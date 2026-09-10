@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -41,6 +41,6 @@ func PIDsByComm(name string) ([]int, error) {
 			pids = append(pids, pid)
 		}
 	}
-	sort.Ints(pids)
+	slices.Sort(pids)
 	return pids, nil
 }

@@ -1,11 +1,11 @@
 package process
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"maps"
 	"slices"
-	"sort"
 	"strings"
 	"syscall"
 	"time"
@@ -205,7 +205,7 @@ func signalRound(set []Process, selector KillSelector, resolve UserResolver, sig
 			}
 		}
 	}
-	sort.Slice(failed, func(i, j int) bool { return failed[i].PID < failed[j].PID })
+	slices.SortFunc(failed, func(a, b SignalFailure) int { return cmp.Compare(a.PID, b.PID) })
 	return failed
 }
 
@@ -294,12 +294,7 @@ func parseNamedSignal(names map[string]syscall.Signal, name, errFormat string) (
 
 // SignalNames returns the accepted signal names, sorted, for diagnostics and docs.
 func SignalNames() []string {
-	out := make([]string, 0, len(signalNames))
-	for name := range signalNames {
-		out = append(out, name)
-	}
-	sort.Strings(out)
-	return out
+	return slices.Sorted(maps.Keys(signalNames))
 }
 
 // killSignalNames are the termination signals a kill action may send. KILL is

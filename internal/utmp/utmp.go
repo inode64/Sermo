@@ -4,7 +4,10 @@
 // binary record parsing lives in one place.
 package utmp
 
-import "time"
+import (
+	"slices"
+	"time"
+)
 
 // DevRoot is the canonical Linux device root used to resolve terminal lines.
 const DevRoot = "/dev"
@@ -50,5 +53,5 @@ func DistinctUserCount() (int, error) {
 // DefaultPaths returns the usual utmp locations in lookup order. The returned
 // slice is a copy; off Linux it is nil.
 func DefaultPaths() []string {
-	return append([]string(nil), defaultPaths...)
+	return slices.Clone(defaultPaths)
 }
