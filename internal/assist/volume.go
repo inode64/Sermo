@@ -163,7 +163,7 @@ func buildVolWatch(v Volume, s volSettings) map[string]any {
 // enforces on *_pct predicates), accepting either "10" or "10%".
 func askPercent(p *Prompt, question string, def int) any {
 	for {
-		v := strings.TrimSpace(p.Ask(question+" (%)", cfgval.String(def)))
+		v := p.Ask(question+" (%)", cfgval.String(def))
 		if v == "" {
 			return def
 		}

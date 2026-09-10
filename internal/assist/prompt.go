@@ -178,7 +178,7 @@ func (p *Prompt) MultiChooseKeyword(question string, options []string, keywords 
 	for {
 		p.printList(question, options)
 		p.printf("%s", hint)
-		ans := strings.TrimSpace(p.readLine())
+		ans := p.readLine()
 		for _, kw := range keywords {
 			if strings.EqualFold(ans, kw) {
 				return nil, kw
@@ -224,7 +224,7 @@ func (p *Prompt) AskInt(question string, def int) int {
 
 func (p *Prompt) askPositiveDuration(question, def, invalidHint string, allowBlank bool) string {
 	for {
-		value := strings.TrimSpace(p.Ask(question, def))
+		value := p.Ask(question, def)
 		if value == "" && allowBlank {
 			return ""
 		}

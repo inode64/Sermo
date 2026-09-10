@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"maps"
 	"path/filepath"
-	"strings"
 
 	"sermo/internal/checks"
 	"sermo/internal/config"
@@ -258,7 +257,7 @@ func stringsToAny(values []string) []any {
 
 func askServicePidfile(p *Prompt, c ServiceCandidate) string {
 	for {
-		pidfile := strings.TrimSpace(p.Ask("Pidfile path for "+c.Name+" (blank to skip)", c.Pidfile))
+		pidfile := p.Ask("Pidfile path for "+c.Name+" (blank to skip)", c.Pidfile)
 		if pidfile == "" || filepath.IsAbs(pidfile) {
 			return pidfile
 		}
