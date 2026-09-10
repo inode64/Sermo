@@ -2,7 +2,6 @@ package rules
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"time"
 
@@ -142,9 +141,4 @@ func BuildRuleWindowReportsAt(ctx context.Context, ruleSet []Rule, windows map[s
 		})
 	}
 	return out
-}
-
-// String returns a debug-friendly summary.
-func (r RuleWindowReport) String() string {
-	return fmt.Sprintf("%s %s %s progress=%s firing=%v", r.Name, r.Type, r.Action, r.Progress, r.Firing)
 }

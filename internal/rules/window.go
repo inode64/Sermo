@@ -416,20 +416,12 @@ func ParseWithinWindow(v any) *WithinWindow {
 // back into immediate clearing.
 const DefaultClearWindow = 5 * time.Minute
 
-// ParseClearWindow parses a `clear` window ({cycles} or {duration}) from a
-// config node, or nil when absent. It shares ForWindow's shape: the consecutive
-// false cycles or wall-clock duration the condition must stay clear before a
-// firing episode ends.
-func ParseClearWindow(v any) *ForWindow {
-	return ParseForWindow(v)
-}
-
 // ClearWindowOrDefault parses a `clear_window` fallback block, substituting the
 // built-in DefaultClearWindow when the block is absent or not a mapping. Shared
 // by ParseRules and the host-watch builder so both surfaces inherit the same
 // default.
 func ClearWindowOrDefault(v any) *ForWindow {
-	if w := ParseClearWindow(v); w != nil {
+	if w := ParseForWindow(v); w != nil {
 		return w
 	}
 	return &ForWindow{Duration: DefaultClearWindow}
@@ -446,7 +438,7 @@ func ParseWindow(entry map[string]any) (*ForWindow, *WithinWindow) {
 // entry — the shape host watches use to reuse the rules window machinery.
 func ParseWindowRule(entry map[string]any) Rule {
 	forWin, withinWin := ParseWindow(entry)
-	return Rule{For: forWin, Within: withinWin, Clear: ParseClearWindow(entry[RuleFieldClear])}
+	return Rule{For: forWin, Within: withinWin, Clear: ParseForWindow(entry[RuleFieldClear])}
 }
 
 // ParseRuleWindow parses the global/per-service `rule_window` fallback block

@@ -646,12 +646,12 @@ func (w *Worker) runRemediation(ctx context.Context, ev *rules.Evaluator, now fu
 }
 
 func (w *Worker) runFiringRemediation(ctx context.Context, ev *rules.Evaluator, now func() time.Time, firing firingRule) bool {
-	op, hasOperation := firing.Rule.OperationAction()
+	op, hasOperation := firing.Rule.Operation()
 	if !hasOperation {
 		w.emitRemediationAlerts(ctx, ev, firing)
 		return false
 	}
-	action := string(op)
+	action := string(op.Type)
 	suppress, skip := w.remediationSuppression(ctx, ev, firing, action, now)
 	if skip {
 		return false
