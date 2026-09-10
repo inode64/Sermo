@@ -119,16 +119,17 @@ func orDefaultWindow(window, fallback time.Duration) time.Duration {
 	return window
 }
 
-// archives returns the resolution ladder, finest first. The array is returned by
-// value so read paths pick a resolution without allocating.
+// archives returns the normalized resolution ladder, finest first. Store
+// normalizes retention once at construction; MaxWindow normalizes its public
+// value receiver before it reaches here. The array is returned by value so read
+// paths pick a resolution without allocating.
 func (r Retention) archives() [archiveCount]archive {
-	windows := r.normalized()
 	return [archiveCount]archive{
-		{Res: resMinute, Retention: windows.Minute},
-		{Res: res5Minutes, Retention: windows.FiveMinutes},
-		{Res: resHour, Retention: windows.Hour},
-		{Res: res6Hours, Retention: windows.SixHours},
-		{Res: resDay, Retention: windows.Day},
+		{Res: resMinute, Retention: r.Minute},
+		{Res: res5Minutes, Retention: r.FiveMinutes},
+		{Res: resHour, Retention: r.Hour},
+		{Res: res6Hours, Retention: r.SixHours},
+		{Res: resDay, Retention: r.Day},
 	}
 }
 
@@ -138,7 +139,7 @@ func (r Retention) archives() [archiveCount]archive {
 // must not silently leave the cap too low.
 func (r Retention) MaxWindow() time.Duration {
 	var longest time.Duration
-	for _, a := range r.archives() {
+	for _, a := range r.normalized().archives() {
 		longest = max(longest, a.Retention)
 	}
 	return longest
