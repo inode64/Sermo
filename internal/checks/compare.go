@@ -156,8 +156,12 @@ func (m OutputMatcher) Match(output string) (ok bool, detail string) {
 type VersionMatcher struct {
 	Contains []string
 	Excludes []string
-	Regex    []string
-	regexps  []*regexp.Regexp
+	regexps  []versionRegexp
+}
+
+type versionRegexp struct {
+	pattern string
+	re      *regexp.Regexp
 }
 
 // ParseVersionMatcher reads a version_match mapping. Supported keys are:
@@ -188,8 +192,7 @@ func ParseVersionMatcher(v any) (VersionMatcher, string) {
 				if err != nil {
 					return VersionMatcher{}, fmt.Sprintf("regex %q is not valid: %v", value, err)
 				}
-				matcher.Regex = append(matcher.Regex, value)
-				matcher.regexps = append(matcher.regexps, re)
+				matcher.regexps = append(matcher.regexps, versionRegexp{pattern: value, re: re})
 			}
 		default:
 			return VersionMatcher{}, fmt.Sprintf("unknown key %q (expected %s)", key, VersionMatchKeySummary)
@@ -203,7 +206,7 @@ func ParseVersionMatcher(v any) (VersionMatcher, string) {
 
 // Active reports whether the matcher carries an identity expectation.
 func (m VersionMatcher) Active() bool {
-	return len(m.Contains) > 0 || len(m.Excludes) > 0 || len(m.Regex) > 0
+	return len(m.Contains) > 0 || len(m.Excludes) > 0 || len(m.regexps) > 0
 }
 
 // Match evaluates output against the configured identity rules.
@@ -224,20 +227,9 @@ func (m VersionMatcher) Match(output string) (ok bool, detail string) {
 			return false, fmt.Sprintf("contains excluded %q", value)
 		}
 	}
-	regexps := m.regexps
-	if len(regexps) != len(m.Regex) {
-		regexps = make([]*regexp.Regexp, 0, len(m.Regex))
-		for _, value := range m.Regex {
-			re, err := regexp.Compile(value)
-			if err != nil {
-				return false, fmt.Sprintf("regex %q is not valid: %v", value, err)
-			}
-			regexps = append(regexps, re)
-		}
-	}
-	for i, re := range regexps {
-		if !re.MatchString(output) {
-			return false, fmt.Sprintf("does not match regex %q", m.Regex[i])
+	for _, matcher := range m.regexps {
+		if !matcher.re.MatchString(output) {
+			return false, fmt.Sprintf("does not match regex %q", matcher.pattern)
 		}
 	}
 	return true, ""
