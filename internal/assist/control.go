@@ -27,7 +27,7 @@ func (dockerAssistant) Run(p *Prompt, env Env) (res Result, err error) {
 		detectLabel: "detect Docker containers",
 		noneFound:   "no Docker containers were detected on this host",
 		question:    "Which Docker containers do you want Sermo to monitor and manage?",
-		choose:      chooseDockerContainers,
+		label:       dockerLabel,
 		name:        dockerName,
 		build:       buildDockerService,
 	})
@@ -49,7 +49,7 @@ func (vmAssistant) Run(p *Prompt, env Env) (res Result, err error) {
 		detectLabel: "detect libvirt domains",
 		noneFound:   "no libvirt/QEMU domains were detected on this host",
 		question:    "Which virtual machines do you want Sermo to monitor and manage?",
-		choose:      chooseVMs,
+		label:       vmLabel,
 		name:        vmName,
 		build:       buildVMService,
 	})
@@ -61,7 +61,7 @@ type controlledAssistantSpec[T any] struct {
 	detectLabel string
 	noneFound   string
 	question    string
-	choose      func(*Prompt, string, []T) []T
+	label       func(T) string
 	name        func(T) string
 	build       func(T) map[string]any
 }
@@ -74,7 +74,7 @@ func runControlledAssistant[T any](p *Prompt, env Env, spec controlledAssistantS
 	if len(candidates) == 0 {
 		return Result{}, errors.New(spec.noneFound)
 	}
-	selected := spec.choose(p, spec.question, candidates)
+	selected := chooseCandidates(p, spec.question, candidates, spec.label)
 	return controlledResult(buildControlledServices(p, env, selected, spec.name, spec.build)), nil
 }
 
@@ -116,14 +116,6 @@ func controlledResult(services map[string]any) Result {
 		Services: services,
 		Summary:  resultSummary(AssistantNameService, services),
 	}
-}
-
-func chooseDockerContainers(p *Prompt, question string, cands []DockerCandidate) []DockerCandidate {
-	return chooseCandidates(p, question, cands, dockerLabel)
-}
-
-func chooseVMs(p *Prompt, question string, cands []VMCandidate) []VMCandidate {
-	return chooseCandidates(p, question, cands, vmLabel)
 }
 
 // runningExpect is the `expect:` mapping both controlled-service checks use to
