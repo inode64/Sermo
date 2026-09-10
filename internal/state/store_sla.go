@@ -44,17 +44,13 @@ var SLAWindows = []SLAWindow{
 	{Name: slaWindowYear, Span: slaSpanYear},
 }
 
-// SLAValue is the availability of one service over one window: the up and total
-// observed cycle counts, plus how many one-minute buckets in the window saw a
-// failure. Ratio derives the fraction (and whether any data exists).
-//
-// DownBuckets survives consolidation, so a window whose ratio rounds to 100% can
-// still be reported as having had incidents, and they can still be counted.
-type SLAValue struct {
-	Window      string `json:"window"`
-	Up          int64  `json:"up"`
-	Total       int64  `json:"total"`
-	DownBuckets int64  `json:"down_buckets"`
+// SLACounts is the availability evidence shared by a rolling SLA value and one
+// stored SLA point. DownBuckets survives consolidation, so a ratio that rounds
+// to 100% can still report affected minutes.
+type SLACounts struct {
+	Up          int64 `json:"up"`
+	Total       int64 `json:"total"`
+	DownBuckets int64 `json:"down_buckets"`
 }
 
 // SLAUnavailable is the text representation for an SLA window with no observed
@@ -63,17 +59,23 @@ const SLAUnavailable = "n/a"
 
 // Ratio returns the availability fraction in [0,1] and whether the window has any
 // observed cycles. With no data (total==0) availability is unknown, not 0%.
-func (v SLAValue) Ratio() (float64, bool) {
-	if v.Total <= 0 {
+func (c SLACounts) Ratio() (float64, bool) {
+	if c.Total <= 0 {
 		return 0, false
 	}
-	return float64(v.Up) / float64(v.Total), true
+	return float64(c.Up) / float64(c.Total), true
 }
 
 // PercentText renders the availability as a percentage, or SLAUnavailable when
 // the window has no observations.
-func (v SLAValue) PercentText() string {
-	return slaPercentText(v.Up, v.Total)
+func (c SLACounts) PercentText() string {
+	return slaPercentText(c.Up, c.Total)
+}
+
+// SLAValue is the availability of one service over one rolling window.
+type SLAValue struct {
+	Window string `json:"window"`
+	SLACounts
 }
 
 // recordSLABucket writes one observed cycle into the per-minute archive. An empty
@@ -114,25 +116,8 @@ func slaTarget(service, check string) string {
 // down. The bucket span is the archive the window resolved to, so a point covers
 // one minute on the hour window and one day on the year window.
 type SLAPoint struct {
-	Start       time.Time `json:"start"`
-	Up          int64     `json:"up"`
-	Total       int64     `json:"total"`
-	DownBuckets int64     `json:"down_buckets"`
-}
-
-// Ratio returns the availability fraction in this series bucket and whether the
-// bucket has any observed cycles.
-func (p SLAPoint) Ratio() (float64, bool) {
-	if p.Total <= 0 {
-		return 0, false
-	}
-	return float64(p.Up) / float64(p.Total), true
-}
-
-// PercentText renders the bucket availability as a percentage, or
-// SLAUnavailable when it has no observations.
-func (p SLAPoint) PercentText() string {
-	return slaPercentText(p.Up, p.Total)
+	Start time.Time `json:"start"`
+	SLACounts
 }
 
 func slaPercentText(up, total int64) string {
