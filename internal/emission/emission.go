@@ -45,18 +45,14 @@ func Resolve(policy, fallback Policy) Policy {
 // Merge overlays raw `emission:` values onto fallback. Invalid values are ignored
 // at runtime; config validation reports them before the daemon accepts a config.
 func Merge(raw any, fallback Policy) Policy {
-	p := fallback
 	m, ok := raw.(map[string]any)
 	if !ok {
-		return p
+		return fallback
 	}
-	if mode := cfgval.String(m[KeyEvents]); ValidMode(mode) {
-		p.Events = mode
-	}
-	if mode := cfgval.String(m[KeyNotify]); ValidMode(mode) {
-		p.Notify = mode
-	}
-	return p
+	return Resolve(Policy{
+		Events: cfgval.String(m[KeyEvents]),
+		Notify: cfgval.String(m[KeyNotify]),
+	}, fallback)
 }
 
 // ValidMode reports whether mode is a supported emission mode.
