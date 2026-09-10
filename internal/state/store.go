@@ -372,13 +372,13 @@ func decodeRows[R, T any](what, raw string, value func(R) (T, bool)) ([]T, error
 
 func encodeUnixNanos(times []time.Time) (string, error) {
 	return encodeRows(columnUnixNanos, times, func(t time.Time) (int64, bool) {
-		return t.UTC().UnixNano(), !t.IsZero()
+		return timeUnixNano(t), !t.IsZero()
 	})
 }
 
 func decodeUnixNanos(raw string) ([]time.Time, error) {
 	return decodeRows(columnUnixNanos, raw, func(n int64) (time.Time, bool) {
-		return time.Unix(0, n).UTC(), n != 0
+		return unixNanoTime(n), n != 0
 	})
 }
 
