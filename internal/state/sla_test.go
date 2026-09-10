@@ -91,10 +91,10 @@ func TestSLAPercentText(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := (SLAValue{SLACounts: SLACounts{Up: tt.up, Total: tt.total}}).PercentText(); got != tt.want {
+			if got := (SLAValue{Up: tt.up, Total: tt.total}).PercentText(); got != tt.want {
 				t.Errorf("SLAValue.PercentText() = %q, want %q", got, tt.want)
 			}
-			point := SLAPoint{SLACounts: SLACounts{Up: tt.up, Total: tt.total}}
+			point := SLAPoint{Up: tt.up, Total: tt.total}
 			if got := point.PercentText(); got != tt.want {
 				t.Errorf("SLAPoint.PercentText() = %q, want %q", got, tt.want)
 			}
