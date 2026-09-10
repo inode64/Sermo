@@ -501,6 +501,12 @@ func validateDocumentAliases(doc *Document, counts map[string]map[string]int, al
 		return []Issue{{Scope: scope, Msg: "aliases must be a list of simple names"}}
 	}
 	owners := aliasOwners[doc.registryKey()]
+	if owners == nil {
+		// validateDocumentAliases also supports direct unit-level callers whose
+		// alias owner registry was not built by validateDocuments.
+		owners = map[string]string{}
+		aliasOwners[doc.registryKey()] = owners
+	}
 	var issues []Issue
 	seen := map[string]bool{}
 	for _, alias := range aliases {
