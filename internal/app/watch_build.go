@@ -498,7 +498,6 @@ func newCheckWatch(spec checkWatchSpec, deps Deps) *Watch {
 	watch.RecoverHook = spec.actions.recoverHook
 	watch.Notifiers = resolveNotifiers(spec.actions.effectiveNames, deps.Notifiers)
 	watch.RaidNotifyEvents = spec.actions.raidNotifyEvents
-	watch.LVMNotifyOnChange = spec.actions.lvmNotifyOnChange
 	watch.NotifyInterval = spec.actions.notifyInterval
 	watch.Emission = spec.emission
 	watch.DryRun = spec.dryRun
@@ -792,14 +791,13 @@ type watchActions struct {
 	hook HookSpec
 	// recoverHook runs once on the failed-to-ok edge — when a firing watch
 	// stops firing — never while healthy and never per healthy cycle.
-	recoverHook       HookSpec
-	effectiveNames    []string
-	raidNotifyEvents  map[string]bool
-	lvmNotifyOnChange bool
-	expand            *ExpandSpec
-	kill              *killSpec
-	makeStep          *MakeStepSpec
-	notifyInterval    time.Duration
+	recoverHook      HookSpec
+	effectiveNames   []string
+	raidNotifyEvents map[string]bool
+	expand           *ExpandSpec
+	kill             *killSpec
+	makeStep         *MakeStepSpec
+	notifyInterval   time.Duration
 }
 
 type watchActionOptions struct {
@@ -838,9 +836,9 @@ func resolveWatchActions(entry map[string]any, deps Deps, opts watchActionOption
 	if err != nil {
 		return watchActions{}, err
 	}
-	lvmNotifyOnChange := raidNotifyEvents[checks.LVMNotifyOnChange]
 	if len(raidNotifyEvents) > 0 {
-		if opts.checkType != checks.CheckTypeRAID && !(opts.checkType == checks.CheckTypeLVM && lvmNotifyOnChange && len(raidNotifyEvents) == 1) {
+		lvmChangeNotification := opts.checkType == checks.CheckTypeLVM && len(raidNotifyEvents) == 1 && raidNotifyEvents[checks.LVMNotifyOnChange]
+		if opts.checkType != checks.CheckTypeRAID && !lvmChangeNotification {
 			return watchActions{}, errors.New("then.notify_on is only valid on a raid watch")
 		}
 	}
@@ -869,15 +867,14 @@ func resolveWatchActions(entry map[string]any, deps Deps, opts watchActionOption
 		return watchActions{}, errors.New(opts.emptyMessage)
 	}
 	return watchActions{
-		hook:              hook,
-		recoverHook:       recoverHook,
-		effectiveNames:    effectiveNames,
-		raidNotifyEvents:  raidNotifyEvents,
-		lvmNotifyOnChange: lvmNotifyOnChange,
-		expand:            expand,
-		kill:              kill,
-		makeStep:          makeStep,
-		notifyInterval:    cfgval.Duration(thenBlock[config.WatchThenKeyNotifyInterval]),
+		hook:             hook,
+		recoverHook:      recoverHook,
+		effectiveNames:   effectiveNames,
+		raidNotifyEvents: raidNotifyEvents,
+		expand:           expand,
+		kill:             kill,
+		makeStep:         makeStep,
+		notifyInterval:   cfgval.Duration(thenBlock[config.WatchThenKeyNotifyInterval]),
 	}, nil
 }
 
