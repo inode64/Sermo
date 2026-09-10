@@ -82,8 +82,8 @@ func (b *WebBackend) applyWatchRuntimeView(view *web.Watch, w *webWatch, activit
 		view.Expand = &web.WatchExpand{ByBytes: w.expand.By}
 	}
 	if !w.disabled {
-		if active, source, changed, ok := b.monitorView(WatchMonitorKey(w.name)); ok {
-			view.Monitored, view.MonitorSource, view.MonitorChangedAt = active, source, changed
+		if monitoredState, ok := b.monitorView(WatchMonitorKey(w.name)); ok {
+			view.Monitored, view.MonitorSource, view.MonitorChangedAt = monitoredState.active, monitoredState.source, monitoredState.changedAtText()
 		}
 	}
 	checkedAt := b.watchLastCheckedAt(w)
