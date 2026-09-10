@@ -185,7 +185,7 @@ func buildHardwareRAIDCheck(b base, entry map[string]any, runner execx.Runner, t
 		return nil, tool + " check: " + err.Error()
 	}
 	return hardwareRAIDCheck{
-		base: b, runner: execx.RunnerOrDefault(runner), binary: binary, tool: tool, preds: preds,
+		base: b, runner: runner, binary: binary, tool: tool, preds: preds,
 	}, ""
 }
 
@@ -195,7 +195,7 @@ func buildGlusterClusterCheck(b base, entry map[string]any, runner execx.Runner)
 	if err != nil {
 		return nil, "gluster_cluster check: " + err.Error()
 	}
-	return glusterClusterCheck{base: b, runner: execx.RunnerOrDefault(runner), peers: peers, volumes: volumes}, ""
+	return glusterClusterCheck{base: b, runner: runner, peers: peers, volumes: volumes}, ""
 }
 
 func buildLVMCheck(b base, entry map[string]any, runner execx.Runner) (Check, string) {
@@ -208,7 +208,6 @@ func buildLVMCheck(b base, entry map[string]any, runner execx.Runner) (Check, st
 	if lv != "" && vg == "" {
 		return nil, "lvm check logical_volume requires volume_group"
 	}
-	runner = execx.RunnerOrDefault(runner)
 	return &lvmCheck{base: b, runner: runner, volumeGroup: vg, logicalVolume: lv, preds: preds}, ""
 }
 
