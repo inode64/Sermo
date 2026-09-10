@@ -62,8 +62,19 @@ func validateWatches(watches map[string]any, locksDir string, notifiers map[stri
 			}
 		}
 		validateRaidNotifyOn(name, typ, entry, notifiers, defaultNotify, add)
-		validateRAIDControl(name, typ, entry, check, add)
-		validateReplicationControl(name, typ, entry, add)
+		validateWatchControl(name, typ, entry, check, watchControlSpec{
+			field:              WatchKeyRAIDControl,
+			watchType:          checks.CheckTypeRAID,
+			watchTypeLabel:     "raid",
+			key:                RAIDControlKeyPauseResume,
+			requiredCheckField: checks.CheckKeyArray,
+		}, add)
+		validateWatchControl(name, typ, entry, check, watchControlSpec{
+			field:          WatchKeyReplicationControl,
+			watchType:      checks.CheckTypeReplication,
+			watchTypeLabel: "replication",
+			key:            ReplicationControlKeyStart,
+		}, add)
 		validateWatchMountBlock(name, typ, entry, add)
 		switch typ {
 		case checks.CheckTypeStorage:
@@ -98,41 +109,13 @@ func validateWatches(watches map[string]any, locksDir string, notifiers map[stri
 	}
 }
 
-func validateRAIDControl(name, typ string, entry, check map[string]any, add addFunc) {
-	prefix := watchFieldPath(name, WatchKeyRAIDControl)
-	value, present := entry[WatchKeyRAIDControl]
-	if !present {
-		return
-	}
-	control, ok := value.(map[string]any)
-	if !ok {
-		add(validationMappingFormat, prefix)
-		return
-	}
-	if typ != checks.CheckTypeRAID {
-		add("%s is only valid on a raid watch", prefix)
-		return
-	}
-	if cfgval.String(check[checks.CheckKeyArray]) == "" {
-		add("%s requires check.%s", prefix, checks.CheckKeyArray)
-	}
-	for key := range control {
-		if key != RAIDControlKeyPauseResume {
-			add("%s.%s is not supported", prefix, key)
-		}
-	}
-	if value, found := control[RAIDControlKeyPauseResume]; !found {
-		add("%s.%s is required", prefix, RAIDControlKeyPauseResume)
-	} else if _, ok := value.(bool); !ok {
-		add(validationBooleanFormat, prefix+"."+RAIDControlKeyPauseResume)
-	}
+type watchControlSpec struct {
+	field, watchType, watchTypeLabel, key, requiredCheckField string
 }
 
-// validateReplicationControl accepts replication_control only on a replication
-// watch, with exactly the boolean start key.
-func validateReplicationControl(name, typ string, entry map[string]any, add addFunc) {
-	prefix := watchFieldPath(name, WatchKeyReplicationControl)
-	value, present := entry[WatchKeyReplicationControl]
+func validateWatchControl(name, typ string, entry, check map[string]any, spec watchControlSpec, add addFunc) {
+	prefix := watchFieldPath(name, spec.field)
+	value, present := entry[spec.field]
 	if !present {
 		return
 	}
@@ -141,19 +124,22 @@ func validateReplicationControl(name, typ string, entry map[string]any, add addF
 		add(validationMappingFormat, prefix)
 		return
 	}
-	if typ != checks.CheckTypeReplication {
-		add("%s is only valid on a replication watch", prefix)
+	if typ != spec.watchType {
+		add("%s is only valid on a %s watch", prefix, spec.watchTypeLabel)
 		return
 	}
+	if spec.requiredCheckField != "" && cfgval.String(check[spec.requiredCheckField]) == "" {
+		add("%s requires check.%s", prefix, spec.requiredCheckField)
+	}
 	for key := range control {
-		if key != ReplicationControlKeyStart {
+		if key != spec.key {
 			add("%s.%s is not supported", prefix, key)
 		}
 	}
-	if value, found := control[ReplicationControlKeyStart]; !found {
-		add("%s.%s is required", prefix, ReplicationControlKeyStart)
+	if value, found := control[spec.key]; !found {
+		add("%s.%s is required", prefix, spec.key)
 	} else if _, ok := value.(bool); !ok {
-		add(validationBooleanFormat, prefix+"."+ReplicationControlKeyStart)
+		add(validationBooleanFormat, prefix+"."+spec.key)
 	}
 }
 
