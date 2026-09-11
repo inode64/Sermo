@@ -938,6 +938,8 @@ error. A certificate problem (expired/not-yet-valid, inside the
 `cert_expires_in_days` window, failing verification, or a change between cycles)
 **fails** the `http` check, keeping its health-style semantics (`OK == true`
 means healthy), the same polarity as the standalone `cert` check. When
+an HTTPS request redirects to plain HTTP, certificate inspection fails because
+the final response has no certificate to inspect. When
 inspection runs, the result data carries the same certificate fields the `cert`
 check exposes (`issuer`, `subject`, `dns_names`, `not_after`, `days_left`,
 `fingerprint`, …). To read the certificate even when it is expired or otherwise

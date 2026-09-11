@@ -175,7 +175,10 @@ func (c *httpCheck) consumeCertificateVerification(resp *http.Response) string {
 
 func (c *httpCheck) success(resp *http.Response, elapsed time.Duration, verifyError string, start time.Time) Result {
 	statusMsg := fmt.Sprintf("status %d", resp.StatusCode)
-	if c.certHost == "" || resp.TLS == nil || len(resp.TLS.PeerCertificates) == 0 {
+	if c.certHost != "" && (resp.TLS == nil || len(resp.TLS.PeerCertificates) == 0) {
+		return c.result(false, statusMsg+"; certificate inspection requires a TLS response", start)
+	}
+	if c.certHost == "" {
 		res := c.result(true, statusMsg, start)
 		res.Data = map[string]any{DataKeyStatus: resp.StatusCode, DataKeyLatencyMS: elapsed.Milliseconds(), DataKeyProtocol: resp.Proto}
 		return res
