@@ -90,7 +90,11 @@ func attachLiveCPU(d *web.Detail, live *LiveMetrics, service string) {
 			}
 		}
 	}
-	attachLiveTotalsFromSample(d.ProcessTotals, sample)
+	// A live sample can outlast the process tree (or describe a processless
+	// service). aggregateProcesses deliberately leaves its totals nil then.
+	if d.ProcessTotals != nil {
+		attachLiveTotalsFromSample(d.ProcessTotals, sample)
+	}
 }
 
 func attachLiveTotals(totals *web.ProcessTotals, live *LiveMetrics, service string) {
