@@ -224,7 +224,7 @@ func ResolvedGraphMetrics(checkType, unit string, entry map[string]any) []GraphM
 	declared := DeclaredGraphMetrics(checkType, unit)
 	banded := BandKeys(DeclaredBandMetrics(checkType, entry))
 	scope := graphMetricEntryScope[checkType]
-	out := declared[:0:0]
+	out := declared[:0]
 	for _, m := range declared {
 		if banded[m.Key] {
 			continue
