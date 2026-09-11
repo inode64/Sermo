@@ -886,7 +886,9 @@ forwards correctly and that the target is reachable through it; for an
 (below) still applies to the target's certificate.
 
 `json:` marshals the value and sets `Content-Type: application/json` (override
-it via `headers`); `body:` sends a raw string. The response is only read when
+it via `headers`). `headers: {Host: app.example.com}` selects an HTTP virtual
+host while the URL still determines the connection address and TLS hostname.
+`body:` sends a raw string. The response is only read when
 `expect_body`/`expect_json` is set (capped at 1 MiB). `expect_json` looks up
 **dotted paths** into nested objects. A scalar value is equality (`==`); a
 `{op, value}` mapping uses an operator. Both use the same comparison as
