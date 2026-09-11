@@ -168,7 +168,14 @@ func (c *httpCheck) consumeCertificateVerification(resp *http.Response) string {
 	if c.certHost == "" || !c.certOpts.verify || resp.TLS == nil || len(resp.TLS.PeerCertificates) == 0 {
 		return ""
 	}
-	return c.certVerification.consume(*resp.TLS)
+	connection := *resp.TLS
+	// IP literals have no SNI. Use the final request host for verification,
+	// including after a redirect, rather than the original check URL.
+	connection.ServerName = c.certHost
+	if resp.Request != nil && resp.Request.URL != nil {
+		connection.ServerName = resp.Request.URL.Hostname()
+	}
+	return c.certVerification.consume(connection)
 }
 
 // success builds the result for a request whose HTTP assertions all passed,
