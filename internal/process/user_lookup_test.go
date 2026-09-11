@@ -100,7 +100,7 @@ func TestUserLookupLookupPolicies(t *testing.T) {
 				getentIDCalls++
 				return 22, tc.getentOK
 			}
-			if id, ok := lookup.lookupID("target", nativeID, getentID); id != tc.wantID || ok != tc.wantOK {
+			if id, ok := lookupWithMode(lookup.mode, "target", nativeID, getentID); id != tc.wantID || ok != tc.wantOK {
 				t.Fatalf("lookupID = %d/%v, want %d/%v", id, ok, tc.wantID, tc.wantOK)
 			}
 			if nativeIDCalls != tc.wantNative || getentIDCalls != tc.wantGetent {
@@ -115,7 +115,7 @@ func TestUserLookupLookupPolicies(t *testing.T) {
 				getentNameCalls++
 				return "getent", tc.getentOK
 			}
-			if name, ok := lookup.lookupName(11, nativeName, getentName); name != tc.wantName || ok != tc.wantOK {
+			if name, ok := lookupWithMode(lookup.mode, uint32(11), nativeName, getentName); name != tc.wantName || ok != tc.wantOK {
 				t.Fatalf("lookupName = %q/%v, want %q/%v", name, ok, tc.wantName, tc.wantOK)
 			}
 			if nativeNameCalls != tc.wantNative || getentNameCalls != tc.wantGetent {
