@@ -104,7 +104,10 @@ func (c *httpCheck) Run(ctx context.Context) Result {
 		return c.success(resp, elapsed, verifyError, start)
 	}
 
-	data, _ := io.ReadAll(io.LimitReader(resp.Body, maxHTTPBody))
+	data, err := io.ReadAll(io.LimitReader(resp.Body, maxHTTPBody))
+	if err != nil {
+		return c.unavailableResult(fmt.Sprintf("read response body: %v", err), start)
+	}
 	if msg := c.payloadFailure(resp.StatusCode, data); msg != "" {
 		return c.result(false, msg, start)
 	}

@@ -894,6 +894,9 @@ it via `headers`); `body:` sends a raw string. The response is only read when
 …), otherwise string equality, `contains` substring matching, or a regex with
 `=~`.
 
+A response-body read error (including a timeout or premature disconnect) makes
+the check unavailable; a matching partial body does not count as success.
+
 By default the check follows HTTP redirects using Go's standard client policy.
 Set `follow_redirects: false` when the redirect itself is the health signal, for
 example a local HTTP listener that intentionally redirects every request to
