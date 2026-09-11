@@ -27,7 +27,7 @@ func (b *WebBackend) Libraries(ctx context.Context) []web.Library {
 
 func (b *WebBackend) loadApplications(ctx context.Context) []web.CatalogItem {
 	if b.applications.list != nil {
-		return b.withApplicationSLA(b.applications.list(ctx))
+		return b.withApplicationSLA(slices.Clone(b.applications.list(ctx)))
 	}
 	return b.withApplicationSLA(b.loadCatalogItems(ctx, config.CategoryApp, true))
 }
@@ -119,7 +119,7 @@ func applicationStateFromReport(r appinspect.Report) string {
 	return TargetStateWarning
 }
 
-// withApplicationSLA marks each application that maps to a monitored service.
+// withApplicationSLA marks each application in an owned slice that maps to a monitored service.
 // Its availability is that service's, so the dashboard draws it with the
 // service's own SLA panel and fetches it from the service's own endpoint; the
 // flag says only that there is one to fetch.
@@ -127,11 +127,10 @@ func (b *WebBackend) withApplicationSLA(apps []web.Application) []web.Applicatio
 	if len(apps) == 0 {
 		return apps
 	}
-	out := slices.Clone(apps)
-	for i := range out {
-		out[i].KeepsSLA = b.entries[out[i].Name] != nil
+	for i := range apps {
+		apps[i].KeepsSLA = b.entries[apps[i].Name] != nil
 	}
-	return out
+	return apps
 }
 
 func decorateCatalogItems(items []web.CatalogItem, observedAt time.Time) []web.CatalogItem {
