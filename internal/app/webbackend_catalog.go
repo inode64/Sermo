@@ -137,8 +137,9 @@ func decorateCatalogItems(items []web.CatalogItem, observedAt time.Time) []web.C
 	if len(items) == 0 || observedAt.IsZero() {
 		return items
 	}
+	timestamp := observedAt.UTC().Format(time.RFC3339)
 	for i := range items {
-		items[i].ObservedAt = observedAt.UTC().Format(time.RFC3339)
+		items[i].ObservedAt = timestamp
 	}
 	return items
 }
