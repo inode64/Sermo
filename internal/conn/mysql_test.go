@@ -59,7 +59,7 @@ func TestMySQLGreetingNotMySQL(t *testing.T) {
 }
 
 func TestBuildDSN(t *testing.T) {
-	dsn := buildDSN(Config{
+	dsn := MySQLDSN(Config{
 		Host: "db.example", Port: 3307, User: "monitor",
 		Password: "p@ss:w/rd", Database: "app", TLS: "skip-verify",
 	})
@@ -82,7 +82,7 @@ func TestBuildDSN(t *testing.T) {
 }
 
 func TestBuildDSNDefaultsAndPlaintext(t *testing.T) {
-	dsn := buildDSN(Config{User: "u"})
+	dsn := MySQLDSN(Config{User: "u"})
 	c, err := mysql.ParseDSN(dsn)
 	if err != nil {
 		t.Fatal(err)

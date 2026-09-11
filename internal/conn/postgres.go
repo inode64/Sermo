@@ -37,7 +37,9 @@ func (postgresProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 
 // PostgresDSN renders a PostgreSQL connection URL from cfg (escaping the password).
 // Exported so the sql check can open a PostgreSQL connection reusing this logic.
-func PostgresDSN(cfg Config) string { return buildPGDSN(cfg) }
+func PostgresDSN(cfg Config) string {
+	return buildPGDSNWithTarget(cfg, newProbeTarget(cfg, defaultPortPostgres))
+}
 
 // OpenPostgresDB opens a PostgreSQL pool via pgx, routing TCP dials through
 // BindDialer when cfg.Interface is set so multihomed probes egress the right link.
@@ -60,12 +62,6 @@ func postgresConfig(_ context.Context, cfg Config) (*pgx.ConnConfig, error) {
 	}
 	config.DialFunc = target.dialer().DialContext
 	return config, nil
-}
-
-// buildPGDSN renders a PostgreSQL connection URL from cfg. A URL (with
-// url.UserPassword) escapes special characters in the password correctly.
-func buildPGDSN(cfg Config) string {
-	return buildPGDSNWithTarget(cfg, newProbeTarget(cfg, defaultPortPostgres))
 }
 
 func buildPGDSNWithTarget(cfg Config, target probeTarget) string {

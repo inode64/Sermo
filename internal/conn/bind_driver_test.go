@@ -35,7 +35,8 @@ func testExternalModuleInterfaceBinding(t *testing.T) {
 		}},
 		{"mysql-config", func(t *testing.T) {
 			t.Helper()
-			cfg := buildMySQLConfig(Config{User: "u", Password: "p", Interface: "eth0"})
+			input := Config{User: "u", Password: "p", Interface: "eth0"}
+			cfg := buildMySQLConfigWithTarget(input, newProbeTarget(input, defaultPortMySQL))
 			if cfg.DialFunc == nil {
 				t.Fatal("mysql config must set DialFunc when interface is set")
 			}
