@@ -6,7 +6,7 @@ import (
 )
 
 func TestBuildPGDSN(t *testing.T) {
-	dsn := buildPGDSN(Config{
+	dsn := PostgresDSN(Config{
 		Host: "db.example", Port: 5433, User: "monitor",
 		Password: "p@ss:w/rd", Database: "app", TLS: "verify-full",
 	})
@@ -33,7 +33,7 @@ func TestBuildPGDSN(t *testing.T) {
 }
 
 func TestBuildPGDSNDefaults(t *testing.T) {
-	u, err := url.Parse(buildPGDSN(Config{User: "u"}))
+	u, err := url.Parse(PostgresDSN(Config{User: "u"}))
 	if err != nil {
 		t.Fatal(err)
 	}
