@@ -155,12 +155,6 @@ type serviceWindows struct {
 }
 
 func (a App) writeSLAJSON(reports []serviceWindows) {
-	writeSLAWindowJSON(a, cliJSONKeySLA, reports)
-}
-
-// writeSLAWindowJSON renders the {top: [{service, windows}]} JSON envelope,
-// mirroring writeSLAWindowTable for the table form.
-func writeSLAWindowJSON(a App, topKey string, reports []serviceWindows) {
 	out := make([]map[string]any, 0, len(reports))
 	for _, r := range reports {
 		windows := make(map[string]any, len(r.Windows))
@@ -169,7 +163,7 @@ func writeSLAWindowJSON(a App, topKey string, reports []serviceWindows) {
 		}
 		out = append(out, map[string]any{cliJSONKeyService: r.Service, cliJSONKeyWindows: windows})
 	}
-	writeJSON(a.Stdout, map[string]any{topKey: out})
+	writeJSON(a.Stdout, map[string]any{cliJSONKeySLA: out})
 }
 
 func slaValueJSON(v state.SLAValue) map[string]any {
@@ -185,13 +179,9 @@ func slaValueJSON(v state.SLAValue) map[string]any {
 	return entry
 }
 
-func (a App) writeSLATable(reports []serviceWindows) {
-	writeSLAWindowTable(a, reports)
-}
-
-// writeSLAWindowTable renders one TARGET + per-SLA-window availability table.
+// writeSLATable renders one TARGET + per-SLA-window availability table.
 // A target is a configured service or an availability host watch.
-func writeSLAWindowTable(a App, reports []serviceWindows) {
+func (a App) writeSLATable(reports []serviceWindows) {
 	if len(reports) == 0 {
 		fmt.Fprintln(a.Stdout, "no targets")
 		return
