@@ -132,6 +132,10 @@ func TestResolvedGraphMetricsSeparatesUnitFromExistence(t *testing.T) {
 	if _, ok := find(banded, DataKeyLoad1); ok {
 		t.Fatal("a banded key must leave the line set")
 	}
+	load[0].Key = "modified"
+	if _, ok := find(ResolvedGraphMetrics(CheckTypeLoad, "", nil), DataKeyLoad1); !ok {
+		t.Fatal("filtering and modifying results must not mutate the registry")
+	}
 }
 
 // TestUnreachableCountLimitIsNotALimit pins what a count-vs-limit check reports
