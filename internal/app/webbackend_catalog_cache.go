@@ -34,10 +34,10 @@ func (b *WebBackend) catalogItems(
 	// inventory — or, on a cold start, waits for that first scan.
 	for {
 		inventory.mu.Lock()
-		cached := slices.Clone(inventory.items)
 		observedAt := inventory.at
 		hasCache := !observedAt.IsZero()
 		if hasCache && b.webNow().Sub(observedAt) < catalogInventoryCacheTTL {
+			cached := slices.Clone(inventory.items)
 			inventory.mu.Unlock()
 			return decorateCatalogItems(cached, observedAt)
 		}
@@ -45,12 +45,14 @@ func (b *WebBackend) catalogItems(
 		if refresh == nil {
 			break // become the rebuilding request; lock still held
 		}
-		inventory.mu.Unlock()
 		if hasCache {
+			cached := slices.Clone(inventory.items)
+			inventory.mu.Unlock()
 			// An expired-but-complete inventory beats queueing every viewer
 			// behind the scan that is already refreshing it.
 			return decorateCatalogItems(cached, observedAt)
 		}
+		inventory.mu.Unlock()
 		select {
 		case <-refresh:
 			// Re-check the cache the finished scan produced.
