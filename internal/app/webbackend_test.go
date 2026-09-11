@@ -616,10 +616,11 @@ func TestWebBackendSeriesScopesToServiceOrCheck(t *testing.T) {
 // whose series it then reads from that service's own endpoint. An application
 // with no service behind it has no availability to show.
 func TestWebBackendApplicationsMarkServiceSLA(t *testing.T) {
+	source := []web.Application{{Name: "nginx", Status: appinspect.StatusOK}, {Name: "orphan", Status: appinspect.StatusOK}}
 	b := &WebBackend{
 		entries: map[string]*webEntry{"nginx": {}},
 		applications: catalogInventoryCache{list: func(context.Context) []web.CatalogItem {
-			return []web.Application{{Name: "nginx", Status: appinspect.StatusOK}, {Name: "orphan", Status: appinspect.StatusOK}}
+			return source
 		}},
 	}
 
@@ -632,6 +633,9 @@ func TestWebBackendApplicationsMarkServiceSLA(t *testing.T) {
 	}
 	if apps[1].KeepsSLA {
 		t.Fatalf("orphan maps to no service, so it must keep none")
+	}
+	if source[0].KeepsSLA || source[0].ObservedAt != "" {
+		t.Fatal("application decoration must not mutate the injected inventory")
 	}
 }
 
