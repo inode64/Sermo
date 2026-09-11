@@ -83,6 +83,10 @@ func (c *httpCheck) Run(ctx context.Context) Result {
 		req.Header.Set(httpHeaderContentType, c.contentType)
 	}
 	for k, v := range c.headers {
+		if strings.EqualFold(k, "Host") {
+			req.Host = v
+			continue
+		}
 		req.Header.Set(k, v)
 	}
 
