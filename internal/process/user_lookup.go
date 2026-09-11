@@ -170,7 +170,7 @@ func (l *UserLookup) resolveID(name string, cache map[string]lookupCacheResult[u
 	if got, cached := cachedLookup(l, cache, name); cached {
 		return got.value, got.ok
 	}
-	id, ok := l.lookupID(name, native, getent)
+	id, ok := lookupWithMode(l.mode, name, native, getent)
 	storeLookup(l, cache, name, lookupCacheResult[uint32]{value: id, ok: ok})
 	return id, ok
 }
@@ -182,17 +182,9 @@ func (l *UserLookup) resolveName(id uint32, cache map[uint32]lookupCacheResult[s
 		}
 		return ""
 	}
-	name, ok := l.lookupName(id, native, getent)
+	name, ok := lookupWithMode(l.mode, id, native, getent)
 	storeLookup(l, cache, id, lookupCacheResult[string]{value: name, ok: ok})
 	return name
-}
-
-func (l *UserLookup) lookupID(name string, native, getent UserResolver) (uint32, bool) {
-	return lookupWithMode(l.mode, name, native, getent)
-}
-
-func (l *UserLookup) lookupName(id uint32, native, getent nameResolver) (string, bool) {
-	return lookupWithMode(l.mode, id, native, getent)
 }
 
 //nolint:ireturn // The generic result preserves the typed resolver contract.
