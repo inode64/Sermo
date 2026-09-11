@@ -145,13 +145,10 @@ func decorateCatalogItems(items []web.CatalogItem, observedAt time.Time) []web.C
 }
 
 func (b *WebBackend) decorateApplications(apps []web.Application) []web.Application {
-	if len(apps) == 0 {
+	if b.events == nil {
 		return apps
 	}
 	for i := range apps {
-		if b.events == nil {
-			continue
-		}
 		ev, ok := b.events.LastApp(apps[i].Name)
 		if !ok {
 			continue
