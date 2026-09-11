@@ -43,8 +43,8 @@ func PostgresDSN(cfg Config) string {
 
 // OpenPostgresDB opens a PostgreSQL pool via pgx, routing TCP dials through
 // BindDialer when cfg.Interface is set so multihomed probes egress the right link.
-func OpenPostgresDB(ctx context.Context, cfg Config) (*sql.DB, error) {
-	config, err := postgresConfig(ctx, cfg)
+func OpenPostgresDB(_ context.Context, cfg Config) (*sql.DB, error) {
+	config, err := postgresConfig(cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -54,7 +54,7 @@ func OpenPostgresDB(ctx context.Context, cfg Config) (*sql.DB, error) {
 // postgresConfig builds the pgx connection config for cfg, routing TCP dials
 // through BindDialer. Tests also use it to verify
 // interface binding is wired without opening a connection.
-func postgresConfig(_ context.Context, cfg Config) (*pgx.ConnConfig, error) {
+func postgresConfig(cfg Config) (*pgx.ConnConfig, error) {
 	target := newProbeTarget(cfg, defaultPortPostgres)
 	config, err := pgx.ParseConfig(buildPGDSNWithTarget(cfg, target))
 	if err != nil {

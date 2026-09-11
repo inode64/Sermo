@@ -25,7 +25,7 @@ func testExternalModuleInterfaceBinding(t *testing.T) {
 		}},
 		{"postgres-config", func(t *testing.T) {
 			t.Helper()
-			cfg, err := postgresConfig(context.Background(), Config{User: "u", Interface: "eth0"})
+			cfg, err := postgresConfig(Config{User: "u", Interface: "eth0"})
 			if err != nil {
 				t.Fatalf("postgresConfig: %v", err)
 			}
