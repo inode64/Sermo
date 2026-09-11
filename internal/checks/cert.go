@@ -487,6 +487,11 @@ func (v *certVerification) observe(cs tls.ConnectionState) error {
 	if !v.enabled || len(cs.PeerCertificates) == 0 {
 		return nil
 	}
+	// HTTP connections to IP literals omit SNI. Defer verification until the
+	// response supplies the request hostname rather than verifying without it.
+	if v.verificationName(cs) == "" {
+		return nil
+	}
 	verdict := v.verify(cs.PeerCertificates[0], cs.PeerCertificates[1:], v.verificationName(cs))
 	result := certVerificationResult{chain: certVerificationChain(cs, v.verificationName(cs)), verdict: verdict}
 

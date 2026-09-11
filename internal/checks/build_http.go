@@ -333,7 +333,7 @@ func configureHTTPCert(hc *httpCheck, target url.URL, clientOpts httpClientOptio
 	}
 	hc.certHost = target.Hostname()
 	hc.certOpts = certOptionsFromEntry(entry, httpCertOptionKeys)
-	hc.certVerification = newCertVerification(hc.certOpts.verify, hc.certHost)
+	hc.certVerification = newCertVerification(hc.certOpts.verify, "")
 	if clientOpts.http3 {
 		// Read the leaf over QUIC too; http3 populates resp.TLS so the same
 		// certificate logic applies. TLS 1.3 is enforced by QUIC.
