@@ -83,7 +83,7 @@ func testExternalModuleTLSPolicy(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			client, base := httpProbeBaseWithTLSMode(context.Background(), Config{Host: host, Port: port}, port, test.mode)
+			client, base := httpProbeBaseWithTLSMode(Config{Host: host, Port: port}, port, test.mode)
 			closeHTTPClientOnCleanup(t, client)
 			_, err := getHTTPProbe(context.Background(), client, base, externalModuleContractBodyLimit)
 			if test.wantErr && err == nil {

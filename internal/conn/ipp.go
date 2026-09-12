@@ -45,7 +45,7 @@ func (ippProtocol) DefaultPort() int   { return defaultPortIPP }
 func (ippProtocol) RequiresUser() bool { return false }
 
 func (ippProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
-	client, base := httpProbeBase(ctx, cfg, defaultPortIPP)
+	client, base := httpProbeBase(cfg, defaultPortIPP)
 	url := base + ippEndpointRoot
 	payload, err := buildIPPDefaultRequest()
 	if err != nil {
