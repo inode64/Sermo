@@ -21,12 +21,8 @@ func MaxOperationTimeout(cfg *config.Config, configured time.Duration) time.Dura
 	if cfg == nil {
 		return maxTO
 	}
-	for _, name := range cfg.SortedServiceNames() {
-		doc := cfg.Services[name]
-		if doc == nil || cfgval.Disabled(doc.Body) {
-			continue
-		}
-		resolved, errs := cfg.Resolve(name)
+	for _, resolution := range cfg.ResolveServices(cfg.EnabledServiceNames()) {
+		resolved, errs := resolution.Resolved, resolution.Errors
 		if len(errs) > 0 {
 			continue
 		}

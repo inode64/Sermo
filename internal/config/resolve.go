@@ -58,6 +58,28 @@ func (c *Config) Resolve(name string) (Resolved, []string) {
 	return c.resolveService(name, true)
 }
 
+// ServiceResolution pairs a resolved service with its resolution errors.
+// Failed entries stay in the batch so callers can report each requested name.
+type ServiceResolution struct {
+	Resolved Resolved
+	Errors   []string
+}
+
+// ResolveServices resolves names in the supplied order using inputs shared only
+// within this call. Returned trees remain independent, and a later call observes
+// changed environment and file variables instead of reusing an old cache.
+func (c *Config) ResolveServices(names []string) []ServiceResolution {
+	out := make([]ServiceResolution, len(names))
+	if len(names) == 0 {
+		return out
+	}
+	inputs := c.newResolutionInputs()
+	for i, name := range names {
+		out[i].Resolved, out[i].Errors = c.resolveServiceWithInputs(name, true, inputs)
+	}
+	return out
+}
+
 func (c *Config) resolveService(name string, pruneOptional bool) (Resolved, []string) {
 	return c.resolveServiceWithInputs(name, pruneOptional, c.newResolutionInputs())
 }
@@ -1406,7 +1428,9 @@ func (c *Config) expandAppsChain(tree map[string]any, chain []string, inputs res
 					}
 				}
 			}
-			preflight[key] = check
+			// Cached app trees belong to this resolution pass. Each service owns
+			// its attached check, including nested matcher and command values.
+			preflight[key] = deepCopy(check)
 		}
 	}
 	if len(preflight) > 0 {

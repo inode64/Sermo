@@ -962,6 +962,14 @@ func (c *Config) SortedServiceNames() []string {
 	return slices.Sorted(maps.Keys(c.Services))
 }
 
+// EnabledServiceNames returns non-nil, enabled service documents in name order.
+func (c *Config) EnabledServiceNames() []string {
+	return slices.DeleteFunc(c.SortedServiceNames(), func(name string) bool {
+		doc := c.Services[name]
+		return doc == nil || cfgval.Disabled(doc.Body)
+	})
+}
+
 type materializedNameCollision struct {
 	Kind         string
 	Name         string

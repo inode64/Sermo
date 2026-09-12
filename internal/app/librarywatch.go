@@ -267,8 +267,8 @@ type artifactDependencies struct {
 func collectArtifactDependencies(cfg *config.Config) artifactDependencies {
 	appSet := map[string]struct{}{}
 	pathIntervals := map[string]time.Duration{}
-	for _, name := range cfg.SortedServiceNames() {
-		resolved, errs := cfg.Resolve(name)
+	for _, resolution := range cfg.ResolveServices(cfg.SortedServiceNames()) {
+		resolved, errs := resolution.Resolved, resolution.Errors
 		if len(errs) > 0 || resolved.Tree == nil {
 			continue
 		}
