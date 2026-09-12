@@ -23,7 +23,7 @@ const (
 )
 
 func (cloudflaredProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
-	client, base := httpProbeBase(ctx, cfg, defaultPortCloudflared)
+	client, base := httpProbeBase(cfg, defaultPortCloudflared)
 	resp, err := getHTTPProbe(ctx, client, base+cloudflaredMetricsEndpoint, maxHTTPProbeLargeBody)
 	if err != nil {
 		return Result{}, err

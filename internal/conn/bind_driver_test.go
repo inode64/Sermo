@@ -65,7 +65,7 @@ func testExternalModuleInterfaceBinding(t *testing.T) {
 		}},
 		{"http-probe-base", func(t *testing.T) {
 			t.Helper()
-			client, base := httpProbeBase(context.Background(), Config{Host: "probe.example", Port: 8443, TLS: tlsSkipVerify, Interface: "eth0"}, 8080)
+			client, base := httpProbeBase(Config{Host: "probe.example", Port: 8443, TLS: tlsSkipVerify, Interface: "eth0"}, 8080)
 			if base != "https://probe.example:8443" {
 				t.Fatalf("base = %q", base)
 			}
@@ -76,7 +76,7 @@ func testExternalModuleInterfaceBinding(t *testing.T) {
 		}},
 		{"http-probe-base-explicit-TLS", func(t *testing.T) {
 			t.Helper()
-			client, base := httpProbeBaseWithTLSMode(context.Background(), Config{Host: "probe.example", Interface: "eth0"}, 8080, tlsSkipVerify)
+			client, base := httpProbeBaseWithTLSMode(Config{Host: "probe.example", Interface: "eth0"}, 8080, tlsSkipVerify)
 			if base != "https://probe.example:8080" {
 				t.Fatalf("base = %q", base)
 			}
