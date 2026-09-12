@@ -36,7 +36,11 @@ func (b *WebBackend) Watches(_ context.Context) []web.Watch {
 }
 
 func (b *WebBackend) watchView(w *webWatch, system metrics.Snapshot, activity watchActivity) web.Watch {
-	storage, swap, meter, readings, summary := b.watchPresentation(w, system)
+	observation := watchObservation{
+		snapshots: b.watchSnapshots.Get(w.name, w.checkType),
+		at:        b.webNow(), available: b.watchSnapshots != nil,
+	}
+	storage, swap, meter, readings, summary := observation.watchPresentation(w, system)
 	monitorMode := w.monitorMode
 	if monitorMode == "" {
 		monitorMode = config.MonitorEnabled
@@ -57,27 +61,27 @@ func (b *WebBackend) watchView(w *webWatch, system metrics.Snapshot, activity wa
 		CanControlRAID: !w.disabled && w.raidControl, RAIDArray: cfgval.String(w.check[checks.CheckKeyArray]),
 		CanControlReplication: !w.disabled && w.replicationControl && w.checkType == checks.CheckTypeReplication,
 	}
-	b.applyWatchRuntimeView(&view, w, activity)
+	b.applyWatchRuntimeView(&view, w, activity, observation)
 	return view
 }
 
-func (b *WebBackend) watchPresentation(w *webWatch, system metrics.Snapshot) (*web.StorageWatchInfo, *web.SwapWatchInfo, *web.WatchMeter, []web.WatchReading, string) {
+func (o watchObservation) watchPresentation(w *webWatch, system metrics.Snapshot) (*web.StorageWatchInfo, *web.SwapWatchInfo, *web.WatchMeter, []web.WatchReading, string) {
 	if w.disabled {
 		return nil, nil, nil, nil, ""
 	}
 	var storage *web.StorageWatchInfo
 	if isStorageCheckType(w.checkType) {
-		storage = b.storageWatchInfo(w)
+		storage = o.storageWatchInfo(w)
 	}
 	var swap *web.SwapWatchInfo
 	if w.checkType == checks.CheckTypeSwap {
 		swap = swapWatchInfo(system)
 	}
-	meter, readings, summary := b.watchSnapshotView(w, system)
+	meter, readings, summary := o.watchSnapshotView(w, system)
 	return storage, swap, meter, readings, summary
 }
 
-func (b *WebBackend) applyWatchRuntimeView(view *web.Watch, w *webWatch, activity watchActivity) {
+func (b *WebBackend) applyWatchRuntimeView(view *web.Watch, w *webWatch, activity watchActivity, observation watchObservation) {
 	if w.expand != nil {
 		view.Expand = &web.WatchExpand{ByBytes: w.expand.By}
 	}
@@ -86,7 +90,7 @@ func (b *WebBackend) applyWatchRuntimeView(view *web.Watch, w *webWatch, activit
 			view.Monitored, view.MonitorSource, view.MonitorChangedAt = monitoredState.active, monitoredState.source, monitoredState.changedAtText()
 		}
 	}
-	checkedAt := b.watchLastCheckedAt(w)
+	checkedAt := observation.watchLastCheckedAt(w)
 	if !checkedAt.IsZero() {
 		view.LastCheckedAt = checkedAt.Format(time.RFC3339)
 	}
@@ -97,14 +101,14 @@ func (b *WebBackend) applyWatchRuntimeView(view *web.Watch, w *webWatch, activit
 		view.LastActivity, view.LastActivityKind = activity.At, activity.Kind
 	}
 	if view.Enabled && view.Monitored {
-		view.SampleState = b.watchSampleState(w, checkedAt)
+		view.SampleState = observation.watchSampleState(w, checkedAt)
 	}
 	view.KeepsSLA = !w.disabled && watchRecordsAvailability(w)
 	// Start from the same declaration the recorder persists from, then narrow a
 	// device-dependent check to the attributes this device actually publishes.
 	if !w.disabled {
 		view.Metrics = webCheckMetricsForReadings(w.checkType, w.graphs, w.bands, view.Readings)
-		b.setWatchCurrentMetricValues(view, w)
+		observation.setWatchCurrentMetricValues(view, w)
 	}
 	observed := b.settling == nil || b.settling.Observed(SettlingWatchKey(w.name))
 	failed, warning := watchViewState(*view)
@@ -125,12 +129,12 @@ func (b *WebBackend) applyWatchRuntimeView(view *web.Watch, w *webWatch, activit
 // setWatchCurrentMetricValues projects the same fresh daemon snapshots the
 // watch row just rendered into its metric declarations. It reads only the
 // in-memory snapshot registry: the web request never starts a second probe.
-func (b *WebBackend) setWatchCurrentMetricValues(view *web.Watch, w *webWatch) {
+func (o watchObservation) setWatchCurrentMetricValues(view *web.Watch, w *webWatch) {
 	if view == nil || len(view.Metrics) == 0 {
 		return
 	}
-	for _, snap := range b.watchSnapshots.Get(w.name, w.checkType) {
-		if !b.watchSnapshotCurrent(w, snap) || !watchSnapshotMetricConfigured(w, snap) {
+	for _, snap := range o.snapshots {
+		if !o.watchSnapshotCurrent(w, snap) || !watchSnapshotMetricConfigured(w, snap) {
 			continue
 		}
 		setCurrentMetricValues(view.Metrics, snap.Data)
