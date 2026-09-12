@@ -1717,7 +1717,7 @@ func snapshotOnlyBackend(t *testing.T, cfg *config.Config, snapshots *WatchSnaps
 	for name, slots := range snapshots.byWatch {
 		entry, _ := raw[name].(map[string]any)
 		for slot, snapshot := range slots {
-			snapshot.result.ConfigID = watchSnapshotConfigID(entry)
+			snapshot.ConfigID = watchSnapshotConfigID(entry)
 			slots[slot] = snapshot
 		}
 	}

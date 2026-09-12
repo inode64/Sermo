@@ -134,24 +134,19 @@ func (s *Snapshots) Get(service string) map[string]CheckSnapshot {
 	return s.byService[service]
 }
 
-type watchResultSnapshot struct {
-	checkType string
-	result    CheckSnapshot
-}
-
 // WatchSnapshots holds each host watch's latest daemon-cycle check result. The
 // web UI reads this registry so /api/watches does not start probes of its own.
 type WatchSnapshots struct {
 	mu          sync.RWMutex
 	now         func() time.Time
-	byWatch     map[string]map[string]watchResultSnapshot
+	byWatch     map[string]map[string]CheckSnapshot
 	store       watchSnapshotStore
 	reportError func(error)
 }
 
 // NewWatchSnapshots returns an empty host-watch result registry.
 func NewWatchSnapshots() *WatchSnapshots {
-	return &WatchSnapshots{now: time.Now, byWatch: map[string]map[string]watchResultSnapshot{}}
+	return &WatchSnapshots{now: time.Now, byWatch: map[string]map[string]CheckSnapshot{}}
 }
 
 type watchSnapshotStore interface {
@@ -174,13 +169,10 @@ func NewPersistentWatchSnapshots(store watchSnapshotStore, reportError func(erro
 	}
 	for watch, slots := range records {
 		if s.byWatch[watch] == nil {
-			s.byWatch[watch] = map[string]watchResultSnapshot{}
+			s.byWatch[watch] = map[string]CheckSnapshot{}
 		}
 		for slot, rec := range slots {
-			s.byWatch[watch][slot] = watchResultSnapshot{
-				checkType: rec.CheckType,
-				result:    snapshotFromRecord(rec),
-			}
+			s.byWatch[watch][slot] = snapshotFromRecord(rec)
 		}
 	}
 	return s, nil
@@ -199,16 +191,15 @@ func (s *WatchSnapshots) publishConfigured(watch, checkType string, r checks.Res
 	now := clockOrNow(s.now)
 	slot := watchResultSlot(r)
 	snap := checkSnapshotFromResult(r)
-	snap.ConfigID, snap.Ran, snap.At = configID, true, now()
+	snap.CheckType, snap.ConfigID, snap.Ran, snap.At = checkType, configID, true, now()
 	s.mu.Lock()
 	if s.byWatch[watch] == nil {
-		s.byWatch[watch] = map[string]watchResultSnapshot{}
+		s.byWatch[watch] = map[string]CheckSnapshot{}
 	}
-	s.byWatch[watch][slot] = watchResultSnapshot{checkType: checkType, result: snap}
+	s.byWatch[watch][slot] = snap
 	s.mu.Unlock()
 	if s.store != nil {
 		rec := snapshotRecord(snap)
-		rec.CheckType = checkType
 		if err := s.store.SetWatchCheckSnapshot(watch, slot, rec); err != nil {
 			s.reportStoreError(err)
 		}
@@ -232,10 +223,10 @@ func (s *WatchSnapshots) Get(watch, checkType string) []CheckSnapshot {
 	out := make([]CheckSnapshot, 0, len(keys))
 	for _, key := range keys {
 		snap := slots[key]
-		if snap.checkType != checkType {
+		if snap.CheckType != checkType {
 			continue
 		}
-		out = append(out, snap.result)
+		out = append(out, snap)
 	}
 	return out
 }
