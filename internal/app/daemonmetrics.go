@@ -157,7 +157,6 @@ func (s *DaemonMetricSampler) Series(since time.Duration) web.DaemonMetrics {
 		return web.DaemonMetrics{Since: since.String()}
 	}
 	sample := s.samples[len(s.samples)-1]
-	samples := samplesSince(s.samples, sample.at.Add(-since))
 	s.mu.Unlock()
 
 	if s.store != nil {
@@ -165,6 +164,11 @@ func (s *DaemonMetricSampler) Series(since time.Duration) web.DaemonMetrics {
 			return out
 		}
 	}
+	// Persistence is the normal source. Copy the fallback only after it fails,
+	// keeping the original observation time if a worker published meanwhile.
+	s.mu.Lock()
+	samples := filterWindow(s.samples, sample.at.Add(-since), sample.at, func(p daemonMetricSample) time.Time { return p.at })
+	s.mu.Unlock()
 	triplet := sampledMetricTriplet(daemonMetricCheck, since, samples,
 		func(p daemonMetricSample) time.Time { return p.at },
 		func(p daemonMetricSample) (float64, bool) { return p.cpu, p.cpuReady },
@@ -327,10 +331,6 @@ func loadPersistentMetricTriplet(check string, at time.Time, since time.Duration
 
 func (s *DaemonMetricSampler) trimLocked(cutoff time.Time) {
 	s.samples = trimBefore(s.samples, cutoff, func(sample daemonMetricSample) time.Time { return sample.at })
-}
-
-func samplesSince(samples []daemonMetricSample, cutoff time.Time) []daemonMetricSample {
-	return filterSince(samples, cutoff, func(s daemonMetricSample) time.Time { return s.at })
 }
 
 func daemonRuntime(sample daemonMetricSample) web.DaemonRuntime {
