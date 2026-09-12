@@ -132,12 +132,12 @@ func (s *ServiceMetricSampler) Series(name string, cur web.ServiceRuntime, since
 		cur.At = at.UTC().Format(time.RFC3339)
 	}
 
-	s.mu.Lock()
-	samples := serviceSamplesSince(s.samples[name], at.Add(-since))
-	s.mu.Unlock()
 	if out, ok := s.persistentSeries(name, cur, at, since); ok {
 		return out
 	}
+	s.mu.Lock()
+	samples := filterWindow(s.samples[name], at.Add(-since), at, func(p serviceMetricSample) time.Time { return p.at })
+	s.mu.Unlock()
 	triplet := sampledMetricTriplet(runtimeMetricCheck, since, samples,
 		func(p serviceMetricSample) time.Time { return p.at },
 		func(p serviceMetricSample) (float64, bool) { return p.current.CPU, p.current.HasCPU },
@@ -201,10 +201,6 @@ func (s *ServiceMetricSampler) persistentSeries(name string, cur web.ServiceRunt
 
 func (s *ServiceMetricSampler) trimLocked(name string, cutoff time.Time) {
 	s.samples[name] = trimBefore(s.samples[name], cutoff, func(sample serviceMetricSample) time.Time { return sample.at })
-}
-
-func serviceSamplesSince(samples []serviceMetricSample, cutoff time.Time) []serviceMetricSample {
-	return filterSince(samples, cutoff, func(s serviceMetricSample) time.Time { return s.at })
 }
 
 // ServiceRuntime returns current and historical process-tree metrics for one service.
