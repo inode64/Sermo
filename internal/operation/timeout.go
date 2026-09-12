@@ -48,10 +48,6 @@ func resolveTimeout(configured time.Duration, policy process.KillPolicy) time.Du
 	return configured
 }
 
-func boundContext(parent context.Context, timeout time.Duration) (context.Context, context.CancelFunc) {
-	return context.WithTimeout(parent, timeout)
-}
-
 func timedOut(ctx context.Context) bool {
 	return ctx.Err() == context.DeadlineExceeded
 }

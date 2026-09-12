@@ -126,17 +126,6 @@ func TestResolvedTimeoutAutomaticEscalation(t *testing.T) {
 	}
 }
 
-func TestBoundContextRespectsShorterParent(t *testing.T) {
-	parent, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
-	defer cancel()
-	ctx, childCancel := boundContext(parent, time.Hour)
-	defer childCancel()
-	time.Sleep(20 * time.Millisecond)
-	if ctx.Err() == nil {
-		t.Fatal("child context should inherit parent deadline")
-	}
-}
-
 func TestStopTimesOutDuringReaperWait(t *testing.T) {
 	h := defaultHarness()
 	h.discoverSteps = [][]process.Process{{{PID: 100, UID: 110, Exe: "/opt/x", ExeOK: true}}, {{PID: 100, UID: 110, Exe: "/opt/x", ExeOK: true}}}
