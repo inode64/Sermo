@@ -184,7 +184,6 @@ func watchMeterFromSnapshot(checkType string, data map[string]any) *web.WatchMet
 		if !totalOK || !availableOK || !pctOK {
 			return nil
 		}
-		available = min(available, total)
 		return memoryWatchMeter(total, available, usedPct)
 	case checks.CheckTypeLoad:
 		load, loadOK := cfgval.Float(data[metrics.MetricLoad1])
