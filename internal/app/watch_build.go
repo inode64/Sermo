@@ -993,15 +993,15 @@ func resolveNotifiers(names []string, reg map[string]notify.Notifier) []notify.N
 func serviceMonitorWatches(cfg *config.Config, deps Deps) ([]*Watch, []string) {
 	var watches []*Watch
 	var warnings []string
-	for _, name := range cfg.SortedServiceNames() {
-		resolved, errs := cfg.Resolve(name)
+	for _, resolution := range cfg.ResolveServices(cfg.SortedServiceNames()) {
+		resolved, errs := resolution.Resolved, resolution.Errors
 		if len(errs) > 0 || resolved.Tree == nil {
 			continue
 		}
 		tree := resolved.Tree
 		interval := serviceArtifactInterval(cfg, tree)
 		for _, build := range []func(string, map[string]any, Deps, time.Duration) (*Watch, string){versionMonitor, configMonitor} {
-			w, warn := build(name, tree, deps, interval)
+			w, warn := build(resolved.Name, tree, deps, interval)
 			if warn != "" {
 				warnings = append(warnings, warn)
 			} else if w != nil {

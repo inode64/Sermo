@@ -336,10 +336,11 @@ func BuildWorkers(ctx context.Context, cfg *config.Config, deps Deps, collector 
 	// only needs the finished workers), so they are wired side by side and
 	// assembled in name order afterwards; the shared registries and caches
 	// they touch are the same ones the running workers share.
-	names := cfg.SortedServiceNames()
+	names := cfg.EnabledServiceNames()
+	resolutions := cfg.ResolveServices(names)
 	built := make([]builtService, len(names))
 	forEachParallel(len(names), deps.MaxParallel, func(i int) {
-		built[i] = buildServiceWorker(ctx, cfg, deps, collector, resolver, &restartNotice, restartNoticeConfigured, names[i])
+		built[i] = buildServiceWorker(ctx, resolutions[i], deps, collector, resolver, &restartNotice, restartNoticeConfigured, names[i])
 	})
 
 	var workers []*Worker
@@ -375,15 +376,11 @@ type builtService struct {
 // minutes on a loaded host, and the name says where the init backend stalls.
 const slowServiceWiring = 10 * time.Second
 
-func buildServiceWorker(ctx context.Context, cfg *config.Config, deps Deps, collector *metrics.Collector, resolver servicemgr.UnitResolver, restartNotice *config.ServiceRestartNotice, restartNoticeConfigured bool, name string) builtService {
+func buildServiceWorker(ctx context.Context, resolution config.ServiceResolution, deps Deps, collector *metrics.Collector, resolver servicemgr.UnitResolver, restartNotice *config.ServiceRestartNotice, restartNoticeConfigured bool, name string) builtService {
 	started := clockOrNow(deps.Now)
 	from := started()
 	var b builtService
-	doc := cfg.Services[name]
-	if doc == nil || cfgval.Disabled(doc.Body) {
-		return b
-	}
-	resolved, errs := cfg.Resolve(name)
+	resolved, errs := resolution.Resolved, resolution.Errors
 	if len(errs) > 0 {
 		b.warnings = append(b.warnings, "skip service "+name+": "+errs[0])
 		return b

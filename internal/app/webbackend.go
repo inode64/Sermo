@@ -343,9 +343,10 @@ func NewWebBackend(ctx context.Context, cfg *config.Config, deps Deps) (*WebBack
 	// side by side and registered in name order, since registration is what
 	// touches the backend's own maps.
 	names := cfg.SortedServiceNames()
+	resolutions := cfg.ResolveServices(names)
 	prepared := make([]preparedService, len(names))
 	forEachParallel(len(names), deps.MaxParallel, func(i int) {
-		prepared[i] = prepareWebService(ctx, cfg, names[i], resolver, deps)
+		prepared[i] = prepareWebService(ctx, cfg, names[i], resolutions[i], resolver, deps)
 	})
 	warnings := make([]string, 0, len(names))
 	for i, name := range names {
@@ -376,12 +377,12 @@ type preparedService struct {
 	warnings []string
 }
 
-func prepareWebService(ctx context.Context, cfg *config.Config, name string, resolver servicemgr.UnitResolver, deps Deps) preparedService {
+func prepareWebService(ctx context.Context, cfg *config.Config, name string, resolution config.ServiceResolution, resolver servicemgr.UnitResolver, deps Deps) preparedService {
 	doc := cfg.Services[name]
 	if doc == nil {
 		return preparedService{}
 	}
-	resolved, errs := cfg.Resolve(name)
+	resolved, errs := resolution.Resolved, resolution.Errors
 	if len(errs) > 0 {
 		return preparedService{warnings: []string{"skip service " + name + ": " + errs[0]}}
 	}
