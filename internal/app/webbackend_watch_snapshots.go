@@ -13,10 +13,19 @@ import (
 // readingSummarySeparator joins the parts of a watch's one-line reading summary.
 const readingSummarySeparator = " · "
 
+// watchObservation captures one watch's published results and freshness clock
+// for every projection in a response row. A missing registry differs from an
+// available registry that has not observed this watch yet.
+type watchObservation struct {
+	snapshots []CheckSnapshot
+	at        time.Time
+	available bool
+}
+
 // watchSnapshotView returns the latest result published by the daemon watch
 // cycle. The web handler never samples watches itself.
-func (b *WebBackend) watchSnapshotView(w *webWatch, system metrics.Snapshot) (*web.WatchMeter, []web.WatchReading, string) {
-	snaps := b.watchSnapshots.Get(w.name, w.checkType)
+func (o watchObservation) watchSnapshotView(w *webWatch, system metrics.Snapshot) (*web.WatchMeter, []web.WatchReading, string) {
+	snaps := o.snapshots
 	if len(snaps) == 0 {
 		if m := watchMeter(w.checkType, system); m != nil {
 			return m, nil, ""
@@ -27,7 +36,7 @@ func (b *WebBackend) watchSnapshotView(w *webWatch, system metrics.Snapshot) (*w
 	var readings []web.WatchReading
 	var summaries []string
 	for _, snap := range snaps {
-		if !b.watchSnapshotCurrent(w, snap) || !watchSnapshotMetricConfigured(w, snap) {
+		if !o.watchSnapshotCurrent(w, snap) || !watchSnapshotMetricConfigured(w, snap) {
 			continue
 		}
 		snapMeter := watchMeterFromSnapshot(w.checkType, snap.Data)
@@ -75,29 +84,29 @@ func dedupeWatchReadings(readings []web.WatchReading) []web.WatchReading {
 	return out
 }
 
-func (b *WebBackend) watchSnapshotCurrent(w *webWatch, snap CheckSnapshot) bool {
+func (o watchObservation) watchSnapshotCurrent(w *webWatch, snap CheckSnapshot) bool {
 	// Name, type and age are not enough: a reload that keeps the watch name
 	// while pointing it at another device must not show the previous target.
-	return snapshotConfigMatches(w.configID, snap.ConfigID) && b.watchSampleCurrent(w, snap.At)
+	return snapshotConfigMatches(w.configID, snap.ConfigID) && o.watchSampleCurrent(w, snap.At)
 }
 
-func (b *WebBackend) watchSampleCurrent(w *webWatch, at time.Time) bool {
+func (o watchObservation) watchSampleCurrent(w *webWatch, at time.Time) bool {
 	if at.IsZero() {
 		return false
 	}
-	return b.webNow().Sub(at) <= runtimePublishMaxAge(w.interval)
+	return o.at.Sub(at) <= runtimePublishMaxAge(w.interval)
 }
 
 // watchSampleState classifies the newest daemon-published result without
 // exposing stale data or asking the web handler to run the watch itself.
-func (b *WebBackend) watchSampleState(w *webWatch, checkedAt time.Time) string {
-	if b.watchSnapshots == nil {
+func (o watchObservation) watchSampleState(w *webWatch, checkedAt time.Time) string {
+	if !o.available {
 		return ""
 	}
 	if checkedAt.IsZero() {
 		return web.WatchSampleStateCollecting
 	}
-	if b.watchSampleCurrent(w, checkedAt) {
+	if o.watchSampleCurrent(w, checkedAt) {
 		return web.WatchSampleStateFresh
 	}
 	return web.WatchSampleStateStale

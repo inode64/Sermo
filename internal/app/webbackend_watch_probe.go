@@ -227,12 +227,12 @@ func ManualProbeCheckType(checkType string) bool {
 // watchLastCheckedAt is the newest sample produced by this watch's current
 // check configuration. Samples from a previous target are ignored even if
 // they are still within the freshness window.
-func (b *WebBackend) watchLastCheckedAt(w *webWatch) time.Time {
-	if b.watchSnapshots == nil {
+func (o watchObservation) watchLastCheckedAt(w *webWatch) time.Time {
+	if !o.available {
 		return time.Time{}
 	}
 	var latest time.Time
-	for _, snap := range b.watchSnapshots.Get(w.name, w.checkType) {
+	for _, snap := range o.snapshots {
 		if snap.Ran && snapshotConfigMatches(w.configID, snap.ConfigID) && watchSnapshotMetricConfigured(w, snap) && snap.At.After(latest) {
 			latest = snap.At
 		}
