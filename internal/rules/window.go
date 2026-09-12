@@ -134,7 +134,7 @@ func (s *WindowState) advance(r Rule, conditionTrue bool, at time.Time) bool {
 				s.timedHistory = append(s.timedHistory, WindowSample{At: at})
 			}
 			s.timedHistory = recentSamples(s.timedHistory, at, duration)
-			return countTimedTrue(s.timedHistory) >= minMatches
+			return len(s.timedHistory) >= minMatches
 		}
 		s.history = append(s.history, conditionTrue)
 		s.history = s.history[max(len(s.history)-cycles, 0):]
@@ -206,7 +206,7 @@ func (s *WindowState) statusAt(r Rule, at time.Time) windowStatus {
 	consecutive, history, trueSince, timedHistory := s.counters()
 	if cycles, duration, minMatches, ok := r.withinWindow(); ok {
 		if duration > 0 {
-			matches := countTimedTrue(recentSamples(timedHistory, at, duration))
+			matches := len(recentSamples(timedHistory, at, duration))
 			return windowStatus{
 				firing:   episodeFiring || matches >= minMatches,
 				progress: fmt.Sprintf("%d/%d in %s", matches, minMatches, formatWindowDuration(duration)),
@@ -353,10 +353,6 @@ func recentSamples(history []WindowSample, at time.Time, duration time.Duration)
 		}
 	}
 	return out
-}
-
-func countTimedTrue(history []WindowSample) int {
-	return len(history)
 }
 
 func durationElapsed(since, at time.Time) time.Duration {

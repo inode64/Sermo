@@ -432,7 +432,7 @@ func (e Engine) run(ctx context.Context, p plan) (result Result) {
 	var staleWarn []string
 	var repairedPIDFiles []string
 
-	ctx, cancel := boundContext(ctx, e.OperationTimeout)
+	ctx, cancel := context.WithTimeout(ctx, e.OperationTimeout)
 	defer cancel()
 
 	// Step 2: exactly one event per operation, on every exit path including a
