@@ -68,15 +68,9 @@ func (w *Watch) runtimeRecord() state.WatchRuntimeRecord {
 }
 
 func watchWindowStateFromRecord(rec state.WatchRuntimeRecord) *rules.WindowState {
-	return windowStateFromRecord(state.RuleWindowRecord{
-		Consecutive:      rec.Window.Consecutive,
-		History:          rec.Window.History,
-		TrueSince:        rec.Window.TrueSince,
-		TimedHistory:     rec.Window.TimedHistory,
-		Firing:           rec.Firing,
-		ClearConsecutive: rec.Window.ClearConsecutive,
-		ClearSince:       rec.Window.ClearSince,
-	})
+	window := watchWindowAsRuleRecord(rec.Window)
+	window.Firing = rec.Firing
+	return windowStateFromRecord(window)
 }
 
 func watchWindowRecord(window *rules.WindowState) state.WatchWindowRecord {
