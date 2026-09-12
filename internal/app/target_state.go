@@ -125,7 +125,7 @@ func WatchState(enabled, monitored, failed, warning, observed bool) string {
 	if !enabled || !monitored {
 		return TargetStateDisabled
 	}
-	if monitored && !observed {
+	if !observed {
 		return TargetStateStarting
 	}
 	if failed {
