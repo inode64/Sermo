@@ -104,7 +104,7 @@ func ruleWindowRecordsEqual(a, b state.RuleWindowRecord) bool {
 	return a.Consecutive == b.Consecutive && a.Firing == b.Firing && a.ClearConsecutive == b.ClearConsecutive &&
 		a.TrueSince.Equal(b.TrueSince) && a.ClearSince.Equal(b.ClearSince) &&
 		slices.Equal(a.History, b.History) &&
-		slices.EqualFunc(a.TimedHistory, b.TimedHistory, func(x, y state.RuleWindowSample) bool {
+		slices.EqualFunc(a.TimedHistory, b.TimedHistory, func(x, y rules.WindowSample) bool {
 			return x.At.Equal(y.At)
 		})
 }
@@ -157,11 +157,17 @@ func remediationToRecord(remediation *rules.RemediationState) state.RemediationR
 }
 
 func windowStateFromRecord(rec state.RuleWindowRecord) *rules.WindowState {
+	if len(rec.History) == 0 {
+		rec.History = nil
+	}
+	if len(rec.TimedHistory) == 0 {
+		rec.TimedHistory = nil
+	}
 	return rules.WindowStateFromSnapshot(rules.WindowStateSnapshot{
 		Consecutive:      rec.Consecutive,
-		History:          append([]bool(nil), rec.History...),
+		History:          rec.History,
 		TrueSince:        rec.TrueSince,
-		TimedHistory:     ruleSamplesFromRecords(rec.TimedHistory),
+		TimedHistory:     rec.TimedHistory,
 		Firing:           rec.Firing,
 		ClearConsecutive: rec.ClearConsecutive,
 		ClearSince:       rec.ClearSince,
@@ -170,27 +176,21 @@ func windowStateFromRecord(rec state.RuleWindowRecord) *rules.WindowState {
 
 func ruleWindowRecord(window *rules.WindowState) state.RuleWindowRecord {
 	snapshot := window.Snapshot()
+	if len(snapshot.History) == 0 {
+		snapshot.History = nil
+	}
+	if len(snapshot.TimedHistory) == 0 {
+		snapshot.TimedHistory = nil
+	}
 	return state.RuleWindowRecord{
 		Consecutive:      snapshot.Consecutive,
-		History:          append([]bool(nil), snapshot.History...),
+		History:          snapshot.History,
 		TrueSince:        snapshot.TrueSince,
-		TimedHistory:     ruleRecordsFromSamples(snapshot.TimedHistory),
+		TimedHistory:     snapshot.TimedHistory,
 		Firing:           snapshot.Firing,
 		ClearConsecutive: snapshot.ClearConsecutive,
 		ClearSince:       snapshot.ClearSince,
 	}
-}
-
-func ruleSamplesFromRecords(records []state.RuleWindowSample) []rules.WindowSample {
-	return mapSlice(records, func(rec state.RuleWindowSample) rules.WindowSample {
-		return rules.WindowSample{At: rec.At}
-	})
-}
-
-func ruleRecordsFromSamples(samples []rules.WindowSample) []state.RuleWindowSample {
-	return mapSlice(samples, func(sample rules.WindowSample) state.RuleWindowSample {
-		return state.RuleWindowSample{At: sample.At}
-	})
 }
 
 func emitRuleStateError(emit func(Event), service, action string, err error) {

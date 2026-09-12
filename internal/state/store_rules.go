@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"sermo/internal/rules"
 	"time"
 
 	_ "modernc.org/sqlite" // registers the "sqlite" database/sql driver
@@ -29,11 +30,8 @@ type RuleWindowRecord struct {
 	ClearSince       time.Time
 }
 
-// RuleWindowSample is one persisted matching sample for a duration-based within
-// window.
-type RuleWindowSample struct {
-	At time.Time
-}
+// RuleWindowSample is the rule engine sample persisted for a duration window.
+type RuleWindowSample = rules.WindowSample
 
 // RemediationState returns a service's persisted automatic-remediation state.
 // found is false when no action state has been recorded yet.

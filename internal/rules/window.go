@@ -237,7 +237,12 @@ func (s *WindowState) Clone() *WindowState {
 	if s == nil {
 		return nil
 	}
-	return WindowStateFromSnapshot(s.Snapshot())
+	out := *s
+	out.consecutive = max(out.consecutive, 0)
+	out.clearConsecutive = max(out.clearConsecutive, 0)
+	out.history = slices.Clone(s.history)
+	out.timedHistory = slices.Clone(s.timedHistory)
+	return &out
 }
 
 // Snapshot returns a deep-copyable representation of the current window state.

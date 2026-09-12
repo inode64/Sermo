@@ -52,3 +52,21 @@ func TestRecentSamplesRetainsValidHistoryWithoutAllocation(t *testing.T) {
 		t.Fatal("valid history was copied")
 	}
 }
+
+func TestWindowClonePreservesIndependentHistories(t *testing.T) {
+	at := time.Date(2026, 9, 12, 12, 0, 0, 0, time.UTC)
+	original := &WindowState{
+		consecutive: -1, clearConsecutive: -2,
+		history: []bool{true}, timedHistory: []WindowSample{{At: at}},
+		trueSince: at, clearSince: at, firing: true,
+	}
+	clone := original.Clone()
+	clone.history[0] = false
+	clone.timedHistory[0].At = time.Time{}
+	if !original.history[0] || !original.timedHistory[0].At.Equal(at) {
+		t.Fatal("clone aliases source histories")
+	}
+	if clone.consecutive != 0 || clone.clearConsecutive != 0 || !clone.firing || !clone.trueSince.Equal(at) || !clone.clearSince.Equal(at) {
+		t.Fatalf("clone lost normalization or episode state: %+v", clone)
+	}
+}
