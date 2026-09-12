@@ -334,15 +334,18 @@ func recentSamples(history []WindowSample, at time.Time, duration time.Duration)
 		return history
 	}
 	cutoff := at.Add(-duration)
-	var out []WindowSample
-	for _, sample := range history {
-		if sample.At.IsZero() || sample.At.Before(cutoff) || sample.At.After(at) {
-			continue
-		}
-		out = append(out, sample)
+	invalid := func(sample WindowSample) bool {
+		return sample.At.IsZero() || sample.At.Before(cutoff) || sample.At.After(at)
 	}
-	if len(out) == len(history) {
+	first := slices.IndexFunc(history, invalid)
+	if first < 0 {
 		return history
+	}
+	out := append([]WindowSample(nil), history[:first]...)
+	for _, sample := range history[first+1:] {
+		if !invalid(sample) {
+			out = append(out, sample)
+		}
 	}
 	return out
 }
