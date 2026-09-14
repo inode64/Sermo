@@ -74,3 +74,32 @@ func TestReclaimStaleRequiresDirectoryLock(t *testing.T) {
 		t.Fatal("reported reclamation despite failing to open the lock directory")
 	}
 }
+
+func TestAcquireDoesNotWaitForReclamation(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "mysql.lock")
+	writeLock(t, dir, "mysql.lock", lockFile{Service: "mysql", ExpiresAt: fixedNow.Add(-time.Hour)})
+	unlock, err := lockReclaimDir(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer unlock()
+	locker := namedLocker(dir, fakeProc{})
+	done := make(chan error, 1)
+	go func() {
+		_, acquireErr := locker.Pin("mysql", "", "", time.Hour)
+		done <- acquireErr
+	}()
+	select {
+	case err := <-done:
+		if !isHeld(err) {
+			t.Fatalf("Acquire = %v, want held lock", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("acquisition waited for the directory lock")
+	}
+	lf, err := readLockFile(path)
+	if err != nil || !lf.ExpiresAt.Equal(fixedNow.Add(-time.Hour)) {
+		t.Fatalf("contended reclamation changed the lock: %+v, %v", lf, err)
+	}
+}
