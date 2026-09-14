@@ -297,8 +297,9 @@ that identifier remain readable and can be reclaimed under the same exclusion.
 Two complementary blocking mechanisms guard operations:
 
 1. **Named runtime locks** — files under `<paths.runtime>/locks` (default
-   `/run/sermo/locks`), named `<service>[.<name>].lock`. The operation engine
-   blocks automatically on any active one; no rule is needed. Created by
+   `/run/sermo/locks`), named `<service>[\<name>].lock`. A literal backslash
+   separates the service and lock name. The operation engine blocks automatically
+   on any active one; no rule is needed. Created by
    `sermoctl lock` (wrap a command), `lock acquire` / `lock release`
    (see [cli.md](cli.md)).
 2. **External lock checks gated by a guard** — a check (`file_exists`,
@@ -309,6 +310,12 @@ Two complementary blocking mechanisms guard operations:
 A service-created `lockfile:` in the catalog is different: it is a gated health
 check for a regular runtime artifact, like `socket:`, and does not block
 operations unless the operator also writes an explicit guard rule.
+
+If a named lock for the service cannot be read or parsed, the operation fails
+before any service action. This also covers the short interval between exclusive
+file creation and completion of its JSON payload. An incomplete or corrupt lock
+is not proof that maintenance has finished; lock listings retain the diagnostic
+warning. A malformed lock for a different service does not block this service.
 
 The **internal operation lock** (`<paths.runtime>/ops/<service>.lock`)
 serializes start/stop/restart/reload/resume/repair for one service. It is deliberately outside the
@@ -338,7 +345,8 @@ even after PID reuse.
 Lifecycle:
 
 - **Acquire atomically** with `O_CREAT|O_EXCL`; write the JSON and fsync file
-  and directory, so an existing lock is always complete and readable.
+  and directory. Until the write finishes, scanners may observe an incomplete
+  file; operations fail closed on that uncertainty.
 - A lock is **stale** (ignored, reclaimable) when its TTL elapsed, its owner
   PID is dead, or the PID is alive with a different start time (reuse). A live
   lock is **never silently overwritten**.

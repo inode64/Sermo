@@ -23,6 +23,8 @@ touches them.
 4. The operation lock is released on every exit path. Named runtime locks live
    under `<paths.runtime>/locks`, operation locks under `<paths.runtime>/ops`;
    they never share a directory and are never loaded from `/etc/sermo`.
+   A named lock read/parse warning for the target service prevents its operation;
+   do not treat a partially written lock as absent.
 5. Locks are created with `O_CREAT|O_EXCL` and are TTL-bounded. A stale lock
    (expired or dead owner) is reclaimed through a logged path, never silently
    overwritten.
