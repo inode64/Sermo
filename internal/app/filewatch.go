@@ -204,9 +204,9 @@ func (w *fileWatcher) publishSnapshot(current map[string]fileState) {
 	if len(current) == 0 {
 		// Name the path: "no watched path exists" says what happened, the path
 		// says to what, and the column is where the operator reads it.
-		message := firstFileWatchPath(w.paths) + ": not found"
+		message := w.paths[0] + ": not found"
 		if w.absentOK {
-			message = firstFileWatchPath(w.paths) + ": absent (ok)"
+			message = w.paths[0] + ": absent (ok)"
 		}
 		data := map[string]any{checks.DataKeyPaths: w.paths}
 		if len(w.paths) == 1 {
@@ -243,7 +243,7 @@ func (w *fileWatcher) publishSnapshot(current map[string]fileState) {
 	result := checks.Result{
 		Check:   w.name,
 		OK:      true,
-		Message: fmt.Sprintf("%s size %d", firstFileWatchPath(w.paths), root.size),
+		Message: fmt.Sprintf("%s size %d", w.paths[0], root.size),
 		Data:    data,
 	}
 	if w.summary != "" {
@@ -471,10 +471,6 @@ func firstFileWatchRoot(paths []string, current map[string]fileState) fileState 
 		}
 	}
 	return fileState{}
-}
-
-func firstFileWatchPath(paths []string) string {
-	return paths[0]
 }
 
 // fire runs the watch's hook for one change and emits a matching event. A hook

@@ -60,22 +60,19 @@ type serviceLockSource interface {
 func CollectDashboardSnapshot(ctx context.Context, backend Backend, since time.Duration) DashboardSnapshot {
 	var snapshot DashboardSnapshot
 	var wg sync.WaitGroup
-	run := func(fn func()) {
-		wg.Go(fn)
-	}
 	if source, ok := backend.(serviceLockSource); ok {
-		run(func() { snapshot.Services, snapshot.Locks = source.ServicesAndLocks(ctx) })
+		wg.Go(func() { snapshot.Services, snapshot.Locks = source.ServicesAndLocks(ctx) })
 	} else {
-		run(func() { snapshot.Services = backend.Services(ctx) })
-		run(func() { snapshot.Locks = backend.Locks(ctx) })
+		wg.Go(func() { snapshot.Services = backend.Services(ctx) })
+		wg.Go(func() { snapshot.Locks = backend.Locks(ctx) })
 	}
-	run(func() { snapshot.Mounts = backend.Mounts(ctx) })
-	run(func() { snapshot.Notifiers = backend.Notifiers(ctx) })
-	run(func() { snapshot.Daemon = backend.DaemonInfo(ctx) })
-	run(func() { snapshot.DaemonMetrics = backend.DaemonMetrics(ctx, since) })
-	run(func() { snapshot.Activity = backend.ActivitySummary(ctx) })
-	run(func() { snapshot.Monitoring = backend.MonitoringStatus(ctx) })
-	run(func() { snapshot.HostMetrics = backend.HostMetrics(ctx) })
+	wg.Go(func() { snapshot.Mounts = backend.Mounts(ctx) })
+	wg.Go(func() { snapshot.Notifiers = backend.Notifiers(ctx) })
+	wg.Go(func() { snapshot.Daemon = backend.DaemonInfo(ctx) })
+	wg.Go(func() { snapshot.DaemonMetrics = backend.DaemonMetrics(ctx, since) })
+	wg.Go(func() { snapshot.Activity = backend.ActivitySummary(ctx) })
+	wg.Go(func() { snapshot.Monitoring = backend.MonitoringStatus(ctx) })
+	wg.Go(func() { snapshot.HostMetrics = backend.HostMetrics(ctx) })
 	wg.Wait()
 	// DaemonInfo warms the shared SSH sampler cache above. Read sessions after
 	// the parallel batch so this aggregate does not race a duplicate host scan.
