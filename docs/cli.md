@@ -172,7 +172,8 @@ accident). The CLI applies the change immediately without a prompt.
 If the initial state read fails after daemon startup, automatic side effects
 stay suspended until a successful read establishes the panic flag. Checks and
 manual operations remain available. Later read failures retain the last
-successfully read value.
+successfully read value. Failed reads are retried after the same one-second
+cache interval, measured from the end of the previous read.
 
 ## Service target resolution
 

@@ -45,19 +45,19 @@ func (g *PanicGate) Active() bool {
 	if g == nil || g.store == nil {
 		return false
 	}
-	now := g.now()
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	if !g.at.IsZero() && now.Sub(g.at) < g.ttl {
+	if !g.at.IsZero() && g.now().Sub(g.at) < g.ttl {
 		return g.cached
 	}
 	rec, found, err := g.store.Panic()
+	// Cache failed reads too, starting the retry interval after the read finishes.
+	g.at = g.now()
 	if err != nil {
 		// Keep the last known state on error rather than flipping the daemon's
 		// behavior because of a transient read failure.
 		return g.cached
 	}
 	g.cached = found && rec.On
-	g.at = now
 	return g.cached
 }
