@@ -72,8 +72,9 @@ func listInstalledCatalogServices(ctx context.Context, cfg *config.Config, backe
 		proc := servicemgr.DetectProcInfo(ctx, runner, nil, backend, unit)
 		c.Pidfile, c.Exe, c.Cmd, c.User = proc.Pidfile, proc.Exe, proc.Cmd, proc.User
 		if c.Port > 0 {
-			c.PortListening = portListening(c.Port)
-			if host, ok := portListenerHost(c.Port); ok && serviceHasVariable(resolved.Tree, config.VariableKeyHost) {
+			sample := portListeners(c.Port, serviceHasVariable(resolved.Tree, config.VariableKeyHost), procSocketTables())
+			c.PortListening = sample.listening
+			if host, ok := specificListenerHost(sample.hosts); ok {
 				mergeCandidateVariables(&c, map[string]any{config.VariableKeyHost: host})
 			}
 		}
@@ -327,18 +328,6 @@ func existingConfigFiles(tree map[string]any) []string {
 	return out
 }
 
-// portListening reports whether the kernel has a TCP listener or UDP socket on
-// port. Reading /proc catches UDP daemons and services bound away from loopback,
-// which a TCP dial to 127.0.0.1 cannot see.
-func portListening(port int) bool {
-	for _, table := range procSocketTables() {
-		if procPortListening(table.path, port, table.states) {
-			return true
-		}
-	}
-	return false
-}
-
 type procSocketTable struct {
 	path   string
 	states map[string]bool
@@ -354,67 +343,54 @@ func procSocketTables() []procSocketTable {
 	}
 }
 
-func procPortListening(path string, port int, states map[string]bool) bool {
-	f, err := hostfs.Open(path)
-	if err != nil {
-		return false
-	}
-	defer func() { _ = f.Close() }()
-	ok, _ := parseProcSocketTable(f, port, states)
-	return ok
+type portListenerSample struct {
+	listening bool
+	hosts     []string
 }
 
-func portListenerHost(port int) (string, bool) {
-	tables := procSocketTables()
-	hosts := make([]string, 0, len(tables))
+// portListeners reads each table once for both presence and optional host hints.
+// Without host hints it stops at the first listener; otherwise all addresses
+// must be collected so an ambiguous binding never selects an arbitrary host.
+func portListeners(port int, collectHosts bool, tables []procSocketTable) portListenerSample {
+	var sample portListenerSample
 	for _, table := range tables {
-		hosts = append(hosts, procPortListenerHosts(table.path, port, table.states, table.ipv6)...)
+		current := readPortListeners(port, collectHosts, table)
+		sample.listening = sample.listening || current.listening
+		sample.hosts = append(sample.hosts, current.hosts...)
+		if sample.listening && !collectHosts {
+			break
+		}
 	}
-	return specificListenerHost(hosts)
+	return sample
 }
 
-func procPortListenerHosts(path string, port int, states map[string]bool, ipv6 bool) []string {
-	f, err := hostfs.Open(path)
+func readPortListeners(port int, collectHosts bool, table procSocketTable) portListenerSample {
+	f, err := hostfs.Open(table.path)
 	if err != nil {
-		return nil
+		return portListenerSample{}
 	}
 	defer func() { _ = f.Close() }()
-	hosts, _ := parseProcSocketTableHosts(f, port, states, ipv6)
-	return hosts
+	sample, _ := parseProcSocketTable(f, port, table, collectHosts)
+	return sample
 }
 
-// scanProcSocketRows walks a /proc/net socket table and calls found with the
-// local-address hex of every row in one of states listening on port; found
-// returning false stops the scan. The row matching shared by the boolean and
-// host-collecting parsers.
-func scanProcSocketRows(r io.Reader, port int, states map[string]bool, found func(hostHex string) bool) error {
-	if err := procnet.ScanPortState(r, port, states, found); err != nil {
-		return fmt.Errorf("scan proc socket rows: %w", err)
-	}
-	return nil
-}
-
-func parseProcSocketTable(r io.Reader, port int, states map[string]bool) (bool, error) {
-	matched := false
-	err := scanProcSocketRows(r, port, states, func(string) bool {
-		matched = true
-		return false
-	})
-	if err != nil {
-		return false, err
-	}
-	return matched, nil
-}
-
-func parseProcSocketTableHosts(r io.Reader, port int, states map[string]bool, ipv6 bool) ([]string, error) {
-	var hosts []string
-	err := scanProcSocketRows(r, port, states, func(hostHex string) bool {
-		if host, ok := procnet.ParseHost(hostHex, ipv6); ok {
-			hosts = append(hosts, host)
+func parseProcSocketTable(r io.Reader, port int, table procSocketTable, collectHosts bool) (portListenerSample, error) {
+	var sample portListenerSample
+	err := procnet.ScanPortState(r, port, table.states, func(hostHex string) bool {
+		sample.listening = true
+		if !collectHosts {
+			return false
+		}
+		if host, ok := procnet.ParseHost(hostHex, table.ipv6); ok {
+			sample.hosts = append(sample.hosts, host)
 		}
 		return true
 	})
-	return strutil.Unique(hosts), err
+	sample.hosts = strutil.Unique(sample.hosts)
+	if err != nil {
+		return sample, fmt.Errorf("scan proc socket rows: %w", err)
+	}
+	return sample, nil
 }
 
 func specificListenerHost(hosts []string) (string, bool) {
