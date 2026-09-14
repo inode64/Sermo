@@ -680,17 +680,18 @@ func (d Discoverer) matchesNonExe(sel *Selector, id Identity, resolve UserResolv
 
 func toProcess(id Identity, role, source string) Process {
 	return Process{
-		PID:     id.PID,
-		PPID:    id.PPID,
-		User:    id.User,
-		UID:     id.UID,
-		Group:   id.Group,
-		GID:     id.GID,
-		Exe:     id.Exe,
-		ExeOK:   id.ExeOK,
-		Cmdline: id.Cmdline,
-		Role:    role,
-		Source:  source,
+		PID:        id.PID,
+		StartTicks: id.StartTicks,
+		PPID:       id.PPID,
+		User:       id.User,
+		UID:        id.UID,
+		Group:      id.Group,
+		GID:        id.GID,
+		Exe:        id.Exe,
+		ExeOK:      id.ExeOK,
+		Cmdline:    id.Cmdline,
+		Role:       role,
+		Source:     source,
 
 		ExePrev: id.ExePrev,
 	}

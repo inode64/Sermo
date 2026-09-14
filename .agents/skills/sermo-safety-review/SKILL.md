@@ -35,6 +35,9 @@ touches them.
 - A process matches only on the exact resolved `/proc/<pid>/exe` path and the
   real UID. Name, basename, substring, argv[0] and cmdline never authorize
   anything; `processes.<name>.cmd` only narrows a match the operator declared.
+- Signal delivery uses a pidfd bound before revalidating the discovered start
+  time, exact exe and real UID. Missing pidfd support fails closed; never fall
+  back to signaling a numeric PID after authorizing a process snapshot.
 - An unreadable or `(deleted)` exe never matches. Leaving an unidentified
   process alive beats killing the wrong one.
 - Prefer extra evidence: pidfile, systemd cgroup or MainPID, parent tree,

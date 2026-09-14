@@ -19,22 +19,17 @@ type Signaler interface {
 	Signal(pid int, sig syscall.Signal) error
 }
 
-// OSSignaler sends real signals via kill(2).
+// OSSignaler sends real signals through Linux pidfds.
 type OSSignaler struct{}
 
 // Signal delivers sig to pid, refusing non-positive PIDs (which have special
 // process-group semantics and must never be signalled here).
 func (OSSignaler) Signal(pid int, sig syscall.Signal) error {
-	if pid <= 0 {
-		return fmt.Errorf("refusing to signal pid %d", pid)
+	id, ok := OSReader{}.Identity(pid)
+	if !ok {
+		return fmt.Errorf("cannot verify signal target pid %d", pid)
 	}
-	if err := protectedSignalTarget(pid, sig, OSReader{}.Identity); err != nil {
-		return err
-	}
-	if err := syscall.Kill(pid, sig); err != nil {
-		return fmt.Errorf("signal pid %d with %v: %w", pid, sig, err)
-	}
-	return nil
+	return (OSSignaler{}).SignalProcess(context.Background(), toProcess(id, "", ""), sig)
 }
 
 // ReapResult is the outcome of signal escalation.
@@ -206,7 +201,7 @@ func signalRound(ctx context.Context, set []Process, selector KillSelector, reso
 				failed = append(failed, SignalFailure{PID: set[i].PID, Err: err})
 				break
 			}
-			if err := signaler.Signal(set[i].PID, sig); err == nil {
+			if err := SignalProcess(ctx, signaler, set[i], sig); err == nil {
 				signalled[set[i].PID] = true
 			} else {
 				failed = append(failed, SignalFailure{PID: set[i].PID, Err: err})

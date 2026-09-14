@@ -652,7 +652,8 @@ func (e Engine) closeSession(ctx context.Context, target SessionTarget, result *
 	if signaler == nil {
 		signaler = process.OSSignaler{}
 	}
-	if err := signaler.Signal(target.PID, syscall.SIGTERM); err != nil {
+	proc := process.Process{PID: target.PID, StartTicks: target.StartTicks, Exe: boundary.Exe, ExeOK: true, UID: boundary.UID}
+	if err := process.SignalProcess(ctx, signaler, proc, syscall.SIGTERM); err != nil {
 		return failSession(result, prefix, err)
 	}
 	return e.waitSessionExit(ctx, target, result)

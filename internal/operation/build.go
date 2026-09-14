@@ -300,39 +300,45 @@ func ReloadSupported(ctx context.Context, tree map[string]any, mgr Manager, unit
 // running its command, or sending its signal to the service's main process.
 func nativeReloadFunc(spec config.ReloadSpec, deps checks.Deps, backend, unit string, tree map[string]any, discoverer process.Discoverer, selectors []process.Selector) func(context.Context) error {
 	if spec.HasSignal {
-		return nativeSignalReloadFunc(spec.Signal, deps.Runner, backend, unit, reloadPidfile(tree), discoverer, selectors)
+		return nativeSignalReloadFunc(spec.Signal, deps.Runner, backend, unit, reloadPidfile(tree), discoverer, selectors, process.OSSignaler{})
 	}
 	return nativeCommandReloadFunc(spec.Command, deps.Runner)
 }
 
-func nativeSignalReloadFunc(signal syscall.Signal, runner execx.Runner, backend, unit, pidfile string, discoverer process.Discoverer, selectors []process.Selector) func(context.Context) error {
+func nativeSignalReloadFunc(signal syscall.Signal, runner execx.Runner, backend, unit, pidfile string, discoverer process.Discoverer, selectors []process.Selector, signaler process.Signaler) func(context.Context) error {
 	return func(ctx context.Context) error {
 		pid, source, err := reloadPID(ctx, runner, backend, unit, pidfile)
 		if err != nil {
 			return err
 		}
-		if err := verifyReloadPID(pid, source, pidfile, discoverer, selectors); err != nil {
+		target, err := verifyReloadPID(pid, source, pidfile, discoverer, selectors)
+		if err != nil {
 			return err
 		}
 		if err := ctx.Err(); err != nil {
 			return reloadContextError(err)
 		}
-		return process.OSSignaler{}.Signal(pid, signal)
+		return process.SignalProcess(ctx, signaler, target, signal)
 	}
 }
 
-func verifyReloadPID(pid int, source reloadPIDSource, pidfile string, discoverer process.Discoverer, selectors []process.Selector) error {
-	if source == reloadPIDPidfile {
-		if _, ok := discoverer.StrictMatchPID(pid, selectors); !ok {
-			return fmt.Errorf("reload: pidfile %q resolved pid %d, but it does not match any process selector with exact exe and user", pidfile, pid)
+func verifyReloadPID(pid int, source reloadPIDSource, pidfile string, discoverer process.Discoverer, selectors []process.Selector) (process.Process, error) {
+	if source == reloadPIDPidfile || (source == reloadPIDMain && hasCommandMatchSelector(selectors)) {
+		target, ok := discoverer.StrictMatchPID(pid, selectors)
+		if !ok {
+			return process.Process{}, fmt.Errorf("reload: pid %d from %s (pidfile %q) does not match any process selector with exact exe and user", pid, source, pidfile)
 		}
+		return target, nil
 	}
-	if source == reloadPIDMain && hasCommandMatchSelector(selectors) {
-		if _, ok := discoverer.StrictMatchPID(pid, selectors); !ok {
-			return fmt.Errorf("reload: MainPID %d does not match any process selector with exact exe and user", pid)
-		}
+	reader := discoverer.Reader
+	if reader == nil {
+		reader = process.OSReader{}
 	}
-	return nil
+	id, ok := reader.Identity(pid)
+	if !ok {
+		return process.Process{}, fmt.Errorf("reload: cannot verify pid %d", pid)
+	}
+	return process.Process{PID: pid, StartTicks: id.StartTicks, Exe: id.Exe, ExeOK: id.ExeOK, UID: id.UID}, nil
 }
 
 func nativeCommandReloadFunc(argv []string, runner execx.Runner) func(context.Context) error {

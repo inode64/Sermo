@@ -16,17 +16,19 @@ import "regexp"
 
 // Process is a discovered process belonging to a service.
 type Process struct {
-	PID     int      `json:"pid"`
-	PPID    int      `json:"ppid"`
-	User    string   `json:"user,omitempty"`
-	UID     uint32   `json:"uid"`
-	Group   string   `json:"group,omitempty"`
-	GID     uint32   `json:"gid"`
-	Exe     string   `json:"exe,omitempty"`     // resolved /proc/<pid>/exe; empty if unresolvable
-	ExeOK   bool     `json:"exe_resolved"`      // false when exe could not be trusted
-	Cmdline []string `json:"cmdline,omitempty"` // display data; an explicit process cmd may filter on it
-	Role    string   `json:"role,omitempty"`    // selector name, "main" for backend seeds, or "child" for tree members
-	Source  string   `json:"source"`            // backend | pidfile | command_match | child
+	// StartTicks binds signal authorization to the discovered process generation.
+	StartTicks uint64   `json:"start_ticks,omitempty"`
+	PID        int      `json:"pid"`
+	PPID       int      `json:"ppid"`
+	User       string   `json:"user,omitempty"`
+	UID        uint32   `json:"uid"`
+	Group      string   `json:"group,omitempty"`
+	GID        uint32   `json:"gid"`
+	Exe        string   `json:"exe,omitempty"`     // resolved /proc/<pid>/exe; empty if unresolvable
+	ExeOK      bool     `json:"exe_resolved"`      // false when exe could not be trusted
+	Cmdline    []string `json:"cmdline,omitempty"` // display data; an explicit process cmd may filter on it
+	Role       string   `json:"role,omitempty"`    // selector name, "main" for backend seeds, or "child" for tree members
+	Source     string   `json:"source"`            // backend | pidfile | command_match | child
 
 	// Delegated marks a process the service owns for observability but that
 	// Sermo must never signal: a workload descendant the init unit deliberately
@@ -215,7 +217,7 @@ type Identity struct {
 	TTY   uint64
 	TTYOK bool
 	// StartTicks is the kernel start time (clock ticks since boot) read with
-	// terminal identity. It lets terminal-scoped actions reject a recycled PID.
+	// process identity. It lets signal delivery reject a recycled PID.
 	StartTicks   uint64
 	StartTicksOK bool
 	UID          uint32

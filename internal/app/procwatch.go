@@ -563,13 +563,14 @@ func (w *procWatcher) matchingProcess(pid int) (ProcInfo, bool) {
 
 func (s ProcInfo) asProcess() process.Process {
 	return process.Process{
-		PID:     s.PID,
-		User:    s.User,
-		UID:     s.UID,
-		Exe:     s.Exe,
-		ExeOK:   s.ExeOK,
-		ExePrev: s.ExePrev,
-		Cmdline: s.Cmdline,
+		PID:        s.PID,
+		StartTicks: s.StartTicks,
+		User:       s.User,
+		UID:        s.UID,
+		Exe:        s.Exe,
+		ExeOK:      s.ExeOK,
+		ExePrev:    s.ExePrev,
+		Cmdline:    s.Cmdline,
 	}
 }
 
