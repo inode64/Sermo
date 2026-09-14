@@ -273,6 +273,13 @@ Because the daemon runs as root:
 
 ## Locks
 
+Every removal (owner release, explicit release or stale reclamation) requires
+exclusive directory locking. Contention fails promptly without removing the lock;
+a failure to acquire exclusion never permits an unlocked removal. Each new lock
+also records an acquisition identifier, so an old handle cannot release a newer
+lock even when both were acquired by the same process. Older lock files without
+that identifier remain readable and can be reclaimed under the same exclusion.
+
 Two complementary blocking mechanisms guard operations:
 
 1. **Named runtime locks** — files under `<paths.runtime>/locks` (default

@@ -75,6 +75,7 @@ func validateIdentifier(kind, value string, allowEmpty bool) error {
 
 // lockFile is the on-disk JSON payload.
 type lockFile struct {
+	AcquisitionID   string    `json:"acquisition_id,omitempty"`
 	Service         string    `json:"service"`
 	Name            string    `json:"name,omitempty"`
 	Reason          string    `json:"reason,omitempty"`
