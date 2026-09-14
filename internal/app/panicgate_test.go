@@ -123,3 +123,31 @@ func TestPanicGateInitialReadFailure(t *testing.T) {
 		})
 	}
 }
+
+func TestPanicGateCachesFailedReads(t *testing.T) {
+	for _, latency := range []time.Duration{0, 2 * defaultPanicGateTTL} {
+		t.Run(latency.String(), func(t *testing.T) {
+			now := time.Unix(0, 0)
+			reads := 0
+			g := NewPanicGate(panicReaderFunc(func() (state.GlobalRecord, bool, error) {
+				reads++
+				now = now.Add(latency)
+				return state.GlobalRecord{}, false, errors.New("state unavailable")
+			}))
+			g.now = func() time.Time { return now }
+			for range 10 {
+				if !g.Active() {
+					t.Fatal("failed read must preserve panic protection")
+				}
+			}
+			if reads != 1 {
+				t.Fatalf("reads within ttl = %d, want 1", reads)
+			}
+			now = now.Add(defaultPanicGateTTL)
+			g.Active()
+			if reads != 2 {
+				t.Fatalf("reads after ttl = %d, want 2", reads)
+			}
+		})
+	}
+}
