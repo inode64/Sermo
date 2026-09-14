@@ -2,6 +2,7 @@ package locks
 
 import (
 	"errors"
+	"path/filepath"
 	"sync"
 	"testing"
 	"time"
@@ -65,4 +66,11 @@ func TestReclaimStaleConcurrentSingleHolder(t *testing.T) {
 func isHeld(err error) bool {
 	_, ok := errors.AsType[*HeldError](err)
 	return ok
+}
+
+func TestReclaimStaleRequiresDirectoryLock(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "missing", "mysql.lock")
+	if reclaimStale(path, lockFile{}, fakeProc{}, func() time.Time { return fixedNow }) {
+		t.Fatal("reported reclamation despite failing to open the lock directory")
+	}
 }

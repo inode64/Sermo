@@ -183,9 +183,11 @@ func acquireExclusive(path string, payload lockFile, ttl time.Duration, proc Pro
 // The exclusive create (O_EXCL) outside this section stays safe: a remove only
 // happens here, after verifying the file is still the expected stale lock.
 func reclaimStale(path string, expected lockFile, proc ProcessProber, now func() time.Time) bool {
-	if unlock, err := lockReclaimDir(path); err == nil {
-		defer unlock()
+	unlock, err := lockReclaimDir(path)
+	if err != nil {
+		return false
 	}
+	defer unlock()
 	current, err := readLockFile(path)
 	if err != nil {
 		return isMissingLock(err)
@@ -206,9 +208,8 @@ func reclaimStale(path string, expected lockFile, proc ProcessProber, now func()
 
 // lockReclaimDir takes an exclusive advisory lock on the directory holding path
 // for the duration of a reclaim. flock is per-open-file-description and works
-// across processes; the lock directory lives on tmpfs. Best-effort: if the
-// directory cannot be opened or locked, reclaim proceeds unserialized (the prior
-// behavior) rather than failing the acquire.
+// across processes; the lock directory lives on tmpfs. A failure to acquire
+// this exclusion must prevent reclamation.
 func lockReclaimDir(path string) (func(), error) {
 	dir := filepath.Dir(path)
 	d, err := hostfs.Open(dir)
