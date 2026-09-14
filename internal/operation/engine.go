@@ -324,7 +324,15 @@ func (e Engine) reapStrays(ctx context.Context, result *Result) {
 	}
 
 	reaper := e.Reaper
-	reaper.Rediscover = e.rediscoverStrays // re-evaluate identity each round
+	var discoveryErr error
+	reaper.Rediscover = func() []process.Process {
+		var current []process.Process
+		current, discoveryErr = e.discoverStrays()
+		if discoveryErr != nil {
+			return nil
+		}
+		return current
+	}
 	reaper.Sleep = e.Sleep
 	outcome := reaper.Reap(ctx, strays, process.KillPolicy{
 		ForceKill: true,
@@ -334,6 +342,10 @@ func (e Engine) reapStrays(ctx context.Context, result *Result) {
 		KillTimeout: e.KillPolicy.KillTimeout,
 		KillOnlyIf:  e.ReapSelector,
 	})
+	if discoveryErr != nil {
+		result.Status, result.Message = ResultFailed, actionReap+": "+discoveryErr.Error()
+		return
+	}
 	result.Processes = outcome.Remaining
 	applyReapOutcome(ctx, result, len(strays), outcome)
 }
@@ -377,18 +389,6 @@ func (e Engine) discoverStrays() ([]process.Process, error) {
 		return nil, fmt.Errorf("process discovery: %w", err)
 	}
 	return process.Strays(procs), nil
-}
-
-// rediscoverStrays is the reaper's per-round view. A discovery error between
-// rounds returns no survivors to signal rather than a stale set, so escalation
-// stops instead of acting on processes it can no longer verify; the surviving
-// process is then reported by the following round's result.
-func (e Engine) rediscoverStrays() []process.Process {
-	strays, err := e.discoverStrays()
-	if err != nil {
-		return nil
-	}
-	return strays
 }
 
 // authorizedStrays returns the strays the service's reap selector allows to be

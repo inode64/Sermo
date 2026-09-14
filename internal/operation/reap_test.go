@@ -3,6 +3,7 @@ package operation
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"syscall"
 	"testing"
@@ -311,5 +312,28 @@ func TestReapIsNotDispatchableAsAnAction(t *testing.T) {
 
 	if res.Status != ResultFailed || !strings.Contains(res.Message, "unknown action") {
 		t.Fatalf("result = %+v, want an unknown-action failure", res)
+	}
+}
+
+func TestReapReportsRediscoveryFailure(t *testing.T) {
+	for _, round := range []int{1, 2} {
+		t.Run(fmt.Sprintf("round_%d", round), func(t *testing.T) {
+			h := defaultHarness()
+			h.discoverSteps = [][]process.Process{{strayProc(300, "/usr/bin/dbus-daemon")}}
+			h.discoverErrs = make([]error, round+1)
+			h.discoverErrs[round] = errors.New("procfs unavailable")
+			signaler := &reapSignaler{}
+			selector := dbusReapSelector()
+			res := reapEngine(h, signaler, &selector).Reap(context.Background(), true)
+			if res.Status != ResultFailed || !strings.Contains(res.Message, "procfs unavailable") {
+				t.Fatalf("unverified reap reported %+v", res)
+			}
+			if len(signaler.calls) != round {
+				t.Fatalf("signals = %v, want %d before verification failed", signaler.calls, round)
+			}
+			if len(h.emitted) != 1 || h.emitted[0].Status != ResultFailed {
+				t.Fatalf("events = %+v, want one failure", h.emitted)
+			}
+		})
 	}
 }

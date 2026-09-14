@@ -271,6 +271,10 @@ Because the daemon runs as root:
 - **No shell, no name-based kills, no SIGKILL by default** — see the hard
   invariants above; these bound what even a misconfiguration can do.
 
+A failure to rediscover processes during `sermoctl reap --apply` stops escalation
+and records a failed outcome. An unreadable process table is never treated as
+proof that all survivors exited.
+
 ## Locks
 
 Every removal (owner release, explicit release or stale reclamation) requires
