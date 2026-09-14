@@ -1,6 +1,9 @@
 package app
 
-import "time"
+import (
+	"slices"
+	"time"
+)
 
 // mapSlice converts a slice element-by-element via conv, preserving the
 // nil-in/nil-out convention the state snapshot converters rely on.
@@ -19,18 +22,11 @@ func mapSlice[S, D any](in []S, conv func(S) D) []D {
 // cutoff, shifting the retained tail in place; the ring-buffer trim shared by
 // the metric samplers.
 func trimBefore[T any](samples []T, cutoff time.Time, at func(T) time.Time) []T {
-	if samples == nil {
-		return nil
-	}
 	i := 0
 	for i < len(samples) && at(samples[i]).Before(cutoff) {
 		i++
 	}
-	if i > 0 {
-		copy(samples, samples[i:])
-		samples = samples[:len(samples)-i]
-	}
-	return samples
+	return slices.Delete(samples, 0, i)
 }
 
 // filterWindow copies samples inside the inclusive observation window. The
