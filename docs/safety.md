@@ -532,7 +532,9 @@ previous incarnation the init system did not clean up (`KillMode=process` or
 through the operation engine", and it is deliberately narrow:
 
 - Only sermod's own control group, and only when that group is a systemd
-  **service** unit whose name is sermod's own. Started from a login shell sermod
+  **service** unit named exactly `sermod.service`, the packaged daemon unit.
+  Prefix matches such as `sermod-helper.service` and custom template instances
+  do not authorize cleanup. Started from a login shell sermod
   shares its scope with the operator's shell and sshd; run inside a unit named
   for something else — a CI agent's service, a container supervisor, a
   systemd-run wrapper — the neighbouring processes belong to that something
