@@ -21,18 +21,18 @@ func TestParseProcSocketTableTCPListen(t *testing.T) {
    0: 0100007F:0050 00000000:0000 0A 00000000:00000000 00:00000000 00000000     0        0 12345 1 0000000000000000 100 0 0 10 0
    1: 0100007F:1FBB 00000000:0000 01 00000000:00000000 00:00000000 00000000     0        0 12346 1 0000000000000000 100 0 0 10 0
 `
-	ok, err := parseProcSocketTable(strings.NewReader(table), 80, map[string]bool{"0A": true})
+	sample, err := parseProcSocketTable(strings.NewReader(table), 80, procSocketTable{states: map[string]bool{"0A": true}}, false)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !ok {
+	if !sample.listening {
 		t.Fatal("TCP LISTEN port 80 should be detected")
 	}
-	ok, err = parseProcSocketTable(strings.NewReader(table), 8123, map[string]bool{"0A": true})
+	sample, err = parseProcSocketTable(strings.NewReader(table), 8123, procSocketTable{states: map[string]bool{"0A": true}}, false)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if ok {
+	if sample.listening {
 		t.Fatal("established TCP socket must not count as listening")
 	}
 }
@@ -41,24 +41,24 @@ func TestParseProcSocketTableUDP(t *testing.T) {
 	const table = `  sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode
  1576: 00000000:0043 00000000:0000 07 00000000:00000000 00:00000000 00000000     0        0 37159 2 0000000000000000 0
 `
-	ok, err := parseProcSocketTable(strings.NewReader(table), 67, map[string]bool{"07": true})
+	sample, err := parseProcSocketTable(strings.NewReader(table), 67, procSocketTable{states: map[string]bool{"07": true}}, false)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !ok {
+	if !sample.listening {
 		t.Fatal("UDP port 67 should be detected")
 	}
 }
 
-// assertParseHosts parses table with parseProcSocketTableHosts (port 9104, state
+// assertParseHosts parses table with parseProcSocketTable (port 9104, state
 // 0A) and asserts the extracted hosts equal want.
 func assertParseHosts(t *testing.T, table string, ipv6 bool, want ...string) {
 	t.Helper()
-	got, err := parseProcSocketTableHosts(strings.NewReader(table), 9104, map[string]bool{"0A": true}, ipv6)
+	sample, err := parseProcSocketTable(strings.NewReader(table), 9104, procSocketTable{states: map[string]bool{"0A": true}, ipv6: ipv6}, true)
 	if err != nil {
 		t.Fatal(err)
 	}
-	assertStringsEqual(t, got, want)
+	assertStringsEqual(t, sample.hosts, want)
 }
 
 func TestParseProcSocketTableHostsIPv4(t *testing.T) {
@@ -428,3 +428,34 @@ func (m wizardManager) Restart(context.Context, string) error                { r
 func (m wizardManager) Reload(context.Context, string) error                 { return nil }
 func (m wizardManager) SupportsReload(context.Context, string) (bool, error) { return false, nil }
 func (m wizardManager) ResetState(context.Context, string) error             { return nil }
+
+func TestPortListenersSharedSample(t *testing.T) {
+	dir := t.TempDir()
+	var tables []procSocketTable
+	for i, row := range []string{"0: 160200C0:2390 00000000:0000 0A\n", "0: 176433C6:2390 00000000:0000 0A\n"} {
+		path := filepath.Join(dir, []string{"tcp", "tcp6"}[i])
+		if err := os.WriteFile(path, []byte(row), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		tables = append(tables, procSocketTable{path: path, states: map[string]bool{"0A": true}})
+	}
+	tables = append(tables, procSocketTable{path: filepath.Join(dir, "missing")})
+	for _, tc := range []struct {
+		name         string
+		port         int
+		collectHosts bool
+		listening    bool
+		hosts        []string
+	}{
+		{name: "presence only", port: 9104, listening: true},
+		{name: "all host hints", port: 9104, collectHosts: true, listening: true, hosts: []string{"192.0.2.22", "198.51.100.23"}},
+		{name: "absent", port: 80, collectHosts: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			sample := portListeners(tc.port, tc.collectHosts, tables)
+			if sample.listening != tc.listening || !slices.Equal(sample.hosts, tc.hosts) {
+				t.Fatalf("sample = %+v, want listening=%v hosts=%v", sample, tc.listening, tc.hosts)
+			}
+		})
+	}
+}
