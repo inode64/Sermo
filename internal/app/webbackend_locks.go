@@ -109,16 +109,11 @@ func (b *WebBackend) operationActiveByService() map[string]bool {
 	return out
 }
 
-func (b *WebBackend) activeLockNamesByService() map[string][]string {
+// ServicesAndLocks renders both dashboard sections from the same request-local
+// lock reports. Operations continue to scan their own current lock state.
+func (b *WebBackend) ServicesAndLocks(ctx context.Context) ([]web.Service, []web.Lock) {
 	reports := b.lockReportsByService()
-	if len(reports) == 0 {
-		return nil
-	}
-	out := make(map[string][]string, len(reports))
-	for name, report := range reports {
-		out[name] = activeLockNamesFromReport(report)
-	}
-	return out
+	return b.servicesWithLockReports(ctx, reports), b.locksFromReports(reports)
 }
 
 // enabledServiceNames lists the services a fleet-wide lock scan covers, in
@@ -151,9 +146,12 @@ func (b *WebBackend) lockReportsByService() map[string]locks.Report {
 
 // Locks returns the active and stale runtime locks across services.
 func (b *WebBackend) Locks(_ context.Context) []web.Lock {
+	return b.locksFromReports(b.lockReportsByService())
+}
+
+func (b *WebBackend) locksFromReports(reports map[string]locks.Report) []web.Lock {
 	var out []web.Lock
 	now := b.webNow()
-	reports := b.lockReportsByService()
 	for _, name := range b.order {
 		if _, ok := b.enabledEntry(name); !ok {
 			continue

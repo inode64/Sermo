@@ -50,6 +50,10 @@ func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 	s.writeBackendJSON(w, http.StatusOK, snapshot, generation)
 }
 
+type serviceLockSource interface {
+	ServicesAndLocks(ctx context.Context) ([]Service, []Lock)
+}
+
 // CollectDashboardSnapshot collects the reload-sensitive dashboard sections in
 // parallel from one backend instance. It intentionally omits server-owned
 // readiness and liveness fields, which Server adds around the aggregate.
@@ -59,12 +63,16 @@ func CollectDashboardSnapshot(ctx context.Context, backend Backend, since time.D
 	run := func(fn func()) {
 		wg.Go(fn)
 	}
-	run(func() { snapshot.Services = backend.Services(ctx) })
+	if source, ok := backend.(serviceLockSource); ok {
+		run(func() { snapshot.Services, snapshot.Locks = source.ServicesAndLocks(ctx) })
+	} else {
+		run(func() { snapshot.Services = backend.Services(ctx) })
+		run(func() { snapshot.Locks = backend.Locks(ctx) })
+	}
 	run(func() { snapshot.Mounts = backend.Mounts(ctx) })
 	run(func() { snapshot.Notifiers = backend.Notifiers(ctx) })
 	run(func() { snapshot.Daemon = backend.DaemonInfo(ctx) })
 	run(func() { snapshot.DaemonMetrics = backend.DaemonMetrics(ctx, since) })
-	run(func() { snapshot.Locks = backend.Locks(ctx) })
 	run(func() { snapshot.Activity = backend.ActivitySummary(ctx) })
 	run(func() { snapshot.Monitoring = backend.MonitoringStatus(ctx) })
 	run(func() { snapshot.HostMetrics = backend.HostMetrics(ctx) })
