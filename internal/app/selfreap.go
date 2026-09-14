@@ -43,11 +43,11 @@ type SelfStrayHygiene struct {
 	// Self is the daemon's own PID; 0 uses os.Getpid().
 	Self int
 	// Identity names a leftover in its event; nil reads the host /proc. A PID that
-	// cannot be read is still signalled — being unidentifiable is what leftovers
-	// often are — and reported without a name.
+	// cannot be named is reported without a name. Independently, the production
+	// signaler refuses delivery when it cannot verify the process identity.
 	Identity func(int) (process.Identity, bool)
-	// Signaler delivers the signal; nil uses the real kill(2), which refuses PID 1
-	// and kernel processes on its own.
+	// Signaler delivers the signal; nil uses pidfds and refuses unverifiable
+	// identities, PID 1 and kernel processes.
 	Signaler process.Signaler
 	// Emit records one event per signalled process and per delivery failure.
 	Emit func(Event)

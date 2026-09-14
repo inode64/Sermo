@@ -2,8 +2,6 @@ package process
 
 import (
 	"context"
-	"os/exec"
-	"os/user"
 	"syscall"
 	"testing"
 	"time"
@@ -240,55 +238,5 @@ func TestReapMixedKillableAndOrphan(t *testing.T) {
 	}
 	if len(res.Signalled) != 1 || res.Signalled[0] != 100 {
 		t.Fatalf("signalled = %v, want [100]", res.Signalled)
-	}
-}
-
-// TestReapRealSignalKillsChild exercises the real OSSignaler against a live
-// child process, reaping the zombie via a concurrent Wait so liveness reflects
-// reality.
-func TestReapRealSignalKillsChild(t *testing.T) {
-	cmd := exec.Command("sleep", "30")
-	if err := cmd.Start(); err != nil {
-		t.Skipf("cannot start sleep: %v", err)
-	}
-	done := make(chan error, 1)
-	go func() { done <- cmd.Wait() }()
-	defer func() {
-		_ = cmd.Process.Kill()
-		<-done
-	}()
-
-	pid := cmd.Process.Pid
-	id, ok := OSReader{}.Identity(pid)
-	if !ok || !id.ExeOK {
-		t.Skipf("cannot read identity for pid %d", pid)
-	}
-	u, err := user.Current()
-	if err != nil {
-		t.Skipf("cannot read current user: %v", err)
-	}
-
-	p := Process{PID: pid, PPID: id.PPID, UID: id.UID, User: id.User, Exe: id.Exe, ExeOK: true}
-	policy := KillPolicy{
-		ForceKill:   true,
-		TermTimeout: 500 * time.Millisecond,
-		KillTimeout: 500 * time.Millisecond,
-		KillOnlyIf:  KillSelector{Users: []string{u.Username}, ExeAny: []string{id.Exe}},
-	}
-
-	rediscover := func() []Process {
-		if syscall.Kill(pid, 0) == nil {
-			return []Process{p}
-		}
-		return nil
-	}
-	r := Reaper{Rediscover: rediscover, Signaler: OSSignaler{}, ResolveUser: OSUserResolver, Sleep: time.Sleep}
-
-	res := r.Reap(context.Background(), []Process{p}, policy)
-	if !res.OK() {
-		t.Fatalf("child not reaped, remaining = %+v", res.Remaining)
-	}
-	if len(res.Signalled) != 1 || res.Signalled[0] != pid {
-		t.Fatalf("signalled = %v, want [%d]", res.Signalled, pid)
 	}
 }

@@ -130,8 +130,8 @@ type OSReader struct {
 	// os/user lookups.
 	LookupGroupName func(uint32) string
 	// ReadTTY adds the controlling-terminal device number from /proc/<pid>/stat
-	// to Identity. It is disabled for ordinary service discovery because it adds
-	// one procfs read per process; terminal-aware checks opt in explicitly.
+	// to Identity. StartTicks is always collected for signal authorization;
+	// terminal-aware checks additionally require and expose the terminal device.
 	ReadTTY bool
 }
 
@@ -155,23 +155,25 @@ func (OSReader) PIDs() ([]int, error) {
 
 // Identity reads PPID, real UID, resolved exe and cmdline for a process.
 func (r OSReader) Identity(pid int) (Identity, bool) {
+	device, ticks, statOK := terminalIdentity(pid)
 	ppid, uid, gid, state, ok := readStatus(pid)
 	if !ok {
 		return Identity{}, false
 	}
 	id := Identity{
-		PID:     pid,
-		PPID:    ppid,
-		UID:     uid,
-		GID:     gid,
-		User:    r.userName(uid),
-		Group:   r.groupName(gid),
-		State:   state,
-		Cmdline: readCmdline(pid),
+		PID:          pid,
+		StartTicks:   ticks,
+		StartTicksOK: statOK,
+		PPID:         ppid,
+		UID:          uid,
+		GID:          gid,
+		User:         r.userName(uid),
+		Group:        r.groupName(gid),
+		State:        state,
+		Cmdline:      readCmdline(pid),
 	}
 	if r.ReadTTY {
-		id.TTY, id.StartTicks, id.TTYOK = terminalIdentity(pid)
-		id.StartTicksOK = id.TTYOK
+		id.TTY, id.TTYOK = device, statOK
 		if !id.TTYOK {
 			return Identity{}, false
 		}

@@ -277,6 +277,14 @@ proof that all survivors exited. Signal rounds check cancellation before each
 process and again after user resolution; an expired operation cannot begin a
 new TERM or KILL delivery.
 
+Process discovery records the kernel start time. Reaping, process-watch signals,
+SSH session closes and native signal reloads bind delivery to a Linux pidfd and
+revalidate that generation, resolved executable and real UID before sending.
+An unreadable identity, changed generation or unavailable pidfd support blocks
+delivery; there is no fallback to a numeric-PID signal. Operators using these
+actions need a kernel that supports `pidfd_open` and `pidfd_send_signal` and a
+security policy that permits them.
+
 ## Locks
 
 Every removal (owner release, explicit release or stale reclamation) requires
@@ -530,6 +538,8 @@ through the operation engine", and it is deliberately narrow:
   systemd-run wrapper — the neighbouring processes belong to that something
   else. In both cases it does nothing at all.
 - `SIGTERM` only. A leftover that ignores it is reported and left alone.
+- Delivery requires a verifiable process generation, executable and UID and
+  available pidfd support; an unverifiable target produces a failure event.
 - One event per process signalled.
 - `engine.reap_own_strays: false` turns it off.
 

@@ -36,7 +36,7 @@ func daemonReloadPidfileCandidates(primary string, fallbacks []string) []string 
 // equivalent). It prefers a pidfile written by the daemon under the configured
 // runtime dir. If no pidfile is found it falls back to a native /proc scan for
 // a running sermod process. This works whether or not the web UI is enabled.
-func (a App) runReload(_ context.Context, opts options) int {
+func (a App) runReload(ctx context.Context, opts options) int {
 	cfg, code := a.loadConfig(opts)
 	if cfg == nil {
 		return code
@@ -86,8 +86,10 @@ func (a App) runReload(_ context.Context, opts options) int {
 		return a.fail(opts, "could not find running sermod pid (no pidfile and no running sermod process)")
 	}
 
-	// Send SIGHUP. On Linux this is reliable for the daemon's signal handler.
-	if err := (process.OSSignaler{}).Signal(pid, syscall.SIGHUP); err != nil {
+	// Bind SIGHUP to the observed generation so PID reuse cannot redirect it.
+	id, _ := (process.OSReader{}).Identity(pid)
+	target := process.Process{PID: pid, StartTicks: id.StartTicks, Exe: id.Exe, ExeOK: id.ExeOK, UID: id.UID}
+	if err := (process.OSSignaler{}).SignalProcess(ctx, target, syscall.SIGHUP); err != nil {
 		a.recordAccess(cfg, accessCommandDaemonReload, "", accessStatusError, err.Error())
 		return a.fail(opts, fmt.Sprintf("failed to signal pid %d: %v", pid, err))
 	}

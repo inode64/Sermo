@@ -19,8 +19,8 @@ func (e Engine) closeResidualSession(ctx context.Context, target SessionTarget, 
 	// Manual reap authorization, narrowed to this terminal's verified sudo
 	// monitor and frontend. Workloads, listeners and other sessions stay outside.
 	procs := []process.Process{
-		{PID: boundary.MonitorPID, Exe: boundary.Exe, ExeOK: true, UID: boundary.UID},
-		{PID: target.PID, Exe: boundary.Exe, ExeOK: true, UID: boundary.UID},
+		{PID: boundary.MonitorPID, StartTicks: boundary.MonitorStartTicks, Exe: boundary.Exe, ExeOK: true, UID: boundary.UID},
+		{PID: target.PID, StartTicks: target.StartTicks, Exe: boundary.Exe, ExeOK: true, UID: boundary.UID},
 	}
 	resolve := e.Reaper.ResolveUser
 	if resolve == nil {

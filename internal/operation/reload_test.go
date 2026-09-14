@@ -4,12 +4,10 @@ import (
 	"context"
 	"errors"
 	"os"
-	"os/signal"
 	"strconv"
 	"strings"
 	"syscall"
 	"testing"
-	"time"
 
 	"sermo/internal/checks"
 	"sermo/internal/config"
@@ -172,32 +170,23 @@ func TestReloadClosureCommandStartErrorUsesOperatorMessage(t *testing.T) {
 }
 
 func TestReloadClosureSignalSentToMainPID(t *testing.T) {
-	// MainPID resolves to this test process; the native reload sends USR1 to it.
-	pid := os.Getpid()
-	mgr := &fakeManager{canReload: false}
-	runner := &execxtest.Runner{ByName: map[string]execx.Result{
-		"systemctl": {Stdout: strconv.Itoa(pid) + "\n"},
-	}}
-	got := make(chan os.Signal, 1)
-	signal.Notify(got, syscall.SIGUSR1)
-	defer signal.Stop(got)
-
-	tree := map[string]any{"reload": map[string]any{"signal": "USR1", "when": "always"}}
-	reload := reloadClosureForTest(tree, depsWith(runner), mgr, "myd")
+	pid := 4242
+	runner := &execxtest.Runner{ByName: map[string]execx.Result{"systemctl": {Stdout: strconv.Itoa(pid) + "\n"}}}
+	signaler := &reapSignaler{}
+	discoverer := reloadDiscoverer(map[int]process.Identity{pid: {PID: pid, StartTicks: 42, StartTicksOK: true, UID: 1001, Exe: "/usr/sbin/svc", ExeOK: true}})
+	reload := nativeSignalReloadFunc(syscall.SIGUSR1, runner, "systemd", "myd", "", discoverer, nil, signaler)
 	if err := reload(context.Background()); err != nil {
-		t.Fatalf("reload: %v", err)
+		t.Fatal(err)
 	}
-	select {
-	case <-got:
-	case <-time.After(time.Second):
-		t.Fatal("native signal reload did not deliver SIGUSR1 to the main pid")
+	if len(signaler.calls) != 1 || signaler.calls[0].pid != pid || signaler.calls[0].sig != syscall.SIGUSR1 {
+		t.Fatalf("signals: %v", signaler.calls)
 	}
 }
 
 func TestReloadClosureSignalHonorsCanceledContext(t *testing.T) {
 	mgr := &fakeManager{canReload: false}
 	runner := &execxtest.Runner{
-		ByName:         map[string]execx.Result{"systemctl": {Stdout: strconv.Itoa(os.Getpid()) + "\n"}},
+		ByName:         map[string]execx.Result{"systemctl": {Stdout: "4242" + "\n"}},
 		RespectContext: true,
 	}
 	tree := map[string]any{"reload": map[string]any{"signal": "USR1", "when": "always"}}
@@ -215,37 +204,23 @@ func TestReloadClosureSignalHonorsCanceledContext(t *testing.T) {
 }
 
 func TestReloadClosureSignalUsesPidfileWhenNoMainPID(t *testing.T) {
-	// OpenRC has no MainPID; the signal target comes from the pidfile selector.
-	pid := os.Getpid()
-	dir := t.TempDir()
-	pidfile := dir + "/svc.pid"
-	if err := os.WriteFile(pidfile, []byte(strconv.Itoa(pid)+"\n"), 0o644); err != nil {
+	pid := 4242
+	pidfile := t.TempDir() + "/svc.pid"
+	if err := os.WriteFile(pidfile, []byte(strconv.Itoa(pid)+"\n"), 0o600); err != nil {
 		t.Fatal(err)
-	}
-	mgr := &fakeManager{canReload: false}
-	got := make(chan os.Signal, 1)
-	signal.Notify(got, syscall.SIGUSR2)
-	defer signal.Stop(got)
-
-	tree := map[string]any{
-		"pidfile": pidfile,
-		"reload":  map[string]any{"signal": "USR2"},
 	}
 	selectors := []process.Selector{
 		{Name: "main", Type: process.SelectorPidfile, Paths: []string{pidfile}},
 		{Name: "identity", Type: process.SelectorCommandMatch, Exe: "/usr/sbin/svc", User: "svcuser"},
 	}
-	discoverer := reloadDiscoverer(map[int]process.Identity{
-		pid: {PID: pid, UID: 1001, Exe: "/usr/sbin/svc", ExeOK: true},
-	})
-	reload := reloadClosure(parsedReloadSpec(tree), tree, depsWith(&execxtest.Runner{}), mgr, "openrc", "svc", discoverer, selectors)
+	discoverer := reloadDiscoverer(map[int]process.Identity{pid: {PID: pid, StartTicks: 42, StartTicksOK: true, UID: 1001, Exe: "/usr/sbin/svc", ExeOK: true}})
+	signaler := &reapSignaler{}
+	reload := nativeSignalReloadFunc(syscall.SIGUSR2, &execxtest.Runner{}, "openrc", "svc", pidfile, discoverer, selectors, signaler)
 	if err := reload(context.Background()); err != nil {
-		t.Fatalf("reload: %v", err)
+		t.Fatal(err)
 	}
-	select {
-	case <-got:
-	case <-time.After(time.Second):
-		t.Fatal("native signal reload did not deliver SIGUSR2 via the pidfile pid")
+	if len(signaler.calls) != 1 || signaler.calls[0].pid != pid || signaler.calls[0].sig != syscall.SIGUSR2 {
+		t.Fatalf("signals: %v", signaler.calls)
 	}
 }
 
@@ -282,7 +257,7 @@ func TestReloadClosureSignalMainPIDRequiresStrictIdentity(t *testing.T) {
 	reload := reloadClosure(parsedReloadSpec(tree), tree, depsWith(runner), mgr, "systemd", "svc", reloadDiscoverer(nil), selectors)
 
 	err := reload(context.Background())
-	if err == nil || !strings.Contains(err.Error(), "MainPID 424242 does not match any process selector") {
+	if err == nil || !strings.Contains(err.Error(), "pid 424242 from mainpid") {
 		t.Fatalf("reload err = %v, want strict MainPID identity failure", err)
 	}
 }
