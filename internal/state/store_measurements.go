@@ -6,8 +6,6 @@ import (
 	"fmt"
 	"strings"
 	"time"
-
-	_ "modernc.org/sqlite" // registers the "sqlite" database/sql driver
 )
 
 // MeasurementPoint is one time bucket of a check's measurement series: the sample

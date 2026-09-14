@@ -8,8 +8,6 @@ import (
 	"slices"
 	"time"
 
-	_ "modernc.org/sqlite" // registers the "sqlite" database/sql driver
-
 	"sermo/internal/checks"
 )
 

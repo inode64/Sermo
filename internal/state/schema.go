@@ -4,8 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-
-	_ "modernc.org/sqlite" // registers the "sqlite" database/sql driver
 )
 
 // storageSchema defines the complete current storage layout.
