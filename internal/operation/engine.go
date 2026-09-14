@@ -364,11 +364,11 @@ func applyReapOutcome(ctx context.Context, result *Result, found int, outcome pr
 		result.Message = fmt.Sprintf("%s: %s; %s", actionReap, signalled, strings.Join(failures, "; "))
 		return
 	}
+	if timedOut(ctx) {
+		result.Status, result.Message = ResultFailed, timeoutDuring(actionReap)
+		return
+	}
 	if len(outcome.Remaining) > 0 {
-		if timedOut(ctx) {
-			result.Status, result.Message = ResultFailed, timeoutDuring(actionReap)
-			return
-		}
 		result.Status = ResultOrphanProcesses
 		result.Message = fmt.Sprintf("%s: %s; %d remain", actionReap, signalled, len(outcome.Remaining))
 		return

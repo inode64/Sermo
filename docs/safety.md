@@ -273,7 +273,9 @@ Because the daemon runs as root:
 
 A failure to rediscover processes during `sermoctl reap --apply` stops escalation
 and records a failed outcome. An unreadable process table is never treated as
-proof that all survivors exited.
+proof that all survivors exited. Signal rounds check cancellation before each
+process and again after user resolution; an expired operation cannot begin a
+new TERM or KILL delivery.
 
 ## Locks
 

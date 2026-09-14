@@ -78,7 +78,7 @@ func (r Reaper) Reap(ctx context.Context, residuals []Process, policy KillPolicy
 	if len(residuals) == 0 {
 		return ReapResult{}
 	}
-	if !policy.ForceKill {
+	if !policy.ForceKill || ctx.Err() != nil {
 		return ReapResult{Remaining: residuals}
 	}
 
@@ -102,7 +102,7 @@ func (r Reaper) Reap(ctx context.Context, residuals []Process, policy KillPolicy
 	signalled := map[int]bool{}
 	var failed []SignalFailure
 	round := func(set []Process, sig syscall.Signal) {
-		failed = append(failed, signalRound(set, policy.KillOnlyIf, resolve, signaler, sig, signalled)...)
+		failed = append(failed, signalRound(ctx, set, policy.KillOnlyIf, resolve, signaler, sig, signalled)...)
 	}
 
 	round(residuals, syscall.SIGTERM)
@@ -141,7 +141,7 @@ func (r Reaper) Signal(ctx context.Context, procs []Process, selector KillSelect
 		signaler = OSSignaler{}
 	}
 	signalled := map[int]bool{}
-	failed := signalRound(procs, selector, resolve, signaler, sig, signalled)
+	failed := signalRound(ctx, procs, selector, resolve, signaler, sig, signalled)
 	remaining := procs
 	if r.Rediscover != nil {
 		remaining = r.Rediscover()
@@ -194,10 +194,18 @@ func Wait(ctx context.Context, sleep func(time.Duration), d time.Duration) error
 	}
 }
 
-func signalRound(set []Process, selector KillSelector, resolve UserResolver, signaler Signaler, sig syscall.Signal, signalled map[int]bool) []SignalFailure {
+func signalRound(ctx context.Context, set []Process, selector KillSelector, resolve UserResolver, signaler Signaler, sig syscall.Signal, signalled map[int]bool) []SignalFailure {
 	var failed []SignalFailure
 	for i := range set {
+		if err := ctx.Err(); err != nil {
+			failed = append(failed, SignalFailure{PID: set[i].PID, Err: err})
+			break
+		}
 		if selector.Killable(set[i], resolve) {
+			if err := ctx.Err(); err != nil {
+				failed = append(failed, SignalFailure{PID: set[i].PID, Err: err})
+				break
+			}
 			if err := signaler.Signal(set[i].PID, sig); err == nil {
 				signalled[set[i].PID] = true
 			} else {
