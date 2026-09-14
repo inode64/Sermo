@@ -6,8 +6,6 @@ import (
 	"fmt"
 	"slices"
 	"time"
-
-	_ "modernc.org/sqlite" // registers the "sqlite" database/sql driver
 )
 
 // EventRecord is one persisted operator-visible event. Service is set for

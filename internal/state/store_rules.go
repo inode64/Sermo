@@ -6,8 +6,6 @@ import (
 	"fmt"
 	"sermo/internal/rules"
 	"time"
-
-	_ "modernc.org/sqlite" // registers the "sqlite" database/sql driver
 )
 
 // RemediationRecord is the persisted automatic-remediation control state for one

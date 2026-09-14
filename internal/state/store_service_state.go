@@ -3,8 +3,6 @@ package state
 import (
 	"fmt"
 	"time"
-
-	_ "modernc.org/sqlite" // registers the "sqlite" database/sql driver
 )
 
 // MonitorRecord is one persisted monitoring state row.
