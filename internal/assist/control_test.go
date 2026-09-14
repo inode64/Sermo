@@ -51,6 +51,10 @@ func TestDockerAssistant(t *testing.T) {
 	if expect[checks.CheckKeyOp] != cfgval.CompareOpEqual || expect[checks.CheckKeyValue] != conn.DockerContainerStatusRunning {
 		t.Fatalf("docker expect = %v, want running", expect)
 	}
+	health := check[checks.CheckKeyExpect].(map[string]any)[conn.ExtraKeyContainerHealth].(map[string]any)
+	if health[checks.CheckKeyOp] != cfgval.CompareOpNotEqual || health[checks.CheckKeyValue] != dockerctl.HealthStatusUnhealthy {
+		t.Fatalf("docker health expect = %v, want unhealthy rejected", health)
+	}
 	if !strings.Contains(out.String(), `"docker-redis" is already configured`) {
 		t.Fatalf("skip message missing from output:\n%s", out.String())
 	}

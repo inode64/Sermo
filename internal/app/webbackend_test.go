@@ -219,6 +219,7 @@ func TestSSHSessionsDeduplicatesFilters(t *testing.T) {
 func TestSSHSessionFiltersUseResolvedAppsMetadata(t *testing.T) {
 	selectors := []process.Selector{
 		{Exe: "/usr/sbin/sshd", User: "root"},
+		{Exe: "/usr/bin/tmux", User: "root", Delegated: true},
 		{Exe: "/usr/sbin/sshd"},
 	}
 	filters := sshSessionFilters([]string{"ssh"}, selectors)

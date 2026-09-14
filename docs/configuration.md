@@ -1080,7 +1080,9 @@ Read-only endpoints:
   signalled. Rows expose PID separately from the session text, plus idle time
   and process-tree CPU, resident memory and IO rates when attributable; tmux and
   screen inventory still comes from published check samples rather than an
-  HTTP-time client run.
+  HTTP-time client run. After a forced close, a stale utmp entry is ignored only
+  when both its terminal and recorded process are proven absent. Permission or
+  other read errors remain visible; Sermo does not rewrite login accounting.
 - `GET /api/services/{name}/sla?since=24h` — availability history at the
   resolution that window is stored at (see [Stored history
   resolution](#stored-history-resolution)); `since` is a duration, default 24h,
@@ -3053,6 +3055,15 @@ Sermo injects it, named `strays`, into every init-managed service that declares
 `processes:` or `pidfile:`, with no fields: what counts as a stray follows from the
 service's own selectors and its control group, and the expected count is zero.
 
+OpenRC hosts using unified cgroups are included when the init definition supplies
+a pidfile whose live PID belongs to `/sys/fs/cgroup/openrc.<service>/cgroup.procs`.
+That PID is the principal; reparented members outside its live tree can therefore
+be reported instead of silently disappearing from the inventory. Without both
+pieces of evidence, Sermo does not guess ownership from a process name.
+Residual sudo terminals can be closed individually from the Sessions panel;
+the SSH service must explicitly authorize their exact sudo executable and real
+users in `reap.kill_only_if`. See [the verified terminal-close boundary](safety.md).
+
 Two optional bounds are accepted when you declare your own instance:
 
 | Field | Meaning |
@@ -3075,6 +3086,12 @@ growth.
 It reports **state**: the count and the executables appear in the dashboard and in
 `sermoctl status`, and never reduce service health or SLA. The daemon is serving;
 something merely accumulated beside it.
+
+A replaced executable belonging only to a stray is reported here, not as a
+`stale_binary` reason to restart the service: restarting the listener cannot
+repair a detached user's old workload.
+Delegated workloads are also excluded from `stale_binary`: updating them is
+the responsibility of their owner, not a reason to restart this service.
 
 Unlike `stale_binary`, **no rule is injected with it**. On real hosts the raw
 condition is dominated by workloads a profile has legitimately marked

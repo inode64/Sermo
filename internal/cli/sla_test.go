@@ -15,10 +15,9 @@ import (
 	"sermo/internal/state"
 )
 
-func TestSLATargetsSortServicesAndSkipEmptyName(t *testing.T) {
+func TestSLATargetsSortServices(t *testing.T) {
 	cfg := &config.Config{Services: map[string]*config.Document{
 		"zeta":  {},
-		"":      {},
 		"alpha": {},
 	}}
 

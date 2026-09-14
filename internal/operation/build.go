@@ -55,7 +55,7 @@ type Config struct {
 	Changed func(string) (bool, error)
 	// SessionVerifier refreshes and verifies an interactive session immediately
 	// before a manual close. It is nil unless the resolved service is SSH.
-	SessionVerifier  func(context.Context, SessionTarget) error
+	SessionVerifier  func(context.Context, SessionTarget) (SessionBoundary, error)
 	SessionSignaler  process.Signaler
 	LockTTL          time.Duration
 	Sleep            func(time.Duration)

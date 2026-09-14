@@ -85,8 +85,9 @@ type Engine struct {
 	RestartIdentity func(ctx context.Context) (ok bool, reason string, err error)
 	// SessionVerifier re-discovers a manual SSH-session target immediately before
 	// signalling it. Nil means this service does not offer session closing.
-	SessionVerifier func(ctx context.Context, target SessionTarget) error
+	SessionVerifier func(ctx context.Context, target SessionTarget) (SessionBoundary, error)
 	SessionSignaler process.Signaler
+	SessionExited   func(int, uint64) (bool, error)
 	// ManagedSessionCloser revalidates and terminates one exact login-manager
 	// session. It never falls through to direct PID signalling.
 	ManagedSessionCloser func(ctx context.Context, target SessionTarget) error
@@ -168,6 +169,15 @@ type SessionTarget struct {
 	ManagedByLogind bool
 }
 
+// SessionBoundary is freshly verified server-side evidence, never client input.
+type SessionBoundary struct {
+	Residual          bool
+	MonitorPID        int
+	MonitorStartTicks uint64
+	Exe               string
+	UID               uint32
+}
+
 // TerminalSessionTarget identifies one exact multiplexer session generation
 // from a configured terminal_sessions check.
 type TerminalSessionTarget struct {
@@ -222,9 +232,10 @@ func (e Engine) Resume(ctx context.Context) Result {
 // CloseSession gracefully terminates one operator-selected SSH session. It
 // shares the service operation lock, named locks, guards, timeout and event
 // path with normal service actions, but deliberately skips service pre/post
-// flight because the SSH daemon itself remains running. Direct process closes
-// send only SIGTERM; managed closes use the independently verified login manager.
-// Neither path escalates to SIGKILL for an interactive user session.
+// flight because the SSH daemon itself remains running. Connected process closes
+// send only SIGTERM; residual sudo terminals require explicit reap authorization.
+// Managed closes use the independently verified login manager.
+// Connected sessions never escalate; authorized residuals reuse the reaper.
 func (e Engine) CloseSession(ctx context.Context, target SessionTarget) Result {
 	return e.run(ctx, plan{action: actionCloseSession, closeSession: &target})
 }
@@ -620,12 +631,18 @@ func (e Engine) closeSession(ctx context.Context, target SessionTarget, result *
 		}
 		return runSessionCloser(ctx, result, closer, "managed SSH session close is unavailable for this service", prefix)
 	}
-	var verify func(context.Context) error
-	if e.SessionVerifier != nil {
-		verify = func(ctx context.Context) error { return e.SessionVerifier(ctx, target) }
+	if e.SessionVerifier == nil {
+		return failSession(result, prefix, errors.New("SSH session close is unavailable for this service"))
 	}
-	if !runSessionCloser(ctx, result, verify, "SSH session close is unavailable for this service", prefix) {
-		return false
+	boundary, err := e.SessionVerifier(ctx, target)
+	if err != nil {
+		return failSession(result, prefix, err)
+	}
+	if err := ctx.Err(); err != nil {
+		return failSession(result, prefix, err)
+	}
+	if boundary.Residual {
+		return e.closeResidualSession(ctx, target, boundary, result)
 	}
 	// The verifier may not honor ctx; never signal after cancellation.
 	if err := ctx.Err(); err != nil {
@@ -638,7 +655,7 @@ func (e Engine) closeSession(ctx context.Context, target SessionTarget, result *
 	if err := signaler.Signal(target.PID, syscall.SIGTERM); err != nil {
 		return failSession(result, prefix, err)
 	}
-	return true
+	return e.waitSessionExit(ctx, target, result)
 }
 
 func (e Engine) closeTerminalSession(ctx context.Context, target TerminalSessionTarget, result *Result) bool {

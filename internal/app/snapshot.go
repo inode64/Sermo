@@ -79,21 +79,6 @@ func NewPersistentSnapshots(store serviceSnapshotStore, reportError func(error))
 	return s, nil
 }
 
-// publishWithCheckTypes replaces a service snapshot with the given cycle's
-// cache and check types. Type metadata prevents a same-named check from an old
-// configuration from being decoded under a newly configured check type.
-func (s *Snapshots) publishWithCheckTypes(service string, cache map[string]checks.Result, ran map[string]bool, checkTypes map[string]string) {
-	typedCache := make(map[string]checks.Result, len(cache))
-	typedRan := make(map[string]bool, len(ran))
-	for name, result := range cache {
-		if checkTypes[name] == "" {
-			continue
-		}
-		typedCache[name], typedRan[name] = result, ran[name]
-	}
-	s.publishConfigured(service, typedCache, typedRan, checkTypes, "")
-}
-
 func (s *Snapshots) publishConfigured(service string, cache map[string]checks.Result, ran map[string]bool, checkTypes map[string]string, configID string) {
 	if s == nil {
 		return
@@ -176,12 +161,6 @@ func NewPersistentWatchSnapshots(store watchSnapshotStore, reportError func(erro
 		}
 	}
 	return s, nil
-}
-
-// publish records one daemon-cycle result for a watch. Multi-metric watches
-// share a visible watch name, so each metric gets its own slot under that name.
-func (s *WatchSnapshots) publish(watch, checkType string, r checks.Result) {
-	s.publishConfigured(watch, checkType, r, "")
 }
 
 func (s *WatchSnapshots) publishConfigured(watch, checkType string, r checks.Result, configID string) {

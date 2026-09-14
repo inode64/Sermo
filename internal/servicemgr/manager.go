@@ -199,6 +199,9 @@ func parseCgroupProcs(data []byte) []int {
 // readers are injectable for tests and for callers that already carry an execx
 // runner.
 func BackendPIDsFuncWithRunner(ctx context.Context, backend Backend, unit string, runner execx.Runner, readFile func(string) ([]byte, error)) func() []int {
+	if backend == BackendOpenRC {
+		return openRCBackendPIDs(unit, readFile)
+	}
 	return func() []int {
 		seen := map[int]bool{}
 		var pids []int

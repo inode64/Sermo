@@ -307,7 +307,7 @@ func (d Discoverer) StaleBinariesIn(attributed []Process, selectors []Selector) 
 		return true
 	}
 	for _, p := range attributed {
-		if p.ExePrev != "" && mark(p.PID) {
+		if !p.Stray && !p.Delegated && p.ExePrev != "" && mark(p.PID) {
 			out = append(out, StaleBinary{PID: p.PID, Path: p.ExePrev})
 		}
 	}
@@ -327,7 +327,7 @@ func (d Discoverer) StaleBinariesIn(attributed []Process, selectors []Selector) 
 		}
 		id := idx.byPID[pid]
 		for i := range selectors {
-			if selectors[i].Type == SelectorCommandMatch && d.matchesDeletedExe(&selectors[i], id, resolve) {
+			if !selectors[i].Delegated && selectors[i].Type == SelectorCommandMatch && d.matchesDeletedExe(&selectors[i], id, resolve) {
 				mark(pid)
 				out = append(out, StaleBinary{PID: pid, Path: id.ExePrev})
 				break

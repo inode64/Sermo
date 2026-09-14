@@ -131,6 +131,7 @@ func parseSSHBanner(banner string) (protocol, software string) {
 // it never consumes the key-exchange bytes that follow.
 func readSSHBanner(c net.Conn) (raw []byte, banner string, err error) {
 	var line []byte
+	var preBanner string
 	one := make([]byte, 1)
 	for {
 		if len(raw) > sshMaxBannerBytes {
@@ -145,11 +146,20 @@ func readSSHBanner(c net.Conn) (raw []byte, banner string, err error) {
 				if strings.HasPrefix(s, sshBannerPrefix) {
 					return raw, s, nil
 				}
+				if s != "" {
+					preBanner = s
+				}
 				continue // a pre-identification line; keep reading
 			}
 			line = append(line, one[0])
 		}
 		if rerr != nil {
+			if pending := strings.TrimRight(string(line), protocolTrimCRLF); pending != "" {
+				preBanner = pending
+			}
+			if preBanner != "" {
+				return raw, "", fmt.Errorf("%w after server message %q", probeErr(ProtocolNameSSH, stepBanner, rerr), preBanner)
+			}
 			return raw, "", probeErr(ProtocolNameSSH, stepBanner, rerr)
 		}
 	}

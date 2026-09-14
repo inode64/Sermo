@@ -226,6 +226,9 @@ var stateColumnMigrations = []struct {
 	column string
 	decl   string
 }{
+	{"rule_window_state", "firing", "firing INTEGER NOT NULL DEFAULT 0"},
+	{"rule_window_state", "clear_since", "clear_since INTEGER NOT NULL DEFAULT 0"},
+	{"rule_window_state", "clear_consecutive", "clear_consecutive INTEGER NOT NULL DEFAULT 0"},
 	{tableServiceSnapshot, "check_type", "check_type TEXT NOT NULL DEFAULT ''"},
 	{tableServiceSnapshot, "unavailable", "unavailable INTEGER NOT NULL DEFAULT 0"},
 	{tableServiceSnapshot, "observation", "observation TEXT NOT NULL DEFAULT ''"},

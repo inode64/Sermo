@@ -108,12 +108,12 @@ same manager before the normal guarded start and postflight.
 The dashboard's **close SSH session** is a separate manual engine operation,
 never a rule action or automatic remediation. It takes the same operation and
 named locks, guards, timeout and one-result event path, but does not restart or
-postflight the SSH daemon. Immediately before the only signal, Sermo re-reads
+postflight the SSH daemon. For a connected session, immediately before the only signal, Sermo re-reads
 the logged-in terminal and its `/proc` ancestry to an exact configured `sshd`
 executable and real user, and requires the same terminal, session PID and
 process start ticks.
 Any missing boundary, changed terminal or recycled PID is rejected. A successful
-close sends one `SIGTERM` to the per-session process; it never escalates to
+connected-session close sends one `SIGTERM` to the per-session process; it never escalates to
 `SIGKILL`.
 An SSH terminal whose ancestry cannot be verified remains visible as an
 unavailable issue. On systemd, a remote issue with a live utmp leader also
@@ -121,6 +121,34 @@ exposes its PID and a login1-managed close. That path sends no signal to the
 uncertain process: immediately before `TerminateSession`, it requires unchanged
 process start ticks plus an exact login1 session ID, leader PID, terminal,
 `Remote=true` and `Service=sshd`. Other unavailable issues remain non-actionable.
+
+A remote terminal left alive by `sudo` after SSH disconnects is shown as
+`residual`, not as an active network connection. Its manual close requires a
+live utmp leader reparented to PID 1 with no controlling terminal, an exact
+resolved `/usr/bin/sudo` or `/bin/sudo` executable, and its direct sudo monitor
+on the displayed PTY. Both real UIDs must match the resolved account recorded
+by utmp: sudo's effective root UID is not its real user identity.
+Both must have valid process start
+ticks and share a non-root cgroup v2 with a live, exactly configured sshd
+identity. Closing a residual also requires the service's explicit
+`reap.kill_only_if` to authorize both sudo processes. It reuses manual reaping's
+TERM, wait, fresh identity verification, KILL, wait and exit-verification path,
+narrowed to the selected terminal's monitor and frontend. A stopped child can
+keep sudo alive after TERM, so successful signal delivery alone is not success.
+No other session, listener, workload PID or entire cgroup is directly signalled.
+Missing reap authorization blocks the close. A replaced
+workload binary does not invalidate the verified sudo boundary, but a replaced
+sudo binary does. Missing cgroup evidence fails closed. No automatic remediation
+uses this path. The session user remains the account recorded by utmp, which
+may be the account selected through sudo rather than the original SSH user.
+
+Administrators always see a close button on SSH session and attribution-issue
+rows. It is disabled, with an explanation, when no safe close identity is
+available; visibility never substitutes for backend verification.
+
+For direct and residual closes, Sermo waits for the selected process generation
+to exit before reporting success. A surviving or unreadable process yields an
+error at the operation timeout rather than a successful signal-delivery report.
 
 The `terminal_sessions` check is observation-only. It runs a bounded,
 argv-only `tmux` or `screen` listing as the explicitly configured account;

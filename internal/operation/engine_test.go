@@ -1708,14 +1708,15 @@ func TestCloseSessionRevalidatesThenSendsOnlyTERM(t *testing.T) {
 	e := h.engine()
 	signaler := &recordingSignaler{}
 	verified := 0
-	e.SessionVerifier = func(_ context.Context, target SessionTarget) error {
+	e.SessionVerifier = func(_ context.Context, target SessionTarget) (SessionBoundary, error) {
 		verified++
 		if target != (SessionTarget{PID: 96, StartTicks: 1234, Terminal: "pts/11"}) {
 			t.Fatalf("target = %+v", target)
 		}
-		return nil
+		return SessionBoundary{}, nil
 	}
 	e.SessionSignaler = signaler
+	e.SessionExited = func(int, uint64) (bool, error) { return true, nil }
 
 	res := e.CloseSession(context.Background(), SessionTarget{PID: 96, StartTicks: 1234, Terminal: "pts/11"})
 	if res.Status != ResultOK || res.Action != actionCloseSession {
@@ -1736,7 +1737,9 @@ func TestCloseSessionNeverSignalsWhenVerificationRejectsIt(t *testing.T) {
 	h := defaultHarness()
 	e := h.engine()
 	signaler := &recordingSignaler{}
-	e.SessionVerifier = func(context.Context, SessionTarget) error { return errors.New("SSH session changed") }
+	e.SessionVerifier = func(context.Context, SessionTarget) (SessionBoundary, error) {
+		return SessionBoundary{}, errors.New("SSH session changed")
+	}
 	e.SessionSignaler = signaler
 
 	res := e.CloseSession(context.Background(), SessionTarget{PID: 96, StartTicks: 1234, Terminal: "pts/11"})

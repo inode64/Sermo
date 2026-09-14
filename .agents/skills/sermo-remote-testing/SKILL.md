@@ -402,13 +402,17 @@ check:
 mount:
   refcount: true
   umount:
-    allow_sigkill: false
-    allow_lazy: false
+    term_timeout: 10s
+    kill_timeout: 5s
 ```
 
   Do not write `source`, `fstype`, `options` or class metadata into the mount
   YAML. If a target is not present in `/etc/fstab`, report it as skipped instead
   of inventing a mount unit.
+  The retired `allow_sigkill` and `allow_lazy` options are not supported. Do not
+  silently drop an old no-kill policy during migration: retain a read-only
+  storage watch without `mount:` controls when the workflow does not authorize
+  the current unmount policy.
 - Include certificate watches for `/etc/ssl` on every complete config. Discover
   only candidate certificate-like regular files (`*.crt`, `*.cer`, `*.pem`) that
   are immediate children of `/etc/ssl`, using read-only commands equivalent to
