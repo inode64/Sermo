@@ -12,9 +12,14 @@ var namedSections = []string{sectionChecks, sectionPreflight, sectionProcesses, 
 // mergeMaps merges src on top of dst and returns a new map. Scalars and lists
 // overwrite; nested maps merge recursively. Inputs are not mutated.
 func mergeMaps(dst, src map[string]any) map[string]any {
-	out := cloneMap(dst)
+	out := make(map[string]any, len(dst))
+	for k, dv := range dst {
+		if _, overridden := src[k]; !overridden {
+			out[k] = deepCopy(dv)
+		}
+	}
 	for k, sv := range src {
-		if dm, sm, ok := mergeableMaps(out[k], sv); ok {
+		if dm, sm, ok := mergeableMaps(dst[k], sv); ok {
 			out[k] = mergeMaps(dm, sm)
 			continue
 		}

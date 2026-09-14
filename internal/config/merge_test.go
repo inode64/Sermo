@@ -57,3 +57,24 @@ func TestApplyDeletesRemovesEntry(t *testing.T) {
 		t.Errorf("tcp should remain")
 	}
 }
+
+func TestMergeMapsRetainedBranchesAreIndependent(t *testing.T) {
+	dst := map[string]any{
+		"retained": map[string]any{"list": []any{map[string]any{"value": "original"}}},
+		"shared":   map[string]any{"keep": map[string]any{"value": "original"}},
+		"replaced": map[string]any{"old": true},
+	}
+	src := map[string]any{"shared": map[string]any{"add": true}, "replaced": nil}
+	out := mergeMaps(dst, src)
+	out["retained"].(map[string]any)["list"].([]any)[0].(map[string]any)["value"] = "changed"
+	out["shared"].(map[string]any)["keep"].(map[string]any)["value"] = "changed"
+	if got := dst["retained"].(map[string]any)["list"].([]any)[0].(map[string]any)["value"]; got != "original" {
+		t.Fatalf("retained branch aliases input: %v", got)
+	}
+	if got := dst["shared"].(map[string]any)["keep"].(map[string]any)["value"]; got != "original" {
+		t.Fatalf("merged branch aliases input: %v", got)
+	}
+	if out["replaced"] != nil {
+		t.Fatalf("explicit nil must replace the old map: %v", out["replaced"])
+	}
+}
