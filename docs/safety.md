@@ -257,6 +257,12 @@ Because the daemon runs as root:
   run their `argv` **as root** (never via a shell). Keep `/etc/sermo` writable
   only by root; anyone who can edit it can run code as root. Secrets belong in the
   environment (`${env:NAME}`), not in the file.
+- **Host path validation is not a filesystem sandbox.** `internal/hostfs`
+  rejects relative paths, unclean paths and NUL bytes, but accepts any clean
+  absolute path and follows symlinks when opening files. Configured paths must
+  come from the trusted operator configuration. Code that builds paths from
+  request parameters must validate those components before joining them;
+  normalizing a path does not authorize its destination.
 - **The web UI** (when enabled) can start/stop/restart/reload/resume/repair services and
   monitor/unmonitor targets as root, so it is hardened by default: it **binds to
   loopback** (`127.0.0.1`), supports

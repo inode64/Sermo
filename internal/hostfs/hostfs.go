@@ -3,10 +3,13 @@
 // files, pidfiles, runtime lock and log files.
 //
 // Every path must be absolute and clean. A relative or traversing path is
-// rejected before the file system is touched, so a path assembled from a
-// device name, a PID or a configured directory can never escape the location
-// the caller reasoned about. Operator-supplied paths (a `--config` argument)
-// are resolved by the CLI before they reach this package.
+// rejected before the file system is touched. This is lexical validation,
+// not confinement: any clean absolute path is accepted and symlinks are
+// followed by the underlying os operations. Callers must authorize the target
+// and validate untrusted components before joining them, since filepath.Join
+// removes traversal components before Check can see them. Operator-supplied
+// paths (a `--config` argument) are resolved by the CLI before they reach this
+// package.
 package hostfs
 
 import (
@@ -21,6 +24,7 @@ import (
 var ErrPath = errors.New("hostfs: path must be absolute and clean")
 
 // Check reports whether path is absolute, clean and free of NUL bytes.
+// It does not establish that path is trusted or contained in a directory.
 func Check(path string) error {
 	if path == "" || !filepath.IsAbs(path) || filepath.Clean(path) != path || strings.ContainsRune(path, 0) {
 		return fmt.Errorf("%w: %q", ErrPath, path)
@@ -33,7 +37,7 @@ func ReadFile(path string) ([]byte, error) {
 	if err := Check(path); err != nil {
 		return nil, err
 	}
-	return os.ReadFile(path) //nolint:gosec,wrapcheck // G304: every host file read passes Check above; this is the single audited read path.
+	return os.ReadFile(path) //nolint:gosec,wrapcheck // G304: callers authorize host paths; Check enforces their lexical form.
 	// wrapcheck: the os error already names the operation and path; callers add their own context.
 }
 
