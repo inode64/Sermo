@@ -441,3 +441,42 @@ func TestWebBackendDetailLocksNone(t *testing.T) {
 		t.Fatalf("locks = %+v, want nil/empty", detail.Locks)
 	}
 }
+
+type countingLockProber struct {
+	fakeAliveProber
+	reads int
+}
+
+func (p *countingLockProber) Alive(int) bool {
+	p.reads++
+	return true
+}
+
+func TestWebBackendSharesLockReportsWithinRead(t *testing.T) {
+	useFakeLockProber(t)
+	prober := &countingLockProber{}
+	lockProcProber = prober
+	runtime := t.TempDir()
+	writeWebLockFixture(t, locks.RuntimeLocksDir(runtime), "mysql\\backup.lock", map[string]any{
+		"service": "mysql", "name": "backup", "owner_pid": 123,
+		"expires_at": time.Now().Add(time.Hour).UTC().Format(time.RFC3339),
+	})
+	b := &WebBackend{
+		cfg:     &config.Config{Global: config.Global{Runtime: runtime}},
+		order:   []string{"mysql"},
+		entries: map[string]*webEntry{"mysql": {noResidentProcess: true}},
+	}
+	for wantReads := 1; wantReads <= 2; wantReads++ {
+		services, lockViews := b.ServicesAndLocks(context.Background())
+		if prober.reads != wantReads {
+			t.Fatalf("owner reads = %d, want %d", prober.reads, wantReads)
+		}
+		if len(services) != 1 || !slices.Equal(services[0].ActiveLocks, []string{"backup"}) || len(lockViews) != 1 {
+			t.Fatalf("inconsistent sections: services=%+v locks=%+v", services, lockViews)
+		}
+	}
+	detail, ok := b.Detail(context.Background(), "mysql")
+	if !ok || len(detail.Locks) != 1 || prober.reads != 3 {
+		t.Fatalf("detail=%+v found=%v reads=%d, want one additional scan", detail, ok, prober.reads)
+	}
+}

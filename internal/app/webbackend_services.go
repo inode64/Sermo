@@ -5,6 +5,7 @@ import (
 	"sermo/internal/cfgval"
 	"sermo/internal/checks"
 	"sermo/internal/config"
+	"sermo/internal/locks"
 	"sermo/internal/servicemgr"
 	"sermo/internal/state"
 	"sermo/internal/units"
@@ -574,9 +575,12 @@ func checkHealthSummaryCurrent(snap map[string]CheckSnapshot, checkNames []strin
 
 // Services returns the web view of every configured service.
 func (b *WebBackend) Services(ctx context.Context) []web.Service {
+	return b.servicesWithLockReports(ctx, b.lockReportsByService())
+}
+
+func (b *WebBackend) servicesWithLockReports(ctx context.Context, reports map[string]locks.Report) []web.Service {
 	out := make([]web.Service, 0, len(b.order))
 	lastEvents := b.lastServiceEvents()
-	activeLocks := b.activeLockNamesByService()
 	operating := b.operationActiveByService()
 	for _, name := range b.order {
 		e := b.entries[name]
@@ -584,7 +588,7 @@ func (b *WebBackend) Services(ctx context.Context) []web.Service {
 			continue
 		}
 		out = append(out, b.viewWithRuntime(ctx, name, e, lastEvents[name], serviceLockView{
-			active:          activeLocks[name],
+			active:          activeLockNamesFromReport(reports[name]),
 			operationActive: operating[name],
 			ready:           true,
 		}))
@@ -601,7 +605,10 @@ func (b *WebBackend) Detail(ctx context.Context, name string) (web.Detail, bool)
 	if e.disabled {
 		return web.Detail{Service: b.view(ctx, name, e)}, true
 	}
-	d := web.Detail{Service: b.view(ctx, name, e)}
+	report, lockErr := serviceLocksReport(b.cfg, name)
+	d := web.Detail{Service: b.viewWithRuntime(ctx, name, e, b.lastServiceEvent(name), serviceLockView{
+		active: activeLockNamesFromReport(report), operationActive: operationActive(b.cfg, name), ready: true,
+	})}
 	now := b.webNow()
 
 	snap := b.snapshots.Get(name)
@@ -609,7 +616,7 @@ func (b *WebBackend) Detail(ctx context.Context, name string) (web.Detail, bool)
 		d.Checks = append(d.Checks, b.checkView(cn, e, snap))
 	}
 
-	if report, err := serviceLocksReport(b.cfg, name); err == nil {
+	if lockErr == nil {
 		for i := range report.Locks {
 			d.Locks = append(d.Locks, lockToWebAt(report.Locks[i], name, now))
 		}
