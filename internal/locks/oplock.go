@@ -206,8 +206,8 @@ func reclaimStale(path string, expected lockFile, proc ProcessProber, now func()
 	return true
 }
 
-// lockReclaimDir takes an exclusive advisory lock on the directory holding path
-// for the duration of a reclaim. flock is per-open-file-description and works
+// lockReclaimDir attempts an exclusive advisory lock without waiting on the
+// directory holding path. flock is per-open-file-description and works
 // across processes; the lock directory lives on tmpfs. A failure to acquire
 // this exclusion must prevent reclamation.
 func lockReclaimDir(path string) (func(), error) {
@@ -216,7 +216,7 @@ func lockReclaimDir(path string) (func(), error) {
 	if err != nil {
 		return nil, fmt.Errorf("open lock directory %s: %w", dir, err)
 	}
-	if err := unix.Flock(int(d.Fd()), unix.LOCK_EX); err != nil {
+	if err := unix.Flock(int(d.Fd()), unix.LOCK_EX|unix.LOCK_NB); err != nil {
 		_ = d.Close()
 		return nil, fmt.Errorf("lock directory %s: %w", dir, err)
 	}
