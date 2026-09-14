@@ -169,6 +169,11 @@ mode`**. In the web UI the same toggle is the red **panic mode** button in the
 footer (it asks for confirmation in both directions so it is not triggered by
 accident). The CLI applies the change immediately without a prompt.
 
+If the initial state read fails after daemon startup, automatic side effects
+stay suspended until a successful read establishes the panic flag. Checks and
+manual operations remain available. Later read failures retain the last
+successfully read value.
+
 ## Service target resolution
 
 For a configured service, `sermoctl status`, `is-active` and service operations

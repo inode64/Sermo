@@ -20,7 +20,8 @@ type panicReader interface {
 // suppresses hooks, alert notifications and automatic remediation. Every worker
 // and watch checks the gate each cycle, so reads go through a short TTL cache to
 // avoid hammering the state database; a read error keeps the last known value so
-// the daemon never flaps. The zero/nil gate reports "not in panic".
+// the daemon never flaps. Until the first successful read, automatic side effects
+// stay suspended. The zero/nil gate reports "not in panic".
 type PanicGate struct {
 	store panicReader
 	ttl   time.Duration
@@ -32,9 +33,10 @@ type PanicGate struct {
 }
 
 // NewPanicGate returns a gate backed by store. A nil store means panic mode is
-// never on (no persistence).
+// never on (no persistence). Otherwise the gate starts active until the persisted
+// state can be read successfully.
 func NewPanicGate(store panicReader) *PanicGate {
-	return &PanicGate{store: store, ttl: defaultPanicGateTTL, now: time.Now}
+	return &PanicGate{store: store, ttl: defaultPanicGateTTL, now: time.Now, cached: true}
 }
 
 // Active reports whether panic mode is currently on, refreshing from the store
