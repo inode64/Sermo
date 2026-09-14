@@ -2,10 +2,12 @@ package app
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
 	"sermo/internal/servicemgr"
+	"sermo/internal/state"
 )
 
 func TestPanicGateNilSafe(t *testing.T) {
@@ -78,5 +80,46 @@ func TestReadinessPanicDoesNotOverrideLifecycle(t *testing.T) {
 	r.MarkShuttingDown()
 	if rep := r.Report(context.Background()); rep.Status != "shutting_down" || rep.Panic {
 		t.Fatalf("shutting down report = %+v, want shutting_down and no panic override", rep)
+	}
+}
+
+type panicReaderFunc func() (state.GlobalRecord, bool, error)
+
+func (f panicReaderFunc) Panic() (state.GlobalRecord, bool, error) {
+	return f()
+}
+
+func TestPanicGateInitialReadFailure(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		found bool
+		on    bool
+	}{
+		{name: "missing"},
+		{name: "off", found: true},
+		{name: "on", found: true, on: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			readErr := errors.New("state unavailable")
+			g := NewPanicGate(panicReaderFunc(func() (state.GlobalRecord, bool, error) {
+				return state.GlobalRecord{On: tc.on}, tc.found, readErr
+			}))
+			now := time.Unix(0, 0)
+			g.now = func() time.Time { return now }
+			if !g.Active() {
+				t.Fatal("initial read failure must suspend automatic side effects")
+			}
+			readErr = nil
+			now = now.Add(2 * defaultPanicGateTTL)
+			want := tc.found && tc.on
+			if got := g.Active(); got != want {
+				t.Fatalf("recovered state = %v, want %v", got, want)
+			}
+			readErr = errors.New("state unavailable again")
+			now = now.Add(2 * defaultPanicGateTTL)
+			if got := g.Active(); got != want {
+				t.Fatalf("later failure state = %v, want last known %v", got, want)
+			}
+		})
 	}
 }
