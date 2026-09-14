@@ -176,7 +176,9 @@ func New(c Config) Engine {
 			if err != nil {
 				return nil, fmt.Errorf("scan locks for %s: %w", c.Service, err)
 			}
-			return report.Locks, nil
+			// A file may already exist while its exclusive creator is still
+			// writing it. Unreadable state is not evidence that no lock is held.
+			return report.Locks, warningError("runtime locks", report.Warnings)
 		},
 		Guard:               guardClosure(tree, deps, c.MetricSample, c.Changed),
 		SessionVerifier:     c.SessionVerifier,
