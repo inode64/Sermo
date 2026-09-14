@@ -191,3 +191,37 @@ func TestSelfStrayHygieneEnabledUnlessDisabled(t *testing.T) {
 		t.Fatal("engine.reap_own_strays: false must turn it off")
 	}
 }
+
+func TestSelfStrayHygieneRequiresExactDaemonUnit(t *testing.T) {
+	for _, tc := range []struct {
+		unit string
+		want int
+	}{
+		{unit: "sermod.service", want: 1},
+		{unit: "sermod-helper.service"},
+		{unit: "sermod2.service"},
+		{unit: "sermod.service-helper.service"},
+		{unit: "sermod@other.service"},
+	} {
+		t.Run(tc.unit, func(t *testing.T) {
+			calls := &selfReapSignaler{}
+			files := map[string]string{
+				"/proc/self/cgroup": "0::/system.slice/" + tc.unit + "\n",
+				"/sys/fs/cgroup/system.slice/" + tc.unit + "/cgroup.procs": "4242\n5000\n",
+			}
+			h := SelfStrayHygiene{
+				Self: 4242, Signaler: calls,
+				Identity: namedIdentity(map[int]string{5000: "/usr/bin/worker"}),
+				ReadFile: func(path string) ([]byte, error) {
+					if data, ok := files[path]; ok {
+						return []byte(data), nil
+					}
+					return nil, os.ErrNotExist
+				},
+			}
+			if got := h.Run(); got != tc.want || len(calls.calls) != tc.want {
+				t.Fatalf("Run = %d, signals = %v; want %d", got, calls.calls, tc.want)
+			}
+		})
+	}
+}

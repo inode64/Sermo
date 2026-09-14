@@ -3,13 +3,14 @@ package app
 import (
 	"fmt"
 	"os"
-	"strings"
 	"syscall"
 
 	"sermo/internal/config"
 	"sermo/internal/process"
 	"sermo/internal/servicemgr"
 )
+
+const daemonSystemdUnit = daemonName + servicemgr.SystemdServiceSuffix
 
 // SelfStrayHygiene terminates whatever a previous sermod incarnation left behind
 // in sermod's own init unit control group.
@@ -35,7 +36,7 @@ import (
 // me" attributes its workers to us. That is not hypothetical: the daemon's own
 // test suite boots run() inside GitHub's runner service, where this hygiene
 // SIGTERMed the runner agent and took the whole machine down with it. A unit
-// whose name does not start with the daemon's own is therefore left untouched.
+// whose name is not exactly the packaged daemon unit is left untouched.
 type SelfStrayHygiene struct {
 	// ReadFile reads /proc/self/cgroup and the cgroup's process list; nil uses
 	// os.ReadFile.
@@ -64,7 +65,7 @@ func ReapOwnStraysEnabled(cfg *config.Config) bool {
 // running inside a systemd service unit control group.
 func (h SelfStrayHygiene) Run() int {
 	pids, unit, ok := servicemgr.SelfUnitCgroupPIDs(h.ReadFile)
-	if !ok || !strings.HasPrefix(unit, daemonName) {
+	if !ok || unit != daemonSystemdUnit {
 		return 0
 	}
 	self := h.Self
