@@ -70,6 +70,9 @@ const (
 // HealthStatusNone is emitted when Docker exposes no container health state.
 const HealthStatusNone = "none"
 
+// HealthStatusUnhealthy means the container's configured health check is failing.
+const HealthStatusUnhealthy = "unhealthy"
+
 // ContainerStatus* constants are Docker `.State.Status` labels from inspect.
 const (
 	ContainerStatusCreated    = "created"

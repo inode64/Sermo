@@ -6,12 +6,14 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 	"time"
 
 	"sermo/internal/cfgval"
+	"sermo/internal/hostfs"
 	"sermo/internal/metrics"
 	"sermo/internal/process"
 	"sermo/internal/utmp"
@@ -56,8 +58,8 @@ type SSHIdleConfig struct {
 	sshdFilters        []process.IdentityFilter
 }
 
-// SSHSession is one interactive terminal proven to descend from a configured
-// sshd executable. PID and StartTicks identify the per-session server process
+// SSHSession is an interactive SSH terminal or a verified residual sudo terminal.
+// PID and StartTicks identify the per-session server or residual sudo frontend
 // that may be closed; they stay zero when that boundary cannot be identified
 // safely.
 type SSHSession struct {
@@ -66,6 +68,17 @@ type SSHSession struct {
 	PID        int
 	StartTicks uint64
 	Idle       time.Duration
+	Residual   bool
+	Sudo       *SudoSessionBoundary
+}
+
+// SudoSessionBoundary is the minimal immutable evidence needed to revalidate
+// cleanup of a residual terminal without retaining the process command lines.
+type SudoSessionBoundary struct {
+	MonitorPID        int
+	MonitorStartTicks uint64
+	Exe               string
+	UID               uint32
 }
 
 // SSHSessionIssue is one remote login terminal that the inventory could not
@@ -223,7 +236,7 @@ func defaultSSHIdleSampler() SSHIdleSamplerFunc {
 	return NewSSHIdleSampler(nil, nil)
 }
 
-func terminalSessionInputs(reader process.Reader, sessions func() ([]utmp.Session, error)) ([]utmp.Session, map[int]process.Identity, error) {
+func terminalSessionInputs(reader process.Reader, sessions func() ([]utmp.Session, error), terminal func(string) (utmp.Terminal, error)) ([]utmp.Session, map[int]process.Identity, error) {
 	loggedIn, err := sessions()
 	if err != nil {
 		return nil, nil, fmt.Errorf("load terminal sessions: %w", err)
@@ -232,7 +245,23 @@ func terminalSessionInputs(reader process.Reader, sessions func() ([]utmp.Sessio
 	if err != nil {
 		return nil, nil, fmt.Errorf("read terminal processes: %w", err)
 	}
-	return loggedIn, snapshot, nil
+	return liveTerminalSessions(loggedIn, snapshot, terminal, hostfs.ReadFile), snapshot, nil
+}
+
+// A forced exit can leave USER_PROCESS records in utmp. Drop one only when
+// both the terminal and its recorded process are proven absent, never merely
+// because a procfs snapshot omitted an unreadable identity.
+func liveTerminalSessions(sessions []utmp.Session, snapshot map[int]process.Identity, terminal func(string) (utmp.Terminal, error), readFile func(string) ([]byte, error)) []utmp.Session {
+	return slices.DeleteFunc(sessions, func(session utmp.Session) bool {
+		if _, present := snapshot[session.PID]; present || session.PID <= 1 {
+			return false
+		}
+		if _, err := terminal(session.Line); !errors.Is(err, os.ErrNotExist) {
+			return false
+		}
+		_, err := readFile(process.PIDPath(session.PID, process.ProcFileStat))
+		return errors.Is(err, os.ErrNotExist)
+	})
 }
 
 func newSSHIdleSampler(reader process.Reader, lookup *process.UserLookup, sessions func() ([]utmp.Session, error), terminal func(string) (utmp.Terminal, error), now func() time.Time) SSHIdleSamplerFunc {
@@ -248,7 +277,7 @@ func newSSHIdleSampler(reader process.Reader, lookup *process.UserLookup, sessio
 				return SSHIdleSample{}, err
 			}
 		}
-		loggedIn, snapshot, err := terminalSessionInputs(reader, sessions)
+		loggedIn, snapshot, err := terminalSessionInputs(reader, sessions, terminal)
 		if err != nil {
 			return SSHIdleSample{}, err
 		}
@@ -262,11 +291,12 @@ func newSSHSessionSampler(reader process.Reader, lookup *process.UserLookup, ses
 		if err != nil {
 			return SSHSessionSample{}, err
 		}
-		loggedIn, snapshot, err := terminalSessionInputs(reader, sessions)
+		loggedIn, snapshot, err := terminalSessionInputs(reader, sessions, terminal)
 		if err != nil {
 			return SSHSessionSample{}, err
 		}
-		return sampleSSHSessions(loggedIn, snapshot, terminal, now(), sshdFilters, lookup.ResolveUser)
+		sudo := sshSudoBoundary{snapshot: snapshot, filters: sshdFilters, resolveUser: lookup.ResolveUser, readFile: hostfs.ReadFile, cgroups: make(map[int]string)}
+		return sampleSSHSessions(loggedIn, snapshot, terminal, now(), sshdFilters, lookup.ResolveUser, sudo.target)
 	}
 }
 
@@ -345,7 +375,7 @@ func sampleSSHIdle(sessions []utmp.Session, snapshot map[int]process.Identity, l
 	return sample, nil
 }
 
-func sampleSSHSessions(sessions []utmp.Session, snapshot map[int]process.Identity, terminal func(string) (utmp.Terminal, error), now time.Time, sshdFilters []process.IdentityFilter, resolveUser process.UserResolver) (SSHSessionSample, error) {
+func sampleSSHSessions(sessions []utmp.Session, snapshot map[int]process.Identity, terminal func(string) (utmp.Terminal, error), now time.Time, sshdFilters []process.IdentityFilter, resolveUser process.UserResolver, sudoBoundary func(utmp.Session, []process.Identity) (sshSudoProcesses, bool)) (SSHSessionSample, error) {
 	seen := map[string]bool{}
 	var sample SSHSessionSample
 	for _, session := range sessions {
@@ -376,6 +406,14 @@ func sampleSSHSessions(sessions []utmp.Session, snapshot map[int]process.Identit
 			continue
 		}
 		ssh, target, unknown, err := terminalSSH(processes, snapshot, sshdFilters, resolveUser)
+		residual := false
+		var sudoEvidence *SudoSessionBoundary
+		if !ssh && err == nil && sudoBoundary != nil {
+			if sudo, ok := sudoBoundary(session, processes); ok {
+				ssh, target, unknown, residual = true, sudo.Frontend, false, true
+				sudoEvidence = &SudoSessionBoundary{MonitorPID: sudo.Monitor.PID, MonitorStartTicks: sudo.Monitor.StartTicks, Exe: sudo.Frontend.Exe, UID: sudo.Frontend.UID}
+			}
+		}
 		if err != nil {
 			addSSHSessionIssue(&sample, session, snapshot, fmt.Sprintf("sshd identity verification failed: %v", err))
 			continue
@@ -398,6 +436,8 @@ func sampleSSHSessions(sessions []utmp.Session, snapshot map[int]process.Identit
 			PID:        target.PID,
 			StartTicks: target.StartTicks,
 			Idle:       max(now.Sub(info.AccessedAt), 0),
+			Residual:   residual,
+			Sudo:       sudoEvidence,
 		})
 	}
 	return sample, nil

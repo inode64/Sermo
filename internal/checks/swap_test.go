@@ -2,7 +2,6 @@ package checks
 
 import (
 	"context"
-	"sermo/internal/metrics"
 	"strings"
 	"testing"
 )
@@ -130,22 +129,4 @@ func buildCheckForTest(t *testing.T, entry map[string]any) (Check, string) {
 		return nil, err.Error()
 	}
 	return c, ""
-}
-
-// parseMeminfoKB turns a "Field:   N kB" value (the part after the label) into
-// bytes; memory and swap sampling both depend on it.
-func TestParseMeminfoKB(t *testing.T) {
-	cases := map[string]uint64{
-		"   16384 kB": 16384 * 1024,
-		"16384 kB":    16384 * 1024,
-		"0 kB":        0,
-		"":            0,
-		"   ":         0,
-		"bogus kB":    0, // non-numeric first field -> 0, never a parse panic
-	}
-	for in, want := range cases {
-		if got, _ := metrics.MeminfoKB(in); got != want {
-			t.Errorf("MeminfoKB(%q) = %d, want %d", in, got, want)
-		}
-	}
 }

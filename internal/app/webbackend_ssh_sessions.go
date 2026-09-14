@@ -45,7 +45,7 @@ func sshSessionFilters(apps []string, selectors []process.Selector) []process.Id
 	}
 	filters := make([]process.IdentityFilter, 0, len(selectors))
 	for _, selector := range selectors {
-		if selector.Exe == "" || selector.User == "" {
+		if selector.Exe == "" || selector.User == "" || selector.Delegated {
 			continue
 		}
 		filter, err := process.NewIdentityFilter(selector.Exe, selector.User, "")
@@ -129,7 +129,7 @@ func (b *WebBackend) sshSessions(filters []process.IdentityFilter) (checks.SSHSe
 	return sample, nil
 }
 
-func freshSSHSessionVerifier(deps Deps, filters []process.IdentityFilter) func(context.Context, operation.SessionTarget) error {
+func freshSSHSessionVerifier(deps Deps, filters []process.IdentityFilter) func(context.Context, operation.SessionTarget) (operation.SessionBoundary, error) {
 	sampler := deps.SSHSessionVerifier
 	if sampler == nil {
 		reader := process.OSReader{ReadTTY: true}
@@ -139,22 +139,35 @@ func freshSSHSessionVerifier(deps Deps, filters []process.IdentityFilter) func(c
 		}
 		sampler = checks.NewSSHSessionSampler(reader, deps.UserLookup)
 	}
-	return func(ctx context.Context, target operation.SessionTarget) error {
+	return func(ctx context.Context, target operation.SessionTarget) (operation.SessionBoundary, error) {
 		if err := ctx.Err(); err != nil {
-			return fmt.Errorf("SSH session verification context: %w", err)
+			return operation.SessionBoundary{}, fmt.Errorf("SSH session verification context: %w", err)
 		}
 		sample, err := sampler(checks.SSHSessionConfig{SSHDFilters: filters})
 		if err != nil {
-			return fmt.Errorf("%s%w", sshSessionSamplerFailedMessage, err)
+			return operation.SessionBoundary{}, fmt.Errorf("%s%w", sshSessionSamplerFailedMessage, err)
 		}
 		if err := ctx.Err(); err != nil {
-			return fmt.Errorf("SSH session verification context: %w", err)
+			return operation.SessionBoundary{}, fmt.Errorf("SSH session verification context: %w", err)
 		}
-		return sample.VerifySSHSession(checks.SSHSession{
+		if err := sample.VerifySSHSession(checks.SSHSession{
 			PID:        target.PID,
 			StartTicks: target.StartTicks,
 			Terminal:   target.Terminal,
-		})
+		}); err != nil {
+			return operation.SessionBoundary{}, fmt.Errorf("verify SSH session: %w", err)
+		}
+		for _, session := range sample.SSH {
+			if session.PID == target.PID && session.Terminal == target.Terminal {
+				boundary := operation.SessionBoundary{Residual: session.Residual}
+				if sudo := session.Sudo; sudo != nil {
+					boundary.MonitorPID, boundary.MonitorStartTicks = sudo.MonitorPID, sudo.MonitorStartTicks
+					boundary.Exe, boundary.UID = sudo.Exe, sudo.UID
+				}
+				return boundary, nil
+			}
+		}
+		return operation.SessionBoundary{}, errors.New("SSH session disappeared during verification")
 	}
 }
 
@@ -183,6 +196,7 @@ func sshSessionsToWeb(sample checks.SSHSessionSample) []web.SSHSession {
 			StartTicks:  session.StartTicks,
 			IdleSeconds: max(int64(session.Idle.Seconds()), 0),
 			CanClose:    session.PID > 0 && session.StartTicks > 0,
+			Residual:    session.Residual,
 		})
 	}
 	slices.SortFunc(result, func(a, c web.SSHSession) int {

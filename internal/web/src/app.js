@@ -247,6 +247,7 @@ const sessionSourceAvailable = "available";
 const sessionSourceUnavailable = "unavailable";
 const sessionSourcePartial = "partial";
 const sessionStateActive = "active";
+const sessionStateResidual = "residual";
 const sessionStateAttached = "attached";
 const sessionStateDetached = "detached";
 const sessionStateEmpty = "empty";
@@ -256,6 +257,7 @@ const sessionStateBadges = {
   [sessionSourceUnavailable]: [targetStateFailed, sessionSourceUnavailable],
   [sessionSourcePartial]: [targetStateWarning, sessionSourcePartial],
   [sessionStateActive]: [targetStateActive, sessionStateActive],
+  [sessionStateResidual]: [targetStateWarning, sessionStateResidual],
   [sessionStateAttached]: [targetStateRunning, sessionStateAttached],
   [sessionStateDetached]: [targetStateStopped, sessionStateDetached],
   [sessionStateEmpty]: [sessionStateEmpty, sessionStateEmpty],
@@ -4029,8 +4031,8 @@ function checkSLAHTML(service, c) {
 
 function sshSessionCloseButton(service, session) {
   if (!me.can_act) return tpl`<span class="muted">read-only</span>`;
-  if (!session.can_close) return tpl`<span class="muted">unavailable</span>`;
   const label = `Close SSH session ${session.terminal || ""} of ${session.user || "unknown user"}`;
+  if (!session.can_close) return tpl`<button class="icon-btn danger-btn" disabled aria-label="${label}" title="${session.message || "Session identity cannot be verified safely"}">${closeGlyph}</button>`;
   return tpl`<button class="icon-btn danger-btn" data-ssh-session-close="1" data-ssh-service="${service}" data-ssh-session-pid="${session.pid}" data-ssh-session-start-ticks="${session.start_ticks}" data-ssh-session-terminal="${session.terminal}" data-ssh-session-user="${session.user || ""}" data-ssh-session-managed="${!!session.managed_by_logind}" aria-label="${label}" title="${label}">${closeGlyph}</button>`;
 }
 
@@ -4093,8 +4095,8 @@ function unmeasuredSessionUsageRow() {
 function sessionRows(inventory) {
   const ssh = (inventory.ssh || []).map((session) => ({
     kind: sessionKindSSH, service: session.service || "", user: session.user || "",
-    name: session.terminal || "", pid: session.pid || 0, pidSort: session.pid || 0, state: sessionStateActive,
-    detail: nothing,
+    name: session.terminal || "", pid: session.pid || 0, pidSort: session.pid || 0, state: session.residual ? sessionStateResidual : sessionStateActive,
+    detail: session.residual ? "sudo terminal retained after SSH disconnected" : nothing,
     ...sessionUsageRow(session, true),
     action: sshSessionCloseButton(session.service || "", session),
   }));

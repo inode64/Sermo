@@ -1375,6 +1375,27 @@ test("the process table reports each process's busiest core beside its total", a
   await expect(detail.locator(".runtime-grid")).not.toContainText("core peak");
 });
 
+test("sudo residual sessions keep an enabled close and unsafe issues a disabled close", async ({ page }) => {
+  await page.route("**/api/dashboard**", (route) => route.fulfill({ json: {
+    ...dashboard,
+    sessions: {
+      sources: [{ kind: "ssh", service: "web", state: "partial", issues: [{
+        user: "unknown", terminal: "pts/99", can_close: false, message: "No trusted process identity",
+      }] }],
+      ssh: [{ service: "web", user: "apache", terminal: "pts/42", pid: 301, start_ticks: 100, residual: true, can_close: true }],
+      terminal: [],
+    },
+  } }));
+  await page.reload();
+  const residual = page.locator("#session-rows tr", { hasText: "pts/42" });
+  await expect(residual).toContainText("residual");
+  await expect(residual).toContainText("sudo terminal retained after SSH disconnected");
+  await expect(residual.getByRole("button", { name: "Close SSH session pts/42 of apache" })).toBeEnabled();
+  const unsafe = page.locator("#session-rows tr", { hasText: "pts/99" });
+  await expect(unsafe.getByRole("button", { name: "Close SSH session pts/99 of unknown" })).toBeVisible();
+  await expect(unsafe.getByRole("button", { name: "Close SSH session pts/99 of unknown" })).toBeDisabled();
+});
+
 test("sessions panel shows metrics, sorts columns and closes verified SSH and tmux", async ({ page }) => {
   let closeRequest = null;
   let managedCloseRequest = null;

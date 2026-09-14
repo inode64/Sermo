@@ -120,9 +120,21 @@ func TestParseProcMeminfoTotalsNoSwapDevice(t *testing.T) {
 	}
 }
 
-func TestParseMeminfoKBRejectsMissingValue(t *testing.T) {
-	if got, ok := parseMeminfoKB("VmSwap:"); ok || got != 0 {
-		t.Fatalf("parseMeminfoKB(missing value) = (%d, %v), want (0, false)", got, ok)
+func TestParseMeminfoKB(t *testing.T) {
+	tests := []struct {
+		line string
+		want uint64
+		ok   bool
+	}{
+		{line: "VmSwap:   16384 kB", want: 16384 * 1024, ok: true},
+		{line: "VmSwap: 0 kB", ok: true},
+		{line: "VmSwap:"},
+		{line: "VmSwap: bogus kB"},
+	}
+	for _, tt := range tests {
+		if got, ok := parseMeminfoKB(tt.line); got != tt.want || ok != tt.ok {
+			t.Errorf("parseMeminfoKB(%q) = (%d, %v), want (%d, %v)", tt.line, got, ok, tt.want, tt.ok)
+		}
 	}
 }
 

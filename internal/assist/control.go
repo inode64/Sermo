@@ -141,11 +141,18 @@ func buildDockerService(c DockerCandidate) map[string]any {
 		dockerctl.ControlKeyType:      dockerctl.ControlType,
 		dockerctl.ControlKeyContainer: c.Container,
 	}
+	expect := runningExpect(conn.ExtraKeyContainerStatus, conn.DockerContainerStatusRunning)
+	// Running does not imply healthy. Allow containers without a health check
+	// and Docker's startup grace period, but retain a failure while unhealthy.
+	expect[conn.ExtraKeyContainerHealth] = map[string]any{
+		checks.CheckKeyOp:    cfgval.CompareOpNotEqual,
+		checks.CheckKeyValue: dockerctl.HealthStatusUnhealthy,
+	}
 	check := map[string]any{
 		checks.CheckKeyType:      dockerctl.ControlType,
 		checks.CheckKeyContainer: c.Container,
 		checks.CheckKeyOnChange:  true,
-		checks.CheckKeyExpect:    runningExpect(conn.ExtraKeyContainerStatus, conn.DockerContainerStatusRunning),
+		checks.CheckKeyExpect:    expect,
 	}
 	attachSocket(control, check, dockerctl.ControlKeySocket, c.Socket)
 	return controlledService(control, dockerctl.ControlType, check)

@@ -3,6 +3,7 @@ package conn
 import (
 	"bytes"
 	"net"
+	"strings"
 	"testing"
 )
 
@@ -55,5 +56,22 @@ func TestReadSSHBanner(t *testing.T) {
 	}
 	if string(raw) != "hello there\r\nSSH-2.0-OpenSSH_9.6\r\n" {
 		t.Fatalf("raw must include the pre-banner line for replay: %q", raw)
+	}
+}
+
+func TestReadSSHBannerReportsServerRejection(t *testing.T) {
+	client, server := net.Pipe()
+	defer client.Close()
+	go func() {
+		_, _ = server.Write([]byte("Not allowed at this time\r\n"))
+		server.Close()
+	}()
+
+	raw, banner, err := readSSHBanner(client)
+	if err == nil || !strings.Contains(err.Error(), `EOF after server message "Not allowed at this time"`) {
+		t.Fatalf("error = %v, want the server's pre-banner rejection", err)
+	}
+	if banner != "" || string(raw) != "Not allowed at this time\r\n" {
+		t.Fatalf("raw/banner = %q/%q, want the rejected pre-banner only", raw, banner)
 	}
 }

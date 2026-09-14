@@ -830,7 +830,12 @@ not need a `processes:` selector for a controlled container. Residual signaling
 is still authorized only by `stop_policy.kill_only_if`.
 
 `sermoctl wizard docker` can generate this service shape from containers
-detected through the local Docker socket.
+detected through the local Docker socket. The generated check requires
+`container.status == running` and `container.health != unhealthy`, so an
+unhealthy container remains a failure even without a new state transition.
+Containers without a Docker health check and those still in the health check's
+startup grace period are not rejected by the health predicate. Configure
+`container.health == healthy` explicitly when readiness must also be required.
 
 ### `restart_policy` — restart strategy
 

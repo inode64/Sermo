@@ -16,6 +16,26 @@ func (s *Snapshots) publishForTest(service string, cache map[string]checks.Resul
 	s.publishConfigured(service, cache, ran, nil, "")
 }
 
+// publishWithCheckTypes is test-only shorthand for snapshots without a
+// configuration generation. Production publishers always carry a config ID.
+func (s *Snapshots) publishWithCheckTypes(service string, cache map[string]checks.Result, ran map[string]bool, checkTypes map[string]string) {
+	typedCache := make(map[string]checks.Result, len(cache))
+	typedRan := make(map[string]bool, len(ran))
+	for name, result := range cache {
+		if checkTypes[name] == "" {
+			continue
+		}
+		typedCache[name], typedRan[name] = result, ran[name]
+	}
+	s.publishConfigured(service, typedCache, typedRan, checkTypes, "")
+}
+
+// publish is test-only shorthand for watch snapshots without a configuration
+// generation. Production publishers always carry a config ID.
+func (s *WatchSnapshots) publish(watch, checkType string, result checks.Result) {
+	s.publishConfigured(watch, checkType, result, "")
+}
+
 func TestSnapshotsRoundTrip(t *testing.T) {
 	s := NewSnapshots()
 	if s.Get("web") != nil {

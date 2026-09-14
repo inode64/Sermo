@@ -18,6 +18,7 @@ type SSHSession struct {
 	IdleSeconds     int64  `json:"idle_seconds,omitempty"`
 	CanClose        bool   `json:"can_close"`
 	ManagedByLogind bool   `json:"managed_by_logind,omitempty"`
+	Residual        bool   `json:"residual,omitempty"`
 	SessionUsage
 }
 

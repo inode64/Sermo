@@ -487,12 +487,6 @@ func parseMeminfoKB(line string) (uint64, bool) {
 	return parseMeminfoFields(fields[meminfoValueIndex:])
 }
 
-// MeminfoKB parses a /proc/meminfo value ("N kB", with the field label already
-// removed) to bytes. ok is false when the value is missing or malformed.
-func MeminfoKB(value string) (uint64, bool) {
-	return parseMeminfoFields(strings.Fields(value))
-}
-
 func parseMeminfoFields(fields []string) (uint64, bool) {
 	if len(fields) == 0 {
 		return 0, false

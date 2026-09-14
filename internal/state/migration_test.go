@@ -4,7 +4,9 @@ import (
 	"context"
 	"database/sql"
 	"path/filepath"
+	"reflect"
 	"testing"
+	"time"
 )
 
 // TestStateColumnMigrationsHealAnOldDatabase pins the additive migrations: a
@@ -74,5 +76,46 @@ func TestStateColumnMigrationsHealAnOldDatabase(t *testing.T) {
 		Unavailable: true,
 	}); err != nil {
 		t.Fatalf("persist into the migrated watch runtime table: %v", err)
+	}
+}
+
+func TestRuleWindowMigrationPreservesProgress(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "old.db")
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = db.Exec(`CREATE TABLE rule_window_state (
+		service TEXT NOT NULL, rule_name TEXT NOT NULL,
+		consecutive INTEGER NOT NULL DEFAULT 0,
+		history TEXT NOT NULL DEFAULT '[]',
+		true_since INTEGER NOT NULL DEFAULT 0,
+		timed_history TEXT NOT NULL DEFAULT '[]',
+		PRIMARY KEY (service, rule_name));
+		INSERT INTO rule_window_state (service, rule_name, consecutive, history)
+		VALUES ('web', 'unhealthy', 2, '[true,true]');`)
+	closeErr := db.Close()
+	if err != nil || closeErr != nil {
+		t.Fatalf("create legacy database: %v; close: %v", err, closeErr)
+	}
+	want := RuleWindowRecord{Consecutive: 2, History: []bool{true, true}, TimedHistory: []RuleWindowSample{}}
+	for range 2 {
+		s, err := OpenContextWith(t.Context(), path, Options{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		got, err := s.RuleWindowStates("web")
+		if err != nil || !reflect.DeepEqual(got["unhealthy"], want) {
+			_ = s.Close()
+			t.Fatalf("migrated progress = %+v, error = %v; want %+v", got, err, want)
+		}
+		want.Firing = true
+		want.ClearSince = time.Unix(100, 0).UTC()
+		want.ClearConsecutive = 1
+		err = s.SetRuleWindowStates("web", map[string]RuleWindowRecord{"unhealthy": want})
+		closeErr = s.Close()
+		if err != nil || closeErr != nil {
+			t.Fatalf("persist migrated progress: %v; close: %v", err, closeErr)
+		}
 	}
 }
