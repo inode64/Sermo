@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"iter"
 	"sermo/internal/cfgval"
 	"sermo/internal/checks"
 	"sermo/internal/config"
@@ -227,7 +228,7 @@ func (b *WebBackend) serviceStateReason(name string, e *webEntry) string {
 	// Any failing one is the warning: a service may declare its own stale_binary
 	// check beside the injected one, and a replaced binary either check found is
 	// still a replaced binary.
-	for _, cs := range b.currentSnapshotsOfType(name, e, checks.CheckTypeStaleBinary) {
+	for cs := range b.currentSnapshotsOfType(name, e, checks.CheckTypeStaleBinary) {
 		if !cs.OK {
 			return stateReasonStaleBinary
 		}
@@ -235,7 +236,7 @@ func (b *WebBackend) serviceStateReason(name string, e *webEntry) string {
 	// A service with an explicitly empty process set gets no injected check; an
 	// exact-exe process check it declares is then what notices the replaced
 	// binary, and it publishes the same condition.
-	for _, cs := range b.currentSnapshotsOfType(name, e, checks.CheckTypeProcess) {
+	for cs := range b.currentSnapshotsOfType(name, e, checks.CheckTypeProcess) {
 		if !cs.OK && cs.Data[checks.DataKeyReplacedBinaries] != nil {
 			return stateReasonStaleBinary
 		}
@@ -244,7 +245,8 @@ func (b *WebBackend) serviceStateReason(name string, e *webEntry) string {
 }
 
 // currentSnapshotsOfType returns this service's checks of the given type whose
-// published snapshot is still current, in declaration order.
+// published snapshot is still current, in declaration order. It stops as soon
+// as the consumer has its answer, without allocating a result slice.
 //
 // Order is part of the contract: a service may declare several checks of one type
 // (the injected `strays` beside an operator's bounded instances, or a second
@@ -252,21 +254,21 @@ func (b *WebBackend) serviceStateReason(name string, e *webEntry) string {
 // ranging over a map would answer differently between requests. Each caller then
 // applies its own policy: the warning fires on any failing check, the stray count
 // takes the first, since every strays check counts the same set.
-func (b *WebBackend) currentSnapshotsOfType(name string, e *webEntry, checkType string) []CheckSnapshot {
-	if e == nil || e.checkTypes == nil || b.snapshots == nil {
-		return nil
-	}
-	snap := b.snapshots.Get(name)
-	var out []CheckSnapshot
-	for _, check := range e.checkNames {
-		if e.checkTypes[check] != checkType {
-			continue
+func (b *WebBackend) currentSnapshotsOfType(name string, e *webEntry, checkType string) iter.Seq[CheckSnapshot] {
+	return func(yield func(CheckSnapshot) bool) {
+		if e == nil || e.checkTypes == nil || b.snapshots == nil {
+			return
 		}
-		if cs, ok := snap[check]; ok && b.serviceCheckSnapshotCurrent(e, check, cs) {
-			out = append(out, cs)
+		snap := b.snapshots.Get(name)
+		for _, check := range e.checkNames {
+			if e.checkTypes[check] != checkType {
+				continue
+			}
+			if cs, ok := snap[check]; ok && b.serviceCheckSnapshotCurrent(e, check, cs) && !yield(cs) {
+				return
+			}
 		}
 	}
-	return out
 }
 
 // serviceStrayCount returns how many processes the service cannot account for,
@@ -279,7 +281,7 @@ func (b *WebBackend) currentSnapshotsOfType(name string, e *webEntry, checkType 
 // as no column value at all — "not measured" and "nothing found" are told apart by
 // the check row in the detail, not by this number.
 func (b *WebBackend) serviceStrayCount(name string, e *webEntry) int {
-	for _, cs := range b.currentSnapshotsOfType(name, e, checks.CheckTypeStrays) {
+	for cs := range b.currentSnapshotsOfType(name, e, checks.CheckTypeStrays) {
 		n, _ := cfgval.Int(cs.Data[checks.DataKeyCount])
 		return n
 	}
