@@ -50,6 +50,14 @@ func (l NamedLocker) Release(service, name string) error {
 		return err
 	}
 	path := l.path(service, name)
+	unlock, err := lockReclaimDir(path)
+	if err != nil {
+		if isMissingLock(err) {
+			return nil
+		}
+		return err
+	}
+	defer unlock()
 	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("release named lock %s: %w", path, err)
 	}

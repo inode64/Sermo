@@ -103,3 +103,48 @@ func TestAcquireDoesNotWaitForReclamation(t *testing.T) {
 		t.Fatalf("contended reclamation changed the lock: %+v, %v", lf, err)
 	}
 }
+
+func TestReleasePreservesNewAcquisitionBySameProcess(t *testing.T) {
+	locker := namedLocker(t.TempDir(), fakeProc{})
+	old, err := locker.Hold("mysql", "backup", "", time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := locker.Release("mysql", "backup"); err != nil {
+		t.Fatal(err)
+	}
+	current, err := locker.Hold("mysql", "backup", "", time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = current.Release() }()
+	if err := old.Release(); err != nil {
+		t.Fatal(err)
+	}
+	lf, err := readLockFile(current.path)
+	if err != nil || lf.AcquisitionID != current.acquisitionID {
+		t.Fatalf("old handle removed the new acquisition: %+v, %v", lf, err)
+	}
+}
+
+func TestReleasesRequireDirectoryExclusion(t *testing.T) {
+	locker := namedLocker(t.TempDir(), fakeProc{})
+	h, err := locker.Hold("mysql", "backup", "", time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	unlock, err := lockReclaimDir(h.path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer unlock()
+	if err := h.Release(); err == nil {
+		t.Fatal("owner release bypassed directory exclusion")
+	}
+	if err := locker.Release("mysql", "backup"); err == nil {
+		t.Fatal("explicit release bypassed directory exclusion")
+	}
+	if _, err := readLockFile(h.path); err != nil {
+		t.Fatalf("blocked release removed the lock: %v", err)
+	}
+}

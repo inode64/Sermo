@@ -1,6 +1,7 @@
 package locks
 
 import (
+	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -32,6 +33,7 @@ type ownedLock struct {
 	path            string
 	ownerPID        int
 	ownerStartTicks uint64
+	acquisitionID   string
 	released        bool
 }
 
@@ -44,6 +46,15 @@ func (h *ownedLock) Release() error {
 	if h.released {
 		return nil
 	}
+	unlock, err := lockReclaimDir(h.path)
+	if err != nil {
+		if isMissingLock(err) {
+			h.released = true
+			return nil
+		}
+		return err
+	}
+	defer unlock()
 	current, err := readLockFile(h.path)
 	if err != nil {
 		if isMissingLock(err) {
@@ -52,7 +63,7 @@ func (h *ownedLock) Release() error {
 		}
 		return err
 	}
-	if current.OwnerPID == h.ownerPID && current.OwnerStartTicks == h.ownerStartTicks {
+	if current.OwnerPID == h.ownerPID && current.OwnerStartTicks == h.ownerStartTicks && current.AcquisitionID == h.acquisitionID {
 		if err := os.Remove(h.path); err != nil && !os.IsNotExist(err) {
 			return fmt.Errorf("release lock %s: %w", h.path, err)
 		}
@@ -128,12 +139,13 @@ func (l OperationLocker) Acquire(service string, ttl time.Duration) (*Handle, er
 // loop retries. Bounding the loop at maxAcquireAttempts keeps a pathologically
 // contended lock from spinning without limit.
 func acquireExclusive(path string, payload lockFile, ttl time.Duration, proc ProcessProber, now func() time.Time, onReclaim func(string)) (ownedLock, error) {
+	payload.AcquisitionID = rand.Text()
 	for range maxAcquireAttempts {
 		payload.CreatedAt = now()
 		payload.ExpiresAt = payload.CreatedAt.Add(ttl)
 		err := writeLockFileExclusive(path, payload)
 		if err == nil {
-			return ownedLock{path: path, ownerPID: payload.OwnerPID, ownerStartTicks: payload.OwnerStartTicks}, nil
+			return ownedLock{path: path, ownerPID: payload.OwnerPID, ownerStartTicks: payload.OwnerStartTicks, acquisitionID: payload.AcquisitionID}, nil
 		}
 		if !errors.Is(err, os.ErrExist) {
 			return ownedLock{}, fmt.Errorf(lockAcquireErrorFormat, path, err)
@@ -181,7 +193,7 @@ func acquireExclusive(path string, payload lockFile, ttl time.Duration, proc Pro
 // after B reclaimed it and created a fresh lock at the same path — delete B's live
 // lock, leaving both A and B believing they held it (mutual exclusion violated).
 // The exclusive create (O_EXCL) outside this section stays safe: a remove only
-// happens here, after verifying the file is still the expected stale lock.
+// happens under this same exclusion, including explicit and owner releases.
 func reclaimStale(path string, expected lockFile, proc ProcessProber, now func() time.Time) bool {
 	unlock, err := lockReclaimDir(path)
 	if err != nil {
@@ -194,7 +206,7 @@ func reclaimStale(path string, expected lockFile, proc ProcessProber, now func()
 	}
 	if current.OwnerPID != expected.OwnerPID ||
 		current.OwnerStartTicks != expected.OwnerStartTicks ||
-		!current.ExpiresAt.Equal(expected.ExpiresAt) {
+		!current.ExpiresAt.Equal(expected.ExpiresAt) || current.AcquisitionID != expected.AcquisitionID {
 		return false
 	}
 	if state, _ := classify(current, now(), proc); state == StateActive {
