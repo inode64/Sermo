@@ -1391,8 +1391,8 @@ func (rc *ruleRuntimeContext) applyCheckResult(name string, res checks.Result) {
 	setRuntimeField(&rc.checkScope, cfgval.String(res.Data[checks.DataKeyScope]))
 	setRuntimeField(&rc.checkOp, cfgval.String(res.Data[checks.DataKeyOp]))
 	unit := cfgval.String(res.Data[checks.DataKeyUnit])
-	setRuntimeField(&rc.checkThreshold, formatRuntimeCheckValue(res.Data[checks.DataKeyThreshold], unit))
-	setRuntimeField(&rc.checkValue, formatRuntimeCheckValue(res.Data[checks.DataKeyValue], unit))
+	setRuntimeField(&rc.checkThreshold, checks.FormatDisplayValueWithUnit(checks.DataKeyValue, res.Data[checks.DataKeyThreshold], unit))
+	setRuntimeField(&rc.checkValue, checks.FormatDisplayValueWithUnit(checks.DataKeyValue, res.Data[checks.DataKeyValue], unit))
 }
 
 func (rc *ruleRuntimeContext) applyInlineMetric(ev *rules.Evaluator, metric map[string]any) {
@@ -1417,8 +1417,8 @@ func (rc *ruleRuntimeContext) applyInlineMetric(ev *rules.Evaluator, metric map[
 	}
 	value, unit, ready, err := metrics.ReadingValueForThreshold(reading, threshold)
 	if err == nil && ready {
-		rc.checkThreshold = formatRuntimeCheckValue(threshold, unit)
-		rc.checkValue = formatRuntimeCheckValue(value, unit)
+		rc.checkThreshold = checks.FormatDisplayValueWithUnit(checks.DataKeyValue, threshold, unit)
+		rc.checkValue = checks.FormatDisplayValueWithUnit(checks.DataKeyValue, value, unit)
 	}
 }
 
@@ -1426,10 +1426,6 @@ func setRuntimeField(field *string, value string) {
 	if value != "" {
 		*field = value
 	}
-}
-
-func formatRuntimeCheckValue(value any, unit string) string {
-	return checks.FormatDisplayValueWithUnit(checks.DataKeyValue, value, unit)
 }
 
 func singleRuleCheckCandidate(node map[string]any) (ruleCheckCandidate, bool) {

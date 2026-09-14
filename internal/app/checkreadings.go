@@ -279,7 +279,7 @@ func (rb *readingBuilder) addGrowthWindow() *readingBuilder {
 // addIntMetric appends the field's integer value with a unit suffix.
 func (rb *readingBuilder) addIntMetric(field, label, unit string) *readingBuilder {
 	if v, ok := cfgval.Int(rb.data[field]); ok {
-		rb.out = append(rb.out, web.WatchReading{Field: field, Label: label, Value: watchReadingIntMetricValue(int64(v), unit)})
+		rb.out = append(rb.out, web.WatchReading{Field: field, Label: label, Value: checks.FormatDisplayValueWithUnit(checks.DataKeyValue, int64(v), unit)})
 	}
 	return rb
 }

@@ -227,13 +227,6 @@ func storageUsagePredicatesConfigured(check map[string]any) bool {
 	})
 }
 
-// watchReadingIntMetricValue renders an integer reading through the canonical
-// value formatter, so grouped counts and IEC byte values read identically to
-// event messages.
-func watchReadingIntMetricValue(value int64, unit string) string {
-	return checks.FormatDisplayValueWithUnit(checks.DataKeyValue, value, unit)
-}
-
 // watchReadingMetricValue renders a float reading. Default-precision readings
 // (and every byte count/rate) go through the canonical value formatter; the
 // readings that need explicit precision — clock offsets (3/6 decimals), await
