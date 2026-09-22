@@ -35,9 +35,19 @@ variables:
   db_cleanup_interval: 6h
   db_cleanup_timeout: 5m
   msglog_dir: /var/spool/exim/msglog
-  msglog_backlog_limit: "300"
-  msglog_growth_limit: "200"
+  msglog_backlog_limit: "200"
+  msglog_growth_limit: "100"
   msglog_growth_window: 2m
+  # `exim -bpc` queue depth above which a sustained backlog alerts. A stolen
+  # password sent 200k messages through one host in four hours: the queue went
+  # from 0 to 109k and stayed there for a day while the graph-only queue watch
+  # recorded it without alerting.
+  queue_limit: "200"
+  # Exim's resident memory is a few tens of MB on an idle host and climbs with
+  # every parallel delivery, so an absolute ceiling catches a mass mailing that
+  # a host-relative percentage never reaches (3 GB on a 64 GB host is under 5%).
+  # Bytes: the metric check takes a plain number or a percentage.
+  memory_limit_bytes: "104857600"
 preflight:
   config:
     type: command
@@ -107,6 +117,22 @@ watches:
         - -bpc
       unit: messages
       timeout: 15s
+  alert-if-queue-high:
+    interval: 1m
+    check:
+      type: command
+      command:
+        - ${exim_binary}
+        - -bpc
+      unit: messages
+      expect_stdout: { op: "<=", value: "${queue_limit}" }
+      timeout: 15s
+    for:
+      duration: 3m
+    then:
+      action: alert
+      message: >-
+        During ${rule.duration}, ${display_name} queue stayed above ${queue_limit} messages
   cert:
     # A cert check opens a TLS connection, so it can only see a port that
     # terminates TLS on connect. An Exim with `daemon_smtp_ports = 25` and no
@@ -128,11 +154,14 @@ watches:
       cert_verify: false
       expires_in_days: 21
       timeout: 5s
+  # split_spool_directory (the common production setting) puts every msglog
+  # file under 62 hashed subdirectories, so a flat count reads 0 forever.
   alert-if-msglog-backlog-high:
     check:
       type: count
       path: ${msglog_dir}
       of: file
+      recursive: true
       count:
         op: '>'
         value: ${msglog_backlog_limit}
@@ -146,6 +175,7 @@ watches:
       type: count
       path: ${msglog_dir}
       of: file
+      recursive: true
       delta:
         op: '>'
         value: ${msglog_growth_limit}
@@ -219,7 +249,7 @@ watches:
       scope: service
       name: memory
       op: '>'
-      value: 30%
+      value: ${memory_limit_bytes}
       optional: true
     for:
       duration: 4m
