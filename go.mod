@@ -5,7 +5,7 @@ go 1.27.1
 require (
 	github.com/OpenPrinting/goipp v1.2.0
 	github.com/beevik/ntp v1.5.0
-	github.com/cloudsoda/go-smb2 v0.0.0-20260803221621-0b399b9d036c
+	github.com/cloudsoda/go-smb2 v0.0.0-20260918041005-0c5d69b69701
 	github.com/digitalocean/go-libvirt v0.0.0-20260814190004-1a83157e1858
 	github.com/go-ldap/ldap/v3 v3.4.14
 	github.com/go-sql-driver/mysql v1.10.1
@@ -14,7 +14,7 @@ require (
 	github.com/google/nftables v0.3.0
 	github.com/gosnmp/gosnmp v1.45.0
 	github.com/jackc/pgx/v5 v5.11.0
-	github.com/quic-go/quic-go v0.62.0
+	github.com/quic-go/quic-go v0.63.0
 	github.com/spf13/pflag v1.0.10
 	github.com/vishvananda/netlink v1.3.1
 	github.com/wneessen/go-mail v0.8.1
@@ -30,12 +30,12 @@ require (
 	filippo.io/edwards25519 v1.2.0 // indirect
 	github.com/Azure/go-ntlmssp v0.1.1 // indirect
 	github.com/cloudsoda/sddl v0.0.0-20250224235906-926454e91efc // indirect
-	github.com/dustin/go-humanize v1.0.1 // indirect
+	github.com/dustin/go-humanize v1.1.0 // indirect
 	github.com/geoffgarside/ber v1.2.0 // indirect
 	github.com/go-asn1-ber/asn1-ber v1.5.8 // indirect
 	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/google/uuid v1.6.0 // indirect
-	github.com/hashicorp/go-uuid v1.0.3 // indirect
+	github.com/hashicorp/go-uuid v1.0.4 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
 	github.com/jackc/puddle/v2 v2.2.2 // indirect
@@ -60,7 +60,7 @@ require (
 	golang.org/x/mod v0.41.0 // indirect
 	golang.org/x/sync v0.23.0 // indirect
 	golang.org/x/text v0.42.0 // indirect
-	modernc.org/libc v1.75.7 // indirect
+	modernc.org/libc v1.77.1 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.12.1 // indirect
 )
