@@ -73,6 +73,7 @@ required there.
 - [Blocking operations while clients are connected](#blocking-operations-while-clients-are-connected)
 - [PostgreSQL replication watches](#postgresql-replication-watches)
 - [Exim hints database maintenance](#exim-hints-database-maintenance)
+- [Exim mail-volume alerts](#exim-mail-volume-alerts)
 - [Auxiliary commands](#auxiliary-commands)
 
 ## Categories
@@ -1995,6 +1996,36 @@ schema read-only and overrides either variable with `tbl` when required. A
 non-SQLite database, absent file or unsupported schema disables only the
 affected record watch; `exim_tidydb` buttons remain available because that
 utility supports Exim's native hints backend independently of the graph query.
+
+## Exim mail-volume alerts
+
+The `exim` catalog service alerts on a mass mailing (a stolen password, a
+looping application, a spam run) from three angles, each tunable through a
+variable:
+
+| Watch | Signal | Variable (default) |
+|---|---|---|
+| `alert-if-queue-high` | `exim -bpc` above the limit for 3 minutes | `queue_limit` (`200`) |
+| `alert-if-msglog-backlog-high` | files under `msglog_dir`, counted recursively | `msglog_backlog_limit` (`200`) |
+| `alert-if-msglog-backlog-growing-fast` | msglog growth inside `msglog_growth_window` | `msglog_growth_limit` (`100`), `msglog_growth_window` (`2m`) |
+| `alert-if-memory-high` | resident memory of the Exim processes | `memory_limit_bytes` (`104857600`, 100 MiB) |
+
+The `queue` watch next to them is graph-only: it publishes the queue depth as
+a `messages` series and never alerts. The msglog counts are recursive because
+`split_spool_directory` (the usual production setting) spreads the files over
+62 hashed subdirectories, where a flat count reads zero. The memory ceiling is
+absolute rather than a host percentage because Exim idles at a few tens of MB
+and a mailing that pushes it to 3 GB is still under 5% of a 64 GB host.
+
+Raise `queue_limit` on a relay that legitimately holds a deep queue; a
+service-level override keeps the rest of the profile:
+
+```yaml
+name: exim
+uses: exim
+variables:
+  queue_limit: "2000"
+```
 
 ## Auxiliary commands
 
