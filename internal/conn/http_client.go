@@ -13,16 +13,16 @@ import (
 
 // httpProbeClient returns an HTTP client for connection probes. When iface is
 // set it routes TCP dialing through BindDialer so HTTP-based protocols preserve
-// the same SO_BINDTODEVICE behavior as raw TCP probes. A plain probe shares the
-// default transport and its pool; a bound or TLS-configured probe gets a
-// private transport that is discarded after one exchange, so it must not
-// retain an idle connection (and the goroutines that own it) until the
-// keep-alive timeout.
+// the same SO_BINDTODEVICE behavior as raw TCP probes. Every probe gets a
+// private transport that closes its connection after one exchange: a bound or
+// TLS-configured one is discarded and must not retain an idle connection (and
+// the goroutines that own it) until the keep-alive timeout, and a plain one
+// must not keep answering over a socket the target accepted before it stopped
+// accepting (see httpx.NewProbeClient).
 func httpProbeClient(iface string, tlsConfig *tls.Config) *http.Client {
-	return httpx.NewClient(httpx.ClientOptions{
-		DialContext:       BindDialContext(iface),
-		TLS:               tlsConfig,
-		DisableKeepAlives: iface != "" || tlsConfig != nil,
+	return httpx.NewProbeClient(httpx.ClientOptions{
+		DialContext: BindDialContext(iface),
+		TLS:         tlsConfig,
 	})
 }
 

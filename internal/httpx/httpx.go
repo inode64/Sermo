@@ -133,3 +133,14 @@ func NewClient(opts ClientOptions) *http.Client {
 	client.Transport = tr
 	return client
 }
+
+// NewProbeClient builds the client every health probe must use: it never keeps
+// a connection between exchanges. A probe exists to observe the target's accept
+// path on each cycle; a pooled connection opened before the target stopped
+// accepting keeps answering on the socket it already owns and hides the outage
+// (a collector that exhausted its file descriptors answered "ready" for hours
+// over such a connection while every new client timed out).
+func NewProbeClient(opts ClientOptions) *http.Client {
+	opts.DisableKeepAlives = true
+	return NewClient(opts)
+}

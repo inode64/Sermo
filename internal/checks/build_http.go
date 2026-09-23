@@ -182,7 +182,7 @@ func http3Client(iface string, tlsConfig *tls.Config) *http.Client {
 }
 
 func httpClientWithTransport(proxyURL *url.URL, iface string) *http.Client {
-	return httpx.NewClient(httpx.ClientOptions{Proxy: proxyFunc(proxyURL), DialContext: conn.BindDialContext(iface)})
+	return httpx.NewProbeClient(httpx.ClientOptions{Proxy: proxyFunc(proxyURL), DialContext: conn.BindDialContext(iface)})
 }
 
 // proxyFunc turns an optional proxy URL into the transport hook, nil keeping
@@ -341,7 +341,7 @@ func configureHTTPCert(hc *httpCheck, target url.URL, clientOpts httpClientOptio
 		return ""
 	}
 	// Cert inspection also goes through the proxy (CONNECT for https).
-	hc.certClient = httpx.NewClient(httpx.ClientOptions{
+	hc.certClient = httpx.NewProbeClient(httpx.ClientOptions{
 		TLS:         inspectionTLSConfig("", 0, hc.certVerification),
 		Proxy:       proxyFunc(clientOpts.proxyURL),
 		DialContext: conn.BindDialContext(clientOpts.iface),

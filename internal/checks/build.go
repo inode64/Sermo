@@ -100,7 +100,9 @@ type Deps struct {
 	Service        string
 	DefaultTimeout time.Duration
 	Runner         execx.Runner
-	HTTPClient     *http.Client
+	// HTTPClient, when set, is used as-is by http checks (tests inject one);
+	// nil selects the probe client, which never reuses a connection.
+	HTTPClient *http.Client
 	// Status queries the service's backend status, for `service` checks. When
 	// nil, service checks are skipped with a warning.
 	Status func(context.Context) (servicemgr.Status, error)
@@ -486,7 +488,7 @@ func buildDependencies(deps Deps) (execx.Runner, *http.Client) {
 	runner = execx.RunnerOrDefault(runner)
 	client := deps.HTTPClient
 	if client == nil {
-		client = httpx.NewClient(httpx.ClientOptions{})
+		client = httpx.NewProbeClient(httpx.ClientOptions{})
 	}
 	return runner, client
 }

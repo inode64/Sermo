@@ -94,3 +94,28 @@ func TestNewClientSharesDefaultTransportUnlessAsked(t *testing.T) {
 		t.Fatal("NewClient must not mutate the shared default transport")
 	}
 }
+
+func TestNewProbeClientNeverKeepsConnections(t *testing.T) {
+	for name, opts := range map[string]ClientOptions{
+		"zero options": {},
+		"timeout only": {Timeout: time.Second},
+		"tls":          {TLS: &tls.Config{MinVersion: tls.VersionTLS12}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			client := NewProbeClient(opts)
+			tr, ok := client.Transport.(*http.Transport)
+			if !ok {
+				t.Fatalf("probe client transport = %T, want a private *http.Transport", client.Transport)
+			}
+			if !tr.DisableKeepAlives {
+				t.Fatal("a probe client must close every connection after its exchange")
+			}
+			if client.Timeout != opts.Timeout {
+				t.Fatalf("timeout = %s, want %s", client.Timeout, opts.Timeout)
+			}
+		})
+	}
+	if def, isDefault := http.DefaultTransport.(*http.Transport); isDefault && def.DisableKeepAlives {
+		t.Fatal("NewProbeClient must not mutate the shared default transport")
+	}
+}
