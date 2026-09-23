@@ -3044,6 +3044,59 @@ A process whose executable was replaced still resolves no exe, so it matches no
 `exe` selector and is never signalled — see [safety.md](safety.md). This check
 reports the condition; it does not relax that rule.
 
+### `fds` — descriptors against the process limit (`fds_limit`)
+
+Service-scoped. A `metric` check on the service `fds` metric: the process of
+the tree closest to its own soft `RLIMIT_NOFILE`, as a percentage (see
+[Metrics](rules.md#metrics)). The limit is per process, so the process about to
+fail `accept()` with `EMFILE` is the one that matters, whatever the rest of the
+tree holds. A process holding more descriptors than its limit allows is
+ignored: the limit was lowered after they were opened, which is how a
+privilege-separated child sandboxes itself (sshd's pre-authentication session
+holds six under a limit of one), not exhaustion.
+
+You do not write this check: Sermo injects it, named `fds`, into every service
+whose processes discovery can attribute — the same population as
+[`stale_binary`](#stale_binary--service-running-a-replaced-binary) — together
+with a remediation rule, `restart-if-fds-high`, that alerts and then restarts
+once the metric has stayed above the threshold for three minutes. Descriptor
+exhaustion is a failure mode of any daemon that accepts connections, and a
+restart is the only remedy the daemon has for a leak: the collector that leaked
+one socket per accepted connection alerted at `80%` hours before it stopped
+accepting anything, and nothing restarted it.
+
+Two service keys govern the sensor; both inherit from `defaults:` like
+`dry_run`:
+
+| Key | Default | Meaning |
+|---|---|---|
+| `fds_limit` | `80%` | share of a process's soft open-files limit that fires the rule; `false` injects neither the check nor the rule |
+| `restart_on_fds_high` | `true` | `false` keeps the alert and drops the restart, which downgrades the rule to `alert` |
+
+```yaml
+# /etc/sermo/services/mariadb.yml — this host's database sits at 85% by design
+name: mariadb
+uses: mariadb
+fds_limit: 95%
+
+# /etc/sermo/services/gitea.yml — tell me, do not restart
+name: gitea
+uses: gitea
+restart_on_fds_high: false
+```
+
+A service that delegates part of its tree (`processes.<name>.delegated: true`:
+a container runtime's shims, SSH sessions, Gluster bricks) gets no sensor: the
+metric is measured over every process discovery attributes, and a container or
+a user's shell near its own limit says nothing about the daemon. The packaged
+`libvirtd` profile opts out with `fds_limit: false` for the same reason. Like
+every remediation the restart only simulates under `dry_run: true`.
+
+The default was chosen against a fleet of 45 hosts: no daemon sat above a
+third of its limit, so `80%` is a leak, not load. The names are reserved: a
+service declaring its own `fds` check or watch fails to resolve, and the
+message names the sugar. Tune with `fds_limit` instead.
+
 ### `strays` — processes the service cannot account for
 
 Service-scoped. Reports the members of the service's init unit control group that

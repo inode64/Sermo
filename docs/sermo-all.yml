@@ -844,7 +844,9 @@ watches:
       command: ["${binary}", "--test-config"]
       path: [/etc/demo/demo.conf, /etc/demo/conf.d]
       on_change: true
-  fds:
+  # `fds` is reserved for the service metric Sermo injects (checks.fds and
+  # restart-if-fds-high, see fds_limit); the host-wide file-nr check gets another name.
+  host-fds:
     check: { type: fds, used_pct: { op: ">", value: "80%" } }
   memory:
     check: { type: memory, available_pct: { op: "<", value: "10%" } }

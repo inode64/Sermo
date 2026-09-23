@@ -240,6 +240,13 @@ func AllowDependencies(tree map[string]any) bool {
 // failure, are unaffected.
 const keyRestartOnStaleBinary = "restart_on_stale_binary"
 
+// keyFDsLimit is the share of a process's soft open-files limit above which
+// the generated fds rule acts; `false` drops the generated check and rule.
+const keyFDsLimit = "fds_limit"
+
+// keyRestartOnFDsHigh permits the generated fds rule to restart.
+const keyRestartOnFDsHigh = "restart_on_fds_high"
+
 // Stop policy field keys.
 const (
 	// StopPolicyKeyTermTimeout is stop_policy.term_timeout.
@@ -506,7 +513,7 @@ var metaKeys = map[string]struct{}{
 
 // perServiceDefaults are the only parts of global `defaults` that merge into a
 // service. Engine-wide settings never reach individual services.
-var perServiceDefaults = []string{keyDryRun, keyAllowDependencies, keyRestartOnChange, keyReloadOnChange, keyRestartOnStaleBinary, sectionStopPolicy, sectionPolicy, sectionRuleWindow, sectionClearWindow}
+var perServiceDefaults = []string{keyDryRun, keyAllowDependencies, keyRestartOnChange, keyReloadOnChange, keyRestartOnStaleBinary, keyFDsLimit, keyRestartOnFDsHigh, sectionStopPolicy, sectionPolicy, sectionRuleWindow, sectionClearWindow}
 
 // Document is a single loaded catalog definition or configured target in raw,
 // unexpanded form.

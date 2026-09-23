@@ -119,6 +119,7 @@ func (c *Config) resolveExpandedService(merged map[string]any, name string, inpu
 	errs = append(errs, expandConfigurationCheck(expanded)...)
 	errs = append(errs, expandStaleBinary(expanded)...)
 	errs = append(errs, expandStrays(expanded)...)
+	errs = append(errs, expandFDs(expanded)...)
 	errs = append(errs, c.expandServiceSugar(expanded)...)
 	return expanded, apps, errs
 }

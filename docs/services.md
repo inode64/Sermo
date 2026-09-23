@@ -75,8 +75,8 @@ required there.
 - [PostgreSQL replication watches](#postgresql-replication-watches)
 - [Exim hints database maintenance](#exim-hints-database-maintenance)
 - [Exim mail-volume alerts](#exim-mail-volume-alerts)
-- [Grafana Alloy saturation alerts](#grafana-alloy-saturation-alerts)
-- [File-descriptor alerts (alert-if-fds-high)](#file-descriptor-alerts-alert-if-fds-high)
+- [Grafana Alloy saturation restarts](#grafana-alloy-saturation-restarts)
+- [File-descriptor restarts (restart-if-fds-high)](#file-descriptor-restarts-restart-if-fds-high)
 - [Auxiliary commands](#auxiliary-commands)
 
 ## Categories
@@ -224,6 +224,7 @@ changes. Each has a permission gate, and every gate is settable per host:
 | `restart_on_change` | app version, library, config path | `config:` / `version:` | yes — alert, then restart |
 | `reload_on_change` | config path | `config:` | **no** — reload only, no alert action |
 | [`restart_on_stale_binary`](configuration.md#stale_binary--service-running-a-replaced-binary) | binary replaced on disk | the flag itself | yes — alert, then restart |
+| [`restart_on_fds_high`](configuration.md#fds--descriptors-against-the-process-limit-fds_limit) | a process above `fds_limit` of its open-files limit for 3 minutes | the flag itself | yes — alert, then restart |
 
 Two levels of granularity, both on the host, neither requiring a catalog edit:
 
@@ -2110,28 +2111,56 @@ variables:
   queue_limit: "2000"
 ```
 
-## Grafana Alloy saturation alerts
+## Grafana Alloy saturation restarts
 
 The `alloy` catalog service watches the collector from the outside, the way
-its clients see it. It was reshaped after an Alloy built with Go 1.26 leaked
-one `MPTCP` socket per accepted OTLP connection on a kernel with
-`net.mptcp.enabled=1`: at `32761/32768` open files it stopped accepting
-connections — listen backlog full, thousands of `CLOSE-WAIT` — while its own
-API kept answering over the two keep-alive connections the monitor already
-held, and every local exporter timed out for ten hours.
+its clients see it, and restarts it when it stops serving them. It was
+reshaped after an Alloy built with Go 1.26 leaked one `MPTCP` socket per
+accepted OTLP connection on a kernel with `net.mptcp.enabled=1`: at
+`32761/32768` open files it stopped accepting connections — listen backlog
+full, thousands of `CLOSE-WAIT` — while its own API kept answering over the two
+keep-alive connections the monitor already held, and every local exporter
+timed out for ten hours. The next day the leak came back on two hosts and the
+profile, which only alerted, watched it happen again; a restart is the only
+remedy a daemon has for a leak, so saturation now restarts.
 
-| Watch | Signal | Variable (default) |
-|---|---|---|
-| `ready` | `GET /-/ready` on the API port, on a fresh connection each cycle; alerts after 2 minutes unreachable | `host` (`127.0.0.1`), `port` (`12345`) |
-| `otlp` | disabled by default; when enabled, an empty `POST /v1/logs` on the OTLP/HTTP receiver must answer below 500; alerts after 2 minutes of failure | `otlp_port` (`4318`) |
-| `alert-if-fds-high` | the worst process against its own soft open-files limit, for 3 minutes | `fds_limit` (`80%`) |
+| Watch | Signal | Action | Variable (default) |
+|---|---|---|---|
+| `ready` | `GET /-/ready` on the API port, on a fresh connection each cycle | restart after 2 minutes unreachable; also the `verify: true` check a restart must pass | `host` (`127.0.0.1`), `port` (`12345`) |
+| `otlp` | disabled by default; when enabled, an empty `POST /v1/logs` on the OTLP/HTTP receiver must answer below 500 | restart after 2 minutes of failure | `otlp_port` (`4318`) |
+| `restart-if-fds-high` | the worst process against its own soft open-files limit; the sensor Sermo injects into every service | restart after 3 minutes above the limit | `fds_limit` (`80%`), a service key rather than a variable |
 
-`metrics` (`GET /metrics`) stays graph-only. Enable `otlp` only on an Alloy
-instance with an OTLP/HTTP receiver, and override the port if needed:
+`metrics` (`GET /metrics`) stays graph-only. The service `policy` bounds the
+retries — `cooldown: 15m`, `max_actions: 2` per hour, backoff to one hour — so a
+receiver that stops answering because of a downstream failure (a Loki that
+rejects every push) costs at most two restarts an hour while the cause is
+fixed. Like every remediation, these rules only simulate under
+`dry_run: true`: the host's `defaults.dry_run` or the service's own `dry_run`
+must be `false` for the restart to run, otherwise the daemon records
+`would restart` events and nothing else.
+
+A restart must also be able to clear the previous incarnation. An OpenRC
+supervisor restart that leaves the old Alloy alive keeps `:4318` bound, and the
+new process starts without its OTLP receiver (`bind: address already in use`,
+which Alloy does not retry) while `/-/ready` still answers. The profile
+therefore declares one exact `processes:` identity per init backend —
+`main` (`user: ${user}`, default `alloy`, the packaged systemd unit) under
+systemd and `main-openrc` (`user: ${openrc_user}`, default `root`, OpenRC's
+`command_user`) under OpenRC — with `stop_policy.force_kill: auto`, so the stop
+phase signals a residual Alloy it can verify and never a process it cannot
+name. Override the variable of your backend when the host runs Alloy as another
+user; an exact selector that never matches a live process blocks every
+operation. Survivors reparented to PID 1 are strays, which a restart reports
+but does not signal; `reap.kill_only_if` authorizes `sermoctl reap alloy
+--apply` for an Alloy binary owned by one of those two users only.
+
+Enable `otlp` only on an Alloy instance with an OTLP/HTTP receiver, and
+override the port if needed:
 
 ```yaml
 name: alloy
 uses: alloy
+dry_run: false
 variables:
   otlp_port: 4319
 watches:
@@ -2140,35 +2169,37 @@ watches:
 ```
 
 `optional: true` on this check makes a failed observation a warning for service
-health; it does **not** suppress its alert rule. Once enabled, an absent or
-unreachable receiver must still alert. Leave the watch disabled on instances
+health; it does **not** suppress its rule. Once enabled, an absent or
+unreachable receiver must still restart. Leave the watch disabled on instances
 without that receiver.
 
-## File-descriptor alerts (alert-if-fds-high)
+## File-descriptor restarts (restart-if-fds-high)
 
-Network daemons in the catalog (web servers, databases, caches, collectors,
-proxies — `apache`, `nginx`, `haproxy`, `mariadb`, `mysql`, `redis`, `keydb`,
-`memcached`, `prometheus`, `loki`, `grafana`, `alloy`, `php-fpm`, …) ship an
-`alert-if-fds-high` watch on the service `fds` metric at **`80%`** of a
-process's soft `RLIMIT_NOFILE`. The percentage is measured per process — the
-process closest to its own limit — because the limit is per process and that
-is the one that will fail `accept()` with `EMFILE`; see
-[Metrics](rules.md#metrics). The watches used to compare the tree's summed
-count against an absolute `50000`, which never fires for a daemon whose limit
-is `32768`.
+Every catalog service whose processes discovery can attribute gets the `fds`
+sensor Sermo injects: a service metric watching the process closest to its own
+soft `RLIMIT_NOFILE`, and a rule, `restart-if-fds-high`, that alerts and then
+restarts the service after three minutes above `fds_limit` (`80%`). No profile
+writes it; the profiles that used to ship an `alert-if-fds-high` watch, or an
+absolute `fds` ceiling such as `50000` that never fires for a daemon whose
+limit is `32768`, now rely on the injected sensor. The percentage is measured
+per process — the process closest to its own limit — because the limit is per
+process and that is the one that will fail `accept()` with `EMFILE`; see
+[Metrics](rules.md#metrics) and
+[`fds_limit`](configuration.md#fds--descriptors-against-the-process-limit-fds_limit).
 
-Services whose control group holds workload they do not own (`docker`,
-`containerd`, `libvirtd`, `virtnetworkd`) still ship no fd watch: a sum over
-containers or guests describes the workload rather than the daemon. A host
-that runs a daemon with a deliberately small limit can lower or raise the
-threshold per service:
+Services whose control group holds workload they do not own get no sensor: the
+ones that delegate part of their tree (`docker`, `containerd`, `virtnetworkd`,
+`glusterd`, `ssh`) automatically, and `libvirtd` through an explicit
+`fds_limit: false`, because a guest's helper near its own limit describes the
+guest rather than the daemon. A host that runs a daemon with a deliberately
+small limit, or one that lives near it by design, tunes or vetoes the sensor
+per service without a catalog edit:
 
 ```yaml
-name: nginx
-uses: nginx
-watches:
-  alert-if-fds-high:
-    check: { value: 90% }
+name: mariadb
+uses: mariadb
+fds_limit: 95%              # or false to drop check and rule
+restart_on_fds_high: false  # alert only
 ```
 
 ## Auxiliary commands

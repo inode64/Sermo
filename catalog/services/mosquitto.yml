@@ -49,14 +49,6 @@ watches:
     check:
       type: service
       expect: active
-  fds:
-    check:
-      type: metric
-      scope: service
-      name: fds
-      op: '>'
-      value: 50000
-      optional: true
   memory:
     check:
       type: metric

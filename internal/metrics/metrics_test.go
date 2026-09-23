@@ -679,6 +679,32 @@ func TestServiceFDsPercentIsWorstProcessAgainstItsLimit(t *testing.T) {
 	}
 }
 
+// A count above the soft limit is not exhaustion: the limit was lowered after
+// the descriptors were opened, which is how a privilege-separated child
+// sandboxes itself (sshd's pre-authentication session holds six descriptors
+// under RLIMIT_NOFILE 1). It must not become the tree's peak.
+func TestServiceFDsPercentIgnoresProcessAboveItsLimit(t *testing.T) {
+	reader := fakeReader{
+		fds:     map[int]uint64{10: 100, 20: 6},
+		fdLimit: map[int]uint64{10: 1000, 20: 1},
+		hz:      100, ncpu: 1,
+	}
+	fds := New(reader).SampleService("svc", []int{10, 20})["fds"]
+	if !fds.HasPercent || fds.Percent != 10 {
+		t.Fatalf("fds percent = %+v, want 10 (pid 10: 100/1000), not the sandboxed pid 20", fds)
+	}
+	if fds.Absolute != 106 {
+		t.Fatalf("fds absolute = %+v, want the tree sum 106 to keep counting the sandboxed process", fds)
+	}
+	t.Run("only a sandboxed process", func(t *testing.T) {
+		reader := fakeReader{fds: map[int]uint64{20: 6}, fdLimit: map[int]uint64{20: 1}, hz: 100, ncpu: 1}
+		fds := New(reader).SampleService("svc", []int{20})["fds"]
+		if fds.HasPercent {
+			t.Fatalf("fds = %+v, want no percentage when no process reports a usable limit", fds)
+		}
+	})
+}
+
 func TestServiceFDsNoPercentWithoutLimit(t *testing.T) {
 	t.Run("reader without ProcessFDLimit", func(t *testing.T) {
 		fds := New(readerNoSwap{}).SampleService("svc", []int{10})["fds"]

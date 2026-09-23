@@ -136,18 +136,3 @@ watches:
       action: alert
       message: >-
         During ${rule.duration}, ${display_name} memory usage stayed above ${check.threshold} (current ${check.value})
-  alert-if-fds-high:
-    check:
-      type: metric
-      scope: service
-      name: fds
-      op: '>'
-      value: 80%
-      optional: true
-    within:
-      cycles: 10
-      min_matches: 3
-    then:
-      action: alert
-      message: >-
-        During ${rule.duration}, ${display_name} file descriptor usage stayed above ${check.threshold} of a process's open-files limit (current ${check.value})

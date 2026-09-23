@@ -282,13 +282,14 @@ checks:
 	if len(errs) > 0 {
 		t.Fatal(errs)
 	}
-	// The injected stale-binary check runs on every service; with no process to
-	// attribute it reports nothing replaced.
+	// The injected stale-binary and fds checks run on every service; with no
+	// process to attribute they report nothing replaced and no descriptor use.
 	snaps.publishConfigured("wait-online", map[string]checks.Result{
 		"state":        {Check: "state", OK: true},
 		"stale-binary": {Check: "stale-binary", OK: true, Reports: checks.ReportsState},
-	}, map[string]bool{"state": true, "stale-binary": true},
-		map[string]string{"state": checks.CheckTypeService, "stale-binary": checks.CheckTypeStaleBinary}, serviceSnapshotConfigID(resolved.Tree))
+		"fds":          {Check: "fds", OK: true, Optional: true},
+	}, map[string]bool{"state": true, "stale-binary": true, "fds": true},
+		map[string]string{"state": checks.CheckTypeService, "stale-binary": checks.CheckTypeStaleBinary, "fds": checks.CheckTypeMetric}, serviceSnapshotConfigID(resolved.Tree))
 	observability := NewObservabilityRegistry()
 	observability.MarkReady("wait-online", time.Now())
 	wb, warnings := NewWebBackend(t.Context(), cfg, Deps{
