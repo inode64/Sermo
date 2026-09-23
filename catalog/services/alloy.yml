@@ -70,8 +70,9 @@ watches:
       timeout: 5s
   # An empty POST is not a valid export, so a healthy receiver answers 400 or
   # 415; what matters is that it answers at all instead of timing out behind a
-  # full listen backlog. Optional: not every Alloy runs an OTLP receiver.
+  # full listen backlog. Enable only on instances running an OTLP/HTTP receiver.
   otlp:
+    enabled: false
     check:
       type: http
       method: POST
