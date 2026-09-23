@@ -1,0 +1,25 @@
+name: mysql-query-health
+uses: mysql
+# Use `uses: mariadb` and `engine: mariadb` for MariaDB.
+# Set credentials in the daemon's environment; never put them in this file.
+variables:
+  monitor_user: monitor
+  monitor_pass: "${env:SERMO_DB_MONITOR_PASS}"
+watches:
+  query-health:
+    check:
+      type: sql
+      engine: mysql
+      host: ${host}
+      port: ${port}
+      user: ${monitor_user}
+      password: ${monitor_pass}
+      query: SELECT 1
+      op: "=="
+      value: 1
+      timeout: 5s
+    for:
+      cycles: 3
+    then:
+      action: alert
+      message: ${display_name} authenticated SELECT 1 failed

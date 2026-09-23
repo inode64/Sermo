@@ -34,10 +34,12 @@ watches:
   port:
     check:
       type: tcp
+      host: ${host}
       port: ${port}
   mongodb:
     check:
       type: mongodb
+      verify: true
       host: ${host}
       port: ${port}
       timeout: 3s

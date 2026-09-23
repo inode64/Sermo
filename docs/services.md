@@ -68,6 +68,7 @@ required there.
 - [Service unit](#service-unit)
 - [Cloning](#cloning)
 - [Multiple instances of one application](#multiple-instances-of-one-application)
+- [Catalog health policies](#catalog-health-policies)
 - [Disabling and deleting inherited entries](#disabling-and-deleting-inherited-entries)
 - [Monitoring flag](#monitoring-flag)
 - [Blocking operations while clients are connected](#blocking-operations-while-clients-are-connected)
@@ -1872,6 +1873,70 @@ Prefer `uses` over [`clone`](#cloning) here: every instance derives from the
 *catalog service* and only overrides variables. Reach for `clone` only when one instance
 should copy *another concrete service* almost verbatim. See [`docs/sermo-all.yml`](sermo-all.yml)
 for a complete worked configuration.
+
+## Catalog health policies
+
+Network probes in a profile use its `variables.host` and `variables.port`;
+override these on the service instance when the listener differs from the
+catalog default. Protocol-specific ports, such as Dovecot's `pop_port`, remain
+separate variables.
+
+MySQL and MariaDB validate the selected `variables.config` with
+`--defaults-file=... --help --verbose`. The defaults-file argument comes first
+and a missing or invalid file fails the preflight. This is a compatible option
+parser check, not a full startup or data-integrity check. High service memory
+usage only alerts; `memory_alert_threshold` defaults to `80%` of host RAM and
+should reflect the instance's buffer-pool budget. The separate `memory` check
+still reports usage over 60%. MySQL, MariaDB, PostgreSQL and Backrest backup
+guards block both `stop` and `restart`; Sermo named locks remain the preferred
+way to protect jobs that can be wrapped with `sermoctl lock`.
+
+Grafana's health check requires HTTP 200 and JSON `database: ok`. Prometheus
+also checks `/-/ready` with HTTP 200, so a live process still loading its TSDB
+does not count as ready. Both checks verify startup and alert after three
+failed cycles; neither adds automatic restarts.
+
+Redis and KeyDB provide an opt-in AOF write check. Enable it only on instances
+with `appendonly yes`: servers without AOF may omit `aof_last_write_status`.
+The monitoring user must be allowed to run `PING` and `INFO`. Missing fields,
+denied INFO access and a write error fail the enabled check.
+
+```yaml
+name: redis-main
+uses: redis                  # keydb supports the same watch
+watches:
+  alert-if-aof-write-failed:
+    enabled: true
+```
+
+PHP-FPM's `fpm` check compares the current `listen_queue` with
+`variables.listen_queue_max` (default `0`). Enable its sustained alert after
+configuring the pool's `ping.path` and `pm.status_path`; the rule reuses the
+existing check. The cumulative `max_children_reached` counter is informational,
+since an old peak alone does not indicate current saturation.
+
+```yaml
+name: php-fpm8.4
+uses: php-fpm8.4
+variables:
+  status_path: /status
+  listen_queue_max: 5
+watches:
+  fpm:
+    check:
+      socket: /run/php/php8.4-fpm.sock
+      optional: false
+rules:
+  alert-if-listen-queue-high:
+    enabled: true
+```
+
+The rule alerts after two minutes of failed checks, including unavailable
+ping/status endpoints. No pool configuration is changed by Sermo. For deeper
+database checks, use an account restricted to monitoring; see
+[`mysql-query-health.yml`](../examples/services/mysql-query-health.yml) for an
+authenticated `SELECT 1` check. The default credential-free MySQL/MariaDB probe
+only reads the server greeting.
 
 ## Disabling and deleting inherited entries
 

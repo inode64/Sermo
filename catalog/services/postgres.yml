@@ -95,12 +95,13 @@ rules:
     type: guard
     blocks:
       - restart
+      - stop
     if:
       active:
         check: backup
     then:
       action: block
-      message: ${display_name} backup is running; restart denied
+      message: ${display_name} backup is running; stop and restart denied
 reload_on_change:
   paths:
     - ${config_dir}
@@ -149,6 +150,7 @@ watches:
   restart-if-port-failed:
     check:
       type: tcp
+      host: ${host}
       port: ${port}
     for:
       cycles: 3
@@ -169,7 +171,7 @@ watches:
     then:
       action: alert
       message: >-
-        ${display_name} is not accepting connections on 127.0.0.1:${port}
+        ${display_name} is not accepting connections on ${host}:${port}
   alert-if-memory-high:
     check:
       type: metric

@@ -58,6 +58,39 @@ class AnalyzerPinContractTest(unittest.TestCase):
             checker.validate_pins(WORKFLOW, custom),
         )
 
+    def test_rejects_ambiguous_go_pins_on_every_surface(self):
+        for version in ("v2", "v2.13", "vbranch", "v2.13.2-", "v02.13.2", "v2.13.2-01"):
+            with self.subTest(version=version):
+                workflow = WORKFLOW.replace("@v2.13.2", "@" + version)
+                custom = CUSTOM_GCL.replace("v2.13.2", version).replace(
+                    "v0.0.0-20260808063849-8649a03c818a", version
+                )
+                problems = checker.validate_pins(workflow, custom)
+                self.assertIn(
+                    f"Go analyzer {checker.GOLANGCI_MODULE} uses mutable pin {version}", problems
+                )
+                self.assertIn(f"custom golangci-lint uses mutable pin {version}", problems)
+                self.assertIn(f"NilAway uses mutable pin {version}", problems)
+
+    def test_accepts_full_release_prerelease_and_pseudoversions(self):
+        for version in (
+            "v2.13.2", "v2.13.2-rc.1", "v2.13.2+incompatible",
+            "v0.0.0-20260808063849-8649a03c818a",
+            "v0.49.1-0.20260828025639-2e922938d07f",
+            "v1.2.3-rc.1.0.20260828025639-2e922938d07f",
+        ):
+            with self.subTest(version=version):
+                workflow = WORKFLOW.replace("@v2.13.2", "@" + version)
+                custom = CUSTOM_GCL.replace("v2.13.2", version)
+                self.assertEqual(checker.validate_pins(workflow, custom), [])
+
+    def test_rejects_wildcard_python_pin(self):
+        workflow = WORKFLOW.replace("ruff==0.16.6", "ruff==0.16.*")
+        self.assertIn(
+            "Python analyzer ruff==0.16.* is not exactly pinned",
+            checker.validate_pins(workflow, CUSTOM_GCL),
+        )
+
     def test_rejects_x_tools_version_drift(self):
         workflow = WORKFLOW.replace(
             "deadcode@v0.49.1-0.20260828025639-2e922938d07f",

@@ -22,6 +22,7 @@ variables:
   backup_user: mysql
   host: 127.0.0.1
   port: 3306
+  memory_alert_threshold: 80%
   config:
     - /etc/mysql/my.cnf
     - /etc/my.cnf
@@ -33,6 +34,7 @@ preflight:
     type: command
     command:
       - ${mysql_binary}
+      - --defaults-file=${config}
       - --help
       - --verbose
     timeout: 15s
@@ -69,12 +71,13 @@ rules:
     type: guard
     blocks:
       - restart
+      - stop
     if:
       active:
         check: backup
     then:
       action: block
-      message: ${display_name} backup is running; restart denied
+      message: ${display_name} backup is running; stop and restart denied
 watches:
   service:
     check:
@@ -95,6 +98,7 @@ watches:
       optional: true
       exe_any:
         - /usr/bin/mysqldump
+        - /usr/bin/mariadb-dump
         - /usr/bin/mysqlpump
         - /usr/bin/mysqlbackup
         - /usr/bin/xtrabackup
@@ -125,19 +129,6 @@ watches:
       cycles: 3
     then:
       action: restart
-  restart-if-memory-high:
-    check:
-      type: metric
-      scope: service
-      name: memory
-      op: '>'
-      value: 40%
-      optional: true
-    within:
-      cycles: 15
-      min_matches: 5
-    then:
-      action: restart
   alert-if-fds-high:
     check:
       type: metric
@@ -159,7 +150,7 @@ watches:
       scope: service
       name: memory
       op: '>'
-      value: 30%
+      value: ${memory_alert_threshold}
       optional: true
     for:
       duration: 4m

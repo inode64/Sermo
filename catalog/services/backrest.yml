@@ -70,7 +70,7 @@ watches:
 rules:
   block-restart-during-backup-or-restore:
     type: guard
-    blocks: [restart]
+    blocks: [restart, stop]
     if:
       active:
         check: backup-or-restore

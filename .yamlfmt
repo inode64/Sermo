@@ -5,19 +5,8 @@ formatter:
   indentless_arrays: false
   eof_newline: true
   retain_line_breaks: true
+  scan_folded_as_literal: true
   pad_line_comments: 2
 
-match_type: doublestar
-gitignore_excludes: true
-
-include:
-  - catalog/**/*.yml
-  - examples/**/*.yml
-  - templates/**/*.yml
-  - docs/**/*.yml
-  - .github/**/*.yml
-  - .golangci.yml
-
-exclude:
-  - graphify-out/**
-  - .agents/**
+# File selection belongs to scripts/normalize_yaml_flow.py and is shared by
+# make yaml-fmt, yaml-fmt-check and yaml-lint. This config only formats stdin.

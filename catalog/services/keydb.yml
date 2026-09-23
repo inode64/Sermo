@@ -27,10 +27,12 @@ watches:
   port:
     check:
       type: tcp
+      host: ${host}
       port: ${port}
   health:
     check:
       type: redis
+      verify: true
       host: ${host}
       port: ${port}
       timeout: 3s
@@ -77,3 +79,16 @@ watches:
       action: alert
       message: >-
         During ${rule.duration}, ${display_name} memory usage stayed above ${check.threshold} (current ${check.value})
+  # Enable on instances using appendonly; INFO omits this field otherwise.
+  alert-if-aof-write-failed:
+    enabled: false
+    check:
+      type: redis
+      host: ${host}
+      port: ${port}
+      timeout: 3s
+      expect:
+        aof_last_write_status: ok
+    then:
+      action: alert
+      message: ${display_name} AOF write status is not ok

@@ -224,8 +224,8 @@ Batch already landed in the catalog (start/restart/reload gate):
 - [x] Mail / security: `dovecot`, `exim`, `rspamd`, `spamassassin`, `fail2ban`,
       `squid`, `proftpd`
 - [x] Databases / caches with offline `preflight.config`: `mysql`
-      (`--defaults-file` + `--validate-config`), `mariadb` (`--defaults-file` +
-      `--help --verbose`), `postgres-%v` (`postgres --check`), `mongod`
+      and `mariadb` (`--defaults-file` + `--help --verbose`),
+      `postgres-%v` (`postgres -C config_file`), `mongod`
       (`--outputConfig`)
 - [ ] `redis` / `keydb` catalog `preflight.config` (no reliable offline validator
       shipped yet; live checks and restart rules exist in catalog)

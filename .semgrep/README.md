@@ -16,6 +16,19 @@ call-level contracts that were violated at least once.
 then scans `cmd`, `internal` and `tools`. A rule that matches nothing, or a
 `ruleid:` that no longer fires, fails the gate.
 
+Import boundaries have the same executable contract: `make analyzer-config-check`
+(via `make lint` and `make check`) verifies the golangci-lint schema and runs
+`scripts/check_depguard.py` against the real configuration in a temporary Go
+module. Forbidden imports must produce the expected rule diagnostics; permitted
+imports and test/primitive exceptions must remain clean. Depguard matches
+absolute filenames, so scoped file globs need the `**/` prefix.
+
+`make yaml-fmt`, `make yaml-fmt-check` and `make yaml-lint` share the inventory
+in `scripts/normalize_yaml_flow.py`: root YAML configs, `.yamlfmt`, and both
+`.yml` and `.yaml` under the configured project directories, including this
+directory. Flow spacing uses YAML tokens to preserve code patterns and regex
+scalars. The Python tools use PyYAML, also required by yamllint.
+
 ## When to add a rule
 
 Add a rule only when all of these hold:

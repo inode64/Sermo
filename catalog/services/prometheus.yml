@@ -62,6 +62,18 @@ watches:
       host: ${host}
       port: ${port}
       timeout: 3s
+  ready:
+    check:
+      type: http
+      url: http://${host}:${port}/-/ready
+      expect_status: 200
+      timeout: 3s
+      verify: true
+    for:
+      cycles: 3
+    then:
+      action: alert
+      message: ${display_name} is not ready to serve queries
   alert-if-fds-high:
     check:
       type: metric
