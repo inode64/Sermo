@@ -18,6 +18,15 @@ restart_on_change:
 variables:
   host: 127.0.0.1
   port: 12345
+  # The OTLP/HTTP receiver (otelcol.receiver.otlp) every local exporter posts
+  # to. It is probed with an empty POST: a healthy receiver answers 4xx, and
+  # any answer proves accept() still works.
+  otlp_port: 4318
+  # Share of a process's soft open-files limit above which a sustained level
+  # alerts. Alloy leaked one socket per accepted OTLP connection until it hit
+  # 32761 of 32768 and stopped accepting anything, while its own API kept
+  # answering over the connections it already held.
+  fds_limit: 80%
   config: /etc/alloy/config.alloy
   stability_level: generally-available
 pidfile: /run/alloy.pid
@@ -47,9 +56,46 @@ watches:
       url: http://${host}:${port}/-/ready
       expect_status: 200
       timeout: 5s
+    for:
+      duration: 2m
+    then:
+      action: alert
+      message: >-
+        During ${rule.duration}, ${display_name} readiness endpoint http://${host}:${port}/-/ready stayed unreachable or not ready
   metrics:
     check:
       type: http
       url: http://${host}:${port}/metrics
       expect_status: 200
       timeout: 5s
+  # An empty POST is not a valid export, so a healthy receiver answers 400 or
+  # 415; what matters is that it answers at all instead of timing out behind a
+  # full listen backlog. Optional: not every Alloy runs an OTLP receiver.
+  otlp:
+    check:
+      type: http
+      method: POST
+      url: http://${host}:${otlp_port}/v1/logs
+      expect_status: { op: "<", value: 500 }
+      timeout: 5s
+      optional: true
+    for:
+      duration: 2m
+    then:
+      action: alert
+      message: >-
+        During ${rule.duration}, ${display_name} OTLP receiver on port ${otlp_port} stopped answering; local exporters are timing out
+  alert-if-fds-high:
+    check:
+      type: metric
+      scope: service
+      name: fds
+      op: '>'
+      value: ${fds_limit}
+      optional: true
+    for:
+      duration: 3m
+    then:
+      action: alert
+      message: >-
+        During ${rule.duration}, ${display_name} file descriptor usage stayed above ${check.threshold} of a process's open-files limit (current ${check.value}); it will stop accepting connections at 100%

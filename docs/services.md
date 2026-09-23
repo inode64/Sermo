@@ -75,6 +75,8 @@ required there.
 - [PostgreSQL replication watches](#postgresql-replication-watches)
 - [Exim hints database maintenance](#exim-hints-database-maintenance)
 - [Exim mail-volume alerts](#exim-mail-volume-alerts)
+- [Grafana Alloy saturation alerts](#grafana-alloy-saturation-alerts)
+- [File-descriptor alerts (alert-if-fds-high)](#file-descriptor-alerts-alert-if-fds-high)
 - [Auxiliary commands](#auxiliary-commands)
 
 ## Categories
@@ -2090,6 +2092,62 @@ name: exim
 uses: exim
 variables:
   queue_limit: "2000"
+```
+
+## Grafana Alloy saturation alerts
+
+The `alloy` catalog service watches the collector from the outside, the way
+its clients see it. It was reshaped after an Alloy built with Go 1.26 leaked
+one `MPTCP` socket per accepted OTLP connection on a kernel with
+`net.mptcp.enabled=1`: at `32761/32768` open files it stopped accepting
+connections — listen backlog full, thousands of `CLOSE-WAIT` — while its own
+API kept answering over the two keep-alive connections the monitor already
+held, and every local exporter timed out for ten hours.
+
+| Watch | Signal | Variable (default) |
+|---|---|---|
+| `ready` | `GET /-/ready` on the API port, on a fresh connection each cycle; alerts after 2 minutes unreachable | `host` (`127.0.0.1`), `port` (`12345`) |
+| `otlp` | an empty `POST /v1/logs` on the OTLP/HTTP receiver answers (any status below 500; a healthy receiver says 400 or 415); alerts after 2 minutes without an answer. Optional: an Alloy without an OTLP receiver skips it | `otlp_port` (`4318`) |
+| `alert-if-fds-high` | the worst process against its own soft open-files limit, for 3 minutes | `fds_limit` (`80%`) |
+
+`metrics` (`GET /metrics`) stays graph-only. An Alloy whose OTLP receiver
+listens elsewhere, or not at all, overrides the port or disables the watch:
+
+```yaml
+name: alloy
+uses: alloy
+variables:
+  otlp_port: 4319
+watches:
+  otlp:
+    enabled: false
+```
+
+## File-descriptor alerts (alert-if-fds-high)
+
+Network daemons in the catalog (web servers, databases, caches, collectors,
+proxies — `apache`, `nginx`, `haproxy`, `mariadb`, `mysql`, `redis`, `keydb`,
+`memcached`, `prometheus`, `loki`, `grafana`, `alloy`, `php-fpm`, …) ship an
+`alert-if-fds-high` watch on the service `fds` metric at **`80%`** of a
+process's soft `RLIMIT_NOFILE`. The percentage is measured per process — the
+process closest to its own limit — because the limit is per process and that
+is the one that will fail `accept()` with `EMFILE`; see
+[Metrics](rules.md#metrics). The watches used to compare the tree's summed
+count against an absolute `50000`, which never fires for a daemon whose limit
+is `32768`.
+
+Services whose control group holds workload they do not own (`docker`,
+`containerd`, `libvirtd`, `virtnetworkd`) still ship no fd watch: a sum over
+containers or guests describes the workload rather than the daemon. A host
+that runs a daemon with a deliberately small limit can lower or raise the
+threshold per service:
+
+```yaml
+name: nginx
+uses: nginx
+watches:
+  alert-if-fds-high:
+    check: { value: 90% }
 ```
 
 ## Auxiliary commands
