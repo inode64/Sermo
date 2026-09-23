@@ -147,9 +147,10 @@ func (c *Collector) ForgetService(service string) {
 // set — which includes the matched processes AND their descendants, so every
 // metric below sums across the whole tree (parent + children): memory (RSS sum,
 // bytes and % of RAM), swap, cpu (whole-machine rate %), process_count,
-// io/io_read/io_write (rate, bytes/s), fds and threads. cpu_thread is the one
-// exception — it is the busiest single thread's rate against one CPU thread, not
-// a sum.
+// io/io_read/io_write (rate, bytes/s), fds and threads. Two readings are not
+// sums: cpu_thread is the busiest single thread's rate against one CPU thread,
+// and the fds percentage is the worst single process against its own soft
+// RLIMIT_NOFILE (see fdPeak).
 func (c *Collector) SampleService(service string, pids []int) Snapshot {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -162,6 +163,12 @@ func (c *Collector) SampleService(service string, pids []int) Snapshot {
 	swapReader, hasSwap := c.Reader.(interface {
 		ProcessSwap(pid int) (uint64, bool)
 	})
+	// The fd limit is optional too: only readers that can read RLIMIT_NOFILE give
+	// fds a percentage form.
+	limitReader, hasFDLimit := c.Reader.(interface {
+		ProcessFDLimit(pid int) (uint64, bool)
+	})
+	var peak fdPeak
 
 	var rss, ticks, ioRead, ioWrite, fds, threads, swap uint64
 	// Track how many processes actually contributed a successful read per metric,
@@ -193,6 +200,11 @@ func (c *Collector) SampleService(service string, pids []int) Snapshot {
 		if v, ok := c.Reader.ProcessFDs(pid); ok {
 			fds += v
 			fdsOK++
+			if hasFDLimit {
+				if limit, ok := limitReader.ProcessFDLimit(pid); ok {
+					peak.observe(v, limit)
+				}
+			}
 		}
 		if v, ok := c.Reader.ProcessThreads(pid); ok {
 			threads += v
@@ -228,7 +240,7 @@ func (c *Collector) SampleService(service string, pids []int) Snapshot {
 	// process_count is the number of processes actually found alive this sample,
 	// not the count of PIDs handed in (some may have exited since discovery).
 	snap[MetricProcessCount] = Reading{Absolute: float64(present), HasAbsolute: true, Ready: measured(present > 0)}
-	snap[MetricFds] = Reading{Absolute: float64(fds), HasAbsolute: true, Ready: measured(fdsOK > 0)}
+	snap[MetricFds] = peak.reading(Reading{Absolute: float64(fds), HasAbsolute: true, Ready: measured(fdsOK > 0)})
 	snap[MetricThreads] = Reading{Absolute: float64(threads), HasAbsolute: true, Ready: measured(threadsOK > 0)}
 
 	cur := cpuSample{ticks: ticks, at: now}
@@ -662,4 +674,33 @@ func BytesPerSecond(prevBytes, curBytes uint64, prevAt, curAt time.Time) (float6
 		return 0, false
 	}
 	return float64(curBytes-prevBytes) / wall, true
+}
+
+// fdPeak tracks the process of a tree that is closest to its own soft
+// RLIMIT_NOFILE. The limit is per process, so a tree sum compared against any
+// one limit would be meaningless; the process about to hit EMFILE is the one
+// that stops accepting connections, whatever the rest of the tree holds.
+type fdPeak struct {
+	pct float64
+	ok  bool
+}
+
+func (p *fdPeak) observe(count, limit uint64) {
+	if limit == 0 {
+		return
+	}
+	pct := float64(count) / float64(limit) * PercentScale
+	if !p.ok || pct > p.pct {
+		p.pct, p.ok = pct, true
+	}
+}
+
+// reading adds the percentage form to the fds reading when a limit was seen.
+// It deliberately publishes no Total: Absolute is the tree sum while Percent is
+// per process, and a consumer deriving "free" from the pair would be misled.
+func (p fdPeak) reading(r Reading) Reading {
+	if p.ok {
+		r.Percent, r.HasPercent = p.pct, true
+	}
+	return r
 }

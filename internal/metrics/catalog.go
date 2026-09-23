@@ -24,7 +24,7 @@ var descriptors = map[Scope]map[string]Descriptor{
 		Descriptor{Name: MetricMemory, Absolute: true, Percentage: true},
 		Descriptor{Name: MetricSwap, Absolute: true, Percentage: true},
 		Descriptor{Name: MetricProcessCount, Absolute: true},
-		Descriptor{Name: MetricFds, Absolute: true},
+		Descriptor{Name: MetricFds, Absolute: true, Percentage: true},
 		Descriptor{Name: MetricThreads, Absolute: true},
 		Descriptor{Name: MetricCPU, Percentage: true},
 		Descriptor{Name: MetricCPUThread, Percentage: true},

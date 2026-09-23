@@ -13,6 +13,7 @@ func TestMetricDescriptors(t *testing.T) {
 		{ScopeService, MetricMemory, true, true},
 		{ScopeService, MetricCPU, false, true},
 		{ScopeService, MetricIORead, true, false},
+		{ScopeService, MetricFds, true, true},
 		{ScopeSystem, MetricTotalCPU, false, true},
 		{ScopeSystem, MetricLoad1, true, false},
 	}

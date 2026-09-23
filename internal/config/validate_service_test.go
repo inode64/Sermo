@@ -358,11 +358,20 @@ rules:
     type: alert
     if: { metric: { scope: service, name: cpu, op: ">", value: 30 } }
     then: { action: alert, message: m }
+  pct-on-fds:
+    type: alert
+    if: { metric: { scope: service, name: fds, op: ">", value: 80% } }
+    then: { action: alert, message: m }
+  abs-on-fds:
+    type: alert
+    if: { metric: { scope: service, name: fds, op: ">", value: 50000 } }
+    then: { action: alert, message: m }
 `,
 			want: []string{
 				`% threshold but metric "process_count" has no percentage form`,
 				`absolute threshold but metric "cpu" has no absolute form`,
 			},
+			absent: []string{"fds"},
 		},
 		{
 			name: "metric catalog and value",

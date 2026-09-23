@@ -288,6 +288,44 @@ func (OSReader) ProcessFDs(pid int) (uint64, bool) {
 	return processEntryCount(pid, process.ProcFileFD)
 }
 
+const (
+	// procLimitsOpenFilesPrefix labels the RLIMIT_NOFILE row of /proc/<pid>/limits.
+	procLimitsOpenFilesPrefix = "Max open files"
+	// procLimitsSoftIndex is the soft-limit column once the label is stripped.
+	procLimitsSoftIndex = 0
+	procLimitsUnlimited = "unlimited"
+)
+
+// ProcessFDLimit reads the process's soft RLIMIT_NOFILE from /proc/<pid>/limits:
+// the ceiling its own open-descriptor count is measured against. ok is false
+// when the file is unreadable or the limit is unlimited.
+func (OSReader) ProcessFDLimit(pid int) (uint64, bool) {
+	data, err := os.ReadFile(process.PIDPath(pid, process.ProcFileLimits))
+	if err != nil {
+		return 0, false
+	}
+	return parseProcLimitsOpenFiles(string(data))
+}
+
+func parseProcLimitsOpenFiles(data string) (uint64, bool) {
+	for line := range strings.Lines(data) {
+		rest, found := strings.CutPrefix(line, procLimitsOpenFilesPrefix)
+		if !found {
+			continue
+		}
+		fields := strings.Fields(rest)
+		if len(fields) <= procLimitsSoftIndex || fields[procLimitsSoftIndex] == procLimitsUnlimited {
+			return 0, false
+		}
+		limit, err := strconv.ParseUint(fields[procLimitsSoftIndex], procDecimalBase, procUintBits)
+		if err != nil || limit == 0 {
+			return 0, false
+		}
+		return limit, true
+	}
+	return 0, false
+}
+
 // ProcessThreads counts the entries in /proc/<pid>/task (the process's threads).
 func (OSReader) ProcessThreads(pid int) (uint64, bool) {
 	return processEntryCount(pid, process.ProcFileTask)
