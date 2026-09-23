@@ -22,6 +22,8 @@ const (
 	ProcFileRoot = "root"
 	// ProcFileIO is the /proc/<pid>/io file name.
 	ProcFileIO = "io"
+	// ProcFileLimits is the /proc/<pid>/limits file name.
+	ProcFileLimits = "limits"
 	// ProcFileStat is the /proc/<pid>/stat file name.
 	ProcFileStat = "stat"
 	// ProcFileStatm is the /proc/<pid>/statm file name.

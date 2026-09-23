@@ -2820,8 +2820,12 @@ individual service (see [docs/safety.md](safety.md)).
 processes *and* their child/descendant processes — so a service's `cpu`,
 `memory`, `io`, `fds`, etc. account for its workers and helpers, not just the
 main process. `io`/`io_read`/`io_write` are byte/second rates over actual
-block-layer I/O (`io` is read+write); `fds` is the open file-descriptor count and
-`threads` the thread count.
+block-layer I/O (`io` is read+write); `fds` is the open file-descriptor count
+(summed) and `threads` the thread count. The `fds` **percentage** is the one
+per-process figure: the process of the tree that is closest to its own soft
+`RLIMIT_NOFILE` (`/proc/<pid>/limits`, "Max open files"), because the limit is
+per process and the process about to hit `EMFILE` is the one that stops
+accepting connections whatever the rest of the tree holds.
 
 `memory` is the summed **RSS** (resident memory) of the process tree, as bytes
 and as a percentage of total RAM. `swap` is the summed **swapped-out** memory
@@ -2862,22 +2866,29 @@ host every non-zero row is a bound — a marker on every row distinguishes nothi
 `cpu`/`cpu_thread`/`total_cpu` and the `io*` metrics are rates: they are **not
 ready** on the first cycle and a condition over a not-ready value is false. A `%`
 threshold needs a metric with a percentage form (`memory`, `swap`, `cpu`,
-`cpu_thread`, `total_memory`, `total_swap`, `total_cpu`;
-`swap`/`memory`/`total_memory`/`total_swap` also have an absolute byte form); a bare number needs an absolute form (everything else, including
-`io*`/`fds`/`threads`, which are absolute only). Reading another process's I/O or fd count
-requires privilege, so those sum only the processes the daemon can read.
+`cpu_thread`, `fds`, `total_memory`, `total_swap`, `total_cpu`;
+`swap`/`memory`/`fds`/`total_memory`/`total_swap` also have an absolute form); a bare number needs an absolute form (everything else, including
+`io*`/`threads`, which are absolute only). Reading another process's I/O, fd
+count or limits requires privilege, so those sum only the processes the daemon
+can read, and the `fds` percentage is absent when no limit could be read or the
+limit is `unlimited`.
 
-Because `io*`/`fds`/`threads` have no percentage form, a packaged threshold for
-them cannot be normalized to the host the way `memory` and `cpu_thread` are, and
-a service-scoped metric sums **every** process discovery attributes to the
+Because `io*`/`threads` have no percentage form, a packaged threshold for them
+cannot be normalized to the host the way `memory` and `cpu_thread` are, and a
+service-scoped metric sums **every** process discovery attributes to the
 service, control-group members included. A catalog default is therefore a
 deliberately generous ceiling rather than a tuned number, and the host that needs
 a different one says so in `services.local/` (see
-[per-host overrides](configuration.md#per-host-overrides-dirlocal)). Where the
-control group holds workload the daemon does not own — a hypervisor's per-domain
-helpers, a container runtime's containers — a summed absolute count describes
-that workload rather than the daemon, so the catalog ships no such watch and
-host-wide exhaustion is alerted from a host watch instead.
+[per-host overrides](configuration.md#per-host-overrides-dirlocal)). `fds` is
+the exception: its percentage is measured per process against that process's
+own limit, so the catalog's `alert-if-fds-high` watches use `80%` and hold on
+any host (an absolute ceiling such as `50000` can never fire for a daemon whose
+limit is `32768`, which is how a collector leaking one socket per accepted
+connection reached `32761/32768` unnoticed). Where the control group holds
+workload the daemon does not own — a hypervisor's per-domain helpers, a
+container runtime's containers — a summed absolute count describes that
+workload rather than the daemon, so the catalog ships no absolute fd watch for
+such services and host-wide exhaustion is alerted from a host watch instead.
 
 ## Rules
 

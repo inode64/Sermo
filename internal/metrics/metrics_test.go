@@ -92,6 +92,7 @@ type fakeReader struct {
 	ioRead  map[int]uint64
 	ioWrite map[int]uint64
 	fds     map[int]uint64
+	fdLimit map[int]uint64
 	threads map[int]uint64
 	// threadCPU is pid -> tid -> jiffies. threadCPUReads, when non-nil, counts every
 	// ProcessThreadCPU call, so a test can pin that the sampling floor keeps an idle
@@ -122,6 +123,7 @@ func (r fakeReader) ProcessIO(pid int) (uint64, uint64, bool) {
 	return rd, wr, ok || ok2
 }
 func (r fakeReader) ProcessFDs(pid int) (uint64, bool)     { v, ok := r.fds[pid]; return v, ok }
+func (r fakeReader) ProcessFDLimit(pid int) (uint64, bool) { v, ok := r.fdLimit[pid]; return v, ok }
 func (r fakeReader) ProcessThreads(pid int) (uint64, bool) { v, ok := r.threads[pid]; return v, ok }
 func (r fakeReader) TotalMemory() (uint64, uint64, bool) {
 	return r.memTotal, r.memUsed, r.memTotal > 0
@@ -652,6 +654,45 @@ func TestServiceFDsAndThreadsAggregate(t *testing.T) {
 	if !snap["threads"].Ready || snap["threads"].Absolute != 8 {
 		t.Fatalf("threads = %+v, want ready 8", snap["threads"])
 	}
+}
+
+// The fds percentage is the worst single process against its own soft
+// RLIMIT_NOFILE: the limit is per process, so a tree sum against any one limit
+// would be meaningless, and the process about to hit EMFILE is the one that
+// matters (a collector that leaked to 32761/32768 stopped accepting connections
+// while the tree sum looked unremarkable).
+func TestServiceFDsPercentIsWorstProcessAgainstItsLimit(t *testing.T) {
+	reader := fakeReader{
+		fds:     map[int]uint64{10: 100, 20: 900, 30: 50},
+		fdLimit: map[int]uint64{10: 1000, 20: 1000, 30: 100},
+		hz:      100, ncpu: 1,
+	}
+	fds := New(reader).SampleService("svc", []int{10, 20, 30})["fds"]
+	if !fds.Ready || !fds.HasAbsolute || fds.Absolute != 1050 {
+		t.Fatalf("fds absolute = %+v, want the tree sum 1050", fds)
+	}
+	if !fds.HasPercent || fds.Percent != 90 {
+		t.Fatalf("fds percent = %+v, want 90 (pid 20: 900/1000)", fds)
+	}
+	if fds.HasTotal {
+		t.Fatalf("fds = %+v, must not publish a Total: the sum and the per-process limit do not combine", fds)
+	}
+}
+
+func TestServiceFDsNoPercentWithoutLimit(t *testing.T) {
+	t.Run("reader without ProcessFDLimit", func(t *testing.T) {
+		fds := New(readerNoSwap{}).SampleService("svc", []int{10})["fds"]
+		if fds.HasPercent {
+			t.Fatalf("fds = %+v, want no percentage when the reader cannot read limits", fds)
+		}
+	})
+	t.Run("limit unreadable or unlimited", func(t *testing.T) {
+		reader := fakeReader{fds: map[int]uint64{10: 7}, fdLimit: map[int]uint64{}, hz: 100, ncpu: 1}
+		fds := New(reader).SampleService("svc", []int{10})["fds"]
+		if !fds.Ready || fds.Absolute != 7 || fds.HasPercent {
+			t.Fatalf("fds = %+v, want ready 7 without a percentage", fds)
+		}
+	})
 }
 
 func TestSampleServiceCPUNoCPUCount(t *testing.T) {

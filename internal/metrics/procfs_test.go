@@ -77,6 +77,9 @@ func TestOSReaderProcfs(t *testing.T) {
 	if count, ok := r.ProcessFDs(pid); !ok || count == 0 {
 		t.Errorf("ProcessFDs(self) = (%d, %v); want ok with count > 0", count, ok)
 	}
+	if limit, ok := r.ProcessFDLimit(pid); !ok || limit == 0 {
+		t.Errorf("ProcessFDLimit(self) = (%d, %v); want ok with the soft RLIMIT_NOFILE", limit, ok)
+	}
 	if count, ok := r.ProcessThreads(pid); !ok || count == 0 {
 		t.Errorf("ProcessThreads(self) = (%d, %v); want ok with count > 0", count, ok)
 	}
@@ -303,5 +306,32 @@ func TestOSReaderProcessThreadCPU(t *testing.T) {
 	// The spinning thread must carry visibly more than an even split would give it.
 	if avg := float64(sum) / float64(len(deltas)); float64(peak) <= avg {
 		t.Errorf("peak thread delta %d not above the %v average across %d threads: a busy thread must stand out", peak, avg, len(deltas))
+	}
+}
+
+func TestParseProcLimitsOpenFiles(t *testing.T) {
+	const limits = "Limit                     Soft Limit           Hard Limit           Units     \n" +
+		"Max cpu time              unlimited            unlimited            seconds   \n" +
+		"Max open files            32768                65536                files     \n" +
+		"Max locked memory         8388608              8388608              bytes     \n"
+	cases := []struct {
+		name string
+		data string
+		want uint64
+		ok   bool
+	}{
+		{name: "soft column", data: limits, want: 32768, ok: true},
+		{name: "unlimited", data: "Max open files            unlimited            unlimited            files     \n"},
+		{name: "line missing", data: "Max cpu time              unlimited            unlimited            seconds   \n"},
+		{name: "garbage", data: "Max open files            lots                 65536                files     \n"},
+		{name: "empty", data: ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, ok := parseProcLimitsOpenFiles(tc.data)
+			if ok != tc.ok || got != tc.want {
+				t.Fatalf("parseProcLimitsOpenFiles = (%d, %v), want (%d, %v)", got, ok, tc.want, tc.ok)
+			}
+		})
 	}
 }
