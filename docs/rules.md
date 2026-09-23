@@ -33,6 +33,7 @@
   - [What a device that stopped answering still reports](#what-a-device-that-stopped-answering-still-reports)
   - [Hardware sensors](#hardware-sensors)
   - [Count](#count)
+  - [Log matches (log)](#log-matches-log)
 - [Metrics](#metrics)
 - [Rules](#rules)
   - [Windows](#windows)
@@ -71,6 +72,7 @@ Connection-protocol checks (MySQL, PostgreSQL, Redis, Docker, libvirt, etc.) are
 | `process_policy` | health | every process of a user account satisfies the allow/deny policy (alert-only; see configuration.md) |
 | `metric`      | condition | a sampled metric satisfies `op value` (see Metrics)                |
 | `count`       | condition | the number of entries in a directory satisfies `op value` (see Count)|
+| `log`         | condition | the lines appended to a log file (or glob) that match `regex` within `within` satisfy `count {op, value}` (see Log matches) |
 | `storage`     | condition | a filesystem's space/inode predicates hold (`*_pct` accepts `%`; `*_bytes` requires K/M/G/T) |
 | `load`        | condition | a load-average threshold holds (load1/load5/load15, optional per_cpu)|
 | `users`       | condition | the count of logged-in users (from utmp) satisfies `count {op, value}`|
@@ -2798,6 +2800,52 @@ checks:
   increases can trip the check; steady or shrinking directories pass. Result data
   carries `count`, `baseline_count`, `growth_count`, `window` and `value` (the
   growth). Use either `count`/`op`/`value` or `delta`/`within`, not both.
+
+### Log matches (`log`)
+
+A `log` check follows a log file like `tail -f` and counts the lines appended
+within a sliding window that match a regular expression. It is
+**condition-style** (`OK == true` means the comparison holds), so a watch with
+`count: { op: ">", value: 3 }` fires its `then:` when more than three matching
+lines arrived within `within`, and releases once the window has slid past them.
+It exists for the failure a service reports only in its own log: a consumer
+whose telemetry exporter times out on every message
+(`cURL error 28: Connection timed out`) keeps its init unit `active` and its
+process alive while it crawls.
+
+```yaml
+checks:
+  otlp-export-timeouts:
+    type: log
+    path: /var/www/app/current/var/log/symfony-messenger_*_err.log  # absolute; a glob sums its files
+    regex: 'cURL error 28: (Connection|Operation) timed out'          # Go/RE2, matched per line
+    count: { op: ">", value: 3 }                                       # matching lines within the window
+    within: 5m
+    optional: true
+```
+
+- **`path`** must be absolute. A glob (`*`, `?`, `[`) matches several files whose
+  matches are summed; the result data reports `files`. Keep the glob tight
+  (`*_err.log`, never `*_err.log*`): a rotated copy that matches the glob is a
+  new file and would be read from its start.
+- **The first cycle only baselines** at the end of every file: lines already
+  there are history, not news. From then on each cycle reads what each file
+  gained. A trailing partial line waits for its newline.
+- **Rotation** is handled by identity and size: a new inode under the same name
+  (logrotate's rename + create) or a file that shrank (`copytruncate`,
+  `truncate`) is read again from its start, and a file that vanished is
+  forgotten.
+- **Read budget**: one cycle reads at most 8 MiB across the matched files. Past
+  that the remainder is skipped, the result carries `truncated: true` and the
+  message says the count is a lower bound — a log that explodes must not stall
+  the worker.
+- **State is in memory.** Like `count`'s `delta` and `size`, the offsets and
+  the window live in the built check: `sermoctl daemon reload` or a restart
+  re-baselines, and lines written meanwhile are not counted.
+- Result data carries `count` (matches within the window, also the graphed
+  `value` in `lines`), `regex`, `window`, `files`, `bytes_read` and
+  `truncated`. A missing or unreadable file makes the check unavailable; with
+  `optional: true` that is a warning rather than a failure.
 
 ## Metrics
 

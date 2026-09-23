@@ -132,6 +132,7 @@ var graphMetrics = map[string][]GraphMetric{
 	CheckTypeZombies:       {{Key: DataKeyZombies, Unit: metrics.MetricUnitProcesses, Label: "Zombies"}},
 	CheckTypeFailedUnits:   {{Key: DataKeyCount, Unit: metrics.MetricUnitNone, Label: "Failed units"}},
 	CheckTypeCount:         {{Key: DataKeyCount, Unit: metrics.MetricUnitNone, Label: "Count"}},
+	CheckTypeLog:           {{Key: DataKeyCount, Unit: metrics.MetricUnitLines, Label: "Matches"}},
 	CheckTypeFirewallRules: {{Key: DataKeyRules, Unit: metrics.MetricUnitNone, Label: "Rules"}},
 	CheckTypeSize:          {{Key: DataKeyCurrentBytes, Unit: metrics.MetricUnitBytes, Label: "Size"}},
 	// Signed, not the absolute offset the check compares: a clock that runs fast

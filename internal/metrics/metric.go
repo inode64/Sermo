@@ -43,6 +43,8 @@ const (
 	MetricUnitProcesses = "processes"
 	// MetricUnitConnections is the canonical UI/API unit for TCP connection counts.
 	MetricUnitConnections = "connections"
+	// MetricUnitLines is the canonical UI/API unit for matched log lines.
+	MetricUnitLines = "lines"
 	// MetricUnitSessions is the canonical UI/API unit for terminal-session counts.
 	MetricUnitSessions = "sessions"
 	// MetricUnitNone marks unitless graph metrics.

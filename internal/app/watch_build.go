@@ -124,13 +124,22 @@ func sustainableCycles(checkEntry map[string]any, interval time.Duration) int {
 		if _, hasDelta := checkEntry[checks.CheckKeyDelta]; !hasDelta {
 			return 0
 		}
-		within := cfgval.Duration(checkEntry[checks.CheckKeyWithin])
-		if within <= 0 || interval <= 0 {
-			return 0
-		}
-		return int(math.Ceil(float64(within) / float64(interval)))
+		return cyclesWithin(checkEntry, interval)
+	case checks.CheckTypeLog:
+		// A log check counts the lines appended within its own `within` span, so
+		// its condition is delta-only by nature and holds for that many cycles.
+		return cyclesWithin(checkEntry, interval)
 	}
 	return 0
+}
+
+// cyclesWithin converts a check's own `within` span into consecutive cycles.
+func cyclesWithin(checkEntry map[string]any, interval time.Duration) int {
+	within := cfgval.Duration(checkEntry[checks.CheckKeyWithin])
+	if within <= 0 || interval <= 0 {
+		return 0
+	}
+	return int(math.Ceil(float64(within) / float64(interval)))
 }
 
 // warnEventCounterWindow warns when a watch gates a delta-only check behind a window

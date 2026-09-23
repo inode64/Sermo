@@ -165,9 +165,7 @@ func (c *Collector) SampleService(service string, pids []int) Snapshot {
 	})
 	// The fd limit is optional too: only readers that can read RLIMIT_NOFILE give
 	// fds a percentage form.
-	limitReader, hasFDLimit := c.Reader.(interface {
-		ProcessFDLimit(pid int) (uint64, bool)
-	})
+	limitReader, _ := c.Reader.(fdLimitReader)
 	var peak fdPeak
 
 	var rss, ticks, ioRead, ioWrite, fds, threads, swap uint64
@@ -200,11 +198,7 @@ func (c *Collector) SampleService(service string, pids []int) Snapshot {
 		if v, ok := c.Reader.ProcessFDs(pid); ok {
 			fds += v
 			fdsOK++
-			if hasFDLimit {
-				if limit, ok := limitReader.ProcessFDLimit(pid); ok {
-					peak.observe(v, limit)
-				}
-			}
+			peak.observeProcess(limitReader, pid, v)
 		}
 		if v, ok := c.Reader.ProcessThreads(pid); ok {
 			threads += v
@@ -685,8 +679,19 @@ type fdPeak struct {
 	ok  bool
 }
 
-func (p *fdPeak) observe(count, limit uint64) {
-	if limit == 0 {
+// fdLimitReader is the optional Reader capability behind the fds percentage.
+type fdLimitReader interface {
+	ProcessFDLimit(pid int) (uint64, bool)
+}
+
+// observeProcess folds one process in; a nil reader (no capability) or an
+// unreadable/unlimited limit leaves the peak untouched.
+func (p *fdPeak) observeProcess(r fdLimitReader, pid int, count uint64) {
+	if r == nil {
+		return
+	}
+	limit, ok := r.ProcessFDLimit(pid)
+	if !ok || limit == 0 {
 		return
 	}
 	pct := float64(count) / float64(limit) * PercentScale
@@ -698,7 +703,7 @@ func (p *fdPeak) observe(count, limit uint64) {
 // reading adds the percentage form to the fds reading when a limit was seen.
 // It deliberately publishes no Total: Absolute is the tree sum while Percent is
 // per process, and a consumer deriving "free" from the pair would be misled.
-func (p fdPeak) reading(r Reading) Reading {
+func (p *fdPeak) reading(r Reading) Reading {
 	if p.ok {
 		r.Percent, r.HasPercent = p.pct, true
 	}

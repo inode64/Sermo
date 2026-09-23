@@ -15,6 +15,10 @@ const (
 	DataKeyAvailableBytes           = fieldAvailableBytes
 	DataKeyBackend                  = CheckKeyBackend
 	DataKeyBaselineCount            = "baseline_count"
+	DataKeyBytesRead                = "bytes_read"
+	DataKeyFiles                    = "files"
+	DataKeyRegex                    = CheckKeyRegex
+	DataKeyTruncated                = "truncated"
 	DataKeyBaselineBytes            = "baseline_bytes"
 	DataKeyCapacityBytes            = "capacity_bytes"
 	DataKeyChanged                  = "changed"

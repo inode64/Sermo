@@ -1,6 +1,11 @@
 package checks
 
-import "sermo/internal/cfgval"
+import (
+	"path/filepath"
+	"regexp"
+
+	"sermo/internal/cfgval"
+)
 
 // buildCountCheck builds a check on the number of entries under a path.
 func buildCountCheck(b base, entry map[string]any) (Check, string) {
@@ -98,4 +103,42 @@ func buildSizeCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 		return nil, "size check requires a positive within (e.g. 1h)"
 	}
 	return &sizeCheck{base: b, path: path, growBy: growBy, window: window, includeHidden: cfgval.Bool(entry[CheckKeyIncludeHidden]), sampler: deps.SizeSampler, state: &sizeState{}}, ""
+}
+
+// buildLogCheck builds a check on the lines appended to a log (a path or a
+// glob) that match a regex within a sliding window.
+func buildLogCheck(b base, entry map[string]any) (Check, string) {
+	path, errs := requireCheckPath(entry, CheckTypeLog)
+	if errs != "" {
+		return nil, errs
+	}
+	if !filepath.IsAbs(path) {
+		return nil, "log check path must be absolute"
+	}
+	path = filepath.Clean(path)
+	pattern := cfgval.AsString(entry[CheckKeyRegex])
+	if pattern == "" {
+		return nil, "log check requires a regex"
+	}
+	re, err := regexp.Compile(pattern)
+	if err != nil {
+		return nil, "log check regex is invalid: " + err.Error()
+	}
+	threshold, ok := entry[CheckKeyCount].(map[string]any)
+	if !ok {
+		return nil, "log check requires a count {op, value}"
+	}
+	op := cfgval.AsString(threshold[CheckKeyOp])
+	if !cfgval.IsCompareOp(op) {
+		return nil, "log check count requires a valid op (>=, >, <=, <, ==, !=)"
+	}
+	val, err := parseFiniteThreshold(threshold[CheckKeyValue])
+	if err != nil {
+		return nil, "log check count value " + err.Error()
+	}
+	window := cfgval.Duration(entry[CheckKeyWithin])
+	if window <= 0 {
+		return nil, "log check requires a positive within (e.g. 5m)"
+	}
+	return logCheck{base: b, path: path, regex: re, op: op, value: val, window: window, state: newLogState()}, ""
 }

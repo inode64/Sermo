@@ -284,6 +284,7 @@ var builtinCheckSpecs = []checkSpec{
 	{info: serviceConditionTypeInfo(CheckTypeMetric), build: func(in checkBuildInput) (Check, string) { return buildMetricCheck(in.base, in.entry, in.deps) }},
 	{info: healthTypeInfo(CheckTypeLibraries), build: func(in checkBuildInput) (Check, string) { return buildLibrariesCheck(in.base, in.entry) }},
 	{info: conditionTypeInfo(CheckTypeCount), build: func(in checkBuildInput) (Check, string) { return buildCountCheck(in.base, in.entry) }},
+	{info: conditionTypeInfo(CheckTypeLog), build: func(in checkBuildInput) (Check, string) { return buildLogCheck(in.base, in.entry) }},
 	{info: conditionTypeInfo(CheckTypeStorage), predicateFields: StoragePredFields, build: func(in checkBuildInput) (Check, string) { return buildStorageCheck(in.base, in.entry, in.deps) }},
 	{info: conditionTypeInfo(CheckTypeLoad), predicateFields: LoadPredFields, build: func(in checkBuildInput) (Check, string) { return buildLoadCheck(in.base, in.entry, in.deps) }},
 	{info: conditionTypeInfo(CheckTypeUsers), predicateFields: UsersPredFields, build: func(in checkBuildInput) (Check, string) { return buildUsersCheck(in.base, in.entry, in.deps) }},

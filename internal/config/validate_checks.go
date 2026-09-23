@@ -871,6 +871,7 @@ var singleShotCheckValidators = map[string]singleShotCheckValidator{
 	checks.CheckTypeLibraries:        validateLibrariesCheck,
 	checks.CheckTypeMetric:           validateSingleShotMetric,
 	checks.CheckTypeCount:            validateSingleShotCount,
+	checks.CheckTypeLog:              singleShotNoLock(validateLogCheck),
 	checks.CheckTypeStorage:          singleShotNoLock(validateStorageFields),
 	checks.CheckTypeLoad:             singleShotNoLock(validateLoadFields),
 	checks.CheckTypeUsers:            singleShotThreshold(checks.UsersPredFields),
@@ -1346,6 +1347,33 @@ func validateSingleShotMetric(path string, entry map[string]any, _ string, add a
 
 func validateSingleShotCount(path string, entry map[string]any, _ string, add addFunc) {
 	validateCount(entry, path, add)
+}
+
+// validateLogCheck mirrors checks.buildLogCheck: an absolute path (or glob), a
+// compilable regex, a count {op, value} predicate and a positive within window.
+func validateLogCheck(path string, entry map[string]any, add addFunc) {
+	switch logPath := cfgval.String(entry[checks.CheckKeyPath]); {
+	case logPath == "":
+		add("%s log check requires a path", path)
+	case !filepath.IsAbs(logPath):
+		add("%s log check path must be absolute", path)
+	}
+	if pattern := cfgval.String(entry[checks.CheckKeyRegex]); pattern == "" {
+		add("%s log check requires a regex", path)
+	} else if _, err := regexp.Compile(pattern); err != nil {
+		add("%s log check regex is invalid: %v", path, err)
+	}
+	if m, ok := entry[checks.CheckKeyCount].(map[string]any); ok {
+		validateOpNumeric(path+"."+checks.CheckKeyCount, m, add)
+	} else {
+		add("%s log check requires a count {op, value}", path)
+	}
+	within := cfgval.String(entry[checks.CheckKeyWithin])
+	if within == "" {
+		add("%s.within is required for a log check (e.g. 5m)", path)
+	} else if !isPositiveDuration(within) {
+		add("%s.within %q must be a valid positive duration", path, within)
+	}
 }
 
 func validateProcessCountCheck(path string, entry map[string]any, _ string, add addFunc) {
