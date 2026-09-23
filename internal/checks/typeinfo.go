@@ -90,6 +90,7 @@ const (
 	CheckTypeMetric           = "metric"
 	CheckTypeLibraries        = "libraries"
 	CheckTypeCount            = "count"
+	CheckTypeLog              = "log"
 	CheckTypeStorage          = "storage"
 	CheckTypeLoad             = "load"
 	CheckTypeUsers            = "users"

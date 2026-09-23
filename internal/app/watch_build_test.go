@@ -1001,6 +1001,20 @@ func TestBuildWatchesWarnsCountDeltaBeyondItsOwnWindow(t *testing.T) {
 			window:   map[string]any{"cycles": 10},
 			wantWarn: false,
 		},
+		{
+			// A log check counts lines appended within its own window, so it is
+			// delta-only by nature: the same ceiling as a count delta.
+			name:     "log window outlasts its span",
+			check:    map[string]any{"type": "log", "path": "/var/log/x.log", "regex": "x", "count": map[string]any{"op": ">", "value": 0}, "within": "2m"},
+			window:   map[string]any{"cycles": 10},
+			wantWarn: true,
+		},
+		{
+			name:     "log window fits inside its span",
+			check:    map[string]any{"type": "log", "path": "/var/log/x.log", "regex": "x", "count": map[string]any{"op": ">", "value": 0}, "within": "2m"},
+			window:   map[string]any{"cycles": 3},
+			wantWarn: false,
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			_, warns := BuildWatches(cfgWithWatches(map[string]any{

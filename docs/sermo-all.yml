@@ -339,6 +339,16 @@ watches:
       within: 2m
     then: { notify: [ops-email] }
 
+  log-export-timeouts:
+    monitor: disabled
+    check:
+      type: log
+      path: /var/log/demo/worker_*_err.log  # absolute; a glob sums its files
+      regex: 'cURL error 28: (Connection|Operation) timed out'
+      count: { op: ">", value: 3 }  # matching lines appended within the window
+      within: 5m
+    then: { notify: [ops-email] }
+
   sqlite-health:
     monitor: disabled
     check: { type: sqlite, path: /var/lib/demo/demo.db, quick: true }

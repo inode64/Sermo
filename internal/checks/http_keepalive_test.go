@@ -2,6 +2,7 @@ package checks
 
 import (
 	"context"
+	"maps"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -49,9 +50,7 @@ func TestHTTPCheckOpensANewConnectionPerRun(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			srv, accepted := connCountingServer(t, tc.tls)
 			entry := map[string]any{"type": "http", "url": srv.URL, "expect_status": 200}
-			for k, v := range tc.entry {
-				entry[k] = v
-			}
+			maps.Copy(entry, tc.entry)
 			built, warns := Build(map[string]any{"h": entry}, Deps{DefaultTimeout: time.Second})
 			if len(warns) > 0 {
 				t.Fatalf("build warns: %v", warns)
