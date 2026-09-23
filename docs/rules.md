@@ -920,6 +920,17 @@ same operators as the [`sql`](#sql-query-sql) check:
 
 Result data carries `status` and `latency_ms` for use in rules/hooks.
 
+**One connection per probe.** Every `http` probe (and every HTTP-based protocol
+probe) opens its own connection and closes it after the exchange; it never
+reuses a pooled keep-alive connection. A probe exists to exercise the target's
+accept path each cycle: a daemon that stopped accepting connections — listen
+backlog full, file descriptors exhausted — keeps answering on the sockets it
+already owns, so a pooled connection opened before the collapse would report it
+healthy while every new client times out. The cost is one TCP (and TLS)
+handshake per probe; for an expensive endpoint, space probes with `interval:`
+rather than sharing a connection. The `http3` (QUIC) client is the exception:
+it keeps its session.
+
 On an `https://` URL the same check can also inspect the **server certificate**
 presented on the request connection, so one check covers reachability *and* TLS
 health. Add any of these optional keys (they reuse the `cert` check's logic):

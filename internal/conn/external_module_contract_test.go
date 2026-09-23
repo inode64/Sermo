@@ -164,3 +164,17 @@ func closeHTTPClientOnCleanup(t *testing.T, client *http.Client) {
 		t.Cleanup(transport.CloseIdleConnections)
 	}
 }
+
+// A plain probe (no interface, no TLS) must not keep its connection either: the
+// pooled socket would keep answering after the target stops accepting.
+func TestPlainHTTPProbeClientDisablesKeepAlives(t *testing.T) {
+	client := httpProbeClient("", nil)
+	closeHTTPClientOnCleanup(t, client)
+	transport, ok := client.Transport.(*http.Transport)
+	if !ok {
+		t.Fatalf("plain probe transport = %T, want *http.Transport", client.Transport)
+	}
+	if !transport.DisableKeepAlives {
+		t.Fatal("plain probe transport must disable keep-alives")
+	}
+}
