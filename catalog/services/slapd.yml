@@ -42,10 +42,12 @@ watches:
   port:
     check:
       type: tcp
+      host: ${host}
       port: ${port}
   ldap:
     check:
       type: ldap
+      host: ${host}
       port: ${port}
       timeout: 3s
   cert:

@@ -32,6 +32,7 @@ variables:
   config_test_pidfile: /run/php-fpm-php${version}${sep}${instance}.pid
   config: /etc/php/fpm-php${version}${sep}${instance}/php-fpm.conf
   status_path: /status
+  listen_queue_max: 0
 pidfile:
   optional: true
   path:
@@ -81,6 +82,8 @@ watches:
       port: ${port}
       status_path: ${status_path}
       timeout: 3s
+      expect:
+        listen_queue: { op: "<=", value: "${listen_queue_max}" }
   alert-if-memory-high:
     check:
       type: metric
@@ -104,3 +107,15 @@ stop_policy:
       - root
     exe_any:
       - ${binary}
+# Enable after configuring the pool's ping/status endpoint.
+rules:
+  alert-if-listen-queue-high:
+    enabled: false
+    type: alert
+    if:
+      failed: { check: fpm }
+    for:
+      duration: 2m
+    then:
+      action: alert
+      message: ${display_name} pool is unavailable or its listen queue remains above ${listen_queue_max}

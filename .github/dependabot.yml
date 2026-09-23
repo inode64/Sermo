@@ -1,7 +1,9 @@
 version: 2
 updates:
   - package-ecosystem: gomod
-    directory: "/"
+    directories:
+      - "/"
+      - "/internal/web/build"
     schedule:
       interval: weekly
 

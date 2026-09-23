@@ -41,10 +41,16 @@ watches:
     check:
       type: http
       url: http://${host}:${port}/api/health
-      expect_status:
-        op: <
-        value: 500
+      expect_status: 200
+      expect_json:
+        database: ok
+      verify: true
       timeout: 5s
+    for:
+      cycles: 3
+    then:
+      action: alert
+      message: ${display_name} health endpoint or database is unhealthy
   alert-if-fds-high:
     check:
       type: metric

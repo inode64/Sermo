@@ -100,7 +100,6 @@ build-candidate-sermoctl:
 # YAML formatting and lint (yamlfmt via go install, yamllint via pip/pipx).
 YAMLFMT ?= yamlfmt
 YAMLLINT ?= yamllint
-YAML_ROOTS = catalog examples templates docs .github
 MARKDOWNLINT ?= ./node_modules/.bin/markdownlint
 PLAYWRIGHT ?= ./node_modules/.bin/playwright
 SHELLCHECK ?= shellcheck
@@ -120,14 +119,13 @@ SCRIPT_PY = scripts/*.py
 PRIVATE_SCRIPT_PATHS = scripts/remote-deploy scripts/open_sermo_dashboards.py scripts/test_open_sermo_dashboards.py
 
 yaml-fmt:
-	@$(LINT_PATH) $(YAMLFMT) -conf .yamlfmt
-	@python3 scripts/normalize_yaml_flow.py
+	@$(LINT_PATH) YAMLFMT="$(YAMLFMT)" python3 scripts/yaml_format_check.py --write
 
 yaml-fmt-check:
-	@$(LINT_PATH) python3 scripts/yaml_format_check.py
+	@$(LINT_PATH) YAMLFMT="$(YAMLFMT)" python3 scripts/yaml_format_check.py
 
 yaml-lint:
-	@$(LINT_PATH) $(YAMLLINT) --strict -c .yamllint.yml $(YAML_ROOTS) .semgrep .golangci.yml .custom-gcl.yml
+	@$(LINT_PATH) YAMLLINT="$(YAMLLINT)" python3 scripts/yaml_format_check.py --lint
 
 yaml-validate: yaml-fmt-check yaml-lint
 
@@ -248,10 +246,17 @@ $(CUSTOM_GCL): .custom-gcl.yml
 
 custom-gcl: $(CUSTOM_GCL)
 
+# Exercise the actual config against forbidden imports and permitted exceptions.
+# Schema validation alone cannot detect a glob that silently matches no files.
+.PHONY: analyzer-config-check
+analyzer-config-check: $(CUSTOM_GCL)
+	@$(LINT_CACHE_ENV) $(CUSTOM_GCL) config verify
+	@$(LINT_CACHE_ENV) python3 scripts/check_depguard.py --binary $(CUSTOM_GCL)
+
 # Static analysis. Finds Go-installed tools in ~/go/bin: staticcheck,
 # custom-gcl (gosec, NilAway, revive and focused bug analyzers, all configured
 # in .golangci.yml), govulncheck and deadcode; unusedglobals is repository code.
-lint: fmt-check $(CUSTOM_GCL)
+lint: fmt-check analyzer-config-check
 	@echo "go fix -diff $(GO_PACKAGES)"
 	@go fix -diff $(GO_PACKAGES)
 	@echo "staticcheck -checks=all $(GO_PACKAGES)"

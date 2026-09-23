@@ -48,6 +48,7 @@ watches:
   port:
     check:
       type: tcp
+      host: ${host}
       port: ${port}
   http:
     check:

@@ -100,10 +100,12 @@ watches:
   port:
     check:
       type: tcp
+      host: ${host}
       port: ${port}
   smtp:
     check:
       type: smtp
+      host: ${host}
       port: ${port}
       timeout: 3s
   # `exim -bpc` prints the number of queued messages; `unit:` turns that number

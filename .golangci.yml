@@ -153,32 +153,33 @@ linters:
           allow:
             - $gostd
             - sermo
+        # Depguard matches absolute filenames; every scoped glob needs **/.
         # Safety invariants: read-only layers must not import the operation engine.
         checks-no-operation:
           list-mode: lax
           files:
-            - internal/checks/**
+            - "**/internal/checks/**"
           deny:
             - pkg: sermo/internal/operation$
               desc: checks are read-only predicates; service control goes through app/operation
         conn-no-operation:
           list-mode: lax
           files:
-            - internal/conn/**
+            - "**/internal/conn/**"
           deny:
             - pkg: sermo/internal/operation$
               desc: protocol probes must not dispatch service operations
         rules-no-operation:
           list-mode: lax
           files:
-            - internal/rules/**
+            - "**/internal/rules/**"
           deny:
             - pkg: sermo/internal/operation$
               desc: rule conditions are predicates; remediation dispatches through app/worker
         config-no-operation:
           list-mode: lax
           files:
-            - internal/config/**
+            - "**/internal/config/**"
           deny:
             - pkg: sermo/internal/operation$
               desc: config parsing/validation must not execute service control
@@ -186,7 +187,7 @@ linters:
         rules-no-execx:
           list-mode: lax
           files:
-            - internal/rules/**
+            - "**/internal/rules/**"
             - "!**/*_test.go"
           deny:
             - pkg: sermo/internal/execx$

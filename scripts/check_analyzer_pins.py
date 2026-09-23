@@ -15,9 +15,17 @@ CUSTOM_GCL_PATH = ROOT / ".custom-gcl.yml"
 GOLANGCI_MODULE = "github.com/golangci/golangci-lint/v2/cmd/golangci-lint"
 GOIMPORTS_MODULE = "golang.org/x/tools/cmd/goimports"
 DEADCODE_MODULE = "golang.org/x/tools/cmd/deadcode"
-MUTABLE_GO_PINS = {"latest", "main", "master", "head"}
+# Full Go module versions, including prereleases and timestamped pseudoversions.
+# Prefix queries (v2, v2.13) and branch names must never pass as exact pins.
+VERSION_NUMBER = r"(?:0|[1-9][0-9]*)"
+PRERELEASE_IDENTIFIER = rf"(?:{VERSION_NUMBER}|[0-9]*[A-Za-z-][0-9A-Za-z-]*)"
+EXACT_GO_VERSION = re.compile(
+    rf"v{VERSION_NUMBER}\.{VERSION_NUMBER}\.{VERSION_NUMBER}"
+    rf"(?:-{PRERELEASE_IDENTIFIER}(?:\.{PRERELEASE_IDENTIFIER})*)?"
+    r"(?:\+incompatible)?"
+)
 EXACT_PYTHON_REQUIREMENT = re.compile(
-    r"^[A-Za-z0-9_.-]+(?:\[[A-Za-z0-9_,.-]+\])?==[^=<>!~\s]+$"
+    r"^[A-Za-z0-9_.-]+(?:\[[A-Za-z0-9_,.-]+\])?==[0-9][A-Za-z0-9.!+_-]*$"
 )
 TOP_LEVEL_VERSION = re.compile(r"^version:\s*([^\s#]+)", re.MULTILINE)
 NILAWAY_PLUGIN = re.compile(
@@ -52,7 +60,7 @@ def go_installs(workflow: str) -> tuple[dict[str, str], list[str]]:
             problems.append(f"Go analyzer {module} is installed more than once")
             continue
         installs[module] = version
-        if version.casefold() in MUTABLE_GO_PINS or not version.startswith("v"):
+        if not EXACT_GO_VERSION.fullmatch(version):
             problems.append(f"Go analyzer {module} uses mutable pin {version}")
     return installs, problems
 
@@ -100,6 +108,8 @@ def validate_pins(workflow: str, custom_gcl: str) -> list[str]:
         problems.append("CI does not pin golangci-lint")
     if not custom_golangci:
         problems.append(".custom-gcl.yml does not pin golangci-lint")
+    elif not EXACT_GO_VERSION.fullmatch(custom_golangci):
+        problems.append(f"custom golangci-lint uses mutable pin {custom_golangci}")
     if ci_golangci and custom_golangci and ci_golangci != custom_golangci:
         problems.append(
             f"golangci-lint is {ci_golangci} in CI but {custom_golangci} "
@@ -108,7 +118,7 @@ def validate_pins(workflow: str, custom_gcl: str) -> list[str]:
 
     if not nilaway:
         problems.append(".custom-gcl.yml does not pin NilAway")
-    elif nilaway.casefold() in MUTABLE_GO_PINS or not nilaway.startswith("v"):
+    elif not EXACT_GO_VERSION.fullmatch(nilaway):
         problems.append(f"NilAway uses mutable pin {nilaway}")
 
     goimports = installs.get(GOIMPORTS_MODULE, "")

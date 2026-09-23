@@ -22,6 +22,7 @@ variables:
   backup_user: mysql
   host: 127.0.0.1
   port: 3306
+  memory_alert_threshold: 80%
   config:
     - /etc/mysql/my.cnf
     - /etc/my.cnf
@@ -36,6 +37,7 @@ preflight:
     type: command
     command:
       - ${mariadb_binary}
+      - --defaults-file=${config}
       - --help
       - --verbose
     timeout: 15s
@@ -65,12 +67,13 @@ rules:
     type: guard
     blocks:
       - restart
+      - stop
     if:
       active:
         check: backup
     then:
       action: block
-      message: ${display_name} backup is running; restart denied
+      message: ${display_name} backup is running; stop and restart denied
 watches:
   service:
     check:
@@ -118,19 +121,21 @@ watches:
       cycles: 3
     then:
       action: restart
-  restart-if-memory-high:
+  alert-if-memory-high:
     check:
       type: metric
       scope: service
       name: memory
       op: '>'
-      value: 40%
+      value: ${memory_alert_threshold}
       optional: true
     within:
       cycles: 15
       min_matches: 5
     then:
-      action: restart
+      action: alert
+      message: >-
+        During ${rule.duration}, ${display_name} memory usage stayed above ${check.threshold} (current ${check.value})
   alert-if-fds-high:
     check:
       type: metric

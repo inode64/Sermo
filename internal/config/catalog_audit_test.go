@@ -2421,7 +2421,7 @@ func TestCatalogServicesUseAppVariablesForBinaryRefs(t *testing.T) {
 	}
 }
 
-func TestDatabaseCatalogServicesBlockRestartDuringBackup(t *testing.T) {
+func TestDatabaseCatalogServicesBlockStopAndRestartDuringBackup(t *testing.T) {
 	root := repoRoot(t)
 	cfg := loadRepoCatalog(t)
 
@@ -2457,8 +2457,10 @@ func TestDatabaseCatalogServicesBlockRestartDuringBackup(t *testing.T) {
 		if !ok {
 			t.Fatalf("%s %s catalog must define backup restart guard", name, label)
 		}
-		if !slices.Contains(cfgval.StringList(guard["blocks"]), "restart") {
-			t.Fatalf("%s %s backup guard blocks = %v, want restart", name, label, guard["blocks"])
+		for _, action := range []string{"stop", "restart"} {
+			if !slices.Contains(cfgval.StringList(guard["blocks"]), action) {
+				t.Fatalf("%s %s backup guard blocks = %v, want %s", name, label, guard["blocks"], action)
+			}
 		}
 		if _, ok := section(body, "preflight")["mariadb-backup-binary"]; ok {
 			t.Fatalf("%s %s catalog still has mariadb-backup preflight", name, label)
