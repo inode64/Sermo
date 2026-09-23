@@ -2824,18 +2824,25 @@ checks:
     optional: true
 ```
 
-- **`path`** must be absolute. A glob (`*`, `?`, `[`) matches several files whose
+- **`path`** must be absolute and point to regular files. FIFOs, sockets,
+  directories and devices are rejected, including through symlinks; opening a
+  FIFO does not wait for a writer. A glob (`*`, `?`, `[`) matches files whose
   matches are summed; the result data reports `files`. Keep the glob tight
   (`*_err.log`, never `*_err.log*`): a rotated copy that matches the glob is a
   new file and would be read from its start.
 - **The first cycle only baselines** at the end of every file: lines already
   there are history, not news. From then on each cycle reads what each file
   gained. A trailing partial line waits for its newline.
+- **`within` counts observation time**, not timestamps embedded in log text.
+  Each batch stays in the window from the cycle that read its complete lines.
+  New matches still count after a pause longer than the window, or when the
+  check interval exceeds it; matches from older observations expire normally.
 - **Rotation** is handled by identity and size: a new inode under the same name
   (logrotate's rename + create) or a file that shrank (`copytruncate`,
   `truncate`) is read again from its start, and a file that vanished is
   forgotten.
-- **Read budget**: one cycle reads at most 8 MiB across the matched files. Past
+- **Read budget**: one cycle reads at most 8 MiB across the matched files,
+  including bytes of partial lines that must be re-read next cycle. Past
   that the remainder is skipped, the result carries `truncated: true` and the
   message says the count is a lower bound — a log that explodes must not stall
   the worker.

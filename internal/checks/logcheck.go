@@ -47,13 +47,17 @@ type logCheck struct {
 }
 
 // logState is the per-check tail memory. It lives in the built check, so a
-// config reload or a daemon restart re-baselines — exactly as count and size
-// growth checks do (see counterWindow).
+// config reload or a daemon restart re-baselines. Matches are dated when read,
+// rather than derived from a cumulative counter that needs an older baseline.
 type logState struct {
 	started bool
 	files   map[string]*logFileState
-	total   int
-	window  counterWindow
+	matches []logMatchBatch
+}
+
+type logMatchBatch struct {
+	at      time.Time
+	matched int
 }
 
 type logFileState struct {
@@ -65,7 +69,7 @@ func newLogState() *logState {
 	return &logState{files: map[string]*logFileState{}}
 }
 
-// logTally is what one cycle read: matches found, bytes consumed and whether
+// logTally is what one cycle read: matches found, bytes read and whether
 // the budget cut the read short.
 type logTally struct {
 	matched   int
@@ -88,14 +92,16 @@ func (c logCheck) Run(ctx context.Context) Result {
 	}
 
 	tally, err := c.state.advance(ctx, paths, c.regex, c.readBudget())
+	// Preserve matches already read even if a later file was unavailable. Their
+	// offsets have advanced, so discarding this batch would lose those events.
+	count := c.state.countWithin(windowClock(c.clock)(), tally.matched, c.window)
 	if err != nil {
 		return c.unavailableResult(fmt.Sprintf("log %s: %v", c.path, err), start)
 	}
-	growth, span := c.state.window.advance(windowClock(c.clock)(), c.state.total, c.window)
-	ok := cfgval.CompareFloat(float64(growth), c.op, c.value)
+	ok := cfgval.CompareFloat(float64(count), c.op, c.value)
 
 	msg := fmt.Sprintf("%d line(s) matching %s in %s across %d file(s) (want %s %s)",
-		growth, c.regex, span.Round(time.Second), tally.files, c.op, formatThreshold(c.value))
+		count, c.regex, c.window, tally.files, c.op, formatThreshold(c.value))
 	if tally.truncated {
 		msg += fmt.Sprintf("; read budget of %d bytes exceeded, count is a lower bound", c.readBudget())
 	}
@@ -103,8 +109,8 @@ func (c logCheck) Run(ctx context.Context) Result {
 	res.Data = map[string]any{
 		DataKeyPath:      c.path,
 		DataKeyRegex:     c.regex.String(),
-		DataKeyCount:     growth,
-		DataKeyValue:     growth,
+		DataKeyCount:     count,
+		DataKeyValue:     count,
 		DataKeyUnit:      metrics.MetricUnitLines,
 		DataKeyOp:        c.op,
 		DataKeyThreshold: c.value,
@@ -138,8 +144,22 @@ func (c logCheck) expand() ([]string, error) {
 	return paths, nil
 }
 
-// advance reads what every file gained since the previous cycle and adds the
-// matches to the cumulative total. Files that vanished are forgotten; a file
+// countWithin retains batches by observation time, including the current batch
+// even when the previous cycle is older than the whole window.
+func (s *logState) countWithin(now time.Time, matched int, window time.Duration) int {
+	s.matches = pruneWindow(s.matches, now.Add(-window), func(b logMatchBatch) time.Time { return b.at })
+	if matched > 0 {
+		s.matches = append(s.matches, logMatchBatch{at: now, matched: matched})
+	}
+	total := 0
+	for _, batch := range s.matches {
+		total += batch.matched
+	}
+	return total
+}
+
+// advance reads what every file gained since the previous cycle and counts its
+// matches. Files that vanished are forgotten; a file
 // seen for the first time after the baseline is read from its start (a rotated
 // log's successor is exactly that).
 func (s *logState) advance(ctx context.Context, paths []string, re *regexp.Regexp, budget int64) (logTally, error) {
@@ -150,7 +170,7 @@ func (s *logState) advance(ctx context.Context, paths []string, re *regexp.Regex
 			return tally, fmt.Errorf("log read cancelled: %w", err)
 		}
 		seen[path] = true
-		if err := s.advanceFile(path, re, budget, &tally); err != nil {
+		if err := s.advanceFile(ctx, path, re, budget, &tally); err != nil {
 			return tally, err
 		}
 	}
@@ -163,8 +183,10 @@ func (s *logState) advance(ctx context.Context, paths []string, re *regexp.Regex
 	return tally, nil
 }
 
-func (s *logState) advanceFile(path string, re *regexp.Regexp, budget int64, tally *logTally) error {
-	fh, err := hostfs.Open(path)
+func (s *logState) advanceFile(ctx context.Context, path string, re *regexp.Regexp, budget int64, tally *logTally) error {
+	// A path (including a symlink target) can become a FIFO between cycles.
+	// Open without waiting for a writer, then validate the opened descriptor.
+	fh, err := hostfs.OpenFile(path, os.O_RDONLY|syscall.O_NONBLOCK, 0)
 	if err != nil {
 		return fmt.Errorf("open: %w", err)
 	}
@@ -172,6 +194,12 @@ func (s *logState) advanceFile(path string, re *regexp.Regexp, budget int64, tal
 	info, err := fh.Stat()
 	if err != nil {
 		return fmt.Errorf("stat %s: %w", path, err)
+	}
+	if !info.Mode().IsRegular() {
+		return fmt.Errorf("log %s is not a regular file", path)
+	}
+	if err := ctx.Err(); err != nil {
+		return fmt.Errorf("log read cancelled: %w", err)
 	}
 	inode := fileInode(info)
 	fs, known := s.files[path]
@@ -195,13 +223,12 @@ func (s *logState) advanceFile(path string, re *regexp.Regexp, budget int64, tal
 		fs.offset = info.Size()
 		return nil
 	}
-	consumed, matched, err := countMatchingLines(fh, fs.offset, min(pending, remaining), re)
+	read, err := countMatchingLines(ctx, fh, fs.offset, min(pending, remaining), re)
 	if err != nil {
 		return err
 	}
-	tally.matched += matched
-	tally.bytesRead += consumed
-	s.total += matched
+	tally.matched += read.matched
+	tally.bytesRead += read.bytesRead
 	if pending > remaining {
 		// The rest would not fit this cycle: skip it rather than fall behind
 		// forever on a log that outruns the budget.
@@ -209,31 +236,48 @@ func (s *logState) advanceFile(path string, re *regexp.Regexp, budget int64, tal
 		fs.offset = info.Size()
 		return nil
 	}
-	fs.offset += consumed
+	fs.offset += read.consumed
 	return nil
 }
 
-// countMatchingLines reads up to limit bytes from offset and counts the whole
-// lines matching re. A trailing partial line is left for the next cycle:
-// consumed is the number of bytes up to and including the last newline.
-func countMatchingLines(r io.ReaderAt, offset, limit int64, re *regexp.Regexp) (consumed int64, matched int, err error) {
+// logRead separates actual I/O from the whole lines consumed. The budget must
+// include a trailing partial line even though the offset cannot advance over it.
+type logRead struct {
+	bytesRead int64
+	consumed  int64
+	matched   int
+}
+
+// countMatchingLines reads up to limit bytes from offset and counts whole lines.
+func countMatchingLines(ctx context.Context, r io.ReaderAt, offset, limit int64, re *regexp.Regexp) (logRead, error) {
+	if err := ctx.Err(); err != nil {
+		return logRead{}, fmt.Errorf("log read cancelled: %w", err)
+	}
 	buf := make([]byte, limit)
 	n, err := r.ReadAt(buf, offset)
 	if err != nil && !errors.Is(err, io.EOF) {
-		return 0, 0, fmt.Errorf("read: %w", err)
+		return logRead{}, fmt.Errorf("read: %w", err)
 	}
+	if err := ctx.Err(); err != nil {
+		return logRead{}, fmt.Errorf("log read cancelled: %w", err)
+	}
+	read := logRead{bytesRead: int64(n)}
 	buf = buf[:n]
 	end := bytes.LastIndexByte(buf, logNewline)
 	if end < 0 {
-		return 0, 0, nil
+		return read, nil
 	}
 	buf = buf[:end+1]
 	for line := range bytes.SplitSeq(buf, []byte{logNewline}) {
+		if err := ctx.Err(); err != nil {
+			return logRead{}, fmt.Errorf("log read cancelled: %w", err)
+		}
 		if len(line) > 0 && re.Match(line) {
-			matched++
+			read.matched++
 		}
 	}
-	return int64(len(buf)), matched, nil
+	read.consumed = int64(len(buf))
+	return read, nil
 }
 
 // fileInode identifies the file behind a path, so a rotated log (a new file

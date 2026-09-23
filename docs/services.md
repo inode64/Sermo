@@ -2107,11 +2107,11 @@ held, and every local exporter timed out for ten hours.
 | Watch | Signal | Variable (default) |
 |---|---|---|
 | `ready` | `GET /-/ready` on the API port, on a fresh connection each cycle; alerts after 2 minutes unreachable | `host` (`127.0.0.1`), `port` (`12345`) |
-| `otlp` | an empty `POST /v1/logs` on the OTLP/HTTP receiver answers (any status below 500; a healthy receiver says 400 or 415); alerts after 2 minutes without an answer. Optional: an Alloy without an OTLP receiver skips it | `otlp_port` (`4318`) |
+| `otlp` | disabled by default; when enabled, an empty `POST /v1/logs` on the OTLP/HTTP receiver must answer below 500; alerts after 2 minutes of failure | `otlp_port` (`4318`) |
 | `alert-if-fds-high` | the worst process against its own soft open-files limit, for 3 minutes | `fds_limit` (`80%`) |
 
-`metrics` (`GET /metrics`) stays graph-only. An Alloy whose OTLP receiver
-listens elsewhere, or not at all, overrides the port or disables the watch:
+`metrics` (`GET /metrics`) stays graph-only. Enable `otlp` only on an Alloy
+instance with an OTLP/HTTP receiver, and override the port if needed:
 
 ```yaml
 name: alloy
@@ -2120,8 +2120,13 @@ variables:
   otlp_port: 4319
 watches:
   otlp:
-    enabled: false
+    enabled: true
 ```
+
+`optional: true` on this check makes a failed observation a warning for service
+health; it does **not** suppress its alert rule. Once enabled, an absent or
+unreachable receiver must still alert. Leave the watch disabled on instances
+without that receiver.
 
 ## File-descriptor alerts (alert-if-fds-high)
 

@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -247,5 +248,144 @@ func TestBuildLogCheck(t *testing.T) {
 				t.Fatal("expected a build warning")
 			}
 		})
+	}
+}
+
+func TestLogCountsNewMatchesAfterWindowGap(t *testing.T) {
+	for _, gap := range []time.Duration{30 * time.Second, time.Minute, 2 * time.Minute} {
+		t.Run(gap.String(), func(t *testing.T) {
+			f := newLogFixture(t, "", ">", 0, time.Minute)
+			f.run()
+			f.now = f.now.Add(gap)
+			f.append(logTestMatch)
+			if result := f.run(); f.count(result) != 1 || !result.OK {
+				t.Fatalf("new batch after %s: %+v", gap, result)
+			}
+			f.now = f.now.Add(time.Minute - time.Second)
+			if result := f.run(); f.count(result) != 1 {
+				t.Fatalf("batch expired before its window: %+v", result)
+			}
+			f.now = f.now.Add(2 * time.Second)
+			if result := f.run(); f.count(result) != 0 {
+				t.Fatalf("batch did not expire: %+v", result)
+			}
+		})
+	}
+}
+
+func TestLogWindowExpiresBatchesIndependently(t *testing.T) {
+	f := newLogFixture(t, "", ">", 0, time.Minute)
+	f.run()
+	f.now = f.now.Add(30 * time.Second)
+	f.append(logTestMatch)
+	f.run()
+	f.now = f.now.Add(31 * time.Second)
+	f.append(logTestMatch)
+	if result := f.run(); f.count(result) != 2 {
+		t.Fatalf("both batches are in window: %+v", result)
+	}
+	f.now = f.now.Add(30 * time.Second)
+	if result := f.run(); f.count(result) != 1 {
+		t.Fatalf("only the oldest batch should expire: %+v", result)
+	}
+}
+
+func TestLogPartialLineConsumesReadBudgetAcrossFiles(t *testing.T) {
+	f := newLogFixture(t, "", ">", 0, time.Minute)
+	f.check.path = filepath.Join(f.dir, "*.log")
+	other := filepath.Join(f.dir, "z.log")
+	if err := os.WriteFile(other, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	f.run()
+	f.check.budget = 8
+	f.append("abcdefgh")
+	appendTo(t, other, logTestMatch)
+	result := f.run()
+	if f.count(result) != 0 || result.Data[DataKeyBytesRead] != int64(8) || result.Data[DataKeyTruncated] != true {
+		t.Fatalf("partial line must exhaust the budget before reading z.log: %+v", result)
+	}
+}
+
+func TestLogRejectsNonRegularFilesWithoutWaiting(t *testing.T) {
+	for _, kind := range []string{"fifo", "symlink to fifo", "directory"} {
+		t.Run(kind, func(t *testing.T) {
+			f := newLogFixture(t, "", ">", 0, time.Minute)
+			path := filepath.Join(f.dir, "pipe")
+			if err := syscall.Mkfifo(path, 0o600); err != nil {
+				t.Fatal(err)
+			}
+			switch kind {
+			case "symlink to fifo":
+				link := filepath.Join(f.dir, "link")
+				if err := os.Symlink(path, link); err != nil {
+					t.Fatal(err)
+				}
+				f.check.path = link
+			case "directory":
+				f.check.path = f.dir
+			default:
+				f.check.path = path
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Millisecond)
+			defer cancel()
+			done := make(chan Result, 1)
+			go func() { done <- f.check.Run(ctx) }()
+			select {
+			case result := <-done:
+				if !result.Unavailable || !strings.Contains(result.Message, "not a regular file") {
+					t.Fatalf("non-regular log: %+v", result)
+				}
+			case <-time.After(time.Second):
+				// Release a regressed blocking open before failing; never leave a reader.
+				release, err := os.OpenFile(path, os.O_RDWR|syscall.O_NONBLOCK, 0)
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer release.Close()
+				<-done
+				t.Fatal("log check waited for a FIFO writer despite its timeout")
+			}
+		})
+	}
+}
+
+func TestLogCancelledCycleKeepsUnreadMatches(t *testing.T) {
+	f := newLogFixture(t, "", ">", 0, time.Minute)
+	f.run()
+	f.append(logTestMatch)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if result := f.check.Run(ctx); !result.Unavailable {
+		t.Fatalf("cancelled cycle: %+v", result)
+	}
+	if result := f.run(); f.count(result) != 1 {
+		t.Fatalf("cancelled cycle consumed new matches: %+v", result)
+	}
+}
+
+func TestLogPreservesMatchesWhenLaterFileIsUnavailable(t *testing.T) {
+	f := newLogFixture(t, "", ">", 0, time.Minute)
+	f.check.path = filepath.Join(f.dir, "*.log")
+	other := filepath.Join(f.dir, "z.log")
+	if err := os.WriteFile(other, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	f.run()
+	f.append(logTestMatch)
+	if err := os.Remove(other); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(f.dir, "absent"), other); err != nil {
+		t.Fatal(err)
+	}
+	if result := f.run(); !result.Unavailable {
+		t.Fatalf("broken symlink should be unavailable: %+v", result)
+	}
+	if err := os.Remove(other); err != nil {
+		t.Fatal(err)
+	}
+	if result := f.run(); f.count(result) != 1 {
+		t.Fatalf("earlier file's matches were lost: %+v", result)
 	}
 }
