@@ -142,7 +142,7 @@ watches:
       scope: service
       name: fds
       op: '>'
-      value: 50000
+      value: 80%
       optional: true
     within:
       cycles: 10
@@ -150,4 +150,4 @@ watches:
     then:
       action: alert
       message: >-
-        During ${rule.duration}, ${display_name} file descriptor usage stayed above ${check.threshold} (current ${check.value})
+        During ${rule.duration}, ${display_name} file descriptor usage stayed above ${check.threshold} of a process's open-files limit (current ${check.value})
