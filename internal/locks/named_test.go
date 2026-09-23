@@ -67,6 +67,12 @@ func TestNamedLockerRejectsPathLikeIDs(t *testing.T) {
 		{name: "service separator", service: "mysql/main", lock: ""},
 		{name: "lock traversal", service: "mysql", lock: "../backup"},
 		{name: "lock separator", service: "mysql", lock: "backup/nightly"},
+		{name: "absolute service", service: filepath.Join(root, "escape")},
+		{name: "absolute lock", service: "mysql", lock: filepath.Join(root, "backup")},
+		{name: "service backslash", service: `mysql\main`},
+		{name: "lock backslash", service: "mysql", lock: `backup\nightly`},
+		{name: "service dot", service: "."},
+		{name: "lock parent", service: "mysql", lock: ".."},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -79,20 +85,40 @@ func TestNamedLockerRejectsPathLikeIDs(t *testing.T) {
 			if _, err := l.Hold(tc.service, tc.lock, "x", time.Hour); err == nil || !strings.Contains(err.Error(), "simple name") {
 				t.Fatalf("Hold() error = %v, want simple-name validation error", err)
 			}
+			if err := l.Release(tc.service, tc.lock); err == nil || !strings.Contains(err.Error(), "simple name") {
+				t.Fatalf("Release() error = %v, want simple-name validation error", err)
+			}
+			if _, err := l.ReleaseInactive(tc.service, tc.lock); err == nil || !strings.Contains(err.Error(), "simple name") {
+				t.Fatalf("ReleaseInactive() error = %v, want simple-name validation error", err)
+			}
 		})
 	}
 	if _, err := os.Stat(filepath.Join(root, "escape.lock")); !os.IsNotExist(err) {
 		t.Fatalf("path-like service must not create escaped lock file: %v", err)
 	}
-	if err := l.Release("mysql", "../backup"); err == nil || !strings.Contains(err.Error(), "simple name") {
-		t.Fatalf("Release() error = %v, want simple-name validation error", err)
+}
+
+func TestNamedReleaseTraversalPreservesExistingLock(t *testing.T) {
+	root := t.TempDir()
+	dir := RuntimeLocksDir(root)
+	if err := os.Mkdir(dir, lockDirMode); err != nil {
+		t.Fatal(err)
 	}
-	// ReleaseInactive validates on its own rather than through acquire, so it is
-	// the entry point most easily left behind when the others are changed. It
-	// unlinks the file it resolves, which is why it must reject a path-like ID
-	// before resolving anything.
-	if _, err := l.ReleaseInactive("mysql", "../backup"); err == nil || !strings.Contains(err.Error(), "simple name") {
-		t.Fatalf("ReleaseInactive() error = %v, want simple-name validation error", err)
+	expected := lockFile{Service: "victim", ExpiresAt: fixedNow.Add(-time.Hour)}
+	writeLock(t, root, "victim.lock", expected)
+	writeLock(t, dir, "victim.lock", expected)
+	l := namedLocker(dir, fakeProc{})
+	if err := l.Release("../victim", ""); err == nil {
+		t.Fatal("explicit release accepted traversal")
+	}
+	if _, err := l.ReleaseInactive("../victim", ""); err == nil {
+		t.Fatal("inactive release accepted traversal")
+	}
+	for _, parent := range []string{root, dir} {
+		lf, err := readLockFile(filepath.Join(parent, "victim.lock"))
+		if err != nil || lf != expected {
+			t.Fatalf("rejected release changed lock under %s: %+v, %v", parent, lf, err)
+		}
 	}
 }
 

@@ -4,13 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
-	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
 
 	"sermo/internal/execx"
+	"sermo/internal/hostfs"
 )
 
 // cgroupRoot is the unified cgroup v2 mount point.
@@ -126,7 +125,7 @@ func newManager(backend Backend, runner execx.Runner, opts Options) (Manager, er
 	case BackendSystemd:
 		return systemdManager{runner: runner, opts: opts}, nil
 	case BackendOpenRC:
-		return openrcManager{runner: runner, readFile: os.ReadFile, opts: opts}, nil
+		return openrcManager{runner: runner, readFile: hostfs.ReadFile, opts: opts}, nil
 	default:
 		return nil, fmt.Errorf("no service manager for backend %q", backend)
 	}
@@ -155,25 +154,25 @@ func MainPIDContext(ctx context.Context, runner execx.Runner, backend Backend, u
 // CgroupPIDsContext returns every PID in a unit's control group.
 // systemd exposes the cgroup path via `systemctl show -p ControlGroup`, and all
 // processes in it belong to the service — more complete than MainPID alone.
-// readFile defaults to os.ReadFile.
+// readFile defaults to hostfs.ReadFile.
 func CgroupPIDsContext(ctx context.Context, runner execx.Runner, readFile func(string) ([]byte, error), backend Backend, unit string) ([]int, bool) {
 	if backend != BackendSystemd {
 		return nil, false
 	}
 	runner = execx.RunnerOrDefault(runner)
 	if readFile == nil {
-		readFile = os.ReadFile
+		readFile = hostfs.ReadFile
 	}
 	res, err := runSystemctlShow(ctx, runner, defaultDetectTimeout, systemctlPropertyCGroup, unit)
 	if err != nil {
 		return nil, false
 	}
-	cgroup := strings.TrimSpace(res.Stdout)
-	if cgroup == "" || cgroup == "/" {
+	path, ok := cgroupProcsPath(strings.TrimSpace(res.Stdout))
+	if !ok {
 		return nil, false
 	}
 
-	data, err := readFile(filepath.Join(cgroupRoot, cgroup, "cgroup.procs"))
+	data, err := readFile(path)
 	if err != nil {
 		return nil, false
 	}
@@ -395,11 +394,15 @@ var openrcReloadDef = regexp.MustCompile(`(?m)` +
 // reload command. The script lives at /etc/init.d/<service>; an unreadable script
 // reports false (best-effort) so the caller falls back to its native reload.
 func (m openrcManager) SupportsReload(_ context.Context, service string) (bool, error) {
+	path, ok := openRCUnitPath(openRCInitDir, service)
+	if !ok {
+		return false, fmt.Errorf("invalid OpenRC unit %q", service)
+	}
 	read := m.readFile
 	if read == nil {
-		read = os.ReadFile
+		read = hostfs.ReadFile
 	}
-	data, err := read(filepath.Join(openRCInitDir, service))
+	data, err := read(path)
 	if err != nil {
 		return false, nil //nolint:nilerr // unreadable scripts mean reload support is unknown; callers fall back safely
 	}

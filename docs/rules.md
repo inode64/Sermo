@@ -663,7 +663,7 @@ counters. A disk answering from standby is the clearest case — `hdparm -t` wak
 it and times its spin-up, so it honestly reports a fraction of a MB/s for a disk
 that is perfectly healthy.
 
-Two check types grade their own findings when nothing declares `severity:`,
+Some check types grade their own findings when nothing declares `severity:`,
 because they mix a verdict with early-warning counters:
 
 - **`smart`** — a predicate that holds (`reallocated`, `pending_sectors`,
@@ -677,6 +677,11 @@ because they mix a verdict with early-warning counters:
   degraded controller, cache, battery, volume or drive, an inaccessible or
   inconsistent volume, unfinished parity or rebuild work, a drive's own SMART
   alert — is `error`, and outranks the advisories beside it.
+
+- **`lvm`** — a configured `free_pct` threshold alone is a `warning`, including
+  0 % free: the VG has little room to allocate or grow LVs, but its filesystems
+  can still have free space. Missing, partial or suspended volumes and thin-pool
+  capacity thresholds remain `error`; a volume fault outranks low VG headroom.
 
 A declared `severity:` on the watch, check or metric always wins over that
 grade: `severity: warning` keeps every finding an advisory, `severity: error`
@@ -809,6 +814,9 @@ available sample. A `tmux` check may set an absolute `socket:` to query a
 non-default server socket; `screen` has no `socket:` option. Command,
 permission, timeout and malformed-output failures are unavailable rather than
 reported as zero sessions.
+For informational terminal inventory attached to SSH, set `severity: warning`
+so an unavailable multiplexer remains visible without declaring SSH unavailable.
+A successful `reports: state` sample still has no effect on service health.
 
 ### Ports
 
@@ -2713,8 +2721,12 @@ detail so gradual degradation is visible.
   [Manual RAID reconstruction control](configuration.md#manual-raid-reconstruction-control).
 
 - **`lvm`** — Linux LVM health and capacity from read-only `lvs` JSON. It is a
-  health check: `ok` means the selected VG/LV is usable; `error` covers an absent,
-  partial or suspended LV, or a configured capacity threshold. Select a target
+  health check: `ok` means the selected VG/LV is usable and its configured
+  limits are respected. A breached `free_pct` threshold alone reports `warning` by
+  default, even at 0 %: VG allocation headroom is not filesystem free space.
+  `error` covers an absent, partial or suspended LV, a reported LV health fault,
+  or a configured thin-pool capacity threshold. Explicit `severity:` overrides
+  the default grade without changing the raw check verdict. Select a target
   with `volume_group` and optional `logical_volume`; `free_pct`, `thin_data_pct`
   and `thin_metadata_pct` are ordinary numeric predicates. Result readings
   include `health`, `volume_group`, `logical_volume`, `lvm_reasons`,
@@ -2735,8 +2747,8 @@ detail so gradual degradation is visible.
   ```
 
   `on_change` is LVM-only and sends one notification when the effective health
-  changes `ok → error` or `error → ok`; it does not notify repeatedly while an
-  error persists. Templates receive VG/LV, current and previous states, current
+  changes between `ok`, `warning` and `error`, including an advisory escalating
+  to a volume fault; it does not notify repeatedly while the same state persists. Templates receive VG/LV, current and previous states, current
   reasons and recovered reasons. Panic mode suppresses that delivery and records
   the state transition as a `panic-suppressed` event.
 

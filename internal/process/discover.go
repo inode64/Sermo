@@ -67,8 +67,10 @@ func (d Discoverer) resolveGroup() UserResolver {
 	return DefaultUserLookup().ResolveGroup
 }
 
-// Discover applies backend-provided PID seeds first, then pidfile and command
-// selectors, then adds descendants from the process tree, deduplicated by PID.
+// Discover applies backend-provided PID seeds and pidfiles first. When either
+// names a live process, command selectors only label members of those trees;
+// otherwise they discover roots across the snapshot. Descendants are included
+// and deduplicated by PID.
 // Non-fatal problems (missing pidfile, dead pid) are returned as warnings.
 func (d Discoverer) Discover(selectors []Selector) ([]Process, []string) {
 	reader := d.reader()
@@ -110,8 +112,17 @@ func (d Discoverer) Discover(selectors []Selector) ([]Process, []string) {
 	// 1. pidfiles.
 	pidfileClaimed, warnings := addPidfileSelectors(selectors, snapshot, add, hasBackendProcess)
 
-	// 2. command_match across the snapshot.
-	for _, pid := range idx.sorted {
+	// 2. An attributed process tree is stronger evidence than a shared exe/user.
+	// Scanning outside it would charge every PHP-FPM pool (or other instance)
+	// for its neighbours' memory and treat their processes as this unit's own.
+	candidates := idx.sorted
+	var children []int
+	if len(order) > 0 {
+		children = descendants(idx.children, order)
+		candidates = append(slices.Clone(order), children...)
+		slices.Sort(candidates)
+	}
+	for _, pid := range candidates {
 		id := snapshot[pid]
 		for i := range selectors {
 			if selectors[i].Type == SelectorCommandMatch && d.matches(&selectors[i], id, resolve) {
@@ -122,7 +133,10 @@ func (d Discoverer) Discover(selectors []Selector) ([]Process, []string) {
 	}
 
 	// 3. descendants from the process tree.
-	for _, pid := range descendants(idx.children, order) {
+	if children == nil {
+		children = descendants(idx.children, order)
+	}
+	for _, pid := range children {
 		add(snapshot[pid], RoleChild, SourceChild)
 	}
 
@@ -311,11 +325,11 @@ func (d Discoverer) StaleBinariesIn(attributed []Process, selectors []Selector) 
 			out = append(out, StaleBinary{PID: p.PID, Path: p.ExePrev})
 		}
 	}
-	// A live backend attribution (notably a systemd cgroup) is authoritative.
+	// A live backend or pidfile attribution is authoritative.
 	// The global deleted-exe fallback exists for backends such as OpenRC that
 	// cannot name their processes; using it alongside a live cgroup would claim
-	// an unrelated orphan merely because its old path and user match a selector.
-	if hasBackendAttribution(attributed) || !hasExeSelector(selectors) {
+	// an unrelated instance merely because its old path and user match a selector.
+	if hasProcessAttribution(attributed) || !hasExeSelector(selectors) {
 		return out
 	}
 
@@ -337,9 +351,9 @@ func (d Discoverer) StaleBinariesIn(attributed []Process, selectors []Selector) 
 	return out
 }
 
-func hasBackendAttribution(processes []Process) bool {
+func hasProcessAttribution(processes []Process) bool {
 	for _, proc := range processes {
-		if proc.Source == SourceBackend {
+		if proc.Source == SourceBackend || proc.Source == SelectorPidfile {
 			return true
 		}
 	}

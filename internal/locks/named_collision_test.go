@@ -14,8 +14,14 @@ import (
 func TestNamedLockNoCollisionWithDottedService(t *testing.T) {
 	l := namedLocker(t.TempDir(), fakeProc{})
 
-	named := l.path("web", "backup") // lock "backup" on service "web"
-	bare := l.path("web.backup", "") // bare lock for service "web.backup"
+	named, err := l.path("web", "backup") // lock "backup" on service "web"
+	if err != nil {
+		t.Fatal(err)
+	}
+	bare, err := l.path("web.backup", "") // bare lock for service "web.backup"
+	if err != nil {
+		t.Fatal(err)
+	}
 	if named == bare {
 		t.Fatalf("named %q and bare %q must not collide", named, bare)
 	}

@@ -2,6 +2,8 @@ name: lvm-vg0-root
 category: storage
 # Read-only LVM health and thin-pool capacity. Replace vg0/root with a detected
 # target; absence, partial or suspended volumes make the check unhealthy.
+# A free_pct threshold on its own grades low VG headroom as warning by default;
+# 0% unallocated extents does not mean that the filesystems are full.
 monitor: disabled
 interval: 1m
 check:
@@ -13,4 +15,4 @@ check:
 # With a configured notifier, add:
 # then:
 #   notify: [ops]
-#   notify_on: [on_change]  # only ok -> error and error -> ok
+#   notify_on: [on_change]  # changes between ok, warning and error

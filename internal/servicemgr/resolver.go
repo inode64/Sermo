@@ -3,7 +3,6 @@ package servicemgr
 import (
 	"context"
 	"fmt"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -43,6 +42,11 @@ func (r UnitResolver) Resolve(ctx context.Context, backend Backend, candidates [
 	var known []string
 	seenUnits := map[string]struct{}{}
 	for _, candidate := range candidates {
+		if backend == BackendOpenRC {
+			if _, ok := openRCUnitPath(openRCInitDir, candidate); !ok {
+				return "", fmt.Errorf("invalid OpenRC unit %q", candidate)
+			}
+		}
 		unit := candidate
 		if backend == BackendSystemd {
 			unit = systemdUnit(candidate)
@@ -83,7 +87,8 @@ func (r UnitResolver) knows(ctx context.Context, backend Backend, unit, candidat
 		res, err := execx.Run(ctx, runner, r.timeout(), cmdSystemctl, systemctlCmdCat, commandArgTerminator, unit)
 		return err == nil && res.ExitCode == execx.ExitCodeSuccess
 	case BackendOpenRC:
-		return probe.PathExists(filepath.Join(openRCInitDir, candidate))
+		path, ok := openRCUnitPath(openRCInitDir, candidate)
+		return ok && probe.PathExists(path)
 	default:
 		return false
 	}
