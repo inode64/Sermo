@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"sermo/internal/cfgval"
 	"sermo/internal/checks"
 	"sermo/internal/rules"
 )
@@ -85,4 +86,104 @@ func assertAlloyOTLPAlerts(t *testing.T, tree map[string]any) {
 		return
 	}
 	t.Fatal("enabled OTLP alert rule missing")
+}
+
+// TestAlloyCatalogRestartsOnSaturation pins the remediation shape adopted after
+// the 23-sep-2026 recurrence: an Alloy that leaked its descriptors alerted for
+// hours on fr1 and ca1 while the profile only knew how to alert, and the
+// operator's own restart left the previous incarnation alive because no
+// selector could name it. Saturation now restarts (the fds rule is the one
+// Sermo injects into every service), the restart can clear its residuals, and
+// the policy bounds the retries.
+func TestAlloyCatalogRestartsOnSaturation(t *testing.T) {
+	root := repoRoot(t)
+	body := catalogDocByName(t, root, "services", "alloy")
+	assertConservativeRemediationPolicy(t, "alloy", body)
+	if got := cfgval.String(nested(t, body, "stop_policy")["force_kill"]); got != "auto" {
+		t.Fatalf("alloy stop_policy.force_kill = %q, want auto", got)
+	}
+	reap := nested(t, body, "reap", "kill_only_if")
+	if len(cfgval.StringList(reap["users"])) == 0 || len(cfgval.StringList(reap["exe_any"])) == 0 {
+		t.Fatalf("alloy reap.kill_only_if must pair users and exe_any: %v", reap)
+	}
+
+	for _, tc := range []struct{ backend, user string }{
+		{backend: "systemd", user: "alloy"},
+		{backend: "openrc", user: "root"},
+	} {
+		t.Run(tc.backend, func(t *testing.T) {
+			global := writeConfig(t, map[string]string{
+				"sermo.yml":          "engine: {backend: " + tc.backend + "}\npaths: {services: [@ROOT@/services]}\ndefaults: {policy: {cooldown: 5m}}\n",
+				"services/alloy.yml": "name: alloy-main\nuses: alloy\nwatches:\n  otlp: {enabled: true}\n",
+			})
+			cfg, err := loadConfig(t, global, WithCatalogDirs(repoCatalogDir(root)))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if issues := Validate(cfg); len(issues) != 0 {
+				t.Fatal(issues)
+			}
+			resolved, errs := cfg.Resolve("alloy-main")
+			if len(errs) != 0 {
+				t.Fatal(errs)
+			}
+
+			procs := nested(t, resolved.Tree, "processes")
+			if len(procs) != 1 {
+				t.Fatalf("processes = %v, want exactly the selector of the active init backend", procs)
+			}
+			for name, raw := range procs {
+				sel, _ := raw.(map[string]any)
+				if got := cfgval.String(sel["exe"]); got != "/usr/bin/alloy" {
+					t.Fatalf("processes.%s.exe = %q, want /usr/bin/alloy", name, got)
+				}
+				if got := cfgval.String(sel["user"]); got != tc.user {
+					t.Fatalf("processes.%s.user = %q, want %q", name, got, tc.user)
+				}
+			}
+			if !cfgval.Bool(nested(t, resolved.Tree, "checks", "ready")["verify"]) {
+				t.Fatal("checks.ready must verify the restart (verify: true)")
+			}
+
+			parsed, warnings := rules.ParseRules(resolved.Tree)
+			if len(warnings) != 0 {
+				t.Fatal(warnings)
+			}
+			for _, want := range []string{"restart-if-fds-high", "ready", "otlp"} {
+				rule := ruleByName(t, parsed, want)
+				if rule.Type != rules.RuleRemediation {
+					t.Fatalf("rule %s type = %s, want %s", want, rule.Type, rules.RuleRemediation)
+				}
+				var restarts, explained bool
+				for _, action := range rule.Actions {
+					if action.Type == rules.ActionRestart {
+						restarts = true
+					}
+					if action.Message != "" {
+						explained = true
+					}
+				}
+				if !restarts || !explained {
+					t.Fatalf("rule %s actions = %v, want a restart and a message telling the operator why", want, rule.Actions)
+				}
+			}
+			if _, stale := nested(t, resolved.Tree, "rules")["alert-if-fds-high"]; stale {
+				t.Fatal("alert-if-fds-high must not survive next to the injected restart-if-fds-high")
+			}
+			if got := cfgval.String(nested(t, resolved.Tree, "checks", "fds")["value"]); got != "80%" {
+				t.Fatalf("checks.fds.value = %q, want the injected default 80%%", got)
+			}
+		})
+	}
+}
+
+func ruleByName(t *testing.T, parsed []rules.Rule, name string) rules.Rule {
+	t.Helper()
+	for _, rule := range parsed {
+		if rule.Name == name {
+			return rule
+		}
+	}
+	t.Fatalf("rule %s missing", name)
+	return rules.Rule{}
 }

@@ -2194,24 +2194,43 @@ func TestCatalogServiceIOAlertsShareOneCeiling(t *testing.T) {
 	})
 }
 
-// TestCatalogDelegatedWorkloadServicesDoNotSumFDs keeps a summed fd count out of
-// the services whose control group holds workload the daemon does not own, where
-// the sum describes the workload rather than the daemon.
-func TestCatalogDelegatedWorkloadServicesDoNotSumFDs(t *testing.T) {
-	root := repoRoot(t)
-	for _, service := range []string{"libvirtd", "virtnetworkd", "docker", "containerd"} {
-		body := catalogDocByName(t, root, "services", service)
-		watches, _ := body["watches"].(map[string]any)
-		for name, raw := range watches {
-			entry, ok := raw.(map[string]any)
-			if !ok {
-				continue
+// TestCatalogFDsSensorFollowsProcessOwnership pins where the injected fds
+// sensor (checks.fds + restart-if-fds-high) lands. Every daemon whose processes
+// discovery can attribute gets it with the packaged default, so a leak like the
+// collector's is caught fleet-wide without a per-profile watch; a service whose
+// control group holds workload it does not own — delegated container shims,
+// sessions, bricks, or the hypervisor helpers libvirtd opts out of with
+// fds_limit: false — gets nothing, because the process closest to its own
+// limit would then describe the workload rather than the daemon.
+func TestCatalogFDsSensorFollowsProcessOwnership(t *testing.T) {
+	for _, service := range []string{"nginx", "apache", "mariadb", "redis", "alloy", "exim", "named"} {
+		t.Run(service, func(t *testing.T) {
+			resolved := resolveCatalogService(t, service, "systemd")
+			check := nested(t, resolved.Tree, sectionChecks, fdsCheckName)
+			if got := cfgval.String(check["value"]); got != defaultFDsLimit {
+				t.Fatalf("%s checks.fds.value = %q, want %s", service, got, defaultFDsLimit)
 			}
-			check, _ := entry["check"].(map[string]any)
-			if cfgval.String(check["name"]) == "fds" && cfgval.String(check["scope"]) == "service" {
-				t.Errorf("%s: watch %s sums fds over a control group holding delegated workload", service, name)
+			rule := nested(t, resolved.Tree, rules.SectionRules, fdsRuleName)
+			if got := ruleActionTypes(t, rule); len(got) != 2 || got[1] != "restart" {
+				t.Fatalf("%s %s actions = %v, want alert then restart", service, fdsRuleName, got)
 			}
-		}
+			if _, legacy := nested(t, resolved.Tree, rules.SectionRules)["alert-if-fds-high"]; legacy {
+				t.Fatalf("%s still ships its own alert-if-fds-high next to the injected sensor", service)
+			}
+		})
+	}
+	for _, service := range []string{"libvirtd", "virtnetworkd", "docker", "containerd", "glusterd", "ssh"} {
+		t.Run(service, func(t *testing.T) {
+			resolved := resolveCatalogService(t, service, "systemd")
+			checksMap, _ := resolved.Tree[sectionChecks].(map[string]any)
+			if _, has := checksMap[fdsCheckName]; has {
+				t.Fatalf("%s: fds sensor injected over a control group holding delegated workload", service)
+			}
+			ruleMap, _ := resolved.Tree[rules.SectionRules].(map[string]any)
+			if _, has := ruleMap[fdsRuleName]; has {
+				t.Fatalf("%s: %s injected over a control group holding delegated workload", service, fdsRuleName)
+			}
+		})
 	}
 }
 

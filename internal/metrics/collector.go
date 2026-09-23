@@ -694,6 +694,15 @@ func (p *fdPeak) observeProcess(r fdLimitReader, pid int, count uint64) {
 	if !ok || limit == 0 {
 		return
 	}
+	// A process cannot open more descriptors than its soft limit allows, so a
+	// count above the limit means the limit was lowered after the descriptors
+	// were opened: a privilege-separated child that sandboxed itself (sshd's
+	// pre-authentication sessions set RLIMIT_NOFILE to 1 while holding six).
+	// Such a process is not about to fail accept(); reading it as 600% would
+	// make every service with a sandboxed helper look exhausted.
+	if count > limit {
+		return
+	}
 	pct := float64(count) / float64(limit) * PercentScale
 	if !p.ok || pct > p.pct {
 		p.pct, p.ok = pct, true

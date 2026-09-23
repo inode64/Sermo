@@ -22,12 +22,17 @@ func resolveWatchService(t *testing.T, body string) (map[string]any, []string) {
 		t.Fatalf("Load: %v", err)
 	}
 	resolved, errs := cfg.Resolve("svc")
-	// Every service gets the stale-binary check and rule injected; these tests
-	// are about watch desugaring, so the sections under test are read without
-	// them.
-	for section, injected := range map[string]string{sectionChecks: staleBinaryCheckName, rules.SectionRules: staleBinaryRuleName} {
+	// Every service gets the stale-binary and fds checks and rules injected;
+	// these tests are about watch desugaring, so the sections under test are
+	// read without them.
+	for section, injected := range map[string][]string{
+		sectionChecks:      {staleBinaryCheckName, fdsCheckName},
+		rules.SectionRules: {staleBinaryRuleName, fdsRuleName},
+	} {
 		if entries, ok := resolved.Tree[section].(map[string]any); ok {
-			delete(entries, injected)
+			for _, name := range injected {
+				delete(entries, name)
+			}
 			if len(entries) == 0 {
 				delete(resolved.Tree, section)
 			}

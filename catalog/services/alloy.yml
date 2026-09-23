@@ -22,14 +22,52 @@ variables:
   # to. It is probed with an empty POST: a healthy receiver answers 4xx, and
   # any answer proves accept() still works.
   otlp_port: 4318
-  # Share of a process's soft open-files limit above which a sustained level
-  # alerts. Alloy leaked one socket per accepted OTLP connection until it hit
-  # 32761 of 32768 and stopped accepting anything, while its own API kept
-  # answering over the connections it already held.
-  fds_limit: 80%
   config: /etc/alloy/config.alloy
   stability_level: generally-available
+  # Real UID Alloy runs as. Packaged systemd units run it as `alloy`; the
+  # OpenRC script runs it as `command_user` from /etc/conf.d/alloy, root
+  # unless the host says otherwise. Override the variable of your backend
+  # when the host deviates.
+  user: alloy
+  openrc_user: root
 pidfile: /run/alloy.pid
+# One exact identity per init backend, so a restart can verify the live
+# process and signal a residual of the previous incarnation. A supervisor
+# restart that leaves the old Alloy alive keeps :4318 bound and the new one
+# starts without its OTLP receiver ("address already in use"), which it never
+# retries; the selector is what lets the stop phase clear that survivor.
+processes:
+  main:
+    exe: ${alloy_binary}
+    user: ${user}
+    enable_if:
+      init: systemd
+  main-openrc:
+    exe: ${alloy_binary}
+    user: ${openrc_user}
+    enable_if:
+      init: openrc
+stop_policy:
+  force_kill: auto
+  term_timeout: 10s
+  kill_timeout: 5s
+# A previous incarnation reparented to PID 1 but still counted against the
+# unit is a stray a restart cannot clear; `sermoctl reap alloy --apply` may
+# signal it, and only an Alloy binary owned by one of its users.
+reap:
+  kill_only_if:
+    users:
+      - ${user}
+      - ${openrc_user}
+    exe_any:
+      - ${alloy_binary}
+policy:
+  cooldown: 15m
+  max_actions: 2
+  max_actions_window: 1h
+  backoff:
+    initial: 15m
+    max: 1h
 preflight:
   config:
     type: command
@@ -56,21 +94,30 @@ watches:
       url: http://${host}:${port}/-/ready
       expect_status: 200
       timeout: 5s
+      verify: true
     for:
       duration: 2m
     then:
-      action: alert
+      action: restart
       message: >-
-        During ${rule.duration}, ${display_name} readiness endpoint http://${host}:${port}/-/ready stayed unreachable or not ready
+        During ${rule.duration}, ${display_name} readiness endpoint http://${host}:${port}/-/ready stayed unreachable or not ready; restarting ${display_name}
   metrics:
     check:
       type: http
       url: http://${host}:${port}/metrics
       expect_status: 200
       timeout: 5s
+  # Descriptor exhaustion is covered by the fds sensor Sermo injects into every
+  # service (restart-if-fds-high at fds_limit, 80% by default): Alloy leaked one
+  # socket per accepted OTLP connection until it hit 32761 of 32768 and stopped
+  # accepting anything while its own API kept answering.
   # An empty POST is not a valid export, so a healthy receiver answers 400 or
   # 415; what matters is that it answers at all instead of timing out behind a
   # full listen backlog. Enable only on instances running an OTLP/HTTP receiver.
+  # A receiver that stops answering stalls every local exporter for its whole
+  # timeout, so the collector is restarted; the policy bounds the retries when
+  # the cause is downstream (a Loki that rejects every push) and a restart only
+  # buys time.
   otlp:
     enabled: false
     check:
@@ -83,20 +130,6 @@ watches:
     for:
       duration: 2m
     then:
-      action: alert
+      action: restart
       message: >-
-        During ${rule.duration}, ${display_name} OTLP receiver on port ${otlp_port} stopped answering; local exporters are timing out
-  alert-if-fds-high:
-    check:
-      type: metric
-      scope: service
-      name: fds
-      op: '>'
-      value: ${fds_limit}
-      optional: true
-    for:
-      duration: 3m
-    then:
-      action: alert
-      message: >-
-        During ${rule.duration}, ${display_name} file descriptor usage stayed above ${check.threshold} of a process's open-files limit (current ${check.value}); it will stop accepting connections at 100%
+        During ${rule.duration}, ${display_name} OTLP receiver on port ${otlp_port} stopped answering and local exporters are timing out; restarting ${display_name}
