@@ -17,7 +17,7 @@ func openRCBackendPIDs(unit string, readFile func(string) ([]byte, error)) func(
 	if readFile == nil {
 		readFile = hostfs.ReadFile
 	}
-	if unit == "" || unit == "." || unit == ".." || filepath.Base(unit) != unit || strings.ContainsAny(unit, "/\\\x00") {
+	if _, ok := openRCUnitPath(openRCInitDir, unit); !ok {
 		return func() []int { return nil }
 	}
 	info := detectOpenRCProc(readFile, unit)

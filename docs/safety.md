@@ -293,6 +293,13 @@ security policy that permits them.
 
 ## Locks
 
+Service and lock names must be single identifiers without path separators or
+`.` / `..` components. Before joining a lock filename to its runtime directory,
+Sermo also checks that it is local and contains no directory components or NUL
+bytes. Invalid names fail without reading or deleting a lock. The runtime
+directory is trusted operator configuration and must not be writable by
+untrusted users.
+
 Every removal (owner release, explicit release or stale reclamation) requires
 exclusive directory locking. Contention fails promptly without removing the lock;
 a failure to acquire exclusion never permits an unlocked removal. Each new lock
@@ -435,6 +442,11 @@ Kill decisions depend on how process facts are read, so this is fixed:
 Discovery order: backend information (systemd MainPID/cgroup; OpenRC status)
 → configured pidfiles → `processes:` selectors → child process tree from
 `/proc`, deduplicated by PID.
+Cgroup paths must be canonical absolute hierarchy paths below the cgroup root;
+the root itself and paths containing traversal components provide no PID
+ownership evidence. OpenRC unit names must be single local filenames before
+Sermo probes init scripts, configuration, runtime metadata or reload support.
+Invalid names are rejected even when the resolver trusts an unprobed unit.
 For `pidfiles:` maps, each pidfile role must be backed by a same-named
 `processes:` selector with exact `exe` and `user`; the pidfile is evidence, not
 a name-only authority.

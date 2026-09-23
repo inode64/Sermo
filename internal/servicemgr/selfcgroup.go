@@ -1,9 +1,10 @@
 package servicemgr
 
 import (
-	"os"
 	"path/filepath"
 	"strings"
+
+	"sermo/internal/hostfs"
 )
 
 const (
@@ -25,11 +26,11 @@ const (
 // `.scope` alongside the operator's shell and sshd, and treating those as its
 // own processes would be catastrophic — so the answer there is "no", not a guess.
 //
-// readFile defaults to os.ReadFile; it is injectable so callers can test without
+// readFile defaults to hostfs.ReadFile; it is injectable so callers can test without
 // a real /proc and /sys.
 func SelfUnitCgroupPIDs(readFile func(string) ([]byte, error)) (pids []int, unit string, ok bool) {
 	if readFile == nil {
-		readFile = os.ReadFile
+		readFile = hostfs.ReadFile
 	}
 	data, err := readFile(selfCgroupPath)
 	if err != nil {
@@ -41,7 +42,11 @@ func SelfUnitCgroupPIDs(readFile func(string) ([]byte, error)) (pids []int, unit
 	if path == "" || !strings.HasSuffix(path, systemdServiceSuffix) {
 		return nil, "", false
 	}
-	procs, err := readFile(filepath.Join(cgroupRoot, path, "cgroup.procs"))
+	procsPath, valid := cgroupProcsPath(path)
+	if !valid {
+		return nil, "", false
+	}
+	procs, err := readFile(procsPath)
 	if err != nil {
 		return nil, "", false
 	}

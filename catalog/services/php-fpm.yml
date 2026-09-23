@@ -122,15 +122,3 @@ stop_policy:
       - root
     exe_any:
       - ${binary}
-# Enable after configuring the pool's ping/status endpoint.
-rules:
-  alert-if-listen-queue-high:
-    enabled: false
-    type: alert
-    if:
-      failed: { check: fpm }
-    for:
-      duration: 2m
-    then:
-      action: alert
-      message: ${display_name} pool is unavailable or its listen queue remains above ${listen_queue_max}

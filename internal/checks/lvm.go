@@ -15,6 +15,8 @@ const (
 	lvsCommand = "lvs"
 	// LVMHealthOK is the normalised healthy state exposed by the LVM check.
 	LVMHealthOK = "ok"
+	// LVMHealthWarning reports low VG allocation headroom without an LV fault.
+	LVMHealthWarning = "warning"
 	// LVMHealthError is the normalised failing state exposed by the LVM check.
 	LVMHealthError = "error"
 	// LVMNotifyOnChange is the state-transition selector for LVM watches.
@@ -77,12 +79,20 @@ func (c *lvmCheck) Run(ctx context.Context) Result {
 	}
 	values := lvmValues(row)
 	reasons := lvmReasons(row)
-	if len(c.preds) > 0 && levelPredsHold(c.preds, values) {
-		reasons = append(reasons, "capacity_threshold")
-	}
 	health := LVMHealthOK
 	if len(reasons) > 0 {
 		health = LVMHealthError
+	}
+	if len(c.preds) > 0 && levelPredsHold(c.preds, values) {
+		// Free extents are allocation headroom, not filesystem free space. A
+		// fully allocated VG can have healthy LVs; thin-pool capacity and actual
+		// volume faults still require the error grade.
+		if health == LVMHealthOK && len(c.preds) == 1 && c.preds[0].field == DataKeyLVMFreePct {
+			health = LVMHealthWarning
+		} else {
+			health = LVMHealthError
+		}
+		reasons = append(reasons, "capacity_threshold")
 	}
 	vg, lv := c.resultTarget(row)
 	message := fmt.Sprintf("lvm %s health=%s", lvmTargetLabel(vg, lv), health)
@@ -106,6 +116,9 @@ func (c *lvmCheck) selectRow(report lvmReport) (lvmRow, bool) {
 
 func (c *lvmCheck) finish(start time.Time, row lvmRow, health, reasons string, values map[string]float64, message string) Result {
 	r := c.result(health == LVMHealthOK, message, start)
+	if c.severity == "" && health == LVMHealthWarning {
+		r.Severity = SeverityWarning
+	}
 	vg, lv := c.resultTarget(row)
 	r.Data = map[string]any{DataKeyHealth: health, DataKeyLVMReasons: reasons, DataKeyVolumeGroup: vg, DataKeyLogicalVolume: lv}
 	if state, progress, hasProgress := lvmDeviceState(row); state != "" {

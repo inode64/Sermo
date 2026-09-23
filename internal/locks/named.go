@@ -3,7 +3,6 @@ package locks
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 )
@@ -49,7 +48,10 @@ func (l NamedLocker) Release(service, name string) error {
 	if err := validateLockIDs(service, name); err != nil {
 		return err
 	}
-	path := l.path(service, name)
+	path, err := l.path(service, name)
+	if err != nil {
+		return err
+	}
 	unlock, err := lockReclaimDir(path)
 	if err != nil {
 		if isMissingLock(err) {
@@ -72,7 +74,10 @@ func (l NamedLocker) ReleaseInactive(service, name string) (Lock, error) {
 		return Lock{}, err
 	}
 	proc, now := procNowDefaults(l.Proc, l.Now)
-	path := l.path(service, name)
+	path, err := l.path(service, name)
+	if err != nil {
+		return Lock{}, err
+	}
 	existing, err := readLockFile(path)
 	if err != nil {
 		if isMissingLock(err) {
@@ -102,7 +107,7 @@ func (l NamedLocker) ReleaseInactive(service, name string) (Lock, error) {
 	return toLock(current, path, state, reason), fmt.Errorf("lock %s changed while releasing; retry", LockID(service, name))
 }
 
-func (l NamedLocker) path(service, name string) string {
+func (l NamedLocker) path(service, name string) (string, error) {
 	file := service
 	if name != "" {
 		// Use a separator that validateIdentifier forbids in both a service and a
@@ -111,7 +116,7 @@ func (l NamedLocker) path(service, name string) string {
 		// service literally named "a.b.x" would both resolve to a.b.x.lock.
 		file = service + lockNameSep + name
 	}
-	return filepath.Join(l.Dir, file+lockSuffix)
+	return lockPath(l.Dir, file+lockSuffix)
 }
 
 func (l NamedLocker) identity() (int, uint64) {
@@ -131,7 +136,10 @@ func (l NamedLocker) acquire(service, name, reason string, ttl time.Duration, ow
 		return nil, fmt.Errorf("create locks dir %s: %w", l.Dir, err)
 	}
 
-	path := l.path(service, name)
+	path, err := l.path(service, name)
+	if err != nil {
+		return nil, err
+	}
 	ol, err := acquireExclusive(path, lockFile{
 		Service: service, Name: name, Reason: reason, OwnerPID: ownerPID, OwnerStartTicks: ownerTicks,
 	}, ttl, proc, now, nil)

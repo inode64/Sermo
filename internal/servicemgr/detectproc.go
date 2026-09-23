@@ -4,7 +4,6 @@ import (
 	"cmp"
 	"context"
 	"maps"
-	"os"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -12,6 +11,7 @@ import (
 	"unicode"
 
 	"sermo/internal/execx"
+	"sermo/internal/hostfs"
 )
 
 const (
@@ -135,7 +135,7 @@ func DetectProcInfo(ctx context.Context, runner execx.Runner, readFile func(stri
 	}
 	runner = execx.RunnerOrDefault(runner)
 	if readFile == nil {
-		readFile = os.ReadFile
+		readFile = hostfs.ReadFile
 	}
 	switch backend {
 	case BackendSystemd:
@@ -164,7 +164,11 @@ func detectSystemdProc(ctx context.Context, runner execx.Runner, unit string) Pr
 
 func detectOpenRCProc(readFile func(string) ([]byte, error), unit string) ProcInfo {
 	var blob strings.Builder
-	for _, path := range []string{filepath.Join(openRCInitDir, unit), filepath.Join(openRCConfDir, unit)} {
+	for _, dir := range []string{openRCInitDir, openRCConfDir} {
+		path, ok := openRCUnitPath(dir, unit)
+		if !ok {
+			return ProcInfo{}
+		}
 		if data, err := readFile(path); err == nil {
 			blob.Write(data)
 			blob.WriteByte(serviceOutputLineByte)
@@ -201,7 +205,11 @@ func detectOpenRCProc(readFile func(string) ([]byte, error), unit string) ProcIn
 }
 
 func detectOpenRCRuntimeProc(readFile func(string) ([]byte, error), unit string) ProcInfo {
-	data, err := readFile(filepath.Join(openRCDaemonsDir, unit, "001"))
+	dir, ok := openRCUnitPath(openRCDaemonsDir, unit)
+	if !ok {
+		return ProcInfo{}
+	}
+	data, err := readFile(filepath.Join(dir, "001"))
 	if err != nil {
 		return ProcInfo{}
 	}

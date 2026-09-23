@@ -3,6 +3,7 @@ package process
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"testing"
@@ -778,5 +779,60 @@ func TestAbsentPidfileWarningCarriesTheStableSuffix(t *testing.T) {
 	}
 	if len(UncertainWarnings(warnings)) != 0 {
 		t.Fatalf("a missing pidfile must classify as proven absence: %v", warnings)
+	}
+}
+
+func TestDiscoverAttributedInstanceExcludesSharedExecutable(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		backend []int
+		pidfile string
+		want    []int
+	}{
+		{name: "backend", backend: []int{100, 102}, want: []int{100, 101, 102}},
+		{name: "pidfile", pidfile: "100", want: []int{100, 101}},
+		{name: "dead backend falls back", backend: []int{999}, want: []int{100, 101, 200, 201}},
+		{name: "dead pidfile falls back", pidfile: "999", want: []int{100, 101, 200, 201}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			d := Discoverer{
+				Reader: fakeReader{ids: map[int]Identity{
+					100: {PID: 100, PPID: 1, UID: 0, Exe: testExe, ExeOK: true},
+					101: {PID: 101, PPID: 100, UID: 33, Exe: testExe, ExeOK: true},
+					102: {PID: 102, PPID: 1, UID: 33, Exe: "/opt/sermo-test/helper", ExeOK: true},
+					200: {PID: 200, PPID: 1, UID: 0, Exe: testExe, ExeOK: true},
+					201: {PID: 201, PPID: 200, UID: 33, Exe: testExe, ExeOK: true},
+					300: {PID: 300, PPID: 1, UID: 0, ExePrev: testExe},
+				}},
+				ResolveUser: fakeUsers(map[string]uint32{"root": 0, "www-data": 33}),
+				BackendPIDs: func() []int { return tc.backend },
+			}
+			selectors := []Selector{
+				{Name: "master", Type: SelectorCommandMatch, Exe: testExe, User: "root"},
+				{Name: "workers", Type: SelectorCommandMatch, Exe: testExe, User: "www-data"},
+			}
+			if tc.pidfile != "" {
+				path := filepath.Join(t.TempDir(), "instance.pid")
+				if err := os.WriteFile(path, []byte(tc.pidfile), 0o600); err != nil {
+					t.Fatal(err)
+				}
+				selectors = append(selectors, Selector{Name: "main", Type: SelectorPidfile, Paths: []string{path}})
+			}
+			procs, _ := d.Discover(selectors)
+			if got := pidsOf(procs); !slices.Equal(got, tc.want) {
+				t.Fatalf("instance pids = %v, want %v", got, tc.want)
+			}
+			if len(tc.want) < 4 && len(d.StaleBinariesIn(procs, selectors)) != 0 {
+				t.Fatal("another instance's replaced executable must not require this instance to restart")
+			}
+			for _, proc := range procs {
+				if proc.PID == 101 && proc.Role != "workers" {
+					t.Fatalf("owned worker lost its selector role: %+v", proc)
+				}
+				if proc.PID == 102 && !proc.Stray {
+					t.Fatalf("unclaimed cgroup member must remain visible as a stray: %+v", proc)
+				}
+			}
+		})
 	}
 }

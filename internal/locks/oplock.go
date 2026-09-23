@@ -114,7 +114,10 @@ func (l OperationLocker) Acquire(service string, ttl time.Duration) (*Handle, er
 		return nil, fmt.Errorf("create ops dir %s: %w", l.Dir, err)
 	}
 
-	path := filepath.Join(l.Dir, service+lockSuffix)
+	path, err := lockPath(l.Dir, service+lockSuffix)
+	if err != nil {
+		return nil, err
+	}
 	pid, ticks := self()
 
 	var onReclaim func(string)

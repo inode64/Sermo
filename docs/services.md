@@ -991,6 +991,14 @@ there is no unique exact identity, leave the helper unselected. A broad helper
 selector can cross-attribute another unit's live process as a residual and safely
 block the restart.
 
+When the init backend or a pidfile identifies a live process, discovery stays
+within those attributed process trees (including all backend cgroup members).
+Selectors label processes inside that scope instead of adding other instances
+that happen to share an executable and user. This keeps per-instance memory,
+CPU and replaced-binary notices separate. With no live backend or pidfile root,
+selectors still discover processes across the host; shared executables need a
+restrictive instance-specific `cmd` for that fallback.
+
 These feed monitoring **and** the residual reaper, so a richer selector lets a
 stop catch and kill more leftovers (an unkillable residual stays
 `orphan_processes`). The `process` *check* still matches by `exe`/`user` only.
@@ -1912,7 +1920,7 @@ watches:
 ```
 
 PHP-FPM's `fpm` check compares the current `listen_queue` with
-`variables.listen_queue_max` (default `0`). Enable its sustained alert after
+`variables.listen_queue_max` (default `0`). Add a sustained alert after
 configuring the pool's `ping.path` and `pm.status_path`; the rule reuses the
 existing check. The cumulative `max_children_reached` counter is informational,
 since an old peak alone does not indicate current saturation.
@@ -1930,10 +1938,18 @@ watches:
       optional: false
 rules:
   alert-if-listen-queue-high:
-    enabled: true
+    type: alert
+    if:
+      failed: { check: fpm }
+    for: { duration: 2m }
+    then:
+      action: alert
+      message: PHP-FPM ping/status is unavailable or its listen queue is high
 ```
 
-The rule alerts after two minutes of failed checks, including unavailable
+The catalog leaves this rule opt-in so installations that disable the `fpm`
+watch have no dangling check reference. Remove the rule when disabling that
+watch. The rule alerts after two minutes of failed checks, including unavailable
 ping/status endpoints. No pool configuration is changed by Sermo. For deeper
 database checks, use an account restricted to monitoring; see
 [`mysql-query-health.yml`](../examples/services/mysql-query-health.yml) for an
