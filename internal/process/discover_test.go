@@ -864,3 +864,27 @@ func TestDiscoverAttributedInstanceExcludesSharedExecutable(t *testing.T) {
 		})
 	}
 }
+
+func TestObserveAnyStateLiveMatchWinsOverZombies(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		live Identity
+		want string
+	}{
+		{name: "matching live process", live: Identity{PID: 101, UID: 110, Exe: testExe, ExeOK: true, State: "S"}, want: StateRunning},
+		{name: "wrong live owner", live: Identity{PID: 101, UID: 999, Exe: testExe, ExeOK: true, State: "S"}, want: StateZombie},
+		{name: "unresolved live executable", live: Identity{PID: 101, UID: 110, Exe: testExe, State: "S"}, want: StateZombie},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			d := Discoverer{Reader: fakeReader{ids: map[int]Identity{
+				100: {PID: 100, UID: 110, Exe: testExe, ExeOK: true, State: ProcStateZombie},
+				101: tc.live,
+			}}, ResolveUser: fakeUsers(map[string]uint32{"mysql": 110})}
+			for range 20 {
+				if got := d.ObserveAnyState([]string{testExe}, "mysql"); got != tc.want {
+					t.Fatalf("state = %q, want %q", got, tc.want)
+				}
+			}
+		})
+	}
+}
