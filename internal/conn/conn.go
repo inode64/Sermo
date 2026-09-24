@@ -307,10 +307,9 @@ const (
 const DefaultPortLibvirt = defaultPortLibvirt
 
 const (
-	fallbackXID32 = 0x53524d4f // "SRMO"
-	networkTCP    = TransportTCP
-	networkUDP    = TransportUDP
-	networkUnix   = netutil.NetworkUnix
+	networkTCP  = TransportTCP
+	networkUDP  = TransportUDP
+	networkUnix = netutil.NetworkUnix
 	// networkUnixgram is the datagram Unix-socket network. Only chronyd's command
 	// socket needs it: it is SOCK_DGRAM, so the stream networkUnix cannot reach it.
 	networkUnixgram = "unixgram"
@@ -567,13 +566,10 @@ func readGreetingLine(r io.Reader) (string, error) {
 	return strings.TrimRight(line, protocolTrimCRLF), nil
 }
 
-// randXID32 returns a random 32-bit transaction id with a fixed fallback when
-// the system RNG fails, shared by the rpcbind/nfs and dhcp probes.
+// randXID32 returns a random 32-bit transaction id for the RPC and DHCP probes.
 func randXID32() uint32 {
 	var b [xid32Bytes]byte
-	if _, err := rand.Read(b[:]); err != nil {
-		return fallbackXID32
-	}
+	_, _ = rand.Read(b[:])
 	return binary.BigEndian.Uint32(b[:])
 }
 

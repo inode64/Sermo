@@ -155,10 +155,7 @@ func smbNegotiate(ctx context.Context, target probeTarget) (dialect uint16, sign
 	}
 	defer func() { _ = c.Close() }()
 
-	req, err := buildSMBNegotiate()
-	if err != nil {
-		return 0, false, err
-	}
+	req := buildSMBNegotiate()
 	if _, err := c.Write(req); err != nil {
 		return 0, false, probeErr(ProtocolNameSMB, stepSMBNegotiateRequest, err)
 	}
@@ -195,15 +192,11 @@ func parseSMBNegotiate(resp []byte) (uint16, bool, error) {
 // buildSMBNegotiate builds a direct-TCP-framed SMB2 NEGOTIATE request offering
 // dialects 2.0.2..3.1.1 (with the mandatory pre-auth integrity context for
 // 3.1.1).
-func buildSMBNegotiate() ([]byte, error) {
+func buildSMBNegotiate() []byte {
 	var guid [smbProtocolIDBytes * 4]byte
-	if _, err := rand.Read(guid[:]); err != nil {
-		return nil, probeErr(ProtocolNameSMB, stepSMBClientGUID, err)
-	}
+	_, _ = rand.Read(guid[:])
 	var salt [smb2PreauthSaltBytes]byte
-	if _, err := rand.Read(salt[:]); err != nil {
-		return nil, probeErr(ProtocolNameSMB, stepSMBPreauthSalt, err)
-	}
+	_, _ = rand.Read(salt[:])
 	dialects := [smb2NegotiateDialectCount]uint16{smb2Dialect202, smb2Dialect210, smb2Dialect300, smb2Dialect302, smb2Dialect311}
 
 	var b bytes.Buffer
@@ -248,7 +241,7 @@ func buildSMBNegotiate() ([]byte, error) {
 	frame[smbDirectTCPLengthHighOffset] = byte(smb2NegotiateRequestBytes >> smbLengthHighShift)
 	frame[smbDirectTCPLengthMiddleOffset] = byte(smb2NegotiateRequestBytes >> smbLengthByteShift)
 	frame[smbDirectTCPLengthLowOffset] = byte(smb2NegotiateRequestBytes)
-	return append(frame, msg...), nil
+	return append(frame, msg...)
 }
 
 func smbDialectName(d uint16) string {

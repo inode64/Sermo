@@ -29,7 +29,6 @@ const (
 	openvpnOpcodeOffset             = 0
 	openvpnPacketIDBytes            = 4
 	openvpnSessionIDBytes           = 8
-	openvpnSessionIDFallback        = "OPENVPN_"
 	openvpnTCPFrameHeaderBytes      = 2
 	openvpnClientResetCapacityBytes = 14
 	openvpnEmptyACKLength           = 0
@@ -82,9 +81,7 @@ func (openvpnProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 // openvpnSessionID returns a random 8-byte OpenVPN session id.
 func openvpnSessionID() []byte {
 	b := make([]byte, openvpnSessionIDBytes)
-	if _, err := rand.Read(b); err != nil {
-		copy(b, openvpnSessionIDFallback)
-	}
+	_, _ = rand.Read(b)
 	return b
 }
 
