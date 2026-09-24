@@ -4,15 +4,12 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strconv"
-	"strings"
 
 	"sermo/internal/process"
 )
 
 const (
-	procPIDStatFile       = "stat"
 	procStatRunStateIndex = 0
 )
 
@@ -57,17 +54,8 @@ func defaultZombieSampler() (uint64, bool) {
 // or "" if it cannot be read. The comm field may contain spaces and parentheses,
 // so the state is the first token after the final ')'.
 func procRunState(pid int) string {
-	data, err := os.ReadFile(filepath.Join(procRootPath, strconv.Itoa(pid), procPIDStatFile))
-	if err != nil {
-		return ""
-	}
-	s := string(data)
-	paren := strings.LastIndex(s, ")")
-	if paren < 0 {
-		return ""
-	}
-	fields := strings.Fields(s[paren+1:])
-	if len(fields) <= procStatRunStateIndex {
+	fields, ok := process.StatFields(pid)
+	if !ok || len(fields) <= procStatRunStateIndex {
 		return ""
 	}
 	return fields[procStatRunStateIndex]
