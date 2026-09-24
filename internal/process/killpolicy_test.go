@@ -2,6 +2,8 @@ package process
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -235,5 +237,28 @@ func TestEnableAutomaticReapingIgnoresDelegatedSelectors(t *testing.T) {
 	})
 	if got.ForceKill {
 		t.Fatalf("policy = %+v, want force kill disabled: a delegated selector authorizes nothing", got)
+	}
+}
+
+func TestPreparedKillSelectorPinsExecutableIdentity(t *testing.T) {
+	dir := t.TempDir()
+	oldExe, newExe, link := filepath.Join(dir, "old"), filepath.Join(dir, "new"), filepath.Join(dir, "current")
+	for _, path := range []string{oldExe, newExe} {
+		if err := os.WriteFile(path, nil, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.Symlink(oldExe, link); err != nil {
+		t.Fatal(err)
+	}
+	selector := NewKillSelector([]string{"mysql"}, []string{link})
+	if err := os.Remove(link); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(newExe, link); err != nil {
+		t.Fatal(err)
+	}
+	if !selector.exeMatches(oldExe) || selector.exeMatches(newExe) {
+		t.Fatal("a symlink change must not widen the prepared authority")
 	}
 }

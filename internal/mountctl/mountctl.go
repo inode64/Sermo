@@ -202,8 +202,7 @@ func SpecFromStorageTree(name string, tree map[string]any) Spec {
 	}
 	if sp, ok := mount[config.MountKeyStopPolicy].(map[string]any); ok {
 		if koi, ok := sp[config.StopPolicyKeyKillOnlyIf].(map[string]any); ok {
-			spec.KillOnlyIf.Users = cfgval.StringList(koi[config.StopPolicyKeyUsers])
-			spec.KillOnlyIf.ExeAny = cfgval.StringList(koi[config.StopPolicyKeyExeAny])
+			spec.KillOnlyIf = process.NewKillSelector(cfgval.StringList(koi[config.StopPolicyKeyUsers]), cfgval.StringList(koi[config.StopPolicyKeyExeAny]))
 		}
 	}
 	return spec
