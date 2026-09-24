@@ -16,9 +16,19 @@ import (
 // only if its real UID matches one of Users AND its resolved exe exactly matches
 // one of ExeAny.
 type KillSelector struct {
-	Users  []string
-	ExeAny []string
-	pairs  []killIdentity
+	Users    []string
+	ExeAny   []string
+	pairs    []killIdentity
+	exePaths []string
+}
+
+// NewKillSelector resolves executable identities once for an immutable policy.
+func NewKillSelector(users, exes []string) KillSelector {
+	s := KillSelector{Users: slices.Clone(users), ExeAny: slices.Clone(exes), exePaths: make([]string, len(exes))}
+	for i, exe := range exes {
+		s.exePaths[i] = canonicalizePath(exe)
+	}
+	return s
 }
 
 // killIdentity keeps an automatic residual-reaping identity paired. Keeping
@@ -155,6 +165,9 @@ func protectedKernelProcess(pid, ppid int, exeOK bool, cmdline []string) bool {
 }
 
 func (s KillSelector) exeMatches(exe string) bool {
+	if s.exePaths != nil {
+		return slices.Contains(s.exePaths, exe)
+	}
 	for _, candidate := range s.ExeAny {
 		if canonicalizePath(candidate) == exe {
 			return true
@@ -200,8 +213,7 @@ func ParseStopPolicy(tree map[string]any) (KillPolicy, []string) {
 		}
 	}
 	if koi, ok := sp[StopPolicyKeyKillOnlyIf].(map[string]any); ok {
-		policy.KillOnlyIf.Users = cfgval.StringList(koi[StopPolicyKeyUsers])
-		policy.KillOnlyIf.ExeAny = cfgval.StringList(koi[StopPolicyKeyExeAny])
+		policy.KillOnlyIf = NewKillSelector(cfgval.StringList(koi[StopPolicyKeyUsers]), cfgval.StringList(koi[StopPolicyKeyExeAny]))
 		if !cfgval.IsNonEmptyStringList(koi[StopPolicyKeyUsers]) || !cfgval.IsNonEmptyStringList(koi[StopPolicyKeyExeAny]) {
 			warnings = append(warnings, SectionStopPolicy+"."+StopPolicyKeyKillOnlyIf+" must define both "+StopPolicyKeyUsers+" and "+StopPolicyKeyExeAny+", each non-empty")
 		}
@@ -245,8 +257,7 @@ func ParseReapPolicy(tree map[string]any) (KillSelector, []string) {
 			warnings = append(warnings, ReapKillOnlyIfPath+"."+key+" is not supported; it accepts "+ReapKeyUsers+" and "+ReapKeyExeAny)
 		}
 	}
-	selector.Users = cfgval.StringList(koi[ReapKeyUsers])
-	selector.ExeAny = cfgval.StringList(koi[ReapKeyExeAny])
+	selector = NewKillSelector(cfgval.StringList(koi[ReapKeyUsers]), cfgval.StringList(koi[ReapKeyExeAny]))
 	if !selector.Configured() {
 		// Return the empty selector, not the partial one: a half-written selector
 		// must authorize nothing rather than whatever half it does carry.
