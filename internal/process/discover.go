@@ -480,13 +480,17 @@ func (d Discoverer) CountInTree(selectors []Selector, user, exe, exeDir string) 
 		return 0
 	}
 	procs, _ := d.Discover(selectors)
-	n := 0
-	for i := range procs {
-		if f.matchesProcess(&procs[i]) {
-			n++
-		}
+	return f.count(procs)
+}
+
+// CountIn counts a discovered process set using the same optional identity
+// filters as CountInTree, without performing another discovery.
+func (d Discoverer) CountIn(procs []Process, user, exe, exeDir string) int {
+	f, ok := d.buildProcessFilter(user, exe, exeDir)
+	if !ok {
+		return 0
 	}
-	return n
+	return f.count(procs)
 }
 
 // processFilter is the resolved user/exe/exe_dir predicate shared by the
@@ -516,6 +520,16 @@ func (d Discoverer) buildProcessFilter(user, exe, exeDir string) (processFilter,
 		f.dir = canonicalizePath(exeDir)
 	}
 	return f, true
+}
+
+func (f processFilter) count(procs []Process) int {
+	n := 0
+	for i := range procs {
+		if f.matchesProcess(&procs[i]) {
+			n++
+		}
+	}
+	return n
 }
 
 func (f processFilter) match(uid uint32, exeOK bool, exe string) bool {
