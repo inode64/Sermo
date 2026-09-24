@@ -111,10 +111,6 @@ func (id NetIdentity) empty() bool {
 	return id == NetIdentity{}
 }
 
-// NetIdentityFunc reports the identity sysfs holds for an interface. Injected
-// for tests; the default reads /sys/class/net/<iface>.
-type NetIdentityFunc func(iface string) NetIdentity
-
 // NetSample is one observation of a network interface.
 type NetSample struct {
 	State      string // "up" | "down"
@@ -154,8 +150,6 @@ type netCheck struct {
 	value    float64
 	sampler  NetSamplerFunc
 
-	identity NetIdentityFunc
-
 	primed       bool
 	lastState    string
 	lastSpeed    int64
@@ -184,9 +178,6 @@ func (c *netCheck) Run(_ context.Context) Result {
 		return res
 	}
 	identity := s.Identity
-	if identity.empty() {
-		identity = resolveNetIdentity(c.identity, c.iface)
-	}
 	if !identity.empty() {
 		c.lastIdentity = identity
 	}
@@ -283,14 +274,6 @@ func (c *netCheck) netResult(ok bool, message string, data map[string]any, start
 // defaultNetSampler reads interface flags and /sys/class/net/<iface>.
 func defaultNetSampler(iface string) (NetSample, error) {
 	return sampleNetFromSysfs(iface, SysfsNetClassPath)
-}
-
-// defaultNetIdentity reads what sysfs publishes about one interface. A physical
-// port answers driver and bus through its `device` symlink; a virtual one has
-// no such link and names itself in `uevent` instead. Reading both covers every
-// interface type in one pass with no device-type branching.
-func defaultNetIdentity(iface string) NetIdentity {
-	return netIdentityFromSysfs(iface, SysfsNetClassPath)
 }
 
 func netIdentityFromSysfs(iface, root string) NetIdentity {
@@ -431,16 +414,6 @@ func ReadTextFile(path string) string {
 		return ""
 	}
 	return string(data)
-}
-
-// resolveNetIdentity reads an interface's identity through the injected reader,
-// falling back to sysfs. A sampler supplied by a test may leave Identity unset,
-// and identity is not the sampler's job to invent.
-func resolveNetIdentity(fn NetIdentityFunc, iface string) NetIdentity {
-	if fn != nil {
-		return fn(iface)
-	}
-	return defaultNetIdentity(iface)
 }
 
 // identityData maps an interface's identity onto its result keys.
