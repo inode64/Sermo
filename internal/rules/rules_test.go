@@ -823,3 +823,58 @@ func TestRulePrimaryAction(t *testing.T) {
 		t.Fatalf("Primary = %+v, want restart", got)
 	}
 }
+
+func TestGuardSharesCycleProbeResults(t *testing.T) {
+	for _, tc := range []struct {
+		name        string
+		result      execx.Result
+		err         error
+		wantBlocked bool
+		wantError   bool
+	}{
+		{name: "blocking", result: execx.Result{ExitCode: 0}, wantBlocked: true},
+		{name: "not blocking", result: execx.Result{ExitCode: 1}},
+		{name: "unavailable", result: execx.Result{ExitCode: execx.ExitCodeRunFailure}, err: errors.New("probe unavailable"), wantError: true},
+		{name: "timeout", result: execx.Result{ExitCode: execx.ExitCodeRunFailure}, err: context.DeadlineExceeded, wantError: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			runner := execxtest.Fixed(tc.result, tc.err)
+			condition := map[string]any{"command": map[string]any{"command": []any{"probe"}}}
+			guard := []Rule{{Name: "guard", Type: RuleGuard, If: condition, Blocks: []string{"restart"}}}
+			for cycle := 1; cycle <= 2; cycle++ {
+				ev := &Evaluator{Deps: checks.Deps{Runner: runner, DefaultTimeout: time.Second}}
+				for range 2 {
+					blocked, _, err := Guard(context.Background(), guard, "restart", ev)
+					if blocked != tc.wantBlocked || (err != nil) != tc.wantError {
+						t.Fatalf("Guard = %v, %v", blocked, err)
+					}
+				}
+				if ev.FailOnUnavailable {
+					t.Fatal("guard policy leaked into ordinary evaluation")
+				}
+				if got, err := ev.Eval(context.Background(), condition); err != nil || got != tc.wantBlocked {
+					t.Fatalf("ordinary Eval = %v, %v", got, err)
+				}
+				if got := runner.Count("probe"); got != cycle {
+					t.Fatalf("probe calls = %d, want one per cycle (%d)", got, cycle)
+				}
+			}
+		})
+	}
+}
+
+func TestGuardRetainsInitiallyAbsentNamedCache(t *testing.T) {
+	calls := 0
+	ev := &Evaluator{ResolveRef: func(context.Context, string) (checks.Result, bool, error) {
+		calls++
+		return checks.Result{OK: true}, true, nil
+	}}
+	condition := map[string]any{"active": map[string]any{"check": "probe"}}
+	guard := []Rule{{Name: "guard", Type: RuleGuard, If: condition, Blocks: []string{"restart"}}}
+	if blocked, _, err := Guard(context.Background(), guard, "restart", ev); err != nil || !blocked {
+		t.Fatalf("Guard = %v, %v", blocked, err)
+	}
+	if !evalNode(t, ev, condition) || calls != 1 {
+		t.Fatalf("named probe was not reused: calls = %d", calls)
+	}
+}
