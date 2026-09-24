@@ -1537,11 +1537,14 @@ func (c *Config) mergedService(name string, chain []string) (map[string]any, err
 			if base == nil {
 				return nil, fmt.Errorf("service %q uses catalog service %q with no document", name, catalogName)
 			}
-			merged = mergeMaps(merged, stripMeta(base.Body))
+			merged = mergeMaps(merged, base.Body)
 		}
 	}
 
-	merged = mergeMaps(merged, stripMeta(doc.Body))
+	merged = mergeMaps(merged, doc.Body)
+	for key := range metaKeys {
+		delete(merged, key)
+	}
 	applyDeletes(merged)
 	return merged, nil
 }

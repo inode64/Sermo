@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sermo/internal/cfgval"
+	"slices"
 	"strings"
 )
 
@@ -43,8 +44,9 @@ func pruneEnableIf(v any, path []string, backend string) any {
 	}
 }
 
+// pruneEnableIfMap consumes a private resolution tree. Callers must clone shared documents first.
 func pruneEnableIfMap(tree map[string]any, path []string, backend string) map[string]any {
-	out := make(map[string]any, len(tree))
+	out := tree
 	for key, value := range tree {
 		childPath := appendPath(path, key)
 		if child, ok := value.(map[string]any); ok {
@@ -54,9 +56,9 @@ func pruneEnableIfMap(tree map[string]any, path []string, backend string) map[st
 					continue
 				}
 				if !enableIfHolds(spec, backend) {
+					delete(out, key)
 					continue // predicate failed: drop the optional branch
 				}
-				child = cloneMap(child)
 				delete(child, keyEnableIf)
 				out[key] = pruneEnableIfMap(child, childPath, backend)
 				continue
@@ -214,6 +216,23 @@ func enableIfPredicateMatches(m map[string]any, val string) bool {
 	}
 	if pat := cfgval.String(m[keyEnableIfMatches]); pat != "" {
 		return regexp.MustCompile(pat).MatchString(val)
+	}
+	return false
+}
+
+func containsEnableIf(value any) bool {
+	switch v := value.(type) {
+	case map[string]any:
+		if _, found := v[keyEnableIf]; found {
+			return true
+		}
+		for _, child := range v {
+			if containsEnableIf(child) {
+				return true
+			}
+		}
+	case []any:
+		return slices.ContainsFunc(v, containsEnableIf)
 	}
 	return false
 }
