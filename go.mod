@@ -4,7 +4,7 @@ go 1.27.1
 
 require (
 	github.com/OpenPrinting/goipp v1.2.0
-	github.com/beevik/ntp v1.5.0
+	github.com/beevik/ntp v1.6.0
 	github.com/cloudsoda/go-smb2 v0.0.0-20260918041005-0c5d69b69701
 	github.com/digitalocean/go-libvirt v0.0.0-20260814190004-1a83157e1858
 	github.com/go-ldap/ldap/v3 v3.4.14
