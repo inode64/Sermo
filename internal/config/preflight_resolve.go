@@ -21,16 +21,15 @@ const resourceExecutableModeMask = 0o111
 // resource preflight entries narrow candidate lists to the path valid for their
 // type, and command exports declare variables with their configured defaults.
 // Command execution itself stays out of config resolution.
-func prepareExpansionInputs(tree map[string]any) []string {
-	errs := resolvePreflightResourceVariables(tree)
+func prepareExpansionInputs(tree map[string]any) {
+	resolvePreflightResourceVariables(tree)
 	applyCommandExportDefaults(tree)
-	return errs
 }
 
-func resolvePreflightResourceVariables(tree map[string]any) []string {
+func resolvePreflightResourceVariables(tree map[string]any) {
 	preflight, ok := tree[sectionPreflight].(map[string]any)
 	if !ok {
-		return nil
+		return
 	}
 	for _, name := range slices.Sorted(maps.Keys(preflight)) {
 		entry, ok := preflight[name].(map[string]any)
@@ -62,7 +61,6 @@ func resolvePreflightResourceVariables(tree map[string]any) []string {
 			entry[checks.CheckKeyPath] = selected
 		}
 	}
-	return nil
 }
 
 func ensureVariables(tree map[string]any) map[string]any {
