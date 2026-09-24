@@ -798,7 +798,7 @@ func (e Engine) runBackendAction(ctx context.Context, result *Result, action str
 func (e Engine) ensureServiceHealthy(ctx context.Context, result *Result, action string, final bool) (healthy, settled bool) {
 	status, err := e.Manager.Status(ctx, e.Unit)
 	if err != nil {
-		return true, true
+		return failPhase(ctx, result, timeoutDuring(action+" status"), "status after "+action+": ", err), true
 	}
 	if status.Status == servicemgr.StatusFailed {
 		result.Status, result.Message = ResultFailed, "service failed after "+action
