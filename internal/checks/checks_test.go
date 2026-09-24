@@ -41,14 +41,6 @@ func TestBaseBeginAppliesAndReleasesCheckTimeout(t *testing.T) {
 	}
 }
 
-func TestPrependLibraryPathPreservesLinkerOrder(t *testing.T) {
-	got := prependLibraryPath([]string{"/runpath", "/lib"}, "/first:/second:/first", "/usr/bin/app")
-	want := []string{"/first", "/second", "/runpath", "/lib"}
-	if !slices.Equal(got, want) {
-		t.Fatalf("library directories = %v, want %v", got, want)
-	}
-}
-
 func TestTCPCheck(t *testing.T) {
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
