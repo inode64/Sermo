@@ -29,7 +29,6 @@ import (
 
 type fakeSLAReader struct {
 	service map[string][]state.SLAValue
-	check   map[string][]state.SLAValue
 	// series is keyed by service for the service-level series and by
 	// service\x00check for one check's, the same convention check uses.
 	series map[string][]state.SLAPoint
@@ -61,10 +60,6 @@ func (f fakeSLAReader) SLAReport(service string, _ time.Time) ([]state.SLAValue,
 
 func (f fakeSLAReader) SLASeries(service string, _, _ time.Time) ([]state.SLAPoint, error) {
 	return f.series[service], nil
-}
-
-func (f fakeSLAReader) CheckSLAReport(service, check string, _ time.Time) ([]state.SLAValue, error) {
-	return f.check[service+"\x00"+check], nil
 }
 
 func (f fakeSLAReader) CheckSLASeries(service, check string, _, _ time.Time) ([]state.SLAPoint, error) {

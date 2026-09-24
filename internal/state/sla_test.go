@@ -106,7 +106,7 @@ func TestSLAPercentText(t *testing.T) {
 	}
 }
 
-func TestCheckSLAReportAndSeries(t *testing.T) {
+func TestCheckSLASeries(t *testing.T) {
 	s := openTemp(t)
 	now := time.Date(2026, 6, 7, 12, 0, 0, 0, time.UTC)
 
@@ -118,17 +118,6 @@ func TestCheckSLAReportAndSeries(t *testing.T) {
 	}
 	if err := s.RecordCheckSLA(slaTestService, "tcp", true, now.Add(-2*time.Minute)); err != nil {
 		t.Fatalf("RecordCheckSLA other check: %v", err)
-	}
-
-	report, err := s.CheckSLAReport(slaTestService, "http", now)
-	if err != nil {
-		t.Fatalf("CheckSLAReport: %v", err)
-	}
-	if len(report) != len(SLAWindows) {
-		t.Fatalf("report has %d windows, want %d", len(report), len(SLAWindows))
-	}
-	if ratio, ok := report[0].Ratio(); !ok || ratio != 0.5 {
-		t.Fatalf("hour ratio = %.2f ok=%v, want 0.50 true", ratio, ok)
 	}
 
 	points, err := s.CheckSLASeries(slaTestService, "http", now.Add(-time.Hour), now)
