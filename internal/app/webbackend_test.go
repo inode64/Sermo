@@ -2951,3 +2951,16 @@ func TestWebBackendSmartServiceCheckAdvertisesOnlyObservedMetrics(t *testing.T) 
 		t.Fatalf("SMART service metrics = %+v, want only temperature", got.Metrics)
 	}
 }
+
+func TestReloadSupportRefreshHasDeadline(t *testing.T) {
+	entry := &webEntry{reloadSupported: func(ctx context.Context) (bool, error) {
+		deadline, ok := ctx.Deadline()
+		if !ok || time.Until(deadline) <= 0 || time.Until(deadline) > serviceInitQueryTimeout {
+			t.Fatalf("deadline=%v present=%v", deadline, ok)
+		}
+		return true, nil
+	}}
+	if supported, err := entry.reloadSupportSnapshot(t.Context(), time.Now(), true); !supported || err != nil {
+		t.Fatalf("supported=%v err=%v", supported, err)
+	}
+}
