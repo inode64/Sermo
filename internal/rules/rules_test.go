@@ -878,3 +878,48 @@ func TestGuardRetainsInitiallyAbsentNamedCache(t *testing.T) {
 		t.Fatalf("named probe was not reused: calls = %d", calls)
 	}
 }
+
+func TestCheckResolverFactoryKeepsResultsWithinEachPass(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		result execx.Result
+		err    error
+	}{
+		{name: "success"},
+		{name: "failed predicate", result: execx.Result{ExitCode: 1}},
+		{name: "unavailable", result: execx.Result{ExitCode: execx.ExitCodeRunFailure}, err: errors.New("cannot execute")},
+		{name: "timeout", result: execx.Result{ExitCode: execx.ExitCodeRunFailure}, err: context.DeadlineExceeded},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			runner := execxtest.Fixed(tc.result, tc.err)
+			built, warnings := checks.Build(map[string]any{
+				"probe": map[string]any{"type": "command", "command": []any{"probe"}},
+			}, checks.Deps{Runner: runner, DefaultTimeout: time.Second})
+			if len(warnings) != 0 {
+				t.Fatal(warnings)
+			}
+			factory := NewCheckResolverFactory(built, 1)
+			for pass := 1; pass <= 2; pass++ {
+				resolve := factory()
+				for range 2 {
+					result, found, err := resolve(t.Context(), "probe")
+					if err != nil || !found || result.Check != "probe" {
+						t.Fatalf("resolve = %+v, %v, %v", result, found, err)
+					}
+					if result.OK != (tc.result.ExitCode == 0 && tc.err == nil) || result.Unavailable != (tc.err != nil) {
+						t.Fatalf("resolver changed probe outcome: %+v", result)
+					}
+				}
+				if _, found, err := resolve(t.Context(), "unknown"); found || err != nil {
+					t.Fatalf("unknown = %v, %v", found, err)
+				}
+				if got := runner.Count("probe"); got != pass {
+					t.Fatalf("runs = %d, want %d", got, pass)
+				}
+			}
+		})
+	}
+	if NewCheckResolverFactory(nil, 1)() != nil {
+		t.Fatal("empty check set must have no resolver")
+	}
+}

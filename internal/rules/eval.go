@@ -66,28 +66,37 @@ type RefResolver func(context.Context, string) (checks.Result, bool, error)
 // are memoized inside the returned resolver, so a referenced preflight check runs
 // at most once for the caller's evaluation pass.
 func NewCheckResolver(built []checks.Built, maxParallel int) RefResolver {
-	if len(built) == 0 {
-		return nil
-	}
+	return NewCheckResolverFactory(built, maxParallel)()
+}
+
+// NewCheckResolverFactory indexes built checks once, returning a factory whose
+// resolvers each retain results for one evaluation pass. A worker keeps the
+// factory across cycles; a configuration reload constructs a new factory.
+func NewCheckResolverFactory(built []checks.Built, maxParallel int) func() RefResolver {
 	byName := make(map[string]checks.Built, len(built))
 	for _, b := range built {
 		byName[b.Check.Name()] = b
 	}
-	memo := make(map[string]checks.Result, len(built))
-	return func(ctx context.Context, name string) (checks.Result, bool, error) {
-		if res, ok := memo[name]; ok {
-			return res, true, nil
+	return func() RefResolver {
+		if len(byName) == 0 {
+			return nil
 		}
-		b, ok := byName[name]
-		if !ok {
-			return checks.Result{}, false, nil
+		memo := make(map[string]checks.Result, len(byName))
+		return func(ctx context.Context, name string) (checks.Result, bool, error) {
+			if res, ok := memo[name]; ok {
+				return res, true, nil
+			}
+			b, ok := byName[name]
+			if !ok {
+				return checks.Result{}, false, nil
+			}
+			results := checks.Run(ctx, []checks.Built{b}, maxParallel)
+			if len(results) == 0 {
+				return checks.Result{}, true, fmt.Errorf("check %q produced no result", name)
+			}
+			memo[name] = results[0]
+			return results[0], true, nil
 		}
-		results := checks.Run(ctx, []checks.Built{b}, maxParallel)
-		if len(results) == 0 {
-			return checks.Result{}, true, fmt.Errorf("check %q produced no result", name)
-		}
-		memo[name] = results[0]
-		return results[0], true, nil
 	}
 }
 
