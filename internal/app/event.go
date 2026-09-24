@@ -234,12 +234,8 @@ func SlogEmitter(logger *slog.Logger) func(Event) {
 		// it is the one thing that belongs at warn level.
 		case eventKindWarning:
 			logger.Warn(daemonName, attrs...)
-		case eventKindAction, eventKindAlert, eventKindSuppressed, eventKindFiring, eventKindRecovered, eventKindDryRun, eventKindHook, eventKindNotify, eventKindCascade,
-			eventKindExpand, eventKindExpandSkipped, eventKindKill, eventKindReload, eventKindPanicSuppressed, eventKindNotifySuppressed,
-			eventKindMakeStep, eventKindMakeStepSkipped:
-			logger.Info(daemonName, attrs...)
 		default:
-			logger.Debug(daemonName, attrs...)
+			logger.Info(daemonName, attrs...)
 		}
 	}
 }
