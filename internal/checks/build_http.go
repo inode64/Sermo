@@ -204,7 +204,7 @@ func configureHTTPBodyAssertion(check *httpCheck, entry map[string]any) string {
 	if !ok {
 		return "http expect_body must be an {op, value} mapping"
 	}
-	op, value, err := parseAssertionOpValue(fields, CheckKeyExpectBody, "", false)
+	op, value, err := ParseAssertion(fields, CheckKeyExpectBody, "", false)
 	if err != nil {
 		return "http " + err.Error()
 	}
@@ -357,7 +357,7 @@ func parseStatusMatcher(v any) (statusMatcher, error) {
 	}
 	// Operator form: {op, value} (e.g. status < 500).
 	if cond, ok := v.(map[string]any); ok {
-		op, value, err := parseAssertionOpValue(cond, CheckKeyExpectStatus, "", false)
+		op, value, err := ParseAssertion(cond, CheckKeyExpectStatus, "", false)
 		if err != nil {
 			return statusMatcher{}, err
 		}

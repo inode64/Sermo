@@ -256,16 +256,12 @@ func buildReplicationCheck(b base, entry map[string]any) (Check, string) {
 		engine:     engine,
 		connection: cfgval.AsString(entry[CheckKeyConnection]),
 	}
-	if m, ok := entry[CheckKeyBehind].(map[string]any); ok {
-		op := cfgval.AsString(m[CheckKeyOp])
-		if !cfgval.IsCompareOp(op) {
-			return nil, "replication check behind has an invalid op (" + cfgval.CompareOpSummary + ")"
-		}
-		v, err := parseFiniteThreshold(m[CheckKeyValue])
+	if raw, present := entry[CheckKeyBehind]; present {
+		var err error
+		check.behindOp, check.behindValue, err = ParsePredicate(CheckKeyBehind, raw)
 		if err != nil {
-			return nil, "replication check behind value " + err.Error()
+			return nil, "replication check " + err.Error()
 		}
-		check.behindOp, check.behindValue = op, v
 	}
 	cfg := sqlConnConfig(SQLEngineMySQL, entry)
 	check.sample = func(ctx context.Context) ([]replicationRow, error) {

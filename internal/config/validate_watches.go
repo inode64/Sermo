@@ -767,22 +767,7 @@ func validateICMPMetricCondition(prefix, metric string, m map[string]any, add ad
 	case checks.NetMetricState:
 		validateStateMetric(prefix, m, add)
 	case checks.IcmpMetricLatency:
-		th, hasT := m[checks.CheckKeyThreshold].(map[string]any)
-		ch, hasC := m[checks.CheckKeyChange].(map[string]any)
-		if !hasT && !hasC {
-			add("%s requires threshold {op, value} or change {delta}", prefix)
-		}
-		if hasT && hasC {
-			add("%s must set only one of threshold or change", prefix)
-		}
-		if hasT {
-			validateOpNumeric(prefix+".threshold", th, add)
-		}
-		if hasC {
-			if _, ok := cfgval.Float(cfgval.String(ch[checks.CheckKeyDelta])); !ok {
-				add("%s.change delta %q must be numeric", prefix, cfgval.String(ch[checks.CheckKeyDelta]))
-			}
-		}
+		validateParsedCheck(prefix, checks.ValidateICMPLatency(m), add)
 	default:
 		add("%s is not a supported icmp metric (%s)", prefix, checks.ICMPMetricSummary)
 	}

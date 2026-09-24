@@ -1,6 +1,7 @@
 package checks
 
 import (
+	"errors"
 	"slices"
 	"strings"
 
@@ -98,25 +99,37 @@ func parseExpectedMetric(entry map[string]any, metric, summary string, allowed .
 	return expect, ""
 }
 
+// ValidateICMPLatency validates the latency condition with the builder's pure
+// parser. No ICMP packets are sent during validation or construction.
+func ValidateICMPLatency(entry map[string]any) error {
+	if warning := configureICMPLatency(&icmpCheck{}, entry); warning != "" {
+		return errors.New(warning)
+	}
+	return nil
+}
+
 func configureICMPLatency(check *icmpCheck, entry map[string]any) string {
-	threshold, hasThreshold := entry[CheckKeyThreshold].(map[string]any)
-	change, hasChange := entry[CheckKeyChange].(map[string]any)
+	threshold, hasThreshold := entry[CheckKeyThreshold]
+	change, hasChange := entry[CheckKeyChange]
+	if hasThreshold && hasChange {
+		return "icmp latency must set only one of threshold or change"
+	}
 	if !hasThreshold && !hasChange {
 		return "icmp latency requires threshold {op, value} or change {delta}"
 	}
 	if hasThreshold {
-		op := cfgval.AsString(threshold[CheckKeyOp])
-		if !cfgval.IsCompareOp(op) {
-			return "icmp latency threshold has an invalid op"
-		}
-		value, err := parseFiniteThreshold(threshold[CheckKeyValue])
+		op, value, err := ParsePredicate(CheckKeyThreshold, threshold)
 		if err != nil {
-			return "icmp latency threshold value " + err.Error()
+			return "icmp latency " + err.Error()
 		}
 		check.hasThreshold, check.op, check.value = true, op, value
 		return ""
 	}
-	delta, err := parseFiniteThreshold(change[CheckKeyDelta])
+	fields, ok := change.(map[string]any)
+	if !ok {
+		return "icmp latency change must be a mapping {delta}"
+	}
+	delta, err := parseFiniteThreshold(fields[CheckKeyDelta])
 	if err != nil {
 		return "icmp latency change delta " + err.Error()
 	}

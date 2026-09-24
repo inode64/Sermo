@@ -23,10 +23,10 @@ checks:
 	mustHave(t, bad, "no-regex log check requires a regex")
 	mustHave(t, bad, "bad-regex log check regex is invalid")
 	mustHave(t, bad, "no-count log check requires a count {op, value}")
-	mustHave(t, bad, `bad-op.count has an invalid op "=>"`)
-	mustHave(t, bad, `bad-val.count value "lots" must be numeric`)
-	mustHave(t, bad, "no-within.within is required")
-	mustHave(t, bad, `bad-within.within "nope" must be a valid positive duration`)
+	mustHave(t, bad, `bad-op count has an invalid op "=>"`)
+	mustHave(t, bad, `bad-val count value "lots" must be numeric`)
+	mustHave(t, bad, "no-within within is required")
+	mustHave(t, bad, `bad-within within "nope" must be a valid positive duration`)
 
 	good := validateService(t, `
 name: svc

@@ -53,7 +53,7 @@ func TestAssertOpValueRequiresValueBeforeNumericValidation(t *testing.T) {
 		CheckKeyOp:    ">",
 		CheckKeyValue: "",
 	}, "postgres-query")
-	if warn != "postgres-query check requires a value" {
+	if warn != "postgres-query check value is required" {
 		t.Fatalf("warning = %q", warn)
 	}
 }

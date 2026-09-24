@@ -1,7 +1,6 @@
 package checks
 
 import (
-	"errors"
 	"fmt"
 	"maps"
 	"regexp"
@@ -76,12 +75,9 @@ func (m valueMatcher) compare(result string) (bool, error) {
 // value valid for that op. noun is the check label used in the error strings
 // (e.g. "influxdb-query", "mongodb-query"); errMsg is empty on success.
 func assertOpValue(entry map[string]any, noun string) (op, value, errMsg string) {
-	op, value, err := parseAssertionOpValue(entry, "", "", true)
+	op, value, err := ParseAssertion(entry, noun+" check", "", true)
 	if err != nil {
-		if errors.Is(err, errAssertionValueRequired) {
-			return "", "", noun + " check requires a value"
-		}
-		return "", "", noun + " check " + err.Error()
+		return "", "", err.Error()
 	}
 	return op, value, ""
 }
@@ -135,7 +131,7 @@ func ParseOutputMatcher(v any) (OutputMatcher, string) {
 	case string:
 		return OutputMatcher{Substring: t}, ""
 	case map[string]any:
-		op, value, err := parseAssertionOpValue(t, "", "", false)
+		op, value, err := ParseAssertion(t, "", "", false)
 		if err != nil {
 			return OutputMatcher{}, err.Error()
 		}
@@ -273,20 +269,18 @@ func parseExpectLatency(entry map[string]any) (op, value, warn string) {
 	if !ok {
 		return "", "", ""
 	}
-	op, value, err := parseAssertionOpValue(lat, CheckKeyExpectLatency, "", false)
+	op, value, err := ParseAssertion(lat, CheckKeyExpectLatency, "", false)
 	if err != nil {
 		return "", "", err.Error()
 	}
 	return op, value, ""
 }
 
-// parseAssertionOpValue reads and validates an {op, value} comparison. label
+// ParseAssertion reads and validates an {op, value} comparison. label
 // names the containing field in diagnostics; defaultOp applies when op is
 // intentionally optional for a specific assertion form. requireValue preserves
 // the stricter query-check contract for an explicitly non-empty value.
-var errAssertionValueRequired = errors.New("assertion value required")
-
-func parseAssertionOpValue(entry map[string]any, label, defaultOp string, requireValue bool) (op, value string, err error) {
+func ParseAssertion(entry map[string]any, label, defaultOp string, requireValue bool) (op, value string, err error) {
 	op = cfgval.AsString(entry[CheckKeyOp])
 	if op == "" {
 		op = defaultOp
@@ -296,11 +290,11 @@ func parseAssertionOpValue(entry map[string]any, label, defaultOp string, requir
 		if label != "" {
 			prefix = label + " "
 		}
-		return "", "", fmt.Errorf("%sop must be one of %s", prefix, cfgval.AssertOpSummary)
+		return "", "", fmt.Errorf("%sop %q is not one of %s", prefix, op, cfgval.AssertOpSummary)
 	}
 	value = cfgval.String(entry[CheckKeyValue])
 	if requireValue && value == "" {
-		return "", "", errAssertionValueRequired
+		return "", "", fmt.Errorf("%s value is required", label)
 	}
 	if err := ValidateAssertionValue(label, op, value); err != nil {
 		return "", "", err
@@ -349,7 +343,7 @@ func parseAssertionMap(v any, field string) ([]jsonAssertion, string) {
 	for _, path := range slices.Sorted(maps.Keys(m)) {
 		raw := m[path]
 		if cond, ok := raw.(map[string]any); ok {
-			op, value, err := parseAssertionOpValue(cond, field+"."+path, cfgval.CompareOpEqual, false)
+			op, value, err := ParseAssertion(cond, field+"."+path, cfgval.CompareOpEqual, false)
 			if err != nil {
 				return nil, err.Error()
 			}
