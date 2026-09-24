@@ -39,8 +39,10 @@ func validateEmailConfig(entry map[string]any) []ValidationIssue {
 	switch {
 	case dsn == "":
 		issues = append(issues, ValidationIssue{Field: KeyDSN, Suffix: " is required for an email notifier"})
-	case !strings.HasPrefix(dsn, EmailDSNPrefixSMTP) && !strings.HasPrefix(dsn, EmailDSNPrefixSMTPS):
-		issues = append(issues, ValidationIssue{Field: KeyDSN, Suffix: " must be an smtp:// or smtps:// URL"})
+	default:
+		if _, err := parseEmailDSN(dsn); err != nil {
+			issues = append(issues, ValidationIssue{Field: KeyDSN, Suffix: ": " + err.Error()})
+		}
 	}
 	if cfgval.String(entry[KeyFrom]) == "" {
 		issues = append(issues, ValidationIssue{Field: KeyFrom, Suffix: " is required for an email notifier"})
