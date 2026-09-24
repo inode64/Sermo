@@ -51,12 +51,6 @@ const (
 	postflightRetryInterval = time.Second
 )
 
-// Manager is the service-manager contract used by the operation engine.
-// Staged restart uses Stop+Start so residual processes can be handled between
-// the phases; services explicitly configured for native restart use Restart
-// atomically.
-type Manager = servicemgr.Manager
-
 // Engine performs the section-18 flow for one service over injected capability
 // closures. A nil closure means that capability is absent (e.g. no preflight
 // section), which is treated as a pass.
@@ -72,7 +66,7 @@ type Engine struct {
 	StopArtifacts StopArtifacts
 
 	ConfigError error
-	Manager     Manager
+	Manager     servicemgr.Manager
 	AcquireLock func(ttl time.Duration) (release func() error, err error)
 	LockTTL     time.Duration
 	NamedLocks  func() ([]locks.Lock, error)
@@ -133,13 +127,8 @@ type StopArtifacts struct {
 	PidfilePaths []string
 	Files        []string
 	CleanEnabled bool
-	Clean        []CleanPath
+	Clean        []config.CleanPath
 }
-
-// CleanPath is one `clean_on_stop` entry: a path (or glob, when not recursive)
-// deleted after a clean stop. It is an alias for config.CleanPath so the resolved
-// form flows straight into the engine without a parallel struct or a copy step.
-type CleanPath = config.CleanPath
 
 type plan struct {
 	action               string
@@ -1053,7 +1042,7 @@ func (e Engine) cleanOnStopWarnings() []string {
 	return warns
 }
 
-func cleanStopPath(path CleanPath) []string {
+func cleanStopPath(path config.CleanPath) []string {
 	if path.Recursive {
 		// The config validator proves the configured path is safe at load time,
 		// but a symlink planted in an ancestor afterwards would redirect the

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sermo/internal/rules"
 	"strings"
 	"testing"
 	"time"
@@ -388,7 +389,7 @@ func writePersistentStoreState(t *testing.T, store *Store, at time.Time) {
 			Consecutive: 2,
 			History:     []bool{true, false, true},
 			TrueSince:   at.Add(-5 * time.Minute),
-			TimedHistory: []RuleWindowSample{
+			TimedHistory: []rules.WindowSample{
 				{At: at.Add(-4 * time.Minute)},
 				{At: at.Add(-2 * time.Minute)},
 			},
@@ -404,7 +405,7 @@ func writePersistentStoreState(t *testing.T, store *Store, at time.Time) {
 			Consecutive: 2,
 			History:     []bool{true, false, true},
 			TrueSince:   at.Add(-5 * time.Minute),
-			TimedHistory: []RuleWindowSample{
+			TimedHistory: []rules.WindowSample{
 				{At: at.Add(-4 * time.Minute)},
 			},
 		},

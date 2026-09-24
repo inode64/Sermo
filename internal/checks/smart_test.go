@@ -303,14 +303,14 @@ func TestParseSmartReadsNVMeIdentityAndCounters(t *testing.T) {
 func TestSmartCheckPublishesDriveIdentity(t *testing.T) {
 	res := smartWith(smartATAFull).Run(context.Background())
 	for key, want := range map[string]any{
-		DataKeyModel:             "WDC WD20EFRX-68EUZN0",
-		DataKeySerialNumber:      "WD-WCC4M4SZ375K",
-		DataKeyFirmware:          "82.00A82",
-		DataKeyWWN:               "0x50014ee2636af963",
-		DataKeyRotationRate:      "5400 rpm",
-		DataKeyCapacityBytes:     uint64(2000398934016),
-		DataKeySelfTest:          "Completed without error at 3468 h",
-		SmartFieldPendingSectors: 3.0,
+		DataKeyModel:         "WDC WD20EFRX-68EUZN0",
+		DataKeySerialNumber:  "WD-WCC4M4SZ375K",
+		DataKeyFirmware:      "82.00A82",
+		DataKeyWWN:           "0x50014ee2636af963",
+		DataKeyRotationRate:  "5400 rpm",
+		DataKeyCapacityBytes: uint64(2000398934016),
+		DataKeySelfTest:      "Completed without error at 3468 h",
+		fieldPendingSectors:  3.0,
 	} {
 		if got := res.Data[key]; got != want {
 			t.Errorf("Data[%s] = %v (%T), want %v", key, got, got, want)

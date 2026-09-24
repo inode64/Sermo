@@ -140,7 +140,7 @@ func (c *smartCheck) Run(ctx context.Context) Result {
 		// around, not an outage. A declared severity always wins.
 		r.Severity = SeverityWarning
 	}
-	r.Data = withDeviceBus(SmartResultData(c.device, health, data.SmartSample), c.deviceBus, c.device)
+	r.Data = withDeviceBus(smartResultData(c.device, health, data.SmartSample), c.deviceBus, c.device)
 	return r
 }
 
@@ -170,9 +170,8 @@ func (c *smartCheck) withLastKnown(data map[string]any, start time.Time) map[str
 	return c.last.into(data, start)
 }
 
-// SmartResultData is the persisted reading data for one SMART sample, shared
-// by the check cycle and the snapshot-backed watch view.
-func SmartResultData(device, health string, sample SmartSample) map[string]any {
+// smartResultData is the persisted reading data for one SMART sample.
+func smartResultData(device, health string, sample SmartSample) map[string]any {
 	data := map[string]any{DataKeyDevice: device, DataKeyHealth: health}
 	if sample.selfTestRunning {
 		data[DataKeyDeviceState] = DeviceStateTesting

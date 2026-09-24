@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"sermo/internal/servicemgr"
 	"strconv"
 	"strings"
 	"syscall"
@@ -26,7 +27,7 @@ func parsedReloadSpec(tree map[string]any) config.ReloadSpec {
 	return spec
 }
 
-func reloadClosureForTest(tree map[string]any, deps checks.Deps, mgr Manager, unit string) func(context.Context) error {
+func reloadClosureForTest(tree map[string]any, deps checks.Deps, mgr servicemgr.Manager, unit string) func(context.Context) error {
 	return reloadClosure(parsedReloadSpec(tree), tree, deps, mgr, "systemd", unit, process.Discoverer{}, nil)
 }
 

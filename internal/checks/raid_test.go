@@ -111,7 +111,7 @@ func runDeviceStateCases[T any](t *testing.T, fn func(T) (string, float64, bool)
 
 func TestRaidDeviceState(t *testing.T) {
 	runDeviceStateCases(t,
-		func(d RaidArrayStatus) (string, float64, bool) { return RaidDeviceState([]RaidArrayStatus{d}) },
+		func(d RaidArrayStatus) (string, float64, bool) { return raidDeviceState([]RaidArrayStatus{d}) },
 		[]deviceStateCase[RaidArrayStatus]{
 			{name: "idle", in: RaidArrayStatus{Name: "md0"}},
 			{name: "check", in: RaidArrayStatus{Name: "md0", Operation: "check", ProgressPct: 12.5, HasProgress: true}, wantState: DeviceStateTesting, wantPct: 12.5, wantActive: true},

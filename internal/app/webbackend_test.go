@@ -1341,7 +1341,7 @@ func TestWebBackendProbeWatchRecordsSnapshotAndEvent(t *testing.T) {
 	}
 
 	result := b.ProbeWatch(context.Background(), "disk-speed")
-	if !result.OK || readingByField(result.Readings, checks.HdparmFieldRead).Value == "" {
+	if !result.OK || readingByField(result.Readings, "read").Value == "" {
 		t.Fatalf("probe result = %+v, want healthy hdparm reading", result)
 	}
 	if len(events) != 2 || events[0].Watch != "disk-speed" || events[0].Action != eventActionProbe || events[0].Status != eventStatusRunning || events[1].Kind != eventKindAction || events[1].Status != eventStatusOK || !strings.Contains(events[1].Message, "completed in") {
@@ -1471,7 +1471,7 @@ func diskSpeedWatch(threshold int) *webWatch {
 		check: map[string]any{
 			checks.CheckKeyType:   checks.CheckTypeHdparm,
 			checks.CheckKeyDevice: "/dev/sda",
-			checks.HdparmFieldRead: map[string]any{
+			"read": map[string]any{
 				checks.CheckKeyOp:    ">",
 				checks.CheckKeyValue: threshold,
 			},
@@ -2388,7 +2388,7 @@ func TestWatchSnapshotsFeedHeavyProbeView(t *testing.T) {
 				check: map[string]any{
 					checks.CheckKeyType:   checks.CheckTypeHdparm,
 					checks.CheckKeyDevice: "/dev/sda",
-					checks.HdparmFieldRead: map[string]any{
+					"read": map[string]any{
 						checks.CheckKeyOp:    "<",
 						checks.CheckKeyValue: 100,
 					},
@@ -2414,12 +2414,12 @@ func TestWatchSnapshotsFeedHeavyProbeView(t *testing.T) {
 		Condition: true,
 		Message:   "hdparm /dev/sda read=500.0 MB/s",
 		Data: map[string]any{
-			checks.DataKeyDevice:   "/dev/sda",
-			checks.HdparmFieldRead: 500.0,
+			checks.DataKeyDevice: "/dev/sda",
+			"read":               500.0,
 		},
 	})
 	ws = b.Watches(context.Background())
-	if len(ws) != 1 || !strings.Contains(ws[0].Summary, "hdparm") || readingByField(ws[0].Readings, checks.HdparmFieldRead).Value == "" {
+	if len(ws) != 1 || !strings.Contains(ws[0].Summary, "hdparm") || readingByField(ws[0].Readings, "read").Value == "" {
 		t.Fatalf("snapshot Watches() = %+v, want hdparm summary/readings", ws)
 	}
 	if len(runner.Calls()) != 0 {
@@ -2878,14 +2878,14 @@ func TestWebCheckMetricsUsesSmartDeviceCapabilities(t *testing.T) {
 	graphs := checks.ResolvedGraphMetrics(checks.CheckTypeSmart, "", map[string]any{})
 	readings := []web.WatchReading{
 		{Field: checks.SmartFieldTemperature, Value: "41 °C"},
-		{Field: checks.LastSampleKey(checks.SmartFieldPowerOnHours), Value: "16mo 20d"},
+		{Field: checks.LastSampleKey("power_on_hours"), Value: "16mo 20d"},
 	}
 
 	got := webCheckMetricsForReadings(checks.CheckTypeSmart, graphs, nil, readings)
 	if len(got) != 2 {
 		t.Fatalf("SMART metrics = %+v, want only the two device-supported metrics", got)
 	}
-	if got[0].Name != checks.SmartFieldTemperature || got[1].Name != checks.SmartFieldPowerOnHours {
+	if got[0].Name != checks.SmartFieldTemperature || got[1].Name != "power_on_hours" {
 		t.Fatalf("SMART metrics = %+v, want temperature and last-known power-on time", got)
 	}
 

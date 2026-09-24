@@ -22,14 +22,11 @@ type RuleWindowRecord struct {
 	Consecutive      int
 	History          []bool
 	TrueSince        time.Time
-	TimedHistory     []RuleWindowSample
+	TimedHistory     []rules.WindowSample
 	Firing           bool
 	ClearConsecutive int
 	ClearSince       time.Time
 }
-
-// RuleWindowSample is the rule engine sample persisted for a duration window.
-type RuleWindowSample = rules.WindowSample
 
 // RemediationState returns a service's persisted automatic-remediation state.
 // found is false when no action state has been recorded yet.
@@ -187,14 +184,14 @@ type ruleWindowSampleJSON struct {
 	At int64 `json:"at"`
 }
 
-func encodeRuleWindowSamples(samples []RuleWindowSample) (string, error) {
-	return encodeRows(columnRuleWindowSamples, samples, func(s RuleWindowSample) (ruleWindowSampleJSON, bool) {
+func encodeRuleWindowSamples(samples []rules.WindowSample) (string, error) {
+	return encodeRows(columnRuleWindowSamples, samples, func(s rules.WindowSample) (ruleWindowSampleJSON, bool) {
 		return ruleWindowSampleJSON{At: timeUnixNano(s.At)}, !s.At.IsZero()
 	})
 }
 
-func decodeRuleWindowSamples(raw string) ([]RuleWindowSample, error) {
-	return decodeRows(columnRuleWindowSamples, raw, func(s ruleWindowSampleJSON) (RuleWindowSample, bool) {
-		return RuleWindowSample{At: unixNanoTime(s.At)}, s.At != 0
+func decodeRuleWindowSamples(raw string) ([]rules.WindowSample, error) {
+	return decodeRows(columnRuleWindowSamples, raw, func(s ruleWindowSampleJSON) (rules.WindowSample, bool) {
+		return rules.WindowSample{At: unixNanoTime(s.At)}, s.At != 0
 	})
 }

@@ -108,8 +108,8 @@ func TestWatchPublishesResultSnapshot(t *testing.T) {
 		Name:      "disk",
 		CheckType: checks.CheckTypeHdparm,
 		Check: stubCheck{name: "disk", ok: false, data: map[string]any{
-			checks.DataKeyDevice:   "/dev/sda",
-			checks.HdparmFieldRead: 500.0,
+			checks.DataKeyDevice: "/dev/sda",
+			"read":               500.0,
 		}},
 		Publish: publishWatchSnapshots(snapshots, ""),
 	}
@@ -117,7 +117,7 @@ func TestWatchPublishesResultSnapshot(t *testing.T) {
 	w.RunCycle(context.Background())
 
 	got := snapshots.Get("disk", checks.CheckTypeHdparm)
-	if len(got) != 1 || got[0].Data[checks.HdparmFieldRead] != 500.0 {
+	if len(got) != 1 || got[0].Data["read"] != 500.0 {
 		t.Fatalf("published snapshot = %+v, want hdparm reading", got)
 	}
 }

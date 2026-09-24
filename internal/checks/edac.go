@@ -49,13 +49,12 @@ func (c edacCheck) Run(_ context.Context) Result {
 	}
 
 	r := c.result(ok, fmt.Sprintf("edac: %d correctable, %d uncorrectable", st.CE, st.UE), start)
-	r.Data = EdacResultData(st)
+	r.Data = edacResultData(st)
 	return r
 }
 
-// EdacResultData is the persisted reading data for one EDAC counter sample,
-// shared by the check cycle and the snapshot-backed watch view.
-func EdacResultData(st EdacCounts) map[string]any {
+// edacResultData is the persisted reading data for one EDAC counter sample.
+func edacResultData(st EdacCounts) map[string]any {
 	return map[string]any{fieldCE: float64(st.CE), fieldUE: float64(st.UE)}
 }
 
