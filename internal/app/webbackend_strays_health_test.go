@@ -36,7 +36,7 @@ func straysHealthBackend(t *testing.T, reports string) *WebBackend {
 func TestFailingStraysCheckDoesNotDegradeTheService(t *testing.T) {
 	b := straysHealthBackend(t, checks.ReportsState)
 
-	failing, health := b.serviceCheckHealth("web", b.entries["web"], true)
+	failing, health := b.observeService("web", b.entries["web"]).serviceCheckHealth(b.entries["web"], true)
 	if failing != 0 {
 		t.Fatalf("checks failing = %d, want 0: a stray is verdictless", failing)
 	}
@@ -44,7 +44,7 @@ func TestFailingStraysCheckDoesNotDegradeTheService(t *testing.T) {
 		t.Fatalf("check health = %q, want %q", health, TargetStateOK)
 	}
 	// And it raises no warning either: the warning reason is stale-binary's alone.
-	if reason := b.serviceStateReason("web", b.entries["web"]); reason != "" {
+	if reason := b.observeService("web", b.entries["web"]).serviceStateReason(b.entries["web"]); reason != "" {
 		t.Fatalf("warning reason = %q, want none", reason)
 	}
 }
@@ -55,7 +55,7 @@ func TestFailingStraysCheckDoesNotDegradeTheService(t *testing.T) {
 func TestFailingStraysCheckWouldCountWithoutTheVerdictlessMode(t *testing.T) {
 	b := straysHealthBackend(t, "")
 
-	if failing, _ := b.serviceCheckHealth("web", b.entries["web"], true); failing != 1 {
+	if failing, _ := b.observeService("web", b.entries["web"]).serviceCheckHealth(b.entries["web"], true); failing != 1 {
 		t.Fatalf("checks failing = %d, want 1 once the check carries a verdict", failing)
 	}
 }

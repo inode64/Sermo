@@ -43,14 +43,14 @@ func staleBinaryBackend(t *testing.T, ok bool) (*WebBackend, *webEntry) {
 // point of the rewrite: the render path no longer discovers processes.
 func TestServiceStateReasonFromPublishedCheck(t *testing.T) {
 	b, entry := staleBinaryBackend(t, false)
-	if got := b.serviceStateReason("web", entry); got != stateReasonStaleBinary {
+	if got := b.observeService("web", entry).serviceStateReason(entry); got != stateReasonStaleBinary {
 		t.Fatalf("want %q, got %q", stateReasonStaleBinary, got)
 	}
 }
 
 func TestServiceStateReasonEmptyWhenCheckPasses(t *testing.T) {
 	b, entry := staleBinaryBackend(t, true)
-	if got := b.serviceStateReason("web", entry); got != "" {
+	if got := b.observeService("web", entry).serviceStateReason(entry); got != "" {
 		t.Fatalf("a passing check must report no reason, got %q", got)
 	}
 }
@@ -60,7 +60,7 @@ func TestServiceStateReasonEmptyWhenCheckPasses(t *testing.T) {
 func TestServiceStateReasonEmptyWithoutSnapshot(t *testing.T) {
 	b, entry := staleBinaryBackend(t, false)
 	b.snapshots = NewSnapshots() // nothing published yet
-	if got := b.serviceStateReason("web", entry); got != "" {
+	if got := b.observeService("web", entry).serviceStateReason(entry); got != "" {
 		t.Fatalf("want no reason without a snapshot, got %q", got)
 	}
 }
@@ -79,14 +79,14 @@ func TestServiceStateReasonIgnoresOtherCheckTypes(t *testing.T) {
 	}
 	b := &WebBackend{order: []string{"web"}, entries: map[string]*webEntry{"web": entry}, snapshots: snaps}
 
-	if got := b.serviceStateReason("web", entry); got != "" {
+	if got := b.observeService("web", entry).serviceStateReason(entry); got != "" {
 		t.Fatalf("a failing unrelated check must not report a stale binary, got %q", got)
 	}
 }
 
 func TestServiceStateReasonNilSafe(t *testing.T) {
 	b, _ := staleBinaryBackend(t, false)
-	if got := b.serviceStateReason("web", nil); got != "" {
+	if got := b.observeService("web", nil).serviceStateReason(nil); got != "" {
 		t.Fatalf("want no reason for a nil entry, got %q", got)
 	}
 }
@@ -198,5 +198,41 @@ func TestStaleBinaryCheckReadingsSurfacePathAndPIDs(t *testing.T) {
 	}
 	if !gotPath || !gotPIDs {
 		t.Fatalf("readings must carry the path and the pids, got %+v", readings)
+	}
+}
+
+func TestServiceObservationKeepsOneCycleAndFreshnessForRow(t *testing.T) {
+	b, entry := staleBinaryBackend(t, false)
+	entry.checkNames = append(entry.checkNames, "strays")
+	entry.checkTypes["strays"] = checks.CheckTypeStrays
+	publish := func(ok bool, count int) {
+		b.snapshots.publishWithCheckTypes("web", map[string]checks.Result{
+			"stale-binary": {Check: "stale-binary", OK: ok, Reports: checks.ReportsState},
+			"strays":       {Check: "strays", OK: count == 0, Data: map[string]any{checks.DataKeyCount: count}},
+		}, map[string]bool{"stale-binary": true, "strays": true}, entry.checkTypes)
+	}
+	publish(false, 3)
+	at := b.webNow()
+	clockReads := 0
+	b.now = func() time.Time { clockReads++; return at }
+	observation := b.observeService("web", entry)
+	publish(true, 0)
+	at = at.Add(time.Hour)
+	if got := observation.serviceStateReason(entry); got != stateReasonStaleBinary {
+		t.Fatalf("reason = %q", got)
+	}
+	if got := observation.serviceStrayCount(entry); got != 3 {
+		t.Fatalf("count = %d", got)
+	}
+	observation.serviceCheckHealth(entry, true)
+	if clockReads != 1 {
+		t.Fatalf("row freshness clocks = %d, want 1", clockReads)
+	}
+	next := b.observeService("web", entry)
+	if got := next.serviceStateReason(entry); got != "" {
+		t.Fatalf("stale result retained: %q", got)
+	}
+	if _, health := next.serviceCheckHealth(entry, true); health != checkHealthUnknown {
+		t.Fatalf("stale health = %q", health)
 	}
 }

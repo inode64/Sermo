@@ -35,7 +35,7 @@ func straysSnapshotBackend(t *testing.T, count int, age time.Duration) *WebBacke
 func TestServiceStrayCountComesFromThePublishedSnapshot(t *testing.T) {
 	b := straysSnapshotBackend(t, 3, 0)
 
-	if got := b.serviceStrayCount("web", b.entries["web"]); got != 3 {
+	if got := b.observeService("web", b.entries["web"]).serviceStrayCount(b.entries["web"]); got != 3 {
 		t.Fatalf("stray count = %d, want 3", got)
 	}
 }
@@ -46,7 +46,7 @@ func TestServiceStrayCountComesFromThePublishedSnapshot(t *testing.T) {
 func TestServiceStrayCountIgnoresAStaleSnapshot(t *testing.T) {
 	b := straysSnapshotBackend(t, 3, time.Hour)
 
-	if got := b.serviceStrayCount("web", b.entries["web"]); got != 0 {
+	if got := b.observeService("web", b.entries["web"]).serviceStrayCount(b.entries["web"]); got != 0 {
 		t.Fatalf("stale snapshot stray count = %d, want 0", got)
 	}
 }
@@ -74,9 +74,9 @@ func TestServiceStrayCountIsDeterministicWithSeveralStraysChecks(t *testing.T) {
 	publishedAt := time.Now()
 	b.now = func() time.Time { return publishedAt }
 
-	first := b.serviceStrayCount("web", b.entries["web"])
+	first := b.observeService("web", b.entries["web"]).serviceStrayCount(b.entries["web"])
 	for range 20 {
-		if got := b.serviceStrayCount("web", b.entries["web"]); got != first {
+		if got := b.observeService("web", b.entries["web"]).serviceStrayCount(b.entries["web"]); got != first {
 			t.Fatalf("stray count varies between reads: %d then %d", first, got)
 		}
 	}
@@ -112,7 +112,7 @@ func TestServiceStateReasonFiresOnAnyFailingStaleBinaryCheck(t *testing.T) {
 			publishedAt := time.Now()
 			b.now = func() time.Time { return publishedAt }
 
-			if got := b.serviceStateReason("web", b.entries["web"]); got != tc.want {
+			if got := b.observeService("web", b.entries["web"]).serviceStateReason(b.entries["web"]); got != tc.want {
 				t.Fatalf("warning reason = %q, want %q", got, tc.want)
 			}
 		})
@@ -124,7 +124,7 @@ func TestServiceStrayCountZeroWithoutAStraysCheck(t *testing.T) {
 	b := webBackendWithEntry(snaps, []string{"service"}, map[string]string{"service": checks.CheckTypeService})
 	b.now = time.Now
 
-	if got := b.serviceStrayCount("web", b.entries["web"]); got != 0 {
+	if got := b.observeService("web", b.entries["web"]).serviceStrayCount(b.entries["web"]); got != 0 {
 		t.Fatalf("stray count = %d, want 0 when no strays check is declared", got)
 	}
 }
