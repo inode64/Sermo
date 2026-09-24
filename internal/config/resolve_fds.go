@@ -129,12 +129,7 @@ func fdsApplies(tree map[string]any) bool {
 // fdsRule builds the rule: alert first, then restart, the canonical generated
 // shape. A metric is a condition check, so the rule fires while it is active.
 func fdsRule(allowRestart bool, message string) map[string]any {
-	then := restartOnChangeThen(message)
-	if !allowRestart {
-		then = map[string]any{rules.RuleFieldActions: []any{
-			map[string]any{rules.RuleFieldType: string(rules.ActionAlert), rules.RuleFieldMessage: message},
-		}}
-	}
+	then := generatedRestartActions(allowRestart, message)
 	return map[string]any{
 		rules.RuleFieldType: string(generatedRuleType(then)),
 		rules.RuleFieldIf: map[string]any{

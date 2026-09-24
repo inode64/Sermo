@@ -99,12 +99,7 @@ func injectGenerated(tree map[string]any, section, name, noun, feature string, v
 func staleBinaryRule(allowRestart bool, message string) map[string]any {
 	// Alert-then-restart is the canonical generated shape; reuse it so the two
 	// sugars cannot drift.
-	then := restartOnChangeThen(message)
-	if !allowRestart {
-		then = map[string]any{rules.RuleFieldActions: []any{
-			map[string]any{rules.RuleFieldType: string(rules.ActionAlert), rules.RuleFieldMessage: message},
-		}}
-	}
+	then := generatedRestartActions(allowRestart, message)
 	return map[string]any{
 		rules.RuleFieldType: string(generatedRuleType(then)),
 		// `failed:`, not `active:`. The check is OK when nothing is stale, and
@@ -170,4 +165,13 @@ func serviceDeclaresProcesses(tree map[string]any) bool {
 // does; the ${check.value} placeholder stays for the worker to fill.
 func staleBinaryAlertMessage(tree map[string]any) string {
 	return restartOnChangeDisplayName(tree) + staleBinaryMessageSuffix
+}
+
+func generatedRestartActions(allowRestart bool, message string) map[string]any {
+	if allowRestart {
+		return restartOnChangeThen(message)
+	}
+	return map[string]any{rules.RuleFieldActions: []any{
+		map[string]any{rules.RuleFieldType: string(rules.ActionAlert), rules.RuleFieldMessage: message},
+	}}
 }
