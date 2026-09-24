@@ -446,6 +446,12 @@ func normalizeKey(m map[string]any) string {
 // safe rather than silently proceed.
 func Guard(ctx context.Context, ruleSet []Rule, action string, ev *Evaluator) (blocked bool, reason string, err error) {
 	guardEvaluator := *ev
+	// A guard may create either cache when it is the first reader this cycle.
+	// Retain those maps, including unavailable results, without leaking the
+	// guard's fail-closed policy or change-message context to ordinary rules.
+	defer func() {
+		ev.Cache, ev.memo = guardEvaluator.Cache, guardEvaluator.memo
+	}()
 	guardEvaluator.FailOnUnavailable = true
 	for i := range ruleSet {
 		if ruleSet[i].Type != RuleGuard || !slices.Contains(ruleSet[i].Blocks, action) {
