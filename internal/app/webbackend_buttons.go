@@ -10,6 +10,7 @@ import (
 	"sermo/internal/cfgval"
 	"sermo/internal/config"
 	"sermo/internal/execx"
+	"sermo/internal/operation"
 	"sermo/internal/output"
 	"sermo/internal/web"
 )
@@ -92,7 +93,7 @@ func (b *WebBackend) ServiceButton(ctx context.Context, service, button string) 
 	}
 	timeout := found.timeout
 	if timeout <= 0 {
-		timeout = b.operationTimeout
+		timeout = operation.ResolveTimeout(b.operationTimeout, nil)
 	}
 	runCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
