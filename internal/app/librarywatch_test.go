@@ -252,7 +252,6 @@ func TestArtifactSamplesCacheAppStatus(t *testing.T) {
 			runner := execxtest.Outputs("demo v1.2.3")
 			w := &Worker{
 				artifactSamples: samples,
-				appVersionCmd:   map[string]appVersionCmd{"demo": {argv: []string{"demo", "--version"}}},
 				appVersions:     map[string]string{},
 				appVersionsLast: map[string]string{},
 				CheckDeps:       checks.Deps{Runner: runner},

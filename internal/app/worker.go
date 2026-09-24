@@ -17,7 +17,6 @@ import (
 	"sermo/internal/checks"
 	"sermo/internal/config"
 	"sermo/internal/emission"
-	"sermo/internal/execx"
 	"sermo/internal/metrics"
 	"sermo/internal/notify"
 	"sermo/internal/operation"
@@ -172,10 +171,6 @@ type Worker struct {
 	// artifactSamples provides cadence-limited catalog app/library/file observations.
 	artifactSamples *ArtifactSamples
 
-	// appVersionCmd holds the resolved version command of each app the service
-	// declares (keyed by app name), so a `changed: {app}` condition can sample the
-	// app's current version. Built once from the resolved tree's preflight.
-	appVersionCmd map[string]appVersionCmd
 	// appVersions holds the acknowledged version-short of each watched app+level
 	// (key "app:level") across cycles, the version analogue of libBaseline.
 	appVersions map[string]string
@@ -183,14 +178,6 @@ type Worker struct {
 	// so acknowledgeChanges can adopt the post-restart version without re-running
 	// the command.
 	appVersionsLast map[string]string
-}
-
-// appVersionCmd is a resolved app version probe: the command argv (variables
-// already expanded), an optional user to run it as, and an optional timeout.
-type appVersionCmd struct {
-	argv    []string
-	user    string
-	timeout time.Duration
 }
 
 type workerCycleMode struct {
@@ -1024,29 +1011,16 @@ type appProbeError struct {
 
 func (e *appProbeError) Error() string { return e.status }
 
-func (w *Worker) changedAppVersion(ctx context.Context, app string, level int) (bool, error) {
-	if w.artifactSamples != nil {
-		raw, status, sampled := w.artifactSamples.AppVersion(app)
-		if !sampled {
-			// Artifact watches own app probes. Waiting for the first sample avoids
-			// turning an absent optional binary into a service-rule error.
-			return false, nil
-		}
-		if appinspect.IsNotInstalledStatus(status) {
-			return false, nil
-		}
-		if status != appinspect.StatusOK {
-			return false, &appProbeError{status: status, output: w.artifactSamples.AppProbeOutput(app)}
-		}
-		return w.compareAppVersion(app, level, raw)
+func (w *Worker) changedAppVersion(_ context.Context, app string, level int) (bool, error) {
+	if w.artifactSamples == nil {
+		return false, fmt.Errorf("changed condition app %q: artifact samples unavailable", app)
 	}
-	vc, ok := w.appVersionCmd[app]
-	if !ok || len(vc.argv) == 0 {
-		return false, fmt.Errorf("changed condition app %q: no sampled artifact or version command", app)
+	raw, status, sampled := w.artifactSamples.AppVersion(app)
+	if !sampled || appinspect.IsNotInstalledStatus(status) {
+		return false, nil
 	}
-	raw, err := w.sampleVersion(ctx, vc)
-	if err != nil {
-		return false, err
+	if status != appinspect.StatusOK {
+		return false, &appProbeError{status: status, output: w.artifactSamples.AppProbeOutput(app)}
 	}
 	return w.compareAppVersion(app, level, raw)
 }
@@ -1070,34 +1044,6 @@ func (w *Worker) compareAppVersion(app string, level int, raw string) (bool, err
 		return false, nil
 	}
 	return key != base, nil
-}
-
-// sampleVersion runs an app's version command and returns its trimmed stdout.
-func (w *Worker) sampleVersion(ctx context.Context, vc appVersionCmd) (string, error) {
-	runner := w.CheckDeps.Runner
-	if runner == nil {
-		return "", errors.New("no command runner configured")
-	}
-	timeout := vc.timeout
-	if timeout <= 0 {
-		timeout = w.CheckDeps.DefaultTimeout
-	}
-	var (
-		res execx.Result
-		err error
-	)
-	if vc.user != "" {
-		res, err = execx.RunUser(ctx, runner, timeout, vc.user, vc.argv[0], vc.argv[1:]...)
-	} else {
-		res, err = execx.Run(ctx, runner, timeout, vc.argv[0], vc.argv[1:]...)
-	}
-	if res.ExitCode != execx.ExitCodeSuccess {
-		if err != nil {
-			return "", fmt.Errorf("version command %s: %w", vc.argv[0], err)
-		}
-		return "", fmt.Errorf("version command exit %d", res.ExitCode)
-	}
-	return strings.TrimSpace(res.Stdout), nil
 }
 
 // fileFingerprint summarizes a file's identity for change detection: its size and
