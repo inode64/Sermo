@@ -130,7 +130,7 @@ func MongoDisconnect(ctx context.Context, client *mongo.Client) {
 	if client == nil {
 		return
 	}
-	dctx, cancel := context.WithTimeout(ctx, mongoDisconnectTimeout)
+	dctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), mongoDisconnectTimeout)
 	defer cancel()
 	_ = client.Disconnect(dctx)
 }
