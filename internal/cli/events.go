@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"sermo/internal/state"
 	"sermo/internal/web"
@@ -130,8 +131,8 @@ func eventTableFields(e event) eventTableRow {
 }
 
 func eventTableValue(value string, width int) string {
-	if len(value) > width {
-		return value[:width]
+	if utf8.RuneCountInString(value) > width {
+		return string([]rune(value)[:width])
 	}
 	return value
 }
@@ -139,8 +140,8 @@ func eventTableValue(value string, width int) string {
 func eventTableMessage(message string) string {
 	// The message column is capped for terminal readability; tabwriter sizes
 	// the rest to content.
-	if len(message) > eventsTableMessageWidth {
-		return message[:eventsTableMessageWidth-eventsTableEllipsisWidth] + eventsTableEllipsis
+	if utf8.RuneCountInString(message) > eventsTableMessageWidth {
+		return eventTableValue(message, eventsTableMessageWidth-eventsTableEllipsisWidth) + eventsTableEllipsis
 	}
 	return message
 }
