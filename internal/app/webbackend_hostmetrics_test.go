@@ -2,7 +2,6 @@ package app
 
 import (
 	"reflect"
-	"runtime"
 	"testing"
 
 	"sermo/internal/checks"
@@ -12,8 +11,8 @@ import (
 func TestHostMetricLoad1Saturation(t *testing.T) {
 	// load1 == CPU count is full saturation: the raw load stays in Absolute, and
 	// the tile gets a 0-100% reading plus the CPU-count capacity for its bar.
-	ncpu := runtime.NumCPU()
-	m := hostMetric("load1", metrics.Reading{Absolute: float64(ncpu), HasAbsolute: true, Ready: true})
+	ncpu := 8
+	m := hostMetric("load1", metrics.Reading{Absolute: float64(ncpu), HasAbsolute: true, Total: float64(ncpu), HasTotal: true, Ready: true})
 	if m.Absolute != float64(ncpu) {
 		t.Fatalf("raw load must stay in Absolute, got %v", m.Absolute)
 	}
@@ -35,9 +34,9 @@ func TestHostMetricLoad1NoReading(t *testing.T) {
 }
 
 func TestHostMetricAndLoadWatchShareLoadProjection(t *testing.T) {
-	numCPU := runtime.NumCPU()
+	numCPU := 8
 	load := float64(numCPU) / 2
-	host := hostMetric(metrics.MetricLoad1, metrics.Reading{Absolute: load, HasAbsolute: true})
+	host := hostMetric(metrics.MetricLoad1, metrics.Reading{Absolute: load, HasAbsolute: true, Total: float64(numCPU), HasTotal: true})
 	meter := loadWatchMeter(load, numCPU)
 	if meter == nil {
 		t.Fatal("loadWatchMeter() = nil, want meter")
@@ -102,7 +101,7 @@ func TestCountMeterDataKey(t *testing.T) {
 }
 
 func TestWatchMeterSourcesShareProjection(t *testing.T) {
-	numCPU := runtime.NumCPU()
+	numCPU := 8
 	tests := []struct {
 		name      string
 		checkType string
@@ -125,7 +124,7 @@ func TestWatchMeterSourcesShareProjection(t *testing.T) {
 			name:      "load",
 			checkType: checks.CheckTypeLoad,
 			system: metrics.Snapshot{metrics.MetricLoad1: {
-				Absolute: float64(numCPU), HasAbsolute: true,
+				Absolute: float64(numCPU), HasAbsolute: true, Total: float64(numCPU), HasTotal: true,
 			}},
 			data: map[string]any{
 				metrics.MetricLoad1:  float64(numCPU),

@@ -438,9 +438,10 @@ func (c *Collector) SampleSystem() Snapshot {
 	}
 
 	if l1, l5, l15, ok := c.Reader.LoadAverages(); ok {
-		snap[MetricLoad1] = Reading{Absolute: l1, HasAbsolute: true, Ready: true}
-		snap[MetricLoad5] = Reading{Absolute: l5, HasAbsolute: true, Ready: true}
-		snap[MetricLoad15] = Reading{Absolute: l15, HasAbsolute: true, Ready: true}
+		ncpu := c.Reader.NumCPU()
+		snap[MetricLoad1] = Reading{Absolute: l1, HasAbsolute: true, Total: float64(ncpu), HasTotal: ncpu > 0, Ready: true}
+		snap[MetricLoad5] = Reading{Absolute: l5, HasAbsolute: true, Total: float64(ncpu), HasTotal: ncpu > 0, Ready: true}
+		snap[MetricLoad15] = Reading{Absolute: l15, HasAbsolute: true, Total: float64(ncpu), HasTotal: ncpu > 0, Ready: true}
 	}
 
 	// Swap is optional: only readers that implement TotalSwap contribute it, and

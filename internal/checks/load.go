@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"runtime"
 	"sermo/internal/metrics"
 	"time"
 )
@@ -17,7 +16,7 @@ type LoadSample struct {
 }
 
 // LoadSamplerFunc reads the current load sample. Injected for tests; the default
-// reads /proc/loadavg and runtime.NumCPU().
+// reads host load and the host CPU count through metrics.OSReader.
 type LoadSamplerFunc func() (LoadSample, error)
 
 // loadCheck watches the system load averages against thresholds (like storage, a
@@ -71,5 +70,5 @@ func defaultLoadSampler() (LoadSample, error) {
 	if !ok {
 		return LoadSample{}, errors.New("malformed /proc/loadavg")
 	}
-	return LoadSample{Load1: l1, Load5: l5, Load15: l15, NumCPU: runtime.NumCPU()}, nil
+	return LoadSample{Load1: l1, Load5: l5, Load15: l15, NumCPU: metrics.OSReader{}.NumCPU()}, nil
 }
