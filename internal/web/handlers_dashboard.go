@@ -83,28 +83,18 @@ func CollectDashboardSnapshot(ctx context.Context, backend Backend, since time.D
 }
 
 func (s *Server) dashboardSnapshot(ctx context.Context, backend Backend, since time.Duration) DashboardSnapshot {
-	return s.dashboardSnapshotWithReadiness(ctx, func() DashboardSnapshot {
-		return CollectDashboardSnapshot(ctx, backend, since)
-	})
-}
-
-func (s *Server) dashboardSnapshotWithReadiness(ctx context.Context, collect func() DashboardSnapshot) DashboardSnapshot {
-	if s.Readiness == nil {
-		snapshot := collect()
-		snapshot.Ready = ReadyReport{Ready: true, Status: apiStatusOK, Services: len(snapshot.Services)}
-		return s.finishDashboardSnapshot(snapshot)
-	}
 	var snapshot DashboardSnapshot
-	var ready ReadyReport
-	var wg sync.WaitGroup
-	wg.Go(func() { snapshot = collect() })
-	wg.Go(func() { ready = s.Readiness.Report(ctx) })
-	wg.Wait()
-	snapshot.Ready = ready
-	return s.finishDashboardSnapshot(snapshot)
-}
-
-func (s *Server) finishDashboardSnapshot(snapshot DashboardSnapshot) DashboardSnapshot {
+	if s.Readiness == nil {
+		snapshot = CollectDashboardSnapshot(ctx, backend, since)
+		snapshot.Ready = ReadyReport{Ready: true, Status: apiStatusOK, Services: len(snapshot.Services)}
+	} else {
+		var ready ReadyReport
+		var wg sync.WaitGroup
+		wg.Go(func() { snapshot = CollectDashboardSnapshot(ctx, backend, since) })
+		wg.Go(func() { ready = s.Readiness.Report(ctx) })
+		wg.Wait()
+		snapshot.Ready = ready
+	}
 	snapshot.Live = s.liveReport(time.Now(), len(snapshot.Services))
 	return snapshot
 }
