@@ -3,7 +3,6 @@ package conn
 import (
 	"context"
 	"encoding/binary"
-	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -106,7 +105,7 @@ func rpcCallTCP(c net.Conn, protocol string, payload []byte) ([]byte, error) {
 		marker := binary.BigEndian.Uint32(m[:])
 		n := int(marker &^ rpcFragmentLastMask)
 		if n > rpcTCPMaxFragmentBytes {
-			return nil, errors.New("nfs: RPC fragment too large")
+			return nil, fmt.Errorf("%s: RPC fragment too large", protocol)
 		}
 		frag := make([]byte, n)
 		if _, err := io.ReadFull(c, frag); err != nil {
