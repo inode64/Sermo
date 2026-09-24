@@ -3,7 +3,6 @@ package diag
 import (
 	"fmt"
 	"maps"
-	"math"
 	"slices"
 	"time"
 
@@ -152,17 +151,9 @@ func hasMountCondition(fields map[string]any) bool {
 	return ok
 }
 
-// checkAlignment warns when a per-check interval is below the resolution or not an
-// exact multiple of it (mirrors the daemon's startup rounding).
+// checkAlignment uses the same interval policy as scheduling and snapshot freshness.
 func checkAlignment(b *builder, scope string, d, resolution time.Duration) {
-	if resolution <= 0 {
-		return
-	}
-	n := int(math.Round(float64(d) / float64(resolution)))
-	switch {
-	case n < 1:
-		b.addf(LevelWarning, scope, "interval %s is below the %s resolution; it will run every cycle", d, resolution)
-	case time.Duration(n)*resolution != d:
-		b.addf(LevelWarning, scope, "interval %s is not a multiple of the %s resolution; it will run every %s", d, resolution, time.Duration(n)*resolution)
+	if _, warning := checks.ResolveInterval(d, resolution); warning != "" {
+		b.addf(LevelWarning, scope, "%s", warning)
 	}
 }
