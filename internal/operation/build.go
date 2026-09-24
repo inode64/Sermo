@@ -1,9 +1,11 @@
 package operation
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"syscall"
 	"time"
@@ -103,7 +105,7 @@ func New(c Config) Engine {
 	// while half of that authorization was misread is not an option.
 	reapSelector, reapWarnings := process.ParseReapPolicy(tree)
 	hasCommandMatch := hasCommandMatchSelector(selectors)
-	configErr := firstWarningError(
+	configErr := cmp.Or(
 		warningError(process.SectionStopPolicy, stopPolicyWarnings),
 		warningError(selectorWarningPrefix, selectorWarnings),
 		warningError(process.SectionReap, reapWarnings),
@@ -418,12 +420,7 @@ func reloadPidfile(tree map[string]any) string {
 }
 
 func hasCommandMatchSelector(selectors []process.Selector) bool {
-	for i := range selectors {
-		if selectors[i].Type == process.SelectorCommandMatch {
-			return true
-		}
-	}
-	return false
+	return slices.ContainsFunc(selectors, func(s process.Selector) bool { return s.Type == process.SelectorCommandMatch })
 }
 
 func hasExactProcessIdentitySelector(selectors []process.Selector) bool {
@@ -476,15 +473,6 @@ func warningError(prefix string, warnings []string) error {
 		return nil
 	}
 	return fmt.Errorf("%s: %s", prefix, strings.Join(warnings, "; "))
-}
-
-func firstWarningError(errs ...error) error {
-	for _, err := range errs {
-		if err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 func checkDepsForEval(ctx context.Context, deps checks.Deps, sample func(context.Context) checks.MetricReader) checks.Deps {

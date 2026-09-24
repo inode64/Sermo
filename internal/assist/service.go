@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"maps"
 	"path/filepath"
+	"slices"
 
 	"sermo/internal/checks"
 	"sermo/internal/config"
@@ -152,12 +153,7 @@ func chooseServices(p *Prompt, question string, cands []ServiceCandidate, allowN
 }
 
 func groupHasPortDefaults(cands []ServiceCandidate) bool {
-	for _, c := range cands {
-		if c.Port > 0 {
-			return true
-		}
-	}
-	return false
+	return slices.ContainsFunc(cands, func(c ServiceCandidate) bool { return c.Port > 0 })
 }
 
 // askServiceProps asks the per-service properties for one detected candidate,

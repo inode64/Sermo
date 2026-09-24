@@ -1,6 +1,7 @@
 package app
 
 import (
+	"cmp"
 	"maps"
 	"slices"
 	"strconv"
@@ -120,14 +121,6 @@ func comparisonCondition(field string, values map[string]any) web.WatchCondition
 	}
 }
 
-// conditionValueOr reports value, or fallback when the check left it unset.
-func conditionValueOr(value, fallback string) string {
-	if value == "" {
-		return fallback
-	}
-	return value
-}
-
 var watchTypeConditionBuilders = map[string]func(map[string]any) []web.WatchCondition{
 	checks.CheckTypeRAID:          raidWatchConditions,
 	checks.CheckTypeReplication:   replicationWatchConditions,
@@ -189,14 +182,14 @@ func processPolicyWatchConditions(check map[string]any) []web.WatchCondition {
 }
 
 func routeWatchConditions(check map[string]any) []web.WatchCondition {
-	family := conditionValueOr(cfgval.AsString(check[checks.CheckKeyFamily]), checks.FamilyIPv4)
+	family := cmp.Or(cfgval.AsString(check[checks.CheckKeyFamily]), checks.FamilyIPv4)
 	out := []web.WatchCondition{{Field: checks.DataKeyFamily, Op: cfgval.CompareOpEqual, Value: family}}
 	return appendCompare(out, checks.DataKeyInterface, cfgval.CompareOpEqual, cfgval.AsString(check[checks.CheckKeyInterface]))
 }
 
 func firewallWatchConditions(check map[string]any) []web.WatchCondition {
-	backend := conditionValueOr(cfgval.AsString(check[checks.CheckKeyBackend]), checks.FirewallBackendAuto)
-	minRules := conditionValueOr(cfgval.String(check[checks.CheckKeyMinRules]),
+	backend := cmp.Or(cfgval.AsString(check[checks.CheckKeyBackend]), checks.FirewallBackendAuto)
+	minRules := cmp.Or(cfgval.String(check[checks.CheckKeyMinRules]),
 		strconv.FormatUint(watchFirewallDefaultMinRules, watchReadingNumericBase))
 	return []web.WatchCondition{
 		{Field: checks.DataKeyBackend, Op: cfgval.CompareOpEqual, Value: backend},
@@ -208,7 +201,7 @@ func firewallWatchConditions(check map[string]any) []web.WatchCondition {
 // count predicate is rendered generically; its default (> 0) is added here so a
 // check that omits it still shows what fires.
 func failedUnitsWatchConditions(check map[string]any) []web.WatchCondition {
-	backend := conditionValueOr(cfgval.AsString(check[checks.CheckKeyBackend]), string(servicemgr.BackendAuto))
+	backend := cmp.Or(cfgval.AsString(check[checks.CheckKeyBackend]), string(servicemgr.BackendAuto))
 	out := appendCompare(nil, checks.DataKeyBackend, cfgval.CompareOpEqual, backend)
 	if _, present := check[checks.CheckKeyCount].(map[string]any); present {
 		return out

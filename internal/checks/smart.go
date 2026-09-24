@@ -374,7 +374,7 @@ func (j smartReport) identity() BlockDeviceIdentity {
 		WWN:      j.wwn(),
 		Rotation: j.rotation(),
 	}
-	if bytes := cmpFirst(j.UserCapacity.Bytes, j.NVMeTotalCapacity); bytes != nil && *bytes > 0 {
+	if bytes := cmp.Or(j.UserCapacity.Bytes, j.NVMeTotalCapacity); bytes != nil && *bytes > 0 {
 		id.CapacityBytes = uint64(*bytes)
 	}
 	return id
@@ -420,7 +420,7 @@ func (j smartReport) readInto(values map[string]float64) {
 		{fieldTemperature, j.Temperature.Current},
 		{fieldPowerOnHours, j.PowerOnTime.Hours},
 		{fieldPowerCycles, j.PowerCycleCount},
-		{fieldWear, cmpFirst(j.EnduranceUsed.CurrentPercent, j.NVMe.PercentageUsed)},
+		{fieldWear, cmp.Or(j.EnduranceUsed.CurrentPercent, j.NVMe.PercentageUsed)},
 		{fieldMediaErrors, j.NVMe.MediaErrors},
 	} {
 		if reading.value != nil {
@@ -489,17 +489,6 @@ func smartSelfTestRunning(value *int, status string) bool {
 		return true
 	}
 	return strings.Contains(strings.ToLower(status), "in progress")
-}
-
-// cmpFirst returns the first reading a report actually carries, for the values
-// two transports spell with two different field names.
-func cmpFirst(values ...*float64) *float64 {
-	for _, v := range values {
-		if v != nil {
-			return v
-		}
-	}
-	return nil
 }
 
 // smartctlMessage is one diagnostic line smartctl attaches to a JSON report.
