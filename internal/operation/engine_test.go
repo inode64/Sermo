@@ -2058,3 +2058,30 @@ func TestCleanOnStopDeletesFilesAndDirs(t *testing.T) {
 		t.Fatal("recursive clean_on_stop must delete the directory tree")
 	}
 }
+
+func TestBackendActionFailsWhenPostActionStatusIsUnknown(t *testing.T) {
+	for _, action := range []string{actionStart, actionRestart, actionReload, actionResume} {
+		for _, timeout := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/timeout=%v", action, timeout), func(t *testing.T) {
+				ctx, cancel := context.WithCancel(t.Context())
+				defer cancel()
+				mgr := &fakeManager{status: servicemgr.StatusActive}
+				engine := Engine{Manager: mgr, Unit: "svc"}
+				result := Result{}
+				ok := engine.runBackendAction(ctx, &result, action, func(context.Context) error {
+					mgr.statusErr = errors.New("status transport unavailable")
+					if timeout {
+						cancel()
+					}
+					return nil
+				})
+				if ok || result.Status != ResultFailed || result.Message == "" {
+					t.Fatalf("unknown post-action status: ok=%v result=%+v", ok, result)
+				}
+				if !timeout && !strings.Contains(result.Message, "status transport unavailable") {
+					t.Fatalf("lost status diagnostic: %+v", result)
+				}
+			})
+		}
+	}
+}

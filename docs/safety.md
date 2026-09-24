@@ -602,3 +602,6 @@ then at most one operation.
 - **Daemon reload** validates the new config, swaps workers/watches while
   preserving per-service runtime state, and keeps the running generation when
   the new config is invalid.
+
+A start, restart, reload or resume is reported as failed when the backend status
+cannot be read after the action, even when no postflight checks are configured.
