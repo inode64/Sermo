@@ -131,6 +131,25 @@ func TestProcessPolicyWatcherAllowsAnchoredCommandOnly(t *testing.T) {
 	}
 }
 
+func TestProcessPolicyWatcherWithoutActionsRecordsOnlyFinding(t *testing.T) {
+	for _, mode := range []string{"normal", "dry-run", "panic"} {
+		t.Run(mode, func(t *testing.T) {
+			invalid := ProcInfo{PID: 9, UID: 70, ExePrev: "/usr/bin/postgres", StartTicks: 30}
+			watcher, events, snapshot := testProcessPolicyWatcher(t,
+				&fakeProcSampler{cycles: [][]ProcInfo{{invalid}, {invalid}}},
+				map[string]any{"postgres": map[string]any{checks.CheckKeyExe: "/usr/bin/postgres"}},
+			)
+			watcher.dryRun = mode == "dry-run"
+			watcher.inPanic = func() bool { return mode == "panic" }
+			watcher.runCycle(context.Background())
+			watcher.runCycle(context.Background())
+			if snapshot.OK || len(*events) != 1 || (*events)[0].Kind != eventKindFiring {
+				t.Fatalf("monitor-only policy snapshot/events = %+v/%+v", *snapshot, *events)
+			}
+		})
+	}
+}
+
 func TestProcessPolicyWatcherReportsDeletedExecutable(t *testing.T) {
 	deleted := ProcInfo{PID: 9, UID: 70, ExePrev: "/usr/lib64/postgresql-18/bin/postgres", StartTicks: 30}
 	watcher, events, snapshot := testProcessPolicyWatcher(t,
