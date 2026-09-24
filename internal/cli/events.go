@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -221,7 +222,7 @@ func (a App) fetchEvents(ctx context.Context, opts options, service string, limi
 	// no CSRF needed for GET; auth is attached when configured
 	resp, err := a.daemonWebRequest(ctx, opts, http.MethodGet, "events", false, func(base string) string {
 		if service != "" {
-			return fmt.Sprintf("%s%s/%s%s?%s=%d", base, web.APIPathServices, service, web.APIPathServiceEvents, web.APIQueryLimit, limit)
+			return fmt.Sprintf("%s%s/%s%s?%s=%d", base, web.APIPathServices, url.PathEscape(service), web.APIPathServiceEvents, web.APIQueryLimit, limit)
 		}
 		return fmt.Sprintf("%s%s?%s=%d", base, web.APIPathEvents, web.APIQueryLimit, limit)
 	})
