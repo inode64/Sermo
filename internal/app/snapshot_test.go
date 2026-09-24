@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"reflect"
 	"testing"
 	"time"
 
@@ -277,4 +278,36 @@ func (s *snapshotStoreFake) SetWatchCheckSnapshot(watch, slot string, rec state.
 	}
 	s.watch[watch][slot] = rec
 	return nil
+}
+
+func TestSnapshotPersistenceCopiesAllFieldsAndIsolatesData(t *testing.T) {
+	for _, data := range []map[string]any{nil, {}, {"count": 3}} {
+		record := state.CheckSnapshotRecord{
+			CheckType: checks.CheckTypeLog, ConfigID: "config-v1", Observation: checks.ObservationUnavailable,
+			OK: true, Condition: true, Optional: true, Skipped: true, Unavailable: true,
+			Message: "read failed", Data: data, Ran: true, At: time.Unix(123, 0), Severity: checks.SeverityWarning,
+		}
+		snapshot := snapshotFromRecord(record)
+		persisted := snapshotRecord(snapshot)
+		if !reflect.DeepEqual(record, persisted) {
+			t.Fatalf("snapshot round trip = %+v, want %+v", persisted, record)
+		}
+		if data == nil {
+			continue
+		}
+		record.Data["source"] = true
+		persisted.Data["destination"] = true
+		if _, ok := snapshot.Data["source"]; ok {
+			t.Fatal("hydration retained the store's Data map")
+		}
+		if _, ok := snapshot.Data["destination"]; ok {
+			t.Fatal("persistence retained the published Data map")
+		}
+		snapshot.Data["published"] = true
+		for _, other := range []map[string]any{record.Data, persisted.Data} {
+			if _, ok := other["published"]; ok {
+				t.Fatal("published Data aliases a persistence map")
+			}
+		}
+	}
 }

@@ -25,7 +25,7 @@ type CheckSnapshotRecord struct {
 	Unavailable bool
 	Message     string
 	Data        map[string]any
-	Ran         bool
+	Ran         bool // executed this cycle, rather than reused from the interval cache
 	At          time.Time
 	// Severity is the grade the check gave its own result ("" means the
 	// declaration decides, and is what rows persisted before the column existed

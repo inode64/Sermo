@@ -16,24 +16,9 @@ import (
 )
 
 // CheckSnapshot is the last observed result of one check, for the web detail view.
-type CheckSnapshot struct {
-	CheckType   string
-	ConfigID    string
-	Observation checks.ObservationState
-	OK          bool
-	Condition   bool
-	Optional    bool
-	Skipped     bool
-	Unavailable bool
-	Message     string
-	Data        map[string]any
-	Ran         bool // true when the check actually executed this cycle (not interval cache)
-	At          time.Time
-	// Severity is the grade the check gave this result; "" leaves the declared
-	// severity to decide, which is what a record persisted before the grade was
-	// stored carries.
-	Severity string
-}
+// Its fields are owned by the persisted record so memory and storage cannot
+// silently diverge. Conversion helpers clone Data at the persistence boundary.
+type CheckSnapshot state.CheckSnapshotRecord
 
 func (c CheckSnapshot) healthy() bool {
 	return c.Observation.Healthy()
@@ -237,11 +222,9 @@ func serviceSnapshotRecords(snaps map[string]CheckSnapshot) map[string]state.Che
 }
 
 func snapshotFromRecord(rec state.CheckSnapshotRecord) CheckSnapshot {
-	return CheckSnapshot{
-		CheckType: rec.CheckType, ConfigID: rec.ConfigID, Observation: rec.Observation,
-		OK: rec.OK, Condition: rec.Condition, Optional: rec.Optional, Skipped: rec.Skipped, Unavailable: rec.Unavailable,
-		Message: rec.Message, Data: maps.Clone(rec.Data), Ran: rec.Ran, At: rec.At, Severity: rec.Severity,
-	}
+	snap := CheckSnapshot(rec)
+	snap.Data = maps.Clone(rec.Data)
+	return snap
 }
 
 func checkSnapshotFromResult(result checks.Result) CheckSnapshot {
@@ -253,11 +236,9 @@ func checkSnapshotFromResult(result checks.Result) CheckSnapshot {
 }
 
 func snapshotRecord(snap CheckSnapshot) state.CheckSnapshotRecord {
-	return state.CheckSnapshotRecord{
-		CheckType: snap.CheckType, ConfigID: snap.ConfigID, Observation: snap.Observation,
-		OK: snap.OK, Condition: snap.Condition, Optional: snap.Optional, Skipped: snap.Skipped, Unavailable: snap.Unavailable,
-		Message: snap.Message, Data: maps.Clone(snap.Data), Ran: snap.Ran, At: snap.At, Severity: snap.Severity,
-	}
+	rec := state.CheckSnapshotRecord(snap)
+	rec.Data = maps.Clone(snap.Data)
+	return rec
 }
 
 func (s *Snapshots) reportStoreError(err error) { reportCallbackError(s.reportError, err) }
