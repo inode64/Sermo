@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/binary"
 	"errors"
-	"fmt"
 	"strconv"
 )
 
@@ -76,15 +75,7 @@ func (rpcbindProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	if err != nil {
 		return Result{}, err
 	}
-	status, err := parseRPCReply(reply, xid)
-	if err != nil {
-		return Result{}, probeErr(ProtocolNameRPCBind, stepRPCReply, err)
-	}
-	if !rpcTargetProgramStatusOK(status) {
-		return Result{}, probeErr(ProtocolNameRPCBind, stepRPCReply,
-			fmt.Errorf("expected program %d, got %s", portmapProg, status))
-	}
-	return Result{Extra: map[string]string{extraProgram: strconv.Itoa(portmapProg), extraRPCStatus: status}}, nil
+	return rpcNullResult(reply, xid, ProtocolNameRPCBind, strconv.Itoa(portmapProg))
 }
 
 // buildRPCNull builds an ONC RPC CALL for the NULL procedure of program prog

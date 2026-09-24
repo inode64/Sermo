@@ -68,6 +68,10 @@ func probeRPCNull(ctx context.Context, cfg Config, protocol string, defaultPort 
 	if err != nil {
 		return Result{}, err
 	}
+	return rpcNullResult(reply, xid, protocol, programName)
+}
+
+func rpcNullResult(reply []byte, xid uint32, protocol, programName string) (Result, error) {
 	status, err := parseRPCReply(reply, xid)
 	if err != nil {
 		return Result{}, probeErr(protocol, stepRPCReply, err)
