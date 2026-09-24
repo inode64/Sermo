@@ -215,6 +215,34 @@ healthy cycle, with the same environment as `then.hook` plus
 mode suppresses it. The stateful `file`/`process` watches fire per path/PID and
 do not accept it.
 
+For systemd jobs that fail and immediately restart, sampling current failed
+units can miss the failure. A bounded journal query can retain that evidence
+in a host watch (or the same check in a service's `watches`):
+
+```yaml
+name: recent-job-failures
+interval: 1m
+check:
+  type: command
+  command:
+    - journalctl
+    - --since=-10min
+    - --no-pager
+    - --quiet
+    - --output=cat
+    - --lines=20
+    - --grep=Failed with result '(timeout|exit-code|signal)'
+  expect_exit: [0, 1]  # journalctl returns 1 when no lines match
+  expect_stdout: { op: "==", value: "" }
+  expect_stderr: { op: "==", value: "" }  # do not accept journal read errors
+  timeout: 5s
+```
+
+An empty result passes; matching failures remain visible for ten minutes.
+Choose a narrow expression for the jobs of interest. Unlike a `log` check,
+this queries retained journal history even on its first cycle and after reload.
+It requires readable systemd journals and a journalctl version with `--grep`.
+
 #### Grading output with `analyze:` (pattern sets)
 
 `expect_*` is a single pass/fail assertion. To grade an *otherwise-passing*

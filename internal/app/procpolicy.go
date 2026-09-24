@@ -327,6 +327,9 @@ func (w *processPolicyWatcher) message(violation processPolicyViolation) (string
 }
 
 func (w *processPolicyWatcher) notifyMessage(ctx context.Context, message string, env map[string]string) {
+	if len(w.notifiers) == 0 {
+		return
+	}
 	dispatchWatchFire(ctx, watchFireSpec{
 		name:        w.name,
 		notifiers:   w.notifiers,

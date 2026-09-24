@@ -652,6 +652,27 @@ loaders), set `processes: {}` explicitly. That prevents Sermo from deriving a
 process selector from init metadata and keeps the WebUI from showing CPU/memory
 process totals for a service that cannot have them.
 
+This also omits the generated file-descriptor check and restart rule. An
+`expect: active` service check is appropriate only if the unit remains active
+after completing. A systemd oneshot skipped by `Condition*` can be inactive
+without failing; monitor its result with a read-only host watch instead:
+
+```yaml
+name: boot-task-result
+interval: 5m
+check:
+  type: command
+  command: [systemctl, show, boot-task.service, "--property=LoadState,Result"]
+  expect_stdout:
+    op: "=~"
+    value: '^(LoadState=loaded\nResult=success|Result=success\nLoadState=loaded)$'
+  timeout: 5s
+```
+
+This checks the last result, not whether the task has ever run or how recently
+it completed. `LoadState=loaded` also ensures a removed unit fails the check,
+even if systemd still reports its default `Result=success`.
+
 ### `control: libvirt` — QEMU/libvirt virtual machines
 
 A service can be controlled as a libvirt/QEMU virtual machine instead of a

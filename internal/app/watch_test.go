@@ -405,6 +405,25 @@ func TestWatchExpandFailureEmitsEvent(t *testing.T) {
 	}
 }
 
+func TestWatchWithoutActionsRecordsOnlyFinding(t *testing.T) {
+	for _, mode := range []string{"normal", "dry-run", "panic"} {
+		t.Run(mode, func(t *testing.T) {
+			var events []Event
+			w := &Watch{
+				Name:    "monitor-only",
+				Check:   stubCheck{name: "storage", ok: true},
+				DryRun:  mode == "dry-run",
+				InPanic: func() bool { return mode == "panic" },
+				Emit:    func(e Event) { events = append(events, e) },
+			}
+			w.RunCycle(context.Background())
+			if len(events) != 1 || events[0].Kind != eventKindFiring {
+				t.Fatalf("monitor-only events = %+v, want only the finding", events)
+			}
+		})
+	}
+}
+
 func TestWatchDryRunSkipsHookNotifyAndExpand(t *testing.T) {
 	exp := &fakeExpander{res: volume.Result{VG: "vg0", LV: "data", GrewBytes: 1 << 30}}
 	n := &fakeNotifier{name: "ops"}

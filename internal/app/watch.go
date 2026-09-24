@@ -359,6 +359,9 @@ func (w *Watch) dispatchFiringActions(ctx context.Context, res checks.Result, wa
 	if emitFiring {
 		w.emit(Event{Watch: w.Name, Kind: w.eventKind(eventKindFiring, res), Message: res.Message, Output: resultOutput(res)})
 	}
+	if len(w.Hook.Command) == 0 && len(w.Notifiers) == 0 && w.Expand == nil && w.MakeStep == nil {
+		return
+	}
 	env := hookEnv(w.Name, w.CheckType, res)
 	if w.DryRun {
 		if emitFiring {

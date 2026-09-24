@@ -1798,6 +1798,10 @@ log under the watch expansion). When a previously firing watch clears, it emits
 notifications are delivered (global `notify:` defaults are **not** inherited
 for bare watches).
 
+With no firing actions configured, `dry_run` and panic mode add no simulated or
+suppressed-action event: the finding itself is still recorded. This applies to
+check-based watches and the per-process events of `process_policy` watches.
+
 ```yaml
 watches:
   memory:
