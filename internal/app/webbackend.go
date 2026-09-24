@@ -164,6 +164,7 @@ var _ stateMaintainer = (*state.Store)(nil)
 // the shared snapshots, and start/stop/restart/reload/resume through the same safe operation
 // engine the workers use.
 type WebBackend struct {
+	actionTimeout          time.Duration
 	order                  []string
 	entries                map[string]*webEntry
 	watchOrder             []string
@@ -235,10 +236,10 @@ func (b *WebBackend) webNow() time.Time {
 }
 
 func (b *WebBackend) maxOperationTimeout() time.Duration {
-	if b.cfg == nil {
-		return b.operationTimeout
+	if b.actionTimeout > 0 {
+		return b.actionTimeout
 	}
-	return MaxOperationTimeout(b.cfg, b.operationTimeout)
+	return operation.ResolveTimeout(b.operationTimeout, nil)
 }
 
 // operationContext bounds one WebBackend operation. secondaryFallback keeps
@@ -285,6 +286,7 @@ func NewWebBackend(ctx context.Context, cfg *config.Config, deps Deps) (*WebBack
 		daemonMetrics = NewDaemonMetricSampler(deps.Collector, deps.Now, deps.DaemonMetrics)
 	}
 	wb := &WebBackend{
+		actionTimeout:         MaxOperationTimeout(cfg, deps.OperationTimeout),
 		entries:               map[string]*webEntry{},
 		watches:               map[string]*webWatch{},
 		notifiers:             map[string]*webNotifier{},
