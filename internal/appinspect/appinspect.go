@@ -13,6 +13,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -114,7 +115,7 @@ func List(ctx context.Context, runner execx.Runner, cfg *config.Config, category
 		return nil
 	}
 	var reports []Report
-	cache := map[string]Report{}
+	cache := &inspectionCache{entries: map[string]*inspectionEntry{}}
 	for _, name := range cfg.CatalogNamesInCategory(category) {
 		r := inspectCatalog(ctx, runner, cfg, category, name, cache, map[string]bool{}, opts...)
 		if !r.Installed && !includeMissing {
@@ -135,13 +136,59 @@ func InspectOne(ctx context.Context, runner execx.Runner, cfg *config.Config, na
 }
 
 // InspectCategoryOne inspects one catalog entry from category, resolving its
-// version_from chain. Web inventories use it to share the same bounded parallel
-// inspection path for applications and libraries.
+// version_from chain.
 func InspectCategoryOne(ctx context.Context, runner execx.Runner, cfg *config.Config, category, name string, opts ...Option) Report {
 	if cfg == nil {
 		return Report{Name: name}
 	}
-	return inspectCatalog(ctx, runner, cfg, category, name, map[string]Report{}, map[string]bool{}, opts...)
+	return inspectCatalog(ctx, runner, cfg, category, name, &inspectionCache{entries: map[string]*inspectionEntry{}}, map[string]bool{}, opts...)
+}
+
+// InspectCategory inspects names in input order with bounded parallelism. All
+// version_from consumers share their provider's probes for this batch only.
+func InspectCategory(ctx context.Context, runner execx.Runner, cfg *config.Config, category string, names []string, parallel int, opts ...Option) []Report {
+	reports := make([]Report, len(names))
+	if cfg == nil {
+		return reports
+	}
+	cache := &inspectionCache{entries: map[string]*inspectionEntry{}}
+	sem := make(chan struct{}, max(1, parallel))
+	var wg sync.WaitGroup
+	for i, name := range names {
+		wg.Go(func() {
+			select {
+			case sem <- struct{}{}:
+				defer func() { <-sem }()
+			case <-ctx.Done():
+				return
+			}
+			if ctx.Err() == nil {
+				reports[i] = inspectCatalog(ctx, runner, cfg, category, name, cache, map[string]bool{}, opts...)
+			}
+		})
+	}
+	wg.Wait()
+	return reports
+}
+
+type inspectionEntry struct {
+	once     sync.Once
+	resolved config.Resolved
+	report   Report
+}
+
+type inspectionCache struct {
+	mu      sync.Mutex
+	entries map[string]*inspectionEntry
+}
+
+func (c *inspectionCache) entry(name string) *inspectionEntry {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.entries[name] == nil {
+		c.entries[name] = &inspectionEntry{}
+	}
+	return c.entries[name]
 }
 
 func applyCurrentLabels(reports []Report, cfg *config.Config, category string) {
@@ -176,7 +223,7 @@ func hasCurrentLabel(displayName string) bool {
 	return slices.Contains(strings.Fields(displayName), statusCurrentLabel)
 }
 
-func inspectCatalog(ctx context.Context, runner execx.Runner, cfg *config.Config, category, name string, cache map[string]Report, chain map[string]bool, opts ...Option) Report {
+func inspectCatalog(ctx context.Context, runner execx.Runner, cfg *config.Config, category, name string, cache *inspectionCache, chain map[string]bool, opts ...Option) Report {
 	if category != config.CategoryApp {
 		resolved, _ := cfg.ResolveCatalog(category, name)
 		return inspectResolved(ctx, runner, name, resolved, category, opts...)
@@ -184,24 +231,26 @@ func inspectCatalog(ctx context.Context, runner execx.Runner, cfg *config.Config
 	if doc, ok := cfg.Apps[name]; ok {
 		name = doc.Name
 	}
-	if cached, ok := cache[name]; ok {
-		return cached
-	}
 	if chain[name] {
 		return Report{Name: name, Status: statusVersionFromCycle}
 	}
 	chain[name] = true
-	resolved, _ := cfg.ResolveCatalog(category, name)
-	r := inspectResolved(ctx, runner, name, resolved, category, opts...)
+	entry := cache.entry(name)
+	// Cache only the direct inspection. Resolving version_from outside Once
+	// avoids mutual waits when concurrent consumers follow a provider cycle.
+	entry.once.Do(func() {
+		entry.resolved, _ = cfg.ResolveCatalog(category, name)
+		entry.report = inspectResolved(ctx, runner, name, entry.resolved, category, opts...)
+	})
+	r := entry.report
 	if r.Installed && r.OK && r.Version == "" {
-		fillVersionFrom(ctx, runner, cfg, &r, resolved.Tree, cache, chain, opts...)
+		fillVersionFrom(ctx, runner, cfg, &r, entry.resolved.Tree, cache, chain, opts...)
 	}
 	delete(chain, name)
-	cache[name] = r
 	return r
 }
 
-func fillVersionFrom(ctx context.Context, runner execx.Runner, cfg *config.Config, r *Report, tree map[string]any, cache map[string]Report, chain map[string]bool, opts ...Option) {
+func fillVersionFrom(ctx context.Context, runner execx.Runner, cfg *config.Config, r *Report, tree map[string]any, cache *inspectionCache, chain map[string]bool, opts ...Option) {
 	source := cfgval.String(tree[config.AppKeyVersionFrom])
 	if source == "" {
 		return
