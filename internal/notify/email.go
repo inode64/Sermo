@@ -44,7 +44,7 @@ type emailDSN struct {
 	implicitTLS bool
 }
 
-func (d emailDSN) addr() string { return net.JoinHostPort(d.host, strconv.Itoa(d.port)) }
+func (d emailDSN) addr() string { return netutil.JoinHostPort(d.host, d.port) }
 
 // emailSender delivers a built message; injected so tests do not hit the network.
 type emailSender func(ctx context.Context, dsn emailDSN, from string, to []string, msg Message) error
