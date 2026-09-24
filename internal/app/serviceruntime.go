@@ -216,11 +216,15 @@ func (b *WebBackend) ServiceRuntime(_ context.Context, name string, since time.D
 	return b.serviceMetrics.Series(name, cur, since), true
 }
 
-func (b *WebBackend) decorateServiceRuntime(name string, e *webEntry, svc *web.Service) {
+func (b *WebBackend) decorateServiceRuntime(name string, e *webEntry, svc *web.Service, observation serviceObservation) {
 	if svc == nil || e == nil || e.disabled || e.noResidentProcess || !serviceRuntimeVisible(svc.Status) {
 		return
 	}
-	applyServiceRuntimeFields(svc, b.listServiceRuntime(name, e))
+	cur := observation.runtime
+	if !observation.runtimeFresh {
+		cur = b.probeServiceRuntime(name, e)
+	}
+	applyServiceRuntimeFields(svc, cur)
 }
 
 func serviceRuntimeVisible(status string) bool {
@@ -245,23 +249,6 @@ func applyServiceRuntimeFields(svc *web.Service, cur web.ServiceRuntime) {
 	svc.CPUThread = cur.CPUThread
 	svc.NumCPU = cur.NumCPU
 	svc.CPUReady = cur.HasCPU
-}
-
-// listServiceRuntime returns runtime fields for the service list. It reuses the
-// worker-published sample when fresh; otherwise it probes the process tree.
-func (b *WebBackend) listServiceRuntime(name string, e *webEntry) web.ServiceRuntime {
-	if cur, ok := b.publishedServiceRuntime(name, e); ok {
-		return cur
-	}
-	return b.probeServiceRuntime(name, e)
-}
-
-func (b *WebBackend) publishedServiceRuntime(name string, e *webEntry) (web.ServiceRuntime, bool) {
-	cur, at, ok := b.latestPublishedServiceRuntime(name, e)
-	if !ok || b.webNow().Sub(at) > runtimePublishMaxAge(e.interval) {
-		return web.ServiceRuntime{}, false
-	}
-	return cur, true
 }
 
 // latestPublishedServiceRuntime returns the last process-tree sample produced

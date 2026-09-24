@@ -42,17 +42,38 @@ func (b *WebBackend) monitorRecord(key string) (active bool, source string, chan
 	return rec.Active, rec.Source, rec.UpdatedAt, true
 }
 
+func (b *WebBackend) monitorRecords() map[string]state.MonitorRecord {
+	if source, ok := b.store.(interface {
+		MonitorStates() (map[string]state.MonitorRecord, error)
+	}); ok {
+		records, err := source.MonitorStates()
+		if err == nil {
+			return records
+		}
+	}
+	return nil
+}
+
+func (b *WebBackend) monitorViewFrom(records map[string]state.MonitorRecord, key string) (monitorStateView, bool) {
+	if records == nil {
+		return b.monitorView(key)
+	}
+	record, ok := records[key]
+	return monitorStateView{active: record.Active, source: record.Source, changedAt: record.UpdatedAt}, ok
+}
+
 // MonitoringStatus returns how many services are monitored versus paused.
 func (b *WebBackend) MonitoringStatus(_ context.Context) web.MonitoringStatus {
 	total := 0
 	monitored := 0
+	records := b.monitorRecords()
 	for _, name := range b.order {
 		if _, ok := b.enabledEntry(name); !ok {
 			continue
 		}
 		total++
 		active := true
-		if monitoredState, ok := b.monitorView(name); ok {
+		if monitoredState, ok := b.monitorViewFrom(records, name); ok {
 			active = monitoredState.active
 		}
 		if active {
