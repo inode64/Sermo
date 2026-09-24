@@ -139,6 +139,34 @@ func TestCountInTree(t *testing.T) {
 	}
 }
 
+func TestCountInFiltersDiscoveredProcesses(t *testing.T) {
+	d := Discoverer{ResolveUser: fakeUsers(map[string]uint32{"svc": 500})}
+	procs := []Process{
+		{PID: 100, UID: 500, Exe: "/opt/app/main", ExeOK: true},
+		{PID: 101, UID: 500, Exe: "/opt/app/worker", ExeOK: true},
+		{PID: 102, UID: 600, Exe: "/opt/app/worker", ExeOK: true},
+		{PID: 103, UID: 500, Exe: "/opt/app/worker", ExeOK: false},
+		{PID: 104, UID: 500, Exe: "/opt/app-other/worker", ExeOK: true},
+	}
+	for _, tc := range []struct {
+		name, user, exe, dir string
+		want                 int
+	}{
+		{name: "all", want: 5},
+		{name: "user", user: "svc", want: 4},
+		{name: "unknown user", user: "ghost"},
+		{name: "exact executable", exe: "/opt/app/worker", want: 2},
+		{name: "combined", user: "svc", exe: "/opt/app/worker", want: 1},
+		{name: "directory boundary", dir: "/opt/app", want: 3},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := d.CountIn(procs, tc.user, tc.exe, tc.dir); got != tc.want {
+				t.Fatalf("CountIn = %d, want %d", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestDiscoverEmptyInputsAvoidSnapshot(t *testing.T) {
 	reader := &countingReader{ids: map[int]Identity{100: {PID: 100}}}
 	d := Discoverer{Reader: reader}

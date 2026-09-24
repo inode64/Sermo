@@ -8,6 +8,7 @@ import (
 	"math"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"sermo/internal/cfgval"
@@ -559,6 +560,9 @@ func buildWorker(ctx context.Context, name, unit string, tree map[string]any, de
 	// Strays come from the same memoized discovery: classification already ran
 	// inside Discover, so the check costs one slice filter per cycle.
 	checkDeps.Strays = func() []process.Process { return process.Strays(processesForCycle()) }
+	checkDeps.ProcessCount = func(user, exe, exeDir string) int {
+		return discoverer.CountIn(processesForCycle(), user, exe, exeDir)
+	}
 	sampleMetrics := metricSampler(name, tree, collector, observe)
 	liveSample := liveSampler(name, deps.LiveCollector, deps.Live, deps.ServiceMetrics, processesForCycle, observe, deps.Now)
 	if noResident {
@@ -1216,10 +1220,13 @@ func metricSampler(service string, tree map[string]any, collector *metrics.Colle
 // result, while continuity inference retains the source/role evidence needed to
 // decide whether a process can safely explain an unobserved interval.
 func cycleProcessSource(discover func() []process.Process, cycle func() int) func() []process.Process {
+	var mu sync.Mutex
 	var cached []process.Process
 	var cachedCycle int
 	var ok bool
 	return func() []process.Process {
+		mu.Lock()
+		defer mu.Unlock()
 		current := 0
 		if cycle != nil {
 			current = cycle()
