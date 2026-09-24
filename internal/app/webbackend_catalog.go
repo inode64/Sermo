@@ -8,7 +8,6 @@ import (
 	"sermo/internal/web"
 	"slices"
 	"strings"
-	"sync"
 	"time"
 )
 
@@ -55,8 +54,8 @@ func (b *WebBackend) loadCatalogItems(ctx context.Context, category string, expo
 		ok   bool
 	}
 	results := make([]catalogResult, len(names))
-	sem := make(chan struct{}, catalogInspectionParallelism)
-	var wg sync.WaitGroup
+	probeNames := make([]string, 0, len(names))
+	probeIndices := make([]int, 0, len(names))
 	for i, name := range names {
 		if exposeSettling && b.settling != nil && !b.settling.Observed(SettlingAppKey(name)) {
 			resolved, _ := b.cfg.ResolveCatalog(category, name)
@@ -68,20 +67,14 @@ func (b *WebBackend) loadCatalogItems(ctx context.Context, category string, expo
 			}}
 			continue
 		}
-		wg.Go(func() {
-			select {
-			case sem <- struct{}{}:
-				defer func() { <-sem }()
-			case <-ctx.Done():
-				return
-			}
-			r := appinspect.InspectCategoryOne(ctx, runner, b.cfg, category, name, opts)
-			if r.Installed {
-				results[i] = catalogResult{item: catalogItemFromReport(r), ok: true}
-			}
-		})
+		probeNames = append(probeNames, name)
+		probeIndices = append(probeIndices, i)
 	}
-	wg.Wait()
+	for i, report := range appinspect.InspectCategory(ctx, runner, b.cfg, category, probeNames, catalogInspectionParallelism, opts) {
+		if report.Installed {
+			results[probeIndices[i]] = catalogResult{item: catalogItemFromReport(report), ok: true}
+		}
+	}
 	out := make([]web.CatalogItem, 0, len(names))
 	for i := range results {
 		if results[i].ok {
