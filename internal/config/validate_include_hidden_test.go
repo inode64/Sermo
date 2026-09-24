@@ -37,7 +37,7 @@ func TestValidateIncludeHiddenForRecursiveChecks(t *testing.T) {
 	joined := strings.Join(invalid, "\n")
 	for _, want := range []string{
 		"checks.count-files count include_hidden must be a boolean",
-		"checks.size-tree.include_hidden must be a boolean",
+		"checks.size-tree size include_hidden must be a boolean",
 	} {
 		if !strings.Contains(joined, want) {
 			t.Fatalf("missing issue %q in %s", want, joined)

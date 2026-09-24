@@ -54,40 +54,15 @@ func validateMountConditions(prefix string, fields map[string]any, add addFunc) 
 // storage-style comparison op and a numeric value) at the dotted label. It is the
 // shared core of every delta/threshold/predicate check.
 func validateOpNumeric(label string, m map[string]any, add addFunc) {
-	validateCompareOp(label, m, add)
-	if _, ok := cfgval.Float(cfgval.String(m[checks.CheckKeyValue])); !ok {
-		add("%s value %q must be numeric", label, cfgval.String(m[checks.CheckKeyValue]))
+	if _, _, err := checks.ParsePredicate(label, m); err != nil {
+		for detail := range strings.SplitSeq(err.Error(), "\n") {
+			add("%s", detail)
+		}
 	}
 }
 
-func validateOpByteSize(label string, m map[string]any, add addFunc) {
-	validateCompareOp(label, m, add)
-	if _, ok := cfgval.ByteSize(m[checks.CheckKeyValue]); !ok {
-		add("%s value %q must include a size suffix (K, M, G or T; e.g. 10G, 500M)", label, cfgval.String(m[checks.CheckKeyValue]))
-	}
-}
-
-func validateOpPercent(label string, m map[string]any, add addFunc) {
-	validateCompareOp(label, m, add)
-	if _, ok := cfgval.Percent(cfgval.String(m[checks.CheckKeyValue])); !ok {
-		add("%s value %q must be a percentage in %s (e.g. 90 or 90%%)", label, cfgval.String(m[checks.CheckKeyValue]), cfgval.PercentRange())
-	}
-}
-
-// validateCompareOp adds an error when the {op} of an already-extracted threshold
-// map is not one of the comparison operators the storage-style checks share. It is
-// the op-validation prologue every validateOp* helper repeats.
-func validateCompareOp(label string, m map[string]any, add addFunc) {
-	if op := cfgval.String(m[checks.CheckKeyOp]); !cfgval.IsCompareOp(op) {
-		add("%s has an invalid op %q", label, op)
-	}
-}
-
-// validatePresentThresholds validates the present {op, value} predicates among
-// fields and returns how many were present (it does not require any). Each
-// value is validated by its field's form — `*_bytes` requires a size suffix,
-// `*_pct` accepts a number or a trailing % in 0..100, anything else is plain
-// numeric — the same grammar the runtime parser (checks.parseLevelPreds) uses.
+// validatePresentThresholds delegates the grammar to the runtime predicate
+// parser and counts present fields even when their values are invalid.
 func validatePresentThresholds(prefix string, fieldsMap map[string]any, fields []string, add addFunc) int {
 	preds := 0
 	for _, field := range fields {
@@ -96,18 +71,10 @@ func validatePresentThresholds(prefix string, fieldsMap map[string]any, fields [
 			continue
 		}
 		preds++
-		m, ok := raw.(map[string]any)
-		if !ok {
-			add("%s.%s must be a mapping {op, value}", prefix, field)
-			continue
-		}
-		switch {
-		case strings.HasSuffix(field, checks.LevelFieldSuffixBytes):
-			validateOpByteSize(prefix+"."+field, m, add)
-		case strings.HasSuffix(field, checks.LevelFieldSuffixPct):
-			validateOpPercent(prefix+"."+field, m, add)
-		default:
-			validateOpNumeric(prefix+"."+field, m, add)
+		if _, _, err := checks.ParsePredicate(field, raw); err != nil {
+			for detail := range strings.SplitSeq(err.Error(), "\n") {
+				add("%s.%s", prefix, detail)
+			}
 		}
 	}
 	return preds
@@ -262,15 +229,7 @@ func validateHTTPJSONExpectations(prefix string, value any, present bool, add ad
 		if !ok {
 			continue
 		}
-		op := cfgval.String(cond[checks.CheckKeyOp])
-		if op == "" {
-			op = cfgval.CompareOpEqual
-		}
-		if !cfgval.IsAssertOp(op) {
-			add("%s.expect_json.%s op %q is not one of %s", prefix, path, op, cfgval.AssertOpSummary)
-			continue
-		}
-		if err := checks.ValidateAssertionValue(prefix+"."+checks.CheckKeyExpectJSON+"."+path, op, cfgval.String(cond[checks.CheckKeyValue])); err != nil {
+		if _, _, err := checks.ParseAssertion(cond, prefix+"."+checks.CheckKeyExpectJSON+"."+path, cfgval.CompareOpEqual, false); err != nil {
 			add("%s", err)
 		}
 	}
@@ -331,13 +290,7 @@ func validateCommandExpectations(path string, entry map[string]any, add addFunc)
 // http response comparisons): op must be a known comparison operator, and value
 // must be numeric for ordering ops and a valid regexp for =~.
 func validateOpValue(prefix, label string, m map[string]any, add addFunc) {
-	op := cfgval.String(m[checks.CheckKeyOp])
-	if !cfgval.IsAssertOp(op) {
-		add("%s.%s op %q is not one of %s", prefix, label, op, cfgval.AssertOpSummary)
-		return
-	}
-	value := cfgval.String(m[checks.CheckKeyValue])
-	if err := checks.ValidateAssertionValue(prefix+"."+label, op, value); err != nil {
+	if _, _, err := checks.ParseAssertion(m, prefix+"."+label, "", false); err != nil {
 		add("%s", err)
 	}
 }
@@ -564,7 +517,6 @@ func validateConnChangeFlags(prefix string, fields map[string]any, add addFunc) 
 	}
 }
 
-var countKinds = set(checks.CountKindAny, checks.CountKindFile, checks.CountKindDir, checks.CountKindSymlink)
 var sqlEngines = set(
 	checks.SQLEngineMySQL,
 	checks.SQLEngineMariaDB,
@@ -1349,30 +1301,17 @@ func validateSingleShotCount(path string, entry map[string]any, _ string, add ad
 	validateCount(entry, path, add)
 }
 
-// validateLogCheck mirrors checks.buildLogCheck: an absolute path (or glob), a
-// compilable regex, a count {op, value} predicate and a positive within window.
 func validateLogCheck(path string, entry map[string]any, add addFunc) {
-	switch logPath := cfgval.String(entry[checks.CheckKeyPath]); {
-	case logPath == "":
-		add("%s log check requires a path", path)
-	case !filepath.IsAbs(logPath):
-		add("%s log check path must be absolute", path)
+	validateParsedCheck(path, checks.ValidateLogCheck(entry), add)
+}
+
+// validateParsedCheck adds configuration identity to every parser diagnostic.
+func validateParsedCheck(path string, err error, add addFunc) {
+	if err == nil {
+		return
 	}
-	if pattern := cfgval.String(entry[checks.CheckKeyRegex]); pattern == "" {
-		add("%s log check requires a regex", path)
-	} else if _, err := regexp.Compile(pattern); err != nil {
-		add("%s log check regex is invalid: %v", path, err)
-	}
-	if m, ok := entry[checks.CheckKeyCount].(map[string]any); ok {
-		validateOpNumeric(path+"."+checks.CheckKeyCount, m, add)
-	} else {
-		add("%s log check requires a count {op, value}", path)
-	}
-	within := cfgval.String(entry[checks.CheckKeyWithin])
-	if within == "" {
-		add("%s.within is required for a log check (e.g. 5m)", path)
-	} else if !isPositiveDuration(within) {
-		add("%s.within %q must be a valid positive duration", path, within)
+	for detail := range strings.SplitSeq(err.Error(), "\n") {
+		add("%s %s", path, detail)
 	}
 }
 
@@ -1558,27 +1497,8 @@ func validateWebsocketFields(prefix string, fields map[string]any, add addFunc) 
 	}
 }
 
-// validateSizeFields validates a size (growth) check: a required path, a
-// positive parseable grow_by byte size and a positive within duration.
 func validateSizeFields(prefix string, fields map[string]any, add addFunc) {
-	requireCheckField(prefix, checks.CheckKeyPath, "a size check", fields, add)
-	if v, present := fields[checks.CheckKeyIncludeHidden]; present {
-		if _, ok := v.(bool); !ok {
-			add(validationBooleanFormat, prefix+"."+checks.CheckKeyIncludeHidden)
-		}
-	}
-	gb := cfgval.String(fields[checks.CheckKeyGrowBy])
-	if gb == "" {
-		add("%s.grow_by is required for a size check (e.g. 1G)", prefix)
-	} else if n, ok := cfgval.ByteSize(gb); !ok || n == 0 {
-		add("%s.grow_by %q must be a positive size with a K/M/G/T suffix (e.g. 1G, 500M)", prefix, gb)
-	}
-	w := cfgval.String(fields[checks.CheckKeyWithin])
-	if w == "" {
-		add("%s.within is required for a size check (e.g. 1h)", prefix)
-	} else if !isPositiveDuration(w) {
-		add("%s.within %q must be a valid positive duration", prefix, w)
-	}
+	validateParsedCheck(prefix, checks.ValidateSizeCheck(fields), add)
 }
 
 // validateMongoFields validates a mongodb-query check: a valid op and value, a
@@ -1586,7 +1506,7 @@ func validateSizeFields(prefix string, fields map[string]any, add addFunc) {
 // collection+pipeline / command), JSON-parseable filter/pipeline/command, and a
 // result path where one is needed.
 func validateMongoFields(prefix string, fields map[string]any, add addFunc) {
-	validateAssertionFields(prefix, fields, "mongodb-query", add)
+	validateAssertionFields(prefix, fields, add)
 
 	collection := cfgval.String(fields[checks.CheckKeyCollection])
 	command := cfgval.String(fields[checks.CheckKeyCommand])
@@ -1649,7 +1569,7 @@ func validateInterfaceFields(prefix string, fields map[string]any, add addFunc) 
 // needs an `org` and `token`.
 func validateInfluxFields(prefix string, fields map[string]any, add addFunc) {
 	requireCheckField(prefix, checks.CheckKeyQuery, "an influxdb-query check", fields, add)
-	validateAssertionFields(prefix, fields, "influxdb-query", add)
+	validateAssertionFields(prefix, fields, add)
 	language := cfgval.String(fields[checks.CheckKeyLanguage])
 	if language == "" {
 		language = checks.InfluxLanguageInfluxQL
@@ -1685,7 +1605,7 @@ func validateSQLFields(prefix string, fields map[string]any, add addFunc) {
 		add("%s.engine must be one of %s", prefix, checks.SQLEngineSummary)
 	}
 	requireCheckField(prefix, checks.CheckKeyQuery, "a sql check", fields, add)
-	validateAssertionFields(prefix, fields, "sql", add)
+	validateAssertionFields(prefix, fields, add)
 	switch engine {
 	case checks.SQLEngineSQLite, checks.SQLEngineSQLite3:
 		requireCheckField(prefix, checks.CheckKeyPath, "a sqlite sql check", fields, add)
@@ -1703,19 +1623,7 @@ func validateReplicationFields(prefix string, fields map[string]any, add addFunc
 		add("%s.engine must be mysql or mariadb for a replication check", prefix)
 	}
 	requireCheckField(prefix, checks.CheckKeyUser, "a replication check", fields, add)
-	behind, ok := fields[checks.CheckKeyBehind].(map[string]any)
-	if !ok {
-		if _, present := fields[checks.CheckKeyBehind]; present {
-			add("%s.behind must be a {op, value} mapping", prefix)
-		}
-		return
-	}
-	if op := cfgval.String(behind[checks.CheckKeyOp]); !cfgval.IsCompareOp(op) {
-		add("%s.behind.op %q is not one of %s", prefix, op, cfgval.CompareOpSummary)
-	}
-	if _, ok := cfgval.Float(cfgval.String(behind[checks.CheckKeyValue])); !ok {
-		add("%s.behind.value must be numeric", prefix)
-	}
+	validatePresentThresholds(prefix, fields, []string{checks.CheckKeyBehind}, add)
 }
 
 // requireCheckField reports the shared "field is required" issue when the check
@@ -1728,18 +1636,9 @@ func requireCheckField(prefix, key, what string, fields map[string]any, add addF
 	}
 }
 
-func validateAssertionFields(prefix string, fields map[string]any, checkType string, add addFunc) {
-	op := cfgval.String(fields[checks.CheckKeyOp])
-	if !cfgval.IsAssertOp(op) {
-		add("%s.op %q is not one of %s", prefix, op, cfgval.AssertOpSummary)
-	}
-	value := cfgval.String(fields[checks.CheckKeyValue])
-	if value == "" {
-		add("%s.value is required for a %s check", prefix, checkType)
-	} else if cfgval.IsAssertOp(op) {
-		if err := checks.ValidateAssertionValue(prefix, op, value); err != nil {
-			add("%s", err)
-		}
+func validateAssertionFields(prefix string, fields map[string]any, add addFunc) {
+	if _, _, err := checks.ParseAssertion(fields, prefix, "", true); err != nil {
+		add("%s", err)
 	}
 }
 
@@ -1802,68 +1701,6 @@ func validatePressureFields(prefix string, fields map[string]any, add addFunc) {
 	validateThresholdPreds(prefix, fields, checks.PressurePredFields, add)
 }
 
-// validateCount checks a count entry: a path, an optional `of` kind, an optional
-// boolean `recursive`, and exactly one predicate mode: a numeric threshold
-// (flat op/value or nested `count: {op, value}`), or growth over a window
-// (`delta: {op, value}` plus `within`).
 func validateCount(entry map[string]any, path string, add addFunc) {
-	if cfgval.String(entry[checks.CheckKeyPath]) == "" {
-		add("%s count check requires a path", path)
-	}
-	if of := cfgval.String(entry[checks.CheckKeyOf]); of != "" {
-		if _, ok := countKinds[of]; !ok {
-			add("%s count `of` %q is not one of %s", path, of, checks.CountKindSummary)
-		}
-	}
-	if v, present := entry[checks.CheckKeyRecursive]; present {
-		if _, ok := v.(bool); !ok {
-			add("%s count recursive must be a boolean", path)
-		}
-	}
-	if v, present := entry[checks.CheckKeyIncludeHidden]; present {
-		if _, ok := v.(bool); !ok {
-			add("%s count include_hidden must be a boolean", path)
-		}
-	}
-	if delta, hasDelta := entry[checks.CheckKeyDelta]; hasDelta {
-		if _, hasCount := entry[checks.CheckKeyCount]; hasCount {
-			add("%s count check must not mix a count threshold with delta", path)
-		}
-		_, hasOp := entry[checks.CheckKeyOp]
-		_, hasValue := entry[checks.CheckKeyValue]
-		if hasOp || hasValue {
-			add("%s count check must not mix top-level op/value with delta", path)
-		}
-		m, ok := delta.(map[string]any)
-		if !ok {
-			add("%s.delta must be a mapping {op, value}", path)
-		} else {
-			validateOpNumeric(path+"."+checks.CheckKeyDelta, m, add)
-		}
-		within := cfgval.String(entry[checks.CheckKeyWithin])
-		if within == "" {
-			add("%s.within is required when count delta is set (e.g. 2m)", path)
-		} else if !isPositiveDuration(within) {
-			add("%s.within %q must be a valid positive duration", path, within)
-		}
-		return
-	}
-	if cfgval.String(entry[checks.CheckKeyWithin]) != "" {
-		add("%s.within requires delta {op, value}", path)
-	}
-	threshold := entry
-	if m, ok := entry[checks.CheckKeyCount].(map[string]any); ok {
-		_, hasOp := entry[checks.CheckKeyOp]
-		_, hasValue := entry[checks.CheckKeyValue]
-		if hasOp || hasValue {
-			add("%s count check must not mix a nested count {op, value} with top-level op/value", path)
-		}
-		threshold = m
-	}
-	if op := cfgval.String(threshold[checks.CheckKeyOp]); !cfgval.IsCompareOp(op) {
-		add("%s count check requires a valid op (%s)", path, cfgval.CompareOpSummary)
-	}
-	if _, ok := cfgval.Float(cfgval.String(threshold[checks.CheckKeyValue])); !ok {
-		add("%s count check value %q must be numeric", path, cfgval.String(threshold[checks.CheckKeyValue]))
-	}
+	validateParsedCheck(path, checks.ValidateCountCheck(entry), add)
 }

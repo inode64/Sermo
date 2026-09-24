@@ -292,21 +292,30 @@ func parseLevelPreds(entry map[string]any, fields []string) ([]levelPred, error)
 		if !ok {
 			continue
 		}
-		m, ok := raw.(map[string]any)
-		if !ok {
-			return nil, fmt.Errorf("%s must be a mapping {op, value}", field)
-		}
-		op := cfgval.AsString(m[CheckKeyOp])
-		if !cfgval.IsCompareOp(op) {
-			return nil, fmt.Errorf("%s has invalid op %q", field, op)
-		}
-		val, err := parseLevelPredValue(field, m[CheckKeyValue])
+		op, val, err := ParsePredicate(field, raw)
 		if err != nil {
 			return nil, err
 		}
 		preds = append(preds, levelPred{field: field, op: op, value: val})
 	}
 	return preds, nil
+}
+
+// ParsePredicate parses a named {op, value} threshold without host I/O. The
+// field selects the value grammar: *_bytes, *_pct, or a finite numeric value.
+// Configuration validation and runtime builders use the same restrictions.
+func ParsePredicate(field string, raw any) (op string, value float64, err error) {
+	m, ok := raw.(map[string]any)
+	if !ok {
+		return "", 0, fmt.Errorf("%s must be a mapping {op, value}", field)
+	}
+	op = cfgval.String(m[CheckKeyOp])
+	var opErr error
+	if !cfgval.IsCompareOp(op) {
+		opErr = fmt.Errorf("%s has an invalid op %q", field, op)
+	}
+	value, valueErr := parseLevelPredValue(field, m[CheckKeyValue])
+	return op, value, errors.Join(opErr, valueErr)
 }
 
 // requireLevelPreds is parseLevelPreds for the checks that require at least one
@@ -340,17 +349,9 @@ func requireSingleLevelPred(entry map[string]any, fields []string, label string)
 // counter threshold shared by net errors, swap io and oom. It returns a
 // builder-style error string when the shape, op or value is invalid.
 func parseDeltaThreshold(raw any, label string) (op string, value float64, errs string) {
-	m, ok := raw.(map[string]any)
-	if !ok {
-		return "", 0, label + " requires a delta {op, value}"
-	}
-	op = cfgval.AsString(m[CheckKeyOp])
-	if !cfgval.IsCompareOp(op) {
-		return "", 0, label + " delta has an invalid op"
-	}
-	value, err := parseFiniteThreshold(m[CheckKeyValue])
+	op, value, err := ParsePredicate(CheckKeyDelta, raw)
 	if err != nil {
-		return "", 0, label + " delta value " + err.Error()
+		return "", 0, label + " " + err.Error()
 	}
 	return op, value, ""
 }

@@ -96,7 +96,7 @@ checks:
 `)
 	mustHave(t, bad, "count check requires a path")
 	mustHave(t, bad, `count `+"`of`"+` "pipe" is not one of`)
-	mustHave(t, bad, "count check requires a valid op")
+	mustHave(t, bad, "count check has an invalid op")
 	mustHave(t, bad, `count check value "lots" must be numeric`)
 	mustHave(t, bad, "count recursive must be a boolean")
 	mustHave(t, bad, "within is required when count delta is set")

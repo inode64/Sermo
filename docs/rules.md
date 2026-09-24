@@ -2031,7 +2031,8 @@ regular-file sizes under a directory), keeps the samples seen in the last
 window. It fails when `current − baseline ≥ grow_by`. The first cycle only
 baselines (no alert). `grow_by` uses the same size grammar as every other size
 field (`free_bytes`, `expand.by`): an explicit `K`/`M`/`G`/`T` suffix (optional
-`B`/`iB`), binary units (`1G` = 2³⁰), with plain byte counts rejected. Result
+`B`/`iB`), binary units (`1G` = 2³⁰), with plain byte counts rejected. It must
+be positive and fit a signed 64-bit byte count. Result
 data carries `current_bytes`, `baseline_bytes`,
 `growth_bytes`, the `window` and `value` (the growth) for hooks/rules. A
 directory walk skips hidden descendants by default; set `include_hidden: true` to
@@ -2793,6 +2794,11 @@ detail so gradual degradation is visible.
   ```
 
 ### Count
+
+Numeric resource and counter predicates (`{op, value}`) require finite values;
+`NaN` and infinities are rejected during configuration validation as well as
+check construction. Percentage predicates remain bounded to 0–100, and byte
+predicates require an explicit size suffix.
 
 A `count` check tallies the entries in a directory and either compares the total
 to a threshold, or alerts when the total grows by a `delta` within a time

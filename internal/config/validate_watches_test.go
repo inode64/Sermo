@@ -897,8 +897,8 @@ func TestValidateReplicationWatch(t *testing.T) {
 	}),
 		"watches.no-user.check.user is required for a replication check",
 		"watches.bad-eng.check.engine must be mysql or mariadb for a replication check",
-		"watches.bad-lag.check.behind.op \"<>\" is not one of",
-		"watches.bad-lag.check.behind.value must be numeric")
+		"watches.bad-lag.check.behind has an invalid op \"<>\"",
+		`watches.bad-lag.check.behind value "x" must be numeric`)
 }
 
 func TestValidateReplicationControlBlock(t *testing.T) {
