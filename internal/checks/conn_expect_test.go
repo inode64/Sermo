@@ -126,17 +126,17 @@ func TestConnExpectExtraField(t *testing.T) {
 	res := conn.Result{Extra: map[string]string{"answers": "3", "rcode": "NOERROR"}}
 
 	// answers > 0 holds.
-	c := connCheckWithExpect([]jsonAssertion{{path: "answers", op: ">", value: "0"}}, res)
+	c := connCheckWithExpect([]jsonAssertion{{path: "answers", valueMatcher: newValueMatcher(">", "0")}}, res)
 	if r := c.Run(context.Background()); !r.OK {
 		t.Fatalf("answers > 0 should pass: %s", r.Message)
 	}
 	// answers > 5 fails (probe still succeeded, but the assertion does not hold).
-	c = connCheckWithExpect([]jsonAssertion{{path: "answers", op: ">", value: "5"}}, res)
+	c = connCheckWithExpect([]jsonAssertion{{path: "answers", valueMatcher: newValueMatcher(">", "5")}}, res)
 	if r := c.Run(context.Background()); r.OK {
 		t.Fatal("answers > 5 should fail")
 	}
 	// rcode == NOERROR (string equality).
-	c = connCheckWithExpect([]jsonAssertion{{path: "rcode", op: "==", value: "NOERROR"}}, res)
+	c = connCheckWithExpect([]jsonAssertion{{path: "rcode", valueMatcher: newValueMatcher("==", "NOERROR")}}, res)
 	if r := c.Run(context.Background()); !r.OK {
 		t.Fatalf("rcode == NOERROR should pass: %s", r.Message)
 	}
@@ -145,12 +145,12 @@ func TestConnExpectExtraField(t *testing.T) {
 func TestConnExpectVersionRegexAndMissing(t *testing.T) {
 	res := conn.Result{Version: "8.0.36", Extra: map[string]string{}}
 
-	c := connCheckWithExpect([]jsonAssertion{{path: "version", op: "=~", value: `^8\.`}}, res)
+	c := connCheckWithExpect([]jsonAssertion{{path: "version", valueMatcher: newValueMatcher("=~", `^8\.`)}}, res)
 	if r := c.Run(context.Background()); !r.OK {
 		t.Fatalf("version =~ ^8. should pass: %s", r.Message)
 	}
 	// A field that the probe does not expose fails clearly.
-	c = connCheckWithExpect([]jsonAssertion{{path: "stratum", op: "<", value: "3"}}, res)
+	c = connCheckWithExpect([]jsonAssertion{{path: "stratum", valueMatcher: newValueMatcher("<", "3")}}, res)
 	r := c.Run(context.Background())
 	if r.OK {
 		t.Fatal("missing field should fail")
@@ -161,8 +161,8 @@ func TestConnExpectVersionRegexAndMissing(t *testing.T) {
 
 	// All assertions must hold (AND): one failing fails the check.
 	c = connCheckWithExpect([]jsonAssertion{
-		{path: "version", op: "=~", value: `^8\.`},
-		{path: "version", op: "==", value: "9.9"},
+		{path: "version", valueMatcher: newValueMatcher("=~", `^8\.`)},
+		{path: "version", valueMatcher: newValueMatcher("==", "9.9")},
 	}, res)
 	if r := c.Run(context.Background()); r.OK {
 		t.Fatal("a failing assertion in the list should fail the check")
@@ -174,7 +174,7 @@ func TestConnExpectLatency(t *testing.T) {
 
 	// A generous ceiling passes and latency_ms is exposed in the data.
 	c := connCheckWithExpect(nil, res)
-	c.latencyOp, c.latencyValue = "<", "100000"
+	c.latencyAssertion = newValueMatcher("<", "100000")
 	r := c.Run(context.Background())
 	if !r.OK {
 		t.Fatalf("latency under 100s should pass: %s", r.Message)
@@ -185,7 +185,7 @@ func TestConnExpectLatency(t *testing.T) {
 
 	// latency < 0 is impossible -> deterministic failure.
 	c = connCheckWithExpect(nil, res)
-	c.latencyOp, c.latencyValue = "<", "0"
+	c.latencyAssertion = newValueMatcher("<", "0")
 	if r := c.Run(context.Background()); r.OK {
 		t.Fatal("latency < 0 must fail")
 	}
@@ -238,8 +238,8 @@ func TestBuildConnCheckExpect(t *testing.T) {
 	if len(warns) != 0 || len(built) != 1 {
 		t.Fatalf("dns check with expect_latency should build: warns=%v", warns)
 	}
-	if cc := built[0].Check.(connCheck); cc.latencyOp != "<" || cc.latencyValue != "800" {
-		t.Fatalf("latency = %q %q", cc.latencyOp, cc.latencyValue)
+	if cc := built[0].Check.(connCheck); cc.latencyAssertion.op != "<" || cc.latencyAssertion.value != "800" {
+		t.Fatalf("latency = %q %q", cc.latencyAssertion.op, cc.latencyAssertion.value)
 	}
 
 	// An invalid expect_latency op warns.

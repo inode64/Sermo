@@ -31,7 +31,7 @@ func TestCompareValue(t *testing.T) {
 		{"x", "><", "1", false, true},
 	}
 	for _, c := range cases {
-		got, err := compareValue(c.result, c.op, c.value)
+		got, err := newValueMatcher(c.op, c.value).compare(c.result)
 		if c.wantErr {
 			if err == nil {
 				t.Errorf("compareValue(%q, %q, %q): expected error", c.result, c.op, c.value)
@@ -56,4 +56,25 @@ func TestAssertOpValueRequiresValueBeforeNumericValidation(t *testing.T) {
 	if warn != "postgres-query check requires a value" {
 		t.Fatalf("warning = %q", warn)
 	}
+}
+
+func BenchmarkValueMatcherRegex(b *testing.B) {
+	const pattern = `^v[0-9]+\.[0-9]+\.[0-9]+$`
+	b.Run("prepared", func(b *testing.B) {
+		matcher := newValueMatcher("=~", pattern)
+		b.ReportAllocs()
+		for b.Loop() {
+			if ok, err := matcher.compare("v1.2.3"); !ok || err != nil {
+				b.Fatal(ok, err)
+			}
+		}
+	})
+	b.Run("compile_per_result", func(b *testing.B) {
+		b.ReportAllocs()
+		for b.Loop() {
+			if ok, err := newValueMatcher("=~", pattern).compare("v1.2.3"); !ok || err != nil {
+				b.Fatal(ok, err)
+			}
+		}
+	})
 }

@@ -12,14 +12,35 @@ import (
 	"time"
 )
 
-// compareValue evaluates "result op value" and is shared by the sql, http and
+// valueMatcher evaluates "result op value" and is shared by the sql, http and
 // connection checks, including HTTP expect_json after jsonValueString. Ordering
 // ops (> >= < <=) parse both sides as floats; == and != compare numerically when
 // both parse as numbers, otherwise as strings (equal/different); contains
 // requires value to be a substring of result; =~ matches result against value as
 // a Go (RE2) regular expression. Parse and regex failures return an error so
 // every {op, value} comparison shares one vocabulary and one diagnostic.
-func compareValue(result, op, value string) (bool, error) {
+type valueMatcher struct {
+	op, value string
+	regex     *regexp.Regexp
+	err       error
+}
+
+func newValueMatcher(op, value string) valueMatcher {
+	m := valueMatcher{op: op, value: value}
+	if op == cfgval.AssertOpRegex {
+		m.regex, m.err = regexp.Compile(value)
+		if m.err != nil {
+			m.err = fmt.Errorf("invalid regex %q: %w", value, m.err)
+		}
+	}
+	return m
+}
+
+func (m valueMatcher) compare(result string) (bool, error) {
+	if m.err != nil {
+		return false, m.err
+	}
+	op, value := m.op, m.value
 	switch op {
 	case cfgval.AssertOpContains:
 		return strings.Contains(result, value), nil
@@ -44,11 +65,7 @@ func compareValue(result, op, value string) (bool, error) {
 		}
 		return result != value, nil
 	case cfgval.AssertOpRegex:
-		re, err := regexp.Compile(value)
-		if err != nil {
-			return false, fmt.Errorf("invalid regex %q: %w", value, err)
-		}
-		return re.MatchString(result), nil
+		return m.regex.MatchString(result), nil
 	default:
 		return false, fmt.Errorf("unsupported op %q", op)
 	}
@@ -72,8 +89,9 @@ func assertOpValue(entry map[string]any, noun string) (op, value, errMsg string)
 // finishScalarCompare applies the common condition-check comparison and emits
 // the standard scalar reading data. Each database check keeps its own I/O and
 // supplies only its label and protocol-specific readings.
-func finishScalarCompare(b base, label, result, op, threshold string, start time.Time, data map[string]any) Result {
-	ok, err := compareValue(result, op, threshold)
+func finishScalarCompare(b base, label, result string, matcher valueMatcher, start time.Time, data map[string]any) Result {
+	op, threshold := matcher.op, matcher.value
+	ok, err := matcher.compare(result)
 	if err != nil {
 		return b.unavailableResult(fmt.Sprintf("%s: %v", label, err), start)
 	}
@@ -103,8 +121,7 @@ func parseNumericString(label, value string) (float64, error) {
 // The zero value is inactive and matches anything.
 type OutputMatcher struct {
 	Substring string // non-empty: output must contain this
-	Op        string // non-empty: compareValue(trimmed output, Op, Value)
-	Value     string
+	assertion valueMatcher
 }
 
 // ParseOutputMatcher reads an expect_stdout/expect_stderr field into a matcher: a
@@ -122,14 +139,14 @@ func ParseOutputMatcher(v any) (OutputMatcher, string) {
 		if err != nil {
 			return OutputMatcher{}, err.Error()
 		}
-		return OutputMatcher{Op: op, Value: value}, ""
+		return OutputMatcher{assertion: newValueMatcher(op, value)}, ""
 	default:
 		return OutputMatcher{}, "must be a string substring or an {op, value} mapping"
 	}
 }
 
 // Active reports whether the matcher carries an expectation.
-func (m OutputMatcher) Active() bool { return m.Substring != "" || m.Op != "" }
+func (m OutputMatcher) Active() bool { return m.Substring != "" || m.assertion.op != "" }
 
 // Match evaluates output against the matcher. ok is true when the expectation is
 // satisfied (or none is set); detail describes the mismatch for a result message.
@@ -137,13 +154,13 @@ func (m OutputMatcher) Match(output string) (ok bool, detail string) {
 	if m.Substring != "" && !strings.Contains(output, m.Substring) {
 		return false, fmt.Sprintf("does not contain %q", m.Substring)
 	}
-	if m.Op != "" {
-		res, err := compareValue(strings.TrimSpace(output), m.Op, m.Value)
+	if m.assertion.op != "" {
+		res, err := m.assertion.compare(strings.TrimSpace(output))
 		if err != nil {
 			return false, err.Error()
 		}
 		if !res {
-			return false, fmt.Sprintf("%s %q not satisfied", m.Op, m.Value)
+			return false, fmt.Sprintf("%s %q not satisfied", m.assertion.op, m.assertion.value)
 		}
 	}
 	return true, ""
@@ -336,10 +353,10 @@ func parseAssertionMap(v any, field string) ([]jsonAssertion, string) {
 			if err != nil {
 				return nil, err.Error()
 			}
-			out = append(out, jsonAssertion{path: path, op: op, value: value})
+			out = append(out, jsonAssertion{path: path, valueMatcher: newValueMatcher(op, value)})
 			continue
 		}
-		out = append(out, jsonAssertion{path: path, op: cfgval.CompareOpEqual, value: cfgval.String(raw)})
+		out = append(out, jsonAssertion{path: path, valueMatcher: newValueMatcher(cfgval.CompareOpEqual, cfgval.String(raw))})
 	}
 	return out, ""
 }

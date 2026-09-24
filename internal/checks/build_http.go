@@ -208,7 +208,7 @@ func configureHTTPBodyAssertion(check *httpCheck, entry map[string]any) string {
 	if err != nil {
 		return "http " + err.Error()
 	}
-	check.bodyOp, check.bodyValue = op, value
+	check.bodyAssertion = newValueMatcher(op, value)
 	return ""
 }
 
@@ -217,7 +217,7 @@ func configureHTTPLatency(check *httpCheck, entry map[string]any) string {
 	if warn != "" {
 		return "http " + warn
 	}
-	check.latencyOp, check.latencyValue = op, value
+	check.latencyAssertion = newValueMatcher(op, value)
 	return ""
 }
 
@@ -361,7 +361,7 @@ func parseStatusMatcher(v any) (statusMatcher, error) {
 		if err != nil {
 			return statusMatcher{}, err
 		}
-		return statusMatcher{op: op, value: value}, nil
+		return statusMatcher{valueMatcher: newValueMatcher(op, value)}, nil
 	}
 	var m statusMatcher
 	var items []any

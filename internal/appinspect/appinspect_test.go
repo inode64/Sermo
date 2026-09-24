@@ -362,8 +362,11 @@ func TestProbeCommandFor(t *testing.T) {
 	if vc.stdout.Substring != "v1." {
 		t.Errorf("stdout matcher = %+v, want substring v1.", vc.stdout)
 	}
-	if vc.stderr.Op != "==" {
-		t.Errorf("stderr matcher = %+v, want op ==", vc.stderr)
+	if ok, detail := vc.stderr.Match(""); !ok {
+		t.Errorf("stderr matcher must accept empty output: %s", detail)
+	}
+	if ok, _ := vc.stderr.Match("unexpected output"); ok {
+		t.Error("stderr matcher must reject non-empty output")
 	}
 }
 
