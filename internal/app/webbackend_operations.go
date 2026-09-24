@@ -159,12 +159,8 @@ func (e *webEntry) reloadSupportSnapshot(ctx context.Context, now time.Time, ref
 			return e.canReload, nil
 		}
 	}
-	queryCtx := ctx
-	if !refresh {
-		var cancel context.CancelFunc
-		queryCtx, cancel = context.WithTimeout(ctx, serviceInitQueryTimeout)
-		defer cancel()
-	}
+	queryCtx, cancel := context.WithTimeout(ctx, serviceInitQueryTimeout)
+	defer cancel()
 	supported, err := e.reloadSupported(queryCtx)
 	if err != nil {
 		return e.canReload, err
