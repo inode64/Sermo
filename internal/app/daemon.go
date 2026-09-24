@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"maps"
-	"math"
 	"slices"
 	"strings"
 	"sync"
@@ -808,34 +807,21 @@ func checkIntervals(tree map[string]any, resolution time.Duration) (map[string]i
 		if d <= 0 {
 			continue // no per-check interval: runs every cycle
 		}
-		n := int(math.Round(float64(d) / float64(resolution)))
-		switch {
-		case n < 1:
-			warnings = append(warnings, fmt.Sprintf("check %q interval %s is below the %s resolution; running every cycle", name, d, resolution))
-			n = 1
-		case time.Duration(n)*resolution != d:
-			warnings = append(warnings, fmt.Sprintf("check %q interval %s is not a multiple of the %s resolution; running every %s", name, d, resolution, time.Duration(n)*resolution))
+		n, warning := checks.ResolveInterval(d, resolution)
+		if warning != "" {
+			warnings = append(warnings, fmt.Sprintf("check %q %s", name, warning))
 		}
 		every[name] = n
 	}
 	return every, warnings
 }
 
-// checkIntervalCycles returns the worker-cycle spacing for a configured check
-// interval. Both scheduling and snapshot freshness use it, so the web does not
-// expire a result before the worker considers the next run due.
-func checkIntervalCycles(interval, resolution time.Duration) int {
-	if interval <= 0 || resolution <= 0 {
-		return 1
-	}
-	return max(int(math.Round(float64(interval)/float64(resolution))), 1)
-}
-
 func effectiveCheckInterval(interval, resolution time.Duration) time.Duration {
 	if resolution <= 0 {
 		return interval
 	}
-	return time.Duration(checkIntervalCycles(interval, resolution)) * resolution
+	cycles, _ := checks.ResolveInterval(interval, resolution)
+	return time.Duration(cycles) * resolution
 }
 
 // dueChecks selects the checks to run on a given cycle: a check with `every` N
