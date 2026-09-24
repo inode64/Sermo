@@ -19,13 +19,16 @@ import (
 // a Go (RE2) regular expression. Parse and regex failures return an error so
 // every {op, value} comparison shares one vocabulary and one diagnostic.
 type valueMatcher struct {
-	op, value string
-	regex     *regexp.Regexp
-	err       error
+	op, value  string
+	regex      *regexp.Regexp
+	numeric    float64
+	numericErr error
+	err        error
 }
 
 func newValueMatcher(op, value string) valueMatcher {
 	m := valueMatcher{op: op, value: value}
+	m.numeric, m.numericErr = parseNumericString(CheckKeyValue, value)
 	if op == cfgval.AssertOpRegex {
 		m.regex, m.err = regexp.Compile(value)
 		if m.err != nil {
@@ -48,16 +51,14 @@ func (m valueMatcher) compare(result string) (bool, error) {
 		if err != nil {
 			return false, fmt.Errorf("%w for op %s", err, op)
 		}
-		vf, err := parseNumericString(CheckKeyValue, value)
-		if err != nil {
-			return false, err
+		if m.numericErr != nil {
+			return false, m.numericErr
 		}
-		return cfgval.CompareFloat(rf, op, vf), nil
+		return cfgval.CompareFloat(rf, op, m.numeric), nil
 	case cfgval.CompareOpEqual, cfgval.CompareOpNotEqual:
 		rf, rerr := parseNumericString(CheckKeyResult, result)
-		vf, verr := parseNumericString(CheckKeyValue, value)
-		if rerr == nil && verr == nil {
-			return cfgval.CompareFloat(rf, op, vf), nil
+		if rerr == nil && m.numericErr == nil {
+			return cfgval.CompareFloat(rf, op, m.numeric), nil
 		}
 		if op == cfgval.CompareOpEqual {
 			return result == value, nil
