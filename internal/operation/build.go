@@ -541,8 +541,8 @@ func collectVerifyChecks(tree map[string]any) map[string]any {
 	return out
 }
 
-// guardClosure runs the service's named checks once, caches them, and evaluates
-// the guard rules against that cache plus inline probes.
+// guardClosure evaluates guards with lazy named checks. Each referenced check
+// runs at most once per evaluation; unrelated checks never perform I/O.
 func guardClosure(tree map[string]any, deps checks.Deps, sample func(context.Context) checks.MetricReader, changed func(string) (bool, error)) func(context.Context, string) (bool, string, error) {
 	return func(ctx context.Context, action string) (bool, string, error) {
 		runDeps := checkDepsForEval(ctx, deps, sample)
@@ -558,10 +558,10 @@ func guardClosure(tree map[string]any, deps checks.Deps, sample func(context.Con
 		for _, issue := range append(preflightIssues, issues...) {
 			cache[issue.Check] = issue.Result()
 		}
-		for _, r := range checks.Run(ctx, built, 0) {
-			cache[r.Check] = r
+		for _, check := range built {
+			delete(cache, check.Check.Name())
 		}
-		ev := &rules.Evaluator{Cache: cache, ResolveRef: rules.NewCheckResolver(preflightBuilt, 0), Deps: runDeps, Changed: changed}
+		ev := &rules.Evaluator{Cache: cache, ResolveRef: rules.NewCheckResolver(append(preflightBuilt, built...), 0), Deps: runDeps, Changed: changed}
 		return rules.Guard(ctx, ruleSet, action, ev)
 	}
 }
