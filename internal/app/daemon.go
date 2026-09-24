@@ -1222,7 +1222,7 @@ func liveSampler(service string, lc *metrics.Collector, live *LiveMetrics, servi
 		if serviceMetrics == nil {
 			return
 		}
-		cur := web.ServiceRuntime{At: at.UTC().Format(time.RFC3339)}
+		cur := web.ServiceRuntime{}
 		if totals := processTotalsFromPIDs(pidList, observation); totals != nil {
 			cur.ProcessTotals = *totals
 		}
@@ -1235,7 +1235,7 @@ func liveSampler(service string, lc *metrics.Collector, live *LiveMetrics, servi
 		if started, ok := serviceStartTime(procList, lc.Reader, at); ok {
 			cur.StartedAt, cur.Uptime, cur.UptimeSeconds = serviceRuntimeUptime(started, at)
 		}
-		serviceMetrics.record(ctx, service, cur)
+		serviceMetrics.record(ctx, service, cur, at)
 	}
 }
 

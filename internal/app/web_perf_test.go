@@ -17,7 +17,7 @@ func TestServiceMetricSamplerLatestWithAt(t *testing.T) {
 	s.record(t.Context(), "web", web.ServiceRuntime{
 		At:    t0.UTC().Format(time.RFC3339),
 		Count: 2, RSS: 4096,
-	})
+	}, t0.UTC())
 	if _, _, ok := s.LatestWithAt("missing"); ok {
 		t.Fatal("LatestWithAt on missing service should be false")
 	}
@@ -39,7 +39,7 @@ func TestWebBackendListRuntimeUsesPublishedSample(t *testing.T) {
 		Uptime:        "1h",
 		UptimeSeconds: 3600,
 		Count:         3, RSS: 8192, CPU: 12.5, HasCPU: true,
-	})
+	}, t0.UTC())
 	b := &WebBackend{
 		order: []string{"web"},
 		entries: map[string]*webEntry{
@@ -98,7 +98,7 @@ func TestWebBackendRuntimeSeriesNeverDiscoversProcesses(t *testing.T) {
 				sampler.record(t.Context(), "web", web.ServiceRuntime{
 					At:    t0.Format(time.RFC3339),
 					Count: 1, RSS: tt.wantRSS,
-				})
+				}, t0)
 			}
 			b := &WebBackend{
 				entries: map[string]*webEntry{
@@ -138,7 +138,7 @@ func TestWebBackendListRuntimeHiddenWhenServiceStopped(t *testing.T) {
 		Uptime:        "1h",
 		UptimeSeconds: 3600,
 		Count:         2, RSS: 8192, CPU: 12.5, HasCPU: true,
-	})
+	}, t0.UTC())
 	b := &WebBackend{
 		order: []string{"lldpd"},
 		entries: map[string]*webEntry{
