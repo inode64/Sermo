@@ -27,8 +27,6 @@ const dialTimeout = 15 * time.Second
 const (
 	EmailDSNSchemeSMTP  = "smtp"
 	EmailDSNSchemeSMTPS = "smtps"
-	EmailDSNPrefixSMTP  = EmailDSNSchemeSMTP + "://"
-	EmailDSNPrefixSMTPS = EmailDSNSchemeSMTPS + "://"
 )
 
 const (

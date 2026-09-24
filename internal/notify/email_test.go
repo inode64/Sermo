@@ -388,3 +388,16 @@ func renderMailMessage(t *testing.T, to []string, msg Message) string {
 	}
 	return b.String()
 }
+
+func TestEmailValidationUsesConstructorDSNParser(t *testing.T) {
+	for _, dsn := range []string{"smtp://", "https://mail.example", "smtp://mail.example:99999", "smtp://mail.example", "smtps://[::1]:465"} {
+		t.Run(dsn, func(t *testing.T) {
+			entry := map[string]any{KeyType: TypeEmail, KeyDSN: dsn, KeyFrom: "sender@example.test", KeyTo: []any{"ops@example.test"}}
+			_, err := buildEmail("mail", entry)
+			issues := ValidateEntry(entry)
+			if (err != nil) != (len(issues) > 0) {
+				t.Fatalf("build error=%v, validation=%v", err, issues)
+			}
+		})
+	}
+}

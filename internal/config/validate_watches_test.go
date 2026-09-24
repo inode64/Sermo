@@ -654,6 +654,7 @@ func TestValidateNotifiers(t *testing.T) {
 
 	bad := validateRawGlobal(t, map[string]any{
 		"notifiers": map[string]any{
+			"no-host":     map[string]any{"type": "email", "dsn": "smtp://", "from": "x@y", "to": []any{"a@b"}},
 			"no-dsn":      map[string]any{"type": "email", "from": "x@y", "to": []any{"a@b"}},
 			"no-to":       map[string]any{"type": "email", "dsn": "smtp://x", "from": "x@y"},
 			"bad-to":      map[string]any{"type": "email", "dsn": "smtp://x", "from": "x@y", "to": []any{"a@b", 7}},
@@ -668,10 +669,11 @@ func TestValidateNotifiers(t *testing.T) {
 		},
 	})
 	for _, w := range []string{
+		"notifiers.no-host.dsn: dsn requires a host",
 		"notifiers.no-dsn.dsn is required for an email notifier",
 		"notifiers.no-to.to must list at least one address",
 		"notifiers.bad-to.to must list at least one address",
-		"notifiers.bad-dsn.dsn must be an smtp:// or smtps:// URL",
+		`notifiers.bad-dsn.dsn: dsn scheme "http" must be smtp or smtps`,
 		"notifiers.no-webhook.webhook is required for a slack notifier",
 		"notifiers.bad-webhook.webhook must be an http(s) URL",
 		"notifiers.bad-type.type \"smoke-signal\" is not supported (email, gotify, ntfy, slack, teams, telegram, tty, wall)",
