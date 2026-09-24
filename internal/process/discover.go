@@ -429,24 +429,20 @@ func (d Discoverer) ObserveAnyState(exes []string, user string) string {
 		return StateAbsent
 	}
 
-	matched, live := false, false
+	matched := false
 	for _, id := range snapshotIdentities(reader) {
 		if !d.matchesAny(selectors, id, resolve) {
 			continue
 		}
-		matched = true
 		if id.State != ProcStateZombie {
-			live = true
+			return StateRunning
 		}
+		matched = true
 	}
-	switch {
-	case live:
-		return StateRunning
-	case matched:
+	if matched {
 		return StateZombie
-	default:
-		return StateAbsent
 	}
+	return StateAbsent
 }
 
 // CountMatching counts processes matching the given filter. Each non-empty
