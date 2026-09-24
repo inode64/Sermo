@@ -365,11 +365,7 @@ func materializedServiceUnitMatches(patterns, units []string, toks []tmplToken) 
 			if sub == nil {
 				continue
 			}
-			values := make(map[string]string, len(order))
-			for i, tk := range order {
-				values[tk.variable] = sub[i+templateCaptureOffset]
-			}
-			addImplicitTokenValues(values, toks)
+			values := capturedTokenValues(sub, order, toks)
 			normalizeOptionalTupleValues(values)
 			out = append(out, templateMatch{
 				values:      values,
@@ -419,11 +415,7 @@ func (c *Config) configuredServiceTemplateMatches(templateName string, body map[
 		if sub == nil {
 			continue
 		}
-		values := make(map[string]string, len(order))
-		for i, tok := range order {
-			values[tok.variable] = sub[i+templateCaptureOffset]
-		}
-		addImplicitTokenValues(values, toks)
+		values := capturedTokenValues(sub, order, toks)
 		normalizeOptionalTupleValues(values)
 		matches = append(matches, templateMatch{
 			values:      values,
@@ -713,11 +705,7 @@ func discoverTokenMatches(paths []string, toks []tmplToken, matchedBinary bool) 
 			if sub == nil {
 				continue
 			}
-			values := make(map[string]string, len(order))
-			for i, tk := range order {
-				values[tk.variable] = sub[i+templateCaptureOffset]
-			}
-			addImplicitTokenValues(values, toks)
+			values := capturedTokenValues(sub, order, toks)
 			realPath := realPathFor(matchPath)
 			values = refineMatchValues(values, path, realPath, toks)
 			normalizeOptionalTupleValues(values)
@@ -1207,4 +1195,13 @@ func (c *Config) dropTemplate(name string, reg map[string]*Document, kind string
 		docs = append(docs, d)
 	}
 	c.docs = docs
+}
+
+func capturedTokenValues(sub []string, order, tokens []tmplToken) map[string]string {
+	values := make(map[string]string, len(order))
+	for i, token := range order {
+		values[token.variable] = sub[i+templateCaptureOffset]
+	}
+	addImplicitTokenValues(values, tokens)
+	return values
 }
