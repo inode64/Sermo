@@ -365,8 +365,7 @@ func TestNetCheckNamesAVanishedInterface(t *testing.T) {
 func TestNetCheckInventsNoIdentityBeforeItObservedOne(t *testing.T) {
 	c := &netCheck{
 		name: "net-eth9", iface: "eth9", metric: NetMetricState, expect: NetStateUp,
-		sampler:  func(string) (NetSample, error) { return NetSample{}, errors.New("no such network interface") },
-		identity: func(string) NetIdentity { return NetIdentity{} },
+		sampler: func(string) (NetSample, error) { return NetSample{}, errors.New("no such network interface") },
 	}
 	res := c.Run(t.Context())
 	for _, key := range []string{DataKeyMAC, DataKeyDriver, DataKeyBus, DataKeyMTU} {
