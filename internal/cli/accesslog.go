@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"os"
 	"time"
 
 	"sermo/internal/config"
@@ -24,7 +23,7 @@ const (
 )
 
 // recordAccess appends one CLI access record when engine.access is configured.
-func (App) recordAccess(cfg *config.Config, command, target, status, message string) {
+func (a App) recordAccess(cfg *config.Config, command, target, status, message string) {
 	if cfg == nil {
 		return
 	}
@@ -38,10 +37,7 @@ func (App) recordAccess(cfg *config.Config, command, target, status, message str
 	}
 	defer func() { _ = w.Close() }()
 
-	actor := os.Getenv("USER")
-	if actor == "" {
-		actor = "-"
-	}
+	actor := loginUser(a.Env)
 	_ = w.Write(map[string]any{
 		cliJSONKeyTime:    time.Now().UTC().Format(time.RFC3339),
 		cliJSONKeySource:  accessSourceCLI,
