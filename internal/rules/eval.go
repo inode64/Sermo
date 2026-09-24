@@ -22,8 +22,6 @@ type ChangeContext struct {
 	Library    string
 	Level      string
 	LevelValue int
-	OldVersion string
-	NewVersion string
 }
 
 // Evaluator evaluates condition trees against the per-cycle check cache and, for
