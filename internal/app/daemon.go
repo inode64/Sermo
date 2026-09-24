@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"maps"
 	"slices"
-	"strings"
 	"sync"
 	"time"
 
@@ -468,41 +467,6 @@ func wireCascade(workers []*Worker, cascadeMap map[string][]string, deps Deps) {
 	}
 }
 
-// appVersionCmds collects the resolved version command of every app the service
-// declares, so a `changed: {app}` rule can sample the app's version. expandApps
-// merges each app's preflight under "<app>-<check>"; the "<app>-version" entries
-// carry the app version probe with variables already expanded. Keyed by app name.
-func appVersionCmds(tree map[string]any) map[string]appVersionCmd {
-	preflight, ok := tree[config.SectionPreflight].(map[string]any)
-	if !ok {
-		return nil
-	}
-	cmds := map[string]appVersionCmd{}
-	for key, raw := range preflight {
-		app, ok := strings.CutSuffix(key, config.ServiceMonitorVersionCheckSuffix)
-		if !ok || app == "" {
-			continue
-		}
-		entry, ok := raw.(map[string]any)
-		if !ok {
-			continue
-		}
-		argv := cfgval.StringList(entry[checks.CheckKeyCommand])
-		if len(argv) == 0 {
-			continue
-		}
-		cmds[app] = appVersionCmd{
-			argv:    argv,
-			user:    cfgval.String(entry[checks.CheckKeyUser]),
-			timeout: cfgval.Duration(entry[checks.CheckKeyTimeout]),
-		}
-	}
-	if len(cmds) == 0 {
-		return nil
-	}
-	return cmds
-}
-
 func buildWorker(ctx context.Context, name, unit string, tree map[string]any, deps Deps, collector *metrics.Collector) (*Worker, []*Watch, []string) {
 	libBaseline := map[string]string{}
 	runtime := BuildServiceRuntime(ctx, ServiceRuntimeConfig{
@@ -636,10 +600,8 @@ func buildWorker(ctx context.Context, name, unit string, tree map[string]any, de
 		libBaseline:          libBaseline,
 		checkFailing:         checkFailingFromSnapshots(deps.Snapshots, name, checkTypes, configID),
 		artifactSamples:      deps.ArtifactSamples,
-
-		appVersionCmd:   appVersionCmds(tree),
-		appVersions:     map[string]string{},
-		appVersionsLast: map[string]string{},
+		appVersions:          map[string]string{},
+		appVersionsLast:      map[string]string{},
 	}
 	worker.Checks = workerCheckRunner(worker, built, every, maxParallel, recordMeasurement, setCycleMetrics)
 	// Watches run independently of the worker and must not capture its cycle cache.
