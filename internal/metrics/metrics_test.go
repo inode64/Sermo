@@ -400,7 +400,7 @@ func TestSampleServiceCPUPerProcessAndAggregate(t *testing.T) {
 	c := New(reader)
 	c.Now = func() time.Time { return clock }
 
-	first := c.SampleServiceCPU("svc", []int{10, 11, 12})
+	first := c.SampleServiceCPU("svc", NewProcessObservation(c.Reader, []int{10, 11, 12}))
 	if first.CPU.Ready || first.CPUThread.Ready {
 		t.Fatal("no rate on the first observation")
 	}
@@ -413,7 +413,7 @@ func TestSampleServiceCPUPerProcessAndAggregate(t *testing.T) {
 	clock = clock.Add(time.Second)
 	reader.cpu[10], reader.cpu[11], reader.cpu[12] = 20, 80, 0
 	c.Reader = reader
-	sc := c.SampleServiceCPU("svc", []int{10, 11, 12})
+	sc := c.SampleServiceCPU("svc", NewProcessObservation(c.Reader, []int{10, 11, 12}))
 
 	if sc.NumCPU != 4 {
 		t.Fatalf("NumCPU = %d, want 4", sc.NumCPU)
@@ -726,12 +726,12 @@ func TestSampleServiceCPUNoCPUCount(t *testing.T) {
 	reader := fakeReader{cpu: map[int]uint64{10: 0}, hz: 100, ncpu: 0}
 	c := New(reader)
 	c.Now = func() time.Time { return clock }
-	c.SampleServiceCPU("svc", []int{10}) // prime
+	c.SampleServiceCPU("svc", NewProcessObservation(c.Reader, []int{10})) // prime
 
 	clock = clock.Add(time.Second)
 	reader.cpu[10] = 100
 	c.Reader = reader
-	sc := c.SampleServiceCPU("svc", []int{10})
+	sc := c.SampleServiceCPU("svc", NewProcessObservation(c.Reader, []int{10}))
 	// With ncpu == 0 the whole-machine CPU% is not computable (ncpu > 0 guard).
 	if sc.CPU.Ready {
 		t.Fatalf("ncpu 0 must leave CPU not ready: %+v", sc.CPU)
@@ -866,7 +866,7 @@ func TestSampleServiceCPUReportsPerProcessMaxCore(t *testing.T) {
 	}
 	c := New(reader)
 	c.Now = func() time.Time { return clock }
-	c.SampleServiceCPU("svc", []int{10, 20})
+	c.SampleServiceCPU("svc", NewProcessObservation(c.Reader, []int{10, 20}))
 
 	// Two more cycles so pid 10's threads have a delta of their own: 400% of one core
 	// each cycle, split 300/100 between two threads. The second cycle's result is the
@@ -880,7 +880,7 @@ func TestSampleServiceCPUReportsPerProcessMaxCore(t *testing.T) {
 		reader.cpu[20] = ticks.p20
 		reader.threadCPU[10] = map[int]uint64{101: ticks.t1, 102: ticks.t2}
 		c.Reader = reader
-		out = c.SampleServiceCPU("svc", []int{10, 20})
+		out = c.SampleServiceCPU("svc", NewProcessObservation(c.Reader, []int{10, 20}))
 	}
 
 	if got := out.PerProcMaxCore[10]; got != 300 {

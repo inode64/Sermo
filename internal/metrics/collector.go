@@ -152,6 +152,16 @@ func (c *Collector) ForgetService(service string) {
 // and the fds percentage is the worst single process against its own soft
 // RLIMIT_NOFILE (see fdPeak).
 func (c *Collector) SampleService(service string, pids []int) Snapshot {
+	return c.sampleService(service, pids, c.Reader)
+}
+
+// SampleServiceObserved computes rates from a shared cycle observation while
+// retaining this collector's independent rate baselines and optional readers.
+func (c *Collector) SampleServiceObserved(service string, observation *ProcessObservation) Snapshot {
+	return c.sampleService(service, observation.pids, observation)
+}
+
+func (c *Collector) sampleService(service string, pids []int, reader processMetricReader) Snapshot {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -178,11 +188,11 @@ func (c *Collector) SampleService(service string, pids []int) Snapshot {
 	curTicks := make(map[int]uint64, len(pids))   // per-process CPU jiffies this cycle
 	curThreads := make(map[int]uint64, len(pids)) // per-process thread count, for the cpu_thread floor
 	for _, pid := range pids {
-		if v, ok := c.Reader.ProcessRSS(pid); ok {
+		if v, ok := reader.ProcessRSS(pid); ok {
 			rss += v
 			present++
 		}
-		if v, ok := c.Reader.ProcessCPU(pid); ok {
+		if v, ok := reader.ProcessCPU(pid); ok {
 			ticks += v
 			curTicks[pid] = v
 		}
@@ -191,16 +201,16 @@ func (c *Collector) SampleService(service string, pids []int) Snapshot {
 				swap += v
 			}
 		}
-		if rd, wr, ok := c.Reader.ProcessIO(pid); ok {
+		if rd, wr, ok := reader.ProcessIO(pid); ok {
 			ioRead += rd
 			ioWrite += wr
 		}
-		if v, ok := c.Reader.ProcessFDs(pid); ok {
+		if v, ok := reader.ProcessFDs(pid); ok {
 			fds += v
 			fdsOK++
 			peak.observeProcess(limitReader, pid, v)
 		}
-		if v, ok := c.Reader.ProcessThreads(pid); ok {
+		if v, ok := reader.ProcessThreads(pid); ok {
 			threads += v
 			threadsOK++
 			curThreads[pid] = v
@@ -251,7 +261,7 @@ func (c *Collector) SampleService(service string, pids []int) Snapshot {
 	// percentage dilutes across every core; and unlike a per-process maximum, it does
 	// not add a multithreaded process's threads together and report more than any one
 	// core could deliver.
-	snap[MetricCPUThread] = c.sampleMaxCore(service, curTicks, curThreads, now).Reading
+	snap[MetricCPUThread] = c.sampleMaxCore(service, curTicks, curThreads, now, reader).Reading
 
 	curIO := ioSample{read: ioRead, write: ioWrite, at: now}
 	if prev, ok := c.prevServiceIO[service]; ok {
@@ -293,7 +303,7 @@ type maxCoreSample struct {
 //
 // Both paths keep their state in prevServiceProcs, which is why the two must run on
 // separate collectors. The caller must hold c.mu.
-func (c *Collector) sampleMaxCore(service string, curTicks, threadCounts map[int]uint64, now time.Time) maxCoreSample {
+func (c *Collector) sampleMaxCore(service string, curTicks, threadCounts map[int]uint64, now time.Time, reader processMetricReader) maxCoreSample {
 	hz := c.Reader.ClockTicks()
 	prev := c.prevServiceProcs[service]
 	cur := procCPUSample{ticks: curTicks, at: now}
@@ -302,7 +312,7 @@ func (c *Collector) sampleMaxCore(service string, curTicks, threadCounts map[int
 	// warrant it, so the next cycle can turn them into a rate. On the first
 	// observation there are no rates yet, so nothing qualifies.
 	if ready {
-		cur.threadTicks = readThreadTicks(c.Reader, threadSampleTargets(procRates, threadCounts))
+		cur.threadTicks = readThreadTicks(reader, threadSampleTargets(procRates, threadCounts))
 	}
 	c.prevServiceProcs[service] = cur
 	if !ready {
@@ -339,7 +349,8 @@ type ServiceCPU struct {
 // per-process breakdown the process table needs. It keeps its own prev state in
 // prevServiceProcs, so it must run on a collector dedicated to live web
 // sampling — never the engine's, or the two would corrupt each other's deltas.
-func (c *Collector) SampleServiceCPU(service string, pids []int) ServiceCPU {
+func (c *Collector) SampleServiceCPU(service string, observation *ProcessObservation) ServiceCPU {
+	pids, reader := observation.pids, observation
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -348,16 +359,16 @@ func (c *Collector) SampleServiceCPU(service string, pids []int) ServiceCPU {
 	curTicks := make(map[int]uint64, len(pids))
 	curThreads := make(map[int]uint64, len(pids))
 	for _, pid := range pids {
-		if v, ok := c.Reader.ProcessCPU(pid); ok {
+		if v, ok := reader.ProcessCPU(pid); ok {
 			curTicks[pid] = v
 		}
-		if v, ok := c.Reader.ProcessThreads(pid); ok {
+		if v, ok := reader.ProcessThreads(pid); ok {
 			curThreads[pid] = v
 		}
 	}
 
 	out := ServiceCPU{NumCPU: ncpu, CPU: Reading{HasPercent: true}, CPUThread: Reading{HasPercent: true}}
-	sample := c.sampleMaxCore(service, curTicks, curThreads, now)
+	sample := c.sampleMaxCore(service, curTicks, curThreads, now, reader)
 	if !sample.Reading.Ready {
 		return out // first observation (or no time elapsed): no delta yet
 	}
@@ -614,7 +625,7 @@ type threadCPUReader interface {
 
 // readThreadTicks reads per-thread jiffies for the given pids, or nothing at all
 // when the reader cannot enumerate threads.
-func readThreadTicks(reader Reader, pids []int) map[int]map[int]uint64 {
+func readThreadTicks(reader processMetricReader, pids []int) map[int]map[int]uint64 {
 	threads, ok := reader.(threadCPUReader)
 	if !ok || len(pids) == 0 {
 		return nil

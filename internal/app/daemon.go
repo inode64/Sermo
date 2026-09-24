@@ -528,7 +528,26 @@ func buildWorker(ctx context.Context, name, unit string, tree map[string]any, de
 		}
 		return worker.cycle
 	})
-	pidsForCycle := func() []int { return processPIDs(processesForCycle()) }
+	var reader metrics.Reader
+	if collector != nil {
+		reader = collector.Reader
+	}
+	if deps.LiveCollector != nil {
+		reader = deps.LiveCollector.Reader
+	}
+	var observation *metrics.ProcessObservation
+	var observationCycle int
+	observe := func() *metrics.ProcessObservation {
+		cycle := 0
+		if worker != nil {
+			cycle = worker.cycle
+		}
+		if observation == nil || observationCycle != cycle {
+			observation = metrics.NewProcessObservation(reader, processPIDs(processesForCycle()))
+			observationCycle = cycle
+		}
+		return observation
+	}
 	primaryProcess := primaryProcessForCycle(processesForCycle, primaryStartReader(collector), deps.Now)
 	// Reuse the cycle's memoized discovery: the stale-binary check runs once per
 	// service per cycle, and rediscovering would repeat the whole selector sweep
@@ -540,8 +559,8 @@ func buildWorker(ctx context.Context, name, unit string, tree map[string]any, de
 	// Strays come from the same memoized discovery: classification already ran
 	// inside Discover, so the check costs one slice filter per cycle.
 	checkDeps.Strays = func() []process.Process { return process.Strays(processesForCycle()) }
-	sampleMetrics := metricSampler(name, tree, collector, pidsForCycle)
-	liveSample := liveSampler(name, deps.LiveCollector, deps.Live, deps.ServiceMetrics, processesForCycle, deps.Now)
+	sampleMetrics := metricSampler(name, tree, collector, observe)
+	liveSample := liveSampler(name, deps.LiveCollector, deps.Live, deps.ServiceMetrics, processesForCycle, observe, deps.Now)
 	if noResident {
 		liveSample = nil
 	}
@@ -1165,19 +1184,15 @@ func WatchMonitorKey(name string) string {
 // service references no metrics (so the daemon does not read /proc every cycle
 // for nothing). Service metrics are sampled over the discovered process set;
 // system metrics come from the shared collector's cached system sample.
-func metricSampler(service string, tree map[string]any, collector *metrics.Collector, pids func() []int) func(context.Context) checks.MetricReader {
+func metricSampler(service string, tree map[string]any, collector *metrics.Collector, observe func() *metrics.ProcessObservation) func(context.Context) checks.MetricReader {
 	needService, needSystem := usesMetrics(tree)
 	if !needService && !needSystem {
 		return nil
 	}
-	if pids == nil {
-		pids = func() []int { return nil }
-	}
-
 	return func(_ context.Context) checks.MetricReader {
 		var svc, sys metrics.Snapshot
 		if needService {
-			svc = collector.SampleService(service, pids())
+			svc = collector.SampleServiceObserved(service, observe())
 		}
 		if needSystem {
 			sys = collector.SampleSystem()
@@ -1242,7 +1257,7 @@ func processPIDs(procs []process.Process) []int {
 // collector (deps.LiveCollector) so CPU rate deltas never collide with the
 // engine's metric sampling. Returns nil when no live/runtime destination is
 // wired.
-func liveSampler(service string, lc *metrics.Collector, live *LiveMetrics, serviceMetrics *ServiceMetricSampler, procs func() []process.Process, now func() time.Time) func(context.Context) {
+func liveSampler(service string, lc *metrics.Collector, live *LiveMetrics, serviceMetrics *ServiceMetricSampler, procs func() []process.Process, observe func() *metrics.ProcessObservation, now func() time.Time) func(context.Context) {
 	if lc == nil || (live == nil && serviceMetrics == nil) {
 		return nil
 	}
@@ -1254,7 +1269,8 @@ func liveSampler(service string, lc *metrics.Collector, live *LiveMetrics, servi
 		at := now()
 		procList := procs()
 		pidList := processPIDs(procList)
-		sc := lc.SampleServiceCPU(service, pidList)
+		observation := observe()
+		sc := lc.SampleServiceCPU(service, observation)
 		sl := ServiceLive{
 			CPU:                 sc.CPU.Percent,
 			CPUReady:            sc.CPU.Ready,
@@ -1269,7 +1285,7 @@ func liveSampler(service string, lc *metrics.Collector, live *LiveMetrics, servi
 			return
 		}
 		cur := web.ServiceRuntime{At: at.UTC().Format(time.RFC3339)}
-		if totals := processTotalsFromPIDs(pidList, lc.Reader); totals != nil {
+		if totals := processTotalsFromPIDs(pidList, observation); totals != nil {
 			cur.ProcessTotals = *totals
 		}
 		cur.NumCPU = sc.NumCPU

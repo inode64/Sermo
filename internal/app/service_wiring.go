@@ -26,8 +26,8 @@ func metricSampleForOperation(name string, tree map[string]any, collector *metri
 	if collector == nil || noResident {
 		return nil
 	}
-	return metricSampler(name, tree, collector, func() []int {
-		return discoverPIDs(discoverer, selectors)
+	return metricSampler(name, tree, collector, func() *metrics.ProcessObservation {
+		return metrics.NewProcessObservation(collector.Reader, discoverPIDs(discoverer, selectors))
 	})
 }
 
