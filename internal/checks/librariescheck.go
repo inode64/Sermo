@@ -17,7 +17,6 @@ const (
 	ldSoConfFile      = "/etc/ld.so.conf"
 	ldSoConfSuffix    = ".conf"
 	ldSoIncludePrefix = "include "
-	ldLibraryPathEnv  = "LD_LIBRARY_PATH"
 	ldPathSeparator   = ":"
 	ldCommentHash     = "#"
 	ldCommentSemi     = ";"
@@ -67,25 +66,14 @@ func (c librariesCheck) Run(ctx context.Context) Result {
 
 	dirs := collectLibrarySearchDirs(c.binary, ef)
 
-	dirs = prependLibraryPath(dirs, os.Getenv(ldLibraryPathEnv), c.binary)
-
 	missing := resolveNeeded(ctx, needed, dirs, make(map[string]bool))
 	if err := ctx.Err(); err != nil {
 		return c.unavailableResult(c.binary+": "+execx.ContextFailure(err, c.timeout), start)
 	}
 	if len(missing) > 0 {
-		return c.result(false, c.binary+": missing shared libraries", start)
+		return c.result(false, c.binary+": missing shared libraries: "+strings.Join(missing, ", "), start)
 	}
 	return c.result(true, c.binary+": all shared libraries resolve", start)
-}
-
-// prependLibraryPath prepends LD_LIBRARY_PATH directories in linker order. A
-// single append preserves a:b rather than repeatedly inserting at index zero.
-func prependLibraryPath(dirs []string, libraryPath, binary string) []string {
-	if libraryPath == "" {
-		return dirs
-	}
-	return strutil.Unique(append(expandLibraryPath(libraryPath, binary), dirs...))
 }
 
 // resolveNeeded recursively resolves DT_NEEDED entries (including transitive
@@ -197,7 +185,7 @@ func findLibrary(soname string, dirs []string) string {
 	}
 	for _, d := range dirs {
 		cand := filepath.Join(d, soname)
-		if _, err := os.Stat(cand); err == nil { //nolint:gosec // G703: linker paths are only probed read-only; no file is written or executed.
+		if _, err := os.Stat(cand); err == nil {
 			return cand
 		}
 	}

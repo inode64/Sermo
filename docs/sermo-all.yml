@@ -608,6 +608,7 @@ preflight:  # gate start/restart/reload/resume
     expect_exit: 0
     skip_when_changed: /etc/demo/demo.conf
   libraries:
+    # Static ELF search: RUNPATH/RPATH and system paths; no daemon environment.
     type: libraries
     binary: "${binary}"
     optional: true  # best-effort: warns, never blocks
