@@ -183,7 +183,7 @@ func raidResultData(st RaidStatus, array string, detail RaidArrayStatus, present
 	}
 	if array == "" {
 		data[DataKeyTotalBytes] = raidTotalBytes(st.Details)
-		state, progress, hasProgress := RaidDeviceState(st.Details)
+		state, progress, hasProgress := raidDeviceState(st.Details)
 		if state != "" {
 			data[DataKeyDeviceState] = state
 		}
@@ -223,9 +223,9 @@ func raidResultData(st RaidStatus, array string, detail RaidArrayStatus, present
 	return data
 }
 
-// RaidDeviceState returns the most urgent active operation. Array names are
+// raidDeviceState returns the most urgent active operation. Array names are
 // sorted by the sampler, making the selected same-priority operation stable.
-func RaidDeviceState(details []RaidArrayStatus) (string, float64, bool) {
+func raidDeviceState(details []RaidArrayStatus) (string, float64, bool) {
 	for _, detail := range details {
 		if state := raidArrayDeviceState(detail); state != "" {
 			return state, detail.ProgressPct, detail.HasProgress
@@ -263,9 +263,6 @@ func RaidTransitions(result Result) []RaidTransition {
 	transitions, _ := result.Data[DataKeyRaidTransitions].([]RaidTransition)
 	return transitions
 }
-
-// SampleRaid returns one live md RAID observation using the default sampler.
-func SampleRaid() (RaidStatus, error) { return defaultRaidSampler() }
 
 // defaultRaidSampler reads mdstat, then enriches each discovered array with
 // read-only sysfs member state. Missing sysfs data is normal on partial kernels.
@@ -412,7 +409,7 @@ func raidArraySizeBytes(path string) uint64 {
 // checks the live state before writing, so callers cannot turn an arbitrary
 // sysfs path into a write target.
 func SetRaidRebuildState(ctx context.Context, array string, resume bool) (RaidArrayStatus, error) {
-	return setRaidRebuildState(ctx, array, resume, raidSysBlockPath, SampleRaid)
+	return setRaidRebuildState(ctx, array, resume, raidSysBlockPath, defaultRaidSampler)
 }
 
 func setRaidRebuildState(ctx context.Context, array string, resume bool, root string, sample RaidSamplerFunc) (RaidArrayStatus, error) {
@@ -423,7 +420,7 @@ func setRaidRebuildState(ctx context.Context, array string, resume bool, root st
 		return RaidArrayStatus{}, fmt.Errorf("set RAID rebuild: %w", err)
 	}
 	if sample == nil {
-		sample = SampleRaid
+		sample = defaultRaidSampler
 	}
 	status, err := sample()
 	if err != nil {

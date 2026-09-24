@@ -3,6 +3,7 @@ package operation
 import (
 	"os"
 	"path/filepath"
+	"sermo/internal/config"
 	"strings"
 	"testing"
 )
@@ -22,7 +23,7 @@ func TestCleanStopPathRefusesSymlinkedAncestor(t *testing.T) {
 	}
 	target := filepath.Join(link, "data")
 
-	warns := cleanStopPath(CleanPath{Path: target, Recursive: true})
+	warns := cleanStopPath(config.CleanPath{Path: target, Recursive: true})
 	if len(warns) != 1 || !strings.Contains(warns[0], "symlink") {
 		t.Fatalf("warns = %v, want a refusal naming the symlink", warns)
 	}
@@ -39,7 +40,7 @@ func TestCleanStopPathDeletesRealTree(t *testing.T) {
 	if err := os.MkdirAll(target, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if warns := cleanStopPath(CleanPath{Path: target, Recursive: true}); len(warns) != 0 {
+	if warns := cleanStopPath(config.CleanPath{Path: target, Recursive: true}); len(warns) != 0 {
 		t.Fatalf("warns = %v, want none", warns)
 	}
 	if _, err := os.Stat(target); !os.IsNotExist(err) {

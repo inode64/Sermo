@@ -43,7 +43,7 @@ type Config struct {
 	Tree    map[string]any // resolved service config; New derives its lifecycle
 	//                        and the stop_policy invariants from it
 
-	Manager     Manager
+	Manager     servicemgr.Manager
 	Locker      *locks.OperationLocker
 	Scanner     locks.Scanner
 	Discoverer  process.Discoverer
@@ -205,7 +205,7 @@ type resumeManager interface {
 	Resume(ctx context.Context, service string) error
 }
 
-func resumeClosure(mgr Manager, unit string) func(context.Context) error {
+func resumeClosure(mgr servicemgr.Manager, unit string) func(context.Context) error {
 	rm, ok := mgr.(resumeManager)
 	if !ok {
 		return nil
@@ -229,7 +229,7 @@ func stopArtifactsFromTree(tree map[string]any) StopArtifacts {
 // the main process or a command — that either overrides the backend reload
 // (`when: always`) or stands in for it only when the init backend cannot reload
 // the unit itself (`when: auto`, the default).
-func reloadClosure(spec config.ReloadSpec, tree map[string]any, deps checks.Deps, mgr Manager, backend, unit string, discoverer process.Discoverer, selectors []process.Selector) func(context.Context) error {
+func reloadClosure(spec config.ReloadSpec, tree map[string]any, deps checks.Deps, mgr servicemgr.Manager, backend, unit string, discoverer process.Discoverer, selectors []process.Selector) func(context.Context) error {
 	backendReload := func(ctx context.Context) error { return mgr.Reload(ctx, unit) }
 	initReload := func(ctx context.Context) error {
 		ok, err := backendReloadSupported(ctx, mgr, unit)
@@ -263,7 +263,7 @@ func reloadClosure(spec config.ReloadSpec, tree map[string]any, deps checks.Deps
 	}
 }
 
-func backendReloadSupported(ctx context.Context, mgr Manager, unit string) (bool, error) {
+func backendReloadSupported(ctx context.Context, mgr servicemgr.Manager, unit string) (bool, error) {
 	supported, err := mgr.SupportsReload(ctx, unit)
 	if err != nil {
 		return false, fmt.Errorf("%s: %w", reloadSupportLabel, err)
@@ -279,7 +279,7 @@ func UnsupportedReloadError(unit string) error {
 
 // ReloadSupported reports whether the resolved service can perform a reload
 // action without waiting for the operation to fail at execution time.
-func ReloadSupported(ctx context.Context, tree map[string]any, mgr Manager, unit string) (bool, error) {
+func ReloadSupported(ctx context.Context, tree map[string]any, mgr servicemgr.Manager, unit string) (bool, error) {
 	spec, err := config.ParseReload(tree)
 	if err != nil {
 		return false, fmt.Errorf("parse reload support: %w", err)
@@ -432,7 +432,7 @@ func hasExactProcessIdentitySelector(selectors []process.Selector) bool {
 	return false
 }
 
-func restartIdentityClosure(mgr Manager, unit string, discover func() ([]process.Process, error), discoverer process.Discoverer, selectors []process.Selector) func(context.Context) (bool, string, error) {
+func restartIdentityClosure(mgr servicemgr.Manager, unit string, discover func() ([]process.Process, error), discoverer process.Discoverer, selectors []process.Selector) func(context.Context) (bool, string, error) {
 	if mgr == nil || discover == nil || !hasExactProcessIdentitySelector(selectors) {
 		return nil
 	}

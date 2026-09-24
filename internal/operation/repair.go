@@ -20,7 +20,7 @@ const runtimeDirectory = "/run"
 // it is a regular file below the canonical runtime directory, and its exact PID
 // is absent from the live process reader. Failed init state is reset through the
 // manager before the guarded start. Anything less conclusive fails closed.
-func repairStalePIDFiles(manager Manager, unit string, selectors []process.Selector, reader process.Reader, runtimeDir string) func(context.Context) ([]string, error) {
+func repairStalePIDFiles(manager servicemgr.Manager, unit string, selectors []process.Selector, reader process.Reader, runtimeDir string) func(context.Context) ([]string, error) {
 	paths := repairPIDFilePaths(selectors)
 	if reader == nil {
 		reader = process.OSReader{}
@@ -30,7 +30,7 @@ func repairStalePIDFiles(manager Manager, unit string, selectors []process.Selec
 	}
 }
 
-func prepareRepair(ctx context.Context, manager Manager, unit string, paths []string, reader process.Reader, runtimeDir string) ([]string, error) {
+func prepareRepair(ctx context.Context, manager servicemgr.Manager, unit string, paths []string, reader process.Reader, runtimeDir string) ([]string, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, fmt.Errorf("repair preparation context: %w", err)
 	}

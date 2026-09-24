@@ -169,32 +169,8 @@ const PressureFieldFullAvg60 = fieldFullAvg60
 // PressureFieldFullAvg300 is the public PSI `full avg300` predicate/data field.
 const PressureFieldFullAvg300 = fieldFullAvg300
 
-// HdparmFieldRead is the public buffered-read predicate/data field.
-const HdparmFieldRead = fieldRead
-
-// HdparmFieldCached is the public cached-read predicate/data field.
-const HdparmFieldCached = fieldCached
-
 // SmartFieldTemperature is the public SMART temperature predicate/data field.
 const SmartFieldTemperature = fieldTemperature
-
-// SmartFieldReallocated is the public SMART reallocated-sector predicate/data field.
-const SmartFieldReallocated = fieldReallocated
-
-// SmartFieldPendingSectors is the public SMART pending-sector predicate/data field.
-const SmartFieldPendingSectors = fieldPendingSectors
-
-// SmartFieldCRCErrors is the public SMART link CRC-error predicate/data field.
-const SmartFieldCRCErrors = fieldCRCErrors
-
-// SmartFieldMediaErrors is the public NVMe media-error predicate/data field.
-const SmartFieldMediaErrors = fieldMediaErrors
-
-// SmartFieldWear is the public SMART wear predicate/data field.
-const SmartFieldWear = fieldWear
-
-// SmartFieldPowerOnHours is the public SMART power-on-hours predicate/data field.
-const SmartFieldPowerOnHours = fieldPowerOnHours
 
 // Predicate field lists, one per level check. They are exported so config
 // validation walks the same lists and both layers stay in step by construction.
@@ -247,11 +223,11 @@ var (
 	// SensorPredFields are the predicates of a sensors check.
 	SensorPredFields = []string{sensorTemp, sensorFan, sensorVoltage}
 	// HdparmPredFields are the predicates of an hdparm check.
-	HdparmPredFields = []string{HdparmFieldRead, HdparmFieldCached}
+	HdparmPredFields = []string{fieldRead, fieldCached}
 	// SmartPredFields are the optional attribute predicates of a smart check.
 	SmartPredFields = []string{
-		SmartFieldTemperature, SmartFieldReallocated, SmartFieldPendingSectors,
-		SmartFieldCRCErrors, SmartFieldMediaErrors, SmartFieldWear, SmartFieldPowerOnHours,
+		SmartFieldTemperature, fieldReallocated, fieldPendingSectors,
+		fieldCRCErrors, fieldMediaErrors, fieldWear, fieldPowerOnHours,
 	}
 	// RaidPredFields are the optional predicates of a raid check.
 	RaidPredFields = []string{fieldDegraded, fieldRecovering, fieldArrays}

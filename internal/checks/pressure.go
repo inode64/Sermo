@@ -74,14 +74,13 @@ func (c pressureCheck) Run(_ context.Context) Result {
 
 	res := c.result(ok, fmt.Sprintf("pressure %s some %.2f/%.2f/%.2f full %.2f/%.2f/%.2f",
 		c.resource, s.Some.Avg10, s.Some.Avg60, s.Some.Avg300, s.Full.Avg10, s.Full.Avg60, s.Full.Avg300), start)
-	res.Data = PressureResultData(c.resource, s)
+	res.Data = pressureResultData(c.resource, s)
 	res.Data[DataKeyValue] = firstPredValue(c.preds, values, s.Some.Avg10)
 	return res
 }
 
-// PressureResultData is the persisted reading data for one PSI observation,
-// shared by the check cycle and the snapshot-backed watch view.
-func PressureResultData(resource string, s PressureSample) map[string]any {
+// pressureResultData is the persisted reading data for one PSI observation.
+func pressureResultData(resource string, s PressureSample) map[string]any {
 	return map[string]any{
 		DataKeyResource: resource,
 		fieldSomeAvg10:  s.Some.Avg10,

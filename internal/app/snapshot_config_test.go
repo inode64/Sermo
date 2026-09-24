@@ -78,7 +78,7 @@ func TestWatchSnapshotConfigSurvivesReloadAndRestart(t *testing.T) {
 					t.Fatalf("producers=%d warnings=%v", len(producers), warnings)
 				}
 				result := checks.Result{Check: "disk", OK: true, Message: "old disk reading",
-					Data: map[string]any{checks.DataKeyDevice: "/dev/sda", checks.HdparmFieldRead: 500.0}}
+					Data: map[string]any{checks.DataKeyDevice: "/dev/sda", "read": 500.0}}
 				producers[0].Publish("disk", checks.CheckTypeHdparm, result)
 				assertSnapshotWatch(t, holder, true)
 				next := snapshotWatchConfig(device, "new label")

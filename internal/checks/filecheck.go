@@ -53,7 +53,7 @@ func (c fileCheck) Run(_ context.Context) Result {
 		return c.pathResult(false, c.path+" is empty", start)
 	}
 	res := c.result(true, c.path+" is a regular file", start)
-	res.Data = FileResultData(c.path, info)
+	res.Data = fileResultData(c.path, info)
 	return res
 }
 
@@ -92,9 +92,9 @@ func FileKind(mode os.FileMode) string {
 	}
 }
 
-// FileResultData is the persisted reading data for one inspected path, shared
+// fileResultData is the persisted reading data for one inspected path, shared
 // by the file check and the live file watch view.
-func FileResultData(path string, info os.FileInfo) map[string]any {
+func fileResultData(path string, info os.FileInfo) map[string]any {
 	data := map[string]any{
 		DataKeyPath:       path,
 		DataKeyKind:       FileKind(info.Mode()),

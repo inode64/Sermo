@@ -3,6 +3,7 @@ package state
 import (
 	"encoding/json"
 	"fmt"
+	"sermo/internal/rules"
 	"time"
 )
 
@@ -22,7 +23,7 @@ type WatchWindowRecord struct {
 	Consecutive      int
 	History          []bool
 	TrueSince        time.Time
-	TimedHistory     []RuleWindowSample
+	TimedHistory     []rules.WindowSample
 	ClearConsecutive int
 	ClearSince       time.Time
 }

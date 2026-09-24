@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"path/filepath"
 	"reflect"
+	"sermo/internal/rules"
 	"testing"
 	"time"
 )
@@ -98,7 +99,7 @@ func TestRuleWindowMigrationPreservesProgress(t *testing.T) {
 	if err != nil || closeErr != nil {
 		t.Fatalf("create legacy database: %v; close: %v", err, closeErr)
 	}
-	want := RuleWindowRecord{Consecutive: 2, History: []bool{true, true}, TimedHistory: []RuleWindowSample{}}
+	want := RuleWindowRecord{Consecutive: 2, History: []bool{true, true}, TimedHistory: []rules.WindowSample{}}
 	for range 2 {
 		s, err := OpenContextWith(t.Context(), path, Options{})
 		if err != nil {

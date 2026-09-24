@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"sermo/internal/config"
 	"slices"
 	"strings"
 	"syscall"
@@ -2024,7 +2025,7 @@ func TestCleanOnStopDeletesFilesAndDirs(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	clean := []CleanPath{
+	clean := []config.CleanPath{
 		{Path: file},                    // plain file
 		{Path: subdir, Recursive: true}, // non-empty dir tree
 	}

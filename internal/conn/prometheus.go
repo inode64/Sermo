@@ -25,20 +25,13 @@ const (
 )
 
 func (prometheusProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
-	client, base := PrometheusClient(cfg)
+	client, base := httpProbeBase(cfg, defaultPortPrometheus)
 	// buildinfo carries the version and proves the API is up; on a non-API reply
 	// (older server, disabled endpoint) fall back to the health endpoint.
 	if res, handled, err := promBuildInfo(ctx, client, base, cfg); handled {
 		return res, err
 	}
 	return promHealthy(ctx, client, base, cfg)
-}
-
-// PrometheusClient builds an HTTP client and base URL for a Prometheus server
-// from cfg (host/port/tls — https when tls is set). Exported so a PromQL query
-// check can reuse the same transport and addressing.
-func PrometheusClient(cfg Config) (*http.Client, string) {
-	return httpProbeBase(cfg, defaultPortPrometheus)
 }
 
 // promBuildInfo queries /api/v1/status/buildinfo. handled is true when the result

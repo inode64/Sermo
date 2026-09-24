@@ -136,8 +136,7 @@ func diskIORatesIdle(rates DiskIORates) bool {
 	return rates.UtilPct == 0 && rates.ReadBytes == 0 && rates.WriteBytes == 0
 }
 
-// DiskIOResultData is the persisted reading data for one disk I/O rate window,
-// shared by the check cycle and the snapshot-backed watch view. The cumulative
+// DiskIOResultData is the persisted reading data for one disk I/O rate window. The cumulative
 // totals ride along with the rates because a window of zeroes says nothing on its
 // own: an idle disk and a disk nothing has ever touched look identical until you
 // can see what it has moved since boot.

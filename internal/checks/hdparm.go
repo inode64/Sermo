@@ -67,7 +67,7 @@ func (c *hdparmCheck) Run(ctx context.Context) Result {
 
 	c.last.record("", values, start)
 	r := c.result(ok, hdparmMessage(c.device, values), start)
-	r.Data = withDeviceBus(HdparmResultData(c.device, values), c.deviceBus, c.device)
+	r.Data = withDeviceBus(hdparmResultData(c.device, values), c.deviceBus, c.device)
 	return r
 }
 
@@ -80,9 +80,9 @@ func (c *hdparmCheck) failedProbe(prefix, reason string, start time.Time) Result
 	return r
 }
 
-// HdparmResultData is the persisted reading data for one hdparm throughput
-// probe, shared by the check cycle and the snapshot-backed watch view.
-func HdparmResultData(device string, values map[string]float64) map[string]any {
+// hdparmResultData is the persisted reading data for one hdparm throughput
+// probe.
+func hdparmResultData(device string, values map[string]float64) map[string]any {
 	data := map[string]any{DataKeyDevice: device}
 	for k, v := range values {
 		data[k] = v
