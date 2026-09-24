@@ -66,6 +66,9 @@ type Worker struct {
 	// not read as a recovery.
 	checkFailing map[string]bool
 
+	// reportedChecks indexes the immutable rule set; reloading replaces the worker.
+	reportedChecks map[string]bool
+
 	// Checks produces this cycle's named-check cache.
 	Checks func(ctx context.Context, deps checks.Deps) map[string]checks.Result
 	// ResolveRefs returns a per-cycle resolver for named checks outside the main
@@ -341,7 +344,10 @@ func (w *Worker) reportCheckHealthChanges(cache map[string]checks.Result) {
 	if w.checkFailing == nil {
 		w.checkFailing = map[string]bool{}
 	}
-	ruled := w.checksReportedByRules()
+	if w.reportedChecks == nil {
+		w.reportedChecks = checksReportedByRules(w.Rules)
+	}
+	ruled := w.reportedChecks
 	for _, name := range slices.Sorted(maps.Keys(cache)) {
 		if ruled[name] {
 			continue
@@ -380,14 +386,11 @@ func (w *Worker) reportCheckHealthChanges(cache map[string]checks.Result) {
 // health reporter can stay out of their way. It walks the same and/or/not tree
 // the rule runtime does, and only named `check:` references count — an inline
 // metric belongs to no named check.
-func (w *Worker) checksReportedByRules() map[string]bool {
-	if len(w.Rules) == 0 {
-		return nil
-	}
+func checksReportedByRules(ruleSet []rules.Rule) map[string]bool {
 	out := map[string]bool{}
-	for i := range w.Rules {
+	for i := range ruleSet {
 		var candidates []ruleCheckCandidate
-		collectRuleCheckCandidates(w.Rules[i].If, &candidates)
+		collectRuleCheckCandidates(ruleSet[i].If, &candidates)
 		for _, c := range candidates {
 			if c.ref != "" {
 				out[c.ref] = true

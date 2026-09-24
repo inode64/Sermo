@@ -54,7 +54,7 @@ func TestChecksReportedByRulesWalksNestedConditions(t *testing.T) {
 		}},
 	}}
 
-	got := w.checksReportedByRules()
+	got := checksReportedByRules(w.Rules)
 	if !got["http"] || !got["backup"] || len(got) != 2 {
 		t.Fatalf("checksReportedByRules() = %v, want http and backup only", got)
 	}
