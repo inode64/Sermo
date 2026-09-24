@@ -28,7 +28,7 @@ import (
 // exchange to daemonWebDo. Its command-level caller owns the one user-facing
 // error so a configuration failure is not emitted twice.
 func (a App) daemonWebRequest(ctx context.Context, opts options, method, what string, csrf bool, buildURL func(base string) string) (*http.Response, error) {
-	cfg, err := a.LoadConfig(opts.globalPath())
+	cfg, err := a.daemonConfig(opts)
 	if err != nil {
 		return nil, fmt.Errorf("load config failed: %w", err)
 	}
@@ -36,6 +36,14 @@ func (a App) daemonWebRequest(ctx context.Context, opts options, method, what st
 		return nil, errors.New("load config returned no configuration")
 	}
 	return a.daemonWebDo(ctx, cfg, method, what, csrf, buildURL)
+}
+
+// daemonConfig reuses the command's resolved configuration when available.
+func (a App) daemonConfig(opts options) (*config.Config, error) {
+	if opts.loadedConfig != nil {
+		return opts.loadedConfig, nil
+	}
+	return a.LoadConfig(opts.globalPath())
 }
 
 // daemonWebDo is the transport owner for requests from sermoctl to sermod's web
@@ -176,7 +184,7 @@ func daemonWebBasicAuth(password string) string {
 // body into out. Any transport, status or decode problem reports false: these
 // reads only enrich CLI output and must never turn into a failure.
 func (a App) daemonAPIJSON(ctx context.Context, opts options, path string, out any) bool {
-	cfg, err := a.LoadConfig(opts.globalPath())
+	cfg, err := a.daemonConfig(opts)
 	if err != nil || cfg == nil {
 		return false
 	}
@@ -211,7 +219,7 @@ func (a App) daemonAPIGetWithConfig(ctx context.Context, cfg *config.Config, pat
 // fetchDaemonServiceState reads GET /api/services/{name} from the running
 // sermod web API and returns its computed state field.
 func (a App) fetchDaemonServiceState(ctx context.Context, opts options, service string) (string, bool) {
-	cfg, err := a.LoadConfig(opts.globalPath())
+	cfg, err := a.daemonConfig(opts)
 	if err != nil || cfg == nil {
 		return "", false
 	}
