@@ -106,9 +106,8 @@ func (c *Config) resolveServiceWithInputs(name string, pruneOptional bool, input
 // service tree has been merged. Keep post-expansion catalog sugar here so every
 // resolved service has the same normalized shape.
 func (c *Config) resolveExpandedService(merged map[string]any, name string, inputs resolutionInputs) (map[string]any, []string, []string) {
-	errs := prepareExpansionInputs(merged)
-	vars, varErrs := c.expansionVariables(merged, name, inputs.globalVars)
-	errs = append(errs, varErrs...)
+	prepareExpansionInputs(merged)
+	vars, errs := c.expansionVariables(merged, name, inputs.globalVars)
 	expanded, expErrs := expandTree(merged, vars)
 	errs = append(errs, expErrs...)
 	apps := cfgval.StringList(expanded[keyApps])
@@ -877,7 +876,7 @@ func (c *Config) appVariables(tree map[string]any) (map[string]string, []string)
 			continue // expandApps reports the missing app in the usual place.
 		}
 		body := stripMeta(doc.Body)
-		errs = append(errs, prepareExpansionInputs(body)...)
+		prepareExpansionInputs(body)
 		appVars := collectVariables(body)
 		errs = append(errs, resolveFileVars(appVars, body)...)
 		// Iterate variable names in sorted order so conflict errors surface in a
@@ -1478,9 +1477,8 @@ func (c *Config) resolveDocBody(doc *Document, name string, appChain []string, i
 	}
 	body := stripMeta(doc.Body)
 	body = pruneEnableIfMap(body, nil, inputs.backend)
-	errs := prepareExpansionInputs(body)
-	vars, varErrs := c.expansionVariables(body, name, inputs.globalVars)
-	errs = append(errs, varErrs...)
+	prepareExpansionInputs(body)
+	vars, errs := c.expansionVariables(body, name, inputs.globalVars)
 	expanded, expErrs := expandTree(body, vars)
 	errs = append(errs, expErrs...)
 	apps := cfgval.StringList(expanded[keyApps])
