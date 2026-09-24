@@ -530,10 +530,7 @@ var sqlEngines = set(
 // optional/verify booleans, command array form, valid service/process states,
 // metric grammar, and that file_exists never points at Sermo's own lock dir.
 func validateCheckSection(tree map[string]any, section, locksDir string, add addFunc) {
-	entries, ok := tree[section].(map[string]any)
-	if !ok {
-		return
-	}
+	entries := validateMappingSection(tree, section, add)
 	for _, name := range slices.Sorted(maps.Keys(entries)) {
 		path := section + "." + name
 		// A check's state bands are persisted under "<check>:<metric>", so the

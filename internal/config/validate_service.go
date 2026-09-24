@@ -240,10 +240,7 @@ func pathDepth(p string) int {
 }
 
 func validateProcesses(tree map[string]any, add addFunc) {
-	processes, ok := tree[sectionProcesses].(map[string]any)
-	if !ok {
-		return
-	}
+	processes := validateMappingSection(tree, sectionProcesses, add)
 	for _, name := range slices.Sorted(maps.Keys(processes)) {
 		path := processEntryPath(name)
 		entry, ok := processes[name].(map[string]any)
@@ -428,10 +425,7 @@ func reloadSignalPidfileIdentity(tree map[string]any) (pidfile, identity bool) {
 // and `version_short` by the apps listings, and `version` by the
 // version.on_change monitor; any other entry is informational.
 func validateCommands(tree map[string]any, add addFunc) {
-	commands, ok := tree[sectionCommands].(map[string]any)
-	if !ok {
-		return
-	}
+	commands := validateMappingSection(tree, sectionCommands, add)
 	for _, name := range slices.Sorted(maps.Keys(commands)) {
 		path := sectionCommands + "." + name
 		entry, ok := commands[name].(map[string]any)

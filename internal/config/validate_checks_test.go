@@ -444,3 +444,14 @@ checks:
 		"checks.no-pred requires at least one of util_pct/read_bytes/write_bytes/await_ms",
 		`read_bytes value "1048576" must include a size suffix`)
 }
+
+func TestValidateRejectsMalformedServiceSections(t *testing.T) {
+	for _, section := range []string{"checks", "preflight", "rules", "processes", "commands"} {
+		for _, value := range []string{"oops", "42", "true", "[broken]"} {
+			t.Run(section+"/"+value, func(t *testing.T) {
+				issues := validateService(t, fmt.Sprintf("name: svc\nservice: svc\npolicy: {cooldown: 5m}\n%s: %s\n", section, value))
+				mustHave(t, issues, section+" must be a mapping")
+			})
+		}
+	}
+}
