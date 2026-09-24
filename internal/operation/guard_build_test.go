@@ -69,3 +69,19 @@ func guardBuildTree(condition map[string]any) map[string]any {
 		"then": map[string]any{"action": "block", "message": "busy"},
 	}}}
 }
+
+func TestGuardDoesNotRunUnreferencedChecks(t *testing.T) {
+	tree := guardBuildTree(map[string]any{"failed": map[string]any{"check": "referenced"}})
+	tree["checks"] = map[string]any{
+		"referenced": map[string]any{"type": "command", "command": []any{"referenced"}},
+		"unrelated":  map[string]any{"type": "command", "command": []any{"unrelated"}},
+	}
+	runner := execxtest.Outputs("ok")
+	guard := guardClosure(tree, checks.Deps{Runner: runner, DefaultTimeout: time.Second}, nil, nil)
+	if blocked, _, err := guard(t.Context(), "start"); blocked || err != nil || len(runner.Calls()) != 0 {
+		t.Fatalf("unrelated action: blocked=%v err=%v calls=%v", blocked, err, runner.Calls())
+	}
+	if blocked, _, err := guard(t.Context(), "restart"); blocked || err != nil || len(runner.Calls()) != 1 {
+		t.Fatalf("referenced guard: blocked=%v err=%v calls=%v", blocked, err, runner.Calls())
+	}
+}
