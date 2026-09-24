@@ -154,9 +154,7 @@ func dhcpClientMAC(s string) (net.HardwareAddr, error) {
 		return mac, nil
 	}
 	mac := make(net.HardwareAddr, dhcpHLenEthernet)
-	if _, err := rand.Read(mac); err != nil {
-		return nil, probeErr(ProtocolNameDHCP, stepDHCPClientMAC, err)
-	}
+	_, _ = rand.Read(mac)
 	mac[0] = (mac[0] | dhcpMACLocalAdminBit) &^ dhcpMACMulticastBit
 	return mac, nil
 }

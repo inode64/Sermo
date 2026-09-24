@@ -32,10 +32,7 @@ func TestSMBDialectNames(t *testing.T) {
 }
 
 func TestBuildSMBNegotiate(t *testing.T) {
-	req, err := buildSMBNegotiate()
-	if err != nil {
-		t.Fatal(err)
-	}
+	req := buildSMBNegotiate()
 	// 4-byte direct-TCP header + 158-byte SMB2 message.
 	if len(req) != 4+158 {
 		t.Fatalf("len = %d, want 162", len(req))
