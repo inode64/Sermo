@@ -336,12 +336,12 @@ func (o *hardwareRAIDObservation) data(health string) map[string]any {
 		DataKeyHardwareRAIDCorrectableErrors:   o.CorrectableErrors,
 		DataKeyHardwareRAIDUncorrectableErrors: o.UncorrectableErrors,
 		SmartFieldTemperature:                  o.MaxTemperature,
-		DataKeyHardwareRAIDIssues:              slices.Clone(o.Issues),
-		DataKeyHardwareRAIDAdvisories:          slices.Clone(o.Advisories),
-		DataKeyHardwareRAIDControllerDetails:   slices.Clone(o.ControllerDetails),
-		DataKeyHardwareRAIDCacheDetails:        slices.Clone(o.CacheDetails),
-		DataKeyHardwareRAIDVolumeDetails:       slices.Clone(o.VolumeDetails),
-		DataKeyHardwareRAIDDriveDetails:        slices.Clone(o.DriveDetails),
+		DataKeyHardwareRAIDIssues:              o.Issues,
+		DataKeyHardwareRAIDAdvisories:          o.Advisories,
+		DataKeyHardwareRAIDControllerDetails:   o.ControllerDetails,
+		DataKeyHardwareRAIDCacheDetails:        o.CacheDetails,
+		DataKeyHardwareRAIDVolumeDetails:       o.VolumeDetails,
+		DataKeyHardwareRAIDDriveDetails:        o.DriveDetails,
 	}
 	if o.Operation != "" {
 		data[DataKeyRaidOperation] = o.Operation
