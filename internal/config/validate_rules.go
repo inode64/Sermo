@@ -168,10 +168,7 @@ func validateClearWindowSection(tree map[string]any, add addFunc) {
 }
 
 func validateRules(tree map[string]any, notifiers map[string]struct{}, add addFunc) {
-	ruleMap, ok := tree[rules.SectionRules].(map[string]any)
-	if !ok {
-		return
-	}
+	ruleMap := validateMappingSection(tree, rules.SectionRules, add)
 	checkNames := collectCheckNames(tree)
 	systemMetricChecks := collectSystemMetricChecks(tree)
 

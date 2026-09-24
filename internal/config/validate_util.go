@@ -59,3 +59,17 @@ func isDuration(s string, allowZero bool) bool {
 	}
 	return d > 0
 }
+
+// validateMappingSection distinguishes an absent optional section from one
+// that would otherwise disappear silently because its shape is invalid.
+func validateMappingSection(tree map[string]any, key string, add addFunc) map[string]any {
+	raw, present := tree[key]
+	if !present {
+		return nil
+	}
+	section, ok := raw.(map[string]any)
+	if !ok {
+		add(validationMappingFormat, key)
+	}
+	return section
+}
