@@ -19,8 +19,11 @@ import (
 // serviceObservation holds one cycle's configured, current check results and
 // one freshness clock for all projections of a service row.
 type serviceObservation struct {
-	snapshots map[string]CheckSnapshot
-	at        time.Time
+	snapshots      map[string]CheckSnapshot
+	runtime        web.ServiceRuntime
+	runtimeFresh   bool
+	runtimeTracked bool
+	at             time.Time
 }
 
 func (b *WebBackend) observeService(name string, e *webEntry) serviceObservation {
@@ -28,6 +31,9 @@ func (b *WebBackend) observeService(name string, e *webEntry) serviceObservation
 	if e == nil {
 		return o
 	}
+	o.runtimeTracked = !e.noResidentProcess && b.serviceMetrics != nil
+	cur, at, ok := b.latestPublishedServiceRuntime(name, e)
+	o.runtime, o.runtimeFresh = cur, ok && o.at.Sub(at) <= runtimePublishMaxAge(e.interval)
 	snapshots := b.snapshots.Get(name)
 	if snapshots == nil {
 		return o
@@ -57,6 +63,8 @@ type serviceLockView struct {
 	active          []string
 	operationActive bool
 	ready           bool
+	monitorRecords  map[string]state.MonitorRecord
+	settlingRecords map[string]state.OperationSettlingRecord
 }
 
 func (b *WebBackend) viewWithRuntime(ctx context.Context, name string, e *webEntry, lastEvent *web.Event, lockView serviceLockView) web.Service {
@@ -90,7 +98,7 @@ func (b *WebBackend) viewWithRuntime(ctx context.Context, name string, e *webEnt
 		return svc
 	}
 	monitorChangedAt := time.Time{}
-	if monitoredState, ok := b.monitorView(name); ok {
+	if monitoredState, ok := b.monitorViewFrom(lockView.monitorRecords, name); ok {
 		svc.Monitored, svc.MonitorSource = monitoredState.active, monitoredState.source
 		monitorChangedAt, svc.MonitorChangedAt = monitoredState.changedAt, monitoredState.changedAtText()
 	}
@@ -111,7 +119,7 @@ func (b *WebBackend) viewWithRuntime(ctx context.Context, name string, e *webEnt
 	failing, health := observation.serviceCheckHealth(e, svc.Monitored)
 	baseHealth := health
 	stateReason := observation.serviceStateReason(e)
-	processActive := b.serviceProcessActive(name, e)
+	processActive := observation.runtimeFresh && observation.runtime.StartedAt != ""
 	backendDegraded := status == string(servicemgr.StatusFailed) && processActive && health == TargetStateOK
 	if backendDegraded {
 		stateReason = stateReasonFailedUnitLiveProcess
@@ -134,7 +142,7 @@ func (b *WebBackend) viewWithRuntime(ctx context.Context, name string, e *webEnt
 	}
 	svc.OperationActive = lockView.operationActive
 	b.decorateRemediation(name, &svc)
-	observed := (b.settling == nil || b.settling.Observed(SettlingServiceKey(name))) && !b.operationSettlingPending(name)
+	observed := (b.settling == nil || b.settling.Observed(SettlingServiceKey(name))) && !b.operationSettlingPending(name, lockView.settlingRecords)
 	svc.ObservabilityReady, svc.ObservabilityMissing = b.serviceObservability(name, e, observation, svc.Status, svc.CheckHealth, svc.Monitored, observed)
 	svc.State = ServiceState(svc.Enabled, svc.Monitored, svc.Status, svc.CheckHealth, observed, svc.ObservabilityReady,
 		processActive, onlyMissingProcesses(svc.ObservabilityMissing), backendDegraded)
@@ -145,7 +153,7 @@ func (b *WebBackend) viewWithRuntime(ctx context.Context, name string, e *webEnt
 	if len(e.alsoApply) > 0 {
 		svc.AlsoApply = slices.Clone(e.alsoApply)
 	}
-	b.decorateServiceRuntime(name, e, &svc)
+	b.decorateServiceRuntime(name, e, &svc, observation)
 	return svc
 }
 
@@ -216,7 +224,7 @@ func (b *WebBackend) serviceObservability(name string, e *webEntry, observation 
 			addMissing(observabilityMissingHistory)
 		}
 		if !e.noResidentProcess {
-			switch b.serviceRuntimeObservability(name, e) {
+			switch observation.runtimeObservability() {
 			case runtimeObservabilityEmpty:
 				addMissing(observabilityMissingProcesses)
 			case runtimeObservabilityPending:
@@ -450,37 +458,20 @@ const (
 	runtimeObservabilityReady
 )
 
-func (b *WebBackend) serviceRuntimeObservability(name string, e *webEntry) runtimeObservability {
-	if e == nil || e.noResidentProcess || b.serviceMetrics == nil {
+func (o serviceObservation) runtimeObservability() runtimeObservability {
+	if !o.runtimeTracked {
 		return runtimeObservabilityReady
 	}
-	cur, at, ok := b.serviceMetrics.LatestWithAt(name)
-	if !ok || b.webNow().Sub(at) > runtimePublishMaxAge(e.interval) {
+	if !o.runtimeFresh {
 		return runtimeObservabilityPending
 	}
-	if cur.Count == 0 {
+	if o.runtime.Count == 0 {
 		return runtimeObservabilityEmpty
 	}
-	// Processes are visible; the CPU and IO rates need a second sample to
-	// derive, so they are genuinely still populating.
-	if cur.HasCPU && cur.IOReady {
+	if o.runtime.HasCPU && o.runtime.IOReady {
 		return runtimeObservabilityReady
 	}
 	return runtimeObservabilityPending
-}
-
-// serviceProcessActive only reads the worker-published runtime sample. The web
-// request must not scan /proc to turn an unobserved service into active: daemon
-// cycles own the runtime evidence and its freshness boundary.
-func (b *WebBackend) serviceProcessActive(name string, e *webEntry) bool {
-	if e == nil || e.noResidentProcess || b.serviceMetrics == nil {
-		return false
-	}
-	cur, at, ok := b.serviceMetrics.LatestWithAt(name)
-	if !ok || b.webNow().Sub(at) > runtimePublishMaxAge(e.interval) {
-		return false
-	}
-	return cur.StartedAt != ""
 }
 
 func (b *WebBackend) decorateRemediation(name string, svc *web.Service) {
@@ -513,11 +504,15 @@ func (b *WebBackend) decorateRemediation(name string, svc *web.Service) {
 	}
 }
 
-func (b *WebBackend) operationSettlingPending(name string) bool {
+func (b *WebBackend) operationSettlingPending(name string, records map[string]state.OperationSettlingRecord) bool {
 	if b.operationSettling == nil {
 		return false
 	}
-	rec, found, err := b.operationSettling.OperationSettling(name)
+	rec, found := records[name]
+	var err error
+	if records == nil {
+		rec, found, err = b.operationSettling.OperationSettling(name)
+	}
 	if err != nil {
 		b.emitMonitorEvent(name, eventActionOperationSettling, eventKindError, "", err.Error())
 		return false
@@ -598,13 +593,24 @@ func (b *WebBackend) servicesWithLockReports(ctx context.Context, reports map[st
 	out := make([]web.Service, 0, len(b.order))
 	lastEvents := b.lastServiceEvents()
 	operating := b.operationActiveByService()
+	monitored := b.monitorRecords()
+	var settling map[string]state.OperationSettlingRecord
+	if source, ok := b.operationSettling.(interface {
+		OperationSettlingStates() (map[string]state.OperationSettlingRecord, error)
+	}); ok {
+		records, err := source.OperationSettlingStates()
+		if err == nil {
+			settling = records
+		}
+	}
 	for _, name := range b.order {
 		e := b.entries[name]
 		if e == nil {
 			continue
 		}
 		out = append(out, b.viewWithRuntime(ctx, name, e, lastEvents[name], serviceLockView{
-			active:          activeLockNamesFromReport(reports[name]),
+			active:         activeLockNamesFromReport(reports[name]),
+			monitorRecords: monitored, settlingRecords: settling,
 			operationActive: operating[name],
 			ready:           true,
 		}))

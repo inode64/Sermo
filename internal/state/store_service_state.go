@@ -43,6 +43,54 @@ func (s *Store) MonitorState(service string) (MonitorRecord, bool, error) {
 	return MonitorRecord{Active: on, Source: source, UpdatedAt: at}, true, nil
 }
 
+// MonitorStates reads monitoring policy once for a dashboard snapshot.
+func (s *Store) MonitorStates() (map[string]MonitorRecord, error) {
+	rows, err := s.reads().QueryContext(s.sqlCtx(), `SELECT service, active, source, updated_at FROM monitor_state;`)
+	if err != nil {
+		return nil, fmt.Errorf("load monitor states: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	out := map[string]MonitorRecord{}
+	for rows.Next() {
+		var name, updated string
+		var active int
+		var record MonitorRecord
+		if err := rows.Scan(&name, &active, &record.Source, &updated); err != nil {
+			return nil, fmt.Errorf("scan monitor state: %w", err)
+		}
+		record.Active = active != 0
+		record.UpdatedAt, _ = time.Parse(time.RFC3339, updated)
+		out[name] = record
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("read monitor states: %w", err)
+	}
+	return out, nil
+}
+
+// OperationSettlingStates reads operation transitions once for a service list.
+func (s *Store) OperationSettlingStates() (map[string]OperationSettlingRecord, error) {
+	rows, err := s.reads().QueryContext(s.sqlCtx(), `SELECT service, phase, updated_at FROM operation_settling;`)
+	if err != nil {
+		return nil, fmt.Errorf("load operation settling states: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	out := map[string]OperationSettlingRecord{}
+	for rows.Next() {
+		var name, updated string
+		var record OperationSettlingRecord
+		if err := rows.Scan(&name, &record.Phase, &updated); err != nil {
+			return nil, fmt.Errorf("scan operation settling state: %w", err)
+		}
+		record.UpdatedAt, _ = time.Parse(time.RFC3339, updated)
+		out[name] = record
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("read operation settling states: %w", err)
+	}
+	return out, nil
+}
+
 // loadFlagRow runs a single-row (flag, source, updated_at) query and decodes
 // it; found is false when no row exists and errContext labels failures. It is
 // the read half shared by the boolean flag tables (monitor_state, global_state).

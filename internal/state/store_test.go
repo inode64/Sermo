@@ -719,3 +719,29 @@ func fileSize(t *testing.T, path string) int64 {
 	}
 	return info.Size()
 }
+
+func TestBulkServiceStatesMatchIndividualReads(t *testing.T) {
+	store := openTemp(t)
+	if err := store.SetActive("web", false, SourceCLI); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SetOperationSettling("web", OperationSettlingSettling); err != nil {
+		t.Fatal(err)
+	}
+	monitors, err := store.MonitorStates()
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, found, err := store.MonitorState("web")
+	if err != nil || !found || monitors["web"] != want {
+		t.Fatalf("monitors=%v individual=%v found=%v err=%v", monitors, want, found, err)
+	}
+	settling, err := store.OperationSettlingStates()
+	if err != nil {
+		t.Fatal(err)
+	}
+	transition, found, err := store.OperationSettling("web")
+	if err != nil || !found || settling["web"] != transition {
+		t.Fatalf("settling=%v individual=%v found=%v err=%v", settling, transition, found, err)
+	}
+}
