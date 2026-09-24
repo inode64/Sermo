@@ -834,6 +834,9 @@ func validateServices(cfg *Config) []Issue {
 			for _, issue := range validateResolved(name, resolved.Tree, cfg.Global.RuntimeDir(), defined, services, inputs.backend) {
 				addIssue(issue)
 			}
+			if !containsEnableIf(resolved.Tree) {
+				break
+			}
 		}
 	}
 	return issues
