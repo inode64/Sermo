@@ -91,9 +91,6 @@ func NewCheckResolverFactory(built []checks.Built, maxParallel int) func() RefRe
 				return checks.Result{}, false, nil
 			}
 			results := checks.Run(ctx, []checks.Built{b}, maxParallel)
-			if len(results) == 0 {
-				return checks.Result{}, true, fmt.Errorf("check %q produced no result", name)
-			}
 			memo[name] = results[0]
 			return results[0], true, nil
 		}
@@ -390,9 +387,6 @@ func (e *Evaluator) runInline(ctx context.Context, name string, entry, keyParams
 		return checks.Result{}, fmt.Errorf("build inline %s check: %w", name, err)
 	}
 	results := checks.Run(ctx, []checks.Built{{Check: check}}, 0)
-	if len(results) == 0 {
-		return checks.Result{}, fmt.Errorf("inline %s check produced no result", name)
-	}
 	res := results[0]
 	if e.memo == nil {
 		e.memo = map[string]checks.Result{}
