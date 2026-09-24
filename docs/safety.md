@@ -9,7 +9,8 @@ any `security:` toggle that tries to disable them.
    required preflight failure blocks the action with `preflight_failed`.
 2. **Never start, stop, restart, reload or resume if a guard blocks the action.**
    Guards are evaluated before remediation; a remediation action a guard blocks
-   never runs.
+   never runs. A guard that references a malformed check also denies the action,
+   reporting the original construction error, including for optional checks.
 3. **Active named runtime locks always block service actions.** The operation
    engine checks `<runtime>/locks` automatically — no rule needed.
 4. **Never signal an unverified residual.** `force_kill: auto` derives authority

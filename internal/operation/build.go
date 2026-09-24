@@ -548,10 +548,16 @@ func guardClosure(tree map[string]any, deps checks.Deps, sample func(context.Con
 		runDeps := checkDepsForEval(ctx, deps, sample)
 		ruleSet, _ := rules.ParseRules(tree)
 		section, _ := tree[config.SectionChecks].(map[string]any)
-		built, _ := checks.Build(section, runDeps)
+		built, issues := checks.BuildWithIssues(section, runDeps)
 		preflightSection, _ := tree[config.SectionPreflight].(map[string]any)
-		preflightBuilt, _ := checks.Build(preflightSection, runDeps)
+		preflightBuilt, preflightIssues := checks.BuildWithIssues(preflightSection, runDeps)
 		cache := map[string]checks.Result{}
+		// Keep malformed references unavailable with their original diagnostic.
+		// Service checks retain precedence over preflight names, even if their
+		// construction failed. Unreferenced issues do not deny an operation.
+		for _, issue := range append(preflightIssues, issues...) {
+			cache[issue.Check] = issue.Result()
+		}
 		for _, r := range checks.Run(ctx, built, 0) {
 			cache[r.Check] = r
 		}
