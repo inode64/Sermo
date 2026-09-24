@@ -953,3 +953,28 @@ func TestSystemLoadCarriesHostCPUCapacity(t *testing.T) {
 		}
 	}
 }
+
+func TestCollectorSharesMemorySampleUntilFreshnessExpires(t *testing.T) {
+	reader := &combinedMemoryReader{memoryTotal: 1024, memoryOK: true, swapOK: true}
+	collector := New(reader)
+	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	collector.Now = func() time.Time { return now }
+	collector.SampleService("first", nil)
+	collector.SampleService("second", nil)
+	collector.SampleSystem()
+	if reader.combinedCalls != 1 {
+		t.Fatalf("host reads=%d, want 1", reader.combinedCalls)
+	}
+	now = now.Add(collector.SystemFreshness)
+	collector.SampleService("first", nil)
+	if reader.combinedCalls != 2 {
+		t.Fatalf("expired reads=%d, want 2", reader.combinedCalls)
+	}
+	reader.memoryOK = false
+	now = now.Add(collector.SystemFreshness)
+	collector.SampleService("first", nil)
+	collector.SampleService("second", nil)
+	if reader.combinedCalls != 4 {
+		t.Fatalf("failed reads=%d, want 4", reader.combinedCalls)
+	}
+}

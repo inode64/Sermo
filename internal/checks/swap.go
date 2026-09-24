@@ -121,7 +121,7 @@ func defaultSwapSampler() (SwapSample, error) {
 	if err != nil {
 		return SwapSample{}, err
 	}
-	s := SwapSample{TotalBytes: info.swapTotalBytes, FreeBytes: info.swapFreeBytes}
+	s := SwapSample{TotalBytes: info.SwapTotal, FreeBytes: info.SwapFree}
 	if vm, err := os.ReadFile(procVMStatPath); err == nil {
 		pagesIn, pagesOut, err := parseSwapVMStat(string(vm))
 		if err != nil {
