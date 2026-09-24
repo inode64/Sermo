@@ -163,3 +163,11 @@ func TestOSHookRunnerWithInjectedExecxRunner(t *testing.T) {
 		t.Fatalf("injected SERMO_ vars not found in env passed to execx; env had %d entries, sample: %v", len(call.Env), call.Env[:min(5, len(call.Env))])
 	}
 }
+
+func TestOSHookRunnerRejectsRunnerWithoutEnvironmentSupport(t *testing.T) {
+	runner := execxtest.Outputs("unexpected")
+	_, err := (OSHookRunner{Runner: execxtest.RunOnly{Runner: runner}}).RunHook(t.Context(), []string{"probe"}, map[string]string{"SERMO_WATCH": "test"}, time.Second)
+	if err == nil || len(runner.Calls()) != 0 {
+		t.Fatalf("unsupported environment runner: err=%v calls=%v", err, runner.Calls())
+	}
+}
