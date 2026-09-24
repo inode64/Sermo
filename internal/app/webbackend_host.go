@@ -132,8 +132,8 @@ func hostMetric(name string, r metrics.Reading) web.HostMetric {
 		// Only derive the per-CPU percentage from a real reading; guarding on
 		// HasAbsolute (as watchMeter does) avoids fabricating Total/Percent when
 		// load1 has no absolute value.
-		if r.HasAbsolute {
-			ncpu := runtime.NumCPU()
+		if r.HasAbsolute && r.HasTotal {
+			ncpu := int(r.Total)
 			if usedPct, ok := loadUsedPercent(r.Absolute, ncpu); ok {
 				m.Total = float64(ncpu)
 				m.Percent = usedPct

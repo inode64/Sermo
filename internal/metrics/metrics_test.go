@@ -941,3 +941,15 @@ func TestCPUThreadFloorReleasesACooledProcess(t *testing.T) {
 		t.Errorf("cooled process was thread-read %d more time(s) over 4 idle cycles; want at most 1", after)
 	}
 }
+
+func TestSystemLoadCarriesHostCPUCapacity(t *testing.T) {
+	for _, ncpu := range []int{0, 8} {
+		snapshot := New(fakeReader{ncpu: ncpu}).SampleSystem()
+		for _, name := range []string{MetricLoad1, MetricLoad5, MetricLoad15} {
+			r := snapshot[name]
+			if !r.HasAbsolute || r.Total != float64(ncpu) || r.HasTotal != (ncpu > 0) {
+				t.Fatalf("%s with %d host CPUs: %+v", name, ncpu, r)
+			}
+		}
+	}
+}

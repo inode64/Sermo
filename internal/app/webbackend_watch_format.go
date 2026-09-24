@@ -2,7 +2,6 @@ package app
 
 import (
 	"fmt"
-	"runtime"
 	"sermo/internal/cfgval"
 	"sermo/internal/checks"
 	"sermo/internal/metrics"
@@ -98,10 +97,10 @@ func watchMeter(checkType string, system metrics.Snapshot) *web.WatchMeter {
 		return memoryWatchMeter(total, available, r.Percent)
 	case checks.CheckTypeLoad:
 		r, ok := system[metrics.MetricLoad1]
-		if !ok || !r.HasAbsolute {
+		if !ok || !r.HasAbsolute || !r.HasTotal {
 			return nil
 		}
-		return loadWatchMeter(r.Absolute, runtime.NumCPU())
+		return loadWatchMeter(r.Absolute, int(r.Total))
 	}
 	return nil
 }
