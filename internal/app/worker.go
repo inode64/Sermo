@@ -1352,18 +1352,13 @@ func (rc *ruleRuntimeContext) applyChange(change rules.ChangeContext, base, last
 	rc.changeApp = change.App
 	rc.changeLibrary = change.Library
 	rc.changeLevel = change.Level
-	rc.changeOld = change.OldVersion
-	rc.changeNew = change.NewVersion
+	rc.changeOld, rc.changeNew = "", ""
 	if change.App == "" || change.LevelValue == 0 {
 		return
 	}
 	bkey := change.App + ":" + strconv.Itoa(change.LevelValue)
-	if rc.changeOld == "" {
-		rc.changeOld = base[bkey]
-	}
-	if rc.changeNew == "" {
-		rc.changeNew = last[bkey]
-	}
+	rc.changeOld = base[bkey]
+	rc.changeNew = last[bkey]
 }
 
 func (rc *ruleRuntimeContext) applyCheckEntry(entry map[string]any) {
