@@ -117,6 +117,7 @@ func (w *fileWatcher) runCycle(ctx context.Context) {
 	paths := slices.Sorted(maps.Keys(current)) // deterministic event order
 
 	var stale []staleFile
+	observeOnly := observeOnlyCycle(ctx)
 	for _, p := range paths {
 		if ctx.Err() != nil {
 			return // shutting down: stop firing
@@ -126,11 +127,11 @@ func (w *fileWatcher) runCycle(ctx context.Context) {
 		if known && cur.older && prev.older {
 			cur.olderFired = prev.olderFired
 		}
-		if !observeOnlyCycle(ctx) && cur.older && !cur.olderFired {
+		if !observeOnly && cur.older && !cur.olderFired {
 			stale = append(stale, staleFile{path: p, state: cur})
 			cur.olderFired = true
 		}
-		if observeOnlyCycle(ctx) {
+		if observeOnly {
 			// The startup observation must not swallow the edge: recording a
 			// fresh breach here would make the first real cycle see it as the
 			// prior state and stay silent forever. older_than avoids this by
@@ -166,7 +167,7 @@ func (w *fileWatcher) runCycle(ctx context.Context) {
 		if ctx.Err() != nil {
 			return
 		}
-		if w.cond.onDelete && !observeOnlyCycle(ctx) {
+		if w.cond.onDelete && !observeOnly {
 			w.fire(ctx, p, fileChangeDeleted, p+" no longer exists", map[string]string{
 				sermoEnvOld: strconv.FormatInt(w.baseline[p].size, envFormatBase),
 			})
