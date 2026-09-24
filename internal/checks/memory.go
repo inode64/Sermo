@@ -65,5 +65,5 @@ func defaultMemorySampler() (MemorySample, error) {
 	if err != nil {
 		return MemorySample{}, err
 	}
-	return MemorySample{TotalBytes: info.memoryTotalBytes, AvailableBytes: info.memoryAvailableBytes}, nil
+	return MemorySample{TotalBytes: info.MemTotal, AvailableBytes: info.MemAvailable}, nil
 }

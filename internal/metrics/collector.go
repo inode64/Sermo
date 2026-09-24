@@ -118,6 +118,8 @@ type Collector struct {
 	prevSystem       *sysSample
 	lastSystem       Snapshot
 	lastSystemA      time.Time
+	lastMemory       memoryTotals
+	lastMemoryAt     time.Time
 }
 
 // New returns a Collector over reader.
@@ -223,7 +225,7 @@ func (c *Collector) sampleService(service string, pids []int, reader processMetr
 	measured := func(ok bool) bool { return len(pids) == 0 || ok }
 
 	mem := Reading{Absolute: float64(rss), Unit: MetricUnitBytes, HasAbsolute: true, Ready: measured(present > 0)}
-	totals := readerMemoryTotals(c.Reader, hasSwap)
+	totals := c.memoryTotals(now)
 	if totals.memoryOK {
 		mem.Percent = float64(rss) / float64(totals.memoryTotal) * PercentScale
 		mem.HasPercent = true
@@ -412,7 +414,7 @@ func (c *Collector) SampleSystem() Snapshot {
 	}
 
 	snap := Snapshot{}
-	totals := readerMemoryTotals(c.Reader, true)
+	totals := c.memoryTotals(now)
 	if totals.memoryOK {
 		r := Reading{Absolute: float64(totals.memoryUsed), Unit: MetricUnitBytes, HasAbsolute: true, Ready: true,
 			Percent:    float64(totals.memoryUsed) / float64(totals.memoryTotal) * PercentScale,
@@ -472,6 +474,20 @@ type memoryTotals struct {
 	swapTotal   uint64
 	swapUsed    uint64
 	swapOK      bool
+}
+
+// memoryTotals shares the host sample for the collector's freshness window.
+// The caller holds mu. Incomplete reads are retried instead of cached.
+func (c *Collector) memoryTotals(now time.Time) memoryTotals {
+	age := now.Sub(c.lastMemoryAt)
+	if !c.lastMemoryAt.IsZero() && age >= 0 && age < c.SystemFreshness {
+		return c.lastMemory
+	}
+	totals := readerMemoryTotals(c.Reader, true)
+	if totals.memoryOK && totals.swapOK {
+		c.lastMemory, c.lastMemoryAt = totals, now
+	}
+	return totals
 }
 
 // readerMemoryTotals returns host memory totals and, when requested and
