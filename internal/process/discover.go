@@ -423,7 +423,7 @@ func (d Discoverer) ObserveAnyState(exes []string, user string) string {
 		if exe == "" {
 			continue
 		}
-		selectors = append(selectors, Selector{Type: SelectorCommandMatch, Exe: exe, User: user})
+		selectors = append(selectors, Selector{Type: SelectorCommandMatch, Exe: exe, User: user, exePath: canonicalizePath(exe)})
 	}
 	if len(selectors) == 0 {
 		return StateAbsent
