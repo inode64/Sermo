@@ -34,8 +34,7 @@ type mongoCheck struct {
 	pipeline   any
 	command    any
 	resultPath []string // dotted result path (aggregate/command)
-	op         string
-	value      string
+	valueMatcher
 }
 
 const (
@@ -60,7 +59,7 @@ func (c mongoCheck) Run(ctx context.Context) Result {
 		return c.unavailableResult("mongodb: "+err.Error(), start)
 	}
 
-	return finishScalarCompare(c.base, "mongodb", result, c.op, c.value, start, map[string]any{
+	return finishScalarCompare(c.base, "mongodb", result, c.valueMatcher, start, map[string]any{
 		DataKeyMode: c.mode,
 	})
 }
@@ -141,7 +140,7 @@ func buildMongoCheck(b base, entry map[string]any) (Check, string) {
 	pipeline := cfgval.AsString(entry[CheckKeyPipeline])
 	resultPath := cfgval.AsString(entry[CheckKeyResult])
 
-	c := mongoCheck{base: b, cfg: mongoConnConfig(entry), database: cfgval.AsString(entry[CheckKeyDatabase]), collection: collection, op: op, value: value}
+	c := mongoCheck{base: b, cfg: mongoConnConfig(entry), database: cfgval.AsString(entry[CheckKeyDatabase]), collection: collection, valueMatcher: newValueMatcher(op, value)}
 
 	switch {
 	case command != "":

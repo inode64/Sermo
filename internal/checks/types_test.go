@@ -20,7 +20,7 @@ func TestJSONAssertNumericBoundaries(t *testing.T) {
 		{"<=", true}, // 5 <= 5
 	}
 	for _, c := range cases {
-		got, err := compareValue(jsonValueString(5.0), c.op, "5")
+		got, err := newValueMatcher(c.op, "5").compare(jsonValueString(5.0))
 		if err != nil {
 			t.Errorf("compareValue(jsonValueString(5), %q, 5): %v", c.op, err)
 			continue
@@ -51,7 +51,7 @@ func TestJSONAssertUsesCompareValue(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			hold, err := compareValue(jsonValueString(c.got), c.op, c.want)
+			hold, err := newValueMatcher(c.op, c.want).compare(jsonValueString(c.got))
 			if c.wantErr {
 				if err == nil {
 					t.Fatalf("compareValue(jsonValueString(%v), %q, %q): expected error", c.got, c.op, c.want)
@@ -70,7 +70,7 @@ func TestJSONAssertUsesCompareValue(t *testing.T) {
 
 func TestStatusMatcherString(t *testing.T) {
 	// Operator form renders "op value"; the code/class form is a comma list.
-	if got := (statusMatcher{op: ">", value: "500"}).String(); got != "> 500" {
+	if got := (statusMatcher{valueMatcher: newValueMatcher(">", "500")}).String(); got != "> 500" {
 		t.Errorf("op-form String() = %q, want \"> 500\"", got)
 	}
 	if got := (statusMatcher{codes: []int{200, 404}}).String(); got != "200,404" {

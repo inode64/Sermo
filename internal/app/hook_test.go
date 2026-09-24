@@ -33,6 +33,10 @@ func (s stubHookRunner) RunHook(context.Context, []string, map[string]string, ti
 }
 
 func TestHookSpecRunExpectations(t *testing.T) {
+	emptyStderr, warning := checks.ParseOutputMatcher(map[string]any{"op": "==", "value": ""})
+	if warning != "" {
+		t.Fatal(warning)
+	}
 	cases := []struct {
 		name    string
 		spec    HookSpec
@@ -47,8 +51,8 @@ func TestHookSpecRunExpectations(t *testing.T) {
 		{"expect_exit mismatch", HookSpec{Command: []string{"x"}, ExpectExit: []int{2}}, execx.Result{ExitCode: 0}, nil, true},
 		{"stdout substring ok", HookSpec{Command: []string{"x"}, Stdout: checks.OutputMatcher{Substring: "done"}}, execx.Result{Stdout: "all done\n"}, nil, false},
 		{"stdout substring missing", HookSpec{Command: []string{"x"}, Stdout: checks.OutputMatcher{Substring: "done"}}, execx.Result{Stdout: "nope\n"}, nil, true},
-		{"stderr op ok", HookSpec{Command: []string{"x"}, Stderr: checks.OutputMatcher{Op: "==", Value: ""}}, execx.Result{Stderr: ""}, nil, false},
-		{"stderr op fail", HookSpec{Command: []string{"x"}, Stderr: checks.OutputMatcher{Op: "==", Value: ""}}, execx.Result{Stderr: "warn\n"}, nil, true},
+		{"stderr op ok", HookSpec{Command: []string{"x"}, Stderr: emptyStderr}, execx.Result{Stderr: ""}, nil, false},
+		{"stderr op fail", HookSpec{Command: []string{"x"}, Stderr: emptyStderr}, execx.Result{Stderr: "warn\n"}, nil, true},
 		{"runner error is fatal", HookSpec{Command: []string{"x"}}, execx.Result{ExitCode: -1}, context.DeadlineExceeded, true},
 	}
 	for _, c := range cases {

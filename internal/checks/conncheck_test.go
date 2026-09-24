@@ -284,7 +284,7 @@ func TestConnCheckMissingExpectedFieldIsUnavailable(t *testing.T) {
 		name: "cache", timeout: time.Second,
 		proto:  fakeProto{},
 		cfg:    conn.Config{Host: "cache", Port: 6379},
-		expect: []jsonAssertion{{path: DataKeyConnectedClients, op: ">", value: "50"}},
+		expect: []jsonAssertion{{path: DataKeyConnectedClients, valueMatcher: newValueMatcher(">", "50")}},
 		probe: func(context.Context, conn.Config) (conn.Result, error) {
 			return conn.Result{Extra: map[string]string{}}, nil
 		},

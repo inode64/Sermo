@@ -19,8 +19,7 @@ type sqlCheck struct {
 	dsn    string
 	open   func(context.Context) (*sql.DB, error)
 	query  string
-	op     string
-	value  string
+	valueMatcher
 }
 
 func (c sqlCheck) Run(ctx context.Context) Result {
@@ -42,7 +41,7 @@ func (c sqlCheck) Run(ctx context.Context) Result {
 		return c.base.unavailableResult(fmt.Sprintf("sql %s: query returned NULL", c.engine), start)
 	}
 
-	return finishScalarCompare(c.base, "sql "+c.engine, result, c.op, c.value, start, map[string]any{
+	return finishScalarCompare(c.base, "sql "+c.engine, result, c.valueMatcher, start, map[string]any{
 		DataKeyEngine: c.engine,
 		DataKeyQuery:  c.query,
 	})
@@ -142,7 +141,7 @@ func buildSQLCheck(b base, entry map[string]any) (Check, string) {
 			open = func(ctx context.Context) (*sql.DB, error) { return conn.OpenPostgresDB(ctx, cfg) }
 		}
 	}
-	return sqlCheck{base: b, engine: engine, driver: driver, dsn: dsn, open: open, query: query, op: op, value: value}, ""
+	return sqlCheck{base: b, engine: engine, driver: driver, dsn: dsn, open: open, query: query, valueMatcher: newValueMatcher(op, value)}, ""
 }
 
 // sqlConnConfig builds a conn.Config for a mysql/postgres sql check, defaulting

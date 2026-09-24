@@ -34,7 +34,7 @@ func TestParseOutputMatcher(t *testing.T) {
 			if (warn != "") != c.wantWarn {
 				t.Fatalf("warn = %q, wantWarn %v", warn, c.wantWarn)
 			}
-			if m.Substring != c.wantSub || m.Op != c.wantOp || m.Value != c.wantVal {
+			if m.Substring != c.wantSub || m.assertion.op != c.wantOp || m.assertion.value != c.wantVal {
 				t.Errorf("matcher = %+v, want sub=%q op=%q val=%q", m, c.wantSub, c.wantOp, c.wantVal)
 			}
 			if m.Active() == c.notActive {
@@ -78,12 +78,12 @@ func TestOutputMatcherMatch(t *testing.T) {
 		{"inactive matches anything", OutputMatcher{}, "whatever", true},
 		{"substring present", OutputMatcher{Substring: "ready"}, "service ready now", true},
 		{"substring absent", OutputMatcher{Substring: "ready"}, "service down", false},
-		{"numeric op pass", OutputMatcher{Op: ">", Value: "10"}, " 42 ", true},
-		{"numeric op fail", OutputMatcher{Op: ">", Value: "10"}, "3", false},
-		{"equality string", OutputMatcher{Op: "==", Value: "done"}, "done", true},
-		{"regex pass", OutputMatcher{Op: "=~", Value: "^v[0-9]+"}, "v12 build", true},
-		{"regex fail", OutputMatcher{Op: "=~", Value: "^v[0-9]+"}, "broken", false},
-		{"non-numeric for ordering op", OutputMatcher{Op: ">", Value: "10"}, "abc", false},
+		{"numeric op pass", OutputMatcher{assertion: newValueMatcher(">", "10")}, " 42 ", true},
+		{"numeric op fail", OutputMatcher{assertion: newValueMatcher(">", "10")}, "3", false},
+		{"equality string", OutputMatcher{assertion: newValueMatcher("==", "done")}, "done", true},
+		{"regex pass", OutputMatcher{assertion: newValueMatcher("=~", "^v[0-9]+")}, "v12 build", true},
+		{"regex fail", OutputMatcher{assertion: newValueMatcher("=~", "^v[0-9]+")}, "broken", false},
+		{"non-numeric for ordering op", OutputMatcher{assertion: newValueMatcher(">", "10")}, "abc", false},
 	})
 }
 
@@ -210,11 +210,11 @@ func TestCommandCheckOutputExpectations(t *testing.T) {
 		}
 	})
 	t.Run("stderr op value must match", func(t *testing.T) {
-		c := mk(execx.Result{ExitCode: 0, Stderr: "0\n"}, []int{0}, OutputMatcher{}, OutputMatcher{Op: "==", Value: "0"})
+		c := mk(execx.Result{ExitCode: 0, Stderr: "0\n"}, []int{0}, OutputMatcher{}, OutputMatcher{assertion: newValueMatcher("==", "0")})
 		if res := c.Run(context.Background()); !res.OK {
 			t.Errorf("matching stderr should pass: %s", res.Message)
 		}
-		c = mk(execx.Result{ExitCode: 0, Stderr: "5\n"}, []int{0}, OutputMatcher{}, OutputMatcher{Op: "==", Value: "0"})
+		c = mk(execx.Result{ExitCode: 0, Stderr: "5\n"}, []int{0}, OutputMatcher{}, OutputMatcher{assertion: newValueMatcher("==", "0")})
 		if res := c.Run(context.Background()); res.OK {
 			t.Error("non-matching stderr should fail")
 		}

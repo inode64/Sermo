@@ -37,12 +37,11 @@ type connCheck struct {
 	// expect holds optional response assertions: each compares a field of the
 	// probe Result ("version" or a Result.Extra key) against a value with a
 	// shared operator. All must hold for the check to pass (additive to the
-	// liveness probe). Reuses the expect_json triple shape and compareValue.
+	// liveness probe). Reuses the expect_json assertion shape and valueMatcher.
 	expect []jsonAssertion
-	// latencyOp/latencyValue optionally compare the probe's response time in ms
+	// latencyAssertion optionally compares the probe's response time in ms
 	// (expect_latency), like the http check.
-	latencyOp    string
-	latencyValue string
+	latencyAssertion valueMatcher
 	// ifaces optionally pins the probe to one or more egress interfaces
 	// (name/IP/MAC); ifaceAll requires every one to succeed (else any).
 	ifaces   []string
@@ -210,14 +209,14 @@ func (c connCheck) evaluateResponse(res conn.Result, elapsed time.Duration, addr
 		ok, msg = false, fmt.Sprintf("%s %s: %s", c.proto.Name(), addr, fail)
 		unavailable = missing
 	}
-	if ok && c.latencyOp != "" {
+	if ok && c.latencyAssertion.op != "" {
 		ms := strconv.FormatInt(elapsed.Milliseconds(), numericBaseDecimal)
-		pass, lerr := compareValue(ms, c.latencyOp, c.latencyValue)
+		pass, lerr := c.latencyAssertion.compare(ms)
 		switch {
 		case lerr != nil:
 			ok, msg = false, fmt.Sprintf("%s %s: latency: %v", c.proto.Name(), addr, lerr)
 		case !pass:
-			ok, msg = false, fmt.Sprintf("%s %s: latency %sms not %s %s", c.proto.Name(), addr, ms, c.latencyOp, c.latencyValue)
+			ok, msg = false, fmt.Sprintf("%s %s: latency %sms not %s %s", c.proto.Name(), addr, ms, c.latencyAssertion.op, c.latencyAssertion.value)
 		}
 	}
 	return ok, msg, unavailable
@@ -258,7 +257,7 @@ func (c connCheck) evalExpect(res conn.Result) (string, bool) {
 			}
 			got = v
 		}
-		ok, err := compareValue(got, a.op, a.value)
+		ok, err := a.compare(got)
 		if err != nil {
 			return fmt.Sprintf("%s: %v", a.path, err), true
 		}
@@ -298,7 +297,7 @@ func buildConnCheck(b base, proto conn.Protocol, entry map[string]any) (Check, s
 	if lwarn != "" {
 		return nil, protoName + " check: " + lwarn
 	}
-	c.latencyOp, c.latencyValue = lop, lval
+	c.latencyAssertion = newValueMatcher(lop, lval)
 	c.onChange = cfgval.Bool(entry[CheckKeyOnChange])
 	c.onVersionChange = cfgval.Bool(entry[CheckKeyOnVersionChange])
 	if c.onChange || c.onVersionChange {

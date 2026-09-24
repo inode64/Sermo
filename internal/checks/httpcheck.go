@@ -23,18 +23,16 @@ import (
 // a raw or JSON body.
 type httpCheck struct {
 	base
-	client       *http.Client
-	url          string
-	method       string
-	headers      map[string]string
-	body         []byte
-	contentType  string // set when the body is JSON, unless headers override it
-	expect       statusMatcher
-	bodyOp       string // when set, compare the (trimmed) body via compareValue
-	bodyValue    string
-	expectJSON   []jsonAssertion
-	latencyOp    string // when set, compare the response latency in ms
-	latencyValue string
+	client           *http.Client
+	url              string
+	method           string
+	headers          map[string]string
+	body             []byte
+	contentType      string // set when the body is JSON, unless headers override it
+	expect           statusMatcher
+	bodyAssertion    valueMatcher
+	expectJSON       []jsonAssertion
+	latencyAssertion valueMatcher
 
 	// Certificate inspection (https only). certHost is non-empty when any cert_*
 	// option is configured; certClient is then an InsecureSkipVerify client so
@@ -51,9 +49,8 @@ type httpCheck struct {
 // jsonAssertion is one response-JSON check: the value at a dotted path compared to
 // value with op (== by default; also != > >= < <= contains).
 type jsonAssertion struct {
-	path  string
-	op    string
-	value string
+	path string
+	valueMatcher
 }
 
 // maxHTTPBody bounds how much of the response is read for body/JSON assertions.
@@ -104,7 +101,7 @@ func (c *httpCheck) Run(ctx context.Context) Result {
 	if msg := c.latencyFailure(resp.StatusCode, elapsed); msg != "" {
 		return c.result(false, msg, start)
 	}
-	if c.bodyOp == "" && len(c.expectJSON) == 0 {
+	if c.bodyAssertion.op == "" && len(c.expectJSON) == 0 {
 		return c.success(resp, elapsed, verifyError, start)
 	}
 
@@ -120,29 +117,29 @@ func (c *httpCheck) Run(ctx context.Context) Result {
 
 // latencyFailure reports why the optional latency assertion failed.
 func (c *httpCheck) latencyFailure(status int, elapsed time.Duration) string {
-	if c.latencyOp == "" {
+	if c.latencyAssertion.op == "" {
 		return ""
 	}
 	ms := strconv.FormatInt(elapsed.Milliseconds(), numericBaseDecimal)
-	ok, err := compareValue(ms, c.latencyOp, c.latencyValue)
+	ok, err := c.latencyAssertion.compare(ms)
 	if err != nil {
 		return fmt.Sprintf("latency: %v", err)
 	}
 	if !ok {
-		return fmt.Sprintf("status %d; latency %sms not %s %s", status, ms, c.latencyOp, c.latencyValue)
+		return fmt.Sprintf("status %d; latency %sms not %s %s", status, ms, c.latencyAssertion.op, c.latencyAssertion.value)
 	}
 	return ""
 }
 
 // payloadFailure reports why an optional body or JSON assertion failed.
 func (c *httpCheck) payloadFailure(status int, data []byte) string {
-	if c.bodyOp != "" {
-		ok, err := compareValue(strings.TrimSpace(string(data)), c.bodyOp, c.bodyValue)
+	if c.bodyAssertion.op != "" {
+		ok, err := c.bodyAssertion.compare(strings.TrimSpace(string(data)))
 		if err != nil {
 			return fmt.Sprintf("status %d; body: %v", status, err)
 		}
 		if !ok {
-			return fmt.Sprintf("status %d; body %s %q not satisfied", status, c.bodyOp, c.bodyValue)
+			return fmt.Sprintf("status %d; body %s %q not satisfied", status, c.bodyAssertion.op, c.bodyAssertion.value)
 		}
 	}
 	if len(c.expectJSON) == 0 {
@@ -157,7 +154,7 @@ func (c *httpCheck) payloadFailure(status int, data []byte) string {
 		if !ok {
 			return fmt.Sprintf("status %d; json %q missing", status, a.path)
 		}
-		ok, err := compareValue(jsonValueString(got), a.op, a.value)
+		ok, err := a.compare(jsonValueString(got))
 		if err != nil {
 			return fmt.Sprintf("status %d; json %q: %v", status, a.path, err)
 		}
@@ -253,13 +250,12 @@ func jsonValueString(v any) string {
 type statusMatcher struct {
 	codes   []int
 	classes []int
-	op      string
-	value   string
+	valueMatcher
 }
 
 func (m statusMatcher) matches(code int) bool {
 	if m.op != "" {
-		ok, _ := compareValue(strconv.Itoa(code), m.op, m.value)
+		ok, _ := m.compare(strconv.Itoa(code))
 		return ok
 	}
 	return slices.Contains(m.codes, code) || slices.Contains(m.classes, code/httpStatusClassDivisor)

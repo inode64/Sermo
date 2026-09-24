@@ -39,8 +39,7 @@ type influxCheck struct {
 	query    string
 	column   string // optional named result column
 	token    string // API token (required for flux; optional v1.8+ for influxql)
-	op       string
-	value    string
+	valueMatcher
 }
 
 func (c influxCheck) Run(ctx context.Context) Result {
@@ -67,7 +66,7 @@ func (c influxCheck) Run(ctx context.Context) Result {
 	if c.org != "" {
 		data[DataKeyOrg] = c.org
 	}
-	return finishScalarCompare(c.base, "influxdb", result, c.op, c.value, start, data)
+	return finishScalarCompare(c.base, "influxdb", result, c.valueMatcher, start, data)
 }
 
 // queryScalar runs the query and returns the chosen scalar. The second return
@@ -239,16 +238,15 @@ func buildInfluxCheck(b base, entry map[string]any) (Check, string) {
 	}
 
 	c := influxCheck{
-		base:     b,
-		cfg:      influxConnConfig(entry),
-		language: language,
-		database: cfgval.AsString(entry[CheckKeyDatabase]),
-		org:      cfgval.AsString(entry[CheckKeyOrg]),
-		query:    query,
-		column:   cfgval.AsString(entry[CheckKeyColumn]),
-		token:    cfgval.AsString(entry[CheckKeyToken]),
-		op:       op,
-		value:    value,
+		base:         b,
+		cfg:          influxConnConfig(entry),
+		language:     language,
+		database:     cfgval.AsString(entry[CheckKeyDatabase]),
+		org:          cfgval.AsString(entry[CheckKeyOrg]),
+		query:        query,
+		column:       cfgval.AsString(entry[CheckKeyColumn]),
+		token:        cfgval.AsString(entry[CheckKeyToken]),
+		valueMatcher: newValueMatcher(op, value),
 	}
 	switch language {
 	case InfluxLanguageInfluxQL:
