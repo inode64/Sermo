@@ -204,14 +204,6 @@ func (s *Store) SLAReport(service string, now time.Time) ([]SLAValue, error) {
 	})
 }
 
-// CheckSLAReport returns one check's availability across every SLAWindow,
-// ordered as SLAWindows (hour..year).
-func (s *Store) CheckSLAReport(service, check string, now time.Time) ([]SLAValue, error) {
-	return reportWindows(func(span time.Duration) (SLAValue, error) {
-		return s.sumSLA(service, check, span, now)
-	})
-}
-
 // reportWindows collects one SLAValue per SLAWindow from the given sum reader;
 // the loop shared by the service- and check-level reports.
 func reportWindows(sum func(span time.Duration) (SLAValue, error)) ([]SLAValue, error) {

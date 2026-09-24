@@ -78,7 +78,6 @@ type SLARecorder interface {
 type SLAReader interface {
 	SLAReport(service string, now time.Time) ([]state.SLAValue, error)
 	SLASeries(service string, from, to time.Time) ([]state.SLAPoint, error)
-	CheckSLAReport(service, check string, now time.Time) ([]state.SLAValue, error)
 	CheckSLASeries(service, check string, from, to time.Time) ([]state.SLAPoint, error)
 }
 
