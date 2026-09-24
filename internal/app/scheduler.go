@@ -37,9 +37,8 @@ type cycler interface {
 // them have returned (graceful shutdown). Workers and watches each run on their
 // own goroutine at their own interval; concurrency between operations on the
 // same service is bounded by that service's operation lock, not by any
-// fleet-wide limit. When finalShutdown is false (config reload), readiness is
-// left unchanged.
-func (s Scheduler) Run(ctx context.Context, workers []*Worker, watches []*Watch, ready *Readiness, finalShutdown, gateReady bool) {
+// fleet-wide limit. The monitor owns final shutdown readiness.
+func (s Scheduler) Run(ctx context.Context, workers []*Worker, watches []*Watch, ready *Readiness, gateReady bool) {
 	interval := s.Interval
 	if interval <= 0 {
 		interval = config.DefaultEngineInterval
@@ -97,9 +96,6 @@ func (s Scheduler) Run(ctx context.Context, workers []*Worker, watches []*Watch,
 		launch(wt, wt.Interval)
 	}
 	wg.Wait()
-	if finalShutdown && ready != nil {
-		ready.MarkShuttingDown()
-	}
 }
 
 // activeMonitorTargets counts the distinct settling keys the first-cycle
