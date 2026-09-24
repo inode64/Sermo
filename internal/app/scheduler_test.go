@@ -50,7 +50,7 @@ func TestSchedulerGateWaitsForFirstCycles(t *testing.T) {
 	defer cancel()
 	done := make(chan struct{})
 	go func() {
-		Scheduler{Interval: 20 * time.Millisecond}.Run(ctx, nil, []*Watch{mkWatch("a"), mkWatch("b")}, ready, false, true)
+		Scheduler{Interval: 20 * time.Millisecond}.Run(ctx, nil, []*Watch{mkWatch("a"), mkWatch("b")}, ready, true)
 		close(done)
 	}()
 
@@ -102,7 +102,7 @@ func runSchedulerUntilDone(t *testing.T, sched Scheduler, workers []*Worker, ctx
 
 	done := make(chan struct{})
 	go func() {
-		sched.Run(ctx, workers, nil, nil, true, false)
+		sched.Run(ctx, workers, nil, nil, false)
 		close(done)
 	}()
 
@@ -155,7 +155,7 @@ func TestSchedulerStartupDelayHoldsBeforeFirstCycle(t *testing.T) {
 
 	done := make(chan struct{})
 	go func() {
-		Scheduler{Interval: 10 * time.Millisecond, StartupDelay: 60 * time.Millisecond}.Run(ctx, workers, nil, nil, true, false)
+		Scheduler{Interval: 10 * time.Millisecond, StartupDelay: 60 * time.Millisecond}.Run(ctx, workers, nil, nil, false)
 		close(done)
 	}()
 
@@ -190,7 +190,7 @@ func TestSchedulerStartupDelayInterruptedByShutdown(t *testing.T) {
 
 	done := make(chan struct{})
 	go func() {
-		Scheduler{Interval: 10 * time.Millisecond, StartupDelay: time.Hour}.Run(ctx, workers, nil, nil, true, false)
+		Scheduler{Interval: 10 * time.Millisecond, StartupDelay: time.Hour}.Run(ctx, workers, nil, nil, false)
 		close(done)
 	}()
 
@@ -223,7 +223,7 @@ func TestSchedulerRunsWatches(t *testing.T) {
 
 	done := make(chan struct{})
 	go func() {
-		Scheduler{Interval: 15 * time.Millisecond}.Run(ctx, nil, []*Watch{w}, nil, true, false)
+		Scheduler{Interval: 15 * time.Millisecond}.Run(ctx, nil, []*Watch{w}, nil, false)
 		close(done)
 	}()
 
@@ -253,7 +253,7 @@ func TestSchedulerRunsWatchWithCustomInjectedRunnerVerifiesEnv(t *testing.T) {
 
 	done := make(chan struct{})
 	go func() {
-		Scheduler{Interval: 10 * time.Millisecond}.Run(ctx, nil, []*Watch{w}, nil, true, false)
+		Scheduler{Interval: 10 * time.Millisecond}.Run(ctx, nil, []*Watch{w}, nil, false)
 		close(done)
 	}()
 
@@ -302,7 +302,7 @@ func TestSchedulerGateCompletesWithInactiveWorker(t *testing.T) {
 	defer cancel()
 	done := make(chan struct{})
 	go func() {
-		Scheduler{Interval: 20 * time.Millisecond}.Run(ctx, []*Worker{w}, nil, ready, false, true)
+		Scheduler{Interval: 20 * time.Millisecond}.Run(ctx, []*Worker{w}, nil, ready, true)
 		close(done)
 	}()
 

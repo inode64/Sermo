@@ -90,7 +90,7 @@ func TestSchedulerMarksReadiness(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	go func() {
-		Scheduler{Interval: 10 * time.Millisecond, StartupDelay: 40 * time.Millisecond}.Run(ctx, workers, nil, ready, true, true)
+		Scheduler{Interval: 10 * time.Millisecond, StartupDelay: 40 * time.Millisecond}.Run(ctx, workers, nil, ready, true)
 		close(done)
 	}()
 
@@ -106,6 +106,7 @@ func TestSchedulerMarksReadiness(t *testing.T) {
 
 	cancel()
 	<-done
+	ready.MarkShuttingDown()
 	if rep := ready.Report(context.Background()); rep.Ready || rep.Status != readinessShuttingDown {
 		t.Fatalf("after shutdown = %+v", rep)
 	}

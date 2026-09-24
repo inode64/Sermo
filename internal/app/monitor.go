@@ -281,7 +281,7 @@ func (m *Monitor) startGenerationLocked(ctx context.Context, firstBoot bool) {
 	}
 
 	m.genWG.Go(func() {
-		sched.Run(genCtx, m.workers, m.watches, m.readiness, false, firstGen)
+		sched.Run(genCtx, m.workers, m.watches, m.readiness, firstGen)
 	})
 	if sampler := m.deps.DaemonMetricSampler; sampler != nil {
 		interval := m.deps.Interval
