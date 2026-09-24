@@ -134,3 +134,41 @@ func TestWorkerProcessCountsReuseConcurrentCycleDiscovery(t *testing.T) {
 		w.cycle++
 	}
 }
+
+func TestServiceProcessWatchesDiscoverIndependentlyOfWorkerCycle(t *testing.T) {
+	for _, typ := range []string{"strays", "stale_binary", "process_count"} {
+		t.Run(typ, func(t *testing.T) {
+			var calls atomic.Int32
+			reads := 0
+			tree := map[string]any{
+				"processes": map[string]any{"main": map[string]any{"type": "command_match", "exe": "/opt/app/main", "user": "500"}},
+				"watches":   map[string]any{"probe": map[string]any{"check": map[string]any{"type": typ, "count": map[string]any{"op": ">", "value": 0}}}},
+			}
+			worker, watches, warnings := buildWorker(t.Context(), "svc", "svc.service", tree, Deps{
+				Backend: servicemgr.BackendSystemd, Manager: fakeManager{}, Runtime: t.TempDir(), DefaultTimeout: time.Second,
+				ProcReader: process.NewCachingReader(countingProcReader{calls: &reads}, time.Minute), ExecxRunner: &execxtest.Runner{},
+				BackendPIDs: func() []int { calls.Add(1); return []int{100} },
+			}, nil)
+			if len(warnings) != 0 || len(watches) != 1 {
+				t.Fatalf("build watches: %d, warnings %v", len(watches), warnings)
+			}
+			baseline := calls.Load()
+			for range 2 {
+				watches[0].Check.Run(t.Context())
+			}
+			if got := calls.Load() - baseline; got != 2 {
+				t.Fatalf("watch discoveries without a worker tick = %d, want 2", got)
+			}
+			var wg sync.WaitGroup
+			wg.Go(func() {
+				for range 100 {
+					worker.cycle++
+				}
+			})
+			for range 100 {
+				watches[0].Check.Run(t.Context())
+			}
+			wg.Wait()
+		})
+	}
+}
