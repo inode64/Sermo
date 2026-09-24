@@ -16,6 +16,31 @@ import (
 	"time"
 )
 
+// serviceObservation holds one cycle's configured, current check results and
+// one freshness clock for all projections of a service row.
+type serviceObservation struct {
+	snapshots map[string]CheckSnapshot
+	at        time.Time
+}
+
+func (b *WebBackend) observeService(name string, e *webEntry) serviceObservation {
+	o := serviceObservation{at: b.webNow()}
+	if e == nil {
+		return o
+	}
+	snapshots := b.snapshots.Get(name)
+	if snapshots == nil {
+		return o
+	}
+	o.snapshots = make(map[string]CheckSnapshot, len(e.checkNames))
+	for _, check := range e.checkNames {
+		if snap, ok := snapshots[check]; ok && serviceCheckSnapshotCurrentAt(e, check, snap, o.at) {
+			o.snapshots[check] = snap
+		}
+	}
+	return o
+}
+
 func (b *WebBackend) view(ctx context.Context, name string, e *webEntry) web.Service {
 	return b.viewWithEvent(ctx, name, e, b.lastServiceEvent(name))
 }
@@ -35,6 +60,7 @@ type serviceLockView struct {
 }
 
 func (b *WebBackend) viewWithRuntime(ctx context.Context, name string, e *webEntry, lastEvent *web.Event, lockView serviceLockView) web.Service {
+	observation := b.observeService(name, e)
 	svc := web.Service{
 		Name:              name,
 		DisplayName:       e.displayName,
@@ -44,7 +70,7 @@ func (b *WebBackend) viewWithRuntime(ctx context.Context, name string, e *webEnt
 		Enabled:           !e.disabled,
 		DryRun:            e.dryRun,
 		Monitored:         true, // no recorded state defaults to monitored
-		CanReload:         e.cachedReloadSupported(ctx, b.webNow()),
+		CanReload:         e.cachedReloadSupported(ctx, observation.at),
 		NoResidentProcess: e.noResidentProcess,
 		Buttons:           serviceButtonViews(e.buttons),
 	}
@@ -68,23 +94,23 @@ func (b *WebBackend) viewWithRuntime(ctx context.Context, name string, e *webEnt
 		svc.Monitored, svc.MonitorSource = monitoredState.active, monitoredState.source
 		monitorChangedAt, svc.MonitorChangedAt = monitoredState.changedAt, monitoredState.changedAtText()
 	}
-	status, statusAt := e.backendStatusSnapshot(ctx, b.webNow())
+	status, statusAt := e.backendStatusSnapshot(ctx, observation.at)
 	// A sermoctl action runs in a separate process, so it cannot invalidate this
 	// backend's in-memory init-status cache directly. Its monitor-state transition
 	// is persisted after the operation; a newer change is therefore the bounded
 	// cross-process signal to refresh status before rendering the Web UI.
 	if monitorChangedAt.After(statusAt) {
 		e.invalidateStatusCache()
-		status, statusAt = e.backendStatusSnapshot(ctx, b.webNow())
+		status, statusAt = e.backendStatusSnapshot(ctx, observation.at)
 	}
-	status, statusAt = b.freshServiceCheckStatus(name, e, status, statusAt)
+	status, statusAt = observation.freshServiceCheckStatus(e, status, statusAt)
 	svc.Status = status
 	if !statusAt.IsZero() {
 		svc.StatusObservedAt = statusAt.UTC().Format(time.RFC3339)
 	}
-	failing, health := b.serviceCheckHealth(name, e, svc.Monitored)
+	failing, health := observation.serviceCheckHealth(e, svc.Monitored)
 	baseHealth := health
-	stateReason := b.serviceStateReason(name, e)
+	stateReason := observation.serviceStateReason(e)
 	processActive := b.serviceProcessActive(name, e)
 	backendDegraded := status == string(servicemgr.StatusFailed) && processActive && health == TargetStateOK
 	if backendDegraded {
@@ -98,7 +124,7 @@ func (b *WebBackend) viewWithRuntime(ctx context.Context, name string, e *webEnt
 		svc.ChecksFailing = failing
 	}
 	svc.StateReason = stateReason
-	svc.Strays = b.serviceStrayCount(name, e)
+	svc.Strays = observation.serviceStrayCount(e)
 	if !lockView.ready {
 		lockView.active = activeLockNames(b.cfg, name)
 		lockView.operationActive = operationActive(b.cfg, name)
@@ -109,7 +135,7 @@ func (b *WebBackend) viewWithRuntime(ctx context.Context, name string, e *webEnt
 	svc.OperationActive = lockView.operationActive
 	b.decorateRemediation(name, &svc)
 	observed := (b.settling == nil || b.settling.Observed(SettlingServiceKey(name))) && !b.operationSettlingPending(name)
-	svc.ObservabilityReady, svc.ObservabilityMissing = b.serviceObservability(name, e, svc.Status, svc.CheckHealth, svc.Monitored, observed)
+	svc.ObservabilityReady, svc.ObservabilityMissing = b.serviceObservability(name, e, observation, svc.Status, svc.CheckHealth, svc.Monitored, observed)
 	svc.State = ServiceState(svc.Enabled, svc.Monitored, svc.Status, svc.CheckHealth, observed, svc.ObservabilityReady,
 		processActive, onlyMissingProcesses(svc.ObservabilityMissing), backendDegraded)
 	if svc.State == TargetStateWarning && stateReason == stateReasonStaleBinary && baseHealth == TargetStateOK &&
@@ -128,17 +154,17 @@ func (b *WebBackend) viewWithRuntime(ctx context.Context, name string, e *webEnt
 // unit, so this keeps a CLI or external restart from displaying the cache's
 // former inactive state after monitoring has observed it active, without
 // adding an init-system query to each dashboard request.
-func (b *WebBackend) freshServiceCheckStatus(name string, e *webEntry, status string, statusAt time.Time) (string, time.Time) {
-	if e == nil || b.snapshots == nil {
+func (o serviceObservation) freshServiceCheckStatus(e *webEntry, status string, statusAt time.Time) (string, time.Time) {
+	if e == nil || o.snapshots == nil {
 		return status, statusAt
 	}
-	snapshots := b.snapshots.Get(name)
+	snapshots := o.snapshots
 	for _, check := range e.checkNames {
 		if e.checkTypes[check] != checks.CheckTypeService {
 			continue
 		}
 		snap, ok := snapshots[check]
-		if !ok || !b.serviceCheckSnapshotCurrent(e, check, snap) || !snap.At.After(statusAt) {
+		if !ok || !snap.At.After(statusAt) {
 			continue
 		}
 		observed := servicemgr.Status(cfgval.String(snap.Data[checks.DataKeyStatus]))
@@ -159,7 +185,7 @@ func normalizedServiceStatus(status servicemgr.Status) bool {
 	}
 }
 
-func (b *WebBackend) serviceObservability(name string, e *webEntry, status, checkHealth string, monitored, observed bool) (bool, []string) {
+func (b *WebBackend) serviceObservability(name string, e *webEntry, observation serviceObservation, status, checkHealth string, monitored, observed bool) (bool, []string) {
 	if e == nil || e.disabled {
 		return false, nil
 	}
@@ -182,18 +208,8 @@ func (b *WebBackend) serviceObservability(name string, e *webEntry, status, chec
 			missing = append(missing, label)
 		}
 	}
-	if len(e.checkNames) > 0 {
-		snap := b.snapshots.Get(name)
-		for _, check := range e.checkNames {
-			cs, ok := snap[check]
-			if !ok || !b.serviceCheckSnapshotCurrent(e, check, cs) {
-				addMissing(config.SectionChecks)
-				break
-			}
-		}
-		if checkHealth == checkHealthUnknown {
-			addMissing(config.SectionChecks)
-		}
+	if len(e.checkNames) > 0 && (len(observation.snapshots) < len(e.checkNames) || checkHealth == checkHealthUnknown) {
+		addMissing(config.SectionChecks)
 	}
 	if b.observability != nil {
 		if _, ready := b.observability.Ready(name); !ready {
@@ -218,17 +234,14 @@ func (b *WebBackend) serviceObservability(name string, e *webEntry, status, chec
 // serviceStateReason returns the highest-precedence machine-readable cause of
 // an operator-facing service state. It reads only current worker snapshots: a
 // web request must never run a config command or scan /proc.
-func (b *WebBackend) serviceStateReason(name string, e *webEntry) string {
-	if e != nil && b.snapshots != nil && slices.Contains(e.checkNames, config.ConfigurationCheckName) {
-		if cs, ok := b.snapshots.Get(name)[config.ConfigurationCheckName]; ok &&
-			b.serviceCheckSnapshotCurrent(e, config.ConfigurationCheckName, cs) && !cs.healthy() {
-			return stateReasonConfigurationInvalid
-		}
+func (o serviceObservation) serviceStateReason(e *webEntry) string {
+	if cs, ok := o.snapshots[config.ConfigurationCheckName]; ok && !cs.healthy() {
+		return stateReasonConfigurationInvalid
 	}
 	// Any failing one is the warning: a service may declare its own stale_binary
 	// check beside the injected one, and a replaced binary either check found is
 	// still a replaced binary.
-	for cs := range b.currentSnapshotsOfType(name, e, checks.CheckTypeStaleBinary) {
+	for cs := range o.currentSnapshotsOfType(e, checks.CheckTypeStaleBinary) {
 		if !cs.OK {
 			return stateReasonStaleBinary
 		}
@@ -236,7 +249,7 @@ func (b *WebBackend) serviceStateReason(name string, e *webEntry) string {
 	// A service with an explicitly empty process set gets no injected check; an
 	// exact-exe process check it declares is then what notices the replaced
 	// binary, and it publishes the same condition.
-	for cs := range b.currentSnapshotsOfType(name, e, checks.CheckTypeProcess) {
+	for cs := range o.currentSnapshotsOfType(e, checks.CheckTypeProcess) {
 		if !cs.OK && cs.Data[checks.DataKeyReplacedBinaries] != nil {
 			return stateReasonStaleBinary
 		}
@@ -254,17 +267,17 @@ func (b *WebBackend) serviceStateReason(name string, e *webEntry) string {
 // ranging over a map would answer differently between requests. Each caller then
 // applies its own policy: the warning fires on any failing check, the stray count
 // takes the first, since every strays check counts the same set.
-func (b *WebBackend) currentSnapshotsOfType(name string, e *webEntry, checkType string) iter.Seq[CheckSnapshot] {
+func (o serviceObservation) currentSnapshotsOfType(e *webEntry, checkType string) iter.Seq[CheckSnapshot] {
 	return func(yield func(CheckSnapshot) bool) {
-		if e == nil || e.checkTypes == nil || b.snapshots == nil {
+		if e == nil || e.checkTypes == nil || o.snapshots == nil {
 			return
 		}
-		snap := b.snapshots.Get(name)
+		snap := o.snapshots
 		for _, check := range e.checkNames {
 			if e.checkTypes[check] != checkType {
 				continue
 			}
-			if cs, ok := snap[check]; ok && b.serviceCheckSnapshotCurrent(e, check, cs) && !yield(cs) {
+			if cs, ok := snap[check]; ok && !yield(cs) {
 				return
 			}
 		}
@@ -280,8 +293,8 @@ func (b *WebBackend) currentSnapshotsOfType(name string, e *webEntry, checkType 
 // A service with no current strays snapshot reports 0, which the dashboard renders
 // as no column value at all — "not measured" and "nothing found" are told apart by
 // the check row in the detail, not by this number.
-func (b *WebBackend) serviceStrayCount(name string, e *webEntry) int {
-	for cs := range b.currentSnapshotsOfType(name, e, checks.CheckTypeStrays) {
+func (o serviceObservation) serviceStrayCount(e *webEntry) int {
+	for cs := range o.currentSnapshotsOfType(e, checks.CheckTypeStrays) {
 		n, _ := cfgval.Int(cs.Data[checks.DataKeyCount])
 		return n
 	}
@@ -398,14 +411,11 @@ func setCurrentMetricValues(metrics []web.CheckMetric, data map[string]any) {
 	}
 }
 
-func (b *WebBackend) serviceCheckHealth(name string, e *webEntry, monitored bool) (int, string) {
+func (o serviceObservation) serviceCheckHealth(e *webEntry, monitored bool) (int, string) {
 	if e == nil {
 		return 0, checkHealthUnknown
 	}
-	return checkHealthSummaryCurrent(b.snapshots.Get(name), e.checkNames, e.checkSeverities, monitored,
-		func(check string, snap CheckSnapshot) bool {
-			return b.serviceCheckSnapshotCurrent(e, check, snap)
-		})
+	return checkHealthSummary(o.snapshots, e.checkNames, e.checkSeverities, monitored)
 }
 
 // serviceCheckSnapshotCurrent accepts only a result produced by the configured
@@ -413,6 +423,10 @@ func (b *WebBackend) serviceCheckHealth(name string, e *webEntry, monitored bool
 // check intervals. A reload may keep a check name while changing its type,
 // cadence or target.
 func (b *WebBackend) serviceCheckSnapshotCurrent(e *webEntry, name string, snap CheckSnapshot) bool {
+	return serviceCheckSnapshotCurrentAt(e, name, snap, b.webNow())
+}
+
+func serviceCheckSnapshotCurrentAt(e *webEntry, name string, snap CheckSnapshot, at time.Time) bool {
 	if e == nil || snap.At.IsZero() || snap.CheckType != e.checkTypes[name] || !snapshotConfigMatches(e.configID, snap.ConfigID) {
 		return false
 	}
@@ -420,7 +434,7 @@ func (b *WebBackend) serviceCheckSnapshotCurrent(e *webEntry, name string, snap 
 	if interval <= 0 {
 		interval = e.interval
 	}
-	return b.webNow().Sub(snap.At) <= runtimePublishMaxAge(interval)
+	return at.Sub(snap.At) <= runtimePublishMaxAge(interval)
 }
 
 // runtimeObservability classifies the per-service runtime indicator. The split
@@ -520,12 +534,12 @@ func (b *WebBackend) operationSettlingPending(name string) bool {
 	return rec.Phase == state.OperationSettlingRunning || rec.Phase == state.OperationSettlingSettling
 }
 
-// checkHealthSummaryCurrent reports required-check health for the service list.
+// checkHealthSummary reports required-check health for the service list.
 // It uses the same canonical observation as workers and SLA availability: only
 // a required failing or unavailable observation counts as failing; skipped and
 // neutral observations are ignored. Paused services are "paused"; services with
-// no observed checks yet are "unknown". current, when set, filters snapshots to
-// the ones the running config still declares; nil keeps every snapshot.
+// no observed checks yet are "unknown". The caller supplies snapshots already
+// filtered for the running configuration and freshness window.
 //
 // A failing check the operator graded an advisory — `severity: warning`, or the
 // `optional: true` that has always meant the same thing — is not counted as
@@ -536,7 +550,7 @@ func (b *WebBackend) operationSettlingPending(name string) bool {
 // from live configuration, and decides for a snapshot that carries none — one
 // persisted before the grade was stored — so it is graded correctly on the
 // first cycle.
-func checkHealthSummaryCurrent(snap map[string]CheckSnapshot, checkNames []string, severities map[string]string, monitored bool, current func(string, CheckSnapshot) bool) (failing int, health string) {
+func checkHealthSummary(snap map[string]CheckSnapshot, checkNames []string, severities map[string]string, monitored bool) (failing int, health string) {
 	if !monitored {
 		return 0, TargetStatePaused
 	}
@@ -550,7 +564,7 @@ func checkHealthSummaryCurrent(snap map[string]CheckSnapshot, checkNames []strin
 	warning := 0
 	for _, name := range checkNames {
 		cs, seen := snap[name]
-		if !seen || (current != nil && !current(name, cs)) {
+		if !seen {
 			continue
 		}
 		observed = true

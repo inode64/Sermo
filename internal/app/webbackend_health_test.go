@@ -18,7 +18,7 @@ func TestCheckHealthSummary(t *testing.T) {
 		"warn": {Observation: checks.ObservationFailing, OK: false, Optional: true},
 		"gate": {Observation: checks.ObservationSkipped, OK: true, Skipped: true},
 	}
-	failing, health := checkHealthSummaryCurrent(snap, []string{"http", "tcp", "warn", "gate"}, nil, true, nil)
+	failing, health := checkHealthSummary(snap, []string{"http", "tcp", "warn", "gate"}, nil, true)
 	if failing != 1 || health != "failing" {
 		t.Fatalf("got failing=%d health=%q, want 1 failing", failing, health)
 	}
@@ -26,18 +26,18 @@ func TestCheckHealthSummary(t *testing.T) {
 	// A failing advisory no longer vanishes: with no real failure beside it the
 	// service reads warning, which is the difference between a quiet degradation
 	// and a clean bill of health.
-	failing, health = checkHealthSummaryCurrent(snap, []string{"http", "warn", "gate"}, nil, true, nil)
+	failing, health = checkHealthSummary(snap, []string{"http", "warn", "gate"}, nil, true)
 	if failing != 0 || health != checkHealthWarning {
 		t.Fatalf("without tcp: failing=%d health=%q, want warning", failing, health)
 	}
 
 	// A declared severity grades the same way the legacy optional flag does.
 	declared := map[string]CheckSnapshot{"disk": {Observation: checks.ObservationFailing, OK: false}}
-	failing, health = checkHealthSummaryCurrent(declared, []string{"disk"}, map[string]string{"disk": checks.SeverityWarning}, true, nil)
+	failing, health = checkHealthSummary(declared, []string{"disk"}, map[string]string{"disk": checks.SeverityWarning}, true)
 	if failing != 0 || health != checkHealthWarning {
 		t.Fatalf("severity: warning: failing=%d health=%q, want warning", failing, health)
 	}
-	failing, health = checkHealthSummaryCurrent(declared, []string{"disk"}, nil, true, nil)
+	failing, health = checkHealthSummary(declared, []string{"disk"}, nil, true)
 	if failing != 1 || health != checkHealthFailing {
 		t.Fatalf("undeclared severity: failing=%d health=%q, want failing", failing, health)
 	}
@@ -45,7 +45,7 @@ func TestCheckHealthSummary(t *testing.T) {
 	// The grade the check gave its own result travels with the snapshot and
 	// wins; the declaration decides only for a snapshot that carries none.
 	graded := map[string]CheckSnapshot{"smart": {Observation: checks.ObservationFailing, OK: true, Condition: true, Severity: checks.SeverityWarning}}
-	failing, health = checkHealthSummaryCurrent(graded, []string{"smart"}, nil, true, nil)
+	failing, health = checkHealthSummary(graded, []string{"smart"}, nil, true)
 	if failing != 0 || health != checkHealthWarning {
 		t.Fatalf("result graded warning: failing=%d health=%q, want warning", failing, health)
 	}
@@ -53,27 +53,27 @@ func TestCheckHealthSummary(t *testing.T) {
 	snap = map[string]CheckSnapshot{
 		"cert": {Observation: checks.ObservationHealthy, OK: false, Condition: true},
 	}
-	failing, health = checkHealthSummaryCurrent(snap, []string{"cert"}, nil, true, nil)
+	failing, health = checkHealthSummary(snap, []string{"cert"}, nil, true)
 	if failing != 0 || health != "ok" {
 		t.Fatalf("healthy condition: failing=%d health=%q, want ok", failing, health)
 	}
 	snap["cert"] = CheckSnapshot{Observation: checks.ObservationFailing, OK: true, Condition: true}
-	failing, health = checkHealthSummaryCurrent(snap, []string{"cert"}, nil, true, nil)
+	failing, health = checkHealthSummary(snap, []string{"cert"}, nil, true)
 	if failing != 1 || health != "failing" {
 		t.Fatalf("firing condition: failing=%d health=%q, want failing", failing, health)
 	}
 
-	failing, health = checkHealthSummaryCurrent(nil, []string{"http"}, nil, true, nil)
+	failing, health = checkHealthSummary(nil, []string{"http"}, nil, true)
 	if failing != 0 || health != "unknown" {
 		t.Fatalf("no snapshot: failing=%d health=%q, want unknown", failing, health)
 	}
 
-	failing, health = checkHealthSummaryCurrent(nil, []string{"http"}, nil, false, nil)
+	failing, health = checkHealthSummary(nil, []string{"http"}, nil, false)
 	if failing != 0 || health != "paused" {
 		t.Fatalf("paused: failing=%d health=%q, want paused", failing, health)
 	}
 
-	failing, health = checkHealthSummaryCurrent(map[string]CheckSnapshot{}, []string{"http"}, nil, true, nil)
+	failing, health = checkHealthSummary(map[string]CheckSnapshot{}, []string{"http"}, nil, true)
 	if failing != 0 || health != "unknown" {
 		t.Fatalf("no observed checks: failing=%d health=%q, want unknown", failing, health)
 	}
@@ -358,13 +358,13 @@ func TestCheckHealthSummaryUsesCanonicalObservation(t *testing.T) {
 		"http":   {Observation: checks.ObservationHealthy, OK: true},
 	}
 
-	failing, health := checkHealthSummaryCurrent(snap, []string{"backup", "http"}, nil, true, nil)
+	failing, health := checkHealthSummary(snap, []string{"backup", "http"}, nil, true)
 	if failing != 0 || health != TargetStateOK {
 		t.Fatalf("failing=%d health=%q, want a healthy service: a state sensor is not a verdict", failing, health)
 	}
 
 	snap["backup"] = CheckSnapshot{OK: true, Skipped: true}
-	failing, health = checkHealthSummaryCurrent(snap, []string{"backup", "http"}, nil, true, nil)
+	failing, health = checkHealthSummary(snap, []string{"backup", "http"}, nil, true)
 	if failing != 1 || health != checkHealthFailing {
 		t.Fatalf("failing=%d health=%q, want invalid observation to fail closed", failing, health)
 	}
