@@ -207,21 +207,22 @@ type App struct {
 }
 
 type options struct {
-	backend    servicemgr.Backend
-	json       bool
-	quiet      bool
-	noCascade  bool // --no-cascade: act on exactly this service, skip also_apply
-	force      bool // --force: allow umount -f during `sermoctl umount`
-	lazy       bool // --lazy: allow umount -l during `sermoctl umount`
-	kill       bool // --kill-blockers: allow policy-gated signalling during `sermoctl umount`
-	apply      bool // --apply: signal the authorized strays during `sermoctl reap` (without it, preview only)
-	help       bool
-	version    bool // --version / -V
-	timeout    time.Duration
-	timeoutSet bool
-	config     string
-	command    string
-	args       []string
+	loadedConfig *config.Config
+	backend      servicemgr.Backend
+	json         bool
+	quiet        bool
+	noCascade    bool // --no-cascade: act on exactly this service, skip also_apply
+	force        bool // --force: allow umount -f during `sermoctl umount`
+	lazy         bool // --lazy: allow umount -l during `sermoctl umount`
+	kill         bool // --kill-blockers: allow policy-gated signalling during `sermoctl umount`
+	apply        bool // --apply: signal the authorized strays during `sermoctl reap` (without it, preview only)
+	help         bool
+	version      bool // --version / -V
+	timeout      time.Duration
+	timeoutSet   bool
+	config       string
+	command      string
+	args         []string
 	// lock command flags
 	name        string
 	reason      string

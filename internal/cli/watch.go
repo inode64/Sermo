@@ -87,6 +87,7 @@ func (a App) runWatchProbe(ctx context.Context, opts options) int {
 	if !app.ManualProbeCheckType(typ) {
 		return a.fail(opts, fmt.Sprintf("watch %q (%s) does not support manual probing", opts.args[1], typ))
 	}
+	opts.loadedConfig = cfg
 	result, err := a.ProbeDaemonWatch(ctx, opts, opts.args[1])
 	advisory := checks.IsWarning(result.Severity)
 	if err != nil && !advisory {

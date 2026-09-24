@@ -46,6 +46,7 @@ func (a App) listCategory(ctx context.Context, opts options, category, jsonKey, 
 		return code
 	}
 
+	opts.loadedConfig = cfg
 	inspectOpts := []appinspect.Option{appinspect.WithUserLookup(app.EngineUserLookup(cfg, a.Runner))}
 	if category == config.CategoryService {
 		inspectOpts = append(inspectOpts, appinspect.WithOptionalVersion())

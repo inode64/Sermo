@@ -30,7 +30,7 @@ func (a App) runEvents(ctx context.Context, opts options) int {
 		return a.commandUsageError(commandEvents, "events accepts at most one service name")
 	}
 
-	service, limit := a.eventListTarget(opts)
+	service, limit := a.eventListTarget(&opts)
 	evs, err := a.FetchEvents(ctx, opts, service, limit)
 	if err != nil {
 		return a.fail(opts, err.Error())
@@ -42,7 +42,7 @@ func (a App) runEvents(ctx context.Context, opts options) int {
 // eventListTarget returns the service filter and limit for `sermoctl events`.
 // Config loading is best effort so the daemon can still serve events when the
 // local configuration is unavailable.
-func (a App) eventListTarget(opts options) (string, int) {
+func (a App) eventListTarget(opts *options) (string, int) {
 	limit := defaultEventsListLimit
 	if opts.eventLimit > 0 {
 		limit = opts.eventLimit
@@ -56,6 +56,7 @@ func (a App) eventListTarget(opts options) (string, int) {
 		return service, limit
 	}
 	if cfg, err := a.LoadConfig(opts.globalPath()); err == nil {
+		opts.loadedConfig = cfg
 		service = canonicalServiceIfKnown(cfg, service)
 	}
 	return service, limit
@@ -163,6 +164,7 @@ func (a App) runEventsClear(ctx context.Context, opts options, noun string) int 
 	if cfg == nil {
 		return code
 	}
+	opts.loadedConfig = cfg
 	before, err := state.ParseCutoff(beforeFlagLabel, opts.before, time.Now())
 	if err != nil {
 		return a.fail(opts, err.Error())
