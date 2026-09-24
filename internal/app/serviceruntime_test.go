@@ -22,17 +22,17 @@ func TestServiceMetricSamplerReadsPersistedHistory(t *testing.T) {
 	first.record(t.Context(), "web", web.ServiceRuntime{
 		At:    base.UTC().Format(time.RFC3339),
 		Count: 1, RSS: 1024, IORead: 1000, IOWrite: 2000, CPU: 10, HasCPU: true,
-	})
+	}, base.UTC())
 	first.record(t.Context(), "web", web.ServiceRuntime{
 		At:    base.Add(time.Minute).UTC().Format(time.RFC3339),
 		Count: 1, RSS: 2048, IORead: 7000, IOWrite: 5000, CPU: 20, HasCPU: true,
-	})
+	}, base.Add(time.Minute).UTC())
 
 	second := NewServiceMetricSampler(store)
 	afterRestart := second.Series("web", web.ServiceRuntime{
 		At:    base.Add(2 * time.Minute).UTC().Format(time.RFC3339),
 		Count: 1, RSS: 4096, IORead: 9000, IOWrite: 7000,
-	}, time.Hour)
+	}, time.Hour, base.Add(2*time.Minute))
 
 	if afterRestart.CPU.Summary.Count != 2 || len(afterRestart.CPU.Points) == 0 {
 		t.Fatalf("persisted CPU series not restored: summary=%+v points=%+v", afterRestart.CPU.Summary, afterRestart.CPU.Points)
@@ -54,14 +54,14 @@ func TestServiceMetricSamplerSeriesDoesNotRecordDashboardReads(t *testing.T) {
 	sampler.record(t.Context(), "web", web.ServiceRuntime{
 		At:    base.UTC().Format(time.RFC3339),
 		Count: 1, RSS: 1024, CPU: 10, HasCPU: true,
-	})
+	}, base.UTC())
 	current := web.ServiceRuntime{
 		At:    base.Add(time.Minute).UTC().Format(time.RFC3339),
 		Count: 1, RSS: 4096, CPU: 40, HasCPU: true,
 	}
 
-	first := sampler.Series("web", current, time.Hour)
-	second := sampler.Series("web", current, time.Hour)
+	first := sampler.Series("web", current, time.Hour, base.Add(time.Minute))
+	second := sampler.Series("web", current, time.Hour, base.Add(time.Minute))
 	if first.Memory.Summary.Count != 1 || second.Memory.Summary.Count != 1 {
 		t.Fatalf("dashboard reads changed memory samples: first=%d second=%d", first.Memory.Summary.Count, second.Memory.Summary.Count)
 	}
@@ -70,5 +70,17 @@ func TestServiceMetricSamplerSeriesDoesNotRecordDashboardReads(t *testing.T) {
 	}
 	if second.Current.RSS != current.RSS || second.Current.CPU != current.CPU {
 		t.Fatalf("current runtime = %+v, want %+v", second.Current, current)
+	}
+}
+
+func TestServiceMetricSamplerRetainsSubsecondTime(t *testing.T) {
+	sampler := NewServiceMetricSampler()
+	at := time.Date(2026, 1, 1, 0, 0, 0, 123, time.UTC)
+	sampler.record(t.Context(), "web", web.ServiceRuntime{Count: 1, IORead: 100}, at)
+	later := at.Add(500 * time.Millisecond)
+	sampler.record(t.Context(), "web", web.ServiceRuntime{Count: 1, IORead: 200}, later)
+	current, observed, ok := sampler.LatestWithAt("web")
+	if !ok || !observed.Equal(later) || !current.IOReady || current.IOReadRate != 200 {
+		t.Fatalf("sample=%+v at=%v present=%v", current, observed, ok)
 	}
 }

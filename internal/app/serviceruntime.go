@@ -71,15 +71,14 @@ func NewServiceMetricSampler(stores ...ServiceMetricStore) *ServiceMetricSampler
 	}
 }
 
-func (s *ServiceMetricSampler) record(ctx context.Context, name string, cur web.ServiceRuntime) {
+func (s *ServiceMetricSampler) record(ctx context.Context, name string, cur web.ServiceRuntime, at time.Time) {
 	if s == nil {
 		return
 	}
-	at, err := time.Parse(time.RFC3339, cur.At)
-	if err != nil {
+	if at.IsZero() {
 		at = time.Now()
-		cur.At = at.UTC().Format(time.RFC3339)
 	}
+	cur.At = at.UTC().Format(time.RFC3339)
 
 	s.mu.Lock()
 	cur = s.recordLocked(name, cur, at)
@@ -122,15 +121,14 @@ func (s *ServiceMetricSampler) LatestWithAt(name string) (web.ServiceRuntime, ti
 // Series returns the selected historical window for CPU, memory and IO without
 // recording cur. Worker cycles own history sampling; dashboard reads must not
 // change sample counts or weight averages by the number of connected clients.
-func (s *ServiceMetricSampler) Series(name string, cur web.ServiceRuntime, since time.Duration) web.ServiceRuntimeMetrics {
+func (s *ServiceMetricSampler) Series(name string, cur web.ServiceRuntime, since time.Duration, at time.Time) web.ServiceRuntimeMetrics {
 	if s == nil {
 		return web.ServiceRuntimeMetrics{Since: since.String(), Current: cur}
 	}
-	at, err := time.Parse(time.RFC3339, cur.At)
-	if err != nil {
+	if at.IsZero() {
 		at = time.Now()
-		cur.At = at.UTC().Format(time.RFC3339)
 	}
+	cur.At = at.UTC().Format(time.RFC3339)
 
 	if out, ok := s.persistentSeries(name, cur, at, since); ok {
 		return out
@@ -209,11 +207,11 @@ func (b *WebBackend) ServiceRuntime(_ context.Context, name string, since time.D
 	if e == nil || e.noResidentProcess {
 		return web.ServiceRuntimeMetrics{}, false
 	}
-	cur, _, _ := b.latestPublishedServiceRuntime(name, e)
+	cur, at, _ := b.latestPublishedServiceRuntime(name, e)
 	if b.serviceMetrics == nil {
 		return web.ServiceRuntimeMetrics{Since: since.String(), Current: cur}, true
 	}
-	return b.serviceMetrics.Series(name, cur, since), true
+	return b.serviceMetrics.Series(name, cur, since, at), true
 }
 
 func (b *WebBackend) decorateServiceRuntime(name string, e *webEntry, svc *web.Service, observation serviceObservation) {

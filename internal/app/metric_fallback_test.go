@@ -49,7 +49,7 @@ func TestMetricFallbackKeepsObservationBoundary(t *testing.T) {
 			defer sampler.mu.Unlock()
 			sampler.samples["web"] = append(sampler.samples["web"], serviceMetricSample{at: at.Add(time.Minute), current: web.ServiceRuntime{RSS: 900, Count: 1}})
 		}
-		got := sampler.Series("web", current, time.Hour)
+		got := sampler.Series("web", current, time.Hour, at)
 		if got.Memory.Summary.Count != 1 || got.Memory.Summary.Avg != 100 || got.Current.At != current.At {
 			t.Fatalf("fallback crossed observation boundary: %+v", got)
 		}
