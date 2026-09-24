@@ -62,5 +62,8 @@ func checkProbeTimeout(check map[string]any, defaultTimeout, operationTimeout ti
 	if defaultTimeout > 0 {
 		return defaultTimeout
 	}
-	return operationTimeout
+	if operationTimeout > 0 {
+		return operationTimeout
+	}
+	return DefaultEngineCheckTimeout
 }

@@ -108,3 +108,17 @@ func (c *countingProbeCheck) Run(context.Context) checks.Result {
 	c.calls++
 	return res
 }
+
+func TestProbeContextWithUnsetTimeoutIsBounded(t *testing.T) {
+	b := &WebBackend{}
+	ctx, cancel := b.probeContext(context.Background(), nil)
+	defer cancel()
+	deadline, ok := ctx.Deadline()
+	if !ok || time.Until(deadline) <= 0 || time.Until(deadline) > DefaultEngineCheckTimeout {
+		t.Fatalf("unexpected probe deadline: %v, present=%v", deadline, ok)
+	}
+	cancel()
+	if ctx.Err() != context.Canceled {
+		t.Fatalf("cancel: %v", ctx.Err())
+	}
+}

@@ -115,9 +115,6 @@ func (b *WebBackend) probeTimeout(check map[string]any) time.Duration {
 
 func (b *WebBackend) probeContext(parent context.Context, check map[string]any) (context.Context, context.CancelFunc) {
 	timeout := b.probeTimeout(check)
-	if timeout <= 0 {
-		return context.WithCancel(parent)
-	}
 	return context.WithTimeout(parent, timeout)
 }
 
