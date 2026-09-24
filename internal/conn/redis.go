@@ -8,9 +8,12 @@ import (
 	"io"
 	"strconv"
 	"strings"
+
+	"sermo/internal/units"
 )
 
 const (
+	maxRedisBulk             = units.BytesPerMiB
 	redisCommandAuth         = "AUTH"
 	redisCommandInfo         = "INFO"
 	redisCommandPing         = "PING"
@@ -155,12 +158,18 @@ func readRESP(br *bufio.Reader) (string, error) {
 		if err != nil {
 			return "", fmt.Errorf("bad bulk length %q", line)
 		}
-		if n < 0 {
+		if n == -1 {
 			return "", nil // null bulk
+		}
+		if n < 0 || n > maxRedisBulk {
+			return "", fmt.Errorf("redis bulk length %d outside 0..%d", n, maxRedisBulk)
 		}
 		buf := make([]byte, n+redisRESPBulkTerminatorBytes)
 		if _, err := io.ReadFull(br, buf); err != nil {
 			return "", probeErr(ProtocolNameRedis, stepRedisBulkString, err)
+		}
+		if string(buf[n:]) != "\r\n" {
+			return "", errors.New("invalid Redis bulk terminator")
 		}
 		return string(buf[:n]), nil
 	default:

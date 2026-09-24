@@ -116,3 +116,28 @@ func TestRedisHandshakeAuthError(t *testing.T) {
 func TestRedisHandshakePingError(t *testing.T) {
 	assertHandshakeFails(t, redisHandshake, "-LOADING server is loading\r\n", Config{})
 }
+
+func TestReadRESPBoundsBulkReplies(t *testing.T) {
+	for _, tt := range []struct {
+		name, wire string
+		wantLen    int
+		wantErr    bool
+	}{
+		{"empty", "$0\r\n\r\n", 0, false},
+		{"null", "$-1\r\n", 0, false},
+		{"invalid negative", "$-2\r\n", 0, true},
+		{"huge", "$9999999999999\r\n", 0, true},
+		{"overflow", "$999999999999999999999999\r\n", 0, true},
+		{"above limit", fmt.Sprintf("$%d\r\n", maxRedisBulk+1), 0, true},
+		{"at limit", infoBulk(strings.Repeat("x", maxRedisBulk)), maxRedisBulk, false},
+		{"truncated", "$3\r\nx", 0, true},
+		{"bad terminator", "$1\r\nx!!", 0, true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := readRESP(bufio.NewReader(strings.NewReader(tt.wire)))
+			if (err != nil) != tt.wantErr || (!tt.wantErr && len(got) != tt.wantLen) {
+				t.Fatalf("reply length=%d err=%v", len(got), err)
+			}
+		})
+	}
+}
