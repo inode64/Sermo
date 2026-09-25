@@ -262,13 +262,10 @@ func writeFCGIRecord(w io.Writer, recType byte, content []byte) error {
 // use one byte; longer use the 4-byte form (high bit set).
 func encodeFCGIParams(pairs []fcgiParam) ([]byte, error) {
 	var b bytes.Buffer
-	writeLen := func(n int) error {
+	writeLen := func(value string) error {
+		n := len(value)
 		if n < fcgiShortParamLenMax {
-			short, err := wireByte(ProtocolNameFPM, "param length", n)
-			if err != nil {
-				return err
-			}
-			b.WriteByte(short)
+			b.WriteByte(byte(n))
 			return nil
 		}
 		long, err := wireUint32(ProtocolNameFPM, "param length", n)
@@ -282,10 +279,10 @@ func encodeFCGIParams(pairs []fcgiParam) ([]byte, error) {
 		return nil
 	}
 	for _, kv := range pairs {
-		if err := writeLen(len(kv[fcgiParamNameIndex])); err != nil {
+		if err := writeLen(kv[fcgiParamNameIndex]); err != nil {
 			return nil, err
 		}
-		if err := writeLen(len(kv[fcgiParamValueIndex])); err != nil {
+		if err := writeLen(kv[fcgiParamValueIndex]); err != nil {
 			return nil, err
 		}
 		b.WriteString(kv[fcgiParamNameIndex])
