@@ -352,15 +352,8 @@ func (c Controller) ReleaseWithOptions(ctx context.Context, spec Spec, opts Rele
 
 // ReadStatus reports the current mount status and refcount.
 func (c Controller) ReadStatus(spec Spec) (Status, error) {
-	state, err := c.readState(spec)
-	if err != nil {
-		return Status{}, err
-	}
-	entries, err := c.sampleMounts()
-	if err != nil {
-		return Status{}, err
-	}
-	return statusFromMounts(spec, state, entries), nil
+	statuses, errs := c.ReadStatuses([]Spec{spec})
+	return statuses[0], errs[0]
 }
 
 // ReadStatuses reports several mount statuses from one mount-table sample.
@@ -380,17 +373,14 @@ func (c Controller) ReadStatuses(specs []Spec) ([]Status, []error) {
 		return statuses, errs
 	}
 	for i, spec := range specs {
-		statuses[i], errs[i] = c.readStatusFromMounts(spec, entries)
+		state, err := c.readState(spec)
+		if err != nil {
+			errs[i] = err
+			continue
+		}
+		statuses[i] = statusFromMounts(spec, state, entries)
 	}
 	return statuses, errs
-}
-
-func (c Controller) readStatusFromMounts(spec Spec, entries []checks.Mount) (Status, error) {
-	state, err := c.readState(spec)
-	if err != nil {
-		return Status{}, err
-	}
-	return statusFromMounts(spec, state, entries), nil
 }
 
 func statusFromMounts(spec Spec, state State, entries []checks.Mount) Status {
