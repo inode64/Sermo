@@ -171,8 +171,10 @@ func (b *WebBackend) Metrics(_ context.Context, name, check, metric string, sinc
 
 // resolvedGraphUnit looks metric up in a check's resolved line metrics.
 func resolvedGraphUnit(graphs []checks.GraphMetric, metric string) (string, bool) {
-	if i := slices.IndexFunc(graphs, func(graph checks.GraphMetric) bool { return graphs != nil && graph.Key == metric }); i >= 0 && i < len(graphs) {
-		return graphs[i].Unit, true
+	for _, graph := range graphs {
+		if graph.Key == metric {
+			return graph.Unit, true
+		}
 	}
 	return "", false
 }
