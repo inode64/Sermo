@@ -20,7 +20,6 @@ type catalogInventoryCache struct {
 	at      time.Time
 	items   []web.CatalogItem
 	refresh chan struct{} // non-nil while a scan is rebuilding the cache; closed when it finishes
-	list    func(context.Context) []web.CatalogItem
 }
 
 func (b *WebBackend) catalogItems(

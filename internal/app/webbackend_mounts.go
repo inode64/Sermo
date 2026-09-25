@@ -480,11 +480,7 @@ func (b *WebBackend) AlertMountUsers(ctx context.Context, name string) web.Mount
 	if len(users) == 0 {
 		return web.MountAlertResult{OK: true, Name: spec.Name, Path: spec.Path, Message: "no logged-in blocking users found"}
 	}
-	alerter := b.mountAlerter
-	if alerter == nil {
-		alerter = ttyMountUserAlerter{}
-	}
-	delivery, err := alerter.AlertMountUsers(opCtx, spec, blockers)
+	delivery, err := b.mountAlerter.AlertMountUsers(opCtx, spec, blockers)
 	if err != nil {
 		return web.MountAlertResult{
 			OK:      false,

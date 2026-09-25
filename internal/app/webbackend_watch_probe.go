@@ -124,9 +124,6 @@ func (b *WebBackend) probeContext(parent context.Context, check map[string]any) 
 func (b *WebBackend) beginWatchProbe(name string) (time.Time, bool) {
 	b.probeMu.Lock()
 	defer b.probeMu.Unlock()
-	if b.probes == nil {
-		b.probes = map[string]time.Time{}
-	}
 	if startedAt, found := b.probes[name]; found {
 		return startedAt, false
 	}

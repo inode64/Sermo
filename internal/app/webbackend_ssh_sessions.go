@@ -99,10 +99,6 @@ func (b *WebBackend) sshSessions(filters []process.IdentityFilter) (checks.SSHSe
 	if len(filters) == 0 {
 		return checks.SSHSessionSample{}, errors.New(sshSessionUnsupportedMessage)
 	}
-	sampler := b.sshSessionSampler
-	if sampler == nil {
-		sampler = checks.NewSSHSessionSampler(nil, b.userLookup)
-	}
 	keyParts := make([]string, 0, len(filters))
 	for _, filter := range filters {
 		keyParts = append(keyParts, sessionMetricKey(filter.Exe, filter.User))
@@ -116,7 +112,7 @@ func (b *WebBackend) sshSessions(filters []process.IdentityFilter) (checks.SSHSe
 	}
 	b.sshSessionsMu.Unlock()
 
-	sample, err := sampler(checks.SSHSessionConfig{SSHDFilters: filters})
+	sample, err := b.sshSessionSampler(checks.SSHSessionConfig{SSHDFilters: filters})
 	if err != nil {
 		return checks.SSHSessionSample{}, err
 	}
