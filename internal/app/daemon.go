@@ -657,7 +657,6 @@ func workerCheckRunner(worker *Worker, built []checks.Built, every map[string]in
 		for _, b := range extra {
 			ran[b.Check.Name()] = true
 		}
-		worker.cycleRan = ran
 		runAndCache(ctx, extra)
 		return cache
 	}
