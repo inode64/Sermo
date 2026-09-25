@@ -157,13 +157,10 @@ func (w *fileWatcher) runCycle(ctx context.Context) {
 	w.fireOlderThanBatch(ctx, stale)
 
 	// Deletions: paths we tracked that are absent now.
-	gone := make([]string, 0)
 	for _, p := range slices.Sorted(maps.Keys(w.baseline)) {
-		if _, ok := current[p]; !ok {
-			gone = append(gone, p)
+		if _, ok := current[p]; ok {
+			continue
 		}
-	}
-	for _, p := range gone {
 		if ctx.Err() != nil {
 			return
 		}
@@ -202,16 +199,16 @@ func (w *fileWatcher) publishSnapshot(current map[string]fileState) {
 	if w.publish == nil {
 		return
 	}
+	data := map[string]any{checks.DataKeyPaths: w.paths}
+	if len(w.paths) == 1 {
+		data[checks.DataKeyPath] = w.paths[0]
+	}
 	if len(current) == 0 {
 		// Name the path: "no watched path exists" says what happened, the path
 		// says to what, and the column is where the operator reads it.
 		message := w.paths[0] + ": not found"
 		if w.absentOK {
 			message = w.paths[0] + ": absent (ok)"
-		}
-		data := map[string]any{checks.DataKeyPaths: w.paths}
-		if len(w.paths) == 1 {
-			data[checks.DataKeyPath] = w.paths[0]
 		}
 		result := checks.Result{
 			Check:   w.name,
@@ -223,17 +220,11 @@ func (w *fileWatcher) publishSnapshot(current map[string]fileState) {
 		return
 	}
 	root := firstFileWatchRoot(w.paths, current)
-	data := map[string]any{
-		checks.DataKeyPaths:      w.paths,
-		checks.DataKeyKind:       root.kind,
-		checks.DataKeySize:       root.size,
-		checks.DataKeyMode:       fmt.Sprintf(fileModeFormat, root.perm),
-		checks.CheckKeyOwner:     fmt.Sprintf(fileOwnerFormat, root.uid, root.gid),
-		checks.DataKeyModifiedAt: root.modifiedAt.UTC().Format(time.RFC3339),
-	}
-	if len(w.paths) == 1 {
-		data[checks.DataKeyPath] = w.paths[0]
-	}
+	data[checks.DataKeyKind] = root.kind
+	data[checks.DataKeySize] = root.size
+	data[checks.DataKeyMode] = fmt.Sprintf(fileModeFormat, root.perm)
+	data[checks.CheckKeyOwner] = fmt.Sprintf(fileOwnerFormat, root.uid, root.gid)
+	data[checks.DataKeyModifiedAt] = root.modifiedAt.UTC().Format(time.RFC3339)
 	if w.cond.olderThan > 0 {
 		data[checks.DataKeyAge] = units.HumanizeDuration(root.age.Round(time.Second))
 	}
@@ -412,7 +403,8 @@ func (w *fileWatcher) fireOlderThanBatch(ctx context.Context, stale []staleFile)
 }
 
 func (w *fileWatcher) runOlderThanHook(ctx context.Context, path string, cur fileState) {
-	msg := w.summaryMessage(path, fileChangeOlderThan, w.olderThanMessage(path, cur), w.olderThanExtra(cur))
+	extra := w.olderThanExtra(cur)
+	msg := w.summaryMessage(path, fileChangeOlderThan, w.olderThanMessage(path, cur), extra)
 	env := map[string]string{
 		sermoEnvWatch:     w.name,
 		sermoEnvCheckType: checks.CheckTypeFile,
@@ -420,7 +412,7 @@ func (w *fileWatcher) runOlderThanHook(ctx context.Context, path string, cur fil
 		sermoEnvChange:    fileChangeOlderThan,
 		sermoEnvMessage:   msg,
 	}
-	maps.Copy(env, w.olderThanExtra(cur))
+	maps.Copy(env, extra)
 	runWatchHook(ctx, w.hook, w.runner, w.emitEvent, w.name, msg, env)
 }
 
