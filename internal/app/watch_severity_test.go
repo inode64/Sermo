@@ -280,7 +280,7 @@ func TestWatchAdvisoryReadingsAndRowState(t *testing.T) {
 		t.Errorf("summary = %q, want the advisory message %q", got, snap.Message)
 	}
 
-	failed, warning := watchViewState(web.Watch{Readings: advisory})
+	failed, warning := watchViewState(&webWatch{}, web.Watch{Readings: advisory}, time.Time{}, time.Time{})
 	if failed || !warning {
 		t.Errorf("watchViewState() = (%v, %v), want (false, true)", failed, warning)
 	}
@@ -290,7 +290,7 @@ func TestWatchAdvisoryReadingsAndRowState(t *testing.T) {
 
 	// One grave reading beside the advisory outranks it.
 	mixed := append(append([]web.WatchReading{}, advisory...), grave...)
-	if failed, _ := watchViewState(web.Watch{Readings: mixed}); !failed {
+	if failed, _ := watchViewState(&webWatch{}, web.Watch{Readings: mixed}, time.Time{}, time.Time{}); !failed {
 		t.Error("a mixed watch graded warning, want failed: an outage outranks an advisory")
 	}
 }
@@ -298,12 +298,12 @@ func TestWatchAdvisoryReadingsAndRowState(t *testing.T) {
 // The advisory event kind is the signal that survives a daemon restart, because
 // it is what the event log stores.
 func TestWatchViewStateFromAdvisoryActivity(t *testing.T) {
-	const at = "2026-06-17T14:20:43Z"
-	failed, warning := watchViewState(web.Watch{LastActivityKind: eventKindWarning, LastActivity: at})
+	at := time.Date(2026, time.June, 17, 14, 20, 43, 0, time.UTC)
+	failed, warning := watchViewState(&webWatch{}, web.Watch{LastActivityKind: eventKindWarning}, at, time.Time{})
 	if failed || !warning {
 		t.Errorf("advisory activity = (%v, %v), want (false, true)", failed, warning)
 	}
-	failed, warning = watchViewState(web.Watch{LastActivityKind: eventKindFiring, LastActivity: at})
+	failed, warning = watchViewState(&webWatch{}, web.Watch{LastActivityKind: eventKindFiring}, at, time.Time{})
 	if !failed || warning {
 		t.Errorf("firing activity = (%v, %v), want (true, false)", failed, warning)
 	}
@@ -312,15 +312,15 @@ func TestWatchViewStateFromAdvisoryActivity(t *testing.T) {
 	// by the check itself: the newest snapshot then carries a warning row and no
 	// error row, and that outranks the kind that opened the episode.
 	advisory := []web.WatchReading{{Field: watchReadingFieldWarning, Warning: "smart /dev/sda health=PASSED; reallocated 4 > 0"}}
-	failed, warning = watchViewState(web.Watch{LastActivityKind: eventKindFiring, LastActivity: at, Readings: advisory})
+	failed, warning = watchViewState(&webWatch{}, web.Watch{LastActivityKind: eventKindFiring, Readings: advisory}, at, time.Time{})
 	if failed || !warning {
 		t.Errorf("firing activity + advisory readings = (%v, %v), want (false, true)", failed, warning)
 	}
 	mixed := append([]web.WatchReading{{Field: watchReadingFieldError, Error: "link down"}}, advisory...)
-	if failed, _ = watchViewState(web.Watch{LastActivityKind: eventKindFiring, LastActivity: at, Readings: mixed}); !failed {
+	if failed, _ = watchViewState(&webWatch{}, web.Watch{LastActivityKind: eventKindFiring, Readings: mixed}, at, time.Time{}); !failed {
 		t.Error("firing activity + an error reading graded warning, want failed")
 	}
-	if failed, _ = watchViewState(web.Watch{LastActivityKind: eventKindHookFail, LastActivity: at, Readings: advisory}); !failed {
+	if failed, _ = watchViewState(&webWatch{}, web.Watch{LastActivityKind: eventKindHookFail, Readings: advisory}, at, time.Time{}); !failed {
 		t.Error("a failed hook beside advisory readings graded warning, want failed: the hook failure is an outage of its own")
 	}
 }
