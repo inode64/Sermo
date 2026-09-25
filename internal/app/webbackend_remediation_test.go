@@ -14,7 +14,7 @@ func TestWebBackendDetailRemediation(t *testing.T) {
 	t0 := time.Date(2026, 6, 7, 14, 0, 0, 0, time.UTC)
 	policy := rules.Policy{Cooldown: 5 * time.Minute}
 	state := &rules.RemediationState{LastActionAt: t0}
-	reg.Publish("web", policy, state, t0.Add(2*time.Minute))
+	reg.Publish("web", policy.Report(state, t0.Add(2*time.Minute)))
 
 	b := &WebBackend{
 		order:       []string{"web"},
@@ -48,7 +48,7 @@ func TestWebBackendServicesExposeRemediationAndLastEventSummary(t *testing.T) {
 
 	policy := rules.Policy{Cooldown: 5 * time.Minute}
 	state := &rules.RemediationState{LastActionAt: t0}
-	reg.Publish("web", policy, state, t0.Add(time.Minute))
+	reg.Publish("web", policy.Report(state, t0.Add(time.Minute)))
 
 	events.now = func() time.Time { return t0.Add(2 * time.Minute) }
 	events.Add(Event{Service: "web", Kind: eventKindAction, Action: string(rules.ActionRestart), Status: eventStatusOK, Message: "restart completed"})

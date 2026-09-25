@@ -1,42 +1,24 @@
 package app
 
-import (
-	"sync"
-	"time"
-
-	"sermo/internal/rules"
-)
+import "sermo/internal/rules"
 
 // RemediationRegistry holds each service's latest remediation policy view for the
 // web detail. Workers publish after every cycle; the web reads.
-type RemediationRegistry struct {
-	mu        sync.RWMutex
-	byService map[string]rules.RemediationReport
-}
+type RemediationRegistry registry[rules.RemediationReport]
 
 // NewRemediationRegistry returns an empty registry.
 func NewRemediationRegistry() *RemediationRegistry {
-	return &RemediationRegistry{byService: map[string]rules.RemediationReport{}}
+	return (*RemediationRegistry)(newRegistry[rules.RemediationReport]())
 }
 
-// Publish snapshots policy gating for service.
-func (r *RemediationRegistry) Publish(service string, policy rules.Policy, state *rules.RemediationState, now time.Time) {
-	if r == nil {
-		return
-	}
-	snap := policy.Report(state, now)
-	r.mu.Lock()
-	r.byService[service] = snap
-	r.mu.Unlock()
+// Publish replaces the latest immutable snapshot for service.
+func (r *RemediationRegistry) Publish(service string, value rules.RemediationReport) {
+	(*registry[rules.RemediationReport])(r).Publish(service, value)
 }
 
-// Get returns the last published report for service, or false when none yet.
+// Get returns the latest snapshot, or false when the service is unobserved.
 func (r *RemediationRegistry) Get(service string) (rules.RemediationReport, bool) {
-	if r == nil {
-		return rules.RemediationReport{}, false
-	}
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	rep, ok := r.byService[service]
-	return rep, ok
+	var value rules.RemediationReport
+	ok := (*registry[rules.RemediationReport])(r).get(service, &value)
+	return value, ok
 }

@@ -1110,7 +1110,7 @@ func (w *Worker) publishRemediation() {
 		return
 	}
 	now := clockOrNow(w.Now)
-	w.Remediation.Publish(w.Service, w.Policy, w.State, now())
+	w.Remediation.Publish(w.Service, w.Policy.Report(w.State, now()))
 }
 
 func (w *Worker) publishRuleWindows(ctx context.Context, ev *rules.Evaluator, at time.Time, evals map[string]ruleEvalResult) {
