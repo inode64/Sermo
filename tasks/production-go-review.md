@@ -13,7 +13,7 @@ pruebas de ejecución. Este registro no afirma una auditoría exhaustiva.
   `internal/conn/prometheus.go`: un HTTP 500 con JSON `status: success` podía
   declarar sano el servicio. Exigir HTTP 200 para una respuesta API reconocida;
   conservar el fallback cuando el contenido no corresponde al endpoint API.
-- [ ] **GO-003 — Acotar la respuesta RPC completa.**
+- [x] **GO-003 — Acotar la respuesta RPC completa.**
   `internal/conn/nfs.go`: cada fragmento estaba limitado, pero la concatenación
   no. Limitar el tamaño acumulado antes de reservar y añadir otro fragmento.
 - [ ] **GO-004 — Acotar los registros FastCGI acumulados.**

@@ -20,6 +20,7 @@ const (
 const (
 	rpcFragmentLastMask    = 0x80000000
 	rpcTCPMaxFragmentBytes = units.BytesPerMiB
+	rpcTCPMaxReplyBytes    = units.BytesPerMiB
 )
 
 // nfsProtocol probes an NFS server natively over ONC RPC: it sends an RPC NULL
@@ -109,6 +110,9 @@ func rpcCallTCP(c net.Conn, protocol string, payload []byte) ([]byte, error) {
 		n := int(marker &^ rpcFragmentLastMask)
 		if n > rpcTCPMaxFragmentBytes {
 			return nil, fmt.Errorf("%s: RPC fragment too large", protocol)
+		}
+		if n > rpcTCPMaxReplyBytes-len(reply) {
+			return nil, fmt.Errorf("%s: RPC reply exceeds %d bytes", protocol, rpcTCPMaxReplyBytes)
 		}
 		frag := make([]byte, n)
 		if _, err := io.ReadFull(c, frag); err != nil {
