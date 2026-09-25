@@ -178,7 +178,7 @@ type Deps struct {
 	// restart emits at most one notice across sermod restarts. Optional: a
 	// configured notice remains safely silent without durable state.
 	ServiceRestartNotice ServiceRestartNoticeStore
-	// RestartNotice is the validated global principal-process restart notice.
+	// RestartNotice is resolved once by BuildWorkers for the generation.
 	// nil disables it for every service in this generation.
 	RestartNotice *config.ServiceRestartNotice
 	// Panic gates the daemon-wide panic mode (hooks, alerts and automatic
@@ -328,7 +328,9 @@ func BuildWorkers(ctx context.Context, cfg *config.Config, deps Deps, collector 
 	}
 	resolver := servicemgr.NewUnitResolver()
 	resolver.Manager = deps.Manager
-	restartNotice, restartNoticeConfigured := config.EngineServiceRestartNotice(cfg)
+	if notice, ok := config.EngineServiceRestartNotice(cfg); ok {
+		deps.RestartNotice = &notice
+	}
 
 	// Every service is wired independently of the others (the cascade below
 	// only needs the finished workers), so they are wired side by side and
@@ -338,7 +340,7 @@ func BuildWorkers(ctx context.Context, cfg *config.Config, deps Deps, collector 
 	resolutions := cfg.ResolveServices(names)
 	built := make([]builtService, len(names))
 	forEachParallel(len(names), deps.MaxParallel, func(i int) {
-		built[i] = buildServiceWorker(ctx, resolutions[i], deps, collector, resolver, &restartNotice, restartNoticeConfigured, names[i])
+		built[i] = buildServiceWorker(ctx, resolutions[i], deps, collector, resolver, names[i])
 	})
 
 	var workers []*Worker
@@ -374,7 +376,7 @@ type builtService struct {
 // minutes on a loaded host, and the name says where the init backend stalls.
 const slowServiceWiring = 10 * time.Second
 
-func buildServiceWorker(ctx context.Context, resolution config.ServiceResolution, deps Deps, collector *metrics.Collector, resolver servicemgr.UnitResolver, restartNotice *config.ServiceRestartNotice, restartNoticeConfigured bool, name string) builtService {
+func buildServiceWorker(ctx context.Context, resolution config.ServiceResolution, deps Deps, collector *metrics.Collector, resolver servicemgr.UnitResolver, name string) builtService {
 	started := clockOrNow(deps.Now)
 	from := started()
 	var b builtService
@@ -399,9 +401,6 @@ func buildServiceWorker(ctx context.Context, resolution config.ServiceResolution
 	serviceDeps.Backend = target.Backend
 	serviceDeps.Manager = target.Manager
 	serviceDeps.BackendPIDs = target.BackendPIDs
-	if restartNoticeConfigured {
-		serviceDeps.RestartNotice = restartNotice
-	}
 	w, svcWatches, warns := buildWorker(ctx, name, target.Unit, resolved.Tree, serviceDeps, collector)
 	for _, x := range warns {
 		b.warnings = append(b.warnings, serviceSubjectPrefix+name+": "+x)
