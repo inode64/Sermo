@@ -151,14 +151,11 @@ const waitCancelledFormat = "wait cancelled: %w"
 // immediate ctx-check. sleep is injectable for tests (defaults to time.Sleep). It
 // is the shared cancellable-sleep used by the reaper and the operation engine.
 func Wait(ctx context.Context, sleep func(time.Duration), d time.Duration) error {
-	if d <= 0 {
-		if err := ctx.Err(); err != nil {
-			return fmt.Errorf(waitCancelledFormat, err)
-		}
-		return nil
-	}
 	if err := ctx.Err(); err != nil {
 		return fmt.Errorf(waitCancelledFormat, err)
+	}
+	if d <= 0 {
+		return nil
 	}
 	if sleep == nil {
 		// Default: the shared stoppable-timer wait, so a cancelled Wait leaks no
