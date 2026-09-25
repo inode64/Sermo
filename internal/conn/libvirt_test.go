@@ -3,7 +3,7 @@ package conn
 import "testing"
 
 func libvirtTransport(cfg Config) (mode, addr, uri string) {
-	return libvirtTransportWithTarget(cfg, newProbeTarget(cfg, defaultPortLibvirt))
+	return libvirtTransportWithTarget(newProbeTarget(cfg, defaultPortLibvirt))
 }
 
 func TestFormatLibvirtVersion(t *testing.T) {

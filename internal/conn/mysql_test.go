@@ -96,5 +96,5 @@ func TestBuildDSNDefaultsAndPlaintext(t *testing.T) {
 }
 
 func mysqlDSNForTest(cfg Config) string {
-	return buildMySQLConfigWithTarget(cfg, newProbeTarget(cfg, defaultPortMySQL)).FormatDSN()
+	return buildMySQLConfigWithTarget(newProbeTarget(cfg, defaultPortMySQL)).FormatDSN()
 }
