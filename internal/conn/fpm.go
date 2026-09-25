@@ -10,6 +10,8 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+
+	"sermo/internal/units"
 )
 
 // FastCGI record types and constants (FastCGI spec 1.0).
@@ -26,8 +28,9 @@ const (
 )
 
 const (
-	fpmDefaultPingPath  = "/ping"
-	fpmStatusFormatJSON = "json"
+	fpmDefaultPingPath   = "/ping"
+	maxFCGIResponseBytes = units.BytesPerMiB
+	fpmStatusFormatJSON  = "json"
 )
 
 const (
@@ -295,6 +298,7 @@ func encodeFCGIParams(pairs []fcgiParam) ([]byte, error) {
 // accumulated STDOUT and STDERR.
 func readFCGIResponse(r io.Reader) (stdout, stderr string, err error) {
 	var out, errOut bytes.Buffer
+	received := 0
 	header := make([]byte, fcgiHeaderBytes)
 	for {
 		if _, err := io.ReadFull(r, header); err != nil {
@@ -304,6 +308,11 @@ func readFCGIResponse(r io.Reader) (stdout, stderr string, err error) {
 		clen := int(header[fcgiHeaderContentLengthHighOffset])<<fcgiContentLengthHighShift |
 			int(header[fcgiHeaderContentLengthLowOffset])
 		plen := int(header[fcgiHeaderPaddingLengthOffset])
+		recordBytes := fcgiHeaderBytes + clen + plen
+		if recordBytes > maxFCGIResponseBytes-received {
+			return "", "", fmt.Errorf("php-fpm: FastCGI response exceeds %d bytes", maxFCGIResponseBytes)
+		}
+		received += recordBytes
 		body := make([]byte, clen+plen)
 		if len(body) > 0 {
 			if _, err := io.ReadFull(r, body); err != nil {

@@ -1207,7 +1207,8 @@ Protocols, in the order of the table above:
 - `fpm` (alias `php-fpm`) — PHP-FPM over FastCGI. Set `socket` to the pool's Unix
   socket (e.g. `/run/php/php8.2-fpm.sock`), or use `host`/`port` (default 9000) for
   a TCP pool. No auth. Performs a FastCGI request to `/ping` and expects `pong`, so
-  the pool must have **`ping.path = /ping`** enabled. Set **`status_path`** (the
+  the pool must have **`ping.path = /ping`** enabled. Each FastCGI response is
+  limited to 1 MiB, including record headers and padding. Set **`status_path`** (the
   pool's `pm.status_path`) to additionally fetch the status page and expose pool
   metrics for `expect:`: `pool`, `process_manager`, `active_processes`,
   `idle_processes`, `total_processes`, `listen_queue`, `max_listen_queue`,
