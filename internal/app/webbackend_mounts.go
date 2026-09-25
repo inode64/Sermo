@@ -72,10 +72,7 @@ func (b *WebBackend) mountController() mountctl.Controller {
 		Signaler:       b.mountSignaler,
 		CommandTimeout: b.mountTimeout(),
 		Mounts:         b.mountSampler,
-	}
-	if b.userLookup != nil {
-		ctrl.ResolveUser = b.userLookup.ResolveUser
-		ctrl.UserLookup = b.userLookup
+		UserLookup:     b.userLookup,
 	}
 	if b.cfg != nil {
 		ctrl.Runtime = b.cfg.Global.RuntimeDir()
@@ -116,8 +113,7 @@ func (b *WebBackend) beginMountOperation(spec mountctl.Spec, action string) (*we
 		b.mountOperations = map[string]web.MountOperation{}
 	}
 	if op, ok := b.mountOperations[spec.Name]; ok {
-		operation := op
-		return &operation, false
+		return &op, false
 	}
 	op := web.MountOperation{
 		Action:    action,
@@ -126,8 +122,7 @@ func (b *WebBackend) beginMountOperation(spec mountctl.Spec, action string) (*we
 		Message:   fmt.Sprintf("%s %s", mountOperationState(action), spec.Path),
 	}
 	b.mountOperations[spec.Name] = op
-	operation := op
-	return &operation, true
+	return &op, true
 }
 
 func (b *WebBackend) endMountOperation(name string) {
@@ -143,8 +138,7 @@ func (b *WebBackend) mountOperation(name string) *web.MountOperation {
 	if !ok {
 		return nil
 	}
-	operation := op
-	return &operation
+	return &op
 }
 
 func (b *WebBackend) mountSpec(name string) (mountctl.Spec, bool, string) {

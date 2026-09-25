@@ -85,7 +85,6 @@ func (b *WebBackend) viewWithRuntime(ctx context.Context, name string, e *webEnt
 		svc.Status = TargetStateDisabled
 		svc.State = ServiceState(false, false, svc.Status, "", true, false, false, false, false)
 		svc.Monitored = false
-		svc.CheckHealth = ""
 		svc.RemediationState = TargetStateDisabled
 		return svc
 	}
@@ -186,7 +185,7 @@ func normalizedServiceStatus(status servicemgr.Status) bool {
 }
 
 func (b *WebBackend) serviceObservability(name string, e *webEntry, observation serviceObservation, status, checkHealth string, monitored, observed bool) (bool, []string) {
-	if e == nil || e.disabled {
+	if e == nil {
 		return false, nil
 	}
 	active := strings.EqualFold(status, string(servicemgr.StatusActive))
@@ -543,9 +542,6 @@ func checkHealthSummary(snap map[string]CheckSnapshot, checkNames []string, seve
 	}
 	if len(checkNames) == 0 {
 		return 0, ""
-	}
-	if snap == nil {
-		return 0, checkHealthUnknown
 	}
 	observed := false
 	warning := 0

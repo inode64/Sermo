@@ -182,7 +182,7 @@ func (b *WebBackend) operationResult(ctx context.Context, name, action string) o
 // CompactState prunes old persisted history and vacuums the state database.
 func (b *WebBackend) CompactState(ctx context.Context, before time.Time) web.StateCompactResult {
 	maint, ok := b.store.(stateMaintainer)
-	if !ok || maint == nil {
+	if !ok {
 		return web.StateCompactResult{OK: false, Message: "state store unavailable"}
 	}
 	now := b.webNow()

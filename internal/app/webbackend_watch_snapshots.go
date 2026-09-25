@@ -27,10 +27,7 @@ type watchObservation struct {
 func (o watchObservation) watchSnapshotView(w *webWatch, system metrics.Snapshot) (*web.WatchMeter, []web.WatchReading, string) {
 	snaps := o.snapshots
 	if len(snaps) == 0 {
-		if m := watchMeter(w.checkType, system); m != nil {
-			return m, nil, ""
-		}
-		return nil, nil, ""
+		return watchMeter(w.checkType, system), nil, ""
 	}
 	var meter *web.WatchMeter
 	var readings []web.WatchReading

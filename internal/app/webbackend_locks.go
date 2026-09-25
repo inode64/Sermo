@@ -130,7 +130,7 @@ func (b *WebBackend) enabledServiceNames() []string {
 }
 
 func (b *WebBackend) lockReportsByService() map[string]locks.Report {
-	if b.cfg == nil || len(b.order) == 0 {
+	if b.cfg == nil {
 		return nil
 	}
 	names := b.enabledServiceNames()
@@ -249,14 +249,8 @@ func lockOwnerStatus(lk locks.Lock) string {
 	if lk.OwnerPID <= 0 {
 		return watchReadingValueNone
 	}
-	switch lk.State {
-	case locks.StateActive:
+	if lk.State == locks.StateActive {
 		return lockOwnerStatusLive
-	case locks.StateStale:
-		return string(locks.StateStale)
-	case locks.StateExpired:
-		return string(locks.StateExpired)
-	default:
-		return string(lk.State)
 	}
+	return string(lk.State)
 }
