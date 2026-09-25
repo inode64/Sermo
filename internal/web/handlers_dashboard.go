@@ -98,7 +98,7 @@ func (s *Server) dashboardSnapshot(ctx context.Context, backend Backend, since t
 	var snapshot DashboardSnapshot
 	if s.Readiness == nil {
 		snapshot = CollectDashboardSnapshot(ctx, backend, since)
-		snapshot.Ready = ReadyReport{Ready: true, Status: apiStatusOK, Services: len(snapshot.Services)}
+		snapshot.Ready = readyFallback(len(snapshot.Services))
 	} else {
 		var ready ReadyReport
 		var wg sync.WaitGroup
@@ -152,10 +152,11 @@ func (s *Server) readyReportFromBackend(ctx context.Context, backend Backend) Re
 	if s.Readiness != nil {
 		return s.Readiness.Report(ctx)
 	}
-	return ReadyReport{
-		Ready: true, Status: apiStatusOK,
-		Services: len(backend.Services(ctx)),
-	}
+	return readyFallback(len(backend.Services(ctx)))
+}
+
+func readyFallback(services int) ReadyReport {
+	return ReadyReport{Ready: true, Status: apiStatusOK, Services: services}
 }
 
 func (s *Server) handleReadyz(w http.ResponseWriter, r *http.Request) {
