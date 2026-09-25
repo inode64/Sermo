@@ -33,8 +33,9 @@ func sshSnapshot(extra ...process.Identity) map[int]process.Identity {
 	return snapshot
 }
 
-func testSSHConfig(protected ...SSHProtectedProcess) SSHIdleConfig {
-	return SSHIdleConfig{IdleFor: 30 * time.Minute, SSHDExes: []string{"/opt/sermo-test/sshd"}, ProtectedProcesses: protected}
+func testSSHConfig(t *testing.T, protected ...SSHProtectedProcess) SSHIdleConfig {
+	t.Helper()
+	return SSHIdleConfig{IdleFor: 30 * time.Minute, sshdFilters: mustSSHDFilters(t), ProtectedProcesses: protected}
 }
 
 func testSSHTerminal(now time.Time) func(string) (utmp.Terminal, error) {
@@ -84,7 +85,7 @@ func TestSSHIdleSamplerReportsTerminalInputErrors(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			sampler := newSSHIdleSampler(test.reader, testSSHLookup(), test.sessions, testSSHTerminal(now), func() time.Time { return now })
-			if _, err := sampler(testSSHConfig()); err == nil || !strings.Contains(err.Error(), test.want) {
+			if _, err := sampler(testSSHConfig(t)); err == nil || !strings.Contains(err.Error(), test.want) {
 				t.Fatalf("sample error = %v, want %q", err, test.want)
 			}
 		})
@@ -134,7 +135,7 @@ func TestSampleSSHIdle(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := sampleSSHIdle([]utmp.Session{{User: "deploy", Line: "pts/0"}}, tt.snapshot, testSSHLookup(), testSSHTerminal(now), now, testSSHConfig(tt.protected...), mustSSHDFilters(t))
+			got, err := sampleSSHIdle([]utmp.Session{{User: "deploy", Line: "pts/0"}}, tt.snapshot, testSSHLookup(), testSSHTerminal(now), now, testSSHConfig(t, tt.protected...), mustSSHDFilters(t))
 			if (err != nil) != tt.wantErr {
 				t.Fatalf("sampleSSHIdle error = %v, wantErr=%v", err, tt.wantErr)
 			}
@@ -385,8 +386,8 @@ func TestBuildSSHIdleCheckAcceptsOwnerOnlyProtection(t *testing.T) {
 	if !check.condition {
 		t.Fatal("ssh_idle must default to condition reporting")
 	}
-	if len(check.filters) != 1 || check.filters[0].Exe != "/usr/sbin/sshd" {
-		t.Fatalf("ssh_idle must retain its resolved sshd filter: %+v", check.filters)
+	if len(check.config.sshdFilters) != 1 || check.config.sshdFilters[0].Exe != "/usr/sbin/sshd" {
+		t.Fatalf("ssh_idle must retain its resolved sshd filter: %+v", check.config.sshdFilters)
 	}
 }
 

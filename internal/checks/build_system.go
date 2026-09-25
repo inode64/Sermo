@@ -63,11 +63,10 @@ func buildSSHIdleCheck(b base, entry map[string]any, deps Deps) (Check, string) 
 		preds: preds,
 		config: SSHIdleConfig{
 			IdleFor:            idleFor,
-			SSHDExes:           sshdExes,
+			sshdFilters:        sshdFilters,
 			ProtectedProcesses: protected,
 		},
 		sampler: deps.SSHIdleSampler,
-		filters: sshdFilters,
 	}, ""
 }
 
