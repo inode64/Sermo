@@ -145,10 +145,8 @@ func validateGlobalEngine(cfg *Config, raw map[string]any, add addFunc) {
 	if !ok {
 		return
 	}
-	for _, key := range slices.Sorted(maps.Keys(engine)) {
-		if _, allowed := validEngineKeys[key]; !allowed {
-			add(validationNotSupportedFormat, engineFieldPath(key))
-		}
+	for key := range unknownBlockKeys(engine, validEngineKeys) {
+		add(validationNotSupportedFormat, engineFieldPath(key))
 	}
 	backend := cfgval.String(engine[EngineKeyBackend])
 	if _, err := servicemgr.ParseBackend(backend); err != nil {
@@ -212,13 +210,8 @@ func validateServiceRestartNotice(engine map[string]any, notifiers map[string]st
 		return
 	}
 	prefix := engineFieldPath(EngineKeyServiceRestartNotice)
-	for _, err := range unknownBlockKeys(prefix, notice, set(
-		ServiceRestartNoticeKeyUptimeBelow,
-		ServiceRestartNoticeKeyNotify,
-		ServiceRestartNoticeKeySubject,
-		ServiceRestartNoticeKeyMessage,
-	)) {
-		add("%s", err)
+	for key := range unknownBlockKeys(notice, serviceRestartNoticeKeys) {
+		add(validationNotSupportedFormat, prefix+"."+key)
 	}
 	if _, configured := notice[ServiceRestartNoticeKeyUptimeBelow]; !configured {
 		add(validationRequiredFormat, prefix+"."+ServiceRestartNoticeKeyUptimeBelow)
@@ -360,10 +353,8 @@ func validateGlobalDefaults(cfg *Config, raw map[string]any, add addFunc) {
 }
 
 func validateDefaultsKeys(defaults map[string]any, add func(string, ...any)) {
-	for _, key := range slices.Sorted(maps.Keys(defaults)) {
-		if _, ok := validDefaultsKeys[key]; !ok {
-			add(validationNotSupportedFormat, defaultsFieldPath(key))
-		}
+	for key := range unknownBlockKeys(defaults, validDefaultsKeys) {
+		add(validationNotSupportedFormat, defaultsFieldPath(key))
 	}
 }
 
@@ -383,8 +374,8 @@ func validateDefaultsGateBlock(defaults map[string]any, block string, add addFun
 		return
 	}
 	prefix := defaultsFieldPath(block)
-	for _, err := range unknownBlockKeys(prefix, body, set(gates...)) {
-		add("%s", err)
+	for key := range unknownBlockKeys(body, set(gates...)) {
+		add(validationNotSupportedFormat, prefix+"."+key)
 	}
 	validateGateFlags(prefix, body, add, gates...)
 }
@@ -843,11 +834,8 @@ func validateServices(cfg *Config) []Issue {
 }
 
 func validateStorageMount(mount map[string]any, add addFunc) {
-	allowed := set(MountKeyRefcount, MountKeyUmount, MountKeyStopPolicy)
-	for _, key := range slices.Sorted(maps.Keys(mount)) {
-		if _, ok := allowed[key]; !ok {
-			add("mount key %q is not supported", key)
-		}
+	for key := range unknownBlockKeys(mount, mountKeys) {
+		add("mount key %q is not supported", key)
 	}
 	if v, present := mount[MountKeyRefcount]; present {
 		if _, ok := v.(bool); !ok {
@@ -860,11 +848,8 @@ func validateStorageMount(mount map[string]any, add addFunc) {
 		add(validationMappingFormat, mountPathUmount)
 	}
 	if umount != nil {
-		allowedUmount := set(StopPolicyKeyTermTimeout, StopPolicyKeyKillTimeout)
-		for _, key := range slices.Sorted(maps.Keys(umount)) {
-			if _, ok := allowedUmount[key]; !ok {
-				add("%s key %q is not one of %s", mountPathUmount, key, mountUmountKeySummary)
-			}
+		for key := range unknownBlockKeys(umount, mountUmountKeys) {
+			add("%s key %q is not one of %s", mountPathUmount, key, mountUmountKeySummary)
 		}
 		for _, field := range []string{StopPolicyKeyTermTimeout, StopPolicyKeyKillTimeout} {
 			validatePositiveDurationField(umount, field, mountUmountFieldPath(field), add)
@@ -872,11 +857,8 @@ func validateStorageMount(mount map[string]any, add addFunc) {
 	}
 
 	if sp, ok := mount[sectionStopPolicy].(map[string]any); ok {
-		allowedStopPolicy := set(keyKillOnlyIf)
-		for _, key := range slices.Sorted(maps.Keys(sp)) {
-			if _, ok := allowedStopPolicy[key]; !ok {
-				add("%s key %q is not one of %s", mountPathStopPolicy, key, keyKillOnlyIf)
-			}
+		for key := range unknownBlockKeys(sp, mountStopPolicyKeys) {
+			add("%s key %q is not one of %s", mountPathStopPolicy, key, keyKillOnlyIf)
 		}
 	} else if _, present := mount[sectionStopPolicy]; present {
 		add(validationMappingFormat, mountPathStopPolicy)
@@ -988,3 +970,16 @@ func documentScope(doc *Document) string {
 	}
 	return scope
 }
+
+var mountKeys = set(MountKeyRefcount, MountKeyUmount, MountKeyStopPolicy)
+
+var mountUmountKeys = set(StopPolicyKeyTermTimeout, StopPolicyKeyKillTimeout)
+
+var mountStopPolicyKeys = set(keyKillOnlyIf)
+
+var serviceRestartNoticeKeys = set(
+	ServiceRestartNoticeKeyUptimeBelow,
+	ServiceRestartNoticeKeyNotify,
+	ServiceRestartNoticeKeySubject,
+	ServiceRestartNoticeKeyMessage,
+)

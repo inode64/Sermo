@@ -321,12 +321,8 @@ func pathSpecFromListItem(v any, field string) (PathSpec, bool, error) {
 }
 
 func pathSpecFromMap(m map[string]any, field string) (PathSpec, error) {
-	for key := range m {
-		switch key {
-		case keyPath, keyRecursive:
-		default:
-			return PathSpec{}, fmt.Errorf("%s.%s is not supported; use path and recursive", field, key)
-		}
+	for key := range unknownBlockKeys(m, pathSpecKeys) {
+		return PathSpec{}, fmt.Errorf("%s.%s is not supported; use path and recursive", field, key)
 	}
 	path, ok := m[keyPath].(string)
 	if !ok || path == "" {
@@ -697,3 +693,5 @@ func isYAML(name string) bool {
 	ext := filepath.Ext(name)
 	return ext == yamlFileExt || ext == yamlLongFileExt
 }
+
+var pathSpecKeys = set(keyPath, keyRecursive)

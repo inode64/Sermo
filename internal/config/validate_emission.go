@@ -18,9 +18,9 @@ func validateEmission(tree map[string]any, path string, add addFunc) {
 		add(validationMappingFormat, path)
 		return
 	}
-	allowed := set(emission.KeyEvents, emission.KeyNotify)
+
 	for _, key := range slices.Sorted(maps.Keys(m)) {
-		if _, ok := allowed[key]; !ok {
+		if _, ok := emissionKeys[key]; !ok {
 			add("%s.%s is not supported", path, key)
 			continue
 		}
@@ -29,3 +29,5 @@ func validateEmission(tree map[string]any, path string, add addFunc) {
 		}
 	}
 }
+
+var emissionKeys = set(emission.KeyEvents, emission.KeyNotify)

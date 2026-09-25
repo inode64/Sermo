@@ -75,10 +75,8 @@ func parseProcessPolicyAllow(name string, raw any) (ProcessPolicyAllow, []Proces
 
 func unsupportedProcessPolicyAllowFields(rawAllow map[string]any, suffix string) []ProcessPolicyAllowError {
 	var issues []ProcessPolicyAllowError
-	for _, key := range slices.Sorted(maps.Keys(rawAllow)) {
-		if key != checks.CheckKeyExe && key != process.SelectorKeyCmd {
-			issues = append(issues, ProcessPolicyAllowError{PathSuffix: suffix + "." + key, Problem: "is not supported"})
-		}
+	for key := range unknownBlockKeys(rawAllow, processPolicyAllowKeys) {
+		issues = append(issues, ProcessPolicyAllowError{PathSuffix: suffix + "." + key, Problem: "is not supported"})
 	}
 	return issues
 }
@@ -118,3 +116,5 @@ func processPolicyAllowCommand(rawAllow map[string]any, suffix string) (*regexp.
 	}
 	return compiled, issues
 }
+
+var processPolicyAllowKeys = set(checks.CheckKeyExe, process.SelectorKeyCmd)

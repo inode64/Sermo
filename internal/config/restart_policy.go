@@ -2,8 +2,6 @@ package config
 
 import (
 	"fmt"
-	"maps"
-	"slices"
 
 	"sermo/internal/cfgval"
 )
@@ -35,10 +33,8 @@ func ParseRestartMode(tree map[string]any) (RestartMode, error) {
 	if !ok {
 		return "", fmt.Errorf(validationMappingFormat, ServiceKeyRestartPolicy)
 	}
-	for _, key := range slices.Sorted(maps.Keys(policy)) {
-		if key != RestartPolicyKeyMode {
-			return "", fmt.Errorf(validationNotSupportedFormat, ServiceKeyRestartPolicy+"."+key)
-		}
+	for key := range unknownBlockKeys(policy, restartPolicyKeys) {
+		return "", fmt.Errorf(validationNotSupportedFormat, ServiceKeyRestartPolicy+"."+key)
 	}
 	mode := RestartMode(cfgval.AsString(policy[RestartPolicyKeyMode]))
 	if mode != RestartModeStaged && mode != RestartModeNative {
@@ -51,3 +47,5 @@ func ParseRestartMode(tree map[string]any) (RestartMode, error) {
 	}
 	return mode, nil
 }
+
+var restartPolicyKeys = set(RestartPolicyKeyMode)
