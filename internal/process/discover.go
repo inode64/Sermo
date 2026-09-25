@@ -117,7 +117,8 @@ func (d Discoverer) Discover(selectors []Selector) ([]Process, []string) {
 	// for its neighbours' memory and treat their processes as this unit's own.
 	candidates := idx.sorted
 	var children []int
-	if len(order) > 0 {
+	childrenComputed := len(order) > 0
+	if childrenComputed {
 		children = descendants(idx.children, order)
 		candidates = append(slices.Clone(order), children...)
 		slices.Sort(candidates)
@@ -133,7 +134,7 @@ func (d Discoverer) Discover(selectors []Selector) ([]Process, []string) {
 	}
 
 	// 3. descendants from the process tree.
-	if children == nil {
+	if !childrenComputed {
 		children = descendants(idx.children, order)
 	}
 	for _, pid := range children {
