@@ -340,6 +340,10 @@ func (a App) withDefaults() App {
 	return a
 }
 
+func (a App) runActionCommand(ctx context.Context, opts options) int {
+	return a.runAction(ctx, opts, opts.command)
+}
+
 // Run executes the CLI.
 func (a App) Run(ctx context.Context, args []string) int {
 	return a.withDefaults().run(ctx, args)
@@ -358,17 +362,18 @@ var commandHandlers = map[string]commandHandler{
 	commandBackend:   App.runBackend,
 	commandStatus:    App.runStatus,
 	commandIsActive:  App.runIsActive,
-	commandStart:     func(a App, ctx context.Context, opts options) int { return a.runAction(ctx, opts, opts.command) },
-	commandStop:      func(a App, ctx context.Context, opts options) int { return a.runAction(ctx, opts, opts.command) },
-	commandRestart:   func(a App, ctx context.Context, opts options) int { return a.runAction(ctx, opts, opts.command) },
-	commandResume:    func(a App, ctx context.Context, opts options) int { return a.runAction(ctx, opts, opts.command) },
-	commandRepair:    func(a App, ctx context.Context, opts options) int { return a.runAction(ctx, opts, opts.command) },
+	commandReload:    App.runServiceReload,
+	commandStart:     App.runActionCommand,
+	commandStop:      App.runActionCommand,
+	commandRestart:   App.runActionCommand,
+	commandResume:    App.runActionCommand,
+	commandRepair:    App.runActionCommand,
 	commandMount:     App.runMount,
 	commandUmount:    App.runUmount,
 	commandConfig:    func(a App, _ context.Context, opts options) int { return a.runConfig(opts) },
 	commandLocks:     func(a App, _ context.Context, opts options) int { return a.runLocks(opts) },
 	commandProcesses: App.runProcesses,
-	commandReap:      func(a App, ctx context.Context, opts options) int { return a.runAction(ctx, opts, opts.command) },
+	commandReap:      App.runActionCommand,
 	commandPreflight: App.runPreflight,
 	commandDaemon:    App.runDaemon,
 	commandNotifier:  App.runNotifier,
@@ -448,9 +453,6 @@ func (a App) prepareOptions(args []string) (options, int, bool) {
 func (a App) dispatchCommand(ctx context.Context, opts options) int {
 	if handler, ok := commandHandlers[opts.command]; ok {
 		return handler(a, ctx, opts)
-	}
-	if opts.command == commandReload {
-		return a.runServiceReload(ctx, opts)
 	}
 	if opts.command == "" {
 		fmt.Fprintln(a.Stderr, "usage error: missing command")
