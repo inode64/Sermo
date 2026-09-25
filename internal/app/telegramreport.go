@@ -113,16 +113,9 @@ func (r *telegramReporter) SLA(ctx context.Context, service string) ([]telegramb
 
 func (r *telegramReporter) Events(ctx context.Context, limit int) ([]telegrambot.EventLine, error) {
 	events := r.backend().Events(ctx, limit)
-	lines := make([]telegrambot.EventLine, 0, len(events))
-	for _, e := range events {
-		lines = append(lines, telegrambot.EventLine{
-			Time:    e.Time,
-			Target:  e.Target(),
-			Kind:    e.Kind,
-			Message: e.Message,
-		})
-	}
-	return lines, nil
+	return mapSlice(events, func(e web.Event) telegrambot.EventLine {
+		return telegrambot.EventLine{Time: e.Time, Target: e.Target(), Kind: e.Kind, Message: e.Message}
+	}), nil
 }
 
 func (r *telegramReporter) serviceExists(ctx context.Context, name string) bool {

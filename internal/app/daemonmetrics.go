@@ -45,7 +45,6 @@ type daemonMetricCounters struct {
 
 type daemonMetricSample struct {
 	at            time.Time
-	pid           int
 	rss           uint64
 	rssOK         bool
 	memoryPercent float64
@@ -175,13 +174,13 @@ func (s *DaemonMetricSampler) Series(since time.Duration) web.DaemonMetrics {
 		func(p daemonMetricSample) (float64, bool) { return float64(p.rss), p.rssOK },
 		func(p daemonMetricSample) (float64, bool) { return p.io, p.ioReady },
 	)
-	return daemonMetricsView(since, sample, triplet)
+	return daemonMetricsView(s.pid, since, sample, triplet)
 }
 
-func daemonMetricsView(since time.Duration, sample daemonMetricSample, triplet persistentMetricTriplet) web.DaemonMetrics {
+func daemonMetricsView(pid int, since time.Duration, sample daemonMetricSample, triplet persistentMetricTriplet) web.DaemonMetrics {
 	return web.DaemonMetrics{
 		Since:   since.String(),
-		Current: daemonRuntime(sample),
+		Current: daemonRuntime(pid, sample),
 		CPU:     triplet.cpu,
 		Memory:  triplet.memory,
 		IO:      triplet.io,
@@ -191,7 +190,7 @@ func daemonMetricsView(since time.Duration, sample daemonMetricSample, triplet p
 func (s *DaemonMetricSampler) sampleLocked() daemonMetricSample {
 	at := s.now()
 	pid := s.pid
-	cur := daemonMetricSample{at: at, pid: pid, numCPU: s.reader.NumCPU()}
+	cur := daemonMetricSample{at: at, numCPU: s.reader.NumCPU()}
 	if rss, ok := s.reader.ProcessRSS(pid); ok {
 		cur.rss = rss
 		cur.rssOK = true
@@ -256,7 +255,7 @@ func (s *DaemonMetricSampler) persistentSeries(sample daemonMetricSample, since 
 	if !ok {
 		return web.DaemonMetrics{}, false
 	}
-	return daemonMetricsView(since, sample, triplet), true
+	return daemonMetricsView(s.pid, since, sample, triplet), true
 }
 
 type persistentMetricRecorder func(string, float64, time.Time) error
@@ -331,10 +330,10 @@ func (s *DaemonMetricSampler) trimLocked(cutoff time.Time) {
 	s.samples = trimBefore(s.samples, cutoff, func(sample daemonMetricSample) time.Time { return sample.at })
 }
 
-func daemonRuntime(sample daemonMetricSample) web.DaemonRuntime {
+func daemonRuntime(pid int, sample daemonMetricSample) web.DaemonRuntime {
 	out := web.DaemonRuntime{
 		At:       sample.at.UTC().Format(time.RFC3339),
-		PID:      sample.pid,
+		PID:      pid,
 		CPU:      sample.cpu,
 		CPUReady: sample.cpuReady,
 		IORead:   sample.ioRead,
