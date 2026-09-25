@@ -2,6 +2,7 @@ package checks
 
 import (
 	"bufio"
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -11,7 +12,6 @@ import (
 	"path/filepath"
 	"sermo/internal/hostfs"
 	"slices"
-	"sort"
 	"strconv"
 	"strings"
 )
@@ -254,11 +254,11 @@ func topHolders(byCommand map[string]uint64, limit int) []InotifyHolder {
 	for command, instances := range byCommand {
 		holders = append(holders, InotifyHolder{Command: command, Instances: instances})
 	}
-	sort.Slice(holders, func(i, j int) bool {
-		if holders[i].Instances != holders[j].Instances {
-			return holders[i].Instances > holders[j].Instances
+	slices.SortFunc(holders, func(a, b InotifyHolder) int {
+		if byInstances := cmp.Compare(b.Instances, a.Instances); byInstances != 0 {
+			return byInstances
 		}
-		return holders[i].Command < holders[j].Command
+		return strings.Compare(a.Command, b.Command)
 	})
 	if len(holders) > limit {
 		holders = holders[:limit]

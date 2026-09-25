@@ -6,7 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -389,7 +389,7 @@ func enrichRaidSysfs(st *RaidStatus, root string) {
 				Errors: readTrim(filepath.Join(memberPath, "errors")), BadBlocks: readTrim(filepath.Join(memberPath, "bad_blocks")),
 			})
 		}
-		sort.Slice(detail.Members, func(i, j int) bool { return detail.Members[i].Name < detail.Members[j].Name })
+		slices.SortFunc(detail.Members, func(a, b RaidMemberStatus) int { return strings.Compare(a.Name, b.Name) })
 	}
 }
 
@@ -486,7 +486,7 @@ func raidTransitions(previous map[string]RaidArrayStatus, current []RaidArraySta
 			names = append(names, name)
 		}
 	}
-	sort.Strings(names)
+	slices.Sort(names)
 	var out []RaidTransition
 	for _, name := range names {
 		cur := currentByName[name]

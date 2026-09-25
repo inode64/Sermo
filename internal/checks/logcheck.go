@@ -10,7 +10,6 @@ import (
 	"path/filepath"
 	"regexp"
 	"slices"
-	"sort"
 	"strings"
 	"syscall"
 	"time"
@@ -141,7 +140,7 @@ func (c logCheck) expand() ([]string, error) {
 	if err != nil {
 		return nil, fmt.Errorf("glob: %w", err)
 	}
-	sort.Strings(paths)
+	slices.Sort(paths)
 	return paths, nil
 }
 
