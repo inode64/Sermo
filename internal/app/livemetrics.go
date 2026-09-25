@@ -1,7 +1,5 @@
 package app
 
-import "sync"
-
 // ServiceLive is a service's most recent live CPU readings, published per cycle
 // by its worker and read by the web detail view. CPU is the whole-machine rate
 // (% of all cores); CPUThread is the busiest single thread against one core
@@ -27,34 +25,21 @@ type ServiceLive struct {
 // per-process and aggregate CPU without re-sampling /proc (which would corrupt
 // the engine's rate deltas). Workers publish after every cycle; the web reads.
 // Safe for concurrent use, mirroring Snapshots.
-type LiveMetrics struct {
-	mu        sync.RWMutex
-	byService map[string]ServiceLive
-}
+type LiveMetrics registry[ServiceLive]
 
 // NewLiveMetrics returns an empty registry.
 func NewLiveMetrics() *LiveMetrics {
-	return &LiveMetrics{byService: map[string]ServiceLive{}}
+	return (*LiveMetrics)(newRegistry[ServiceLive]())
 }
 
-// Publish replaces a service's live CPU sample. A nil registry is a no-op so
-// callers need not nil-check.
-func (l *LiveMetrics) Publish(service string, sl ServiceLive) {
-	if l == nil {
-		return
-	}
-	l.mu.Lock()
-	l.byService[service] = sl
-	l.mu.Unlock()
+// Publish replaces the latest immutable snapshot for service.
+func (r *LiveMetrics) Publish(service string, value ServiceLive) {
+	(*registry[ServiceLive])(r).Publish(service, value)
 }
 
-// Get returns a service's last live CPU sample, and false if none exists yet.
-func (l *LiveMetrics) Get(service string) (ServiceLive, bool) {
-	if l == nil {
-		return ServiceLive{}, false
-	}
-	l.mu.RLock()
-	defer l.mu.RUnlock()
-	sl, ok := l.byService[service]
-	return sl, ok
+// Get returns the latest snapshot, or false when the service is unobserved.
+func (r *LiveMetrics) Get(service string) (ServiceLive, bool) {
+	var value ServiceLive
+	ok := (*registry[ServiceLive])(r).get(service, &value)
+	return value, ok
 }
