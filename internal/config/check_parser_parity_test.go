@@ -72,7 +72,7 @@ func TestCheckFieldParsersAgreeWithBuilders(t *testing.T) {
 
 func TestSharedLogParserReportsAllInvalidFields(t *testing.T) {
 	var diagnostics []string
-	validateLogCheck("checks.probe", map[string]any{"path": "relative", "regex": "(", "count": map[string]any{"op": "bad", "value": "NaN"}}, func(format string, args ...any) {
+	singleShotCheckValidators[checks.CheckTypeLog]("checks.probe", map[string]any{"path": "relative", "regex": "(", "count": map[string]any{"op": "bad", "value": "NaN"}}, "", func(format string, args ...any) {
 		diagnostics = append(diagnostics, fmt.Sprintf(format, args...))
 	})
 	joined := strings.Join(diagnostics, "\n")
