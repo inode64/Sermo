@@ -2,7 +2,6 @@ package app
 
 import (
 	"fmt"
-	"slices"
 	"time"
 
 	"sermo/internal/checks"
@@ -35,7 +34,7 @@ func (w *Watch) loadRuntimeState() {
 	if policy := remediationFromRecord(rec.Policy); policy != nil {
 		w.policyState = *policy
 	}
-	w.persistedState = cloneWatchRuntimeRecord(rec)
+	w.persistedState = rec
 	w.stateRestored = true
 }
 
@@ -51,7 +50,7 @@ func (w *Watch) persistRuntimeState() {
 		w.emitWatchStateError("persist watch state", err)
 		return
 	}
-	w.persistedState = cloneWatchRuntimeRecord(rec)
+	w.persistedState = rec
 }
 
 func (w *Watch) runtimeRecord() state.WatchRuntimeRecord {
@@ -121,13 +120,6 @@ func (w *Watch) emitWatchStateError(action string, err error) {
 	if err != nil {
 		w.emit(Event{Watch: w.Name, Kind: eventKindError, Message: fmt.Sprintf("%s: %v", action, err)})
 	}
-}
-
-func cloneWatchRuntimeRecord(rec state.WatchRuntimeRecord) state.WatchRuntimeRecord {
-	rec.Window.History = slices.Clone(rec.Window.History)
-	rec.Window.TimedHistory = slices.Clone(rec.Window.TimedHistory)
-	rec.Policy.RecentActions = slices.Clone(rec.Policy.RecentActions)
-	return rec
 }
 
 func watchRuntimeRecordsEqual(a, b state.WatchRuntimeRecord) bool {

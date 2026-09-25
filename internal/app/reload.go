@@ -38,7 +38,7 @@ func captureWatchState(watches []*Watch) map[watchStateKey]watchSnapshot {
 			settled:        w.settled,
 			stateLoaded:    w.stateLoaded,
 			stateRestored:  w.stateRestored,
-			persistedState: cloneWatchRuntimeRecord(w.persistedState),
+			persistedState: w.persistedState,
 			policyState:    *cloneRemediationState(&w.policyState),
 		}
 		if cloned := w.state.Clone(); cloned != nil {

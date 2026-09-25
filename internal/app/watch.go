@@ -166,7 +166,7 @@ type Watch struct {
 	settled        bool      // true after the startup observation cycle completed
 	stateLoaded    bool
 	stateRestored  bool
-	persistedState state.WatchRuntimeRecord
+	persistedState state.WatchRuntimeRecord // immutable snapshot; replaced after successful persistence
 	unavailable    bool
 }
 
