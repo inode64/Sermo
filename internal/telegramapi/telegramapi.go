@@ -58,4 +58,7 @@ func ValidParseMode(s string) bool { return slices.Contains(parseModes, s) }
 
 // MethodURL renders the endpoint for one method call with the bot token
 // embedded, the single spelling both callers share.
-func MethodURL(token, method string) string { return APIBase + token + "/" + method }
+func MethodURL(token, method string) string { return MethodURLAt(APIBase, token, method) }
+
+// MethodURLAt renders a method endpoint at an explicitly supplied API base.
+func MethodURLAt(base, token, method string) string { return base + token + "/" + method }
