@@ -86,18 +86,11 @@ func summaryValueUnit(name string, data map[string]any) string {
 }
 
 func summaryValue(name string, entry, data map[string]any) (any, bool) {
-	switch name {
-	case DataKeyValue:
+	if name == DataKeyValue {
 		if value, ok := data[DataKeyValue]; ok {
 			return value, true
 		}
 		value, ok := data[DataKeyResult]
-		return value, ok
-	case DataKeyTrigger:
-		value, ok := data[DataKeyTrigger]
-		return value, ok
-	case DataKeyNumberFiles:
-		value, ok := data[DataKeyNumberFiles]
 		return value, ok
 	}
 	if key, ok := strings.CutPrefix(name, "check."); ok {
