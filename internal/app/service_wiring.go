@@ -117,7 +117,7 @@ func BuildServiceRuntime(ctx context.Context, cfg ServiceRuntimeConfig) ServiceR
 		// jobs" for a crashed fcron — which latched its own block action and made
 		// the service unrepairable through Sermo.
 		ProcessCount:        func(user, exe, exeDir string) int { return discoverer.CountInTree(selectors, user, exe, exeDir) },
-		PidfileFallbackPIDs: pidfileFallbackPIDs(deps, backendPIDs, procInfo),
+		PidfileFallbackPIDs: pidfileFallbackPIDs(needPidfileFallback, backendPIDs, procInfo),
 		StaleBinaries:       func() []process.StaleBinary { return discoverer.StaleBinaries(selectors) },
 		Strays: func() []process.Process {
 			procs, _ := discoverer.Discover(selectors)
@@ -157,8 +157,8 @@ func BuildServiceRuntime(ctx context.Context, cfg ServiceRuntimeConfig) ServiceR
 	}
 }
 
-func pidfileFallbackPIDs(deps Deps, backendPIDs func() []int, info servicemgr.ProcInfo) func() []int {
-	if deps.Backend != servicemgr.BackendSystemd || backendPIDs == nil {
+func pidfileFallbackPIDs(needed bool, backendPIDs func() []int, info servicemgr.ProcInfo) func() []int {
+	if !needed {
 		return nil
 	}
 	if info.Pidfile != "" {
@@ -206,7 +206,7 @@ func serviceNoResidentProcess(tree map[string]any, selectors []process.Selector,
 	if noResidentProcess(tree) {
 		return true
 	}
-	if processes, configured := tree[config.SectionProcesses].(map[string]any); configured && len(processes) > 0 && len(selectors) == 0 {
+	if processes, configured := tree[config.SectionProcesses].(map[string]any); configured && len(processes) > 0 {
 		return false
 	}
 	if len(selectors) > 0 || len(cfgval.StringList(tree[config.ServiceKeyPidfile])) > 0 {
