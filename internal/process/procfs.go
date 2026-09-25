@@ -287,18 +287,18 @@ func readCmdline(pid int) []string {
 	return parts
 }
 
-// OSUserResolver resolves a selector user name (or numeric id) to a real UID
+// osUserResolver resolves a selector user name (or numeric id) to a real UID
 // through the passwd database.
-func OSUserResolver(name string) (uint32, bool) {
+func osUserResolver(name string) (uint32, bool) {
 	if uid, err := strconv.ParseUint(name, numericIDBase, numericIDBits); err == nil {
 		return uint32(uid), true
 	}
 	return nativeUserID(name)
 }
 
-// OSGroupResolver resolves a group name (or numeric gid string) to its GID via
-// the OS group database — the group analog of OSUserResolver, native Go.
-func OSGroupResolver(name string) (uint32, bool) {
+// osGroupResolver resolves a group name (or numeric gid string) to its GID via
+// the OS group database — the group analog of osUserResolver, native Go.
+func osGroupResolver(name string) (uint32, bool) {
 	if gid, err := strconv.ParseUint(name, numericIDBase, numericIDBits); err == nil {
 		return uint32(gid), true
 	}

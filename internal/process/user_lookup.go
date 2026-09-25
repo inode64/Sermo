@@ -132,7 +132,7 @@ func DefaultUserLookup() *UserLookup {
 // ResolveUser resolves a user name or numeric UID to a UID.
 func (l *UserLookup) ResolveUser(name string) (uint32, bool) {
 	if l == nil {
-		return OSUserResolver(name)
+		return osUserResolver(name)
 	}
 	return l.resolveID(name, l.users, nativeUserID, l.getentUserID)
 }
@@ -140,7 +140,7 @@ func (l *UserLookup) ResolveUser(name string) (uint32, bool) {
 // ResolveGroup resolves a group name or numeric GID to a GID.
 func (l *UserLookup) ResolveGroup(name string) (uint32, bool) {
 	if l == nil {
-		return OSGroupResolver(name)
+		return osGroupResolver(name)
 	}
 	return l.resolveID(name, l.groups, nativeGroupID, l.getentGroupID)
 }

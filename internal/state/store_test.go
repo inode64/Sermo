@@ -563,14 +563,14 @@ func TestPruneBeforeDropsHistoryAtEveryResolution(t *testing.T) {
 	}
 
 	now := recent.Add(time.Minute)
-	result, err := s.PruneBefore(context.Background(), recent)
+	result, err := s.pruneBefore(context.Background(), recent)
 	if err != nil {
-		t.Fatalf("PruneBefore: %v", err)
+		t.Fatalf("pruneBefore: %v", err)
 	}
 	// Two SLA rows (service and check) plus four metric rows, all at the finest
 	// resolution, and the one old event.
 	if result.Archives != 6 || result.Events != 1 || result.Pruned() != 7 {
-		t.Fatalf("PruneBefore = %+v (pruned %d), want 6 archive rows and 1 event", result, result.Pruned())
+		t.Fatalf("pruneBefore = %+v (pruned %d), want 6 archive rows and 1 event", result, result.Pruned())
 	}
 
 	if value, err := s.sumSLA("web", "", 2*time.Minute, now); err != nil || value.Total != 1 {
@@ -670,7 +670,7 @@ func TestOpenCreatesParentDir(t *testing.T) {
 // without the trailing checkpoint. Two attempts to reproduce that condition failed in
 // opposite directions: with no reader, VACUUM truncates on its own; with a held read
 // transaction, the checkpoint cannot truncate at all, which is not what a daemon does
-// either. The ordering fix in Store.Compact was verified against a live host instead:
+// either. The ordering fix in Store.compact was verified against a live host instead:
 // after `state compact` the database held 90 pages in a 157 MB file, and a checkpoint
 // took it to 360 KB.
 func TestCompactReturnsSpaceToTheFilesystem(t *testing.T) {
@@ -695,16 +695,16 @@ func TestCompactReturnsSpaceToTheFilesystem(t *testing.T) {
 			}
 		}
 	}
-	if err := s.Compact(context.Background()); err != nil {
-		t.Fatalf("Compact (grow): %v", err)
+	if err := s.compact(context.Background()); err != nil {
+		t.Fatalf("compact (grow): %v", err)
 	}
 	grown := fileSize(t, path)
 
-	if _, err := s.PruneBefore(context.Background(), at.Add(1000*time.Hour)); err != nil {
-		t.Fatalf("PruneBefore: %v", err)
+	if _, err := s.pruneBefore(context.Background(), at.Add(1000*time.Hour)); err != nil {
+		t.Fatalf("pruneBefore: %v", err)
 	}
-	if err := s.Compact(context.Background()); err != nil {
-		t.Fatalf("Compact (shrink): %v", err)
+	if err := s.compact(context.Background()); err != nil {
+		t.Fatalf("compact (shrink): %v", err)
 	}
 	if shrunk := fileSize(t, path); shrunk >= grown {
 		t.Fatalf("file did not shrink: %d bytes before compaction, %d after; freed pages must be returned to the filesystem, not just to the freelist", grown, shrunk)

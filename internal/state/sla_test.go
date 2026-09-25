@@ -87,7 +87,7 @@ func TestSLAPercentText(t *testing.T) {
 		want  string
 	}{
 		{name: "rounded percentage", up: 2, total: 3, want: "66.67%"},
-		{name: "no observations", up: 0, total: 0, want: SLAUnavailable},
+		{name: "no observations", up: 0, total: 0, want: slaUnavailable},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

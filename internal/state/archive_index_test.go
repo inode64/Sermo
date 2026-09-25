@@ -25,7 +25,7 @@ func TestArchiveMaintenancePlansWithoutSecondaryIndexes(t *testing.T) {
 	// A fleet-shaped corpus: 40 services × 5 checks of per-minute history over the
 	// per-minute retention, then consolidated up the ladder.
 	now := time.Date(2026, 6, 7, 12, 0, 0, 0, time.UTC)
-	start := now.Add(-DefaultRetention1m)
+	start := now.Add(-defaultRetention1m)
 	for minute := 0; start.Add(time.Duration(minute) * time.Minute).Before(now); minute++ {
 		at := start.Add(time.Duration(minute) * time.Minute)
 		for svc := range 40 {
@@ -44,11 +44,11 @@ func TestArchiveMaintenancePlansWithoutSecondaryIndexes(t *testing.T) {
 			}
 		}
 	}
-	if _, err := s.Rollup(context.Background(), now); err != nil {
-		t.Fatalf("Rollup: %v", err)
+	if _, err := s.rollup(context.Background(), now); err != nil {
+		t.Fatalf("rollup: %v", err)
 	}
-	if err := s.Compact(context.Background()); err != nil {
-		t.Fatalf("Compact: %v", err)
+	if err := s.compact(context.Background()); err != nil {
+		t.Fatalf("compact: %v", err)
 	}
 
 	logArchiveSizes(t, s, filepath.Join(dir, Filename))

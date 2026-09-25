@@ -42,24 +42,24 @@ const archiveCount = 5
 // request for exactly `since=window` does not land on a just-pruned edge, and
 // the result is rounded to a whole number of hours or days.
 const (
-	// DefaultRetention1m keeps per-minute samples long enough to investigate
+	// defaultRetention1m keeps per-minute samples long enough to investigate
 	// a fresh incident at full resolution. It is also the cascade's slack: the
 	// consolidation job must not fall behind by more than this, or per-minute
 	// rows would be pruned before the 5-minute archive has read them. The prune
 	// safety floor makes that a delay rather than data loss.
-	DefaultRetention1m = 3 * time.Hour
-	// DefaultRetention5m covers the 24-hour window.
-	DefaultRetention5m = 30 * time.Hour
-	// DefaultRetention1h covers the 7-day window.
-	DefaultRetention1h = 9 * slaSpanDay
-	// DefaultRetention6h covers the 30-day window.
-	DefaultRetention6h = 38 * slaSpanDay
+	defaultRetention1m = 3 * time.Hour
+	// defaultRetention5m covers the 24-hour window.
+	defaultRetention5m = 30 * time.Hour
+	// defaultRetention1h covers the 7-day window.
+	defaultRetention1h = 9 * slaSpanDay
+	// defaultRetention6h covers the 30-day window.
+	defaultRetention6h = 38 * slaSpanDay
 	// DefaultRetention1d covers the rolling-year window the SLA report needs.
 	DefaultRetention1d = historyRetentionDays * slaSpanDay
-	// DefaultRetentionEvents bounds the operator-visible event feed. It is the
+	// defaultRetentionEvents bounds the operator-visible event feed. It is the
 	// only history that still records the exact timestamp of an old incident,
 	// which the coarse archives deliberately no longer localize.
-	DefaultRetentionEvents = 30 * slaSpanDay
+	defaultRetentionEvents = 30 * slaSpanDay
 	// DefaultRollupInterval is the consolidation and prune cadence: the span of the
 	// second-finest archive, so one pass per bucket keeps every coarser archive at
 	// most one interval behind the live samples. Derived from the ladder rather than
@@ -88,12 +88,12 @@ type Retention struct {
 // DefaultRetention returns the built-in resolution ladder.
 func DefaultRetention() Retention {
 	return Retention{
-		Minute:      DefaultRetention1m,
-		FiveMinutes: DefaultRetention5m,
-		Hour:        DefaultRetention1h,
-		SixHours:    DefaultRetention6h,
+		Minute:      defaultRetention1m,
+		FiveMinutes: defaultRetention5m,
+		Hour:        defaultRetention1h,
+		SixHours:    defaultRetention6h,
 		Day:         DefaultRetention1d,
-		Events:      DefaultRetentionEvents,
+		Events:      defaultRetentionEvents,
 	}
 }
 

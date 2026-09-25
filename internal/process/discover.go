@@ -20,7 +20,7 @@ import (
 type Discoverer struct {
 	Reader       Reader
 	ResolveUser  UserResolver
-	ResolveGroup UserResolver // group-name -> GID (OSGroupResolver); for command_match group
+	ResolveGroup UserResolver // group-name -> GID (osGroupResolver); for command_match group
 	// BackendPIDs reports backend-provided PIDs (systemd cgroup process set and
 	// MainPID), tried first. Optional.
 	//

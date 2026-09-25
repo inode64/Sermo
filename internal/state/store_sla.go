@@ -51,9 +51,9 @@ type SLACounts struct {
 	DownBuckets int64 `json:"down_buckets"`
 }
 
-// SLAUnavailable is the text representation for an SLA window with no observed
+// slaUnavailable is the text representation for an SLA window with no observed
 // cycles. Missing observations are unknown, not zero availability.
-const SLAUnavailable = "n/a"
+const slaUnavailable = "n/a"
 
 // Ratio returns the availability fraction in [0,1] and whether the window has any
 // observed cycles. With no data (total==0) availability is unknown, not 0%.
@@ -64,7 +64,7 @@ func (c SLACounts) Ratio() (float64, bool) {
 	return float64(c.Up) / float64(c.Total), true
 }
 
-// PercentText renders the availability as a percentage, or SLAUnavailable when
+// PercentText renders the availability as a percentage, or slaUnavailable when
 // the window has no observations.
 func (c SLACounts) PercentText() string {
 	return slaPercentText(c.Up, c.Total)
@@ -120,7 +120,7 @@ type SLAPoint struct {
 
 func slaPercentText(up, total int64) string {
 	if total <= 0 {
-		return SLAUnavailable
+		return slaUnavailable
 	}
 	return fmt.Sprintf("%.2f%%", float64(up)/float64(total)*metrics.PercentScale)
 }
