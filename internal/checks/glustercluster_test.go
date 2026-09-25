@@ -254,3 +254,26 @@ func TestParseGlusterPeersNormalizesOnce(t *testing.T) {
 		})
 	}
 }
+
+func TestGlusterClusterDisconnectedPeerAliases(t *testing.T) {
+	for _, configured := range []string{"zeus", "zeus.internal", "missing"} {
+		t.Run(configured, func(t *testing.T) {
+			results := glusterClusterResults()
+			results["gluster --mode=script --xml peer status"] = glusterXML(`
+<peerStatus><peer><hostname>zeus</hostname><hostnames><hostname>zeus.internal</hostname></hostnames><connected>0</connected><state>3</state></peer></peerStatus>`)
+			check := glusterClusterCheck{name: "cluster", timeout: time.Second, runner: cliRunner(results, nil), peers: []string{configured}}
+			result := check.Run(t.Context())
+			want := []string{"peer zeus is disconnected"}
+			if configured == "missing" {
+				want = append([]string{"peer missing is absent"}, want...)
+			}
+			issues, ok := result.Data[DataKeyGlusterIssues].([]string)
+			if result.OK || result.Unavailable || !ok || !slices.Equal(issues, want) {
+				t.Fatalf("result = %+v, want issues %v", result, want)
+			}
+			if result.Data[DataKeyGlusterPeersConnected] != 0 {
+				t.Fatalf("disconnected peer counted as connected: %+v", result.Data)
+			}
+		})
+	}
+}

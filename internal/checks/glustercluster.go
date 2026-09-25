@@ -144,9 +144,7 @@ func (c glusterClusterCheck) evaluatePeers(peers []glusterPeerXML, observation *
 		}
 		if peer.healthy() {
 			observation.connectedPeers++
-			continue
 		}
-		observation.issues = append(observation.issues, "peer "+name+" is disconnected")
 	}
 	for _, name := range observation.disconnectedPeers {
 		observation.issues = append(observation.issues, "peer "+name+" is disconnected")
