@@ -151,13 +151,9 @@ func defaultBlockDeviceSize(device string) (uint64, error) {
 		return 0, fmt.Errorf("block device %q: not a kernel device name", device)
 	}
 	path := filepath.Join(sysBlockPath, name, sysBlockSizeFile)
-	sectors, err := readProcUint(path)
-	if err != nil {
-		// Wrapped, not replaced: blockDeviceMissing tells an absent device from
-		// an unreadable one through errors.Is(err, fs.ErrNotExist).
-		return 0, err
-	}
-	return sectors, nil
+	// Wrapped, not replaced: blockDeviceMissing tells an absent device from
+	// an unreadable one through errors.Is(err, fs.ErrNotExist).
+	return readProcUint(path)
 }
 
 // blockDeviceName reduces a configured device to its bare kernel name. Anything
