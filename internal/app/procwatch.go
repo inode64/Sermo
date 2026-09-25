@@ -555,8 +555,10 @@ func (w *procWatcher) matchingProcess(pid int) (ProcInfo, bool) {
 	if !ok {
 		return ProcInfo{}, false
 	}
-	if i := slices.IndexFunc(samples, func(sample ProcInfo) bool { return sample.PID == pid }); samples != nil && i >= 0 && i < len(samples) {
-		return samples[i], true
+	for _, sample := range samples {
+		if sample.PID == pid {
+			return sample, true
+		}
 	}
 	return ProcInfo{}, false
 }
