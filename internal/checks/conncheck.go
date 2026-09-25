@@ -162,7 +162,7 @@ func (c connCheck) probeResult(ctx context.Context) (conn.Result, time.Duration,
 }
 
 func (c connCheck) changed(res conn.Result) (problems []string, extra map[string]any, changed bool) {
-	if c.state == nil {
+	if !c.onChange && !c.onVersionChange {
 		return nil, nil, false
 	}
 	const connChangeExtraInitialCapacity = 2

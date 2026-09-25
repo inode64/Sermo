@@ -53,7 +53,7 @@ func (c configCheck) Run(ctx context.Context) Result {
 	}
 
 	// Change detection: alert when a watched config file changed since last cycle.
-	if c.onChange && c.state != nil && len(c.paths) > 0 {
+	if c.onChange && len(c.paths) > 0 {
 		fp := configFingerprint(c.paths)
 		if c.state.primed && fp != c.state.last {
 			c.state.last = fp
