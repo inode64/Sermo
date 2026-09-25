@@ -3,7 +3,7 @@ package checks
 import (
 	"context"
 	"fmt"
-	"os"
+	"sermo/internal/hostfs"
 	"strconv"
 	"strings"
 	"time"
@@ -122,7 +122,7 @@ func defaultSwapSampler() (SwapSample, error) {
 		return SwapSample{}, err
 	}
 	s := SwapSample{TotalBytes: info.SwapTotal, FreeBytes: info.SwapFree}
-	if vm, err := os.ReadFile(procVMStatPath); err == nil {
+	if vm, err := hostfs.ReadFile(procVMStatPath); err == nil {
 		pagesIn, pagesOut, err := parseSwapVMStat(string(vm))
 		if err != nil {
 			return s, err

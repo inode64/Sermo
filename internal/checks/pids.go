@@ -3,7 +3,7 @@ package checks
 import (
 	"context"
 	"fmt"
-	"os"
+	"sermo/internal/hostfs"
 	"strconv"
 	"strings"
 )
@@ -41,7 +41,7 @@ func (c pidsCheck) Run(_ context.Context) Result {
 // defaultPidsSampler reads the total scheduling entities from the fourth loadavg
 // field ("running/total") and the ceiling from bindingThreadCeiling.
 func defaultPidsSampler() (PidsSample, error) {
-	data, err := os.ReadFile(procLoadavgPath)
+	data, err := hostfs.ReadFile(procLoadavgPath)
 	if err != nil {
 		return PidsSample{}, fmt.Errorf("read %s: %w", procLoadavgPath, err)
 	}

@@ -3,7 +3,7 @@ package checks
 import (
 	"context"
 	"fmt"
-	"os"
+	"sermo/internal/hostfs"
 	"strconv"
 
 	"sermo/internal/process"
@@ -29,7 +29,7 @@ func (c zombieCheck) Run(_ context.Context) Result {
 
 // defaultZombieSampler counts processes whose /proc/<pid>/stat run state is zombie.
 func defaultZombieSampler() (uint64, bool) {
-	entries, err := os.ReadDir(procRootPath)
+	entries, err := hostfs.ReadDir(procRootPath)
 	if err != nil {
 		return 0, false
 	}

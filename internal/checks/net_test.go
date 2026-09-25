@@ -374,3 +374,27 @@ func TestNetCheckInventsNoIdentityBeforeItObservedOne(t *testing.T) {
 		}
 	}
 }
+
+func TestReadTextFileRequiresCleanAbsolutePath(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "value")
+	if err := os.WriteFile(path, []byte("observed\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for _, test := range []struct {
+		name string
+		path string
+		want string
+	}{
+		{name: "absolute", path: path, want: "observed\n"},
+		{name: "relative", path: "value"},
+		{name: "unclean", path: root + "/./value"},
+		{name: "missing", path: filepath.Join(root, "missing")},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if got := ReadTextFile(test.path); got != test.want {
+				t.Fatalf("ReadTextFile(%q) = %q, want %q", test.path, got, test.want)
+			}
+		})
+	}
+}

@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sermo/internal/hostfs"
 	"slices"
 	"strconv"
 	"strings"
@@ -267,7 +268,7 @@ func RaidTransitions(result Result) []RaidTransition {
 // defaultRaidSampler reads mdstat, then enriches each discovered array with
 // read-only sysfs member state. Missing sysfs data is normal on partial kernels.
 func defaultRaidSampler() (RaidStatus, error) {
-	b, err := os.ReadFile(procMDStatPath)
+	b, err := hostfs.ReadFile(procMDStatPath)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return RaidStatus{}, nil
@@ -372,7 +373,7 @@ func enrichRaidSysfs(st *RaidStatus, root string) {
 		mdPath := filepath.Join(root, detail.Name, "md")
 		detail.SyncAction = readTrim(filepath.Join(mdPath, raidSyncActionFile))
 		detail.MismatchCount = readTrim(filepath.Join(mdPath, "mismatch_cnt"))
-		entries, err := os.ReadDir(mdPath)
+		entries, err := hostfs.ReadDir(mdPath)
 		if err != nil {
 			continue
 		}

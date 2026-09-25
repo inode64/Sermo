@@ -3,7 +3,7 @@ package checks
 import (
 	"context"
 	"fmt"
-	"os"
+	"sermo/internal/hostfs"
 	"time"
 
 	"sermo/internal/cfgval"
@@ -54,7 +54,7 @@ func (c *oomCheck) Run(_ context.Context) Result {
 
 // defaultOomSampler reads the cumulative oom_kill counter from vmstat.
 func defaultOomSampler() (uint64, bool) {
-	data, err := os.ReadFile(procVMStatPath)
+	data, err := hostfs.ReadFile(procVMStatPath)
 	if err != nil {
 		return 0, false
 	}
