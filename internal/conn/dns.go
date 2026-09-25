@@ -83,20 +83,13 @@ var dnsRouteAddrs = func(host string) (net.Addr, net.Addr, error) {
 }
 
 func (dnsProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
-	host := cfg.Host
+	host, port := cfg.hostPortDefaults(dnsDefaultPort)
 	if cfg.Params[ParamKeyResolvconf] == ParamValueTrue {
 		ns, err := firstNameserver(resolvConfPath)
 		if err != nil {
 			return Result{}, err
 		}
 		host = ns
-	}
-	if host == "" {
-		host = DefaultHost
-	}
-	port := cfg.Port
-	if port == 0 {
-		port = dnsDefaultPort
 	}
 	name := cfg.Query
 	if name == "" {
