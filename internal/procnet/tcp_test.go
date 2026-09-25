@@ -1,10 +1,12 @@
 package procnet
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"testing/iotest"
 )
 
 func TestCountPortState(t *testing.T) {
@@ -54,5 +56,21 @@ func TestScanPortStateStops(t *testing.T) {
 	}
 	if seen != 1 {
 		t.Fatalf("visited %d matching rows, want 1 after early stop", seen)
+	}
+}
+
+func TestScanSocketRowsPropagatesErrors(t *testing.T) {
+	failure := errors.New("socket table failed")
+	if err := ScanSocketRows(iotest.ErrReader(failure), MinFields, func([]string) (bool, error) {
+		t.Fatal("callback after failed read")
+		return false, nil
+	}); !errors.Is(err, failure) {
+		t.Fatalf("reader error = %v", err)
+	}
+	err := ScanSocketRows(strings.NewReader("0: 0100007F:0015 00000000:0000 01\n"), MinFields, func([]string) (bool, error) {
+		return false, failure
+	})
+	if !errors.Is(err, failure) {
+		t.Fatalf("callback error = %v", err)
 	}
 }

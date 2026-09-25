@@ -6,26 +6,6 @@ import (
 	"time"
 )
 
-func TestParseProcUDP4Address(t *testing.T) {
-	tests := []struct {
-		in       string
-		wantAddr string
-		wantPort int
-	}{
-		{in: "00000000:0044", wantAddr: "0.0.0.0", wantPort: 68},
-		{in: "0100007F:0035", wantAddr: "127.0.0.1", wantPort: 53},
-	}
-	for _, tt := range tests {
-		addr, port, err := parseProcUDP4Address(tt.in)
-		if err != nil {
-			t.Fatalf("%s: %v", tt.in, err)
-		}
-		if addr != tt.wantAddr || port != tt.wantPort {
-			t.Fatalf("%s = %s:%d, want %s:%d", tt.in, addr, port, tt.wantAddr, tt.wantPort)
-		}
-	}
-}
-
 func TestParseUDP4SocketTable(t *testing.T) {
 	const table = `  sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode
  1576: 00000000:0044 00000000:0000 07 00000000:00000000 00:00000000 00000000     0        0 37159 2 0000000000000000 0
@@ -78,5 +58,12 @@ lease {
 
 	if _, ok, err := parseDHClientLeases(strings.NewReader(leases), "eth2", now); err != nil || ok {
 		t.Fatalf("eth2 should have no active lease, ok=%v err=%v", ok, err)
+	}
+}
+
+func TestUDP4SocketTableRejectsMalformedAddressBeforeFiltering(t *testing.T) {
+	const row = "0: INVALID:0035 00000000:0000 07 0 0 0 0 0 1234\n"
+	if _, found, err := parseUDP4SocketTable(strings.NewReader(row), "", 68); err == nil || found {
+		t.Fatalf("malformed address on another port: found=%v err=%v", found, err)
 	}
 }
