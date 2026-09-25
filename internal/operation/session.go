@@ -22,10 +22,7 @@ func (e Engine) closeResidualSession(ctx context.Context, target SessionTarget, 
 		{PID: boundary.MonitorPID, StartTicks: boundary.MonitorStartTicks, Exe: boundary.Exe, ExeOK: true, UID: boundary.UID},
 		{PID: target.PID, StartTicks: target.StartTicks, Exe: boundary.Exe, ExeOK: true, UID: boundary.UID},
 	}
-	resolve := e.Reaper.ResolveUser
-	if resolve == nil {
-		resolve = process.DefaultUserLookup().ResolveUser
-	}
+	resolve := e.reapResolver()
 	for _, proc := range procs {
 		if !e.ReapSelector.Killable(proc, resolve) {
 			return failSession(result, prefix, errors.New("requires matching reap.kill_only_if for the residual sudo processes"))
