@@ -55,11 +55,11 @@ func TestRecentSamplesRetainsValidHistoryWithoutAllocation(t *testing.T) {
 
 func TestWindowClonePreservesIndependentHistories(t *testing.T) {
 	at := time.Date(2026, 9, 12, 12, 0, 0, 0, time.UTC)
-	original := &WindowState{
-		consecutive: -1, clearConsecutive: -2,
-		history: []bool{true}, timedHistory: []WindowSample{{At: at}},
-		trueSince: at, clearSince: at, firing: true,
-	}
+	original := WindowStateFromSnapshot(WindowStateSnapshot{
+		Consecutive: -1, ClearConsecutive: -2,
+		History: []bool{true}, TimedHistory: []WindowSample{{At: at}},
+		TrueSince: at, ClearSince: at, Firing: true,
+	})
 	clone := original.Clone()
 	clone.history[0] = false
 	clone.timedHistory[0].At = time.Time{}
