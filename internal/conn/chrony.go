@@ -353,6 +353,19 @@ func chronyDialUnix(ctx context.Context, socket string) (net.Conn, error) {
 	if len(local) >= chronySunPathMax {
 		return nil, fmt.Errorf("chrony client socket path %q exceeds %d bytes; use a shorter socket directory", local, chronySunPathMax-1)
 	}
+	// Limit pathname mutations to the configured socket directory; the client
+	// basename is generated locally, never taken from the peer or configuration.
+	root, err := os.OpenRoot(filepath.Dir(socket))
+	if err != nil {
+		return nil, probeErr(ProtocolNameChrony, stepChronyClientSocket, err)
+	}
+	keepRoot := false
+	defer func() {
+		if !keepRoot {
+			_ = root.Close()
+		}
+	}()
+	name := filepath.Base(local)
 	c, err := net.DialUnix(networkUnixgram,
 		&net.UnixAddr{Name: local, Net: networkUnixgram},
 		&net.UnixAddr{Name: socket, Net: networkUnixgram})
@@ -362,7 +375,7 @@ func chronyDialUnix(ctx context.Context, socket string) (net.Conn, error) {
 		// itself failed because something else already holds that name, which
 		// we must not delete.
 		if !errors.Is(err, syscall.EADDRINUSE) {
-			_ = os.Remove(local)
+			_ = root.Remove(name)
 		}
 		return nil, probeErr(ProtocolNameChrony, stepChronyClientSocket, err)
 	}
@@ -370,13 +383,14 @@ func chronyDialUnix(ctx context.Context, socket string) (net.Conn, error) {
 	// socket only we may write. The socket lives in chronyd's own run directory,
 	// which is not world-accessible; a forged reply is additionally rejected by
 	// the per-request random sequence we echo-check.
-	if err := os.Chmod(local, chronyClientSocketMode); err != nil {
+	if err := root.Chmod(name, chronyClientSocketMode); err != nil {
 		_ = c.Close()
-		_ = os.Remove(local)
+		_ = root.Remove(name)
 		return nil, probeErr(ProtocolNameChrony, stepChronyClientSocketMode, err)
 	}
 	ApplyDeadline(ctx, c)
-	return &unlinkOnCloseConn{Conn: c, path: local}, nil
+	keepRoot = true
+	return &unlinkOnCloseConn{Conn: c, path: local, root: root}, nil
 }
 
 // unlinkOnCloseConn removes a client socket's pathname when the connection
@@ -386,6 +400,7 @@ func chronyDialUnix(ctx context.Context, socket string) (net.Conn, error) {
 type unlinkOnCloseConn struct {
 	net.Conn
 	path   string
+	root   *os.Root
 	closed bool
 }
 
@@ -395,7 +410,8 @@ func (c *unlinkOnCloseConn) Close() error {
 	}
 	c.closed = true
 	err := c.Conn.Close()
-	_ = os.Remove(c.path)
+	_ = c.root.Remove(filepath.Base(c.path))
+	_ = c.root.Close()
 	if err != nil {
 		return probeErr(ProtocolNameChrony, stepClose, err)
 	}
