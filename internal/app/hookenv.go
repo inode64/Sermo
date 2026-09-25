@@ -45,9 +45,7 @@ const (
 )
 
 // envAgeSeconds renders a duration as the whole seconds SERMO_AGE_SECONDS
-// carries. Every watch that reports an age emits this variable and addSummaryAge
-// parses it back, so the encoding belongs next to the key rather than restated
-// once per watch.
+// carries. Summary templates consume the typed duration directly.
 func envAgeSeconds(d time.Duration) string {
 	return strconv.FormatInt(int64(d.Seconds()), envFormatBase)
 }

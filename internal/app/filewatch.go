@@ -165,7 +165,7 @@ func (w *fileWatcher) runCycle(ctx context.Context) {
 			return
 		}
 		if w.cond.onDelete && !observeOnly {
-			w.fire(ctx, p, fileChangeDeleted, p+" no longer exists", map[string]string{
+			w.fire(ctx, p, fileChangeDeleted, p+" no longer exists", map[string]any{
 				sermoEnvOld: strconv.FormatInt(w.baseline[p].size, envFormatBase),
 			})
 		}
@@ -317,8 +317,8 @@ func (w *fileWatcher) stateOf(info fs.FileInfo, now time.Time) fileState {
 func (w *fileWatcher) fireSizeThreshold(ctx context.Context, path string, cur fileState) {
 	val := strconv.FormatFloat(w.cond.sizeValue, envFloatFormat, envFloatPrecisionAuto, envFloatBits)
 	w.fire(ctx, path, fileChangeSizeThreshold,
-		fmt.Sprintf("%s size %d %s %s", path, cur.size, w.cond.sizeOp, val), map[string]string{
-			sermoEnvSize:  strconv.FormatInt(cur.size, envFormatBase),
+		fmt.Sprintf("%s size %d %s %s", path, cur.size, w.cond.sizeOp, val), map[string]any{
+			sermoEnvSize:  cur.size,
 			sermoEnvOp:    w.cond.sizeOp,
 			sermoEnvValue: val,
 		})
@@ -329,10 +329,10 @@ func (w *fileWatcher) fireSizeThreshold(ctx context.Context, path string, cur fi
 func (w *fileWatcher) diff(ctx context.Context, path string, prev, cur fileState) {
 	c := w.cond
 	if c.sizeChange && cur.size != prev.size {
-		w.fire(ctx, path, fileChangeSize, fmt.Sprintf("%s size %d -> %d", path, prev.size, cur.size), map[string]string{
+		w.fire(ctx, path, fileChangeSize, fmt.Sprintf("%s size %d -> %d", path, prev.size, cur.size), map[string]any{
 			sermoEnvOld:  strconv.FormatInt(prev.size, envFormatBase),
 			sermoEnvNew:  strconv.FormatInt(cur.size, envFormatBase),
-			sermoEnvSize: strconv.FormatInt(cur.size, envFormatBase),
+			sermoEnvSize: cur.size,
 		})
 	}
 	// Edge-triggered: fire only when the threshold is newly crossed.
@@ -340,14 +340,14 @@ func (w *fileWatcher) diff(ctx context.Context, path string, prev, cur fileState
 		w.fireSizeThreshold(ctx, path, cur)
 	}
 	if c.permChange && cur.perm != prev.perm {
-		w.fire(ctx, path, fileChangePermissions, fmt.Sprintf("%s permissions %04o -> %04o", path, prev.perm, cur.perm), map[string]string{
+		w.fire(ctx, path, fileChangePermissions, fmt.Sprintf("%s permissions %04o -> %04o", path, prev.perm, cur.perm), map[string]any{
 			sermoEnvOld: fmt.Sprintf(fileModeFormat, prev.perm),
 			sermoEnvNew: fmt.Sprintf(fileModeFormat, cur.perm),
 		})
 	}
 	if c.ownerChange && (cur.uid != prev.uid || cur.gid != prev.gid) {
 		w.fire(ctx, path, fileChangeOwner,
-			fmt.Sprintf("%s owner %d:%d -> %d:%d", path, prev.uid, prev.gid, cur.uid, cur.gid), map[string]string{
+			fmt.Sprintf("%s owner %d:%d -> %d:%d", path, prev.uid, prev.gid, cur.uid, cur.gid), map[string]any{
 				sermoEnvOld: fmt.Sprintf(fileOwnerFormat, prev.uid, prev.gid),
 				sermoEnvNew: fmt.Sprintf(fileOwnerFormat, cur.uid, cur.gid),
 			})
@@ -412,7 +412,7 @@ func (w *fileWatcher) runOlderThanHook(ctx context.Context, path string, cur fil
 		sermoEnvChange:    fileChangeOlderThan,
 		sermoEnvMessage:   msg,
 	}
-	maps.Copy(env, extra)
+	watchValuesEnv(env, extra)
 	runWatchHook(ctx, w.hook, w.runner, w.emitEvent, w.name, msg, env)
 }
 
@@ -432,10 +432,10 @@ func (w *fileWatcher) olderThanMessage(path string, cur fileState) string {
 	return fmt.Sprintf("%s was modified at %s and is older than %s", path, cur.modifiedAt.UTC().Format(time.RFC3339), units.HumanizeDuration(w.cond.olderThan))
 }
 
-func (w *fileWatcher) olderThanExtra(cur fileState) map[string]string {
-	return map[string]string{
+func (w *fileWatcher) olderThanExtra(cur fileState) map[string]any {
+	return map[string]any{
 		sermoEnvModifiedAt: cur.modifiedAt.UTC().Format(time.RFC3339),
-		sermoEnvAgeSeconds: envAgeSeconds(cur.age),
+		sermoEnvAgeSeconds: cur.age,
 		sermoEnvValue:      w.cond.olderThan.String(),
 	}
 }
@@ -459,7 +459,7 @@ func firstFileWatchRoot(paths []string, current map[string]fileState) fileState 
 
 // fire runs the watch's hook for one change and emits a matching event. A hook
 // failure is reported but never aborts the cycle (other changes still fire).
-func (w *fileWatcher) fire(ctx context.Context, path, change, msg string, extra map[string]string) {
+func (w *fileWatcher) fire(ctx context.Context, path, change, msg string, extra map[string]any) {
 	msg = w.summaryMessage(path, change, msg, extra)
 	env := map[string]string{
 		sermoEnvWatch:     w.name,
@@ -468,11 +468,11 @@ func (w *fileWatcher) fire(ctx context.Context, path, change, msg string, extra 
 		sermoEnvChange:    change,
 		sermoEnvMessage:   msg,
 	}
-	maps.Copy(env, extra)
+	watchValuesEnv(env, extra)
 	dispatchWatchFire(ctx, w.fireSpec(w.hook), msg, env)
 }
 
-func (w *fileWatcher) summaryMessage(path, change, message string, extra map[string]string) string {
+func (w *fileWatcher) summaryMessage(path, change, message string, extra map[string]any) string {
 	if w.summary == "" {
 		return message
 	}
@@ -482,11 +482,9 @@ func (w *fileWatcher) summaryMessage(path, change, message string, extra map[str
 		checks.DataKeyNumberFiles: w.numberFiles,
 	}
 	addSummaryAge(data, extra)
-	if size, ok := extra[sermoEnvSize]; ok {
-		if value, err := strconv.ParseInt(size, envFormatBase, envFloatBits); err == nil {
-			data[checks.DataKeySize] = value
-			data[checks.DataKeyValue] = value
-		}
+	if size, ok := extra[sermoEnvSize].(int64); ok {
+		data[checks.DataKeySize] = size
+		data[checks.DataKeyValue] = size
 	}
 	if value, ok := extra[sermoEnvValue]; ok {
 		if _, found := data[checks.DataKeyValue]; !found {
