@@ -449,13 +449,15 @@ func parseStorCLIControllers(envelope storCLIEnvelope, observation *hardwareRAID
 		if !hardwareRAIDStateOK(state, "optimal", "ok") {
 			observation.addIssue(fmt.Sprintf("controller %s state %s", id, orUnknown(state)))
 		}
-		observation.CorrectableErrors += integerValue(status["Memory Correctable Errors"])
-		observation.UncorrectableErrors += integerValue(status["Memory Uncorrectable Errors"])
-		if count := integerValue(status["Memory Correctable Errors"]); count > 0 {
-			observation.addIssue(fmt.Sprintf("controller %s correctable memory errors %d", id, count))
+		correctable := integerValue(status["Memory Correctable Errors"])
+		uncorrectable := integerValue(status["Memory Uncorrectable Errors"])
+		observation.CorrectableErrors += correctable
+		observation.UncorrectableErrors += uncorrectable
+		if correctable > 0 {
+			observation.addIssue(fmt.Sprintf("controller %s correctable memory errors %d", id, correctable))
 		}
-		if count := integerValue(status["Memory Uncorrectable Errors"]); count > 0 {
-			observation.addIssue(fmt.Sprintf("controller %s uncorrectable memory errors %d", id, count))
+		if uncorrectable > 0 {
+			observation.addIssue(fmt.Sprintf("controller %s uncorrectable memory errors %d", id, uncorrectable))
 		}
 		for _, finding := range []struct{ key, message string }{
 			{"Any Offline VD Cache Preserved", "has offline virtual-drive cache preserved"},

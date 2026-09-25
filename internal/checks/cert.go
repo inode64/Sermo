@@ -485,11 +485,12 @@ func (v *certVerification) observe(cs tls.ConnectionState) error {
 	}
 	// HTTP connections to IP literals omit SNI. Defer verification until the
 	// response supplies the request hostname rather than verifying without it.
-	if v.verificationName(cs) == "" {
+	name := v.verificationName(cs)
+	if name == "" {
 		return nil
 	}
-	verdict := v.verify(cs.PeerCertificates[0], cs.PeerCertificates[1:], v.verificationName(cs))
-	result := certVerificationResult{chain: certVerificationChain(cs, v.verificationName(cs)), verdict: verdict}
+	verdict := v.verify(cs.PeerCertificates[0], cs.PeerCertificates[1:], name)
+	result := certVerificationResult{chain: certVerificationChain(cs, name), verdict: verdict}
 
 	v.mu.Lock()
 	if len(v.pending) == certVerificationPendingLimit {
