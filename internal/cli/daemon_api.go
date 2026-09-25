@@ -20,24 +20,6 @@ import (
 	"sermo/internal/web"
 )
 
-// pruneDaemonEvents performs the HTTP call to the running sermod's web API
-// to prune its event log. It reads the web: address/port and any
-// admin password from the shared config so local sermoctl can authenticate
-// the same way the operator would via the UI.
-// daemonWebRequest loads config without reporting it, then delegates the HTTP
-// exchange to daemonWebDo. Its command-level caller owns the one user-facing
-// error so a configuration failure is not emitted twice.
-func (a App) daemonWebRequest(ctx context.Context, opts options, method, what string, csrf bool, buildURL func(base string) string) (*http.Response, error) {
-	cfg, err := a.daemonConfig(opts)
-	if err != nil {
-		return nil, fmt.Errorf("load config failed: %w", err)
-	}
-	if cfg == nil {
-		return nil, errors.New("load config returned no configuration")
-	}
-	return a.daemonWebDo(ctx, cfg, method, what, csrf, buildURL)
-}
-
 // daemonConfig reuses the command's resolved configuration when available.
 func (a App) daemonConfig(opts options) (*config.Config, error) {
 	if opts.loadedConfig != nil {
@@ -178,22 +160,12 @@ func daemonWebBasicAuth(password string) string {
 	return daemonWebBasicAuthPrefix + cred
 }
 
-// daemonAPIGet silently loads config for best-effort status enrichment, then
-// performs an authenticated GET against the running sermod web API.
-// daemonAPIJSON loads the config, GETs one daemon API path and decodes a 200
-// body into out. Any transport, status or decode problem reports false: these
-// reads only enrich CLI output and must never turn into a failure.
-func (a App) daemonAPIJSON(ctx context.Context, opts options, path string, out any) bool {
-	cfg, err := a.daemonConfig(opts)
-	if err != nil || cfg == nil {
+// daemonAPIJSONWithConfig performs best-effort enrichment using the command's
+// configuration. Missing configuration, transport or decoding failures are silent.
+func (a App) daemonAPIJSONWithConfig(ctx context.Context, cfg *config.Config, path string, out any) bool {
+	if cfg == nil {
 		return false
 	}
-	return a.daemonAPIJSONWithConfig(ctx, cfg, path, out)
-}
-
-// daemonAPIJSONWithConfig is daemonAPIJSON for callers that already loaded the
-// config, such as service-name canonicalization.
-func (a App) daemonAPIJSONWithConfig(ctx context.Context, cfg *config.Config, path string, out any) bool {
 	body, status, err := a.daemonAPIGetWithConfig(ctx, cfg, path)
 	if err != nil || status != http.StatusOK {
 		return false
@@ -242,9 +214,9 @@ func (a App) fetchDaemonServiceStateWithConfig(ctx context.Context, cfg *config.
 	return detail.State, true
 }
 
-func (a App) fetchDaemonWatchDetail(ctx context.Context, opts options, watch string) (daemonWatchDetail, bool) {
+func (a App) fetchDaemonWatchDetail(ctx context.Context, cfg *config.Config, watch string) (daemonWatchDetail, bool) {
 	var watches []daemonWatchDetail
-	if !a.daemonAPIJSON(ctx, opts, web.APIPathWatches, &watches) {
+	if !a.daemonAPIJSONWithConfig(ctx, cfg, web.APIPathWatches, &watches) {
 		return daemonWatchDetail{}, false
 	}
 	for _, detail := range watches {
@@ -255,12 +227,12 @@ func (a App) fetchDaemonWatchDetail(ctx context.Context, opts options, watch str
 	return daemonWatchDetail{}, false
 }
 
-func (a App) fetchDaemonApplicationStates(ctx context.Context, opts options) map[string]string {
+func (a App) fetchDaemonApplicationStates(ctx context.Context, cfg *config.Config) map[string]string {
 	var apps []struct {
 		Name  string `json:"name"`
 		State string `json:"state"`
 	}
-	if !a.daemonAPIJSON(ctx, opts, web.APIPathApplications, &apps) {
+	if !a.daemonAPIJSONWithConfig(ctx, cfg, web.APIPathApplications, &apps) {
 		return nil
 	}
 	out := make(map[string]string, len(apps))

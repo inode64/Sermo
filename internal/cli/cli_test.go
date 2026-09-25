@@ -649,6 +649,8 @@ func TestEventsList(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	var gotService string
 	var gotLimit int
+	cfg := &config.Config{}
+	loadCalls := 0
 	sample := []event{
 		{Time: "2026-06-13T10:05:00Z", Service: "web", Kind: "action", Action: "restart", Status: "ok", Message: "restarted"},
 		{Time: "2026-06-13T10:00:00Z", Watch: "storage-root", Kind: "alert", Message: "high usage"},
@@ -656,7 +658,11 @@ func TestEventsList(t *testing.T) {
 		{Time: "2026-06-13T09:55:00Z", Service: "web", Kind: "recovered", Rule: "alert-if-memory-high", Message: "rule condition recovered"},
 	}
 	app := App{
-		FetchEvents: func(ctx context.Context, opts options, service string, limit int) ([]event, error) {
+		LoadConfig: func(string, ...config.Option) (*config.Config, error) { loadCalls++; return cfg, nil },
+		FetchEvents: func(ctx context.Context, loaded *config.Config, service string, limit int) ([]event, error) {
+			if loaded != cfg {
+				t.Fatal("fetch did not receive command configuration")
+			}
 			gotService = service
 			gotLimit = limit
 			return sample, nil
@@ -700,6 +706,9 @@ func TestEventsList(t *testing.T) {
 	if gotService != "web" || gotLimit != 7 {
 		t.Fatalf("events json query = (%q, %d), want (%q, %d)", gotService, gotLimit, "web", 7)
 	}
+	if loadCalls != 2 {
+		t.Fatalf("config loads for two commands = %d, want 2", loadCalls)
+	}
 }
 
 func TestEventActivityClear(t *testing.T) {
@@ -721,7 +730,7 @@ func TestEventActivityClear(t *testing.T) {
 			app := App{
 				Env:        func(string) string { return "" },
 				LoadConfig: func(string, ...config.Option) (*config.Config, error) { return &config.Config{}, nil },
-				PruneEvents: func(_ context.Context, _ options, before time.Time) (int, error) {
+				PruneEvents: func(_ context.Context, _ *config.Config, before time.Time) (int, error) {
 					called = true
 					if !before.Equal(tc.before) {
 						t.Fatalf("before = %v, want %v", before, tc.before)

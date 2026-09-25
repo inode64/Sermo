@@ -79,7 +79,8 @@ func TestWatchStatus(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			var stdout bytes.Buffer
 			app := App{Env: func(string) string { return "" }, Stdout: &stdout, Stderr: &bytes.Buffer{},
-				FetchDaemonWatchDetail: func(context.Context, options, string) (daemonWatchDetail, bool) { return tc.detail, tc.detailOK }}
+				LoadConfig:             func(string, ...config.Option) (*config.Config, error) { return &config.Config{}, nil },
+				FetchDaemonWatchDetail: func(context.Context, *config.Config, string) (daemonWatchDetail, bool) { return tc.detail, tc.detailOK }}
 
 			code := app.Run(context.Background(), tc.args)
 			if code != exitSuccess {
@@ -108,7 +109,7 @@ func TestWatchProbeRendersAnAdvisoryAsAWarning(t *testing.T) {
 
 	var stdout bytes.Buffer
 	app := App{Env: func(string) string { return "" }, Stdout: &stdout, Stderr: &bytes.Buffer{},
-		ProbeDaemonWatch: func(context.Context, options, string) (daemonWatchProbe, error) {
+		ProbeDaemonWatch: func(context.Context, *config.Config, string) (daemonWatchProbe, error) {
 			return daemonWatchProbe{
 				Message:  "hdparm /dev/sdd read=0.4 MB/s",
 				Severity: checks.SeverityWarning,
@@ -141,7 +142,7 @@ func TestWatchProbeUsesDaemonAndSupportsHdparm(t *testing.T) {
 	var stdout bytes.Buffer
 	called := false
 	app := App{Env: func(string) string { return "" }, Stdout: &stdout, Stderr: &bytes.Buffer{},
-		ProbeDaemonWatch: func(_ context.Context, _ options, watch string) (daemonWatchProbe, error) {
+		ProbeDaemonWatch: func(_ context.Context, _ *config.Config, watch string) (daemonWatchProbe, error) {
 			called = watch == "disk-speed"
 			return daemonWatchProbe{OK: true, Message: "hdparm /dev/sda read=166.67 MB/s", Readings: []daemonWatchReading{{Field: "read", Label: "Read", Value: "167 MB/s"}}}, nil
 		}}
