@@ -69,7 +69,10 @@ func doHTTPProbe(client *http.Client, req *http.Request, limit int64) (httpProbe
 		return httpProbeResponse{}, err
 	}
 	defer func() { _ = resp.Body.Close() }()
-	body, _ := io.ReadAll(io.LimitReader(resp.Body, limit))
+	body, err := io.ReadAll(io.LimitReader(resp.Body, limit))
+	if err != nil {
+		return httpProbeResponse{}, fmt.Errorf("read HTTP probe response: %w", err)
+	}
 	return httpProbeResponse{status: resp.StatusCode, header: resp.Header, body: body}, nil
 }
 
