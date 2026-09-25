@@ -228,7 +228,7 @@ func lockToWebAt(lk locks.Lock, service string, now time.Time) web.Lock {
 		Releaseable: lk.State == locks.StateExpired || lk.State == locks.StateStale,
 	}
 	if lk.State == locks.StateActive {
-		w.BlockedActions = serviceOperationActionList()
+		w.BlockedActions = serviceOperationActions
 	}
 	if !lk.CreatedAt.IsZero() {
 		w.CreatedAt = lk.CreatedAt.UTC().Format(time.RFC3339)

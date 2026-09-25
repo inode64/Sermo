@@ -898,6 +898,7 @@ func TestWebBackendLastEventIndexes(t *testing.T) {
 	b := &WebBackend{
 		events:     events,
 		order:      []string{"web", "db"},
+		entries:    map[string]*webEntry{"web": {}, "db": {}},
 		watchOrder: []string{"storage-root"},
 	}
 
@@ -918,7 +919,7 @@ func TestWebBackendLastEventIndexes(t *testing.T) {
 
 func TestWebBackendActivitySummaryCountsErrors(t *testing.T) {
 	events := NewEventLog(16)
-	for _, action := range serviceOperationActionList() {
+	for _, action := range serviceOperationActions {
 		events.Add(Event{Service: "web", Kind: eventKindAction, Action: action, Status: eventStatusOK})
 	}
 	// Cascade targets mirror the primary's kind mapping: a successful or
@@ -2914,7 +2915,7 @@ func TestWebBackendSmartServiceCheckAdvertisesOnlyObservedMetrics(t *testing.T) 
 		"disk": checks.ResolvedGraphMetrics(checks.CheckTypeSmart, "", map[string]any{}),
 	}
 
-	got := b.checkView("disk", b.entries["web"], snapshots.Get("web"))
+	got := b.observeService("web", b.entries["web"]).checkView("disk", b.entries["web"])
 	if len(got.Metrics) != 1 || got.Metrics[0].Name != checks.SmartFieldTemperature {
 		t.Fatalf("SMART service metrics = %+v, want only temperature", got.Metrics)
 	}
@@ -2935,5 +2936,5 @@ func TestReloadSupportRefreshHasDeadline(t *testing.T) {
 
 // view is concise fixture setup for service row projection tests.
 func (b *WebBackend) view(ctx context.Context, name string, e *webEntry) web.Service {
-	return b.viewWithRuntime(ctx, name, e, b.lastServiceEvent(name), serviceLockView{})
+	return b.viewWithRuntime(ctx, name, e, b.observeService(name, e), b.lastServiceEvent(name), serviceLockView{})
 }

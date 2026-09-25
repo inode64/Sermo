@@ -58,7 +58,7 @@ func TestWebBackendListRuntimeUsesPublishedSample(t *testing.T) {
 		serviceMetrics: metrics,
 		now:            func() time.Time { return now },
 	}
-	svc := b.viewWithRuntime(context.Background(), "web", b.entries["web"], nil, serviceLockView{ready: true})
+	svc := b.viewWithRuntime(context.Background(), "web", b.entries["web"], b.observeService("web", b.entries["web"]), nil, serviceLockView{ready: true})
 	if discoverCalls != 0 {
 		t.Fatalf("discover called %d times, want 0", discoverCalls)
 	}
@@ -73,7 +73,7 @@ func TestWebBackendListRuntimeUsesPublishedSample(t *testing.T) {
 	}
 
 	// Second view within status TTL should not re-query backend status.
-	_ = b.viewWithRuntime(context.Background(), "web", b.entries["web"], nil, serviceLockView{ready: true})
+	_ = b.viewWithRuntime(context.Background(), "web", b.entries["web"], b.observeService("web", b.entries["web"]), nil, serviceLockView{ready: true})
 	if statusCalls != 1 {
 		t.Fatalf("status called %d times after cache, want 1", statusCalls)
 	}
@@ -153,7 +153,7 @@ func TestWebBackendListRuntimeHiddenWhenServiceStopped(t *testing.T) {
 		now:            func() time.Time { return now },
 	}
 
-	svc := b.viewWithRuntime(context.Background(), "lldpd", b.entries["lldpd"], nil, serviceLockView{ready: true})
+	svc := b.viewWithRuntime(context.Background(), "lldpd", b.entries["lldpd"], b.observeService("lldpd", b.entries["lldpd"]), nil, serviceLockView{ready: true})
 	if svc.State != TargetStateFailed || svc.Status != "inactive" {
 		t.Fatalf("state = %q status=%q, want failed/inactive", svc.State, svc.Status)
 	}

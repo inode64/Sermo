@@ -168,13 +168,9 @@ func (b *WebBackend) lastServiceEvents() map[string]*web.Event {
 	if b.events == nil {
 		return nil
 	}
-	wanted := make(map[string]struct{}, len(b.order))
-	for _, name := range b.order {
-		wanted[name] = struct{}{}
-	}
 	out := map[string]*web.Event{}
 	for _, ev := range b.events.Page(0, activitySummaryEventScanLimit) {
-		if _, ok := wanted[ev.Service]; !ok || out[ev.Service] != nil {
+		if b.entries[ev.Service] == nil || out[ev.Service] != nil {
 			continue
 		}
 		webEv := loggedEventToWeb(ev)

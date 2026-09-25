@@ -20,6 +20,7 @@ import (
 // one freshness clock for all projections of a service row.
 type serviceObservation struct {
 	snapshots      map[string]CheckSnapshot
+	rawSnapshots   map[string]CheckSnapshot
 	runtime        web.ServiceRuntime
 	runtimeFresh   bool
 	runtimeTracked bool
@@ -35,6 +36,7 @@ func (b *WebBackend) observeService(name string, e *webEntry) serviceObservation
 	cur, at, ok := b.latestPublishedServiceRuntime(name, e)
 	o.runtime, o.runtimeFresh = cur, ok && o.at.Sub(at) <= runtimePublishMaxAge(e.interval)
 	snapshots := b.snapshots.Get(name)
+	o.rawSnapshots = snapshots
 	if snapshots == nil {
 		return o
 	}
@@ -59,8 +61,7 @@ type serviceLockView struct {
 	settlingRecords map[string]state.OperationSettlingRecord
 }
 
-func (b *WebBackend) viewWithRuntime(ctx context.Context, name string, e *webEntry, lastEvent *web.Event, lockView serviceLockView) web.Service {
-	observation := b.observeService(name, e)
+func (b *WebBackend) viewWithRuntime(ctx context.Context, name string, e *webEntry, observation serviceObservation, lastEvent *web.Event, lockView serviceLockView) web.Service {
 	svc := web.Service{
 		Name:              name,
 		DisplayName:       e.displayName,
@@ -309,9 +310,9 @@ func onlyMissingProcesses(missing []string) bool {
 }
 
 // checkView builds one check's detail row from its latest snapshot.
-func (b *WebBackend) checkView(cn string, e *webEntry, snap map[string]CheckSnapshot) web.Check {
-	cs, seen := snap[cn]
-	current := seen && b.serviceCheckSnapshotCurrent(e, cn, cs)
+func (o serviceObservation) checkView(cn string, e *webEntry) web.Check {
+	cs, seen := o.rawSnapshots[cn]
+	_, current := o.snapshots[cn]
 	ch := web.Check{
 		Name:    cn,
 		Type:    e.checkTypes[cn],
@@ -596,7 +597,7 @@ func (b *WebBackend) servicesWithLockReports(ctx context.Context, reports map[st
 		if e == nil {
 			continue
 		}
-		out = append(out, b.viewWithRuntime(ctx, name, e, lastEvents[name], serviceLockView{
+		out = append(out, b.viewWithRuntime(ctx, name, e, b.observeService(name, e), lastEvents[name], serviceLockView{
 			active:         activeLockNamesFromReport(reports[name]),
 			monitorRecords: monitored, settlingRecords: settling,
 			operationActive: operating[name],
@@ -612,18 +613,18 @@ func (b *WebBackend) Detail(ctx context.Context, name string) (web.Detail, bool)
 	if e == nil {
 		return web.Detail{}, false
 	}
+	observation := b.observeService(name, e)
 	if e.disabled {
-		return web.Detail{Service: b.viewWithRuntime(ctx, name, e, b.lastServiceEvent(name), serviceLockView{})}, true
+		return web.Detail{Service: b.viewWithRuntime(ctx, name, e, observation, b.lastServiceEvent(name), serviceLockView{})}, true
 	}
 	report, lockErr := serviceLocksReport(b.cfg, name)
-	d := web.Detail{Service: b.viewWithRuntime(ctx, name, e, b.lastServiceEvent(name), serviceLockView{
+	d := web.Detail{Service: b.viewWithRuntime(ctx, name, e, observation, b.lastServiceEvent(name), serviceLockView{
 		active: activeLockNamesFromReport(report), operationActive: operationActive(b.cfg, name), ready: true,
 	})}
-	now := b.webNow()
+	now := observation.at
 
-	snap := b.snapshots.Get(name)
 	for _, cn := range e.checkNames {
-		d.Checks = append(d.Checks, b.checkView(cn, e, snap))
+		d.Checks = append(d.Checks, observation.checkView(cn, e))
 	}
 
 	if lockErr == nil {

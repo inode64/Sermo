@@ -442,7 +442,6 @@ func attachServiceRuntime(ctx context.Context, entry *webEntry, name string, tre
 	selectors, processWarnings := runtime.Selectors, runtime.ProcessWarnings
 	catalog := checkCatalog(tree, entry.interval)
 	entry.noResidentProcess = runtime.NoResidentProcess
-	entry.engine = engine
 	entry.status = checkDeps.Status
 	entry.checkNames = catalog.names
 	entry.checkTypes = catalog.types
@@ -463,13 +462,12 @@ func attachServiceRuntime(ctx context.Context, entry *webEntry, name string, tre
 		engine.SessionVerifier = freshSSHSessionVerifier(deps, entry.sshSessionFilters)
 		engine.SessionSignaler = deps.SSHSessionSignaler
 		engine.ManagedSessionCloser = managedSSHSessionCloser(deps, target.Backend)
-		entry.engine = engine
 	}
 	if len(entry.terminalSessions) > 0 {
 		engine.TerminalSessionCloser = freshTerminalSessionCloser(deps.ExecxRunner, entry.terminalSessions)
 		engine.EmptyTerminalSessionCloser = freshEmptyTerminalSessionCloser(deps.ExecxRunner, entry.terminalSessions)
-		entry.engine = engine
 	}
+	entry.engine = engine
 	entry.reloadSupported = func(ctx context.Context) (bool, error) {
 		return ServiceReloadSupported(ctx, tree, target.Manager, target.Unit)
 	}
@@ -529,8 +527,9 @@ func (b *WebBackend) registerHostWatches(cfg *config.Config, deps Deps) []string
 }
 
 func (b *WebBackend) registerNotifiers(cfg *config.Config) {
-	for _, name := range slices.Sorted(maps.Keys(cfg.Notifiers())) {
-		entry, _ := cfg.Notifiers()[name].(map[string]any)
+	notifiers := cfg.Notifiers()
+	for _, name := range slices.Sorted(maps.Keys(notifiers)) {
+		entry, _ := notifiers[name].(map[string]any)
 		typ := cfgval.AsString(entry[notify.KeyType])
 		b.notifiers[name] = &webNotifier{name: name, typ: typ, enabled: !cfgval.Disabled(entry), summary: notify.ConfigSummary(typ, entry)}
 		b.notifierOrder = append(b.notifierOrder, name)
