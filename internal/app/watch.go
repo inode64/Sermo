@@ -546,9 +546,7 @@ func observeOnlyCycle(ctx context.Context) bool {
 
 func (w *Watch) markSettled() {
 	w.settled = true
-	if w.Settling != nil {
-		w.Settling.MarkObserved(settlingKeyForWatch(w))
-	}
+	w.Settling.MarkObserved(settlingKeyForWatch(w))
 }
 
 // clock returns the current time, honoring an injected w.Now for tests.

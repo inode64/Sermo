@@ -243,9 +243,7 @@ func (w *Worker) RunCycle(ctx context.Context) {
 func (w *Worker) prepareCycle(ctx context.Context, settleKey string, now func() time.Time) (workerCycleMode, bool) {
 	if w.IsPaused != nil && w.IsPaused() {
 		w.clearObservability()
-		if w.Settling != nil && !w.Settling.Observed(settleKey) {
-			w.Settling.MarkObserved(settleKey)
-		}
+		w.Settling.MarkObserved(settleKey)
 		return workerCycleMode{}, true // monitoring paused for this service
 	}
 
@@ -254,7 +252,7 @@ func (w *Worker) prepareCycle(ctx context.Context, settleKey string, now func() 
 	mode.operation, running = w.operationSettlingState(now())
 	if running {
 		w.clearObservability()
-		if mode.startup && w.Settling != nil {
+		if mode.startup {
 			w.Settling.MarkObserved(settleKey)
 		}
 		return workerCycleMode{}, true
@@ -268,7 +266,7 @@ func (w *Worker) prepareCycle(ctx context.Context, settleKey string, now func() 
 	// checks so stopped services do not block daemon readiness or stay "starting".
 	// An operation's one observe-only cycle is complete too: retaining its marker
 	// would publish a permanent "starting" state for a rejected start/restart.
-	if mode.startup && w.Settling != nil {
+	if mode.startup {
 		w.Settling.MarkObserved(settleKey)
 	}
 	if mode.operation {
@@ -397,7 +395,7 @@ func checkHealthChangeMessage(name string, result checks.Result) string {
 }
 
 func (w *Worker) completeObserveCycle(settleKey string, mode workerCycleMode) {
-	if mode.startup && w.Settling != nil {
+	if mode.startup {
 		w.Settling.MarkObserved(settleKey)
 	}
 	if mode.operation {
