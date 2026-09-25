@@ -2,7 +2,6 @@ package conn
 
 import (
 	"context"
-	"fmt"
 	"strings"
 )
 
@@ -19,24 +18,13 @@ func (rsyncProtocol) RequiresUser() bool { return false }
 const rsyncGreetingPrefix = "@RSYNCD:"
 
 func (rsyncProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
-	c, err := newProbeTarget(cfg, defaultPortRsync).openTCP(ctx)
-	if err != nil {
-		return Result{}, err
-	}
-	defer func() { _ = c.Close() }()
-
-	line, err := readGreetingLine(c)
-	if err != nil {
-		return Result{}, err
-	}
-	version, ok := rsyncGreetingVersion(line)
-	if !ok {
-		return Result{}, fmt.Errorf("not an rsync daemon: %q", line)
-	}
-	return Result{
-		Version: version,
-		Extra:   map[string]string{extraGreeting: line, extraProtocol: version},
-	}, nil
+	return probeLineCommand(ctx, cfg, defaultPortRsync, "", func(line string) (Result, bool) {
+		version, ok := rsyncGreetingVersion(line)
+		return Result{
+			Version: version,
+			Extra:   map[string]string{extraGreeting: line, extraProtocol: version},
+		}, ok
+	}, "not an rsync daemon: %q")
 }
 
 // rsyncGreetingVersion extracts the protocol version from an rsync daemon
