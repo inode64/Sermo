@@ -286,10 +286,12 @@ paths:
 // must read the generation before it writes.
 func TestProbeDaemonWatchSendsTheBackendGeneration(t *testing.T) {
 	const generation = "7"
+	var generationReads atomic.Int32
 	t.Setenv(config.EnvWebPassword, "secret")
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set(web.HeaderGeneration, generation)
-		if r.Method == http.MethodGet && r.URL.Path == "/api/watches" {
+		if r.Method == http.MethodHead && r.URL.Path == "/api/watches" {
+			generationReads.Add(1)
 			if auth := r.Header.Get("Authorization"); auth != "Basic YWRtaW46c2VjcmV0" {
 				t.Errorf("generation Authorization = %q, want configured Basic auth", auth)
 			}
@@ -322,6 +324,9 @@ paths:
 	}
 	if !result.OK {
 		t.Fatalf("probe result = %+v, want ok", result)
+	}
+	if got := generationReads.Load(); got != 1 {
+		t.Fatalf("generation HEAD requests = %d, want 1", got)
 	}
 }
 
