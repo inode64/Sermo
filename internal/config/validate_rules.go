@@ -56,15 +56,7 @@ func validateWindow(prefix string, entry map[string]any, add addFunc) {
 			}
 		}
 		cycles, hasCycles := validateWindowLength(prefix+".within", wn, add)
-		if v, present := wn[rules.WindowKeyMinMatches]; present {
-			matches, _ := cfgval.Int(v)
-			switch {
-			case matches <= 0:
-				add("%s.within.min_matches must be > 0", prefix)
-			case hasCycles && cycles > 0 && matches > cycles:
-				add("%s.within.min_matches must be <= within.cycles", prefix)
-			}
-		}
+		validateMinMatches(prefix+".within", wn, cycles, hasCycles, add)
 	}
 }
 
@@ -144,15 +136,7 @@ func validateRuleWindow(tree map[string]any, add addFunc) {
 	switch mode := cfgval.String(m[rules.FieldMode]); mode {
 	case "", rules.WindowModeConsecutive:
 	case rules.WindowModeWithin:
-		if v, present := m[rules.WindowKeyMinMatches]; present {
-			matches, _ := cfgval.Int(v)
-			switch {
-			case matches <= 0:
-				add("rule_window.min_matches must be > 0 for mode %q", mode)
-			case hasCycles && cycles > 0 && matches > cycles:
-				add("rule_window.min_matches must be <= rule_window.cycles")
-			}
-		}
+		validateMinMatches(sectionRuleWindow, m, cycles, hasCycles, add)
 	default:
 		add("rule_window.mode %q is not one of %s", mode, rules.WindowModeSummary)
 	}
@@ -589,4 +573,16 @@ func parseMetricValue(s string) bool {
 	}
 	_, ok := cfgval.Float(s)
 	return ok
+}
+
+func validateMinMatches(prefix string, window map[string]any, cycles int, hasCycles bool, add addFunc) {
+	if value, present := window[rules.WindowKeyMinMatches]; present {
+		matches, _ := cfgval.Int(value)
+		switch {
+		case matches <= 0:
+			add("%s.min_matches must be > 0", prefix)
+		case hasCycles && cycles > 0 && matches > cycles:
+			add("%s.min_matches must be <= %s.cycles", prefix, prefix)
+		}
+	}
 }
