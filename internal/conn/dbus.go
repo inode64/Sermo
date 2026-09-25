@@ -97,9 +97,6 @@ func (dbusProtocol) DefaultPort() int   { return defaultPortNone }
 func (dbusProtocol) RequiresUser() bool { return false }
 
 func (dbusProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
-	if err := ValidateDBusTarget(dbusTargetFromConfig(cfg)); err != nil {
-		return Result{}, probeErr(ProtocolNameDBus, stepConfig, err)
-	}
 	return probeBusWithDeadline(ctx, cfg, dbusProbe)
 }
 
