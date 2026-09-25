@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"time"
 
 	"sermo/internal/state"
 )
@@ -66,22 +65,19 @@ func (a App) runPanic(ctx context.Context, opts options) int {
 
 func (a App) reportPanic(opts options, rec state.GlobalRecord, found bool) {
 	enabled := found && rec.On
+	changedAt := recordChangedAt(rec.UpdatedAt)
 	if opts.json {
 		payload := map[string]any{cliJSONKeyPanic: enabled}
 		if found {
 			if rec.Source != "" {
 				payload[cliJSONKeyPanicSource] = rec.Source
 			}
-			if !rec.UpdatedAt.IsZero() {
-				payload[cliJSONKeyPanicChanged] = rec.UpdatedAt.UTC().Format(time.RFC3339)
+			if changedAt != "" {
+				payload[cliJSONKeyPanicChanged] = changedAt
 			}
 		}
 		writeJSON(a.Stdout, payload)
 		return
-	}
-	changedAt := ""
-	if found && !rec.UpdatedAt.IsZero() {
-		changedAt = rec.UpdatedAt.UTC().Format(time.RFC3339)
 	}
 	modeLine := commandPanicOff
 	if enabled {

@@ -3,7 +3,6 @@ package cli
 import (
 	"context"
 	"fmt"
-	"time"
 
 	sermoapp "sermo/internal/app"
 	"sermo/internal/config"
@@ -101,19 +100,22 @@ func updateMonitorState(store *state.Store, key string, pause bool) (string, err
 func (a App) reportMonitor(opts options, store *state.Store, service, status string) {
 	rec, found, _ := store.MonitorState(service)
 	payload := map[string]any{cliJSONKeyService: service, cliJSONKeyMonitoring: status}
+	suffix := ""
 	if found {
 		if rec.Source != "" {
 			payload[cliJSONKeyMonitorSource] = rec.Source
 		}
-		if !rec.UpdatedAt.IsZero() {
-			payload[cliJSONKeyMonitorChanged] = rec.UpdatedAt.UTC().Format(time.RFC3339)
+		changedAt := recordChangedAt(rec.UpdatedAt)
+		if changedAt != "" {
+			payload[cliJSONKeyMonitorChanged] = changedAt
 		}
+		suffix = metaSuffix(rec.Source, changedAt)
 	}
 	if opts.json {
 		writeJSON(a.Stdout, payload)
 		return
 	}
-	a.printMonitorStatus(service, status, monitorMetaSuffix(rec, found))
+	a.printMonitorStatus(service, status, suffix)
 }
 
 // printMonitorStatus prints the human-readable monitor transition for subject
@@ -129,15 +131,4 @@ func (a App) printMonitorStatus(subject, status, suffix string) {
 	default:
 		fmt.Fprintf(a.Stdout, "%s was not paused\n", subject)
 	}
-}
-
-func monitorMetaSuffix(rec state.MonitorRecord, found bool) string {
-	if !found {
-		return ""
-	}
-	changedAt := ""
-	if !rec.UpdatedAt.IsZero() {
-		changedAt = rec.UpdatedAt.UTC().Format(time.RFC3339)
-	}
-	return metaSuffix(rec.Source, changedAt)
 }

@@ -76,9 +76,7 @@ func serviceMonitorState(ctx context.Context, cfg *config.Config, service string
 		}
 		view.Paused = !record.Active
 		view.Source = record.Source
-		if !record.UpdatedAt.IsZero() {
-			view.ChangedAt = record.UpdatedAt.UTC().Format(time.RFC3339)
-		}
+		view.ChangedAt = recordChangedAt(record.UpdatedAt)
 		return exitSuccess
 	})
 	return view
@@ -99,4 +97,12 @@ func metaSuffix(source, changedAt string) string {
 		return ""
 	}
 	return " " + strings.Join(parts, " ")
+}
+
+// recordChangedAt renders persisted timestamps consistently, omitting zero values.
+func recordChangedAt(at time.Time) string {
+	if at.IsZero() {
+		return ""
+	}
+	return at.UTC().Format(time.RFC3339)
 }
