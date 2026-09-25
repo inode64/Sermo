@@ -443,11 +443,15 @@ func TestRequireCheckPaths(t *testing.T) {
 	if _, errs := requireCheckPath(map[string]any{}, CheckTypeBinary); errs != "binary check requires a path" {
 		t.Fatalf("missing scalar path warning = %q", errs)
 	}
-	paths, errs := requireCheckPaths(map[string]any{CheckKeyPath: []any{"/run/a", "/run/b"}}, CheckTypeSocket)
-	if len(paths) != 2 || paths[0] != "/run/a" || paths[1] != "/run/b" || errs != "" {
-		t.Fatalf("requireCheckPaths = %v, %q", paths, errs)
+	check, errs := buildSocketCheck(base{}, map[string]any{CheckKeyPath: []any{"/run/a", "/run/b"}})
+	if errs != "" {
+		t.Fatal(errs)
 	}
-	if _, errs := requireCheckPaths(map[string]any{}, CheckTypePidfile); errs != "pidfile check requires a path" {
+	paths := check.(socketCheck).paths
+	if len(paths) != 2 || paths[0] != "/run/a" || paths[1] != "/run/b" || errs != "" {
+		t.Fatalf("socket paths = %v, %q", paths, errs)
+	}
+	if _, errs := buildPidfileCheck(base{}, map[string]any{}, Deps{}); errs != "pidfile check requires a path" {
 		t.Fatalf("missing path list warning = %q", errs)
 	}
 }

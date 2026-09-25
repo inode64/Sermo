@@ -10,14 +10,6 @@ func requireCheckPath(entry map[string]any, checkType string) (string, string) {
 	return path, ""
 }
 
-func requireCheckPaths(entry map[string]any, checkType string) ([]string, string) {
-	paths := cfgval.StringList(entry[CheckKeyPath])
-	if len(paths) == 0 {
-		return nil, checkType + " check requires a path"
-	}
-	return paths, ""
-}
-
 // buildPathCheck runs the shared prologue of every check configured by a single
 // required `path:`, handing the validated path to build. Together with
 // buildPathsCheck it is the whole body of the resource builders below, which
@@ -33,9 +25,9 @@ func buildPathCheck(entry map[string]any, checkType string, build func(path stri
 // buildPathsCheck is buildPathCheck for the checks that accept a candidate list
 // and pass when any candidate matches.
 func buildPathsCheck(entry map[string]any, checkType string, build func(paths []string) Check) (Check, string) {
-	paths, errs := requireCheckPaths(entry, checkType)
-	if errs != "" {
-		return nil, errs
+	paths := cfgval.StringList(entry[CheckKeyPath])
+	if len(paths) == 0 {
+		return nil, checkType + " check requires a path"
 	}
 	return build(paths), ""
 }
