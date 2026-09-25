@@ -47,14 +47,6 @@ func (b *WebBackend) observeService(name string, e *webEntry) serviceObservation
 	return o
 }
 
-func (b *WebBackend) view(ctx context.Context, name string, e *webEntry) web.Service {
-	return b.viewWithEvent(ctx, name, e, b.lastServiceEvent(name))
-}
-
-func (b *WebBackend) viewWithEvent(ctx context.Context, name string, e *webEntry, lastEvent *web.Event) web.Service {
-	return b.viewWithRuntime(ctx, name, e, lastEvent, serviceLockView{})
-}
-
 // serviceLockView carries one service's already-scanned lock state, so the
 // batched Services path reads each lock directory once for the whole fleet
 // instead of per row. ready distinguishes "scanned, nothing held" from "not
@@ -625,7 +617,7 @@ func (b *WebBackend) Detail(ctx context.Context, name string) (web.Detail, bool)
 		return web.Detail{}, false
 	}
 	if e.disabled {
-		return web.Detail{Service: b.view(ctx, name, e)}, true
+		return web.Detail{Service: b.viewWithRuntime(ctx, name, e, b.lastServiceEvent(name), serviceLockView{})}, true
 	}
 	report, lockErr := serviceLocksReport(b.cfg, name)
 	d := web.Detail{Service: b.viewWithRuntime(ctx, name, e, b.lastServiceEvent(name), serviceLockView{

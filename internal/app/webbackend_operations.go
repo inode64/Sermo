@@ -70,7 +70,7 @@ func (b *WebBackend) Operate(ctx context.Context, name, action string, opts web.
 		return b.operateError(name, action, serviceSubjectPrefix+name+" is disabled in configuration")
 	}
 	if action == string(rules.ActionReload) {
-		canReload, err := e.currentReloadSupported(ctx, b.webNow())
+		canReload, err := e.reloadSupportSnapshot(ctx, b.webNow(), true)
 		if err != nil {
 			return b.operateError(name, action, serviceSubjectPrefix+name+": reload support unavailable: "+err.Error())
 		}
@@ -131,10 +131,6 @@ func (b *WebBackend) activeAfterPostflightFailure(ctx context.Context, name, act
 		return false
 	}
 	return ServiceActiveAfterPostflightFailure(ctx, action, result, nil, e.status)
-}
-
-func (e *webEntry) currentReloadSupported(ctx context.Context, now time.Time) (bool, error) {
-	return e.reloadSupportSnapshot(ctx, now, true)
 }
 
 func (e *webEntry) cachedReloadSupported(ctx context.Context, now time.Time) bool {

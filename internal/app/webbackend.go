@@ -449,10 +449,13 @@ func attachServiceRuntime(ctx context.Context, entry *webEntry, name string, tre
 	entry.checkNames = catalog.names
 	entry.checkTypes = catalog.types
 	entry.configID = serviceSnapshotConfigID(tree)
-	entry.checkReports = checkReportingModes(tree)
+	// Reporting modes are static, including before the first daemon sample.
+	entry.checkReports = checkStringField(tree, checks.CheckKeyReports)
 	entry.checkBands = bandCheckMetrics(tree)
 	entry.checkGraphs = graphableCheckMetrics(tree)
-	entry.checkSeverities = checkDeclaredSeverities(tree)
+	// The published grade wins; this declaration is the fallback for restored
+	// snapshots without severity, including before the first new cycle.
+	entry.checkSeverities = checkStringField(tree, checks.CheckKeySeverity)
 	entry.checkIntervals = catalog.intervals
 	entry.discoverer = discoverer
 	entry.selectors = selectors
@@ -623,23 +626,6 @@ func resolveWatchGraphs(ctype string, check, metricBlocks map[string]any) []chec
 		}
 	}
 	return out
-}
-
-// checkReportingModes maps each check that declares `reports:` to its mode. It
-// reads configuration rather than the published result because the mode is
-// static: sourcing it here keeps it correct on the first cycle and across a
-// daemon restart, without widening the persisted snapshot record.
-func checkReportingModes(tree map[string]any) map[string]string {
-	return checkStringField(tree, checks.CheckKeyReports)
-}
-
-// checkDeclaredSeverities maps each check that declares `severity:` to its value.
-// The published snapshot carries the grade the check gave its result, which
-// wins; the declaration read here is the fallback for a snapshot that carries
-// none — one persisted before the grade was stored — so a restored snapshot is
-// graded on the first cycle instead of red until the check next runs.
-func checkDeclaredSeverities(tree map[string]any) map[string]string {
-	return checkStringField(tree, checks.CheckKeySeverity)
 }
 
 // checkStringField collects one string field per configured check. Both callers
