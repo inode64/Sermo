@@ -55,7 +55,7 @@ func buildICMPCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 	if host == "" {
 		return nil, "icmp check requires a host"
 	}
-	count := DefaultPingCount
+	count := defaultPingCount
 	if v, ok := cfgval.Int(entry[CheckKeyCount]); ok {
 		if v <= 0 {
 			return nil, "icmp count must be a positive integer"
