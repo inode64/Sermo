@@ -59,7 +59,11 @@ type swapCheck struct {
 
 func (c *swapCheck) Run(_ context.Context) Result {
 	start := time.Now()
-	sampler := samplerOr(c.sampler, defaultSwapSampler)
+	defaultSampler := defaultSwapSampler
+	if c.metric == SwapMetricUsage {
+		defaultSampler = defaultSwapUsageSampler
+	}
+	sampler := samplerOr(c.sampler, defaultSampler)
 	s, err := sampler()
 	if err != nil {
 		return c.unavailableResult("swap: "+err.Error(), start)
@@ -114,9 +118,25 @@ func (c *swapCheck) Run(_ context.Context) Result {
 	}
 }
 
-// defaultSwapSampler reads SwapTotal/SwapFree from meminfo and the pswpin/pswpout
-// counters from vmstat.
+// defaultSwapSampler reads capacity and requires a complete I/O observation.
 func defaultSwapSampler() (SwapSample, error) {
+	s, err := defaultSwapUsageSampler()
+	if err != nil {
+		return SwapSample{}, err
+	}
+	vm, err := hostfs.ReadFile(procVMStatPath)
+	if err != nil {
+		return SwapSample{}, fmt.Errorf("read %s: %w", procVMStatPath, err)
+	}
+	s.PagesIn, s.PagesOut, err = parseSwapVMStat(string(vm))
+	if err != nil {
+		return SwapSample{}, err
+	}
+	return s, nil
+}
+
+// defaultSwapUsageSampler does not depend on vmstat: capacity only needs meminfo.
+func defaultSwapUsageSampler() (SwapSample, error) {
 	info, err := readMeminfo()
 	if err != nil {
 		return SwapSample{}, err
@@ -124,30 +144,28 @@ func defaultSwapSampler() (SwapSample, error) {
 	if !info.HaveSwapTotal || !info.HaveSwapFree || info.SwapFree > info.SwapTotal {
 		return SwapSample{}, fmt.Errorf("invalid or incomplete swap counters in %s", procMeminfoPath)
 	}
-	s := SwapSample{TotalBytes: info.SwapTotal, FreeBytes: info.SwapFree}
-	if vm, err := hostfs.ReadFile(procVMStatPath); err == nil {
-		pagesIn, pagesOut, err := parseSwapVMStat(string(vm))
-		if err != nil {
-			return s, err
-		}
-		s.PagesIn, s.PagesOut = pagesIn, pagesOut
-	}
-	return s, nil
+	return SwapSample{TotalBytes: info.SwapTotal, FreeBytes: info.SwapFree}, nil
 }
 
 func parseSwapVMStat(vm string) (pagesIn, pagesOut uint64, err error) {
+	var haveIn, haveOut bool
 	for line := range strings.SplitSeq(vm, checkLineSeparator) {
 		if v, ok := strings.CutPrefix(line, swapVMStatPagesInPrefix); ok {
 			pagesIn, err = parseSwapPageCounter(swapVMStatPagesIn, v)
+			haveIn = true
 			if err != nil {
 				return 0, 0, err
 			}
 		} else if v, ok := strings.CutPrefix(line, swapVMStatPagesOutPrefix); ok {
 			pagesOut, err = parseSwapPageCounter(swapVMStatPagesOut, v)
+			haveOut = true
 			if err != nil {
 				return 0, 0, err
 			}
 		}
+	}
+	if !haveIn || !haveOut {
+		return 0, 0, fmt.Errorf("%s: missing %s or %s counter", procVMStatPath, swapVMStatPagesIn, swapVMStatPagesOut)
 	}
 	return pagesIn, pagesOut, nil
 }

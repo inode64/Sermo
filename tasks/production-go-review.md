@@ -25,7 +25,7 @@ pruebas de ejecución. Este registro no afirma una auditoría exhaustiva.
   checks ignoraban las banderas Have*, confundiendo información ausente con
   memoria disponible cero o ausencia de swap. Rechazar muestras incompletas o
   incoherentes y un total de RAM cero; conservar el swap realmente deshabilitado.
-- [ ] **GO-006 — No interpretar vmstat ilegible como actividad de swap cero.**
+- [x] **GO-006 — No interpretar vmstat ilegible como actividad de swap cero.**
   `internal/checks/swap.go`: errores al abrir vmstat o contadores ausentes se
   convertían en cero y alteraban la línea base. Propagar los fallos y exigir
   ambos contadores; la consulta de capacidad no debe depender de vmstat.
