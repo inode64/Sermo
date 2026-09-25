@@ -81,7 +81,7 @@ func (a App) operateWithCascade(ctx context.Context, opts options, cfg *config.C
 	// also_apply cascades only lifecycle actions that change running state. Manual
 	// repair and reap always act on the one service the operator named.
 	if opts.noCascade || !operation.CascadesAlsoApply(action) || len(targets) == 0 {
-		return a.operateWithManualState(ctx, opts, cfg, resolved, service, action, actionStore, runner)
+		return a.operateWithManualState(ctx, cfg, resolved, service, action, actionStore, runner)
 	}
 	resolvedByService := map[string]config.Resolved{service: resolved}
 	resolveErrors := map[string]error{}
@@ -116,7 +116,7 @@ func (a App) operateWithCascade(ctx context.Context, opts options, cfg *config.C
 			if err != nil {
 				return operation.Result{}, err
 			}
-			return a.operateWithManualState(ctx, opts, cfg, res, svc, action, actionStore, runner)
+			return a.operateWithManualState(ctx, cfg, res, svc, action, actionStore, runner)
 		},
 		Target: func(svc string, out operation.Result, err error) {
 			if actionStore != nil {
@@ -145,10 +145,10 @@ func (a App) operateWithCascade(ctx context.Context, opts options, cfg *config.C
 // monitoring and settling transition. The direct and cascade paths share it so
 // every action, including manual-only repair, has identical post-operation
 // state handling.
-func (a App) operateWithManualState(ctx context.Context, opts options, cfg *config.Config, resolved config.Resolved, service, action string, actionStore *state.Store, runner manualOperationRunner) (operation.Result, error) {
+func (a App) operateWithManualState(ctx context.Context, cfg *config.Config, resolved config.Resolved, service, action string, actionStore *state.Store, runner manualOperationRunner) (operation.Result, error) {
 	a.beginManualOperationSettling(cfg, actionStore, service, action)
-	result, err := runner.operate(ctx, opts, cfg, resolved, service, action)
-	activeAfterPostflightFailure := runner.activeAfter(ctx, opts, cfg, resolved, service, action, result, err)
+	result, err := runner.operate(ctx, resolved, service, action)
+	activeAfterPostflightFailure := runner.activeAfter(ctx, resolved, service, action, result, err)
 	a.finishManualOperationSettling(cfg, actionStore, service, action, result, err, activeAfterPostflightFailure)
 	return result, err
 }

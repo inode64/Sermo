@@ -16,8 +16,8 @@ import (
 // manualOperationRunner is the caller-neutral manual action seam. Production
 // uses one operationSession; tests may still inject App.Operate.
 type manualOperationRunner struct {
-	operate     func(context.Context, options, *config.Config, config.Resolved, string, string) (operation.Result, error)
-	activeAfter func(context.Context, options, *config.Config, config.Resolved, string, string, operation.Result, error) bool
+	operate     func(context.Context, config.Resolved, string, string) (operation.Result, error)
+	activeAfter func(context.Context, config.Resolved, string, string, operation.Result, error) bool
 }
 
 // operationSession owns the backend detection, manager and prepared service
@@ -41,28 +41,21 @@ type preparedOperation struct {
 
 func (a App) prepareManualOperationRunner(ctx context.Context, opts options, cfg *config.Config, resolved config.Resolved, service, action string, actionStore *state.Store) (manualOperationRunner, func(), error) {
 	closeRunner := func() {}
+	var runner manualOperationRunner
 	if a.Operate != nil {
-		runner := manualOperationRunner{
-			operate: a.Operate,
-			activeAfter: func(context.Context, options, *config.Config, config.Resolved, string, string, operation.Result, error) bool {
-				return false
+		runner = manualOperationRunner{
+			operate: func(ctx context.Context, resolved config.Resolved, service, action string) (operation.Result, error) {
+				return a.Operate(ctx, opts, cfg, resolved, service, action)
 			},
+			activeAfter: func(context.Context, config.Resolved, string, string, operation.Result, error) bool { return false },
 		}
 		if action != actionReload {
 			return runner, closeRunner, nil
 		}
-		session, err := a.newOperationSession(ctx, opts, cfg, nil)
-		if err != nil {
-			return manualOperationRunner{}, closeRunner, err
-		}
-		if err := session.reloadSupported(ctx, service, resolved); err != nil {
-			return manualOperationRunner{}, closeRunner, err
-		}
-		return runner, closeRunner, nil
 	}
 
 	eventStore := actionStore
-	if eventStore == nil {
+	if a.Operate == nil && eventStore == nil {
 		var err error
 		eventStore, err = openStateStore(ctx, cfg)
 		if err != nil {
@@ -81,6 +74,10 @@ func (a App) prepareManualOperationRunner(ctx context.Context, opts options, cfg
 			return manualOperationRunner{}, func() {}, err
 		}
 	}
+	if a.Operate != nil {
+		return runner, closeRunner, nil
+	}
+
 	return manualOperationRunner{operate: session.operate, activeAfter: session.activeAfterPostflightFailure}, closeRunner, nil
 }
 
@@ -140,7 +137,7 @@ func (s *operationSession) prepare(ctx context.Context, service string, resolved
 	return prepared, nil
 }
 
-func (s *operationSession) operate(ctx context.Context, opts options, _ *config.Config, resolved config.Resolved, service, action string) (operation.Result, error) {
+func (s *operationSession) operate(ctx context.Context, resolved config.Resolved, service, action string) (operation.Result, error) {
 	prepared, err := s.prepare(ctx, service, resolved)
 	if err != nil {
 		return operation.Result{}, err
@@ -153,7 +150,7 @@ func (s *operationSession) operate(ctx context.Context, opts options, _ *config.
 		eventErr = recordManualActionEvent(ctx, s.eventStore, app.OperationEventRecord(result))
 	}
 	defer func() { prepared.recordOperation = nil }()
-	result := runEngineAction(ctx, prepared.runtime.Engine, opts, action)
+	result := runEngineAction(ctx, prepared.runtime.Engine, s.opts, action)
 	if eventErr != nil {
 		return result, fmt.Errorf("%s applied with result %q, but its audit event could not be recorded: %w",
 			action, result.Status, eventErr)
@@ -176,7 +173,7 @@ func (s *operationSession) reloadSupported(ctx context.Context, service string, 
 	return nil
 }
 
-func (s *operationSession) activeAfterPostflightFailure(ctx context.Context, _ options, _ *config.Config, resolved config.Resolved, service, action string, result operation.Result, opErr error) bool {
+func (s *operationSession) activeAfterPostflightFailure(ctx context.Context, resolved config.Resolved, service, action string, result operation.Result, opErr error) bool {
 	return app.ServiceActiveAfterPostflightFailure(ctx, action, result, opErr, func(statusCtx context.Context) (servicemgr.Status, error) {
 		prepared, err := s.prepare(statusCtx, service, resolved)
 		if err != nil {

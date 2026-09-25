@@ -758,7 +758,7 @@ func TestOperationSessionPostflightStatusReusesPreparedTarget(t *testing.T) {
 	if first != second {
 		t.Fatal("prepare returned two runtimes for one service")
 	}
-	active := session.activeAfterPostflightFailure(t.Context(), options{}, cfg, resolved, "web", "start",
+	active := session.activeAfterPostflightFailure(t.Context(), resolved, "web", "start",
 		operation.Result{Status: operation.ResultPostflightFailed}, nil)
 	if !active {
 		t.Fatal("activeAfterPostflightFailure = false, want true")
@@ -1040,7 +1040,7 @@ func runProductionOperation(ctx context.Context, app App, opts options, cfg *con
 		return operation.Result{}, err
 	}
 	defer closeRunner()
-	return runner.operate(ctx, opts, cfg, resolved, service, action)
+	return runner.operate(ctx, resolved, service, action)
 }
 
 type flakyRecorder struct {
