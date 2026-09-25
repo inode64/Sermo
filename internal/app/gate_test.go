@@ -80,7 +80,7 @@ func TestApplyGatesSkipWhenChanged(t *testing.T) {
 	path := dir + "/conf"
 	writeFile(t, path, "v1")
 
-	w := &Worker{Gates: map[string]CheckGate{
+	w := &Worker{libBaseline: map[string]string{}, Gates: map[string]CheckGate{
 		"probe": {SkipWhenChanged: []string{path}},
 	}}
 	// first observation primes the baseline -> not skipped

@@ -159,11 +159,7 @@ func parseProcessPolicyAllows(user string, check map[string]any) ([]processPolic
 }
 
 func (w *processPolicyWatcher) runCycle(ctx context.Context) {
-	sampler := w.sampler
-	if sampler == nil {
-		sampler = osProcSampler{}
-	}
-	samples, ok := sampler.Sample(ProcMatch{User: w.user})
+	samples, ok := w.sampler.Sample(ProcMatch{User: w.user})
 	if !ok {
 		w.publishSnapshot(nil, nil, false)
 		return

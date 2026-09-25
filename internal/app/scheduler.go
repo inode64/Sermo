@@ -125,9 +125,6 @@ func watchTargetActive(wt *Watch) bool {
 // first target starts immediately and the rest fan out up to (just under) one
 // interval later.
 func staggerOffset(idx, total int, interval time.Duration) time.Duration {
-	if total <= 0 {
-		return 0
-	}
 	return time.Duration(int64(interval) * int64(idx) / int64(total))
 }
 
