@@ -327,7 +327,7 @@ func reloadConfigCompatibilityError(current, next *config.Config) string {
 	return ""
 }
 
-// formatValidationIssues joins the first few validation findings for reload errors.
+// monitorTargetNames returns the settling keys of active workers and watches.
 func monitorTargetNames(workers []*Worker, watches []*Watch) []string {
 	names := make([]string, 0, len(workers)+len(watches))
 	for _, w := range workers {
@@ -343,6 +343,7 @@ func monitorTargetNames(workers []*Worker, watches []*Watch) []string {
 	return names
 }
 
+// formatValidationIssues joins the first few validation findings for reload errors.
 func formatValidationIssues(issues []config.Issue) string {
 	msgs := make([]string, 0, min(len(issues), validationIssuePreviewLimit))
 	for i, issue := range issues {
