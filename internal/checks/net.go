@@ -366,7 +366,7 @@ func sampleNetFromSysfs(iface, root string) (NetSample, error) {
 	}
 
 	statDir := filepath.Join(dir, sysfsIfaceStatisticsDir)
-	if entries, err := os.ReadDir(statDir); err == nil {
+	if entries, err := hostfs.ReadDir(statDir); err == nil {
 		for _, e := range entries {
 			if v, err := readProcUint(filepath.Join(statDir, e.Name())); err == nil {
 				sample.Counters[e.Name()] = v
@@ -409,7 +409,7 @@ func sysfsIfaceFlagBits(path string) uint64 {
 // ReadTextFile reads a small text file (typically sysfs), returning "" on any
 // error.
 func ReadTextFile(path string) string {
-	data, err := os.ReadFile(filepath.Clean(path))
+	data, err := hostfs.ReadFile(path)
 	if err != nil {
 		return ""
 	}

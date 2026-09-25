@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
-	"os"
 	"path/filepath"
 	"sermo/internal/hostfs"
 	"slices"
@@ -282,7 +281,7 @@ func readInotifyUsage(ctx context.Context, root string, countWatches bool) (Inot
 		MaxInstances: readInotifyLimit(root, "max_user_instances"),
 		MaxWatches:   readInotifyLimit(root, "max_user_watches")}
 
-	entries, err := os.ReadDir(root)
+	entries, err := hostfs.ReadDir(root)
 	if err != nil {
 		return InotifySample{}, fmt.Errorf("read %s: %w", root, err)
 	}
@@ -347,7 +346,7 @@ func readInotifyLimit(root, name string) uint64 {
 // fd table is counted, because it makes the total a lower bound.
 func readPIDInotify(pidPath string, countWatches bool) (instances, watches, unreadable uint64) {
 	fdDir := filepath.Join(pidPath, "fd")
-	entries, err := os.ReadDir(fdDir)
+	entries, err := hostfs.ReadDir(fdDir)
 	if err != nil {
 		if errors.Is(err, fs.ErrPermission) {
 			return 0, 0, 1
@@ -355,7 +354,7 @@ func readPIDInotify(pidPath string, countWatches bool) (instances, watches, unre
 		return 0, 0, 0
 	}
 	for _, entry := range entries {
-		target, err := os.Readlink(filepath.Join(fdDir, entry.Name()))
+		target, err := hostfs.Readlink(filepath.Join(fdDir, entry.Name()))
 		if err != nil || !isInotifyFDTarget(target) {
 			continue
 		}

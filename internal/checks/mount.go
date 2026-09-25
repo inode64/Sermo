@@ -2,8 +2,8 @@ package checks
 
 import (
 	"fmt"
-	"os"
 	"path/filepath"
+	"sermo/internal/hostfs"
 	"strings"
 
 	"sermo/internal/mounts"
@@ -67,7 +67,7 @@ func (m mountCond) evaluate(table []Mount, path string) (reason string, info *Mo
 
 // DefaultMounts reads the mount table from /proc/mounts.
 func DefaultMounts() ([]Mount, error) {
-	data, err := os.ReadFile(procMountsPath)
+	data, err := hostfs.ReadFile(procMountsPath)
 	if err != nil {
 		return nil, fmt.Errorf("read %s: %w", procMountsPath, err)
 	}
