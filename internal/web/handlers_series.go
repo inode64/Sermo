@@ -1,6 +1,7 @@
 package web
 
 import (
+	"context"
 	"net/http"
 	"time"
 
@@ -75,36 +76,32 @@ func (s *Server) handleWatchSeries(w http.ResponseWriter, r *http.Request) {
 // selects the series, and a metric the check does not publish is a 404 rather
 // than an empty series that would read as a measured flat line.
 func (s *Server) handleWatchMetrics(w http.ResponseWriter, r *http.Request) {
-	metric := r.URL.Query().Get(apiQueryMetric)
-	if metric == "" {
-		writeError(w, http.StatusBadRequest, apiErrorMetricQueryRequired)
-		return
-	}
-	backend, generation, ok := s.backendRead(w)
-	if !ok {
-		return
-	}
-	res, ok := backend.WatchMetrics(r.Context(), r.PathValue(apiParamName), metric, s.seriesSince(r))
-	if !ok {
-		writeError(w, http.StatusNotFound, apiErrorUnknownWatchMetric)
-		return
-	}
-	s.writeBackendJSON(w, http.StatusOK, res, generation)
+	s.serveMetrics(w, r, apiQueryMetric, apiErrorMetricQueryRequired, apiErrorUnknownWatchMetric,
+		func(ctx context.Context, backend Backend, metric string, since time.Duration) (MetricSeries, bool) {
+			return backend.WatchMetrics(ctx, r.PathValue(apiParamName), metric, since)
+		})
 }
 
 func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
-	check := r.URL.Query().Get(apiQueryCheck)
-	if check == "" {
-		writeError(w, http.StatusBadRequest, apiErrorCheckQueryRequired)
+	s.serveMetrics(w, r, apiQueryCheck, apiErrorCheckQueryRequired, apiErrorUnknownServiceOrCheck,
+		func(ctx context.Context, backend Backend, check string, since time.Duration) (MetricSeries, bool) {
+			return backend.Metrics(ctx, r.PathValue(apiParamName), check, r.URL.Query().Get(apiQueryMetric), since)
+		})
+}
+
+func (s *Server) serveMetrics(w http.ResponseWriter, r *http.Request, required, missing, notFound string, fetch func(context.Context, Backend, string, time.Duration) (MetricSeries, bool)) {
+	value := r.URL.Query().Get(required)
+	if value == "" {
+		writeError(w, http.StatusBadRequest, missing)
 		return
 	}
 	backend, generation, ok := s.backendRead(w)
 	if !ok {
 		return
 	}
-	res, ok := backend.Metrics(r.Context(), r.PathValue(apiParamName), check, r.URL.Query().Get(apiQueryMetric), s.seriesSince(r))
+	res, ok := fetch(r.Context(), backend, value, s.seriesSince(r))
 	if !ok {
-		writeError(w, http.StatusNotFound, apiErrorUnknownServiceOrCheck)
+		writeError(w, http.StatusNotFound, notFound)
 		return
 	}
 	s.writeBackendJSON(w, http.StatusOK, res, generation)
