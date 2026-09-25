@@ -106,15 +106,8 @@ func (s Scheduler) Run(ctx context.Context, workers []*Worker, watches []*Watch,
 // can ever fire, wedging the daemon at "starting" (readyz 503) forever.
 func activeMonitorTargets(workers []*Worker, watches []*Watch) int {
 	keys := make(map[string]struct{})
-	for _, w := range workers {
-		if monitorTargetActive(w) {
-			keys[SettlingServiceKey(w.Service)] = struct{}{}
-		}
-	}
-	for _, wt := range watches {
-		if watchTargetActive(wt) {
-			keys[settlingKeyForWatch(wt)] = struct{}{}
-		}
+	for _, name := range monitorTargetNames(workers, watches) {
+		keys[name] = struct{}{}
 	}
 	return len(keys)
 }
