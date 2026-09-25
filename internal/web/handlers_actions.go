@@ -55,12 +55,7 @@ func (s *Server) handleAction(w http.ResponseWriter, r *http.Request) {
 			return res.OK, res
 		})
 	case monitorActions[action]:
-		err := backend.SetMonitored(r.Context(), name, action == apiActionMonitor)
-		if err != nil {
-			writeError(w, http.StatusConflict, err.Error())
-			return
-		}
-		writeJSON(w, http.StatusOK, ActionResult{OK: true})
+		writeMonitorAction(w, backend.SetMonitored(r.Context(), name, action == apiActionMonitor))
 	default:
 		writeError(w, http.StatusBadRequest, apiErrorUnknownActionPrefix+action)
 	}
@@ -108,7 +103,11 @@ func (s *Server) handleWatchAction(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, apiErrorUnknownActionPrefix+action)
 		return
 	}
-	if err := backend.SetWatchMonitored(r.Context(), name, action == apiActionMonitor); err != nil {
+	writeMonitorAction(w, backend.SetWatchMonitored(r.Context(), name, action == apiActionMonitor))
+}
+
+func writeMonitorAction(w http.ResponseWriter, err error) {
+	if err != nil {
 		writeError(w, http.StatusConflict, err.Error())
 		return
 	}
