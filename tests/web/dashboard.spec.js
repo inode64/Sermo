@@ -9,19 +9,19 @@ const services = [
   {
     name: "web", display_name: "Web server", category: "service", enabled: true,
     monitored: true, status: "active", state: "active", can_reload: true,
-    uptime_seconds: 7200, status_observed_at: "2026-07-10T12:00:00Z", fds: 4096,
+    uptime_seconds: 7200, fds: 4096,
     buttons: [{ name: "flush-queue", label: "Flush queue" }],
   },
   {
     name: "db", display_name: "Database", category: "service", enabled: true,
     monitored: true, status: "active", state: "started", can_reload: true, fds: 512,
-    uptime_seconds: 10800, status_observed_at: "2026-07-10T12:00:00Z",
+    uptime_seconds: 10800,
     last_event: { time: "2026-07-10T11:59:00Z", kind: "reload", message: "config reloaded" },
   },
   {
     name: "stale", display_name: "Stale binary", category: "service", enabled: true,
     monitored: true, status: "active", state: "restart_required", state_reason: "stale_binary",
-    uptime_seconds: 3600, status_observed_at: "2026-07-10T12:00:00Z", strays: 3,
+    uptime_seconds: 3600, strays: 3,
   },
 ];
 
@@ -63,7 +63,7 @@ const dashboard = {
   locks: [],
   activity: { errors: 0, last_event_kind: "action" },
   ready: { ready: true, status: "ok", backend: "systemd", services: 2, watches: 1 },
-  live: { status: "ok", uptime: "1h", uptime_seconds: 3600, services: 2, go: "go1.test" },
+  live: { status: "ok", uptime_seconds: 3600, services: 2, go: "go1.test" },
   monitoring: { monitored: 2, paused: 0, total: 2 },
   host_metrics: [],
 };
@@ -72,11 +72,11 @@ const watches = [{
   name: "process-queue", display_name: "Process queue", category: "watch",
   scope: "service",
   enabled: true, monitored: true, state: "ok", check_type: "process",
-  summary: "2 processes", interval: "1m", status_observed_at: "2026-07-10T12:00:00Z",
+  summary: "2 processes", interval: "1m",
 }, {
   name: "raid-md9", display_name: "RAID md9", category: "storage",
   enabled: true, monitored: true, state: "ok", check_type: "raid",
-  summary: "raid md9 healthy", interval: "1m", status_observed_at: "2026-07-10T12:00:00Z",
+  summary: "raid md9 healthy", interval: "1m",
   metrics: [
     { name: "degraded", band: true, severity: "error", label: "Degraded arrays" },
     { name: "recovering", band: true, severity: "warning", label: "Recovering arrays" },
@@ -90,7 +90,7 @@ const watches = [{
   enabled: true, monitored: true, state: "ok", check_type: "replication",
   can_control_replication: true,
   summary: "replication ok: io and sql running, 0s behind (source 172.31.27.30)",
-  interval: "1m", status_observed_at: "2026-07-10T12:00:00Z",
+  interval: "1m",
   metrics: [
     { name: "io_stopped", band: true, severity: "error", label: "IO thread" },
     { name: "sql_stopped", band: true, severity: "error", label: "SQL thread" },
@@ -109,17 +109,16 @@ const watches = [{
     { field: "path", label: "Path", value: "/usr/share/GeoIP" },
     { field: "age", label: "Age", value: "8mo 1d" },
   ],
-  summary: "GeoIP databases are current", interval: "12h", status_observed_at: "2026-07-10T12:00:00Z",
+  summary: "GeoIP databases are current", interval: "12h",
 }, {
   name: "dead-letter", display_name: "Dead letter", category: "files",
   enabled: true, monitored: true, state: "ok", check_type: "file",
-  summary: "size threshold clear", interval: "5m", status_observed_at: "2026-07-10T12:00:00Z",
+  summary: "size threshold clear", interval: "5m",
   metrics: [{ name: "size", band: true, severity: "error", label: "Size threshold" }],
 }, {
   name: "host-fds", display_name: "File descriptors", category: "system",
   enabled: true, monitored: true, state: "ok", check_type: "fds",
   summary: "fds 879072 allocated (no kernel limit)", interval: "1m",
-  status_observed_at: "2026-07-10T12:00:00Z",
   readings: [{ field: "allocated", label: "Allocated", value: "879072" }],
 }, {
   name: "net-wan", display_name: "WAN", category: "network",
@@ -133,11 +132,11 @@ const watches = [{
     { field: "state", label: "State", value: "up" },
     { field: "errors", label: "Errors total", value: "0 (total 0)" },
   ],
-  summary: "wan state up", interval: "30s", status_observed_at: "2026-07-10T12:00:00Z",
+  summary: "wan state up", interval: "30s",
 }, {
   name: "icmp-gateway", display_name: "Gateway", category: "network",
   enabled: true, monitored: true, state: "ok", check_type: "icmp",
-  summary: "gateway reachable", interval: "30s", status_observed_at: "2026-07-10T12:00:00Z",
+  summary: "gateway reachable", interval: "30s",
 }, {
   name: "dns-upstream", display_name: "Upstream DNS", category: "network",
   enabled: true, monitored: true, state: "stale", sample_state: "stale", check_type: "dns",
@@ -154,22 +153,22 @@ const watches = [{
   name: "storage-data", display_name: "Data volume", category: "storage",
   enabled: true, monitored: true, state: "ok", check_type: "storage",
   storage: { filesystem: "ext4", mount_point: "/data", used_bytes: 10, total_bytes: 100 },
-  summary: "10% used", interval: "1m", status_observed_at: "2026-07-10T12:00:00Z",
+  summary: "10% used", interval: "1m",
 }, {
   name: "storage-backup", display_name: "Backup volume", category: "storage",
   enabled: true, monitored: true, state: "ok", check_type: "storage",
   storage: { filesystem: "xfs", mount_point: "/backup", used_bytes: 20, total_bytes: 100 },
-  summary: "20% used", interval: "1m", status_observed_at: "2026-07-10T12:00:00Z",
+  summary: "20% used", interval: "1m",
 }, {
   name: "hdparm-sda", display_name: "Disk speed", category: "storage",
   enabled: true, monitored: true, state: "ok", check_type: "hdparm", can_probe: true,
   probe: { state: "running", started_at: "2026-07-10T12:00:00Z" },
-  summary: "hdparm /dev/sda", interval: "6h", status_observed_at: "2026-07-10T12:00:00Z",
+  summary: "hdparm /dev/sda", interval: "6h",
 }, {
   name: "hdparm-sdd", display_name: "Backup disk speed", category: "storage",
   enabled: true, monitored: true, state: "warning", check_type: "hdparm",
   readings: [{ field: "warning", label: "Warning", warning: "hdparm /dev/sdd read=0.4 MB/s" }],
-  summary: "hdparm /dev/sdd read=0.4 MB/s", interval: "6h", status_observed_at: "2026-07-10T12:00:00Z",
+  summary: "hdparm /dev/sdd read=0.4 MB/s", interval: "6h",
 }, {
   name: "diskio-sdd", display_name: "Backup disk I/O", category: "storage",
   enabled: true, monitored: true, state: "ok", check_type: "diskio",
@@ -183,12 +182,12 @@ const watches = [{
     { field: "read_total_bytes", label: "Read total", value: "12.8 GB" },
     { field: "write_total_bytes", label: "Written total", value: "57 KB" },
   ],
-  summary: "diskio sdd idle", interval: "30s", status_observed_at: "2026-07-10T12:00:00Z",
+  summary: "diskio sdd idle", interval: "30s",
 }, {
   name: "smart-sda", display_name: "Disk health", category: "storage",
   enabled: true, monitored: true, state: "testing", check_type: "smart", can_probe: true,
   readings: [{ field: "device", label: "Device", value: "/dev/sda" }, { field: "device_state", label: "State", value: "testing" }],
-  summary: "smart /dev/sda self-test", interval: "1d", status_observed_at: "2026-07-10T12:00:00Z",
+  summary: "smart /dev/sda self-test", interval: "1d",
 }, {
   name: "smart-sdb", display_name: "Healthy disk health", category: "storage",
   enabled: true, monitored: true, state: "ok", check_type: "smart", can_probe: true,
@@ -199,7 +198,7 @@ const watches = [{
     { field: "temperature", label: "temperature", value: "42 °C" },
   ],
   metrics: [{ name: "temperature", unit: "°C" }],
-  summary: "smart /dev/sdb health=PASSED", interval: "1d", status_observed_at: "2026-07-10T12:00:00Z",
+  summary: "smart /dev/sdb health=PASSED", interval: "1d",
 }, {
   name: "smart-sdc", display_name: "Verdictless disk health", category: "storage",
   enabled: true, monitored: true, state: "ok", check_type: "smart", can_probe: true,
@@ -207,7 +206,7 @@ const watches = [{
     { field: "device", label: "Device", value: "/dev/sdc" },
     { field: "health", label: "Health", value: "unknown" },
   ],
-  summary: "smart /dev/sdc health=unknown", interval: "1d", status_observed_at: "2026-07-10T12:00:00Z",
+  summary: "smart /dev/sdc health=unknown", interval: "1d",
 }, {
   name: "smart-sdz", display_name: "Dead disk health", category: "storage",
   enabled: true, monitored: true, state: "missing", check_type: "smart", can_probe: true,
@@ -217,27 +216,26 @@ const watches = [{
     { field: "device_state", label: "State", value: "missing" },
     { field: "health", label: "Health", value: "missing" },
   ],
-  summary: "smart /dev/sdz: device missing", interval: "1d", status_observed_at: "2026-07-10T12:00:00Z",
+  summary: "smart /dev/sdz: device missing", interval: "1d",
 }];
 
 const applications = [{
   name: "nginx", display_name: "Nginx", category: "web", state: "ok",
   status: "ok", version: "1.28.0", version_short: "1.28.0",
-  observed_at: "2026-07-10T12:00:00Z", keeps_sla: true,
+  keeps_sla: true,
 }, {
   name: "postgres", display_name: "PostgreSQL", category: "data", state: "failed",
   status: "error: exit 1", version: "16.3", version_short: "16.3",
-  observed_at: "2026-07-10T12:00:00Z",
 }];
 
 const libraries = [{
   name: "openssl", display_name: "OpenSSL", category: "crypto", state: "ok",
   status: "ok", version: "OpenSSL 3.5.1", version_short: "3.5.1",
-  binary: "/usr/lib64/libssl.so", observed_at: "2026-07-10T12:00:00Z",
+  binary: "/usr/lib64/libssl.so",
 }, {
   name: "zlib", display_name: "zlib", category: "compression", state: "warning",
   status: "version unavailable", version: "1.3.1", version_short: "1.3.1",
-  binary: "/usr/lib64/libz.so", observed_at: "2026-07-10T12:00:00Z",
+  binary: "/usr/lib64/libz.so",
 }];
 
 const dashboardFallbackFields = Object.freeze({
@@ -805,7 +803,7 @@ test("service warning reason sits below the service instead of widening State", 
       // pill or a reason used to split inside a word.
       name: "degraded", display_name: "Degraded workload with a fairly long display name", category: "service", enabled: true,
       monitored: true, status: "failed", state: "warning", state_reason: "failed_unit_live_process",
-      uptime_seconds: 1800, status_observed_at: "2026-07-10T12:00:00Z",
+      uptime_seconds: 1800,
     });
     await route.fulfill({ json: body });
   });
@@ -968,7 +966,6 @@ test("failed services prioritize restart and keep repair as a manual fallback", 
       name: "failed-repair", display_name: "Failed repair", category: "service", enabled: true,
       monitored: true, status: "failed", state: "failed", can_reload: false,
       also_apply: ["db"],
-      status_observed_at: "2026-07-10T12:00:00Z",
     });
     await route.fulfill({ json: body });
   });

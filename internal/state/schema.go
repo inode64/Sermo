@@ -71,9 +71,7 @@ var storageSchema = []string{
 	// relaunch until the worker has observed one active check cycle.
 	`CREATE TABLE IF NOT EXISTS operation_settling (
 		service    TEXT PRIMARY KEY,
-		action     TEXT NOT NULL,
 		phase      TEXT NOT NULL,
-		source     TEXT NOT NULL,
 		updated_at TEXT NOT NULL
 	);`,
 	// service_restart_notice stores the principal process identity last observed
@@ -208,6 +206,10 @@ func (s *Store) initializeSchema(ctx context.Context) error {
 		_ = tx.Rollback()
 		return err
 	}
+	if err := dropOperationSettlingMetadata(ctx, tx); err != nil {
+		_ = tx.Rollback()
+		return err
+	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit state schema: %w", err)
 	}
@@ -266,4 +268,24 @@ func columnExists(ctx context.Context, tx *sql.Tx, table, column string) (bool, 
 		return false, fmt.Errorf("inspect %s.%s: %w", table, column, err)
 	}
 	return count > 0, nil
+}
+
+// dropOperationSettlingMetadata removes unused columns from older databases.
+// Keep the phase and timestamp intact: pending transitions still suppress rules
+// and alerts after a daemon restart. Run inside the schema transaction so a
+// failed migration cannot leave a partially updated schema.
+func dropOperationSettlingMetadata(ctx context.Context, tx *sql.Tx) error {
+	for _, column := range []string{"action", "source"} {
+		present, err := columnExists(ctx, tx, "operation_settling", column)
+		if err != nil {
+			return err
+		}
+		if !present {
+			continue
+		}
+		if _, err := tx.ExecContext(ctx, "ALTER TABLE operation_settling DROP COLUMN "+column); err != nil {
+			return fmt.Errorf("drop operation_settling.%s: %w", column, err)
+		}
+	}
+	return nil
 }

@@ -11,7 +11,6 @@ import (
 	"sermo/internal/process"
 	"sermo/internal/servicemgr"
 	"sermo/internal/state"
-	"sermo/internal/units"
 	"sermo/internal/web"
 )
 
@@ -232,7 +231,6 @@ func serviceRuntimeVisible(status string) bool {
 
 func applyServiceRuntimeFields(svc *web.Service, cur web.ServiceRuntime) {
 	svc.StartedAt = cur.StartedAt
-	svc.Uptime = cur.Uptime
 	svc.UptimeSeconds = cur.UptimeSeconds
 	svc.RSS = cur.RSS
 	svc.IORead = cur.IORead
@@ -273,7 +271,7 @@ func (b *WebBackend) probeServiceRuntime(name string, e *webEntry) web.ServiceRu
 		cur.ProcessTotals = *totals
 	}
 	if started, ok := serviceStartTime(procs, b.runtimeMetricReader(), now); ok {
-		cur.StartedAt, cur.Uptime, cur.UptimeSeconds = serviceRuntimeUptime(started, now)
+		cur.StartedAt, cur.UptimeSeconds = serviceRuntimeUptime(started, now)
 	}
 	return cur
 }
@@ -311,12 +309,12 @@ func serviceStartTime(procs []process.Process, r metrics.Reader, now time.Time) 
 	return oldestProcessStart(procs, r, now)
 }
 
-func serviceRuntimeUptime(started, now time.Time) (startedAt, uptime string, uptimeSeconds int64) {
+func serviceRuntimeUptime(started, now time.Time) (startedAt string, uptimeSeconds int64) {
 	if started.IsZero() || started.After(now) {
-		return "", "", 0
+		return "", 0
 	}
 	secs := max(int64(now.Sub(started).Seconds()), 0)
-	return started.UTC().Format(time.RFC3339), units.HumanizeDuration(time.Duration(secs) * time.Second), secs
+	return started.UTC().Format(time.RFC3339), secs
 }
 
 func oldestProcessStart(procs []process.Process, r metrics.Reader, now time.Time) (time.Time, bool) {

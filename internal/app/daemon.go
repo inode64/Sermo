@@ -1163,7 +1163,7 @@ func liveSampler(service string, lc *metrics.Collector, live *LiveMetrics, servi
 			cur.HasCPU = true
 		}
 		if started, ok := serviceStartTime(procList, lc.Reader, at); ok {
-			cur.StartedAt, cur.Uptime, cur.UptimeSeconds = serviceRuntimeUptime(started, at)
+			cur.StartedAt, cur.UptimeSeconds = serviceRuntimeUptime(started, at)
 		}
 		serviceMetrics.record(ctx, service, cur, at)
 	}

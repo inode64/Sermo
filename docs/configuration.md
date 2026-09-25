@@ -1063,11 +1063,12 @@ Read-only endpoints:
 - `GET /api/services` — **configured runtime** service list (the service
   files under `paths.services`): name, `state` (`disabled`, `stopped`,
   `started`, `starting`, `collecting`, `monitored`, `restart_required`, `warning`, `failed`), backend status,
-  `check_health`, `checks_failing`, `observability_ready`,
+  `check_health`, `observability_ready`,
   `observability_missing`, `state_reason`, active locks, monitor state/source/timestamp,
   backend, unit, cooldown, remediation state, next eligible action and last
   event. This is not `sermoctl services`, which lists catalog service profiles — see
-  [cli.md](cli.md#catalog-inventory).
+  [cli.md](cli.md#catalog-inventory). Process age is exposed as `uptime_seconds`;
+  clients format the duration for display.
 - `GET /api/services/{name}` — service detail: latest checks, rolling SLA, named
   runtime locks, discovered processes, automatic remediation policy state and
   rule window progress.
@@ -1086,14 +1087,16 @@ Read-only endpoints:
 - `GET /api/services/{name}/sla?since=24h` — availability history at the
   resolution that window is stored at (see [Stored history
   resolution](#stored-history-resolution)); `since` is a duration, default 24h,
-  capped at `engine.retention_1d` (default 366 days, ~1 year).
+  capped at `engine.retention_1d` (default 366 days, ~1 year). Each bucket exposes
+  `start`, `up`, `total` and `down_buckets`; compute availability as `up / total`
+  when `total > 0`. A zero total means no observations, not downtime.
 - `GET /api/services/{name}/metrics?check=NAME&since=24h` — check latency
   history + summary. Add `metric=KEY` for a named numeric metric published by
   that check, see below.
 - `GET /api/services/{name}/runtime?since=24h` — service process tree CPU,
   memory and IO history. Its current value is the latest worker-published
   sample (with its original `at` timestamp); API reads never trigger another
-  process discovery pass.
+  process discovery pass. Process age uses `uptime_seconds`, as in the service list.
 - `GET /api/services/{name}/events?limit=N` — events for one service.
 - `GET /api/watches` — host-level and service-scoped watches, their `scope`,
   monitor state, conditions, notifications, live readings when available and
@@ -1164,7 +1167,8 @@ accepted operation cannot switch targets during a concurrent reload.
 - `POST /api/state/compact?before=TIME` — consolidate and prune stored history to
   the configured retention, then vacuum the state database. `before` optionally
   drops whatever history remains older than an explicit cutoff. Matches
-  `sermoctl state compact`.
+  `sermoctl state compact`. The response includes `ok`, total rows `pruned`,
+  `events` pruned and the optional `before` cutoff; failures include `message`.
 - `POST /api/reload` — request a `sermod` configuration reload, equivalent to
   `sermoctl daemon reload`.
 
@@ -1174,8 +1178,8 @@ accepted operation cannot switch targets during a concurrent reload.
 process is alive, so it always returns **200**. A plain request returns
 `text/plain` body `ok`; this plain probe is served **without authentication** so a
 monitor, load balancer, container orchestrator or reverse proxy can probe it with
-no credentials. `GET /livez?verbose` returns JSON with `status`, `uptime` (and
-`uptime_seconds`), `started_at`, `now`, the number of `services`, and the Go
+no credentials. `GET /livez?verbose` returns JSON with `status`,
+`uptime_seconds`, `started_at`, `now`, the number of `services`, and the Go
 runtime version; when web auth is configured, the verbose form follows normal
 read authentication like the dashboard:
 

@@ -103,12 +103,9 @@ func (b *WebBackend) viewWithRuntime(ctx context.Context, name string, e *webEnt
 		e.invalidateStatusCache()
 		status, statusAt = e.backendStatusSnapshot(ctx, observation.at)
 	}
-	status, statusAt = observation.freshServiceCheckStatus(e, status, statusAt)
+	status = observation.freshServiceCheckStatus(e, status, statusAt)
 	svc.Status = status
-	if !statusAt.IsZero() {
-		svc.StatusObservedAt = statusAt.UTC().Format(time.RFC3339)
-	}
-	failing, health := observation.serviceCheckHealth(e, svc.Monitored)
+	health := observation.serviceCheckHealth(e, svc.Monitored)
 	baseHealth := health
 	stateReason := observation.serviceStateReason(e)
 	processActive := observation.runtimeFresh && observation.runtime.StartedAt != ""
@@ -120,9 +117,6 @@ func (b *WebBackend) viewWithRuntime(ctx context.Context, name string, e *webEnt
 		health = checkHealthWarning
 	}
 	svc.CheckHealth = health
-	if failing > 0 {
-		svc.ChecksFailing = failing
-	}
 	svc.StateReason = stateReason
 	svc.Strays = observation.serviceStrayCount(e)
 	if !lockView.ready {
@@ -154,9 +148,9 @@ func (b *WebBackend) viewWithRuntime(ctx context.Context, name string, e *webEnt
 // unit, so this keeps a CLI or external restart from displaying the cache's
 // former inactive state after monitoring has observed it active, without
 // adding an init-system query to each dashboard request.
-func (o serviceObservation) freshServiceCheckStatus(e *webEntry, status string, statusAt time.Time) (string, time.Time) {
+func (o serviceObservation) freshServiceCheckStatus(e *webEntry, status string, statusAt time.Time) string {
 	if e == nil || o.snapshots == nil {
-		return status, statusAt
+		return status
 	}
 	snapshots := o.snapshots
 	for _, check := range e.checkNames {
@@ -171,9 +165,9 @@ func (o serviceObservation) freshServiceCheckStatus(e *webEntry, status string, 
 		if !normalizedServiceStatus(observed) {
 			continue
 		}
-		return string(observed), snap.At
+		return string(observed)
 	}
-	return status, statusAt
+	return status
 }
 
 func normalizedServiceStatus(status servicemgr.Status) bool {
@@ -411,9 +405,9 @@ func setCurrentMetricValues(metrics []web.CheckMetric, data map[string]any) {
 	}
 }
 
-func (o serviceObservation) serviceCheckHealth(e *webEntry, monitored bool) (int, string) {
+func (o serviceObservation) serviceCheckHealth(e *webEntry, monitored bool) string {
 	if e == nil {
-		return 0, checkHealthUnknown
+		return checkHealthUnknown
 	}
 	return checkHealthSummary(o.snapshots, e.checkNames, e.checkSeverities, monitored)
 }
@@ -537,14 +531,15 @@ func (b *WebBackend) operationSettlingPending(name string, records map[string]st
 // from live configuration, and decides for a snapshot that carries none — one
 // persisted before the grade was stored — so it is graded correctly on the
 // first cycle.
-func checkHealthSummary(snap map[string]CheckSnapshot, checkNames []string, severities map[string]string, monitored bool) (failing int, health string) {
+func checkHealthSummary(snap map[string]CheckSnapshot, checkNames []string, severities map[string]string, monitored bool) string {
 	if !monitored {
-		return 0, TargetStatePaused
+		return TargetStatePaused
 	}
 	if len(checkNames) == 0 {
-		return 0, ""
+		return ""
 	}
 	observed := false
+	failing := 0
 	warning := 0
 	for _, name := range checkNames {
 		cs, seen := snap[name]
@@ -562,15 +557,15 @@ func checkHealthSummary(snap map[string]CheckSnapshot, checkNames []string, seve
 		failing++
 	}
 	if !observed {
-		return 0, checkHealthUnknown
+		return checkHealthUnknown
 	}
 	if failing > 0 {
-		return failing, checkHealthFailing
+		return checkHealthFailing
 	}
 	if warning > 0 {
-		return 0, checkHealthWarning
+		return checkHealthWarning
 	}
-	return 0, TargetStateOK
+	return TargetStateOK
 }
 
 // Services returns the web view of every configured service.

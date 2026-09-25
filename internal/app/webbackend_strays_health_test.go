@@ -36,10 +36,7 @@ func straysHealthBackend(t *testing.T, reports string) *WebBackend {
 func TestFailingStraysCheckDoesNotDegradeTheService(t *testing.T) {
 	b := straysHealthBackend(t, checks.ReportsState)
 
-	failing, health := b.observeService("web", b.entries["web"]).serviceCheckHealth(b.entries["web"], true)
-	if failing != 0 {
-		t.Fatalf("checks failing = %d, want 0: a stray is verdictless", failing)
-	}
+	health := b.observeService("web", b.entries["web"]).serviceCheckHealth(b.entries["web"], true)
 	if health != TargetStateOK {
 		t.Fatalf("check health = %q, want %q", health, TargetStateOK)
 	}
@@ -55,7 +52,7 @@ func TestFailingStraysCheckDoesNotDegradeTheService(t *testing.T) {
 func TestFailingStraysCheckWouldCountWithoutTheVerdictlessMode(t *testing.T) {
 	b := straysHealthBackend(t, "")
 
-	if failing, _ := b.observeService("web", b.entries["web"]).serviceCheckHealth(b.entries["web"], true); failing != 1 {
-		t.Fatalf("checks failing = %d, want 1 once the check carries a verdict", failing)
+	if health := b.observeService("web", b.entries["web"]).serviceCheckHealth(b.entries["web"], true); health != checkHealthFailing {
+		t.Fatalf("check health = %q, want failing once the check carries a verdict", health)
 	}
 }

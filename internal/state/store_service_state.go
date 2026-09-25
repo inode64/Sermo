@@ -144,8 +144,8 @@ func (s *Store) SetActive(service string, active bool, source string) error {
 // its first post-operation observation cycle.
 func (s *Store) SetOperationSettling(service, phase string) error {
 	_, err := s.exec(s.sqlCtx(),
-		`INSERT INTO operation_settling (service, action, phase, source, updated_at)
-		 VALUES (?, '', ?, '', ?)
+		`INSERT INTO operation_settling (service, phase, updated_at)
+		 VALUES (?, ?, ?)
 		 ON CONFLICT(service) DO UPDATE SET
 		   phase      = excluded.phase,
 		   updated_at = excluded.updated_at;`,

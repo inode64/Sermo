@@ -16,16 +16,15 @@ func TestObservationContractReachesPersistenceEventsAndWeb(t *testing.T) {
 		result      checks.Result
 		observation checks.ObservationState
 		wantEvents  int
-		wantFailing int
 		wantHealth  string
 	}{
 		{name: "healthy", result: checks.Result{OK: true}, observation: checks.ObservationHealthy, wantHealth: TargetStateOK},
-		{name: "failing", result: checks.Result{OK: false}, observation: checks.ObservationFailing, wantEvents: 1, wantFailing: 1, wantHealth: checkHealthFailing},
-		{name: "unavailable", result: checks.Result{OK: false, Unavailable: true}, observation: checks.ObservationUnavailable, wantEvents: 1, wantFailing: 1, wantHealth: checkHealthFailing},
+		{name: "failing", result: checks.Result{OK: false}, observation: checks.ObservationFailing, wantEvents: 1, wantHealth: checkHealthFailing},
+		{name: "unavailable", result: checks.Result{OK: false, Unavailable: true}, observation: checks.ObservationUnavailable, wantEvents: 1, wantHealth: checkHealthFailing},
 		{name: "skipped", result: checks.Result{OK: false, Skipped: true}, observation: checks.ObservationSkipped, wantHealth: TargetStateOK},
 		{name: "neutral", result: checks.Result{OK: false, Reports: checks.ReportsState}, observation: checks.ObservationNeutral, wantHealth: TargetStateOK},
 		{name: "condition healthy", result: checks.Result{OK: false, Condition: true}, observation: checks.ObservationHealthy, wantHealth: TargetStateOK},
-		{name: "condition firing", result: checks.Result{OK: true, Condition: true}, observation: checks.ObservationFailing, wantEvents: 1, wantFailing: 1, wantHealth: checkHealthFailing},
+		{name: "condition firing", result: checks.Result{OK: true, Condition: true}, observation: checks.ObservationFailing, wantEvents: 1, wantHealth: checkHealthFailing},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -72,8 +71,8 @@ func TestObservationContractReachesPersistenceEventsAndWeb(t *testing.T) {
 				snapshots: snapshots,
 			}
 			service := backend.view(context.Background(), "demo", entry)
-			if service.ChecksFailing != tt.wantFailing || service.CheckHealth != tt.wantHealth {
-				t.Fatalf("web check health = %q failing=%d, want %q failing=%d", service.CheckHealth, service.ChecksFailing, tt.wantHealth, tt.wantFailing)
+			if service.CheckHealth != tt.wantHealth {
+				t.Fatalf("web check health = %q, want %q", service.CheckHealth, tt.wantHealth)
 			}
 		})
 	}

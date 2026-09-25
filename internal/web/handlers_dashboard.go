@@ -117,7 +117,6 @@ func (s *Server) liveReport(now time.Time, services int) LiveReport {
 		Status:        apiStatusOK,
 		StartedAt:     s.started.Format(time.RFC3339),
 		Now:           now.Format(time.RFC3339),
-		Uptime:        uptime.Round(time.Second).String(),
 		UptimeSeconds: int64(uptime.Seconds()),
 		Services:      services,
 		Go:            runtime.Version(),

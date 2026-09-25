@@ -94,7 +94,7 @@ func TestServiceStateReasonNilSafe(t *testing.T) {
 func TestWebBackendStaleBinaryRequiresRestartWithoutFailingHealth(t *testing.T) {
 	b, entry := staleBinaryBackend(t, false)
 	svc := b.view(context.Background(), "web", entry)
-	if svc.State != TargetStateRestartRequired || svc.CheckHealth != checkHealthWarning || svc.ChecksFailing != 0 || svc.StateReason != stateReasonStaleBinary {
+	if svc.State != TargetStateRestartRequired || svc.CheckHealth != checkHealthWarning || svc.StateReason != stateReasonStaleBinary {
 		t.Fatalf("stale binary service = %+v, want restart required without failed health", svc)
 	}
 
@@ -133,7 +133,7 @@ func TestWebBackendProcessCheckReplacedBinaryRequiresRestart(t *testing.T) {
 	}
 
 	svc := b.view(context.Background(), "dmeventd", entry)
-	if svc.State != TargetStateRestartRequired || svc.StateReason != stateReasonStaleBinary || svc.ChecksFailing != 0 {
+	if svc.State != TargetStateRestartRequired || svc.StateReason != stateReasonStaleBinary {
 		t.Fatalf("replaced binary seen by the process check = %+v, want restart required", svc)
 	}
 	// The detail row must not read "ok" beside a message that says the process
@@ -175,7 +175,7 @@ func TestWebBackendConfigurationWarningOutranksRestartRequired(t *testing.T) {
 	}
 
 	svc := b.view(context.Background(), "web", entry)
-	if svc.State != TargetStateWarning || svc.StateReason != stateReasonConfigurationInvalid || svc.ChecksFailing != 0 {
+	if svc.State != TargetStateWarning || svc.StateReason != stateReasonConfigurationInvalid {
 		t.Fatalf("invalid configuration with stale binary = %+v, want configuration warning precedence", svc)
 	}
 }
@@ -232,7 +232,7 @@ func TestServiceObservationKeepsOneCycleAndFreshnessForRow(t *testing.T) {
 	if got := next.serviceStateReason(entry); got != "" {
 		t.Fatalf("stale result retained: %q", got)
 	}
-	if _, health := next.serviceCheckHealth(entry, true); health != checkHealthUnknown {
+	if health := next.serviceCheckHealth(entry, true); health != checkHealthUnknown {
 		t.Fatalf("stale health = %q", health)
 	}
 }

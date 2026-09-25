@@ -23,15 +23,13 @@ type Service struct {
 	Unit                 string   `json:"unit"`
 	State                string   `json:"state"`
 	Status               string   `json:"status"`
-	StatusObservedAt     string   `json:"status_observed_at,omitempty"` // RFC3339 when init status was actually sampled
-	Interval             string   `json:"interval,omitempty"`           // resolved per-service cycle cadence (own interval or engine default)
-	DryRun               bool     `json:"dry_run,omitempty"`            // true when automatic actions are simulated
-	Enabled              bool     `json:"enabled"`                      // false when service document has `enabled: false`
+	Interval             string   `json:"interval,omitempty"` // resolved per-service cycle cadence (own interval or engine default)
+	DryRun               bool     `json:"dry_run,omitempty"`  // true when automatic actions are simulated
+	Enabled              bool     `json:"enabled"`            // false when service document has `enabled: false`
 	Monitored            bool     `json:"monitored"`
 	MonitorSource        string   `json:"monitor_source,omitempty"`        // cli | web | config | daemon
 	MonitorChangedAt     string   `json:"monitor_changed_at,omitempty"`    // RFC3339 when monitoring state last changed
 	CheckHealth          string   `json:"check_health,omitempty"`          // ok | warning | failing | unknown | paused | disabled
-	ChecksFailing        int      `json:"checks_failing,omitempty"`        // required checks currently failing
 	ObservabilityReady   bool     `json:"observability_ready"`             // true when monitored service has fresh visible indicators
 	ObservabilityMissing []string `json:"observability_missing,omitempty"` // indicator groups still collecting
 	// StateReason is a machine-readable cause behind an operator-facing state
@@ -58,7 +56,6 @@ type Service struct {
 	// semantics: matched processes plus their child/descendant processes.
 	NoResidentProcess bool     `json:"no_resident_process,omitempty"` // true for oneshot/helper services with no resident process tree
 	StartedAt         string   `json:"started_at,omitempty"`          // oldest discovered process start time, RFC3339
-	Uptime            string   `json:"uptime,omitempty"`              // display-ready age of StartedAt
 	UptimeSeconds     int64    `json:"uptime_seconds,omitempty"`
 	RSS               int64    `json:"rss,omitempty"`
 	IORead            int64    `json:"io_read,omitempty"`  // cumulative disk read bytes
@@ -130,9 +127,7 @@ type MountActionResult struct {
 	Mounted   bool            `json:"mounted"`
 	Refcount  int             `json:"refcount"`
 	Operation *MountOperation `json:"operation,omitempty"`
-	Forced    bool            `json:"forced,omitempty"`
 	Lazy      bool            `json:"lazy,omitempty"`
-	Signalled []int           `json:"signalled,omitempty"`
 	Blockers  []MountBlocker  `json:"blockers,omitempty"`
 }
 
@@ -173,7 +168,6 @@ type CatalogItem struct {
 	VersionSource string `json:"version_source,omitempty"` // app whose version probe supplied this version
 	Status        string `json:"status"`                   // ok, or an error description
 	State         string `json:"state,omitempty"`          // starting | ok | failed | warning
-	ObservedAt    string `json:"observed_at,omitempty"`    // RFC3339 when version/status probes actually ran
 	LastEvent     *Event `json:"last_event,omitempty"`     // populated with the newest retained application event
 
 	// KeepsSLA marks an application that maps to a monitored service, so the
@@ -326,7 +320,6 @@ type StorageWatchInfo struct {
 	InodesTotal      uint64   `json:"inodes_total,omitempty"`
 	InodesFree       uint64   `json:"inodes_free,omitempty"`
 	InodesUsedPct    float64  `json:"inodes_used_pct,omitempty"`
-	InodesFreePct    float64  `json:"inodes_free_pct,omitempty"`
 	SampleError      string   `json:"sample_error,omitempty"`
 	MountSampleError string   `json:"mount_sample_error,omitempty"`
 }
@@ -412,7 +405,6 @@ type ServiceRuntime struct {
 	At string `json:"at,omitempty"` // RFC3339
 	ProcessTotals
 	StartedAt     string  `json:"started_at,omitempty"` // oldest discovered process start time, RFC3339
-	Uptime        string  `json:"uptime,omitempty"`
 	UptimeSeconds int64   `json:"uptime_seconds,omitempty"`
 	IOReadRate    float64 `json:"io_read_rate,omitempty"`  // bytes/s
 	IOWriteRate   float64 `json:"io_write_rate,omitempty"` // bytes/s
@@ -479,12 +471,9 @@ type StateCompactResult struct {
 	Message string `json:"message,omitempty"`
 	Pruned  int64  `json:"pruned"`
 	Before  string `json:"before,omitempty"` // RFC3339 cutoff, empty when none was given
-	Rolled  int64  `json:"rolled,omitempty"`
-	// Archives is the rows pruned from the resolution archives; Events the rows
-	// pruned from the event feed. Pruned is their sum.
-	Archives int64 `json:"archives,omitempty"`
-	Events   int64 `json:"events,omitempty"`
-	Vacuum   bool  `json:"vacuum"`
+	// Events counts rows pruned from the event feed. Pruned also includes
+	// rows removed from the resolution archives.
+	Events int64 `json:"events,omitempty"`
 }
 
 // PreflightResult is the outcome of an on-demand preflight run.
@@ -631,16 +620,15 @@ type Detail struct {
 	Rules           []RuleWindow   `json:"rules,omitempty"`
 }
 
-// SeriesPoint is one availability bucket of the SLA history. Ratio is nil for a
+// SeriesPoint is one availability bucket of the SLA history. Total is zero for a
 // bucket with no observed cycle. The bucket span is the resolution the requested
 // window is stored at, so a point covers one minute on a short window and up to a
 // day on the rolling year.
 type SeriesPoint struct {
-	Start       string   `json:"start"` // RFC3339, bucket-aligned
-	Ratio       *float64 `json:"ratio"`
-	Up          int64    `json:"up"`
-	Total       int64    `json:"total"`
-	DownBuckets int64    `json:"down_buckets"`
+	Start       string `json:"start"` // RFC3339, bucket-aligned
+	Up          int64  `json:"up"`
+	Total       int64  `json:"total"`
+	DownBuckets int64  `json:"down_buckets"`
 }
 
 // MetricPoint is one time bucket of a check's latency series (milliseconds).
@@ -706,7 +694,6 @@ type LiveReport struct {
 	Status        string `json:"status"`
 	StartedAt     string `json:"started_at"`
 	Now           string `json:"now"`
-	Uptime        string `json:"uptime"`
 	UptimeSeconds int64  `json:"uptime_seconds"`
 	Services      int    `json:"services"`
 	Go            string `json:"go"`
