@@ -143,9 +143,6 @@ func (c *Config) materializeRegistry(ctx context.Context, names []string, reg ma
 		c.recordTemplateValidationIssues(tmpl)
 		body := c.templateBody(tmpl, kind)
 		toks := tokensFor(tmpl.Name)
-		if len(toks) == 0 {
-			continue
-		}
 		instances := c.materializeTemplate(ctx, tmpl, body, toks, kind)
 		for _, inst := range instances {
 			if existing, ok := reg[inst.Name]; ok && existing.Name == inst.Name {
@@ -374,9 +371,7 @@ func materializedServiceUnitMatches(patterns, units []string, toks []tmplToken) 
 			})
 		}
 	}
-	matches := dedupeTemplateMatches(out, toks)
-	sortTemplateMatches(matches)
-	return matches
+	return out
 }
 
 // configuredServiceTemplateMatches materializes catalog service templates that
@@ -423,7 +418,7 @@ func (c *Config) configuredServiceTemplateMatches(templateName string, body map[
 			realPath:    uses,
 		})
 	}
-	return dedupeTemplateMatches(matches, toks)
+	return matches
 }
 
 func linkedAppTemplateNameMulti(name string, toks []tmplToken) string {
@@ -559,8 +554,6 @@ func materializedTemplateMatches(discoverPaths []string, matchedBinary bool, opt
 			}
 		}
 	}
-	matches = dedupeTemplateMatches(matches, toks)
-	sortTemplateMatches(matches)
 	return matches
 }
 
