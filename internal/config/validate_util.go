@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"sermo/internal/cfgval"
+	"sermo/internal/rules"
 	"sermo/internal/strutil"
 )
 
@@ -72,4 +73,15 @@ func validateMappingSection(tree map[string]any, key string, add addFunc) map[st
 		add(validationMappingFormat, key)
 	}
 	return section
+}
+
+// serviceSectionErrors runs before expansion can add generated entries to a
+// section and accidentally replace an operator's malformed declaration.
+func serviceSectionErrors(tree map[string]any) []string {
+	var errs []string
+	add := func(format string, args ...any) { errs = append(errs, fmt.Sprintf(format, args...)) }
+	for _, section := range []string{sectionChecks, sectionPreflight, rules.SectionRules, sectionProcesses, sectionCommands} {
+		validateMappingSection(tree, section, add)
+	}
+	return errs
 }
