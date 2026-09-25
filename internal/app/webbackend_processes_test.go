@@ -556,10 +556,13 @@ func (r *liveCPUReader) ProcessThreads(pid int) (uint64, bool) {
 	v, ok := r.threads[pid]
 	return v, ok
 }
-func (*liveCPUReader) TotalMemory() (uint64, uint64, bool) { return 0, 0, false }
-func (*liveCPUReader) SystemCPU() (uint64, uint64, bool)   { return 0, 0, false }
+func (*liveCPUReader) SystemCPU() (uint64, uint64, bool) { return 0, 0, false }
 func (*liveCPUReader) LoadAverages() (float64, float64, float64, bool) {
 	return 0, 0, 0, false
 }
 func (r *liveCPUReader) NumCPU() int         { return r.ncpu }
 func (r *liveCPUReader) ClockTicks() float64 { return r.hz }
+
+func (*liveCPUReader) ProcessSwap(int) (uint64, bool)     { return 0, false }
+func (*liveCPUReader) ProcessFDLimit(int) (uint64, bool)  { return 0, false }
+func (*liveCPUReader) MemoryTotals() metrics.MemoryTotals { return metrics.MemoryTotals{} }

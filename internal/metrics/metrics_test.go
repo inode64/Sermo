@@ -122,12 +122,9 @@ func (r fakeReader) ProcessIO(pid int) (uint64, uint64, bool) {
 	wr, ok2 := r.ioWrite[pid]
 	return rd, wr, ok || ok2
 }
-func (r fakeReader) ProcessFDs(pid int) (uint64, bool)     { v, ok := r.fds[pid]; return v, ok }
-func (r fakeReader) ProcessFDLimit(pid int) (uint64, bool) { v, ok := r.fdLimit[pid]; return v, ok }
-func (r fakeReader) ProcessThreads(pid int) (uint64, bool) { v, ok := r.threads[pid]; return v, ok }
-func (r fakeReader) TotalMemory() (uint64, uint64, bool) {
-	return r.memTotal, r.memUsed, r.memTotal > 0
-}
+func (r fakeReader) ProcessFDs(pid int) (uint64, bool)               { v, ok := r.fds[pid]; return v, ok }
+func (r fakeReader) ProcessFDLimit(pid int) (uint64, bool)           { v, ok := r.fdLimit[pid]; return v, ok }
+func (r fakeReader) ProcessThreads(pid int) (uint64, bool)           { v, ok := r.threads[pid]; return v, ok }
 func (r fakeReader) SystemCPU() (uint64, uint64, bool)               { return r.sysBusy, r.sysTotal, true }
 func (r fakeReader) LoadAverages() (float64, float64, float64, bool) { return 1.5, 0.7, 0.3, true }
 func (r fakeReader) NumCPU() int                                     { return r.ncpu }
@@ -139,27 +136,14 @@ type combinedMemoryReader struct {
 	swapTotal, swapUsed     uint64
 	memoryOK, swapOK        bool
 	combinedCalls           int
-	totalMemoryCalls        int
-	totalSwapCalls          int
 }
 
-func (r *combinedMemoryReader) TotalMemory() (uint64, uint64, bool) {
-	r.totalMemoryCalls++
-	return r.memoryTotal, r.memoryUsed, r.memoryOK
-}
-
-func (r *combinedMemoryReader) TotalSwap() (uint64, uint64, bool) {
-	r.totalSwapCalls++
-	return r.swapTotal, r.swapUsed, r.swapOK
-}
-
-func (r *combinedMemoryReader) TotalMemoryAndSwap() (uint64, uint64, uint64, uint64, bool, bool) {
+func (r *combinedMemoryReader) MemoryTotals() MemoryTotals {
 	r.combinedCalls++
-	return r.memoryTotal, r.memoryUsed, r.swapTotal, r.swapUsed, r.memoryOK, r.swapOK
+	return MemoryTotals{MemoryTotal: r.memoryTotal, MemoryUsed: r.memoryUsed, MemoryOK: r.memoryOK, SwapTotal: r.swapTotal, SwapUsed: r.swapUsed, SwapOK: r.swapOK}
 }
 
-// readerNoSwap implements the core Reader interface but NOT the optional
-// ProcessSwap, so the swap metric must not appear for it.
+// readerNoSwap models a reader whose process swap and fd limits are unavailable.
 type readerNoSwap struct{}
 
 func (readerNoSwap) ProcessCPU(int) (uint64, bool)        { return 0, false }
@@ -167,7 +151,6 @@ func (readerNoSwap) ProcessRSS(int) (uint64, bool)        { return 0, false }
 func (readerNoSwap) ProcessIO(int) (uint64, uint64, bool) { return 0, 0, false }
 func (readerNoSwap) ProcessFDs(int) (uint64, bool)        { return 0, false }
 func (readerNoSwap) ProcessThreads(int) (uint64, bool)    { return 0, false }
-func (readerNoSwap) TotalMemory() (uint64, uint64, bool)  { return 0, 0, false }
 func (readerNoSwap) SystemCPU() (uint64, uint64, bool)    { return 0, 0, false }
 func (readerNoSwap) LoadAverages() (float64, float64, float64, bool) {
 	return 0, 0, 0, false
@@ -302,7 +285,7 @@ func TestServiceProcessCountReflectsAlive(t *testing.T) {
 
 func TestServiceSwapAggregatesOverTree(t *testing.T) {
 	// Per-service swap must sum the parent and all children (like RSS), and report
-	// its share of total swap. swapReader supplies the optional TotalSwap.
+	// its share of total swap. swapReader supplies the machine swap capacity.
 	reader := swapReader{
 		swap: map[int]uint64{10: 100, 11: 200, 12: 50}, // parent + two children
 		hz:   100, ncpu: 1,
@@ -323,11 +306,10 @@ func TestServiceSwapAggregatesOverTree(t *testing.T) {
 	}
 }
 
-func TestServiceSwapAbsentWithoutReaderSupport(t *testing.T) {
-	// readerNoSwap omits ProcessSwap; the swap metric is then simply not produced.
-	c := New(readerNoSwap{})
-	if _, ok := c.SampleService("svc", []int{10})["swap"]; ok {
-		t.Fatal("swap metric must be absent when the reader has no ProcessSwap")
+func TestServiceSwapUnavailableWithoutReadings(t *testing.T) {
+	c := New(fakeReader{rss: map[int]uint64{10: 100}, ncpu: 1, hz: 100})
+	if reading := c.SampleService("svc", []int{10})[MetricSwap]; reading.Ready {
+		t.Fatal("unreadable process swap must not be reported as a measured zero")
 	}
 }
 
@@ -344,8 +326,8 @@ func TestSampleServiceUsesCombinedMemoryTotals(t *testing.T) {
 	}
 	snap := New(reader).SampleService("svc", []int{10})
 
-	if reader.combinedCalls != 1 || reader.totalMemoryCalls != 0 || reader.totalSwapCalls != 0 {
-		t.Fatalf("memory calls combined/mem/swap = %d/%d/%d, want 1/0/0", reader.combinedCalls, reader.totalMemoryCalls, reader.totalSwapCalls)
+	if reader.combinedCalls != 1 {
+		t.Fatalf("memory sample calls = %d, want 1", reader.combinedCalls)
 	}
 	if snap["memory"].Percent != 10 {
 		t.Fatalf("memory percent = %v, want 10", snap["memory"].Percent)
@@ -536,8 +518,8 @@ func TestSampleSystemUsesCombinedMemoryTotals(t *testing.T) {
 	}
 	snap := New(reader).SampleSystem()
 
-	if reader.combinedCalls != 1 || reader.totalMemoryCalls != 0 || reader.totalSwapCalls != 0 {
-		t.Fatalf("memory calls combined/mem/swap = %d/%d/%d, want 1/0/0", reader.combinedCalls, reader.totalMemoryCalls, reader.totalSwapCalls)
+	if reader.combinedCalls != 1 {
+		t.Fatalf("memory sample calls = %d, want 1", reader.combinedCalls)
 	}
 	if snap["total_memory"].Percent != 25 {
 		t.Fatalf("total_memory percent = %v, want 25", snap["total_memory"].Percent)
@@ -706,7 +688,7 @@ func TestServiceFDsPercentIgnoresProcessAboveItsLimit(t *testing.T) {
 }
 
 func TestServiceFDsNoPercentWithoutLimit(t *testing.T) {
-	t.Run("reader without ProcessFDLimit", func(t *testing.T) {
+	t.Run("reader with unavailable fd limits", func(t *testing.T) {
 		fds := New(readerNoSwap{}).SampleService("svc", []int{10})["fds"]
 		if fds.HasPercent {
 			t.Fatalf("fds = %+v, want no percentage when the reader cannot read limits", fds)
@@ -977,4 +959,12 @@ func TestCollectorSharesMemorySampleUntilFreshnessExpires(t *testing.T) {
 	if reader.combinedCalls != 4 {
 		t.Fatalf("failed reads=%d, want 4", reader.combinedCalls)
 	}
+}
+
+func (readerNoSwap) ProcessSwap(int) (uint64, bool)    { return 0, false }
+func (readerNoSwap) ProcessFDLimit(int) (uint64, bool) { return 0, false }
+func (readerNoSwap) MemoryTotals() MemoryTotals        { return MemoryTotals{} }
+
+func (r fakeReader) MemoryTotals() MemoryTotals {
+	return MemoryTotals{MemoryTotal: r.memTotal, MemoryUsed: r.memUsed, MemoryOK: r.memTotal > 0}
 }

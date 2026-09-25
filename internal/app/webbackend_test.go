@@ -1588,16 +1588,12 @@ func (fakeSwapReader) ProcessRSS(int) (uint64, bool)        { return 0, false }
 func (fakeSwapReader) ProcessIO(int) (uint64, uint64, bool) { return 0, 0, false }
 func (fakeSwapReader) ProcessFDs(int) (uint64, bool)        { return 0, false }
 func (fakeSwapReader) ProcessThreads(int) (uint64, bool)    { return 0, false }
-func (fakeSwapReader) TotalMemory() (uint64, uint64, bool)  { return 1 << 30, 1 << 29, true }
 func (fakeSwapReader) SystemCPU() (uint64, uint64, bool)    { return 0, 0, false }
 func (fakeSwapReader) LoadAverages() (float64, float64, float64, bool) {
 	return 0, 0, 0, false
 }
 func (fakeSwapReader) NumCPU() int         { return 1 }
 func (fakeSwapReader) ClockTicks() float64 { return 100 }
-func (r fakeSwapReader) TotalSwap() (uint64, uint64, bool) {
-	return r.total, r.used, true
-}
 
 type countingSystemReader struct {
 	memoryCalls int
@@ -1614,19 +1610,9 @@ func (*countingSystemReader) SystemCPU() (uint64, uint64, bool)    { return 0, 0
 func (*countingSystemReader) NumCPU() int                          { return 4 }
 func (*countingSystemReader) ClockTicks() float64                  { return 100 }
 
-func (r *countingSystemReader) TotalMemory() (uint64, uint64, bool) {
-	r.memoryCalls++
-	return 1000, 250, true
-}
-
 func (r *countingSystemReader) LoadAverages() (float64, float64, float64, bool) {
 	r.loadCalls++
 	return 1, 2, 3, true
-}
-
-func (r *countingSystemReader) TotalSwap() (uint64, uint64, bool) {
-	r.swapCalls++
-	return 2000, 500, true
 }
 
 func TestWebBackendSwapWatchIncludesUsage(t *testing.T) {
@@ -2950,4 +2936,18 @@ func (b *WebBackend) applicationsForTest(ctx context.Context, load func(context.
 	return b.decorateApplications(b.catalogItems(ctx, &b.applications, func(ctx context.Context) []web.CatalogItem {
 		return b.withApplicationSLA(slices.Clone(load(ctx)))
 	}))
+}
+
+func (fakeSwapReader) ProcessSwap(int) (uint64, bool)    { return 0, false }
+func (fakeSwapReader) ProcessFDLimit(int) (uint64, bool) { return 0, false }
+func (r fakeSwapReader) MemoryTotals() metrics.MemoryTotals {
+	return metrics.MemoryTotals{MemoryTotal: 1 << 30, MemoryUsed: 1 << 29, MemoryOK: true, SwapTotal: r.total, SwapUsed: r.used, SwapOK: true}
+}
+
+func (*countingSystemReader) ProcessSwap(int) (uint64, bool)    { return 0, false }
+func (*countingSystemReader) ProcessFDLimit(int) (uint64, bool) { return 0, false }
+func (r *countingSystemReader) MemoryTotals() metrics.MemoryTotals {
+	r.memoryCalls++
+	r.swapCalls++
+	return metrics.MemoryTotals{MemoryTotal: 1000, MemoryUsed: 250, MemoryOK: true, SwapTotal: 2000, SwapUsed: 500, SwapOK: true}
 }

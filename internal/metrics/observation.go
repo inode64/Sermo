@@ -3,12 +3,17 @@ package metrics
 import "sync"
 
 // processMetricReader contains the readings shared by service checks and live
-// views. Optional swap and limit capabilities remain on the original Reader.
+// views. Swap and limit readings remain on the original Reader.
 type processMetricReader interface {
+	// ProcessCPU returns a process's accumulated CPU jiffies (utime+stime).
 	ProcessCPU(pid int) (uint64, bool)
+	// ProcessRSS returns a process's resident memory in bytes.
 	ProcessRSS(pid int) (uint64, bool)
-	ProcessIO(pid int) (uint64, uint64, bool)
+	// ProcessIO returns a process's cumulative block-layer read/write bytes.
+	ProcessIO(pid int) (read, write uint64, ok bool)
+	// ProcessFDs returns a process's count of open file descriptors.
 	ProcessFDs(pid int) (uint64, bool)
+	// ProcessThreads returns a process's thread count.
 	ProcessThreads(pid int) (uint64, bool)
 }
 

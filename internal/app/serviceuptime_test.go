@@ -1,6 +1,7 @@
 package app
 
 import (
+	"sermo/internal/metrics"
 	"testing"
 	"time"
 
@@ -18,7 +19,6 @@ func (fakeStartReader) ProcessRSS(int) (uint64, bool)        { return 0, false }
 func (fakeStartReader) ProcessIO(int) (uint64, uint64, bool) { return 0, 0, false }
 func (fakeStartReader) ProcessFDs(int) (uint64, bool)        { return 0, false }
 func (fakeStartReader) ProcessThreads(int) (uint64, bool)    { return 0, false }
-func (fakeStartReader) TotalMemory() (uint64, uint64, bool)  { return 0, 0, false }
 func (fakeStartReader) SystemCPU() (uint64, uint64, bool)    { return 0, 0, false }
 func (fakeStartReader) LoadAverages() (float64, float64, float64, bool) {
 	return 0, 0, 0, false
@@ -95,3 +95,7 @@ func TestServiceStartTimeFallsBackWhenPrincipalHasNoStart(t *testing.T) {
 		t.Fatalf("start = %v, want the fallback %v", started, helper)
 	}
 }
+
+func (fakeStartReader) ProcessSwap(int) (uint64, bool)     { return 0, false }
+func (fakeStartReader) ProcessFDLimit(int) (uint64, bool)  { return 0, false }
+func (fakeStartReader) MemoryTotals() metrics.MemoryTotals { return metrics.MemoryTotals{} }
