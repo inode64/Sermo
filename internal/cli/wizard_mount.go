@@ -46,7 +46,7 @@ func (a App) writeWizardMounts(p *assist.Prompt, opts options, globalPath string
 	}
 
 	targetDir := wizardMountTargetDir(globalPath)
-	deletes, err := planStaleMountDeletes(p, targetDir, detectedTargetKeys(env, wizardAssistantMount))
+	deletes, err := planStaleDeletes(p, targetDir, wizardNounMount, "mount watches", detectedTargetKeys(env, wizardAssistantMount), mountStaleFile)
 	if err != nil {
 		return a.fail(opts, err.Error())
 	}
@@ -117,10 +117,6 @@ func writeMountFiles(globalPath string, docs map[string]map[string]any) (string,
 		return "", 0, err
 	}
 	return targetDir, len(files), nil
-}
-
-func planStaleMountDeletes(p *assist.Prompt, dir string, detected map[string]bool) ([]string, error) {
-	return planStaleDeletes(p, dir, wizardNounMount, "mount watches", detected, mountStaleFile)
 }
 
 func mountStaleFile(path string, detected map[string]bool) staleFile {

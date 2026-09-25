@@ -450,28 +450,12 @@ func (a App) writeWizardServices(p *assist.Prompt, opts options, globalPath stri
 
 	// Step-9 cleanup: offer to delete managed service files whose catalog service
 	// is no longer detected on this host.
-	var deletes []string
-	for _, dir := range serviceCleanupDirs(globalPath, cfg) {
-		more, err := planStaleServiceDeletes(p, dir, detectedTargetKeys(env, wizardAssistantService))
-		if err != nil {
-			return a.fail(opts, err.Error())
-		}
-		deletes = append(deletes, more...)
+	targetDir := filepath.Join(filepath.Dir(filepath.Clean(globalPath)), servicesIncludeDir)
+	deletes, err := planStaleDeletes(p, targetDir, wizardNounService, "services", detectedTargetKeys(env, wizardAssistantService), serviceStaleFile)
+	if err != nil {
+		return a.fail(opts, err.Error())
 	}
 	return a.finishWizardWrite(opts, globalPath, wizardNounService, deletes, docs, writeServiceFiles)
-}
-
-func serviceCleanupDirs(globalPath string, _ *config.Config) []string {
-	base := filepath.Dir(filepath.Clean(globalPath))
-	return []string{filepath.Join(base, servicesIncludeDir)}
-}
-
-// planStaleServiceDeletes offers to delete managed `kind: service` files under
-// a services dir whose `uses:` catalog service (or name) is no longer in the detected
-// set. Mirrors planWizardWatchDeletes for the service wizard; a no-op when
-// detection is empty so a valid file is never proposed for deletion.
-func planStaleServiceDeletes(p *assist.Prompt, dir string, detected map[string]bool) ([]string, error) {
-	return planStaleDeletes(p, dir, wizardNounService, "services", detected, serviceStaleFile)
 }
 
 func serviceStaleFile(path string, detected map[string]bool) staleFile {
