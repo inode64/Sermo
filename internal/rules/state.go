@@ -100,7 +100,7 @@ func (p Policy) cooldownStatus(state *RemediationState, now time.Time) (effectiv
 
 // actionHistoryStatus counts recent remediations and, when rate limiting is
 // enabled, calculates when enough actions have expired. Report uses this once
-// for both fields; Allow retains its allocation-free count-only hot path.
+// for both fields and supplies the same decision to Allow.
 func (p Policy) actionHistoryStatus(state *RemediationState, now time.Time) (count int, until time.Time) {
 	windowed := p.MaxActionsWindow > 0
 	if p.MaxActions <= 0 || !windowed {
@@ -146,18 +146,8 @@ func maxTime(a, b time.Time) time.Time {
 //  2. else max_actions reached inside the window -> suppress;
 //  3. else allow.
 func (p Policy) Allow(state *RemediationState, now time.Time) (bool, string) {
-	if state == nil {
-		state = &RemediationState{}
-	}
-	if _, until := p.cooldownStatus(state, now); !until.IsZero() {
-		return false, "cooldown"
-	}
-	if p.MaxActions > 0 {
-		if state.countWithin(now, p.MaxActionsWindow) >= p.MaxActions {
-			return false, "rate limit"
-		}
-	}
-	return true, ""
+	report := p.Report(state, now)
+	return report.Allowed, report.Reason
 }
 
 // Record updates the state after an executed automatic remediation: stamps the
