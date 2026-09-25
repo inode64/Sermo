@@ -1590,3 +1590,13 @@ func stripMeta(body map[string]any) map[string]any {
 	}
 	return out
 }
+
+// withoutMeta borrows nested values for read-only consumers and merge inputs.
+// Callers that mutate nested values must use stripMeta instead.
+func withoutMeta(body map[string]any) map[string]any {
+	out := maps.Clone(body)
+	for key := range metaKeys {
+		delete(out, key)
+	}
+	return out
+}
