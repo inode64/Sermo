@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -12,7 +13,6 @@ import (
 	"path/filepath"
 	"sermo/internal/hostfs"
 	"slices"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -105,7 +105,7 @@ func listInstalledCatalogServices(ctx context.Context, cfg *config.Config, backe
 			addWizardCatalogUnits(catalogUnits, backend, unit)
 		}
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+	slices.SortFunc(out, func(a, b assist.ServiceCandidate) int { return cmp.Compare(a.Name, b.Name) })
 	return out, nil
 }
 
