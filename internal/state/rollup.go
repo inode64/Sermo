@@ -152,10 +152,10 @@ func (r MaintainResult) plus(other MaintainResult) MaintainResult {
 func (s *Store) Maintain(ctx context.Context, now time.Time) (MaintainResult, error) {
 	var out MaintainResult
 	var err error
-	if out.Rolled, err = s.Rollup(ctx, now); err != nil {
+	if out.Rolled, err = s.rollup(ctx, now); err != nil {
 		return out, err
 	}
-	if out.Archives, err = s.PruneArchives(ctx, now); err != nil {
+	if out.Archives, err = s.pruneArchives(ctx, now); err != nil {
 		return out, err
 	}
 	if out.Events, err = s.PruneEvents(ctx, now.Add(-s.retention.Events)); err != nil {
@@ -177,19 +177,19 @@ func (s *Store) CompactHistory(ctx context.Context, now, before time.Time) (Main
 		return out, fmt.Errorf("consolidate state history: %w", err)
 	}
 	if !before.IsZero() {
-		extra, err := s.PruneBefore(ctx, before)
+		extra, err := s.pruneBefore(ctx, before)
 		out = out.plus(extra)
 		if err != nil {
 			return out, fmt.Errorf("prune state history: %w", err)
 		}
 	}
-	if err := s.Compact(ctx); err != nil {
+	if err := s.compact(ctx); err != nil {
 		return out, fmt.Errorf("compact state database: %w", err)
 	}
 	return out, nil
 }
 
-// Rollup consolidates every archive from the one below it, finest first so a
+// rollup consolidates every archive from the one below it, finest first so a
 // single pass can carry a fresh sample all the way up the ladder. It returns the
 // rows written.
 //
@@ -198,7 +198,7 @@ func (s *Store) CompactHistory(ctx context.Context, now, before time.Time) (Main
 // between them would make the second table skip everything below the first
 // table's new watermark. An error leaves it untouched, so the next pass redoes the
 // whole step.
-func (s *Store) Rollup(ctx context.Context, now time.Time) (int64, error) {
+func (s *Store) rollup(ctx context.Context, now time.Time) (int64, error) {
 	ladder := s.retention.archives()
 	var rolled int64
 	for i := 1; i < archiveCount; i++ {
@@ -276,11 +276,11 @@ func (s *Store) rollupChunk(ctx context.Context, table archiveTable, sourceRes, 
 	return n, nil
 }
 
-// PruneArchives deletes buckets past their resolution's retention and returns the
+// pruneArchives deletes buckets past their resolution's retention and returns the
 // rows removed. Every archive but the coarsest is additionally floored at the next
 // archive's consolidation watermark, so no resolution is deleted ahead of the one
 // that still has to read it.
-func (s *Store) PruneArchives(ctx context.Context, now time.Time) (int64, error) {
+func (s *Store) pruneArchives(ctx context.Context, now time.Time) (int64, error) {
 	ladder := s.retention.archives()
 	var pruned int64
 	// Walk coarsest first so each archive already knows the one that consumes it:
@@ -307,12 +307,12 @@ func (s *Store) PruneArchives(ctx context.Context, now time.Time) (int64, error)
 	return pruned, nil
 }
 
-// PruneBefore deletes every archive bucket and event that starts before the
+// pruneBefore deletes every archive bucket and event that starts before the
 // cutoff, at every resolution. It is the explicit operator cutoff behind
 // `state compact --before`, and deliberately ignores the consolidation
 // watermarks the automatic prune respects: the operator asked for that history to
 // be gone, not to be consolidated first.
-func (s *Store) PruneBefore(ctx context.Context, before time.Time) (MaintainResult, error) {
+func (s *Store) pruneBefore(ctx context.Context, before time.Time) (MaintainResult, error) {
 	var out MaintainResult
 	cutoff := before.Unix()
 	for _, stored := range s.retention.archives() {

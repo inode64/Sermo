@@ -11,8 +11,8 @@ import (
 // on its rollup interval.
 func mustRollup(t *testing.T, s *Store, now time.Time) {
 	t.Helper()
-	if _, err := s.Rollup(context.Background(), now); err != nil {
-		t.Fatalf("Rollup: %v", err)
+	if _, err := s.rollup(context.Background(), now); err != nil {
+		t.Fatalf("rollup: %v", err)
 	}
 }
 
@@ -245,9 +245,9 @@ func TestPruneFloorsAtTheConsolidationWatermark(t *testing.T) {
 
 	// Long past the per-minute retention, but nothing has ever been consolidated,
 	// so the watermark is zero and the prune must not touch the samples.
-	now := at.Add(DefaultRetention1m + time.Hour)
-	if _, err := s.PruneArchives(ctx, now); err != nil {
-		t.Fatalf("PruneArchives: %v", err)
+	now := at.Add(defaultRetention1m + time.Hour)
+	if _, err := s.pruneArchives(ctx, now); err != nil {
+		t.Fatalf("pruneArchives: %v", err)
 	}
 	if _, _, _, found := archiveRow(t, s, resMinute, alignBucket(at, resMinute)); !found {
 		t.Fatal("per-minute bucket pruned before it was consolidated")
@@ -255,8 +255,8 @@ func TestPruneFloorsAtTheConsolidationWatermark(t *testing.T) {
 
 	// Once consolidated, the same prune reclaims it.
 	mustRollup(t, s, now)
-	if _, err := s.PruneArchives(ctx, now); err != nil {
-		t.Fatalf("PruneArchives after rollup: %v", err)
+	if _, err := s.pruneArchives(ctx, now); err != nil {
+		t.Fatalf("pruneArchives after rollup: %v", err)
 	}
 	if _, _, _, found := archiveRow(t, s, resMinute, alignBucket(at, resMinute)); found {
 		t.Fatal("per-minute bucket kept after it was consolidated and aged out")
@@ -282,8 +282,8 @@ func TestPruneMemoDoesNotStrandRows(t *testing.T) {
 	mustRollup(t, s, at.Add(2*time.Hour))
 
 	// A cutoff between them removes the older one only.
-	if _, err := s.PruneBefore(ctx, at.Add(30*time.Minute)); err != nil {
-		t.Fatalf("PruneBefore first: %v", err)
+	if _, err := s.pruneBefore(ctx, at.Add(30*time.Minute)); err != nil {
+		t.Fatalf("pruneBefore first: %v", err)
 	}
 	if _, _, _, found := archiveRow(t, s, resMinute, alignBucket(at, resMinute)); found {
 		t.Fatal("older bucket survived a cutoff past it")
@@ -293,13 +293,13 @@ func TestPruneMemoDoesNotStrandRows(t *testing.T) {
 	}
 
 	// A lower cutoff now has nothing to do; the memo may skip it.
-	if result, err := s.PruneBefore(ctx, at.Add(10*time.Minute)); err != nil || result.Archives != 0 {
-		t.Fatalf("PruneBefore lower cutoff = %+v err=%v, want no rows removed", result, err)
+	if result, err := s.pruneBefore(ctx, at.Add(10*time.Minute)); err != nil || result.Archives != 0 {
+		t.Fatalf("pruneBefore lower cutoff = %+v err=%v, want no rows removed", result, err)
 	}
 
 	// A higher cutoff must still delete, memo or not.
-	if _, err := s.PruneBefore(ctx, at.Add(90*time.Minute)); err != nil {
-		t.Fatalf("PruneBefore higher: %v", err)
+	if _, err := s.pruneBefore(ctx, at.Add(90*time.Minute)); err != nil {
+		t.Fatalf("pruneBefore higher: %v", err)
 	}
 	if _, _, _, found := archiveRow(t, s, resMinute, alignBucket(at.Add(time.Hour), resMinute)); found {
 		t.Fatal("the memo skipped a prune with a higher cutoff, stranding the bucket")
@@ -317,8 +317,8 @@ func TestPruneBeforeKeepsBucketsStraddlingTheCutoff(t *testing.T) {
 
 	// Midday cuts the day bucket in half; the sample itself is at 23:00, after it.
 	cutoff := time.Date(2026, 6, 7, 12, 0, 0, 0, time.UTC)
-	if _, err := s.PruneBefore(context.Background(), cutoff); err != nil {
-		t.Fatalf("PruneBefore: %v", err)
+	if _, err := s.pruneBefore(context.Background(), cutoff); err != nil {
+		t.Fatalf("pruneBefore: %v", err)
 	}
 	if _, _, _, found := archiveRow(t, s, resDay, alignBucket(now, resDay)); !found {
 		t.Fatal("a cutoff inside a day bucket deleted a sample newer than the cutoff")
@@ -369,8 +369,8 @@ func TestArchiveForPicksTheFinestCoveringResolution(t *testing.T) {
 		want int64
 	}{
 		{"hour window", time.Hour, resMinute},
-		{"per-minute retention edge", DefaultRetention1m, resMinute},
-		{"just past per-minute retention", DefaultRetention1m + time.Second, res5Minutes},
+		{"per-minute retention edge", defaultRetention1m, resMinute},
+		{"just past per-minute retention", defaultRetention1m + time.Second, res5Minutes},
 		{"day window", slaSpanDay, res5Minutes},
 		{"week window", slaSpanWeek, resHour},
 		{"month window", slaSpanMonth, res6Hours},

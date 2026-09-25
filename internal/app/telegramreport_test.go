@@ -61,7 +61,7 @@ func TestTelegramSLAFormatKeepsAffectedMinutes(t *testing.T) {
 	if got, want := formatSLARatio(state.SLAValue{Up: 2, Total: 3, DownBuckets: 1}), "66.67% (1 min affected)"; got != want {
 		t.Errorf("formatSLARatio() = %q, want %q", got, want)
 	}
-	if got, want := formatSLARatio(state.SLAValue{}), state.SLAUnavailable; got != want {
+	if got, want := formatSLARatio(state.SLAValue{}), "n/a"; got != want {
 		t.Errorf("formatSLARatio() = %q, want %q", got, want)
 	}
 }

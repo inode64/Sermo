@@ -392,7 +392,7 @@ func scanOne(scan func() error) (found bool, err error) {
 
 type statementExecutor func(context.Context, string, ...any) (sql.Result, error)
 
-// Compact checkpoints the WAL and vacuums the SQLite state database so space
+// compact checkpoints the WAL and vacuums the SQLite state database so space
 // freed by pruning can be returned to the filesystem.
 //
 // The order is load-bearing, and the trailing checkpoint is the step that actually
@@ -405,7 +405,7 @@ type statementExecutor func(context.Context, string, ...any) (sql.Result, error)
 //
 // The leading checkpoint still earns its place: it bounds the WAL before VACUUM
 // rewrites the whole database through it.
-func (s *Store) Compact(ctx context.Context) error {
+func (s *Store) compact(ctx context.Context) error {
 	if _, err := s.exec(ctx, `PRAGMA wal_checkpoint(TRUNCATE);`); err != nil {
 		return fmt.Errorf("checkpoint state db WAL: %w", err)
 	}
