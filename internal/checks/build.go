@@ -511,10 +511,3 @@ func Evaluate(results []Result) Outcome {
 	}
 	return Outcome{OK: ok, Results: results}
 }
-
-// pruneWindow drops the samples older than cutoff in place (keeping the
-// backing array), preserving order; the sliding-window trim shared by the
-// growth-delta checks (count, size).
-func pruneWindow[S any](samples []S, cutoff time.Time, at func(S) time.Time) []S {
-	return slices.DeleteFunc(samples, func(sample S) bool { return at(sample).Before(cutoff) })
-}

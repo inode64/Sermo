@@ -1,6 +1,9 @@
 package checks
 
-import "time"
+import (
+	"slices"
+	"time"
+)
 
 // counterWindow is the sliding sample window behind every "did this integer
 // counter grow?" check. It answers growth over wall-clock time rather than since
@@ -30,7 +33,8 @@ type counterSample struct {
 // A first sample reports zero growth over a zero span: there is nothing to compare
 // against yet, so the cycle is a baseline rather than a verdict.
 func (w *counterWindow) advance(now time.Time, count int, window time.Duration) (growth int, span time.Duration) {
-	w.samples = pruneWindow(w.samples, now.Add(-window), func(s counterSample) time.Time { return s.at })
+	cutoff := now.Add(-window)
+	w.samples = slices.DeleteFunc(w.samples, func(s counterSample) bool { return s.at.Before(cutoff) })
 	w.samples = append(w.samples, counterSample{at: now, count: count})
 	baseline := w.samples[0]
 	return count - baseline.count, now.Sub(baseline.at)
