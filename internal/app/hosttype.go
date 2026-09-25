@@ -204,30 +204,33 @@ func hostTypeFactDetail(facts []hostTypeFact) string {
 	return strings.Join(parts, " ")
 }
 
+// virtualPlatformTextMatches is read-only and ordered by detection priority.
+var virtualPlatformTextMatches = []struct {
+	needles  []string
+	platform string
+	label    string
+}{
+	{[]string{"vmware"}, hostTypePlatformVMware, hostTypeLabelVMware},
+	{[]string{"microsoft corporation virtual machine", "hyper v", "microsoft hv"}, hostTypePlatformHyperV, hostTypeLabelHyperV},
+	{[]string{"virtualbox", "innotek"}, hostTypePlatformVirtualBox, hostTypeLabelVirtualBox},
+	{[]string{"kvm", "qemu", "rhev", "ovirt", "bochs"}, hostTypePlatformKVM, hostTypeLabelKVM},
+	{[]string{"xen"}, hostTypePlatformXen, hostTypeLabelXen},
+	{[]string{"parallels"}, hostTypePlatformParallels, hostTypeLabelParallels},
+	{[]string{"bhyve"}, hostTypePlatformBhyve, hostTypeLabelBhyve},
+	{[]string{"amazon ec2"}, hostTypePlatformAmazonEC2, hostTypeLabelAmazonEC2},
+	{[]string{"google compute engine"}, hostTypePlatformGCE, hostTypeLabelGCE},
+	{[]string{"digitalocean"}, hostTypePlatformDigital, hostTypeLabelDigitalOcean},
+	{[]string{"openstack"}, hostTypePlatformOpenStack, hostTypeLabelOpenStack},
+	{[]string{"oracle cloud"}, hostTypePlatformOracle, hostTypeLabelOracleCloud},
+	{[]string{"alibaba cloud"}, hostTypePlatformAlibaba, hostTypeLabelAlibabaCloud},
+	{[]string{"tencent cloud"}, hostTypePlatformTencent, hostTypeLabelTencentCloud},
+	{[]string{"apple virtualization", "virtualmac"}, hostTypePlatformApple, hostTypeLabelAppleVirtual},
+	{[]string{hostTypeLabelVirtual}, hostTypePlatformVirtual, hostTypeLabelVirtual},
+}
+
 func virtualPlatformFromText(text string) (string, string) {
 	normalized := normalizeHostTypeText(text)
-	for _, match := range []struct {
-		needles  []string
-		platform string
-		label    string
-	}{
-		{[]string{"vmware"}, hostTypePlatformVMware, hostTypeLabelVMware},
-		{[]string{"microsoft corporation virtual machine", "hyper v", "microsoft hv"}, hostTypePlatformHyperV, hostTypeLabelHyperV},
-		{[]string{"virtualbox", "innotek"}, hostTypePlatformVirtualBox, hostTypeLabelVirtualBox},
-		{[]string{"kvm", "qemu", "rhev", "ovirt", "bochs"}, hostTypePlatformKVM, hostTypeLabelKVM},
-		{[]string{"xen"}, hostTypePlatformXen, hostTypeLabelXen},
-		{[]string{"parallels"}, hostTypePlatformParallels, hostTypeLabelParallels},
-		{[]string{"bhyve"}, hostTypePlatformBhyve, hostTypeLabelBhyve},
-		{[]string{"amazon ec2"}, hostTypePlatformAmazonEC2, hostTypeLabelAmazonEC2},
-		{[]string{"google compute engine"}, hostTypePlatformGCE, hostTypeLabelGCE},
-		{[]string{"digitalocean"}, hostTypePlatformDigital, hostTypeLabelDigitalOcean},
-		{[]string{"openstack"}, hostTypePlatformOpenStack, hostTypeLabelOpenStack},
-		{[]string{"oracle cloud"}, hostTypePlatformOracle, hostTypeLabelOracleCloud},
-		{[]string{"alibaba cloud"}, hostTypePlatformAlibaba, hostTypeLabelAlibabaCloud},
-		{[]string{"tencent cloud"}, hostTypePlatformTencent, hostTypeLabelTencentCloud},
-		{[]string{"apple virtualization", "virtualmac"}, hostTypePlatformApple, hostTypeLabelAppleVirtual},
-		{[]string{hostTypeLabelVirtual}, hostTypePlatformVirtual, hostTypeLabelVirtual},
-	} {
+	for _, match := range virtualPlatformTextMatches {
 		for _, needle := range match.needles {
 			if strings.Contains(normalized, needle) {
 				return match.platform, match.label
@@ -237,21 +240,24 @@ func virtualPlatformFromText(text string) (string, string) {
 	return "", ""
 }
 
+// virtualPlatformCPUMatches is read-only and ordered by detection priority.
+var virtualPlatformCPUMatches = []struct {
+	needle   string
+	platform string
+	label    string
+}{
+	{"kvmkvmkvm", hostTypePlatformKVM, hostTypeLabelKVM},
+	{"microsoft hv", hostTypePlatformHyperV, hostTypeLabelHyperV},
+	{"vmwarevmware", hostTypePlatformVMware, hostTypeLabelVMware},
+	{"vboxvboxvbox", hostTypePlatformVirtualBox, hostTypeLabelVirtualBox},
+	{"xenvmmxenvmm", hostTypePlatformXen, hostTypeLabelXen},
+	{"bhyve bhyve", hostTypePlatformBhyve, hostTypeLabelBhyve}, //nolint:dupword // CPUID vendor string repeats the hypervisor token
+	{"tcgtcgtcgtcg", hostTypePlatformQEMU, hostTypeLabelQEMU},
+}
+
 func virtualPlatformFromCPU(cpuinfo string) (string, string) {
 	normalized := normalizeHostTypeText(cpuinfo)
-	for _, match := range []struct {
-		needle   string
-		platform string
-		label    string
-	}{
-		{"kvmkvmkvm", hostTypePlatformKVM, hostTypeLabelKVM},
-		{"microsoft hv", hostTypePlatformHyperV, hostTypeLabelHyperV},
-		{"vmwarevmware", hostTypePlatformVMware, hostTypeLabelVMware},
-		{"vboxvboxvbox", hostTypePlatformVirtualBox, hostTypeLabelVirtualBox},
-		{"xenvmmxenvmm", hostTypePlatformXen, hostTypeLabelXen},
-		{"bhyve bhyve", hostTypePlatformBhyve, hostTypeLabelBhyve}, //nolint:dupword // CPUID vendor string repeats the hypervisor token
-		{"tcgtcgtcgtcg", hostTypePlatformQEMU, hostTypeLabelQEMU},
-	} {
+	for _, match := range virtualPlatformCPUMatches {
 		if strings.Contains(normalized, match.needle) {
 			return match.platform, match.label
 		}
@@ -275,17 +281,19 @@ func cpuHasHypervisorFlag(cpuinfo string) bool {
 	return false
 }
 
+var hostTypeTextReplacer = strings.NewReplacer(
+	"_", " ",
+	"-", " ",
+	".", " ",
+	",", " ",
+	"(", " ",
+	")", " ",
+	"/", " ",
+)
+
 func normalizeHostTypeText(s string) string {
 	s = strings.ToLower(strings.TrimSpace(s))
-	replacer := strings.NewReplacer(
-		"_", " ",
-		"-", " ",
-		".", " ",
-		",", " ",
-		"(", " ",
-		")", " ",
-		"/", " ",
-	)
-	s = replacer.Replace(s)
+
+	s = hostTypeTextReplacer.Replace(s)
 	return strings.Join(strings.Fields(s), " ")
 }
