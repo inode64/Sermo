@@ -10,7 +10,7 @@ import (
 	"sermo/internal/metrics"
 )
 
-func TestCheckIntervals(t *testing.T) {
+func TestCheckCatalogCycles(t *testing.T) {
 	tree := map[string]any{"checks": map[string]any{
 		"fast":    map[string]any{"type": "tcp"},                        // no interval -> every cycle
 		"slow":    map[string]any{"type": "command", "interval": "30m"}, // 60 cycles
@@ -18,7 +18,8 @@ func TestCheckIntervals(t *testing.T) {
 		"nonmult": map[string]any{"type": "http", "interval": "45s"},    // not a multiple
 		"large":   map[string]any{"type": "tcp", "interval": "1000h"},   // large but exact multiple of res (pins float precision / scheduling edge)
 	}}
-	every, warns := checkIntervals(tree, 30*time.Second)
+	catalog := checkCatalog(tree, 30*time.Second)
+	every, warns := catalog.cycles, catalog.warnings
 
 	if _, ok := every["fast"]; ok {
 		t.Fatalf("a check with no interval should not be in the map: %v", every)
@@ -35,20 +36,24 @@ func TestCheckIntervals(t *testing.T) {
 	if every["large"] != 120000 {
 		t.Fatalf("large every = %d, want 120000", every["large"])
 	}
+	if catalog.intervals["sub"] != 30*time.Second || catalog.intervals["nonmult"] != time.Minute || catalog.intervals["fast"] != 30*time.Second {
+		t.Fatalf("display intervals differ from worker cadence: %v", catalog.intervals)
+	}
 	// two warnings: below-resolution and not-a-multiple. (large exact should not add non-multiple warn)
 	if len(warns) != 2 {
 		t.Fatalf("warnings = %v, want 2 (sub + nonmult)", warns)
 	}
 }
 
-func TestCheckIntervalsNonPositiveResolution(t *testing.T) {
-	// A non-positive resolution would make round(d/resolution) divide by zero
-	// (+Inf -> undefined int conversion); the guard returns no intervals instead.
+func TestCheckCatalogCyclesNonPositiveResolution(t *testing.T) {
+	// Without a positive resolution, retain raw display intervals and omit
+	// scheduling cycles instead of dividing by zero.
 	tree := map[string]any{"checks": map[string]any{
 		"slow": map[string]any{"type": "command", "interval": "30m"},
 	}}
 	for _, res := range []time.Duration{0, -time.Second} {
-		every, warns := checkIntervals(tree, res)
+		catalog := checkCatalog(tree, res)
+		every, warns := catalog.cycles, catalog.warnings
 		if every != nil || warns != nil {
 			t.Fatalf("resolution %s: got every=%v warns=%v, want nil,nil", res, every, warns)
 		}

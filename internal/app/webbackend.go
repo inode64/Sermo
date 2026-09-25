@@ -442,18 +442,18 @@ func attachServiceRuntime(ctx context.Context, entry *webEntry, name string, tre
 	})
 	engine, checkDeps, discoverer := runtime.Engine, runtime.CheckDeps, runtime.Discoverer
 	selectors, processWarnings := runtime.Selectors, runtime.ProcessWarnings
-	names, types, intervals := checkCatalog(tree, entry.interval)
+	catalog := checkCatalog(tree, entry.interval)
 	entry.noResidentProcess = runtime.NoResidentProcess
 	entry.engine = engine
 	entry.status = checkDeps.Status
-	entry.checkNames = names
-	entry.checkTypes = types
+	entry.checkNames = catalog.names
+	entry.checkTypes = catalog.types
 	entry.configID = serviceSnapshotConfigID(tree)
 	entry.checkReports = checkReportingModes(tree)
 	entry.checkBands = bandCheckMetrics(tree)
 	entry.checkGraphs = graphableCheckMetrics(tree)
 	entry.checkSeverities = checkDeclaredSeverities(tree)
-	entry.checkIntervals = intervals
+	entry.checkIntervals = catalog.intervals
 	entry.discoverer = discoverer
 	entry.selectors = selectors
 	entry.processWarnings = processWarnings
@@ -623,30 +623,6 @@ func resolveWatchGraphs(ctype string, check, metricBlocks map[string]any) []chec
 		}
 	}
 	return out
-}
-
-// checkCatalog returns a service's check names (sorted), types and effective
-// intervals from the resolved `checks` section.
-func checkCatalog(tree map[string]any, defaultInterval time.Duration) ([]string, map[string]string, map[string]time.Duration) {
-	section, ok := tree[config.SectionChecks].(map[string]any)
-	if !ok {
-		return nil, nil, nil
-	}
-	types := make(map[string]string, len(section))
-	intervals := make(map[string]time.Duration, len(section))
-	names := slices.Sorted(maps.Keys(section))
-	for _, name := range names {
-		raw := section[name]
-		typ := ""
-		if m, ok := raw.(map[string]any); ok {
-			typ, _ = m[checks.CheckKeyType].(string)
-			intervals[name] = effectiveCheckInterval(cfgval.Duration(m[config.EntryKeyInterval]), defaultInterval)
-		} else {
-			intervals[name] = defaultInterval
-		}
-		types[name] = typ
-	}
-	return names, types, intervals
 }
 
 // checkReportingModes maps each check that declares `reports:` to its mode. It

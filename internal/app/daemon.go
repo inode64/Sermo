@@ -4,8 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"maps"
-	"slices"
 	"sync"
 	"time"
 
@@ -541,7 +539,8 @@ func buildWorker(ctx context.Context, name, unit string, tree map[string]any, de
 	if resolution <= 0 {
 		resolution = config.DefaultEngineInterval
 	}
-	every, warnings := checkIntervals(tree, resolution)
+	catalog := checkCatalog(tree, resolution)
+	warnings := catalog.warnings
 
 	cycleWriter := newCycleWriter(deps, name, tree)
 	var recordMeasurement func(checks.Result)
@@ -551,7 +550,6 @@ func buildWorker(ctx context.Context, name, unit string, tree map[string]any, de
 		recordCycle = cycleWriter.RecordCycle
 	}
 	section, _ := tree[config.SectionChecks].(map[string]any)
-	_, checkTypes, _ := checkCatalog(tree, resolution)
 	built, checkWarnings, setCycleMetrics := buildWorkerCheckSet(section, checkDeps, sampleMetrics != nil)
 	warnings = append(warnings, checkWarnings...)
 	preflightSection, _ := tree[config.SectionPreflight].(map[string]any)
@@ -591,18 +589,18 @@ func buildWorker(ctx context.Context, name, unit string, tree map[string]any, de
 		DryRun:               config.DryRun(tree),
 		ResolveRefs:          rules.NewCheckResolverFactory(preflightBuilt, maxParallel),
 		RecordCycle:          recordCycle,
-		Publish:              publishSnapshots(deps.Snapshots, name, checkTypes, configID),
+		Publish:              publishSnapshots(deps.Snapshots, name, catalog.types, configID),
 		PersistState:         ruleStatePersister(deps.RuleState, deps.Emit, name, ruleSet),
 		Now:                  deps.Now,
 		Emit:                 deps.Emit,
 		windows:              windowStates,
 		libBaseline:          libBaseline,
-		checkFailing:         checkFailingFromSnapshots(deps.Snapshots, name, checkTypes, configID),
+		checkFailing:         checkFailingFromSnapshots(deps.Snapshots, name, catalog.types, configID),
 		artifactSamples:      deps.ArtifactSamples,
 		appVersions:          map[string]string{},
 		appVersionsLast:      map[string]string{},
 	}
-	worker.Checks = workerCheckRunner(worker, built, every, maxParallel, recordMeasurement, setCycleMetrics)
+	worker.Checks = workerCheckRunner(worker, built, catalog.cycles, maxParallel, recordMeasurement, setCycleMetrics)
 	// Watches run independently of the worker and must not capture its cycle cache.
 	watchDeps := runtime.CheckDeps
 	newMetricSource := watchMetricSourceFactory(name, discoverer, selectors, deps.SystemFreshness)
@@ -725,52 +723,6 @@ func publishSnapshots(s *Snapshots, name string, checkTypes map[string]string, c
 	}
 }
 
-// checkIntervals computes, per check in the `checks` section that sets an
-// `interval`, how many cycles to skip between runs: round(interval/resolution),
-// at least 1. It returns warnings (surfaced at daemon start) when an interval is
-// below the resolution or not an exact multiple of it.
-func checkIntervals(tree map[string]any, resolution time.Duration) (map[string]int, []string) {
-	if resolution <= 0 {
-		// Callers normalise resolution to a positive value; guard anyway so a
-		// misuse can't divide by zero below (round(d/0) -> +Inf -> undefined int).
-		return nil, nil
-	}
-	section, ok := tree[config.SectionChecks].(map[string]any)
-	if !ok {
-		return nil, nil
-	}
-	every := map[string]int{}
-	var warnings []string
-	for _, name := range slices.Sorted(maps.Keys(section)) {
-		entry, ok := section[name].(map[string]any)
-		if !ok {
-			continue
-		}
-		d := cfgval.Duration(entry[config.EntryKeyInterval])
-		if d <= 0 {
-			continue // no per-check interval: runs every cycle
-		}
-		n, warning := checks.ResolveInterval(d, resolution)
-		if warning != "" {
-			warnings = append(warnings, fmt.Sprintf("check %q %s", name, warning))
-		}
-		every[name] = n
-	}
-	return every, warnings
-}
-
-func effectiveCheckInterval(interval, resolution time.Duration) time.Duration {
-	if resolution <= 0 {
-		return interval
-	}
-	cycles, _ := checks.ResolveInterval(interval, resolution)
-	return time.Duration(cycles) * resolution
-}
-
-// dueChecks selects the checks to run on a given cycle: a check with `every` N
-// runs on cycles 1, N+1, 2N+1, … Skipped checks keep their cached result.
-// A check with no cached result always runs so a reload or config change cannot
-// leave long-interval checks unobserved until their next scheduled modulo.
 func dueChecks(cycle int, built []checks.Built, every map[string]int, cache map[string]checks.Result) []checks.Built {
 	due := make([]checks.Built, 0, len(built))
 	for _, b := range built {
