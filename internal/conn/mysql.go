@@ -144,9 +144,6 @@ func buildMySQLConfigWithTarget(target probeTarget) *mysql.Config {
 	if tls := netutil.NormalizeTLS(cfg.TLS); tls != "" {
 		c.TLSConfig = tls
 	}
-	if len(cfg.Params) > 0 {
-		c.Params = map[string]string{}
-		maps.Copy(c.Params, cfg.Params)
-	}
+	c.Params = maps.Clone(cfg.Params)
 	return c
 }
