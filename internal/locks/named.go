@@ -120,8 +120,12 @@ func (l NamedLocker) path(service, name string) (string, error) {
 }
 
 func (l NamedLocker) identity() (int, uint64) {
-	if l.Self != nil {
-		return l.Self()
+	return selfOr(l.Self)
+}
+
+func selfOr(self func() (int, uint64)) (int, uint64) {
+	if self != nil {
+		return self()
 	}
 	return selfIdentity()
 }

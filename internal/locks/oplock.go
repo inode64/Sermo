@@ -105,10 +105,6 @@ func (l OperationLocker) Acquire(service string, ttl time.Duration) (*Handle, er
 	}
 
 	proc, now := procNowDefaults(l.Proc, l.Now)
-	self := l.Self
-	if self == nil {
-		self = selfIdentity
-	}
 
 	if err := os.MkdirAll(l.Dir, lockDirMode); err != nil {
 		return nil, fmt.Errorf("create ops dir %s: %w", l.Dir, err)
@@ -118,7 +114,7 @@ func (l OperationLocker) Acquire(service string, ttl time.Duration) (*Handle, er
 	if err != nil {
 		return nil, err
 	}
-	pid, ticks := self()
+	pid, ticks := selfOr(l.Self)
 
 	var onReclaim func(string)
 	if l.OnReclaim != nil {
