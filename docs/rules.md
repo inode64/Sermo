@@ -1774,7 +1774,9 @@ credentials and trust configuration, and never changes cluster state. Use
 
 Supply one or both of `peers` and `volumes`: every configured peer must be
 present, connected and a cluster member, and a disconnected peer returned by
-Gluster also fails the check. Every configured volume must exist, be started and
+Gluster also fails the check. A disconnected peer is reported once under its
+Gluster hostname, even when configured through an alias. Every configured
+volume must exist, be started and
 have exactly its configured number of `bricks` online. `self_heal: true` requires
 a running self-heal daemon; `max_heal_entries` and `max_split_brain_entries` are
 optional non-negative limits (use `0` to require no pending entries).
