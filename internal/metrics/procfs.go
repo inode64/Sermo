@@ -2,10 +2,12 @@ package metrics
 
 import (
 	"bytes"
+	"fmt"
 	"math"
 	"os"
 	"path/filepath"
 	"runtime"
+	"sermo/internal/hostfs"
 	"strconv"
 	"strings"
 	"sync"
@@ -340,14 +342,32 @@ func processEntryCount(pid int, name string) (uint64, bool) {
 }
 
 // MemoryTotals reads memory and swap counters from a single /proc/meminfo sample.
-func (OSReader) MemoryTotals() MemoryTotals { return readProcMeminfoTotals() }
+func (OSReader) MemoryTotals(maxAge time.Duration) MemoryTotals { return readProcMeminfoTotals(maxAge) }
 
-func readProcMeminfoTotals() MemoryTotals {
-	data, err := os.ReadFile(procPath(procFileMeminfo))
+func readProcMeminfoTotals(maxAge time.Duration) MemoryTotals {
+	m, err := ReadMeminfo(maxAge)
 	if err != nil {
 		return MemoryTotals{}
 	}
-	return parseProcMeminfoTotals(data)
+	return meminfoTotals(m)
+}
+
+var hostMeminfo cachedSample[Meminfo]
+
+// ReadMeminfo shares complete memory observations across collectors and checks.
+// maxAge is enforced per caller; failed or incomplete reads are never cached.
+func ReadMeminfo(maxAge time.Duration) (Meminfo, error) {
+	var sample Meminfo
+	err := hostMeminfo.readInto(time.Now(), maxAge, func() (Meminfo, bool, error) {
+		data, err := hostfs.ReadFile(procPath(procFileMeminfo))
+		if err != nil {
+			return Meminfo{}, false, fmt.Errorf("read meminfo: %w", err)
+		}
+		m := ParseMeminfo(data)
+		totals := meminfoTotals(m)
+		return m, totals.MemoryOK && totals.SwapOK, nil
+	}, &sample)
+	return sample, err
 }
 
 // Meminfo is the /proc/meminfo subset Sermo reads, in bytes. Each Have* field
@@ -386,9 +406,8 @@ func ParseMeminfo(data []byte) Meminfo {
 	return m
 }
 
-func parseProcMeminfoTotals(data []byte) MemoryTotals {
+func meminfoTotals(m Meminfo) MemoryTotals {
 	var totals MemoryTotals
-	m := ParseMeminfo(data)
 	totals.MemoryTotal, totals.MemoryOK = m.MemTotal, m.HaveMemTotal
 	totals.SwapTotal, totals.SwapOK = m.SwapTotal, m.HaveSwapTotal
 	if !totals.MemoryOK || !m.HaveMemAvailable || totals.MemoryTotal < m.MemAvailable {

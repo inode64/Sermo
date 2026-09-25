@@ -138,7 +138,7 @@ type combinedMemoryReader struct {
 	combinedCalls           int
 }
 
-func (r *combinedMemoryReader) MemoryTotals() MemoryTotals {
+func (r *combinedMemoryReader) MemoryTotals(_ time.Duration) MemoryTotals {
 	r.combinedCalls++
 	return MemoryTotals{MemoryTotal: r.memoryTotal, MemoryUsed: r.memoryUsed, MemoryOK: r.memoryOK, SwapTotal: r.swapTotal, SwapUsed: r.swapUsed, SwapOK: r.swapOK}
 }
@@ -936,35 +936,10 @@ func TestSystemLoadCarriesHostCPUCapacity(t *testing.T) {
 	}
 }
 
-func TestCollectorSharesMemorySampleUntilFreshnessExpires(t *testing.T) {
-	reader := &combinedMemoryReader{memoryTotal: 1024, memoryOK: true, swapOK: true}
-	collector := New(reader)
-	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
-	collector.Now = func() time.Time { return now }
-	collector.SampleService("first", nil)
-	collector.SampleService("second", nil)
-	collector.SampleSystem()
-	if reader.combinedCalls != 1 {
-		t.Fatalf("host reads=%d, want 1", reader.combinedCalls)
-	}
-	now = now.Add(collector.SystemFreshness)
-	collector.SampleService("first", nil)
-	if reader.combinedCalls != 2 {
-		t.Fatalf("expired reads=%d, want 2", reader.combinedCalls)
-	}
-	reader.memoryOK = false
-	now = now.Add(collector.SystemFreshness)
-	collector.SampleService("first", nil)
-	collector.SampleService("second", nil)
-	if reader.combinedCalls != 4 {
-		t.Fatalf("failed reads=%d, want 4", reader.combinedCalls)
-	}
-}
+func (readerNoSwap) ProcessSwap(int) (uint64, bool)            { return 0, false }
+func (readerNoSwap) ProcessFDLimit(int) (uint64, bool)         { return 0, false }
+func (readerNoSwap) MemoryTotals(_ time.Duration) MemoryTotals { return MemoryTotals{} }
 
-func (readerNoSwap) ProcessSwap(int) (uint64, bool)    { return 0, false }
-func (readerNoSwap) ProcessFDLimit(int) (uint64, bool) { return 0, false }
-func (readerNoSwap) MemoryTotals() MemoryTotals        { return MemoryTotals{} }
-
-func (r fakeReader) MemoryTotals() MemoryTotals {
+func (r fakeReader) MemoryTotals(_ time.Duration) MemoryTotals {
 	return MemoryTotals{MemoryTotal: r.memTotal, MemoryUsed: r.memUsed, MemoryOK: r.memTotal > 0}
 }

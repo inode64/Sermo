@@ -194,7 +194,7 @@ func (s *DaemonMetricSampler) sampleLocked() daemonMetricSample {
 	if rss, ok := s.reader.ProcessRSS(pid); ok {
 		cur.rss = rss
 		cur.rssOK = true
-		if totals := s.reader.MemoryTotals(); totals.MemoryOK && totals.MemoryTotal > 0 {
+		if totals := s.reader.MemoryTotals(metrics.DefaultSystemFreshness); totals.MemoryOK && totals.MemoryTotal > 0 {
 			cur.memoryPercent = float64(rss) / float64(totals.MemoryTotal) * metrics.PercentScale
 			cur.memoryPctOK = true
 		}

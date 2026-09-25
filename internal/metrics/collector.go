@@ -31,14 +31,16 @@ const (
 	MetricLoad15      = "load15"
 )
 
-const defaultSystemFreshness = 2 * time.Second
+// DefaultSystemFreshness bounds shared host observations unless a collector supplies its own window.
+const DefaultSystemFreshness = 2 * time.Second
 
 // Reader abstracts the /proc and /sys reads the collector needs, so rate and
 // percentage math can be tested without real processes.
 type Reader interface {
 	processMetricReader
-	// MemoryTotals returns memory and swap readings from one host sample.
-	MemoryTotals() MemoryTotals
+	// MemoryTotals returns one memory/swap sample no older than maxAge.
+	// A non-positive maxAge requests a fresh read.
+	MemoryTotals(maxAge time.Duration) MemoryTotals
 	// ProcessSwap returns swapped-out bytes; false means unavailable.
 	ProcessSwap(pid int) (uint64, bool)
 	// ProcessFDLimit returns the soft open-file limit; false means unavailable.
@@ -113,8 +115,6 @@ type Collector struct {
 	prevSystem       *sysSample
 	lastSystem       Snapshot
 	lastSystemA      time.Time
-	lastMemory       MemoryTotals
-	lastMemoryAt     time.Time
 }
 
 // New returns a Collector over reader.
@@ -122,7 +122,7 @@ func New(reader Reader) *Collector {
 	return &Collector{
 		Reader:           reader,
 		Now:              time.Now,
-		SystemFreshness:  defaultSystemFreshness,
+		SystemFreshness:  DefaultSystemFreshness,
 		prevService:      map[string]cpuSample{},
 		prevServiceProcs: map[string]procCPUSample{},
 		prevServiceIO:    map[string]ioSample{},
@@ -211,7 +211,7 @@ func (c *Collector) sampleService(service string, pids []int, reader processMetr
 	measured := func(ok bool) bool { return len(pids) == 0 || ok }
 
 	mem := Reading{Absolute: float64(rss), Unit: MetricUnitBytes, HasAbsolute: true, Ready: measured(present > 0)}
-	totals := c.memoryTotals(now)
+	totals := c.Reader.MemoryTotals(c.SystemFreshness)
 	if totals.MemoryOK {
 		mem.Percent = float64(rss) / float64(totals.MemoryTotal) * PercentScale
 		mem.HasPercent = true
@@ -398,7 +398,9 @@ func (c *Collector) SampleSystem() Snapshot {
 	}
 
 	snap := Snapshot{}
-	totals := c.memoryTotals(now)
+	// The complete system snapshot is cached above; read memory fresh here so
+	// the raw and derived caches cannot extend one another's age.
+	totals := c.Reader.MemoryTotals(0)
 	if totals.MemoryOK {
 		r := Reading{Absolute: float64(totals.MemoryUsed), Unit: MetricUnitBytes, HasAbsolute: true, Ready: true,
 			Percent:    float64(totals.MemoryUsed) / float64(totals.MemoryTotal) * PercentScale,
@@ -459,20 +461,6 @@ type MemoryTotals struct {
 	SwapTotal   uint64
 	SwapUsed    uint64
 	SwapOK      bool
-}
-
-// memoryTotals shares the host sample for the collector's freshness window.
-// The caller holds mu. Incomplete reads are retried instead of cached.
-func (c *Collector) memoryTotals(now time.Time) MemoryTotals {
-	age := now.Sub(c.lastMemoryAt)
-	if !c.lastMemoryAt.IsZero() && age >= 0 && age < c.SystemFreshness {
-		return c.lastMemory
-	}
-	totals := c.Reader.MemoryTotals()
-	if totals.MemoryOK && totals.SwapOK {
-		c.lastMemory, c.lastMemoryAt = totals, now
-	}
-	return totals
 }
 
 // perProcCPURates returns each PID's CPU rate as a percentage of ONE CPU thread

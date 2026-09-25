@@ -563,6 +563,8 @@ func (*liveCPUReader) LoadAverages() (float64, float64, float64, bool) {
 func (r *liveCPUReader) NumCPU() int         { return r.ncpu }
 func (r *liveCPUReader) ClockTicks() float64 { return r.hz }
 
-func (*liveCPUReader) ProcessSwap(int) (uint64, bool)     { return 0, false }
-func (*liveCPUReader) ProcessFDLimit(int) (uint64, bool)  { return 0, false }
-func (*liveCPUReader) MemoryTotals() metrics.MemoryTotals { return metrics.MemoryTotals{} }
+func (*liveCPUReader) ProcessSwap(int) (uint64, bool)    { return 0, false }
+func (*liveCPUReader) ProcessFDLimit(int) (uint64, bool) { return 0, false }
+func (*liveCPUReader) MemoryTotals(_ time.Duration) metrics.MemoryTotals {
+	return metrics.MemoryTotals{}
+}
