@@ -41,8 +41,7 @@ func (sieveProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	br := bufio.NewReader(c)
 	impl := ""
 	for range sieveGreetingLimit {
-		line, rerr := br.ReadString(protocolLineBreak)
-		line = strings.TrimRight(line, protocolTrimCRLF)
+		line, rerr := readCRLFLine(br)
 		if line != "" {
 			upper := strings.ToUpper(line)
 			switch {
