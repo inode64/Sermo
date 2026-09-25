@@ -36,10 +36,8 @@ func validateWindow(prefix string, entry map[string]any, add addFunc) {
 			// runtime parser, leaving the rule without a window.
 			add("%s.for must be a mapping, e.g. for: {cycles: 3} or for: {duration: 6m}", prefix)
 		} else {
-			for _, key := range slices.Sorted(maps.Keys(f)) {
-				if key != rules.WindowKeyCycles && key != rules.WindowKeyDuration {
-					add("%s.for.%s is not supported; for is always consecutive and only accepts cycles or duration", prefix, key)
-				}
+			for key := range unknownBlockKeys(f, windowLengthKeys) {
+				add("%s.for.%s is not supported; for is always consecutive and only accepts cycles or duration", prefix, key)
 			}
 			validateWindowLength(prefix+".for", f, add)
 		}
@@ -50,10 +48,8 @@ func validateWindow(prefix string, entry map[string]any, add addFunc) {
 			add("%s.within must be a mapping, e.g. within: {cycles: 5, min_matches: 2} or within: {duration: 30m, min_matches: 2}", prefix)
 			return
 		}
-		for _, key := range slices.Sorted(maps.Keys(wn)) {
-			if key != rules.WindowKeyCycles && key != rules.WindowKeyDuration && key != rules.WindowKeyMinMatches {
-				add("%s.within.%s is not supported; within only accepts cycles or duration, plus min_matches", prefix, key)
-			}
+		for key := range unknownBlockKeys(wn, withinWindowKeys) {
+			add("%s.within.%s is not supported; within only accepts cycles or duration, plus min_matches", prefix, key)
 		}
 		cycles, hasCycles := validateWindowLength(prefix+".within", wn, add)
 		validateMinMatches(prefix+".within", wn, cycles, hasCycles, add)
@@ -80,10 +76,8 @@ func validateWindowBlock(path, label string, raw any, present bool, add addFunc)
 		add("%s must be a mapping, e.g. %s: {cycles: 3} or %s: {duration: 4m}", path, label, label)
 		return
 	}
-	for _, key := range slices.Sorted(maps.Keys(m)) {
-		if key != rules.WindowKeyCycles && key != rules.WindowKeyDuration {
-			add("%s.%s is not supported; %s only accepts cycles or duration", path, key, label)
-		}
+	for key := range unknownBlockKeys(m, windowLengthKeys) {
+		add("%s.%s is not supported; %s only accepts cycles or duration", path, key, label)
 	}
 	validateWindowLength(path, m, add)
 }
@@ -586,3 +580,6 @@ func validateMinMatches(prefix string, window map[string]any, cycles int, hasCyc
 		}
 	}
 }
+
+var windowLengthKeys = set(rules.WindowKeyCycles, rules.WindowKeyDuration)
+var withinWindowKeys = set(rules.WindowKeyCycles, rules.WindowKeyDuration, rules.WindowKeyMinMatches)

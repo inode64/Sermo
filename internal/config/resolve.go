@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"iter"
 	"maps"
 	"path/filepath"
 	"slices"
@@ -988,10 +989,8 @@ func (c *Config) expandRestartOnChange(tree map[string]any) []string {
 	}
 
 	var errs []string
-	for _, key := range slices.Sorted(maps.Keys(roc)) {
-		if _, ok := restartOnChangeKeys[key]; !ok {
-			errs = append(errs, fmt.Sprintf("%s.%s is not supported", keyRestartOnChange, key))
-		}
+	for key := range unknownBlockKeys(roc, restartOnChangeKeys) {
+		errs = append(errs, fmt.Sprintf("%s.%s is not supported", keyRestartOnChange, key))
 	}
 	errs = append(errs, validateGateFlags(keyRestartOnChange, roc, nil, keyRestartConfig, keyRestartVersion)...)
 	configAllowed := restartOnChangeAllowed(roc, keyRestartConfig)
@@ -1147,20 +1146,23 @@ var reloadOnChangeKeys = set(keyPaths, keyRestartConfig)
 // validateReloadOnChangeKeys rejects unknown sub-keys and a non-boolean gate, so
 // a typo in the flag fails loudly instead of silently leaving reloads enabled.
 func validateReloadOnChangeKeys(roc map[string]any) []string {
-	errs := unknownBlockKeys(keyReloadOnChange, roc, reloadOnChangeKeys)
+	var errs []string
+	for key := range unknownBlockKeys(roc, reloadOnChangeKeys) {
+		errs = append(errs, fmt.Sprintf(validationNotSupportedFormat, keyReloadOnChange+"."+key))
+	}
 	return append(errs, validateGateFlags(keyReloadOnChange, roc, nil, keyRestartConfig)...)
 }
 
-// unknownBlockKeys names every sub-key of block that is not in allowed, sorted so
-// a config with several typos reports them in a stable order.
-func unknownBlockKeys(prefix string, block map[string]any, allowed map[string]struct{}) []string {
-	var errs []string
-	for _, key := range slices.Sorted(maps.Keys(block)) {
-		if _, ok := allowed[key]; !ok {
-			errs = append(errs, fmt.Sprintf(validationNotSupportedFormat, prefix+"."+key))
+// unknownBlockKeys yields unsupported keys in stable order. Callers retain
+// their context-specific diagnostics without repeating the traversal.
+func unknownBlockKeys(block map[string]any, allowed map[string]struct{}) iter.Seq[string] {
+	return func(yield func(string) bool) {
+		for _, key := range slices.Sorted(maps.Keys(block)) {
+			if _, ok := allowed[key]; !ok && !yield(key) {
+				return
+			}
 		}
 	}
-	return errs
 }
 
 func restartOnChangeAllowed(roc map[string]any, key string) bool {

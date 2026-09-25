@@ -247,10 +247,8 @@ func validateProcesses(tree map[string]any, add addFunc) {
 		if !ok {
 			continue
 		}
-		for _, key := range slices.Sorted(maps.Keys(entry)) {
-			if _, ok := validProcessSelectorKeys[key]; !ok {
-				add("%s.%s is not supported; processes entries accept %s", path, key, processSelectorKeySummary)
-			}
+		for key := range unknownBlockKeys(entry, validProcessSelectorKeys) {
+			add("%s.%s is not supported; processes entries accept %s", path, key, processSelectorKeySummary)
 		}
 	}
 	for _, diagnostic := range process.ValidateSelectors(tree) {
@@ -327,17 +325,17 @@ func validateControl(tree map[string]any, add addFunc) {
 	typ := cfgval.String(control[keyType])
 	switch typ {
 	case virt.ControlType:
-		validateControlKeys(control, set(virt.ControlKeyType, virt.ControlKeyURI, virt.ControlKeyDomain, virt.ControlKeyUUID, virt.ControlKeySocket, virt.ControlKeyHost, virt.ControlKeyPort), libvirtControlKeySummary, add)
+		validateControlKeys(control, libvirtControlKeys, libvirtControlKeySummary, add)
 		if _, _, err := virt.SpecFromTree(tree); err != nil {
 			add("%s", err)
 		}
 	case virt.NetworkControlType:
-		validateControlKeys(control, set(virt.ControlKeyType, virt.ControlKeyURI, virt.ControlKeyNetwork, virt.ControlKeySocket, virt.ControlKeyGuardSocket, virt.ControlKeyGuardURI, virt.ControlKeyHost, virt.ControlKeyPort), libvirtNetworkControlKeySummary, add)
+		validateControlKeys(control, libvirtNetworkControlKeys, libvirtNetworkControlKeySummary, add)
 		if _, _, err := virt.NetworkSpecFromTree(tree); err != nil {
 			add("%s", err)
 		}
 	case dockerctl.ControlType:
-		validateControlKeys(control, set(dockerctl.ControlKeyType, dockerctl.ControlKeySocket, dockerctl.ControlKeyHost, dockerctl.ControlKeyPort, dockerctl.ControlKeyTLS, dockerctl.ControlKeyContainer), dockerControlKeySummary, add)
+		validateControlKeys(control, dockerControlKeys, dockerControlKeySummary, add)
 		if _, _, err := dockerctl.SpecFromTree(tree); err != nil {
 			add("%s", err)
 		}
@@ -347,10 +345,8 @@ func validateControl(tree map[string]any, add addFunc) {
 }
 
 func validateControlKeys(control map[string]any, allowed map[string]struct{}, labels string, add addFunc) {
-	for _, key := range slices.Sorted(maps.Keys(control)) {
-		if _, ok := allowed[key]; !ok {
-			add("control key %q is not one of %s", key, labels)
-		}
+	for key := range unknownBlockKeys(control, allowed) {
+		add("control key %q is not one of %s", key, labels)
 	}
 }
 
@@ -559,8 +555,8 @@ func validateButtons(tree map[string]any, add addFunc) {
 			add(validationMappingFormat, path)
 			continue
 		}
-		for _, err := range unknownBlockKeys(path, entry, set(ButtonKeyLabel, ButtonKeyCommand, ButtonKeyTimeout)) {
-			add("%s", err)
+		for key := range unknownBlockKeys(entry, buttonKeys) {
+			add(validationNotSupportedFormat, path+"."+key)
 		}
 		if !cfgval.IsNonEmptyStringArray(entry[ButtonKeyCommand]) {
 			add("%s.%s must be a non-empty array", path, ButtonKeyCommand)
@@ -571,3 +567,8 @@ func validateButtons(tree map[string]any, add addFunc) {
 		validatePositiveDurationField(entry, ButtonKeyTimeout, path+"."+ButtonKeyTimeout, add)
 	}
 }
+
+var libvirtControlKeys = set(virt.ControlKeyType, virt.ControlKeyURI, virt.ControlKeyDomain, virt.ControlKeyUUID, virt.ControlKeySocket, virt.ControlKeyHost, virt.ControlKeyPort)
+var libvirtNetworkControlKeys = set(virt.ControlKeyType, virt.ControlKeyURI, virt.ControlKeyNetwork, virt.ControlKeySocket, virt.ControlKeyGuardSocket, virt.ControlKeyGuardURI, virt.ControlKeyHost, virt.ControlKeyPort)
+var dockerControlKeys = set(dockerctl.ControlKeyType, dockerctl.ControlKeySocket, dockerctl.ControlKeyHost, dockerctl.ControlKeyPort, dockerctl.ControlKeyTLS, dockerctl.ControlKeyContainer)
+var buttonKeys = set(ButtonKeyLabel, ButtonKeyCommand, ButtonKeyTimeout)

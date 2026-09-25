@@ -284,10 +284,8 @@ func validateFromFileVariables(raw any, add addFunc) {
 }
 
 func validateFromFileSpec(path string, spec map[string]any, add addFunc) {
-	for _, key := range slices.Sorted(maps.Keys(spec)) {
-		if _, ok := fromFileVariableKeys[key]; !ok {
-			add("%s.%s is not supported; from_file variables accept from_file, directive, pattern and default", path, key)
-		}
+	for key := range unknownBlockKeys(spec, fromFileVariableKeys) {
+		add("%s.%s is not supported; from_file variables accept from_file, directive, pattern and default", path, key)
 	}
 	if cfgval.String(spec[varKeyFromFile]) == "" {
 		add("%s.from_file is required", path)

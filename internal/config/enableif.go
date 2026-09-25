@@ -117,10 +117,8 @@ func validateEnableIfSpec(path string, spec any, add addFunc) {
 		add(validationMappingFormat, path)
 		return
 	}
-	for key := range m {
-		if _, ok := enableIfKeys[key]; !ok {
-			add("%s.%s is not supported; enable_if accepts init, or file, key and one of %s", path, key, enableIfPredicateSummary)
-		}
+	for key := range unknownBlockKeys(m, enableIfKeys) {
+		add("%s.%s is not supported; enable_if accepts init, or file, key and one of %s", path, key, enableIfPredicateSummary)
 	}
 	if _, has := m[keyEnableIfInit]; has {
 		validateEnableIfInit(path, m, add)

@@ -287,11 +287,9 @@ func validateWatchThenAction(prefix, action string, then map[string]any, add fun
 			add("%s cannot be combined with an action (a watch is either an operation/alert or a fire-and-forget %s)", thenFieldPath(prefix, k), k)
 		}
 	}
-	allowed := set(rules.RuleFieldAction, rules.RuleFieldMessage, rules.RuleFieldBlocks, rules.RuleFieldNotify)
-	for _, k := range slices.Sorted(maps.Keys(then)) {
-		if _, ok := allowed[k]; !ok {
-			add("%s is not supported with an action", thenFieldPath(prefix, k))
-		}
+
+	for k := range unknownBlockKeys(then, watchActionKeys) {
+		add("%s is not supported with an action", thenFieldPath(prefix, k))
 	}
 	if action == string(rules.ActionBlock) {
 		if _, hasNotify := then[rules.RuleFieldNotify]; hasNotify {
@@ -440,11 +438,8 @@ func watchThenMapping(prefix string, block map[string]any, add func(string, ...a
 }
 
 func validateWatchThenKeys(prefix string, then map[string]any, add func(string, ...any)) {
-	allowed := set(WatchThenKeyHook, WatchThenKeyRecoverHook, rules.RuleFieldNotify, WatchThenKeyNotifyInterval, WatchThenKeyNotifyOn, WatchThenKeyExpand, WatchThenKeyKill, WatchThenKeyMakeStep)
-	for _, key := range slices.Sorted(maps.Keys(then)) {
-		if _, ok := allowed[key]; !ok {
-			add(validationNotSupportedFormat, thenFieldPath(prefix, key))
-		}
+	for key := range unknownBlockKeys(then, watchThenKeys) {
+		add(validationNotSupportedFormat, thenFieldPath(prefix, key))
 	}
 }
 
@@ -513,9 +508,9 @@ func validateRaidNotifyOn(name, typ string, entry map[string]any, notifiers map[
 		add("%s must be a non-empty event list", prefix)
 		return
 	}
-	allowed := set(checks.RaidNotifyEvents...)
+	allowed := raidNotifyEvents
 	if typ == checks.CheckTypeLVM {
-		allowed = set(checks.LVMNotifyOnChange)
+		allowed = lvmNotifyEvents
 	}
 	if typ != checks.CheckTypeRAID && typ != checks.CheckTypeLVM {
 		add("%s is only valid on a raid or lvm watch", prefix)
@@ -937,3 +932,10 @@ func validateAlertOnlyWatchThen(name string, entry map[string]any, defaultNotify
 		add("%s requires notify or omit then for dashboard/event-log alerts", prefix+"."+rules.RuleFieldThen)
 	}
 }
+
+var watchActionKeys = set(rules.RuleFieldAction, rules.RuleFieldMessage, rules.RuleFieldBlocks, rules.RuleFieldNotify)
+
+var watchThenKeys = set(WatchThenKeyHook, WatchThenKeyRecoverHook, rules.RuleFieldNotify, WatchThenKeyNotifyInterval, WatchThenKeyNotifyOn, WatchThenKeyExpand, WatchThenKeyKill, WatchThenKeyMakeStep)
+
+var raidNotifyEvents = set(checks.RaidNotifyEvents...)
+var lvmNotifyEvents = set(checks.LVMNotifyOnChange)
