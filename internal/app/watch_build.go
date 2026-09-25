@@ -81,7 +81,7 @@ func buildWatchEntry(name string, entry map[string]any, deps Deps, defaultInterv
 		interval = d
 	}
 	var warnings []string
-	if w := applyWatchMonitorMode(deps.Monitor, name, config.MonitorMode(entry)); w != "" {
+	if w := applyMonitorModeFor(deps.Monitor, watchSubjectPrefix+name, WatchMonitorKey(name), config.MonitorMode(entry)); w != "" {
 		warnings = append(warnings, w)
 	}
 	if w := warnEventCounterWindow(name, entry, checkEntry, interval); w != "" {
@@ -516,7 +516,9 @@ func newCheckWatch(spec checkWatchSpec, deps Deps) *Watch {
 	watch.FireOnFail = checks.IsHealthType(spec.checkType)
 	watch.Publish = publishWatchSnapshots(deps.WatchSnapshots, deps.watchConfigID)
 	watch.ForceSLA = spec.forceSLA
-	watch.RecordAvailability = watchSLARecorder(deps, spec)
+	if !spec.slaOff {
+		watch.RecordAvailability = watchAvailabilityRecorder(deps, spec.name)
+	}
 	watch.RecordMetrics = watchMetricRecorder(deps, spec.name, spec.checkType, spec.graphs, spec.bands)
 	watch.StateSlot = spec.stateSlot
 	return watch
@@ -1182,16 +1184,6 @@ func slaForced(entry map[string]any) bool {
 func slaSilenced(entry map[string]any) bool {
 	value, declared := checks.SLAOverride(entry)
 	return declared && !value
-}
-
-// watchSLARecorder is watchAvailabilityRecorder behind the `sla:` override: an
-// explicit false wires no recorder at all, so a silenced watch cannot record
-// even through the availability default.
-func watchSLARecorder(deps Deps, spec checkWatchSpec) func(bool, time.Time) {
-	if spec.slaOff {
-		return nil
-	}
-	return watchAvailabilityRecorder(deps, spec.name)
 }
 
 // watchAvailabilityRecorder returns the availability sink for one watch, or nil

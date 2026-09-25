@@ -58,12 +58,8 @@ type serviceMetricSample struct {
 }
 
 // NewServiceMetricSampler returns an empty service runtime metric history. The
-// optional store persists CPU, memory and IO buckets across daemon restarts.
-func NewServiceMetricSampler(stores ...ServiceMetricStore) *ServiceMetricSampler {
-	var store ServiceMetricStore
-	if len(stores) > 0 {
-		store = stores[0]
-	}
+// store, when non-nil, persists CPU, memory and IO buckets across daemon restarts.
+func NewServiceMetricSampler(store ServiceMetricStore) *ServiceMetricSampler {
 	return &ServiceMetricSampler{
 		store:   store,
 		prev:    map[string]serviceMetricCounters{},

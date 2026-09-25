@@ -384,7 +384,7 @@ func buildServiceWorker(ctx context.Context, resolution config.ServiceResolution
 		return b
 	}
 
-	if w := applyMonitorMode(deps.Monitor, name, config.MonitorMode(resolved.Tree)); w != "" {
+	if w := applyMonitorModeFor(deps.Monitor, serviceSubjectPrefix+name, name, config.MonitorMode(resolved.Tree)); w != "" {
 		b.warnings = append(b.warnings, w)
 	}
 
@@ -1005,19 +1005,7 @@ func measuredCheckNames(tree map[string]any) map[string]bool {
 	return out
 }
 
-// applyMonitorMode reconciles a service's persisted monitoring state with its
-// `monitor` flag at daemon startup, returning a non-empty warning on store error.
-//   - enabled : force monitoring on
-//   - disabled: force monitoring off
-//   - previous: keep the persisted state; first run defaults to on
-func applyMonitorMode(store MonitorStore, name, mode string) string {
-	return applyMonitorModeFor(store, serviceSubjectPrefix+name, name, mode)
-}
-
-func applyWatchMonitorMode(store MonitorStore, name, mode string) string {
-	return applyMonitorModeFor(store, watchSubjectPrefix+name, WatchMonitorKey(name), mode)
-}
-
+// applyMonitorModeFor reconciles persisted monitoring with the configured mode.
 func applyMonitorModeFor(store MonitorStore, label, key, mode string) string {
 	if store == nil {
 		return ""

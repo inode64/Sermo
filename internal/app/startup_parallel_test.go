@@ -91,7 +91,7 @@ func parallelStartupDeps(t *testing.T, runner execx.Runner) (Deps, *metrics.Coll
 		MaxParallel:      4,
 		Live:             NewLiveMetrics(),
 		LiveCollector:    collector,
-		ServiceMetrics:   NewServiceMetricSampler(),
+		ServiceMetrics:   NewServiceMetricSampler(nil),
 		Collector:        collector,
 		ExecxRunner:      runner,
 		Now:              time.Now,

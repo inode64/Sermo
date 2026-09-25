@@ -332,7 +332,7 @@ func NewWebBackend(ctx context.Context, cfg *config.Config, deps Deps) (*WebBack
 		}
 	}
 	if wb.serviceMetrics == nil {
-		wb.serviceMetrics = NewServiceMetricSampler()
+		wb.serviceMetrics = NewServiceMetricSampler(nil)
 	}
 	wb.sla, _ = deps.SLA.(SLAReader)
 	wb.measure, _ = deps.SLA.(MeasurementReader)

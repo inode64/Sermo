@@ -50,7 +50,7 @@ func TestServiceMetricSamplerReadsPersistedHistory(t *testing.T) {
 
 func TestServiceMetricSamplerSeriesDoesNotRecordDashboardReads(t *testing.T) {
 	base := time.Date(2026, 6, 15, 10, 0, 0, 0, time.UTC)
-	sampler := NewServiceMetricSampler()
+	sampler := NewServiceMetricSampler(nil)
 	sampler.record(t.Context(), "web", web.ServiceRuntime{
 		At:    base.UTC().Format(time.RFC3339),
 		Count: 1, RSS: 1024, CPU: 10, HasCPU: true,
@@ -74,7 +74,7 @@ func TestServiceMetricSamplerSeriesDoesNotRecordDashboardReads(t *testing.T) {
 }
 
 func TestServiceMetricSamplerRetainsSubsecondTime(t *testing.T) {
-	sampler := NewServiceMetricSampler()
+	sampler := NewServiceMetricSampler(nil)
 	at := time.Date(2026, 1, 1, 0, 0, 0, 123, time.UTC)
 	sampler.record(t.Context(), "web", web.ServiceRuntime{Count: 1, IORead: 100}, at)
 	later := at.Add(500 * time.Millisecond)

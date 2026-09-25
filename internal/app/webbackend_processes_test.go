@@ -380,7 +380,7 @@ func TestWorkerRecordsServiceRuntimeMetricsForWebHistory(t *testing.T) {
 	}
 	collector := metrics.New(reader)
 	collector.Now = func() time.Time { return clock }
-	serviceMetrics := NewServiceMetricSampler()
+	serviceMetrics := NewServiceMetricSampler(nil)
 	deps := Deps{
 		Backend:          servicemgr.BackendSystemd,
 		Manager:          fakeManager{},
