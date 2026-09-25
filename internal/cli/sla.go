@@ -159,14 +159,14 @@ func (a App) writeSLAJSON(reports []serviceWindows) {
 	for _, r := range reports {
 		windows := make(map[string]any, len(r.Windows))
 		for _, v := range r.Windows {
-			windows[v.Window] = slaValueJSON(v)
+			windows[v.Window] = slaCountsJSON(v.SLACounts)
 		}
 		out = append(out, map[string]any{cliJSONKeyService: r.Service, cliJSONKeyWindows: windows})
 	}
 	writeJSON(a.Stdout, map[string]any{cliJSONKeySLA: out})
 }
 
-func slaValueJSON(v state.SLAValue) map[string]any {
+func slaCountsJSON(v state.SLACounts) map[string]any {
 	entry := map[string]any{
 		cliJSONKeyUp:          v.Up,
 		cliJSONKeyTotal:       v.Total,
@@ -230,15 +230,7 @@ func (a App) writeSLASeriesJSON(service string, window time.Duration, points []s
 }
 
 func slaPointJSON(p state.SLAPoint) map[string]any {
-	entry := map[string]any{
-		cliJSONKeyStart:       p.Start.Format(time.RFC3339),
-		cliJSONKeyUp:          p.Up,
-		cliJSONKeyTotal:       p.Total,
-		cliJSONKeyDownBuckets: p.DownBuckets,
-		cliJSONKeyRatio:       nil,
-	}
-	if ratio, ok := p.Ratio(); ok {
-		entry[cliJSONKeyRatio] = ratio
-	}
+	entry := slaCountsJSON(p.SLACounts)
+	entry[cliJSONKeyStart] = p.Start.Format(time.RFC3339)
 	return entry
 }
