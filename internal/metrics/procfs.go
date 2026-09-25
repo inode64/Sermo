@@ -10,7 +10,6 @@ import (
 	"sermo/internal/hostfs"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"sermo/internal/process"
@@ -160,53 +159,36 @@ func (OSReader) ProcessStart(pid int) (uint64, time.Time, bool) {
 	return startTicks, time.Unix(boot+whole, nsec), true
 }
 
-// bootTimeCacheTTL bounds how long a `btime` reading is reused. Callers ask per
-// PID per cycle (the process watch, service runtime, restart notices), so within
-// one sampling pass this collapses N reads of a file that carries a line per CPU
-// into one. It is deliberately short rather than permanent: `btime` is
-// `wall_now - uptime`, so the kernel re-anchors it on every clock step, and a
-// permanently cached value would leave derived ages off by the whole step.
-const bootTimeCacheTTL = 5 * time.Second
+// procStatCacheTTL bounds CPU hotplug and boot-time changes after clock steps.
+// These nearly static fields share one /proc/stat read across process samples.
+const procStatCacheTTL = 5 * time.Second
 
-// cpuCountCacheTTL bounds reuse of the host CPU count. Process and service
-// sampling ask for it repeatedly in one daemon cycle, while CPU hotplug remains
-// visible within a short bounded interval.
-const cpuCountCacheTTL = 5 * time.Second
-
-// bootTimeCache memoizes the `btime` field of /proc/stat for bootTimeCacheTTL.
-// Only a successful read is cached, so a transient failure does not pin the
-// daemon to a stale reading.
-var bootTimeCache struct {
-	sync.Mutex
-	sec    int64
-	readAt time.Time
+type procStatObservation struct {
+	bootTime int64
+	bootOK   bool
+	numCPU   int
 }
 
-// cpuCountCache memoizes successful /proc/stat CPU counts. Like bootTimeCache,
-// it never retains a failed procfs read, so the runtime fallback remains only a
-// transient fallback.
-var cpuCountCache struct {
-	sync.Mutex
-	count  int
-	readAt time.Time
+var hostProcStat cachedSample[procStatObservation]
+
+func procStatSample() procStatObservation {
+	var sample procStatObservation
+	_ = hostProcStat.readInto(time.Now(), procStatCacheTTL, func() (procStatObservation, bool, error) {
+		data, err := hostfs.ReadFile(procPath(procFileStat))
+		if err != nil {
+			return procStatObservation{}, false, fmt.Errorf("read proc stat: %w", err)
+		}
+		boot, ok := procBootTimeValue(ScanUintField(string(data), procStatBootTimePrefix))
+		count := countCPULines(data)
+		return procStatObservation{bootTime: boot, bootOK: ok, numCPU: count}, ok && count > 0, nil
+	}, &sample)
+	return sample
 }
 
 // procBootTime returns the system boot time in seconds since the epoch.
 func procBootTime() (int64, bool) {
-	bootTimeCache.Lock()
-	defer bootTimeCache.Unlock()
-	if !bootTimeCache.readAt.IsZero() && time.Since(bootTimeCache.readAt) < bootTimeCacheTTL {
-		return bootTimeCache.sec, true
-	}
-	data, err := os.ReadFile(procPath(procFileStat))
-	if err != nil {
-		return 0, false
-	}
-	sec, ok := procBootTimeValue(ScanUintField(string(data), procStatBootTimePrefix))
-	if ok {
-		bootTimeCache.sec, bootTimeCache.readAt = sec, time.Now()
-	}
-	return sec, ok
+	sample := procStatSample()
+	return sample.bootTime, sample.bootOK
 }
 
 func procBootTimeValue(sec uint64, ok bool) (int64, bool) {
@@ -488,22 +470,7 @@ func (OSReader) NumCPU() int {
 
 // procStatCPUCount counts the per-CPU "cpuN" lines in /proc/stat. Returns 0 when
 // /proc/stat cannot be read.
-func procStatCPUCount() int {
-	cpuCountCache.Lock()
-	defer cpuCountCache.Unlock()
-	if cpuCountCache.count > 0 && !cpuCountCache.readAt.IsZero() && time.Since(cpuCountCache.readAt) < cpuCountCacheTTL {
-		return cpuCountCache.count
-	}
-	data, err := os.ReadFile(procPath(procFileStat))
-	if err != nil {
-		return 0
-	}
-	count := countCPULines(data)
-	if count > 0 {
-		cpuCountCache.count, cpuCountCache.readAt = count, time.Now()
-	}
-	return count
-}
+func procStatCPUCount() int { return procStatSample().numCPU }
 
 // countCPULines counts the per-CPU "cpuN" lines in /proc/stat content (the
 // aggregate "cpu" line, which has no digit after the prefix, is excluded).
