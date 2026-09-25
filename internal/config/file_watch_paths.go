@@ -13,11 +13,6 @@ func FileWatchPaths(check map[string]any) ([]string, error) {
 	if !hasPaths {
 		return nil, fmt.Errorf("file check %s is required", checks.CheckKeyPaths)
 	}
-	switch paths.(type) {
-	case []any, []string:
-	default:
-		return nil, fmt.Errorf("file check %s must be a non-empty list of strings", checks.CheckKeyPaths)
-	}
 	selected, err := cfgval.StrictStringArray(paths)
 	if err != nil || len(selected) == 0 {
 		return nil, fmt.Errorf("file check %s must be a non-empty list of strings", checks.CheckKeyPaths)
