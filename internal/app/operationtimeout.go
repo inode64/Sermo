@@ -29,14 +29,11 @@ func MaxOperationTimeout(cfg *config.Config, configured time.Duration) time.Dura
 		maxTO = max(maxTO, operation.ResolveTimeout(configured, resolved.Tree))
 	}
 	defaultTimeout := config.EngineDuration(cfg, config.EngineKeyDefaultTimeout, DefaultEngineCheckTimeout)
-	if watches, _ := cfg.ResolveWatches(); len(watches) > 0 {
-		maxTO = maxWatchProbeTimeout(maxTO, watches, defaultTimeout, configured)
-	}
-	return maxTO
+	watches, _ := cfg.ResolveWatches()
+	return maxWatchProbeTimeout(maxTO, watches, defaultTimeout, configured)
 }
 
-func maxWatchProbeTimeout(maxTO time.Duration, raw any, defaultTimeout, operationTimeout time.Duration) time.Duration {
-	watches, _ := raw.(map[string]any)
+func maxWatchProbeTimeout(maxTO time.Duration, watches map[string]any, defaultTimeout, operationTimeout time.Duration) time.Duration {
 	for _, item := range watches {
 		entry, _ := item.(map[string]any)
 		if entry == nil || cfgval.Disabled(entry) {
