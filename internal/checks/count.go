@@ -43,20 +43,9 @@ func (c countCheck) Run(ctx context.Context) Result {
 	}
 
 	ok := cfgval.CompareFloat(float64(n), c.op, c.value)
-	scope := "in"
-	if c.recursive {
-		scope = "under"
-	}
 	res := c.result(ok, fmt.Sprintf("%d %s entries %s %s (want %s %s)",
-		n, c.kind, scope, c.path, c.op, formatThreshold(c.value)), start)
-	res.Data = map[string]any{
-		DataKeyPath:           c.path,
-		DataKeyOf:             c.kind,
-		DataKeyRecursive:      c.recursive,
-		CheckKeyIncludeHidden: c.includeHidden,
-		DataKeyCount:          n,
-		DataKeyValue:          n,
-	}
+		n, c.kind, c.scope(), c.path, c.op, formatThreshold(c.value)), start)
+	res.Data = c.baseData(n)
 	return res
 }
 
@@ -64,25 +53,33 @@ func (c countCheck) runDelta(n int, start time.Time) Result {
 	growth, span := c.state.advance(windowClock(c.clock)(), n, c.window)
 	ok := growth > 0 && cfgval.CompareFloat(float64(growth), c.deltaOp, c.deltaValue)
 
-	scope := "in"
-	if c.recursive {
-		scope = "under"
-	}
 	res := c.result(ok, fmt.Sprintf("%d %s entries %s %s (%+d in %s, want %s %s)",
-		n, c.kind, scope, c.path, growth, span.Round(time.Second),
+		n, c.kind, c.scope(), c.path, growth, span.Round(time.Second),
 		c.deltaOp, formatThreshold(c.deltaValue)), start)
-	res.Data = map[string]any{
+	res.Data = c.baseData(n)
+	res.Data[DataKeyBaselineCount] = n - growth
+	res.Data[DataKeyGrowthCount] = growth
+	res.Data[DataKeyWindow] = c.window.String()
+	res.Data[DataKeyValue] = growth
+	return res
+}
+
+func (c countCheck) scope() string {
+	if c.recursive {
+		return "under"
+	}
+	return "in"
+}
+
+func (c countCheck) baseData(n int) map[string]any {
+	return map[string]any{
 		DataKeyPath:           c.path,
 		DataKeyOf:             c.kind,
 		DataKeyRecursive:      c.recursive,
 		CheckKeyIncludeHidden: c.includeHidden,
 		DataKeyCount:          n,
-		DataKeyBaselineCount:  n - growth,
-		DataKeyGrowthCount:    growth,
-		DataKeyWindow:         c.window.String(),
-		DataKeyValue:          growth,
+		DataKeyValue:          n,
 	}
-	return res
 }
 
 // tally excludes the root path itself.
