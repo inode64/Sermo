@@ -96,7 +96,7 @@ func networkManagerWith(client *fakeNetworkClient) NetworkManager {
 		URI:         DefaultNetworkURI,
 		Network:     "default",
 		Socket:      testNetworkSocket,
-		GuardSocket: DefaultQEMUSocket,
+		GuardSocket: defaultQEMUSocket,
 		GuardURI:    DefaultURI,
 	})
 	m.NewClient = func(_ NetworkSpec, socket string, _ time.Duration) (NetworkClient, error) {
@@ -174,12 +174,12 @@ func TestNetworkManagerStopGuardsOverGuardSocket(t *testing.T) {
 	}
 	found := false
 	for _, s := range client.sockets {
-		if s == DefaultQEMUSocket {
+		if s == defaultQEMUSocket {
 			found = true
 		}
 	}
 	if !found {
-		t.Fatalf("sockets dialed = %v, want the guard session on %s", client.sockets, DefaultQEMUSocket)
+		t.Fatalf("sockets dialed = %v, want the guard session on %s", client.sockets, defaultQEMUSocket)
 	}
 }
 

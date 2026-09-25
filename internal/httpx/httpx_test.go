@@ -60,8 +60,8 @@ func TestCloneDefaultTransportFallsBackForCustomRoundTripper(t *testing.T) {
 		return nil, errors.New("unexpected RoundTrip call")
 	})
 
-	if transport := CloneDefaultTransport(); transport == nil {
-		t.Fatal("CloneDefaultTransport() = nil")
+	if transport := cloneDefaultTransport(); transport == nil {
+		t.Fatal("cloneDefaultTransport() = nil")
 	}
 }
 

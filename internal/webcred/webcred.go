@@ -270,7 +270,7 @@ func (c credential) verify(password string) bool {
 }
 
 // saltedDigest is the `$sha256$` digest of password under salt. It is the one
-// definition shared by verification and by HashSHA256, so the two can never
+// definition shared by verification and by hashSHA256, so the two can never
 // drift apart. Writing into the hash avoids joining salt and password into a
 // throwaway buffer on a path that runs per request.
 func saltedDigest(salt []byte, password string) [sha256.Size]byte {

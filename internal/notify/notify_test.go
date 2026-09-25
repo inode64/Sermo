@@ -134,10 +134,10 @@ func TestBuildCanSkipTemplates(t *testing.T) {
 }
 
 func TestSupportedTypes(t *testing.T) {
-	got := SupportedTypes()
+	got := supportedTypes()
 	want := []string{TypeEmail, TypeGotify, TypeNtfy, TypeSlack, TypeTeams, TypeTelegram, TypeTTY, TypeWall}
 	if !slices.Equal(got, want) {
-		t.Fatalf("SupportedTypes = %v, want %v", got, want)
+		t.Fatalf("supportedTypes = %v, want %v", got, want)
 	}
 }
 

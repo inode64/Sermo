@@ -138,8 +138,8 @@ func TestEphemeralSpecNormalizesPathAndID(t *testing.T) {
 			if spec.Path != test.wantPath || spec.Name != test.wantID {
 				t.Fatalf("EphemeralSpec(%q) = path %q name %q; want path %q name %q", test.path, spec.Path, spec.Name, test.wantPath, test.wantID)
 			}
-			if got := IDForPath(test.path); got != test.wantID {
-				t.Fatalf("IDForPath(%q) = %q, want %q", test.path, got, test.wantID)
+			if got := idForPath(test.path); got != test.wantID {
+				t.Fatalf("idForPath(%q) = %q, want %q", test.path, got, test.wantID)
 			}
 			if !spec.Refcount || spec.Umount != defaultUmountSpec() {
 				t.Fatalf("EphemeralSpec(%q) defaults = refcount %t umount %+v", test.path, spec.Refcount, spec.Umount)

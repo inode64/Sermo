@@ -162,7 +162,7 @@ func Build(raw map[string]any, opts ...Option) (map[string]Notifier, []string) {
 				warnings = append(warnings, fmt.Sprintf("notifier %s: template %q: %v", name, templateName, err))
 				continue
 			}
-			n = WithTemplate(n, tmpl)
+			n = withTemplate(n, tmpl)
 		}
 		out[name] = n
 	}
@@ -211,7 +211,7 @@ func NewTargetedTTY(name string, users []string) (Notifier, error) {
 	return notifier, nil
 }
 
-// SupportedTypes lists the registered notifier types, for validation and docs.
-func SupportedTypes() []string {
+// supportedTypes lists the registered notifier types, for validation and docs.
+func supportedTypes() []string {
 	return slices.Sorted(maps.Keys(transports))
 }

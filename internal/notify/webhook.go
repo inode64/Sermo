@@ -24,8 +24,8 @@ const (
 
 // Webhook URL prefix constants are the supported webhook transport URL schemes.
 const (
-	WebhookURLPrefixHTTP  = netutil.URLSchemeHTTP + netutil.URLSchemeSeparator
-	WebhookURLPrefixHTTPS = netutil.URLSchemeHTTPS + netutil.URLSchemeSeparator
+	webhookURLPrefixHTTP  = netutil.URLSchemeHTTP + netutil.URLSchemeSeparator
+	webhookURLPrefixHTTPS = netutil.URLSchemeHTTPS + netutil.URLSchemeSeparator
 )
 
 // webhookPoster delivers a JSON payload to a webhook; injected so tests do not

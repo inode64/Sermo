@@ -15,12 +15,12 @@ const (
 	ntfyBearerPrefix = "Bearer "
 )
 
-// ParseNtfyWebhook splits an ntfy topic URL into the publish base URL and the
+// parseNtfyWebhook splits an ntfy topic URL into the publish base URL and the
 // topic name. The topic is the last path segment; any leading segments are a
 // reverse-proxy subpath kept on the base (https://host/ntfy/alerts →
 // base https://host/ntfy, topic alerts). Publishing POSTs the topic in the
 // JSON body to that base, which keeps title and body structured.
-func ParseNtfyWebhook(webhook string) (base, topic string, err error) {
+func parseNtfyWebhook(webhook string) (base, topic string, err error) {
 	u, err := url.Parse(webhook)
 	if err != nil || u.Host == "" {
 		return "", "", errors.New("ntfy webhook must be a full topic URL (https://server/topic)")
@@ -43,7 +43,7 @@ func ParseNtfyWebhook(webhook string) (base, topic string, err error) {
 func buildNtfy(name string, entry map[string]any) (Notifier, error) {
 	webhook := webhookURL(entry)
 	// Build validates the transport entry before invoking this constructor.
-	server, topic, _ := ParseNtfyWebhook(webhook)
+	server, topic, _ := parseNtfyWebhook(webhook)
 	var headers map[string]string
 	if token := cfgval.String(entry[KeyToken]); token != "" {
 		headers = map[string]string{httpx.HeaderAuthorization: ntfyBearerPrefix + token}

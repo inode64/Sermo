@@ -15,8 +15,8 @@ func TestDistinctUsers(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := DistinctUsers(tc.in); got != tc.want {
-				t.Errorf("DistinctUsers(%v) = %d, want %d", tc.in, got, tc.want)
+			if got := distinctUsers(tc.in); got != tc.want {
+				t.Errorf("distinctUsers(%v) = %d, want %d", tc.in, got, tc.want)
 			}
 		})
 	}

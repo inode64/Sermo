@@ -67,9 +67,9 @@ func (t *Template) Name() string {
 	return t.name
 }
 
-// ValidTemplateName reports whether name is safe to map to a file inside the
+// validTemplateName reports whether name is safe to map to a file inside the
 // configured template directory.
-func ValidTemplateName(name string) bool {
+func validTemplateName(name string) bool {
 	if name == "" || name == "." || name == ".." || strings.Contains(name, "..") {
 		return false
 	}
@@ -86,11 +86,11 @@ func ValidTemplateName(name string) bool {
 	return true
 }
 
-// LocalDirSuffix names the per-host override sibling of the template directory.
+// localDirSuffix names the per-host override sibling of the template directory.
 // Unlike the document directories, whose overrides merge field by field, a
 // template is a whole file: `<dir>.local/<name>.yml` shadows `<dir>/<name>.yml`
 // entirely. There are no named entries inside a template to merge.
-const LocalDirSuffix = ".local"
+const localDirSuffix = ".local"
 
 // LoadTemplate loads a named template from dir. Template names are mapped to
 // `<name>.yml` and cannot contain path separators. A `<dir>.local` sibling takes
@@ -100,11 +100,11 @@ func LoadTemplate(dir, name string) (*Template, error) {
 	if dir == "" {
 		return nil, errors.New("template directory is required")
 	}
-	if !ValidTemplateName(name) {
+	if !validTemplateName(name) {
 		return nil, fmt.Errorf("invalid template name %q", name)
 	}
 	path := filepath.Join(dir, name+templateFileSuffix)
-	if local := filepath.Join(filepath.Clean(dir)+LocalDirSuffix, name+templateFileSuffix); fileExists(local) {
+	if local := filepath.Join(filepath.Clean(dir)+localDirSuffix, name+templateFileSuffix); fileExists(local) {
 		path = local
 	}
 	data, err := os.ReadFile(filepath.Clean(path))
@@ -187,8 +187,8 @@ type templatedNotifier struct {
 	template *Template
 }
 
-// WithTemplate returns a notifier that renders tmpl before delegating delivery.
-func WithTemplate(inner Notifier, tmpl *Template) Notifier {
+// withTemplate returns a notifier that renders tmpl before delegating delivery.
+func withTemplate(inner Notifier, tmpl *Template) Notifier {
 	if tmpl == nil {
 		return inner
 	}

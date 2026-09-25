@@ -26,7 +26,7 @@ func Formats() []string { return []string{FormatBcrypt, FormatSHA256} }
 func Hash(password, format string, cost int) (string, error) {
 	switch format {
 	case FormatSHA256:
-		return HashSHA256(password)
+		return hashSHA256(password)
 	case FormatBcrypt:
 		if cost == 0 {
 			cost = DefaultBcryptCost
@@ -68,11 +68,11 @@ func HashBcrypt(password string, cost int) (string, error) {
 	return string(hash), nil
 }
 
-// HashSHA256 returns the salted `$sha256$` credential line for password. It is
+// hashSHA256 returns the salted `$sha256$` credential line for password. It is
 // only safe for a high-entropy secret such as the one GenerateSecret returns:
 // verification is fast by design, so a guessable password would fall quickly if
 // the file leaked.
-func HashSHA256(password string) (string, error) {
+func hashSHA256(password string) (string, error) {
 	if password == "" {
 		return "", errNoCredentials
 	}

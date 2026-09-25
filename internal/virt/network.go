@@ -78,7 +78,7 @@ func NetworkSpecFromTree(tree map[string]any) (NetworkSpec, bool, error) {
 	if err := validateEndpointFields(spec.URI, spec.Socket, spec.Host); err != nil {
 		return NetworkSpec{}, true, err
 	}
-	if !ValidSocketPath(spec.GuardSocket) {
+	if !validSocketPath(spec.GuardSocket) {
 		return NetworkSpec{}, true, fmt.Errorf("%s.%s %q must be an absolute path", sectionControl, ControlKeyGuardSocket, spec.GuardSocket)
 	}
 	if spec.GuardSocket != "" && spec.Host != "" {

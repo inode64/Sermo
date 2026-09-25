@@ -27,7 +27,7 @@ func ValidateEntry(entry map[string]any) []ValidationIssue {
 	if !ok {
 		return []ValidationIssue{{
 			Field:  KeyType,
-			Suffix: fmt.Sprintf(" %q is not supported (%s)", typ, strings.Join(SupportedTypes(), ", ")),
+			Suffix: fmt.Sprintf(" %q is not supported (%s)", typ, strings.Join(supportedTypes(), ", ")),
 		}}
 	}
 	return registered.validate(entry)
@@ -64,7 +64,7 @@ func validateGotifyConfig(entry map[string]any) []ValidationIssue {
 func validateNtfyConfig(entry map[string]any) []ValidationIssue {
 	issues := validateWebhookConfig(TypeNtfy)(entry)
 	if webhook := cfgval.String(entry[KeyWebhook]); webhook != "" {
-		if _, _, err := ParseNtfyWebhook(webhook); err != nil {
+		if _, _, err := parseNtfyWebhook(webhook); err != nil {
 			issues = append(issues, ValidationIssue{Field: KeyWebhook, Suffix: ": " + err.Error()})
 		}
 	}
@@ -109,7 +109,7 @@ func validateWebhookConfig(typ string) func(map[string]any) []ValidationIssue {
 		switch {
 		case webhook == "":
 			return []ValidationIssue{{Field: KeyWebhook, Suffix: " is required for a " + typ + " notifier"}}
-		case !strings.HasPrefix(webhook, WebhookURLPrefixHTTP) && !strings.HasPrefix(webhook, WebhookURLPrefixHTTPS):
+		case !strings.HasPrefix(webhook, webhookURLPrefixHTTP) && !strings.HasPrefix(webhook, webhookURLPrefixHTTPS):
 			return []ValidationIssue{{Field: KeyWebhook, Suffix: " must be an http(s) URL"}}
 		default:
 			return nil

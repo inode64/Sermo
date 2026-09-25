@@ -28,9 +28,9 @@ type Terminal struct {
 	AccessedAt time.Time
 }
 
-// DistinctUsers counts the unique, non-empty user names across sessions. It is
+// distinctUsers counts the unique, non-empty user names across sessions. It is
 // platform-independent (the slice already comes from SessionsFrom).
-func DistinctUsers(sessions []Session) int {
+func distinctUsers(sessions []Session) int {
 	users := make(map[string]struct{}, len(sessions))
 	for _, s := range sessions {
 		if s.User != "" {
@@ -47,7 +47,7 @@ func DistinctUserCount() (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	return DistinctUsers(sessions), nil
+	return distinctUsers(sessions), nil
 }
 
 // DefaultPaths returns the usual utmp locations in lookup order. The returned

@@ -59,8 +59,8 @@ func ensureDeadline(ctx context.Context) (context.Context, context.CancelFunc) {
 }
 
 const (
-	// DefaultHost is Docker's loopback host when TCP control omits host.
-	DefaultHost = netutil.LoopbackIPv4
+	// defaultHost is Docker's loopback host when TCP control omits host.
+	defaultHost = netutil.LoopbackIPv4
 	// DefaultSocket is Docker's local Unix API socket on modern Linux systems.
 	DefaultSocket = "/run/docker.sock"
 	// DefaultPort is Docker's plaintext TCP API port.
@@ -153,7 +153,7 @@ func SpecFromTree(tree map[string]any) (Spec, bool, error) {
 	if spec.Host != "" && strings.TrimSpace(spec.Host) == "" {
 		return Spec{}, true, fmt.Errorf("%s must not be blank", controlPathHost)
 	}
-	if !ValidTLSValue(m[ControlKeyTLS]) {
+	if !validTLSValue(m[ControlKeyTLS]) {
 		return Spec{}, true, fmt.Errorf("%s %q is not a valid docker TLS mode", controlPathTLS, cfgval.String(m[ControlKeyTLS]))
 	}
 	if spec.Host == "" && spec.Socket == "" {
@@ -194,7 +194,7 @@ func NewClient(spec Spec) *Client {
 	}
 	host := spec.Host
 	if host == "" {
-		host = DefaultHost
+		host = defaultHost
 	}
 	port := spec.Port
 	if port == 0 {
@@ -371,9 +371,9 @@ func containerPath(container, suffix string) string {
 	return dockerContainerPathPrefix + url.PathEscape(container) + suffix
 }
 
-// ValidTLSValue reports whether v is accepted by Sermo's Docker transport: an
+// validTLSValue reports whether v is accepted by Sermo's Docker transport: an
 // omitted or boolean value, or one of the shared friendly tls spellings.
-func ValidTLSValue(v any) bool {
+func validTLSValue(v any) bool {
 	switch t := v.(type) {
 	case nil:
 		return true
