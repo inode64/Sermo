@@ -15,7 +15,6 @@ import (
 type DiagnosticLog struct {
 	mu   sync.Mutex
 	cfg  *config.Config
-	host diag.Host
 	file *logfile.Writer
 	now  func() time.Time
 }
@@ -34,7 +33,6 @@ const (
 func NewDiagnosticLog(cfg *config.Config, file *logfile.Writer, now func() time.Time) *DiagnosticLog {
 	return &DiagnosticLog{
 		cfg:  cfg,
-		host: diag.OSHost{},
 		file: file,
 		now:  clockOrNow(now),
 	}
@@ -57,15 +55,12 @@ func (l *DiagnosticLog) Export() {
 	}
 	l.mu.Lock()
 	cfg := l.cfg
-	host := l.host
-	file := l.file
-	now := l.now
 	l.mu.Unlock()
 
-	findings := collectDiagnosticFindings(cfg, host)
-	at := now().UTC()
+	findings := collectDiagnosticFindings(cfg, diag.OSHost{})
+	at := l.now().UTC()
 	errors, warnings := countDiagFindingLevels(findings)
-	_ = file.Write(map[string]any{
+	_ = l.file.Write(map[string]any{
 		diagFieldTime:     at.Format(time.RFC3339),
 		diagFieldErrors:   errors,
 		diagFieldWarnings: warnings,
