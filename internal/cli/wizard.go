@@ -120,7 +120,7 @@ func (a App) runWizardSession(ctx context.Context, opts options) (code int, err 
 		return exitSuccess, nil
 	}
 
-	data, err := renderWizardWatchPreview(as.Name(), res.Watches)
+	data, err := renderWizardWatchPreview(res.Watches)
 	if err != nil {
 		a.reportError(opts, fmt.Sprintf("render config: %v", err))
 		return exitRuntimeError, nil
@@ -131,16 +131,13 @@ func (a App) runWizardSession(ctx context.Context, opts options) (code int, err 
 		fmt.Fprintln(a.Stdout, "Not written — paste each block above into its own YAML file loaded from paths.watches.")
 		return exitSuccess, nil
 	}
-	var deletes []string
 	detected := detectedTargetKeys(env, as.Name())
 	noun := wizardNounWatch
-	for _, dir := range wizardCleanupDirs(globalPath, as.Name(), res.Watches) {
-		more, err := planWizardWatchDeletes(p, dir, detected, noun)
-		if err != nil {
-			a.reportError(opts, err.Error())
-			return exitRuntimeError, nil
-		}
-		deletes = append(deletes, more...)
+	_, targetDir := wizardTargetDir(globalPath, as.Name(), res.Watches)
+	deletes, err := planStaleDeletes(p, targetDir, noun, "existing watch", detected, wizardWatchStaleFile)
+	if err != nil {
+		a.reportError(opts, err.Error())
+		return exitRuntimeError, nil
 	}
 	if err := deleteWizardConfigFiles(deletes); err != nil {
 		a.reportError(opts, err.Error())
@@ -163,16 +160,16 @@ func (a App) runWizardSession(ctx context.Context, opts options) (code int, err 
 		return exitRuntimeError, nil
 	}
 	if merged.Backup != "" {
-		fmt.Fprintf(a.Stdout, "Updated %s paths.%s (backup: %s).\n", globalPath, merged.PathKey, merged.Backup)
+		fmt.Fprintf(a.Stdout, "Updated %s paths.%s (backup: %s).\n", globalPath, watchesConfigDir, merged.Backup)
 	}
 	if len(deletes) > 0 {
 		fmt.Fprintf(a.Stdout, "Deleted %d existing %s file(s).\n", len(deletes), noun)
 	}
-	fmt.Fprintf(a.Stdout, "Wrote %d %s file(s) under %s. Run `sermoctl daemon reload` to apply.\n", len(merged.Files), noun, merged.Dir)
+	fmt.Fprintf(a.Stdout, "Wrote %d %s file(s) under %s. Run `sermoctl daemon reload` to apply.\n", merged.Count, noun, merged.Dir)
 	return exitSuccess, nil
 }
 
-func renderWizardWatchPreview(_ string, entries map[string]any) ([]byte, error) {
+func renderWizardWatchPreview(entries map[string]any) ([]byte, error) {
 	docs, err := watchDocsFromEntries(entries)
 	if err != nil {
 		return nil, err
@@ -404,10 +401,9 @@ func ifaceHasUsableAddress(addrs []net.Addr) bool {
 }
 
 type wizardMergeResult struct {
-	Backup  string
-	Dir     string
-	Files   []string
-	PathKey string
+	Backup string
+	Dir    string
+	Count  int
 }
 
 func ensureNoWatchCollisions(cfg *config.Config, entries map[string]any) error {
@@ -427,16 +423,15 @@ func ensureNoWatchCollisions(cfg *config.Config, entries map[string]any) error {
 // directory loaded from paths.watches.
 func mergeWizardWatches(path, wizard string, entries map[string]any) (wizardMergeResult, error) {
 	relDir, targetDir := wizardTargetDir(path, wizard, entries)
-	pathKey := watchesConfigDir
 	docs, err := watchDocsFromEntries(entries)
 	if err != nil {
 		return wizardMergeResult{}, err
 	}
-	files, bak, err := writeConfigDocs(path, pathKey, relDir, targetDir, wizardNounWatch, docs)
+	files, bak, err := writeConfigDocs(path, watchesConfigDir, relDir, targetDir, wizardNounWatch, docs)
 	if err != nil {
 		return wizardMergeResult{}, err
 	}
-	return wizardMergeResult{Backup: bak, Dir: targetDir, Files: plannedConfigFilePaths(files), PathKey: pathKey}, nil
+	return wizardMergeResult{Backup: bak, Dir: targetDir, Count: len(files)}, nil
 }
 
 func watchDocsFromEntries(entries map[string]any) (map[string]map[string]any, error) {
@@ -466,11 +461,6 @@ func wizardTargetDir(path, wizard string, entries map[string]any) (string, strin
 	dirName := wizardConfigDirName(wizard, entries)
 	base := filepath.Dir(filepath.Clean(path))
 	return dirName, filepath.Join(base, dirName)
-}
-
-func wizardCleanupDirs(path, wizard string, entries map[string]any) []string {
-	_, targetDir := wizardTargetDir(path, wizard, entries)
-	return []string{targetDir}
 }
 
 func wizardConfigDirName(wizard string, entries map[string]any) string {
@@ -521,18 +511,6 @@ func watchTypeDirName(checkType string) string {
 	}
 }
 
-// planWizardWatchDeletes offers to delete managed wizard output files whose
-// target is no longer present on the host — the wizard's final cleanup step
-// ("delete the files whose target we no longer detect").
-// detected is the set of currently detected target keys (mountpoints /
-// interface names); a file is offered only when every target it monitors is
-// absent from that set. When detection is empty (unavailable, or an assistant
-// without host targets) nothing is offered, so a valid file is never proposed
-// for deletion.
-func planWizardWatchDeletes(p *assist.Prompt, targetDir string, detected map[string]bool, noun string) ([]string, error) {
-	return planStaleDeletes(p, targetDir, noun, "existing watch", detected, wizardWatchStaleFile)
-}
-
 // staleFile is a managed config file whose target is no longer detected on the
 // host, offered for deletion by the step-9 cleanup. label is the path plus a
 // human hint (the watch names, or the catalog service a service uses).
@@ -546,7 +524,8 @@ type staleFilePlanner func(path string, detected map[string]bool) staleFile
 // planStaleDeletes finds managed YAML files whose planner can prove their
 // target is no longer detected, then delegates the interactive confirmation.
 // Each wizard keeps its own target parser and stale policy; only filesystem
-// traversal and operator prompts are shared.
+// traversal and operator prompts are shared. Empty detection never proposes
+// deletion: the planner must have evidence that a target is absent.
 func planStaleDeletes(p *assist.Prompt, dir, noun, directoryLabel string, detected map[string]bool, plan staleFilePlanner) ([]string, error) {
 	if len(detected) == 0 {
 		return nil, nil
@@ -779,14 +758,6 @@ func writeConfigDocs(globalPath, pathKey, relDir, targetDir, noun string, docs m
 		}
 	}
 	return files, bak, nil
-}
-
-func plannedConfigFilePaths(files []plannedConfigFile) []string {
-	paths := make([]string, 0, len(files))
-	for _, file := range files {
-		paths = append(paths, file.path)
-	}
-	return paths
 }
 
 // ensureConfigPathDir makes sure targetDir (whose path relative to the config

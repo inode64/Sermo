@@ -243,17 +243,6 @@ func TestCephMonIDFromSystemdUnit(t *testing.T) {
 	}
 }
 
-func TestServiceCleanupDirsUsesServicesDirOnly(t *testing.T) {
-	tmp := t.TempDir()
-	global := filepath.Join(tmp, "sermo.yml")
-
-	got := serviceCleanupDirs(global, &config.Config{})
-	want := []string{filepath.Join(tmp, servicesIncludeDir)}
-	if strings.Join(got, "\n") != strings.Join(want, "\n") {
-		t.Fatalf("serviceCleanupDirs() = %v, want %v", got, want)
-	}
-}
-
 func TestEnsureConfigPathListRecognizesAbsolutePathForRelativeTarget(t *testing.T) {
 	tmp := t.TempDir()
 	t.Chdir(tmp)

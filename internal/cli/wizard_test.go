@@ -454,7 +454,7 @@ func TestMergeWizardWatchesWritesWatchDocuments(t *testing.T) {
 	if err != nil {
 		t.Fatalf("mergeWizardWatches: %v", err)
 	}
-	if merged.PathKey != "watches" || len(merged.Files) != 1 {
+	if merged.Count != 1 {
 		t.Fatalf("merge result = %+v, want one watch path update", merged)
 	}
 	data, err := os.ReadFile(filepath.Join(tmp, "networks", "net-eth0.yml"))
@@ -516,7 +516,7 @@ func TestWizardConfigDirNameUsesWatchType(t *testing.T) {
 	}
 }
 
-func TestWizardCleanupDirsUsesCurrentOutputDirOnly(t *testing.T) {
+func TestWizardTargetDirUsesClassifiedOutputDir(t *testing.T) {
 	tmp := t.TempDir()
 	cfgPath := filepath.Join(tmp, "sermo.yml")
 	tests := []struct {
@@ -544,9 +544,9 @@ func TestWizardCleanupDirsUsesCurrentOutputDirOnly(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := wizardCleanupDirs(cfgPath, tt.wizard, tt.entries)
-			if strings.Join(got, "\n") != strings.Join(tt.want, "\n") {
-				t.Fatalf("wizardCleanupDirs() = %v, want %v", got, tt.want)
+			_, got := wizardTargetDir(cfgPath, tt.wizard, tt.entries)
+			if got != tt.want[0] {
+				t.Fatalf("wizardTargetDir() = %v, want %v", got, tt.want)
 			}
 		})
 	}
@@ -636,9 +636,9 @@ func TestPlanStaleMountDeletes(t *testing.T) {
 		t.Fatal(err)
 	}
 	p := assist.NewPrompt(strings.NewReader("y\ny\n"), &strings.Builder{})
-	deletes, err := planStaleMountDeletes(p, dir, map[string]bool{"/mnt/current": true})
+	deletes, err := planStaleDeletes(p, dir, wizardNounMount, "mount watches", map[string]bool{"/mnt/current": true}, mountStaleFile)
 	if err != nil {
-		t.Fatalf("planStaleMountDeletes: %v", err)
+		t.Fatalf("planStaleDeletes: %v", err)
 	}
 	if len(deletes) != 1 || deletes[0] != oldFile {
 		t.Fatalf("deletes = %v, want [%s]", deletes, oldFile)
