@@ -171,20 +171,13 @@ type App struct {
 	FetchEvents func(ctx context.Context, cfg *config.Config, service string, limit int) ([]event, error)
 	// FetchDaemonServiceState returns the daemon-computed service state when
 	// sermod is running and the web API is reachable. ok is false when unavailable.
-	FetchDaemonServiceState func(ctx context.Context, opts options, service string) (string, bool)
-	// daemonServiceStateWithConfig is the production path for status, which has
-	// already loaded and canonicalized its configuration. A custom fetch seam
-	// deliberately keeps the public, request-shaped function above.
-	daemonServiceStateWithConfig func(context.Context, *config.Config, string) (string, bool)
+	FetchDaemonServiceState func(ctx context.Context, cfg *config.Config, service string) (string, bool)
 	// FetchDaemonWatchDetail returns the current daemon-published snapshot for
 	// one watch. ok is false when sermod or its web API is unavailable.
 	FetchDaemonWatchDetail func(ctx context.Context, cfg *config.Config, watch string) (daemonWatchDetail, bool)
 	// ProbeDaemonWatch asks the active daemon to run and record one safe manual
 	// host-watch sample through the authenticated Web API.
 	ProbeDaemonWatch func(ctx context.Context, cfg *config.Config, watch string) (daemonWatchProbe, error)
-	// FetchDaemonApplicationStates returns daemon-computed application states keyed
-	// by catalog name. An empty map means the web API was unavailable.
-	FetchDaemonApplicationStates func(ctx context.Context, cfg *config.Config) map[string]string
 	// PruneEvents is injectable for `sermoctl events clear` and
 	// `sermoctl activity clear`. Defaults to pruning the daemon's persisted event
 	// feed over HTTP using the config's web address/port (and password for auth if
@@ -208,22 +201,21 @@ type App struct {
 }
 
 type options struct {
-	loadedConfig *config.Config
-	backend      servicemgr.Backend
-	json         bool
-	quiet        bool
-	noCascade    bool // --no-cascade: act on exactly this service, skip also_apply
-	force        bool // --force: allow umount -f during `sermoctl umount`
-	lazy         bool // --lazy: allow umount -l during `sermoctl umount`
-	kill         bool // --kill-blockers: allow policy-gated signalling during `sermoctl umount`
-	apply        bool // --apply: signal the authorized strays during `sermoctl reap` (without it, preview only)
-	help         bool
-	version      bool // --version / -V
-	timeout      time.Duration
-	timeoutSet   bool
-	config       string
-	command      string
-	args         []string
+	backend    servicemgr.Backend
+	json       bool
+	quiet      bool
+	noCascade  bool // --no-cascade: act on exactly this service, skip also_apply
+	force      bool // --force: allow umount -f during `sermoctl umount`
+	lazy       bool // --lazy: allow umount -l during `sermoctl umount`
+	kill       bool // --kill-blockers: allow policy-gated signalling during `sermoctl umount`
+	apply      bool // --apply: signal the authorized strays during `sermoctl reap` (without it, preview only)
+	help       bool
+	version    bool // --version / -V
+	timeout    time.Duration
+	timeoutSet bool
+	config     string
+	command    string
+	args       []string
 	// lock command flags
 	name        string
 	reason      string
@@ -283,16 +275,6 @@ func Main(ctx context.Context, args []string) int {
 	return cliApp.Run(ctx, args)
 }
 
-// env reads an environment variable through the injected seam, falling back to
-// the real environment for an App built directly (helpers reachable without
-// withDefaults, such as the daemon API calls).
-func (a App) env(name string) string {
-	if a.Env == nil {
-		return os.Getenv(name)
-	}
-	return a.Env(name)
-}
-
 func (a App) withDefaults() App {
 	if a.Env == nil {
 		a.Env = os.Getenv
@@ -315,18 +297,14 @@ func (a App) withDefaults() App {
 	if a.FetchEvents == nil {
 		a.FetchEvents = a.fetchEvents
 	}
-	if a.FetchDaemonServiceState == nil && a.daemonServiceStateWithConfig == nil {
-		a.FetchDaemonServiceState = a.fetchDaemonServiceState
-		a.daemonServiceStateWithConfig = a.fetchDaemonServiceStateWithConfig
+	if a.FetchDaemonServiceState == nil {
+		a.FetchDaemonServiceState = a.fetchDaemonServiceStateWithConfig
 	}
 	if a.FetchDaemonWatchDetail == nil {
 		a.FetchDaemonWatchDetail = a.fetchDaemonWatchDetail
 	}
 	if a.ProbeDaemonWatch == nil {
 		a.ProbeDaemonWatch = a.probeDaemonWatch
-	}
-	if a.FetchDaemonApplicationStates == nil {
-		a.FetchDaemonApplicationStates = a.fetchDaemonApplicationStates
 	}
 	if a.PruneEvents == nil {
 		a.PruneEvents = a.pruneDaemonEvents

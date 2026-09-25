@@ -162,11 +162,7 @@ func (a App) runEventsClear(ctx context.Context, opts options, noun string) int 
 	if err != nil {
 		return a.fail(opts, err.Error())
 	}
-	pruneEvents := a.PruneEvents
-	if pruneEvents == nil {
-		pruneEvents = a.pruneDaemonEvents
-	}
-	n, err := pruneEvents(ctx, cfg, before)
+	n, err := a.PruneEvents(ctx, cfg, before)
 	if err != nil {
 		a.recordAccess(cfg, accessCommandEventsClear, "", accessStatusError, err.Error())
 		return a.fail(opts, err.Error())

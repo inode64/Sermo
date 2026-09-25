@@ -214,7 +214,7 @@ func TestStatusUsesDaemonStateWhenAvailable(t *testing.T) {
 		Service: "mysql", Backend: servicemgr.BackendSystemd,
 		Unit: "mysql.service", Status: servicemgr.StatusInactive,
 	}, nil, &stdout, nil)
-	app.FetchDaemonServiceState = func(context.Context, options, string) (string, bool) {
+	app.FetchDaemonServiceState = func(context.Context, *config.Config, string) (string, bool) {
 		return "starting", true
 	}
 
@@ -233,7 +233,7 @@ func TestStatusShowsDaemonRestartRequiredState(t *testing.T) {
 		Service: "acpid", Backend: servicemgr.BackendSystemd,
 		Unit: "acpid.service", Status: servicemgr.StatusActive,
 	}, nil, &stdout, nil)
-	app.FetchDaemonServiceState = func(context.Context, options, string) (string, bool) {
+	app.FetchDaemonServiceState = func(context.Context, *config.Config, string) (string, bool) {
 		return "restart_required", true
 	}
 
@@ -253,7 +253,7 @@ func TestStatusUsesRequestedServiceForDaemonState(t *testing.T) {
 		Unit: "sshd", Status: servicemgr.StatusActive,
 	}, nil, &stdout, nil)
 	var requested string
-	app.FetchDaemonServiceState = func(_ context.Context, _ options, service string) (string, bool) {
+	app.FetchDaemonServiceState = func(_ context.Context, _ *config.Config, service string) (string, bool) {
 		requested = service
 		return "monitored", true
 	}

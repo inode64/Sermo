@@ -68,13 +68,13 @@ service: mysql.service
 	}
 
 	loadCalls := 0
-	app := App{LoadConfig: func(string, ...config.Option) (*config.Config, error) {
+	app := App{Env: os.Getenv, LoadConfig: func(string, ...config.Option) (*config.Config, error) {
 		loadCalls++
 		return cfg, nil
 	}}
 	opts := options{config: global}
 
-	st, ok := app.fetchDaemonServiceState(context.Background(), opts, "mysql")
+	st, ok := app.fetchDaemonServiceStateWithConfig(context.Background(), app.statusConfig(opts), "mysql")
 	if !ok {
 		t.Fatal("fetchDaemonServiceState() ok = false, want true")
 	}
@@ -91,10 +91,10 @@ service: mysql.service
 
 func TestFetchDaemonServiceStateConfigFailureIsSilent(t *testing.T) {
 	var stderr bytes.Buffer
-	app := App{LoadConfig: config.Load, Stderr: &stderr}
+	app := App{Env: os.Getenv, LoadConfig: config.Load, Stderr: &stderr}
 	opts := options{config: filepath.Join(t.TempDir(), "missing.yml")}
 
-	if state, ok := app.fetchDaemonServiceState(context.Background(), opts, "mysql"); ok || state != "" {
+	if state, ok := app.fetchDaemonServiceStateWithConfig(context.Background(), app.statusConfig(opts), "mysql"); ok || state != "" {
 		t.Fatalf("fetchDaemonServiceState() = (%q, %v), want (\"\", false)", state, ok)
 	}
 	if stderr.Len() != 0 {
@@ -104,7 +104,7 @@ func TestFetchDaemonServiceStateConfigFailureIsSilent(t *testing.T) {
 
 func TestWatchStatusConfigFailureIsSilent(t *testing.T) {
 	var stdout, stderr bytes.Buffer
-	app := App{LoadConfig: func(string, ...config.Option) (*config.Config, error) { return nil, errors.New("unreadable config") }, Stdout: &stdout, Stderr: &stderr}
+	app := App{Env: os.Getenv, LoadConfig: func(string, ...config.Option) (*config.Config, error) { return nil, errors.New("unreadable config") }, Stdout: &stdout, Stderr: &stderr}
 	if code := app.Run(context.Background(), []string{"watch", "status", "load"}); code != exitSuccess {
 		t.Fatalf("exit=%d", code)
 	}
@@ -235,7 +235,7 @@ web:
   port: PORT
 paths:
 `)
-			app := App{LoadConfig: func(string, ...config.Option) (*config.Config, error) { return cfg, nil }}
+			app := App{Env: os.Getenv, LoadConfig: func(string, ...config.Option) (*config.Config, error) { return cfg, nil }}
 
 			events, err := app.fetchEvents(context.Background(), cfg, tc.service, 7)
 			if err != nil {
@@ -274,7 +274,7 @@ web:
 paths:
   watches: [WATCHES]
 `)
-	app := App{LoadConfig: func(string, ...config.Option) (*config.Config, error) { return cfg, nil }}
+	app := App{Env: os.Getenv, LoadConfig: func(string, ...config.Option) (*config.Config, error) { return cfg, nil }}
 	result, err := app.probeDaemonWatch(context.Background(), cfg, "disk-speed")
 	if err != nil || !result.OK || len(result.Readings) != 1 || result.Readings[0].Value != "166.67 MB/s" {
 		t.Fatalf("probe result=%+v err=%v", result, err)
@@ -315,7 +315,7 @@ web:
 paths:
   watches: [WATCHES]
 `)
-	app := App{LoadConfig: func(string, ...config.Option) (*config.Config, error) { return cfg, nil }}
+	app := App{Env: os.Getenv, LoadConfig: func(string, ...config.Option) (*config.Config, error) { return cfg, nil }}
 	result, err := app.probeDaemonWatch(context.Background(), cfg, "diskio-sdd")
 	if err != nil {
 		t.Fatalf("probe failed: %v", err)
@@ -335,7 +335,7 @@ web:
   port: PORT
 paths:
 `)
-	app := App{LoadConfig: func(string, ...config.Option) (*config.Config, error) { return cfg, nil }}
+	app := App{Env: os.Getenv, LoadConfig: func(string, ...config.Option) (*config.Config, error) { return cfg, nil }}
 
 	states := app.fetchDaemonApplicationStates(context.Background(), cfg)
 	if got := states["git"]; got != "starting" {

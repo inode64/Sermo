@@ -20,14 +20,6 @@ import (
 	"sermo/internal/web"
 )
 
-// daemonConfig reuses the command's resolved configuration when available.
-func (a App) daemonConfig(opts options) (*config.Config, error) {
-	if opts.loadedConfig != nil {
-		return opts.loadedConfig, nil
-	}
-	return a.LoadConfig(opts.globalPath())
-}
-
 // daemonWebDo is the transport owner for requests from sermoctl to sermod's web
 // API. It resolves the endpoint, builds and authenticates the request, attaches
 // mutation headers, and performs the bounded exchange. The caller owns the
@@ -99,7 +91,7 @@ func (a App) applyDaemonWebAuth(req *http.Request, cfg *config.Config) {
 // dashboard may have no authentication at all, and a 401 is reported by the
 // caller with the guidance in daemonWebAuthHint.
 func (a App) daemonWebPassword(cfg *config.Config) string {
-	if pw := strings.TrimSpace(a.env(config.EnvWebPassword)); pw != "" {
+	if pw := strings.TrimSpace(a.Env(config.EnvWebPassword)); pw != "" {
 		return pw
 	}
 	if daemonIsLocal(cfg) {
@@ -186,22 +178,6 @@ func (a App) daemonAPIGetWithConfig(ctx context.Context, cfg *config.Config, pat
 		return nil, resp.StatusCode, fmt.Errorf("read daemon API response for %s: %w", path, err)
 	}
 	return body, resp.StatusCode, nil
-}
-
-// fetchDaemonServiceState reads GET /api/services/{name} from the running
-// sermod web API and returns its computed state field.
-func (a App) fetchDaemonServiceState(ctx context.Context, opts options, service string) (string, bool) {
-	cfg, err := a.daemonConfig(opts)
-	if err != nil || cfg == nil {
-		return "", false
-	}
-	name := service
-	if canonical, ok := cfg.CanonicalServiceName(service); ok {
-		name = canonical
-	} else if len(cfg.Services) > 0 {
-		return "", false
-	}
-	return a.fetchDaemonServiceStateWithConfig(ctx, cfg, name)
 }
 
 func (a App) fetchDaemonServiceStateWithConfig(ctx context.Context, cfg *config.Config, service string) (string, bool) {
