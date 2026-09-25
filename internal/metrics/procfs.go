@@ -92,7 +92,7 @@ func (OSReader) ProcessCPU(pid int) (uint64, bool) {
 // same way a vanished process is; ok is false only when the task directory itself
 // cannot be read.
 func (OSReader) ProcessThreadCPU(pid int) (map[int]uint64, bool) {
-	entries, err := os.ReadDir(process.PIDPath(pid, process.ProcFileTask))
+	entries, err := hostfs.ReadDir(process.PIDPath(pid, process.ProcFileTask))
 	if err != nil {
 		return nil, false
 	}
@@ -213,7 +213,7 @@ func ScanUintField(data, prefix string) (uint64, bool) {
 
 // ProcessRSS reads resident pages (field 2 of /proc/<pid>/statm) as bytes.
 func (OSReader) ProcessRSS(pid int) (uint64, bool) {
-	data, err := os.ReadFile(process.PIDPath(pid, process.ProcFileStatm))
+	data, err := hostfs.ReadFile(process.PIDPath(pid, process.ProcFileStatm))
 	if err != nil {
 		return 0, false
 	}
@@ -233,7 +233,7 @@ func (OSReader) ProcessRSS(pid int) (uint64, bool) {
 // process without a VmSwap line (e.g. a kernel thread) also reports 0, true. ok
 // is false only when the file cannot be read.
 func (OSReader) ProcessSwap(pid int) (uint64, bool) {
-	data, err := os.ReadFile(process.PIDPath(pid, process.ProcFileStatus))
+	data, err := hostfs.ReadFile(process.PIDPath(pid, process.ProcFileStatus))
 	if err != nil {
 		return 0, false
 	}
@@ -249,7 +249,7 @@ func (OSReader) ProcessSwap(pid int) (uint64, bool) {
 // /proc/<pid>/io. Reading another user's io requires privilege, so ok is false
 // when the file cannot be read.
 func (OSReader) ProcessIO(pid int) (read, write uint64, ok bool) {
-	data, err := os.ReadFile(process.PIDPath(pid, process.ProcFileIO))
+	data, err := hostfs.ReadFile(process.PIDPath(pid, process.ProcFileIO))
 	if err != nil {
 		return 0, 0, false
 	}
@@ -284,7 +284,7 @@ const (
 // the ceiling its own open-descriptor count is measured against. ok is false
 // when the file is unreadable or the limit is unlimited.
 func (OSReader) ProcessFDLimit(pid int) (uint64, bool) {
-	data, err := os.ReadFile(process.PIDPath(pid, process.ProcFileLimits))
+	data, err := hostfs.ReadFile(process.PIDPath(pid, process.ProcFileLimits))
 	if err != nil {
 		return 0, false
 	}
@@ -316,7 +316,7 @@ func (OSReader) ProcessThreads(pid int) (uint64, bool) {
 }
 
 func processEntryCount(pid int, name string) (uint64, bool) {
-	entries, err := os.ReadDir(process.PIDPath(pid, name))
+	entries, err := hostfs.ReadDir(process.PIDPath(pid, name))
 	if err != nil {
 		return 0, false
 	}
@@ -410,7 +410,7 @@ func meminfoTotals(m Meminfo) MemoryTotals {
 // SystemCPU reads the aggregate cpu line of /proc/stat. busy excludes idle and
 // iowait; total is the sum of all fields.
 func (OSReader) SystemCPU() (busy, total uint64, ok bool) {
-	data, err := os.ReadFile(procPath(procFileStat))
+	data, err := hostfs.ReadFile(procPath(procFileStat))
 	if err != nil {
 		return 0, 0, false
 	}
@@ -438,7 +438,7 @@ func (OSReader) SystemCPU() (busy, total uint64, ok bool) {
 
 // LoadAverages reads the first three fields of /proc/loadavg.
 func (OSReader) LoadAverages() (l1, l5, l15 float64, ok bool) {
-	data, err := os.ReadFile(procPath(procFileLoadavg))
+	data, err := hostfs.ReadFile(procPath(procFileLoadavg))
 	if err != nil {
 		return 0, 0, 0, false
 	}
