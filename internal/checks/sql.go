@@ -15,8 +15,6 @@ import (
 type sqlCheck struct {
 	base
 	engine string
-	driver string // database/sql driver name: mysql | pgx | sqlite
-	dsn    string
 	open   func(context.Context) (*sql.DB, error)
 	query  string
 	valueMatcher
@@ -27,7 +25,7 @@ func (c sqlCheck) Run(ctx context.Context) Result {
 	defer run.close()
 	start := run.start
 
-	db, err := c.openDB(ctx)
+	db, err := c.open(ctx)
 	if err != nil {
 		return c.base.unavailableResult(fmt.Sprintf("sql %s: %v", c.engine, err), start)
 	}
@@ -45,17 +43,6 @@ func (c sqlCheck) Run(ctx context.Context) Result {
 		DataKeyEngine: c.engine,
 		DataKeyQuery:  c.query,
 	})
-}
-
-func (c sqlCheck) openDB(ctx context.Context) (*sql.DB, error) {
-	if c.open != nil {
-		return c.open(ctx)
-	}
-	db, err := sql.Open(c.driver, c.dsn)
-	if err != nil {
-		return nil, fmt.Errorf("open %s: %w", c.engine, err)
-	}
-	return db, nil
 }
 
 // sqlScalarDB runs query and returns the first column of the first row as a
@@ -101,8 +88,8 @@ func sqlEngineDriver(engine string) (string, bool) {
 	}
 }
 
-// buildSQLCheck builds a sql check, resolving the driver and connection DSN from
-// the engine: mysql/postgres reuse the conn DSN builders and host/port/user/
+// buildSQLCheck builds a sql check with an opener for its engine.
+// MySQL/Postgres reuse the conn connectors and host/port/user/
 // password/database/tls fields; sqlite opens `path` read-only.
 func buildSQLCheck(b base, entry map[string]any) (Check, string) {
 	engine := cfgval.AsString(entry[CheckKeyEngine])
@@ -119,7 +106,6 @@ func buildSQLCheck(b base, entry map[string]any) (Check, string) {
 		return nil, msg
 	}
 
-	var dsn string
 	var open func(context.Context) (*sql.DB, error)
 	switch driver {
 	case SQLEngineSQLite:
@@ -127,21 +113,26 @@ func buildSQLCheck(b base, entry map[string]any) (Check, string) {
 		if path == "" {
 			return nil, "sql check (sqlite) requires a path"
 		}
-		dsn = sqliteReadOnlyDSN(path)
+		dsn := sqliteReadOnlyDSN(path)
+		open = func(context.Context) (*sql.DB, error) {
+			db, err := sql.Open(SQLEngineSQLite, dsn)
+			if err != nil {
+				return nil, fmt.Errorf("open %s: %w", engine, err)
+			}
+			return db, nil
+		}
 	default:
 		if cfgval.AsString(entry[CheckKeyUser]) == "" {
 			return nil, "sql check (" + engine + ") requires a user"
 		}
 		cfg := sqlConnConfig(engine, entry)
 		if driver == SQLEngineMySQL {
-			dsn = conn.MySQLDSN(cfg)
 			open = func(ctx context.Context) (*sql.DB, error) { return conn.OpenMySQLDB(ctx, cfg) }
 		} else {
-			dsn = conn.PostgresDSN(cfg)
 			open = func(ctx context.Context) (*sql.DB, error) { return conn.OpenPostgresDB(ctx, cfg) }
 		}
 	}
-	return sqlCheck{base: b, engine: engine, driver: driver, dsn: dsn, open: open, query: query, valueMatcher: newValueMatcher(op, value)}, ""
+	return sqlCheck{base: b, engine: engine, open: open, query: query, valueMatcher: newValueMatcher(op, value)}, ""
 }
 
 // sqlConnConfig builds a conn.Config for a mysql/postgres sql check, defaulting

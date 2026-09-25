@@ -129,12 +129,6 @@ func mysqlGreeting(r io.Reader) (Result, error) {
 	}
 }
 
-// MySQLDSN renders a go-sql-driver DSN from cfg (escaping the password). Exported
-// so the sql check can open a MySQL/MariaDB connection reusing this logic.
-func MySQLDSN(cfg Config) string {
-	return buildMySQLConfigWithTarget(cfg, newProbeTarget(cfg, defaultPortMySQL)).FormatDSN()
-}
-
 // buildMySQLConfigWithTarget binds TCP dials to cfg.Interface when configured.
 func buildMySQLConfigWithTarget(cfg Config, target probeTarget) *mysql.Config {
 	c := mysql.NewConfig()

@@ -6,7 +6,7 @@ import (
 )
 
 func TestBuildPGDSN(t *testing.T) {
-	dsn := PostgresDSN(Config{
+	dsn := postgresDSNForTest(Config{
 		Host: "db.example", Port: 5433, User: "monitor",
 		Password: "p@ss:w/rd", Database: "app", TLS: "verify-full",
 	})
@@ -33,7 +33,7 @@ func TestBuildPGDSN(t *testing.T) {
 }
 
 func TestBuildPGDSNDefaults(t *testing.T) {
-	u, err := url.Parse(PostgresDSN(Config{User: "u"}))
+	u, err := url.Parse(postgresDSNForTest(Config{User: "u"}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -52,4 +52,8 @@ func TestSSLMode(t *testing.T) {
 		"skip-verify": "require",
 		"verify-full": "verify-full", "verify-ca": "verify-ca", "prefer": "prefer",
 	})
+}
+
+func postgresDSNForTest(cfg Config) string {
+	return buildPGDSNWithTarget(cfg, newProbeTarget(cfg, defaultPortPostgres))
 }

@@ -4,11 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
-
-	"sermo/internal/conn"
 )
 
 func TestSQLValueString(t *testing.T) {
@@ -103,7 +100,7 @@ func TestBuildSQLCheckSQLiteEndToEnd(t *testing.T) {
 }
 
 func TestBuildSQLCheckWiring(t *testing.T) {
-	// mysql engine: default port and DSN resolved; needs a user.
+	// MySQL retains its bound connector and requires a user.
 	built, warns := Build(map[string]any{
 		"q": map[string]any{
 			"type": "sql", "engine": "mysql", "user": "monitor", "password": "p",
@@ -114,11 +111,8 @@ func TestBuildSQLCheckWiring(t *testing.T) {
 		t.Fatalf("mysql sql check should build: warns=%v", warns)
 	}
 	cc, ok := built[0].Check.(sqlCheck)
-	if !ok || cc.driver != "mysql" || cc.engine != "mysql" {
+	if !ok || cc.engine != "mysql" {
 		t.Fatalf("built = %T %+v", built[0].Check, built[0].Check)
-	}
-	if !strings.Contains(cc.dsn, "@tcp(") {
-		t.Fatalf("mysql dsn = %q, want a go-sql-driver @tcp(...) DSN", cc.dsn)
 	}
 	if cc.open == nil {
 		t.Fatal("mysql sql check must retain its connector so interface binding is not lost")
@@ -131,8 +125,8 @@ func TestBuildSQLCheckWiring(t *testing.T) {
 			"query": "SELECT 1", "op": ">", "value": "0",
 		},
 	}, Deps{DefaultTimeout: time.Second})
-	if cc := built[0].Check.(sqlCheck); cc.driver != conn.PostgresDriverName || !strings.Contains(cc.dsn, "postgres://") || cc.open == nil {
-		t.Fatalf("driver = %q dsn = %q opener=%v, want bound pgx opener and postgres:// DSN", cc.driver, cc.dsn, cc.open != nil)
+	if cc := built[0].Check.(sqlCheck); cc.engine != "postgresql" || cc.open == nil {
+		t.Fatalf("engine = %q opener=%v, want PostgreSQL with a bound opener", cc.engine, cc.open != nil)
 	}
 
 	// assertSQLBuildWarns builds one sql check entry and asserts it warns.
