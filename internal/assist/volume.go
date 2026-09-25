@@ -148,9 +148,6 @@ func buildVolWatch(v Volume, s volSettings) map[string]any {
 func askPercent(p *Prompt, question string, def int) any {
 	for {
 		v := p.Ask(question+" (%)", cfgval.String(def))
-		if v == "" {
-			return def
-		}
 		if strings.HasSuffix(v, cfgval.PercentSuffix) {
 			if _, ok := cfgval.Percent(v); ok {
 				return v
