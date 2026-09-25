@@ -76,10 +76,7 @@ func (b *WebBackend) TestNotifier(ctx context.Context, name string) web.ActionRe
 }
 
 func (b *WebBackend) emitNotifierTestEvent(kind, status, message string) {
-	if b.emit == nil {
-		return
-	}
-	b.emit(Event{
+	emitSafe(b.emit, Event{
 		Kind:    kind,
 		Action:  eventActionNotifierTest,
 		Status:  status,
