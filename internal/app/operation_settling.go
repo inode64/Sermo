@@ -25,7 +25,7 @@ func finishOperationSettling(store OperationSettlingStore, service, action strin
 	if store == nil || !operation.IsServiceAction(action) {
 		return nil
 	}
-	settleAfter := result.OK() || (activeAfterPostflightFailure && result.Status == operation.ResultPostflightFailed && operation.CanRemainActiveAfterPostflightFailure(action))
+	settleAfter := result.OK() || activeAfterPostflightFailure
 	if opErr == nil && settleAfter && operation.SettlesAfter(action) {
 		if err := store.SetOperationSettling(service, state.OperationSettlingSettling); err != nil {
 			return fmt.Errorf("mark post-operation settling for %s: %w", service, err)
