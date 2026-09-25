@@ -27,7 +27,6 @@ const wsGUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 const (
 	wsConnectionUpgrade = "Upgrade"
 	wsCRLF              = "\r\n"
-	wsDefaultPath       = "/"
 	wsDefaultPortPlain  = "80"
 	wsDefaultPortTLS    = defaultTLSPort
 	wsHeaderFormat      = "%s: %s" + wsCRLF
@@ -196,7 +195,7 @@ func buildWebsocketCheck(b base, entry map[string]any) (Check, string) {
 		ifaces:      cfgval.StringList(entry[CheckKeyInterface]),
 		ifaceAll:    wsAll,
 		port:        port,
-		path:        websocketPath(u),
+		path:        u.RequestURI(),
 		tls:         tlsString(entry[CheckKeyTLS]),
 		origin:      cfgval.AsString(entry[CheckKeyOrigin]),
 		subprotocol: cfgval.AsString(entry[CheckKeySubprotocol]),
@@ -213,14 +212,6 @@ func websocketDefaultPort(secure bool) string {
 		return wsDefaultPortTLS
 	}
 	return wsDefaultPortPlain
-}
-
-func websocketPath(u *url.URL) string {
-	path := u.RequestURI()
-	if path == "" {
-		return wsDefaultPath
-	}
-	return path
 }
 
 // wsKey returns a fresh base64 Sec-WebSocket-Key (16 random bytes).
