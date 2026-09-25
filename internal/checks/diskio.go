@@ -10,8 +10,6 @@ import (
 )
 
 const (
-	diskIOSectorBytes = blockSectorBytes
-
 	diskStatsMinFields            = 13
 	diskStatsDeviceFieldIndex     = 2
 	diskStatsReadsCompletedIndex  = 3
@@ -143,8 +141,8 @@ func DiskIOResultData(device string, rates DiskIORates, total DiskIOSample) map[
 		fieldReadBytes:       rates.ReadBytes,
 		fieldWriteBytes:      rates.WriteBytes,
 		fieldAwaitMs:         rates.AwaitMs,
-		fieldReadTotalBytes:  float64(total.SectorsRead) * diskIOSectorBytes,
-		fieldWriteTotalBytes: float64(total.SectorsWritten) * diskIOSectorBytes,
+		fieldReadTotalBytes:  float64(total.SectorsRead) * blockSectorBytes,
+		fieldWriteTotalBytes: float64(total.SectorsWritten) * blockSectorBytes,
 	}
 }
 
@@ -158,8 +156,8 @@ func calculateDiskIORates(prev, cur DiskIOSample, elapsed time.Duration) DiskIOR
 	ioTicks := deltaOrZero(cur.IOTicksMs, prev.IOTicksMs)
 	rates := DiskIORates{
 		UtilPct:    min(percentScale, float64(ioTicks)/float64(elapsedMs)*percentScale),
-		ReadBytes:  float64(deltaOrZero(cur.SectorsRead, prev.SectorsRead)*diskIOSectorBytes) / elapsed.Seconds(),
-		WriteBytes: float64(deltaOrZero(cur.SectorsWritten, prev.SectorsWritten)*diskIOSectorBytes) / elapsed.Seconds(),
+		ReadBytes:  float64(deltaOrZero(cur.SectorsRead, prev.SectorsRead)*blockSectorBytes) / elapsed.Seconds(),
+		WriteBytes: float64(deltaOrZero(cur.SectorsWritten, prev.SectorsWritten)*blockSectorBytes) / elapsed.Seconds(),
 	}
 	ops := deltaOrZero(cur.ReadsCompleted, prev.ReadsCompleted) + deltaOrZero(cur.WritesCompleted, prev.WritesCompleted)
 	if ops > 0 {

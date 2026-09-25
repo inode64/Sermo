@@ -77,7 +77,7 @@ func (c *httpCheck) Run(ctx context.Context) Result {
 		return c.unavailableResult(fmt.Sprintf("build request: %v", err), start)
 	}
 	if c.contentType != "" {
-		req.Header.Set(httpHeaderContentType, c.contentType)
+		req.Header.Set(httpx.HeaderContentType, c.contentType)
 	}
 	for k, v := range c.headers {
 		if strings.EqualFold(k, "Host") {
