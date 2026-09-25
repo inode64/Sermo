@@ -98,9 +98,7 @@ func (c connCheck) Run(ctx context.Context) Result {
 	}
 	ok, msg, unavailable := c.evaluateResponse(res, elapsed, addr)
 	r := c.result(ok, msg, start)
-	if unavailable {
-		r = c.base.unavailableResult(msg, start)
-	}
+	r.Unavailable = unavailable
 	r.Data = c.resultData(elapsed, perIface, res)
 	return r
 }

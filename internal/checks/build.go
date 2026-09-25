@@ -485,8 +485,7 @@ func buildCheckBase(name string, entry map[string]any, deps Deps) (string, base,
 func positiveDurationMessage(key string) string { return key + positiveDurationMessageSuffix }
 
 func buildDependencies(deps Deps) (execx.Runner, *http.Client) {
-	runner := deps.Runner
-	runner = execx.RunnerOrDefault(runner)
+	runner := execx.RunnerOrDefault(deps.Runner)
 	client := deps.HTTPClient
 	if client == nil {
 		client = httpx.NewProbeClient(httpx.ClientOptions{})
