@@ -24,9 +24,6 @@ const (
 
 // recordAccess appends one CLI access record when engine.access is configured.
 func (a App) recordAccess(cfg *config.Config, command, target, status, message string) {
-	if cfg == nil {
-		return
-	}
 	path := config.EngineString(cfg, config.EngineKeyAccess)
 	if path == "" {
 		return
