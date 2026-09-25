@@ -13,7 +13,7 @@ import (
 // watchSnapshot preserves per-watch window and policy pacing state across reload.
 type watchSnapshot struct {
 	state          rules.WindowState
-	policyState    *rules.RemediationState
+	policyState    rules.RemediationState
 	firing         bool
 	unavailable    bool
 	lastNotifyAt   time.Time
@@ -42,7 +42,7 @@ func captureWatchState(watches []*Watch) map[watchStateKey]watchSnapshot {
 			stateLoaded:    w.stateLoaded,
 			stateRestored:  w.stateRestored,
 			persistedState: cloneWatchRuntimeRecord(w.persistedState),
-			policyState:    cloneRemediationState(&w.policyState),
+			policyState:    *cloneRemediationState(&w.policyState),
 		}
 		if cloned := w.state.Clone(); cloned != nil {
 			snap.state = *cloned
@@ -52,6 +52,7 @@ func captureWatchState(watches []*Watch) map[watchStateKey]watchSnapshot {
 	return out
 }
 
+// applyWatchState transfers the captured state to the new generation.
 func applyWatchState(watches []*Watch, saved map[watchStateKey]watchSnapshot) {
 	for _, w := range watches {
 		snap, ok := saved[watchStateKey{name: w.runtimeStateName(), slot: w.runtimeStateSlot()}]
@@ -65,10 +66,8 @@ func applyWatchState(watches []*Watch, saved map[watchStateKey]watchSnapshot) {
 		w.settled = snap.settled
 		w.stateLoaded = snap.stateLoaded
 		w.stateRestored = snap.stateRestored
-		w.persistedState = cloneWatchRuntimeRecord(snap.persistedState)
-		if snap.policyState != nil {
-			w.policyState = *snap.policyState
-		}
+		w.persistedState = snap.persistedState
+		w.policyState = snap.policyState
 	}
 }
 
@@ -105,6 +104,7 @@ func captureWorkerState(workers []*Worker) map[string]workerSnapshot {
 	return out
 }
 
+// applyWorkerState transfers the captured state to the new generation.
 func applyWorkerState(workers []*Worker, saved map[string]workerSnapshot) {
 	for _, w := range workers {
 		snap, ok := saved[w.Service]
@@ -122,7 +122,7 @@ func applyWorkerState(workers []*Worker, saved map[string]workerSnapshot) {
 			w.libBaseline = snap.libBaseline
 		}
 		if snap.checkFailing != nil {
-			w.checkFailing = maps.Clone(snap.checkFailing)
+			w.checkFailing = snap.checkFailing
 		}
 	}
 }
