@@ -96,12 +96,7 @@ type Store struct {
 	pruneMu sync.Mutex
 	pruned  map[pruneKey]int64
 
-	// stmtMu guards stmts, the prepared-statement cache for the write paths.
-	// database/sql re-prepares a db.Exec query on every call; the per-cycle
-	// upsert burst repeats the same handful of statements, so preparing each
-	// once on the single write connection removes that overhead.
-	stmtMu sync.Mutex
-	stmts  map[string]*sql.Stmt
+	statements statementCache
 }
 
 // Batch records related time-series samples in one SQLite transaction. A batch
@@ -118,38 +113,15 @@ type Batch interface {
 
 type batch struct {
 	recorder
-	tx    *sql.Tx
-	stmts map[string]*sql.Stmt
+	tx         *sql.Tx
+	statements statementCache
 }
 
 // exec runs a batch statement through its transaction-local prepared-statement
 // cache. Store's cache cannot be used here: its one write connection is already
 // pinned by the transaction.
 func (b *batch) exec(ctx context.Context, query string, args ...any) (sql.Result, error) {
-	stmt, ok := b.stmts[query]
-	if !ok {
-		var err error
-		stmt, err = b.tx.PrepareContext(ctx, query)
-		if err != nil {
-			return nil, fmt.Errorf("prepare state batch statement: %w", err)
-		}
-		if b.stmts == nil {
-			b.stmts = map[string]*sql.Stmt{}
-		}
-		b.stmts[query] = stmt
-	}
-	result, err := stmt.ExecContext(ctx, args...)
-	if err != nil {
-		return nil, fmt.Errorf("exec state batch statement: %w", err)
-	}
-	return result, nil
-}
-
-func (b *batch) close() {
-	for _, stmt := range b.stmts {
-		_ = stmt.Close()
-	}
-	b.stmts = nil
+	return b.statements.exec(ctx, query, b.tx.PrepareContext, args...)
 }
 
 // WithBatch runs record in one transaction. Returning an error from record
@@ -170,7 +142,7 @@ func (s *Store) WithBatch(ctx context.Context, record func(Batch) error) error {
 
 	txBatch := &batch{tx: tx}
 	txBatch.recorder = recorder{ctx: func() context.Context { return ctx }, exec: txBatch.exec}
-	defer txBatch.close()
+	defer txBatch.statements.close()
 	if err := record(txBatch); err != nil {
 		return fmt.Errorf("record state batch: %w", err)
 	}
@@ -182,26 +154,47 @@ func (s *Store) WithBatch(ctx context.Context, record func(Batch) error) error {
 
 // exec runs a write statement through the prepared-statement cache.
 func (s *Store) exec(ctx context.Context, query string, args ...any) (sql.Result, error) {
-	s.stmtMu.Lock()
-	stmt, ok := s.stmts[query]
+	return s.statements.exec(ctx, query, s.db.PrepareContext, args...)
+}
+
+// statementCache owns prepared statements for one database or transaction.
+// Preparing once avoids SQLite compilation on every per-cycle write. Its lock
+// protects both cache lookup and preparation, but never covers execution.
+type statementCache struct {
+	mu    sync.Mutex
+	stmts map[string]*sql.Stmt
+}
+
+func (c *statementCache) exec(ctx context.Context, query string, prepare func(context.Context, string) (*sql.Stmt, error), args ...any) (sql.Result, error) {
+	c.mu.Lock()
+	stmt, ok := c.stmts[query]
 	if !ok {
 		var err error
-		stmt, err = s.db.PrepareContext(ctx, query)
+		stmt, err = prepare(ctx, query)
 		if err != nil {
-			s.stmtMu.Unlock()
+			c.mu.Unlock()
 			return nil, fmt.Errorf("prepare state statement: %w", err)
 		}
-		if s.stmts == nil {
-			s.stmts = map[string]*sql.Stmt{}
+		if c.stmts == nil {
+			c.stmts = map[string]*sql.Stmt{}
 		}
-		s.stmts[query] = stmt
+		c.stmts[query] = stmt
 	}
-	s.stmtMu.Unlock()
+	c.mu.Unlock()
 	res, err := stmt.ExecContext(ctx, args...)
 	if err != nil {
 		return nil, fmt.Errorf("exec state statement: %w", err)
 	}
 	return res, nil
+}
+
+func (c *statementCache) close() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for _, stmt := range c.stmts {
+		_ = stmt.Close()
+	}
+	c.stmts = nil
 }
 
 // reads returns the connection SELECT-only paths should use.
@@ -305,12 +298,7 @@ func OpenContextWith(ctx context.Context, path string, opts Options) (*Store, er
 
 // Close releases the database handles.
 func (s *Store) Close() error {
-	s.stmtMu.Lock()
-	for _, stmt := range s.stmts {
-		_ = stmt.Close()
-	}
-	s.stmts = nil
-	s.stmtMu.Unlock()
+	s.statements.close()
 	var readerErr error
 	if s.reader != nil {
 		readerErr = s.reader.Close()
