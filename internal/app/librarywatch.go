@@ -168,14 +168,11 @@ func storeLibrarySample(samples *ArtifactSamples, _ string, report appinspect.Re
 // artifactWatchInterval resolves a catalog app or library's explicit interval,
 // falling back to engine.artifact_interval and then the documented five-minute default.
 func artifactWatchInterval(cfg *config.Config, category, name string) time.Duration {
-	interval := config.EngineDuration(cfg, config.EngineKeyArtifactInterval, DefaultEngineArtifactInterval)
 	resolved, errs := cfg.ResolveCatalog(category, name)
-	if len(errs) == 0 {
-		if override := cfgval.Duration(resolved.Tree[config.EntryKeyInterval]); override > 0 {
-			interval = override
-		}
+	if len(errs) > 0 {
+		return serviceArtifactInterval(cfg, nil)
 	}
-	return interval
+	return serviceArtifactInterval(cfg, resolved.Tree)
 }
 
 type catalogArtifactWatchSpec struct {
