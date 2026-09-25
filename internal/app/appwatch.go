@@ -5,7 +5,6 @@ import (
 
 	"sermo/internal/appinspect"
 	"sermo/internal/config"
-	"sermo/internal/execx"
 )
 
 func storeAppSample(samples *ArtifactSamples, name string, report appinspect.Report) {
@@ -29,9 +28,7 @@ func BuildAppWatches(ctx context.Context, cfg *config.Config, deps Deps) []*Watc
 		register: func(samples *ArtifactSamples, report appinspect.Report) {
 			samples.RegisterApp(report.Name)
 		},
-		store: storeAppSample,
-		inspect: func(ctx context.Context, runner execx.Runner, cfg *config.Config, name string, lookup appinspect.Option) appinspect.Report {
-			return appinspect.InspectOne(ctx, runner, cfg, name, lookup)
-		},
+		store:   storeAppSample,
+		inspect: appinspect.InspectOne,
 	})
 }

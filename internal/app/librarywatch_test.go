@@ -132,11 +132,11 @@ func TestChangedRulePaths(t *testing.T) {
 			map[string]any{rules.ConditionChanged: map[string]any{rules.FieldPath: "/etc/other.conf"}},
 		}}},
 	}}
-	paths := changedRulePaths(tree)
+	paths := changedRuleValues(tree, rules.FieldPath)
 	if len(paths) != 2 || paths[0] != "/etc/demo.conf" || paths[1] != "/etc/other.conf" {
 		t.Fatalf("changedRulePaths = %v", paths)
 	}
-	apps := changedRuleApps(tree)
+	apps := changedRuleValues(tree, rules.FieldApp)
 	if len(apps) != 0 {
 		t.Fatalf("changedRuleApps = %v, want none", apps)
 	}
@@ -150,7 +150,7 @@ func TestChangedRuleApps(t *testing.T) {
 			map[string]any{rules.ConditionChanged: map[string]any{rules.FieldApp: "other"}},
 		}}},
 	}}
-	apps := changedRuleApps(tree)
+	apps := changedRuleValues(tree, rules.FieldApp)
 	if len(apps) != 2 || apps[0] != "demo" || apps[1] != "other" {
 		t.Fatalf("changedRuleApps = %v", apps)
 	}

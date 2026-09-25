@@ -181,7 +181,7 @@ type catalogArtifactWatchSpec struct {
 	appName   func(string) string
 	register  func(*ArtifactSamples, appinspect.Report)
 	store     func(*ArtifactSamples, string, appinspect.Report)
-	inspect   func(context.Context, execx.Runner, *config.Config, string, appinspect.Option) appinspect.Report
+	inspect   func(context.Context, execx.Runner, *config.Config, string, ...appinspect.Option) appinspect.Report
 }
 
 func buildCatalogArtifactWatches(ctx context.Context, cfg *config.Config, deps Deps, spec catalogArtifactWatchSpec) []*Watch {
@@ -228,8 +228,8 @@ func BuildLibraryWatches(ctx context.Context, cfg *config.Config, deps Deps) []*
 			samples.RegisterFile(report.Binary)
 		},
 		store: storeLibrarySample,
-		inspect: func(ctx context.Context, runner execx.Runner, cfg *config.Config, name string, lookup appinspect.Option) appinspect.Report {
-			return appinspect.InspectCategoryOne(ctx, runner, cfg, config.CategoryLibrary, name, lookup)
+		inspect: func(ctx context.Context, runner execx.Runner, cfg *config.Config, name string, options ...appinspect.Option) appinspect.Report {
+			return appinspect.InspectCategoryOne(ctx, runner, cfg, config.CategoryLibrary, name, options...)
 		},
 	})
 }
@@ -266,11 +266,11 @@ func collectArtifactDependencies(cfg *config.Config) artifactDependencies {
 		if len(errs) > 0 || resolved.Tree == nil {
 			continue
 		}
-		for _, app := range changedRuleApps(resolved.Tree) {
+		for _, app := range changedRuleValues(resolved.Tree, rules.FieldApp) {
 			appSet[app] = struct{}{}
 		}
 		interval := serviceArtifactInterval(cfg, resolved.Tree)
-		for _, path := range changedRulePaths(resolved.Tree) {
+		for _, path := range changedRuleValues(resolved.Tree, rules.FieldPath) {
 			if prior, found := pathIntervals[path]; !found || interval < prior {
 				pathIntervals[path] = interval
 			}
@@ -325,14 +325,6 @@ func buildArtifactPathWatches(deps Deps, samples *ArtifactSamples, paths map[str
 		out = append(out, watch)
 	}
 	return out
-}
-
-func changedRulePaths(tree map[string]any) []string {
-	return changedRuleValues(tree, rules.FieldPath)
-}
-
-func changedRuleApps(tree map[string]any) []string {
-	return changedRuleValues(tree, rules.FieldApp)
 }
 
 func changedRuleValues(tree map[string]any, field string) []string {

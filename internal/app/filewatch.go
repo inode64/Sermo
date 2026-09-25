@@ -364,10 +364,6 @@ type staleFile struct {
 	state fileState
 }
 
-func (w *fileWatcher) fireOlderThan(ctx context.Context, path string, cur fileState) {
-	w.fire(ctx, path, fileChangeOlderThan, w.olderThanMessage(path, cur), w.olderThanExtra(cur))
-}
-
 // fireOlderThanBatch fires the paths that crossed older_than this cycle. A
 // single path keeps the classic per-file fire; several paths run the hook once
 // per file (its SERMO_PATH contract) but emit ONE aggregated event and
@@ -378,7 +374,8 @@ func (w *fileWatcher) fireOlderThanBatch(ctx context.Context, stale []staleFile)
 		return
 	}
 	if len(stale) == 1 {
-		w.fireOlderThan(ctx, stale[0].path, stale[0].state)
+		s := stale[0]
+		w.fire(ctx, s.path, fileChangeOlderThan, w.olderThanMessage(s.path, s.state), w.olderThanExtra(s.state))
 		return
 	}
 	if len(w.hook.Command) > 0 && !w.dryRun && !w.panicking() {
