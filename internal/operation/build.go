@@ -431,7 +431,7 @@ func hasExactProcessIdentitySelector(selectors []process.Selector) bool {
 }
 
 func restartIdentityClosure(mgr servicemgr.Manager, unit string, discover func() ([]process.Process, error), discoverer process.Discoverer, selectors []process.Selector) func(context.Context) (bool, string, error) {
-	if mgr == nil || discover == nil || !hasExactProcessIdentitySelector(selectors) {
+	if mgr == nil || !hasExactProcessIdentitySelector(selectors) {
 		return nil
 	}
 	return func(ctx context.Context) (bool, string, error) {
