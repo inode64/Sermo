@@ -102,22 +102,17 @@ func TestFetchDaemonServiceStateConfigFailureIsSilent(t *testing.T) {
 	}
 }
 
-func TestDaemonAPIGetConfigFailureIsSilent(t *testing.T) {
-	wantErr := errors.New("unreadable config")
-	var stderr bytes.Buffer
-	app := App{
-		LoadConfig: func(string, ...config.Option) (*config.Config, error) {
-			return nil, wantErr
-		},
-		Stderr: &stderr,
-	}
-
-	var watches []daemonWatchDetail
-	if ok := app.daemonAPIJSON(context.Background(), options{}, web.APIPathWatches, &watches); ok || watches != nil {
-		t.Fatalf("daemonAPIJSON() = (%v, %t), want (nil, false) when the config cannot be read", watches, ok)
+func TestWatchStatusConfigFailureIsSilent(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	app := App{LoadConfig: func(string, ...config.Option) (*config.Config, error) { return nil, errors.New("unreadable config") }, Stdout: &stdout, Stderr: &stderr}
+	if code := app.Run(context.Background(), []string{"watch", "status", "load"}); code != exitSuccess {
+		t.Fatalf("exit=%d", code)
 	}
 	if stderr.Len() != 0 {
-		t.Errorf("stderr = %q, want no best-effort diagnostic", stderr.String())
+		t.Fatalf("stderr=%q", stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "load state=ok") {
+		t.Fatalf("stdout=%q", stdout.String())
 	}
 }
 
@@ -234,7 +229,7 @@ func TestFetchEventsHTTP(t *testing.T) {
 			}))
 			defer srv.Close()
 
-			_, global, cfg := daemonAPITestConfig(t, srv.URL, `
+			_, _, cfg := daemonAPITestConfig(t, srv.URL, `
 web:
   address: HOST
   port: PORT
@@ -242,7 +237,7 @@ paths:
 `)
 			app := App{LoadConfig: func(string, ...config.Option) (*config.Config, error) { return cfg, nil }}
 
-			events, err := app.fetchEvents(context.Background(), options{config: global}, tc.service, 7)
+			events, err := app.fetchEvents(context.Background(), cfg, tc.service, 7)
 			if err != nil {
 				t.Fatalf("fetchEvents() error = %v", err)
 			}
@@ -272,7 +267,7 @@ func TestProbeDaemonWatchHTTP(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	_, global, cfg := daemonAPITestConfig(t, srv.URL, `
+	_, _, cfg := daemonAPITestConfig(t, srv.URL, `
 web:
   address: HOST
   port: PORT
@@ -280,7 +275,7 @@ paths:
   watches: [WATCHES]
 `)
 	app := App{LoadConfig: func(string, ...config.Option) (*config.Config, error) { return cfg, nil }}
-	result, err := app.probeDaemonWatch(context.Background(), options{config: global}, "disk-speed")
+	result, err := app.probeDaemonWatch(context.Background(), cfg, "disk-speed")
 	if err != nil || !result.OK || len(result.Readings) != 1 || result.Readings[0].Value != "166.67 MB/s" {
 		t.Fatalf("probe result=%+v err=%v", result, err)
 	}
@@ -313,7 +308,7 @@ func TestProbeDaemonWatchSendsTheBackendGeneration(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	_, global, cfg := daemonAPITestConfig(t, srv.URL, `
+	_, _, cfg := daemonAPITestConfig(t, srv.URL, `
 web:
   address: HOST
   port: PORT
@@ -321,7 +316,7 @@ paths:
   watches: [WATCHES]
 `)
 	app := App{LoadConfig: func(string, ...config.Option) (*config.Config, error) { return cfg, nil }}
-	result, err := app.probeDaemonWatch(context.Background(), options{config: global}, "diskio-sdd")
+	result, err := app.probeDaemonWatch(context.Background(), cfg, "diskio-sdd")
 	if err != nil {
 		t.Fatalf("probe failed: %v", err)
 	}
@@ -334,16 +329,15 @@ func TestFetchDaemonApplicationStatesHTTP(t *testing.T) {
 	srv := daemonAPIStub("/api/applications", []map[string]string{{"name": "git", "state": "starting"}})
 	defer srv.Close()
 
-	_, global, cfg := daemonAPITestConfig(t, srv.URL, `
+	_, _, cfg := daemonAPITestConfig(t, srv.URL, `
 web:
   address: HOST
   port: PORT
 paths:
 `)
 	app := App{LoadConfig: func(string, ...config.Option) (*config.Config, error) { return cfg, nil }}
-	opts := options{config: global}
 
-	states := app.fetchDaemonApplicationStates(context.Background(), opts)
+	states := app.fetchDaemonApplicationStates(context.Background(), cfg)
 	if got := states["git"]; got != "starting" {
 		t.Fatalf("states[git] = %q, want starting; map=%v", got, states)
 	}

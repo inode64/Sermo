@@ -11,6 +11,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"sermo/internal/config"
 	"sermo/internal/state"
 	"sermo/internal/web"
 )
@@ -30,8 +31,12 @@ func (a App) runEvents(ctx context.Context, opts options) int {
 		return a.commandUsageError(commandEvents, "events accepts at most one service name")
 	}
 
-	service, limit := a.eventListTarget(&opts)
-	evs, err := a.FetchEvents(ctx, opts, service, limit)
+	cfg, err := a.LoadConfig(opts.globalPath())
+	if err != nil {
+		return a.fail(opts, fmt.Sprintf("load config failed: %v", err))
+	}
+	service, limit := eventListTarget(opts, cfg)
+	evs, err := a.FetchEvents(ctx, cfg, service, limit)
 	if err != nil {
 		return a.fail(opts, err.Error())
 	}
@@ -39,10 +44,8 @@ func (a App) runEvents(ctx context.Context, opts options) int {
 	return exitSuccess
 }
 
-// eventListTarget returns the service filter and limit for `sermoctl events`.
-// Config loading is best effort so the daemon can still serve events when the
-// local configuration is unavailable.
-func (a App) eventListTarget(opts *options) (string, int) {
+// eventListTarget uses the command's configuration to canonicalize its filter.
+func eventListTarget(opts options, cfg *config.Config) (string, int) {
 	limit := defaultEventsListLimit
 	if opts.eventLimit > 0 {
 		limit = opts.eventLimit
@@ -50,16 +53,7 @@ func (a App) eventListTarget(opts *options) (string, int) {
 	if len(opts.args) == 0 {
 		return "", limit
 	}
-
-	service := opts.args[0]
-	if a.LoadConfig == nil {
-		return service, limit
-	}
-	if cfg, err := a.LoadConfig(opts.globalPath()); err == nil {
-		opts.loadedConfig = cfg
-		service = canonicalServiceIfKnown(cfg, service)
-	}
-	return service, limit
+	return canonicalServiceIfKnown(cfg, opts.args[0]), limit
 }
 
 func (a App) writeEvents(opts options, service string, evs []event) {
@@ -164,7 +158,6 @@ func (a App) runEventsClear(ctx context.Context, opts options, noun string) int 
 	if cfg == nil {
 		return code
 	}
-	opts.loadedConfig = cfg
 	before, err := state.ParseCutoff(beforeFlagLabel, opts.before, time.Now())
 	if err != nil {
 		return a.fail(opts, err.Error())
@@ -173,7 +166,7 @@ func (a App) runEventsClear(ctx context.Context, opts options, noun string) int 
 	if pruneEvents == nil {
 		pruneEvents = a.pruneDaemonEvents
 	}
-	n, err := pruneEvents(ctx, opts, before)
+	n, err := pruneEvents(ctx, cfg, before)
 	if err != nil {
 		a.recordAccess(cfg, accessCommandEventsClear, "", accessStatusError, err.Error())
 		return a.fail(opts, err.Error())
@@ -190,8 +183,8 @@ func (a App) runEventsClear(ctx context.Context, opts options, noun string) int 
 	return exitSuccess
 }
 
-func (a App) pruneDaemonEvents(ctx context.Context, opts options, before time.Time) (int, error) {
-	resp, err := a.daemonWebRequest(ctx, opts, http.MethodPost, "clear events", true, func(base string) string {
+func (a App) pruneDaemonEvents(ctx context.Context, cfg *config.Config, before time.Time) (int, error) {
+	resp, err := a.daemonWebDo(ctx, cfg, http.MethodPost, "clear events", true, func(base string) string {
 		u := base + web.APIPathEventsClear
 		if !before.IsZero() {
 			u += "?" + web.APIQueryBefore + "=" + before.Format(time.RFC3339)
@@ -221,9 +214,9 @@ func (a App) pruneDaemonEvents(ctx context.Context, opts options, before time.Ti
 
 // fetchEvents (the default for App.FetchEvents) calls the daemon web API to retrieve
 // recent events. If service != "", uses the per-service endpoint.
-func (a App) fetchEvents(ctx context.Context, opts options, service string, limit int) ([]event, error) {
+func (a App) fetchEvents(ctx context.Context, cfg *config.Config, service string, limit int) ([]event, error) {
 	// no CSRF needed for GET; auth is attached when configured
-	resp, err := a.daemonWebRequest(ctx, opts, http.MethodGet, "events", false, func(base string) string {
+	resp, err := a.daemonWebDo(ctx, cfg, http.MethodGet, "events", false, func(base string) string {
 		if service != "" {
 			return fmt.Sprintf("%s%s/%s%s?%s=%d", base, web.APIPathServices, url.PathEscape(service), web.APIPathServiceEvents, web.APIQueryLimit, limit)
 		}

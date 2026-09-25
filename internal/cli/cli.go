@@ -168,7 +168,7 @@ type App struct {
 	// FetchEvents is injectable for `sermoctl events` (listing recent events via
 	// the daemon web API). Defaults to fetching over HTTP using the config's web
 	// address/port (and password for auth if present).
-	FetchEvents func(ctx context.Context, opts options, service string, limit int) ([]event, error)
+	FetchEvents func(ctx context.Context, cfg *config.Config, service string, limit int) ([]event, error)
 	// FetchDaemonServiceState returns the daemon-computed service state when
 	// sermod is running and the web API is reachable. ok is false when unavailable.
 	FetchDaemonServiceState func(ctx context.Context, opts options, service string) (string, bool)
@@ -178,18 +178,18 @@ type App struct {
 	daemonServiceStateWithConfig func(context.Context, *config.Config, string) (string, bool)
 	// FetchDaemonWatchDetail returns the current daemon-published snapshot for
 	// one watch. ok is false when sermod or its web API is unavailable.
-	FetchDaemonWatchDetail func(ctx context.Context, opts options, watch string) (daemonWatchDetail, bool)
+	FetchDaemonWatchDetail func(ctx context.Context, cfg *config.Config, watch string) (daemonWatchDetail, bool)
 	// ProbeDaemonWatch asks the active daemon to run and record one safe manual
 	// host-watch sample through the authenticated Web API.
-	ProbeDaemonWatch func(ctx context.Context, opts options, watch string) (daemonWatchProbe, error)
+	ProbeDaemonWatch func(ctx context.Context, cfg *config.Config, watch string) (daemonWatchProbe, error)
 	// FetchDaemonApplicationStates returns daemon-computed application states keyed
 	// by catalog name. An empty map means the web API was unavailable.
-	FetchDaemonApplicationStates func(ctx context.Context, opts options) map[string]string
+	FetchDaemonApplicationStates func(ctx context.Context, cfg *config.Config) map[string]string
 	// PruneEvents is injectable for `sermoctl events clear` and
 	// `sermoctl activity clear`. Defaults to pruning the daemon's persisted event
 	// feed over HTTP using the config's web address/port (and password for auth if
 	// present).
-	PruneEvents func(ctx context.Context, opts options, before time.Time) (int, error)
+	PruneEvents func(ctx context.Context, cfg *config.Config, before time.Time) (int, error)
 	// MountController builds the host mount controller for `sermoctl mount|umount`.
 	// nil uses the real host commands and /proc readers.
 	MountController func(*config.Config) mountctl.Controller

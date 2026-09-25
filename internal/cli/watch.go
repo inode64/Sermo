@@ -87,8 +87,7 @@ func (a App) runWatchProbe(ctx context.Context, opts options) int {
 	if !app.ManualProbeCheckType(typ) {
 		return a.fail(opts, fmt.Sprintf("watch %q (%s) does not support manual probing", opts.args[1], typ))
 	}
-	opts.loadedConfig = cfg
-	result, err := a.ProbeDaemonWatch(ctx, opts, opts.args[1])
+	result, err := a.ProbeDaemonWatch(ctx, cfg, opts.args[1])
 	advisory := checks.IsWarning(result.Severity)
 	if err != nil && !advisory {
 		return a.fail(opts, "watch probe: "+err.Error())
@@ -114,9 +113,9 @@ func (a App) runWatchProbe(ctx context.Context, opts options) int {
 	return exitNotActive
 }
 
-func (a App) probeDaemonWatch(ctx context.Context, opts options, watch string) (daemonWatchProbe, error) {
+func (a App) probeDaemonWatch(ctx context.Context, cfg *config.Config, watch string) (daemonWatchProbe, error) {
 	path := web.APIPathWatches + "/" + url.PathEscape(watch) + "/probe"
-	resp, err := a.daemonWebRequest(ctx, opts, http.MethodPost, "probe", true, func(base string) string {
+	resp, err := a.daemonWebDo(ctx, cfg, http.MethodPost, "probe", true, func(base string) string {
 		return base + path
 	})
 	if err != nil {
@@ -255,10 +254,11 @@ func (a App) runWatchStatus(ctx context.Context, opts options) int {
 		return a.commandUsageError(commandWatch, "watch status requires exactly one watch name")
 	}
 	name := opts.args[1]
+	cfg := a.statusConfig(opts)
 	watchState := app.TargetStateOK
 	var detail daemonWatchDetail
 	if a.FetchDaemonWatchDetail != nil {
-		if current, ok := a.FetchDaemonWatchDetail(ctx, opts, name); ok {
+		if current, ok := a.FetchDaemonWatchDetail(ctx, cfg, name); ok {
 			detail = current
 			if detail.State != "" {
 				watchState = detail.State

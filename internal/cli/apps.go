@@ -46,14 +46,13 @@ func (a App) listCategory(ctx context.Context, opts options, category, jsonKey, 
 		return code
 	}
 
-	opts.loadedConfig = cfg
 	inspectOpts := []appinspect.Option{appinspect.WithUserLookup(app.EngineUserLookup(cfg, a.Runner))}
 	if category == config.CategoryService {
 		inspectOpts = append(inspectOpts, appinspect.WithOptionalVersion())
 	}
 	reports := appinspect.List(ctx, a.Runner, cfg, category, includeMissing, inspectOpts...)
 	if category == config.CategoryApp && a.FetchDaemonApplicationStates != nil {
-		if states := a.FetchDaemonApplicationStates(ctx, opts); len(states) > 0 {
+		if states := a.FetchDaemonApplicationStates(ctx, cfg); len(states) > 0 {
 			for i := range reports {
 				if st, ok := states[reports[i].Name]; ok && st != "" {
 					reports[i].Status = st
