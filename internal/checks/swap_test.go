@@ -110,9 +110,14 @@ func TestParseSwapVMStat(t *testing.T) {
 		t.Fatalf("pagesIn=%d pagesOut=%d, want 12/34", pagesIn, pagesOut)
 	}
 
-	pagesIn, pagesOut, err = parseSwapVMStat("nr_free_pages 10\n")
+	for _, text := range []string{"nr_free_pages 10\n", "pswpin 0\n", "pswpout 0\n"} {
+		if _, _, err := parseSwapVMStat(text); err == nil {
+			t.Fatalf("incomplete counters %q must be unavailable, not zero usage", text)
+		}
+	}
+	pagesIn, pagesOut, err = parseSwapVMStat("pswpin 0\npswpout 0\n")
 	if err != nil || pagesIn != 0 || pagesOut != 0 {
-		t.Fatalf("missing counters = %d/%d err=%v, want zeroes without error", pagesIn, pagesOut, err)
+		t.Fatalf("present zero counters = %d/%d err=%v, want zeroes without error", pagesIn, pagesOut, err)
 	}
 
 	_, _, err = parseSwapVMStat("pswpin nope\n")
