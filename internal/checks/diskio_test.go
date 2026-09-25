@@ -64,11 +64,11 @@ func TestDiskIOCheckRates(t *testing.T) {
 	if res.Data["util_pct"].(float64) != 90 {
 		t.Fatalf("util_pct = %v, want 90", res.Data["util_pct"])
 	}
-	if got := res.Data["write_bytes"].(float64); got != 4096.0*diskIOSectorBytes/10 {
-		t.Fatalf("write_bytes = %v, want %v", got, 4096.0*diskIOSectorBytes/10)
+	if got := res.Data["write_bytes"].(float64); got != 4096.0*blockSectorBytes/10 {
+		t.Fatalf("write_bytes = %v, want %v", got, 4096.0*blockSectorBytes/10)
 	}
-	if got := res.Data["read_bytes"].(float64); got != 2048.0*diskIOSectorBytes/10 {
-		t.Fatalf("read_bytes = %v, want %v", got, 2048.0*diskIOSectorBytes/10)
+	if got := res.Data["read_bytes"].(float64); got != 2048.0*blockSectorBytes/10 {
+		t.Fatalf("read_bytes = %v, want %v", got, 2048.0*blockSectorBytes/10)
 	}
 	if got := res.Data["await_ms"].(float64); got != 15 {
 		t.Fatalf("await_ms = %v, want 15", got)
@@ -280,10 +280,10 @@ func TestDiskIOCheckPublishesCumulativeTotals(t *testing.T) {
 	if got := res.Data[DiskIOFieldReadBytes]; got != 0.0 {
 		t.Fatalf("read rate = %v, want an empty window", got)
 	}
-	if got, want := res.Data[DiskIOFieldReadTotalBytes], float64(sectorsRead*diskIOSectorBytes); got != want {
+	if got, want := res.Data[DiskIOFieldReadTotalBytes], float64(sectorsRead*blockSectorBytes); got != want {
 		t.Errorf("read total = %v, want %v: the disk has been read even though it is idle now", got, want)
 	}
-	if got, want := res.Data[DiskIOFieldWriteTotalBytes], float64(sectorsWritten*diskIOSectorBytes); got != want {
+	if got, want := res.Data[DiskIOFieldWriteTotalBytes], float64(sectorsWritten*blockSectorBytes); got != want {
 		t.Errorf("written total = %v, want %v", got, want)
 	}
 }

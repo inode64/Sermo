@@ -18,9 +18,6 @@ import (
 
 const (
 	defaultHTTPStatusCode = http.StatusOK
-	httpHeaderAccept      = httpx.HeaderAccept
-	httpHeaderContentType = httpx.HeaderContentType
-	httpContentTypeJSON   = httpx.ContentTypeJSON
 	httpStatusMinCode     = 100
 	httpStatusMaxCode     = 599
 )
@@ -93,7 +90,7 @@ func httpRequestBody(entry map[string]any) ([]byte, string, string) {
 		if err != nil {
 			return nil, "", "http check: invalid json body: " + err.Error()
 		}
-		return raw, httpContentTypeJSON, ""
+		return raw, httpx.ContentTypeJSON, ""
 	}
 	if body := cfgval.AsString(entry[CheckKeyBody]); body != "" {
 		return []byte(body), "", ""

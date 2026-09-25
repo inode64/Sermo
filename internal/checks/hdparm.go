@@ -13,7 +13,6 @@ import (
 )
 
 const (
-	hdparmCommand = CheckTypeHdparm
 	// hdparmRateSuffix is the tail hdparm's two rate units share; the byte scale
 	// is the single character in front of it.
 	hdparmRateSuffix = "B/sec"
@@ -48,8 +47,8 @@ func (c *hdparmCheck) Run(ctx context.Context) Result {
 	for _, p := range c.preds {
 		want[p.field] = true
 	}
-	prefix := hdparmCommand + " " + c.device
-	res, runErr := c.runner.Run(ctx, hdparmCommand, hdparmArgs(c.device, want[fieldCached], want[fieldRead])...)
+	prefix := CheckTypeHdparm + " " + c.device
+	res, runErr := c.runner.Run(ctx, CheckTypeHdparm, hdparmArgs(c.device, want[fieldCached], want[fieldRead])...)
 	if res.ExitCode == execx.ExitCodeRunFailure {
 		msg := execx.OperatorFailureOr(runErr, res, c.timeout, execx.CommandDidNotStart)
 		return c.failedProbe(prefix, msg, start)

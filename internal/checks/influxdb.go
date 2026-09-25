@@ -155,8 +155,8 @@ func (c influxCheck) fluxScalar(ctx context.Context, client *http.Client, base s
 		return "", false, fmt.Errorf("build influxdb request: %w", err)
 	}
 	req.Header.Set(influxAuthHeader, influxAuthTokenPrefix+c.token)
-	req.Header.Set(httpHeaderContentType, influxFluxContentType)
-	req.Header.Set(httpHeaderAccept, influxFluxAccept)
+	req.Header.Set(httpx.HeaderContentType, influxFluxContentType)
+	req.Header.Set(httpx.HeaderAccept, influxFluxAccept)
 
 	resp, err := httpx.Do(client, req)
 	if err != nil {
