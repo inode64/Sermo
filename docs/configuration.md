@@ -3073,12 +3073,17 @@ holds six under a limit of one), not exhaustion.
 You do not write this check: Sermo injects it, named `fds`, into every service
 whose processes discovery can attribute — the same population as
 [`stale_binary`](#stale_binary--service-running-a-replaced-binary) — together
-with a remediation rule, `restart-if-fds-high`, that alerts and then restarts
-once the metric has stayed above the threshold for three minutes. Descriptor
-exhaustion is a failure mode of any daemon that accepts connections, and a
-restart is the only remedy the daemon has for a leak: the collector that leaked
-one socket per accepted connection alerted at `80%` hours before it stopped
-accepting anything, and nothing restarted it.
+with a rule named `restart-if-fds-high`. By default it is an **alert** rule:
+it reports usage that stays above the threshold for three minutes and does
+not restart the service. The historical rule name stays the same when the
+action changes, so existing rule state and references remain identifiable.
+Set `restart_on_fds_high: true` explicitly to alert and then restart through
+the normal operation guards, preflight and remediation policy.
+
+High FD use can be normal for a workload, including database processes that
+cache open files. The percentage detects proximity to the process limit; it
+does not prove a leak or replace a measured per-service baseline. `fds_limit`
+is an alarm threshold, not a change to the process's `RLIMIT_NOFILE`.
 
 Two service keys govern the sensor; both inherit from `defaults:` like
 `dry_run`:
@@ -3086,7 +3091,7 @@ Two service keys govern the sensor; both inherit from `defaults:` like
 | Key | Default | Meaning |
 |---|---|---|
 | `fds_limit` | `80%` | share of a process's soft open-files limit that fires the rule; `false` injects neither the check nor the rule |
-| `restart_on_fds_high` | `true` | `false` keeps the alert and drops the restart, which downgrades the rule to `alert` |
+| `restart_on_fds_high` | `false` | alert only by default; `true` explicitly permits an alert followed by restart |
 
 ```yaml
 # /etc/sermo/services/mariadb.yml — this host's database sits at 85% by design
@@ -3094,7 +3099,7 @@ name: mariadb
 uses: mariadb
 fds_limit: 95%
 
-# /etc/sermo/services/gitea.yml — tell me, do not restart
+# /etc/sermo/services/gitea.yml — keep alerts even if host defaults enable restart
 name: gitea
 uses: gitea
 restart_on_fds_high: false
@@ -3107,10 +3112,18 @@ a user's shell near its own limit says nothing about the daemon. The packaged
 `libvirtd` profile opts out with `fds_limit: false` for the same reason. Like
 every remediation the restart only simulates under `dry_run: true`.
 
-The default was chosen against a fleet of 45 hosts: no daemon sat above a
-third of its limit, so `80%` is a leak, not load. The names are reserved: a
-service declaring its own `fds` check or watch fails to resolve, and the
-message names the sugar. Tune with `fds_limit` instead.
+Choose host-specific thresholds from representative normal and peak load.
+Keep automatic restarts disabled while investigating a high reading. The
+names are reserved: a service declaring its own `fds` check or watch fails to resolve, and the
+message names the sugar. Tune with `fds_limit` instead. An additional absolute
+FD-count alarm uses a separately named service metric check and alert rule;
+its threshold compares the sum across the attributed process tree, unlike the
+per-process percentage. Do not derive it from a single sample.
+
+On upgrade, services without an explicit `restart_on_fds_high: true` now alert
+without restarting. Existing explicit `true` and `false` values keep their
+meaning. An alert still follows the configured notification selection; target
+`dry_run: true` suppresses automatic notifications other than `wall`.
 
 ### `strays` — processes the service cannot account for
 

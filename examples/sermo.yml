@@ -99,6 +99,8 @@ paths:
   templates: /etc/sermo/templates
 
 defaults:
+  # FDs alert by default; enabling restart here is an explicit host-wide opt-in.
+  restart_on_fds_high: false
   stop_policy:
     graceful_timeout: 30s
     term_timeout: 15s

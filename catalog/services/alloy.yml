@@ -108,7 +108,7 @@ watches:
       expect_status: 200
       timeout: 5s
   # Descriptor exhaustion is covered by the fds sensor Sermo injects into every
-  # service (restart-if-fds-high at fds_limit, 80% by default): Alloy leaked one
+  # service (alert-only at fds_limit, 80% by default; restart is opt-in): Alloy leaked one
   # socket per accepted OTLP connection until it hit 32761 of 32768 and stopped
   # accepting anything while its own API kept answering.
   # An empty POST is not a valid export, so a healthy receiver answers 400 or

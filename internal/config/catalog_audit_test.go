@@ -2211,8 +2211,8 @@ func TestCatalogFDsSensorFollowsProcessOwnership(t *testing.T) {
 				t.Fatalf("%s checks.fds.value = %q, want %s", service, got, defaultFDsLimit)
 			}
 			rule := nested(t, resolved.Tree, rules.SectionRules, fdsRuleName)
-			if got := ruleActionTypes(t, rule); len(got) != 2 || got[1] != "restart" {
-				t.Fatalf("%s %s actions = %v, want alert then restart", service, fdsRuleName, got)
+			if got := ruleActionTypes(t, rule); len(got) != 1 || got[0] != "alert" {
+				t.Fatalf("%s %s actions = %v, want alert only", service, fdsRuleName, got)
 			}
 			if _, legacy := nested(t, resolved.Tree, rules.SectionRules)["alert-if-fds-high"]; legacy {
 				t.Fatalf("%s still ships its own alert-if-fds-high next to the injected sensor", service)
