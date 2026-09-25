@@ -881,6 +881,21 @@ type CleanPath struct {
 	Recursive bool
 }
 
+// StopArtifacts are the stopped-state invariants verified after a clean stop: the
+// pidfile path(s) and the files/globs that must no longer exist. A still-present
+// artifact is always a warning folded into the result message, not a failure.
+// CleanEnabled is the master opt-in (`clean_after_stop`) for all active deletion:
+// when set, lingering pidfile/files artifacts are deleted and the Clean list is
+// removed; when unset nothing is deleted (verify-and-warn only). Clean lists the
+// `clean_on_stop` files and directories deleted when CleanEnabled is set
+// (recursive for directory trees).
+type StopArtifacts struct {
+	PidfilePaths []string
+	Files        []string
+	CleanEnabled bool
+	Clean        []CleanPath
+}
+
 // StopInvariants reads the stopped-state invariants from `stop_policy`: the
 // pidfile path(s) that must be absent after stop (when `pidfile_absent: true`,
 // found from the service's top-level `pidfile:`), the files/globs
@@ -891,20 +906,19 @@ type CleanPath struct {
 // clean stop — both removing stale `pidfile_absent`/`files_absent` leftovers and
 // deleting the `clean_on_stop` list; with it off the invariants are verified and
 // warned about but nothing is deleted. All zero when absent.
-//
-//nolint:unparam // cleanPaths feeds operation.StopArtifacts.Clean; static analysis cannot follow that safety boundary.
-func StopInvariants(tree map[string]any) (pidfilePaths, files []string, clean bool, cleanPaths []CleanPath) {
+func StopInvariants(tree map[string]any) StopArtifacts {
+	var out StopArtifacts
 	sp, ok := tree[sectionStopPolicy].(map[string]any)
 	if !ok {
-		return nil, nil, false, nil
+		return out
 	}
-	clean, _ = sp[keyCleanAfterStop].(bool)
-	files = cfgval.StringList(sp[keyFilesAbsent])
+	out.CleanEnabled, _ = sp[keyCleanAfterStop].(bool)
+	out.Files = cfgval.StringList(sp[keyFilesAbsent])
 	if pa, _ := sp[keyPidfileAbsent].(bool); pa {
-		pidfilePaths = append(pidfilePaths, cfgval.StringList(tree[ServiceKeyPidfile])...)
+		out.PidfilePaths = append(out.PidfilePaths, cfgval.StringList(tree[ServiceKeyPidfile])...)
 		if pidfiles, ok := tree[ServiceKeyPidfiles].(map[string]any); ok {
 			for _, role := range sortedPidfileRoles(tree) {
-				pidfilePaths = append(pidfilePaths, cfgval.StringList(pidfiles[role])...)
+				out.PidfilePaths = append(out.PidfilePaths, cfgval.StringList(pidfiles[role])...)
 			}
 		}
 	}
@@ -913,18 +927,18 @@ func StopInvariants(tree map[string]any) (pidfilePaths, files []string, clean bo
 			switch e := item.(type) {
 			case string:
 				if e != "" {
-					cleanPaths = append(cleanPaths, CleanPath{Path: e})
+					out.Clean = append(out.Clean, CleanPath{Path: e})
 				}
 			case map[string]any:
 				p := cfgval.AsString(e[keyPath])
 				rec, _ := e[keyRecursive].(bool)
 				if p != "" {
-					cleanPaths = append(cleanPaths, CleanPath{Path: p, Recursive: rec})
+					out.Clean = append(out.Clean, CleanPath{Path: p, Recursive: rec})
 				}
 			}
 		}
 	}
-	return pidfilePaths, files, clean, cleanPaths
+	return out
 }
 
 func sortedPidfileRoles(tree map[string]any) []string {

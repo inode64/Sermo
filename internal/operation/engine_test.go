@@ -1989,7 +1989,7 @@ func TestVerifyStoppedWarnsAndRemoves(t *testing.T) {
 	// report-only: a clean stop warns about the lingering pidfile + socket glob.
 	h := defaultHarness()
 	e := h.engine()
-	e.StopArtifacts = StopArtifacts{PidfilePaths: []string{pidf}, Files: []string{filepath.Join(dir, "*.sock")}}
+	e.StopArtifacts = config.StopArtifacts{PidfilePaths: []string{pidf}, Files: []string{filepath.Join(dir, "*.sock")}}
 	res := e.Stop(context.Background())
 	if res.Status != ResultOK || !strings.Contains(res.Message, "stale") {
 		t.Fatalf("report-only stale artifact must warn (OK + 'stale'), got %q (%s)", res.Status, res.Message)
@@ -2000,7 +2000,7 @@ func TestVerifyStoppedWarnsAndRemoves(t *testing.T) {
 	// remove: the same stop deletes the stale files.
 	h2 := defaultHarness()
 	e2 := h2.engine()
-	e2.StopArtifacts = StopArtifacts{PidfilePaths: []string{pidf}, Files: []string{filepath.Join(dir, "*.sock")}, CleanEnabled: true}
+	e2.StopArtifacts = config.StopArtifacts{PidfilePaths: []string{pidf}, Files: []string{filepath.Join(dir, "*.sock")}, CleanEnabled: true}
 	res2 := e2.Stop(context.Background())
 	if res2.Status != ResultOK {
 		t.Fatalf("remove stop status = %q (%s)", res2.Status, res2.Message)
@@ -2033,7 +2033,7 @@ func TestCleanOnStopDeletesFilesAndDirs(t *testing.T) {
 	// clean_after_stop off (default): the list is inert — nothing is deleted.
 	h0 := defaultHarness()
 	e0 := h0.engine()
-	e0.StopArtifacts = StopArtifacts{Clean: clean}
+	e0.StopArtifacts = config.StopArtifacts{Clean: clean}
 	if res := e0.Stop(context.Background()); res.Status != ResultOK {
 		t.Fatalf("clean_on_stop (disabled) status = %q (%s)", res.Status, res.Message)
 	}
@@ -2047,7 +2047,7 @@ func TestCleanOnStopDeletesFilesAndDirs(t *testing.T) {
 	// clean_after_stop on: the list is deleted (file and recursive dir tree).
 	h := defaultHarness()
 	e := h.engine()
-	e.StopArtifacts = StopArtifacts{CleanEnabled: true, Clean: clean}
+	e.StopArtifacts = config.StopArtifacts{CleanEnabled: true, Clean: clean}
 	res := e.Stop(context.Background())
 	if res.Status != ResultOK {
 		t.Fatalf("clean_on_stop status = %q (%s)", res.Status, res.Message)
