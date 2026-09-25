@@ -52,7 +52,7 @@ executor once and obtain the prepared target through the existing helpers. Do
 not add package-init registration or duplicate endpoint defaults.
 
 Stream probes dial through `BindDialer`; packet listeners use
-`BindListenConfig`. A library is acceptable only if it is codec-only or
+`bindListenConfig`. A library is acceptable only if it is codec-only or
 accepts Sermo's dialer/connection. Reject libraries that perform unhookable
 internal I/O.
 

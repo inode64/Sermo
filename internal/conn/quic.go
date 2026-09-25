@@ -18,7 +18,7 @@ func BindQUICDialer(iface string) func(
 	*tls.Config,
 	*quic.Config,
 ) (*quic.Conn, error) {
-	listenConfig := BindListenConfig(iface)
+	listenConfig := bindListenConfig(iface)
 	return func(
 		ctx context.Context,
 		address string,

@@ -38,9 +38,9 @@ func resolveInterface(id string) (*net.Interface, error) {
 	return nil, fmt.Errorf("interface %q is not a known name, IP or MAC", id)
 }
 
-// ResolveInterfaceName resolves an identifier (name/IP/MAC) to the interface's
+// resolveInterfaceName resolves an identifier (name/IP/MAC) to the interface's
 // device name, for SO_BINDTODEVICE.
-func ResolveInterfaceName(id string) (string, error) {
+func resolveInterfaceName(id string) (string, error) {
 	ifi, err := resolveInterface(id)
 	if err != nil {
 		return "", err
@@ -103,9 +103,9 @@ func BindDialContext(iface string) httpx.DialFunc {
 	return BindDialer(iface).DialContext
 }
 
-// BindListenConfig is the net.ListenConfig equivalent of BindDialer, for packet
+// bindListenConfig is the net.ListenConfig equivalent of BindDialer, for packet
 // sockets opened with ListenPacket (e.g. the ICMP and TFTP probes).
-func BindListenConfig(iface string) net.ListenConfig {
+func bindListenConfig(iface string) net.ListenConfig {
 	var lc net.ListenConfig
 	if iface != "" {
 		lc.Control = bindControl(iface)
