@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"fmt"
 	"slices"
-	"sort"
 	"strconv"
 	"strings"
 
@@ -221,7 +220,7 @@ func aggregateReplication(rows []replicationRow) replicationState {
 			}
 		}
 	}
-	sort.Strings(state.connections)
+	slices.Sort(state.connections)
 	state.sourceHost = strings.Join(hosts, ", ")
 	return state
 }
