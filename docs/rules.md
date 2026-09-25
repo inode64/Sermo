@@ -1507,8 +1507,8 @@ Protocols, in the order of the table above:
   `X-Influxdb-Version` header. A liveness/version check; to run an InfluxQL query
   and compare a result, see the **InfluxDB query** check.
 - `prometheus` (alias `prom`) — a Prometheus server. Default port 9090; `tls`
-  supported (https). GETs `/api/v1/status/buildinfo` and verifies a `success`
-  status, reporting the server `version` (pair with `on_version_change`); on older
+  supported (https). GETs `/api/v1/status/buildinfo` and requires HTTP 200 with
+  a JSON `success` status, reporting the server `version` (pair with `on_version_change`); on older
   servers it falls back to `/-/healthy` (liveness only). An optional `user`/
   `password` is sent as HTTP Basic auth (for a reverse proxy fronting the API).
 - `cloudflared` (alias `cloudflare-tunnel`) — Cloudflare Tunnel's local metrics

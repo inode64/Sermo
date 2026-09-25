@@ -58,6 +58,9 @@ func promBuildInfo(ctx context.Context, client *http.Client, base string, decora
 	if !decodedJSON(resp.body, &info) || info.Status == "" {
 		return Result{}, false, nil // not the Prometheus API JSON — fall back
 	}
+	if resp.status != http.StatusOK {
+		return Result{}, true, fmt.Errorf("prometheus buildinfo HTTP status %d", resp.status)
+	}
 	if info.Status != promStatusSuccess {
 		return Result{}, true, fmt.Errorf("prometheus buildinfo status %q", info.Status)
 	}

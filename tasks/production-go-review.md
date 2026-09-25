@@ -9,7 +9,7 @@ pruebas de ejecución. Este registro no afirma una auditoría exhaustiva.
   `internal/conn/http_client.go`: un cuerpo parcial con JSON válido y un error
   de lectura se aceptaba como respuesta completa. Propagar el error antes de
   interpretar el cuerpo, manteniendo el límite de lectura existente.
-- [ ] **GO-002 — Respetar el estado HTTP de Prometheus.**
+- [x] **GO-002 — Respetar el estado HTTP de Prometheus.**
   `internal/conn/prometheus.go`: un HTTP 500 con JSON `status: success` podía
   declarar sano el servicio. Exigir HTTP 200 para una respuesta API reconocida;
   conservar el fallback cuando el contenido no corresponde al endpoint API.
