@@ -303,9 +303,6 @@ var httpCertKeys = []string{
 	CheckKeyCertOnAlgorithmChange,
 }
 
-// configureHTTPCert enables certificate inspection on hc when any cert_* key is
-// present. It requires an https url and returns a warning string on a config
-// error (empty when there is nothing to configure or configuration succeeded).
 func hasHTTPCertOptions(entry map[string]any) bool {
 	for _, k := range httpCertKeys {
 		if _, ok := entry[k]; ok {
@@ -315,6 +312,9 @@ func hasHTTPCertOptions(entry map[string]any) bool {
 	return false
 }
 
+// configureHTTPCert enables certificate inspection on hc when any cert_* key is
+// present. It requires an https url and returns a warning string on a config
+// error (empty when there is nothing to configure or configuration succeeded).
 func configureHTTPCert(hc *httpCheck, target url.URL, clientOpts httpClientOptions, entry map[string]any) string {
 	if target.Scheme != URLSchemeHTTPS {
 		return "http check: cert_* options require an https url"
