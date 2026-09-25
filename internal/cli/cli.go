@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"slices"
 	"text/tabwriter"
 	"time"
 
@@ -611,10 +612,8 @@ func parseArgs(args []string) (options, error) {
 // splitCommandArgs preserves the lock wrapper convention: everything after a
 // literal `--` is a command payload, not another sermoctl flag or argument.
 func splitCommandArgs(args []string) (flagArgs, commandArgs []string) {
-	for i, arg := range args {
-		if arg == "--" {
-			return args[:i], args[i+1:]
-		}
+	if i := slices.Index(args, "--"); i >= 0 {
+		return args[:i], args[i+1:]
 	}
 	return args, nil
 }

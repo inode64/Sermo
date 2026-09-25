@@ -1,10 +1,11 @@
 package cli
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"os"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 
@@ -44,7 +45,7 @@ func listWizardDockerContainers(ctx context.Context, timeout time.Duration) ([]a
 			Socket:    dockerctl.DefaultSocket,
 		})
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+	slices.SortFunc(out, func(a, b assist.DockerCandidate) int { return cmp.Compare(a.Name, b.Name) })
 	return out, nil
 }
 
@@ -91,7 +92,7 @@ func listWizardVMs(ctx context.Context, timeout time.Duration) ([]assist.VMCandi
 			Socket: socket,
 		})
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+	slices.SortFunc(out, func(a, b assist.VMCandidate) int { return cmp.Compare(a.Name, b.Name) })
 	return out, nil
 }
 

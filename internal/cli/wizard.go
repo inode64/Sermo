@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -10,7 +11,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"sort"
 	"strconv"
 	"strings"
 	"unicode"
@@ -299,7 +299,7 @@ func listWizardMounts() ([]assist.MountCandidate, error) {
 			Mounted: mounted[path],
 		})
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Path < out[j].Path })
+	slices.SortFunc(out, func(a, b assist.MountCandidate) int { return cmp.Compare(a.Path, b.Path) })
 	return out, nil
 }
 
@@ -353,7 +353,7 @@ func listIfacesFromSysfs(root string) ([]assist.Iface, error) {
 		up := flags&checks.SysfsIfaceFlagUp != 0 && (flags&checks.SysfsIfaceFlagRunning != 0 || operstate == checks.NetStateUp || operstate == checks.NetStateUnknown)
 		out = append(out, assist.Iface{Name: name, Up: up, Loopback: loopback})
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+	slices.SortFunc(out, func(a, b assist.Iface) int { return cmp.Compare(a.Name, b.Name) })
 	return out, nil
 }
 
@@ -380,7 +380,7 @@ func defaultRouteIfaces() []string {
 			out = append(out, route.Iface)
 		}
 	}
-	sort.Strings(out)
+	slices.Sort(out)
 	return out
 }
 

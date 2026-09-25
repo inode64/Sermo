@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
-	"sort"
+	"slices"
 
 	"sermo/internal/app"
 	"sermo/internal/cfgval"
@@ -110,7 +110,7 @@ func (a App) runMountList(opts options) int {
 	}
 	controller := a.mountController(cfg, opts)
 	names := cfg.StorageMountNames()
-	sort.Strings(names)
+	slices.Sort(names)
 	var statuses []mountctl.Status
 	for _, name := range names {
 		resolved, errs := cfg.ResolveStorage(name)
