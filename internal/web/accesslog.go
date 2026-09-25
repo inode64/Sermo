@@ -79,9 +79,6 @@ func (s *Server) withAccessLog(next http.Handler) http.Handler {
 }
 
 func (s *Server) recordWebAccess(r *http.Request, status int, actor string) {
-	if s == nil || s.AccessLog == nil || r == nil {
-		return
-	}
 	target, action := parseAPIAccessTarget(r.URL.Path)
 	if actor == "" {
 		actor = accessActorAnonymous
