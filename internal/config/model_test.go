@@ -116,7 +116,8 @@ func TestStopInvariants(t *testing.T) {
 			"clean_after_stop": true,
 		},
 	}
-	pp, ff, cleanEnabled, _ := StopInvariants(tree)
+	artifacts := StopInvariants(tree)
+	pp, ff, cleanEnabled := artifacts.PidfilePaths, artifacts.Files, artifacts.CleanEnabled
 	wantPidfiles := []string{"/run/svc.pid", "/run/svc-helper.pid", "/run/svc-worker.pid", "/run/svc-worker-legacy.pid"}
 	if !slices.Equal(pp, wantPidfiles) {
 		t.Fatalf("pidfile paths = %v, want %v", pp, wantPidfiles)
@@ -125,11 +126,11 @@ func TestStopInvariants(t *testing.T) {
 		t.Fatalf("files=%v cleanEnabled=%v", ff, cleanEnabled)
 	}
 	// pidfile_absent omitted -> no pidfile paths even if pidfile is declared.
-	pp2, _, _, _ := StopInvariants(map[string]any{
+	withoutPidfile := StopInvariants(map[string]any{
 		"pidfile":     tree["pidfile"],
 		"stop_policy": map[string]any{"files_absent": []any{"/x"}},
 	})
-	if len(pp2) != 0 {
-		t.Fatalf("pidfile_absent off must yield no pidfile paths, got %v", pp2)
+	if len(withoutPidfile.PidfilePaths) != 0 {
+		t.Fatalf("pidfile_absent off must yield no pidfile paths, got %v", withoutPidfile.PidfilePaths)
 	}
 }

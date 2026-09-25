@@ -98,7 +98,7 @@ func New(c Config) Engine {
 	// consistent with how the kill policy/selectors below are parsed — callers
 	// pass only the Tree, not parallel pre-parsed forms.
 	lifecycle, lifecycleErr := config.ResolveServiceLifecycle(tree, c.Backend)
-	stopArtifacts := stopArtifactsFromTree(tree)
+	stopArtifacts := config.StopInvariants(tree)
 	killPolicy, stopPolicyWarnings := process.ParseStopPolicy(tree)
 	selectors, selectorWarnings := process.ParseSelectors(tree)
 	reloadSpec, reloadErr := config.ParseReload(tree)
@@ -216,14 +216,6 @@ func resumeClosure(mgr servicemgr.Manager, unit string) func(context.Context) er
 	return func(ctx context.Context) error {
 		return rm.Resume(ctx, unit)
 	}
-}
-
-// stopArtifactsFromTree maps a resolved service's stop_policy invariants into the
-// engine's StopArtifacts form. It is the single config→engine translation of the
-// stopped-state invariants, shared by every engine build (daemon, web, CLI).
-func stopArtifactsFromTree(tree map[string]any) StopArtifacts {
-	pp, ff, cleanEnabled, clean := config.StopInvariants(tree)
-	return StopArtifacts{PidfilePaths: pp, Files: ff, CleanEnabled: cleanEnabled, Clean: clean}
 }
 
 // reloadClosure builds the engine's reload step. With no native reload declared

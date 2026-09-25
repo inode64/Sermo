@@ -63,7 +63,7 @@ type Engine struct {
 	// directly-built test engines.
 	Lifecycle config.ServiceLifecycle
 	// StopArtifacts are stopped-state invariants verified after a clean stop.
-	StopArtifacts StopArtifacts
+	StopArtifacts config.StopArtifacts
 
 	ConfigError error
 	Manager     servicemgr.Manager
@@ -113,21 +113,6 @@ type Engine struct {
 	Sleep               func(time.Duration)
 	OperationTimeout    time.Duration
 	Emit                func(Result)
-}
-
-// StopArtifacts are the stopped-state invariants verified after a clean stop: the
-// pidfile path(s) and the files/globs that must no longer exist. A still-present
-// artifact is always a warning folded into the result message, not a failure.
-// CleanEnabled is the master opt-in (`clean_after_stop`) for all active deletion:
-// when set, lingering pidfile/files artifacts are deleted and the Clean list is
-// removed; when unset nothing is deleted (verify-and-warn only). Clean lists the
-// `clean_on_stop` files and directories deleted when CleanEnabled is set
-// (recursive for directory trees).
-type StopArtifacts struct {
-	PidfilePaths []string
-	Files        []string
-	CleanEnabled bool
-	Clean        []config.CleanPath
 }
 
 type plan struct {
