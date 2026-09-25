@@ -2940,13 +2940,13 @@ func (b *WebBackend) applicationsForTest(ctx context.Context, load func(context.
 
 func (fakeSwapReader) ProcessSwap(int) (uint64, bool)    { return 0, false }
 func (fakeSwapReader) ProcessFDLimit(int) (uint64, bool) { return 0, false }
-func (r fakeSwapReader) MemoryTotals() metrics.MemoryTotals {
+func (r fakeSwapReader) MemoryTotals(_ time.Duration) metrics.MemoryTotals {
 	return metrics.MemoryTotals{MemoryTotal: 1 << 30, MemoryUsed: 1 << 29, MemoryOK: true, SwapTotal: r.total, SwapUsed: r.used, SwapOK: true}
 }
 
 func (*countingSystemReader) ProcessSwap(int) (uint64, bool)    { return 0, false }
 func (*countingSystemReader) ProcessFDLimit(int) (uint64, bool) { return 0, false }
-func (r *countingSystemReader) MemoryTotals() metrics.MemoryTotals {
+func (r *countingSystemReader) MemoryTotals(_ time.Duration) metrics.MemoryTotals {
 	r.memoryCalls++
 	r.swapCalls++
 	return metrics.MemoryTotals{MemoryTotal: 1000, MemoryUsed: 250, MemoryOK: true, SwapTotal: 2000, SwapUsed: 500, SwapOK: true}

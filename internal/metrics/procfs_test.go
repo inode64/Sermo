@@ -46,7 +46,7 @@ func TestOSReaderProcfs(t *testing.T) {
 	if l1, l5, l15, ok := r.LoadAverages(); !ok || l1 < 0 || l5 < 0 || l15 < 0 {
 		t.Errorf("LoadAverages = (%v, %v, %v, %v); want ok with non-negative values", l1, l5, l15, ok)
 	}
-	if totals := r.MemoryTotals(); !totals.MemoryOK || totals.MemoryTotal == 0 || totals.MemoryUsed > totals.MemoryTotal || (totals.SwapOK && totals.SwapUsed > totals.SwapTotal) {
+	if totals := r.MemoryTotals(0); !totals.MemoryOK || totals.MemoryTotal == 0 || totals.MemoryUsed > totals.MemoryTotal || (totals.SwapOK && totals.SwapUsed > totals.SwapTotal) {
 		t.Errorf("MemoryTotals = %+v; want valid memory and optional valid swap", totals)
 	}
 	if n := r.NumCPU(); n < 1 {
@@ -100,7 +100,7 @@ func TestOSReaderNumCPUUsesFreshCache(t *testing.T) {
 
 func TestParseProcMeminfoTotals(t *testing.T) {
 	data := []byte("MemTotal:       1000 kB\nMemAvailable:    250 kB\nSwapTotal:       2000 kB\nSwapFree:        500 kB\n")
-	totals := parseProcMeminfoTotals(data)
+	totals := meminfoTotals(ParseMeminfo(data))
 	if !totals.MemoryOK || totals.MemoryTotal != 1000*1024 || totals.MemoryUsed != 750*1024 {
 		t.Fatalf("memory totals = %+v, want 1000k total and 750k used", totals)
 	}
@@ -111,7 +111,7 @@ func TestParseProcMeminfoTotals(t *testing.T) {
 
 func TestParseProcMeminfoTotalsNoSwapDevice(t *testing.T) {
 	data := []byte("MemTotal:       1000 kB\nMemAvailable:    250 kB\nSwapTotal:          0 kB\nSwapFree:           0 kB\n")
-	totals := parseProcMeminfoTotals(data)
+	totals := meminfoTotals(ParseMeminfo(data))
 	if !totals.MemoryOK {
 		t.Fatalf("memory totals = %+v, want valid memory", totals)
 	}
@@ -220,7 +220,7 @@ func TestParseProcMeminfoTotalsAvailableEqualsTotal(t *testing.T) {
 	// MemAvailable == MemTotal is a legitimate fully-free host (0 used), not the
 	// rejected available > total case.
 	data := []byte("MemTotal:       1000 kB\nMemAvailable:   1000 kB\n")
-	totals := parseProcMeminfoTotals(data)
+	totals := meminfoTotals(ParseMeminfo(data))
 	if !totals.MemoryOK || totals.MemoryTotal != 1000*1024 || totals.MemoryUsed != 0 {
 		t.Fatalf("equal mem totals = %+v, want valid memory with 0 used", totals)
 	}
@@ -328,6 +328,6 @@ func TestParseProcLimitsOpenFiles(t *testing.T) {
 	}
 }
 
-func (r swapReader) MemoryTotals() MemoryTotals {
+func (r swapReader) MemoryTotals(_ time.Duration) MemoryTotals {
 	return MemoryTotals{MemoryTotal: r.memTotal, MemoryUsed: r.memUsed, MemoryOK: r.memTotal > 0, SwapTotal: r.swapTotal, SwapUsed: r.swapUsed, SwapOK: r.swapOK}
 }

@@ -96,6 +96,8 @@ func TestServiceStartTimeFallsBackWhenPrincipalHasNoStart(t *testing.T) {
 	}
 }
 
-func (fakeStartReader) ProcessSwap(int) (uint64, bool)     { return 0, false }
-func (fakeStartReader) ProcessFDLimit(int) (uint64, bool)  { return 0, false }
-func (fakeStartReader) MemoryTotals() metrics.MemoryTotals { return metrics.MemoryTotals{} }
+func (fakeStartReader) ProcessSwap(int) (uint64, bool)    { return 0, false }
+func (fakeStartReader) ProcessFDLimit(int) (uint64, bool) { return 0, false }
+func (fakeStartReader) MemoryTotals(_ time.Duration) metrics.MemoryTotals {
+	return metrics.MemoryTotals{}
+}

@@ -2678,7 +2678,9 @@ A `memory` watch checks system RAM against thresholds. It is built on the
 kernel's **MemAvailable** estimate (from `/proc/meminfo`) — the memory new
 allocations can claim without swapping — so page cache and reclaimable buffers
 never read as "used". Catches the slow leak or over-packed host before the OOM
-killer does.
+killer does. Memory and swap checks share a `/proc/meminfo` observation for at
+most two seconds. Failed or incomplete reads are retried; they do not reuse a
+previous successful observation.
 
 ```yaml
 check:                                   # in a watch body like `load` above

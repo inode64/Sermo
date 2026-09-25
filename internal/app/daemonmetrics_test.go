@@ -316,6 +316,6 @@ func TestDaemonMetricSamplerRunSamplesWithoutDashboard(t *testing.T) {
 
 func (*fakeDaemonMetricReader) ProcessSwap(int) (uint64, bool)    { return 0, false }
 func (*fakeDaemonMetricReader) ProcessFDLimit(int) (uint64, bool) { return 0, false }
-func (r *fakeDaemonMetricReader) MemoryTotals() metrics.MemoryTotals {
+func (r *fakeDaemonMetricReader) MemoryTotals(_ time.Duration) metrics.MemoryTotals {
 	return metrics.MemoryTotals{MemoryTotal: r.memTotal, MemoryUsed: r.memUsed, MemoryOK: r.memTotal > 0}
 }
