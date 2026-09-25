@@ -209,7 +209,7 @@ func diskIOWithSize(sampler DiskIOSamplerFunc, sectors uint64, sampleErr error) 
 			identity: testDeviceIdentity,
 		},
 		state: &diskIOState{},
-		last:  &lastSample{},
+		last:  lastSample{},
 		clock: func() time.Time {
 			now = now.Add(10 * time.Second)
 			return now

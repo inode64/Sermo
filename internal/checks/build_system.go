@@ -117,7 +117,7 @@ func buildHdparmCheck(b base, entry map[string]any, runner execx.Runner, deps De
 	}
 	return &hdparmCheck{
 		base: b, runner: runner, device: device, preds: preds, deviceBus: deps.BlockDeviceBus,
-		probe: deviceProbe{size: deps.BlockDeviceSizer, identity: deps.BlockDeviceIdentity}, last: &lastSample{},
+		probe: deviceProbe{size: deps.BlockDeviceSizer, identity: deps.BlockDeviceIdentity},
 	}, ""
 }
 
@@ -142,7 +142,7 @@ func buildSmartCheck(b base, entry map[string]any, runner execx.Runner, deps Dep
 	}
 	return &smartCheck{
 		base: b, runner: runner, device: device, preds: preds,
-		deviceBus: deps.BlockDeviceBus, deviceIdentity: deps.BlockDeviceIdentity, last: &lastSample{},
+		deviceBus: deps.BlockDeviceBus, deviceIdentity: deps.BlockDeviceIdentity,
 	}, ""
 }
 
@@ -243,7 +243,7 @@ func buildDiskIOCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 	return &diskIOCheck{
 		base: b, device: device, preds: preds, sampler: deps.DiskIOSampler, deviceBus: deps.BlockDeviceBus,
 		probe: deviceProbe{size: deps.BlockDeviceSizer, identity: deps.BlockDeviceIdentity},
-		state: &diskIOState{}, last: &lastSample{},
+		state: &diskIOState{},
 	}, ""
 }
 

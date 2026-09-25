@@ -80,7 +80,7 @@ type smartCheck struct {
 	preds          []levelPred
 	deviceBus      BlockDeviceBusFunc
 	deviceIdentity BlockDeviceIdentityFunc
-	last           *lastSample
+	last           lastSample
 }
 
 func (c *smartCheck) Run(ctx context.Context) Result {

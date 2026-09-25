@@ -33,7 +33,7 @@ type hdparmCheck struct {
 	preds     []levelPred
 	deviceBus BlockDeviceBusFunc
 	probe     deviceProbe
-	last      *lastSample
+	last      lastSample
 }
 
 func (c *hdparmCheck) Run(ctx context.Context) Result {

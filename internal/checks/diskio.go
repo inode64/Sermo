@@ -73,7 +73,7 @@ type diskIOCheck struct {
 	probe     deviceProbe
 	clock     func() time.Time
 	state     *diskIOState
-	last      *lastSample
+	last      lastSample
 }
 
 func (c *diskIOCheck) Run(_ context.Context) Result {

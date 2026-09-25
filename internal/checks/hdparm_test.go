@@ -91,7 +91,7 @@ func TestHdparmThresholds(t *testing.T) {
 	pred := []levelPred{{"read", "<", 100}} // alert condition: read below 100 MB/s
 
 	// Degraded: read=50 < 100 -> the alert condition holds -> OK (fires as a watch).
-	c := &hdparmCheck{name: "d", timeout: time.Second, runner: execxtest.Fixed(execx.Result{Stdout: degraded}, nil), device: "/dev/sda", preds: pred, last: &lastSample{}}
+	c := &hdparmCheck{name: "d", timeout: time.Second, runner: execxtest.Fixed(execx.Result{Stdout: degraded}, nil), device: "/dev/sda", preds: pred, last: lastSample{}}
 	if res := c.Run(context.Background()); !res.OK {
 		t.Errorf("read 50 < 100 should meet the alert condition: %s", res.Message)
 	} else if res.Data["read"] != 50.0 {
@@ -99,7 +99,7 @@ func TestHdparmThresholds(t *testing.T) {
 	}
 
 	// Healthy: read=200, not below 100 -> condition not met.
-	c = &hdparmCheck{name: "d", timeout: time.Second, runner: execxtest.Fixed(execx.Result{Stdout: healthy}, nil), device: "/dev/sda", preds: pred, last: &lastSample{}}
+	c = &hdparmCheck{name: "d", timeout: time.Second, runner: execxtest.Fixed(execx.Result{Stdout: healthy}, nil), device: "/dev/sda", preds: pred, last: lastSample{}}
 	if res := c.Run(context.Background()); res.OK {
 		t.Error("read 200 must not meet the read<100 alert condition")
 	}
@@ -112,7 +112,7 @@ func TestHdparmCheckError(t *testing.T) {
 		device: "/dev/sda",
 		preds:  []levelPred{{"read", "<", 100}},
 		probe:  livingDeviceProbe(),
-		last:   &lastSample{},
+		last:   lastSample{},
 	}
 	res := c.Run(context.Background())
 	if res.OK {
@@ -147,7 +147,7 @@ func TestHdparmCheckReportsMissingDevice(t *testing.T) {
 		device: "/dev/sda",
 		preds:  []levelPred{{fieldRead, "<", 20}},
 		probe:  deviceProbe{size: func(string) (uint64, error) { return 0, nil }, identity: testDeviceIdentity},
-		last:   &lastSample{},
+		last:   lastSample{},
 	}
 	res := c.Run(context.Background())
 	if !res.Unavailable {
@@ -168,7 +168,7 @@ func TestHdparmCheckKeepsToolErrorWhenDevicePresent(t *testing.T) {
 		device: "/dev/sda",
 		preds:  []levelPred{{fieldRead, "<", 20}},
 		probe:  livingDeviceProbe(),
-		last:   &lastSample{},
+		last:   lastSample{},
 	}
 	res := c.Run(context.Background())
 	if !res.Unavailable {
@@ -190,7 +190,7 @@ func TestHdparmCheckKeepsLastKnownRatesOfAMissingDevice(t *testing.T) {
 		device: "/dev/sda",
 		preds:  []levelPred{{fieldRead, "<", 20}},
 		probe:  deviceProbe{size: func(string) (uint64, error) { return 0, nil }, identity: testDeviceIdentity},
-		last:   &lastSample{},
+		last:   lastSample{},
 	}
 	if res := c.Run(context.Background()); res.Unavailable {
 		t.Fatalf("first timing must succeed: %s", res.Message)

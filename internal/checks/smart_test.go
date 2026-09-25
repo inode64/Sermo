@@ -80,7 +80,7 @@ func smartWith(out string, preds ...levelPred) *smartCheck {
 		runner: execxtest.Fixed(execx.Result{Stdout: out}, nil),
 		device: "/dev/sda", preds: preds,
 		deviceIdentity: testDeviceIdentity,
-		last:           &lastSample{},
+		last:           lastSample{},
 	}
 }
 
@@ -136,7 +136,7 @@ func TestSmartCheckError(t *testing.T) {
 	c := &smartCheck{
 		name: "sm", timeout: time.Second,
 		runner: execxtest.Fixed(execx.Result{Stderr: "/dev/sda: Unable to detect device type\n", ExitCode: 2}, nil),
-		device: "/dev/sda", deviceIdentity: testDeviceIdentity, last: &lastSample{},
+		device: "/dev/sda", deviceIdentity: testDeviceIdentity, last: lastSample{},
 	}
 	if res := c.Run(context.Background()); res.OK {
 		t.Fatal("a smartctl error must fail the check")
@@ -336,7 +336,7 @@ func TestSmartCheckReportsLastKnownReadingsWhenDeviceGone(t *testing.T) {
 		name: "sm", timeout: time.Second,
 		runner: runner, device: "/dev/sda",
 		deviceIdentity: testDeviceIdentity,
-		last:           &lastSample{},
+		last:           lastSample{},
 	}
 	if res := c.Run(context.Background()); res.Unavailable {
 		t.Fatalf("first sample must succeed: %s", res.Message)
@@ -373,7 +373,7 @@ func TestSmartCheckIdentifiesADriveSmartctlCouldNotRead(t *testing.T) {
 	c := &smartCheck{
 		name: "sm", timeout: time.Second,
 		runner: execxtest.Fixed(execx.Result{Stderr: "/dev/sda: Unable to detect device type\n", ExitCode: 2}, nil),
-		device: "/dev/sda", deviceIdentity: testDeviceIdentity, last: &lastSample{},
+		device: "/dev/sda", deviceIdentity: testDeviceIdentity, last: lastSample{},
 	}
 	res := c.Run(context.Background())
 	if !res.Unavailable {
