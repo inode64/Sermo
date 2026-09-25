@@ -51,14 +51,9 @@ func (s *Store) RecordEvent(e EventRecord) (int64, error) {
 const eventSelectPrefix = `SELECT id, at, service, watch, app, kind, rule, action, status, message, output
 		   FROM event_log`
 
-// RecentEvents returns the newest persisted events first. limit <= 0 returns all
-// persisted events.
-func (s *Store) RecentEvents(limit int) ([]EventRecord, error) {
-	return s.RecentEventsBefore(0, limit)
-}
-
 // RecentEventsBefore returns persisted events newest first. beforeID <= 0
 // starts at the newest event; otherwise only rows with a smaller ID are read.
+// A non-positive limit returns all matching events.
 func (s *Store) RecentEventsBefore(beforeID int64, limit int) ([]EventRecord, error) {
 	if limit <= 0 {
 		limit = -1

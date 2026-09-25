@@ -23,7 +23,7 @@ func TestStoreEventsRoundTripAndPrune(t *testing.T) {
 		t.Fatalf("event IDs old=%d recent=%d, want increasing positive IDs", oldID, recentID)
 	}
 
-	events, err := s.RecentEvents(0)
+	events, err := s.RecentEventsBefore(0, 0)
 	if err != nil {
 		t.Fatalf("RecentEvents: %v", err)
 	}
@@ -40,7 +40,7 @@ func TestStoreEventsRoundTripAndPrune(t *testing.T) {
 	if len(older) != 1 || older[0].ID != oldID {
 		t.Fatalf("older events = %+v, want only ID %d", older, oldID)
 	}
-	limited, err := s.RecentEvents(1)
+	limited, err := s.RecentEventsBefore(0, 1)
 	if err != nil {
 		t.Fatalf("RecentEvents(limit): %v", err)
 	}
@@ -55,7 +55,7 @@ func TestStoreEventsRoundTripAndPrune(t *testing.T) {
 	if n != 1 {
 		t.Fatalf("PruneEvents removed %d, want 1", n)
 	}
-	events, err = s.RecentEvents(0)
+	events, err = s.RecentEventsBefore(0, 0)
 	if err != nil {
 		t.Fatalf("RecentEvents(after prune): %v", err)
 	}
@@ -70,7 +70,7 @@ func TestStoreEventsRoundTripAndPrune(t *testing.T) {
 	if n != 1 {
 		t.Fatalf("PruneEvents(all) removed %d, want 1", n)
 	}
-	events, err = s.RecentEvents(0)
+	events, err = s.RecentEventsBefore(0, 0)
 	if err != nil {
 		t.Fatalf("RecentEvents(after clear): %v", err)
 	}

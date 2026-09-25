@@ -304,10 +304,6 @@ func (s *stubEventStore) RecordEvent(rec state.EventRecord) (int64, error) {
 	return rec.ID, nil
 }
 
-func (s *stubEventStore) RecentEvents(limit int) ([]state.EventRecord, error) {
-	return s.RecentEventsBefore(0, limit)
-}
-
 func (s *stubEventStore) RecentEventsBefore(_ int64, limit int) ([]state.EventRecord, error) {
 	return s.newest(func(state.EventRecord) bool { return true }, limit), nil
 }

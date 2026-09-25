@@ -23,7 +23,6 @@ type LoggedEvent struct {
 // repopulate the web UI after a daemon restart.
 type EventStore interface {
 	RecordEvent(record state.EventRecord) (int64, error)
-	RecentEvents(limit int) ([]state.EventRecord, error)
 	RecentEventsBefore(beforeID int64, limit int) ([]state.EventRecord, error)
 	// RecentEventsForColumn returns one target's events, filtered on the
 	// event_log column naming that dimension (state.EventColumnService and
@@ -317,7 +316,7 @@ func (l *EventLog) rebuildIndexesLocked() {
 }
 
 func (l *EventLog) loadRecentFromStore() error {
-	records, err := l.store.RecentEvents(l.size)
+	records, err := l.store.RecentEventsBefore(0, l.size)
 	if err != nil {
 		return fmt.Errorf("load recent events: %w", err)
 	}
