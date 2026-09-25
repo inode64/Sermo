@@ -10,13 +10,13 @@ import (
 func TestAddSummaryAge(t *testing.T) {
 	tests := []struct {
 		name string
-		env  map[string]string
+		env  map[string]any
 		want time.Duration
 		ok   bool
 	}{
-		{name: "valid", env: map[string]string{sermoEnvAgeSeconds: "90"}, want: 90 * time.Second, ok: true},
+		{name: "valid", env: map[string]any{sermoEnvAgeSeconds: 90500 * time.Millisecond}, want: 90 * time.Second, ok: true},
 		{name: "missing"},
-		{name: "invalid", env: map[string]string{sermoEnvAgeSeconds: "nope"}},
+		{name: "invalid", env: map[string]any{sermoEnvAgeSeconds: "nope"}},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

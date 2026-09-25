@@ -1,21 +1,28 @@
 package app
 
 import (
-	"strconv"
+	"fmt"
 	"time"
 
 	"sermo/internal/checks"
 )
 
-func addSummaryAge(data map[string]any, env map[string]string) {
-	ageSeconds, ok := env[sermoEnvAgeSeconds]
-	if !ok {
-		return
+// watchValuesEnv formats typed observations only at the hook boundary.
+func watchValuesEnv(env map[string]string, values map[string]any) {
+	for key, value := range values {
+		switch v := value.(type) {
+		case time.Duration:
+			env[key] = envAgeSeconds(v)
+		default:
+			env[key] = fmt.Sprint(v)
+		}
 	}
-	seconds, err := strconv.ParseInt(ageSeconds, envFormatBase, envFloatBits)
-	if err != nil {
-		return
+}
+
+func addSummaryAge(data, values map[string]any) {
+	if age, ok := values[sermoEnvAgeSeconds].(time.Duration); ok {
+		// Summaries and SERMO_AGE_SECONDS have always exposed whole seconds.
+		data[checks.DataKeyAge] = age.Truncate(time.Second)
+		data[checks.DataKeyValue] = data[checks.DataKeyAge]
 	}
-	data[checks.DataKeyAge] = time.Duration(seconds) * time.Second
-	data[checks.DataKeyValue] = data[checks.DataKeyAge]
 }

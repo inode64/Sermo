@@ -341,12 +341,12 @@ func procSamplerFromDeps(deps Deps) ProcSampler {
 // procEnv is the hook environment both firing paths share — a presence threshold
 // and a `gone` disappearance — so the identity and age they report cannot drift
 // apart. The presence path adds its own reading-derived variables on top.
-func (w *procWatcher) procEnv(pid int, change string, age time.Duration) map[string]string {
-	env := map[string]string{
+func (w *procWatcher) procEnv(pid int, change string, age time.Duration) map[string]any {
+	env := map[string]any{
 		sermoEnvPID:        strconv.Itoa(pid),
 		sermoEnvProcess:    w.match.Name,
 		sermoEnvChange:     change,
-		sermoEnvAgeSeconds: envAgeSeconds(age),
+		sermoEnvAgeSeconds: age,
 	}
 	if w.match.User != "" {
 		env[sermoEnvUser] = w.match.User
@@ -356,12 +356,12 @@ func (w *procWatcher) procEnv(pid int, change string, age time.Duration) map[str
 
 // evaluate computes whether a PID satisfies every configured condition this
 // cycle, returning the firing decision, the hook environment and a message.
-func (w *procWatcher) evaluate(st *procState, now time.Time, s ProcInfo) (bool, map[string]string, string) {
+func (w *procWatcher) evaluate(st *procState, now time.Time, s ProcInfo) (bool, map[string]any, string) {
 	c := w.cond
 	age := st.age(now)
 
 	env := w.procEnv(s.PID, procChangeThreshold, age)
-	env[sermoEnvMemory] = strconv.FormatUint(s.RSS, envFormatBase)
+	env[sermoEnvMemory] = s.RSS
 
 	// A watch with only `gone` never fires on presence.
 	ok := c.hasPresence()
@@ -394,8 +394,10 @@ func (w *procWatcher) evaluate(st *procState, now time.Time, s ProcInfo) (bool, 
 	return ok, env, msg
 }
 
-func (w *procWatcher) fire(ctx context.Context, info ProcInfo, msg string, env map[string]string) {
-	msg = w.summaryMessage(info, msg, env)
+func (w *procWatcher) fire(ctx context.Context, info ProcInfo, msg string, values map[string]any) {
+	msg = w.summaryMessage(info, msg, values)
+	env := map[string]string{}
+	watchValuesEnv(env, values)
 	env[sermoEnvWatch] = w.name
 	env[sermoEnvCheckType] = checks.CheckTypeProcess
 	env[sermoEnvMessage] = msg
@@ -419,7 +421,7 @@ func (w *procWatcher) fire(ctx context.Context, info ProcInfo, msg string, env m
 	dispatchWatchFire(ctx, spec, msg, env)
 }
 
-func (w *procWatcher) summaryMessage(info ProcInfo, message string, env map[string]string) string {
+func (w *procWatcher) summaryMessage(info ProcInfo, message string, env map[string]any) string {
 	if w.summary == "" {
 		return message
 	}
@@ -438,7 +440,14 @@ func (w *procWatcher) summaryMessage(info ProcInfo, message string, env map[stri
 		{sermoEnvIO, "io"},
 	} {
 		if raw, ok := env[field.envKey]; ok {
-			if value, err := strconv.ParseFloat(raw, envFloatBits); err == nil {
+			value, ok := cfgval.Float(raw)
+			// CPU and IO retain the decimal precision already exposed to hooks.
+			if text, formatted := raw.(string); formatted {
+				var err error
+				value, err = strconv.ParseFloat(text, envFloatBits)
+				ok = err == nil
+			}
+			if ok {
 				data[field.dataKey] = value
 				data[checks.DataKeyValue] = value
 			}
