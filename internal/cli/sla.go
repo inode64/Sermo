@@ -118,8 +118,7 @@ func (a App) runSLASeries(ctx context.Context, opts options, cfg *config.Config)
 	if code != exitSuccess {
 		return code
 	}
-	// A named lookup resolves to exactly one target or fails above; the guard
-	// keeps that an assertion rather than an assumption.
+	// Preserve the producer invariant explicitly for bounds and nil analysis.
 	if len(targets) != 1 {
 		return a.fail(opts, fmt.Sprintf(cliUnknownSLATargetFormat, opts.service()))
 	}

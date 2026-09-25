@@ -45,9 +45,6 @@ func (a App) interactiveUser() (string, bool) {
 }
 
 func loginUser(env func(string) string) string {
-	if env == nil {
-		env = func(string) string { return "" }
-	}
 	for _, key := range []string{"SUDO_USER", "DOAS_USER", "LOGNAME", "USER"} {
 		if value := strings.TrimSpace(env(key)); value != "" {
 			return value

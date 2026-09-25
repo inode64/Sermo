@@ -407,9 +407,6 @@ type wizardMergeResult struct {
 }
 
 func ensureNoWatchCollisions(cfg *config.Config, entries map[string]any) error {
-	if cfg == nil {
-		return nil
-	}
 	watches, _ := cfg.ResolveWatches()
 	for name := range entries {
 		if _, exists := watches[name]; exists {

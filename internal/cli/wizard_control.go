@@ -25,7 +25,7 @@ func listWizardDockerContainers(ctx context.Context, timeout time.Duration) ([]a
 	}
 	client := dockerctl.NewClient(dockerctl.Spec{Socket: dockerctl.DefaultSocket})
 	defer client.CloseIdleConnections()
-	ctx, cancel := context.WithTimeout(ctx, wizardDetectionTimeout(timeout))
+	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	containers, err := client.ListContainers(ctx, true)
 	if err != nil {
@@ -71,7 +71,7 @@ func listWizardVMs(ctx context.Context, timeout time.Duration) ([]assist.VMCandi
 	if !ok {
 		return nil, nil
 	}
-	ctx, cancel := context.WithTimeout(ctx, wizardDetectionTimeout(timeout))
+	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	domains, err := virt.ListDomains(ctx, virt.Spec{URI: virt.DefaultURI, Socket: socket})
 	if err != nil {
@@ -112,11 +112,4 @@ func wizardManagedServiceName(prefix, target string) string {
 		return prefix
 	}
 	return name
-}
-
-func wizardDetectionTimeout(timeout time.Duration) time.Duration {
-	if timeout > 0 {
-		return timeout
-	}
-	return defaultTimeout("wizard")
 }

@@ -137,9 +137,6 @@ func daemonWebStatusHint(status int) string {
 // readDaemonWebToken reads the daemon's runtime token, or "" when it is absent
 // or unreadable (sermoctl running as another user).
 func readDaemonWebToken(runtimeDir string) string {
-	if runtimeDir == "" {
-		runtimeDir = config.DefaultRuntime
-	}
 	data, err := hostfs.ReadFile(filepath.Join(runtimeDir, config.DaemonWebTokenFilename))
 	if err != nil {
 		return ""
