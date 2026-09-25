@@ -408,16 +408,7 @@ func (w *fileWatcher) fireOlderThanBatch(ctx context.Context, stale []staleFile)
 	}
 	// The hook already ran per file above, so the aggregated dispatch carries
 	// no hook of its own.
-	dispatchWatchFire(ctx, watchFireSpec{
-		name:        w.name,
-		runner:      w.runner,
-		notifiers:   w.notifiers,
-		inPanic:     w.inPanic,
-		dryRun:      w.dryRun,
-		emit:        w.emitEvent,
-		dryRunLabel: watchDryRunMessage(w.hook, w.notifiers),
-		panicLabel:  "panic mode: hook/notify suppressed",
-	}, msg, env)
+	dispatchWatchFire(ctx, w.fireSpec(HookSpec{}), msg, env)
 }
 
 func (w *fileWatcher) runOlderThanHook(ctx context.Context, path string, cur fileState) {
@@ -486,17 +477,7 @@ func (w *fileWatcher) fire(ctx context.Context, path, change, msg string, extra 
 		sermoEnvMessage:   msg,
 	}
 	maps.Copy(env, extra)
-	dispatchWatchFire(ctx, watchFireSpec{
-		name:        w.name,
-		hook:        w.hook,
-		runner:      w.runner,
-		notifiers:   w.notifiers,
-		inPanic:     w.inPanic,
-		dryRun:      w.dryRun,
-		emit:        w.emitEvent,
-		dryRunLabel: watchDryRunMessage(w.hook, w.notifiers),
-		panicLabel:  "panic mode: hook/notify suppressed",
-	}, msg, env)
+	dispatchWatchFire(ctx, w.fireSpec(w.hook), msg, env)
 }
 
 func (w *fileWatcher) summaryMessage(path, change, message string, extra map[string]string) string {
@@ -524,3 +505,17 @@ func (w *fileWatcher) summaryMessage(path, change, message string, extra map[str
 }
 
 func (w *fileWatcher) emitEvent(e Event) { emitSafe(w.emit, e) }
+
+func (w *fileWatcher) fireSpec(hook HookSpec) watchFireSpec {
+	return watchFireSpec{
+		name:        w.name,
+		hook:        hook,
+		runner:      w.runner,
+		notifiers:   w.notifiers,
+		inPanic:     w.inPanic,
+		dryRun:      w.dryRun,
+		emit:        w.emitEvent,
+		dryRunLabel: watchDryRunMessage(w.hook, w.notifiers),
+		panicLabel:  "panic mode: hook/notify suppressed",
+	}
+}
