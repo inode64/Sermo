@@ -456,9 +456,6 @@ func (w *Worker) markObservabilityReady(at time.Time) {
 }
 
 func (w *Worker) backendActive(ctx context.Context) bool {
-	if w.CheckDeps.Status == nil {
-		return true
-	}
 	st, err := w.CheckDeps.Status(ctx)
 	if err != nil {
 		return false
@@ -967,9 +964,6 @@ func currentArtifactFingerprint(path string, samples *ArtifactSamples, directFin
 // baseline. The first observation adopts the current fingerprint (so a daemon
 // start never triggers a restart); thereafter it is true until acknowledged.
 func (w *Worker) changed(path string) (bool, error) {
-	if w.libBaseline == nil {
-		w.libBaseline = map[string]string{}
-	}
 	return artifactPathChanged(w.libBaseline, path, w.artifactSamples)
 }
 
@@ -1030,12 +1024,6 @@ func (w *Worker) compareAppVersion(app string, level int, raw string) (bool, err
 	key := checks.TruncateVersion(checks.ShortVersion(raw), level)
 	if key == "" {
 		key = output.FirstNonEmptyLine(raw)
-	}
-	if w.appVersions == nil {
-		w.appVersions = map[string]string{}
-	}
-	if w.appVersionsLast == nil {
-		w.appVersionsLast = map[string]string{}
 	}
 	bkey := app + ":" + strconv.Itoa(level)
 	w.appVersionsLast[bkey] = key

@@ -726,11 +726,9 @@ func dueChecks(cycle int, built []checks.Built, every map[string]int, cache map[
 	due := make([]checks.Built, 0, len(built))
 	for _, b := range built {
 		name := b.Check.Name()
-		if cache != nil {
-			if _, ok := cache[name]; !ok {
-				due = append(due, b)
-				continue
-			}
+		if _, ok := cache[name]; !ok {
+			due = append(due, b)
+			continue
 		}
 		n := max(every[name], 1)
 		if (cycle-1)%n == 0 {
@@ -1096,10 +1094,7 @@ func cycleProcessSource(discover func() []process.Process, cycle func() int) fun
 	return func() []process.Process {
 		mu.Lock()
 		defer mu.Unlock()
-		current := 0
-		if cycle != nil {
-			current = cycle()
-		}
+		current := cycle()
 		if ok && cachedCycle == current {
 			return cached
 		}
@@ -1136,9 +1131,6 @@ func processPIDs(procs []process.Process) []int {
 func liveSampler(service string, lc *metrics.Collector, live *LiveMetrics, serviceMetrics *ServiceMetricSampler, procs func() []process.Process, observe func() *metrics.ProcessObservation, now func() time.Time) func(context.Context) {
 	if lc == nil || (live == nil && serviceMetrics == nil) {
 		return nil
-	}
-	if procs == nil {
-		procs = func() []process.Process { return nil }
 	}
 	now = clockOrNow(now)
 	return func(ctx context.Context) {

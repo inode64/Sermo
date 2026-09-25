@@ -44,13 +44,12 @@ type procHarness struct {
 	clock  time.Time
 }
 
-func TestProcWatcherFallbackSamplerKeepsUserLookup(t *testing.T) {
+func TestProcSamplerBuilderKeepsUserLookup(t *testing.T) {
 	lookup := process.DefaultUserLookup()
-	w := &procWatcher{userLookup: lookup}
-
-	sampler, ok := procSamplerOrDefault(w.sampler, w.userLookup).(osProcSampler)
+	configured := procSamplerFromDeps(Deps{UserLookup: lookup})
+	sampler, ok := configured.(osProcSampler)
 	if !ok {
-		t.Fatalf("fallback sampler = %T, want osProcSampler", procSamplerOrDefault(w.sampler, w.userLookup))
+		t.Fatalf("fallback sampler = %T, want osProcSampler", configured)
 	}
 	if sampler.userLookup != lookup {
 		t.Fatal("fallback sampler did not retain the configured user lookup")

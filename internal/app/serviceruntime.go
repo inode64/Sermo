@@ -279,7 +279,7 @@ func (b *WebBackend) probeServiceRuntime(name string, e *webEntry) web.ServiceRu
 }
 
 func (b *WebBackend) runtimeMetricReader() metrics.Reader {
-	if b != nil && b.collector != nil && b.collector.Reader != nil {
+	if b.collector != nil && b.collector.Reader != nil {
 		return b.collector.Reader
 	}
 	return metrics.OSReader{}

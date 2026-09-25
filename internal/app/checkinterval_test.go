@@ -69,7 +69,7 @@ func TestDueChecks(t *testing.T) {
 
 	dueNames := func(cycle int) []string {
 		var out []string
-		for _, b := range dueChecks(cycle, built, every, nil) {
+		for _, b := range dueChecks(cycle, built, every, map[string]checks.Result{"fast": {}, "slow": {}}) {
 			out = append(out, b.Check.Name())
 		}
 		return out
@@ -121,7 +121,7 @@ func TestPausedCyclesAdvanceCheckInterval(t *testing.T) {
 	var slowRan bool
 	w := &Worker{IsPaused: func() bool { return paused }}
 	w.Checks = func(_ context.Context, _ checks.Deps) map[string]checks.Result {
-		for _, b := range dueChecks(w.cycle, built, every, nil) {
+		for _, b := range dueChecks(w.cycle, built, every, map[string]checks.Result{"fast": {}, "slow": {}}) {
 			if b.Check.Name() == "slow" {
 				slowRan = true
 			}

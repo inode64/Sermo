@@ -31,9 +31,6 @@ type watchStateKey struct {
 func captureWatchState(watches []*Watch) map[watchStateKey]watchSnapshot {
 	out := make(map[watchStateKey]watchSnapshot, len(watches))
 	for _, w := range watches {
-		if w == nil {
-			continue
-		}
 		snap := watchSnapshot{
 			firing:         w.firing,
 			unavailable:    w.unavailable,
@@ -83,9 +80,6 @@ type workerSnapshot struct {
 func captureWorkerState(workers []*Worker) map[string]workerSnapshot {
 	out := make(map[string]workerSnapshot, len(workers))
 	for _, w := range workers {
-		if w == nil {
-			continue
-		}
 		snap := workerSnapshot{cycle: w.cycle}
 		if w.State != nil {
 			snap.remediation = cloneRemediationState(w.State)
@@ -143,9 +137,7 @@ func resetRemovedServiceMetrics(collector *metrics.Collector, oldWorkers, newWor
 func workerServiceNames(workers []*Worker) map[string]bool {
 	names := make(map[string]bool, len(workers))
 	for _, w := range workers {
-		if w != nil {
-			names[w.Service] = true
-		}
+		names[w.Service] = true
 	}
 	return names
 }

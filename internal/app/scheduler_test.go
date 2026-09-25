@@ -22,9 +22,9 @@ func TestStaggerOffsetSpreadsAcrossInterval(t *testing.T) {
 			t.Fatalf("staggerOffset(%d,4) = %v, want %v", i, got, w)
 		}
 	}
-	// Degenerate cases stay at 0 (single target starts immediately; no division by zero).
-	if staggerOffset(0, 1, interval) != 0 || staggerOffset(0, 0, interval) != 0 {
-		t.Fatal("single/zero target must start immediately")
+	// A single target starts immediately; empty fleets never launch a target.
+	if staggerOffset(0, 1, interval) != 0 {
+		t.Fatal("single target must start immediately")
 	}
 }
 
