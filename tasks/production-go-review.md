@@ -16,7 +16,7 @@ pruebas de ejecución. Este registro no afirma una auditoría exhaustiva.
 - [x] **GO-003 — Acotar la respuesta RPC completa.**
   `internal/conn/nfs.go`: cada fragmento estaba limitado, pero la concatenación
   no. Limitar el tamaño acumulado antes de reservar y añadir otro fragmento.
-- [ ] **GO-004 — Acotar los registros FastCGI acumulados.**
+- [x] **GO-004 — Acotar los registros FastCGI acumulados.**
   `internal/conn/fpm.go`: un peer podía enviar registros sin END_REQUEST y
   hacer crecer STDOUT/STDERR hasta agotar memoria. Acotar toda la respuesta,
   incluidos cabeceras, padding y registros no reconocidos.
