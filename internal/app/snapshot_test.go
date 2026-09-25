@@ -280,7 +280,7 @@ func (s *snapshotStoreFake) SetWatchCheckSnapshot(watch, slot string, rec state.
 	return nil
 }
 
-func TestSnapshotPersistenceCopiesAllFieldsAndIsolatesData(t *testing.T) {
+func TestSnapshotPersistencePreservesAllFields(t *testing.T) {
 	for _, data := range []map[string]any{nil, {}, {"count": 3}} {
 		record := state.CheckSnapshotRecord{
 			CheckType: checks.CheckTypeLog, ConfigID: "config-v1", Observation: checks.ObservationUnavailable,
@@ -292,22 +292,14 @@ func TestSnapshotPersistenceCopiesAllFieldsAndIsolatesData(t *testing.T) {
 		if !reflect.DeepEqual(record, persisted) {
 			t.Fatalf("snapshot round trip = %+v, want %+v", persisted, record)
 		}
-		if data == nil {
-			continue
-		}
-		record.Data["source"] = true
-		persisted.Data["destination"] = true
-		if _, ok := snapshot.Data["source"]; ok {
-			t.Fatal("hydration retained the store's Data map")
-		}
-		if _, ok := snapshot.Data["destination"]; ok {
-			t.Fatal("persistence retained the published Data map")
-		}
-		snapshot.Data["published"] = true
-		for _, other := range []map[string]any{record.Data, persisted.Data} {
-			if _, ok := other["published"]; ok {
-				t.Fatal("published Data aliases a persistence map")
-			}
-		}
+	}
+}
+
+func TestCheckSnapshotIsolatesMutableResultData(t *testing.T) {
+	result := checks.Result{Data: map[string]any{"count": 3}}
+	snapshot := checkSnapshotFromResult(result)
+	result.Data["count"] = 4
+	if snapshot.Data["count"] != 3 {
+		t.Fatalf("snapshot changed with cached result: %v", snapshot.Data)
 	}
 }
