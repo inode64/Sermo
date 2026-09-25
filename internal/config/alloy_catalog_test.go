@@ -92,9 +92,9 @@ func assertAlloyOTLPAlerts(t *testing.T, tree map[string]any) {
 // the 23-sep-2026 recurrence: an Alloy that leaked its descriptors alerted for
 // hours on fr1 and ca1 while the profile only knew how to alert, and the
 // operator's own restart left the previous incarnation alive because no
-// selector could name it. Saturation now restarts (the fds rule is the one
-// Sermo injects into every service), the restart can clear its residuals, and
-// the policy bounds the retries.
+// selector could name it. Failed readiness now restarts, while FD saturation
+// only alerts by default. The restart can clear its residuals, and the policy
+// bounds the retries.
 func TestAlloyCatalogRestartsOnSaturation(t *testing.T) {
 	root := repoRoot(t)
 	body := catalogDocByName(t, root, "services", "alloy")
@@ -149,7 +149,7 @@ func TestAlloyCatalogRestartsOnSaturation(t *testing.T) {
 			if len(warnings) != 0 {
 				t.Fatal(warnings)
 			}
-			for _, want := range []string{"restart-if-fds-high", "ready", "otlp"} {
+			for _, want := range []string{"ready", "otlp"} {
 				rule := ruleByName(t, parsed, want)
 				if rule.Type != rules.RuleRemediation {
 					t.Fatalf("rule %s type = %s, want %s", want, rule.Type, rules.RuleRemediation)
@@ -166,6 +166,10 @@ func TestAlloyCatalogRestartsOnSaturation(t *testing.T) {
 				if !restarts || !explained {
 					t.Fatalf("rule %s actions = %v, want a restart and a message telling the operator why", want, rule.Actions)
 				}
+			}
+			fds := ruleByName(t, parsed, "restart-if-fds-high")
+			if fds.Type != rules.RuleAlert || len(fds.Actions) != 1 || fds.Actions[0].Type != rules.ActionAlert {
+				t.Fatalf("FD saturation must alert without restart permission, got %+v", fds)
 			}
 			if _, stale := nested(t, resolved.Tree, "rules")["alert-if-fds-high"]; stale {
 				t.Fatal("alert-if-fds-high must not survive next to the injected restart-if-fds-high")

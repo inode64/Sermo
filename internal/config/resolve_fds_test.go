@@ -34,9 +34,8 @@ func fdsGenerated(t *testing.T, tree map[string]any) (map[string]any, map[string
 	return check, rule
 }
 
-// Absent keys mean the default threshold and a restart, the convention
-// restart_on_stale_binary uses.
-func TestFDsDefaultInjectsMetricAndRestart(t *testing.T) {
+// Absent keys keep capacity monitoring without authorizing a service action.
+func TestFDsDefaultInjectsMetricAndAlert(t *testing.T) {
 	tree := fdsTree(nil)
 	check, rule := fdsGenerated(t, tree)
 	if check == nil || rule == nil {
@@ -56,11 +55,11 @@ func TestFDsDefaultInjectsMetricAndRestart(t *testing.T) {
 	if !cfgval.Bool(check[checks.CheckKeyOptional]) {
 		t.Fatal("checks.fds must be optional: an unreadable limit is a warning, not a failed service")
 	}
-	if got := rule[rules.RuleFieldType]; got != string(rules.RuleRemediation) {
-		t.Fatalf("rule type = %v, want remediation", got)
+	if got := rule[rules.RuleFieldType]; got != string(rules.RuleAlert) {
+		t.Fatalf("rule type = %v, want alert", got)
 	}
-	if got := ruleActionTypes(t, rule); len(got) != 2 || got[0] != "alert" || got[1] != "restart" {
-		t.Fatalf("want alert then restart, got %v", got)
+	if got := ruleActionTypes(t, rule); len(got) != 1 || got[0] != "alert" {
+		t.Fatalf("want alert only, got %v", got)
 	}
 	cond := nested(t, rule, rules.RuleFieldIf, rules.ConditionActive)
 	if cfgval.String(cond[rules.FieldCheck]) != fdsCheckName {
@@ -153,5 +152,46 @@ func TestFDsRefusesToShadowOperatorEntries(t *testing.T) {
 	errs := expandFDs(tree)
 	if len(errs) != 1 || !strings.Contains(errs[0], fdsCheckName) {
 		t.Fatalf("want one error naming the reserved check, got %v", errs)
+	}
+}
+
+func TestFDsRestartRequiresExplicitPermission(t *testing.T) {
+	_, rule := fdsGenerated(t, fdsTree(map[string]any{keyRestartOnFDsHigh: true}))
+	if got := rule[rules.RuleFieldType]; got != string(rules.RuleRemediation) {
+		t.Fatalf("explicit restart permission: rule type = %v, want remediation", got)
+	}
+	if got := ruleActionTypes(t, rule); len(got) != 2 || got[0] != "alert" || got[1] != "restart" {
+		t.Fatalf("explicit restart permission: want alert then restart, got %v", got)
+	}
+}
+
+func TestFDsRestartPermissionInheritance(t *testing.T) {
+	for _, tt := range []struct {
+		name, defaults, service string
+		wantRestart             bool
+	}{
+		{name: "default alert"},
+		{name: "host opts in", defaults: "  restart_on_fds_high: true\n", wantRestart: true},
+		{name: "service veto", defaults: "  restart_on_fds_high: true\n", service: "restart_on_fds_high: false\n"},
+		{name: "service opts in", defaults: "  restart_on_fds_high: false\n", service: "restart_on_fds_high: true\n", wantRestart: true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := loadCatalog(t, map[string]string{
+				"sermo.yml":            "engine: { backend: systemd }\npaths:\n  services: [@ROOT@/services]\ndefaults:\n  policy: { cooldown: 5m }\n" + tt.defaults,
+				"services/example.yml": "name: example\nservice: example\nprocesses:\n  main: { exe: /usr/sbin/example, user: root }\n" + tt.service,
+			})
+			resolved, errs := cfg.Resolve("example")
+			if len(errs) != 0 {
+				t.Fatalf("Resolve: %v", errs)
+			}
+			rule := nested(t, resolved.Tree, rules.SectionRules, fdsRuleName)
+			want := 1
+			if tt.wantRestart {
+				want = 2
+			}
+			if got := ruleActionTypes(t, rule); len(got) != want || got[0] != "alert" || (tt.wantRestart && got[1] != "restart") {
+				t.Fatalf("actions = %v, wantRestart = %v", got, tt.wantRestart)
+			}
+		})
 	}
 }

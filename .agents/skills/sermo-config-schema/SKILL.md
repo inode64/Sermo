@@ -21,7 +21,7 @@ here. This skill records the design decisions a change must respect.
   one inherited item. Scalars override, maps merge recursively, arrays replace.
 - Precedence for services: global `defaults` < catalog service (`uses`) or
   `clone` source < service overrides. Only target-safe defaults merge in
-  (`dry_run`, `stop_policy`, `policy`, `rule_window`); engine settings never do.
+  (including generated-sensor permissions); engine settings never do.
 - `clone` and `uses` copy the source unexpanded. Variables expand once, after
   all merging; a variable whose value contains `${...}` is rejected; an
   unresolved variable fails validation.

@@ -76,7 +76,7 @@ required there.
 - [Exim hints database maintenance](#exim-hints-database-maintenance)
 - [Exim mail-volume alerts](#exim-mail-volume-alerts)
 - [Grafana Alloy saturation restarts](#grafana-alloy-saturation-restarts)
-- [File-descriptor restarts (restart-if-fds-high)](#file-descriptor-restarts-restart-if-fds-high)
+- [File-descriptor alerts (restart-if-fds-high)](#file-descriptor-alerts-restart-if-fds-high)
 - [Auxiliary commands](#auxiliary-commands)
 
 ## Categories
@@ -224,7 +224,7 @@ changes. Each has a permission gate, and every gate is settable per host:
 | `restart_on_change` | app version, library, config path | `config:` / `version:` | yes — alert, then restart |
 | `reload_on_change` | config path | `config:` | **no** — reload only, no alert action |
 | [`restart_on_stale_binary`](configuration.md#stale_binary--service-running-a-replaced-binary) | binary replaced on disk | the flag itself | yes — alert, then restart |
-| [`restart_on_fds_high`](configuration.md#fds--descriptors-against-the-process-limit-fds_limit) | a process above `fds_limit` of its open-files limit for 3 minutes | the flag itself | yes — alert, then restart |
+| [`restart_on_fds_high`](configuration.md#fds--descriptors-against-the-process-limit-fds_limit) | a process above `fds_limit` of its open-files limit for 3 minutes | explicit `true` (default `false`) | yes — alert; restart only when enabled |
 
 Two levels of granularity, both on the host, neither requiring a catalog edit:
 
@@ -2142,14 +2142,15 @@ accepted OTLP connection on a kernel with `net.mptcp.enabled=1`: at
 full, thousands of `CLOSE-WAIT` — while its own API kept answering over the two
 keep-alive connections the monitor already held, and every local exporter
 timed out for ten hours. The next day the leak came back on two hosts and the
-profile, which only alerted, watched it happen again; a restart is the only
-remedy a daemon has for a leak, so saturation now restarts.
+profile, which only alerted, watched it happen again. The readiness and OTLP
+watches now request a restart when the collector stops responding. FD usage
+alone raises an alert unless the operator explicitly permits a restart.
 
 | Watch | Signal | Action | Variable (default) |
 |---|---|---|---|
 | `ready` | `GET /-/ready` on the API port, on a fresh connection each cycle | restart after 2 minutes unreachable; also the `verify: true` check a restart must pass | `host` (`127.0.0.1`), `port` (`12345`) |
 | `otlp` | disabled by default; when enabled, an empty `POST /v1/logs` on the OTLP/HTTP receiver must answer below 500 | restart after 2 minutes of failure | `otlp_port` (`4318`) |
-| `restart-if-fds-high` | the worst process against its own soft open-files limit; the sensor Sermo injects into every service | restart after 3 minutes above the limit | `fds_limit` (`80%`), a service key rather than a variable |
+| `restart-if-fds-high` | the worst process against its own soft open-files limit; the sensor Sermo injects into every service | alert after 3 minutes above the limit; restart requires explicit permission | `fds_limit` (`80%`), a service key rather than a variable |
 
 `metrics` (`GET /metrics`) stays graph-only. The service `policy` bounds the
 retries — `cooldown: 15m`, `max_actions: 2` per hour, backoff to one hour — so a
@@ -2194,12 +2195,13 @@ health; it does **not** suppress its rule. Once enabled, an absent or
 unreachable receiver must still restart. Leave the watch disabled on instances
 without that receiver.
 
-## File-descriptor restarts (restart-if-fds-high)
+## File-descriptor alerts (restart-if-fds-high)
 
 Every catalog service whose processes discovery can attribute gets the `fds`
 sensor Sermo injects: a service metric watching the process closest to its own
-soft `RLIMIT_NOFILE`, and a rule, `restart-if-fds-high`, that alerts and then
-restarts the service after three minutes above `fds_limit` (`80%`). No profile
+soft `RLIMIT_NOFILE`, and a rule, `restart-if-fds-high`, that alerts after
+three minutes above `fds_limit` (`80%`). Restart is disabled by default;
+`restart_on_fds_high: true` explicitly enables it. No profile
 writes it; the profiles that used to ship an `alert-if-fds-high` watch, or an
 absolute `fds` ceiling such as `50000` that never fires for a daemon whose
 limit is `32768`, now rely on the injected sensor. The percentage is measured
@@ -2220,7 +2222,7 @@ per service without a catalog edit:
 name: mariadb
 uses: mariadb
 fds_limit: 95%              # or false to drop check and rule
-restart_on_fds_high: false  # alert only
+restart_on_fds_high: false  # alert only (the default; overrides host opt-in)
 ```
 
 ## Auxiliary commands

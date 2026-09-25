@@ -2992,9 +2992,12 @@ a different one says so in `services.local/` (see
 [per-host overrides](configuration.md#per-host-overrides-dirlocal)). `fds` is
 the exception: its percentage is measured per process against that process's
 own limit, so the `restart-if-fds-high` rule Sermo injects into every service
-uses `80%` (`fds_limit`) and holds on any host (an absolute ceiling such as `50000` can never fire for a daemon whose
+uses `80%` (`fds_limit`) as a default alert threshold. Restart requires
+`restart_on_fds_high: true`. Tune the threshold against representative load:
+closeness to the limit is not proof of a leak. An absolute ceiling such as
+`50000` can never fire for a daemon whose
 limit is `32768`, which is how a collector leaking one socket per accepted
-connection reached `32761/32768` unnoticed). Where the control group holds
+connection reached `32761/32768` unnoticed. Where the control group holds
 workload the daemon does not own — a hypervisor's per-domain helpers, a
 container runtime's containers — a summed absolute count describes that
 workload rather than the daemon, so the catalog ships no absolute fd watch for

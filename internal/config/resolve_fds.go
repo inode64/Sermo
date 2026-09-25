@@ -15,14 +15,11 @@ const (
 	fdsCheckName = "fds"
 	// fdsRuleName is the rule it drives.
 	fdsRuleName = "restart-if-fds-high"
-	// defaultFDsLimit leaves room to act before accept() fails with EMFILE
-	// while staying above what a healthy daemon holds: across a fleet of 45
-	// hosts no daemon sat above a third of its limit, and the collector that
-	// leaked one socket per connection crossed 80% hours before it stopped
-	// accepting anything.
+	// defaultFDsLimit leaves headroom before a process exhausts its soft limit.
+	// Sustained use may be normal for a workload, so it alerts by default and
+	// only restarts when the operator explicitly permits that action.
 	defaultFDsLimit = "80%"
-	// fdsRuleDuration filters a burst of connections from a leak: a daemon that
-	// holds the level for three minutes is not going to release it.
+	// fdsRuleDuration filters transient bursts before an alert is emitted.
 	fdsRuleDuration = "3m"
 	// fdsMessageSuffix names the two facts an operator needs: how close the
 	// worst process is to its own limit, and what happens at 100%.
@@ -32,11 +29,9 @@ const (
 )
 
 // expandFDs injects the fds check and its rule into every service whose
-// processes discovery can attribute. Descriptor exhaustion is a failure mode
-// of any daemon that accepts connections and the only remedy a daemon has for
-// a leak is a restart, so the check is not opt-in; what is configurable is the
-// threshold (`fds_limit`, a percentage, or `false` to inject nothing) and
-// whether the rule may restart (`restart_on_fds_high`).
+// processes discovery can attribute. The sensor alerts by default; the operator
+// configures its threshold (`fds_limit`, a percentage, or `false` to disable)
+// and explicitly opts into restart with `restart_on_fds_high: true`.
 //
 // Services whose selectors mark workload as `delegated: true` get nothing: the
 // metric is measured over every process discovery attributes, and a container
@@ -76,8 +71,8 @@ func expandFDs(tree map[string]any) []string {
 	return nil
 }
 
-// fdsSettings reads the two keys. Absent means the default threshold and a
-// restart, the convention restart_on_stale_binary uses. An empty limit means
+// fdsSettings reads the two keys. Absent means the default threshold and an
+// alert without restart. An empty limit means
 // the operator disabled the sensor with `fds_limit: false`.
 func fdsSettings(tree map[string]any) (limit string, allowRestart bool, errs []string) {
 	limit = defaultFDsLimit
@@ -95,7 +90,6 @@ func fdsSettings(tree map[string]any) (limit string, allowRestart bool, errs []s
 			limit = cfgval.String(raw)
 		}
 	}
-	allowRestart = true
 	if raw, present := tree[keyRestartOnFDsHigh]; present {
 		v, ok := raw.(bool)
 		if !ok {
