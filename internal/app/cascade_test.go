@@ -14,12 +14,12 @@ func TestOrderedGroupDependencyOrder(t *testing.T) {
 	graph := map[string][]string{"a": {"b", "c"}, "b": {"d"}}
 	lookup := func(s string) []string { return graph[s] }
 
-	start := OrderedGroup("a", "restart", lookup, map[string]bool{}, 0)
+	start := orderedGroup("a", "restart", lookup, map[string]bool{}, 0)
 	// pre-order: primary first, then dependents (a, b, d, c).
 	if got := start; !eq(got, []string{"a", "b", "d", "c"}) {
 		t.Fatalf("start/restart order = %v, want [a b d c]", got)
 	}
-	stop := OrderedGroup("a", "stop", lookup, map[string]bool{}, 0)
+	stop := orderedGroup("a", "stop", lookup, map[string]bool{}, 0)
 	// post-order: dependents first, primary last (d, b, c, a).
 	if got := stop; !eq(got, []string{"d", "b", "c", "a"}) {
 		t.Fatalf("stop order = %v, want [d b c a]", got)
@@ -29,7 +29,7 @@ func TestOrderedGroupDependencyOrder(t *testing.T) {
 func TestOrderedGroupCutsCycle(t *testing.T) {
 	graph := map[string][]string{"a": {"b"}, "b": {"a"}} // cycle
 	lookup := func(s string) []string { return graph[s] }
-	got := OrderedGroup("a", "restart", lookup, map[string]bool{}, 0)
+	got := orderedGroup("a", "restart", lookup, map[string]bool{}, 0)
 	if !eq(got, []string{"a", "b"}) {
 		t.Fatalf("cycle must terminate with each once, got %v", got)
 	}
