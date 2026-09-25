@@ -6,7 +6,6 @@ import (
 	"sermo/internal/config"
 	"sermo/internal/execx"
 	"sermo/internal/web"
-	"slices"
 	"strings"
 	"time"
 )
@@ -25,16 +24,10 @@ func (b *WebBackend) Libraries(ctx context.Context) []web.Library {
 }
 
 func (b *WebBackend) loadApplications(ctx context.Context) []web.CatalogItem {
-	if b.applications.list != nil {
-		return b.withApplicationSLA(slices.Clone(b.applications.list(ctx)))
-	}
 	return b.withApplicationSLA(b.loadCatalogItems(ctx, config.CategoryApp, true))
 }
 
 func (b *WebBackend) loadLibraries(ctx context.Context) []web.CatalogItem {
-	if b.libraries.list != nil {
-		return b.libraries.list(ctx)
-	}
 	return b.loadCatalogItems(ctx, config.CategoryLibrary, false)
 }
 

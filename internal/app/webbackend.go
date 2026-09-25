@@ -275,6 +275,10 @@ func NewWebBackend(ctx context.Context, cfg *config.Config, deps Deps) (*WebBack
 	if sshSessionSampler == nil {
 		sshSessionSampler = checks.NewSSHSessionSampler(terminalReader, deps.UserLookup)
 	}
+	mountAlerter := deps.MountUserAlerter
+	if mountAlerter == nil {
+		mountAlerter = ttyMountUserAlerter{}
+	}
 	operationSettling := deps.OperationSettling
 	if operationSettling == nil {
 		if store, ok := deps.Monitor.(OperationSettlingStore); ok {
@@ -314,7 +318,7 @@ func NewWebBackend(ctx context.Context, cfg *config.Config, deps Deps) (*WebBack
 		userLookup:            deps.UserLookup,
 		mountUsers:            deps.MountDiscoverUsers,
 		mountSignaler:         deps.MountSignaler,
-		mountAlerter:          deps.MountUserAlerter,
+		mountAlerter:          mountAlerter,
 		sshSessionSampler:     sshSessionSampler,
 		terminalProcessReader: terminalReader,
 		emit:                  deps.Emit,

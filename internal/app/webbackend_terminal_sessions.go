@@ -68,9 +68,6 @@ func (b *WebBackend) rememberClosedTerminalSource(service, check string) {
 	}
 	b.terminalSourcesMu.Lock()
 	defer b.terminalSourcesMu.Unlock()
-	if b.closedTerminalSources == nil {
-		b.closedTerminalSources = map[string]time.Time{}
-	}
 	b.closedTerminalSources[terminalSessionSourceKey(service, check)] = b.webNow()
 }
 

@@ -410,6 +410,7 @@ func TestWebBackendHidesClosedTerminalSourceUntilNextSample(t *testing.T) {
 	b.entries["web"].terminalSessions = []terminalSessionSource{{
 		check: "tmux-sessions", multiplexer: checks.TerminalMultiplexerTmux, user: "deploy", socket: "/tmp/tmux-1000/default",
 	}}
+	b.closedTerminalSources = map[string]time.Time{}
 	b.rememberClosedTerminalSource("web", "tmux-sessions")
 
 	if inventory := b.Sessions(context.Background()); len(inventory.Sources) != 0 {
@@ -613,14 +614,14 @@ func TestWebBackendSeriesScopesToServiceOrCheck(t *testing.T) {
 // with no service behind it has no availability to show.
 func TestWebBackendApplicationsMarkServiceSLA(t *testing.T) {
 	source := []web.Application{{Name: "nginx", Status: appinspect.StatusOK}, {Name: "orphan", Status: appinspect.StatusOK}}
+	load := func(context.Context) []web.CatalogItem {
+		return source
+	}
 	b := &WebBackend{
 		entries: map[string]*webEntry{"nginx": {}},
-		applications: catalogInventoryCache{list: func(context.Context) []web.CatalogItem {
-			return source
-		}},
 	}
 
-	apps := b.Applications(context.Background())
+	apps := b.applicationsForTest(context.Background(), load)
 	if len(apps) != 2 {
 		t.Fatalf("apps = %+v", apps)
 	}
@@ -643,14 +644,14 @@ func TestWebBackendApplicationsIncludeLastEvent(t *testing.T) {
 	events.now = func() time.Time { return t0.Add(time.Minute) }
 	events.Add(Event{App: "nginx", Kind: eventKindRecovered, Message: "ok"})
 
+	load := func(context.Context) []web.CatalogItem {
+		return []web.Application{{Name: "nginx", Status: appinspect.StatusOK}, {Name: "orphan", Status: appinspect.StatusOK}}
+	}
 	b := &WebBackend{
 		events: events,
-		applications: catalogInventoryCache{list: func(context.Context) []web.CatalogItem {
-			return []web.Application{{Name: "nginx", Status: appinspect.StatusOK}, {Name: "orphan", Status: appinspect.StatusOK}}
-		}},
 	}
 
-	apps := b.Applications(context.Background())
+	apps := b.applicationsForTest(context.Background(), load)
 	if len(apps) != 2 {
 		t.Fatalf("apps = %+v", apps)
 	}
@@ -1002,19 +1003,19 @@ func TestWebBackendApplicationsCache(t *testing.T) {
 
 	now := time.Date(2026, 7, 23, 10, 0, 0, 0, time.UTC)
 	calls := 0
+	load := func(context.Context) []web.CatalogItem {
+		calls++
+		name := "first"
+		if calls > 1 {
+			name = "second"
+		}
+		return []web.Application{{Name: name}}
+	}
 	b := &WebBackend{
 		now: func() time.Time { return now },
-		applications: catalogInventoryCache{list: func(context.Context) []web.CatalogItem {
-			calls++
-			name := "first"
-			if calls > 1 {
-				name = "second"
-			}
-			return []web.Application{{Name: name}}
-		}},
 	}
 
-	first := b.Applications(context.Background())
+	first := b.applicationsForTest(context.Background(), load)
 	if calls != 1 || len(first) != 1 || first[0].Name != "first" {
 		t.Fatalf("first Applications = %v, calls=%d", first, calls)
 	}
@@ -1026,7 +1027,7 @@ func TestWebBackendApplicationsCache(t *testing.T) {
 	}
 	first[0].Name = "mutated"
 
-	second := b.Applications(context.Background())
+	second := b.applicationsForTest(context.Background(), load)
 	if calls != 1 || len(second) != 1 || second[0].Name != "first" {
 		t.Fatalf("cached Applications = %v, calls=%d; want cached first", second, calls)
 	}
@@ -1035,78 +1036,78 @@ func TestWebBackendApplicationsCache(t *testing.T) {
 	}
 
 	now = now.Add(catalogInventoryCacheTTL + time.Nanosecond)
-	third := b.Applications(context.Background())
+	third := b.applicationsForTest(context.Background(), load)
 	if calls != 2 || len(third) != 1 || third[0].Name != "second" {
 		t.Fatalf("expired Applications = %v, calls=%d; want refreshed second", third, calls)
 	}
 }
 
 func TestWebBackendApplicationsCacheIgnoresCancelledRequests(t *testing.T) {
-	b := &WebBackend{
-		applications: catalogInventoryCache{list: func(ctx context.Context) []web.CatalogItem {
-			if ctx.Err() != nil {
-				// A cancelled request aborts inspection early and yields a
-				// partial inventory; model that as an empty list.
-				return nil
-			}
-			return []web.Application{{Name: "complete"}}
-		}},
+	load := func(ctx context.Context) []web.CatalogItem {
+		if ctx.Err() != nil {
+			// A cancelled request aborts inspection early and yields a
+			// partial inventory; model that as an empty list.
+			return nil
+		}
+		return []web.Application{{Name: "complete"}}
 	}
+	b := &WebBackend{}
 
 	cancelled, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	if got := b.Applications(cancelled); len(got) != 0 {
+	if got := b.applicationsForTest(cancelled, load); len(got) != 0 {
 		t.Fatalf("cold cancelled Applications = %v, want empty partial result", got)
 	}
 	if !b.applications.at.IsZero() {
 		t.Fatalf("cancelled request populated inventory time = %v, want zero", b.applications.at)
 	}
 
-	if got := b.Applications(context.Background()); len(got) != 1 || got[0].Name != "complete" {
+	if got := b.applicationsForTest(context.Background(), load); len(got) != 1 || got[0].Name != "complete" {
 		t.Fatalf("Applications = %v, want complete inventory", got)
 	}
 
 	b.applications.at = time.Now().Add(-catalogInventoryCacheTTL - time.Nanosecond)
-	if got := b.Applications(cancelled); len(got) != 1 || got[0].Name != "complete" {
+	if got := b.applicationsForTest(cancelled, load); len(got) != 1 || got[0].Name != "complete" {
 		t.Fatalf("cancelled Applications after expiry = %v, want previous complete cache", got)
 	}
 }
 
-// blockingCatalogCache returns a catalog inventory cache whose first scan closes
+// blockingCatalogLoader returns a loader whose first scan closes
 // scanning and blocks until release closes, counting every scan in calls.
-func blockingCatalogCache(calls *atomic.Int32, scanning, release chan struct{}) catalogInventoryCache {
-	return catalogInventoryCache{list: func(context.Context) []web.CatalogItem {
+func blockingCatalogLoader(calls *atomic.Int32, scanning, release chan struct{}) func(context.Context) []web.CatalogItem {
+	return func(context.Context) []web.CatalogItem {
 		if calls.Add(1) == 1 {
 			close(scanning)
 			<-release
 		}
 		return []web.Application{{Name: "fresh"}}
-	}}
+	}
 }
 
 func TestWebBackendApplicationsServeStaleWhileRefreshing(t *testing.T) {
 	scanning := make(chan struct{})
 	release := make(chan struct{})
 	var calls atomic.Int32
-	b := &WebBackend{applications: blockingCatalogCache(&calls, scanning, release)}
+	load := blockingCatalogLoader(&calls, scanning, release)
+	b := &WebBackend{}
 	b.applications.items = []web.CatalogItem{{Name: "stale"}}
 	b.applications.at = time.Now().Add(-catalogInventoryCacheTTL - time.Nanosecond)
 
 	leader := make(chan []web.Application)
-	go func() { leader <- b.Applications(context.Background()) }()
+	go func() { leader <- b.applicationsForTest(context.Background(), load) }()
 	<-scanning
 
 	// While the scan holds the refresh slot, other viewers must be served the
 	// expired-but-complete inventory instead of queueing behind the scan.
-	if got := b.Applications(context.Background()); len(got) != 1 || got[0].Name != "stale" {
+	if got := b.applicationsForTest(context.Background(), load); len(got) != 1 || got[0].Name != "stale" {
 		t.Fatalf("Applications during refresh = %v, want stale cache", got)
 	}
 	close(release)
 	if got := <-leader; len(got) != 1 || got[0].Name != "fresh" {
 		t.Fatalf("refreshing Applications = %v, want fresh inventory", got)
 	}
-	if got := b.Applications(context.Background()); len(got) != 1 || got[0].Name != "fresh" {
+	if got := b.applicationsForTest(context.Background(), load); len(got) != 1 || got[0].Name != "fresh" {
 		t.Fatalf("Applications after refresh = %v, want fresh cache", got)
 	}
 	if n := calls.Load(); n != 1 {
@@ -1118,21 +1119,22 @@ func TestWebBackendApplicationsColdStartSingleScan(t *testing.T) {
 	scanning := make(chan struct{})
 	release := make(chan struct{})
 	var calls atomic.Int32
-	b := &WebBackend{applications: blockingCatalogCache(&calls, scanning, release)}
+	load := blockingCatalogLoader(&calls, scanning, release)
+	b := &WebBackend{}
 
 	leader := make(chan []web.Application)
-	go func() { leader <- b.Applications(context.Background()) }()
+	go func() { leader <- b.applicationsForTest(context.Background(), load) }()
 	<-scanning
 
 	// A cold-start viewer has no previous inventory to serve, so it waits for
 	// the running scan and shares its result rather than starting a second one.
 	follower := make(chan []web.Application)
-	go func() { follower <- b.Applications(context.Background()) }()
+	go func() { follower <- b.applicationsForTest(context.Background(), load) }()
 
 	// A cold-start viewer that goes away stops waiting instead of scanning.
 	cancelled, cancel := context.WithCancel(context.Background())
 	cancel()
-	if got := b.Applications(cancelled); got != nil {
+	if got := b.applicationsForTest(cancelled, load); got != nil {
 		t.Fatalf("cancelled cold-start Applications = %v, want nil", got)
 	}
 
@@ -1305,6 +1307,7 @@ func TestWebBackendProbeWatchRecordsSnapshotAndEvent(t *testing.T) {
 	snapshots.now = func() time.Time { return now }
 	var events []Event
 	b := &WebBackend{
+		probes:         map[string]time.Time{},
 		watchOrder:     []string{"disk-speed"},
 		watches:        map[string]*webWatch{"disk-speed": diskSpeedWatch(200)},
 		watchSnapshots: snapshots,
@@ -1335,6 +1338,7 @@ func TestWebBackendProbeWatchShowsRunningStateAndRejectsDuplicate(t *testing.T) 
 	runner := &blockingProbeRunner{started: make(chan struct{}, 1), release: make(chan struct{})}
 	var events []Event
 	b := &WebBackend{
+		probes:     map[string]time.Time{},
 		watchOrder: []string{"disk-speed"},
 		watches:    map[string]*webWatch{"disk-speed": diskSpeedWatch(200)},
 		execRunner: runner,
@@ -1374,6 +1378,7 @@ func TestWebBackendProbeWatchFailureEventIncludesDuration(t *testing.T) {
 	nowCalls := 0
 	var events []Event
 	b := &WebBackend{
+		probes:  map[string]time.Time{},
 		watches: map[string]*webWatch{"disk-speed": diskSpeedWatch(100)},
 		execRunner: &execxtest.Runner{ByName: map[string]execx.Result{
 			checks.CheckTypeHdparm: {ExitCode: 0, Stdout: " Timing buffered disk reads: 500 MB in 3.00 seconds = 166.67 MB/sec\n"},
@@ -1401,6 +1406,7 @@ func TestWebBackendProbeSmartStartsShortSelfTest(t *testing.T) {
 	runner := execxtest.Fixed(execx.Result{ExitCode: execx.ExitCodeSuccess}, nil)
 	var events []Event
 	b := &WebBackend{
+		probes:     map[string]time.Time{},
 		watchOrder: []string{"smart-sda"},
 		watches: map[string]*webWatch{
 			"smart-sda": {
@@ -2937,4 +2943,11 @@ func TestReloadSupportRefreshHasDeadline(t *testing.T) {
 // view is concise fixture setup for service row projection tests.
 func (b *WebBackend) view(ctx context.Context, name string, e *webEntry) web.Service {
 	return b.viewWithRuntime(ctx, name, e, b.observeService(name, e), b.lastServiceEvent(name), serviceLockView{})
+}
+
+// applicationsForTest exercises publication and cache ownership with an injected loader.
+func (b *WebBackend) applicationsForTest(ctx context.Context, load func(context.Context) []web.CatalogItem) []web.Application {
+	return b.decorateApplications(b.catalogItems(ctx, &b.applications, func(ctx context.Context) []web.CatalogItem {
+		return b.withApplicationSLA(slices.Clone(load(ctx)))
+	}))
 }

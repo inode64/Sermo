@@ -37,16 +37,9 @@ func (b *WebBackend) ExpandWatch(ctx context.Context, name string) web.ActionRes
 		b.emitWatchExpandEvent(name, eventKindExpandFailed, eventStatusFailed, msg)
 		return web.ActionResult{OK: false, Message: msg}
 	}
-	expander := b.expander
-	if expander == nil {
-		msg := "volume expander is unavailable"
-		b.emitWatchExpandEvent(name, eventKindExpandFailed, eventStatusFailed, msg)
-		return web.ActionResult{OK: false, Message: msg}
-	}
-
 	opCtx, cancel := b.operationContext(ctx, 0)
 	defer cancel()
-	res, err := expander.ExpandPath(opCtx, path, w.expand.By)
+	res, err := b.expander.ExpandPath(opCtx, path, w.expand.By)
 	if err != nil {
 		msg := err.Error()
 		b.emitWatchExpandEvent(name, eventKindExpandFailed, eventStatusFailed, msg)

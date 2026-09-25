@@ -24,11 +24,7 @@ func (b *WebBackend) DaemonInfo(_ context.Context) web.DaemonInfo {
 	// Short host identity — same source as ${hostname} and the Basic auth realm.
 	info.Hostname = config.ShortHostname()
 	info.OS = osPrettyName()
-	if b.hostType != nil {
-		info.HostType = b.hostType
-	} else {
-		info.HostType = hostTypeInfo()
-	}
+	info.HostType = b.hostType
 	if up, ok := hostUptime(); ok {
 		info.HostUptimeSeconds = int64(up.Seconds())
 		info.HostUptime = units.HumanizeDuration(up.Round(time.Second))
