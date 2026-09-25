@@ -17,7 +17,8 @@ import (
 
 // CheckSnapshot is the last observed result of one check, for the web detail view.
 // Its fields are owned by the persisted record so memory and storage cannot
-// silently diverge. Conversion helpers clone Data at the persistence boundary.
+// silently diverge. Data is cloned when publishing mutable check results; the
+// store serializes writes and returns freshly decoded maps on reads.
 type CheckSnapshot state.CheckSnapshotRecord
 
 func (c CheckSnapshot) healthy() bool {
@@ -222,9 +223,7 @@ func serviceSnapshotRecords(snaps map[string]CheckSnapshot) map[string]state.Che
 }
 
 func snapshotFromRecord(rec state.CheckSnapshotRecord) CheckSnapshot {
-	snap := CheckSnapshot(rec)
-	snap.Data = maps.Clone(rec.Data)
-	return snap
+	return CheckSnapshot(rec)
 }
 
 func checkSnapshotFromResult(result checks.Result) CheckSnapshot {
@@ -236,9 +235,7 @@ func checkSnapshotFromResult(result checks.Result) CheckSnapshot {
 }
 
 func snapshotRecord(snap CheckSnapshot) state.CheckSnapshotRecord {
-	rec := state.CheckSnapshotRecord(snap)
-	rec.Data = maps.Clone(snap.Data)
-	return rec
+	return state.CheckSnapshotRecord(snap)
 }
 
 func (s *Snapshots) reportStoreError(err error) { reportCallbackError(s.reportError, err) }
