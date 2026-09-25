@@ -32,7 +32,7 @@ name: svc
 service: svc
 policy: { cooldown: 5m }
 checks:
-  - { name: h, type: http, url: "http://x", expect_status: `+expect+` }
+  h: { type: http, url: "http://x", expect_status: `+expect+` }
 `)
 	}
 	// Valid shapes produce no expect_status issue.
@@ -457,11 +457,11 @@ func TestValidateRejectsMalformedServiceSections(t *testing.T) {
 }
 
 func TestValidateArtifactsPreserveMalformedChecks(t *testing.T) {
-	for _, artifact := range []string{
-		"pidfile: /run/svc.pid", "pidfiles: {main: /run/svc.pid}", "socket: /run/svc.sock", "lockfile: /run/svc.lock",
+	for name, artifact := range map[string]string{
+		"pidfile": "pidfile: /run/svc.pid", "pidfiles": "pidfiles: {main: /run/svc.pid}", "socket": "socket: /run/svc.sock", "lockfile": "lockfile: /run/svc.lock",
 	} {
 		for _, value := range []string{"null", "[broken]", "oops"} {
-			t.Run(artifact+"/"+value, func(t *testing.T) {
+			t.Run(name+"/"+value, func(t *testing.T) {
 				issues := validateService(t, fmt.Sprintf("name: svc\nservice: svc\npolicy: {cooldown: 5m}\n%s\nchecks: %s\n", artifact, value))
 				mustHave(t, issues, "checks must be a mapping")
 			})
