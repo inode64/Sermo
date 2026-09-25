@@ -83,16 +83,15 @@ func TestOSReaderProcfs(t *testing.T) {
 }
 
 func TestOSReaderNumCPUUsesFreshCache(t *testing.T) {
-	cpuCountCache.Lock()
-	oldCount, oldReadAt := cpuCountCache.count, cpuCountCache.readAt
-	cpuCountCache.count, cpuCountCache.readAt = 3, time.Now()
-	cpuCountCache.Unlock()
+	hostProcStat.mu.Lock()
+	old, oldAt := hostProcStat.value, hostProcStat.at
+	hostProcStat.value, hostProcStat.at = procStatObservation{numCPU: 3}, time.Now()
+	hostProcStat.mu.Unlock()
 	t.Cleanup(func() {
-		cpuCountCache.Lock()
-		cpuCountCache.count, cpuCountCache.readAt = oldCount, oldReadAt
-		cpuCountCache.Unlock()
+		hostProcStat.mu.Lock()
+		hostProcStat.value, hostProcStat.at = old, oldAt
+		hostProcStat.mu.Unlock()
 	})
-
 	if got := (OSReader{}).NumCPU(); got != 3 {
 		t.Fatalf("NumCPU() = %d, want cached 3", got)
 	}
