@@ -60,14 +60,15 @@ func (a App) daemonWebDo(ctx context.Context, cfg *config.Config, method, what s
 func (a App) daemonWebGeneration(ctx context.Context, cfg *config.Config) string {
 	// csrf=false is the recursion boundary: generation lookup uses the shared
 	// transport but never asks for another generation lookup itself.
-	resp, err := a.daemonWebDo(ctx, cfg, http.MethodGet, "daemon generation", false, func(base string) string {
+	// The GET route also accepts HEAD: obtain its generation without transferring
+	// the watch inventory. The server still constructs that snapshot.
+	resp, err := a.daemonWebDo(ctx, cfg, http.MethodHead, "daemon generation", false, func(base string) string {
 		return base + web.APIPathWatches
 	})
 	if err != nil {
 		return ""
 	}
 	defer func() { _ = resp.Body.Close() }()
-	_, _ = io.Copy(io.Discard, resp.Body)
 	return strings.TrimSpace(resp.Header.Get(web.HeaderGeneration))
 }
 
