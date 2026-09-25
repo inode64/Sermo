@@ -53,7 +53,7 @@ func RunCascade(ctx context.Context, root, action string, cfg CascadeConfig) (op
 // so callers do not treat the cascade as fully successful.
 func (c cascader) run(ctx context.Context, root, action string) (operation.Result, error) {
 	visited := map[string]bool{}
-	seq := OrderedGroup(root, action, c.config.Lookup, visited, 0)
+	seq := orderedGroup(root, action, c.config.Lookup, visited, 0)
 	var primary operation.Result
 	var primaryErr error
 	var cascadeFailed bool
@@ -143,11 +143,11 @@ func (c cascader) backoff(ctx context.Context) error {
 	return nil
 }
 
-// OrderedGroup returns the services to operate, in dependency order. For stop the
+// orderedGroup returns the services to operate, in dependency order. For stop the
 // root is placed AFTER its targets (post-order: dependents down first); otherwise
 // BEFORE (pre-order: the thing depended on comes up first). A visited set cuts
 // cycles and de-duplicates; depth caps pathological chains.
-func OrderedGroup(root, action string, lookup func(string) []string, visited map[string]bool, depth int) []string {
+func orderedGroup(root, action string, lookup func(string) []string, visited map[string]bool, depth int) []string {
 	if visited[root] || depth > cascadeMaxDepth {
 		return nil
 	}
@@ -158,7 +158,7 @@ func OrderedGroup(root, action string, lookup func(string) []string, visited map
 		out = append(out, root)
 	}
 	for _, t := range lookup(root) {
-		out = append(out, OrderedGroup(t, action, lookup, visited, depth+1)...)
+		out = append(out, orderedGroup(t, action, lookup, visited, depth+1)...)
 	}
 	if stop {
 		out = append(out, root)
