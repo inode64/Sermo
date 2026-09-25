@@ -20,7 +20,7 @@ pruebas de ejecución. Este registro no afirma una auditoría exhaustiva.
   `internal/conn/fpm.go`: un peer podía enviar registros sin END_REQUEST y
   hacer crecer STDOUT/STDERR hasta agotar memoria. Acotar toda la respuesta,
   incluidos cabeceras, padding y registros no reconocidos.
-- [ ] **GO-005 — No convertir campos ausentes de meminfo en mediciones.**
+- [x] **GO-005 — No convertir campos ausentes de meminfo en mediciones.**
   `internal/checks/memory.go`, `swap.go` y `internal/metrics/procfs.go`: los
   checks ignoraban las banderas Have*, confundiendo información ausente con
   memoria disponible cero o ausencia de swap. Rechazar muestras incompletas o

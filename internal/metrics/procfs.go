@@ -392,7 +392,7 @@ func meminfoTotals(m Meminfo) MemoryTotals {
 	var totals MemoryTotals
 	totals.MemoryTotal, totals.MemoryOK = m.MemTotal, m.HaveMemTotal
 	totals.SwapTotal, totals.SwapOK = m.SwapTotal, m.HaveSwapTotal
-	if !totals.MemoryOK || !m.HaveMemAvailable || totals.MemoryTotal < m.MemAvailable {
+	if !totals.MemoryOK || !m.HaveMemAvailable || totals.MemoryTotal == 0 || totals.MemoryTotal < m.MemAvailable {
 		totals.MemoryOK = false
 		totals.MemoryTotal = 0
 	} else {

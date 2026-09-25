@@ -2644,7 +2644,8 @@ watches:
 - **`usage`** predicates: `used_pct`, `free_pct` (of total swap) and `free_bytes`
   (a size with a `K`/`M`/`G`/`T` suffix, e.g. `1G` — same grammar as the storage
   check). A host with **no swap configured** never fires (so a `free_bytes`
-  predicate does not misfire on a swapless box).
+  predicate does not misfire on a swapless box). Missing or invalid swap
+  counters make the sample unavailable; they do not mean no swap is configured.
 - **`io`** sums the pages swapped **in and out** (`pswpin`+`pswpout` from
   `/proc/vmstat`); the `delta` threshold is pages per interval, so it scales with
   `interval`.
@@ -2695,7 +2696,9 @@ check:                                   # in a watch body like `load` above
 
 Predicates: `used_pct`, `available_pct` (of total RAM) and `available_bytes`
 (size suffix required, e.g. `1G` — the shared size grammar). A host whose
-`/proc/meminfo` reports no total never fires. Pair with `for: { cycles: 3 }` so
+`/proc/meminfo` reports no valid total or available count has an unavailable
+sample, which cannot trigger the condition. Available memory greater than the
+total is also rejected. Pair with `for: { cycles: 3 }` so
 a momentary spike does not alert. Hook extras: `SERMO_TOTAL_BYTES`,
 `SERMO_AVAILABLE_BYTES`, `SERMO_USED_PCT`, `SERMO_AVAILABLE_PCT`.
 

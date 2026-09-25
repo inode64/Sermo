@@ -121,6 +121,9 @@ func defaultSwapSampler() (SwapSample, error) {
 	if err != nil {
 		return SwapSample{}, err
 	}
+	if !info.HaveSwapTotal || !info.HaveSwapFree || info.SwapFree > info.SwapTotal {
+		return SwapSample{}, fmt.Errorf("invalid or incomplete swap counters in %s", procMeminfoPath)
+	}
 	s := SwapSample{TotalBytes: info.SwapTotal, FreeBytes: info.SwapFree}
 	if vm, err := hostfs.ReadFile(procVMStatPath); err == nil {
 		pagesIn, pagesOut, err := parseSwapVMStat(string(vm))

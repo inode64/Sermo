@@ -65,5 +65,8 @@ func defaultMemorySampler() (MemorySample, error) {
 	if err != nil {
 		return MemorySample{}, err
 	}
+	if !info.HaveMemTotal || !info.HaveMemAvailable || info.MemTotal == 0 || info.MemAvailable > info.MemTotal {
+		return MemorySample{}, fmt.Errorf("invalid or incomplete RAM counters in %s", procMeminfoPath)
+	}
 	return MemorySample{TotalBytes: info.MemTotal, AvailableBytes: info.MemAvailable}, nil
 }
