@@ -95,14 +95,14 @@ func (c sensorsCheck) Run(_ context.Context) Result {
 	appendSensorPart(sensorFan, summary.Fan, summary.HasFan)
 	appendSensorPart(sensorVoltage, summary.Voltage, summary.HasVoltage)
 	r := c.result(ok, "sensors "+strings.Join(parts, " "), start)
-	r.Data = SensorsResultData(summary, c.chip, c.label)
+	r.Data = sensorsResultData(summary, c.chip, c.label)
 	return r
 }
 
-// SensorsResultData is the persisted reading data for one aggregated sensors
-// sample, shared by the check cycle and the snapshot-backed watch view: the matching-input
-// count, the configured chip/label filters when set, and the aggregate values.
-func SensorsResultData(summary SensorValues, chip, label string) map[string]any {
+// sensorsResultData is the persisted reading data for one aggregated sensors
+// sample: the matching-input count, configured chip/label filters when set,
+// and aggregate values.
+func sensorsResultData(summary SensorValues, chip, label string) map[string]any {
 	data := map[string]any{DataKeyInputs: summary.Count}
 	if chip != "" {
 		data[DataKeyChip] = chip
