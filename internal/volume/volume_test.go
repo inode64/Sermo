@@ -7,7 +7,6 @@ import (
 	"testing"
 	"time"
 
-	"sermo/internal/checks"
 	"sermo/internal/execx"
 	"sermo/internal/execx/execxtest"
 )
@@ -77,7 +76,7 @@ func TestResolveUsesSharedMountSelection(t *testing.T) {
 			name: "real filesystem after autofs",
 			path: "/mnt/archive/records",
 			mounts: []Mount{
-				{Device: "systemd-1", MountPoint: "/mnt/archive", FSType: checks.FSTypeAutofs},
+				{Device: "systemd-1", MountPoint: "/mnt/archive", FSType: "autofs"},
 				{Device: "/dev/mapper/vg0-archive", MountPoint: "/mnt/archive", FSType: "ext4"},
 			},
 			wantMount:  "/mnt/archive",

@@ -29,8 +29,8 @@ const (
 	networkIP4ICMP              = "ip4:icmp"
 )
 
-// DefaultPingCount is the default number of ICMP echo requests for ping checks.
-const DefaultPingCount = 3
+// defaultPingCount is the default number of ICMP echo requests for ping checks.
+const defaultPingCount = 3
 
 // PingSample is one ICMP observation of a host.
 type PingSample struct {

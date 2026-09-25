@@ -159,7 +159,7 @@ func TestMountForPathReturnsDeepestContainingMount(t *testing.T) {
 
 func TestMountForPathPrefersRealMountOverAutofsPlaceholder(t *testing.T) {
 	realMount := Mount{Device: "192.0.2.100:/", MountPoint: "/var/lib/libvirt/images", FSType: "ceph"}
-	autofsMount := Mount{Device: "systemd-1", MountPoint: realMount.MountPoint, FSType: FSTypeAutofs}
+	autofsMount := Mount{Device: "systemd-1", MountPoint: realMount.MountPoint, FSType: fsTypeAutofs}
 	for _, tt := range []struct {
 		name   string
 		mounts []Mount

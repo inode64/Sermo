@@ -9,8 +9,8 @@ import (
 	"sermo/internal/mounts"
 )
 
-// FSTypeAutofs identifies autofs placeholder mounts in the mount table.
-const FSTypeAutofs = "autofs"
+// fsTypeAutofs identifies autofs placeholder mounts in the mount table.
+const fsTypeAutofs = "autofs"
 
 const (
 	procMountsMinFields       = 4
@@ -142,7 +142,7 @@ func betterMount(current, candidate *Mount) *Mount {
 	if current == nil {
 		return candidate
 	}
-	if current.FSType == FSTypeAutofs && candidate.FSType != FSTypeAutofs {
+	if current.FSType == fsTypeAutofs && candidate.FSType != fsTypeAutofs {
 		return candidate
 	}
 	return current
