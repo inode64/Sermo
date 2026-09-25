@@ -349,7 +349,7 @@ func readPIDInotify(pidPath string, countWatches bool) (instances, watches, unre
 	fdDir := filepath.Join(pidPath, "fd")
 	entries, err := os.ReadDir(fdDir)
 	if err != nil {
-		if errorIsPermission(err) {
+		if errors.Is(err, fs.ErrPermission) {
 			return 0, 0, 1
 		}
 		return 0, 0, 0
@@ -374,10 +374,6 @@ func readPIDInotify(pidPath string, countWatches bool) (instances, watches, unre
 		}
 	}
 	return instances, watches, 0
-}
-
-func errorIsPermission(err error) bool {
-	return errors.Is(err, fs.ErrPermission)
 }
 
 func readPIDUID(pidPath string) (uint32, bool) {

@@ -48,7 +48,7 @@ func (c storageCheck) Run(_ context.Context) Result {
 	start := time.Now()
 	data := map[string]any{DataKeyPath: c.path}
 
-	sampler := samplerOr(c.mountSampler, defaultMountSampler)
+	sampler := samplerOr(c.mountSampler, DefaultMounts)
 	mounts, mountErr := sampler()
 
 	// Mount verification takes precedence: a wrong/absent mount makes the space

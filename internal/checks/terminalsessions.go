@@ -150,7 +150,7 @@ func terminalMultiplexerAdapterFor(name string) (terminalMultiplexerAdapter, boo
 			args:           screenSessionArgs,
 			closeArgs:      screenSessionCloseArgs,
 			sessionsAbsent: screenSessionsAbsent,
-			parseSessions:  parseScreenSessionsResult,
+			parseSessions:  parseScreenSessions,
 		}, true
 	default:
 		return terminalMultiplexerAdapter{}, false
@@ -354,7 +354,7 @@ func parseTmuxSessions(config TerminalSessionConfig, output string) ([]TerminalS
 	return sortedTerminalSessions(sessions), nil
 }
 
-func parseScreenSessions(config TerminalSessionConfig, output string) []TerminalSession {
+func parseScreenSessions(config TerminalSessionConfig, output string) ([]TerminalSession, error) {
 	sessions := make([]TerminalSession, 0)
 	for line := range strings.SplitSeq(output, "\n") {
 		matches := screenSessionLine.FindStringSubmatch(line)
@@ -385,11 +385,7 @@ func parseScreenSessions(config TerminalSessionConfig, output string) []Terminal
 			Identity: identity, PIDs: positivePID(pid),
 		})
 	}
-	return sortedTerminalSessions(sessions)
-}
-
-func parseScreenSessionsResult(config TerminalSessionConfig, output string) ([]TerminalSession, error) {
-	return parseScreenSessions(config, output), nil
+	return sortedTerminalSessions(sessions), nil
 }
 
 func positivePID(pid int) []int {

@@ -71,8 +71,8 @@ func (m mountCond) evaluate(table []Mount, path string) (mounted, problem bool, 
 	return mounted, false, "", info
 }
 
-// defaultMountSampler reads the mount table from /proc/mounts.
-func defaultMountSampler() ([]Mount, error) {
+// DefaultMounts reads the mount table from /proc/mounts.
+func DefaultMounts() ([]Mount, error) {
 	data, err := os.ReadFile(procMountsPath)
 	if err != nil {
 		return nil, fmt.Errorf("read %s: %w", procMountsPath, err)
@@ -91,11 +91,6 @@ func defaultMountSampler() ([]Mount, error) {
 		})
 	}
 	return out, nil
-}
-
-// DefaultMounts reads the host mount table from /proc/mounts.
-func DefaultMounts() ([]Mount, error) {
-	return defaultMountSampler()
 }
 
 // MountForPath returns the deepest mount containing path, or nil when none is
