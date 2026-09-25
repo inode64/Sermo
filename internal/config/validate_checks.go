@@ -802,25 +802,37 @@ func validVariableName(name string) bool {
 type singleShotCheckValidator func(path string, entry map[string]any, locksDir string, add addFunc)
 
 var singleShotCheckValidators = map[string]singleShotCheckValidator{
-	checks.CheckTypeTCP:              validateTCPCheck,
-	checks.CheckTypeHTTP:             singleShotNoLock(validateHTTPFields),
-	checks.CheckTypePorts:            singleShotNoLock(validatePortsFields),
-	checks.CheckTypeCommand:          validateSingleShotCommand,
-	checks.CheckTypeClock:            singleShotNoLock(validateClockFields),
-	checks.CheckTypeService:          validateServiceCheck,
-	checks.CheckTypeProcess:          validateProcessCheck,
-	checks.CheckTypeStaleBinary:      singleShotNoLock(validateStaleBinaryCheck),
-	checks.CheckTypeStrays:           singleShotNoLock(validateStraysCheck),
-	checks.CheckTypeFileExists:       validateFileExistsCheck,
-	checks.CheckTypeFile:             validateSingleShotFileCheck,
-	checks.CheckTypeLockfile:         validateLockfileCheck,
-	checks.CheckTypeBinary:           validateBinaryCheck,
-	checks.CheckTypePidfile:          validatePidfileCheck,
-	checks.CheckTypeSocket:           validateSocketCheck,
-	checks.CheckTypeLibraries:        validateLibrariesCheck,
-	checks.CheckTypeMetric:           validateSingleShotMetric,
-	checks.CheckTypeCount:            validateSingleShotCount,
-	checks.CheckTypeLog:              singleShotNoLock(validateLogCheck),
+	checks.CheckTypeTCP:   validateTCPCheck,
+	checks.CheckTypeHTTP:  singleShotNoLock(validateHTTPFields),
+	checks.CheckTypePorts: singleShotNoLock(validatePortsFields),
+	checks.CheckTypeCommand: func(path string, entry map[string]any, _ string, add addFunc) {
+		validateCommandFields(path, entry, true, add)
+	},
+	checks.CheckTypeClock:       singleShotNoLock(validateClockFields),
+	checks.CheckTypeService:     validateServiceCheck,
+	checks.CheckTypeProcess:     validateProcessCheck,
+	checks.CheckTypeStaleBinary: singleShotNoLock(validateStaleBinaryCheck),
+	checks.CheckTypeStrays:      singleShotNoLock(validateStraysCheck),
+	checks.CheckTypeFileExists:  validateFileExistsCheck,
+	checks.CheckTypeFile:        validateSingleShotFileCheck,
+	checks.CheckTypeLockfile:    validateLockfileCheck,
+	checks.CheckTypeBinary: func(path string, entry map[string]any, _ string, add addFunc) {
+		validateRequiredStringField(path, entry, checks.CheckKeyPath, checks.CheckTypeBinary, add)
+	},
+	checks.CheckTypePidfile: func(path string, entry map[string]any, _ string, add addFunc) {
+		validateRequiredStringListField(path, entry, checks.CheckKeyPath, checks.CheckTypePidfile, add)
+	},
+	checks.CheckTypeSocket: func(path string, entry map[string]any, _ string, add addFunc) {
+		validateRequiredStringListField(path, entry, checks.CheckKeyPath, checks.CheckTypeSocket, add)
+	},
+	checks.CheckTypeLibraries: func(path string, entry map[string]any, _ string, add addFunc) {
+		validateRequiredStringField(path, entry, checks.CheckKeyBinary, checks.CheckTypeLibraries, add)
+	},
+	checks.CheckTypeMetric: func(path string, entry map[string]any, _ string, add addFunc) {
+		validateMetric(entry, path, true, add)
+	},
+	checks.CheckTypeCount:            singleShotParsed(checks.ValidateCountCheck),
+	checks.CheckTypeLog:              singleShotParsed(checks.ValidateLogCheck),
 	checks.CheckTypeStorage:          singleShotNoLock(validateStorageFields),
 	checks.CheckTypeLoad:             singleShotNoLock(validateLoadFields),
 	checks.CheckTypeUsers:            singleShotThreshold(checks.UsersPredFields),
@@ -859,7 +871,7 @@ var singleShotCheckValidators = map[string]singleShotCheckValidator{
 	checks.CheckTypeReplication:      singleShotNoLock(validateReplicationFields),
 	checks.CheckTypeMongoDBQuery:     singleShotNoLock(validateMongoFields),
 	checks.CheckTypeInfluxDBQuery:    singleShotNoLock(validateInfluxFields),
-	checks.CheckTypeSize:             singleShotNoLock(validateSizeFields),
+	checks.CheckTypeSize:             singleShotParsed(checks.ValidateSizeCheck),
 	checks.CheckTypeWebsocket:        singleShotNoLock(validateWebsocketFields),
 
 	checks.CheckTypeTCPConnections: validateTCPConnectionsCheck,
@@ -950,6 +962,12 @@ func validateGlusterLimit(path string, entry map[string]any, key string, add add
 func singleShotNoLock(validate func(string, map[string]any, addFunc)) singleShotCheckValidator {
 	return func(path string, entry map[string]any, _ string, add addFunc) {
 		validate(path, entry, add)
+	}
+}
+
+func singleShotParsed(validate func(map[string]any) error) singleShotCheckValidator {
+	return func(path string, entry map[string]any, _ string, add addFunc) {
+		validateParsedCheck(path, validate(entry), add)
 	}
 }
 
@@ -1145,10 +1163,6 @@ func validateSSHProtectedProcesses(path string, raw any, add addFunc) {
 	}
 }
 
-func validateSingleShotCommand(path string, entry map[string]any, _ string, add addFunc) {
-	validateCommandFields(path, entry, true, add)
-}
-
 func validateServiceCheck(path string, entry map[string]any, _ string, add addFunc) {
 	state := cfgval.String(entry[checks.CheckKeyExpect])
 	if state == "" {
@@ -1262,22 +1276,6 @@ func validateLockfileCheck(path string, entry map[string]any, locksDir string, a
 	}
 }
 
-func validateBinaryCheck(path string, entry map[string]any, _ string, add addFunc) {
-	validateRequiredStringField(path, entry, checks.CheckKeyPath, checks.CheckTypeBinary, add)
-}
-
-func validatePidfileCheck(path string, entry map[string]any, _ string, add addFunc) {
-	validateRequiredStringListField(path, entry, checks.CheckKeyPath, checks.CheckTypePidfile, add)
-}
-
-func validateSocketCheck(path string, entry map[string]any, _ string, add addFunc) {
-	validateRequiredStringListField(path, entry, checks.CheckKeyPath, checks.CheckTypeSocket, add)
-}
-
-func validateLibrariesCheck(path string, entry map[string]any, _ string, add addFunc) {
-	validateRequiredStringField(path, entry, checks.CheckKeyBinary, checks.CheckTypeLibraries, add)
-}
-
 func validateRequiredStringField(path string, entry map[string]any, field, checkType string, add addFunc) {
 	if cfgval.String(entry[field]) == "" {
 		add("%s.%s is required for a %s check", path, field, checkType)
@@ -1288,18 +1286,6 @@ func validateRequiredStringListField(path string, entry map[string]any, field, c
 	if !cfgval.IsNonEmptyStringList(entry[field]) {
 		add("%s.%s is required for a %s check", path, field, checkType)
 	}
-}
-
-func validateSingleShotMetric(path string, entry map[string]any, _ string, add addFunc) {
-	validateMetric(entry, path, true, add)
-}
-
-func validateSingleShotCount(path string, entry map[string]any, _ string, add addFunc) {
-	validateCount(entry, path, add)
-}
-
-func validateLogCheck(path string, entry map[string]any, add addFunc) {
-	validateParsedCheck(path, checks.ValidateLogCheck(entry), add)
 }
 
 // validateParsedCheck adds configuration identity to every parser diagnostic.
@@ -1492,10 +1478,6 @@ func validateWebsocketFields(prefix string, fields map[string]any, add addFunc) 
 	default:
 		add("%s.url scheme must be %s", prefix, checks.WebsocketURLSchemeSummary)
 	}
-}
-
-func validateSizeFields(prefix string, fields map[string]any, add addFunc) {
-	validateParsedCheck(prefix, checks.ValidateSizeCheck(fields), add)
 }
 
 // validateMongoFields validates a mongodb-query check: a valid op and value, a
@@ -1696,8 +1678,4 @@ func validatePressureFields(prefix string, fields map[string]any, add addFunc) {
 		add("%s.resource must be %s for a pressure check", prefix, checks.PressureResourceSummary)
 	}
 	validateThresholdPreds(prefix, fields, checks.PressurePredFields, add)
-}
-
-func validateCount(entry map[string]any, path string, add addFunc) {
-	validateParsedCheck(path, checks.ValidateCountCheck(entry), add)
 }
