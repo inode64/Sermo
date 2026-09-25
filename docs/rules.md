@@ -1641,7 +1641,7 @@ Protocols, in the order of the table above:
 - `nfs` (aliases `nfs-server`, `nfsd`) — an ONC RPC NULL to the NFS program
   (100003) over TCP (record marking), like `rpcbind`; default port 2049. A
   version-mismatch reply (e.g. an NFSv4-only server answering a v3 NULL) still
-  passes.
+  passes. NFS-family RPC replies are limited to 1 MiB in total across fragments.
 - `mountd` (aliases `rpc.mountd`, `nfs-mountd`) — the NFS mount daemon: an ONC RPC
   NULL to the MOUNT program (100005) over TCP, like `nfs`. **No fixed well-known
   port** — mountd registers a (often random) port with rpcbind; default 20048,
