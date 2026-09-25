@@ -392,14 +392,6 @@ func (b base) resultMetadata() Result {
 	}
 }
 
-// withTimeout derives the check's deadline from the caller's context.
-func (b base) withTimeout(ctx context.Context) (context.Context, context.CancelFunc) {
-	if b.timeout <= 0 {
-		return context.WithCancel(ctx)
-	}
-	return context.WithTimeout(ctx, b.timeout)
-}
-
 // checkRun owns the common lifecycle of a potentially blocking check run.
 // Local, non-blocking samplers deliberately skip it to avoid a context
 // allocation in the daemon's hot path.
@@ -411,7 +403,12 @@ type checkRun struct {
 // begin starts latency accounting and derives the check's bounded context.
 func (b base) begin(ctx context.Context) (context.Context, checkRun) {
 	start := time.Now()
-	ctx, cancel := b.withTimeout(ctx)
+	var cancel context.CancelFunc
+	if b.timeout <= 0 {
+		ctx, cancel = context.WithCancel(ctx)
+	} else {
+		ctx, cancel = context.WithTimeout(ctx, b.timeout)
+	}
 	return ctx, checkRun{start: start, cancel: cancel}
 }
 
