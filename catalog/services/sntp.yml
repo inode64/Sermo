@@ -8,6 +8,8 @@ description: One-shot SNTP system clock synchronization.
 service:
   systemd:
     - sntp
+# The successful oneshot remains active without a resident process.
+processes: { }
 stop_policy:
   graceful_timeout: 1s
 watches:
