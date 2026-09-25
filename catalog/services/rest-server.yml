@@ -18,6 +18,11 @@ restart_on_change:
 variables:
   host: 127.0.0.1
   port: 8000
+  user: root
+processes:
+  main:
+    exe: ${rest_server_binary}
+    user: ${user}
 watches:
   service:
     check:
