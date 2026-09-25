@@ -444,7 +444,7 @@ checks:
 	}
 	store := openTestStateStore(t, global)
 	defer func() { _ = store.Close() }()
-	events, err := store.RecentEvents(10)
+	events, err := store.RecentEventsBefore(0, 10)
 	if err != nil {
 		t.Fatalf("recent events: %v", err)
 	}
@@ -989,7 +989,7 @@ func TestOperationSessionPersistsOneOperationEvent(t *testing.T) {
 
 	store := openTestStateStore(t, global)
 	defer func() { _ = store.Close() }()
-	events, err := store.RecentEvents(10)
+	events, err := store.RecentEventsBefore(0, 10)
 	if err != nil {
 		t.Fatalf("recent events: %v", err)
 	}

@@ -268,7 +268,7 @@ func TestStoreEventAppDimensionRoundTrip(t *testing.T) {
 	if _, err := s.RecordEvent(EventRecord{App: "salt-minion", Kind: "firing", Message: "error: exit 1", Output: "stderr:\nImportError: no module"}); err != nil {
 		t.Fatalf("RecordEvent app: %v", err)
 	}
-	recs, err := s.RecentEvents(0)
+	recs, err := s.RecentEventsBefore(0, 0)
 	if err != nil {
 		t.Fatalf("RecentEvents: %v", err)
 	}
