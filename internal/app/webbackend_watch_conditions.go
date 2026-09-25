@@ -140,11 +140,7 @@ func replicationWatchConditions(check map[string]any) []web.WatchCondition {
 		{Field: checks.DataKeySQLStopped, Op: cfgval.CompareOpEqual, Value: "0"},
 	}
 	if behind, ok := check[checks.CheckKeyBehind].(map[string]any); ok {
-		out = append(out, web.WatchCondition{
-			Field: checks.DataKeyBehindSeconds,
-			Op:    cfgval.AsString(behind[checks.CheckKeyOp]),
-			Value: cfgval.String(behind[checks.CheckKeyValue]),
-		})
+		out = append(out, comparisonCondition(checks.DataKeyBehindSeconds, behind))
 	}
 	return out
 }

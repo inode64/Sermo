@@ -58,10 +58,7 @@ func (b *WebBackend) ExpandWatch(ctx context.Context, name string) web.ActionRes
 }
 
 func (b *WebBackend) emitWatchExpandEvent(watch, kind, status, message string) {
-	if b.emit == nil {
-		return
-	}
-	b.emit(Event{
+	emitSafe(b.emit, Event{
 		Watch:   watch,
 		Kind:    kind,
 		Action:  eventActionExpand,

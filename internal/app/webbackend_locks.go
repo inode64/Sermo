@@ -200,14 +200,11 @@ func (b *WebBackend) ReleaseLock(_ context.Context, service, name string) web.Ac
 }
 
 func (b *WebBackend) emitLockReleaseEvent(service, name, kind, status, message string) {
-	if b.emit == nil {
-		return
-	}
 	rule := name
 	if rule == "" {
 		rule = lockReleaseDefaultRule
 	}
-	b.emit(Event{
+	emitSafe(b.emit, Event{
 		Service: service,
 		Kind:    kind,
 		Rule:    rule,

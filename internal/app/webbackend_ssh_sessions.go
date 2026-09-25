@@ -62,7 +62,7 @@ func uniqueSSHDFilters(filters []process.IdentityFilter) []process.IdentityFilte
 	seen := make(map[string]bool, len(filters))
 	out := make([]process.IdentityFilter, 0, len(filters))
 	for _, filter := range filters {
-		key := filter.Exe + "\x00" + filter.User
+		key := sessionMetricKey(filter.Exe, filter.User)
 		if filter.Exe == "" || filter.User == "" || seen[key] {
 			continue
 		}
@@ -105,9 +105,9 @@ func (b *WebBackend) sshSessions(filters []process.IdentityFilter) (checks.SSHSe
 	}
 	keyParts := make([]string, 0, len(filters))
 	for _, filter := range filters {
-		keyParts = append(keyParts, filter.Exe+"\x00"+filter.User)
+		keyParts = append(keyParts, sessionMetricKey(filter.Exe, filter.User))
 	}
-	key := strings.Join(keyParts, "\x00")
+	key := sessionMetricKey(keyParts...)
 	now := b.webNow()
 	b.sshSessionsMu.Lock()
 	if cached, ok := b.sshSessionCache[key]; ok && now.Sub(cached.at) <= interactiveSessionCacheTTL {
