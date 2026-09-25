@@ -7,7 +7,6 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 
 	"sermo/internal/hostfs"
@@ -133,7 +132,6 @@ func (s Scanner) lockFileNames() ([]string, error) {
 			names = append(names, e.Name())
 		}
 	}
-	sort.Strings(names)
 	return names, nil
 }
 
