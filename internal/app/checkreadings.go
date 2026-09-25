@@ -994,35 +994,23 @@ func hardwareRAIDCheckReadings(data map[string]any) []web.WatchReading {
 		rb.add(checks.DataKeyHardwareRAIDAdvisories, "Advisories", strings.Join(advisories, readingSummarySeparator))
 	}
 	readings := rb.readings()
-	for _, detail := range hardwareRAIDDetails[checks.HardwareRAIDControllerStatus](data[checks.DataKeyHardwareRAIDControllerDetails]) {
-		readings = append(readings, web.WatchReading{
-			Field: hardwareRAIDReadingField("controller", detail.ID), Label: "Controller " + detail.ID,
-			Value: hardwareRAIDControllerReading(detail),
-		})
-	}
-	for _, detail := range hardwareRAIDDetails[checks.HardwareRAIDCacheStatus](data[checks.DataKeyHardwareRAIDCacheDetails]) {
-		readings = append(readings, web.WatchReading{
-			Field: hardwareRAIDReadingField("cache", detail.ID), Label: "Cache " + detail.ID,
-			Value: hardwareRAIDCacheReading(detail),
-		})
-	}
-	for _, detail := range hardwareRAIDDetails[checks.HardwareRAIDVolumeStatus](data[checks.DataKeyHardwareRAIDVolumeDetails]) {
-		readings = append(readings, web.WatchReading{
-			Field: hardwareRAIDReadingField("volume", detail.ID), Label: "Volume " + detail.ID,
-			Value: hardwareRAIDVolumeReading(detail),
-		})
-	}
-	for _, detail := range hardwareRAIDDetails[checks.HardwareRAIDDriveStatus](data[checks.DataKeyHardwareRAIDDriveDetails]) {
-		readings = append(readings, web.WatchReading{
-			Field: hardwareRAIDReadingField("drive", detail.ID), Label: "Drive " + detail.ID,
-			Value: hardwareRAIDDriveReading(detail),
-		})
-	}
+	readings = appendHardwareRAIDDetails(readings, data[checks.DataKeyHardwareRAIDControllerDetails], "controller", "Controller ", hardwareRAIDControllerReading)
+	readings = appendHardwareRAIDDetails(readings, data[checks.DataKeyHardwareRAIDCacheDetails], "cache", "Cache ", hardwareRAIDCacheReading)
+	readings = appendHardwareRAIDDetails(readings, data[checks.DataKeyHardwareRAIDVolumeDetails], "volume", "Volume ", hardwareRAIDVolumeReading)
+	readings = appendHardwareRAIDDetails(readings, data[checks.DataKeyHardwareRAIDDriveDetails], "drive", "Drive ", hardwareRAIDDriveReading)
 	return readings
 }
 
-func hardwareRAIDControllerReading(detail checks.HardwareRAIDControllerStatus) string {
-	return hardwareRAIDReadingParts(
+func appendHardwareRAIDDetails[T any](out []web.WatchReading, raw any, kind, label string, render func(T) (string, string)) []web.WatchReading {
+	for _, detail := range hardwareRAIDDetails[T](raw) {
+		id, value := render(detail)
+		out = append(out, web.WatchReading{Field: hardwareRAIDReadingField(kind, id), Label: label + id, Value: value})
+	}
+	return out
+}
+
+func hardwareRAIDControllerReading(detail checks.HardwareRAIDControllerStatus) (string, string) {
+	return detail.ID, hardwareRAIDReadingParts(
 		detail.State, detail.Model,
 		hardwareRAIDBytesPart("memory", detail.MemoryBytes),
 		hardwareRAIDBytesPart("cache", detail.CacheBytes),
@@ -1033,8 +1021,8 @@ func hardwareRAIDControllerReading(detail checks.HardwareRAIDControllerStatus) s
 	)
 }
 
-func hardwareRAIDCacheReading(detail checks.HardwareRAIDCacheStatus) string {
-	return hardwareRAIDReadingParts(
+func hardwareRAIDCacheReading(detail checks.HardwareRAIDCacheStatus) (string, string) {
+	return detail.ID, hardwareRAIDReadingParts(
 		detail.State, detail.Model,
 		hardwareRAIDBytesPart("size", detail.SizeBytes),
 		hardwareRAIDBytesPart("available", detail.AvailableBytes),
@@ -1043,12 +1031,12 @@ func hardwareRAIDCacheReading(detail checks.HardwareRAIDCacheStatus) string {
 	)
 }
 
-func hardwareRAIDVolumeReading(detail checks.HardwareRAIDVolumeStatus) string {
+func hardwareRAIDVolumeReading(detail checks.HardwareRAIDVolumeStatus) (string, string) {
 	operation := detail.Operation
 	if detail.HasProgress {
 		operation = fmt.Sprintf("%s %.1f%%", operation, detail.ProgressPct)
 	}
-	return hardwareRAIDReadingParts(
+	return detail.ID, hardwareRAIDReadingParts(
 		detail.State, detail.RAIDLevel,
 		hardwareRAIDBytesPart("size", detail.SizeBytes),
 		hardwareRAIDTextPart("device", detail.OSDevice),
@@ -1059,7 +1047,7 @@ func hardwareRAIDVolumeReading(detail checks.HardwareRAIDVolumeStatus) string {
 	)
 }
 
-func hardwareRAIDDriveReading(detail checks.HardwareRAIDDriveStatus) string {
+func hardwareRAIDDriveReading(detail checks.HardwareRAIDDriveStatus) (string, string) {
 	smart := "controller SMART OK"
 	if detail.SMARTAlert {
 		smart = "controller SMART alert"
@@ -1068,7 +1056,7 @@ func hardwareRAIDDriveReading(detail checks.HardwareRAIDDriveStatus) string {
 	if detail.HasProgress {
 		operation = fmt.Sprintf("%s %.1f%%", operation, detail.ProgressPct)
 	}
-	return hardwareRAIDReadingParts(
+	return detail.ID, hardwareRAIDReadingParts(
 		detail.State, detail.MediaType, detail.Interface,
 		hardwareRAIDBytesPart("size", detail.SizeBytes),
 		detail.Model,
