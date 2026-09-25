@@ -70,8 +70,7 @@ func parseEventQuery(r *http.Request) (EventQuery, error) {
 }
 
 // IsErrorEvent reports whether an event counts as an error for the
-// errors-only feed filter. It is the single classification shared by the
-// in-memory filter here and the store-backed pagination in the daemon backend.
+// errors-only feed filter used by the daemon backend.
 func IsErrorEvent(e Event) bool {
 	if e.Kind == eventKindError || strings.Contains(e.Kind, eventKindFailedFragment) {
 		return true
