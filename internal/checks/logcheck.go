@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"syscall"
@@ -147,7 +148,8 @@ func (c logCheck) expand() ([]string, error) {
 // countWithin retains batches by observation time, including the current batch
 // even when the previous cycle is older than the whole window.
 func (s *logState) countWithin(now time.Time, matched int, window time.Duration) int {
-	s.matches = pruneWindow(s.matches, now.Add(-window), func(b logMatchBatch) time.Time { return b.at })
+	cutoff := now.Add(-window)
+	s.matches = slices.DeleteFunc(s.matches, func(b logMatchBatch) bool { return b.at.Before(cutoff) })
 	if matched > 0 {
 		s.matches = append(s.matches, logMatchBatch{at: now, matched: matched})
 	}

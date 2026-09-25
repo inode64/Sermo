@@ -7,6 +7,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"slices"
 	"time"
 
 	"sermo/internal/cfgval"
@@ -57,7 +58,7 @@ func (c *sizeCheck) Run(ctx context.Context) Result {
 	now := clock()
 
 	cutoff := now.Add(-c.window)
-	c.state.samples = pruneWindow(c.state.samples, cutoff, func(s sizeSample) time.Time { return s.t })
+	c.state.samples = slices.DeleteFunc(c.state.samples, func(s sizeSample) bool { return s.t.Before(cutoff) })
 	c.state.samples = append(c.state.samples, sizeSample{t: now, size: size})
 
 	baseline := c.state.samples[0]
