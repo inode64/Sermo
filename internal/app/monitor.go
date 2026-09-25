@@ -36,14 +36,12 @@ type Monitor struct {
 	collector *metrics.Collector
 	web       *WebBackendHolder
 
-	parent context.Context //nolint:containedctx // daemon Run cancel, reused across worker generations; not request-scoped.
-
 	mu        sync.Mutex
 	workers   []*Worker
 	watches   []*Watch
 	genCancel context.CancelFunc
 	genWG     sync.WaitGroup
-	booted    bool
+	running   bool
 }
 
 const (
@@ -75,13 +73,14 @@ func (m *Monitor) Init(workers []*Worker, watches []*Watch) {
 // Run starts the first generation and blocks until ctx is cancelled, then stops
 // workers and marks readiness shutting down.
 func (m *Monitor) Run(ctx context.Context) {
-	m.parent = ctx //nolint:fatcontext // stores the daemon lifetime context for later generations, not nested per-request values.
 	m.mu.Lock()
+	m.running = true
 	m.startGenerationLocked(ctx, true)
 	m.mu.Unlock()
 	<-ctx.Done()
 	m.mu.Lock()
 	m.stopGenerationLocked(true)
+	m.running = false
 	m.mu.Unlock()
 }
 
@@ -96,7 +95,7 @@ func (m *Monitor) Reload(ctx context.Context) {
 		m.emitReloadError("config path is not set")
 		return
 	}
-	if m.parent == nil {
+	if !m.running {
 		m.emitReloadError("monitor is not running")
 		return
 	}
@@ -252,19 +251,16 @@ func (m *Monitor) startGenerationLocked(ctx context.Context, firstBoot bool) {
 	m.genCancel = cancel
 
 	sched := m.scheduler
-	// firstGen is the very first boot: it keeps the StartupDelay and gates
+	// firstBoot is the very first boot: it keeps the StartupDelay and gates
 	// readiness on first cycles. Reloads skip both (the daemon is already up).
-	firstGen := firstBoot && !m.booted
-	if firstGen {
-		m.booted = true
-	} else {
+	if !firstBoot {
 		sched.StartupDelay = 0
 	}
 
 	if m.deps.Settling != nil {
 		names := monitorTargetNames(m.workers, m.watches)
 		m.deps.Settling.Reset(names)
-		if !firstGen {
+		if !firstBoot {
 			var preserved []string
 			for _, w := range m.workers {
 				if w != nil && w.cycle > 0 {
@@ -281,7 +277,7 @@ func (m *Monitor) startGenerationLocked(ctx context.Context, firstBoot bool) {
 	}
 
 	m.genWG.Go(func() {
-		sched.Run(genCtx, m.workers, m.watches, m.readiness, firstGen)
+		sched.Run(genCtx, m.workers, m.watches, m.readiness, firstBoot)
 	})
 	if sampler := m.deps.DaemonMetricSampler; sampler != nil {
 		interval := m.deps.Interval

@@ -396,3 +396,20 @@ func waitReady(t *testing.T, ready *Readiness) {
 		time.Sleep(5 * time.Millisecond)
 	}
 }
+
+func TestMonitorRejectsReloadOutsideRun(t *testing.T) {
+	var events []Event
+	mon := NewMonitor(&config.Config{}, Deps{Emit: func(event Event) { events = append(events, event) }}, Scheduler{}, nil, nil, nil)
+	mon.ConfigPath = filepath.Join(t.TempDir(), "unused.yml")
+	mon.Logger = slog.Default()
+	for _, phase := range []string{"before run", "after shutdown"} {
+		mon.Reload(t.Context())
+		if len(events) != 1 || events[0].Message != "monitor is not running" {
+			t.Fatalf("%s: reload events = %+v", phase, events)
+		}
+		events = nil
+		ctx, cancel := context.WithCancel(t.Context())
+		cancel()
+		mon.Run(ctx)
+	}
+}
