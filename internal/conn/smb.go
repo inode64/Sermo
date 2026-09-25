@@ -97,7 +97,7 @@ func (smbProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	}
 
 	if cfg.User != "" {
-		if err := smbSession(ctx, target, cfg, extra); err != nil {
+		if err := smbSession(ctx, target, extra); err != nil {
 			return Result{}, err
 		}
 	}
@@ -105,7 +105,8 @@ func (smbProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 }
 
 // smbSession authenticates with NTLM and gathers share information.
-func smbSession(ctx context.Context, target probeTarget, cfg Config, extra map[string]string) error {
+func smbSession(ctx context.Context, target probeTarget, extra map[string]string) error {
+	cfg := target.cfg
 	user, domain := splitSMBUser(cfg.User)
 	d := &smb2.Dialer{Initiator: &smb2.NTLMInitiator{User: user, Password: cfg.Password, Domain: domain}}
 	tcp, err := target.openTCP(ctx)

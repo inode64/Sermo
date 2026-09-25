@@ -50,7 +50,7 @@ func OpenPostgresDB(_ context.Context, cfg Config) (*sql.DB, error) {
 // interface binding is wired without opening a connection.
 func postgresConfig(cfg Config) (*pgx.ConnConfig, error) {
 	target := newProbeTarget(cfg, defaultPortPostgres)
-	config, err := pgx.ParseConfig(buildPGDSNWithTarget(cfg, target))
+	config, err := pgx.ParseConfig(buildPGDSNWithTarget(target))
 	if err != nil {
 		return nil, fmt.Errorf("postgres config: %w", err)
 	}
@@ -58,7 +58,8 @@ func postgresConfig(cfg Config) (*pgx.ConnConfig, error) {
 	return config, nil
 }
 
-func buildPGDSNWithTarget(cfg Config, target probeTarget) string {
+func buildPGDSNWithTarget(target probeTarget) string {
+	cfg := target.cfg
 	u := url.URL{
 		Scheme: ProtocolNamePostgres,
 		User:   url.UserPassword(cfg.User, cfg.Password),

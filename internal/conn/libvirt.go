@@ -51,7 +51,7 @@ func (libvirtProtocol) RequiresUser() bool { return false }
 
 func (libvirtProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	target := newProbeTarget(cfg, defaultPortLibvirt)
-	mode, addr, uri := libvirtTransportWithTarget(cfg, target)
+	mode, addr, uri := libvirtTransportWithTarget(target)
 	timeout := netutil.TimeoutFromContext(ctx, DefaultLibvirtTimeout)
 
 	var l *libvirt.Libvirt
@@ -162,7 +162,8 @@ func libvirtDomainState(s int32) string {
 // libvirtTransport decides the transport, dial address and connect URI from the
 // config: an explicit socket path, otherwise plain TCP to host:port. The connect
 // URI defaults to qemu:///system.
-func libvirtTransportWithTarget(cfg Config, target probeTarget) (mode, addr, uri string) {
+func libvirtTransportWithTarget(target probeTarget) (mode, addr, uri string) {
+	cfg := target.cfg
 	uri = cfg.Query
 	if uri == "" {
 		uri = string(libvirt.QEMUSystem)

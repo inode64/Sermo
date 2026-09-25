@@ -59,7 +59,7 @@ func (mysqlProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 // formatting the config back to a DSN would discard that function.
 func OpenMySQLDB(_ context.Context, cfg Config) (*sql.DB, error) {
 	target := newProbeTarget(cfg, defaultPortMySQL)
-	connector, err := mysql.NewConnector(buildMySQLConfigWithTarget(cfg, target))
+	connector, err := mysql.NewConnector(buildMySQLConfigWithTarget(target))
 	if err != nil {
 		return nil, fmt.Errorf("mysql connector: %w", err)
 	}
@@ -130,7 +130,8 @@ func mysqlGreeting(r io.Reader) (Result, error) {
 }
 
 // buildMySQLConfigWithTarget binds TCP dials to cfg.Interface when configured.
-func buildMySQLConfigWithTarget(cfg Config, target probeTarget) *mysql.Config {
+func buildMySQLConfigWithTarget(target probeTarget) *mysql.Config {
+	cfg := target.cfg
 	c := mysql.NewConfig()
 	c.Net = networkTCP
 	c.Addr = target.address()

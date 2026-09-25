@@ -55,5 +55,5 @@ func TestSSLMode(t *testing.T) {
 }
 
 func postgresDSNForTest(cfg Config) string {
-	return buildPGDSNWithTarget(cfg, newProbeTarget(cfg, defaultPortPostgres))
+	return buildPGDSNWithTarget(newProbeTarget(cfg, defaultPortPostgres))
 }
