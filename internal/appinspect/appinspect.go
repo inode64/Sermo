@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"os"
 	"slices"
-	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -583,7 +582,7 @@ func namespacedBinaryPrefixes(preflight map[string]any) []string {
 		}
 		prefixes = append(prefixes, prefix)
 	}
-	sort.Strings(prefixes)
+	slices.Sort(prefixes)
 	return prefixes
 }
 
