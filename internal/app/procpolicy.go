@@ -215,13 +215,9 @@ func (w *processPolicyWatcher) shouldRemind(state processPolicyState, now time.T
 }
 
 func (w *processPolicyWatcher) violationReason(info ProcInfo) string {
-	id := process.Identity{
-		PID: info.PID, UID: info.UID, Exe: info.Exe, ExeOK: info.ExeOK,
-		ExePrev: info.ExePrev, Cmdline: info.Cmdline,
-	}
 	hasExecutableMatch := false
 	for _, allow := range w.allows {
-		matched, err := allow.filter.Match(id, w.resolve, nil)
+		matched, err := allow.filter.Match(info.Identity, w.resolve, nil)
 		if err != nil || matched != process.IdentityMatched {
 			continue
 		}

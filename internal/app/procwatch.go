@@ -30,18 +30,7 @@ type ProcMatch struct {
 // ProcInfo is one matched process's current resource counters. CPU and IO are
 // cumulative; the watch derives rates from successive samples.
 type ProcInfo struct {
-	PID   int
-	User  string
-	UID   uint32
-	Exe   string
-	ExeOK bool
-	// ExePrev identifies a process still running a replaced binary. It is
-	// diagnostic-only: like an unreadable executable, it never authorizes an
-	// executable match.
-	ExePrev string
-	// Cmdline is retained only for an explicit process-policy cmd constraint.
-	// It is never published to events, notifications or the Web UI.
-	Cmdline  []string
+	process.Identity
 	CPUTicks uint64 // accumulated CPU jiffies (utime+stime)
 	RSS      uint64 // resident memory bytes
 	IOBytes  uint64 // cumulative read+write bytes (/proc/<pid>/io)
@@ -50,11 +39,6 @@ type ProcInfo struct {
 	// against the boot time), so `for` measures the process's own age rather than
 	// how long this daemon has watched it. Zero when it was unreadable.
 	StartTime time.Time
-	// StartTicks is the same start time in clock ticks since boot. It is taken
-	// against the monotonic boot clock, so unlike StartTime a clock step does not
-	// move it: it is the stable identity of the process behind this PID. Zero when
-	// it was unreadable.
-	StartTicks uint64
 }
 
 // ProcSampler lists the processes matching a selector and reads each one's
@@ -622,10 +606,7 @@ func (s osProcSampler) Sample(m ProcMatch) ([]ProcInfo, bool) {
 		if !ok || !procMatchesWithLookup(m, id, lookup) {
 			continue
 		}
-		info := ProcInfo{
-			PID: pid, User: id.User, UID: id.UID, Exe: id.Exe, ExeOK: id.ExeOK,
-			ExePrev: id.ExePrev, Cmdline: id.Cmdline,
-		}
+		info := ProcInfo{PID: pid, User: id.User, UID: id.UID, Exe: id.Exe, ExeOK: id.ExeOK, ExePrev: id.ExePrev, Cmdline: id.Cmdline}
 		if ticks, at, ok := mr.ProcessStart(pid); ok {
 			info.StartTicks, info.StartTime = ticks, at
 		}

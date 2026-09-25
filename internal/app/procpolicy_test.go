@@ -37,10 +37,7 @@ func testProcessPolicyWatcher(t *testing.T, sampler ProcSampler, allow map[strin
 
 func TestProcessPolicyWatcherAlertsOncePerPIDIncarnation(t *testing.T) {
 	const secretArgument = "--password=never-publish-this"
-	invalid := ProcInfo{
-		PID: 42, UID: 70, Exe: "/usr/bin/bash", ExeOK: true, StartTicks: 100,
-		Cmdline: []string{"bash", "-c", secretArgument},
-	}
+	invalid := ProcInfo{PID: 42, UID: 70, Exe: "/usr/bin/bash", ExeOK: true, StartTicks: 100, Cmdline: []string{"bash", "-c", secretArgument}}
 	watcher, events, snapshot := testProcessPolicyWatcher(t,
 		&fakeProcSampler{cycles: [][]ProcInfo{{invalid}, {invalid}, {{PID: 42, UID: 70, Exe: "/usr/bin/bash", ExeOK: true, StartTicks: 200, Cmdline: invalid.Cmdline}}}},
 		map[string]any{"postgres": map[string]any{checks.CheckKeyExe: "/usr/lib64/postgresql-18/bin/postgres"}},
@@ -103,10 +100,7 @@ func TestProcessPolicyWatcherPacesUnknownPIDNotifications(t *testing.T) {
 }
 
 func TestProcessPolicyWatcherAllowsAnchoredCommandOnly(t *testing.T) {
-	valid := ProcInfo{
-		PID: 7, UID: 70, Exe: "/usr/lib64/postgresql-18/bin/postgres", ExeOK: true, StartTicks: 10,
-		Cmdline: []string{"postgres", "-D", "/srv/postgres"},
-	}
+	valid := ProcInfo{PID: 7, UID: 70, Exe: "/usr/lib64/postgresql-18/bin/postgres", ExeOK: true, StartTicks: 10, Cmdline: []string{"postgres", "-D", "/srv/postgres"}}
 	invalid := valid
 	invalid.Cmdline = []string{"postgres", "-D", "/tmp/other", "--password=hidden"}
 	watcher, events, snapshot := testProcessPolicyWatcher(t,
@@ -169,13 +163,7 @@ func TestProcessPolicyWatcherReportsDeletedExecutable(t *testing.T) {
 func TestProcessPolicyWatcherBoundsPublishedViolationDetails(t *testing.T) {
 	invalid := make([]ProcInfo, processPIDListLimit+1)
 	for i := range invalid {
-		invalid[i] = ProcInfo{
-			PID:        i + 1,
-			UID:        70,
-			Exe:        "/usr/bin/bash",
-			ExeOK:      true,
-			StartTicks: uint64(i + 1),
-		}
+		invalid[i] = ProcInfo{PID: i + 1, UID: 70, Exe: "/usr/bin/bash", ExeOK: true, StartTicks: uint64(i + 1)}
 	}
 	watcher, _, snapshot := testProcessPolicyWatcher(t,
 		&fakeProcSampler{cycles: [][]ProcInfo{invalid}},
