@@ -207,38 +207,20 @@ func (b *WebBackend) Mounts(ctx context.Context) []web.Mount {
 	out := make([]web.Mount, 0, len(rows))
 	for i := range rows {
 		row := &rows[i]
-		if row.err != nil {
-			umountReason := mountctl.UmountDisabledReason(row.spec.Path)
-			out = append(out, web.Mount{
-				Name:         row.spec.Name,
-				DisplayName:  row.spec.DisplayName,
-				Category:     row.spec.Category,
-				Path:         row.spec.Path,
-				State:        backendStatusError,
-				Operation:    b.mountOperation(row.spec.Name),
-				Refcounted:   row.spec.Refcount,
-				CanUmount:    umountReason == "",
-				UmountReason: umountReason,
-				Message:      row.err.Error(),
-			})
-			continue
-		}
 		umountReason := mountctl.UmountDisabledReason(row.spec.Path)
-		out = append(out, web.Mount{
-			Name:         row.status.Name,
-			DisplayName:  row.spec.DisplayName,
-			Category:     row.spec.Category,
-			Path:         row.status.Path,
-			Mounted:      row.status.Mounted,
-			Refcount:     row.status.Refcount,
-			State:        row.status.State,
-			Operation:    b.mountOperation(row.spec.Name),
-			Refcounted:   row.spec.Refcount,
-			CanUmount:    umountReason == "",
-			UmountReason: umountReason,
-			Blockers:     b.mountBlockers(row.spec, usage[row.spec.Path]),
-			BlockerError: usageErrors[row.spec.Path],
-		})
+		view := web.Mount{
+			Name: row.spec.Name, DisplayName: row.spec.DisplayName, Category: row.spec.Category, Path: row.spec.Path,
+			Operation: b.mountOperation(row.spec.Name), Refcounted: row.spec.Refcount,
+			CanUmount: umountReason == "", UmountReason: umountReason,
+		}
+		if row.err != nil {
+			view.State, view.Message = backendStatusError, row.err.Error()
+		} else {
+			view.Name, view.Path = row.status.Name, row.status.Path
+			view.Mounted, view.Refcount, view.State = row.status.Mounted, row.status.Refcount, row.status.State
+			view.Blockers, view.BlockerError = b.mountBlockers(row.spec, usage[row.spec.Path]), usageErrors[row.spec.Path]
+		}
+		out = append(out, view)
 	}
 	return out
 }
