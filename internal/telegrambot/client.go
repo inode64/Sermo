@@ -35,10 +35,6 @@ func newClient(token string, timeout time.Duration) *client {
 	}
 }
 
-func (c *client) methodURL(method string) string {
-	return c.base + c.token + "/" + method
-}
-
 // update is one getUpdates result item; only message updates are requested.
 // Only the fields the bot acts on are decoded.
 type update struct {
@@ -107,7 +103,7 @@ func (c *client) call(ctx context.Context, method string, body map[string]any, o
 	if err != nil {
 		return fmt.Errorf("encode %s request: %w", method, err)
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.methodURL(method), bytes.NewReader(payload))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, telegramapi.MethodURLAt(c.base, c.token, method), bytes.NewReader(payload))
 	if err != nil {
 		return fmt.Errorf("build %s request: %w", method, netutil.URLErrorCause(err))
 	}
