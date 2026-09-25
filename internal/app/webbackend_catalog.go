@@ -13,13 +13,13 @@ import (
 // Applications returns the installed applications (catalog app daemons whose
 // binary is present) with their version and binary location, reusing the same
 // inspection the sermoctl `apps` listing uses so both surfaces agree.
-func (b *WebBackend) Applications(ctx context.Context) []web.Application {
+func (b *WebBackend) Applications(ctx context.Context) []web.CatalogItem {
 	return b.decorateApplications(b.catalogItems(ctx, &b.applications, b.loadApplications))
 }
 
 // Libraries returns installed catalog libraries with their version and file
 // location, reusing the same inspection as sermoctl libs.
-func (b *WebBackend) Libraries(ctx context.Context) []web.Library {
+func (b *WebBackend) Libraries(ctx context.Context) []web.CatalogItem {
 	return b.catalogItems(ctx, &b.libraries, b.loadLibraries)
 }
 
@@ -109,7 +109,7 @@ func applicationStateFromReport(r appinspect.Report) string {
 // Its availability is that service's, so the dashboard draws it with the
 // service's own SLA panel and fetches it from the service's own endpoint; the
 // flag says only that there is one to fetch.
-func (b *WebBackend) withApplicationSLA(apps []web.Application) []web.Application {
+func (b *WebBackend) withApplicationSLA(apps []web.CatalogItem) []web.CatalogItem {
 	if len(apps) == 0 {
 		return apps
 	}
@@ -130,7 +130,7 @@ func decorateCatalogItems(items []web.CatalogItem, observedAt time.Time) []web.C
 	return items
 }
 
-func (b *WebBackend) decorateApplications(apps []web.Application) []web.Application {
+func (b *WebBackend) decorateApplications(apps []web.CatalogItem) []web.CatalogItem {
 	if b.events == nil {
 		return apps
 	}
