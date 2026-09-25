@@ -374,8 +374,6 @@ func NewWebBackend(ctx context.Context, cfg *config.Config, deps Deps) (*WebBack
 type preparedService struct {
 	entry    *webEntry
 	tree     map[string]any
-	interval time.Duration
-	disabled bool
 	warnings []string
 }
 
@@ -388,7 +386,7 @@ func prepareWebService(ctx context.Context, cfg *config.Config, name string, res
 	if len(errs) > 0 {
 		return preparedService{warnings: []string{"skip service " + name + ": " + errs[0]}}
 	}
-	p := preparedService{tree: resolved.Tree, disabled: cfgval.Disabled(doc.Body)}
+	p := preparedService{tree: resolved.Tree}
 	target, warn := resolveServiceTarget(ctx, deps, name, resolved.Tree, resolver)
 	if warn != "" {
 		p.warnings = append(p.warnings, serviceResolutionNotice(name, warn, resolved.Tree, deps.Backend))
@@ -396,24 +394,24 @@ func prepareWebService(ctx context.Context, cfg *config.Config, name string, res
 	if target.Unit == "" {
 		return p
 	}
-	p.interval = cfgval.Duration(resolved.Tree[config.EntryKeyInterval])
-	if p.interval <= 0 {
-		p.interval = config.EngineInterval(cfg, config.DefaultEngineInterval)
+	interval := cfgval.Duration(resolved.Tree[config.EntryKeyInterval])
+	if interval <= 0 {
+		interval = config.EngineInterval(cfg, config.DefaultEngineInterval)
 	}
 	p.entry = &webEntry{
 		displayName:      config.DisplayName(resolved.Tree, name),
 		category:         config.CategoryLabel(resolved.Tree, config.CategoryService),
 		unit:             target.Unit,
 		backend:          string(target.Backend),
-		interval:         p.interval,
+		interval:         interval,
+		disabled:         cfgval.Disabled(doc.Body),
 		dryRun:           config.DryRun(resolved.Tree),
 		policyCooldown:   rules.ParsePolicy(resolved.Tree).Cooldown,
 		alsoApply:        config.CascadeTargets(resolved.Tree),
 		terminalSessions: terminalSessionSources(resolved.Tree),
 		buttons:          serviceButtons(resolved.Tree),
 	}
-	if p.disabled {
-		p.entry.disabled = true
+	if p.entry.disabled {
 		p.entry.noResidentProcess = noResidentProcess(resolved.Tree)
 	} else {
 		p.warnings = append(p.warnings, attachServiceRuntime(ctx, p.entry, name, resolved.Tree, resolved.Apps, target, deps)...)
@@ -426,7 +424,7 @@ func prepareWebService(ctx context.Context, cfg *config.Config, name string, res
 func (b *WebBackend) registerService(name string, p preparedService, deps Deps) {
 	b.entries[name] = p.entry
 	b.order = append(b.order, name)
-	b.registerServiceWatches(name, p.tree, deps.GlobalNotify, p.interval, p.disabled)
+	b.registerServiceWatches(name, p.tree, deps.GlobalNotify, p.entry.interval, p.entry.disabled)
 }
 
 // attachServiceRuntime wires an enabled service's entry with its operation
