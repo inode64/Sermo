@@ -50,8 +50,8 @@ func (b *WebBackend) watchView(w *webWatch, system metrics.Snapshot, activity wa
 	}
 	view := web.Watch{
 		Name: w.name, Scope: scope, DisplayName: w.displayName, Category: w.category, CheckType: w.checkType,
-		Summary: watchSummary(w, storage, summary), SummaryConfigured: cfgval.String(w.check[checks.CheckKeySummary]) != "",
-		Interval: units.HumanizeDuration(w.interval), Enabled: !w.disabled, Monitor: monitorMode,
+		SummaryConfigured: cfgval.String(w.check[checks.CheckKeySummary]) != "",
+		Interval:          units.HumanizeDuration(w.interval), Enabled: !w.disabled, Monitor: monitorMode,
 		Monitored: !w.disabled && monitorMode != config.MonitorDisabled, FireOnFail: w.fireOnFail,
 		HasHook: len(w.hookCommand) > 0, HookCommand: slices.Clone(w.hookCommand), Notifiers: slices.Clone(w.notifiers),
 		NotifierCount: len(w.notifiers), DryRun: w.dryRun, Conditions: watchConditions(w.check, w.metrics),
@@ -60,6 +60,7 @@ func (b *WebBackend) watchView(w *webWatch, system metrics.Snapshot, activity wa
 		CanControlRAID: !w.disabled && w.raidControl, RAIDArray: cfgval.String(w.check[checks.CheckKeyArray]),
 		CanControlReplication: !w.disabled && w.replicationControl && w.checkType == checks.CheckTypeReplication,
 	}
+	view.Summary = watchSummary(w, storage, summary, view.Conditions)
 	b.applyWatchRuntimeView(&view, w, activity, observation)
 	return view
 }
@@ -300,7 +301,7 @@ func isWatchActivityKind(kind string) bool {
 	}
 }
 
-func watchSummary(w *webWatch, storage *web.StorageWatchInfo, liveSummary string) string {
+func watchSummary(w *webWatch, storage *web.StorageWatchInfo, liveSummary string, conds []web.WatchCondition) string {
 	if isStorageCheckType(w.checkType) && storage != nil {
 		if storage.SampleError != "" {
 			return storage.Path + ": " + storage.SampleError
@@ -326,7 +327,6 @@ func watchSummary(w *webWatch, storage *web.StorageWatchInfo, liveSummary string
 	if liveSummary != "" {
 		return liveSummary
 	}
-	conds := watchConditions(w.check, w.metrics)
 	if len(conds) == 0 {
 		return ""
 	}
