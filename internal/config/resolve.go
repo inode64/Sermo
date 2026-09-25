@@ -323,10 +323,6 @@ func expandPidfiles(tree map[string]any) []string {
 	}
 
 	normalized := make(map[string]any, len(pidfiles))
-	checksMap, _ := tree[sectionChecks].(map[string]any)
-	if checksMap == nil {
-		checksMap = map[string]any{}
-	}
 	for _, role := range slices.Sorted(maps.Keys(pidfiles)) {
 		path := pidfilesRolePath(role)
 		if !validDocumentName(role) {
@@ -338,24 +334,12 @@ func expandPidfiles(tree map[string]any) []string {
 			errs = append(errs, fmt.Sprintf(validationNonEmptyPathListFormat, path))
 			continue
 		}
-		for _, path := range paths {
-			if !filepath.IsAbs(path) {
-				errs = append(errs, fmt.Sprintf(validationPathAbsoluteFormat, pidfilesRolePath(role), path))
-			}
-		}
+		errs = append(errs, validateArtifactAbsolutePaths(path, paths)...)
 		pathValue := serviceArtifactPathValue(paths)
 		normalized[role] = pathValue
-		checkName := artifactPidfile + "-" + role
-		if _, exists := checksMap[checkName]; !exists {
-			checksMap[checkName] = map[string]any{
-				keyType:     artifactPidfile,
-				keyPath:     pathValue,
-				keyRequires: []any{ServiceKeyService},
-			}
-		}
+		ensureServiceArtifactCheck(tree, artifactPidfile+"-"+role, artifactPidfile, pathValue, false)
 	}
 	tree[ServiceKeyPidfiles] = normalized
-	tree[sectionChecks] = checksMap
 	return errs
 }
 
@@ -394,17 +378,25 @@ func parseServiceArtifactPaths(kind string, raw any) (serviceArtifactPaths, []st
 	if len(paths) == 0 {
 		return serviceArtifactPaths{}, []string{kind + " must be a non-empty path string, list or {path: ...} mapping"}
 	}
+	return serviceArtifactPaths{paths: paths, optional: optional}, validateArtifactAbsolutePaths(kind, paths)
+}
+
+func validateArtifactAbsolutePaths(kind string, paths []string) []string {
 	var errs []string
 	for _, path := range paths {
 		if !filepath.IsAbs(path) {
 			errs = append(errs, fmt.Sprintf(validationPathAbsoluteFormat, kind, path))
 		}
 	}
-	return serviceArtifactPaths{paths: paths, optional: optional}, errs
+	return errs
 }
 
 func ensureServiceArtifactCheck(tree map[string]any, name, checkType string, pathValue any, optional bool) {
-	checksMap, _ := tree[sectionChecks].(map[string]any)
+	checksMap, isMap := tree[sectionChecks].(map[string]any)
+	if _, present := tree[sectionChecks]; present && !isMap {
+		// Leave malformed sections intact for validateCheckSection.
+		return
+	}
 	if checksMap == nil {
 		checksMap = map[string]any{}
 	}

@@ -455,3 +455,16 @@ func TestValidateRejectsMalformedServiceSections(t *testing.T) {
 		}
 	}
 }
+
+func TestValidateArtifactsPreserveMalformedChecks(t *testing.T) {
+	for _, artifact := range []string{
+		"pidfile: /run/svc.pid", "pidfiles: {main: /run/svc.pid}", "socket: /run/svc.sock", "lockfile: /run/svc.lock",
+	} {
+		for _, value := range []string{"null", "[broken]", "oops"} {
+			t.Run(artifact+"/"+value, func(t *testing.T) {
+				issues := validateService(t, fmt.Sprintf("name: svc\nservice: svc\npolicy: {cooldown: 5m}\n%s\nchecks: %s\n", artifact, value))
+				mustHave(t, issues, "checks must be a mapping")
+			})
+		}
+	}
+}
