@@ -199,18 +199,12 @@ func (c *statementCache) close() {
 
 // reads returns the connection SELECT-only paths should use.
 func (s *Store) reads() *sql.DB {
-	if s.reader != nil {
-		return s.reader
-	}
-	return s.db
+	return s.reader
 }
 
 // sqlCtx is the context passed to database/sql *Context methods.
 func (s *Store) sqlCtx() context.Context {
-	if s.ctx != nil {
-		return s.ctx
-	}
-	return context.Background()
+	return s.ctx
 }
 
 const (

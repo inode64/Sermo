@@ -190,11 +190,7 @@ func (s *Server) withAuth(next http.Handler) http.Handler {
 }
 
 func (s *Server) challenge(w http.ResponseWriter) {
-	host := ""
-	if s != nil {
-		host = s.Hostname
-	}
-	w.Header().Set(headerWWWAuthenticate, basicAuthChallenge(host))
+	w.Header().Set(headerWWWAuthenticate, basicAuthChallenge(s.Hostname))
 	writeJSON(w, http.StatusUnauthorized, ActionResult{OK: false, Message: authMessageRequired})
 }
 
@@ -291,7 +287,7 @@ func isReadMethod(method string) bool {
 }
 
 func isPlainHealthProbe(r *http.Request) bool {
-	if r == nil || !isReadMethod(r.Method) || r.URL.Query().Has(apiQueryVerbose) {
+	if !isReadMethod(r.Method) || r.URL.Query().Has(apiQueryVerbose) {
 		return false
 	}
 	return r.URL.Path == routePathLivez || r.URL.Path == routePathReadyz

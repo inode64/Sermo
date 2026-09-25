@@ -228,12 +228,9 @@ func storeLookup[K comparable, T any](l *UserLookup, cache map[K]lookupCacheResu
 	l.mu.Unlock()
 }
 
-// clock returns the current time via the injectable hook, defaulting to time.Now.
+// clock returns the current time via the constructor-initialized hook.
 func (l *UserLookup) clock() time.Time {
-	if l.now != nil {
-		return l.now()
-	}
-	return time.Now()
+	return l.now()
 }
 
 // negativeExpired reports whether a cached miss (ok=false) has outlived negTTL
@@ -242,11 +239,7 @@ func (l *UserLookup) negativeExpired(ok bool, at time.Time) bool {
 	if ok {
 		return false
 	}
-	ttl := l.negTTL
-	if ttl <= 0 {
-		ttl = negativeCacheTTL
-	}
-	return l.clock().Sub(at) >= ttl
+	return l.clock().Sub(at) >= l.negTTL
 }
 
 func (l *UserLookup) getentUserID(name string) (uint32, bool) {
