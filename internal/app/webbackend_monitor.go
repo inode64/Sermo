@@ -24,22 +24,14 @@ func (v monitorStateView) changedAtText() string {
 }
 
 func (b *WebBackend) monitorView(key string) (monitorStateView, bool) {
-	active, source, changedAt, ok := b.monitorRecord(key)
-	if !ok {
-		return monitorStateView{}, false
-	}
-	return monitorStateView{active: active, source: source, changedAt: changedAt}, true
-}
-
-func (b *WebBackend) monitorRecord(key string) (active bool, source string, changedAt time.Time, ok bool) {
 	if b.store == nil {
-		return false, "", time.Time{}, false
+		return monitorStateView{}, false
 	}
 	rec, found, err := b.store.MonitorState(key)
 	if err != nil || !found {
-		return false, "", time.Time{}, false
+		return monitorStateView{}, false
 	}
-	return rec.Active, rec.Source, rec.UpdatedAt, true
+	return monitorStateView{active: rec.Active, source: rec.Source, changedAt: rec.UpdatedAt}, true
 }
 
 func (b *WebBackend) monitorRecords() map[string]state.MonitorRecord {

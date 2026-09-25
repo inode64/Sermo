@@ -2932,3 +2932,8 @@ func TestReloadSupportRefreshHasDeadline(t *testing.T) {
 		t.Fatalf("supported=%v err=%v", supported, err)
 	}
 }
+
+// view is concise fixture setup for service row projection tests.
+func (b *WebBackend) view(ctx context.Context, name string, e *webEntry) web.Service {
+	return b.viewWithRuntime(ctx, name, e, b.lastServiceEvent(name), serviceLockView{})
+}
