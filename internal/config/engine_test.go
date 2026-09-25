@@ -13,7 +13,9 @@ func TestEngineDuration(t *testing.T) {
 		read func(*Config, time.Duration) time.Duration
 	}{
 		{name: "interval", key: keyInterval, read: EngineInterval},
-		{name: "diagnostics interval", key: EngineKeyDiagnosticsInterval, read: EngineDiagnosticsInterval},
+		{name: "diagnostics interval", key: EngineKeyDiagnosticsInterval, read: func(cfg *Config, fallback time.Duration) time.Duration {
+			return EngineDuration(cfg, EngineKeyDiagnosticsInterval, fallback)
+		}},
 	}
 	tests := []struct {
 		name  string

@@ -374,9 +374,7 @@ func validateCommandCondition(value any, path string, add addFunc) {
 		add("%s.command must be a mapping", path)
 		return
 	}
-	entry := make(map[string]any, len(m)+1)
-	maps.Copy(entry, m)
-	entry[checks.CheckKeyType] = checks.CheckTypeCommand
+	entry := inlineCheckEntry(m, checks.CheckTypeCommand)
 	validateSingleShotCheckFields(path+".command", checks.CheckTypeCommand, entry, "", add)
 	if cfgval.String(m[checks.CheckKeyTimeout]) == "" {
 		add("%s.command condition must declare a timeout", path)
@@ -445,9 +443,7 @@ func validateProbe(v any, path string, checkNames, systemMetricChecks map[string
 			add("%s.%s must be a mapping", path, typ)
 			continue
 		}
-		entry := make(map[string]any, len(fields)+1)
-		maps.Copy(entry, fields)
-		entry[checks.CheckKeyType] = typ
+		entry := inlineCheckEntry(fields, typ)
 		if typ == checks.CheckTypeMetric {
 			validateMetric(entry, path+"."+typ, allowSystemMetric, add)
 			continue
@@ -583,3 +579,10 @@ func validateMinMatches(prefix string, window map[string]any, cycles int, hasCyc
 
 var windowLengthKeys = set(rules.WindowKeyCycles, rules.WindowKeyDuration)
 var withinWindowKeys = set(rules.WindowKeyCycles, rules.WindowKeyDuration, rules.WindowKeyMinMatches)
+
+func inlineCheckEntry(fields map[string]any, typ string) map[string]any {
+	entry := make(map[string]any, len(fields)+1)
+	maps.Copy(entry, fields)
+	entry[checks.CheckKeyType] = typ
+	return entry
+}

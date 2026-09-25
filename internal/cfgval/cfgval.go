@@ -23,12 +23,10 @@ const (
 )
 
 const (
-	floatFormatFixed       = 'f'
-	floatPrecisionAuto     = -1
-	floatPrecisionInteger  = 0
-	numericBaseDecimal     = 10
-	numericBits64          = 64
-	numericBitsCurrentArch = 0
+	floatFormatFixed   = 'f'
+	floatPrecisionAuto = -1
+	numericBaseDecimal = 10
+	numericBits64      = 64
 )
 
 const (
@@ -324,12 +322,18 @@ func uint64Value(n uint64) (int, bool) {
 }
 
 func float64Int(n float64) (int, bool) {
-	i, err := strconv.ParseInt(
-		strconv.FormatFloat(math.Trunc(n), floatFormatFixed, floatPrecisionInteger, numericBits64),
-		numericBaseDecimal,
-		numericBitsCurrentArch,
-	)
-	return int(i), err == nil
+	n = math.Trunc(n)
+	switch {
+	case math.IsNaN(n) || math.IsInf(n, 0):
+		return 0, false
+	case n < float64(minInt):
+		return minInt, false
+	case n >= -float64(minInt):
+		// The exclusive upper bound is exact even when maxInt rounds up in float64.
+		return maxInt, false
+	default:
+		return int(n), true
+	}
 }
 
 type byteSizeSuffix struct {
@@ -337,14 +341,12 @@ type byteSizeSuffix struct {
 	mult float64
 }
 
-func byteSizeSuffixes() [13]byteSizeSuffix {
-	return [...]byteSizeSuffix{
-		{"TIB", units.BytesPerTiB}, {"TB", units.BytesPerTiB}, {"T", units.BytesPerTiB},
-		{"GIB", units.BytesPerGiB}, {"GB", units.BytesPerGiB}, {"G", units.BytesPerGiB},
-		{"MIB", units.BytesPerMiB}, {"MB", units.BytesPerMiB}, {"M", units.BytesPerMiB},
-		{"KIB", units.BytesPerKiB}, {"KB", units.BytesPerKiB}, {"K", units.BytesPerKiB},
-		{"B", 1},
-	}
+var byteSizeSuffixes = [...]byteSizeSuffix{
+	{"TIB", units.BytesPerTiB}, {"TB", units.BytesPerTiB}, {"T", units.BytesPerTiB},
+	{"GIB", units.BytesPerGiB}, {"GB", units.BytesPerGiB}, {"G", units.BytesPerGiB},
+	{"MIB", units.BytesPerMiB}, {"MB", units.BytesPerMiB}, {"M", units.BytesPerMiB},
+	{"KIB", units.BytesPerKiB}, {"KB", units.BytesPerKiB}, {"K", units.BytesPerKiB},
+	{"B", 1},
 }
 
 // ByteSize parses a scalar byte size. It requires an explicit suffix using
@@ -359,7 +361,7 @@ func ByteSize(v any) (uint64, bool) {
 	upper := strings.ToUpper(s)
 	unit := float64(1)
 	hasUnit := false
-	for _, suffix := range byteSizeSuffixes() {
+	for _, suffix := range byteSizeSuffixes {
 		if strings.HasSuffix(upper, suffix.text) {
 			unit = suffix.mult
 			hasUnit = true

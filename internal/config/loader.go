@@ -79,13 +79,13 @@ func Load(globalPath string, opts ...Option) (*Config, error) {
 	servicePaths := global.ServicePaths
 	if len(servicePaths) == 0 && !servicePathsOverridden {
 		servicePaths = pathSpecsFromPaths(defaultConfigDirs(globalPath, defaultServiceDirs))
-		global.ServicePaths = append([]PathSpec(nil), servicePaths...)
+		global.ServicePaths = servicePaths
 	}
 	_, appPathsOverridden := o.pathDirs[pathKeyApps]
 	appPaths := global.AppPaths
 	if len(appPaths) == 0 && !appPathsOverridden {
 		appPaths = pathSpecsFromPaths(defaultConfigDirs(globalPath, defaultAppDirs))
-		global.AppPaths = append([]PathSpec(nil), appPaths...)
+		global.AppPaths = appPaths
 	}
 	notifierPaths := global.NotifierPaths
 	watchPaths := global.WatchPaths
@@ -378,11 +378,11 @@ func uniquePathSpecs(specs []PathSpec) []PathSpec {
 }
 
 func (c *Config) loadServiceDir(dir string, recursive bool) error {
-	return c.loadKindDirEntries(dir, kindService, kindService, recursive)
+	return c.loadKindDirEntries(dir, kindService, recursive)
 }
 
 func (c *Config) loadAppDir(dir string, recursive bool) error {
-	return c.loadKindDirEntries(dir, kindApp, kindApp, recursive)
+	return c.loadKindDirEntries(dir, kindApp, recursive)
 }
 
 func (c *Config) loadNotifierDir(dir string, recursive bool) error {
@@ -402,8 +402,8 @@ func (c *Config) loadWatchDir(dir string, recursive bool) error {
 	return loadDocumentTree(dir, pathKeyWatches, recursive, c.mergeWatchDocument)
 }
 
-func (c *Config) loadKindDirEntries(dir, label, kind string, recursive bool) error {
-	return loadDocumentTree(dir, label, recursive, func(doc *Document) error {
+func (c *Config) loadKindDirEntries(dir, kind string, recursive bool) error {
+	return loadDocumentTree(dir, kind, recursive, func(doc *Document) error {
 		if err := assignKind(doc, kind); err != nil {
 			return err
 		}

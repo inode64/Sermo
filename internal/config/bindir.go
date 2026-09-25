@@ -89,20 +89,12 @@ func expandBindirValue(v any) any {
 		if cands == nil {
 			return t
 		}
-		return bindirCandidateValues(cands)
+		return stringValues(cands)
 	case []any:
 		return expandBindirList(t)
 	default:
 		return t
 	}
-}
-
-func bindirCandidateValues(cands []string) []any {
-	out := make([]any, len(cands))
-	for i, c := range cands {
-		out[i] = c
-	}
-	return out
 }
 
 func expandBindirList(values []any) []any {

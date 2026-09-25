@@ -273,7 +273,7 @@ func run(args []string) int {
 	var diagnosticLog *app.DiagnosticLog
 	if diagFile != nil {
 		diagnosticLog = app.NewDiagnosticLog(cfg, diagFile, time.Now)
-		go diagnosticLog.Run(ctx, config.EngineDiagnosticsInterval(cfg, config.DefaultEngineDiagnosticsInterval))
+		go diagnosticLog.Run(ctx, config.EngineDuration(cfg, config.EngineKeyDiagnosticsInterval, config.DefaultEngineDiagnosticsInterval))
 	}
 	panicGate := app.NewPanicGate(store)
 	// webChanges pushes a change signal to connected dashboards (SSE) on every

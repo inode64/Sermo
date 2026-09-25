@@ -21,7 +21,7 @@ const (
 // validateWeb checks the global `web` block. The UI is enabled only when `port`
 // is set to a valid TCP port; a `web` block without `port` (or with port omitted)
 // is valid and leaves the dashboard disabled, matching sermod.
-func validateWeb(webCfg map[string]any, add func(string, ...any)) {
+func validateWeb(webCfg map[string]any, add addFunc) {
 	if portRaw, present := webCfg[WebKeyPort]; present {
 		port, ok := cfgval.Int(portRaw)
 		if !ok || !cfgval.ValidTCPPort(port) {
@@ -101,13 +101,13 @@ const (
 
 // validateNotifiers checks the global `notifiers` section: each entry is a known
 // type with the fields that type needs. New transports validate here too.
-func validateNotifiers(notifiers map[string]any, templateDir string, add func(string, ...any)) {
+func validateNotifiers(notifiers map[string]any, templateDir string, add addFunc) {
 	for _, name := range slices.Sorted(maps.Keys(notifiers)) {
 		validateNotifier(name, notifiers[name], templateDir, add)
 	}
 }
 
-func validateNotifier(name string, raw any, templateDir string, add func(string, ...any)) {
+func validateNotifier(name string, raw any, templateDir string, add addFunc) {
 	if name == NotifyNone {
 		add("%s: %q is a reserved keyword and cannot name a notifier", notifierPath(name), NotifyNone)
 		return
@@ -136,7 +136,7 @@ func validateNotifier(name string, raw any, templateDir string, add func(string,
 // variable) leaves the bot inactive rather than failing config load — mirroring
 // telegrambot.Config.active(). When a token is present the section requires at
 // least one allowed chat id; a poll interval, when set, must be positive.
-func validateTelegramBot(raw map[string]any, add func(string, ...any)) {
+func validateTelegramBot(raw map[string]any, add addFunc) {
 	section, ok := raw[SectionTelegramBot].(map[string]any)
 	if !ok {
 		return
@@ -164,7 +164,7 @@ func validateTelegramBot(raw map[string]any, add func(string, ...any)) {
 	}
 }
 
-func validateNotifierTemplate(name string, entry map[string]any, templateDir string, add func(string, ...any)) {
+func validateNotifierTemplate(name string, entry map[string]any, templateDir string, add addFunc) {
 	raw, present := entry[notify.KeyTemplate]
 	if !present {
 		return
@@ -204,7 +204,7 @@ func NotifyDefault(raw map[string]any) []string {
 // watch `then.notify`, or a rule `notify`): it must be a string or string list,
 // every name must be a defined notifier or the `none` sentinel, and `none`
 // cannot be combined with real names.
-func validateNotifySelection(prefix string, raw any, defined map[string]struct{}, add func(string, ...any)) {
+func validateNotifySelection(prefix string, raw any, defined map[string]struct{}, add addFunc) {
 	names, err := cfgval.StrictStringList(raw)
 	if err != nil {
 		add(validationStringListFormat, prefix)
@@ -225,7 +225,7 @@ func validateNotifySelection(prefix string, raw any, defined map[string]struct{}
 
 // validateNotifyRefs checks every `then.notify` selection in a watch (entry-level
 // and per-metric) against the defined notifiers and the `none` sentinel.
-func validateNotifyRefs(name string, entry map[string]any, notifiers map[string]struct{}, add func(string, ...any)) {
+func validateNotifyRefs(name string, entry map[string]any, notifiers map[string]struct{}, add addFunc) {
 	check := func(prefix string, then any) {
 		t, ok := then.(map[string]any)
 		if !ok {

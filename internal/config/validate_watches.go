@@ -13,7 +13,7 @@ import (
 	"sermo/internal/rules"
 )
 
-func validateWatches(watches map[string]any, locksDir string, notifiers map[string]struct{}, defaultNotify []string, add func(string, ...any)) {
+func validateWatches(watches map[string]any, locksDir string, notifiers map[string]struct{}, defaultNotify []string, add addFunc) {
 	for _, name := range slices.Sorted(maps.Keys(watches)) {
 		prefix := watchPath(name)
 		checkPath := watchCheckPath(name)
@@ -132,7 +132,7 @@ func validateWatchControl(name, typ string, entry, check map[string]any, spec wa
 	}
 }
 
-func validateWatchMountBlock(name, typ string, entry map[string]any, add func(string, ...any)) {
+func validateWatchMountBlock(name, typ string, entry map[string]any, add addFunc) {
 	mountPath := watchFieldPath(name, keyMount)
 	mount, ok := entry[keyMount].(map[string]any)
 	if _, present := entry[keyMount]; !present {
@@ -159,7 +159,7 @@ func validateWatchMountBlock(name, typ string, entry map[string]any, add func(st
 // then.action are desugared to checks:+rules:, by expandServiceWatches; this pass
 // still validates their grammar when it sees an unexpanded tree. Per-type field
 // grammar is shared with host watches.
-func validateServiceWatches(tree map[string]any, locksDir string, notifiers map[string]struct{}, defaultNotify []string, add func(string, ...any)) {
+func validateServiceWatches(tree map[string]any, locksDir string, notifiers map[string]struct{}, defaultNotify []string, add addFunc) {
 	watches, ok := tree[sectionWatches].(map[string]any)
 	if !ok {
 		if _, present := tree[sectionWatches]; present {
@@ -277,7 +277,7 @@ func isRuleClassAction(action string) bool {
 // rule-class action. It desugars to a generated check + rule, so its then accepts
 // action/message/blocks/notify but not fire-and-forget hook/expand/kill side
 // effects or watch-only notification cadence.
-func validateWatchThenAction(prefix, action string, then map[string]any, add func(string, ...any)) {
+func validateWatchThenAction(prefix, action string, then map[string]any, add addFunc) {
 	if !isRuleClassAction(action) {
 		add(validationNotOneOfFormat, thenFieldPath(prefix, rules.RuleFieldAction), action, rules.RuleActionSummary)
 		return
@@ -316,7 +316,7 @@ func validateWatchThenAction(prefix, action string, then map[string]any, add fun
 	}
 }
 
-func validateWatchMetadata(name string, entry map[string]any, add func(string, ...any)) {
+func validateWatchMetadata(name string, entry map[string]any, add addFunc) {
 	for _, key := range []string{keyDisplayName, keyDescription, keyCategory} {
 		if v, present := entry[key]; present {
 			if _, ok := v.(string); !ok {
@@ -331,7 +331,7 @@ func validateWatchMetadata(name string, entry map[string]any, add func(string, .
 // Unlike then.expand it REQUIRES a positive watch-level policy.cooldown (safety
 // invariant 8) — a zero policy allows an action on every cycle, and a clock step
 // is a discontinuity, not an idempotent nudge.
-func validateWatchMakeStepAction(prefix string, block, then map[string]any, allow bool, add func(string, ...any)) bool {
+func validateWatchMakeStepAction(prefix string, block, then map[string]any, allow bool, add addFunc) bool {
 	raw, present := then[WatchThenKeyMakeStep]
 	step, hasStep := raw.(map[string]any)
 	switch {
@@ -377,7 +377,7 @@ type watchNativeActions struct {
 // must be a non-empty array with a valid optional timeout. Notifier-name
 // references are checked separately by validateNotifyRefs (which has the
 // configured notifier set).
-func validateHookBlock(prefix string, block map[string]any, allow watchNativeActions, defaultNotify []string, add func(string, ...any)) {
+func validateHookBlock(prefix string, block map[string]any, allow watchNativeActions, defaultNotify []string, add addFunc) {
 	then, ok := watchThenMapping(prefix, block, add)
 	if !ok {
 		return
@@ -410,7 +410,7 @@ func validateHookBlock(prefix string, block map[string]any, allow watchNativeAct
 // validateWatchHookAction validates the identical hook and recover_hook command
 // grammar; the caller retains the policy that decides whether recover_hook is
 // available for a watch type.
-func validateWatchHookAction(prefix, field string, hook map[string]any, hasHook bool, add func(string, ...any)) {
+func validateWatchHookAction(prefix, field string, hook map[string]any, hasHook bool, add addFunc) {
 	if !hasHook {
 		return
 	}
@@ -422,7 +422,7 @@ func validateWatchHookAction(prefix, field string, hook map[string]any, hasHook 
 	validateCommandExpectations(path, hook, add)
 }
 
-func watchThenMapping(prefix string, block map[string]any, add func(string, ...any)) (map[string]any, bool) {
+func watchThenMapping(prefix string, block map[string]any, add addFunc) (map[string]any, bool) {
 	rawThen, present := block[rules.RuleFieldThen]
 	if !present {
 		// Absent `then` is valid: the watch is alert/monitor-only. Its `check` +
@@ -437,13 +437,13 @@ func watchThenMapping(prefix string, block map[string]any, add func(string, ...a
 	return then, ok
 }
 
-func validateWatchThenKeys(prefix string, then map[string]any, add func(string, ...any)) {
+func validateWatchThenKeys(prefix string, then map[string]any, add addFunc) {
 	for key := range unknownBlockKeys(then, watchThenKeys) {
 		add(validationNotSupportedFormat, thenFieldPath(prefix, key))
 	}
 }
 
-func validateWatchNotifyInterval(prefix string, then map[string]any, hasNotifyOn bool, notify, defaultNotify []string, add func(string, ...any)) {
+func validateWatchNotifyInterval(prefix string, then map[string]any, hasNotifyOn bool, notify, defaultNotify []string, add addFunc) {
 	v, present := then[WatchThenKeyNotifyInterval]
 	if !present {
 		return
@@ -460,7 +460,7 @@ func validateWatchNotifyInterval(prefix string, then map[string]any, hasNotifyOn
 	}
 }
 
-func validateWatchExpandAction(prefix string, then map[string]any, allowExpand bool, add func(string, ...any)) bool {
+func validateWatchExpandAction(prefix string, then map[string]any, allowExpand bool, add addFunc) bool {
 	rawExpand, present := then[WatchThenKeyExpand]
 	expand, hasExpand := rawExpand.(map[string]any)
 	switch {
@@ -476,7 +476,7 @@ func validateWatchExpandAction(prefix string, then map[string]any, allowExpand b
 	return hasExpand
 }
 
-func validateWatchKillAction(prefix string, then map[string]any, allowKill bool, add func(string, ...any)) bool {
+func validateWatchKillAction(prefix string, then map[string]any, allowKill bool, add addFunc) bool {
 	rawKill, present := then[WatchThenKeyKill]
 	kill, hasKill := rawKill.(map[string]any)
 	switch {
@@ -533,7 +533,7 @@ func validateRaidNotifyOn(name, typ string, entry map[string]any, notifiers map[
 // signal (TERM default, or KILL — validated by the same process.ParseKillSignal
 // the daemon uses), an optional boolean `escalate`, and the optional grace
 // durations that only apply when escalating.
-func validateKillAction(prefix string, kill map[string]any, add func(string, ...any)) {
+func validateKillAction(prefix string, kill map[string]any, add addFunc) {
 	if s := cfgval.String(kill[WatchKillKeySignal]); s != "" {
 		if _, err := process.ParseKillSignal(s); err != nil {
 			add("%s %q must be %s", thenKillPath(prefix)+"."+WatchKillKeySignal, s, process.KillSignalSummary)
@@ -599,18 +599,18 @@ func HasEffectiveNotifyAction(names, defaultNotify []string) bool {
 
 // validateMetricWatchEntry rejects entry-level then/for/within on a multi-metric
 // watch (net, icmp, swap): those fields belong inside each metric's own block.
-func validateMetricWatchEntry(name string, entry map[string]any, add func(string, ...any)) {
+func validateMetricWatchEntry(name string, entry map[string]any, add addFunc) {
 	validateInvalidWatchEntryFields(name, "multi-metric", entry, []string{rules.RuleFieldThen, rules.RuleFieldFor, rules.RuleFieldWithin, rules.RuleFieldClear}, "metrics.<name>.%s", add)
 }
 
 // validateStatefulWatchEntry rejects entry-level for/within on a file or process
 // watch: these use internal per-path/per-PID state and never read the shared
 // rules window fields at the entry level.
-func validateStatefulWatchEntry(name, typ string, entry map[string]any, add func(string, ...any)) {
+func validateStatefulWatchEntry(name, typ string, entry map[string]any, add addFunc) {
 	validateInvalidWatchEntryFields(name, typ, entry, []string{rules.RuleFieldFor, rules.RuleFieldWithin, rules.RuleFieldClear}, "", add)
 }
 
-func validateInvalidWatchEntryFields(name, typ string, entry map[string]any, keys []string, moveHint string, add func(string, ...any)) {
+func validateInvalidWatchEntryFields(name, typ string, entry map[string]any, keys []string, moveHint string, add addFunc) {
 	for _, key := range keys {
 		if _, present := entry[key]; present {
 			msg := fmt.Sprintf("%s is not valid on a %s watch", watchFieldPath(name, key), typ)
@@ -624,7 +624,7 @@ func validateInvalidWatchEntryFields(name, typ string, entry map[string]any, key
 
 // validateNetCheck validates a net interface watch: an interface and a non-empty
 // metrics map, each metric with a valid condition and its own hook.
-func validateNetCheck(name string, check, entry map[string]any, defaultNotify []string, add func(string, ...any)) {
+func validateNetCheck(name string, check, entry map[string]any, defaultNotify []string, add addFunc) {
 	validateMetricWatchEntry(name, entry, add)
 	if cfgval.String(check[checks.CheckKeyInterface]) == "" {
 		add("%s is required for a net check", watchCheckFieldPath(name, checks.CheckKeyInterface))
@@ -704,7 +704,7 @@ func validateWatchableCheck(prefix, typ string, fields map[string]any, locksDir 
 // validateSwapCheck validates a swap watch: a non-empty metrics map of usage
 // (used_pct/free_pct/free_bytes thresholds) and/or io (per-cycle delta), each
 // with its own hook (mirrors validateNetCheck).
-func validateSwapCheck(name string, entry map[string]any, defaultNotify []string, add func(string, ...any)) {
+func validateSwapCheck(name string, entry map[string]any, defaultNotify []string, add addFunc) {
 	validateMetricWatchEntry(name, entry, add)
 	validateMetricWatchEntries(name, "swap", entry, defaultNotify, validateSwapMetricCondition, add)
 }
@@ -731,7 +731,7 @@ func validateSwapMetricCondition(prefix, metric string, m map[string]any, add ad
 
 // validateStateMetric validates a state metric condition shared by net/icmp:
 // expect up|down OR on: change.
-func validateStateMetric(prefix string, m map[string]any, add func(string, ...any)) {
+func validateStateMetric(prefix string, m map[string]any, add addFunc) {
 	exp := cfgval.String(m[checks.CheckKeyExpect])
 	onChange := cfgval.String(m[checks.CheckKeyOn]) == checks.OnModeChange
 	if exp == "" && !onChange {
@@ -744,7 +744,7 @@ func validateStateMetric(prefix string, m map[string]any, add func(string, ...an
 // validateICMPCheck validates an icmp host watch: a host (+ optional positive
 // count) and a non-empty metrics map, each metric with a valid condition and its
 // own hook.
-func validateICMPCheck(name string, check, entry map[string]any, defaultNotify []string, add func(string, ...any)) {
+func validateICMPCheck(name string, check, entry map[string]any, defaultNotify []string, add addFunc) {
 	validateMetricWatchEntry(name, entry, add)
 	if cfgval.String(check[checks.CheckKeyHost]) == "" {
 		add("%s is required for an icmp check", watchCheckFieldPath(name, checks.CheckKeyHost))
@@ -771,7 +771,7 @@ func validateICMPMetricCondition(prefix, metric string, m map[string]any, add ad
 // validateFileCheck validates a file watch: path or paths, optional recursive
 // traversal flags, and at least one attribute condition (size threshold/change,
 // permissions/owner on change, existence on delete, older_than), plus the entry's hook.
-func validateFileCheck(name string, check, entry map[string]any, defaultNotify []string, add func(string, ...any)) {
+func validateFileCheck(name string, check, entry map[string]any, defaultNotify []string, add addFunc) {
 	validateStatefulWatchEntry(name, checks.CheckTypeFile, entry, add)
 	if _, err := FileWatchPaths(check); err != nil {
 		add("%s: %s", watchCheckPath(name), err)
@@ -832,7 +832,7 @@ func validateFileCheck(name string, check, entry map[string]any, defaultNotify [
 // validateProcessWatch validates a process watch: a name, an optional user, and
 // at least one condition (for duration, or cpu/memory/io {op, value}), plus the
 // entry's hook.
-func validateProcessWatch(name string, check, entry map[string]any, defaultNotify []string, add func(string, ...any)) {
+func validateProcessWatch(name string, check, entry map[string]any, defaultNotify []string, add addFunc) {
 	validateStatefulWatchEntry(name, checks.CheckTypeProcess, entry, add)
 	if cfgval.String(check[checks.CheckKeyName]) == "" {
 		add("%s is required for a process check", watchCheckFieldPath(name, checks.CheckKeyName))
@@ -871,7 +871,7 @@ func validateProcessWatch(name string, check, entry map[string]any, defaultNotif
 	validateProcessWatchKillSelector(name, check, entry, add)
 }
 
-func validateProcessWatchKillSelector(name string, check, entry map[string]any, add func(string, ...any)) {
+func validateProcessWatchKillSelector(name string, check, entry map[string]any, add addFunc) {
 	then, ok := entry[rules.RuleFieldThen].(map[string]any)
 	if !ok {
 		return
@@ -892,7 +892,7 @@ func validateProcessWatchKillSelector(name string, check, entry map[string]any, 
 // an optional cmd regex can only narrow that executable identity. The policy
 // never accepts a hook or native action, so a configuration mistake cannot turn
 // an observation watch into a process-control path.
-func validateProcessPolicyWatch(name string, check, entry map[string]any, defaultNotify []string, add func(string, ...any)) {
+func validateProcessPolicyWatch(name string, check, entry map[string]any, defaultNotify []string, add addFunc) {
 	validateStatefulWatchEntry(name, checks.CheckTypeProcessPolicy, entry, add)
 	if cfgval.String(check[checks.CheckKeyUser]) == "" {
 		add("%s is required for a process_policy check", watchCheckFieldPath(name, checks.CheckKeyUser))
@@ -915,7 +915,7 @@ func validateProcessPolicyWatch(name string, check, entry map[string]any, defaul
 // validateAlertOnlyWatchThen permits only notification delivery on an
 // execution-policy watch. Omitting then remains valid and records a dashboard
 // and event-log alert without running an external action.
-func validateAlertOnlyWatchThen(name string, entry map[string]any, defaultNotify []string, add func(string, ...any)) {
+func validateAlertOnlyWatchThen(name string, entry map[string]any, defaultNotify []string, add addFunc) {
 	prefix := watchPath(name)
 	then, ok := watchThenMapping(prefix, entry, add)
 	if !ok {

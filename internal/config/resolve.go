@@ -56,7 +56,7 @@ func (c *Config) newResolutionInputs() resolutionInputs {
 // returned errors include undefined-variable and nested-variable problems; a
 // nil error slice means a clean resolution.
 func (c *Config) Resolve(name string) (Resolved, []string) {
-	return c.resolveService(name, true)
+	return c.resolveServiceWithInputs(name, true, c.newResolutionInputs())
 }
 
 // ServiceResolution pairs a resolved service with its resolution errors.
@@ -79,10 +79,6 @@ func (c *Config) ResolveServices(names []string) []ServiceResolution {
 		out[i].Resolved, out[i].Errors = c.resolveServiceWithInputs(name, true, inputs)
 	}
 	return out
-}
-
-func (c *Config) resolveService(name string, pruneOptional bool) (Resolved, []string) {
-	return c.resolveServiceWithInputs(name, pruneOptional, c.newResolutionInputs())
 }
 
 func (c *Config) resolveServiceWithInputs(name string, pruneOptional bool, inputs resolutionInputs) (Resolved, []string) {
@@ -147,8 +143,11 @@ func (c *Config) ResolveStorage(name string) (Resolved, []string) {
 	if !ok {
 		return Resolved{Name: name}, append(errs, fmt.Sprintf("unknown storage watch %q", name))
 	}
-	tree, storageErrs := storageTreeFromWatch(name, entry)
-	errs = append(errs, storageErrs...)
+	check, _ := entry[WatchKeyCheck].(map[string]any)
+	if cfgval.String(check[checks.CheckKeyType]) != checks.CheckTypeStorage {
+		return Resolved{Name: name}, append(errs, fmt.Sprintf("watch %q is not a storage watch", name))
+	}
+	tree := storageTreeFromWatch(entry, check)
 	return Resolved{Name: name, Tree: tree}, errs
 }
 
@@ -167,8 +166,7 @@ func (c *Config) ResolveStorages() ([]Resolved, []string) {
 		if cfgval.String(check[checks.CheckKeyType]) != checks.CheckTypeStorage {
 			continue
 		}
-		tree, storageErrs := storageTreeFromWatch(name, entry)
-		errs = append(errs, storageErrs...)
+		tree := storageTreeFromWatch(entry, check)
 		out = append(out, Resolved{Name: name, Tree: tree})
 	}
 	return out, errs
@@ -242,11 +240,7 @@ func watchRecordsAvailability(raw any) bool {
 	return checks.ConfiguredRecordsAvailability(checkType, check, metrics)
 }
 
-func storageTreeFromWatch(name string, entry map[string]any) (map[string]any, []string) {
-	check, _ := entry[WatchKeyCheck].(map[string]any)
-	if cfgval.String(check[checks.CheckKeyType]) != checks.CheckTypeStorage {
-		return nil, []string{fmt.Sprintf("watch %q is not a storage watch", name)}
-	}
+func storageTreeFromWatch(entry, check map[string]any) map[string]any {
 	path := cfgval.String(check[checks.CheckKeyPath])
 	tree := map[string]any{keyPath: path}
 	for _, key := range []string{keyDisplayName, keyDescription, keyCategory, keyDryRun, keyMonitor, keyInterval, keyMount, WatchKeySeverity} {
@@ -254,7 +248,7 @@ func storageTreeFromWatch(name string, entry map[string]any) (map[string]any, []
 			tree[key] = deepCopy(v)
 		}
 	}
-	return tree, nil
+	return tree
 }
 
 // Service-artifact kinds. Each top-level artifact declaration desugars into an
@@ -419,11 +413,7 @@ func serviceArtifactPathValue(paths []string) any {
 	if len(paths) == 1 {
 		return paths[0]
 	}
-	out := make([]any, 0, len(paths))
-	for _, path := range paths {
-		out = append(out, path)
-	}
-	return out
+	return stringValues(paths)
 }
 
 // expandAnalyze resolves each check's `analyze` block into the flat rule list the
@@ -705,7 +695,7 @@ var serviceWatchCheckEntryFields = [...]string{keyEnabled, keyVerify, keyRequire
 
 // promoteServiceWatchCheck promotes an embedded watch check to checks.<watch-name>,
 // returning the generated rule target.
-func promoteServiceWatchCheck(checksMap map[string]any, name string, entry, check map[string]any, add func(string, ...any)) (serviceWatchRuleTarget, bool) {
+func promoteServiceWatchCheck(checksMap map[string]any, name string, entry, check map[string]any, add addFunc) (serviceWatchRuleTarget, bool) {
 	if _, exists := checksMap[name]; exists {
 		add("%s would overwrite existing check %q; rename the watch", watchPath(name), name)
 		return serviceWatchRuleTarget{}, false
@@ -1489,14 +1479,9 @@ func (c *Config) resolveDocBody(doc *Document, name string, appChain []string, i
 }
 
 // mergedService returns the merged-but-unexpanded body for a service, following
-// its uses/clone layering. chain tracks the active clone path for cycle
-// detection.
+// its uses/clone layering. name must be canonical; chain tracks the active clone
+// path for cycle detection.
 func (c *Config) mergedService(name string, chain []string) (map[string]any, error) {
-	canonicalName, ok := c.CanonicalServiceName(name)
-	if !ok {
-		return nil, fmt.Errorf(unknownServiceFormat, name)
-	}
-	name = canonicalName
 	if slices.Contains(chain, name) {
 		cycle := append(append([]string{}, chain...), name)
 		return nil, fmt.Errorf("clone cycle detected: %s", strings.Join(cycle, " -> "))
@@ -1515,7 +1500,11 @@ func (c *Config) mergedService(name string, chain []string) (map[string]any, err
 		if uses := cfgval.String(doc.Body[ServiceKeyUses]); uses != "" {
 			return nil, fmt.Errorf("service %q sets both clone and uses, which are mutually exclusive", name)
 		}
-		src, err := c.mergedService(clone, append(chain, name))
+		canonicalClone, ok := c.CanonicalServiceName(clone)
+		if !ok {
+			return nil, fmt.Errorf(unknownServiceFormat, clone)
+		}
+		src, err := c.mergedService(canonicalClone, append(chain, name))
 		if err != nil {
 			return nil, err
 		}

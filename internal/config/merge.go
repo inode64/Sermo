@@ -76,3 +76,11 @@ func deepCopy(v any) any {
 		return t
 	}
 }
+
+func stringValues(values []string) []any {
+	out := make([]any, len(values))
+	for i, c := range values {
+		out[i] = c
+	}
+	return out
+}

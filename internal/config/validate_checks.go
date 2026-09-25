@@ -592,7 +592,7 @@ func validateCheckSection(tree map[string]any, section, locksDir string, add add
 // A graph metric converted to a band must supply its `ok:` predicate: no
 // default exists for an arbitrary metric, and a band whose OK never holds would
 // record permanent downtime.
-func validateCheckBands(path, typ string, entry map[string]any, add func(string, ...any)) {
+func validateCheckBands(path, typ string, entry map[string]any, add addFunc) {
 	raw, present := entry[checks.CheckKeyBands]
 	if !present {
 		return
@@ -646,7 +646,7 @@ func validateCheckReporting(path string, entry map[string]any, add addFunc) {
 
 // validateBandOverride validates one band entry's `ok:` and `severity:` fields
 // and reports whether a usable OK predicate was declared.
-func validateBandOverride(bandPath string, override map[string]any, add func(string, ...any)) bool {
+func validateBandOverride(bandPath string, override map[string]any, add addFunc) bool {
 	hasOK := false
 	if pred, present := override[checks.CheckKeyOK]; present {
 		predMap, isMap := pred.(map[string]any)
@@ -1068,15 +1068,11 @@ func validateSMTPAcceptanceString(path string, entry map[string]any, field strin
 }
 
 func validateTCPCheck(path string, entry map[string]any, _ string, add addFunc) {
-	if n, ok := cfgval.Int(entry[checks.CheckKeyPort]); !ok || !cfgval.ValidTCPPort(n) {
-		add("%s.port is required and must be a port in %s for a tcp check", path, cfgval.TCPPortRange())
-	}
+	validateCheckPort(path, entry, checks.CheckTypeTCP, add)
 }
 
 func validateTCPConnectionsCheck(path string, entry map[string]any, _ string, add addFunc) {
-	if n, ok := cfgval.Int(entry[checks.CheckKeyPort]); !ok || !cfgval.ValidTCPPort(n) {
-		add("%s.port is required and must be a port in %s for a tcp_connections check", path, cfgval.TCPPortRange())
-	}
+	validateCheckPort(path, entry, checks.CheckTypeTCPConnections, add)
 	validateThresholdPreds(path, entry, checks.TCPConnectionsPredFields, add)
 }
 
@@ -1678,4 +1674,10 @@ func validatePressureFields(prefix string, fields map[string]any, add addFunc) {
 		add("%s.resource must be %s for a pressure check", prefix, checks.PressureResourceSummary)
 	}
 	validateThresholdPreds(prefix, fields, checks.PressurePredFields, add)
+}
+
+func validateCheckPort(path string, entry map[string]any, typ string, add addFunc) {
+	if n, ok := cfgval.Int(entry[checks.CheckKeyPort]); !ok || !cfgval.ValidTCPPort(n) {
+		add("%s.port is required and must be a port in %s for a %s check", path, cfgval.TCPPortRange(), typ)
+	}
 }
