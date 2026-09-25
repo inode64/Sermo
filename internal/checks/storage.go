@@ -61,9 +61,9 @@ func (c storageCheck) Run(_ context.Context) Result {
 			res.Data = data
 			return res
 		}
-		mounted, problem, reason, info := c.mount.evaluate(mounts, c.path)
-		storageMountData(data, mounted, info)
-		if problem {
+		reason, info := c.mount.evaluate(mounts, c.path)
+		storageMountData(data, info != nil, info)
+		if reason != "" {
 			res := c.result(true, c.path+" "+reason, start)
 			res.Data = data
 			return res

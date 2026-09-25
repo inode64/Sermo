@@ -52,23 +52,17 @@ func parseMountCond(entry map[string]any) mountCond {
 	return m
 }
 
-// evaluate checks the mount table for path against the expectations. problem is
-// true when the expectation is violated; info is the matching mount entry (nil
-// when not mounted).
-func (m mountCond) evaluate(table []Mount, path string) (mounted, problem bool, reason string, info *Mount) {
+// evaluate returns the reason a mount expectation is violated, or an empty
+// reason when satisfied. info is the matching mount entry, nil when unmounted.
+func (m mountCond) evaluate(table []Mount, path string) (reason string, info *Mount) {
 	info = MountAtPath(table, path)
-	mounted = info != nil
-
-	if !m.expectMount {
-		if mounted {
-			return mounted, true, "is mounted (want unmounted)", info
-		}
-		return mounted, false, "", info
+	if !m.expectMount && info != nil {
+		return "is mounted (want unmounted)", info
 	}
-	if !mounted {
-		return mounted, true, "is not mounted", info
+	if m.expectMount && info == nil {
+		return "is not mounted", info
 	}
-	return mounted, false, "", info
+	return "", info
 }
 
 // DefaultMounts reads the mount table from /proc/mounts.
