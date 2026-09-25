@@ -329,12 +329,27 @@ func (rb *readingBuilder) addDeviceIdentity() *readingBuilder {
 		addBytes(checks.DataKeyCapacityBytes, watchReadingLabelCapacity)
 }
 
+// addDurationSeconds appends a finite, nonnegative duration in seconds.
+func (rb *readingBuilder) addDurationSeconds(field, label string) *readingBuilder {
+	if v, ok := cfgval.Float(rb.data[field]); ok {
+		rb.add(field, label, watchReadingDuration(v, time.Second))
+	}
+	return rb
+}
+
+func watchReadingDuration(v float64, unit time.Duration) string {
+	if v >= 0 && v <= float64(maxWatchReadingDuration)/float64(unit) {
+		return units.HumanizeDuration(time.Duration(v * float64(unit)))
+	}
+	return ""
+}
+
 // addLastKnown appends the readings a device answered with before it stopped
 // answering, marked as historical and dated. The check publishes them under
 // their own keys precisely so they can never be mistaken for a live sample.
 func (rb *readingBuilder) addLastKnown(list []checks.GraphMetric) *readingBuilder {
-	if v, ok := cfgval.Float(rb.data[checks.DataKeyLastSeenSeconds]); ok && v > 0 && v <= float64(maxWatchReadingDuration)/float64(time.Second) {
-		rb.add(checks.DataKeyLastSeenSeconds, watchReadingLabelLastSeen, units.HumanizeDuration(time.Duration(v*float64(time.Second))))
+	if v, ok := cfgval.Float(rb.data[checks.DataKeyLastSeenSeconds]); ok && v > 0 {
+		rb.add(checks.DataKeyLastSeenSeconds, watchReadingLabelLastSeen, watchReadingDuration(v, time.Second))
 	}
 	rb.add(checks.DataKeyLastHealth, watchReadingLabelHealth+watchReadingLastSuffix, cfgval.String(rb.data[checks.DataKeyLastHealth]))
 	for _, m := range list {
@@ -352,8 +367,10 @@ func watchReadingMetricLabel(m checks.GraphMetric) string { return cmp.Or(m.Labe
 // watchReadingGraphMetricValue renders one metric with its unit. An hour count
 // reads as a duration ("2y 4mo") rather than as five digits of hours.
 func watchReadingGraphMetricValue(m checks.GraphMetric, v float64) string {
-	if m.Unit == metrics.MetricUnitHours && v >= 0 && v <= float64(maxWatchReadingDuration)/float64(time.Hour) {
-		return units.HumanizeDuration(time.Duration(v * float64(time.Hour)))
+	if m.Unit == metrics.MetricUnitHours {
+		if value := watchReadingDuration(v, time.Hour); value != "" {
+			return value
+		}
 	}
 	return watchReadingMetricValue(v, m.Decimals, m.Unit)
 }
@@ -862,14 +879,7 @@ func redisCheckReadings(data map[string]any) []web.WatchReading {
 
 func sshIdleCheckReadings(data map[string]any) []web.WatchReading {
 	out := metricCheckReadings(checks.CheckTypeSSHIdle, data)
-	if v, ok := cfgval.Float(data[checks.DataKeyOldestIdleSeconds]); ok && v >= 0 && v <= float64(maxWatchReadingDuration)/float64(time.Second) {
-		out = append(out, web.WatchReading{
-			Field: checks.DataKeyOldestIdleSeconds,
-			Label: watchReadingLabelOldestIdle,
-			Value: units.HumanizeDuration(time.Duration(v * float64(time.Second))),
-		})
-	}
-	return out
+	return append(out, readingsFrom(data).addDurationSeconds(checks.DataKeyOldestIdleSeconds, watchReadingLabelOldestIdle).readings()...)
 }
 
 func httpCheckReadings(data map[string]any) []web.WatchReading {
