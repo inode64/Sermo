@@ -224,7 +224,7 @@ func TestParseSMTPMailboxAndPolicy(t *testing.T) {
 	if !ValidSMTPHelo("mail.sender.example") || ValidSMTPHelo("localhost") || ValidSMTPHelo("bad name.example") {
 		t.Fatal("ValidSMTPHelo accepted an invalid name or rejected a valid FQDN")
 	}
-	if NormalizeSMTPStartTLS("") != SMTPStartTLSRequired || ValidSMTPStartTLS("disabled") {
+	if normalizeSMTPStartTLS("") != SMTPStartTLSRequired || ValidSMTPStartTLS("disabled") {
 		t.Fatal("STARTTLS policy defaults or validation changed")
 	}
 	if got := truncateSMTPReply(strings.Repeat("x", smtpAcceptanceReplyMaxBytes+100)); len(got) != smtpAcceptanceReplyMaxBytes {

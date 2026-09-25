@@ -515,7 +515,7 @@ type Result struct {
 //
 // Every implementation must honor cfg.Interface (egress binding via
 // SO_BINDTODEVICE) by constructing a probeTarget;
-// packet listeners use BindListenConfig. When simplifying a probe with a Go
+// packet listeners use bindListenConfig. When simplifying a probe with a Go
 // module, preserve interface binding: a codec-only library is ideal (keep the
 // existing dial, e.g. DNS with x/net/dnsmessage); a library that does its own
 // I/O is only acceptable if it takes a custom dialer routed through BindDialer

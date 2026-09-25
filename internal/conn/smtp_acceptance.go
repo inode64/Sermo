@@ -284,7 +284,7 @@ func ParseSMTPAcceptanceEnvelope(helo, mailFrom, recipient, startTLS string) (SM
 	if err != nil {
 		return SMTPAcceptanceEnvelope{}, fmt.Errorf("recipient: %w", err)
 	}
-	startTLS = NormalizeSMTPStartTLS(startTLS)
+	startTLS = normalizeSMTPStartTLS(startTLS)
 	if !validNormalizedSMTPStartTLS(startTLS) {
 		return SMTPAcceptanceEnvelope{}, fmt.Errorf("starttls %q must be %s", startTLS, SMTPStartTLSValueSummary)
 	}
@@ -348,8 +348,8 @@ func validSMTPDomain(domain string) bool {
 // SMTPStartTLSValueSummary is the user-facing list of supported policies.
 const SMTPStartTLSValueSummary = SMTPStartTLSRequired + " or " + SMTPStartTLSOpportunistic
 
-// NormalizeSMTPStartTLS applies the secure default for acceptance probes.
-func NormalizeSMTPStartTLS(value string) string {
+// normalizeSMTPStartTLS applies the secure default for acceptance probes.
+func normalizeSMTPStartTLS(value string) string {
 	value = strings.ToLower(strings.TrimSpace(value))
 	if value == "" {
 		return SMTPStartTLSRequired
@@ -359,7 +359,7 @@ func NormalizeSMTPStartTLS(value string) string {
 
 // ValidSMTPStartTLS reports whether value selects a supported STARTTLS policy.
 func ValidSMTPStartTLS(value string) bool {
-	return validNormalizedSMTPStartTLS(NormalizeSMTPStartTLS(value))
+	return validNormalizedSMTPStartTLS(normalizeSMTPStartTLS(value))
 }
 
 func validNormalizedSMTPStartTLS(value string) bool {

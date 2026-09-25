@@ -167,7 +167,7 @@ into a change that does not touch them.
 - Catalog service definitions: `sermo-profile-author`
 - Protocol probes: honor `cfg.Interface`; register in
   `internal/conn/registry.go`; dial with `BindDialer`, listen with
-  `BindListenConfig`
+  `bindListenConfig`
 - Web UI: sources in `internal/web/src/`; generated
   `internal/web/index.html`; repetitive watch-panel metadata in
   `watch-panels.json`. lit-html, delegated `data-*` clicks (not inline or

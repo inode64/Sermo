@@ -14,7 +14,7 @@ import (
 // routing table. Needs CAP_NET_RAW.
 func bindControl(iface string) func(network, address string, c syscall.RawConn) error {
 	return func(_, _ string, c syscall.RawConn) error {
-		dev, err := ResolveInterfaceName(iface) // accepts a name, IP or MAC
+		dev, err := resolveInterfaceName(iface) // accepts a name, IP or MAC
 		if err != nil {
 			return err
 		}

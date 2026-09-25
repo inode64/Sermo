@@ -51,12 +51,12 @@ func TestResolveInterface(t *testing.T) {
 		t.Skip("no loopback interface")
 	}
 	// By name.
-	if n, err := ResolveInterfaceName("lo"); err != nil || n != "lo" {
-		t.Fatalf("ResolveInterfaceName(lo) = %q/%v", n, err)
+	if n, err := resolveInterfaceName("lo"); err != nil || n != "lo" {
+		t.Fatalf("resolveInterfaceName(lo) = %q/%v", n, err)
 	}
 	// By IP -> the interface that carries it.
-	if n, err := ResolveInterfaceName("127.0.0.1"); err != nil || n != "lo" {
-		t.Fatalf("ResolveInterfaceName(127.0.0.1) = %q/%v", n, err)
+	if n, err := resolveInterfaceName("127.0.0.1"); err != nil || n != "lo" {
+		t.Fatalf("resolveInterfaceName(127.0.0.1) = %q/%v", n, err)
 	}
 	// IPv4 of the interface.
 	if ip, err := ResolveInterfaceIPv4("lo"); err != nil || ip != "127.0.0.1" {
@@ -67,7 +67,7 @@ func TestResolveInterface(t *testing.T) {
 		t.Fatalf("ResolveInterfaceIPv4(127.0.0.1) = %q/%v", ip, err)
 	}
 	// Unknown identifier errors.
-	if _, err := ResolveInterfaceName("sermo-nope0"); err == nil {
+	if _, err := resolveInterfaceName("sermo-nope0"); err == nil {
 		t.Fatal("unknown identifier must error")
 	}
 }
