@@ -199,16 +199,11 @@ func ParseStopPolicy(tree map[string]any) (KillPolicy, []string) {
 	policy.TermTimeout = stopPolicyDuration(sp, StopPolicyKeyTermTimeout, &warnings)
 	policy.KillTimeout = stopPolicyDuration(sp, StopPolicyKeyKillTimeout, &warnings)
 	if value, present := sp[StopPolicyKeyForceKill]; present {
-		switch v := value.(type) {
-		case bool:
+		if v, ok := value.(bool); ok {
 			policy.ForceKill = v
-		case string:
-			if v == StopPolicyForceKillAuto {
-				policy.Automatic = true
-			} else {
-				warnings = append(warnings, SectionStopPolicy+"."+StopPolicyKeyForceKill+" must be a boolean or \""+StopPolicyForceKillAuto+"\"")
-			}
-		default:
+		} else if value == StopPolicyForceKillAuto {
+			policy.Automatic = true
+		} else {
 			warnings = append(warnings, SectionStopPolicy+"."+StopPolicyKeyForceKill+" must be a boolean or \""+StopPolicyForceKillAuto+"\"")
 		}
 	}
