@@ -257,12 +257,10 @@ func (a App) runWatchStatus(ctx context.Context, opts options) int {
 	cfg := a.statusConfig(opts)
 	watchState := app.TargetStateOK
 	var detail daemonWatchDetail
-	if a.FetchDaemonWatchDetail != nil {
-		if current, ok := a.FetchDaemonWatchDetail(ctx, cfg, name); ok {
-			detail = current
-			if detail.State != "" {
-				watchState = detail.State
-			}
+	if current, ok := a.FetchDaemonWatchDetail(ctx, cfg, name); ok {
+		detail = current
+		if detail.State != "" {
+			watchState = detail.State
 		}
 	}
 	if opts.json {

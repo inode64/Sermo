@@ -15,19 +15,9 @@ import (
 // serviceDisplayState returns the operator-facing state for status output.
 // When sermod is up it prefers the daemon's settled view (including starting);
 // otherwise it derives state from the local backend query only.
-func (a App) serviceDisplayState(ctx context.Context, opts options, cfg *config.Config, service string, status servicemgr.ServiceStatus, mon monitorView) string {
-	if cfg != nil && a.daemonServiceStateWithConfig != nil {
-		if serviceState, ok := a.daemonServiceStateWithConfig(ctx, cfg, service); ok && serviceState != "" {
-			return serviceState
-		}
-	} else if a.FetchDaemonServiceState != nil {
-		requested := opts.service()
-		if requested == "" {
-			requested = status.Service
-		}
-		if serviceState, ok := a.FetchDaemonServiceState(ctx, opts, requested); ok && serviceState != "" {
-			return serviceState
-		}
+func (a App) serviceDisplayState(ctx context.Context, cfg *config.Config, service string, status servicemgr.ServiceStatus, mon monitorView) string {
+	if serviceState, ok := a.FetchDaemonServiceState(ctx, cfg, service); ok && serviceState != "" {
+		return serviceState
 	}
 	// The local fallback has no runtime samples at all, so it can never tell an
 	// empty process tree from one it has not sampled: never processesMissing.
