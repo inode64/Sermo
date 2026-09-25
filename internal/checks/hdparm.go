@@ -109,11 +109,11 @@ func hdparmArgs(device string, wantCached, wantRead bool) []string {
 func parseHdparm(out string) (map[string]float64, error) {
 	values := map[string]float64{}
 	for line := range strings.SplitSeq(out, checkLineSeparator) {
-		eq := strings.LastIndex(line, "=")
-		if eq < 0 {
+		_, rate, found := strings.CutLast(line, "=")
+		if !found {
 			continue
 		}
-		v, ok := parseHdparmRate(line[eq+1:])
+		v, ok := parseHdparmRate(rate)
 		if !ok {
 			continue
 		}

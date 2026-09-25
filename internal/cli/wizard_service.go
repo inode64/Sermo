@@ -301,11 +301,10 @@ func parseCephAddrVersion(addrs, version string) (string, int, bool) {
 	endpoint := strings.TrimSpace(before)
 	host, portText, err := net.SplitHostPort(endpoint)
 	if err != nil {
-		colon := strings.LastIndex(endpoint, ":")
-		if colon < 0 {
+		host, portText, ok = strings.CutLast(endpoint, ":")
+		if !ok {
 			return "", 0, false
 		}
-		host, portText = endpoint[:colon], endpoint[colon+1:]
 	}
 	host = strings.Trim(host, "[]")
 	port, err := strconv.Atoi(portText)

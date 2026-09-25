@@ -6,10 +6,10 @@
 #
 # Build with `make custom-gcl` (or `golangci-lint custom`); the result lands in
 # bin/, which is git-ignored.
-version: v2.13.2
+version: v2.14.0
 name: custom-gcl
 destination: bin
 plugins:
   - module: go.uber.org/nilaway
     import: go.uber.org/nilaway/cmd/gclplugin
-    version: v0.0.0-20260808063849-8649a03c818a
+    version: v0.0.0-20260918162853-acb8859b9031
