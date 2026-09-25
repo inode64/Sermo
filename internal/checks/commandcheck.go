@@ -100,7 +100,7 @@ func (c commandCheck) Run(ctx context.Context) Result {
 			return r
 		}
 	}
-	if c.onChange && c.state != nil {
+	if c.onChange {
 		raw := strings.TrimSpace(res.Stdout)
 		key := c.changeKey(raw)
 		if c.state.primed && key != c.state.last {
