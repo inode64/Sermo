@@ -534,10 +534,7 @@ func sameUnixSocketGeneration(before, after fs.FileInfo) bool {
 
 func sortedTerminalSessions(sessions []TerminalSession) []TerminalSession {
 	slices.SortFunc(sessions, func(a, b TerminalSession) int {
-		if byName := strings.Compare(a.Name, b.Name); byName != 0 {
-			return byName
-		}
-		return strings.Compare(a.User, b.User)
+		return strings.Compare(a.Name, b.Name)
 	})
 	return sessions
 }
