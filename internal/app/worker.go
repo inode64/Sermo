@@ -553,6 +553,11 @@ func (w *Worker) gateReason(gate CheckGate, cache map[string]checks.Result) stri
 	return ""
 }
 
+// requiredCheckFailing is the shared availability and failure-output predicate.
+func requiredCheckFailing(result checks.Result) bool {
+	return !result.Optional && !result.Warning() && !result.Healthy()
+}
+
 // requiredChecksOK reports the service's availability this cycle: true unless a
 // required check failed. A check declared an advisory — `severity: warning`, or
 // the `optional: true` that has always meant the same thing — is a warning and
@@ -560,7 +565,7 @@ func (w *Worker) gateReason(gate CheckGate, cache map[string]checks.Result) stri
 // vacuously available.
 func requiredChecksOK(cache map[string]checks.Result) bool {
 	for _, r := range cache {
-		if !r.Optional && !r.Warning() && !r.Observation().Healthy() {
+		if requiredCheckFailing(r) {
 			return false
 		}
 	}
@@ -574,8 +579,7 @@ func requiredChecksOK(cache map[string]checks.Result) bool {
 func failingChecksOutput(cache map[string]checks.Result) string {
 	names := make([]string, 0, len(cache))
 	for name, r := range cache {
-		observation := r.Observation()
-		if r.Optional || !r.CountsTowardHealth() || observation.Healthy() {
+		if !requiredCheckFailing(r) {
 			continue
 		}
 		if resultOutput(r) != "" {
