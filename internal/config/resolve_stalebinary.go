@@ -42,14 +42,6 @@ func expandStaleBinary(tree map[string]any) []string {
 	if !staleBinaryApplies(tree) {
 		return nil
 	}
-	// A checks section in any shape but a mapping is the operator's to have
-	// validated; the check cannot be added to it, and a rule without its check
-	// would only add a second error on top of theirs.
-	if raw, present := tree[sectionChecks]; present && raw != nil {
-		if _, isMap := raw.(map[string]any); !isMap {
-			return nil
-		}
-	}
 
 	// A replaced executable needs operator attention (and may trigger the
 	// generated alert/restart rule), but it does not make the running service
@@ -77,10 +69,9 @@ func expandStaleBinary(tree map[string]any) []string {
 // feature names which sugar is responsible.
 func injectGenerated(tree map[string]any, section, name, noun, feature string, value any) string {
 	entries, isMap := tree[section].(map[string]any)
-	if raw, present := tree[section]; present && raw != nil && !isMap {
-		// A section in any other shape is the operator's to have validated;
-		// replacing it with a fresh map would silently drop what they wrote.
-		return ""
+	if _, present := tree[section]; present && !isMap {
+		// Preserve the malformed value so validation can also identify it.
+		return fmt.Sprintf(validationMappingFormat, section)
 	}
 	if entries == nil {
 		entries = map[string]any{}
@@ -97,21 +88,26 @@ func injectGenerated(tree map[string]any, section, name, noun, feature string, v
 // shape restart_on_change already uses so the operator is told before anything
 // acts.
 func staleBinaryRule(allowRestart bool, message string) map[string]any {
-	// Alert-then-restart is the canonical generated shape; reuse it so the two
-	// sugars cannot drift.
+	// Stale binaries use failed: because a healthy sensor is not a restart trigger.
+	return generatedSensorRule(
+		map[string]any{rules.ConditionFailed: map[string]any{rules.FieldCheck: staleBinaryCheckName}},
+		nil, allowRestart, message,
+	)
+}
+
+// generatedSensorRule keeps alert-before-restart ordering and the rule type
+// consistent for generated sensors. A nil window uses the service fallback.
+func generatedSensorRule(condition, window map[string]any, allowRestart bool, message string) map[string]any {
 	then := generatedRestartActions(allowRestart, message)
-	return map[string]any{
+	rule := map[string]any{
 		rules.RuleFieldType: string(generatedRuleType(then)),
-		// `failed:`, not `active:`. The check is OK when nothing is stale, and
-		// eval.go reads `active:` as "the check is OK" -- so the rule used to
-		// fire on every healthy service and go quiet exactly when a binary had
-		// been replaced. dry_run hid it fleet-wide; the first host with the flag
-		// off restarted a service that had nothing wrong with it.
-		rules.RuleFieldIf: map[string]any{
-			rules.ConditionFailed: map[string]any{rules.FieldCheck: staleBinaryCheckName},
-		},
+		rules.RuleFieldIf:   condition,
 		rules.RuleFieldThen: then,
 	}
+	if window != nil {
+		rule[rules.RuleFieldFor] = window
+	}
+	return rule
 }
 
 // staleBinaryRestartAllowed reads the flag. Absent means allowed, the same

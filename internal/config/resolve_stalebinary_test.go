@@ -2,6 +2,7 @@ package config
 
 import (
 	"maps"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -211,5 +212,29 @@ func TestStaleBinaryMessageNamesPerBackendServiceUnit(t *testing.T) {
 	}
 	if !strings.HasPrefix(got, "rsync ") {
 		t.Fatalf("message must start with the primary unit name, got %q", got)
+	}
+}
+
+func TestGeneratedSensorsRejectMalformedSections(t *testing.T) {
+	for _, section := range []string{sectionChecks, rules.SectionRules} {
+		for _, raw := range []any{nil, "broken", []any{"broken"}} {
+			for name, expand := range map[string]func(map[string]any) []string{
+				"fds": expandFDs, "stale_binary": expandStaleBinary,
+			} {
+				t.Run(name+"/"+section, func(t *testing.T) {
+					tree := staleBinaryTree(map[string]any{section: raw})
+					errs := expand(tree)
+					if len(errs) != 1 || errs[0] != section+" must be a mapping" {
+						t.Fatalf("malformed section: %v", errs)
+					}
+					if !reflect.DeepEqual(tree[section], raw) {
+						t.Fatalf("malformed section was replaced: %#v", tree[section])
+					}
+					if section == sectionChecks && tree[rules.SectionRules] != nil {
+						t.Fatal("generated a rule without its check")
+					}
+				})
+			}
+		}
 	}
 }
