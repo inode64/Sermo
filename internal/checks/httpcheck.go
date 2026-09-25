@@ -183,7 +183,6 @@ func (c *httpCheck) consumeCertificateVerification(resp *http.Response) string {
 // folding in certificate inspection when configured (https only). A certificate
 // problem turns the otherwise-passing check into a failure, keeping the http
 // check's pass/fail semantics (OK==true means healthy).
-
 func (c *httpCheck) success(resp *http.Response, elapsed time.Duration, verifyError string, start time.Time) Result {
 	statusMsg := fmt.Sprintf("status %d", resp.StatusCode)
 	if c.certHost != "" && (resp.TLS == nil || len(resp.TLS.PeerCertificates) == 0) {

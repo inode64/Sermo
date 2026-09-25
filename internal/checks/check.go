@@ -428,15 +428,6 @@ func (b base) unavailableResult(message string, start time.Time) Result {
 	return res
 }
 
-// levelCountResult builds the Result shared by the count-vs-max level checks
-// (fds, pids, conntrack): the used_pct/free predicate fields — with free clamped
-// so a count momentarily above the max can't underflow the unsigned subtraction
-// — the "label cur/max unit (pct)" message, and the Data map. countField names
-// the primary metric in values/Data ("allocated", "count"). The kernel maximum
-// (each sample's Max, the DataKeyMax field) is the `limit` parameter: the
-// lowercase local is `limit`, not `max`, only to avoid shadowing the Go `max`
-// builtin — keep it that way. When it is 0 the maximum is unknown, so used_pct/
-// free are omitted and a predicate on them cannot hold (the level check is an AND).
 // samplerOr returns the check's injected sampler, falling back to the package
 // default when no test seam was wired. Every Run that reads the host opens with
 // this resolution; the three shapes here cover the samplers whose only inputs
@@ -499,12 +490,6 @@ func runThresholdCheck(b base, op string, value float64, sample func() (uint64, 
 	return res
 }
 
-// levelCountFields writes one count-vs-limit dimension's utilisation and free
-// headroom into values under the given field names, and reports the utilisation.
-// It owns the two rules the count-vs-limit checks share: an unknown limit (0)
-// omits both fields so a predicate on them cannot hold, and free is clamped so a
-// count momentarily above the limit cannot underflow the unsigned subtraction.
-// A multi-dimension check (inotify) calls it once per dimension.
 // unlimitedCountMax is the kernel's "no limit" sentinel for a count ceiling:
 // fs.file-max reads LONG_MAX on a host that lifts the cap entirely.
 const unlimitedCountMax = uint64(math.MaxInt64)
@@ -521,6 +506,12 @@ func countLimitUsable(limit uint64) bool {
 	return limit > 0 && limit < unlimitedCountMax
 }
 
+// levelCountFields writes one count-vs-limit dimension's utilisation and free
+// headroom into values under the given field names, and reports the utilisation.
+// It owns the two rules the count-vs-limit checks share: an unknown limit (0)
+// omits both fields so a predicate on them cannot hold, and free is clamped so a
+// count momentarily above the limit cannot underflow the unsigned subtraction.
+// A multi-dimension check (inotify) calls it once per dimension.
 func levelCountFields(values map[string]float64, pctField, freeField string, count, limit uint64) float64 {
 	if !countLimitUsable(limit) {
 		return 0
@@ -531,6 +522,15 @@ func levelCountFields(values map[string]float64, pctField, freeField string, cou
 	return usedPct
 }
 
+// levelCountResult builds the Result shared by the count-vs-max level checks
+// (fds, pids, conntrack): the used_pct/free predicate fields — with free clamped
+// so a count momentarily above the max can't underflow the unsigned subtraction
+// — the "label cur/max unit (pct)" message, and the Data map. countField names
+// the primary metric in values/Data ("allocated", "count"). The kernel maximum
+// (each sample's Max, the DataKeyMax field) is the `limit` parameter: the
+// lowercase local is `limit`, not `max`, only to avoid shadowing the Go `max`
+// builtin — keep it that way. When it is 0 the maximum is unknown, so used_pct/
+// free are omitted and a predicate on them cannot hold (the level check is an AND).
 func levelCountResult(b base, preds []levelPred, label, unit, countField string, count, limit uint64, start time.Time) Result {
 	values := map[string]float64{countField: float64(count)}
 	usedPct := levelCountFields(values, fieldUsedPct, fieldFree, count, limit)
