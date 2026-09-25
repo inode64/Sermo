@@ -62,7 +62,7 @@ func (a App) runUmount(ctx context.Context, opts options) int {
 		AllowLazy:    opts.lazy,
 		KillBlockers: opts.kill,
 	})
-	a.syncStorageMountMonitoring(ctx, opts, cfg, spec.Name, mountctl.ActionUmount, err == nil && res.Status == mountctl.ResultOK)
+	a.syncStorageMountMonitoring(ctx, cfg, spec.Name, mountctl.ActionUmount, err == nil && res.Status == mountctl.ResultOK)
 	return a.printMountResult(opts, res, err)
 }
 
@@ -77,7 +77,7 @@ func (a App) runMountAcquire(ctx context.Context, opts options, target string) i
 	}
 	controller := a.mountController(cfg, opts)
 	res, err := controller.Acquire(ctx, spec)
-	a.syncStorageMountMonitoring(ctx, opts, cfg, spec.Name, mountctl.ActionMount, err == nil && res.Status == mountctl.ResultOK)
+	a.syncStorageMountMonitoring(ctx, cfg, spec.Name, mountctl.ActionMount, err == nil && res.Status == mountctl.ResultOK)
 	return a.printMountResult(opts, res, err)
 }
 
@@ -181,7 +181,7 @@ func (a App) mountController(cfg *config.Config, opts options) mountctl.Controll
 	return mountctl.Controller{Runtime: cfg.Global.RuntimeDir(), Runner: a.Runner, ResolveUser: lookup.ResolveUser, UserLookup: lookup, CommandTimeout: commandTimeout}
 }
 
-func (a App) syncStorageMountMonitoring(ctx context.Context, _ options, cfg *config.Config, storage, action string, resultOK bool) {
+func (a App) syncStorageMountMonitoring(ctx context.Context, cfg *config.Config, storage, action string, resultOK bool) {
 	monitorMode, disabled, ok := storageMountWatchConfig(cfg, storage)
 	if !ok {
 		return
