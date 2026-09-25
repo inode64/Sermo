@@ -2,7 +2,17 @@ package config
 
 import "testing"
 
+// TestPHPFPMCatalogDisabledProbeValidates checks that the shipped php-fpm
+// template, with its fpm status probe disabled, validates on both init
+// backends. The php-fpm8.4 instance comes from a fake binary under a stubbed
+// ${bindir}, so the result does not depend on which PHP the host has installed.
+// Validate covers the whole catalog, and its python services need the python3
+// app template materialized the same way.
 func TestPHPFPMCatalogDisabledProbeValidates(t *testing.T) {
+	bindir := t.TempDir()
+	fakeBinary(t, bindir, "php-fpm8.4")
+	fakeBinary(t, bindir, "python3")
+	stubBinDirs(t, bindir)
 	for _, backend := range []string{"systemd", "openrc"} {
 		t.Run(backend, func(t *testing.T) {
 			global := writeConfig(t, map[string]string{

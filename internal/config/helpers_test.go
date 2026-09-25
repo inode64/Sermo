@@ -350,3 +350,22 @@ func runServiceIssueCases(t *testing.T, tests []serviceIssueCase) {
 		})
 	}
 }
+
+// stubBinDirs points the ${bindir} search at dir alone for the rest of the test,
+// so a catalog template that discovers versions from installed binaries sees
+// only the fake ones the test lays out there, never the host's. The caller must
+// not run in parallel: binDirSearch is package state.
+func stubBinDirs(t *testing.T, dir string) {
+	t.Helper()
+	saved := binDirSearch
+	binDirSearch = []string{dir}
+	t.Cleanup(func() { binDirSearch = saved })
+}
+
+// fakeBinary writes an executable placeholder named name under dir.
+func fakeBinary(t *testing.T, dir, name string) {
+	t.Helper()
+	if err := os.WriteFile(filepath.Join(dir, name), []byte("x"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+}
