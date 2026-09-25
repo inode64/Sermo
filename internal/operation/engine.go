@@ -380,15 +380,19 @@ func (e Engine) discoverStrays() ([]process.Process, error) {
 	return process.Strays(procs), nil
 }
 
+func (e Engine) reapResolver() process.UserResolver {
+	if e.Reaper.ResolveUser != nil {
+		return e.Reaper.ResolveUser
+	}
+	return process.DefaultUserLookup().ResolveUser
+}
+
 // authorizedStrays returns the strays the service's reap selector allows to be
 // signalled. Killable is the same gate every other kill decision passes through,
 // so a delegated process, an unresolvable exe, PID 1 and kernel threads are
 // refused here for free — and an unconfigured selector refuses everything.
 func (e Engine) authorizedStrays(strays []process.Process) []process.Process {
-	resolve := e.Reaper.ResolveUser
-	if resolve == nil {
-		resolve = process.DefaultUserLookup().ResolveUser
-	}
+	resolve := e.reapResolver()
 	var authorized []process.Process
 	for _, stray := range strays {
 		if e.ReapSelector.Killable(stray, resolve) {
