@@ -47,7 +47,7 @@ type routeCheck struct {
 
 func (c routeCheck) Run(_ context.Context) Result {
 	start := time.Now()
-	sampler := keyedSamplerOr(c.sampler, defaultRouteSampler)
+	sampler := keyedSamplerOr(c.sampler, SampleRoutes)
 	routes, err := sampler(c.family)
 	if err != nil {
 		return c.unavailableResult("route: "+err.Error(), start)
@@ -95,8 +95,8 @@ func matchingRoutes(routes []DefaultRoute, iface string) []DefaultRoute {
 // tests/builders, and the kernel reports unicast routes as 1.
 const routeTypeUnicast = 1
 
-// defaultRouteSampler reads the kernel routing tables through netlink.
-func defaultRouteSampler(family string) ([]DefaultRoute, error) {
+// SampleRoutes reads the kernel routing tables through netlink.
+func SampleRoutes(family string) ([]DefaultRoute, error) {
 	nlFamily, err := netlinkFamily(family)
 	if err != nil {
 		return nil, err
@@ -112,10 +112,6 @@ func defaultRouteSampler(family string) ([]DefaultRoute, error) {
 	}
 	return defaultRoutesFromNetlink(family, routes, netlinkLinkNames(links)), nil
 }
-
-// SampleRoutes returns one live default-route observation using the default
-// netlink sampler.
-func SampleRoutes(family string) ([]DefaultRoute, error) { return defaultRouteSampler(family) }
 
 func netlinkFamily(family string) (int, error) {
 	switch family {

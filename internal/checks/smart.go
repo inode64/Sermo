@@ -200,7 +200,7 @@ func smartctlArgs(device string) []string {
 // that acknowledgement as a new SMART-health verdict.
 func StartSmartShortTest(ctx context.Context, runner execx.Runner, device string, timeout time.Duration) error {
 	runner = execx.RunnerOrDefault(runner)
-	res, runErr := runner.Run(ctx, smartctlCommand, smartctlShortTestArgs(device)...)
+	res, runErr := runner.Run(ctx, smartctlCommand, smartctlShortTest, device)
 	if res.ExitCode == execx.ExitCodeSuccess {
 		return nil
 	}
@@ -214,10 +214,6 @@ func StartSmartShortTest(ctx context.Context, runner execx.Runner, device string
 		return errors.New(msg)
 	}
 	return fmt.Errorf("smartctl %s exited with code %d", smartctlShortTest, res.ExitCode)
-}
-
-func smartctlShortTestArgs(device string) []string {
-	return []string{smartctlShortTest, device}
 }
 
 // SmartSample is the parsed subset of `smartctl -j` output that describes the
