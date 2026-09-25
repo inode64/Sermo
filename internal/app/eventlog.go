@@ -375,11 +375,7 @@ func (l *EventLog) Prune(ctx context.Context, before time.Time) int {
 
 	// Rebuild the ring with kept events (oldest at [0]).
 	newBuf := make([]LoggedEvent, l.size)
-	for i := range kept {
-		if i < l.size {
-			newBuf[i] = kept[i]
-		}
-	}
+	copy(newBuf, kept)
 	l.buf = newBuf
 	l.count = len(kept)
 	if l.count < l.size {

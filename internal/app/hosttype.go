@@ -180,9 +180,6 @@ func joinHostTypeFacts(facts []hostTypeFact) string {
 }
 
 func hostTypeFactDetail(facts []hostTypeFact) string {
-	if len(facts) == 0 {
-		return ""
-	}
 	preferred := []string{dmiFieldSysVendor, dmiFieldProductName, dmiFieldProductVersion}
 	seen := map[string]bool{}
 	parts := make([]string, 0, len(preferred))

@@ -72,9 +72,6 @@ func newServiceRestartRuntime(service, unit string, notice config.ServiceRestart
 func primaryProcessForCycle(procs func() []process.Process, starts processStartReader, now func() time.Time) func() (servicePrimaryProcess, bool) {
 	now = clockOrNow(now)
 	return func() (servicePrimaryProcess, bool) {
-		if procs == nil || starts == nil {
-			return servicePrimaryProcess{}, false
-		}
 		principal, ok := selectPrimaryProcess(procs())
 		if !ok {
 			return servicePrimaryProcess{}, false

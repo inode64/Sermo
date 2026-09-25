@@ -917,9 +917,6 @@ func pressureCheckReadings(data map[string]any) []web.WatchReading {
 	rb := readingsFrom(data).addString(checks.DataKeyResource, watchReadingLabelResource)
 	for _, field := range checks.PressurePredFields {
 		label := pressureFieldLabels[field]
-		if label == "" {
-			label = field
-		}
 		rb.addMetric(field, label, watchReadingDefaultMetricDecimals, metrics.MetricUnitPercent)
 	}
 	return rb.addMetric(checks.DataKeyValue, watchReadingLabelValue, watchReadingDefaultMetricDecimals, metrics.MetricUnitPercent).readings()

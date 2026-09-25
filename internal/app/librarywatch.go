@@ -185,10 +185,7 @@ type catalogArtifactWatchSpec struct {
 }
 
 func buildCatalogArtifactWatches(ctx context.Context, cfg *config.Config, deps Deps, spec catalogArtifactWatchSpec) []*Watch {
-	if cfg == nil {
-		return nil
-	}
-	samples := artifactSamplesOrDefault(deps.ArtifactSamples)
+	samples := deps.ArtifactSamples
 	runner := deps.ExecxRunner
 	lookup := appinspect.WithUserLookup(deps.UserLookup)
 	// Presence decides which entries get a watch; the version and health
