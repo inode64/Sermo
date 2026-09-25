@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"sermo/internal/hostfs"
 	"time"
 )
 
@@ -117,7 +119,7 @@ func (s Scanner) ScanDir() ([]string, error) {
 }
 
 func (s Scanner) lockFileNames() ([]string, error) {
-	entries, err := os.ReadDir(s.Dir)
+	entries, err := hostfs.ReadDir(s.Dir)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, nil
@@ -169,7 +171,7 @@ func lockServiceMatches(fileName string, services []string) []lockServiceMatch {
 }
 
 func readLockFile(path string) (lockFile, error) {
-	data, err := os.ReadFile(filepath.Clean(path))
+	data, err := hostfs.ReadFile(path)
 	if err != nil {
 		return lockFile{}, fmt.Errorf("read %s: %w", path, err)
 	}

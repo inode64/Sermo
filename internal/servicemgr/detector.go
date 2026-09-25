@@ -7,11 +7,11 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
 	"sermo/internal/execx"
+	"sermo/internal/hostfs"
 )
 
 const defaultDetectTimeout = 2 * time.Second
@@ -46,7 +46,7 @@ func (OSProbe) PathExists(path string) bool {
 
 // ReadFile reads path from the host filesystem.
 func (OSProbe) ReadFile(path string) ([]byte, error) {
-	data, err := os.ReadFile(filepath.Clean(path))
+	data, err := hostfs.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("read %s: %w", path, err)
 	}
