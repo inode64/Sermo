@@ -52,7 +52,7 @@ type MetricReader func(scope, name string) (metrics.Reading, bool)
 
 // Samplers groups host probes that can be injected for checks. It is a narrow
 // dependency bundle: service-specific capabilities such as Status, Metrics,
-// Processes and pidfile fallback PIDs stay on Deps.
+// Process observation and pidfile fallback PIDs stay on Deps.
 type Samplers struct {
 	StorageUsage    StorageUsageFunc
 	NetSampler      NetSamplerFunc
@@ -108,11 +108,10 @@ type Deps struct {
 	Status func(context.Context) (servicemgr.Status, error)
 	// Metrics reads a sampled metric value, for `metric` checks.
 	Metrics MetricReader
-	// Processes reports the observed state (running/zombie/absent) of processes
-	// matching an exe/user selector, for `process` checks.
+	// Processes reports the observed state for single-selector rule conditions.
 	Processes func(exe, user string) string
 	// ProcessesAny reports the observed state of processes matching any exact
-	// resolved executable in exes with the same user. Nil falls back to Processes.
+	// resolved executable in exes with the same user. Nil makes process checks unavailable.
 	ProcessesAny func(exes []string, user string) string
 	// ProcessCount counts processes matching an optional user/exe/exe_dir filter,
 	// for `process_count` checks. Nil makes the check do a self-contained scan.

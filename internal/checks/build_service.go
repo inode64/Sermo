@@ -56,7 +56,7 @@ func buildProcessCheck(b base, entry map[string]any, deps Deps) (Check, string) 
 	if len(exes) == 0 {
 		return nil, "process check requires exe or exe_any"
 	}
-	if deps.Processes == nil && deps.ProcessesAny == nil {
+	if deps.ProcessesAny == nil {
 		return nil, "process check needs process discovery, unavailable here"
 	}
 	expect := cfgval.AsString(entry[CheckKeyState])
@@ -65,7 +65,7 @@ func buildProcessCheck(b base, entry map[string]any, deps Deps) (Check, string) 
 	}
 	return processCheck{
 		base: b, exes: exes, user: user, expect: expect,
-		observe: deps.Processes, observeAny: deps.ProcessesAny, stale: deps.StaleBinaries,
+		observeAny: deps.ProcessesAny, stale: deps.StaleBinaries,
 	}, ""
 }
 

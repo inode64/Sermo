@@ -89,6 +89,9 @@ func New(c Config) Engine {
 	if deps.Processes == nil {
 		deps.Processes = c.Discoverer.ObserveState
 	}
+	if deps.ProcessesAny == nil {
+		deps.ProcessesAny = c.Discoverer.ObserveAnyState
+	}
 
 	tree := c.Tree
 	// Derive the lifecycle and stop_policy invariants from the resolved tree here,
