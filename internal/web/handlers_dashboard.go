@@ -71,9 +71,21 @@ func CollectDashboardSnapshot(ctx context.Context, backend Backend, since time.D
 	wg.Go(func() { snapshot.Daemon = backend.DaemonInfo(ctx) })
 	wg.Go(func() { snapshot.DaemonMetrics = backend.DaemonMetrics(ctx, since) })
 	wg.Go(func() { snapshot.Activity = backend.ActivitySummary(ctx) })
-	wg.Go(func() { snapshot.Monitoring = backend.MonitoringStatus(ctx) })
 	wg.Go(func() { snapshot.HostMetrics = backend.HostMetrics(ctx) })
 	wg.Wait()
+	// Derive totals from the same service rows: a concurrent monitor transition
+	// must not make the dashboard counters disagree with its own list.
+	for i := range snapshot.Services {
+		service := &snapshot.Services[i]
+		if !service.Enabled {
+			continue
+		}
+		snapshot.Monitoring.Total++
+		if service.Monitored {
+			snapshot.Monitoring.Monitored++
+		}
+	}
+	snapshot.Monitoring.Paused = snapshot.Monitoring.Total - snapshot.Monitoring.Monitored
 	// DaemonInfo warms the shared SSH sampler cache above. Read sessions after
 	// the parallel batch so this aggregate does not race a duplicate host scan.
 	if source, ok := backend.(sessionInventorySource); ok {
