@@ -27,44 +27,41 @@ func (s *Server) seriesSince(r *http.Request) time.Duration {
 }
 
 func (s *Server) handleSeries(w http.ResponseWriter, r *http.Request) {
-	since := s.seriesSince(r)
 	check := r.URL.Query().Get(apiQueryCheck)
 	metric := r.URL.Query().Get(apiQueryMetric)
-	backend, generation, ok := s.backendRead(w)
-	if !ok {
-		return
+	notFound := apiErrorUnknownService
+	switch {
+	case metric != "":
+		notFound = apiErrorUnknownCheckBand
+	case check != "":
+		notFound = apiErrorUnknownServiceOrCheck
 	}
-	points, ok := backend.Series(r.Context(), r.PathValue(apiParamName), check, metric, since)
-	if !ok {
-		notFound := apiErrorUnknownService
-		switch {
-		case metric != "":
-			notFound = apiErrorUnknownCheckBand
-		case check != "":
-			notFound = apiErrorUnknownServiceOrCheck
-		}
-		writeError(w, http.StatusNotFound, notFound)
-		return
-	}
-	s.writeBackendJSON(w, http.StatusOK, map[string]any{apiJSONKeySince: since.String(), apiJSONKeyPoints: points}, generation)
+	s.serveSeries(w, r, notFound, func(ctx context.Context, backend Backend, since time.Duration) ([]SeriesPoint, bool) {
+		return backend.Series(ctx, r.PathValue(apiParamName), check, metric, since)
+	})
 }
 
-// handleWatchSeries serves a host watch's availability series — or, with
-// ?metric=, one of its state bands — through the same envelope and window query
-// the service series uses, so the dashboard reads both with one loader.
+// handleWatchSeries serves a host watch's availability series or metric state
+// bands through the same envelope and bounded window as service series.
 func (s *Server) handleWatchSeries(w http.ResponseWriter, r *http.Request) {
-	since := s.seriesSince(r)
 	metric := r.URL.Query().Get(apiQueryMetric)
+	notFound := apiErrorUnknownAvailWatch
+	if metric != "" {
+		notFound = apiErrorUnknownCheckBand
+	}
+	s.serveSeries(w, r, notFound, func(ctx context.Context, backend Backend, since time.Duration) ([]SeriesPoint, bool) {
+		return backend.WatchSeries(ctx, r.PathValue(apiParamName), metric, since)
+	})
+}
+
+func (s *Server) serveSeries(w http.ResponseWriter, r *http.Request, notFound string, fetch func(context.Context, Backend, time.Duration) ([]SeriesPoint, bool)) {
+	since := s.seriesSince(r)
 	backend, generation, ok := s.backendRead(w)
 	if !ok {
 		return
 	}
-	points, ok := backend.WatchSeries(r.Context(), r.PathValue(apiParamName), metric, since)
+	points, ok := fetch(r.Context(), backend, since)
 	if !ok {
-		notFound := apiErrorUnknownAvailWatch
-		if metric != "" {
-			notFound = apiErrorUnknownCheckBand
-		}
 		writeError(w, http.StatusNotFound, notFound)
 		return
 	}
