@@ -8,14 +8,6 @@ import (
 	"strings"
 )
 
-// ParseHost decodes a /proc/net hex address as IPv4 or IPv6.
-func ParseHost(hexAddr string, ipv6 bool) (string, bool) {
-	if ipv6 {
-		return ParseIPv6Host(hexAddr)
-	}
-	return ParseIPv4Host(hexAddr)
-}
-
 // ParseIPv4Host decodes a little-endian IPv4 address from /proc/net hex.
 func ParseIPv4Host(hexAddr string) (string, bool) {
 	if len(hexAddr) != IPv4HexChars {

@@ -376,12 +376,16 @@ func readPortListeners(port int, collectHosts bool, table procSocketTable) portL
 
 func parseProcSocketTable(r io.Reader, port int, table procSocketTable, collectHosts bool) (portListenerSample, error) {
 	var sample portListenerSample
+	parseHost := procnet.ParseIPv4Host
+	if table.ipv6 {
+		parseHost = procnet.ParseIPv6Host
+	}
 	err := procnet.ScanPortState(r, port, table.states, func(hostHex string) bool {
 		sample.listening = true
 		if !collectHosts {
 			return false
 		}
-		if host, ok := procnet.ParseHost(hostHex, table.ipv6); ok {
+		if host, ok := parseHost(hostHex); ok {
 			sample.hosts = append(sample.hosts, host)
 		}
 		return true
