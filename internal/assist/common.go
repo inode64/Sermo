@@ -221,11 +221,5 @@ func labelField(name, value string) string {
 }
 
 func nonEmpty(values ...string) []string {
-	out := make([]string, 0, len(values))
-	for _, value := range values {
-		if value != "" {
-			out = append(out, value)
-		}
-	}
-	return out
+	return slices.DeleteFunc(append([]string{}, values...), func(value string) bool { return value == "" })
 }

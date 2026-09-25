@@ -3,6 +3,7 @@ package assist
 import (
 	"errors"
 	"fmt"
+	"slices"
 
 	"sermo/internal/cfgval"
 	"sermo/internal/checks"
@@ -93,13 +94,7 @@ func ifaceLabel(iface Iface, defaultRoute bool) string {
 }
 
 func filterIfaces(ifaces []Iface, keep func(Iface) bool) []Iface {
-	out := make([]Iface, 0, len(ifaces))
-	for _, iface := range ifaces {
-		if keep(iface) {
-			out = append(out, iface)
-		}
-	}
-	return out
+	return slices.DeleteFunc(append([]Iface{}, ifaces...), func(iface Iface) bool { return !keep(iface) })
 }
 
 type netSettings struct {
