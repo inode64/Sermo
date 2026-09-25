@@ -47,16 +47,15 @@ func InfluxClient(cfg Config) (*http.Client, string) {
 // transport error, or a recognised InfluxDB health JSON); it is false only when
 // the endpoint is missing/not InfluxDB, signalling a /ping fallback.
 func influxHealth(ctx context.Context, client *http.Client, base string) (res Result, handled bool, err error) {
-	resp, err := getHTTPProbe(ctx, client, base+influxHealthEndpoint, maxHTTPProbeBody)
-	if err != nil {
-		return Result{}, true, err // server unreachable — conclusive
-	}
-
 	var h struct {
 		Name    string `json:"name"`
 		Status  string `json:"status"`
 		Version string `json:"version"`
 		Message string `json:"message"`
+	}
+	resp, err := getHTTPProbe(ctx, client, base+influxHealthEndpoint, maxHTTPProbeBody, nil)
+	if err != nil {
+		return Result{}, true, err // server unreachable — conclusive
 	}
 	if !decodedJSON(resp.body, &h) || h.Status == "" {
 		return Result{}, false, nil // not the InfluxDB health JSON — fall back to /ping
@@ -74,7 +73,7 @@ func influxHealth(ctx context.Context, client *http.Client, base string) (res Re
 // influxPing queries /ping, the universal liveness endpoint; the version is in
 // the X-Influxdb-Version response header.
 func influxPing(ctx context.Context, client *http.Client, base string) (Result, error) {
-	resp, err := getHTTPProbe(ctx, client, base+influxPingEndpoint, maxHTTPProbeShortBody)
+	resp, err := getHTTPProbe(ctx, client, base+influxPingEndpoint, maxHTTPProbeShortBody, nil)
 	if err != nil {
 		return Result{}, err
 	}

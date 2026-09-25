@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 
@@ -72,19 +73,37 @@ func doHTTPProbe(client *http.Client, req *http.Request, limit int64) (httpProbe
 	return httpProbeResponse{status: resp.StatusCode, header: resp.Header, body: body}, nil
 }
 
-// getHTTPProbe builds a plain GET for url and performs doHTTPProbe.
-func getHTTPProbe(ctx context.Context, client *http.Client, url string, limit int64) (httpProbeResponse, error) {
+// getHTTPProbe builds a GET, optionally decorates its headers, and performs doHTTPProbe.
+func getHTTPProbe(ctx context.Context, client *http.Client, url string, limit int64, decorate func(*http.Request)) (httpProbeResponse, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody)
 	if err != nil {
 		//nolint:wrapcheck // see doHTTPProbe: the caller's probeErr supplies the protocol context.
 		return httpProbeResponse{}, err
 	}
+	if decorate != nil {
+		decorate(req)
+	}
 	return doHTTPProbe(client, req, limit)
 }
 
-// decodedJSON reports whether data parses as JSON into out. Probes use it to
-// decide between a recognised API reply and a fallback endpoint, where a parse
-// failure is a routing signal rather than an error.
+// decodedJSON reports whether an API reply can be recognized before choosing
+// a fallback endpoint. Malformed JSON is a routing signal for these probes.
 func decodedJSON(data []byte, out any) bool {
 	return json.Unmarshal(data, out) == nil
+}
+
+// getJSONProbe performs a bounded GET for probes that require HTTP 200 and JSON.
+// Probes with fallback endpoints use getHTTPProbe and decodedJSON instead.
+func getJSONProbe(ctx context.Context, client *http.Client, url string, decorate func(*http.Request), out any) error {
+	resp, err := getHTTPProbe(ctx, client, url, maxHTTPProbeBody, decorate)
+	if err != nil {
+		return err
+	}
+	if resp.status != http.StatusOK {
+		return fmt.Errorf("HTTP status %d", resp.status)
+	}
+	if err := json.Unmarshal(resp.body, out); err != nil {
+		return fmt.Errorf("invalid JSON response: %w", err)
+	}
+	return nil
 }

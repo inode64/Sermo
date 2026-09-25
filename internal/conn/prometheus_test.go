@@ -21,6 +21,10 @@ func TestPrometheusProbeBuildInfo(t *testing.T) {
 
 func TestPrometheusProbeHealthyFallback(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if user, password, ok := r.BasicAuth(); !ok || user != "ops" || password != "secret" {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
 		switch r.URL.Path {
 		case "/api/v1/status/buildinfo": // endpoint disabled / older server
 			http.NotFound(w, r)
@@ -31,7 +35,7 @@ func TestPrometheusProbeHealthyFallback(t *testing.T) {
 	defer srv.Close()
 
 	host, port := serverHostPort(t, srv)
-	if _, err := (prometheusProtocol{}).Probe(context.Background(), Config{Host: host, Port: port}); err != nil {
+	if _, err := (prometheusProtocol{}).Probe(context.Background(), Config{Host: host, Port: port, User: "ops", Password: "secret"}); err != nil {
 		t.Fatalf("probe should fall back to /-/healthy: %v", err)
 	}
 }

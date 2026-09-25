@@ -27,7 +27,7 @@ const (
 func (rspamdProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	client, base := httpProbeBase(cfg, defaultPortRspamd)
 	url := base + rspamdPingEndpoint
-	resp, err := getHTTPProbe(ctx, client, url, maxHTTPProbeShortBody)
+	resp, err := getHTTPProbe(ctx, client, url, maxHTTPProbeShortBody, nil)
 	if err != nil {
 		return Result{}, err
 	}
