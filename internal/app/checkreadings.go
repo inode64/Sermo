@@ -251,7 +251,7 @@ func (rb *readingBuilder) addState(field, label, okText, badText string, warn bo
 // addInt appends the field's integer value when present.
 func (rb *readingBuilder) addInt(field, label string) *readingBuilder {
 	if v, ok := cfgval.Int(rb.data[field]); ok {
-		rb.out = append(rb.out, web.WatchReading{Field: field, Label: label, Value: strconv.Itoa(v)})
+		rb.add(field, label, strconv.Itoa(v))
 	}
 	return rb
 }
@@ -260,7 +260,7 @@ func (rb *readingBuilder) addInt(field, label string) *readingBuilder {
 // growth reading needs: "+5" says the count rose, where "5" reads as a total.
 func (rb *readingBuilder) addSignedInt(field, label string) *readingBuilder {
 	if v, ok := cfgval.Int(rb.data[field]); ok {
-		rb.out = append(rb.out, web.WatchReading{Field: field, Label: label, Value: fmt.Sprintf("%+d", v)})
+		rb.add(field, label, fmt.Sprintf("%+d", v))
 	}
 	return rb
 }
@@ -279,7 +279,7 @@ func (rb *readingBuilder) addGrowthWindow() *readingBuilder {
 // addIntMetric appends the field's integer value with a unit suffix.
 func (rb *readingBuilder) addIntMetric(field, label, unit string) *readingBuilder {
 	if v, ok := cfgval.Int(rb.data[field]); ok {
-		rb.out = append(rb.out, web.WatchReading{Field: field, Label: label, Value: checks.FormatDisplayValueWithUnit(checks.DataKeyValue, int64(v), unit)})
+		rb.add(field, label, checks.FormatDisplayValueWithUnit(checks.DataKeyValue, int64(v), unit))
 	}
 	return rb
 }
@@ -288,7 +288,7 @@ func (rb *readingBuilder) addIntMetric(field, label, unit string) *readingBuilde
 // byte formatter, so meters and event messages render bytes identically.
 func (rb *readingBuilder) addBytes(field, label string) *readingBuilder {
 	if v, ok := cfgval.Uint(rb.data[field]); ok {
-		rb.out = append(rb.out, web.WatchReading{Field: field, Label: label, Value: checks.HumanizeSignedBytes(uintToInt64(v))})
+		rb.add(field, label, checks.HumanizeSignedBytes(uintToInt64(v)))
 	}
 	return rb
 }
@@ -296,7 +296,7 @@ func (rb *readingBuilder) addBytes(field, label string) *readingBuilder {
 // addMetric appends the field's float value formatted with decimals and unit.
 func (rb *readingBuilder) addMetric(field, label string, decimals int, unit string) *readingBuilder {
 	if v, ok := cfgval.Float(rb.data[field]); ok {
-		rb.out = append(rb.out, web.WatchReading{Field: field, Label: label, Value: watchReadingMetricValue(v, decimals, unit)})
+		rb.add(field, label, watchReadingMetricValue(v, decimals, unit))
 	}
 	return rb
 }
@@ -465,7 +465,7 @@ func checkReadings(checkType string, data map[string]any) []web.WatchReading {
 func routeCheckReadings(data map[string]any) []web.WatchReading {
 	return readingsFrom(data).
 		addString(checks.DataKeyFamily, watchReadingLabelFamily).
-		addString(checks.DataKeyInterface, "Interface").
+		addString(checks.DataKeyInterface, watchReadingLabelInterface).
 		addString(checks.DataKeyGateway, watchReadingLabelGateway).
 		addInt(checks.DataKeyRoutes, "Routes in table").
 		addInt(checks.DataKeyValue, "Matched").

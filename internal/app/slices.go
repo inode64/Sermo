@@ -5,8 +5,7 @@ import (
 	"time"
 )
 
-// mapSlice converts a slice element-by-element via conv, preserving the
-// nil-in/nil-out convention the state snapshot converters rely on.
+// mapSlice projects each element through conv and returns nil for empty input.
 func mapSlice[S, D any](in []S, conv func(S) D) []D {
 	if len(in) == 0 {
 		return nil
