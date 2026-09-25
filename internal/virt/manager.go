@@ -282,10 +282,7 @@ func (m Manager) withDomainAction(ctx context.Context, action string, fn func(Cl
 		}
 		return struct{}{}, nil
 	})
-	if err != nil {
-		return err
-	}
-	return nil
+	return err
 }
 
 func lookupDomain(c Client, spec Spec) (libvirt.Domain, error) {
