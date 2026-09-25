@@ -7,7 +7,6 @@ import (
 	"maps"
 	"os"
 	"slices"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -502,8 +501,8 @@ func (w *Worker) gatedChecksDue(built []checks.Built, cache map[string]checks.Re
 			extra = append(extra, b)
 		}
 	}
-	sort.Slice(extra, func(i, j int) bool {
-		return extra[i].Check.Name() < extra[j].Check.Name()
+	slices.SortFunc(extra, func(a, b checks.Built) int {
+		return strings.Compare(a.Check.Name(), b.Check.Name())
 	})
 	return extra
 }
@@ -586,7 +585,7 @@ func failingChecksOutput(cache map[string]checks.Result) string {
 	if len(names) == 0 {
 		return ""
 	}
-	sort.Strings(names)
+	slices.Sort(names)
 	var b strings.Builder
 	for i, name := range names {
 		if i > 0 {

@@ -1,13 +1,13 @@
 package app
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
 	"maps"
 	"regexp"
 	"slices"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -168,7 +168,7 @@ func (w *processPolicyWatcher) runCycle(ctx context.Context) {
 		w.publishSnapshot(nil, nil, false)
 		return
 	}
-	sort.Slice(samples, func(i, j int) bool { return samples[i].PID < samples[j].PID })
+	slices.SortFunc(samples, func(a, b ProcInfo) int { return cmp.Compare(a.PID, b.PID) })
 	violations := make([]processPolicyViolation, 0)
 	for _, sample := range samples {
 		if ctx.Err() != nil {

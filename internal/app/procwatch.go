@@ -1,12 +1,12 @@
 package app
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"maps"
 	"path/filepath"
 	"slices"
-	"sort"
 	"strconv"
 	"syscall"
 	"time"
@@ -210,7 +210,7 @@ func (w *procWatcher) runCycle(ctx context.Context) {
 		w.publishSnapshot(nil, false)
 		return
 	}
-	sort.Slice(samples, func(i, j int) bool { return samples[i].PID < samples[j].PID })
+	slices.SortFunc(samples, func(a, b ProcInfo) int { return cmp.Compare(a.PID, b.PID) })
 	defer w.publishSnapshot(samples, true)
 
 	t := now()
