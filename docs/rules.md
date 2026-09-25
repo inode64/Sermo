@@ -1126,6 +1126,9 @@ keep the per-protocol entries short:
 - **`socket`** (a Unix socket path) dials the socket instead of `host`/`port`;
   **`query`** is the per-protocol lookup target (e.g. the DNS name for `dns`).
 
+HTTP-based protocol exchanges reject response-body read errors, including
+timeouts and premature disconnects; a matching partial response is not accepted.
+
 Protocols, in the order of the table above:
 
 - `mysql` (alias `mariadb`) — default port 3306; `tls` supported. `user` is
