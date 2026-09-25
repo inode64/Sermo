@@ -422,10 +422,6 @@ func keyAlgoBits(key any) (string, int) {
 // certSampleFromCert populates a CertSample from a parsed x509 certificate.
 func certSampleFromCert(leaf *x509.Certificate) CertSample {
 	sum := sha256.Sum256(leaf.Raw)
-	var serial string
-	if leaf.SerialNumber != nil {
-		serial = leaf.SerialNumber.Text(certSerialNumberBase)
-	}
 	_, bits := keyAlgoBits(leaf.PublicKey)
 	return CertSample{
 		Kind:               certKindCertificate,
@@ -436,7 +432,7 @@ func certSampleFromCert(leaf *x509.Certificate) CertSample {
 		KeyBits:            bits,
 		Issuer:             leaf.Issuer.String(),
 		Subject:            leaf.Subject.String(),
-		SerialNumber:       serial,
+		SerialNumber:       leaf.SerialNumber.Text(certSerialNumberBase),
 		DNSNames:           leaf.DNSNames,
 		Fingerprint:        hex.EncodeToString(sum[:]),
 	}

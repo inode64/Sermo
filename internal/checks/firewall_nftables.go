@@ -51,7 +51,7 @@ func listNftablesRules() (uint64, error) {
 	}
 	var total uint64
 	for _, chain := range chains {
-		if chain == nil || chain.Table == nil {
+		if chain.Table == nil {
 			continue
 		}
 		rules, err := conn.GetRules(chain.Table, chain)
