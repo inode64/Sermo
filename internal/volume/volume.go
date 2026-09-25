@@ -10,9 +10,10 @@
 package volume
 
 import (
+	"cmp"
 	"context"
 	"fmt"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -307,8 +308,8 @@ func storageFilesystem(fstype string) bool {
 }
 
 func pruneNestedSameDeviceMounts(table []Mount) []Mount {
-	sort.SliceStable(table, func(i, j int) bool {
-		return len(cleanMountpoint(table[i].MountPoint)) < len(cleanMountpoint(table[j].MountPoint))
+	slices.SortStableFunc(table, func(a, b Mount) int {
+		return cmp.Compare(len(cleanMountpoint(a.MountPoint)), len(cleanMountpoint(b.MountPoint)))
 	})
 	out := make([]Mount, 0, len(table))
 	for _, m := range table {

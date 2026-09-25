@@ -10,8 +10,9 @@
 package diag
 
 import (
+	"cmp"
 	"fmt"
-	"sort"
+	"slices"
 
 	"sermo/internal/config"
 )
@@ -73,12 +74,8 @@ func (b *builder) addf(level Level, scope, format string, args ...any) {
 }
 
 func (b *builder) sort() {
-	sort.SliceStable(b.findings, func(i, j int) bool {
-		left, right := levelRank(b.findings[i].Level), levelRank(b.findings[j].Level)
-		if left != right {
-			return left < right
-		}
-		return b.findings[i].Scope < b.findings[j].Scope
+	slices.SortStableFunc(b.findings, func(a, b Finding) int {
+		return cmp.Or(cmp.Compare(levelRank(a.Level), levelRank(b.Level)), cmp.Compare(a.Scope, b.Scope))
 	})
 }
 

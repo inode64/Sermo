@@ -3,6 +3,7 @@
 package mountctl
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -12,7 +13,6 @@ import (
 	"path/filepath"
 	"sermo/internal/hostfs"
 	"slices"
-	"sort"
 	"strings"
 	"time"
 
@@ -761,7 +761,7 @@ func ProcessesByMount(ctx context.Context, mountPaths []string, lookup *process.
 		}
 	}
 	for mountPath := range out {
-		sort.Slice(out[mountPath], func(i, j int) bool { return out[mountPath][i].PID < out[mountPath][j].PID })
+		slices.SortFunc(out[mountPath], func(a, b process.Process) int { return cmp.Compare(a.PID, b.PID) })
 	}
 	return out, nil
 }
@@ -780,7 +780,7 @@ func cleanMountPaths(mountPaths []string) []string {
 		seen[clean] = struct{}{}
 		out = append(out, clean)
 	}
-	sort.Strings(out)
+	slices.Sort(out)
 	return out
 }
 
