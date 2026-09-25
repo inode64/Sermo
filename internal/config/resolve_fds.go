@@ -51,14 +51,7 @@ func expandFDs(tree map[string]any) []string {
 	if limit == "" || !fdsApplies(tree) {
 		return nil
 	}
-	// A checks section in any shape but a mapping is the operator's to have
-	// validated; the check cannot be added to it, and a rule without its check
-	// would only add a second error on top of theirs.
-	if raw, present := tree[sectionChecks]; present && raw != nil {
-		if _, isMap := raw.(map[string]any); !isMap {
-			return nil
-		}
-	}
+
 	checkEntry := map[string]any{
 		checks.CheckKeyType:  checks.CheckTypeMetric,
 		checks.CheckKeyScope: checks.MetricScopeService,
@@ -72,7 +65,11 @@ func expandFDs(tree map[string]any) []string {
 	if err := injectGenerated(tree, sectionChecks, fdsCheckName, "check", fdsCheckName, checkEntry); err != "" {
 		return []string{err}
 	}
-	rule := fdsRule(allowRestart, restartOnChangeDisplayName(tree)+fdsMessageSuffix)
+	rule := generatedSensorRule(
+		map[string]any{rules.ConditionActive: map[string]any{rules.FieldCheck: fdsCheckName}},
+		map[string]any{rules.WindowKeyDuration: fdsRuleDuration},
+		allowRestart, restartOnChangeDisplayName(tree)+fdsMessageSuffix,
+	)
 	if err := injectGenerated(tree, rules.SectionRules, fdsRuleName, "rule", fdsCheckName, rule); err != "" {
 		return []string{err}
 	}
@@ -124,18 +121,4 @@ func fdsApplies(tree map[string]any) bool {
 		}
 	}
 	return true
-}
-
-// fdsRule builds the rule: alert first, then restart, the canonical generated
-// shape. A metric is a condition check, so the rule fires while it is active.
-func fdsRule(allowRestart bool, message string) map[string]any {
-	then := generatedRestartActions(allowRestart, message)
-	return map[string]any{
-		rules.RuleFieldType: string(generatedRuleType(then)),
-		rules.RuleFieldIf: map[string]any{
-			rules.ConditionActive: map[string]any{rules.FieldCheck: fdsCheckName},
-		},
-		rules.RuleFieldFor:  map[string]any{rules.WindowKeyDuration: fdsRuleDuration},
-		rules.RuleFieldThen: then,
-	}
 }
