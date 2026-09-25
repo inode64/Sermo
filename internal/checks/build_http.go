@@ -17,21 +17,12 @@ import (
 )
 
 const (
-	defaultHTTPStatusCode       = http.StatusOK
-	httpHeaderAccept            = httpx.HeaderAccept
-	httpHeaderContentType       = httpx.HeaderContentType
-	httpContentTypeJSON         = httpx.ContentTypeJSON
-	httpStatusClassPatternLen   = 3
-	httpStatusClassDigitIndex   = 0
-	httpStatusClassWildcard1    = 1
-	httpStatusClassWildcard2    = 2
-	httpStatusClassMinDigit     = '1'
-	httpStatusClassMaxDigit     = '5'
-	httpStatusClassWildcard     = 'x'
-	httpStatusClassWildcardCaps = 'X'
-	httpStatusClassDigitBase    = '0'
-	httpStatusMinCode           = 100
-	httpStatusMaxCode           = 599
+	defaultHTTPStatusCode = http.StatusOK
+	httpHeaderAccept      = httpx.HeaderAccept
+	httpHeaderContentType = httpx.HeaderContentType
+	httpContentTypeJSON   = httpx.ContentTypeJSON
+	httpStatusMinCode     = 100
+	httpStatusMaxCode     = 599
 )
 
 // buildHTTPCheck builds an http(s) check, configuring proxy, http3 and interface
@@ -395,16 +386,12 @@ func ValidHTTPStatus(value string) bool {
 
 func parseHTTPStatus(value string) (int, int, bool) {
 	if isHTTPStatusClassPattern(value) {
-		return 0, int(value[httpStatusClassDigitIndex] - httpStatusClassDigitBase), true
+		return 0, int(value[0] - '0'), true
 	}
 	code, err := strconv.Atoi(value)
 	return code, 0, err == nil && code >= httpStatusMinCode && code <= httpStatusMaxCode
 }
 
 func isHTTPStatusClassPattern(s string) bool {
-	return len(s) == httpStatusClassPatternLen &&
-		(s[httpStatusClassWildcard1] == httpStatusClassWildcard || s[httpStatusClassWildcard1] == httpStatusClassWildcardCaps) &&
-		(s[httpStatusClassWildcard2] == httpStatusClassWildcard || s[httpStatusClassWildcard2] == httpStatusClassWildcardCaps) &&
-		s[httpStatusClassDigitIndex] >= httpStatusClassMinDigit &&
-		s[httpStatusClassDigitIndex] <= httpStatusClassMaxDigit
+	return len(s) == 3 && strings.EqualFold(s[1:], "xx") && s[0] >= '1' && s[0] <= '5'
 }
