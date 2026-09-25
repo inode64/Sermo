@@ -507,7 +507,7 @@ func instantiateMulti(body map[string]any, templateName string, match templateMa
 		bodyPairs = append(bodyPairs, t.marker(), v)
 	}
 	bodyPairs = append(bodyPairs, templateCurrentMarker, templateCurrentValue(match.current))
-	out := bindTokensMap(cloneMap(body), strings.NewReplacer(bodyPairs...))
+	out := bindTokensMap(body, strings.NewReplacer(bodyPairs...))
 	if templateMatchHasEmptyValue(match, toks) {
 		applyUnversionedOverrides(out)
 	}

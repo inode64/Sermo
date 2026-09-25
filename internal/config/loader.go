@@ -511,7 +511,7 @@ func configDirEntries(dir, label string) (names, subdirs []string, err error) {
 // watchEntryFromDocument validates a watch document's shape and returns the
 // entry that belongs under Global.Raw["watches"]. It is shared by the base pass,
 // which refuses a duplicate name, and by the local-override pass, which merges
-// onto an existing entry instead.
+// onto an existing entry instead. Both callers transfer ownership of doc.Body.
 func watchEntryFromDocument(doc *Document) (map[string]any, error) {
 	if _, present := doc.Body[pathKeyWatches]; present {
 		return nil, fmt.Errorf("%s: watch documents use top-level name/check fields, not a watches map", doc.Path)
@@ -525,7 +525,7 @@ func watchEntryFromDocument(doc *Document) (map[string]any, error) {
 	if !validDocumentName(doc.Name) {
 		return nil, fmt.Errorf("%s: watch name %q must be a simple name without path separators", doc.Path, doc.Name)
 	}
-	entry := cloneMap(doc.Body)
+	entry := doc.Body
 	delete(entry, keyKind)
 	delete(entry, keyName)
 	expandEnvTree(entry)
