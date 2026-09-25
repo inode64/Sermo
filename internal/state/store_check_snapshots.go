@@ -132,44 +132,32 @@ func (s *Store) groupedCheckSnapshots(query, label string) (map[string]map[strin
 // table in scan errors.
 func scanCheckSnapshotRow(rows *sql.Rows, label string) (string, string, CheckSnapshotRecord, error) {
 	var (
+		record      CheckSnapshotRecord
 		group       string
 		slot        string
-		checkType   string
-		observation string
 		ok          int
 		cond        int
 		optional    int
 		skipped     int
 		unavailable int
-		message     string
 		rawData     string
 		ran         int
 		at          int64
-		configID    string
-		severity    string
 	)
-	if err := rows.Scan(&group, &slot, &checkType, &observation, &ok, &cond, &optional, &skipped, &unavailable, &message, &rawData, &ran, &at, &configID, &severity); err != nil {
+	if err := rows.Scan(&group, &slot, &record.CheckType, &record.Observation, &ok, &cond, &optional, &skipped, &unavailable, &record.Message, &rawData, &ran, &at, &record.ConfigID, &record.Severity); err != nil {
 		return "", "", CheckSnapshotRecord{}, fmt.Errorf("scan %s: %w", label, err)
 	}
-	record, err := newCheckSnapshotRecord(slot, checkType, observation, ok, cond, optional, skipped, unavailable, message, rawData, ran, at)
-	record.ConfigID = configID
-	record.Severity = severity
-	return group, slot, record, err
-}
-
-func newCheckSnapshotRecord(slot, checkType, observation string, ok, condition, optional, skipped, unavailable int, message, rawData string, ran int, at int64) (CheckSnapshotRecord, error) {
-	observationState := checks.ObservationState(observation)
-	if err := validateCheckSnapshotObservation(observationState); err != nil {
-		return CheckSnapshotRecord{}, fmt.Errorf("decode check snapshot %s: %w", slot, err)
+	if err := validateCheckSnapshotObservation(record.Observation); err != nil {
+		return group, slot, CheckSnapshotRecord{}, fmt.Errorf("decode check snapshot %s: %w", slot, err)
 	}
 	data, err := decodeSnapshotData(rawData)
 	if err != nil {
-		return CheckSnapshotRecord{}, err
+		return group, slot, CheckSnapshotRecord{}, err
 	}
-	return CheckSnapshotRecord{
-		CheckType: checkType, Observation: observationState, OK: intBool(ok), Condition: intBool(condition), Optional: intBool(optional),
-		Skipped: intBool(skipped), Unavailable: intBool(unavailable), Message: message, Data: data, Ran: intBool(ran), At: unixNanoTime(at),
-	}, nil
+	record.OK, record.Condition, record.Optional = intBool(ok), intBool(cond), intBool(optional)
+	record.Skipped, record.Unavailable, record.Ran = intBool(skipped), intBool(unavailable), intBool(ran)
+	record.Data, record.At = data, unixNanoTime(at)
+	return group, slot, record, nil
 }
 
 // SetWatchCheckSnapshot upserts one host-watch snapshot slot.
