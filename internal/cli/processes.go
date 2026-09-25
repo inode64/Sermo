@@ -30,7 +30,7 @@ func (a App) discoverProcesses(ctx context.Context, opts options, cfg *config.Co
 		return a.Discover(selectors)
 	}
 	discoverer := process.NewDiscovererWithUserLookup(app.EngineUserLookup(cfg, a.Runner))
-	dependencies, _, err := a.controlDependenciesFor(ctx, opts.backend)
+	dependencies, err := a.controlDependenciesFor(ctx, opts.backend)
 	if err != nil {
 		return discoverer.Discover(selectors)
 	}

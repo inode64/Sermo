@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"fmt"
 
 	"sermo/internal/servicemgr"
 )
@@ -12,27 +13,19 @@ type controlDependencies struct {
 	resolver servicemgr.UnitResolver
 }
 
-type controlDependencyStage uint8
-
-const (
-	controlDependencyDetection controlDependencyStage = iota
-	controlDependencyManager
-)
-
 // controlDependenciesFor builds the backend-specific dependencies shared by
 // status, process discovery and manual operations.
-func (a App) controlDependenciesFor(ctx context.Context, requested servicemgr.Backend) (controlDependencies, controlDependencyStage, error) {
+func (a App) controlDependenciesFor(ctx context.Context, requested servicemgr.Backend) (controlDependencies, error) {
 	backend, err := a.Detector.Detect(ctx, requested)
 	if err != nil {
-		//nolint:wrapcheck // the caller preserves the stage-specific diagnostic.
-		return controlDependencies{}, controlDependencyDetection, err
+		return controlDependencies{}, fmt.Errorf("backend detection failed: %w", err)
 	}
 	manager, err := a.NewManager(backend)
 	if err != nil {
-		return controlDependencies{}, controlDependencyManager, err
+		return controlDependencies{}, fmt.Errorf("service manager unavailable: %w", err)
 	}
 	resolver := servicemgr.NewUnitResolver()
 	resolver.Runner = a.Runner
 	resolver.Manager = manager
-	return controlDependencies{backend: backend, manager: manager, resolver: resolver}, controlDependencyDetection, nil
+	return controlDependencies{backend: backend, manager: manager, resolver: resolver}, nil
 }

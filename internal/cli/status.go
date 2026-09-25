@@ -85,13 +85,9 @@ func (a App) serviceStatus(ctx context.Context, opts options, cfg *config.Config
 	ctx, cancel := context.WithTimeout(ctx, opts.timeout)
 	defer cancel()
 
-	dependencies, stage, err := a.controlDependenciesFor(ctx, opts.backend)
+	dependencies, err := a.controlDependenciesFor(ctx, opts.backend)
 	if err != nil {
-		if stage == controlDependencyManager {
-			a.reportError(opts, fmt.Sprintf("service manager unavailable: %v", err))
-		} else {
-			a.reportError(opts, fmt.Sprintf("backend detection failed: %v", err))
-		}
+		a.reportError(opts, err.Error())
 		return servicemgr.ServiceStatus{}, "", false, exitRuntimeError
 	}
 
