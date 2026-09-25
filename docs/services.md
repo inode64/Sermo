@@ -647,6 +647,13 @@ process, so per-OS or versioned pidfile locations all resolve without personal
 config. Use `pidfiles:` instead when one service intentionally owns several
 resident processes that each have their own pidfile.
 
+The `rest-server` profile discovers its resident process using the linked
+application's `rest_server_binary` and an exact `user` (default `root`), including
+on OpenRC installations without a pidfile. Set `variables.user` to the account
+that runs your instance; set `variables.rest_server_binary` when it lives outside
+the discovered binary directories. Both values must match for process and FD
+metrics to be attributed to the service.
+
 For oneshot services that do not keep a resident process (for example firewall
 loaders or SNTP), set `processes: {}` explicitly. That prevents Sermo from deriving a
 process selector from init metadata and keeps the WebUI from showing CPU/memory
