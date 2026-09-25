@@ -120,21 +120,14 @@ func parseAPIAccessTarget(path string) (target, action string) {
 			target = parts[apiAccessTargetSegment]
 			action = apiActionRelease
 		}
-	case apiSegmentEvents:
-		if len(parts) >= apiAccessTargetSegments {
+	case apiSegmentEvents, apiSegmentState:
+		switch {
+		case len(parts) >= apiAccessTargetSegments:
 			action = parts[apiAccessTargetSegment]
-		} else {
+		case parts[apiAccessResourceSegment] == apiSegmentEvents:
 			action = apiActionClear
-		}
-	case apiSegmentState:
-		if len(parts) >= apiAccessTargetSegments {
-			action = parts[apiAccessTargetSegment]
-		} else {
+		default:
 			action = apiActionCompact
-		}
-	case apiSegmentPanic:
-		if len(parts) >= apiAccessTargetSegments {
-			action = parts[apiAccessTargetSegment]
 		}
 	case apiSegmentReload:
 		action = apiActionReload
