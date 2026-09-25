@@ -23,7 +23,7 @@ func TestBuildNtfyRequiresTopic(t *testing.T) {
 }
 
 func TestNtfySubpathInstallKeepsPrefix(t *testing.T) {
-	base, topic, err := ParseNtfyWebhook("https://host.example.net/ntfy/sermo-alerts")
+	base, topic, err := parseNtfyWebhook("https://host.example.net/ntfy/sermo-alerts")
 	if err != nil {
 		t.Fatal(err)
 	}

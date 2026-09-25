@@ -55,7 +55,7 @@ func TestSessionsFromFallsBackAndReads(t *testing.T) {
 	if err != nil {
 		t.Fatalf("SessionsFrom: %v", err)
 	}
-	if DistinctUsers(sessions) != 1 {
+	if distinctUsers(sessions) != 1 {
 		t.Fatalf("sessions = %+v, want one distinct user", sessions)
 	}
 
@@ -81,7 +81,7 @@ func TestSessionsReadsDefaultPaths(t *testing.T) {
 	if err != nil {
 		t.Fatalf("SessionsFrom(nil): %v", err)
 	}
-	if DistinctUsers(got) != 1 {
+	if distinctUsers(got) != 1 {
 		t.Fatalf("SessionsFrom(nil) = %+v, want one distinct user", got)
 	}
 }

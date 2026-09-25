@@ -51,9 +51,9 @@ func ErrorBody(resp *http.Response, limit int64) string {
 	return strings.TrimSpace(string(snippet))
 }
 
-// ErrNilResponse reports a transport that broke net/http's contract by
+// errNilResponse reports a transport that broke net/http's contract by
 // returning neither a response nor an error.
-var ErrNilResponse = errors.New("http: nil response without error")
+var errNilResponse = errors.New("http: nil response without error")
 
 // Doer performs an HTTP request; *http.Client satisfies it. Callers take the
 // interface so tests can inject a stub.
@@ -74,16 +74,16 @@ func Do(client Doer, req *http.Request) (*http.Response, error) {
 		//nolint:wrapcheck // by design, see above: the caller wraps, and the notify/telegram callers must scrub the bot token out of the *url.Error first.
 		return nil, err
 	case resp == nil:
-		return nil, ErrNilResponse
+		return nil, errNilResponse
 	}
 	return resp, nil
 }
 
-// CloneDefaultTransport returns a mutable copy of the process default HTTP
+// cloneDefaultTransport returns a mutable copy of the process default HTTP
 // transport. A caller may replace http.DefaultTransport with a custom
 // RoundTripper; use a working zero-value transport rather than panic when the
 // caller needs Transport-specific settings such as a dialer or TLS config.
-func CloneDefaultTransport() *http.Transport {
+func cloneDefaultTransport() *http.Transport {
 	if transport, ok := http.DefaultTransport.(*http.Transport); ok {
 		return transport.Clone()
 	}
@@ -119,7 +119,7 @@ func NewClient(opts ClientOptions) *http.Client {
 	if opts.DialContext == nil && opts.TLS == nil && opts.Proxy == nil && !opts.DisableKeepAlives {
 		return client
 	}
-	tr := CloneDefaultTransport()
+	tr := cloneDefaultTransport()
 	if opts.DialContext != nil {
 		tr.DialContext = opts.DialContext
 	}

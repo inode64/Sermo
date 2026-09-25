@@ -32,8 +32,8 @@ const (
 	DefaultKillTimeout = 5 * time.Second
 	// DefaultCommandTimeout bounds individual mount/umount command invocations.
 	DefaultCommandTimeout = 30 * time.Second
-	// DefaultLockTTL bounds the per-mount operation lock.
-	DefaultLockTTL = 5 * time.Minute
+	// defaultLockTTL bounds the per-mount operation lock.
+	defaultLockTTL = 5 * time.Minute
 )
 
 const (
@@ -239,8 +239,8 @@ func UmountDisabledReason(path string) string {
 	return rootUmountDisabledMessage
 }
 
-// IDForPath derives a simple stable identifier from a mount path.
-func IDForPath(path string) string {
+// idForPath derives a simple stable identifier from a mount path.
+func idForPath(path string) string {
 	return idForCleanPath(filepath.Clean(path))
 }
 
@@ -408,7 +408,7 @@ func (c Controller) Blockers(ctx context.Context, spec Spec) ([]process.Process,
 func (c Controller) withLock(spec Spec, fn func() (Result, error)) (Result, error) {
 	ttl := c.LockTTL
 	if ttl <= 0 {
-		ttl = DefaultLockTTL
+		ttl = defaultLockTTL
 	}
 	locker := locks.NewOperationLocker(mountOpsDir(c.runtime()))
 	handle, err := locker.Acquire(stateID(spec), ttl)
@@ -566,9 +566,9 @@ func mountStateDir(runtime string) string {
 
 func stateID(spec Spec) string {
 	if spec.Name != "" {
-		return IDForPath(spec.Name)
+		return idForPath(spec.Name)
 	}
-	return IDForPath(spec.Path)
+	return idForPath(spec.Path)
 }
 
 func (c Controller) run(ctx context.Context, name string, args ...string) error {
@@ -587,7 +587,7 @@ func (c Controller) run(ctx context.Context, name string, args ...string) error 
 }
 
 // pathMatchesAny reports whether path (cleaned) equals the cleaned mountpoint of
-// any entry, the comparison shared by isMounted and PathInFstab over their
+// any entry, the comparison shared by isMounted and pathInFstab over their
 // different entry types.
 func pathMatchesAny[T any](path string, entries []T, mountpoint func(T) string) bool {
 	cleanPath := filepath.Clean(path)
@@ -619,7 +619,7 @@ func (c Controller) inFstab(path string) (bool, error) {
 	if c.InFstab != nil {
 		return c.InFstab(path)
 	}
-	return PathInFstab(path)
+	return pathInFstab(path)
 }
 
 func (c Controller) discoverUsers(ctx context.Context, path string) ([]process.Process, error) {
@@ -696,8 +696,8 @@ func FstabEntries(fstabPath string) ([]FstabEntry, error) {
 	return entries, nil
 }
 
-// PathInFstab reports whether path is a mountpoint in /etc/fstab.
-func PathInFstab(path string) (bool, error) {
+// pathInFstab reports whether path is a mountpoint in /etc/fstab.
+func pathInFstab(path string) (bool, error) {
 	entries, err := FstabEntries(DefaultFstabPath)
 	if err != nil {
 		return false, err

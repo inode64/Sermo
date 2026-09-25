@@ -60,7 +60,7 @@ body: '{{ .Body }} / {{ .Field "SERMO_WATCH" }}'
 		t.Fatal(err)
 	}
 	inner := &recordingNotifier{}
-	notifier := WithTemplate(inner, tmpl)
+	notifier := withTemplate(inner, tmpl)
 	if err := notifier.Send(context.Background(), Message{
 		Subject: "watch",
 		Body:    "payload",
@@ -75,12 +75,12 @@ body: '{{ .Body }} / {{ .Field "SERMO_WATCH" }}'
 
 func TestValidTemplateNameRejectsPathTraversal(t *testing.T) {
 	for _, name := range []string{"../secret", "a/b", "bad name", ".."} {
-		if ValidTemplateName(name) {
+		if validTemplateName(name) {
 			t.Fatalf("name %q should be invalid", name)
 		}
 	}
 	for _, name := range []string{"default-alert", "tenant.ops", "email_1"} {
-		if !ValidTemplateName(name) {
+		if !validTemplateName(name) {
 			t.Fatalf("name %q should be valid", name)
 		}
 	}
@@ -92,7 +92,7 @@ func TestValidTemplateNameRejectsPathTraversal(t *testing.T) {
 func TestLoadTemplateLocalOverrideShadowsPackaged(t *testing.T) {
 	root := t.TempDir()
 	base := filepath.Join(root, "templates")
-	local := base + LocalDirSuffix
+	local := base + localDirSuffix
 	for _, dir := range []string{base, local} {
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			t.Fatal(err)

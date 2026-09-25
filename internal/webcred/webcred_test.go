@@ -21,9 +21,9 @@ func hashOrFail(t *testing.T, password string) string {
 
 func sha256OrFail(t *testing.T, password string) string {
 	t.Helper()
-	line, err := HashSHA256(password)
+	line, err := hashSHA256(password)
 	if err != nil {
-		t.Fatalf("HashSHA256() error = %v", err)
+		t.Fatalf("hashSHA256() error = %v", err)
 	}
 	return line
 }
@@ -329,8 +329,8 @@ func TestHashErrors(t *testing.T) {
 	if _, err := HashBcrypt("", DefaultBcryptCost); err == nil {
 		t.Error("HashBcrypt(\"\") = nil error, want one")
 	}
-	if _, err := HashSHA256(""); err == nil {
-		t.Error("HashSHA256(\"\") = nil error, want one")
+	if _, err := hashSHA256(""); err == nil {
+		t.Error("hashSHA256(\"\") = nil error, want one")
 	}
 	for _, cost := range []int{MinBcryptCost - 1, MaxBcryptCost + 1} {
 		if _, err := HashBcrypt("pw", cost); err == nil {

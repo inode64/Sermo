@@ -27,8 +27,8 @@ const (
 	DefaultURI = string(libvirt.QEMUSystem)
 	// DefaultSocket is libvirt's traditional local control socket.
 	DefaultSocket = conn.DefaultLibvirtSocket
-	// DefaultQEMUSocket is the modular libvirt QEMU daemon's local socket.
-	DefaultQEMUSocket = "/run/libvirt/virtqemud-sock"
+	// defaultQEMUSocket is the modular libvirt QEMU daemon's local socket.
+	defaultQEMUSocket = "/run/libvirt/virtqemud-sock"
 	// DefaultPort is libvirt's plaintext TCP port.
 	DefaultPort = conn.DefaultPortLibvirt
 )
@@ -116,7 +116,7 @@ func SpecFromTree(tree map[string]any) (Spec, bool, error) {
 		return Spec{}, true, fmt.Errorf("%s is required for libvirt", controlPathDomain)
 	}
 	if spec.UUID != "" {
-		if _, err := ParseUUID(spec.UUID); err != nil {
+		if _, err := parseUUID(spec.UUID); err != nil {
 			return Spec{}, true, fmt.Errorf("%s: %w", controlPathUUID, err)
 		}
 	}
@@ -131,7 +131,7 @@ func controlPort(fields map[string]any, host string) (int, error) {
 		return 0, nil
 	}
 	port, ok := cfgval.Int(value)
-	if !ok || !ValidHostPort(host, port) {
+	if !ok || !validHostPort(host, port) {
 		return 0, fmt.Errorf("%s must be an integer in %s", controlPathPort, cfgval.TCPPortRange())
 	}
 	return port, nil
@@ -141,7 +141,7 @@ func validateEndpointFields(uri, socket, host string) error {
 	if uri != "" && strings.TrimSpace(uri) == "" {
 		return fmt.Errorf("%s must not be blank", controlPathURI)
 	}
-	if socket != "" && !ValidSocketPath(socket) {
+	if socket != "" && !validSocketPath(socket) {
 		return fmt.Errorf("%s %q must be an absolute path", controlPathSocket, socket)
 	}
 	if host != "" && strings.TrimSpace(host) == "" {
@@ -287,7 +287,7 @@ func (m Manager) withDomainAction(ctx context.Context, action string, fn func(Cl
 
 func lookupDomain(c Client, spec Spec) (libvirt.Domain, error) {
 	if spec.UUID != "" {
-		u, err := ParseUUID(spec.UUID)
+		u, err := parseUUID(spec.UUID)
 		if err != nil {
 			return libvirt.Domain{}, err
 		}
@@ -401,8 +401,8 @@ func statusFromDomainState(state libvirt.DomainState) servicemgr.Status {
 	}
 }
 
-// ParseUUID accepts canonical UUIDs with hyphens or compact 32-hex strings.
-func ParseUUID(value string) (libvirt.UUID, error) {
+// parseUUID accepts canonical UUIDs with hyphens or compact 32-hex strings.
+func parseUUID(value string) (libvirt.UUID, error) {
 	var out libvirt.UUID
 	compact := strings.ReplaceAll(strings.TrimSpace(value), "-", "")
 	if len(compact) != len(out)*2 {
@@ -414,13 +414,13 @@ func ParseUUID(value string) (libvirt.UUID, error) {
 	return out, nil
 }
 
-// ValidSocketPath reports whether path is a usable absolute local socket path.
-func ValidSocketPath(path string) bool {
+// validSocketPath reports whether path is a usable absolute local socket path.
+func validSocketPath(path string) bool {
 	return path == "" || filepath.IsAbs(path)
 }
 
-// ValidHostPort reports whether the remote host and port pair is structurally valid.
-func ValidHostPort(host string, port int) bool {
+// validHostPort reports whether the remote host and port pair is structurally valid.
+func validHostPort(host string, port int) bool {
 	if !cfgval.ValidTCPPort(port) {
 		return false
 	}
@@ -431,16 +431,16 @@ func ValidHostPort(host string, port int) bool {
 	return err == nil
 }
 
-// LocalSocketCandidates returns local libvirt sockets in preferred order.
-func LocalSocketCandidates() []string {
-	return []string{DefaultSocket, DefaultQEMUSocket}
+// localSocketCandidates returns local libvirt sockets in preferred order.
+func localSocketCandidates() []string {
+	return []string{DefaultSocket, defaultQEMUSocket}
 }
 
 // FirstExistingLocalSocket returns the first known local libvirt socket present
 // on the host. It lets callers support both monolithic libvirtd and modular
 // virtqemud deployments without probing libvirt itself when no socket exists.
 func FirstExistingLocalSocket(exists func(string) (bool, error)) (string, bool, error) {
-	for _, socket := range LocalSocketCandidates() {
+	for _, socket := range localSocketCandidates() {
 		ok, err := exists(socket)
 		if err != nil {
 			return "", false, err

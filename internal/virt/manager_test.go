@@ -171,7 +171,7 @@ func TestManagerUsesUUIDLookup(t *testing.T) {
 	if !reflect.DeepEqual(client.calls, want) {
 		t.Fatalf("calls = %v, want %v", client.calls, want)
 	}
-	if parsed, err := ParseUUID(uuid); err != nil || client.dom.UUID != parsed {
+	if parsed, err := parseUUID(uuid); err != nil || client.dom.UUID != parsed {
 		t.Fatalf("uuid lookup = %v, %v", client.dom.UUID, err)
 	}
 }
@@ -225,14 +225,14 @@ func TestFirstExistingLocalSocket(t *testing.T) {
 	}{
 		{
 			name:   "traditional socket wins",
-			exists: map[string]bool{DefaultSocket: true, DefaultQEMUSocket: true},
+			exists: map[string]bool{DefaultSocket: true, defaultQEMUSocket: true},
 			want:   DefaultSocket,
 			wantOK: true,
 		},
 		{
 			name:   "modular qemu socket fallback",
-			exists: map[string]bool{DefaultQEMUSocket: true},
-			want:   DefaultQEMUSocket,
+			exists: map[string]bool{defaultQEMUSocket: true},
+			want:   defaultQEMUSocket,
 			wantOK: true,
 		},
 		{

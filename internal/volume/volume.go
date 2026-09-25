@@ -57,9 +57,6 @@ const (
 	lvExtendSizeArgFormat = "-L+%db"
 )
 
-// Mount is one entry of the shared mount table.
-type Mount = checks.Mount
-
 // MountSource returns the current mount table. Injected for tests; the default
 // reads /proc/mounts.
 type MountSource = checks.MountSamplerFunc
@@ -99,7 +96,7 @@ func commandFailure(prefix string, err error, res execx.Result, timeout time.Dur
 	return fmt.Errorf("%s: %s", prefix, msg)
 }
 
-func (e Expander) mountTable() ([]Mount, error) {
+func (e Expander) mountTable() ([]checks.Mount, error) {
 	if e.Mounts != nil {
 		return e.Mounts()
 	}
@@ -242,7 +239,7 @@ func (e Expander) vgFreeBytes(ctx context.Context, vg string) (int64, error) {
 // sysfs, cgroup, ...), autofs placeholders and duplicate mount points. It is
 // the candidate list the volume wizard offers. source is injectable for tests;
 // nil reads /proc/mounts.
-func List(source MountSource) ([]Mount, error) {
+func List(source MountSource) ([]checks.Mount, error) {
 	if source == nil {
 		source = procMounts
 	}
@@ -251,9 +248,9 @@ func List(source MountSource) ([]Mount, error) {
 		return nil, err
 	}
 	seen := map[string]bool{}
-	var out []Mount
+	var out []checks.Mount
 	for _, m := range all {
-		if !IsStorageMount(m) || seen[m.MountPoint] {
+		if !isStorageMount(m) || seen[m.MountPoint] {
 			continue
 		}
 		seen[m.MountPoint] = true
@@ -262,9 +259,9 @@ func List(source MountSource) ([]Mount, error) {
 	return pruneNestedSameDeviceMounts(out), nil
 }
 
-// IsStorageMount reports whether a mount table entry is a real storage
+// isStorageMount reports whether a mount table entry is a real storage
 // filesystem candidate for generated storage watches.
-func IsStorageMount(m Mount) bool {
+func isStorageMount(m checks.Mount) bool {
 	if m.MountPoint == "" || m.FSType == "" {
 		return false
 	}
@@ -291,7 +288,7 @@ func pseudoFilesystem(fstype string) bool {
 
 // storageFilesystem reports whether a filesystem type backs real storage even
 // though its device is not under /dev — network and pooled filesystems, plus any
-// fuse.* mount. IsStorageMount takes the /dev shortcut first, so device-backed
+// fuse.* mount. isStorageMount takes the /dev shortcut first, so device-backed
 // types (ext4, xfs, btrfs, …) deliberately do not appear here.
 //
 // Lustre is deliberately absent: the config generator never emitted a watch for
@@ -307,11 +304,11 @@ func storageFilesystem(fstype string) bool {
 	}
 }
 
-func pruneNestedSameDeviceMounts(table []Mount) []Mount {
-	slices.SortStableFunc(table, func(a, b Mount) int {
+func pruneNestedSameDeviceMounts(table []checks.Mount) []checks.Mount {
+	slices.SortStableFunc(table, func(a, b checks.Mount) int {
 		return cmp.Compare(len(cleanMountpoint(a.MountPoint)), len(cleanMountpoint(b.MountPoint)))
 	})
-	out := make([]Mount, 0, len(table))
+	out := make([]checks.Mount, 0, len(table))
 	for _, m := range table {
 		if hasParentMountOnSameDevice(out, m) {
 			continue
@@ -321,7 +318,7 @@ func pruneNestedSameDeviceMounts(table []Mount) []Mount {
 	return out
 }
 
-func hasParentMountOnSameDevice(existing []Mount, child Mount) bool {
+func hasParentMountOnSameDevice(existing []checks.Mount, child checks.Mount) bool {
 	for _, parent := range existing {
 		if parent.Device == child.Device && mounts.PathStrictlyUnder(child.MountPoint, parent.MountPoint) {
 			return true
@@ -339,7 +336,7 @@ func cleanMountpoint(path string) string {
 }
 
 // procMounts reads the mount table via the shared /proc/mounts parser.
-func procMounts() ([]Mount, error) {
+func procMounts() ([]checks.Mount, error) {
 	entries, err := checks.DefaultMounts()
 	if err != nil {
 		return nil, fmt.Errorf("read /proc/mounts: %w", err)

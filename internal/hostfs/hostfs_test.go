@@ -24,12 +24,12 @@ func TestCheckRejectsUnsafePaths(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			err := Check(tc.path)
+			err := check(tc.path)
 			if tc.ok && err != nil {
-				t.Fatalf("Check(%q) = %v, want nil", tc.path, err)
+				t.Fatalf("check(%q) = %v, want nil", tc.path, err)
 			}
 			if !tc.ok && !errors.Is(err, ErrPath) {
-				t.Fatalf("Check(%q) = %v, want ErrPath", tc.path, err)
+				t.Fatalf("check(%q) = %v, want ErrPath", tc.path, err)
 			}
 		})
 	}
@@ -91,7 +91,7 @@ func TestReadHostFiles(t *testing.T) {
 }
 
 // Every entry point must reject unsafe syntax before accessing the filesystem.
-// The target exists so a missing-file error cannot hide a missing Check call.
+// The target exists so a missing-file error cannot hide a missing check call.
 func TestHostOperationsRejectUnsafePaths(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "file")
