@@ -29,7 +29,25 @@ pruebas de ejecución. Este registro no afirma una auditoría exhaustiva.
   `internal/checks/swap.go`: errores al abrir vmstat o contadores ausentes se
   convertían en cero y alteraban la línea base. Propagar los fallos y exigir
   ambos contadores; la consulta de capacidad no debe depender de vmstat.
-- [ ] **GO-007 — Acotar las líneas recibidas por sondas de texto.**
+- [x] **GO-007 — Acotar las líneas recibidas por sondas de texto.**
   `internal/conn/conn.go`: ReadString podía reservar memoria sin límite ante
   una línea sin salto final. Limitar las líneas sin perder la distinción entre
   protocolos estrictos y banners que admiten EOF tras datos.
+
+## Validación y límites
+
+- `go vet` sobre los archivos de producción seleccionados por `go list` en
+  `internal/conn`, `internal/checks` e `internal/metrics`: correcto.
+- `staticcheck -tests=false -checks=all ./cmd/... ./internal/... ./tools/...`:
+  correcto.
+- `make fmt-check markdown-check` y `git diff --check`: correctos.
+- `bin/custom-gcl run --tests=false ./cmd/... ./internal/... ./tools/...`:
+  sin incidencias nuevas; mantiene dos avisos `unparam` en
+  `internal/process/cache.go:99` y `internal/process/discover.go:75`. Ambos
+  se reproducen en un checkout separado del commit inicial `c8bc1d0f`.
+  No se han añadido exclusiones ni supresiones.
+
+Los tests no se han revisado, modificado ni ejecutado. Tampoco se ha ejecutado
+`make check`, que incluye tests; queda pendiente la validación de ejecución.
+La revisión se ha centrado en sondas, lecturas de métricas y propagación de
+errores, sin afirmar que todo el Go de producción esté libre de fallos.

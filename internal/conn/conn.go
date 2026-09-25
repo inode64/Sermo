@@ -11,6 +11,7 @@ import (
 	"crypto/rand"
 	"database/sql"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"io"
 	"strconv"
@@ -314,7 +315,8 @@ const (
 	// socket needs it: it is SOCK_DGRAM, so the stream networkUnix cannot reach it.
 	networkUnixgram = "unixgram"
 
-	// HTTP probe body limits keep service probes bounded against unexpected peers.
+	// Response limits keep service probes bounded against unexpected peers.
+	maxProtocolLineBytes  = 64 * units.BytesPerKiB
 	maxHTTPProbeBody      = 64 * units.BytesPerKiB
 	maxHTTPProbeLargeBody = units.BytesPerMiB
 	maxHTTPProbeShortBody = 4 * units.BytesPerKiB
@@ -549,18 +551,35 @@ func ValidTLSValue(value string) bool {
 // readCRLFLine reads one CRLF/LF-terminated line, trimmed — the line shape
 // every text protocol probe (redis RESP, imap, nut, …) reads.
 func readCRLFLine(br *bufio.Reader) (string, error) {
-	s, err := br.ReadString(protocolLineBreak)
+	s, err := readProtocolLine(br)
 	return strings.TrimRight(s, protocolTrimCRLF), err
 }
 
 // readCRLFLineLenient accepts a final unterminated line when any bytes arrived.
 // Framed protocols keep using readCRLFLine so truncation remains an error.
 func readCRLFLineLenient(br *bufio.Reader) (string, error) {
-	line, err := br.ReadString(protocolLineBreak)
+	line, err := readProtocolLine(br)
 	if line != "" {
 		err = nil
 	}
 	return strings.TrimRight(line, protocolTrimCRLF), err
+}
+
+// readProtocolLine bounds a peer-controlled line before appending each fragment.
+// Oversized input returns no partial line, so lenient banner readers also fail.
+func readProtocolLine(br *bufio.Reader) (string, error) {
+	var line []byte
+	for {
+		part, err := br.ReadSlice(protocolLineBreak)
+		if len(part) > maxProtocolLineBytes-len(line) {
+			return "", fmt.Errorf("protocol line exceeds %d bytes", maxProtocolLineBytes)
+		}
+		line = append(line, part...)
+		if errors.Is(err, bufio.ErrBufferFull) {
+			continue
+		}
+		return string(line), err
+	}
 }
 
 // readGreetingLine reads one CR/LF-terminated greeting line from a fresh reader
