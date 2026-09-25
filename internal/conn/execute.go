@@ -8,7 +8,7 @@ import "context"
 // Concrete Probe methods remain private wire implementations; callers receive
 // registeredProtocol from Lookup and therefore cannot bypass this preparation.
 func executeProbe(ctx context.Context, registration protocolRegistration, cfg Config) (Result, error) {
-	cfg = resolveRegistration(registration, cfg)
+	cfg = resolveProtocolTarget(registration.protocol, registration.defaultSocket, cfg)
 	//nolint:wrapcheck // Wire implementations already provide protocol/step context; the executor must preserve their user-facing error unchanged.
 	return registration.protocol.Probe(ctx, cfg)
 }

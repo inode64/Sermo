@@ -195,7 +195,7 @@ func Resolve(protocol Protocol, cfg Config) Config {
 	}
 	registration, registered := protocolRegistrationFor(protocol)
 	if registered {
-		return resolveRegistration(registration, cfg)
+		return resolveProtocolTarget(registration.protocol, registration.defaultSocket, cfg)
 	}
 	return resolveProtocolTarget(protocol, "", cfg)
 }
@@ -206,10 +206,6 @@ func protocolRegistrationFor(protocol Protocol) (protocolRegistration, bool) {
 		return protocolRegistration{}, false
 	}
 	return registered.registration, true
-}
-
-func resolveRegistration(registration protocolRegistration, cfg Config) Config {
-	return resolveProtocolTarget(registration.protocol, registration.defaultSocket, cfg)
 }
 
 func resolveProtocolTarget(protocol Protocol, defaultSocket string, cfg Config) Config {
