@@ -61,8 +61,10 @@ DHCP's per-datagram `IP_PKTINFO` path. A protocol may rebuild an endpoint only
 when its wire format genuinely selects a different target, with the reason
 documented at that call.
 
-Length and count fields on the wire go through the `wire*` helpers in
-`internal/conn/wire.go`; they return an error instead of truncating.
+Variable length and count fields on the wire go through the `wire*` helpers in
+`internal/conn/wire.go`; they return an error instead of truncating. A conversion
+with an explicit local bound, such as FastCGI string lengths below 128, can
+convert directly. Keep checks at helpers that accept arbitrary buffers or ports.
 
 ## Wizards
 
