@@ -1298,6 +1298,7 @@ Protocols, in the order of the table above:
   8010/8011.
 - `rsync` (alias `rsyncd`) — default port 873 (TCP). No auth. Reads the rsync
   daemon's `@RSYNCD: <version>` greeting; receiving it proves the daemon is up.
+  A `socket` selects a Unix endpoint; `tls` supports a TLS-wrapped daemon endpoint.
   Result data carries the protocol version.
 - `dhcp` (alias `dhcpd`) — default port 67 (UDP). **Linux only.** No auth. Sends a
   `DHCPDISCOVER` and verifies the server replies with a `DHCPOFFER` — proof it is

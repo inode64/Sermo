@@ -2,7 +2,11 @@ package conn
 
 import (
 	"context"
+	"io"
+	"net"
+	"path/filepath"
 	"testing"
+	"time"
 )
 
 func TestRsyncGreetingVersion(t *testing.T) {
@@ -23,5 +27,32 @@ func TestRsyncProbeAgainstFakeServer(t *testing.T) {
 	}
 	if res.Version != "31.0" {
 		t.Fatalf("version = %q, want 31.0", res.Version)
+	}
+}
+
+func TestRsyncProbeUnixSocket(t *testing.T) {
+	socket := filepath.Join(t.TempDir(), "rsync.sock")
+	listener, err := net.Listen("unix", socket)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = listener.Close() })
+	go func() {
+		c, acceptErr := listener.Accept()
+		if acceptErr != nil {
+			return
+		}
+		defer func() { _ = c.Close() }()
+		_, _ = io.WriteString(c, "@RSYNCD: 31.0\n")
+	}()
+	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+	defer cancel()
+	protocol, cfg, ok := Prepare(ProtocolNameRsync, Config{Socket: socket})
+	if !ok {
+		t.Fatal("rsync is not registered")
+	}
+	res, err := protocol.Probe(ctx, cfg)
+	if err != nil || res.Version != "31.0" || res.Extra[extraProtocol] != "31.0" {
+		t.Fatalf("probe = %+v, %v", res, err)
 	}
 }
