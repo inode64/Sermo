@@ -655,7 +655,7 @@ func raidCheckReadings(data map[string]any) []web.WatchReading {
 	if size, ok := cfgval.Uint(data[checks.DataKeyTotalBytes]); ok && size > 0 {
 		rb.add(checks.DataKeyTotalBytes, watchReadingLabelSize, checks.HumanizeSignedBytes(uintToInt64(size)))
 	}
-	for _, detail := range raidMemberDetails(data[checks.DataKeyRaidMembers]) {
+	for _, detail := range hardwareRAIDDetails[checks.RaidArrayStatus](data[checks.DataKeyRaidMembers]) {
 		rb.add(watchReadingFieldRAIDArrayPrefix+detail.Name, detail.Name, raidArrayReading(detail))
 	}
 	return rb.readings()
@@ -681,12 +681,6 @@ func raidArrayReading(detail checks.RaidArrayStatus) string {
 		return fmt.Sprintf("%s · %s %.1f%%", state, detail.Operation, detail.ProgressPct)
 	}
 	return state + readingSummarySeparator + detail.Operation
-}
-
-// raidMemberDetails reads the per-array RAID breakdown from Result.Data. It
-// tolerates both live values and the JSON-hydrated snapshot shape.
-func raidMemberDetails(value any) []checks.RaidArrayStatus {
-	return hardwareRAIDDetails[checks.RaidArrayStatus](value)
 }
 
 func certCheckReadings(data map[string]any) []web.WatchReading {
