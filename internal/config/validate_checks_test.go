@@ -447,7 +447,7 @@ checks:
 
 func TestValidateRejectsMalformedServiceSections(t *testing.T) {
 	for _, section := range []string{"checks", "preflight", "rules", "processes", "commands"} {
-		for _, value := range []string{"oops", "42", "true", "[broken]"} {
+		for _, value := range []string{"oops", "42", "true", "[broken]", "null"} {
 			t.Run(section+"/"+value, func(t *testing.T) {
 				issues := validateService(t, fmt.Sprintf("name: svc\nservice: svc\npolicy: {cooldown: 5m}\n%s: %s\n", section, value))
 				mustHave(t, issues, section+" must be a mapping")
@@ -464,6 +464,21 @@ func TestValidateArtifactsPreserveMalformedChecks(t *testing.T) {
 			t.Run(artifact+"/"+value, func(t *testing.T) {
 				issues := validateService(t, fmt.Sprintf("name: svc\nservice: svc\npolicy: {cooldown: 5m}\n%s\nchecks: %s\n", artifact, value))
 				mustHave(t, issues, "checks must be a mapping")
+			})
+		}
+	}
+}
+
+func TestValidateGeneratedEntriesDoNotHideMalformedSections(t *testing.T) {
+	for _, section := range []string{"checks", "preflight", "rules", "processes", "commands"} {
+		for name, sugar := range map[string]string{
+			"watch":   "watches: {probe: {check: {type: tcp, port: 80}, then: {action: alert, message: problem}}}",
+			"reload":  "reload_on_change: {paths: [/etc/svc.conf]}",
+			"restart": "restart_on_change: {paths: [/etc/svc.conf]}",
+		} {
+			t.Run(section+"/"+name, func(t *testing.T) {
+				issues := validateService(t, fmt.Sprintf("name: svc\nservice: svc\npolicy: {cooldown: 5m}\n%s: [broken]\n%s\n", section, sugar))
+				mustHave(t, issues, section+" must be a mapping")
 			})
 		}
 	}

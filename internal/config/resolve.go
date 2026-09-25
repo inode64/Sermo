@@ -103,6 +103,9 @@ func (c *Config) resolveServiceWithInputs(name string, pruneOptional bool, input
 // service tree has been merged. Keep post-expansion catalog sugar here so every
 // resolved service has the same normalized shape.
 func (c *Config) resolveExpandedService(merged map[string]any, name string, inputs resolutionInputs) (map[string]any, []string, []string) {
+	if errs := serviceSectionErrors(merged); len(errs) > 0 {
+		return nil, nil, errs
+	}
 	prepareExpansionInputs(merged)
 	vars, errs := c.expansionVariables(merged, name, inputs.globalVars)
 	expanded, expErrs := expandTree(merged, vars)
@@ -1460,6 +1463,9 @@ func (c *Config) resolveDocBody(doc *Document, name string, appChain []string, i
 		}
 	}
 	body := stripMeta(doc.Body)
+	if errs := serviceSectionErrors(body); len(errs) > 0 {
+		return Resolved{Name: name}, errs
+	}
 	body = pruneEnableIfMap(body, nil, inputs.backend)
 	prepareExpansionInputs(body)
 	vars, errs := c.expansionVariables(body, name, inputs.globalVars)
