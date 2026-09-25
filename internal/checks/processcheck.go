@@ -19,7 +19,6 @@ type processCheck struct {
 	exes       []string
 	user       string
 	expect     string
-	observe    func(exe, user string) string
 	observeAny func(exes []string, user string) string
 	// stale reports the service's processes whose binary was replaced on disk.
 	// It exists to explain an "absent" reading rather than to change it.
@@ -28,10 +27,10 @@ type processCheck struct {
 
 func (c processCheck) Run(_ context.Context) Result {
 	start := time.Now()
-	if c.observe == nil && c.observeAny == nil {
+	if c.observeAny == nil {
 		return c.unavailableResult("process discovery unavailable", start)
 	}
-	state := c.observedState()
+	state := c.observeAny(c.exes, c.user)
 	ok := state == c.expect
 	message := fmt.Sprintf("state %s (want %s)", state, c.expect)
 	// A process whose executable was replaced on disk resolves no exe, so an
@@ -72,23 +71,4 @@ func (c processCheck) replacedBinaries() string {
 		return ""
 	}
 	return strings.Join(strutil.Unique(matched), ", ")
-}
-
-func (c processCheck) observedState() string {
-	if c.observeAny != nil {
-		return c.observeAny(c.exes, c.user)
-	}
-	matchedZombie := false
-	for _, exe := range c.exes {
-		switch c.observe(exe, c.user) {
-		case process.StateRunning:
-			return process.StateRunning
-		case process.StateZombie:
-			matchedZombie = true
-		}
-	}
-	if matchedZombie {
-		return process.StateZombie
-	}
-	return process.StateAbsent
 }

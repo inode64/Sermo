@@ -17,11 +17,11 @@ import (
 // it needs a restart, and health must not book an outage.
 func TestProcessCheckExplainsAReplacedBinaryInsteadOfBareAbsent(t *testing.T) {
 	c := processCheck{
-		name:    "process",
-		exes:    []string{"/usr/bin/dmeventd"},
-		user:    "root",
-		expect:  process.StateRunning,
-		observe: func(string, string) string { return process.StateAbsent },
+		name:       "process",
+		exes:       []string{"/usr/bin/dmeventd"},
+		user:       "root",
+		expect:     process.StateRunning,
+		observeAny: func([]string, string) string { return process.StateAbsent },
 		stale: func() []process.StaleBinary {
 			return []process.StaleBinary{{PID: 3549, Path: "/usr/bin/dmeventd"}}
 		},
@@ -48,11 +48,11 @@ func TestProcessCheckExplainsAReplacedBinaryInsteadOfBareAbsent(t *testing.T) {
 // reading is reserved for the replaced-binary case.
 func TestProcessCheckKeepsTheVerdictWhenNothingWasReplaced(t *testing.T) {
 	c := processCheck{
-		name:    "process",
-		exes:    []string{"/usr/sbin/nope"},
-		expect:  process.StateRunning,
-		observe: func(string, string) string { return process.StateAbsent },
-		stale:   func() []process.StaleBinary { return nil },
+		name:       "process",
+		exes:       []string{"/usr/sbin/nope"},
+		expect:     process.StateRunning,
+		observeAny: func([]string, string) string { return process.StateAbsent },
+		stale:      func() []process.StaleBinary { return nil },
 	}
 	res := c.Run(context.Background())
 	if got := res.Observation(); got != ObservationFailing {
@@ -67,10 +67,10 @@ func TestProcessCheckKeepsTheVerdictWhenNothingWasReplaced(t *testing.T) {
 // appear when a replaced binary actually accounts for the miss.
 func TestProcessCheckKeepsPlainAbsentWhenNothingWasReplaced(t *testing.T) {
 	c := processCheck{
-		name:    "process",
-		exes:    []string{"/usr/sbin/nope"},
-		expect:  process.StateRunning,
-		observe: func(string, string) string { return process.StateAbsent },
+		name:       "process",
+		exes:       []string{"/usr/sbin/nope"},
+		expect:     process.StateRunning,
+		observeAny: func([]string, string) string { return process.StateAbsent },
 		stale: func() []process.StaleBinary {
 			// A replaced binary belonging to a different selector must not be
 			// blamed for this check's miss.
@@ -87,11 +87,11 @@ func TestProcessCheckKeepsPlainAbsentWhenNothingWasReplaced(t *testing.T) {
 // path.
 func TestProcessCheckRunningIsUnaffected(t *testing.T) {
 	c := processCheck{
-		name:    "process",
-		exes:    []string{"/usr/bin/dmeventd"},
-		expect:  process.StateRunning,
-		observe: func(string, string) string { return process.StateRunning },
-		stale:   func() []process.StaleBinary { t.Fatal("stale lookup ran for a healthy process"); return nil },
+		name:       "process",
+		exes:       []string{"/usr/bin/dmeventd"},
+		expect:     process.StateRunning,
+		observeAny: func([]string, string) string { return process.StateRunning },
+		stale:      func() []process.StaleBinary { t.Fatal("stale lookup ran for a healthy process"); return nil },
 	}
 	if res := c.Run(context.Background()); !res.OK {
 		t.Fatalf("running process = %+v, want OK", res)
