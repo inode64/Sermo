@@ -11,7 +11,6 @@ import (
 	"sermo/internal/units"
 	"sermo/internal/web"
 	"slices"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -85,8 +84,10 @@ func (b *WebBackend) applyWatchRuntimeView(view *web.Watch, w *webWatch, activit
 	if w.expand != nil {
 		view.Expand = &web.WatchExpand{ByBytes: w.expand.By}
 	}
+	var changedAt time.Time
 	if !w.disabled {
 		if monitoredState, ok := b.monitorView(WatchMonitorKey(w.name)); ok {
+			changedAt = monitoredState.changedAt
 			view.Monitored, view.MonitorSource, view.MonitorChangedAt = monitoredState.active, monitoredState.source, monitoredState.changedAtText()
 		}
 	}
@@ -97,8 +98,8 @@ func (b *WebBackend) applyWatchRuntimeView(view *web.Watch, w *webWatch, activit
 	if startedAt, running := b.watchProbeStartedAt(w.name); running {
 		view.Probe = &web.WatchProbe{State: eventStatusRunning, StartedAt: startedAt.Format(time.RFC3339)}
 	}
-	if activity.At != "" {
-		view.LastActivity, view.LastActivityKind = activity.At, activity.Kind
+	if !activity.At.IsZero() {
+		view.LastActivity, view.LastActivityKind = activity.At.UTC().Format(time.RFC3339), activity.Kind
 	}
 	if view.Enabled && view.Monitored {
 		view.SampleState = observation.watchSampleState(w, checkedAt)
@@ -111,7 +112,7 @@ func (b *WebBackend) applyWatchRuntimeView(view *web.Watch, w *webWatch, activit
 		observation.setWatchCurrentMetricValues(view, w)
 	}
 	observed := b.settling == nil || b.settling.Observed(SettlingWatchKey(w.name))
-	failed, warning := watchViewState(*view)
+	failed, warning := watchViewState(w, *view, activity.At, changedAt)
 	view.State = WatchState(view.Enabled, view.Monitored, observed && failed, observed && warning, observed)
 	if view.State == TargetStateOK {
 		switch view.SampleState {
@@ -158,7 +159,7 @@ func (b *WebBackend) watchSystemSnapshot() metrics.Snapshot {
 }
 
 type watchActivity struct {
-	At   string
+	At   time.Time
 	Kind string
 }
 
@@ -192,9 +193,7 @@ func (b *WebBackend) lastWatchActivities() map[string]watchActivity {
 			continue
 		}
 		out[name] = watchActivity{
-			// UTC like every event timestamp, so persisted and in-memory events
-			// keep one wire convention across daemon restarts.
-			At:   ev.Time.UTC().Format(time.RFC3339),
+			At:   ev.Time,
 			Kind: ev.Kind,
 		}
 	}
@@ -251,56 +250,36 @@ func (e *webEntry) invalidateStatusCache() {
 // upgraded to a build that grades SMART predicates — the newest snapshot carries
 // a warning row and no error row, and that outranks the firing kind that opened
 // the episode. A failed hook or notification stays an outage regardless.
-func watchViewState(w web.Watch) (failed, warning bool) {
-	current := watchActivityCurrent(w.LastActivity, w.MonitorChangedAt)
-	if WatchActivityFailed(w.LastActivityKind) && current {
-		regraded := w.LastActivityKind == eventKindFiring && watchReadingsWarning(w.Readings) && !watchReadingsFailed(w.Readings)
+func watchViewState(w *webWatch, view web.Watch, activityAt, changedAt time.Time) (failed, warning bool) {
+	current := watchActivityCurrent(activityAt, changedAt)
+	if WatchActivityFailed(view.LastActivityKind) && current {
+		regraded := view.LastActivityKind == eventKindFiring && watchReadingsWarning(view.Readings) && !watchReadingsFailed(view.Readings)
 		if !regraded {
 			return true, false
 		}
 	}
-	if watchStorageMountFailed(w) {
+	if watchStorageMountFailed(w, view.Storage) {
 		return true, false
 	}
-	if w.Storage != nil && (w.Storage.SampleError != "" || w.Storage.MountSampleError != "") {
+	if view.Storage != nil && (view.Storage.SampleError != "" || view.Storage.MountSampleError != "") {
 		return true, false
 	}
-	if watchReadingsFailed(w.Readings) {
+	if watchReadingsFailed(view.Readings) {
 		return true, false
 	}
-	return false, (w.LastActivityKind == eventKindWarning && current) || watchReadingsWarning(w.Readings)
+	return false, (view.LastActivityKind == eventKindWarning && current) || watchReadingsWarning(view.Readings)
 }
 
-func watchStorageMountFailed(w web.Watch) bool {
-	if w.Storage == nil {
+func watchStorageMountFailed(w *webWatch, storage *web.StorageWatchInfo) bool {
+	if storage == nil {
 		return false
 	}
-	for _, cond := range w.Conditions {
-		if cond.Field != checks.DataKeyMounted || cond.Op != cfgval.CompareOpEqual {
-			continue
-		}
-		expect, err := strconv.ParseBool(cond.Value)
-		if err != nil {
-			continue
-		}
-		return w.Storage.Mounted != expect
-	}
-	return false
+	expect, ok := storageMountExpectation(w.check)
+	return ok && storage.Mounted != expect
 }
 
-func watchActivityCurrent(activity, changed string) bool {
-	if activity == "" || changed == "" {
-		return true
-	}
-	activityAt, err := time.Parse(time.RFC3339, activity)
-	if err != nil {
-		return true
-	}
-	changedAt, err := time.Parse(time.RFC3339, changed)
-	if err != nil {
-		return true
-	}
-	return !activityAt.Before(changedAt)
+func watchActivityCurrent(activityAt, changedAt time.Time) bool {
+	return activityAt.IsZero() || changedAt.IsZero() || !activityAt.Before(changedAt)
 }
 
 func watchReadingsFailed(readings []web.WatchReading) bool {

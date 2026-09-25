@@ -910,8 +910,8 @@ func TestWebBackendLastEventIndexes(t *testing.T) {
 	}
 
 	activities := b.lastWatchActivities()
-	wantAt := t0.Add(5 * time.Minute).Format(time.RFC3339)
-	if got := activities["storage-root"]; got.Kind != eventKindHookFail || got.At != wantAt {
+	wantAt := t0.Add(5 * time.Minute)
+	if got := activities["storage-root"]; got.Kind != eventKindHookFail || !got.At.Equal(wantAt) {
 		t.Fatalf("storage-root activity = %+v, want hook-failed at %s", got, wantAt)
 	}
 }
@@ -960,8 +960,8 @@ func TestWebBackendLastWatchActivityIncludesRecovered(t *testing.T) {
 		watchOrder: []string{"uplink-dns", "runaway"},
 	}
 	activities := b.lastWatchActivities()
-	wantAt := t0.Add(time.Minute).Format(time.RFC3339)
-	if got := activities["uplink-dns"]; got.Kind != eventKindRecovered || got.At != wantAt {
+	wantAt := t0.Add(time.Minute)
+	if got := activities["uplink-dns"]; got.Kind != eventKindRecovered || !got.At.Equal(wantAt) {
 		t.Fatalf("uplink-dns activity = %+v, want recovered at %s", got, wantAt)
 	}
 	// A process-watch kill is watch activity too; it used to leave the watch's
@@ -972,50 +972,23 @@ func TestWebBackendLastWatchActivityIncludesRecovered(t *testing.T) {
 }
 
 func TestWatchViewFailedIgnoresActivityBeforeMonitorChange(t *testing.T) {
-	tests := []struct {
+	changedAt := time.Date(2026, time.June, 17, 14, 14, 53, 500, time.UTC)
+	for _, tc := range []struct {
 		name     string
-		watch    web.Watch
+		kind     string
+		activity time.Time
 		wantFail bool
 	}{
-		{
-			name: "failed activity before monitor change is stale",
-			watch: web.Watch{
-				LastActivityKind: eventKindFiring,
-				LastActivity:     "2026-06-17T14:10:43Z",
-				MonitorChangedAt: "2026-06-17T14:14:53Z",
-			},
-		},
-		{
-			name: "failed activity after monitor change is current",
-			watch: web.Watch{
-				LastActivityKind: eventKindFiring,
-				LastActivity:     "2026-06-17T14:20:43Z",
-				MonitorChangedAt: "2026-06-17T14:14:53Z",
-			},
-			wantFail: true,
-		},
-		{
-			name: "bad timestamp keeps conservative failure",
-			watch: web.Watch{
-				LastActivityKind: eventKindFiring,
-				LastActivity:     "bad-time",
-				MonitorChangedAt: "2026-06-17T14:14:53Z",
-			},
-			wantFail: true,
-		},
-		{
-			name: "recovered activity is not failed",
-			watch: web.Watch{
-				LastActivityKind: eventKindRecovered,
-				LastActivity:     "2026-06-17T14:20:43Z",
-				MonitorChangedAt: "2026-06-17T14:14:53Z",
-			},
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got, _ := watchViewState(tt.watch); got != tt.wantFail {
-				t.Fatalf("watchViewState() failed = %v, want %v", got, tt.wantFail)
+		{"before", eventKindFiring, changedAt.Add(-time.Minute), false},
+		{"before in same second", eventKindFiring, changedAt.Add(-time.Nanosecond), false},
+		{"equal", eventKindFiring, changedAt, true},
+		{"after", eventKindFiring, changedAt.Add(time.Minute), true},
+		{"missing keeps conservative failure", eventKindFiring, time.Time{}, true},
+		{"recovered", eventKindRecovered, changedAt.Add(time.Minute), false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got, _ := watchViewState(&webWatch{}, web.Watch{LastActivityKind: tc.kind}, tc.activity, changedAt); got != tc.wantFail {
+				t.Fatalf("failed = %v, want %v", got, tc.wantFail)
 			}
 		})
 	}
