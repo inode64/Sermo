@@ -505,18 +505,16 @@ func (b *WebBackend) mountActionResult(spec mountctl.Spec, res mountctl.Result, 
 		res.Path = spec.Path
 	}
 	out := web.MountActionResult{
-		OK:        err == nil && res.Status == mountctl.ResultOK,
-		Name:      res.Name,
-		Path:      res.Path,
-		Action:    res.Action,
-		Status:    res.Status,
-		Message:   res.Message,
-		Mounted:   res.Mounted,
-		Refcount:  res.Refcount,
-		Forced:    res.Forced,
-		Lazy:      res.Lazy,
-		Signalled: res.Signalled,
-		Blockers:  b.mountBlockers(spec, res.Blockers),
+		OK:       err == nil && res.Status == mountctl.ResultOK,
+		Name:     res.Name,
+		Path:     res.Path,
+		Action:   res.Action,
+		Status:   res.Status,
+		Message:  res.Message,
+		Mounted:  res.Mounted,
+		Refcount: res.Refcount,
+		Lazy:     res.Lazy,
+		Blockers: b.mountBlockers(spec, res.Blockers),
 	}
 	if out.Message == "" && err != nil {
 		out.Message = err.Error()

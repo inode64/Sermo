@@ -631,7 +631,7 @@ func TestWebBackendApplicationsMarkServiceSLA(t *testing.T) {
 	if apps[1].KeepsSLA {
 		t.Fatalf("orphan maps to no service, so it must keep none")
 	}
-	if source[0].KeepsSLA || source[0].ObservedAt != "" {
+	if source[0].KeepsSLA {
 		t.Fatal("application decoration must not mutate the injected inventory")
 	}
 }
@@ -855,9 +855,6 @@ func TestWebBackendServiceCheckRefreshesOlderStatusCache(t *testing.T) {
 	if refreshed.Status != string(servicemgr.StatusActive) || refreshed.State == TargetStateFailed {
 		t.Fatalf("fresh service check must replace stale backend status: %+v", refreshed)
 	}
-	if refreshed.StatusObservedAt != now.Format(time.RFC3339) {
-		t.Fatalf("status observed at = %q, want %q", refreshed.StatusObservedAt, now.Format(time.RFC3339))
-	}
 	if statusCalls != 1 {
 		t.Fatalf("status calls = %d, want cache-only one call", statusCalls)
 	}
@@ -1019,20 +1016,11 @@ func TestWebBackendApplicationsCache(t *testing.T) {
 	if calls != 1 || len(first) != 1 || first[0].Name != "first" {
 		t.Fatalf("first Applications = %v, calls=%d", first, calls)
 	}
-	if first[0].ObservedAt == "" {
-		t.Fatal("first Applications response must expose observed_at")
-	}
-	if first[0].ObservedAt != now.Format(time.RFC3339) {
-		t.Fatalf("first observed_at = %q, want %q", first[0].ObservedAt, now.Format(time.RFC3339))
-	}
 	first[0].Name = "mutated"
 
 	second := b.applicationsForTest(context.Background(), load)
 	if calls != 1 || len(second) != 1 || second[0].Name != "first" {
 		t.Fatalf("cached Applications = %v, calls=%d; want cached first", second, calls)
-	}
-	if second[0].ObservedAt != first[0].ObservedAt {
-		t.Fatalf("cached observed_at = %q, want original %q", second[0].ObservedAt, first[0].ObservedAt)
 	}
 
 	now = now.Add(catalogInventoryCacheTTL + time.Nanosecond)
@@ -1241,9 +1229,6 @@ func TestWebBackendLibrariesInspectInstalledCatalogFiles(t *testing.T) {
 	got := libraries[0]
 	if got.Name != "libdemo" || got.DisplayName != "Demo library" || got.Category != "runtime" || got.Binary != libraryPath {
 		t.Fatalf("library = %+v, want resolved installed catalog library", got)
-	}
-	if got.ObservedAt == "" {
-		t.Fatal("library inventory must expose its probe observation time")
 	}
 }
 

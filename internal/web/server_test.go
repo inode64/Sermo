@@ -181,12 +181,11 @@ func (f *fakeBackend) Series(_ context.Context, name, check, metric string, sinc
 			continue
 		}
 		f.seriesSince, f.seriesCheck = since, check
-		r := 1.0
 		total := int64(2)
 		if check != "" {
 			total = 4 // distinguishes the check series from the service's
 		}
-		return []SeriesPoint{{Start: "2026-06-07T10:00:00Z", Ratio: &r, Up: 2, Total: total}}, true
+		return []SeriesPoint{{Start: "2026-06-07T10:00:00Z", Up: 2, Total: total}}, true
 	}
 	return nil, false
 }
@@ -205,8 +204,7 @@ func (f *fakeBackend) WatchSeries(_ context.Context, name, metric string, since 
 		return nil, false
 	}
 	f.seriesSince = since
-	r := 1.0
-	return []SeriesPoint{{Start: "2026-06-07T10:00:00Z", Ratio: &r, Up: 3, Total: 3}}, true
+	return []SeriesPoint{{Start: "2026-06-07T10:00:00Z", Up: 3, Total: 3}}, true
 }
 
 // WatchMetrics answers for the one metric the fake watch publishes and refuses
@@ -292,7 +290,6 @@ func (f *fakeBackend) ServiceRuntime(_ context.Context, name string, since time.
 				Current: ServiceRuntime{
 					At:            "2026-06-07T10:00:00Z",
 					ProcessTotals: ProcessTotals{Count: 2, RSS: 2048, IORead: 100, IOWrite: 200, CPU: 3.5, HasCPU: true},
-					Uptime:        "1h",
 					UptimeSeconds: 3600,
 				},
 				CPU:    MetricSeries{Check: "runtime", Metric: "cpu", Unit: "%", Points: []MetricPoint{{Start: "2026-06-07T10:00:00Z", N: 1, Avg: 3.5, Min: 3.5, Max: 3.5}}},
@@ -349,7 +346,6 @@ func (f *fakeBackend) CompactState(_ context.Context, before time.Time) StateCom
 		OK:     true,
 		Pruned: 3,
 		Before: before.UTC().Format(time.RFC3339),
-		Vacuum: true,
 	}
 }
 func (f *fakeBackend) SetMonitored(_ context.Context, name string, monitored bool) error {
@@ -1398,7 +1394,7 @@ func TestStateCompact(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if !out.OK || out.Pruned != 3 || !out.Vacuum {
+	if !out.OK || out.Pruned != 3 {
 		t.Fatalf("compact result = %+v", out)
 	}
 }

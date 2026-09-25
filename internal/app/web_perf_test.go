@@ -36,7 +36,6 @@ func TestWebBackendListRuntimeUsesPublishedSample(t *testing.T) {
 	metrics.record(t.Context(), "web", web.ServiceRuntime{
 		At:            t0.UTC().Format(time.RFC3339),
 		StartedAt:     t0.Add(-time.Hour).UTC().Format(time.RFC3339),
-		Uptime:        "1h",
 		UptimeSeconds: 3600,
 		Count:         3, RSS: 8192, CPU: 12.5, HasCPU: true,
 	}, t0.UTC())
@@ -68,8 +67,8 @@ func TestWebBackendListRuntimeUsesPublishedSample(t *testing.T) {
 	if svc.RSS != 8192 || !svc.CPUReady || svc.CPU != 12.5 {
 		t.Fatalf("runtime fields = %+v", svc)
 	}
-	if svc.Uptime != "1h" || svc.UptimeSeconds != 3600 {
-		t.Fatalf("uptime = %q (%d), want 1h (3600)", svc.Uptime, svc.UptimeSeconds)
+	if svc.UptimeSeconds != 3600 {
+		t.Fatalf("uptime_seconds = %d, want 3600", svc.UptimeSeconds)
 	}
 
 	// Second view within status TTL should not re-query backend status.
@@ -135,7 +134,6 @@ func TestWebBackendListRuntimeHiddenWhenServiceStopped(t *testing.T) {
 	metrics.record(t.Context(), "lldpd", web.ServiceRuntime{
 		At:            t0.UTC().Format(time.RFC3339),
 		StartedAt:     t0.Add(-time.Hour).UTC().Format(time.RFC3339),
-		Uptime:        "1h",
 		UptimeSeconds: 3600,
 		Count:         2, RSS: 8192, CPU: 12.5, HasCPU: true,
 	}, t0.UTC())

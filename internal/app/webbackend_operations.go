@@ -200,13 +200,10 @@ func (b *WebBackend) CompactState(ctx context.Context, before time.Time) web.Sta
 		cutoff = before.UTC().Format(time.RFC3339)
 	}
 	return web.StateCompactResult{
-		OK:       true,
-		Pruned:   result.Pruned(),
-		Before:   cutoff,
-		Rolled:   result.Rolled,
-		Archives: result.Archives,
-		Events:   result.Events,
-		Vacuum:   true,
+		OK:     true,
+		Pruned: result.Pruned(),
+		Before: cutoff,
+		Events: result.Events,
 	}
 }
 

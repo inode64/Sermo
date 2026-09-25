@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"sermo/internal/httpx"
 	"sermo/internal/webcred"
@@ -133,22 +134,24 @@ func TestReadyzStartingReturns503(t *testing.T) {
 }
 
 func TestLivezVerbose(t *testing.T) {
-	h := authServer(Auth{}) // open
+	s := &Server{Backend: StaticBackend{Backend: &fakeBackend{services: []Service{{Name: "web"}}}}}
+	h := s.Handler() // open
+	s.started = time.Now().Add(-2 * time.Minute)
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, testFlagQuery(routePathLivez), nil))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("/livez?verbose = %d, want 200", rec.Code)
 	}
 	var got struct {
-		Status   string `json:"status"`
-		Uptime   string `json:"uptime"`
-		Services int    `json:"services"`
-		Go       string `json:"go"`
+		Status        string `json:"status"`
+		UptimeSeconds int64  `json:"uptime_seconds"`
+		Services      int    `json:"services"`
+		Go            string `json:"go"`
 	}
 	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if got.Status != apiStatusOK || got.Uptime == "" || got.Services != 1 || got.Go == "" {
+	if got.Status != apiStatusOK || got.UptimeSeconds < 120 || got.Services != 1 || got.Go == "" {
 		t.Fatalf("unexpected livez verbose: %+v", got)
 	}
 }

@@ -95,20 +95,9 @@ func (b *WebBackend) availabilitySeries(key, check string, since time.Duration) 
 			Up:          point.Up,
 			Total:       point.Total,
 			DownBuckets: point.DownBuckets,
-			Ratio:       slaRatio(point.SLACounts),
 		})
 	}
 	return out
-}
-
-// slaRatio returns up/total as an optional ratio: nil when nothing was
-// observed (total 0), which renders as a gap rather than as a measured zero.
-func slaRatio(counts state.SLACounts) *float64 {
-	ratio, ok := counts.Ratio()
-	if !ok {
-		return nil
-	}
-	return &ratio
 }
 
 // slaSeries reads the service-level series, or one check's when check is set.

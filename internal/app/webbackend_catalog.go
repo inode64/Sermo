@@ -7,7 +7,6 @@ import (
 	"sermo/internal/execx"
 	"sermo/internal/web"
 	"strings"
-	"time"
 )
 
 // Applications returns the installed applications (catalog app daemons whose
@@ -117,17 +116,6 @@ func (b *WebBackend) withApplicationSLA(apps []web.CatalogItem) []web.CatalogIte
 		apps[i].KeepsSLA = b.entries[apps[i].Name] != nil
 	}
 	return apps
-}
-
-func decorateCatalogItems(items []web.CatalogItem, observedAt time.Time) []web.CatalogItem {
-	if len(items) == 0 || observedAt.IsZero() {
-		return items
-	}
-	timestamp := observedAt.UTC().Format(time.RFC3339)
-	for i := range items {
-		items[i].ObservedAt = timestamp
-	}
-	return items
 }
 
 func (b *WebBackend) decorateApplications(apps []web.CatalogItem) []web.CatalogItem {

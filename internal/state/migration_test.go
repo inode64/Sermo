@@ -120,3 +120,57 @@ func TestRuleWindowMigrationPreservesProgress(t *testing.T) {
 		}
 	}
 }
+
+func TestOperationSettlingMigrationPreservesTransitions(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "old.db")
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	_, err = db.ExecContext(ctx, `CREATE TABLE operation_settling (
+		service TEXT PRIMARY KEY, action TEXT NOT NULL, phase TEXT NOT NULL,
+		source TEXT NOT NULL, updated_at TEXT NOT NULL);
+		INSERT INTO operation_settling VALUES
+		('web', '', 'running', '', '2026-09-25T10:00:00Z'),
+		('db', '', 'settling', '', '2026-09-25T10:00:00Z');`)
+	closeErr := db.Close()
+	if err != nil || closeErr != nil {
+		t.Fatalf("create legacy database: %v; close: %v", err, closeErr)
+	}
+	at := time.Date(2026, 9, 25, 10, 0, 0, 0, time.UTC)
+	want := map[string]OperationSettlingRecord{
+		"web": {Phase: OperationSettlingRunning, UpdatedAt: at},
+		"db":  {Phase: OperationSettlingSettling, UpdatedAt: at},
+	}
+	for range 2 {
+		s, err := OpenContextWith(ctx, path, Options{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = s.Close() })
+		s.now = func() time.Time { return at }
+		got, err := s.OperationSettlingStates()
+		if err != nil || !reflect.DeepEqual(got, want) {
+			t.Fatalf("migrated transitions = %+v, error = %v; want %+v", got, err, want)
+		}
+		var columns int
+		if err := s.db.QueryRowContext(ctx,
+			`SELECT COUNT(*) FROM pragma_table_info('operation_settling')`,
+		).Scan(&columns); err != nil || columns != 3 {
+			t.Fatalf("settling column count = %d, error = %v; want 3", columns, err)
+		}
+		if err := s.SetOperationSettling("web", OperationSettlingSettling); err != nil {
+			t.Fatal(err)
+		}
+		if err := s.ClearOperationSettling("db"); err != nil {
+			t.Fatal(err)
+		}
+		want["web"] = OperationSettlingRecord{Phase: OperationSettlingSettling, UpdatedAt: at}
+		delete(want, "db")
+		if err := s.Close(); err != nil {
+			t.Fatal(err)
+		}
+	}
+}

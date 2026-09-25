@@ -38,7 +38,7 @@ func (b *WebBackend) catalogItems(
 		if hasCache && b.webNow().Sub(observedAt) < catalogInventoryCacheTTL {
 			cached := slices.Clone(inventory.items)
 			inventory.mu.Unlock()
-			return decorateCatalogItems(cached, observedAt)
+			return cached
 		}
 		refresh := inventory.refresh
 		if refresh == nil {
@@ -49,7 +49,7 @@ func (b *WebBackend) catalogItems(
 			inventory.mu.Unlock()
 			// An expired-but-complete inventory beats queueing every viewer
 			// behind the scan that is already refreshing it.
-			return decorateCatalogItems(cached, observedAt)
+			return cached
 		}
 		inventory.mu.Unlock()
 		select {
@@ -83,13 +83,11 @@ func (b *WebBackend) catalogItems(
 		if !inventory.at.IsZero() {
 			items = slices.Clone(inventory.items)
 		}
-		observedAt := inventory.at
 		inventory.mu.Unlock()
-		return decorateCatalogItems(items, observedAt)
+		return items
 	}
 	inventory.at = b.webNow()
-	observedAt := inventory.at
 	inventory.items = slices.Clone(items)
 	inventory.mu.Unlock()
-	return decorateCatalogItems(items, observedAt)
+	return items
 }

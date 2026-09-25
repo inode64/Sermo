@@ -51,7 +51,7 @@ func TestServiceStartTimeUsesPrincipalNotOldestMember(t *testing.T) {
 	if !started.Equal(principal) {
 		t.Fatalf("start = %v, want the principal's %v, not the 74-day-old helper's", started, helper)
 	}
-	if _, _, secs := serviceRuntimeUptime(started, now); secs != 90 {
+	if _, secs := serviceRuntimeUptime(started, now); secs != 90 {
 		t.Fatalf("uptime = %ds, want 90s", secs)
 	}
 }

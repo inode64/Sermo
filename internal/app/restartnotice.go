@@ -12,6 +12,7 @@ import (
 	"sermo/internal/notify"
 	"sermo/internal/process"
 	"sermo/internal/state"
+	"sermo/internal/units"
 )
 
 const (
@@ -58,7 +59,8 @@ type serviceRestartRuntime struct {
 }
 
 func newServiceRestartRuntime(service, unit string, notice config.ServiceRestartNotice, principal servicePrimaryProcess, uptime time.Duration) serviceRestartRuntime {
-	startedAt, uptimeText, uptimeSeconds := serviceRuntimeUptime(principal.startedAt, principal.startedAt.Add(uptime))
+	startedAt, uptimeSeconds := serviceRuntimeUptime(principal.startedAt, principal.startedAt.Add(uptime))
+	uptimeText := units.HumanizeDuration(time.Duration(uptimeSeconds) * time.Second)
 	return serviceRestartRuntime{
 		service: service, unit: unit, process: primaryProcessName(principal.process), pid: strconv.Itoa(principal.process.PID),
 		uptime: uptimeText, uptimeSeconds: strconv.FormatInt(uptimeSeconds, 10), startedAt: startedAt, threshold: notice.UptimeBelow.String(),

@@ -188,7 +188,6 @@ func storageWatchInfoFromSnapshot(path string, snap CheckSnapshot) *web.StorageW
 		InodesTotal:      snapshotUint(data, checks.DataKeyInodesTotal),
 		InodesFree:       snapshotUint(data, checks.DataKeyInodesFree),
 		InodesUsedPct:    snapshotFloat(data, checks.DataKeyInodesUsedPct),
-		InodesFreePct:    snapshotFloat(data, checks.DataKeyInodesFreePct),
 		SampleError:      cfgval.String(data[checks.DataKeySampleError]),
 		MountSampleError: cfgval.String(data[checks.DataKeyMountSampleError]),
 	}
