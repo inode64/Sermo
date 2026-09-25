@@ -145,7 +145,7 @@ rules:
 			want: []string{
 				"cannot define both for and within",
 				"for.cycles must be > 0",
-				"within.min_matches must be <= within.cycles",
+				"within.min_matches must be <= rules.both.within.cycles",
 				"rules.bad-for-key.for.unexpected is not supported",
 				"rules.bad-within-key.within.unexpected is not supported",
 				"rules.both-for-lengths.for cannot define both cycles and duration",
