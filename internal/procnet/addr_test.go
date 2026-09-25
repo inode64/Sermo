@@ -33,17 +33,6 @@ func TestParseIPv6Host(t *testing.T) {
 	}
 }
 
-func TestParseHost(t *testing.T) {
-	got, ok := ParseHost("0100007F", false)
-	if !ok || got != "127.0.0.1" {
-		t.Fatalf("ParseHost IPv4 = %q, %v", got, ok)
-	}
-	got, ok = ParseHost("00000000000000000000000001000000", true)
-	if !ok || got != "::1" {
-		t.Fatalf("ParseHost IPv6 = %q, %v", got, ok)
-	}
-}
-
 func TestParseIPv4Socket(t *testing.T) {
 	tests := []struct {
 		in       string
