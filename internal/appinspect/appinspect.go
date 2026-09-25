@@ -417,16 +417,26 @@ func inspectOptions(opts []Option) options {
 
 func runExitProbe(ctx context.Context, runner execx.Runner, cmd probeCommand) (bool, string, string) {
 	res, err := runProbeCommand(ctx, runner, cmd)
+	if status := probeFailure(res, err, cmd, ""); status != "" {
+		return false, status, output.Bounded(res.Stdout, res.Stderr)
+	}
+	return true, StatusOK, ""
+}
+
+func probeFailure(res execx.Result, err error, cmd probeCommand, exitDetail string) string {
 	switch {
 	case res.ExitCode == execx.ExitCodeRunFailure:
-		msg := execx.OperatorFailureOr(err, res, cmd.timeout, execx.CommandDidNotStart)
-		return false, statusErrorPrefix + msg, output.Bounded(res.Stdout, res.Stderr)
+		return statusErrorPrefix + execx.OperatorFailureOr(err, res, cmd.timeout, execx.CommandDidNotStart)
 	case err != nil && res.ExitCode == checks.CommandDefaultExpectedExit:
-		return false, statusErrorPrefix + err.Error(), output.Bounded(res.Stdout, res.Stderr)
+		return statusErrorPrefix + err.Error()
 	case !checks.ExitCodeExpected(res.ExitCode, cmd.expectExit):
-		return false, fmt.Sprintf("%sexit %d (want %s)", statusErrorPrefix, res.ExitCode, checks.ExpectExitText(cmd.expectExit)), output.Bounded(res.Stdout, res.Stderr)
+		status := fmt.Sprintf("%sexit %d (want %s)", statusErrorPrefix, res.ExitCode, checks.ExpectExitText(cmd.expectExit))
+		if exitDetail != "" {
+			status += ": " + exitDetail
+		}
+		return status
 	default:
-		return true, StatusOK, ""
+		return ""
 	}
 }
 
@@ -444,17 +454,7 @@ func runVersionProbe(ctx context.Context, runner execx.Runner, tree map[string]a
 	fail := func(status string) versionProbeResult {
 		return versionProbeResult{status: status, output: output.Bounded(res.Stdout, res.Stderr)}
 	}
-	switch {
-	case res.ExitCode == execx.ExitCodeRunFailure:
-		msg := execx.OperatorFailureOr(err, res, cmd.timeout, execx.CommandDidNotStart)
-		return fail(statusErrorPrefix + msg)
-	case err != nil && res.ExitCode == checks.CommandDefaultExpectedExit:
-		return fail(statusErrorPrefix + err.Error())
-	case !checks.ExitCodeExpected(res.ExitCode, cmd.expectExit):
-		status := fmt.Sprintf("%sexit %d (want %s)", statusErrorPrefix, res.ExitCode, checks.ExpectExitText(cmd.expectExit))
-		if line := output.FirstNonEmptyLine(res.Stderr); line != "" {
-			status += ": " + line
-		}
+	if status := probeFailure(res, err, cmd, output.FirstNonEmptyLine(res.Stderr)); status != "" {
 		return fail(status)
 	}
 	if ok, detail := cmd.stdout.Match(res.Stdout); !ok {
