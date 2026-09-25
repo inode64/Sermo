@@ -613,7 +613,7 @@ func TestWebBackendSeriesScopesToServiceOrCheck(t *testing.T) {
 // whose series it then reads from that service's own endpoint. An application
 // with no service behind it has no availability to show.
 func TestWebBackendApplicationsMarkServiceSLA(t *testing.T) {
-	source := []web.Application{{Name: "nginx", Status: appinspect.StatusOK}, {Name: "orphan", Status: appinspect.StatusOK}}
+	source := []web.CatalogItem{{Name: "nginx", Status: appinspect.StatusOK}, {Name: "orphan", Status: appinspect.StatusOK}}
 	load := func(context.Context) []web.CatalogItem {
 		return source
 	}
@@ -645,7 +645,7 @@ func TestWebBackendApplicationsIncludeLastEvent(t *testing.T) {
 	events.Add(Event{App: "nginx", Kind: eventKindRecovered, Message: "ok"})
 
 	load := func(context.Context) []web.CatalogItem {
-		return []web.Application{{Name: "nginx", Status: appinspect.StatusOK}, {Name: "orphan", Status: appinspect.StatusOK}}
+		return []web.CatalogItem{{Name: "nginx", Status: appinspect.StatusOK}, {Name: "orphan", Status: appinspect.StatusOK}}
 	}
 	b := &WebBackend{
 		events: events,
@@ -1009,7 +1009,7 @@ func TestWebBackendApplicationsCache(t *testing.T) {
 		if calls > 1 {
 			name = "second"
 		}
-		return []web.Application{{Name: name}}
+		return []web.CatalogItem{{Name: name}}
 	}
 	b := &WebBackend{
 		now: func() time.Time { return now },
@@ -1049,7 +1049,7 @@ func TestWebBackendApplicationsCacheIgnoresCancelledRequests(t *testing.T) {
 			// partial inventory; model that as an empty list.
 			return nil
 		}
-		return []web.Application{{Name: "complete"}}
+		return []web.CatalogItem{{Name: "complete"}}
 	}
 	b := &WebBackend{}
 
@@ -1081,7 +1081,7 @@ func blockingCatalogLoader(calls *atomic.Int32, scanning, release chan struct{})
 			close(scanning)
 			<-release
 		}
-		return []web.Application{{Name: "fresh"}}
+		return []web.CatalogItem{{Name: "fresh"}}
 	}
 }
 
@@ -1094,7 +1094,7 @@ func TestWebBackendApplicationsServeStaleWhileRefreshing(t *testing.T) {
 	b.applications.items = []web.CatalogItem{{Name: "stale"}}
 	b.applications.at = time.Now().Add(-catalogInventoryCacheTTL - time.Nanosecond)
 
-	leader := make(chan []web.Application)
+	leader := make(chan []web.CatalogItem)
 	go func() { leader <- b.applicationsForTest(context.Background(), load) }()
 	<-scanning
 
@@ -1122,13 +1122,13 @@ func TestWebBackendApplicationsColdStartSingleScan(t *testing.T) {
 	load := blockingCatalogLoader(&calls, scanning, release)
 	b := &WebBackend{}
 
-	leader := make(chan []web.Application)
+	leader := make(chan []web.CatalogItem)
 	go func() { leader <- b.applicationsForTest(context.Background(), load) }()
 	<-scanning
 
 	// A cold-start viewer has no previous inventory to serve, so it waits for
 	// the running scan and shares its result rather than starting a second one.
-	follower := make(chan []web.Application)
+	follower := make(chan []web.CatalogItem)
 	go func() { follower <- b.applicationsForTest(context.Background(), load) }()
 
 	// A cold-start viewer that goes away stops waiting instead of scanning.
@@ -2946,7 +2946,7 @@ func (b *WebBackend) view(ctx context.Context, name string, e *webEntry) web.Ser
 }
 
 // applicationsForTest exercises publication and cache ownership with an injected loader.
-func (b *WebBackend) applicationsForTest(ctx context.Context, load func(context.Context) []web.CatalogItem) []web.Application {
+func (b *WebBackend) applicationsForTest(ctx context.Context, load func(context.Context) []web.CatalogItem) []web.CatalogItem {
 	return b.decorateApplications(b.catalogItems(ctx, &b.applications, func(ctx context.Context) []web.CatalogItem {
 		return b.withApplicationSLA(slices.Clone(load(ctx)))
 	}))

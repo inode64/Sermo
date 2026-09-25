@@ -184,12 +184,6 @@ type CatalogItem struct {
 	KeepsSLA bool `json:"keeps_sla,omitempty"`
 }
 
-// Application is an installed catalog application returned by the dashboard.
-type Application = CatalogItem
-
-// Library is an installed catalog library returned by the dashboard.
-type Library = CatalogItem
-
 // WatchSampleState reports whether the latest daemon-published watch sample is
 // usable for dashboard readings.
 const (
@@ -817,10 +811,10 @@ type Backend interface {
 	TestNotifier(ctx context.Context, name string) ActionResult
 	// Applications returns the installed applications (catalog app daemons whose
 	// binary is present), with their version and binary location.
-	Applications(ctx context.Context) []Application
+	Applications(ctx context.Context) []CatalogItem
 	// Libraries returns installed catalog libraries with their version and file
 	// location, matching sermoctl libs.
-	Libraries(ctx context.Context) []Library
+	Libraries(ctx context.Context) []CatalogItem
 	// Mounts returns configured fstab-backed mount units and their runtime status.
 	Mounts(ctx context.Context) []Mount
 	// MountAction runs mount|umount on a configured mount unit.

@@ -35,8 +35,8 @@ const (
 type fakeBackend struct {
 	services                    []Service
 	sessions                    SessionInventory
-	applications                []Application
-	libraries                   []Library
+	applications                []CatalogItem
+	libraries                   []CatalogItem
 	mounts                      []Mount
 	mountAction                 MountActionResult
 	mountBlockers               MountBlockersResult
@@ -94,11 +94,11 @@ func (f *fakeBackend) TestNotifier(_ context.Context, name string) ActionResult 
 	}
 	return ActionResult{OK: true, Message: "test sent"}
 }
-func (f *fakeBackend) Applications(context.Context) []Application {
+func (f *fakeBackend) Applications(context.Context) []CatalogItem {
 	return f.applications
 }
-func (f *fakeBackend) Libraries(context.Context) []Library { return f.libraries }
-func (f *fakeBackend) Mounts(context.Context) []Mount      { return f.mounts }
+func (f *fakeBackend) Libraries(context.Context) []CatalogItem { return f.libraries }
+func (f *fakeBackend) Mounts(context.Context) []Mount          { return f.mounts }
 func (f *fakeBackend) MountAction(_ context.Context, name, action string, opts MountActionOptions) MountActionResult {
 	var suffix []string
 	if opts.AllowForce {
@@ -730,13 +730,13 @@ func TestListServicesExposesCanonicalStateReason(t *testing.T) {
 }
 
 func TestListApplications(t *testing.T) {
-	b := &fakeBackend{applications: []Application{{
+	b := &fakeBackend{applications: []CatalogItem{{
 		Name: "nginx", DisplayName: "Nginx", Category: "web", Binary: "/usr/bin/nginx",
 		Permissions: "-rwxr-xr-x (0755)", User: "root", Group: "root",
 		Version:      "nginx version: nginx/1.30.2",
 		VersionShort: "1.30.2", VersionSource: "nginx-bin", Status: apiStatusOK,
 	}}}
-	got := getJSON[[]Application](t, b, APIPathApplications)
+	got := getJSON[[]CatalogItem](t, b, APIPathApplications)
 	if len(got) != 1 || got[0].Name != "nginx" || got[0].VersionShort != "1.30.2" ||
 		got[0].Binary != "/usr/bin/nginx" || got[0].Permissions != "-rwxr-xr-x (0755)" ||
 		got[0].User != "root" || got[0].Group != "root" || got[0].Category != "web" ||
@@ -746,12 +746,12 @@ func TestListApplications(t *testing.T) {
 }
 
 func TestListLibraries(t *testing.T) {
-	b := &fakeBackend{libraries: []Library{{
+	b := &fakeBackend{libraries: []CatalogItem{{
 		Name: "openssl", DisplayName: "OpenSSL", Category: "crypto", Binary: "/usr/lib64/libssl.so",
 		Permissions: "-rwxr-xr-x (0755)", User: "root", Group: "root",
 		Version: "OpenSSL 3.5.1", VersionShort: "3.5.1", Status: apiStatusOK,
 	}}}
-	got := getJSON[[]Library](t, b, apiPathLibraries)
+	got := getJSON[[]CatalogItem](t, b, apiPathLibraries)
 	if len(got) != 1 || got[0].Name != "openssl" || got[0].VersionShort != "3.5.1" ||
 		got[0].Binary != "/usr/lib64/libssl.so" || got[0].Category != "crypto" {
 		t.Fatalf("unexpected libraries: %+v", got)
