@@ -647,12 +647,12 @@ process, so per-OS or versioned pidfile locations all resolve without personal
 config. Use `pidfiles:` instead when one service intentionally owns several
 resident processes that each have their own pidfile.
 
-For oneshot loaders that do not keep a resident process (for example firewall
-loaders), set `processes: {}` explicitly. That prevents Sermo from deriving a
+For oneshot services that do not keep a resident process (for example firewall
+loaders or SNTP), set `processes: {}` explicitly. That prevents Sermo from deriving a
 process selector from init metadata and keeps the WebUI from showing CPU/memory
 process totals for a service that cannot have them.
 
-This also omits the generated file-descriptor check and restart rule. An
+This also omits the generated file-descriptor and stale-binary checks and rules. An
 `expect: active` service check is appropriate only if the unit remains active
 after completing. A systemd oneshot skipped by `Condition*` can be inactive
 without failing; monitor its result with a read-only host watch instead:
