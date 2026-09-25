@@ -1125,6 +1125,8 @@ keep the per-protocol entries short:
 - **Auth** is noted per entry; many protocols are anonymous.
 - **`socket`** (a Unix socket path) dials the socket instead of `host`/`port`;
   **`query`** is the per-protocol lookup target (e.g. the DNS name for `dns`).
+- Shared text-protocol banner and line readers accept at most 64 KiB per line,
+  including its terminator. Oversized lines fail the exchange.
 
 HTTP-based protocol exchanges reject response-body read errors, including
 timeouts and premature disconnects; a matching partial response is not accepted.
