@@ -238,8 +238,6 @@ func (s *WindowState) Clone() *WindowState {
 		return nil
 	}
 	out := *s
-	out.consecutive = max(out.consecutive, 0)
-	out.clearConsecutive = max(out.clearConsecutive, 0)
 	out.history = slices.Clone(s.history)
 	out.timedHistory = slices.Clone(s.timedHistory)
 	return &out
