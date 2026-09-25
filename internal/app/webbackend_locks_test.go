@@ -317,7 +317,7 @@ func TestWebBackendLocksContext(t *testing.T) {
 			t.Fatalf("active lock timing fields missing: %+v", lk)
 		}
 	}
-	if byName["backup"].state != "active" || byName["backup"].owner != lockOwnerStatusLive || byName["backup"].releaseable || !slices.Equal(byName["backup"].blocks, serviceOperationActionList()) {
+	if byName["backup"].state != "active" || byName["backup"].owner != lockOwnerStatusLive || byName["backup"].releaseable || !slices.Equal(byName["backup"].blocks, serviceOperationActions) {
 		t.Fatalf("backup context = %+v", byName["backup"])
 	}
 	if byName["old"].state != "expired" || !byName["old"].releaseable || len(byName["old"].blocks) != 0 {

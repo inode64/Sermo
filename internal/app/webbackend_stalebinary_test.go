@@ -139,7 +139,7 @@ func TestWebBackendProcessCheckReplacedBinaryRequiresRestart(t *testing.T) {
 	// The detail row must not read "ok" beside a message that says the process
 	// is absent and its binary replaced: the reading renders as the state
 	// sensor it is, like the injected stale-binary check does.
-	ch := b.checkView("process", entry, snaps.Get("dmeventd"))
+	ch := b.observeService("dmeventd", entry).checkView("process", entry)
 	if ch.OK || ch.Reports != checks.ReportsState {
 		t.Fatalf("process check view = %+v, want an inactive state reading", ch)
 	}

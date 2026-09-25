@@ -199,12 +199,6 @@ func sshSessionsToWeb(sample checks.SSHSessionSample) []web.SSHSession {
 			Residual:    session.Residual,
 		})
 	}
-	slices.SortFunc(result, func(a, c web.SSHSession) int {
-		if byTerminal := strings.Compare(a.Terminal, c.Terminal); byTerminal != 0 {
-			return byTerminal
-		}
-		return a.PID - c.PID
-	})
 	return result
 }
 

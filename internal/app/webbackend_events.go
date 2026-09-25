@@ -19,7 +19,8 @@ const (
 	webEventPageMaxScan           = 5000
 )
 
-func serviceOperationActionList() []string {
+// serviceOperationActions is the read-only operation action vocabulary.
+var serviceOperationActions = func() []string {
 	actions := strings.Split(rules.RuleActionSummary, ", ")
 	out := make([]string, 0, len(actions))
 	for _, action := range actions {
@@ -28,7 +29,7 @@ func serviceOperationActionList() []string {
 		}
 	}
 	return out
-}
+}()
 
 // ActivitySummary returns a rollup of recent events for the dashboard.
 func (b *WebBackend) ActivitySummary(_ context.Context) web.ActivitySummary {

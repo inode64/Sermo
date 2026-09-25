@@ -180,7 +180,7 @@ func (b *WebBackend) attachSessionMetrics(inventory *web.SessionInventory) {
 		if b.sessionMetricCollector != nil && len(pids) > 0 {
 			session.SessionUsage = sessionUsage(b.sessionMetricCollector.SampleService(key, pids))
 		}
-		attachTerminalSessionIdle(snapshot, session, b.webNow())
+		attachTerminalSessionIdle(snapshot, session, pids, b.webNow())
 	}
 	if b.sessionMetricCollector != nil {
 		for key := range b.sessionMetricKeys {
@@ -209,14 +209,14 @@ func sessionUsage(sample metrics.Snapshot) web.SessionUsage {
 	return result
 }
 
-func attachTerminalSessionIdle(snapshot sessionProcessSnapshot, session *web.TerminalSession, now time.Time) {
+func attachTerminalSessionIdle(snapshot sessionProcessSnapshot, session *web.TerminalSession, pids []int, now time.Time) {
 	if session.ActivityUnix > 0 {
 		session.IdleSeconds = max(now.Unix()-session.ActivityUnix, 0)
 		session.HasIdle = true
 		return
 	}
 	var latest time.Time
-	for _, pid := range snapshot.treePIDs(session.PIDs) {
+	for _, pid := range pids {
 		identity := snapshot.byPID[pid]
 		if !identity.TTYOK || identity.TTY == 0 {
 			continue
