@@ -53,7 +53,6 @@ type SSHIdleSample struct {
 // SSHIdleConfig configures one SSH terminal-idle observation.
 type SSHIdleConfig struct {
 	IdleFor            time.Duration
-	SSHDExes           []string
 	ProtectedProcesses []SSHProtectedProcess
 	sshdFilters        []process.IdentityFilter
 }
@@ -137,7 +136,6 @@ type sshIdleCheck struct {
 	preds   []levelPred
 	config  SSHIdleConfig
 	sampler SSHIdleSamplerFunc
-	filters []process.IdentityFilter
 }
 
 func (c sshIdleCheck) Run(ctx context.Context) Result {
@@ -151,9 +149,7 @@ func (c sshIdleCheck) Run(ctx context.Context) Result {
 	if sampler == nil {
 		sampler = defaultSSHIdleSampler()
 	}
-	config := c.config
-	config.sshdFilters = c.filters
-	sample, err := sampler(config)
+	sample, err := sampler(c.config)
 	if err != nil {
 		return c.unavailableResult(err, start)
 	}
@@ -269,19 +265,11 @@ func newSSHIdleSampler(reader process.Reader, lookup *process.UserLookup, sessio
 		if config.IdleFor <= 0 {
 			return SSHIdleSample{}, errors.New("idle_for must be positive")
 		}
-		filters := config.sshdFilters
-		if filters == nil {
-			var err error
-			filters, err = sshdFilters(config.SSHDExes)
-			if err != nil {
-				return SSHIdleSample{}, err
-			}
-		}
 		loggedIn, snapshot, err := terminalSessionInputs(reader, sessions, terminal)
 		if err != nil {
 			return SSHIdleSample{}, err
 		}
-		return sampleSSHIdle(loggedIn, snapshot, lookup, terminal, now(), config, filters)
+		return sampleSSHIdle(loggedIn, snapshot, lookup, terminal, now(), config, config.sshdFilters)
 	}
 }
 
