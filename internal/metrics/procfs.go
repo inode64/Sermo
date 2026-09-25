@@ -525,14 +525,7 @@ func parseMeminfoKB(line string) (uint64, bool) {
 	if len(fields) <= meminfoValueIndex {
 		return 0, false
 	}
-	return parseMeminfoFields(fields[meminfoValueIndex:])
-}
-
-func parseMeminfoFields(fields []string) (uint64, bool) {
-	if len(fields) == 0 {
-		return 0, false
-	}
-	kb, err := strconv.ParseUint(fields[0], procDecimalBase, procUintBits)
+	kb, err := strconv.ParseUint(fields[meminfoValueIndex], procDecimalBase, procUintBits)
 	if err != nil {
 		return 0, false
 	}
