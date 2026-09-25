@@ -57,17 +57,11 @@ const (
 const SystemFreshnessIntervalDivisor = 2
 
 // NewMonitor wires a monitor from the initial validated config and shared deps.
-func NewMonitor(cfg *config.Config, deps Deps, scheduler Scheduler, readiness *Readiness, collector *metrics.Collector, web *WebBackendHolder) *Monitor {
+func NewMonitor(cfg *config.Config, deps Deps, scheduler Scheduler, readiness *Readiness, collector *metrics.Collector, web *WebBackendHolder, workers []*Worker, watches []*Watch) *Monitor {
 	return &Monitor{
 		cfg: cfg, deps: deps, scheduler: scheduler, readiness: readiness,
-		collector: collector, web: web,
+		collector: collector, web: web, workers: workers, watches: watches,
 	}
-}
-
-// Init records the first worker/watch set built at daemon start.
-func (m *Monitor) Init(workers []*Worker, watches []*Watch) {
-	m.workers = workers
-	m.watches = watches
 }
 
 // Run starts the first generation and blocks until ctx is cancelled, then stops

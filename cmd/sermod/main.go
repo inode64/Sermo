@@ -481,10 +481,9 @@ func run(args []string) int {
 	monitor := app.NewMonitor(cfg, deps, app.Scheduler{
 		Interval:     interval,
 		StartupDelay: startupDelay,
-	}, readiness, collector, webHolder)
+	}, readiness, collector, webHolder, workers, watches)
 	monitor.ConfigPath = globalPath
 	monitor.Logger = logger
-	monitor.Init(workers, watches)
 
 	hup := make(chan os.Signal, 1)
 	signal.Notify(hup, syscall.SIGHUP)

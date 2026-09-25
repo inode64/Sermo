@@ -110,7 +110,7 @@ func TestWebBackendFailedUnitWithHealthyLiveProcessWarns(t *testing.T) {
 	snaps.publishForTest("glusterd", map[string]checks.Result{
 		"management": {Check: "management", OK: true},
 	}, map[string]bool{"management": true})
-	metrics := NewServiceMetricSampler()
+	metrics := NewServiceMetricSampler(nil)
 	metrics.record(t.Context(), "glusterd", web.ServiceRuntime{
 		At:        at.UTC().Format(time.RFC3339),
 		StartedAt: at.Add(-time.Minute).UTC().Format(time.RFC3339),
@@ -301,7 +301,7 @@ func TestWebBackendServiceStateEmptyProcessTreeWarnsInsteadOfCollectingForever(t
 	snaps.publishForTest("rpcbind", map[string]checks.Result{
 		"service": {Check: "service", OK: true},
 	}, map[string]bool{"service": true})
-	metrics := NewServiceMetricSampler()
+	metrics := NewServiceMetricSampler(nil)
 	b := &WebBackend{
 		order: []string{"rpcbind"},
 		entries: map[string]*webEntry{

@@ -435,7 +435,7 @@ func (w *Watch) dispatchRaidTransitions(ctx context.Context, res checks.Result) 
 		}
 		w.dispatchRaidTransition(ctx, res, transition)
 	}
-	for _, array := range sortedRaidArrays(arrayChanges) {
+	for _, array := range slices.Sorted(maps.Keys(arrayChanges)) {
 		w.dispatchRaidTransition(ctx, res, combineRaidArrayChanges(array, arrayChanges[array]))
 	}
 }
@@ -452,10 +452,6 @@ func (w *Watch) dispatchRaidTransition(ctx context.Context, res checks.Result, t
 		return
 	}
 	dispatchNotify(ctx, w.Notifiers, watchMessage(w.Name, transitionResult.Message, env), w.Name, w.emit)
-}
-
-func sortedRaidArrays(changes map[string][]checks.RaidTransition) []string {
-	return slices.Sorted(maps.Keys(changes))
 }
 
 func combineRaidArrayChanges(array string, changes []checks.RaidTransition) checks.RaidTransition {

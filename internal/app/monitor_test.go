@@ -75,10 +75,9 @@ checks:
 		"/etc/web.conf": "123:456789",
 	}
 
-	mon := NewMonitor(cfg, deps, Scheduler{Interval: 20 * time.Millisecond}, ready, collector, nil)
+	mon := NewMonitor(cfg, deps, Scheduler{Interval: 20 * time.Millisecond}, ready, collector, nil, workers, nil)
 	mon.ConfigPath = global
 	mon.Logger = slog.Default()
-	mon.Init(workers, nil)
 
 	ctx := t.Context()
 	go mon.Run(ctx)
@@ -159,10 +158,9 @@ checks:
 	const seededCycle = 5
 	workers[0].cycle = seededCycle
 
-	mon := NewMonitor(cfg, deps, Scheduler{Interval: 20 * time.Millisecond}, ready, collector, nil)
+	mon := NewMonitor(cfg, deps, Scheduler{Interval: 20 * time.Millisecond}, ready, collector, nil, workers, nil)
 	mon.ConfigPath = global
 	mon.Logger = slog.Default()
-	mon.Init(workers, nil)
 
 	ctx := t.Context()
 	go mon.Run(ctx)
@@ -251,7 +249,7 @@ func TestMonitorApplyConfigUpdatesSchedulerInterval(t *testing.T) {
 	next.Global.Raw[config.SectionEngine] = map[string]any{
 		config.EntryKeyInterval: "10s",
 	}
-	mon := NewMonitor(current, Deps{Interval: time.Minute}, Scheduler{Interval: time.Minute}, nil, nil, nil)
+	mon := NewMonitor(current, Deps{Interval: time.Minute}, Scheduler{Interval: time.Minute}, nil, nil, nil, nil, nil)
 	mon.Logger = slog.Default()
 
 	mon.applyConfig(next)
@@ -267,8 +265,7 @@ func TestMonitorGenerationRunsDaemonMetricSampler(t *testing.T) {
 		sampled:                make(chan struct{}),
 	}
 	sampler := &DaemonMetricSampler{reader: reader, now: time.Now, pid: 42}
-	mon := NewMonitor(&config.Config{}, Deps{DaemonMetricSampler: sampler, Interval: time.Hour}, Scheduler{Interval: time.Hour}, nil, nil, nil)
-	mon.Init(nil, nil)
+	mon := NewMonitor(&config.Config{}, Deps{DaemonMetricSampler: sampler, Interval: time.Hour}, Scheduler{Interval: time.Hour}, nil, nil, nil, nil, nil)
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	go func() {
@@ -331,10 +328,9 @@ checks:
 	collector.SystemFreshness = deps.SystemFreshness
 	workers, _, _ := BuildWorkers(t.Context(), cfg, deps, collector)
 	forceWorkerBackendActive(workers)
-	mon := NewMonitor(cfg, deps, Scheduler{Interval: deps.Interval}, ready, collector, nil)
+	mon := NewMonitor(cfg, deps, Scheduler{Interval: deps.Interval}, ready, collector, nil, workers, nil)
 	mon.ConfigPath = global
 	mon.Logger = slog.Default()
-	mon.Init(workers, nil)
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	go func() {
@@ -399,7 +395,7 @@ func waitReady(t *testing.T, ready *Readiness) {
 
 func TestMonitorRejectsReloadOutsideRun(t *testing.T) {
 	var events []Event
-	mon := NewMonitor(&config.Config{}, Deps{Emit: func(event Event) { events = append(events, event) }}, Scheduler{}, nil, nil, nil)
+	mon := NewMonitor(&config.Config{}, Deps{Emit: func(event Event) { events = append(events, event) }}, Scheduler{}, nil, nil, nil, nil, nil)
 	mon.ConfigPath = filepath.Join(t.TempDir(), "unused.yml")
 	mon.Logger = slog.Default()
 	for _, phase := range []string{"before run", "after shutdown"} {
