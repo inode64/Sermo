@@ -81,10 +81,6 @@ type diskIOCheck struct {
 func (c *diskIOCheck) Run(_ context.Context) Result {
 	start := time.Now()
 	sampler := keyedSamplerOr(c.sampler, defaultDiskIOSampler)
-	clock := c.clock
-	if clock == nil {
-		clock = time.Now
-	}
 
 	prefix := CheckTypeDiskIO + " " + c.device
 	s, err := sampler(c.device)
@@ -93,7 +89,7 @@ func (c *diskIOCheck) Run(_ context.Context) Result {
 		r.Data = c.last.into(r.Data, start)
 		return r
 	}
-	now := clock()
+	now := windowClock(c.clock)()
 	st := c.state
 	elapsed := now.Sub(st.t)
 	if !st.primed || elapsed <= 0 {
