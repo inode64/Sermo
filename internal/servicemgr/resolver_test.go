@@ -261,3 +261,30 @@ func scriptRunner(results map[string]execxResultErr) *execxtest.Runner {
 	}
 	return &execxtest.Runner{ByLine: byLine, Errs: errs}
 }
+
+func TestResolveSkipsEmptyAndRepeatedCandidates(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		backend    Backend
+		candidates []string
+		want       string
+		calls      int
+	}{
+		{name: "empty systemd", backend: BackendSystemd, candidates: []string{"", ""}},
+		{name: "empty openrc", backend: BackendOpenRC, candidates: []string{""}},
+		{name: "systemd normalized duplicates", backend: BackendSystemd, candidates: []string{"", "svc", "svc.service", "svc"}, want: "svc.service", calls: 1},
+		{name: "openrc empty then trusted", backend: BackendOpenRC, candidates: []string{"", "svc", "svc"}, want: "svc"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			runner := execxtest.Fixed(execx.Result{ExitCode: 1}, nil)
+			r := UnitResolver{Runner: runner, Probe: fakeProbe{}}
+			got, err := r.Resolve(t.Context(), tc.backend, tc.candidates, true)
+			if got != tc.want || (err != nil) != (tc.want == "") {
+				t.Fatalf("Resolve = %q, %v; want %q", got, err, tc.want)
+			}
+			if len(runner.Calls()) != tc.calls {
+				t.Fatalf("probe calls = %v; want %d", runner.Calls(), tc.calls)
+			}
+		})
+	}
+}
