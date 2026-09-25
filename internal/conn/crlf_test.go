@@ -24,3 +24,16 @@ func TestReadCRLFLine(t *testing.T) {
 		t.Fatalf("line 3 = %q, %v; want %q + io.EOF", s, err, "no-newline-eof")
 	}
 }
+
+func TestReadCRLFLineLenientPreservesBufferedLines(t *testing.T) {
+	br := bufio.NewReader(strings.NewReader("first\r\nsecond\nlast"))
+	for _, want := range []string{"first", "second", "last"} {
+		line, err := readCRLFLineLenient(br)
+		if err != nil || line != want {
+			t.Fatalf("line = %q, %v; want %q", line, err, want)
+		}
+	}
+	if _, err := readCRLFLineLenient(br); !errors.Is(err, io.EOF) {
+		t.Fatalf("empty read = %v, want EOF", err)
+	}
+}

@@ -553,17 +553,27 @@ func readCRLFLine(br *bufio.Reader) (string, error) {
 	return strings.TrimRight(s, protocolTrimCRLF), err
 }
 
+// readCRLFLineLenient accepts a final unterminated line when any bytes arrived.
+// Framed protocols keep using readCRLFLine so truncation remains an error.
+func readCRLFLineLenient(br *bufio.Reader) (string, error) {
+	line, err := br.ReadString(protocolLineBreak)
+	if line != "" {
+		err = nil
+	}
+	return strings.TrimRight(line, protocolTrimCRLF), err
+}
+
 // readGreetingLine reads one CR/LF-terminated greeting line from a fresh reader
 // over r, trimmed. It tolerates a read error as long as some data arrived — a
 // server that sends its banner then closes without a final newline — returning
 // the error only when nothing was read. For single-line greetings; a probe that
 // reads more lines must keep its own bufio.Reader.
 func readGreetingLine(r io.Reader) (string, error) {
-	line, err := bufio.NewReader(r).ReadString(protocolLineBreak)
-	if err != nil && line == "" {
+	line, err := readCRLFLineLenient(bufio.NewReader(r))
+	if err != nil {
 		return "", fmt.Errorf("read greeting line: %w", err)
 	}
-	return strings.TrimRight(line, protocolTrimCRLF), nil
+	return line, nil
 }
 
 // randXID32 returns a random 32-bit transaction id for the RPC and DHCP probes.

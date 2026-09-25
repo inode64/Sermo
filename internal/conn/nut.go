@@ -220,11 +220,11 @@ func writeNUT(w io.Writer, cmd string) error {
 
 // readNUTLine reads one CRLF/LF-terminated reply line.
 func readNUTLine(br *bufio.Reader) (string, error) {
-	s, err := br.ReadString(protocolLineBreak)
-	if err != nil && s == "" {
+	s, err := readCRLFLineLenient(br)
+	if err != nil {
 		return "", probeErr(ProtocolNameNUT, stepReply, err)
 	}
-	return strings.TrimRight(s, protocolTrimCRLF), nil
+	return s, nil
 }
 
 // nutCmdOK sends cmd and requires an `OK` reply, mapping `ERR <reason>` to an error.

@@ -40,8 +40,8 @@ func (varnishProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	defer func() { _ = c.Close() }()
 
 	br := bufio.NewReader(c)
-	line, err := br.ReadString(protocolLineBreak)
-	if err != nil && line == "" {
+	line, err := readCRLFLineLenient(br)
+	if err != nil {
 		return Result{}, probeErr(ProtocolNameVarnish, stepVarnishCLIBanner, err)
 	}
 	status, length, err := parseVarnishStatus(line)
