@@ -48,15 +48,14 @@ func (p rpcNullProtocol) Name() string     { return p.name }
 func (p rpcNullProtocol) DefaultPort() int { return p.defaultPort }
 func (rpcNullProtocol) RequiresUser() bool { return false }
 func (p rpcNullProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
-	programName := strconv.FormatUint(uint64(p.program), numericBaseDecimal)
-	return probeRPCNull(ctx, cfg, p.name, p.defaultPort, p.program, p.version, programName)
+	return probeRPCNull(ctx, cfg, p.name, p.defaultPort, p.program, p.version)
 }
 
 // probeRPCNull dials an ONC RPC service over TCP, sends a NULL procedure call,
 // and verifies that the requested program is available. It binds egress through
 // cfg.Interface and applies the context deadline, matching the behavior
 // required by NFS-family RPC probes.
-func probeRPCNull(ctx context.Context, cfg Config, protocol string, defaultPort int, program, version uint32, programName string) (Result, error) {
+func probeRPCNull(ctx context.Context, cfg Config, protocol string, defaultPort int, program, version uint32) (Result, error) {
 	xid := randXID32()
 	c, err := newProbeTarget(cfg, defaultPort).openTCP(ctx)
 	if err != nil {
@@ -68,7 +67,7 @@ func probeRPCNull(ctx context.Context, cfg Config, protocol string, defaultPort 
 	if err != nil {
 		return Result{}, err
 	}
-	return rpcNullResult(reply, xid, protocol, programName)
+	return rpcNullResult(reply, xid, protocol, strconv.FormatUint(uint64(program), numericBaseDecimal))
 }
 
 func rpcNullResult(reply []byte, xid uint32, protocol, programName string) (Result, error) {
