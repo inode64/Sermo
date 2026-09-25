@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"path/filepath"
+	"sermo/internal/metrics"
 	"sync"
 	"testing"
 	"time"
@@ -61,9 +62,6 @@ func (r *fakeDaemonMetricReader) ProcessIO(int) (uint64, uint64, bool) {
 }
 func (r *fakeDaemonMetricReader) ProcessFDs(int) (uint64, bool)     { return r.fds, true }
 func (r *fakeDaemonMetricReader) ProcessThreads(int) (uint64, bool) { return r.threads, true }
-func (r *fakeDaemonMetricReader) TotalMemory() (uint64, uint64, bool) {
-	return r.memTotal, r.memUsed, r.memTotal > 0
-}
 func (r *fakeDaemonMetricReader) SystemCPU() (uint64, uint64, bool) { return 0, 0, false }
 func (r *fakeDaemonMetricReader) LoadAverages() (float64, float64, float64, bool) {
 	return 0, 0, 0, false
@@ -314,4 +312,10 @@ func TestDaemonMetricSamplerRunSamplesWithoutDashboard(t *testing.T) {
 	if got := sampler.Series(time.Hour).Memory.Summary.Count; got != 1 {
 		t.Fatalf("background sample count = %d, want 1", got)
 	}
+}
+
+func (*fakeDaemonMetricReader) ProcessSwap(int) (uint64, bool)    { return 0, false }
+func (*fakeDaemonMetricReader) ProcessFDLimit(int) (uint64, bool) { return 0, false }
+func (r *fakeDaemonMetricReader) MemoryTotals() metrics.MemoryTotals {
+	return metrics.MemoryTotals{MemoryTotal: r.memTotal, MemoryUsed: r.memUsed, MemoryOK: r.memTotal > 0}
 }

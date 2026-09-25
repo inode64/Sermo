@@ -36,18 +36,13 @@ const defaultSystemFreshness = 2 * time.Second
 // Reader abstracts the /proc and /sys reads the collector needs, so rate and
 // percentage math can be tested without real processes.
 type Reader interface {
-	// ProcessCPU returns a process's accumulated CPU jiffies (utime+stime).
-	ProcessCPU(pid int) (uint64, bool)
-	// ProcessRSS returns a process's resident memory in bytes.
-	ProcessRSS(pid int) (uint64, bool)
-	// ProcessIO returns a process's cumulative block-layer read/write bytes.
-	ProcessIO(pid int) (read, write uint64, ok bool)
-	// ProcessFDs returns a process's count of open file descriptors.
-	ProcessFDs(pid int) (uint64, bool)
-	// ProcessThreads returns a process's thread count.
-	ProcessThreads(pid int) (uint64, bool)
-	// TotalMemory returns total and used machine memory in bytes.
-	TotalMemory() (total, used uint64, ok bool)
+	processMetricReader
+	// MemoryTotals returns memory and swap readings from one host sample.
+	MemoryTotals() MemoryTotals
+	// ProcessSwap returns swapped-out bytes; false means unavailable.
+	ProcessSwap(pid int) (uint64, bool)
+	// ProcessFDLimit returns the soft open-file limit; false means unavailable.
+	ProcessFDLimit(pid int) (uint64, bool)
 	// SystemCPU returns busy and total jiffies from /proc/stat.
 	SystemCPU() (busy, total uint64, ok bool)
 	// LoadAverages returns the 1/5/15-minute load averages.
@@ -118,7 +113,7 @@ type Collector struct {
 	prevSystem       *sysSample
 	lastSystem       Snapshot
 	lastSystemA      time.Time
-	lastMemory       memoryTotals
+	lastMemory       MemoryTotals
 	lastMemoryAt     time.Time
 }
 
@@ -170,14 +165,6 @@ func (c *Collector) sampleService(service string, pids []int, reader processMetr
 	now := c.Now()
 	snap := Snapshot{}
 
-	// Swap is optional: only readers that implement ProcessSwap contribute a
-	// per-service swap metric (summed over the tree, like RSS).
-	swapReader, hasSwap := c.Reader.(interface {
-		ProcessSwap(pid int) (uint64, bool)
-	})
-	// The fd limit is optional too: only readers that can read RLIMIT_NOFILE give
-	// fds a percentage form.
-	limitReader, _ := c.Reader.(fdLimitReader)
 	var peak fdPeak
 
 	var rss, ticks, ioRead, ioWrite, fds, threads, swap uint64
@@ -186,7 +173,7 @@ func (c *Collector) sampleService(service string, pids []int, reader processMetr
 	// exited or is unreadable) is reported as not-ready rather than a measured 0.
 	// Otherwise a threshold like `fds < N` would fire spuriously and `fds > N`
 	// could never fire. `present` (RSS-readable PIDs) is the alive-process count.
-	var present, fdsOK, threadsOK int
+	var present, fdsOK, threadsOK, swapOK int
 	curTicks := make(map[int]uint64, len(pids))   // per-process CPU jiffies this cycle
 	curThreads := make(map[int]uint64, len(pids)) // per-process thread count, for the cpu_thread floor
 	for _, pid := range pids {
@@ -198,10 +185,9 @@ func (c *Collector) sampleService(service string, pids []int, reader processMetr
 			ticks += v
 			curTicks[pid] = v
 		}
-		if hasSwap {
-			if v, ok := swapReader.ProcessSwap(pid); ok {
-				swap += v
-			}
+		if v, ok := c.Reader.ProcessSwap(pid); ok {
+			swap += v
+			swapOK++
 		}
 		if rd, wr, ok := reader.ProcessIO(pid); ok {
 			ioRead += rd
@@ -210,7 +196,7 @@ func (c *Collector) sampleService(service string, pids []int, reader processMetr
 		if v, ok := reader.ProcessFDs(pid); ok {
 			fds += v
 			fdsOK++
-			peak.observeProcess(limitReader, pid, v)
+			peak.observeProcess(c.Reader, pid, v)
 		}
 		if v, ok := reader.ProcessThreads(pid); ok {
 			threads += v
@@ -226,22 +212,20 @@ func (c *Collector) sampleService(service string, pids []int, reader processMetr
 
 	mem := Reading{Absolute: float64(rss), Unit: MetricUnitBytes, HasAbsolute: true, Ready: measured(present > 0)}
 	totals := c.memoryTotals(now)
-	if totals.memoryOK {
-		mem.Percent = float64(rss) / float64(totals.memoryTotal) * PercentScale
+	if totals.MemoryOK {
+		mem.Percent = float64(rss) / float64(totals.MemoryTotal) * PercentScale
 		mem.HasPercent = true
 	}
 	snap[MetricMemory] = mem
 
 	// Per-service swap: total swapped-out memory of the process tree (bytes), and
 	// — when a swap device exists — its share of total swap.
-	if hasSwap {
-		sw := Reading{Absolute: float64(swap), Unit: MetricUnitBytes, HasAbsolute: true, Ready: measured(present > 0)}
-		if totals.swapOK && totals.swapTotal > 0 {
-			sw.Percent = float64(swap) / float64(totals.swapTotal) * PercentScale
-			sw.HasPercent = true
-		}
-		snap[MetricSwap] = sw
+	sw := Reading{Absolute: float64(swap), Unit: MetricUnitBytes, HasAbsolute: true, Ready: measured(swapOK > 0)}
+	if totals.SwapOK && totals.SwapTotal > 0 {
+		sw.Percent = float64(swap) / float64(totals.SwapTotal) * PercentScale
+		sw.HasPercent = true
 	}
+	snap[MetricSwap] = sw
 
 	// process_count is the number of processes actually found alive this sample,
 	// not the count of PIDs handed in (some may have exited since discovery).
@@ -415,11 +399,11 @@ func (c *Collector) SampleSystem() Snapshot {
 
 	snap := Snapshot{}
 	totals := c.memoryTotals(now)
-	if totals.memoryOK {
-		r := Reading{Absolute: float64(totals.memoryUsed), Unit: MetricUnitBytes, HasAbsolute: true, Ready: true,
-			Percent:    float64(totals.memoryUsed) / float64(totals.memoryTotal) * PercentScale,
+	if totals.MemoryOK {
+		r := Reading{Absolute: float64(totals.MemoryUsed), Unit: MetricUnitBytes, HasAbsolute: true, Ready: true,
+			Percent:    float64(totals.MemoryUsed) / float64(totals.MemoryTotal) * PercentScale,
 			HasPercent: true}
-		r.Total, r.HasTotal = float64(totals.memoryTotal), true
+		r.Total, r.HasTotal = float64(totals.MemoryTotal), true
 		snap[MetricTotalMemory] = r
 	}
 
@@ -449,14 +433,14 @@ func (c *Collector) SampleSystem() Snapshot {
 	// Swap is optional: only readers that implement TotalSwap contribute it, and
 	// only when a swap device exists (total > 0). Percent is always computed so a
 	// 0%-used swap still reports a value.
-	if totals.swapOK && totals.swapTotal > 0 {
+	if totals.SwapOK && totals.SwapTotal > 0 {
 		snap[MetricTotalSwap] = Reading{
-			Absolute:    float64(totals.swapUsed),
+			Absolute:    float64(totals.SwapUsed),
 			Unit:        MetricUnitBytes,
 			HasAbsolute: true,
-			Percent:     float64(totals.swapUsed) / float64(totals.swapTotal) * PercentScale,
+			Percent:     float64(totals.SwapUsed) / float64(totals.SwapTotal) * PercentScale,
 			HasPercent:  true,
-			Total:       float64(totals.swapTotal),
+			Total:       float64(totals.SwapTotal),
 			HasTotal:    true,
 			Ready:       true,
 		}
@@ -467,55 +451,26 @@ func (c *Collector) SampleSystem() Snapshot {
 	return snap
 }
 
-type memoryTotals struct {
-	memoryTotal uint64
-	memoryUsed  uint64
-	memoryOK    bool
-	swapTotal   uint64
-	swapUsed    uint64
-	swapOK      bool
+// MemoryTotals contains byte counts and availability from one memory sample.
+type MemoryTotals struct {
+	MemoryTotal uint64
+	MemoryUsed  uint64
+	MemoryOK    bool
+	SwapTotal   uint64
+	SwapUsed    uint64
+	SwapOK      bool
 }
 
 // memoryTotals shares the host sample for the collector's freshness window.
 // The caller holds mu. Incomplete reads are retried instead of cached.
-func (c *Collector) memoryTotals(now time.Time) memoryTotals {
+func (c *Collector) memoryTotals(now time.Time) MemoryTotals {
 	age := now.Sub(c.lastMemoryAt)
 	if !c.lastMemoryAt.IsZero() && age >= 0 && age < c.SystemFreshness {
 		return c.lastMemory
 	}
-	totals := readerMemoryTotals(c.Reader, true)
-	if totals.memoryOK && totals.swapOK {
+	totals := c.Reader.MemoryTotals()
+	if totals.MemoryOK && totals.SwapOK {
 		c.lastMemory, c.lastMemoryAt = totals, now
-	}
-	return totals
-}
-
-// readerMemoryTotals returns host memory totals and, when requested and
-// supported, swap totals. Readers can implement TotalMemoryAndSwap to supply
-// both from one underlying probe; older readers still use the separate methods.
-func readerMemoryTotals(r Reader, needSwap bool) memoryTotals {
-	if mr, has := r.(interface {
-		TotalMemoryAndSwap() (memoryTotal, memoryUsed, swapTotal, swapUsed uint64, memoryOK, swapOK bool)
-	}); has {
-		memoryTotal, memoryUsed, swapTotal, swapUsed, memoryOK, swapOK := mr.TotalMemoryAndSwap()
-		return memoryTotals{
-			memoryTotal: memoryTotal,
-			memoryUsed:  memoryUsed,
-			memoryOK:    memoryOK,
-			swapTotal:   swapTotal,
-			swapUsed:    swapUsed,
-			swapOK:      swapOK,
-		}
-	}
-	memoryTotal, memoryUsed, memoryOK := r.TotalMemory()
-	totals := memoryTotals{memoryTotal: memoryTotal, memoryUsed: memoryUsed, memoryOK: memoryOK}
-	if !needSwap {
-		return totals
-	}
-	if sr, has := r.(interface {
-		TotalSwap() (total, used uint64, ok bool)
-	}); has {
-		totals.swapTotal, totals.swapUsed, totals.swapOK = sr.TotalSwap()
 	}
 	return totals
 }
@@ -630,7 +585,7 @@ func threadSampleTargets(procRates map[int]float64, threadCounts map[int]uint64)
 }
 
 // threadCPUReader is the optional half of Reader that resolves cpu_thread to a
-// measurement instead of an upper bound. It is optional — like ProcessSwap — so a
+// measurement instead of an upper bound. It is optional for process observations, so a
 // reader that cannot enumerate threads still produces a correct, if bounded,
 // cpu_thread rather than failing.
 type threadCPUReader interface {
@@ -707,17 +662,14 @@ type fdPeak struct {
 	ok  bool
 }
 
-// fdLimitReader is the optional Reader capability behind the fds percentage.
+// fdLimitReader is the capability used to calculate the fds percentage.
 type fdLimitReader interface {
 	ProcessFDLimit(pid int) (uint64, bool)
 }
 
-// observeProcess folds one process in; a nil reader (no capability) or an
-// unreadable/unlimited limit leaves the peak untouched.
+// observeProcess folds one process in; an unreadable/unlimited limit leaves
+// the peak untouched.
 func (p *fdPeak) observeProcess(r fdLimitReader, pid int, count uint64) {
-	if r == nil {
-		return
-	}
 	limit, ok := r.ProcessFDLimit(pid)
 	if !ok || limit == 0 {
 		return

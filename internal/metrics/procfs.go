@@ -339,29 +339,13 @@ func processEntryCount(pid int, name string) (uint64, bool) {
 	return uint64(len(entries)), true
 }
 
-// TotalMemory reads MemTotal and MemAvailable from /proc/meminfo.
-func (OSReader) TotalMemory() (total, used uint64, ok bool) {
-	totals := readProcMeminfoTotals()
-	if !totals.memoryOK {
-		return 0, 0, false
-	}
-	return totals.memoryTotal, totals.memoryUsed, true
-}
+// MemoryTotals reads memory and swap counters from a single /proc/meminfo sample.
+func (OSReader) MemoryTotals() MemoryTotals { return readProcMeminfoTotals() }
 
-// TotalMemoryAndSwap reads memory and swap totals from /proc/meminfo with one
-// file read. The collector uses it when available so system and service metric
-// sampling do not reread meminfo for memory and swap separately.
-//
-//nolint:gocritic // tooManyResultsChecker: this signature is the optional-interface contract collector.go type-asserts on; narrowing it would close the extension point to out-of-package readers.
-func (OSReader) TotalMemoryAndSwap() (memoryTotal, memoryUsed, swapTotal, swapUsed uint64, memoryOK, swapOK bool) {
-	totals := readProcMeminfoTotals()
-	return totals.memoryTotal, totals.memoryUsed, totals.swapTotal, totals.swapUsed, totals.memoryOK, totals.swapOK
-}
-
-func readProcMeminfoTotals() memoryTotals {
+func readProcMeminfoTotals() MemoryTotals {
 	data, err := os.ReadFile(procPath(procFileMeminfo))
 	if err != nil {
-		return memoryTotals{}
+		return MemoryTotals{}
 	}
 	return parseProcMeminfoTotals(data)
 }
@@ -402,22 +386,22 @@ func ParseMeminfo(data []byte) Meminfo {
 	return m
 }
 
-func parseProcMeminfoTotals(data []byte) memoryTotals {
-	var totals memoryTotals
+func parseProcMeminfoTotals(data []byte) MemoryTotals {
+	var totals MemoryTotals
 	m := ParseMeminfo(data)
-	totals.memoryTotal, totals.memoryOK = m.MemTotal, m.HaveMemTotal
-	totals.swapTotal, totals.swapOK = m.SwapTotal, m.HaveSwapTotal
-	if !totals.memoryOK || !m.HaveMemAvailable || totals.memoryTotal < m.MemAvailable {
-		totals.memoryOK = false
-		totals.memoryTotal = 0
+	totals.MemoryTotal, totals.MemoryOK = m.MemTotal, m.HaveMemTotal
+	totals.SwapTotal, totals.SwapOK = m.SwapTotal, m.HaveSwapTotal
+	if !totals.MemoryOK || !m.HaveMemAvailable || totals.MemoryTotal < m.MemAvailable {
+		totals.MemoryOK = false
+		totals.MemoryTotal = 0
 	} else {
-		totals.memoryUsed = totals.memoryTotal - m.MemAvailable
+		totals.MemoryUsed = totals.MemoryTotal - m.MemAvailable
 	}
-	if !totals.swapOK || !m.HaveSwapFree || totals.swapTotal < m.SwapFree {
-		totals.swapOK = false
-		totals.swapTotal = 0
+	if !totals.SwapOK || !m.HaveSwapFree || totals.SwapTotal < m.SwapFree {
+		totals.SwapOK = false
+		totals.SwapTotal = 0
 	} else {
-		totals.swapUsed = totals.swapTotal - m.SwapFree
+		totals.SwapUsed = totals.SwapTotal - m.SwapFree
 	}
 	return totals
 }
