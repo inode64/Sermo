@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"sermo/internal/execx"
-	"sermo/internal/strutil"
 )
 
 // UnitResolver resolves a service to the concrete unit name the active backend
@@ -37,26 +36,27 @@ func (r UnitResolver) Resolve(ctx context.Context, backend Backend, candidates [
 		probe = OSProbe{}
 	}
 
-	candidates = strutil.Unique(candidates)
 	var tried []string
 	var known []string
 	seenUnits := map[string]struct{}{}
 	for _, candidate := range candidates {
+		if candidate == "" {
+			continue
+		}
+		var path string
 		if backend == BackendOpenRC {
-			if _, ok := openRCUnitPath(openRCInitDir, candidate); !ok {
+			var ok bool
+			if path, ok = openRCUnitPath(openRCInitDir, candidate); !ok {
 				return "", fmt.Errorf("invalid OpenRC unit %q", candidate)
 			}
 		}
-		unit := candidate
-		if backend == BackendSystemd {
-			unit = systemdUnit(candidate)
-		}
+		unit := NormalizeUnit(backend, candidate)
 		if _, ok := seenUnits[unit]; ok {
 			continue
 		}
 		seenUnits[unit] = struct{}{}
 		tried = append(tried, unit)
-		if r.knows(ctx, backend, unit, candidate, runner, probe) {
+		if r.knows(ctx, backend, unit, path, runner, probe) {
 			known = append(known, unit)
 		}
 	}
@@ -67,13 +67,10 @@ func (r UnitResolver) Resolve(ctx context.Context, backend Backend, candidates [
 		return known[0], nil
 	}
 
-	if trust && len(candidates) > 0 {
-		if backend == BackendSystemd {
-			return systemdUnit(candidates[0]), nil
-		}
-		return candidates[0], nil
+	if trust && len(tried) > 0 {
+		return tried[0], nil
 	}
-	if len(candidates) == 0 {
+	if len(tried) == 0 {
 		return "", fmt.Errorf("service is not available on %s", backend)
 	}
 	return "", fmt.Errorf("no unit resolved on %s; tried: %s", backend, strings.Join(tried, ", "))
@@ -81,14 +78,13 @@ func (r UnitResolver) Resolve(ctx context.Context, backend Backend, candidates [
 
 // knows reports whether the backend recognizes a candidate: systemd via
 // `systemctl cat`, OpenRC via the presence of the init script.
-func (r UnitResolver) knows(ctx context.Context, backend Backend, unit, candidate string, runner execx.Runner, probe Probe) bool {
+func (r UnitResolver) knows(ctx context.Context, backend Backend, unit, path string, runner execx.Runner, probe Probe) bool {
 	switch backend {
 	case BackendSystemd:
 		res, err := execx.Run(ctx, runner, r.timeout(), cmdSystemctl, systemctlCmdCat, commandArgTerminator, unit)
 		return err == nil && res.ExitCode == execx.ExitCodeSuccess
 	case BackendOpenRC:
-		path, ok := openRCUnitPath(openRCInitDir, candidate)
-		return ok && probe.PathExists(path)
+		return probe.PathExists(path)
 	default:
 		return false
 	}
