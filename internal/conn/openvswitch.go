@@ -110,11 +110,10 @@ func ovsdbCall(enc *json.Encoder, dec *json.Decoder, id, method string, params [
 		if len(resp.Error) > 0 && string(resp.Error) != ovsdbJSONNull {
 			return fmt.Errorf("ovsdb %s error: %s", method, resp.Error)
 		}
-		if out != nil && len(resp.Result) > 0 {
+		if len(resp.Result) > 0 {
 			if err := json.Unmarshal(resp.Result, out); err != nil {
 				return probeErr(ProtocolNameOpenVSwitch, stepOpenvSwitchDecodeResult, err)
 			}
-			return nil
 		}
 		return nil
 	}
