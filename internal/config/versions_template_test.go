@@ -31,7 +31,7 @@ func TestMaterializedTemplateMatchesUsesAllBinaryCandidates(t *testing.T) {
 	}
 }
 
-func TestMaterializedTemplateMatchesDedupesSameTupleAcrossSources(t *testing.T) {
+func TestMaterializeTemplateDedupesSameTupleAcrossSources(t *testing.T) {
 	root := t.TempDir()
 	etcSystemdDir := filepath.Join(root, "etc", "systemd", "system")
 	libSystemdDir := filepath.Join(root, "usr", "lib", "systemd", "system")
@@ -54,15 +54,19 @@ func TestMaterializedTemplateMatchesDedupesSameTupleAcrossSources(t *testing.T) 
 		filepath.Join(etcSystemdDir, "php-fpm@${version}${sep}${instance}.service"),
 		filepath.Join(libSystemdDir, "php-fpm@${version}${sep}${instance}.service"),
 	}
-	got := materializedTemplateMatches(paths, false, nil, tokensFor("php-fpm%v%s%i"))
-	if len(got) != 1 {
-		t.Fatalf("materializedTemplateMatches returned %d matches, want one: %#v", len(got), got)
+	body := map[string]any{
+		keyVersions:      map[string]any{keyVersionsFrom: paths},
+		sectionVariables: map[string]any{varVersion: "${version}", varSep: "${sep}", varInstance: "${instance}"},
 	}
-	if got[0].values["version"] != "8.2" || got[0].values["sep"] != "" || got[0].values["instance"] != "" {
-		t.Fatalf("materializedTemplateMatches values = %v, want version 8.2 with empty sep/instance", got[0].values)
+	cfg := &Config{}
+	tmpl := &Document{Name: "php-fpm%v%s%i"}
+	got := cfg.materializeTemplate(t.Context(), tmpl, body, tokensFor(tmpl.Name), kindApp)
+	if len(got) != 1 || got[0].Name != "php-fpm8.2" {
+		t.Fatalf("materializeTemplate = %#v, want one php-fpm8.2 instance", got)
 	}
-	if got[0].matchedPath != filepath.Join(etcSystemdDir, "php-fpm@8.2.service") {
-		t.Fatalf("materializedTemplateMatches kept %q, want first unit source", got[0].matchedPath)
+	values := got[0].Body[sectionVariables].(map[string]any)
+	if values[varVersion] != "8.2" || values[varSep] != "" || values[varInstance] != "" {
+		t.Fatalf("materialized values = %v, want version 8.2 with empty sep/instance", values)
 	}
 }
 
