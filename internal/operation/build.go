@@ -427,12 +427,7 @@ func hasCommandMatchSelector(selectors []process.Selector) bool {
 }
 
 func hasExactProcessIdentitySelector(selectors []process.Selector) bool {
-	for i := range selectors {
-		if selectors[i].HasStrictIdentity() {
-			return true
-		}
-	}
-	return false
+	return slices.ContainsFunc(selectors, func(s process.Selector) bool { return s.HasStrictIdentity() })
 }
 
 func restartIdentityClosure(mgr servicemgr.Manager, unit string, discover func() ([]process.Process, error), discoverer process.Discoverer, selectors []process.Selector) func(context.Context) (bool, string, error) {

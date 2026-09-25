@@ -1230,11 +1230,9 @@ func applyLockError(r *Result, err error) {
 }
 
 func activeOnly(in []locks.Lock) []locks.Lock {
-	var out []locks.Lock
-	for _, l := range in {
-		if l.Active() {
-			out = append(out, l)
-		}
+	out := slices.DeleteFunc(slices.Clone(in), func(l locks.Lock) bool { return !l.Active() })
+	if len(out) == 0 {
+		return nil
 	}
 	return out
 }
