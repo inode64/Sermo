@@ -2,9 +2,7 @@ package conn
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"net/http"
 
 	"sermo/internal/netutil"
 )
@@ -36,14 +34,6 @@ func (unifiProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	}
 	client, base := httpProbeBaseWithTLSMode(cfg, defaultPortUniFi, tlsMode)
 	url := base + unifiStatusEndpoint
-	resp, err := getHTTPProbe(ctx, client, url, maxHTTPProbeBody)
-	if err != nil {
-		return Result{}, err
-	}
-	if resp.status != http.StatusOK {
-		return Result{}, fmt.Errorf("unifi: HTTP status %d", resp.status)
-	}
-
 	var status struct {
 		Meta struct {
 			RC            string `json:"rc"`
@@ -51,8 +41,9 @@ func (unifiProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 			UUID          string `json:"uuid"`
 		} `json:"meta"`
 	}
-	if err := json.Unmarshal(resp.body, &status); err != nil {
-		return Result{}, fmt.Errorf("unifi: invalid JSON response: %w", err)
+	err := getJSONProbe(ctx, client, url, nil, &status)
+	if err != nil {
+		return Result{}, fmt.Errorf("unifi: %w", err)
 	}
 	if status.Meta.RC != unifiRCOK {
 		return Result{}, fmt.Errorf("unifi: status rc %q, want %s", status.Meta.RC, unifiRCOK)

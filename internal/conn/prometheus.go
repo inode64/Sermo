@@ -26,35 +26,34 @@ const (
 
 func (prometheusProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	client, base := httpProbeBase(cfg, defaultPortPrometheus)
+	decorate := func(req *http.Request) {
+		if cfg.User != "" {
+			req.SetBasicAuth(cfg.User, cfg.Password)
+		}
+	}
 	// buildinfo carries the version and proves the API is up; on a non-API reply
 	// (older server, disabled endpoint) fall back to the health endpoint.
-	if res, handled, err := promBuildInfo(ctx, client, base, cfg); handled {
+	if res, handled, err := promBuildInfo(ctx, client, base, decorate); handled {
 		return res, err
 	}
-	return promHealthy(ctx, client, base, cfg)
+	return promHealthy(ctx, client, base, decorate)
 }
 
 // promBuildInfo queries /api/v1/status/buildinfo. handled is true when the result
 // is conclusive (a transport error, or a recognised Prometheus API reply); it is
 // false only when the endpoint is missing/not Prometheus, signalling a /-/healthy
 // fallback.
-func promBuildInfo(ctx context.Context, client *http.Client, base string, cfg Config) (res Result, handled bool, err error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+promBuildInfoEndpoint, http.NoBody)
-	if err != nil {
-		return Result{}, true, probeErr(ProtocolNamePrometheus, stepPrometheusBuildinfoRequest, err)
-	}
-	promAuth(req, cfg)
-	resp, err := doHTTPProbe(client, req, maxHTTPProbeBody)
-	if err != nil {
-		return Result{}, true, err // server unreachable — conclusive
-	}
-
+func promBuildInfo(ctx context.Context, client *http.Client, base string, decorate func(*http.Request)) (res Result, handled bool, err error) {
 	var info struct {
 		Status string `json:"status"`
 		Data   struct {
 			Version  string `json:"version"`
 			Revision string `json:"revision"`
 		} `json:"data"`
+	}
+	resp, err := getHTTPProbe(ctx, client, base+promBuildInfoEndpoint, maxHTTPProbeBody, decorate)
+	if err != nil {
+		return Result{}, true, err // server unreachable — conclusive
 	}
 	if !decodedJSON(resp.body, &info) || info.Status == "" {
 		return Result{}, false, nil // not the Prometheus API JSON — fall back
@@ -73,13 +72,8 @@ func promBuildInfo(ctx context.Context, client *http.Client, base string, cfg Co
 }
 
 // promHealthy queries /-/healthy, the always-available liveness endpoint.
-func promHealthy(ctx context.Context, client *http.Client, base string, cfg Config) (Result, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+promHealthyEndpoint, http.NoBody)
-	if err != nil {
-		return Result{}, probeErr(ProtocolNamePrometheus, stepPrometheusHealthRequest, err)
-	}
-	promAuth(req, cfg)
-	resp, err := doHTTPProbe(client, req, maxHTTPProbeShortBody)
+func promHealthy(ctx context.Context, client *http.Client, base string, decorate func(*http.Request)) (Result, error) {
+	resp, err := getHTTPProbe(ctx, client, base+promHealthyEndpoint, maxHTTPProbeShortBody, decorate)
 	if err != nil {
 		return Result{}, err
 	}
@@ -87,11 +81,4 @@ func promHealthy(ctx context.Context, client *http.Client, base string, cfg Conf
 		return Result{}, fmt.Errorf("prometheus: %s HTTP status %d", promHealthyEndpoint, resp.status)
 	}
 	return Result{}, nil
-}
-
-// promAuth adds HTTP Basic auth when a user is configured (for a reverse proxy).
-func promAuth(req *http.Request, cfg Config) {
-	if cfg.User != "" {
-		req.SetBasicAuth(cfg.User, cfg.Password)
-	}
 }

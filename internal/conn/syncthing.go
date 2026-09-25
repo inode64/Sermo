@@ -2,7 +2,6 @@ package conn
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/http"
 )
@@ -67,22 +66,13 @@ func (syncthingProtocol) Probe(ctx context.Context, cfg Config) (Result, error) 
 // syncthingGet performs a GET, optionally with an X-API-Key header, and decodes
 // the JSON body into out. A non-200 status is an error.
 func syncthingGet(ctx context.Context, client *http.Client, url, apiKey string, out any) error {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody)
+	err := getJSONProbe(ctx, client, url, func(req *http.Request) {
+		if apiKey != "" {
+			req.Header.Set(httpHeaderSyncthingAuth, apiKey)
+		}
+	}, out)
 	if err != nil {
-		return probeErr(ProtocolNameSyncthing, stepRequest, err)
-	}
-	if apiKey != "" {
-		req.Header.Set(httpHeaderSyncthingAuth, apiKey)
-	}
-	resp, err := doHTTPProbe(client, req, maxHTTPProbeBody)
-	if err != nil {
-		return err
-	}
-	if resp.status != http.StatusOK {
-		return fmt.Errorf("syncthing: HTTP status %d", resp.status)
-	}
-	if err := json.Unmarshal(resp.body, out); err != nil {
-		return fmt.Errorf("syncthing: invalid JSON response: %w", err)
+		return fmt.Errorf("syncthing: %w", err)
 	}
 	return nil
 }

@@ -21,6 +21,7 @@ func TestInfluxdbProbeHealth(t *testing.T) {
 
 func TestInfluxdbProbeHealthFail(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
 		_, _ = io.WriteString(w, `{"name":"influxdb","status":"fail","message":"storage unavailable"}`)
 	}))
 	defer srv.Close()

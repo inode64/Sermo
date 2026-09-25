@@ -85,7 +85,7 @@ func testExternalModuleTLSPolicy(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			client, base := httpProbeBaseWithTLSMode(Config{Host: host, Port: port}, port, test.mode)
 			closeHTTPClientOnCleanup(t, client)
-			_, err := getHTTPProbe(context.Background(), client, base, externalModuleContractBodyLimit)
+			_, err := getHTTPProbe(context.Background(), client, base, externalModuleContractBodyLimit, nil)
 			if test.wantErr && err == nil {
 				t.Fatal("strict TLS probe accepted an untrusted certificate")
 			}
@@ -104,7 +104,7 @@ func testExternalModuleResponseBound(t *testing.T) {
 	t.Cleanup(srv.Close)
 
 	client := externalModuleContractHTTPClient(t)
-	response, err := getHTTPProbe(context.Background(), client, srv.URL, externalModuleContractBodyLimit)
+	response, err := getHTTPProbe(context.Background(), client, srv.URL, externalModuleContractBodyLimit, nil)
 	if err != nil {
 		t.Fatalf("getHTTPProbe(): %v", err)
 	}
@@ -134,7 +134,7 @@ func testExternalModuleCleanup(t *testing.T) {
 	if !transport.DisableKeepAlives {
 		t.Fatal("one-shot module transport must disable keep-alives")
 	}
-	if _, err := getHTTPProbe(context.Background(), client, srv.URL, externalModuleContractBodyLimit); err != nil {
+	if _, err := getHTTPProbe(context.Background(), client, srv.URL, externalModuleContractBodyLimit, nil); err != nil {
 		t.Fatalf("getHTTPProbe(): %v", err)
 	}
 	select {
