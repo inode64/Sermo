@@ -44,9 +44,6 @@ type lastSample struct {
 
 // record keeps one successful sample as the newest known state of the device.
 func (s *lastSample) record(health string, values map[string]float64, at time.Time) {
-	if s == nil {
-		return
-	}
 	s.health, s.values, s.at = health, maps.Clone(values), at
 }
 
@@ -54,7 +51,7 @@ func (s *lastSample) record(health string, values map[string]float64, at time.Ti
 // no-op until the device has answered at least once, so a check that never got
 // a reading reports no invented history.
 func (s *lastSample) into(data map[string]any, now time.Time) map[string]any {
-	if s == nil || s.at.IsZero() {
+	if s.at.IsZero() {
 		return data
 	}
 	if data == nil {

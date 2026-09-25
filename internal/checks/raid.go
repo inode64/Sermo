@@ -366,9 +366,6 @@ func parseMdstat(s string) RaidStatus {
 }
 
 func enrichRaidSysfs(st *RaidStatus, root string) {
-	if st == nil || len(st.Details) == 0 {
-		return
-	}
 	for i := range st.Details {
 		detail := &st.Details[i]
 		detail.SizeBytes = raidArraySizeBytes(filepath.Join(root, detail.Name, "size"))
@@ -418,9 +415,6 @@ func setRaidRebuildState(ctx context.Context, array string, resume bool, root st
 	}
 	if err := ctx.Err(); err != nil {
 		return RaidArrayStatus{}, fmt.Errorf("set RAID rebuild: %w", err)
-	}
-	if sample == nil {
-		sample = defaultRaidSampler
 	}
 	status, err := sample()
 	if err != nil {

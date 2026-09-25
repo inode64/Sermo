@@ -432,7 +432,7 @@ func TestCheckTimeoutMessage(t *testing.T) {
 				runner:         slowRunner{},
 				device:         "/dev/sda",
 				deviceIdentity: testDeviceIdentity,
-				last:           &lastSample{},
+				last:           lastSample{},
 			},
 		},
 		{
@@ -443,7 +443,7 @@ func TestCheckTimeoutMessage(t *testing.T) {
 				device: "/dev/sda",
 				preds:  []levelPred{{field: "cached", op: "<", value: 100}},
 				probe:  livingDeviceProbe(),
-				last:   &lastSample{},
+				last:   lastSample{},
 			},
 		},
 		{
