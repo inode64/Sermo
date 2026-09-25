@@ -35,12 +35,6 @@ func (postgresProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	return pingAndVersion(ctx, db, "SHOW server_version")
 }
 
-// PostgresDSN renders a PostgreSQL connection URL from cfg (escaping the password).
-// Exported so the sql check can open a PostgreSQL connection reusing this logic.
-func PostgresDSN(cfg Config) string {
-	return buildPGDSNWithTarget(cfg, newProbeTarget(cfg, defaultPortPostgres))
-}
-
 // OpenPostgresDB opens a PostgreSQL pool via pgx, routing TCP dials through
 // BindDialer when cfg.Interface is set so multihomed probes egress the right link.
 func OpenPostgresDB(_ context.Context, cfg Config) (*sql.DB, error) {

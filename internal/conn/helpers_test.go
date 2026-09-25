@@ -36,7 +36,7 @@ func TestMQTTConnackName(t *testing.T) {
 }
 
 func TestMySQLDSNDefaultsAndEscaping(t *testing.T) {
-	dsn := MySQLDSN(Config{User: "mon", Password: "p@ss/word"})
+	dsn := mysqlDSNForTest(Config{User: "mon", Password: "p@ss/word"})
 	if !strings.Contains(dsn, "tcp(127.0.0.1:3306)") {
 		t.Fatalf("dsn lacks default host/port: %q", dsn)
 	}
@@ -44,7 +44,7 @@ func TestMySQLDSNDefaultsAndEscaping(t *testing.T) {
 		t.Fatalf("dsn lacks user: %q", dsn)
 	}
 
-	custom := MySQLDSN(Config{Host: "db.internal", Port: 3307, User: "mon"})
+	custom := mysqlDSNForTest(Config{Host: "db.internal", Port: 3307, User: "mon"})
 	if !strings.Contains(custom, "tcp(db.internal:3307)") {
 		t.Fatalf("dsn lacks explicit host/port: %q", custom)
 	}
