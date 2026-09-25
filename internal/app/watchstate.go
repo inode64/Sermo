@@ -31,9 +31,7 @@ func (w *Watch) loadRuntimeState() {
 	w.unavailable = rec.Unavailable
 	w.lastNotifyAt = rec.LastNotifyAt
 	w.state = *watchWindowStateFromRecord(rec)
-	if policy := remediationFromRecord(rec.Policy); policy != nil {
-		w.policyState = *policy
-	}
+	w.policyState = *remediationFromRecord(rec.Policy)
 	w.persistedState = rec
 	w.stateRestored = true
 }
@@ -117,9 +115,7 @@ func (w *Watch) runtimeStateSlot() string {
 }
 
 func (w *Watch) emitWatchStateError(action string, err error) {
-	if err != nil {
-		w.emit(Event{Watch: w.Name, Kind: eventKindError, Message: fmt.Sprintf("%s: %v", action, err)})
-	}
+	w.emit(Event{Watch: w.Name, Kind: eventKindError, Message: fmt.Sprintf("%s: %v", action, err)})
 }
 
 func watchRuntimeRecordsEqual(a, b state.WatchRuntimeRecord) bool {

@@ -36,9 +36,6 @@ func loadRuleState(store RuleStateStore, service string, ruleSet []rules.Rule) (
 		}
 		windows[name] = windowStateFromRecord(rec)
 	}
-	if len(windows) == 0 {
-		windows = nil
-	}
 	return remediation, windows, warnings
 }
 
@@ -194,7 +191,5 @@ func ruleWindowRecord(window *rules.WindowState) state.RuleWindowRecord {
 }
 
 func emitRuleStateError(emit func(Event), service, action string, err error) {
-	if err != nil {
-		emitSafe(emit, Event{Service: service, Kind: eventKindError, Message: fmt.Sprintf("%s: %v", action, err)})
-	}
+	emitSafe(emit, Event{Service: service, Kind: eventKindError, Message: fmt.Sprintf("%s: %v", action, err)})
 }

@@ -82,17 +82,12 @@ type OSHookRunner struct {
 // only a genuine run failure (including runners that return a zero Result on
 // error) is returned as an error.
 func (r OSHookRunner) RunHook(ctx context.Context, argv []string, env map[string]string, timeout time.Duration) (execx.Result, error) {
-	if len(argv) == 0 {
-		return execx.Result{}, errors.New("hook command is empty")
-	}
-
 	fullEnv := os.Environ()
 	for k, v := range env {
 		fullEnv = append(fullEnv, k+"="+v)
 	}
 
-	runner := r.Runner
-	runner = execx.RunnerOrDefault(runner)
+	runner := execx.RunnerOrDefault(r.Runner)
 
 	// RunEnv honors the custom environment and applies the timeout (if > 0).
 	res, err := execx.RunEnv(ctx, runner, fullEnv, timeout, argv[0], argv[1:]...)

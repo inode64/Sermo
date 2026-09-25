@@ -138,9 +138,6 @@ const (
 // Data["output"] (set by `command` checks and app probes on failure), for
 // threading into an event's Output field. Empty when absent.
 func resultOutput(r checks.Result) string {
-	if r.Data == nil {
-		return ""
-	}
 	if s, ok := r.Data[checks.DataKeyOutput].(string); ok {
 		return s
 	}
