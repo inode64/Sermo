@@ -42,24 +42,36 @@ func countTCPConnections(port int, paths []string) (int, error) {
 // ScanPortState walks a procfs socket table and calls found for every row whose
 // local port and state match. Returning false from found stops the scan.
 func ScanPortState(r io.Reader, port int, states map[string]bool, found func(localAddress string) bool) error {
-	sc := bufio.NewScanner(r)
-	for sc.Scan() {
-		fields := strings.Fields(sc.Text())
-		if len(fields) < MinFields || fields[HeaderIndex] == HeaderField {
-			continue
-		}
+	return ScanSocketRows(r, MinFields, func(fields []string) (bool, error) {
 		if !states[strings.ToUpper(fields[StateIndex])] {
-			continue
+			return true, nil
 		}
 		localAddress, portHex, ok := strings.Cut(fields[LocalAddressIndex], AddressSeparator)
 		if !ok {
+			return true, nil
+		}
+		if got, err := strconv.ParseUint(portHex, HexBase, PortBits); err == nil && int(got) == port {
+			return found(localAddress), nil
+		}
+		return true, nil
+	})
+}
+
+// ScanSocketRows visits non-header procfs socket rows with at least minFields
+// columns. Consumers own protocol-specific address validation and filtering;
+// returning false stops the scan, and an error rejects the observation.
+func ScanSocketRows(r io.Reader, minFields int, found func([]string) (bool, error)) error {
+	sc := bufio.NewScanner(r)
+	for sc.Scan() {
+		fields := strings.Fields(sc.Text())
+		if len(fields) < minFields || len(fields) == 0 || fields[HeaderIndex] == HeaderField {
 			continue
 		}
-		got, err := strconv.ParseUint(portHex, HexBase, PortBits)
-		if err != nil || int(got) != port {
-			continue
+		more, err := found(fields)
+		if err != nil {
+			return fmt.Errorf("read proc socket row: %w", err)
 		}
-		if !found(localAddress) {
+		if !more {
 			return nil
 		}
 	}

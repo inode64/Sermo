@@ -106,33 +106,24 @@ func findUDP4Socket(path, host string, port int) (udpSocket, error) {
 }
 
 func parseUDP4SocketTable(r io.Reader, host string, port int) (udpSocket, bool, error) {
-	sc := bufio.NewScanner(r)
-	for sc.Scan() {
-		fields := strings.Fields(sc.Text())
-		if len(fields) < procnet.InodeMinFields || fields[procnet.HeaderIndex] == procnet.HeaderField {
-			continue
-		}
-		addr, p, err := parseProcUDP4Address(fields[procnet.LocalAddressIndex])
+	var socket udpSocket
+	found := false
+	err := procnet.ScanSocketRows(r, procnet.InodeMinFields, func(fields []string) (bool, error) {
+		addr, p, err := procnet.ParseIPv4Socket(fields[procnet.LocalAddressIndex])
 		if err != nil {
-			return udpSocket{}, false, err
+			return false, fmt.Errorf("decode UDP address: %w", err)
 		}
 		if p != port || (host != "" && addr != host) {
-			continue
+			return true, nil
 		}
-		return udpSocket{localAddress: addr, port: p, state: fields[procnet.StateIndex], inode: fields[procnet.InodeIndex]}, true, nil
-	}
-	if err := sc.Err(); err != nil {
+		socket = udpSocket{localAddress: addr, port: p, state: fields[procnet.StateIndex], inode: fields[procnet.InodeIndex]}
+		found = true
+		return false, nil
+	})
+	if err != nil {
 		return udpSocket{}, false, fmt.Errorf("dhclient: read UDP socket table: %w", err)
 	}
-	return udpSocket{}, false, nil
-}
-
-func parseProcUDP4Address(s string) (string, int, error) {
-	addr, port, err := procnet.ParseIPv4Socket(s)
-	if err != nil {
-		return "", 0, fmt.Errorf("dhclient: %w", err)
-	}
-	return addr, port, nil
+	return socket, found, nil
 }
 
 type dhclientLease struct {
