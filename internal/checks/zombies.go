@@ -9,10 +9,6 @@ import (
 	"sermo/internal/process"
 )
 
-const (
-	procStatRunStateIndex = 0
-)
-
 // ZombieSamplerFunc counts the zombie (defunct) processes, reporting ok = false
 // when /proc cannot be read. Injected for tests; the default scans /proc.
 type ZombieSamplerFunc func() (uint64, bool)
@@ -43,20 +39,9 @@ func defaultZombieSampler() (uint64, bool) {
 		if err != nil || pid <= 0 {
 			continue
 		}
-		if procRunState(pid) == process.ProcStateZombie {
+		if fields, ok := process.StatFields(pid); ok && len(fields) > 0 && fields[0] == process.ProcStateZombie {
 			n++
 		}
 	}
 	return n, true
-}
-
-// procRunState returns the run-state field of /proc/<pid>/stat (R, S, D, Z, ...),
-// or "" if it cannot be read. The comm field may contain spaces and parentheses,
-// so the state is the first token after the final ')'.
-func procRunState(pid int) string {
-	fields, ok := process.StatFields(pid)
-	if !ok || len(fields) <= procStatRunStateIndex {
-		return ""
-	}
-	return fields[procStatRunStateIndex]
 }
