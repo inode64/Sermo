@@ -42,10 +42,8 @@ func ParseNtfyWebhook(webhook string) (base, topic string, err error) {
 // via the Authorization header. Self-hosted push with no external dependency.
 func buildNtfy(name string, entry map[string]any) (Notifier, error) {
 	webhook := webhookURL(entry)
-	server, topic, err := ParseNtfyWebhook(webhook)
-	if err != nil {
-		return nil, err
-	}
+	// Build validates the transport entry before invoking this constructor.
+	server, topic, _ := ParseNtfyWebhook(webhook)
 	var headers map[string]string
 	if token := cfgval.String(entry[KeyToken]); token != "" {
 		headers = map[string]string{httpx.HeaderAuthorization: ntfyBearerPrefix + token}
