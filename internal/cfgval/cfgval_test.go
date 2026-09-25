@@ -2,6 +2,7 @@ package cfgval
 
 import (
 	"encoding/json"
+	"math"
 	"slices"
 	"testing"
 	"time"
@@ -285,8 +286,17 @@ func TestInt(t *testing.T) {
 		{uint64(7), 7, true},
 		{uint64(maxInt), maxInt, true}, // largest uint64 that still fits int (boundary)
 		{uint64(maxInt) + 1, 0, false},
-		{8.9, 8, true},   // float truncates
-		{10.0, 10, true}, // float64Int ParseInt base (mutant .62)
+		{8.9, 8, true}, // float truncates
+		{10.0, 10, true},
+		{-8.9, -8, true},
+		{math.NaN(), 0, false},
+		{math.Inf(1), 0, false},
+		{math.Inf(-1), 0, false},
+		{float64(minInt), minInt, true},
+		{-float64(minInt), maxInt, false},
+		{math.Floor(math.Nextafter(float64(minInt), math.Inf(-1))), minInt, false},
+		{math.MaxFloat64, maxInt, false},
+		{-math.MaxFloat64, minInt, false},
 		{"10", 10, true},
 		{"  12  ", 12, true}, // whitespace trimmed
 		{"nope", 0, false},

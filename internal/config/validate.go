@@ -352,7 +352,7 @@ func validateGlobalDefaults(cfg *Config, raw map[string]any, add addFunc) {
 	}
 }
 
-func validateDefaultsKeys(defaults map[string]any, add func(string, ...any)) {
+func validateDefaultsKeys(defaults map[string]any, add addFunc) {
 	for key := range unknownBlockKeys(defaults, validDefaultsKeys) {
 		add(validationNotSupportedFormat, defaultsFieldPath(key))
 	}
