@@ -263,21 +263,21 @@ func askServicePidfile(p *Prompt, c ServiceCandidate) string {
 
 func detectedProcessSelector(c ServiceCandidate) (map[string]any, string) {
 	selector := map[string]any{}
-	if c.Cmd != "" {
+	var label string
+	switch {
+	case c.Cmd != "":
 		selector[process.SelectorKeyCmd] = c.Cmd
-		if c.User != "" {
-			selector[process.SelectorKeyUser] = c.User
-		}
-		return selector, "command pattern " + c.Cmd
-	}
-	if c.Exe != "" {
+		label = "command pattern " + c.Cmd
+	case c.Exe != "":
 		selector[process.SelectorKeyExe] = c.Exe
-		if c.User != "" {
-			selector[process.SelectorKeyUser] = c.User
-		}
-		return selector, "executable " + c.Exe
+		label = "executable " + c.Exe
+	default:
+		return nil, ""
 	}
-	return nil, ""
+	if c.User != "" {
+		selector[process.SelectorKeyUser] = c.User
+	}
+	return selector, label
 }
 
 // serviceLabel renders the candidate's detected facts for the selection menu.
