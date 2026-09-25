@@ -627,15 +627,12 @@ func (e Engine) closeSession(ctx context.Context, target SessionTarget, result *
 	if err != nil {
 		return failSession(result, prefix, err)
 	}
+	// The verifier may not honor ctx; never proceed after cancellation.
 	if err := ctx.Err(); err != nil {
 		return failSession(result, prefix, err)
 	}
 	if boundary.Residual {
 		return e.closeResidualSession(ctx, target, boundary, result)
-	}
-	// The verifier may not honor ctx; never signal after cancellation.
-	if err := ctx.Err(); err != nil {
-		return failSession(result, prefix, err)
 	}
 	signaler := e.SessionSignaler
 	if signaler == nil {
