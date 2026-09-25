@@ -175,6 +175,10 @@ func (s *DaemonMetricSampler) Series(since time.Duration) web.DaemonMetrics {
 		func(p daemonMetricSample) (float64, bool) { return float64(p.rss), p.rssOK },
 		func(p daemonMetricSample) (float64, bool) { return p.io, p.ioReady },
 	)
+	return daemonMetricsView(since, sample, triplet)
+}
+
+func daemonMetricsView(since time.Duration, sample daemonMetricSample, triplet persistentMetricTriplet) web.DaemonMetrics {
 	return web.DaemonMetrics{
 		Since:   since.String(),
 		Current: daemonRuntime(sample),
@@ -252,13 +256,7 @@ func (s *DaemonMetricSampler) persistentSeries(sample daemonMetricSample, since 
 	if !ok {
 		return web.DaemonMetrics{}, false
 	}
-	return web.DaemonMetrics{
-		Since:   since.String(),
-		Current: daemonRuntime(sample),
-		CPU:     triplet.cpu,
-		Memory:  triplet.memory,
-		IO:      triplet.io,
-	}, true
+	return daemonMetricsView(since, sample, triplet), true
 }
 
 type persistentMetricRecorder func(string, float64, time.Time) error
