@@ -418,16 +418,9 @@ func (b base) begin(ctx context.Context) (context.Context, checkRun) {
 func (r checkRun) close() { r.cancel() }
 
 func (b base) result(ok bool, message string, start time.Time) Result {
-	return Result{
-		Service:   b.service,
-		Check:     b.name,
-		OK:        ok,
-		Condition: b.condition,
-		Reports:   b.reports,
-		Severity:  b.severity,
-		Message:   message,
-		Latency:   time.Since(start),
-	}
+	r := b.resultMetadata()
+	r.OK, r.Message, r.Latency = ok, message, time.Since(start)
+	return r
 }
 
 // unavailableResult builds a failed observation that guards must not interpret
