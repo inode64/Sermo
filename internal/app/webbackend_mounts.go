@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"slices"
-	"sort"
 	"strings"
 	"time"
 
@@ -300,7 +299,7 @@ func mountedMountPaths(specs []mountctl.Spec, mounted map[string]bool) []string 
 		seen[specs[i].Path] = struct{}{}
 		paths = append(paths, specs[i].Path)
 	}
-	sort.Strings(paths)
+	slices.Sort(paths)
 	return paths
 }
 

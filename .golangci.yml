@@ -92,7 +92,7 @@ linters:
     - unconvert  # redundant conversions hide the source type and add noise
     - unparam  # unused function parameters and always-nil results
     - usestdlibvars  # prefer stdlib constants (http.StatusOK, ...)
-    - unqueryvet  # prohibit SELECT * in production SQL queries
+    - unqueryvet  # prohibit SELECT * ; injection and tx-leak checks stay off (see below)
     - usetesting  # prefer testing.T cleanup-aware helpers
     - wastedassign
     - whitespace  # leading/trailing blank lines inside a block
@@ -318,10 +318,18 @@ linters:
       # Eclipse Mosquitto — real MQTT broker name in catalog/tests.
       ignore-rules:
         - mosquitto
+    ineffassign:
+      # Off by default. An error captured by a closure or a deferred call and
+      # then dropped is a lost failure. Re-measure if a closure that
+      # intentionally discards the error shows up; do not blanket-exclude it.
+      check-escaping-errors: true
     perfsprint:
-      # Off by default: fmt.Sprintf("%v", err) allocates for what err.Error()
-      # already returns. Every other perfsprint check is on by default.
+      # Both off by default. err-error replaces fmt.Sprintf("%v", err) with
+      # err.Error(). loop-other-ops extends the concat-loop check (already on
+      # by default) to loops that also do other work. The remaining perfsprint
+      # checks are on by default.
       err-error: true
+      loop-other-ops: true
     revive:
       # Was a standalone `revive -config revive.toml` step that ran WITHOUT
       # -set_exit_status, so it printed findings and never failed anything.
@@ -410,6 +418,21 @@ linters:
         - name: early-return
         - name: use-any
         - name: comment-spacings
+        # Defect rules that shipped after the original allowlist. An upgrade
+        # does not enable them: golangci-lint only runs the names listed here.
+        # use-slices-sort is the one idiom in this group; sort.Strings is the
+        # production shape it still sees, and slices.Sort is the same order.
+        - name: inefficient-map-lookup
+        - name: forbidden-call-in-wg-go
+        - name: identical-ifelseif-branches
+        - name: identical-ifelseif-conditions
+        - name: identical-switch-branches
+        - name: identical-switch-conditions
+        - name: useless-fallthrough
+        - name: unnecessary-if
+        - name: marshal-receiver
+        - name: package-directory-mismatch
+        - name: use-slices-sort
     prealloc:
       # Off by default; simple and range-loops are already on. Classic
       # index-loop appends get the same capacity hint as range appends.
@@ -428,9 +451,14 @@ linters:
           json: snake
           yaml: snake
     usestdlibvars:
-      # All off by default. tls-signature-scheme stays off: its only hit is
-      # `keyAlgorithmEd25519 = "Ed25519"` in a const block, and the suggested
-      # tls.Ed25519.String() is a method call, so it cannot be a constant.
+      # http-method and http-status-code default on in current usestdlibvars;
+      # the rest below default off. Pinning the two HTTP checks keeps a
+      # default change from dropping them. tls-signature-scheme stays off:
+      # its only hit is `keyAlgorithmEd25519 = "Ed25519"` in a const block,
+      # and the suggested tls.Ed25519.String() is a method call, so it cannot
+      # be a constant.
+      http-method: true
+      http-status-code: true
       time-weekday: true
       time-month: true
       time-layout: true
@@ -481,6 +509,13 @@ linters:
   #   gomodguard / wsl / exhaustruct_v5 — superseded or already rejected in the
   #                  versions listed above (gomodguard_v2 is enabled; wsl_v5 and
   #                  exhaustruct are rejected on measured churn).
+  #   unqueryvet check-sql-injection / check-tx-leaks (20 on production files)
+  #                  — the injection check treats every method named Get and
+  #                  every QueryContext argument as SQL, including map lookups,
+  #                  URL query parameters and operator-owned probe text. Schema
+  #                  DDL concatenates identifiers, which placeholders cannot
+  #                  bind. Ignored Rollback errors are the database/sql idiom.
+  #                  check-n1 stays off with them: a probe query is not an N+1.
   exclusions:
     generated: strict
     warn-unused: true
