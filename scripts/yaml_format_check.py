@@ -32,6 +32,19 @@ def canonicalize(text: str) -> str:
     return normalize_flow(proc.stdout)
 
 
+def yamllint_command(paths: list[Path]) -> list[str]:
+    """Return a yamllint invocation whose paths stay inside the working directory.
+
+    github.com/wasilibs/go-yamllint, the binary `go install` puts on PATH, runs
+    yamllint inside a Wasm sandbox that can only see files under the process
+    working directory. An absolute -c or file argument is invisible there, and
+    the process exits 1 without a diagnostic. CPython yamllint accepts the same
+    relative arguments when the working directory is the repository root.
+    """
+    relative = [path.relative_to(ROOT).as_posix() for path in paths]
+    return [YAMLLINT, "--strict", "-c", ".yamllint.yml", *relative]
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     mode = parser.add_mutually_exclusive_group()
@@ -41,8 +54,8 @@ def main() -> int:
     paths = iter_yaml_files()
     if args.lint:
         return subprocess.run(
-            [YAMLLINT, "--strict", "-c", str(ROOT / ".yamllint.yml"), *map(str, paths)],
-            env=tool_env(), check=False, timeout=TOOL_TIMEOUT_SECONDS,
+            yamllint_command(paths),
+            cwd=ROOT, env=tool_env(), check=False, timeout=TOOL_TIMEOUT_SECONDS,
         ).returncode
     bad: list[Path] = []
     for path in paths:
