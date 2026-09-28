@@ -22,11 +22,13 @@ import (
 	"time"
 
 	"sermo/internal/cfgval"
+	"sermo/internal/dockerctl"
 	"sermo/internal/httpx"
 	"sermo/internal/netutil"
 	"sermo/internal/process"
 	"sermo/internal/servicemgr"
 	"sermo/internal/strutil"
+	"sermo/internal/virt"
 )
 
 func compareManagers(a, b servicemgr.Manager) bool {
@@ -86,6 +88,26 @@ func bypassServiceStart(m servicemgr.Manager, ctx context.Context) error {
 func serviceStatusIsReadOnly(m servicemgr.Manager, ctx context.Context) (servicemgr.ServiceStatus, error) {
 	// ok: service-lifecycle-must-use-operation
 	return m.Status(ctx, "nginx")
+}
+
+func bypassDockerResume(m dockerctl.Manager, ctx context.Context) error {
+	// ruleid: service-lifecycle-must-use-operation
+	return m.Resume(ctx, "web")
+}
+
+func bypassDomainResume(m virt.Manager, ctx context.Context) error {
+	// ruleid: service-lifecycle-must-use-operation
+	return m.Resume(ctx, "vm")
+}
+
+func bypassNetworkStop(m virt.NetworkManager, ctx context.Context) error {
+	// ruleid: service-lifecycle-must-use-operation
+	return m.Stop(ctx, "net")
+}
+
+func dockerStatusIsReadOnly(m dockerctl.Manager, ctx context.Context) (servicemgr.ServiceStatus, error) {
+	// ok: service-lifecycle-must-use-operation
+	return m.Status(ctx, "web")
 }
 
 func bypassKill(pid int) error {

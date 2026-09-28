@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 	"sermo/internal/cfgval"
 	"slices"
-	"sort"
 	"strings"
 
 	"github.com/goccy/go-yaml"
@@ -499,8 +498,8 @@ func configDirEntries(dir, label string) (names, subdirs []string, err error) {
 			names = append(names, e.Name())
 		}
 	}
-	sort.Strings(names)
-	sort.Strings(subdirs)
+	slices.Sort(names)
+	slices.Sort(subdirs)
 	return names, subdirs, nil
 }
 
@@ -660,7 +659,7 @@ func indexDocument(reg map[string]*Document, names *[]string, doc *Document) {
 func (c *Config) CatalogNamesInCategory(category string) []string {
 	names, _ := c.catalogSet(category)
 	namesCopy := append([]string(nil), (*names)...)
-	sort.Strings(namesCopy)
+	slices.Sort(namesCopy)
 	return slices.Compact(namesCopy)
 }
 
