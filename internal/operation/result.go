@@ -35,6 +35,7 @@ type Result struct {
 	Status    ResultStatus      `json:"status"`
 	Message   string            `json:"message,omitempty"`
 	Backend   string            `json:"backend,omitempty"`
+	Warnings  []string          `json:"warnings,omitempty"`
 	Checks    []checks.Result   `json:"checks,omitempty"`
 	Locks     []locks.Lock      `json:"locks,omitempty"`
 	Processes []process.Process `json:"processes,omitempty"`

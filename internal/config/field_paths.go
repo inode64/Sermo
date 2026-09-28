@@ -46,10 +46,9 @@ const (
 
 	controlPathType = SectionControl + "." + keyType
 
-	reloadPathCommand     = SectionReload + "." + ReloadKeyCommand
-	reloadPathSignal      = SectionReload + "." + ReloadKeySignal
-	reloadPathWhen        = SectionReload + "." + ReloadKeyWhen
-	restartPolicyPathMode = ServiceKeyRestartPolicy + "." + RestartPolicyKeyMode
+	reloadPathCommand = SectionReload + "." + ReloadKeyCommand
+	reloadPathSignal  = SectionReload + "." + ReloadKeySignal
+	reloadPathWhen    = SectionReload + "." + ReloadKeyWhen
 
 	stopPolicyPathCleanOnStop = sectionStopPolicy + "." + keyCleanOnStop
 	stopPolicyPathFilesAbsent = sectionStopPolicy + "." + keyFilesAbsent

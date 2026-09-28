@@ -59,7 +59,7 @@ actuar**:
 **Remediación segura**
 - Un único **engine de operación** compartido por la CLI y el daemon: lock de
   operación → locks de runtime con nombre → preflight requerido → guards →
-  stop/start staged con residuales o restart atómico de init explícito →
+  stop → verificar procesos y conciliar init → start →
   verificación + postflight.
 - **Locks de runtime con nombre** para acotar ventanas de mantenimiento (backups,
   migraciones): `sermoctl lock … -- COMANDO` mantiene un lock con TTL durante la

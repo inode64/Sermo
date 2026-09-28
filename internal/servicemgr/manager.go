@@ -2,7 +2,6 @@ package servicemgr
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"regexp"
 	"strconv"
@@ -31,7 +30,7 @@ type ServiceStatus struct {
 
 // Manager queries and controls services on a specific backend.
 //
-// Start, Stop, Restart and Reload are raw backend actions: they invoke the
+// Start, Stop and Reload are raw backend actions: they invoke the
 // underlying service manager and report whether it succeeded. They do NOT
 // implement the safe operation engine (locks, guards, preflight,
 // residual-process handling); that wraps these primitives separately.
@@ -39,7 +38,6 @@ type Manager interface {
 	Status(ctx context.Context, service string) (ServiceStatus, error)
 	Start(ctx context.Context, service string) error
 	Stop(ctx context.Context, service string) error
-	Restart(ctx context.Context, service string) error
 	// Reload asks the init system to reload the service's configuration without a
 	// full restart (systemd `reload` runs the unit's ExecReload, e.g. `udevadm
 	// control --reload` or `nginx -s reload`; OpenRC runs the init script's
@@ -55,26 +53,20 @@ type Manager interface {
 	ResetState(ctx context.Context, service string) error
 }
 
-// ComposedRestart provides the Manager surface shared by live external
+// ExternalLifecycle provides the Manager surface shared by live external
 // backends (Docker containers, libvirt domains): restart is composed as
 // Stop+Start by the operation engine, reload capability is absent, and there
 // is no recorded init state to reset. Embed it and implement Reload with a
 // backend-specific message.
-type ComposedRestart struct{}
-
-// Restart rejects native restart. External backends must use the staged
-// operation-engine path so residual-process handling stays between the phases.
-func (ComposedRestart) Restart(context.Context, string) error {
-	return errors.New("native restart is unsupported; use the staged operation engine")
-}
+type ExternalLifecycle struct{}
 
 // SupportsReload reports false; these backends cannot reload in place.
-func (ComposedRestart) SupportsReload(context.Context, string) (bool, error) {
+func (ExternalLifecycle) SupportsReload(context.Context, string) (bool, error) {
 	return false, nil
 }
 
 // ResetState is a no-op; the backend state is live, with no failed marker.
-func (ComposedRestart) ResetState(context.Context, string) error {
+func (ExternalLifecycle) ResetState(context.Context, string) error {
 	return nil
 }
 
@@ -272,10 +264,6 @@ func (m systemdManager) Stop(ctx context.Context, service string) error {
 	return m.action(ctx, actionStop, service)
 }
 
-func (m systemdManager) Restart(ctx context.Context, service string) error {
-	return m.action(ctx, actionRestart, service)
-}
-
 func (m systemdManager) Reload(ctx context.Context, service string) error {
 	return m.action(ctx, actionReload, service)
 }
@@ -314,7 +302,7 @@ func (m systemdManager) action(ctx context.Context, verb, service string) error 
 // Querying, reloading and clearing failed state never do.
 func isolatedVerb(verb string) bool {
 	switch verb {
-	case actionStart, actionStop, actionRestart:
+	case actionStart, actionStop:
 		return true
 	default:
 		return false
@@ -363,10 +351,6 @@ func (m openrcManager) Start(ctx context.Context, service string) error {
 
 func (m openrcManager) Stop(ctx context.Context, service string) error {
 	return m.action(ctx, actionStop, service)
-}
-
-func (m openrcManager) Restart(ctx context.Context, service string) error {
-	return m.action(ctx, actionRestart, service)
 }
 
 func (m openrcManager) Reload(ctx context.Context, service string) error {

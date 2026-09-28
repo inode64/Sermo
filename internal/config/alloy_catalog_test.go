@@ -41,6 +41,21 @@ func TestAlloyCatalogOTLPRequiresOptIn(t *testing.T) {
 					t.Fatalf("opt-in=%v: check=%v rule=%v", enabled, hasCheck, hasRule)
 				}
 				if enabled {
+					check := nested(t, resolved.Tree, "checks", "otlp")
+					if got := cfgval.String(check["method"]); got != "POST" {
+						t.Fatalf("OTLP method = %q, want POST", got)
+					}
+					if got := cfgval.String(check["url"]); got != "http://127.0.0.1:4318/v1/logs" {
+						t.Fatalf("OTLP url = %q", got)
+					}
+					if got := cfgval.String(check["expect_status"]); got != "200" {
+						t.Fatalf("OTLP expected status = %q, want 200", got)
+					}
+					body := nested(t, check, "json")
+					logs, ok := body["resourceLogs"].([]any)
+					if !ok || len(logs) != 0 {
+						t.Fatalf("OTLP request body resourceLogs = %v, want an empty array", body["resourceLogs"])
+					}
 					assertAlloyOTLPAlerts(t, resolved.Tree)
 				}
 			})

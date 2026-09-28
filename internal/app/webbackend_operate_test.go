@@ -14,13 +14,26 @@ import (
 	"sermo/internal/web"
 )
 
-type fakeManager struct{}
+type fakeManager struct{ stopped *bool }
 
-func (fakeManager) Status(context.Context, string) (servicemgr.ServiceStatus, error) {
+func (m fakeManager) Status(context.Context, string) (servicemgr.ServiceStatus, error) {
+	if m.stopped != nil && *m.stopped {
+		return servicemgr.ServiceStatus{Status: servicemgr.StatusInactive}, nil
+	}
 	return servicemgr.ServiceStatus{Status: servicemgr.StatusActive}, nil
 }
-func (fakeManager) Start(context.Context, string) error { return nil }
-func (fakeManager) Stop(context.Context, string) error  { return nil }
+func (m fakeManager) Start(context.Context, string) error {
+	if m.stopped != nil {
+		*m.stopped = false
+	}
+	return nil
+}
+func (m fakeManager) Stop(context.Context, string) error {
+	if m.stopped != nil {
+		*m.stopped = true
+	}
+	return nil
+}
 func (fakeManager) Restart(context.Context, string) error {
 	return nil
 }
@@ -74,6 +87,7 @@ func TestWebBackendOperateEmitsEvent(t *testing.T) {
 }
 
 func TestWebBackendOperateStopStartSyncsMonitoring(t *testing.T) {
+	stopped := false
 	var events []Event
 	store := newFakeStore()
 	store.active["web"] = true
@@ -86,7 +100,7 @@ func TestWebBackendOperateStopStartSyncsMonitoring(t *testing.T) {
 		Unit:    "nginx",
 		Backend: string(servicemgr.BackendSystemd),
 		Tree:    map[string]any{"policy": map[string]any{"cooldown": "5m"}},
-		Manager: fakeManager{},
+		Manager: fakeManager{stopped: &stopped},
 		Locker:  &locker,
 		Scanner: locks.NewScanner(locks.RuntimeLocksDir(dir)),
 		CheckDeps: checks.Deps{

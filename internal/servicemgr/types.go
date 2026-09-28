@@ -120,7 +120,6 @@ const (
 	actionStart       = "start"
 	actionStop        = "stop"
 	actionStatus      = "status"
-	actionRestart     = "restart"
 	actionReload      = "reload"
 	actionResetFailed = "reset-failed"
 	actionZap         = "zap"

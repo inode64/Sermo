@@ -22,10 +22,11 @@ import (
 )
 
 type fakeManager struct {
+	stopped          bool
+	resetKeepsState  bool
+	stopLeavesActive bool
 	stopErr          error
 	startErr         error
-	restartErr       error
-	restartFunc      func(context.Context, string) error
 	reloadErr        error
 	resumeErr        error
 	resetErr         error
@@ -51,21 +52,16 @@ func (m *fakeManager) record(verb, s string, dflt error) error {
 }
 
 func (m *fakeManager) Start(_ context.Context, s string) error {
+	m.stopped = false
 	return m.record("start", s, m.startErr)
 }
 
 func (m *fakeManager) Stop(_ context.Context, s string) error {
-	return m.record("stop", s, m.stopErr)
-}
-
-func (m *fakeManager) Restart(ctx context.Context, s string) error {
-	if err := m.record("restart", s, m.restartErr); err != nil {
-		return err
+	err := m.record("stop", s, m.stopErr)
+	if err == nil && !m.stopLeavesActive {
+		m.stopped = true
 	}
-	if m.restartFunc != nil {
-		return m.restartFunc(ctx, s)
-	}
-	return nil
+	return err
 }
 
 func (m *fakeManager) Reload(_ context.Context, s string) error {
@@ -84,6 +80,9 @@ func (m *fakeManager) SupportsReload(_ context.Context, s string) (bool, error) 
 }
 
 func (m *fakeManager) Status(_ context.Context, s string) (servicemgr.ServiceStatus, error) {
+	if m.stopped {
+		return servicemgr.ServiceStatus{Status: servicemgr.StatusInactive}, m.statusErr
+	}
 	if m.statusCalls < len(m.statusSteps) {
 		status := m.statusSteps[m.statusCalls]
 		m.statusCalls++
@@ -94,6 +93,9 @@ func (m *fakeManager) Status(_ context.Context, s string) (servicemgr.ServiceSta
 
 func (m *fakeManager) ResetState(_ context.Context, s string) error {
 	m.calls = append(m.calls, "reset "+s)
+	if m.resetErr == nil && !m.resetKeepsState {
+		m.stopped = true
+	}
 	return m.resetErr
 }
 
@@ -727,7 +729,7 @@ func TestRestartOrphanProcessesDoesNotStart(t *testing.T) {
 func TestRestartAcceptsSystemdBackendReactivation(t *testing.T) {
 	h := defaultHarness()
 	h.discoverSteps = [][]process.Process{{{
-		PID:    100,
+		PID: 100, StartTicks: 20,
 		Source: process.SourceBackend,
 	}}}
 	signaler := &recordingSignaler{}
@@ -744,12 +746,33 @@ func TestRestartAcceptsSystemdBackendReactivation(t *testing.T) {
 		Sleep:       func(time.Duration) {},
 	}
 
-	res := h.restart(t)
+	h.mgr.stopLeavesActive = true
+	engine := h.engine()
+	engine.Lifecycle.AuxiliaryUnits = []string{"mysqld.socket"}
+	observations := 0
+	engine.ObserveProcesses = func() (process.Observation, error) {
+		observations++
+		if observations == 1 {
+			return process.Observation{Trusted: true, Processes: []process.Process{{PID: 99, StartTicks: 10, Source: process.SourceBackend}}}, nil
+		}
+		d := process.Discoverer{
+			Reader: &countingPIDReader{ids: map[int]process.Identity{100: {
+				PID: 100, PPID: 1, UID: 1001, Exe: "/opt/mysqld", ExeOK: true, StartTicks: 20, StartTicksOK: true,
+			}}},
+			BackendPIDs: func() []int { return []int{100} },
+			ResolveUser: func(string) (uint32, bool) { return 1001, true },
+		}
+		return d.Observe([]process.Selector{{Name: process.RoleMain, Type: process.SelectorCommandMatch, Exe: "/opt/mysqld", User: "mysql"}})
+	}
+	res := engine.Restart(context.Background())
 	if !res.OK() {
 		t.Fatalf("status = %q, want ok (%s)", res.Status, res.Message)
 	}
 	if h.mgr.did("start mysqld") {
 		t.Fatalf("systemd reactivation must not start the unit a second time, calls=%v", h.mgr.calls)
+	}
+	if !h.mgr.did("stop mysqld.socket") || !h.mgr.did("start mysqld.socket") {
+		t.Fatalf("reactivation must restore auxiliary units, calls=%v", h.mgr.calls)
 	}
 	if !h.mgr.did("stop mysqld") {
 		t.Fatalf("systemd reactivation must retain the isolated primary stop, calls=%v", h.mgr.calls)
@@ -962,6 +985,9 @@ func (r *countingPIDReader) Identity(pid int) (process.Identity, bool) {
 }
 
 type steppedPIDReader struct {
+	manager *fakeManager
+	live    map[int]process.Identity
+	started map[int]process.Identity
 	steps   []map[int]process.Identity
 	current map[int]process.Identity
 	walks   int
@@ -972,12 +998,16 @@ func (r *steppedPIDReader) PIDs() ([]int, error) {
 		r.current = nil
 		return nil, nil
 	}
-	idx := r.walks
-	if idx >= len(r.steps) {
-		idx = len(r.steps) - 1
+	if r.manager != nil && (!r.manager.stopped) {
+		r.current = r.live
+		if r.started != nil && slices.ContainsFunc(r.manager.calls, func(call string) bool { return strings.HasPrefix(call, "start ") }) {
+			r.current = r.started
+		}
+	} else {
+		idx := min(r.walks, len(r.steps)-1)
+		r.current = r.steps[idx]
+		r.walks++
 	}
-	r.current = r.steps[idx]
-	r.walks++
 	pids := make([]int, 0, len(r.current))
 	for pid := range r.current {
 		pids = append(pids, pid)
@@ -1060,6 +1090,7 @@ func TestNewAutomaticResidualReapingClearsBeforeRestart(t *testing.T) {
 		{},
 	}}
 	mgr := &fakeManager{status: servicemgr.StatusActive}
+	reader.manager, reader.live, reader.walks = mgr, reader.steps[0], 0
 	engine := New(Config{
 		Service: "snmpd",
 		Unit:    "snmpd",
@@ -1080,7 +1111,6 @@ func TestNewAutomaticResidualReapingClearsBeforeRestart(t *testing.T) {
 	})
 	// The residual is deliberately exercised after the backend stop. This test
 	// covers cleanup itself, not the separate active-service identity preflight.
-	engine.RestartIdentity = nil
 	signaler := &recordingSignaler{}
 	engine.Reaper.Signaler = signaler
 
@@ -1145,12 +1175,13 @@ func TestRuntimeDiscoveryAbsentPidfileDoesNotBlockRestart(t *testing.T) {
 		Unit:    "mysqld",
 		Backend: "systemd",
 		Tree: map[string]any{
-			"pidfile": filepath.Join(dir, "missing.pid"),
+			"pidfile":   filepath.Join(dir, "missing.pid"),
+			"processes": map[string]any{"main": map[string]any{"exe": "/opt/mysqld", "user": "1001"}},
 		},
 		Manager:    mgr,
 		Locker:     &locker,
 		Scanner:    locks.NewScanner(locks.RuntimeLocksDir(dir)),
-		Discoverer: process.NewDiscovererWithUserLookup(nil),
+		Discoverer: process.Discoverer{Reader: &steppedPIDReader{manager: mgr, live: map[int]process.Identity{200: {PID: 200, UID: 1001, Exe: "/opt/mysqld", ExeOK: true}}, steps: []map[int]process.Identity{{}}}, ResolveUser: func(string) (uint32, bool) { return 1001, true }},
 		Sleep:      func(time.Duration) {},
 	})
 
@@ -1184,7 +1215,7 @@ func TestRuntimeDiscoveryUncertaintyBlocksRestart(t *testing.T) {
 		Manager:    mgr,
 		Locker:     &locker,
 		Scanner:    locks.NewScanner(locks.RuntimeLocksDir(dir)),
-		Discoverer: process.NewDiscovererWithUserLookup(nil),
+		Discoverer: process.Discoverer{Reader: &countingPIDReader{}},
 		Sleep:      func(time.Duration) {},
 	})
 
@@ -1256,9 +1287,12 @@ func TestNewActiveServiceWithStaleBinaryCanRestart(t *testing.T) {
 			State:   "S",
 		},
 	}
-	// The stale diagnostic takes a fresh snapshot after the identity discovery;
-	// retain the old process for both reads, then model the backend stop.
+	// Model a replaced executable before stop and the current binary after start.
 	reader := &steppedPIDReader{steps: []map[int]process.Identity{stale, stale, stale, stale, {}}}
+	reader.manager, reader.live, reader.walks = mgr, reader.steps[0], len(reader.steps)-1
+	reader.started = map[int]process.Identity{
+		201: {PID: 201, PPID: 1, UID: 1001, Exe: "/usr/sbin/rspamd", ExeOK: true, State: "S"},
+	}
 	engine := New(Config{
 		Service: "rspamd",
 		Unit:    "rspamd",
@@ -1307,6 +1341,7 @@ func TestNewActiveServiceWithCommandOnlyProcessCanRestart(t *testing.T) {
 		},
 		{},
 	}}
+	reader.manager, reader.live, reader.walks = mgr, reader.steps[0], 1
 	engine := New(Config{
 		Service: "salt-minion",
 		Unit:    "salt-minion",
@@ -1374,6 +1409,7 @@ func TestNewAutomaticResidualReapingSignalsOnlySaltSupervisor(t *testing.T) {
 		{},
 	}}
 	mgr := &fakeManager{status: servicemgr.StatusActive}
+	reader.manager, reader.live, reader.walks = mgr, reader.steps[0], 3
 	engine := New(Config{
 		Service: "salt-minion",
 		Unit:    "salt-minion",
@@ -1409,9 +1445,9 @@ func TestNewAutomaticResidualReapingSignalsOnlySaltSupervisor(t *testing.T) {
 	if len(procs) != 2 || procs[0].PID != supervisor.PID || procs[1].PID != minion.PID {
 		t.Fatalf("discovered processes = %+v, want supervisor and Python minion", procs)
 	}
-	ok, reason, err := engine.RestartIdentity(context.Background())
-	if err != nil || !ok {
-		t.Fatalf("RestartIdentity = %v, %q, %v; want allowed", ok, reason, err)
+	observation, err := engine.ObserveProcesses()
+	if err != nil || !observation.Trusted {
+		t.Fatalf("observation = %+v, %v; want trusted", observation, err)
 	}
 
 	res := engine.Restart(context.Background())
@@ -1487,7 +1523,7 @@ func TestNewRuntimeDiscoveryWarningWithCommandMatchDoesNotBlockRestart(t *testin
 		Locker:  &locker,
 		Scanner: locks.NewScanner(locks.RuntimeLocksDir(dir)),
 		Discoverer: process.Discoverer{
-			Reader: &steppedPIDReader{steps: []map[int]process.Identity{
+			Reader: &steppedPIDReader{manager: mgr, walks: 1, live: map[int]process.Identity{200: {PID: 200, PPID: 1, UID: 1001, Exe: exe, ExeOK: true, State: "S"}}, steps: []map[int]process.Identity{
 				{
 					200: {PID: 200, PPID: 1, UID: 1001, Exe: exe, ExeOK: true, State: "S"},
 				},

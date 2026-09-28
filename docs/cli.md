@@ -22,6 +22,10 @@ are shown by `sermoctl help COMMAND`.
 Without `--timeout`, live service queries (`status` and `is-active`) use the
 10-second engine check budget; service operations use the 90-second operation
 budget. Other short probe commands keep their 2-second CLI budget.
+For service operations, an explicit `--timeout` bounds backend preparation and
+every operation phase after configuration and audit-store initialization.
+Stop-policy budgets cannot extend this deadline; expiration prevents subsequent
+lifecycle steps. Recording the outcome retains its separate storage timeout.
 
 ## sermod daemon flags
 

@@ -548,6 +548,7 @@ func fakeStatusManager(status servicemgr.ServiceStatus, calls *[]string) func(se
 }
 
 type fakeManager struct {
+	liveStatus        *servicemgr.Status
 	status            servicemgr.ServiceStatus
 	err               error
 	actionErr         error
@@ -561,14 +562,23 @@ func (m fakeManager) Status(_ context.Context, service string) (servicemgr.Servi
 	if m.statusCalls != nil {
 		*m.statusCalls = append(*m.statusCalls, service)
 	}
+	if m.liveStatus != nil {
+		return servicemgr.ServiceStatus{Status: *m.liveStatus}, m.err
+	}
 	return m.status, m.err
 }
 
 func (m fakeManager) Start(_ context.Context, service string) error {
+	if m.liveStatus != nil && m.actionErr == nil {
+		*m.liveStatus = servicemgr.StatusActive
+	}
 	return m.record("start", service)
 }
 
 func (m fakeManager) Stop(_ context.Context, service string) error {
+	if m.liveStatus != nil && m.actionErr == nil {
+		*m.liveStatus = servicemgr.StatusInactive
+	}
 	return m.record("stop", service)
 }
 

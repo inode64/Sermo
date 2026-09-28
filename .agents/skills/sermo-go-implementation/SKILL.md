@@ -22,7 +22,7 @@ those cheap to follow.
 - Wrap errors with what was attempted, for a sysadmin reader:
 
   ```text
-  restart mysql via openrc: rc-service mysql restart failed: exit code 1: service not found
+  stop mysql via openrc: rc-service mysql stop failed: exit code 1: service not found
   ```
 
 - Keep exported APIs small. Do not add new package-level mutable state;
@@ -33,7 +33,7 @@ those cheap to follow.
   ```go
   ctx, cancel := context.WithTimeout(parent, timeout)
   defer cancel()
-  res, err := runner.Run(ctx, "systemctl", "restart", service)
+  res, err := runner.Run(ctx, "systemctl", "stop", service)
   ```
 
   The `Result` carries stdout, stderr, exit code and duration.

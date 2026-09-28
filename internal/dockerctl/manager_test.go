@@ -87,9 +87,6 @@ func TestManagerActions(t *testing.T) {
 	if !slices.Equal(fake.actions, []string{"start", "stop", "unpause"}) {
 		t.Fatalf("actions = %v", fake.actions)
 	}
-	if err := manager.Restart(context.Background(), "svc"); err == nil {
-		t.Fatal("Restart() must be composed by the operation engine")
-	}
 	if err := manager.Reload(context.Background(), "svc"); err == nil {
 		t.Fatal("Reload() must be unsupported")
 	}

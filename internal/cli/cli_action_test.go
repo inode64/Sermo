@@ -810,6 +810,35 @@ func TestActionTimeoutNotConsumedByDetection(t *testing.T) {
 	}
 }
 
+func TestExplicitActionTimeoutBoundsEngineBudget(t *testing.T) {
+	global := writeActionConfig(t)
+	var remaining time.Duration
+	app := App{
+		Detector: fakeBackendDetector{detection: servicemgr.BackendSystemd},
+		NewManager: func(servicemgr.Backend) (servicemgr.Manager, error) {
+			return deadlineManager{status: servicemgr.ServiceStatus{Status: servicemgr.StatusActive}, remaining: &remaining}, nil
+		},
+		Runner: statusUnitRunner{known: "web.service"},
+		Stdout: &bytes.Buffer{},
+		Stderr: &bytes.Buffer{},
+	}
+	if code := app.Run(t.Context(), []string{"--config", global, "start", "web", "--timeout", "2s"}); code != exitRuntimeError {
+		t.Fatalf("exit = %d; stdout = %s; stderr = %s", code, app.Stdout, app.Stderr)
+	}
+	if remaining <= 0 || remaining > 2*time.Second {
+		t.Fatalf("engine deadline = %v, want positive and at most explicit timeout", remaining)
+	}
+	store := openTestStateStore(t, global)
+	defer func() { _ = store.Close() }()
+	events, err := store.RecentEventsBefore(0, 10)
+	if err != nil || len(events) != 1 {
+		t.Fatalf("timeout audit events = %+v, err = %v; want exactly one", events, err)
+	}
+	if !strings.Contains(events[0].Message, "timed out") {
+		t.Fatalf("event = %+v; want timeout outcome", events[0])
+	}
+}
+
 func TestWithDefaultsLeavesProductionOperationToSession(t *testing.T) {
 	app := (App{}).withDefaults()
 	if app.Operate != nil {
@@ -971,10 +1000,11 @@ func TestOperationSessionPersistsOneOperationEvent(t *testing.T) {
 	}
 
 	var actions []string
+	liveStatus := servicemgr.StatusActive
 	app := App{
 		Detector: fakeBackendDetector{detection: servicemgr.BackendSystemd},
 		NewManager: func(servicemgr.Backend) (servicemgr.Manager, error) {
-			return fakeManager{actions: &actions, status: servicemgr.ServiceStatus{Status: servicemgr.StatusActive}}, nil
+			return fakeManager{actions: &actions, liveStatus: &liveStatus, status: servicemgr.ServiceStatus{Status: servicemgr.StatusActive}}, nil
 		},
 		Stdout: &bytes.Buffer{},
 		Stderr: &bytes.Buffer{},

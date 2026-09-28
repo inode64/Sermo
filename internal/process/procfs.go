@@ -1,7 +1,9 @@
 package process
 
 import (
+	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"sermo/internal/hostfs"
 	"strconv"
@@ -120,8 +122,10 @@ type Reader interface {
 	Identity(pid int) (Identity, bool)
 }
 
-// UserResolver maps a selector's user name (or numeric id) to a real UID.
-type UserResolver func(name string) (uint32, bool)
+// IdentityErrorReader distinguishes vanished identities from incomplete reads.
+type IdentityErrorReader interface {
+	IdentityWithError(pid int) (Identity, bool, error)
+}
 
 // OSReader reads the host /proc filesystem.
 type OSReader struct {
@@ -136,6 +140,21 @@ type OSReader struct {
 	// terminal-aware checks additionally require and expose the terminal device.
 	ReadTTY bool
 }
+
+// IdentityWithError retains failures on live processes for operation snapshots.
+func (r OSReader) IdentityWithError(pid int) (Identity, bool, error) {
+	id, ok := r.Identity(pid)
+	if ok && id.StartTicksOK {
+		return id, true, nil
+	}
+	if _, err := hostfs.ReadFile(PIDPath(pid, ProcFileStat)); errors.Is(err, os.ErrNotExist) {
+		return Identity{}, false, nil
+	}
+	return id, ok, fmt.Errorf("cannot read identity of live pid %d", pid)
+}
+
+// UserResolver maps a selector's user name (or numeric id) to a real UID.
+type UserResolver func(name string) (uint32, bool)
 
 // PIDs lists numeric entries under /proc.
 func (OSReader) PIDs() ([]int, error) {

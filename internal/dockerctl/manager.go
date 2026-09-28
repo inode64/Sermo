@@ -23,7 +23,7 @@ type DockerClient interface {
 
 // Manager implements service management over one Docker container.
 type Manager struct {
-	servicemgr.ComposedRestart
+	servicemgr.ExternalLifecycle
 
 	Spec      Spec
 	NewClient func(Spec) (DockerClient, error)
@@ -72,8 +72,8 @@ func (m Manager) Stop(ctx context.Context, _ string) error {
 	return m.withContainerAction(ctx, "stop", DockerClient.Stop)
 }
 
-// Reload is not meaningful for a Docker container. Restart, SupportsReload and
-// ResetState come from the embedded servicemgr.ComposedRestart.
+// Reload is not meaningful for a Docker container. SupportsReload and
+// ResetState come from the embedded servicemgr.ExternalLifecycle.
 func (Manager) Reload(context.Context, string) error {
 	return errors.New("reload is not supported for Docker containers")
 }

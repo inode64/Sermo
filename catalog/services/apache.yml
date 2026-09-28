@@ -26,6 +26,10 @@ variables:
   port: 80
   tls_port: 443
   health_path: /
+os:
+  gentoo:
+    variables:
+      user: apache
 preflight:
   config:
     # The bare binary does not see the distro's extra defines (Gentoo's

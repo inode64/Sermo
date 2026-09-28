@@ -107,7 +107,6 @@ func New(c Config) Engine {
 	// the block's only purpose is to authorize signalling, so running the service
 	// while half of that authorization was misread is not an option.
 	reapSelector, reapWarnings := process.ParseReapPolicy(tree)
-	hasCommandMatch := hasCommandMatchSelector(selectors)
 	configErr := cmp.Or(
 		warningError(process.SectionStopPolicy, stopPolicyWarnings),
 		warningError(selectorWarningPrefix, selectorWarnings),
@@ -124,18 +123,11 @@ func New(c Config) Engine {
 	// re-check (safety invariants 1, 4, 12). So invalidate the cache first when
 	// the reader is a CachingReader.
 	discover := func() ([]process.Process, error) {
-		if inv, ok := c.Discoverer.Reader.(interface{ Invalidate() }); ok {
-			inv.Invalidate()
+		observation, err := c.Discoverer.Observe(selectors)
+		if err != nil {
+			return observation.Processes, fmt.Errorf("%s: %w", runtimeDiscoveryWarningPrefix, err)
 		}
-		procs, warnings := c.Discoverer.Discover(selectors)
-		// Proven absences (missing pidfile, pidfile naming a dead PID) are the
-		// expected state after a stop; only genuine uncertainty may abort the
-		// operation, or a routine restart strands the service stopped.
-		warnings = process.UncertainWarnings(warnings)
-		if len(warnings) > 0 && !hasCommandMatch {
-			return procs, warningError(runtimeDiscoveryWarningPrefix, warnings)
-		}
-		return procs, nil
+		return observation.Processes, nil
 	}
 
 	resolveUser := c.ResolveUser
@@ -190,10 +182,10 @@ func New(c Config) Engine {
 		SessionSignaler:     c.SessionSignaler,
 		Preflight:           sectionRunner(tree, deps, c.MetricSample),
 		Postflight:          verifyRunner(tree, deps, c.MetricSample),
-		RestartIdentity:     restartIdentityClosure(c.Manager, c.Unit, discover, c.Discoverer, selectors),
 		ReloadFunc:          reloadClosure(reloadSpec, tree, deps, c.Manager, c.Backend, c.Unit, c.Discoverer, selectors),
 		ResumeFunc:          resumeClosure(c.Manager, c.Unit),
 		RepairStalePIDFiles: repairStalePIDFiles(c.Manager, c.Unit, selectors, c.Discoverer.Reader, runtimeDirectory),
+		ObserveProcesses:    func() (process.Observation, error) { return c.Discoverer.Observe(selectors) },
 		Discover:            discover,
 		Reaper:              reaper,
 		KillPolicy:          killPolicy,
@@ -416,46 +408,6 @@ func reloadPidfile(tree map[string]any) string {
 
 func hasCommandMatchSelector(selectors []process.Selector) bool {
 	return slices.ContainsFunc(selectors, func(s process.Selector) bool { return s.Type == process.SelectorCommandMatch })
-}
-
-func hasExactProcessIdentitySelector(selectors []process.Selector) bool {
-	return slices.ContainsFunc(selectors, func(s process.Selector) bool { return s.HasStrictIdentity() })
-}
-
-func restartIdentityClosure(mgr servicemgr.Manager, unit string, discover func() ([]process.Process, error), discoverer process.Discoverer, selectors []process.Selector) func(context.Context) (bool, string, error) {
-	if mgr == nil || !hasExactProcessIdentitySelector(selectors) {
-		return nil
-	}
-	return func(ctx context.Context) (bool, string, error) {
-		st, err := mgr.Status(ctx, unit)
-		if err != nil {
-			return false, "", fmt.Errorf("status %s: %w", unit, err)
-		}
-		if st.Status != servicemgr.StatusActive {
-			return true, "", nil
-		}
-		procs, err := discover()
-		if err != nil {
-			return false, "", err
-		}
-		for i := range procs {
-			if _, ok := discoverer.StrictMatchPID(procs[i].PID, selectors); ok {
-				return true, "", nil
-			}
-		}
-		// A package replacement makes /proc/<pid>/exe end in " (deleted)",
-		// deliberately preventing the old process from matching an exe selector
-		// or being signalled.  Its previous exe path and real user still give us
-		// an exact attribution to this unit, though, so the init backend may restart
-		// the named unit. StaleBinariesIn is diagnostic only and never authorizes a
-		// signal. In staged mode, clearResiduals still blocks the start if the backend
-		// leaves that process behind; native mode delegates the unit's complete
-		// atomic restart semantics to the selected init backend.
-		if len(discoverer.StaleBinariesIn(procs, selectors)) > 0 {
-			return true, "", nil
-		}
-		return false, "blocked: active service has no process matching configured exact exe/user selectors", nil
-	}
 }
 
 func warningError(prefix string, warnings []string) error {

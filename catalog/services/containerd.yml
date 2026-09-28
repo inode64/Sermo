@@ -7,8 +7,6 @@ service:
     - containerd
   openrc:
     - containerd
-restart_policy:
-  mode: native
 apps:
   - containerd
 variables:
