@@ -34,10 +34,10 @@ any `security:` toggle that tries to disable them.
    and an `exe_any` selector, each non-empty. **`force_kill: auto`** requires
    no broad fallback: it authorizes only strict `processes:` identities and
    leaves services without one as `orphan_processes`.
-8. **Native restart does not weaken the common gates or fall back.** It still
-   requires locks, preflight, guards, any available restart identity, timeout
-   and postflight; a failed backend `Restart` is a failed operation, never an
-   implicit staged stop/start.
+8. **Restart always verifies stop and start under the common gates.** Locks,
+   preflight, guards, process identity, timeout and postflight wrap the complete
+   operation. An init command error is recoverable only after verifying the
+   requested state; surviving processes or uncertain evidence block a new start.
 9. **A stray process is never signalled without its own authorization.** A
    control-group member that no selector claims can only be signalled by
    `sermoctl reap --apply`, and only through the service's own
@@ -73,31 +73,35 @@ decision.
 2. Block on any active named runtime lock.
 3. Run required preflight (start/restart/reload/resume/repair).
 4. Block if any guard blocks the action.
-5. Execute the action's service-manager phase:
-   - Before either restart mode, a stable backend `inactive`/`failed` state plus
-     surviving non-delegated service processes triggers stale-init
-     reconciliation under the normal stop policy. `unknown` and transitional
-     states never enter the reaper. Status-query, discovery or reset errors
-     return `failed`, and any survivor returns `orphan_processes`; neither path
-     reaches the backend restart.
-   - `stop` and `restart_policy.mode: staged` restart: stop, wait
-     `graceful_timeout`, discover residual processes and apply the configured
-     signal escalation. A restart never starts while residuals remain. The
-     narrow socket-reactivation exception is unchanged: when an isolated systemd
-     stop succeeded, every residual is backend-attributed to that same unit and
-     the unit is already `active`, Sermo accepts the backend reactivation and
-     does not issue a second start.
-   - `restart_policy.mode: native` restart: after the guarded stale-init case
-     above, invoke one bounded backend `Restart` for the primary unit. There is
-     no ordinary Sermo stop phase, stopped-artifact cleanup or staged fallback.
-     Auxiliary `also_service` units remain active.
-   - `start`, `reload` and `resume`: run their existing bounded backend action.
-6. After a clean explicit stop or staged-restart stop, reconcile the init's
-   recorded state with reality — `systemctl reset-failed` (systemd) or
-   `rc-service … zap` (OpenRC). Best effort: it never fails a stop that already
-   succeeded.
-7. Verify backend status where applicable and run required postflight for
-   start/restart/reload/resume/repair.
+5. Before start/restart, compare init state with fresh process evidence:
+   - Stable `inactive`/`failed` with surviving non-delegated processes triggers
+     cleanup under `stop_policy`. Unmatched survivors block start.
+   - `active` with a proven-absent resident daemon triggers reconciliation.
+     OpenRC uses `zap`; systemd uses stop and, when stopped, `reset-failed`.
+     Unknown/transitional state, incomplete reads and missing identity do not
+     prove a divergence. Process-free services retain their own lifecycle.
+6. Restart always composes stop and start, never a backend restart command.
+   Stop waits `graceful_timeout`, discovers residuals and applies the configured
+   signal escalation. Incomplete rediscovery stops escalation, including
+   SIGKILL. Before starting, Sermo revalidates process absence,
+   reconciles init bookkeeping and verifies its inactive state. A reset error
+   or an inconsistent state blocks the next phase.
+7. A stop command error is retained while Sermo checks the actual outcome. Only
+   confirmed process absence and successful init reconciliation permit recovery.
+   A start command error requires a trusted live process and active init state;
+   postflight must also pass. Recovered errors remain warnings in the single
+   auditable result, including when a later phase fails. Auxiliary-stop and
+   stopped-artifact warnings are retained too. Cancellation/timeout never
+   extends the operation deadline.
+8. A socket/D-Bus reactivation during restart can replace the start phase only
+   when the same systemd unit is active with trusted backend processes from new
+   generations and no old non-delegated generation remains anywhere in the
+   process snapshot, including outside the unit's current cgroup. PID alone or an
+   unchanged active daemon is insufficient evidence. Auxiliary units are still
+   started again; only the primary start is skipped.
+9. Verify backend and resident-process state, then required postflight for
+   start/restart/reload/resume/repair. Reload/resume command errors remain errors:
+   a running process alone cannot prove those effects.
 
 `repair` is intentionally narrower than a general cleanup command. It first
 requires the init backend to report the service failed or inactive. It can then
@@ -508,10 +512,8 @@ Whether that blocks a restart depends on the unit's `KillMode`:
   remain. Those a `delegated: true` selector claims are excluded from residuals by
   design; a stray is not, so it ends the operation in `orphan_processes` with the
   service left stopped.
-- `restart_policy: native`: the init backend performs one atomic restart, so there
-  is no residual phase at all.
 
-In that third case the result names the strays and points at the verb that clears
+When a stray blocks the restart, the result names the strays and points at the verb that clears
 them:
 
 ```console

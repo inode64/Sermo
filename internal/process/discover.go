@@ -810,12 +810,24 @@ func readSnapshot(reader Reader) (map[int]Identity, error) {
 	if err != nil {
 		return snapshot, fmt.Errorf("list process IDs: %w", err)
 	}
+	var failures []error
 	for _, pid := range pids {
+		if checked, ok := reader.(IdentityErrorReader); ok {
+			id, present, readErr := checked.IdentityWithError(pid)
+			if readErr != nil {
+				failures = append(failures, fmt.Errorf("read process identity: %w", readErr))
+				continue
+			}
+			if present {
+				snapshot[pid] = id
+			}
+			continue
+		}
 		if id, ok := reader.Identity(pid); ok {
 			snapshot[pid] = id
 		}
 	}
-	return snapshot, nil
+	return snapshot, errors.Join(failures...)
 }
 
 // Discovery warning fragments shared by the producers above and the

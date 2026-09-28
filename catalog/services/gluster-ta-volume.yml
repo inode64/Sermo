@@ -7,8 +7,6 @@ description: GlusterFS thin-arbiter daemon that keeps quorum for a replica 2 vol
 service:
   systemd:
     - gluster-ta-volume
-restart_policy:
-  mode: native
 apps:
   - glusterd
 # The unit runs the shared Gluster daemon binary — sbin/glusterd, sbin/glusterfs

@@ -18,21 +18,21 @@ func TestWithOptionsChangesTheArgvNotJustTheStruct(t *testing.T) {
 		allowed  string
 	}{
 		{"systemd", func(r *execxtest.Runner) Manager { return systemdManager{runner: r} },
-			"systemctl restart --job-mode=ignore-dependencies -- nginx.service",
-			"systemctl restart -- nginx.service"},
+			"systemctl stop --job-mode=ignore-dependencies -- nginx.service",
+			"systemctl stop -- nginx.service"},
 		{"openrc", func(r *execxtest.Runner) Manager { return openrcManager{runner: r} },
-			"rc-service --nodeps nginx restart",
-			"rc-service nginx restart"},
+			"rc-service --nodeps nginx stop",
+			"rc-service nginx stop"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			rec := &execxtest.Runner{}
 			shared := tc.build(rec)
-			if err := shared.Restart(ctx, "nginx"); err != nil {
-				t.Fatalf("shared Restart: %v", err)
+			if err := shared.Stop(ctx, "nginx"); err != nil {
+				t.Fatalf("shared Stop: %v", err)
 			}
 			derived := WithOptions(shared, Options{AllowDependencies: true})
-			if err := derived.Restart(ctx, "nginx"); err != nil {
-				t.Fatalf("derived Restart: %v", err)
+			if err := derived.Stop(ctx, "nginx"); err != nil {
+				t.Fatalf("derived Stop: %v", err)
 			}
 			if len(rec.Lines()) != 2 {
 				t.Fatalf("calls = %v", rec.Lines())
@@ -53,10 +53,10 @@ func TestWithOptionsLeavesTheSharedManagerAlone(t *testing.T) {
 	rec := &execxtest.Runner{}
 	shared := systemdManager{runner: rec}
 	_ = WithOptions(shared, Options{AllowDependencies: true})
-	if err := shared.Restart(context.Background(), "nginx"); err != nil {
+	if err := shared.Stop(context.Background(), "nginx"); err != nil {
 		t.Fatal(err)
 	}
-	if got := rec.Lines()[0]; got != "systemctl restart --job-mode=ignore-dependencies -- nginx.service" {
+	if got := rec.Lines()[0]; got != "systemctl stop --job-mode=ignore-dependencies -- nginx.service" {
 		t.Fatalf("deriving mutated the shared manager: %q", got)
 	}
 }
@@ -66,7 +66,7 @@ func TestWithOptionsLeavesTheSharedManagerAlone(t *testing.T) {
 func TestWithOptionsPreservesTheRunner(t *testing.T) {
 	rec := &execxtest.Runner{}
 	derived := WithOptions(openrcManager{runner: rec}, Options{AllowDependencies: true})
-	if err := derived.Restart(context.Background(), "nginx"); err != nil {
+	if err := derived.Stop(context.Background(), "nginx"); err != nil {
 		t.Fatal(err)
 	}
 	if len(rec.Lines()) != 1 {

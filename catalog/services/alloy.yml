@@ -19,8 +19,7 @@ variables:
   host: 127.0.0.1
   port: 12345
   # The OTLP/HTTP receiver (otelcol.receiver.otlp) every local exporter posts
-  # to. It is probed with an empty POST: a healthy receiver answers 4xx, and
-  # any answer proves accept() still works.
+  # to. A valid, empty export must return HTTP 200 without producing logs.
   otlp_port: 4318
   config: /etc/alloy/config.alloy
   stability_level: generally-available
@@ -111,20 +110,19 @@ watches:
   # service (alert-only at fds_limit, 80% by default; restart is opt-in): Alloy leaked one
   # socket per accepted OTLP connection until it hit 32761 of 32768 and stopped
   # accepting anything while its own API kept answering.
-  # An empty POST is not a valid export, so a healthy receiver answers 400 or
-  # 415; what matters is that it answers at all instead of timing out behind a
-  # full listen backlog. Enable only on instances running an OTLP/HTTP receiver.
-  # A receiver that stops answering stalls every local exporter for its whole
-  # timeout, so the collector is restarted; the policy bounds the retries when
-  # the cause is downstream (a Loki that rejects every push) and a restart only
-  # buys time.
+  # A valid empty export exercises the receiver without sending a log. Require
+  # HTTP 200 so rejected requests, server errors and timeouts all fail. Enable
+  # only on instances running an OTLP/HTTP receiver. A failed export restarts
+  # the collector after two minutes; the policy bounds retries if the cause is
+  # downstream and a restart only buys time.
   otlp:
     enabled: false
     check:
       type: http
       method: POST
       url: http://${host}:${otlp_port}/v1/logs
-      expect_status: { op: "<", value: 500 }
+      json: { resourceLogs: [] }
+      expect_status: 200
       timeout: 5s
       optional: true
     for:
@@ -132,4 +130,4 @@ watches:
     then:
       action: restart
       message: >-
-        During ${rule.duration}, ${display_name} OTLP receiver on port ${otlp_port} stopped answering and local exporters are timing out; restarting ${display_name}
+        During ${rule.duration}, ${display_name} OTLP receiver on port ${otlp_port} did not accept a valid empty log export with HTTP 200; restarting ${display_name}

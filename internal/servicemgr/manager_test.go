@@ -192,8 +192,8 @@ func TestSystemdManagerActionsUseRunner(t *testing.T) {
 	if err := m.Stop(ctx, "nginx"); err != nil {
 		t.Fatalf("Stop() error = %v", err)
 	}
-	if err := m.Restart(ctx, "nginx"); err != nil {
-		t.Fatalf("Restart() error = %v", err)
+	if err := m.Stop(ctx, "nginx"); err != nil {
+		t.Fatalf("Stop() error = %v", err)
 	}
 
 	// Isolated by default: a start or stop must not propagate through the
@@ -201,7 +201,7 @@ func TestSystemdManagerActionsUseRunner(t *testing.T) {
 	want := []string{
 		"systemctl start --job-mode=ignore-dependencies -- nginx.service",
 		"systemctl stop --job-mode=ignore-dependencies -- nginx.service",
-		"systemctl restart --job-mode=ignore-dependencies -- nginx.service",
+		"systemctl stop --job-mode=ignore-dependencies -- nginx.service",
 	}
 	if len(rec.Lines()) != len(want) {
 		t.Fatalf("calls = %v, want %v", rec.Lines(), want)
@@ -247,12 +247,12 @@ func TestSystemdManagerActionTimeoutMessage(t *testing.T) {
 func TestOpenRCManagerActionUsesRunner(t *testing.T) {
 	rec := &execxtest.Runner{}
 	m := openrcManager{runner: rec}
-	if err := m.Restart(context.Background(), "nginx"); err != nil {
-		t.Fatalf("Restart() error = %v", err)
+	if err := m.Stop(context.Background(), "nginx"); err != nil {
+		t.Fatalf("Stop() error = %v", err)
 	}
 	// Isolated by default; rc-service takes its options before the service name.
-	if len(rec.Lines()) != 1 || rec.Lines()[0] != "rc-service --nodeps nginx restart" {
-		t.Fatalf("calls = %v, want [rc-service --nodeps nginx restart]", rec.Lines())
+	if len(rec.Lines()) != 1 || rec.Lines()[0] != "rc-service --nodeps nginx stop" {
+		t.Fatalf("calls = %v, want [rc-service --nodeps nginx stop]", rec.Lines())
 	}
 }
 
@@ -263,20 +263,20 @@ func TestManagerActionsAllowDependenciesWhenOptedIn(t *testing.T) {
 
 	sysRec := &execxtest.Runner{}
 	sysMgr := systemdManager{runner: sysRec, opts: Options{AllowDependencies: true}}
-	if err := sysMgr.Restart(ctx, "nginx"); err != nil {
-		t.Fatalf("Restart() error = %v", err)
+	if err := sysMgr.Stop(ctx, "nginx"); err != nil {
+		t.Fatalf("Stop() error = %v", err)
 	}
-	if len(sysRec.Lines()) != 1 || sysRec.Lines()[0] != "systemctl restart -- nginx.service" {
-		t.Fatalf("systemd calls = %v, want the plain restart", sysRec.Lines())
+	if len(sysRec.Lines()) != 1 || sysRec.Lines()[0] != "systemctl stop -- nginx.service" {
+		t.Fatalf("systemd calls = %v, want the plain stop", sysRec.Lines())
 	}
 
 	rcRec := &execxtest.Runner{}
 	rcMgr := openrcManager{runner: rcRec, opts: Options{AllowDependencies: true}}
-	if err := rcMgr.Restart(ctx, "nginx"); err != nil {
-		t.Fatalf("Restart() error = %v", err)
+	if err := rcMgr.Stop(ctx, "nginx"); err != nil {
+		t.Fatalf("Stop() error = %v", err)
 	}
-	if len(rcRec.Lines()) != 1 || rcRec.Lines()[0] != "rc-service nginx restart" {
-		t.Fatalf("openrc calls = %v, want the plain restart", rcRec.Lines())
+	if len(rcRec.Lines()) != 1 || rcRec.Lines()[0] != "rc-service nginx stop" {
+		t.Fatalf("openrc calls = %v, want the plain stop", rcRec.Lines())
 	}
 }
 

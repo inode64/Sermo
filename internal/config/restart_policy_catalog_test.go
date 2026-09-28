@@ -6,12 +6,8 @@ import (
 	"sermo/internal/process"
 )
 
-// Container runtimes and glusterd own delegated process trees whose continued
-// presence is not a failed daemon stop. Their catalog profiles therefore
-// delegate restart atomically to the init backend instead of treating those
-// workload processes as residuals between Stop and Start. Ordinary
-// multi-process daemons keep the staged default.
-func TestDelegatedWorkloadCatalogUsesNativeRestart(t *testing.T) {
+// Delegated workloads survive stop/start. The daemon itself remains managed.
+func TestDelegatedWorkloadCatalogPreservesWorkloads(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -40,39 +36,11 @@ func TestDelegatedWorkloadCatalogUsesNativeRestart(t *testing.T) {
 				t.Fatalf("%s must keep its own daemon signallable", tt.service)
 			}
 
-			for _, backend := range []string{backendSystemd, backendOpenRC} {
-				resolved := resolveCatalogService(t, tt.service, backend)
-				got, err := ParseRestartMode(resolved.Tree)
-				if err != nil {
-					t.Fatalf("ParseRestartMode(%s, %s): %v", tt.service, backend, err)
-				}
-				if got != RestartModeNative {
-					t.Fatalf("ParseRestartMode(%s, %s) = %q, want %q", tt.service, backend, got, RestartModeNative)
-				}
-			}
 		})
 	}
 }
 
-func TestPolkitCatalogUsesNativeRestartForDBusActivation(t *testing.T) {
-	t.Parallel()
-
-	resolved := resolveCatalogService(t, "polkit", backendSystemd)
-	got, err := ParseRestartMode(resolved.Tree)
-	if err != nil {
-		t.Fatalf("ParseRestartMode(polkit, systemd): %v", err)
-	}
-	if got != RestartModeNative {
-		t.Fatalf("ParseRestartMode(polkit, systemd) = %q, want %q", got, RestartModeNative)
-	}
-}
-
-// virtnetworkd keeps the staged default, so it stays out of the native-restart
-// table above — but the same delegation rule applies. libvirt spawns one dnsmasq
-// pair per virtual network; they serve the guests' DHCP and DNS across a daemon
-// restart, and a package update routinely replaces their binary without one. An
-// undelegated pair is discovered as a residual, becomes unsignallable the moment
-// its exe stops resolving, and parks every restart in orphan_processes.
+// libvirt's dnsmasq processes serve guests across a daemon restart.
 func TestVirtnetworkdCatalogDelegatesItsDnsmasqPair(t *testing.T) {
 	t.Parallel()
 

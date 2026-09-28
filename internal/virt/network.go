@@ -132,7 +132,7 @@ type NetworkClient interface {
 // without reattaching them on the next start, so a network with live guest
 // interfaces is never destroyed. No configuration option relaxes this.
 type NetworkManager struct {
-	servicemgr.ComposedRestart
+	servicemgr.ExternalLifecycle
 
 	Spec NetworkSpec
 	// NewClient injects the session factory for tests; socket names the
@@ -219,8 +219,8 @@ func (m NetworkManager) Stop(ctx context.Context, _ string) error {
 	})
 }
 
-// Reload is not meaningful for a virtual network. Restart, SupportsReload and
-// ResetState come from the embedded servicemgr.ComposedRestart.
+// Reload is not meaningful for a virtual network. SupportsReload and
+// ResetState come from the embedded servicemgr.ExternalLifecycle.
 func (NetworkManager) Reload(context.Context, string) error {
 	return errors.New("reload is not supported for libvirt networks")
 }

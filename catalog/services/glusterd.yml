@@ -3,8 +3,6 @@ display_name: GlusterFS
 category: storage
 description: GlusterFS
 service: glusterd
-restart_policy:
-  mode: native
 apps:
   - glusterd
 # The packaged unit is Type=forking with KillMode=process: systemd deliberately

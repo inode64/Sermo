@@ -59,7 +59,7 @@ type Engine struct {
 	Unit    string // backend unit, passed to Manager
 	Backend string
 	// Lifecycle is the resolved service contract shared by monitoring and
-	// operations. Its zero value preserves staged restart with no auxiliaries for
+	// operations. Its zero value preserves stop/start with no auxiliaries for
 	// directly-built test engines.
 	Lifecycle config.ServiceLifecycle
 	// StopArtifacts are stopped-state invariants verified after a clean stop.
@@ -73,10 +73,6 @@ type Engine struct {
 	Guard       func(ctx context.Context, action string) (blocked bool, reason string, err error)
 	Preflight   func(ctx context.Context) checks.Outcome
 	Postflight  func(ctx context.Context) checks.Outcome
-	// RestartIdentity verifies that an active service still has at least one
-	// trusted process identity before a restart stops it. Nil means no extra
-	// identity gate is available.
-	RestartIdentity func(ctx context.Context) (ok bool, reason string, err error)
 	// SessionVerifier re-discovers a manual SSH-session target immediately before
 	// signalling it. Nil means this service does not offer session closing.
 	SessionVerifier func(ctx context.Context, target SessionTarget) (SessionBoundary, error)
@@ -95,11 +91,12 @@ type Engine struct {
 	// a closure: a native signal/command that either overrides the backend reload
 	// (`when: always`) or stands in for it when the init has no reload of its own
 	// (`when: auto`). A nil closure means reload is unavailable.
-	ReloadFunc func(ctx context.Context) error
-	ResumeFunc func(ctx context.Context) error
-	Discover   func() ([]process.Process, error)
-	Reaper     process.Reaper
-	KillPolicy process.KillPolicy
+	ReloadFunc       func(ctx context.Context) error
+	ResumeFunc       func(ctx context.Context) error
+	ObserveProcesses func() (process.Observation, error)
+	Discover         func() ([]process.Process, error)
+	Reaper           process.Reaper
+	KillPolicy       process.KillPolicy
 	// ReapSelector is the service's `reap.kill_only_if` authorization: the only
 	// thing that can turn a stray process into a signal target. The zero value is
 	// unconfigured and matches nothing, so a service that declares no `reap:`
@@ -121,7 +118,6 @@ type plan struct {
 	reconcile            bool
 	stop                 bool
 	start                bool
-	nativeRestart        bool
 	resume               bool
 	reload               bool
 	postflight           bool
@@ -169,20 +165,14 @@ type TerminalSessionSourceTarget struct {
 	Check string
 }
 
-// Restart executes the configured restart strategy and verifies health. Staged
-// mode stops, clears residuals and starts; outside stale-init reconciliation,
-// native mode delegates one atomic restart to the init backend. Both modes first
-// reconcile an init state that has drifted from reality.
+// Restart composes verified stop and start under one operation lock and timeout.
 func (e Engine) Restart(ctx context.Context) Result {
-	if e.Lifecycle.RestartMode == config.RestartModeNative {
-		return e.run(ctx, plan{action: actionRestart, preflight: true, reconcile: true, nativeRestart: true, postflight: true})
-	}
 	return e.run(ctx, plan{action: actionRestart, preflight: true, reconcile: true, stop: true, start: true, postflight: true})
 }
 
 // Start runs preflight, starts the service and verifies health.
 func (e Engine) Start(ctx context.Context) Result {
-	return e.run(ctx, plan{action: actionStart, preflight: true, start: true, postflight: true})
+	return e.run(ctx, plan{action: actionStart, preflight: true, reconcile: true, start: true, postflight: true})
 }
 
 // Stop stops the service and clears residuals. Stop runs no preflight or
@@ -413,12 +403,6 @@ func (e Engine) Do(ctx context.Context, action string) Result {
 func (e Engine) run(ctx context.Context, p plan) (result Result) {
 	result = Result{Service: e.Service, Action: p.action, Backend: e.Backend, Status: ResultOK}
 
-	// Best-effort failures stopping also_service units; folded into the final
-	// success message (a successful stop is not failed by an auxiliary unit).
-	var alsoStopErrs []string
-	// Stale stopped-state artifacts (pidfile/files still present after a clean
-	// stop); folded into the success message as a warning, like alsoStopErrs.
-	var staleWarn []string
 	var repairedPIDFiles []string
 
 	ctx, cancel := context.WithTimeout(ctx, e.OperationTimeout)
@@ -427,6 +411,9 @@ func (e Engine) run(ctx context.Context, p plan) (result Result) {
 	// Step 2: exactly one event per operation, on every exit path including a
 	// failed lock acquisition. Registered first.
 	defer func() {
+		if len(result.Warnings) > 0 {
+			result.Message += " (warnings: " + strings.Join(result.Warnings, "; ") + ")"
+		}
 		if e.Emit != nil {
 			e.Emit(result)
 		}
@@ -472,16 +459,13 @@ func (e Engine) run(ctx context.Context, p plan) (result Result) {
 
 	var stopped, systemdReactivated bool
 	if p.stop {
-		alsoStopErrs, staleWarn, stopped, systemdReactivated = e.stopService(ctx, &result)
+		stopped, systemdReactivated = e.stopService(ctx, &result)
 		if !stopped {
 			return result
 		}
 	}
 
-	if p.start && !systemdReactivated && !e.startService(ctx, &result) {
-		return result
-	}
-	if p.nativeRestart && !e.restartService(ctx, &result) {
+	if p.start && !e.startService(ctx, &result, systemdReactivated) {
 		return result
 	}
 
@@ -501,12 +485,6 @@ func (e Engine) run(ctx context.Context, p plan) (result Result) {
 	}
 	if systemdReactivated {
 		result.Message += " (systemd reactivated the same unit)"
-	}
-	if len(alsoStopErrs) > 0 {
-		result.Message += " (also_service: " + strings.Join(alsoStopErrs, "; ") + ")"
-	}
-	if len(staleWarn) > 0 {
-		result.Message += " (stale: " + strings.Join(staleWarn, "; ") + ")"
 	}
 	if len(repairedPIDFiles) > 0 {
 		result.Message += " (removed stale pidfile: " + strings.Join(repairedPIDFiles, ", ") + ")"
@@ -558,7 +536,7 @@ func (e Engine) runCloseAction(ctx context.Context, p plan, result *Result) bool
 	return false
 }
 
-// runReconciliation applies the restart-only stale-init guard and translates
+// runReconciliation applies the start/restart stale-init guard and translates
 // its outcome into the operation result. Keeping this phase-shaped helper next
 // to run makes the top-level operation sequence readable without duplicating the
 // fail-closed result contract.
@@ -566,16 +544,19 @@ func (e Engine) runReconciliation(ctx context.Context, p plan, result *Result) (
 	if !p.reconcile {
 		return false, true
 	}
-	reconciled, remaining, err := e.reconcileInitState(ctx)
+	reconciled, remaining, err := e.reconcileInitState(ctx, result)
 	if err != nil {
 		result.Status = ResultFailed
+		if errors.Is(err, errProcessIdentity) {
+			result.Status = ResultBlocked
+		}
 		result.Message = err.Error()
 		result.Processes = remaining
 		return false, false
 	}
 	if len(remaining) > 0 {
 		result.Status = ResultOrphanProcesses
-		result.Message = residualsRemain(remaining, "before restart")
+		result.Message = residualsRemain(remaining, "before "+p.action)
 		result.Processes = remaining
 		return false, false
 	}
@@ -735,12 +716,6 @@ func (e Engine) reloadService(ctx context.Context, result *Result) bool {
 	return e.runBackendAction(ctx, result, actionReload, e.ReloadFunc)
 }
 
-func (e Engine) restartService(ctx context.Context, result *Result) bool {
-	return e.runBackendAction(ctx, result, actionRestart, func(ctx context.Context) error {
-		return e.Manager.Restart(ctx, e.Unit)
-	})
-}
-
 // runBackendAction centralizes the result contract shared by backend actions:
 // timeout-aware errors followed by a settle-aware status check. Higher-level
 // safety gates and postflight remain in run, around this primitive. The check
@@ -748,13 +723,24 @@ func (e Engine) restartService(ctx context.Context, result *Result) bool {
 // can accept a start and report the settled state a moment later — OpenRC
 // answers `inactive` until a starting service's readiness callback runs.
 func (e Engine) runBackendAction(ctx context.Context, result *Result, action string, run func(context.Context) error) bool {
-	if err := run(ctx); err != nil {
+	if err := ctx.Err(); err != nil {
 		return failPhase(ctx, result, timeoutDuring(action), action+": ", err)
+	}
+	actionErr := run(ctx)
+	if actionErr != nil && (action != actionStart || ctx.Err() != nil) {
+		return failPhase(ctx, result, timeoutDuring(action), action+": ", actionErr)
 	}
 	for attempt := range postflightMaxAttempts {
 		final := attempt+1 == postflightMaxAttempts
 		healthy, settled := e.ensureServiceHealthy(ctx, result, action, final)
 		if settled {
+			if actionErr != nil {
+				observation, err := e.observeProcesses(ctx)
+				if !healthy || err != nil || !observation.Trusted {
+					return failPhase(ctx, result, timeoutDuring(action), action+": ", actionErr)
+				}
+				result.Warnings = append(result.Warnings, action+" command: "+actionErr.Error()+"; running process and init state verified")
+			}
 			return healthy
 		}
 		if err := process.Wait(ctx, e.Sleep, postflightRetryInterval); err != nil {
@@ -786,6 +772,20 @@ func (e Engine) ensureServiceHealthy(ctx context.Context, result *Result, action
 		result.Status, result.Message = ResultFailed, "service not active after "+action
 		return false, true
 	}
+	if e.Lifecycle.ProcessMode == config.ServiceProcessResident {
+		observation, err := e.observeProcesses(ctx)
+		if err != nil {
+			result.Status, result.Message = ResultFailed, err.Error()
+			return false, true
+		}
+		if len(nonDelegatedResiduals(observation.Processes)) == 0 || observation.IdentityRequired && !observation.Trusted {
+			if !final {
+				return false, false
+			}
+			result.Status, result.Message = ResultFailed, "init reports active but service process is absent"
+			return false, true
+		}
+	}
 	return true, true
 }
 
@@ -796,7 +796,7 @@ func (e Engine) runPostflight(ctx context.Context, p plan, result *Result) bool 
 	var out checks.Outcome
 	postflightReady := false
 	for attempt := range postflightMaxAttempts {
-		if p.start || p.nativeRestart || p.resume {
+		if p.start || p.resume {
 			healthy, settled := e.ensureServiceHealthy(ctx, result, result.Action, attempt+1 == postflightMaxAttempts)
 			if settled && !healthy {
 				return false
@@ -831,75 +831,21 @@ func (e Engine) runPostflight(ctx context.Context, p plan, result *Result) bool 
 	return false
 }
 
-func (e Engine) startService(ctx context.Context, result *Result) bool {
+func (e Engine) startService(ctx context.Context, result *Result, primaryActive bool) bool {
 	for _, unit := range e.Lifecycle.AuxiliaryUnits {
+		if err := ctx.Err(); err != nil {
+			return failPhase(ctx, result, timeoutDuring(actionStart), "start: ", err)
+		}
 		if err := e.Manager.Start(ctx, unit); err != nil {
 			return failPhase(ctx, result, "operation timed out starting also_service "+unit, "start "+unit+": ", err)
 		}
 	}
+	if primaryActive {
+		return true
+	}
 	return e.runBackendAction(ctx, result, actionStart, func(ctx context.Context) error {
 		return e.Manager.Start(ctx, e.Unit)
 	})
-}
-
-func (e Engine) stopService(ctx context.Context, result *Result) (alsoStopErrs, staleWarn []string, stopped, systemdReactivated bool) {
-	if err := e.Manager.Stop(ctx, e.Unit); err != nil {
-		_ = failPhase(ctx, result, timeoutDuring("stop"), "stop: ", err)
-		return nil, nil, false, false
-	}
-	for _, unit := range slices.Backward(e.Lifecycle.AuxiliaryUnits) {
-		if err := e.Manager.Stop(ctx, unit); err != nil {
-			alsoStopErrs = append(alsoStopErrs, fmt.Sprintf("stop %s: %v", unit, err))
-		}
-	}
-	if err := process.Wait(ctx, e.Sleep, e.KillPolicy.GracefulTimeout); err != nil {
-		_ = failWait(ctx, result, "graceful stop wait")
-		return alsoStopErrs, nil, false, false
-	}
-	residuals, err := e.clearResiduals(ctx, func(residuals []process.Process) bool {
-		return e.systemdReactivated(ctx, result.Action, residuals)
-	})
-	remaining, systemdReactivated := residuals.remaining, residuals.accepted
-	if err != nil {
-		result.Status, result.Message, result.Processes = ResultFailed, "process discovery: "+err.Error(), remaining
-		return alsoStopErrs, nil, false, false
-	}
-	if len(remaining) > 0 {
-		if systemdReactivated {
-			return alsoStopErrs, nil, true, true
-		}
-		result.Processes = remaining
-		if timedOut(ctx) {
-			result.Status, result.Message = ResultFailed, timeoutDuring("residual process handling")
-		} else {
-			result.Status, result.Message = ResultOrphanProcesses, residualsRemain(remaining, "after stop")
-		}
-		return alsoStopErrs, nil, false, false
-	}
-	_ = e.Manager.ResetState(ctx, e.Unit)
-	return alsoStopErrs, e.verifyStopped(), true, false
-}
-
-// systemdReactivated reports whether an isolated systemd restart has already
-// been completed by systemd after the primary unit stopped. This happens for
-// socket-activated units: the socket remains untouched by the isolated stop and
-// systemd starts the same service again as soon as it receives work.
-//
-// Accept only backend-attributed processes and an active unit. A selector-only
-// residual, an inactive/unknown unit, or any non-systemd backend remains an
-// orphan so this exception cannot authorize an unrelated process or a second
-// service action.
-func (e Engine) systemdReactivated(ctx context.Context, action string, residuals []process.Process) bool {
-	if action != actionRestart || e.Backend != string(servicemgr.BackendSystemd) || len(residuals) == 0 {
-		return false
-	}
-	for _, residual := range residuals {
-		if residual.Source != process.SourceBackend {
-			return false
-		}
-	}
-	status, err := e.Manager.Status(ctx, e.Unit)
-	return err == nil && status.Status == servicemgr.StatusActive
 }
 
 func (e Engine) checkNamedLocks(result *Result) bool {
@@ -948,20 +894,6 @@ func (e Engine) checkGuards(ctx context.Context, p plan, result *Result) bool {
 			result.Message = reason
 			return false
 		}
-	}
-	if p.action != actionRestart || e.RestartIdentity == nil {
-		return true
-	}
-	ok, reason, err := e.RestartIdentity(ctx)
-	if err != nil {
-		result.Status = ResultFailed
-		result.Message = "restart identity: " + err.Error()
-		return false
-	}
-	if !ok {
-		result.Status = ResultBlocked
-		result.Message = reason
-		return false
 	}
 	return true
 }
@@ -1127,59 +1059,23 @@ type residualOutcome struct {
 	accepted  bool
 }
 
-// reconcileInitState clears an init state that has drifted from reality before a
-// restart acts on it: the backend reports the unit as not active while the
-// service's own processes are still running, so the init has lost track of a live
-// daemon. Neither restart mode recovers from that alone — a native restart asks
-// the init to signal a PID it no longer knows, and the replacement daemon then
-// collides with the survivor over its port, socket or lock; a staged restart only
-// gets there through the reaper.
-//
-// It signals nothing a stop would not have signalled: the same discovery, the
-// same stop_policy, and delegated processes excluded, so a workload tree the unit
-// deliberately keeps alive survives. Unknown and transitional backend states are
-// not proof of drift and never enter the reaper. A discovery/reset error or any
-// survivor fails closed before the restart can launch a second daemon.
-func (e Engine) reconcileInitState(ctx context.Context) (bool, []process.Process, error) {
-	if e.Discover == nil || e.Manager == nil {
-		return false, nil, nil
-	}
-	status, err := e.Manager.Status(ctx, e.Unit)
-	if err != nil {
-		return false, nil, fmt.Errorf("query init state before restart: %w", err)
-	}
-	if status.Status != servicemgr.StatusInactive && status.Status != servicemgr.StatusFailed {
-		return false, nil, nil
-	}
-	outcome, err := e.clearResiduals(ctx, nil)
-	if err != nil {
-		return false, outcome.remaining, fmt.Errorf("process discovery: %w", err)
-	}
-	if !outcome.found {
-		return false, nil, nil
-	}
-	if len(outcome.remaining) > 0 {
-		return false, outcome.remaining, nil
-	}
-	if err := e.Manager.ResetState(ctx, e.Unit); err != nil {
-		return false, nil, fmt.Errorf("reset init state before restart: %w", err)
-	}
-	return true, nil, nil
-}
-
 // clearResiduals discovers residual processes after a stop and applies signal
 // escalation, returning one outcome that preserves whether any were initially
 // found. accept may acknowledge an already reactivated backend-owned process set
 // before the reaper can signal it.
-func (e Engine) clearResiduals(ctx context.Context, accept func([]process.Process) bool) (residualOutcome, error) {
+func (e Engine) clearResiduals(ctx context.Context, accept func([]process.Process) (bool, error)) (residualOutcome, error) {
 	if e.Discover == nil {
 		return residualOutcome{}, nil
 	}
 	var discoverErr error
 	discover := func() []process.Process {
+		if discoverErr != nil {
+			return nil
+		}
 		procs, err := e.Discover()
-		if err != nil && discoverErr == nil {
+		if err != nil {
 			discoverErr = err
+			return nil
 		}
 		return nonDelegatedResiduals(procs)
 	}
@@ -1191,9 +1087,12 @@ func (e Engine) clearResiduals(ctx context.Context, accept func([]process.Proces
 	if !outcome.found {
 		return outcome, nil
 	}
-	if accept != nil && accept(residuals) {
-		outcome.accepted = true
-		return outcome, nil
+	if accept != nil {
+		accepted, err := accept(residuals)
+		outcome.accepted = accepted
+		if accepted || err != nil {
+			return outcome, err
+		}
 	}
 	reaper := e.Reaper
 	reaper.Rediscover = discover // re-evaluate identity each round

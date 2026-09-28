@@ -49,7 +49,7 @@ required there.
   - [OS-specific blocks (os:)](#os-specific-blocks-os)
   - [control: libvirt — QEMU/libvirt virtual machines](#control-libvirt--qemulibvirt-virtual-machines)
   - [control: docker — Docker containers](#control-docker--docker-containers)
-  - [restart_policy — restart strategy](#restart_policy--restart-strategy)
+  - [Verified restart](#verified-restart)
   - [also_service — auxiliary init units](#also_service--auxiliary-init-units)
   - [also_apply — cascade to other services](#also_apply--cascade-to-other-services)
   - [processes: by executable or cmdline](#processes-by-executable-or-cmdline)
@@ -870,64 +870,76 @@ Containers without a Docker health check and those still in the health check's
 startup grace period are not rejected by the health predicate. Configure
 `container.health == healthy` explicitly when readiness must also be required.
 
-### `restart_policy` — restart strategy
+### Verified restart
 
-Every restart keeps the common operation-engine gates: one operation lock, named
-runtime locks, required preflight, guards, the active-service identity check when
-available, the operation timeout, backend status verification, postflight and
-exactly one result event. The service chooses only how the restart action itself
-is performed:
+`sermoctl restart SERVICE` always composes stop and start inside one operation:
+one lock, one timeout, required preflight, guards, process identity verification,
+postflight and one auditable result. Sermo does not invoke the init backend's
+`restart` command. The former `restart_policy` setting is rejected; remove it
+from defaults and service overrides when upgrading.
 
-```yaml
-restart_policy:
-  mode: native
-```
+Before start or restart, Sermo compares the init state with a fresh process
+observation. An active resident service with no processes can be reconciled only
+when absence is demonstrated by configured exact executable/user identities and
+complete process discovery. Missing identity, unreadable procfs, an unresolvable
+user or uncertain pidfile data cannot authorize this recovery. Services declared
+without a resident process retain their existing lifecycle semantics: active
+without a PID is valid for them.
+Zombies do not count as running processes and cannot restrict discovery to a
+dead process tree; monitoring can still report them independently.
 
-- `staged` (default) runs Sermo's `Stop` → residual discovery/reaping → init
-  state reconciliation → `Start` flow. `stop_policy`, stopped-state cleanup and
-  residual reporting apply in full.
-- `native` invokes one atomic `Restart` on the selected systemd/OpenRC backend.
-  Beyond the stale-init reconciliation described below, it runs no stop phase, no
-  residual reaper and no stopped-state cleanup. A backend error fails the
-  operation; Sermo never falls back silently to staged restart.
+- **Init active, daemon absent:** OpenRC clears its stale started marker with
+  `rc-service SERVICE zap`; systemd first runs `systemctl stop UNIT`, then clears
+  failed bookkeeping with `systemctl reset-failed UNIT`. Sermo verifies that init
+  is inactive before proceeding. A restart uses its normal stop phase for this
+  reconciliation, without a second stop or graceful wait. `reset-failed` cannot
+  deactivate an active unit.
+- **Init inactive/failed, daemon alive:** Sermo handles survivors under the same
+  `stop_policy` as a stop, excluding delegated workloads. Any surviving orphan or
+  discovery error blocks a following start. A successful cleanup reconciles init
+  before proceeding.
 
-Both modes first **reconcile a stale init state**. When the backend reports the
-unit as stably `inactive` or `failed` while the service's own processes are still
-running, the init has lost track of a live daemon — a systemd unit that dropped
-its `MainPID` is the usual way in. `unknown` and transitional states do not prove
-that divergence and never enter the reaper. Neither mode recovers from real drift
-alone: a native restart asks the init to signal a PID it no longer knows, and the
-replacement daemon then collides with the survivor over its port, socket or lock.
-Sermo therefore clears those survivors first, under the service's own
-`stop_policy` and with `delegated` processes excluded, reconciles the init state,
-and only then runs the restart; the result message reports it. Nothing is
-signalled that a stop would not have signalled. Status-query, discovery or
-init-reset errors return `failed`, and any survivor returns
-`orphan_processes`; both outcomes stop before the backend restart, so Sermo
-never launches a second daemon.
+The stop phase runs the backend stop, waits `graceful_timeout`, handles residuals,
+reconciles init and verifies the stopped state. A nonzero command result does
+not by itself prove that stopping failed: when Sermo demonstrates that the daemon
+is gone and init can be reconciled, it continues and records the command error
+as a warning. Otherwise it fails without starting a replacement. A failed reset
+or an init state that remains inconsistent is an operation failure.
+Stop-command, auxiliary-stop and stopped-artifact warnings stay in the result
+and audit event even if a later phase fails or times out. An error during
+residual rediscovery stops further signal escalation and blocks start.
 
-`native` is valid only for init-managed services; a service with `control:`
-(Docker container or libvirt domain) must use `staged`. Use native mode when the
-init unit deliberately owns a delegated process tree whose workload descendants
-may survive a daemon restart and therefore must not be classified as failed-stop
-residuals. The packaged `containerd` and Docker Engine profiles use it for shims,
-proxies and container workloads, and the `glusterd` profile uses it because its
-`KillMode=process` unit deliberately keeps the brick and self-heal processes
-serving across a restart. The systemd-only `polkit` profile also uses it because
-D-Bus activation can cancel an isolated stop while immediately starting a new
-daemon generation. Ordinary multi-process daemons keep `staged`: native
-mode must not be used merely to hide a service that fails to stop cleanly.
+The start phase verifies both the init state and the expected resident process,
+then runs postflight. A command error can be recovered only with a trusted live
+process and an active init state; the error remains visible in the result.
+An executable replaced on disk can justify stopping the old daemon when its
+previous path and real user match the configured identity. It cannot verify a
+successful start: that requires the current executable. When `main` declares an
+exact executable/user identity, a surviving worker or an unrelated deleted
+executable cannot stand in for that main process.
+Postflight must still pass. Reload and resume errors are not recovered merely
+because the service remains active: that does not prove their requested effect.
+Cancellation and timeout stop the flow; recovery never creates a new deadline.
 
-With `also_service`, native restart leaves auxiliary units active and restarts
-only the primary atomically; explicit `start`/`stop` and staged restart retain
-the wrap ordering below. `also_apply` still sends the restart action through
-each referenced service's own engine and policy.
+Socket/D-Bus activation can replace the daemon while stop is settling. Sermo
+accepts this only for an active systemd unit with verified backend-attributed
+processes from a new generation (PID plus start time), with none of the old
+non-delegated generations remaining anywhere in the observed process table.
+Leaving the unit's cgroup or process tree does not prove that an old daemon
+exited. It then verifies health without issuing a
+redundant primary start. Auxiliary units stopped by this operation are started
+again before health verification. Finding the unchanged daemon active is not
+proof of a restart.
+
+Delegated workloads, including container shims and Gluster workers, remain
+excluded from residual cleanup. Auxiliary units declared by `also_service`
+participate in the same stop/start ordering below.
 
 ### `also_service` — auxiliary init units
 
 A service can name **auxiliary init units of its own** (a `.socket`, `.timer`,
 companion unit) that are started/stopped **together with the primary**, in the
-same operation. A staged restart composes those two operations. It mirrors the
+same operation. A restart composes those two operations. It mirrors the
 `service:` shape (per-init lists, resolved for the active backend):
 
 ```yaml
@@ -945,8 +957,7 @@ aborts the operation before the primary starts), and stopped **after** it
 (best-effort — a stop failure is reported in the result message but does not fail
 an already-successful stop). `reload` touches the primary only. The primary's
 guards, locks and preflight wrap the whole operation. Listing the primary unit in
-`also_service` is rejected. A native restart also touches the primary only and
-leaves these auxiliary units active, as described above.
+`also_service` is rejected.
 
 ### `also_apply` — cascade to other services
 
@@ -1076,7 +1087,7 @@ touch.
 
 Measured on real hosts, `nfs-server` is the catalog exception that needs normal
 dependency propagation. It `ConsistsOf` `nfs-mountd` and `nfs-idmapd`; an
-isolated staged restart stops those companions but cannot pull the required
+isolated restart stops those companions but cannot pull the required
 mount daemon up again, leaving NFSv3 mount requests unavailable while the kernel
 NFS port remains healthy. The packaged `nfs` profile therefore sets
 `allow_dependencies: true`. The NFS profile itself is a no-resident-process
@@ -2156,7 +2167,7 @@ alone raises an alert unless the operator explicitly permits a restart.
 | Watch | Signal | Action | Variable (default) |
 |---|---|---|---|
 | `ready` | `GET /-/ready` on the API port, on a fresh connection each cycle | restart after 2 minutes unreachable; also the `verify: true` check a restart must pass | `host` (`127.0.0.1`), `port` (`12345`) |
-| `otlp` | disabled by default; when enabled, an empty `POST /v1/logs` on the OTLP/HTTP receiver must answer below 500 | restart after 2 minutes of failure | `otlp_port` (`4318`) |
+| `otlp` | disabled by default; when enabled, a valid empty JSON `POST /v1/logs` on the OTLP/HTTP receiver must answer 200 | restart after 2 minutes of failure | `otlp_port` (`4318`) |
 | `restart-if-fds-high` | the worst process against its own soft open-files limit; the sensor Sermo injects into every service | alert after 3 minutes above the limit; restart requires explicit permission | `fds_limit` (`80%`), a service key rather than a variable |
 
 `metrics` (`GET /metrics`) stays graph-only. The service `policy` bounds the
@@ -2196,6 +2207,13 @@ watches:
   otlp:
     enabled: true
 ```
+
+The probe sends `{"resourceLogs":[]}` with `Content-Type: application/json`.
+It creates no log records but detects HTTP rejections, server errors and
+timeouts. It cannot prove that nonempty exports reach a downstream destination.
+Opening `/v1/logs` in a browser sends `GET` and normally returns 405; that does
+not indicate a failed receiver. The check remains opt-in because an Alloy
+instance without an OTLP/HTTP receiver must not enter a restart loop.
 
 `optional: true` on this check makes a failed observation a warning for service
 health; it does **not** suppress its rule. Once enabled, an absent or

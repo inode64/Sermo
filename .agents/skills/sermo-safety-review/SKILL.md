@@ -32,6 +32,28 @@ touches them.
 7. One slow service never blocks monitoring of another; shared check
    concurrency stays bounded.
 
+8. Restart is always stop/verify/reconcile/start/verify under the same lock and
+   deadline. There is no backend restart mode. Fresh process observations must
+   distinguish confirmed absence from incomplete discovery. Process-free services
+   cannot be judged by missing PIDs.
+9. A failed stop command may have stopped the process: retain the error, verify
+   absence and reconcile init before proceeding. A failed start requires a trusted
+   live process, active init and postflight. Never discard reset errors or infer
+   reload/resume success from liveness. systemd reset-failed does not deactivate
+   an active unit; OpenRC zap must never hide a surviving daemon.
+10. Accept systemd reactivation only after verifying old process generations
+    exited across the complete process snapshot, including outside the current
+    cgroup, and the same unit owns the new generation. Never signal the replacement
+    or accept an unchanged daemon as a completed restart. Restore stopped
+    auxiliary units even when the primary start is skipped.
+11. Deleted-executable evidence with the main selector's previous path and real
+    user may permit a backend stop, but never validates a new start. Keep it
+    separate from current exact identity; workers cannot substitute for an exact
+    main selector, and zombies cannot prove a process is running.
+12. Incomplete rediscovery stops signal escalation. Keep stop-command,
+    auxiliary-stop and artifact warnings in the one audit result even if a
+    subsequent phase fails or times out.
+
 ## Process identity and signaling
 
 - A process matches only on the exact resolved `/proc/<pid>/exe` path and the

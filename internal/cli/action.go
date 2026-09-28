@@ -45,6 +45,13 @@ func (a App) runAction(ctx context.Context, opts options, action string) int {
 	if actionStore != nil {
 		defer func() { _ = actionStore.Close() }()
 	}
+	// Keep the audit store on the caller context so an operation deadline does
+	// not prevent recording its outcome. Store queries retain their own bounds.
+	if opts.timeoutSet {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, opts.timeout)
+		defer cancel()
+	}
 	runner, closeRunner, err := a.prepareManualOperationRunner(ctx, opts, cfg, resolved, service, action, actionStore)
 	if err != nil {
 		return a.fail(opts, err.Error())

@@ -385,7 +385,7 @@ const (
 	ServiceKeyAlsoService = "also_service"
 	// ServiceKeyAlsoApply is the cascading Sermo services field.
 	ServiceKeyAlsoApply = "also_apply"
-	// ServiceKeyRestartPolicy selects how restart operations are executed.
+	// ServiceKeyRestartPolicy is retired and is rejected with migration guidance.
 	ServiceKeyRestartPolicy = "restart_policy"
 	// ServiceKeyConfigFiles is the catalog hint listing service config files.
 	ServiceKeyConfigFiles = "config_files"

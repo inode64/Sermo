@@ -42,7 +42,7 @@ func delegatedWorkload() process.Process {
 // divergentHarness builds the state this reconciliation exists for: the init has
 // lost track of a live daemon — the unit reads failed with no MainPID — while the
 // daemon it used to own is still holding its port and its delegated workload is
-// still serving. A native restart cannot recover from this on its own, because it
+// still serving. An init-only restart cannot recover from this on its own, because it
 // asks the init to signal a PID the init no longer knows and the replacement then
 // collides with the survivor.
 func divergentHarness() (*harness, *recordingSignaler) {
@@ -70,11 +70,11 @@ func divergentHarness() (*harness, *recordingSignaler) {
 	return h, signaler
 }
 
-func TestNativeRestartReconcilesStaleInitState(t *testing.T) {
+func TestRestartReconcilesStaleInitState(t *testing.T) {
 	t.Parallel()
 
 	h, signaler := divergentHarness()
-	res := nativeRestartEngine(h).Restart(context.Background())
+	res := h.engine().Restart(context.Background())
 
 	if !res.OK() {
 		t.Fatalf("status = %q, want ok (%s)", res.Status, res.Message)
@@ -85,11 +85,11 @@ func TestNativeRestartReconcilesStaleInitState(t *testing.T) {
 	if !h.mgr.did("reset mysqld") {
 		t.Fatalf("a reconciled unit must have its init state reset, calls=%v", h.mgr.calls)
 	}
-	if !h.mgr.did("restart mysqld") {
+	if !h.mgr.did("start mysqld") {
 		t.Fatalf("reconciliation must not replace the restart itself, calls=%v", h.mgr.calls)
 	}
-	if h.discoverCalls != 2 {
-		t.Fatalf("process discoveries = %d, want 2 (initial plus post-SIGTERM revalidation)", h.discoverCalls)
+	if h.discoverCalls != 3 {
+		t.Fatalf("process discoveries = %d, want 3 (reconciliation, revalidation and stop)", h.discoverCalls)
 	}
 	// The orphaned daemon is signalled; the workload the unit deliberately kept
 	// alive is not. Signalling it would take the node's storage down with it.
@@ -104,21 +104,9 @@ func TestNativeRestartReconcilesStaleInitState(t *testing.T) {
 	}
 }
 
-type restartModeCase struct {
-	name   string
-	engine func(*harness) Engine
-}
-
-func restartModeCases() []restartModeCase {
-	return []restartModeCase{
-		{name: "staged", engine: func(h *harness) Engine { return h.engine() }},
-		{name: "native", engine: nativeRestartEngine},
-	}
-}
-
-// The staged path reaches the same place through its own stop phase, so the
+// Restart reaches the same place through its own stop phase, so the
 // reconciliation must be idempotent there rather than a second, conflicting stop.
-func TestStagedRestartReconcilesStaleInitState(t *testing.T) {
+func TestRestartKeepsStopStartAfterReconciliation(t *testing.T) {
 	t.Parallel()
 
 	h, _ := divergentHarness()
@@ -131,7 +119,7 @@ func TestStagedRestartReconcilesStaleInitState(t *testing.T) {
 		t.Fatalf("message = %q, want it to report the reconciliation", res.Message)
 	}
 	if !h.mgr.did("stop mysqld") || !h.mgr.did("start mysqld") {
-		t.Fatalf("staged restart must keep its stop/start phases, calls=%v", h.mgr.calls)
+		t.Fatalf("restart must keep its stop/start phases, calls=%v", h.mgr.calls)
 	}
 }
 
@@ -142,7 +130,7 @@ func TestRestartSkipsReconciliationWhenUnitIsActive(t *testing.T) {
 	h, _ := divergentHarness()
 	h.mgr.statusSteps = nil // active from the first probe
 
-	res := nativeRestartEngine(h).Restart(context.Background())
+	res := h.engine().Restart(context.Background())
 
 	if !res.OK() {
 		t.Fatalf("status = %q, want ok (%s)", res.Status, res.Message)
@@ -150,17 +138,17 @@ func TestRestartSkipsReconciliationWhenUnitIsActive(t *testing.T) {
 	if strings.Contains(res.Message, "reconciled") {
 		t.Fatalf("message = %q, want no reconciliation on an active unit", res.Message)
 	}
-	if h.mgr.did("reset mysqld") {
+	if len(h.mgr.calls) == 0 || h.mgr.calls[0] == "reset mysqld" {
 		t.Fatalf("an active unit needs no init-state reset, calls=%v", h.mgr.calls)
 	}
-	if h.discoverCalls != 0 {
-		t.Fatalf("residual discovery calls = %d, want 0 on an active unit", h.discoverCalls)
+	if h.discoverCalls != 2 {
+		t.Fatalf("residual discovery calls = %d, want 2 while clearing stop residuals", h.discoverCalls)
 	}
 }
 
 // Unknown includes transitional backend states such as systemd activating or
 // deactivating. They are not proof that init lost a live daemon, so the restart
-// may use its backend action but must never enter the residual reaper.
+// enters its normal stop phase without treating the state as stale init.
 func TestRestartSkipsReconciliationWhenUnitStatusIsUnknown(t *testing.T) {
 	t.Parallel()
 
@@ -168,36 +156,37 @@ func TestRestartSkipsReconciliationWhenUnitStatusIsUnknown(t *testing.T) {
 	h.mgr.statusSteps = []servicemgr.Status{servicemgr.StatusUnknown}
 	h.mgr.status = servicemgr.StatusActive
 
-	res := nativeRestartEngine(h).Restart(context.Background())
+	res := h.engine().Restart(context.Background())
 
 	if !res.OK() {
 		t.Fatalf("status = %q, want ok (%s)", res.Status, res.Message)
 	}
-	if !h.mgr.did("restart mysqld") {
-		t.Fatalf("the backend restart must still run, calls=%v", h.mgr.calls)
+	if !h.mgr.did("start mysqld") {
+		t.Fatalf("the composed restart must still run, calls=%v", h.mgr.calls)
 	}
-	if h.discoverCalls != 0 || len(signaler.calls) != 0 {
+	if len(h.mgr.calls) == 0 || h.mgr.calls[0] != "stop mysqld" {
 		t.Fatalf("unknown state entered reconciliation: discovery=%d signals=%v", h.discoverCalls, signaler.calls)
 	}
-	if h.mgr.did("reset mysqld") {
+	if len(h.mgr.calls) == 0 || h.mgr.calls[0] == "reset mysqld" {
 		t.Fatalf("unknown state must not be reset, calls=%v", h.mgr.calls)
 	}
 }
 
-// A backend restart or staged start can launch a second daemon because init no
-// longer owns the survivor. Both modes must fail closed before any backend
-// action when reconciliation leaves an unkillable residual.
+// Starting can launch a second daemon because init no longer owns the survivor.
+// Both backends must fail closed before any action when reconciliation leaves
+// an unkillable residual.
 func TestRestartBlocksWhenReconciliationLeavesResidual(t *testing.T) {
 	t.Parallel()
 
-	for _, mode := range restartModeCases() {
-		t.Run(mode.name, func(t *testing.T) {
+	for _, backend := range []servicemgr.Backend{servicemgr.BackendSystemd, servicemgr.BackendOpenRC} {
+		t.Run(string(backend), func(t *testing.T) {
 			t.Parallel()
 
 			h, signaler := divergentHarness()
 			h.killPolicy = process.KillPolicy{}
 
-			res := mode.engine(h).Restart(context.Background())
+			h.backend = string(backend)
+			res := h.engine().Restart(context.Background())
 
 			if res.Status != ResultOrphanProcesses {
 				t.Fatalf("status = %q (%s), want %q", res.Status, res.Message, ResultOrphanProcesses)
@@ -252,18 +241,19 @@ func TestRestartBlocksWhenReconciliationFails(t *testing.T) {
 			setup: func(h *harness) {
 				h.mgr.resetErr = errors.New("reset refused")
 			},
-			message: "reset init state before restart: reset refused",
+			message: "reset stopped init state: reset refused",
 		},
 	}
-	for _, mode := range restartModeCases() {
+	for _, backend := range []servicemgr.Backend{servicemgr.BackendSystemd, servicemgr.BackendOpenRC} {
 		for _, tt := range tests {
-			t.Run(mode.name+"/"+tt.name, func(t *testing.T) {
+			t.Run(string(backend)+"/"+tt.name, func(t *testing.T) {
 				t.Parallel()
 
 				h, _ := divergentHarness()
 				tt.setup(h)
 
-				res := mode.engine(h).Restart(context.Background())
+				h.backend = string(backend)
+				res := h.engine().Restart(context.Background())
 
 				if res.Status != ResultFailed || res.Message != tt.message {
 					t.Fatalf("result = %+v, want failed with %q", res, tt.message)
@@ -289,7 +279,7 @@ func TestRestartSkipsReconciliationWithoutSurvivingProcesses(t *testing.T) {
 	h, signaler := divergentHarness()
 	h.discoverSteps = [][]process.Process{nil}
 
-	res := nativeRestartEngine(h).Restart(context.Background())
+	res := h.engine().Restart(context.Background())
 
 	if !res.OK() {
 		t.Fatalf("status = %q, want ok (%s)", res.Status, res.Message)
@@ -297,7 +287,7 @@ func TestRestartSkipsReconciliationWithoutSurvivingProcesses(t *testing.T) {
 	if strings.Contains(res.Message, "reconciled") {
 		t.Fatalf("message = %q, want no reconciliation without survivors", res.Message)
 	}
-	if h.mgr.did("reset mysqld") {
+	if len(h.mgr.calls) == 0 || h.mgr.calls[0] == "reset mysqld" {
 		t.Fatalf("an inactive unit with no processes needs no reset, calls=%v", h.mgr.calls)
 	}
 	if len(signaler.calls) != 0 {
@@ -313,7 +303,7 @@ func TestRestartSkipsReconciliationWhenOnlySurvivorsAreDelegated(t *testing.T) {
 	h, signaler := divergentHarness()
 	h.discoverSteps = [][]process.Process{{delegatedWorkload()}}
 
-	res := nativeRestartEngine(h).Restart(context.Background())
+	res := h.engine().Restart(context.Background())
 
 	if !res.OK() {
 		t.Fatalf("status = %q, want ok (%s)", res.Status, res.Message)
