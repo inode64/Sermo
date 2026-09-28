@@ -8,8 +8,8 @@ import unittest
 from pathlib import Path
 
 import yaml
-from normalize_yaml_flow import iter_yaml_files, normalize_flow
-from yaml_format_check import canonicalize
+from normalize_yaml_flow import ROOT, iter_yaml_files, normalize_flow
+from yaml_format_check import canonicalize, yamllint_command
 
 
 class YAMLFormattingTest(unittest.TestCase):
@@ -62,6 +62,14 @@ command: ["${binary}", "--format={x,y}"]
 
     def test_missing_final_newline_is_repaired(self):
         self.assertEqual(canonicalize("name: fixture"), "name: fixture\n")
+
+    def test_yamllint_paths_stay_relative_to_the_repository(self):
+        command = yamllint_command([
+            ROOT / ".yamllint.yml",
+            ROOT / "catalog" / "services" / "nginx.yml",
+        ])
+        self.assertEqual(command[1:4], ["--strict", "-c", ".yamllint.yml"])
+        self.assertEqual(command[4:], [".yamllint.yml", "catalog/services/nginx.yml"])
 
 
 if __name__ == "__main__":
