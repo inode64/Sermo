@@ -2,6 +2,7 @@ package state
 
 import (
 	"context"
+	"path/filepath"
 	"testing"
 	"time"
 )
@@ -447,5 +448,55 @@ func TestRecordSLATracksDownBucketsWithinAMinute(t *testing.T) {
 	up, total, down, _ := archiveRow(t, s, resMinute, bucket)
 	if up != 2 || total != 3 || down != 1 {
 		t.Fatalf("up/total/down = %d/%d/%d, want 2/3/1", up, total, down)
+	}
+}
+
+// TestShortRetentionDoesNotLoseConsolidatedHistory pins that pruning keeps every
+// source bucket the next consolidation pass still re-reads. Each pass replaces
+// the trailing refresh buckets of the coarser archive, so pruning their source
+// rows first would overwrite a complete coarse sum with a partial one.
+func TestShortRetentionDoesNotLoseConsolidatedHistory(t *testing.T) {
+	tests := []struct {
+		name string
+		set  func(*Retention)
+	}{
+		{"per-minute below the 5m refresh window", func(r *Retention) { r.Minute = 2 * time.Minute }},
+		{"5m below the 1h refresh window", func(r *Retention) { r.FiveMinutes = 30 * time.Minute }},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := context.Background()
+			retention := DefaultRetention()
+			tt.set(&retention)
+			s, err := OpenContextWith(ctx, filepath.Join(t.TempDir(), Filename), Options{Retention: retention})
+			if err != nil {
+				t.Fatalf("open: %v", err)
+			}
+			t.Cleanup(func() { s.Close() })
+
+			// One healthy cycle per minute for an hour, with the daemon's maintenance
+			// pass every five minutes at an unaligned offset, then three more hours of
+			// passes so every refresh window that covers the hour has closed.
+			start := time.Date(2026, 6, 7, 12, 0, 0, 0, time.UTC)
+			const minutes = 60
+			const passEvery = 5
+			const tail = 3 * 60
+			for i := range minutes + tail {
+				if i < minutes {
+					mustRecord(t, s, true, start.Add(time.Duration(i)*time.Minute+10*time.Second))
+				}
+				if (i+1)%passEvery == 0 {
+					if _, err := s.Maintain(ctx, start.Add(time.Duration(i+1)*time.Minute+30*time.Second)); err != nil {
+						t.Fatalf("Maintain: %v", err)
+					}
+				}
+			}
+
+			for _, res := range []int64{resHour, res6Hours, resDay} {
+				if _, total, _, found := archiveRow(t, s, res, alignBucket(start, res)); !found || total != minutes {
+					t.Fatalf("%ds bucket total=%d found=%v, want %d (no sample lost to an early prune)", res, total, found, minutes)
+				}
+			}
+		})
 	}
 }

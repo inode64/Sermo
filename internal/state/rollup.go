@@ -146,9 +146,9 @@ func (r MaintainResult) plus(other MaintainResult) MaintainResult {
 // daemon repeats on its rollup interval and that state compact runs once.
 //
 // The order is load-bearing: pruning first could delete rows a coarser archive
-// still had to read. Pruning additionally refuses to go past the next archive's
-// consolidation watermark, so a stalled or interrupted pass delays reclaiming
-// space instead of losing history.
+// still had to read. Pruning additionally refuses to go past the start of the next
+// archive's refresh window, so a stalled or interrupted pass — or a retention
+// shorter than that window — delays reclaiming space instead of losing history.
 func (s *Store) Maintain(ctx context.Context, now time.Time) (MaintainResult, error) {
 	var out MaintainResult
 	var err error
@@ -277,9 +277,10 @@ func (s *Store) rollupChunk(ctx context.Context, table archiveTable, sourceRes, 
 }
 
 // pruneArchives deletes buckets past their resolution's retention and returns the
-// rows removed. Every archive but the coarsest is additionally floored at the next
-// archive's consolidation watermark, so no resolution is deleted ahead of the one
-// that still has to read it.
+// rows removed. Every archive but the coarsest is additionally floored at the start
+// of the next archive's refresh window (its consolidation watermark minus the
+// trailing buckets each pass re-consolidates), so no resolution is deleted ahead
+// of the one that still has to read it.
 func (s *Store) pruneArchives(ctx context.Context, now time.Time) (int64, error) {
 	ladder := s.retention.archives()
 	var pruned int64
@@ -293,7 +294,11 @@ func (s *Store) pruneArchives(ctx context.Context, now time.Time) (int64, error)
 			if err != nil {
 				return pruned, err
 			}
-			before = min(before, watermark)
+			// The consumer's next pass re-reads the refresh buckets below its
+			// watermark and replaces them, so their source rows must survive it:
+			// flooring at the watermark alone lets a retention shorter than that
+			// window overwrite a complete coarse bucket with a partial sum.
+			before = min(before, watermark-rollupRefreshBuckets*consumerRes)
 		}
 		for _, table := range archiveTables {
 			n, err := s.pruneArchive(ctx, table, stored.Res, before)

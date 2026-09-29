@@ -592,8 +592,10 @@ separately by `engine.retention_events` (default `720h`, 30 days).
 
 `engine.rollup_interval` (default `5m`) is how often `sermod` consolidates and
 prunes. Keep it well under `retention_1m`: the per-minute archive is the source
-every coarser one reads, and its prune is floored at the consolidation watermark,
-so a slower cadence delays reclaiming space rather than losing history. A window
+every coarser one reads, and its prune is floored at the consolidation watermark
+(less the two trailing buckets each pass re-consolidates), so a slower cadence or a
+retention shorter than the next archive's two buckets delays reclaiming space
+rather than losing history. A window
 served by a consolidated archive is therefore at most one interval behind the live
 samples; the `1h` window reads per-minute buckets and is immediate.
 
