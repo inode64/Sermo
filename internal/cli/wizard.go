@@ -750,8 +750,8 @@ func writeConfigDocs(globalPath, pathKey, relDir, targetDir, noun string, docs m
 		return nil, "", fmt.Errorf("create %s: %w", targetDir, err)
 	}
 	for _, file := range files {
-		if err := os.WriteFile(file.path, file.data, wizardConfigFileMode); err != nil {
-			return nil, "", fmt.Errorf("write %s: %w", file.path, err)
+		if err := writeFileAtomic(file.path, file.data, wizardConfigFileMode); err != nil {
+			return nil, "", err
 		}
 	}
 	return files, bak, nil
@@ -759,9 +759,16 @@ func writeConfigDocs(globalPath, pathKey, relDir, targetDir, noun string, docs m
 
 // ensureConfigPathDir makes sure targetDir (whose path relative to the config
 // dir is relDir) is listed in paths.<pathKey> of the global config, rewriting
-// the file — keeping a .bak of the original — only when a change is needed. It
-// returns the backup path written, or "" when paths.<pathKey> already covered it.
+// the file only when a change is needed. The original is first copied to a
+// backup that never replaces an earlier one, and the new text replaces the
+// config atomically, so an interrupted write cannot leave a truncated
+// sermo.yml that sermod refuses to load. It returns the backup path written, or
+// "" when paths.<pathKey> already covered it.
 func ensureConfigPathDir(globalPath, pathKey, relDir, targetDir string) (string, error) {
+	// Rewrite the file a symlinked sermo.yml points at, not the link itself.
+	if resolved, err := filepath.EvalSymlinks(globalPath); err == nil {
+		globalPath = resolved
+	}
 	orig, err := os.ReadFile(globalPath) //nolint:gosec // G304: global sermo.yml path from --config / defaults
 	if err != nil {
 		return "", fmt.Errorf("read %s: %w", globalPath, err)
@@ -780,16 +787,20 @@ func ensureConfigPathDir(globalPath, pathKey, relDir, targetDir string) (string,
 	if !changed {
 		return "", nil
 	}
-	out, err := yaml.Marshal(root)
+	out, err := renderConfigPathAppend(orig, pathKey, relDir, root)
 	if err != nil {
 		return "", fmt.Errorf("render %s: %w", globalPath, err)
 	}
-	bak := globalPath + ".bak"
-	if err := os.WriteFile(bak, orig, wizardConfigFileMode); err != nil { //nolint:gosec // G703: backup path is derived from the operator-selected global config file
-		return "", fmt.Errorf("write backup %s: %w", bak, err)
+	info, err := os.Stat(globalPath)
+	if err != nil {
+		return "", fmt.Errorf("stat %s: %w", globalPath, err)
 	}
-	if err := os.WriteFile(globalPath, out, wizardConfigFileMode); err != nil {
-		return "", fmt.Errorf("write %s: %w", globalPath, err)
+	bak, err := writeConfigBackup(globalPath, orig, info.Mode().Perm())
+	if err != nil {
+		return "", err
+	}
+	if err := replaceFileAtomic(globalPath, out, info); err != nil {
+		return "", err
 	}
 	return bak, nil
 }

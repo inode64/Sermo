@@ -1889,7 +1889,11 @@ document never merges into a service. (A service can also declare its own
 > Watch assistants (`net`, `uplink`) print watch document previews and, if
 > accepted, write one watch per file under a watch-type directory such as
 > `/etc/sermo/networks` or `/etc/sermo/watches`; the wizard adds that directory
-> to `paths.watches` (writing a `.bak` first).
+> to `paths.watches`. That edit keeps the file's comments and key order when it
+> can (a flow-style `paths: {…}` mapping or an empty file is re-rendered without
+> comments), copies the original to `sermo.yml.bak` first — or to a timestamped
+> `sermo.yml.bak.<UTC time>` when that backup already exists, so the original is
+> never overwritten — and replaces `sermo.yml` atomically with its mode and owner.
 > Service assistants (`service`, `docker`, `vm`) write
 > one service file per target under `services/` and ensure that
 > `paths.services` loads it; `docker` and `vm` add `control.type: docker` or
