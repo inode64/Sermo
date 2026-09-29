@@ -1392,10 +1392,11 @@ Protocols, in the order of the table above:
   rspamd version, read from the `Server` header.
 - `libvirt` (alias `libvirtd`) — opens an RPC connection to a libvirt daemon and
   reads its version; both succeeding prove libvirtd is up. It runs no write
-  operation. **Transport:** with no `socket` and no `host` it dials the local Unix
-  socket `/run/libvirt/libvirt-sock`; set `socket` for a different path such as
-  `/run/libvirt/virtqemud-sock` on modular libvirt hosts, or set `host` to use
-  plain **TCP** (default port 16509). TLS/SASL is not supported.
+  operation. **Transport:** with no `socket`, `host` or `port` it dials the local
+  Unix socket `/run/libvirt/libvirt-sock`; set `socket` for a different path such
+  as `/run/libvirt/virtqemud-sock` on modular libvirt hosts, or set `host` and/or
+  `port` to use plain **TCP** (default `127.0.0.1:16509`). TLS/SASL is not
+  supported.
   **Connect URI:** `query` selects the driver, default `qemu:///system` (e.g.
   `lxc:///`, `xen://`). No auth — local socket access is governed by the socket's
   permissions/polkit. Uses `github.com/digitalocean/go-libvirt`.
@@ -1597,8 +1598,8 @@ Protocols, in the order of the table above:
   `on_version_change`. Because `ups.status` is a space-separated flag list (e.g.
   `OL CHRG`), match it with `=~` rather than `==`.
 - `docker` — the Docker Engine API. By default it talks to the local Unix socket
-  `/run/docker.sock`; set `host` (and `port`, default 2375 / 2376 with `tls`)
-  for a TCP daemon, or `socket` for a non-default path. No `user`. It GETs `/info`
+  `/run/docker.sock`; set `host` and/or `port` (default `127.0.0.1`, port 2375 /
+  2376 with `tls`) for a TCP daemon, or `socket` for a non-default path. No `user`. It GETs `/info`
   (proving the daemon is up), reports the engine `version` (pair with
   `on_version_change`), and exposes counts: **`containers`**,
   **`containers.running`**, `containers.paused`, `containers.stopped`, `images`,

@@ -207,8 +207,9 @@ func Prepare(name string, cfg Config) (Protocol, Config, bool) {
 }
 
 // Resolve applies one protocol's target defaults to cfg. An explicit socket,
-// host or port always wins; when neither socket nor host was selected, a
-// protocol with a well-known local socket prefers it over loopback TCP.
+// host or port always wins; when none of them was selected, a protocol with a
+// well-known local socket prefers it over loopback TCP. A port alone selects
+// loopback TCP on that port.
 func Resolve(protocol Protocol, cfg Config) Config {
 	if protocol == nil {
 		return cfg
@@ -229,7 +230,7 @@ func protocolRegistrationFor(protocol Protocol) (protocolRegistration, bool) {
 }
 
 func resolveProtocolTarget(registration protocolRegistration, cfg Config) Config {
-	if cfg.Socket == "" && cfg.Host == "" {
+	if cfg.Socket == "" && cfg.Host == "" && cfg.Port == 0 {
 		cfg.Socket = registration.defaultSocket
 	}
 	if cfg.Host == "" {
