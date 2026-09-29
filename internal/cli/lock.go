@@ -6,6 +6,9 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"os/signal"
+	"slices"
+	"syscall"
 	"time"
 
 	"sermo/internal/config"
@@ -95,7 +98,7 @@ func (a App) runLockWrap(ctx context.Context, opts options, cfg *config.Config, 
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
+	if err := runLockedCommand(cmd); err != nil {
 		if exitErr, ok := errors.AsType[*exec.ExitError](err); ok {
 			a.recordAccess(cfg, accessCommandLockWrap, service, accessStatusError, fmt.Sprintf("exit %d", exitErr.ExitCode()))
 			return exitErr.ExitCode()
@@ -165,4 +168,38 @@ func formatLock(lock locks.Lock) string {
 		line += fmt.Sprintf(" reason=%q", lock.Reason)
 	}
 	return line
+}
+
+// runLockedCommand runs cmd while the caller holds its named lock. The lock
+// owner is this sermoctl process, so sermoctl must outlive COMMAND: dying on a
+// signal would skip the deferred release and leave a "dead owner" lock that no
+// longer blocks operations while COMMAND (for example a backup cleaning up
+// after SIGTERM) is still running. Termination signals are therefore caught
+// for the command's lifetime. SIGTERM and SIGHUP are passed on to COMMAND;
+// SIGINT and SIGQUIT are held but not forwarded: typed at a terminal they
+// already reach COMMAND through the foreground process group, and a second copy
+// could turn a graceful interrupt into a forced abort in tools that escalate on
+// repeat.
+func runLockedCommand(cmd *exec.Cmd) error {
+	forwarded := []os.Signal{syscall.SIGTERM, syscall.SIGHUP}
+	held := []os.Signal{syscall.SIGINT, syscall.SIGQUIT}
+	sigs := make(chan os.Signal, len(forwarded)+len(held))
+	signal.Notify(sigs, slices.Concat(forwarded, held)...)
+	defer signal.Stop(sigs)
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("start %s: %w", cmd.Path, err)
+	}
+	done := make(chan error, 1)
+	go func() { done <- cmd.Wait() }()
+	for {
+		select {
+		case err := <-done:
+			return err
+		case sig := <-sigs:
+			if slices.Contains(forwarded, sig) {
+				// Best effort: the command may have exited already.
+				_ = cmd.Process.Signal(sig)
+			}
+		}
+	}
 }

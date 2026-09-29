@@ -359,6 +359,17 @@ unexpected panic recovered at the top level.
 `is-active` maps directly: `0` active, `1` not active (including `paused`),
 `2` error.
 
+## Named locks
+
+`sermoctl lock SERVICE --reason R --ttl D -- COMMAND...` holds the named lock
+while `COMMAND` runs; the lock's owner is the `sermoctl` process. `sermoctl`
+therefore stays alive until `COMMAND` exits: it forwards `SIGTERM` and `SIGHUP`
+to `COMMAND`, and it neither dies on nor forwards `SIGINT`/`SIGQUIT` (typed at a
+terminal they already reach `COMMAND` through the foreground process group).
+The lock is released only after `COMMAND` has exited, so a backup that cleans up
+after `SIGTERM` stays protected until it finishes. `SIGKILL` of `sermoctl` cannot
+be caught; the lock then turns stale (dead owner) and stops blocking.
+
 ## Mounts
 
 Mount actions are fstab-backed and use storage watch files with a `mount:` block
