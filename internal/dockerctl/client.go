@@ -30,7 +30,10 @@ const defaultTimeout = 10 * time.Second
 
 const (
 	dockerResponseBodyLimit = 256 * units.BytesPerKiB
-	dockerErrorBodyLimit    = 4 * units.BytesPerKiB
+	// dockerListBodyLimit bounds /containers/json, which grows with every
+	// container's labels, mounts and networks; 256 KiB covers only tens of them.
+	dockerListBodyLimit  = 8 * units.BytesPerMiB
+	dockerErrorBodyLimit = 4 * units.BytesPerKiB
 )
 
 const (
@@ -277,7 +280,7 @@ func (c Container) ContainerName() string {
 // Info reads Docker daemon info.
 func (c *Client) Info(ctx context.Context) (Info, error) {
 	var info Info
-	if err := c.get(ctx, dockerEndpointInfo, &info); err != nil {
+	if err := c.get(ctx, dockerEndpointInfo, dockerResponseBodyLimit, &info); err != nil {
 		return Info{}, err
 	}
 	return info, nil
@@ -286,7 +289,7 @@ func (c *Client) Info(ctx context.Context) (Info, error) {
 // Inspect reads one container by name or ID.
 func (c *Client) Inspect(ctx context.Context, container string) (Container, error) {
 	var out Container
-	if err := c.get(ctx, containerPath(container, dockerEndpointInspect), &out); err != nil {
+	if err := c.get(ctx, containerPath(container, dockerEndpointInspect), dockerResponseBodyLimit, &out); err != nil {
 		return Container{}, err
 	}
 	return out, nil
@@ -300,7 +303,7 @@ func (c *Client) ListContainers(ctx context.Context, all bool) ([]ContainerSumma
 		path += dockerQueryAll
 	}
 	var out []ContainerSummary
-	if err := c.get(ctx, path, &out); err != nil {
+	if err := c.get(ctx, path, dockerListBodyLimit, &out); err != nil {
 		return nil, err
 	}
 	return out, nil
@@ -323,7 +326,10 @@ func (c *Client) Unpause(ctx context.Context, container string) error {
 	return c.post(ctx, containerPath(container, dockerEndpointUnpause), nil, http.StatusNoContent, http.StatusNotModified)
 }
 
-func (c *Client) get(ctx context.Context, path string, out any) error {
+// get decodes a JSON response of at most limit bytes. A read error or a body
+// over the limit is reported as such: decoding a truncated body would surface
+// as a misleading "invalid JSON" error.
+func (c *Client) get(ctx context.Context, path string, limit int64, out any) error {
 	ctx, cancel := ensureDeadline(ctx)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.Base+path, http.NoBody)
@@ -338,7 +344,13 @@ func (c *Client) get(ctx context.Context, path string, out any) error {
 	if resp.StatusCode != http.StatusOK {
 		return dockerStatusError(resp)
 	}
-	body, _ := io.ReadAll(io.LimitReader(resp.Body, dockerResponseBodyLimit))
+	body, err := io.ReadAll(io.LimitReader(resp.Body, limit+1))
+	if err != nil {
+		return fmt.Errorf("read Docker GET %s response: %w", path, err)
+	}
+	if int64(len(body)) > limit {
+		return fmt.Errorf("docker: GET %s response exceeds %d bytes", path, limit)
+	}
 	if err := json.Unmarshal(body, out); err != nil {
 		return fmt.Errorf("docker: invalid JSON response: %w", err)
 	}
