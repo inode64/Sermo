@@ -2547,7 +2547,10 @@ watches:
 `hdparm` is **condition-style**: a predicate expresses the *alerting* condition
 (e.g. `read < 100`), so the watch hook/notify fires when it holds.
 **`hdparm` needs root** (raw device access); without it the
-check fails with hdparm's error. Because `-t` reads from the platter for a few
+check fails with hdparm's error. A run that exits non-zero, or that lacks a
+timing a predicate asks for (a disk that fell off its bus still answers `-T`
+from cache before `-t` fails), is an unavailable observation, never a sample
+judged on the half that came back. Because `-t` reads from the platter for a few
 seconds and adds real I/O load, schedule it on a **long `interval`** (e.g. `24h`)
 with a generous `timeout`. The measured `read`/`cached` are placed in the result
 data (and the `SERMO_READ`/`SERMO_CACHED` hook variables), and are **recorded as a

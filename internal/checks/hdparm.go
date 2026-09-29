@@ -54,6 +54,9 @@ func (c *hdparmCheck) Run(ctx context.Context) Result {
 		return c.failedProbe(prefix, msg, start)
 	}
 	values, err := parseHdparm(res.Stdout)
+	if err == nil {
+		err = hdparmIncomplete(values, want, res.ExitCode)
+	}
 	if err != nil {
 		msg := err.Error()
 		if line := output.FirstNonEmptyLine(res.Stderr); line != "" {
@@ -87,6 +90,23 @@ func hdparmResultData(device string, values map[string]float64) map[string]any {
 		data[k] = v
 	}
 	return data
+}
+
+// hdparmIncomplete rejects a report that lacks a requested timing or comes
+// with a failing exit status. hdparm -T -t on a disk that fell off its bus
+// prints the cached line and then fails the buffered read (exit 5): judged on
+// the half it got, the check would record a healthy sample and never ask
+// sysfs whether the disk is still there.
+func hdparmIncomplete(values map[string]float64, want map[string]bool, exitCode int) error {
+	for _, f := range []string{fieldCached, fieldRead} {
+		if _, ok := values[f]; want[f] && !ok {
+			return fmt.Errorf("no %s timing in output (exit code %d)", f, exitCode)
+		}
+	}
+	if exitCode != 0 {
+		return fmt.Errorf("exit code %d", exitCode)
+	}
+	return nil
 }
 
 func hdparmArgs(device string, wantCached, wantRead bool) []string {
