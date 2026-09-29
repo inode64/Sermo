@@ -338,6 +338,39 @@ func TestSSACLISectionFieldsDoNotOverwriteThePreviousDrive(t *testing.T) {
 	}
 }
 
+// A controller that reports no temperature has no reading: publishing 0 drew a
+// 0 °C series and satisfied a "temperature <" predicate against nothing.
+func TestHardwareRAIDWithoutTemperatureReportsNoReading(t *testing.T) {
+	output := strings.NewReplacer(
+		"   Controller Temperature (C): 50\n", "",
+		"   Cache Module Temperature (C): 42\n", "",
+		"   Capacitor Temperature  (C): 39\n", "",
+		"\t\t Current Temperature (C): 43\n", "",
+	).Replace(healthySSACLI)
+	if strings.Contains(output, "Temperature") {
+		t.Fatalf("fixture still carries a temperature:\n%s", output)
+	}
+	runner := cliRunner(map[string]execx.Result{
+		"/usr/bin/ssacli ctrl all show config detail": {Stdout: output},
+	}, nil)
+	check := hardwareRAIDCheck{
+		name: CheckTypeSSACLI, timeout: time.Second, runner: runner,
+		binary: "/usr/bin/ssacli", tool: CheckTypeSSACLI,
+		preds: []levelPred{{field: SmartFieldTemperature, op: "<", value: 10}},
+	}
+	result := check.Run(context.Background())
+
+	if !result.OK || result.Unavailable {
+		t.Fatalf("result = %+v, want healthy: no temperature cannot satisfy a threshold", result)
+	}
+	if got, present := result.Data[SmartFieldTemperature]; present {
+		t.Errorf("Data[%s] = %v, want no reading", SmartFieldTemperature, got)
+	}
+	if !strings.Contains(result.Message, "max_temperature=unknown") {
+		t.Errorf("message = %q, want max_temperature=unknown", result.Message)
+	}
+}
+
 func TestSSACLIRebuildProgressIsAttachedToItsVolume(t *testing.T) {
 	output := strings.Replace(healthySSACLI, "Logical Drive Label: system", "Logical Drive Label: system\n         Rebuild Status: Rebuilding 42.5%", 1)
 	observation, err := parseSSACLIReport(output)
