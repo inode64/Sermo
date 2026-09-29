@@ -332,7 +332,13 @@ func inspectResolved(
 		}
 		if r.OK && len(version.argv) > 0 {
 			vres := runVersionProbe(ctx, runner, resolved.Tree, version)
-			if applyVersionIdentityFailure(&r, version, vres) {
+			if applyVersionIdentityFailure(&r, vres) {
+				return r
+			}
+			if !vres.ok && version.identityRequired() {
+				// The identity is unconfirmed: an invalid sample, not a
+				// healthy app of unknown version.
+				r.OK, r.Status, r.Output = false, vres.status, vres.output
 				return r
 			}
 			if vres.ok {
@@ -350,10 +356,10 @@ func inspectResolved(
 	}
 
 	vres := runVersionProbe(ctx, runner, resolved.Tree, version)
-	if applyVersionIdentityFailure(&r, version, vres) {
+	if applyVersionIdentityFailure(&r, vres) {
 		return r
 	}
-	if !vres.ok && (version.optional || options.versionOptional) {
+	if !vres.ok && (version.optional || options.versionOptional) && !version.identityRequired() {
 		r.OK = true
 		r.Status = StatusOK
 		return r
@@ -371,9 +377,21 @@ func inspectResolved(
 // /usr/sbin/mysqld is mariadbd, and only `mysql`'s version_match tells the two
 // apart. Registering it from the path alone made its first cycle fire "not
 // installed".
+//
+// A probe that could not confirm the identity (a timeout or failed command on a
+// loaded host) is not proof of absence, but presence only decides whether to
+// register a watch: it is left unregistered rather than risk that false alarm.
 func presenceReport(ctx context.Context, runner execx.Runner, tree map[string]any, version probeCommand, r Report) Report {
 	if version.identityRequired() && len(version.argv) > 0 {
-		if vres := runVersionProbe(ctx, runner, tree, version); applyVersionIdentityFailure(&r, version, vres) {
+		vres := runVersionProbe(ctx, runner, tree, version)
+		if applyVersionIdentityFailure(&r, vres) {
+			return r
+		}
+		if !vres.ok {
+			r.Installed = false
+			r.OK = false
+			r.Status = vres.status
+			r.Output = vres.output
 			return r
 		}
 	}
@@ -383,10 +401,11 @@ func presenceReport(ctx context.Context, runner execx.Runner, tree map[string]an
 }
 
 // applyVersionIdentityFailure marks the report not-installed when the version
-// probe failed an identity requirement (wrong binary answering, or an identity
-// match the probe requires). Reports true when the caller must return early.
-func applyVersionIdentityFailure(r *Report, version probeCommand, vres versionProbeResult) bool {
-	if vres.ok || (!vres.identityMismatch && !version.identityRequired()) {
+// output failed version_match: another implementation answered for the binary.
+// A version command that timed out or failed is an invalid sample, reported as
+// an error, not absence. Reports true when the caller must return early.
+func applyVersionIdentityFailure(r *Report, vres versionProbeResult) bool {
+	if !vres.identityMismatch {
 		return false
 	}
 	r.Installed = false
