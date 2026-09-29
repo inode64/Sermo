@@ -142,13 +142,13 @@ func (l *EventLog) exportEvent(e LoggedEvent) {
 
 // Recent returns up to limit events, newest first. A non-empty service filters to
 // that service's events (Event.Service); "" returns everything (including
-// host-watch events). limit <= 0 returns all retained events.
+// host-watch events). limit <= 0 returns as many events as the ring retains.
 //
-// A named service is read from the store first, exactly as Page does. The ring
-// is not authoritative for one target: sermoctl runs a service operation in its
-// own process and records the event straight to the store, so a ring-only read
-// omitted every operator action until a daemon restart rehydrated the ring —
-// while the global feed, which is store-backed, showed it all along.
+// Both reads go to the store first, exactly as Page does. The ring is not
+// authoritative: sermoctl runs a service operation in its own process and
+// records the event straight to the store, so a ring-only read omitted every
+// operator action until a daemon restart rehydrated the ring — while the paged
+// feed, which is store-backed, showed it all along.
 func (l *EventLog) Recent(service string, limit int) []LoggedEvent {
 	if l == nil {
 		return nil
@@ -156,6 +156,18 @@ func (l *EventLog) Recent(service string, limit int) []LoggedEvent {
 	if service != "" {
 		return l.recentForTarget(state.EventColumnService, service, limit,
 			func(e LoggedEvent) bool { return e.Service == service })
+	}
+	if l.store != nil {
+		if limit <= 0 {
+			// Keep "all retained events" bounded like the ring it replaces,
+			// instead of loading the whole persisted table.
+			limit = l.size
+		}
+		records, err := l.store.RecentEventsBefore(0, limit)
+		if err == nil {
+			return loggedEventsFromRecords(records)
+		}
+		l.reportStoreError(err)
 	}
 	return l.recentFiltered(func(LoggedEvent) bool { return true }, limit)
 }
@@ -222,7 +234,7 @@ func (l *EventLog) Page(beforeID int64, limit int) []LoggedEvent {
 		}
 		l.reportStoreError(err)
 	}
-	all := l.Recent("", 0)
+	all := l.recentFiltered(func(LoggedEvent) bool { return true }, 0)
 	capacity := len(all)
 	if limit > 0 {
 		capacity = min(limit, capacity)
