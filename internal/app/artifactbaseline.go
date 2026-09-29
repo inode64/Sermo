@@ -68,6 +68,17 @@ func (b *ArtifactBaseline) Acknowledge(samples *ArtifactSamples) {
 	}
 }
 
+// restore replaces the acknowledged fingerprints in place: the operation
+// engine captured this baseline when it was built, so swapping in another
+// one would leave the engine judging `changed:` against a baseline the worker
+// no longer acknowledges.
+func (b *ArtifactBaseline) restore(fingerprints map[string]string) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	clear(b.fingerprints)
+	maps.Copy(b.fingerprints, fingerprints)
+}
+
 // snapshot returns a copy of the acknowledged fingerprints.
 func (b *ArtifactBaseline) snapshot() map[string]string {
 	if b == nil {
