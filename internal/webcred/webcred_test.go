@@ -271,6 +271,29 @@ func TestCacheStaysBounded(t *testing.T) {
 	}
 }
 
+// A flood of distinct wrong passwords must not evict the operator's cached
+// match: that entry is the oldest, so plain closest-to-expiry eviction would
+// push the operator back onto bcrypt, queued behind the flood.
+func TestCacheKeepsMatchesThroughAWrongPasswordFlood(t *testing.T) {
+	list, err := Parse(hashOrFail(t, "typed"))
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+	now := time.Now()
+	list.cache.now = func() time.Time { return now }
+	list.cache.put("typed", true)
+	for i := range cacheEntries * 2 {
+		now = now.Add(time.Second)
+		list.cache.put(strings.Repeat("x", i+1), false)
+	}
+	if match, found := list.cache.get("typed"); !found || !match {
+		t.Errorf("cached match evicted by wrong guesses: found=%v match=%v", found, match)
+	}
+	if got := len(list.cache.entries); got > cacheEntries {
+		t.Errorf("cache holds %d entries, want at most %d", got, cacheEntries)
+	}
+}
+
 // A client that gives up while queued for an expensive verification must not
 // hold a slot: Verify returns instead of waiting.
 func TestVerifyHonorsContextWhileQueued(t *testing.T) {

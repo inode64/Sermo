@@ -333,13 +333,16 @@ func (c *verifyCache) put(password string, match bool) {
 	c.entries[key] = verdict{match: match, expires: c.now().Add(cacheTTL)}
 }
 
-// evict drops expired entries, and the entry closest to expiring when none are.
-// Dropping the whole cache instead would let a flood of wrong passwords push
-// every operator back onto the slow path.
+// evict drops expired entries, and when none are, the failure closest to
+// expiring. Dropping the whole cache instead would let a flood of wrong passwords
+// push every operator back onto the slow path. Matches are spared for the same
+// reason: an operator's match is usually the oldest entry, and only a correct
+// password creates one, so a flood cannot fill the cache with them. A cache
+// holding nothing but matches still gives up its oldest to stay bounded.
 func (c *verifyCache) evict() {
 	now := c.now()
-	var oldestKey [sha256.Size]byte
-	var oldest time.Time
+	var oldestKey, oldestFailureKey [sha256.Size]byte
+	var oldest, oldestFailure time.Time
 	for key, entry := range c.entries {
 		if !now.Before(entry.expires) {
 			delete(c.entries, key)
@@ -348,8 +351,17 @@ func (c *verifyCache) evict() {
 		if oldest.IsZero() || entry.expires.Before(oldest) {
 			oldestKey, oldest = key, entry.expires
 		}
+		if !entry.match && (oldestFailure.IsZero() || entry.expires.Before(oldestFailure)) {
+			oldestFailureKey, oldestFailure = key, entry.expires
+		}
 	}
-	if len(c.entries) >= cacheEntries && !oldest.IsZero() {
+	if len(c.entries) < cacheEntries {
+		return
+	}
+	switch {
+	case !oldestFailure.IsZero():
+		delete(c.entries, oldestFailureKey)
+	case !oldest.IsZero():
 		delete(c.entries, oldestKey)
 	}
 }
