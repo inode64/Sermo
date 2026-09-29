@@ -5,8 +5,10 @@ import (
 	"debug/elf"
 	"os"
 	"path/filepath"
-	"sermo/internal/hostfs"
+	"slices"
 	"strings"
+
+	"sermo/internal/hostfs"
 
 	"sermo/internal/execx"
 	"sermo/internal/strutil"
@@ -64,9 +66,12 @@ func (c librariesCheck) Run(ctx context.Context) Result {
 		return c.result(true, c.binary+": static binary, no shared libraries", start)
 	}
 
-	dirs := collectLibrarySearchDirs(c.binary, ef)
-
-	missing := resolveNeeded(ctx, needed, dirs, make(map[string]bool))
+	resolver := libraryResolver{
+		target: elfTarget{class: ef.Class, machine: ef.Machine},
+		dirs:   collectLibrarySearchDirs(c.binary, ef),
+		seen:   make(map[string]bool),
+	}
+	missing := resolver.resolve(ctx, needed, nil)
 	if err := ctx.Err(); err != nil {
 		return c.unavailableResult(c.binary+": "+execx.ContextFailure(err, c.timeout), start)
 	}
@@ -76,36 +81,55 @@ func (c librariesCheck) Run(ctx context.Context) Result {
 	return c.result(true, c.binary+": all shared libraries resolve", start)
 }
 
-// resolveNeeded recursively resolves DT_NEEDED entries (including transitive
-// dependencies of the resolved libraries). It returns the list of sonames
-// that could not be located.
-func resolveNeeded(ctx context.Context, needed, dirs []string, seen map[string]bool) []string {
+// elfTarget is the ELF class and machine every library of a binary must share.
+// The dynamic linker skips a candidate of another class or architecture — the
+// 32-bit copies multilib distributions keep in /lib and /usr/lib — and keeps
+// searching, so a name match alone does not make a library resolvable.
+type elfTarget struct {
+	class   elf.Class
+	machine elf.Machine
+}
+
+// libraryResolver walks a binary's DT_NEEDED tree. dirs is the binary's search
+// path; each library additionally searches its own DT_RUNPATH/DT_RPATH first,
+// with $ORIGIN at that library, as the dynamic linker does for its
+// dependencies.
+type libraryResolver struct {
+	target elfTarget
+	dirs   []string
+	seen   map[string]bool
+}
+
+// resolve recursively resolves DT_NEEDED entries (including transitive
+// dependencies of the resolved libraries), searching own before the binary's
+// path. It returns the list of sonames that could not be located.
+func (r *libraryResolver) resolve(ctx context.Context, needed, own []string) []string {
 	var missing []string
+	dirs := append(slices.Clip(own), r.dirs...)
 	for _, soname := range needed {
 		if err := ctx.Err(); err != nil {
 			return missing
 		}
-		if seen[soname] {
+		if r.seen[soname] {
 			continue
 		}
-		seen[soname] = true
+		r.seen[soname] = true
 
-		path := findLibrary(soname, dirs)
-		if path == "" {
-			missing = append(missing, soname)
+		lib, path, openFailed := openLibrary(soname, dirs, r.target)
+		if lib == nil {
+			reason := soname
+			if openFailed {
+				reason = soname + " (open failed)"
+			}
+			missing = append(missing, reason)
 			continue
 		}
+		// Collect the library's own DT_NEEDED (transitive) and search path.
+		subNeeded, _ := lib.DynString(elf.DT_NEEDED)
+		subOwn := expandLibraryPath(dynamicLibraryPath(lib), path)
+		_ = lib.Close()
 
-		// Open the resolved library to collect its own DT_NEEDED (transitive).
-		ef, err := elf.Open(path)
-		if err != nil {
-			missing = append(missing, soname+" (open failed)")
-			continue
-		}
-		subNeeded, _ := ef.DynString(elf.DT_NEEDED)
-		_ = ef.Close()
-
-		missing = append(missing, resolveNeeded(ctx, subNeeded, dirs, seen)...)
+		missing = append(missing, r.resolve(ctx, subNeeded, subOwn)...)
 	}
 	return missing
 }
@@ -176,20 +200,32 @@ func expandOrigin(p, binary string) string {
 	return filepath.Clean(p)
 }
 
-func findLibrary(soname string, dirs []string) string {
-	if filepath.IsAbs(soname) {
-		if _, err := os.Stat(soname); err == nil {
-			return soname
+// openLibrary opens the first candidate for soname in dirs that matches target.
+// openFailed reports that a candidate existed but could not be read as ELF, so
+// the caller can tell an unreadable library from an absent one. The caller
+// closes the returned file.
+func openLibrary(soname string, dirs []string, target elfTarget) (lib *elf.File, path string, openFailed bool) {
+	candidates := []string{soname}
+	if !filepath.IsAbs(soname) {
+		candidates = candidates[:0]
+		for _, d := range dirs {
+			candidates = append(candidates, filepath.Join(d, soname))
 		}
-		return ""
 	}
-	for _, d := range dirs {
-		cand := filepath.Join(d, soname)
-		if _, err := os.Stat(cand); err == nil {
-			return cand
+	for _, cand := range candidates {
+		ef, err := elf.Open(cand)
+		if err != nil {
+			if !os.IsNotExist(err) {
+				openFailed = true
+			}
+			continue
 		}
+		if ef.Class == target.class && ef.Machine == target.machine {
+			return ef, cand, false
+		}
+		_ = ef.Close()
 	}
-	return ""
+	return nil, "", openFailed
 }
 
 // parseLdSoConf returns directory paths listed in a simple ld.so.conf file.

@@ -755,23 +755,42 @@ func TestLibrariesCheckHonorsCanceledContext(t *testing.T) {
 }
 
 // Low-level tests for the native resolver helpers.
-func TestFindLibrary(t *testing.T) {
-	// Absolute path
-	abs := "/bin/sh"
-	if got := findLibrary(abs, nil); got != abs {
-		t.Fatalf("absolute: got %q", got)
+func TestOpenLibrary(t *testing.T) {
+	root := t.TempDir()
+	target := elfTarget{class: elf.ELFCLASS64, machine: elf.EM_X86_64}
+	abs := filepath.Join(root, "lib", "libsermotest.so.1")
+	writeTestELF(t, abs, testELF{class: target.class, machine: target.machine})
+	unreadable := filepath.Join(root, "bad", "libsermotest.so.1")
+	if err := os.MkdirAll(filepath.Dir(unreadable), 0o755); err != nil {
+		t.Fatal(err)
 	}
-	if got := findLibrary("/nonexistent/abs/path", nil); got != "" {
-		t.Fatalf("missing absolute should return empty")
+	if err := os.WriteFile(unreadable, []byte("not an ELF"), 0o644); err != nil {
+		t.Fatal(err)
 	}
 
-	// Relative via dirs
-	dirs := []string{"/bin", "/usr/bin"}
-	if got := findLibrary("sh", dirs); got == "" {
-		t.Fatalf("sh should be found via dirs")
+	cases := []struct {
+		name           string
+		soname         string
+		dirs           []string
+		wantPath       string
+		wantOpenFailed bool
+	}{
+		{"absolute", abs, nil, abs, false},
+		{"missing absolute", filepath.Join(root, "nonexistent.so"), nil, "", false},
+		{"relative via dirs", "libsermotest.so.1", []string{filepath.Join(root, "none"), filepath.Join(root, "lib")}, abs, false},
+		{"missing relative", "nonexistentlib.so.9", []string{filepath.Join(root, "lib")}, "", false},
+		{"unreadable candidate", "libsermotest.so.1", []string{filepath.Join(root, "bad")}, "", true},
 	}
-	if got := findLibrary("nonexistentlib.so.9", dirs); got != "" {
-		t.Fatalf("missing should return empty")
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			lib, path, openFailed := openLibrary(tc.soname, tc.dirs, target)
+			if lib != nil {
+				_ = lib.Close()
+			}
+			if path != tc.wantPath || openFailed != tc.wantOpenFailed {
+				t.Fatalf("path, openFailed = %q, %v; want %q, %v", path, openFailed, tc.wantPath, tc.wantOpenFailed)
+			}
+		})
 	}
 }
 
@@ -793,10 +812,14 @@ func TestResolveNeededBasic(t *testing.T) {
 	}
 	defer ef.Close()
 
-	dirs := collectLibrarySearchDirs("/bin/sh", ef)
-	missing := resolveNeeded(context.Background(), []string{"libc.so.6"}, dirs, make(map[string]bool))
+	resolver := libraryResolver{
+		target: elfTarget{class: ef.Class, machine: ef.Machine},
+		dirs:   collectLibrarySearchDirs("/bin/sh", ef),
+		seen:   make(map[string]bool),
+	}
+	missing := resolver.resolve(context.Background(), []string{"libc.so.6"}, nil)
 	if len(missing) > 0 {
-		t.Logf("note: resolveNeeded reported missing in smoke test (distro dependent): %v", missing)
+		t.Logf("note: the resolver reported missing in smoke test (distro dependent): %v", missing)
 	}
 }
 
