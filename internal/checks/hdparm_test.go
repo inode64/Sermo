@@ -206,3 +206,41 @@ func TestHdparmCheckKeepsLastKnownRatesOfAMissingDevice(t *testing.T) {
 		t.Errorf("Data[%s] = %v, want the model sysfs still publishes", DataKeyModel, got)
 	}
 }
+
+// hdparm -T -t on a disk that dropped off its bus prints the cached line, then
+// fails the buffered read with exit 5. Judging the check on the cached half
+// alone would record a healthy sample for a disk that is gone.
+func TestHdparmCheckPartialTimingIsAFailedProbe(t *testing.T) {
+	partial := "/dev/sda:\n" +
+		" Timing cached reads:   18000 MB in  2.00 seconds = 9000.00 MB/sec\n" +
+		" Timing buffered disk reads: "
+	cases := []struct {
+		name string
+		res  execx.Result
+	}{
+		{"exit 5 after the cached line", execx.Result{Stdout: partial, Stderr: "read() hit EOF - device too small\n", ExitCode: 5}},
+		{"requested timing absent with exit 0", execx.Result{Stdout: partial}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			c := &hdparmCheck{
+				name: "d", timeout: time.Second,
+				runner: execxtest.Fixed(tc.res, nil),
+				device: "/dev/sda",
+				preds:  []levelPred{{fieldCached, "<", 100}, {fieldRead, "<", 20}},
+				probe:  deviceProbe{size: func(string) (uint64, error) { return 0, nil }, identity: testDeviceIdentity},
+				last:   lastSample{},
+			}
+			res := c.Run(context.Background())
+			if !res.Unavailable {
+				t.Fatalf("Unavailable = false (message %q), want a failed probe for a partial report", res.Message)
+			}
+			if got := res.Data[DataKeyDeviceState]; got != DeviceStateMissing {
+				t.Errorf("device state = %v, want %q", got, DeviceStateMissing)
+			}
+			if _, recorded := res.Data[fieldCached]; recorded {
+				t.Errorf("Data[%s] recorded from a failed probe: %v", fieldCached, res.Data)
+			}
+		})
+	}
+}
