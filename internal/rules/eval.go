@@ -450,7 +450,8 @@ func normalizeKey(m map[string]any) string {
 }
 
 // Guard reports whether any guard rule blocks action, returning the blocking
-// rule's message. Guards are evaluated in name order; the first
+// rule's message. A guard applies when its blocks list names the action or a
+// lifecycle action it performs (see guardedBy). Guards are evaluated in name order; the first
 // blocking guard wins. An evaluation error is returned so the caller can fail
 // safe rather than silently proceed.
 func Guard(ctx context.Context, ruleSet []Rule, action string, ev *Evaluator) (blocked bool, reason string, err error) {
@@ -462,8 +463,9 @@ func Guard(ctx context.Context, ruleSet []Rule, action string, ev *Evaluator) (b
 		ev.Cache, ev.memo = guardEvaluator.Cache, guardEvaluator.memo
 	}()
 	guardEvaluator.FailOnUnavailable = true
+	classes := guardedBy(action)
 	for i := range ruleSet {
-		if ruleSet[i].Type != RuleGuard || !slices.Contains(ruleSet[i].Blocks, action) {
+		if ruleSet[i].Type != RuleGuard || !slices.ContainsFunc(ruleSet[i].Blocks, func(b string) bool { return slices.Contains(classes, b) }) {
 			continue
 		}
 		ok, err := guardEvaluator.Eval(ctx, ruleSet[i].If)

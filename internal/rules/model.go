@@ -64,6 +64,36 @@ const (
 		string(ActionBlock)
 )
 
+// Manual-only operations a guard may name in `blocks:`. They are never rule
+// actions (then.action): the operation engine runs them only on an explicit
+// operator request, but they still pass the service's guards.
+const (
+	ActionRepair              ActionType = "repair"
+	ActionReap                ActionType = "reap"
+	ActionCloseSession        ActionType = "close_session"
+	ActionCloseTerminalSource ActionType = "close_terminal_source"
+)
+
+// guardedBy lists the `blocks:` entries that deny action: the action itself
+// plus every lifecycle action it performs. A guard that forbids a start must
+// also stop a restart or a repair (which start the service), and a guard that
+// forbids a stop must also stop a restart or a reap (which terminate service
+// processes) — safety invariant 2 is about what an action does, not its name.
+// Session closes signal one session process and change no service lifecycle,
+// so only their own name blocks them.
+func guardedBy(action string) []string {
+	switch ActionType(action) {
+	case ActionRestart:
+		return []string{action, string(ActionStop), string(ActionStart)}
+	case ActionRepair:
+		return []string{action, string(ActionStart)}
+	case ActionReap:
+		return []string{action, string(ActionStop)}
+	default:
+		return []string{action}
+	}
+}
+
 // Action is one resolved entry from a rule's then block.
 type Action struct {
 	Type    ActionType

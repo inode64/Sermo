@@ -3246,6 +3246,20 @@ Guard rules evaluate their condition at the moment an action is requested, so
 they do not support `for:` or `within:` windows; declaring either on a guard is
 a validation error.
 
+`blocks:` accepts `restart`, `start`, `stop`, `reload`, `resume` and the
+manual-only operations `repair`, `reap` (`sermoctl reap --apply`),
+`close_session` (closing an SSH or terminal session) and
+`close_terminal_source` (closing an empty tmux server). A guard applies to
+the action it names **and** to every action that performs that step:
+
+| `blocks:` entry | also denies |
+|---|---|
+| `start` | `restart`, `repair` |
+| `stop` | `restart`, `reap` |
+
+Session closes signal one session process and do not start or stop the service,
+so only `close_session` / `close_terminal_source` deny them.
+
 #### Connection guards
 
 Connection thresholds are workload policy, so catalog services do not enable

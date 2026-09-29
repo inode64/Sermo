@@ -644,6 +644,35 @@ func TestRestartGuardErrorFailsSafe(t *testing.T) {
 	}
 }
 
+// Repair ends in a start, so a guard that forbids starting the service (e.g.
+// during a volume migration) must also deny repair.
+func TestRepairBlockedByStartGuard(t *testing.T) {
+	flag := filepath.Join(t.TempDir(), "migrating")
+	if err := os.WriteFile(flag, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	tree := map[string]any{
+		"rules": map[string]any{
+			"block-start-during-migration": map[string]any{
+				"type": "guard", "blocks": []any{"start"},
+				"if":   map[string]any{"file": map[string]any{"path": flag, "exists": true}},
+				"then": map[string]any{"action": "block", "message": "volume migration"},
+			},
+		},
+	}
+	engine, mgr := newInvalidTreeEngine(t, "app", "app", tree)
+	mgr.status = servicemgr.StatusFailed
+	res := engine.Repair(context.Background())
+	if res.Status != ResultBlocked || res.Message != "volume migration" {
+		t.Fatalf("Repair = %s %q, want blocked by the start guard", res.Status, res.Message)
+	}
+	for _, call := range mgr.calls {
+		if strings.HasPrefix(call, "start ") || strings.HasPrefix(call, "reset ") {
+			t.Fatalf("manager calls = %v, want no start or reset after a guard block", mgr.calls)
+		}
+	}
+}
+
 func TestGuardClosureFailsSafeOnUnavailableSQLCheck(t *testing.T) {
 	missing := filepath.Join(t.TempDir(), "missing.db")
 	tree := map[string]any{

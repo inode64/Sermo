@@ -30,18 +30,18 @@ const (
 	// ActionRepair is a manual-only recovery action. It never becomes a rule
 	// action: an operator must explicitly request removal of a proven-stale
 	// runtime pidfile before the normal guarded start path runs.
-	ActionRepair = "repair"
+	ActionRepair = string(rules.ActionRepair)
 	// actionCloseSession is intentionally not a rule action: closing an
 	// interactive SSH terminal always requires an explicit web request and is
 	// never eligible for automatic remediation.
-	actionCloseSession = "close_session"
+	actionCloseSession = string(rules.ActionCloseSession)
 	// actionCloseTerminalSource is intentionally not a rule action: closing an
 	// empty tmux server always requires an explicit web request.
-	actionCloseTerminalSource = "close_terminal_source"
+	actionCloseTerminalSource = string(rules.ActionCloseTerminalSource)
 	// actionReap is intentionally not a rule action: a stray is a process Sermo
 	// cannot name, so clearing one always requires an operator who decided that
 	// the service's reap.kill_only_if selector describes it.
-	actionReap = process.SectionReap
+	actionReap = string(rules.ActionReap)
 
 	// postflightMaxAttempts lets a daemon finish binding its ready socket after
 	// its init manager reports a successful start. The retries remain within the
