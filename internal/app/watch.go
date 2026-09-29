@@ -247,6 +247,12 @@ func (w *Watch) runCheckCycle(ctx context.Context, res checks.Result, observeOnl
 	w.dispatchFiringActions(ctx, res, wasFiring, emitFiring)
 }
 
+// watchAvailabilityCheck is the notification identity of a watch's
+// availability edges. It keeps them a separate incident from the watch's
+// firing episode, so a probe that comes back cannot announce a still-firing
+// watch as recovered or close its reminders.
+const watchAvailabilityCheck = "availability"
+
 // updateAvailability keeps an unavailable observation out of condition windows
 // and, critically, out of automatic actions. It emits only on edges and stores
 // the edge state with the rest of the watch runtime record.
@@ -255,13 +261,13 @@ func (w *Watch) updateAvailability(res checks.Result) bool {
 	if observation == checks.ObservationUnavailable {
 		if !w.unavailable {
 			w.unavailable = true
-			w.emit(Event{Watch: w.Name, Kind: w.eventKind(eventKindError, res), Message: "check unavailable: " + res.Message})
+			w.emit(Event{Watch: w.Name, Kind: w.eventKind(eventKindError, res), Check: watchAvailabilityCheck, Message: "check unavailable: " + res.Message})
 		}
 		return true
 	}
 	if w.unavailable {
 		w.unavailable = false
-		w.emit(Event{Watch: w.Name, Kind: eventKindRecovered, Message: "check available: " + res.Message})
+		w.emit(Event{Watch: w.Name, Kind: eventKindRecovered, Check: watchAvailabilityCheck, Message: "check available: " + res.Message})
 	}
 	if observation == checks.ObservationSkipped {
 		return true

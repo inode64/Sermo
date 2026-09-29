@@ -231,3 +231,36 @@ func TestEventNotifierRemediationEpisodesRealertAfterRecovery(t *testing.T) {
 		}
 	}
 }
+
+func TestEventNotifierAvailabilityRecoveryKeepsFiringIncidentOpen(t *testing.T) {
+	recorder := &eventNotifyRecorder{messages: make(chan notify.Message, 10)}
+	router := NewEventNotifier("host-a", slog.New(slog.NewTextHandler(io.Discard, nil)), nil, nil)
+	router.Update(config.EventNotification{Targets: []string{"ops"}, RepeatInterval: time.Hour}, map[string]notify.Notifier{"ops": recorder})
+	now := time.Date(2026, 9, 28, 12, 0, 0, 0, time.UTC)
+	router.now = func() time.Time { return now }
+	failing := checks.Result{Check: "scripted", OK: false, Message: "connection refused"}
+	unavailable := checks.Result{Check: "scripted", Unavailable: true, Message: "probe timed out"}
+	var events []Event
+	w := &Watch{
+		Name:       "api",
+		Check:      &scriptedCheck{results: []checks.Result{failing, unavailable, failing}},
+		FireOnFail: true,
+		Emit:       func(e Event) { events = append(events, e) },
+	}
+	for range 3 {
+		w.RunCycle(context.Background())
+	}
+	for _, e := range events {
+		router.deliver(t.Context(), e)
+	}
+	for len(recorder.messages) > 0 {
+		if msg := <-recorder.messages; strings.Contains(msg.Subject, eventKindRecovered) {
+			t.Fatalf("availability recovery announced the open firing incident as recovered: %q (events %+v)", msg.Subject, events)
+		}
+	}
+	now = now.Add(time.Hour)
+	router.remind(t.Context())
+	if got := len(recorder.messages); got != 1 {
+		t.Fatalf("open firing incident reminders = %d, want 1 (events %+v)", got, events)
+	}
+}
