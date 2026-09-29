@@ -13,6 +13,11 @@ type protocolRegistration struct {
 	protocol      Protocol
 	aliases       []string
 	defaultSocket string
+	// socket marks a protocol whose probe dials a configured Unix socket
+	// instead of host/port. Validation rejects `socket` for every other
+	// protocol, which would otherwise ignore it and probe TCP/UDP silently.
+	// A default socket or a socket-only protocol implies it.
+	socket bool
 	// defaultHost replaces DefaultHost when a protocol's target is not a
 	// loopback service. dhclient matches its UDP socket by exact bind address,
 	// and a DHCP client binds the wildcard address, never 127.0.0.1.
@@ -26,62 +31,62 @@ type protocolRegistration struct {
 var builtinProtocolRegistrations = []protocolRegistration{
 	{protocol: acpidProtocol, defaultSocket: DefaultACPIDSocket, socketOnly: true},
 	{protocol: ajpProtocol{}},
-	{protocol: amqpProtocol{}, aliases: []string{protocolAliasRabbitMQ}},
-	{protocol: asteriskProtocol{}, aliases: []string{protocolAliasAMI}},
-	{protocol: avahiProtocol{}, aliases: []string{protocolAliasAvahiDaemon}},
+	{protocol: amqpProtocol{}, aliases: []string{protocolAliasRabbitMQ}, socket: true},
+	{protocol: asteriskProtocol{}, aliases: []string{protocolAliasAMI}, socket: true},
+	{protocol: avahiProtocol{}, aliases: []string{protocolAliasAvahiDaemon}, socket: true},
 	{protocol: cephProtocol{}, aliases: []string{protocolAliasCephMon}},
-	{protocol: chronyProtocol{}, aliases: []string{protocolAliasChronyd}},
-	{protocol: clamdProtocol{}, aliases: []string{protocolAliasClamAV}},
+	{protocol: chronyProtocol{}, aliases: []string{protocolAliasChronyd}, socket: true},
+	{protocol: clamdProtocol{}, aliases: []string{protocolAliasClamAV}, socket: true},
 	{protocol: cloudflaredProtocol{}, aliases: []string{protocolAliasCloudflareTunnel}},
-	{protocol: dbusProtocol{}},
+	{protocol: dbusProtocol{}, socket: true},
 	{protocol: dhclientProtocol{}, aliases: []string{protocolAliasDHClient}, defaultHost: dhclientDefaultHost},
 	{protocol: dhcpProtocol{}, aliases: []string{protocolAliasDHCPD}},
 	{protocol: dnsProtocol{}},
 	{protocol: dockerProtocol{}, defaultSocket: DefaultDockerSocket},
 	{protocol: fail2banProtocol, defaultSocket: DefaultFail2banSocket, socketOnly: true},
-	{protocol: fpmProtocol{}, aliases: []string{protocolAliasPHPFPM}},
-	{protocol: ftpProtocol{}},
+	{protocol: fpmProtocol{}, aliases: []string{protocolAliasPHPFPM}, socket: true},
+	{protocol: ftpProtocol{}, socket: true},
 	{protocol: glusterfsProtocol{}, aliases: []string{protocolAliasGlusterd, protocolAliasGluster}},
 	{protocol: guacdProtocol{}, aliases: []string{protocolAliasGuacamole}},
-	{protocol: imapProtocol{}},
+	{protocol: imapProtocol{}, socket: true},
 	{protocol: influxdbProtocol{}, aliases: []string{protocolAliasInflux}},
 	{protocol: ippProtocol{}, aliases: []string{protocolAliasCUPS}},
-	{protocol: kafkaProtocol{}},
+	{protocol: kafkaProtocol{}, socket: true},
 	{protocol: ldapProtocol{}},
 	{protocol: libvirtProtocol{}, aliases: []string{protocolAliasLibvirtd}, defaultSocket: DefaultLibvirtSocket},
 	{protocol: lvmpolldProtocol{}, defaultSocket: DefaultLVMPolldSocket, socketOnly: true},
-	{protocol: memcachedProtocol{}, aliases: []string{protocolAliasMemcache}},
+	{protocol: memcachedProtocol{}, aliases: []string{protocolAliasMemcache}, socket: true},
 	{protocol: mongodbProtocol{}, aliases: []string{protocolAliasMongo}},
 	{protocol: mountdProtocol, aliases: []string{protocolAliasRPCMountd, protocolAliasNFSMountd}},
-	{protocol: mqttProtocol{}},
-	{protocol: mysqlProtocol{}, aliases: []string{protocolAliasMariaDB}},
+	{protocol: mqttProtocol{}, socket: true},
+	{protocol: mysqlProtocol{}, aliases: []string{protocolAliasMariaDB}, socket: true},
 	{protocol: nebulaProtocol{}, aliases: []string{protocolAliasNebulaVPN}},
 	{protocol: nfsProtocol, aliases: []string{protocolAliasNFSServer, protocolAliasNFSD}},
-	{protocol: nntpProtocol{}, aliases: []string{protocolAliasNNTPs}},
+	{protocol: nntpProtocol{}, aliases: []string{protocolAliasNNTPs}, socket: true},
 	{protocol: ntpProtocol{}},
-	{protocol: nutProtocol{}, aliases: []string{protocolAliasUPS, protocolAliasUPSD}},
+	{protocol: nutProtocol{}, aliases: []string{protocolAliasUPS, protocolAliasUPSD}, socket: true},
 	{protocol: openvpnProtocol{}, aliases: []string{protocolAliasOpenVPN}},
-	{protocol: openvswitchProtocol{}, aliases: []string{protocolAliasOVS, protocolAliasOVSDB, protocolAliasOVSDBServer}},
-	{protocol: popProtocol{}, aliases: []string{protocolAliasPOP3}},
+	{protocol: openvswitchProtocol{}, aliases: []string{protocolAliasOVS, protocolAliasOVSDB, protocolAliasOVSDBServer}, socket: true},
+	{protocol: popProtocol{}, aliases: []string{protocolAliasPOP3}, socket: true},
 	{protocol: postgresProtocol{}, aliases: []string{protocolAliasPostgreSQL}},
 	{protocol: prometheusProtocol{}, aliases: []string{protocolAliasPrometheus}},
 	{protocol: rdpProtocol{}, aliases: []string{protocolAliasMSWBTServer}},
-	{protocol: redisProtocol{}, aliases: []string{protocolAliasValkey}},
+	{protocol: redisProtocol{}, aliases: []string{protocolAliasValkey}, socket: true},
 	{protocol: rpcbindProtocol{}, aliases: []string{protocolAliasPortmap, protocolAliasPortmapper}},
 	{protocol: rspamdProtocol{}},
-	{protocol: rsyncProtocol{}, aliases: []string{protocolAliasRsyncd}},
-	{protocol: sieveProtocol{}, aliases: []string{protocolAliasManageSieve}},
+	{protocol: rsyncProtocol{}, aliases: []string{protocolAliasRsyncd}, socket: true},
+	{protocol: sieveProtocol{}, aliases: []string{protocolAliasManageSieve}, socket: true},
 	{protocol: smbProtocol{}, aliases: []string{protocolAliasSamba, protocolAliasCIFS}},
-	{protocol: smtpProtocol{}},
+	{protocol: smtpProtocol{}, socket: true},
 	{protocol: smtpAcceptanceProtocol{}},
 	{protocol: snmpProtocol{}},
-	{protocol: spamdProtocol{}, aliases: []string{protocolAliasSpamAssassin}},
+	{protocol: spamdProtocol{}, aliases: []string{protocolAliasSpamAssassin}, socket: true},
 	{protocol: sshProtocol{}},
 	{protocol: statdProtocol, aliases: []string{protocolAliasRPCStatd, protocolAliasNSM, protocolAliasNFSStatd}},
 	{protocol: syncthingProtocol{}},
 	{protocol: tftpProtocol{}},
 	{protocol: unifiProtocol{}, aliases: []string{protocolAliasUniFiController, protocolAliasUniFiNetwork}},
-	{protocol: varnishProtocol{}, aliases: []string{protocolAliasVarnishAdm}},
+	{protocol: varnishProtocol{}, aliases: []string{protocolAliasVarnishAdm}, socket: true},
 }
 
 // registry is an immutable name-to-protocol index. Registrations are complete
@@ -175,6 +180,17 @@ func SocketOnly(name string) bool {
 	}
 	registration, ok := protocolRegistrationFor(protocol)
 	return ok && registration.socketOnly
+}
+
+// SupportsSocket reports whether name selects a protocol whose probe honors a
+// configured Unix socket. The other protocols only dial host/port.
+func SupportsSocket(name string) bool {
+	protocol, ok := Lookup(name)
+	if !ok {
+		return false
+	}
+	registration, ok := protocolRegistrationFor(protocol)
+	return ok && (registration.socket || registration.socketOnly || registration.defaultSocket != "")
 }
 
 // Prepare returns the registered protocol selected by name together with a
