@@ -219,7 +219,7 @@ func (w *fileWatcher) publishSnapshot(current map[string]fileState) {
 		w.publish(w.name, checks.CheckTypeFile, checks.ApplySummary(w.summary, w.check, result))
 		return
 	}
-	root := firstFileWatchRoot(w.paths, current)
+	rootPath, root, roots := firstFileWatchRoot(w.paths, current)
 	data[checks.DataKeyKind] = root.kind
 	data[checks.DataKeySize] = root.size
 	data[checks.DataKeyMode] = fmt.Sprintf(fileModeFormat, root.perm)
@@ -229,13 +229,13 @@ func (w *fileWatcher) publishSnapshot(current map[string]fileState) {
 		data[checks.DataKeyAge] = units.HumanizeDuration(root.age.Round(time.Second))
 	}
 	if w.recursive {
-		entries := max(len(current)-1, 0)
+		entries := max(len(current)-roots, 0)
 		data[watchReadingFieldEntries] = entries
 	}
 	result := checks.Result{
 		Check:   w.name,
 		OK:      true,
-		Message: fmt.Sprintf("%s size %d", w.paths[0], root.size),
+		Message: fmt.Sprintf("%s size %d", rootPath, root.size),
 		Data:    data,
 	}
 	if w.summary != "" {
@@ -445,13 +445,23 @@ func (w *fileWatcher) clock() time.Time {
 	return clockOrNow(w.now)()
 }
 
-func firstFileWatchRoot(paths []string, current map[string]fileState) fileState {
-	for _, path := range paths {
-		if state, ok := current[path]; ok {
-			return state
+// firstFileWatchRoot returns the first configured root that exists, which the
+// reading describes, and how many configured roots exist, so the entry count
+// excludes every root rather than only the first.
+func firstFileWatchRoot(paths []string, current map[string]fileState) (path string, root fileState, present int) {
+	seen := make(map[string]bool, len(paths))
+	for _, candidate := range paths {
+		state, ok := current[candidate]
+		if !ok || seen[candidate] {
+			continue
 		}
+		seen[candidate] = true
+		if present == 0 {
+			path, root = candidate, state
+		}
+		present++
 	}
-	return fileState{}
+	return path, root, present
 }
 
 // fire runs the watch's hook for one change and emits a matching event. A hook
