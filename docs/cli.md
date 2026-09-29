@@ -362,6 +362,12 @@ unexpected panic recovered at the top level.
 `is-active` maps directly: `0` active, `1` not active (including `paused`),
 `2` error.
 
+`status` and `is-active` still answer for a raw init unit when there is no
+config. When the config file exists but does not load (for example a YAML
+syntax error), they print `warning: config not loaded, treating SERVICE as an
+init unit: …` on stderr (unless `--quiet`), because a configured alias such as
+`mysql-main` then reads as an unknown unit.
+
 ## Named locks
 
 `lock acquire` and the `lock SERVICE -- COMMAND` wrapper require a configured

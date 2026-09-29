@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
+	"os"
 
 	"sermo/internal/config"
 	"sermo/internal/control"
@@ -125,10 +127,16 @@ func (a App) serviceStatus(ctx context.Context, opts options, cfg *config.Config
 }
 
 // statusConfig loads the optional config once. Status still works for a direct
-// service unit when the config is absent or invalid.
+// service unit when the config is absent or invalid. An existing config that
+// fails to load is announced on stderr: the name is then treated as a raw init
+// unit, so a configured alias would otherwise read inactive with no reason.
 func (a App) statusConfig(opts options) *config.Config {
-	cfg, err := a.LoadConfig(opts.globalPath())
+	path := opts.globalPath()
+	cfg, err := a.LoadConfig(path)
 	if err != nil {
+		if _, statErr := os.Stat(path); !errors.Is(statErr, fs.ErrNotExist) && !opts.quiet {
+			fmt.Fprintf(a.Stderr, "warning: config not loaded, treating %s as an init unit: %v\n", opts.service(), err)
+		}
 		return nil
 	}
 	return cfg
