@@ -158,7 +158,7 @@ func TestStoreOperationSettlingRoundTrip(t *testing.T) {
 
 func TestStoreServiceRestartNoticeRoundTrip(t *testing.T) {
 	s := openTemp(t)
-	record := ServiceRestartNoticeRecord{PID: 4242, StartedAt: time.Date(2026, 6, 7, 9, 0, 0, 123456789, time.UTC)}
+	record := ServiceRestartNoticeRecord{PID: 4242, StartTicks: 987654, StartedAt: time.Date(2026, 6, 7, 9, 0, 0, 123456789, time.UTC)}
 	if err := s.SetServiceRestartNotice("web", record); err != nil {
 		t.Fatalf("SetServiceRestartNotice: %v", err)
 	}
@@ -166,7 +166,7 @@ func TestStoreServiceRestartNoticeRoundTrip(t *testing.T) {
 	if err != nil || !found {
 		t.Fatalf("ServiceRestartNotice: found=%v err=%v", found, err)
 	}
-	if got.PID != record.PID || !got.StartedAt.Equal(record.StartedAt) {
+	if got.PID != record.PID || got.StartTicks != record.StartTicks || !got.StartedAt.Equal(record.StartedAt) {
 		t.Fatalf("record = %+v, want %+v", got, record)
 	}
 }

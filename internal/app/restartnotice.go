@@ -78,12 +78,32 @@ func primaryProcessForCycle(procs func() []process.Process, starts processStartR
 		if !ok {
 			return servicePrimaryProcess{}, false
 		}
-		started, ok := starts.ProcessStartTime(principal.PID)
+		started, ok := readPrimaryStart(starts, &principal)
 		if !ok || started.IsZero() || started.After(now()) {
 			return servicePrimaryProcess{}, false
 		}
 		return servicePrimaryProcess{process: principal, startedAt: started}, true
 	}
+}
+
+// processStartIdentityReader reads a process's start tick count and wall-clock
+// start time from one /proc/<pid>/stat read (metrics.OSReader).
+type processStartIdentityReader interface {
+	ProcessStart(pid int) (uint64, time.Time, bool)
+}
+
+// readPrimaryStart reads the principal's start time and, when the reader can,
+// refreshes its StartTicks from the same read so the persisted generation and
+// the reported uptime describe one process.
+func readPrimaryStart(starts processStartReader, principal *process.Process) (time.Time, bool) {
+	if reader, ok := starts.(processStartIdentityReader); ok {
+		ticks, started, ok := reader.ProcessStart(principal.PID)
+		if ok && ticks != 0 {
+			principal.StartTicks = ticks
+		}
+		return started, ok
+	}
+	return starts.ProcessStartTime(principal.PID)
 }
 
 // selectPrimaryProcess chooses only an unambiguous principal identity. Systemd
@@ -146,7 +166,7 @@ func (w *Worker) observeServiceRestart(ctx context.Context, mode workerCycleMode
 		w.emitStoreError(restartNoticeRule+"-state", "service restart notice requires persistent state")
 		return
 	}
-	record := state.ServiceRestartNoticeRecord{PID: principal.process.PID, StartedAt: principal.startedAt}
+	record := state.ServiceRestartNoticeRecord{PID: principal.process.PID, StartTicks: principal.process.StartTicks, StartedAt: principal.startedAt}
 	previous, found, err := store.ServiceRestartNotice(w.Service)
 	if err != nil {
 		w.emitStoreError(restartNoticeRule+"-load", err.Error())
@@ -165,8 +185,19 @@ func (w *Worker) observeServiceRestart(ctx context.Context, mode workerCycleMode
 	w.emitServiceRestartNotice(ctx, *notice, principal, uptime)
 }
 
+// sameServiceRestartNotice compares process generations. The kernel re-derives
+// the wall-clock start time from the boot time, which moves when the clock
+// steps (chronyd makestep shortly after boot), so start ticks decide whenever
+// both records carry them; the wall-clock time only covers rows persisted
+// before ticks were recorded.
 func sameServiceRestartNotice(a, b state.ServiceRestartNoticeRecord) bool {
-	return a.PID == b.PID && a.StartedAt.Equal(b.StartedAt)
+	if a.PID != b.PID {
+		return false
+	}
+	if a.StartTicks != 0 && b.StartTicks != 0 {
+		return a.StartTicks == b.StartTicks
+	}
+	return a.StartedAt.Equal(b.StartedAt)
 }
 
 func (w *Worker) emitServiceRestartNotice(ctx context.Context, notice config.ServiceRestartNotice, principal servicePrimaryProcess, uptime time.Duration) {

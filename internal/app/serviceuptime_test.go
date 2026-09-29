@@ -12,6 +12,7 @@ import (
 // times, which is what serviceStartTime needs.
 type fakeStartReader struct {
 	starts map[int]time.Time
+	ticks  map[int]uint64
 }
 
 func (fakeStartReader) ProcessCPU(int) (uint64, bool)        { return 0, false }
@@ -28,6 +29,10 @@ func (fakeStartReader) ClockTicks() float64 { return 100 }
 func (r fakeStartReader) ProcessStartTime(pid int) (time.Time, bool) {
 	started, ok := r.starts[pid]
 	return started, ok
+}
+func (r fakeStartReader) ProcessStart(pid int) (uint64, time.Time, bool) {
+	started, ok := r.starts[pid]
+	return r.ticks[pid], started, ok
 }
 
 // TestServiceStartTimeUsesPrincipalNotOldestMember is the libvirtd case: a

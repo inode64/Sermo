@@ -453,8 +453,10 @@ runtime variables such as `${date}` and `${event}`.
 Sermo trusts only a backend or an explicit service identity: systemd's `MainPID`,
 Docker's init PID, or an OpenRC pidfile / named `processes.main` selector. If it
 cannot identify one principal process safely, it does not guess and emits no
-restart notice. The PID and start timestamp are kept in the state database, so
-each identity produces at most one notice across daemon restarts. A Sermo
+restart notice. The PID and kernel start time (clock ticks since boot) are
+kept in the state database, so each process generation produces at most one
+notice across daemon restarts, and a clock step after boot (chronyd
+`makestep`) does not repeat it. A Sermo
 operation is recorded but deliberately not notified during its settling cycle,
 which prevents a CLI, Web UI, or automatic Sermo restart from being reported as
 external.

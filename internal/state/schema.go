@@ -92,9 +92,10 @@ var storageSchema = []string{
 	// under the restart-notice uptime threshold. It is deliberately durable so a
 	// sermod restart cannot repeat an already-delivered external-restart alert.
 	`CREATE TABLE IF NOT EXISTS service_restart_notice (
-		service    TEXT PRIMARY KEY,
-		pid        INTEGER NOT NULL,
-		started_at TEXT NOT NULL
+		service     TEXT PRIMARY KEY,
+		pid         INTEGER NOT NULL,
+		start_ticks INTEGER NOT NULL DEFAULT 0,
+		started_at  TEXT NOT NULL
 	);`,
 	// service_check_snapshot stores the latest service check result published by
 	// each worker. It is current observable state, not history, so the web UI can
@@ -254,6 +255,7 @@ var stateColumnMigrations = []struct {
 	{tableWatchSnapshot, "config_id", "config_id TEXT NOT NULL DEFAULT ''"},
 	{tableWatchSnapshot, "severity", "severity TEXT NOT NULL DEFAULT ''"},
 	{"watch_runtime_state", "unavailable", "unavailable INTEGER NOT NULL DEFAULT 0"},
+	{"service_restart_notice", "start_ticks", "start_ticks INTEGER NOT NULL DEFAULT 0"},
 }
 
 // ensureStateColumns adds any missing cache/control-table columns to a database
