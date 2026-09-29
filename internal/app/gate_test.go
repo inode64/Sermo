@@ -71,6 +71,31 @@ func TestApplyGatesRequires(t *testing.T) {
 	}
 }
 
+// TestApplyGatesRequiresChainIsDeterministic: with port down, query (requires
+// port) and deep (requires query) both failing, deep must be skipped on every
+// cycle. Judging it against query's already rewritten Skipped/OK result made
+// the outcome depend on map iteration order.
+func TestApplyGatesRequiresChainIsDeterministic(t *testing.T) {
+	w := &Worker{Gates: map[string]CheckGate{
+		"query": {Requires: []string{"port"}},
+		"deep":  {Requires: []string{"query"}},
+	}, cycleRan: ranChecks("port", "query", "deep")}
+	for range 100 {
+		cache := map[string]checks.Result{
+			"port":  {Check: "port", OK: false},
+			"query": {Check: "query", OK: false},
+			"deep":  {Check: "deep", OK: false},
+		}
+		w.applyGates(cache)
+		if deep := cache["deep"]; !deep.Skipped || deep.Message != "skipped: requires check query" {
+			t.Fatalf("deep = %+v, want skipped because query failed", deep)
+		}
+		if query := cache["query"]; !query.Skipped {
+			t.Fatalf("query = %+v, want skipped because port failed", query)
+		}
+	}
+}
+
 func TestArtifactChangedFuncSharesWorkerBaseline(t *testing.T) {
 	dir := t.TempDir()
 	path := dir + "/lib.so"
