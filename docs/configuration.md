@@ -3239,7 +3239,9 @@ Two optional bounds are accepted when you declare your own instance:
 | `max_increase` + `within` | fail when the count grew by more than this over that wall-clock span |
 
 Both are **bounds above which the check fails**, so `OK` always means healthy and a
-rule keeps using `failed:`. That is why they are not `{op, value}` predicates: in a
+rule keeps using `failed:`. When one instance sets both, it fails if either bound
+is exceeded; with `max_increase` alone the count itself is not bounded (the
+default `max: 0` applies only to an instance without `max_increase`). That is why they are not `{op, value}` predicates: in a
 level check like `process_count`, OK means "the predicate holds", which would invert
 `failed:` for a configured instance while the injected one kept it. `op` and `value`
 are rejected at validation time for that reason.

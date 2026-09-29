@@ -98,7 +98,7 @@ func buildStraysCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 		if !ok || n < 0 {
 			return nil, "strays check max must be a non-negative integer"
 		}
-		check.max = float64(n)
+		check.max, check.hasMax = float64(n), true
 	}
 	raw, hasIncrease := entry[CheckKeyMaxIncrease]
 	if !hasIncrease {
