@@ -149,7 +149,8 @@ var commandUsages = []commandUsage{
 		Notes: []string{
 			"Probes the init backend only (active/inactive/paused), not the daemon's",
 			"computed state. Use status when you need starting/settling visibility.",
-			"Paused monitoring counts as not active for scripting purposes.",
+			"A backend-paused target (a frozen container or VM) counts as not active;",
+			"`unmonitor` does not change the answer.",
 		},
 		Examples: []string{
 			"sermoctl is-active redis-cache",
