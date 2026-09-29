@@ -59,7 +59,7 @@ func TestProbeDiskIOSamplesTwiceForARateWindow(t *testing.T) {
 		{Check: "diskio-sdd", OK: true, Message: "diskio sdd util 0.0% read 0 B/s write 0 B/s await 0.0ms",
 			Data: map[string]any{checks.DataKeyDevice: "sdd"}},
 	}}
-	res, err := b.probeDiskIORates(context.Background(), check)
+	res, err := b.probeDiskIORates(context.Background(), check, time.Second)
 	if err != nil {
 		t.Fatalf("probeDiskIORates: %v", err)
 	}
@@ -73,11 +73,34 @@ func TestProbeDiskIOSamplesTwiceForARateWindow(t *testing.T) {
 	// A device that cannot be sampled at all is reported straight away rather
 	// than waited on for a window that will never mean anything.
 	gone := &countingProbeCheck{results: []checks.Result{{Check: "diskio-sdd", Unavailable: true, Message: "diskio sdd: missing"}}}
-	if _, err := b.probeDiskIORates(context.Background(), gone); err != nil {
+	if _, err := b.probeDiskIORates(context.Background(), gone, time.Second); err != nil {
 		t.Fatalf("probeDiskIORates: %v", err)
 	}
 	if gone.calls != 1 {
 		t.Errorf("unavailable device sampled %d times, want 1", gone.calls)
+	}
+}
+
+// The check timeout bounds each sample, not the rate window between them: a
+// timeout no longer than the window (engine.default_timeout: 2s against the 2s
+// window) used to fail every manual probe with "context deadline exceeded".
+func TestProbeDiskIOWindowOutlivesCheckTimeout(t *testing.T) {
+	b := &WebBackend{diskIOWindow: 50 * time.Millisecond}
+	check := &countingProbeCheck{results: []checks.Result{
+		{Check: "diskio-sdd", Message: "diskio sdd baseline"},
+		{Check: "diskio-sdd", OK: true, Message: "diskio sdd util 0.0%", Data: map[string]any{checks.DataKeyDevice: "sdd"}},
+	}}
+	res, err := b.probeDiskIORates(context.Background(), check, 10*time.Millisecond)
+	if err != nil {
+		t.Fatalf("probeDiskIORates: %v, want the window to run outside the sample timeout", err)
+	}
+	if check.calls != 2 || !res.OK {
+		t.Fatalf("calls=%d result=%+v, want the rate sample", check.calls, res)
+	}
+	for i, deadline := range check.deadlines {
+		if deadline.IsZero() || time.Until(deadline) > 10*time.Millisecond {
+			t.Fatalf("sample %d deadline %v, want each sample bounded by the check timeout", i, deadline)
+		}
 	}
 }
 
@@ -98,12 +121,15 @@ func TestManualProbeCheckTypeCoversDiskIO(t *testing.T) {
 }
 
 type countingProbeCheck struct {
-	results []checks.Result
-	calls   int
+	results   []checks.Result
+	calls     int
+	deadlines []time.Time
 }
 
 func (c *countingProbeCheck) Name() string { return "probe" }
-func (c *countingProbeCheck) Run(context.Context) checks.Result {
+func (c *countingProbeCheck) Run(ctx context.Context) checks.Result {
+	deadline, _ := ctx.Deadline()
+	c.deadlines = append(c.deadlines, deadline)
 	res := c.results[min(c.calls, len(c.results)-1)]
 	c.calls++
 	return res

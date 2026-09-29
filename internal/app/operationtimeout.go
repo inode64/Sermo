@@ -78,7 +78,11 @@ func maxWatchProbeTimeout(maxTO time.Duration, watches map[string]any, defaultTi
 		if !ManualProbeCheckType(cfgval.String(check[checks.CheckKeyType])) {
 			continue
 		}
-		maxTO = max(maxTO, checkProbeTimeout(check, defaultTimeout, operationTimeout))
+		timeout := checkProbeTimeout(check, defaultTimeout, operationTimeout)
+		if cfgval.String(check[checks.CheckKeyType]) == checks.CheckTypeDiskIO {
+			timeout = diskIOProbeBudget(timeout)
+		}
+		maxTO = max(maxTO, timeout)
 	}
 	return maxTO
 }

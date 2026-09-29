@@ -2316,8 +2316,9 @@ firewall, count, disk I/O, `hdparm` or `smart` probes on each dashboard poll.
 The Web UI and `sermoctl watch probe` can request one explicit sample for
 configured `diskio`, `hdparm`, `lvm`, `raid` and `smart` host watches. `diskio`,
 `hdparm`, `lvm` and `raid` are read-only samples — a `diskio` probe reads the
-counters twice around a short pause, because its rates are the delta between two
-readings and a single one would only be a baseline; a manual `smart` probe instead starts the device's
+counters twice around a short (2s) pause, because its rates are the delta between two
+readings and a single one would only be a baseline; the check `timeout:` bounds each
+reading, not the pause; a manual `smart` probe instead starts the device's
 short self-test with `smartctl --test=short DEVICE`. Its successful command
 acknowledgement means the self-test was scheduled, not that the drive is
 healthy; scheduled SMART cycles continue to read the drive's identity, health,

@@ -105,6 +105,24 @@ func TestMaxOperationTimeoutIgnoresWatchInterval(t *testing.T) {
 	}
 }
 
+// A manual disk I/O probe samples twice around its rate window, so its HTTP
+// budget is two check timeouts plus the window.
+func TestMaxOperationTimeoutCoversDiskIOProbeWindow(t *testing.T) {
+	cfg := cfgWithWatches(map[string]any{
+		"disk-io": map[string]any{
+			"check": map[string]any{
+				checks.CheckKeyType:    checks.CheckTypeDiskIO,
+				checks.CheckKeyDevice:  "sda",
+				checks.CheckKeyTimeout: "2m",
+			},
+		},
+	})
+	want := 2*2*time.Minute + defaultDiskIOProbeWindow
+	if got := MaxOperationTimeout(cfg, 90*time.Second); got != want {
+		t.Fatalf("MaxOperationTimeout = %v, want %v", got, want)
+	}
+}
+
 // A button's own timeout bounds its command, so the HTTP write deadline must
 // outlive the longest configured button.
 func TestMaxOperationTimeoutRaisesForButtonTimeout(t *testing.T) {
