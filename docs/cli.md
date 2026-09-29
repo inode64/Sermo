@@ -361,6 +361,13 @@ unexpected panic recovered at the top level.
 
 ## Named locks
 
+`lock acquire` and the `lock SERVICE -- COMMAND` wrapper require a configured
+service (a name or alias `status` accepts): the engine checks locks by the
+canonical service name, so a lock on a mistyped name would protect nothing.
+`lock release` also accepts a service that is no longer configured, to clean up
+its leftover lock; when no such lock exists (for example a mistyped `--name`) it
+prints `no named lock SERVICE[.NAME] to release` and exits `1`.
+
 `sermoctl lock SERVICE --reason R --ttl D -- COMMAND...` holds the named lock
 while `COMMAND` runs; the lock's owner is the `sermoctl` process. `sermoctl`
 therefore stays alive until `COMMAND` exits: it forwards `SIGTERM` and `SIGHUP`

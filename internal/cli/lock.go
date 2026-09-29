@@ -49,7 +49,13 @@ func (a App) runLockAcquire(opts options, cfg *config.Config, locker locks.Named
 	if code := requireLockMeta(a, opts); code != exitSuccess {
 		return code
 	}
-	service := canonicalServiceIfKnown(cfg, args[0])
+	// A lock only protects a configured service: the engine checks locks by the
+	// canonical service name, so a typo would protect nothing while the
+	// operator believes it does.
+	service, code := a.canonicalService(opts, cfg, args[0])
+	if code != exitSuccess {
+		return code
+	}
 
 	path, err := locker.Pin(service, opts.name, opts.reason, opts.ttl)
 	if err != nil {
@@ -65,14 +71,40 @@ func (a App) runLockRelease(opts options, cfg *config.Config, locker locks.Named
 	if code := a.requireSingleServiceName(len(args) > 0, len(args), commandLock, "lock release"); code != exitSuccess {
 		return code
 	}
+	// Release still accepts a service that is no longer configured so its
+	// leftover lock can be cleaned up.
 	service := canonicalServiceIfKnown(cfg, args[0])
+	id := locks.LockID(service, opts.name)
+	if !namedLockMayExist(locks.NewScanner(locker.Dir), service, opts.name) {
+		// A mistyped --name must not read as "released" while the real lock
+		// keeps blocking operations.
+		a.recordAccess(cfg, accessCommandLockRelease, service, accessStatusError, "no such lock "+id)
+		fmt.Fprintf(a.Stdout, "no named lock %s to release\n", id)
+		return exitNotActive
+	}
 	if err := locker.Release(service, opts.name); err != nil {
 		a.recordAccess(cfg, accessCommandLockRelease, service, accessStatusError, err.Error())
 		return a.fail(opts, fmt.Sprintf("release failed: %v", err))
 	}
-	a.recordAccess(cfg, accessCommandLockRelease, service, accessStatusOK, locks.LockID(service, opts.name))
-	fmt.Fprintf(a.Stdout, "released %s\n", locks.LockID(service, opts.name))
+	a.recordAccess(cfg, accessCommandLockRelease, service, accessStatusOK, id)
+	fmt.Fprintf(a.Stdout, "released %s\n", id)
 	return exitSuccess
+}
+
+// namedLockMayExist reports whether the named lock is present. A scan failure
+// or an unreadable lock file for the service counts as present, so release
+// still runs rather than wrongly reporting nothing to do.
+func namedLockMayExist(scanner locks.Scanner, service, name string) bool {
+	report, err := scanner.Scan(service)
+	if err != nil || len(report.Warnings) > 0 {
+		return true
+	}
+	for _, lock := range report.Locks {
+		if lock.Name == name {
+			return true
+		}
+	}
+	return false
 }
 
 func (a App) runLockWrap(ctx context.Context, opts options, cfg *config.Config, locker locks.NamedLocker, service string) int {
@@ -85,7 +117,10 @@ func (a App) runLockWrap(ctx context.Context, opts options, cfg *config.Config, 
 	if code := requireLockMeta(a, opts); code != exitSuccess {
 		return code
 	}
-	service = canonicalServiceIfKnown(cfg, service)
+	service, code := a.canonicalService(opts, cfg, service)
+	if code != exitSuccess {
+		return code
+	}
 
 	handle, err := locker.Hold(service, opts.name, opts.reason, opts.ttl)
 	if err != nil {
