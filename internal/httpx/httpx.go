@@ -140,7 +140,16 @@ func NewClient(opts ClientOptions) *http.Client {
 // accepting keeps answering on the socket it already owns and hides the outage
 // (a collector that exhausted its file descriptors answered "ready" for hours
 // over such a connection while every new client timed out).
+//
+// It also never uses the HTTP(S)_PROXY environment: a probe through an
+// ambient proxy would measure the proxy, and the egress interface would bind
+// the proxy connection instead of the target's. Only an explicit opts.Proxy
+// (the http check's `proxy:`) routes a probe through a proxy.
 func NewProbeClient(opts ClientOptions) *http.Client {
 	opts.DisableKeepAlives = true
-	return NewClient(opts)
+	client := NewClient(opts)
+	if tr, ok := client.Transport.(*http.Transport); ok && opts.Proxy == nil {
+		tr.Proxy = nil
+	}
+	return client
 }

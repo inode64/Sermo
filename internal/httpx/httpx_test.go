@@ -119,3 +119,31 @@ func TestNewProbeClientNeverKeepsConnections(t *testing.T) {
 		t.Fatal("NewProbeClient must not mutate the shared default transport")
 	}
 }
+
+func TestNewProbeClientIgnoresEnvironmentProxy(t *testing.T) {
+	client := NewProbeClient(ClientOptions{})
+	tr, ok := client.Transport.(*http.Transport)
+	if !ok {
+		t.Fatalf("probe client transport = %T, want a private *http.Transport", client.Transport)
+	}
+	if tr.Proxy != nil {
+		t.Fatal("a probe client must dial its target directly, not an HTTP(S)_PROXY from the environment")
+	}
+
+	explicit, err := url.Parse("http://squid.internal:3128")
+	if err != nil {
+		t.Fatal(err)
+	}
+	client = NewProbeClient(ClientOptions{Proxy: http.ProxyURL(explicit)})
+	tr, ok = client.Transport.(*http.Transport)
+	if !ok || tr.Proxy == nil {
+		t.Fatal("an explicit probe proxy must be kept")
+	}
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, "http://target.internal/", http.NoBody)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, err := tr.Proxy(req); err != nil || got.String() != explicit.String() {
+		t.Fatalf("proxy = %v, %v; want %s", got, err, explicit)
+	}
+}
