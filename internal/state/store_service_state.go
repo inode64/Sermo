@@ -25,10 +25,13 @@ type OperationSettlingRecord struct {
 }
 
 // ServiceRestartNoticeRecord is the principal process identity last handled by
-// the external-restart notice monitor for one service.
+// the external-restart notice monitor for one service. StartTicks identifies the
+// process generation; StartedAt is wall-clock and moves when the clock steps.
+// Rows written before StartTicks was recorded carry zero.
 type ServiceRestartNoticeRecord struct {
-	PID       int
-	StartedAt time.Time
+	PID        int
+	StartTicks uint64
+	StartedAt  time.Time
 }
 
 // MonitorState returns a persisted monitoring row. found is false when the entry
@@ -190,11 +193,12 @@ func (s *Store) ClearOperationSettling(service string) error {
 // not been observed below its configured uptime threshold yet.
 func (s *Store) ServiceRestartNotice(service string) (ServiceRestartNoticeRecord, bool, error) {
 	var pid int
+	var ticks int64
 	var started string
 	found, err := scanOne(func() error {
 		return s.reads().QueryRowContext(s.sqlCtx(),
-			`SELECT pid, started_at FROM service_restart_notice WHERE service = ?;`, service,
-		).Scan(&pid, &started)
+			`SELECT pid, start_ticks, started_at FROM service_restart_notice WHERE service = ?;`, service,
+		).Scan(&pid, &ticks, &started)
 	})
 	if err != nil {
 		return ServiceRestartNoticeRecord{}, false, fmt.Errorf("load service restart notice for %s: %w", service, err)
@@ -206,7 +210,7 @@ func (s *Store) ServiceRestartNotice(service string) (ServiceRestartNoticeRecord
 	if err != nil {
 		return ServiceRestartNoticeRecord{}, false, fmt.Errorf("parse service restart notice for %s: %w", service, err)
 	}
-	return ServiceRestartNoticeRecord{PID: pid, StartedAt: at}, true, nil
+	return ServiceRestartNoticeRecord{PID: pid, StartTicks: uint64(max(ticks, 0)), StartedAt: at}, true, nil
 }
 
 // SetServiceRestartNotice persists the principal process identity handled by
@@ -214,12 +218,13 @@ func (s *Store) ServiceRestartNotice(service string) (ServiceRestartNoticeRecord
 // suppressed for a Sermo-initiated operation.
 func (s *Store) SetServiceRestartNotice(service string, record ServiceRestartNoticeRecord) error {
 	_, err := s.exec(s.sqlCtx(),
-		`INSERT INTO service_restart_notice (service, pid, started_at)
-		 VALUES (?, ?, ?)
+		`INSERT INTO service_restart_notice (service, pid, start_ticks, started_at)
+		 VALUES (?, ?, ?, ?)
 		 ON CONFLICT(service) DO UPDATE SET
-		   pid        = excluded.pid,
-		   started_at = excluded.started_at;`,
-		service, record.PID, record.StartedAt.UTC().Format(time.RFC3339Nano),
+		   pid         = excluded.pid,
+		   start_ticks = excluded.start_ticks,
+		   started_at  = excluded.started_at;`,
+		service, record.PID, record.StartTicks, record.StartedAt.UTC().Format(time.RFC3339Nano),
 	)
 	if err != nil {
 		return fmt.Errorf("set service restart notice for %s: %w", service, err)

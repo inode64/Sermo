@@ -45,6 +45,9 @@ func TestStateColumnMigrationsHealAnOldDatabase(t *testing.T) {
 			clear_since INTEGER NOT NULL DEFAULT 0,
 			clear_consecutive INTEGER NOT NULL DEFAULT 0,
 			PRIMARY KEY (watch, slot));`,
+		`CREATE TABLE service_restart_notice (
+			service TEXT PRIMARY KEY, pid INTEGER NOT NULL, started_at TEXT NOT NULL);`,
+		`INSERT INTO service_restart_notice VALUES ('web', 42, '2026-06-07T09:00:00Z');`,
 	} {
 		if _, err := db.Exec(stmt); err != nil {
 			t.Fatal(err)
@@ -77,6 +80,9 @@ func TestStateColumnMigrationsHealAnOldDatabase(t *testing.T) {
 		Unavailable: true,
 	}); err != nil {
 		t.Fatalf("persist into the migrated watch runtime table: %v", err)
+	}
+	if got, found, err := s.ServiceRestartNotice("web"); err != nil || !found || got.PID != 42 || got.StartTicks != 0 {
+		t.Fatalf("legacy restart notice = %+v, found=%v, err=%v; want pid 42 without start ticks", got, found, err)
 	}
 }
 

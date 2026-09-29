@@ -209,6 +209,49 @@ func TestSelectPrimaryProcess(t *testing.T) {
 	}
 }
 
+// A clock step (chronyd makestep at boot) re-anchors the wall-clock start time
+// the kernel reports for a process that never restarted; only the tick count
+// identifies the process generation.
+func TestWorkerServiceRestartNoticeSurvivesClockStep(t *testing.T) {
+	store := newFakeStore()
+	n := &fakeNotifier{name: "ops"}
+	h := &workerHarness{}
+	w := h.worker(nil, rules.Policy{}, nil)
+	w.RestartNotice = restartNoticeConfig()
+	w.ServiceRestartNotice = store
+	w.Notifiers = map[string]notify.Notifier{"ops": n}
+	started := t0.Add(-time.Minute)
+	w.PrimaryProcess = func() (servicePrimaryProcess, bool) {
+		return servicePrimaryProcess{
+			process:   process.Process{PID: 42, StartTicks: 12345, Role: process.RoleMain, Source: process.SourceBackend},
+			startedAt: started,
+		}, true
+	}
+
+	w.RunCycle(context.Background())
+	started = started.Add(3 * time.Second)
+	w.RunCycle(context.Background())
+
+	if got := len(n.msgs); got != 1 {
+		t.Fatalf("notifications = %d, want one for an unchanged process generation", got)
+	}
+	if rec := store.restarts["web"]; rec.StartTicks != 12345 {
+		t.Fatalf("persisted restart notice = %+v, want start ticks 12345", rec)
+	}
+}
+
+func TestPrimaryProcessForCycleReadsStartTicksWithStartTime(t *testing.T) {
+	at := t0.Add(-time.Minute)
+	reader := fakeStartReader{starts: map[int]time.Time{42: at}, ticks: map[int]uint64{42: 777}}
+	procs := func() []process.Process {
+		return []process.Process{{PID: 42, StartTicks: 1, Role: process.RoleMain, Source: process.SourceBackend}}
+	}
+	principal, ok := primaryProcessForCycle(procs, reader, func() time.Time { return t0 })()
+	if !ok || principal.process.StartTicks != 777 || !principal.startedAt.Equal(at) {
+		t.Fatalf("principal = %+v ok=%v, want ticks 777 read together with the start time", principal, ok)
+	}
+}
+
 func restartNoticeConfig() *config.ServiceRestartNotice {
 	return &config.ServiceRestartNotice{
 		UptimeBelow: 5 * time.Minute,
