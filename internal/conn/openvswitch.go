@@ -5,8 +5,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"slices"
 	"strings"
+
+	"sermo/internal/units"
 )
 
 // openvswitchProtocol probes Open vSwitch's configuration database server
@@ -46,6 +49,10 @@ const (
 
 	ovsdbFirstResultIndex = 0
 	ovsdbFirstRowIndex    = 0
+
+	// maxOVSDBResponseBytes bounds everything read in one probe; the real
+	// list_dbs and single-column select replies are a few hundred bytes.
+	maxOVSDBResponseBytes = units.BytesPerMiB
 )
 
 func (openvswitchProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
@@ -56,7 +63,9 @@ func (openvswitchProtocol) Probe(ctx context.Context, cfg Config) (Result, error
 	defer func() { _ = c.Close() }()
 
 	enc := json.NewEncoder(c)
-	dec := json.NewDecoder(c)
+	// Bound the decoder: a peer that never finishes a JSON value would
+	// otherwise grow its buffer until the deadline.
+	dec := json.NewDecoder(io.LimitReader(c, maxOVSDBResponseBytes))
 
 	// list_dbs proves the server is up and reports the databases it serves.
 	var dbs []string

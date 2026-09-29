@@ -16,7 +16,10 @@ const (
 	guacdElementSep      = ','
 	guacdLengthSep       = '.'
 	guacdLengthSepWidth  = 1
-	extraOpcode          = "opcode"
+	// maxGuacdReplyBytes bounds the reply read while looking for ';'; an RDP
+	// args list, the longest real reply, is a few KiB.
+	maxGuacdReplyBytes = maxProtocolLineBytes
+	extraOpcode        = "opcode"
 )
 
 // guacdProtocol probes the Apache Guacamole proxy daemon (guacd) natively over
@@ -46,7 +49,7 @@ func (guacdProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	if _, err := io.WriteString(c, guacInstruction(guacdSelectOp, selectProto)); err != nil {
 		return Result{}, probeErr(ProtocolNameGuacd, stepGuacdSelect, err)
 	}
-	line, err := bufio.NewReader(c).ReadString(guacdInstructionEnd)
+	line, err := bufio.NewReader(io.LimitReader(c, maxGuacdReplyBytes)).ReadString(guacdInstructionEnd)
 	if err != nil && line == "" {
 		return Result{}, probeErr(ProtocolNameGuacd, stepGuacdSelectReply, err)
 	}
