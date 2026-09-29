@@ -141,15 +141,40 @@ func UnsupportedOnBackend(tree map[string]any, backend servicemgr.Backend, name 
 // the cache each service's unit is probed twice (systemctl cat / init-script
 // stat) and every resolution warning is logged twice. Create a fresh cache per
 // config generation — entries never expire, and the warning is returned only
-// to the first resolver so it reaches the log once.
+// to the first resolver so it reaches the log once. It also memoizes each
+// unit's init-provided process identity, which both builds derive the same way.
 type TargetCache struct {
-	mu      sync.Mutex
-	entries map[string]Target
+	mu       sync.Mutex
+	entries  map[string]Target
+	procInfo map[procInfoKey]servicemgr.ProcInfo
+}
+
+type procInfoKey struct {
+	backend servicemgr.Backend
+	unit    string
 }
 
 // NewTargetCache returns an empty per-generation resolution cache.
 func NewTargetCache() *TargetCache {
-	return &TargetCache{entries: map[string]Target{}}
+	return &TargetCache{entries: map[string]Target{}, procInfo: map[procInfoKey]servicemgr.ProcInfo{}}
+}
+
+// ProcInfo returns the unit's init-provided process identity (systemd
+// properties or OpenRC supervise metadata), calling detect only on the first
+// request for that backend unit in this generation.
+func (c *TargetCache) ProcInfo(backend servicemgr.Backend, unit string, detect func() servicemgr.ProcInfo) servicemgr.ProcInfo {
+	key := procInfoKey{backend: backend, unit: unit}
+	c.mu.Lock()
+	cached, ok := c.procInfo[key]
+	c.mu.Unlock()
+	if ok {
+		return cached
+	}
+	info := detect()
+	c.mu.Lock()
+	c.procInfo[key] = info
+	c.mu.Unlock()
+	return info
 }
 
 // ResolveWithFallback resolves through the cache: the first call for a service
