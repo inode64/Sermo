@@ -63,6 +63,10 @@ func (a App) runLockAcquire(opts options, cfg *config.Config, locker locks.Named
 		return a.reportLockError(opts, err)
 	}
 	a.recordAccess(cfg, accessCommandLockAcquire, service, accessStatusOK, path)
+	if opts.json {
+		writeJSON(a.Stdout, map[string]any{cliJSONKeyOK: true, cliJSONKeyService: service, cliJSONKeyLock: locks.LockID(service, opts.name), cliJSONKeyPath: path})
+		return exitSuccess
+	}
 	fmt.Fprintf(a.Stdout, "acquired %s\n", path)
 	return exitSuccess
 }
@@ -79,7 +83,12 @@ func (a App) runLockRelease(opts options, cfg *config.Config, locker locks.Named
 		// A mistyped --name must not read as "released" while the real lock
 		// keeps blocking operations.
 		a.recordAccess(cfg, accessCommandLockRelease, service, accessStatusError, "no such lock "+id)
-		fmt.Fprintf(a.Stdout, "no named lock %s to release\n", id)
+		msg := fmt.Sprintf("no named lock %s to release", id)
+		if opts.json {
+			writeJSON(a.Stdout, map[string]any{cliJSONKeyOK: false, cliJSONKeyService: service, cliJSONKeyLock: id, cliJSONKeyMessage: msg})
+		} else {
+			fmt.Fprintln(a.Stdout, msg)
+		}
 		return exitNotActive
 	}
 	if err := locker.Release(service, opts.name); err != nil {
@@ -87,6 +96,10 @@ func (a App) runLockRelease(opts options, cfg *config.Config, locker locks.Named
 		return a.fail(opts, fmt.Sprintf("release failed: %v", err))
 	}
 	a.recordAccess(cfg, accessCommandLockRelease, service, accessStatusOK, id)
+	if opts.json {
+		writeJSON(a.Stdout, map[string]any{cliJSONKeyOK: true, cliJSONKeyService: service, cliJSONKeyLock: id})
+		return exitSuccess
+	}
 	fmt.Fprintf(a.Stdout, "released %s\n", id)
 	return exitSuccess
 }

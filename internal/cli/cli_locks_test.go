@@ -240,6 +240,38 @@ func TestLockReleaseAcceptsUnconfiguredLeftover(t *testing.T) {
 	}
 }
 
+// --json must produce JSON for every lock subcommand, and an empty list is [].
+func TestLockJSONOutput(t *testing.T) {
+	root := t.TempDir()
+	global, locksDir := writeLocksConfig(t, root)
+	decode := func(out string) map[string]any {
+		t.Helper()
+		var got map[string]any
+		if err := json.Unmarshal([]byte(out), &got); err != nil {
+			t.Fatalf("not JSON: %q (%v)", out, err)
+		}
+		return got
+	}
+
+	code, out, _ := runLockCLI(t, "--config", global, "--json", "locks", "mysql")
+	if code != exitSuccess || strings.TrimSpace(out) != `{"locks":[],"service":"mysql"}` {
+		t.Fatalf("empty locks: code=%d out=%q", code, out)
+	}
+	code, out, _ = runLockCLI(t, "--config", global, "--json", "lock", "acquire", "mysql", "--name", "backup", "--reason", "x", "--ttl", "1h")
+	got := decode(out)
+	if code != exitSuccess || got["ok"] != true || got["lock"] != "mysql.backup" || got["path"] != filepath.Join(locksDir, `mysql\backup.lock`) {
+		t.Fatalf("acquire: code=%d out=%q", code, out)
+	}
+	code, out, _ = runLockCLI(t, "--config", global, "--json", "lock", "release", "mysql", "--name", "backup")
+	if got := decode(out); code != exitSuccess || got["ok"] != true || got["lock"] != "mysql.backup" {
+		t.Fatalf("release: code=%d out=%q", code, out)
+	}
+	code, out, _ = runLockCLI(t, "--config", global, "--json", "lock", "release", "mysql", "--name", "backup")
+	if got := decode(out); code != exitNotActive || got["ok"] != false {
+		t.Fatalf("release missing: code=%d out=%q", code, out)
+	}
+}
+
 func TestLockAcquireRequiresReasonAndTTL(t *testing.T) {
 	root := t.TempDir()
 	global, _ := writeLocksConfig(t, root)

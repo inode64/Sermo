@@ -111,7 +111,8 @@ func (a App) runMountList(opts options) int {
 	controller := a.mountController(cfg, opts)
 	names := cfg.StorageMountNames()
 	slices.Sort(names)
-	var statuses []mountctl.Status
+	// Non-nil so `mount list --json` prints [] rather than null with no mounts.
+	statuses := make([]mountctl.Status, 0, len(names))
 	for _, name := range names {
 		resolved, errs := cfg.ResolveStorage(name)
 		if len(errs) > 0 {
