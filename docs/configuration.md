@@ -2276,10 +2276,16 @@ then:
 
 The CLI and WebUI can run a short probe for this watch. Pausing reconstruction
 uses two confirmations in the WebUI (and `--confirm md0` in the CLI), then
-validates the live reconstruction state, locks the array and writes the native
-md `sync_action`. Resume has the same preflight, lock and post-write check, but
-can resume any paused configured array; Sermo does not require ownership of the
-original pause. `dry_run: true` reports the intended operation without writing.
+validates the live reconstruction state, locks the array and freezes it by
+writing `frozen` to the native md `sync_action` (writing `idle` would only
+interrupt the running pass; md relaunches it at once). Resume has the same
+preflight, lock and post-write check: it writes `idle`, which clears the freeze
+so md restarts whatever recovery or resync the array still needs. It can resume
+any frozen configured array; Sermo does not require ownership of the original
+pause. While frozen, md starts no resync, recovery or check at all — including
+a rebuild onto a newly added spare — so resume the array when the maintenance
+window ends; reassembling the array or rebooting also clears the freeze.
+`dry_run: true` reports the intended operation without writing.
 
 For an `lvm` watch, `then.notify_on: [on_change]` notifies only when its
 effective health changes between `ok` and `error`, including recovery. It cannot

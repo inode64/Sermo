@@ -305,6 +305,7 @@ const (
 	raidSectorBytes      = uint64(512)
 	raidSyncActionFile   = "sync_action"
 	raidSyncActionIdle   = "idle"
+	raidSyncActionFrozen = "frozen"
 	raidSyncActionResync = "resync"
 	// The remaining md sync_action values; lvs raid_sync_action mirrors them,
 	// so the lvm device-state mapping shares this vocabulary.
@@ -418,6 +419,11 @@ func raidArraySizeBytes(path string) uint64 {
 // sync_action sysfs attribute. It accepts only a discovered md array name and
 // checks the live state before writing, so callers cannot turn an arbitrary
 // sysfs path into a write target.
+//
+// Pause writes "frozen": "idle" only interrupts the running pass, and md
+// relaunches the still-needed recovery or resync right away. Resume writes
+// "idle", which clears the freeze and lets md restart whichever pass the array
+// still needs, so it succeeds once the array is no longer frozen.
 func SetRaidRebuildState(ctx context.Context, array string, resume bool) (RaidArrayStatus, error) {
 	return setRaidRebuildState(ctx, array, resume, raidSysBlockPath, defaultRaidSampler)
 }
@@ -438,16 +444,16 @@ func setRaidRebuildState(ctx context.Context, array string, resume bool, root st
 		return RaidArrayStatus{}, fmt.Errorf("RAID array %q was not found", array)
 	}
 	if resume {
-		if detail.SyncAction != raidSyncActionIdle {
+		if detail.SyncAction != raidSyncActionFrozen {
 			return RaidArrayStatus{}, fmt.Errorf("RAID array %q is not paused (sync_action=%q)", array, detail.SyncAction)
 		}
 	} else if !isRaidRebuild(detail.Operation) {
 		return RaidArrayStatus{}, fmt.Errorf("RAID array %q is not reconstructing", array)
 	}
 
-	action := raidSyncActionIdle
+	action := raidSyncActionFrozen
 	if resume {
-		action = raidSyncActionResync
+		action = raidSyncActionIdle
 	}
 	path := filepath.Join(root, array, "md", raidSyncActionFile)
 	if err := os.WriteFile(path, []byte(action+"\n"), 0); err != nil {
@@ -464,11 +470,11 @@ func setRaidRebuildState(ctx context.Context, array string, resume bool, root st
 	if !present {
 		return RaidArrayStatus{}, fmt.Errorf("RAID array %q disappeared after setting sync_action", array)
 	}
-	if !resume && detail.SyncAction != raidSyncActionIdle {
+	if !resume && detail.SyncAction != raidSyncActionFrozen {
 		return RaidArrayStatus{}, fmt.Errorf("RAID array %q did not pause (sync_action=%q)", array, detail.SyncAction)
 	}
-	if resume && detail.SyncAction == raidSyncActionIdle {
-		return RaidArrayStatus{}, fmt.Errorf("RAID array %q did not resume", array)
+	if resume && detail.SyncAction == raidSyncActionFrozen {
+		return RaidArrayStatus{}, fmt.Errorf("RAID array %q did not resume (sync_action=%q)", array, detail.SyncAction)
 	}
 	return detail, nil
 }
