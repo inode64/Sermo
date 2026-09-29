@@ -2611,7 +2611,10 @@ The four metrics and their conditions:
   provider-forced renumbering or reconnect, the natural trigger for a dynamic-DNS
   hook — or `expect: present` / `expect: absent` to fire whenever addresses
   **are** in the expected state (a PPP session can be up with IPCP failed and no
-  address assigned; the `pppd` catalog service uses `expect: present`).
+  address assigned; the `pppd` catalog service uses `expect: present`). When
+  the addresses cannot be listed (netlink unavailable, e.g. in a restricted
+  container, while sysfs still shows the interface) the result is unavailable:
+  it neither satisfies `expect: absent` nor moves the `on: change` baseline.
 
 Hook extras: `SERMO_INTERFACE`, `SERMO_METRIC`, and — for the change metrics
 (`state`/`speed`/`address`) — `SERMO_OLD`/`SERMO_NEW`.

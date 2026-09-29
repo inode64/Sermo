@@ -16,7 +16,7 @@ func addrNetCheck(t *testing.T, expect string, samples ...[]string) *netCheck {
 		metric: "address",
 		expect: expect,
 		sampler: func(iface string) (NetSample, error) {
-			s := NetSample{State: "up", Addrs: samples[min(i, len(samples)-1)]}
+			s := NetSample{State: "up", Addrs: samples[min(i, len(samples)-1)], AddrsKnown: true}
 			i++
 			return s, nil
 		},
@@ -52,6 +52,39 @@ func TestNetAddressOnChange(t *testing.T) {
 	}
 	if r.Data["old"] != "203.0.113.7" || r.Data["new"] != "198.51.100.9" {
 		t.Fatalf("data = %v, want old/new addresses", r.Data)
+	}
+}
+
+// When netlink cannot list addresses (restricted container, transient
+// failure) the sample has none, which must not read as "no address".
+func TestNetAddressUnknownIsUnavailable(t *testing.T) {
+	known := true
+	c := &netCheck{
+		name: "net", timeout: time.Second, iface: "ppp0", metric: "address",
+		sampler: func(string) (NetSample, error) {
+			if known {
+				return NetSample{State: "up", Addrs: []string{"203.0.113.7"}, AddrsKnown: true}, nil
+			}
+			return NetSample{State: "up"}, nil
+		},
+	}
+	if r := c.Run(t.Context()); r.OK || r.Unavailable {
+		t.Fatalf("first run must prime: %+v", r)
+	}
+	known = false
+	if r := c.Run(t.Context()); r.OK || !r.Unavailable {
+		t.Fatalf("unreadable addresses must be unavailable, not a change: %+v", r)
+	}
+	known = true
+	if r := c.Run(t.Context()); r.OK || r.Unavailable {
+		t.Fatalf("the baseline must survive an unavailable sample: %+v", r)
+	}
+	c = &netCheck{
+		name: "net", timeout: time.Second, iface: "ppp0", metric: "address", expect: NetAddrAbsent,
+		sampler: func(string) (NetSample, error) { return NetSample{State: "up"}, nil },
+	}
+	if r := c.Run(t.Context()); r.OK || !r.Unavailable {
+		t.Fatalf("expect absent must not fire on unreadable addresses: %+v", r)
 	}
 }
 

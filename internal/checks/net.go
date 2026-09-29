@@ -121,6 +121,10 @@ type NetSample struct {
 	// sorted. Link-local IPv6 is excluded: it exists on any up interface, so it
 	// would mask both "no address assigned" and a provider-forced renumbering.
 	Addrs []string
+	// AddrsKnown is false when the addresses could not be listed (netlink
+	// unavailable while sysfs still shows the interface), so an empty Addrs is
+	// not evidence that the interface has none.
+	AddrsKnown bool
 	// CarrierChanges counts every link transition the kernel has seen since the
 	// interface appeared. A link that is up now but has flapped hundreds of
 	// times is a different situation from one that has been up since boot, and
@@ -242,6 +246,13 @@ func (c *netCheck) runErrors(sample NetSample, data map[string]any, start time.T
 }
 
 func (c *netCheck) runAddress(sample NetSample, data map[string]any, start time.Time) Result {
+	if !sample.AddrsKnown {
+		// Neither an "absent" verdict nor a change: the on-change baseline
+		// stays put so a transient failure cannot fake X->"" then ""->X.
+		res := c.unavailableResult("net "+c.iface+": addresses could not be listed", start)
+		res.Data = data
+		return res
+	}
 	joined := strings.Join(sample.Addrs, ",")
 	display := joined
 	if display == "" {
@@ -378,6 +389,7 @@ func sampleNetFromSysfs(iface, root string) (NetSample, error) {
 
 func addNetInterfaceAddrs(sample *NetSample, ifi *net.Interface) {
 	if addrs, err := ifi.Addrs(); err == nil {
+		sample.AddrsKnown = true
 		for _, a := range addrs {
 			ipn, ok := a.(*net.IPNet)
 			if !ok || ipn.IP.IsLinkLocalUnicast() {
