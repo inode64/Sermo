@@ -100,8 +100,9 @@ func (a App) runLockWrap(ctx context.Context, opts options, cfg *config.Config, 
 	cmd.Stderr = os.Stderr
 	if err := runLockedCommand(cmd); err != nil {
 		if exitErr, ok := errors.AsType[*exec.ExitError](err); ok {
-			a.recordAccess(cfg, accessCommandLockWrap, service, accessStatusError, fmt.Sprintf("exit %d", exitErr.ExitCode()))
-			return exitErr.ExitCode()
+			code := lockedCommandExitCode(exitErr)
+			a.recordAccess(cfg, accessCommandLockWrap, service, accessStatusError, fmt.Sprintf("exit %d", code))
+			return code
 		}
 		a.recordAccess(cfg, accessCommandLockWrap, service, accessStatusError, err.Error())
 		return a.fail(opts, fmt.Sprintf("run command: %v", err))
@@ -202,4 +203,18 @@ func runLockedCommand(cmd *exec.Cmd) error {
 			}
 		}
 	}
+}
+
+// shellSignalExitBase is the shell convention for a child killed by a signal:
+// exit status 128 + signal number.
+const shellSignalExitBase = 128
+
+// lockedCommandExitCode maps COMMAND's wait status to the wrapper's exit code.
+// ExitCode() is -1 for a signal death, which os.Exit turns into 255; report
+// 128+signal like a shell so callers can tell a SIGTERM (143) from a failure.
+func lockedCommandExitCode(exitErr *exec.ExitError) int {
+	if status, ok := exitErr.Sys().(syscall.WaitStatus); ok && status.Signaled() {
+		return shellSignalExitBase + int(status.Signal())
+	}
+	return exitErr.ExitCode()
 }
