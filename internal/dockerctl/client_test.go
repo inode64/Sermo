@@ -172,3 +172,26 @@ func TestSpecFromTreeDockerRejectsUnsafeOptions(t *testing.T) {
 		})
 	}
 }
+
+func TestClientGetReportsOversizedAndBrokenBodies(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/info", func(w http.ResponseWriter, _ *http.Request) {
+		// A syntactically valid JSON document one byte over the limit.
+		_, _ = w.Write([]byte(`"` + strings.Repeat("x", dockerResponseBodyLimit-1) + `"`))
+	})
+	mux.HandleFunc("/containers/web/json", func(w http.ResponseWriter, _ *http.Request) {
+		// Promise more bytes than are sent, so the body read fails.
+		w.Header().Set("Content-Length", "100")
+		_, _ = w.Write([]byte(`{"Id":`))
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+	client := &Client{HTTP: srv.Client(), Base: srv.URL}
+
+	if _, err := client.Info(context.Background()); err == nil || !strings.Contains(err.Error(), "exceeds") {
+		t.Fatalf("Info() error = %v, want an oversized-response error", err)
+	}
+	if _, err := client.Inspect(context.Background(), "web"); err == nil || !strings.Contains(err.Error(), "read Docker GET") {
+		t.Fatalf("Inspect() error = %v, want a body read error", err)
+	}
+}
