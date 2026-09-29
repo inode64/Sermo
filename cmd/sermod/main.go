@@ -524,7 +524,14 @@ func run(args []string) int {
 	monitor.ConfigPath = globalPath
 	monitor.Logger = logger
 
-	go serveReloads(ctx, hup, monitor.Reload)
+	engineLogs := []*logfile.Writer{accessLog, eventFile, diagFile}
+	go serveReloads(ctx, hup, func(ctx context.Context) {
+		// Reopen first and regardless of the config outcome: logrotate's
+		// postrotate reload must move the export logs to the new files even
+		// when the edited configuration turns out invalid.
+		reopenEngineLogs(logger, engineLogs)
+		monitor.Reload(ctx)
+	})
 
 	// SIGHUP stays claimed until run returns (deferred signal.Stop): one during
 	// the shutdown drain is ignored instead of killing the daemon mid-drain.
@@ -749,6 +756,17 @@ func openEngineLog(logger *slog.Logger, cfg *config.Config, key string) *logfile
 	}
 	logger.Info("engine log enabled", logFieldKey, key, logFieldPath, path)
 	return w
+}
+
+// reopenEngineLogs reopens the engine.access/events/diagnostics files at their
+// startup paths so a rotation by rename is followed. A failure keeps the
+// previous handle and is only logged: losing the rotation beats losing records.
+func reopenEngineLogs(logger *slog.Logger, logs []*logfile.Writer) {
+	for _, w := range logs {
+		if err := w.Reopen(); err != nil {
+			logger.Warn("reopen engine log failed; still writing to the previous file", logFieldError, err)
+		}
+	}
 }
 
 // stateMaintainer consolidates stored history into the coarser archives and

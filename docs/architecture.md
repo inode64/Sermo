@@ -226,8 +226,11 @@ to `/proc` to detect dead owners and PID reuse.
 Startup loads config, detects the init manager, opens the state store, builds
 the fleet, brings up the web server, writes the pidfile and enters the
 `Scheduler` loop. **SIGHUP** (sent by `sermoctl daemon reload` or the `/reload`
-endpoint) triggers a reload without stopping the daemon: it validates the new
-config, captures the in-flight state, rebuilds the fleet and restores it.
+endpoint) triggers a reload without stopping the daemon: it reopens the
+`engine.access|events|diagnostics` export logs (following a logrotate rename),
+then validates the new config, captures the in-flight state, rebuilds the fleet
+and restores it. SIGHUP is claimed before startup work begins, so one received
+while the fleet is still being built is applied once the loop runs.
 **SIGTERM/SIGINT** cancel the context for an orderly shutdown.
 
 ```mermaid

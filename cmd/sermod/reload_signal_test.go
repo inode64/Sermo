@@ -2,11 +2,15 @@ package main
 
 import (
 	"context"
+	"log/slog"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"testing"
 	"time"
+
+	"sermo/internal/logfile"
 )
 
 // A SIGHUP delivered while sermod is still starting must be captured, not
@@ -62,4 +66,30 @@ func TestServeReloadsIgnoresSIGHUPAfterShutdown(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	serveReloads(ctx, hup, func(context.Context) { t.Fatal("reload ran after shutdown") })
+}
+
+// logrotate's default create mode renames the export log; the SIGHUP handler
+// must move each configured writer to the new file (nil = channel disabled).
+func TestReopenEngineLogsFollowsRotation(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "events.log")
+	w, err := logfile.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = w.Close() })
+	if err := os.Rename(path, path+".1"); err != nil {
+		t.Fatal(err)
+	}
+	reopenEngineLogs(slog.New(slog.DiscardHandler), []*logfile.Writer{nil, w, nil})
+	if err := w.Write(map[string]string{"kind": "reload"}); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("rotated log not recreated: %v", err)
+	}
+	if string(data) != `{"kind":"reload"}`+"\n" {
+		t.Fatalf("new log = %q", data)
+	}
 }

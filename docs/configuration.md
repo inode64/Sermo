@@ -44,6 +44,7 @@ configuration omits it.
 - [Layout](#layout)
 - [Storage and mount units](#storage-and-mount-units)
 - [Engine settings](#engine-settings)
+  - [Rotating the export logs](#rotating-the-export-logs)
   - [Per-service interval](#per-service-interval)
   - [Operator buttons (buttons:)](#operator-buttons-buttons)
   - [Per-check interval](#per-check-interval)
@@ -423,6 +424,42 @@ Omit a key to leave that channel off.
   and appends each snapshot as one JSON line to the file. Rotate and retain the
   file with your host's log tooling (for example logrotate); Sermo does not prune
   it.
+
+### Rotating the export logs
+
+Sermo never prunes these files. `sermod` opens them once at startup; on every
+`SIGHUP` (`systemctl reload sermod`, `rc-service sermod reload` or
+`sermoctl daemon reload`) it reopens each one at its configured path *before*
+reloading the configuration, so a rotation by rename is followed even when the
+edited configuration is rejected. A reopen that fails is logged and `sermod`
+keeps writing to the previous file. `sermoctl` opens `engine.access` for each
+record and needs no signal. With logrotate's default `create` mode, reload the
+daemon after rotating:
+
+```text
+/var/log/sermo/*.log {
+    weekly
+    rotate 8
+    compress
+    delaycompress
+    missingok
+    notifempty
+    create 0640 root root
+    sharedscripts
+    postrotate
+        systemctl reload sermod >/dev/null 2>&1 || true
+    endscript
+}
+```
+
+On OpenRC use `rc-service sermod reload` in `postrotate`. The reload also
+re-reads `sermo.yml` and swaps the configuration in place (see the daemon reload
+notes under [Engine settings](#engine-settings)). To rotate without any signal, use
+`copytruncate` instead of `create`: the files are opened with `O_APPEND`, so
+writes continue at the truncated end (logrotate may lose lines written between
+its copy and truncate). The log paths themselves are read at startup: changing
+`engine.access`, `engine.events` or `engine.diagnostics` takes effect after a
+full `sermod` restart.
 
 `engine.interval` is the default cadence at which every service's checks are
 run. Each service runs all of its checks once per cycle.
@@ -3968,8 +4005,9 @@ array. Every finding has `level` (`error` / `warning` / `info`), `scope` and
   which would otherwise silently never fire).
 - **Locks** — malformed lock files under `<paths.runtime>/locks`.
 
-Rotate and retain `engine.diagnostics` with your host's log tooling; Sermo does
-not prune that file.
+Rotate and retain `engine.diagnostics` with your host's log tooling (see
+[Rotating the export logs](#rotating-the-export-logs)); Sermo does not prune
+that file.
 
 To reclaim old state-database history intentionally, use:
 
