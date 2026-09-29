@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -127,6 +128,52 @@ func TestTTYPayloadSanitizesControlSequences(t *testing.T) {
 	}
 	if !strings.Contains(payload, "bad?subject") || !strings.Contains(payload, "line?two") {
 		t.Fatalf("payload did not preserve sanitized text: %q", payload)
+	}
+}
+
+func TestTerminalAcceptsMessagesHonoursMesg(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		mode    uint32
+		wantErr error
+		wantOK  bool
+	}{
+		{name: "mesg y", mode: syscall.S_IFCHR | 0o620, wantOK: true},
+		{name: "mesg n", mode: syscall.S_IFCHR | 0o600, wantErr: errTTYMessagesDisabled},
+		{name: "regular file", mode: syscall.S_IFREG | 0o620},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			err := terminalAcceptsMessages(tc.mode)
+			if tc.wantOK != (err == nil) || (tc.wantErr != nil && !errors.Is(err, tc.wantErr)) {
+				t.Fatalf("terminalAcceptsMessages(%o) = %v", tc.mode, err)
+			}
+		})
+	}
+}
+
+func TestTTYNotifierSkipsTerminalsWithMessagesDisabled(t *testing.T) {
+	disabled := map[string]bool{}
+	n := &ttyNotifier{
+		name: "wall", typ: TypeWall, devRoot: utmp.DevRoot,
+		writeTTY: func(_ context.Context, path string, _ []byte) error {
+			if disabled[path] {
+				return errTTYMessagesDisabled
+			}
+			return nil
+		},
+		hostname: func() (string, error) { return "host", nil },
+		now:      func() time.Time { return time.Unix(0, 0).UTC() },
+	}
+	targets := []string{"/dev/pts/0", "/dev/pts/1"}
+
+	disabled["/dev/pts/1"] = true
+	if err := n.sendToTargets(context.Background(), targets, Message{Subject: "s"}); err != nil {
+		t.Fatalf("a terminal with mesg n is skipped, not a failure: %v", err)
+	}
+	disabled["/dev/pts/0"] = true
+	err := n.sendToTargets(context.Background(), targets, Message{Subject: "s"})
+	if err == nil || !errors.Is(err, errTTYMessagesDisabled) || !strings.Contains(err.Error(), "reached no terminal") {
+		t.Fatalf("every terminal refusing messages must be reported, got %v", err)
 	}
 }
 
