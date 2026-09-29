@@ -7,7 +7,6 @@ import (
 	"errors"
 	"net"
 	"net/url"
-	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -16,17 +15,18 @@ import (
 // redactedMark replaces any credential material in a redacted URL.
 const redactedMark = "xxxxx"
 
-// userinfoPasswordPattern matches the password in a URL userinfo section
-// (scheme://user:PASSWORD@host), used to scrub a URL that url.Parse rejects.
-var userinfoPasswordPattern = regexp.MustCompile(`(//[^/@\s:]+:)[^/@\s]*(@)`)
+// userinfoUsernameStop are the bytes a URL username cannot contain; a ':' seen
+// after one of them belongs to a host port, path or query, not to userinfo.
+const userinfoUsernameStop = "/?#@"
 
 // RedactURL strips credential material from a URL so it is safe to put in an
-// error, event or log. It drops the entire query string — `?token=` /
-// `?access_token=` are common credential carriers Go never redacts — and masks
-// the userinfo password. A URL that url.Parse rejects (e.g. a control char in
-// the password) is scrubbed textually so a parse failure can never surface the
-// raw credential either.
+// error, event or log. It masks the userinfo password and drops the entire
+// query string — `?token=` / `?access_token=` are common credential carriers
+// Go never redacts. The password is masked textually before any parsing: an
+// unencoded '/', '?', '#' or '@' inside it makes url.Parse fail or read part
+// of it as a port, path or query, and neither may surface the credential.
 func RedactURL(raw string) string {
+	raw = redactUserinfoPassword(raw)
 	if i := strings.IndexByte(raw, '?'); i >= 0 {
 		raw = raw[:i]
 	}
@@ -38,7 +38,29 @@ func RedactURL(raw string) string {
 		}
 		return u.String()
 	}
-	return userinfoPasswordPattern.ReplaceAllString(raw, "${1}"+redactedMark+"${2}")
+	return raw
+}
+
+// redactUserinfoPassword masks everything from the first ':' of the userinfo
+// up to the last '@' of the URL, so a password containing any delimiter is
+// covered entirely. It may over-redact a URL that has both a host port and an
+// '@' in its path; for a log or error message that is the safe direction.
+func redactUserinfoPassword(raw string) string {
+	start := strings.Index(raw, "//")
+	if start < 0 {
+		return raw
+	}
+	start += len("//")
+	rest := raw[start:]
+	at := strings.LastIndexByte(rest, '@')
+	if at < 0 {
+		return raw
+	}
+	colon := strings.IndexByte(rest[:at], ':')
+	if colon < 0 || strings.ContainsAny(rest[:colon], userinfoUsernameStop) {
+		return raw
+	}
+	return raw[:start] + rest[:colon+1] + redactedMark + rest[at:]
 }
 
 // URLErrorCause unwraps a *url.Error to its underlying cause, dropping the URL
