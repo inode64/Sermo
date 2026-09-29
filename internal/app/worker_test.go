@@ -872,21 +872,21 @@ func TestCycleRestartsOnAppVersionChange(t *testing.T) {
 	w := appVersionWorker(h, runner, "patch")
 
 	// Cycle 1: first observation adopts the baseline; no restart on startup.
-	w.artifactSamples.StoreAppVersion("containerd", "containerd v1.7.0", appinspect.StatusOK, "")
+	w.artifactSamples.StoreAppReport("containerd", appinspect.Report{Version: "containerd v1.7.0", Status: appinspect.StatusOK})
 	w.RunCycle(context.Background())
 	if len(h.ops) != 0 {
 		t.Fatalf("first cycle must not restart, ops=%v", h.ops)
 	}
 
 	// Cycle 2: patch bump 1.7.0 -> 1.7.1 fires once, then baseline acknowledged.
-	w.artifactSamples.StoreAppVersion("containerd", "containerd v1.7.1", appinspect.StatusOK, "")
+	w.artifactSamples.StoreAppReport("containerd", appinspect.Report{Version: "containerd v1.7.1", Status: appinspect.StatusOK})
 	w.RunCycle(context.Background())
 	if len(h.ops) != 1 || h.ops[0] != string(rules.ActionRestart) {
 		t.Fatalf("version change should restart once, ops=%v", h.ops)
 	}
 
 	// Cycle 3: version unchanged since the restart → no further restart.
-	w.artifactSamples.StoreAppVersion("containerd", "containerd v1.7.1", appinspect.StatusOK, "")
+	w.artifactSamples.StoreAppReport("containerd", appinspect.Report{Version: "containerd v1.7.1", Status: appinspect.StatusOK})
 	w.RunCycle(context.Background())
 	if len(h.ops) != 1 {
 		t.Fatalf("acknowledged version must not refire, ops=%v", h.ops)
@@ -901,9 +901,9 @@ func TestCycleAppVersionChangeUsesArtifactSample(t *testing.T) {
 	samples.RegisterApp("containerd")
 	w.artifactSamples = samples
 
-	samples.StoreAppVersion("containerd", "containerd v1.7.0", appinspect.StatusOK, "")
+	samples.StoreAppReport("containerd", appinspect.Report{Version: "containerd v1.7.0", Status: appinspect.StatusOK})
 	w.RunCycle(context.Background()) // establish baseline from the artifact cache
-	samples.StoreAppVersion("containerd", "containerd v1.7.1", appinspect.StatusOK, "")
+	samples.StoreAppReport("containerd", appinspect.Report{Version: "containerd v1.7.1", Status: appinspect.StatusOK})
 	w.RunCycle(context.Background())
 
 	if len(h.ops) != 1 || h.ops[0] != string(rules.ActionRestart) {
@@ -948,7 +948,7 @@ func TestCycleEvaluationErrorCarriesAppProbeOutput(t *testing.T) {
 	w.artifactSamples = samples
 
 	const probeOutput = "Traceback (most recent call last):\n  File \"/usr/bin/containerd\"\nImportError: no module named runtime"
-	samples.StoreAppVersion("containerd", "", "exit 1 (want 0): Traceback (most recent call last):", probeOutput)
+	samples.StoreAppReport("containerd", appinspect.Report{Status: "exit 1 (want 0): Traceback (most recent call last):", Output: probeOutput})
 	w.RunCycle(context.Background())
 
 	e, ok := h.eventOf(eventKindError)
@@ -968,7 +968,7 @@ func TestCycleMissingArtifactAppSkipsChangedRule(t *testing.T) {
 	samples.RegisterApp("containerd")
 	w.artifactSamples = samples
 
-	samples.StoreAppVersion("containerd", "", appinspect.StatusNotInstalled, "")
+	samples.StoreAppReport("containerd", appinspect.Report{Status: appinspect.StatusNotInstalled})
 	w.RunCycle(context.Background())
 	w.RunCycle(context.Background())
 	if len(h.ops) != 0 {
@@ -981,13 +981,13 @@ func TestCycleMissingArtifactAppSkipsChangedRule(t *testing.T) {
 		t.Fatalf("worker must not re-run a cached missing app probe, calls=%d", len(runner.Calls()))
 	}
 
-	samples.StoreAppVersion("containerd", "containerd v1.7.0", appinspect.StatusOK, "")
+	samples.StoreAppReport("containerd", appinspect.Report{Version: "containerd v1.7.0", Status: appinspect.StatusOK})
 	w.RunCycle(context.Background())
 	if len(h.ops) != 0 {
 		t.Fatalf("first available app sample must establish a baseline, ops=%v", h.ops)
 	}
 
-	samples.StoreAppVersion("containerd", "containerd v1.7.1", appinspect.StatusOK, "")
+	samples.StoreAppReport("containerd", appinspect.Report{Version: "containerd v1.7.1", Status: appinspect.StatusOK})
 	w.RunCycle(context.Background())
 	if len(h.ops) != 1 || h.ops[0] != string(rules.ActionRestart) {
 		t.Fatalf("version change after app installation must restart once, ops=%v", h.ops)
@@ -1004,14 +1004,14 @@ func TestCycleAppVersionChangeRespectsLevel(t *testing.T) {
 	h := &workerHarness{opResult: operation.Result{Status: operation.ResultOK}}
 	w := appVersionWorker(h, runner, "minor")
 
-	w.artifactSamples.StoreAppVersion("containerd", "containerd v1.7.0", appinspect.StatusOK, "")
+	w.artifactSamples.StoreAppReport("containerd", appinspect.Report{Version: "containerd v1.7.0", Status: appinspect.StatusOK})
 	w.RunCycle(context.Background()) // prime
-	w.artifactSamples.StoreAppVersion("containerd", "containerd v1.7.5", appinspect.StatusOK, "")
+	w.artifactSamples.StoreAppReport("containerd", appinspect.Report{Version: "containerd v1.7.5", Status: appinspect.StatusOK})
 	w.RunCycle(context.Background()) // patch bump
 	if len(h.ops) != 0 {
 		t.Fatalf("patch bump must not restart at minor level, ops=%v", h.ops)
 	}
-	w.artifactSamples.StoreAppVersion("containerd", "containerd v1.8.0", appinspect.StatusOK, "")
+	w.artifactSamples.StoreAppReport("containerd", appinspect.Report{Version: "containerd v1.8.0", Status: appinspect.StatusOK})
 	w.RunCycle(context.Background()) // minor bump
 	if len(h.ops) != 1 || h.ops[0] != string(rules.ActionRestart) {
 		t.Fatalf("minor bump must restart, ops=%v", h.ops)
@@ -1029,9 +1029,9 @@ func TestCycleAppVersionCommandFailureDoesNotRestartOrAcknowledge(t *testing.T) 
 	w := appVersionWorker(h, nil, "patch")
 	w.CheckDeps = checks.Deps{Runner: runner}
 
-	w.artifactSamples.StoreAppVersion("containerd", "containerd v1.7.0", appinspect.StatusOK, "")
+	w.artifactSamples.StoreAppReport("containerd", appinspect.Report{Version: "containerd v1.7.0", Status: appinspect.StatusOK})
 	w.RunCycle(context.Background()) // prime baseline at 1.7.0
-	w.artifactSamples.StoreAppVersion("containerd", "", "error: missing shared library", "")
+	w.artifactSamples.StoreAppReport("containerd", appinspect.Report{Status: "error: missing shared library"})
 	w.RunCycle(context.Background()) // broken binary/version command
 	if len(h.ops) != 0 {
 		t.Fatalf("broken version command must not restart, ops=%v", h.ops)
@@ -1040,13 +1040,13 @@ func TestCycleAppVersionCommandFailureDoesNotRestartOrAcknowledge(t *testing.T) 
 		t.Fatalf("broken version command should emit an error event, events=%+v", h.events)
 	}
 
-	w.artifactSamples.StoreAppVersion("containerd", "containerd v1.7.1", appinspect.StatusOK, "")
+	w.artifactSamples.StoreAppReport("containerd", appinspect.Report{Version: "containerd v1.7.1", Status: appinspect.StatusOK})
 	w.RunCycle(context.Background()) // valid 1.7.1 still differs from 1.7.0
 	if len(h.ops) != 1 || h.ops[0] != string(rules.ActionRestart) {
 		t.Fatalf("failed version sample must not acknowledge baseline, ops=%v", h.ops)
 	}
 
-	w.artifactSamples.StoreAppVersion("containerd", "containerd v1.7.1", appinspect.StatusOK, "")
+	w.artifactSamples.StoreAppReport("containerd", appinspect.Report{Version: "containerd v1.7.1", Status: appinspect.StatusOK})
 	w.RunCycle(context.Background()) // acknowledged by successful restart
 	if len(h.ops) != 1 {
 		t.Fatalf("acknowledged version must not refire, ops=%v", h.ops)
@@ -1276,12 +1276,12 @@ func TestRuleMessageRuntimeContextForChangedAppVersion(t *testing.T) {
 	w.appVersions = map[string]string{}
 	w.appVersionsLast = map[string]string{}
 
-	w.artifactSamples.StoreAppVersion("containerd", "containerd v1.7.0", appinspect.StatusOK, "")
+	w.artifactSamples.StoreAppReport("containerd", appinspect.Report{Version: "containerd v1.7.0", Status: appinspect.StatusOK})
 	w.RunCycle(context.Background())
 	if _, ok := h.eventOf(eventKindAlert); ok {
 		t.Fatal("baseline cycle must not alert")
 	}
-	w.artifactSamples.StoreAppVersion("containerd", "containerd v1.7.1", appinspect.StatusOK, "")
+	w.artifactSamples.StoreAppReport("containerd", appinspect.Report{Version: "containerd v1.7.1", Status: appinspect.StatusOK})
 	w.RunCycle(context.Background())
 
 	e, ok := h.eventOf(eventKindAlert)

@@ -78,11 +78,11 @@ func TestArtifactSamplesShareAppVersion(t *testing.T) {
 	samples.RegisterApp("demo")
 	w := &Worker{artifactSamples: samples, appVersions: map[string]string{}, appVersionsLast: map[string]string{}}
 
-	samples.StoreAppVersion("demo", "1.2.3", appinspect.StatusOK, "")
+	samples.StoreAppReport("demo", appinspect.Report{Version: "1.2.3", Status: appinspect.StatusOK})
 	if changed, err := w.changedAppVersion(context.Background(), "demo", 3); err != nil || changed {
 		t.Fatalf("first app sample = changed:%t err:%v, want false nil", changed, err)
 	}
-	samples.StoreAppVersion("demo", "1.3.0", appinspect.StatusOK, "")
+	samples.StoreAppReport("demo", appinspect.Report{Version: "1.3.0", Status: appinspect.StatusOK})
 	if changed, err := w.changedAppVersion(context.Background(), "demo", 3); err != nil || !changed {
 		t.Fatalf("updated app sample = changed:%t err:%v, want true nil", changed, err)
 	}
@@ -256,7 +256,7 @@ func TestArtifactSamplesCacheAppStatus(t *testing.T) {
 				appVersionsLast: map[string]string{},
 				CheckDeps:       checks.Deps{Runner: runner},
 			}
-			samples.StoreAppVersion("demo", "", tt.status, "")
+			samples.StoreAppReport("demo", appinspect.Report{Status: tt.status})
 
 			changed, err := w.changedAppVersion(context.Background(), "demo", 3)
 			if changed || (err != nil) != tt.wantErr {

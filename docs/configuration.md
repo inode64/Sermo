@@ -472,7 +472,9 @@ artifacts. An app or library profile may set its top-level `interval`; a service
 uses its own top-level `interval` for version/config monitors and changed paths.
 A service worker may still run more often, but reads the latest shared artifact
 sample instead of re-running a version command or filesystem probe each cycle.
-The internal `artifact:*` samplers only refresh those shared samples: they do
+The Web UI Applications list reads the same samples; it runs an app's version
+command itself only when no sample exists yet, such as for an app installed
+after the daemon started. The internal `artifact:*` samplers only refresh those shared samples: they do
 not emit firing/recovered events or notifications. Service operations still run
 their normal preflight checks directly.
 

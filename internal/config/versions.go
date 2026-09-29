@@ -185,6 +185,9 @@ func (c *Config) materializeTemplate(ctx context.Context, tmpl *Document, body m
 	matches := source.templateMatches(toks)
 	matches = append(matches, demanded...)
 	matches = dedupeTemplateMatches(matches, toks)
+	if kind != kindService {
+		matches = dedupeSameBinaryMatches(matches, toks)
+	}
 	sortTemplateMatches(matches)
 	matches = c.withCurrentMatches(matches, tmpl.Name, toks, kind)
 	for _, match := range matches {
@@ -824,6 +827,33 @@ func dedupeTemplateMatches(matches []templateMatch, toks []tmplToken) []template
 			continue
 		}
 		seen[key] = true
+		out = append(out, match)
+	}
+	return out
+}
+
+// dedupeSameBinaryMatches keeps one versioned app or library instance per real
+// binary. Overlapping `binary:` candidates can match one directory twice with
+// different token values: Java's `${instance}-bin-${version}` reads
+// `openjdk-bin-17` as instance "openjdk" and the later `${instance}-${version}`
+// reads it as "openjdk-bin", so one JVM materialized as two apps and every
+// sampling round started it twice. Candidates are listed most specific first
+// and matches keep that order here, so the first identity wins.
+//
+// Catalog services are exempt: their instances are init units, and several of
+// them (php-fpm pools, Tomcat instances) legitimately share one binary. The
+// empty active-slot match is exempt too, since it names the current version
+// alongside its own versioned instance by design.
+func dedupeSameBinaryMatches(matches []templateMatch, toks []tmplToken) []templateMatch {
+	seen := map[string]bool{}
+	out := make([]templateMatch, 0, len(matches))
+	for _, match := range matches {
+		if match.matchedBinary && match.realPath != "" && !templateMatchHasEmptyValue(match, toks) {
+			if seen[match.realPath] {
+				continue
+			}
+			seen[match.realPath] = true
+		}
 		out = append(out, match)
 	}
 	return out

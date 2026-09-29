@@ -1202,6 +1202,51 @@ func TestWebBackendApplicationsInspectInParallel(t *testing.T) {
 	}
 }
 
+// TestWebBackendApplicationsServeWatchSamples pins that the Applications page
+// reuses the app watches' own inspections instead of re-running every version
+// probe per page load: a slow probe (salt-minion took 5-6 s) used to run once
+// for its watch and again for every viewer.
+func TestWebBackendApplicationsServeWatchSamples(t *testing.T) {
+	root := t.TempDir()
+	cfg := &config.Config{AppNames: []string{"sampled", "unsampled"}, Apps: map[string]*config.Document{}}
+	for _, name := range cfg.AppNames {
+		bin := filepath.Join(root, name)
+		if err := os.WriteFile(bin, []byte("x"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		cfg.Apps[name] = &config.Document{Name: name, Body: map[string]any{
+			"name": name,
+			"preflight": map[string]any{
+				"binary":  map[string]any{"type": "binary", "path": bin},
+				"version": map[string]any{"type": "command", "command": []any{bin, "--version"}},
+			},
+		}}
+	}
+	samples := NewArtifactSamples()
+	samples.RegisterApp("sampled")
+	samples.StoreAppReport("sampled", appinspect.Report{
+		Name: "sampled", DisplayName: "Sampled", Binary: filepath.Join(root, "sampled"),
+		Version: "sampled 9.9.9", VersionShort: "9.9.9", Installed: true, OK: true, Status: appinspect.StatusOK,
+	})
+	runner := &countingRunner{result: execx.Result{Stdout: "app 1.2.3\n"}}
+	b := &WebBackend{cfg: cfg, execRunner: runner, artifactSamples: samples}
+
+	apps := b.loadApplications(context.Background())
+	byName := map[string]web.CatalogItem{}
+	for _, a := range apps {
+		byName[a.Name] = a
+	}
+	if got := byName["sampled"]; got.Version != "sampled 9.9.9" || got.State != TargetStateOK {
+		t.Fatalf("sampled app = %+v, want the watch sample", got)
+	}
+	if _, ok := byName["unsampled"]; !ok {
+		t.Fatalf("unsampled app missing: %+v", apps)
+	}
+	if calls := runner.calls.Load(); calls != 1 {
+		t.Fatalf("version probes = %d, want 1 (only the unsampled app)", calls)
+	}
+}
+
 func TestWebBackendLibrariesInspectInstalledCatalogFiles(t *testing.T) {
 	root := t.TempDir()
 	libraryPath := filepath.Join(root, "libdemo.so")
