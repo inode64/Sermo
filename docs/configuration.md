@@ -2495,6 +2495,12 @@ The generated `storage` check reads filesystem usage for `path` and is true when
 every present predicate holds (`op ∈ >=,>,<=,<,==,!=`). Predicates cover **block space** —
 `used_pct`, `free_pct`, `used_bytes`, `free_bytes` — and **inodes** —
 `inodes_used_pct`, `inodes_free_pct`, `inodes_free` (absolute count).
+Block percentages match `df`'s `Use%`: `used_pct` is used / (used + available)
+and `free_pct` is available / (used + available), so they sum to 100. Blocks
+reserved for root (5 % by default on ext4) are in neither, so `used_pct` reaches
+100 % exactly when unprivileged writes start failing with `ENOSPC`; `free_bytes`
+is the space available to unprivileged users and `total_bytes` the raw
+filesystem size.
 `*_pct.value` accepts a number or an explicit `%` suffix in 0–100, e.g. `90` or `90%`.
 `*_bytes.value` must include a size suffix (`K`/`M`/`G`/`T`, with optional
 `B`/`iB`), e.g. `10G`; unitless byte values such as `10` are rejected.
