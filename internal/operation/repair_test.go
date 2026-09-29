@@ -2,6 +2,8 @@ package operation
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -15,7 +17,64 @@ import (
 
 type repairReader map[int]bool
 
-func (r repairReader) PIDs() ([]int, error) { return nil, nil }
+func (r repairReader) PIDs() ([]int, error) {
+	pids := make([]int, 0, len(r))
+	for pid, alive := range r {
+		if alive {
+			pids = append(pids, pid)
+		}
+	}
+	return pids, nil
+}
+
+// partialSnapshotReader is the daemon's caching reader after a /proc walk that
+// failed part-way: the live PID is missing and the error says why.
+type partialSnapshotReader struct{ repairReader }
+
+func (partialSnapshotReader) SnapshotWithError() (map[int]process.Identity, error) {
+	return map[int]process.Identity{}, errors.New("read process identity: permission denied")
+}
+
+// identityErrReader fails the direct read of one live PID.
+type identityErrReader struct{ repairReader }
+
+func (identityErrReader) IdentityWithError(pid int) (process.Identity, bool, error) {
+	return process.Identity{}, false, fmt.Errorf("cannot read identity of live pid %d", pid)
+}
+
+func TestRepairKeepsPIDFileWhenAbsenceIsUnproven(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		reader process.Reader
+	}{
+		{name: "incomplete snapshot", reader: partialSnapshotReader{}},
+		{name: "unreadable pid", reader: identityErrReader{}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			runtimeDir := filepath.Join(t.TempDir(), "run")
+			if err := os.Mkdir(runtimeDir, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			pidfile := filepath.Join(runtimeDir, "rabbitmq.pid")
+			if err := os.WriteFile(pidfile, []byte("5023\n"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			mgr := &fakeManager{status: servicemgr.StatusFailed}
+			prepare := repairStalePIDFiles(mgr, "rabbitmq", []process.Selector{{
+				Name: process.SelectorPidfile, Type: process.SelectorPidfile, Paths: []string{pidfile},
+			}}, tc.reader, runtimeDir)
+
+			_, err := prepare(context.Background())
+
+			if err == nil || !strings.Contains(err.Error(), "cannot prove pid 5023 is gone") {
+				t.Fatalf("repair error = %v, want fail-closed refusal", err)
+			}
+			if _, err := os.Lstat(pidfile); err != nil {
+				t.Fatalf("pidfile must remain when absence is unproven: %v", err)
+			}
+		})
+	}
+}
 
 func (r repairReader) Identity(pid int) (process.Identity, bool) {
 	if !r[pid] {
