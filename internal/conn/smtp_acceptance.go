@@ -172,6 +172,13 @@ func probeSMTPAcceptanceMX(
 	}
 	if offersStartTLS {
 		if err := client.StartTLS(tlsConfig(mxHost)); err != nil {
+			// The MX answered with a certificate that fails verification: that
+			// is its verdict, like an SMTP rejection. Treating it as a transport
+			// failure would let a lower-priority MX mask the primary's broken
+			// certificate as "accepted".
+			if _, ok := errors.AsType[*tls.CertificateVerificationError](err); ok {
+				return smtpAcceptancePolicyFailure(res, smtpAcceptanceStageStartTLS, "certificate verification failed: "+err.Error()), nil
+			}
 			return smtpAcceptanceStepResult(res, smtpAcceptanceStageStartTLS, err)
 		}
 		extra[ExtraKeySMTPStartTLS] = "true"

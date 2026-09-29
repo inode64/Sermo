@@ -13,6 +13,7 @@ import (
 	"math/big"
 	"net"
 	"net/textproto"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -406,4 +407,48 @@ func smtpAcceptanceTestTLS(t *testing.T) (*tls.Config, *tls.Config) {
 	roots.AddCert(leaf)
 	return &tls.Config{Certificates: []tls.Certificate{cert}, MinVersion: tls.VersionTLS12},
 		&tls.Config{ServerName: "127.0.0.1", RootCAs: roots, MinVersion: tls.VersionTLS12}
+}
+
+// TestSMTPAcceptanceDoesNotMaskPrimaryCertificateFailure: the primary MX
+// offers STARTTLS with a certificate the client cannot verify, and a later MX
+// would accept in plaintext. The primary's failure is the verdict.
+func TestSMTPAcceptanceDoesNotMaskPrimaryCertificateFailure(t *testing.T) {
+	serverTLS, _ := smtpAcceptanceTestTLS(t)
+	port, commands, done := serveSMTPAcceptance(t, serverTLS, "250 recipient ok")
+	secondary, err := net.Listen("tcp", net.JoinHostPort("127.0.0.2", strconv.Itoa(port)))
+	if err != nil {
+		t.Skipf("second loopback address unavailable: %v", err)
+	}
+	t.Cleanup(func() { _ = secondary.Close() })
+	contacted := make(chan struct{}, 1)
+	go func() {
+		conn, err := secondary.Accept()
+		if err != nil {
+			return
+		}
+		contacted <- struct{}{}
+		_ = conn.Close()
+	}()
+	proto := smtpAcceptanceProtocol{lookupMX: func(context.Context, string, string) ([]*net.MX, error) {
+		return []*net.MX{{Host: "127.0.0.1.", Pref: 10}, {Host: "127.0.0.2.", Pref: 20}}, nil
+	}}
+	cfg := smtpAcceptanceTestConfig(port)
+	cfg.Params[ParamKeySMTPStartTLS] = SMTPStartTLSOpportunistic
+
+	res, err := proto.Probe(context.Background(), cfg)
+	if err != nil {
+		t.Fatalf("Probe: %v", err)
+	}
+	if res.Extra[ExtraKeySMTPMXHost] != "127.0.0.1" ||
+		res.Extra[ExtraKeySMTPStatus] != smtpAcceptanceStatusPolicy ||
+		res.Extra[ExtraKeySMTPStage] != smtpAcceptanceStageStartTLS ||
+		!strings.Contains(res.Failure, "certificate") {
+		t.Fatalf("result = %+v, want a STARTTLS certificate policy failure from the primary", res)
+	}
+	_ = waitSMTPAcceptanceCommands(t, commands, done)
+	select {
+	case <-contacted:
+		t.Fatal("a lower-priority MX was tried after the primary's certificate failed")
+	default:
+	}
 }

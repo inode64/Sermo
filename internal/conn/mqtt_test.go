@@ -68,3 +68,9 @@ func TestMQTTProbeRefused(t *testing.T) {
 		t.Fatal("a non-zero CONNACK return code must fail the probe")
 	}
 }
+
+func TestBuildMQTTConnectRejectsPasswordWithoutUser(t *testing.T) {
+	if _, err := buildMQTTConnect("c", "", "secret"); err == nil {
+		t.Fatal("a password without a user must be rejected before it reaches the broker")
+	}
+}
