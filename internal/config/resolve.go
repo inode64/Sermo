@@ -1478,6 +1478,9 @@ func (c *Config) resolveDocBody(doc *Document, name string, appChain []string, i
 	if errs := serviceSectionErrors(body); len(errs) > 0 {
 		return Resolved{Name: name}, errs
 	}
+	// An apps.local override merges `delete: true` into the app body; this is
+	// the app's only merge point, as mergedService is for services.
+	applyDeletes(body)
 	body = pruneEnableIfMap(body, nil, inputs.backend)
 	prepareExpansionInputs(body)
 	vars, errs := c.expansionVariables(body, name, inputs.globalVars)

@@ -108,9 +108,10 @@ func (c *Config) loadKindOverrideDir(dir, kind string, recursive bool) error {
 		if base.LocalOverride != "" {
 			return fmt.Errorf("%s: %s %q is already overridden by %s", doc.Path, kind, doc.Name, base.LocalOverride)
 		}
-		// applyDeletes is deliberately not called here: mergedService runs it
-		// after the catalog body is merged, and running it now would drop a
-		// `delete: true` before it ever met the entry it names.
+		// applyDeletes is deliberately not called here: mergedService (services)
+		// and resolveDocBody (apps) run it at resolution, after every layer is
+		// merged; running it now would drop a service's `delete: true` before it
+		// ever met the catalog entry it names.
 		base.Body = mergeMaps(base.Body, doc.Body)
 		base.LocalOverride = doc.Path
 		return nil
@@ -143,6 +144,10 @@ func (c *Config) loadWatchOverrideDir(dir string, recursive bool) error {
 			return err
 		}
 		dst := c.registry(pathKeyWatches)
+		if overrideDeletes(entry) {
+			delete(dst, doc.Name)
+			return nil
+		}
 		if existing, ok := dst[doc.Name].(map[string]any); ok {
 			dst[doc.Name] = mergeMaps(existing, entry)
 			return nil
@@ -174,6 +179,10 @@ func (c *Config) loadNotifierOverrideDir(dir string, recursive bool) error {
 		}
 		existing, isMap := dst[name].(map[string]any)
 		entryMap, entryIsMap := entry.(map[string]any)
+		if entryIsMap && overrideDeletes(entryMap) {
+			delete(dst, name)
+			return nil
+		}
 		if isMap && entryIsMap {
 			dst[name] = mergeMaps(existing, entryMap)
 			return nil
@@ -181,6 +190,20 @@ func (c *Config) loadNotifierOverrideDir(dir string, recursive bool) error {
 		dst[name] = entry
 		return nil
 	})
+}
+
+// overrideDeletes reports whether a watch or notifier override asks to remove
+// its base entry, and consumes a boolean `delete`. These entries live directly
+// in Global.Raw, outside any named section applyDeletes walks, so the override
+// loader is the only place the request can be honored. A non-boolean value is
+// left in place for validation to report.
+func overrideDeletes(entry map[string]any) bool {
+	remove, ok := entry[keyDelete].(bool)
+	if !ok {
+		return false
+	}
+	delete(entry, keyDelete)
+	return remove
 }
 
 // claimLocalOverride records that one override owns a watch or notifier name.

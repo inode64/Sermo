@@ -3748,7 +3748,9 @@ exists to survive. Listing a `.local` directory in `paths` is rejected.
   can add a host-only one.
 - **The [merge rules](#merge-rules) above apply unchanged** — maps merge
   recursively, scalars and lists overwrite, `enabled: false` disables an
-  inherited entry and `delete: true` removes it.
+  inherited entry and `delete: true` removes it. A watch or notifier override
+  whose own top level sets `delete: true` removes that whole watch or notifier
+  from this host.
 - **The override sits above the host document**, so the order is
   `defaults < catalog < host document < host override`.
 - **It is taken unexpanded**, like `uses`/`clone`. Redefining one variable
