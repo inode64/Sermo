@@ -1778,6 +1778,32 @@ func TestWebBackendStorageWatchUsesSnapshot(t *testing.T) {
 	}
 }
 
+// A host watch without its own interval runs at engine.interval in the
+// daemon; the web listing (and its snapshot freshness window) must use the
+// same cadence rather than the built-in default.
+func TestWebBackendHostWatchInheritsEngineInterval(t *testing.T) {
+	cfg := cfgWithWatches(map[string]any{
+		"load": map[string]any{
+			"check": map[string]any{"type": "load", "load1": map[string]any{"op": ">", "value": 8}},
+		},
+		"load-fast": map[string]any{
+			"interval": "10s",
+			"check":    map[string]any{"type": "load", "load1": map[string]any{"op": ">", "value": 8}},
+		},
+	})
+	cfg.Global.Raw["engine"] = map[string]any{"interval": "2m"}
+	b, warns := NewWebBackend(t.Context(), cfg, Deps{})
+	if len(warns) != 0 {
+		t.Fatalf("unexpected warnings: %v", warns)
+	}
+	if got := b.watches["load"].interval; got != 2*time.Minute {
+		t.Fatalf("load interval = %s, want engine.interval 2m", got)
+	}
+	if got := b.watches["load-fast"].interval; got != 10*time.Second {
+		t.Fatalf("load-fast interval = %s, want its own 10s", got)
+	}
+}
+
 func TestWebBackendStorageMountOnlyUsesSnapshot(t *testing.T) {
 	cfg := cfgWithWatches(map[string]any{
 		"mount-backup": map[string]any{
