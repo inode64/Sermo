@@ -2,6 +2,7 @@ package checks
 
 import (
 	"context"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -201,5 +202,36 @@ func TestSizeGrowthAtExactThreshold(t *testing.T) {
 	fz.now = fz.now.Add(20 * time.Minute)
 	if r := c.Run(context.Background()); !r.OK {
 		t.Fatalf("growth of exactly 1GiB == limit must alert: %s", r.Message)
+	}
+}
+
+type vanishedSizeEntry struct{ fs.DirEntry }
+
+func (vanishedSizeEntry) Name() string               { return "rotated.log" }
+func (vanishedSizeEntry) IsDir() bool                { return false }
+func (vanishedSizeEntry) Type() fs.FileMode          { return 0 }
+func (vanishedSizeEntry) Info() (fs.FileInfo, error) { return nil, fs.ErrNotExist }
+
+// Spool, tmp and rotated log directories lose entries between the directory
+// read and the per-entry stat; such an entry no longer takes space and must
+// not turn the whole measurement unavailable. Any other error still does.
+func TestSizeWalkSkipsEntriesThatVanished(t *testing.T) {
+	root := "/var/spool/sermo-test"
+	var total int64
+	walk := sizeWalkFunc(t.Context(), root, true, &total)
+	if err := walk(root+"/gone", nil, fs.ErrNotExist); err != nil {
+		t.Fatalf("vanished entry: %v, want skipped", err)
+	}
+	if err := walk(root+"/rotated.log", vanishedSizeEntry{}, nil); err != nil {
+		t.Fatalf("entry vanished before stat: %v, want skipped", err)
+	}
+	if err := walk(root+"/locked", nil, fs.ErrPermission); err == nil {
+		t.Fatal("a permission error must still abort the measurement")
+	}
+	if err := walk(root, nil, fs.ErrNotExist); err == nil {
+		t.Fatal("the measured path itself vanishing must still abort")
+	}
+	if total != 0 {
+		t.Fatalf("total = %d, want nothing counted", total)
 	}
 }

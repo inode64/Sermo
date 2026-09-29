@@ -2,6 +2,7 @@ package checks
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io/fs"
 	"math"
@@ -109,14 +110,30 @@ func dirOrFileSize(ctx context.Context, path string, includeHidden bool) (int64,
 		return info.Size(), nil
 	}
 	var total int64
-	err = filepath.WalkDir(path, func(entryPath string, d fs.DirEntry, err error) error {
+	err = filepath.WalkDir(path, sizeWalkFunc(ctx, path, includeHidden, &total))
+	if err != nil {
+		return total, fmt.Errorf("walk size path %q: %w", path, err)
+	}
+	return total, nil
+}
+
+// sizeWalkFunc adds regular-file sizes under root to total. An entry that
+// vanished between the directory read and its stat (spool, tmp, log
+// rotation) no longer takes space, so it is skipped instead of making the
+// whole sample unavailable and costing the growth window a sample; any other
+// error, or root itself vanishing, still aborts the measurement.
+func sizeWalkFunc(ctx context.Context, root string, includeHidden bool, total *int64) fs.WalkDirFunc {
+	return func(entryPath string, d fs.DirEntry, err error) error {
 		if ctxErr := ctx.Err(); ctxErr != nil {
 			return fmt.Errorf("measure size of %q: %w", entryPath, ctxErr)
 		}
 		if err != nil {
+			if entryPath != root && errors.Is(err, fs.ErrNotExist) {
+				return nil
+			}
 			return fmt.Errorf("walk size path %q: %w", entryPath, err)
 		}
-		if !includeHidden && IsHiddenDescendant(path, entryPath, d) {
+		if !includeHidden && IsHiddenDescendant(root, entryPath, d) {
 			if d.IsDir() {
 				return filepath.SkipDir
 			}
@@ -124,17 +141,16 @@ func dirOrFileSize(ctx context.Context, path string, includeHidden bool) (int64,
 		}
 		if d.Type().IsRegular() {
 			fi, err := d.Info()
+			if errors.Is(err, fs.ErrNotExist) {
+				return nil
+			}
 			if err != nil {
 				return fmt.Errorf("read size information for %q: %w", entryPath, err)
 			}
-			total += fi.Size()
+			*total += fi.Size()
 		}
 		return nil
-	})
-	if err != nil {
-		return total, fmt.Errorf("walk size path %q: %w", path, err)
 	}
-	return total, nil
 }
 
 // parseSize parses a human byte size with an explicit suffix ("1G", "500M",
