@@ -676,9 +676,13 @@ process logs a warning, exits with status **1**, and does not start a second
 monitor loop.
 
 The daemon writes `<paths.runtime>/sermod.pid` (default `/run/sermo/sermod.pid`)
-at startup to make `sermoctl daemon reload` reliable. If no pidfile is present,
-`sermoctl daemon reload` falls back to locating the running `sermod` process by
-name — a native scan of `/proc`, no external `pidof`/`pgrep` needed.
+at startup to make `sermoctl daemon reload` reliable. Before signalling, the CLI
+checks that the PID is still a `sermod` process (its `/proc/<pid>/exe` basename
+is `sermod`); a pidfile left behind by a killed daemon whose PID now belongs to
+another program is skipped, never signalled. If no pidfile names a live
+`sermod`, `sermoctl daemon reload` falls back to locating the running `sermod`
+process by name — a native scan of `/proc`, no external `pidof`/`pgrep` needed —
+and applies the same executable check to each candidate.
 
 While the dashboard requires authentication, the daemon also writes
 `<paths.runtime>/web.token` (mode `0600`, removed when it stops): the admin
