@@ -67,6 +67,10 @@ type Worker struct {
 	// reportedChecks indexes the immutable rule set; reloading replaces the worker.
 	reportedChecks map[string]bool
 
+	// checkNames lists the configured checks whose health events this worker
+	// can emit, so event_notify can tell a renamed check's open incident apart.
+	checkNames map[string]bool
+
 	// Checks produces this cycle's named-check cache.
 	Checks func(ctx context.Context, deps checks.Deps) map[string]checks.Result
 	// ResolveRefs returns a per-cycle resolver for named checks outside the main

@@ -1706,8 +1706,10 @@ between warning and firing, recovery, or a new episode is sent immediately.
 A watch whose check becomes unavailable and later available again tracks that
 as its own incident, so the check coming back never announces a still-firing
 watch as recovered.
-Delivery state survives daemon restarts and config reloads. If
-`repeat_interval` is set, an open incident is reminded at that interval, even
+Delivery state survives daemon restarts and config reloads. An open incident
+whose service, check, rule, watch or app is no longer configured (or no longer
+enabled) after a restart or reload is forgotten, since nothing can send its
+recovery any more; it is not reminded again. If `repeat_interval` is set, an open incident is reminded at that interval, even
 when the underlying check emits no new event. Without it, open incidents are
 announced only on state changes. A remediation rule's episode closes with the
 `recovered` event emitted when its condition clears, so its next firing is a

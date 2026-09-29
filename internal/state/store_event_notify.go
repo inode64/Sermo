@@ -84,3 +84,34 @@ func (s *Store) DueEventNotifyStates(notifier string, before time.Time) ([]Event
 	}
 	return records, nil
 }
+
+// ActiveEventNotifyIncidents lists the distinct incident keys that still have
+// an open (reminder-eligible) delivery at any notifier.
+func (s *Store) ActiveEventNotifyIncidents() ([]string, error) {
+	rows, err := s.reads().QueryContext(s.sqlCtx(),
+		`SELECT DISTINCT incident_key FROM event_notify_state WHERE active = 1 ORDER BY incident_key`)
+	if err != nil {
+		return nil, fmt.Errorf("list active event notifications: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	var keys []string
+	for rows.Next() {
+		var key string
+		if err := rows.Scan(&key); err != nil {
+			return nil, fmt.Errorf("scan active event notification: %w", err)
+		}
+		keys = append(keys, key)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("read active event notifications: %w", err)
+	}
+	return keys, nil
+}
+
+// DeleteEventNotifyIncident forgets one incident at every notifier.
+func (s *Store) DeleteEventNotifyIncident(incidentKey string) error {
+	if _, err := s.exec(s.sqlCtx(), `DELETE FROM event_notify_state WHERE incident_key = ?`, incidentKey); err != nil {
+		return fmt.Errorf("delete event notification state: %w", err)
+	}
+	return nil
+}
