@@ -76,20 +76,22 @@ func buildPGDSNWithTarget(target probeTarget) string {
 }
 
 // sslMode maps the generic tls field to a PostgreSQL sslmode. Default disable
-// (plaintext). "true" and "skip-verify" both encrypt without strict
-// verification ("require"); the verify-* / prefer modes pass through.
+// (plaintext). The shared spellings keep their meaning for every protocol:
+// "true" (and yes/on/required) is verified TLS, so it maps to verify-full, and
+// only "skip-verify" encrypts without verification ("require"). The native
+// sslmodes pass through.
 func sslMode(tls string) string {
 	switch strings.ToLower(strings.TrimSpace(tls)) {
 	case "", tlsModeFalse, tlsModeNo, tlsModeOff, tlsDisable:
 		return tlsDisable
-	case ParamValueTrue, tlsModeYes, tlsModeOn, tlsModeRequired, tlsRequire, tlsSkipVerify:
+	case ParamValueTrue, tlsModeYes, tlsModeOn, tlsModeRequired, tlsVerifyFull:
+		return tlsVerifyFull
+	case tlsRequire, tlsSkipVerify:
 		return tlsRequire
 	case tlsPrefer:
 		return tlsPrefer
 	case tlsVerifyCA:
 		return tlsVerifyCA
-	case tlsVerifyFull:
-		return tlsVerifyFull
 	default:
 		return tls // allow a valid sslmode passed through
 	}
