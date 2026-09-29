@@ -79,6 +79,20 @@ func (r *fakeMountRunner) Run(_ context.Context, name string, args ...string) (e
 	return execx.Result{}, nil
 }
 
+// With no configured mounts, `mount list --json` is an empty array, not null.
+func TestMountListJSONEmpty(t *testing.T) {
+	global := writeServiceConfig(t, servicesDirGlobal, nil)
+	var out bytes.Buffer
+	mounted := false
+	app := mountApp(t, &mounted, &out)
+	if code := app.Run(context.Background(), []string{"--config", global, "--json", "mount", "list"}); code != exitSuccess {
+		t.Fatalf("exit = %d", code)
+	}
+	if got := strings.TrimSpace(out.String()); got != "[]" {
+		t.Fatalf("mount list --json = %q, want []", got)
+	}
+}
+
 func TestMountCommandByName(t *testing.T) {
 	global := writeMountConfig(t)
 	mounted := false

@@ -366,7 +366,11 @@ service (a name or alias `status` accepts): the engine checks locks by the
 canonical service name, so a lock on a mistyped name would protect nothing.
 `lock release` also accepts a service that is no longer configured, to clean up
 its leftover lock; when no such lock exists (for example a mistyped `--name`) it
-prints `no named lock SERVICE[.NAME] to release` and exits `1`.
+prints `no named lock SERVICE[.NAME] to release` and exits `1`. With `--json`,
+`lock acquire` prints `{"ok":true,"service":…,"lock":…,"path":…}` and
+`lock release` prints `{"ok":true|false,"service":…,"lock":…}` (plus `message`
+when nothing was released); `locks --json` and `mount list --json` print an
+empty array rather than `null` when there is nothing to list.
 
 `sermoctl lock SERVICE --reason R --ttl D -- COMMAND...` holds the named lock
 while `COMMAND` runs; the lock's owner is the `sermoctl` process. `sermoctl`

@@ -70,6 +70,9 @@ func renderServiceList[T any](a App, opts options, service, jsonKey string, item
 		fmt.Fprintf(a.Stderr, cliWarningFormat, w)
 	}
 	if opts.json {
+		if items == nil {
+			items = []T{} // an empty list is [], not null, for JSON consumers
+		}
 		writeJSON(a.Stdout, map[string]any{cliJSONKeyService: service, jsonKey: items})
 		return exitSuccess
 	}
