@@ -23,6 +23,7 @@ func validateWatches(watches map[string]any, locksDir string, notifiers map[stri
 			continue
 		}
 		validateWatchHeader(name, entry, add)
+		validateHostWatchFlags(name, entry, add)
 		if cfgval.Disabled(entry) {
 			continue
 		}
@@ -223,6 +224,26 @@ func validateWatchHeader(name string, entry map[string]any, add addFunc) {
 	validateWatchMetadata(name, entry, add)
 	if mode, present := entry[keyMonitor]; present {
 		validateMonitorMode(watchFieldPath(name, keyMonitor), mode, add)
+	}
+}
+
+// validateHostWatchFlags rejects the entry flags a host watch would otherwise
+// misread: a non-boolean `enabled` (YAML 1.2 `no` is a string) keeps the watch
+// running. A boolean `delete` is consumed by the `.local` override loader, so
+// any `delete` still present is either non-boolean or sits in a base document
+// where it would be ignored.
+func validateHostWatchFlags(name string, entry map[string]any, add addFunc) {
+	if v, present := entry[keyEnabled]; present {
+		if _, ok := v.(bool); !ok {
+			add(validationBooleanLiteralFormat, watchFieldPath(name, keyEnabled))
+		}
+	}
+	if v, present := entry[keyDelete]; present {
+		if _, ok := v.(bool); !ok {
+			add(validationBooleanLiteralFormat, watchFieldPath(name, keyDelete))
+		} else {
+			add("%s is only supported in a %s override", watchFieldPath(name, keyDelete), localDirSuffix)
+		}
 	}
 }
 

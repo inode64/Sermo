@@ -3715,7 +3715,8 @@ variable and have every `${var}` reference resolve to the new value.
 - Named sections (`checks`, `preflight`, `processes`, `rules`)
   are maps keyed by name, so a child can override one field of one entry.
 - Disable an inherited entry with `enabled: false`; delete it with
-  `delete: true`.
+  `delete: true`. Both take the literals `true` or `false`: YAML 1.2 reads
+  `no`, `yes` and quoted `"false"` as strings, and validation rejects them.
 
 ## Per-host overrides (`<dir>.local`)
 

@@ -2,6 +2,8 @@ package config
 
 import (
 	"fmt"
+	"maps"
+	"slices"
 
 	"sermo/internal/cfgval"
 	"sermo/internal/rules"
@@ -82,6 +84,32 @@ func serviceSectionErrors(tree map[string]any) []string {
 	add := func(format string, args ...any) { errs = append(errs, fmt.Sprintf(format, args...)) }
 	for _, section := range []string{sectionChecks, sectionPreflight, rules.SectionRules, sectionProcesses, sectionCommands} {
 		validateMappingSection(tree, section, add)
+	}
+	return errs
+}
+
+// namedEntryFlagErrors rejects a non-boolean `enabled` or `delete` on an entry
+// of a mergeable named section. YAML 1.2 reads `no` or "false" as a string,
+// which cfgval.Disabled and applyDeletes treat as "keep it active", so such a
+// typo would silently leave a check or remediation running. It runs on the
+// merged tree, before expansion folds service watches into checks and rules.
+func namedEntryFlagErrors(tree map[string]any) []string {
+	var errs []string
+	for _, section := range namedSections {
+		entries, _ := tree[section].(map[string]any)
+		for _, name := range slices.Sorted(maps.Keys(entries)) {
+			entry, ok := entries[name].(map[string]any)
+			if !ok {
+				continue
+			}
+			for _, key := range []string{keyEnabled, keyDelete} {
+				if v, present := entry[key]; present {
+					if _, isBool := v.(bool); !isBool {
+						errs = append(errs, fmt.Sprintf(validationBooleanLiteralFormat, section+"."+name+"."+key))
+					}
+				}
+			}
+		}
 	}
 	return errs
 }
