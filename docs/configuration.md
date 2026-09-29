@@ -1466,6 +1466,10 @@ Notifier types:
     present, are only sent over an encrypted connection.
   - **`from`** — the sender address (a bare `addr` or `Name <addr>`).
   - **`to`** — one or more recipient addresses.
+
+  Bodies are UTF-8 sent as `quoted-printable`, so every line stays within SMTP
+  limits and the message is 7-bit clean: relays without `8BITMIME` accept it and
+  long command output or the one-line HTML report is never folded or rejected.
 - **`gotify`** — pushes to a **[Gotify](https://gotify.net) server**
   (self-hosted push with its own mobile app).
   - **`webhook`** — the server base URL (`https://push.example.net`).

@@ -9,9 +9,15 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"errors"
 	"fmt"
+	"io"
 	"math/big"
+	"mime"
+	"mime/multipart"
+	"mime/quotedprintable"
 	"net"
+	"net/mail"
 	"strconv"
 	"strings"
 	"testing"
@@ -365,6 +371,64 @@ func TestBuildMailMessageHTMLMultipart(t *testing.T) {
 	if !strings.Contains(raw, "Content-Type: text/html; charset=UTF-8") || !strings.Contains(raw, "<strong>html body</strong>") {
 		t.Fatalf("missing HTML part:\n%s", raw)
 	}
+}
+
+func TestBuildMailMessageIsSevenBitWithShortLines(t *testing.T) {
+	// The services report HTML is one line of tens of KB and check output may
+	// carry long non-ASCII lines: relays fold or reject lines over 998 octets
+	// and a relay without 8BITMIME refuses 8-bit bodies.
+	body := "salida: " + strings.Repeat("café ", 400)
+	html := "<table>" + strings.Repeat("<tr><td>señal</td></tr>", 500) + "</table>"
+	raw := renderMailMessage(t, []string{"ops@example.com"}, Message{Subject: "report", Body: body, HTML: html})
+	for i, line := range strings.Split(raw, "\r\n") {
+		if len(line) > 78 {
+			t.Fatalf("line %d has %d octets:\n%.120s…", i, len(line), line)
+		}
+		for _, b := range []byte(line) {
+			if b >= 0x80 {
+				t.Fatalf("line %d carries 8-bit data: %.120s…", i, line)
+			}
+		}
+	}
+	if strings.Count(raw, "Content-Transfer-Encoding: quoted-printable") != 2 {
+		t.Fatalf("both parts must be quoted-printable:\n%.600s", raw)
+	}
+	for _, want := range []string{body, html} {
+		if !strings.Contains(decodeQuotedPrintableParts(t, raw), want) {
+			t.Fatalf("decoded message lost the original text %.40q…", want)
+		}
+	}
+}
+
+// decodeQuotedPrintableParts decodes every quoted-printable part of a
+// multipart/alternative message and joins them.
+func decodeQuotedPrintableParts(t *testing.T, raw string) string {
+	t.Helper()
+	msg, err := mail.ReadMessage(strings.NewReader(raw))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, params, err := mime.ParseMediaType(msg.Header.Get("Content-Type"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	reader := multipart.NewReader(msg.Body, params["boundary"])
+	var out strings.Builder
+	for {
+		part, err := reader.NextRawPart()
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		decoded, err := io.ReadAll(quotedprintable.NewReader(part))
+		if err != nil {
+			t.Fatal(err)
+		}
+		out.WriteString(strings.ReplaceAll(string(decoded), "\r\n", ""))
+	}
+	return out.String()
 }
 
 func TestBuildMailMessageValidatesAddresses(t *testing.T) {
