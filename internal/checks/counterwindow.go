@@ -32,9 +32,20 @@ type counterSample struct {
 //
 // A first sample reports zero growth over a zero span: there is nothing to compare
 // against yet, so the cycle is a baseline rather than a verdict.
+//
+// When every earlier sample has slid out of window, the newest of them stays as
+// the baseline. A window no longer than the sampling interval (within: 30s on
+// the default 30s tick, which lands a few ms late) would otherwise baseline on
+// the current sample every cycle and report +0 forever.
 func (w *counterWindow) advance(now time.Time, count int, window time.Duration) (growth int, span time.Duration) {
 	cutoff := now.Add(-window)
-	w.samples = slices.DeleteFunc(w.samples, func(s counterSample) bool { return s.at.Before(cutoff) })
+	// Samples are appended in time order, so a stale newest one means every
+	// earlier sample is stale too.
+	if last := len(w.samples) - 1; last >= 0 && w.samples[last].at.Before(cutoff) {
+		w.samples = w.samples[last:]
+	} else {
+		w.samples = slices.DeleteFunc(w.samples, func(s counterSample) bool { return s.at.Before(cutoff) })
+	}
 	w.samples = append(w.samples, counterSample{at: now, count: count})
 	baseline := w.samples[0]
 	return count - baseline.count, now.Sub(baseline.at)
