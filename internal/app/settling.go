@@ -42,54 +42,67 @@ func settlingKeyForWatch(w *Watch) string {
 // first check for watches/apps). While unsettled, targets report state
 // "starting" and must not drive alerts, hooks or remediation.
 type Settling struct {
-	mu       sync.RWMutex
-	observed map[string]struct{}
-	ready    *Readiness
+	mu sync.RWMutex
+	// pending counts, per target key, the runnable objects that have not yet
+	// completed their startup observation cycle. Metric watches (net/icmp/swap)
+	// expand to one Watch per metric sharing one key: each metric runs its own
+	// observe-only cycle, and the key settles (advancing readiness once) when
+	// the last of them has.
+	pending map[string]int
+	ready   *Readiness
 }
 
 // NewSettling returns an empty settling registry. When ready is non-nil,
 // MarkObserved also advances the daemon readiness first-cycle gate.
 func NewSettling(ready *Readiness) *Settling {
-	return &Settling{observed: map[string]struct{}{}, ready: ready}
+	return &Settling{pending: map[string]int{}, ready: ready}
 }
 
 // Reset arms the named targets as unsettled for a new scheduler generation.
+// A name listed once per runnable object is pending until each has reported.
 func (s *Settling) Reset(names []string) {
 	if s == nil {
 		return
 	}
 	s.mu.Lock()
-	s.observed = make(map[string]struct{}, len(names))
+	s.pending = make(map[string]int, len(names))
 	for _, name := range names {
 		if name != "" {
-			s.observed[name] = struct{}{}
+			s.pending[name]++
 		}
 	}
 	s.mu.Unlock()
 }
 
-// Pending returns how many armed targets have not completed their startup
-// observation cycle yet.
+// Pending returns how many armed targets (distinct keys) have not completed
+// their startup observation cycle yet.
 func (s *Settling) Pending() int {
 	if s == nil {
 		return 0
 	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return len(s.observed)
+	return len(s.pending)
 }
 
-// MarkObserved records that name has finished its startup observation cycle.
+// MarkObserved records that one object of name has finished its startup
+// observation cycle; name settles when the last of its objects has.
 func (s *Settling) MarkObserved(name string) {
 	if s == nil || name == "" {
 		return
 	}
 	s.mu.Lock()
-	if _, pending := s.observed[name]; !pending {
+	remaining, pending := s.pending[name]
+	if !pending {
 		s.mu.Unlock()
 		return
 	}
-	delete(s.observed, name)
+	if remaining > 1 {
+		s.pending[name] = remaining - 1
+		s.mu.Unlock()
+		return
+	}
+	delete(s.pending, name)
 	s.mu.Unlock()
 	if s.ready != nil {
 		s.ready.markFirstCycle()
@@ -102,7 +115,7 @@ func (s *Settling) Observed(name string) bool {
 		return true
 	}
 	s.mu.RLock()
-	_, pending := s.observed[name]
+	_, pending := s.pending[name]
 	s.mu.RUnlock()
 	return !pending
 }
@@ -117,7 +130,7 @@ func (s *Settling) MarkObservedBulk(names []string) {
 	s.mu.Lock()
 	for _, name := range names {
 		if name != "" {
-			delete(s.observed, name)
+			delete(s.pending, name)
 		}
 	}
 	s.mu.Unlock()
