@@ -14,7 +14,7 @@ import (
 	"sermo/internal/config"
 )
 
-func TestRAIDControlTimeout(t *testing.T) {
+func TestManualOperationTimeout(t *testing.T) {
 	cfg := &config.Config{Global: config.Global{Raw: map[string]any{
 		config.SectionEngine: map[string]any{config.EngineKeyOperationTimeout: "19s"},
 	}}}
@@ -27,8 +27,8 @@ func TestRAIDControlTimeout(t *testing.T) {
 		{name: "explicit CLI override", opts: options{timeout: 7 * time.Second, timeoutSet: true}, want: 7 * time.Second},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := raidControlTimeout(cfg, tc.opts); got != tc.want {
-				t.Fatalf("raidControlTimeout() = %s, want %s", got, tc.want)
+			if got := manualOperationTimeout(cfg, tc.opts); got != tc.want {
+				t.Fatalf("manualOperationTimeout() = %s, want %s", got, tc.want)
 			}
 		})
 	}

@@ -163,7 +163,7 @@ func (a App) runWatchRAIDControl(ctx context.Context, opts options, action strin
 	if action == "pause" && opts.confirm != array {
 		return a.commandUsageError(commandWatch, "watch pause requires --confirm "+array)
 	}
-	timeout := raidControlTimeout(cfg, opts)
+	timeout := manualOperationTimeout(cfg, opts)
 	result := app.ControlRAID(ctx, cfg.Global.RuntimeDir(), array, action, timeout)
 	if opts.json {
 		writeJSON(a.Stdout, map[string]any{cliJSONKeyWatch: opts.args[1], cliJSONKeyOK: result.OK, cliJSONKeyMessage: result.Message})
@@ -176,11 +176,12 @@ func (a App) runWatchRAIDControl(ctx context.Context, opts options, action strin
 	return exitBlocked
 }
 
-// raidControlTimeout keeps manual RAID control on the engine operation budget
-// unless the operator explicitly supplied --timeout. prepareOptions gives every
-// command a CLI default, so opts.timeout alone cannot distinguish that default
-// from an operator override.
-func raidControlTimeout(cfg *config.Config, opts options) time.Duration {
+// manualOperationTimeout keeps manual service operations and RAID control on the
+// engine.operation_timeout budget the daemon and web use, unless the operator
+// explicitly supplied --timeout. prepareOptions gives every command a CLI
+// default, so opts.timeout alone cannot distinguish that default from an
+// operator override.
+func manualOperationTimeout(cfg *config.Config, opts options) time.Duration {
 	if opts.timeoutSet {
 		return opts.timeout
 	}
