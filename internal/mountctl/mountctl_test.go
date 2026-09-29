@@ -477,6 +477,48 @@ func TestReleaseSignalsOnlyWithKillPolicy(t *testing.T) {
 	}
 }
 
+// The production signaler refuses a target without its kernel start time, so a
+// blocker built from /proc must carry it or --kill-blockers can never signal.
+func TestMountUserProcessCarriesStartTicks(t *testing.T) {
+	id := process.Identity{PID: 123, StartTicks: 884512, StartTicksOK: true, UID: 1000, Exe: "/usr/bin/rsync", ExeOK: true}
+	if got := mountUserProcess(id); got.StartTicks != 884512 || got.Exe != id.Exe || !got.ExeOK || got.UID != id.UID {
+		t.Fatalf("mountUserProcess = %+v, want start ticks and exact identity", got)
+	}
+	id.StartTicksOK = false
+	if got := mountUserProcess(id); got.StartTicks != 0 {
+		t.Fatalf("StartTicks = %d with unreadable stat, want 0 (never signalable)", got.StartTicks)
+	}
+}
+
+type failingSignaler struct{ calls int }
+
+func (s *failingSignaler) Signal(int, syscall.Signal) error {
+	s.calls++
+	return errors.New("signal identity changed or unavailable")
+}
+
+func TestReleaseReportsSignalFailures(t *testing.T) {
+	mounted := true
+	runner := &fakeRunner{mounted: &mounted, busy: true}
+	c := testController(t, &mounted, runner)
+	sig := &failingSignaler{}
+	c.Signaler = sig
+	c.ResolveUser = func(name string) (uint32, bool) { return 1000, name == "backup" }
+	c.DiscoverUsers = func(string) ([]process.Process, error) {
+		return []process.Process{{PID: 123, StartTicks: 7, Exe: "/usr/bin/rsync", ExeOK: true, UID: 1000}}, nil
+	}
+	spec := EphemeralSpec("/mnt/backup")
+	spec.KillOnlyIf = process.KillSelector{Users: []string{"backup"}, ExeAny: []string{"/usr/bin/rsync"}}
+
+	res, err := c.ReleaseWithOptions(context.Background(), spec, ReleaseOptions{KillBlockers: true})
+	if err == nil || !mounted || sig.calls == 0 {
+		t.Fatalf("Release = %+v err=%v mounted=%t calls=%d, want busy failure after attempted signal", res, err, mounted, sig.calls)
+	}
+	if !strings.Contains(res.Message, "signal failed: pid 123") || !strings.Contains(err.Error(), "signal identity changed") {
+		t.Fatalf("message = %q err=%v, want signal failure surfaced", res.Message, err)
+	}
+}
+
 func TestReleaseKillBlockersRequiresSelector(t *testing.T) {
 	mounted := true
 	runner := &fakeRunner{mounted: &mounted, busy: true}
