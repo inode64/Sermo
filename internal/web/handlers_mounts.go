@@ -8,13 +8,7 @@ import (
 )
 
 func (s *Server) handleMounts(w http.ResponseWriter, r *http.Request) {
-	s.readJSON(w, r, func(ctx context.Context, backend Backend) any {
-		mounts := backend.Mounts(ctx)
-		if roleFrom(ctx) == roleGuest {
-			mounts = redactMountCmdlines(mounts)
-		}
-		return mounts
-	})
+	readGuestRedacted(s, w, r, Backend.Mounts, redactMountCmdlines)
 }
 
 func (s *Server) handleMountAction(w http.ResponseWriter, r *http.Request) {

@@ -69,11 +69,12 @@ type fakeBackend struct {
 	notifierTested              string
 	notifierResult              ActionResult
 	pruneErr                    error
+	watches                     []Watch
 }
 
 func (f *fakeBackend) Services(context.Context) []Service        { return f.services }
 func (f *fakeBackend) Sessions(context.Context) SessionInventory { return f.sessions }
-func (f *fakeBackend) Watches(context.Context) []Watch           { return nil }
+func (f *fakeBackend) Watches(context.Context) []Watch           { return f.watches }
 
 // testAvailabilityWatch is the only watch the fake keeps a series for, so a
 // handler test can tell the answered case from the refused one.

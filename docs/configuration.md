@@ -858,8 +858,9 @@ web:
 - **guest** — **read-only**: can view everything but every action (a `POST`) is
   refused with `403`. Granted by a hash in `guest_password_file`, and/or to anyone when
   `guest: true` (anonymous read-only). Process **command lines are redacted to
-  the executable** for guests (service process trees and mount blockers):
-  arguments can carry secrets that only admins should see.
+  the executable** for guests (service process trees, mount blockers and watch
+  hook commands, which are shown after `${env:…}` expansion): arguments can
+  carry secrets that only admins should see.
 
 #### Credential files
 
