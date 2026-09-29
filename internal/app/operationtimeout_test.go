@@ -105,6 +105,39 @@ func TestMaxOperationTimeoutIgnoresWatchInterval(t *testing.T) {
 	}
 }
 
+// A button's own timeout bounds its command, so the HTTP write deadline must
+// outlive the longest configured button.
+func TestMaxOperationTimeoutRaisesForButtonTimeout(t *testing.T) {
+	cfg := &config.Config{Services: map[string]*config.Document{
+		"web": {Body: map[string]any{
+			"name": "web",
+			"buttons": map[string]any{
+				"flush": map[string]any{"command": []any{"/usr/bin/true"}, "timeout": "5m"},
+			},
+		}},
+	}}
+	if got := MaxOperationTimeout(cfg, 90*time.Second); got != 5*time.Minute {
+		t.Fatalf("MaxOperationTimeout = %v, want 5m so a 5m button can return over HTTP", got)
+	}
+}
+
+// The web runs an also_apply cascade synchronously: every member operates in
+// turn under its own timeout, and a blocked member is retried once after
+// cascadeBlockedRetryDelay. The HTTP write deadline must cover the whole group.
+func TestMaxOperationTimeoutRaisesForCascade(t *testing.T) {
+	cfg := &config.Config{Services: map[string]*config.Document{
+		"app":   {Body: map[string]any{"name": "app", "also_apply": []any{"db", "cache"}}},
+		"db":    {Body: map[string]any{"name": "db", "stop_policy": map[string]any{"graceful_timeout": "120s"}}},
+		"cache": {Body: map[string]any{"name": "cache"}},
+	}}
+	configured := 90 * time.Second
+	dbTimeout := operation.ResolveTimeout(configured, cfg.Services["db"].Body)
+	want := 2*(configured+configured+dbTimeout) + 3*cascadeBlockedRetryDelay
+	if got := MaxOperationTimeout(cfg, configured); got != want {
+		t.Fatalf("MaxOperationTimeout = %v, want %v for the app+db+cache cascade", got, want)
+	}
+}
+
 // A web unmount may run every escalation step, each bounded by the mount
 // command timeout, plus the configured TERM and KILL waits; the HTTP write
 // deadline must outlive that whole budget.

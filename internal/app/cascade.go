@@ -15,6 +15,8 @@ import (
 const (
 	cascadeMaxDepth          = 16
 	cascadeBlockedRetryDelay = time.Second
+	// cascadeOperateAttempts is the first attempt plus the single blocked retry.
+	cascadeOperateAttempts = 2
 )
 
 // CascadeConfig supplies the service graph and the one guarded operation used by
@@ -141,6 +143,17 @@ func (c cascader) backoff(ctx context.Context) error {
 		return fmt.Errorf("cascade retry wait: %w", ctx.Err())
 	}
 	return nil
+}
+
+// cascadeBudget is the longest a synchronous RunCascade over root's also_apply
+// group may take: members run one after another under their own timeout, and
+// each may be retried once after cascadeBlockedRetryDelay when blocked.
+func cascadeBudget(root string, lookup func(string) []string, timeout func(string) time.Duration) time.Duration {
+	var total time.Duration
+	for _, svc := range orderedGroup(root, "", lookup, map[string]bool{}, 0) {
+		total += cascadeOperateAttempts*timeout(svc) + cascadeBlockedRetryDelay
+	}
+	return total
 }
 
 // orderedGroup returns the services to operate, in dependency order. For stop the

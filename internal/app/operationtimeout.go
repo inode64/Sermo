@@ -11,8 +11,10 @@ import (
 
 // MaxOperationTimeout returns the longest deadline any enabled web action may
 // need: the configured engine operation timeout, raised per service by
-// stop_policy, and raised again by any enabled host-watch probe budget and
-// any configured mount unit's escalation budget. The
+// stop_policy, by the longest operator button timeout, by the synchronous
+// also_apply cascade the web runs for a service, and raised again by any
+// enabled host-watch probe budget and any configured mount unit's escalation
+// budget. The
 // HTTP write deadline is sized from this value so a manual probe can return
 // after its check timeout instead of being cut off at the service-operation
 // limit. Service-scoped watches are not included: they cannot be probed from
@@ -22,17 +24,48 @@ func MaxOperationTimeout(cfg *config.Config, configured time.Duration) time.Dura
 	if cfg == nil {
 		return maxTO
 	}
-	for _, resolution := range cfg.ResolveServices(cfg.EnabledServiceNames()) {
+	names := cfg.EnabledServiceNames()
+	timeouts := make(map[string]time.Duration, len(names))
+	targets := make(map[string][]string, len(names))
+	for i, resolution := range cfg.ResolveServices(names) {
 		resolved, errs := resolution.Resolved, resolution.Errors
 		if len(errs) > 0 {
 			continue
 		}
-		maxTO = max(maxTO, operation.ResolveTimeout(configured, resolved.Tree))
+		timeout := operation.ResolveTimeout(configured, resolved.Tree)
+		timeouts[names[i]] = timeout
+		targets[names[i]] = config.CascadeTargets(resolved.Tree)
+		maxTO = max(maxTO, timeout)
+		for _, button := range serviceButtons(resolved.Tree) {
+			maxTO = max(maxTO, button.timeout)
+		}
 	}
+	maxTO = max(maxTO, maxCascadeTimeout(timeouts, targets, operation.ResolveTimeout(configured, nil)))
 	maxTO = max(maxTO, maxMountActionTimeout(cfg, configured))
 	defaultTimeout := config.EngineDuration(cfg, config.EngineKeyDefaultTimeout, DefaultEngineCheckTimeout)
 	watches, _ := cfg.ResolveWatches()
 	return maxWatchProbeTimeout(maxTO, watches, defaultTimeout, configured)
+}
+
+// maxCascadeTimeout is the longest also_apply cascade any enabled service can
+// start from the web. A member without a resolved timeout (disabled or invalid)
+// counts with the default one.
+func maxCascadeTimeout(timeouts map[string]time.Duration, targets map[string][]string, fallback time.Duration) time.Duration {
+	lookup := func(service string) []string { return targets[service] }
+	timeoutOf := func(service string) time.Duration {
+		if timeout, ok := timeouts[service]; ok {
+			return timeout
+		}
+		return fallback
+	}
+	var longest time.Duration
+	for root, rootTargets := range targets {
+		if len(rootTargets) == 0 {
+			continue
+		}
+		longest = max(longest, cascadeBudget(root, lookup, timeoutOf))
+	}
+	return longest
 }
 
 func maxWatchProbeTimeout(maxTO time.Duration, watches map[string]any, defaultTimeout, operationTimeout time.Duration) time.Duration {
