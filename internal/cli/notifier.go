@@ -35,7 +35,14 @@ func (a App) runNotifier(ctx context.Context, opts options) int {
 		return a.commandUsageError(commandNotifier, fmt.Sprintf("unknown or disabled notifier %q", name))
 	}
 
-	sendCtx, cancel := context.WithTimeout(ctx, opts.timeout)
+	// Match the Web UI test: an SMTP or webhook round trip (TLS, auth) routinely
+	// exceeds the 2s probe budget, so use engine.default_timeout unless the
+	// operator chose --timeout.
+	timeout := opts.timeout
+	if !opts.timeoutSet {
+		timeout = engineDefaultTimeout(cfg)
+	}
+	sendCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	if err := n.Send(sendCtx, notify.TestMessage()); err != nil {
 		return a.fail(opts, fmt.Sprintf("send test notification to %s: %v", name, err))
