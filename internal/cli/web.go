@@ -4,8 +4,11 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
+	"os"
+	"os/signal"
 	"slices"
 	"strings"
+	"syscall"
 
 	"sermo/internal/webcred"
 )
@@ -49,6 +52,10 @@ func (a App) runWebHashPassword(opts options, rest []string) int {
 		return a.commandUsageError(commandWeb, err.Error())
 	}
 	password, generated, err := a.webHashPasswordInput(opts)
+	if interrupted, ok := errors.AsType[interruptedError](err); ok {
+		a.reportError(opts, err.Error())
+		return interrupted.exitCode()
+	}
 	if err != nil {
 		return a.fail(opts, err.Error())
 	}
@@ -149,7 +156,43 @@ func (a App) readHiddenPassword(reader *bufio.Reader, prompt string) (string, er
 		return "", err
 	}
 	defer restore()
-	return readPasswordLine(reader)
+	// Ctrl-C (or a hangup/kill) at the prompt must not end the process with
+	// echo still off: the terminal would stay silent in the operator's shell.
+	// Catch the signal, return through the deferred restore, and exit 128+sig.
+	sigs := make(chan os.Signal, 1)
+	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP, syscall.SIGQUIT)
+	defer signal.Stop(sigs)
+	return readUntilSignal(func() (string, error) { return readPasswordLine(reader) }, sigs)
+}
+
+// interruptedError reports a prompt abandoned because of a signal.
+type interruptedError struct{ sig syscall.Signal }
+
+func (e interruptedError) Error() string { return "interrupted by " + e.sig.String() }
+
+// exitCode follows the shell convention for a signal: 128 + signal number.
+func (e interruptedError) exitCode() int { return shellSignalExitBase + int(e.sig) }
+
+// readUntilSignal runs read, returning early with an interruptedError when a
+// signal arrives first. The abandoned read finishes (or dies with the process)
+// in the background; its result is discarded.
+func readUntilSignal(read func() (string, error), sigs <-chan os.Signal) (string, error) {
+	type result struct {
+		line string
+		err  error
+	}
+	done := make(chan result, 1)
+	go func() {
+		line, err := read()
+		done <- result{line: line, err: err}
+	}()
+	select {
+	case r := <-done:
+		return r.line, r.err
+	case sig := <-sigs:
+		s, _ := sig.(syscall.Signal)
+		return "", interruptedError{sig: s}
+	}
 }
 
 // readPasswordLine reads a single line and strips the trailing newline every
