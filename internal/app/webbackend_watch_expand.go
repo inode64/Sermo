@@ -2,7 +2,9 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
+
 	"sermo/internal/cfgval"
 	"sermo/internal/checks"
 	"sermo/internal/web"
@@ -40,6 +42,11 @@ func (b *WebBackend) ExpandWatch(ctx context.Context, name string) web.ActionRes
 	opCtx, cancel := b.operationContext(ctx, 0)
 	defer cancel()
 	res, err := b.expander.ExpandPath(opCtx, path, w.expand.By)
+	if errors.Is(err, errExpandInProgress) {
+		msg := err.Error()
+		b.emitWatchExpandEvent(name, eventKindExpandSkipped, eventStatusBlocked, msg)
+		return web.ActionResult{OK: false, Message: msg}
+	}
 	if err != nil {
 		msg := err.Error()
 		b.emitWatchExpandEvent(name, eventKindExpandFailed, eventStatusFailed, msg)

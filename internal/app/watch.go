@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"maps"
 	"slices"
@@ -605,7 +606,15 @@ func (w *Watch) runExpand(ctx context.Context, res checks.Result, emitSkipped bo
 	}
 	path := cfgval.String(res.Data[checks.DataKeyPath])
 	r, err := w.Expander.ExpandPath(ctx, path, w.Expand.By)
+	// A collision with a running (manual) expansion also starts the cooldown:
+	// that expansion is already growing the volume this cycle wanted to grow.
 	w.policyState.Record(at, w.Policy)
+	if errors.Is(err, errExpandInProgress) {
+		if emitSkipped {
+			w.emit(Event{Watch: w.Name, Kind: eventKindExpandSkipped, Message: err.Error()})
+		}
+		return
+	}
 	if err != nil {
 		w.emit(Event{Watch: w.Name, Kind: eventKindExpandFailed, Message: err.Error()})
 		return
