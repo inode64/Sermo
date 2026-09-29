@@ -235,6 +235,23 @@ func TestRestartOK(t *testing.T) {
 	}
 }
 
+// A lock that could not be released blocks the service until its TTL; the
+// operation's single event must say so instead of discarding the error.
+func TestReleaseErrorIsReportedInTheEvent(t *testing.T) {
+	h := defaultHarness()
+	e := h.engine()
+	e.AcquireLock = func(time.Duration) (func() error, error) {
+		return func() error { return errors.New("lock directory busy") }, nil
+	}
+	res := e.Do(context.Background(), "restart")
+	if !res.OK() || !strings.Contains(res.Message, "release operation lock: lock directory busy") {
+		t.Fatalf("result = %s %q, want the release failure as a warning", res.Status, res.Message)
+	}
+	if len(h.emitted) != 1 || h.emitted[0].Message != res.Message {
+		t.Fatalf("emitted = %+v, want one event carrying the warning", h.emitted)
+	}
+}
+
 func TestSectionRunnerBuildIssueBlocksRequiredPreflight(t *testing.T) {
 	tree := map[string]any{
 		"preflight": map[string]any{

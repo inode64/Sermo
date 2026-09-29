@@ -317,7 +317,11 @@ untrusted users.
 
 Every removal (owner release, explicit release or stale reclamation) requires
 exclusive directory locking. Contention fails promptly without removing the lock;
-a failure to acquire exclusion never permits an unlocked removal. Each new lock
+a failure to acquire exclusion never permits an unlocked removal. An owner
+release retries that exclusion briefly (bounded well under a second), because
+releases and reclaims of other services share the directory; if it still fails,
+the operation's result carries a `release operation lock` warning and the lock
+expires at its TTL. Each new lock
 also records an acquisition identifier, so an old handle cannot release a newer
 lock even when both were acquired by the same process. Older lock files without
 that identifier remain readable and can be reclaimed under the same exclusion.

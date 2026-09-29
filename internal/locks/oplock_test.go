@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"golang.org/x/sys/unix"
 )
 
 func opLocker(t *testing.T, proc ProcessProber, reclaimed *[]string) OperationLocker {
@@ -166,6 +168,67 @@ func TestReleaseRemovesOwnLock(t *testing.T) {
 	// Release is idempotent.
 	if err := handle.Release(); err != nil {
 		t.Fatalf("second Release() error = %v", err)
+	}
+}
+
+// holdDirExclusion takes the same directory flock another release or reclaim
+// holds, through its own open file description as a concurrent goroutine or
+// process would.
+func holdDirExclusion(t *testing.T, dir string) func() {
+	t.Helper()
+	d, err := os.Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := unix.Flock(int(d.Fd()), unix.LOCK_EX); err != nil {
+		_ = d.Close()
+		t.Fatal(err)
+	}
+	return func() {
+		_ = unix.Flock(int(d.Fd()), unix.LOCK_UN)
+		_ = d.Close()
+	}
+}
+
+// A release that meets a momentary exclusion held by another service's release
+// must not strand this service's lock until its TTL.
+func TestReleaseWaitsOutBriefDirectoryContention(t *testing.T) {
+	l := opLocker(t, fakeProc{}, nil)
+	handle, err := l.Acquire("mysql", time.Hour)
+	if err != nil {
+		t.Fatalf("Acquire() error = %v", err)
+	}
+	unlock := holdDirExclusion(t, l.Dir)
+	timer := time.AfterFunc(20*time.Millisecond, unlock)
+	defer timer.Stop()
+
+	if err := handle.Release(); err != nil {
+		t.Fatalf("Release() under brief contention error = %v", err)
+	}
+	if _, err := os.Stat(handle.path); !os.IsNotExist(err) {
+		t.Fatalf("lock file still present after Release: %v", err)
+	}
+}
+
+// Persistent contention stays bounded and never removes without exclusion.
+func TestReleaseFailsBoundedUnderPersistentContention(t *testing.T) {
+	l := opLocker(t, fakeProc{}, nil)
+	handle, err := l.Acquire("mysql", time.Hour)
+	if err != nil {
+		t.Fatalf("Acquire() error = %v", err)
+	}
+	unlock := holdDirExclusion(t, l.Dir)
+	defer unlock()
+
+	start := time.Now()
+	if err := handle.Release(); err == nil {
+		t.Fatal("Release() without directory exclusion succeeded")
+	}
+	if elapsed := time.Since(start); elapsed > 5*time.Second {
+		t.Fatalf("Release() waited %s, want a bounded retry", elapsed)
+	}
+	if _, err := os.Stat(handle.path); err != nil {
+		t.Fatalf("lock must remain without exclusion: %v", err)
 	}
 }
 
