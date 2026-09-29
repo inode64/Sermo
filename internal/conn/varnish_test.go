@@ -1,9 +1,12 @@
 package conn
 
 import (
+	"context"
 	"fmt"
+	"io"
 	"net"
 	"testing"
+	"time"
 )
 
 func TestParseVarnishStatus(t *testing.T) {
@@ -40,4 +43,26 @@ func TestVarnishProbeBanner(t *testing.T) {
 func TestVarnishProbeAuthChallenge(t *testing.T) {
 	port := serveVarnish(t, 107, "ixslvvxrgkjptxmcgnnsdxsvdmvfympg\n\nAuthentication required.")
 	assertProbeExtras(t, varnishProtocol{}, port, map[string]string{"cli_status": "107", "auth_required": "true"})
+}
+
+func TestVarnishProbeRejectsCLIFailures(t *testing.T) {
+	tests := []struct {
+		name  string
+		reply string
+	}{
+		{name: "CLIS_COMMS", reply: "400 7       \nbad cmd\n"},
+		{name: "CLIS_CLOSE", reply: "500 7       \nclosing\n"},
+		{name: "truncated body", reply: "200 64      \nVarnish Cache CLI 1.0\n"},
+		{name: "oversized body", reply: "200 99999999\n"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			port := serveOnce(t, func(c net.Conn) { _, _ = io.WriteString(c, tt.reply) })
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			defer cancel()
+			if _, err := (varnishProtocol{}).Probe(ctx, Config{Host: "127.0.0.1", Port: port}); err == nil {
+				t.Fatalf("reply %q must fail the probe", tt.reply)
+			}
+		})
+	}
 }

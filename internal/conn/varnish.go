@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"strconv"
 	"strings"
@@ -12,6 +13,7 @@ import (
 const (
 	maxVarnishCLIBody       = 1 << 16
 	varnishStatusAuthNeeded = 107 // CLIS_AUTH
+	varnishStatusOK         = 200 // CLIS_OK
 	varnishStatusLineFields = 2
 	varnishStatusFieldIndex = 0
 	varnishLengthFieldIndex = 1
@@ -48,13 +50,19 @@ func (varnishProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	if err != nil {
 		return Result{}, probeErr(ProtocolNameVarnish, stepVarnishCLIStatus, err)
 	}
-	body := ""
-	if length > 0 && length <= maxVarnishCLIBody {
-		buf := make([]byte, length)
-		if _, rerr := io.ReadFull(br, buf); rerr == nil {
-			body = string(buf)
-		}
+	// Only the banner (200) and the auth challenge (107) prove a working CLI;
+	// e.g. 400 CLIS_COMMS or 500 CLIS_CLOSE mean varnishd is refusing it.
+	if status != varnishStatusOK && status != varnishStatusAuthNeeded {
+		return Result{}, fmt.Errorf("varnish: CLI answered status %d", status)
 	}
+	if length > maxVarnishCLIBody {
+		return Result{}, fmt.Errorf("varnish: implausible CLI body length %d", length)
+	}
+	buf := make([]byte, length)
+	if _, err := io.ReadFull(br, buf); err != nil {
+		return Result{}, probeErr(ProtocolNameVarnish, stepResponseBody, err)
+	}
+	body := string(buf)
 
 	extra := map[string]string{extraCLIStatus: strconv.Itoa(status)}
 	if status == varnishStatusAuthNeeded {
