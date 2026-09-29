@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -21,11 +22,24 @@ const (
 	eventNotifyPhaseRecovered = "recovered"
 )
 
+// Incident key dimensions and the category of incidents a recovery closes.
+const (
+	eventNotifyDimensionDaemon  = "daemon"
+	eventNotifyDimensionService = "service"
+	eventNotifyDimensionWatch   = "watch"
+	eventNotifyDimensionApp     = "app"
+	eventNotifyCategoryHealth   = "health"
+	eventNotifyKeySeparator     = ':'
+	eventNotifyKeyFields        = 5
+)
+
 // EventNotifyStore owns durable delivery edges independently of the event log.
 type EventNotifyStore interface {
 	EventNotifyState(incidentKey, notifier string) (state.EventNotifyRecord, bool, error)
 	SetEventNotifyState(record state.EventNotifyRecord) error
 	DueEventNotifyStates(notifier string, before time.Time) ([]state.EventNotifyRecord, error)
+	ActiveEventNotifyIncidents() ([]string, error)
+	DeleteEventNotifyIncident(incidentKey string) error
 }
 
 // EventNotifier routes daemon alarm events to named notifiers. Its queue keeps
@@ -107,6 +121,124 @@ func (n *EventNotifier) Run(ctx context.Context) {
 			n.remind(ctx)
 		}
 	}
+}
+
+// Retain forgets open incidents that no target of the running generation can
+// emit again: a removed or renamed service, check, rule, watch or app never
+// sends the recovery that would close them, so with repeat_interval they would
+// be reminded forever. It runs when a generation starts, before its workers,
+// and only against the persistent store; the in-memory fallback is owned by
+// the Run goroutine and used only in tests.
+func (n *EventNotifier) Retain(scope eventNotifyScope) {
+	if n == nil || n.store == nil {
+		return
+	}
+	keys, err := n.store.ActiveEventNotifyIncidents()
+	if err != nil {
+		n.logger.Error("list open event notifications", "error", err)
+		return
+	}
+	for _, key := range keys {
+		if scope.live(key) {
+			continue
+		}
+		if err := n.store.DeleteEventNotifyIncident(key); err != nil {
+			n.logger.Error("drop orphaned event notification", "incident", key, "error", err)
+		}
+	}
+}
+
+// eventNotifyScope is what the running generation can still emit events for.
+type eventNotifyScope struct {
+	services map[string]eventNotifyServiceScope
+	watches  map[string]bool
+	apps     map[string]bool
+}
+
+type eventNotifyServiceScope struct {
+	rules  map[string]bool
+	checks map[string]bool
+}
+
+func eventNotifyScopeOf(workers []*Worker, watches []*Watch) eventNotifyScope {
+	scope := eventNotifyScope{
+		services: make(map[string]eventNotifyServiceScope, len(workers)),
+		watches:  make(map[string]bool, len(watches)),
+		apps:     map[string]bool{},
+	}
+	for _, w := range workers {
+		if w == nil {
+			continue
+		}
+		svc := eventNotifyServiceScope{rules: make(map[string]bool, len(w.Rules)), checks: w.checkNames}
+		for i := range w.Rules {
+			svc.rules[w.Rules[i].Name] = true
+		}
+		scope.services[w.Service] = svc
+	}
+	for _, w := range watches {
+		switch {
+		case w == nil:
+		case w.App != "":
+			// Watch.emit records an app watch's events on the app dimension.
+			scope.apps[w.App] = true
+		default:
+			scope.watches[w.Name] = true
+		}
+	}
+	return scope
+}
+
+// live reports whether an open incident still belongs to a running target. A
+// service incident is opened only by a check or a rule of that service, so a
+// key naming neither (a pre-notice lock-reclaim alert) cannot be closed either.
+// A key it cannot parse is kept rather than guessed at.
+func (s eventNotifyScope) live(key string) bool {
+	parts, ok := parseEventNotifyKey(key)
+	if !ok {
+		return true
+	}
+	dimension, name, rule, check := parts[0], parts[1], parts[2], parts[3]
+	switch dimension {
+	case eventNotifyDimensionService:
+		svc, ok := s.services[name]
+		return ok && ((rule != "" && svc.rules[rule]) || (check != "" && svc.checks[check]))
+	case eventNotifyDimensionWatch:
+		return s.watches[name]
+	case eventNotifyDimensionApp:
+		return s.apps[name]
+	default:
+		return true
+	}
+}
+
+func formatEventNotifyKey(dimension, name, rule, check, category string) string {
+	return fmt.Sprintf("%q:%q:%q:%q:%q", dimension, name, rule, check, category)
+}
+
+// parseEventNotifyKey splits a key built by formatEventNotifyKey.
+func parseEventNotifyKey(key string) ([]string, bool) {
+	parts := make([]string, 0, eventNotifyKeyFields)
+	for rest := key; ; {
+		quoted, err := strconv.QuotedPrefix(rest)
+		if err != nil {
+			return nil, false
+		}
+		part, err := strconv.Unquote(quoted)
+		if err != nil {
+			return nil, false
+		}
+		parts = append(parts, part)
+		rest = rest[len(quoted):]
+		if rest == "" {
+			break
+		}
+		if rest[0] != eventNotifyKeySeparator {
+			return nil, false
+		}
+		rest = rest[1:]
+	}
+	return parts, len(parts) == eventNotifyKeyFields
 }
 
 func (n *EventNotifier) deliveryConfig() ([]notify.Notifier, time.Duration) {
@@ -243,16 +375,16 @@ func (n *EventNotifier) due(target string, before time.Time) ([]state.EventNotif
 // eventNotifyIdentity groups all PID-level process-policy events under their
 // watch, while independent service checks and rules retain separate episodes.
 func eventNotifyIdentity(e Event) (key string, active bool, phase string) {
-	dimension, name := "daemon", ""
+	dimension, name := eventNotifyDimensionDaemon, ""
 	switch {
 	case e.Service != "":
-		dimension, name = "service", e.Service
+		dimension, name = eventNotifyDimensionService, e.Service
 	case e.Watch != "":
-		dimension, name = "watch", e.Watch
+		dimension, name = eventNotifyDimensionWatch, e.Watch
 	case e.App != "":
-		dimension, name = "app", e.App
+		dimension, name = eventNotifyDimensionApp, e.App
 	}
-	category := "health"
+	category := eventNotifyCategoryHealth
 	phase = e.Kind
 	switch e.Kind {
 	case eventKindRecovered:
@@ -265,8 +397,8 @@ func eventNotifyIdentity(e Event) (key string, active bool, phase string) {
 			category += ":" + e.Action
 		}
 	}
-	active = category == "health" && phase != eventNotifyPhaseRecovered
-	return fmt.Sprintf("%q:%q:%q:%q:%q", dimension, name, e.Rule, e.Check, category), active, phase
+	active = category == eventNotifyCategoryHealth && phase != eventNotifyPhaseRecovered
+	return formatEventNotifyKey(dimension, name, e.Rule, e.Check, category), active, phase
 }
 
 func shouldDeliverEvent(kind string, active bool, phase string, rec state.EventNotifyRecord, found bool, now time.Time, interval time.Duration) bool {

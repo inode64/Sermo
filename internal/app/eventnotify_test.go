@@ -5,6 +5,7 @@ import (
 	"io"
 	"log/slog"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -262,5 +263,64 @@ func TestEventNotifierAvailabilityRecoveryKeepsFiringIncidentOpen(t *testing.T) 
 	router.remind(t.Context())
 	if got := len(recorder.messages); got != 1 {
 		t.Fatalf("open firing incident reminders = %d, want 1 (events %+v)", got, events)
+	}
+}
+
+// A reload that removes or renames the entity behind an open incident leaves
+// nothing that can ever emit its recovery, so the incident must not be
+// reminded forever.
+func TestEventNotifierRetainDropsIncidentsNoTargetCanClose(t *testing.T) {
+	store, err := state.OpenContextWith(t.Context(), filepath.Join(t.TempDir(), state.Filename), state.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = store.Close() }()
+	recorder := &eventNotifyRecorder{messages: make(chan notify.Message, 20)}
+	router := NewEventNotifier("host-a", slog.New(slog.NewTextHandler(io.Discard, nil)), nil, store)
+	router.Update(config.EventNotification{Targets: []string{"ops"}, RepeatInterval: time.Hour}, map[string]notify.Notifier{"ops": recorder})
+	now := time.Date(2026, 9, 28, 12, 0, 0, 0, time.UTC)
+	router.now = func() time.Time { return now }
+	for _, e := range []Event{
+		{Service: "web", Check: "http", Kind: eventKindFiring, Message: "kept check"},
+		{Service: "web", Check: "renamed-check", Kind: eventKindFiring},
+		{Service: "web", Rule: "repair", Action: "restart", Kind: eventKindAction, Message: "kept rule"},
+		{Service: "web", Rule: "renamed-rule", Kind: eventKindAlert},
+		{Service: "web", Kind: eventKindAlert, Message: "legacy lock reclaim row"},
+		{Service: "removed", Check: "http", Kind: eventKindFiring},
+		{Watch: "disk", Kind: eventKindFiring, Message: "kept watch"},
+		{Watch: "old-watch", Kind: eventKindFiring},
+		{App: "salt-minion", Kind: eventKindFiring, Message: "kept app"},
+		{App: "removed-app", Kind: eventKindFiring},
+		{Kind: eventKindFiring, Message: "daemon incident"},
+	} {
+		router.deliver(t.Context(), e)
+	}
+	for len(recorder.messages) > 0 {
+		<-recorder.messages
+	}
+
+	workers := []*Worker{{
+		Service:    "web",
+		Rules:      []rules.Rule{{Name: "repair"}},
+		checkNames: map[string]bool{"http": true},
+	}}
+	watches := []*Watch{{Name: "disk"}, {Name: "salt-minion-version", App: "salt-minion"}}
+	router.Retain(eventNotifyScopeOf(workers, watches))
+
+	now = now.Add(time.Hour)
+	router.remind(t.Context())
+	var got []string
+	for len(recorder.messages) > 0 {
+		msg := <-recorder.messages
+		got = append(got, msg.Body)
+	}
+	want := []string{"message: kept check", "message: kept rule", "message: kept watch", "message: kept app", "message: daemon incident"}
+	if len(got) != len(want) {
+		t.Fatalf("reminders = %q, want only the incidents the running targets can still close (%d)", got, len(want))
+	}
+	for _, body := range want {
+		if !slices.ContainsFunc(got, func(g string) bool { return strings.Contains(g, body) }) {
+			t.Fatalf("reminders = %q, missing %q", got, body)
+		}
 	}
 }

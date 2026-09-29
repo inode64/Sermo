@@ -78,3 +78,32 @@ func TestStoreEventsRoundTripAndPrune(t *testing.T) {
 		t.Fatalf("events after clear = %+v, want none", events)
 	}
 }
+
+func TestStoreActiveEventNotifyIncidentsAndDelete(t *testing.T) {
+	s := openTemp(t)
+	at := time.Date(2026, 9, 28, 12, 0, 0, 0, time.UTC)
+	for _, rec := range []EventNotifyRecord{
+		{IncidentKey: "open", Notifier: "ops", Phase: "firing", Active: true, LastSentAt: at},
+		{IncidentKey: "open", Notifier: "mail", Phase: "firing", Active: true, LastSentAt: at},
+		{IncidentKey: "closed", Notifier: "ops", Phase: "recovered", LastSentAt: at},
+	} {
+		if err := s.SetEventNotifyState(rec); err != nil {
+			t.Fatalf("SetEventNotifyState: %v", err)
+		}
+	}
+	keys, err := s.ActiveEventNotifyIncidents()
+	if err != nil || len(keys) != 1 || keys[0] != "open" {
+		t.Fatalf("ActiveEventNotifyIncidents() = %v, %v; want [open]", keys, err)
+	}
+	if err := s.DeleteEventNotifyIncident("open"); err != nil {
+		t.Fatalf("DeleteEventNotifyIncident: %v", err)
+	}
+	for _, notifier := range []string{"ops", "mail"} {
+		if _, found, err := s.EventNotifyState("open", notifier); err != nil || found {
+			t.Fatalf("open incident at %s after delete: found=%v err=%v", notifier, found, err)
+		}
+	}
+	if rec, found, err := s.EventNotifyState("closed", "ops"); err != nil || !found || rec.Phase != "recovered" {
+		t.Fatalf("unrelated incident changed: %+v found=%v err=%v", rec, found, err)
+	}
+}

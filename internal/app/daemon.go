@@ -584,6 +584,7 @@ func buildWorker(ctx context.Context, name, unit string, tree map[string]any, de
 		Unit:                 unit,
 		Rules:                ruleSet,
 		reportedChecks:       checksReportedByRules(ruleSet),
+		checkNames:           builtCheckNames(built),
 		MetricChecks:         rules.ReferencedChecks(tree),
 		Policy:               rules.ParsePolicy(tree),
 		State:                remediationState,
@@ -708,6 +709,15 @@ func watchMetricSourceFactory(service string, discoverer process.Discoverer, sel
 			return r, ok
 		}
 	}
+}
+
+// builtCheckNames indexes the names the check cache is keyed by.
+func builtCheckNames(built []checks.Built) map[string]bool {
+	names := make(map[string]bool, len(built))
+	for _, b := range built {
+		names[b.Check.Name()] = true
+	}
+	return names
 }
 
 func buildWorkerCheckSet(section map[string]any, deps checks.Deps, dynamicMetrics bool) ([]checks.Built, []string, func(checks.MetricReader)) {
