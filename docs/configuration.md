@@ -1704,8 +1704,12 @@ between warning and firing, recovery, or a new episode is sent immediately.
 Delivery state survives daemon restarts and config reloads. If
 `repeat_interval` is set, an open incident is reminded at that interval, even
 when the underlying check emits no new event. Without it, open incidents are
-announced only on state changes. Operational errors without a recovery edge
-are limited to once per 24 hours by default, or to `repeat_interval` when set.
+announced only on state changes. A remediation rule's episode closes with the
+`recovered` event emitted when its condition clears, so its next firing is a
+new episode. Operational errors without a recovery edge are limited to once
+per 24 hours by default, or to `repeat_interval` when set. One-shot notices (a
+service restart notice, a reclaimed stale operation lock) are sent every time
+they occur; they open no incident and are never reminded.
 The detailed event log remains unchanged, including per-PID `process_policy`
 events; Slack groups those under their watch. A `process_policy` watch emits
 one aggregate recovery when its violations clear, including after a daemon

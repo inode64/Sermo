@@ -9,8 +9,11 @@ import (
 	"testing"
 	"time"
 
+	"sermo/internal/checks"
 	"sermo/internal/config"
 	"sermo/internal/notify"
+	"sermo/internal/operation"
+	"sermo/internal/rules"
 	"sermo/internal/state"
 )
 
@@ -167,5 +170,64 @@ func TestEventNotifierSeparatesChecksAndPacesErrors(t *testing.T) {
 	router.deliver(t.Context(), errEvent)
 	if got := len(recorder.messages); got != 4 {
 		t.Fatalf("daily error delivered %d times, want 4 total", got)
+	}
+}
+
+func TestEventNotifierSendsEveryOneShotNoticeWithoutReminders(t *testing.T) {
+	recorder := &eventNotifyRecorder{messages: make(chan notify.Message, 10)}
+	router := NewEventNotifier("host-a", slog.New(slog.NewTextHandler(io.Discard, nil)), nil, nil)
+	router.Update(config.EventNotification{Targets: []string{"ops"}, RepeatInterval: time.Hour}, map[string]notify.Notifier{"ops": recorder})
+	now := time.Date(2026, 9, 28, 12, 0, 0, 0, time.UTC)
+	router.now = func() time.Time { return now }
+	var reclaims []Event
+	reclaim := operationLockReclaimEvent(func(e Event) { reclaims = append(reclaims, e) })
+	reclaim("nginx", "expired")
+	reclaim("nginx", "dead owner")
+	notices := []Event{
+		{Service: "nginx", Kind: eventKindAlert, Rule: restartNoticeRule, Message: "nginx restarted (pid 10)", Notice: true},
+		{Service: "nginx", Kind: eventKindAlert, Rule: restartNoticeRule, Message: "nginx restarted (pid 20)", Notice: true},
+	}
+	notices = append(notices, reclaims...)
+	for _, e := range notices {
+		router.deliver(t.Context(), e)
+		now = now.Add(10 * time.Minute)
+	}
+	if got := len(recorder.messages); got != len(notices) {
+		t.Fatalf("one-shot notices delivered %d times, want %d", got, len(notices))
+	}
+	for range notices {
+		<-recorder.messages
+	}
+	now = now.Add(3 * time.Hour)
+	router.remind(t.Context())
+	if got := len(recorder.messages); got != 0 {
+		t.Fatalf("one-shot notices were reminded %d times, want none", got)
+	}
+}
+
+func TestEventNotifierRemediationEpisodesRealertAfterRecovery(t *testing.T) {
+	recorder := &eventNotifyRecorder{messages: make(chan notify.Message, 10)}
+	router := NewEventNotifier("host-a", slog.New(slog.NewTextHandler(io.Discard, nil)), nil, nil)
+	router.Update(config.EventNotification{Targets: []string{"ops"}}, map[string]notify.Notifier{"ops": recorder})
+	h := &workerHarness{opResult: operation.Result{Status: operation.ResultOK}}
+	w := h.worker(remediationTree("restart-if-down", "http", "restart"), rules.Policy{Cooldown: time.Minute}, nil)
+	now := t0
+	w.Now = func() time.Time { return now }
+	for _, failing := range []bool{true, false, true} {
+		h.cache = map[string]checks.Result{"http": {Check: "http", OK: !failing}}
+		w.RunCycle(context.Background())
+		now = now.Add(2 * time.Minute)
+	}
+	for _, e := range h.events {
+		router.deliver(t.Context(), e)
+	}
+	want := []string{"web: action", "web: recovered", "web: action"}
+	if got := len(recorder.messages); got != len(want) {
+		t.Fatalf("remediation episodes delivered %d messages, want %d (events %+v)", got, len(want), h.events)
+	}
+	for _, subject := range want {
+		if msg := <-recorder.messages; !strings.Contains(msg.Subject, subject) {
+			t.Fatalf("subject = %q, want %q", msg.Subject, subject)
+		}
 	}
 }
