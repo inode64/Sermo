@@ -1811,8 +1811,9 @@ Reloading (`sermoctl daemon reload` / `SIGHUP`) applies changes to `token`,
 `allowed_chats` and `poll_interval` without a restart. Because the goroutine is
 only started at boot when the section is present, **enabling the bot for the
 first time requires a restart** (the same rule the web UI follows for its port).
-On startup the bot discards any commands queued while it was down, so a restart
-never replays old requests.
+On startup, after a reload that changes the `token`, and when a bot with
+`enabled: false` is enabled again, the bot discards the commands already queued
+for that token, so it never replays old requests.
 
 ## Host watches
 
