@@ -56,7 +56,16 @@ const (
 	screenSessionNameParts  = 2
 )
 
-var screenSessionLine = regexp.MustCompile(`^\s*(\d+\.\S+)\s+\(([^)]+)\)`)
+var (
+	screenSessionLine = regexp.MustCompile(`^\s*(\d+\.\S+)\s+\(([^)]+)\)`)
+	// screenSocketSummary is the closing "N Socket(s) in DIR." line screen
+	// prints only after it has read its socket directory.
+	screenSocketSummary = regexp.MustCompile(`(?m)^\s*\d+ Sockets? in \S`)
+)
+
+// screenListExitCode is the status GNU screen 4.x uses to end every `-ls`,
+// including a successful listing of live sessions.
+const screenListExitCode = 1
 
 // TerminalSession is one tmux or screen session reported by its own client.
 // Identity is a multiplexer-owned generation marker used to reject a stale
@@ -99,7 +108,10 @@ type terminalMultiplexerAdapter struct {
 	args           func(TerminalSessionConfig) []string
 	closeArgs      func(TerminalSessionConfig, TerminalSession) []string
 	sessionsAbsent func(string) bool
-	parseSessions  func(TerminalSessionConfig, string) ([]TerminalSession, error)
+	// listedDespiteExit reports a client that ends a complete listing with a
+	// non-zero status; nil means only exit 0 is a listing.
+	listedDespiteExit func(exitCode int, output string) bool
+	parseSessions     func(TerminalSessionConfig, string) ([]TerminalSession, error)
 }
 
 // Validate confirms that a terminal-session query has an explicit, bounded
@@ -147,10 +159,11 @@ func terminalMultiplexerAdapterFor(name string) (terminalMultiplexerAdapter, boo
 		}, true
 	case TerminalMultiplexerScreen:
 		return terminalMultiplexerAdapter{
-			args:           screenSessionArgs,
-			closeArgs:      screenSessionCloseArgs,
-			sessionsAbsent: screenSessionsAbsent,
-			parseSessions:  parseScreenSessions,
+			args:              screenSessionArgs,
+			closeArgs:         screenSessionCloseArgs,
+			sessionsAbsent:    screenSessionsAbsent,
+			listedDespiteExit: screenSessionsListed,
+			parseSessions:     parseScreenSessions,
 		}, true
 	default:
 		return terminalMultiplexerAdapter{}, false
@@ -257,7 +270,8 @@ func sampleTerminalSessions(ctx context.Context, runner execx.Runner, config Ter
 	result, err := execx.RunUser(ctx, runner, execx.NoTimeout, config.User, config.Binary, adapter.args(config)...)
 	output := strings.TrimSpace(result.Stdout + "\n" + result.Stderr)
 	absent := adapter.sessionsAbsent(output)
-	if err := terminalUserCommandError(result, err, fmt.Sprintf("list %s sessions for user %q", config.Multiplexer, config.User), absent); err != nil {
+	listed := adapter.listedDespiteExit != nil && adapter.listedDespiteExit(result.ExitCode, output)
+	if err := terminalUserCommandError(result, err, fmt.Sprintf("list %s sessions for user %q", config.Multiplexer, config.User), absent || listed); err != nil {
 		return TerminalSessionSample{}, err
 	}
 	if absent {
@@ -305,6 +319,13 @@ func tmuxSessionsAbsent(output string) bool {
 
 func screenSessionsAbsent(output string) bool {
 	return strings.Contains(strings.ToLower(output), "no sockets found in")
+}
+
+// screenSessionsListed accepts screen's exit 1 only together with the socket
+// summary line, so a startup or permission failure with the same status is
+// still reported instead of being read as a listing.
+func screenSessionsListed(exitCode int, output string) bool {
+	return exitCode == screenListExitCode && screenSocketSummary.MatchString(output)
 }
 
 func parseTmuxSessions(config TerminalSessionConfig, output string) ([]TerminalSession, error) {
@@ -462,17 +483,18 @@ func CloseEmptyTmuxServer(ctx context.Context, runner execx.Runner, config Termi
 }
 
 // terminalUserCommandError classifies a RunUser result uniformly for session
-// reads and close operations. An absent session server is a successful empty
-// sample only after a command that did start, so startup failures remain
-// unavailable even when their output resembles the client's empty response.
-func terminalUserCommandError(result execx.Result, runErr error, action string, absent bool) error {
+// reads and close operations. A tolerated non-zero exit (an absent session
+// server, or a listing the client ends with a non-zero status) succeeds only
+// after a command that did start, so startup failures remain unavailable even
+// when their output resembles the client's response.
+func terminalUserCommandError(result execx.Result, runErr error, action string, tolerated bool) error {
 	if result.ExitCode == execx.ExitCodeRunFailure {
 		if runErr == nil {
 			runErr = errors.New(execx.CommandDidNotStart)
 		}
 		return fmt.Errorf("%s: %w", action, runErr)
 	}
-	if absent {
+	if tolerated {
 		return nil
 	}
 	if runErr != nil {
