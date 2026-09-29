@@ -51,9 +51,13 @@ const (
 	smartExitDeviceOpen  = 1 << 1 // open failed, or no IDENTIFY DEVICE answer
 )
 
-// smartSelfTestRunningNibble is the low nibble the ATA self-test status byte
-// carries while a test is in progress.
-const smartSelfTestRunningNibble = 0x0f
+// smartSelfTestRunningNibble is the high nibble the ATA self-test execution
+// status byte carries while a test is in progress; the low nibble then holds
+// the remaining work in tenths.
+const (
+	smartSelfTestRunningNibble = 0x0f
+	smartSelfTestStatusShift   = 4
+)
 
 // smartCheck reads a drive's SMART health and attributes via `smartctl -j`. With
 // no predicate it alerts when the overall SMART health verdict is FAILED;
@@ -464,7 +468,7 @@ func smartSelfTestSummary(status string, hours *float64) string {
 }
 
 // selfTestProgress reports whether a self-test is running and how far it has
-// got. It recognises smartctl's stable JSON status text, the ATA status low
+// got. It recognises smartctl's stable JSON status text, the ATA status high
 // nibble (0xf means in progress) and the NVMe log's current-operation code. The
 // numeric forms keep the result reliable when a smartctl version localises its
 // text, and the NVMe form is the only one an NVMe drive publishes at all.
@@ -480,7 +484,7 @@ func (j smartReport) selfTestProgress() (bool, float64) {
 
 // smartSelfTestRunning reads the ATA self-test status, numerically first.
 func smartSelfTestRunning(value *int, status string) bool {
-	if value != nil && *value&smartSelfTestRunningNibble == smartSelfTestRunningNibble {
+	if value != nil && *value>>smartSelfTestStatusShift&smartSelfTestRunningNibble == smartSelfTestRunningNibble {
 		return true
 	}
 	return strings.Contains(strings.ToLower(status), "in progress")
