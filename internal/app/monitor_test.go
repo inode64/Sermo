@@ -73,9 +73,9 @@ checks:
 		RecentActions:  []time.Time{t0, t0.Add(5 * time.Second)},
 		CurrentBackoff: 42 * time.Second,
 	}
-	workers[0].libBaseline = &ArtifactBaseline{fingerprints: map[string]string{
+	workers[0].libBaseline = testArtifactBaseline(map[string]string{
 		"/etc/web.conf": "123:456789",
-	}}
+	})
 
 	mon := NewMonitor(cfg, deps, Scheduler{Interval: 20 * time.Millisecond}, ready, collector, nil, workers, nil)
 	mon.ConfigPath = global
@@ -98,7 +98,7 @@ checks:
 	w := mon.workers[0]
 	cycle := w.cycle
 	state := w.State
-	baseline := w.libBaseline.snapshot()
+	baseline := baselineFingerprints(w.libBaseline)
 	mon.mu.Unlock()
 	mon.startGenerationLocked(ctx, false)
 

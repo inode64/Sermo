@@ -599,8 +599,6 @@ func buildWorker(ctx context.Context, name, unit string, tree map[string]any, de
 		libBaseline:          libBaseline,
 		checkFailing:         checkFailingFromSnapshots(deps.Snapshots, name, catalog.types, configID),
 		artifactSamples:      deps.ArtifactSamples,
-		appVersions:          map[string]string{},
-		appVersionsLast:      map[string]string{},
 	}
 	worker.Checks = workerCheckRunner(worker, built, catalog.cycles, maxParallel, recordMeasurement, setCycleMetrics)
 	// Watches run independently of the worker and must not capture its cycle cache.

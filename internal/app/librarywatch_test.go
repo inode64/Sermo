@@ -77,7 +77,7 @@ func TestArtifactWatchInterval(t *testing.T) {
 func TestArtifactSamplesShareAppVersion(t *testing.T) {
 	samples := NewArtifactSamples()
 	samples.RegisterApp("demo")
-	w := &Worker{artifactSamples: samples, appVersions: map[string]string{}, appVersionsLast: map[string]string{}}
+	w := &Worker{artifactSamples: samples, libBaseline: NewArtifactBaseline()}
 
 	samples.StoreAppReport("demo", appinspect.Report{Version: "1.2.3", Status: appinspect.StatusOK})
 	if changed, err := w.changedAppVersion(context.Background(), "demo", 3); err != nil || changed {
@@ -203,7 +203,7 @@ func TestArtifactPathChangedUsesCachedSampleWithoutFingerprinting(t *testing.T) 
 	samples.RegisterFile(path)
 	samples.StoreFile(path)
 	fingerprint, _, _ := samples.FileFingerprint(path)
-	baseline := &ArtifactBaseline{fingerprints: map[string]string{path: fingerprint}}
+	baseline := testArtifactBaseline(map[string]string{path: fingerprint})
 
 	if changed, err := baseline.changedWithFingerprint(path, samples, func(string) string {
 		t.Fatal("cached artifact must not call the direct fingerprinter")
@@ -226,9 +226,9 @@ func TestAcknowledgeChangesRefreshesArtifactSample(t *testing.T) {
 	}
 	want := fileFingerprint(path)
 
-	w := &Worker{artifactSamples: samples, libBaseline: &ArtifactBaseline{fingerprints: map[string]string{path: "previous"}}}
+	w := &Worker{artifactSamples: samples, libBaseline: testArtifactBaseline(map[string]string{path: "previous"})}
 	w.acknowledgeChanges()
-	if got := w.libBaseline.snapshot()[path]; got != want {
+	if got := baselineFingerprints(w.libBaseline)[path]; got != want {
 		t.Fatalf("acknowledged fingerprint = %q, want refreshed sample %q", got, want)
 	}
 	if got, _, _ := samples.FileFingerprint(path); got != want {
@@ -253,8 +253,7 @@ func TestArtifactSamplesCacheAppStatus(t *testing.T) {
 			runner := execxtest.Outputs("demo v1.2.3")
 			w := &Worker{
 				artifactSamples: samples,
-				appVersions:     map[string]string{},
-				appVersionsLast: map[string]string{},
+				libBaseline:     NewArtifactBaseline(),
 				CheckDeps:       checks.Deps{Runner: runner},
 			}
 			samples.StoreAppReport("demo", appinspect.Report{Status: tt.status})

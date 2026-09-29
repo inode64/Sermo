@@ -165,19 +165,12 @@ type Worker struct {
 	// evaluates cleanly again.
 	evalErrs map[string]string
 	// libBaseline holds the acknowledged fingerprint of each watched path (a
-	// `changed:` condition target, typically a library .so) across cycles. The
-	// operation engine shares it (see ArtifactBaseline).
+	// `changed:` condition target, typically a library .so) and the acknowledged
+	// version of each watched app across cycles. The operation engine shares it
+	// (see ArtifactBaseline).
 	libBaseline *ArtifactBaseline
 	// artifactSamples provides cadence-limited catalog app/library/file observations.
 	artifactSamples *ArtifactSamples
-
-	// appVersions holds the acknowledged version-short of each watched app+level
-	// (key "app:level") across cycles, the version analogue of libBaseline.
-	appVersions map[string]string
-	// appVersionsLast holds the most recently sampled version-short per app+level,
-	// so acknowledgeChanges can adopt the post-restart version without re-running
-	// the command.
-	appVersionsLast map[string]string
 }
 
 type workerCycleMode struct {
@@ -954,11 +947,6 @@ func (w *Worker) changed(path string) (bool, error) {
 // versions as the new baseline after a successful (re)launch.
 func (w *Worker) acknowledgeChanges() {
 	w.libBaseline.Acknowledge(w.artifactSamples)
-	// Adopt the version sampled during this cycle's rule evaluation as the new
-	// baseline. After a successful restart the service runs the upgraded app, so
-	// the last-seen version is the one to acknowledge; this clears the pending
-	// `changed: {app}` signal without re-running the version command.
-	maps.Copy(w.appVersions, w.appVersionsLast)
 }
 
 // changedAppVersion reports whether the named app's version differs from the
@@ -997,14 +985,7 @@ func (w *Worker) compareAppVersion(app string, level int, raw string) (bool, err
 	if key == "" {
 		key = output.FirstNonEmptyLine(raw)
 	}
-	bkey := app + ":" + strconv.Itoa(level)
-	w.appVersionsLast[bkey] = key
-	base, seen := w.appVersions[bkey]
-	if !seen {
-		w.appVersions[bkey] = key
-		return false, nil
-	}
-	return key != base, nil
+	return w.libBaseline.versionChanged(app+":"+strconv.Itoa(level), key), nil
 }
 
 // fileFingerprint summarizes a file's identity for change detection: its size and
@@ -1231,7 +1212,7 @@ func (w *Worker) ruleRuntimeContext(ev *rules.Evaluator, r rules.Rule, change ru
 		ruleDuration: rules.WindowDurationDescription(r),
 		ruleWindow:   rules.WindowDescription(r),
 	}
-	rc.applyChange(change, w.appVersions, w.appVersionsLast)
+	rc.applyChange(change, w.libBaseline)
 	candidate, ok := singleRuleCheckCandidate(r.If)
 	if !ok {
 		return rc
@@ -1254,7 +1235,7 @@ func (w *Worker) ruleRuntimeContext(ev *rules.Evaluator, r rules.Rule, change ru
 	return rc
 }
 
-func (rc *ruleRuntimeContext) applyChange(change rules.ChangeContext, base, last map[string]string) {
+func (rc *ruleRuntimeContext) applyChange(change rules.ChangeContext, baseline *ArtifactBaseline) {
 	rc.changePath = change.Path
 	rc.changeApp = change.App
 	rc.changeLibrary = change.Library
@@ -1263,9 +1244,7 @@ func (rc *ruleRuntimeContext) applyChange(change rules.ChangeContext, base, last
 	if change.App == "" || change.LevelValue == 0 {
 		return
 	}
-	bkey := change.App + ":" + strconv.Itoa(change.LevelValue)
-	rc.changeOld = base[bkey]
-	rc.changeNew = last[bkey]
+	rc.changeOld, rc.changeNew = baseline.versionChange(change.App + ":" + strconv.Itoa(change.LevelValue))
 }
 
 func (rc *ruleRuntimeContext) applyCheckEntry(entry map[string]any) {

@@ -608,7 +608,8 @@ the configuration from the path passed to `sermod run --config` (the same file
 `sermoctl` uses). `sermod` validates the new config, rebuilds its service
 workers and host watches, and swaps them in without restarting the process.
 Per-service runtime state is preserved across reload: monitoring cycle counters
-and watched-file baselines for `changed:` conditions stay in memory, while
+and the watched-file and app-version baselines for `changed:` conditions stay in
+memory, while
 remediation cooldown/backoff and rule `for`/`within` windows are also persisted
 in `paths.state` and survive a full `sermod` process restart. Invalid config, or
 a config with no included services or watches, is rejected and the current

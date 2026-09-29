@@ -583,16 +583,14 @@ func (h *workerHarness) worker(tree map[string]any, policy rules.Policy, remedia
 		remediationState = &rules.RemediationState{}
 	}
 	return &Worker{
-		libBaseline:     NewArtifactBaseline(),
-		appVersions:     map[string]string{},
-		appVersionsLast: map[string]string{},
-		CheckDeps:       checks.Deps{Status: func(context.Context) (servicemgr.Status, error) { return servicemgr.StatusActive, nil }},
-		Service:         "web",
-		Rules:           ruleSet,
-		Policy:          policy,
-		State:           remediationState,
-		MetricChecks:    rules.ReferencedChecks(tree),
-		Checks:          func(context.Context, checks.Deps) map[string]checks.Result { return h.cache },
+		libBaseline:  NewArtifactBaseline(),
+		CheckDeps:    checks.Deps{Status: func(context.Context) (servicemgr.Status, error) { return servicemgr.StatusActive, nil }},
+		Service:      "web",
+		Rules:        ruleSet,
+		Policy:       policy,
+		State:        remediationState,
+		MetricChecks: rules.ReferencedChecks(tree),
+		Checks:       func(context.Context, checks.Deps) map[string]checks.Result { return h.cache },
 		Operate: func(_ context.Context, action string) operation.Result {
 			h.ops = append(h.ops, action)
 			res := h.opResult
@@ -857,8 +855,6 @@ func appVersionWorker(h *workerHarness, runner *execxtest.Runner, level string) 
 	w.CheckDeps = checks.Deps{Runner: runner}
 	w.artifactSamples = NewArtifactSamples()
 	w.artifactSamples.RegisterApp("containerd")
-	w.appVersions = map[string]string{}
-	w.appVersionsLast = map[string]string{}
 	return w
 }
 
@@ -1273,8 +1269,6 @@ func TestRuleMessageRuntimeContextForChangedAppVersion(t *testing.T) {
 	w.CheckDeps = checks.Deps{Runner: runner}
 	w.artifactSamples = NewArtifactSamples()
 	w.artifactSamples.RegisterApp("containerd")
-	w.appVersions = map[string]string{}
-	w.appVersionsLast = map[string]string{}
 
 	w.artifactSamples.StoreAppReport("containerd", appinspect.Report{Version: "containerd v1.7.0", Status: appinspect.StatusOK})
 	w.RunCycle(context.Background())
