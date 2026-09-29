@@ -154,3 +154,34 @@ func TestServiceReloadSupportedUsesBoundedQuery(t *testing.T) {
 		t.Fatal("reload capability query had no deadline")
 	}
 }
+
+type pidfileClaimReader map[int]process.Identity
+
+func (r pidfileClaimReader) PIDs() ([]int, error) { return nil, nil }
+
+func (r pidfileClaimReader) Identity(pid int) (process.Identity, bool) {
+	id, ok := r[pid]
+	return id, ok
+}
+
+func TestPidfileClaimUsesSelectorsThenBackendPIDs(t *testing.T) {
+	const exe = "/opt/sermo-test/daemon"
+	discoverer := process.Discoverer{
+		Reader: pidfileClaimReader{
+			10: {PID: 10, UID: 0, Exe: exe, ExeOK: true, State: "S"},
+			11: {PID: 11, UID: 0, Exe: "/bin/sh", ExeOK: true, State: "S"},
+			12: {PID: 12, UID: 0, Exe: "/usr/bin/unrelated", ExeOK: true, State: "S"},
+		},
+		ResolveUser: func(string) (uint32, bool) { return 0, true },
+	}
+	selectors := []process.Selector{{Name: "main", Type: process.SelectorCommandMatch, Exe: exe, User: "root"}}
+	claim := pidfileClaim(discoverer, selectors, func() []int { return []int{10, 11} })
+	for pid, want := range map[int]bool{10: true, 11: true, 12: false} {
+		if claimed, known := claim(pid); !known || claimed != want {
+			t.Errorf("claim(%d) = %v/%v, want %v/true", pid, claimed, known, want)
+		}
+	}
+	if _, known := pidfileClaim(discoverer, nil, nil)(12); known {
+		t.Error("a service without executable selectors cannot judge pidfile identity")
+	}
+}

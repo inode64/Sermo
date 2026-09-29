@@ -1252,6 +1252,13 @@ reported as an **error only while the service is active** (it means the service
 died or lost its pidfile without the service manager noticing); a legitimately
 stopped service is skipped, not alarmed.
 
+A zombie PID counts as stale. When the service declares a `processes:` selector
+with an exact `exe`, the check also fails if the live PID is neither named by
+one of those selectors (a binary replaced on disk still counts) nor reported by
+the init backend for the unit: after the daemon died, its PID may have been
+recycled by an unrelated process. Without an `exe` selector (and in host
+watches) the check can only verify that the PID is alive.
+
 A check already named `pidfile` is respected, so a catalog service that needs a
 custom check can still spell it out. Public `processes:` entries stay limited to
 `exe`/`cmd` selectors with optional `user`/`group`; do not put `pidfile` under

@@ -569,6 +569,30 @@ func TestStrictMatchPIDRequiresExactExeAndUser(t *testing.T) {
 	}
 }
 
+func TestClaimsPIDNamesOnlySelectorProcesses(t *testing.T) {
+	d := Discoverer{
+		Reader: fakeReader{ids: map[int]Identity{
+			100: {PID: 100, UID: 110, Exe: testExe, ExeOK: true, State: "S"},
+			101: {PID: 101, UID: 110, ExePrev: testExe, State: "S"},
+			102: {PID: 102, UID: 110, Exe: "/opt/sermo-test/other", ExeOK: true, State: "S"},
+			103: {PID: 103, UID: 999, Exe: testExe, ExeOK: true, State: "S"},
+		}},
+		ResolveUser: fakeUsers(map[string]uint32{"mysql": 110}),
+	}
+	selectors := []Selector{
+		{Name: "pidfile", Type: SelectorPidfile, Paths: []string{"/run/mysqld.pid"}},
+		{Name: "main", Type: SelectorCommandMatch, Exe: testExe, User: "mysql"},
+	}
+	for pid, want := range map[int]bool{100: true, 101: true, 102: false, 103: false, 999: false} {
+		if claimed, known := d.ClaimsPID(pid, selectors); !known || claimed != want {
+			t.Errorf("ClaimsPID(%d) = %v/%v, want %v/true", pid, claimed, known, want)
+		}
+	}
+	if _, known := d.ClaimsPID(100, selectors[:1]); known {
+		t.Error("a pidfile-only selector set cannot judge identity")
+	}
+}
+
 func TestSelectorHasStrictIdentity(t *testing.T) {
 	tests := []struct {
 		name     string

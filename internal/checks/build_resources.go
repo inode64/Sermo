@@ -59,7 +59,7 @@ func buildLockfileCheck(b base, entry map[string]any) (Check, string) {
 // is active.
 func buildPidfileCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 	return buildPathsCheck(entry, CheckTypePidfile, func(paths []string) Check {
-		return pidfileCheck{base: b, paths: paths, fallbackPIDs: deps.PidfileFallbackPIDs}
+		return pidfileCheck{base: b, paths: paths, claim: deps.PidfileClaim, fallbackPIDs: deps.PidfileFallbackPIDs}
 	})
 }
 
