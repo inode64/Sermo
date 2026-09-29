@@ -207,8 +207,12 @@ func TestCountDeltaWindowPrunesOldGrowth(t *testing.T) {
 	c := deltaCountOf(root, &now, ">", 2, 2*time.Minute)
 
 	_ = c.Run(context.Background())
-	now = now.Add(3 * time.Minute)
+	now = now.Add(time.Minute)
 	addCountFiles(t, root, "old", 3)
+	_ = c.Run(context.Background())
+	// The growth was observed by the 1m sample; once the 0s baseline slides
+	// out, the 1m sample is the baseline and the old growth no longer counts.
+	now = now.Add(2 * time.Minute)
 	res := c.Run(context.Background())
 	if res.OK {
 		t.Fatalf("growth before the window must be pruned: %s", res.Message)

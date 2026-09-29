@@ -3232,8 +3232,10 @@ are rejected at validation time for that reason.
 `max_increase` measures growth against the oldest sample still inside `within`, not
 against the previous cycle. A per-cycle delta is true for exactly one cycle, so a
 rule's `for:` window would silence it permanently; growth stays true for the whole
-span and composes with rule windows. A count that falls never reports negative
-growth.
+span and composes with rule windows. When no earlier sample is left inside
+`within` (a window no longer than the check interval), the previous sample is the
+baseline, so growth is still measured cycle to cycle. A count that falls never
+reports negative growth.
 
 It reports **state**: the count and the executables appear in the dashboard and in
 `sermoctl status`, and never reduce service health or SLA. The daemon is serving;

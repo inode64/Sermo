@@ -2866,7 +2866,11 @@ checks:
   checks use. Use one form or the other, not both.
 - **`delta` + `within`** is stateful. Each cycle samples the count, keeps samples
   in the last `within`, and compares the current count against the oldest sample
-  still in the window. The first cycle only baselines (no alert), and only
+  still in the window. When no earlier sample is left in the window (a `within`
+  no longer than the check's interval), the previous sample is the baseline, so
+  growth is measured cycle to cycle instead of reading `+0` forever; the message
+  then shows the real, slightly longer span. The first cycle only
+  baselines (no alert), and only
   increases can trip the check; steady or shrinking directories pass. Result data
   carries `count`, `baseline_count`, `growth_count`, `window` and `value` (the
   growth). Use either `count`/`op`/`value` or `delta`/`within`, not both.
