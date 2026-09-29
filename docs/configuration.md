@@ -2165,9 +2165,17 @@ then:
 
 `expand.by` is the amount to grow by (`K`/`M`/`G`/`T`, binary units). It is
 **capped to the volume group's free space**, and when the VG has no free space
-the action fails and is reported — Sermo never shrinks or reformats. Scope:
-LVM logical volumes with an ext2/3/4, xfs or btrfs filesystem; a non-LVM or
-otherwise unsupported volume fails cleanly rather than guessing.
+the action fails and is reported — Sermo never shrinks or reformats. A thin
+logical volume grows virtually and never uses VG free space, so it is capped to
+its **thin pool's free data space** instead, and a full pool fails the action
+rather than over-committing it. Scope: LVM logical volumes with an ext2/3/4,
+xfs or btrfs filesystem; a non-LVM or otherwise unsupported volume fails
+cleanly rather than guessing.
+
+Each expansion first runs the filesystem grow tool, a no-op when the filesystem
+already fills its volume. If an earlier attempt extended the LV but its
+filesystem grow failed, that step recovers the space and the expansion stops
+there; if the grow still fails, the LV is not extended again.
 
 Because watch actions are evaluated while the condition holds, an `expand`
 action should always carry a watch-level **`policy`** block (same fields as

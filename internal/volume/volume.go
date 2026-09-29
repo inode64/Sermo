@@ -1,8 +1,8 @@
 // Package volume grows an LVM-backed filesystem natively in Go, shelling out
 // only to the LVM and filesystem tools that have no native Go API (lvs, vgs,
 // lvextend, resize2fs, xfs_growfs, btrfs). The orchestration — resolving a path
-// to its mount and logical volume, checking the volume group's free space,
-// capping the request and sequencing extend-then-grow — is all Go.
+// to its mount and logical volume, checking the volume group's (or thin pool's)
+// free space, capping the request and sequencing extend-then-grow — is all Go.
 //
 // Scope: LVM logical volumes with an ext2/3/4, xfs or btrfs filesystem. Non-LVM
 // devices and other layouts (DRBD, plain partitions) are rejected rather than
@@ -13,10 +13,13 @@ import (
 	"cmp"
 	"context"
 	"fmt"
+	"math"
 	"slices"
 	"strconv"
 	"strings"
 	"time"
+
+	"golang.org/x/sys/unix"
 
 	"sermo/internal/checks"
 	"sermo/internal/execx"
@@ -43,14 +46,21 @@ const (
 	btrfsSubcommandResize     = "resize"
 	btrfsResizeMax            = "max"
 
-	lvmFlagNoHeadings     = "--noheadings"
-	lvmFlagOutput         = "-o"
-	lvmFlagSeparator      = "--separator"
-	lvmFlagUnits          = "--units"
-	lvmFlagNoSuffix       = "--nosuffix"
-	lvmLVFields           = "vg_name,lv_name"
-	lvmVGFreeField        = "vg_free"
-	lvmCSVSeparator       = ","
+	lvmFlagNoHeadings = "--noheadings"
+	lvmFlagOutput     = "-o"
+	lvmFlagSeparator  = "--separator"
+	lvmFlagUnits      = "--units"
+	lvmFlagNoSuffix   = "--nosuffix"
+	lvmLVFields       = "vg_name,lv_name"
+	lvmVGFreeField    = "vg_free"
+	lvmCSVSeparator   = ","
+	// lv_layout is itself comma-separated ("thin,sparse"), so these queries
+	// use a separator LVM names and numbers never contain.
+	lvmFieldSeparator     = "|"
+	lvmLayoutFields       = "lv_layout,pool_lv"
+	lvmLayoutThin         = "thin"
+	lvmPoolFields         = "lv_size,data_percent"
+	percentFull           = 100.0
 	lvmByteUnit           = "b"
 	devPathPrefix         = "/dev/"
 	lvmLVPathFormat       = devPathPrefix + "%s/%s"
@@ -82,6 +92,9 @@ type Expander struct {
 	Runner  execx.Runner
 	Mounts  MountSource   // nil -> /proc/mounts
 	Timeout time.Duration // per command; 0 -> DefaultCommandTimeout
+	// FSSize reports a mounted filesystem's total size in bytes; nil uses
+	// statfs(2). Injected for tests.
+	FSSize func(mountpoint string) (int64, error)
 }
 
 func (e Expander) timeout() time.Duration {
@@ -143,29 +156,37 @@ func (e Expander) ExpandPath(ctx context.Context, path string, by int64) (Result
 }
 
 // Expand grows the logical volume backing t by up to by bytes, then grows the
-// filesystem to fill it. The request is capped to the volume group's free space
-// (like a manual operator would); a full volume group is an error. Only
-// ext2/3/4, xfs and btrfs filesystems are grown.
+// filesystem to fill it. The request is capped to the space that can back it
+// (like a manual operator would): the volume group's free space, or for a thin
+// LV its thin pool's free data space, since a thin LV grows virtually and never
+// draws on vg_free. No free space is an error. Only ext2/3/4, xfs and btrfs
+// filesystems are grown.
+//
+// An earlier expansion whose lvextend succeeded but whose filesystem grow
+// failed leaves the LV larger than the filesystem. Expand first grows the
+// filesystem into that space; when that recovers capacity it stops there, and
+// when the grow fails it stops too, so a retry never extends the LV again on
+// top of space the filesystem could not use.
 func (e Expander) Expand(ctx context.Context, t Target, by int64) (Result, error) {
 	if !growableFS(t.FSType) {
 		return Result{}, fmt.Errorf("unsupported filesystem %q for %s", t.FSType, t.Mountpoint)
 	}
-	free, err := e.vgFreeBytes(ctx, t.VG)
-	if err != nil {
-		return Result{}, err
-	}
-	if free <= 0 {
-		return Result{}, fmt.Errorf("no free space in volume group %q to expand %s", t.VG, t.Mountpoint)
-	}
-	grow := min(by,
-		// use all that is available, as the operator script does
-		free)
-	if grow <= 0 {
+	if by <= 0 {
 		// Config validation already requires a positive expand.by, but Expand is
 		// exported: guard so a zero/negative request never reaches lvextend as a
 		// no-op or malformed `-L+<n>b` argument.
 		return Result{}, fmt.Errorf("expand size must be positive, got %d bytes for %s", by, t.Mountpoint)
 	}
+	if grew, err := e.growPendingFS(ctx, t); err != nil || grew > 0 {
+		return Result{VG: t.VG, LV: t.LV, GrewBytes: grew}, err
+	}
+	free, err := e.backingFreeBytes(ctx, t)
+	if err != nil {
+		return Result{}, err
+	}
+	grow := min(by,
+		// use all that is available, as the operator script does
+		free)
 
 	lv := fmt.Sprintf(lvmLVPathFormat, t.VG, t.LV)
 	to := e.timeout()
@@ -219,6 +240,98 @@ func (e Expander) growFS(ctx context.Context, t Target) error {
 		return commandFailure(fmt.Sprintf("grow %s filesystem on %s", t.FSType, t.Mountpoint), err, res, to)
 	}
 	return nil
+}
+
+// growPendingFS grows the filesystem into any LV space it does not use yet and
+// reports how many bytes of capacity that recovered. The grow tools are no-ops
+// when the filesystem already fills its device.
+func (e Expander) growPendingFS(ctx context.Context, t Target) (int64, error) {
+	before, err := e.fsSize(t.Mountpoint)
+	if err != nil {
+		return 0, err
+	}
+	if err := e.growFS(ctx, t); err != nil {
+		return 0, fmt.Errorf("refusing to extend %s/%s: %w", t.VG, t.LV, err)
+	}
+	after, err := e.fsSize(t.Mountpoint)
+	if err != nil {
+		return 0, err
+	}
+	return max(after-before, 0), nil
+}
+
+func (e Expander) fsSize(mountpoint string) (int64, error) {
+	if e.FSSize != nil {
+		return e.FSSize(mountpoint)
+	}
+	var s unix.Statfs_t
+	if err := unix.Statfs(mountpoint, &s); err != nil {
+		return 0, fmt.Errorf("statfs %s: %w", mountpoint, err)
+	}
+	if s.Bsize <= 0 {
+		return 0, fmt.Errorf("statfs %s: invalid block size %d", mountpoint, s.Bsize)
+	}
+	bsize := uint64(s.Bsize)
+	total := s.Blocks * bsize
+	if s.Blocks > math.MaxInt64/bsize || total > math.MaxInt64 {
+		return 0, fmt.Errorf("statfs %s: size of %d blocks overflows", mountpoint, s.Blocks)
+	}
+	return int64(total), nil
+}
+
+// backingFreeBytes reports the space that can back an extension of t: the thin
+// pool's free data space for a thin LV, the volume group's free space
+// otherwise.
+func (e Expander) backingFreeBytes(ctx context.Context, t Target) (int64, error) {
+	lv := t.VG + "/" + t.LV
+	to := e.timeout()
+	res, err := execx.Run(ctx, e.Runner, to, cmdLVS, lvmFlagNoHeadings, lvmFlagOutput, lvmLayoutFields, lvmFlagSeparator, lvmFieldSeparator, lv)
+	if err != nil {
+		return 0, commandFailure(cmdLVS+" "+lv, err, res, to)
+	}
+	layout, pool, _ := strings.Cut(strings.TrimSpace(res.Stdout), lvmFieldSeparator)
+	if !slices.Contains(strings.Split(strings.TrimSpace(layout), lvmCSVSeparator), lvmLayoutThin) {
+		free, err := e.vgFreeBytes(ctx, t.VG)
+		if err == nil && free <= 0 {
+			err = fmt.Errorf("no free space in volume group %q to expand %s", t.VG, t.Mountpoint)
+		}
+		return free, err
+	}
+	pool = strings.TrimSpace(pool)
+	if pool == "" {
+		return 0, fmt.Errorf("thin LV %s reports no thin pool", lv)
+	}
+	free, err := e.thinPoolFreeBytes(ctx, t.VG, pool)
+	if err == nil && free <= 0 {
+		err = fmt.Errorf("no free data space in thin pool %s/%s to expand %s", t.VG, pool, t.Mountpoint)
+	}
+	return free, err
+}
+
+// thinPoolFreeBytes reports the unallocated data space of a thin pool. Growing
+// a thin LV beyond it over-commits the pool, which turns I/O errors or a
+// read-only filesystem into the failure mode when the pool fills.
+func (e Expander) thinPoolFreeBytes(ctx context.Context, vg, pool string) (int64, error) {
+	lv := vg + "/" + pool
+	to := e.timeout()
+	res, err := execx.Run(ctx, e.Runner, to, cmdLVS, lvmFlagNoHeadings, lvmFlagOutput, lvmPoolFields, lvmFlagSeparator, lvmFieldSeparator, lvmFlagUnits, lvmByteUnit, lvmFlagNoSuffix, lv)
+	if err != nil {
+		return 0, commandFailure(cmdLVS+" "+lv, err, res, to)
+	}
+	sizeText, percentText, ok := strings.Cut(strings.TrimSpace(res.Stdout), lvmFieldSeparator)
+	if !ok {
+		return 0, fmt.Errorf("parse thin pool %s: unexpected output %q", lv, res.Stdout)
+	}
+	size, err := parseInt(sizeText)
+	if err != nil {
+		return 0, fmt.Errorf("parse thin pool %s size: %w", lv, err)
+	}
+	// data_percent follows the numeric locale; accept a decimal comma.
+	used, err := strconv.ParseFloat(strings.ReplaceAll(strings.TrimSpace(percentText), ",", "."), volumeNumericBits64)
+	if err != nil || used < 0 || used > percentFull {
+		return 0, fmt.Errorf("parse thin pool %s data_percent %q", lv, percentText)
+	}
+	return int64(float64(size) * (percentFull - used) / percentFull), nil
 }
 
 // vgFreeBytes reports the free space of volume group vg in bytes.
