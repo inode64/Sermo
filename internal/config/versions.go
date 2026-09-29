@@ -832,13 +832,17 @@ func dedupeTemplateMatches(matches []templateMatch, toks []tmplToken) []template
 	return out
 }
 
-// dedupeSameBinaryMatches keeps one versioned app or library instance per real
-// binary. Overlapping `binary:` candidates can match one directory twice with
+// dedupeSameBinaryMatches keeps one app or library instance per real binary and
+// version. Overlapping `binary:` candidates can match one directory twice with
 // different token values: Java's `${instance}-bin-${version}` reads
 // `openjdk-bin-17` as instance "openjdk" and the later `${instance}-${version}`
 // reads it as "openjdk-bin", so one JVM materialized as two apps and every
 // sampling round started it twice. Candidates are listed most specific first
 // and matches keep that order here, so the first identity wins.
+//
+// The version is part of the identity because a real path alone is not one:
+// Gentoo links python2 and python3 to the same python-exec wrapper, and those
+// are two installs.
 //
 // Catalog services are exempt: their instances are init units, and several of
 // them (php-fpm pools, Tomcat instances) legitimately share one binary. The
@@ -849,10 +853,11 @@ func dedupeSameBinaryMatches(matches []templateMatch, toks []tmplToken) []templa
 	out := make([]templateMatch, 0, len(matches))
 	for _, match := range matches {
 		if match.matchedBinary && match.realPath != "" && !templateMatchHasEmptyValue(match, toks) {
-			if seen[match.realPath] {
+			key := match.realPath + "\x00" + match.values[varVersion] + "\x00" + match.values[varN]
+			if seen[key] {
 				continue
 			}
-			seen[match.realPath] = true
+			seen[key] = true
 		}
 		out = append(out, match)
 	}
