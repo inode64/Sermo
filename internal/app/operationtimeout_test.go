@@ -6,6 +6,7 @@ import (
 
 	"sermo/internal/checks"
 	"sermo/internal/config"
+	"sermo/internal/mountctl"
 	"sermo/internal/operation"
 )
 
@@ -101,5 +102,24 @@ func TestMaxOperationTimeoutIgnoresWatchInterval(t *testing.T) {
 	got := MaxOperationTimeout(cfg, 90*time.Second)
 	if got != 90*time.Second {
 		t.Fatalf("MaxOperationTimeout = %v, want 90s; watch interval is the poll cadence, not the probe budget", got)
+	}
+}
+
+// A web unmount may run every escalation step, each bounded by the mount
+// command timeout, plus the configured TERM and KILL waits; the HTTP write
+// deadline must outlive that whole budget.
+func TestMaxOperationTimeoutRaisesForMountEscalation(t *testing.T) {
+	cfg := cfgWithWatches(map[string]any{
+		"mount-backup": map[string]any{
+			"check": map[string]any{checks.CheckKeyType: checks.CheckTypeStorage, "path": "/mnt/backup", "mounted": true},
+			"mount": map[string]any{
+				"umount": map[string]any{"term_timeout": "60s", "kill_timeout": "10s"},
+			},
+		},
+	})
+	got := MaxOperationTimeout(cfg, 90*time.Second)
+	want := 5*mountctl.DefaultCommandTimeout + 60*time.Second + 10*time.Second
+	if got != want {
+		t.Fatalf("MaxOperationTimeout = %v, want %v to cover the unmount escalation budget", got, want)
 	}
 }

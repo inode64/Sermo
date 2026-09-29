@@ -405,6 +405,11 @@ daemon-cycle remediation. They still use the same safety posture:
 - Forced and lazy unmount are per-action choices: `--force` / Web `force`
   permits `umount -f`, and `--lazy` / Web `lazy` permits `umount -l` as the last
   fallback.
+- Every `mount`/`umount` invocation has its own timeout. A Web/API action is
+  bounded as a whole by the sum of its escalation steps (each command timeout
+  plus `umount.term_timeout` and `umount.kill_timeout`), so a hung first
+  `umount` still leaves the requested `-f`, blocker signalling and `-l` their
+  time; the HTTP response deadline is sized to cover that budget.
 
 ## Process identity and matching
 

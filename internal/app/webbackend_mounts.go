@@ -80,18 +80,46 @@ func (b *WebBackend) mountController() mountctl.Controller {
 }
 
 func (b *WebBackend) mountTimeout() time.Duration {
+	return webMountCommandTimeout(b.operationTimeout)
+}
+
+// webMountCommandTimeout bounds one web mount command: the mount default,
+// lowered to a shorter operation timeout.
+func webMountCommandTimeout(operationTimeout time.Duration) time.Duration {
 	timeout := mountctl.DefaultCommandTimeout
-	if b.operationTimeout > 0 && b.operationTimeout < timeout {
-		timeout = b.operationTimeout
+	if operationTimeout > 0 && operationTimeout < timeout {
+		timeout = operationTimeout
 	}
 	return timeout
 }
 
 func (b *WebBackend) mountContext(ctx context.Context) (context.Context, context.CancelFunc) {
+	return withDefaultDeadline(ctx, b.mountTimeout())
+}
+
+// mountActionContext bounds a whole mount or unmount by the controller's
+// escalation budget rather than one command timeout, so a hung first umount
+// leaves the requested -f, reap and -l steps their own time.
+func mountActionContext(ctx context.Context, ctrl mountctl.Controller, spec mountctl.Spec) (context.Context, context.CancelFunc) {
+	return withDefaultDeadline(ctx, ctrl.OperationBudget(spec))
+}
+
+func withDefaultDeadline(ctx context.Context, timeout time.Duration) (context.Context, context.CancelFunc) {
 	if _, ok := ctx.Deadline(); ok {
 		return ctx, func() {}
 	}
-	return context.WithTimeout(ctx, b.mountTimeout())
+	return context.WithTimeout(ctx, timeout)
+}
+
+// maxMountActionTimeout is the longest web mount action any configured mount
+// unit may need, so the HTTP write deadline outlives the escalation budget.
+func maxMountActionTimeout(cfg *config.Config, operationTimeout time.Duration) time.Duration {
+	ctrl := mountctl.Controller{CommandTimeout: webMountCommandTimeout(operationTimeout)}
+	var longest time.Duration
+	for _, spec := range configuredMountSpecs(cfg) {
+		longest = max(longest, ctrl.OperationBudget(spec))
+	}
+	return longest
 }
 
 func mountOperationState(action string) string {
@@ -413,7 +441,7 @@ func (b *WebBackend) MountAction(ctx context.Context, name, action string, opts 
 		}
 	}
 	defer b.endMountOperation(spec.Name)
-	opCtx, cancel := b.mountContext(ctx)
+	opCtx, cancel := mountActionContext(ctx, ctrl, spec)
 	defer cancel()
 	var (
 		res mountctl.Result

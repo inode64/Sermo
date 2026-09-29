@@ -11,7 +11,8 @@ import (
 
 // MaxOperationTimeout returns the longest deadline any enabled web action may
 // need: the configured engine operation timeout, raised per service by
-// stop_policy, and raised again by any enabled host-watch probe budget. The
+// stop_policy, and raised again by any enabled host-watch probe budget and
+// any configured mount unit's escalation budget. The
 // HTTP write deadline is sized from this value so a manual probe can return
 // after its check timeout instead of being cut off at the service-operation
 // limit. Service-scoped watches are not included: they cannot be probed from
@@ -28,6 +29,7 @@ func MaxOperationTimeout(cfg *config.Config, configured time.Duration) time.Dura
 		}
 		maxTO = max(maxTO, operation.ResolveTimeout(configured, resolved.Tree))
 	}
+	maxTO = max(maxTO, maxMountActionTimeout(cfg, configured))
 	defaultTimeout := config.EngineDuration(cfg, config.EngineKeyDefaultTimeout, DefaultEngineCheckTimeout)
 	watches, _ := cfg.ResolveWatches()
 	return maxWatchProbeTimeout(maxTO, watches, defaultTimeout, configured)
