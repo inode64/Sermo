@@ -31,8 +31,27 @@ func isLocalOverrideDir(dir string) bool {
 	return filepath.Ext(filepath.Clean(dir)) == localDirSuffix
 }
 
-// applyLocalOverrides folds every `<dir>.local` document onto the document of
-// the same name, or loads it as an ordinary document when no base exists.
+// applyServiceLocalOverrides folds every `services.local` document onto the
+// configured service of the same name, or loads it as a new service.
+//
+// It runs after applyOSSelectors, bakeBuiltins and expandBindir but *before*
+// materializeVersionTemplates. A configured service is never a template, so
+// nothing it targets depends on materialization, while materialization does
+// depend on it: a catalog template instance named by a service's `uses:` is
+// materialized even when its unit is stopped, and that `uses:` may be set or
+// changed by a host override.
+func (c *Config) applyServiceLocalOverrides(servicePaths []PathSpec) error {
+	for _, spec := range uniquePathSpecs(servicePaths) {
+		if err := c.loadServiceOverrideDir(localOverrideDir(spec.Path), spec.Recursive); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// applyLocalOverrides folds every apps, notifiers and watches `<dir>.local`
+// document onto the document of the same name, or loads it as an ordinary
+// document when no base exists.
 //
 // It runs at the very end of Load, after applyOSSelectors, bakeBuiltins,
 // expandBindir and materializeVersionTemplates, and that ordering is
@@ -45,12 +64,11 @@ func isLocalOverrideDir(dir string) bool {
 // Because override documents are deliberately not in c.docs, each body is
 // prepared here with the same three passes the base documents already went
 // through.
-func (c *Config) applyLocalOverrides(servicePaths, appPaths, notifierPaths, watchPaths []PathSpec) error {
+func (c *Config) applyLocalOverrides(appPaths, notifierPaths, watchPaths []PathSpec) error {
 	kinds := []struct {
 		specs []PathSpec
 		load  func(dir string, recursive bool) error
 	}{
-		{servicePaths, c.loadServiceOverrideDir},
 		{appPaths, c.loadAppOverrideDir},
 		{notifierPaths, c.loadNotifierOverrideDir},
 		{watchPaths, c.loadWatchOverrideDir},
@@ -98,6 +116,12 @@ func (c *Config) loadKindOverrideDir(dir, kind string, recursive bool) error {
 		}
 		if doc.Name == "" {
 			return fmt.Errorf("%s: %s override documents must define name", doc.Path, kind)
+		}
+		// A template is only materialized from the base directories, so a
+		// template name here would be registered as a literal, never-expanded
+		// document instead of reaching its template or its instances.
+		if tokenFor(doc.Name) != nil {
+			return fmt.Errorf("%s: %s override %q names a version template; a %s override adjusts one materialized instance", doc.Path, kind, doc.Name, localDirSuffix)
 		}
 		base := c.registryFor(doc.registryKey())[doc.Name]
 		if base == nil {

@@ -3759,6 +3759,12 @@ exists to survive. Listing a `.local` directory in `paths` is rejected.
 - **The merged result is fully validated.** An override cannot bypass an
   invariant, and `sermoctl config validate` names the `.local` file in its
   diagnostics.
+- **Overrides target materialized instances, not templates.** A
+  `services.local` document that sets `uses:` to an instance of a `%i` or `%n`
+  catalog template keeps that instance available while its unit is
+  stopped, exactly like a base service document. An `apps.local` document named
+  after a version template (`php%v`) is rejected: override the materialized
+  instance (`php8.4`) instead.
 - **One override per name.** The four classified watch directories share a single
   namespace, so a watch may be overridden from any of their `.local` siblings —
   but only from one.

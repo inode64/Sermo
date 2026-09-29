@@ -213,6 +213,47 @@ preflight:
 	}
 }
 
+// TestLocalServiceOverrideDemandsTemplateInstance keeps the demanded
+// materialization of a stopped template instance working when the `uses:`
+// naming it comes from services.local, either as a host-only service or as an
+// override that points an existing service at another instance.
+func TestLocalServiceOverrideDemandsTemplateInstance(t *testing.T) {
+	files := map[string]string{
+		"sermo.yml": `
+engine: { backend: systemd }
+paths: { services: [ "@ROOT@/services" ], apps: [ "@ROOT@/apps" ], runtime: /run/sermo }
+defaults: { policy: { cooldown: 5m } }
+`,
+		"catalog/services/vpn.yml": `
+name: vpn-%i
+service: { systemd: ["vpn@${instance}"] }
+checks:
+  service: { type: service, expect: active }
+`,
+		"services/a.yml":       "name: a\nuses: vpn-a\n",
+		"services.local/a.yml": "name: a\nuses: vpn-c\n",
+		"services.local/b.yml": "name: b\nuses: vpn-b\n",
+	}
+	cfg, err := loadConfig(t, writeConfig(t, files), withServiceUnits("systemd", nil))
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	for _, service := range []string{"a", "b"} {
+		if _, errs := cfg.Resolve(service); len(errs) != 0 {
+			t.Errorf("Resolve(%s) errors = %v", service, errs)
+		}
+	}
+	if issues := Validate(cfg); len(issues) != 0 {
+		t.Fatalf("Validate() issues = %v", issues)
+	}
+
+	files["apps.local/tool%v.yml"] = "name: tool%v\nvariables: { binary: /usr/bin/tool }\n"
+	if _, err := loadConfig(t, writeConfig(t, files), withServiceUnits("systemd", nil)); err == nil ||
+		!strings.Contains(err.Error(), `app override "tool%v" names a version template`) {
+		t.Fatalf("Load() error = %v, want a template override rejection", err)
+	}
+}
+
 func TestLocalNotifierOverrideMergesBaseEntry(t *testing.T) {
 	files := localOverrideFiles()
 	files["notifiers/ops.yml"] = `
