@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/digitalocean/go-libvirt"
-	"github.com/digitalocean/go-libvirt/socket/dialers"
 
 	"sermo/internal/netutil"
 	"sermo/internal/units"
@@ -52,36 +51,43 @@ func (libvirtProtocol) RequiresUser() bool { return false }
 func (libvirtProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	target := newProbeTarget(cfg, defaultPortLibvirt)
 	mode, addr, uri := libvirtTransportWithTarget(target)
-	timeout := netutil.TimeoutFromContext(ctx, DefaultLibvirtTimeout)
+	// Every probe context ends, even one without a deadline, so the dialed
+	// connection is always closed by libvirtDialer.
+	ctx, cancel := context.WithTimeout(ctx, netutil.TimeoutFromContext(ctx, DefaultLibvirtTimeout))
+	defer cancel()
 
-	var l *libvirt.Libvirt
-	switch mode {
-	case libvirtTransportSocket:
-		l = libvirt.NewWithDialer(dialers.NewLocal(
-			dialers.WithSocket(addr),
-			dialers.WithLocalTimeout(timeout),
-		))
-	default: // tcp
-		l = libvirt.NewWithDialer(libvirtRemoteDialer{target: target, timeout: timeout})
-	}
+	l := libvirt.NewWithDialer(libvirtDialer{ctx: ctx, dial: func(ctx context.Context) (net.Conn, error) {
+		if mode == libvirtTransportSocket {
+			return dialUnix(ctx, addr)
+		}
+		return target.dialer().DialContext(ctx, networkTCP, addr)
+	}})
 
-	// go-libvirt's connect/RPC calls are not context-aware; the dialer timeout
-	// complements the shared context backstop.
+	// go-libvirt's connect/RPC calls are not context-aware; probeWithDeadline
+	// returns on time and libvirtDialer releases the abandoned call.
 	return probeWithDeadline(ctx, func(context.Context) (Result, error) {
 		return libvirtProbe(l, uri, mode, cfg.Params[ParamKeyDomain])
 	})
 }
 
-type libvirtRemoteDialer struct {
-	target  probeTarget
-	timeout time.Duration
+// libvirtDialer closes the connection it dialed once ctx ends. go-libvirt
+// waits for RPC replies without a timeout, so a daemon that accepts but never
+// answers would otherwise pin the probe goroutine, go-libvirt's reader and the
+// socket forever, one set per cycle. A read deadline is not enough: the reader
+// treats the timeout as temporary and spins; closing ends the reader and fails
+// the pending call with ErrInterrupted. Closing after a normal Disconnect is a
+// no-op.
+type libvirtDialer struct {
+	ctx  context.Context //nolint:containedctx // go-libvirt's Dial() takes no context; the probe's context must reach it.
+	dial func(context.Context) (net.Conn, error)
 }
 
-func (d libvirtRemoteDialer) Dial() (net.Conn, error) {
-	c, err := d.target.dialerWithTimeout(d.timeout).Dial(networkTCP, d.target.address())
+func (d libvirtDialer) Dial() (net.Conn, error) {
+	c, err := d.dial(d.ctx)
 	if err != nil {
 		return nil, probeErr(ProtocolNameLibvirt, stepDial, err)
 	}
+	context.AfterFunc(d.ctx, func() { _ = c.Close() })
 	return c, nil
 }
 

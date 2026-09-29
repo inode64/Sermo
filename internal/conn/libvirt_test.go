@@ -1,6 +1,14 @@
 package conn
 
-import "testing"
+import (
+	"context"
+	"errors"
+	"io"
+	"net"
+	"path/filepath"
+	"testing"
+	"time"
+)
 
 func libvirtTransport(cfg Config) (mode, addr, uri string) {
 	return libvirtTransportWithTarget(newProbeTarget(cfg, defaultPortLibvirt))
@@ -55,5 +63,44 @@ func TestLibvirtTransport(t *testing.T) {
 	// path defaults to local TCP) — confirm the bare fallback.
 	if mode, addr, _ := libvirtTransport(Config{}); mode != "tcp" || addr != "127.0.0.1:16509" {
 		t.Fatalf("empty: mode=%q addr=%q", mode, addr)
+	}
+}
+
+// TestLibvirtProbeReleasesHungDaemonConnection covers a libvirtd that accepts
+// and never answers: the probe returns at its deadline and the client closes
+// the connection instead of leaving go-libvirt waiting on it forever.
+func TestLibvirtProbeReleasesHungDaemonConnection(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "libvirt-sock")
+	ln, err := net.Listen(networkUnix, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = ln.Close() }()
+	closed := make(chan error, 1)
+	go func() {
+		c, err := ln.Accept()
+		if err != nil {
+			closed <- err
+			return
+		}
+		defer func() { _ = c.Close() }()
+		// Never reply; the read ends only when the client closes.
+		_, err = io.Copy(io.Discard, c)
+		closed <- err
+	}()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+	probe, _ := Lookup(ProtocolNameLibvirt)
+	if _, err := probe.Probe(ctx, Config{Socket: path}); err == nil {
+		t.Fatal("probe of a silent daemon succeeded")
+	}
+	select {
+	case err := <-closed:
+		if err != nil && !errors.Is(err, net.ErrClosed) {
+			t.Fatalf("server side ended with %v, want client close", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("libvirt probe left the connection open after its deadline")
 	}
 }
