@@ -6,6 +6,7 @@ import (
 	"io"
 	"net"
 	"strconv"
+	"strings"
 	"testing"
 )
 
@@ -74,6 +75,25 @@ func TestParseSMBNegotiate(t *testing.T) {
 	}
 	if _, _, err := parseSMBNegotiate([]byte("HTTP/1.1 200 OK............................................................")); err == nil {
 		t.Fatal("a non-SMB2 response must error")
+	}
+
+	// An SMB2 ERROR response (status set, 9-byte error body) padded past the
+	// minimum length must not be read as dialect 0x0000.
+	errResp := fakeNegotiateResp(0, 0)
+	binary.LittleEndian.PutUint32(errResp[8:], 0xC0000022) // STATUS_ACCESS_DENIED
+	binary.LittleEndian.PutUint16(errResp[64:], 9)
+	if _, _, err := parseSMBNegotiate(errResp); err == nil || !strings.Contains(err.Error(), "0xc0000022") {
+		t.Fatalf("error response: err = %v, want the server status", err)
+	}
+	wrongCommand := fakeNegotiateResp(0x0311, 0)
+	binary.LittleEndian.PutUint16(wrongCommand[12:], 1) // SESSION_SETUP
+	if _, _, err := parseSMBNegotiate(wrongCommand); err == nil {
+		t.Fatal("a response to another command must error")
+	}
+	wrongSize := fakeNegotiateResp(0x0311, 0)
+	binary.LittleEndian.PutUint16(wrongSize[64:], 9)
+	if _, _, err := parseSMBNegotiate(wrongSize); err == nil {
+		t.Fatal("a body that is not a NEGOTIATE response must error")
 	}
 }
 

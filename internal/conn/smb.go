@@ -82,6 +82,13 @@ const (
 	smb2ResponseSecurityModeOffset    = 66
 	smb2ResponseSecurityModeEndOffset = 68
 	smb2ResponseDialectEndOffset      = 70
+	// Response header and body fields that tell a NEGOTIATE response apart
+	// from an SMB2 error response, whose shorter body would otherwise be read
+	// as dialect 0x0000 with signing not required.
+	smb2HeaderStatusOffset             = 8
+	smb2HeaderCommandOffset            = 12
+	smb2CommandNegotiate               = 0x0000
+	smb2NegotiateResponseStructureSize = 65
 )
 
 func (smbProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
@@ -184,6 +191,15 @@ func parseSMBNegotiate(resp []byte) (uint16, bool, error) {
 	if len(resp) < smb2MinNegotiateResponseBytes ||
 		!bytes.Equal(resp[:smbProtocolIDBytes], []byte(smbProtocolID)) {
 		return 0, false, errors.New("not an SMB2 response")
+	}
+	if status := binary.LittleEndian.Uint32(resp[smb2HeaderStatusOffset:]); status != 0 {
+		return 0, false, fmt.Errorf("smb negotiate: server returned status 0x%08x", status)
+	}
+	if command := binary.LittleEndian.Uint16(resp[smb2HeaderCommandOffset:]); command != smb2CommandNegotiate {
+		return 0, false, fmt.Errorf("smb negotiate: unexpected response command 0x%04x", command)
+	}
+	if size := binary.LittleEndian.Uint16(resp[smb2HeaderBytes:]); size != smb2NegotiateResponseStructureSize {
+		return 0, false, fmt.Errorf("smb negotiate: unexpected response structure size %d", size)
 	}
 	securityMode := binary.LittleEndian.Uint16(resp[smb2ResponseSecurityModeOffset:smb2ResponseSecurityModeEndOffset])
 	dialect := binary.LittleEndian.Uint16(resp[smb2ResponseDialectOffset:smb2ResponseDialectEndOffset])
