@@ -435,7 +435,10 @@ checks:
 
 - **`requires: [check, …]`** — skip this check while any listed check **failed**
   this cycle. This avoids cascading alerts: if MySQL's `port` is down, the deeper
-  `query` check is skipped rather than also reported as failing.
+  `query` check is skipped rather than also reported as failing. A dependency's
+  own result counts even when its gate skips it, so in a chain where `deep`
+  requires `query` and `query` requires `port`, `deep` is skipped whenever
+  `query` failed.
 - **`skip_when_changed: [path, …]`** — skip this check while any listed file
   differs from its acknowledged baseline (e.g. a config file or library was just
   updated). The baseline is re-acknowledged after a successful (re)start, so the

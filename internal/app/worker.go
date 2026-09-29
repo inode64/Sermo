@@ -504,20 +504,31 @@ func (w *Worker) gatedChecksDue(built []checks.Built, cache map[string]checks.Re
 // the shared change baseline (acknowledged on a successful (re)start). A skipped
 // check keeps its optional flag and is marked Skipped/OK. Checks that regain
 // their gate this cycle are run via gatedChecksDue before applyGates is called.
+//
+// Every gate is judged against the real results before any is rewritten: a
+// dependency already rewritten to Skipped/OK would read as healthy, so whether
+// a `requires` chain (deep → query → port) skipped would depend on map order.
 func (w *Worker) applyGates(cache map[string]checks.Result) {
+	var reasons map[string]string
 	for name, gate := range w.Gates {
 		r, ok := cache[name]
 		if !ok || r.Skipped {
 			continue
 		}
 		if reason := w.gateReason(gate, cache); reason != "" {
-			cache[name] = checks.Result{
-				Check:    name,
-				OK:       true,
-				Skipped:  true,
-				Optional: r.Optional,
-				Message:  "skipped: " + reason,
+			if reasons == nil {
+				reasons = map[string]string{}
 			}
+			reasons[name] = reason
+		}
+	}
+	for name, reason := range reasons {
+		cache[name] = checks.Result{
+			Check:    name,
+			OK:       true,
+			Skipped:  true,
+			Optional: cache[name].Optional,
+			Message:  "skipped: " + reason,
 		}
 	}
 }
