@@ -76,6 +76,25 @@ func TestProcessPolicyWatcherRealertsWhenPIDIncarnationIsUnknown(t *testing.T) {
 	}
 }
 
+func TestProcessPolicyWatcherRecoversAfterRestart(t *testing.T) {
+	store := openRuleStateStore(t)
+	allow := map[string]any{"postgres": map[string]any{checks.CheckKeyExe: "/usr/bin/postgres"}}
+	invalid := ProcInfo{PID: 42, UID: 70, Exe: "/usr/bin/bash", ExeOK: true, StartTicks: 100}
+	first, firstEvents, _ := testProcessPolicyWatcher(t, &fakeProcSampler{cycles: [][]ProcInfo{{invalid}}}, allow)
+	first.stateStore = store
+	first.runCycle(t.Context())
+	if len(*firstEvents) != 1 || (*firstEvents)[0].Kind != eventKindFiring {
+		t.Fatalf("initial policy events = %+v", *firstEvents)
+	}
+	second, secondEvents, _ := testProcessPolicyWatcher(t, &fakeProcSampler{cycles: [][]ProcInfo{{}}}, allow)
+	second.stateStore = store
+	second.runCycle(t.Context())
+	second.runCycle(t.Context())
+	if len(*secondEvents) != 1 || (*secondEvents)[0].Kind != eventKindRecovered {
+		t.Fatalf("recovery after restart = %+v", *secondEvents)
+	}
+}
+
 func TestProcessPolicyWatcherPacesUnknownPIDNotifications(t *testing.T) {
 	invalid := ProcInfo{PID: 42, UID: 70, Exe: "/usr/bin/bash", ExeOK: true}
 	watcher, _, _ := testProcessPolicyWatcher(t,

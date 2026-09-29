@@ -358,7 +358,7 @@ func (w *Worker) reportCheckHealthChanges(cache map[string]checks.Result) {
 				kind = eventKindWarning
 			}
 		}
-		w.emit(Event{Kind: kind, Message: checkHealthChangeMessage(name, result)})
+		w.emit(Event{Kind: kind, Check: name, Message: checkHealthChangeMessage(name, result)})
 	}
 	// Forget checks the running configuration no longer produces, so a reload
 	// that drops a check cannot leave a stale "failing" memory that reports a

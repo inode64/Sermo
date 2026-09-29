@@ -78,6 +78,9 @@ func TestStopWarningsSurviveLaterFailure(t *testing.T) {
 			defer cancel()
 			if phase == "wait" {
 				e.KillPolicy.GracefulTimeout = time.Second
+				e.ObserveProcesses = func() (process.Observation, error) {
+					return process.Observation{Processes: []process.Process{{PID: 100}}}, nil
+				}
 				e.Sleep = func(time.Duration) { cancel() }
 			}
 			res := e.Restart(ctx)

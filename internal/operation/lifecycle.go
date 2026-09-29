@@ -160,8 +160,11 @@ func (e Engine) stopService(ctx context.Context, result *Result) (stopped, react
 			result.Warnings = append(result.Warnings, fmt.Sprintf("also_service stop %s: %v", unit, err))
 		}
 	}
-	if err := process.Wait(ctx, e.Sleep, e.KillPolicy.GracefulTimeout); err != nil {
-		_ = failWait(ctx, result, "graceful stop wait")
+	if err := e.waitGracefulStop(ctx, before, result.Action); err != nil {
+		result.Status, result.Message = ResultFailed, err.Error()
+		if ctx.Err() != nil {
+			_ = failWait(ctx, result, "graceful stop wait")
+		}
 		return false, false
 	}
 	residuals, err := e.clearResiduals(ctx, func(procs []process.Process) (bool, error) {
@@ -188,6 +191,43 @@ func (e Engine) stopService(ctx context.Context, result *Result) (stopped, react
 	}
 	result.Warnings = append(result.Warnings, e.verifyStopped()...)
 	return true, false
+}
+
+// waitGracefulStop treats graceful_timeout as a maximum, not a fixed pause after
+// a synchronous backend stop. Only fresh, complete evidence may end it early.
+func (e Engine) waitGracefulStop(ctx context.Context, before process.Observation, action string) error {
+	if e.KillPolicy.GracefulTimeout <= 0 || e.ObserveProcesses == nil {
+		if err := process.Wait(ctx, e.Sleep, e.KillPolicy.GracefulTimeout); err != nil {
+			return fmt.Errorf("wait for graceful stop: %w", err)
+		}
+		return nil
+	}
+	_, err := process.WaitUntil(ctx, e.Sleep, e.KillPolicy.GracefulTimeout, func() (bool, error) {
+		if e.Lifecycle.ProcessMode == config.ServiceProcessNone {
+			status, err := e.Manager.Status(ctx, e.Unit)
+			if err != nil {
+				return false, fmt.Errorf("query init state during stop: %w", err)
+			}
+			return status.Status == servicemgr.StatusInactive, nil
+		}
+		observation, err := e.observeProcesses(ctx)
+		if err != nil {
+			return false, err
+		}
+		remaining := nonDelegatedResiduals(observation.Processes)
+		if len(remaining) == 0 {
+			return observation.AbsenceKnown, nil
+		}
+		// A replacement may start while the old generation is still exiting.
+		// Keep waiting until that exception is fully verified; clearResiduals
+		// will verify it again before deciding whether to skip primary start.
+		accepted, _ := e.systemdReactivated(ctx, action, before, remaining)
+		return accepted, nil
+	})
+	if err != nil {
+		return fmt.Errorf("wait for graceful stop: %w", err)
+	}
+	return nil
 }
 
 // systemdReactivated accepts only a verified new generation of this same unit.

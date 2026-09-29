@@ -32,6 +32,20 @@ var storageSchema = []string{
 		);`,
 	`CREATE INDEX IF NOT EXISTS event_log_at_idx ON event_log (at DESC, id DESC);`,
 	`CREATE INDEX IF NOT EXISTS event_log_service_at_idx ON event_log (service, at DESC, id DESC);`,
+	// event_notify_state tracks externally delivered incident edges and reminders.
+	// It is separate from the event log: detailed events remain auditable even
+	// when repeated notifications are suppressed.
+	`CREATE TABLE IF NOT EXISTS event_notify_state (
+		incident_key TEXT NOT NULL,
+		notifier     TEXT NOT NULL,
+		phase        TEXT NOT NULL,
+		active       INTEGER NOT NULL,
+		last_sent_at INTEGER NOT NULL,
+		subject      TEXT NOT NULL,
+		body         TEXT NOT NULL,
+		PRIMARY KEY (incident_key, notifier)
+	);`,
+	`CREATE INDEX IF NOT EXISTS event_notify_due_idx ON event_notify_state (notifier, active, last_sent_at);`,
 	// remediation_state stores automatic remediation cooldown, rate-limit and
 	// backoff state per service. It is control state, not historical metrics, so
 	// daemon restarts must not reset when a rule may act again.

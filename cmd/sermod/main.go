@@ -280,6 +280,9 @@ func run(args []string) int {
 	// emitted event; with the web UI disabled nobody subscribes and Notify is
 	// a cheap no-op.
 	webChanges := web.NewBroadcaster()
+	eventNotifier := app.NewEventNotifier(config.ShortHostname(), logger, panicGate.Active, store)
+	eventNotifier.Update(config.EventNotifyConfig(cfg.Global.Raw), notifiers)
+	eventNotifyDone := goTracked(func() { eventNotifier.Run(ctx) })
 	userLookup := app.EngineUserLookup(cfg, runner)
 	readiness := app.NewReadiness(string(backend), 0, 0)
 	readiness.WatchPanic(panicGate.Active)
@@ -297,7 +300,7 @@ func run(args []string) int {
 		Now:   time.Now,
 		// Events go to slog, to the persisted ring the web UI reads, and to
 		// the dashboard change stream.
-		Emit:                 app.MultiEmit(app.SlogEmitter(logger), eventLog.Add, func(app.Event) { webChanges.Notify() }),
+		Emit:                 app.MultiEmit(app.SlogEmitter(logger), eventLog.Add, func(app.Event) { webChanges.Notify() }, eventNotifier.Emit),
 		Monitor:              store,
 		OperationSettling:    store,
 		ServiceRestartNotice: store,
@@ -307,6 +310,7 @@ func run(args []string) int {
 		SLA:                  store,
 		DaemonMetrics:        store,
 		Notifiers:            notifiers,
+		EventNotify:          eventNotifier,
 		GlobalNotify:         config.NotifyDefault(cfg.Global.Raw),
 		GlobalEmission:       emission.Merge(cfg.Global.Raw[emission.Section], emission.Default()),
 		GlobalClear:          rules.ClearWindowOrDefault(cfg.Global.Defaults()[rules.SectionClearWindow]),
@@ -519,6 +523,7 @@ func run(args []string) int {
 	if botDone != nil {
 		<-botDone
 	}
+	<-eventNotifyDone
 	if !drainOrTimeout(maintenanceDone, shutdownPruneDrainTimeout) {
 		logger.Warn("state maintenance still running at shutdown; closing the store without it")
 	}

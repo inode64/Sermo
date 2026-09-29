@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestNotifyDefault(t *testing.T) {
@@ -20,6 +21,41 @@ func TestNotifyDefault(t *testing.T) {
 	}
 	if got := NotifyDefault(map[string]any{}); got != nil {
 		t.Errorf("absent = %v, want nil", got)
+	}
+}
+
+func TestEventNotifyDefaultAndValidation(t *testing.T) {
+	raw := map[string]any{SectionEventNotify: map[string]any{EventNotifyKeyTargets: []any{"ops"}, EventNotifyKeyRepeatInterval: "24h"}}
+	if got := EventNotifyConfig(raw); len(got.Targets) != 1 || got.Targets[0] != "ops" || got.RepeatInterval != 24*time.Hour {
+		t.Fatalf("event notify = %v, want ops", got)
+	}
+	if got := EventNotifyConfig(map[string]any{SectionEventNotify: map[string]any{EventNotifyKeyTargets: "none"}}); got.Targets != nil {
+		t.Fatalf("none = %v, want nil", got)
+	}
+	issues := validateRawGlobal(t, map[string]any{SectionEventNotify: map[string]any{EventNotifyKeyTargets: []any{"ghost"}}})
+	if len(issues) == 0 || !strings.Contains(fmt.Sprint(issues), "event_notify.targets references unknown notifier") {
+		t.Fatalf("missing event_notify validation: %v", issues)
+	}
+}
+
+func TestEventNotifyRejectsInvalidPolicy(t *testing.T) {
+	cases := []struct {
+		name  string
+		value any
+		want  string
+	}{
+		{"old list shape", []any{"ops"}, "must be a mapping"},
+		{"missing targets", map[string]any{EventNotifyKeyRepeatInterval: "24h"}, "targets is required"},
+		{"bad interval", map[string]any{EventNotifyKeyTargets: "none", EventNotifyKeyRepeatInterval: "0s"}, "repeat_interval must be a positive duration"},
+		{"unknown key", map[string]any{EventNotifyKeyTargets: "none", "mode": "daily"}, "mode is not supported"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			issues := validateRawGlobal(t, map[string]any{SectionEventNotify: tc.value})
+			if !strings.Contains(fmt.Sprint(issues), tc.want) {
+				t.Fatalf("issues = %v, want %q", issues, tc.want)
+			}
+		})
 	}
 }
 
