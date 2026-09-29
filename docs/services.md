@@ -1240,6 +1240,9 @@ reports `/var/run/...`, write the equivalent `/run/...` path in the catalog
 service definition while preserving Linux/init compatibility. Before committing a new
 pidfile or socket path, resolve it with `readlink -f` or inspect it with
 `namei -l`; if any component is a symlink, use the resolved canonical target.
+Sermo reads only the first line of a regular file there (at most 4 KiB); a FIFO,
+device or directory at the pidfile path is reported as unreadable rather than
+waited on.
 
 On resolution this creates (a) an internal pidfile discovery selector — so the
 parent process **and its descendants** are discovered and monitored without

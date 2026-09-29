@@ -1,12 +1,17 @@
 package process
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"slices"
 	"sort"
 	"strings"
+	"syscall"
 	"testing"
+	"time"
+
+	"sermo/internal/hostfs"
 )
 
 type fakeReader struct {
@@ -311,6 +316,53 @@ func TestReadPidfilePostgresFormat(t *testing.T) {
 	}
 	if got != 4991 {
 		t.Fatalf("ReadPidfile() = %d, want 4991", got)
+	}
+}
+
+// A pidfile path that turns out to be a FIFO must fail at once instead of
+// blocking the discovery cycle until some writer opens it.
+func TestReadPidfileRefusesFIFOWithoutBlocking(t *testing.T) {
+	fifo := filepath.Join(t.TempDir(), "daemon.pid")
+	if err := syscall.Mkfifo(fifo, 0o600); err != nil {
+		t.Skipf("mkfifo: %v", err)
+	}
+	done := make(chan error, 1)
+	go func() {
+		_, err := ReadPidfile(fifo)
+		done <- err
+	}()
+	select {
+	case err := <-done:
+		if err == nil || !strings.Contains(err.Error(), "not a regular file") {
+			t.Fatalf("ReadPidfile(fifo) error = %v, want a non-regular-file refusal", err)
+		}
+	case <-time.After(2 * time.Second):
+		// Unblock the reader so the goroutine does not outlive the test.
+		if w, err := os.OpenFile(fifo, os.O_WRONLY, 0); err == nil {
+			_ = w.Close()
+		}
+		t.Fatal("ReadPidfile blocked on a FIFO")
+	}
+}
+
+// Pidfiles are host files located by Sermo, so they go through hostfs: a relative
+// path is refused rather than resolved against the daemon's working directory.
+func TestReadPidfileRefusesRelativePath(t *testing.T) {
+	if _, err := ReadPidfile("run/daemon.pid"); !errors.Is(err, hostfs.ErrPath) {
+		t.Fatalf("ReadPidfile(relative) error = %v, want hostfs.ErrPath", err)
+	}
+}
+
+// Only the first line names the PID; a huge file must not be read whole.
+func TestReadPidfileReadsABoundedPrefix(t *testing.T) {
+	pidfile := filepath.Join(t.TempDir(), "big.pid")
+	content := "4242\n" + strings.Repeat("x", 1<<20)
+	if err := os.WriteFile(pidfile, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got, err := ReadPidfile(pidfile)
+	if err != nil || got != 4242 {
+		t.Fatalf("ReadPidfile(big) = %d, %v, want 4242", got, err)
 	}
 }
 
