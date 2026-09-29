@@ -138,7 +138,13 @@ func buildMySQLConfigWithTarget(target probeTarget) *mysql.Config {
 	c.User = cfg.User
 	c.Passwd = cfg.Password
 	c.DBName = cfg.Database
-	if cfg.Interface != "" {
+	switch {
+	case cfg.Socket != "":
+		// The authenticated path must reach the same endpoint as the greeting
+		// probe; over TCP the server would also apply other user@host grants.
+		c.Net = networkUnix
+		c.Addr = cfg.Socket
+	case cfg.Interface != "":
 		c.DialFunc = target.dialer().DialContext
 	}
 	if tls := netutil.NormalizeTLS(cfg.TLS); tls != "" {

@@ -193,3 +193,30 @@ func TestPrepareProtocol(t *testing.T) {
 		t.Errorf("Prepare(missing) = %v/%+v/%v, want nil/input/false", protocol, cfg, ok)
 	}
 }
+
+func TestSupportsSocket(t *testing.T) {
+	tests := []struct {
+		name     string
+		protocol string
+		want     bool
+	}{
+		{name: "stream probe", protocol: ProtocolNameRedis, want: true},
+		{name: "alias of stream probe", protocol: protocolAliasMariaDB, want: true},
+		{name: "default socket", protocol: ProtocolNameDocker, want: true},
+		{name: "socket only", protocol: ProtocolNameACPID, want: true},
+		{name: "chrony command socket", protocol: ProtocolNameChrony, want: true},
+		{name: "postgres driver dials TCP", protocol: ProtocolNamePostgres, want: false},
+		{name: "http probe dials TCP", protocol: ProtocolNameRspamd, want: false},
+		{name: "binary probe dials TCP", protocol: ProtocolNameSSH, want: false},
+		{name: "udp probe", protocol: ProtocolNameDNS, want: false},
+		{name: "proc table probe", protocol: ProtocolNameDHClient, want: false},
+		{name: "unknown", protocol: "missing", want: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := SupportsSocket(tt.protocol); got != tt.want {
+				t.Errorf("SupportsSocket(%q) = %v, want %v", tt.protocol, got, tt.want)
+			}
+		})
+	}
+}

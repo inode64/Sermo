@@ -4,7 +4,9 @@ import (
 	"context"
 	"io"
 	"net"
+	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/go-sql-driver/mysql"
 )
@@ -97,4 +99,34 @@ func TestBuildDSNDefaultsAndPlaintext(t *testing.T) {
 
 func mysqlDSNForTest(cfg Config) string {
 	return buildMySQLConfigWithTarget(newProbeTarget(cfg, defaultPortMySQL)).FormatDSN()
+}
+
+// TestMySQLAuthenticatedProbeUsesSocket keeps the credentialed path on the
+// configured Unix socket, like the greeting path, instead of dialing TCP.
+func TestMySQLAuthenticatedProbeUsesSocket(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "mysqld.sock")
+	ln, err := net.Listen(networkUnix, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = ln.Close() }()
+	accepted := make(chan struct{}, 1)
+	go func() {
+		c, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		accepted <- struct{}{}
+		_ = c.Close()
+	}()
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	probe, _ := Lookup(ProtocolNameMySQL)
+	// The closed TCP port proves the socket, not TCP, was dialed.
+	_, _ = probe.Probe(ctx, Config{User: "monitor", Password: "secret", Socket: path, Host: "127.0.0.1", Port: 1})
+	select {
+	case <-accepted:
+	case <-time.After(time.Second):
+		t.Fatal("authenticated mysql probe did not dial the configured socket")
+	}
 }

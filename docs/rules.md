@@ -1142,8 +1142,14 @@ keep the per-protocol entries short:
   `sql` check with a postgres engine); validation rejects them elsewhere, so
   `tls: disable` can never switch TLS on for another protocol.
 - **Auth** is noted per entry; many protocols are anonymous.
-- **`socket`** (a Unix socket path) dials the socket instead of `host`/`port`;
-  **`query`** is the per-protocol lookup target (e.g. the DNS name for `dns`).
+- **`socket`** (a Unix socket path) dials the socket instead of `host`/`port`
+  for the protocols that can reach a Unix endpoint: `amqp`, `asterisk`, `avahi`,
+  `chrony`, `clamd`, `dbus`, `docker`, `fpm`, `ftp`, `imap`, `kafka`, `libvirt`,
+  `memcached`, `mqtt`, `mysql`, `nntp`, `nut`, `openvswitch`, `pop`, `redis`,
+  `rsync`, `sieve`, `smtp`, `spamd`, `varnish` and the socket-only daemons
+  (`acpid`, `fail2ban`, `lvmpolld`). Validation rejects `socket` for any other
+  protocol, which only dials `host`/`port`.
+- **`query`** is the per-protocol lookup target (e.g. the DNS name for `dns`).
 - Shared text-protocol banner and line readers accept at most 64 KiB per line,
   including its terminator. Oversized lines fail the exchange.
 

@@ -84,6 +84,36 @@ checks:
 			want: []string{`checks.docs.tls "prefer" must be a boolean or skip-verify`},
 		},
 		{
+			name: "socket accepted where the probe dials it",
+			service: `
+name: db
+service: x
+checks:
+  conn: { type: mariadb, user: monitor, socket: /run/mysqld/mysqld.sock }
+`,
+			absent: []string{"checks.conn"},
+		},
+		{
+			name: "socket rejected where the probe ignores it",
+			service: `
+name: db
+service: x
+checks:
+  conn: { type: postgres, user: monitor, socket: /run/postgresql/.s.PGSQL.5432 }
+`,
+			want: []string{"checks.conn.socket is not supported by a postgres check; use host and port"},
+		},
+		{
+			name: "empty socket ignored",
+			service: `
+name: filter
+service: x
+checks:
+  conn: { type: rspamd, socket: "" }
+`,
+			absent: []string{"checks.conn"},
+		},
+		{
 			name: "cloudflared check valid",
 			service: `
 name: tunnel

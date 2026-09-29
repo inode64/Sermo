@@ -986,9 +986,7 @@ func validateSingleShotCheckFields(path, typ string, entry map[string]any, locks
 		// the conn registry, validated generically below.
 		if proto, isProto := conn.Lookup(typ); isProto {
 			validateConnFields(path, typ, entry, proto.RequiresUser(), add)
-			if conn.SocketOnly(typ) {
-				validateSocketOnlyConnFields(path, entry, add)
-			}
+			validateConnSocketFields(path, typ, entry, add)
 			validateInterfaceFields(path, entry, add)
 			if proto.Name() == conn.ProtocolNameSMTPAcceptance {
 				validateSMTPAcceptanceFields(path, entry, add)
@@ -1019,6 +1017,18 @@ func validateSingleShotCheckFields(path, typ string, entry map[string]any, locks
 	}
 	validate(path, entry, locksDir, add)
 	return true
+}
+
+// validateConnSocketFields keeps the target fields consistent with how the
+// protocol dials: a socket-only protocol ignores host/port, and a host/port
+// protocol would silently ignore socket and probe TCP/UDP instead.
+func validateConnSocketFields(path, typ string, entry map[string]any, add addFunc) {
+	if conn.SocketOnly(typ) {
+		validateSocketOnlyConnFields(path, entry, add)
+	}
+	if cfgval.String(entry[checks.CheckKeySocket]) != "" && !conn.SupportsSocket(typ) {
+		add("%s.socket is not supported by a %s check; use host and port", path, typ)
+	}
 }
 
 func validateSocketOnlyConnFields(path string, entry map[string]any, add addFunc) {
