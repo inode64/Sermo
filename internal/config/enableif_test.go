@@ -449,3 +449,47 @@ processes:
 		})
 	}
 }
+
+// TestEnableIfPrunesHostWatches covers enable_if on a host watch: the daemon
+// consumes ResolveWatches, so a failing gate must drop the watch there, a
+// holding gate must keep it without the guard, and validation must still check
+// the gated-off watch.
+func TestEnableIfPrunesHostWatches(t *testing.T) {
+	root := t.TempDir()
+	conf := filepath.Join(root, "feature.conf")
+	if err := os.WriteFile(conf, []byte("mode=on\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	missing := filepath.Join(root, "missing.conf")
+	load := "{ type: load, load1: { op: '>', value: 50 } }"
+	watch := func(name, file, check string) string {
+		return fmt.Sprintf("name: %s\nenable_if: { file: %q, key: mode, equals: \"on\" }\ncheck: %s\n", name, file, check)
+	}
+	cfg := loadCatalog(t, map[string]string{
+		"sermo.yml": `
+paths: { watches: [ "@ROOT@/watches" ], runtime: /run/sermo }
+defaults: { policy: { cooldown: 5m } }
+`,
+		"watches/kept.yml":   watch("kept", conf, load),
+		"watches/gated.yml":  watch("gated", missing, load),
+		"watches/broken.yml": watch("broken", missing, "{ type: no-such-type }"),
+	})
+
+	watches, errs := cfg.ResolveWatches()
+	if len(errs) != 0 {
+		t.Fatalf("ResolveWatches() errors = %v", errs)
+	}
+	if _, ok := watches["gated"]; ok {
+		t.Errorf("watch with a failing enable_if must be pruned: %v", watches["gated"])
+	}
+	kept, ok := watches["kept"].(map[string]any)
+	if !ok {
+		t.Fatalf("watch with a holding enable_if must be kept: %v", watches)
+	}
+	if _, has := kept[keyEnableIf]; has {
+		t.Errorf("enable_if must be stripped from a surviving watch: %v", kept)
+	}
+	if issues := Validate(cfg); !hasIssue(issues, `watches.broken.check.type "no-such-type"`) {
+		t.Errorf("Validate() must check a gated-off watch: %v", issues)
+	}
+}

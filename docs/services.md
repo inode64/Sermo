@@ -1691,7 +1691,9 @@ The key is read from `KEY="val"`, `key: val`, `key = val` and whitespace-only
 first line that starts with the key wins, a key alone on its line is a flag
 with an empty value, and a trailing comment stays part of the value.
 A missing file or absent key prunes the entry (fail-safe). The guard is stripped
-from surviving entries. `config validate` still checks disabled entries before
+from surviving entries. A host watch document (under `paths.watches`) accepts
+the same top-level `enable_if`; the daemon then skips that watch on hosts where
+the gate fails. `config validate` still checks disabled entries before
 they are pruned, so typos in optional process/check definitions are reported.
 `enable_if` is intentionally not supported under `rules`, `policy`, `guards` or
 other safety-affecting sections.

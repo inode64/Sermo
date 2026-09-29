@@ -932,10 +932,18 @@ func appVariablePrefix(name string) string {
 }
 
 // ResolveWatches returns the global `watches` section with ${var} expanded
-// against the custom global variables and the host-level builtins. Watches have
+// against the custom global variables and the host-level builtins, and with
+// every watch whose `enable_if` gate fails on this host dropped. Watches have
 // no per-watch builtins (name/port/pidfile).
 // nil when no watches are configured.
 func (c *Config) ResolveWatches() (map[string]any, []string) {
+	return c.resolveWatches(true)
+}
+
+// resolveWatches expands the global watches. pruneOptional=false keeps gated
+// watches (with their `enable_if` block) so validation checks every watch the
+// operator wrote, not only the ones this host enables.
+func (c *Config) resolveWatches(pruneOptional bool) (map[string]any, []string) {
 	configured, ok := c.Global.Raw[sectionWatches].(map[string]any)
 	if !ok || len(configured) == 0 {
 		return nil, nil
@@ -943,6 +951,10 @@ func (c *Config) ResolveWatches() (map[string]any, []string) {
 	vars := c.globalVars()
 	injectHostBuiltins(vars)
 	expanded, expErrs := expandTree(configured, vars)
+	if pruneOptional {
+		// The gate is evaluated after expansion so its file may use ${var}.
+		expanded = pruneEnableIfMap(expanded, []string{sectionWatches}, effectiveBackend(c))
+	}
 	// expandTree returns a fresh tree, so defaults can be injected here without
 	// first cloning the complete loaded watches section.
 	c.applyWatchDefaults(expanded)

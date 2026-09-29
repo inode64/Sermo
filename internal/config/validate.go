@@ -346,7 +346,9 @@ func validateGlobalDefaults(cfg *Config, raw map[string]any, add addFunc) {
 	for _, e := range validateVariableValues(cfg.globalVars()) {
 		add("%s: %s", defaultsPathVariables, e)
 	}
-	watches, watchErrs := cfg.ResolveWatches()
+	// Unpruned: a watch gated off on this host is still validated, like the
+	// unpruned service variant in validateServices.
+	watches, watchErrs := cfg.resolveWatches(false)
 	for _, e := range watchErrs {
 		add("watches: %s", e)
 	}
