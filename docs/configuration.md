@@ -504,7 +504,9 @@ start/stop/restart/reload/resume/repair. The engine may raise it per service whe
 limit applies to automatic remediation, `sermoctl` actions and web-initiated
 operations. When the web UI is enabled, `sermod` also sets the HTTP server's
 initial write timeout from the longest resolved deadline — including a watch
-probe's check `timeout:` — and extends each long action response from the
+probe's check `timeout:`, a `buttons.<name>.timeout`, and an `also_apply`
+cascade, which the web runs member by member (each under its own deadline,
+with one retry when a member is blocked) — and extends each long action response from the
 active configuration after a reload, so an operation or a manual probe is not
 cut off mid-request. The default is `90s`.
 
