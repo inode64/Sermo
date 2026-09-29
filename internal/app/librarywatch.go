@@ -36,9 +36,7 @@ type artifactFileSample struct {
 }
 
 type artifactAppSample struct {
-	version string
-	status  string
-	output  string
+	report  appinspect.Report
 	sampled bool
 }
 
@@ -103,15 +101,15 @@ func (s *ArtifactSamples) RegisterApp(name string) bool {
 	return false
 }
 
-// StoreAppVersion records one app version observation, its inspection status and
-// the probe's bounded output. A non-OK observation remains sampled so workers do
-// not re-run its probe.
-func (s *ArtifactSamples) StoreAppVersion(name, version, status, output string) {
+// StoreAppReport records one app inspection: the version and status rules
+// compare, the probe's bounded output, and the full report the Web UI lists. A
+// non-OK observation remains sampled so workers do not re-run its probe.
+func (s *ArtifactSamples) StoreAppReport(name string, report appinspect.Report) {
 	if s == nil || name == "" {
 		return
 	}
 	s.mu.Lock()
-	s.appVersions[name] = artifactAppSample{version: version, status: status, output: output, sampled: true}
+	s.appVersions[name] = artifactAppSample{report: report, sampled: true}
 	s.mu.Unlock()
 }
 
@@ -123,7 +121,7 @@ func (s *ArtifactSamples) AppProbeOutput(name string) string {
 	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return s.appVersions[name].output
+	return s.appVersions[name].report.Output
 }
 
 // AppVersion returns the latest sampled app version and its probe outcome.
@@ -137,7 +135,22 @@ func (s *ArtifactSamples) AppVersion(name string) (string, string, bool) {
 	if !tracked || !entry.sampled {
 		return "", "", false
 	}
-	return entry.version, entry.status, true
+	return entry.report.Version, entry.report.Status, true
+}
+
+// AppReport returns the app watch's latest full inspection, so a listing can
+// show it without re-running the app's version probe.
+func (s *ArtifactSamples) AppReport(name string) (appinspect.Report, bool) {
+	if s == nil {
+		return appinspect.Report{}, false
+	}
+	s.mu.RLock()
+	entry, tracked := s.appVersions[name]
+	s.mu.RUnlock()
+	if !tracked || !entry.sampled {
+		return appinspect.Report{}, false
+	}
+	return entry.report, true
 }
 
 type artifactCheck struct {

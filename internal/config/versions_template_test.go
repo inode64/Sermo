@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -946,6 +947,14 @@ func assertJavaVersionTemplate(t *testing.T, cfg *Config, bin, jvm string) {
 	if _, ok := cfg.Apps["java-openjdk-25"]; ok {
 		t.Fatalf("short Java version should be deduplicated")
 	}
+	// `openjdk-bin-21` also matches the later `${instance}-${version}` pattern as
+	// instance "openjdk-bin"; it is the same JVM, so only the first pattern's
+	// identity may materialize or every sampling round starts the JVM twice.
+	for _, dup := range []string{"java-openjdk-bin-21.0.11_p10", "java-openjdk-bin-25.0.3_p9"} {
+		if _, ok := cfg.Apps[dup]; ok {
+			t.Fatalf("%s resolves to an already materialized binary and must be deduplicated: %v", dup, cfg.AppNames)
+		}
+	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			doc, ok := cfg.Apps[tt.name]
@@ -1789,5 +1798,27 @@ defaults: { policy: { cooldown: 5m } }
 	}
 	if _, ok := cfg.CatalogServices["app2"]; ok {
 		t.Error("app2 must be gated out: its required config is absent")
+	}
+}
+
+func TestDedupeSameBinaryMatchesKeepsFirstIdentityAndExemptions(t *testing.T) {
+	toks := tokensFor("java-%i-%v")
+	jvm := "/opt/openjdk-bin-17.0.20_p8/bin/java"
+	matches := []templateMatch{
+		{values: map[string]string{varInstance: "openjdk", varVersion: "17.0.20_p8"}, realPath: jvm, matchedBinary: true},
+		{values: map[string]string{varInstance: "openjdk-bin", varVersion: "17.0.20_p8"}, realPath: jvm, matchedBinary: true},
+		// The active slot names the same JVM on purpose.
+		{values: map[string]string{varInstance: "", varVersion: ""}, realPath: jvm, matchedBinary: true},
+		// versions.from paths are not the artifact's binary.
+		{values: map[string]string{varInstance: "other", varVersion: "17"}, realPath: jvm},
+	}
+	got := dedupeSameBinaryMatches(matches, toks)
+	var instances []string
+	for _, m := range got {
+		instances = append(instances, m.values[varInstance])
+	}
+	want := []string{"openjdk", "", "other"}
+	if !slices.Equal(instances, want) {
+		t.Fatalf("instances = %q, want %q", instances, want)
 	}
 }

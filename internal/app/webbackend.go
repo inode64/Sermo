@@ -193,6 +193,7 @@ type WebBackend struct {
 	mountSpecs             []mountctl.Spec
 	raidSampler            checks.RaidSamplerFunc
 	execRunner             execx.Runner
+	artifactSamples        *ArtifactSamples
 	expander               VolumeExpander
 	userLookup             *process.UserLookup
 	mountUsers             func(string) ([]process.Process, error)
@@ -314,6 +315,7 @@ func NewWebBackend(ctx context.Context, cfg *config.Config, deps Deps) (*WebBack
 		mountSpecs:            configuredMountSpecs(cfg),
 		raidSampler:           deps.RaidSampler,
 		execRunner:            deps.ExecxRunner,
+		artifactSamples:       deps.ArtifactSamples,
 		expander:              configuredVolumeExpander(deps),
 		userLookup:            deps.UserLookup,
 		mountUsers:            deps.MountDiscoverUsers,

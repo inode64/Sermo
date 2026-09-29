@@ -1525,6 +1525,15 @@ preflight:
   binary: { type: binary, path: "${binary}" }
 ```
 
+An app or library template materializes one versioned instance per real binary.
+When overlapping `binary:` candidates match the same file with different token
+values — `/usr/lib/jvm/openjdk-bin-17` read as instance `openjdk` by
+`${instance}-bin-${version}` and as `openjdk-bin` by `${instance}-${version}` —
+the first candidate in the list wins, so list the most specific pattern first.
+The unversioned active slot is kept alongside its versioned instance, and catalog
+service templates are not affected: their instances are init units, and several
+of them (PHP-FPM pools, Tomcat instances) share one binary.
+
 If a template would materialize a `name:` that already exists as an explicit
 document in the same catalog category, validation reports a collision. Remove
 one definition or adjust the template discovery; Sermo does not silently choose

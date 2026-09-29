@@ -5,4 +5,9 @@ variables:
   binary: ${bindir}/salt-minion
 preflight:
   binary: { type: binary, path: "${binary}" }
-  version: { type: command, command: ["${binary}", "--version"], timeout: 10s }
+  # Without --disable-keepalive, salt-minion runs even `--version` inside its
+  # keepalive child, whose parent-watch thread sleeps a fixed 5 s before the
+  # process can exit: 5.3-6.1 s on an idle host, so any load pushed the probe
+  # past its timeout. The flag makes it parse the options in-process and print
+  # the same line (`salt-minion 3007.14 (Chlorine)`) in under half a second.
+  version: { type: command, command: ["${binary}", "--disable-keepalive", "--version"], timeout: 10s }

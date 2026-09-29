@@ -59,6 +59,12 @@ func (b *WebBackend) loadCatalogItems(ctx context.Context, category string, expo
 			}}
 			continue
 		}
+		if report, ok := b.sampledAppReport(category, name); ok {
+			if report.Installed {
+				results[i] = catalogResult{item: catalogItemFromReport(report), ok: true}
+			}
+			continue
+		}
 		probeNames = append(probeNames, name)
 		probeIndices = append(probeIndices, i)
 	}
@@ -74,6 +80,18 @@ func (b *WebBackend) loadCatalogItems(ctx context.Context, category string, expo
 		}
 	}
 	return out
+}
+
+// sampledAppReport returns the app watch's latest inspection of an app. Each
+// installed app is already inspected by its own watch every artifact interval;
+// re-running every version probe for the listing doubled the probe load and
+// kept a viewer waiting on the slowest one. Apps without a watch sample (not
+// installed at startup, or no watch yet) are still inspected directly.
+func (b *WebBackend) sampledAppReport(category, name string) (appinspect.Report, bool) {
+	if category != config.CategoryApp {
+		return appinspect.Report{}, false
+	}
+	return b.artifactSamples.AppReport(name)
 }
 
 func catalogItemFromReport(r appinspect.Report) web.CatalogItem {
