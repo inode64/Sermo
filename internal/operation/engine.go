@@ -409,15 +409,8 @@ func (e Engine) run(ctx context.Context, p plan) (result Result) {
 	defer cancel()
 
 	// Step 2: exactly one event per operation, on every exit path including a
-	// failed lock acquisition. Registered first.
-	defer func() {
-		if len(result.Warnings) > 0 {
-			result.Message += " (warnings: " + strings.Join(result.Warnings, "; ") + ")"
-		}
-		if e.Emit != nil {
-			e.Emit(result)
-		}
-	}()
+	// failed lock acquisition and a panic. Registered first.
+	defer func() { e.emitFinal(&result, recover()) }()
 
 	if e.ConfigError != nil {
 		result.Status = ResultFailed
@@ -515,6 +508,27 @@ func (e Engine) runRepair(ctx context.Context, result *Result) ([]string, bool) 
 		return nil, false
 	}
 	return removed, true
+}
+
+// emitFinal emits the operation's one event. The result starts as ok, so a
+// panic part-way through (say after the stop phase) would otherwise be audited
+// as a successful action and, never reaching the worker's policy record, be
+// retried next cycle without cooldown. A recovered panic is recorded as a
+// failure and then re-raised for the caller's own recovery.
+func (e Engine) emitFinal(result *Result, recovered any) {
+	if recovered != nil {
+		result.Status = ResultFailed
+		result.Message = fmt.Sprintf("panic during %s: %v", result.Action, recovered)
+	}
+	if len(result.Warnings) > 0 {
+		result.Message += " (warnings: " + strings.Join(result.Warnings, "; ") + ")"
+	}
+	if e.Emit != nil {
+		e.Emit(*result)
+	}
+	if recovered != nil {
+		panic(recovered)
+	}
 }
 
 // releaseOperationLock releases the operation lock and keeps a failure as a

@@ -252,6 +252,32 @@ func TestReleaseErrorIsReportedInTheEvent(t *testing.T) {
 	}
 }
 
+type panicOnStartManager struct{ *fakeManager }
+
+func (m panicOnStartManager) Start(context.Context, string) error { panic("backend bug") }
+
+// A panic after the stop phase must not be audited as "restart ok": the one
+// event reports failure, the lock is released and the panic still propagates.
+func TestPanicEmitsFailedEventAndReleasesLock(t *testing.T) {
+	h := defaultHarness()
+	e := h.engine()
+	e.Manager = panicOnStartManager{h.mgr}
+	var recovered any
+	func() {
+		defer func() { recovered = recover() }()
+		e.Do(context.Background(), "restart")
+	}()
+	if recovered == nil {
+		t.Fatal("panic was swallowed; the caller's recovery must still see it")
+	}
+	if len(h.emitted) != 1 || h.emitted[0].Status != ResultFailed || !strings.Contains(h.emitted[0].Message, "panic during restart: backend bug") {
+		t.Fatalf("emitted = %+v, want one failed event naming the panic", h.emitted)
+	}
+	if h.released != 1 {
+		t.Fatalf("op lock released %d times, want 1", h.released)
+	}
+}
+
 func TestSectionRunnerBuildIssueBlocksRequiredPreflight(t *testing.T) {
 	tree := map[string]any{
 		"preflight": map[string]any{
