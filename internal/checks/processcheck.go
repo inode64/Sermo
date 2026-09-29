@@ -31,6 +31,11 @@ func (c processCheck) Run(_ context.Context) Result {
 		return c.unavailableResult("process discovery unavailable", start)
 	}
 	state := c.observeAny(c.exes, c.user)
+	if state == process.StateUnknown {
+		// Neither presence nor absence is proven; a guard on this check must
+		// deny rather than read the gap as the process being gone.
+		return c.unavailableResult(fmt.Sprintf("state unknown (want %s): process table incomplete or user %q unresolved", c.expect, c.user), start)
+	}
 	ok := state == c.expect
 	message := fmt.Sprintf("state %s (want %s)", state, c.expect)
 	// A process whose executable was replaced on disk resolves no exe, so an

@@ -403,6 +403,11 @@ const (
 	StateRunning = "running"
 	StateZombie  = "zombie"
 	StateAbsent  = "absent"
+	// StateUnknown is an observation that proves neither presence nor
+	// absence: the process table could not be read completely or the user
+	// selector did not resolve. It is not a selectable state; consumers treat
+	// it as unavailable so a guard fails closed instead of reading "absent".
+	StateUnknown = "unknown"
 	// StateSummary is the user-facing list of process watch states.
 	StateSummary = StateRunning + ", " + StateZombie + ", " + StateAbsent
 )
@@ -412,7 +417,9 @@ const (
 //
 //   - running: at least one live (non-zombie) process matches;
 //   - zombie:  matches exist but all are defunct;
-//   - absent:  no process matches.
+//   - absent:  no process matches in a complete process table;
+//   - unknown: no live match, and the table was incomplete or the user
+//     selector could not be resolved.
 func (d Discoverer) ObserveState(exe, user string) string {
 	return d.ObserveAnyState([]string{exe}, user)
 }
@@ -432,9 +439,17 @@ func (d Discoverer) ObserveAnyState(exes []string, user string) string {
 	if len(selectors) == 0 {
 		return StateAbsent
 	}
+	// An unresolvable user (NSS/LDAP outage) matches nothing, which would read
+	// as "absent" and let a backup guard allow a restart mid-backup.
+	if user != "" {
+		if _, ok := resolve(user); !ok {
+			return StateUnknown
+		}
+	}
 
+	snapshot, snapshotErr := Snapshot(reader)
 	matched := false
-	for _, id := range snapshotIdentities(reader) {
+	for _, id := range snapshot {
 		if !d.matchesAny(selectors, id, resolve) {
 			continue
 		}
@@ -442,6 +457,11 @@ func (d Discoverer) ObserveAnyState(exes []string, user string) string {
 			return StateRunning
 		}
 		matched = true
+	}
+	// A live match is positive evidence even in a partial table; a missing or
+	// defunct-only match is not, because the unread PIDs may hold the process.
+	if snapshotErr != nil {
+		return StateUnknown
 	}
 	if matched {
 		return StateZombie

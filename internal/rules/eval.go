@@ -11,6 +11,7 @@ import (
 	"sermo/internal/cfgval"
 	"sermo/internal/checks"
 	"sermo/internal/metrics"
+	"sermo/internal/process"
 )
 
 // ChangeContext describes the changed: leaf that made the current rule true.
@@ -274,7 +275,14 @@ func (e *Evaluator) evalProcess(v any) (bool, error) {
 	if want == "" {
 		want = ProcessStateRunning
 	}
-	return e.Deps.Processes(cfgval.AsString(m[FieldExe]), cfgval.AsString(m[FieldUser])) == want, nil
+	exe, user := cfgval.AsString(m[FieldExe]), cfgval.AsString(m[FieldUser])
+	got := e.Deps.Processes(exe, user)
+	if got == process.StateUnknown {
+		// An incomplete process table or an unresolvable user proves nothing;
+		// reading it as a state would let a guard allow the action.
+		return e.unavailableSignal(fmt.Errorf("process %s (user %q) state is unknown: process table or user unreadable", exe, user))
+	}
+	return got == want, nil
 }
 
 // evalMetric reads a sampled metric and compares it to the threshold.
