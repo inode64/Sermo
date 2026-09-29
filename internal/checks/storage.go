@@ -140,6 +140,15 @@ func statfsUsage(path string) (StorageStats, error) {
 	if err := syscall.Statfs(path, &s); err != nil {
 		return StorageStats{}, fmt.Errorf("statfs %s: %w", path, err)
 	}
+	return storageStatsFromStatfs(path, &s)
+}
+
+// storageStatsFromStatfs converts statfs(2) counters. The percentages use df's
+// base, used/(used+available): blocks reserved for root are neither, so on a
+// filesystem with a 5 % reserve a total-based used_pct tops out near 95 % while
+// every unprivileged write already fails with ENOSPC. used_pct and free_pct
+// therefore sum to 100 and match df's Use%; TotalBytes stays the raw size.
+func storageStatsFromStatfs(path string, s *syscall.Statfs_t) (StorageStats, error) {
 	if s.Bsize <= 0 {
 		return StorageStats{}, fmt.Errorf("statfs %q returned invalid block size %d", path, s.Bsize)
 	}
@@ -148,9 +157,9 @@ func statfsUsage(path string) (StorageStats, error) {
 	free := s.Bavail * bsize // space available to unprivileged users
 	used := total - s.Bfree*bsize
 	var usedPct, freePct float64
-	if total > 0 {
-		usedPct = float64(used) / float64(total) * percentScale
-		freePct = float64(free) / float64(total) * percentScale
+	if base := used + free; base > 0 {
+		usedPct = float64(used) / float64(base) * percentScale
+		freePct = float64(free) / float64(base) * percentScale
 	}
 
 	// Inode accounting (f_files/f_ffree); 0 total means the filesystem does not

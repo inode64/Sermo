@@ -2,7 +2,9 @@ package checks
 
 import (
 	"context"
+	"math"
 	"strings"
+	"syscall"
 	"testing"
 )
 
@@ -244,5 +246,35 @@ func TestStorageCheckPreservesZeroUsedBytes(t *testing.T) {
 	res := c.Run(context.Background())
 	if !res.OK || res.Data[DataKeyUsedBytes] != uint64(0) {
 		t.Fatalf("storage result = %+v, want zero used bytes", res)
+	}
+}
+
+// A filesystem with blocks reserved for root is full for everyone else when
+// df shows 100%; used_pct must use df's used/(used+avail) base so that
+// threshold is reachable, and free_pct must complete it to 100.
+func TestStorageStatsFromStatfsMatchesDf(t *testing.T) {
+	// 1000 blocks of 4 KiB, 50 reserved for root, 950 used: df Use% 100%.
+	st, err := storageStatsFromStatfs("/", &syscall.Statfs_t{Bsize: 4096, Blocks: 1000, Bfree: 50, Bavail: 0, Files: 100, Ffree: 25})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.UsedPct != 100 || st.FreePct != 0 {
+		t.Fatalf("used/free pct = %v/%v, want 100/0 like df", st.UsedPct, st.FreePct)
+	}
+	if st.UsedBytes != 950*4096 || st.FreeBytes != 0 || st.TotalBytes != 1000*4096 {
+		t.Fatalf("bytes = %+v, want used 950 blocks, free 0, total 1000", st)
+	}
+	st, err = storageStatsFromStatfs("/", &syscall.Statfs_t{Bsize: 4096, Blocks: 1000, Bfree: 450, Bavail: 400})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := float64(550*4096) / float64(950*4096) * percentScale; st.UsedPct != want || math.Abs(st.UsedPct+st.FreePct-100) > 1e-9 {
+		t.Fatalf("used/free pct = %v/%v, want %v and a 100%% sum", st.UsedPct, st.FreePct, want)
+	}
+	if st.InodesTotal != 0 || st.InodesUsedPct != 0 {
+		t.Fatalf("inodes = %+v, want none reported", st)
+	}
+	if _, err := storageStatsFromStatfs("/", &syscall.Statfs_t{Blocks: 1000}); err == nil {
+		t.Fatal("zero block size must be rejected")
 	}
 }
