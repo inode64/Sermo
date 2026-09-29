@@ -667,7 +667,10 @@ rc-service sermod reload # OpenRC
 Both send `SIGHUP` to the init-tracked `sermod` process; they validate and swap
 the configuration in place rather than restarting the daemon. As with
 `sermoctl daemon reload`, an invalid configuration leaves the current generation
-running and is reported in Sermo's event log and daemon log.
+running and is reported in Sermo's event log and daemon log. `sermod` claims
+`SIGHUP` as soon as it starts: a reload requested while it is still building
+its workers (for example a `systemctl reload` right after a start) is applied
+once startup completes, and several such requests coalesce into one reload.
 
 Only one `sermod` instance may run per `<paths.runtime>` directory (default
 `/run/sermo`). At startup it takes an exclusive lock on
