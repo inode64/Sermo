@@ -128,6 +128,38 @@ const (
 	logValueAuthEnabled = "enabled"
 )
 
+// notifyReload claims SIGHUP for the reload loop. Go's default action for an
+// unclaimed SIGHUP terminates the process, and systemd counts death by SIGHUP
+// as a clean exit that Restart=on-failure does not restart: a `systemctl
+// reload sermod` or `sermoctl daemon reload` during the seconds a large host
+// spends building workers would leave the supervisor silently down. The one-slot
+// buffer keeps a SIGHUP received during startup pending, so the reload loop
+// applies it once the monitor runs (the config may have changed after it was
+// read); further startup SIGHUPs coalesce into that one reload.
+func notifyReload() chan os.Signal {
+	hup := make(chan os.Signal, 1)
+	signal.Notify(hup, syscall.SIGHUP)
+	return hup
+}
+
+// serveReloads applies each SIGHUP until ctx ends.
+func serveReloads(ctx context.Context, hup <-chan os.Signal, reload func(context.Context)) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-hup:
+			// Ignore a SIGHUP racing shutdown: reloading against a cancelled
+			// context would spawn a fresh generation and emit a spurious
+			// "config reloaded" after the daemon reported stopped.
+			if ctx.Err() != nil {
+				return
+			}
+			reload(ctx)
+		}
+	}
+}
+
 func main() {
 	//nolint:forbidigo // main cannot return an exit code; os.Exit here is the only way to propagate it.
 	os.Exit(run(os.Args[1:]))
@@ -183,6 +215,9 @@ func run(args []string) int {
 		return exitUsage
 	}
 	globalPath := parsed.globalPath
+	// Claim SIGHUP before any startup work; see notifyReload.
+	hup := notifyReload()
+	defer signal.Stop(hup)
 
 	level := slog.LevelInfo
 	if parsed.verbose {
@@ -489,27 +524,11 @@ func run(args []string) int {
 	monitor.ConfigPath = globalPath
 	monitor.Logger = logger
 
-	hup := make(chan os.Signal, 1)
-	signal.Notify(hup, syscall.SIGHUP)
-	go func() {
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-hup:
-				// Ignore a SIGHUP racing shutdown: reloading against a cancelled
-				// context would spawn a fresh generation and emit a spurious
-				// "config reloaded" after the daemon reported stopped.
-				if ctx.Err() != nil {
-					return
-				}
-				monitor.Reload(ctx)
-			}
-		}
-	}()
+	go serveReloads(ctx, hup, monitor.Reload)
 
+	// SIGHUP stays claimed until run returns (deferred signal.Stop): one during
+	// the shutdown drain is ignored instead of killing the daemon mid-drain.
 	monitor.Run(ctx)
-	signal.Stop(hup) // stop SIGHUP delivery; the goroutine exits via ctx.Done()
 	// Drain background store users before the deferred store.Close() runs: the
 	// web server finishes its bounded graceful shutdown (in-flight requests may
 	// query the store) and the startup prune stops at its next step boundary.
