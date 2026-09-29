@@ -187,6 +187,7 @@ func (c glusterClusterCheck) evaluateVolumes(volumes []glusterVolumeXML, statuse
 
 func evaluateGlusterVolumeStatus(name string, expectation glusterVolumeExpectation, nodes []glusterVolumeNodeXML, observation *glusterClusterObservation) {
 	selfHealFound := false
+	reportedBricks := 0
 	for _, node := range nodes {
 		if node.Hostname == glusterSelfHealDaemon {
 			selfHealFound = true
@@ -198,11 +199,23 @@ func evaluateGlusterVolumeStatus(name string, expectation glusterVolumeExpectati
 			}
 			continue
 		}
+		// Only a brick has a directory path. The volume's other daemons (quota,
+		// bitrot, scrubber, snapshot, NFS) carry the node name there, and are
+		// neither bricks to count nor bricks to report offline.
+		if !strings.HasPrefix(node.Path, "/") {
+			continue
+		}
+		reportedBricks++
 		if node.Status != glusterStatusOnline {
 			observation.issues = append(observation.issues, "volume "+name+" brick "+node.label()+" is offline")
 			continue
 		}
 		observation.onlineBricks++
+	}
+	// A brick on a peer that dropped out is omitted from the report rather than
+	// listed offline, so only the count can show it is gone.
+	if reportedBricks < expectation.bricks {
+		observation.issues = append(observation.issues, fmt.Sprintf("volume %s status reports %d of %d bricks", name, reportedBricks, expectation.bricks))
 	}
 	if expectation.selfHeal && !selfHealFound {
 		observation.issues = append(observation.issues, "volume "+name+" has no self-heal daemon")

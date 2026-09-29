@@ -124,6 +124,64 @@ func TestGlusterClusterCheckReportsTopologyFailures(t *testing.T) {
 	}
 }
 
+// volume status lists the volume's feature daemons beside its bricks. Their
+// path is the node name, not a brick directory: counting them inflated
+// bricks_online and reported a stopped scrubber as an offline brick. A brick
+// the report omits entirely (its peer dropped out) must still be missed.
+func TestGlusterClusterCheckCountsOnlyBricks(t *testing.T) {
+	cases := []struct {
+		name       string
+		nodes      string
+		wantOK     bool
+		wantOnline int
+		wantIssue  string
+	}{
+		{
+			name: "feature daemons are not bricks",
+			nodes: `
+  <node><hostname>sirio</hostname><path>/bricks/images0</path><status>1</status></node>
+  <node><hostname>zeus</hostname><path>/bricks/images0</path><status>1</status></node>
+  <node><hostname>Self-heal Daemon</hostname><path>sirio</path><status>1</status></node>
+  <node><hostname>Quota Daemon</hostname><path>sirio</path><status>1</status></node>
+  <node><hostname>Scrubber Daemon</hostname><path>localhost</path><status>0</status></node>
+  <node><hostname>Bitrot Daemon</hostname><path>localhost</path><status>1</status></node>`,
+			wantOK:     true,
+			wantOnline: 2,
+		},
+		{
+			name: "a brick missing from the report is an issue",
+			nodes: `
+  <node><hostname>sirio</hostname><path>/bricks/images0</path><status>1</status></node>
+  <node><hostname>Self-heal Daemon</hostname><path>sirio</path><status>1</status></node>
+  <node><hostname>Quota Daemon</hostname><path>sirio</path><status>1</status></node>`,
+			wantOnline: 1,
+			wantIssue:  "volume images status reports 1 of 2 bricks",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			results := glusterClusterResults()
+			results["gluster --mode=script --xml volume status"] = glusterXML(`
+<volStatus><volumes><volume><volName>images</volName>` + tc.nodes + `
+</volume></volumes></volStatus>`)
+			peers, volumes, err := parseGlusterClusterConfig(glusterClusterExpectation())
+			if err != nil {
+				t.Fatal(err)
+			}
+			result := (glusterClusterCheck{name: "cluster", timeout: time.Second, runner: cliRunner(results, nil), peers: peers, volumes: volumes}).Run(context.Background())
+			if result.OK != tc.wantOK || result.Unavailable {
+				t.Fatalf("result = %+v, want OK=%v", result, tc.wantOK)
+			}
+			if got := result.Data[DataKeyGlusterBricksOnline]; got != tc.wantOnline {
+				t.Errorf("bricks online = %v, want %d", got, tc.wantOnline)
+			}
+			if tc.wantIssue != "" && !strings.Contains(result.Message, tc.wantIssue) {
+				t.Errorf("message %q does not contain %q", result.Message, tc.wantIssue)
+			}
+		})
+	}
+}
+
 // Gluster writes "-" instead of a count for a brick that cannot answer. Parsed
 // into an int field that failed the whole document's unmarshal, so a single
 // unreachable brick took the entire check Unavailable — seen in production as
