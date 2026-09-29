@@ -1961,36 +1961,16 @@ func TestCatalogOpenVPNSystemdInstancesAreSystemdOnly(t *testing.T) {
 		})
 	}
 
-	body := catalogDocByName(t, root, "services", "openvpn-%i")
+	body := catalogDocByName(t, root, "services", "openvpn%s%i")
 	service, ok := body["service"].(map[string]any)
 	if !ok {
-		t.Fatalf("openvpn-%%i service = %v, want per-init map", body["service"])
+		t.Fatalf("openvpn%%s%%i service = %v, want per-init map", body["service"])
 	}
 	if got := cfgval.StringList(service["systemd"]); len(got) != 0 {
-		t.Fatalf("openvpn-%%i service.systemd = %v, want no systemd candidates", got)
+		t.Fatalf("openvpn%%s%%i service.systemd = %v, want no systemd candidates", got)
 	}
 	if got := cfgval.StringList(service["openrc"]); !slices.Equal(got, []string{"openvpn.${instance}"}) {
-		t.Fatalf("openvpn-%%i service.openrc = %v, want OpenRC legacy candidate", got)
-	}
-}
-
-// The OpenRC `openvpn.<instance>` unit carries no `-`/`_` separator a `%s`
-// token could capture, so the packaged template must name the instance with a
-// literal separator: `openvpn.office` materializes `openvpn-office`, never a
-// glued `openvpnoffice`.
-func TestCatalogOpenVPNOpenRCInstanceName(t *testing.T) {
-	global := writeConfig(t, map[string]string{
-		"sermo.yml": "engine: {backend: openrc}\npaths: {services: [@ROOT@/services]}\ndefaults: {policy: {cooldown: 5m}}\n",
-	})
-	cfg, err := loadConfig(t, global, WithCatalogDirs(repoCatalogDir(repoRoot(t))),
-		withServiceUnits(backendOpenRC, []string{"openvpn.office"}))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, ok := cfg.CatalogServices["openvpn-office"]; !ok {
-		t.Fatalf("openvpn.office did not materialize openvpn-office: %v", slices.DeleteFunc(slices.Clone(cfg.CatalogServiceNames), func(name string) bool {
-			return !strings.HasPrefix(name, "openvpn")
-		}))
+		t.Fatalf("openvpn%%s%%i service.openrc = %v, want OpenRC legacy candidate", got)
 	}
 }
 

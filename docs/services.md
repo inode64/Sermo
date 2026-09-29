@@ -1600,12 +1600,6 @@ service:
   systemd: ["tomcat@${version}${sep}${instance}"]
 ```
 
-`%s` binds only what a discovery candidate captures with `${sep}`; a name `%s`
-whose candidates never contain `${sep}` always binds it empty and glues the
-parts together. A unit that joins with another character, such as OpenRC's
-`openvpn.office`, needs a literal separator in the name instead: the packaged
-`openvpn-%i` materializes `openvpn-office`.
-
 ### Service-owned discovery
 
 A service template in `catalog/services` normally discovers from active init
