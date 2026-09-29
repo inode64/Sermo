@@ -370,7 +370,7 @@ func parseMdstat(s string) RaidStatus {
 		}
 		if m := mdProgressRe.FindStringSubmatch(line); m != nil {
 			cur.Operation = m[mdOperationGroup]
-			cur.Recovering = true
+			cur.Recovering = isRaidRebuild(cur.Operation)
 			cur.ProgressPct, _ = strconv.ParseFloat(m[mdProgressValueGroup], 64)
 			cur.HasProgress = true
 		}
