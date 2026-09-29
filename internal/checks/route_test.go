@@ -39,6 +39,25 @@ func TestDefaultRoutesFromNetlinkIPv4(t *testing.T) {
 	}
 }
 
+// The kernel keeps an IPv4 route whose link lost carrier, flagged linkdown,
+// and marks an unusable multipath hop dead; neither can carry traffic.
+func TestDefaultRoutesFromNetlinkSkipsLinkdownAndDead(t *testing.T) {
+	default4 := mustCIDR(t, "0.0.0.0/0")
+	routes := []netlink.Route{
+		{LinkIndex: 1, Dst: default4, Gw: net.ParseIP("192.168.1.1"), Type: routeTypeUnicast, Flags: routeNexthopLinkDown},
+		{LinkIndex: 3, Dst: default4, Type: routeTypeUnicast, Flags: routeNexthopDead},
+		{Dst: default4, Type: routeTypeUnicast, MultiPath: []*netlink.NexthopInfo{
+			{LinkIndex: 1, Gw: net.ParseIP("10.0.0.1"), Flags: routeNexthopDead | routeNexthopLinkDown},
+			{LinkIndex: 2, Gw: net.ParseIP("10.0.1.1")},
+		}},
+	}
+	got := defaultRoutesFromNetlink("ipv4", routes, map[int]string{1: "eth0", 2: "eth1", 3: "eth2"})
+	want := []DefaultRoute{{Iface: "eth1", Gateway: "10.0.1.1"}}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("routes = %#v, want only the live multipath hop %#v", got, want)
+	}
+}
+
 func TestDefaultRoutesFromNetlinkIPv6SkipsLoopback(t *testing.T) {
 	default6 := mustCIDR(t, "::/0")
 	routes := []netlink.Route{

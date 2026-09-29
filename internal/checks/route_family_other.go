@@ -9,3 +9,10 @@ const (
 	familyV4 = 2  // AF_INET
 	familyV6 = 10 // AF_INET6 on Linux
 )
+
+// routeNexthopDead and routeNexthopLinkDown mirror Linux RTNH_F_DEAD /
+// RTNH_F_LINKDOWN so the shared route filter compiles off Linux.
+const (
+	routeNexthopDead     = 0x1
+	routeNexthopLinkDown = 0x10
+)

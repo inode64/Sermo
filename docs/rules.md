@@ -2373,10 +2373,12 @@ watches.
 ### Default route (`route`)
 
 The `route` check verifies the kernel has an **up default route** — read
-natively from `/proc/net/route` (IPv4, the default) or `/proc/net/ipv6_route`
-(`family: ipv6`). With `interface`, a default route must egress through that
-interface. It is a health check (OK means the route is there); as a watch it
-fires when the route disappears.
+natively through netlink from the IPv4 (the default) or IPv6 (`family: ipv6`)
+routing tables. A route or multipath hop the kernel flags `linkdown` (the
+interface is up but has no carrier) or `dead` does not count. With
+`interface`, a default route must egress through that interface. It is a
+health check (OK means the route is there); as a watch it fires when the route
+disappears or its link goes down.
 
 It closes the uplink gap the link and ping layers leave: after a failed PPP
 renegotiation the interface can stay `up` with the default route gone, and a
