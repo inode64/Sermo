@@ -13,7 +13,11 @@ type protocolRegistration struct {
 	protocol      Protocol
 	aliases       []string
 	defaultSocket string
-	socketOnly    bool
+	// defaultHost replaces DefaultHost when a protocol's target is not a
+	// loopback service. dhclient matches its UDP socket by exact bind address,
+	// and a DHCP client binds the wildcard address, never 127.0.0.1.
+	defaultHost string
+	socketOnly  bool
 }
 
 // builtinProtocolRegistrations is the complete connection-protocol catalog.
@@ -30,7 +34,7 @@ var builtinProtocolRegistrations = []protocolRegistration{
 	{protocol: clamdProtocol{}, aliases: []string{protocolAliasClamAV}},
 	{protocol: cloudflaredProtocol{}, aliases: []string{protocolAliasCloudflareTunnel}},
 	{protocol: dbusProtocol{}},
-	{protocol: dhclientProtocol{}, aliases: []string{protocolAliasDHClient}},
+	{protocol: dhclientProtocol{}, aliases: []string{protocolAliasDHClient}, defaultHost: dhclientDefaultHost},
 	{protocol: dhcpProtocol{}, aliases: []string{protocolAliasDHCPD}},
 	{protocol: dnsProtocol{}},
 	{protocol: dockerProtocol{}, defaultSocket: DefaultDockerSocket},
@@ -195,9 +199,9 @@ func Resolve(protocol Protocol, cfg Config) Config {
 	}
 	registration, registered := protocolRegistrationFor(protocol)
 	if registered {
-		return resolveProtocolTarget(registration.protocol, registration.defaultSocket, cfg)
+		return resolveProtocolTarget(registration, cfg)
 	}
-	return resolveProtocolTarget(protocol, "", cfg)
+	return resolveProtocolTarget(protocolRegistration{protocol: protocol}, cfg)
 }
 
 func protocolRegistrationFor(protocol Protocol) (protocolRegistration, bool) {
@@ -208,15 +212,18 @@ func protocolRegistrationFor(protocol Protocol) (protocolRegistration, bool) {
 	return registered.registration, true
 }
 
-func resolveProtocolTarget(protocol Protocol, defaultSocket string, cfg Config) Config {
+func resolveProtocolTarget(registration protocolRegistration, cfg Config) Config {
 	if cfg.Socket == "" && cfg.Host == "" {
-		cfg.Socket = defaultSocket
+		cfg.Socket = registration.defaultSocket
+	}
+	if cfg.Host == "" {
+		cfg.Host = registration.defaultHost
 	}
 	if cfg.Host == "" {
 		cfg.Host = DefaultHost
 	}
 	if cfg.Port == 0 {
-		cfg.Port = protocol.DefaultPort()
+		cfg.Port = registration.protocol.DefaultPort()
 	}
 	return cfg
 }

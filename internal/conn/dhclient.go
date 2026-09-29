@@ -14,6 +14,9 @@ import (
 )
 
 const (
+	// dhclientDefaultHost is the wildcard address a DHCP client binds UDP/68
+	// to; it must be receivable before the interface has an address.
+	dhclientDefaultHost             = "0.0.0.0"
 	dhclientAnyInterface            = "any interface"
 	dhclientLeaseBlockStart         = "lease {"
 	dhclientLeaseBlockEnd           = "}"

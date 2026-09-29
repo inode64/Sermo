@@ -1362,8 +1362,9 @@ Protocols, in the order of the table above:
 - `dhclient` (alias `dhcp-client`) — default port 68 (UDP). **Linux only.** This
   is a local DHCP client check: `dhclient` receives offers on UDP/68 and does not
   provide a request/response server protocol. The check reads `/proc/net/udp` and
-  passes when it finds a local UDP socket bound to `host:port` (`0.0.0.0:68` by
-  default in the packaged catalog service). It does not send packets and does not consume
+  passes when it finds a local UDP socket bound exactly to `host:port`. Unlike
+  the other protocols, `host` defaults to the wildcard `0.0.0.0` (where a DHCP
+  client binds), not `127.0.0.1`. It does not send packets and does not consume
   a lease. Set `lease_file` (the packaged catalog service defaults to
   `/var/lib/dhcp/dhclient.leases`; override it when your distribution stores ISC
   dhclient leases elsewhere) to also require an unexpired lease. If `interface`
