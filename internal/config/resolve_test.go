@@ -661,3 +661,27 @@ rules:
 		t.Fatalf("expected unknown-library error, got %v", errs)
 	}
 }
+
+// TestResolveWatchesExpandsWatchNamedVariables pins that a host watch key is a
+// watch name, never the variables section: a watch named `variables` is
+// expanded like any other and its resolved copy is independent of Global.Raw.
+func TestResolveWatchesExpandsWatchNamedVariables(t *testing.T) {
+	cfg := loadCatalog(t, map[string]string{
+		"sermo.yml": `
+paths: { watches: [ "@ROOT@/watches" ], runtime: /run/sermo }
+defaults: { policy: { cooldown: 5m }, dry_run: true }
+`,
+		"watches/variables.yml": "name: variables\ncheck: { type: file, path: \"${undefined_var}\" }\n",
+	})
+	watches, errs := cfg.ResolveWatches()
+	if !slices.ContainsFunc(errs, func(e string) bool { return strings.Contains(e, "undefined_var") }) {
+		t.Errorf("ResolveWatches() errors = %v, want the undefined variable reported", errs)
+	}
+	if got, _ := watches["variables"].(map[string]any)[keyDryRun].(bool); !got {
+		t.Errorf("resolved watch did not inherit defaults.dry_run: %v", watches["variables"])
+	}
+	raw, _ := cfg.Global.Raw[sectionWatches].(map[string]any)
+	if _, leaked := raw["variables"].(map[string]any)[keyDryRun]; leaked {
+		t.Errorf("ResolveWatches wrote dry_run into the loaded config: %v", raw["variables"])
+	}
+}
