@@ -31,9 +31,13 @@ pidfile: /run/squid.pid
 stop_policy:
   graceful_timeout: 65s
 processes:
+  # Squid's master keeps root only as its effective UID: it runs with the real
+  # UID of cache_effective_user (Uid: 107 0 0 0 on fw1). Sermo identifies
+  # processes by real UID, so `user: root` never matched the master, which was
+  # found only through the pidfile and flagged by the pidfile identity check.
   main:
     exe: ${squid_binary}
-    user: root
+    user: ${user}
   pinger:
     exe: ${squid_pinger_binary}
     user: ${user}
