@@ -1871,7 +1871,10 @@ watches:
 - **`replication_control.start: true`** offers the manual repair in the
   dashboard: Sermo revalidates live status, runs `START REPLICA` (or the
   engine's older spelling, or the MariaDB named-connection form) exactly as the
-  manual process would, then re-reads status until both threads run. It is an
+  manual process would, then re-reads status until both threads run. Without
+  `connection` on a MariaDB server with named connections it runs
+  `START ALL SLAVES`, since plain `START SLAVE` would start only the default
+  connection while the check covers them all. It is an
   explicitly requested admin action behind confirmation — never autonomous —
   and it cannot skip or discard replication events.
 - A server with no replication configured fails the check: declaring the watch

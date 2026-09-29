@@ -52,10 +52,11 @@ func StartReplication(ctx context.Context, entry map[string]any) ReplicationCont
 }
 
 func startReplicationDB(ctx context.Context, db *sql.DB, connection string) ReplicationControlResult {
-	state, err := replicationStateNow(ctx, db, connection)
+	rows, err := queryReplicationRows(ctx, db)
 	if err != nil {
 		return ReplicationControlResult{Message: err.Error()}
 	}
+	state := scopedReplicationState(rows, connection)
 	if state == nil {
 		return ReplicationControlResult{Message: "no replication configured to start"}
 	}
@@ -63,7 +64,7 @@ func startReplicationDB(ctx context.Context, db *sql.DB, connection string) Repl
 		return ReplicationControlResult{OK: true, Message: "replication already running (source " + state.sourceHost + ")"}
 	}
 
-	if err := execStartReplica(ctx, db, connection); err != nil {
+	if err := execStartReplica(ctx, db, replicationStartStatements(connection, rows)); err != nil {
 		return ReplicationControlResult{Message: err.Error()}
 	}
 
@@ -95,21 +96,40 @@ func replicationStateNow(ctx context.Context, db *sql.DB, connection string) (*r
 	if err != nil {
 		return nil, err
 	}
-	rows = filterReplicationRows(rows, connection)
-	if len(rows) == 0 {
-		return nil, nil //nolint:nilnil // no rows is a distinct, documented outcome, not an error
-	}
-	state := aggregateReplication(rows)
-	return &state, nil
+	return scopedReplicationState(rows, connection), nil
 }
 
-// execStartReplica issues the start statement in the newest vocabulary the
-// server accepts. A named MariaDB connection has exactly one form.
-func execStartReplica(ctx context.Context, db *sql.DB, connection string) error {
-	statements := []string{"START REPLICA", "START SLAVE"}
-	if connection != "" {
-		statements = []string{"START SLAVE '" + connection + "'"}
+// scopedReplicationState aggregates the rows of the scoped connection; nil
+// means no matching replication row exists.
+func scopedReplicationState(rows []replicationRow, connection string) *replicationState {
+	rows = filterReplicationRows(rows, connection)
+	if len(rows) == 0 {
+		return nil
 	}
+	state := aggregateReplication(rows)
+	return &state
+}
+
+// replicationStartStatements lists the start statements to try, newest
+// vocabulary first. A named MariaDB connection has exactly one form. Without
+// a connection the check covers every row, but MariaDB's plain START SLAVE
+// only starts @@default_master_connection, so a server with named
+// connections needs START ALL SLAVES; MySQL's START REPLICA already starts
+// every channel.
+func replicationStartStatements(connection string, rows []replicationRow) []string {
+	if connection != "" {
+		return []string{"START SLAVE '" + connection + "'"}
+	}
+	for _, row := range rows {
+		if row["Connection_name"] != "" {
+			return []string{"START ALL REPLICAS", "START ALL SLAVES"}
+		}
+	}
+	return []string{"START REPLICA", "START SLAVE"}
+}
+
+// execStartReplica issues the first start statement the server accepts.
+func execStartReplica(ctx context.Context, db *sql.DB, statements []string) error {
 	var lastErr error
 	for _, statement := range statements {
 		_, err := db.ExecContext(ctx, statement)

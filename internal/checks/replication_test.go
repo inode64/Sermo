@@ -2,6 +2,7 @@ package checks
 
 import (
 	"context"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -167,6 +168,33 @@ func TestStartReplicationRefusesUnsafeConnectionName(t *testing.T) {
 	res := StartReplication(t.Context(), map[string]any{"user": "root", "connection": "bad'name"})
 	if res.OK || !strings.Contains(res.Message, "not startable") {
 		t.Fatalf("unsafe connection name must be refused: %+v", res)
+	}
+}
+
+// Without `connection` the check covers every MariaDB connection, but plain
+// START SLAVE only starts @@default_master_connection; named connections need
+// START ALL SLAVES. MySQL channels all start with plain START REPLICA.
+func TestReplicationStartStatements(t *testing.T) {
+	mariaNamed := []replicationRow{{"Connection_name": ""}, {"Connection_name": "east"}}
+	mariaDefault := []replicationRow{{"Connection_name": ""}}
+	mysqlChannels := []replicationRow{{"Channel_Name": ""}, {"Channel_Name": "east"}}
+	tests := []struct {
+		name       string
+		connection string
+		rows       []replicationRow
+		want       []string
+	}{
+		{name: "mariadb named connections", rows: mariaNamed, want: []string{"START ALL REPLICAS", "START ALL SLAVES"}},
+		{name: "mariadb default connection", rows: mariaDefault, want: []string{"START REPLICA", "START SLAVE"}},
+		{name: "mysql channels", rows: mysqlChannels, want: []string{"START REPLICA", "START SLAVE"}},
+		{name: "scoped connection", connection: "east", rows: mariaNamed, want: []string{"START SLAVE 'east'"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := replicationStartStatements(tt.connection, tt.rows); !slices.Equal(got, tt.want) {
+				t.Fatalf("statements = %q, want %q", got, tt.want)
+			}
+		})
 	}
 }
 
