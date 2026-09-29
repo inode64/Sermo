@@ -27,7 +27,15 @@ func (ldapProtocol) Name() string       { return ProtocolNameLDAP }
 func (ldapProtocol) DefaultPort() int   { return defaultPortLDAP }
 func (ldapProtocol) RequiresUser() bool { return false }
 
+// Probe returns at the context deadline: go-ldap is not context-aware, so the
+// exchange runs under probeWithDeadline and each phase gets only the time left.
 func (ldapProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
+	return probeWithDeadline(ctx, func(ctx context.Context) (Result, error) {
+		return ldapProbe(ctx, cfg)
+	})
+}
+
+func ldapProbe(ctx context.Context, cfg Config) (Result, error) {
 	target := newProbeTarget(cfg, defaultPortLDAP)
 	host, port := target.hostPort()
 	timeout := netutil.TimeoutFromContext(ctx, defaultLDAPProbeTimeout)
@@ -43,7 +51,9 @@ func (ldapProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 		return Result{}, probeErr(ProtocolNameLDAP, stepDial, err)
 	}
 	defer func() { _ = l.Close() }()
-	l.SetTimeout(timeout)
+	// The dial (and LDAPS handshake) already spent part of the budget; reusing
+	// the full timeout for the bind could double the probe's duration.
+	l.SetTimeout(netutil.TimeoutFromContext(ctx, timeout))
 
 	requireAuth := cfg.User != ""
 	mode := ldapBindAnonymous
