@@ -1701,6 +1701,9 @@ does not send routine manual successful actions. The first failure or warning
 for each service check, rule, watch or app is sent immediately; unchanged
 incidents are suppressed even when their event text or PID changes. A change
 between warning and firing, recovery, or a new episode is sent immediately.
+A watch whose check becomes unavailable and later available again tracks that
+as its own incident, so the check coming back never announces a still-firing
+watch as recovered.
 Delivery state survives daemon restarts and config reloads. If
 `repeat_interval` is set, an open incident is reminded at that interval, even
 when the underlying check emits no new event. Without it, open incidents are
