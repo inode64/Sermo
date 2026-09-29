@@ -187,7 +187,8 @@ emit one event from the final result (registered first, so it fires on every
 exit path), and release the operation lock (registered only after a successful
 acquire). Every later step may return early; cleanup never repeats per return,
 and a blocked, failed or panicking operation cannot leak the lock or skip its
-event. Result statuses: `ok`, `blocked`, `preflight_failed`,
+event. A panic is audited as `failed`, never as the `ok` the result starts
+with, and still propagates to the caller. Result statuses: `ok`, `blocked`, `preflight_failed`,
 `postflight_failed`, `failed`, `orphan_processes`. A reload (SIGHUP) or shutdown
 cancels an in-flight operation, so the engine's bounded waits report
 `operation cancelled during <phase>` instead of a timeout: an interrupted action
