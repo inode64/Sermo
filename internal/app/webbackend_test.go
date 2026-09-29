@@ -14,6 +14,7 @@ import (
 	"sermo/internal/appinspect"
 	"sermo/internal/checks"
 	"sermo/internal/config"
+	"sermo/internal/emission"
 	"sermo/internal/execx"
 	"sermo/internal/execx/execxtest"
 	"sermo/internal/metrics"
@@ -2001,6 +2002,7 @@ func TestWebBackendExpandWatchExpands(t *testing.T) {
 			var events []Event
 			b, warns := NewWebBackend(t.Context(), cfg, Deps{
 				VolumeExpander:   exp,
+				Runtime:          t.TempDir(),
 				OperationTimeout: time.Second,
 				Emit:             func(e Event) { events = append(events, e) },
 			})
@@ -2019,6 +2021,104 @@ func TestWebBackendExpandWatchExpands(t *testing.T) {
 				t.Fatalf("events = %+v, want successful expand event", events)
 			}
 		})
+	}
+}
+
+// blockingExpander holds the first expansion until released, so a test can
+// issue a second one while the first is still growing the volume. Later calls
+// return at once so an unserialized expansion fails the test instead of hanging.
+type blockingExpander struct {
+	mu       sync.Mutex
+	calls    int
+	entered  chan struct{}
+	released chan struct{}
+}
+
+func (e *blockingExpander) ExpandPath(context.Context, string, int64) (volume.Result, error) {
+	e.mu.Lock()
+	e.calls++
+	first := e.calls == 1
+	e.mu.Unlock()
+	if first {
+		e.entered <- struct{}{}
+		<-e.released
+	}
+	return volume.Result{VG: "vg0", LV: "data", GrewBytes: 5 << 30}, nil
+}
+
+func (e *blockingExpander) callCount() int {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.calls
+}
+
+func expandTestConfig() *config.Config {
+	return cfgWithWatches(map[string]any{"storage-data": map[string]any{
+		"check": map[string]any{
+			"type":     "storage",
+			"path":     "/data/app",
+			"used_pct": map[string]any{"op": ">=", "value": 90},
+		},
+		"then": map[string]any{"expand": map[string]any{"by": "5G"}},
+	}})
+}
+
+// A second expansion of the same path while the first is still running is
+// refused: each would resolve the VG free space on its own and grow the
+// volume by expand.by again. The automatic then.expand shares the same lock.
+func TestWebBackendExpandWatchRefusesConcurrentExpansion(t *testing.T) {
+	exp := &blockingExpander{entered: make(chan struct{}, 1), released: make(chan struct{})}
+	deps := Deps{VolumeExpander: exp, Runtime: t.TempDir(), OperationTimeout: 10 * time.Second}
+	var eventsMu sync.Mutex
+	var events []Event
+	deps.Emit = func(e Event) {
+		eventsMu.Lock()
+		events = append(events, e)
+		eventsMu.Unlock()
+	}
+	b, warns := NewWebBackend(t.Context(), expandTestConfig(), deps)
+	if len(warns) != 0 {
+		t.Fatalf("unexpected warnings: %v", warns)
+	}
+	first := make(chan web.ActionResult, 1)
+	go func() { first <- b.ExpandWatch(context.Background(), "storage-data") }()
+	<-exp.entered
+
+	second := b.ExpandWatch(context.Background(), "storage-data")
+	if second.OK || !strings.Contains(second.Message, "already in progress") {
+		close(exp.released)
+		t.Fatalf("second ExpandWatch = %+v, want in-progress refusal", second)
+	}
+
+	var auto []Event
+	w := &Watch{
+		Name:      "storage-data",
+		CheckType: checks.CheckTypeStorage,
+		Check:     stubCheck{name: "storage", ok: true, data: map[string]any{"path": "/data/app"}},
+		Expand:    &ExpandSpec{By: 5 << 30},
+		Expander:  configuredVolumeExpander(deps),
+		Emission:  emission.Policy{Events: emission.ModeEveryCycle},
+		Policy:    rules.Policy{Cooldown: time.Hour},
+		Emit:      func(e Event) { auto = append(auto, e) },
+	}
+	w.RunCycle(context.Background())
+	if !hasEventKind(auto, eventKindExpandSkipped) || hasEventKind(auto, eventKindExpandFailed) {
+		t.Fatalf("automatic expand events = %+v, want expand-skipped while the manual one runs", auto)
+	}
+
+	close(exp.released)
+	if res := <-first; !res.OK {
+		t.Fatalf("first ExpandWatch = %+v, want success", res)
+	}
+	if got := exp.callCount(); got != 1 {
+		t.Fatalf("expander calls = %d, want only the first expansion", got)
+	}
+	eventsMu.Lock()
+	defer eventsMu.Unlock()
+	if !slices.ContainsFunc(events, func(e Event) bool {
+		return e.Kind == eventKindExpandSkipped && e.Status == eventStatusBlocked
+	}) {
+		t.Fatalf("web events = %+v, want a blocked expand-skipped event", events)
 	}
 }
 

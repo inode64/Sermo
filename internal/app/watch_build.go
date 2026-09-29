@@ -340,13 +340,18 @@ func configuredClockStepper(deps Deps) ClockStepper {
 	return conn.MakeStep
 }
 
+// configuredVolumeExpander returns the injected or real LVM expander wrapped in
+// the per-path operation lock. It is the single source of expanders for the
+// automatic then.expand and the manual web action, which is what makes the two
+// share one lock.
 func configuredVolumeExpander(deps Deps) VolumeExpander {
-	if deps.VolumeExpander != nil {
-		return deps.VolumeExpander
+	inner := deps.VolumeExpander
+	if inner == nil {
+		runner := deps.ExecxRunner
+		runner = execx.RunnerOrDefault(runner)
+		inner = volume.Expander{Runner: runner}
 	}
-	runner := deps.ExecxRunner
-	runner = execx.RunnerOrDefault(runner)
-	return volume.Expander{Runner: runner}
+	return lockedVolumeExpander{inner: inner, runtimeDir: deps.Runtime, timeout: deps.OperationTimeout}
 }
 
 // buildMetricWatches expands one multi-metric watch entry (net/icmp/swap) into

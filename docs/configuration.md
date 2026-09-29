@@ -2141,6 +2141,13 @@ When the web UI is enabled, a storage watch with `then.expand` also shows an
 **expand** action. That manual action uses the same configured `check.path` and
 `expand.by` values from YAML; the browser does not send a path or size.
 
+Manual and automatic expansions of the same `check.path` share one operation
+lock under `<paths.runtime>/ops`, and each is bounded by
+`engine.operation_timeout`. An expansion requested while another one of that
+path is still running is refused, not queued, so the volume never grows twice
+for one request; the refusal is recorded as `expand-skipped`, and when it hits
+the automatic action it also starts that watch's cooldown.
+
 ### `then.makestep` — forced clock correction (clock watch)
 
 A `clock` watch may carry a native `then.makestep` action: Sermo asks the local
