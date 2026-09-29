@@ -110,6 +110,9 @@ type Spec struct {
 	Refcount    bool
 	Umount      UmountSpec
 	KillOnlyIf  process.KillSelector
+	// ephemeral marks a path with no storage watch: its state is keyed by the
+	// path, never by Name, which for it is only a display label.
+	ephemeral bool
 }
 
 // State is the persisted runtime refcount for one mount.
@@ -231,10 +234,11 @@ func SpecFromStorageTree(name string, tree map[string]any) Spec {
 func EphemeralSpec(path string) Spec {
 	clean := filepath.Clean(path)
 	return Spec{
-		Name:     idForCleanPath(clean),
-		Path:     clean,
-		Refcount: true,
-		Umount:   defaultUmountSpec(),
+		Name:      idForCleanPath(clean),
+		Path:      clean,
+		Refcount:  true,
+		Umount:    defaultUmountSpec(),
+		ephemeral: true,
 	}
 }
 
@@ -535,16 +539,25 @@ func disabledUmountResult(spec Spec, message string) Result {
 
 func (c Controller) readState(spec Spec) (State, error) {
 	path := c.statePath(spec)
-	data, err := hostfs.ReadFile(path)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return State{Name: spec.Name, Path: spec.Path}, nil
+	state, found, err := readStateFile(path)
+	if err == nil && !found {
+		// A count written under the previous lossy identifier still belongs to
+		// this mount when it records the same path; dropping it on upgrade
+		// would let one consumer's release unmount under another.
+		if legacy := c.legacyStatePath(spec); legacy != path {
+			path = legacy
+			state, found, err = readStateFile(legacy)
+			found = found && samePath(state.Path, spec.Path)
 		}
-		return State{}, fmt.Errorf("read mount state %s: %w", path, err)
 	}
-	var state State
-	if err := json.Unmarshal(data, &state); err != nil {
-		return State{}, fmt.Errorf("parse mount state %s: %w", path, err)
+	if err != nil {
+		return State{}, err
+	}
+	if !found {
+		return State{Name: spec.Name, Path: spec.Path}, nil
+	}
+	if state.Path != "" && !samePath(state.Path, spec.Path) {
+		return State{}, fmt.Errorf("mount state %s counts %s, not %s; refusing to reuse another mount's refcount", path, state.Path, spec.Path)
 	}
 	if state.Refcount < 0 {
 		state.Refcount = 0
@@ -552,6 +565,25 @@ func (c Controller) readState(spec Spec) (State, error) {
 	state.Name = spec.Name
 	state.Path = spec.Path
 	return state, nil
+}
+
+func readStateFile(path string) (State, bool, error) {
+	data, err := hostfs.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return State{}, false, nil
+		}
+		return State{}, false, fmt.Errorf("read mount state %s: %w", path, err)
+	}
+	var state State
+	if err := json.Unmarshal(data, &state); err != nil {
+		return State{}, false, fmt.Errorf("parse mount state %s: %w", path, err)
+	}
+	return state, true, nil
+}
+
+func samePath(a, b string) bool {
+	return filepath.Clean(a) == filepath.Clean(b)
 }
 
 func (c Controller) writeState(spec Spec, state State) error {
@@ -574,11 +606,29 @@ func (c Controller) writeState(spec Spec, state State) error {
 	if err := os.Rename(tmp, path); err != nil {
 		return fmt.Errorf("replace mount state %s: %w", path, err)
 	}
+	c.retireLegacyState(spec, path)
 	return nil
+}
+
+// retireLegacyState removes this mount's state under the previous identifier
+// once the current file holds the count, so a later read cannot adopt a stale
+// copy. Another mount's legacy state (different path) is left alone.
+func (c Controller) retireLegacyState(spec Spec, current string) {
+	legacy := c.legacyStatePath(spec)
+	if legacy == current {
+		return
+	}
+	if state, found, err := readStateFile(legacy); err == nil && found && samePath(state.Path, spec.Path) {
+		_ = os.Remove(legacy)
+	}
 }
 
 func (c Controller) statePath(spec Spec) string {
 	return filepath.Join(mountStateDir(c.runtime()), stateID(spec)+stateFileExt)
+}
+
+func (c Controller) legacyStatePath(spec Spec) string {
+	return filepath.Join(mountStateDir(c.runtime()), legacyStateID(spec)+stateFileExt)
 }
 
 func mountOpsDir(runtime string) string {
@@ -589,11 +639,43 @@ func mountStateDir(runtime string) string {
 	return filepath.Join(runtime, runtimeDirMounts, runtimeDirState)
 }
 
+// stateID keys a mount's refcount file and operation lock. It must be
+// injective: two mounts sharing it would share one count and one lock. A
+// configured mount is keyed by its storage watch name, an ephemeral one by its
+// absolute path. Escaping is reversible, and since a watch name never contains
+// '/', an ephemeral key (always starting with the escaped '/') never equals a
+// configured one. Plain names keep their previous identifier.
 func stateID(spec Spec) string {
+	if spec.ephemeral || spec.Name == "" {
+		return escapeStateID(filepath.Clean(spec.Path))
+	}
+	return escapeStateID(spec.Name)
+}
+
+// legacyStateID is the previous lossy identifier, read only to carry a live
+// count across an upgrade.
+func legacyStateID(spec Spec) string {
 	if spec.Name != "" {
 		return idForPath(spec.Name)
 	}
 	return idForPath(spec.Path)
+}
+
+// escapeStateID keeps [A-Za-z0-9._-] and writes every other byte as %XX, so
+// the result is a single path component that decodes back to its input.
+func escapeStateID(value string) string {
+	var b strings.Builder
+	for i := range len(value) {
+		ch := value[i]
+		switch {
+		case ch >= 'a' && ch <= 'z', ch >= 'A' && ch <= 'Z', ch >= '0' && ch <= '9',
+			ch == '.', ch == '-', ch == '_':
+			b.WriteByte(ch)
+		default:
+			fmt.Fprintf(&b, "%%%02X", ch)
+		}
+	}
+	return b.String()
 }
 
 func (c Controller) run(ctx context.Context, name string, args ...string) error {

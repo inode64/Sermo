@@ -354,7 +354,10 @@ Sermo's runtime counter and `umount` decrements it. The real `umount` only runs
 when the counter reaches zero; if the path is not mounted yet, the first
 `mount` runs `mount <path>` and requires a matching `/etc/fstab` entry. The
 counter is kept under `<paths.runtime>/mounts/state`, and each mount operation
-uses a per-target lock under `<paths.runtime>/mounts/ops`.
+uses a per-target lock under `<paths.runtime>/mounts/ops`. Both are keyed by
+the storage watch name, or by the escaped path for a path with no storage
+watch, so two different mounts never share a counter or a lock. A counter file
+that records a different path is refused rather than reused.
 
 Normal unmount is conservative: Sermo first runs `umount <path>`. If the mount
 is still busy, `sermoctl umount --force` or the Web UI `force` checkbox permits
