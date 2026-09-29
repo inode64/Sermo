@@ -54,6 +54,7 @@ type websocketCheck struct {
 	rawURL      string
 	scheme      string
 	host        string
+	hostHeader  string
 	ifaces      []string
 	ifaceAll    bool
 	port        string
@@ -145,7 +146,7 @@ func websocketResponseData(resp *http.Response) map[string]any {
 func (c *websocketCheck) handshakeRequest(key string) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, wsRequestLineFormat, c.path)
-	fmt.Fprintf(&b, wsHeaderFormat, wsHeaderHost, c.host)
+	fmt.Fprintf(&b, wsHeaderFormat, wsHeaderHost, c.hostHeader)
 	fmt.Fprintf(&b, wsHeaderFormat, wsHeaderUpgrade, wsUpgradeWebSocket)
 	fmt.Fprintf(&b, wsHeaderFormat, wsHeaderConnection, wsConnectionUpgrade)
 	fmt.Fprintf(&b, wsHeaderFormat, wsHeaderKey, key)
@@ -183,6 +184,13 @@ func buildWebsocketCheck(b base, entry map[string]any) (Check, string) {
 	if port == "" {
 		port = websocketDefaultPort(secure)
 	}
+	// The Host header is uri-host[:port]: the bare hostname would drop a
+	// non-default port and the brackets of an IPv6 literal, which proxies
+	// reject and Origin-checking servers refuse.
+	hostHeader := net.JoinHostPort(u.Hostname(), port)
+	if port == websocketDefaultPort(secure) {
+		hostHeader = strings.TrimSuffix(hostHeader, ":"+port)
+	}
 	wsAll, iwarn := parseInterfaceMatch(entry)
 	if iwarn != "" {
 		return nil, "websocket check: " + iwarn
@@ -192,6 +200,7 @@ func buildWebsocketCheck(b base, entry map[string]any) (Check, string) {
 		rawURL:      raw,
 		scheme:      u.Scheme,
 		host:        u.Hostname(),
+		hostHeader:  hostHeader,
 		ifaces:      cfgval.StringList(entry[CheckKeyInterface]),
 		ifaceAll:    wsAll,
 		port:        port,
