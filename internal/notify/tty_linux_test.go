@@ -103,6 +103,23 @@ func TestTTYNotifierSendToTargetsWritesEachTarget(t *testing.T) {
 	}
 }
 
+func TestTTYPayloadSanitizesC1ControlSequences(t *testing.T) {
+	// U+009B is the 8-bit CSI: xterm and other UTF-8 terminals act on it like
+	// ESC [, so check output could recolour or rewrite the operator's screen.
+	payload := string(ttyPayload(Message{Subject: "a\u009b31mred", Body: "b\u0085c\u009dd"}, "host", time.Unix(0, 0).UTC()))
+	for _, r := range payload {
+		if r >= 0x80 && r <= 0x9f {
+			t.Fatalf("payload contains C1 control %U: %q", r, payload)
+		}
+	}
+	if !strings.Contains(payload, "a?31mred") || !strings.Contains(payload, "b?c?d") {
+		t.Fatalf("payload did not preserve sanitized text: %q", payload)
+	}
+	if got := string(ttyPayload(Message{Subject: "café ✓"}, "host", time.Unix(0, 0).UTC())); !strings.Contains(got, "café ✓") {
+		t.Fatalf("printable non-ASCII text was altered: %q", got)
+	}
+}
+
 func TestTTYPayloadSanitizesControlSequences(t *testing.T) {
 	payload := string(ttyPayload(Message{Subject: "bad\x1bsubject", Body: "line\x00two"}, "host", time.Unix(0, 0).UTC()))
 	if strings.Contains(payload, "\x1b") || strings.Contains(payload, "\x00") {

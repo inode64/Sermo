@@ -141,7 +141,9 @@ func terminalSafe(s string) string {
 		case '\n', '\r', '\t':
 			return r
 		}
-		if r < 0x20 || r == 0x7f {
+		// C0, DEL and the C1 range: UTF-8 terminals (xterm and others) act on
+		// C1 codes such as U+009B, the 8-bit CSI, just like an ESC sequence.
+		if r < 0x20 || (r >= 0x7f && r <= 0x9f) {
 			return '?'
 		}
 		return r
