@@ -458,3 +458,25 @@ func TestSmartCheckGradesPredicatesAsWarningWhileHealthPasses(t *testing.T) {
 		t.Fatalf("declared warning + FAILED verdict = %+v, want the declared advisory", res)
 	}
 }
+
+// The ATA self-test execution status keeps "in progress" (0xF) in the high
+// nibble and the remaining tenths in the low one, so the numeric reading must
+// not depend on smartctl's English status text.
+func TestSmartSelfTestRunningReadsHighNibble(t *testing.T) {
+	tests := []struct {
+		value int
+		want  bool
+	}{
+		{value: 0xf9, want: true},  // in progress, 90 % remaining
+		{value: 0xf0, want: true},  // in progress, finishing
+		{value: 0x00, want: false}, // completed without error
+		{value: 0x0f, want: false}, // reserved status, not in progress
+		{value: 0x2f, want: false}, // interrupted by host reset
+	}
+	for _, tt := range tests {
+		value := tt.value
+		if got := smartSelfTestRunning(&value, ""); got != tt.want {
+			t.Errorf("smartSelfTestRunning(%#x) = %v, want %v", tt.value, got, tt.want)
+		}
+	}
+}
