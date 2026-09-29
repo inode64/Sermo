@@ -370,6 +370,9 @@ The lock is released only after `COMMAND` has exited, so a backup that cleans up
 after `SIGTERM` stays protected until it finishes. `SIGKILL` of `sermoctl` cannot
 be caught; the lock then turns stale (dead owner) and stops blocking.
 
+The wrapper exits with `COMMAND`'s exit status, or `128 + signal` when a signal
+killed `COMMAND` (for example `143` for `SIGTERM`), as a shell reports it.
+
 ## Mounts
 
 Mount actions are fstab-backed and use storage watch files with a `mount:` block

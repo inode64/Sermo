@@ -58,3 +58,24 @@ func TestLockWrapForwardsSIGTERMAndHoldsLockUntilCommandExits(t *testing.T) {
 		t.Fatalf("lock should be released after the command exited: %v", err)
 	}
 }
+
+func TestLockWrapReportsCommandExitStatus(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		script string
+		want   int
+	}{
+		{name: "exit code", script: "exit 3", want: 3},
+		{name: "killed by SIGTERM", script: "kill -TERM $$", want: 128 + int(syscall.SIGTERM)},
+		{name: "killed by SIGKILL", script: "kill -KILL $$", want: 128 + int(syscall.SIGKILL)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			global, _ := writeLocksConfig(t, t.TempDir())
+			code, _, _ := runLockCLI(t, "--config", global, "lock", "mysql", "--reason", "r", "--ttl", "1h",
+				"--", "sh", "-c", tc.script)
+			if code != tc.want {
+				t.Fatalf("wrap exit = %d, want %d", code, tc.want)
+			}
+		})
+	}
+}
