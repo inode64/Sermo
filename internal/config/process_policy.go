@@ -109,7 +109,10 @@ func processPolicyAllowCommand(rawAllow map[string]any, suffix string) (*regexp.
 	if !strings.HasPrefix(command, "^") || !strings.HasSuffix(command, "$") {
 		issues = append(issues, ProcessPolicyAllowError{PathSuffix: path, Problem: "must be anchored with ^ and $"})
 	}
-	compiled, err := regexp.Compile(command)
+	// The ^…$ check above is textual: `^a|b$` passes it, yet its top-level
+	// alternation leaves each branch anchored at one end only. Wrapping the
+	// whole expression anchors every branch at both ends.
+	compiled, err := regexp.Compile(`^(?:` + command + `)$`)
 	if err != nil {
 		issues = append(issues, ProcessPolicyAllowError{PathSuffix: path, Problem: fmt.Sprintf("is invalid: %v", err)})
 		return nil, issues

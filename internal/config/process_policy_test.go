@@ -22,6 +22,24 @@ func TestParseProcessPolicyAllows(t *testing.T) {
 		}
 	})
 
+	// A top-level alternation must not escape the anchors: `^a|b$` would
+	// otherwise allow any command line of that executable ending in `b`.
+	t.Run("top-level alternation stays anchored", func(t *testing.T) {
+		allows, issues := ParseProcessPolicyAllows(map[string]any{
+			"main": map[string]any{"exe": "/usr/bin/foo", "cmd": "^/usr/bin/foo --a|--b$"},
+		})
+		if len(issues) != 0 || len(allows) != 1 {
+			t.Fatalf("allows = %+v, issues = %v", allows, issues)
+		}
+		cmd := allows[0].Cmd
+		if !cmd.MatchString("/usr/bin/foo --a") || !cmd.MatchString("--b") {
+			t.Fatalf("anchored alternatives must still match: %v", cmd)
+		}
+		if cmd.MatchString("/usr/bin/foo --evil --b") || cmd.MatchString("/usr/bin/foo --a --evil") {
+			t.Fatalf("alternation escaped its anchors: %v", cmd)
+		}
+	})
+
 	tests := []struct {
 		name string
 		raw  any

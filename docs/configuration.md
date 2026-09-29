@@ -3544,7 +3544,7 @@ check:
       exe: /usr/lib/postgresql/18/bin/postgres
     postgres-17:
       exe: /usr/lib/postgresql/17/bin/postgres
-      cmd: '^/usr/lib/postgresql/17/bin/postgres(?: |$)'
+      cmd: '^/usr/lib/postgresql/17/bin/postgres(?: .*)?$'
 then:                         # optional; omit for dashboard/event-only alerting
   notify: [security]
   notify_interval: 15m
@@ -3552,7 +3552,10 @@ then:                         # optional; omit for dashboard/event-only alerting
 
 `allow` is non-empty. Each named entry accepts only `exe` and optional `cmd`:
 `exe` must be a clean absolute path, and `cmd` must compile and start with `^`
-and end with `$`. A basename, glob or partial command is rejected. The command
+and end with `$`. The expression always matches the whole command line (the
+space-joined argv): a top-level alternation such as `^foo --a|--b$` means
+`^(?:foo --a|--b)$`, not "starts with `foo --a` or ends with `--b`". A
+basename, glob or partial command is rejected. The command
 line is used only to make an allow entry narrower; it is never copied into the
 WebUI, events, notification environment or generated inventory.
 
