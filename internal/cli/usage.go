@@ -357,6 +357,11 @@ var commandUsages = []commandUsage{
 			"--reason REASON    required reason stored with the lock",
 			"--ttl DURATION     required lock lifetime",
 		},
+		Notes: []string{
+			"The wrapper holds the lock until COMMAND exits: SIGTERM and SIGHUP are",
+			"forwarded to COMMAND; SIGINT and SIGQUIT are not (a terminal already",
+			"delivers them to COMMAND) and never end sermoctl early.",
+		},
 		Examples: []string{
 			"sermoctl lock mysql-main --reason backup --ttl 2h -- /usr/local/bin/backup-mysql",
 			"sermoctl lock acquire postgres-main --name maintenance --reason patch --ttl 30m",
