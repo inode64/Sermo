@@ -464,10 +464,13 @@ func serviceStaleFile(path string, detected map[string]bool) staleFile {
 	return staleFile{path: path, label: path + " (" + target + ")"}
 }
 
-// serviceFileTarget returns the typed target a managed service file controls.
-// Catalog/init services use "service:<name>", Docker services use
-// "docker:<container>", and libvirt VM services use "vm:<domain>". "" when
-// unreadable or not targetable.
+// serviceFileTarget returns the typed target a managed service file controls,
+// or "" when the cleanup cannot prove anything about it. Catalog services use
+// "service:<uses>", Docker services "docker:<container>" and libvirt VM
+// services "vm:<domain>". A service without `uses:` (a generic init unit the
+// wizard found active, or a hand-written service) is never a target: generic
+// detection only sees active units, so a stopped or failed unit — exactly the
+// one worth monitoring — would otherwise be offered for deletion.
 func serviceFileTarget(path string) string {
 	doc := readYAMLMap(path)
 	if doc == nil {
@@ -481,10 +484,7 @@ func serviceFileTarget(path string) string {
 			return serviceTargetKey(serviceFamilyVM, cfgval.AsString(control[virt.ControlKeyDomain]))
 		}
 	}
-	if s, _ := doc[config.ServiceKeyUses].(string); s != "" {
-		return serviceTargetKey(wizardNounService, s)
-	}
-	s, _ := doc[wizardFieldName].(string)
+	s, _ := doc[config.ServiceKeyUses].(string)
 	return serviceTargetKey(wizardNounService, s)
 }
 

@@ -559,12 +559,14 @@ func confirmStaleDeletes(p *assist.Prompt, dir, noun string, stale []staleFile) 
 	if len(stale) == 0 {
 		return nil
 	}
-	if !p.Confirm(fmt.Sprintf("Found %d managed %s file(s) in %s whose target is no longer detected. Review them for deletion?", len(stale), noun, dir), true) {
+	// Deleting config is destructive and detection can be incomplete, so both
+	// questions default to no.
+	if !p.Confirm(fmt.Sprintf("Found %d managed %s file(s) in %s whose target is no longer detected. Review them for deletion?", len(stale), noun, dir), false) {
 		return nil
 	}
 	var deletes []string
 	for _, f := range stale {
-		if p.Confirm("Delete stale "+noun+" file "+f.label+"?", true) {
+		if p.Confirm("Delete stale "+noun+" file "+f.label+"?", false) {
 			deletes = append(deletes, f.path)
 		}
 	}

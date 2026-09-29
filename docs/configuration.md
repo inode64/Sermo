@@ -1918,7 +1918,12 @@ document never merges into a service. (A service can also declare its own
 > with a default `60m` interval. Run with no argument to choose from the list.
 >
 > On finishing, the wizard offers to delete managed files whose target is no
-> longer detected from the current generated output directories. New assistant
+> longer detected from the current generated output directories; both questions
+> suggest `n` and need an explicit answer. For services it only offers files
+> that `uses:` a catalog service no longer installed, or whose Docker container
+> or libvirt domain no longer exists; a service without `uses:` (a generic unit,
+> which is detected only while active, or a hand-written service) is never
+> offered. New assistant
 > types can be added over time. At any multi-select prompt you can
 > type item numbers (`1,3`), the keyword `all`, or an option's name. When asked
 > for notification targets the numbered list shows only the notifiers defined in

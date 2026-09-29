@@ -312,6 +312,16 @@ func TestServiceFileTargetControlledServices(t *testing.T) {
 			body: "name: nginx-main\nuses: nginx\n",
 			want: "service:nginx",
 		},
+		{
+			// Generic units are detected only while active; a stopped or
+			// failed one must never look orphaned.
+			name: "generic unit",
+			body: "name: web\nenabled: true\nservice: web.service\n",
+		},
+		{
+			name: "hand-written",
+			body: "name: web\nservice: nginx\n",
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			path := filepath.Join(tmp, tc.name+".yml")
@@ -322,6 +332,40 @@ func TestServiceFileTargetControlledServices(t *testing.T) {
 				t.Fatalf("serviceFileTarget() = %q, want %q", got, tc.want)
 			}
 		})
+	}
+}
+
+// The service cleanup offers only catalog files whose catalog service is no
+// longer installed; stopped generic units and hand-written services stay, and
+// the prompts suggest "no".
+func TestPlanStaleServiceDeletesSparesGenericAndHandWritten(t *testing.T) {
+	dir := t.TempDir()
+	files := map[string]string{
+		"gone.yml":    "name: redis-main\nuses: redis\n",
+		"present.yml": "name: nginx-main\nuses: nginx\n",
+		"stopped.yml": "name: web\nenabled: true\nservice: web.service\n",
+		"manual.yml":  "name: web2\nservice: nginx\n",
+	}
+	for name, body := range files {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	detected := map[string]bool{
+		serviceDetectedFamilyKey(wizardNounService):  true,
+		serviceTargetKey(wizardNounService, "nginx"): true,
+	}
+	var out strings.Builder
+	p := assist.NewPrompt(strings.NewReader("y\ny\n"), &out)
+	deletes, err := planStaleDeletes(p, dir, wizardNounService, "services", detected, serviceStaleFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{filepath.Join(dir, "gone.yml")}; !slices.Equal(deletes, want) {
+		t.Fatalf("deletes = %v, want %v", deletes, want)
+	}
+	if !strings.Contains(out.String(), "Found 1 managed service file(s)") || strings.Contains(out.String(), "[Y/n]") {
+		t.Fatalf("prompts = %q, want one stale file and y/N hints", out.String())
 	}
 }
 
