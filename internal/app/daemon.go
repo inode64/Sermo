@@ -602,6 +602,7 @@ func buildWorker(ctx context.Context, name, unit string, tree map[string]any, de
 		InPanic:              deps.Panic.Active,
 		Settling:             deps.Settling,
 		OperationSettling:    deps.OperationSettling,
+		OperationTimeout:     engine.OperationTimeout,
 		ServiceRestartNotice: deps.ServiceRestartNotice,
 		RestartNotice:        deps.RestartNotice,
 		PrimaryProcess:       primaryProcess,

@@ -103,6 +103,10 @@ type Worker struct {
 	// awaiting one post-operation observation cycle. While active, checks may
 	// publish fresh data but must not drive SLA, alerts or remediation.
 	OperationSettling OperationSettlingStore
+	// OperationTimeout is this service's resolved operation deadline (engine
+	// operation_timeout raised by stop_policy). An operation-settling marker is
+	// trusted at least this long before it is treated as abandoned.
+	OperationTimeout time.Duration
 	// RestartNotice is the optional global principal-process external-restart
 	// notice policy. It is intentionally observed during startup and
 	// operation-settling cycles, before ordinary rule side effects are considered.
@@ -410,7 +414,7 @@ func (w *Worker) operationSettlingState(now time.Time) (observeOnly, running boo
 	if !found {
 		return false, false
 	}
-	if !rec.UpdatedAt.IsZero() && now.Sub(rec.UpdatedAt) > operationSettlingMaxAge {
+	if !rec.UpdatedAt.IsZero() && now.Sub(rec.UpdatedAt) > operationSettlingMaxAge(w.OperationTimeout) {
 		w.clearOperationSettling()
 		return false, false
 	}

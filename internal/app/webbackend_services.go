@@ -128,7 +128,7 @@ func (b *WebBackend) viewWithRuntime(ctx context.Context, name string, e *webEnt
 	}
 	svc.OperationActive = lockView.operationActive
 	b.decorateRemediation(name, &svc)
-	observed := (b.settling == nil || b.settling.Observed(SettlingServiceKey(name))) && !b.operationSettlingPending(name, lockView.settlingRecords)
+	observed := (b.settling == nil || b.settling.Observed(SettlingServiceKey(name))) && !b.operationSettlingPending(name, lockView.settlingRecords, e.engine.OperationTimeout)
 	svc.ObservabilityReady, svc.ObservabilityMissing = b.serviceObservability(name, e, observation, svc.Status, svc.CheckHealth, svc.Monitored, observed)
 	svc.State = ServiceState(svc.Enabled, svc.Monitored, svc.Status, svc.CheckHealth, observed, svc.ObservabilityReady,
 		processActive, onlyMissingProcesses(svc.ObservabilityMissing), backendDegraded)
@@ -490,7 +490,7 @@ func (b *WebBackend) decorateRemediation(name string, svc *web.Service) {
 	}
 }
 
-func (b *WebBackend) operationSettlingPending(name string, records map[string]state.OperationSettlingRecord) bool {
+func (b *WebBackend) operationSettlingPending(name string, records map[string]state.OperationSettlingRecord, operationTimeout time.Duration) bool {
 	if b.operationSettling == nil {
 		return false
 	}
@@ -506,7 +506,7 @@ func (b *WebBackend) operationSettlingPending(name string, records map[string]st
 	if !found {
 		return false
 	}
-	if !rec.UpdatedAt.IsZero() && b.webNow().Sub(rec.UpdatedAt) > operationSettlingMaxAge {
+	if !rec.UpdatedAt.IsZero() && b.webNow().Sub(rec.UpdatedAt) > operationSettlingMaxAge(operationTimeout) {
 		if err := b.operationSettling.ClearOperationSettling(name); err != nil {
 			b.emitMonitorEvent(name, eventActionOperationSettling, eventKindError, "", err.Error())
 		}
