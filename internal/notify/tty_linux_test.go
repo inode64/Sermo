@@ -22,7 +22,7 @@ func TestTTYNotifierTargetsFilterUsersAndUnsafeLines(t *testing.T) {
 		{User: "fran", Line: "pts/2"},
 		{User: "root", Line: "pts/0"},
 	})
-	if len(got) != 1 || got[0] != "/dev/pts/0" {
+	if len(got) != 1 || got[0] != (ttyTarget{path: "/dev/pts/0", user: "root"}) {
 		t.Fatalf("targetTTYs = %v, want [/dev/pts/0]", got)
 	}
 }
@@ -44,7 +44,7 @@ func TestNewTargetedTTYRequiresAndNormalizesUsers(t *testing.T) {
 		{User: "fran", Line: "pts/1"},
 		{User: "other", Line: "pts/2"},
 	})
-	if len(got) != 2 || got[0] != "/dev/pts/0" || got[1] != "/dev/pts/1" {
+	if len(got) != 2 || got[0] != (ttyTarget{path: "/dev/pts/0", user: "root"}) || got[1] != (ttyTarget{path: "/dev/pts/1", user: "fran"}) {
 		t.Fatalf("targetTTYs = %v, want only configured users", got)
 	}
 
@@ -72,7 +72,8 @@ func TestWallNotifierTargetsAllUsers(t *testing.T) {
 		{User: "root", Line: "pts/0"},
 		{User: "fran", Line: "pts/1"},
 	})
-	if len(got) != 2 || got[0] != "/dev/pts/0" || got[1] != "/dev/pts/1" {
+	// wall writes to every terminal, whoever owns it: no owner to confirm.
+	if len(got) != 2 || got[0] != (ttyTarget{path: "/dev/pts/0"}) || got[1] != (ttyTarget{path: "/dev/pts/1"}) {
 		t.Fatalf("wall targetTTYs = %v, want every active terminal", got)
 	}
 	if wn.Type() != "wall" {
@@ -86,8 +87,8 @@ func TestTTYNotifierSendToTargetsWritesEachTarget(t *testing.T) {
 		name:    "tty",
 		typ:     TypeTTY,
 		devRoot: utmp.DevRoot,
-		writeTTY: func(_ context.Context, path string, payload []byte) error {
-			paths = append(paths, path)
+		writeTTY: func(_ context.Context, target ttyTarget, payload []byte) error {
+			paths = append(paths, target.path)
 			if !strings.Contains(string(payload), "Subject") || strings.Contains(string(payload), "\x1b") {
 				t.Fatalf("payload was not rendered/sanitized: %q", string(payload))
 			}
@@ -96,7 +97,7 @@ func TestTTYNotifierSendToTargetsWritesEachTarget(t *testing.T) {
 		hostname: func() (string, error) { return "host\x1b[31m", nil },
 		now:      func() time.Time { return time.Unix(0, 0).UTC() },
 	}
-	if err := n.sendToTargets(context.Background(), []string{"/dev/pts/0", "/dev/tty1"}, Message{Subject: "Subject"}); err != nil {
+	if err := n.sendToTargets(context.Background(), []ttyTarget{{path: "/dev/pts/0"}, {path: "/dev/tty1"}}, Message{Subject: "Subject"}); err != nil {
 		t.Fatalf("sendToTargets error = %v", err)
 	}
 	if len(paths) != 2 || paths[0] != "/dev/pts/0" || paths[1] != "/dev/tty1" {
@@ -155,8 +156,8 @@ func TestTTYNotifierSkipsTerminalsWithMessagesDisabled(t *testing.T) {
 	disabled := map[string]bool{}
 	n := &ttyNotifier{
 		name: "wall", typ: TypeWall, devRoot: utmp.DevRoot,
-		writeTTY: func(_ context.Context, path string, _ []byte) error {
-			if disabled[path] {
+		writeTTY: func(_ context.Context, target ttyTarget, _ []byte) error {
+			if disabled[target.path] {
 				return errTTYMessagesDisabled
 			}
 			return nil
@@ -164,7 +165,7 @@ func TestTTYNotifierSkipsTerminalsWithMessagesDisabled(t *testing.T) {
 		hostname: func() (string, error) { return "host", nil },
 		now:      func() time.Time { return time.Unix(0, 0).UTC() },
 	}
-	targets := []string{"/dev/pts/0", "/dev/pts/1"}
+	targets := []ttyTarget{{path: "/dev/pts/0"}, {path: "/dev/pts/1"}}
 
 	disabled["/dev/pts/1"] = true
 	if err := n.sendToTargets(context.Background(), targets, Message{Subject: "s"}); err != nil {
@@ -177,13 +178,57 @@ func TestTTYNotifierSkipsTerminalsWithMessagesDisabled(t *testing.T) {
 	}
 }
 
+func TestTerminalOwnedByRejectsReusedTerminal(t *testing.T) {
+	names := map[uint32]string{0: "root", 1000: "fran"}
+	nameOf := func(uid uint32) string { return names[uid] }
+	for _, tc := range []struct {
+		name    string
+		uid     uint32
+		user    string
+		wantErr bool
+	}{
+		{name: "owner matches", uid: 0, user: "root"},
+		// A stale root session whose pts now belongs to fran.
+		{name: "reused by another user", uid: 1000, user: "root", wantErr: true},
+		{name: "unknown owner", uid: 4242, user: "root"},
+		{name: "no user filter (wall)", uid: 1000, user: ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			err := terminalOwnedBy(tc.uid, tc.user, nameOf)
+			if tc.wantErr != (err != nil) || (err != nil && !errors.Is(err, errTTYOtherOwner)) {
+				t.Fatalf("terminalOwnedBy(%d, %q) = %v", tc.uid, tc.user, err)
+			}
+		})
+	}
+}
+
+func TestTTYNotifierSkipsStaleSessionTerminal(t *testing.T) {
+	n := &ttyNotifier{
+		name: "tty", typ: TypeTTY, devRoot: utmp.DevRoot,
+		writeTTY: func(_ context.Context, target ttyTarget, _ []byte) error {
+			if target.path == "/dev/pts/1" {
+				return errTTYOtherOwner
+			}
+			return nil
+		},
+		hostname: func() (string, error) { return "host", nil },
+		now:      func() time.Time { return time.Unix(0, 0).UTC() },
+	}
+	if err := n.sendToTargets(context.Background(), []ttyTarget{{path: "/dev/pts/0", user: "root"}, {path: "/dev/pts/1", user: "root"}}, Message{Subject: "s"}); err != nil {
+		t.Fatalf("a reused terminal is skipped, not a failure: %v", err)
+	}
+	if err := n.sendToTargets(context.Background(), []ttyTarget{{path: "/dev/pts/1", user: "root"}}, Message{Subject: "s"}); !errors.Is(err, errTTYOtherOwner) {
+		t.Fatalf("no terminal reached must be reported, got %v", err)
+	}
+}
+
 func TestTTYNotifierPartialFailureReportsError(t *testing.T) {
 	n := &ttyNotifier{
 		name:    "tty",
 		typ:     TypeTTY,
 		devRoot: utmp.DevRoot,
-		writeTTY: func(_ context.Context, path string, _ []byte) error {
-			if path == "/dev/pts/1" {
+		writeTTY: func(_ context.Context, target ttyTarget, _ []byte) error {
+			if target.path == "/dev/pts/1" {
 				return errors.New("denied")
 			}
 			return nil

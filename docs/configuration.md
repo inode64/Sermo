@@ -1601,7 +1601,9 @@ notifiers:
   I/O. It honours `mesg n` like `write` and `wall` do, even though `sermod`
   runs as root: a terminal without group write permission is skipped. If no
   targeted terminal accepts the message, or the daemon cannot write a terminal,
-  Sermo records a `notify-failed` event.
+  Sermo records a `notify-failed` event. With `users`, a terminal is written
+  only while its device still belongs to that user, so a stale utmp record whose
+  terminal was reused by someone else does not leak the message to them.
 
 - **`wall`** — broadcasts to every active Linux terminal session using the same
   native Go utmp/TTY implementation as `tty`, but with no user filter. The
