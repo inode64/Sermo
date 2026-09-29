@@ -127,7 +127,9 @@ func (scan *webEventPageScan) addBatch(batch []LoggedEvent, hasRawMore bool) (we
 		scan.scanned++
 		scan.cursor = batch[i].ID
 		if !scan.cutoff.IsZero() && batch[i].Time.Before(scan.cutoff) {
-			continue
+			// The feed is newest first: every event further back is older
+			// still, so the page is complete and has no continuation.
+			return scan.page(false), true
 		}
 		event := loggedEventToWeb(batch[i])
 		if !webEventMatchesQuery(event, scan.query) {
