@@ -92,6 +92,11 @@ func (mqttProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 // buildMQTTConnect builds an MQTT 3.1.1 CONNECT packet with a clean session and
 // optional username/password.
 func buildMQTTConnect(clientID, user, pass string) ([]byte, error) {
+	// MQTT 3.1.1 forbids the password flag without the user name flag; a
+	// broker closes such a CONNECT, which would surface as a confusing EOF.
+	if pass != "" && user == "" {
+		return nil, errors.New("mqtt: password requires a user (MQTT 3.1.1)")
+	}
 	var vh bytes.Buffer
 	if err := writeMQTTString(&vh, mqttProtocolName); err != nil {
 		return nil, err

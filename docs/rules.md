@@ -1222,7 +1222,9 @@ Protocols, in the order of the table above:
   bounded `smtp_reply`, and the enhanced status when supplied. MX targets are
   tried in preference order, up to three: a transport failure advances to the
   next target, while the first SMTP or local-policy verdict is retained so a
-  lower-priority MX cannot mask it. A null MX is reported as a `policy`
+  lower-priority MX cannot mask it. A STARTTLS certificate that fails
+  verification counts as such a verdict (`policy` at the `starttls` stage),
+  not as a transport failure. A null MX is reported as a `policy`
   failure. A pre-DATA acceptance detects connection, TLS and early
   reputation/policy blocks; it cannot prove content acceptance, inbox
   placement, DKIM signing or spam classification.
@@ -1737,7 +1739,8 @@ Protocols, in the order of the table above:
 - `mqtt` — default port 1883 (TCP); `tls` supported (MQTTS, port 8883). Performs an
   MQTT 3.1.1 `CONNECT` handshake and verifies the broker answers `CONNACK`
   accepting the connection (return code 0). With no credentials it is an anonymous
-  connect; `user`/`password` authenticate. A refused CONNACK (e.g. `not-authorized`,
+  connect; `user`/`password` authenticate (MQTT 3.1.1 allows no `password`
+  without a `user`; the check fails before connecting). A refused CONNACK (e.g. `not-authorized`,
   `bad-username-or-password`) fails the check with the reason; result data: the
   `connack` status.
 - `amqp` (alias `rabbitmq`) — default port 5672 (TCP); no auth. Sends the AMQP
