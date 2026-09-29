@@ -2,8 +2,10 @@ package procnet
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"sermo/internal/hostfs"
 	"strconv"
 	"strings"
@@ -12,31 +14,44 @@ import (
 // CountTCPConnections returns the number of established TCP sockets whose
 // local port matches port. It reads both IPv4 and IPv6 kernel socket tables.
 func CountTCPConnections(port int) (int, error) {
-	return countTCPConnections(port, []string{PathTCP, PathTCP6})
+	return countTCPConnections(port, PathTCP, PathTCP6)
 }
 
-// countTCPConnections counts established sockets from every path. A missing or
-// unreadable table makes the whole observation unavailable: returning a partial
-// count could authorize a guard while connections in the other address family
-// remain unseen.
-func countTCPConnections(port int, paths []string) (int, error) {
-	count := 0
-	for _, path := range paths {
-		f, err := hostfs.Open(path)
-		if err != nil {
-			return 0, fmt.Errorf("open TCP socket table %s: %w", path, err)
-		}
-		n, scanErr := countPortState(f, port, StateEstablished)
-		closeErr := f.Close()
-		if scanErr != nil {
-			return 0, fmt.Errorf("read %s: %w", path, scanErr)
-		}
-		if closeErr != nil {
-			return 0, fmt.Errorf("close %s: %w", path, closeErr)
-		}
-		count += n
+// countTCPConnections counts established sockets from both tables. A missing or
+// unreadable IPv4 table, or an unreadable IPv6 table, makes the whole
+// observation unavailable: returning a partial count could authorize a guard
+// while connections in the other address family remain unseen. A missing IPv6
+// table is authoritative instead: the kernel creates it whenever the IPv6 stack
+// exists, so without it (ipv6.disable=1) no IPv6 socket can exist either.
+func countTCPConnections(port int, tcpPath, tcp6Path string) (int, error) {
+	count, err := countTableConnections(port, tcpPath)
+	if err != nil {
+		return 0, err
 	}
-	return count, nil
+	n, err := countTableConnections(port, tcp6Path)
+	if errors.Is(err, fs.ErrNotExist) {
+		return count, nil
+	}
+	if err != nil {
+		return 0, err
+	}
+	return count + n, nil
+}
+
+func countTableConnections(port int, path string) (int, error) {
+	f, err := hostfs.Open(path)
+	if err != nil {
+		return 0, fmt.Errorf("open TCP socket table %s: %w", path, err)
+	}
+	n, scanErr := countPortState(f, port, StateEstablished)
+	closeErr := f.Close()
+	if scanErr != nil {
+		return 0, fmt.Errorf("read %s: %w", path, scanErr)
+	}
+	if closeErr != nil {
+		return 0, fmt.Errorf("close %s: %w", path, closeErr)
+	}
+	return n, nil
 }
 
 // ScanPortState walks a procfs socket table and calls found for every row whose

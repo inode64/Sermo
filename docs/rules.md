@@ -731,6 +731,9 @@ under the same reallocated sectors — is announced again with the new kind.
 `tcp_connections` is a local, condition-style check: it counts IPv4 and IPv6
 TCP sockets in `ESTABLISHED` state whose local port equals `port`. It reads
 `/proc/net/tcp` and `/proc/net/tcp6`; it does not open a network connection.
+An unreadable table makes the check unavailable rather than report a partial
+count. The one exception is a host booted with `ipv6.disable=1`: the kernel then
+has no `/proc/net/tcp6` and no IPv6 sockets, so only the IPv4 table is counted.
 
 ```yaml
 checks:

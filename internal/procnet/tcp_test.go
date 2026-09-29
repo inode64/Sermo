@@ -26,18 +26,44 @@ func TestCountPortState(t *testing.T) {
 	}
 }
 
-func TestCountTCPConnectionsRejectsPartialSocketTables(t *testing.T) {
+func TestCountTCPConnectionsSocketTables(t *testing.T) {
+	const row = "  sl  local_address rem_address   st\n   0: 0100007F:0015 0100007F:AF20 01\n"
 	dir := t.TempDir()
 	tcp := filepath.Join(dir, "tcp")
-	if err := os.WriteFile(tcp, []byte("  sl  local_address rem_address   st\n   0: 0100007F:0015 0100007F:AF20 01\n"), 0o600); err != nil {
-		t.Fatal(err)
+	tcp6 := filepath.Join(dir, "tcp6")
+	for _, path := range []string{tcp, tcp6} {
+		if err := os.WriteFile(path, []byte(row), 0o600); err != nil {
+			t.Fatal(err)
+		}
 	}
-	missingTCP6 := filepath.Join(dir, "tcp6")
+	missing := filepath.Join(dir, "missing")
+	unreadable := t.TempDir() // a directory: opens, but reading it fails
 
-	if _, err := countTCPConnections(21, []string{tcp, missingTCP6}); err == nil {
-		t.Fatal("partial TCP tables must be unavailable")
-	} else if !strings.Contains(err.Error(), missingTCP6) {
-		t.Fatalf("error = %q, want missing TCP6 path", err)
+	tests := []struct {
+		name     string
+		tcp      string
+		tcp6     string
+		want     int
+		wantPath string
+	}{
+		{name: "both families", tcp: tcp, tcp6: tcp6, want: 2},
+		{name: "IPv6 stack disabled", tcp: tcp, tcp6: missing, want: 1},
+		{name: "missing IPv4 table", tcp: missing, tcp6: tcp6, wantPath: missing},
+		{name: "unreadable IPv6 table", tcp: tcp, tcp6: unreadable, wantPath: unreadable},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := countTCPConnections(21, tt.tcp, tt.tcp6)
+			if tt.wantPath != "" {
+				if err == nil || !strings.Contains(err.Error(), tt.wantPath) {
+					t.Fatalf("err = %v, want an unavailable observation naming %s", err, tt.wantPath)
+				}
+				return
+			}
+			if err != nil || got != tt.want {
+				t.Fatalf("count = %d, %v; want %d", got, err, tt.want)
+			}
+		})
 	}
 }
 
