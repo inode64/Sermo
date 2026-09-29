@@ -163,50 +163,104 @@ func documentBinaryCandidates(tree map[string]any) []string {
 // assembled so the file path may reference other variables such as ${config}. A
 // missing file or unmatched key leaves the default already set by
 // collectVariables in place. Malformed specs and unresolved path
-// variables are configuration errors.
+// variables are configuration errors. A from_file variable may reference
+// another one (an include file named by a directive), so they are read in
+// dependency order: each sees the file value of the ones it names, never their
+// default.
 func resolveFileVars(vars map[string]string, tree map[string]any) []string {
 	raw, ok := tree[sectionVariables].(map[string]any)
 	if !ok {
 		return nil
 	}
-	var errs []string
+	specs := map[string]map[string]any{}
 	for name, v := range raw {
-		spec, ok := v.(map[string]any)
-		if !ok {
-			continue
-		}
-		from, ok := spec[varKeyFromFile]
-		if !ok {
-			continue
-		}
-		var specErrs []string
-		validateFromFileSpec(variablePath(name), spec, func(format string, args ...any) {
-			specErrs = append(specErrs, fmt.Sprintf(format, args...))
-		})
-		if len(specErrs) > 0 {
-			errs = append(errs, specErrs...)
-			continue
-		}
-		path, pathErrs := substituteVars(cfgval.String(from), vars, variableFieldPath(name, varKeyFromFile))
-		errs = append(errs, pathErrs...)
-		if len(pathErrs) > 0 {
-			continue
-		}
-		resolvedSpec, specErrs := resolveFromFileSpecVars(name, spec, vars)
-		errs = append(errs, specErrs...)
-		if len(specErrs) > 0 {
-			continue
-		}
-		val, found, err := extractFileValue(path, resolvedSpec)
-		if err != nil {
-			errs = append(errs, fmt.Sprintf("%s: %v", variablePath(name), err))
-			continue
-		}
-		if found {
-			vars[name] = val
+		if spec, ok := v.(map[string]any); ok {
+			if _, has := spec[varKeyFromFile]; has {
+				specs[name] = spec
+			}
 		}
 	}
+	order, errs := fromFileOrder(specs)
+	for _, name := range order {
+		errs = append(errs, resolveFileVar(name, specs[name], vars)...)
+	}
 	return errs
+}
+
+func resolveFileVar(name string, spec map[string]any, vars map[string]string) []string {
+	var specErrs []string
+	validateFromFileSpec(variablePath(name), spec, func(format string, args ...any) {
+		specErrs = append(specErrs, fmt.Sprintf(format, args...))
+	})
+	if len(specErrs) > 0 {
+		return specErrs
+	}
+	path, pathErrs := substituteVars(cfgval.String(spec[varKeyFromFile]), vars, variableFieldPath(name, varKeyFromFile))
+	if len(pathErrs) > 0 {
+		return pathErrs
+	}
+	resolvedSpec, specErrs := resolveFromFileSpecVars(name, spec, vars)
+	if len(specErrs) > 0 {
+		return specErrs
+	}
+	val, found, err := extractFileValue(path, resolvedSpec)
+	if err != nil {
+		return []string{fmt.Sprintf("%s: %v", variablePath(name), err)}
+	}
+	if found {
+		vars[name] = val
+	}
+	return nil
+}
+
+// fromFileOrder returns the from_file variables so that each follows every
+// from_file variable its path or pattern references. Map order would otherwise
+// decide whether a dependency contributes its file value or its default, which
+// changes from one reload to the next. A reference cycle is an error.
+func fromFileOrder(specs map[string]map[string]any) ([]string, []string) {
+	const (
+		visiting = 1
+		done     = 2
+	)
+	state := make(map[string]int, len(specs))
+	order := make([]string, 0, len(specs))
+	var errs []string
+	var visit func(name string, chain []string)
+	visit = func(name string, chain []string) {
+		switch state[name] {
+		case done:
+			return
+		case visiting:
+			cycle := strings.Join(append(slices.Clone(chain), name), " -> ")
+			errs = append(errs, fmt.Sprintf("%s: from_file variables reference each other in a cycle: %s", variablePath(name), cycle))
+			return
+		}
+		state[name] = visiting
+		for _, dep := range fromFileRefs(specs[name]) {
+			if _, isFromFile := specs[dep]; isFromFile {
+				visit(dep, append(chain, name))
+			}
+		}
+		state[name] = done
+		order = append(order, name)
+	}
+	for _, name := range slices.Sorted(maps.Keys(specs)) {
+		visit(name, nil)
+	}
+	return order, errs
+}
+
+// fromFileRefs lists, sorted, the variables a from_file spec's path and
+// pattern reference.
+func fromFileRefs(spec map[string]any) []string {
+	var refs []string
+	for _, key := range []string{varKeyFromFile, varKeyPattern} {
+		for _, ref := range varRef.FindAllString(cfgval.String(spec[key]), -1) {
+			refs = append(refs, varRefName(ref))
+		}
+	}
+	slices.Sort(refs)
+	return refs
 }
 
 func resolveFromFileSpecVars(name string, spec map[string]any, vars map[string]string) (map[string]any, []string) {
