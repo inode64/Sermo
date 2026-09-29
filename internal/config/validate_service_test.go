@@ -1,6 +1,7 @@
 package config
 
 import (
+	"slices"
 	"testing"
 )
 
@@ -958,6 +959,50 @@ processes:
   shim: { exe: /usr/bin/containerd-shim, user: root, delegated: "true" }
 `,
 		"processes.shim.delegated must be a boolean")
+}
+
+// enabled/delete decide whether an entry (and its remediation) runs at all.
+// YAML 1.2 reads `no` or "false" as a string, which the lenient readers treat
+// as "keep active", so anything but a boolean literal must fail validation.
+func TestValidateEntryFlagsMustBeBoolean(t *testing.T) {
+	assertServiceValidationTokens(t, `
+name: svc
+service: x
+processes:
+  main: { exe: /usr/bin/x, user: root }
+  helper: { exe: /usr/bin/y, user: root, delete: true }
+checks:
+  port: { type: tcp, host: 127.0.0.1, port: 80, enabled: false }
+`, []string{"enabled must be", "delete must be"}, `
+name: svc
+service: x
+processes:
+  main: { exe: /usr/bin/x, user: root, delete: yes }
+checks:
+  port: { type: tcp, host: 127.0.0.1, port: 80, enabled: "false" }
+watches:
+  load:
+    enabled: no
+    check: { type: load, load1: { op: '>', value: 50 } }
+    then: { action: restart }
+`,
+		"processes.main.delete must be true or false",
+		"checks.port.enabled must be true or false",
+		"watches.load.enabled must be true or false")
+
+	serviceFlag := validateService(t, "name: svc\nservice: x\nenabled: no\n")
+	if !slices.ContainsFunc(serviceFlag, func(i Issue) bool { return i.Msg == "enabled must be true or false" }) {
+		t.Errorf("service-level enabled: no must be rejected: %v", serviceFlag)
+	}
+
+	assertWatchIssues(t, map[string]any{"watches": map[string]any{
+		"quoted":  map[string]any{"enabled": "false", "check": map[string]any{"type": "load"}},
+		"deleted": map[string]any{"delete": true, "check": map[string]any{"type": "load"}},
+		"typo":    map[string]any{"delete": "yes", "check": map[string]any{"type": "load"}},
+	}},
+		"watches.quoted.enabled must be true or false",
+		"watches.deleted.delete is only supported in a .local override",
+		"watches.typo.delete must be true or false")
 }
 
 func TestValidateCleanServicePasses(t *testing.T) {

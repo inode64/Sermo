@@ -903,6 +903,12 @@ func validateResolved(name string, tree map[string]any, runtime string, notifier
 			add(validationBooleanFormat, keyDryRun)
 		}
 	}
+	// A string `enabled: no` would read as enabled and keep the worker running.
+	if v, present := tree[keyEnabled]; present {
+		if _, ok := v.(bool); !ok {
+			add(validationBooleanLiteralFormat, keyEnabled)
+		}
+	}
 	if _, present := tree[keyUnsupportedRemediation]; present {
 		add("remediation is not supported; use top-level dry_run")
 	}

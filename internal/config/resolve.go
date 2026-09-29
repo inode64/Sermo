@@ -106,8 +106,10 @@ func (c *Config) resolveExpandedService(merged map[string]any, name string, inpu
 	if errs := serviceSectionErrors(merged); len(errs) > 0 {
 		return nil, nil, errs
 	}
+	errs := namedEntryFlagErrors(merged)
 	prepareExpansionInputs(merged)
-	vars, errs := c.expansionVariables(merged, name, inputs.globalVars)
+	vars, varErrs := c.expansionVariables(merged, name, inputs.globalVars)
+	errs = append(errs, varErrs...)
 	expanded, expErrs := expandTree(merged, vars)
 	errs = append(errs, expErrs...)
 	apps := cfgval.StringList(expanded[keyApps])
@@ -1480,10 +1482,12 @@ func (c *Config) resolveDocBody(doc *Document, name string, appChain []string, i
 	}
 	// An apps.local override merges `delete: true` into the app body; this is
 	// the app's only merge point, as mergedService is for services.
+	errs := namedEntryFlagErrors(body)
 	applyDeletes(body)
 	body = pruneEnableIfMap(body, nil, inputs.backend)
 	prepareExpansionInputs(body)
-	vars, errs := c.expansionVariables(body, name, inputs.globalVars)
+	vars, varErrs := c.expansionVariables(body, name, inputs.globalVars)
+	errs = append(errs, varErrs...)
 	expanded, expErrs := expandTree(body, vars)
 	errs = append(errs, expErrs...)
 	apps := cfgval.StringList(expanded[keyApps])
