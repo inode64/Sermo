@@ -10,6 +10,21 @@ import (
 	"sermo/internal/checks"
 )
 
+// testArtifactBaseline returns a baseline that has acknowledged fingerprints.
+func testArtifactBaseline(fingerprints map[string]string) *ArtifactBaseline {
+	b := NewArtifactBaseline()
+	b.restore(artifactBaselineState{fingerprints: fingerprints})
+	return b
+}
+
+// baselineFingerprints returns b's acknowledged file fingerprints.
+func baselineFingerprints(b *ArtifactBaseline) map[string]string {
+	if state := b.snapshot(); state != nil {
+		return state.fingerprints
+	}
+	return nil
+}
+
 func writeFile(t *testing.T, path, content string) {
 	t.Helper()
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {

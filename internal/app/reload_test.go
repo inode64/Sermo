@@ -25,7 +25,7 @@ func TestCaptureAndApplyWorkerState(t *testing.T) {
 			ws.FiresAt(r, true, time.Now())
 			return map[string]*rules.WindowState{"restart-if-down": ws}
 		}(),
-		libBaseline:  &ArtifactBaseline{fingerprints: map[string]string{"/etc/app.conf": "1:2"}},
+		libBaseline:  testArtifactBaseline(map[string]string{"/etc/app.conf": "1:2"}),
 		checkFailing: map[string]bool{"service": true},
 	}
 	saved := captureWorkerState([]*Worker{old})
@@ -42,8 +42,8 @@ func TestCaptureAndApplyWorkerState(t *testing.T) {
 	if got := fresh.windows["restart-if-down"].Snapshot().Consecutive; got != 2 {
 		t.Fatalf("window consecutive = %d, want 2", got)
 	}
-	if fresh.libBaseline.snapshot()["/etc/app.conf"] != "1:2" {
-		t.Fatalf("baseline = %+v", fresh.libBaseline.snapshot())
+	if baselineFingerprints(fresh.libBaseline)["/etc/app.conf"] != "1:2" {
+		t.Fatalf("baseline = %+v", baselineFingerprints(fresh.libBaseline))
 	}
 	if !fresh.checkFailing["service"] {
 		t.Fatalf("check health state = %+v, want service failing", fresh.checkFailing)
@@ -60,7 +60,7 @@ func TestCaptureAndApplyWorkerState(t *testing.T) {
 func TestApplyWorkerStateKeepsEngineBaselineShared(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "lib.so")
 	writeFile(t, path, "upgraded")
-	old := &Worker{Service: "web", libBaseline: &ArtifactBaseline{fingerprints: map[string]string{path: "acknowledged-before-upgrade"}}}
+	old := &Worker{Service: "web", libBaseline: testArtifactBaseline(map[string]string{path: "acknowledged-before-upgrade"})}
 	saved := captureWorkerState([]*Worker{old})
 
 	baseline := NewArtifactBaseline()
@@ -74,6 +74,23 @@ func TestApplyWorkerStateKeepsEngineBaselineShared(t *testing.T) {
 	fresh.acknowledgeChanges()
 	if changed, err := engineChanged(path); err != nil || changed {
 		t.Fatalf("engine changed(%s) after the worker acknowledged = %t, %v; want false", path, changed, err)
+	}
+}
+
+// TestApplyWorkerStateKeepsAppVersionBaseline: a `changed: {app}` rule still
+// waiting for its window, cooldown or guard when a reload happens must keep
+// seeing the upgrade, like `changed: {path}` does.
+func TestApplyWorkerStateKeepsAppVersionBaseline(t *testing.T) {
+	old := &Worker{Service: "web", libBaseline: NewArtifactBaseline()}
+	if changed, err := old.compareAppVersion("redis", 1, "redis 7.2.4"); err != nil || changed {
+		t.Fatalf("first observation = %t, %v; want adopted", changed, err)
+	}
+	saved := captureWorkerState([]*Worker{old})
+
+	fresh := &Worker{Service: "web", libBaseline: NewArtifactBaseline()}
+	applyWorkerState([]*Worker{fresh}, saved)
+	if changed, err := fresh.compareAppVersion("redis", 1, "redis 8.0.1"); err != nil || !changed {
+		t.Fatalf("upgrade after reload = %t, %v; want the change against the preserved baseline", changed, err)
 	}
 }
 

@@ -73,7 +73,7 @@ type workerSnapshot struct {
 	cycle        int
 	remediation  *rules.RemediationState
 	windows      map[string]*rules.WindowState
-	libBaseline  map[string]string
+	libBaseline  *artifactBaselineState
 	checkFailing map[string]bool
 }
 
@@ -87,9 +87,9 @@ func captureWorkerState(workers []*Worker) map[string]workerSnapshot {
 		if len(w.windows) > 0 {
 			snap.windows = cloneWindowStates(w.windows)
 		}
-		if baseline := w.libBaseline.snapshot(); len(baseline) > 0 {
-			snap.libBaseline = baseline
-		}
+		// The `changed:` baseline carries both file fingerprints and app
+		// versions, so a pending library or app upgrade survives the reload.
+		snap.libBaseline = w.libBaseline.snapshot()
 		if len(w.checkFailing) > 0 {
 			snap.checkFailing = maps.Clone(w.checkFailing)
 		}
@@ -116,7 +116,7 @@ func applyWorkerState(workers []*Worker, saved map[string]workerSnapshot) {
 			if w.libBaseline == nil {
 				w.libBaseline = NewArtifactBaseline()
 			}
-			w.libBaseline.restore(snap.libBaseline)
+			w.libBaseline.restore(*snap.libBaseline)
 		}
 		if snap.checkFailing != nil {
 			w.checkFailing = snap.checkFailing
