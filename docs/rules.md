@@ -935,7 +935,9 @@ request through a forward proxy such as **Squid**
 — credentials, when present, go in the URL). This both monitors that the proxy
 forwards correctly and that the target is reachable through it; for an
 `https://` target the proxy is used via `CONNECT`, and certificate inspection
-(below) still applies to the target's certificate.
+(below) still applies to the target's certificate. Without `proxy`, the check
+(like every HTTP-based protocol probe) connects directly: the `HTTP_PROXY`,
+`HTTPS_PROXY` and `NO_PROXY` environment variables are ignored.
 
 `json:` marshals the value and sets `Content-Type: application/json` (override
 it via `headers`). `headers: {Host: app.example.com}` selects an HTTP virtual
