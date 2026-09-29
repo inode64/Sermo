@@ -235,7 +235,12 @@ func (c *boundedDeadlineConn) deadline(t time.Time) time.Time {
 }
 
 func buildMailMessage(from string, to []string, msg Message) (*gomail.Msg, error) {
-	m := gomail.NewMsg(gomail.WithCharset(gomail.CharsetUTF8), gomail.WithEncoding(gomail.NoEncoding))
+	// Quoted-printable keeps every line within 76 octets and the body 7-bit:
+	// the services report HTML is a single line of tens of KB and check output
+	// can exceed the 998-octet SMTP line limit, which relays fold (corrupting
+	// it) or reject, and a relay without 8BITMIME refuses an 8-bit body. Plain
+	// ASCII text stays readable in the raw message.
+	m := gomail.NewMsg(gomail.WithCharset(gomail.CharsetUTF8), gomail.WithEncoding(gomail.EncodingQP))
 	if err := m.From(from); err != nil {
 		return nil, fmt.Errorf("from address: %w", err)
 	}
