@@ -34,6 +34,9 @@ const (
 	DefaultCommandTimeout = 30 * time.Second
 	// defaultLockTTL bounds the per-mount operation lock.
 	defaultLockTTL = 5 * time.Minute
+	// releaseCommandSlots counts the command-bounded steps of the longest
+	// unmount: plain, forced, post-signal and lazy umount plus one blocker scan.
+	releaseCommandSlots = 5
 )
 
 const (
@@ -162,6 +165,22 @@ type Controller struct {
 	Now            func() time.Time
 	CommandTimeout time.Duration
 	LockTTL        time.Duration
+}
+
+// OperationBudget is the longest a mount or unmount of spec may take when
+// every escalation is requested: each step is bounded by CommandTimeout and
+// the blocker reap by the TERM and KILL waits. A caller that imposes one
+// deadline on the whole operation must use at least this budget, or a hung
+// first umount would consume the time the requested escalation needs.
+func (c Controller) OperationBudget(spec Spec) time.Duration {
+	return releaseCommandSlots*c.commandTimeout() + spec.Umount.TermTimeout + spec.Umount.KillTimeout
+}
+
+func (c Controller) commandTimeout() time.Duration {
+	if c.CommandTimeout > 0 {
+		return c.CommandTimeout
+	}
+	return DefaultCommandTimeout
 }
 
 // ResolveConfiguredSpec resolves one storage watch and requires it to expose a
@@ -453,11 +472,7 @@ func (c Controller) unmount(ctx context.Context, spec Spec, opts ReleaseOptions)
 		// A discovery failure must not masquerade as "no blockers": surface it so
 		// the operator knows escalation could not be attempted, rather than
 		// silently reporting a clean busy mount.
-		timeout := c.CommandTimeout
-		if timeout <= 0 {
-			timeout = DefaultCommandTimeout
-		}
-		result.Message = fmt.Sprintf("mount is busy (could not enumerate blockers: %s)", execx.FormatContextOrError(derr, timeout))
+		result.Message = fmt.Sprintf("mount is busy (could not enumerate blockers: %s)", execx.FormatContextOrError(derr, c.commandTimeout()))
 	}
 	if opts.KillBlockers && !spec.KillOnlyIf.Configured() {
 		result.Message = mountMessageKillSelectorRequired
@@ -574,10 +589,7 @@ func stateID(spec Spec) string {
 func (c Controller) run(ctx context.Context, name string, args ...string) error {
 	runner := c.Runner
 	runner = execx.RunnerOrDefault(runner)
-	timeout := c.CommandTimeout
-	if timeout <= 0 {
-		timeout = DefaultCommandTimeout
-	}
+	timeout := c.commandTimeout()
 	res, err := execx.Run(ctx, runner, timeout, name, args...)
 	if err != nil {
 		msg := execx.OperatorFailureOr(err, res, timeout, err.Error())

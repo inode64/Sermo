@@ -728,3 +728,65 @@ func rootMountTestConfig(t *testing.T) *config.Config {
 		}},
 	}
 }
+
+// hangingUmountRunner models a hung NFS mount: the plain umount only returns
+// when its per-command deadline expires, while `umount -f` succeeds as long as
+// the operation context is still alive.
+type hangingUmountRunner struct {
+	mu      sync.Mutex
+	mounted bool
+	calls   []string
+}
+
+func (r *hangingUmountRunner) Run(ctx context.Context, name string, args ...string) (execx.Result, error) {
+	line := strings.Join(append([]string{name}, args...), " ")
+	r.mu.Lock()
+	r.calls = append(r.calls, line)
+	r.mu.Unlock()
+	switch line {
+	case "umount /mnt/backup":
+		<-ctx.Done()
+		return execx.Result{}, ctx.Err()
+	case "umount -f /mnt/backup":
+		if err := ctx.Err(); err != nil {
+			return execx.Result{}, err
+		}
+		r.mu.Lock()
+		r.mounted = false
+		r.mu.Unlock()
+		return execx.Result{}, nil
+	default:
+		return execx.Result{}, fmt.Errorf("unexpected command %s", line)
+	}
+}
+
+func (r *hangingUmountRunner) Mounts() ([]checks.Mount, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if !r.mounted {
+		return nil, nil
+	}
+	return []checks.Mount{{MountPoint: "/mnt/backup", Device: "nfs:/backup"}}, nil
+}
+
+// The operation timeout bounds each mount command, not the whole unmount: a
+// plain umount that hangs until its own deadline must still leave time for the
+// requested `umount -f` escalation, as the CLI does.
+func TestWebBackendUmountEscalatesAfterCommandTimeout(t *testing.T) {
+	runner := &hangingUmountRunner{mounted: true}
+	b, warns := NewWebBackend(t.Context(), mountTestConfig(t), Deps{
+		ExecxRunner:      runner,
+		MountSampler:     runner.Mounts,
+		OperationTimeout: 20 * time.Millisecond,
+	})
+	if len(warns) != 0 {
+		t.Fatalf("unexpected warnings: %v", warns)
+	}
+	res := b.MountAction(context.Background(), "mount-backup", mountctl.ActionUmount, web.MountActionOptions{AllowForce: true})
+	if !res.OK || res.Mounted {
+		t.Fatalf("forced umount = %+v calls=%v, want escalation to umount -f to succeed", res, runner.calls)
+	}
+	if !slices.Contains(runner.calls, "umount -f /mnt/backup") {
+		t.Fatalf("calls = %v, want umount -f", runner.calls)
+	}
+}
