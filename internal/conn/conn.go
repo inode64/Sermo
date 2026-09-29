@@ -239,7 +239,11 @@ const TLSModeSkipVerify = netutil.TLSModeSkipVerify
 
 const (
 	// TLSValueSummary is the user-facing list of accepted connection-check TLS values.
-	TLSValueSummary = "boolean, " + TLSModeSkipVerify + ", or a valid sslmode"
+	TLSValueSummary = "a boolean or " + TLSModeSkipVerify
+	// PostgresTLSValueSummary extends TLSValueSummary with the sslmode names
+	// only the postgres protocol accepts.
+	PostgresTLSValueSummary = TLSValueSummary + ", or a PostgreSQL sslmode (" +
+		tlsDisable + "/" + tlsPrefer + "/" + tlsRequire + "/" + tlsVerifyCA + "/" + tlsVerifyFull + ")"
 	// TLSScalarSummary is the user-facing scalar form accepted in YAML.
 	TLSScalarSummary = "true/false/" + TLSModeSkipVerify
 )
@@ -331,11 +335,14 @@ const (
 	tlsModeNo     = "no"
 	tlsModeOn     = "on"
 	tlsModeOff    = "off"
-	tlsDisable    = "disable"
-	tlsRequire    = "require"
-	tlsPrefer     = "prefer"
-	tlsVerifyCA   = "verify-ca"
-	tlsVerifyFull = "verify-full"
+	// tlsModeRequired is the shared friendly spelling of "true"; pgx only
+	// knows the sslmode "require", so postgres must translate it.
+	tlsModeRequired = "required"
+	tlsDisable      = "disable"
+	tlsRequire      = "require"
+	tlsPrefer       = "prefer"
+	tlsVerifyCA     = "verify-ca"
+	tlsVerifyFull   = "verify-full"
 	// schemeHTTP and schemeHTTPS are the URL schemes an HTTP-based probe selects
 	// by whether TLS is in use.
 	schemeHTTP         = netutil.URLSchemeHTTP
@@ -533,12 +540,16 @@ type Protocol interface {
 	Probe(ctx context.Context, cfg Config) (Result, error)
 }
 
-// ValidTLSValue reports whether value is one of the connection-check TLS mode
-// strings accepted by config validation: the shared spellings from
-// netutil.ValidTLSValue plus the SQL drivers' sslmode names.
-func ValidTLSValue(value string) bool {
+// ValidTLSValue reports whether value is a TLS mode the named protocol accepts:
+// the shared spellings from netutil.ValidTLSValue, plus the sslmode names for
+// postgres only. Any other protocol treats a non-empty unknown mode as TLS, so
+// accepting "disable" there would silently turn on verified TLS.
+func ValidTLSValue(protocol, value string) bool {
 	if netutil.ValidTLSValue(value) {
 		return true
+	}
+	if !isPostgresProtocol(protocol) {
+		return false
 	}
 	switch strings.ToLower(strings.TrimSpace(value)) {
 	case tlsDisable, tlsRequire, tlsPrefer, tlsVerifyCA, tlsVerifyFull:
@@ -546,6 +557,22 @@ func ValidTLSValue(value string) bool {
 	default:
 		return false
 	}
+}
+
+// TLSValueSummaryFor returns the user-facing list of TLS values protocol
+// accepts, matching ValidTLSValue.
+func TLSValueSummaryFor(protocol string) string {
+	if isPostgresProtocol(protocol) {
+		return PostgresTLSValueSummary
+	}
+	return TLSValueSummary
+}
+
+// isPostgresProtocol reports whether name (canonical or alias) selects the
+// postgres protocol, whose driver owns the sslmode vocabulary.
+func isPostgresProtocol(name string) bool {
+	protocol, ok := Lookup(name)
+	return ok && protocol != nil && protocol.Name() == ProtocolNamePostgres
 }
 
 // readCRLFLine reads one CRLF/LF-terminated line, trimmed — the line shape

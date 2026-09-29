@@ -48,10 +48,35 @@ func TestBuildPGDSNDefaults(t *testing.T) {
 func TestSSLMode(t *testing.T) {
 	runMapCases(t, "sslMode", sslMode, map[string]string{
 		"": "disable", "false": "disable", "off": "disable",
-		"true": "require", "on": "require",
+		"true": "require", "on": "require", "required": "require",
 		"skip-verify": "require",
 		"verify-full": "verify-full", "verify-ca": "verify-ca", "prefer": "prefer",
 	})
+}
+
+func TestValidTLSValueSSLModesArePostgresOnly(t *testing.T) {
+	tests := []struct {
+		name     string
+		protocol string
+		value    string
+		want     bool
+	}{
+		{name: "postgres sslmode", protocol: ProtocolNamePostgres, value: "verify-full", want: true},
+		{name: "postgres alias sslmode", protocol: protocolAliasPostgreSQL, value: "disable", want: true},
+		{name: "postgres shared spelling", protocol: ProtocolNamePostgres, value: "required", want: true},
+		{name: "redis rejects disable", protocol: ProtocolNameRedis, value: "disable", want: false},
+		{name: "mysql rejects verify-ca", protocol: ProtocolNameMySQL, value: "verify-ca", want: false},
+		{name: "http probe rejects prefer", protocol: ProtocolNamePrometheus, value: "prefer", want: false},
+		{name: "shared skip-verify", protocol: ProtocolNameLDAP, value: "skip-verify", want: true},
+		{name: "unknown protocol shared only", protocol: "missing", value: "require", want: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := ValidTLSValue(tt.protocol, tt.value); got != tt.want {
+				t.Errorf("ValidTLSValue(%q, %q) = %v, want %v", tt.protocol, tt.value, got, tt.want)
+			}
+		})
+	}
 }
 
 func postgresDSNForTest(cfg Config) string {
