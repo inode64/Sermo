@@ -196,3 +196,40 @@ func TestTelegramPlainTextIsNotEscaped(t *testing.T) {
 		t.Fatalf("plain text was altered: %q", text)
 	}
 }
+
+func TestTelegramTruncatesTextOverTheLimit(t *testing.T) {
+	long := Message{Subject: "[sermo] web: check failed", Body: "SERMO_OUTPUT=" + strings.Repeat("output line.\n", 400)}
+	for _, parseMode := range []string{"", "MarkdownV2", "HTML"} {
+		t.Run("mode="+parseMode, func(t *testing.T) {
+			n, err := buildTelegram("tg", map[string]any{"type": "telegram", "token": "123:abc", "chat_id": "1", "parse_mode": parseMode})
+			if err != nil {
+				t.Fatal(err)
+			}
+			text, mode := telegramSentText(t, n, long)
+			if telegramapi.TextLength(text) > telegramapi.MaxTextLength || !strings.HasSuffix(text, telegramapi.TruncatedMarker) {
+				t.Fatalf("text has %d units, want a truncated message within the limit", telegramapi.TextLength(text))
+			}
+			// Cutting markup could leave an escape or entity open, so an
+			// oversized message falls back to the plain text.
+			if mode != "" || !strings.HasPrefix(text, "[sermo] web: check failed\nSERMO_OUTPUT=output line.") {
+				t.Fatalf("oversized message must be plain text: parse_mode %q, text %q…", mode, text[:40])
+			}
+		})
+	}
+}
+
+func TestTelegramTemplateOverTheLimitFallsBackToPlainText(t *testing.T) {
+	tmpl, err := parseTemplate("tg", []byte("body: '<pre>{{ .Body }}</pre>'\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	inner, err := buildTelegram("tg", map[string]any{"type": "telegram", "token": "123:abc", "chat_id": "1", "parse_mode": "HTML"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	msg := Message{Subject: "[sermo] db", Body: strings.Repeat("a<b\n", 2000)}
+	text, mode := telegramSentText(t, withTemplate(inner, tmpl), msg)
+	if mode != "" || strings.Contains(text, "<pre>") || strings.Contains(text, "&lt;") || telegramapi.TextLength(text) > telegramapi.MaxTextLength {
+		t.Fatalf("parse_mode %q, %d units, text %q…", mode, telegramapi.TextLength(text), text[:40])
+	}
+}

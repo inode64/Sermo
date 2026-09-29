@@ -16,6 +16,7 @@ package telegramapi
 import (
 	"slices"
 	"strings"
+	"unicode/utf16"
 )
 
 // APIBase is the Bot API endpoint prefix. A bot token is appended directly to
@@ -78,6 +79,63 @@ func newBackslashEscaper(reserved string) *strings.Replacer {
 		pairs = append(pairs, string(r), `\`+string(r))
 	}
 	return strings.NewReplacer(pairs...)
+}
+
+// MaxTextLength is the sendMessage `text` limit. The Bot API counts it in
+// UTF-16 code units and rejects a longer text as a whole ("message is too
+// long") rather than cutting it.
+const MaxTextLength = 4096
+
+// TruncatedMarker ends a text that SplitText had to cut short.
+const TruncatedMarker = "\n… (truncated)"
+
+// TextLength returns the length of s as the Bot API counts it: UTF-16 code
+// units, so a character outside the Basic Multilingual Plane counts twice.
+func TextLength(s string) int {
+	n := 0
+	for _, r := range s {
+		n += utf16.RuneLen(r)
+	}
+	return n
+}
+
+// SplitText splits plain text into parts that each fit MaxTextLength,
+// breaking at the last line break that fits (the break itself is dropped) or,
+// for a longer line, at a character boundary. When more than maxParts parts
+// would be needed the last one is cut short and ends with TruncatedMarker.
+// Markup must not go through here: a cut could split an escape or leave an
+// entity open.
+func SplitText(text string, maxParts int) []string {
+	var parts []string
+	for TextLength(text) > MaxTextLength {
+		if len(parts)+1 >= maxParts {
+			head := prefixWithin(text, MaxTextLength-TextLength(TruncatedMarker))
+			return append(parts, head+TruncatedMarker)
+		}
+		head := prefixWithin(text, MaxTextLength)
+		if i := strings.LastIndexByte(head, '\n'); i > 0 {
+			head = head[:i]
+		}
+		parts = append(parts, head)
+		text = strings.TrimPrefix(text[len(head):], "\n")
+	}
+	return append(parts, text)
+}
+
+// TruncateText cuts plain text to one sendMessage, marking the cut.
+func TruncateText(text string) string { return SplitText(text, 1)[0] }
+
+// prefixWithin returns the longest prefix of s, ending at a character
+// boundary, whose TextLength is at most limit.
+func prefixWithin(s string, limit int) string {
+	units := 0
+	for i, r := range s {
+		units += utf16.RuneLen(r)
+		if units > limit {
+			return s[:i]
+		}
+	}
+	return s
 }
 
 // EscapeText makes s render literally under parseMode. An empty or unknown

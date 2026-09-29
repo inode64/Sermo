@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/url"
 	"strings"
+	"unicode/utf8"
 
 	"sermo/internal/cfgval"
 	"sermo/internal/httpx"
@@ -13,6 +14,11 @@ const (
 	ntfyTopicKey = "topic"
 
 	ntfyBearerPrefix = "Bearer "
+
+	// ntfyMessageLimit is ntfy's default message-size-limit in bytes.
+	ntfyMessageLimit = 4096
+
+	truncatedMarker = "\n… (truncated)"
 )
 
 // parseNtfyWebhook splits an ntfy topic URL into the publish base URL and the
@@ -62,6 +68,22 @@ func buildNtfy(name string, entry map[string]any) (Notifier, error) {
 // subject-only notification travels as the message alone.
 func ntfyPayload(topic string, msg Message) []byte {
 	body := pushMessageFields(msg)
+	// ntfy delivers a message over its size limit as a file attachment (or
+	// rejects it when attachments are disabled), hiding the alert text.
+	body[pushPayloadMessageKey] = truncateBytes(body[pushPayloadMessageKey], ntfyMessageLimit)
 	body[ntfyTopicKey] = topic
 	return webhookPayload(body)
+}
+
+// truncateBytes cuts s to at most limit bytes on a UTF-8 character boundary,
+// ending it with truncatedMarker when anything was dropped.
+func truncateBytes(s string, limit int) string {
+	if len(s) <= limit {
+		return s
+	}
+	cut := limit - len(truncatedMarker)
+	for cut > 0 && !utf8.RuneStart(s[cut]) {
+		cut--
+	}
+	return s[:cut] + truncatedMarker
 }

@@ -3,7 +3,9 @@ package notify
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"sermo/internal/httpx"
 )
@@ -83,5 +85,26 @@ func TestNtfySubjectOnlyTravelsAsMessage(t *testing.T) {
 	}
 	if _, hasTitle := body["title"]; hasTitle {
 		t.Fatalf("subject-only notification should omit the title: %v", body)
+	}
+}
+
+func TestNtfyTruncatesMessageOverTheSizeLimit(t *testing.T) {
+	// ntfy turns a message over 4096 bytes into an attachment, or rejects it
+	// when attachments are disabled; the alert text must stay inline.
+	var body map[string]string
+	long := "SERMO_OUTPUT=" + strings.Repeat("é", ntfyMessageLimit)
+	if err := json.Unmarshal(ntfyPayload("alerts", Message{Subject: "[sermo] x", Body: long}), &body); err != nil {
+		t.Fatal(err)
+	}
+	got := body["message"]
+	if len(got) > ntfyMessageLimit || !utf8.ValidString(got) || !strings.HasPrefix(got, "SERMO_OUTPUT=é") || !strings.HasSuffix(got, truncatedMarker) {
+		t.Fatalf("message = %d bytes (valid UTF-8 %v)", len(got), utf8.ValidString(got))
+	}
+	short := Message{Subject: "s", Body: strings.Repeat("x", ntfyMessageLimit)}
+	if err := json.Unmarshal(ntfyPayload("alerts", short), &body); err != nil {
+		t.Fatal(err)
+	}
+	if body["message"] != short.Body {
+		t.Fatal("a message at the limit must stay unchanged")
 	}
 }

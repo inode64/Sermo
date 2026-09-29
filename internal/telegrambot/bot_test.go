@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -158,5 +159,38 @@ func TestHandleUpdateAuthorization(t *testing.T) {
 	}
 	if !strings.Contains(lastText, "Sermo status") {
 		t.Fatalf("unexpected reply text: %q", lastText)
+	}
+}
+
+func TestHandleUpdateSplitsLongReply(t *testing.T) {
+	var texts []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Text string `json:"text"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		if telegramapi.TextLength(body.Text) > telegramapi.MaxTextLength {
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = io.WriteString(w, `{"ok":false,"description":"Bad Request: message is too long"}`)
+			return
+		}
+		texts = append(texts, body.Text)
+		_, _ = io.WriteString(w, `{"ok":true}`)
+	}))
+	defer srv.Close()
+
+	services := make([]ServiceLine, 400)
+	for i := range services {
+		services[i] = ServiceLine{Name: fmt.Sprintf("service-with-a-long-name-%03d", i), State: "running"}
+	}
+	cfg := Config{Enabled: true, Token: "t", AllowedChats: []int64{42}}
+	b := &Bot{reporter: &fakeReporter{services: services}, log: discardLogger()}
+	b.handleUpdate(context.Background(), cfg, testClient(srv.URL, "t"), update{UpdateID: 1, Message: &message{Chat: chat{ID: 42}, Text: "/services"}})
+	if len(texts) < 2 {
+		t.Fatalf("a reply over the limit must arrive in several messages, got %d", len(texts))
+	}
+	joined := strings.Join(texts, "\n")
+	if !strings.Contains(joined, "service-with-a-long-name-000") || !strings.Contains(joined, "service-with-a-long-name-399") {
+		t.Fatal("split reply lost services")
 	}
 }
