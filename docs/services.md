@@ -537,7 +537,7 @@ validating config off-host.
 |-------------------|------------------------------------------------|-----------------|
 | `${name}`         | the resolved service name                     | resolution      |
 | `${display_name}` | the display name (falls back to name)          | resolution      |
-| `${service}`      | the service's primary unit name                | resolution      |
+| `${service}`      | the primary unit name for the active backend   | resolution      |
 | `${host}`         | hostname (`SERMO_HOST` override)               | resolution¹     |
 | `${hostname}`     | short hostname (`SERMO_HOSTNAME`)              | resolution⁵     |
 | `${init}`         | detected init system (`SERMO_INIT`)            | resolution      |
