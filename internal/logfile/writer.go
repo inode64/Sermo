@@ -45,7 +45,7 @@ func Open(path string) (*Writer, error) {
 
 // Write marshals v as one JSON line and appends it to the log.
 func (w *Writer) Write(v any) error {
-	if w == nil || w.f == nil {
+	if w == nil {
 		return nil
 	}
 	data, err := json.Marshal(v)
@@ -54,8 +54,14 @@ func (w *Writer) Write(v any) error {
 	}
 	data = append(data, '\n')
 
+	// The file is checked under the lock: Close may run concurrently (daemon
+	// shutdown), and a record arriving after it is dropped like one written to
+	// a writer that never opened.
 	w.mu.Lock()
 	defer w.mu.Unlock()
+	if w.f == nil {
+		return nil
+	}
 	_, err = w.f.Write(data)
 	if err != nil {
 		return fmt.Errorf("append log %q: %w", w.path, err)
@@ -65,11 +71,14 @@ func (w *Writer) Write(v any) error {
 
 // Close closes the underlying file.
 func (w *Writer) Close() error {
-	if w == nil || w.f == nil {
+	if w == nil {
 		return nil
 	}
 	w.mu.Lock()
 	defer w.mu.Unlock()
+	if w.f == nil {
+		return nil
+	}
 	err := w.f.Close()
 	w.f = nil
 	if err != nil {
