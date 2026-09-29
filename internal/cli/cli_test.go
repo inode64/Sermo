@@ -485,6 +485,43 @@ func TestIsActiveQuietSuppressesOutput(t *testing.T) {
 	}
 }
 
+// A config that exists but does not load turns a configured alias into a raw
+// unit name; say so instead of answering silently. A missing config stays quiet.
+func TestIsActiveWarnsWhenExistingConfigDoesNotLoad(t *testing.T) {
+	dir := t.TempDir()
+	broken := filepath.Join(dir, "sermo.yml")
+	if err := os.WriteFile(broken, []byte("paths: [unclosed\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		name string
+		args []string
+		want string
+	}{
+		{name: "broken config", args: []string{"--config", broken, "is-active", "mysql"}, want: "warning: config not loaded, treating mysql as an init unit"},
+		{name: "quiet", args: []string{"--quiet", "--config", broken, "is-active", "mysql"}},
+		{name: "missing config", args: []string{"--config", filepath.Join(dir, "absent.yml"), "is-active", "mysql"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var stderr bytes.Buffer
+			app := statusApp(servicemgr.ServiceStatus{
+				Service: "mysql", Backend: servicemgr.BackendSystemd,
+				Unit: "mysql.service", Status: servicemgr.StatusActive,
+			}, nil, nil, &stderr)
+			app.LoadConfig = config.Load
+			if code := app.Run(context.Background(), tc.args); code != exitSuccess {
+				t.Fatalf("Run() exit = %d, want %d", code, exitSuccess)
+			}
+			if tc.want == "" && stderr.Len() != 0 {
+				t.Fatalf("stderr = %q, want nothing", stderr.String())
+			}
+			if !strings.Contains(stderr.String(), tc.want) {
+				t.Fatalf("stderr = %q, want %q", stderr.String(), tc.want)
+			}
+		})
+	}
+}
+
 func TestStatusQueryErrorExitTwo(t *testing.T) {
 	var stderr bytes.Buffer
 	app := statusApp(servicemgr.ServiceStatus{}, errors.New("boom"), nil, &stderr)
