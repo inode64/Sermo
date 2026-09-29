@@ -293,6 +293,51 @@ func TestSSACLICheckHealthy(t *testing.T) {
 	}
 }
 
+// The fields of a later array header, an enclosure SEP or an expander belong to
+// that section, not to the last physicaldrive or logical drive printed before
+// it: they used to overwrite that drive's model, firmware, interface and state.
+func TestSSACLISectionFieldsDoNotOverwriteThePreviousDrive(t *testing.T) {
+	output := healthySSACLI + `
+   Array: B
+      Interface Type: SATA
+      Status: OK
+      Logical Drive: 2
+         Size: 1.0 TB
+         Status: OK
+      physicaldrive 1I:3:2
+         Status: OK
+         Interface Type: SATA
+         Firmware Revision: HPG1
+         Model: HPE SATA DRIVE
+
+   SEP (Vendor ID PMCSIERA, Model SRCv8x6G) 380
+      Device Number: 380
+      Firmware Version: RevB
+      Model: SRCv8x6G
+
+   Expander 381
+      Device Number: 381
+      Firmware Version: 4.02
+`
+	observation, err := parseSSACLIReport(output)
+	if err != nil {
+		t.Fatal(err)
+	}
+	drive := observation.DriveDetails[0]
+	if drive.Model != "HPE DRIVE" || drive.Firmware != "HPD5" || drive.Interface != "SAS" || drive.State != "OK" {
+		t.Errorf("array A drive = %+v, want its own model, firmware, interface and state", drive)
+	}
+	if drive := observation.DriveDetails[1]; drive.Model != "HPE SATA DRIVE" || drive.Firmware != "HPG1" {
+		t.Errorf("array B drive = %+v, want its own model and firmware, not the SEP's", drive)
+	}
+	if got := observation.ControllerDetails[0].Firmware; got != "4.11" {
+		t.Errorf("controller firmware = %q, want 4.11, not an enclosure's", got)
+	}
+	if got := observation.VolumeDetails[1]; got.ID != "2" || got.Array != "B" || got.State != "OK" {
+		t.Errorf("array B volume = %+v", got)
+	}
+}
+
 func TestSSACLIRebuildProgressIsAttachedToItsVolume(t *testing.T) {
 	output := strings.Replace(healthySSACLI, "Logical Drive Label: system", "Logical Drive Label: system\n         Rebuild Status: Rebuilding 42.5%", 1)
 	observation, err := parseSSACLIReport(output)
