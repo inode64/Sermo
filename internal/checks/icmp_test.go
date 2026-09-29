@@ -87,11 +87,21 @@ func TestICMPLatencyChange(t *testing.T) {
 			PingSample{Reachable: true, RTTms: 20, RTTKnown: true},
 			PingSample{Reachable: true, RTTms: 100, RTTKnown: true}, // |100-20|=80 > 50
 		)}
-	if c.Run(context.Background()).OK {
+	baseline := c.Run(context.Background())
+	if baseline.OK {
 		t.Fatal("first reachable cycle primes")
 	}
-	if !c.Run(context.Background()).OK {
+	jump := c.Run(context.Background())
+	if !jump.OK {
 		t.Fatal("latency jump should fire")
+	}
+	// The latency graph is offered for every metric: latency watch, so the
+	// change form must write its series too, baseline cycle included.
+	if got := baseline.Data[DataKeyLatencyMS]; got != 20.0 {
+		t.Errorf("baseline Data[%s] = %v, want 20", DataKeyLatencyMS, got)
+	}
+	if got := jump.Data[DataKeyLatencyMS]; got != 100.0 {
+		t.Errorf("change Data[%s] = %v, want 100", DataKeyLatencyMS, got)
 	}
 }
 

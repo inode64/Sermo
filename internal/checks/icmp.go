@@ -98,9 +98,11 @@ func (c *icmpCheck) Run(_ context.Context) Result {
 			res.Data = data
 			return res
 		}
+		// Both forms publish the round trip: the latency graph is offered for
+		// every metric: latency watch, threshold or change.
+		data[DataKeyLatencyMS] = s.RTTms
 		if c.hasThreshold {
 			data[DataKeyValue] = s.RTTms
-			data[DataKeyLatencyMS] = s.RTTms
 			met := cfgval.CompareFloat(s.RTTms, c.op, c.value)
 			res := c.result(met, fmt.Sprintf("%s rtt %.1fms %s %.1f", c.host, s.RTTms, c.op, c.value), start)
 			res.Data = data
