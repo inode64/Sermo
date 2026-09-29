@@ -1175,7 +1175,8 @@ accepted operation cannot switch targets during a concurrent reload.
   stale/expired named runtime lock; active locks are refused.
 - `POST /api/events/clear?before=TIME` — clear the persisted event/activity log;
   `before` may be a positive duration or a non-future RFC3339 timestamp. Omit it
-  to clear all events.
+  to clear all events. A failed database delete answers `500` with `ok: false`
+  and leaves the live feed unchanged.
 - `POST /api/state/compact?before=TIME` — consolidate and prune stored history to
   the configured retention, then vacuum the state database. `before` optionally
   drops whatever history remains older than an explicit cutoff. Matches

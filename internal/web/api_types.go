@@ -838,8 +838,9 @@ type Backend interface {
 	// installed application, newest first; ok is false for unknown names.
 	ApplicationEvents(ctx context.Context, name string, limit int) ([]Event, bool)
 	// PruneEvents removes events older than 'before' (or all if zero time).
-	// Intended for the `sermoctl events clear` command.
-	PruneEvents(ctx context.Context, before time.Time) int
+	// Intended for the `sermoctl events clear` command. The error reports a
+	// failed persistent delete, whose events would reappear after a restart.
+	PruneEvents(ctx context.Context, before time.Time) (int, error)
 	// Operate runs start|stop|restart|reload|resume|repair on a service through the safe engine.
 	Operate(ctx context.Context, name, action string, opts OperateOpts) ActionResult
 	// ReapStrays signals the service's stray processes, gated by its own

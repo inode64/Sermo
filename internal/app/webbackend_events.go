@@ -192,9 +192,9 @@ func (b *WebBackend) knownApp(name string) bool {
 }
 
 // PruneEvents removes events older than before (all if zero) from the live log.
-func (b *WebBackend) PruneEvents(ctx context.Context, before time.Time) int {
+func (b *WebBackend) PruneEvents(ctx context.Context, before time.Time) (int, error) {
 	if b.events == nil {
-		return 0
+		return 0, nil
 	}
 	return b.events.Prune(ctx, before)
 }
