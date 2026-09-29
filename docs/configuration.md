@@ -963,7 +963,8 @@ $ printf '%s' "$PASS" | sermoctl web hash-password --stdin
 - A single source holds at most **64** credentials: every failed attempt is
   checked against all of them.
 - Verification results are cached briefly, so the bcrypt cost is paid once per
-  credential rather than on every request.
+  credential rather than on every request. A burst of wrong passwords evicts
+  other cached failures first, never a cached correct password.
 - Credentials are read **when the daemon starts**, not on `sermoctl daemon
   reload`: editing the file takes effect on the next `sermod` restart. Adding the
   new credential before removing the old one is still what rotates without a cut.
