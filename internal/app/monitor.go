@@ -248,12 +248,15 @@ func (m *Monitor) startGenerationLocked(ctx context.Context, firstBoot bool) {
 	m.genCancel = cancel
 
 	sched := m.scheduler
-	// firstBoot is the very first boot: it keeps the StartupDelay and gates
-	// readiness on first cycles. Reloads skip both (the daemon is already up).
+	// firstBoot is the very first boot: it keeps the StartupDelay. Reloads skip
+	// it, and the first-cycle gate ignores them once the daemon is ready.
 	if !firstBoot {
 		sched.StartupDelay = 0
 	}
 
+	// firstCycles counts the keys armed below, so each target's pause state is
+	// read once per generation (see Scheduler.Run).
+	firstCycles := 0
 	if m.deps.Settling != nil {
 		names := monitorTargetNames(m.workers, m.watches)
 		m.deps.Settling.Reset(names)
@@ -271,10 +274,11 @@ func (m *Monitor) startGenerationLocked(ctx context.Context, firstBoot bool) {
 			}
 			m.deps.Settling.MarkObservedBulk(preserved)
 		}
+		firstCycles = m.deps.Settling.Pending()
 	}
 
 	m.genWG.Go(func() {
-		sched.Run(genCtx, m.workers, m.watches, m.readiness, firstBoot)
+		sched.Run(genCtx, m.workers, m.watches, m.readiness, firstCycles)
 	})
 	if sampler := m.deps.DaemonMetricSampler; sampler != nil {
 		interval := m.deps.Interval

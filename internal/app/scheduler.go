@@ -38,7 +38,14 @@ type cycler interface {
 // own goroutine at their own interval; concurrency between operations on the
 // same service is bounded by that service's operation lock, not by any
 // fleet-wide limit. The monitor owns final shutdown readiness.
-func (s Scheduler) Run(ctx context.Context, workers []*Worker, watches []*Watch, ready *Readiness, gateReady bool) {
+//
+// firstCycles is the number of settling keys still pending for this generation
+// (Settling.Pending right after the generation armed it). The caller counts
+// them from the same snapshot it armed Settling with because each target's
+// pause state is read from the store and can change in between: a second read
+// could count a target whose first cycle never reports, wedging /readyz at
+// "starting", or miss one and open the gate early.
+func (s Scheduler) Run(ctx context.Context, workers []*Worker, watches []*Watch, ready *Readiness, firstCycles int) {
 	interval := s.Interval
 	if interval <= 0 {
 		interval = config.DefaultEngineInterval
@@ -55,17 +62,12 @@ func (s Scheduler) Run(ctx context.Context, workers []*Worker, watches []*Watch,
 		}
 	}
 
-	// On the first boot, hold the daemon at "starting" until every active target
-	// has completed its startup observation cycle (workers and watches call
-	// Settling.MarkObserved when ready). Paused/disabled targets are excluded.
-	// On a config reload the daemon is already up, so mark it ready right away.
-	total := activeMonitorTargets(workers, watches)
-	if gateReady {
-		if ready != nil {
-			ready.ExpectFirstCycles(total)
-		}
-	} else if ready != nil {
-		ready.MarkReady()
+	// While the daemon is starting, hold it there until every pending target has
+	// completed its startup observation cycle (workers and watches call
+	// Settling.MarkObserved when ready). Paused/disabled targets are not pending.
+	// A daemon that is already ready (config reload) ignores the gate.
+	if ready != nil {
+		ready.ExpectFirstCycles(firstCycles)
 	}
 
 	// Stagger the first cycle of the whole fleet (workers + watches, including the
@@ -96,20 +98,6 @@ func (s Scheduler) Run(ctx context.Context, workers []*Worker, watches []*Watch,
 		launch(wt, wt.Interval)
 	}
 	wg.Wait()
-}
-
-// activeMonitorTargets counts the distinct settling keys the first-cycle
-// readiness gate must wait for. It must dedupe by key, not count objects:
-// metric watches (net/icmp/swap) expand to one Watch per metric that all share
-// a single settling key (SettlingWatchKey(name)), so a target reports observed
-// only once. Counting objects here would arm the gate for more first cycles than
-// can ever fire, wedging the daemon at "starting" (readyz 503) forever.
-func activeMonitorTargets(workers []*Worker, watches []*Watch) int {
-	keys := make(map[string]struct{})
-	for _, name := range monitorTargetNames(workers, watches) {
-		keys[name] = struct{}{}
-	}
-	return len(keys)
 }
 
 func monitorTargetActive(w *Worker) bool {

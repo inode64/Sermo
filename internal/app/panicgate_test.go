@@ -48,7 +48,7 @@ func TestPanicGateReadsAndCaches(t *testing.T) {
 func TestReadinessReportsPanic(t *testing.T) {
 	panicking := false
 	r := NewReadiness(string(servicemgr.BackendSystemd), 3, 1)
-	r.MarkReady()
+	r.ExpectFirstCycles(0)
 	r.WatchPanic(func() bool { return panicking })
 
 	rep := r.Report(context.Background())
