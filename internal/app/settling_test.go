@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"slices"
 	"testing"
 
 	"sermo/internal/servicemgr"
@@ -45,19 +46,46 @@ func TestSettlingPendingDedupesMetricWatchKeys(t *testing.T) {
 		t.Fatalf("expected 2 distinct settling keys, got %d (counting objects wedges readiness)", got)
 	}
 
-	// End-to-end: arm readiness with the deduped count and settle each distinct
-	// key once, as the scheduler does (only the first object per key runs the
-	// observe-only cycle). The daemon must reach ready.
+	// End-to-end: arm readiness with the deduped count and let every watch
+	// object complete its observe-only cycle. The daemon must reach ready.
 	ready.ExpectFirstCycles(s.Pending())
-	seen := map[string]bool{}
 	for _, w := range watches {
-		if k := settlingKeyForWatch(w); !seen[k] {
-			seen[k] = true
-			s.MarkObserved(k)
-		}
+		s.MarkObserved(settlingKeyForWatch(w))
 	}
 	if rep := ready.Report(context.Background()); !rep.Ready {
 		t.Fatalf("daemon must be ready once every distinct key settles: %+v", rep)
+	}
+}
+
+// TestSettlingSharedKeyObservesEveryMetricWatch: every Watch object of a
+// metric watch runs its own observe-only first cycle, so a metric that cycles
+// second cannot fire a hook or notification, or skip reconciling its restored
+// episode, just because a sibling metric settled the shared key first.
+func TestSettlingSharedKeyObservesEveryMetricWatch(t *testing.T) {
+	ready := NewReadiness(string(servicemgr.BackendOpenRC), 0, 2)
+	settling := NewSettling(ready)
+	var observeOnly []bool
+	metric := func() *Watch {
+		return &Watch{Name: "uplink-ppp0", Settling: settling, Cycle: func(ctx context.Context) {
+			observeOnly = append(observeOnly, observeOnlyCycle(ctx))
+		}}
+	}
+	address, state := metric(), metric()
+	settling.Reset(monitorTargetNames(nil, []*Watch{address, state}))
+	ready.ExpectFirstCycles(settling.Pending())
+
+	address.RunCycle(t.Context())
+	if rep := ready.Report(context.Background()); rep.Ready {
+		t.Fatalf("ready before every metric of the watch completed its first cycle: %+v", rep)
+	}
+	state.RunCycle(t.Context())
+	address.RunCycle(t.Context())
+
+	if !slices.Equal(observeOnly, []bool{true, true, false}) {
+		t.Fatalf("observe-only cycles = %v, want [true true false]", observeOnly)
+	}
+	if rep := ready.Report(context.Background()); !rep.Ready {
+		t.Fatalf("ready after every metric observed = %+v", rep)
 	}
 }
 

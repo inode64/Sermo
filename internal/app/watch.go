@@ -196,15 +196,20 @@ func (w *Watch) RunCycle(ctx context.Context) {
 	w.runCheckCycle(ctx, res, observeOnly)
 }
 
+// prepareCycle decides the cycle mode. Each Watch object runs its own
+// observe-only first cycle: metric watches share one settling key, and the
+// key alone would let a metric that cycles after its sibling go live on its
+// very first cycle.
 func (w *Watch) prepareCycle() (observeOnly, skip bool) {
 	settleKey := settlingKeyForWatch(w)
+	pending := w.Settling != nil && !w.settled && !w.Settling.Observed(settleKey)
 	if w.IsPaused != nil && w.IsPaused() {
-		if w.Settling != nil && !w.Settling.Observed(settleKey) {
+		if pending {
 			w.markSettled()
 		}
 		return false, true
 	}
-	return w.Settling != nil && !w.Settling.Observed(settleKey), false
+	return pending, false
 }
 
 func (w *Watch) runCustomCycle(ctx context.Context, observeOnly bool) {
