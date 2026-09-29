@@ -173,6 +173,46 @@ check: { type: storage, path: /var, used_pct: { op: ">=", value: "80%" } }
 	}
 }
 
+// TestLocalOverrideDeleteRemovesEntry covers `delete: true` outside services:
+// the documented merge rules apply to every `.local` layer, so an app override
+// removes the named preflight entry, and a watch or notifier override removes
+// the whole entry it names.
+func TestLocalOverrideDeleteRemovesEntry(t *testing.T) {
+	files := localOverrideFiles()
+	files["catalog/apps/tool.yml"] = `
+name: tool
+variables: { binary: /usr/bin/tool }
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["${binary}", "--version"] }
+`
+	files["services/tooled.yml"] = "name: tooled\nuses: demo\napps: [tool]\n"
+	files["apps.local/tool.yml"] = "name: tool\npreflight:\n  version: { delete: true }\n"
+	files["storages.local/root-free.yml"] = "name: root-free\ndelete: true\n"
+	files["notifiers/ops.yml"] = "notifiers:\n  ops: { type: email, to: [ops@example.org] }\n"
+	files["notifiers.local/ops.yml"] = "notifiers:\n  ops: { delete: true }\n"
+	cfg := loadCatalog(t, files)
+
+	resolved, errs := cfg.Resolve("tooled")
+	if len(errs) != 0 {
+		t.Fatalf("Resolve(tooled) errors = %v", errs)
+	}
+	preflight, _ := resolved.Tree[sectionPreflight].(map[string]any)
+	if _, present := preflight["tool-version"]; present {
+		t.Errorf("deleted app preflight entry still attached: %v", preflight)
+	}
+	if _, present := preflight["tool-binary"]; !present {
+		t.Errorf("sibling app preflight entry lost: %v", preflight)
+	}
+	watches, _ := cfg.Global.Raw[pathKeyWatches].(map[string]any)
+	if _, present := watches["root-free"]; present {
+		t.Errorf("deleted host watch still loaded: %v", watches["root-free"])
+	}
+	if _, present := cfg.Notifiers()["ops"]; present {
+		t.Errorf("deleted notifier still loaded: %v", cfg.Notifiers()["ops"])
+	}
+}
+
 func TestLocalNotifierOverrideMergesBaseEntry(t *testing.T) {
 	files := localOverrideFiles()
 	files["notifiers/ops.yml"] = `
