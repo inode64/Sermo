@@ -432,7 +432,10 @@ func (e Engine) run(ctx context.Context, p plan) (result Result) {
 		return result
 	}
 	// Step 4: release only after a successful acquire.
-	defer func() { _ = release() }()
+	// It runs before the event defer above, so a lock that could not be
+	// released (and will block this service until its TTL) is reported in the
+	// operation's one audited result instead of being silently discarded.
+	defer releaseOperationLock(release, &result)
 
 	if !e.checkNamedLocks(&result) || !e.runPreflight(ctx, p, &result) || !e.checkGuards(ctx, p, &result) {
 		return result
@@ -512,6 +515,14 @@ func (e Engine) runRepair(ctx context.Context, result *Result) ([]string, bool) 
 		return nil, false
 	}
 	return removed, true
+}
+
+// releaseOperationLock releases the operation lock and keeps a failure as a
+// warning on the operation's result.
+func releaseOperationLock(release func() error, result *Result) {
+	if err := release(); err != nil {
+		result.Warnings = append(result.Warnings, "release operation lock: "+err.Error())
+	}
 }
 
 // resetRepairedState clears a failed init marker after reconciliation handled

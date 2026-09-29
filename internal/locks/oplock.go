@@ -17,6 +17,19 @@ import (
 // fails fast as held rather than spinning.
 const maxAcquireAttempts = 5
 
+// Owner release retries the directory exclusion briefly. Every release and
+// reclaim in the directory — of any service, and each goroutine in sermod with
+// its own open file description — holds it for one read and unlink, so a
+// single non-blocking attempt could strand a finished operation's lock until
+// its TTL and block that service with "operation in progress". The total wait
+// stays well under a second; exhausting it still never removes without
+// exclusion.
+const (
+	releaseExclusionAttempts   = 12
+	releaseExclusionBackoff    = 2 * time.Millisecond
+	releaseExclusionMaxBackoff = 100 * time.Millisecond
+)
+
 // HeldError is returned by Acquire when an active operation lock already exists.
 // The operation engine maps it to a blocked result (exit code 75).
 type HeldError struct {
@@ -46,7 +59,7 @@ func (h *ownedLock) Release() error {
 	if h.released {
 		return nil
 	}
-	unlock, err := lockReclaimDir(h.path)
+	unlock, err := lockReleaseDir(h.path)
 	if err != nil {
 		if isMissingLock(err) {
 			h.released = true
@@ -235,6 +248,20 @@ func lockReclaimDir(path string) (func(), error) {
 		_ = unix.Flock(int(d.Fd()), unix.LOCK_UN)
 		_ = d.Close()
 	}, nil
+}
+
+// lockReleaseDir is lockReclaimDir with a bounded retry while another holder
+// has the directory exclusion. Any other failure returns immediately.
+func lockReleaseDir(path string) (func(), error) {
+	backoff := releaseExclusionBackoff
+	for attempt := 1; ; attempt++ {
+		unlock, err := lockReclaimDir(path)
+		if err == nil || !errors.Is(err, unix.EWOULDBLOCK) || attempt >= releaseExclusionAttempts {
+			return unlock, err
+		}
+		<-time.After(backoff)
+		backoff = min(backoff+backoff, releaseExclusionMaxBackoff)
+	}
 }
 
 // writeLockFileExclusive creates path with O_CREAT|O_EXCL, writes the payload
