@@ -1754,7 +1754,8 @@ Protocols, in the order of the table above:
   management CLI). No auth. On connect varnishd sends a CLI response (a `<status>
   <length>` line and a body); status **200** carries the banner (with the version)
   and **107** is an authentication challenge (a CLI secret is set) — either proves
-  the management CLI is up. Result data: the `cli_status` and, for a banner, the
+  the management CLI is up. Any other status, or a body shorter than its declared
+  length, fails the check. Result data: the `cli_status` and, for a banner, the
   Varnish `version`. The CLI secret authentication is not performed (liveness only).
 - `ceph` (alias `ceph-mon`) — default port 3300 (TCP, the Ceph monitor's messenger
   v2; use port 6789 for the legacy v1). No auth. On connect a Ceph daemon sends a
