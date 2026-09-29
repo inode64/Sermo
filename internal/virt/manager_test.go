@@ -98,6 +98,8 @@ func TestStatusFromDomainState(t *testing.T) {
 		{name: "paused", state: libvirt.DomainPaused, want: servicemgr.StatusPaused},
 		{name: "suspended", state: libvirt.DomainPmsuspended, want: servicemgr.StatusPaused},
 		{name: "shutoff", state: libvirt.DomainShutoff, want: servicemgr.StatusInactive},
+		// Shutting down: qemu is still alive, so a stop is not complete yet.
+		{name: "shutdown in progress", state: libvirt.DomainShutdown, want: servicemgr.StatusUnknown},
 		{name: "crashed", state: libvirt.DomainCrashed, want: servicemgr.StatusFailed},
 	}
 	for _, tt := range tests {
