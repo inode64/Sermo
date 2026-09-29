@@ -35,11 +35,11 @@ func (b *WebBackend) probeWatchResult(ctx context.Context, w *webWatch) (checks.
 	if err != nil {
 		return checks.Result{}, fmt.Errorf("build check: %w", err)
 	}
+	if w.checkType == checks.CheckTypeDiskIO {
+		return b.probeDiskIORates(ctx, check, b.probeTimeout(w.check))
+	}
 	probeCtx, cancel := b.probeContext(ctx, w.check)
 	defer cancel()
-	if w.checkType == checks.CheckTypeDiskIO {
-		return b.probeDiskIORates(probeCtx, check)
-	}
 	return check.Run(probeCtx), nil
 }
 
@@ -50,8 +50,18 @@ func (b *WebBackend) probeWatchResult(ctx context.Context, w *webWatch) (checks.
 // bounded pause gives the operator a real window. The check instance is the
 // standalone one built for this probe, so the scheduler's own baseline is
 // untouched, and an idle disk honestly reports zeroes rather than silence.
-func (b *WebBackend) probeDiskIORates(ctx context.Context, check checks.Check) (checks.Result, error) {
-	if baseline := check.Run(ctx); baseline.Unavailable {
+//
+// timeout bounds each sample, as it bounds the check in the daemon cycle; the
+// window is a pause between samples, not check work, so it runs outside that
+// deadline. Waiting inside it failed every probe whose timeout was no longer
+// than the window.
+func (b *WebBackend) probeDiskIORates(ctx context.Context, check checks.Check, timeout time.Duration) (checks.Result, error) {
+	sample := func() checks.Result {
+		sampleCtx, cancel := context.WithTimeout(ctx, timeout)
+		defer cancel()
+		return check.Run(sampleCtx)
+	}
+	if baseline := sample(); baseline.Unavailable {
 		return baseline, nil
 	}
 	select {
@@ -59,7 +69,13 @@ func (b *WebBackend) probeDiskIORates(ctx context.Context, check checks.Check) (
 		return checks.Result{}, fmt.Errorf("sample disk I/O rate window: %w", ctx.Err())
 	case <-time.After(b.diskIOProbeWindow()):
 	}
-	return check.Run(ctx), nil
+	return sample(), nil
+}
+
+// diskIOProbeBudget is the whole manual disk I/O probe: two bounded samples
+// around the default rate window.
+func diskIOProbeBudget(timeout time.Duration) time.Duration {
+	return diskIOProbeSamples*timeout + defaultDiskIOProbeWindow
 }
 
 // diskIOProbeWindow is how long a manual disk I/O probe watches the counters:
@@ -97,6 +113,9 @@ func (b *WebBackend) startSmartShortTest(ctx context.Context, w *webWatch) (chec
 // defaultDiskIOProbeWindow is the rate window a manual disk I/O probe opens when
 // the backend declares none.
 const defaultDiskIOProbeWindow = 2 * time.Second
+
+// diskIOProbeSamples is the baseline plus the rate sample of a manual probe.
+const diskIOProbeSamples = 2
 
 func watchErrorReadings(message string) []web.WatchReading {
 	return []web.WatchReading{{Field: watchReadingFieldSample, Label: watchReadingLabelSample, Error: message}}
