@@ -3997,6 +3997,11 @@ sermoctl config validate          # whole Sermo configuration
 `config validate` exits `78` on a configuration error. See
 [rules](rules.md) for what each section may contain.
 
+Unknown top-level keys are errors in `sermo.yml`, in service and catalog
+service documents and in host watch documents, as they are under `engine`,
+`paths` and `defaults`. A misspelling such as `dryrun: true` would otherwise
+be ignored and leave the service performing real remediation.
+
 ## Diagnostics
 
 `config validate` checks that the configuration is *well-formed*. When

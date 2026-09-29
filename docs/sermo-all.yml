@@ -1361,8 +1361,6 @@ display_name: Backup mount
 category: storage
 monitor: previous
 interval: 30s
-variables:  # mount-scoped custom variables
-  owner: backup
 check:
   type: storage
   path: /mnt/backup  # must exist in /etc/fstab; no source/fstype/options here
