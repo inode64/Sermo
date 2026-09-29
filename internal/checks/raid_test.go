@@ -72,6 +72,22 @@ unused devices: <none>
 	}
 }
 
+// A scrub ("check") is an active operation but not a reconstruction, so it
+// must not raise the recovering count or its predicates.
+func TestParseMdstatScrubIsNotRecovering(t *testing.T) {
+	const mdstatScrub = `Personalities : [raid1]
+md0 : active raid1 sdb1[1] sda1[0]
+      976630464 blocks super 1.2 [2/2] [UU]
+      [=>...................]  check =  8.3% (81234/976630464) finish=90.1min speed=150000K/sec
+
+unused devices: <none>
+`
+	st := parseMdstat(mdstatScrub)
+	if st.Recovering != 0 || st.Details[0].Recovering || st.Details[0].Operation != "check" || !st.Details[0].HasProgress {
+		t.Fatalf("status = %+v, want an active check that is not recovering", st)
+	}
+}
+
 func TestEnrichRaidSysfsReadsArraySize(t *testing.T) {
 	root := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(root, "md0", "md"), 0o755); err != nil {
