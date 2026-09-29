@@ -202,8 +202,10 @@ runner fails the check closed.
 
 With a `unit:`, the first numeric token of the command's stdout publishes as
 the check's `value` series in that unit — `exim -bpc` becomes a queue-depth
-graph with two lines of YAML. Output with no leading number simply records no
-sample (a gap), never a failure; the exit code and matchers stay the verdict.
+graph with two lines of YAML. Output with no leading number — including `nan`
+and `inf`, which are not readings — simply records no sample (a gap), never a
+failure; the exit code and matchers stay the verdict. The same holds for the
+`value` of a `sql`, `mongodb-query` or `influxdb-query` result.
 
 The same `expect_exit` / `expect_stdout` / `expect_stderr` fields are available
 on a watch hook (`then.hook`) to validate the hook command's result, but
@@ -1142,8 +1144,10 @@ Protocols, in the order of the table above:
   check). An ERR handshake (host blocked, too many connections) fails the probe.
 - `mongodb` (alias `mongo`) — default port 27017; `tls` supported. `user` is
   **optional** (MongoDB may run without auth); with credentials it authenticates
-  against `auth_source` (defaults to `database`, then `admin`). Connects, verifies
-  a `ping`, and reads the version via `buildInfo`. A `hello` (with the legacy
+  against `auth_source` (defaults to `database`, then `admin`). It connects
+  directly to the configured node — replica-set discovery is off, so a
+  secondary answers as itself and no primary is needed — verifies a `ping`, and
+  reads the version via `buildInfo`. A `hello` (with the legacy
   `isMaster` as fallback) reports the replica-set `role`
   (`primary`/`secondary`/`arbiter`/`standalone`), `set_name` and `read_only`, so
   an `expect:` rule can assert e.g. `role == primary`. To run a query and compare
@@ -1905,8 +1909,8 @@ checks:
 A `mongodb-query` check runs a MongoDB query, compares a **scalar result** with
 `value`, and is **condition-style** (`OK == true` means the comparison holds).
 It uses the same connection variables as the `mongodb` connection check
-(`host`/`port`/`user`/`password`/`database`/`tls`, plus `auth_source`) and the
-official MongoDB driver. Three query shapes are supported:
+(`host`/`port`/`user`/`password`/`database`/`tls`, plus `auth_source`), the same
+direct connection to that node, and the official MongoDB driver. Three query shapes are supported:
 
 ```yaml
 checks:
@@ -2767,7 +2771,11 @@ detail so gradual degradation is visible.
   or a configured thin-pool capacity threshold. Explicit `severity:` overrides
   the default grade without changing the raw check verdict. Select a target
   with `volume_group` and optional `logical_volume`; `free_pct`, `thin_data_pct`
-  and `thin_metadata_pct` are ordinary numeric predicates. Result readings
+  and `thin_metadata_pct` are ordinary numeric predicates. Without
+  `logical_volume` the watch covers every LV of the group, hidden ones
+  included: any faulty LV or any thin pool over its threshold fails it,
+  `lvm_reasons` names each faulty LV (`data:partial`), and the thin-pool
+  readings report the fullest pool. Result readings
   include `health`, `volume_group`, `logical_volume`, `lvm_reasons`,
   `vg_free_bytes`, `vg_size_bytes`, `vg_used_bytes` and the configured
   percentage fields.

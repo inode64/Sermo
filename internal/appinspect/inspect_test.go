@@ -588,6 +588,36 @@ func TestListWithoutProbesRunsNoCommand(t *testing.T) {
 	}
 }
 
+// TestListWithoutProbesStillProbesIdentity pins that an app whose presence is
+// decided by version_match is not reported installed from its binary alone: on a
+// MariaDB host /usr/sbin/mysqld is mariadbd, and registering a `mysql` watch from
+// the path made its first cycle fire "not installed" on every such host.
+func TestListWithoutProbesStillProbesIdentity(t *testing.T) {
+	root := t.TempDir()
+	mysqld := filepath.Join(root, "mysqld")
+	if err := os.WriteFile(mysqld, []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cfg := &config.Config{AppNames: []string{"mysql"}, Apps: map[string]*config.Document{
+		"mysql": {Name: "mysql", Body: map[string]any{
+			"name": "mysql",
+			"preflight": map[string]any{
+				"binary": map[string]any{"type": "binary", "path": mysqld},
+				"version": map[string]any{
+					"type":          "command",
+					"command":       []any{mysqld, "--version"},
+					"version_match": map[string]any{"excludes": "MariaDB"},
+				},
+			},
+		}},
+	}}
+	runner := testRunner{mysqld: {Stdout: "mysqld  Ver 11.4.5-MariaDB for Linux on x86_64\n"}}
+	reports := List(t.Context(), runner, cfg, config.CategoryApp, true, WithoutProbes())
+	if len(reports) != 1 || reports[0].Installed {
+		t.Fatalf("reports = %+v, want mysql not installed (MariaDB answered)", reports)
+	}
+}
+
 // refusingRunner fails the test on any command: presence must be decided from
 // the filesystem alone.
 type refusingRunner struct{ t *testing.T }

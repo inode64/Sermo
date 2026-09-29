@@ -8,7 +8,6 @@ import (
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
-	"go.mongodb.org/mongo-driver/v2/mongo/readpref"
 
 	"sermo/internal/netutil"
 )
@@ -43,7 +42,9 @@ func (mongodbProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	}
 	defer func() { MongoDisconnect(ctx, client) }()
 
-	if err := client.Ping(ctx, readpref.Primary()); err != nil {
+	// A direct connection selects the configured node whatever its role, so the
+	// ping needs no read preference.
+	if err := client.Ping(ctx, nil); err != nil {
 		return Result{}, probeErr(ProtocolNameMongoDB, stepPing, err)
 	}
 	var info struct {
@@ -97,9 +98,22 @@ func mongoRole(primary, secondary, arbiter bool, setName string) string {
 
 // MongoConnect builds a lazy MongoDB client from cfg.
 func MongoConnect(_ context.Context, cfg Config) (*mongo.Client, error) {
+	client, err := mongo.Connect(mongoClientOptions(cfg))
+	if err != nil {
+		return nil, probeErr(ProtocolNameMongoDB, stepConnect, err)
+	}
+	return client, nil
+}
+
+// mongoClientOptions connects directly to the configured node. Without it the
+// driver discovers a replica set from its seed and routes every operation to
+// the primary: a secondary reported role=primary, a set without a primary
+// failed a healthy local mongod, and a member advertising another name dropped
+// the configured address (and its interface binding) altogether.
+func mongoClientOptions(cfg Config) *options.ClientOptions {
 	target := newProbeTarget(cfg, defaultPortMongoDB)
 	host, _ := target.hostPort()
-	opts := options.Client().SetHosts([]string{target.address()})
+	opts := options.Client().SetHosts([]string{target.address()}).SetDirect(true)
 	if cfg.Interface != "" {
 		opts.SetDialer(target.dialer())
 	}
@@ -118,11 +132,7 @@ func MongoConnect(_ context.Context, cfg Config) (*mongo.Client, error) {
 	if mode := netutil.NormalizeTLS(cfg.TLS); mode != "" {
 		opts.SetTLSConfig(netutil.TLSClientConfigForMode(host, mode))
 	}
-	client, err := mongo.Connect(opts)
-	if err != nil {
-		return nil, probeErr(ProtocolNameMongoDB, stepConnect, err)
-	}
-	return client, nil
+	return opts
 }
 
 // MongoDisconnect closes a MongoDB client with the bounded teardown timeout.

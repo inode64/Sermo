@@ -39,3 +39,17 @@ func TestMongoConnectBuilds(t *testing.T) {
 func TestMongoProbeUnreachable(t *testing.T) {
 	assertProbeRefused(t, mongodbProtocol{}, deadPort(t))
 }
+
+// TestMongoClientOptionsConnectDirectly pins that the probe talks to the node it
+// was pointed at. Without a direct connection the driver discovers the replica
+// set and routes ping and hello to the primary, so a secondary reported
+// role=primary and a set without a primary failed a healthy local mongod.
+func TestMongoClientOptionsConnectDirectly(t *testing.T) {
+	opts := mongoClientOptions(Config{Host: "127.0.0.1", Port: 27017})
+	if opts.Direct == nil || !*opts.Direct {
+		t.Fatalf("Direct = %v, want true", opts.Direct)
+	}
+	if len(opts.Hosts) != 1 || opts.Hosts[0] != "127.0.0.1:27017" {
+		t.Fatalf("Hosts = %v, want the configured node", opts.Hosts)
+	}
+}

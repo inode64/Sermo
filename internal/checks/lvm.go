@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -73,17 +74,17 @@ func (c *lvmCheck) Run(ctx context.Context) Result {
 		}
 		return c.unavailableResult("lvm: parse lvs JSON: "+err.Error(), start)
 	}
-	row, found := c.selectRow(report)
-	if !found {
-		return c.finish(start, lvmRow{}, LVMHealthError, "absent", map[string]float64{}, "lvm target absent")
+	rows := c.selectRows(report)
+	if len(rows) == 0 {
+		return c.finish(start, lvmRow{}, lvmRow{}, LVMHealthError, "absent", map[string]float64{}, "lvm target absent")
 	}
-	values := lvmValues(row)
-	reasons := lvmReasons(row)
+	scan := c.scanRows(rows)
 	health := LVMHealthOK
-	if len(reasons) > 0 {
+	if len(scan.reasons) > 0 {
 		health = LVMHealthError
 	}
-	if len(c.preds) > 0 && levelPredsHold(c.preds, values) {
+	reasons := scan.reasons
+	if scan.breached {
 		// Free extents are allocation headroom, not filesystem free space. A
 		// fully allocated VG can have healthy LVs; thin-pool capacity and actual
 		// volume faults still require the error grade.
@@ -94,34 +95,112 @@ func (c *lvmCheck) Run(ctx context.Context) Result {
 		}
 		reasons = append(reasons, "capacity_threshold")
 	}
-	vg, lv := c.resultTarget(row)
+	vg, lv := c.resultTarget(scan.target)
 	message := fmt.Sprintf("lvm %s health=%s", lvmTargetLabel(vg, lv), health)
-	return c.finish(start, row, health, strings.Join(reasons, ","), values, message)
+	return c.finish(start, scan.target, scan.state, health, strings.Join(reasons, ","), scan.values, message)
 }
 
-func (c *lvmCheck) selectRow(report lvmReport) (lvmRow, bool) {
+// selectRows returns every `lvs -a` row in the watch's scope. A volume-group
+// watch covers all its LVs: `lvs -a` lists hidden volumes such as
+// [lvol0_pmspare] first, so judging the first row alone reported a VG with a
+// partial member as healthy.
+func (c *lvmCheck) selectRows(report lvmReport) []lvmRow {
+	var rows []lvmRow
 	for i := range report.Report {
-		for j := range report.Report[i].LV {
-			if c.volumeGroup != "" && report.Report[i].LV[j].VGName != c.volumeGroup {
+		for _, row := range report.Report[i].LV {
+			if c.volumeGroup != "" && row.VGName != c.volumeGroup {
 				continue
 			}
-			if c.logicalVolume != "" && report.Report[i].LV[j].LVName != c.logicalVolume {
+			if c.logicalVolume != "" && row.LVName != c.logicalVolume {
 				continue
 			}
-			return report.Report[i].LV[j], true
+			rows = append(rows, row)
 		}
 	}
-	return lvmRow{}, false
+	return rows
 }
 
-func (c *lvmCheck) finish(start time.Time, row lvmRow, health, reasons string, values map[string]float64, message string) Result {
+// lvmScan is the verdict over every row in scope: the faults of each LV, whether
+// any row breaches the predicates, the readings to publish, the row that names
+// the result (the first faulty or breaching one) and the first row with device
+// activity.
+type lvmScan struct {
+	reasons       []string
+	breached      bool
+	values        map[string]float64
+	target, state lvmRow
+}
+
+func (c *lvmCheck) scanRows(rows []lvmRow) lvmScan {
+	scan := lvmScan{values: lvmValues(rows[0]), target: rows[0]}
+	named := len(rows) > 1
+	targeted := false
+	for _, row := range rows {
+		values := lvmValues(row)
+		faults := lvmReasons(row)
+		scan.reasons = append(scan.reasons, lvmNamedReasons(row, faults, named)...)
+		breach := len(c.preds) > 0 && levelPredsHold(c.preds, values)
+		if breach && !scan.breached {
+			scan.breached = true
+			// Publish the VG readings of the group that breached; the thin-pool
+			// readings below keep the fullest pool of the scope.
+			copyLVMReadings(scan.values, values, lvmVGReadingKeys)
+		}
+		if (breach || len(faults) > 0) && !targeted {
+			scan.target, targeted = row, true
+		}
+		if state, _, _ := lvmDeviceState(row); state != "" && scan.state.LVName == "" {
+			scan.state = row
+		}
+		keepFullestThinPool(scan.values, values)
+	}
+	if scan.state.LVName == "" {
+		scan.state = scan.target
+	}
+	return scan
+}
+
+var lvmVGReadingKeys = []string{DataKeyLVMFreeBytes, DataKeyLVMSizeBytes, DataKeyLVMUsedBytes, DataKeyLVMFreePct}
+
+// lvmNamedReasons prefixes each fault with its LV when the watch spans several.
+func lvmNamedReasons(row lvmRow, faults []string, named bool) []string {
+	if !named {
+		return faults
+	}
+	out := make([]string, 0, len(faults))
+	for _, reason := range faults {
+		out = append(out, row.LVName+":"+reason)
+	}
+	return out
+}
+
+func copyLVMReadings(dst, src map[string]float64, keys []string) {
+	for _, key := range keys {
+		if value, ok := src[key]; ok {
+			dst[key] = value
+		}
+	}
+}
+
+// keepFullestThinPool publishes the highest thin-pool usage of the scope: the
+// readings exist only on pool rows.
+func keepFullestThinPool(dst, src map[string]float64) {
+	for _, key := range []string{DataKeyLVMThinDataPct, DataKeyLVMThinMetadataPct} {
+		value, ok := src[key]
+		if prior, seen := dst[key]; ok && (!seen || value > prior) {
+			dst[key] = value
+		}
+	}
+}
+
+func (c *lvmCheck) finish(start time.Time, row, stateRow lvmRow, health, reasons string, values map[string]float64, message string) Result {
 	r := c.result(health == LVMHealthOK, message, start)
 	if c.severity == "" && health == LVMHealthWarning {
 		r.Severity = SeverityWarning
 	}
 	vg, lv := c.resultTarget(row)
 	r.Data = map[string]any{DataKeyHealth: health, DataKeyLVMReasons: reasons, DataKeyVolumeGroup: vg, DataKeyLogicalVolume: lv}
-	if state, progress, hasProgress := lvmDeviceState(row); state != "" {
+	if state, progress, hasProgress := lvmDeviceState(stateRow); state != "" {
 		r.Data[DataKeyDeviceState] = state
 		if hasProgress {
 			r.Data[DataKeyProgressPct] = progress
@@ -200,7 +279,8 @@ func lvmReasons(row lvmRow) []string {
 	if lvmAttributeAt(row.LVAttr, lvmLVAttrSuspendedIndex) == 's' {
 		reasons = append(reasons, "suspended")
 	}
-	if status := strings.TrimSpace(row.LVHealth); status != "" && status != "healthy" {
+	// lvs reports a partial LV both in its attributes and as its health status.
+	if status := strings.TrimSpace(row.LVHealth); status != "" && status != "healthy" && !slices.Contains(reasons, status) {
 		reasons = append(reasons, status)
 	}
 	return reasons

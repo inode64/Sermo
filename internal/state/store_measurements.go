@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"math"
 	"strings"
 	"time"
 )
@@ -87,6 +88,13 @@ func (m metricSeries) target() string {
 }
 
 func recordMetric(ctx context.Context, exec statementExecutor, m metricSeries, value float64, at time.Time) error {
+	// A non-finite sample is dropped, not stored: NaN violates the NOT NULL
+	// aggregates and rolls back the cycle's whole batch, and +Inf beside -Inf
+	// sums to NaN in the rollup, which then stops consolidating and pruning
+	// every series behind that bucket.
+	if math.IsNaN(value) || math.IsInf(value, 0) {
+		return nil
+	}
 	if _, err := exec(ctx, metricRecordStmt,
 		resMinute, m.scope, m.service, m.check, m.metric, alignBucket(at, resMinute),
 		value, value, value,

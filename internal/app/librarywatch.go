@@ -86,19 +86,17 @@ func (s *ArtifactSamples) FileFingerprint(path string) (string, bool, bool) {
 	return entry.fingerprint, tracked, entry.sampled
 }
 
-// RegisterApp marks an app before its first sample and reports whether it was
-// newly registered.
-func (s *ArtifactSamples) RegisterApp(name string) bool {
+// RegisterApp marks an app before its first sample. A sample that survived a
+// config reload is kept.
+func (s *ArtifactSamples) RegisterApp(name string) {
 	if s == nil || name == "" {
-		return false
+		return
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if _, ok := s.appVersions[name]; !ok {
 		s.appVersions[name] = artifactAppSample{}
-		return true
 	}
-	return false
 }
 
 // StoreAppReport records one app inspection: the version and status rules
@@ -192,12 +190,21 @@ type catalogArtifactWatchSpec struct {
 	category  string
 	watchName func(string) string
 	appName   func(string) string
-	register  func(*ArtifactSamples, appinspect.Report)
-	store     func(*ArtifactSamples, string, appinspect.Report)
-	inspect   func(context.Context, execx.Runner, *config.Config, string, ...appinspect.Option) appinspect.Report
+	// register records the entry's sample slot and returns the artifact key
+	// (app name or file path) its watch samples in this generation.
+	register func(*ArtifactSamples, appinspect.Report) string
+	store    func(*ArtifactSamples, string, appinspect.Report)
+	inspect  func(context.Context, execx.Runner, *config.Config, string, ...appinspect.Option) appinspect.Report
 }
 
-func buildCatalogArtifactWatches(ctx context.Context, cfg *config.Config, deps Deps, spec catalogArtifactWatchSpec) []*Watch {
+// artifactOwned is the set of app names or file paths that one generation's
+// catalog watches sample. It is rebuilt on every build: the ArtifactSamples
+// store outlives config reloads so that samples survive them, and deciding
+// ownership from its registrations made a reload skip every artifact sampler as
+// already owned while the previous generation's were cancelled.
+type artifactOwned map[string]bool
+
+func buildCatalogArtifactWatches(ctx context.Context, cfg *config.Config, deps Deps, spec catalogArtifactWatchSpec) ([]*Watch, artifactOwned) {
 	samples := deps.ArtifactSamples
 	runner := deps.ExecxRunner
 	lookup := appinspect.WithUserLookup(deps.UserLookup)
@@ -205,15 +212,16 @@ func buildCatalogArtifactWatches(ctx context.Context, cfg *config.Config, deps D
 	// probes belong to the watch cycles. Running them here held a loaded host's
 	// start for minutes on one slow version command.
 	reports := appinspect.List(ctx, runner, cfg, spec.category, false, lookup, appinspect.WithoutProbes())
+	owned := artifactOwned{}
 	if len(reports) == 0 {
-		return nil
+		return nil, owned
 	}
 	notifiers := resolveNotifiers(deps.GlobalNotify, deps.Notifiers)
 	out := make([]*Watch, 0, len(reports))
 	for i := range reports {
 		report := reports[i]
 		name := report.Name
-		spec.register(samples, report)
+		owned[spec.register(samples, report)] = true
 		watch := newWatchRuntime(spec.watchName(name), spec.category, deps, artifactWatchInterval(cfg, spec.category, name))
 		watch.App = spec.appName(name)
 		watch.Check = artifactCheck{
@@ -226,19 +234,21 @@ func buildCatalogArtifactWatches(ctx context.Context, cfg *config.Config, deps D
 		watch.Notifiers = notifiers
 		out = append(out, watch)
 	}
-	return out
+	return out, owned
 }
 
-// BuildLibraryWatches builds one monitor for every installed catalog library.
-// Library events are regular watches named "library:<name>" so they remain
-// distinct from application events without expanding the persisted event schema.
-func BuildLibraryWatches(ctx context.Context, cfg *config.Config, deps Deps) []*Watch {
+// buildLibraryWatches builds one monitor for every installed catalog library and
+// returns the library files they sample. Library events are regular watches
+// named "library:<name>" so they remain distinct from application events without
+// expanding the persisted event schema.
+func buildLibraryWatches(ctx context.Context, cfg *config.Config, deps Deps) ([]*Watch, artifactOwned) {
 	return buildCatalogArtifactWatches(ctx, cfg, deps, catalogArtifactWatchSpec{
 		category:  config.CategoryLibrary,
 		watchName: func(name string) string { return libraryWatchNamePrefix + name },
 		appName:   func(string) string { return "" },
-		register: func(samples *ArtifactSamples, report appinspect.Report) {
+		register: func(samples *ArtifactSamples, report appinspect.Report) string {
 			samples.RegisterFile(report.Binary)
+			return report.Binary
 		},
 		store: storeLibrarySample,
 		inspect: func(ctx context.Context, runner execx.Runner, cfg *config.Config, name string, options ...appinspect.Option) appinspect.Report {
@@ -256,11 +266,12 @@ func BuildArtifactWatches(ctx context.Context, cfg *config.Config, deps Deps) []
 	}
 	samples := artifactSamplesOrDefault(deps.ArtifactSamples)
 	deps.ArtifactSamples = samples
-	out := BuildLibraryWatches(ctx, cfg, deps)
-	out = append(out, BuildAppWatches(ctx, cfg, deps)...)
+	out, ownedFiles := buildLibraryWatches(ctx, cfg, deps)
+	appWatches, ownedApps := buildAppWatches(ctx, cfg, deps)
+	out = append(out, appWatches...)
 	dependencies := collectArtifactDependencies(cfg)
-	out = append(out, buildArtifactAppWatches(cfg, deps, samples, dependencies.apps)...)
-	return append(out, buildArtifactPathWatches(deps, samples, dependencies.paths)...)
+	out = append(out, buildArtifactAppWatches(cfg, deps, samples, dependencies.apps, ownedApps)...)
+	return append(out, buildArtifactPathWatches(deps, samples, dependencies.paths, ownedFiles)...)
 }
 
 type artifactDependencies struct {
@@ -297,7 +308,7 @@ func collectArtifactDependencies(cfg *config.Config) artifactDependencies {
 // intentionally silent: its only purpose is to refresh the shared sample, so a
 // failed app probe is cached at the artifact cadence rather than retried by each
 // service rule.
-func buildArtifactAppWatches(cfg *config.Config, deps Deps, samples *ArtifactSamples, apps []string) []*Watch {
+func buildArtifactAppWatches(cfg *config.Config, deps Deps, samples *ArtifactSamples, apps []string, owned artifactOwned) []*Watch {
 	if len(apps) == 0 {
 		return nil
 	}
@@ -305,9 +316,10 @@ func buildArtifactAppWatches(cfg *config.Config, deps Deps, samples *ArtifactSam
 	runner := deps.ExecxRunner
 	out := make([]*Watch, 0, len(apps))
 	for _, name := range apps {
-		if !samples.RegisterApp(name) {
-			continue // The regular installed-app watch already samples it.
+		if owned[name] {
+			continue // This generation's installed-app watch already samples it.
 		}
+		samples.RegisterApp(name)
 		appName := name
 		watch := newWatchRuntime(artifactWatchNamePrefix+appName, artifactWatchCheckType, deps,
 			artifactWatchInterval(cfg, config.CategoryApp, appName))
@@ -321,14 +333,14 @@ func buildArtifactAppWatches(cfg *config.Config, deps Deps, samples *ArtifactSam
 	return out
 }
 
-func buildArtifactPathWatches(deps Deps, samples *ArtifactSamples, paths map[string]time.Duration) []*Watch {
+func buildArtifactPathWatches(deps Deps, samples *ArtifactSamples, paths map[string]time.Duration, owned artifactOwned) []*Watch {
 	if len(paths) == 0 {
 		return nil
 	}
 	out := make([]*Watch, 0, len(paths))
 	for _, path := range slices.Sorted(maps.Keys(paths)) {
-		if _, tracked, _ := samples.FileFingerprint(path); tracked {
-			continue // installed library watcher already owns this file sample.
+		if owned[path] {
+			continue // This generation's library watch already samples the file.
 		}
 		samples.RegisterFile(path)
 		name := artifactWatchNamePrefix + path

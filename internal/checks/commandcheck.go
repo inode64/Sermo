@@ -137,11 +137,7 @@ func firstNumericToken(stdout string) (float64, bool) {
 	if len(fields) == 0 {
 		return 0, false
 	}
-	v, err := strconv.ParseFloat(fields[0], 64)
-	if err != nil {
-		return 0, false
-	}
-	return v, true
+	return parseFiniteFloat(fields[0])
 }
 
 // changeKey turns a trimmed command output into the value on_change compares

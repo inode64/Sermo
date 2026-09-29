@@ -1,6 +1,7 @@
 package state
 
 import (
+	"math"
 	"testing"
 	"time"
 )
@@ -91,5 +92,26 @@ func TestMeasurementSummaryNoData(t *testing.T) {
 	}
 	if stat.Count != 0 {
 		t.Fatalf("expected no data, got %+v", stat)
+	}
+}
+
+// TestRecordMetricDropsNonFiniteValues pins that NaN and ±Inf never reach the
+// archive. NaN broke the NOT NULL aggregates and rolled back the whole cycle's
+// batch; +Inf and -Inf in one 5-minute bucket summed to NaN and froze every
+// rollup and prune behind that bucket.
+func TestRecordMetricDropsNonFiniteValues(t *testing.T) {
+	s := openTemp(t)
+	base := time.Date(2026, 6, 7, 10, 0, 0, 0, time.UTC)
+	for i, v := range []float64{7, math.NaN(), math.Inf(1), math.Inf(-1)} {
+		if err := s.RecordMetric("web", "cmd", "value", v, base.Add(time.Duration(i)*time.Minute)); err != nil {
+			t.Fatalf("record %v: %v", v, err)
+		}
+	}
+	stat, err := s.MetricSummary("web", "cmd", "value", time.Hour, base.Add(10*time.Minute))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stat.Count != 1 || stat.Avg != 7 {
+		t.Fatalf("summary = %+v, want only the finite sample", stat)
 	}
 }

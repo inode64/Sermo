@@ -3,6 +3,7 @@ package checks
 import (
 	"fmt"
 	"maps"
+	"math"
 	"regexp"
 	"sermo/internal/cfgval"
 	"slices"
@@ -95,12 +96,24 @@ func finishScalarCompare(b base, label, result string, matcher valueMatcher, sta
 	data[DataKeyOp] = op
 	data[DataKeyThreshold] = threshold
 	data[DataKeyResult] = result
-	if value, err := strconv.ParseFloat(strings.TrimSpace(result), numericBits64); err == nil {
+	if value, ok := parseFiniteFloat(result); ok {
 		data[DataKeyValue] = value
 	}
 	res := b.result(ok, fmt.Sprintf("%s: %q %s %q = %t", label, result, op, threshold, ok), start)
 	res.Data = data
 	return res
+}
+
+// parseFiniteFloat parses a probe's textual result as a reading. strconv also
+// accepts "nan" and "inf", which no reading may carry: JSON cannot encode them,
+// so the check snapshot and the service detail API failed, and the metric
+// store's aggregates turned to NaN.
+func parseFiniteFloat(s string) (float64, bool) {
+	v, err := strconv.ParseFloat(strings.TrimSpace(s), numericBits64)
+	if err != nil || math.IsNaN(v) || math.IsInf(v, 0) {
+		return 0, false
+	}
+	return v, true
 }
 
 func parseNumericString(label, value string) (float64, error) {
