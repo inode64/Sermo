@@ -401,7 +401,9 @@ daemon-cycle remediation. They still use the same safety posture:
   `mount <path>` / `umount <path>` with argv directly and a timeout; it never
   builds a shell command from YAML.
 - Each target has an operation lock under `<paths.runtime>/mounts/ops`, so two
-  callers cannot race the same mount.
+  callers cannot race the same mount. Lock and counter identifiers are
+  injective: distinct mounts never share either, and a counter recording
+  another path is refused.
 - With `mount.refcount: true` (the default), `mount` increments a runtime counter and
   `umount` decrements it; the real unmount is attempted only when the counter
   reaches zero.

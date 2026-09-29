@@ -343,6 +343,113 @@ func TestStateIDScrubsConfiguredName(t *testing.T) {
 	}
 }
 
+// Distinct mounts must never share a refcount file or operation lock.
+func TestStateIDIsInjectiveAcrossMounts(t *testing.T) {
+	specs := []Spec{
+		EphemeralSpec("/mnt/a/b"),
+		EphemeralSpec("/mnt/a_b"),
+		EphemeralSpec("/mnt/a%2Fb"),
+		EphemeralSpec("/backup"),
+		{Name: "backup", Path: "/srv/backup"},
+		{Name: "mnt_a_b", Path: "/srv/x"},
+		{Name: "a:b", Path: "/srv/y"},
+		{Name: "a_b", Path: "/srv/z"},
+	}
+	seen := map[string]string{}
+	for _, spec := range specs {
+		id := stateID(spec)
+		if strings.ContainsAny(id, `/\`) || id == "." || id == ".." {
+			t.Fatalf("stateID(%+v) = %q, want a simple filename", spec, id)
+		}
+		key := spec.Name + "|" + spec.Path
+		if other, dup := seen[id]; dup {
+			t.Fatalf("stateID %q shared by %s and %s", id, other, key)
+		}
+		seen[id] = key
+	}
+	if got := stateID(Spec{Name: "nfs_data-1.x", Path: "/srv/data"}); got != "nfs_data-1.x" {
+		t.Fatalf("stateID of a plain configured name = %q, want it unchanged", got)
+	}
+}
+
+// The reported scenario: releasing one of two colliding ephemeral mounts must
+// not consume the other's reference and must actually unmount it.
+func TestReleaseDoesNotShareRefcountWithCollidingPath(t *testing.T) {
+	mountedAB, mountedA := true, true
+	runner := &fakeRunner{mounted: &mountedA}
+	c := testController(t, &mountedA, runner)
+	c.Mounts = func() ([]checks.Mount, error) {
+		var out []checks.Mount
+		if mountedAB {
+			out = append(out, checks.Mount{MountPoint: "/mnt/a/b"})
+		}
+		if mountedA {
+			out = append(out, checks.Mount{MountPoint: "/mnt/a_b"})
+		}
+		return out, nil
+	}
+	c.InFstab = func(string) (bool, error) { return true, nil }
+	if _, err := c.Acquire(context.Background(), EphemeralSpec("/mnt/a/b")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.Acquire(context.Background(), EphemeralSpec("/mnt/a_b")); err != nil {
+		t.Fatal(err)
+	}
+	res, err := c.ReleaseWithOptions(context.Background(), EphemeralSpec("/mnt/a_b"), ReleaseOptions{})
+	if err != nil {
+		t.Fatalf("Release: %v", err)
+	}
+	if res.Message == mountMessageRefcountReleasedInUse || res.Refcount != 0 {
+		t.Fatalf("Release = %+v, want the last reference of /mnt/a_b released", res)
+	}
+}
+
+// A persisted state for another path is never adopted as this mount's count.
+func TestReadStateRejectsStateOfAnotherPath(t *testing.T) {
+	mounted := true
+	c := testController(t, &mounted, &fakeRunner{mounted: &mounted})
+	spec := Spec{Name: "backup", Path: "/srv/backup", Refcount: true}
+	if err := c.writeState(Spec{Name: "backup", Path: "/srv/old-backup"}, State{Refcount: 2}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.readState(spec); err == nil || !strings.Contains(err.Error(), "/srv/old-backup") {
+		t.Fatalf("readState error = %v, want refusal naming the other path", err)
+	}
+}
+
+// State written under the previous (lossy) identifier is still honoured for
+// the same path, so an upgrade does not drop a live reference count.
+func TestReadStateAdoptsLegacyStateForSamePath(t *testing.T) {
+	mounted := true
+	c := testController(t, &mounted, &fakeRunner{mounted: &mounted})
+	spec := EphemeralSpec("/mnt/data")
+	dir := mountStateDir(c.runtime())
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	legacy := filepath.Join(dir, "mnt_data"+stateFileExt)
+	if err := os.WriteFile(legacy, []byte(`{"name":"mnt_data","path":"/mnt/data","refcount":2}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	state, err := c.readState(spec)
+	if err != nil || state.Refcount != 2 {
+		t.Fatalf("readState = %+v, %v; want the legacy refcount 2", state, err)
+	}
+	if err := c.writeState(spec, state); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(legacy); !os.IsNotExist(err) {
+		t.Fatalf("legacy state should be retired after the new state is written, err=%v", err)
+	}
+	other := EphemeralSpec("/mnt_data")
+	if err := os.WriteFile(legacy, []byte(`{"name":"mnt_data","path":"/mnt/data","refcount":5}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if state, err := c.readState(other); err != nil || state.Refcount != 0 {
+		t.Fatalf("readState(%s) = %+v, %v; must not adopt another path's legacy state", other.Path, state, err)
+	}
+}
+
 func TestReleaseBusyWithoutLazyReportsBlockers(t *testing.T) {
 	mounted := true
 	runner := &fakeRunner{mounted: &mounted, busy: true}
