@@ -218,9 +218,11 @@ func (c *certCheck) Run(ctx context.Context) Result {
 		}
 		sampled, err := sampler(ctx, c.host, c.port, c.serverName, c.verify)
 		if err != nil {
-			// Cannot retrieve the certificate (network/TLS error): this probe is
-			// quiet as a health alert — use a tcp/http check for reachability — but
-			// remains unavailable so a guard cannot authorize an operation from it.
+			// Cannot retrieve the certificate (network/TLS error): OK keeps a
+			// failed: rule quiet, since reachability belongs to a tcp/http check,
+			// but the cycle is still unavailable. Health, SLA and watch events
+			// treat it like any probe that could not look, and a guard cannot
+			// authorize an operation from it.
 			res := c.result(true, fmt.Sprintf("cert %s:%s: %v", c.host, c.port, err), start)
 			res.Unavailable = true
 			return res
