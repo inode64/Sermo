@@ -2449,6 +2449,38 @@ func TestWebBackendApplicationsStartingUnsettled(t *testing.T) {
 	}
 }
 
+// The inventory cache must not freeze startup placeholders for its whole TTL:
+// once the app's first cycle has observed it, the next poll shows its report.
+func TestWebBackendApplicationsCacheSkipsStartingPlaceholders(t *testing.T) {
+	settling := NewSettling(nil)
+	settling.Reset([]string{SettlingAppKey("git")})
+	samples := NewArtifactSamples()
+	now := time.Unix(1000, 0)
+	b := &WebBackend{
+		cfg: &config.Config{
+			AppNames: []string{"git"},
+			Apps: map[string]*config.Document{
+				"git": {Body: map[string]any{"name": "git", "display_name": "Git"}},
+			},
+		},
+		settling:        settling,
+		artifactSamples: samples,
+		now:             func() time.Time { return now },
+	}
+
+	if apps := b.Applications(context.Background()); len(apps) != 1 || apps[0].State != TargetStateStarting {
+		t.Fatalf("unsettled apps = %+v, want git starting", apps)
+	}
+
+	samples.StoreAppReport("git", appinspect.Report{Name: "git", Installed: true, OK: true, Version: "2.45.0", Status: "ok"})
+	settling.MarkObserved(SettlingAppKey("git"))
+	now = now.Add(30 * time.Second)
+	apps := b.Applications(context.Background())
+	if len(apps) != 1 || apps[0].State != TargetStateOK || apps[0].Version != "2.45.0" {
+		t.Fatalf("observed apps = %+v, want git ok 2.45.0 instead of the cached placeholder", apps)
+	}
+}
+
 func TestWebBackendStartingStateUnsettled(t *testing.T) {
 	settling := NewSettling(nil)
 	settling.Reset([]string{SettlingServiceKey("web"), SettlingWatchKey("disk")})

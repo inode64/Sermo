@@ -86,8 +86,23 @@ func (b *WebBackend) catalogItems(
 		inventory.mu.Unlock()
 		return items
 	}
+	if slices.ContainsFunc(items, isSettlingPlaceholder) {
+		// Startup placeholders turn into real rows within one cycle; caching
+		// them would show "starting" for the whole TTL. Unsettled rows run no
+		// probe and settled ones reuse their watch sample, so rebuilding on
+		// the next poll during that window stays cheap.
+		inventory.mu.Unlock()
+		return items
+	}
 	inventory.at = b.webNow()
 	inventory.items = slices.Clone(items)
 	inventory.mu.Unlock()
 	return items
+}
+
+// isSettlingPlaceholder reports a row loadCatalogItems synthesized for an app
+// that has not finished its startup observation; inspection reports never map
+// to the starting state.
+func isSettlingPlaceholder(item web.CatalogItem) bool {
+	return item.State == TargetStateStarting
 }
