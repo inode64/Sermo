@@ -159,6 +159,10 @@ func (e *webEntry) reloadSupportSnapshot(ctx context.Context, now time.Time, ref
 	defer cancel()
 	supported, err := e.reloadSupported(queryCtx)
 	if err != nil {
+		// Cache the failure with the last known answer, like the status
+		// cache: a hung init query would otherwise stall every row of every
+		// poll. An explicit refresh (a reload request) still queries again.
+		e.reloadCheckedAt = now
 		return e.canReload, err
 	}
 	e.canReload = supported

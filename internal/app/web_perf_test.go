@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -215,6 +216,35 @@ func TestWebBackendReloadSupportCacheTTL(t *testing.T) {
 	}
 	if !e.cachedReloadSupported(context.Background(), now.Add(reloadSupportCacheTTL)) || calls.Load() != 2 {
 		t.Fatalf("refreshed capability = %v calls=%d, want true/2", e.canReload, calls.Load())
+	}
+}
+
+// A failing capability query (hung or degraded init) is cached like a success,
+// keeping the last known answer: otherwise every service row of every poll
+// would wait up to serviceInitQueryTimeout for the init system again.
+func TestWebBackendReloadSupportCachesFailure(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 6, 16, 12, 0, 0, 0, time.UTC)
+	var calls atomic.Int32
+	e := &webEntry{
+		canReload: true,
+		reloadSupported: func(context.Context) (bool, error) {
+			calls.Add(1)
+			return false, errors.New("systemctl show: timeout")
+		},
+	}
+	if !e.cachedReloadSupported(context.Background(), now) || calls.Load() != 1 {
+		t.Fatalf("first capability calls=%d, want the previous answer after one query", calls.Load())
+	}
+	if !e.cachedReloadSupported(context.Background(), now.Add(time.Second)) || calls.Load() != 1 {
+		t.Fatalf("cached failure calls=%d, want no second query within the TTL", calls.Load())
+	}
+	if _, err := e.reloadSupportSnapshot(context.Background(), now.Add(time.Second), true); err == nil || calls.Load() != 2 {
+		t.Fatalf("refresh err=%v calls=%d, want an explicit refresh to query and report the failure", err, calls.Load())
+	}
+	e.cachedReloadSupported(context.Background(), now.Add(time.Second+reloadSupportCacheTTL))
+	if calls.Load() != 3 {
+		t.Fatalf("calls=%d, want a retry after the TTL", calls.Load())
 	}
 }
 
