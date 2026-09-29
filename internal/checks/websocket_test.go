@@ -109,3 +109,31 @@ func TestWebsocketHandshakeRequestHeaders(t *testing.T) {
 		t.Fatalf("bare handshake must not carry Origin/subprotocol:\n%s", bare)
 	}
 }
+
+// The Host header is uri-host[:port] (RFC 9110): a non-default port must be
+// kept and an IPv6 literal bracketed, or proxies answer 400 and servers that
+// check Origin against Host answer 403.
+func TestWebsocketHandshakeHostHeader(t *testing.T) {
+	tests := map[string]string{
+		"ws://example.test/ws":        "example.test",
+		"ws://example.test:80/ws":     "example.test",
+		"ws://example.test:8080/ws":   "example.test:8080",
+		"wss://example.test:443/ws":   "example.test",
+		"https://example.test:8443/x": "example.test:8443",
+		"ws://[::1]:8080/ws":          "[::1]:8080",
+		"ws://[::1]/ws":               "[::1]",
+	}
+	for raw, want := range tests {
+		c, warn := buildWS(t, map[string]any{"url": raw})
+		if warn != "" {
+			t.Fatalf("%s: %s", raw, warn)
+		}
+		ws, ok := c.(*websocketCheck)
+		if !ok {
+			t.Fatalf("%s: got %T", raw, c)
+		}
+		if req := ws.handshakeRequest("KEY"); !strings.Contains(req, "\r\nHost: "+want+"\r\n") {
+			t.Errorf("%s: handshake Host must be %q:\n%s", raw, want, req)
+		}
+	}
+}
