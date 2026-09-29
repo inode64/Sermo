@@ -743,9 +743,20 @@ func (w *Worker) firingRemediationRules(ctx context.Context, ev *rules.Evaluator
 		evaluation := w.fires(ctx, ev, *rule, at, evals)
 		if evaluation.firing {
 			firing = append(firing, firingRule{Rule: *rule, rising: evaluation.rising, change: evaluation.change})
+		} else if evaluation.recovered {
+			// The rule outcome is the alarm for the checks it claims, so its
+			// episode needs the same recovery edge an alert rule has: without
+			// it event_notify would treat the next episode as the same incident.
+			w.emitRuleRecovered(ev, *rule, evaluation.change)
 		}
 	}
 	return firing
+}
+
+func (w *Worker) emitRuleRecovered(ev *rules.Evaluator, rule rules.Rule, change rules.ChangeContext) {
+	if w.shouldEmitRuleEvent(rule, true) {
+		w.emit(Event{Kind: eventKindRecovered, Rule: rule.Name, Message: w.recoveredRuleMessage(ev, rule, change)})
+	}
 }
 
 func (w *Worker) operateForRemediation(ctx context.Context, action string) operation.Result {
@@ -772,8 +783,8 @@ func (w *Worker) runAlerts(ctx context.Context, ev *rules.Evaluator, at time.Tim
 			} else {
 				w.emitAlerts(ctx, ev, *rule, fireState.rising, fireState.change)
 			}
-		} else if fireState.recovered && w.shouldEmitRuleEvent(*rule, true) {
-			w.emit(Event{Kind: eventKindRecovered, Rule: rule.Name, Message: w.recoveredRuleMessage(ev, *rule, fireState.change)})
+		} else if fireState.recovered {
+			w.emitRuleRecovered(ev, *rule, fireState.change)
 		}
 	}
 }

@@ -124,6 +124,13 @@ func (n *EventNotifier) deliver(ctx context.Context, e Event) {
 	msg := n.message(e)
 	now := n.now()
 	for _, target := range targets {
+		if e.Notice {
+			// Its producer already reports each occurrence once, and no recovery
+			// edge follows, so persisting it would open an incident that nothing
+			// closes: it would silence the next notice and be reminded forever.
+			n.send(ctx, target, e, msg)
+			continue
+		}
 		rec, found, err := n.load(key, target.Name())
 		if err != nil {
 			n.logger.Error("load event notification state", "notifier", target.Name(), "error", err)
@@ -132,10 +139,7 @@ func (n *EventNotifier) deliver(ctx context.Context, e Event) {
 		if !shouldDeliverEvent(e.Kind, active, phase, rec, found, now, interval) {
 			continue
 		}
-		if err := sendEventNotification(ctx, target, msg); err != nil {
-			n.logger.Error("event notification failed", "notifier", target.Name(),
-				eventFieldKind, e.Kind, eventFieldService, e.Service,
-				eventFieldWatch, e.Watch, eventFieldApp, e.App, "error", err)
+		if !n.send(ctx, target, e, msg) {
 			continue
 		}
 		rec = state.EventNotifyRecord{
@@ -146,6 +150,16 @@ func (n *EventNotifier) deliver(ctx context.Context, e Event) {
 			n.logger.Error("persist event notification state", "notifier", target.Name(), "error", err)
 		}
 	}
+}
+
+func (n *EventNotifier) send(ctx context.Context, target notify.Notifier, e Event, msg notify.Message) bool {
+	if err := sendEventNotification(ctx, target, msg); err != nil {
+		n.logger.Error("event notification failed", "notifier", target.Name(),
+			eventFieldKind, e.Kind, eventFieldService, e.Service,
+			eventFieldWatch, e.Watch, eventFieldApp, e.App, "error", err)
+		return false
+	}
+	return true
 }
 
 func (n *EventNotifier) remind(ctx context.Context) {

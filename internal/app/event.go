@@ -28,6 +28,10 @@ type Event struct {
 	// event (app probe or service `command` check), shown expandable in the UI so
 	// operators can see why it failed. Empty for events without command output.
 	Output string
+	// Notice marks a one-shot report of a single occurrence (a service restart
+	// notice, a reclaimed operation lock) that no recovery event ever closes.
+	// event_notify sends each one instead of tracking it as an open incident.
+	Notice bool
 }
 
 // Event kind values for Event.Kind.

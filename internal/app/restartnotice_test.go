@@ -41,6 +41,9 @@ func TestWorkerServiceRestartNoticeIsOneShotAcrossWorkers(t *testing.T) {
 	if got := h.countEvents(eventKindAlert); got != 1 {
 		t.Fatalf("alert events = %d, want one: %+v", got, h.events)
 	}
+	if alert, _ := h.eventOf(eventKindAlert); !alert.Notice {
+		t.Fatalf("restart notice alert is not marked as a one-shot notice: %+v", alert)
+	}
 	if got := len(n.msgs); got != 1 {
 		t.Fatalf("notifications = %d, want one", got)
 	}

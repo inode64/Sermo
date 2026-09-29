@@ -3045,7 +3045,8 @@ an explicit list wins, `notify: none` suppresses, and omitting it inherits the
 global `notify` default. It applies to the rule's alert messages; remediation
 operations are reported as events, not notifications. By default those automatic
 alert events and notifications are emitted only when the rule enters a firing
-episode, then `recovered` is emitted when it clears. Use rule-level
+episode, then `recovered` is emitted when it clears; remediation rules emit
+that `recovered` event too. Use rule-level
 `emission.events` or `emission.notify` (`on_change` | `every_cycle`) to override
 the global emission policy for that rule. Operation result events remain audit
 events and are recorded whenever the operation is attempted.

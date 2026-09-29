@@ -173,7 +173,7 @@ func (w *Worker) emitServiceRestartNotice(ctx context.Context, notice config.Ser
 	runtime := newServiceRestartRuntime(w.Service, w.Unit, notice, principal, uptime)
 	message := w.expandServiceRestartNotice(notice.Message, runtime)
 	subject := w.expandServiceRestartNotice(notice.Subject, runtime)
-	w.emit(Event{Kind: eventKindAlert, Rule: restartNoticeRule, Message: message})
+	w.emit(Event{Kind: eventKindAlert, Rule: restartNoticeRule, Message: message, Notice: true})
 	if w.InPanic != nil && w.InPanic() {
 		w.emit(Event{Kind: eventKindNotifySuppressed, Rule: restartNoticeRule, Message: "panic mode: service restart notification suppressed"})
 		return
