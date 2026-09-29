@@ -100,3 +100,27 @@ func TestStraysRefusesToShadowAnOperatorCheck(t *testing.T) {
 		t.Fatalf("error %q must name the sugar and the check", errs[0])
 	}
 }
+
+// The `pidfile: {path, optional}` mapping is the same process identity as the
+// flat form, so it must receive the same injected sensors: strays read the
+// selector and would otherwise see a service with no identity at all.
+func TestStraysInjectedForPidfileMapping(t *testing.T) {
+	for name, pidfile := range map[string]string{
+		"flat":    "/run/rngd.pid",
+		"mapping": "{ path: /run/rngd.pid, optional: true }",
+	} {
+		t.Run(name, func(t *testing.T) {
+			resolved := resolveInstance(t, map[string]string{
+				"sermo.yml":        baseGlobal,
+				"services/svc.yml": "name: rngd\nservice: rngd\npidfile: " + pidfile + "\n",
+			}, "rngd")
+			checksMap, _ := resolved.Tree[sectionChecks].(map[string]any)
+			if _, ok := checksMap[straysCheckName]; !ok {
+				t.Errorf("strays check not injected: %v", checksMap)
+			}
+			if got := resolvedProcessMode(resolved.Tree); got != ServiceProcessResident {
+				t.Errorf("process mode = %v, want resident", got)
+			}
+		})
+	}
+}
