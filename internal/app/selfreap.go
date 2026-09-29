@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"syscall"
@@ -43,12 +44,12 @@ type SelfStrayHygiene struct {
 	ReadFile func(string) ([]byte, error)
 	// Self is the daemon's own PID; 0 uses os.Getpid().
 	Self int
-	// Identity names a leftover in its event; nil reads the host /proc. A PID that
-	// cannot be named is reported without a name. Independently, the production
-	// signaler refuses delivery when it cannot verify the process identity.
+	// Identity pins each leftover's process generation (start ticks, exe, user)
+	// before its cgroup membership is re-read, and names it in its event; nil
+	// reads the host /proc. A PID that cannot be identified is not signalled.
 	Identity func(int) (process.Identity, bool)
-	// Signaler delivers the signal; nil uses pidfds and refuses unverifiable
-	// identities, PID 1 and kernel processes.
+	// Signaler delivers the signal; nil uses pidfds bound to the pinned
+	// generation and refuses unverifiable identities, PID 1 and kernel processes.
 	Signaler process.Signaler
 	// Emit records one event per signalled process and per delivery failure.
 	Emit func(Event)
@@ -76,6 +77,10 @@ func (h SelfStrayHygiene) Run() int {
 	if signaler == nil {
 		signaler = process.OSSignaler{}
 	}
+	identity := h.Identity
+	if identity == nil {
+		identity = process.OSReader{}.Identity
+	}
 	signalled := 0
 	for _, pid := range pids {
 		// PID 1 can never be a leftover of ours, and the signaler would refuse it
@@ -83,35 +88,56 @@ func (h SelfStrayHygiene) Run() int {
 		if pid == self || pid <= 1 {
 			continue
 		}
-		if err := signaler.Signal(pid, syscall.SIGTERM); err != nil {
-			emitSafe(h.Emit, Event{
-				Service: daemonName,
-				Kind:    eventKindKillFailed,
-				Action:  eventActionReapOwnStrays,
-				Status:  eventStatusFailed,
-				Message: fmt.Sprintf("leftover %s in the %s control group: %v", h.describe(pid), unit, err),
-			})
-			continue
+		if h.reap(pid, unit, identity, signaler) {
+			signalled++
 		}
-		signalled++
-		emitSafe(h.Emit, Event{
-			Service: daemonName,
-			Kind:    eventKindKill,
-			Action:  eventActionReapOwnStrays,
-			Status:  eventStatusOK,
-			Message: fmt.Sprintf("sent SIGTERM to leftover %s in the %s control group", h.describe(pid), unit),
-		})
 	}
 	return signalled
 }
 
-// describe names one leftover as precisely as /proc allows.
-func (h SelfStrayHygiene) describe(pid int) string {
-	identity := h.Identity
-	if identity == nil {
-		identity = process.OSReader{}.Identity
-	}
+// reap signals one listed PID only while it is still the leftover the listing
+// named. cgroup.procs was read once, and each signal before this one leaves
+// time for a leftover to exit and its PID to be recycled outside the unit. So
+// the generation is pinned first, membership is re-read after that, and
+// delivery is bound to the pinned generation: if the PID was recycled in
+// between, the generation check at delivery refuses it.
+func (h SelfStrayHygiene) reap(pid int, unit string, identity func(int) (process.Identity, bool), signaler process.Signaler) bool {
 	id, ok := identity(pid)
+	if !ok {
+		h.emitReapFailure(pid, unit, process.Identity{}, false, fmt.Errorf("cannot verify signal target pid %d", pid))
+		return false
+	}
+	if !servicemgr.InSelfCgroup(h.ReadFile, pid) {
+		// Exited, or recycled by a process that is not ours: nothing to reap.
+		return false
+	}
+	target := process.Process{PID: id.PID, StartTicks: id.StartTicks, UID: id.UID, User: id.User, Exe: id.Exe, ExeOK: id.ExeOK, ExePrev: id.ExePrev}
+	if err := process.SignalProcess(context.Background(), signaler, target, syscall.SIGTERM); err != nil {
+		h.emitReapFailure(pid, unit, id, true, err)
+		return false
+	}
+	emitSafe(h.Emit, Event{
+		Service: daemonName,
+		Kind:    eventKindKill,
+		Action:  eventActionReapOwnStrays,
+		Status:  eventStatusOK,
+		Message: fmt.Sprintf("sent SIGTERM to leftover %s in the %s control group", describeLeftover(pid, id, true), unit),
+	})
+	return true
+}
+
+func (h SelfStrayHygiene) emitReapFailure(pid int, unit string, id process.Identity, named bool, err error) {
+	emitSafe(h.Emit, Event{
+		Service: daemonName,
+		Kind:    eventKindKillFailed,
+		Action:  eventActionReapOwnStrays,
+		Status:  eventStatusFailed,
+		Message: fmt.Sprintf("leftover %s in the %s control group: %v", describeLeftover(pid, id, named), unit, err),
+	})
+}
+
+// describeLeftover names one leftover as precisely as /proc allowed.
+func describeLeftover(pid int, id process.Identity, ok bool) string {
 	if !ok {
 		return fmt.Sprintf("pid %d", pid)
 	}

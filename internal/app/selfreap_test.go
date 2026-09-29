@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"errors"
 	"os"
 	"strings"
@@ -26,12 +27,32 @@ func (s *selfReapSignaler) Signal(pid int, sig syscall.Signal) error {
 	return s.err
 }
 
+// verifiedSelfReapSignaler records the pidfd-bound delivery path, which carries
+// the process generation the hygiene authorized.
+type verifiedSelfReapSignaler struct {
+	targets []process.Process
+}
+
+func (s *verifiedSelfReapSignaler) Signal(int, syscall.Signal) error {
+	return errors.New("unverified numeric-PID delivery used")
+}
+
+func (s *verifiedSelfReapSignaler) SignalProcess(_ context.Context, target process.Process, _ syscall.Signal) error {
+	s.targets = append(s.targets, target)
+	return nil
+}
+
 // sermodCgroup models sermod's own service unit control group after a restart that
-// left two processes of the previous incarnation behind.
+// left processes of the previous incarnation behind. Every listed PID still
+// reports the unit as its own cgroup.
 func sermodCgroup(procs string) func(string) ([]byte, error) {
+	const own = "0::/system.slice/sermod.service\n"
 	files := map[string]string{
-		"/proc/self/cgroup": "0::/system.slice/sermod.service\n",
+		"/proc/self/cgroup": own,
 		"/sys/fs/cgroup/system.slice/sermod.service/cgroup.procs": procs,
+	}
+	for field := range strings.FieldsSeq(procs) {
+		files["/proc/"+field+"/cgroup"] = own
 	}
 	return func(path string) ([]byte, error) {
 		data, ok := files[path]
@@ -48,7 +69,7 @@ func namedIdentity(exes map[int]string) func(int) (process.Identity, bool) {
 		if !ok {
 			return process.Identity{}, false
 		}
-		return process.Identity{PID: pid, Exe: exe, ExeOK: true}, true
+		return process.Identity{PID: pid, Exe: exe, ExeOK: true, StartTicks: uint64(pid) * 10, StartTicksOK: true}, true
 	}
 }
 
@@ -164,6 +185,7 @@ func TestSelfStrayHygieneReportsSignalFailure(t *testing.T) {
 	hygiene := SelfStrayHygiene{
 		ReadFile: sermodCgroup("4242\n5000\n"),
 		Self:     4242,
+		Identity: namedIdentity(map[int]string{5000: "/usr/bin/dbus-daemon"}),
 		Signaler: &selfReapSignaler{err: errors.New("operation not permitted")},
 		Emit:     func(e Event) { events = append(events, e) },
 	}
@@ -207,6 +229,7 @@ func TestSelfStrayHygieneRequiresExactDaemonUnit(t *testing.T) {
 			calls := &selfReapSignaler{}
 			files := map[string]string{
 				"/proc/self/cgroup": "0::/system.slice/" + tc.unit + "\n",
+				"/proc/5000/cgroup": "0::/system.slice/" + tc.unit + "\n",
 				"/sys/fs/cgroup/system.slice/" + tc.unit + "/cgroup.procs": "4242\n5000\n",
 			}
 			h := SelfStrayHygiene{
@@ -223,5 +246,43 @@ func TestSelfStrayHygieneRequiresExactDaemonUnit(t *testing.T) {
 				t.Fatalf("Run = %d, signals = %v; want %d", got, calls.calls, tc.want)
 			}
 		})
+	}
+}
+
+// A leftover listed in cgroup.procs can exit on its own while earlier leftovers
+// are signalled, and its PID can be recycled by an unrelated process outside
+// the unit. Only the generation still inside sermod's cgroup may be signalled,
+// and delivery is bound to that generation.
+func TestSelfStrayHygieneSkipsRecycledPIDOutsideTheUnit(t *testing.T) {
+	cgroups := sermodCgroup("4242\n5000\n5001\n")
+	readFile := func(path string) ([]byte, error) {
+		if path == "/proc/5001/cgroup" {
+			return []byte("0::/user.slice/user-0.slice/session-7.scope\n"), nil
+		}
+		return cgroups(path)
+	}
+	signaler := &verifiedSelfReapSignaler{}
+	var events []Event
+	hygiene := SelfStrayHygiene{
+		ReadFile: readFile,
+		Self:     4242,
+		Identity: namedIdentity(map[int]string{5000: "/usr/bin/dbus-daemon", 5001: "/usr/bin/bash"}),
+		Signaler: signaler,
+		Emit:     func(e Event) { events = append(events, e) },
+	}
+
+	if n := hygiene.Run(); n != 1 {
+		t.Fatalf("signalled %d, want only the leftover still in the unit", n)
+	}
+	if len(signaler.targets) != 1 || signaler.targets[0].PID != 5000 {
+		t.Fatalf("targets = %+v, want only pid 5000", signaler.targets)
+	}
+	if got := signaler.targets[0]; got.StartTicks != 50000 || got.Exe != "/usr/bin/dbus-daemon" || !got.ExeOK {
+		t.Fatalf("target = %+v, want the generation whose membership was verified", got)
+	}
+	for _, e := range events {
+		if strings.Contains(e.Message, "pid 5001") {
+			t.Fatalf("recycled pid reported as a leftover: %+v", e)
+		}
 	}
 }

@@ -86,3 +86,32 @@ func TestSelfUnitCgroupPIDsRefusesNonServiceCgroups(t *testing.T) {
 		})
 	}
 }
+
+func TestInSelfCgroup(t *testing.T) {
+	const own = "0::/system.slice/sermod.service\n"
+	readFile := cgroupFiles(map[string]string{
+		selfCgroupPath:      own,
+		"/proc/5000/cgroup": own,
+		"/proc/5001/cgroup": "0::/user.slice/user-0.slice/session-7.scope\n",
+		"/proc/5002/cgroup": "0::/system.slice/sermod.service/child\n",
+		"/proc/5003/cgroup": "12:pids:/system.slice/sermod.service\n",
+	})
+	for _, tc := range []struct {
+		name string
+		pid  int
+		want bool
+	}{
+		{name: "same unit", pid: 5000, want: true},
+		{name: "recycled into a session", pid: 5001},
+		{name: "nested cgroup", pid: 5002},
+		{name: "no unified entry", pid: 5003},
+		{name: "gone", pid: 5004},
+		{name: "invalid pid", pid: 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := InSelfCgroup(readFile, tc.pid); got != tc.want {
+				t.Fatalf("InSelfCgroup(%d) = %v, want %v", tc.pid, got, tc.want)
+			}
+		})
+	}
+}
