@@ -140,6 +140,11 @@ func TestResolveProtocolTarget(t *testing.T) {
 			want:     Config{Host: DefaultHost, Port: defaultPortLibvirt, Socket: DefaultLibvirtSocket},
 		},
 		{
+			name:     "dhclient wildcard host default",
+			protocol: ProtocolNameDHClient,
+			want:     Config{Host: dhclientDefaultHost, Port: dhcpClientPort},
+		},
+		{
 			name:     "explicit host selects network",
 			protocol: ProtocolNameDocker,
 			cfg:      Config{Host: "docker.example"},
