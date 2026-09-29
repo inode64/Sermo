@@ -198,7 +198,9 @@ checks:
 `user` runs the command as that OS user (Linux only). Sermo still executes the
 argv directly, never through a shell; the daemon/CLI process must have permission
 to switch user (normally by running as root), and an unresolved user or unsupported
-runner fails the check closed.
+runner fails the check closed. Like `runuser`, the command gets that user's
+`HOME`, `USER` and `LOGNAME`, so clients find their own `~/.my.cnf` or
+`~/.pgpass`.
 
 With a `unit:`, the first numeric token of the command's stdout publishes as
 the check's `value` series in that unit — `exim -bpc` becomes a queue-depth

@@ -48,7 +48,38 @@ func prepareCommandUser(cmd *exec.Cmd, userName string) error {
 	cmd.SysProcAttr = &syscall.SysProcAttr{
 		Credential: &syscall.Credential{Uid: uid, Gid: gid, Groups: groups},
 	}
+	cmd.Env = withUserIdentityEnv(cmd.Env, u)
 	return nil
+}
+
+// Identity variables a login sets for its user.
+const (
+	envHomePrefix    = "HOME="
+	envUserPrefix    = "USER="
+	envLognamePrefix = "LOGNAME="
+	identityEnvCount = 3
+)
+
+// withUserIdentityEnv points HOME, USER and LOGNAME at the command user, as
+// runuser and su do. Inherited from the daemon they name root: HOME=/root is
+// unreadable to the target user, so clients that read ~/.my.cnf, ~/.pgpass or
+// ~/.psqlrc fail or pick up the wrong identity. A nil env stands for the
+// inherited environment; a user without a home directory gets no HOME.
+func withUserIdentityEnv(env []string, u *osuser.User) []string {
+	if env == nil {
+		env = os.Environ()
+	}
+	out := make([]string, 0, len(env)+identityEnvCount)
+	for _, entry := range env {
+		if strings.HasPrefix(entry, envHomePrefix) || strings.HasPrefix(entry, envUserPrefix) || strings.HasPrefix(entry, envLognamePrefix) {
+			continue
+		}
+		out = append(out, entry)
+	}
+	if u.HomeDir != "" {
+		out = append(out, envHomePrefix+u.HomeDir)
+	}
+	return append(out, envUserPrefix+u.Username, envLognamePrefix+u.Username)
 }
 
 func lookupCommandUser(userName string) (*osuser.User, error) {
