@@ -46,6 +46,7 @@ const (
 	procStatBootTimePrefix        = "btime "
 	procStatIdleValueOffset       = 3
 	procStatIOWaitValueOffset     = 4
+	procStatAccountedCPUFields    = 8 // user nice system idle iowait irq softirq steal
 	procLoadAvg1Index             = 0
 	procLoadAvg5Index             = 1
 	procLoadAvg15Index            = 2
@@ -408,7 +409,7 @@ func meminfoTotals(m Meminfo) MemoryTotals {
 }
 
 // SystemCPU reads the aggregate cpu line of /proc/stat. busy excludes idle and
-// iowait; total is the sum of all fields.
+// iowait; total is the sum of the user…steal fields.
 func (OSReader) SystemCPU() (busy, total uint64, ok bool) {
 	data, err := hostfs.ReadFile(procPath(procFileStat))
 	if err != nil {
@@ -418,12 +419,24 @@ func (OSReader) SystemCPU() (busy, total uint64, ok bool) {
 	if before, _, ok := bytes.Cut(data, []byte{'\n'}); ok {
 		line = before
 	}
-	fields := strings.Fields(string(line))
+	return parseSystemCPU(string(line))
+}
+
+// parseSystemCPU parses the aggregate "cpu" line of /proc/stat. Only the
+// user…steal fields are summed: per proc(5), guest and guest_nice are already
+// included in user and nice, so adding them again inflates busy and total on a
+// hypervisor (a host at 50 % running VMs would read 66.7 %).
+func parseSystemCPU(line string) (busy, total uint64, ok bool) {
+	fields := strings.Fields(line)
 	if len(fields) < procStatAggregateMinFields || fields[procStatCPULabelIndex] != procStatCPUPrefix {
 		return 0, 0, false
 	}
+	values := fields[procStatCPUValuesStartIndex:]
+	if len(values) > procStatAccountedCPUFields {
+		values = values[:procStatAccountedCPUFields]
+	}
 	var sum, idle uint64
-	for i, f := range fields[procStatCPUValuesStartIndex:] {
+	for i, f := range values {
 		v, err := strconv.ParseUint(f, procDecimalBase, procUintBits)
 		if err != nil {
 			continue

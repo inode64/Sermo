@@ -9,6 +9,33 @@ import (
 	"time"
 )
 
+func TestParseSystemCPUExcludesGuestTime(t *testing.T) {
+	tests := []struct {
+		name      string
+		line      string
+		wantBusy  uint64
+		wantTotal uint64
+		wantOK    bool
+	}{
+		// A hypervisor at 50 %: 400 of user is guest time (already inside
+		// user), so busy is 500 of 1000, not 900 of 1400.
+		{name: "guest counted once", line: "cpu  500 0 0 400 100 0 0 0 400 0", wantBusy: 500, wantTotal: 1000, wantOK: true},
+		{name: "guest_nice counted once", line: "cpu  100 200 0 700 0 0 0 0 0 150", wantBusy: 300, wantTotal: 1000, wantOK: true},
+		{name: "steal counts as busy", line: "cpu  100 0 100 700 0 0 0 100", wantBusy: 300, wantTotal: 1000, wantOK: true},
+		{name: "old kernel with four fields", line: "cpu  100 0 100 800", wantBusy: 200, wantTotal: 1000, wantOK: true},
+		{name: "not the aggregate line", line: "intr 1 2 3 4 5"},
+		{name: "too short", line: "cpu 1 2"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			busy, total, ok := parseSystemCPU(tc.line)
+			if busy != tc.wantBusy || total != tc.wantTotal || ok != tc.wantOK {
+				t.Fatalf("parseSystemCPU(%q) = (%d, %d, %v), want (%d, %d, %v)", tc.line, busy, total, ok, tc.wantBusy, tc.wantTotal, tc.wantOK)
+			}
+		})
+	}
+}
+
 func TestProcBootTimeValueRejectsUnsignedOverflow(t *testing.T) {
 	tests := []struct {
 		name string

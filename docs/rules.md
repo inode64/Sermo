@@ -2988,7 +2988,8 @@ hardware threads, counted from `/proc/stat` so the figure reflects the whole
 machine even if Sermo is pinned to a CPU subset). So `100%` means the service's
 processes are saturating every CPU thread of the server, and a single fully-busy
 core on an 8-thread host reads `~12.5%`. `total_cpu` uses the same whole-machine
-basis.
+basis: the non-idle share of the aggregate `/proc/stat` line, where virtual
+machines' guest time is counted once, inside user time, as `top` does.
 
 `cpu_thread` complements `cpu` for the **single-thread** case: it is the **busiest
 single thread** in the tree (of the parent or of any child) measured against **one**
