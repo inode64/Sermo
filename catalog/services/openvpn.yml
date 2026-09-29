@@ -1,4 +1,4 @@
-name: openvpn-%i
+name: openvpn%s%i
 display_name: OpenVPN ${instance}
 category: vpn
 apps:
