@@ -1224,7 +1224,7 @@ paths: { services: [@ROOT@/services], runtime: /run/sermo }
 defaults: { policy: { cooldown: 5m } }
 `,
 		"catalog/services/openvpn.yml": `
-name: openvpn%s%i
+name: openvpn-%i
 service:
   openrc: ["openvpn.${instance}"]
 `,
