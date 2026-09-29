@@ -20,8 +20,10 @@ Global flags may be placed before or after the command. Command-specific flags
 are shown by `sermoctl help COMMAND`.
 
 Without `--timeout`, live service queries (`status` and `is-active`) use the
-10-second engine check budget; service operations use the 90-second operation
-budget. Other short probe commands keep their 2-second CLI budget.
+10-second engine check budget; service operations (and `watch pause|resume`) use
+`engine.operation_timeout` (default `90s`), the same budget as the daemon and the
+Web UI, which a service's `stop_policy` may raise. Other short probe commands
+keep their 2-second CLI budget.
 For service operations, an explicit `--timeout` bounds backend preparation and
 every operation phase after configuration and audit-store initialization.
 Stop-policy budgets cannot extend this deadline; expiration prevents subsequent

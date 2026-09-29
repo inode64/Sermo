@@ -118,7 +118,7 @@ func (s *operationSession) prepare(ctx context.Context, service string, resolved
 			BackendPIDs:      target.BackendPIDs,
 			Runtime:          s.cfg.Global.RuntimeDir(),
 			DefaultTimeout:   engineDefaultTimeout(s.cfg),
-			OperationTimeout: s.opts.timeout,
+			OperationTimeout: manualOperationTimeout(s.cfg, s.opts),
 			Collector:        metrics.New(metrics.OSReader{}),
 			ExecxRunner:      s.app.Runner,
 			UserLookup:       app.EngineUserLookup(s.cfg, s.app.Runner),

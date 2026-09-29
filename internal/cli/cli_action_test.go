@@ -13,6 +13,7 @@ import (
 
 	sqlite3 "modernc.org/sqlite/lib"
 
+	appcore "sermo/internal/app"
 	"sermo/internal/config"
 	"sermo/internal/execx/execxtest"
 	"sermo/internal/operation"
@@ -691,6 +692,55 @@ func TestReloadPreparesBackendOnce(t *testing.T) {
 	}
 	if len(actions) != 1 || actions[0] != "reload web.service" {
 		t.Fatalf("actions = %v, want reload web.service", actions)
+	}
+}
+
+// A manual action must use the engine.operation_timeout the daemon and web
+// use; the CLI's 90s default would cut a slow stop the config allows.
+func TestManualOperationUsesEngineOperationTimeout(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		args []string
+		want time.Duration
+	}{
+		{name: "engine operation_timeout", want: 7 * time.Minute},
+		{name: "explicit --timeout", args: []string{"--timeout", "45s"}, want: 45 * time.Second},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			global := writeServiceConfig(t, `
+engine:
+  operation_timeout: 7m
+paths:
+  services: [ @ROOT@/services ]
+  runtime: @ROOT@/run
+  state: @ROOT@/state
+defaults:
+  policy:
+    cooldown: 5m
+`, map[string]string{"services/web.yml": "name: web\nservice: web\n"})
+			var got time.Duration
+			var actions []string
+			app := App{
+				Detector: fakeBackendDetector{detection: servicemgr.BackendSystemd},
+				NewManager: func(servicemgr.Backend) (servicemgr.Manager, error) {
+					return fakeManager{actions: &actions, status: servicemgr.ServiceStatus{Status: servicemgr.StatusActive}}, nil
+				},
+				buildServiceRuntime: func(ctx context.Context, cfg appcore.ServiceRuntimeConfig) appcore.ServiceRuntime {
+					got = cfg.Deps.OperationTimeout
+					return appcore.BuildServiceRuntime(ctx, cfg)
+				},
+				Runner: statusUnitRunner{known: "web.service"},
+				Stdout: &bytes.Buffer{},
+				Stderr: &bytes.Buffer{},
+			}
+			args := append(append([]string{"--config", global}, tc.args...), "reload", "web")
+			if code := app.Run(t.Context(), args); code != exitSuccess {
+				t.Fatalf("Run() exit = %d, want %d", code, exitSuccess)
+			}
+			if got != tc.want {
+				t.Fatalf("OperationTimeout = %s, want %s", got, tc.want)
+			}
+		})
 	}
 }
 
