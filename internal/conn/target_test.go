@@ -151,6 +151,18 @@ func TestResolveProtocolTarget(t *testing.T) {
 			want:     Config{Host: "docker.example", Port: dockerctl.DefaultPort},
 		},
 		{
+			name:     "explicit port selects loopback network",
+			protocol: ProtocolNameDocker,
+			cfg:      Config{Port: 2376},
+			want:     Config{Host: DefaultHost, Port: 2376},
+		},
+		{
+			name:     "libvirt port selects loopback network",
+			protocol: ProtocolNameLibvirt,
+			cfg:      Config{Port: 16510},
+			want:     Config{Host: DefaultHost, Port: 16510},
+		},
+		{
 			name:     "explicit target wins",
 			protocol: ProtocolNameLibvirt,
 			cfg:      Config{Host: "hypervisor.example", Port: 17000, Socket: "/run/custom.sock"},
