@@ -113,7 +113,10 @@ func applyWorkerState(workers []*Worker, saved map[string]workerSnapshot) {
 			w.windows = snap.windows
 		}
 		if snap.libBaseline != nil {
-			w.libBaseline = &ArtifactBaseline{fingerprints: snap.libBaseline}
+			if w.libBaseline == nil {
+				w.libBaseline = NewArtifactBaseline()
+			}
+			w.libBaseline.restore(snap.libBaseline)
 		}
 		if snap.checkFailing != nil {
 			w.checkFailing = snap.checkFailing

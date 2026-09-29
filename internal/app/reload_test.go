@@ -1,6 +1,7 @@
 package app
 
 import (
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -50,6 +51,29 @@ func TestCaptureAndApplyWorkerState(t *testing.T) {
 	fresh.checkFailing["service"] = false
 	if !old.checkFailing["service"] {
 		t.Fatal("applying worker state reused the old check-health map")
+	}
+}
+
+// TestApplyWorkerStateKeepsEngineBaselineShared: the new generation's
+// operation engine captured its worker's baseline at build time, so a reload
+// must restore the acknowledged fingerprints into that same baseline.
+func TestApplyWorkerStateKeepsEngineBaselineShared(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "lib.so")
+	writeFile(t, path, "upgraded")
+	old := &Worker{Service: "web", libBaseline: &ArtifactBaseline{fingerprints: map[string]string{path: "acknowledged-before-upgrade"}}}
+	saved := captureWorkerState([]*Worker{old})
+
+	baseline := NewArtifactBaseline()
+	engineChanged := ArtifactChangedFunc(baseline, nil)
+	fresh := &Worker{Service: "web", libBaseline: baseline}
+	applyWorkerState([]*Worker{fresh}, saved)
+
+	if changed, err := engineChanged(path); err != nil || !changed {
+		t.Fatalf("engine changed(%s) = %t, %v; want the pending change carried across the reload", path, changed, err)
+	}
+	fresh.acknowledgeChanges()
+	if changed, err := engineChanged(path); err != nil || changed {
+		t.Fatalf("engine changed(%s) after the worker acknowledged = %t, %v; want false", path, changed, err)
 	}
 }
 
