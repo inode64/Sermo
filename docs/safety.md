@@ -574,6 +574,9 @@ through the operation engine", and it is deliberately narrow:
 - `SIGTERM` only. A leftover that ignores it is reported and left alone.
 - Delivery requires a verifiable process generation, executable and UID and
   available pidfd support; an unverifiable target produces a failure event.
+  The generation is pinned before the PID's control group is re-read, and the
+  signal is bound to it, so a listed leftover that exits and whose PID is
+  recycled outside the unit is skipped, never signalled.
 - One event per process signalled.
 - `engine.reap_own_strays: false` turns it off.
 

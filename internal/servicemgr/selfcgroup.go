@@ -2,6 +2,7 @@ package servicemgr
 
 import (
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"sermo/internal/hostfs"
@@ -51,6 +52,30 @@ func SelfUnitCgroupPIDs(readFile func(string) ([]byte, error)) (pids []int, unit
 		return nil, "", false
 	}
 	return parseCgroupProcs(procs), filepath.Base(path), true
+}
+
+// InSelfCgroup reports whether pid currently sits in the caller's own cgroup v2
+// control group. A PID listed in cgroup.procs can exit and be recycled by an
+// unrelated process before the caller acts on it; re-reading membership after
+// pinning the process generation keeps that recycled PID out of reach.
+// Unreadable or non-unified cgroup files answer false.
+func InSelfCgroup(readFile func(string) ([]byte, error), pid int) bool {
+	if pid <= 0 {
+		return false
+	}
+	if readFile == nil {
+		readFile = hostfs.ReadFile
+	}
+	self, err := readFile(selfCgroupPath)
+	if err != nil {
+		return false
+	}
+	own, err := readFile("/proc/" + strconv.Itoa(pid) + "/cgroup")
+	if err != nil {
+		return false
+	}
+	path := unifiedCgroupPath(string(self))
+	return path != "" && unifiedCgroupPath(string(own)) == path
 }
 
 // unifiedCgroupPath extracts the cgroup v2 path from /proc/self/cgroup content,
