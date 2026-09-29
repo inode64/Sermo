@@ -60,7 +60,9 @@ func TestRepairRemovesProvenStaleRuntimePIDFileThenStarts(t *testing.T) {
 	}
 	h := defaultHarness()
 	h.mgr.status = servicemgr.StatusActive
-	h.mgr.statusSteps = []servicemgr.Status{servicemgr.StatusFailed}
+	// Failed through the repair precondition, the residual reconciliation and
+	// the reset decision; reset then reports inactive and start reports active.
+	h.mgr.statusSteps = []servicemgr.Status{servicemgr.StatusFailed, servicemgr.StatusFailed, servicemgr.StatusFailed}
 	e := h.engine()
 	e.RepairStalePIDFiles = repairStalePIDFiles(h.mgr, e.Unit, []process.Selector{{
 		Name: process.SelectorPidfile, Type: process.SelectorPidfile, Paths: []string{pidfile},
@@ -76,6 +78,47 @@ func TestRepairRemovesProvenStaleRuntimePIDFileThenStarts(t *testing.T) {
 	}
 	if !h.mgr.did("reset mysqld") || !h.mgr.did("start mysqld") || !strings.Contains(result.Message, pidfile) {
 		t.Fatalf("repair must remove stale pidfile, reset failed state, then start, calls=%v message=%q", h.mgr.calls, result.Message)
+	}
+}
+
+// A crashed unit whose daemon (or a child) survived must not have its failed
+// marker cleared and a second instance started beside the survivor.
+func TestRepairReconcilesSurvivorsBeforeResetAndStart(t *testing.T) {
+	h := defaultHarness()
+	h.mgr.status = servicemgr.StatusFailed
+	h.discoverSteps = [][]process.Process{{{PID: 4242, Exe: "/usr/sbin/mysqld", ExeOK: true, UID: 110, StartTicks: 9}}}
+	h.killPolicy = process.KillPolicy{ForceKill: false}
+	e := h.engine()
+	e.RepairStalePIDFiles = repairStalePIDFiles(h.mgr, e.Unit, nil, repairReader{}, t.TempDir())
+
+	result := e.Repair(context.Background())
+
+	if result.Status != ResultOrphanProcesses || !strings.Contains(result.Message, "before repair") {
+		t.Fatalf("repair result = %s %q, want orphan_processes before repair", result.Status, result.Message)
+	}
+	if h.mgr.did("reset mysqld") || h.mgr.did("start mysqld") {
+		t.Fatalf("survivor must block reset and start, calls=%v", h.mgr.calls)
+	}
+}
+
+// resetStopped revalidates absence right before the reset: a process that
+// appears after reconciliation still blocks the zap/reset-failed and the start.
+func TestRepairRevalidatesAbsenceBeforeReset(t *testing.T) {
+	h := defaultHarness()
+	h.mgr.status = servicemgr.StatusFailed
+	e := h.engine()
+	e.RepairStalePIDFiles = repairStalePIDFiles(h.mgr, e.Unit, nil, repairReader{}, t.TempDir())
+	e.ObserveProcesses = func() (process.Observation, error) {
+		return process.Observation{Processes: []process.Process{{PID: 4242, Exe: "/usr/sbin/mysqld", ExeOK: true}}}, nil
+	}
+
+	result := e.Repair(context.Background())
+
+	if result.OK() || !strings.Contains(result.Message, "processes appeared before init state reconciliation") {
+		t.Fatalf("repair result = %s %q, want refusal to reset with a live process", result.Status, result.Message)
+	}
+	if h.mgr.did("reset mysqld") || h.mgr.did("start mysqld") {
+		t.Fatalf("reset and start must not run, calls=%v", h.mgr.calls)
 	}
 }
 
