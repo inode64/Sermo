@@ -3,6 +3,7 @@ package checks
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net"
 	"os"
 	"path/filepath"
@@ -160,6 +161,42 @@ func TestTerminalSessionsTreatsKnownEmptyClientOutputAsZero(t *testing.T) {
 			sample, err := sampleTerminalSessions(context.Background(), execxtest.Fixed(tt.result, nil), tt.config)
 			if err != nil || len(sample.Sessions) != 0 || sample.Present != tt.wantPresent {
 				t.Fatalf("sampleTerminalSessions() = %#v, %v; want empty success", sample, err)
+			}
+		})
+	}
+}
+
+// GNU screen 4.x ends a successful `-ls` with exit 1 even when it lists
+// sessions; only that exact shape is accepted, any other failure stays one.
+func TestScreenListingWithExitOne(t *testing.T) {
+	config := TerminalSessionConfig{Multiplexer: TerminalMultiplexerScreen, Binary: "/usr/bin/screen", User: "deploy", StartTicks: func(int) (uint64, bool) { return 7, true }}
+	listing := "There are screens on:\n\t120.ops\t(Detached)\n\t121.build\t(Attached)\n2 Sockets in /run/screen/S-deploy.\n"
+	tests := []struct {
+		name      string
+		result    execx.Result
+		wantCount int
+		wantErr   bool
+	}{
+		{name: "sessions listed", result: execx.Result{ExitCode: 1, Stdout: listing}, wantCount: 2},
+		{name: "one session listed", result: execx.Result{ExitCode: 1, Stdout: "There is a screen on:\n\t120.ops\t(Detached)\n1 Socket in /run/screen/S-deploy.\n"}, wantCount: 1},
+		{name: "exit 1 without listing", result: execx.Result{ExitCode: 1, Stderr: "Cannot open your terminal '/dev/pts/1'"}, wantErr: true},
+		{name: "other exit with listing", result: execx.Result{ExitCode: 2, Stdout: listing}, wantErr: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var runErr error
+			if tt.result.ExitCode != execx.ExitCodeSuccess {
+				runErr = fmt.Errorf("exit status %d", tt.result.ExitCode)
+			}
+			sample, err := sampleTerminalSessions(t.Context(), execxtest.Fixed(tt.result, runErr), config)
+			if tt.wantErr {
+				if err == nil {
+					t.Fatalf("sampleTerminalSessions() = %#v, want error", sample)
+				}
+				return
+			}
+			if err != nil || !sample.Present || len(sample.Sessions) != tt.wantCount {
+				t.Fatalf("sampleTerminalSessions() = %#v, %v; want %d present sessions", sample, err, tt.wantCount)
 			}
 		})
 	}
