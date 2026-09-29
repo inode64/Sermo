@@ -5,61 +5,50 @@ import (
 	"time"
 )
 
-// These cover the pure rate computations (ioRate, cpuRate, perProcCPURates,
-// maxProcCPURate): the exact value on a normal delta, the counter-reset clamp
-// to 0, and the non-positive wall/hz/ncpu guards. Mutation testing flagged the
-// arithmetic and boundary conditions here as covered-but-unasserted.
+// These cover the pure rate computations (serviceIORates, wholeMachineCPU,
+// perProcCPURates, maxProcCPURate): the exact value on a normal delta, the
+// counter-reset skip, and the non-positive wall/hz/ncpu guards. Mutation testing
+// flagged the arithmetic and boundary conditions here as covered-but-unasserted.
 
-func TestIORate(t *testing.T) {
+func TestServiceIORates(t *testing.T) {
 	t0 := time.Unix(1000, 0)
 	t2 := t0.Add(2 * time.Second)
+	prev := procIOSample{counters: map[int]ioCounters{1: {read: 100, write: 50}, 2: {read: 900, write: 900}, 4: {read: 7, write: 7}}, at: t0}
+	// pid 1 advances, pid 2 was recycled (counters dropped), pid 3 is new,
+	// pid 4 is unchanged: only pid 1's deltas count.
+	cur := procIOSample{counters: map[int]ioCounters{1: {read: 300, write: 450}, 2: {read: 10, write: 10}, 3: {read: 5000, write: 5000}, 4: {read: 7, write: 7}}, at: t2}
 
-	if r := ioRate(100, 300, t0, t2); !r.Ready || !r.HasAbsolute || r.Absolute != 100 {
-		t.Errorf("normal: got %+v, want rate 100 ready", r)
+	read, write, total := serviceIORates(prev, cur, true)
+	if !read.Ready || !read.HasAbsolute || read.Unit != MetricUnitBytesPerSecond || read.Absolute != 100 {
+		t.Errorf("read = %+v, want 100 B/s ready", read)
 	}
-	// Counter reset (cur < prev) and the cur==prev boundary both clamp to 0.
-	if r := ioRate(300, 100, t0, t2); !r.Ready || r.Absolute != 0 {
-		t.Errorf("reset: got %+v, want rate 0 ready", r)
+	if write.Absolute != 200 || total.Absolute != 300 {
+		t.Errorf("write/total = %v/%v, want 200/300", write.Absolute, total.Absolute)
 	}
-	if r := ioRate(100, 100, t0, t2); !r.Ready || r.Absolute != 0 {
-		t.Errorf("equal: got %+v, want rate 0 ready", r)
-	}
-	// Non-positive wall is not ready (zero is the boundary, negative is reversed).
-	if r := ioRate(100, 300, t0, t0); r.Ready {
-		t.Errorf("wall==0: got %+v, want not ready", r)
-	}
-	if r := ioRate(100, 300, t2, t0); r.Ready {
-		t.Errorf("wall<0: got %+v, want not ready", r)
+	// First observation and non-positive wall are not ready.
+	for name, r := range map[string]Reading{
+		"first":   firstReading(serviceIORates(procIOSample{}, cur, false)),
+		"wall==0": firstReading(serviceIORates(prev, procIOSample{counters: cur.counters, at: t0}, true)),
+		"wall<0":  firstReading(serviceIORates(procIOSample{counters: prev.counters, at: t2}, procIOSample{counters: cur.counters, at: t0}, true)),
+	} {
+		if r.Ready || !r.HasAbsolute {
+			t.Errorf("%s: got %+v, want not ready", name, r)
+		}
 	}
 }
 
-func TestCPURate(t *testing.T) {
-	t0 := time.Unix(1000, 0)
-	t2 := t0.Add(2 * time.Second)
-	// Non-zero prev so the Δ (300-100=200) differs from the sum, pinning the
-	// subtraction. /100 hz = 2 cpu-seconds over 2 wall-seconds, 1 cpu => 100%.
-	prev := cpuSample{ticks: 100, at: t0}
-	cur := cpuSample{ticks: 300, at: t2}
+func firstReading(r, _, _ Reading) Reading { return r }
 
-	if r := cpuRate(prev, cur, 100, 1); !r.Ready || r.Percent != 100 {
-		t.Errorf("normal: got %+v, want 100%% ready", r)
+func TestWholeMachineCPU(t *testing.T) {
+	sample := maxCoreSample{Reading: Reading{Ready: true}, ProcRates: map[int]float64{1: 80, 2: 20}}
+	if r := wholeMachineCPU(sample, 4); !r.Ready || r.Percent != 25 {
+		t.Errorf("got %+v, want 25%% ready", r)
 	}
-	// Counter reset clamps to 0% but stays ready.
-	if r := cpuRate(cpuSample{ticks: 200, at: t0}, cpuSample{ticks: 0, at: t2}, 100, 1); !r.Ready || r.Percent != 0 {
-		t.Errorf("reset: got %+v, want 0%% ready", r)
+	if r := wholeMachineCPU(sample, 0); r.Ready || !r.HasPercent {
+		t.Errorf("ncpu<=0: got %+v, want not ready", r)
 	}
-	// Each non-positive guard returns not-ready (these are div-by-zero traps).
-	for _, bad := range []struct {
-		name string
-		r    Reading
-	}{
-		{"wall<=0", cpuRate(prev, cpuSample{ticks: 200, at: t0}, 100, 1)},
-		{"ncpu<=0", cpuRate(prev, cur, 100, 0)},
-		{"hz<=0", cpuRate(prev, cur, 0, 1)},
-	} {
-		if bad.r.Ready {
-			t.Errorf("%s: got %+v, want not ready", bad.name, bad.r)
-		}
+	if r := wholeMachineCPU(maxCoreSample{}, 4); r.Ready || !r.HasPercent {
+		t.Errorf("no rates yet: got %+v, want not ready", r)
 	}
 }
 
