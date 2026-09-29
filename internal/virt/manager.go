@@ -392,11 +392,14 @@ func statusFromDomainState(state libvirt.DomainState) servicemgr.Status {
 		return servicemgr.StatusActive
 	case libvirt.DomainPaused, libvirt.DomainPmsuspended:
 		return servicemgr.StatusPaused
-	case libvirt.DomainShutdown, libvirt.DomainShutoff, libvirt.DomainNostate:
+	case libvirt.DomainShutoff, libvirt.DomainNostate:
 		return servicemgr.StatusInactive
 	case libvirt.DomainCrashed:
 		return servicemgr.StatusFailed
 	default:
+		// Includes DomainShutdown: shutting down, the guest and its qemu
+		// process are still alive. Stop verification must keep waiting for
+		// shut off, or a restart could call DomainCreate on a running domain.
 		return servicemgr.StatusUnknown
 	}
 }

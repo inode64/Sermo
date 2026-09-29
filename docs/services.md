@@ -728,8 +728,9 @@ libvirt operations:
   mechanism is added.
 
 Libvirt status maps to Sermo status as follows: running/blocked → `active`,
-paused/pmsuspended → `paused`, shutoff/shutdown/nostate → `inactive`, crashed →
-`failed`. The CLI and web UI still expose backend `status=paused`; the aggregated
+paused/pmsuspended → `paused`, shutoff/nostate → `inactive`, crashed →
+`failed`, and shutdown (a guest still shutting down) → `unknown`, so a stop or
+restart keeps waiting until the domain is shut off. The CLI and web UI still expose backend `status=paused`; the aggregated
 service state is `failed` while monitoring is active, or `stopped` when Sermo
 monitoring is paused.
 
