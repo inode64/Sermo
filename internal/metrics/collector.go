@@ -55,11 +55,6 @@ type Reader interface {
 	ClockTicks() float64
 }
 
-type cpuSample struct {
-	ticks uint64
-	at    time.Time
-}
-
 // CPUThreadSampleFloorPercent is the per-process CPU rate, as a percentage of one
 // core, at or above which a process's individual threads are read so cpu_thread can
 // be measured rather than bounded.
@@ -88,10 +83,17 @@ type procCPUSample struct {
 	at          time.Time
 }
 
-type ioSample struct {
+// ioCounters is one process's cumulative read/write bytes.
+type ioCounters struct {
 	read  uint64
 	write uint64
-	at    time.Time
+}
+
+// procIOSample remembers each process's cumulative I/O at a time, so rates are
+// summed from per-process deltas like CPU (see serviceIORates).
+type procIOSample struct {
+	counters map[int]ioCounters
+	at       time.Time
 }
 
 type sysSample struct {
@@ -109,9 +111,8 @@ type Collector struct {
 	SystemFreshness time.Duration
 
 	mu               sync.Mutex
-	prevService      map[string]cpuSample
 	prevServiceProcs map[string]procCPUSample
-	prevServiceIO    map[string]ioSample
+	prevServiceIO    map[string]procIOSample
 	prevSystem       *sysSample
 	lastSystem       Snapshot
 	lastSystemA      time.Time
@@ -123,9 +124,8 @@ func New(reader Reader) *Collector {
 		Reader:           reader,
 		Now:              time.Now,
 		SystemFreshness:  DefaultSystemFreshness,
-		prevService:      map[string]cpuSample{},
 		prevServiceProcs: map[string]procCPUSample{},
-		prevServiceIO:    map[string]ioSample{},
+		prevServiceIO:    map[string]procIOSample{},
 	}
 }
 
@@ -135,7 +135,6 @@ func New(reader Reader) *Collector {
 func (c *Collector) ForgetService(service string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	delete(c.prevService, service)
 	delete(c.prevServiceProcs, service)
 	delete(c.prevServiceIO, service)
 }
@@ -167,7 +166,7 @@ func (c *Collector) sampleService(service string, pids []int, reader processMetr
 
 	var peak fdPeak
 
-	var rss, ticks, ioRead, ioWrite, fds, threads, swap uint64
+	var rss, fds, threads, swap uint64
 	// Track how many processes actually contributed a successful read per metric,
 	// so a gauge that summed nothing (every /proc read failed because the tree
 	// exited or is unreadable) is reported as not-ready rather than a measured 0.
@@ -176,13 +175,13 @@ func (c *Collector) sampleService(service string, pids []int, reader processMetr
 	var present, fdsOK, threadsOK, swapOK int
 	curTicks := make(map[int]uint64, len(pids))   // per-process CPU jiffies this cycle
 	curThreads := make(map[int]uint64, len(pids)) // per-process thread count, for the cpu_thread floor
+	curIO := procIOSample{counters: make(map[int]ioCounters, len(pids)), at: now}
 	for _, pid := range pids {
 		if v, ok := reader.ProcessRSS(pid); ok {
 			rss += v
 			present++
 		}
 		if v, ok := reader.ProcessCPU(pid); ok {
-			ticks += v
 			curTicks[pid] = v
 		}
 		if v, ok := c.Reader.ProcessSwap(pid); ok {
@@ -190,8 +189,7 @@ func (c *Collector) sampleService(service string, pids []int, reader processMetr
 			swapOK++
 		}
 		if rd, wr, ok := reader.ProcessIO(pid); ok {
-			ioRead += rd
-			ioWrite += wr
+			curIO.counters[pid] = ioCounters{read: rd, write: wr}
 		}
 		if v, ok := reader.ProcessFDs(pid); ok {
 			fds += v
@@ -233,31 +231,18 @@ func (c *Collector) sampleService(service string, pids []int, reader processMetr
 	snap[MetricFds] = peak.reading(Reading{Absolute: float64(fds), HasAbsolute: true, Ready: measured(fdsOK > 0)})
 	snap[MetricThreads] = Reading{Absolute: float64(threads), HasAbsolute: true, Ready: measured(threadsOK > 0)}
 
-	cur := cpuSample{ticks: ticks, at: now}
-	cpu := Reading{HasPercent: true}
-	if prev, ok := c.prevService[service]; ok {
-		cpu = cpuRate(prev, cur, c.Reader.ClockTicks(), c.Reader.NumCPU())
-	}
-	c.prevService[service] = cur
-	snap[MetricCPU] = cpu
-
 	// cpu_thread: the most a single core was used on this tree's behalf — the
 	// busiest individual thread, normalized so 100% is one saturated core. Unlike
 	// `cpu` (whole-machine), it catches one pegged thread that the machine-wide
 	// percentage dilutes across every core; and unlike a per-process maximum, it does
 	// not add a multithreaded process's threads together and report more than any one
 	// core could deliver.
-	snap[MetricCPUThread] = c.sampleMaxCore(service, curTicks, curThreads, now, reader).Reading
+	cpuResult := c.sampleMaxCore(service, curTicks, curThreads, now, reader)
+	snap[MetricCPUThread] = cpuResult.Reading
+	snap[MetricCPU] = wholeMachineCPU(cpuResult, c.Reader.NumCPU())
 
-	curIO := ioSample{read: ioRead, write: ioWrite, at: now}
-	if prev, ok := c.prevServiceIO[service]; ok {
-		snap[MetricIORead] = ioRate(prev.read, curIO.read, prev.at, curIO.at)
-		snap[MetricIOWrite] = ioRate(prev.write, curIO.write, prev.at, curIO.at)
-		snap[MetricIO] = ioRate(prev.read+prev.write, curIO.read+curIO.write, prev.at, curIO.at)
-	} else {
-		notReady := Reading{Unit: MetricUnitBytesPerSecond, HasAbsolute: true}
-		snap[MetricIORead], snap[MetricIOWrite], snap[MetricIO] = notReady, notReady, notReady
-	}
+	prevIO, havePrevIO := c.prevServiceIO[service]
+	snap[MetricIORead], snap[MetricIOWrite], snap[MetricIO] = serviceIORates(prevIO, curIO, havePrevIO)
 	c.prevServiceIO[service] = curIO
 
 	return snap
@@ -361,28 +346,57 @@ func (c *Collector) SampleServiceCPU(service string, observation *ProcessObserva
 	out.PerProc = sample.ProcRates
 	out.CPUThread = sample.Reading
 	out.PerProcMaxCore, out.PerProcMaxCoreExact = sample.MaxCore, sample.Exact
-	// The whole-machine rate is the sum of the per-process rates spread over the
-	// cores (each rate is already a percentage of one core, so Σ/ncpu is the
-	// percentage of all of them).
+	out.CPU = wholeMachineCPU(sample, ncpu)
+	return out
+}
+
+// wholeMachineCPU is the service `cpu` metric: the sum of the per-process rates
+// spread over the cores (each rate is already a percentage of one core, so
+// Σ/ncpu is the percentage of all of them). Summing per-process deltas, rather
+// than differencing the tree's tick total, keeps a child that exits between
+// cycles from subtracting its lifetime CPU from the survivors (php-fpm, Apache
+// and Postfix recycle busy children constantly), and a process that misses one
+// sample from adding its lifetime back as a spike when it returns. SampleService
+// and SampleServiceCPU share it, so rules and the Web UI see the same figure.
+func wholeMachineCPU(sample maxCoreSample, ncpu int) Reading {
+	if !sample.Reading.Ready || ncpu <= 0 {
+		return Reading{HasPercent: true}
+	}
 	var sum float64
 	for _, pct := range sample.ProcRates {
 		sum += pct
 	}
-	if ncpu > 0 {
-		out.CPU = Reading{Percent: sum / float64(ncpu), HasPercent: true, Ready: true}
-	}
-	return out
+	return Reading{Percent: sum / float64(ncpu), HasPercent: true, Ready: true}
 }
 
-// ioRate computes a bytes/second rate from two cumulative samples. A drop in the
-// total (a counter reset, or a child leaving the process set between cycles)
-// clamps to 0 rather than underflowing.
-func ioRate(prevBytes, curBytes uint64, prevAt, curAt time.Time) Reading {
-	if curBytes < prevBytes {
-		curBytes = prevBytes
+// serviceIORates returns the io_read, io_write and io bytes/second rates as the
+// sum of per-process deltas over the PIDs present in both samples, for the same
+// reason wholeMachineCPU sums per-process CPU. A counter that went backwards (a
+// recycled PID) is skipped, as perProcCPURates does. ok is false on the first
+// observation, which leaves the rates not ready.
+func serviceIORates(prev, cur procIOSample, ok bool) (read, write, total Reading) {
+	notReady := Reading{Unit: MetricUnitBytesPerSecond, HasAbsolute: true}
+	wall := cur.at.Sub(prev.at).Seconds()
+	if !ok || wall <= 0 {
+		return notReady, notReady, notReady
 	}
-	rate, ready := BytesPerSecond(prevBytes, curBytes, prevAt, curAt)
-	return Reading{Absolute: rate, Unit: MetricUnitBytesPerSecond, HasAbsolute: true, Ready: ready}
+	var dRead, dWrite uint64
+	for pid, c := range cur.counters {
+		p, seen := prev.counters[pid]
+		if !seen {
+			continue
+		}
+		if c.read >= p.read {
+			dRead += c.read - p.read
+		}
+		if c.write >= p.write {
+			dWrite += c.write - p.write
+		}
+	}
+	rate := func(bytes uint64) Reading {
+		return Reading{Absolute: float64(bytes) / wall, Unit: MetricUnitBytesPerSecond, HasAbsolute: true, Ready: true}
+	}
+	return rate(dRead), rate(dWrite), rate(dRead + dWrite)
 }
 
 // SampleSystem computes the machine-scope metrics: total_memory (bytes and %),
@@ -597,19 +611,6 @@ func readThreadTicks(reader processMetricReader, pids []int) map[int]map[int]uin
 		}
 	}
 	return out
-}
-
-// cpuRate computes CPU% = Δticks / hz / (Δwall * ncpu) * 100. A drop
-// in the cumulative tick count — a worker restarting, or a busy PID leaving the
-// matched set and being replaced by a fresh one starting at zero — clamps to 0
-// rather than underflowing the unsigned subtraction into a bogus huge rate (the
-// same guard ioRate and perProcCPURates apply).
-func cpuRate(prev, cur cpuSample, hz float64, ncpu int) Reading {
-	if cur.ticks < prev.ticks {
-		cur.ticks = prev.ticks
-	}
-	pct, ready := CPUPercent(prev.ticks, cur.ticks, prev.at, cur.at, hz, ncpu)
-	return Reading{Percent: pct, HasPercent: true, Ready: ready}
 }
 
 // CPUPercent derives a host-normalized CPU percentage from two cumulative

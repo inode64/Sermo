@@ -2976,6 +2976,14 @@ per-process figure: the process of the tree that is closest to its own soft
 per process and the process about to hit `EMFILE` is the one that stops
 accepting connections whatever the rest of the tree holds.
 
+The rates (`cpu`, `io`, `io_read`, `io_write`) add up each process's own
+change since the previous sample, counting only processes seen in both samples.
+A child that exits between cycles (php-fpm `pm.max_requests`, Apache
+`MaxConnectionsPerChild`, Postfix `smtpd`) therefore does not subtract its
+lifetime totals from the rest of the tree, and a process that missed one sample
+does not come back as a spike. The work a process did in the interval in which
+it started or exited is not counted.
+
 `memory` is the summed **RSS** (resident memory) of the process tree, as bytes
 and as a percentage of total RAM. `swap` is the summed **swapped-out** memory
 (`VmSwap`) of the tree, as bytes and — when a swap device exists — as a

@@ -223,6 +223,92 @@ func TestServiceIORateClampsOnShrink(t *testing.T) {
 	assertServiceIORate(t, 5000, 0, 1000, 0, 0)
 }
 
+// sampleServiceCycles samples pids of one service once per cycle, a second
+// apart, applying each cycle's reader state first, and returns the last
+// snapshot.
+func sampleServiceCycles(t *testing.T, reader fakeReader, cycles []func(*fakeReader) []int) Snapshot {
+	t.Helper()
+	clock := time.Unix(0, 0)
+	c := New(reader)
+	c.Now = func() time.Time { return clock }
+	var snap Snapshot
+	for i, cycle := range cycles {
+		if i > 0 {
+			clock = clock.Add(time.Second)
+		}
+		pids := cycle(&reader)
+		c.Reader = reader
+		snap = c.SampleService("svc", pids)
+	}
+	return snap
+}
+
+func TestServiceRatesSurviveAnExitingChild(t *testing.T) {
+	// A php-fpm child with 50 s of lifetime CPU and 80 MB of I/O exits between
+	// cycles while the master keeps working. Differencing tree totals would
+	// subtract the child's lifetime counters from the survivor's work and
+	// report 0; the rates must be the survivor's own deltas.
+	reader := fakeReader{cpu: map[int]uint64{}, ioRead: map[int]uint64{}, ioWrite: map[int]uint64{}, hz: 100, ncpu: 1}
+	snap := sampleServiceCycles(t, reader, []func(*fakeReader) []int{
+		func(r *fakeReader) []int {
+			r.cpu[10], r.cpu[11] = 100, 5000
+			r.ioRead[10], r.ioRead[11] = 0, 80<<20
+			r.ioWrite[10], r.ioWrite[11] = 0, 0
+			return []int{10, 11}
+		},
+		func(r *fakeReader) []int {
+			delete(r.cpu, 11)
+			delete(r.ioRead, 11)
+			delete(r.ioWrite, 11)
+			r.cpu[10] = 150         // 0.5 CPU-seconds in 1 s on 1 CPU = 50%
+			r.ioRead[10] = 1 << 20  // 1 MiB/s
+			r.ioWrite[10] = 2 << 20 // 2 MiB/s
+			return []int{10}
+		},
+	})
+	if got := snap[MetricCPU]; !got.Ready || got.Percent < 49.9 || got.Percent > 50.1 {
+		t.Fatalf("cpu = %+v, want ~50%% from the surviving process", got)
+	}
+	if got := snap[MetricIORead]; !got.Ready || got.Absolute != float64(1<<20) {
+		t.Fatalf("io_read = %+v, want 1 MiB/s", got)
+	}
+	if got := snap[MetricIO]; !got.Ready || got.Absolute != float64(3<<20) {
+		t.Fatalf("io = %+v, want 3 MiB/s", got)
+	}
+}
+
+func TestServiceRatesIgnoreAProcessReturningAfterAMissedSample(t *testing.T) {
+	// A long-lived process drops out of one sample (its read failed) and comes
+	// back: its lifetime counters must not reappear as a one-cycle spike.
+	reader := fakeReader{cpu: map[int]uint64{}, ioRead: map[int]uint64{}, ioWrite: map[int]uint64{}, hz: 100, ncpu: 1}
+	snap := sampleServiceCycles(t, reader, []func(*fakeReader) []int{
+		func(r *fakeReader) []int {
+			r.cpu[10], r.cpu[11] = 900000, 0
+			r.ioRead[10], r.ioRead[11] = 1<<30, 0
+			return []int{10, 11}
+		},
+		func(r *fakeReader) []int {
+			delete(r.cpu, 10)
+			delete(r.ioRead, 10)
+			r.cpu[11], r.ioRead[11] = 10, 100
+			return []int{10, 11}
+		},
+		func(r *fakeReader) []int {
+			r.cpu[10] = 900010
+			r.ioRead[10] = 1<<30 + 100
+			r.cpu[11], r.ioRead[11] = 20, 200
+			return []int{10, 11}
+		},
+	})
+	// Only pid 11 has a baseline in the previous sample: 10 ticks = 10%.
+	if got := snap[MetricCPU]; !got.Ready || got.Percent < 9.9 || got.Percent > 10.1 {
+		t.Fatalf("cpu = %+v, want ~10%%", got)
+	}
+	if got := snap[MetricIORead]; !got.Ready || got.Absolute != 100 {
+		t.Fatalf("io_read = %+v, want 100 B/s", got)
+	}
+}
+
 func TestServiceMemoryAndCount(t *testing.T) {
 	reader := fakeReader{rss: map[int]uint64{10: 100, 20: 300}, memTotal: 1000, hz: 100, ncpu: 1}
 	c := New(reader)
