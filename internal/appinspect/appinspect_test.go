@@ -306,9 +306,51 @@ func TestInspectCanTreatVersionFailureAsOptional(t *testing.T) {
 	}
 
 	resolved.Tree["version_match"] = map[string]any{"contains": "Webd"}
-	matched := inspectResolved(context.Background(), runner, "web", resolved, config.CategoryApp, WithOptionalVersion())
+	other := testRunner{binary: {Stdout: "Otherd 1.0\n", ExitCode: 0}}
+	matched := inspectResolved(context.Background(), other, "web", resolved, config.CategoryApp, WithOptionalVersion())
 	if matched.Installed || !strings.HasPrefix(matched.Status, statusNotInstalledVersionPrefix) {
 		t.Fatalf("version_match inspectResolved() = %+v, want identity failure despite optional version", matched)
+	}
+}
+
+// timeoutRunner answers every command the way execx reports a probe that ran
+// out of time.
+type timeoutRunner struct{}
+
+func (timeoutRunner) Run(context.Context, string, ...string) (execx.Result, error) {
+	return execx.Result{ExitCode: execx.ExitCodeRunFailure}, context.DeadlineExceeded
+}
+
+// TestVersionMatchProbeFailureIsNotAbsence pins that only a version_match
+// mismatch makes an app not installed: a version command that timed out, exited
+// non-zero or failed expect_stdout on a loaded host is an invalid sample (an
+// error), not proof that the binary belongs to another implementation.
+func TestVersionMatchProbeFailureIsNotAbsence(t *testing.T) {
+	root := t.TempDir()
+	binary := filepath.Join(root, "mysqld")
+	if err := os.WriteFile(binary, []byte("x"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		name   string
+		runner execx.Runner
+		stdout any
+	}{
+		{name: "timeout", runner: timeoutRunner{}},
+		{name: "exit status", runner: testRunner{binary: {Stderr: "cannot allocate memory\n", ExitCode: 1}}},
+		{name: "expect_stdout", runner: testRunner{binary: {Stdout: "garbage\n"}}, stdout: "Ver"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			resolved := preflightResolved(binary, "")
+			resolved.Tree["version_match"] = map[string]any{"excludes": "MariaDB"}
+			if tc.stdout != nil {
+				resolved.Tree["preflight"].(map[string]any)["version"].(map[string]any)["expect_stdout"] = tc.stdout
+			}
+			r := inspectResolved(context.Background(), tc.runner, "mysql", resolved, config.CategoryApp)
+			if !r.Installed || r.OK || IsNotInstalledStatus(r.Status) || !strings.HasPrefix(r.Status, statusErrorPrefix) {
+				t.Fatalf("report = %+v, want an installed app with a version error", r)
+			}
+		})
 	}
 }
 

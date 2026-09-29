@@ -229,7 +229,11 @@ evaluated against the combined stdout/stderr of the app's `version` command and
 supports `contains`, `excludes` and `regex` string matchers. A failed
 `version_match` marks the app as not installed, even when the binary exists; this
 lets MariaDB use an older `/usr/sbin/mysqld` fallback without also showing the
-MySQL catalog app on MariaDB hosts. When a service links the app through
+MySQL catalog app on MariaDB hosts. Only a matcher that rejects the output means
+absence: a `version` command that times out or fails is reported as an error (an
+invalid sample), because it proves nothing about which implementation answered.
+At daemon start such an app gets no version watch until its identity is
+confirmed by a later reload or restart. When a service links the app through
 `apps:`, the matcher is copied into that app's namespaced version preflight.
 
 Catalog and service documents may declare `aliases: [...]`, a list of alternate

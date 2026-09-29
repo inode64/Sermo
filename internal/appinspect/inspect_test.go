@@ -618,6 +618,39 @@ func TestListWithoutProbesStillProbesIdentity(t *testing.T) {
 	}
 }
 
+// TestListWithoutProbesIdentityOutcomes pins the startup presence decision for
+// an app with version_match: a confirmed identity registers, while a probe that
+// timed out leaves the app unregistered (a watch registered on a MariaDB host
+// whose probe was merely slow would fire "not installed" on its first cycle).
+func TestListWithoutProbesIdentityOutcomes(t *testing.T) {
+	root := t.TempDir()
+	mysqld := filepath.Join(root, "mysqld")
+	if err := os.WriteFile(mysqld, []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cfg := &config.Config{AppNames: []string{"mysql"}, Apps: map[string]*config.Document{
+		"mysql": {Name: "mysql", Body: map[string]any{
+			"name": "mysql",
+			"preflight": map[string]any{
+				"binary": map[string]any{"type": "binary", "path": mysqld},
+				"version": map[string]any{
+					"type":          "command",
+					"command":       []any{mysqld, "--version"},
+					"version_match": map[string]any{"excludes": "MariaDB"},
+				},
+			},
+		}},
+	}}
+	confirmed := List(t.Context(), testRunner{mysqld: {Stdout: "mysqld  Ver 8.4.3 for Linux on x86_64 (MySQL Community Server - GPL)\n"}}, cfg, config.CategoryApp, false, WithoutProbes())
+	if len(confirmed) != 1 || !confirmed[0].Installed || confirmed[0].Status != StatusOK {
+		t.Fatalf("confirmed identity: reports = %+v, want mysql installed", confirmed)
+	}
+	unconfirmed := List(t.Context(), timeoutRunner{}, cfg, config.CategoryApp, true, WithoutProbes())
+	if len(unconfirmed) != 1 || unconfirmed[0].Installed {
+		t.Fatalf("timed-out identity probe: reports = %+v, want mysql left unregistered", unconfirmed)
+	}
+}
+
 // refusingRunner fails the test on any command: presence must be decided from
 // the filesystem alone.
 type refusingRunner struct{ t *testing.T }
