@@ -194,6 +194,37 @@ func serveOnce(t *testing.T, onConn func(c net.Conn)) int {
 	return port
 }
 
+// serveEndless writes prefix and then streams filler bytes until the client
+// goes away, modelling a peer that never terminates its reply.
+func serveEndless(t *testing.T, prefix string) int {
+	t.Helper()
+	return serveOnce(t, func(c net.Conn) {
+		if _, err := io.WriteString(c, prefix); err != nil {
+			return
+		}
+		chunk := bytes.Repeat([]byte("a"), 32*1024)
+		for {
+			if _, err := c.Write(chunk); err != nil {
+				return
+			}
+		}
+	})
+}
+
+// assertProbeEndsBeforeDeadline asserts that proto gives up on an endless
+// reply on its own read bound, well before a generous context deadline.
+func assertProbeEndsBeforeDeadline(t *testing.T, proto Protocol, port int) {
+	t.Helper()
+	const deadline = 5 * time.Second
+	ctx, cancel := context.WithTimeout(context.Background(), deadline)
+	defer cancel()
+	start := time.Now()
+	_, _ = proto.Probe(ctx, Config{Host: "127.0.0.1", Port: port})
+	if elapsed := time.Since(start); elapsed > deadline/2 {
+		t.Fatalf("probe read an endless reply for %v; want it bounded by size, not the deadline", elapsed)
+	}
+}
+
 // listenUDPLoopback binds an ephemeral loopback UDP socket, closes it on
 // cleanup and returns it with its port. The prologue every datagram-probe test
 // server shares.

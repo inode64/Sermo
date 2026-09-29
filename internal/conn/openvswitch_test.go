@@ -163,3 +163,8 @@ func TestOpenvswitchProbeNotOVSDB(t *testing.T) {
 		t.Fatal("a non-OVSDB server must error")
 	}
 }
+
+func TestOpenvSwitchProbeBoundsEndlessReply(t *testing.T) {
+	port := serveEndless(t, `{"id":"list_dbs","result":["`)
+	assertProbeEndsBeforeDeadline(t, openvswitchProtocol{}, port)
+}

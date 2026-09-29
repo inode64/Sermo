@@ -65,3 +65,8 @@ func TestGuacdProbeCustomProtocol(t *testing.T) {
 		t.Fatalf("select = %q, want rdp", res.Extra["select"])
 	}
 }
+
+func TestGuacdProbeBoundsEndlessReply(t *testing.T) {
+	port := serveEndless(t, "4.args,")
+	assertProbeEndsBeforeDeadline(t, guacdProtocol{}, port)
+}
