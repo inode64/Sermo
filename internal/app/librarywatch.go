@@ -279,13 +279,13 @@ type artifactDependencies struct {
 	paths map[string]time.Duration
 }
 
-// collectArtifactDependencies resolves each service once to find the app and
-// file artifacts its changed conditions need. A path used by several services
-// runs at the shortest configured service interval.
+// collectArtifactDependencies resolves each enabled service once to find the
+// app and file artifacts its changed conditions need. A path used by several
+// services runs at the shortest configured service interval.
 func collectArtifactDependencies(cfg *config.Config) artifactDependencies {
 	appSet := map[string]struct{}{}
 	pathIntervals := map[string]time.Duration{}
-	for _, resolution := range cfg.ResolveServices(cfg.SortedServiceNames()) {
+	for _, resolution := range cfg.ResolveServices(cfg.EnabledServiceNames()) {
 		resolved, errs := resolution.Resolved, resolution.Errors
 		if len(errs) > 0 || resolved.Tree == nil {
 			continue

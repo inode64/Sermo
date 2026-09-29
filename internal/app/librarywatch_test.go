@@ -465,6 +465,28 @@ func TestBuildArtifactWatchesCollectsSharedDependencies(t *testing.T) {
 	}
 }
 
+// TestCollectArtifactDependenciesSkipsDisabledServices: a service with
+// top-level `enabled: false` is disabled entirely, so its `changed:` targets
+// must not keep artifact samplers running.
+func TestCollectArtifactDependenciesSkipsDisabledServices(t *testing.T) {
+	disabled := artifactServiceDocument("web", "1m", []string{"alpha"}, []string{"/usr/lib/libweb.so"})
+	disabled.Body["enabled"] = false
+	cfg := &config.Config{
+		AppNames:     []string{"alpha", "beta"},
+		Apps:         map[string]*config.Document{"alpha": artifactAppDocument("alpha", "1m"), "beta": artifactAppDocument("beta", "1m")},
+		ServiceNames: []string{"api", "web"},
+		Services: map[string]*config.Document{
+			"api": artifactServiceDocument("api", "1m", []string{"beta"}, []string{"/usr/lib/libapi.so"}),
+			"web": disabled,
+		},
+	}
+
+	got := collectArtifactDependencies(cfg)
+	if !slices.Equal(got.apps, []string{"beta"}) || len(got.paths) != 1 || got.paths["/usr/lib/libapi.so"] == 0 {
+		t.Fatalf("artifact dependencies = %+v, want only the enabled api service", got)
+	}
+}
+
 func artifactAppDocument(name, interval string) *config.Document {
 	return &config.Document{Name: name, Kind: config.CategoryApp, Body: map[string]any{
 		config.EntryKeyInterval: interval,
