@@ -47,6 +47,31 @@ func TestParseMdstat(t *testing.T) {
 	}
 }
 
+// An array md could not start is listed as "inactive" with no [n/m] ratio or
+// [U_] map; its data is unavailable, so it must not read as good.
+func TestParseMdstatInactiveArrayIsDegraded(t *testing.T) {
+	const mdstatInactive = `Personalities : [raid1]
+md127 : inactive sdb1[1](S)
+      976630464 blocks super 1.2
+
+md0 : active raid1 sdc1[1] sdd1[0]
+      976630464 blocks super 1.2 [2/2] [UU]
+
+unused devices: <none>
+`
+	st := parseMdstat(mdstatInactive)
+	if st.Arrays != 2 || st.Degraded != 1 || len(st.DegradedNames) != 1 || st.DegradedNames[0] != "md127" {
+		t.Fatalf("status = %+v, want md127 as the only degraded array", st)
+	}
+	if !st.Details[0].Inactive || st.Details[1].Inactive || st.Details[1].Degraded {
+		t.Fatalf("details = %+v, want only md127 inactive", st.Details)
+	}
+	res := (&raidCheck{name: "r", timeout: time.Second, array: "md127", sampler: func() (RaidStatus, error) { return st, nil }}).Run(t.Context())
+	if !res.OK || res.Message != "raid md127: inactive" {
+		t.Fatalf("result = %v %q, want alert for the inactive array", res.OK, res.Message)
+	}
+}
+
 func TestEnrichRaidSysfsReadsArraySize(t *testing.T) {
 	root := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(root, "md0", "md"), 0o755); err != nil {

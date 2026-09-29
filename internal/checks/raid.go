@@ -26,6 +26,7 @@ type RaidArrayStatus struct {
 	Name          string
 	SizeBytes     uint64
 	Degraded      bool
+	Inactive      bool
 	Recovering    bool
 	Operation     string
 	SyncAction    string
@@ -171,6 +172,9 @@ func raidMessage(st RaidStatus, array string, detail RaidArrayStatus, present bo
 }
 
 func raidArrayState(detail RaidArrayStatus) string {
+	if detail.Inactive {
+		return mdArrayStateInactive
+	}
 	if detail.Degraded {
 		return "degraded"
 	}
@@ -296,6 +300,7 @@ const (
 	mdOperationGroup     = 1
 	mdProgressValueGroup = 2
 	mdMemberPrefix       = "dev-"
+	mdArrayStateInactive = "inactive"
 	raidSysBlockPath     = "/sys/block"
 	raidSectorBytes      = uint64(512)
 	raidSyncActionFile   = "sync_action"
@@ -311,7 +316,8 @@ const (
 )
 
 // parseMdstat parses /proc/mdstat. An array is degraded when its active count
-// is short or its [U_…] map has a down member. recovery/resync/reshape/check
+// is short, its [U_…] map has a down member, or it is inactive (assembled but
+// not started, so its data is unavailable). recovery/resync/reshape/check
 // are reported as active operations; only the first three are reconstruction.
 func parseMdstat(s string) RaidStatus {
 	var st RaidStatus
@@ -336,6 +342,12 @@ func parseMdstat(s string) RaidStatus {
 		if h := mdHeadRe.FindStringSubmatch(trimmed); h != nil {
 			flush()
 			cur.Name = h[mdArrayNameGroup]
+			// An inactive array carries no [n/m] ratio or [U_] map, so only the
+			// header state token can tell it apart from a healthy one.
+			if state := strings.Fields(trimmed[len(h[0]):]); len(state) > 0 && state[0] == mdArrayStateInactive {
+				cur.Inactive = true
+				cur.Degraded = true
+			}
 			continue
 		}
 		if cur.Name == "" {
