@@ -3,6 +3,8 @@ package config
 import (
 	"slices"
 	"testing"
+
+	"sermo/internal/cfgval"
 )
 
 func TestServiceCandidates(t *testing.T) {
@@ -32,6 +34,32 @@ func TestServiceCandidates(t *testing.T) {
 			}
 			if trust != tc.wantTrust {
 				t.Fatalf("trust = %v, want %v", trust, tc.wantTrust)
+			}
+		})
+	}
+}
+
+// ${service} and the ${pidfile} fallback built from it must name the unit of
+// the active backend; the first systemd candidate on an OpenRC host would make
+// a `pidfile: "${pidfile}"` check watch a file that never exists.
+func TestServiceBuiltinFollowsActiveBackend(t *testing.T) {
+	for _, backend := range []string{backendSystemd, backendOpenRC} {
+		t.Run(backend, func(t *testing.T) {
+			resolved := resolveInstance(t, map[string]string{
+				"sermo.yml": "engine: { backend: " + backend + " }\n" +
+					"paths: { services: [ \"@ROOT@/services\" ], runtime: /run/sermo }\n" +
+					"defaults: { policy: { cooldown: 5m } }\n",
+				"services/foo.yml": `
+name: foo
+service: { systemd: [foo-sd], openrc: [foo-rc] }
+checks:
+  unit: { type: command, command: [/bin/echo, "${service}", "${pidfile}"] }
+`,
+			}, "foo")
+			unit := map[string]string{backendSystemd: "foo-sd", backendOpenRC: "foo-rc"}[backend]
+			want := []string{"/bin/echo", unit, "/run/" + unit + ".pid"}
+			if got := cfgval.StringList(nested(t, resolved.Tree, "checks", "unit")["command"]); !slices.Equal(got, want) {
+				t.Fatalf("command = %v, want %v", got, want)
 			}
 		})
 	}

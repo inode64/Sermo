@@ -840,6 +840,19 @@ func ServiceUnit(tree map[string]any, fallback string) string {
 	return fallback
 }
 
+// serviceUnitFor is ServiceUnit for the active init backend: a per-init
+// `service` map yields that backend's first candidate, so ${service} and the
+// ${pidfile} fallback built from it name the unit this host actually runs.
+// Without an entry for backend it falls back to ServiceUnit.
+func serviceUnitFor(tree map[string]any, backend, fallback string) string {
+	if s, ok := tree[ServiceKeyService].(map[string]any); ok {
+		if list := cfgval.StringList(s[backend]); len(list) > 0 {
+			return list[0]
+		}
+	}
+	return ServiceUnit(tree, fallback)
+}
+
 // ServiceCandidates returns the unit-name candidates to try for backend, and
 // whether to trust the first candidate when none can be probed.
 //

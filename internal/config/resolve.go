@@ -108,7 +108,7 @@ func (c *Config) resolveExpandedService(merged map[string]any, name string, inpu
 	}
 	errs := namedEntryFlagErrors(merged)
 	prepareExpansionInputs(merged)
-	vars, varErrs := c.expansionVariables(merged, name, inputs.globalVars)
+	vars, varErrs := c.expansionVariables(merged, name, inputs)
 	errs = append(errs, varErrs...)
 	expanded, expErrs := expandTree(merged, vars)
 	errs = append(errs, expErrs...)
@@ -794,7 +794,7 @@ const (
 	pidfileExt        = ".pid"
 )
 
-func injectBuiltinVariables(vars map[string]string, name string, merged map[string]any) {
+func injectBuiltinVariables(vars map[string]string, name string, merged map[string]any, backend string) {
 	if _, ok := vars[keyName]; !ok {
 		vars[keyName] = name
 	}
@@ -802,7 +802,7 @@ func injectBuiltinVariables(vars map[string]string, name string, merged map[stri
 		vars[keyDisplayName] = DisplayName(merged, name)
 	}
 	if _, ok := vars[VariableKeyService]; !ok {
-		vars[VariableKeyService] = ServiceUnit(merged, name)
+		vars[VariableKeyService] = serviceUnitFor(merged, backend, name)
 	}
 	injectHostBuiltins(vars)
 	// ${pidfile} falls back to the conventional /run/<unit>.pid; an explicit
@@ -846,13 +846,13 @@ func (c *Config) globalVars() map[string]string {
 	return collectVariables(map[string]any{sectionVariables: c.Global.Defaults()[sectionVariables]})
 }
 
-func (c *Config) expansionVariables(tree map[string]any, name string, globalVars map[string]string) (map[string]string, []string) {
-	vars := maps.Clone(globalVars)
+func (c *Config) expansionVariables(tree map[string]any, name string, inputs resolutionInputs) (map[string]string, []string) {
+	vars := maps.Clone(inputs.globalVars)
 	appVars, errs := c.appVariables(tree)
 	maps.Copy(vars, appVars)
 	maps.Copy(vars, collectVariables(tree)) // service/doc variables override app and global custom ones
 	errs = append(errs, validateVariableValues(vars)...)
-	injectBuiltinVariables(vars, name, tree)
+	injectBuiltinVariables(vars, name, tree, inputs.backend)
 	errs = append(errs, resolveFileVars(vars, tree)...)
 	return vars, errs
 }
@@ -1495,7 +1495,7 @@ func (c *Config) resolveDocBody(doc *Document, name string, appChain []string, i
 	applyDeletes(body)
 	body = pruneEnableIfMap(body, nil, inputs.backend)
 	prepareExpansionInputs(body)
-	vars, varErrs := c.expansionVariables(body, name, inputs.globalVars)
+	vars, varErrs := c.expansionVariables(body, name, inputs)
 	errs = append(errs, varErrs...)
 	expanded, expErrs := expandTree(body, vars)
 	errs = append(errs, expErrs...)
