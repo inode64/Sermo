@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"slices"
+	"syscall"
 	"text/tabwriter"
 	"time"
 
@@ -165,6 +166,11 @@ type App struct {
 	// the production defaults; tests set it (often empty) to keep pidfile
 	// discovery hermetic instead of reading the host's /run/sermo/sermod.pid.
 	pidfileFallbacks []string
+	// daemonIdentity reads the identity `daemon reload` uses to prove a PID is
+	// sermod before signalling it. nil reads /proc.
+	daemonIdentity func(pid int) (process.Identity, bool)
+	// signalDaemon delivers the reload signal. nil uses the pidfd signaler.
+	signalDaemon func(ctx context.Context, target process.Process, sig syscall.Signal) error
 	// FetchEvents is injectable for `sermoctl events` (listing recent events via
 	// the daemon web API). Defaults to fetching over HTTP using the config's web
 	// address/port (and password for auth if present).

@@ -50,46 +50,20 @@ func (a App) runReload(ctx context.Context, opts options) int {
 	}
 	candidates := daemonReloadPidfileCandidates(filepath.Join(runtimeDir, daemonPIDFilename), fallbacks)
 
-	var pid int
-	for _, p := range candidates {
-		data, err := hostfs.ReadFile(p)
-		if err != nil {
-			continue
-		}
-		if n, err := strconv.Atoi(strings.TrimSpace(string(data))); err == nil && n > 0 {
-			pid = n
-			break
-		}
-	}
-
-	if pid == 0 {
-		// Fallback: find a running sermod by program name. This is a native
-		// /proc scan (process.PIDsByComm), not a pidof/pgrep shell-out — it
-		// reads the world-readable /proc/<pid>/comm so it locates a root-owned
-		// daemon without external binaries.
-		find := a.FindPID
-		if find == nil {
-			find = process.PIDsByComm
-		}
-		if pids, err := find(daemonProcessName); err == nil {
-			for _, p := range pids {
-				if p > 0 {
-					pid = p
-					break
-				}
-			}
-		}
-	}
-
-	if pid <= 0 {
+	target, ok := a.findDaemon(candidates)
+	if !ok {
 		a.recordAccess(cfg, accessCommandDaemonReload, "", accessStatusError, "could not find running sermod pid")
-		return a.fail(opts, "could not find running sermod pid (no pidfile and no running sermod process)")
+		return a.fail(opts, "could not find running sermod pid (no pidfile naming a live sermod and no running sermod process)")
 	}
+	pid := target.PID
 
-	// Bind SIGHUP to the observed generation so PID reuse cannot redirect it.
-	id, _ := (process.OSReader{}).Identity(pid)
-	target := process.Process{PID: pid, StartTicks: id.StartTicks, Exe: id.Exe, ExeOK: id.ExeOK, UID: id.UID}
-	if err := (process.OSSignaler{}).SignalProcess(ctx, target, syscall.SIGHUP); err != nil {
+	signal := a.signalDaemon
+	if signal == nil {
+		signal = process.OSSignaler{}.SignalProcess
+	}
+	// The pidfd signaler revalidates target's start time and exe, so PID reuse
+	// between the identity check and delivery cannot redirect SIGHUP.
+	if err := signal(ctx, target, syscall.SIGHUP); err != nil {
 		a.recordAccess(cfg, accessCommandDaemonReload, "", accessStatusError, err.Error())
 		return a.fail(opts, fmt.Sprintf("failed to signal pid %d: %v", pid, err))
 	}
@@ -101,4 +75,68 @@ func (a App) runReload(ctx context.Context, opts options) int {
 		fmt.Fprintf(a.Stdout, "reload signal (HUP) sent to sermod pid %d\n", pid)
 	}
 	return exitSuccess
+}
+
+// findDaemon resolves the running sermod: pidfile candidates first, then a
+// native /proc scan by program name. Every candidate PID must currently be a
+// sermod process. A pidfile left behind by a SIGKILLed or OOM-killed daemon can
+// name a recycled PID, and SIGHUP terminates most programs, so an unverified
+// pidfile PID is skipped instead of signalled.
+func (a App) findDaemon(pidfiles []string) (process.Process, bool) {
+	identify := a.daemonIdentity
+	if identify == nil {
+		identify = process.OSReader{}.Identity
+	}
+	for _, p := range pidfiles {
+		data, err := hostfs.ReadFile(p)
+		if err != nil {
+			continue
+		}
+		if n, err := strconv.Atoi(strings.TrimSpace(string(data))); err == nil && n > 0 {
+			if target, ok := daemonTarget(identify, n); ok {
+				return target, true
+			}
+		}
+	}
+	// Fallback: find a running sermod by program name. This is a native /proc
+	// scan (process.PIDsByComm), not a pidof/pgrep shell-out — it reads the
+	// world-readable /proc/<pid>/comm so it locates a root-owned daemon without
+	// external binaries.
+	find := a.FindPID
+	if find == nil {
+		find = process.PIDsByComm
+	}
+	pids, err := find(daemonProcessName)
+	if err != nil {
+		return process.Process{}, false
+	}
+	for _, pid := range pids {
+		if pid <= 0 {
+			continue
+		}
+		if target, ok := daemonTarget(identify, pid); ok {
+			return target, true
+		}
+	}
+	return process.Process{}, false
+}
+
+// daemonTarget returns the signal target for pid when it is a live sermod.
+// The executable basename is the proof because comm is writable by any process
+// through prctl. A daemon whose binary a package upgrade replaced is still
+// identified through its previous exe path so the operator gets the signaler's
+// refusal (a deleted exe is never signalled) instead of "no sermod running".
+func daemonTarget(identify func(int) (process.Identity, bool), pid int) (process.Process, bool) {
+	id, ok := identify(pid)
+	if !ok || !id.StartTicksOK {
+		return process.Process{}, false
+	}
+	exe := id.Exe
+	if !id.ExeOK {
+		exe = id.ExePrev
+	}
+	if exe == "" || filepath.Base(exe) != daemonProcessName {
+		return process.Process{}, false
+	}
+	return process.Process{PID: pid, StartTicks: id.StartTicks, Exe: id.Exe, ExeOK: id.ExeOK, UID: id.UID}, true
 }
