@@ -4,13 +4,16 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"sermo/internal/checks"
 	"sermo/internal/config"
+	"sermo/internal/control"
 	"sermo/internal/execx"
 	"sermo/internal/metrics"
 	"sermo/internal/process"
@@ -175,6 +178,35 @@ func TestServiceProcessSelectorsDerivesInitPidfile(t *testing.T) {
 	if selectors[0].Type != process.SelectorPidfile || strings.Join(selectors[0].Paths, ",") != pidfile {
 		t.Fatalf("selector = %+v, want pidfile %s", selectors[0], pidfile)
 	}
+}
+
+// TestServiceProcessSelectorsDetectOncePerGeneration: the workers build and
+// the web backend build derive the same service's init process identity
+// back-to-back; the generation's target cache must probe the backend once.
+func TestServiceProcessSelectorsDetectOncePerGeneration(t *testing.T) {
+	runner := &probeCountingRunner{Runner: procInfoRunner{pidfile: filepath.Join(t.TempDir(), "web.pid")}}
+	deps := Deps{Backend: servicemgr.BackendSystemd, ExecxRunner: runner, Targets: control.NewTargetCache()}
+
+	first, _, _ := serviceProcessSelectors(t.Context(), map[string]any{}, deps, "web.service", false)
+	probes := runner.calls.Load()
+	second, _, _ := serviceProcessSelectors(t.Context(), map[string]any{}, deps, "web.service", false)
+
+	if probes == 0 || runner.calls.Load() != probes {
+		t.Fatalf("backend probes = %d then %d, want one detection per generation", probes, runner.calls.Load())
+	}
+	if !reflect.DeepEqual(first, second) {
+		t.Fatalf("cached selectors = %+v, want %+v", second, first)
+	}
+}
+
+type probeCountingRunner struct {
+	execx.Runner
+	calls atomic.Int32
+}
+
+func (r *probeCountingRunner) Run(ctx context.Context, name string, args ...string) (execx.Result, error) {
+	r.calls.Add(1)
+	return r.Runner.Run(ctx, name, args...)
 }
 
 func TestServiceProcessSelectorsExplicitEmptySkipsInitDerivation(t *testing.T) {

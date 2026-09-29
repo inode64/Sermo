@@ -189,7 +189,14 @@ func serviceProcessSelectors(ctx context.Context, tree map[string]any, deps Deps
 	needSelectors := !configured && len(selectors) == 0
 	var info servicemgr.ProcInfo
 	if needSelectors || needPidfileFallback {
-		info = servicemgr.DetectProcInfo(ctx, deps.ExecxRunner, nil, deps.Backend, unit)
+		detect := func() servicemgr.ProcInfo {
+			return servicemgr.DetectProcInfo(ctx, deps.ExecxRunner, nil, deps.Backend, unit)
+		}
+		if deps.Targets != nil {
+			info = deps.Targets.ProcInfo(deps.Backend, unit, detect)
+		} else {
+			info = detect()
+		}
 	}
 	if needSelectors {
 		selectors = initDerivedProcessSelectors(info)
