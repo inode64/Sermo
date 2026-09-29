@@ -607,6 +607,29 @@ func (d Discoverer) StrictMatchPID(pid int, selectors []Selector) (Process, bool
 	return Process{}, false
 }
 
+// ClaimsPID reports whether pid is currently a process one of the command
+// selectors names by exact executable, including one whose binary was replaced
+// on disk. It serves observation-only identity checks (a pidfile check telling
+// its daemon from a process that recycled the PID) and authorizes nothing.
+// known is false when no selector declares an executable, so identity cannot
+// be judged and the caller keeps its liveness-only answer.
+func (d Discoverer) ClaimsPID(pid int, selectors []Selector) (claimed, known bool) {
+	for i := range selectors {
+		if selectors[i].Type == SelectorCommandMatch && selectors[i].Exe != "" {
+			known = true
+			break
+		}
+	}
+	if !known || pid <= 0 {
+		return false, known
+	}
+	id, ok := d.reader().Identity(pid)
+	if !ok {
+		return false, true
+	}
+	return d.claimedBy(selectors, id, d.resolveUser()), true
+}
+
 // matches reports whether a process satisfies a command selector. Every
 // configured field is ANDed. Exe is matched by exact resolved /proc/<pid>/exe;
 // cmd is an explicit regex over argv that narrows a shared binary down to one

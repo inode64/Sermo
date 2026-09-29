@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -118,5 +119,60 @@ func TestPidfileLiveFallbackPIDsFiltersNonPositiveAndDupes(t *testing.T) {
 	// pid <= 0 are dropped, duplicates collapsed: [5, 7].
 	if len(got) != 2 || got[0] != 5 || got[1] != 7 {
 		t.Fatalf("liveFallbackPIDs = %v, want [5 7]", got)
+	}
+}
+
+// A daemon that died unnoticed can leave its PID to an unrelated process; the
+// pidfile check must not report that stranger as the service running.
+func TestPidfileCheckRejectsPIDTheServiceDoesNotClaim(t *testing.T) {
+	tests := []struct {
+		name    string
+		claimed bool
+		known   bool
+		wantOK  bool
+	}{
+		{name: "claimed by a selector", claimed: true, known: true, wantOK: true},
+		{name: "recycled pid", known: true},
+		{name: "no exe selector to judge", wantOK: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := pidfileCheck{
+				name: "pid", timeout: time.Second, paths: []string{writePid(t, "4321")},
+				alive: func(int) bool { return true },
+				claim: func(pid int) (bool, bool) { return pid == 4321 && tt.claimed, tt.known },
+			}
+			res := c.Run(t.Context())
+			if res.OK != tt.wantOK || res.Unavailable {
+				t.Fatalf("result = %+v, want OK=%v", res, tt.wantOK)
+			}
+			if !tt.wantOK && !strings.Contains(res.Message, "not a process of this service") {
+				t.Fatalf("message = %q, want the identity failure", res.Message)
+			}
+		})
+	}
+}
+
+// A zombie has exited; only its parent has not reaped it yet.
+func TestPidRunningRejectsZombie(t *testing.T) {
+	exists := func(int) bool { return true }
+	state := func(pid int) (string, bool) {
+		switch pid {
+		case 10:
+			return "Z", true
+		case 11:
+			return "S", true
+		default:
+			return "", false
+		}
+	}
+	if pidRunning(10, exists, state) {
+		t.Fatal("a zombie must not count as running")
+	}
+	if !pidRunning(11, exists, state) || !pidRunning(12, exists, state) {
+		t.Fatal("a live process (state readable or not) must count as running")
+	}
+	if pidRunning(11, func(int) bool { return false }, state) {
+		t.Fatal("an absent pid must not count as running")
 	}
 }

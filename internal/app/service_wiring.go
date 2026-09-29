@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"slices"
 	"time"
 
 	"sermo/internal/cfgval"
@@ -118,6 +119,7 @@ func BuildServiceRuntime(ctx context.Context, cfg ServiceRuntimeConfig) ServiceR
 		// the service unrepairable through Sermo.
 		ProcessCount:        func(user, exe, exeDir string) int { return discoverer.CountInTree(selectors, user, exe, exeDir) },
 		PidfileFallbackPIDs: pidfileFallbackPIDs(needPidfileFallback, backendPIDs, procInfo),
+		PidfileClaim:        pidfileClaim(discoverer, selectors, backendPIDs),
 		StaleBinaries:       func() []process.StaleBinary { return discoverer.StaleBinaries(selectors) },
 		Strays: func() []process.Process {
 			procs, _ := discoverer.Discover(selectors)
@@ -165,6 +167,20 @@ func pidfileFallbackPIDs(needed bool, backendPIDs func() []int, info servicemgr.
 		return nil
 	}
 	return backendPIDs
+}
+
+// pidfileClaim lets a pidfile check reject a PID an unrelated process recycled
+// after the daemon died unnoticed. A PID counts as the service's when one of
+// its exact-executable selectors names it or, failing that, when the init
+// backend reports it for the unit (a wrapper the selectors do not describe).
+func pidfileClaim(discoverer process.Discoverer, selectors []process.Selector, backendPIDs func() []int) func(int) (bool, bool) {
+	return func(pid int) (bool, bool) {
+		claimed, known := discoverer.ClaimsPID(pid, selectors)
+		if !known || claimed || backendPIDs == nil {
+			return claimed, known
+		}
+		return slices.Contains(backendPIDs(), pid), true
+	}
 }
 
 // ServiceBackendPIDs returns the backend-owned process roots for one resolved
