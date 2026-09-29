@@ -72,7 +72,30 @@ const (
 	ActionReap                ActionType = "reap"
 	ActionCloseSession        ActionType = "close_session"
 	ActionCloseTerminalSource ActionType = "close_terminal_source"
+	// GuardBlocksSummary is the user-facing list of valid guard `blocks:` values.
+	GuardBlocksSummary = string(ActionRestart) + ", " +
+		string(ActionStart) + ", " +
+		string(ActionStop) + ", " +
+		string(ActionReload) + ", " +
+		string(ActionResume) + ", " +
+		string(ActionRepair) + ", " +
+		string(ActionReap) + ", " +
+		string(ActionCloseSession) + ", " +
+		string(ActionCloseTerminalSource)
 )
+
+// IsGuardTarget reports whether t may appear in a guard's `blocks:` list: a
+// service operation or one of the manual-only operations. Anything else can
+// never match a requested action, so accepting it would silently disable the
+// guard.
+func (t ActionType) IsGuardTarget() bool {
+	switch t {
+	case ActionRepair, ActionReap, ActionCloseSession, ActionCloseTerminalSource:
+		return true
+	default:
+		return t.IsOperation()
+	}
+}
 
 // guardedBy lists the `blocks:` entries that deny action: the action itself
 // plus every lifecycle action it performs. A guard that forbids a start must

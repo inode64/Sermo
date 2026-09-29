@@ -98,6 +98,11 @@ rules:
     blocks: [restart, 7]
     if: { failed: { check: http } }
     then: { action: block, message: "x" }
+  guard-typo-blocks:
+    type: guard
+    blocks: [restrat]
+    if: { failed: { check: http } }
+    then: { action: block, message: "x" }
 `,
 			want: []string{
 				"then.action \"explode\" is not one of",
@@ -105,6 +110,7 @@ rules:
 				"only guard rules may set blocks",
 				"action block requires a non-empty message",
 				"blocks must be a string or list of strings",
+				`guard-typo-blocks blocks entry "restrat" is not one of`,
 			},
 		},
 		{
@@ -986,6 +992,11 @@ rules:
   block-during-backup:
     type: guard
     blocks: [restart, stop]
+    if: { file: { path: /run/backup/flag, exists: true } }
+    then: { action: block, message: "backup running" }
+  block-manual-during-backup:
+    type: guard
+    blocks: [repair, reap, close_session, close_terminal_source]
     if: { file: { path: /run/backup/flag, exists: true } }
     then: { action: block, message: "backup running" }
   warn-cpu:

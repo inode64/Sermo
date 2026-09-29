@@ -3249,7 +3249,8 @@ a validation error.
 `blocks:` accepts `restart`, `start`, `stop`, `reload`, `resume` and the
 manual-only operations `repair`, `reap` (`sermoctl reap --apply`),
 `close_session` (closing an SSH or terminal session) and
-`close_terminal_source` (closing an empty tmux server). A guard applies to
+`close_terminal_source` (closing an empty tmux server). Any other value is a
+validation error, so a typo cannot silently disable a guard. A guard applies to
 the action it names **and** to every action that performs that step:
 
 | `blocks:` entry | also denies |

@@ -252,6 +252,11 @@ func validateRuleGuardActions(path string, entry map[string]any, isGuard bool, b
 	if blocksErr != nil || len(blocks) == 0 {
 		add("%s guard requires a non-empty blocks list", path)
 	}
+	for _, b := range blocks {
+		if !rules.ActionType(b).IsGuardTarget() {
+			add("%s blocks entry %q is not one of %s", path, b, rules.GuardBlocksSummary)
+		}
+	}
 	if !hasBlock {
 		add("%s guard rules must use action block", path)
 	}
