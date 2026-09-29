@@ -98,6 +98,19 @@ func (s *ServiceMetricSampler) recordLocked(name string, cur web.ServiceRuntime,
 	return cur
 }
 
+// Forget drops the in-memory samples and IO counters of a service the running
+// configuration no longer has. Persisted history stays in the store, so a
+// service that comes back under the same name still shows it.
+func (s *ServiceMetricSampler) Forget(name string) {
+	if s == nil {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.samples, name)
+	delete(s.prev, name)
+}
+
 // LatestWithAt returns the latest worker-published sample and its observation time.
 func (s *ServiceMetricSampler) LatestWithAt(name string) (web.ServiceRuntime, time.Time, bool) {
 	if s == nil {

@@ -137,7 +137,7 @@ func (m *Monitor) Reload(ctx context.Context) {
 
 	applyWorkerState(workers, savedWorkers)
 	applyWatchState(watches, savedWatches)
-	resetRemovedServiceMetrics(m.collector, oldWorkers, workers)
+	resetRemovedServiceMetrics(m.collector, m.deps.ServiceMetrics, oldWorkers, workers)
 
 	m.installGenerationLocked(ctx, newCfg, workers, watches, warnings)
 }
