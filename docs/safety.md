@@ -11,6 +11,9 @@ any `security:` toggle that tries to disable them.
    Guards are evaluated before remediation; a remediation action a guard blocks
    never runs. A guard that references a malformed check also denies the action,
    reporting the original construction error, including for optional checks.
+   A guard that blocks `start` also denies `restart` and `repair`, and one that
+   blocks `stop` also denies `restart` and `reap`: what an action performs, not
+   its name, decides which guards apply.
 3. **Active named runtime locks always block service actions.** The operation
    engine checks `<runtime>/locks` automatically — no rule needed.
 4. **Never signal an unverified residual.** `force_kill: auto` derives authority

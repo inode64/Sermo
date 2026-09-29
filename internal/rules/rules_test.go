@@ -628,6 +628,48 @@ func TestGuardBlocksMatchingAction(t *testing.T) {
 	}
 }
 
+// A guard names what must not happen; an action that performs a start or a
+// stop must pass the guards for that lifecycle step (safety invariant 2).
+func TestGuardAppliesToActionsThatPerformTheBlockedStep(t *testing.T) {
+	guard := func(blocks ...string) []Rule {
+		return []Rule{{
+			Name:    "maintenance",
+			Type:    RuleGuard,
+			Blocks:  blocks,
+			If:      map[string]any{ConditionActive: map[string]any{FieldCheck: "flag"}},
+			Actions: []Action{{Type: ActionBlock, Message: "maintenance"}},
+		}}
+	}
+	tests := []struct {
+		name   string
+		blocks []string
+		action ActionType
+		want   bool
+	}{
+		{name: "start guard blocks repair", blocks: []string{"start"}, action: ActionRepair, want: true},
+		{name: "start guard blocks restart", blocks: []string{"start"}, action: ActionRestart, want: true},
+		{name: "stop guard blocks restart", blocks: []string{"stop"}, action: ActionRestart, want: true},
+		{name: "stop guard blocks reap", blocks: []string{"stop"}, action: ActionReap, want: true},
+		{name: "repair named literally", blocks: []string{"repair"}, action: ActionRepair, want: true},
+		{name: "close_session named literally", blocks: []string{"close_session"}, action: ActionCloseSession, want: true},
+		{name: "close_terminal_source named literally", blocks: []string{"close_terminal_source"}, action: ActionCloseTerminalSource, want: true},
+		{name: "stop guard leaves session close alone", blocks: []string{"stop", "restart"}, action: ActionCloseSession, want: false},
+		{name: "start guard leaves stop alone", blocks: []string{"start"}, action: ActionStop, want: false},
+		{name: "restart guard leaves start alone", blocks: []string{"restart"}, action: ActionStart, want: false},
+		{name: "repair guard leaves start alone", blocks: []string{"repair"}, action: ActionStart, want: false},
+		{name: "stop guard leaves reload alone", blocks: []string{"stop"}, action: ActionReload, want: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ev := &Evaluator{Cache: cache(map[string]bool{"flag": true})}
+			blocked, _, err := Guard(context.Background(), guard(tt.blocks...), string(tt.action), ev)
+			if err != nil || blocked != tt.want {
+				t.Fatalf("Guard(%v, %s) = %v, %v; want %v", tt.blocks, tt.action, blocked, err, tt.want)
+			}
+		})
+	}
+}
+
 func TestGuardReasonUsesBlockMessage(t *testing.T) {
 	ruleSet := []Rule{{
 		Name:   "block-during-backup",
