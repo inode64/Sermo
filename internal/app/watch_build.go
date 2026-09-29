@@ -997,13 +997,13 @@ func resolveNotifiers(names []string, reg map[string]notify.Notifier) []notify.N
 }
 
 // serviceMonitorWatches synthesizes the per-service version/config monitors from
-// each resolved service's `version:`/`config:` blocks, reusing the daemon's
+// each enabled service's `version:`/`config:` blocks, reusing the daemon's
 // `commands.version` and `preflight.config`. They are built once (like host
 // watches) so their on_change detection persists across cycles.
 func serviceMonitorWatches(cfg *config.Config, deps Deps) ([]*Watch, []string) {
 	var watches []*Watch
 	var warnings []string
-	for _, resolution := range cfg.ResolveServices(cfg.SortedServiceNames()) {
+	for _, resolution := range cfg.ResolveServices(cfg.EnabledServiceNames()) {
 		resolved, errs := resolution.Resolved, resolution.Errors
 		if len(errs) > 0 || resolved.Tree == nil {
 			continue

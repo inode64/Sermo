@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"sermo/internal/config"
 	"sermo/internal/execx"
 	"sermo/internal/execx/execxtest"
 	"sermo/internal/notify"
@@ -255,5 +256,31 @@ func TestServiceChangeMonitorsInheritDryRun(t *testing.T) {
 	}
 	if !configWatch.DryRun {
 		t.Fatal("config monitor should inherit service dry_run")
+	}
+}
+
+// TestServiceMonitorWatchesSkipDisabledServices: top-level `enabled: false`
+// disables the service entirely, including its version/config monitors.
+func TestServiceMonitorWatchesSkipDisabledServices(t *testing.T) {
+	service := func(name string, enabled bool) *config.Document {
+		return &config.Document{Name: name, Kind: config.CategoryService, Body: map[string]any{
+			"service":  name,
+			"enabled":  enabled,
+			"commands": map[string]any{"version": map[string]any{"command": []any{"/bin/true"}}},
+			"version":  map[string]any{"on_change": map[string]any{"notify": []any{"ops"}}},
+		}}
+	}
+	cfg := &config.Config{
+		ServiceNames: []string{"api", "web"},
+		Services:     map[string]*config.Document{"api": service("api", true), "web": service("web", false)},
+	}
+
+	watches, warnings := serviceMonitorWatches(cfg, monitorTestDeps())
+	names := make([]string, 0, len(watches))
+	for _, w := range watches {
+		names = append(names, w.Name)
+	}
+	if !reflect.DeepEqual(names, []string{"api:version"}) || len(warnings) != 0 {
+		t.Fatalf("service monitors = %v warnings = %v, want only api:version", names, warnings)
 	}
 }
