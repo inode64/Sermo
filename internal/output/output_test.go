@@ -3,6 +3,7 @@ package output
 import (
 	"strings"
 	"testing"
+	"unicode/utf8"
 )
 
 func TestBounded(t *testing.T) {
@@ -44,6 +45,19 @@ func TestBoundTailBoundaries(t *testing.T) {
 	exact := strings.Repeat("a", boundedMaxBytes)
 	if strings.HasPrefix(boundTail(exact), "… (truncated)") {
 		t.Errorf("a %d-byte single line must not be truncated", boundedMaxBytes)
+	}
+}
+
+func TestBoundTailKeepsWholeCharactersOnALongLine(t *testing.T) {
+	// A single line longer than the cap with multi-byte characters: the byte
+	// cut lands inside one and there is no line break to realign on.
+	long := strings.Repeat("€", boundedMaxBytes) // 3 bytes each; 4096 is not a multiple of 3
+	got := boundTail(long)
+	if !utf8.ValidString(got) {
+		t.Fatalf("tail starts inside a character: %q…", got[:20])
+	}
+	if !strings.HasPrefix(got, truncatedOutputPrefix+"€") || len(got) > len(truncatedOutputPrefix)+boundedMaxBytes {
+		t.Fatalf("tail = %d bytes, want whole characters within the cap", len(got))
 	}
 }
 
