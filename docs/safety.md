@@ -404,6 +404,10 @@ daemon-cycle remediation. They still use the same safety posture:
 - Mount blocker signalling requires `mount.stop_policy.kill_only_if` with
   restrictive `users` and `exe_any` selectors. Only blockers that match that
   selector are signalled; cmdline is display data and never authorizes a kill.
+  Delivery uses the same pidfd path as reaping, bound to the blocker's start
+  time, exact executable and real UID; a blocker whose identity cannot be
+  verified is reported, not signalled, and each refused delivery is named in
+  the result.
 - Forced and lazy unmount are per-action choices: `--force` / Web `force`
   permits `umount -f`, and `--lazy` / Web `lazy` permits `umount -l` as the last
   fallback.

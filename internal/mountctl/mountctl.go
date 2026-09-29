@@ -496,6 +496,16 @@ func (c Controller) unmount(ctx context.Context, spec Spec, opts ReleaseOptions)
 		})
 		result.Signalled = reaped.Signalled
 		result.Blockers = reaped.Remaining
+		if len(reaped.Failed) > 0 {
+			// A refused or failed delivery (identity changed, pidfd unavailable)
+			// explains why an authorized blocker is still there; without it the
+			// operator only sees "mount is busy".
+			failures := make([]string, 0, len(reaped.Failed))
+			for _, failure := range reaped.Failed {
+				failures = append(failures, fmt.Sprintf("pid %d: %v", failure.PID, failure.Err))
+			}
+			result.Message = fmt.Sprintf("%s (signal failed: %s)", result.Message, strings.Join(failures, "; "))
+		}
 		if err := c.run(ctx, ActionUmount, spec.Path); err == nil {
 			return Result{Name: spec.Name, Path: spec.Path, Action: ActionUmount, Status: ResultOK, Message: mountMessageUnmountedAfterSignal, Mounted: false, Signalled: reaped.Signalled}, nil
 		}
@@ -754,19 +764,7 @@ func ProcessesByMount(ctx context.Context, mountPaths []string, lookup *process.
 			continue
 		}
 		if id, ok := reader.Identity(pid); ok {
-			proc := process.Process{
-				PID:     id.PID,
-				PPID:    id.PPID,
-				User:    id.User,
-				UID:     id.UID,
-				Group:   id.Group,
-				GID:     id.GID,
-				Exe:     id.Exe,
-				ExeOK:   id.ExeOK,
-				Cmdline: id.Cmdline,
-				Role:    processRoleMountUser,
-				Source:  processSourceMount,
-			}
+			proc := mountUserProcess(id)
 			for _, mountPath := range matches {
 				out[mountPath] = append(out[mountPath], proc)
 			}
@@ -776,6 +774,30 @@ func ProcessesByMount(ctx context.Context, mountPaths []string, lookup *process.
 		slices.SortFunc(out[mountPath], func(a, b process.Process) int { return cmp.Compare(a.PID, b.PID) })
 	}
 	return out, nil
+}
+
+// mountUserProcess builds a blocker from its identity. It carries the kernel
+// start time because the pidfd signaler binds delivery to that generation and
+// refuses a target without it; an unreadable start time stays zero so the
+// blocker is still reported but can never be signalled.
+func mountUserProcess(id process.Identity) process.Process {
+	proc := process.Process{
+		PID:     id.PID,
+		PPID:    id.PPID,
+		User:    id.User,
+		UID:     id.UID,
+		Group:   id.Group,
+		GID:     id.GID,
+		Exe:     id.Exe,
+		ExeOK:   id.ExeOK,
+		Cmdline: id.Cmdline,
+		Role:    processRoleMountUser,
+		Source:  processSourceMount,
+	}
+	if id.StartTicksOK {
+		proc.StartTicks = id.StartTicks
+	}
+	return proc
 }
 
 func cleanMountPaths(mountPaths []string) []string {
