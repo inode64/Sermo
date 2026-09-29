@@ -171,7 +171,7 @@ func TestExpandExt4CapsToFreeAndGrows(t *testing.T) {
 	r := &execxtest.Runner{ByName: map[string]execx.Result{
 		"vgs": {Stdout: "  2147483648\n"}, // 2 GiB free
 	}}
-	e := Expander{Runner: r}
+	e := Expander{Runner: r, FSSize: steadyFSSize}
 	tgt := Target{Mountpoint: "/mnt/backup", FSType: "ext4", VG: "vg0", LV: "data"}
 
 	// Request 5 GiB but only 2 GiB free -> cap to 2 GiB.
@@ -183,11 +183,108 @@ func TestExpandExt4CapsToFreeAndGrows(t *testing.T) {
 		t.Fatalf("GrewBytes = %d, want %d", res.GrewBytes, 2<<30)
 	}
 	want := []string{
+		"resize2fs /dev/vg0/data", // no pending growth: a no-op
+		"lvs --noheadings -o lv_layout,pool_lv --separator | vg0/data",
 		"vgs --noheadings -o vg_free --units b --nosuffix vg0",
 		"lvextend -L+2147483648b /dev/vg0/data",
 		"resize2fs /dev/vg0/data",
 	}
 	assertCalls(t, r.Lines(), want)
+}
+
+// steadyFSSize is a filesystem that already fills its LV.
+func steadyFSSize(string) (int64, error) { return 10 << 30, nil }
+
+// growingFSSize reports sizes in turn, as statfs does around a grow.
+func growingFSSize(sizes ...int64) func(string) (int64, error) {
+	return func(string) (int64, error) {
+		size := sizes[0]
+		if len(sizes) > 1 {
+			sizes = sizes[1:]
+		}
+		return size, nil
+	}
+}
+
+// An earlier run extended the LV but its resize2fs failed. The retry must grow
+// the filesystem into that space, not extend the LV a second time.
+func TestExpandFinishesPendingFilesystemGrowWithoutReextending(t *testing.T) {
+	r := &execxtest.Runner{ByName: map[string]execx.Result{"vgs": {Stdout: "2147483648"}}}
+	e := Expander{Runner: r, FSSize: growingFSSize(10<<30, 12<<30)}
+	tgt := Target{Mountpoint: "/mnt/backup", FSType: "ext4", VG: "vg0", LV: "data"}
+
+	res, err := e.Expand(context.Background(), tgt, 2<<30)
+	if err != nil {
+		t.Fatalf("Expand: %v", err)
+	}
+	if res.GrewBytes != 2<<30 {
+		t.Fatalf("GrewBytes = %d, want the recovered 2 GiB", res.GrewBytes)
+	}
+	assertCalls(t, r.Lines(), []string{"resize2fs /dev/vg0/data"})
+}
+
+// When the filesystem grow keeps failing, extending the LV again only piles
+// up space nothing can use.
+func TestExpandDoesNotExtendWhenFilesystemGrowFails(t *testing.T) {
+	r := &execxtest.Runner{
+		ByName: map[string]execx.Result{"vgs": {Stdout: "2147483648"}, "resize2fs": {ExitCode: 1, Stderr: "resize2fs: Device or resource busy"}},
+		Errs:   map[string]error{"resize2fs": fmt.Errorf("exit status 1")},
+	}
+	e := Expander{Runner: r, FSSize: steadyFSSize}
+	tgt := Target{Mountpoint: "/mnt/backup", FSType: "ext4", VG: "vg0", LV: "data"}
+
+	if _, err := e.Expand(context.Background(), tgt, 1<<30); err == nil || !strings.Contains(err.Error(), "refusing to extend vg0/data") {
+		t.Fatalf("Expand error = %v, want refusal before lvextend", err)
+	}
+	for _, call := range r.Lines() {
+		if strings.HasPrefix(call, "lvextend") {
+			t.Fatalf("calls = %v; lvextend must not run while the filesystem cannot grow", r.Lines())
+		}
+	}
+}
+
+// A thin LV grows virtually: vg_free says nothing about whether the pool can
+// back it. The cap is the pool's free data space.
+func TestExpandThinLVCapsToPoolFreeSpace(t *testing.T) {
+	r := &execxtest.Runner{
+		ByLine: map[string]execx.Result{
+			"lvs --noheadings -o lv_layout,pool_lv --separator | vg0/data":                          {Stdout: "  thin,sparse|pool0\n"},
+			"lvs --noheadings -o lv_size,data_percent --separator | --units b --nosuffix vg0/pool0": {Stdout: "  10737418240|90.00\n"},
+		},
+		ByName: map[string]execx.Result{"vgs": {Stdout: "107374182400"}},
+	}
+	e := Expander{Runner: r, FSSize: steadyFSSize}
+	tgt := Target{Mountpoint: "/mnt/backup", FSType: "xfs", VG: "vg0", LV: "data"}
+
+	res, err := e.Expand(context.Background(), tgt, 5<<30)
+	if err != nil {
+		t.Fatalf("Expand: %v", err)
+	}
+	if res.GrewBytes != 1<<30 {
+		t.Fatalf("GrewBytes = %d, want the pool's free 1 GiB, not vg_free", res.GrewBytes)
+	}
+	for _, call := range r.Lines() {
+		if strings.HasPrefix(call, "vgs") {
+			t.Fatalf("calls = %v; a thin LV must not be capped by vg_free", r.Lines())
+		}
+	}
+}
+
+func TestExpandThinLVFullPoolErrors(t *testing.T) {
+	r := &execxtest.Runner{ByLine: map[string]execx.Result{
+		"lvs --noheadings -o lv_layout,pool_lv --separator | vg0/data":                          {Stdout: "thin,sparse|pool0"},
+		"lvs --noheadings -o lv_size,data_percent --separator | --units b --nosuffix vg0/pool0": {Stdout: "10737418240|100,00"},
+	}}
+	e := Expander{Runner: r, FSSize: steadyFSSize}
+	tgt := Target{Mountpoint: "/mnt/backup", FSType: "ext4", VG: "vg0", LV: "data"}
+	if _, err := e.Expand(context.Background(), tgt, 1<<30); err == nil || !strings.Contains(err.Error(), "thin pool vg0/pool0") {
+		t.Fatalf("Expand error = %v, want a full thin pool refusal", err)
+	}
+	for _, call := range r.Lines() {
+		if strings.HasPrefix(call, "lvextend") {
+			t.Fatalf("calls = %v; must not lvextend into a full thin pool", r.Lines())
+		}
+	}
 }
 
 func TestExpandXFSAndBtrfsUseMountpoint(t *testing.T) {
@@ -199,7 +296,7 @@ func TestExpandXFSAndBtrfsUseMountpoint(t *testing.T) {
 		{"btrfs", "btrfs filesystem resize max /mnt/backup"},
 	} {
 		r := &execxtest.Runner{ByName: map[string]execx.Result{"vgs": {Stdout: "1073741824"}}}
-		e := Expander{Runner: r}
+		e := Expander{Runner: r, FSSize: steadyFSSize}
 		tgt := Target{Mountpoint: "/mnt/backup", FSType: tc.fs, VG: "vg0", LV: "data"}
 		if _, err := e.Expand(context.Background(), tgt, 512<<20); err != nil {
 			t.Fatalf("%s Expand: %v", tc.fs, err)
@@ -213,7 +310,7 @@ func TestExpandXFSAndBtrfsUseMountpoint(t *testing.T) {
 func TestExpandRejectsNonPositiveSize(t *testing.T) {
 	for _, by := range []int64{0, -1 << 20} {
 		r := &execxtest.Runner{ByName: map[string]execx.Result{"vgs": {Stdout: "2147483648"}}}
-		e := Expander{Runner: r}
+		e := Expander{Runner: r, FSSize: steadyFSSize}
 		tgt := Target{Mountpoint: "/mnt/backup", FSType: "ext4", VG: "vg0", LV: "data"}
 		if _, err := e.Expand(context.Background(), tgt, by); err == nil {
 			t.Fatalf("Expand(by=%d) must error, not run lvextend", by)
@@ -228,7 +325,7 @@ func TestExpandRejectsNonPositiveSize(t *testing.T) {
 
 func TestExpandNoFreeSpaceErrors(t *testing.T) {
 	r := &execxtest.Runner{ByName: map[string]execx.Result{"vgs": {Stdout: "0"}}}
-	e := Expander{Runner: r}
+	e := Expander{Runner: r, FSSize: steadyFSSize}
 	tgt := Target{Mountpoint: "/mnt/backup", FSType: "ext4", VG: "vg0", LV: "data"}
 	if _, err := e.Expand(context.Background(), tgt, 1<<30); err == nil {
 		t.Fatal("expand with zero VG free must error")
@@ -242,7 +339,7 @@ func TestExpandNoFreeSpaceErrors(t *testing.T) {
 
 func TestExpandUnknownFSErrors(t *testing.T) {
 	r := &execxtest.Runner{ByName: map[string]execx.Result{"vgs": {Stdout: "1073741824"}}}
-	e := Expander{Runner: r}
+	e := Expander{Runner: r, FSSize: steadyFSSize}
 	tgt := Target{Mountpoint: "/x", FSType: "reiserfs", VG: "vg0", LV: "data"}
 	if _, err := e.Expand(context.Background(), tgt, 1<<20); err == nil {
 		t.Fatal("unknown fstype must error")
