@@ -176,23 +176,23 @@ func TestArtifactSamplesDeferChangeUntilSampled(t *testing.T) {
 	}
 	samples := NewArtifactSamples()
 	samples.RegisterFile(path)
-	baseline := map[string]string{}
+	baseline := NewArtifactBaseline()
 
-	if changed, err := artifactPathChanged(baseline, path, samples); err != nil || changed {
+	if changed, err := baseline.Changed(path, samples); err != nil || changed {
 		t.Fatalf("unsampled library = changed:%t err:%v, want false nil", changed, err)
 	}
 	samples.StoreFile(path)
-	if changed, err := artifactPathChanged(baseline, path, samples); err != nil || changed {
+	if changed, err := baseline.Changed(path, samples); err != nil || changed {
 		t.Fatalf("first sample = changed:%t err:%v, want false nil", changed, err)
 	}
 	if err := os.WriteFile(path, []byte("second value"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if changed, err := artifactPathChanged(baseline, path, samples); err != nil || changed {
+	if changed, err := baseline.Changed(path, samples); err != nil || changed {
 		t.Fatalf("stale sample = changed:%t err:%v, want false nil", changed, err)
 	}
 	samples.StoreFile(path)
-	if changed, err := artifactPathChanged(baseline, path, samples); err != nil || !changed {
+	if changed, err := baseline.Changed(path, samples); err != nil || !changed {
 		t.Fatalf("updated sample = changed:%t err:%v, want true nil", changed, err)
 	}
 }
@@ -203,9 +203,9 @@ func TestArtifactPathChangedUsesCachedSampleWithoutFingerprinting(t *testing.T) 
 	samples.RegisterFile(path)
 	samples.StoreFile(path)
 	fingerprint, _, _ := samples.FileFingerprint(path)
-	baseline := map[string]string{path: fingerprint}
+	baseline := &ArtifactBaseline{fingerprints: map[string]string{path: fingerprint}}
 
-	if changed, err := artifactPathChangedWithFingerprint(baseline, path, samples, func(string) string {
+	if changed, err := baseline.changedWithFingerprint(path, samples, func(string) string {
 		t.Fatal("cached artifact must not call the direct fingerprinter")
 		return ""
 	}); err != nil || changed {
@@ -226,9 +226,9 @@ func TestAcknowledgeChangesRefreshesArtifactSample(t *testing.T) {
 	}
 	want := fileFingerprint(path)
 
-	w := &Worker{artifactSamples: samples, libBaseline: map[string]string{path: "previous"}}
+	w := &Worker{artifactSamples: samples, libBaseline: &ArtifactBaseline{fingerprints: map[string]string{path: "previous"}}}
 	w.acknowledgeChanges()
-	if got := w.libBaseline[path]; got != want {
+	if got := w.libBaseline.snapshot()[path]; got != want {
 		t.Fatalf("acknowledged fingerprint = %q, want refreshed sample %q", got, want)
 	}
 	if got, _, _ := samples.FileFingerprint(path); got != want {
@@ -546,15 +546,15 @@ func TestBuildArtifactPathWatchesSampleSilently(t *testing.T) {
 		t.Fatalf("artifact path sampler must not emit events, got %+v", events)
 	}
 
-	baseline := map[string]string{}
-	if changed, err := artifactPathChanged(baseline, path, samples); err != nil || changed {
+	baseline := NewArtifactBaseline()
+	if changed, err := baseline.Changed(path, samples); err != nil || changed {
 		t.Fatalf("first artifact sample = changed:%t err:%v, want false nil", changed, err)
 	}
 	if err := os.WriteFile(path, []byte("updated"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	sampler.RunCycle(context.Background())
-	if changed, err := artifactPathChanged(baseline, path, samples); err != nil || !changed {
+	if changed, err := baseline.Changed(path, samples); err != nil || !changed {
 		t.Fatalf("updated artifact sample = changed:%t err:%v, want true nil", changed, err)
 	}
 	if len(events) != 0 {

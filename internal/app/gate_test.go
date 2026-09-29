@@ -1,7 +1,10 @@
 package app
 
 import (
+	"fmt"
 	"os"
+	"path/filepath"
+	"sync"
 	"testing"
 
 	"sermo/internal/checks"
@@ -58,7 +61,7 @@ func TestArtifactChangedFuncSharesWorkerBaseline(t *testing.T) {
 	path := dir + "/lib.so"
 	writeFile(t, path, "v1")
 
-	baseline := map[string]string{}
+	baseline := NewArtifactBaseline()
 	changed := ArtifactChangedFunc(baseline, nil)
 	w := &Worker{libBaseline: baseline}
 
@@ -75,12 +78,41 @@ func TestArtifactChangedFuncSharesWorkerBaseline(t *testing.T) {
 	}
 }
 
+// TestArtifactBaselineConcurrentCascade covers an also_apply cascade: the
+// cascading service's goroutine runs the target's engine, whose `changed:`
+// guards adopt first observations, while the target's own worker evaluates
+// and acknowledges the same baseline.
+func TestArtifactBaselineConcurrentCascade(t *testing.T) {
+	dir := t.TempDir()
+	paths := make([]string, 256)
+	for i := range paths {
+		paths[i] = filepath.Join(dir, fmt.Sprintf("lib%d.so", i))
+	}
+	baseline := NewArtifactBaseline()
+	engineChanged := ArtifactChangedFunc(baseline, nil)
+	w := &Worker{libBaseline: baseline}
+
+	var wg sync.WaitGroup
+	wg.Go(func() {
+		for _, path := range paths {
+			_, _ = engineChanged(path)
+		}
+	})
+	wg.Go(func() {
+		for _, path := range paths {
+			_, _ = w.changed(path)
+			w.acknowledgeChanges()
+		}
+	})
+	wg.Wait()
+}
+
 func TestApplyGatesSkipWhenChanged(t *testing.T) {
 	dir := t.TempDir()
 	path := dir + "/conf"
 	writeFile(t, path, "v1")
 
-	w := &Worker{libBaseline: map[string]string{}, Gates: map[string]CheckGate{
+	w := &Worker{libBaseline: NewArtifactBaseline(), Gates: map[string]CheckGate{
 		"probe": {SkipWhenChanged: []string{path}},
 	}}
 	// first observation primes the baseline -> not skipped

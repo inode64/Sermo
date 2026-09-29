@@ -24,7 +24,7 @@ func TestCaptureAndApplyWorkerState(t *testing.T) {
 			ws.FiresAt(r, true, time.Now())
 			return map[string]*rules.WindowState{"restart-if-down": ws}
 		}(),
-		libBaseline:  map[string]string{"/etc/app.conf": "1:2"},
+		libBaseline:  &ArtifactBaseline{fingerprints: map[string]string{"/etc/app.conf": "1:2"}},
 		checkFailing: map[string]bool{"service": true},
 	}
 	saved := captureWorkerState([]*Worker{old})
@@ -41,8 +41,8 @@ func TestCaptureAndApplyWorkerState(t *testing.T) {
 	if got := fresh.windows["restart-if-down"].Snapshot().Consecutive; got != 2 {
 		t.Fatalf("window consecutive = %d, want 2", got)
 	}
-	if fresh.libBaseline["/etc/app.conf"] != "1:2" {
-		t.Fatalf("baseline = %+v", fresh.libBaseline)
+	if fresh.libBaseline.snapshot()["/etc/app.conf"] != "1:2" {
+		t.Fatalf("baseline = %+v", fresh.libBaseline.snapshot())
 	}
 	if !fresh.checkFailing["service"] {
 		t.Fatalf("check health state = %+v, want service failing", fresh.checkFailing)

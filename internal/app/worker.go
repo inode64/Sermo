@@ -165,8 +165,9 @@ type Worker struct {
 	// evaluates cleanly again.
 	evalErrs map[string]string
 	// libBaseline holds the acknowledged fingerprint of each watched path (a
-	// `changed:` condition target, typically a library .so) across cycles.
-	libBaseline map[string]string
+	// `changed:` condition target, typically a library .so) across cycles. The
+	// operation engine shares it (see ArtifactBaseline).
+	libBaseline *ArtifactBaseline
 	// artifactSamples provides cadence-limited catalog app/library/file observations.
 	artifactSamples *ArtifactSamples
 
@@ -916,32 +917,15 @@ func (*Worker) evalRule(ctx context.Context, ev *rules.Evaluator, r rules.Rule, 
 }
 
 // ArtifactChangedFunc returns a `changed:` evaluator backed by baseline. The
-// worker and operation engine share the same map so manual actions honor the
-// same acknowledged fingerprints as automatic remediation.
-func ArtifactChangedFunc(baseline map[string]string, artifactSamples *ArtifactSamples) func(string) (bool, error) {
+// worker and operation engine share the same baseline so manual actions honor
+// the same acknowledged fingerprints as automatic remediation.
+func ArtifactChangedFunc(baseline *ArtifactBaseline, artifactSamples *ArtifactSamples) func(string) (bool, error) {
 	if baseline == nil {
 		return nil
 	}
 	return func(path string) (bool, error) {
-		return artifactPathChanged(baseline, path, artifactSamples)
+		return baseline.Changed(path, artifactSamples)
 	}
-}
-
-func artifactPathChanged(baseline map[string]string, path string, samples *ArtifactSamples) (bool, error) {
-	return artifactPathChangedWithFingerprint(baseline, path, samples, fileFingerprint)
-}
-
-func artifactPathChangedWithFingerprint(baseline map[string]string, path string, samples *ArtifactSamples, directFingerprint func(string) string) (bool, error) {
-	cur, observed := currentArtifactFingerprint(path, samples, directFingerprint)
-	if !observed {
-		return false, nil
-	}
-	base, seen := baseline[path]
-	if !seen {
-		baseline[path] = cur
-		return false, nil
-	}
-	return cur != base, nil
 }
 
 // currentArtifactFingerprint returns the cache sample when the path is an
@@ -961,27 +945,15 @@ func currentArtifactFingerprint(path string, samples *ArtifactSamples, directFin
 }
 
 // changed reports whether the file at path differs from the acknowledged
-// baseline. The first observation adopts the current fingerprint (so a daemon
-// start never triggers a restart); thereafter it is true until acknowledged.
+// baseline (see ArtifactBaseline.Changed).
 func (w *Worker) changed(path string) (bool, error) {
-	return artifactPathChanged(w.libBaseline, path, w.artifactSamples)
+	return w.libBaseline.Changed(path, w.artifactSamples)
 }
 
-// acknowledgeChanges refreshes every watched baseline and cache entry after a
-// successful (re)launch. This one-off refresh keeps the acknowledged baseline
-// aligned with the cache when an artifact changes during the operation, without
-// adding filesystem work to normal service cycles.
+// acknowledgeChanges adopts the current file fingerprints and sampled app
+// versions as the new baseline after a successful (re)launch.
 func (w *Worker) acknowledgeChanges() {
-	for path := range w.libBaseline {
-		if w.artifactSamples != nil {
-			if _, tracked, _ := w.artifactSamples.FileFingerprint(path); tracked {
-				w.artifactSamples.StoreFile(path)
-			}
-		}
-		if fingerprint, observed := currentArtifactFingerprint(path, w.artifactSamples, fileFingerprint); observed {
-			w.libBaseline[path] = fingerprint
-		}
-	}
+	w.libBaseline.Acknowledge(w.artifactSamples)
 	// Adopt the version sampled during this cycle's rule evaluation as the new
 	// baseline. After a successful restart the service runs the upgraded app, so
 	// the last-seen version is the one to acknowledge; this clears the pending

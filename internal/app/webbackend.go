@@ -442,7 +442,7 @@ func attachServiceRuntime(ctx context.Context, entry *webEntry, name string, tre
 	serviceDeps.BackendPIDs = target.BackendPIDs
 	runtime := BuildServiceRuntime(ctx, ServiceRuntimeConfig{
 		Service: name, Unit: target.Unit, Tree: tree, Deps: serviceDeps,
-		LibraryBaseline: map[string]string{}, RecordOperation: operationEventEmitter(deps.Emit),
+		LibraryBaseline: NewArtifactBaseline(), RecordOperation: operationEventEmitter(deps.Emit),
 	})
 	engine, checkDeps, discoverer := runtime.Engine, runtime.CheckDeps, runtime.Discoverer
 	selectors, processWarnings := runtime.Selectors, runtime.ProcessWarnings
