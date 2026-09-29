@@ -34,6 +34,56 @@ checks:
 			absent: []string{"checks.conn"},
 		},
 		{
+			name: "postgres alias sslmode disable accepted",
+			service: `
+name: db
+service: x
+checks:
+  conn: { type: postgresql, user: monitor, tls: disable }
+`,
+			absent: []string{"checks.conn"},
+		},
+		{
+			name: "sslmode rejected outside postgres",
+			service: `
+name: cache
+service: x
+checks:
+  conn: { type: redis, tls: disable }
+`,
+			want: []string{`checks.conn.tls "disable" must be a boolean or skip-verify`},
+		},
+		{
+			name: "sslmode rejected for mysql sql check",
+			service: `
+name: db
+service: x
+checks:
+  rows: { type: sql, engine: mysql, user: u, query: "select 1", op: "==", value: 1, tls: verify-full }
+`,
+			want: []string{`checks.rows.tls "verify-full" must be a boolean or skip-verify`},
+		},
+		{
+			name: "sslmode accepted for postgres sql check",
+			service: `
+name: db
+service: x
+checks:
+  rows: { type: sql, engine: postgres, user: u, query: "select 1", op: "==", value: 1, tls: verify-full }
+`,
+			absent: []string{"checks.rows"},
+		},
+		{
+			name: "sslmode rejected for mongodb query check",
+			service: `
+name: db
+service: x
+checks:
+  docs: { type: mongodb-query, command: '{"ping":1}', result: ok, op: "==", value: 1, tls: prefer }
+`,
+			want: []string{`checks.docs.tls "prefer" must be a boolean or skip-verify`},
+		},
+		{
 			name: "cloudflared check valid",
 			service: `
 name: tunnel

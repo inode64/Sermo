@@ -1138,7 +1138,9 @@ keep the per-protocol entries short:
 - **`tls`** (where listed) accepts `false` (plaintext, the default), `true`
   (verified TLS) or `skip-verify` (TLS without certificate verification). Entries
   add only protocol-specific notes — the implicit-TLS port (e.g. IMAPS 993) or
-  extra modes (e.g. PostgreSQL sslmodes).
+  extra modes. The PostgreSQL sslmodes are accepted only by `postgres` (and a
+  `sql` check with a postgres engine); validation rejects them elsewhere, so
+  `tls: disable` can never switch TLS on for another protocol.
 - **Auth** is noted per entry; many protocols are anonymous.
 - **`socket`** (a Unix socket path) dials the socket instead of `host`/`port`;
   **`query`** is the per-protocol lookup target (e.g. the DNS name for `dns`).

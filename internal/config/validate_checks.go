@@ -409,12 +409,12 @@ func validateSmartFields(prefix string, fields map[string]any, add addFunc) {
 // is required (password is optional and may come from the environment), the
 // port must be numeric when present, and tls must be a boolean or one of the
 // known string modes.
-func validateConnFields(prefix string, fields map[string]any, requireUser bool, add addFunc) {
+func validateConnFields(prefix, protocol string, fields map[string]any, requireUser bool, add addFunc) {
 	if requireUser && cfgval.String(fields[checks.CheckKeyUser]) == "" {
 		add("%s.user is required for a connection check", prefix)
 	}
 	validateOptionalTCPPort(prefix, fields, add)
-	validateConnTLS(prefix, fields, add)
+	validateConnTLS(prefix, protocol, fields, add)
 	validateConnExpectations(prefix, fields, add)
 	validateConnChangeFlags(prefix, fields, add)
 }
@@ -462,14 +462,17 @@ func validateOptionalTCPPort(prefix string, fields map[string]any, add addFunc) 
 	}
 }
 
-func validateConnTLS(prefix string, fields map[string]any, add addFunc) {
+// validateConnTLS validates tls against the protocol that consumes it: only
+// postgres understands sslmode names, and every other transport would read one
+// as "TLS on" (so `tls: disable` would enable verified TLS).
+func validateConnTLS(prefix, protocol string, fields map[string]any, add addFunc) {
 	if v, present := fields[checks.CheckKeyTLS]; present {
 		switch t := v.(type) {
 		case bool:
 			// fine
 		case string:
-			if !conn.ValidTLSValue(t) {
-				add("%s.tls %q must be %s", prefix, t, conn.TLSValueSummary)
+			if !conn.ValidTLSValue(protocol, t) {
+				add("%s.tls %q must be %s", prefix, t, conn.TLSValueSummaryFor(protocol))
 			}
 		default:
 			add("%s.tls must be a boolean or a string (%s)", prefix, conn.TLSScalarSummary)
@@ -982,7 +985,7 @@ func validateSingleShotCheckFields(path, typ string, entry map[string]any, locks
 		// A connection-protocol check (mysql, …): the type names a protocol in
 		// the conn registry, validated generically below.
 		if proto, isProto := conn.Lookup(typ); isProto {
-			validateConnFields(path, entry, proto.RequiresUser(), add)
+			validateConnFields(path, typ, entry, proto.RequiresUser(), add)
 			if conn.SocketOnly(typ) {
 				validateSocketOnlyConnFields(path, entry, add)
 			}
@@ -1482,6 +1485,7 @@ func validateWebsocketFields(prefix string, fields map[string]any, add addFunc) 
 // result path where one is needed.
 func validateMongoFields(prefix string, fields map[string]any, add addFunc) {
 	validateAssertionFields(prefix, fields, add)
+	validateConnTLS(prefix, conn.ProtocolNameMongoDB, fields, add)
 
 	collection := cfgval.String(fields[checks.CheckKeyCollection])
 	command := cfgval.String(fields[checks.CheckKeyCommand])
@@ -1545,6 +1549,7 @@ func validateInterfaceFields(prefix string, fields map[string]any, add addFunc) 
 func validateInfluxFields(prefix string, fields map[string]any, add addFunc) {
 	requireCheckField(prefix, checks.CheckKeyQuery, "an influxdb-query check", fields, add)
 	validateAssertionFields(prefix, fields, add)
+	validateConnTLS(prefix, conn.ProtocolNameInfluxDB, fields, add)
 	language := cfgval.String(fields[checks.CheckKeyLanguage])
 	if language == "" {
 		language = checks.InfluxLanguageInfluxQL
@@ -1586,6 +1591,7 @@ func validateSQLFields(prefix string, fields map[string]any, add addFunc) {
 		requireCheckField(prefix, checks.CheckKeyPath, "a sqlite sql check", fields, add)
 	case checks.SQLEngineMySQL, checks.SQLEngineMariaDB, checks.SQLEnginePostgres, checks.SQLEnginePostgreSQL:
 		requireCheckField(prefix, checks.CheckKeyUser, "a "+engine+" sql check", fields, add)
+		validateConnTLS(prefix, engine, fields, add)
 	}
 }
 
@@ -1598,6 +1604,7 @@ func validateReplicationFields(prefix string, fields map[string]any, add addFunc
 		add("%s.engine must be mysql or mariadb for a replication check", prefix)
 	}
 	requireCheckField(prefix, checks.CheckKeyUser, "a replication check", fields, add)
+	validateConnTLS(prefix, conn.ProtocolNameMySQL, fields, add)
 	validatePresentThresholds(prefix, fields, []string{checks.CheckKeyBehind}, add)
 }
 

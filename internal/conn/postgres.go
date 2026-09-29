@@ -82,7 +82,7 @@ func sslMode(tls string) string {
 	switch strings.ToLower(strings.TrimSpace(tls)) {
 	case "", tlsModeFalse, tlsModeNo, tlsModeOff, tlsDisable:
 		return tlsDisable
-	case ParamValueTrue, tlsModeYes, tlsModeOn, tlsRequire, tlsSkipVerify:
+	case ParamValueTrue, tlsModeYes, tlsModeOn, tlsModeRequired, tlsRequire, tlsSkipVerify:
 		return tlsRequire
 	case tlsPrefer:
 		return tlsPrefer
