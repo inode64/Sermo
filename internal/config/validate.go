@@ -497,6 +497,11 @@ func validateDocument(cfg *Config, doc *Document) ([]Issue, bool) {
 			addDoc(validationNotSupportedFormat, key)
 		}
 	}
+	// mergedService folds a catalog service's body without following its own
+	// `uses`; only templates inherit a base (templateBody), one level deep.
+	if _, has := doc.Body[ServiceKeyUses]; has && doc.Category == CategoryService && tokenFor(doc.Name) == nil {
+		addDoc("%s is only supported on catalog service templates; nothing would inherit this base", ServiceKeyUses)
+	}
 	validateEnableIfTree(doc.Body, addDoc)
 	validateFromFileVariables(doc.Body[sectionVariables], addDoc)
 	issues = append(issues, validateBinaryVariables(doc, scope)...)

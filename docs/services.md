@@ -1843,19 +1843,26 @@ preflight:
   version_short: { type: command, command: ["${binary}","-r","echo PHP_VERSION;"], timeout: 10s }
 ```
 
-A service template may `uses` a base service to inherit its checks, processes and
-rules, while a linked app supplies the instance- or version-specific binary. The
-packaged `nebula-%i` service builds on the base `nebula` service and links the
-`nebula-${instance}` app:
+A service template may `uses` a base catalog service to inherit its checks,
+processes and rules, while a linked app supplies the instance- or
+version-specific binary:
 
 ```yaml
-name: nebula-%i
-uses: nebula
-display_name: "Nebula ${instance}"
-apps: ["nebula-${instance}"]
+name: myvpn-%i
+uses: myvpn                   # an existing catalog service, not a template
+display_name: "MyVPN ${instance}"
+service: { systemd: ["myvpn@${instance}"], openrc: ["myvpn.${instance}"] }
+apps: ["myvpn-${instance}"]
 ```
 
-A configured service then targets a concrete instance, e.g. `uses: nebula-nebula0`.
+Only a template's `uses` is followed, and only one level deep. Validation
+rejects a template whose `uses` names a missing catalog service or another
+template, and `uses` on a catalog service that is not a template, since
+nothing would inherit it.
+
+A configured service then targets a concrete instance: the packaged `nebula-%i`
+template materializes `nebula-nebula0` from `nebula@nebula0.service`, and a
+service file selects it with `uses: nebula-nebula0`.
 Active systemd/OpenRC units normally materialize catalog instances for discovery.
 An explicitly configured `uses:` instance also materializes when its unit is
 stopped or failed, so `sermod` can report that service state instead of rejecting
