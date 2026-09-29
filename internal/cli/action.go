@@ -57,7 +57,7 @@ func (a App) runAction(ctx context.Context, opts options, action string) int {
 		return a.fail(opts, err.Error())
 	}
 	defer closeRunner()
-	result, err := a.operateWithCascade(ctx, opts, cfg, resolved, service, action, actionStore, runner)
+	result, cascade, err := a.operateWithCascade(ctx, opts, cfg, resolved, service, action, actionStore, runner)
 	if err != nil {
 		a.recordAccess(cfg, action, service, accessStatusError, err.Error())
 		return a.fail(opts, err.Error())
@@ -71,25 +71,46 @@ func (a App) runAction(ctx context.Context, opts options, action string) int {
 	a.recordAccess(cfg, action, service, status, result.Message)
 
 	if opts.json {
-		writeJSON(a.Stdout, result)
+		writeJSON(a.Stdout, actionJSON{Result: result, Cascade: cascade})
 	} else if !opts.quiet {
 		a.printOperation(opts, result)
 	}
 	return operationExit(result.Status)
 }
 
+// actionJSON is the --json output of a service action: the primary result's
+// fields plus one entry per also_apply cascade target.
+type actionJSON struct {
+	operation.Result
+
+	Cascade []cascadeTargetJSON `json:"cascade,omitempty"`
+}
+
+// cascadeTargetJSON is one cascade target's final outcome. Error is set when
+// the target could not be operated at all (for example it failed to resolve).
+type cascadeTargetJSON struct {
+	Service string                 `json:"service"`
+	Action  string                 `json:"action"`
+	Status  operation.ResultStatus `json:"status,omitempty"`
+	Message string                 `json:"message,omitempty"`
+	Error   string                 `json:"error,omitempty"`
+}
+
 // operateWithCascade runs the action on the primary service, and — unless
 // --no-cascade — on the services it lists in also_apply, in dependency order
 // (start/restart: primary first; stop: additionals first). Targets run through
-// their own guarded operation; each target's result is printed. The primary's
-// result is returned and drives the exit code.
-func (a App) operateWithCascade(ctx context.Context, opts options, cfg *config.Config, resolved config.Resolved, service, action string, actionStore *state.Store, runner manualOperationRunner) (operation.Result, error) {
+// their own guarded operation; each target's outcome is printed, or returned
+// for the JSON document with --json so stdout stays one JSON value. The
+// primary's result is returned and drives the exit code.
+func (a App) operateWithCascade(ctx context.Context, opts options, cfg *config.Config, resolved config.Resolved, service, action string, actionStore *state.Store, runner manualOperationRunner) (operation.Result, []cascadeTargetJSON, error) {
 	targets := config.CascadeTargets(resolved.Tree)
 	// also_apply cascades only lifecycle actions that change running state. Manual
 	// repair and reap always act on the one service the operator named.
 	if opts.noCascade || !operation.CascadesAlsoApply(action) || len(targets) == 0 {
-		return a.operateWithManualState(ctx, cfg, resolved, service, action, actionStore, runner)
+		result, err := a.operateWithManualState(ctx, cfg, resolved, service, action, actionStore, runner)
+		return result, nil, err
 	}
+	cascade := cascadeOutcomes{index: map[string]int{}}
 	resolvedByService := map[string]config.Resolved{service: resolved}
 	resolveErrors := map[string]error{}
 	resolve := func(svc string) (config.Resolved, error) {
@@ -131,9 +152,10 @@ func (a App) operateWithCascade(ctx context.Context, opts options, cfg *config.C
 					cascadeEventErr = fmt.Errorf("record cascade event for %s: %w", svc, recordErr)
 				}
 			}
+			cascade.record(svc, action, out, err)
 			if err != nil {
 				fmt.Fprintf(a.Stderr, "cascade %s: %v\n", svc, err)
-			} else if !opts.quiet {
+			} else if !opts.json && !opts.quiet {
 				fmt.Fprintf(a.Stdout, "cascade %s: %s %s\n", svc, action, out.Status)
 			}
 			if err == nil {
@@ -145,7 +167,28 @@ func (a App) operateWithCascade(ctx context.Context, opts options, cfg *config.C
 	if primaryErr == nil && cascadeEventErr != nil {
 		primaryErr = cascadeEventErr
 	}
-	return primary, primaryErr
+	return primary, cascade.targets, primaryErr
+}
+
+// cascadeOutcomes collects one entry per cascade target in first-run order.
+type cascadeOutcomes struct {
+	targets []cascadeTargetJSON
+	index   map[string]int
+}
+
+// record stores a target's outcome; a retried target (blocked, then run
+// again) keeps only its final outcome.
+func (c *cascadeOutcomes) record(svc, action string, out operation.Result, err error) {
+	entry := cascadeTargetJSON{Service: svc, Action: action, Status: out.Status, Message: out.Message}
+	if err != nil {
+		entry = cascadeTargetJSON{Service: svc, Action: action, Error: err.Error()}
+	}
+	if i, seen := c.index[svc]; seen {
+		c.targets[i] = entry
+		return
+	}
+	c.index[svc] = len(c.targets)
+	c.targets = append(c.targets, entry)
 }
 
 // operateWithManualState runs one manual service action and records its
