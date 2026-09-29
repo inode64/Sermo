@@ -123,7 +123,7 @@ func (s *operationSession) prepare(ctx context.Context, service string, resolved
 			ExecxRunner:      s.app.Runner,
 			UserLookup:       app.EngineUserLookup(s.cfg, s.app.Runner),
 		},
-		LibraryBaseline: map[string]string{},
+		LibraryBaseline: app.NewArtifactBaseline(),
 		LockReclaimed: func(service, reason string) {
 			fmt.Fprintf(s.app.Stderr, "reclaimed stale operation lock for %s (%s)\n", service, reason)
 		},

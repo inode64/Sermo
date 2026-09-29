@@ -39,7 +39,7 @@ type ServiceRuntimeConfig struct {
 	Unit            string
 	Tree            map[string]any
 	Deps            Deps
-	LibraryBaseline map[string]string
+	LibraryBaseline *ArtifactBaseline
 	LockReclaimed   func(service, reason string)
 	RecordOperation func(operation.Result)
 }

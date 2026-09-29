@@ -583,7 +583,7 @@ func (h *workerHarness) worker(tree map[string]any, policy rules.Policy, remedia
 		remediationState = &rules.RemediationState{}
 	}
 	return &Worker{
-		libBaseline:     map[string]string{},
+		libBaseline:     NewArtifactBaseline(),
 		appVersions:     map[string]string{},
 		appVersionsLast: map[string]string{},
 		CheckDeps:       checks.Deps{Status: func(context.Context) (servicemgr.Status, error) { return servicemgr.StatusActive, nil }},

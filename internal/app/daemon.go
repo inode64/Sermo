@@ -467,7 +467,7 @@ func wireCascade(workers []*Worker, cascadeMap map[string][]string, deps Deps) {
 }
 
 func buildWorker(ctx context.Context, name, unit string, tree map[string]any, deps Deps, collector *metrics.Collector) (*Worker, []*Watch, []string) {
-	libBaseline := map[string]string{}
+	libBaseline := NewArtifactBaseline()
 	runtime := BuildServiceRuntime(ctx, ServiceRuntimeConfig{
 		Service: name, Unit: unit, Tree: tree, Deps: deps, LibraryBaseline: libBaseline,
 	})

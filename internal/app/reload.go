@@ -87,8 +87,8 @@ func captureWorkerState(workers []*Worker) map[string]workerSnapshot {
 		if len(w.windows) > 0 {
 			snap.windows = cloneWindowStates(w.windows)
 		}
-		if len(w.libBaseline) > 0 {
-			snap.libBaseline = maps.Clone(w.libBaseline)
+		if baseline := w.libBaseline.snapshot(); len(baseline) > 0 {
+			snap.libBaseline = baseline
 		}
 		if len(w.checkFailing) > 0 {
 			snap.checkFailing = maps.Clone(w.checkFailing)
@@ -113,7 +113,7 @@ func applyWorkerState(workers []*Worker, saved map[string]workerSnapshot) {
 			w.windows = snap.windows
 		}
 		if snap.libBaseline != nil {
-			w.libBaseline = snap.libBaseline
+			w.libBaseline = &ArtifactBaseline{fingerprints: snap.libBaseline}
 		}
 		if snap.checkFailing != nil {
 			w.checkFailing = snap.checkFailing
