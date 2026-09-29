@@ -996,6 +996,10 @@ also_apply: [nginx, varnish]
   actions.
 - Entries must be configured services and must not include the service itself.
 - `sermoctl start|stop|restart <svc> --no-cascade` acts on exactly one service.
+  Without it, text output adds one `cascade <target>: <action> <status>` line
+  per target; with `--json` the single JSON result gains a `cascade` array of
+  `{service, action, status, message, error}` objects (the final outcome of a
+  retried target) instead.
 - `sermoctl reload <svc>` and `sermoctl resume <svc>` act on the primary only
   (no cascade). Use `sermoctl daemon reload` to reload the running `sermod`
   configuration. In the web UI the per-service **reload** button is enabled only

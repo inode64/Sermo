@@ -388,6 +388,46 @@ func TestCascadeTargetErrorDowngradesPrimary(t *testing.T) {
 	}
 }
 
+// --json must keep stdout a single JSON document and carry the cascade
+// targets' outcomes instead of printing text lines before it.
+func TestCascadeJSONIsOneDocument(t *testing.T) {
+	global := writeCascadeConfig(t)
+	var stdout bytes.Buffer
+	app := actionApp(operation.Result{}, nil, &stdout, nil)
+	calls := map[string]int{}
+	app.Operate = func(_ context.Context, _ options, _ *config.Config, _ config.Resolved, service, action string) (operation.Result, error) {
+		calls[service]++
+		status := operation.ResultOK
+		if service == "db" && calls[service] == 1 {
+			status = operation.ResultBlocked // retried: only the final outcome is reported
+		}
+		return operation.Result{Service: service, Action: action, Status: status}, nil
+	}
+	if code := app.Run(t.Context(), []string{"--config", global, "--json", "restart", "web"}); code != exitSuccess {
+		t.Fatalf("Run() exit = %d, want %d", code, exitSuccess)
+	}
+	var got struct {
+		Service string `json:"service"`
+		Status  string `json:"status"`
+		Cascade []struct {
+			Service string `json:"service"`
+			Action  string `json:"action"`
+			Status  string `json:"status"`
+		} `json:"cascade"`
+	}
+	dec := json.NewDecoder(&stdout)
+	if err := dec.Decode(&got); err != nil {
+		t.Fatalf("stdout is not JSON: %v (%q)", err, stdout.String())
+	}
+	if dec.More() {
+		t.Fatalf("stdout has more than one JSON value: %q", stdout.String())
+	}
+	if got.Service != "web" || got.Status != "ok" || len(got.Cascade) != 1 ||
+		got.Cascade[0].Service != "db" || got.Cascade[0].Action != "restart" || got.Cascade[0].Status != "ok" {
+		t.Fatalf("JSON = %+v", got)
+	}
+}
+
 func TestCascadeRetriesBlockedTarget(t *testing.T) {
 	global := writeCascadeConfig(t)
 	app := actionApp(operation.Result{}, nil, nil, nil)
