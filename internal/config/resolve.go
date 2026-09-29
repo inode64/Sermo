@@ -961,12 +961,20 @@ func (c *Config) resolveWatches(pruneOptional bool) (map[string]any, []string) {
 	}
 	vars := c.globalVars()
 	injectHostBuiltins(vars)
-	expanded, expErrs := expandTree(configured, vars)
+	// Every key here is a watch name, so each entry is expanded as a value.
+	// expandTree would treat a watch named `variables` as the variables section:
+	// copied unexpanded and shared with Global.Raw, where applyWatchDefaults
+	// would then write into the published config.
+	var expErrs []string
+	expanded := make(map[string]any, len(configured))
+	for name, entry := range configured {
+		expanded[name] = expandValue(entry, vars, name, &expErrs)
+	}
 	if pruneOptional {
 		// The gate is evaluated after expansion so its file may use ${var}.
 		expanded = pruneEnableIfMap(expanded, []string{sectionWatches}, effectiveBackend(c))
 	}
-	// expandTree returns a fresh tree, so defaults can be injected here without
+	// expandValue returns fresh maps, so defaults can be injected here without
 	// first cloning the complete loaded watches section.
 	c.applyWatchDefaults(expanded)
 	return expanded, expErrs
