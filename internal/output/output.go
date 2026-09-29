@@ -2,7 +2,10 @@
 // comparisons and compact diagnostics.
 package output
 
-import "strings"
+import (
+	"strings"
+	"unicode/utf8"
+)
 
 const (
 	outputLineBreak          = '\n'
@@ -87,7 +90,12 @@ func tailBytes(s string, limit int) (string, bool) {
 	s = s[len(s)-limit:]
 	// Drop a partial first line left by the byte cut.
 	if i := strings.IndexByte(s, outputLineBreak); i >= 0 {
-		s = s[i+truncatedFirstLineOffset:]
+		return s[i+truncatedFirstLineOffset:], true
+	}
+	// One long line: at least start on a whole character, since the cut may
+	// have split a multi-byte one.
+	for s != "" && !utf8.RuneStart(s[0]) {
+		s = s[1:]
 	}
 	return s, true
 }
