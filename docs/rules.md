@@ -1329,7 +1329,8 @@ Protocols, in the order of the table above:
   **CPong** — the same liveness probe Apache/nginx use against Tomcat's AJP
   connector.
 - `ipp` (alias `cups`) — default port 631; `tls` supported (IPPS). No auth. POSTs
-  an IPP `CUPS-Get-Default` request over HTTP and verifies a valid IPP response —
+  an IPP `CUPS-Get-Default` request (asking only for `printer-name`, so the
+  reply stays small) over HTTP and verifies a valid IPP response —
   any parseable reply proves cupsd is up and speaking IPP. Result data: the IPP
   version and status. Encoding and parsing use `github.com/OpenPrinting/goipp`;
   Sermo retains HTTP transport, interface binding, TLS and response limits. RFC

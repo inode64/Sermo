@@ -32,6 +32,7 @@ func TestBuildIPPRequest(t *testing.T) {
 	wantAttributes := goipp.Attributes{
 		goipp.MakeAttr(ippAttrCharset, goipp.TagCharset, goipp.String(ippCharsetUTF8)),
 		goipp.MakeAttr(ippAttrNaturalLanguage, goipp.TagLanguage, goipp.String(ippLanguageEN)),
+		goipp.MakeAttr(ippAttrRequested, goipp.TagKeyword, goipp.String(ippAttrPrinterName)),
 	}
 	if !request.Operation.Equal(wantAttributes) {
 		t.Fatalf("operation attributes = %v, want %v", request.Operation, wantAttributes)
