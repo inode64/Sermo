@@ -261,16 +261,12 @@ func (m NetworkManager) sessionClient(socket string) func(time.Duration) (Networ
 	}
 }
 
-// liveDomainStates are the libvirt domain states whose guests still hold their
-// network taps. Anything not cleanly gone counts: a paused or blocked guest
-// keeps its interfaces attached, so pausing never makes a destroy safe.
+// domainHoldsInterfaces reports whether a guest in this libvirt state may still
+// hold its network taps. Only shut off is cleanly gone: a paused or blocked
+// guest keeps its interfaces attached, and a crashed one preserved by
+// on_crash=preserve/coredump-* keeps its qemu process and tap alive.
 func domainHoldsInterfaces(state libvirt.DomainState) bool {
-	switch state {
-	case libvirt.DomainShutoff, libvirt.DomainCrashed:
-		return false
-	default:
-		return true
-	}
+	return state != libvirt.DomainShutoff
 }
 
 // attachedGuests returns the names of live domains with an interface on the

@@ -783,10 +783,13 @@ network operations:
 - `start` starts the defined network (`NetworkCreate`).
 - `stop` destroys the network (`NetworkDestroy`) — but **hard-refuses while any
   live guest has an interface on the network** (matched by source network name
-  or by the network's bridge, and counting paused guests: their taps stay
-  attached). Destroying such a network cuts guest connectivity and the taps do
-  not reattach on the next start. No configuration option relaxes this guard,
-  and an unverifiable guest blocks the destroy rather than being skipped.
+  or by the network's bridge, and counting paused and crashed guests: their
+  taps stay attached; only a shut-off guest is free). Destroying such a network
+  cuts guest connectivity and the taps do not reattach on the next start. No
+  configuration option relaxes this guard, and an unverifiable guest blocks the
+  destroy rather than being skipped. The guard sees only the domains of
+  `guard_uri`: guests of another driver or of a session URI on the same bridge
+  are not inspected.
 - `restart` is still Sermo's safe stop+start flow, so it inherits the guard.
 - `reload` and `resume` are unsupported for virtual networks.
 
