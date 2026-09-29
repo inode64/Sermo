@@ -44,6 +44,25 @@ func TestProcessCheckExplainsAReplacedBinaryInsteadOfBareAbsent(t *testing.T) {
 	}
 }
 
+// Catalog backup guards (`active: {check: backup}`) run this check with
+// expect absent. An unproven absence must be unavailable so the guard denies,
+// never a passing "absent".
+func TestProcessCheckUnknownStateIsUnavailable(t *testing.T) {
+	for _, expect := range []string{process.StateAbsent, process.StateRunning} {
+		c := processCheck{
+			name:       "backup",
+			exes:       []string{"/usr/bin/mysqldump"},
+			user:       "backup",
+			expect:     expect,
+			observeAny: func([]string, string) string { return process.StateUnknown },
+		}
+		res := c.Run(context.Background())
+		if !res.Unavailable || res.OK {
+			t.Fatalf("expect %s: result = %+v, want unavailable and not OK", expect, res)
+		}
+	}
+}
+
 // A genuinely absent process is an outage, verdict included: the verdictless
 // reading is reserved for the replaced-binary case.
 func TestProcessCheckKeepsTheVerdictWhenNothingWasReplaced(t *testing.T) {

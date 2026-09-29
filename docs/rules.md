@@ -3277,7 +3277,10 @@ This fail-closed rule applies to every check and to `metric:`, `process:` and
 `changed:` condition leaves: a timeout, unreadable source, malformed sample,
 missing source or not-ready metric is an unavailable observation, not a valid
 false condition. A valid sample that simply does not satisfy its predicate
-remains an ordinary false result.
+remains an ordinary false result. For `process:` leaves and `type: process`
+checks, an incomplete process table or a `user` that does not resolve (for
+example an NSS/LDAP outage) proves neither presence nor absence and is
+unavailable; a live match is still reported as `running`.
 
 For MySQL/MariaDB and PostgreSQL, use a read-only `sql` check that counts the
 application sessions you want to preserve; this is more accurate than sockets

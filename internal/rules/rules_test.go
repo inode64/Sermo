@@ -16,6 +16,7 @@ import (
 	"sermo/internal/execx"
 	"sermo/internal/execx/execxtest"
 	"sermo/internal/metrics"
+	"sermo/internal/process"
 )
 
 func cache(results map[string]bool) map[string]checks.Result {
@@ -203,6 +204,14 @@ func TestGuardFailsSafeOnUnavailableLeaf(t *testing.T) {
 		leaf map[string]any
 	}{
 		{name: "missing process source", ev: &Evaluator{}, leaf: processLeaf},
+		{
+			// Incomplete /proc or an unresolvable user: "absent" is unproven.
+			name: "unknown process state",
+			ev: &Evaluator{Deps: checks.Deps{Processes: func(string, string) string {
+				return process.StateUnknown
+			}}},
+			leaf: processLeaf,
+		},
 		{name: "missing metric source", ev: &Evaluator{}, leaf: metricLeaf},
 		{
 			name: "missing metric reading",

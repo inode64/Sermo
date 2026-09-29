@@ -541,6 +541,46 @@ func TestObserveAnyState(t *testing.T) {
 	}
 }
 
+// snapshotErrReader serves a partial process table plus the error that made it
+// partial, as the daemon's CachingReader does after a failed /proc walk.
+type snapshotErrReader struct {
+	fakeReader
+	err error
+}
+
+func (r snapshotErrReader) SnapshotWithError() (map[int]Identity, error) {
+	return r.ids, r.err
+}
+
+// A guard on a backup process must not read an unreadable table or an
+// unresolvable user (NSS outage) as "absent": that would allow a restart
+// in the middle of the backup.
+func TestObserveAnyStateUnknownWhenUnproven(t *testing.T) {
+	backup := Identity{PID: 100, UID: 110, Exe: testExe, ExeOK: true, State: "S"}
+	users := fakeUsers(map[string]uint32{"mysql": 110})
+	readErr := errors.New("read process identity: permission denied")
+	cases := []struct {
+		name   string
+		reader Reader
+		user   string
+		want   string
+	}{
+		{name: "partial table without match", reader: snapshotErrReader{err: readErr}, user: "mysql", want: StateUnknown},
+		{name: "partial table with zombie only", reader: snapshotErrReader{fakeReader: fakeReader{ids: map[int]Identity{100: {PID: 100, UID: 110, Exe: testExe, ExeOK: true, State: "Z"}}}, err: readErr}, user: "mysql", want: StateUnknown},
+		{name: "partial table with live match", reader: snapshotErrReader{fakeReader: fakeReader{ids: map[int]Identity{100: backup}}, err: readErr}, user: "mysql", want: StateRunning},
+		{name: "unresolvable user", reader: fakeReader{ids: map[int]Identity{100: backup}}, user: "ldap-backup", want: StateUnknown},
+		{name: "complete table without match", reader: fakeReader{ids: map[int]Identity{}}, user: "mysql", want: StateAbsent},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			d := Discoverer{Reader: tc.reader, ResolveUser: users}
+			if got := d.ObserveAnyState([]string{testExe}, tc.user); got != tc.want {
+				t.Fatalf("ObserveAnyState = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestStrictMatchPIDRequiresExactExeAndUser(t *testing.T) {
 	d := Discoverer{
 		Reader: fakeReader{ids: map[int]Identity{
