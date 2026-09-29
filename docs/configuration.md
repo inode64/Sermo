@@ -1540,7 +1540,12 @@ notifiers:
     plain text.
   - **`parse_mode`** *(optional)* — `MarkdownV2`, `Markdown` or `HTML` to render
     the message as formatted text (bold, code, links) instead of plain text. Omit
-    for plain text.
+    for plain text. Sermo's generated subject and body are plain text, so Sermo
+    escapes them for the selected mode (`[sermo]`, `SERMO_*`, `<`, `&`, `.` and
+    the like arrive literally). The formatting itself comes from a
+    [notification template](#notification-templates): the template's own text is
+    sent as written, while every value it inserts (`.Subject`, `.Body`,
+    `.Field`, `.SortedFields`) is already escaped for the mode.
   - **`silent`** *(optional)* — `true` delivers the message quietly, with no
     sound or vibration (Bot API `disable_notification`).
   - **`message_thread_id`** *(optional)* — an integer forum-topic id, to post
@@ -1640,6 +1645,11 @@ subject or body for that part. The available data is:
   fields render as an empty string.
 - **`.SortedFields`** — all structured fields as stable `{Name, Value}` entries,
   useful for `range`.
+
+On a Telegram notifier with `parse_mode`, these values arrive already escaped
+for that mode, so a template writes markup around them (`*{{ .Subject }}*`,
+`<pre>{{ .Body }}</pre>`) without escaping anything itself. Compare a field with
+`eq` only against text that needs no escaping in the mode.
 
 A principal-process restart notice supplies the structured fields
 `SERMO_RESTART_SERVICE`, `SERMO_RESTART_UNIT`, `SERMO_RESTART_PROCESS`,

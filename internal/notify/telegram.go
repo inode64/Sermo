@@ -34,12 +34,19 @@ func buildTelegram(name string, entry map[string]any) (Notifier, error) {
 			opts.threadID, opts.hasThread = id, true
 		}
 	}
-	return &webhookNotifier{
+	n := &webhookNotifier{
 		name:    name,
 		typ:     TypeTelegram,
 		webhook: telegramapi.MethodURL(token, telegramapi.MethodSendMessage),
 		payload: func(msg Message) []byte { return telegramPayload(chatID, opts, msg) },
-	}, nil
+	}
+	if opts.parseMode != "" {
+		// Subjects start with "[sermo]" and bodies carry SERMO_* names and
+		// command output: unescaped, any of them makes the Bot API reject the
+		// whole message ("can't parse entities").
+		n.escape = func(s string) string { return telegramapi.EscapeText(opts.parseMode, s) }
+	}
+	return n, nil
 }
 
 // telegramPayload renders the sendMessage body: the subject as the lead line

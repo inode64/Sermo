@@ -13,7 +13,10 @@
 // thing, and tying them together would make a config rename an API change.
 package telegramapi
 
-import "slices"
+import (
+	"slices"
+	"strings"
+)
 
 // APIBase is the Bot API endpoint prefix. A bot token is appended directly to
 // it, so it is also the reason every error raised around these calls has to be
@@ -47,8 +50,50 @@ const (
 // UpdateTypeMessage is the only update kind the bot subscribes to.
 const UpdateTypeMessage = "message"
 
+// `parse_mode` values the API accepts.
+const (
+	ParseModeHTML       = "HTML"
+	ParseModeMarkdown   = "Markdown"
+	ParseModeMarkdownV2 = "MarkdownV2"
+)
+
 // parseModes are the `parse_mode` values the API accepts, sorted.
-var parseModes = []string{"HTML", "Markdown", "MarkdownV2"}
+var parseModes = []string{ParseModeHTML, ParseModeMarkdown, ParseModeMarkdownV2}
+
+// Per-mode escapers for literal text. The character sets are the ones the Bot
+// API "Formatting options" section lists as reserved outside an entity: any
+// unescaped occurrence makes sendMessage fail with "can't parse entities".
+var (
+	markdownV2Escaper = newBackslashEscaper("\\_*[]()~`>#+-=|{}.!")
+	markdownEscaper   = newBackslashEscaper("_*`[")
+	htmlEscaper       = strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;")
+)
+
+// replacerPairSize is the old/new argument count per strings.Replacer rule.
+const replacerPairSize = 2
+
+func newBackslashEscaper(reserved string) *strings.Replacer {
+	pairs := make([]string, 0, replacerPairSize*len(reserved))
+	for _, r := range reserved {
+		pairs = append(pairs, string(r), `\`+string(r))
+	}
+	return strings.NewReplacer(pairs...)
+}
+
+// EscapeText makes s render literally under parseMode. An empty or unknown
+// mode is plain text and s is returned unchanged.
+func EscapeText(parseMode, s string) string {
+	switch parseMode {
+	case ParseModeMarkdownV2:
+		return markdownV2Escaper.Replace(s)
+	case ParseModeMarkdown:
+		return markdownEscaper.Replace(s)
+	case ParseModeHTML:
+		return htmlEscaper.Replace(s)
+	default:
+		return s
+	}
+}
 
 // ParseModes returns the accepted `parse_mode` values, for validation and docs.
 func ParseModes() []string { return slices.Clone(parseModes) }
