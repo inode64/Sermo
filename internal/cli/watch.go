@@ -47,7 +47,11 @@ type daemonWatchProbe struct {
 	Severity string `json:"severity"`
 }
 
-const watchCommandTargetArgCount = 2
+const (
+	watchCommandTargetArgCount = 2
+	// watchStateUnknown is reported when sermod cannot supply the watch state.
+	watchStateUnknown = "unknown"
+)
 
 // runWatch dispatches host-watch queries against the running daemon.
 func (a App) runWatch(ctx context.Context, opts options) int {
@@ -254,14 +258,22 @@ func (a App) runWatchStatus(ctx context.Context, opts options) int {
 		return a.commandUsageError(commandWatch, "watch status requires exactly one watch name")
 	}
 	name := opts.args[1]
-	cfg := a.statusConfig(opts)
-	watchState := app.TargetStateOK
-	var detail daemonWatchDetail
-	if current, ok := a.FetchDaemonWatchDetail(ctx, cfg, name); ok {
-		detail = current
-		if detail.State != "" {
-			watchState = detail.State
-		}
+	cfg, code := a.loadConfig(opts)
+	if cfg == nil {
+		return code
+	}
+	if !knownWatchName(cfg, name) {
+		return a.fail(opts, fmt.Sprintf("unknown watch %q", name))
+	}
+	// Only the daemon observes watches. Without its answer the state is
+	// unknown, never ok: a monitoring script must not read a stopped daemon
+	// or a rejected token as a healthy watch.
+	watchState, code := watchStateUnknown, exitRuntimeError
+	detail, ok := a.FetchDaemonWatchDetail(ctx, cfg, name)
+	if ok && detail.State != "" {
+		watchState, code = detail.State, exitSuccess
+	} else if !opts.quiet {
+		fmt.Fprintf(a.Stderr, "warning: watch %s: sermod did not report its state (daemon stopped or web API unavailable)\n", name)
 	}
 	if opts.json {
 		out := map[string]any{cliJSONKeyWatch: name, cliJSONKeyState: watchState}
@@ -272,7 +284,7 @@ func (a App) runWatchStatus(ctx context.Context, opts options) int {
 			out["readings"] = detail.Readings
 		}
 		writeJSON(a.Stdout, out)
-		return exitSuccess
+		return code
 	}
 	fmt.Fprintf(a.Stdout, "%s state=%s\n", name, watchState)
 	if detail.LastCheckedAt != "" {
@@ -281,7 +293,7 @@ func (a App) runWatchStatus(ctx context.Context, opts options) int {
 	for _, reading := range detail.Readings {
 		printWatchReading(a.Stdout, reading)
 	}
-	return exitSuccess
+	return code
 }
 
 func printWatchReading(out io.Writer, reading daemonWatchReading) {

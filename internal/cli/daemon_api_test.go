@@ -102,20 +102,6 @@ func TestFetchDaemonServiceStateConfigFailureIsSilent(t *testing.T) {
 	}
 }
 
-func TestWatchStatusConfigFailureIsSilent(t *testing.T) {
-	var stdout, stderr bytes.Buffer
-	app := App{Env: os.Getenv, LoadConfig: func(string, ...config.Option) (*config.Config, error) { return nil, errors.New("unreadable config") }, Stdout: &stdout, Stderr: &stderr}
-	if code := app.Run(context.Background(), []string{"watch", "status", "load"}); code != exitSuccess {
-		t.Fatalf("exit=%d", code)
-	}
-	if stderr.Len() != 0 {
-		t.Fatalf("stderr=%q", stderr.String())
-	}
-	if !strings.Contains(stdout.String(), "load state=ok") {
-		t.Fatalf("stdout=%q", stdout.String())
-	}
-}
-
 func TestEventsConfigFailureIsReportedOnce(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	app := App{
@@ -160,6 +146,8 @@ web:
   port: PORT
 paths:
   watches: [WATCHES]
+watches:
+  storage-root: { check: { type: oom } }
 `)
 	var stdout bytes.Buffer
 	loadCalls := 0

@@ -227,10 +227,17 @@ monitored service still settling with an inactive backend therefore shows
 `state=starting` in `status` but exits **1** from `is-active` until the unit
 reports active.
 
-The same preference applies to `sermoctl watch status WATCH` and to the STATUS
-column of `sermoctl apps` for installed applications monitored by the daemon.
+The same preference applies to the STATUS column of `sermoctl apps` for
+installed applications monitored by the daemon.
 Catalog apps whose binary is not installed are omitted from `sermoctl apps` and
 do not participate in startup settling.
+
+Only the daemon observes watches, so `sermoctl watch status WATCH` reports the
+daemon's computed state. `WATCH` must be a configured watch (a host watch or
+`"<service>:<watch>"`); an unknown name is an error. When `sermod` is stopped or
+its web API does not answer (web disabled, token rejected), the command prints
+`state=unknown` (also in `--json`), warns on stderr and exits `2`, so a
+monitoring script never reads an unobserved watch as healthy.
 
 When the daemon has current watch readings, `sermoctl watch status WATCH` also
 prints them (including RAID operation and rebuild percentage) and the separate

@@ -35,12 +35,23 @@ func TestRAIDControlTimeout(t *testing.T) {
 }
 
 func TestWatchStatus(t *testing.T) {
+	global := filepath.Join(t.TempDir(), "sermo.yml")
+	mustWrite(t, global, `defaults:
+  policy: { cooldown: 5m }
+watches:
+  storage-root: { check: { type: oom } }
+  load: { check: { type: oom } }
+  raid-md0: { check: { type: oom } }
+  hdparm-sdd: { check: { type: oom } }
+`)
 	for _, tc := range []struct {
 		name     string
 		detail   daemonWatchDetail
 		detailOK bool
 		args     []string
 		want     string
+		wantCode int
+		wantErr  string
 	}{
 		{
 			name: "daemon state", detail: daemonWatchDetail{State: "starting"}, detailOK: true,
@@ -53,9 +64,27 @@ func TestWatchStatus(t *testing.T) {
 			want: `{"state":"failed","watch":"load"}`,
 		},
 		{
-			name: "daemon unavailable",
-			args: []string{"watch", "status", "load"},
-			want: "load state=ok",
+			// Only the daemon observes watches: without it the answer is
+			// unknown and non-zero, never a false ok.
+			name:     "daemon unavailable",
+			args:     []string{"watch", "status", "load"},
+			want:     "load state=unknown",
+			wantCode: exitRuntimeError,
+			wantErr:  "sermod did not report its state",
+		},
+		{
+			name:     "daemon unavailable json",
+			args:     []string{"--json", "watch", "status", "load"},
+			want:     `{"state":"unknown","watch":"load"}`,
+			wantCode: exitRuntimeError,
+		},
+		{
+			name:     "unknown watch",
+			detail:   daemonWatchDetail{State: "ok"},
+			detailOK: true,
+			args:     []string{"watch", "status", "nosuch"},
+			wantCode: exitRuntimeError,
+			wantErr:  `unknown watch "nosuch"`,
 		},
 		{
 			name:     "raid readings",
@@ -77,19 +106,34 @@ func TestWatchStatus(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			var stdout bytes.Buffer
-			app := App{Env: func(string) string { return "" }, Stdout: &stdout, Stderr: &bytes.Buffer{},
-				LoadConfig:             func(string, ...config.Option) (*config.Config, error) { return &config.Config{}, nil },
+			var stdout, stderr bytes.Buffer
+			app := App{Env: func(string) string { return "" }, Stdout: &stdout, Stderr: &stderr,
 				FetchDaemonWatchDetail: func(context.Context, *config.Config, string) (daemonWatchDetail, bool) { return tc.detail, tc.detailOK }}
 
-			code := app.Run(context.Background(), tc.args)
-			if code != exitSuccess {
-				t.Fatalf("Run() exit = %d, want %d", code, exitSuccess)
+			code := app.Run(context.Background(), append([]string{"--config", global}, tc.args...))
+			if code != tc.wantCode {
+				t.Fatalf("Run() exit = %d, want %d (stderr %q)", code, tc.wantCode, stderr.String())
 			}
 			if got := strings.TrimSpace(stdout.String()); got != tc.want {
 				t.Fatalf("stdout = %q, want %q", got, tc.want)
 			}
+			if !strings.Contains(stderr.String(), tc.wantErr) {
+				t.Fatalf("stderr = %q, want %q", stderr.String(), tc.wantErr)
+			}
 		})
+	}
+}
+
+func TestWatchStatusRejectsMissingConfig(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	app := App{Env: func(string) string { return "" }, Stdout: &stdout, Stderr: &stderr,
+		FetchDaemonWatchDetail: func(context.Context, *config.Config, string) (daemonWatchDetail, bool) {
+			t.Fatal("daemon queried without a config")
+			return daemonWatchDetail{}, false
+		}}
+	code := app.Run(context.Background(), []string{"--config", filepath.Join(t.TempDir(), "missing.yml"), "watch", "status", "x"})
+	if code != exitRuntimeError || stdout.Len() != 0 || !strings.Contains(stderr.String(), "load config failed") {
+		t.Fatalf("exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
 	}
 }
 
