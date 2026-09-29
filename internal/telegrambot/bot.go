@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"sermo/internal/ctxutil"
+	"sermo/internal/telegramapi"
 )
 
 const (
@@ -17,6 +18,9 @@ const (
 	// idlePollInterval is how long Run waits between checks while disabled or
 	// tokenless, so a reload can enable it without a restart.
 	idlePollInterval = 5 * time.Second
+	// maxReplyParts caps how many messages one command reply is split into;
+	// the last part is truncated beyond it.
+	maxReplyParts = 8
 )
 
 // Bot is a read-only Telegram command bot driven by long polling. Construct it
@@ -151,7 +155,13 @@ func (b *Bot) handleUpdate(ctx context.Context, cfg Config, cl *client, u update
 	if reply == "" {
 		return
 	}
-	if err := cl.sendMessage(ctx, msg.Chat.ID, msg.MessageThreadID, reply); err != nil {
-		b.log.Warn("telegram sendMessage failed", "error", err)
+	// A long list (/services on a large host, /events 50) exceeds the API's
+	// per-message limit and would be rejected whole; send it in order as
+	// several messages, capped so one command cannot flood the chat.
+	for _, part := range telegramapi.SplitText(reply, maxReplyParts) {
+		if err := cl.sendMessage(ctx, msg.Chat.ID, msg.MessageThreadID, part); err != nil {
+			b.log.Warn("telegram sendMessage failed", "error", err)
+			return
+		}
 	}
 }

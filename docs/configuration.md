@@ -1489,7 +1489,9 @@ notifiers:
     A reverse-proxy subpath is kept (`https://host/ntfy/alerts` publishes to
     `https://host/ntfy` with topic `alerts`). The subject travels as the
     notification title and the detail (the
-    `SERMO_*` fields) as the message.
+    `SERMO_*` fields) as the message. A message over ntfy's default 4096-byte
+    limit is cut and ends with `… (truncated)`, so ntfy never turns the alert
+    into a file attachment or rejects it.
   - **`token`** — optional access token for a protected topic (sent as an
     `Authorization: Bearer` header). The dashboard shows only the server host;
     the topic name stays private.
@@ -1550,6 +1552,10 @@ notifiers:
     sound or vibration (Bot API `disable_notification`).
   - **`message_thread_id`** *(optional)* — an integer forum-topic id, to post
     into a specific topic within a group.
+
+  Telegram accepts at most 4096 characters per message. A longer notification
+  is sent as plain text (without `parse_mode`, because cutting formatted text
+  could leave it unparsable), truncated and ending with `… (truncated)`.
 
 ```yaml
 # /etc/sermo/notifiers/telegram.yml
@@ -1792,6 +1798,10 @@ Commands (all read-only):
 | `/sla <service>` | availability windows (hour…year) for a service |
 | `/events [count]` | the most recent events (default 10, max 50) |
 | `/help` | the command list |
+
+A reply longer than Telegram's 4096-character message limit arrives as several
+consecutive messages, split at line breaks; beyond eight messages the rest is
+cut and marked `… (truncated)`.
 
 Reloading (`sermoctl daemon reload` / `SIGHUP`) applies changes to `token`,
 `allowed_chats` and `poll_interval` without a restart. Because the goroutine is

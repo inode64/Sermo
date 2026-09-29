@@ -54,13 +54,19 @@ func buildTelegram(name string, entry map[string]any) (Notifier, error) {
 // added only when configured, so an unconfigured notifier posts exactly the
 // plain `chat_id`+`text` body it always did.
 func telegramPayload(chatID string, opts telegramOptions, msg Message) []byte {
-	text := msg.Subject
-	if msg.Body != "" {
-		text = msg.Subject + notifyLF + msg.Body
+	text, parseMode := telegramText(msg), opts.parseMode
+	if telegramapi.TextLength(text) > telegramapi.MaxTextLength {
+		// The API rejects the whole message, losing exactly the alert with the
+		// most output. Cutting markup could split an escape or leave an entity
+		// open, so an oversized message goes out as its plain text, truncated.
+		if msg.raw != nil {
+			text = telegramText(*msg.raw)
+		}
+		text, parseMode = telegramapi.TruncateText(text), ""
 	}
 	body := map[string]any{telegramapi.FieldChatID: chatID, telegramapi.FieldText: text}
-	if opts.parseMode != "" {
-		body[telegramapi.FieldParseMode] = opts.parseMode
+	if parseMode != "" {
+		body[telegramapi.FieldParseMode] = parseMode
 	}
 	if opts.silent {
 		body[telegramapi.FieldSilent] = true
@@ -69,4 +75,12 @@ func telegramPayload(chatID string, opts telegramOptions, msg Message) []byte {
 		body[telegramapi.FieldThreadID] = opts.threadID
 	}
 	return webhookPayload(body)
+}
+
+// telegramText joins the subject lead line and the detail below it.
+func telegramText(msg Message) string {
+	if msg.Body == "" {
+		return msg.Subject
+	}
+	return msg.Subject + notifyLF + msg.Body
 }
