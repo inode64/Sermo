@@ -140,9 +140,12 @@ type hardwareRAIDObservation struct {
 	CorrectableErrors   int
 	UncorrectableErrors int
 	MaxTemperature      float64
-	Operation           string
-	ProgressPct         float64
-	HasProgress         bool
+	// HasTemperature tells a real 0 °C reading apart from a tool that reported
+	// no temperature at all.
+	HasTemperature bool
+	Operation      string
+	ProgressPct    float64
+	HasProgress    bool
 
 	ControllerDetails []HardwareRAIDControllerStatus
 	CacheDetails      []HardwareRAIDCacheStatus
@@ -172,7 +175,13 @@ func (c hardwareRAIDCheck) Run(ctx context.Context) Result {
 	if len(observation.ControllerDetails) == 0 {
 		observation.addIssue("no controller found")
 	}
-	if len(c.preds) > 0 && levelPredsHold(c.preds, map[string]float64{fieldTemperature: observation.MaxTemperature}) {
+	// A controller that reports no temperature has no reading to judge: the
+	// predicate sees an unknown value and does not hold.
+	temperatures := map[string]float64{}
+	if observation.HasTemperature {
+		temperatures[fieldTemperature] = observation.MaxTemperature
+	}
+	if len(c.preds) > 0 && levelPredsHold(c.preds, temperatures) {
 		observation.addAdvisory(fmt.Sprintf("maximum temperature %s exceeds configured threshold", formatCelsius(observation.MaxTemperature)))
 	}
 
@@ -286,8 +295,8 @@ func (o *hardwareRAIDObservation) addTemperature(value any) (float64, bool) {
 	if !ok {
 		return 0, false
 	}
-	if temperature > o.MaxTemperature {
-		o.MaxTemperature = temperature
+	if !o.HasTemperature || temperature > o.MaxTemperature {
+		o.MaxTemperature, o.HasTemperature = temperature, true
 	}
 	return temperature, true
 }
@@ -307,8 +316,12 @@ func (o *hardwareRAIDObservation) noteOperation(operation string, progress float
 }
 
 func (o *hardwareRAIDObservation) message(tool, health string) string {
+	var maxTemperature string
+	if o.HasTemperature {
+		maxTemperature = formatCelsius(o.MaxTemperature)
+	}
 	message := fmt.Sprintf("%s: health=%s controllers=%d volumes=%d drives=%d caches=%d batteries=%d max_temperature=%s",
-		tool, health, len(o.ControllerDetails), len(o.VolumeDetails), len(o.DriveDetails), len(o.CacheDetails), o.Batteries, formatCelsius(o.MaxTemperature))
+		tool, health, len(o.ControllerDetails), len(o.VolumeDetails), len(o.DriveDetails), len(o.CacheDetails), o.Batteries, orUnknown(maxTemperature))
 	if len(o.Issues) > 0 {
 		issues := slices.Clone(o.Issues)
 		slices.Sort(issues)
@@ -335,7 +348,6 @@ func (o *hardwareRAIDObservation) data(health string) map[string]any {
 		DataKeyHardwareRAIDSMARTAlerts:         o.SMARTAlerts,
 		DataKeyHardwareRAIDCorrectableErrors:   o.CorrectableErrors,
 		DataKeyHardwareRAIDUncorrectableErrors: o.UncorrectableErrors,
-		SmartFieldTemperature:                  o.MaxTemperature,
 		DataKeyHardwareRAIDIssues:              o.Issues,
 		DataKeyHardwareRAIDAdvisories:          o.Advisories,
 		DataKeyHardwareRAIDControllerDetails:   o.ControllerDetails,
@@ -348,6 +360,9 @@ func (o *hardwareRAIDObservation) data(health string) map[string]any {
 	}
 	if o.HasProgress {
 		data[DataKeyRaidProgressPct] = o.ProgressPct
+	}
+	if o.HasTemperature {
+		data[SmartFieldTemperature] = o.MaxTemperature
 	}
 	return data
 }

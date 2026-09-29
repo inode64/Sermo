@@ -2735,7 +2735,9 @@ detail so gradual degradation is visible.
   temperature, error counters and the controller's physical-drive SMART
   verdict. Rebuild/reconstruct progress is attached to the affected volume or
   drive and also exposed as `raid_progress_pct`. `temperature` optionally alerts on the
-  hottest controller, cache-protection module or drive. Counts, reasons and the
+  hottest controller, cache-protection module or drive; a report with no
+  temperature at all publishes no `temperature` reading (the message says
+  `max_temperature=unknown`) and the predicate does not hold. Counts, reasons and the
   maximum temperature are exposed as readings, and temperature/error/progress
   history is graphed. Do not add a `smart` watch for an OS device that is one of
   these virtual volumes: smartctl sees the logical volume, while this controller
