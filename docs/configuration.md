@@ -613,7 +613,10 @@ remediation cooldown/backoff and rule `for`/`within` windows are also persisted
 in `paths.state` and survive a full `sermod` process restart. Invalid config, or
 a config with no included services or watches, is rejected and the current
 generation keeps running; a `reload` or `error` event is recorded. Reload does
-not repeat `startup_delay` and does not mark `/readyz` as shutting down.
+not repeat `startup_delay` and does not mark `/readyz` as shutting down. A reload
+during the startup wait keeps only what is left of it, and a reload before every
+target has completed its first cycle keeps `/readyz` at `starting` until the new
+generation's targets have reported.
 
 `paths.runtime` and `paths.state` are process-lifetime resources: they contain
 the daemon singleton/operation locks and its open persistent store. Changing

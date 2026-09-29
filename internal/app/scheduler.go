@@ -52,12 +52,11 @@ func (s Scheduler) Run(ctx context.Context, workers []*Worker, watches []*Watch,
 	}
 
 	// Grace period before the first cycle so a still-booting host can settle.
-	// A shutdown signal during the wait aborts cleanly without starting workers.
+	// A cancelled generation during the wait returns without starting workers.
+	// That is a shutdown or a config reload; the monitor tells them apart, so it
+	// alone marks shutting_down and carries the rest of the wait into a reload.
 	if s.StartupDelay > 0 {
 		if !ctxutil.Sleep(ctx, s.StartupDelay) {
-			if ready != nil {
-				ready.MarkShuttingDown()
-			}
 			return
 		}
 	}
