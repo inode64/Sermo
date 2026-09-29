@@ -22,6 +22,7 @@ const (
 	openRCStateNotStarted       = "not started"
 	openRCStateStopped          = "stopped"
 	openRCStateCrashed          = "crashed"
+	openRCStateInactive         = "inactive"
 	systemdListUnitNameIndex    = 0
 	openRCServiceNameIndex      = 0
 )

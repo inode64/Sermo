@@ -484,7 +484,7 @@ func systemdStatus(state string) Status {
 }
 
 func openrcStatus(result execx.Result) Status {
-	if status := openrcStateTextStatus(result.Stdout, false); status != StatusUnknown {
+	if status := openrcStateTextStatus(result.Stdout); status != StatusUnknown {
 		return status
 	}
 	switch result.ExitCode {
@@ -521,17 +521,23 @@ func openRCLineStatus(line string) (Status, bool) {
 	if !found {
 		return StatusUnknown, false
 	}
-	return openrcStateTextStatus(state, true), true
+	return openrcStateTextStatus(state), true
 }
 
-func openrcStateTextStatus(text string, includeInactive bool) Status {
+// openrcStateTextStatus maps OpenRC state words to a Status. OpenRC `inactive`
+// is a started service whose readiness callback is still pending (see
+// openRCStartedInactive), not a stopped one, so it is transitional and reports
+// unknown. Mapping it to inactive would let start reconciliation treat the live
+// daemon as a survivor of a stable stop and apply stop_policy to it.
+func openrcStateTextStatus(text string) Status {
 	state := strings.ToLower(strings.TrimSpace(text))
 	switch {
 	case strings.Contains(state, openRCStateCrashed):
 		return StatusFailed
+	case strings.Contains(state, openRCStateInactive):
+		return StatusUnknown
 	case strings.Contains(state, openRCStateStopped),
-		strings.Contains(state, openRCStateNotStarted),
-		includeInactive && strings.Contains(state, string(StatusInactive)):
+		strings.Contains(state, openRCStateNotStarted):
 		return StatusInactive
 	case strings.Contains(state, openRCStateStarted):
 		return StatusActive

@@ -79,7 +79,9 @@ decision.
    - `active` with a proven-absent resident daemon triggers reconciliation.
      OpenRC uses `zap`; systemd uses stop and, when stopped, `reset-failed`.
      Unknown/transitional state, incomplete reads and missing identity do not
-     prove a divergence. Process-free services retain their own lifecycle.
+     prove a divergence. OpenRC `inactive` (started, readiness still pending,
+     as with `mark_service_inactive`) is transitional, not a stable stop, and
+     reports `unknown`. Process-free services retain their own lifecycle.
 6. Restart always composes stop and start, never a backend restart command.
    Stop waits up to `graceful_timeout`, discovers residuals and applies the configured
    signal escalation. Incomplete rediscovery stops escalation, including

@@ -170,6 +170,35 @@ func TestOpenRCManagerStatusFallsBackToRCStatus(t *testing.T) {
 	}
 }
 
+// OpenRC's `inactive` means started with readiness pending (openvpn uses
+// mark_service_inactive until its tunnel is up). Reporting it as a stable stop
+// would let start reconciliation treat the live daemon as a residual.
+func TestOpenRCInactiveIsNotAStableStop(t *testing.T) {
+	runner := multiResultRunner(map[string]runnerResult{
+		"rc-service openvpn.tun1 status": {
+			result: execx.Result{Stderr: " * status: inactive\n", ExitCode: 16},
+			err:    errors.New("exit 16"),
+		},
+		"rc-status -a": {
+			result: execx.Result{Stdout: " sshd [  started  ]\n openvpn.tun1 [  inactive  ]\n"},
+		},
+	})
+
+	m := openrcManager{runner: runner}
+	got, err := m.Status(context.Background(), "openvpn.tun1")
+	if err != nil {
+		t.Fatalf("Status() error = %v", err)
+	}
+	if got.Status != StatusUnknown {
+		t.Fatalf("Status = %q, want %q", got.Status, StatusUnknown)
+	}
+	for _, text := range []string{"inactive", "  Inactive ", " * status: inactive"} {
+		if status := openrcStateTextStatus(text); status != StatusUnknown {
+			t.Errorf("openrcStateTextStatus(%q) = %q, want %q", text, status, StatusUnknown)
+		}
+	}
+}
+
 func TestOpenRCStatusLineMatchesExactService(t *testing.T) {
 	out := "firehol-extra [  started  ]\nfirehol [  stopped  ]\n"
 	got, ok := openrcStatusLine(out, "firehol")
