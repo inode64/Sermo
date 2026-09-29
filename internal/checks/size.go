@@ -59,7 +59,15 @@ func (c *sizeCheck) Run(ctx context.Context) Result {
 	now := clock()
 
 	cutoff := now.Add(-c.window)
-	c.state.samples = slices.DeleteFunc(c.state.samples, func(s sizeSample) bool { return s.t.Before(cutoff) })
+	if n := len(c.state.samples); n > 0 && c.state.samples[n-1].t.Before(cutoff) {
+		// Every stored sample is outside the window (within no longer than the
+		// sampling interval, or a late cycle). Dropping them all would make the
+		// new sample its own baseline and read +0 growth forever, so the newest
+		// stays as the baseline.
+		c.state.samples = c.state.samples[n-1:]
+	} else {
+		c.state.samples = slices.DeleteFunc(c.state.samples, func(s sizeSample) bool { return s.t.Before(cutoff) })
+	}
 	c.state.samples = append(c.state.samples, sizeSample{t: now, size: size})
 
 	baseline := c.state.samples[0]

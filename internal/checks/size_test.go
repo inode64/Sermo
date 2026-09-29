@@ -88,6 +88,27 @@ func TestSizeWindowPrunesOldGrowth(t *testing.T) {
 	}
 }
 
+// With `within` no longer than the sampling interval (or a late cycle), every
+// stored sample is already outside the window when the next one arrives; the
+// newest of them must remain the baseline, or growth reads +0 forever.
+func TestSizeWindowShorterThanIntervalKeepsLastBaseline(t *testing.T) {
+	fz := &fakeSizer{sizes: []int64{1 * gib, 3 * gib}, now: time.Unix(0, 0)}
+	c := newSizeCheck(fz)
+	c.window = 30 * time.Second
+	if r := c.Run(t.Context()); r.OK {
+		t.Fatalf("first cycle must not alert: %s", r.Message)
+	}
+	fz.now = fz.now.Add(31 * time.Second)
+	r := c.Run(t.Context())
+	if !r.OK || r.Data[DataKeyGrowthBytes].(int64) != 2*gib {
+		t.Fatalf("a 2GiB jump one late cycle later must alert: %+v", r)
+	}
+	fz.now = fz.now.Add(31 * time.Second)
+	if r := c.Run(t.Context()); r.OK {
+		t.Fatalf("a settled size must stop alerting once the baseline moved: %s", r.Message)
+	}
+}
+
 func TestBuildAndRunSizeCheckRealFile(t *testing.T) {
 	// End-to-end via Build with the default sampler against a real file.
 	path := filepath.Join(t.TempDir(), "f.bin")
