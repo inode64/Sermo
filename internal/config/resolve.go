@@ -118,6 +118,7 @@ func (c *Config) resolveExpandedService(merged map[string]any, name string, inpu
 	errs = append(errs, expandReloadOnChange(expanded)...)
 	errs = append(errs, c.expandAppsChain(expanded, nil, inputs)...)
 	errs = append(errs, expandConfigurationCheck(expanded)...)
+	errs = append(errs, expandPidfileSugar(expanded)...)
 	errs = append(errs, expandStaleBinary(expanded)...)
 	errs = append(errs, expandStrays(expanded)...)
 	errs = append(errs, expandFDs(expanded)...)
@@ -125,13 +126,21 @@ func (c *Config) resolveExpandedService(merged map[string]any, name string, inpu
 	return expanded, apps, errs
 }
 
+// expandPidfileSugar flattens `pidfile` (including its `{path, optional}`
+// mapping) and `pidfiles` into selector paths plus their gated health checks.
+// It must run before stale-binary, strays and fds: those derive the service's
+// process identity from the flat selector, and would read the unflattened
+// mapping as "no pidfile".
+func expandPidfileSugar(expanded map[string]any) []string {
+	errs := expandPidfile(expanded)
+	return append(errs, expandPidfiles(expanded)...)
+}
+
 // expandServiceSugar runs the post-expansion desugar tail shared by
-// resolveExpandedService and resolveDocBody: analyze, pidfile(s), service
-// artifacts and embedded watches.
+// resolveExpandedService and resolveDocBody: analyze, service artifacts and
+// embedded watches. Both callers run expandPidfileSugar first.
 func (c *Config) expandServiceSugar(expanded map[string]any) []string {
 	errs := c.expandAnalyze(expanded)
-	errs = append(errs, expandPidfile(expanded)...)
-	errs = append(errs, expandPidfiles(expanded)...)
 	errs = append(errs, expandServiceArtifact(expanded, artifactSocket)...)
 	errs = append(errs, expandServiceArtifact(expanded, artifactLockfile)...)
 	errs = append(errs, expandServiceWatches(expanded)...)
@@ -1495,6 +1504,7 @@ func (c *Config) resolveDocBody(doc *Document, name string, appChain []string, i
 		errs = append(errs, c.expandRestartOnChange(expanded)...)
 	}
 	errs = append(errs, c.expandAppsChain(expanded, appChain, inputs)...)
+	errs = append(errs, expandPidfileSugar(expanded)...)
 	errs = append(errs, c.expandServiceSugar(expanded)...)
 	resolved := Resolved{Name: name, Tree: expanded, Apps: apps}
 	if cacheKey != "" {
