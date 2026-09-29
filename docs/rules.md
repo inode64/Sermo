@@ -67,7 +67,7 @@ Connection-protocol checks (MySQL, PostgreSQL, Redis, Docker, libvirt, etc.) are
 | `binary`      | health | a path exists and is executable                                    |
 | `pidfile`     | health | a pidfile exists and references a running process — gate with `requires: [service]` so a missing/stale pidfile is an error only while the service is active |
 | `socket`      | health | one Unix socket candidate exists — gate with `requires: [service]` for sockets created by the service |
-| `libraries`   | health | all DT_NEEDED shared libraries of the binary can be resolved (native debug/elf, no ldd) |
+| `libraries`   | health | all DT_NEEDED shared libraries of the binary can be resolved with the binary's ELF class and machine, each library's own RUNPATH/`$ORIGIN` searched first (native debug/elf, no ldd) |
 | `process`     | health | a process matching `exe`/`user` is in `state` (running/zombie/absent); an `absent` reading that a replaced binary explains names it and becomes a verdictless state (the service reads `restart_required`, not failed) |
 | `process_policy` | health | every process of a user account satisfies the allow/deny policy (alert-only; see configuration.md) |
 | `metric`      | condition | a sampled metric satisfies `op value` (see Metrics)                |
