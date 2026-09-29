@@ -371,17 +371,36 @@ func TestRecentReadsOneServiceFromTheStoreNotTheRing(t *testing.T) {
 	}
 }
 
-// The global feed keeps its existing ring semantics: only a named target is
-// read through the store.
-func TestRecentGlobalStillReadsTheRing(t *testing.T) {
+// The global feed (dashboard activity summary, Telegram /events) must include
+// what sermoctl wrote straight to the store, exactly like the paged feed.
+func TestRecentGlobalReadsTheStoreNotTheRing(t *testing.T) {
 	store := &stubEventStore{}
 	l, _ := NewPersistentEventLog(10, store, nil)
 	l.Add(Event{Service: "a", Kind: eventKindError, Message: "one"})
-	if got := l.Recent("", 10); len(got) != 1 {
-		t.Fatalf("Recent(\"\") = %d events, want 1", len(got))
+	if _, err := store.RecordEvent(state.EventRecord{
+		At: time.Unix(100, 0), Service: "freshclam", Kind: eventKindError, Message: "restart failed",
+	}); err != nil {
+		t.Fatalf("RecordEvent: %v", err)
+	}
+	got := l.Recent("", 10)
+	if len(got) != 2 || got[0].Message != "restart failed" {
+		t.Fatalf("Recent(\"\") = %+v, want the operator action recorded outside this process first", got)
 	}
 	for _, q := range store.queries {
 		t.Fatalf("global read issued a per-target store query %q", q)
+	}
+}
+
+// An unbounded global read stays bounded by the ring size when it goes to the
+// store, instead of loading the whole persisted table.
+func TestRecentGlobalUnboundedReadIsCappedAtRingSize(t *testing.T) {
+	store := &stubEventStore{}
+	l, _ := NewPersistentEventLog(2, store, nil)
+	for _, msg := range []string{"1", "2", "3"} {
+		l.Add(Event{Service: "a", Kind: eventKindError, Message: msg})
+	}
+	if got := l.Recent("", 0); len(got) != 2 || got[0].Message != "3" {
+		t.Fatalf("Recent(\"\", 0) = %+v, want the newest two", got)
 	}
 }
 
