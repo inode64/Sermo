@@ -1,6 +1,13 @@
 package conn
 
-import "testing"
+import (
+	"context"
+	"crypto/tls"
+	"io"
+	"net"
+	"testing"
+	"time"
+)
 
 func TestBuildLDAPURL(t *testing.T) {
 	tests := []struct {
@@ -44,5 +51,33 @@ func TestLDAPSucceeds(t *testing.T) {
 	}
 	if !ldapSucceeds(true, true, true) {
 		t.Fatal("credentialed: a successful bind must pass")
+	}
+}
+
+// TestLDAPProbeHonorsDeadlineAfterSlowHandshake covers an LDAPS server whose
+// handshake consumes most of the budget and which then never answers the bind:
+// the probe must end at its deadline, not a full timeout after the dial.
+func TestLDAPProbeHonorsDeadlineAfterSlowHandshake(t *testing.T) {
+	serverTLS, _ := smtpAcceptanceTestTLS(t)
+	port := serveOnce(t, func(c net.Conn) {
+		time.Sleep(300 * time.Millisecond)
+		tc := tls.Server(c, serverTLS)
+		if err := tc.Handshake(); err != nil {
+			return
+		}
+		_, _ = io.Copy(io.Discard, tc) // never reply to the bind
+	})
+	const budget = 500 * time.Millisecond
+	ctx, cancel := context.WithTimeout(context.Background(), budget)
+	defer cancel()
+	probe, _ := Lookup(ProtocolNameLDAP)
+	start := time.Now()
+	_, err := probe.Probe(ctx, Config{Host: "127.0.0.1", Port: port, TLS: TLSModeSkipVerify})
+	elapsed := time.Since(start)
+	if err == nil {
+		t.Fatal("probe of a silent directory succeeded")
+	}
+	if elapsed > budget+200*time.Millisecond {
+		t.Fatalf("probe took %v, want it to end near its %v deadline", elapsed, budget)
 	}
 }
