@@ -519,10 +519,13 @@ func (b *WebBackend) registerHostWatches(cfg *config.Config, deps Deps) []string
 	if len(raw) == 0 {
 		return nil
 	}
+	// The daemon runs host watches without their own interval at
+	// engine.interval; the listing and its snapshot freshness follow suit.
+	defaultInterval := config.EngineInterval(cfg, config.DefaultEngineInterval)
 	var warnings []string
 	for _, name := range slices.Sorted(maps.Keys(raw)) {
 		entry, _ := raw[name].(map[string]any)
-		watch, warn := newWebWatch(name, entry, deps.GlobalNotify, config.DefaultEngineInterval, false)
+		watch, warn := newWebWatch(name, entry, deps.GlobalNotify, defaultInterval, false)
 		if warn != "" {
 			warnings = append(warnings, watchSubjectPrefix+name+": "+warn)
 		}
