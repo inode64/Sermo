@@ -35,7 +35,7 @@ type Readiness struct {
 	panic func() bool
 }
 
-// NewReadiness returns a checker in the starting state (not ready until MarkReady).
+// NewReadiness returns a checker in the starting state (not ready until its first-cycle gate opens).
 func NewReadiness(backend string, services, watches int) *Readiness {
 	return &Readiness{
 		backend: backend, services: services, watches: watches,
@@ -54,33 +54,25 @@ func (r *Readiness) WatchPanic(active func() bool) {
 	r.mu.Unlock()
 }
 
-// MarkReady records that monitoring is up. It only advances from starting to
-// ready, so a late first-cycle signal can never undo a shutting_down state.
-func (r *Readiness) MarkReady() {
-	if r == nil {
-		return
-	}
-	r.mu.Lock()
-	if r.state == readinessStarting {
-		r.state = readinessReady
-	}
-	r.mu.Unlock()
-}
-
 // ExpectFirstCycles arms the first-cycle gate for n monitored targets: the
 // daemon stays "starting" until markFirstCycle has fired n times. n<=0 means
-// there is nothing to wait for, so it becomes ready immediately.
+// there is nothing to wait for, so it becomes ready immediately. Only a starting
+// daemon is gated: a config reload after it became ready must not re-gate
+// /readyz, and a shutdown must stick.
 func (r *Readiness) ExpectFirstCycles(n int) {
 	if r == nil {
 		return
 	}
 	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.state != readinessStarting {
+		return
+	}
 	r.firstTotal = n
 	r.firstRemaining = n
-	if n <= 0 && r.state == readinessStarting {
+	if n <= 0 {
 		r.state = readinessReady
 	}
-	r.mu.Unlock()
 }
 
 // markFirstCycle records that one target has completed its first cycle. When the

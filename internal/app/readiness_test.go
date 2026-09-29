@@ -16,7 +16,7 @@ func TestReadinessLifecycle(t *testing.T) {
 		t.Fatalf("initial = %+v", rep)
 	}
 
-	r.MarkReady()
+	r.ExpectFirstCycles(0)
 	if rep := r.Report(context.Background()); !rep.Ready || rep.Status != TargetStateOK || rep.Services != 3 || rep.Watches != 1 {
 		t.Fatalf("ready = %+v", rep)
 	}
@@ -58,13 +58,25 @@ func TestReadinessGateZeroTargetsReadyImmediately(t *testing.T) {
 	}
 }
 
-func TestReadinessMarkReadyDoesNotUndoShutdown(t *testing.T) {
+func TestReadinessGateIgnoredOnceReady(t *testing.T) {
+	r := NewReadiness(string(servicemgr.BackendSystemd), 1, 0)
+	r.ExpectFirstCycles(0)
+	// A config reload re-arms the gate with the new generation's pending targets;
+	// a daemon that is already ready must stay ready.
+	r.ExpectFirstCycles(3)
+	if rep := r.Report(context.Background()); !rep.Ready {
+		t.Fatalf("reload must not re-gate a ready daemon: %+v", rep)
+	}
+}
+
+func TestReadinessGateDoesNotUndoShutdown(t *testing.T) {
 	r := NewReadiness(string(servicemgr.BackendSystemd), 1, 0)
 	r.ExpectFirstCycles(1)
 	r.MarkShuttingDown()
-	// A late first-cycle signal (or MarkReady) must not revive the daemon.
+	// A late first-cycle signal (or a reload re-arming the gate) must not revive
+	// the daemon.
 	r.markFirstCycle()
-	r.MarkReady()
+	r.ExpectFirstCycles(0)
 	if rep := r.Report(context.Background()); rep.Ready || rep.Status != readinessShuttingDown {
 		t.Fatalf("shutdown must stick: %+v", rep)
 	}
@@ -90,7 +102,7 @@ func TestSchedulerMarksReadiness(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	go func() {
-		Scheduler{Interval: 10 * time.Millisecond, StartupDelay: 40 * time.Millisecond}.Run(ctx, workers, nil, ready, true)
+		Scheduler{Interval: 10 * time.Millisecond, StartupDelay: 40 * time.Millisecond}.Run(ctx, workers, nil, ready, 1)
 		close(done)
 	}()
 

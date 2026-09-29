@@ -68,6 +68,17 @@ func (s *Settling) Reset(names []string) {
 	s.mu.Unlock()
 }
 
+// Pending returns how many armed targets have not completed their startup
+// observation cycle yet.
+func (s *Settling) Pending() int {
+	if s == nil {
+		return 0
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return len(s.observed)
+}
+
 // MarkObserved records that name has finished its startup observation cycle.
 func (s *Settling) MarkObserved(name string) {
 	if s == nil || name == "" {

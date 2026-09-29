@@ -6,9 +6,11 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
 	"time"
 
+	"sermo/internal/checks"
 	"sermo/internal/config"
 	"sermo/internal/execx"
 	"sermo/internal/metrics"
@@ -408,4 +410,50 @@ func TestMonitorRejectsReloadOutsideRun(t *testing.T) {
 		cancel()
 		mon.Run(ctx)
 	}
+}
+
+// activeGateWorker is a minimal service worker whose backend is active, so its
+// first cycle completes startup observation.
+func activeGateWorker(name string, settling *Settling, isPaused func() bool) *Worker {
+	return &Worker{
+		Service:  name,
+		Settling: settling,
+		Interval: 10 * time.Millisecond,
+		IsPaused: isPaused,
+		CheckDeps: checks.Deps{
+			Status: func(context.Context) (servicemgr.Status, error) { return servicemgr.StatusActive, nil },
+		},
+		Checks: func(context.Context, checks.Deps) map[string]checks.Result { return nil },
+	}
+}
+
+// startTestGeneration starts one monitor generation and stops it (marking
+// shutdown) when the test ends.
+func startTestGeneration(t *testing.T, mon *Monitor, firstBoot bool) {
+	t.Helper()
+	mon.mu.Lock()
+	mon.startGenerationLocked(t.Context(), firstBoot)
+	mon.mu.Unlock()
+	t.Cleanup(func() {
+		mon.mu.Lock()
+		mon.stopGenerationLocked(true)
+		mon.mu.Unlock()
+	})
+}
+
+// TestMonitorFirstCycleGateCountsSettlingSnapshot reads the pause state once
+// per generation: a service paused when Settling is armed and resumed before
+// the gate opens must not count as a first cycle that can never report.
+func TestMonitorFirstCycleGateCountsSettlingSnapshot(t *testing.T) {
+	ready := NewReadiness(string(servicemgr.BackendSystemd), 2, 0)
+	settling := NewSettling(ready)
+	var pauseReads atomic.Int32
+	// Paused on the first read only: the operator resumes it right after the
+	// generation arms Settling.
+	resumed := activeGateWorker("resumed", settling, func() bool { return pauseReads.Add(1) == 1 })
+	web := activeGateWorker("web", settling, nil)
+	mon := NewMonitor(&config.Config{}, Deps{Settling: settling, Interval: 10 * time.Millisecond}, Scheduler{Interval: 10 * time.Millisecond}, ready, nil, nil, []*Worker{resumed, web}, nil)
+	startTestGeneration(t, mon, true)
+
+	waitReady(t, ready)
 }
