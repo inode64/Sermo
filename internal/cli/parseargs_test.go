@@ -66,6 +66,8 @@ func TestParseArgsErrors(t *testing.T) {
 		{"--bogus"},           // unknown flag
 		{"--limit", "0"},      // explicit zero is not a valid count
 		{"--limit", "-3"},     // negative
+		{"--timeout", "0"},    // would silently become the command default
+		{"--timeout", "-5s"},  // negative
 	}
 	for _, args := range cases {
 		if _, err := parseArgs(args); err == nil {

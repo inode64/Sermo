@@ -569,6 +569,12 @@ func parseArgs(args []string) (options, error) {
 		return opts, cliutil.NormalizePflagError(err) //nolint:wrapcheck // the normalized message is printed verbatim as the usage error; wrapping would re-add the pflag prefix noise the helper strips
 	}
 	opts.timeoutSet = fs.Changed(cliFlagTimeout)
+	// An explicit 0 or negative timeout would silently become the command's
+	// default while still counting as an operator override (for example 2s
+	// instead of engine.operation_timeout for `watch pause`).
+	if opts.timeoutSet && opts.timeout <= 0 {
+		return opts, errors.New("--timeout must be a positive duration")
+	}
 	// --limit defaults to 0 (unset → runEvents applies its default). An explicit
 	// 0 or negative is rejected rather than silently falling back to the default,
 	// which the bare `> 0` guard could not distinguish from "unset".
