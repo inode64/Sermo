@@ -998,6 +998,9 @@ $sha256$i6xhXZ6zQlQpysyEusOo4A$2PnStYnKgGXhXLNqy2a/gEBn5EuBv9HmWOZjVJigIys
 $ printf '%s' "$PASS" | sermoctl web hash-password --stdin
 ```
 
+The interactive prompt turns terminal echo off while you type; interrupting it
+(Ctrl-C) restores echo before `sermoctl` exits with status `130`.
+
 - **`$2a$` / `$2b$` / `$2y$` (bcrypt)** is for a password a **person chose**: it
   is deliberately slow, which is what makes a stolen file hard to crack. `--cost`
   sets the work factor (default 12).
