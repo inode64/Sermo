@@ -258,8 +258,9 @@ watch with `raid_control.pause_resume: true` and an explicit `check.array` also
 supports `watch pause` and `watch resume`.
 Pausing requires `--confirm MD_ARRAY` in addition to naming the watch; both
 actions re-check the array, use an exclusive runtime operation lock and verify
-the resulting kernel state. Resume accepts any currently paused configured
-array, including one paused outside Sermo.
+the resulting kernel state. Pause freezes the array (`sync_action` `frozen`);
+resume accepts any currently frozen configured array, including one frozen
+outside Sermo.
 
 The daemon records both `probe/running` when a manual sample starts and its
 `probe/ok` or `probe/failed` completion event with the elapsed time. A SMART
