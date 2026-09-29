@@ -112,8 +112,12 @@ decision.
 requires the init backend to report the service failed or inactive. It can then
 remove only a regular pidfile below `/run` whose exact PID is absent from
 `/proc`; a live PID, malformed file, symlink or non-runtime path fails closed.
-For a failed unit it also clears the init backend's failed marker through the
-same manager before the normal guarded start and postflight.
+It then applies the same survivor reconciliation as start (step 5): surviving
+non-delegated processes are cleaned up under `stop_policy` or block the repair
+with `orphan_processes`. Only then, for a failed unit, does it clear the init
+backend's failed marker, after revalidating process absence and verifying the
+backend reports inactive, before the normal guarded start and postflight. A
+repair never starts a second instance beside a survivor.
 
 The dashboard's **close SSH session** is a separate manual engine operation,
 never a rule action or automatic remediation. It takes the same operation and

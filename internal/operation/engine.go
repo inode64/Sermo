@@ -237,7 +237,7 @@ func (e Engine) Reap(ctx context.Context, apply bool) Result {
 // service through the same preflight, locks, guards and postflight as Start.
 // It is deliberately manual-only; rules cannot dispatch this recovery action.
 func (e Engine) Repair(ctx context.Context) Result {
-	return e.run(ctx, plan{action: ActionRepair, preflight: true, repair: true, start: true, postflight: true})
+	return e.run(ctx, plan{action: ActionRepair, preflight: true, repair: true, reconcile: true, start: true, postflight: true})
 }
 
 // previewReap lists the strays and says which ones the service authorized,
@@ -456,6 +456,9 @@ func (e Engine) run(ctx context.Context, p plan) (result Result) {
 	if !proceed {
 		return result
 	}
+	if p.repair && !e.resetRepairedState(ctx, &result) {
+		return result
+	}
 
 	var stopped, systemdReactivated bool
 	if p.stop {
@@ -509,6 +512,30 @@ func (e Engine) runRepair(ctx context.Context, result *Result) ([]string, bool) 
 		return nil, false
 	}
 	return removed, true
+}
+
+// resetRepairedState clears a failed init marker after reconciliation handled
+// any survivors. It goes through resetStopped, which revalidates process
+// absence immediately before the reset and verifies the backend converged to
+// inactive, so a repair never zaps the bookkeeping of a live daemon and then
+// starts a second instance beside it.
+func (e Engine) resetRepairedState(ctx context.Context, result *Result) bool {
+	if e.Manager == nil {
+		return true
+	}
+	status, err := e.Manager.Status(ctx, e.Unit)
+	if err != nil {
+		result.Status, result.Message = ResultFailed, "repair: query init state: "+err.Error()
+		return false
+	}
+	if status.Status != servicemgr.StatusFailed {
+		return true
+	}
+	if err := e.resetStopped(ctx, false); err != nil {
+		result.Status, result.Message = ResultFailed, "repair: "+err.Error()
+		return false
+	}
+	return true
 }
 
 // runCloseAction executes one manual session-close variant when the plan carries

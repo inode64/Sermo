@@ -18,8 +18,10 @@ const runtimeDirectory = "/run"
 // repairStalePIDFiles builds the manual-repair preparation shared by the CLI
 // and Web UI. A pidfile is removable only when its service is failed/inactive,
 // it is a regular file below the canonical runtime directory, and its exact PID
-// is absent from the live process reader. Failed init state is reset through the
-// manager before the guarded start. Anything less conclusive fails closed.
+// is absent from the live process reader. Anything less conclusive fails
+// closed. It never resets init state: the engine does that only after residual
+// reconciliation proves no survivor remains (see Engine.resetRepairedState), so
+// clearing a failed marker cannot hide a live daemon from the following start.
 func repairStalePIDFiles(manager servicemgr.Manager, unit string, selectors []process.Selector, reader process.Reader, runtimeDir string) func(context.Context) ([]string, error) {
 	paths := repairPIDFilePaths(selectors)
 	if reader == nil {
@@ -44,16 +46,7 @@ func prepareRepair(ctx context.Context, manager servicemgr.Manager, unit string,
 	if status.Status != servicemgr.StatusFailed && status.Status != servicemgr.StatusInactive {
 		return nil, fmt.Errorf("service is %s; repair requires failed or inactive state", status.Status)
 	}
-	removed, err := removeStalePIDFiles(ctx, paths, reader, runtimeDir)
-	if err != nil {
-		return nil, err
-	}
-	if status.Status == servicemgr.StatusFailed {
-		if err := manager.ResetState(ctx, unit); err != nil {
-			return nil, fmt.Errorf("reset failed init state: %w", err)
-		}
-	}
-	return removed, nil
+	return removeStalePIDFiles(ctx, paths, reader, runtimeDir)
 }
 
 func removeStalePIDFiles(ctx context.Context, paths []string, reader process.Reader, runtimeDir string) ([]string, error) {
