@@ -37,6 +37,7 @@ defaults:
   policy:
     cooldown: 5m
 `)
+	mustWrite(t, filepath.Join(root, "services", "mysql.yml"), "name: mysql\nservice: mysql\n")
 	return global, locks.RuntimeLocksDir(filepath.Join(root, "run"))
 }
 
@@ -182,6 +183,60 @@ func TestLockAcquireListRelease(t *testing.T) {
 	code, out, _ = runLockCLI(t, "--config", global, "locks", "mysql")
 	if code != exitSuccess || !strings.Contains(out, "no named runtime locks") {
 		t.Fatalf("locks after release: code=%d out=%q", code, out)
+	}
+}
+
+// A lock on a mistyped service protects nothing; refuse it instead of
+// reporting success.
+func TestLockRejectsUnknownService(t *testing.T) {
+	root := t.TempDir()
+	global, locksDir := writeLocksConfig(t, root)
+	marker := filepath.Join(root, "ran")
+	for _, args := range [][]string{
+		{"lock", "acquire", "mysqll", "--reason", "x", "--ttl", "1h"},
+		{"lock", "mysqll", "--reason", "x", "--ttl", "1h", "--", "sh", "-c", ": > " + marker},
+	} {
+		code, _, stderr := runLockCLI(t, append([]string{"--config", global}, args...)...)
+		if code != exitRuntimeError || !strings.Contains(stderr, `unknown service "mysqll"`) {
+			t.Fatalf("%v: code=%d stderr=%q", args, code, stderr)
+		}
+	}
+	if _, err := os.Stat(marker); !os.IsNotExist(err) {
+		t.Fatalf("wrapped command ran for an unknown service: %v", err)
+	}
+	if entries, _ := os.ReadDir(locksDir); len(entries) != 0 {
+		t.Fatalf("lock files created for an unknown service: %v", entries)
+	}
+}
+
+// A mistyped --name must not report "released" while the real lock stays.
+func TestLockReleaseReportsMissingLock(t *testing.T) {
+	root := t.TempDir()
+	global, _ := writeLocksConfig(t, root)
+	if code, out, _ := runLockCLI(t, "--config", global, "lock", "acquire", "mysql", "--name", "backup", "--reason", "x", "--ttl", "1h"); code != exitSuccess {
+		t.Fatalf("acquire: code=%d out=%q", code, out)
+	}
+	code, out, _ := runLockCLI(t, "--config", global, "lock", "release", "mysql", "--name", "backpu")
+	if code != exitNotActive || !strings.Contains(out, "no named lock mysql.backpu to release") {
+		t.Fatalf("release of missing lock: code=%d out=%q", code, out)
+	}
+	if code, out, _ := runLockCLI(t, "--config", global, "locks", "mysql"); code != exitSuccess || !strings.Contains(out, "mysql.backup active") {
+		t.Fatalf("real lock disappeared: code=%d out=%q", code, out)
+	}
+}
+
+// A service removed from the config can still have its leftover lock released.
+func TestLockReleaseAcceptsUnconfiguredLeftover(t *testing.T) {
+	root := t.TempDir()
+	global, locksDir := writeLocksConfig(t, root)
+	writeLockFixture(t, locksDir, "oldsvc.lock", map[string]any{
+		"service": "oldsvc", "reason": "x", "owner_pid": 0,
+		"created_at": time.Now().UTC().Format(time.RFC3339),
+		"expires_at": time.Now().Add(time.Hour).UTC().Format(time.RFC3339),
+	})
+	code, out, _ := runLockCLI(t, "--config", global, "lock", "release", "oldsvc")
+	if code != exitSuccess || !strings.Contains(out, "released oldsvc") {
+		t.Fatalf("release leftover: code=%d out=%q", code, out)
 	}
 }
 

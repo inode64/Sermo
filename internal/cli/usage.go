@@ -358,6 +358,8 @@ var commandUsages = []commandUsage{
 			"--ttl DURATION     required lock lifetime",
 		},
 		Notes: []string{
+			"acquire and the wrapper require a configured SERVICE. release exits 1",
+			"when the lock does not exist.",
 			"The wrapper holds the lock until COMMAND exits: SIGTERM and SIGHUP are",
 			"forwarded to COMMAND; SIGINT and SIGQUIT are not (a terminal already",
 			"delivers them to COMMAND) and never end sermoctl early.",
