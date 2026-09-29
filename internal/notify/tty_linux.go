@@ -78,13 +78,17 @@ func (n *ttyNotifier) sendToTargets(ctx context.Context, targets []string, msg M
 		host = defaultTTYHost
 	}
 	payload := ttyPayload(msg, host, n.now())
-	var errs []error
+	var errs, skipped []error
 	delivered := 0
 	for _, target := range targets {
 		if err := ctx.Err(); err != nil {
 			return fmt.Errorf("check terminal delivery context: %w", err)
 		}
 		if err := n.writeTTY(ctx, target, payload); err != nil {
+			if errors.Is(err, errTTYMessagesDisabled) {
+				skipped = append(skipped, fmt.Errorf("%s: %w", target, err))
+				continue
+			}
 			errs = append(errs, fmt.Errorf("%s: %w", target, err))
 			continue
 		}
@@ -96,6 +100,10 @@ func (n *ttyNotifier) sendToTargets(ctx context.Context, targets []string, msg M
 			return fmt.Errorf("%s notifier delivered to %d terminal(s), failed on %d: %w", n.Type(), delivered, len(errs), err)
 		}
 		return err
+	}
+	if delivered == 0 && len(skipped) > 0 {
+		// Nobody saw the alert: record it rather than report a delivery.
+		return fmt.Errorf("%s notifier reached no terminal: %w", n.Type(), errors.Join(skipped...))
 	}
 	return nil
 }
@@ -150,6 +158,24 @@ func terminalSafe(s string) string {
 	}, s)
 }
 
+// errTTYMessagesDisabled marks a terminal whose user refused messages. It is a
+// skip, not a delivery failure, unless no terminal took the message.
+var errTTYMessagesDisabled = errors.New("messages disabled (mesg n)")
+
+// terminalAcceptsMessages checks the opened terminal's mode. `mesg n` clears
+// the group-write bit; write(1) and wall(1) honour it through the kernel's
+// permission check, but sermod runs as root and CAP_DAC_OVERRIDE bypasses that
+// check, so the bit is tested explicitly.
+func terminalAcceptsMessages(mode uint32) error {
+	if mode&syscall.S_IFMT != syscall.S_IFCHR {
+		return errors.New("not a character device")
+	}
+	if mode&syscall.S_IWGRP == 0 {
+		return errTTYMessagesDisabled
+	}
+	return nil
+}
+
 func writeTTYLinux(ctx context.Context, path string, payload []byte) error {
 	if err := ctx.Err(); err != nil {
 		return fmt.Errorf("check terminal write context: %w", err)
@@ -164,8 +190,8 @@ func writeTTYLinux(ctx context.Context, path string, payload []byte) error {
 	if err := syscall.Fstat(fd, &st); err != nil {
 		return fmt.Errorf("inspect terminal %s: %w", path, err)
 	}
-	if st.Mode&syscall.S_IFMT != syscall.S_IFCHR {
-		return errors.New("not a character device")
+	if err := terminalAcceptsMessages(st.Mode); err != nil {
+		return err
 	}
 	for len(payload) > 0 {
 		if err := ctx.Err(); err != nil {

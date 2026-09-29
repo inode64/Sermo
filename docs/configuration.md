@@ -1598,9 +1598,10 @@ notifiers:
 
   The `tty` notifier reads `/run/utmp` (falling back to `/var/run/utmp`) and
   writes to the corresponding `/dev/<tty>` device with non-blocking native Go
-  I/O. It respects terminal permissions such as `mesg n`; if the daemon user
-  cannot write a terminal, delivery to that terminal fails and Sermo records a
-  `notify-failed` event.
+  I/O. It honours `mesg n` like `write` and `wall` do, even though `sermod`
+  runs as root: a terminal without group write permission is skipped. If no
+  targeted terminal accepts the message, or the daemon cannot write a terminal,
+  Sermo records a `notify-failed` event.
 
 - **`wall`** — broadcasts to every active Linux terminal session using the same
   native Go utmp/TTY implementation as `tty`, but with no user filter. The
