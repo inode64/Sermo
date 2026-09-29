@@ -457,11 +457,29 @@ func wireCascade(workers []*Worker, cascadeMap map[string][]string, deps Deps) {
 		if len(cascadeMap[w.Service]) == 0 {
 			continue
 		}
-		cfg := CascadeConfig{Operate: op, Lookup: lookup, Emit: deps.Emit}
+		base := CascadeConfig{Operate: op, Lookup: lookup, Emit: deps.Emit}
 		service := w.Service
 		w.Cascade = func(ctx context.Context, action string) operation.Result {
+			cfg := base
+			cfg.Target = acknowledgeCascadeTarget(byName, action)
 			result, _ := RunCascade(ctx, service, action, cfg)
 			return result
+		}
+	}
+}
+
+// acknowledgeCascadeTarget acknowledges a cascade target's `changed:`
+// baseline after the cascade (re)launched it successfully, as the target's
+// own remediation would: it now runs the upgraded artifact, and an
+// unacknowledged baseline would let the target's own `changed:` rule restart
+// it a second time. The root is acknowledged by its worker as usual.
+func acknowledgeCascadeTarget(byName map[string]*Worker, action string) func(string, operation.Result, error) {
+	if !rules.ActionType(action).SettlesAfter() {
+		return nil
+	}
+	return func(service string, result operation.Result, err error) {
+		if tw := byName[service]; tw != nil && err == nil && result.OK() {
+			tw.acknowledgeChanges()
 		}
 	}
 }

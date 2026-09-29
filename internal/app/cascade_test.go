@@ -2,12 +2,50 @@ package app
 
 import (
 	"context"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"sermo/internal/operation"
 )
+
+// TestWireCascadeAcknowledgesTargetChanges: when A cascades a restart to B,
+// B runs the upgraded library afterwards too, so B's own `changed:` rule must
+// not restart it a second time.
+func TestWireCascadeAcknowledgesTargetChanges(t *testing.T) {
+	lib := filepath.Join(t.TempDir(), "libshared.so")
+	writeFile(t, lib, "upgraded")
+	operate := func(_ context.Context, action string) operation.Result {
+		return operation.Result{Action: action, Status: operation.ResultOK}
+	}
+	tests := []struct {
+		name        string
+		action      string
+		status      operation.ResultStatus
+		wantChanged bool
+	}{
+		{name: "successful restart acknowledges", action: "restart", status: operation.ResultOK, wantChanged: false},
+		{name: "failed restart keeps the change", action: "restart", status: operation.ResultFailed, wantChanged: true},
+		{name: "stop does not acknowledge", action: "stop", status: operation.ResultOK, wantChanged: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			a := &Worker{Service: "a", Operate: operate, libBaseline: NewArtifactBaseline()}
+			b := &Worker{Service: "b", libBaseline: testArtifactBaseline(map[string]string{lib: "before-upgrade"}),
+				Operate: func(_ context.Context, action string) operation.Result {
+					return operation.Result{Action: action, Status: tt.status}
+				}}
+			wireCascade([]*Worker{a, b}, map[string][]string{"a": {"b"}}, Deps{})
+
+			a.Cascade(t.Context(), tt.action)
+
+			if changed, err := b.changed(lib); err != nil || changed != tt.wantChanged {
+				t.Fatalf("b changed(%s) = %t, %v; want %t", lib, changed, err, tt.wantChanged)
+			}
+		})
+	}
+}
 
 func TestOrderedGroupDependencyOrder(t *testing.T) {
 	// a -> [b, c]; b -> [d]
