@@ -29,6 +29,34 @@ type Message struct {
 	Body    string
 	HTML    string
 	Fields  map[string]string
+
+	// raw is set once Subject/Body are markup for the transport (a template
+	// rendered over escaped values), so the transport must not escape them
+	// again. It keeps the plain message the markup was built from.
+	raw *Message
+}
+
+// markupEscaper is implemented by transports whose text is parsed as markup
+// (Telegram with parse_mode). escapeMarkup returns nil for plain text.
+type markupEscaper interface {
+	escapeMarkup() func(string) string
+}
+
+// escapedForMarkup returns msg with its text and field values escaped by
+// escape, marked as markup so the transport sends it verbatim.
+func escapedForMarkup(msg Message, escape func(string) string) Message {
+	plain := msg
+	out := msg
+	out.raw = &plain
+	out.Subject = escape(msg.Subject)
+	out.Body = escape(msg.Body)
+	if msg.Fields != nil {
+		out.Fields = make(map[string]string, len(msg.Fields))
+		for name, value := range msg.Fields {
+			out.Fields[name] = escape(value)
+		}
+	}
+	return out
 }
 
 // Notifier is one configured delivery target. Implementations are safe to call

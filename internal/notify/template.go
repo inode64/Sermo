@@ -200,6 +200,14 @@ func (n *templatedNotifier) Name() string { return n.inner.Name() }
 func (n *templatedNotifier) Type() string { return n.inner.Type() }
 
 func (n *templatedNotifier) Send(ctx context.Context, msg Message) error {
+	// A markup transport parses the rendered text, so the template's own
+	// markup must survive while every value it interpolates renders literally:
+	// escape the data, not the result.
+	if m, ok := n.inner.(markupEscaper); ok {
+		if escape := m.escapeMarkup(); escape != nil {
+			msg = escapedForMarkup(msg, escape)
+		}
+	}
 	rendered, err := n.template.Render(msg)
 	if err != nil {
 		return fmt.Errorf("render template %s: %w", n.template.Name(), err)

@@ -66,6 +66,9 @@ type webhookNotifier struct {
 	headers map[string]string // optional extra request headers (auth tokens)
 	post    webhookPoster
 	payload func(Message) []byte
+	// escape makes plain text literal under the service's markup; nil when
+	// the service receives plain text.
+	escape func(string) string
 }
 
 // Name returns the notifier's configured name.
@@ -74,8 +77,15 @@ func (n *webhookNotifier) Name() string { return n.name }
 // Type returns the notifier type identifier.
 func (n *webhookNotifier) Type() string { return n.typ }
 
-// Send posts the rendered message to the configured webhook.
+func (n *webhookNotifier) escapeMarkup() func(string) string { return n.escape }
+
+// Send posts the rendered message to the configured webhook. Sermo's own
+// subjects and bodies are plain text; they are escaped here unless a template
+// already produced markup from escaped values.
 func (n *webhookNotifier) Send(ctx context.Context, msg Message) error {
+	if n.escape != nil && msg.raw == nil {
+		msg = escapedForMarkup(msg, n.escape)
+	}
 	return sendWebhook(ctx, n.post, n.typ, n.webhook, n.headers, n.payload(msg))
 }
 

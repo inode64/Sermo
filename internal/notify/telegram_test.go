@@ -104,3 +104,95 @@ func TestTelegramSendOmitsUnsetOptions(t *testing.T) {
 		}
 	}
 }
+
+// telegramSentText sends msg through n and returns the posted text and
+// parse_mode.
+func telegramSentText(t *testing.T, n Notifier, msg Message) (text, parseMode string) {
+	t.Helper()
+	var gotURL string
+	var gotPayload []byte
+	inner := n
+	if tn, ok := n.(*templatedNotifier); ok {
+		inner = tn.inner
+	}
+	inner.(*webhookNotifier).post = capturingPost(t, TypeTelegram, &gotURL, &gotPayload)
+	if err := n.Send(context.Background(), msg); err != nil {
+		t.Fatal(err)
+	}
+	var body struct {
+		Text      string `json:"text"`
+		ParseMode string `json:"parse_mode"`
+	}
+	if err := json.Unmarshal(gotPayload, &body); err != nil {
+		t.Fatalf("payload not JSON: %v (%s)", err, gotPayload)
+	}
+	return body.Text, body.ParseMode
+}
+
+func TestTelegramEscapesGeneratedTextForParseMode(t *testing.T) {
+	msg := Message{Subject: "[sermo] web: check failed", Body: "SERMO_WATCH=disk-root\nSERMO_OUTPUT=<b> & 1.5"}
+	tests := []struct {
+		parseMode string
+		want      string
+	}{
+		{parseMode: "MarkdownV2", want: "\\[sermo\\] web: check failed\nSERMO\\_WATCH\\=disk\\-root\nSERMO\\_OUTPUT\\=<b\\> & 1\\.5"},
+		{parseMode: "Markdown", want: "\\[sermo] web: check failed\nSERMO\\_WATCH=disk-root\nSERMO\\_OUTPUT=<b> & 1.5"},
+		{parseMode: "HTML", want: "[sermo] web: check failed\nSERMO_WATCH=disk-root\nSERMO_OUTPUT=&lt;b&gt; &amp; 1.5"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.parseMode, func(t *testing.T) {
+			n, err := buildTelegram("tg", map[string]any{"type": "telegram", "token": "123:abc", "chat_id": "1", "parse_mode": tt.parseMode})
+			if err != nil {
+				t.Fatal(err)
+			}
+			text, mode := telegramSentText(t, n, msg)
+			if text != tt.want || mode != tt.parseMode {
+				t.Fatalf("text = %q (parse_mode %q), want %q", text, mode, tt.want)
+			}
+		})
+	}
+}
+
+func TestTelegramTemplateKeepsMarkupAndEscapesValues(t *testing.T) {
+	tmpl, err := parseTemplate("tg", []byte(`
+subject: '*{{ .Field "SERMO_SERVICE" }}* {{ .Subject }}'
+body: '<pre>{{ .Body }}</pre>'
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	msg := Message{
+		Subject: "[sermo] php-fpm: cpu high",
+		Body:    "SERMO_RULE=cpu_high <x>",
+		Fields:  map[string]string{"SERMO_SERVICE": "php-fpm_8.2"},
+	}
+	for _, tt := range []struct {
+		parseMode string
+		want      string
+	}{
+		{parseMode: "MarkdownV2", want: "*php\\-fpm\\_8\\.2* \\[sermo\\] php\\-fpm: cpu high\n<pre>SERMO\\_RULE\\=cpu\\_high <x\\></pre>"},
+		{parseMode: "HTML", want: "*php-fpm_8.2* [sermo] php-fpm: cpu high\n<pre>SERMO_RULE=cpu_high &lt;x&gt;</pre>"},
+	} {
+		t.Run(tt.parseMode, func(t *testing.T) {
+			inner, err := buildTelegram("tg", map[string]any{"type": "telegram", "token": "123:abc", "chat_id": "1", "parse_mode": tt.parseMode})
+			if err != nil {
+				t.Fatal(err)
+			}
+			text, _ := telegramSentText(t, withTemplate(inner, tmpl), msg)
+			if text != tt.want {
+				t.Fatalf("text = %q, want %q", text, tt.want)
+			}
+		})
+	}
+}
+
+func TestTelegramPlainTextIsNotEscaped(t *testing.T) {
+	n, err := buildTelegram("tg", map[string]any{"type": "telegram", "token": "123:abc", "chat_id": "1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	msg := Message{Subject: "[sermo] a_b", Body: "<x> & 1.5"}
+	if text, _ := telegramSentText(t, withTemplate(n, &Template{name: "none"}), msg); text != "[sermo] a_b\n<x> & 1.5" {
+		t.Fatalf("plain text was altered: %q", text)
+	}
+}
