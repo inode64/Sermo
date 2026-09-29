@@ -42,8 +42,12 @@ const StrayReapHint = "`sermoctl reap` lists them and, with reap.kill_only_if de
 //     reused cycles. Growth stays true for the whole window, so it composes.
 type straysCheck struct {
 	base
-	strays      StraysFunc
-	max         float64
+	strays StraysFunc
+	max    float64
+	// hasMax records an explicit max. Alone, the default 0 applies; alongside
+	// max_increase only an explicit max also bounds the count, otherwise a
+	// growth-only instance would fail on any stray at all.
+	hasMax      bool
 	maxIncrease float64
 	window      time.Duration
 	clock       func() time.Time
@@ -83,9 +87,15 @@ func (c straysCheck) growthResult(strays []process.Process, exes []string, start
 
 	message := fmt.Sprintf("%d stray process(es), %+d in %s (max_increase %s)",
 		len(strays), growth, span, formatThreshold(c.maxIncrease))
-	if !ok {
+	switch {
+	case !ok:
 		message = fmt.Sprintf("stray processes grew by %d in %s (max_increase %s): %d now (%s); %s",
 			growth, span, formatThreshold(c.maxIncrease), len(strays), strings.Join(exes, ", "), StrayReapHint)
+	case c.hasMax && float64(len(strays)) > c.max:
+		// Both bounds fail the check: a large but stable leak has no growth.
+		ok = false
+		message = fmt.Sprintf("%d stray process(es) above max %s, %+d in %s (%s); %s",
+			len(strays), formatThreshold(c.max), growth, span, strings.Join(exes, ", "), StrayReapHint)
 	}
 
 	res := c.result(ok, message, start)

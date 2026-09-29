@@ -231,6 +231,39 @@ func TestStraysCheckMaxIncreaseUsesASlidingWindow(t *testing.T) {
 	}
 }
 
+// Both bounds are limits above which the check fails: an explicit max still
+// applies when max_increase is set, so a large but stable leak is not OK.
+func TestStraysCheckMaxAndMaxIncreaseBothBound(t *testing.T) {
+	strays := make([]process.Process, 0, 200)
+	for i := range 200 {
+		strays = append(strays, stray(1000+i, "/usr/bin/leak"))
+	}
+	c, warn := buildStraysCheck(
+		base{name: straysCheckTestName},
+		map[string]any{CheckKeyMax: 20, CheckKeyMaxIncrease: 5, CheckKeyWithin: "30m"},
+		straysDeps(strays...),
+	)
+	if warn != "" {
+		t.Fatalf("unexpected warning: %s", warn)
+	}
+	res := c.Run(t.Context())
+	if res.OK || !strings.Contains(res.Message, "max 20") {
+		t.Fatalf("200 stable strays must exceed max 20, got %+v", res)
+	}
+	if got := res.Data[DataKeyGrowthCount]; got != 0 {
+		t.Fatalf("growth = %v, want 0 for a stable count", got)
+	}
+
+	c, _ = buildStraysCheck(
+		base{name: straysCheckTestName},
+		map[string]any{CheckKeyMax: 250, CheckKeyMaxIncrease: 5, CheckKeyWithin: "30m"},
+		straysDeps(strays...),
+	)
+	if res := c.Run(t.Context()); !res.OK {
+		t.Fatalf("a stable count within max must pass, got %s", res.Message)
+	}
+}
+
 func TestStraysCheckNeedsDiscovery(t *testing.T) {
 	if _, warn := buildStraysCheck(base{name: straysCheckTestName}, nil, Deps{}); warn == "" {
 		t.Fatal("want a warning when process discovery is unavailable")
