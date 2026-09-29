@@ -246,6 +246,35 @@ func TestFileWatchPublishesSnapshot(t *testing.T) {
 	}
 }
 
+// With several roots the reading describes the root it measured, and the entry
+// count excludes every present root, not just one.
+func TestFileWatchSnapshotNamesTheMeasuredRoot(t *testing.T) {
+	base := t.TempDir()
+	missing := filepath.Join(base, "missing")
+	first, second := filepath.Join(base, "first"), filepath.Join(base, "second")
+	for _, dir := range []string{first, second} {
+		if err := os.Mkdir(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	writeSize(t, filepath.Join(first, "a.txt"), 10)
+	writeSize(t, filepath.Join(second, "b.txt"), 10)
+	h := &fileWatchHarness{}
+	w := h.watcher(missing, true, fileCond{sizeChange: true})
+	w.paths = []string{missing, first, second}
+	var got checks.Result
+	w.publish = func(_, _ string, res checks.Result) { got = res }
+
+	w.runCycle(context.Background())
+
+	if !strings.HasPrefix(got.Message, first+" size ") {
+		t.Fatalf("message = %q, want the size of %s, the root it measured", got.Message, first)
+	}
+	if got.Data[watchReadingFieldEntries] != 2 {
+		t.Fatalf("entries = %v, want 2 (the two files, without either root)", got.Data[watchReadingFieldEntries])
+	}
+}
+
 func TestFileWatchRecursiveSkipsHiddenEntriesByDefault(t *testing.T) {
 	root := t.TempDir()
 	for path, size := range map[string]int{
