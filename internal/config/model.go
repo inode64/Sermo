@@ -81,9 +81,14 @@ const (
 const (
 	sectionDefaults = "defaults"
 	sectionNotify   = "notify"
-	sectionPaths    = "paths"
-	sectionSecurity = "security"
-	sectionWatches  = "watches"
+	// SectionEventNotify selects notifiers for daemon event alerts independently
+	// of target dry_run and per-rule/per-watch notification actions.
+	SectionEventNotify           = "event_notify"
+	EventNotifyKeyTargets        = "targets"
+	EventNotifyKeyRepeatInterval = "repeat_interval"
+	sectionPaths                 = "paths"
+	sectionSecurity              = "security"
+	sectionWatches               = "watches"
 )
 
 // SectionWatches is the global or service embedded watches block.

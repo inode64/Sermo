@@ -179,6 +179,9 @@ func (m *Monitor) buildGenerationLocked(ctx context.Context, newCfg *config.Conf
 // installGenerationLocked swaps in the already-built generation, propagates the
 // reload to the web backend, starts the schedulers, and reports the outcome.
 func (m *Monitor) installGenerationLocked(ctx context.Context, newCfg *config.Config, workers []*Worker, watches []*Watch, warnings []string) {
+	if m.deps.EventNotify != nil {
+		m.deps.EventNotify.Update(config.EventNotifyConfig(newCfg.Global.Raw), m.deps.Notifiers)
+	}
 	m.cfg = newCfg
 	m.workers = workers
 	m.watches = watches

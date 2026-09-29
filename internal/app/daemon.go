@@ -223,6 +223,8 @@ type Deps struct {
 	// Notifiers are the configured delivery targets (email, …) addressable by name
 	// from a watch's `then.notify`. Optional: nil/empty means no notifications.
 	Notifiers map[string]notify.Notifier
+	// EventNotify routes all health/alarm events, independently of dry_run.
+	EventNotify *EventNotifier
 	// GlobalNotify is the top-level `notify` default selection (notifier names): the
 	// fallback for any notify site (watch or rule alert) that declares none of its
 	// own. Empty means no default. See config.NotifyDefault.

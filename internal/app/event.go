@@ -20,6 +20,7 @@ type Event struct {
 	App     string // set for installed-application monitoring events (instead of Service/Watch)
 	Kind    string // eventKind* value describing the visible event type
 	Rule    string
+	Check   string // stable check identity for notification grouping
 	Action  string
 	Status  string
 	Message string

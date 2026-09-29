@@ -81,7 +81,7 @@ decision.
      Unknown/transitional state, incomplete reads and missing identity do not
      prove a divergence. Process-free services retain their own lifecycle.
 6. Restart always composes stop and start, never a backend restart command.
-   Stop waits `graceful_timeout`, discovers residuals and applies the configured
+   Stop waits up to `graceful_timeout`, discovers residuals and applies the configured
    signal escalation. Incomplete rediscovery stops escalation, including
    SIGKILL. Before starting, Sermo revalidates process absence,
    reconciles init bookkeeping and verifies its inactive state. A reset error
@@ -462,7 +462,9 @@ a name-only authority.
 `defaults.stop_policy`. The stop phase of an explicit stop or a `staged`
 restart:
 
-1. Backend `Stop`, wait `graceful_timeout`, discover residuals.
+1. Backend `Stop`, observe processes until confirmed absent or `graceful_timeout`
+   expires, then discover residuals. Process-free services use inactive init state
+   instead of process absence. An incomplete observation fails closed.
 2. No residuals → clean stop.
 3. Residuals with `force_kill: false` → `orphan_processes` (and a restart does
    **not** start).
@@ -470,8 +472,9 @@ restart:
    only when every explicit `kill_only_if` field matches, or when it matches a
    single paired strict `processes:` identity (exact resolved exe **and** real
    UID; unresolvable exe and protected PIDs are never killable). SIGTERM the
-   killable set, wait `term_timeout`, rediscover; SIGKILL what remains of the
-   killable set, wait `kill_timeout`, rediscover. A residual that never matched
+   killable set, wait up to `term_timeout`, rediscover; SIGKILL what remains of the
+   killable set, wait up to `kill_timeout`, rediscover. Each wait ends early when
+   fresh discovery confirms that no residual remains. A residual that never matched
    is never signaled.
 5. The result is `ok` only when no residuals remain at all — whether the
    survivor was deliberately spared or outlived SIGKILL, the result is

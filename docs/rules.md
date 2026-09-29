@@ -347,7 +347,8 @@ config:
 `on_change.notify` follows the usual notify precedence (omit to inherit the global
 `notify` default, or `none` to suppress). A service-level `dry_run: true`
 suppresses non-console notification delivery for these service-owned monitors;
-`wall` still delivers. The underlying `command` (`on_change`) and `config` check
+`wall` still delivers. Top-level `event_notify` can independently deliver
+their alarm events. The underlying `command` (`on_change`) and `config` check
 types can also be used as host watch documents when you want a hook or a
 standalone command.
 
@@ -3037,6 +3038,10 @@ episode, then `recovered` is emitted when it clears. Use rule-level
 `emission.events` or `emission.notify` (`on_change` | `every_cycle`) to override
 the global emission policy for that rule. Operation result events remain audit
 events and are recorded whenever the operation is attempted.
+
+The separate [fleet-wide `event_notify` route](configuration.md#fleet-wide-event-alerts)
+can send these alert and recovery events even when the service is in `dry_run`.
+It also covers service check failures that have no notification rule.
 
 For a recovered rule with exactly one direct check or metric leaf, the event also
 records the current formatted value and its configured operator and threshold.

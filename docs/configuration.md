@@ -1676,6 +1676,43 @@ alert-only behaviour (firing state + events in the UI and log, but no actions
 and no inheritance of globals). See the host watches section below for the
 bare `check` + `for` example.
 
+### Fleet-wide event alerts
+
+Use top-level `event_notify` to deliver Sermo alarm events from every enabled
+service, host watch, service watch and application watch, including targets
+with no `then` or rule notification action:
+
+```yaml
+event_notify:
+  targets: [ops-slack]
+  # repeat_interval: 24h  # optional reminder while an incident stays open
+```
+
+This route sends `firing`, `warning`, `alert`, `recovered`, `error`, failed
+watch-action events, and automatic service remediation outcomes (including
+`dry-run` and `suppressed`). It includes the host and target in the message and
+does not send routine manual successful actions. The first failure or warning
+for each service check, rule, watch or app is sent immediately; unchanged
+incidents are suppressed even when their event text or PID changes. A change
+between warning and firing, recovery, or a new episode is sent immediately.
+Delivery state survives daemon restarts and config reloads. If
+`repeat_interval` is set, an open incident is reminded at that interval, even
+when the underlying check emits no new event. Without it, open incidents are
+announced only on state changes. Operational errors without a recovery edge
+are limited to once per 24 hours by default, or to `repeat_interval` when set.
+The detailed event log remains unchanged, including per-PID `process_policy`
+events; Slack groups those under their watch. A `process_policy` watch emits
+one aggregate recovery when its violations clear, including after a daemon
+restart.
+
+This route is independent of per-site `notify` selections and of `dry_run`:
+it delivers health events while automatic remediation and hooks stay simulated.
+Panic mode suppresses delivery. A target with an ordinary notification action
+can still produce a second message from that separate route. Delivery is best
+effort through a bounded queue so a slow notifier cannot stop monitoring;
+overflow and delivery errors are logged. Use `targets: none` to disable the
+route. A config reload updates the selected notifiers and reminder interval.
+
 ## Telegram report bot
 
 The optional top-level **`telegram_bot`** section runs an interactive,
@@ -1908,7 +1945,8 @@ Dry-run applies only to automatic actions driven by monitoring/rules:
   service's `dry_run` flag, so their non-console notifications are suppressed;
 - watch actions (`hook`, `expand`, `kill`, `makestep`) are evaluated but not executed;
 - notifications are suppressed except `wall`, which is still delivered for local
-  console visibility.
+  console visibility. The separate top-level `event_notify` event route remains
+  active unless panic mode is enabled.
 
 Manual operator actions are not dry-run gated: CLI/Web start, stop, restart,
 reload, resume, monitor/unmonitor, mount/umount and other explicit operations
@@ -2132,10 +2170,10 @@ clock by an unknown or zero correction. The check reports which one it was as
 `SERMO_CLOCK_FAILURE` to a hook), and any value other than `offset` is skipped
 with the reason recorded.
 
-Note what `dry_run` does **not** give you: it suppresses every notifier except
-`wall`, so a dry-run watch is not a way to "alert but never correct". For an
-alert-only tier, configure a watch **without** the action — that is exactly what
-tiers 1 and 3 are. Reserve `dry_run` for rehearsing a watch you intend to arm.
+`dry_run` suppresses watch action-site notifiers except `wall`; it is for
+rehearsing a watch you intend to arm. For an alert-only tier, configure a watch
+without the action — that is what tiers 1 and 3 do. Top-level `event_notify`
+can separately deliver the watch's alarm events while it stays in dry-run.
 
 Results are recorded as `makestep` / `makestep-skipped` / `makestep-failed`
 events. `dry_run: true` and panic mode both suppress it exactly like the other
@@ -3123,7 +3161,8 @@ per-process percentage. Do not derive it from a single sample.
 On upgrade, services without an explicit `restart_on_fds_high: true` now alert
 without restarting. Existing explicit `true` and `false` values keep their
 meaning. An alert still follows the configured notification selection; target
-`dry_run: true` suppresses automatic notifications other than `wall`.
+`dry_run: true` suppresses rule/action-site notifications other than `wall`.
+Top-level `event_notify` can still deliver the resulting alarm events.
 
 ### `strays` — processes the service cannot account for
 
@@ -3376,7 +3415,8 @@ start time cannot be read, Sermo records a firing event for every current
 violating sample rather than risk suppressing a reused PID; `notify_interval`,
 when configured, still paces notifier delivery. The WebUI shows the account,
 active-match and violation counts, PIDs and a safe reason, but no command
-arguments.
+arguments. The watch also emits one aggregate `recovered` event when all
+violations clear; that transition survives a daemon restart.
 
 #### `then.kill` — terminate the matched process
 

@@ -899,8 +899,13 @@ dead process tree; monitoring can still report them independently.
   discovery error blocks a following start. A successful cleanup reconciles init
   before proceeding.
 
-The stop phase runs the backend stop, waits `graceful_timeout`, handles residuals,
-reconciles init and verifies the stopped state. A nonzero command result does
+The stop phase runs the backend stop, waits up to `graceful_timeout` for fresh
+process observations to confirm exit, handles residuals, reconciles init and
+verifies the stopped state. It proceeds immediately when the backend has already
+stopped the processes; process-free services instead wait for inactive init state.
+The signal escalation limits `term_timeout` and `kill_timeout` also end early
+when fresh discovery confirms that no residual remains. These are maximum grace
+periods, not fixed delays added to every restart. A nonzero command result does
 not by itself prove that stopping failed: when Sermo demonstrates that the daemon
 is gone and init can be reconciled, it continues and records the command error
 as a warning. Otherwise it fails without starting a replacement. A failed reset
@@ -2267,7 +2272,8 @@ checks, but the **reserved names** are consumed by features:
   `version.on_change.level` (`major`/`minor`/`patch`, default `patch`) selects at
   which `a.b.c` granularity a change should alert.
   The monitor inherits the service's `dry_run` flag, so non-console notification
-  delivery is suppressed while the service is in dry-run mode.
+  delivery through that monitor is suppressed while the service is in dry-run
+  mode. Top-level `event_notify` may still deliver its alarm events.
   When both exist, `preflight.version` takes precedence over `commands.version`.
   They also declare `version` and `version_short` variables with empty defaults
   for expansion; linked apps expose them to services as `${app_version}` and

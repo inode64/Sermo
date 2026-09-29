@@ -319,6 +319,9 @@ func validateGlobalDefaults(cfg *Config, raw map[string]any, add addFunc) {
 	if _, present := raw[sectionNotify]; present {
 		validateNotifySelection(sectionNotify, raw[sectionNotify], notifierNames(notifiers), add)
 	}
+	if _, present := raw[SectionEventNotify]; present {
+		validateEventNotify(raw[SectionEventNotify], notifierNames(notifiers), add)
+	}
 	defaults := cfg.Global.Defaults()
 	cooldown, present := policyCooldown(defaults)
 	switch {

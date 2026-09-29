@@ -18,6 +18,7 @@ import (
 	"sermo/internal/notify"
 	"sermo/internal/process"
 	"sermo/internal/rules"
+	persistedstate "sermo/internal/state"
 )
 
 // processPolicyAllow is one exact executable identity permitted for a watched
@@ -54,6 +55,7 @@ const (
 	processPolicyReasonUnresolvedExe = "executable is unresolved"
 	processPolicyReasonCommand       = "command does not match the execution policy"
 	processPolicyReasonExecutable    = "executable is not allowlisted"
+	processPolicyStateSlot           = "process-policy"
 )
 
 // processPolicyWatcher verifies that every process of one real user belongs to
@@ -74,6 +76,9 @@ type processPolicyWatcher struct {
 	sampler        ProcSampler
 	resolve        process.UserResolver
 	publish        func(string, string, checks.Result)
+	stateStore     WatchStateStore
+	activeLoaded   bool
+	active         bool
 
 	state map[processPolicyKey]processPolicyState
 }
@@ -119,6 +124,7 @@ func buildProcessPolicyWatch(name string, entry, checkEntry map[string]any, deps
 		sampler:        procSamplerFromDeps(deps),
 		resolve:        resolve,
 		publish:        publishWatchSnapshots(deps.WatchSnapshots, deps.watchConfigID),
+		stateStore:     deps.WatchState,
 	}
 	return newStatefulWatch(name, checks.CheckTypeProcessPolicy, entry, deps, interval, pw.runCycle), ""
 }
@@ -179,6 +185,16 @@ func (w *processPolicyWatcher) runCycle(ctx context.Context) {
 	if observeOnlyCycle(ctx) {
 		return
 	}
+	w.loadActiveState()
+	if len(violations) == 0 && w.active {
+		w.active = false
+		w.persistActiveState()
+		w.emitEvent(Event{Watch: w.name, Kind: eventKindRecovered, Message: processPolicySubject(w.user) + ": no violations"})
+	}
+	if len(violations) > 0 && !w.active {
+		w.active = true
+		w.persistActiveState()
+	}
 	now := w.clock()
 	next := make(map[processPolicyKey]processPolicyState, len(violations))
 	for _, violation := range violations {
@@ -200,6 +216,30 @@ func (w *processPolicyWatcher) runCycle(ctx context.Context) {
 		next[key] = state
 	}
 	w.state = next
+}
+
+func (w *processPolicyWatcher) loadActiveState() {
+	if w.activeLoaded || w.stateStore == nil {
+		return
+	}
+	w.activeLoaded = true
+	rec, found, err := w.stateStore.WatchRuntimeState(w.name, processPolicyStateSlot)
+	if err != nil {
+		w.emitEvent(Event{Watch: w.name, Kind: eventKindError, Message: "load process policy state: " + err.Error()})
+		return
+	}
+	if found {
+		w.active = rec.Firing
+	}
+}
+
+func (w *processPolicyWatcher) persistActiveState() {
+	if w.stateStore == nil {
+		return
+	}
+	if err := w.stateStore.SetWatchRuntimeState(w.name, processPolicyStateSlot, persistedstate.WatchRuntimeRecord{Firing: w.active}); err != nil {
+		w.emitEvent(Event{Watch: w.name, Kind: eventKindError, Message: "persist process policy state: " + err.Error()})
+	}
 }
 
 func (w *processPolicyWatcher) clock() time.Time {

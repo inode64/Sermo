@@ -163,6 +163,57 @@ func TestReapTermSucceeds(t *testing.T) {
 	}
 }
 
+func TestReapStopsWaitingWhenProcessesExit(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		steps      [][]Process
+		wantSleeps int
+	}{
+		{name: "already exited after term", steps: [][]Process{{}}},
+		{name: "exits during term grace", steps: [][]Process{{killableProc(100)}, {}}, wantSleeps: 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			sig := &recSignaler{}
+			r := newReaper(sig, tc.steps)
+			sleeps := 0
+			r.Sleep = func(time.Duration) { sleeps++ }
+			policy := killPolicy
+			policy.TermTimeout = time.Minute
+			policy.KillTimeout = time.Second
+			result := r.Reap(t.Context(), []Process{killableProc(100)}, policy)
+			if !result.OK() || sleeps != tc.wantSleeps {
+				t.Fatalf("result=%+v sleeps=%d, want %d", result, sleeps, tc.wantSleeps)
+			}
+			if got := sig.sigsFor(100); len(got) != 1 || got[0] != syscall.SIGTERM {
+				t.Fatalf("signals=%v, want only SIGTERM", got)
+			}
+		})
+	}
+}
+
+func TestReapWaitsFullTermGraceBeforeKill(t *testing.T) {
+	sig := &recSignaler{}
+	r := newReaper(sig, nil)
+	r.Rediscover = func() []Process {
+		if len(sig.calls) < 2 {
+			return []Process{killableProc(100)}
+		}
+		return nil
+	}
+	policy := killPolicy
+	policy.TermTimeout = time.Second
+	policy.KillTimeout = time.Minute
+	var slept time.Duration
+	r.Sleep = func(d time.Duration) { slept += d }
+	result := r.Reap(t.Context(), []Process{killableProc(100)}, policy)
+	if !result.OK() || slept != policy.TermTimeout {
+		t.Fatalf("result=%+v slept=%v, want full term grace %v and no kill wait", result, slept, policy.TermTimeout)
+	}
+	if got := sig.sigsFor(100); len(got) != 2 || got[1] != syscall.SIGKILL {
+		t.Fatalf("signals=%v, want TERM then KILL", got)
+	}
+}
+
 func TestReapEscalatesToKill(t *testing.T) {
 	sig := &recSignaler{}
 	// Survives SIGTERM (still present), gone after SIGKILL.

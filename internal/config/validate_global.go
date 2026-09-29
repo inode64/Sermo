@@ -4,6 +4,7 @@ import (
 	"maps"
 	"slices"
 	"strings"
+	"time"
 
 	"sermo/internal/cfgval"
 	"sermo/internal/notify"
@@ -198,6 +199,45 @@ func NotifyDefault(raw map[string]any) []string {
 		return nil
 	}
 	return names
+}
+
+// EventNotifyConfig selects transports and reminder cadence for daemon alarm events.
+// Validation rejects malformed shapes before this resolved view is consumed.
+func EventNotifyConfig(raw map[string]any) EventNotification {
+	entry, _ := raw[SectionEventNotify].(map[string]any)
+	names := cfgval.StringList(entry[EventNotifyKeyTargets])
+	if slices.Contains(names, NotifyNone) {
+		names = nil
+	}
+	return EventNotification{Targets: names, RepeatInterval: cfgval.Duration(entry[EventNotifyKeyRepeatInterval])}
+}
+
+// EventNotification is the resolved global event delivery policy.
+type EventNotification struct {
+	Targets        []string
+	RepeatInterval time.Duration
+}
+
+func validateEventNotify(raw any, defined map[string]struct{}, add addFunc) {
+	entry, ok := raw.(map[string]any)
+	if !ok {
+		add("%s must be a mapping with %s", SectionEventNotify, EventNotifyKeyTargets)
+		return
+	}
+	for key := range entry {
+		if key != EventNotifyKeyTargets && key != EventNotifyKeyRepeatInterval {
+			add("%s.%s is not supported", SectionEventNotify, key)
+		}
+	}
+	targets, present := entry[EventNotifyKeyTargets]
+	if !present {
+		add("%s.%s is required", SectionEventNotify, EventNotifyKeyTargets)
+	} else {
+		validateNotifySelection(SectionEventNotify+"."+EventNotifyKeyTargets, targets, defined, add)
+	}
+	if value, present := entry[EventNotifyKeyRepeatInterval]; present && !isPositiveDuration(cfgval.String(value)) {
+		add("%s.%s must be a positive duration", SectionEventNotify, EventNotifyKeyRepeatInterval)
+	}
 }
 
 // validateNotifySelection validates a notify selection (a global `notify`, a

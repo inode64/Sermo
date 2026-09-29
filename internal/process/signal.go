@@ -9,8 +9,6 @@ import (
 	"strings"
 	"syscall"
 	"time"
-
-	"sermo/internal/ctxutil"
 )
 
 // Signaler delivers a signal to a process. It is an interface so escalation can
@@ -63,8 +61,8 @@ type Reaper struct {
 //
 //   - no residuals          -> ok.
 //   - force_kill=false       -> signal nothing; residuals are orphans.
-//   - force_kill=true        -> SIGTERM the killable set, wait term_timeout,
-//     rediscover; SIGKILL survivors, wait kill_timeout, rediscover; whatever
+//   - force_kill=true        -> SIGTERM the killable set, wait up to term_timeout,
+//     rediscover; SIGKILL survivors, wait up to kill_timeout, rediscover; whatever
 //     remains is an orphan.
 //
 // Only processes that exactly match kill_only_if are ever signalled; a residual
@@ -81,9 +79,6 @@ func (r Reaper) Reap(ctx context.Context, residuals []Process, policy KillPolicy
 	if resolve == nil {
 		resolve = DefaultUserLookup().ResolveUser
 	}
-	// Leave sleep nil when unset so Wait uses its cancellable timer in production;
-	// tests inject a fake to control timing. (Reap uses sleep only for Wait.)
-	sleep := r.Sleep
 	signaler := r.Signaler
 	if signaler == nil {
 		signaler = OSSignaler{}
@@ -101,21 +96,31 @@ func (r Reaper) Reap(ctx context.Context, residuals []Process, policy KillPolicy
 	}
 
 	round(residuals, syscall.SIGTERM)
-	if err := Wait(ctx, sleep, policy.TermTimeout); err != nil {
+	var err error
+	residuals, err = r.waitForExit(ctx, policy.TermTimeout)
+	if err != nil {
 		return ReapResult{Remaining: r.Rediscover(), Signalled: slices.Sorted(maps.Keys(signalled)), Failed: failed}
 	}
-	residuals = r.Rediscover()
 	if len(residuals) == 0 {
 		return ReapResult{Signalled: slices.Sorted(maps.Keys(signalled)), Failed: failed}
 	}
 
 	round(residuals, syscall.SIGKILL)
-	if err := Wait(ctx, sleep, policy.KillTimeout); err != nil {
+	residuals, err = r.waitForExit(ctx, policy.KillTimeout)
+	if err != nil {
 		return ReapResult{Remaining: r.Rediscover(), Signalled: slices.Sorted(maps.Keys(signalled)), Failed: failed}
 	}
-	residuals = r.Rediscover()
 
 	return ReapResult{Remaining: residuals, Signalled: slices.Sorted(maps.Keys(signalled)), Failed: failed}
+}
+
+func (r Reaper) waitForExit(ctx context.Context, timeout time.Duration) ([]Process, error) {
+	var remaining []Process
+	_, err := WaitUntil(ctx, r.Sleep, timeout, func() (bool, error) {
+		remaining = r.Rediscover()
+		return len(remaining) == 0, nil
+	})
+	return remaining, err
 }
 
 // Signal sends one signal to the processes allowed by selector. It shares the
@@ -142,48 +147,6 @@ func (r Reaper) Signal(ctx context.Context, procs []Process, selector KillSelect
 		remaining = r.Rediscover()
 	}
 	return ReapResult{Remaining: remaining, Signalled: slices.Sorted(maps.Keys(signalled)), Failed: failed}
-}
-
-// waitCancelledFormat wraps the context error when a cancellable Wait is aborted.
-const waitCancelledFormat = "wait cancelled: %w"
-
-// Wait blocks for d, returning early if ctx is cancelled. A non-positive d is an
-// immediate ctx-check. sleep is injectable for tests (defaults to time.Sleep). It
-// is the shared cancellable-sleep used by the reaper and the operation engine.
-func Wait(ctx context.Context, sleep func(time.Duration), d time.Duration) error {
-	if err := ctx.Err(); err != nil {
-		return fmt.Errorf(waitCancelledFormat, err)
-	}
-	if d <= 0 {
-		return nil
-	}
-	if sleep == nil {
-		// Default: the shared stoppable-timer wait, so a cancelled Wait leaks no
-		// goroutine. An injected sleep (tests) takes the goroutine path below,
-		// where the fake returns promptly and so cannot leak — unlike a real
-		// time.Sleep, which is not cancellable and would block until d elapsed.
-		if !ctxutil.Sleep(ctx, d) {
-			return fmt.Errorf(waitCancelledFormat, ctx.Err())
-		}
-		if err := ctx.Err(); err != nil {
-			return fmt.Errorf(waitCancelledFormat, err)
-		}
-		return nil
-	}
-	done := make(chan struct{})
-	go func() {
-		sleep(d)
-		close(done)
-	}()
-	select {
-	case <-ctx.Done():
-		return fmt.Errorf(waitCancelledFormat, ctx.Err())
-	case <-done:
-		if err := ctx.Err(); err != nil {
-			return fmt.Errorf(waitCancelledFormat, err)
-		}
-		return nil
-	}
 }
 
 func signalRound(ctx context.Context, set []Process, selector KillSelector, resolve UserResolver, signaler Signaler, sig syscall.Signal, signalled map[int]bool) []SignalFailure {
