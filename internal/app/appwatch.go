@@ -14,19 +14,21 @@ func storeAppSample(samples *ArtifactSamples, name string, report appinspect.Rep
 	samples.StoreAppReport(name, report)
 }
 
-// BuildAppWatches builds one app-watch per installed catalog application. Each
-// reuses the whole Watch cycle: every engine.artifact_interval it inspects its app,
-// and because FireOnFail is set it "fires" when the app is not ok — emitting a
-// firing/recovered event on the App dimension and notifying the global default
-// once on the rising edge (NotifyInterval 0 = first time only). Only installed
-// apps are watched, matching the web Applications list.
-func BuildAppWatches(ctx context.Context, cfg *config.Config, deps Deps) []*Watch {
+// buildAppWatches builds one app-watch per installed catalog application and
+// returns the app names they sample. Each reuses the whole Watch cycle: every
+// engine.artifact_interval it inspects its app, and because FireOnFail is set it
+// "fires" when the app is not ok — emitting a firing/recovered event on the App
+// dimension and notifying the global default once on the rising edge
+// (NotifyInterval 0 = first time only). Only installed apps are watched,
+// matching the web Applications list.
+func buildAppWatches(ctx context.Context, cfg *config.Config, deps Deps) ([]*Watch, artifactOwned) {
 	return buildCatalogArtifactWatches(ctx, cfg, deps, catalogArtifactWatchSpec{
 		category:  config.CategoryApp,
 		watchName: func(name string) string { return name },
 		appName:   func(name string) string { return name },
-		register: func(samples *ArtifactSamples, report appinspect.Report) {
+		register: func(samples *ArtifactSamples, report appinspect.Report) string {
 			samples.RegisterApp(report.Name)
+			return report.Name
 		},
 		store:   storeAppSample,
 		inspect: appinspect.InspectOne,

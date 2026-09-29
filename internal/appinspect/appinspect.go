@@ -101,7 +101,9 @@ func WithOptionalVersion() Option {
 // its app and library watches from that presence alone: their cycles run the
 // probes, so a version command that takes seconds (salt-minion starts a Python
 // interpreter) no longer holds the whole start — a loaded VM host spent
-// minutes there before it opened its web listener.
+// minutes there before it opened its web listener. The one exception is a
+// version command carrying version_match: its output is the presence verdict
+// (mysqld may be MariaDB), so it still runs.
 func WithoutProbes() Option {
 	return func(o *options) { o.withoutProbes = true }
 }
@@ -313,14 +315,12 @@ func inspectResolved(
 	r.Installed = true
 
 	setReportOwner(&r, info, lookup)
-	if options.withoutProbes {
-		r.OK = true
-		r.Status = StatusOK
-		return r
-	}
-
 	health := probeCommandFor(resolved.Tree, checks.DataKeyHealth)
 	version := probeCommandFor(resolved.Tree, checks.DataKeyVersion)
+	if options.withoutProbes {
+		return presenceReport(ctx, runner, resolved.Tree, version, r)
+	}
+
 	if len(health.argv) > 0 {
 		var healthOut string
 		r.OK, r.Status, healthOut = runExitProbe(ctx, runner, health)
@@ -363,6 +363,22 @@ func inspectResolved(
 	r.Output = vres.output
 	r.Version = vres.raw
 	r.VersionShort = vres.short
+	return r
+}
+
+// presenceReport completes a WithoutProbes report. Presence skips the probes,
+// except when the version output is what decides presence: on a MariaDB host
+// /usr/sbin/mysqld is mariadbd, and only `mysql`'s version_match tells the two
+// apart. Registering it from the path alone made its first cycle fire "not
+// installed".
+func presenceReport(ctx context.Context, runner execx.Runner, tree map[string]any, version probeCommand, r Report) Report {
+	if version.identityRequired() && len(version.argv) > 0 {
+		if vres := runVersionProbe(ctx, runner, tree, version); applyVersionIdentityFailure(&r, version, vres) {
+			return r
+		}
+	}
+	r.OK = true
+	r.Status = StatusOK
 	return r
 }
 

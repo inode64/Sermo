@@ -153,3 +153,46 @@ func TestLVMWarningEscalatesAndRecovers(t *testing.T) {
 		}
 	}
 }
+
+// TestLVMVolumeGroupWatchEvaluatesEveryVolume pins that a VG-scoped watch sees a
+// fault on any member LV. `lvs -a` lists hidden volumes such as
+// [lvol0_pmspare] first, and taking only the first row reported a VG with a
+// partial LV as healthy.
+func TestLVMVolumeGroupWatchEvaluatesEveryVolume(t *testing.T) {
+	data := `{"report":[{"lv":[
+		{"vg_name":"vg0","lv_name":"[lvol0_pmspare]","lv_attr":"ewi-------","vg_free":"100","vg_size":"1000"},
+		{"vg_name":"vg0","lv_name":"root","lv_attr":"-wi-a-----","lv_health_status":"healthy","vg_free":"100","vg_size":"1000"},
+		{"vg_name":"vg0","lv_name":"data","lv_attr":"rwi-a-r-p-","lv_health_status":"partial","vg_free":"100","vg_size":"1000"}
+	]}]}`
+	check := &lvmCheck{name: "lvm", timeout: time.Second, runner: execxtest.Outputs(data), volumeGroup: "vg0"}
+	result := check.Run(t.Context())
+	if result.OK || result.Data[DataKeyHealth] != LVMHealthError {
+		t.Fatalf("result = %+v, want error for the partial member LV", result)
+	}
+	if got := result.Data[DataKeyLVMReasons]; got != "data:partial" {
+		t.Fatalf("reasons = %v, want the faulty LV named", got)
+	}
+	if want := "lvm vg0 health=error"; result.Message != want {
+		t.Fatalf("message = %q, want %q", result.Message, want)
+	}
+}
+
+// TestLVMThinPredicateEvaluatesEveryPool pins that thin-pool thresholds reach
+// the pool row even when it is not the first LV of the VG.
+func TestLVMThinPredicateEvaluatesEveryPool(t *testing.T) {
+	data := `{"report":[{"lv":[
+		{"vg_name":"vg0","lv_name":"root","lv_attr":"-wi-a-----","vg_free":"100","vg_size":"1000"},
+		{"vg_name":"vg0","lv_name":"pool","lv_attr":"twi-a-tz--","vg_free":"100","vg_size":"1000","data_percent":"92.5","metadata_percent":"10"}
+	]}]}`
+	check := &lvmCheck{
+		name: "lvm", timeout: time.Second, runner: execxtest.Outputs(data), volumeGroup: "vg0",
+		preds: []levelPred{{field: DataKeyLVMThinDataPct, op: ">", value: 80}},
+	}
+	result := check.Run(t.Context())
+	if result.OK || result.Data[DataKeyHealth] != LVMHealthError {
+		t.Fatalf("result = %+v, want the pool threshold to fire", result)
+	}
+	if got := result.Data[DataKeyLVMThinDataPct]; got != 92.5 {
+		t.Fatalf("thin data pct = %v, want the pool's 92.5", got)
+	}
+}

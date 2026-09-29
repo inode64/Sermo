@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"sermo/internal/execx"
+	"slices"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -348,7 +349,7 @@ func TestBuildAppWatchesKeepsCheckingButSuppressesNotifyInPanic(t *testing.T) {
 	notifier := &fakeNotifier{name: "ops"}
 	samples := NewArtifactSamples()
 	var events []Event
-	watches := BuildAppWatches(t.Context(), cfg, Deps{
+	watches, _ := buildAppWatches(t.Context(), cfg, Deps{
 		ArtifactSamples: samples,
 		GlobalNotify:    []string{"ops"},
 		Notifiers:       map[string]notify.Notifier{"ops": notifier},
@@ -373,6 +374,38 @@ func TestBuildAppWatchesKeepsCheckingButSuppressesNotifyInPanic(t *testing.T) {
 	}
 	if !hasEvent(events, eventKindFiring) || !hasEvent(events, eventKindPanicSuppressed) {
 		t.Fatalf("panic mode must preserve app firing visibility and report suppression, events=%v", events)
+	}
+}
+
+// TestBuildArtifactWatchesSurviveReload pins that a config reload rebuilds the
+// artifact samplers. The samples store outlives generations, so deciding
+// ownership from its registrations made the second build skip every sampler as
+// "already owned" while the old generation's were cancelled: `changed: {path}`
+// kept its stale fingerprint until sermod restarted.
+func TestBuildArtifactWatchesSurviveReload(t *testing.T) {
+	cfg := &config.Config{
+		AppNames:     []string{"alpha"},
+		Apps:         map[string]*config.Document{"alpha": artifactAppDocument("alpha", "5m")},
+		ServiceNames: []string{"api"},
+		Services: map[string]*config.Document{
+			"api": artifactServiceDocument("api", "3m", []string{"alpha"}, []string{"/etc/demo/api.conf"}),
+		},
+	}
+	deps := Deps{ArtifactSamples: NewArtifactSamples()}
+	artifactNames := func(watches []*Watch) []string {
+		var names []string
+		for _, w := range watches {
+			if strings.HasPrefix(w.Name, artifactWatchNamePrefix) {
+				names = append(names, w.Name)
+			}
+		}
+		slices.Sort(names)
+		return names
+	}
+	first := artifactNames(BuildArtifactWatches(t.Context(), cfg, deps))
+	reloaded := artifactNames(BuildArtifactWatches(t.Context(), cfg, deps))
+	if len(first) == 0 || !slices.Equal(first, reloaded) {
+		t.Fatalf("artifact watches after reload = %v, want %v", reloaded, first)
 	}
 }
 
@@ -553,7 +586,7 @@ func TestBuildAppWatchesProbesOnlyInTheCycle(t *testing.T) {
 	}
 	runner := &countingRunner{result: execx.Result{Stdout: "demo 1.2\n"}}
 	samples := NewArtifactSamples()
-	watches := BuildAppWatches(t.Context(), cfg, Deps{ArtifactSamples: samples, ExecxRunner: runner, Emit: func(Event) {}})
+	watches, _ := buildAppWatches(t.Context(), cfg, Deps{ArtifactSamples: samples, ExecxRunner: runner, Emit: func(Event) {}})
 	if len(watches) != 1 {
 		t.Fatalf("app watches = %d, want 1", len(watches))
 	}

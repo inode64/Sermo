@@ -62,7 +62,7 @@ type Watch struct {
 	Name string
 	// App, when set, marks this as an application-monitoring watch: its events are
 	// emitted on the App dimension (instead of Watch) so they are queryable and
-	// shown per application, separate from host watches. Built by BuildAppWatches.
+	// shown per application, separate from host watches. Built by buildAppWatches.
 	App       string
 	CheckType string // e.g. "storage"; for sermoEnvCheckType (Result.Check is the watch name)
 	Check     checks.Check

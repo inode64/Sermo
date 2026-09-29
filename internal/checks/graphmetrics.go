@@ -1,6 +1,7 @@
 package checks
 
 import (
+	"math"
 	"slices"
 
 	"sermo/internal/cfgval"
@@ -166,7 +167,8 @@ var hardwareRAIDGraphMetrics = []GraphMetric{
 func NumericData(v any) (float64, bool) {
 	switch t := v.(type) {
 	case float64:
-		return t, true
+		// NaN and ±Inf are not readings: they cannot be encoded or aggregated.
+		return t, !math.IsNaN(t) && !math.IsInf(t, 0)
 	case int:
 		return float64(t), true
 	case int64:
