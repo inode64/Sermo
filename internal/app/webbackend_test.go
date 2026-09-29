@@ -112,6 +112,26 @@ func TestWebBackendEventPageFiltersAndContinuesByID(t *testing.T) {
 	}
 }
 
+// The feed is newest first, so the first event older than the since cutoff
+// ends the page: nothing further back can match, and scanning on would only
+// hand out empty continuation pages.
+func TestWebBackendEventPageStopsAtSinceCutoff(t *testing.T) {
+	events := NewEventLog(webEventPageMaxScan + 10)
+	now := time.Date(2026, 7, 10, 12, 0, 0, 0, time.UTC)
+	events.now = func() time.Time { return now.Add(-2 * time.Hour) }
+	for range webEventPageMaxScan + 5 {
+		events.Add(Event{Service: "db", Kind: eventKindAction, Status: eventStatusOK})
+	}
+	events.now = func() time.Time { return now.Add(-time.Minute) }
+	events.Add(Event{Service: "web", Kind: eventKindAction, Status: eventStatusOK, Message: "recent"})
+
+	b := &WebBackend{events: events, now: func() time.Time { return now }}
+	page := b.EventPage(context.Background(), web.EventQuery{Limit: 10, Since: time.Hour})
+	if len(page.Events) != 1 || page.Events[0].Message != "recent" || page.HasMore || page.NextBeforeID != 0 {
+		t.Fatalf("since page = %+v, want the one recent event and no continuation", page)
+	}
+}
+
 func TestWebBackendEventPageStopsAtBoundedScan(t *testing.T) {
 	events := NewEventLog(webEventPageMaxScan + 1)
 	events.now = func() time.Time { return time.Date(2026, 7, 10, 12, 0, 0, 0, time.UTC) }
