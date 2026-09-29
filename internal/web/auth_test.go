@@ -411,6 +411,9 @@ func TestGuestSeesRedactedCmdlines(t *testing.T) {
 		services:      []Service{{Name: "web"}},
 		mounts:        []Mount{{Name: "data", Blockers: []MountBlocker{{PID: 9, Cmdline: []string{"rsync", "--password=hunter2", "/data"}}}}},
 		mountBlockers: MountBlockersResult{OK: true, Name: "data", Blockers: []MountBlocker{{PID: 9, Cmdline: []string{"rsync", "--password=hunter2", "/data"}}}},
+		// The hook argv is served after ${env:…} expansion, so it can carry a
+		// token the operator kept out of the config file.
+		watches: []Watch{{Name: "disk", HasHook: true, HookCommand: []string{"/usr/local/bin/push", "--token", "s3cret"}}},
 	}
 	h := (&Server{Backend: StaticBackend{Backend: b}, Auth: Auth{AdminCredentials: testCredentials(t, "secret"), GuestCredentials: testCredentials(t, "guest")}}).Handler()
 
@@ -441,6 +444,11 @@ func TestGuestSeesRedactedCmdlines(t *testing.T) {
 	if got := guestBlockers.Blockers[0].Cmdline; len(got) != 1 || got[0] != "rsync" {
 		t.Fatalf("guest blockers cmdline = %q, want just the executable", got)
 	}
+	var guestWatches []Watch
+	fetch(APIPathWatches, "guest", &guestWatches)
+	if got := guestWatches[0].HookCommand; len(got) != 1 || got[0] != "/usr/local/bin/push" {
+		t.Fatalf("guest watch hook command = %q, want just the executable", got)
+	}
 
 	var adminDetail Detail
 	fetch(testServicePath("web"), "secret", &adminDetail)
@@ -456,6 +464,14 @@ func TestGuestSeesRedactedCmdlines(t *testing.T) {
 	fetch(testMountPath("data", apiSegmentBlockers), "secret", &adminBlockers)
 	if got := adminBlockers.Blockers[0].Cmdline; len(got) != 3 {
 		t.Fatalf("admin blockers cmdline = %q, want the full command line", got)
+	}
+	var adminWatches []Watch
+	fetch(APIPathWatches, "secret", &adminWatches)
+	if got := adminWatches[0].HookCommand; len(got) != 3 {
+		t.Fatalf("admin watch hook command = %q, want the full command line", got)
+	}
+	if got := b.watches[0].HookCommand; len(got) != 3 {
+		t.Fatalf("guest redaction mutated the backend's watch: %q", got)
 	}
 }
 

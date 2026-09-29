@@ -11,7 +11,23 @@ func (s *Server) handleServices(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleWatches(w http.ResponseWriter, r *http.Request) {
-	s.readJSON(w, r, func(ctx context.Context, backend Backend) any { return backend.Watches(ctx) })
+	// The hook argv is served after ${env:…} expansion, so it can carry a secret
+	// the operator deliberately kept out of the config file.
+	readGuestRedacted(s, w, r, Backend.Watches, redactWatchHookCommands)
+}
+
+// readGuestRedacted serves one backend list, passing it through redact for
+// read-only viewers.
+func readGuestRedacted[T any](s *Server, w http.ResponseWriter, r *http.Request,
+	read func(Backend, context.Context) []T, redact func([]T) []T,
+) {
+	s.readJSON(w, r, func(ctx context.Context, backend Backend) any {
+		items := read(backend, ctx)
+		if roleFrom(ctx) == roleGuest {
+			items = redact(items)
+		}
+		return items
+	})
 }
 
 func (s *Server) handleNotifiers(w http.ResponseWriter, r *http.Request) {
@@ -81,6 +97,10 @@ func (s *Server) handleDetail(w http.ResponseWriter, r *http.Request) {
 
 func redactProcessCmdlines(procs []Process) []Process {
 	return redactCloned(procs, func(p *Process) { p.Cmdline = executableOnly(p.Cmdline) })
+}
+
+func redactWatchHookCommands(watches []Watch) []Watch {
+	return redactCloned(watches, func(w *Watch) { w.HookCommand = executableOnly(w.HookCommand) })
 }
 
 func redactMountCmdlines(mounts []Mount) []Mount {
