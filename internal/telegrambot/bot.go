@@ -35,6 +35,8 @@ type Bot struct {
 
 	// offset is touched only by the Run goroutine, so it needs no lock.
 	offset int64
+	// idle overrides idlePollInterval in tests; zero means the constant.
+	idle time.Duration
 }
 
 // New builds a bot from the initial config. reporter supplies report data;
@@ -74,13 +76,17 @@ func (b *Bot) snapshot() (Config, *client) {
 	return b.cfg, b.client
 }
 
-// Run polls Telegram for commands until ctx is cancelled. It first discards any
-// backlog queued before startup so a restart does not replay old commands.
+// Run polls Telegram for commands until ctx is cancelled. Whenever it starts
+// polling a token — at startup, after a reload changes the token, or when a
+// disabled or tokenless bot becomes active — it first discards the backlog
+// queued for that token, so old commands are never replayed.
 func (b *Bot) Run(ctx context.Context) {
 	if b == nil {
 		return
 	}
-	b.skipBacklog(ctx)
+	// skippedToken is the token whose backlog was discarded; empty while idle,
+	// so becoming active again discards what queued meanwhile.
+	skippedToken := ""
 	for {
 		if ctx.Err() != nil {
 			return
@@ -89,10 +95,19 @@ func (b *Bot) Run(ctx context.Context) {
 		if !cfg.active() || cl == nil {
 			// Disabled or tokenless (possibly after a reload): idle rather than
 			// busy-loop, and re-check on the next tick.
-			if !ctxutil.Sleep(ctx, idlePollInterval) {
+			skippedToken = ""
+			if !ctxutil.Sleep(ctx, b.idleInterval()) {
 				return
 			}
 			continue
+		}
+		if cfg.Token != skippedToken {
+			// Update ids are per bot: an offset carried over from another token
+			// would make getUpdates skip (and confirm) every new command, or
+			// replay the new bot's queue.
+			b.offset = 0
+			b.skipBacklog(ctx, cl)
+			skippedToken = cfg.Token
 		}
 		updates, err := cl.getUpdates(ctx, b.offset, cfg.PollInterval)
 		if err != nil {
@@ -112,14 +127,18 @@ func (b *Bot) Run(ctx context.Context) {
 	}
 }
 
-// skipBacklog advances the offset past updates already queued at startup
+// idleInterval is how long Run waits between checks while inactive.
+func (b *Bot) idleInterval() time.Duration {
+	if b.idle > 0 {
+		return b.idle
+	}
+	return idlePollInterval
+}
+
+// skipBacklog advances the offset past updates already queued for cl's token
 // without acting on them. Best effort: on error the offset stays at zero and
 // the main loop proceeds.
-func (b *Bot) skipBacklog(ctx context.Context) {
-	cfg, cl := b.snapshot()
-	if !cfg.active() || cl == nil {
-		return
-	}
+func (b *Bot) skipBacklog(ctx context.Context, cl *client) {
 	updates, err := cl.getUpdates(ctx, 0, 0)
 	if err != nil {
 		return
