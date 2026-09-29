@@ -876,6 +876,7 @@ func validateServices(cfg *Config) []Issue {
 		if name == "" {
 			continue
 		}
+		gated := cfg.serviceDeclaresEnableIf(name)
 		for _, pruneOptional := range []bool{false, true} {
 			resolved, errs := cfg.resolveServiceWithInputs(name, pruneOptional, inputs)
 			for _, e := range errs {
@@ -887,12 +888,25 @@ func validateServices(cfg *Config) []Issue {
 			for _, issue := range validateResolved(name, resolved.Tree, cfg.Global.RuntimeDir(), defined, services, inputs.backend) {
 				addIssue(issue)
 			}
-			if !containsEnableIf(resolved.Tree) {
+			if !gated {
 				break
 			}
 		}
 	}
 	return issues
+}
+
+// serviceDeclaresEnableIf reports whether the merged, unexpanded service carries
+// any enable_if gate, i.e. whether the pruned variant the daemon runs can
+// differ from the unpruned one. The resolved tree cannot answer this: expansion
+// folds service watches into generated checks and rules and drops their gate.
+func (c *Config) serviceDeclaresEnableIf(name string) bool {
+	canonical, ok := c.CanonicalServiceName(name)
+	if !ok {
+		return false
+	}
+	merged, err := c.mergedService(canonical, nil)
+	return err == nil && containsEnableIf(merged)
 }
 
 func validateStorageMount(mount map[string]any, add addFunc) {

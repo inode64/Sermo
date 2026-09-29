@@ -493,3 +493,24 @@ defaults: { policy: { cooldown: 5m } }
 		t.Errorf("Validate() must check a gated-off watch: %v", issues)
 	}
 }
+
+// TestEnableIfOnServiceWatchValidatesPrunedVariant covers a gate that lives
+// only on a service watch. Expansion folds the watch into a generated check and
+// drops its gate, so validation must still check the pruned variant the daemon
+// runs, where a rule naming the gated watch's check has nothing to reference.
+func TestEnableIfOnServiceWatchValidatesPrunedVariant(t *testing.T) {
+	issues := validateService(t, fmt.Sprintf(`
+name: svc
+service: x
+watches:
+  opt:
+    enable_if: { file: %q, key: mode, equals: "on" }
+    check: { type: tcp, host: 127.0.0.1, port: 80 }
+rules:
+  restart-opt:
+    type: remediation
+    if: { failed: { check: opt } }
+    then: { action: restart }
+`, filepath.Join(t.TempDir(), "missing.conf")))
+	mustHave(t, issues, `references unknown check "opt"`)
+}
