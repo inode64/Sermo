@@ -1822,3 +1822,17 @@ func TestDedupeSameBinaryMatchesKeepsFirstIdentityAndExemptions(t *testing.T) {
 		t.Fatalf("instances = %q, want %q", instances, want)
 	}
 }
+
+// Gentoo links every versioned Python entry point to one python-exec wrapper, so
+// a shared real path alone does not make python2 and python3 the same install.
+func TestDedupeSameBinaryMatchesKeepsDistinctVersionsOfSharedWrapper(t *testing.T) {
+	toks := tokensFor("python%n")
+	wrapper := "/usr/bin/python-exec2c"
+	matches := []templateMatch{
+		{values: map[string]string{varN: "2"}, realPath: wrapper, matchedBinary: true},
+		{values: map[string]string{varN: "3"}, realPath: wrapper, matchedBinary: true},
+	}
+	if got := dedupeSameBinaryMatches(matches, toks); len(got) != len(matches) {
+		t.Fatalf("matches = %+v, want python2 and python3 kept", got)
+	}
+}
