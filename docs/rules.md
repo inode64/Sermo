@@ -1319,7 +1319,9 @@ Protocols, in the order of the table above:
   model/firmware) changes. Uses `github.com/gosnmp/gosnmp`.
 - `tftp` — default port 69 (UDP). No auth. Sends a read request (RRQ) for `query`
   (default `sermo-tftp-check`) and verifies a valid TFTP packet: a `DATA` reply
-  (the file is served) or an `ERROR` reply (e.g. file not found) both pass. Result
+  (the file is served) or an `ERROR` reply (e.g. file not found) both pass. Only
+  datagrams from the server's address count, and a transfer the probe opened is
+  ended at once with a TFTP `ERROR`, so the server does not retransmit. Result
   data: the reply kind and, for an error, the TFTP error code/message. RFC 1350.
 - `ldap` — default port 389; `tls` supported (implicit TLS / LDAPS — use port
   636). `user` is **optional**: with no credentials it does an **anonymous bind** (a

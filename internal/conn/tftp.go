@@ -3,6 +3,7 @@ package conn
 import (
 	"bytes"
 	"context"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"net"
@@ -24,6 +25,10 @@ const (
 	tftpReplyMinBytes        = 4
 	tftpWireByteShift        = 8
 	tftpWireZeroByte         = 0
+	// tftpErrorNotDefined is the RFC 1350 error code 0 the probe sends to end
+	// a transfer it started, with tftpAbortMessage as the reason.
+	tftpErrorNotDefined = 0
+	tftpAbortMessage    = "sermo probe complete"
 )
 
 const (
@@ -73,17 +78,21 @@ func (tftpProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	if _, err := pc.WriteTo(buildTFTPReadRequest(filename), server); err != nil {
 		return Result{}, probeErr(ProtocolNameTFTP, stepTFTPReadRequest, err)
 	}
-	buf := make([]byte, tftpReplyBufferBytes)
-	n, _, err := pc.ReadFrom(buf)
+	reply, tid, err := readTFTPReply(pc, server.IP)
 	if err != nil {
-		return Result{}, probeErr(ProtocolNameTFTP, stepReply, err)
+		return Result{}, err
 	}
-	opcode, errCode, msg, err := parseTFTPReply(buf[:n])
+	opcode, errCode, msg, err := parseTFTPReply(reply)
 	if err != nil {
 		return Result{}, err
 	}
 	if !tftpResponded(opcode) {
 		return Result{}, fmt.Errorf("unexpected TFTP opcode %d", opcode)
+	}
+	if opcode != tftpERROR {
+		// DATA or OACK opened a transfer; end it so the server does not
+		// retransmit and log a timeout on every probe cycle.
+		_, _ = pc.WriteTo(buildTFTPError(tftpErrorNotDefined, tftpAbortMessage), tid)
 	}
 
 	extra := map[string]string{extraQuery: filename, extraReply: tftpOpName(opcode)}
@@ -92,6 +101,32 @@ func (tftpProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 		extra[extraTFTPError] = msg
 	}
 	return Result{Extra: extra}, nil
+}
+
+// readTFTPReply returns the first datagram sent from the server's IP address
+// and the transfer ID (address) it came from. The reply arrives from a fresh
+// port, so the socket is unconnected; filtering by source IP keeps a stray or
+// spoofed datagram from another host from counting as the server's answer.
+// The socket deadline bounds the wait.
+func readTFTPReply(pc net.PacketConn, serverIP net.IP) ([]byte, net.Addr, error) {
+	buf := make([]byte, tftpReplyBufferBytes)
+	for {
+		n, from, err := pc.ReadFrom(buf)
+		if err != nil {
+			return nil, nil, probeErr(ProtocolNameTFTP, stepReply, err)
+		}
+		if udp, ok := from.(*net.UDPAddr); ok && udp.IP.Equal(serverIP) {
+			return buf[:n], from, nil
+		}
+	}
+}
+
+// buildTFTPError builds an ERROR packet with code and message.
+func buildTFTPError(code uint16, message string) []byte {
+	b := binary.BigEndian.AppendUint16(nil, tftpERROR)
+	b = binary.BigEndian.AppendUint16(b, code)
+	b = append(b, message...)
+	return append(b, tftpWireZeroByte)
 }
 
 // buildTFTPReadRequest builds an RRQ for filename in octet (binary) mode.
