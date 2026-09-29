@@ -3,6 +3,7 @@ package web
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -67,6 +68,7 @@ type fakeBackend struct {
 	releaseOK                   bool
 	notifierTested              string
 	notifierResult              ActionResult
+	pruneErr                    error
 }
 
 func (f *fakeBackend) Services(context.Context) []Service        { return f.services }
@@ -251,11 +253,14 @@ func (f *fakeBackend) ApplicationEvents(_ context.Context, name string, limit in
 	}
 	return nil, false
 }
-func (f *fakeBackend) PruneEvents(_ context.Context, before time.Time) int {
+func (f *fakeBackend) PruneEvents(_ context.Context, before time.Time) (int, error) {
+	if f.pruneErr != nil {
+		return 0, f.pruneErr
+	}
 	if before.IsZero() {
 		n := len(f.events)
 		f.events = nil
-		return n
+		return n, nil
 	}
 	// simple impl for tests: drop if their (string) Time parses before
 	kept := f.events[:0]
@@ -266,7 +271,7 @@ func (f *fakeBackend) PruneEvents(_ context.Context, before time.Time) int {
 	}
 	cleared := len(f.events) - len(kept)
 	f.events = kept
-	return cleared
+	return cleared, nil
 }
 func (f *fakeBackend) Metrics(_ context.Context, name, check, _ string, since time.Duration) (MetricSeries, bool) {
 	for _, s := range f.services {
@@ -1534,6 +1539,24 @@ func TestEventsClear(t *testing.T) {
 	}
 	if len(b.events) != 1 || b.events[0].Kind != "keep" {
 		t.Fatalf("after prune before, left=%v", b.events)
+	}
+}
+
+// TestEventsClearReportsStoreFailure pins that a failed persistent delete is not
+// reported as success: the events would reappear after a daemon restart.
+func TestEventsClearReportsStoreFailure(t *testing.T) {
+	b := &fakeBackend{pruneErr: errors.New("database is locked")}
+	rec := httptest.NewRecorder()
+	newServer(b).ServeHTTP(rec, postReq(testAPIPath(apiSegmentEvents, apiActionClear)))
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("clear with a failing store = %d, want 500: %s", rec.Code, rec.Body.String())
+	}
+	var res ActionResult
+	if err := json.Unmarshal(rec.Body.Bytes(), &res); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if res.OK || !strings.Contains(res.Message, "database is locked") {
+		t.Fatalf("result = %+v, want ok=false naming the store error", res)
 	}
 }
 

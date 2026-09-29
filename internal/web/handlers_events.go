@@ -156,7 +156,11 @@ func (s *Server) handleEventsClear(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	n := backend.PruneEvents(r.Context(), before)
+	n, err := backend.PruneEvents(r.Context(), before)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, ActionResult{OK: false, Message: err.Error()})
+		return
+	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		apiJSONKeyOK:     true,
 		apiJSONKeyPruned: n,

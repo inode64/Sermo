@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -141,8 +142,8 @@ func TestEventLogPrune(t *testing.T) {
 	l.now = func() time.Time { return now.Add(10 * time.Minute) }
 	l.Add(Event{Message: "recent"})
 
-	if got := l.Prune(context.Background(), now.Add(5*time.Minute)); got != 2 {
-		t.Fatalf("prune before 5m pruned %d, want 2", got)
+	if got, err := l.Prune(context.Background(), now.Add(5*time.Minute)); err != nil || got != 2 {
+		t.Fatalf("prune before 5m pruned %d err=%v, want 2", got, err)
 	}
 	rem := l.Recent("", 0)
 	if len(rem) != 1 || rem[0].Message != "recent" {
@@ -150,11 +151,30 @@ func TestEventLogPrune(t *testing.T) {
 	}
 
 	// prune all
-	if got := l.Prune(context.Background(), time.Time{}); got != 1 {
-		t.Fatalf("prune zero-time cleared %d", got)
+	if got, err := l.Prune(context.Background(), time.Time{}); err != nil || got != 1 {
+		t.Fatalf("prune zero-time cleared %d err=%v", got, err)
 	}
 	if len(l.Recent("", 0)) != 0 {
 		t.Fatal("not empty after clear all")
+	}
+}
+
+// TestEventLogPruneReportsStoreFailure pins that a failed persistent DELETE
+// reaches the caller and leaves the ring intact, so `events clear` cannot report
+// success for events a daemon restart would bring back.
+func TestEventLogPruneReportsStoreFailure(t *testing.T) {
+	store := &stubEventStore{pruneErr: errors.New("database is locked")}
+	l, err := NewPersistentEventLog(10, store, nil)
+	if err != nil {
+		t.Fatalf("NewPersistentEventLog: %v", err)
+	}
+	l.Add(Event{Message: "kept"})
+
+	if _, err := l.Prune(context.Background(), time.Time{}); err == nil || !strings.Contains(err.Error(), "database is locked") {
+		t.Fatalf("Prune err = %v, want the store failure", err)
+	}
+	if rem := l.Recent("", 0); len(rem) != 1 {
+		t.Fatalf("ring after a failed prune = %+v, want the event kept", rem)
 	}
 }
 
@@ -291,10 +311,11 @@ func TestWebBackendLastServiceEventIsNotBoundedByGlobalScan(t *testing.T) {
 // operation in its own process and writes the audit row straight to the state
 // database.
 type stubEventStore struct {
-	rows    []state.EventRecord
-	nextID  int64
-	queries []string
-	failFor string
+	rows     []state.EventRecord
+	nextID   int64
+	queries  []string
+	failFor  string
+	pruneErr error
 }
 
 func (s *stubEventStore) RecordEvent(rec state.EventRecord) (int64, error) {
@@ -339,7 +360,9 @@ func (s *stubEventStore) newest(match func(state.EventRecord) bool, limit int) [
 	return out
 }
 
-func (s *stubEventStore) PruneEvents(context.Context, time.Time) (int64, error) { return 0, nil }
+func (s *stubEventStore) PruneEvents(context.Context, time.Time) (int64, error) {
+	return 0, s.pruneErr
+}
 
 // sermoctl performs a service operation in its own process and records the
 // audit row directly in the state database, so it never reaches the running

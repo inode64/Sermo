@@ -349,17 +349,36 @@ func (l *EventLog) loadRecentFromStore() error {
 }
 
 // Prune removes events strictly older than 'before'. If before.IsZero(), all
-// events are cleared. Returns the number of events removed. Safe for concurrent
-// use. ctx bounds the optional store DELETE.
-func (l *EventLog) Prune(ctx context.Context, before time.Time) int {
+// events are cleared. Returns the number of events removed: the store's count
+// when one is attached, else the ring's. Safe for concurrent use. ctx bounds the
+// optional store DELETE.
+//
+// The store is pruned first so a failed DELETE leaves the ring untouched: the
+// caller reports the failure while the view still matches what a restart would
+// rehydrate.
+func (l *EventLog) Prune(ctx context.Context, before time.Time) (int, error) {
 	if l == nil {
-		return 0
+		return 0, nil
 	}
+	if l.store == nil {
+		return l.pruneRing(before), nil
+	}
+	cleared, err := l.store.PruneEvents(ctx, before)
+	if err != nil {
+		return 0, fmt.Errorf("prune persisted events: %w", err)
+	}
+	l.pruneRing(before)
+	return int(min(cleared, int64(math.MaxInt))), nil
+}
+
+// pruneRing drops the ring's events older than before (all when zero) and returns
+// how many it removed.
+func (l *EventLog) pruneRing(before time.Time) int {
 	l.mu.Lock()
+	defer l.mu.Unlock()
 
 	if l.count == 0 {
-		l.mu.Unlock()
-		return l.pruneStore(ctx, before, 0)
+		return 0
 	}
 	var cleared int
 	if before.IsZero() {
@@ -368,8 +387,7 @@ func (l *EventLog) Prune(ctx context.Context, before time.Time) int {
 		l.next = 0
 		l.count = 0
 		l.rebuildIndexesLocked()
-		l.mu.Unlock()
-		return l.pruneStore(ctx, before, cleared)
+		return cleared
 	}
 
 	ordered := l.orderedLocked() // oldest first
@@ -395,24 +413,7 @@ func (l *EventLog) Prune(ctx context.Context, before time.Time) int {
 		l.next = 0
 	}
 	l.rebuildIndexesLocked()
-	l.mu.Unlock()
-	return l.pruneStore(ctx, before, cleared)
-}
-
-func (l *EventLog) pruneStore(ctx context.Context, before time.Time, memoryCleared int) int {
-	if l.store == nil {
-		return memoryCleared
-	}
-	cleared, err := l.store.PruneEvents(ctx, before)
-	if err != nil {
-		l.reportStoreError(err)
-		return memoryCleared
-	}
-	maxInt := int64(math.MaxInt)
-	if cleared > maxInt {
-		return int(maxInt)
-	}
-	return int(cleared)
+	return cleared
 }
 
 func (l *EventLog) reportStoreError(err error) { reportCallbackError(l.onStoreError, err) }
