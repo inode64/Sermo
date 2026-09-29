@@ -308,6 +308,62 @@ func TestSampleSSHSessionsSkipsMultiplexerWindows(t *testing.T) {
 	}
 }
 
+// ssh_idle must agree with the SSH session inventory: the windows of a screen
+// server started from an SSH shell are the multiplexer's terminals, not extra
+// SSH sessions, so an untouched window cannot inflate the idle count.
+func TestSampleSSHIdleSkipsMultiplexerWindows(t *testing.T) {
+	now := time.Date(2026, time.September, 6, 12, 0, 0, 0, time.UTC)
+	const (
+		clientPID   = sshShellPID + 1
+		screenPID   = sshShellPID + 2
+		windowShell = sshShellPID + 3
+		windowTTY   = testTTY + 20
+	)
+	snapshot := sshSnapshot(
+		process.Identity{PID: clientPID, PPID: sshShellPID, UID: testUserID, Exe: "/usr/bin/screen", ExeOK: true, TTY: testTTY, TTYOK: true},
+		process.Identity{PID: screenPID, PPID: clientPID, UID: testUserID, Exe: "/usr/bin/screen", ExeOK: true},
+		process.Identity{PID: windowShell, PPID: screenPID, UID: testUserID, Exe: "/bin/bash", ExeOK: true, TTY: windowTTY, TTYOK: true},
+	)
+	terminal := func(line string) (utmp.Terminal, error) {
+		if line == "pts/1" {
+			return utmp.Terminal{Device: windowTTY, AccessedAt: now.Add(-3 * time.Hour)}, nil
+		}
+		return utmp.Terminal{Device: testTTY, AccessedAt: now.Add(-time.Minute)}, nil
+	}
+	got, err := sampleSSHIdle([]utmp.Session{
+		{User: "deploy", Line: "pts/0", Host: "192.0.2.10"},
+		{User: "deploy", Line: "pts/1", Host: "192.0.2.10:S.0"},
+	}, snapshot, testSSHLookup(), terminal, now, testSSHConfig(t), mustSSHDFilters(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Count != 0 || got.OldestIdle != time.Minute || got.ProtectedCount != 0 {
+		t.Fatalf("sample = %+v, want only the SSH terminal (idle 1m) counted", got)
+	}
+
+	// A protected job in a window, even of a detached server, keeps a guard
+	// denying: the window is not an SSH session but its protection counts.
+	detached := sshSnapshot(
+		process.Identity{PID: screenPID, PPID: 1, UID: testUserID, Exe: "/usr/bin/screen", ExeOK: true},
+		process.Identity{PID: windowShell, PPID: screenPID, UID: testUserID, Exe: "/bin/bash", ExeOK: true, TTY: windowTTY, TTYOK: true},
+		process.Identity{PID: windowShell + 1, PPID: windowShell, UID: testUserID, Exe: "/opt/sermo-test/mysqldump", ExeOK: true, TTY: windowTTY, TTYOK: true},
+	)
+	backupFilter, err := process.NewIdentityFilter("/opt/sermo-test/mysqldump", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	protected := testSSHConfig(t, SSHProtectedProcess{Name: "backup", Filter: backupFilter})
+	got, err = sampleSSHIdle([]utmp.Session{
+		{User: "deploy", Line: "pts/1", Host: "192.0.2.10:S.0"},
+	}, detached, testSSHLookup(), terminal, now, protected, mustSSHDFilters(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Count != 0 || got.ProtectedCount != 1 {
+		t.Fatalf("sample = %+v, want the window's protected job counted", got)
+	}
+}
+
 // A tmux client run from an SSH shell is still that SSH session: only an
 // ancestor that is a multiplexer server makes a terminal a window.
 func TestSampleSSHSessionsKeepsSSHSessionRunningAMultiplexerClient(t *testing.T) {

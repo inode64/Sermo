@@ -785,9 +785,12 @@ widens service-process discovery or authorizes a signal.
 `count` is the number of unprotected SSH sessions at least `idle_for` old.
 `protected_count` is the number excluded by `protected_processes`, and
 `oldest_idle_seconds` is the maximum input-idle duration among unprotected SSH
-sessions. To make a guard retain a protected account or job, configure a second
-`ssh_idle` check with `protected_count: { op: ">", value: 0 }` and reference it
-from the guard. The check itself never closes an SSH session.
+sessions. A `screen` or `tmux` window is the multiplexer's terminal, not
+another SSH session, so it never adds to `count` or `oldest_idle_seconds`; a
+protected process running in a window still adds to `protected_count`, even
+when the multiplexer session is detached. To make a guard retain a protected
+account or job, configure a second `ssh_idle` check with
+`protected_count: { op: ">", value: 0 }` and reference it from the guard. The check itself never closes an SSH session.
 
 SFTP/scp without a terminal and port-forward-only connections are deliberately
 outside this check; use `tcp_connections` for transport connections. Terminal
