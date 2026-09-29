@@ -6,6 +6,7 @@ import (
 	"reflect"
 	"strings"
 	"sync"
+	"time"
 
 	"sermo/internal/checks"
 	"sermo/internal/config"
@@ -42,6 +43,8 @@ type Monitor struct {
 	genCancel context.CancelFunc
 	genWG     sync.WaitGroup
 	running   bool
+	// startupDelayUntil is when the first boot's engine.startup_delay ends.
+	startupDelayUntil time.Time
 }
 
 const (
@@ -248,11 +251,15 @@ func (m *Monitor) startGenerationLocked(ctx context.Context, firstBoot bool) {
 	m.genCancel = cancel
 
 	sched := m.scheduler
-	// firstBoot is the very first boot: it keeps the StartupDelay. Reloads skip
-	// it, and the first-cycle gate ignores them once the daemon is ready.
-	if !firstBoot {
-		sched.StartupDelay = 0
+	// startup_delay applies once per process: the first boot fixes its deadline
+	// and a later generation only waits for what is left of it, so a reload
+	// during the wait neither repeats it nor lets the new generation check and
+	// remediate before the host has settled. The first-cycle gate ignores
+	// generations started after the daemon is ready.
+	if firstBoot {
+		m.startupDelayUntil = time.Now().Add(sched.StartupDelay)
 	}
+	sched.StartupDelay = time.Until(m.startupDelayUntil)
 
 	// firstCycles counts the keys armed below, so each target's pause state is
 	// read once per generation (see Scheduler.Run).

@@ -457,3 +457,31 @@ func TestMonitorFirstCycleGateCountsSettlingSnapshot(t *testing.T) {
 
 	waitReady(t, ready)
 }
+
+// TestMonitorReloadDuringStartupDelay covers a config reload that cancels the
+// first generation while it is still in engine.startup_delay: readiness must
+// not report shutting_down, and the new generation must wait out what is left
+// of the delay and then gate on its first cycles.
+func TestMonitorReloadDuringStartupDelay(t *testing.T) {
+	const delay = 300 * time.Millisecond
+	ready := NewReadiness(string(servicemgr.BackendSystemd), 1, 0)
+	settling := NewSettling(ready)
+	mon := NewMonitor(&config.Config{}, Deps{Settling: settling, Interval: 10 * time.Millisecond},
+		Scheduler{Interval: 10 * time.Millisecond, StartupDelay: delay}, ready, nil, nil,
+		[]*Worker{activeGateWorker("web", settling, nil)}, nil)
+	start := time.Now()
+	startTestGeneration(t, mon, true)
+
+	mon.mu.Lock()
+	mon.stopGenerationLocked(false)
+	mon.startGenerationLocked(t.Context(), false)
+	mon.mu.Unlock()
+	if rep := ready.Report(context.Background()); rep.Status != readinessStarting {
+		t.Fatalf("readiness after a reload during startup_delay = %+v, want starting", rep)
+	}
+
+	waitReady(t, ready)
+	if elapsed := time.Since(start); elapsed < delay {
+		t.Fatalf("daemon became ready after %s, before startup_delay %s elapsed", elapsed, delay)
+	}
+}
