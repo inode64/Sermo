@@ -112,7 +112,8 @@ decision.
 `repair` is intentionally narrower than a general cleanup command. It first
 requires the init backend to report the service failed or inactive. It can then
 remove only a regular pidfile below `/run` whose exact PID is absent from
-`/proc`; a live PID, malformed file, symlink or non-runtime path fails closed.
+`/proc`; a live PID, a PID or process table that cannot be read completely, a
+malformed file, symlink or non-runtime path fails closed.
 It then applies the same survivor reconciliation as start (step 5): surviving
 non-delegated processes are cleaned up under `stop_policy` or block the repair
 with `orphan_processes`. Only then, for a failed unit, does it clear the init

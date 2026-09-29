@@ -78,13 +78,40 @@ func removeStalePIDFile(ctx context.Context, path string, reader process.Reader,
 	if err != nil {
 		return false, fmt.Errorf("refusing to remove pidfile %q: %w", path, err)
 	}
-	if _, alive := reader.Identity(pid); alive {
+	alive, err := pidAlive(reader, pid)
+	if err != nil {
+		return false, fmt.Errorf("refusing to remove pidfile %q: cannot prove pid %d is gone: %w", path, pid, err)
+	}
+	if alive {
 		return false, fmt.Errorf("refusing to remove pidfile %q: pid %d is running", path, pid)
 	}
 	if err := os.Remove(path); err != nil {
 		return false, fmt.Errorf("remove stale pidfile %q: %w", path, err)
 	}
 	return true, nil
+}
+
+// pidAlive reports whether pid is live. Absence counts only when it is proven:
+// a failed read of that PID, or a process table that could not be read
+// completely without it, is an error rather than "dead". The daemon's caching
+// reader otherwise serves a snapshot whose read failures are dropped, and a
+// live daemon missing from it would lose its pidfile.
+func pidAlive(reader process.Reader, pid int) (bool, error) {
+	if checked, ok := reader.(process.IdentityErrorReader); ok {
+		_, present, err := checked.IdentityWithError(pid)
+		if err != nil {
+			return present, fmt.Errorf("read pid %d: %w", pid, err)
+		}
+		return present, nil
+	}
+	snapshot, err := process.Snapshot(reader)
+	if _, present := snapshot[pid]; present {
+		return true, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("process table incomplete: %w", err)
+	}
+	return false, nil
 }
 
 func repairPIDFilePaths(selectors []process.Selector) []string {
