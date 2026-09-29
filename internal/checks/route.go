@@ -142,13 +142,25 @@ func defaultRoutesFromNetlink(family string, routes []netlink.Route, linkNames m
 		}
 		if len(routes[i].MultiPath) > 0 {
 			for _, hop := range routes[i].MultiPath {
-				out = appendDefaultRoute(out, family, linkNames[hop.LinkIndex], hop.Gw)
+				if hop != nil && nexthopUsable(hop.Flags) {
+					out = appendDefaultRoute(out, family, linkNames[hop.LinkIndex], hop.Gw)
+				}
 			}
 			continue
 		}
-		out = appendDefaultRoute(out, family, linkNames[routes[i].LinkIndex], routes[i].Gw)
+		if nexthopUsable(routes[i].Flags) {
+			out = appendDefaultRoute(out, family, linkNames[routes[i].LinkIndex], routes[i].Gw)
+		}
 	}
 	return out
+}
+
+// nexthopUsable rejects a next hop the kernel flags dead or linkdown. With
+// IFF_UP still set but no carrier the kernel keeps the IPv4 default route,
+// only flagged linkdown, so without this a pulled uplink cable still reads as
+// an up default route.
+func nexthopUsable(flags int) bool {
+	return flags&(routeNexthopDead|routeNexthopLinkDown) == 0
 }
 
 func isDefaultNetlinkRoute(family string, route netlink.Route) bool {
