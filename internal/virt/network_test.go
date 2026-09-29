@@ -147,6 +147,8 @@ func TestNetworkManagerStopRefusesAttachedGuests(t *testing.T) {
 		{name: "running on network", state: libvirt.DomainRunning, xml: domOnNetworkXML},
 		{name: "running on bridge", state: libvirt.DomainRunning, xml: domOnBridgeXML},
 		{name: "paused on network", state: libvirt.DomainPaused, xml: domOnNetworkXML},
+		// on_crash=preserve/coredump keeps qemu and its tap alive.
+		{name: "crashed on network", state: libvirt.DomainCrashed, xml: domOnNetworkXML},
 		{name: "unknown state on network", state: libvirt.DomainNostate, xml: domOnNetworkXML},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
