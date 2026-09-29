@@ -25,6 +25,8 @@ Without `--timeout`, live service queries (`status` and `is-active`) use the
 Web UI, which a service's `stop_policy` may raise. `notifier test` uses
 `engine.default_timeout` (default `10s`), like the Web UI's test button. Other
 short probe commands keep their 2-second CLI budget.
+`--timeout` must be a positive duration; `0` or a negative value is a usage
+error (exit `64`).
 For service operations, an explicit `--timeout` bounds backend preparation and
 every operation phase after configuration and audit-store initialization.
 Stop-policy budgets cannot extend this deadline; expiration prevents subsequent

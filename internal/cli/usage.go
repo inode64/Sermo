@@ -626,7 +626,7 @@ func writeUsage(w io.Writer) {
 	fmt.Fprintln(tw, "  --backend auto|systemd|openrc\tservice-manager backend; default is auto")
 	fmt.Fprintln(tw, "  --json\tmachine-readable output where supported")
 	fmt.Fprintln(tw, "  --quiet, -q\tsuppress non-essential text where supported")
-	fmt.Fprintln(tw, "  --timeout DURATION\touter command timeout")
+	fmt.Fprintln(tw, "  --timeout DURATION\tpositive outer command timeout")
 	fmt.Fprintln(tw, "  --version, -V\tprint version and exit")
 	_ = tw.Flush()
 	fmt.Fprintln(w)
