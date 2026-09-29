@@ -106,6 +106,38 @@ security:
 	}
 }
 
+// TestValidateRejectsUnknownTopLevelKeys covers the sections without a nested
+// owner: a misspelled top-level key in sermo.yml, a service or a host watch
+// must be reported, since `dryrun: true` would otherwise leave real
+// remediation on and `intervall:` would silently keep the default cadence.
+func TestValidateRejectsUnknownTopLevelKeys(t *testing.T) {
+	cfg := loadCatalog(t, map[string]string{
+		"sermo.yml": `
+paths: { services: [ "@ROOT@/services" ], watches: [ "@ROOT@/watches" ], runtime: /run/sermo }
+defaults: { policy: { cooldown: 5m } }
+securty: { allow_sigkill_by_default: true }
+`,
+		"catalog/services/base.yml": "name: base\nservice: base\nwatchs: {}\n",
+		"services/svc.yml":          "name: svc\nuses: base\ndryrun: true\n",
+		"watches/load.yml": `
+name: load
+intervall: 5s
+dryrun: true
+check: { type: load, load1: { op: '>', value: 50 } }
+`,
+	})
+	issues := Validate(cfg)
+	for _, want := range []string{
+		"securty is not supported",
+		"watchs is not supported",
+		"dryrun is not supported",
+		"watches.load.intervall is not supported",
+		"watches.load.dryrun is not supported",
+	} {
+		mustHave(t, issues, want)
+	}
+}
+
 func TestValidateMissingVariableAndPort(t *testing.T) {
 	global := writeConfig(t, map[string]string{
 		"sermo.yml": baseGlobal,

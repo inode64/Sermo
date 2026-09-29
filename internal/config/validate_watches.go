@@ -24,6 +24,9 @@ func validateWatches(watches map[string]any, locksDir string, notifiers map[stri
 		}
 		validateWatchHeader(name, entry, add)
 		validateHostWatchFlags(name, entry, add)
+		for key := range unknownBlockKeys(entry, validHostWatchKeys) {
+			add(validationNotSupportedFormat, watchFieldPath(name, key))
+		}
 		if cfgval.Disabled(entry) {
 			continue
 		}

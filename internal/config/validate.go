@@ -85,6 +85,55 @@ var validGlobalPathKeys = set(
 // it, and it is never merged into a service.
 var validDefaultsKeys = set(append(slices.Clone(perServiceDefaults), sectionVariables)...)
 
+// validGlobalKeys are the top-level sections of sermo.yml. Everything else is
+// rejected so a misspelled section (`securty:`) cannot silently drop the
+// settings it was meant to carry.
+var validGlobalKeys = set(
+	SectionEngine,
+	sectionPaths,
+	sectionDefaults,
+	emission.Section,
+	SectionWeb,
+	pathKeyNotifiers,
+	sectionNotify,
+	SectionEventNotify,
+	sectionSecurity,
+	SectionTelegramBot,
+	sectionWatches,
+)
+
+// validServiceDocumentKeys are the top-level keys of a configured or catalog
+// service document. A typo such as `dryrun: true` would otherwise leave the
+// service performing real remediation. perServiceDefaults are included because
+// a service may set every key the global defaults can give it. `emission`,
+// `remediation` and `enable_if` are listed only because validateResolved and
+// walkEnableIf reject them with a more specific hint.
+var validServiceDocumentKeys = set(append(slices.Clone(perServiceDefaults),
+	keyKind, keyName, ServiceKeyUses, keyClone, keyAliases,
+	keyDisplayName, keyDescription, keyCategory, keyType,
+	keyVersions, keyInterval, keyMonitor, keyEnabled, sectionNotify,
+	sectionVariables, VariableKeyPort, keyApps,
+	ServiceKeyService, ServiceKeyAlsoService, ServiceKeyAlsoApply,
+	ServiceKeyRestartPolicy, ServiceKeyConfigFiles,
+	ServiceKeyPidfile, ServiceKeyPidfiles, artifactSocket, artifactLockfile, keyAnalyze,
+	sectionProcesses, sectionChecks, sectionPreflight, rules.SectionRules, sectionWatches,
+	sectionCommands, sectionButtons, sectionControl, sectionReload, sectionReap,
+	ServiceMonitorKeyVersion, ServiceMonitorKeyConfig,
+	emission.Section, keyUnsupportedRemediation, keyEnableIf,
+)...)
+
+// validHostWatchKeys are the top-level keys of a host watch entry (kind and
+// name are consumed by the loader). A boolean `delete` is consumed by the
+// `.local` loader; validateHostWatchFlags reports any that remains.
+var validHostWatchKeys = set(
+	WatchKeyCheck, WatchKeyThen, sectionMetrics,
+	rules.RuleFieldFor, rules.RuleFieldWithin, rules.RuleFieldClear,
+	keyInterval, keyDryRun, keyMonitor, keyEnabled, keyDelete, keyEnableIf,
+	emission.Section, sectionPolicy, WatchKeySeverity,
+	keyDisplayName, keyDescription, keyCategory,
+	WatchKeyRAIDControl, WatchKeyReplicationControl, keyMount,
+)
+
 var validEngineKeys = set(
 	keyInterval,
 	EngineKeyAccess,
@@ -129,6 +178,9 @@ func validateGlobal(cfg *Config) []Issue {
 		issues = append(issues, Issue{Scope: globalScope, Msg: fmt.Sprintf(format, args...)})
 	}
 
+	for key := range unknownBlockKeys(raw, validGlobalKeys) {
+		add(validationNotSupportedFormat, key)
+	}
 	validateEnableIfTree(raw, add)
 	validateGlobalEngine(cfg, raw, add)
 	validateGlobalPaths(cfg, raw, add)
@@ -439,6 +491,11 @@ func validateDocument(cfg *Config, doc *Document) ([]Issue, bool) {
 	issues := validateDocumentMetadata(doc, scope)
 	addDoc := func(format string, args ...any) {
 		issues = append(issues, Issue{Scope: scope, Msg: fmt.Sprintf(format, args...)})
+	}
+	if doc.Kind == kindService {
+		for key := range unknownBlockKeys(doc.Body, validServiceDocumentKeys) {
+			addDoc(validationNotSupportedFormat, key)
+		}
 	}
 	validateEnableIfTree(doc.Body, addDoc)
 	validateFromFileVariables(doc.Body[sectionVariables], addDoc)
