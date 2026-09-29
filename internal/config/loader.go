@@ -135,10 +135,15 @@ func Load(globalPath string, opts ...Option) (*Config, error) {
 	}
 	cfg.bakeBuiltins()
 	cfg.expandBindir()
+	// Before materialization, so a `uses:` a host override sets or changes
+	// still demands its catalog template instance.
+	if err := cfg.applyServiceLocalOverrides(servicePaths); err != nil {
+		return nil, err
+	}
 	cfg.materializeVersionTemplates(loadCtx)
 	// Last, so an override wins over a collapsed `os:` branch and targets the
 	// materialized version instance rather than the template it came from.
-	if err := cfg.applyLocalOverrides(servicePaths, appPaths, notifierPaths, watchPaths); err != nil {
+	if err := cfg.applyLocalOverrides(appPaths, notifierPaths, watchPaths); err != nil {
 		return nil, err
 	}
 	return cfg, nil
