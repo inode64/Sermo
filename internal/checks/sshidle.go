@@ -334,15 +334,20 @@ func sampleSSHIdle(sessions []utmp.Session, snapshot map[int]process.Identity, l
 		if len(processes) == 0 {
 			return SSHIdleSample{}, fmt.Errorf("terminal %s has no visible processes", session.Line)
 		}
-		ssh, _, unknown, err := terminalSSH(processes, snapshot, sshdFilters, nil)
-		if err != nil {
-			return SSHIdleSample{}, fmt.Errorf("attribute terminal %s to sshd: %w", session.Line, err)
-		}
-		if unknown {
-			return SSHIdleSample{}, fmt.Errorf("cannot attribute terminal %s to sshd", session.Line)
-		}
-		if !ssh {
-			continue
+		// A screen or tmux window is the multiplexer's terminal, not another SSH
+		// session: counted here, every untouched window would inflate the idle
+		// count and disagree with the SSH session inventory, which skips it too.
+		// A protected job inside a window still counts as protected, so a guard
+		// keeps denying while it runs, including in a detached session.
+		window := terminalMultiplexed(processes, snapshot)
+		if !window {
+			ssh, err := sshIdleTerminalIsSSH(session.Line, processes, snapshot, sshdFilters)
+			if err != nil {
+				return SSHIdleSample{}, err
+			}
+			if !ssh {
+				continue
+			}
 		}
 		protected, err := terminalProtected(processes, config.ProtectedProcesses, lookup)
 		if err != nil {
@@ -350,6 +355,9 @@ func sampleSSHIdle(sessions []utmp.Session, snapshot map[int]process.Identity, l
 		}
 		if protected {
 			sample.ProtectedCount++
+			continue
+		}
+		if window {
 			continue
 		}
 		idle := max(now.Sub(info.AccessedAt), 0)
@@ -361,6 +369,19 @@ func sampleSSHIdle(sessions []utmp.Session, snapshot map[int]process.Identity, l
 		}
 	}
 	return sample, nil
+}
+
+// sshIdleTerminalIsSSH attributes a terminal to a configured sshd. An
+// unattributable terminal is an error: ssh_idle feeds guards and fails closed.
+func sshIdleTerminalIsSSH(line string, processes []process.Identity, snapshot map[int]process.Identity, sshdFilters []process.IdentityFilter) (bool, error) {
+	ssh, _, unknown, err := terminalSSH(processes, snapshot, sshdFilters, nil)
+	if err != nil {
+		return false, fmt.Errorf("attribute terminal %s to sshd: %w", line, err)
+	}
+	if unknown {
+		return false, fmt.Errorf("cannot attribute terminal %s to sshd", line)
+	}
+	return ssh, nil
 }
 
 func sampleSSHSessions(sessions []utmp.Session, snapshot map[int]process.Identity, terminal func(string) (utmp.Terminal, error), now time.Time, sshdFilters []process.IdentityFilter, resolveUser process.UserResolver, sudoBoundary func(utmp.Session, []process.Identity) (sshSudoProcesses, bool)) (SSHSessionSample, error) {
