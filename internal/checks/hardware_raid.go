@@ -798,6 +798,11 @@ type ssaCLIParser struct {
 	cacheIndex      int
 	volumeIndex     int
 	driveIndex      int
+	// otherSection is set inside a block the parser does not model (an
+	// enclosure SEP, an expander, the unassigned list's header). Its model,
+	// firmware and other identity fields describe that device, not the last
+	// drive, logical drive or controller printed before it.
+	otherSection bool
 }
 
 func parseSSACLIReport(raw string) (hardwareRAIDObservation, error) {
@@ -829,18 +834,20 @@ func (p *ssaCLIParser) parseLine(line string) {
 		p.controllerIndex = len(p.observation.ControllerDetails) - 1
 		p.array, p.volume, p.drive = "", "", ""
 		p.cacheIndex, p.volumeIndex, p.driveIndex = -1, -1, -1
+		p.otherSection = false
 		return
 	}
 	if value, ok := afterPrefixFold(line, "Array:"); ok {
-		p.array, p.volume, p.drive = value, "", ""
+		p.openArray(value)
 		return
 	}
 	if value, ok := afterPrefixFold(line, "HPE SmartCache Array:"); ok {
-		p.array, p.volume, p.drive = value, "", ""
+		p.openArray(value)
 		return
 	}
 	if value, ok := afterPrefixFold(line, "Logical Drive:"); ok {
 		p.volume, p.drive = value, ""
+		p.otherSection = false
 		p.observation.VolumeDetails = append(p.observation.VolumeDetails, HardwareRAIDVolumeStatus{
 			ID: value, Controller: p.controller, Array: p.array,
 		})
@@ -854,18 +861,33 @@ func (p *ssaCLIParser) parseLine(line string) {
 			ID: p.drive, Controller: p.controller,
 		})
 		p.driveIndex = len(p.observation.DriveDetails) - 1
+		p.otherSection = false
 		return
 	}
 	key, value, found := strings.Cut(line, ":")
 	if !found {
+		// Any other colon-less line heads a section the parser does not model
+		// (SEP, Expander, Unassigned): the drive and logical drive before it
+		// are closed.
+		p.volume, p.drive = "", ""
+		p.volumeIndex, p.driveIndex = -1, -1
+		p.otherSection = true
 		return
 	}
 	p.parseField(strings.TrimSpace(key), strings.TrimSpace(value))
 }
 
+// openArray starts an array block. The array's own Status and Interface Type
+// lines must not land on the last drive or logical drive of the previous array.
+func (p *ssaCLIParser) openArray(name string) {
+	p.array, p.volume, p.drive = name, "", ""
+	p.volumeIndex, p.driveIndex = -1, -1
+	p.otherSection = false
+}
+
 func (p *ssaCLIParser) parseField(key, value string) {
 	lowerKey := strings.ToLower(key)
-	if !p.parseControllerField(lowerKey, value) && !p.parseIdentityField(lowerKey, value) {
+	if !p.parseControllerField(lowerKey, value) && (p.otherSection || !p.parseIdentityField(lowerKey, value)) {
 		p.parseHealthField(lowerKey, key, value)
 	}
 	p.parseTemperature(key, value)
