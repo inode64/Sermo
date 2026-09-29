@@ -980,7 +980,10 @@ also_apply: [nginx, varnish]
   additionals act first, then the primary.
 - **Each target keeps its own guards/locks/preflight** (it runs its real
   operation). A target's remediation cooldown and paused/`unmonitor` state are
-  *not* consulted — `also_apply` is an explicit relationship.
+  *not* consulted — `also_apply` is an explicit relationship. When a remediation
+  cascade starts or restarts a target successfully, the target also
+  acknowledges its pending `changed:` baseline, as its own restart would, so
+  its own `restart_on_change` rule does not restart it a second time.
 - **Best-effort & loop-safe**: a blocked target is retried once; if it remains
   blocked, it is reported by a non-fatal `cascade` event. A failed or unresolved
   target is also reported and makes the overall cascade result fail, while the
