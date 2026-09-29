@@ -121,9 +121,10 @@ var commandUsages = []commandUsage{
 			"--json  print the result as JSON",
 		},
 		Notes: []string{
-			"When sermod is running with web enabled, watch status prefers the",
-			"daemon's computed state (including starting during startup settling).",
-			"Otherwise it reports ok.",
+			"watch status reports the daemon's computed state (including starting",
+			"during startup settling). It rejects a WATCH that is not configured;",
+			"when sermod or its web API does not answer it reports state=unknown",
+			"and exits 2.",
 			"monitor/unmonitor pause or resume a single watch, persisted under",
 			"paths.state and read live by the daemon. WATCH is a host watch name or",
 			"a service watch \"<service>:<watch>\"; a watch's monitor state is",
