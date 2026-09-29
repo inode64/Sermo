@@ -359,8 +359,9 @@ is not a clean false (`1`), a usage error (`64`) or a temporary block (`75`):
 I/O errors, backend not detected, an exec that could not be launched, an
 unexpected panic recovered at the top level.
 
-`is-active` maps directly: `0` active, `1` not active (including `paused`),
-`2` error.
+`is-active` maps directly: `0` active, `1` not active (including a
+backend-`paused` container or VM), `2` error. Pausing daemon monitoring with
+`unmonitor` does not change the answer.
 
 `status` and `is-active` still answer for a raw init unit when there is no
 config. When the config file exists but does not load (for example a YAML
