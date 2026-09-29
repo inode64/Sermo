@@ -124,16 +124,21 @@ func applyWorkerState(workers []*Worker, saved map[string]workerSnapshot) {
 	}
 }
 
-func resetRemovedServiceMetrics(collector *metrics.Collector, oldWorkers, newWorkers []*Worker) {
-	if collector == nil {
-		return
-	}
+// resetRemovedServiceMetrics drops the in-memory metric state of services the
+// new generation no longer runs. The collector and the sampler both outlive
+// every reload, and each only trims a service when it records it again, so a
+// removed or renamed service would otherwise stay in memory for good.
+func resetRemovedServiceMetrics(collector *metrics.Collector, sampler *ServiceMetricSampler, oldWorkers, newWorkers []*Worker) {
 	oldNames := workerServiceNames(oldWorkers)
 	newNames := workerServiceNames(newWorkers)
 	for name := range oldNames {
-		if !newNames[name] {
+		if newNames[name] {
+			continue
+		}
+		if collector != nil {
 			collector.ForgetService(name)
 		}
+		sampler.Forget(name)
 	}
 }
 

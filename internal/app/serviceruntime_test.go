@@ -84,3 +84,23 @@ func TestServiceMetricSamplerRetainsSubsecondTime(t *testing.T) {
 		t.Fatalf("sample=%+v at=%v present=%v", current, observed, ok)
 	}
 }
+
+func TestResetRemovedServiceMetricsForgetsRetiredServiceSamples(t *testing.T) {
+	at := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	sampler := NewServiceMetricSampler(nil)
+	sampler.record(t.Context(), "web", web.ServiceRuntime{Count: 1, IORead: 100}, at)
+	sampler.record(t.Context(), "old-name", web.ServiceRuntime{Count: 1, IORead: 100}, at)
+
+	resetRemovedServiceMetrics(nil, sampler, []*Worker{{Service: "web"}, {Service: "old-name"}}, []*Worker{{Service: "web"}})
+
+	if _, _, ok := sampler.LatestWithAt("web"); !ok {
+		t.Fatal("a service kept by the reload lost its samples")
+	}
+	sampler.mu.Lock()
+	_, samples := sampler.samples["old-name"]
+	_, counters := sampler.prev["old-name"]
+	sampler.mu.Unlock()
+	if samples || counters {
+		t.Fatalf("retired service still held in memory: samples=%v counters=%v", samples, counters)
+	}
+}
