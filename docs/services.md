@@ -1750,7 +1750,11 @@ variables:
 ```
 
 It is evaluated during resolution (so it can reference other variables such as
-`${config}`) and re-evaluated on every config reload. `pattern` may also
+`${config}`) and re-evaluated on every config reload. A `from_file` path or
+`pattern` may also name another `from_file` variable, for example an include
+file read from the main config; such variables are read in dependency order,
+so each sees the file value of the one it names, and a reference cycle is a
+validation error. `pattern` may also
 reference variables such as `${instance}`; those values are escaped as regex
 literals before the file is read. The variable spec must define `from_file`,
 `default`, and exactly one of `directive` or `pattern`. `pattern` must compile

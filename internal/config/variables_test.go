@@ -637,3 +637,52 @@ defaults: { policy: { cooldown: 5m } }
 		t.Fatalf("instance process exe_any = %v, want snmp-ups path", instExes)
 	}
 }
+
+// TestFromFileChainsInDependencyOrder covers a from_file variable whose path is
+// another from_file variable (an include directive). Reading them in map order
+// made the result flip between the included file's value and the default from
+// one resolution to the next; a reference cycle has no correct order at all.
+func TestFromFileChainsInDependencyOrder(t *testing.T) {
+	dir := t.TempDir()
+	main := filepath.Join(dir, "main.conf")
+	inc := filepath.Join(dir, "inc.conf")
+	if err := os.WriteFile(main, []byte("include "+inc+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(inc, []byte("port 4242\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg := loadCatalog(t, map[string]string{
+		"sermo.yml": baseGlobal,
+		"services/chain.yml": fmt.Sprintf(`
+name: chain
+service: chain
+variables:
+  main: %q
+  a_port: { from_file: "${z_inc}", directive: port, default: 1 }
+  z_inc: { from_file: "${main}", directive: include, default: /nonexistent }
+checks:
+  tcp: { type: tcp, host: 127.0.0.1, port: "${a_port}" }
+`, main),
+		"services/loop.yml": `
+name: loop
+service: loop
+variables:
+  a: { from_file: "/etc/${b}", directive: x, default: a }
+  b: { from_file: "/etc/${a}", directive: x, default: b }
+`,
+	})
+	for range 20 {
+		resolved, errs := cfg.Resolve("chain")
+		if len(errs) != 0 {
+			t.Fatalf("Resolve(chain) errors = %v", errs)
+		}
+		if got := cfgval.String(nested(t, resolved.Tree, "checks", "tcp")["port"]); got != "4242" {
+			t.Fatalf("chained from_file port = %q, want 4242 from the included file", got)
+		}
+	}
+	_, errs := cfg.Resolve("loop")
+	if !slices.ContainsFunc(errs, func(e string) bool { return strings.Contains(e, "cycle: a -> b -> a") }) {
+		t.Fatalf("Resolve(loop) errors = %v, want a from_file cycle", errs)
+	}
+}
