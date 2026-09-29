@@ -20,6 +20,8 @@ const (
 	ippRequestIDDefault    = 1
 	ippAttrCharset         = "attributes-charset"
 	ippAttrNaturalLanguage = "attributes-natural-language"
+	ippAttrRequested       = "requested-attributes"
+	ippAttrPrinterName     = "printer-name"
 	ippCharsetUTF8         = "utf-8"
 	ippLanguageEN          = "en"
 )
@@ -83,6 +85,10 @@ func buildIPPDefaultRequest() ([]byte, error) {
 	message := goipp.NewRequest(goipp.DefaultVersion, goipp.OpCupsGetDefault, ippRequestIDDefault)
 	message.Operation.Add(goipp.MakeAttr(ippAttrCharset, goipp.TagCharset, goipp.String(ippCharsetUTF8)))
 	message.Operation.Add(goipp.MakeAttr(ippAttrNaturalLanguage, goipp.TagLanguage, goipp.String(ippLanguageEN)))
+	// Without requested-attributes cupsd returns every attribute of the
+	// default printer (a large PPD's media lists exceed the probe's body
+	// bound), and the truncated reply would fail to decode.
+	message.Operation.Add(goipp.MakeAttr(ippAttrRequested, goipp.TagKeyword, goipp.String(ippAttrPrinterName)))
 	payload, err := message.EncodeBytes()
 	if err != nil {
 		return nil, fmt.Errorf("encode IPP request: %w", err)
