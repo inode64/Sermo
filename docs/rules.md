@@ -1078,8 +1078,14 @@ rules:
 **expires within `expires_in_days`**, fails chain/hostname **verification**
 (`cert_verify`, on by default — catches self-signed, wrong host, expired chains), or —
 between cycles — its **signature algorithm**, **issuer** or **fingerprint** changes.
-A network/TLS error fetching the cert is **not** a `cert` failure (use a
-`tcp`/`http` check for reachability).
+A network/TLS error fetching the cert is **not** a certificate verdict: a
+`failed:` rule on the check does not fire, so a certificate alert never doubles
+as a reachability alert (use a `tcp`/`http` check for that). The cycle is still an
+**unavailable** observation, like any probe that could not look: it counts
+against the service's health and SLA, a watch reports it through its `error`
+("check unavailable") event, and a guard reading it denies the action. Grade the
+check `severity: warning` (see [Severity](#severity-severity)) to keep an
+unreachable endpoint amber instead of red.
 
 **File source (`path`).** Reads and parses a local file, recognising natively (no
 external tools): PEM **certificate**, **certificate request** (CSR), PKCS#1 / EC /
