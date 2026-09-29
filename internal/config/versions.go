@@ -2,6 +2,7 @@ package config
 
 import (
 	"context"
+	"fmt"
 	"maps"
 	"os"
 	"path/filepath"
@@ -156,6 +157,16 @@ func (c *Config) materializeRegistry(ctx context.Context, names []string, reg ma
 }
 
 func (c *Config) recordTemplateValidationIssues(tmpl *Document) {
+	// templateBody silently skips a base it cannot find, and folds a base
+	// template's raw, unmaterialized body; both would drop the inheritance.
+	if base := cfgval.String(tmpl.Body[ServiceKeyUses]); base != "" && tmpl.Kind == kindService {
+		if _, ok := c.CatalogServices[base]; !ok || tokenFor(base) != nil {
+			c.validationIssues = append(c.validationIssues, Issue{
+				Scope: documentScope(tmpl),
+				Msg:   fmt.Sprintf("%s %q must name an existing catalog service that is not a template", ServiceKeyUses, base),
+			})
+		}
+	}
 	c.validationIssues = append(c.validationIssues, validateVersionsFrom(tmpl, documentScope(tmpl))...)
 	c.validationIssues = append(c.validationIssues, validateVersionsCurrentFrom(tmpl, documentScope(tmpl))...)
 	c.validationIssues = append(c.validationIssues, validateVersionsSuffix(tmpl, documentScope(tmpl))...)
