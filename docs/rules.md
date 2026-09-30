@@ -288,8 +288,10 @@ rules:
   `info` or `debug` → the check fails as *optional* (does not block
   start/restart/reload/resume or drive remediation by itself); no match → the
   check passes. When the check declares no `severity:` of its own, the
-  matched grade is the failure's severity. The matched `pattern_id` and line
-  are in the result data.
+  matched grade is the failure's severity. A declared severity grades the
+  check's failures: it may lower an advisory match, but never raises one — a
+  `deprecated` warning stays a warning under `severity: error`. The matched
+  `pattern_id` and line are in the result data.
 - **Precedence:** exit-code → `expect_*` → `analyze`. The analyzer only grades a
   command that already passed its exit-code and `expect_*` checks.
 
@@ -297,7 +299,8 @@ rules:
 
 A resolved service that has `preflight.config` automatically receives the
 periodic advisory check `checks.configuration` (default interval `15m`). A
-failure makes an active service `warning`, remains outside SLA, and is visible
+failure makes an active service `warning` (an `error` when `preflight.config`
+declares `severity: error`, as Apache's does), remains outside SLA, and is visible
 in the Web UI and through `sermoctl status`; `sermoctl preflight SERVICE`
 reruns the required form on demand. The required preflight still blocks an
 operation. The `config.on_change` block below is optional and adds persistent

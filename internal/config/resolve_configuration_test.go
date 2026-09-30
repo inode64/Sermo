@@ -38,6 +38,36 @@ func TestExpandConfigurationCheckCopiesConfigPreflightAsAdvisory(t *testing.T) {
 	}
 }
 
+// A service whose next reload or restart an invalid configuration would take
+// down declares the grade on preflight.config; the monitoring copy keeps it.
+func TestExpandConfigurationCheckKeepsADeclaredSeverity(t *testing.T) {
+	tree := map[string]any{sectionPreflight: map[string]any{ServiceMonitorKeyConfig: map[string]any{
+		checks.CheckKeyType:     checks.CheckTypeCommand,
+		checks.CheckKeySeverity: "error",
+	}}}
+	if errs := expandConfigurationCheck(tree); len(errs) > 0 {
+		t.Fatalf("expandConfigurationCheck: %v", errs)
+	}
+	got := tree[sectionChecks].(map[string]any)[ConfigurationCheckName].(map[string]any)
+	if got[checks.CheckKeySeverity] != "error" {
+		t.Fatalf("generated severity = %v, want the declared error", got[checks.CheckKeySeverity])
+	}
+}
+
+// Apache declares an invalid configuration an error: its next graceful reload
+// refuses it and a restart takes every site down.
+func TestApacheConfigurationCheckIsAnError(t *testing.T) {
+	cfg := loadAllCatalogServices(t, repoCatalogDir(repoRoot(t)), "openrc")
+	resolved, errs := cfg.Resolve("apache-audit")
+	if len(errs) > 0 {
+		t.Fatalf("resolve apache: %v", errs)
+	}
+	check := resolved.Tree[sectionChecks].(map[string]any)[ConfigurationCheckName].(map[string]any)
+	if check[checks.CheckKeySeverity] != "error" {
+		t.Fatalf("apache configuration check severity = %v, want error", check[checks.CheckKeySeverity])
+	}
+}
+
 func TestExpandConfigurationCheckPreservesExplicitInterval(t *testing.T) {
 	tree := map[string]any{sectionPreflight: map[string]any{ServiceMonitorKeyConfig: map[string]any{
 		checks.CheckKeyType: checks.CheckTypeCommand,

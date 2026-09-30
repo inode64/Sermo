@@ -354,7 +354,7 @@ func TestBuildAppWatchesKeepsCheckingButSuppressesNotifyInPanic(t *testing.T) {
 		Notifiers:       map[string]notify.Notifier{"ops": notifier},
 		Panic:           NewPanicGate(store),
 		Emit:            func(event Event) { events = append(events, event) },
-	})
+	}, nil)
 	if len(watches) != 1 {
 		t.Fatalf("app watches = %d, want 1", len(watches))
 	}
@@ -607,7 +607,7 @@ func TestBuildAppWatchesProbesOnlyInTheCycle(t *testing.T) {
 	}
 	runner := &countingRunner{result: execx.Result{Stdout: "demo 1.2\n"}}
 	samples := NewArtifactSamples()
-	watches, _ := buildAppWatches(t.Context(), cfg, Deps{ArtifactSamples: samples, ExecxRunner: runner, Emit: func(Event) {}})
+	watches, _ := buildAppWatches(t.Context(), cfg, Deps{ArtifactSamples: samples, ExecxRunner: runner, Emit: func(Event) {}}, nil)
 	if len(watches) != 1 {
 		t.Fatalf("app watches = %d, want 1", len(watches))
 	}

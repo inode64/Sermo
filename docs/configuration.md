@@ -524,6 +524,14 @@ after the daemon started. The internal `artifact:*` samplers only refresh those 
 not emit firing/recovered events or notifications. Service operations still run
 their normal preflight checks directly.
 
+An installed app whose binary, version or health probe fails fires on the App
+dimension. It is an `error` when an active service declares the app in
+`apps:` — the service runs a broken program — and a `warning` otherwise. A
+service counts as active while its `service`-type check is healthy, and until
+one has been observed. The message states the probe's cause and names the
+services, for example `error: exit 127 (want 0): php: error while loading shared
+libraries: libicuuc.so.74 (used by active service php-fpm8.4)`.
+
 `engine.backend: auto` detects the init system: probe systemd (`systemctl`
 exists, `/run/systemd/system` exists, `is-system-running` usable — `degraded`
 counts as usable) and OpenRC (`rc-service` exists, `/run/openrc` exists or
@@ -1453,8 +1461,15 @@ When a resolved service declares `preflight.config`, Sermo also injects a
 periodic service check named `configuration`. It reuses that exact command,
 user, timeout and analyzer, defaults to a `15m` interval, and has
 `severity: warning`: an active service with a configuration that would fail its
-next operation is degraded, not down, so the result is visible without reducing
-SLA. An explicit `interval` on `preflight.config` overrides the default. The
+next operation is degraded, not down. A service whose next reload or restart an
+invalid configuration would take down declares its own grade on
+`preflight.config` — the packaged Apache profile declares `severity: error`,
+because logrotate's graceful reload refuses the file and a restart stops every
+site. Either way the check never reduces SLA: it judges the next start, not the
+running service. Its message states the cause — the command's first line, with
+the next one when it only introduces the reason (Apache's `Syntax error on line
+N of FILE:` and the rejected directive) — and the notification body carries the
+command's full output. An explicit `interval` on `preflight.config` overrides the default. The
 original preflight remains required and still blocks start, restart, reload and
 resume. A service with no `preflight.config` makes no configuration-health
 claim. Invalid Sermo YAML is a separate boundary: reload is rejected and the

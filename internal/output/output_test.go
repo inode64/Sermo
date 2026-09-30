@@ -69,3 +69,25 @@ func TestFirstNonEmptyLineUsesTrim(t *testing.T) {
 		t.Fatalf("FirstNonEmptyLine all blank gave %q", got)
 	}
 }
+
+func TestCauseJoinsALineThatOnlyIntroducesTheReason(t *testing.T) {
+	tests := map[string]string{
+		"AH00526: Syntax error on line 3 of /etc/a.conf:\n\nInvalid command 'Foo'\nmore\n": "AH00526: Syntax error on line 3 of /etc/a.conf: Invalid command 'Foo'",
+		"\n  php: error while loading shared libraries: libicu.so.74\nsecond\n":            "php: error while loading shared libraries: libicu.so.74",
+		"Error:\n":         "Error:",
+		"":                 "",
+		"\n \n":            "",
+		"done in 3s: ok\n": "done in 3s: ok",
+	}
+	for in, want := range tests {
+		if got := Cause(in); got != want {
+			t.Errorf("Cause(%q) = %q, want %q", in, got, want)
+		}
+	}
+	if got := FailureCause("reported on stdout\n", ""); got != "reported on stdout" {
+		t.Errorf("FailureCause fell back to %q", got)
+	}
+	if got := FailureCause("stdout\n", "stderr wins\n"); got != "stderr wins" {
+		t.Errorf("FailureCause preferred %q", got)
+	}
+}
