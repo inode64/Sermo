@@ -1,0 +1,96 @@
+name: fsledger
+display_name: fsledger
+category: security
+description: fsledger filesystem change history in Git and integrity inventory.
+service:
+  systemd:
+    - fsledger
+  openrc:
+    - fsledger
+apps:
+  - fsledger
+restart_on_change:
+  apps:
+    - fsledger
+  messages:
+    app: >-
+      ${display_name} will restart after version change of ${change.app}: ${change.old_version} -> ${change.new_version}
+variables:
+  config: /etc/fsledger/fsledger.yaml
+  # logging.file in the YAML. Without it the daemon logs to standard error (the
+  # journal) and the log watch has nothing to follow; point this at the file a
+  # host configures.
+  log: /var/log/fsledger/fsledger.log
+  # Errors logged within 15 minutes: any is an advisory, a burst an error.
+  log_error_limit: "0"
+  log_error_error_limit: "20"
+  # The fleet runs fsledgerd with GOMEMLIMIT=384MiB, a soft target the Go
+  # runtime works to stay under; resident memory well past it means the limit
+  # is not holding.
+  memory_limit_bytes: "536870912"
+  memory_error_limit_bytes: "1073741824"
+# fsledgerd runs as root under systemd and under OpenRC's supervise-daemon; the
+# supervisor's pidfile names the supervisor, so the daemon is found by exe.
+processes:
+  main:
+    exe: ${fsledger_binary}
+    user: root
+# SIGTERM stops the watchers, finishes pending work and reconciles; the daemon
+# exits within its own 270 s shutdown grace. The stop waits 300 s, like the
+# packaged units, and never kills it halfway through a Git commit. SIGHUP does
+# not reload the configuration, so there is no reload: apply changes with a
+# restart.
+stop_policy:
+  force_kill: false
+  term_timeout: 300s
+preflight:
+  # Strict YAML, source patterns, exclusions and location conflicts; absent
+  # sources are valid. Creates nothing.
+  config:
+    type: command
+    command:
+      - ${fsledger_cli}
+      - check
+      - -c
+      - ${config}
+    timeout: 30s
+watches:
+  service:
+    check:
+      type: service
+      expect: active
+      verify: true
+  # The daemon reports what it could not do — a Git publish, a source it cannot
+  # read, a catalog write — only in its log, while the unit stays active.
+  errors-in-log:
+    check:
+      type: log
+      path: ${log}
+      regex: 'level=ERROR'
+      count: { op: ">", value: "${log_error_limit}" }
+      within: 15m
+      optional: true
+      severity: warning
+      levels:
+        error: { count: { op: ">", value: "${log_error_error_limit}" } }
+    then:
+      action: alert
+      message: >-
+        ${display_name} logged errors within the last 15 minutes; see ${log}
+  alert-if-memory-high:
+    check:
+      type: metric
+      scope: service
+      name: memory
+      op: '>'
+      value: ${memory_limit_bytes}
+      optional: true
+      severity: warning
+      levels:
+        error: { op: '>', value: "${memory_error_limit_bytes}" }
+    for:
+      duration: 4m
+    then:
+      action: alert
+      message: >-
+        During ${rule.duration}, ${display_name} memory usage stayed above ${check.threshold} (current ${check.value})
