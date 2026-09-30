@@ -18,6 +18,7 @@ import (
 	"sermo/internal/notify"
 	"sermo/internal/process"
 	"sermo/internal/rules"
+	"sermo/internal/severity"
 	persistedstate "sermo/internal/state"
 )
 
@@ -79,6 +80,11 @@ type processPolicyWatcher struct {
 	stateStore     WatchStateStore
 	activeLoaded   bool
 	active         bool
+	// announced records that the open incident notified someone live, so the
+	// aggregate recovery goes out only for an incident its notifiers heard.
+	announced bool
+	// severity grades every violation this watch reports.
+	severity severity.Level
 
 	state map[processPolicyKey]processPolicyState
 }
@@ -125,6 +131,7 @@ func buildProcessPolicyWatch(name string, entry, checkEntry map[string]any, deps
 		resolve:        resolve,
 		publish:        publishWatchSnapshots(deps.WatchSnapshots, deps.watchConfigID),
 		stateStore:     deps.WatchState,
+		severity:       watchSeverity(entry, checkEntry),
 	}
 	return newStatefulWatch(name, checks.CheckTypeProcessPolicy, entry, deps, interval, pw.runCycle), ""
 }
@@ -187,9 +194,17 @@ func (w *processPolicyWatcher) runCycle(ctx context.Context) {
 	}
 	w.loadActiveState()
 	if len(violations) == 0 && w.active {
-		w.active = false
+		announced := w.announced
+		w.active, w.announced = false, false
 		w.persistActiveState()
-		w.emitEvent(Event{Watch: w.name, Kind: eventKindRecovered, Message: processPolicySubject(w.user) + ": no violations"})
+		message := processPolicySubject(w.user) + ": no violations"
+		w.emitEvent(Event{Watch: w.name, Kind: eventKindRecovered, Severity: w.severity, Message: message})
+		if announced {
+			w.notifyMessage(ctx, recoveredMessagePrefix+message, map[string]string{
+				sermoEnvWatch: w.name, sermoEnvUser: w.user, sermoEnvCheckType: checks.CheckTypeProcessPolicy,
+				sermoEnvMessage: message, sermoEnvEvent: eventKindRecovered,
+			})
+		}
 	}
 	if len(violations) > 0 && !w.active {
 		w.active = true
@@ -230,6 +245,7 @@ func (w *processPolicyWatcher) loadActiveState() {
 	}
 	if found {
 		w.active = rec.Firing
+		w.announced = rec.Firing && rec.NotifiedSeverity != ""
 	}
 }
 
@@ -237,7 +253,11 @@ func (w *processPolicyWatcher) persistActiveState() {
 	if w.stateStore == nil {
 		return
 	}
-	if err := w.stateStore.SetWatchRuntimeState(w.name, processPolicyStateSlot, persistedstate.WatchRuntimeRecord{Firing: w.active}); err != nil {
+	rec := persistedstate.WatchRuntimeRecord{Firing: w.active}
+	if w.announced {
+		rec.NotifiedSeverity = w.severity.Resolved().String()
+	}
+	if err := w.stateStore.SetWatchRuntimeState(w.name, processPolicyStateSlot, rec); err != nil {
 		w.emitEvent(Event{Watch: w.name, Kind: eventKindError, Message: "persist process policy state: " + err.Error()})
 	}
 }
@@ -335,15 +355,27 @@ func processPolicySubject(user string) string {
 
 func (w *processPolicyWatcher) fire(ctx context.Context, violation processPolicyViolation, notifyNow bool) {
 	message, env := w.message(violation)
-	w.emitEvent(Event{Watch: w.name, Kind: eventKindFiring, Message: message})
+	w.emitEvent(Event{Watch: w.name, Kind: eventKindFiring, Severity: w.severity, Message: message})
 	if notifyNow {
-		w.notifyMessage(ctx, message, env)
+		w.notifyViolation(ctx, message, env)
 	}
 }
 
 func (w *processPolicyWatcher) notify(ctx context.Context, violation processPolicyViolation) {
 	message, env := w.message(violation)
+	w.notifyViolation(ctx, message, env)
+}
+
+// notifyViolation sends a violation's notification and records whether it
+// really reached the notifiers — not in dry-run, not under panic — which
+// decides whether the incident's recovery goes out.
+func (w *processPolicyWatcher) notifyViolation(ctx context.Context, message string, env map[string]string) {
+	live := len(w.notifiers) > 0 && !w.dryRun && (w.inPanic == nil || !w.inPanic())
 	w.notifyMessage(ctx, message, env)
+	if live && w.active && !w.announced {
+		w.announced = true
+		w.persistActiveState()
+	}
 }
 
 func (w *processPolicyWatcher) message(violation processPolicyViolation) (string, map[string]string) {
@@ -370,6 +402,7 @@ func (w *processPolicyWatcher) notifyMessage(ctx context.Context, message string
 		emit:        w.emitEvent,
 		dryRunLabel: watchDryRunMessage(HookSpec{}, w.notifiers),
 		panicLabel:  "panic mode: notifications suppressed",
+		severity:    w.severity,
 	}, message, env)
 }
 

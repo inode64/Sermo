@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"sermo/internal/rules"
+	"sermo/internal/severity"
 	"sermo/internal/state"
 )
 
@@ -101,9 +102,18 @@ func ruleWindowRecordsEqual(a, b state.RuleWindowRecord) bool {
 	return a.Consecutive == b.Consecutive && a.Firing == b.Firing && a.ClearConsecutive == b.ClearConsecutive &&
 		a.TrueSince.Equal(b.TrueSince) && a.ClearSince.Equal(b.ClearSince) &&
 		slices.Equal(a.History, b.History) &&
-		slices.EqualFunc(a.TimedHistory, b.TimedHistory, func(x, y rules.WindowSample) bool {
-			return x.At.Equal(y.At)
-		})
+		slices.EqualFunc(a.TimedHistory, b.TimedHistory, windowSamplesEqual) &&
+		a.Severity == b.Severity && a.NotifiedSeverity == b.NotifiedSeverity &&
+		(a.Rungs == nil) == (b.Rungs == nil) && slices.EqualFunc(a.Rungs, b.Rungs, entryWindowsEqual)
+}
+
+func windowSamplesEqual(x, y rules.WindowSample) bool { return x.At.Equal(y.At) }
+
+// entryWindowsEqual compares persisted severity rungs with time.Equal, like
+// the rest of the change gate.
+func entryWindowsEqual(a, b rules.EntryWindowSnapshot) bool {
+	return a.Consecutive == b.Consecutive && a.TrueSince.Equal(b.TrueSince) &&
+		slices.Equal(a.History, b.History) && slices.EqualFunc(a.TimedHistory, b.TimedHistory, windowSamplesEqual)
 }
 
 func ruleWindowMapsEqual(a, b map[string]state.RuleWindowRecord) bool {
@@ -168,6 +178,9 @@ func windowStateFromRecord(rec state.RuleWindowRecord) *rules.WindowState {
 		Firing:           rec.Firing,
 		ClearConsecutive: rec.ClearConsecutive,
 		ClearSince:       rec.ClearSince,
+		Severity:         severity.Level(rec.Severity),
+		NotifiedSeverity: severity.Level(rec.NotifiedSeverity),
+		Rungs:            rec.Rungs,
 	})
 }
 
@@ -187,6 +200,9 @@ func ruleWindowRecord(window *rules.WindowState) state.RuleWindowRecord {
 		Firing:           snapshot.Firing,
 		ClearConsecutive: snapshot.ClearConsecutive,
 		ClearSince:       snapshot.ClearSince,
+		Severity:         snapshot.Severity.String(),
+		NotifiedSeverity: snapshot.NotifiedSeverity.String(),
+		Rungs:            snapshot.Rungs,
 	}
 }
 

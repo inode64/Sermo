@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"sermo/internal/operation"
+	"sermo/internal/severity"
 	"sermo/internal/state"
 )
 
@@ -72,8 +73,13 @@ func parseEventQuery(r *http.Request) (EventQuery, error) {
 // IsErrorEvent reports whether an event counts as an error for the
 // errors-only feed filter used by the daemon backend.
 func IsErrorEvent(e Event) bool {
-	if e.Kind == eventKindError || strings.Contains(e.Kind, eventKindFailedFragment) {
+	if strings.Contains(e.Kind, eventKindFailedFragment) {
 		return true
+	}
+	// An error an advisory incident raised (its check became unavailable) is
+	// graded below an outage and stays out of the errors-only feed.
+	if e.Kind == eventKindError {
+		return !severity.Level(e.Severity).Advisory()
 	}
 	switch e.Status {
 	case string(operation.ResultFailed),

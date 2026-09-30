@@ -8,6 +8,7 @@ import (
 	"sermo/internal/checks"
 	"sermo/internal/config"
 	"sermo/internal/servicemgr"
+	"sermo/internal/severity"
 )
 
 // staleBinaryBackend builds the minimal WebBackend the reason lookup needs: the
@@ -155,14 +156,14 @@ func TestWebBackendConfigurationWarningOutranksRestartRequired(t *testing.T) {
 	snaps := NewSnapshots()
 	snaps.now = func() time.Time { return at }
 	snaps.publishWithCheckTypes("web", map[string]checks.Result{
-		config.ConfigurationCheckName: {Check: config.ConfigurationCheckName, OK: false, Severity: checks.SeverityWarning},
+		config.ConfigurationCheckName: {Check: config.ConfigurationCheckName, OK: false, Severity: severity.Warning},
 		"stale-binary":                {Check: "stale-binary", OK: false, Reports: checks.ReportsState},
 	}, map[string]bool{config.ConfigurationCheckName: true, "stale-binary": true}, types)
 	entry := &webEntry{
 		checkNames:      names,
 		checkTypes:      types,
 		checkReports:    map[string]string{"stale-binary": checks.ReportsState},
-		checkSeverities: map[string]string{config.ConfigurationCheckName: checks.SeverityWarning},
+		checkSeverities: map[string]string{config.ConfigurationCheckName: string(severity.Warning)},
 		checkIntervals:  map[string]time.Duration{config.ConfigurationCheckName: time.Minute, "stale-binary": time.Minute},
 		interval:        time.Minute,
 		status:          func(context.Context) (servicemgr.Status, error) { return servicemgr.StatusActive, nil },

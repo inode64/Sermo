@@ -40,7 +40,7 @@ checks:
 	mustHave(t, issues, `checks.raid0.bands.ghost: "ghost" is not a state raid publishes`)
 	mustHave(t, issues, `checks.raid0.bands.degraded.ok has invalid op "~~"`)
 	mustHave(t, issues, "checks.raid0.bands.degraded.ok value must be numeric")
-	mustHave(t, issues, `checks.raid0.bands.degraded.severity "fatal" must be error or warning`)
+	mustHave(t, issues, `checks.raid0.bands.degraded.severity "fatal" must be debug, info, warning, error or critical`)
 	mustHave(t, issues, "checks.raid0.bands.recovering must be a mapping or false")
 	// A graph metric converted to a band needs its OK predicate spelled out.
 	mustHave(t, issues, "checks.load0.bands.load1 converts a graph metric to a band and must declare ok: {op, value}")

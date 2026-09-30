@@ -1,54 +1,43 @@
 package checks
 
-import "slices"
-
-// Severity names. One vocabulary serves both the per-check `severity:`
-// declaration and the grades an output-analysis rule assigns, so an operator
-// writes the same word wherever Sermo asks how grave a finding is.
-const (
-	// SeverityError is the default: a failing check is an outage to act on. It
-	// reads red, logs at error level and counts against health.
-	SeverityError = "error"
-	// SeverityWarning demotes a failing check to an advisory. It still evaluates
-	// its window and still runs its actions, but it reads amber rather than red,
-	// logs at warn level, and stays out of aggregated health and the SLA — for a
-	// measurement whose bad value is worth seeing and not worth waking anyone.
-	SeverityWarning = "warning"
-	// SeverityOK grades an analysis match as benign. Only output analysis uses
-	// it: a check itself is either an error or a warning.
-	SeverityOK = "ok"
+import (
+	"sermo/internal/cfgval"
+	"sermo/internal/severity"
 )
 
-// checkSeverities is the immutable package-owned catalog of values `severity:`
-// accepts on a check. Consumers receive a copy through CheckSeverities so they
-// cannot alter validation at runtime. SeverityOK is deliberately absent: a check
-// with nothing to say does not fail in the first place.
-var checkSeverities = [...]string{SeverityError, SeverityWarning}
+// AnalyzeSeverityOK grades an output-analysis match as benign: an `ok` rule
+// whitelists the line it matches. Every other grade is a severity level
+// (internal/severity), so an analyze rule and a check's own `severity:` are
+// spelled the same way. A check itself never declares ok: a check with nothing
+// to say does not fail in the first place.
+const AnalyzeSeverityOK = "ok"
 
-// CheckSeveritySummary names the accepted per-check severities for error text.
-const CheckSeveritySummary = SeverityError + " or " + SeverityWarning
+// AnalyzeSeveritySummary names the grades an analyze rule accepts, for error
+// text.
+const AnalyzeSeveritySummary = AnalyzeSeverityOK + ", " + severity.Summary
 
-// CheckSeverities returns the values a check's `severity:` accepts, in display
-// order.
-func CheckSeverities() []string { return slices.Clone(checkSeverities[:]) }
-
-// IsCheckSeverity reports whether s names a severity a check may declare.
-func IsCheckSeverity(s string) bool { return slices.Contains(checkSeverities[:], s) }
-
-// ResolveSeverity layers one declaration over its fallback: an explicit value
-// wins, an empty or unusable one inherits, and a chain that declares nothing is
-// an error. A watch stacks metric over check over watch through it, so the
-// narrowest declaration is the one that decides.
-func ResolveSeverity(declared, fallback string) string {
-	if IsCheckSeverity(declared) {
-		return declared
+// IsAnalyzeSeverity reports whether s is a grade an analyze rule may assign.
+func IsAnalyzeSeverity(s string) bool {
+	if s == AnalyzeSeverityOK {
+		return true
 	}
-	if IsCheckSeverity(fallback) {
-		return fallback
-	}
-	return SeverityError
+	_, ok := severity.Parse(s)
+	return ok
 }
 
-// IsWarning reports whether a severity demotes a failure to an advisory. The
-// empty severity is an error, so an unconfigured check keeps today's behavior.
-func IsWarning(severity string) bool { return severity == SeverityWarning }
+// DeclaredSeverity is the narrowest valid `severity:` the trees declare, or
+// unset when none does. Trees are given broadest first — watch entry, check
+// block, metric block — so a `net` watch can call its error counter an
+// advisory while its link state stays an outage. The distinction between unset
+// and Error matters to the check: one that receives no declaration may grade
+// its own finding (a SMART predicate under a PASSED verdict is an advisory),
+// while a declaration always wins.
+func DeclaredSeverity(trees ...map[string]any) severity.Level {
+	var declared severity.Level
+	for _, tree := range trees {
+		if level, ok := severity.Parse(cfgval.AsString(tree[CheckKeySeverity])); ok {
+			declared = level
+		}
+	}
+	return declared
+}

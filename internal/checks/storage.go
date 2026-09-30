@@ -2,10 +2,14 @@ package checks
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
+
+	"sermo/internal/severity"
 )
 
 // StorageStats is one filesystem's usage, computed from statfs. Beyond block space
@@ -65,6 +69,12 @@ func (c storageCheck) Run(_ context.Context) Result {
 		storageMountData(data, info != nil, info)
 		if reason != "" {
 			res := c.result(true, c.path+" "+reason, start)
+			if len(c.preds) > 0 {
+				// A declared severity grades the space thresholds (the first
+				// rung of a used/free ladder): a wrong or absent mount is never
+				// merely advisory. A mount-only check keeps its declaration.
+				res = raiseSeverity(res, severity.Error)
+			}
 			res.Data = data
 			return res
 		}
@@ -87,10 +97,15 @@ func (c storageCheck) Run(_ context.Context) Result {
 	if usage == nil {
 		usage = statfsUsage
 	}
-	st, err := usage(c.path)
+	st, err := boundedUsage(usage, c.path, c.timeout)
 	if err != nil {
 		data[DataKeySampleError] = err.Error()
 		res := c.unavailableResult(fmt.Sprintf("statfs %s: %v", c.path, err), start)
+		if errors.Is(err, errStatfsHung) && len(c.preds) > 0 {
+			// Like a missing mount, a hung one is an outage for whatever uses
+			// it, not an advisory of the space ladder.
+			res.Severity = severity.Max(res.Severity.Resolved(), severity.Error)
+		}
 		res.Data = data
 		return res
 	}
@@ -109,7 +124,7 @@ func (c storageCheck) Run(_ context.Context) Result {
 		values[fieldInodesFree] = float64(st.InodesFree)
 	}
 	ok := levelPredsHold(c.preds, values)
-	res := c.result(ok, fmt.Sprintf("%s used %.1f%% free %.1f%% inodes %.1f%% used", c.path, st.UsedPct, st.FreePct, st.InodesUsedPct), start)
+	res := c.grade(c.result(ok, fmt.Sprintf("%s used %.1f%% free %.1f%% inodes %.1f%% used", c.path, st.UsedPct, st.FreePct, st.InodesUsedPct), start), values)
 	data[DataKeyUsedPct] = st.UsedPct
 	data[DataKeyFreePct] = st.FreePct
 	data[DataKeyUsedBytes] = st.UsedBytes
@@ -135,6 +150,44 @@ func storageMountData(data map[string]any, mounted bool, info *Mount) {
 }
 
 // statfsUsage is the default StorageUsageFunc backed by statfs(2).
+// statfsInFlight holds the paths whose statfs has not returned yet. On a hard
+// network mount whose server is gone, statfs blocks in the kernel and cannot be
+// interrupted; the check reports it unavailable after its timeout, and later
+// cycles fail fast instead of stacking another blocked call on the same mount.
+var statfsInFlight sync.Map
+
+// errStatfsHung marks a statfs that did not answer: the mount is hung.
+var errStatfsHung = errors.New("hung mount")
+
+// boundedUsage runs usage for path within timeout (unbounded when timeout is
+// not positive).
+func boundedUsage(usage StorageUsageFunc, path string, timeout time.Duration) (StorageStats, error) {
+	if timeout <= 0 {
+		return usage(path)
+	}
+	if _, busy := statfsInFlight.LoadOrStore(path, struct{}{}); busy {
+		return StorageStats{}, fmt.Errorf("%w: an earlier statfs is still blocked", errStatfsHung)
+	}
+	type answer struct {
+		stats StorageStats
+		err   error
+	}
+	done := make(chan answer, 1)
+	go func() {
+		defer statfsInFlight.Delete(path)
+		stats, err := usage(path)
+		done <- answer{stats, err}
+	}()
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	select {
+	case got := <-done:
+		return got.stats, got.err
+	case <-timer.C:
+		return StorageStats{}, fmt.Errorf("%w: no answer within %s", errStatfsHung, timeout)
+	}
+}
+
 func statfsUsage(path string) (StorageStats, error) {
 	var s syscall.Statfs_t
 	if err := syscall.Statfs(path, &s); err != nil {

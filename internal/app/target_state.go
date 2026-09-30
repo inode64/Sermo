@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"sermo/internal/servicemgr"
+	"sermo/internal/severity"
 )
 
 // Operator-facing target states and monitor-filter values shown by sermoctl and
@@ -137,14 +138,15 @@ func WatchState(enabled, monitored, failed, warning, observed bool) string {
 	return TargetStateOK
 }
 
-// WatchActivityFailed reports whether an event kind represents a failed watch
-// side-effect or an active firing condition. The dashboard uses it as the
-// current best-effort watch health signal (watches do not publish the same
-// check snapshots services do). "firing" is emitted for any watch (including
-// bare ones without a `then`) when its `for` window is satisfied.
-func WatchActivityFailed(kind string) bool {
+// WatchActivityFailed reports whether an event represents a failed watch
+// side-effect or an active firing condition graded as an outage. The dashboard
+// uses it as the current best-effort watch health signal (watches do not
+// publish the same check snapshots services do). "firing" is emitted for any
+// watch (including bare ones without a `then`) when its `for` window is
+// satisfied; an advisory firing reads warning, not failed.
+func WatchActivityFailed(kind string, level severity.Level) bool {
 	if kind == eventKindFiring {
-		return true
+		return !level.Advisory()
 	}
 	return strings.HasSuffix(kind, eventKindFailedSuffix)
 }

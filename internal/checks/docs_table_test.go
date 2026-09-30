@@ -49,3 +49,36 @@ func TestRulesDocTableCoversEveryBuiltinCheckType(t *testing.T) {
 		}
 	}
 }
+
+// The graded-levels table in docs/rules.md lists exactly the types that accept
+// `levels:`, so the documentation cannot promise a tier the code rejects.
+func TestRulesDocLevelsTableMatchesGradableTypes(t *testing.T) {
+	data, err := os.ReadFile("../../docs/rules.md")
+	if err != nil {
+		t.Fatalf("read docs/rules.md: %v", err)
+	}
+	text := string(data)
+	start := strings.Index(text, "| Threshold form | Types | Level keys |")
+	if start < 0 {
+		t.Fatal("docs/rules.md has no graded-levels table")
+	}
+	end := strings.Index(text[start:], "\n\n")
+	rowPattern := regexp.MustCompile(`(?m)^\|[^|]+\|([^|]+)\|`)
+	namePattern := regexp.MustCompile("`([a-z0-9_-]+)`")
+	documented := map[string]bool{}
+	for _, row := range rowPattern.FindAllStringSubmatch(text[start:start+end], -1) {
+		for _, name := range namePattern.FindAllStringSubmatch(row[1], -1) {
+			documented[name[1]] = true
+		}
+	}
+	for typ := range gradeSupports {
+		if !documented[typ] {
+			t.Errorf("docs/rules.md levels table is missing %q", typ)
+		}
+	}
+	for typ := range documented {
+		if _, ok := gradeSupports[typ]; !ok {
+			t.Errorf("docs/rules.md levels table lists %q, which rejects levels", typ)
+		}
+	}
+}

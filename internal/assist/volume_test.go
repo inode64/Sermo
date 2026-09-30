@@ -54,6 +54,8 @@ func TestVolumeAssistantFreePctWithExpand(t *testing.T) {
 		"",                          // interval: inherit global
 		"1",                         // condition: free space below %
 		"10",                        // value
+		"",                          // escalate to error: default
+		"",                          // escalate to critical: default
 		"3",                         // for cycles
 		"1",                         // notifier ops-email
 		"y",                         // auto-expand
@@ -104,8 +106,8 @@ func TestVolumeAssistantFreePctWithExpand(t *testing.T) {
 
 func TestVolumeAssistantUsedPctNoExpand(t *testing.T) {
 	// Select volume 2 (/), used-space condition 90, for 1, notifier team-slack, no expand.
-	entry := runVolumeAssistant(t, testEnv(), "storage-root", "2", "1", "", "2", "90", "1", "2", "n", "n")
-	assertCheckPred(t, entry, checks.LevelFieldUsedPct, cfgval.CompareOpGreaterEqual, volumeDefaultUsedPct)
+	entry := runVolumeAssistant(t, testEnv(), "storage-root", "2", "1", "", "2", "90", "", "", "1", "2", "n", "n")
+	assertCheckPred(t, entry, checks.LevelFieldUsedPct, cfgval.CompareOpGreaterEqual, 90)
 	then := entryThen(entry)
 	if _, hasExpand := then[config.WatchThenKeyExpand]; hasExpand {
 		t.Fatalf("must not have expand: %v", then)
@@ -117,7 +119,7 @@ func TestVolumeAssistantUsedPctNoExpand(t *testing.T) {
 
 func TestVolumeAssistantPercentSuffix(t *testing.T) {
 	// Select volume 2 (/), used-space condition 90%, for 1, notifier team-slack, no expand.
-	entry := runVolumeAssistant(t, testEnv(), "storage-root", "2", "1", "", "2", "90%", "1", "2", "n", "n")
+	entry := runVolumeAssistant(t, testEnv(), "storage-root", "2", "1", "", "2", "90%", "", "", "1", "2", "n", "n")
 	assertCheckPred(t, entry, checks.LevelFieldUsedPct, cfgval.CompareOpGreaterEqual, "90%")
 }
 
@@ -157,7 +159,7 @@ func TestVolumeAssistantInheritsGlobalNotify(t *testing.T) {
 	// Select volume 1; monitor enabled; inherit interval; free 10; for 3; inherit
 	// global notify; no expand.
 	entry := runVolumeAssistant(t, testEnvWithDefaultNotify(), "storage-mnt-backup",
-		"1", "1", "", "1", "10", "3", config.NotifyKeywordDefault, "n", "n")
+		"1", "1", "", "1", "10", "", "", "3", config.NotifyKeywordDefault, "n", "n")
 	then := entryThen(entry)
 	if _, hasNotify := then[rules.RuleFieldNotify]; hasNotify {
 		t.Fatalf("notify should be omitted to inherit global default: %v", then)
@@ -173,7 +175,7 @@ func TestVolumeAssistantDefaultWithoutGlobalMonitorOnly(t *testing.T) {
 	// Select volume 1; monitor enabled; inherit interval; free 10; for 3; default
 	// notify (not configured); decline expand. 'default' is accepted and degrades
 	// to a monitor-only watch (notify [none]) instead of erroring or re-asking.
-	script := strings.Join([]string{"1", "1", "", "1", "10", "3", config.NotifyKeywordDefault, "n"}, "\n") + "\n"
+	script := strings.Join([]string{"1", "1", "", "1", "10", "", "", "3", config.NotifyKeywordDefault, "n"}, "\n") + "\n"
 	var out strings.Builder
 	p := NewPrompt(strings.NewReader(script), &out)
 	res, err := volumeAssistant{}.Run(p, env)
@@ -193,7 +195,7 @@ func TestVolumeAssistantNoneWithoutExpandMonitorOnly(t *testing.T) {
 	// 'none' with expand declined is the reserved monitor-only opt-out: it is
 	// accepted directly.
 	entry := runVolumeAssistant(t, testEnv(), "storage-mnt-backup",
-		"1", "1", "", "1", "10", "3", config.NotifyNone, "n")
+		"1", "1", "", "1", "10", "", "", "3", config.NotifyNone, "n")
 	assertNotifyNone(t, entryThen(entry))
 }
 
@@ -203,7 +205,7 @@ func TestVolumeAssistantNoneWithoutExpandMonitorOnly(t *testing.T) {
 func assertNotifyNoneWithExpand(t *testing.T, env Env, notifyAnswer string) {
 	t.Helper()
 	entry := runVolumeAssistant(t, env, "storage-mnt-backup",
-		"1", "1", "", "1", "10", "3", notifyAnswer, "y", volumeDefaultExpandBy, volumeDefaultExpandCooldown, "n")
+		"1", "1", "", "1", "10", "", "", "3", notifyAnswer, "y", volumeDefaultExpandBy, volumeDefaultExpandCooldown, "n")
 	then := entryThen(entry)
 	assertNotifyNone(t, then)
 	if _, ok := then[config.WatchThenKeyExpand].(map[string]any); !ok {
@@ -234,4 +236,61 @@ func TestVolumeAssistantNotifyKeywordsWithoutNotifiers(t *testing.T) {
 		// and degrades to monitor-only (notify [none]).
 		assertNotifyNoneWithExpand(t, base, config.NotifyKeywordDefault)
 	})
+}
+
+// A percentage condition is graded: the base threshold warns, and the wizard
+// asks where it escalates to error and critical, refusing a level that is not
+// stricter than the one below it.
+func TestVolumeAssistantGradesPercentConditions(t *testing.T) {
+	// used 80 (warning); error first tries 70 (not stricter), then 95; critical 99.
+	entry := runVolumeAssistant(t, testEnv(), "storage-root", "2", "1", "", "2", "80", "70", "95", "99", "1", "2", "n", "n")
+	check := entry[config.WatchKeyCheck].(map[string]any)
+	if check[checks.CheckKeySeverity] != "warning" {
+		t.Fatalf("severity = %v, want warning", check[checks.CheckKeySeverity])
+	}
+	levels := check[checks.CheckKeyLevels].(map[string]any)
+	for level, want := range map[string]any{"error": 95, "critical": 99} {
+		pred := levels[level].(map[string]any)[checks.LevelFieldUsedPct].(map[string]any)
+		if pred[checks.CheckKeyOp] != cfgval.CompareOpGreaterEqual || pred[checks.CheckKeyValue] != want {
+			t.Fatalf("levels.%s = %v, want >= %v", level, pred, want)
+		}
+	}
+	// A size condition keeps a single threshold.
+	sized := runVolumeAssistant(t, testEnv(), "storage-mnt-backup", "1", "1", "", "3", volumeDefaultFreeSize, "2", "1", "n", "n")
+	if _, graded := sized[config.WatchKeyCheck].(map[string]any)[checks.CheckKeyLevels]; graded {
+		t.Fatal("a size condition was graded")
+	}
+}
+
+// A tier that cannot tighten the one below it is not asked, and closed input
+// ends the re-prompt loop instead of spinning.
+func TestVolumeAssistantLevelEdges(t *testing.T) {
+	// used 100 %: nothing is stricter, so the condition keeps one threshold —
+	// still the warning the prompt asked for.
+	entry := runVolumeAssistant(t, testEnv(), "storage-root", "2", "1", "", "2", "100", "1", "2", "n", "n")
+	check := entry[config.WatchKeyCheck].(map[string]any)
+	if _, graded := check[checks.CheckKeyLevels]; graded || check[checks.CheckKeySeverity] != "warning" {
+		t.Fatalf("check = %v, want a single warning threshold", check)
+	}
+	// used 99.5 %: error at 100 %, no room left for critical.
+	entry = runVolumeAssistant(t, testEnv(), "storage-root", "2", "1", "", "2", "99.5%", "100", "1", "2", "n", "n")
+	levels := entry[config.WatchKeyCheck].(map[string]any)[checks.CheckKeyLevels].(map[string]any)
+	if levels["error"] == nil || levels["critical"] != nil {
+		t.Fatalf("levels = %v, want only an error tier", levels)
+	}
+	// used 96 %: the ladder's error default (95) is not stricter, so the
+	// wizard offers the nearest one that is.
+	entry = runVolumeAssistant(t, testEnv(), "storage-root", "2", "1", "", "2", "96", "", "", "1", "2", "n", "n")
+	levels = entry[config.WatchKeyCheck].(map[string]any)[checks.CheckKeyLevels].(map[string]any)
+	for level, want := range map[string]any{"error": 97, "critical": 99} {
+		if got := levels[level].(map[string]any)[checks.LevelFieldUsedPct].(map[string]any)[checks.CheckKeyValue]; got != want {
+			t.Fatalf("levels.%s = %v, want %v", level, got, want)
+		}
+	}
+	// A level that is not stricter, then EOF: the closed input must abort
+	// rather than loop forever.
+	p := NewPrompt(strings.NewReader(strings.Join([]string{"2", "1", "", "2", "96", "90"}, "\n")+"\n"), &strings.Builder{})
+	if _, err := (volumeAssistant{}).Run(p, testEnv()); err == nil {
+		t.Fatal("closed input produced a result, want an input-closed error")
+	}
 }

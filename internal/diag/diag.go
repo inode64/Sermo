@@ -94,4 +94,7 @@ func diagConfig(b *builder, cfg *config.Config) {
 	for _, iss := range config.Validate(cfg) {
 		b.addf(LevelError, iss.Scope, "%s", iss.Msg)
 	}
+	for _, iss := range config.Warnings(cfg) {
+		b.addf(LevelWarning, iss.Scope, "%s", iss.Msg)
+	}
 }

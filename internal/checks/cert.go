@@ -22,6 +22,7 @@ import (
 
 	"sermo/internal/cfgval"
 	"sermo/internal/conn"
+	"sermo/internal/severity"
 	"sermo/internal/units"
 )
 
@@ -79,6 +80,43 @@ type certOptions struct {
 	onAlgoChange   bool
 	onIssuerChange bool
 	onChange       bool
+	// expiryGrades are the kept `levels:` tiers, each an expiry window in days.
+	expiryGrades grades[int]
+}
+
+// expiryGrades parses the kept tiers of a cert or http check; key is the
+// type's expiry-window key.
+func expiryGrades(specs []levelSpec, key string) grades[int] {
+	return parseGrades(specs, func(tier map[string]any) (int, bool) {
+		days, ok := cfgval.Int(tier[key])
+		return days, ok && days > 0
+	})
+}
+
+// levelGrade is the gravest tier whose window the material has entered, an
+// expired certificate included.
+func (o certOptions) levelGrade(daysLeft int, hasExpiry bool) severity.Level {
+	return o.expiryGrades.highest(func(days int) bool { return hasExpiry && daysLeft < days })
+}
+
+// Certificate problems grade themselves when the check declares no severity:
+// material that is already unusable is critical, a certificate entering its
+// renewal window is an advisory to plan around, and a broken chain or an
+// unexpected change is an error.
+const (
+	certGradeUnusable = severity.Critical
+	certGradeExpiring = severity.Warning
+	certGradeProblem  = severity.Error
+)
+
+// gradeCert applies a certificate result's self-grade when nothing is
+// declared, then raises it by any expiry tier the material has entered. A
+// declared severity always wins over the self-grade.
+func gradeCert(res Result, declared severity.Level, opts certOptions, grade severity.Level, daysLeft int, hasExpiry bool) Result {
+	if !declared.Valid() && res.Observation() == ObservationFailing {
+		res.Severity = grade
+	}
+	return raiseSeverity(res, opts.levelGrade(daysLeft, hasExpiry))
 }
 
 type certOptionKeys struct {
@@ -105,7 +143,7 @@ var httpCertOptionKeys = certOptionKeys{
 	onChange:       CheckKeyCertOnChange,
 }
 
-func certOptionsFromEntry(entry map[string]any, keys certOptionKeys) certOptions {
+func certOptionsFromEntry(entry map[string]any, keys certOptionKeys, levels []levelSpec) certOptions {
 	days := 0
 	if value, ok := cfgval.Int(entry[keys.expiresInDays]); ok {
 		days = value
@@ -116,6 +154,7 @@ func certOptionsFromEntry(entry map[string]any, keys certOptionKeys) certOptions
 		onAlgoChange:   cfgval.Bool(entry[keys.onAlgoChange]),
 		onIssuerChange: cfgval.Bool(entry[keys.onIssuerChange]),
 		onChange:       cfgval.Bool(entry[keys.onChange]),
+		expiryGrades:   expiryGrades(levels, keys.expiresInDays),
 	}
 }
 
@@ -131,38 +170,43 @@ type certEvaluator struct {
 }
 
 // evaluate reports the problems for sample s under opts at time now, plus the
-// days until expiry and whether the material has an expiry at all.
-func (e *certEvaluator) evaluate(s CertSample, opts certOptions, now time.Time) (problems []string, daysLeft int, hasExpiry bool) {
+// days until expiry, whether the material has an expiry at all, and the self-
+// grade of the gravest problem.
+func (e *certEvaluator) evaluate(s CertSample, opts certOptions, now time.Time) (problems []string, daysLeft int, hasExpiry bool, grade severity.Level) {
+	add := func(problem string, level severity.Level) {
+		problems = append(problems, problem)
+		grade = severity.Max(grade, level)
+	}
 	hasExpiry = !s.NotAfter.IsZero()
 	if hasExpiry {
 		daysLeft = int(s.NotAfter.Sub(now).Hours() / units.HoursPerDay)
 		switch {
 		case now.After(s.NotAfter):
-			problems = append(problems, "expired")
+			add("expired", certGradeUnusable)
 		case now.Before(s.NotBefore):
-			problems = append(problems, "not yet valid")
+			add("not yet valid", certGradeUnusable)
 		case opts.expiresInDays > 0 && daysLeft < opts.expiresInDays:
-			problems = append(problems, fmt.Sprintf("expires in %d days", daysLeft))
+			add(fmt.Sprintf("expires in %d days", daysLeft), certGradeExpiring)
 		}
 	}
 	if opts.verify && s.VerifyError != "" {
-		problems = append(problems, "chain: "+s.VerifyError)
+		add("chain: "+s.VerifyError, certGradeProblem)
 	}
 	if !e.primed {
 		e.primed = true
 	} else {
 		if opts.onAlgoChange && s.SignatureAlgorithm != e.lastAlgo {
-			problems = append(problems, "signature algorithm "+e.lastAlgo+" -> "+s.SignatureAlgorithm)
+			add("signature algorithm "+e.lastAlgo+" -> "+s.SignatureAlgorithm, certGradeProblem)
 		}
 		if opts.onIssuerChange && s.Issuer != e.lastIssuer {
-			problems = append(problems, "issuer changed")
+			add("issuer changed", certGradeProblem)
 		}
 		if opts.onChange && s.Fingerprint != e.lastFP {
-			problems = append(problems, "certificate changed")
+			add("certificate changed", certGradeProblem)
 		}
 	}
 	e.lastAlgo, e.lastIssuer, e.lastFP = s.SignatureAlgorithm, s.Issuer, s.Fingerprint
-	return problems, daysLeft, hasExpiry
+	return problems, daysLeft, hasExpiry, grade
 }
 
 // certCheck inspects TLS material from a live endpoint or local file. It is
@@ -202,7 +246,9 @@ func (c *certCheck) Run(ctx context.Context) Result {
 		data, err := os.ReadFile(c.path)
 		if err != nil {
 			if os.IsNotExist(err) {
-				return c.result(false, fmt.Sprintf("%s: %v", c.path, err), start)
+				// The material is gone: nothing the service could serve from it.
+				res := c.result(false, fmt.Sprintf("%s: %v", c.path, err), start)
+				return gradeCert(res, c.severity, c.certOptions, certGradeUnusable, 0, false)
 			}
 			return c.unavailableResult(fmt.Sprintf("%s: %v", c.path, err), start)
 		}
@@ -230,7 +276,7 @@ func (c *certCheck) Run(ctx context.Context) Result {
 		s = sampled
 	}
 
-	problems, daysLeft, hasExpiry := c.eval.evaluate(s, c.certOptions, time.Now())
+	problems, daysLeft, hasExpiry, grade := c.eval.evaluate(s, c.certOptions, time.Now())
 
 	healthy := len(problems) == 0
 	src := c.source()
@@ -238,7 +284,7 @@ func (c *certCheck) Run(ctx context.Context) Result {
 	if !healthy {
 		msg = src + ": " + strings.Join(problems, "; ")
 	}
-	res := c.result(healthy, msg, start)
+	res := gradeCert(c.result(healthy, msg, start), c.severity, c.certOptions, grade, daysLeft, hasExpiry)
 	res.Data = certData(src, c.host, c.path, s, daysLeft, hasExpiry)
 	return res
 }

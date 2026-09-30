@@ -15,6 +15,7 @@ import (
 	"sermo/internal/cfgval"
 	"sermo/internal/checks"
 	"sermo/internal/config"
+	"sermo/internal/severity"
 	"sermo/internal/state"
 	"sermo/internal/web"
 )
@@ -92,19 +93,18 @@ func (a App) runWatchProbe(ctx context.Context, opts options) int {
 		return a.fail(opts, fmt.Sprintf("watch %q (%s) does not support manual probing", opts.args[1], typ))
 	}
 	result, err := a.ProbeDaemonWatch(ctx, cfg, opts.args[1])
-	advisory := checks.IsWarning(result.Severity)
-	if err != nil && !advisory {
+	// A failing sample comes back as a 409 carrying its graded result: print
+	// it at its grade. Only a probe that produced no result is a failure of
+	// the command itself.
+	if err != nil && !severity.Level(result.Severity).Valid() {
 		return a.fail(opts, "watch probe: "+err.Error())
 	}
 	if opts.json {
 		writeJSON(a.Stdout, map[string]any{cliJSONKeyWatch: opts.args[1], cliJSONKeyOK: result.OK, cliJSONKeyMessage: result.Message, "readings": result.Readings, checks.CheckKeySeverity: result.Severity})
 	} else {
 		status := cliTextOK
-		switch {
-		case advisory:
-			status = cliTextWarn
-		case !result.OK:
-			status = cliTextFail
+		if !result.OK {
+			status = severityLabel(severity.Level(result.Severity))
 		}
 		fmt.Fprintf(a.Stdout, "%s watch %s: %s\n", status, opts.args[1], result.Message)
 		for _, reading := range result.Readings {

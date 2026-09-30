@@ -719,11 +719,14 @@ func TestWatchReNotifiesOnNewEpisode(t *testing.T) {
 	w.RunCycle(context.Background()) // firing → notify (1)
 	w.RunCycle(context.Background()) // still firing → no notify
 	w.Check = stubCheck{name: "storage", ok: false}
-	w.RunCycle(context.Background()) // recovered → reset
+	w.RunCycle(context.Background()) // recovered → recovery notice (2), reset
 	w.Check = stubCheck{name: "storage", ok: true, data: map[string]any{"path": "/"}}
-	w.RunCycle(context.Background()) // new episode → notify (2)
-	if len(n.msgs) != 2 {
+	w.RunCycle(context.Background()) // new episode → notify (3)
+	if len(n.msgs) != 3 {
 		t.Fatalf("a new firing episode must notify again, got %d notifications", len(n.msgs))
+	}
+	if !strings.Contains(n.msgs[1].Subject, recoveredMessagePrefix) || strings.Contains(n.msgs[2].Subject, recoveredMessagePrefix) {
+		t.Fatalf("subjects = %q, %q, want the recovery then the new episode", n.msgs[1].Subject, n.msgs[2].Subject)
 	}
 }
 
@@ -781,7 +784,7 @@ func TestHookEnvMapsAllDataKeys(t *testing.T) {
 			"value":     "down",
 		},
 	}
-	env := hookEnv("net-eth0", "net", res)
+	env := hookEnv("net-eth0", "net", res, res.Severity)
 	if env["SERMO_WATCH"] != "net-eth0" || env["SERMO_CHECK_TYPE"] != "net" || env["SERMO_MESSAGE"] != "eth0 state up->down" {
 		t.Fatalf("base env wrong: %v", env)
 	}
@@ -801,7 +804,7 @@ func TestHookEnvMapsAllDataKeys(t *testing.T) {
 func TestHookEnvStorageKeysStillWork(t *testing.T) {
 	// Storage check data with a `value` key yields SERMO_PATH + SERMO_VALUE.
 	res := checks.Result{Data: map[string]any{"path": "/", "value": 92.0, "used_pct": 92.0}}
-	env := hookEnv("storage-root", "storage", res)
+	env := hookEnv("storage-root", "storage", res, res.Severity)
 	if env["SERMO_PATH"] != "/" || env["SERMO_VALUE"] != "92" {
 		t.Fatalf("storage env wrong: %v", env)
 	}
@@ -814,7 +817,7 @@ func TestHookEnvTrimsCapturedText(t *testing.T) {
 			"result": "\nready\n",
 		},
 	}
-	env := hookEnv("sql-health", "sql", res)
+	env := hookEnv("sql-health", "sql", res, res.Severity)
 	if env["SERMO_MESSAGE"] != "SQL threshold fired" || env["SERMO_RESULT"] != "ready" {
 		t.Fatalf("env should carry trimmed captured text: %v", env)
 	}

@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"sermo/internal/locks"
+	"sermo/internal/severity"
 )
 
 // configureOperationLocker returns the per-service internal operation locker with
@@ -25,8 +26,10 @@ func operationLockReclaimEvent(emit func(Event)) func(service, reason string) {
 		emit(Event{
 			Service: service,
 			Kind:    eventKindAlert,
-			Message: fmt.Sprintf("reclaimed stale operation lock (%s)", reason),
-			Notice:  true,
+			// The lock's holder died mid-operation: worth a look, not an outage.
+			Severity: severity.Warning,
+			Message:  fmt.Sprintf("reclaimed stale operation lock (%s)", reason),
+			Notice:   true,
 		})
 	}
 }

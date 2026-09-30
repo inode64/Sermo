@@ -53,11 +53,16 @@ func (a App) printPreflight(service string, outcome checks.Outcome) {
 	fmt.Fprintf(a.Stdout, "preflight %s: %s\n", service, overall)
 	for _, r := range outcome.Results {
 		tag := cliTextOK
-		if !r.OK {
+		switch {
+		case r.OK:
+		case r.Optional:
+			tag = cliTextWarn // does not block the operation
+		case r.Severity.Advisory():
+			// A required check blocks whatever its grade: never label a
+			// blocker as a warning.
 			tag = cliTextFail
-			if r.Optional {
-				tag = cliTextWarn
-			}
+		default:
+			tag = severityLabel(r.Severity)
 		}
 		fmt.Fprintf(a.Stdout, "  %-4s %s: %s\n", tag, r.Check, r.Message)
 	}

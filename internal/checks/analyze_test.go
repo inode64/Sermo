@@ -1,6 +1,10 @@
 package checks
 
-import "testing"
+import (
+	"testing"
+
+	"sermo/internal/severity"
+)
 
 func mustAnalyzer(t *testing.T, rules []any) *outputAnalyzer {
 	t.Helper()
@@ -25,7 +29,7 @@ func TestAnalyzeMaxSeverityAndFirstMatch(t *testing.T) {
 		rule("warn", "(?i)deprecated", "warning"),
 	})
 	sev, id, _ := a.Analyze("all fine\nfeature is deprecated\nBACK UP DATA NOW", "")
-	if sev != SevError || id != "err" {
+	if sev != severity.Error || id != "err" {
 		t.Fatalf("sev=%v id=%q, want error/err", sev, id)
 	}
 }
@@ -35,7 +39,7 @@ func TestAnalyzeReportsFirstLineReachingMaxSeverity(t *testing.T) {
 	// one to reach it (severity > sev, not >=, so a later equal match never wins).
 	a := mustAnalyzer(t, []any{rule("err", "FAIL", "error")})
 	sev, id, line := a.Analyze("FAIL first\nFAIL second", "")
-	if sev != SevError || id != "err" || line != "FAIL first" {
+	if sev != severity.Error || id != "err" || line != "FAIL first" {
 		t.Fatalf("sev=%v id=%q line=%q, want error/err/\"FAIL first\"", sev, id, line)
 	}
 }
@@ -46,21 +50,35 @@ func TestAnalyzeOkWhitelistsLine(t *testing.T) {
 		rule("benign", "(?i)deprecated option ignored", "ok"),
 		rule("warn", "(?i)deprecated", "warning"),
 	})
-	if sev, _, _ := a.Analyze("deprecated option ignored", ""); sev != SevOK {
+	if sev, _, _ := a.Analyze("deprecated option ignored", ""); sev.Valid() {
 		t.Fatalf("ok rule must whitelist the line, got %v", sev)
 	}
 	// But a different deprecated line is still a warning.
-	if sev, _, _ := a.Analyze("X is deprecated", ""); sev != SevWarning {
+	if sev, _, _ := a.Analyze("X is deprecated", ""); sev != severity.Warning {
 		t.Fatalf("a non-whitelisted line must warn, got %v", sev)
+	}
+}
+
+func TestAnalyzeGradesOnTheSeverityScale(t *testing.T) {
+	a := mustAnalyzer(t, []any{
+		rule("note", "(?i)note", "info"),
+		rule("panic", "(?i)panic", "critical"),
+		rule("trace", "(?i)trace", "debug"),
+	})
+	if sev, id, _ := a.Analyze("trace one\nnote two", ""); sev != severity.Info || id != "note" {
+		t.Fatalf("sev=%v id=%q, want info/note", sev, id)
+	}
+	if sev, id, _ := a.Analyze("note\nkernel panic", ""); sev != severity.Critical || id != "panic" {
+		t.Fatalf("sev=%v id=%q, want critical/panic", sev, id)
 	}
 }
 
 func TestAnalyzeStreamScoping(t *testing.T) {
 	a := mustAnalyzer(t, []any{rule("e", "boom", "error", "stderr")})
-	if sev, _, _ := a.Analyze("boom", ""); sev != SevOK {
+	if sev, _, _ := a.Analyze("boom", ""); sev.Valid() {
 		t.Fatalf("stderr-scoped rule must ignore stdout, got %v", sev)
 	}
-	if sev, _, _ := a.Analyze("", "boom"); sev != SevError {
+	if sev, _, _ := a.Analyze("", "boom"); sev != severity.Error {
 		t.Fatalf("stderr-scoped rule must match stderr, got %v", sev)
 	}
 }

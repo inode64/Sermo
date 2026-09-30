@@ -6,6 +6,7 @@
 package rules
 
 import (
+	"fmt"
 	"maps"
 	"slices"
 	"time"
@@ -13,6 +14,7 @@ import (
 	"sermo/internal/cfgval"
 	"sermo/internal/checks"
 	"sermo/internal/emission"
+	"sermo/internal/severity"
 )
 
 // RuleType classifies a rule.
@@ -161,6 +163,9 @@ type Rule struct {
 	// Emission optionally overrides the global event/notification cadence for this
 	// rule. Empty fields inherit from the daemon's global emission policy.
 	Emission emission.Policy
+	// Severity is the declared grade of the rule's episode; unset lets
+	// Evaluator.RuleSeverity grade it from the checks its condition reads.
+	Severity severity.Level
 }
 
 // IsOperation reports whether the action type is a service operation that
@@ -321,6 +326,24 @@ func ReferencedChecks(tree map[string]any) map[string]any {
 	return out
 }
 
+// parseRuleSeverity reads a rule's declared `severity:`. A guard grades
+// nothing — it blocks an action, it does not report an incident — so a
+// severity there is dropped like any other malformed value.
+func parseRuleSeverity(entry map[string]any, ruleType RuleType) (severity.Level, string) {
+	raw, present := entry[RuleFieldSeverity]
+	if !present {
+		return "", ""
+	}
+	if ruleType == RuleGuard {
+		return "", RuleFieldSeverity + " is not supported on a guard rule; ignored"
+	}
+	level, ok := severity.Parse(cfgval.AsString(raw))
+	if !ok {
+		return "", fmt.Sprintf("%s %q must be one of %s; ignored", RuleFieldSeverity, cfgval.String(raw), severity.Summary)
+	}
+	return level, ""
+}
+
 // ruleSubjectPrefix names a rule as the subject of a parse warning, e.g.
 // "rule <name> is not a mapping".
 const ruleSubjectPrefix = "rule "
@@ -387,7 +410,12 @@ func ParseRules(tree map[string]any) ([]Rule, []string) {
 		if clearWin == nil && ruleType == RuleAlert {
 			clearWin = fbClear
 		}
+		level, levelWarning := parseRuleSeverity(entry, ruleType)
+		if levelWarning != "" {
+			warnings = append(warnings, ruleSubjectPrefix+name+": "+levelWarning)
+		}
 		rules = append(rules, Rule{
+			Severity: level,
 			Name:     name,
 			Type:     ruleType,
 			If:       ifNode,

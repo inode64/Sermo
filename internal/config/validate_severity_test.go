@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"sermo/internal/checks"
+	"sermo/internal/severity"
 )
 
 // A watch file has no key allow-list, so an unwired `severity:` would be
@@ -20,7 +21,7 @@ func TestValidateWatchSeveritySurfaces(t *testing.T) {
 		},
 		"then": map[string]any{"hook": map[string]any{"command": []any{"/x"}}},
 	}
-	for _, sev := range []string{checks.SeverityError, checks.SeverityWarning} {
+	for _, sev := range []string{string(severity.Error), string(severity.Warning)} {
 		w := map[string]any{"severity": sev, "check": valid["check"], "then": valid["then"]}
 		assertNoWatchIssues(t, map[string]any{"watches": map[string]any{"hdparm-sdd": w}})
 	}
@@ -41,7 +42,7 @@ func TestValidateWatchSeveritySurfaces(t *testing.T) {
 	// `ok` grades an analyze match, never a check: a check that has nothing to
 	// say does not fail in the first place.
 	t.Run("ok is not a check severity", func(t *testing.T) {
-		w := map[string]any{"severity": checks.SeverityOK, "check": valid["check"], "then": valid["then"]}
+		w := map[string]any{"severity": checks.AnalyzeSeverityOK, "check": valid["check"], "then": valid["then"]}
 		assertWatchIssues(t, map[string]any{"watches": map[string]any{"hdparm-sdd": w}}, "severity")
 	})
 
@@ -64,7 +65,7 @@ func TestValidateWatchSeveritySurfaces(t *testing.T) {
 			"check": map[string]any{"type": checks.CheckTypeNet, "interface": "enp1s0"},
 			"metrics": map[string]any{
 				"errors": map[string]any{
-					"severity": checks.SeverityWarning,
+					"severity": string(severity.Warning),
 					"delta":    map[string]any{"op": ">", "value": 100},
 					"then":     map[string]any{"hook": map[string]any{"command": []any{"/x"}}},
 				},

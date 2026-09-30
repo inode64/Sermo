@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"sermo/internal/checks"
 	"sermo/internal/config"
+	"sermo/internal/severity"
 )
 
 func TestManualOperationTimeout(t *testing.T) {
@@ -156,7 +156,7 @@ func TestWatchProbeRendersAnAdvisoryAsAWarning(t *testing.T) {
 		ProbeDaemonWatch: func(context.Context, *config.Config, string) (daemonWatchProbe, error) {
 			return daemonWatchProbe{
 				Message:  "hdparm /dev/sdd read=0.4 MB/s",
-				Severity: checks.SeverityWarning,
+				Severity: string(severity.Warning),
 				Readings: []daemonWatchReading{{Field: "warning", Label: "Warning", Warning: "hdparm /dev/sdd read=0.4 MB/s"}},
 			}, errors.New("probe failed (409): hdparm /dev/sdd read=0.4 MB/s")
 		}}
@@ -195,5 +195,40 @@ func TestWatchProbeUsesDaemonAndSupportsHdparm(t *testing.T) {
 	}
 	if !called || !strings.Contains(stdout.String(), "Read: 167 MB/s") {
 		t.Fatalf("daemon probe called=%v stdout=%q", called, stdout.String())
+	}
+}
+
+// A failing sample prints at its grade — FAIL for an outage, CRIT for a
+// critical one — with its readings, and exits 1; only a probe that returned no
+// result is reported as a command failure.
+func TestWatchProbeRendersTheGradeOfAFailingSample(t *testing.T) {
+	root := t.TempDir()
+	watches := filepath.Join(root, "watches")
+	if err := os.Mkdir(watches, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	global := filepath.Join(root, "sermo.yml")
+	mustWrite(t, global, "paths:\n  watches: ["+watches+"]\ndefaults:\n  policy: { cooldown: 5m }\n")
+	mustWrite(t, filepath.Join(watches, "hdparm-sdd.yml"),
+		"name: hdparm-sdd\ncheck:\n  type: hdparm\n  device: /dev/sdd\n  read: { op: \"<\", value: 20 }\n")
+	for level, label := range map[severity.Level]string{severity.Error: cliTextFail, severity.Critical: cliTextCrit} {
+		var stdout bytes.Buffer
+		app := App{Env: func(string) string { return "" }, Stdout: &stdout, Stderr: &bytes.Buffer{},
+			ProbeDaemonWatch: func(context.Context, *config.Config, string) (daemonWatchProbe, error) {
+				return daemonWatchProbe{Message: "hdparm /dev/sdd read=0.4 MB/s", Severity: string(level)},
+					errors.New("probe failed (409): hdparm /dev/sdd read=0.4 MB/s")
+			}}
+		code := app.Run(context.Background(), []string{"--config", global, "watch", "probe", "hdparm-sdd"})
+		if code != exitNotActive || !strings.HasPrefix(stdout.String(), label+" watch hdparm-sdd:") {
+			t.Fatalf("%s: exit=%d stdout=%q, want exit %d leading with %s", level, code, stdout.String(), exitNotActive, label)
+		}
+	}
+	var stderr bytes.Buffer
+	app := App{Env: func(string) string { return "" }, Stdout: &bytes.Buffer{}, Stderr: &stderr,
+		ProbeDaemonWatch: func(context.Context, *config.Config, string) (daemonWatchProbe, error) {
+			return daemonWatchProbe{}, errors.New("talking to daemon web UI: connection refused")
+		}}
+	if code := app.Run(context.Background(), []string{"--config", global, "watch", "probe", "hdparm-sdd"}); code == exitSuccess || !strings.Contains(stderr.String(), "connection refused") {
+		t.Fatalf("transport failure exit=%d stderr=%q, want a command failure", code, stderr.String())
 	}
 }

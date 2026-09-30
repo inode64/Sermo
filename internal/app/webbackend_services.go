@@ -3,17 +3,19 @@ package app
 import (
 	"context"
 	"iter"
+	"slices"
+	"strings"
+	"time"
+
 	"sermo/internal/cfgval"
 	"sermo/internal/checks"
 	"sermo/internal/config"
 	"sermo/internal/locks"
 	"sermo/internal/servicemgr"
+	"sermo/internal/severity"
 	"sermo/internal/state"
 	"sermo/internal/units"
 	"sermo/internal/web"
-	"slices"
-	"strings"
-	"time"
 )
 
 // serviceObservation holds one cycle's configured, current check results and
@@ -329,7 +331,7 @@ func (o serviceObservation) checkView(cn string, e *webEntry) web.Check {
 			ch.Reports = checks.ReportsState
 		}
 		ch.Optional = cs.Optional
-		ch.Severity = checks.ResolveSeverity(cs.Severity, e.checkSeverities[cn])
+		ch.Severity = cs.severityOr(severity.Level(e.checkSeverities[cn])).String()
 		ch.Skipped = cs.Skipped
 		ch.Message = cs.Message
 		ch.Readings = checkReadings(e.checkTypes[cn], cs.Data)
@@ -383,7 +385,7 @@ func webCheckMetrics(graphs []checks.GraphMetric, bands []checks.BandMetric) []w
 		out = append(out, web.CheckMetric{Name: m.Key, Unit: m.Unit, Label: m.Label})
 	}
 	for _, b := range bands {
-		out = append(out, web.CheckMetric{Name: b.Key, Band: true, Severity: b.Severity, Label: b.Label})
+		out = append(out, web.CheckMetric{Name: b.Key, Band: true, Severity: b.Severity.String(), Label: b.Label})
 	}
 	return out
 }
@@ -550,7 +552,7 @@ func checkHealthSummary(snap map[string]CheckSnapshot, checkNames []string, seve
 		if cs.healthy() {
 			continue
 		}
-		if cs.Optional || checks.IsWarning(checks.ResolveSeverity(cs.Severity, severities[name])) {
+		if cs.Optional || cs.severityOr(severity.Level(severities[name])).Advisory() {
 			warning++
 			continue
 		}

@@ -41,8 +41,12 @@ func TestMountAssistantGeneratesMountUnit(t *testing.T) {
 		t.Fatalf("mount body = %+v, want storage check/refcount", body)
 	}
 	freePct, ok := check[checks.LevelFieldFreePct].(map[string]any)
-	if !ok || freePct[checks.CheckKeyOp] != cfgval.CompareOpLess || freePct[checks.CheckKeyValue] != mountDefaultFreePct {
-		t.Fatalf("free_pct = %+v, want op< value%d", freePct, mountDefaultFreePct)
+	if !ok || freePct[checks.CheckKeyOp] != cfgval.CompareOpLess || freePct[checks.CheckKeyValue] != storageWarnFreePct {
+		t.Fatalf("free_pct = %+v, want op< value%d", freePct, storageWarnFreePct)
+	}
+	levels, _ := check[checks.CheckKeyLevels].(map[string]any)
+	if check[checks.CheckKeySeverity] != "warning" || levels["error"] == nil || levels["critical"] == nil {
+		t.Fatalf("mount check = %+v, want a warning with error and critical levels", check)
 	}
 	if _, ok := mount[config.MountKeyUmount]; ok {
 		t.Fatalf("mount body = %+v, want no persistent umount escalation policy", body)

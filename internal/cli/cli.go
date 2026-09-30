@@ -28,6 +28,7 @@ import (
 	"sermo/internal/process"
 	"sermo/internal/rules"
 	"sermo/internal/servicemgr"
+	"sermo/internal/severity"
 	"sermo/internal/web"
 )
 
@@ -109,17 +110,39 @@ const (
 )
 
 const (
-	cliTextFail = "FAIL"
-	cliTextOK   = "OK"
-	cliTextWarn = "WARN"
+	cliTextFail  = "FAIL"
+	cliTextOK    = "OK"
+	cliTextWarn  = "WARN"
+	cliTextCrit  = "CRIT"
+	cliTextInfo  = "INFO"
+	cliTextDebug = "DEBUG"
 )
+
+// severityLabel is the status tag a terminal line prints for a failure graded
+// level: an unset grade is an error, so an ungraded failure still reads FAIL.
+func severityLabel(level severity.Level) string {
+	switch level.Resolved() {
+	case severity.Critical:
+		return cliTextCrit
+	case severity.Warning:
+		return cliTextWarn
+	case severity.Info:
+		return cliTextInfo
+	case severity.Debug:
+		return cliTextDebug
+	default:
+		return cliTextFail
+	}
+}
 
 const (
 	eventsTableTimestampWidth = 19
 	eventsTableTargetWidth    = 15
 	// Wide enough for the longest event kind ("notify-suppressed");
 	// "recovered" used to truncate to "recovere" at 8.
-	eventsTableKindWidth     = 17
+	eventsTableKindWidth = 17
+	// Wide enough for the longest severity ("critical").
+	eventsTableSeverityWidth = 8
 	eventsTableRuleWidth     = 14
 	eventsTableActionWidth   = 7
 	eventsTableMessageWidth  = 60

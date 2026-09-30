@@ -10,6 +10,7 @@ import (
 
 	"sermo/internal/execx"
 	"sermo/internal/output"
+	"sermo/internal/severity"
 )
 
 const (
@@ -196,7 +197,7 @@ func keepFullestThinPool(dst, src map[string]float64) {
 func (c *lvmCheck) finish(start time.Time, row, stateRow lvmRow, health, reasons string, values map[string]float64, message string) Result {
 	r := c.result(health == LVMHealthOK, message, start)
 	if c.severity == "" && health == LVMHealthWarning {
-		r.Severity = SeverityWarning
+		r.Severity = severity.Warning
 	}
 	vg, lv := c.resultTarget(row)
 	r.Data = map[string]any{DataKeyHealth: health, DataKeyLVMReasons: reasons, DataKeyVolumeGroup: vg, DataKeyLogicalVolume: lv}

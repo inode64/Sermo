@@ -72,7 +72,10 @@ around the opposite principle — **prove it is safe, then act**:
 - A focused operator **CLI** (`sermoctl`) for status, safe lifecycle actions,
   config validation, locks, processes, preflight, inventory, SLA and events.
 - **Notifications** to email, Slack, Teams and webhook sinks (ntfy/Telegram/
-  Gotify) with a templated default message.
+  Gotify) with a templated default message, graded on five severity levels
+  (debug → critical): each notifier sets the lowest level it receives, a
+  threshold can escalate from warning to error to critical, and an incident is
+  announced once per level instead of once per watch.
 - An optional **interactive Telegram report bot** (read-only): ask it `/status`,
   `/services`, `/sla` and it replies with live reports — long polling only, no
   inbound port, answering allow-listed chats.

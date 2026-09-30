@@ -196,13 +196,13 @@ func (c *httpCheck) success(resp *http.Response, elapsed time.Duration, verifyEr
 	leaf := resp.TLS.PeerCertificates[0]
 	s := certSampleFromCert(leaf)
 	s.VerifyError = verifyError
-	problems, daysLeft, hasExpiry := c.certEval.evaluate(s, c.certOpts, time.Now())
+	problems, daysLeft, hasExpiry, grade := c.certEval.evaluate(s, c.certOpts, time.Now())
 	ok := len(problems) == 0
 	msg := statusMsg
 	if !ok {
 		msg = c.certHost + ": " + strings.Join(problems, "; ")
 	}
-	res := c.result(ok, msg, start)
+	res := gradeCert(c.result(ok, msg, start), c.severity, c.certOpts, grade, daysLeft, hasExpiry)
 	data := certData(c.certHost, c.certHost, "", s, daysLeft, hasExpiry)
 	data[DataKeyStatus], data[DataKeyLatencyMS], data[DataKeyProtocol] = resp.StatusCode, elapsed.Milliseconds(), resp.Proto
 	res.Data = data

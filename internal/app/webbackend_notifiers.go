@@ -28,11 +28,12 @@ func (b *WebBackend) Notifiers(_ context.Context) []web.Notifier {
 			continue
 		}
 		out = append(out, web.Notifier{
-			Name:    n.name,
-			Type:    n.typ,
-			Enabled: n.enabled,
-			Summary: n.summary,
-			UsedBy:  usedBy[name],
+			Name:        n.name,
+			Type:        n.typ,
+			Enabled:     n.enabled,
+			Summary:     n.summary,
+			UsedBy:      usedBy[name],
+			MinSeverity: n.minSeverity.String(),
 		})
 	}
 	return out

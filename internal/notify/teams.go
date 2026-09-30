@@ -5,6 +5,10 @@ const (
 	teamsAdaptiveCardType      = "AdaptiveCard"
 	teamsAdaptiveCardVersion   = "1.4"
 	teamsAttachmentContentType = "application/vnd.microsoft.card.adaptive"
+	teamsActionOpenURLType     = "Action.OpenUrl"
+	teamsActionTitleKey        = "title"
+	teamsActionURLKey          = "url"
+	teamsCardActionsKey        = "actions"
 	teamsCardBodyKey           = "body"
 	teamsCardContentKey        = "content"
 	teamsCardContentTypeKey    = "contentType"
@@ -19,6 +23,7 @@ const (
 	teamsMSTeamsWidth          = "Full"
 	teamsMSTeamsWidthKey       = "width"
 	teamsTextBlockType         = "TextBlock"
+	teamsTextColorKey          = "color"
 	teamsTextKey               = "text"
 	teamsTextWeightBolder      = "Bolder"
 	teamsTextWeightKey         = "weight"
@@ -46,18 +51,27 @@ func teamsPayload(msg Message) []byte {
 }
 
 func teamsCard(msg Message) map[string]any {
-	return map[string]any{
+	card := map[string]any{
 		teamsCardSchemaKey:  teamsAdaptiveCardSchema,
 		teamsCardTypeKey:    teamsAdaptiveCardType,
 		teamsCardVersionKey: teamsAdaptiveCardVersion,
 		teamsMSTeamsKey:     map[string]any{teamsMSTeamsWidthKey: teamsMSTeamsWidth},
 		teamsCardBodyKey:    teamsCardBody(msg),
 	}
+	if msg.Link != "" {
+		card[teamsCardActionsKey] = []map[string]any{{
+			teamsCardTypeKey: teamsActionOpenURLType, teamsActionTitleKey: panelLinkLabel, teamsActionURLKey: msg.Link,
+		}}
+	}
+	return card
 }
 
 func teamsCardBody(msg Message) []map[string]any {
+	// The lead line takes the message's colour: its severity, or good news
+	// for a recovery.
 	body := []map[string]any{{
 		teamsCardTypeKey: teamsTextBlockType, teamsTextKey: msg.Subject, teamsTextWeightKey: teamsTextWeightBolder, teamsTextWrapKey: true,
+		teamsTextColorKey: toneTeamsColors[msg.tone()],
 	}}
 	if msg.Body != "" {
 		body = append(body, map[string]any{

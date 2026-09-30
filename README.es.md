@@ -79,7 +79,10 @@ actuar**:
   vida seguras, validación de config, locks, procesos, preflight, inventario, SLA
   y eventos.
 - **Notificaciones** a email, Slack, Teams y sinks de webhook (ntfy/Telegram/
-  Gotify) con una plantilla de mensaje por defecto.
+  Gotify) con una plantilla de mensaje por defecto, graduadas en cinco niveles
+  de severidad (debug → critical): cada notifier fija el nivel mínimo que
+  recibe, un umbral puede escalar de warning a error y a critical, y un
+  incidente se anuncia una vez por nivel en lugar de una vez por watch.
 - Un **interruptor de pánico** a nivel de daemon para pausar toda la remediación
   automática al instante.
 - **Asistentes guiados** para configuraciones comunes (service, docker, vm,

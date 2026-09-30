@@ -13,7 +13,6 @@ import (
 	"sermo/internal/control"
 	"sermo/internal/emission"
 	"sermo/internal/metrics"
-	"sermo/internal/notify"
 	"sermo/internal/process"
 	"sermo/internal/rules"
 	"sermo/internal/telegrambot"
@@ -155,6 +154,7 @@ func (m *Monitor) loadReloadConfig(ctx context.Context) *config.Config {
 		m.emitReloadError("config invalid: " + formatValidationIssues(issues))
 		return nil
 	}
+	LogBuildNotices(m.Logger, "config warning", ConfigWarnings(newCfg))
 	return newCfg
 }
 
@@ -236,7 +236,7 @@ func (m *Monitor) applyConfig(cfg *config.Config) {
 	m.deps.SSHIdleSampler = checks.NewSSHIdleSampler(terminalReader, m.deps.UserLookup)
 	m.deps.SSHSessionSampler = checks.NewSSHSessionSampler(terminalReader, m.deps.UserLookup)
 	m.deps.TerminalProcessReader = terminalReader
-	notifiers, warns := notify.Build(cfg.Notifiers(), notify.WithTemplateDir(cfg.Global.TemplateDir()))
+	notifiers, warns := BuildNotifiers(cfg)
 	m.deps.Notifiers = notifiers
 	m.deps.GlobalNotify = config.NotifyDefault(cfg.Global.Raw)
 	m.deps.GlobalEmission = emission.Merge(cfg.Global.Raw[emission.Section], emission.Default())

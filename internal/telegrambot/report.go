@@ -51,10 +51,11 @@ type WatchLine struct {
 
 // EventLine is one entry of the /events feed.
 type EventLine struct {
-	Time    string
-	Target  string // the service/watch/app the event concerns, if any
-	Kind    string
-	Message string
+	Time     string
+	Target   string // the service/watch/app the event concerns, if any
+	Kind     string
+	Severity string // the event's grade, if it carries one
+	Message  string
 }
 
 // SLAWindow is one availability window for /sla.
@@ -156,7 +157,11 @@ func formatEvents(lines []EventLine) string {
 		if e.Target != "" {
 			target = " " + e.Target
 		}
-		return fmt.Sprintf("%s [%s]%s: %s", e.Time, nonEmpty(e.Kind, fallbackUnknownField), target, e.Message)
+		kind := nonEmpty(e.Kind, fallbackUnknownField)
+		if e.Severity != "" {
+			kind += "/" + e.Severity // tells an advisory from an outage
+		}
+		return fmt.Sprintf("%s [%s]%s: %s", e.Time, kind, target, e.Message)
 	})
 }
 

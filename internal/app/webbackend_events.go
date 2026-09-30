@@ -51,7 +51,7 @@ func (b *WebBackend) ActivitySummary(_ context.Context) web.ActivitySummary {
 			if events[i].Status != eventStatusOK && events[i].Status != eventStatusBlocked {
 				summary.Errors++
 			}
-		case events[i].Kind == eventKindError:
+		case events[i].Kind == eventKindError && !events[i].advisoryError():
 			summary.Errors++
 		}
 	}
@@ -212,17 +212,18 @@ func loggedEventToWeb(event LoggedEvent) web.Event {
 	// local zone; normalizing here keeps one timestamp convention (UTC) across
 	// restarts in the web UI, sermoctl and notifications.
 	return web.Event{
-		ID:      event.ID,
-		Time:    event.Time.UTC().Format(time.RFC3339),
-		Service: event.Service,
-		Watch:   event.Watch,
-		App:     event.App,
-		Kind:    event.Kind,
-		Rule:    event.Rule,
-		Action:  event.Action,
-		Status:  event.Status,
-		Message: event.Message,
-		Output:  event.Output,
+		ID:       event.ID,
+		Time:     event.Time.UTC().Format(time.RFC3339),
+		Service:  event.Service,
+		Watch:    event.Watch,
+		App:      event.App,
+		Kind:     event.Kind,
+		Rule:     event.Rule,
+		Action:   event.Action,
+		Status:   event.Status,
+		Message:  event.Message,
+		Output:   event.Output,
+		Severity: event.Severity.String(),
 	}
 }
 

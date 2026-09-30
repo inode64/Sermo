@@ -3,11 +3,18 @@ display_name: Root filesystem
 category: storage
 monitor: disabled
 interval: 30s
+# Graded disk usage: an advisory at 80 %, an outage at 95 %, critical at 99 %.
+# Each level must hold for the same `for:` window before the alert escalates,
+# and one alert escalates instead of three watches firing side by side.
 check:
   type: storage
   path: /
-  used_pct: { op: ">=", value: "90%" }
+  used_pct: { op: ">=", value: "80%" }
   mounted: true
+  severity: warning
+  levels:
+    error: { used_pct: { op: ">=", value: "95%" } }
+    critical: { used_pct: { op: ">=", value: "99%" } }
 for: { cycles: 3 }
 then:
   hook:

@@ -16,6 +16,7 @@ import (
 	"sermo/internal/httpx"
 	"sermo/internal/metrics"
 	"sermo/internal/servicemgr"
+	"sermo/internal/severity"
 )
 
 const (
@@ -420,7 +421,7 @@ func buildCertCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 		port:        port,
 		serverName:  serverName,
 		path:        path,
-		certOptions: certOptionsFromEntry(entry, certCheckOptionKeys),
+		certOptions: certOptionsFromEntry(entry, certCheckOptionKeys, b.levels),
 		sampler:     deps.CertSampler,
 	}, ""
 }
@@ -467,20 +468,27 @@ func buildCheckBase(name string, entry map[string]any, deps Deps) (string, base,
 				strings.Join(ReportingModes(), ", ")),
 		}
 	}
-	severity := cfgval.AsString(entry[CheckKeySeverity])
-	if _, present := entry[CheckKeySeverity]; present && !IsCheckSeverity(severity) {
+	declared := cfgval.AsString(entry[CheckKeySeverity])
+	level, validLevel := severity.Parse(declared)
+	if _, present := entry[CheckKeySeverity]; present && !validLevel {
 		return typ, base{}, &buildFailure{
-			detail: fmt.Sprintf("%s %q must be one of %s", CheckKeySeverity, severity,
-				strings.Join(CheckSeverities(), ", ")),
+			detail: fmt.Sprintf("%s %q must be one of %s", CheckKeySeverity, declared, severity.Summary),
 		}
 	}
+	levels, failure := buildLevels(typ, entry, level)
+	if failure != nil {
+		return typ, base{}, failure
+	}
 	return typ, base{
-		name:      name,
-		service:   deps.Service,
-		timeout:   timeout,
-		condition: ResolveCondition(typ, reports),
-		reports:   reports,
-		severity:  severity,
+		name:       name,
+		service:    deps.Service,
+		timeout:    timeout,
+		condition:  ResolveCondition(typ, reports),
+		reports:    reports,
+		severity:   level,
+		levels:     levels,
+		grades:     predicateGrades(typ, entry, levels),
+		gradeAnyOf: gradeSupports[typ].anyOf,
 	}, nil
 }
 

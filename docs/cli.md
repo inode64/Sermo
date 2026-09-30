@@ -108,7 +108,7 @@ sermoctl patterns
 sermoctl sla [TARGET]                   # availability windows for every service and availability watch, or one
 sermoctl sla --series TARGET [--since DURATION]   # per-minute series; --since default 24h
 
-sermoctl events [SERVICE] [--limit N]   # list recent events (global or for SERVICE)
+sermoctl events [SERVICE] [--limit N]   # list recent events (global or for SERVICE); SEVERITY shows a graded event's level
 sermoctl events clear [--before TIME]   # omit TIME to clear all; TIME may be non-future RFC3339 or positive duration
                                         # only events strictly before the timestamp are removed
 sermoctl activity clear [--before TIME] # clears the same log shown in Events
@@ -265,6 +265,8 @@ device's short SMART self-test with `smartctl --test=short DEVICE`; success mean
 the device accepted the test, not that it has passed it. Normal scheduled SMART
 checks remain read-only health/attribute reads. The command records a `probe`
 event and last-check time, but does not run rules, notifications or remediation.
+Its status line names the result's [severity](rules.md#severity-severity):
+`OK`, or `DEBUG`, `INFO`, `WARN`, `FAIL` (error) or `CRIT` for a failing sample.
 A RAID
 watch with `raid_control.pause_resume: true` and an explicit `check.array` also
 supports `watch pause` and `watch resume`.
@@ -340,6 +342,12 @@ spared or outlived SIGKILL (`orphan_processes`), `2` on a failure.
 `--apply` is rejected by every other command, and no rule action can reap — see
 [safety.md](safety.md) for the whole contract and [services.md](services.md) for
 the `reap:` block.
+
+`sermoctl config validate` prints each validation error as `ERROR` and exits
+`78`. It also prints advisory findings as `WARN` — today a
+[`levels:`](rules.md#graded-levels-levels) tier Sermo ignores because it is not
+stricter than the threshold below it — and still exits `0`, since the
+configuration loads and runs; `--json` lists them under `warnings`.
 
 ## Exit codes
 

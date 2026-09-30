@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"sermo/internal/cfgval"
+	"sermo/internal/severity"
 )
 
 const (
@@ -57,6 +58,19 @@ type swapCheck struct {
 	lastIO uint64
 }
 
+// swapSelfSeverity grades a swap finding nothing declares a severity for: a
+// full swap area or steady paging is memory pressure to plan around, not an
+// outage — the memory watch owns the alarm for a host that runs out.
+const swapSelfSeverity = severity.Warning
+
+// selfGrade gives res the swap grade unless the check declares its own.
+func (c *swapCheck) selfGrade(res Result) Result {
+	if !c.severity.Valid() {
+		res.Severity = swapSelfSeverity
+	}
+	return res
+}
+
 func (c *swapCheck) Run(_ context.Context) Result {
 	start := time.Now()
 	defaultSampler := defaultSwapSampler
@@ -66,7 +80,7 @@ func (c *swapCheck) Run(_ context.Context) Result {
 	sampler := samplerOr(c.sampler, defaultSampler)
 	s, err := sampler()
 	if err != nil {
-		return c.unavailableResult("swap: "+err.Error(), start)
+		return c.selfGrade(c.unavailableResult("swap: "+err.Error(), start))
 	}
 	data := map[string]any{DataKeyMetric: c.metric, DataKeyTotalBytes: s.TotalBytes, DataKeyFreeBytes: s.FreeBytes}
 
@@ -91,7 +105,7 @@ func (c *swapCheck) Run(_ context.Context) Result {
 		ok := levelPredsHold(c.preds, values)
 		data[DataKeyUsedPct], data[DataKeyFreePct] = usedPct, freePct
 		data[DataKeyValue] = firstPredValue(c.preds, values, usedPct)
-		res := c.result(ok, fmt.Sprintf("swap used %.1f%% free %.1f%% (%s free)", usedPct, freePct, formatSummaryBytes(float64(s.FreeBytes))), start)
+		res := c.grade(c.selfGrade(c.result(ok, fmt.Sprintf("swap used %.1f%% free %.1f%% (%s free)", usedPct, freePct, formatSummaryBytes(float64(s.FreeBytes))), start)), values)
 		res.Data = data
 		return res
 
@@ -107,7 +121,7 @@ func (c *swapCheck) Run(_ context.Context) Result {
 		c.lastIO = total
 		data[DataKeyValue], data[DataKeyPages] = delta, total
 		met := cfgval.CompareFloat(float64(delta), c.op, c.value)
-		res := c.result(met, fmt.Sprintf("swap io +%d pages/cycle (total %d)", delta, total), start)
+		res := c.gradeValue(c.selfGrade(c.result(met, fmt.Sprintf("swap io +%d pages/cycle (total %d)", delta, total), start)), CheckKeyDelta, float64(delta))
 		res.Data = data
 		return res
 

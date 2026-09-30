@@ -28,7 +28,8 @@ var storageSchema = []string{
 			status  TEXT NOT NULL DEFAULT '',
 			message TEXT NOT NULL DEFAULT '',
 			app     TEXT NOT NULL DEFAULT '',
-			output  TEXT NOT NULL DEFAULT ''
+			output  TEXT NOT NULL DEFAULT '',
+			severity TEXT NOT NULL DEFAULT ''
 		);`,
 	`CREATE INDEX IF NOT EXISTS event_log_at_idx ON event_log (at DESC, id DESC);`,
 	`CREATE INDEX IF NOT EXISTS event_log_service_at_idx ON event_log (service, at DESC, id DESC);`,
@@ -43,6 +44,7 @@ var storageSchema = []string{
 		last_sent_at INTEGER NOT NULL,
 		subject      TEXT NOT NULL,
 		body         TEXT NOT NULL,
+		severity     TEXT NOT NULL DEFAULT '',
 		PRIMARY KEY (incident_key, notifier)
 	);`,
 	`CREATE INDEX IF NOT EXISTS event_notify_due_idx ON event_notify_state (notifier, active, last_sent_at);`,
@@ -67,6 +69,9 @@ var storageSchema = []string{
 		firing            INTEGER NOT NULL DEFAULT 0,
 		clear_since       INTEGER NOT NULL DEFAULT 0,
 		clear_consecutive INTEGER NOT NULL DEFAULT 0,
+		severity          TEXT NOT NULL DEFAULT '',
+		notified_severity TEXT NOT NULL DEFAULT '',
+		severity_windows  TEXT NOT NULL DEFAULT '',
 		PRIMARY KEY (service, rule_name)
 	);`,
 	// global_state holds daemon-wide on/off flags that are not keyed by service
@@ -157,6 +162,10 @@ var storageSchema = []string{
 		current_backoff_ns INTEGER NOT NULL DEFAULT 0,
 		clear_since        INTEGER NOT NULL DEFAULT 0,
 		clear_consecutive INTEGER NOT NULL DEFAULT 0,
+		severity           TEXT NOT NULL DEFAULT '',
+		severity_windows   TEXT NOT NULL DEFAULT '',
+		notified_severity  TEXT NOT NULL DEFAULT '',
+		transition_severity TEXT NOT NULL DEFAULT '',
 		PRIMARY KEY (watch, slot)
 	);`,
 	// sla_archive holds availability at every stored resolution: res is the
@@ -231,31 +240,75 @@ func (s *Store) initializeSchema(ctx context.Context) error {
 	return nil
 }
 
+// Tables and the shared column the additive migrations name.
+const (
+	tableRuleWindowState   = "rule_window_state"
+	tableWatchRuntimeState = "watch_runtime_state"
+	tableEventLog          = "event_log"
+	tableEventNotifyState  = "event_notify_state"
+	columnSeverity         = "severity"
+	// severityColumnDecl declares a graded row's severity; empty is ungraded.
+	severityColumnDecl = columnSeverity + " TEXT NOT NULL DEFAULT ''"
+	// columnNotifiedSeverity keeps the gravest level an open episode notified.
+	columnNotifiedSeverity     = "notified_severity"
+	notifiedSeverityColumnDecl = columnNotifiedSeverity + " TEXT NOT NULL DEFAULT ''"
+)
+
 // stateColumnMigrations are additive columns introduced after their tables'
 // first shipped shapes. CREATE TABLE IF NOT EXISTS never alters an existing
 // table, so a pre-existing database otherwise keeps failing every write that
 // names a new column. Defaults make old cache/control rows readable until the
-// next cycle overwrites them.
+// next cycle overwrites them. backfill, when set, runs once right after the
+// column is added, to translate rows written under the older vocabulary.
 var stateColumnMigrations = []struct {
-	table  string
-	column string
-	decl   string
+	table    string
+	column   string
+	decl     string
+	backfill string
 }{
-	{"rule_window_state", "firing", "firing INTEGER NOT NULL DEFAULT 0"},
-	{"rule_window_state", "clear_since", "clear_since INTEGER NOT NULL DEFAULT 0"},
-	{"rule_window_state", "clear_consecutive", "clear_consecutive INTEGER NOT NULL DEFAULT 0"},
-	{tableServiceSnapshot, "check_type", "check_type TEXT NOT NULL DEFAULT ''"},
-	{tableServiceSnapshot, "unavailable", "unavailable INTEGER NOT NULL DEFAULT 0"},
-	{tableServiceSnapshot, "observation", "observation TEXT NOT NULL DEFAULT ''"},
-	{tableServiceSnapshot, "config_id", "config_id TEXT NOT NULL DEFAULT ''"},
-	{tableServiceSnapshot, "severity", "severity TEXT NOT NULL DEFAULT ''"},
-	{tableWatchSnapshot, "check_type", "check_type TEXT NOT NULL DEFAULT ''"},
-	{tableWatchSnapshot, "unavailable", "unavailable INTEGER NOT NULL DEFAULT 0"},
-	{tableWatchSnapshot, "observation", "observation TEXT NOT NULL DEFAULT ''"},
-	{tableWatchSnapshot, "config_id", "config_id TEXT NOT NULL DEFAULT ''"},
-	{tableWatchSnapshot, "severity", "severity TEXT NOT NULL DEFAULT ''"},
-	{"watch_runtime_state", "unavailable", "unavailable INTEGER NOT NULL DEFAULT 0"},
-	{"service_restart_notice", "start_ticks", "start_ticks INTEGER NOT NULL DEFAULT 0"},
+	{tableRuleWindowState, "firing", "firing INTEGER NOT NULL DEFAULT 0", ""},
+	{tableRuleWindowState, "clear_since", "clear_since INTEGER NOT NULL DEFAULT 0", ""},
+	{tableRuleWindowState, "clear_consecutive", "clear_consecutive INTEGER NOT NULL DEFAULT 0", ""},
+	{tableServiceSnapshot, "check_type", "check_type TEXT NOT NULL DEFAULT ''", ""},
+	{tableServiceSnapshot, "unavailable", "unavailable INTEGER NOT NULL DEFAULT 0", ""},
+	{tableServiceSnapshot, "observation", "observation TEXT NOT NULL DEFAULT ''", ""},
+	{tableServiceSnapshot, "config_id", "config_id TEXT NOT NULL DEFAULT ''", ""},
+	{tableServiceSnapshot, columnSeverity, severityColumnDecl, ""},
+	{tableWatchSnapshot, "check_type", "check_type TEXT NOT NULL DEFAULT ''", ""},
+	{tableWatchSnapshot, "unavailable", "unavailable INTEGER NOT NULL DEFAULT 0", ""},
+	{tableWatchSnapshot, "observation", "observation TEXT NOT NULL DEFAULT ''", ""},
+	{tableWatchSnapshot, "config_id", "config_id TEXT NOT NULL DEFAULT ''", ""},
+	{tableWatchSnapshot, columnSeverity, severityColumnDecl, ""},
+	{tableWatchRuntimeState, "unavailable", "unavailable INTEGER NOT NULL DEFAULT 0", ""},
+	{"service_restart_notice", "start_ticks", "start_ticks INTEGER NOT NULL DEFAULT 0", ""},
+	// Severity used to be folded into the event kind: "warning" was an
+	// advisory firing, an advisory check that went unavailable, or an advisory
+	// manual probe failure, while "firing" and "alert" were errors. It is now
+	// its own column: an advisory firing is kind "firing" graded warning, the
+	// other two are kind "error" graded warning, and the one-shot notices (a
+	// service restart, a reclaimed operation lock) are alerts graded warning.
+	{tableEventLog, columnSeverity, severityColumnDecl,
+		`UPDATE event_log SET
+		   severity = CASE
+		     WHEN kind = 'warning' THEN 'warning'
+		     WHEN kind = 'alert' AND (rule = 'service-restart' OR message LIKE 'reclaimed stale operation lock%') THEN 'warning'
+		     ELSE 'error' END,
+		   kind = CASE
+		     WHEN kind = 'warning' AND (action = 'probe' OR message LIKE 'check unavailable:%') THEN 'error'
+		     WHEN kind = 'warning' THEN 'firing'
+		     ELSE kind END
+		 WHERE kind IN ('warning', 'firing', 'alert');`},
+	{tableEventNotifyState, columnSeverity, severityColumnDecl,
+		`UPDATE event_notify_state SET
+		   severity = CASE phase WHEN 'warning' THEN 'warning' WHEN 'recovered' THEN '' ELSE 'error' END,
+		   phase    = CASE phase WHEN 'warning' THEN 'firing' ELSE phase END;`},
+	{tableRuleWindowState, columnSeverity, severityColumnDecl, ""},
+	{tableRuleWindowState, columnNotifiedSeverity, notifiedSeverityColumnDecl, ""},
+	{tableRuleWindowState, "severity_windows", "severity_windows TEXT NOT NULL DEFAULT ''", ""},
+	{tableWatchRuntimeState, columnSeverity, severityColumnDecl, ""},
+	{tableWatchRuntimeState, "severity_windows", "severity_windows TEXT NOT NULL DEFAULT ''", ""},
+	{tableWatchRuntimeState, columnNotifiedSeverity, notifiedSeverityColumnDecl, ""},
+	{tableWatchRuntimeState, "transition_severity", "transition_severity TEXT NOT NULL DEFAULT ''", ""},
 }
 
 // ensureStateColumns adds any missing cache/control-table columns to a database
@@ -271,6 +324,12 @@ func ensureStateColumns(ctx context.Context, tx *sql.Tx) error {
 		}
 		if _, err := tx.ExecContext(ctx, "ALTER TABLE "+m.table+" ADD COLUMN "+m.decl); err != nil {
 			return fmt.Errorf("add %s.%s: %w", m.table, m.column, err)
+		}
+		if m.backfill == "" {
+			continue
+		}
+		if _, err := tx.ExecContext(ctx, m.backfill); err != nil {
+			return fmt.Errorf("backfill %s.%s: %w", m.table, m.column, err)
 		}
 	}
 	return nil

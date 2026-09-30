@@ -48,7 +48,7 @@ func (c memoryCheck) Run(_ context.Context) Result {
 
 	ok := levelPredsHold(c.preds, values)
 
-	res := c.result(ok, fmt.Sprintf("memory used %.1f%% available %.1f%% (%s available)", usedPct, availPct, formatSummaryBytes(float64(avail))), start)
+	res := c.grade(c.result(ok, fmt.Sprintf("memory used %.1f%% available %.1f%% (%s available)", usedPct, availPct, formatSummaryBytes(float64(avail))), start), values)
 	res.Data = map[string]any{
 		DataKeyTotalBytes:     s.TotalBytes,
 		DataKeyAvailableBytes: avail,

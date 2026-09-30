@@ -47,7 +47,7 @@ func (c *oomCheck) Run(_ context.Context) Result {
 	delta := deltaOrZero(count, c.lastCount)
 	c.lastCount = count
 	met := cfgval.CompareFloat(float64(delta), c.op, c.value)
-	res := c.result(met, fmt.Sprintf("oom kills +%d (total %d)", delta, count), start)
+	res := c.gradeValue(c.result(met, fmt.Sprintf("oom kills +%d (total %d)", delta, count), start), CheckKeyDelta, float64(delta))
 	res.Data = map[string]any{DataKeyValue: delta, DataKeyKills: delta, DataKeyTotal: count}
 	return res
 }

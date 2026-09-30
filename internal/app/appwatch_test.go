@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"sermo/internal/appinspect"
@@ -86,10 +87,13 @@ func TestAppWatchNotifiesOnceAndRecovers(t *testing.T) {
 
 	w.RunCycle(context.Background()) // error  -> firing + notify (rising edge)
 	w.RunCycle(context.Background()) // error  -> firing, no re-notify
-	w.RunCycle(context.Background()) // ok     -> recovered
+	w.RunCycle(context.Background()) // ok     -> recovered + recovery notice
 
-	if len(n.msgs) != 1 {
-		t.Fatalf("app-watch must notify once on the rising edge, got %d", len(n.msgs))
+	if len(n.msgs) != 2 {
+		t.Fatalf("app-watch must notify once on the rising edge and once on recovery, got %d", len(n.msgs))
+	}
+	if !strings.Contains(n.msgs[1].Subject, "salt-minion: "+recoveredMessagePrefix) {
+		t.Fatalf("second notification = %q, want the recovery", n.msgs[1].Subject)
 	}
 	for _, e := range events {
 		if e.App != "salt-minion" || e.Watch != "" {

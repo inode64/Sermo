@@ -65,6 +65,11 @@ func validateWeb(webCfg map[string]any, add addFunc) {
 			add("%s must be a hostname or list of hostnames", webPathAllowedHosts)
 		}
 	}
+	if v, present := webCfg[WebKeyPublicURL]; present {
+		if err := validatePublicURL(v); err != nil {
+			add("%s %v", webPathPublicURL, err)
+		}
+	}
 }
 
 // validateWebCredentialFiles requires a non-empty path for every configured

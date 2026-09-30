@@ -12,6 +12,7 @@ import (
 
 	"sermo/internal/execx"
 	"sermo/internal/output"
+	"sermo/internal/severity"
 )
 
 const (
@@ -20,6 +21,10 @@ const (
 	smartHealthUnknown = "unknown"
 	smartHealthPassed  = "PASSED"
 	smartHealthFailed  = "FAILED"
+	// smartHealthWarning is a SCSI drive's warning-class informational
+	// exception: it reports a medium error or a grown defect — a sector it lost
+	// and remapped — without predicting its own failure.
+	smartHealthWarning = "WARNING"
 	// smartFailureUnknown stands in when smartctl produced no sample and named
 	// no reason, so the operator still gets a message instead of a blank one.
 	smartFailureUnknown = "smartctl produced no usable report"
@@ -125,9 +130,12 @@ func (c *smartCheck) Run(ctx context.Context) Result {
 
 	health := smartHealthUnknown
 	if data.healthKnown {
-		if data.passed {
+		switch {
+		case data.passed:
 			health = smartHealthPassed
-		} else {
+		case data.advisory:
+			health = smartHealthWarning
+		default:
 			health = smartHealthFailed
 		}
 	}
@@ -138,12 +146,14 @@ func (c *smartCheck) Run(ctx context.Context) Result {
 		message += "; " + strings.Join(fired, ", ")
 	}
 	r := c.result(ok, message, start)
-	if c.severity == "" && !verdictFailed && len(fired) > 0 {
-		// Early-warning predicates grade themselves: the drive answers and its
-		// own verdict passes, so a rising counter is an advisory to plan a swap
-		// around, not an outage. A declared severity always wins.
-		r.Severity = SeverityWarning
+	if c.severity == "" && (data.advisory || (!verdictFailed && len(fired) > 0)) {
+		// Early-warning findings grade themselves: the drive answers and does
+		// not predict its own failure, so a lost-and-remapped sector or a rising
+		// counter is an advisory to plan a swap around, not an outage. A
+		// declared severity always wins.
+		r.Severity = severity.Warning
 	}
+	r = c.grade(r, data.values)
 	r.Data = withDeviceBus(smartResultData(c.device, health, data.SmartSample), c.deviceBus, c.device)
 	return r
 }
@@ -238,6 +248,10 @@ type smartData struct {
 	SmartSample
 	passed      bool
 	healthKnown bool
+	// advisory marks a failed verdict that is a SCSI warning-class exception
+	// (medium error, grown defect, temperature) rather than a failure
+	// prediction.
+	advisory bool
 	// deviceUnreadable means smartctl could not open the device or it returned
 	// no identification — the drive is gone, not merely unhealthy.
 	deviceUnreadable bool
@@ -273,6 +287,11 @@ type smartReport struct {
 	NVMeTotalCapacity *float64 `json:"nvme_total_capacity"`
 	SmartStatus       *struct {
 		Passed bool `json:"passed"`
+		// SCSI carries the informational exception behind the verdict: its
+		// additional sense code tells a warning from a failure prediction.
+		SCSI *struct {
+			ASC int `json:"asc"`
+		} `json:"scsi"`
 	} `json:"smart_status"`
 	Temperature struct {
 		Current *float64 `json:"current"`
@@ -335,6 +354,11 @@ type smartNVMeSelfTestEntry struct {
 	PowerOnHours *float64 `json:"power_on_hours"`
 }
 
+// scsiASCWarning is the SCSI additional sense code of the WARNING class
+// (0Bh: a background scan's medium error, an exceeded temperature, a degraded
+// enclosure). A failure prediction is 5Dh and stays a failed verdict.
+const scsiASCWarning = 0x0b
+
 // parseSmart extracts the health verdict, the drive's identity and the graphable
 // attributes from smartctl's JSON (ATA and NVMe shapes).
 func parseSmart(out string) (smartData, error) {
@@ -354,6 +378,7 @@ func parseSmart(out string) (smartData, error) {
 	}
 	if j.SmartStatus != nil {
 		d.passed, d.healthKnown = j.SmartStatus.Passed, true
+		d.advisory = !d.passed && j.SmartStatus.SCSI != nil && j.SmartStatus.SCSI.ASC == scsiASCWarning
 	}
 	d.identity = j.identity()
 	j.readInto(d.values)

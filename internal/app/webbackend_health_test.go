@@ -8,6 +8,7 @@ import (
 
 	"sermo/internal/checks"
 	"sermo/internal/servicemgr"
+	"sermo/internal/severity"
 	"sermo/internal/web"
 )
 
@@ -33,7 +34,7 @@ func TestCheckHealthSummary(t *testing.T) {
 
 	// A declared severity grades the same way the legacy optional flag does.
 	declared := map[string]CheckSnapshot{"disk": {Observation: checks.ObservationFailing, OK: false}}
-	health = checkHealthSummary(declared, []string{"disk"}, map[string]string{"disk": checks.SeverityWarning}, true)
+	health = checkHealthSummary(declared, []string{"disk"}, map[string]string{"disk": string(severity.Warning)}, true)
 	if health != checkHealthWarning {
 		t.Fatalf("severity: warning: health=%q, want warning", health)
 	}
@@ -44,7 +45,7 @@ func TestCheckHealthSummary(t *testing.T) {
 
 	// The grade the check gave its own result travels with the snapshot and
 	// wins; the declaration decides only for a snapshot that carries none.
-	graded := map[string]CheckSnapshot{"smart": {Observation: checks.ObservationFailing, OK: true, Condition: true, Severity: checks.SeverityWarning}}
+	graded := map[string]CheckSnapshot{"smart": {Observation: checks.ObservationFailing, OK: true, Condition: true, Severity: string(severity.Warning)}}
 	health = checkHealthSummary(graded, []string{"smart"}, nil, true)
 	if health != checkHealthWarning {
 		t.Fatalf("result graded warning: health=%q, want warning", health)

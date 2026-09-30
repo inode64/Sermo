@@ -245,7 +245,7 @@ func (c terminalSessionsCheck) Run(ctx context.Context) Result {
 		DataKeyAttached: float64(attached),
 		DataKeyDetached: float64(detached),
 	}
-	res := c.result(levelPredsHold(c.preds, values), terminalSessionMessage(c.config, len(sample.Sessions), attached, detached), start)
+	res := c.grade(c.result(levelPredsHold(c.preds, values), terminalSessionMessage(c.config, len(sample.Sessions), attached, detached), start), values)
 	res.Data = map[string]any{
 		DataKeyCount:            len(sample.Sessions),
 		DataKeyAttached:         attached,

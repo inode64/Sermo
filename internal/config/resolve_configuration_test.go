@@ -5,6 +5,7 @@ import (
 
 	"sermo/internal/checks"
 	"sermo/internal/rules"
+	"sermo/internal/severity"
 )
 
 func TestExpandConfigurationCheckCopiesConfigPreflightAsAdvisory(t *testing.T) {
@@ -21,7 +22,7 @@ func TestExpandConfigurationCheckCopiesConfigPreflightAsAdvisory(t *testing.T) {
 
 	entries, _ := tree[sectionChecks].(map[string]any)
 	got, _ := entries[ConfigurationCheckName].(map[string]any)
-	if got[checks.CheckKeyType] != checks.CheckTypeCommand || got[checks.CheckKeySeverity] != checks.SeverityWarning {
+	if got[checks.CheckKeyType] != checks.CheckTypeCommand || got[checks.CheckKeySeverity] != string(severity.Warning) {
 		t.Fatalf("generated configuration check = %#v", got)
 	}
 	if got[EntryKeyInterval] != DefaultConfigurationCheckInterval {

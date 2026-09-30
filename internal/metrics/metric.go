@@ -102,7 +102,7 @@ func evalThreshold(r Reading, threshold string) (value, actual float64, isPercen
 	if !r.Ready {
 		return 0, 0, false, false, nil
 	}
-	value, isPercent, err = parseThreshold(threshold)
+	value, isPercent, err = ParseThreshold(threshold)
 	if err != nil {
 		return 0, 0, false, false, err
 	}
@@ -143,7 +143,10 @@ func metricValue(r Reading, isPercent bool, threshold string) (float64, error) {
 	return r.Absolute, nil
 }
 
-func parseThreshold(s string) (value float64, isPercent bool, err error) {
+// ParseThreshold parses a metric threshold: a number, or a number with a trailing
+// "%" that selects the percentage form. Compare and a check's graded levels
+// read thresholds through it, so both accept exactly the same spellings.
+func ParseThreshold(s string) (value float64, isPercent bool, err error) {
 	s = strings.TrimSpace(s)
 	if raw, ok := strings.CutSuffix(s, MetricUnitPercent); ok {
 		v, perr := strconv.ParseFloat(strings.TrimSpace(raw), metricFloatBits)

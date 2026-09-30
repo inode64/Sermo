@@ -7,8 +7,15 @@ import (
 )
 
 const (
-	gotifyMessagePath = "/message"
-	gotifyKeyHeader   = "X-Gotify-Key"
+	gotifyMessagePath   = "/message"
+	gotifyKeyHeader     = "X-Gotify-Key"
+	gotifyPriorityKey   = "priority"
+	gotifyExtrasKey     = "extras"
+	gotifyNotificationX = "client::notification"
+	gotifyClickKey      = "click"
+	gotifyURLKey        = "url"
+	// gotifyPriorityScale maps the 1..5 severity priority onto Gotify's 0..10.
+	gotifyPriorityScale = 2
 )
 
 // buildGotify constructs a Gotify notifier from a config entry: `webhook` is
@@ -31,5 +38,18 @@ func buildGotify(name string, entry map[string]any) (Notifier, error) {
 // the detail (the SERMO_* fields) as the message. A subject-only notification
 // travels as the message alone.
 func gotifyPayload(msg Message) []byte {
-	return webhookPayload(pushMessageFields(msg))
+	fields := pushMessageFields(msg)
+	body := make(map[string]any, len(fields))
+	for name, value := range fields {
+		body[name] = value
+	}
+	// The severity sets how loudly the client announces it; a tap opens the
+	// dashboard row.
+	body[gotifyPriorityKey] = tonePriorities[msg.tone()] * gotifyPriorityScale
+	if msg.Link != "" {
+		body[gotifyExtrasKey] = map[string]any{
+			gotifyNotificationX: map[string]any{gotifyClickKey: map[string]any{gotifyURLKey: msg.Link}},
+		}
+	}
+	return webhookPayload(body)
 }

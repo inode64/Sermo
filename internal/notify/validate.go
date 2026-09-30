@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"sermo/internal/cfgval"
+	"sermo/internal/severity"
 	"sermo/internal/telegramapi"
 )
 
@@ -30,7 +31,19 @@ func ValidateEntry(entry map[string]any) []ValidationIssue {
 			Suffix: fmt.Sprintf(" %q is not supported (%s)", typ, strings.Join(supportedTypes(), ", ")),
 		}}
 	}
-	return registered.validate(entry)
+	return append(validateMinSeverity(entry), registered.validate(entry)...)
+}
+
+// validateMinSeverity checks the transport-independent min_severity field.
+func validateMinSeverity(entry map[string]any) []ValidationIssue {
+	raw, present := entry[KeyMinSeverity]
+	if !present {
+		return nil
+	}
+	if _, ok := severity.Parse(cfgval.AsString(raw)); !ok {
+		return []ValidationIssue{{Field: KeyMinSeverity, Suffix: fmt.Sprintf(" %q must be one of %s", cfgval.String(raw), severity.Summary)}}
+	}
+	return nil
 }
 
 func validateEmailConfig(entry map[string]any) []ValidationIssue {

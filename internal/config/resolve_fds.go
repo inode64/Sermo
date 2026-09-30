@@ -5,8 +5,10 @@ import (
 
 	"sermo/internal/cfgval"
 	"sermo/internal/checks"
+	"sermo/internal/metrics"
 	"sermo/internal/process"
 	"sermo/internal/rules"
+	"sermo/internal/severity"
 )
 
 const (
@@ -19,6 +21,9 @@ const (
 	// Sustained use may be normal for a workload, so it alerts by default and
 	// only restarts when the operator explicitly permits that action.
 	defaultFDsLimit = "80%"
+	// defaultFDsErrorLimit escalates the alert from warning to error: a process
+	// this close to its limit is about to refuse connections.
+	defaultFDsErrorLimit = "95%"
 	// fdsRuleDuration filters transient bursts before an alert is emitted.
 	fdsRuleDuration = "3m"
 	// fdsMessageSuffix names the two facts an operator needs: how close the
@@ -56,6 +61,14 @@ func expandFDs(tree map[string]any) []string {
 		// A tree with no readable limit, or no process yet, is a warning for
 		// the check and never a failed service.
 		checks.CheckKeyOptional: true,
+		// Crossing the limit is an advisory; the error level below is the
+		// outage that is about to happen.
+		checks.CheckKeySeverity: string(severity.Warning),
+	}
+	if fdsErrorLevelApplies(limit) {
+		checkEntry[checks.CheckKeyLevels] = map[string]any{
+			string(severity.Error): map[string]any{checks.CheckKeyOp: cfgval.CompareOpGreater, checks.CheckKeyValue: defaultFDsErrorLimit},
+		}
 	}
 	if err := injectGenerated(tree, sectionChecks, fdsCheckName, "check", fdsCheckName, checkEntry); err != "" {
 		return []string{err}
@@ -69,6 +82,15 @@ func expandFDs(tree map[string]any) []string {
 		return []string{err}
 	}
 	return nil
+}
+
+// fdsErrorLevelApplies reports whether the default error level is stricter
+// than the operator's limit; a limit at or above it keeps a single warning
+// threshold rather than an inert level.
+func fdsErrorLevelApplies(limit string) bool {
+	value, percent, err := metrics.ParseThreshold(limit)
+	errorValue, _, _ := metrics.ParseThreshold(defaultFDsErrorLimit)
+	return err == nil && percent && value < errorValue
 }
 
 // fdsSettings reads the two keys. Absent means the default threshold and an

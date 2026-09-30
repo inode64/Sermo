@@ -104,7 +104,7 @@ func (c *icmpCheck) Run(_ context.Context) Result {
 		if c.hasThreshold {
 			data[DataKeyValue] = s.RTTms
 			met := cfgval.CompareFloat(s.RTTms, c.op, c.value)
-			res := c.result(met, fmt.Sprintf("%s rtt %.1fms %s %.1f", c.host, s.RTTms, c.op, c.value), start)
+			res := c.gradeValue(c.result(met, fmt.Sprintf("%s rtt %.1fms %s %.1f", c.host, s.RTTms, c.op, c.value), start), CheckKeyThreshold, s.RTTms)
 			res.Data = data
 			return res
 		}

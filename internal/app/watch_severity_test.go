@@ -9,6 +9,7 @@ import (
 	"sermo/internal/checks"
 	"sermo/internal/execx"
 	"sermo/internal/notify"
+	"sermo/internal/severity"
 	"sermo/internal/web"
 )
 
@@ -17,12 +18,12 @@ import (
 // runtime. The check itself receives only the declaration — none when nothing
 // is declared, so it may grade its own finding — which is why the result is
 // resolved here the way the watch runtime resolves it.
-func severityOf(t *testing.T, w *Watch) string {
+func severityOf(t *testing.T, w *Watch) severity.Level {
 	t.Helper()
 	if w.Check == nil {
 		return w.Severity
 	}
-	return checks.ResolveSeverity(w.Check.Run(context.Background()).Severity, "")
+	return w.Check.Run(context.Background()).Severity.Resolved()
 }
 
 func watchesByStateSlot(watches []*Watch) map[string]*Watch {
@@ -43,13 +44,13 @@ func TestBuildWatchesSeverityPrecedence(t *testing.T) {
 			"metrics": map[string]any{
 				"state": map[string]any{"expect": "down"},
 				"errors": map[string]any{
-					"severity": checks.SeverityWarning,
+					"severity": string(severity.Warning),
 					"delta":    map[string]any{"op": ">", "value": 100},
 				},
 			},
 		},
 		"hdparm-sdd": map[string]any{
-			"severity": checks.SeverityWarning,
+			"severity": string(severity.Warning),
 			"check": map[string]any{
 				"type": "hdparm", "device": "/dev/sdd",
 				"read": map[string]any{"op": "<", "value": 20},
@@ -72,7 +73,7 @@ func TestBuildWatchesSeverityPrecedence(t *testing.T) {
 	if !ok {
 		t.Fatalf("no errors metric watch built, got slots %v", slots)
 	}
-	if got := severityOf(t, errors); got != checks.SeverityWarning {
+	if got := severityOf(t, errors); got != severity.Warning {
 		t.Errorf("errors metric severity = %q, want warning", got)
 	}
 	state, ok := slots[checks.DataKeyMetric+":state"]
@@ -81,7 +82,7 @@ func TestBuildWatchesSeverityPrecedence(t *testing.T) {
 	}
 	// The base check block is copied over the metric block, so a metric-level
 	// severity is only safe if it is applied after that copy.
-	if got := severityOf(t, state); got != checks.SeverityError {
+	if got := severityOf(t, state); got != severity.Error {
 		t.Errorf("state metric severity = %q, want the undeclared default error", got)
 	}
 
@@ -99,16 +100,16 @@ func TestBuildWatchesSeverityPrecedence(t *testing.T) {
 	}
 	// A watch-level declaration reaches the check, which is what makes the
 	// inline build path carry it at all.
-	if got := severityOf(t, hdparm); got != checks.SeverityWarning {
+	if got := severityOf(t, hdparm); got != severity.Warning {
 		t.Errorf("hdparm-sdd severity = %q, want the watch-level warning", got)
 	}
-	if !checks.IsWarning(hdparm.Severity) {
+	if hdparm.Severity != severity.Warning {
 		t.Error("hdparm-sdd severity is not warning")
 	}
-	if got := severityOf(t, storage); got != checks.SeverityError {
+	if got := severityOf(t, storage); got != severity.Error {
 		t.Errorf("storage-root severity = %q, want error", got)
 	}
-	if checks.IsWarning(storage.Severity) {
+	if storage.Severity == severity.Warning {
 		t.Error("storage-root severity is warning, want undeclared error")
 	}
 }
@@ -120,10 +121,10 @@ func TestBuildWatchesSeverityMetricOverridesCheck(t *testing.T) {
 		"icmp-gw": map[string]any{
 			"check": map[string]any{
 				"type": "icmp", "host": "192.0.2.1", "count": 3,
-				"severity": checks.SeverityWarning,
+				"severity": string(severity.Warning),
 			},
 			"metrics": map[string]any{
-				"state":   map[string]any{"severity": checks.SeverityError, "expect": "down"},
+				"state":   map[string]any{"severity": string(severity.Error), "expect": "down"},
 				"latency": map[string]any{"threshold": map[string]any{"op": ">", "value": 100}},
 			},
 		},
@@ -133,28 +134,28 @@ func TestBuildWatchesSeverityMetricOverridesCheck(t *testing.T) {
 		t.Fatalf("unexpected warnings: %v", warns)
 	}
 	slots := watchesByStateSlot(watches)
-	if got := severityOf(t, slots[checks.DataKeyMetric+":latency"]); got != checks.SeverityWarning {
+	if got := severityOf(t, slots[checks.DataKeyMetric+":latency"]); got != severity.Warning {
 		t.Errorf("latency severity = %q, want the check-level warning", got)
 	}
-	if got := severityOf(t, slots[checks.DataKeyMetric+":state"]); got != checks.SeverityError {
+	if got := severityOf(t, slots[checks.DataKeyMetric+":state"]); got != severity.Error {
 		t.Errorf("state severity = %q, want the metric-level error", got)
 	}
 }
 
-// An advisory reports through its own event kind. The kind is the one severity
-// channel the event log stores, so this is what keeps a watch amber per metric
-// and across a daemon restart.
-func TestWatchWarningRaisesWarningKindAndStillActs(t *testing.T) {
+// An advisory reports through its events' severity, which the event log
+// stores beside the kind, so the watch stays amber per metric and across a
+// daemon restart.
+func TestWatchAdvisoryCarriesItsSeverityAndStillActs(t *testing.T) {
 	check := &scriptedCheck{results: []checks.Result{
-		{Check: "hdparm", Unavailable: true, Message: "no timing in output", Severity: checks.SeverityWarning},
-		{Check: "hdparm", OK: true, Message: "read=0.4 MB/s", Severity: checks.SeverityWarning},
+		{Check: "hdparm", Unavailable: true, Message: "no timing in output", Severity: severity.Warning},
+		{Check: "hdparm", OK: true, Message: "read=0.4 MB/s", Severity: severity.Warning},
 	}}
 	var events []Event
 	var hookEnvSeen map[string]string
 	sent := make(chan notify.Message, 1)
 	w := &Watch{
 		Name: "hdparm-sdd", CheckType: checks.CheckTypeHdparm, Check: check,
-		Severity: checks.SeverityWarning,
+		Severity: severity.Warning,
 		Hook:     HookSpec{Command: []string{"/bin/true"}},
 		Runner: HookRunnerFunc(func(_ context.Context, _ []string, env map[string]string, _ time.Duration) error {
 			hookEnvSeen = env
@@ -171,24 +172,24 @@ func TestWatchWarningRaisesWarningKindAndStillActs(t *testing.T) {
 	for _, e := range events {
 		kinds = append(kinds, e.Kind)
 	}
-	if len(events) == 0 || events[0].Kind != eventKindWarning {
-		t.Fatalf("kinds = %v, want an unavailable advisory to raise %q, not %q", kinds, eventKindWarning, eventKindError)
+	if len(events) < 2 || events[0].Kind != eventKindError || events[0].Severity != severity.Warning {
+		t.Fatalf("events = %+v, want an unavailable advisory to raise an error graded warning", events)
 	}
 	for _, e := range events {
-		if e.Kind == eventKindError || e.Kind == eventKindFiring {
-			t.Errorf("kinds = %v, want no %q or %q from an advisory watch", kinds, eventKindError, eventKindFiring)
+		if e.Kind == eventKindFiring && e.Severity != severity.Warning {
+			t.Errorf("kinds = %v: a firing from an advisory watch graded %q, want warning", kinds, e.Severity)
 		}
 	}
 	// An advisory is still a condition: it must keep running its actions.
 	if hookEnvSeen == nil {
 		t.Fatal("advisory watch ran no hook, want the configured hook to still run")
 	}
-	if got := hookEnvSeen[sermoEnvSeverity]; got != checks.SeverityWarning {
+	if got := hookEnvSeen[sermoEnvSeverity]; got != string(severity.Warning) {
 		t.Errorf("%s = %q, want warning", sermoEnvSeverity, got)
 	}
 	select {
 	case msg := <-sent:
-		if !strings.Contains(msg.Subject, checks.SeverityWarning) {
+		if !strings.Contains(msg.Subject, string(severity.Warning)) {
 			t.Errorf("subject = %q, want it to mark the advisory", msg.Subject)
 		}
 	default:
@@ -211,7 +212,7 @@ func TestWatchErrorSeverityKeepsExistingReporting(t *testing.T) {
 	if len(events) != 1 || events[0].Kind != eventKindError {
 		t.Fatalf("events = %+v, want one error", events)
 	}
-	if got := watchSubject("http", "request timed out", checks.SeverityError); got != "[sermo] http: request timed out" {
+	if got := watchSubject("http", "request timed out", severity.Error); got != "[sermo] http: request timed out" {
 		t.Errorf("subject = %q, want the unmarked error form", got)
 	}
 }
@@ -234,24 +235,24 @@ func (n captureNotifier) Send(_ context.Context, msg notify.Message) error {
 // a net watch's error counter can read amber while its link state reads red.
 func TestWebWatchSeverityFor(t *testing.T) {
 	w := &webWatch{
-		severity: checks.SeverityError,
+		severity: severity.Error,
 		metrics: map[string]any{
-			"errors": map[string]any{"severity": checks.SeverityWarning},
+			"errors": map[string]any{"severity": string(severity.Warning)},
 			"state":  map[string]any{"expect": "down"},
 		},
 	}
-	if got := w.severityFor("errors"); got != checks.SeverityWarning {
+	if got := w.severityFor("errors"); got != severity.Warning {
 		t.Errorf("errors severity = %q, want warning", got)
 	}
-	if got := w.severityFor("state"); got != checks.SeverityError {
+	if got := w.severityFor("state"); got != severity.Error {
 		t.Errorf("state severity = %q, want the inherited error", got)
 	}
-	if got := w.severityFor(""); got != checks.SeverityError {
+	if got := w.severityFor(""); got != severity.Error {
 		t.Errorf("single-check severity = %q, want error", got)
 	}
 
-	advisory := &webWatch{severity: checks.SeverityWarning}
-	if got := advisory.severityFor(""); got != checks.SeverityWarning {
+	advisory := &webWatch{severity: severity.Warning}
+	if got := advisory.severityFor(""); got != severity.Warning {
 		t.Errorf("watch-level severity = %q, want warning", got)
 	}
 }
@@ -264,12 +265,12 @@ func TestWatchAdvisoryReadingsAndRowState(t *testing.T) {
 		Message: "hdparm /dev/sdd: no timing in output",
 	}
 
-	grave := watchSnapshotReadings(checks.CheckTypeHdparm, checks.SeverityError, snap, false)
+	grave := watchSnapshotReadings(checks.CheckTypeHdparm, severity.Error, snap, false)
 	if !watchReadingsFailed(grave) || watchReadingsWarning(grave) {
 		t.Fatalf("error-severity readings = %+v, want an Error entry", grave)
 	}
 
-	advisory := watchSnapshotReadings(checks.CheckTypeHdparm, checks.SeverityWarning, snap, false)
+	advisory := watchSnapshotReadings(checks.CheckTypeHdparm, severity.Warning, snap, false)
 	if watchReadingsFailed(advisory) {
 		t.Fatalf("advisory readings = %+v, want no Error entry: Error is what turns the row red", advisory)
 	}
@@ -295,11 +296,11 @@ func TestWatchAdvisoryReadingsAndRowState(t *testing.T) {
 	}
 }
 
-// The advisory event kind is the signal that survives a daemon restart, because
-// it is what the event log stores.
+// The last activity's severity is the signal that survives a daemon restart,
+// because the event log stores it.
 func TestWatchViewStateFromAdvisoryActivity(t *testing.T) {
 	at := time.Date(2026, time.June, 17, 14, 20, 43, 0, time.UTC)
-	failed, warning := watchViewState(&webWatch{}, web.Watch{LastActivityKind: eventKindWarning}, at, time.Time{})
+	failed, warning := watchViewState(&webWatch{}, web.Watch{LastActivityKind: eventKindFiring, LastActivitySeverity: string(severity.Warning)}, at, time.Time{})
 	if failed || !warning {
 		t.Errorf("advisory activity = (%v, %v), want (false, true)", failed, warning)
 	}
@@ -330,7 +331,7 @@ func TestWatchViewStateFromAdvisoryActivity(t *testing.T) {
 // watch's static declaration.
 func TestWatchGradesEventKindFromResultSeverity(t *testing.T) {
 	check := &scriptedCheck{results: []checks.Result{
-		{Check: "smart", OK: true, Condition: true, Message: "health=PASSED; reallocated 4 > 0", Severity: checks.SeverityWarning},
+		{Check: "smart", OK: true, Condition: true, Message: "health=PASSED; reallocated 4 > 0", Severity: severity.Warning},
 	}}
 	var events []Event
 	w := &Watch{
@@ -338,20 +339,20 @@ func TestWatchGradesEventKindFromResultSeverity(t *testing.T) {
 		Emit: func(e Event) { events = append(events, e) },
 	}
 	w.RunCycle(context.Background())
-	if len(events) != 1 || events[0].Kind != eventKindWarning {
-		t.Fatalf("events = %+v, want one %q from a result the check graded warning", events, eventKindWarning)
+	if len(events) != 1 || events[0].Kind != eventKindFiring || events[0].Severity != severity.Warning {
+		t.Fatalf("events = %+v, want one firing graded warning from a result the check graded warning", events)
 	}
-	if checks.IsWarning(w.Severity) {
+	if w.Severity == severity.Warning {
 		t.Error("watch severity is warning, want undeclared error")
 	}
 }
 
-// An open episode that changes grade — the drive's verdict flips to FAILED under
-// the same reallocated sectors, or a RAID member's state recovers while its
-// counters remain — is announced again with the new kind, once per change,
-// while an unchanged grade stays quiet.
-func TestWatchAnnouncesGradeChangeWithinEpisode(t *testing.T) {
-	advisory := checks.Result{Check: "smart", OK: true, Condition: true, Message: "health=PASSED; reallocated 4 > 0", Severity: checks.SeverityWarning}
+// An open episode that grows graver — the drive's verdict flips to FAILED under
+// the same reallocated sectors — is announced again, once; a grade that eases
+// off — a RAID member's state recovers while its counters remain — is held
+// until the episode recovers, so an oscillating grade stays quiet.
+func TestWatchEscalatesAndHoldsWithinEpisode(t *testing.T) {
+	advisory := checks.Result{Check: "smart", OK: true, Condition: true, Message: "health=PASSED; reallocated 4 > 0", Severity: severity.Warning}
 	outage := checks.Result{Check: "smart", OK: true, Condition: true, Message: "health=FAILED; reallocated 4 > 0"}
 	check := &scriptedCheck{results: []checks.Result{advisory, advisory, outage, outage, advisory}}
 	var events []Event
@@ -364,10 +365,10 @@ func TestWatchAnnouncesGradeChangeWithinEpisode(t *testing.T) {
 	}
 	got := make([]string, 0, len(events))
 	for _, e := range events {
-		got = append(got, e.Kind)
+		got = append(got, e.Kind+"/"+e.Severity.String())
 	}
-	want := []string{eventKindWarning, eventKindFiring, eventKindWarning}
+	want := []string{eventKindFiring + "/warning", eventKindFiring + "/error"}
 	if strings.Join(got, ",") != strings.Join(want, ",") {
-		t.Fatalf("event kinds = %v, want %v: one announcement per grade change", got, want)
+		t.Fatalf("events = %v, want %v: one announcement per escalation, none when the grade eases", got, want)
 	}
 }

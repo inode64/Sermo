@@ -26,6 +26,13 @@ type RuleWindowRecord struct {
 	Firing           bool
 	ClearConsecutive int
 	ClearSince       time.Time
+	// Severity is the open episode's high-water mark ("" outside an episode).
+	Severity string
+	// NotifiedSeverity is the gravest level the open episode notified at.
+	NotifiedSeverity string
+	// Rungs is a graded rule's per-severity window progress; nil when the rule
+	// never graded a sample.
+	Rungs []rules.EntryWindowSnapshot
 }
 
 // RemediationState returns a service's persisted automatic-remediation state.
@@ -94,7 +101,7 @@ func (s *Store) SetRemediationState(service string, rec RemediationRecord) error
 func (s *Store) RuleWindowStates(service string) (map[string]RuleWindowRecord, error) {
 	rows, err := s.reads().QueryContext(s.sqlCtx(),
 		`SELECT rule_name, consecutive, history, true_since, timed_history,
-		        firing, clear_since, clear_consecutive
+		        firing, clear_since, clear_consecutive, severity, notified_severity, severity_windows
 		   FROM rule_window_state WHERE service = ? ORDER BY rule_name;`,
 		service,
 	)
@@ -114,8 +121,12 @@ func (s *Store) RuleWindowStates(service string) (map[string]RuleWindowRecord, e
 			firing           int
 			clearSince       int64
 			clearConsecutive int
+			level            string
+			notified         string
+			rawRungs         string
 		)
-		if err := rows.Scan(&name, &consecutive, &rawHistory, &trueSince, &rawTimed, &firing, &clearSince, &clearConsecutive); err != nil {
+		if err := rows.Scan(&name, &consecutive, &rawHistory, &trueSince, &rawTimed, &firing, &clearSince, &clearConsecutive,
+			&level, &notified, &rawRungs); err != nil {
 			return nil, fmt.Errorf("scan rule window state for %s: %w", service, err)
 		}
 		var history []bool
@@ -126,7 +137,14 @@ func (s *Store) RuleWindowStates(service string) (map[string]RuleWindowRecord, e
 		if err != nil {
 			return nil, err
 		}
+		rungs, err := decodeSeverityWindows(rawRungs)
+		if err != nil {
+			return nil, err
+		}
 		out[name] = RuleWindowRecord{
+			Severity:         level,
+			NotifiedSeverity: notified,
+			Rungs:            rungs,
 			Consecutive:      consecutive,
 			History:          history,
 			TrueSince:        unixNanoTime(trueSince),
@@ -155,13 +173,17 @@ func (s *Store) SetRuleWindowStates(service string, records map[string]RuleWindo
 			if err != nil {
 				return err
 			}
+			rungs, err := encodeSeverityWindows(rec.Rungs)
+			if err != nil {
+				return err
+			}
 			firing := boolInt(rec.Firing)
 			if _, err := tx.ExecContext(s.sqlCtx(),
 				`INSERT INTO rule_window_state (service, rule_name, consecutive, history, true_since, timed_history,
-				                                firing, clear_since, clear_consecutive)
-				 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);`,
+				                                firing, clear_since, clear_consecutive, severity, notified_severity, severity_windows)
+				 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
 				service, name, rec.Consecutive, string(history), timeUnixNano(rec.TrueSince), timed,
-				firing, timeUnixNano(rec.ClearSince), rec.ClearConsecutive,
+				firing, timeUnixNano(rec.ClearSince), rec.ClearConsecutive, rec.Severity, rec.NotifiedSeverity, rungs,
 			); err != nil {
 				return fmt.Errorf("insert rule window state for %s/%s: %w", service, name, err)
 			}

@@ -161,7 +161,7 @@ func (c sshIdleCheck) Run(ctx context.Context) Result {
 		DataKeyProtectedCount:    float64(sample.ProtectedCount),
 		DataKeyOldestIdleSeconds: sample.OldestIdle.Seconds(),
 	}
-	res := c.result(levelPredsHold(c.preds, values), sshIdleMessage(sample), start)
+	res := c.grade(c.result(levelPredsHold(c.preds, values), sshIdleMessage(sample), start), values)
 	res.Data = map[string]any{
 		DataKeyCount:             sample.Count,
 		DataKeyProtectedCount:    sample.ProtectedCount,

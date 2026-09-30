@@ -3,9 +3,11 @@ package checks
 import (
 	"context"
 	"fmt"
-	"sermo/internal/execx/execxtest"
 	"testing"
 	"time"
+
+	"sermo/internal/execx/execxtest"
+	"sermo/internal/severity"
 )
 
 func TestLVMCheckHealthTransition(t *testing.T) {
@@ -46,7 +48,7 @@ func TestLVMCheckCapacityPredicate(t *testing.T) {
 	data := `{"report":[{"lv":[{"vg_name":"vg0","lv_name":"root","lv_attr":"-wi-a-----","lv_health_status":"healthy","vg_free":"50","vg_size":"1000","data_percent":"85.5","metadata_percent":"81"}]}]}`
 	check := &lvmCheck{name: "lvm", timeout: time.Second, runner: execxtest.Outputs(data), volumeGroup: "vg0", logicalVolume: "root", preds: []levelPred{{field: DataKeyLVMFreePct, op: "<", value: 10}}}
 	result := check.Run(context.Background())
-	if result.OK || result.Data[DataKeyHealth] != LVMHealthWarning || !IsWarning(result.Severity) {
+	if result.OK || result.Data[DataKeyHealth] != LVMHealthWarning || result.Severity != severity.Warning {
 		t.Fatalf("capacity result = %+v", result)
 	}
 	if got := result.Data[DataKeyVolumeGroup]; got != "vg0" {
@@ -92,21 +94,21 @@ func TestLVMCapacitySeverity(t *testing.T) {
 		name     string
 		attr     string
 		field    string
-		severity string
+		severity severity.Level
 		absent   bool
 		mixed    bool
 		want     string
 		warning  bool
 	}{
 		{name: "zero VG free", attr: "-wi-a-----", field: DataKeyLVMFreePct, want: LVMHealthWarning, warning: true},
-		{name: "explicit error", attr: "-wi-a-----", field: DataKeyLVMFreePct, severity: SeverityError, want: LVMHealthWarning},
+		{name: "explicit error", attr: "-wi-a-----", field: DataKeyLVMFreePct, severity: severity.Error, want: LVMHealthWarning},
 		{name: "partial outranks headroom", attr: "-wi-a---p-", field: DataKeyLVMFreePct, want: LVMHealthError},
 		{name: "suspended outranks headroom", attr: "-wi-s-----", field: DataKeyLVMFreePct, want: LVMHealthError},
 		{name: "missing volume", absent: true, field: DataKeyLVMFreePct, want: LVMHealthError},
 		{name: "mixed capacity stays error", attr: "twi-a-tz--", field: DataKeyLVMFreePct, mixed: true, want: LVMHealthError},
 		{name: "thin data stays error", attr: "twi-a-tz--", field: DataKeyLVMThinDataPct, want: LVMHealthError},
 		{name: "thin metadata stays error", attr: "twi-a-tz--", field: DataKeyLVMThinMetadataPct, want: LVMHealthError},
-		{name: "explicit warning", attr: "twi-a-tz--", field: DataKeyLVMThinDataPct, severity: SeverityWarning, want: LVMHealthError, warning: true},
+		{name: "explicit warning", attr: "twi-a-tz--", field: DataKeyLVMThinDataPct, severity: severity.Warning, want: LVMHealthError, warning: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			data := fmt.Sprintf(`{"report":[{"lv":[{"vg_name":"vg0","lv_name":"root","lv_attr":%q,"vg_free":"0","vg_size":"1000","data_percent":"90","metadata_percent":"90"}]}]}`, tc.attr)
@@ -125,7 +127,7 @@ func TestLVMCapacitySeverity(t *testing.T) {
 				check.preds = append(check.preds, levelPred{field: DataKeyLVMThinDataPct, op: ">", value: 80})
 			}
 			result := check.Run(t.Context())
-			if result.OK || result.Data[DataKeyHealth] != tc.want || result.Warning() != tc.warning {
+			if result.OK || result.Data[DataKeyHealth] != tc.want || result.Advisory() != tc.warning {
 				t.Fatalf("result = %+v, want health=%s warning=%v and failed raw verdict", result, tc.want, tc.warning)
 			}
 		})
@@ -140,7 +142,7 @@ func TestLVMWarningEscalatesAndRecovers(t *testing.T) {
 		name: "lvm", timeout: time.Second, runner: execxtest.Outputs(low, partial, low, healthy),
 		volumeGroup: "vg0", preds: []levelPred{{field: DataKeyLVMFreePct, op: "<", value: 5}},
 	}
-	if result := check.Run(t.Context()); !result.Warning() {
+	if result := check.Run(t.Context()); !result.Advisory() {
 		t.Fatalf("initial low headroom = %+v", result)
 	}
 	for _, tc := range []struct{ old, next string }{

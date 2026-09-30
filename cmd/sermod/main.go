@@ -27,7 +27,6 @@ import (
 	"sermo/internal/execx"
 	"sermo/internal/logfile"
 	"sermo/internal/metrics"
-	"sermo/internal/notify"
 	"sermo/internal/process"
 	"sermo/internal/rules"
 	"sermo/internal/servicemgr"
@@ -201,6 +200,7 @@ func loadDaemonConfig(logger *slog.Logger, globalPath string) (*config.Config, i
 		}
 		return nil, exitConfigInvalid
 	}
+	app.LogBuildNotices(logger, "config warning", app.ConfigWarnings(cfg))
 	return cfg, 0
 }
 
@@ -273,7 +273,7 @@ func run(args []string) int {
 	phases.mark("open state store")
 	defer func() { _ = store.Close() }()
 
-	notifiers, notifyWarnings := notify.Build(cfg.Notifiers(), notify.WithTemplateDir(cfg.Global.TemplateDir()))
+	notifiers, notifyWarnings := app.BuildNotifiers(cfg)
 	app.LogBuildNotices(logger, "build notifiers", notifyWarnings)
 
 	eventLog, err := app.NewPersistentEventLog(daemonEventLogLimit, store, func(err error) {

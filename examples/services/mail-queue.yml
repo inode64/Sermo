@@ -27,6 +27,9 @@ watches:
       of: file
       recursive: true
       count: { op: ">=", value: 5000 }
+      severity: warning
+      levels:
+        error: { count: { op: ">=", value: 20000 } }
     for: { cycles: 3 }
     then:
       hook:
@@ -58,6 +61,9 @@ watches:
       name: cpu_thread
       op: ">"
       value: "90%"
+      severity: warning
+      levels:
+        error: { op: ">", value: "98%" }
     for: { duration: 6m }
     then:
       hook:

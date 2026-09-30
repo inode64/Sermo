@@ -14,6 +14,7 @@ import (
 
 	"sermo/internal/logfile"
 	"sermo/internal/rules"
+	"sermo/internal/severity"
 	"sermo/internal/state"
 )
 
@@ -440,5 +441,48 @@ func TestRecentFallsBackToRingWhenStoreFails(t *testing.T) {
 	}
 	if storeErr == nil {
 		t.Fatal("store failure was not reported")
+	}
+}
+
+// The delivery report of a recovery notification follows the recovery: a
+// notifier that failed to hear it must not paint the recovered watch red, and
+// the next firing is still the watch's last activity.
+func TestEventLogRecoveryStaysTheWatchActivity(t *testing.T) {
+	l := NewEventLog(10)
+	l.Add(Event{Watch: "disk-root", Kind: eventKindFiring, Severity: severity.Critical})
+	l.Add(Event{Watch: "disk-root", Kind: eventKindNotify, Message: "notified ops"})
+	l.Add(Event{Watch: "disk-root", Kind: eventKindRecovered, Severity: severity.Critical})
+	l.Add(Event{Watch: "disk-root", Kind: eventKindNotifyFail, Message: "ops: timeout"})
+	l.Add(Event{Watch: "disk-root", Kind: eventKindNotify, Message: "notified pager"})
+	if last, _ := l.LastWatchActivity("disk-root"); last.Kind != eventKindRecovered {
+		t.Fatalf("last activity = %s, want recovered", last.Kind)
+	}
+	l.Add(Event{Watch: "disk-root", Kind: eventKindFiring, Severity: severity.Warning})
+	l.Add(Event{Watch: "disk-root", Kind: eventKindNotifyFail, Message: "ops: timeout"})
+	if last, _ := l.LastWatchActivity("disk-root"); last.Kind != eventKindNotifyFail {
+		t.Fatalf("last activity = %s, want the firing's failed delivery", last.Kind)
+	}
+}
+
+// A row an older binary wrote under the retired warning kind reads the way the
+// migration converts one.
+func TestLoggedEventNormalizesLegacyWarningRows(t *testing.T) {
+	tests := []struct {
+		rec  state.EventRecord
+		kind string
+	}{
+		{state.EventRecord{Kind: legacyEventKindWarning, Watch: "disk-root", Message: "used 85%"}, eventKindFiring},
+		{state.EventRecord{Kind: legacyEventKindWarning, Watch: "disk-root", Message: checkUnavailablePrefix + "statfs failed"}, eventKindError},
+		{state.EventRecord{Kind: legacyEventKindWarning, Watch: "disk-root", Action: eventActionProbe}, eventKindError},
+	}
+	for _, tt := range tests {
+		got := loggedEventFromRecord(tt.rec)
+		if got.Kind != tt.kind || got.Severity != severity.Warning {
+			t.Errorf("loggedEventFromRecord(%+v) = %s/%s, want %s/warning", tt.rec, got.Kind, got.Severity, tt.kind)
+		}
+	}
+	// A row written with a severity is never rewritten.
+	if got := loggedEventFromRecord(state.EventRecord{Kind: eventKindFiring, Severity: "critical"}); got.Kind != eventKindFiring || got.Severity != severity.Critical {
+		t.Fatalf("graded row = %+v", got)
 	}
 }

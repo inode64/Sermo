@@ -249,11 +249,23 @@ func buildMailMessage(from string, to []string, msg Message) (*gomail.Msg, error
 	}
 	m.Subject(sanitizeHeader(msg.Subject))
 	m.SetDate()
-	m.SetBodyString(gomail.TypeTextPlain, crlfBody(msg.Body))
+	m.SetBodyString(gomail.TypeTextPlain, crlfBody(emailTextBody(msg)))
 	if msg.HTML != "" {
 		m.AddAlternativeString(gomail.TypeTextHTML, crlfBody(msg.HTML))
 	}
 	return m, nil
+}
+
+// emailTextBody is the plain-text body, ending with the dashboard link when
+// the daemon has a public URL.
+func emailTextBody(msg Message) string {
+	if msg.Link == "" {
+		return msg.Body
+	}
+	if msg.Body == "" {
+		return panelLinkLabel + ": " + msg.Link
+	}
+	return msg.Body + notifyLF + notifyLF + panelLinkLabel + ": " + msg.Link
 }
 
 func crlfBody(body string) string {

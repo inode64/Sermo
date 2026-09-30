@@ -275,18 +275,21 @@ rules:
   - { id: deprecated, match: "(?i)deprecated",      severity: warning }
 ```
 
-- `match` is a Go RE2 regex (`(?i)` for case-insensitive); `severity` is
-  `error` | `warning` | `ok`; optional `stream` is `stdout` | `stderr` | `both`
-  (default `both`).
+- `match` is a Go RE2 regex (`(?i)` for case-insensitive); `severity` is `ok`
+  or one of the [severity levels](#severity-severity) (`debug` | `info` |
+  `warning` | `error` | `critical`); optional `stream` is `stdout` | `stderr` |
+  `both` (default `both`).
 - **Evaluation:** the resolved rule list is the check's local `rules` first (so a
   service `ok` whitelist or stricter rule overrides an inherited one), then the
   `use` sets in order (minus `silence`d ids). Per output line the first matching
   rule wins (an `ok` match whitelists that line); the check's severity is the
   maximum over all lines.
-- **Result:** `error` → the check fails as required; `warning` → the check
-  fails as *optional* (does not block start/restart/reload/resume
-  or drive remediation by itself); no match → the check passes. The matched `pattern_id`
-  and line are in the result data.
+- **Result:** `error` or `critical` → the check fails as required; `warning`,
+  `info` or `debug` → the check fails as *optional* (does not block
+  start/restart/reload/resume or drive remediation by itself); no match → the
+  check passes. When the check declares no `severity:` of its own, the
+  matched grade is the failure's severity. The matched `pattern_id` and line
+  are in the result data.
 - **Precedence:** exit-code → `expect_*` → `analyze`. The analyzer only grades a
   command that already passed its exit-code and `expect_*` checks.
 
@@ -649,23 +652,34 @@ the normal condition.
 
 `severity:` grades how serious a failure is. It never changes the verdict — the
 check fails exactly when it failed before — only how loudly that failure is
-reported.
+reported and who hears it. There are five levels, in ascending order:
 
-| value | dashboard | daemon log | aggregate health and SLA | actions |
-|---|---|---|---|---|
-| `error` (default) | red, state `failed` | `level=ERROR` | counted against the target | run |
-| `warning` | amber, state `warning` | `level=WARN` | excluded | run |
+| value | meaning | dashboard | daemon log | aggregate health and SLA | actions |
+|---|---|---|---|---|---|
+| `debug` | diagnostic chatter you opt into | amber row, `debug` badge | `level=DEBUG` | excluded | run |
+| `info` | news worth recording, no action needed | amber row, `info` badge | `level=INFO` | excluded | run |
+| `warning` | a degradation worth seeing, not worth waking anyone | amber, state `warning` | `level=WARN` | excluded | run |
+| `error` (default) | an outage to act on | red, state `failed` | `level=ERROR` | counted against the target | run |
+| `critical` | an outage that needs someone now | red, `critical` badge | `level=ERROR` | counted against the target | run |
 
-A **warning still fires**: its `for:` window, its `then.hook`, its `then.notify`
-and its notification cadence are untouched, and the notification subject says
-`[sermo][warning]` so the advisory is obvious in mail or chat. What changes is
-that it stops competing for attention with a real outage: it does not turn the
-watch row red, does not raise the daemon's error count, does not hold against the
-service in the aggregate health badge, and records no SLA series.
+`debug`, `info` and `warning` are **advisories**. An advisory **still fires**:
+its `for:` window, its `then.hook`, its `then.notify` and its notification
+cadence are untouched. What changes is that it stops competing for attention
+with a real outage: it does not turn the watch row red, does not raise the
+daemon's error count, does not hold against the service in the aggregate
+health badge, and records no SLA series.
+
+The level travels into every notification: the subject is tagged
+`[sermo][warning]`, `[sermo][critical]` and so on (an `error` keeps the plain
+`[sermo]` subject it always had), the message carries `SERMO_SEVERITY`, and
+each notifier's [`min_severity`](configuration.md#notifications) decides
+whether it receives the message at all. That is how noise is routed: a chat
+channel at `warning` sees advisories and outages, an on-call phone at
+`critical` only what needs someone now.
 
 Nothing that gates an automatic action reads it. Rule guards (`active:`,
 `failed:`), remediation and start verification keep reading the check's raw
-outcome, so a warning can never be mistaken for a healthy target.
+outcome, so an advisory can never be mistaken for a healthy target.
 
 It can be declared at three levels, and the narrowest one wins:
 
@@ -686,45 +700,189 @@ metrics:
     for: { cycles: 3 }
 ```
 
-A service check declares it the same way, beside `reports:` and `timeout:`.
+A service check declares it the same way, beside `reports:` and `timeout:`. A
+service watch declares it on the entry or its `check:` block; when the watch
+desugars into a check plus a rule, the entry's severity grades that check. An
+alert or remediation rule may declare its own `severity:` too; without one, the
+rule takes the gravest grade among the failing checks its `failed:`/`active:`
+conditions read (outside `not:`), and `error` when none carries one. A guard
+reports no incident and accepts no severity.
+
 `optional: true` remains the older, narrower spelling: it also keeps a failure
 out of the service's availability, and it emits no warn-level log, but only
 inside a `checks:` section. It does **not** keep the service out of the amber
 state — an optional check that fails still reads the service `warning`, which is
 what makes a mistuned threshold visible instead of silently swallowed.
 
-The measurements worth grading this way are the ones that **degrade** rather than
-break: `hdparm` throughput, `icmp` latency, and a `net` interface's error
-counters. A disk answering from standby is the clearest case — `hdparm -t` wakes
-it and times its spin-up, so it honestly reports a fraction of a MB/s for a disk
-that is perfectly healthy.
+The measurements worth grading as advisories are the ones that **degrade**
+rather than break: `hdparm` throughput, `icmp` latency, and a `net` interface's
+error counters. A disk answering from standby is the clearest case —
+`hdparm -t` wakes it and times its spin-up, so it honestly reports a fraction of
+a MB/s for a disk that is perfectly healthy.
 
 Some check types grade their own findings when nothing declares `severity:`,
 because they mix a verdict with early-warning counters:
 
+- **`service`** — a service proven not to be running (`expect: active` and a
+  status other than `active` or `unknown`) is `critical`. An `unknown` status
+  proves nothing and keeps `error`.
+- **`process`** — a daemon expected `running` that is absent or a zombie is
+  `critical`.
+- **`cert`** and **`http`** certificate options — a certificate inside its
+  `expires_in_days` (`cert_expires_in_days`) window is a `warning`; one that
+  already expired, is not yet valid, or whose file is gone is `critical`; a
+  broken chain or an unexpected algorithm, issuer or certificate change is
+  `error`. The gravest problem decides.
+- **`command`** `on_change` and **`config`** file-change detection — a changed
+  output or configuration file is `info`; a failing command or an invalid
+  configuration keeps `error`.
 - **`smart`** — a predicate that holds (`reallocated`, `pending_sectors`,
   `media_errors`, `crc_errors`, `temperature`, `wear`, `power_on_hours`) while
   the drive's own verdict is **PASSED** or unknown is a `warning`: the disk
-  works, it is starting to go. The **FAILED** verdict and a drive `smartctl`
-  cannot read stay `error`.
+  works, it is starting to go. So is a SCSI/SAS drive's warning-class
+  exception (sense code `0Bh`, reported as `health=WARNING`): a background scan
+  found a medium error and the drive remapped the sector, or a temperature was
+  exceeded — a lost sector, not a predicted failure. The **FAILED** verdict (an
+  ATA prefail attribute past its threshold, a SCSI failure prediction `5Dh`) and
+  a drive `smartctl` cannot read stay `error`.
+- **`swap`** — every finding is a `warning`: a full swap area or steady paging
+  is memory pressure to plan around, not an outage; the `memory` check owns the
+  alarm for a host that runs out.
 - **`storcli` / `ssacli`** — error counters on members whose state is still OK
   (media, other and predictive error counts, a volume's unrecoverable media
   errors) and the `temperature` predicate are `warning`; any state finding — a
   degraded controller, cache, battery, volume or drive, an inaccessible or
   inconsistent volume, unfinished parity or rebuild work, a drive's own SMART
   alert — is `error`, and outranks the advisories beside it.
-
 - **`lvm`** — a configured `free_pct` threshold alone is a `warning`, including
   0 % free: the VG has little room to allocate or grow LVs, but its filesystems
   can still have free space. Missing, partial or suspended volumes and thin-pool
   capacity thresholds remain `error`; a volume fault outranks low VG headroom.
+- **`analyze`** rules grade a `command` check's output match (see
+  [Grading output with `analyze:`](#grading-output-with-analyze-pattern-sets)).
 
 A declared `severity:` on the watch, check or metric always wins over that
 grade: `severity: warning` keeps every finding an advisory, `severity: error`
-makes the counters outages again. The grade travels with the result, so the
-row, the event kind, the daemon log level, the notification subject and the SLA
-follow it; an open episode that changes grade — the verdict flips to FAILED
-under the same reallocated sectors — is announced again with the new kind.
+makes the counters outages again. One exception keeps a space ladder from
+hiding a lost filesystem: on a **`storage`** check that declares both
+`mounted:` and a space threshold, the declared `severity:` grades the
+thresholds, and a wrong or absent mount is at least `error`. A mount-only
+check keeps its declaration. So is a hung one: `statfs` on a hard network mount
+whose server is gone blocks in the kernel, so the check gives it its `timeout`
+(the engine's `default_timeout` unless set) and then reports the path
+unavailable — `error` beside space thresholds — and later cycles fail at once
+instead of stacking another blocked call on the same mount. The grade travels with the result, so the
+row, the event's severity, the daemon log level, the notification subject and
+the SLA follow it.
+
+#### Graded levels (`levels:`)
+
+One measurement often deserves several grades: a disk at 80 % is worth a look,
+at 95 % it is an outage, at 99 % someone must act now. `levels:` grades the
+same sample on stricter thresholds, inside the check entry:
+
+```yaml
+check:
+  type: storage
+  path: /
+  used_pct: { op: ">=", value: "80%" }   # fires, graded by severity:
+  severity: warning
+  levels:
+    error:    { used_pct: { op: ">=", value: "95%" } }
+    critical: { used_pct: { op: ">=", value: "99%" } }
+for: { cycles: 3 }
+```
+
+- The base threshold decides whether the check fails, and fails at the
+  resolved severity (the declaration, or the type's self-grade).
+- Each key of `levels:` is a severity; its value restates the type's own
+  threshold keys with a stricter value, in the same grammar. A level repeats
+  only the keys it tightens. A `count` or `log` threshold is restated in its
+  nested form, `{ count: { op, value } }`, even when the base uses a
+  top-level `op`/`value`. An equality (`==`, `!=`) cannot tighten a shared key
+  and is ignored.
+- When a level's thresholds breach too, the failure is raised to that level:
+  the highest breaching level wins. Levels read the sample the check already
+  took — nothing probes twice — and never grade an unavailable, skipped or
+  verdictless result.
+- What "breach" means follows the check's style. For a condition check
+  (`storage`, `memory`, `load`, `log`, `count`, `metric`, …) every predicate of
+  the level holds. For `command` `expect_stdout`, whose assertion states the
+  passing side, the level loosens the bound and breaches when that looser
+  assertion fails too: base `{ op: "<=", value: 200 }` warns above 200 messages,
+  level `error: { expect_stdout: { op: "<=", value: 1000 } }` escalates above
+  1000. Output that is not a number never escalates. For `cert` and `http`, a
+  level `{ expires_in_days: 7 }` breaches when fewer than 7 days remain,
+  including an expired certificate. `smart` ORs its predicates, as its base
+  does.
+- `levels` lives in the check entry: a host or service watch's `check:`, a
+  service `checks:` entry, or — for `net`, `icmp` and `swap` — each metric block,
+  since those grade one metric at a time. A preflight check and an inline rule
+  probe read only the verdict and reject it.
+- `levels: false` drops a block inherited from the catalog; `levels.error:
+  false` drops one tier. A partial override merges into the inherited tier.
+
+A level that cannot escalate is **ignored, not rejected**, so a configuration
+keeps loading: one that is not strictly stricter than the threshold below it
+(typical when an operator raises a catalog base threshold above a catalog
+level), one that compares in the opposite direction or in the other metric
+form (percentage versus absolute), or one that is not above the check's own
+severity (`levels.error` under `severity: error`). For `oom`, `failed_units`,
+`edac` and `raid` with no declared threshold, the one they fire on (any kill,
+failed unit, uncorrectable error or degraded array: `> 0`) is the threshold
+below the first level. A whole block under a `reports:` other than the type's
+default is ignored too: the verdict it would grade is inverted or gone, which
+is what happens when an override turns a catalog check into a sensor.
+`sermoctl config validate` prints each as `WARN` and still succeeds, and
+`sermod` logs it at load and reload. Raise the level with the base, or drop it
+with `false`. Malformed blocks — an unknown severity name, a key that is not a
+threshold of the type, an unsupported type — are validation errors. An
+override that changes a check's `type:` never inherits the base's `levels:`,
+which restate the old type's thresholds: it keeps none, or only the ones it
+declares.
+
+Types that accept `levels:`, and the threshold keys a level restates:
+
+| Threshold form | Types | Level keys |
+|---|---|---|
+| level predicates | `storage`, `memory`, `load`, `pressure`, `fds`, `pids`, `conntrack`, `inotify`, `diskio`, `sensors`, `hdparm`, `users`, `tcp_connections`, `ssh_idle`, `terminal_sessions`, `process_count`, `edac`, `raid`, `smart` | the type's predicate fields |
+| single count | `zombies`, `failed_units`, `log` | `count` |
+| counter delta | `oom` | `delta` |
+| count or growth | `count` | `count`, or `delta` in growth mode |
+| per metric | `swap` | `usage`: `used_pct` / `free_pct` / `free_bytes`; `io`: `delta` |
+| per metric | `net` | `errors`: `delta` |
+| per metric | `icmp` | `latency` with `threshold`: `threshold` |
+| metric threshold | `metric` | `op` + `value` |
+| output assertion | `command` | `expect_stdout` (`{op, value}` with `>`, `>=`, `<`, `<=`) |
+| expiry window | `cert` | `expires_in_days` |
+| expiry window | `http` | `cert_expires_in_days` |
+
+Latency probes (`tcp`, `http` latency, connection protocols), composite health
+verdicts (`lvm`, `storcli`, `ssacli`), the host `process` and `process_policy`
+watches, and state, speed, address and change metrics have no single ordered
+threshold and reject `levels:`.
+
+#### Escalate and hold
+
+A graded watch or rule escalates its open episode only when a graver level has
+held for the owner's own window — the same `for:` or `within:` that opened the
+episode. With `for: { cycles: 3 }` a disk must read above 95 % for three
+consecutive cycles before the warning becomes an error; one spike does not
+page anyone.
+
+Inside an episode the grade only rises. Each escalation is announced once — a
+firing event at the new severity and a new `then.notify` message — and the
+episode keeps the gravest level it reached even when the value eases off, so a
+value oscillating around a threshold costs at most one message per level per
+episode. Reminders (`notify_interval`, `event_notify.repeat_interval`,
+`emission: every_cycle`) repeat the held level. When the episode ends, the
+`recovered` event and the recover hook's `SERMO_SEVERITY` carry that
+high-water mark, and the recovery notification goes out at the gravest level
+that was actually delivered, so exactly the notifiers that heard the incident
+hear that it is over. A remediation rule whose action a cooldown holds back
+still announces an escalation through its alert. A service check's health edge
+has no window, so it escalates on the cycle its grade rises; after a daemon
+restart it resumes from the last recorded grade.
 
 ### TCP connections (`tcp_connections`)
 
@@ -2690,7 +2848,10 @@ detail so gradual degradation is visible.
   `/sys/class/hwmon`). Aggregates: `temp` (the hottest matching temperature, °C),
   `fan` (the slowest matching fan, RPM — catches a stalled fan) and `voltage` (the
   lowest matching rail, V). At least one predicate is required; optional `chip` and
-  `label` substrings narrow which inputs count.
+  `label` substrings narrow which inputs count. An input that measures nothing is
+  left out: a channel its driver disabled (`_enable` 0) or flags faulty (`_fault`
+  1), and a temperature outside -55..125 °C — the saturated 127 or -128 °C an
+  unused probe input (a board's AUXTIN) reports.
 
   ```yaml
   checks:

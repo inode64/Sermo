@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"sermo/internal/cfgval"
+	"sermo/internal/severity"
 )
 
 // TestRaidBandsReplaceItsLineCharts pins the registry split: raid's degraded
@@ -25,7 +26,7 @@ func TestRaidBandsReplaceItsLineCharts(t *testing.T) {
 		byKey[b.Key] = b
 	}
 	degraded, recovering := byKey[DataKeyDegraded], byKey[DataKeyRecovering]
-	if degraded.Severity != SeverityError || recovering.Severity != SeverityWarning {
+	if degraded.Severity != severity.Error || recovering.Severity != severity.Warning {
 		t.Fatalf("severities = %q/%q, want error/warning: a rebuild is a thing to watch, not an outage", degraded.Severity, recovering.Severity)
 	}
 	if !degraded.OKFor(0) || degraded.OKFor(1) || degraded.OKFor(2) {
@@ -80,18 +81,18 @@ func TestBandOverridesMergeOverDefaults(t *testing.T) {
 	entry := map[string]any{
 		CheckKeyBands: map[string]any{
 			// partial: demote to amber, keep the default ==0 predicate
-			DataKeyDegraded: map[string]any{CheckKeySeverity: SeverityWarning},
+			DataKeyDegraded: map[string]any{CheckKeySeverity: string(severity.Warning)},
 			// disable the default recovering band
 			DataKeyRecovering: false,
 			// unknown key: neither a default band nor a raid graph metric
-			"ghost": map[string]any{CheckKeySeverity: SeverityError},
+			"ghost": map[string]any{CheckKeySeverity: string(severity.Error)},
 		},
 	}
 	bands := DeclaredBandMetrics(CheckTypeRAID, entry)
 	if len(bands) != 1 {
 		t.Fatalf("bands = %+v, want only the adjusted degraded", bands)
 	}
-	if bands[0].Key != DataKeyDegraded || bands[0].Severity != SeverityWarning {
+	if bands[0].Key != DataKeyDegraded || bands[0].Severity != severity.Warning {
 		t.Fatalf("degraded override = %+v, want severity warning", bands[0])
 	}
 	if !bands[0].OKFor(0) || bands[0].OKFor(1) {
@@ -103,7 +104,7 @@ func TestBandOverridesMergeOverDefaults(t *testing.T) {
 		CheckKeyBands: map[string]any{
 			DataKeyLoad1: map[string]any{
 				CheckKeyOK:       map[string]any{CheckKeyOp: "<", CheckKeyValue: 8},
-				CheckKeySeverity: SeverityWarning,
+				CheckKeySeverity: string(severity.Warning),
 			},
 		},
 	})

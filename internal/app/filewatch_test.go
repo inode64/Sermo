@@ -74,6 +74,10 @@ func TestFileWatchOlderThanFiresPerPathAndRearms(t *testing.T) {
 	if len(h.fired) != 1 || h.fired[0][sermoEnvPath] != oldPath || h.fired[0][sermoEnvChange] != fileChangeOlderThan {
 		t.Fatalf("first stale path fire = %v, want only %s", h.fired, oldPath)
 	}
+	// Every file hook carries the watch's grade, per-file older_than included.
+	if h.fired[0][sermoEnvSeverity] != "error" {
+		t.Fatalf("stale path hook severity = %q, want error", h.fired[0][sermoEnvSeverity])
+	}
 	if len(h.events) != 1 || h.events[0].Message != oldPath+" was modified at 2026-07-12T10:00:00Z and is older than 1h" {
 		t.Fatalf("stale path event = %+v", h.events)
 	}

@@ -105,7 +105,7 @@ func (c logCheck) Run(ctx context.Context) Result {
 	if tally.truncated {
 		msg += fmt.Sprintf("; read budget of %d bytes exceeded, count is a lower bound", c.readBudget())
 	}
-	res := c.result(ok, msg, start)
+	res := c.gradeValue(c.result(ok, msg, start), CheckKeyCount, float64(count))
 	res.Data = map[string]any{
 		DataKeyPath:      c.path,
 		DataKeyRegex:     c.regex.String(),

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"sermo/internal/cfgval"
+	"sermo/internal/severity"
 )
 
 // WindowSample is one matching condition observation in a duration-based
@@ -19,10 +20,7 @@ type WindowSample struct {
 // open and the progress of an optional `clear` window that ends it. One
 // instance per rule per service, persisted by the worker between cycles.
 type WindowState struct {
-	consecutive  int
-	history      []bool // sliding window for `within: {cycles: ...}`
-	trueSince    time.Time
-	timedHistory []WindowSample // true samples for `within: {duration: ...}`
+	entryWindow
 	// firing is the current episode: it rises when the entry window matures and
 	// falls when the entry window stops firing (immediately, or after the clear
 	// window when one is configured). Reading it before FiresAt is the only
@@ -31,6 +29,18 @@ type WindowState struct {
 	firing           bool
 	clearConsecutive int
 	clearSince       time.Time
+	// grading tracks a graded owner's severity ladder and the episode's
+	// high-water mark (window_severity.go); zero for an ungraded rule.
+	grading
+}
+
+// entryWindow is the progress of one entry (for/within) window: the episode's
+// own, and one per severity rung of a graded owner.
+type entryWindow struct {
+	consecutive  int
+	history      []bool // sliding window for `within: {cycles: ...}`
+	trueSince    time.Time
+	timedHistory []WindowSample // true samples for `within: {duration: ...}`
 }
 
 // WindowStateSnapshot is the serializable form of a WindowState.
@@ -42,6 +52,23 @@ type WindowStateSnapshot struct {
 	Firing           bool
 	ClearConsecutive int
 	ClearSince       time.Time
+	// Severity is the open episode's high-water mark; unset outside an episode
+	// or for an ungraded rule.
+	Severity severity.Level
+	// NotifiedSeverity is the gravest level the open episode delivered a
+	// notification at, so its recovery reaches the same audience.
+	NotifiedSeverity severity.Level
+	// Rungs is the per-severity entry-window progress of a graded owner,
+	// ascending from info; nil when the owner never graded a sample.
+	Rungs []EntryWindowSnapshot
+}
+
+// EntryWindowSnapshot is the serializable progress of one entry window.
+type EntryWindowSnapshot struct {
+	Consecutive  int
+	History      []bool
+	TrueSince    time.Time
+	TimedHistory []WindowSample
 }
 
 // withinWindow returns a within-window's cycle count and effective minimum
@@ -98,6 +125,16 @@ func (r Rule) clearWindow() (cycles int, duration time.Duration) {
 // avoid wall-clock sleeps.
 func (s *WindowState) FiresAt(r Rule, conditionTrue bool, at time.Time) bool {
 	raw := s.advance(r, conditionTrue, at)
+	firing := s.settle(r, raw, conditionTrue, at)
+	if !firing {
+		s.endGrading()
+	}
+	return firing
+}
+
+// settle folds this cycle's entry-window verdict into the firing episode,
+// holding it open through the clear window when one is configured.
+func (s *WindowState) settle(r Rule, raw, conditionTrue bool, at time.Time) bool {
 	clearCycles, clearDuration := r.clearWindow()
 	if (clearCycles == 0 && clearDuration == 0) || !s.firing {
 		s.firing = raw
@@ -127,7 +164,7 @@ func (s *WindowState) FiresAt(r Rule, conditionTrue bool, at time.Time) bool {
 
 // advance updates the entry window (for/within) with this cycle's condition
 // value and reports whether it fires, independent of the episode/clear state.
-func (s *WindowState) advance(r Rule, conditionTrue bool, at time.Time) bool {
+func (s *entryWindow) advance(r Rule, conditionTrue bool, at time.Time) bool {
 	if cycles, duration, minMatches, ok := r.withinWindow(); ok {
 		if duration > 0 {
 			if conditionTrue {
@@ -182,6 +219,7 @@ func (s *WindowState) EndEpisode() {
 	}
 	s.firing = false
 	s.resetClear()
+	s.endGrading()
 }
 
 // counters returns the window's read-only counters; a nil state (a rule that
@@ -238,9 +276,16 @@ func (s *WindowState) Clone() *WindowState {
 		return nil
 	}
 	out := *s
+	out.entryWindow = s.entryWindow.clone()
+	out.grading = s.grading.clone()
+	return &out
+}
+
+func (s *entryWindow) clone() entryWindow {
+	out := *s
 	out.history = slices.Clone(s.history)
 	out.timedHistory = slices.Clone(s.timedHistory)
-	return &out
+	return out
 }
 
 // Snapshot returns a deep-copyable representation of the current window state.
@@ -256,13 +301,16 @@ func (s *WindowState) Snapshot() WindowStateSnapshot {
 		Firing:           s.firing,
 		ClearConsecutive: s.clearConsecutive,
 		ClearSince:       s.clearSince,
+		Severity:         s.severity,
+		NotifiedSeverity: s.notified,
+		Rungs:            s.rungSnapshots(),
 	}
 }
 
 // WindowStateFromSnapshot restores a window state snapshot.
 func WindowStateFromSnapshot(snapshot WindowStateSnapshot) *WindowState {
 	snapshot.Consecutive = max(snapshot.Consecutive, 0)
-	return &WindowState{
+	state := &WindowState{
 		consecutive:      snapshot.Consecutive,
 		history:          slices.Clone(snapshot.History),
 		trueSince:        snapshot.TrueSince,
@@ -271,6 +319,12 @@ func WindowStateFromSnapshot(snapshot WindowStateSnapshot) *WindowState {
 		clearConsecutive: max(snapshot.ClearConsecutive, 0),
 		clearSince:       snapshot.ClearSince,
 	}
+	if snapshot.Firing {
+		state.severity = snapshot.Severity
+		state.notified = snapshot.NotifiedSeverity
+	}
+	state.restoreRungs(snapshot.Rungs)
+	return state
 }
 
 // WindowDescription summarizes the configured for/within window.

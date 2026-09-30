@@ -54,7 +54,7 @@ func (c loadCheck) Run(_ context.Context) Result {
 	if c.perCPU {
 		suffix = fmt.Sprintf(" per-cpu (/%d)", s.NumCPU)
 	}
-	res := c.result(ok, fmt.Sprintf("load %.2f %.2f %.2f%s", s.Load1, s.Load5, s.Load15, suffix), start)
+	res := c.grade(c.result(ok, fmt.Sprintf("load %.2f %.2f %.2f%s", s.Load1, s.Load5, s.Load15, suffix), start), values)
 	res.Data = map[string]any{
 		DataKeyLoad1: s.Load1, DataKeyLoad5: s.Load5, DataKeyLoad15: s.Load15,
 		DataKeyNumCPU: s.NumCPU, DataKeyPerCPU: c.perCPU,

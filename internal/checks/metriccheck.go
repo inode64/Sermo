@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"sermo/internal/cfgval"
 	"sermo/internal/metrics"
 )
 
@@ -18,6 +19,28 @@ type metricCheck struct {
 	op     string
 	value  string
 	source MetricReader
+	grades grades[metricTier]
+}
+
+// metricTier is one `levels:` tier of a metric check: a stricter op +
+// value on the same reading.
+type metricTier struct {
+	op, value string
+}
+
+// metricGrades parses the kept tiers of a metric check.
+func metricGrades(specs []levelSpec) grades[metricTier] {
+	return parseGrades(specs, func(tier map[string]any) (metricTier, bool) {
+		return metricTier{op: cfgval.AsString(tier[CheckKeyOp]), value: cfgval.String(tier[CheckKeyValue])}, true
+	})
+}
+
+// grade raises a breach to the highest tier the same reading also breaches.
+func (c metricCheck) grade(res Result, reading metrics.Reading) Result {
+	return raiseSeverity(res, c.grades.highest(func(t metricTier) bool {
+		met, err := metrics.Compare(reading, t.op, t.value)
+		return err == nil && met
+	}))
 }
 
 func (c metricCheck) Run(_ context.Context) Result {
@@ -36,7 +59,7 @@ func (c metricCheck) Run(_ context.Context) Result {
 	if !reading.Ready {
 		return c.unavailableResult(fmt.Sprintf("%s/%s not ready", c.scope, c.metric), start)
 	}
-	res := c.result(met, fmt.Sprintf("%s/%s %s %s = %t", c.scope, c.metric, c.op, c.value, met), start)
+	res := c.grade(c.result(met, fmt.Sprintf("%s/%s %s %s = %t", c.scope, c.metric, c.op, c.value, met), start), reading)
 	res.Data = map[string]any{
 		DataKeyType:      CheckTypeMetric,
 		DataKeyScope:     c.scope,

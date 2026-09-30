@@ -7,8 +7,10 @@ import (
 	"slices"
 	"strings"
 
+	"sermo/internal/checks"
 	"sermo/internal/config"
 	"sermo/internal/rules"
+	"sermo/internal/severity"
 )
 
 func detectCandidates[T any](detect func() ([]T, error), unavailable, action string) ([]T, error) {
@@ -222,4 +224,28 @@ func labelField(name, value string) string {
 
 func nonEmpty(values ...string) []string {
 	return slices.DeleteFunc(append([]string{}, values...), func(value string) bool { return value == "" })
+}
+
+// Graded capacity defaults shared by the storage wizards: an advisory while
+// space runs low, an outage when it is nearly gone, critical at the edge.
+const (
+	storageWarnFreePct     = 20
+	storageErrorFreePct    = 5
+	storageCriticalFreePct = 1
+	storageWarnUsedPct     = 80
+	storageErrorUsedPct    = 95
+	storageCriticalUsedPct = 99
+)
+
+// storageLevels renders the `levels:` block grading one percentage predicate.
+func storageLevels(field, op string, errorValue, criticalValue any) map[string]any {
+	return map[string]any{
+		string(severity.Error):    storageLevel(field, op, errorValue),
+		string(severity.Critical): storageLevel(field, op, criticalValue),
+	}
+}
+
+// storageLevel renders one tier of a percentage predicate.
+func storageLevel(field, op string, value any) map[string]any {
+	return map[string]any{field: map[string]any{checks.CheckKeyOp: op, checks.CheckKeyValue: value}}
 }

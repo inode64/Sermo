@@ -16,6 +16,7 @@ import (
 	"sermo/internal/cfgval"
 	"sermo/internal/checks"
 	"sermo/internal/notify"
+	"sermo/internal/severity"
 	"sermo/internal/units"
 )
 
@@ -66,7 +67,9 @@ const (
 // can be judged from a single observation — an already-stale path and one that
 // already satisfies a size threshold.
 type fileWatcher struct {
-	name          string
+	name string
+	// severity grades every change this watch reports.
+	severity      severity.Level
 	paths         []string
 	recursive     bool
 	includeHidden bool
@@ -408,6 +411,7 @@ func (w *fileWatcher) runOlderThanHook(ctx context.Context, path string, cur fil
 		sermoEnvPath:      path,
 		sermoEnvChange:    fileChangeOlderThan,
 		sermoEnvMessage:   msg,
+		sermoEnvSeverity:  w.severity.Resolved().String(),
 	}
 	watchValuesEnv(env, extra)
 	runWatchHook(ctx, w.hook, w.runner, w.emitEvent, w.name, msg, env)
@@ -514,5 +518,6 @@ func (w *fileWatcher) fireSpec(hook HookSpec) watchFireSpec {
 		emit:        w.emitEvent,
 		dryRunLabel: watchDryRunMessage(w.hook, w.notifiers),
 		panicLabel:  "panic mode: hook/notify suppressed",
+		severity:    w.severity,
 	}
 }

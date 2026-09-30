@@ -48,7 +48,7 @@ func (c edacCheck) Run(_ context.Context) Result {
 		ok = levelPredsHold(c.preds, values)
 	}
 
-	r := c.result(ok, fmt.Sprintf("edac: %d correctable, %d uncorrectable", st.CE, st.UE), start)
+	r := c.grade(c.result(ok, fmt.Sprintf("edac: %d correctable, %d uncorrectable", st.CE, st.UE), start), values)
 	r.Data = edacResultData(st)
 	return r
 }

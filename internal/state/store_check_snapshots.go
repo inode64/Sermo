@@ -3,6 +3,7 @@ package state
 import (
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"maps"
 	"slices"
@@ -102,6 +103,11 @@ func (s *Store) WatchCheckSnapshots() (map[string]map[string]CheckSnapshotRecord
 	)
 }
 
+// groupedCheckSnapshots loads one snapshot table. A row that cannot be decoded
+// (a legacy row with no observation, a slot a removed check left behind) is
+// skipped rather than discarding every other snapshot: the result holds the
+// decodable rows, and the error names each skipped one. Snapshots are a cache
+// the next cycle rewrites for every slot still configured.
 func (s *Store) groupedCheckSnapshots(query, label string) (map[string]map[string]CheckSnapshotRecord, error) {
 	rows, err := s.reads().QueryContext(s.sqlCtx(), query)
 	if err != nil {
@@ -110,10 +116,15 @@ func (s *Store) groupedCheckSnapshots(query, label string) (map[string]map[strin
 	defer func() { _ = rows.Close() }()
 
 	out := map[string]map[string]CheckSnapshotRecord{}
+	var skipped []error
 	for rows.Next() {
 		group, slot, record, err := scanCheckSnapshotRow(rows, label)
 		if err != nil {
-			return nil, err
+			if group == "" {
+				return nil, err // the row itself could not be scanned
+			}
+			skipped = append(skipped, fmt.Errorf("%s/%s skipped: %w", group, slot, err))
+			continue
 		}
 		if out[group] == nil {
 			out[group] = map[string]CheckSnapshotRecord{}
@@ -123,7 +134,7 @@ func (s *Store) groupedCheckSnapshots(query, label string) (map[string]map[strin
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("iterate %s: %w", label, err)
 	}
-	return out, nil
+	return out, errors.Join(skipped...)
 }
 
 // scanCheckSnapshotRow scans one (group, slot) check-snapshot row. The service

@@ -2,6 +2,7 @@ notifiers:
   ops-email:
     type: email
     # template: default-alert
+    # min_severity: warning  # lowest level delivered: debug, info, warning, error or critical
     dsn: "smtp://user:pass@smtp.example.com:587"  # smtp:// (STARTTLS) or smtps:// (implicit TLS)
     from: "Sermo <sermo@example.com>"
     to: [ops@example.com, oncall@example.com]

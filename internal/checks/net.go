@@ -242,7 +242,7 @@ func (c *netCheck) runErrors(sample NetSample, data map[string]any, start time.T
 	c.lastErrTotal = total
 	data[DataKeyValue], data[DataKeyTotal] = delta, total
 	met := cfgval.CompareFloat(float64(delta), c.op, c.value)
-	return c.netResult(met, fmt.Sprintf("%s errors +%d (total %d)", c.iface, delta, total), data, start)
+	return c.gradeValue(c.netResult(met, fmt.Sprintf("%s errors +%d (total %d)", c.iface, delta, total), data, start), CheckKeyDelta, float64(delta))
 }
 
 func (c *netCheck) runAddress(sample NetSample, data map[string]any, start time.Time) Result {

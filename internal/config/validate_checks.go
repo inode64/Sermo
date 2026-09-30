@@ -15,6 +15,7 @@ import (
 	"sermo/internal/mounts"
 	"sermo/internal/process"
 	"sermo/internal/servicemgr"
+	"sermo/internal/severity"
 )
 
 const portSpecRequiredMessage = `is required (e.g. "80,443,1024-4000")`
@@ -580,6 +581,11 @@ func validateCheckSection(tree map[string]any, section, locksDir string, add add
 			}
 		}
 		validateCheckBands(path, typ, entry, add)
+		if section == sectionPreflight {
+			rejectLevels(path, entry, "a preflight check", add)
+		} else {
+			validateCheckLevels(path, typ, entry, checks.DeclaredSeverity(entry), add)
+		}
 		if !validateSingleShotCheckFields(path, typ, entry, locksDir, add) {
 			add("%s has unknown type %q", path, typ)
 			continue
@@ -667,9 +673,9 @@ func validateBandOverride(bandPath string, override map[string]any, add addFunc)
 			}
 		}
 	}
-	if severity, present := override[checks.CheckKeySeverity]; present {
-		if s := cfgval.AsString(severity); !checks.IsCheckSeverity(s) {
-			add("%s.severity %q must be %s", bandPath, s, checks.CheckSeveritySummary)
+	if declared, present := override[checks.CheckKeySeverity]; present {
+		if s := cfgval.AsString(declared); !validSeverity(s) {
+			add("%s.severity %q must be %s", bandPath, s, severity.Summary)
 		}
 	}
 	return hasOK
@@ -681,10 +687,15 @@ func validateBandOverride(bandPath string, override map[string]any, add addFunc)
 // watch's check block is validated per type, not through validateCheckSection —
 // and an unwired key would otherwise be accepted in silence.
 func validateSeverityField(path string, entry map[string]any, add addFunc) {
-	if v, present := entry[checks.CheckKeySeverity]; present && !checks.IsCheckSeverity(cfgval.String(v)) {
-		add("%s.%s %q must be one of %s", path, checks.CheckKeySeverity, cfgval.String(v),
-			strings.Join(checks.CheckSeverities(), ", "))
+	if v, present := entry[checks.CheckKeySeverity]; present && !validSeverity(cfgval.String(v)) {
+		add("%s.%s %q must be one of %s", path, checks.CheckKeySeverity, cfgval.String(v), severity.Summary)
 	}
+}
+
+// validSeverity reports whether s names one of the five severity levels.
+func validSeverity(s string) bool {
+	_, ok := severity.Parse(s)
+	return ok
 }
 
 func validateCheckSummary(path string, entry map[string]any, add addFunc) {
@@ -699,7 +710,7 @@ func validateCheckSummary(path string, entry map[string]any, add addFunc) {
 // block. It runs after expandAnalyze, so `use`/`silence` are gone and only the
 // flat `rules` list remains (unknown-set/silence errors are raised during
 // resolution). It checks each rule's id (present, unique), severity
-// (error|warning|ok), stream (stdout|stderr|both or empty), and that `match`
+// (ok or a severity level), stream (stdout|stderr|both or empty), and that `match`
 // is a non-empty regular expression.
 func validateAnalyze(path string, entry map[string]any, add addFunc) {
 	analyze, ok := entry[checks.CheckKeyAnalyze].(map[string]any)
@@ -730,9 +741,7 @@ func validateAnalyze(path string, entry map[string]any, add addFunc) {
 			add("%s.analyze has a duplicate rule id %q", path, id)
 		}
 		seen[id] = true
-		switch cfgval.AsString(rm[checks.CheckKeySeverity]) {
-		case checks.SeverityError, checks.SeverityWarning, checks.SeverityOK:
-		default:
+		if !checks.IsAnalyzeSeverity(cfgval.AsString(rm[checks.CheckKeySeverity])) {
 			add("%s.analyze rule %q severity must be %s", path, id, checks.AnalyzeSeveritySummary)
 		}
 		switch cfgval.AsString(rm[checks.CheckKeyStream]) {

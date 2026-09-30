@@ -657,6 +657,8 @@ func expandServiceWatches(tree map[string]any) []string {
 				add(validationRequiredFormat, watchCheckPath(name))
 				continue
 			}
+			// This entry is removed before the resolved-tree validators run.
+			validateServiceWatchGrading(name, entry, add)
 			if _, ok := promoteServiceWatchCheck(checksMap, name, entry, check, add); !ok {
 				continue
 			}
@@ -669,6 +671,7 @@ func expandServiceWatches(tree map[string]any) []string {
 		// Validate the action grammar here (this entry is removed before the
 		// resolved-tree validators run, so they never see it).
 		validateWatchThenAction(watchPath(name), action, then, add)
+		validateServiceWatchGrading(name, entry, add)
 		check, ok := entry[WatchKeyCheck].(map[string]any)
 		if !ok {
 			add(validationRequiredFormat, watchCheckPath(name))
@@ -723,6 +726,14 @@ func promoteServiceWatchCheck(checksMap map[string]any, name string, entry, chec
 	for _, k := range serviceWatchCheckEntryFields {
 		if v, has := entry[k]; has {
 			genCheck[k] = v
+		}
+	}
+	// The entry's gravity grades the generated check, exactly as it grades a
+	// host watch's; a severity the check block declares is narrower and wins.
+	// An invalid one is reported on the watch entry the operator wrote.
+	if v, has := entry[WatchKeySeverity]; has && validSeverity(cfgval.String(v)) {
+		if _, own := genCheck[checks.CheckKeySeverity]; !own {
+			genCheck[checks.CheckKeySeverity] = v
 		}
 	}
 	checksMap[name] = genCheck

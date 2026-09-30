@@ -44,6 +44,7 @@ const (
 	cliJSONKeyUp             = "up"
 	cliJSONKeyVacuum         = "vacuum"
 	cliJSONKeyValid          = "valid"
+	cliJSONKeyWarnings       = "warnings"
 	cliJSONKeyWatch          = "watch"
 	cliJSONKeyWindows        = "windows"
 )

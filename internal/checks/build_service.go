@@ -42,7 +42,7 @@ func buildMetricCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 	if deps.Metrics == nil {
 		return nil, "metric check needs a metric source, unavailable here"
 	}
-	return metricCheck{base: b, scope: scope, metric: name, op: op, value: cfgval.String(entry[CheckKeyValue]), source: deps.Metrics}, ""
+	return metricCheck{base: b, scope: scope, metric: name, op: op, value: cfgval.String(entry[CheckKeyValue]), source: deps.Metrics, grades: metricGrades(b.levels)}, ""
 }
 
 // buildProcessCheck builds a check on processes matching an exe/user selector.

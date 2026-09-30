@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"sermo/internal/checks"
+	"sermo/internal/severity"
 	"sermo/internal/state"
 )
 
@@ -142,8 +143,8 @@ func TestCheckSLARecorderSkipsFailingAdvisories(t *testing.T) {
 	}, "svc", nil)
 	writer.RecordCycle(context.Background(), cycleRecord{
 		cache: map[string]checks.Result{
-			"disk-speed": {Check: "disk-speed", OK: false, Severity: checks.SeverityWarning},
-			"disk-ok":    {Check: "disk-ok", OK: true, Severity: checks.SeverityWarning},
+			"disk-speed": {Check: "disk-speed", OK: false, Severity: severity.Warning},
+			"disk-ok":    {Check: "disk-ok", OK: true, Severity: severity.Warning},
 			"http":       {Check: "http", OK: false},
 		},
 		ran:                map[string]bool{"disk-speed": true, "disk-ok": true, "http": true},
@@ -171,11 +172,11 @@ func TestCheckSLARecorderSkipsFailingAdvisories(t *testing.T) {
 func TestRequiredChecksOKIgnoresAdvisories(t *testing.T) {
 	if !requiredChecksOK(map[string]checks.Result{
 		"http":       {OK: true},
-		"disk-speed": {OK: false, Severity: checks.SeverityWarning},
+		"disk-speed": {OK: false, Severity: severity.Warning},
 	}) {
 		t.Error("a failing advisory took the service down, want availability unaffected")
 	}
-	if requiredChecksOK(map[string]checks.Result{"http": {OK: false, Severity: checks.SeverityError}}) {
+	if requiredChecksOK(map[string]checks.Result{"http": {OK: false, Severity: severity.Error}}) {
 		t.Error("a failing error-severity check left the service up")
 	}
 }

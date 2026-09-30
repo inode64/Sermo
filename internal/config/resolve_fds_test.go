@@ -195,3 +195,24 @@ func TestFDsRestartPermissionInheritance(t *testing.T) {
 		})
 	}
 }
+
+// The injected alert is an advisory that escalates to an error close to the
+// limit; an operator limit at or above that level keeps a single threshold
+// rather than an inert level.
+func TestFDsAlertEscalatesBeforeTheLimit(t *testing.T) {
+	check, _ := fdsGenerated(t, fdsTree(nil))
+	if got := cfgval.String(check[checks.CheckKeySeverity]); got != "warning" {
+		t.Fatalf("checks.fds.severity = %q, want warning", got)
+	}
+	levels, _ := check[checks.CheckKeyLevels].(map[string]any)
+	errorLevel, _ := levels["error"].(map[string]any)
+	if cfgval.String(errorLevel[checks.CheckKeyValue]) != defaultFDsErrorLimit || cfgval.String(errorLevel[checks.CheckKeyOp]) != ">" {
+		t.Fatalf("checks.fds.levels = %v, want error above %s", check[checks.CheckKeyLevels], defaultFDsErrorLimit)
+	}
+	for _, limit := range []string{"95%", "97%"} {
+		check, _ := fdsGenerated(t, fdsTree(map[string]any{keyFDsLimit: limit}))
+		if _, present := check[checks.CheckKeyLevels]; present {
+			t.Fatalf("fds_limit %s kept an error level that could never be stricter", limit)
+		}
+	}
+}

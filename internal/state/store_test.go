@@ -6,10 +6,12 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sermo/internal/rules"
 	"strings"
 	"testing"
 	"time"
+
+	"sermo/internal/rules"
+	"sermo/internal/severity"
 
 	"sermo/internal/checks"
 )
@@ -192,14 +194,14 @@ func TestStoreCheckSnapshotsPersistAcrossReopen(t *testing.T) {
 	if err := first.SetServiceCheckSnapshots("web", map[string]CheckSnapshotRecord{
 		"http": {
 			CheckType: "http", ConfigID: "service-config", Observation: checks.ObservationHealthy, OK: true, Message: "status 200", Data: map[string]any{"status": float64(200)}, Ran: true, At: at,
-			Severity: checks.SeverityWarning,
+			Severity: string(severity.Warning),
 		},
 	}); err != nil {
 		t.Fatalf("SetServiceCheckSnapshots replace: %v", err)
 	}
 	if err := first.SetWatchCheckSnapshot("clock", "result", CheckSnapshotRecord{
 		CheckType: "clock", ConfigID: "watch-config", Observation: checks.ObservationUnavailable, OK: false, Unavailable: true, Message: "offset 1200ms",
-		Data: map[string]any{"offset_ms": float64(1200)}, Ran: true, At: at, Severity: checks.SeverityWarning,
+		Data: map[string]any{"offset_ms": float64(1200)}, Ran: true, At: at, Severity: string(severity.Warning),
 	}); err != nil {
 		t.Fatalf("SetWatchCheckSnapshot: %v", err)
 	}
@@ -221,7 +223,7 @@ func TestStoreCheckSnapshotsPersistAcrossReopen(t *testing.T) {
 	if len(service) != 1 {
 		t.Fatalf("service snapshots = %+v, want only current row", service)
 	}
-	if got := service["http"]; got.CheckType != "http" || got.ConfigID != "service-config" || got.Observation != checks.ObservationHealthy || !got.OK || got.Message != "status 200" || got.Data["status"] != float64(200) || !got.Ran || !got.At.Equal(at) || got.Severity != checks.SeverityWarning {
+	if got := service["http"]; got.CheckType != "http" || got.ConfigID != "service-config" || got.Observation != checks.ObservationHealthy || !got.OK || got.Message != "status 200" || got.Data["status"] != float64(200) || !got.Ran || !got.At.Equal(at) || got.Severity != string(severity.Warning) {
 		t.Fatalf("service snapshot did not round-trip: %+v", got)
 	}
 
@@ -230,7 +232,7 @@ func TestStoreCheckSnapshotsPersistAcrossReopen(t *testing.T) {
 		t.Fatalf("WatchCheckSnapshots: %v", err)
 	}
 	got := watchSnapshots["clock"]["result"]
-	if got.CheckType != "clock" || got.ConfigID != "watch-config" || got.Observation != checks.ObservationUnavailable || got.OK || !got.Unavailable || got.Message != "offset 1200ms" || got.Data["offset_ms"] != float64(1200) || !got.At.Equal(at) || got.Severity != checks.SeverityWarning {
+	if got.CheckType != "clock" || got.ConfigID != "watch-config" || got.Observation != checks.ObservationUnavailable || got.OK || !got.Unavailable || got.Message != "offset 1200ms" || got.Data["offset_ms"] != float64(1200) || !got.At.Equal(at) || got.Severity != string(severity.Warning) {
 		t.Fatalf("watch snapshot did not round-trip: %+v", got)
 	}
 }
@@ -245,18 +247,26 @@ func TestStoreRejectsInvalidSnapshotObservation(t *testing.T) {
 	}
 }
 
-func TestStoreRejectsPersistedInvalidSnapshotObservation(t *testing.T) {
+// An undecodable row (a legacy row with no observation) is reported and
+// skipped; it must not discard the other snapshots, or every restart re-opens
+// the episodes they would have restored.
+func TestStoreSkipsPersistedInvalidSnapshotObservation(t *testing.T) {
 	s := openTemp(t)
 	if err := s.SetServiceCheckSnapshots("web", map[string]CheckSnapshotRecord{
-		"http": {CheckType: checks.CheckTypeHTTP, Observation: checks.ObservationHealthy, OK: true},
+		"http":    {CheckType: checks.CheckTypeHTTP, Observation: checks.ObservationHealthy, OK: true},
+		"service": {CheckType: checks.CheckTypeService, Observation: checks.ObservationFailing},
 	}); err != nil {
 		t.Fatalf("write valid snapshot: %v", err)
 	}
-	if _, err := s.db.ExecContext(context.Background(), `UPDATE service_check_snapshot SET observation = 'invalid' WHERE service = 'web';`); err != nil {
+	if _, err := s.db.ExecContext(context.Background(), `UPDATE service_check_snapshot SET observation = '' WHERE service = 'web' AND check_name = 'http';`); err != nil {
 		t.Fatalf("corrupt snapshot observation: %v", err)
 	}
-	if _, err := s.ServiceCheckSnapshots(); err == nil || !strings.Contains(err.Error(), `invalid observation "invalid"`) {
-		t.Fatalf("read snapshot error = %v, want invalid observation", err)
+	snapshots, err := s.ServiceCheckSnapshots()
+	if err == nil || !strings.Contains(err.Error(), `web/http skipped`) || !strings.Contains(err.Error(), `invalid observation ""`) {
+		t.Fatalf("read snapshot error = %v, want the skipped row named", err)
+	}
+	if _, kept := snapshots["web"]["service"]; !kept || len(snapshots["web"]) != 1 {
+		t.Fatalf("snapshots = %+v, want only the decodable service row", snapshots)
 	}
 }
 

@@ -12,6 +12,7 @@ import (
 	"sermo/internal/cfgval"
 	"sermo/internal/checks"
 	"sermo/internal/config"
+	"sermo/internal/severity"
 	"sermo/internal/state"
 )
 
@@ -23,6 +24,13 @@ type CheckSnapshot state.CheckSnapshotRecord
 
 func (c CheckSnapshot) healthy() bool {
 	return c.Observation.Healthy()
+}
+
+// severityOr is the grade the snapshot's result carried, or declared when it
+// carries none: records persisted before the grade was stored, and checks that
+// neither graded themselves nor received a declaration.
+func (c CheckSnapshot) severityOr(declared severity.Level) severity.Level {
+	return severity.Resolve(severity.Level(c.Severity), declared)
 }
 
 // Snapshots holds each service's most recent check results so the web UI can show
@@ -55,12 +63,14 @@ func NewPersistentSnapshots(store serviceSnapshotStore, reportError func(error))
 	if store == nil {
 		return s, nil
 	}
+	// A partial load still hydrates the decodable snapshots; the error names
+	// the rows it skipped.
 	records, err := store.ServiceCheckSnapshots()
-	if err != nil {
-		return s, fmt.Errorf("load service check snapshots: %w", err)
-	}
 	for service, checkRecords := range records {
 		s.byService[service] = serviceSnapshotsFromRecords(checkRecords)
+	}
+	if err != nil {
+		return s, fmt.Errorf("load service check snapshots: %w", err)
 	}
 	return s, nil
 }
@@ -135,9 +145,6 @@ func NewPersistentWatchSnapshots(store watchSnapshotStore, reportError func(erro
 		return s, nil
 	}
 	records, err := store.WatchCheckSnapshots()
-	if err != nil {
-		return s, fmt.Errorf("load watch check snapshots: %w", err)
-	}
 	for watch, slots := range records {
 		if s.byWatch[watch] == nil {
 			s.byWatch[watch] = map[string]CheckSnapshot{}
@@ -145,6 +152,9 @@ func NewPersistentWatchSnapshots(store watchSnapshotStore, reportError func(erro
 		for slot, rec := range slots {
 			s.byWatch[watch][slot] = snapshotFromRecord(rec)
 		}
+	}
+	if err != nil {
+		return s, fmt.Errorf("load watch check snapshots: %w", err)
 	}
 	return s, nil
 }
@@ -230,7 +240,7 @@ func checkSnapshotFromResult(result checks.Result) CheckSnapshot {
 	return CheckSnapshot{
 		Observation: result.Observation(),
 		OK:          result.OK, Condition: result.Condition, Optional: result.Optional, Skipped: result.Skipped,
-		Unavailable: result.Unavailable, Message: result.Message, Data: maps.Clone(result.Data), Severity: result.Severity,
+		Unavailable: result.Unavailable, Message: result.Message, Data: maps.Clone(result.Data), Severity: result.Severity.String(),
 	}
 }
 

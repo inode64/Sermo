@@ -76,7 +76,7 @@ func TestNtfySendPublishesTopicJSON(t *testing.T) {
 }
 
 func TestNtfySubjectOnlyTravelsAsMessage(t *testing.T) {
-	var body map[string]string
+	var body map[string]any
 	if err := json.Unmarshal(ntfyPayload("alerts", Message{Subject: "recovered"}), &body); err != nil {
 		t.Fatal(err)
 	}
@@ -91,12 +91,12 @@ func TestNtfySubjectOnlyTravelsAsMessage(t *testing.T) {
 func TestNtfyTruncatesMessageOverTheSizeLimit(t *testing.T) {
 	// ntfy turns a message over 4096 bytes into an attachment, or rejects it
 	// when attachments are disabled; the alert text must stay inline.
-	var body map[string]string
+	var body map[string]any
 	long := "SERMO_OUTPUT=" + strings.Repeat("é", ntfyMessageLimit)
 	if err := json.Unmarshal(ntfyPayload("alerts", Message{Subject: "[sermo] x", Body: long}), &body); err != nil {
 		t.Fatal(err)
 	}
-	got := body["message"]
+	got, _ := body["message"].(string)
 	if len(got) > ntfyMessageLimit || !utf8.ValidString(got) || !strings.HasPrefix(got, "SERMO_OUTPUT=é") || !strings.HasSuffix(got, truncatedMarker) {
 		t.Fatalf("message = %d bytes (valid UTF-8 %v)", len(got), utf8.ValidString(got))
 	}

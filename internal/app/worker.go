@@ -22,6 +22,7 @@ import (
 	"sermo/internal/output"
 	"sermo/internal/rules"
 	"sermo/internal/servicemgr"
+	"sermo/internal/severity"
 	"sermo/internal/state"
 )
 
@@ -58,11 +59,12 @@ type Worker struct {
 	// attached to alert events so the operator sees why the rule fired.
 	cycleFailOutput string
 
-	// checkFailing remembers which required checks were failing at the end of the
-	// previous observed cycle, so a change of health is reported once instead of
-	// every cycle. Only checks that ran are updated, so a per-check interval does
-	// not read as a recovery.
-	checkFailing map[string]bool
+	// checkEpisodes remembers which required checks were failing at the end of
+	// the previous observed cycle, and the gravest grade each failure reached, so
+	// a change of health is reported once instead of every cycle and an
+	// escalation once more. Only checks that ran are updated, so a per-check
+	// interval does not read as a recovery.
+	checkEpisodes map[string]checkEpisode
 
 	// reportedChecks indexes the immutable rule set; reloading replaces the worker.
 	reportedChecks map[string]bool
@@ -327,8 +329,8 @@ func (w *Worker) reportCheckHealthChanges(cache map[string]checks.Result) {
 	if w.Emit == nil {
 		return
 	}
-	if w.checkFailing == nil {
-		w.checkFailing = map[string]bool{}
+	if w.checkEpisodes == nil {
+		w.checkEpisodes = map[string]checkEpisode{}
 	}
 	if w.reportedChecks == nil {
 		w.reportedChecks = checksReportedByRules(w.Rules)
@@ -348,24 +350,44 @@ func (w *Worker) reportCheckHealthChanges(cache map[string]checks.Result) {
 		if (w.cycleRan != nil && !w.cycleRan[name]) || result.Optional || !observation.AffectsHealth() {
 			continue
 		}
-		failing := !observation.Healthy()
-		if failing == w.checkFailing[name] {
+		episode, wasFailing := w.checkEpisodes[name]
+		if observation.Healthy() {
+			if wasFailing {
+				delete(w.checkEpisodes, name)
+				w.emit(Event{Kind: eventKindRecovered, Severity: episode.held, Check: name, Message: checkHealthChangeMessage(name, result)})
+			}
 			continue
 		}
-		w.checkFailing[name] = failing
-		kind := eventKindRecovered
-		if failing {
-			kind = eventKindFiring
-			if result.Warning() {
-				kind = eventKindWarning
-			}
+		// A failing check opens an episode at its grade and escalates at once
+		// when the grade rises (a health edge has no window to sustain); a grade
+		// that eases off is held until the check recovers.
+		graded := result.Severity.Resolved()
+		if wasFailing && episode.restored {
+			// Announced before the restart, at a grade the snapshot only
+			// bounds from below: adopt the graver one without announcing it.
+			w.checkEpisodes[name] = checkEpisode{held: severity.Max(episode.held, graded)}
+			continue
 		}
-		w.emit(Event{Kind: kind, Check: name, Message: checkHealthChangeMessage(name, result)})
+		if wasFailing && graded.Rank() <= episode.held.Rank() {
+			continue
+		}
+		w.checkEpisodes[name] = checkEpisode{held: graded}
+		w.emit(Event{Kind: eventKindFiring, Severity: graded, Check: name, Message: checkHealthChangeMessage(name, result)})
 	}
 	// Forget checks the running configuration no longer produces, so a reload
 	// that drops a check cannot leave a stale "failing" memory that reports a
 	// recovery the next time the name comes back.
-	maps.DeleteFunc(w.checkFailing, func(name string, _ bool) bool { _, ok := cache[name]; return !ok })
+	maps.DeleteFunc(w.checkEpisodes, func(name string, _ checkEpisode) bool { _, ok := cache[name]; return !ok })
+}
+
+// checkEpisode is one failing required check's health episode.
+type checkEpisode struct {
+	// held is the gravest grade the episode reached.
+	held severity.Level
+	// restored marks an episode restored after a restart. Its snapshot keeps
+	// the last grade, not the gravest, so held is a lower bound: the next
+	// failing observation raises it without announcing it again.
+	restored bool
 }
 
 // checksReportedByRules lists the check names some rule condition reads, so the
@@ -565,7 +587,7 @@ func (w *Worker) gateReason(gate CheckGate, cache map[string]checks.Result) stri
 
 // requiredCheckFailing is the shared availability and failure-output predicate.
 func requiredCheckFailing(result checks.Result) bool {
-	return !result.Optional && !result.Warning() && !result.Healthy()
+	return !result.Optional && !result.Advisory() && !result.Healthy()
 }
 
 // requiredChecksOK reports the service's availability this cycle: true unless a
@@ -662,15 +684,20 @@ func (w *Worker) runFiringRemediation(ctx context.Context, ev *rules.Evaluator, 
 		return false
 	}
 	if suppress != "" {
-		if w.shouldEmitRuleEvent(firing.Rule, firing.rising) {
-			w.emit(Event{Kind: eventKindSuppressed, Rule: firing.Name, Action: action, Message: suppress})
+		if w.shouldEmitRuleEvent(firing.Rule, firing.announce()) {
+			w.emit(Event{Kind: eventKindSuppressed, Severity: firing.severity, Rule: firing.Name, Action: action, Message: suppress})
+		}
+		// The action is held back, but a graver incident is still news: the
+		// rule's alert announces the escalation.
+		if firing.escalated {
+			w.emitAlerts(ctx, ev, firing.Rule, true, firing.change, firing.severity)
 		}
 		return false
 	}
-	w.emitAlerts(ctx, ev, firing.Rule, true, firing.change)
+	w.emitAlerts(ctx, ev, firing.Rule, true, firing.change, firing.severity)
 	if w.InPanic != nil && w.InPanic() {
-		if w.shouldEmitRuleEvent(firing.Rule, firing.rising) {
-			w.emit(Event{Kind: eventKindSuppressed, Rule: firing.Name, Action: action, Message: "panic mode: remediation suppressed"})
+		if w.shouldEmitRuleEvent(firing.Rule, firing.announce()) {
+			w.emit(Event{Kind: eventKindSuppressed, Severity: firing.severity, Rule: firing.Name, Action: action, Message: "panic mode: remediation suppressed"})
 		}
 		return false
 	}
@@ -680,10 +707,10 @@ func (w *Worker) runFiringRemediation(ctx context.Context, ev *rules.Evaluator, 
 
 func (w *Worker) emitRemediationAlerts(ctx context.Context, ev *rules.Evaluator, firing firingRule) {
 	if w.DryRun {
-		w.emitDryRunAlerts(ctx, ev, firing.Rule, firing.rising, firing.change)
+		w.emitDryRunAlerts(ctx, ev, firing.Rule, firing.announce(), firing.change, firing.severity)
 		return
 	}
-	w.emitAlerts(ctx, ev, firing.Rule, firing.rising, firing.change)
+	w.emitAlerts(ctx, ev, firing.Rule, firing.announce(), firing.change, firing.severity)
 }
 
 func (w *Worker) remediationSuppression(ctx context.Context, ev *rules.Evaluator, firing firingRule, action string, now func() time.Time) (string, bool) {
@@ -714,11 +741,11 @@ func (w *Worker) emitDryRunRemediation(ctx context.Context, ev *rules.Evaluator,
 	if suppress != "" {
 		message = "would " + action + " (suppressed: " + suppress + ")"
 	}
-	if w.shouldEmitRuleEvent(firing.Rule, firing.rising) {
-		w.emit(Event{Kind: eventKindDryRun, Rule: firing.Name, Action: action, Message: message})
+	if w.shouldEmitRuleEvent(firing.Rule, firing.announce()) {
+		w.emit(Event{Kind: eventKindDryRun, Severity: firing.severity, Rule: firing.Name, Action: action, Message: message})
 	}
-	if suppress == "" {
-		w.emitDryRunAlerts(ctx, ev, firing.Rule, firing.rising, firing.change)
+	if suppress == "" || firing.escalated {
+		w.emitDryRunAlerts(ctx, ev, firing.Rule, firing.announce(), firing.change, firing.severity)
 	}
 }
 
@@ -734,7 +761,19 @@ func (w *Worker) executeRemediation(ctx context.Context, now func() time.Time, f
 	if result.OK() && rules.ActionType(action).SettlesAfter() {
 		w.acknowledgeChanges()
 	}
-	w.emit(Event{Kind: eventKindForResult(result), Rule: firing.Name, Action: action, Status: string(result.Status), Message: result.Message})
+	kind := eventKindForResult(result)
+	w.emit(Event{Kind: kind, Severity: remediationSeverity(kind, firing.severity), Rule: firing.Name, Action: action, Status: string(result.Status), Message: result.Message})
+}
+
+// remediationSeverity grades a remediation outcome by the incident that
+// triggered it: a repair that worked, or one the policy held back, reports at
+// the trigger's grade, so whoever was told a service went down is told what
+// Sermo did about it; a failed repair is at least an error.
+func remediationSeverity(kind string, trigger severity.Level) severity.Level {
+	if isErrorKind(kind) {
+		return severity.Max(severity.Error, trigger)
+	}
+	return trigger.Resolved()
 }
 
 func (w *Worker) firingRemediationRules(ctx context.Context, ev *rules.Evaluator, at time.Time, evals map[string]ruleEvalResult) []firingRule {
@@ -746,21 +785,32 @@ func (w *Worker) firingRemediationRules(ctx context.Context, ev *rules.Evaluator
 		}
 		evaluation := w.fires(ctx, ev, *rule, at, evals)
 		if evaluation.firing {
-			firing = append(firing, firingRule{Rule: *rule, rising: evaluation.rising, change: evaluation.change})
+			firing = append(firing, firingRule{Rule: *rule, rising: evaluation.rising, escalated: evaluation.escalated, severity: evaluation.severity, change: evaluation.change})
 		} else if evaluation.recovered {
 			// The rule outcome is the alarm for the checks it claims, so its
 			// episode needs the same recovery edge an alert rule has: without
 			// it event_notify would treat the next episode as the same incident.
-			w.emitRuleRecovered(ev, *rule, evaluation.change)
+			w.emitRuleRecovered(ctx, ev, *rule, evaluation)
 		}
 	}
 	return firing
 }
 
-func (w *Worker) emitRuleRecovered(ev *rules.Evaluator, rule rules.Rule, change rules.ChangeContext) {
+// emitRuleRecovered closes a rule's episode at the gravest severity it
+// reached and, when the episode notified anyone, tells the same notifiers.
+func (w *Worker) emitRuleRecovered(ctx context.Context, ev *rules.Evaluator, rule rules.Rule, evaluation ruleFiringState) {
+	message := w.recoveredRuleMessage(ev, rule, evaluation.change)
 	if w.shouldEmitRuleEvent(rule, true) {
-		w.emit(Event{Kind: eventKindRecovered, Rule: rule.Name, Message: w.recoveredRuleMessage(ev, rule, change)})
+		w.emit(Event{Kind: eventKindRecovered, Severity: evaluation.severity, Rule: rule.Name, Message: message})
 	}
+	if !evaluation.notified.Valid() || (w.InPanic != nil && w.InPanic()) {
+		return
+	}
+	// At the gravest level actually delivered: exactly the notifiers that
+	// heard the incident accept it.
+	msg := alertMessage(w.Service, rule.Name, recoveredMessagePrefix+message, "", evaluation.notified)
+	msg.Fields[sermoEnvEvent] = eventKindRecovered
+	w.deliverRuleMessage(ctx, rule, msg, dryRunFilter(w.DryRun))
 }
 
 func (w *Worker) operateForRemediation(ctx context.Context, action string) operation.Result {
@@ -783,12 +833,12 @@ func (w *Worker) runAlerts(ctx context.Context, ev *rules.Evaluator, at time.Tim
 		fireState := w.fires(ctx, ev, *rule, at, evals)
 		if fireState.firing {
 			if w.DryRun {
-				w.emitDryRunAlerts(ctx, ev, *rule, fireState.rising, fireState.change)
+				w.emitDryRunAlerts(ctx, ev, *rule, fireState.announce(), fireState.change, fireState.severity)
 			} else {
-				w.emitAlerts(ctx, ev, *rule, fireState.rising, fireState.change)
+				w.emitAlerts(ctx, ev, *rule, fireState.announce(), fireState.change, fireState.severity)
 			}
 		} else if fireState.recovered {
-			w.emitRuleRecovered(ev, *rule, fireState.change)
+			w.emitRuleRecovered(ctx, ev, *rule, fireState)
 		}
 	}
 }
@@ -796,27 +846,27 @@ func (w *Worker) runAlerts(ctx context.Context, ev *rules.Evaluator, at time.Tim
 // emitAlerts emits each of a rule's alert messages as an `alert` event and, when
 // the rule resolves to one or more notifiers (its own `notify`, or the global
 // default it inherits, unless suppressed with `none`), delivers each message to
-// them best-effort.
-func (w *Worker) emitAlerts(ctx context.Context, ev *rules.Evaluator, r rules.Rule, rising bool, change rules.ChangeContext) {
-	w.emitAlertsFiltered(ctx, ev, r, nil, rising, change)
+// them best-effort. announce marks a cycle that opened or escalated the
+// episode; level is the episode's held severity.
+func (w *Worker) emitAlerts(ctx context.Context, ev *rules.Evaluator, r rules.Rule, announce bool, change rules.ChangeContext, level severity.Level) {
+	w.emitAlertsFiltered(ctx, ev, r, nil, announce, change, level)
 }
 
-func (w *Worker) emitDryRunAlerts(ctx context.Context, ev *rules.Evaluator, r rules.Rule, rising bool, change rules.ChangeContext) {
-	w.emitAlertsFiltered(ctx, ev, r, dryRunConsoleNotifier, rising, change)
+func (w *Worker) emitDryRunAlerts(ctx context.Context, ev *rules.Evaluator, r rules.Rule, announce bool, change rules.ChangeContext, level severity.Level) {
+	w.emitAlertsFiltered(ctx, ev, r, dryRunConsoleNotifier, announce, change, level)
 }
 
-func (w *Worker) emitAlertsFiltered(ctx context.Context, ev *rules.Evaluator, r rules.Rule, allow func(notify.Notifier) bool, rising bool, change rules.ChangeContext) {
-	notifiers := resolveNotifiers(effectiveNotify(r.Notify, w.GlobalNotify), w.Notifiers)
+func (w *Worker) emitAlertsFiltered(ctx context.Context, ev *rules.Evaluator, r rules.Rule, allow func(notify.Notifier) bool, announce bool, change rules.ChangeContext, level severity.Level) {
 	panicking := w.InPanic != nil && w.InPanic()
 	failOutput := w.cycleFailOutput
-	emitEvent := w.shouldEmitRuleEvent(r, rising)
-	emitNotify := w.shouldNotifyRule(r, rising)
+	emitEvent := w.shouldEmitRuleEvent(r, announce)
+	emitNotify := w.shouldNotifyRule(r, announce)
 	for _, msg := range r.AlertMessages() {
 		msg = w.expandRuleRuntime(msg, ev, r, change)
 		// Output carries the failing command's stdout/stderr so the operator can see
 		// why the rule fired on emitted cycles.
 		if emitEvent {
-			w.emit(Event{Kind: eventKindAlert, Rule: r.Name, Message: msg, Output: failOutput})
+			w.emit(Event{Kind: eventKindAlert, Severity: level, Rule: r.Name, Message: msg, Output: failOutput})
 		}
 		if panicking {
 			if emitEvent {
@@ -827,44 +877,62 @@ func (w *Worker) emitAlertsFiltered(ctx context.Context, ev *rules.Evaluator, r 
 		if !emitNotify {
 			continue
 		}
-		for _, n := range notifiers {
-			if allow != nil && !allow(n) {
-				continue
-			}
-			if err := n.Send(ctx, alertMessage(w.Service, r.Name, msg, failOutput)); err != nil {
-				w.emit(Event{Kind: eventKindNotifyFail, Rule: r.Name, Message: n.Name() + ": " + err.Error()})
-			} else {
-				w.emit(Event{Kind: eventKindNotify, Rule: r.Name, Message: "notified " + n.Name()})
-			}
+		if !w.DryRun {
+			// Only a live delivery defines who the recovery must reach.
+			w.windowState(r.Name).MarkNotified(level)
 		}
+		w.deliverRuleMessage(ctx, r, alertMessage(w.Service, r.Name, msg, failOutput, level), allow)
 	}
 }
 
+// deliverRuleMessage sends one rule notification to the notifiers the rule
+// resolves to that accept its severity.
+func (w *Worker) deliverRuleMessage(ctx context.Context, r rules.Rule, msg notify.Message, allow func(notify.Notifier) bool) {
+	notifiers := resolveNotifiers(effectiveNotify(r.Notify, w.GlobalNotify), w.Notifiers)
+	deliverNotification(ctx, notifiers, msg, allow, deliveryReport(w.emit, Event{Rule: r.Name}))
+}
+
 // alertMessage builds the notification for a rule's alert message.
-func alertMessage(service, rule, msg, failOutput string) notify.Message {
+func alertMessage(service, rule, msg, failOutput string, level severity.Level) notify.Message {
 	body := msg
 	if failOutput != "" {
 		body += "\n\n" + failOutput
 	}
+	level = level.Resolved()
 	return notify.Message{
-		Subject: fmt.Sprintf("[sermo] %s: %s", service, msg),
-		Body:    body,
-		Fields:  map[string]string{sermoEnvService: service, sermoEnvRule: rule},
+		Subject:  subjectPrefix(level) + " " + service + ": " + msg,
+		Body:     body,
+		Fields:   map[string]string{sermoEnvService: service, sermoEnvRule: rule, sermoEnvSeverity: level.String()},
+		Severity: level,
 	}
 }
 
 type ruleFiringState struct {
 	firing    bool
 	rising    bool
+	escalated bool
 	recovered bool
-	change    rules.ChangeContext
+	// notified is the gravest level the episode that just recovered
+	// notified anyone at; unset when it notified no one.
+	notified severity.Level
+	// severity is the episode's held severity, or the one it closed with.
+	severity severity.Level
+	change   rules.ChangeContext
 }
+
+// announce reports a cycle that opened or escalated the episode.
+func (s ruleFiringState) announce() bool { return s.rising || s.escalated }
 
 type firingRule struct {
 	rules.Rule
-	rising bool
-	change rules.ChangeContext
+	rising    bool
+	escalated bool
+	severity  severity.Level
+	change    rules.ChangeContext
 }
+
+// announce reports a cycle that opened or escalated the episode.
+func (f firingRule) announce() bool { return f.rising || f.escalated }
 
 // fires evaluates a rule's condition this cycle and advances its window state.
 // An evaluation error counts as a false cycle.
@@ -903,9 +971,17 @@ func (w *Worker) fires(ctx context.Context, ev *rules.Evaluator, r rules.Rule, a
 	// recomputing the window status with this cycle's timestamp reads a for:{duration}
 	// window as already elapsed, which made rising unobservable (alerts were
 	// silently never emitted while recovered fired on every episode end).
-	wasFiring := window.Firing()
-	firing := window.FiresAt(r, cond, at)
-	return ruleFiringState{firing: firing, rising: !wasFiring && firing, recovered: wasFiring && !firing, change: ev.Change}
+	wasFiring, notified := window.Firing(), window.Notified()
+	step := window.FiresGradedAt(r, cond, ev.RuleSeverity(r), at)
+	return ruleFiringState{
+		firing:    step.Firing,
+		rising:    !wasFiring && step.Firing,
+		escalated: wasFiring && step.Firing && step.Raised,
+		recovered: wasFiring && !step.Firing,
+		notified:  notified,
+		severity:  step.Severity,
+		change:    ev.Change,
+	}
 }
 
 func (w *Worker) ruleEmission(r rules.Rule) emission.Policy {

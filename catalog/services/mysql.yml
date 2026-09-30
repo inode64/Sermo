@@ -23,6 +23,8 @@ variables:
   host: 127.0.0.1
   port: 3306
   memory_alert_threshold: 80%
+  # The alert escalates from warning to error past this share of host memory.
+  memory_error_threshold: 90%
   config:
     - /etc/mysql/my.cnf
     - /etc/my.cnf
@@ -137,6 +139,9 @@ watches:
       op: '>'
       value: ${memory_alert_threshold}
       optional: true
+      severity: warning
+      levels:
+        error: { op: '>', value: "${memory_error_threshold}" }
     for:
       duration: 4m
     then:
@@ -151,6 +156,9 @@ watches:
       op: '>'
       value: 90%
       optional: true
+      severity: warning
+      levels:
+        error: { op: '>', value: 98% }
     for:
       duration: 5m
     then:
