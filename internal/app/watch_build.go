@@ -21,6 +21,7 @@ import (
 	"sermo/internal/notify"
 	"sermo/internal/process"
 	"sermo/internal/rules"
+	"sermo/internal/severity"
 	"sermo/internal/volume"
 )
 
@@ -282,8 +283,8 @@ func unsupportedServiceWatchType(entry map[string]any) string {
 // Health checks fire the hook on failure; condition checks on OK (threshold met).
 func buildSingleWatch(name string, entry, checkEntry map[string]any, deps Deps, interval time.Duration) (*Watch, string) {
 	typ := cfgval.AsString(checkEntry[checks.CheckKeyType])
-	severity := watchSeverity(entry, checkEntry)
-	check, err := checks.BuildInline(name, withSeverity(checkEntry, declaredSeverity(entry, checkEntry)), watchInlineDeps(deps))
+	level := watchSeverity(entry, checkEntry)
+	check, err := checks.BuildInline(name, withSeverity(checkEntry, checks.DeclaredSeverity(entry, checkEntry)), watchInlineDeps(deps))
 	if err != nil {
 		return nil, watchSubjectPrefix + name + ": " + err.Error()
 	}
@@ -309,7 +310,7 @@ func buildSingleWatch(name string, entry, checkEntry map[string]any, deps Deps, 
 		actions:   actions,
 		emission:  emission.Merge(entry[emission.Section], deps.GlobalEmission),
 		dryRun:    config.DryRun(entry),
-		severity:  severity,
+		severity:  level,
 		interval:  interval,
 	}, deps)
 	if actions.expand != nil || actions.makeStep != nil {
@@ -372,21 +373,11 @@ func buildMetricWatches(name string, entry, checkEntry map[string]any, deps Deps
 			warns = append(warns, watchSubjectPrefix+name+".metrics."+key+": not a mapping")
 			continue
 		}
-		ce := map[string]any{}
-		for k, v := range mEntry { // condition keys
-			switch k {
-			case rules.RuleFieldThen, rules.RuleFieldFor, rules.RuleFieldWithin, rules.RuleFieldClear:
-			default:
-				ce[k] = v
-			}
-		}
-		// base check fields win
-		maps.Copy(ce, checkEntry)
-		ce[checks.CheckKeyMetric] = key
+		ce := config.MetricCheckEntry(checkEntry, key, mEntry)
 		// Severity is the one key the base check must not win: the point of
 		// declaring it per metric is to overrule the watch for this metric alone.
-		severity := watchSeverity(entry, checkEntry, mEntry)
-		ce = withSeverity(ce, declaredSeverity(entry, checkEntry, mEntry))
+		level := watchSeverity(entry, checkEntry, mEntry)
+		ce = withSeverity(ce, checks.DeclaredSeverity(entry, checkEntry, mEntry))
 
 		check, err := checks.BuildInline(name, ce, watchInlineDeps(deps))
 		if err != nil {
@@ -413,7 +404,7 @@ func buildMetricWatches(name string, entry, checkEntry map[string]any, deps Deps
 			actions:   actions,
 			emission:  emission.Merge(mEntry[emission.Section], emission.Merge(entry[emission.Section], deps.GlobalEmission)),
 			dryRun:    config.DryRun(entry),
-			severity:  severity,
+			severity:  level,
 			interval:  interval,
 			stateSlot: checks.DataKeyMetric + ":" + key,
 		}, deps))
@@ -426,31 +417,17 @@ func buildMetricWatches(name string, entry, checkEntry map[string]any, deps Deps
 // declaration wins, so a `net` watch can call its error counter an advisory while
 // its link state stays an outage. A chain that declares nothing is an error, which
 // leaves every existing watch exactly as it is.
-func watchSeverity(trees ...map[string]any) string {
-	return checks.ResolveSeverity(declaredSeverity(trees...), "")
-}
-
-// declaredSeverity is the narrowest severity the trees declare, or "" when none
-// does. The distinction matters to the check: one that receives no declaration
-// may grade its own finding (a SMART predicate under a PASSED verdict is an
-// advisory), while a declaration always wins.
-func declaredSeverity(trees ...map[string]any) string {
-	declared := ""
-	for _, tree := range trees {
-		if s := cfgval.AsString(tree[checks.CheckKeySeverity]); checks.IsCheckSeverity(s) {
-			declared = s
-		}
-	}
-	return declared
+func watchSeverity(trees ...map[string]any) severity.Level {
+	return checks.DeclaredSeverity(trees...).Resolved()
 }
 
 // withSeverity copies entry with the layered declared severity written in — or
 // the key removed when nothing is declared — so the check builder reads one
 // already-layered declaration and the shared config tree is never mutated.
-func withSeverity(entry map[string]any, declared string) map[string]any {
+func withSeverity(entry map[string]any, declared severity.Level) map[string]any {
 	out := maps.Clone(entry)
-	if checks.IsCheckSeverity(declared) {
-		out[checks.CheckKeySeverity] = declared
+	if declared.Valid() {
+		out[checks.CheckKeySeverity] = string(declared)
 	} else {
 		delete(out, checks.CheckKeySeverity)
 	}
@@ -477,7 +454,7 @@ type checkWatchSpec struct {
 	actions   watchActions
 	emission  emission.Policy
 	dryRun    bool
-	severity  string
+	severity  severity.Level
 	interval  time.Duration
 	stateSlot string
 }
@@ -565,6 +542,7 @@ func buildFileWatch(name string, entry, checkEntry map[string]any, deps Deps, in
 		publish:       publishWatchSnapshots(deps.WatchSnapshots, deps.watchConfigID),
 		recordBand:    fileBandRecorder(deps, name, checkEntry),
 		now:           deps.Now,
+		severity:      watchSeverity(entry, checkEntry),
 	}
 	return newStatefulWatch(name, checks.CheckTypeFile, entry, deps, interval, fw.runCycle), ""
 }
@@ -618,6 +596,7 @@ func buildProcWatch(name string, entry, checkEntry map[string]any, deps Deps, in
 		emit:      deps.Emit,
 		sampler:   procSamplerFromDeps(deps),
 		publish:   publishWatchSnapshots(deps.WatchSnapshots, deps.watchConfigID),
+		severity:  watchSeverity(entry, checkEntry),
 	}
 	return newStatefulWatch(name, checks.CheckTypeProcess, entry, deps, interval, pw.runCycle), ""
 }
@@ -628,7 +607,7 @@ func newStatefulWatch(name, checkType string, entry map[string]any, deps Deps, i
 	watch := newWatchRuntime(name, checkType, deps, interval)
 	watch.IsPaused = monitorPaused(deps.Monitor, WatchMonitorKey(name))
 	watch.DryRun = config.DryRun(entry)
-	watch.Severity = watchSeverity(entry)
+	watch.Severity = watchSeverity(entry, checkMap(entry))
 	watch.Cycle = cycle
 	return watch
 }

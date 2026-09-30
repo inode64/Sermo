@@ -23,6 +23,8 @@ type EventRecord struct {
 	Status  string
 	Message string
 	Output  string
+	// Severity grades the event ("" for events that carry no grade).
+	Severity string
 }
 
 // RecordEvent appends one event to the persistent event/activity feed.
@@ -32,9 +34,9 @@ func (s *Store) RecordEvent(e EventRecord) (int64, error) {
 		at = s.now()
 	}
 	result, err := s.exec(s.sqlCtx(),
-		`INSERT INTO event_log (at, service, watch, app, kind, rule, action, status, message, output)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
-		at.UTC().UnixNano(), e.Service, e.Watch, e.App, e.Kind, e.Rule, e.Action, e.Status, e.Message, e.Output,
+		`INSERT INTO event_log (at, service, watch, app, kind, rule, action, status, message, output, severity)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
+		at.UTC().UnixNano(), e.Service, e.Watch, e.App, e.Kind, e.Rule, e.Action, e.Status, e.Message, e.Output, e.Severity,
 	)
 	if err != nil {
 		return 0, fmt.Errorf("insert event log row: %w", err)
@@ -48,7 +50,7 @@ func (s *Store) RecordEvent(e EventRecord) (int64, error) {
 
 // eventSelectPrefix is the column list every event_log read shares, so the two
 // queries below cannot drift out of step with scanEventRows.
-const eventSelectPrefix = `SELECT id, at, service, watch, app, kind, rule, action, status, message, output
+const eventSelectPrefix = `SELECT id, at, service, watch, app, kind, rule, action, status, message, output, severity
 		   FROM event_log`
 
 // RecentEventsBefore returns persisted events newest first. beforeID <= 0
@@ -117,7 +119,7 @@ func scanEventRows(rows *sql.Rows) ([]EventRecord, error) {
 	for rows.Next() {
 		var rec EventRecord
 		var at int64
-		if err := rows.Scan(&rec.ID, &at, &rec.Service, &rec.Watch, &rec.App, &rec.Kind, &rec.Rule, &rec.Action, &rec.Status, &rec.Message, &rec.Output); err != nil {
+		if err := rows.Scan(&rec.ID, &at, &rec.Service, &rec.Watch, &rec.App, &rec.Kind, &rec.Rule, &rec.Action, &rec.Status, &rec.Message, &rec.Output, &rec.Severity); err != nil {
 			return nil, fmt.Errorf("scan event log row: %w", err)
 		}
 		rec.At = time.Unix(0, at).UTC()

@@ -18,6 +18,10 @@
     --ok: #157a32;
     --warn: #795000;
     --crit: #b4232a;
+    /* critical is a different hue from --crit, not a darker red: an outage and
+       one that needs someone now must stay apart for readers who cannot tell
+       red shades apart. AA on panel and on its own 14% tint. */
+    --critical: #9e1c68;
     --info: #0860c8;
     --accent: #0860c8;
     --radius: 12px;
@@ -38,6 +42,7 @@
       --ok: #3fb950;
       --warn: #d29922;
       --crit: #f85149;
+      --critical: #f778ba;
       --info: #4493f8;
       --accent: #4493f8;
       --shadow: 0 1px 2px rgb(0 0 0 / .4);
@@ -523,7 +528,7 @@
   .events .t { white-space: nowrap; color: var(--text-2); font-variant-numeric: tabular-nums; }
   .kind { font-weight: 600; }
   .kind-error, .kind-hook-failed, .kind-notify-failed, .kind-expand-failed, .kind-kill-failed, .kind-makestep-failed { color: var(--crit); }
-  .kind-alert, .kind-suppressed, .kind-firing, .kind-warning, .kind-expand-skipped, .kind-makestep-skipped, .kind-panic-suppressed, .kind-notify-suppressed { color: var(--warn); }
+  .kind-alert, .kind-suppressed, .kind-firing, .kind-expand-skipped, .kind-makestep-skipped, .kind-panic-suppressed, .kind-notify-suppressed, .kind-advisory { color: var(--warn); }
   .kind-action, .kind-hook, .kind-notify, .kind-cascade, .kind-recovered, .kind-expand, .kind-kill { color: var(--ok); }
   .kind-dry-run, .kind-reload { color: var(--info); }
   .activity-time { font-weight: 600; font-variant-numeric: tabular-nums; }
@@ -531,6 +536,16 @@
   .activity-warn { color: var(--warn); }
   .activity-ok { color: var(--ok); }
   .activity-info { color: var(--info); }
+  .activity-critical { color: var(--critical); }
+  /* A graded event, check or notifier names its level beside its kind or
+     state: debug and info are routine news, warning an advisory, error an
+     outage, critical the outage that needs someone now. */
+  .sev { display: inline-block; margin-left: .35rem; padding: 0 .35rem; border-radius: var(--radius-s); font-size: .78em; font-weight: 600; text-transform: uppercase; letter-spacing: .02em; }
+  .sev-debug, .sev-info { color: var(--info); background: color-mix(in srgb, var(--info) 11%, transparent); }
+  .sev-warning { color: var(--warn); background: color-mix(in srgb, var(--warn) 11%, transparent); }
+  .sev-error { color: var(--crit); background: color-mix(in srgb, var(--crit) 11%, transparent); }
+  .sev-critical { color: var(--critical); background: color-mix(in srgb, var(--critical) 14%, transparent); }
+  .sev-critical-text { color: var(--critical); font-weight: 600; }
   .activity-muted { color: var(--text-2); }
   .lvl-error { color: var(--crit); font-weight: 600; }
   .lvl-warning { color: var(--warn); font-weight: 600; }

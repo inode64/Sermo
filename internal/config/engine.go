@@ -21,7 +21,7 @@ func engineValue(cfg *Config, key string) any {
 	return EngineSection(cfg)[key]
 }
 
-const defaultServiceRestartNoticeSubject = "[sermo] ${restart.service}: main process restarted"
+const defaultServiceRestartNoticeSubject = "[sermo][warning] ${restart.service}: main process restarted"
 
 // ServiceRestartNotice configures a one-shot global notification when a
 // service's principal process is younger than UptimeBelow. A zero value means

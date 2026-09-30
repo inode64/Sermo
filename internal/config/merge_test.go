@@ -78,3 +78,30 @@ func TestMergeMapsRetainedBranchesAreIndependent(t *testing.T) {
 		t.Fatalf("explicit nil must replace the old map: %v", out["replaced"])
 	}
 }
+
+// A check's levels restate its type's thresholds: an override that changes the
+// type drops the inherited tiers, or replaces them with its own, while one that
+// keeps the type still merges into them.
+func TestMergeMapsRetypedCheckDropsInheritedLevels(t *testing.T) {
+	catalog := map[string]any{
+		"type":     "metric",
+		"name":     "memory",
+		"op":       ">",
+		"value":    "30%",
+		"severity": "warning",
+		"levels":   map[string]any{"error": map[string]any{"value": "50%"}},
+	}
+	retyped := mergeMaps(catalog, map[string]any{"type": "memory", "used_pct": map[string]any{"op": ">=", "value": 90}})
+	if _, kept := retyped["levels"]; kept || retyped["severity"] != "warning" {
+		t.Fatalf("retyped check = %v, want the inherited levels dropped and the rest kept", retyped)
+	}
+	own := map[string]any{"critical": map[string]any{"used_pct": map[string]any{"op": ">=", "value": 99}}}
+	replaced := mergeMaps(catalog, map[string]any{"type": "memory", "levels": own})
+	if levels := replaced["levels"].(map[string]any); len(levels) != 1 || levels["critical"] == nil {
+		t.Fatalf("retyped levels = %v, want only the override's tiers", levels)
+	}
+	same := mergeMaps(catalog, map[string]any{"type": "metric", "levels": map[string]any{"critical": map[string]any{"value": "90%"}}})
+	if levels := same["levels"].(map[string]any); levels["error"] == nil || levels["critical"] == nil {
+		t.Fatalf("same-type levels = %v, want the override merged into the inherited tiers", levels)
+	}
+}

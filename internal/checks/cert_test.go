@@ -14,6 +14,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"sermo/internal/severity"
 )
 
 func fakeCert(s CertSample) CertSamplerFunc {
@@ -51,11 +53,11 @@ func TestCertEvaluatorChangeAndExpiry(t *testing.T) {
 	now := time.Now()
 
 	s := healthyCert() // 60 days out, fingerprint "aaaa"
-	if probs, _, _ := e.evaluate(s, opts, now); len(probs) != 0 {
+	if probs, _, _, _ := e.evaluate(s, opts, now); len(probs) != 0 {
 		t.Fatalf("first observation primes and a healthy cert must not alert: %v", probs)
 	}
 	s.Fingerprint = "bbbb" // changed
-	if probs, _, _ := e.evaluate(s, opts, now); len(probs) != 1 || probs[0] != "certificate changed" {
+	if probs, _, _, _ := e.evaluate(s, opts, now); len(probs) != 1 || probs[0] != "certificate changed" {
 		t.Fatalf("a fingerprint change must alert after priming: %v", probs)
 	}
 
@@ -63,9 +65,12 @@ func TestCertEvaluatorChangeAndExpiry(t *testing.T) {
 	var e2 certEvaluator
 	soon := healthyCert()
 	soon.NotAfter = now.Add(5 * 24 * time.Hour)
-	probs, daysLeft, hasExpiry := e2.evaluate(soon, certOptions{expiresInDays: 14}, now)
+	probs, daysLeft, hasExpiry, grade := e2.evaluate(soon, certOptions{expiresInDays: 14}, now)
 	if !hasExpiry || daysLeft > 5 || len(probs) != 1 {
 		t.Fatalf("a cert 5 days out must alert with expires_in_days=14: probs=%v days=%d", probs, daysLeft)
+	}
+	if grade != severity.Warning {
+		t.Fatalf("an expiring certificate grades %q, want warning", grade)
 	}
 }
 

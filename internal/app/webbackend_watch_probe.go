@@ -4,11 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"maps"
 	"time"
 
 	"sermo/internal/cfgval"
 	"sermo/internal/checks"
+	"sermo/internal/severity"
 	"sermo/internal/units"
 	"sermo/internal/web"
 )
@@ -31,7 +31,9 @@ func (b *WebBackend) probeWatchResult(ctx context.Context, w *webWatch) (checks.
 	if w.checkType == checks.CheckTypeSmart {
 		return b.startSmartShortTest(ctx, w)
 	}
-	check, err := checks.BuildInline(w.name, maps.Clone(w.check), b.watchCheckDeps())
+	// The check receives the watch's layered declaration, exactly as the daemon
+	// builds it, so its self-grade and its levels grade the probe the same way.
+	check, err := checks.BuildInline(w.name, withSeverity(w.check, w.severity), b.watchCheckDeps())
 	if err != nil {
 		return checks.Result{}, fmt.Errorf("build check: %w", err)
 	}
@@ -200,27 +202,24 @@ func (b *WebBackend) ProbeWatch(ctx context.Context, name string) web.ActionResu
 		b.watchSnapshots.publishConfigured(name, w.checkType, result, w.configID)
 	}
 	snap := checkSnapshotFromResult(result)
-	severity := checks.ResolveSeverity(result.Severity, w.severityFor(cfgval.String(result.Data[checks.DataKeyMetric])))
+	level := severity.Resolve(result.Severity, w.severityFor(cfgval.String(result.Data[checks.DataKeyMetric])))
 	// A manual probe reports through an event message, not through a panel with a
 	// gauge beside it, so the result line is the whole answer here.
-	readings := watchSnapshotReadings(w.checkType, severity, snap, false)
+	readings := watchSnapshotReadings(w.checkType, level, snap, false)
 	summary := watchSnapshotSummary(snap, readings)
 	ok := result.Healthy()
 	kind, status := eventKindAction, eventStatusOK
 	eventMessage := manualProbeCompletedMessage(summary, duration)
-	graded := ""
+	var graded severity.Level
 	if !ok {
-		// A manual probe of an advisory watch reports the same way its cycle does,
-		// and says so to its caller: announcing it as a failure would contradict
+		// A manual probe reports its grade the same way its cycle does, and says
+		// so to its caller: announcing an advisory as a failure would contradict
 		// the amber the same result gets everywhere else.
-		kind, status = eventKindError, eventStatusFailed
-		if checks.IsWarning(severity) {
-			kind, graded = eventKindWarning, severity
-		}
+		kind, status, graded = eventKindError, eventStatusFailed, level
 		eventMessage = manualProbeFailedMessage(summary, duration)
 	}
-	b.emitWatchMonitorEvent(name, eventActionProbe, kind, status, eventMessage)
-	return web.ActionResult{OK: ok, Message: summary, Readings: readings, Severity: graded}
+	b.emitMonitorSubjectEvent(Event{Watch: name, Severity: graded}, eventActionProbe, kind, status, eventMessage)
+	return web.ActionResult{OK: ok, Message: summary, Readings: readings, Severity: graded.String()}
 }
 
 // ManualProbeCheckType reports whether a watch of this check type answers a

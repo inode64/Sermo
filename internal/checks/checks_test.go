@@ -23,6 +23,7 @@ import (
 	"sermo/internal/execx"
 	"sermo/internal/execx/execxtest"
 	"sermo/internal/servicemgr"
+	"sermo/internal/severity"
 )
 
 func TestBaseBeginAppliesAndReleasesCheckTimeout(t *testing.T) {
@@ -631,6 +632,33 @@ func TestServiceCheck(t *testing.T) {
 	bad := serviceCheck{name: "s", timeout: time.Second, expect: "inactive", status: status}
 	if res := bad.Run(context.Background()); res.OK {
 		t.Errorf("active!=inactive should fail")
+	} else if res.Severity.Valid() {
+		t.Errorf("an unexpectedly running service graded %q, want the default grade", res.Severity)
+	}
+}
+
+// A service proven to be down is critical unless the check declares otherwise;
+// a status nobody could establish proves nothing.
+func TestServiceCheckGradesADownServiceCritical(t *testing.T) {
+	tests := []struct {
+		name     string
+		status   servicemgr.Status
+		declared severity.Level
+		want     severity.Level
+	}{
+		{"failed", servicemgr.StatusFailed, "", severity.Critical},
+		{"inactive", servicemgr.StatusInactive, "", severity.Critical},
+		{"unknown keeps the default", servicemgr.StatusUnknown, "", ""},
+		{"a declaration wins", servicemgr.StatusFailed, severity.Warning, severity.Warning},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			status := func(context.Context) (servicemgr.Status, error) { return tt.status, nil }
+			check := serviceCheck{name: "s", timeout: time.Second, severity: tt.declared, expect: "active", status: status}
+			if res := check.Run(context.Background()); res.OK || res.Severity != tt.want {
+				t.Fatalf("ok=%v severity=%q, want a failure graded %q", res.OK, res.Severity, tt.want)
+			}
+		})
 	}
 }
 
@@ -837,6 +865,16 @@ func TestProcessCheck(t *testing.T) {
 	absent := processCheck{name: "p", exes: []string{"/usr/bin/mariadb-backup"}, expect: "absent", observeAny: observe}
 	if res := absent.Run(context.Background()); res.OK {
 		t.Errorf("running!=absent should fail")
+	} else if res.Severity.Valid() {
+		t.Errorf("an unexpectedly running process graded %q, want the default grade", res.Severity)
+	}
+	gone := processCheck{name: "p", exes: []string{"/usr/sbin/mariadbd"}, expect: "running", observeAny: observe}
+	if res := gone.Run(context.Background()); res.OK || res.Severity != severity.Critical {
+		t.Errorf("a missing daemon = ok %v severity %q, want a critical failure", res.OK, res.Severity)
+	}
+	declared := processCheck{name: "p", exes: []string{"/usr/sbin/mariadbd"}, expect: "running", severity: severity.Error, observeAny: observe}
+	if res := declared.Run(context.Background()); res.Severity != severity.Error {
+		t.Errorf("declared severity = %q, want the declaration to win", res.Severity)
 	}
 }
 

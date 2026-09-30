@@ -2,7 +2,10 @@ name: oom
 category: host
 monitor: disabled
 interval: 30s
-check: { type: oom }  # no delta -> fires on any kill (> 0)
+# no delta -> fires on any kill (> 0); an OOM kill is graded error by default.
+# Add `levels: { critical: { delta: { op: ">=", value: 5 } } }` to page on a
+# burst of kills (a kill is true for one cycle, so keep no `for:` window).
+check: { type: oom }
 then:
   hook:
     command: [/usr/local/bin/sermo-oom-alert.sh]

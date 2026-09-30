@@ -7,6 +7,7 @@ import (
 	"sermo/internal/cfgval"
 	"sermo/internal/checks"
 	"sermo/internal/metrics"
+	"sermo/internal/severity"
 	"sermo/internal/web"
 )
 
@@ -40,8 +41,8 @@ func (o watchObservation) watchSnapshotView(w *webWatch, system metrics.Snapshot
 		// The result's own grade wins over the declaration: a check may call its
 		// finding an advisory (a SMART predicate under a PASSED verdict). Records
 		// persisted before the grade was stored carry none and fall back.
-		severity := checks.ResolveSeverity(snap.Severity, w.severityFor(cfgval.String(snap.Data[checks.DataKeyMetric])))
-		rs := watchSnapshotReadings(w.checkType, severity, snap, snapMeter != nil)
+		level := snap.severityOr(w.severityFor(cfgval.String(snap.Data[checks.DataKeyMetric])))
+		rs := watchSnapshotReadings(w.checkType, level, snap, snapMeter != nil)
 		readings = append(readings, rs...)
 		if meter == nil {
 			meter = snapMeter
@@ -121,12 +122,12 @@ func watchSnapshotMetricConfigured(w *webWatch, snap CheckSnapshot) bool {
 // severityFor resolves how grave one published sample is, narrowing this watch's
 // own gravity by the metric block that produced it. A net watch can therefore
 // call its error counter an advisory while its link state stays an outage.
-func (w *webWatch) severityFor(metric string) string {
-	declared := ""
+func (w *webWatch) severityFor(metric string) severity.Level {
+	var declared severity.Level
 	if m, ok := w.metrics[metric].(map[string]any); ok {
-		declared = cfgval.AsString(m[checks.CheckKeySeverity])
+		declared = severity.Level(cfgval.AsString(m[checks.CheckKeySeverity]))
 	}
-	return checks.ResolveSeverity(declared, w.severity)
+	return severity.Resolve(declared, w.severity)
 }
 
 // watchSnapshotReadings turns one snapshot into the rows its expansion shows.
@@ -137,7 +138,7 @@ func (w *webWatch) severityFor(metric string) string {
 // sentence as its summary. An expansion earns its space by adding to the row, not
 // by restating it. A failure is never suppressed — that is not a repetition of
 // the gauge, it is the thing the gauge cannot say.
-func watchSnapshotReadings(checkType, severity string, snap CheckSnapshot, gauged bool) []web.WatchReading {
+func watchSnapshotReadings(checkType string, level severity.Level, snap CheckSnapshot, gauged bool) []web.WatchReading {
 	readings := checkReadings(checkType, snap.Data)
 	if len(readings) == 0 && snap.Message != "" && !gauged {
 		readings = []web.WatchReading{{Field: watchReadingFieldResult, Label: watchReadingLabelResult, Value: snap.Message}}
@@ -146,7 +147,7 @@ func watchSnapshotReadings(checkType, severity string, snap CheckSnapshot, gauge
 		// An advisory reports through Warning, never Error: a non-empty Error is
 		// precisely what paints the row red.
 		bad := web.WatchReading{Field: watchReadingFieldError, Label: watchReadingLabelError, Error: snap.Message}
-		if checks.IsWarning(severity) {
+		if level.Advisory() {
 			bad = web.WatchReading{Field: watchReadingFieldWarning, Label: watchReadingLabelWarning, Warning: snap.Message}
 		}
 		readings = append([]web.WatchReading{bad}, readings...)

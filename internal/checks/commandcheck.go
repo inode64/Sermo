@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	"sermo/internal/cfgval"
 	"sermo/internal/execx"
 	"sermo/internal/output"
 )
@@ -33,10 +34,13 @@ type commandCheck struct {
 	expectExit []int
 	stdout     OutputMatcher
 	stderr     OutputMatcher
-	version    VersionMatcher
-	exports    []commandExport
-	analyzer   *outputAnalyzer
-	onChange   bool
+	// stdoutGrades are the kept `levels:` tiers of an ordered expect_stdout
+	// assertion, each a looser bound that breaches when it fails as well.
+	stdoutGrades grades[valueMatcher]
+	version      VersionMatcher
+	exports      []commandExport
+	analyzer     *outputAnalyzer
+	onChange     bool
 	// changeLevel selects how on_change compares output: 0 compares the trimmed
 	// raw line; 1/2/3 compare version_short truncated to that many components
 	// (major/minor/patch), with a raw-line fallback when no version is parseable.
@@ -81,7 +85,7 @@ func (c commandCheck) Run(ctx context.Context) Result {
 		return fail(msg)
 	}
 	if ok, detail := c.stdout.Match(res.Stdout); !ok {
-		return fail(fmt.Sprintf("exit %d; stdout %s", res.ExitCode, detail))
+		return gradeStdout(fail(fmt.Sprintf("exit %d; stdout %s", res.ExitCode, detail)), c.stdoutGrades, res.Stdout)
 	}
 	if ok, detail := c.stderr.Match(res.Stderr); !ok {
 		return fail(fmt.Sprintf("exit %d; stderr %s", res.ExitCode, detail))
@@ -90,10 +94,15 @@ func (c commandCheck) Run(ctx context.Context) Result {
 		return fail(fmt.Sprintf("exit %d; version %s", res.ExitCode, detail))
 	}
 	if c.analyzer.Active() {
-		if sev, id, line := c.analyzer.Analyze(res.Stdout, res.Stderr); sev != SevOK {
-			r := c.result(false, fmt.Sprintf("exit %d; %s pattern %q: %s", res.ExitCode, sev, id, output.FirstNonEmptyLine(line)), start)
-			r.Optional = sev == SevWarning
-			r.Data = map[string]any{DataKeyPatternID: id, DataKeyPatternSeverity: sev.String(), DataKeyPatternLine: line}
+		if grade, id, line := c.analyzer.Analyze(res.Stdout, res.Stderr); grade.Valid() {
+			r := c.result(false, fmt.Sprintf("exit %d; %s pattern %q: %s", res.ExitCode, grade, id, output.FirstNonEmptyLine(line)), start)
+			// An advisory grade keeps a preflight non-blocking, and it grades the
+			// finding when the check declares no severity of its own.
+			r.Optional = grade.Advisory()
+			if !c.severity.Valid() {
+				r.Severity = grade
+			}
+			r.Data = map[string]any{DataKeyPatternID: id, DataKeyPatternSeverity: grade.String(), DataKeyPatternLine: line}
 			if out := output.Bounded(res.Stdout, res.Stderr); out != "" {
 				r.Data[DataKeyOutput] = out
 			}
@@ -104,7 +113,7 @@ func (c commandCheck) Run(ctx context.Context) Result {
 		raw := strings.TrimSpace(res.Stdout)
 		key := c.changeKey(raw)
 		if c.state.primed && key != c.state.last {
-			r := c.result(false, fmt.Sprintf("output changed (%s -> %s)", output.FirstNonEmptyLine(c.state.lastRaw), output.FirstNonEmptyLine(raw)), start)
+			r := c.changeResult(c.result(false, fmt.Sprintf("output changed (%s -> %s)", output.FirstNonEmptyLine(c.state.lastRaw), output.FirstNonEmptyLine(raw)), start))
 			r.Data = map[string]any{DataKeyOld: c.state.lastRaw, DataKeyNew: raw}
 			c.state.last, c.state.lastRaw = key, raw
 			return r
@@ -202,4 +211,27 @@ func (c commandCheck) exportData(stdout, stderr string) map[string]any {
 		out[e.name] = e.value(stdout, stderr)
 	}
 	return out
+}
+
+// outputGrades parses the kept tiers of a command check: each restates the
+// expect_stdout assertion with a looser bound.
+func outputGrades(specs []levelSpec) grades[valueMatcher] {
+	return parseGrades(specs, func(tier map[string]any) (valueMatcher, bool) {
+		assertion, ok := tier[CheckKeyExpectStdout].(map[string]any)
+		if !ok {
+			return valueMatcher{}, false
+		}
+		return newValueMatcher(cfgval.String(assertion[CheckKeyOp]), cfgval.String(assertion[CheckKeyValue])), true
+	})
+}
+
+// gradeStdout raises a failed stdout assertion to the highest tier whose
+// looser assertion fails too. Output a tier cannot compare (not a number)
+// never escalates: the base failure already reports it.
+func gradeStdout(res Result, tiers grades[valueMatcher], stdout string) Result {
+	trimmed := strings.TrimSpace(stdout)
+	return raiseSeverity(res, tiers.highest(func(m valueMatcher) bool {
+		pass, err := m.compare(trimmed)
+		return err == nil && !pass
+	}))
 }

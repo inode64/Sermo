@@ -5,10 +5,12 @@ import (
 	"fmt"
 	"math"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 
 	"sermo/internal/logfile"
+	"sermo/internal/severity"
 	"sermo/internal/state"
 )
 
@@ -127,16 +129,17 @@ func (l *EventLog) exportEvent(e LoggedEvent) {
 	}
 	rec := eventRecordFromLogged(e)
 	_ = w.Write(map[string]any{
-		eventFieldTime:    rec.At.UTC().Format(time.RFC3339),
-		eventFieldService: rec.Service,
-		eventFieldWatch:   rec.Watch,
-		eventFieldApp:     rec.App,
-		eventFieldKind:    rec.Kind,
-		eventFieldRule:    rec.Rule,
-		eventFieldAction:  rec.Action,
-		eventFieldStatus:  rec.Status,
-		eventFieldMessage: rec.Message,
-		eventFieldOutput:  rec.Output,
+		eventFieldTime:     rec.At.UTC().Format(time.RFC3339),
+		eventFieldService:  rec.Service,
+		eventFieldWatch:    rec.Watch,
+		eventFieldApp:      rec.App,
+		eventFieldKind:     rec.Kind,
+		eventFieldRule:     rec.Rule,
+		eventFieldAction:   rec.Action,
+		eventFieldStatus:   rec.Status,
+		eventFieldMessage:  rec.Message,
+		eventFieldOutput:   rec.Output,
+		eventFieldSeverity: rec.Severity,
 	})
 }
 
@@ -310,12 +313,20 @@ func (l *EventLog) addLocked(e LoggedEvent) {
 }
 
 func (l *EventLog) indexLocked(e LoggedEvent) {
-	if e.Watch != "" && isWatchActivityKind(e.Kind) {
+	if e.Watch != "" && isWatchActivityKind(e.Kind) && !recoveryDelivery(l.lastByWatch[e.Watch], e) {
 		l.lastByWatch[e.Watch] = e
 	}
 	if e.App != "" {
 		l.lastByApp[e.App] = e
 	}
+}
+
+// recoveryDelivery reports a notify or notify-failed event that reports the
+// delivery of the recovery before it: the recovery stays the watch's last
+// activity, so a notifier that failed to hear it does not paint a recovered
+// watch red.
+func recoveryDelivery(last, e LoggedEvent) bool {
+	return last.Kind == eventKindRecovered && (e.Kind == eventKindNotify || e.Kind == eventKindNotifyFail)
 }
 
 func (l *EventLog) rebuildIndexesLocked() {
@@ -430,32 +441,57 @@ func MultiEmit(emitters ...func(Event)) func(Event) {
 
 func eventRecordFromLogged(e LoggedEvent) state.EventRecord {
 	return state.EventRecord{
-		ID:      e.ID,
-		At:      e.Time,
-		Service: e.Service,
-		Watch:   e.Watch,
-		App:     e.App,
-		Kind:    e.Kind,
-		Rule:    e.Rule,
-		Action:  e.Action,
-		Status:  e.Status,
-		Message: e.Message,
-		Output:  e.Output,
+		ID:       e.ID,
+		At:       e.Time,
+		Service:  e.Service,
+		Watch:    e.Watch,
+		App:      e.App,
+		Kind:     e.Kind,
+		Rule:     e.Rule,
+		Action:   e.Action,
+		Status:   e.Status,
+		Message:  e.Message,
+		Output:   e.Output,
+		Severity: e.Severity.String(),
 	}
 }
 
+// legacyEventKindWarning is the kind older binaries recorded an advisory
+// under, before severity had its own column. The schema migration converts the
+// rows present when it runs; a row an older binary writes afterwards (a
+// downgrade, or an old sermod still running while a new sermoctl migrated the
+// store) is converted as it is read.
+const legacyEventKindWarning = "warning"
+
+// normalizeLegacyEvent reads a legacy advisory row the way the migration
+// converts one: an unavailable check or a failed manual probe is an error
+// graded warning, anything else an advisory firing.
+func normalizeLegacyEvent(e state.EventRecord) state.EventRecord {
+	if e.Kind != legacyEventKindWarning || e.Severity != "" {
+		return e
+	}
+	e.Severity = severity.Warning.String()
+	e.Kind = eventKindFiring
+	if e.Action == eventActionProbe || strings.HasPrefix(e.Message, checkUnavailablePrefix) {
+		e.Kind = eventKindError
+	}
+	return e
+}
+
 func loggedEventFromRecord(e state.EventRecord) LoggedEvent {
+	e = normalizeLegacyEvent(e)
 	return LoggedEvent{
-		ID:      e.ID,
-		Time:    e.At,
-		Service: e.Service,
-		Watch:   e.Watch,
-		App:     e.App,
-		Kind:    e.Kind,
-		Rule:    e.Rule,
-		Action:  e.Action,
-		Status:  e.Status,
-		Message: e.Message,
-		Output:  e.Output,
+		ID:       e.ID,
+		Time:     e.At,
+		Service:  e.Service,
+		Watch:    e.Watch,
+		App:      e.App,
+		Kind:     e.Kind,
+		Rule:     e.Rule,
+		Action:   e.Action,
+		Status:   e.Status,
+		Message:  e.Message,
+		Output:   e.Output,
+		Severity: severity.Level(e.Severity),
 	}
 }

@@ -19,6 +19,7 @@ import (
 	"sermo/internal/process"
 	"sermo/internal/rules"
 	"sermo/internal/servicemgr"
+	"sermo/internal/severity"
 	"sermo/internal/state"
 	"sermo/internal/web"
 )
@@ -50,7 +51,7 @@ const (
 const (
 	backendStatusError        = "error"
 	watchReadingFieldError    = "error"
-	watchReadingFieldWarning  = checks.SeverityWarning
+	watchReadingFieldWarning  = string(severity.Warning)
 	watchReadingFieldCPUTicks = "cpu_ticks"
 	watchReadingFieldMatches  = "matches"
 	watchReadingFieldProcess  = checks.CheckTypeProcess
@@ -128,10 +129,11 @@ type webWatch struct {
 	dryRun      bool
 	check       map[string]any
 	metrics     map[string]any
-	// severity is the watch entry's own gravity layered with its check block. A
-	// metric block narrows it further; severityFor applies that last step, so the
-	// dashboard resolves the same chain the daemon builder does.
-	severity           string
+	// severity is the gravity the watch entry and its check block declare
+	// (unset when neither does). A metric block narrows it further; severityFor
+	// applies that last step, so the dashboard resolves the same chain the daemon
+	// builder does, and a manual probe hands the check the same declaration.
+	severity           severity.Level
 	expand             *ExpandSpec
 	raidControl        bool
 	replicationControl bool
@@ -143,10 +145,11 @@ type webWatch struct {
 
 // webNotifier is a configured notification target (used by watches).
 type webNotifier struct {
-	name    string
-	typ     string
-	enabled bool
-	summary string
+	name        string
+	typ         string
+	enabled     bool
+	summary     string
+	minSeverity severity.Level
 }
 
 type stateMaintainer interface {
@@ -540,7 +543,7 @@ func (b *WebBackend) registerNotifiers(cfg *config.Config) {
 	for _, name := range slices.Sorted(maps.Keys(notifiers)) {
 		entry, _ := notifiers[name].(map[string]any)
 		typ := cfgval.AsString(entry[notify.KeyType])
-		b.notifiers[name] = &webNotifier{name: name, typ: typ, enabled: !cfgval.Disabled(entry), summary: notify.ConfigSummary(typ, entry)}
+		b.notifiers[name] = &webNotifier{name: name, typ: typ, enabled: !cfgval.Disabled(entry), summary: notify.ConfigSummary(typ, entry), minSeverity: notify.EntryMinSeverity(entry)}
 		b.notifierOrder = append(b.notifierOrder, name)
 	}
 }
@@ -600,7 +603,7 @@ func newWebWatch(name string, entry map[string]any, globalNotify []string, defau
 		dryRun:             config.DryRun(entry),
 		check:              checkMap(entry),
 		metrics:            metricsMap(entry),
-		severity:           watchSeverity(entry, checkMap(entry)),
+		severity:           checks.DeclaredSeverity(entry, checkMap(entry)),
 		expand:             expand,
 		raidControl:        raidControl,
 		replicationControl: replicationControl,

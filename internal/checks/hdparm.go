@@ -68,7 +68,7 @@ func (c *hdparmCheck) Run(ctx context.Context) Result {
 	ok := levelPredsHold(c.preds, values)
 
 	c.last.record("", values, start)
-	r := c.result(ok, hdparmMessage(c.device, values), start)
+	r := c.grade(c.result(ok, hdparmMessage(c.device, values), start), values)
 	r.Data = withDeviceBus(hdparmResultData(c.device, values), c.deviceBus, c.device)
 	return r
 }

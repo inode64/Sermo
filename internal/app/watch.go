@@ -1,6 +1,7 @@
 package app
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -16,6 +17,7 @@ import (
 	"sermo/internal/emission"
 	"sermo/internal/notify"
 	"sermo/internal/rules"
+	"sermo/internal/severity"
 	"sermo/internal/state"
 	"sermo/internal/volume"
 )
@@ -88,12 +90,12 @@ type Watch struct {
 	// DryRun keeps watch evaluation and firing events active, but reports the
 	// configured actions without executing hook, non-console notify or expand side effects.
 	DryRun bool
-	// Severity is how grave this watch's failures are: checks.SeverityError (the
-	// default) or checks.SeverityWarning, which reports the same verdict as an
-	// advisory instead of an outage. It changes reporting only — the window, the
-	// actions and the notifications are unchanged — so nothing that gates an
-	// automatic action can read a warning as healthy.
-	Severity string
+	// Severity is how grave this watch's failures are: severity.Error (the
+	// default), an advisory level below it that reports the same verdict without
+	// holding against health, or severity.Critical. It changes reporting only —
+	// the window, the actions and the notifications are unchanged — so nothing
+	// that gates an automatic action can read an advisory as healthy.
+	Severity severity.Level
 	Interval time.Duration
 	Now      func() time.Time
 	Emit     func(Event)
@@ -162,13 +164,19 @@ type Watch struct {
 	state          rules.WindowState
 	policyState    rules.RemediationState
 	firing         bool
-	lastGrade      string    // severity the open firing episode was last announced with
 	lastNotifyAt   time.Time // when a notification was last dispatched this firing episode
 	settled        bool      // true after the startup observation cycle completed
 	stateLoaded    bool
 	stateRestored  bool
 	persistedState state.WatchRuntimeRecord // immutable snapshot; replaced after successful persistence
 	unavailable    bool
+	// legacyNotified marks a restored episode whose record predates the
+	// notified level but shows a notification: the first graded cycle adopts
+	// it at the episode's grade.
+	legacyNotified bool
+	// transitionHeard is the gravest failing RAID/LVM transition delivered
+	// since the last healthy one; it persists with the runtime record.
+	transitionHeard severity.Level
 }
 
 const watchEnvAssignSeparator = "="
@@ -229,23 +237,21 @@ func (w *Watch) runCheckCycle(ctx context.Context, res checks.Result, observeOnl
 	}
 	w.recordMetricSamples(res)
 	if observeOnly {
-		w.reconcileRestoredEpisode(res)
-		if w.firing {
-			// A restored episode was announced by the previous process; seed the
-			// grade silently so an unchanged episode is not announced twice.
-			w.lastGrade = w.resultSeverity(res)
-		}
+		// A restored episode that is still firing keeps its recorded severity:
+		// the next graded cycle adopts it silently, so an unchanged episode is
+		// never announced twice.
+		w.reconcileRestoredEpisode(ctx, res)
 		w.markSettled()
 		return
 	}
 	w.recordAvailabilitySample(res)
 	w.dispatchRaidTransitions(ctx, res)
 	w.dispatchLVMTransition(ctx, res)
-	wasFiring, emitFiring, firing := w.evaluateFiring(ctx, res)
+	step, firing := w.evaluateFiring(ctx, res)
 	if !firing {
 		return
 	}
-	w.dispatchFiringActions(ctx, res, wasFiring, emitFiring)
+	w.dispatchFiringActions(ctx, res, step)
 }
 
 // watchAvailabilityCheck is the notification identity of a watch's
@@ -253,6 +259,9 @@ func (w *Watch) runCheckCycle(ctx context.Context, res checks.Result, observeOnl
 // firing episode, so a probe that comes back cannot announce a still-firing
 // watch as recovered or close its reminders.
 const watchAvailabilityCheck = "availability"
+
+// checkUnavailablePrefix opens the message of a watch's unavailability edge.
+const checkUnavailablePrefix = "check unavailable: "
 
 // updateAvailability keeps an unavailable observation out of condition windows
 // and, critically, out of automatic actions. It emits only on edges and stores
@@ -262,7 +271,7 @@ func (w *Watch) updateAvailability(res checks.Result) bool {
 	if observation == checks.ObservationUnavailable {
 		if !w.unavailable {
 			w.unavailable = true
-			w.emit(Event{Watch: w.Name, Kind: w.eventKind(eventKindError, res), Check: watchAvailabilityCheck, Message: "check unavailable: " + res.Message})
+			w.emit(Event{Watch: w.Name, Kind: eventKindError, Severity: w.resultSeverity(res), Check: watchAvailabilityCheck, Message: checkUnavailablePrefix + res.Message})
 		}
 		return true
 	}
@@ -276,41 +285,27 @@ func (w *Watch) updateAvailability(res checks.Result) bool {
 	return false
 }
 
-// eventKind names the event this watch raises for its own bad news. An advisory
-// raises the warning kind in place of both "error" and "firing": the kind is the
-// one severity channel that survives a daemon restart, because it is what the
-// event log stores, and it is per metric, because each metric of a net/icmp watch
-// is its own Watch with its own severity. So a sleeping disk that cannot be timed
-// and a link's error counter stop looking like a dead disk and a dead link.
-//
-// The grade is the result's: a check that received no declaration may call its
-// own finding an advisory, and a declared severity already travels in the result.
-func (w *Watch) eventKind(grave string, res checks.Result) string {
-	if checks.IsWarning(w.resultSeverity(res)) {
-		return eventKindWarning
-	}
-	return grave
-}
-
 // resultSeverity is how grave this result is: the grade the check gave it, or
-// the watch's resolved declaration when the result carries none.
-func (w *Watch) resultSeverity(res checks.Result) string {
-	return checks.ResolveSeverity(res.Severity, w.Severity)
+// the watch's resolved declaration when the result carries none. The event
+// kind no longer carries it — each event records its own severity — so a
+// sleeping disk that cannot be timed and a link's error counter stop looking
+// like a dead disk and a dead link, per metric and across a restart.
+func (w *Watch) resultSeverity(res checks.Result) severity.Level {
+	return severity.Resolve(res.Severity, w.Severity)
 }
 
-// gradeChanged reports whether an open episode has just been regraded — an
-// outage that became an advisory or the reverse — which is worth announcing
-// even though the episode itself was announced when it opened. It records the
-// grade for the next cycle; a fresh episode always records without announcing
-// a change.
-func (w *Watch) gradeChanged(wasFiring bool, res checks.Result) bool {
-	grade := w.resultSeverity(res)
-	changed := wasFiring && w.lastGrade != "" && w.lastGrade != grade
-	w.lastGrade = grade
-	return changed
+// watchStep is one live cycle of the watch's firing episode.
+type watchStep struct {
+	wasFiring bool
+	// announce is set when the episode opened (within the emission policy) or
+	// escalated: the cycles whose firing event and notification go out.
+	announce  bool
+	escalated bool
+	// level is the episode's sustained severity (escalate and hold).
+	level severity.Level
 }
 
-func (w *Watch) evaluateFiring(ctx context.Context, res checks.Result) (wasFiring, emitFiring, firing bool) {
+func (w *Watch) evaluateFiring(ctx context.Context, res checks.Result) (watchStep, bool) {
 	// Actions consume the raw predicate just like rule conditions do. Observation
 	// owns availability, while FireOnFail remains the explicit mapping from this
 	// watch's predicate to its firing condition.
@@ -318,35 +313,68 @@ func (w *Watch) evaluateFiring(ctx context.Context, res checks.Result) (wasFirin
 	if w.FireOnFail {
 		fired = !res.OK
 	}
-	if !w.state.FiresAt(w.Window, fired, w.clock()) {
-		w.recover(ctx, res)
-		return false, false, false
+	// An episode restored from before severity was kept, and closing before
+	// any graded cycle, takes the watch's own grade.
+	legacy := cmp.Or(w.state.Severity(), w.resultSeverity(res))
+	w.adoptLegacyNotification(legacy)
+	announced := w.state.Notified()
+	episode := w.state.FiresGradedAt(w.Window, fired, w.resultSeverity(res), w.clock())
+	if !episode.Firing {
+		w.recover(ctx, res, cmp.Or(episode.Severity, legacy), announced)
+		return watchStep{}, false
 	}
-	wasFiring = w.firing
+	step := watchStep{wasFiring: w.firing, level: episode.Severity}
 	w.firing = true
 	if !fired {
 		// A clear window is holding the episode open: the condition is not met
 		// this cycle, so hooks/notify/expand must not run on it.
-		return wasFiring, false, false
+		return step, false
 	}
-	regraded := w.gradeChanged(wasFiring, res)
-	return wasFiring, w.shouldEmitFiring(wasFiring) || regraded, true
+	step.escalated = step.wasFiring && episode.Raised
+	step.announce = w.shouldEmitFiring(step.wasFiring) || step.escalated
+	return step, true
 }
 
-func (w *Watch) recover(ctx context.Context, res checks.Result) {
+// adoptLegacyNotification records the notification a restored pre-grading
+// episode delivered, at level — the episode's own grade — so its recovery
+// reaches the notifiers that heard it.
+func (w *Watch) adoptLegacyNotification(level severity.Level) {
+	if w.legacyNotified {
+		w.legacyNotified = false
+		w.state.MarkNotified(level)
+	}
+}
+
+// recover closes the firing episode at level, the gravest severity it
+// reached; announced is the gravest level it notified at.
+func (w *Watch) recover(ctx context.Context, res checks.Result, level, announced severity.Level) {
 	if !w.firing {
 		return
 	}
 	w.firing = false
-	w.lastGrade = ""
 	w.lastNotifyAt = time.Time{}
-	w.emit(Event{Watch: w.Name, Kind: eventKindRecovered, Message: res.Message})
-	w.runRecoverHook(ctx, res)
+	w.emit(Event{Watch: w.Name, Kind: eventKindRecovered, Severity: level, Message: res.Message})
+	w.runRecoverHook(ctx, res, level)
+	w.notifyRecovery(ctx, res, announced)
+}
+
+// notifyRecovery tells the watch's notifiers that an announced episode ended,
+// at announced — the gravest level it delivered — so exactly the notifiers
+// that heard the incident hear it is over. An episode that notified no one,
+// or a RAID/LVM watch announcing its own transitions (on_good), sends nothing.
+func (w *Watch) notifyRecovery(ctx context.Context, res checks.Result, announced severity.Level) {
+	if !announced.Valid() || len(w.Notifiers) == 0 || len(w.RaidNotifyEvents) > 0 || (w.InPanic != nil && w.InPanic()) {
+		return
+	}
+	env := hookEnv(w.Name, w.CheckType, res, announced)
+	env[sermoEnvEvent] = eventKindRecovered
+	msg := watchMessage(w.Name, recoveredMessagePrefix+res.Message, env)
+	dispatchNotifyFiltered(ctx, w.Notifiers, msg, w.Name, w.emit, dryRunFilter(w.DryRun))
 }
 
 // runRecoverHook executes the recovery-edge hook, honoring the same dry-run and
 // panic gates the firing-side actions honor.
-func (w *Watch) runRecoverHook(ctx context.Context, res checks.Result) {
+func (w *Watch) runRecoverHook(ctx context.Context, res checks.Result, level severity.Level) {
 	if len(w.RecoverHook.Command) == 0 {
 		return
 	}
@@ -358,7 +386,7 @@ func (w *Watch) runRecoverHook(ctx context.Context, res checks.Result) {
 		w.emit(Event{Watch: w.Name, Kind: eventKindPanicSuppressed, Message: "panic mode: recover hook suppressed"})
 		return
 	}
-	env := hookEnv(w.Name, w.CheckType, res)
+	env := hookEnv(w.Name, w.CheckType, res, level)
 	env[sermoEnvEvent] = eventKindRecovered
 	if err := w.RecoverHook.Run(ctx, defaultHookRunner(w.Runner), env); err != nil {
 		w.emit(Event{Watch: w.Name, Kind: eventKindHookFail, Message: "recover hook: " + err.Error()})
@@ -367,40 +395,52 @@ func (w *Watch) runRecoverHook(ctx context.Context, res checks.Result) {
 	w.emit(Event{Watch: w.Name, Kind: eventKindHook, Message: "recover hook: " + res.Message})
 }
 
-func (w *Watch) dispatchFiringActions(ctx context.Context, res checks.Result, wasFiring, emitFiring bool) {
-	if emitFiring {
-		w.emit(Event{Watch: w.Name, Kind: w.eventKind(eventKindFiring, res), Message: res.Message, Output: resultOutput(res)})
+func (w *Watch) dispatchFiringActions(ctx context.Context, res checks.Result, step watchStep) {
+	if step.announce {
+		w.emit(Event{Watch: w.Name, Kind: eventKindFiring, Severity: step.level, Message: res.Message, Output: resultOutput(res)})
 	}
 	if len(w.Hook.Command) == 0 && len(w.Notifiers) == 0 && w.Expand == nil && w.MakeStep == nil {
 		return
 	}
-	env := hookEnv(w.Name, w.CheckType, res)
+	env := hookEnv(w.Name, w.CheckType, res, step.level)
 	if w.DryRun {
-		if emitFiring {
+		if step.announce {
 			w.emit(Event{Watch: w.Name, Kind: eventKindDryRun, Message: w.dryRunMessage()})
 		}
-		if len(w.RaidNotifyEvents) == 0 && w.shouldNotify(wasFiring) {
-			dispatchDryRunNotify(ctx, w.Notifiers, watchMessage(w.Name, res.Message, env), w.Name, w.emit)
-		}
+		w.notifyFiring(ctx, step, watchMessage(w.Name, res.Message, env))
 		return
 	}
 	if w.InPanic != nil && w.InPanic() {
-		if emitFiring {
+		if step.announce {
 			w.emit(Event{Watch: w.Name, Kind: eventKindPanicSuppressed, Message: "panic mode: hook/notify/expand/makestep suppressed"})
 		}
 		return
 	}
 
 	if w.Expand != nil && w.Expander != nil {
-		w.runExpand(ctx, res, emitFiring)
+		w.runExpand(ctx, res, step.announce)
 	}
 	if w.MakeStep != nil && w.Stepper != nil {
-		w.runMakeStep(ctx, res, emitFiring)
+		w.runMakeStep(ctx, res, step.announce)
 	}
 	runWatchHook(ctx, w.Hook, w.Runner, w.emit, w.Name, res.Message, env)
-	if len(w.RaidNotifyEvents) == 0 && w.shouldNotify(wasFiring) {
-		dispatchNotify(ctx, w.Notifiers, watchMessage(w.Name, res.Message, env), w.Name, w.emit)
+	w.notifyFiring(ctx, step, watchMessage(w.Name, res.Message, env))
+}
+
+// notifyFiring sends a firing cycle's notification when the cadence calls for
+// one — only to the console in dry-run mode — and records the level a live
+// notification announced at, so the recovery reaches the same audience. A RAID/LVM watch
+// announces its own transitions instead.
+func (w *Watch) notifyFiring(ctx context.Context, step watchStep, msg notify.Message) {
+	if len(w.RaidNotifyEvents) > 0 || !w.shouldNotify(step) {
+		return
 	}
+	// A dry-run notification reaches the console only: the audience a later
+	// live recovery must match is the one that really heard the episode.
+	if !w.DryRun {
+		w.state.MarkNotified(step.level)
+	}
+	dispatchNotifyFiltered(ctx, w.Notifiers, msg, w.Name, w.emit, dryRunFilter(w.DryRun))
 }
 
 func (w *Watch) dispatchLVMTransition(ctx context.Context, res checks.Result) {
@@ -421,15 +461,18 @@ func (w *Watch) dispatchLVMTransition(ctx context.Context, res checks.Result) {
 	changed.Data["lvm_reasons"] = transition.Reasons
 	changed.Data["lvm_previous_reasons"] = transition.PreviousReasons
 	changed.Message = fmt.Sprintf("lvm state %s -> %s", transition.OldState, transition.NewState)
+	level := w.transitionSeverity(changed)
+	msg := watchMessage(w.Name, changed.Message, transitionEnv(w.Name, w.CheckType, changed, level))
 	if w.DryRun {
-		dispatchDryRunNotify(ctx, w.Notifiers, watchMessage(w.Name, changed.Message, hookEnv(w.Name, w.CheckType, changed)), w.Name, w.emit)
+		dispatchDryRunNotify(ctx, w.Notifiers, msg, w.Name, w.emit)
 		return
 	}
 	if w.InPanic != nil && w.InPanic() {
 		w.emit(Event{Watch: w.Name, Kind: eventKindPanicSuppressed, Message: "panic mode: LVM notification suppressed: " + changed.Message})
 		return
 	}
-	dispatchNotify(ctx, w.Notifiers, watchMessage(w.Name, changed.Message, hookEnv(w.Name, w.CheckType, changed)), w.Name, w.emit)
+	w.noteTransition(changed, level)
+	dispatchNotify(ctx, w.Notifiers, msg, w.Name, w.emit)
 }
 
 func (w *Watch) dispatchRaidTransitions(ctx context.Context, res checks.Result) {
@@ -454,7 +497,8 @@ func (w *Watch) dispatchRaidTransitions(ctx context.Context, res checks.Result) 
 
 func (w *Watch) dispatchRaidTransition(ctx context.Context, res checks.Result, transition checks.RaidTransition) {
 	transitionResult := raidTransitionResult(res, transition)
-	env := hookEnv(w.Name, w.CheckType, transitionResult)
+	level := w.transitionSeverity(transitionResult)
+	env := transitionEnv(w.Name, w.CheckType, transitionResult, level)
 	if w.DryRun {
 		dispatchDryRunNotify(ctx, w.Notifiers, watchMessage(w.Name, transitionResult.Message, env), w.Name, w.emit)
 		return
@@ -463,7 +507,42 @@ func (w *Watch) dispatchRaidTransition(ctx context.Context, res checks.Result, t
 		w.emit(Event{Watch: w.Name, Kind: eventKindPanicSuppressed, Message: "panic mode: RAID notification suppressed: " + transitionResult.Message})
 		return
 	}
+	w.noteTransition(transitionResult, level)
 	dispatchNotify(ctx, w.Notifiers, watchMessage(w.Name, transitionResult.Message, env), w.Name, w.emit)
+}
+
+// transitionSeverity grades a RAID/LVM lifecycle notification: the result's
+// own grade while the array or volume is failing; once it is healthy again,
+// the gravest failing transition delivered since the last healthy one, so the
+// recovery reaches exactly the channels that heard the failure, and info when
+// none did.
+func (w *Watch) transitionSeverity(res checks.Result) severity.Level {
+	if res.Observation() == checks.ObservationFailing {
+		return w.resultSeverity(res)
+	}
+	return severity.Max(severity.Info, w.transitionHeard)
+}
+
+// transitionEnv is a RAID/LVM transition's hook environment; a healthy
+// transition is the incident's recovery and says so, so a transport paints it
+// as good news.
+func transitionEnv(name, checkType string, res checks.Result, level severity.Level) map[string]string {
+	env := hookEnv(name, checkType, res, level)
+	if res.Observation() != checks.ObservationFailing {
+		env[sermoEnvEvent] = eventKindRecovered
+	}
+	return env
+}
+
+// noteTransition records a live RAID/LVM notification about to be delivered:
+// a failing one raises the level the next healthy transition reports at, and a
+// healthy one closes the incident.
+func (w *Watch) noteTransition(res checks.Result, level severity.Level) {
+	if res.Observation() == checks.ObservationFailing {
+		w.transitionHeard = severity.Max(w.transitionHeard, level)
+		return
+	}
+	w.transitionHeard = ""
 }
 
 func combineRaidArrayChanges(array string, changes []checks.RaidTransition) checks.RaidTransition {
@@ -563,17 +642,18 @@ func (w *Watch) clock() time.Time {
 }
 
 // shouldNotify reports whether the watch should dispatch a notification this
-// firing cycle. It notifies once on the rising edge (when the alert starts);
-// if NotifyInterval is set, it re-notifies as a reminder once that interval
-// elapses while the watch stays firing. lastNotifyAt is reset on recovery, so
-// a fresh firing episode always notifies again.
-func (w *Watch) shouldNotify(wasFiring bool) bool {
+// firing cycle. It notifies on the rising edge (when the alert starts) and on
+// every escalation; if NotifyInterval is set, it re-notifies as a reminder at
+// the held severity once that interval elapses while the watch stays firing,
+// counted from the last announcement. lastNotifyAt is reset on recovery, so a
+// fresh firing episode always notifies again.
+func (w *Watch) shouldNotify(step watchStep) bool {
 	now := w.clock()
 	if w.emissionPolicy().Notify == emission.ModeEveryCycle {
 		w.lastNotifyAt = now
 		return true
 	}
-	if !wasFiring {
+	if !step.wasFiring || step.escalated {
 		w.lastNotifyAt = now
 		return true
 	}
@@ -730,16 +810,7 @@ func dispatchDryRunNotify(ctx context.Context, notifiers []notify.Notifier, msg 
 }
 
 func dispatchNotifyFiltered(ctx context.Context, notifiers []notify.Notifier, msg notify.Message, watch string, emit func(Event), allow func(notify.Notifier) bool) {
-	for _, n := range notifiers {
-		if allow != nil && !allow(n) {
-			continue
-		}
-		if err := n.Send(ctx, msg); err != nil {
-			emit(Event{Watch: watch, Kind: eventKindNotifyFail, Message: n.Name() + ": " + err.Error()})
-		} else {
-			emit(Event{Watch: watch, Kind: eventKindNotify, Message: "notified " + n.Name()})
-		}
-	}
+	deliverNotification(ctx, notifiers, msg, allow, deliveryReport(emit, Event{Watch: watch}))
 }
 
 func dryRunConsoleNotifier(n notify.Notifier) bool {
@@ -761,6 +832,7 @@ type watchFireSpec struct {
 	dryRunLabel string // rendered actions for the dry-run event
 	panicLabel  string // suppression notice for panic mode
 	action      func() // runs between the hook and the notify fan-out (e.g. kill)
+	severity    severity.Level
 }
 
 // runWatchHook runs a watch hook and emits its hook/hook-failed completion
@@ -783,6 +855,7 @@ func runWatchHook(ctx context.Context, hook HookSpec, runner HookRunner, emit fu
 // dispatchWatchFire applies the dry-run → panic → hook → action → notify tail
 // every watcher fire ends with.
 func dispatchWatchFire(ctx context.Context, spec watchFireSpec, msg string, env map[string]string) {
+	env[sermoEnvSeverity] = spec.severity.Resolved().String()
 	if spec.dryRun {
 		spec.emit(Event{Watch: spec.name, Kind: eventKindDryRun, Message: spec.dryRunLabel + ": " + msg})
 		dispatchDryRunNotify(ctx, spec.notifiers, watchMessage(spec.name, msg, env), spec.name, spec.emit)
@@ -806,33 +879,33 @@ func watchMessage(name, message string, env map[string]string) notify.Message {
 	for _, k := range slices.Sorted(maps.Keys(env)) {
 		body.WriteString(k + watchEnvAssignSeparator + env[k] + appLineSeparator)
 	}
+	level := severity.Level(env[sermoEnvSeverity]).Resolved()
 	return notify.Message{
-		Subject: watchSubject(name, message, env[sermoEnvSeverity]),
-		Body:    body.String(),
-		Fields:  env,
+		Subject:  watchSubject(name, message, level),
+		Body:     body.String(),
+		Fields:   env,
+		Severity: level,
 	}
 }
 
-// watchSubject renders the notification subject. An advisory says so in the
+// watchSubject renders the notification subject. The grade says so in the
 // subject line, which is the one string an operator reads in mail or chat before
 // deciding whether to get up; an error keeps the unmarked form it always had.
-func watchSubject(name, message, severity string) string {
-	if checks.IsWarning(severity) {
-		return fmt.Sprintf("[sermo][%s] %s: %s", checks.SeverityWarning, name, message)
-	}
-	return fmt.Sprintf("[sermo] %s: %s", name, message)
+func watchSubject(name, message string, level severity.Level) string {
+	return subjectPrefix(level) + " " + name + ": " + message
 }
 
 // hookEnv builds the SERMO_* environment for a hook. Beyond the always-present
 // SERMO_WATCH/CHECK_TYPE/MESSAGE/SEVERITY, every Result.Data key is exported as
 // SERMO_<UPPER_KEY> (non-alphanumerics become "_") so any check's metadata
-// reaches the hook without per-type code.
-func hookEnv(name, checkType string, res checks.Result) map[string]string {
+// reaches the hook without per-type code. level is the severity the episode
+// announces — its held high-water mark, not necessarily this sample's grade.
+func hookEnv(name, checkType string, res checks.Result, level severity.Level) map[string]string {
 	env := map[string]string{
 		sermoEnvWatch:     name,
 		sermoEnvCheckType: checkType,
 		sermoEnvMessage:   strings.TrimSpace(res.Message),
-		sermoEnvSeverity:  checks.ResolveSeverity(res.Severity, ""),
+		sermoEnvSeverity:  level.Resolved().String(),
 	}
 	for k, v := range res.Data {
 		env[sermoEnvPrefix+envKey(k)] = strings.TrimSpace(cfgval.String(v))

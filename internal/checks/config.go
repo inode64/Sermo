@@ -57,7 +57,7 @@ func (c configCheck) Run(ctx context.Context) Result {
 		fp := configFingerprint(c.paths)
 		if c.state.primed && fp != c.state.last {
 			c.state.last = fp
-			return c.result(false, "config changed: "+strings.Join(c.paths, ", "), start)
+			return c.changeResult(c.result(false, "config changed: "+strings.Join(c.paths, ", "), start))
 		}
 		c.state.last, c.state.primed = fp, true
 	}

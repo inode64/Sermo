@@ -85,6 +85,7 @@ const (
 	CheckKeyLabel                 = "label"
 	CheckKeyLanguage              = "language"
 	CheckKeyLeaseFile             = "lease_file"
+	CheckKeyLevels                = "levels"
 	CheckKeyMAC                   = "mac"
 	CheckKeyMailFrom              = conn.ParamKeySMTPMailFrom
 	CheckKeyMatch                 = "match"

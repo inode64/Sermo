@@ -135,9 +135,9 @@ func TestTelegramEscapesGeneratedTextForParseMode(t *testing.T) {
 		parseMode string
 		want      string
 	}{
-		{parseMode: "MarkdownV2", want: "\\[sermo\\] web: check failed\nSERMO\\_WATCH\\=disk\\-root\nSERMO\\_OUTPUT\\=<b\\> & 1\\.5"},
-		{parseMode: "Markdown", want: "\\[sermo] web: check failed\nSERMO\\_WATCH=disk-root\nSERMO\\_OUTPUT=<b> & 1.5"},
-		{parseMode: "HTML", want: "[sermo] web: check failed\nSERMO_WATCH=disk-root\nSERMO_OUTPUT=&lt;b&gt; &amp; 1.5"},
+		{parseMode: "MarkdownV2", want: "🔴 \\[sermo\\] web: check failed\nSERMO\\_WATCH\\=disk\\-root\nSERMO\\_OUTPUT\\=<b\\> & 1\\.5"},
+		{parseMode: "Markdown", want: "🔴 \\[sermo] web: check failed\nSERMO\\_WATCH=disk-root\nSERMO\\_OUTPUT=<b> & 1.5"},
+		{parseMode: "HTML", want: "🔴 [sermo] web: check failed\nSERMO_WATCH=disk-root\nSERMO_OUTPUT=&lt;b&gt; &amp; 1.5"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.parseMode, func(t *testing.T) {
@@ -170,8 +170,8 @@ body: '<pre>{{ .Body }}</pre>'
 		parseMode string
 		want      string
 	}{
-		{parseMode: "MarkdownV2", want: "*php\\-fpm\\_8\\.2* \\[sermo\\] php\\-fpm: cpu high\n<pre>SERMO\\_RULE\\=cpu\\_high <x\\></pre>"},
-		{parseMode: "HTML", want: "*php-fpm_8.2* [sermo] php-fpm: cpu high\n<pre>SERMO_RULE=cpu_high &lt;x&gt;</pre>"},
+		{parseMode: "MarkdownV2", want: "🔴 *php\\-fpm\\_8\\.2* \\[sermo\\] php\\-fpm: cpu high\n<pre>SERMO\\_RULE\\=cpu\\_high <x\\></pre>"},
+		{parseMode: "HTML", want: "🔴 *php-fpm_8.2* [sermo] php-fpm: cpu high\n<pre>SERMO_RULE=cpu_high &lt;x&gt;</pre>"},
 	} {
 		t.Run(tt.parseMode, func(t *testing.T) {
 			inner, err := buildTelegram("tg", map[string]any{"type": "telegram", "token": "123:abc", "chat_id": "1", "parse_mode": tt.parseMode})
@@ -192,7 +192,7 @@ func TestTelegramPlainTextIsNotEscaped(t *testing.T) {
 		t.Fatal(err)
 	}
 	msg := Message{Subject: "[sermo] a_b", Body: "<x> & 1.5"}
-	if text, _ := telegramSentText(t, withTemplate(n, &Template{name: "none"}), msg); text != "[sermo] a_b\n<x> & 1.5" {
+	if text, _ := telegramSentText(t, withTemplate(n, &Template{name: "none"}), msg); text != "🔴 [sermo] a_b\n<x> & 1.5" {
 		t.Fatalf("plain text was altered: %q", text)
 	}
 }
@@ -211,8 +211,8 @@ func TestTelegramTruncatesTextOverTheLimit(t *testing.T) {
 			}
 			// Cutting markup could leave an escape or entity open, so an
 			// oversized message falls back to the plain text.
-			if mode != "" || !strings.HasPrefix(text, "[sermo] web: check failed\nSERMO_OUTPUT=output line.") {
-				t.Fatalf("oversized message must be plain text: parse_mode %q, text %q…", mode, text[:40])
+			if mode != "" || !strings.HasPrefix(text, "🔴 [sermo] web: check failed\nSERMO_OUTPUT=output line.") {
+				t.Fatalf("oversized message must be plain text: parse_mode %q, text %q…", mode, text[:44])
 			}
 		})
 	}

@@ -55,7 +55,10 @@ const dashboard = {
     name: "backup.mount", display_name: "Backup", category: "backup", path: "/backup",
     mounted: true, state: "active", refcount: 0, blockers: [], can_umount: true,
   }],
-  notifiers: [{ name: "ops", type: "slack", enabled: true, summary: "hooks.slack.com", used_by: 2 }],
+  notifiers: [
+    { name: "ops", type: "slack", enabled: true, summary: "hooks.slack.com", used_by: 2, min_severity: "warning" },
+    { name: "everything", type: "ntfy", enabled: true, summary: "ntfy.example.net", used_by: 1, min_severity: "debug" },
+  ],
   daemon: { backend: "systemd", hostname: "fixture", host_uptime_seconds: 86400, active_users: 1, sessions: { console: 0, ssh: 3 } },
   daemon_metrics: {
     current: { pid: 4242, fds: 12345, threads: 8, cpu_ready: true, cpu: 1.5, rss: 1048576, io_ready: true, io: 2048 },
@@ -331,7 +334,10 @@ async function mockAPI(page) {
         return;
       case "/api/events":
 		body = {
-		  events: [{ id: 1, time: "2026-07-10T12:00:00Z", service: "web", kind: "action", status: "ok", message: "started" }],
+		  events: [
+		    { id: 2, time: "2026-07-10T12:01:00Z", watch: "disk-root", kind: "firing", severity: "critical", message: "/ used 99.5%" },
+		    { id: 1, time: "2026-07-10T12:00:00Z", service: "web", kind: "action", status: "ok", message: "started" },
+		  ],
 		  has_more: false,
 		};
         break;
@@ -1933,4 +1939,19 @@ test("a check that graded its own failure a warning reads warn, not fail", async
   const row = table.locator("tr", { hasText: "smart-sda" });
   await expect(row.locator(".inactive")).toHaveText("warn");
   await expect(row.locator(".bad")).toHaveCount(0);
+});
+
+test("a graded event names its level in the event log", async ({ page }) => {
+  const row = page.locator("#events-section tr", { hasText: "disk-root" });
+  await expect(row.locator(".sev-critical")).toHaveText("critical");
+  // An ungraded event carries no badge.
+  await expect(page.locator("#events-section tr", { hasText: "started" }).locator(".sev")).toHaveCount(0);
+});
+
+test("notifiers show the lowest severity they receive", async ({ page }) => {
+  await page.locator("#notifiers-section > summary").click();
+  const ops = page.locator("#notifier-rows tr", { hasText: "ops" });
+  await expect(ops.locator(".sev-warning")).toHaveText("≥ warning");
+  // debug filters nothing.
+  await expect(page.locator("#notifier-rows tr", { hasText: "everything" })).toContainText("all");
 });

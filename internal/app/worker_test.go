@@ -382,11 +382,12 @@ func TestCycleAlertEmitsOnChangeByDefault(t *testing.T) {
 	if got := h.countEvents(eventKindAlert); got != 1 {
 		t.Fatalf("default alert rule must emit once per firing episode, got %d events: %+v", got, h.events)
 	}
-	if got := h.countEvents(eventKindNotify); got != 1 {
-		t.Fatalf("default alert rule must notify once per firing episode, got %d events: %+v", got, h.events)
+	// One alert when the episode opens and one recovery when it ends.
+	if got := h.countEvents(eventKindNotify); got != 2 {
+		t.Fatalf("default alert rule must notify once per firing episode plus its recovery, got %d events: %+v", got, h.events)
 	}
-	if len(n.msgs) != 1 {
-		t.Fatalf("default alert rule must send one notification per episode, got %d messages", len(n.msgs))
+	if len(n.msgs) != 2 || !strings.Contains(n.msgs[1].Subject, recoveredMessagePrefix) {
+		t.Fatalf("default alert rule must send the alert and its recovery, got %d messages", len(n.msgs))
 	}
 	if got := h.countEvents(eventKindRecovered); got != 1 {
 		t.Fatalf("recovery must still emit a recovered event, got %d events: %+v", got, h.events)

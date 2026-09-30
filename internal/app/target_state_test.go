@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"sermo/internal/servicemgr"
+	"sermo/internal/severity"
 )
 
 func TestServiceState(t *testing.T) {
@@ -100,11 +101,17 @@ func TestWatchState(t *testing.T) {
 
 func TestWatchActivityFailed(t *testing.T) {
 	tests := []struct {
-		kind string
-		want bool
+		kind  string
+		level severity.Level
+		want  bool
 	}{
 		{kind: eventKindFiring, want: true},
+		{kind: eventKindFiring, level: severity.Critical, want: true},
+		// An advisory firing reads warning, not failed.
+		{kind: eventKindFiring, level: severity.Warning},
+		{kind: eventKindFiring, level: severity.Info},
 		{kind: eventKindHookFail, want: true},
+		{kind: eventKindHookFail, level: severity.Warning, want: true},
 		{kind: eventKindNotifyFail, want: true},
 		{kind: eventKindExpandFailed, want: true},
 		{kind: eventKindRecovered},
@@ -112,9 +119,9 @@ func TestWatchActivityFailed(t *testing.T) {
 		{kind: eventKindNotify},
 	}
 	for _, tt := range tests {
-		t.Run(tt.kind, func(t *testing.T) {
-			if got := WatchActivityFailed(tt.kind); got != tt.want {
-				t.Fatalf("WatchActivityFailed(%q) = %v, want %v", tt.kind, got, tt.want)
+		t.Run(tt.kind+"/"+tt.level.String(), func(t *testing.T) {
+			if got := WatchActivityFailed(tt.kind, tt.level); got != tt.want {
+				t.Fatalf("WatchActivityFailed(%q, %q) = %v, want %v", tt.kind, tt.level, got, tt.want)
 			}
 		})
 	}

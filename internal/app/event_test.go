@@ -8,6 +8,7 @@ import (
 
 	"sermo/internal/operation"
 	"sermo/internal/rules"
+	"sermo/internal/severity"
 )
 
 func TestOperationEventEmitter(t *testing.T) {
@@ -88,31 +89,50 @@ func TestSlogEmitterSeverityPerKind(t *testing.T) {
 	// Failed watch actions must be visible at the daemon's default Info level;
 	// expand-failed and kill-failed used to fall through to Debug.
 	cases := []struct {
-		kind string
-		want string
+		kind  string
+		level severity.Level
+		want  string
 	}{
-		{eventKindExpandFailed, "level=ERROR"},
-		{eventKindKillFailed, "level=ERROR"},
-		{eventKindMakeStepFailed, "level=ERROR"},
-		{eventKindError, "level=ERROR"},
-		// An advisory is the one thing between an outage and routine traffic, and
-		// the only kind that belongs at warn level.
-		{eventKindWarning, "level=WARN"},
-		{eventKindExpand, "level=INFO"},
-		{eventKindMakeStep, "level=INFO"},
-		{eventKindMakeStepSkipped, "level=INFO"},
-		{eventKindKill, "level=INFO"},
-		{eventKindReload, "level=INFO"},
-		{eventKindPanicSuppressed, "level=INFO"},
-		{eventKindNotifySuppressed, "level=INFO"},
+		{eventKindExpandFailed, "", "level=ERROR"},
+		{eventKindKillFailed, "", "level=ERROR"},
+		{eventKindMakeStepFailed, "", "level=ERROR"},
+		{eventKindError, "", "level=ERROR"},
+		// A graded event logs at its grade: an advisory between an outage and
+		// routine traffic, critical as an error.
+		{eventKindFiring, severity.Critical, "level=ERROR"},
+		{eventKindFiring, severity.Error, "level=ERROR"},
+		{eventKindFiring, severity.Warning, "level=WARN"},
+		{eventKindFiring, severity.Info, "level=INFO"},
+		{eventKindFiring, severity.Debug, "level=DEBUG"},
+		// A failed action stays an error whatever the incident's grade; an
+		// error graded by an advisory incident (its check went unavailable)
+		// logs at that grade.
+		{eventKindHookFail, severity.Warning, "level=ERROR"},
+		{eventKindError, severity.Warning, "level=WARN"},
+		// Routine traffic stays at info even inside a critical incident: a
+		// recovery or a repair that worked must not page anyone.
+		{eventKindRecovered, severity.Critical, "level=INFO"},
+		{eventKindAction, severity.Critical, "level=INFO"},
+		{eventKindDryRun, severity.Error, "level=INFO"},
+		{eventKindSuppressed, severity.Critical, "level=INFO"},
+		{eventKindExpand, "", "level=INFO"},
+		{eventKindMakeStep, "", "level=INFO"},
+		{eventKindMakeStepSkipped, "", "level=INFO"},
+		{eventKindKill, "", "level=INFO"},
+		{eventKindReload, "", "level=INFO"},
+		{eventKindPanicSuppressed, "", "level=INFO"},
+		{eventKindNotifySuppressed, "", "level=INFO"},
 	}
 	for _, tc := range cases {
-		t.Run(tc.kind, func(t *testing.T) {
+		t.Run(tc.kind+"/"+tc.level.String(), func(t *testing.T) {
 			var buf bytes.Buffer
 			logger := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug}))
-			SlogEmitter(logger)(Event{Watch: "w", Kind: tc.kind, Message: "x"})
+			SlogEmitter(logger)(Event{Watch: "w", Kind: tc.kind, Severity: tc.level, Message: "x"})
 			if !strings.Contains(buf.String(), tc.want) {
-				t.Fatalf("kind %s logged as %q, want %s", tc.kind, buf.String(), tc.want)
+				t.Fatalf("kind %s severity %q logged as %q, want %s", tc.kind, tc.level, buf.String(), tc.want)
+			}
+			if tc.level.Valid() && !strings.Contains(buf.String(), "severity="+tc.level.String()) {
+				t.Fatalf("graded event lacks its severity attribute: %q", buf.String())
 			}
 		})
 	}

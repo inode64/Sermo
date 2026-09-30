@@ -6,22 +6,8 @@ import (
 	"strings"
 
 	"sermo/internal/cfgval"
+	"sermo/internal/severity"
 )
-
-// Severity ranks a pattern match; higher is worse.
-type Severity int
-
-// Severity levels assigned by an analyze rule, ordered ok < warning < error.
-const (
-	SevOK      Severity = iota // benign / whitelist
-	SevWarning                 // degraded — maps to an optional (warning) failure
-	SevError                   // maps to a required failure
-)
-
-// AnalyzeSeveritySummary is the user-facing list of analysis severities. The
-// names themselves are the shared severity vocabulary (see severity.go), so a
-// rule grade and a check's own `severity:` are spelled the same way.
-const AnalyzeSeveritySummary = SeverityError + ", " + SeverityWarning + " or " + SeverityOK
 
 // Analyze stream identifiers accepted by command output analysis rules.
 const (
@@ -34,36 +20,22 @@ const (
 	AnalyzeExportStreamSummary = AnalyzeStreamStdout + " or " + AnalyzeStreamStderr
 )
 
-func (s Severity) String() string {
-	switch s {
-	case SevError:
-		return SeverityError
-	case SevWarning:
-		return SeverityWarning
-	default:
-		return SeverityOK
+// parseAnalyzeGrade reads a rule's `severity:`. An `ok` rule grades its match
+// as benign, which is the unset level: it ranks below every real severity, so a
+// whitelisted line can never raise the check's grade.
+func parseAnalyzeGrade(s string) (severity.Level, bool) {
+	if s == AnalyzeSeverityOK {
+		return "", true
 	}
+	return severity.Parse(s)
 }
 
-func parseSeverity(s string) (Severity, bool) {
-	switch s {
-	case SeverityError:
-		return SevError, true
-	case SeverityWarning:
-		return SevWarning, true
-	case SeverityOK:
-		return SevOK, true
-	default:
-		return SevOK, false
-	}
-}
-
-// analyzeRule is one compiled pattern rule.
+// analyzeRule is one compiled pattern rule. An unset grade is an `ok` rule.
 type analyzeRule struct {
-	id       string
-	re       *regexp.Regexp
-	severity Severity
-	stream   string
+	id     string
+	re     *regexp.Regexp
+	grade  severity.Level
+	stream string
 }
 
 // outputAnalyzer holds a check's resolved, compiled rule list.
@@ -73,10 +45,11 @@ type outputAnalyzer struct{ rules []analyzeRule }
 func (a *outputAnalyzer) Active() bool { return a != nil && len(a.rules) > 0 }
 
 // Analyze classifies stdout/stderr. Per non-empty line, the first matching rule
-// wins (an `ok` match whitelists that line); the check's severity is the max
-// over all lines. It returns that severity and the id + line of the first rule
-// that reached it (for the result message).
-func (a *outputAnalyzer) Analyze(stdout, stderr string) (sev Severity, id, line string) {
+// wins (an `ok` match whitelists that line); the check's grade is the max over
+// all lines. It returns that grade — unset when nothing but benign lines
+// matched — and the id + line of the first rule that reached it (for the result
+// message).
+func (a *outputAnalyzer) Analyze(stdout, stderr string) (grade severity.Level, id, line string) {
 	scan := func(text, stream string) {
 		for ln := range strings.SplitSeq(text, checkLineSeparator) {
 			ln = strings.TrimRight(ln, "\r")
@@ -88,8 +61,8 @@ func (a *outputAnalyzer) Analyze(stdout, stderr string) (sev Severity, id, line 
 					continue
 				}
 				if r.re.MatchString(ln) {
-					if r.severity > sev {
-						sev, id, line = r.severity, r.id, ln
+					if r.grade.Rank() > grade.Rank() {
+						grade, id, line = r.grade, r.id, ln
 					}
 					break // first match wins for this line
 				}
@@ -98,7 +71,7 @@ func (a *outputAnalyzer) Analyze(stdout, stderr string) (sev Severity, id, line 
 	}
 	scan(stdout, AnalyzeStreamStdout)
 	scan(stderr, AnalyzeStreamStderr)
-	return sev, id, line
+	return grade, id, line
 }
 
 // parseAnalyzer reads a resolved `analyze` mapping (its `rules` list — `use` and
@@ -132,7 +105,7 @@ func parseAnalyzer(v any) (*outputAnalyzer, string) {
 			return nil, fmt.Sprintf("%s has a duplicate rule id %q", CheckKeyAnalyze, id)
 		}
 		seen[id] = true
-		sev, ok := parseSeverity(cfgval.AsString(rm[CheckKeySeverity]))
+		grade, ok := parseAnalyzeGrade(cfgval.AsString(rm[CheckKeySeverity]))
 		if !ok {
 			return nil, fmt.Sprintf("%s severity must be %s", analyzeRuleID(id), AnalyzeSeveritySummary)
 		}
@@ -151,7 +124,7 @@ func parseAnalyzer(v any) (*outputAnalyzer, string) {
 		if err != nil {
 			return nil, fmt.Sprintf("%s has an invalid regex: %v", analyzeRuleID(id), err)
 		}
-		a.rules = append(a.rules, analyzeRule{id: id, re: re, severity: sev, stream: stream})
+		a.rules = append(a.rules, analyzeRule{id: id, re: re, grade: grade, stream: stream})
 	}
 	return a, ""
 }

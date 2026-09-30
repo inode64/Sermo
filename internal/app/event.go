@@ -4,12 +4,15 @@
 package app
 
 import (
+	"context"
 	"log/slog"
+	"strings"
 
 	"sermo/internal/checks"
 	"sermo/internal/config"
 	"sermo/internal/operation"
 	"sermo/internal/rules"
+	"sermo/internal/severity"
 	"sermo/internal/state"
 )
 
@@ -32,6 +35,37 @@ type Event struct {
 	// notice, a reclaimed operation lock) that no recovery event ever closes.
 	// event_notify sends each one instead of tracking it as an open incident.
 	Notice bool
+	// Severity grades the event: a firing or escalation at the episode's level,
+	// a recovery at the level the episode closed with. Unset means the kind
+	// decides (level).
+	Severity severity.Level
+}
+
+// level is the event's grade: its own Severity, else Error for an alarm or an
+// operational failure, else Info for routine traffic.
+func (e Event) level() severity.Level {
+	if e.Severity.Valid() {
+		return e.Severity
+	}
+	switch {
+	case e.Kind == eventKindFiring, e.Kind == eventKindAlert, isErrorKind(e.Kind):
+		return severity.Error
+	default:
+		return severity.Info
+	}
+}
+
+// advisoryError reports an error an advisory incident raised — an advisory
+// watch whose check became unavailable, or its failed manual probe. It is a
+// health incident at its grade, not an outage: it neither counts as an error
+// nor opens a paced operational-error incident.
+func (e Event) advisoryError() bool {
+	return e.Kind == eventKindError && e.Severity.Advisory()
+}
+
+// isErrorKind reports an operational failure: an error or a failed action.
+func isErrorKind(kind string) bool {
+	return kind == eventKindError || strings.HasSuffix(kind, eventKindFailedSuffix)
 }
 
 // Event kind values for Event.Kind.
@@ -41,7 +75,6 @@ const (
 	eventKindAction           = "action"
 	eventKindAlert            = string(rules.ActionAlert)
 	eventKindError            = "error"
-	eventKindWarning          = checks.SeverityWarning
 	eventKindHook             = config.WatchThenKeyHook
 	eventKindNotify           = rules.RuleFieldNotify
 	eventKindDryRun           = "dry-run"
@@ -137,6 +170,8 @@ const (
 	eventFieldStatus  = "status"
 	eventFieldMessage = "message"
 	eventFieldOutput  = "output"
+	// eventFieldSeverity is the graded level of an event.
+	eventFieldSeverity = "severity"
 )
 
 // resultOutput extracts the bounded command output a check stored under
@@ -222,16 +257,45 @@ func SlogEmitter(logger *slog.Logger) func(Event) {
 		if e.Message != "" {
 			attrs = append(attrs, eventFieldMessage, e.Message)
 		}
-		switch e.Kind {
-		case eventKindError, eventKindHookFail, eventKindNotifyFail, eventKindExpandFailed, eventKindKillFailed, eventKindMakeStepFailed:
-			logger.Error(daemonName, attrs...)
-		// An advisory is the one thing between an outage and routine traffic, so
-		// it is the one thing that belongs at warn level.
-		case eventKindWarning:
-			logger.Warn(daemonName, attrs...)
-		default:
-			logger.Info(daemonName, attrs...)
+		if e.Severity.Valid() {
+			attrs = append(attrs, eventFieldSeverity, e.Severity.String())
 		}
+		logger.Log(context.Background(), eventLogLevel(e), daemonName, attrs...)
+	}
+}
+
+// eventLogLevel is the journal level of an event. Only an alarm logs at its
+// grade: a firing, an alert, or an error graded by the incident behind it (an
+// advisory watch whose check became unavailable) — critical has no slog level
+// of its own and logs as an error. A failed action and an ungraded error are
+// errors. Everything else — a recovery, a remediation that ran or was held
+// back, a dry run — is routine traffic at info, whatever incident it belongs
+// to, so nothing scraping level=ERROR pages on a repair that worked.
+func eventLogLevel(e Event) slog.Level {
+	switch {
+	case strings.HasSuffix(e.Kind, eventKindFailedSuffix):
+		return slog.LevelError
+	case e.Kind == eventKindError && !e.Severity.Valid():
+		return slog.LevelError
+	case e.Kind == eventKindFiring, e.Kind == eventKindAlert, e.Kind == eventKindError:
+		return severityLogLevel(e.Severity)
+	default:
+		return slog.LevelInfo
+	}
+}
+
+// severityLogLevel maps a grade to a journal level; an ungraded alarm stays
+// at info, as it always logged.
+func severityLogLevel(level severity.Level) slog.Level {
+	switch level {
+	case severity.Critical, severity.Error:
+		return slog.LevelError
+	case severity.Warning:
+		return slog.LevelWarn
+	case severity.Debug:
+		return slog.LevelDebug
+	default:
+		return slog.LevelInfo
 	}
 }
 

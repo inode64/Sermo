@@ -3328,3 +3328,36 @@ func generatedRuleMessages(tree map[string]any) []string {
 	}
 	return out
 }
+
+// Every catalog resource alert is an advisory that escalates to an error at a
+// higher threshold, and no catalog level is left inert: a tier the validator
+// would ignore is a profile bug, not an operator choice.
+func TestCatalogResourceAlertsAreGraded(t *testing.T) {
+	cfg := loadAllCatalogServices(t, repoCatalogDir(repoRoot(t)), "systemd")
+	for _, warning := range Warnings(cfg) {
+		t.Errorf("catalog level ignored: %s", warning)
+	}
+	graded := 0
+	for _, name := range cfg.ServiceNames {
+		resolved, errs := cfg.resolveServiceWithInputs(name, false, cfg.newResolutionInputs())
+		if len(errs) > 0 || resolved.Tree == nil {
+			continue
+		}
+		checkEntries, _ := resolved.Tree[sectionChecks].(map[string]any)
+		for _, alert := range []string{"alert-if-memory-high", "alert-if-cpu-thread-high"} {
+			entry, ok := checkEntries[alert].(map[string]any)
+			if !ok {
+				continue
+			}
+			levels, _ := entry[checks.CheckKeyLevels].(map[string]any)
+			if entry[checks.CheckKeySeverity] != "warning" || levels["error"] == nil {
+				t.Errorf("%s %s is not graded warning with an error level: %v", name, alert, entry)
+				continue
+			}
+			graded++
+		}
+	}
+	if graded == 0 {
+		t.Fatal("no catalog resource alert was inspected")
+	}
+}

@@ -19,6 +19,7 @@ import (
 	"sermo/internal/process"
 	"sermo/internal/rules"
 	"sermo/internal/servicemgr"
+	"sermo/internal/severity"
 	"sermo/internal/state"
 	"sermo/internal/telegrambot"
 	"sermo/internal/web"
@@ -617,7 +618,7 @@ func buildWorker(ctx context.Context, name, unit string, tree map[string]any, de
 		Emit:                 deps.Emit,
 		windows:              windowStates,
 		libBaseline:          libBaseline,
-		checkFailing:         checkFailingFromSnapshots(deps.Snapshots, name, catalog.types, configID),
+		checkEpisodes:        checkEpisodesFromSnapshots(deps.Snapshots, name, catalog.types, configID),
 		artifactSamples:      deps.ArtifactSamples,
 	}
 	worker.Checks = workerCheckRunner(worker, built, catalog.cycles, maxParallel, recordMeasurement, setCycleMetrics)
@@ -629,11 +630,14 @@ func buildWorker(ctx context.Context, name, unit string, tree map[string]any, de
 	return worker, watches, warnings
 }
 
-// checkFailingFromSnapshots restores the last check-health edge after a daemon
-// restart. Snapshot type metadata ensures a same-named check from a changed
-// configuration does not inherit an unrelated state.
-func checkFailingFromSnapshots(snapshots *Snapshots, service string, checkTypes map[string]string, configID string) map[string]bool {
-	restored := map[string]bool{}
+// checkEpisodesFromSnapshots restores the last check-health edge after a daemon
+// restart: each failing check at the grade its last snapshot carried (an error
+// for a snapshot from before grading), marked restored so its next failing
+// observation completes the grade silently. Snapshot type metadata ensures a
+// same-named check from a changed configuration does not inherit an unrelated
+// state.
+func checkEpisodesFromSnapshots(snapshots *Snapshots, service string, checkTypes map[string]string, configID string) map[string]checkEpisode {
+	restored := map[string]checkEpisode{}
 	for name, snapshot := range snapshots.Get(service) {
 		if !snapshotConfigMatches(configID, snapshot.ConfigID) {
 			continue
@@ -642,7 +646,9 @@ func checkFailingFromSnapshots(snapshots *Snapshots, service string, checkTypes 
 		if !configured || snapshot.CheckType != checkType || snapshot.Optional || !snapshot.Observation.AffectsHealth() {
 			continue
 		}
-		restored[name] = !snapshot.healthy()
+		if !snapshot.healthy() {
+			restored[name] = checkEpisode{held: severity.Level(snapshot.Severity).Resolved(), restored: true}
+		}
 	}
 	if len(restored) == 0 {
 		return nil

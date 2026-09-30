@@ -81,3 +81,31 @@ paths: { services: [ @ROOT@/services ] }
 defaults: { policy: { cooldown: 5m } }
 `), "web.")
 }
+
+// web.public_url is the dashboard address notifications link to: an absolute
+// http(s) URL, optionally under a proxy path, with no query or fragment.
+func TestWebPublicURL(t *testing.T) {
+	for _, bad := range []string{`"fr5.intranet:9797"`, `"ftp://h/"`, `"http://h:9797/#wat:x"`, `"http://h/?a=1"`, `5`} {
+		issues := validateGlobalDoc(t, `
+web: { port: 9797, public_url: `+bad+` }
+paths: { services: [ @ROOT@/services ] }
+defaults: { policy: { cooldown: 5m } }
+`)
+		if !hasIssue(issues, "web.public_url") {
+			t.Errorf("public_url %s: no issue in %v", bad, issues)
+		}
+	}
+	for raw, want := range map[string]string{
+		"http://fr5.intranet:9797/":         "http://fr5.intranet:9797",
+		"https://ops.example.com/sermo/fr5": "https://ops.example.com/sermo/fr5",
+		"":                                  "",
+	} {
+		g := Global{Raw: map[string]any{SectionWeb: map[string]any{WebKeyPublicURL: raw}}}
+		if got := g.WebPublicURL(); got != want {
+			t.Errorf("WebPublicURL(%q) = %q, want %q", raw, got, want)
+		}
+	}
+	if got := (Global{}).WebPublicURL(); got != "" {
+		t.Errorf("WebPublicURL without a web block = %q", got)
+	}
+}

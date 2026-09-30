@@ -18,6 +18,7 @@ func TestFormattersRenderGoldenReplies(t *testing.T) {
 	events := []EventLine{
 		{Time: "12:00", Target: "db", Kind: "action", Message: "restarted"},
 		{Time: "12:01", Message: "bare"},
+		{Time: "12:02", Target: "disk", Kind: "firing", Severity: "critical", Message: "used 99%"},
 	}
 	windows := []SLAWindow{{Window: "hour", Ratio: "99.9%"}}
 	status := StatusReport{
@@ -36,7 +37,7 @@ func TestFormattersRenderGoldenReplies(t *testing.T) {
 		{"watches", formatWatches(watches),
 			"Watches (2):\n- w1 (host): ok\n- w2 (?): ? [not monitored]"},
 		{"events", formatEvents(events),
-			"Recent events (2):\n- 12:00 [action] db: restarted\n- 12:01 [?]: bare"},
+			"Recent events (3):\n- 12:00 [action] db: restarted\n- 12:01 [?]: bare\n- 12:02 [firing/critical] disk: used 99%"},
 		{"sla", formatSLA("db", windows), "SLA — db\n- hour: 99.9%"},
 		{"services empty", formatServices(nil), "No services configured."},
 		{"watches empty", formatWatches(nil), "No watches configured."},

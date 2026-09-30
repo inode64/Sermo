@@ -11,6 +11,7 @@ import (
 	"sermo/internal/metrics"
 	"sermo/internal/notify"
 	"sermo/internal/process"
+	"sermo/internal/severity"
 	"sermo/internal/state"
 	"sermo/internal/units"
 )
@@ -204,26 +205,18 @@ func (w *Worker) emitServiceRestartNotice(ctx context.Context, notice config.Ser
 	runtime := newServiceRestartRuntime(w.Service, w.Unit, notice, principal, uptime)
 	message := w.expandServiceRestartNotice(notice.Message, runtime)
 	subject := w.expandServiceRestartNotice(notice.Subject, runtime)
-	w.emit(Event{Kind: eventKindAlert, Rule: restartNoticeRule, Message: message, Notice: true})
+	w.emit(Event{Kind: eventKindAlert, Severity: restartNoticeSeverity, Rule: restartNoticeRule, Message: message, Notice: true})
 	if w.InPanic != nil && w.InPanic() {
 		w.emit(Event{Kind: eventKindNotifySuppressed, Rule: restartNoticeRule, Message: "panic mode: service restart notification suppressed"})
 		return
 	}
-	allow := func(notify.Notifier) bool { return true }
-	if w.DryRun {
-		allow = dryRunConsoleNotifier
-	}
-	for _, n := range resolveNotifiers(notice.Notify, w.Notifiers) {
-		if !allow(n) {
-			continue
-		}
-		if err := n.Send(ctx, runtime.message(subject, message)); err != nil {
-			w.emit(Event{Kind: eventKindNotifyFail, Rule: restartNoticeRule, Message: n.Name() + ": " + err.Error()})
-		} else {
-			w.emit(Event{Kind: eventKindNotify, Rule: restartNoticeRule, Message: "notified " + n.Name()})
-		}
-	}
+	deliverNotification(ctx, resolveNotifiers(notice.Notify, w.Notifiers), runtime.message(subject, message),
+		dryRunFilter(w.DryRun), deliveryReport(w.emit, Event{Rule: restartNoticeRule}))
 }
+
+// restartNoticeSeverity grades a principal process that restarted on its own:
+// the service is up again, but something outside Sermo killed or restarted it.
+const restartNoticeSeverity = severity.Warning
 
 func (w *Worker) expandServiceRestartNotice(text string, runtime serviceRestartRuntime) string {
 	text = strings.NewReplacer(
@@ -254,9 +247,11 @@ func primaryProcessName(p process.Process) string {
 
 func (runtime serviceRestartRuntime) message(subject, body string) notify.Message {
 	return notify.Message{
-		Subject: subject,
-		Body:    body,
+		Subject:  subject,
+		Body:     body,
+		Severity: restartNoticeSeverity,
 		Fields: map[string]string{
+			sermoEnvSeverity:           restartNoticeSeverity.String(),
 			sermoEnvService:            runtime.service,
 			sermoEnvRule:               restartNoticeRule,
 			sermoEnvEvent:              restartNoticeRule,

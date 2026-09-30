@@ -15,6 +15,7 @@ import (
 	"sermo/internal/config"
 	"sermo/internal/operation"
 	"sermo/internal/servicemgr"
+	"sermo/internal/severity"
 )
 
 // writePreflightConfig builds a service with preflight checks: a binary check at
@@ -188,5 +189,24 @@ func TestPreflightJSON(t *testing.T) {
 	}
 	if got.Service != "apache-main" || !got.OK || len(got.Checks) != 2 {
 		t.Fatalf("unexpected JSON: %+v", got)
+	}
+}
+
+// A required check blocks the operation whatever its grade, so it is never
+// labelled a warning; an optional one never blocks, so it always is.
+func TestPreflightLabelsFollowWhetherTheCheckBlocks(t *testing.T) {
+	var stdout bytes.Buffer
+	app := App{Stdout: &stdout}
+	app.printPreflight("web", checks.Outcome{Results: []checks.Result{
+		{Check: "required-warning", Severity: severity.Warning, Message: "graded warning"},
+		{Check: "optional-error", Optional: true, Message: "graded error"},
+		{Check: "required-critical", Severity: severity.Critical, Message: "down"},
+		{Check: "passing", OK: true},
+	}})
+	out := stdout.String()
+	for _, want := range []string{"FAIL required-warning", "WARN optional-error", "CRIT required-critical", "OK   passing"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("preflight output missing %q:\n%s", want, out)
+		}
 	}
 }

@@ -54,13 +54,13 @@ func buildTelegram(name string, entry map[string]any) (Notifier, error) {
 // added only when configured, so an unconfigured notifier posts exactly the
 // plain `chat_id`+`text` body it always did.
 func telegramPayload(chatID string, opts telegramOptions, msg Message) []byte {
-	text, parseMode := telegramText(msg), opts.parseMode
+	text, parseMode := telegramText(msg, opts.parseMode), opts.parseMode
 	if telegramapi.TextLength(text) > telegramapi.MaxTextLength {
 		// The API rejects the whole message, losing exactly the alert with the
 		// most output. Cutting markup could split an escape or leave an entity
 		// open, so an oversized message goes out as its plain text, truncated.
 		if msg.raw != nil {
-			text = telegramText(*msg.raw)
+			text = telegramText(*msg.raw, "")
 		}
 		text, parseMode = telegramapi.TruncateText(text), ""
 	}
@@ -77,10 +77,20 @@ func telegramPayload(chatID string, opts telegramOptions, msg Message) []byte {
 	return webhookPayload(body)
 }
 
-// telegramText joins the subject lead line and the detail below it.
-func telegramText(msg Message) string {
-	if msg.Body == "" {
-		return msg.Subject
+// telegramText leads with a coloured mark — the message's severity, or green
+// for a recovery — then the subject, the detail below it and the dashboard
+// link last. The link is escaped for parseMode like every other value.
+func telegramText(msg Message, parseMode string) string {
+	text := toneMarks[msg.tone()] + notifySP + msg.Subject
+	if msg.Body != "" {
+		text += notifyLF + msg.Body
 	}
-	return msg.Subject + notifyLF + msg.Body
+	if msg.Link != "" {
+		link := msg.Link
+		if parseMode != "" {
+			link = telegramapi.EscapeText(parseMode, link)
+		}
+		text += notifyLF + link
+	}
+	return text
 }

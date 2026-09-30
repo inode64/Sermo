@@ -320,7 +320,7 @@ func configureHTTPCert(hc *httpCheck, target url.URL, clientOpts httpClientOptio
 		return "http check: cert_* options require an https url"
 	}
 	hc.certHost = target.Hostname()
-	hc.certOpts = certOptionsFromEntry(entry, httpCertOptionKeys)
+	hc.certOpts = certOptionsFromEntry(entry, httpCertOptionKeys, hc.levels)
 	hc.certVerification = newCertVerification(hc.certOpts.verify, "")
 	if clientOpts.http3 {
 		// Read the leaf over QUIC too; http3 populates resp.TLS so the same

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"sermo/internal/checks"
+	"sermo/internal/severity"
 	"sermo/internal/state"
 )
 
@@ -236,10 +237,10 @@ func TestWebCheckMetricsAdvertisesBands(t *testing.T) {
 		}
 	}
 	got = bandsOnly
-	if got[0].Name != checks.DataKeyDegraded || got[0].Severity != checks.SeverityError || got[0].Label == "" {
+	if got[0].Name != checks.DataKeyDegraded || got[0].Severity != string(severity.Error) || got[0].Label == "" {
 		t.Fatalf("degraded = %+v, want error severity and a label", got[0])
 	}
-	if got[1].Severity != checks.SeverityWarning {
+	if got[1].Severity != string(severity.Warning) {
 		t.Fatalf("recovering = %+v, want warning severity", got[1])
 	}
 }

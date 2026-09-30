@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"sermo/internal/execx"
+	"sermo/internal/severity"
 )
 
 // TestGraphMetricsAreWrittenIntoResultData is the invariant that keeps a declared
@@ -125,7 +126,7 @@ func TestResolvedGraphMetricsSeparatesUnitFromExistence(t *testing.T) {
 		CheckKeyBands: map[string]any{
 			DataKeyLoad1: map[string]any{
 				CheckKeyOK:       map[string]any{CheckKeyOp: "<", CheckKeyValue: 8},
-				CheckKeySeverity: SeverityWarning,
+				CheckKeySeverity: string(severity.Warning),
 			},
 		},
 	})

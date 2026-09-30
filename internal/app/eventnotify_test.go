@@ -15,6 +15,7 @@ import (
 	"sermo/internal/notify"
 	"sermo/internal/operation"
 	"sermo/internal/rules"
+	"sermo/internal/severity"
 	"sermo/internal/state"
 )
 
@@ -39,11 +40,11 @@ func TestEventNotifierRoutesAllTargetsDespiteDryRun(t *testing.T) {
 	service := &Worker{Service: "apache", DryRun: true, Emit: router.Emit}
 	watch := &Watch{Name: "storage-root", DryRun: true, Emit: router.Emit}
 	service.emit(Event{Kind: eventKindFiring, Message: "connection refused"})
-	watch.emit(Event{Watch: watch.Name, Kind: eventKindWarning, Message: "space low"})
+	watch.emit(Event{Watch: watch.Name, Kind: eventKindFiring, Severity: severity.Warning, Message: "space low"})
 	watch.emit(Event{Watch: watch.Name, Kind: eventKindRecovered, Message: "space available"})
 	service.emit(Event{Kind: eventKindAlert, Rule: "latency", Message: "slow"})
 	service.emit(Event{Kind: eventKindDryRun, Rule: "repair", Action: "restart", Message: "would restart"})
-	for _, want := range []string{"apache: firing", "storage-root: warning", "storage-root: recovered", "apache: alert", "apache: dry-run"} {
+	for _, want := range []string{"[sermo] host-a apache: firing", "[sermo][warning] host-a storage-root: firing", "storage-root: recovered", "apache: alert", "apache: dry-run"} {
 		select {
 		case msg := <-recorder.messages:
 			if !strings.Contains(msg.Subject, want) {

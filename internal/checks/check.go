@@ -21,6 +21,7 @@ import (
 
 	"sermo/internal/cfgval"
 	"sermo/internal/conn"
+	"sermo/internal/severity"
 )
 
 // Reporting modes a check can declare with `reports:`. They describe what the
@@ -101,15 +102,15 @@ type Result struct {
 	Condition bool `json:"-"`
 	// Reports is the declared reporting mode; empty means ReportsHealth.
 	Reports string `json:"-"`
-	// Severity is how grave a failure of this check is; empty means
-	// SeverityError. It never changes the verdict — Observation() owns that — only
+	// Severity is how grave a failure of this check is; unset means
+	// severity.Error. It never changes the verdict — Observation() owns that — only
 	// how loudly the verdict is reported, so a guard can never read a warning as
 	// healthy. It is the declared severity, except that a check whose
 	// configuration declares none may grade its own finding (a SMART predicate
 	// holding under a PASSED verdict is an advisory); a declaration always wins.
-	Severity string `json:"-"`
-	Optional bool   `json:"optional,omitempty"`
-	Skipped  bool   `json:"skipped,omitempty"` // gated off this cycle (requires/skip_when_changed)
+	Severity severity.Level `json:"-"`
+	Optional bool           `json:"optional,omitempty"`
+	Skipped  bool           `json:"skipped,omitempty"` // gated off this cycle (requires/skip_when_changed)
 	// Unavailable marks a failed observation that a guard must treat as unsafe
 	// rather than as a false condition.
 	Unavailable bool           `json:"-"`
@@ -184,12 +185,13 @@ func (r Result) Observation() ObservationState {
 	}
 }
 
-// Warning reports whether this result is a failure its subject declared an
-// advisory: a bad or unobservable sample worth showing and not worth waking
-// anyone. Severity grades a failure — it never invents one and never cancels
-// one, so a healthy, skipped or verdictless result is never a warning.
-func (r Result) Warning() bool {
-	return !r.Observation().Healthy() && IsWarning(r.Severity)
+// Advisory reports whether this result is a failure graded below an outage
+// (debug, info or warning): a bad or unobservable sample worth showing and not
+// worth waking anyone. Severity grades a failure — it never invents one and
+// never cancels one, so a healthy, skipped or verdictless result is never an
+// advisory.
+func (r Result) Advisory() bool {
+	return !r.Observation().Healthy() && r.Severity.Advisory()
 }
 
 // CountsTowardHealth reports whether this result may move aggregate health or
@@ -198,7 +200,7 @@ func (r Result) Warning() bool {
 // to hold against the target. Availability guards deliberately do not consult
 // it — they keep reading Observation, so a warning can never read as healthy.
 func (r Result) CountsTowardHealth() bool {
-	return r.Observation().AffectsHealth() && !r.Warning()
+	return r.Observation().AffectsHealth() && !r.Advisory()
 }
 
 // Verdictless reports whether this result passes no judgement, so it never
@@ -377,10 +379,29 @@ type base struct {
 	timeout   time.Duration
 	condition bool
 	reports   string
-	severity  string
+	severity  severity.Level
+	// levels are the kept `levels:` tiers, ascending. Level-predicate types
+	// also carry them parsed as grades; other gradable types parse their own.
+	levels     []levelSpec
+	grades     grades[[]levelPred]
+	gradeAnyOf bool
 }
 
 func (b base) Name() string { return b.name }
+
+// changeSeverity grades an on_change detection when the check declares no
+// severity: a version or configuration that changed is news worth recording,
+// not an outage. A failing command or an invalid configuration keeps the
+// default error grade.
+const changeSeverity = severity.Info
+
+// changeResult grades a change-detection failure (see changeSeverity).
+func (b base) changeResult(res Result) Result {
+	if !b.severity.Valid() {
+		res.Severity = changeSeverity
+	}
+	return res
+}
 
 func (b base) resultMetadata() Result {
 	return Result{
@@ -485,7 +506,8 @@ func runThresholdCheck(b base, op string, value float64, sample func() (uint64, 
 		return b.unavailableResult(unavailableMsg, start)
 	}
 	met := cfgval.CompareFloat(float64(v), op, value)
-	res := b.result(met, message(v), start)
+	// Every single-value level check names its one predicate `count`.
+	res := b.gradeValue(b.result(met, message(v), start), DataKeyCount, float64(v))
 	res.Data = map[string]any{dataKey: v, DataKeyValue: v}
 	return res
 }
@@ -534,7 +556,7 @@ func levelCountFields(values map[string]float64, pctField, freeField string, cou
 func levelCountResult(b base, preds []levelPred, label, unit, countField string, count, limit uint64, start time.Time) Result {
 	values := map[string]float64{countField: float64(count)}
 	usedPct := levelCountFields(values, fieldUsedPct, fieldFree, count, limit)
-	res := b.result(levelPredsHold(preds, values), levelCountMessage(label, unit, count, limit, usedPct), start)
+	res := b.grade(b.result(levelPredsHold(preds, values), levelCountMessage(label, unit, count, limit, usedPct), start), values)
 	// Without a usable ceiling the percentage, the headroom and the ceiling
 	// itself are absent rather than zero. Reporting 0% would read as an idle
 	// resource, gauge it against a number nothing can reach, and record a series

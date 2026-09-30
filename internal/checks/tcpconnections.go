@@ -35,7 +35,7 @@ func (c tcpConnectionsCheck) Run(ctx context.Context) Result {
 		return c.unavailableResult(err, start)
 	}
 	values := map[string]float64{DataKeyCount: float64(count)}
-	res := c.result(levelPredsHold(c.preds, values), fmt.Sprintf("%d established TCP connection(s) on port %d", count, c.port), start)
+	res := c.grade(c.result(levelPredsHold(c.preds, values), fmt.Sprintf("%d established TCP connection(s) on port %d", count, c.port), start), values)
 	res.Data = map[string]any{
 		DataKeyPort:  c.port,
 		DataKeyCount: count,

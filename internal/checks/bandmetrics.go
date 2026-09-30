@@ -5,6 +5,7 @@ import (
 	"slices"
 
 	"sermo/internal/cfgval"
+	"sermo/internal/severity"
 )
 
 // BandPred is the {op, value} predicate whose truth means "this state is OK".
@@ -27,7 +28,7 @@ type BandMetric struct {
 	Key      string
 	Label    string   // panel title; the client falls back to Key
 	OK       BandPred // evaluated against Result.Data[Key]
-	Severity string   // SeverityError | SeverityWarning
+	Severity severity.Level
 }
 
 // OKFor reports whether one sampled value satisfies this band's OK predicate.
@@ -41,14 +42,14 @@ func (m BandMetric) OKFor(v float64) bool {
 // A key listed here must be a numeric field the check writes into Result.Data.
 var bandMetrics = map[string][]BandMetric{
 	CheckTypeReplication: {
-		{Key: DataKeyIOStopped, Label: "IO thread", OK: BandPred{Op: cfgval.CompareOpEqual, Value: 0}, Severity: SeverityError},
-		{Key: DataKeySQLStopped, Label: "SQL thread", OK: BandPred{Op: cfgval.CompareOpEqual, Value: 0}, Severity: SeverityError},
+		{Key: DataKeyIOStopped, Label: "IO thread", OK: BandPred{Op: cfgval.CompareOpEqual, Value: 0}, Severity: severity.Error},
+		{Key: DataKeySQLStopped, Label: "SQL thread", OK: BandPred{Op: cfgval.CompareOpEqual, Value: 0}, Severity: severity.Error},
 	},
 	CheckTypeRAID: {
 		{Key: DataKeyDegraded, Label: "Degraded arrays",
-			OK: BandPred{Op: cfgval.CompareOpEqual, Value: 0}, Severity: SeverityError},
+			OK: BandPred{Op: cfgval.CompareOpEqual, Value: 0}, Severity: severity.Error},
 		{Key: DataKeyRecovering, Label: "Recovering arrays",
-			OK: BandPred{Op: cfgval.CompareOpEqual, Value: 0}, Severity: SeverityWarning},
+			OK: BandPred{Op: cfgval.CompareOpEqual, Value: 0}, Severity: severity.Warning},
 	},
 }
 
@@ -116,7 +117,7 @@ func fileSizeBand(checkType string, entry map[string]any) (BandMetric, bool) {
 		Key:      DataKeySize,
 		Label:    "Size threshold",
 		OK:       BandPred{Op: op, Value: value},
-		Severity: SeverityError,
+		Severity: severity.Error,
 	}, true
 }
 
@@ -151,8 +152,8 @@ func applyBandOverrides(checkType string, entry map[string]any, byKey map[string
 				base.OK = BandPred{Op: op, Value: value}
 			}
 		}
-		if severity := cfgval.AsString(override[CheckKeySeverity]); IsCheckSeverity(severity) {
-			base.Severity = severity
+		if level, ok := severity.Parse(cfgval.AsString(override[CheckKeySeverity])); ok {
+			base.Severity = level
 		}
 		put(base)
 	}
@@ -166,7 +167,7 @@ func applyBandOverrides(checkType string, entry map[string]any, byKey map[string
 func graphMetricAsBand(checkType, key string) (BandMetric, bool) {
 	m, ok := declaredGraphMetric(checkType, key)
 	if ok {
-		return BandMetric{Key: key, Label: m.Label, Severity: SeverityError}, true
+		return BandMetric{Key: key, Label: m.Label, Severity: severity.Error}, true
 	}
 	return BandMetric{}, false
 }

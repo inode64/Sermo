@@ -1,11 +1,14 @@
 package app
 
 import (
+	"cmp"
+	"context"
 	"fmt"
 	"time"
 
 	"sermo/internal/checks"
 	"sermo/internal/rules"
+	"sermo/internal/severity"
 	"sermo/internal/state"
 )
 
@@ -30,6 +33,8 @@ func (w *Watch) loadRuntimeState() {
 	w.firing = rec.Firing
 	w.unavailable = rec.Unavailable
 	w.lastNotifyAt = rec.LastNotifyAt
+	w.legacyNotified = rec.Firing && rec.NotifiedSeverity == "" && !rec.LastNotifyAt.IsZero()
+	w.transitionHeard = severity.Level(rec.TransitionSeverity)
 	w.state = *watchWindowStateFromRecord(rec)
 	w.policyState = *remediationFromRecord(rec.Policy)
 	w.persistedState = rec
@@ -53,10 +58,13 @@ func (w *Watch) persistRuntimeState() {
 
 func (w *Watch) runtimeRecord() state.WatchRuntimeRecord {
 	rec := state.WatchRuntimeRecord{
-		Firing:       w.firing,
-		Unavailable:  w.unavailable,
-		LastNotifyAt: w.lastNotifyAt,
-		Policy:       remediationToRecord(&w.policyState),
+		Firing:             w.firing,
+		Unavailable:        w.unavailable,
+		LastNotifyAt:       w.lastNotifyAt,
+		Severity:           w.state.Severity().String(),
+		NotifiedSeverity:   w.state.Notified().String(),
+		TransitionSeverity: w.transitionHeard.String(),
+		Policy:             remediationToRecord(&w.policyState),
 	}
 	if w.Window.For != nil || w.Window.Within != nil || w.Window.Clear != nil {
 		rec.Window = watchWindowRecord(&w.state)
@@ -67,6 +75,8 @@ func (w *Watch) runtimeRecord() state.WatchRuntimeRecord {
 func watchWindowStateFromRecord(rec state.WatchRuntimeRecord) *rules.WindowState {
 	window := watchWindowAsRuleRecord(rec.Window)
 	window.Firing = rec.Firing
+	window.Severity = rec.Severity
+	window.NotifiedSeverity = rec.NotifiedSeverity
 	return windowStateFromRecord(window)
 }
 
@@ -79,10 +89,14 @@ func watchWindowRecord(window *rules.WindowState) state.WatchWindowRecord {
 		TimedHistory:     rec.TimedHistory,
 		ClearConsecutive: rec.ClearConsecutive,
 		ClearSince:       rec.ClearSince,
+		Rungs:            rec.Rungs,
 	}
 }
 
-func (w *Watch) reconcileRestoredEpisode(res checks.Result) {
+// reconcileRestoredEpisode closes an episode the previous process left open
+// when the first observation finds it no longer triggered, at the severity the
+// episode had reached.
+func (w *Watch) reconcileRestoredEpisode(ctx context.Context, res checks.Result) {
 	if !w.stateRestored || !w.firing {
 		return
 	}
@@ -93,11 +107,16 @@ func (w *Watch) reconcileRestoredEpisode(res checks.Result) {
 	if triggered {
 		return
 	}
+	// A record from before severity was kept has none: grade the recovery
+	// by the result, as a fresh episode would have been.
+	level := cmp.Or(w.state.Severity(), w.resultSeverity(res))
+	w.adoptLegacyNotification(level)
+	announced := w.state.Notified()
 	w.firing = false
-	w.lastGrade = ""
 	w.state.EndEpisode()
 	w.lastNotifyAt = time.Time{}
-	w.emit(Event{Watch: w.Name, Kind: eventKindRecovered, Message: res.Message})
+	w.emit(Event{Watch: w.Name, Kind: eventKindRecovered, Severity: level, Message: res.Message})
+	w.notifyRecovery(ctx, res, announced)
 }
 
 func (w *Watch) runtimeStateName() string {
@@ -122,6 +141,8 @@ func watchRuntimeRecordsEqual(a, b state.WatchRuntimeRecord) bool {
 	return a.Firing == b.Firing &&
 		a.Unavailable == b.Unavailable &&
 		a.LastNotifyAt.Equal(b.LastNotifyAt) &&
+		a.Severity == b.Severity && a.NotifiedSeverity == b.NotifiedSeverity &&
+		a.TransitionSeverity == b.TransitionSeverity &&
 		ruleWindowRecordsEqual(watchWindowAsRuleRecord(a.Window), watchWindowAsRuleRecord(b.Window)) &&
 		remediationRecordsEqual(a.Policy, b.Policy)
 }
@@ -134,5 +155,6 @@ func watchWindowAsRuleRecord(rec state.WatchWindowRecord) state.RuleWindowRecord
 		TimedHistory:     rec.TimedHistory,
 		ClearConsecutive: rec.ClearConsecutive,
 		ClearSince:       rec.ClearSince,
+		Rungs:            rec.Rungs,
 	}
 }

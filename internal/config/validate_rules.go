@@ -183,6 +183,12 @@ func validateRule(path string, entry map[string]any, notifiers, checkNames, syst
 	if _, present := entry[rules.RuleFieldClear]; present && ruleType != string(rules.RuleAlert) {
 		add("%s.clear is only supported on alert rules and watches", path)
 	}
+	// A guard blocks an action; it reports no incident to grade.
+	if _, present := entry[rules.RuleFieldSeverity]; present && ruleType == string(rules.RuleGuard) {
+		add("%s.%s is not supported on a guard rule", path, rules.RuleFieldSeverity)
+	} else {
+		validateSeverityField(path, entry, add)
+	}
 	if hasIf {
 		validateCondition(ifNode, path+".if", checkNames, systemMetricChecks, ruleType == string(rules.RuleAlert), add)
 	}
@@ -449,6 +455,7 @@ func validateProbe(v any, path string, checkNames, systemMetricChecks map[string
 			continue
 		}
 		entry := inlineCheckEntry(fields, typ)
+		rejectLevels(path+"."+typ, entry, "an inline rule probe", add)
 		if typ == checks.CheckTypeMetric {
 			validateMetric(entry, path+"."+typ, allowSystemMetric, add)
 			continue

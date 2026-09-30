@@ -3,12 +3,14 @@ package assist
 import (
 	"errors"
 	"fmt"
+	"math"
 	"strings"
 
 	"sermo/internal/cfgval"
 	"sermo/internal/checks"
 	"sermo/internal/config"
 	"sermo/internal/rules"
+	"sermo/internal/severity"
 )
 
 const (
@@ -22,8 +24,6 @@ const (
 type volumeAssistant struct{}
 
 const (
-	volumeDefaultFreePct        = 10
-	volumeDefaultUsedPct        = 90
 	volumeDefaultFreeSize       = "10G"
 	volumeDefaultUsedSize       = "100G"
 	volumeDefaultForCycles      = 3
@@ -72,12 +72,18 @@ type volSettings struct {
 	metric     string // checks.LevelFieldFreePct/UsedPct/FreeBytes/UsedBytes
 	op         string
 	value      any
-	forCycles  int
-	notifiers  []string
-	dryRun     bool
-	expand     bool
-	expandBy   string
-	cooldown   string
+	// severity grades the base threshold: warning for a percentage condition
+	// (asked as "Warn when"), unset for a size condition.
+	severity severity.Level
+	// levels grades a percentage condition (warning, then error and
+	// critical); nil for a size condition, which keeps one threshold.
+	levels    map[string]any
+	forCycles int
+	notifiers []string
+	dryRun    bool
+	expand    bool
+	expandBy  string
+	cooldown  string
 }
 
 func askVolSettings(p *Prompt, env Env, label string) volSettings {
@@ -90,11 +96,11 @@ func askVolSettings(p *Prompt, env Env, label string) volSettings {
 		"used space at/above a size (K/M/G/T)",
 	}) {
 	case volumeConditionFreePct:
-		s.metric, s.op = checks.LevelFieldFreePct, cfgval.CompareOpLess
-		s.value = askPercent(p, "Alert when free space drops below", volumeDefaultFreePct)
+		s.askGradedPercent(p, percentLadder{checks.LevelFieldFreePct, cfgval.CompareOpLess, "free space drops below",
+			storageWarnFreePct, storageErrorFreePct, storageCriticalFreePct})
 	case volumeConditionUsedPct:
-		s.metric, s.op = checks.LevelFieldUsedPct, cfgval.CompareOpGreaterEqual
-		s.value = askPercent(p, "Alert when used space reaches/exceeds", volumeDefaultUsedPct)
+		s.askGradedPercent(p, percentLadder{checks.LevelFieldUsedPct, cfgval.CompareOpGreaterEqual, "used space reaches/exceeds",
+			storageWarnUsedPct, storageErrorUsedPct, storageCriticalUsedPct})
 	case volumeConditionFreeBytes:
 		s.metric, s.op = checks.LevelFieldFreeBytes, cfgval.CompareOpLess
 		s.value = askSize(p, "Alert when free space drops below (e.g. 10G)", volumeDefaultFreeSize)
@@ -124,6 +130,12 @@ func buildVolWatch(v Volume, s volSettings) map[string]any {
 			checks.CheckKeyOp:    s.op,
 			checks.CheckKeyValue: s.value,
 		},
+	}
+	if s.severity.Valid() {
+		check[checks.CheckKeySeverity] = s.severity.String()
+	}
+	if s.levels != nil {
+		check[checks.CheckKeyLevels] = s.levels
 	}
 	then := watchThen(s.notifiers)
 	if s.expand {
@@ -159,6 +171,95 @@ func askPercent(p *Prompt, question string, def int) any {
 		}
 		p.printf("  use a percentage in %s, like 10 or 10%%\n", cfgval.PercentRange())
 	}
+}
+
+// percentLadder is one graded percentage condition and its default rungs.
+type percentLadder struct {
+	field, op, condition                       string
+	warnDefault, errorDefault, criticalDefault int
+}
+
+// askGradedPercent asks a percentage condition's warning threshold and the
+// levels it escalates to.
+func (s *volSettings) askGradedPercent(p *Prompt, l percentLadder) {
+	s.metric, s.op, s.severity = l.field, l.op, severity.Warning
+	s.value = askPercent(p, "Warn when "+l.condition, l.warnDefault)
+	s.levels = askPercentLevels(p, l, s.value)
+}
+
+// askPercentLevels asks where a percentage condition escalates to error and
+// to critical, re-prompting until each level is stricter than the one below
+// it: Sermo ignores a level that is not. A tier with no stricter percentage
+// left (a warning already at 100 % used or 0 % free) is not asked; nil means
+// the condition keeps a single threshold.
+func askPercentLevels(p *Prompt, l percentLadder, warn any) map[string]any {
+	levels := map[string]any{}
+	below := warn
+	for _, tier := range []struct {
+		level severity.Level
+		def   int
+	}{{severity.Error, l.errorDefault}, {severity.Critical, l.criticalDefault}} {
+		if !stricterPercentExists(l.op, below) {
+			break
+		}
+		value := askStricterPercent(p, "Escalate to "+tier.level.String()+" when "+l.condition, l.op, below, tier.def)
+		levels[tier.level.String()] = storageLevel(l.field, l.op, value)
+		below = value
+	}
+	if len(levels) == 0 {
+		return nil
+	}
+	return levels
+}
+
+// tightens reports whether value is a stricter threshold than floor: smaller
+// for a "<" condition, larger for ">=".
+func tightens(op string, value, floor float64) bool {
+	if op == cfgval.CompareOpLess {
+		return value < floor
+	}
+	return value > floor
+}
+
+// stricterPercentExists reports whether any valid percentage tightens below.
+func stricterPercentExists(op string, below any) bool {
+	floor, _ := cfgval.Percent(below)
+	direction := math.Inf(1)
+	if op == cfgval.CompareOpLess {
+		direction = math.Inf(-1)
+	}
+	_, ok := cfgval.Percent(math.Nextafter(floor, direction))
+	return ok
+}
+
+// askStricterPercent reads a percentage that tightens below. The caller has
+// checked that one exists, and closed input aborts the re-prompt loop.
+func askStricterPercent(p *Prompt, question, op string, below any, def int) any {
+	floor, _ := cfgval.Percent(below)
+	def = stricterDefault(op, floor, def)
+	for {
+		v := askPercent(p, question, def)
+		if value, _ := cfgval.Percent(v); tightens(op, value, floor) {
+			return v
+		}
+		p.abortIfClosed()
+		p.printf("  must be stricter than %s%%\n", cfgval.String(floor))
+	}
+}
+
+// stricterDefault keeps a tier's offered default valid: the ladder's own
+// default when it tightens floor, otherwise the nearest whole percentage that
+// does (a warning already past the default ladder). The caller has checked
+// that a stricter percentage exists, so floor is inside 0..100 exclusive on
+// the tightening side and the result stays in range.
+func stricterDefault(op string, floor float64, def int) int {
+	if tightens(op, float64(def), floor) {
+		return def
+	}
+	if op == cfgval.CompareOpLess {
+		return int(math.Ceil(floor)) - 1
+	}
+	return int(math.Floor(floor)) + 1
 }
 
 // askSize reads a size like 5G, re-prompting on an obviously bad value.

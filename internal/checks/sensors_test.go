@@ -40,6 +40,44 @@ func TestReadHwmon(t *testing.T) {
 	}
 }
 
+// An input that measures nothing — a disabled or faulty channel, or a
+// temperature register saturated because no probe is attached — must not
+// become the hottest sensor.
+func TestReadHwmonSkipsChannelsThatMeasureNothing(t *testing.T) {
+	root := t.TempDir()
+	d := filepath.Join(root, "hwmon0")
+	if err := os.Mkdir(d, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, filepath.Join(d, "name"), "nct6796\n")
+	writeFile(t, filepath.Join(d, "temp1_input"), "37000\n")  // SYSTIN
+	writeFile(t, filepath.Join(d, "temp2_input"), "127500\n") // AUXTIN, no probe
+	writeFile(t, filepath.Join(d, "temp3_input"), "-128000\n")
+	writeFile(t, filepath.Join(d, "temp4_input"), "60000\n")
+	writeFile(t, filepath.Join(d, "temp4_enable"), "0\n")
+	writeFile(t, filepath.Join(d, "temp5_input"), "61000\n")
+	writeFile(t, filepath.Join(d, "temp5_fault"), "1\n")
+	writeFile(t, filepath.Join(d, "fan1_input"), "0\n") // a stopped fan still counts
+
+	readings, err := readHwmon(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var temps []float64
+	fans := 0
+	for _, r := range readings {
+		switch r.Kind {
+		case sensorTemp:
+			temps = append(temps, r.Value)
+		case sensorFan:
+			fans++
+		}
+	}
+	if len(temps) != 1 || temps[0] != 37 || fans != 1 {
+		t.Fatalf("temps = %v fans = %d, want only the 37 °C input and the fan", temps, fans)
+	}
+}
+
 func sensorsWith(readings []SensorReading, chip string, preds ...levelPred) sensorsCheck {
 	return sensorsCheck{
 		name: "s", timeout: time.Second,

@@ -8,6 +8,9 @@ interval: 30s
 check:
   type: memory
   used_pct: { op: ">=", value: "90%" }
+  severity: warning  # high memory is worth seeing...
+  levels:
+    error: { used_pct: { op: ">=", value: "95%" } }  # ...near-exhaustion is an outage
 for: { cycles: 3 }
 then:
   hook:

@@ -4,6 +4,8 @@ import (
 	"context"
 	"strings"
 	"testing"
+
+	"sermo/internal/severity"
 )
 
 func fakeSwap(s SwapSample) SwapSamplerFunc {
@@ -134,4 +136,19 @@ func buildCheckForTest(t *testing.T, entry map[string]any) (Check, string) {
 		return nil, err.Error()
 	}
 	return c, ""
+}
+
+// A full swap area is memory pressure to plan around, not an outage: with no
+// declared severity the finding is a warning, and a declaration still wins.
+func TestSwapFindingsAreWarningsUnlessDeclared(t *testing.T) {
+	full := SwapSample{TotalBytes: 1000, FreeBytes: 0}
+	c := &swapCheck{name: "s", metric: "usage", condition: true,
+		preds: []levelPred{{field: "used_pct", op: ">", value: 95}}, sampler: fakeSwap(full)}
+	if res := c.Run(context.Background()); !res.OK || res.Severity != severity.Warning {
+		t.Fatalf("full swap = ok %v severity %q, want an alerting warning", res.OK, res.Severity)
+	}
+	c.severity = severity.Error
+	if res := c.Run(context.Background()); res.Severity != severity.Error {
+		t.Fatalf("declared severity = %q, want error", res.Severity)
+	}
 }

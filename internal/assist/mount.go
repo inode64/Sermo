@@ -8,6 +8,7 @@ import (
 	"sermo/internal/cfgval"
 	"sermo/internal/checks"
 	"sermo/internal/config"
+	"sermo/internal/severity"
 )
 
 type mountAssistant struct{}
@@ -15,7 +16,6 @@ type mountAssistant struct{}
 const (
 	mountCandidateStateMounted    = "mounted"
 	mountCandidateStateNotMounted = "not mounted"
-	mountDefaultFreePct           = 5
 	mountSourceDetailSeparator    = " on "
 )
 
@@ -65,8 +65,10 @@ func buildMountUnit(c MountCandidate, s mountSettings) map[string]any {
 			checks.CheckKeyMounted: true,
 			checks.LevelFieldFreePct: map[string]any{
 				checks.CheckKeyOp:    cfgval.CompareOpLess,
-				checks.CheckKeyValue: mountDefaultFreePct,
+				checks.CheckKeyValue: storageWarnFreePct,
 			},
+			checks.CheckKeySeverity: string(severity.Warning),
+			checks.CheckKeyLevels:   storageLevels(checks.LevelFieldFreePct, cfgval.CompareOpLess, storageErrorFreePct, storageCriticalFreePct),
 		},
 		config.StorageKeyMount: map[string]any{
 			config.MountKeyRefcount: s.refcount,

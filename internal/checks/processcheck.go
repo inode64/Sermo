@@ -57,7 +57,12 @@ func (c processCheck) Run(_ context.Context) Result {
 			return res
 		}
 	}
-	return c.result(ok, message, start)
+	res := c.result(ok, message, start)
+	if !ok && c.expect == process.StateRunning && !c.severity.Valid() {
+		// The daemon is proven gone (absent) or dead (zombie).
+		res.Severity = serviceDownSeverity
+	}
+	return res
 }
 
 // replacedBinaries names this service's replaced executables that one of this

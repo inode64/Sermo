@@ -75,6 +75,9 @@ watches:
       op: '>'
       value: 30%
       optional: true
+      severity: warning
+      levels:
+        error: { op: '>', value: 50% }
     for:
       duration: 4m
     then:

@@ -1,6 +1,9 @@
 package config
 
-import "sermo/internal/checks"
+import (
+	"sermo/internal/checks"
+	"sermo/internal/severity"
+)
 
 const (
 	// ConfigurationCheckName is the reserved service check synthesized from
@@ -26,7 +29,7 @@ func expandConfigurationCheck(tree map[string]any) []string {
 	}
 
 	generated := cloneMap(entry)
-	generated[checks.CheckKeySeverity] = checks.SeverityWarning
+	generated[checks.CheckKeySeverity] = string(severity.Warning)
 	if _, present := generated[EntryKeyInterval]; !present {
 		generated[EntryKeyInterval] = DefaultConfigurationCheckInterval
 	}

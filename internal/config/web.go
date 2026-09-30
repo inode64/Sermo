@@ -3,6 +3,8 @@ package config
 import (
 	"errors"
 	"fmt"
+	"net/url"
+	"strings"
 
 	"sermo/internal/cfgval"
 	"sermo/internal/netutil"
@@ -56,4 +58,31 @@ func (g Global) WebBind() (WebBind, error) {
 		}
 	}
 	return WebBind{Host: host, Port: port}, nil
+}
+
+// WebPublicURL returns web.public_url without a trailing slash: the dashboard
+// address notifications link to, or "" when unset or not a usable URL.
+func (g Global) WebPublicURL() string {
+	raw, present := g.WebSection()[WebKeyPublicURL]
+	if !present || validatePublicURL(raw) != nil {
+		return ""
+	}
+	return strings.TrimRight(cfgval.AsString(raw), "/")
+}
+
+// validatePublicURL accepts an absolute http(s) URL: the dashboard root,
+// optionally under a reverse-proxy path. A fragment is Sermo's to add.
+func validatePublicURL(raw any) error {
+	s, isStr := raw.(string)
+	if !isStr {
+		return errors.New("must be a string")
+	}
+	u, err := url.Parse(s)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+		return errors.New("must be an absolute http:// or https:// URL")
+	}
+	if u.Fragment != "" || u.RawQuery != "" {
+		return errors.New("must not carry a query or fragment")
+	}
+	return nil
 }

@@ -87,6 +87,18 @@ conservative by default
 avoid SIGKILL unless explicitly allowed
 ```
 
+## Alert severity
+
+Grade every alert so a notifier's `min_severity` can route it. A resource
+alert (memory, `cpu_thread`, queue depth, backlog) is `severity: warning` at
+its threshold with a `levels: { error: … }` tier at a higher one; name the
+tier's threshold as a variable next to the base one (`queue_limit` /
+`queue_error_limit`) so an instance raises both together — a tier that is not
+stricter than its base is ignored with a warning. Health checks rely on the
+self-grades (`service`/`process` down is critical, `cert` expiry warning or
+critical); do not declare `severity:` on them unless the profile really means
+a different grade. Quote `${var}` values inside YAML flow mappings.
+
 ## Common services
 
 When creating catalog services, consider:

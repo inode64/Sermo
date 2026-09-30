@@ -193,6 +193,9 @@ const (
 	WebKeyPasswordFile = "password_file"
 	// WebKeyPort is web.port.
 	WebKeyPort = "port"
+	// WebKeyPublicURL is web.public_url: the address operators open the
+	// dashboard at, which notifications link to.
+	WebKeyPublicURL = "public_url"
 )
 
 // SectionTelegramBot is the top-level interactive Telegram report-bot block. It

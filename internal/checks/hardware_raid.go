@@ -14,6 +14,7 @@ import (
 	"sermo/internal/cfgval"
 	"sermo/internal/execx"
 	"sermo/internal/output"
+	"sermo/internal/severity"
 )
 
 const (
@@ -189,7 +190,7 @@ func (c hardwareRAIDCheck) Run(ctx context.Context) Result {
 	message := observation.message(c.tool, health)
 	result := c.result(health == hardwareRAIDHealthOK, message, run.start)
 	if c.severity == "" && health == hardwareRAIDHealthWarning {
-		result.Severity = SeverityWarning
+		result.Severity = severity.Warning
 	}
 	result.Data = observation.data(health)
 	return result

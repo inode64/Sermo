@@ -27,6 +27,23 @@ const (
 	hwmonMilliScale = 1000.0
 )
 
+// A digital temperature sensor measures within -55..125 °C. Beyond that range
+// hwmon reports a saturated register rather than a temperature: an input with
+// no probe attached (a board's unused AUXTIN) reads 127 or -128 intermittently,
+// and treating that as the hottest sensor would fire a server-wide alarm.
+const (
+	hwmonTempMinC = -55.0
+	hwmonTempMaxC = 125.0
+)
+
+// hwmon channel attributes that mark an input as not measuring anything.
+const (
+	hwmonEnableSuffix = "_enable"
+	hwmonFaultSuffix  = "_fault"
+	hwmonDisabled     = "0"
+	hwmonFaulted      = "1"
+)
+
 // SensorReading is one hwmon input: the chip name, the kind (temp/fan/in), a
 // label and the value in its natural unit (°C, RPM, V).
 type SensorReading struct {
@@ -94,7 +111,7 @@ func (c sensorsCheck) Run(_ context.Context) Result {
 	appendSensorPart(sensorTemp, summary.Temp, summary.HasTemp)
 	appendSensorPart(sensorFan, summary.Fan, summary.HasFan)
 	appendSensorPart(sensorVoltage, summary.Voltage, summary.HasVoltage)
-	r := c.result(ok, "sensors "+strings.Join(parts, " "), start)
+	r := c.grade(c.result(ok, "sensors "+strings.Join(parts, " "), start), values)
 	r.Data = sensorsResultData(summary, c.chip, c.label)
 	return r
 }
@@ -196,6 +213,9 @@ func readSensorKind(dir, chip, kind string, scale float64) []SensorReading {
 			continue
 		}
 		base := strings.TrimSuffix(f, "_input")
+		if !hwmonChannelLive(base, kind, v/scale) {
+			continue
+		}
 		label := readTrim(base + "_label")
 		if label == "" {
 			label = chip + "/" + filepath.Base(base)
@@ -203,6 +223,16 @@ func readSensorKind(dir, chip, kind string, scale float64) []SensorReading {
 		out = append(out, SensorReading{Chip: chip, Kind: kind, Label: label, Value: v / scale})
 	}
 	return out
+}
+
+// hwmonChannelLive reports whether an hwmon input measures something: not a
+// channel its driver disabled or flagged faulty, and not a temperature outside
+// what a sensor can read.
+func hwmonChannelLive(base, kind string, value float64) bool {
+	if readTrim(base+hwmonEnableSuffix) == hwmonDisabled || readTrim(base+hwmonFaultSuffix) == hwmonFaulted {
+		return false
+	}
+	return kind != sensorTemp || (value >= hwmonTempMinC && value <= hwmonTempMaxC)
 }
 
 // readTrim reads a sysfs file and trims surrounding whitespace, returning ""

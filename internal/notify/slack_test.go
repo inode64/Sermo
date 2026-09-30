@@ -29,12 +29,21 @@ func TestSlackSendPostsPayload(t *testing.T) {
 		t.Fatalf("posted to %q", gotURL)
 	}
 	var body struct {
-		Text string `json:"text"`
+		Attachments []struct {
+			Color    string `json:"color"`
+			Title    string `json:"title"`
+			Fallback string `json:"fallback"`
+			Text     string `json:"text"`
+		} `json:"attachments"`
 	}
 	if err := json.Unmarshal(gotPayload, &body); err != nil {
 		t.Fatalf("payload not JSON: %v (%s)", err, gotPayload)
 	}
-	if !strings.Contains(body.Text, "storage-root") || !strings.Contains(body.Text, "SERMO_PATH=/") {
-		t.Fatalf("unexpected slack text: %q", body.Text)
+	if len(body.Attachments) != 1 {
+		t.Fatalf("attachments = %+v, want one", body.Attachments)
+	}
+	got := body.Attachments[0]
+	if !strings.Contains(got.Title, "storage-root") || got.Fallback != got.Title || !strings.Contains(got.Text, "SERMO_PATH=/") {
+		t.Fatalf("unexpected slack attachment: %+v", got)
 	}
 }

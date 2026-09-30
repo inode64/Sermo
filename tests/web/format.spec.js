@@ -27,3 +27,14 @@ test("duration helpers route through fmtDuration", async () => {
   // Ages beyond a day keep the absolute UTC timestamp fallback.
   expect(fmt.fmtAge(new Date(Date.now() - 2 * 86400 * 1000).toISOString())).toMatch(/ UTC$/);
 });
+
+test("severity helpers rank the daemon's scale", async () => {
+  const fmt = await import(formatURL);
+  expect(fmt.severityLevels).toEqual(["debug", "info", "warning", "error", "critical"]);
+  expect(fmt.severityRank("critical")).toBeGreaterThan(fmt.severityRank("error"));
+  // An unset or unknown grade is an error, never an advisory.
+  expect(fmt.severityRank("")).toBe(fmt.severityRank("error"));
+  expect(fmt.severityRank("urgent")).toBe(fmt.severityRank("error"));
+  for (const level of ["debug", "info", "warning"]) expect(fmt.isAdvisorySeverity(level), level).toBe(true);
+  for (const level of ["error", "critical", "", undefined]) expect(fmt.isAdvisorySeverity(level), String(level)).toBe(false);
+});

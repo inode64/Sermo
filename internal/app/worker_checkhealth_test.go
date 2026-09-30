@@ -6,6 +6,7 @@ import (
 
 	"sermo/internal/checks"
 	"sermo/internal/rules"
+	"sermo/internal/severity"
 )
 
 // runCycles drives n cycles over a worker whose check cache is produced by
@@ -71,8 +72,8 @@ func TestRestoredCheckFailureDoesNotRepeatFiringAndRecovers(t *testing.T) {
 	var events []Event
 	cycle := 0
 	w := &Worker{
-		Service:      "web",
-		checkFailing: checkFailingFromSnapshots(snapshots, "web", map[string]string{"service": "service"}, testServiceSnapshotConfigID),
+		Service:       "web",
+		checkEpisodes: checkEpisodesFromSnapshots(snapshots, "web", map[string]string{"service": "service"}, testServiceSnapshotConfigID),
 		Checks: func(context.Context, checks.Deps) map[string]checks.Result {
 			cycle++
 			return map[string]checks.Result{
@@ -98,17 +99,17 @@ func TestCheckFailureRestoreRejectsStaleSnapshots(t *testing.T) {
 		result     checks.Result
 		storedType string
 		current    map[string]string
-		want       map[string]bool
+		want       map[string]checkEpisode
 	}{
 		{
 			name: "matching failure", result: checks.Result{Check: "service", OK: false},
 			storedType: "service", current: map[string]string{"service": "service"},
-			want: map[string]bool{"service": true},
+			want: map[string]checkEpisode{"service": {held: severity.Error, restored: true}},
 		},
 		{
 			name: "matching health", result: checks.Result{Check: "service", OK: true},
 			storedType: "service", current: map[string]string{"service": "service"},
-			want: map[string]bool{"service": false},
+			// A healthy check has no open episode to restore.
 		},
 		{
 			name: "changed type", result: checks.Result{Check: "service", OK: false},
@@ -133,7 +134,7 @@ func TestCheckFailureRestoreRejectsStaleSnapshots(t *testing.T) {
 			snapshots := NewSnapshots()
 			snapshots.publishConfigured("web", map[string]checks.Result{"service": tt.result},
 				map[string]bool{"service": true}, map[string]string{"service": tt.storedType}, testServiceSnapshotConfigID)
-			got := checkFailingFromSnapshots(snapshots, "web", tt.current, testServiceSnapshotConfigID)
+			got := checkEpisodesFromSnapshots(snapshots, "web", tt.current, testServiceSnapshotConfigID)
 			if len(got) != len(tt.want) || got["service"] != tt.want["service"] {
 				t.Fatalf("restored = %+v, want %+v", got, tt.want)
 			}
@@ -299,16 +300,20 @@ func TestNestedRuleConditionSuppressesCheckHealthEvent(t *testing.T) {
 	}
 }
 
-// A check that graded its own failure an advisory reaches the event log as a
-// warning, so the transition logs at warn level like every other advisory.
-func TestWarningGradedCheckFailureRaisesWarningKind(t *testing.T) {
+// A check that graded its own failure an advisory reaches the event log graded
+// warning, so the transition logs at warn level like every other advisory, and
+// its recovery reports the grade the episode closed with.
+func TestWarningGradedCheckFailureCarriesItsSeverity(t *testing.T) {
 	events := runCycles(t, func(c int) map[string]checks.Result {
 		if c == 1 {
-			return map[string]checks.Result{"smart": {Check: "smart", OK: true, Condition: true, Message: "health=PASSED; reallocated 4 > 0", Severity: checks.SeverityWarning}}
+			return map[string]checks.Result{"smart": {Check: "smart", OK: true, Condition: true, Message: "health=PASSED; reallocated 4 > 0", Severity: severity.Warning}}
 		}
 		return map[string]checks.Result{"smart": {Check: "smart", OK: false, Condition: true, Message: "health=PASSED"}}
 	}, 2)
-	if got := kinds(events); len(got) != 2 || got[0] != eventKindWarning || got[1] != eventKindRecovered {
-		t.Fatalf("kinds = %v, want exactly [warning recovered]", got)
+	if got := kinds(events); len(got) != 2 || got[0] != eventKindFiring || got[1] != eventKindRecovered {
+		t.Fatalf("kinds = %v, want exactly [firing recovered]", got)
+	}
+	if events[0].Severity != severity.Warning || events[1].Severity != severity.Warning {
+		t.Fatalf("severities = %q, %q, want both warning", events[0].Severity, events[1].Severity)
 	}
 }

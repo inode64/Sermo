@@ -23,6 +23,7 @@ import (
 	"sermo/internal/process"
 	"sermo/internal/rules"
 	"sermo/internal/servicemgr"
+	"sermo/internal/severity"
 	"sermo/internal/state"
 	"sermo/internal/volume"
 	web "sermo/internal/web"
@@ -950,12 +951,15 @@ func TestWebBackendActivitySummaryCountsErrors(t *testing.T) {
 	events.Add(Event{Watch: "storage-root", Kind: eventKindExpand, Message: "grew vg0/data"})
 	events.Add(Event{Watch: "runaway", Kind: eventKindKillFailed, Message: "pid 42 survived"})
 	events.Add(Event{Watch: "storage-root", Kind: eventKindNotify, Status: eventStatusOK})
+	// An advisory watch's unavailable probe is an error graded below an outage.
+	events.Add(Event{Watch: "api", Kind: eventKindError, Severity: severity.Warning, Check: watchAvailabilityCheck, Message: checkUnavailablePrefix + "timeout"})
 	events.Add(Event{Kind: eventKindError, Message: "boom"})
 
 	b := &WebBackend{events: events}
 	got := b.ActivitySummary(context.Background())
 	// Only the error event and the failed cascade count as errors: successful
-	// and blocked operations, hooks, expands, kills and notifies do not.
+	// and blocked operations, hooks, expands, kills, notifies and an advisory's
+	// error do not.
 	if got.Errors != 2 {
 		t.Fatalf("ActivitySummary = %+v, want errors=2 (error event + failed cascade)", got)
 	}

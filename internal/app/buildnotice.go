@@ -1,6 +1,10 @@
 package app
 
-import "strings"
+import (
+	"strings"
+
+	"sermo/internal/config"
+)
 
 // buildNoticeInfoPrefix marks a build/reload notice as informational rather
 // than a warning (e.g. a configured service whose explicit per-init map
@@ -33,4 +37,15 @@ func LogBuildNotices(logger buildNoticeLogger, label string, notices []string) {
 		}
 		logger.Warn(label, buildNoticeFieldWarning, n)
 	}
+}
+
+// ConfigWarnings renders the advisory findings of an accepted configuration
+// (config.Warnings) as notices for LogBuildNotices, each naming its scope.
+func ConfigWarnings(cfg *config.Config) []string {
+	issues := config.Warnings(cfg)
+	notices := make([]string, 0, len(issues))
+	for _, issue := range issues {
+		notices = append(notices, issue.Scope+": "+issue.Msg)
+	}
+	return notices
 }

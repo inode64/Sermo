@@ -3,16 +3,18 @@ package app
 import (
 	"context"
 	"fmt"
+	"slices"
+	"strings"
+	"time"
+
 	"sermo/internal/cfgval"
 	"sermo/internal/checks"
 	"sermo/internal/config"
 	"sermo/internal/metrics"
 	"sermo/internal/servicemgr"
+	"sermo/internal/severity"
 	"sermo/internal/units"
 	"sermo/internal/web"
-	"slices"
-	"strings"
-	"time"
 )
 
 // Watches returns configured host-level and service-scoped watches, including
@@ -101,6 +103,7 @@ func (b *WebBackend) applyWatchRuntimeView(view *web.Watch, w *webWatch, activit
 	}
 	if !activity.At.IsZero() {
 		view.LastActivity, view.LastActivityKind = activity.At.UTC().Format(time.RFC3339), activity.Kind
+		view.LastActivitySeverity = activity.Severity.String()
 	}
 	if view.Enabled && view.Monitored {
 		view.SampleState = observation.watchSampleState(w, checkedAt)
@@ -160,8 +163,9 @@ func (b *WebBackend) watchSystemSnapshot() metrics.Snapshot {
 }
 
 type watchActivity struct {
-	At   time.Time
-	Kind string
+	At       time.Time
+	Kind     string
+	Severity severity.Level
 }
 
 func (b *WebBackend) lastServiceEvents() map[string]*web.Event {
@@ -190,8 +194,9 @@ func (b *WebBackend) lastWatchActivities() map[string]watchActivity {
 			continue
 		}
 		out[name] = watchActivity{
-			At:   ev.Time,
-			Kind: ev.Kind,
+			At:       ev.Time,
+			Kind:     ev.Kind,
+			Severity: ev.Severity,
 		}
 	}
 	return out
@@ -237,9 +242,9 @@ func (e *webEntry) invalidateStatusCache() {
 }
 
 // watchViewState grades a watch row: an outage, an advisory, or neither. The two
-// signals are the last activity kind — an advisory watch records its own kind, so
-// this stays right per metric and across a restart — and the published readings,
-// where an advisory reports through Warning instead of Error.
+// signals are the last activity — its kind and severity, which the event log
+// keeps per metric and across a restart — and the published readings, where an
+// advisory reports through Warning instead of Error.
 //
 // The readings are the newer signal. A firing episode announces itself once, so
 // when the check has since regraded the same episode an advisory — a RAID
@@ -249,7 +254,8 @@ func (e *webEntry) invalidateStatusCache() {
 // the episode. A failed hook or notification stays an outage regardless.
 func watchViewState(w *webWatch, view web.Watch, activityAt, changedAt time.Time) (failed, warning bool) {
 	current := watchActivityCurrent(activityAt, changedAt)
-	if WatchActivityFailed(view.LastActivityKind) && current {
+	level := severity.Level(view.LastActivitySeverity)
+	if WatchActivityFailed(view.LastActivityKind, level) && current {
 		regraded := view.LastActivityKind == eventKindFiring && watchReadingsWarning(view.Readings) && !watchReadingsFailed(view.Readings)
 		if !regraded {
 			return true, false
@@ -264,7 +270,8 @@ func watchViewState(w *webWatch, view web.Watch, activityAt, changedAt time.Time
 	if watchReadingsFailed(view.Readings) {
 		return true, false
 	}
-	return false, (view.LastActivityKind == eventKindWarning && current) || watchReadingsWarning(view.Readings)
+	advisoryFiring := view.LastActivityKind == eventKindFiring && level.Advisory()
+	return false, (advisoryFiring && current) || watchReadingsWarning(view.Readings)
 }
 
 func watchStorageMountFailed(w *webWatch, storage *web.StorageWatchInfo) bool {
@@ -289,7 +296,7 @@ func watchReadingsWarning(readings []web.WatchReading) bool {
 
 func isWatchActivityKind(kind string) bool {
 	switch kind {
-	case eventKindFiring, eventKindWarning, eventKindRecovered, eventKindDryRun, eventKindHook, eventKindNotify, eventKindHookFail, eventKindNotifyFail, eventKindExpand, eventKindExpandSkipped, eventKindExpandFailed, eventKindKill, eventKindKillFailed,
+	case eventKindFiring, eventKindRecovered, eventKindDryRun, eventKindHook, eventKindNotify, eventKindHookFail, eventKindNotifyFail, eventKindExpand, eventKindExpandSkipped, eventKindExpandFailed, eventKindKill, eventKindKillFailed,
 		eventKindMakeStep, eventKindMakeStepSkipped, eventKindMakeStepFailed:
 		return true
 	default:

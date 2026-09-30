@@ -3,6 +3,7 @@ notifiers:
     # enabled: false  # keep configured but skip delivery attempts
     type: telegram
     # template: default-alert
+    # min_severity: warning  # lowest level delivered: debug, info, warning, error or critical
     token: "${env:TELEGRAM_TOKEN}"  # bot token from @BotFather; kept inside the API URL, never surfaced
     chat_id: "-1001234567890"  # numeric chat/channel id or @channelname
     # parse_mode: MarkdownV2  # HTML, Markdown or MarkdownV2; omit for plain text

@@ -182,3 +182,21 @@ export function fmtAge(value) {
 export function fmtSince(value) {
   return fmtDuration(Math.max(0, Math.round(value / millisecondsPerSecond)));
 }
+
+// Severity grades, ascending. The daemon's internal/severity package owns the
+// scale; the dashboard only ranks and colours it.
+export const severityLevels = ["debug", "info", "warning", "error", "critical"];
+export const severityError = "error";
+export const severityCritical = "critical";
+
+// severityRank orders a grade. An unset or unknown grade is an error, the
+// daemon's default, so an ungraded failure never reads as an advisory.
+export function severityRank(level) {
+  const rank = severityLevels.indexOf(String(level || ""));
+  return rank < 0 ? severityLevels.indexOf(severityError) : rank;
+}
+
+// isAdvisorySeverity reports a grade below an outage: debug, info or warning.
+export function isAdvisorySeverity(level) {
+  return severityRank(level) < severityLevels.indexOf(severityError);
+}

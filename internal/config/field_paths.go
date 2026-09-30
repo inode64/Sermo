@@ -25,6 +25,7 @@ const (
 	webPathGuestPasswordFile = SectionWeb + "." + WebKeyGuestPasswordFile
 	webPathPasswordFile      = SectionWeb + "." + WebKeyPasswordFile
 	webPathPort              = SectionWeb + "." + WebKeyPort
+	webPathPublicURL         = SectionWeb + "." + WebKeyPublicURL
 
 	policyPathBackoff          = sectionPolicy + "." + rules.PolicyKeyBackoff
 	policyPathBackoffInitial   = policyPathBackoff + "." + rules.BackoffKeyInitial

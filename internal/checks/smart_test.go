@@ -8,6 +8,7 @@ import (
 
 	"sermo/internal/execx"
 	"sermo/internal/execx/execxtest"
+	"sermo/internal/severity"
 )
 
 const smartATA = `{
@@ -109,6 +110,28 @@ func TestSmartCheck(t *testing.T) {
 	// own FAILED verdict.
 	if res := smartWith(smartNVMeFailing, levelPred{"temperature", ">", 100}).Run(context.Background()); !res.OK {
 		t.Error("a FAILED SMART verdict should still alert when predicates do not hold")
+	}
+}
+
+// A SCSI drive reporting a warning-class exception — a background scan found a
+// medium error and the drive remapped the sector — has lost a sector, not
+// predicted its own failure: it alerts as an advisory. A failure prediction
+// (5Dh) stays the outage a FAILED verdict is.
+func TestSmartCheckGradesScsiWarningsAsAdvisories(t *testing.T) {
+	const scsiMediumError = `{"smart_status": {"passed": false, "scsi": {"asc": 11, "ascq": 5, "ie_string": "Warning - background medium scan detected medium error"}}, "scsi_grown_defect_list": 10}`
+	const scsiFailurePrediction = `{"smart_status": {"passed": false, "scsi": {"asc": 93, "ascq": 0, "ie_string": "FAILURE PREDICTION THRESHOLD EXCEEDED"}}}`
+	warning := smartWith(scsiMediumError).Run(context.Background())
+	if !warning.OK || warning.Severity != severity.Warning || !strings.Contains(warning.Message, "health=WARNING") {
+		t.Fatalf("medium error = ok %v severity %q %q, want an alerting warning", warning.OK, warning.Severity, warning.Message)
+	}
+	failed := smartWith(scsiFailurePrediction).Run(context.Background())
+	if !failed.OK || failed.Severity.Resolved() != severity.Error || !strings.Contains(failed.Message, "health=FAILED") {
+		t.Fatalf("failure prediction = ok %v severity %q %q, want a failed error", failed.OK, failed.Severity, failed.Message)
+	}
+	declared := smartWith(scsiMediumError)
+	declared.severity = severity.Critical
+	if res := declared.Run(context.Background()); res.Severity != severity.Critical {
+		t.Fatalf("declared severity = %q, want critical", res.Severity)
 	}
 }
 
@@ -430,31 +453,31 @@ func TestSmartCheckGradesPredicatesAsWarningWhileHealthPasses(t *testing.T) {
 	reallocated := levelPred{"reallocated", ">", 0}
 
 	res := smartWith(smartATA, reallocated).Run(context.Background())
-	if !res.OK || !IsWarning(res.Severity) {
+	if !res.OK || res.Severity != severity.Warning {
 		t.Fatalf("PASSED + reallocated 4 > 0 = %+v, want the condition fired and graded warning", res)
 	}
-	if res := smartWith(smartATA).Run(context.Background()); res.OK || IsWarning(res.Severity) {
+	if res := smartWith(smartATA).Run(context.Background()); res.OK || res.Severity == severity.Warning {
 		t.Fatalf("PASSED with no predicate = %+v, want healthy and ungraded", res)
 	}
-	if res := smartWith(smartNVMeFailing).Run(context.Background()); !res.OK || IsWarning(res.Severity) {
+	if res := smartWith(smartNVMeFailing).Run(context.Background()); !res.OK || res.Severity == severity.Warning {
 		t.Fatalf("FAILED verdict = %+v, want an outage", res)
 	}
-	if res := smartWith(smartNVMeFailing, levelPred{"temperature", ">", 0}).Run(context.Background()); !res.OK || IsWarning(res.Severity) {
+	if res := smartWith(smartNVMeFailing, levelPred{"temperature", ">", 0}).Run(context.Background()); !res.OK || res.Severity == severity.Warning {
 		t.Fatalf("FAILED verdict beside a holding predicate = %+v, want the outage to win", res)
 	}
-	if res := smartWith(smartDeviceGone, reallocated).Run(context.Background()); !res.Unavailable || IsWarning(res.Severity) {
+	if res := smartWith(smartDeviceGone, reallocated).Run(context.Background()); !res.Unavailable || res.Severity == severity.Warning {
 		t.Fatalf("missing device = %+v, want unavailable and ungraded", res)
 	}
 
 	// A declaration always wins, in either direction.
 	declaredError := smartWith(smartATA, reallocated)
-	declaredError.severity = SeverityError
-	if res := declaredError.Run(context.Background()); !res.OK || IsWarning(res.Severity) {
+	declaredError.severity = severity.Error
+	if res := declaredError.Run(context.Background()); !res.OK || res.Severity == severity.Warning {
 		t.Fatalf("declared error + predicate = %+v, want the declared outage", res)
 	}
 	declaredWarning := smartWith(smartNVMeFailing)
-	declaredWarning.severity = SeverityWarning
-	if res := declaredWarning.Run(context.Background()); !res.OK || !IsWarning(res.Severity) {
+	declaredWarning.severity = severity.Warning
+	if res := declaredWarning.Run(context.Background()); !res.OK || res.Severity != severity.Warning {
 		t.Fatalf("declared warning + FAILED verdict = %+v, want the declared advisory", res)
 	}
 }

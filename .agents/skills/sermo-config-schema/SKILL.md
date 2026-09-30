@@ -48,6 +48,12 @@ here. This skill records the design decisions a change must respect.
   hard safety invariant (preflight, locks, SIGKILL default, kill selector).
 - Validation errors name the file, target, field and reason.
 - There is no resolved-config rendering subcommand; do not document one.
+- `severity` has five levels (`internal/severity` owns them). `levels:` lives
+  in the check entry — a watch's `check:`, a service `checks:` entry, or a
+  multi-metric type's metric block — never on a watch entry. Its shape errors
+  are validation errors; an inert tier (not stricter, not above the declared
+  severity) is ignored and surfaces through `config.Warnings`, not `Validate`.
+  A service watch's entry `severity:` is copied into the generated check.
 
 ## Traps
 

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"sermo/internal/checks"
+	"sermo/internal/severity"
 )
 
 // availabilitySample is one recorded point of a watch's availability series.
@@ -88,7 +89,7 @@ func TestWatchRecordsNoAvailabilityWhenUnavailable(t *testing.T) {
 // matching the service rule: a warning is a thing to look at, not downtime.
 func TestWatchRecordsNoAvailabilityForAdvisory(t *testing.T) {
 	w, got := recordingWatch(t, checks.CheckTypeNet, checks.Result{
-		Check: "probe", OK: false, Severity: checks.SeverityWarning,
+		Check: "probe", OK: false, Severity: severity.Warning,
 		Data: map[string]any{checks.DataKeyMetric: checks.NetMetricState},
 	})
 	w.RunCycle(t.Context())

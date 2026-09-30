@@ -14,10 +14,12 @@ import (
 	"errors"
 	"fmt"
 	"maps"
-	"sermo/internal/cfgval"
-	"sermo/internal/strutil"
 	"slices"
 	"strings"
+
+	"sermo/internal/cfgval"
+	"sermo/internal/severity"
+	"sermo/internal/strutil"
 )
 
 // Message is a notification to deliver. Subject/Body are the human-facing text;
@@ -29,6 +31,12 @@ type Message struct {
 	Body    string
 	HTML    string
 	Fields  map[string]string
+	// Severity grades the message; monitoring delivers it only to notifiers
+	// whose min_severity it meets (Accepts). Unset counts as an error.
+	Severity severity.Level
+	// Link opens the dashboard at the message's target (WithPanelURL); empty
+	// when the daemon has no public URL.
+	Link string
 
 	// raw is set once Subject/Body are markup for the transport (a template
 	// rendered over escaped values), so the transport must not escape them
@@ -82,6 +90,9 @@ const (
 	KeyParseMode       = "parse_mode"
 	KeySilent          = "silent"
 	KeyMessageThreadID = "message_thread_id"
+	// KeyMinSeverity is the lowest severity a notifier receives from
+	// monitoring; absent, it receives everything.
+	KeyMinSeverity = "min_severity"
 )
 
 // Option customizes notifier construction.
@@ -90,6 +101,7 @@ type Option func(*buildOptions)
 type buildOptions struct {
 	templateDir       string
 	templatesDisabled bool
+	panelURL          string
 }
 
 // Type constants are the supported notifier transport names.
@@ -192,6 +204,13 @@ func Build(raw map[string]any, opts ...Option) (map[string]Notifier, []string) {
 			}
 			n = withTemplate(n, tmpl)
 		}
+		if options.panelURL != "" {
+			n = panelLinkNotifier{Notifier: n, base: options.panelURL}
+		}
+		// Outermost, so the template wrapper still sees the raw transport.
+		if floor := EntryMinSeverity(entry); floor.Rank() > severity.Debug.Rank() {
+			n = severityFloorNotifier{Notifier: n, floor: floor}
+		}
 		out[name] = n
 	}
 	return out, warnings
@@ -237,6 +256,35 @@ func NewTargetedTTY(name string, users []string) (Notifier, error) {
 		return nil, fmt.Errorf("build targeted tty notifier %s: %w", name, err)
 	}
 	return notifier, nil
+}
+
+// EntryMinSeverity returns the lowest severity a notifier entry receives from
+// monitoring: its `min_severity`, or debug (everything) when absent. Build and
+// the dashboard read it through this one function.
+func EntryMinSeverity(entry map[string]any) severity.Level {
+	if floor, ok := severity.Parse(cfgval.AsString(entry[KeyMinSeverity])); ok {
+		return floor
+	}
+	return severity.Debug
+}
+
+// severityFloorNotifier carries a notifier's min_severity. Send delegates
+// unchanged: monitoring filters before sending (Accepts), while an explicit
+// operator action — a notifier test, an inventory report — always goes out.
+type severityFloorNotifier struct {
+	Notifier
+	floor severity.Level
+}
+
+// MinSeverity is the lowest severity the notifier receives from monitoring.
+func (n severityFloorNotifier) MinSeverity() severity.Level { return n.floor }
+
+// Accepts reports whether monitoring may deliver a message graded level to n.
+// A notifier without a min_severity accepts everything; an unset level counts
+// as an error, so an ungraded message still reaches an error-level channel.
+func Accepts(n Notifier, level severity.Level) bool {
+	floored, ok := n.(interface{ MinSeverity() severity.Level })
+	return !ok || level.AtLeast(floored.MinSeverity())
 }
 
 // supportedTypes lists the registered notifier types, for validation and docs.

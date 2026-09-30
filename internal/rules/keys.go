@@ -25,6 +25,9 @@ const (
 	RuleFieldActions = "actions"
 	RuleFieldAction  = "action"
 	RuleFieldMessage = "message"
+	// RuleFieldSeverity grades an alert or remediation rule's episode. Absent,
+	// the rule takes the gravest grade of the failing checks its condition reads.
+	RuleFieldSeverity = "severity"
 )
 
 // Condition constants are the recognized condition-tree operators.

@@ -396,7 +396,7 @@ engine:
   # service_restart_notice:    # optional normal alert for a newly started principal process
   #   uptime_below: 5m
   #   notify: [ops-email]      # explicit targets; does not inherit top-level notify
-  #   subject: "[sermo] ${restart.service}: main process restarted"
+  #   subject: "[sermo][warning] ${restart.service}: main process restarted"
   #   message: "${restart.service} PID ${restart.pid} started ${restart.uptime} ago"
   # Optional append-only JSONL export logs (opt-in: omit a key to disable it).
   # access: /var/log/sermo/access.log
@@ -479,7 +479,7 @@ engine:
   service_restart_notice:
     uptime_below: 5m       # required, strictly positive
     notify: [ops-email]    # required; `none` records the event without delivery
-    subject: "[sermo] ${restart.service}: main process restarted"  # optional
+    subject: "[sermo][warning] ${restart.service}: main process restarted"  # optional
     message: >-            # required
       ${restart.service} principal process ${restart.process}
       (PID ${restart.pid}) started at ${restart.started_at};
@@ -488,7 +488,7 @@ engine:
 
 The selection in `notify` is deliberately explicit and never inherits the
 top-level `notify` default. `subject` defaults to
-`[sermo] ${restart.service}: main process restarted`. The message and subject
+`[sermo][warning] ${restart.service}: main process restarted`. The message and subject
 may use `${restart.service}`, `${restart.unit}`, `${restart.process}`,
 `${restart.pid}`, `${restart.uptime}`, `${restart.uptime_seconds}`,
 `${restart.started_at}`, and `${restart.threshold}`, as well as the standard
@@ -1057,6 +1057,17 @@ web:
 With auth enabled the check does not apply — a rebound origin cannot attach
 Basic credentials, and proxies keep whatever `Host` they use. Plain `/livez`
 and `/readyz` probes are always exempt.
+
+`public_url` is the address operators open this dashboard at — the proxy's
+address, or the host name and port on a private network. Notifications link to
+it ([Notifications](#notifications)): an absolute `http://` or `https://` URL,
+optionally under a proxy path, without a query or fragment.
+
+```yaml
+web:
+  port: 9797
+  public_url: "http://fr5.intranet:9797"   # notifications open the failing row here
+```
 
 ### Behind a reverse proxy (required to expose it)
 
@@ -1672,6 +1683,48 @@ The supported notifier types today are `email`, `ntfy`, `gotify`, `telegram`,
 Set **`enabled: false`** on any notifier to keep it defined but skip delivery.
 Disabled notifiers may still be referenced by `notify` selections.
 
+Set **`min_severity`** on any notifier to the lowest
+[severity](rules.md#severity-severity) it receives from monitoring: `debug`,
+`info`, `warning`, `error` or `critical`. Without it the notifier receives
+everything (`debug`), as before. This is where alert noise is routed: every
+watch, rule, event and reminder carries a severity, and each notifier only
+hears the ones at or above its minimum.
+
+```yaml
+notifiers:
+  team-slack:
+    type: slack
+    webhook: "https://hooks.slack.com/services/T0000/B0000/XXXXXXXX"
+    min_severity: warning     # advisories and outages, no info chatter
+  oncall-telegram:
+    type: telegram
+    token: "${env:TELEGRAM_TOKEN}"
+    chat_id: "-1001234567890"
+    min_severity: critical    # only what needs someone now
+```
+
+Each transport also shows the grade at a glance, and a recovery as good news
+whatever grade the incident reached:
+
+| Transport | Colour | Panel link |
+|---|---|---|
+| `slack` | attachment bar: grey debug, blue info, amber warning, red error, purple critical, green recovery | the title opens the row |
+| `teams` | lead line colour (`accent`, `warning`, `attention`, `good`) | an **Open in Sermo** button |
+| `telegram` | a leading ⚪ 🔵 🟡 🔴 🟣 🟢 mark | last line of the text |
+| `ntfy`, `gotify` | priority (ntfy 1–5, Gotify 2–10) | tapping the notification |
+| `email` | the `[sermo][<level>]` subject tag | last line of the body |
+
+The link needs [`web.public_url`](#web-ui): with it every notification opens the
+dashboard at the row it is about — the service (`#svc:NAME`), else the app
+(`#app:NAME`), else the watch (`#wat:NAME`) — and templates receive it as
+`SERMO_URL`. Without it messages carry no link.
+
+A notifier that the opening alert did not reach is not sent the recovery
+either, so a channel never sees a recovery for an incident it never heard of;
+a notifier that heard an escalation hears the recovery at that level. The
+filter applies to monitoring only: `sermoctl notifier test`, the web UI test
+button and `sermoctl services --notify` always deliver.
+
 Use `sermoctl notifier test NAME` to send a clearly marked test message through
 one enabled notifier. The Notifiers panel offers the same action to WebUI
 administrators. Both paths use the configured delivery target and timeout, do
@@ -1718,6 +1771,14 @@ for that mode, so a template writes markup around them (`*{{ .Subject }}*`,
 `<pre>{{ .Body }}</pre>`) without escaping anything itself. Compare a field with
 `eq` only against text that needs no escaping in the mode.
 
+Every monitoring notification carries **`SERMO_SEVERITY`** — the level the
+message was graded at (`debug` … `critical`) — so a template can mark or route
+it, for example `{{ if eq (.Field "SERMO_SEVERITY") "critical" }}🚨 {{ end }}`.
+`event_notify` messages also carry `SERMO_EVENT` (the event kind) and the
+`SERMO_SERVICE`, `SERMO_WATCH`, `SERMO_APP` or `SERMO_RULE` they concern. A
+recovery carries `SERMO_EVENT=recovered`, and with `web.public_url` every
+message carries its dashboard link as `SERMO_URL`.
+
 A principal-process restart notice supplies the structured fields
 `SERMO_RESTART_SERVICE`, `SERMO_RESTART_UNIT`, `SERMO_RESTART_PROCESS`,
 `SERMO_RESTART_PID`, `SERMO_RESTART_UPTIME`, `SERMO_RESTART_UPTIME_SECONDS`,
@@ -1762,6 +1823,20 @@ Each site then **overrides** the default — the per-site choice always wins:
   records events, it just never delivers;
 - omitting `notify` (inside an explicit `then`) inherits the global default.
 
+When an episode that notified ends, the same site sends a recovery message —
+`<subject tag> <name>: recovered: <message>` — at the gravest level it actually
+delivered, so exactly the notifiers that heard the incident receive it (an
+escalation held back by panic mode or a remediation cooldown does not count,
+and neither does a dry-run notification, which only reaches the console).
+The subject tag names that level (`[sermo][critical]`; an error keeps plain
+`[sermo]`), and for a rule `<name>` is the service. A `process_policy` watch
+sends one when all its violations clear, if a violation was delivered. A watch
+that announces its own RAID/LVM transitions (`notify_on`) sends no separate
+recovery: its healthy transition (`on_good`, LVM back to `ok`) is graded at the
+gravest failing transition it delivered since the last healthy one (kept
+across a daemon restart), and `info` when there was none. The one-shot `file`
+and `process` watches send no recovery.
+
 `none` cannot be combined with notifier names in the same list. Omitting the
 entire `then` key on a watch (or per-metric) is another way to get pure
 alert-only behaviour (firing state + events in the UI and log, but no actions
@@ -1785,8 +1860,13 @@ watch-action events, and automatic service remediation outcomes (including
 `dry-run` and `suppressed`). It includes the host and target in the message and
 does not send routine manual successful actions. The first failure or warning
 for each service check, rule, watch or app is sent immediately; unchanged
-incidents are suppressed even when their event text or PID changes. A change
-between warning and firing, recovery, or a new episode is sent immediately.
+incidents are suppressed even when their event text or PID changes. An
+escalation to a graver severity, a recovery, or a new episode is sent
+immediately; a lower severity inside an open incident is held (see
+[Escalate and hold](rules.md#escalate-and-hold)). Each target's `min_severity`
+applies: a target below the incident's level is skipped and keeps no record of
+it, and a recovery goes to exactly the targets that heard the incident, at the
+gravest level each one heard.
 A watch whose check becomes unavailable and later available again tracks that
 as its own incident, so the check coming back never announces a still-firing
 watch as recovered.
@@ -2521,6 +2601,14 @@ The condition polarity follows the check: a **health** check (tcp/http/service/
 command/cert/…) fires on **failure**; a **condition** check (metric/storage/load/…)
 fires when its **threshold** is met (mark an embedded condition check
 `optional: true` so it does not affect the service's availability/SLA).
+
+A [`severity:`](rules.md#severity-severity) on the watch entry grades the
+generated check, exactly as on a host watch; one on the `check:` block is
+narrower and wins. The generated rule takes that grade — and any
+[`levels:`](rules.md#graded-levels-levels) escalation of the check — for its
+alert, its events and its notifications. Catalog resource alerts use this:
+`alert-if-memory-high` warns at its threshold and escalates to error above a
+higher one.
 
 A service watch with no `then` is a check-only entry: on resolution it becomes
 `checks.<watch>` and participates in service health/SLA/post-operation
@@ -3259,7 +3347,10 @@ whose processes discovery can attribute — the same population as
 [`stale_binary`](#stale_binary--service-running-a-replaced-binary) — together
 with a rule named `restart-if-fds-high`. By default it is an **alert** rule:
 it reports usage that stays above the threshold for three minutes and does
-not restart the service. The historical rule name stays the same when the
+not restart the service. The alert is a `warning` that
+[escalates](rules.md#escalate-and-hold) to `error` above 95 %, where a process
+is about to refuse connections; a `fds_limit` at or above 95 % keeps a single
+warning threshold. The historical rule name stays the same when the
 action changes, so existing rule state and references remain identifiable.
 Set `restart_on_fds_high: true` explicitly to alert and then restart through
 the normal operation guards, preflight and remediation policy.
@@ -3274,7 +3365,7 @@ Two service keys govern the sensor; both inherit from `defaults:` like
 
 | Key | Default | Meaning |
 |---|---|---|
-| `fds_limit` | `80%` | share of a process's soft open-files limit that fires the rule; `false` injects neither the check nor the rule |
+| `fds_limit` | `80%` | share of a process's soft open-files limit that fires the rule as a warning (it escalates to error above 95 %); `false` injects neither the check nor the rule |
 | `restart_on_fds_high` | `false` | alert only by default; `true` explicitly permits an alert followed by restart |
 
 ```yaml

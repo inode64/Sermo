@@ -75,10 +75,10 @@ func (a App) writeEvents(opts options, service string, evs []event) {
 
 func (a App) writeEventsTable(evs []event) {
 	tw := newTabWriter(a.Stdout)
-	fmt.Fprintln(tw, "TIME\tTARGET\tKIND\tRULE\tACTION\tMESSAGE")
+	fmt.Fprintln(tw, "TIME\tTARGET\tKIND\tSEVERITY\tRULE\tACTION\tMESSAGE")
 	for _, e := range evs {
 		r := eventTableFields(e)
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\n", r.timestamp, r.target, r.kind, r.rule, r.action, r.message)
+		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n", r.timestamp, r.target, r.kind, r.severity, r.rule, r.action, r.message)
 	}
 	_ = tw.Flush()
 }
@@ -88,6 +88,7 @@ type eventTableRow struct {
 	timestamp string
 	target    string
 	kind      string
+	severity  string
 	rule      string
 	action    string
 	message   string
@@ -104,6 +105,10 @@ func eventTableFields(e event) eventTableRow {
 	target = eventTableValue(target, eventsTableTargetWidth)
 
 	kind := eventTableValue(e.Kind, eventsTableKindWidth)
+	level := eventTableValue(e.Severity, eventsTableSeverityWidth)
+	if level == "" {
+		level = "-"
+	}
 	// The rule distinguishes several rules of one service transitioning in the
 	// same cycle, which otherwise render as identical rows.
 	rule := eventTableValue(e.Rule, eventsTableRuleWidth)
@@ -119,6 +124,7 @@ func eventTableFields(e event) eventTableRow {
 		timestamp: timestamp,
 		target:    target,
 		kind:      kind,
+		severity:  level,
 		rule:      rule,
 		action:    action,
 		message:   eventTableMessage(e.Message),

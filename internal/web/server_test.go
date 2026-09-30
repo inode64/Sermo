@@ -1795,6 +1795,7 @@ func TestSeriesSinceParsing(t *testing.T) {
 func TestIsErrorEventClassification(t *testing.T) {
 	errorEvents := []Event{
 		{Kind: eventKindError},
+		{Kind: eventKindError, Severity: "critical"},
 		{Kind: eventKindHookFailed},
 		{Kind: "notify-failed"},
 		{Kind: eventKindAction, Status: eventStatusFailed},
@@ -1814,6 +1815,9 @@ func TestIsErrorEventClassification(t *testing.T) {
 		{Kind: eventKindAlert},
 		{Kind: "recovered"},
 		{Kind: "reload"},
+		// An advisory watch whose probe became unavailable raises an error
+		// graded below an outage: it stays out of the errors-only feed.
+		{Kind: eventKindError, Severity: "warning"},
 	}
 	for _, e := range okEvents {
 		if IsErrorEvent(e) {

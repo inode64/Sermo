@@ -36,6 +36,20 @@ the types are `RuleType`, `ActionType` and `Action` in
   validation error. Manual actions skip cooldown only.
 - An unavailable or erroring guard leaf fails closed.
 
+## Severity
+
+- Escalate and hold lives in `rules.WindowState` (`FiresGradedAt`): one entry
+  window per severity rung, fed with "true and graded at least this level",
+  reusing the owner's `for:`/`within:`. The episode severity only rises and
+  resets when the episode ends; do not add a parallel ladder elsewhere.
+- `FiresGradedAt` must fire exactly when `FiresAt` would (a property test pins
+  it). The rung state, the high-water mark and the gravest level notified
+  persist with the window; a recovery notification goes out at the level
+  notified, not at the high-water mark.
+- A rule's grade is its declared `severity:` or `Evaluator.RuleSeverity`, the
+  gravest failing `failed:`/`active:` leaf outside `not:`, read from the cycle
+  cache without probing.
+
 ## Evaluation order
 
 ```text

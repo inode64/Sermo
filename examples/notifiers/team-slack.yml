@@ -3,4 +3,5 @@ notifiers:
     # enabled: false  # keep configured but skip delivery attempts
     type: slack
     # template: default-alert
+    # min_severity: warning  # lowest level delivered: debug, info, warning, error or critical
     webhook: "https://hooks.slack.com/services/T0000/B0000/XXXXXXXX"

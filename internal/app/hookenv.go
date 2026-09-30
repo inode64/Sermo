@@ -12,6 +12,7 @@ const (
 
 	sermoEnvService = sermoEnvPrefix + "SERVICE"
 	sermoEnvRule    = sermoEnvPrefix + "RULE"
+	sermoEnvApp     = sermoEnvPrefix + "APP"
 
 	sermoEnvWatch      = sermoEnvPrefix + "WATCH"
 	sermoEnvCheckType  = sermoEnvPrefix + "CHECK_TYPE"

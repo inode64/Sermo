@@ -163,7 +163,7 @@ func TestServiceSnapshotRejectsChangedConfiguration(t *testing.T) {
 	if b.serviceCheckSnapshotCurrent(entry, "http", snapshot) {
 		t.Fatal("changed service configuration accepted the previous endpoint's sample")
 	}
-	if got := checkFailingFromSnapshots(samples, "web", types, newID); got != nil {
+	if got := checkEpisodesFromSnapshots(samples, "web", types, newID); got != nil {
 		t.Fatalf("changed configuration restored old check health: %v", got)
 	}
 }

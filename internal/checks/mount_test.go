@@ -3,7 +3,12 @@ package checks
 import (
 	"context"
 	"errors"
+	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
+
+	"sermo/internal/severity"
 )
 
 func fakeMounts(ms ...Mount) MountSamplerFunc {
@@ -191,5 +196,78 @@ func TestMountAtPathRequiresExactMountPoint(t *testing.T) {
 	}
 	if got := MountAtPath(mounts, "data"); got != nil {
 		t.Fatalf("MountAtPath relative = %+v, want nil", got)
+	}
+}
+
+// A declared severity grades a used/free ladder; a missing mount beside it is
+// never demoted to an advisory. A mount-only check keeps its declaration.
+func TestStorageMountFailureIsNeverAdvisoryBesideSpaceThresholds(t *testing.T) {
+	tests := []struct {
+		name  string
+		preds []levelPred
+		want  severity.Level
+	}{
+		{"space ladder", []levelPred{{"used_pct", ">=", 80}}, severity.Error},
+		{"mount only", nil, severity.Warning},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := storageCheck{
+				name:         "fs",
+				condition:    true,
+				severity:     severity.Warning,
+				path:         "/data",
+				preds:        tt.preds,
+				mount:        mountCond{active: true, expectMount: true},
+				mountSampler: fakeMounts(),
+			}
+			res := c.Run(context.Background())
+			if !res.OK || res.Severity.Resolved() != tt.want {
+				t.Fatalf("result = ok %v severity %q, want failing at %q", res.OK, res.Severity, tt.want)
+			}
+		})
+	}
+}
+
+// A hard network mount whose server is gone blocks statfs in the kernel. The
+// check must answer unavailable within its timeout — graded as the outage a
+// hung mount is — and later cycles must fail fast rather than stack another
+// blocked call on the same mount.
+func TestStorageHungStatfsIsBoundedAndNotStacked(t *testing.T) {
+	release := make(chan struct{})
+	var calls atomic.Int32
+	c := storageCheck{
+		name:      "fs",
+		condition: true,
+		severity:  severity.Warning,
+		timeout:   20 * time.Millisecond,
+		path:      "/hung-" + t.Name(),
+		preds:     []levelPred{{"free_pct", "<", 20}},
+		usage: func(string) (StorageStats, error) {
+			calls.Add(1)
+			<-release
+			return StorageStats{FreePct: 50, UsedPct: 50}, nil
+		},
+		mountSampler: fakeMounts(),
+	}
+	first := c.Run(context.Background())
+	if first.Observation() != ObservationUnavailable || !strings.Contains(first.Message, "no answer within") || first.Severity != severity.Error {
+		t.Fatalf("first result = %+v, want unavailable at error after the timeout", first)
+	}
+	second := c.Run(context.Background())
+	if !strings.Contains(second.Message, "still blocked") || calls.Load() != 1 {
+		t.Fatalf("second result = %q after %d calls, want a fast failure without a new call", second.Message, calls.Load())
+	}
+	close(release)
+	deadline := time.Now().Add(time.Second)
+	for {
+		res := c.Run(context.Background())
+		if res.Observation() == ObservationHealthy {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("the mount answered again but the check still reports %q", res.Message)
+		}
+		time.Sleep(5 * time.Millisecond)
 	}
 }

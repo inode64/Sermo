@@ -49,6 +49,7 @@ func validateWatches(watches map[string]any, locksDir string, notifiers map[stri
 		validateSeverityField(checkPath, check, add)
 		typ := cfgval.String(check[checks.CheckKeyType])
 		validateCheckBands(checkPath, typ, check, add)
+		validateWatchCheckLevels(checkPath, typ, entry, check, add)
 		if v, present := check[checks.CheckKeySLA]; present {
 			if _, isBool := v.(bool); !isBool {
 				add(validationBooleanFormat, checkPath+"."+checks.CheckKeySLA)
@@ -193,6 +194,7 @@ func validateServiceWatch(name string, entry map[string]any, locksDir string, no
 	validateWatchHeader(name, entry, add)
 	validateWatchRuntimeFields(name, entry, add)
 	validateServiceWatchNotify(name, entry, notifiers, add)
+	validateServiceWatchGrading(name, entry, add)
 	checkPath := watchCheckPath(name)
 	check, ok := entry[WatchKeyCheck].(map[string]any)
 	if !ok {
@@ -200,11 +202,13 @@ func validateServiceWatch(name string, entry map[string]any, locksDir string, no
 		return
 	}
 	validateCheckSummary(checkPath, check, add)
+	validateSeverityField(checkPath, check, add)
 	typ := cfgval.String(check[checks.CheckKeyType])
 	if typ == "" {
 		add(validationRequiredFormat, watchCheckFieldPath(name, checks.CheckKeyType))
 		return
 	}
+	validateCheckLevels(checkPath, typ, check, checks.DeclaredSeverity(entry, check), add)
 	rawThen, hasThen := entry[rules.RuleFieldThen]
 	then, _ := rawThen.(map[string]any)
 	if !hasThen {
@@ -671,6 +675,7 @@ func validateMetricWatchEntries(name, typ string, entry map[string]any, defaultN
 		}
 		validateCondition(prefix, key, metric, add)
 		validateSeverityField(prefix, metric, add)
+		validateMetricLevels(prefix, typ, key, entry, metric, add)
 		validateEmission(metric, prefix+"."+emission.Section, add)
 		validateHookBlock(prefix, metric, watchNativeActions{}, defaultNotify, add)
 		validateWindow(prefix, metric, add)

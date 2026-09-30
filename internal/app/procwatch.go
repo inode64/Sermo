@@ -17,6 +17,7 @@ import (
 	"sermo/internal/metrics"
 	"sermo/internal/notify"
 	"sermo/internal/process"
+	"sermo/internal/severity"
 	"sermo/internal/units"
 )
 
@@ -155,7 +156,9 @@ type killSpec struct {
 // CPU/memory/IO thresholds, firing the hook once per matching PID when its
 // conditions are newly met (edge-triggered) — one event and one hook per PID.
 type procWatcher struct {
-	name      string
+	name string
+	// severity grades every fire this watch reports.
+	severity  severity.Level
 	match     ProcMatch
 	cond      procCond
 	summary   string
@@ -414,6 +417,7 @@ func (w *procWatcher) fire(ctx context.Context, info ProcInfo, msg string, value
 		emit:        w.emitEvent,
 		dryRunLabel: w.dryRunActions(killable),
 		panicLabel:  "panic mode: hook/notify/kill suppressed",
+		severity:    w.severity,
 	}
 	if killable {
 		spec.action = func() { w.doKill(ctx, info, msg) }

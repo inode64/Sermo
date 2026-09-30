@@ -2,6 +2,7 @@ package config
 
 import (
 	"sermo/internal/cfgval"
+	"sermo/internal/checks"
 	"sermo/internal/rules"
 )
 
@@ -11,14 +12,23 @@ var namedSections = []string{sectionChecks, sectionPreflight, sectionProcesses, 
 
 // mergeMaps merges src on top of dst and returns a new map. Scalars and lists
 // overwrite; nested maps merge recursively. Inputs are not mutated.
+//
+// One key follows its owner rather than the merge: a check's `levels:` restate
+// the thresholds of the check's type, so an override that changes the `type:`
+// drops the inherited tiers unless it declares its own.
 func mergeMaps(dst, src map[string]any) map[string]any {
 	out := make(map[string]any, len(dst))
+	retyped := overridesType(dst, src)
 	for k, dv := range dst {
-		if _, overridden := src[k]; !overridden {
+		if _, overridden := src[k]; !overridden && (!retyped || k != checks.CheckKeyLevels) {
 			out[k] = deepCopy(dv)
 		}
 	}
 	for k, sv := range src {
+		if retyped && k == checks.CheckKeyLevels {
+			out[k] = deepCopy(sv) // tiers for the new type replace the old ones
+			continue
+		}
 		if dm, sm, ok := mergeableMaps(dst[k], sv); ok {
 			out[k] = mergeMaps(dm, sm)
 			continue
@@ -26,6 +36,12 @@ func mergeMaps(dst, src map[string]any) map[string]any {
 		out[k] = deepCopy(sv)
 	}
 	return out
+}
+
+// overridesType reports an override that gives a typed entry another type.
+func overridesType(dst, src map[string]any) bool {
+	typ, typed := src[checks.CheckKeyType]
+	return typed && dst[checks.CheckKeyType] != nil && cfgval.String(typ) != cfgval.String(dst[checks.CheckKeyType])
 }
 
 func mergeableMaps(dst, src any) (map[string]any, map[string]any, bool) {

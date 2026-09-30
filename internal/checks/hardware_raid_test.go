@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"sermo/internal/execx"
+	"sermo/internal/severity"
 )
 
 const healthyStorCLIController = `{
@@ -503,7 +504,7 @@ func TestHardwareRAIDCountersAloneAreAdvisories(t *testing.T) {
 		binary: "/usr/bin/storcli64", tool: CheckTypeStorCLI,
 	}
 	result := storcli.Run(context.Background())
-	if result.OK || result.Unavailable || !IsWarning(result.Severity) {
+	if result.OK || result.Unavailable || result.Severity != severity.Warning {
 		t.Fatalf("storcli counters = %+v, want failing and graded warning", result)
 	}
 	if got := result.Data[DataKeyHealth]; got != hardwareRAIDHealthWarning {
@@ -525,7 +526,7 @@ func TestHardwareRAIDCountersAloneAreAdvisories(t *testing.T) {
 		binary: "/usr/bin/ssacli", tool: CheckTypeSSACLI,
 	}
 	result = ssacli.Run(context.Background())
-	if result.OK || !IsWarning(result.Severity) || result.Data[DataKeyHealth] != hardwareRAIDHealthWarning {
+	if result.OK || result.Severity != severity.Warning || result.Data[DataKeyHealth] != hardwareRAIDHealthWarning {
 		t.Fatalf("ssacli unrecoverable media errors = %+v, want failing and graded warning", result)
 	}
 	if !strings.Contains(result.Message, "volume 1 has unrecoverable media errors: Detected") {
@@ -539,14 +540,14 @@ func TestHardwareRAIDCountersAloneAreAdvisories(t *testing.T) {
 		binary: "/usr/bin/ssacli", tool: CheckTypeSSACLI,
 		preds: []levelPred{{field: SmartFieldTemperature, op: ">", value: 40}},
 	}
-	if result := hot.Run(context.Background()); result.OK || !IsWarning(result.Severity) {
+	if result := hot.Run(context.Background()); result.OK || result.Severity != severity.Warning {
 		t.Fatalf("temperature predicate = %+v, want failing and graded warning", result)
 	}
 
 	// A declared severity wins over the grade.
 	declared := storcli
-	declared.severity = SeverityError
-	if result := declared.Run(context.Background()); result.OK || IsWarning(result.Severity) || result.Data[DataKeyHealth] != hardwareRAIDHealthWarning {
+	declared.severity = severity.Error
+	if result := declared.Run(context.Background()); result.OK || result.Severity == severity.Warning || result.Data[DataKeyHealth] != hardwareRAIDHealthWarning {
 		t.Fatalf("declared error = %+v, want the counters reported as an outage while health still reads warning", result)
 	}
 }
@@ -576,7 +577,7 @@ func TestHardwareRAIDStateFindingOutranksAdvisories(t *testing.T) {
 		binary: "/usr/bin/storcli64", tool: CheckTypeStorCLI,
 	}
 	result := check.Run(context.Background())
-	if result.OK || IsWarning(result.Severity) || result.Data[DataKeyHealth] != hardwareRAIDHealthError {
+	if result.OK || result.Severity == severity.Warning || result.Data[DataKeyHealth] != hardwareRAIDHealthError {
 		t.Fatalf("offline drive beside media errors = %+v, want an ungraded outage with health error", result)
 	}
 	if got := result.Data[DataKeyHardwareRAIDAdvisories].([]string); len(got) != 1 || got[0] != "drive c0/e252/s0 media errors 12" {

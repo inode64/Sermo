@@ -7,20 +7,23 @@ import (
 
 	"sermo/internal/metrics"
 	"sermo/internal/rules"
+	"sermo/internal/severity"
 	"sermo/internal/state"
 )
 
 // watchSnapshot preserves per-watch window and policy pacing state across reload.
 type watchSnapshot struct {
-	state          rules.WindowState
-	policyState    rules.RemediationState
-	firing         bool
-	unavailable    bool
-	lastNotifyAt   time.Time
-	settled        bool
-	stateLoaded    bool
-	stateRestored  bool
-	persistedState state.WatchRuntimeRecord
+	state           rules.WindowState
+	policyState     rules.RemediationState
+	firing          bool
+	unavailable     bool
+	lastNotifyAt    time.Time
+	legacyNotified  bool
+	transitionHeard severity.Level
+	settled         bool
+	stateLoaded     bool
+	stateRestored   bool
+	persistedState  state.WatchRuntimeRecord
 }
 
 type watchStateKey struct {
@@ -32,14 +35,16 @@ func captureWatchState(watches []*Watch) map[watchStateKey]watchSnapshot {
 	out := make(map[watchStateKey]watchSnapshot, len(watches))
 	for _, w := range watches {
 		snap := watchSnapshot{
-			firing:         w.firing,
-			unavailable:    w.unavailable,
-			lastNotifyAt:   w.lastNotifyAt,
-			settled:        w.settled,
-			stateLoaded:    w.stateLoaded,
-			stateRestored:  w.stateRestored,
-			persistedState: w.persistedState,
-			policyState:    *cloneRemediationState(&w.policyState),
+			firing:          w.firing,
+			unavailable:     w.unavailable,
+			lastNotifyAt:    w.lastNotifyAt,
+			legacyNotified:  w.legacyNotified,
+			transitionHeard: w.transitionHeard,
+			settled:         w.settled,
+			stateLoaded:     w.stateLoaded,
+			stateRestored:   w.stateRestored,
+			persistedState:  w.persistedState,
+			policyState:     *cloneRemediationState(&w.policyState),
 		}
 		if cloned := w.state.Clone(); cloned != nil {
 			snap.state = *cloned
@@ -60,6 +65,8 @@ func applyWatchState(watches []*Watch, saved map[watchStateKey]watchSnapshot) {
 		w.firing = snap.firing
 		w.unavailable = snap.unavailable
 		w.lastNotifyAt = snap.lastNotifyAt
+		w.legacyNotified = snap.legacyNotified
+		w.transitionHeard = snap.transitionHeard
 		w.settled = snap.settled
 		w.stateLoaded = snap.stateLoaded
 		w.stateRestored = snap.stateRestored
@@ -70,11 +77,11 @@ func applyWatchState(watches []*Watch, saved map[watchStateKey]watchSnapshot) {
 
 // workerSnapshot preserves per-service runtime state across a config reload.
 type workerSnapshot struct {
-	cycle        int
-	remediation  *rules.RemediationState
-	windows      map[string]*rules.WindowState
-	libBaseline  *artifactBaselineState
-	checkFailing map[string]bool
+	cycle         int
+	remediation   *rules.RemediationState
+	windows       map[string]*rules.WindowState
+	libBaseline   *artifactBaselineState
+	checkEpisodes map[string]checkEpisode
 }
 
 func captureWorkerState(workers []*Worker) map[string]workerSnapshot {
@@ -90,8 +97,8 @@ func captureWorkerState(workers []*Worker) map[string]workerSnapshot {
 		// The `changed:` baseline carries both file fingerprints and app
 		// versions, so a pending library or app upgrade survives the reload.
 		snap.libBaseline = w.libBaseline.snapshot()
-		if len(w.checkFailing) > 0 {
-			snap.checkFailing = maps.Clone(w.checkFailing)
+		if len(w.checkEpisodes) > 0 {
+			snap.checkEpisodes = maps.Clone(w.checkEpisodes)
 		}
 		out[w.Service] = snap
 	}
@@ -118,8 +125,8 @@ func applyWorkerState(workers []*Worker, saved map[string]workerSnapshot) {
 			}
 			w.libBaseline.restore(*snap.libBaseline)
 		}
-		if snap.checkFailing != nil {
-			w.checkFailing = snap.checkFailing
+		if snap.checkEpisodes != nil {
+			w.checkEpisodes = snap.checkEpisodes
 		}
 	}
 }

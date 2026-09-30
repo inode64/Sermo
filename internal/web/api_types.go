@@ -222,12 +222,14 @@ type Watch struct {
 	RAIDArray         string            `json:"raid_array,omitempty"`
 	// CanControlReplication marks a replication watch whose manual start
 	// control is configured and startable by an admin.
-	CanControlReplication bool        `json:"can_control_replication,omitempty"`
-	LastActivity          string      `json:"last_activity,omitempty"` // RFC3339 of last watch activity, if any
-	LastActivityKind      string      `json:"last_activity_kind,omitempty"`
-	LastCheckedAt         string      `json:"last_checked_at,omitempty"` // RFC3339 of latest completed check sample
-	SampleState           string      `json:"sample_state,omitempty"`    // collecting | fresh | stale
-	Probe                 *WatchProbe `json:"probe,omitempty"`           // current manual probe, if one is running
+	CanControlReplication bool   `json:"can_control_replication,omitempty"`
+	LastActivity          string `json:"last_activity,omitempty"` // RFC3339 of last watch activity, if any
+	LastActivityKind      string `json:"last_activity_kind,omitempty"`
+	// LastActivitySeverity grades the last activity (a firing's episode level).
+	LastActivitySeverity string      `json:"last_activity_severity,omitempty"`
+	LastCheckedAt        string      `json:"last_checked_at,omitempty"` // RFC3339 of latest completed check sample
+	SampleState          string      `json:"sample_state,omitempty"`    // collecting | fresh | stale
+	Probe                *WatchProbe `json:"probe,omitempty"`           // current manual probe, if one is running
 	// KeepsSLA marks a watch whose check asserts availability, so the dashboard
 	// draws it the same SLA section a service gets. A condition watch keeps none:
 	// its threshold being met is not downtime.
@@ -331,6 +333,8 @@ type Notifier struct {
 	Enabled bool   `json:"enabled"`
 	Summary string `json:"summary,omitempty"`
 	UsedBy  int    `json:"used_by,omitempty"`
+	// MinSeverity is the lowest severity the notifier receives from monitoring.
+	MinSeverity string `json:"min_severity"`
 }
 
 // DaemonInfo provides a summary of the running daemon configuration
@@ -453,9 +457,10 @@ type ActionResult struct {
 	OK       bool           `json:"ok"`
 	Message  string         `json:"message,omitempty"`
 	Readings []WatchReading `json:"readings,omitempty"`
-	// Severity grades a rejected outcome for the client that renders it. A watch
-	// declared an advisory reports "warning" here, so a manual probe of one is
-	// not announced as a failure while the dashboard shows it amber.
+	// Severity grades a rejected outcome for the client that renders it (debug,
+	// info, warning, error or critical). A below-error grade is advisory, so a
+	// manual probe of an advisory watch is not announced as a failure while the
+	// dashboard shows it amber.
 	Severity string `json:"severity,omitempty"`
 }
 
@@ -493,8 +498,9 @@ type Check struct {
 	Reports  string `json:"reports,omitempty"`
 	Stale    bool   `json:"stale,omitempty"`
 	Optional bool   `json:"optional"`
-	// Severity grades a failing check for the row that renders it: "warning"
-	// reads amber like an optional check, "error" (the default) reads red.
+	// Severity grades a failing check for the row that renders it: a grade
+	// below error (debug, info, warning) reads amber like an optional check,
+	// error (the default) reads red and critical is marked apart.
 	Severity string         `json:"severity,omitempty"`
 	Skipped  bool           `json:"skipped,omitempty"` // gated off (requires/skip_when_changed)
 	Message  string         `json:"message,omitempty"`
@@ -671,7 +677,8 @@ type CheckMetric struct {
 	Value *float64 `json:"value,omitempty"`
 	// Band marks a state metric: drawn as an availability-style band from
 	// /api/.../sla?metric=NAME, never as a line chart. Severity grades its
-	// failing colour (error red, warning amber) and Label titles the panel.
+	// failing colour (error or critical red, a lower grade amber) and Label
+	// titles the panel.
 	Band     bool   `json:"band,omitempty"`
 	Severity string `json:"severity,omitempty"`
 }
@@ -741,6 +748,8 @@ type Event struct {
 	// Output is the bounded stdout/stderr of the failing command behind this event
 	// (app probe or service `command` check), shown expandable in the dashboard.
 	Output string `json:"output,omitempty"`
+	// Severity grades the event (a firing, an escalation, a recovery).
+	Severity string `json:"severity,omitempty"`
 }
 
 // Target returns the event subject in the public precedence order: service,

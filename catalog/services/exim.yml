@@ -36,6 +36,8 @@ variables:
   db_cleanup_timeout: 5m
   msglog_dir: /var/spool/exim/msglog
   msglog_backlog_limit: "200"
+  # The backlog alert escalates from warning to error past this many files.
+  msglog_backlog_error_limit: "1000"
   msglog_growth_limit: "100"
   msglog_growth_window: 2m
   # `exim -bpc` queue depth above which a sustained backlog alerts. A stolen
@@ -43,11 +45,16 @@ variables:
   # from 0 to 109k and stayed there for a day while the graph-only queue watch
   # recorded it without alerting.
   queue_limit: "200"
+  # The queue alert escalates from warning to error past this depth. Raise it
+  # together with queue_limit: a level that is not stricter is ignored.
+  queue_error_limit: "1000"
   # Exim's resident memory is a few tens of MB on an idle host and climbs with
   # every parallel delivery, so an absolute ceiling catches a mass mailing that
   # a host-relative percentage never reaches (3 GB on a 64 GB host is under 5%).
   # Bytes: the metric check takes a plain number or a percentage.
   memory_limit_bytes: "104857600"
+  # The memory alert escalates from warning to error past this many bytes.
+  memory_error_limit_bytes: "524288000"
 preflight:
   config:
     type: command
@@ -128,6 +135,9 @@ watches:
         - -bpc
       unit: messages
       expect_stdout: { op: "<=", value: "${queue_limit}" }
+      severity: warning
+      levels:
+        error: { expect_stdout: { op: "<=", value: "${queue_error_limit}" } }
       timeout: 15s
     for:
       duration: 3m
@@ -168,6 +178,9 @@ watches:
         op: '>'
         value: ${msglog_backlog_limit}
       optional: true
+      severity: warning
+      levels:
+        error: { count: { op: '>', value: "${msglog_backlog_error_limit}" } }
     then:
       action: alert
       message: >-
@@ -183,6 +196,7 @@ watches:
         value: ${msglog_growth_limit}
       within: ${msglog_growth_window}
       optional: true
+      severity: warning
     then:
       action: alert
       message: >-
@@ -253,6 +267,9 @@ watches:
       op: '>'
       value: ${memory_limit_bytes}
       optional: true
+      severity: warning
+      levels:
+        error: { op: '>', value: "${memory_error_limit_bytes}" }
     for:
       duration: 4m
     then:
@@ -267,6 +284,9 @@ watches:
       op: '>'
       value: 90%
       optional: true
+      severity: warning
+      levels:
+        error: { op: '>', value: 98% }
     for:
       duration: 5m
     then:

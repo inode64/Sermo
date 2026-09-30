@@ -23,7 +23,7 @@ import {
   metricUnitBytes, metricUnitBytesPerSecond, metricUnitMilliseconds,
   metricUnitPercent, pctClamp, percentMax,
   percentScale, rollingMonthDays, rollingWeekDays, rollingYearDays,
-  secondsPerHour, secondsPerMinute,
+  secondsPerHour, secondsPerMinute, isAdvisorySeverity, severityCritical, severityLevels,
 } from "./format.js";
 
 const $ = (s) => document.querySelector(s);
@@ -146,6 +146,7 @@ const healthStatusWarning = targetStateWarning;
 const healthStatusWarningShort = feedbackStatusWarn;
 const healthStatusOK = targetStateOK;
 const healthStatusInfo = "info";
+const healthStatusCriticalSeverity = severityCritical;
 const healthStatusMuted = "muted";
 const policyStateEligible = "eligible";
 const policyStateCooldown = "cooldown";
@@ -185,6 +186,7 @@ const actionMount = "mount";
 const actionUmount = "umount";
 const eventKindAction = "action";
 const eventKindCascade = "cascade";
+const eventKindError = "error";
 const eventKindDryRun = "dry-run";
 const eventKindExpandFailed = "expand-failed";
 const eventKindExpandSkipped = "expand-skipped";
@@ -203,7 +205,6 @@ const eventKindPanicSuppressed = "panic-suppressed";
 const eventKindRecovered = "recovered";
 const eventKindReload = "reload";
 const eventKindSuppressed = "suppressed";
-const eventKindWarning = "warning";
 const eventStatusPreflightFailed = "preflight_failed";
 const eventStatusPostflightFailed = "postflight_failed";
 const eventStatusOrphanProcesses = "orphan_processes";
@@ -220,7 +221,7 @@ const serviceCascadeActions = [actionStart, actionStop, actionRestart];
 const serviceTrackedActions = [actionStart, actionStop, actionRestart, actionReload, actionResume, actionRepair];
 const activityCriticalStatuses = [targetStateFailed, mountStateError, eventStatusPreflightFailed, eventStatusPostflightFailed, eventStatusOrphanProcesses];
 const activityCriticalKinds = [mountStateError, eventKindHookFailed, eventKindNotifyFailed, eventKindExpandFailed, eventKindKillFailed, eventKindMakeStepFailed];
-const activityWarningKinds = [actionAlert, eventKindFiring, eventKindWarning, eventKindSuppressed, eventKindPanicSuppressed, eventKindNotifySuppressed, eventKindExpandSkipped, eventKindMakeStepSkipped];
+const activityWarningKinds = [actionAlert, eventKindFiring, eventKindSuppressed, eventKindPanicSuppressed, eventKindNotifySuppressed, eventKindExpandSkipped, eventKindMakeStepSkipped];
 const activityOKKinds = [eventKindAction, eventKindCascade, eventKindHook, eventKindNotify, eventKindRecovered, actionExpand, eventKindKill, eventKindMakeStep];
 const activityInfoKinds = [eventKindDryRun, eventKindReload];
 const serviceStatusFilterStates = [
@@ -1176,10 +1177,24 @@ function eventRows(events, withService, opts = {}) {
     return tpl`<tr id="${rowId}">
       <td class="t">${fmtTimeTitled(e.time)}</td>
       ${withService && who ? tpl`<td>${who}</td>` : nothing}
-      <td class="kind kind-${e.kind || ""}">${e.kind}</td>
+      <td class="kind ${eventKindClass(e)}">${e.kind}${severityBadge(e.severity)}</td>
       <td>${detail ? tpl`<span class="muted">${detail}</span> ` : nothing}${eventMessageHTML(e, key)}</td>
     </tr>`;
   });
+}
+
+// eventKindClass colours an event's kind cell; an error an advisory incident
+// raised reads amber rather than red.
+function eventKindClass(e) {
+  if (e.kind === eventKindError && isAdvisorySeverity(e.severity)) return "kind-advisory";
+  return "kind-" + (e.kind || "");
+}
+
+// severityBadge names a graded event's or notifier's level; nothing when the
+// value carries no grade.
+function severityBadge(severity) {
+  if (!severityLevels.includes(severity)) return nothing;
+  return tpl`<span class="sev sev-${severity}">${severity}</span>`;
 }
 
 function renderEventsLoading(target, cols = 3) {
@@ -1253,9 +1268,20 @@ function lastEventTime(item) {
   return (item && item.last_event && item.last_event.time) || "";
 }
 
-function activitySeverity(kind, status) {
+// activitySeverity colours an activity timestamp. A graded alarm speaks its
+// grade where it differs from the kind's usual amber: critical in its own hue,
+// debug and info as routine news.
+function activitySeverity(kind, status, severity) {
   const k = String(kind || "").toLowerCase();
   const st = String(status || "").toLowerCase();
+  const graded = severityLevels.includes(severity) && [actionAlert, eventKindFiring].includes(k);
+  if (graded && severity === severityCritical) return healthStatusCriticalSeverity;
+  if (graded && isAdvisorySeverity(severity) && severity !== targetStateWarning) return healthStatusInfo;
+  // An error an advisory incident raised (its check became unavailable) is
+  // not an outage: it reads at its grade.
+  if (k === eventKindError && isAdvisorySeverity(severity)) {
+    return severity === targetStateWarning ? healthStatusWarningShort : healthStatusInfo;
+  }
   if (activityCriticalStatuses.includes(st)) return healthStatusCriticalShort;
   if (st === policyStateBlocked) return healthStatusWarningShort;
   if (activityCriticalKinds.includes(k)) return healthStatusCriticalShort;
@@ -1272,7 +1298,7 @@ function activityDateCell(e) {
   const detail = [kind, e.action, e.status].filter(Boolean).join(" ");
   const local = fmtLocalTime(time);
   const title = [fmtTime(time), local && local + " local", detail, e.message || ""].filter(Boolean).join(" · ");
-  const cls = "activity-time activity-" + activitySeverity(kind, e.status);
+  const cls = "activity-time activity-" + activitySeverity(kind, e.status, e.severity);
   const label = [fmtTime(time), detail || "activity"].filter(Boolean).join(" · ");
   return tpl`<div class="event-cell" title="${title}"><span class="${cls}" aria-label="${label}">${fmtTime(time)}</span></div>`;
 }
@@ -3739,7 +3765,7 @@ function loadWatchMetrics(w, generation = dashboardGeneration) {
   const key = watchMetricsWindowKey(w.name);
   return Promise.all(list.map((metric) => metric.band
     ? loadSLAPanel(watchBandKey(w.name, metric.name), generation,
-      { windowKey: key, warn: metric.severity === targetStateWarning })
+      { windowKey: key, warn: isAdvisorySeverity(metric.severity) })
     : loadMetricPanel(key,
       watchMetricDomID(w.name, metric.name, "summary"), watchMetricDomID(w.name, metric.name, "chart"),
       generation,
@@ -4015,9 +4041,14 @@ function checkStateHTML(c, age) {
   }
   if (c.reports === REPORTS_VALUE) return tpl`<span class="state-on">measured</span>${age}`;
   if (c.ok) return tpl`<span class="ok">ok</span>${age}`;
-  // An advisory — declared optional, or a failure the check itself graded a
-  // warning — reads amber: it is worth seeing, not an outage.
-  if (c.optional || c.severity === targetStateWarning) return tpl`<span class="inactive">warn</span>${age}`;
+  // An advisory — declared optional, or a failure graded below an outage —
+  // reads amber: it is worth seeing, not an outage. It names its grade.
+  if (c.optional || isAdvisorySeverity(c.severity)) {
+    // An advisory below warning (debug, info) names its level.
+    const label = c.optional || c.severity === targetStateWarning ? "warn" : c.severity;
+    return tpl`<span class="inactive">${label}</span>${age}`;
+  }
+  if (c.severity === severityCritical) return tpl`<span class="sev-critical-text">crit</span>${age}`;
   return tpl`<span class="bad">fail</span>${age}`;
 }
 
@@ -4541,7 +4572,7 @@ async function refreshServiceGraphs(d, generation = dashboardGeneration) {
   pending.push(...serviceSLAChecks(d).map((c) => loadCheckSLA(d.name, c.name, generation)));
   pending.push(...checkMetrics.map((metric) => metric.band
     ? loadSLAPanel(svcBandKey(d.name, metric.check, metric.name), generation,
-      { windowKey: d.name, warn: metric.severity === targetStateWarning })
+      { windowKey: d.name, warn: isAdvisorySeverity(metric.severity) })
     : loadCheckMetric(d.name, metric, generation)));
   pending.push(...serviceScopedWatchMetricEntries(d.name).map((entry) => loadMetricPanel(d.name,
     serviceScopedWatchMetricDomID(d.name, entry.watch.name, entry.metric.name, "summary"),
@@ -5178,6 +5209,7 @@ function watchLastCell(w) {
   return activityDateCell({
     time: w && w.last_activity,
     kind: w && w.last_activity_kind,
+    severity: w && w.last_activity_severity,
   });
 }
 
@@ -6495,12 +6527,16 @@ function renderNotifiers(notifiers) {
     const dest = n.summary ? esc(n.summary) : '<span class="muted">—</span>';
     const used = Number(n.used_by || 0);
     const watches = used ? String(used) : '<span class="muted">—</span>';
+    // debug filters nothing: the notifier hears every level.
+    const floor = severityLevels.includes(n.min_severity) && n.min_severity !== severityLevels[0]
+      ? `<span class="sev sev-${esc(n.min_severity)}">≥ ${esc(n.min_severity)}</span>`
+      : '<span class="muted">all</span>';
     const test = enabled && me.can_act
       ? `<button class="icon-btn" data-notifier-test="${esc(n.name)}" aria-label="Send test notification to ${esc(n.name)}" title="Send test notification to ${esc(n.name)}"><span aria-hidden="true">▶</span></button>`
       : '<span class="muted">—</span>';
-    return `<tr><td>${esc(n.name)}</td><td>${esc(n.type)}</td><td class="muted">${dest}</td><td>${watches}</td><td class="${cls}">${state}</td><td class="actions">${test}</td></tr>`;
+    return `<tr><td>${esc(n.name)}</td><td>${esc(n.type)}</td><td>${floor}</td><td class="muted">${dest}</td><td>${watches}</td><td class="${cls}">${state}</td><td class="actions">${test}</td></tr>`;
   });
-  setHTMLIfChanged(tbody, rows.join("") || `<tr><td colspan="6" class="muted">No notifiers.</td></tr>`);
+  setHTMLIfChanged(tbody, rows.join("") || `<tr><td colspan="7" class="muted">No notifiers.</td></tr>`);
   updateSectionNav();
 }
 
@@ -7361,7 +7397,9 @@ async function actWatch(name, action) {
     const { body, failed, status } = await actionResult(res);
     if (action === actionProbe) {
       applyWatchProbeResult(name, body, failed);
-      setStatus(`${action} watch ${name}: ${body.message || (failed ? "failed" : feedbackStatusOK)}`, failed ? feedbackStatusErr : feedbackStatusOK);
+      // A probe that found an advisory reads amber, exactly like its row.
+      const probeStatus = !failed ? feedbackStatusOK : (isAdvisorySeverity(body.severity) ? feedbackStatusWarn : feedbackStatusErr);
+      setStatus(`${action} watch ${name}: ${body.message || (failed ? "failed" : feedbackStatusOK)}`, probeStatus);
       return; // the finally below triggers the refresh
     }
     if (failed) {
@@ -7386,7 +7424,8 @@ function applyWatchProbeResult(name, body, failed) {
   delete next.probe;
   next.sample_state = watchSampleStateFresh;
   next.last_checked_at = new Date().toISOString();
-  next.state = failed ? targetStateFailed : targetStateOK;
+  // An advisory result keeps the amber its row gets everywhere else.
+  next.state = !failed ? targetStateOK : (isAdvisorySeverity(body.severity) ? targetStateWarning : targetStateFailed);
   allWatches = [...allWatches];
   allWatches[idx] = next;
   renderWatches(allWatches);
@@ -7825,7 +7864,7 @@ function renderActionConfirm() {
   const activeLocks = (d.locks || []).filter((l) => l.state === lockStateActive);
   // A verdictless check has no verdict to fail: its ok flag carries the sensed
   // state, so an idle state sensor would otherwise read as a blocker here.
-  const failingChecks = (d.checks || []).filter((c) => c.ran && !c.ok && !c.optional && c.severity !== targetStateWarning && !verdictlessCheck(c));
+  const failingChecks = (d.checks || []).filter((c) => c.ran && !c.ok && !c.optional && !isAdvisorySeverity(c.severity) && !verdictlessCheck(c));
   const procWarnings = d.process_warnings || [];
   const noResidentProcess = !!d.no_resident_process;
   const ev = ctx.lastEvent;

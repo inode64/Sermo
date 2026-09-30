@@ -11,6 +11,7 @@ import (
 
 	"sermo/internal/config"
 	"sermo/internal/notify"
+	"sermo/internal/severity"
 	"sermo/internal/state"
 )
 
@@ -253,14 +254,16 @@ func (n *EventNotifier) deliver(ctx context.Context, e Event) {
 	}
 	targets, interval := n.deliveryConfig()
 	key, active, phase := eventNotifyIdentity(e)
-	msg := n.message(e)
+	level := e.level()
 	now := n.now()
 	for _, target := range targets {
 		if e.Notice {
 			// Its producer already reports each occurrence once, and no recovery
 			// edge follows, so persisting it would open an incident that nothing
 			// closes: it would silence the next notice and be reminded forever.
-			n.send(ctx, target, e, msg)
+			if notify.Accepts(target, level) {
+				n.send(ctx, target, e, n.message(e, level))
+			}
 			continue
 		}
 		rec, found, err := n.load(key, target.Name())
@@ -268,20 +271,61 @@ func (n *EventNotifier) deliver(ctx context.Context, e Event) {
 			n.logger.Error("load event notification state", "notifier", target.Name(), "error", err)
 			continue
 		}
-		if !shouldDeliverEvent(e.Kind, active, phase, rec, found, now, interval) {
-			continue
-		}
-		if !n.send(ctx, target, e, msg) {
+		sent, ok := n.deliverTo(ctx, target, e, deliveryEdge{active: active, phase: phase, level: level, rec: rec, found: found, now: now, interval: interval})
+		if !ok {
 			continue
 		}
 		rec = state.EventNotifyRecord{
 			IncidentKey: key, Notifier: target.Name(), Phase: phase,
-			Active: active, LastSentAt: now, Subject: msg.Subject, Body: msg.Body,
+			Active: active, LastSentAt: now, Subject: sent.Subject, Body: sent.Body, Severity: sent.Severity.String(),
 		}
 		if err := n.save(rec); err != nil {
 			n.logger.Error("persist event notification state", "notifier", target.Name(), "error", err)
 		}
 	}
+}
+
+// deliveryEdge is one event's incident edge at one notifier.
+type deliveryEdge struct {
+	active   bool
+	phase    string
+	level    severity.Level
+	rec      state.EventNotifyRecord
+	found    bool
+	now      time.Time
+	interval time.Duration
+}
+
+// deliverTo sends e to target when its incident edge calls for it and
+// returns the message sent, whose severity the record keeps.
+//
+// A recovery reaches exactly the notifiers told of the incident, at the
+// gravest level each one heard (its record's severity): it never passes the
+// min_severity filter on its own grade. Any other event is filtered first — a notifier below its minimum gets
+// no record, so it can never receive an orphan reminder or recovery — and
+// then delivered on a new incident, an escalation, or a reminder; a lower
+// grade inside an open incident is held.
+func (n *EventNotifier) deliverTo(ctx context.Context, target notify.Notifier, e Event, edge deliveryEdge) (notify.Message, bool) {
+	if e.Kind == eventKindRecovered {
+		if !edge.found || !edge.rec.Active {
+			return notify.Message{}, false
+		}
+		msg := n.message(e, severity.Level(edge.rec.Severity))
+		return msg, n.send(ctx, target, e, msg)
+	}
+	if !notify.Accepts(target, edge.level) || !shouldDeliverEvent(edge) {
+		return notify.Message{}, false
+	}
+	held := edge.level
+	if edge.active && edge.found && edge.rec.Active {
+		held = severity.Max(severity.Level(edge.rec.Severity), edge.level)
+	}
+	msg := n.message(e, edge.level)
+	if !n.send(ctx, target, e, msg) {
+		return notify.Message{}, false
+	}
+	msg.Severity = held
+	return msg, true
 }
 
 func (n *EventNotifier) send(ctx context.Context, target notify.Notifier, e Event, msg notify.Message) bool {
@@ -310,12 +354,21 @@ func (n *EventNotifier) remind(ctx context.Context) {
 			continue
 		}
 		for _, rec := range due {
-			msg := notify.Message{Subject: rec.Subject + " (continues)", Body: rec.Body}
+			level := severity.Level(rec.Severity).Resolved()
+			rec.LastSentAt = now
+			if !notify.Accepts(target, level) {
+				// A reload raised this notifier's minimum above the incident:
+				// keep the record quiet rather than remind it every scan.
+				if err := n.save(rec); err != nil {
+					n.logger.Error("persist event reminder state", "notifier", target.Name(), "error", err)
+				}
+				continue
+			}
+			msg := notify.Message{Subject: rec.Subject + " (continues)", Body: rec.Body, Severity: level}
 			if err := sendEventNotification(ctx, target, msg); err != nil {
 				n.logger.Error("event reminder failed", "notifier", target.Name(), "error", err)
 				continue
 			}
-			rec.LastSentAt = now
 			if err := n.save(rec); err != nil {
 				n.logger.Error("persist event reminder state", "notifier", target.Name(), "error", err)
 			}
@@ -332,13 +385,22 @@ func sendEventNotification(ctx context.Context, target notify.Notifier, msg noti
 	return nil
 }
 
+// normalizeLegacyNotifyRecord reads a delivery record an older binary wrote
+// after the migration: its advisory phase is a firing graded warning.
+func normalizeLegacyNotifyRecord(rec state.EventNotifyRecord) state.EventNotifyRecord {
+	if rec.Phase == legacyEventKindWarning && rec.Severity == "" {
+		rec.Phase, rec.Severity = eventKindFiring, severity.Warning.String()
+	}
+	return rec
+}
+
 func (n *EventNotifier) load(key, target string) (state.EventNotifyRecord, bool, error) {
 	if n.store != nil {
 		rec, found, err := n.store.EventNotifyState(key, target)
 		if err != nil {
 			return state.EventNotifyRecord{}, false, fmt.Errorf("load incident state: %w", err)
 		}
-		return rec, found, nil
+		return normalizeLegacyNotifyRecord(rec), found, nil
 	}
 	rec, found := n.memory[key+"\x00"+target]
 	return rec, found, nil
@@ -360,6 +422,9 @@ func (n *EventNotifier) due(target string, before time.Time) ([]state.EventNotif
 		records, err := n.store.DueEventNotifyStates(target, before)
 		if err != nil {
 			return nil, fmt.Errorf("load due reminders: %w", err)
+		}
+		for i := range records {
+			records[i] = normalizeLegacyNotifyRecord(records[i])
 		}
 		return records, nil
 	}
@@ -392,6 +457,11 @@ func eventNotifyIdentity(e Event) (key string, active bool, phase string) {
 	case eventKindDryRun, eventKindSuppressed, eventKindAction:
 		phase = eventKindFiring
 	case eventKindError, eventKindHookFail, eventKindExpandFailed, eventKindKillFailed, eventKindMakeStepFailed:
+		// An advisory incident's error stays a health incident, so the
+		// recovery that follows it closes it.
+		if e.advisoryError() {
+			break
+		}
 		category = e.Kind
 		if e.Action != "" {
 			category += ":" + e.Action
@@ -401,25 +471,40 @@ func eventNotifyIdentity(e Event) (key string, active bool, phase string) {
 	return formatEventNotifyKey(dimension, name, e.Rule, e.Check, category), active, phase
 }
 
-func shouldDeliverEvent(kind string, active bool, phase string, rec state.EventNotifyRecord, found bool, now time.Time, interval time.Duration) bool {
-	if kind == eventKindRecovered {
-		return found && rec.Active
-	}
-	if !found || (active && (!rec.Active || rec.Phase != phase)) {
+// shouldDeliverEvent decides whether a non-recovery event opens, escalates or
+// reminds its incident at one notifier. An operational error is paced (once per
+// interval, sooner when it grows graver); a health incident delivers when it
+// opens, when its grade rises above what the notifier last heard, or when the
+// same grade arrives in another phase (a rule's alert, then its remediation
+// outcome), and holds a lower grade silently.
+func shouldDeliverEvent(edge deliveryEdge) bool {
+	rec := edge.rec
+	if !edge.found {
 		return true
 	}
-	if !active {
+	held := severity.Level(rec.Severity).Resolved()
+	if !edge.active {
+		interval := edge.interval
 		if interval <= 0 {
 			interval = eventNotifyErrorInterval
 		}
-		return now.Sub(rec.LastSentAt) >= interval
+		return edge.level.Rank() > held.Rank() || edge.now.Sub(rec.LastSentAt) >= interval
 	}
-	return interval > 0 && now.Sub(rec.LastSentAt) >= interval
+	switch {
+	case !rec.Active, edge.level.Rank() > held.Rank():
+		return true
+	case edge.level.Rank() < held.Rank():
+		return false
+	case rec.Phase != edge.phase:
+		return true
+	}
+	return edge.interval > 0 && edge.now.Sub(rec.LastSentAt) >= edge.interval
 }
 
-func (n *EventNotifier) message(e Event) notify.Message {
+func (n *EventNotifier) message(e Event, level severity.Level) notify.Message {
+	level = level.Resolved()
 	var subject strings.Builder
-	subject.WriteString("[sermo] " + n.host)
+	subject.WriteString(subjectPrefix(level) + " " + n.host)
 	for _, part := range []string{e.Service, e.Watch, e.App} {
 		if part != "" {
 			subject.WriteString(" " + part)
@@ -433,12 +518,18 @@ func (n *EventNotifier) message(e Event) notify.Message {
 			details = append(details, field[0]+": "+field[1])
 		}
 	}
-	return notify.Message{Subject: subject.String(), Body: strings.Join(details, "\n")}
+	fields := map[string]string{sermoEnvSeverity: level.String(), sermoEnvEvent: e.Kind}
+	for field, value := range map[string]string{sermoEnvService: e.Service, sermoEnvWatch: e.Watch, sermoEnvApp: e.App, sermoEnvRule: e.Rule} {
+		if value != "" {
+			fields[field] = value
+		}
+	}
+	return notify.Message{Subject: subject.String(), Body: strings.Join(details, "\n"), Fields: fields, Severity: level}
 }
 
 func eventNeedsNotification(e Event) bool {
 	switch e.Kind {
-	case eventKindFiring, eventKindWarning, eventKindRecovered, eventKindAlert,
+	case eventKindFiring, eventKindRecovered, eventKindAlert,
 		eventKindError, eventKindHookFail, eventKindExpandFailed,
 		eventKindKillFailed, eventKindMakeStepFailed:
 		return true

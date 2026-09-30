@@ -1980,12 +1980,24 @@ override these on the service instance when the listener differs from the
 catalog default. Protocol-specific ports, such as Dovecot's `pop_port`, remain
 separate variables.
 
+Catalog alerts are graded (see [Severity](rules.md#severity-severity)) so each
+notifier's `min_severity` can filter them. The resource alerts are advisories
+that escalate: `alert-if-memory-high` warns above 30 % of host RAM and becomes
+an error above 50 %, `alert-if-cpu-thread-high` warns above 90 % of one core and
+becomes an error above 98 %. A stopped service or missing daemon is `critical`;
+a certificate inside its renewal window is a `warning` and an expired one is
+`critical`. Override the base threshold and the level together on an instance
+that needs different numbers, for example
+`levels: { error: { op: ">", value: 70% } }` beside `value: 50%`.
+
 MySQL and MariaDB validate the selected `variables.config` with
 `--defaults-file=... --help --verbose`. The defaults-file argument comes first
 and a missing or invalid file fails the preflight. This is a compatible option
 parser check, not a full startup or data-integrity check. High service memory
 usage only alerts; `memory_alert_threshold` defaults to `80%` of host RAM and
-should reflect the instance's buffer-pool budget. The separate `memory` check
+should reflect the instance's buffer-pool budget. The alert is a `warning` and
+escalates to `error` past `memory_error_threshold` (`90%`); raise both
+together. The separate `memory` check
 still reports usage over 60%. MySQL, MariaDB, PostgreSQL and Backrest backup
 guards block both `stop` and `restart`; Sermo named locks remain the preferred
 way to protect jobs that can be wrapped with `sermoctl lock`.
@@ -2175,12 +2187,17 @@ The `exim` catalog service alerts on a mass mailing (a stolen password, a
 looping application, a spam run) from three angles, each tunable through a
 variable:
 
-| Watch | Signal | Variable (default) |
-|---|---|---|
-| `alert-if-queue-high` | `exim -bpc` above the limit for 3 minutes | `queue_limit` (`200`) |
-| `alert-if-msglog-backlog-high` | files under `msglog_dir`, counted recursively | `msglog_backlog_limit` (`200`) |
-| `alert-if-msglog-backlog-growing-fast` | msglog growth inside `msglog_growth_window` | `msglog_growth_limit` (`100`), `msglog_growth_window` (`2m`) |
-| `alert-if-memory-high` | resident memory of the Exim processes | `memory_limit_bytes` (`104857600`, 100 MiB) |
+| Watch | Signal | Warning variable (default) | Error variable (default) |
+|---|---|---|---|
+| `alert-if-queue-high` | `exim -bpc` above the limit for 3 minutes | `queue_limit` (`200`) | `queue_error_limit` (`1000`) |
+| `alert-if-msglog-backlog-high` | files under `msglog_dir`, counted recursively | `msglog_backlog_limit` (`200`) | `msglog_backlog_error_limit` (`1000`) |
+| `alert-if-msglog-backlog-growing-fast` | msglog growth inside `msglog_growth_window` | `msglog_growth_limit` (`100`), `msglog_growth_window` (`2m`) | — |
+| `alert-if-memory-high` | resident memory of the Exim processes | `memory_limit_bytes` (`104857600`, 100 MiB) | `memory_error_limit_bytes` (`524288000`, 500 MiB) |
+
+Each alert is a `warning` at its first variable and
+[escalates](rules.md#escalate-and-hold) to `error` past the second, so a small
+backlog reaches the chat channel while a mass mailing also reaches a notifier
+with `min_severity: error`.
 
 The `queue` watch next to them is graph-only: it publishes the queue depth as
 a `messages` series and never alerts. The msglog counts are recursive because
@@ -2189,7 +2206,9 @@ a `messages` series and never alerts. The msglog counts are recursive because
 absolute rather than a host percentage because Exim idles at a few tens of MB
 and a mailing that pushes it to 3 GB is still under 5% of a 64 GB host.
 
-Raise `queue_limit` on a relay that legitimately holds a deep queue; a
+Raise `queue_limit` on a relay that legitimately holds a deep queue, and raise
+`queue_error_limit` with it: an error level that is not above the warning
+threshold is ignored (`sermoctl config validate` warns about it). A
 service-level override keeps the rest of the profile:
 
 ```yaml
@@ -2197,6 +2216,7 @@ name: exim
 uses: exim
 variables:
   queue_limit: "2000"
+  queue_error_limit: "10000"
 ```
 
 ## Grafana Alloy saturation restarts

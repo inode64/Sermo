@@ -108,7 +108,7 @@ func (c inotifyCheck) Run(ctx context.Context) Result {
 		return c.unavailableResult(fmt.Sprintf("%s: %d process fd table(s) unreadable, usage is a lower bound",
 			CheckTypeInotify, sample.Unreadable), run.start)
 	}
-	res := c.result(held, inotifyMessage(sample, worst), run.start)
+	res := c.grade(c.result(held, inotifyMessage(sample, worst), run.start), values)
 	res.Data = inotifyData(sample, worst, values, c.preds)
 	return res
 }

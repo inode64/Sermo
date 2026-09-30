@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"sermo/internal/rules"
+	"sermo/internal/severity"
 )
 
 func TestCaptureAndApplyWorkerState(t *testing.T) {
@@ -25,8 +26,8 @@ func TestCaptureAndApplyWorkerState(t *testing.T) {
 			ws.FiresAt(r, true, time.Now())
 			return map[string]*rules.WindowState{"restart-if-down": ws}
 		}(),
-		libBaseline:  testArtifactBaseline(map[string]string{"/etc/app.conf": "1:2"}),
-		checkFailing: map[string]bool{"service": true},
+		libBaseline:   testArtifactBaseline(map[string]string{"/etc/app.conf": "1:2"}),
+		checkEpisodes: map[string]checkEpisode{"service": {held: severity.Critical}},
 	}
 	saved := captureWorkerState([]*Worker{old})
 
@@ -45,11 +46,11 @@ func TestCaptureAndApplyWorkerState(t *testing.T) {
 	if baselineFingerprints(fresh.libBaseline)["/etc/app.conf"] != "1:2" {
 		t.Fatalf("baseline = %+v", baselineFingerprints(fresh.libBaseline))
 	}
-	if !fresh.checkFailing["service"] {
-		t.Fatalf("check health state = %+v, want service failing", fresh.checkFailing)
+	if fresh.checkEpisodes["service"].held != severity.Critical {
+		t.Fatalf("check health state = %+v, want service failing at critical", fresh.checkEpisodes)
 	}
-	fresh.checkFailing["service"] = false
-	if !old.checkFailing["service"] {
+	delete(fresh.checkEpisodes, "service")
+	if old.checkEpisodes["service"].held != severity.Critical {
 		t.Fatal("applying worker state reused the old check-health map")
 	}
 }

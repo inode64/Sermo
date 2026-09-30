@@ -2,11 +2,13 @@ package app
 
 import (
 	"context"
+	"errors"
 	"reflect"
 	"testing"
 	"time"
 
 	"sermo/internal/checks"
+	"sermo/internal/severity"
 	"sermo/internal/state"
 )
 
@@ -129,7 +131,7 @@ func TestPersistentSnapshotsHydrateAndStore(t *testing.T) {
 	store := &snapshotStoreFake{
 		service: map[string]map[string]state.CheckSnapshotRecord{
 			"web": {
-				"http": {CheckType: checks.CheckTypeHTTP, Observation: checks.ObservationUnavailable, OK: true, Unavailable: true, Message: "status unavailable", Data: map[string]any{"status": float64(200)}, Ran: true, At: t0, Severity: checks.SeverityWarning},
+				"http": {CheckType: checks.CheckTypeHTTP, Observation: checks.ObservationUnavailable, OK: true, Unavailable: true, Message: "status unavailable", Data: map[string]any{"status": float64(200)}, Ran: true, At: t0, Severity: string(severity.Warning)},
 			},
 		},
 	}
@@ -137,22 +139,41 @@ func TestPersistentSnapshotsHydrateAndStore(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewPersistentSnapshots: %v", err)
 	}
-	if got := s.Get("web")["http"]; got.CheckType != checks.CheckTypeHTTP || got.Observation != checks.ObservationUnavailable || !got.OK || !got.Unavailable || got.Message != "status unavailable" || got.Data["status"] != float64(200) || !got.At.Equal(t0) || got.Severity != checks.SeverityWarning {
+	if got := s.Get("web")["http"]; got.CheckType != checks.CheckTypeHTTP || got.Observation != checks.ObservationUnavailable || !got.OK || !got.Unavailable || got.Message != "status unavailable" || got.Data["status"] != float64(200) || !got.At.Equal(t0) || got.Severity != string(severity.Warning) {
 		t.Fatalf("hydrated snapshot = %+v", got)
 	}
 
 	t1 := t0.Add(time.Minute)
 	s.now = func() time.Time { return t1 }
 	s.publishForTest("web", map[string]checks.Result{
-		"tcp": {Check: "tcp", OK: false, Unavailable: true, Message: "connection refused", Data: map[string]any{"port": float64(443)}, Severity: checks.SeverityWarning},
+		"tcp": {Check: "tcp", OK: false, Unavailable: true, Message: "connection refused", Data: map[string]any{"port": float64(443)}, Severity: severity.Warning},
 	}, map[string]bool{"tcp": true})
 
 	service := store.service["web"]
 	if len(service) != 1 {
 		t.Fatalf("stored service snapshots = %+v, want replaced current rows", service)
 	}
-	if got := service["tcp"]; got.Observation != checks.ObservationUnavailable || got.OK || !got.Unavailable || got.Message != "connection refused" || got.Data["port"] != float64(443) || !got.At.Equal(t1) || got.Severity != checks.SeverityWarning {
+	if got := service["tcp"]; got.Observation != checks.ObservationUnavailable || got.OK || !got.Unavailable || got.Message != "connection refused" || got.Data["port"] != float64(443) || !got.At.Equal(t1) || got.Severity != string(severity.Warning) {
 		t.Fatalf("stored snapshot = %+v", got)
+	}
+}
+
+// A load that skipped an undecodable row still restores every other snapshot,
+// so a restart does not re-open the episodes they carry.
+func TestPersistentSnapshotsHydrateAPartialLoad(t *testing.T) {
+	record := state.CheckSnapshotRecord{CheckType: checks.CheckTypeService, Observation: checks.ObservationFailing}
+	store := &snapshotStoreFake{
+		service: map[string]map[string]state.CheckSnapshotRecord{"web": {"service": record}},
+		watch:   map[string]map[string]state.CheckSnapshotRecord{"disk": {"result": record}},
+		loadErr: errors.New("web/http skipped: invalid observation \"\""),
+	}
+	services, err := NewPersistentSnapshots(store, nil)
+	if err == nil || services.Get("web")["service"].Observation != checks.ObservationFailing {
+		t.Fatalf("service snapshots = %+v, err %v; want the decodable row and the error", services.Get("web"), err)
+	}
+	watches, err := NewPersistentWatchSnapshots(store, nil)
+	if err == nil || watches.byWatch["disk"]["result"].Observation != checks.ObservationFailing {
+		t.Fatalf("watch snapshots = %+v, err %v; want the decodable row and the error", watches.byWatch, err)
 	}
 }
 
@@ -189,7 +210,7 @@ func TestPersistentWatchSnapshotsHydrateAndStore(t *testing.T) {
 			"clock": {
 				checks.DataKeyResult: {
 					CheckType: "clock", Observation: checks.ObservationFailing, OK: false, Message: "offset 1200ms",
-					Data: map[string]any{"offset_ms": float64(1200)}, Ran: true, At: t0, Severity: checks.SeverityWarning,
+					Data: map[string]any{"offset_ms": float64(1200)}, Ran: true, At: t0, Severity: string(severity.Warning),
 				},
 			},
 		},
@@ -198,7 +219,7 @@ func TestPersistentWatchSnapshotsHydrateAndStore(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewPersistentWatchSnapshots: %v", err)
 	}
-	if got := s.Get("clock", "clock"); len(got) != 1 || got[0].Message != "offset 1200ms" || got[0].Data["offset_ms"] != float64(1200) || got[0].Severity != checks.SeverityWarning {
+	if got := s.Get("clock", "clock"); len(got) != 1 || got[0].Message != "offset 1200ms" || got[0].Data["offset_ms"] != float64(1200) || got[0].Severity != string(severity.Warning) {
 		t.Fatalf("hydrated watch snapshots = %+v", got)
 	}
 
@@ -210,11 +231,11 @@ func TestPersistentWatchSnapshotsHydrateAndStore(t *testing.T) {
 		Unavailable: true,
 		Message:     "offset 4ms",
 		Data:        map[string]any{"offset_ms": float64(4)},
-		Severity:    checks.SeverityWarning,
+		Severity:    severity.Warning,
 	})
 
 	got := store.watch["clock"]["clock"]
-	if got.CheckType != "clock" || !got.OK || !got.Unavailable || got.Message != "offset 4ms" || got.Data["offset_ms"] != float64(4) || !got.At.Equal(t1) || got.Severity != checks.SeverityWarning {
+	if got.CheckType != "clock" || !got.OK || !got.Unavailable || got.Message != "offset 4ms" || got.Data["offset_ms"] != float64(4) || !got.At.Equal(t1) || got.Severity != string(severity.Warning) {
 		t.Fatalf("stored watch snapshot = %+v", got)
 	}
 }
@@ -251,10 +272,13 @@ func TestWorkerPausedDoesNotPublish(t *testing.T) {
 type snapshotStoreFake struct {
 	service map[string]map[string]state.CheckSnapshotRecord
 	watch   map[string]map[string]state.CheckSnapshotRecord
+	// loadErr is returned with the rows, the way a load that skipped an
+	// undecodable row reports it.
+	loadErr error
 }
 
 func (s *snapshotStoreFake) ServiceCheckSnapshots() (map[string]map[string]state.CheckSnapshotRecord, error) {
-	return s.service, nil
+	return s.service, s.loadErr
 }
 
 func (s *snapshotStoreFake) SetServiceCheckSnapshots(service string, records map[string]state.CheckSnapshotRecord) error {
@@ -266,7 +290,7 @@ func (s *snapshotStoreFake) SetServiceCheckSnapshots(service string, records map
 }
 
 func (s *snapshotStoreFake) WatchCheckSnapshots() (map[string]map[string]state.CheckSnapshotRecord, error) {
-	return s.watch, nil
+	return s.watch, s.loadErr
 }
 
 func (s *snapshotStoreFake) SetWatchCheckSnapshot(watch, slot string, rec state.CheckSnapshotRecord) error {
@@ -285,7 +309,7 @@ func TestSnapshotPersistencePreservesAllFields(t *testing.T) {
 		record := state.CheckSnapshotRecord{
 			CheckType: checks.CheckTypeLog, ConfigID: "config-v1", Observation: checks.ObservationUnavailable,
 			OK: true, Condition: true, Optional: true, Skipped: true, Unavailable: true,
-			Message: "read failed", Data: data, Ran: true, At: time.Unix(123, 0), Severity: checks.SeverityWarning,
+			Message: "read failed", Data: data, Ran: true, At: time.Unix(123, 0), Severity: string(severity.Warning),
 		}
 		snapshot := snapshotFromRecord(record)
 		persisted := snapshotRecord(snapshot)

@@ -175,6 +175,17 @@ per cycle from `/proc/<pid>/io`, CPU per cycle, seconds to `/readyz`).
       templates.
 - [ ] Additional notification sinks such as file, syslog, Discord and generic
       webhook.
+- [x] Notification severity: five levels (debug, info, warning, error,
+      critical), per-notifier `min_severity`, graded `levels:` thresholds and
+      escalate-and-hold episodes.
+- [x] Notification presentation by severity: Slack attachment colour, Teams
+      lead-line colour, Telegram colour mark, ntfy/Gotify priority, and a
+      dashboard link (`web.public_url`) on every transport.
+- [ ] Telegram `silent` for levels below warning.
+- [ ] Dashboard severity filter for the event log and the watch list.
+- [ ] `levels:` for latency thresholds (tcp, http, connection protocols) and
+      for the capacity and temperature predicates of `lvm`, `storcli` and
+      `ssacli`, whose verdicts are composite today.
 - [ ] Sermo metrics export (Prometheus / OpenMetrics scrape endpoint — distinct
       from *monitoring* a Prometheus server; log/slog, JSON file, syslog and
       webhook sinks are likewise pending)

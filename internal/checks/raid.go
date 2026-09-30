@@ -116,7 +116,7 @@ func (c *raidCheck) Run(_ context.Context) Result {
 	}
 
 	msg := raidMessage(st, c.array, detail, present)
-	r := c.result(ok, msg, start)
+	r := c.grade(c.result(ok, msg, start), values)
 	r.Data = raidResultData(st, c.array, detail, present)
 	if c.previous == nil {
 		c.previous = map[string]RaidArrayStatus{}
