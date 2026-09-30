@@ -1,0 +1,11 @@
+name: fsledger
+display_name: "fsledger"
+category: security
+variables:
+  # fsledgerd is installed to sbin and the fsledger CLI to bin; on a merged-usr
+  # host both resolve under /usr/bin.
+  binary: ${bindir}/fsledgerd
+  cli: ${bindir}/fsledger
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["${binary}", "-version"], timeout: 10s }
