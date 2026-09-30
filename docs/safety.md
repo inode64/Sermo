@@ -627,7 +627,8 @@ then at most one operation.
   (`engine.max_parallel_checks`). A check that cannot get a slot waits — it is
   not skipped.
 - **Configuration health**: a service's `preflight.config` is copied into the
-  warning-grade `configuration` check and runs through that same bounded pool,
+  `configuration` check — warning-grade unless the entry declares its own
+  severity, and never counted against SLA — and runs through that same bounded pool,
   every `15m` by default. The original required preflight remains in the
   operation path and can block an action before any service mutation.
 - **Shutdown** (SIGTERM/SIGINT): stop starting cycles, cancel worker contexts;

@@ -372,7 +372,9 @@ func (w *Worker) reportCheckHealthChanges(cache map[string]checks.Result) {
 			continue
 		}
 		w.checkEpisodes[name] = checkEpisode{held: graded}
-		w.emit(Event{Kind: eventKindFiring, Severity: graded, Check: name, Message: checkHealthChangeMessage(name, result)})
+		// The message states the cause; Output carries the command's own words
+		// (a configtest's full report) for the notification body.
+		w.emit(Event{Kind: eventKindFiring, Severity: graded, Check: name, Message: checkHealthChangeMessage(name, result), Output: resultOutput(result)})
 	}
 	// Forget checks the running configuration no longer produces, so a reload
 	// that drops a check cannot leave a stale "failing" memory that reports a
@@ -593,11 +595,12 @@ func requiredCheckFailing(result checks.Result) bool {
 // requiredChecksOK reports the service's availability this cycle: true unless a
 // required check failed. A check declared an advisory — `severity: warning`, or
 // the `optional: true` that has always meant the same thing — is a warning and
-// does not affect availability or SLA. A service with no required checks is
-// vacuously available.
+// does not affect availability or SLA. Nor does the configuration test, however
+// it is graded: it judges the next start, while the running service keeps
+// serving. A service with no required checks is vacuously available.
 func requiredChecksOK(cache map[string]checks.Result) bool {
-	for _, r := range cache {
-		if requiredCheckFailing(r) {
+	for name, r := range cache {
+		if name != config.ConfigurationCheckName && requiredCheckFailing(r) {
 			return false
 		}
 	}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"maps"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -13,6 +14,7 @@ import (
 	"sermo/internal/config"
 	"sermo/internal/execx"
 	"sermo/internal/rules"
+	"sermo/internal/severity"
 )
 
 const (
@@ -156,6 +158,10 @@ type artifactCheck struct {
 	inspect func(context.Context) appinspect.Report
 	samples *ArtifactSamples
 	store   func(*ArtifactSamples, string, appinspect.Report)
+	// activeUsers, set for an application, names the services using it that
+	// are active now: a broken application an active service runs is an
+	// outage, one nothing running depends on an advisory.
+	activeUsers func() []string
 }
 
 func (c artifactCheck) Name() string { return c.name }
@@ -169,7 +175,43 @@ func (c artifactCheck) Run(ctx context.Context) checks.Result {
 	if !result.OK && report.Output != "" {
 		result.Data = map[string]any{checks.DataKeyOutput: report.Output}
 	}
+	if !result.OK && c.activeUsers != nil {
+		if users := c.activeUsers(); len(users) > 0 {
+			result.Severity = severity.Error
+			result.Message += " (used by active service " + strings.Join(users, displayListSeparator) + ")"
+		} else {
+			result.Severity = severity.Warning
+		}
+	}
 	return result
+}
+
+// appActiveUsers returns a function naming the services of users (per
+// application, the enabled services declaring it in `apps:`) active now. A
+// service counts as active while its init-state check (type service) is
+// healthy; one without such a check, or not observed yet, counts as active.
+func appActiveUsers(users map[string][]string, snapshots *Snapshots) func(app string) []string {
+	return func(app string) []string {
+		var active []string
+		for _, service := range users[app] {
+			if serviceActive(snapshots.Get(service)) {
+				active = append(active, service)
+			}
+		}
+		return active
+	}
+}
+
+// serviceActive reads a service's init state from its published check
+// snapshots: active while its service-type check is healthy, and assumed
+// active until one says otherwise.
+func serviceActive(snapshots map[string]CheckSnapshot) bool {
+	for _, snapshot := range snapshots {
+		if snapshot.CheckType == checks.CheckTypeService {
+			return snapshot.healthy()
+		}
+	}
+	return true
 }
 
 func storeLibrarySample(samples *ArtifactSamples, _ string, report appinspect.Report) {
@@ -195,6 +237,9 @@ type catalogArtifactWatchSpec struct {
 	register func(*ArtifactSamples, appinspect.Report) string
 	store    func(*ArtifactSamples, string, appinspect.Report)
 	inspect  func(context.Context, execx.Runner, *config.Config, string, ...appinspect.Option) appinspect.Report
+	// activeUsers, for applications, names the active services using one;
+	// nil grades a failure by the watch alone.
+	activeUsers func(string) []string
 }
 
 // artifactOwned is the set of app names or file paths that one generation's
@@ -217,6 +262,7 @@ func buildCatalogArtifactWatches(ctx context.Context, cfg *config.Config, deps D
 		return nil, owned
 	}
 	notifiers := resolveNotifiers(deps.GlobalNotify, deps.Notifiers)
+	usersOf := spec.activeUsers
 	out := make([]*Watch, 0, len(reports))
 	for i := range reports {
 		report := reports[i]
@@ -224,12 +270,16 @@ func buildCatalogArtifactWatches(ctx context.Context, cfg *config.Config, deps D
 		owned[spec.register(samples, report)] = true
 		watch := newWatchRuntime(spec.watchName(name), spec.category, deps, artifactWatchInterval(cfg, spec.category, name))
 		watch.App = spec.appName(name)
-		watch.Check = artifactCheck{
+		check := artifactCheck{
 			name: name, samples: samples, store: spec.store,
 			inspect: func(ctx context.Context) appinspect.Report {
 				return spec.inspect(ctx, runner, cfg, name, lookup)
 			},
 		}
+		if usersOf != nil {
+			check.activeUsers = func() []string { return usersOf(name) }
+		}
+		watch.Check = check
 		watch.FireOnFail = true
 		watch.Notifiers = notifiers
 		out = append(out, watch)
@@ -267,9 +317,9 @@ func BuildArtifactWatches(ctx context.Context, cfg *config.Config, deps Deps) []
 	samples := artifactSamplesOrDefault(deps.ArtifactSamples)
 	deps.ArtifactSamples = samples
 	out, ownedFiles := buildLibraryWatches(ctx, cfg, deps)
-	appWatches, ownedApps := buildAppWatches(ctx, cfg, deps)
-	out = append(out, appWatches...)
 	dependencies := collectArtifactDependencies(cfg)
+	appWatches, ownedApps := buildAppWatches(ctx, cfg, deps, dependencies.appUsers)
+	out = append(out, appWatches...)
 	out = append(out, buildArtifactAppWatches(cfg, deps, samples, dependencies.apps, ownedApps)...)
 	return append(out, buildArtifactPathWatches(deps, samples, dependencies.paths, ownedFiles)...)
 }
@@ -277,6 +327,8 @@ func BuildArtifactWatches(ctx context.Context, cfg *config.Config, deps Deps) []
 type artifactDependencies struct {
 	apps  []string
 	paths map[string]time.Duration
+	// appUsers names, per application, the enabled services declaring it.
+	appUsers map[string][]string
 }
 
 // collectArtifactDependencies resolves each enabled service once to find the
@@ -285,10 +337,14 @@ type artifactDependencies struct {
 func collectArtifactDependencies(cfg *config.Config) artifactDependencies {
 	appSet := map[string]struct{}{}
 	pathIntervals := map[string]time.Duration{}
+	appUsers := map[string][]string{}
 	for _, resolution := range cfg.ResolveServices(cfg.EnabledServiceNames()) {
 		resolved, errs := resolution.Resolved, resolution.Errors
 		if len(errs) > 0 || resolved.Tree == nil {
 			continue
+		}
+		for _, app := range resolved.Apps {
+			appUsers[app] = append(appUsers[app], resolved.Name)
 		}
 		for _, app := range changedRuleValues(resolved.Tree, rules.FieldApp) {
 			appSet[app] = struct{}{}
@@ -300,7 +356,7 @@ func collectArtifactDependencies(cfg *config.Config) artifactDependencies {
 			}
 		}
 	}
-	return artifactDependencies{apps: slices.Sorted(maps.Keys(appSet)), paths: pathIntervals}
+	return artifactDependencies{apps: slices.Sorted(maps.Keys(appSet)), paths: pathIntervals, appUsers: appUsers}
 }
 
 // buildArtifactAppWatches samples changed-app dependencies which do not have a

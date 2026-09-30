@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"sermo/internal/appinspect"
 	"sermo/internal/checks"
 	"sermo/internal/config"
 	"sermo/internal/notify"
@@ -595,5 +596,65 @@ func TestNormalizeLegacyNotifyRecord(t *testing.T) {
 	graded := state.EventNotifyRecord{Phase: eventKindFiring, Severity: string(severity.Critical)}
 	if got := normalizeLegacyNotifyRecord(graded); got != graded {
 		t.Fatalf("graded record rewritten: %+v", got)
+	}
+}
+
+// A broken application an active service runs is an error that names the
+// service and the cause; one no running service depends on is an advisory.
+func TestAppFailureGradesByTheActiveServicesUsingIt(t *testing.T) {
+	broken := appinspect.Report{Name: "php8.4", Status: "error: exit 127 (want 0): php: error while loading shared libraries: libicuuc.so.74", Output: "stderr:\nphp: error while loading shared libraries: libicuuc.so.74"}
+	snapshots := NewSnapshots()
+	check := func(users map[string][]string) checks.Result {
+		c := artifactCheck{
+			name:        "php8.4",
+			inspect:     func(context.Context) appinspect.Report { return broken },
+			activeUsers: func() []string { return appActiveUsers(users, snapshots)("php8.4") },
+		}
+		return c.Run(context.Background())
+	}
+	used := check(map[string][]string{"php8.4": {"php-fpm8.4"}})
+	if used.OK || used.Severity != severity.Error || !strings.Contains(used.Message, "libicuuc.so.74") || !strings.HasSuffix(used.Message, "(used by active service php-fpm8.4)") {
+		t.Fatalf("used app = %+v, want an error naming the cause and the service", used)
+	}
+	if unused := check(map[string][]string{}); unused.Severity != severity.Warning {
+		t.Fatalf("unused app severity = %q, want warning", unused.Severity)
+	}
+	// A stopped service no longer makes its broken application an outage.
+	snapshots.publishConfigured("php-fpm8.4", map[string]checks.Result{
+		"service": {Check: "service", OK: false},
+	}, map[string]bool{"service": true}, map[string]string{"service": checks.CheckTypeService}, "")
+	if stopped := check(map[string][]string{"php8.4": {"php-fpm8.4"}}); stopped.Severity != severity.Warning {
+		t.Fatalf("app of a stopped service = %q, want warning", stopped.Severity)
+	}
+}
+
+// The configuration test judges the next start: an invalid Apache
+// configuration is an error for the operator but never downtime for the SLA.
+func TestConfigurationCheckNeverCountsAgainstAvailability(t *testing.T) {
+	cache := map[string]checks.Result{
+		config.ConfigurationCheckName: {Check: config.ConfigurationCheckName, OK: false, Severity: severity.Error},
+		"service":                     {Check: "service", OK: true},
+	}
+	if !requiredChecksOK(cache) {
+		t.Fatal("a failing configuration test made the service unavailable")
+	}
+	cache["service"] = checks.Result{Check: "service", OK: false}
+	if requiredChecksOK(cache) {
+		t.Fatal("a failing service check must still count")
+	}
+}
+
+// A check's health edge carries the command's own output, so the notification
+// shows the configtest's full report beside the one-line cause.
+func TestCheckHealthEdgeCarriesTheCommandOutput(t *testing.T) {
+	events := runCycles(t, func(int) map[string]checks.Result {
+		return map[string]checks.Result{"configuration": {
+			Check: "configuration", OK: false, Severity: severity.Error,
+			Message: "exit 1 (want 0): AH00526: Syntax error on line 3 of /etc/a.conf: Invalid command 'Foo'",
+			Data:    map[string]any{checks.DataKeyOutput: "stderr:\nAH00526: Syntax error on line 3 of /etc/a.conf:\nInvalid command 'Foo'"},
+		}}
+	}, 1)
+	if len(events) != 1 || !strings.Contains(events[0].Message, "Invalid command 'Foo'") || !strings.Contains(events[0].Output, "AH00526") {
+		t.Fatalf("events = %+v, want the cause in the message and the report in Output", events)
 	}
 }

@@ -451,7 +451,7 @@ func inspectOptions(opts []Option) options {
 
 func runExitProbe(ctx context.Context, runner execx.Runner, cmd probeCommand) (bool, string, string) {
 	res, err := runProbeCommand(ctx, runner, cmd)
-	if status := probeFailure(res, err, cmd, ""); status != "" {
+	if status := probeFailure(res, err, cmd, output.FailureCause(res.Stdout, res.Stderr)); status != "" {
 		return false, status, output.Bounded(res.Stdout, res.Stderr)
 	}
 	return true, StatusOK, ""
@@ -488,7 +488,7 @@ func runVersionProbe(ctx context.Context, runner execx.Runner, tree map[string]a
 	fail := func(status string) versionProbeResult {
 		return versionProbeResult{status: status, output: output.Bounded(res.Stdout, res.Stderr)}
 	}
-	if status := probeFailure(res, err, cmd, output.FirstNonEmptyLine(res.Stderr)); status != "" {
+	if status := probeFailure(res, err, cmd, output.FailureCause(res.Stdout, res.Stderr)); status != "" {
 		return fail(status)
 	}
 	if ok, detail := cmd.stdout.Match(res.Stdout); !ok {

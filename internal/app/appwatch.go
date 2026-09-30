@@ -20,8 +20,14 @@ func storeAppSample(samples *ArtifactSamples, name string, report appinspect.Rep
 // "fires" when the app is not ok — emitting a firing/recovered event on the App
 // dimension and notifying the global default once on the rising edge
 // (NotifyInterval 0 = first time only). Only installed apps are watched,
-// matching the web Applications list.
-func buildAppWatches(ctx context.Context, cfg *config.Config, deps Deps) ([]*Watch, artifactOwned) {
+// matching the web Applications list. appUsers names each application's
+// enabled services: a broken application an active one runs is an error, any
+// other a warning (nil grades by the watch alone).
+func buildAppWatches(ctx context.Context, cfg *config.Config, deps Deps, appUsers map[string][]string) ([]*Watch, artifactOwned) {
+	var activeUsers func(string) []string
+	if appUsers != nil {
+		activeUsers = appActiveUsers(appUsers, deps.Snapshots)
+	}
 	return buildCatalogArtifactWatches(ctx, cfg, deps, catalogArtifactWatchSpec{
 		category:  config.CategoryApp,
 		watchName: func(name string) string { return name },
@@ -30,7 +36,8 @@ func buildAppWatches(ctx context.Context, cfg *config.Config, deps Deps) ([]*Wat
 			samples.RegisterApp(report.Name)
 			return report.Name
 		},
-		store:   storeAppSample,
-		inspect: appinspect.InspectOne,
+		store:       storeAppSample,
+		inspect:     appinspect.InspectOne,
+		activeUsers: activeUsers,
 	})
 }

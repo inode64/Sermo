@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"sermo/internal/cfgval"
 	"sermo/internal/execx"
@@ -54,6 +55,32 @@ type commandCheck struct {
 	numeric bool
 }
 
+// analyzedResult grades the output against the check's analyze patterns; ok is
+// false when no pattern matched.
+func (c commandCheck) analyzedResult(res execx.Result, start time.Time) (Result, bool) {
+	if !c.analyzer.Active() {
+		return Result{}, false
+	}
+	grade, id, line := c.analyzer.Analyze(res.Stdout, res.Stderr)
+	if !grade.Valid() {
+		return Result{}, false
+	}
+	r := c.result(false, fmt.Sprintf("exit %d; %s pattern %q: %s", res.ExitCode, grade, id, output.FirstNonEmptyLine(line)), start)
+	// An advisory grade keeps a preflight non-blocking. The finding takes the
+	// pattern's grade unless the check declares its own; a declared severity
+	// grades failures, so it may lower an advisory finding but never raises a
+	// deprecation notice into an outage.
+	r.Optional = grade.Advisory()
+	if !c.severity.Valid() || (grade.Advisory() && grade.Rank() < c.severity.Rank()) {
+		r.Severity = grade
+	}
+	r.Data = map[string]any{DataKeyPatternID: id, DataKeyPatternSeverity: grade.String(), DataKeyPatternLine: line}
+	if out := output.Bounded(res.Stdout, res.Stderr); out != "" {
+		r.Data[DataKeyOutput] = out
+	}
+	return r, true
+}
+
 func (c commandCheck) Run(ctx context.Context) Result {
 	ctx, run := c.begin(ctx)
 	defer run.close()
@@ -77,8 +104,8 @@ func (c commandCheck) Run(ctx context.Context) Result {
 	}
 	if !ExitCodeExpected(res.ExitCode, c.expectExit) {
 		msg := fmt.Sprintf("exit %d (want %s)", res.ExitCode, ExpectExitText(c.expectExit))
-		if stderr := output.FirstNonEmptyLine(res.Stderr); stderr != "" {
-			msg += ": " + stderr
+		if cause := output.FailureCause(res.Stdout, res.Stderr); cause != "" {
+			msg += ": " + cause
 		} else if err != nil {
 			msg += ": " + err.Error()
 		}
@@ -93,21 +120,8 @@ func (c commandCheck) Run(ctx context.Context) Result {
 	if ok, detail := c.version.Match(VersionOutput(res.Stdout, res.Stderr)); !ok {
 		return fail(fmt.Sprintf("exit %d; version %s", res.ExitCode, detail))
 	}
-	if c.analyzer.Active() {
-		if grade, id, line := c.analyzer.Analyze(res.Stdout, res.Stderr); grade.Valid() {
-			r := c.result(false, fmt.Sprintf("exit %d; %s pattern %q: %s", res.ExitCode, grade, id, output.FirstNonEmptyLine(line)), start)
-			// An advisory grade keeps a preflight non-blocking, and it grades the
-			// finding when the check declares no severity of its own.
-			r.Optional = grade.Advisory()
-			if !c.severity.Valid() {
-				r.Severity = grade
-			}
-			r.Data = map[string]any{DataKeyPatternID: id, DataKeyPatternSeverity: grade.String(), DataKeyPatternLine: line}
-			if out := output.Bounded(res.Stdout, res.Stderr); out != "" {
-				r.Data[DataKeyOutput] = out
-			}
-			return r
-		}
+	if r, matched := c.analyzedResult(res, start); matched {
+		return r
 	}
 	if c.onChange {
 		raw := strings.TrimSpace(res.Stdout)

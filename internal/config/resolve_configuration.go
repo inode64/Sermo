@@ -17,10 +17,13 @@ const (
 )
 
 // expandConfigurationCheck turns the application's existing preflight.config
-// command into a periodic advisory check. The original preflight entry remains
-// required and continues to block unsafe start/restart/reload/resume actions;
-// only the monitoring copy is warning-grade, because a running service with an
-// invalid next configuration is degraded but still available.
+// command into a periodic check. The original preflight entry remains required
+// and continues to block unsafe start/restart/reload/resume actions. The
+// monitoring copy is warning-grade unless the entry declares its own severity:
+// a running service with an invalid next configuration is degraded but still
+// available, and a service whose next reload or restart would take it down
+// (a web server) declares `severity: error`. Either way it never counts
+// against availability: it judges the next start, not the running service.
 func expandConfigurationCheck(tree map[string]any) []string {
 	preflight, _ := tree[sectionPreflight].(map[string]any)
 	entry, _ := preflight[ServiceMonitorKeyConfig].(map[string]any)
@@ -29,7 +32,9 @@ func expandConfigurationCheck(tree map[string]any) []string {
 	}
 
 	generated := cloneMap(entry)
-	generated[checks.CheckKeySeverity] = string(severity.Warning)
+	if _, declared := generated[checks.CheckKeySeverity]; !declared {
+		generated[checks.CheckKeySeverity] = string(severity.Warning)
+	}
 	if _, present := generated[EntryKeyInterval]; !present {
 		generated[EntryKeyInterval] = DefaultConfigurationCheckInterval
 	}

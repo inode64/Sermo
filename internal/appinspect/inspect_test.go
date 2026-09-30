@@ -232,8 +232,10 @@ func TestInspectHealthCommandTakesPriority(t *testing.T) {
 	if r.OK || !strings.Contains(r.Status, "exit 1 (want 0)") {
 		t.Fatalf("health failure should take priority over version success: %+v", r)
 	}
-	if strings.Contains(r.Status, "health details") || r.Version != "" {
-		t.Fatalf("health must ignore command output and not run version after failure: %+v", r)
+	// The exit code alone decides health; the reason the command printed is
+	// the cause the alert shows, and the version probe never runs after it.
+	if !strings.HasSuffix(r.Status, "exit 1 (want 0): health details") || r.Version != "" {
+		t.Fatalf("health failure must state its cause and not run version after failure: %+v", r)
 	}
 }
 

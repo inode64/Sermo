@@ -45,6 +45,11 @@ preflight:
         ubuntu: [/usr/sbin/apache2ctl, configtest]
         default: ["${apache_binary}", -t]
     timeout: 30s
+    # Monitored every 15 minutes as the `configuration` check. An invalid
+    # configuration is an error: the next graceful reload (logrotate, a
+    # certificate renewal) refuses it and a restart takes every site down. The
+    # web patterns keep deprecation notices and [warn] lines advisories.
+    severity: error
     analyze:
       use:
         - web
