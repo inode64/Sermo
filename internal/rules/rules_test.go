@@ -524,8 +524,11 @@ func TestRuleAndActionTypesValid(t *testing.T) {
 			t.Errorf("ActionType(%q).Valid() = false", actionType)
 		}
 	}
-	if ActionType("repair").Valid() || ActionType("").Valid() {
-		t.Fatal("unknown and empty rule actions must be invalid")
+	if ActionType("repair").Valid() || ActionPause.Valid() || ActionType("").Valid() {
+		t.Fatal("manual-only, unknown and empty rule actions must be invalid")
+	}
+	if !ActionPause.IsGuardTarget() {
+		t.Fatal("a guard must be able to name pause in blocks:")
 	}
 }
 
@@ -650,6 +653,9 @@ func TestGuardAppliesToActionsThatPerformTheBlockedStep(t *testing.T) {
 		{name: "start guard blocks restart", blocks: []string{"start"}, action: ActionRestart, want: true},
 		{name: "stop guard blocks restart", blocks: []string{"stop"}, action: ActionRestart, want: true},
 		{name: "stop guard blocks reap", blocks: []string{"stop"}, action: ActionReap, want: true},
+		{name: "stop guard blocks pause", blocks: []string{"stop"}, action: ActionPause, want: true},
+		{name: "pause named literally", blocks: []string{"pause"}, action: ActionPause, want: true},
+		{name: "start guard leaves pause alone", blocks: []string{"start"}, action: ActionPause, want: false},
 		{name: "repair named literally", blocks: []string{"repair"}, action: ActionRepair, want: true},
 		{name: "close_session named literally", blocks: []string{"close_session"}, action: ActionCloseSession, want: true},
 		{name: "close_terminal_source named literally", blocks: []string{"close_terminal_source"}, action: ActionCloseTerminalSource, want: true},

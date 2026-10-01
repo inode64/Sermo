@@ -60,7 +60,7 @@ func (b *WebBackend) operateError(name, action, msg string) web.ActionResult {
 	return web.ActionResult{OK: false, Message: msg}
 }
 
-// Operate runs a start/stop/restart/reload/resume/repair action on a service.
+// Operate runs a start/stop/restart/reload/pause/resume/repair action on a service.
 func (b *WebBackend) Operate(ctx context.Context, name, action string, opts web.OperateOpts) web.ActionResult {
 	e := b.entries[name]
 	if e == nil {

@@ -201,6 +201,22 @@ func (a App) fetchDaemonWatchDetail(ctx context.Context, cfg *config.Config, wat
 	return daemonWatchDetail{}, false
 }
 
+// fetchDaemonServices returns the daemon's computed view of its configured
+// services by name, or nil when sermod or its web API does not answer.
+func (a App) fetchDaemonServices(ctx context.Context, cfg *config.Config) map[string]web.Service {
+	var services []web.Service
+	if !a.daemonAPIJSONWithConfig(ctx, cfg, web.APIPathServices, &services) {
+		return nil
+	}
+	out := make(map[string]web.Service, len(services))
+	for i := range services {
+		if s := &services[i]; s.Name != "" && s.State != "" {
+			out[s.Name] = *s
+		}
+	}
+	return out
+}
+
 func (a App) fetchDaemonApplicationStates(ctx context.Context, cfg *config.Config) map[string]string {
 	var apps []struct {
 		Name  string `json:"name"`

@@ -16,6 +16,7 @@ func TestServiceActionSemantics(t *testing.T) {
 		{action: actionReload, serviceAction: true, settlesAfter: true},
 		{action: actionResume, serviceAction: true, settlesAfter: true, canRemainActive: true},
 		{action: ActionRepair, serviceAction: true, settlesAfter: true, canRemainActive: true},
+		{action: ActionPause, serviceAction: true},
 		{action: "alert"},
 		{action: "unknown"},
 	}

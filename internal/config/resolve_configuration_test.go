@@ -1,6 +1,7 @@
 package config
 
 import (
+	"strings"
 	"testing"
 
 	"sermo/internal/checks"
@@ -133,5 +134,43 @@ func TestResolveExpandsAnalyzeForPreflightAndMonitoringCopy(t *testing.T) {
 		if _, remains := analyze[keyAnalyzeUse]; remains {
 			t.Fatalf("%s analyze kept catalog sugar: %#v", label, analyze)
 		}
+	}
+}
+
+func TestResolveRecordsAnalyzePatternSets(t *testing.T) {
+	command := func(use ...any) map[string]any {
+		return map[string]any{
+			checks.CheckKeyType:    checks.CheckTypeCommand,
+			checks.CheckKeyCommand: []any{"webctl", "configtest"},
+			checks.CheckKeyAnalyze: map[string]any{keyAnalyzeUse: use},
+		}
+	}
+	set := func(id string) *Document {
+		return &Document{Body: map[string]any{
+			rules.SectionRules: []any{map[string]any{"id": id, "match": id, "severity": "error"}},
+		}}
+	}
+	cfg := &Config{
+		Services: map[string]*Document{
+			"web": {Body: map[string]any{
+				ServiceKeyService: "web",
+				sectionChecks:     map[string]any{"syntax": command("web", "common")},
+				sectionPreflight:  map[string]any{"syntax": command("common")},
+				sectionWatches:    map[string]any{"log": map[string]any{WatchKeyCheck: command("logs")}},
+			}},
+			"db": {Body: map[string]any{ServiceKeyService: "db"}},
+		},
+		Patterns: map[string]*Document{"web": set("w"), "common": set("c"), "logs": set("l")},
+	}
+
+	resolved, errs := cfg.Resolve("web")
+	if len(errs) > 0 {
+		t.Fatalf("Resolve: %v", errs)
+	}
+	if got, want := strings.Join(resolved.PatternSets, ","), "common,logs,web"; got != want {
+		t.Fatalf("PatternSets = %q, want %q (sorted, unique, from checks, preflight and watch checks)", got, want)
+	}
+	if plain, errs := cfg.Resolve("db"); len(errs) > 0 || plain.PatternSets != nil {
+		t.Fatalf("service without analyze: PatternSets = %#v, errs = %v", plain.PatternSets, errs)
 	}
 }

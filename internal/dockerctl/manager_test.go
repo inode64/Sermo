@@ -35,6 +35,11 @@ func (f *fakeDockerClient) Unpause(context.Context, string) error {
 	return nil
 }
 
+func (f *fakeDockerClient) Pause(context.Context, string) error {
+	f.actions = append(f.actions, "pause")
+	return nil
+}
+
 func TestManagerStatusFromContainer(t *testing.T) {
 	for _, tc := range []struct {
 		name   string
@@ -81,10 +86,13 @@ func TestManagerActions(t *testing.T) {
 	if err := manager.Stop(context.Background(), "svc"); err != nil {
 		t.Fatalf("Stop() error = %v", err)
 	}
+	if err := manager.Pause(context.Background(), "svc"); err != nil {
+		t.Fatalf("Pause() error = %v", err)
+	}
 	if err := manager.Resume(context.Background(), "svc"); err != nil {
 		t.Fatalf("Resume() error = %v", err)
 	}
-	if !slices.Equal(fake.actions, []string{"start", "stop", "unpause"}) {
+	if !slices.Equal(fake.actions, []string{"start", "stop", "pause", "unpause"}) {
 		t.Fatalf("actions = %v", fake.actions)
 	}
 	if err := manager.Reload(context.Background(), "svc"); err == nil {

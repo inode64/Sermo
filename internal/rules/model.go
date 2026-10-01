@@ -74,12 +74,17 @@ const (
 	ActionReap                ActionType = "reap"
 	ActionCloseSession        ActionType = "close_session"
 	ActionCloseTerminalSource ActionType = "close_terminal_source"
+	// ActionPause freezes a VM or container in place (libvirt suspend, Docker
+	// pause). Remediation never pauses a service: a paused workload stops
+	// serving, which no rule can judge safe.
+	ActionPause ActionType = "pause"
 	// GuardBlocksSummary is the user-facing list of valid guard `blocks:` values.
 	GuardBlocksSummary = string(ActionRestart) + ", " +
 		string(ActionStart) + ", " +
 		string(ActionStop) + ", " +
 		string(ActionReload) + ", " +
 		string(ActionResume) + ", " +
+		string(ActionPause) + ", " +
 		string(ActionRepair) + ", " +
 		string(ActionReap) + ", " +
 		string(ActionCloseSession) + ", " +
@@ -92,18 +97,25 @@ const (
 // guard.
 func (t ActionType) IsGuardTarget() bool {
 	switch t {
-	case ActionRepair, ActionReap, ActionCloseSession, ActionCloseTerminalSource:
+	case ActionReap, ActionCloseSession, ActionCloseTerminalSource:
 		return true
 	default:
-		return t.IsOperation()
+		return t.IsOperation() || t.IsManualOperation()
 	}
+}
+
+// IsManualOperation reports whether t is a lifecycle operation the engine runs
+// only on an explicit operator request (repair, pause): it drives the service
+// like IsOperation, but no rule may emit it.
+func (t ActionType) IsManualOperation() bool {
+	return t == ActionRepair || t == ActionPause
 }
 
 // guardedBy lists the `blocks:` entries that deny action: the action itself
 // plus every lifecycle action it performs. A guard that forbids a start must
 // also stop a restart or a repair (which start the service), and a guard that
-// forbids a stop must also stop a restart or a reap (which terminate service
-// processes) — safety invariant 2 is about what an action does, not its name.
+// forbids a stop must also stop a restart, a reap (which terminate service
+// processes) or a pause (which takes the workload out of service) — safety invariant 2 is about what an action does, not its name.
 // Session closes signal one session process and change no service lifecycle,
 // so only their own name blocks them.
 func guardedBy(action string) []string {
@@ -112,7 +124,7 @@ func guardedBy(action string) []string {
 		return []string{action, string(ActionStop), string(ActionStart)}
 	case ActionRepair:
 		return []string{action, string(ActionStart)}
-	case ActionReap:
+	case ActionReap, ActionPause:
 		return []string{action, string(ActionStop)}
 	default:
 		return []string{action}

@@ -100,6 +100,41 @@ func TestClientInfoInspectAndStop(t *testing.T) {
 	}
 }
 
+func TestClientPauseAndUnpause(t *testing.T) {
+	var calls []string
+	mux := http.NewServeMux()
+	for _, endpoint := range []string{"pause", "unpause"} {
+		mux.HandleFunc("/containers/web/"+endpoint, func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != http.MethodPost {
+				t.Errorf("%s method = %s, want POST", endpoint, r.Method)
+			}
+			calls = append(calls, endpoint)
+			w.WriteHeader(http.StatusNoContent)
+		})
+	}
+	// Docker answers 409 when the container is not running: pausing it must fail.
+	mux.HandleFunc("/containers/stopped/pause", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusConflict)
+		_, _ = w.Write([]byte(`{"message":"container is not running"}`))
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	client := &Client{HTTP: srv.Client(), Base: srv.URL}
+	if err := client.Pause(context.Background(), "web"); err != nil {
+		t.Fatalf("Pause() error = %v", err)
+	}
+	if err := client.Unpause(context.Background(), "web"); err != nil {
+		t.Fatalf("Unpause() error = %v", err)
+	}
+	if strings.Join(calls, ",") != "pause,unpause" {
+		t.Fatalf("calls = %v", calls)
+	}
+	if err := client.Pause(context.Background(), "stopped"); err == nil || !strings.Contains(err.Error(), "HTTP 409") {
+		t.Fatalf("Pause(stopped) error = %v, want HTTP 409", err)
+	}
+}
+
 func TestClientHTTPStatusError(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/info", func(w http.ResponseWriter, _ *http.Request) {

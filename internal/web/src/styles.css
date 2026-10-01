@@ -23,6 +23,10 @@
        red shades apart. AA on panel and on its own 14% tint. */
     --critical: #9e1c68;
     --info: #0860c8;
+    /* paused (a frozen VM or container) is its own hue: it is neither down
+       (--crit), degraded (--warn) nor running (--info). AA on panel and on
+       its own tint. */
+    --paused: #6639ba;
     --accent: #0860c8;
     --radius: 12px;
     --radius-s: 7px;
@@ -44,6 +48,7 @@
       --crit: #f85149;
       --critical: #f778ba;
       --info: #4493f8;
+      --paused: #a371f7;
       --accent: #4493f8;
       --shadow: 0 1px 2px rgb(0 0 0 / .4);
     }
@@ -147,10 +152,17 @@
      (#app-rows) and every watch panel (host #watch-rows, storage, network,
      cert, diskio) so a firing certificate or host watch paints red like a
      failing service. */
-  #rows tr.row-warning > td, #app-rows tr.row-warning > td, #library-rows tr.row-warning > td, #watch-rows tr.row-warning > td, #storage-rows tr.row-warning > td, #network-rows tr.row-warning > td, #cert-rows tr.row-warning > td, #diskio-rows tr.row-warning > td { background: color-mix(in srgb, var(--warn) 9%, transparent); }
-  #rows tr.row-failing > td, #app-rows tr.row-failing > td, #library-rows tr.row-failing > td, #watch-rows tr.row-failing > td, #storage-rows tr.row-failing > td, #network-rows tr.row-failing > td, #cert-rows tr.row-failing > td, #diskio-rows tr.row-failing > td { background: color-mix(in srgb, var(--crit) 9%, transparent); }
-  #rows tr.row-warning:hover > td, #app-rows tr.row-warning:hover > td, #library-rows tr.row-warning:hover > td, #watch-rows tr.row-warning:hover > td, #storage-rows tr.row-warning:hover > td, #network-rows tr.row-warning:hover > td, #cert-rows tr.row-warning:hover > td, #diskio-rows tr.row-warning:hover > td { background: color-mix(in srgb, var(--warn) 13%, transparent); }
-  #rows tr.row-failing:hover > td, #app-rows tr.row-failing:hover > td, #library-rows tr.row-failing:hover > td, #watch-rows tr.row-failing:hover > td, #storage-rows tr.row-failing:hover > td, #network-rows tr.row-failing:hover > td, #cert-rows tr.row-failing:hover > td, #diskio-rows tr.row-failing:hover > td { background: color-mix(in srgb, var(--crit) 13%, transparent); }
+  #rows tr.row-warning > td, #container-rows tr.row-warning > td, #vm-rows tr.row-warning > td, #app-rows tr.row-warning > td, #library-rows tr.row-warning > td, #watch-rows tr.row-warning > td, #storage-rows tr.row-warning > td, #network-rows tr.row-warning > td, #cert-rows tr.row-warning > td, #diskio-rows tr.row-warning > td { background: color-mix(in srgb, var(--warn) 9%, transparent); }
+  #rows tr.row-failing > td, #container-rows tr.row-failing > td, #vm-rows tr.row-failing > td, #app-rows tr.row-failing > td, #library-rows tr.row-failing > td, #watch-rows tr.row-failing > td, #storage-rows tr.row-failing > td, #network-rows tr.row-failing > td, #cert-rows tr.row-failing > td, #diskio-rows tr.row-failing > td { background: color-mix(in srgb, var(--crit) 9%, transparent); }
+  #rows tr.row-warning:hover > td, #container-rows tr.row-warning:hover > td, #vm-rows tr.row-warning:hover > td, #app-rows tr.row-warning:hover > td, #library-rows tr.row-warning:hover > td, #watch-rows tr.row-warning:hover > td, #storage-rows tr.row-warning:hover > td, #network-rows tr.row-warning:hover > td, #cert-rows tr.row-warning:hover > td, #diskio-rows tr.row-warning:hover > td { background: color-mix(in srgb, var(--warn) 13%, transparent); }
+  #rows tr.row-failing:hover > td, #container-rows tr.row-failing:hover > td, #vm-rows tr.row-failing:hover > td, #app-rows tr.row-failing:hover > td, #library-rows tr.row-failing:hover > td, #watch-rows tr.row-failing:hover > td, #storage-rows tr.row-failing:hover > td, #network-rows tr.row-failing:hover > td, #cert-rows tr.row-failing:hover > td, #diskio-rows tr.row-failing:hover > td { background: color-mix(in srgb, var(--crit) 13%, transparent); }
+  /* A paused VM or container row: tinted in its own hue so it stands apart
+     from failing (red) and warning (amber) rows. */
+  #rows tr.row-paused > td, #container-rows tr.row-paused > td, #vm-rows tr.row-paused > td { background: color-mix(in srgb, var(--paused) 9%, transparent); }
+  #rows tr.row-paused:hover > td, #container-rows tr.row-paused:hover > td, #vm-rows tr.row-paused:hover > td { background: color-mix(in srgb, var(--paused) 13%, transparent); }
+  /* The pause toggle keeps its glyph; pressed (paused) it latches in the
+     paused hue so the row's state reads from the button too. */
+  .icon-btn.suspend-btn[aria-pressed="true"] { color: var(--paused); border-color: var(--paused); background: color-mix(in srgb, var(--paused) 14%, transparent); }
   tr.clickable { cursor: pointer; }
   .exp { color: var(--text-2); margin-right: .35rem; user-select: none; font-size: .9em; display: inline-block; }
   .category-badge { display: inline-block; max-width: 8rem; overflow: hidden; text-overflow: ellipsis; vertical-align: top; color: var(--text-2); }
@@ -197,7 +209,7 @@
   .target-state::before { content: ""; width: .52em; height: .52em; border-radius: 50%; background: currentColor; flex: none; }
   .state-disabled, .state-stopped, .state-starting { color: var(--text-2); }
   .state-running, .state-started { color: var(--info); }
-  .state-paused { color: var(--warn); }
+  .state-paused { color: var(--paused); }
   .state-warning, .state-restart-required, .state-stale { color: var(--warn); }
   .state-collecting { color: var(--warn); }
   .state-testing { color: var(--warn); }

@@ -2332,6 +2332,27 @@ func TestWebBackendIncludesDisabledServices(t *testing.T) {
 	}
 }
 
+// can_pause follows the engine: only a backend that wired a pause verb
+// (libvirt domain, Docker container) offers the toggle.
+func TestWebBackendExposesPauseCapability(t *testing.T) {
+	status := func(context.Context) (servicemgr.Status, error) { return servicemgr.StatusActive, nil }
+	b := &WebBackend{
+		order: []string{"vm", "web"},
+		entries: map[string]*webEntry{
+			"vm":  {unit: "vm", backend: string(servicemgr.BackendLibvirt), status: status, engine: operation.Engine{PauseFunc: func(context.Context) error { return nil }}},
+			"web": {unit: "nginx", backend: string(servicemgr.BackendSystemd), status: status},
+		},
+		emit: func(Event) {},
+	}
+	got := map[string]bool{}
+	for _, svc := range b.Services(context.Background()) {
+		got[svc.Name] = svc.CanPause
+	}
+	if !got["vm"] || got["web"] {
+		t.Fatalf("can_pause = %v, want vm only", got)
+	}
+}
+
 func TestWebBackendReloadUnsupportedIsExposedAndBlocked(t *testing.T) {
 	var events []Event
 	b := &WebBackend{

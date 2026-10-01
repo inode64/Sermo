@@ -285,6 +285,28 @@ func TestPreflightFailedExit1(t *testing.T) {
 	}
 }
 
+// A manual pause takes the target out of service like a stop: monitoring is
+// paused under the CLI manual-stop source and resume restores it.
+func TestPausePausesMonitoringAndResumeRestores(t *testing.T) {
+	global := writeActionConfig(t)
+	var stdout bytes.Buffer
+	app := actionApp(operation.Result{}, nil, &stdout, nil)
+	app.Operate = okOperate
+
+	if code := app.Run(context.Background(), []string{"--config", global, "pause", "web"}); code != exitSuccess {
+		t.Fatalf("pause exit = %d, want %d", code, exitSuccess)
+	}
+	if rec := readMonitorRecord(t, global, "web"); rec.Active || rec.Source != state.SourceCLIManualStop {
+		t.Fatalf("record after pause = %+v", rec)
+	}
+	if code := app.Run(context.Background(), []string{"--config", global, "resume", "web"}); code != exitSuccess {
+		t.Fatalf("resume exit = %d, want %d", code, exitSuccess)
+	}
+	if rec := readMonitorRecord(t, global, "web"); !rec.Active || rec.Source != state.SourceCLI {
+		t.Fatalf("record after resume = %+v", rec)
+	}
+}
+
 func TestActionFailedExit2(t *testing.T) {
 	global := writeActionConfig(t)
 	app := actionApp(operation.Result{Service: "web", Action: "stop", Status: operation.ResultFailed, Message: "stop: boom"}, nil, nil, nil)

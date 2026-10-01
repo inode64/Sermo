@@ -36,6 +36,37 @@ func TestSyncManualActionMonitoringPausesAndRestores(t *testing.T) {
 	}
 }
 
+// A manual pause takes the workload out of service like a stop: monitoring is
+// paused under the manual-stop source, so resume restores it.
+func TestSyncManualActionMonitoringPauseAndResume(t *testing.T) {
+	store := newFakeStore()
+	result := operation.Result{Service: "vm", Action: operation.ActionPause, Status: operation.ResultOK}
+	change, err := SyncManualActionMonitoring(store, "vm", operation.ActionPause, result, state.SourceWebManualStop, state.SourceWeb, false)
+	if err != nil {
+		t.Fatalf("pause sync: %v", err)
+	}
+	if !change.Changed || change.Action != eventActionUnmonitor || change.Message != "monitoring paused after manual pause" {
+		t.Fatalf("pause change = %+v", change)
+	}
+	if store.active["vm"] || store.source["vm"] != state.SourceWebManualStop {
+		t.Fatalf("store after pause active=%v source=%q", store.active["vm"], store.source["vm"])
+	}
+
+	result = operation.Result{Service: "vm", Action: string(rules.ActionResume), Status: operation.ResultOK}
+	change, err = SyncManualActionMonitoring(store, "vm", string(rules.ActionResume), result, state.SourceWebManualStop, state.SourceWeb, false)
+	if err != nil {
+		t.Fatalf("resume sync: %v", err)
+	}
+	if !change.Changed || change.Action != eventActionMonitor || change.Message != "monitoring resumed after manual resume" || !store.active["vm"] {
+		t.Fatalf("resume change = %+v active=%v", change, store.active["vm"])
+	}
+
+	failed := operation.Result{Service: "vm", Action: operation.ActionPause, Status: operation.ResultFailed}
+	if change, err := SyncManualActionMonitoring(store, "vm", operation.ActionPause, failed, state.SourceWebManualStop, state.SourceWeb, false); err != nil || change.Changed {
+		t.Fatalf("failed pause change = %+v, %v; want no monitoring change", change, err)
+	}
+}
+
 func TestSyncManualActionMonitoringRestoresAfterRepair(t *testing.T) {
 	store := newFakeStore()
 	store.active["web"] = false

@@ -356,7 +356,7 @@ func NewWebBackend(ctx context.Context, cfg *config.Config, deps Deps) (*WebBack
 	names := cfg.SortedServiceNames()
 	resolutions := cfg.ResolveServices(names)
 	prepared := make([]preparedService, len(names))
-	forEachParallel(len(names), deps.MaxParallel, func(i int) {
+	ForEachParallel(len(names), deps.MaxParallel, func(i int) {
 		prepared[i] = prepareWebService(ctx, cfg, names[i], resolutions[i], resolver, deps)
 	})
 	warnings := make([]string, 0, len(names))

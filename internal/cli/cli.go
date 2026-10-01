@@ -51,6 +51,9 @@ const (
 	// actionRepair is manual-only and clears only proven-stale runtime pidfiles
 	// before running the normal guarded start path.
 	actionRepair = operation.ActionRepair
+	// actionPause is manual-only: it freezes a libvirt VM or Docker container
+	// in place, which remediation never does.
+	actionPause = operation.ActionPause
 	// actionReap is not a rule action: a stray process is one Sermo cannot name,
 	// so clearing one is always an operator's decision, never a remediation.
 	actionReap = process.SectionReap
@@ -376,6 +379,7 @@ var commandHandlers = map[string]commandHandler{
 	commandRestart:   App.runActionCommand,
 	commandResume:    App.runActionCommand,
 	commandRepair:    App.runActionCommand,
+	commandPause:     App.runActionCommand,
 	commandMount:     App.runMount,
 	commandUmount:    App.runUmount,
 	commandConfig:    func(a App, _ context.Context, opts options) int { return a.runConfig(opts) },
@@ -537,7 +541,7 @@ func (a App) fail(opts options, msg string) int {
 // not given. Backend actions can legitimately take much longer than a probe.
 func defaultTimeout(command string) time.Duration {
 	switch command {
-	case commandStart, commandStop, commandRestart, commandReload, commandResume, commandRepair, commandMount, commandUmount, commandState:
+	case commandStart, commandStop, commandRestart, commandReload, commandResume, commandPause, commandRepair, commandMount, commandUmount, commandState:
 		return app.DefaultEngineOperationTimeout
 	case commandStatus, commandIsActive:
 		// Config loading and control-target resolution are part of a live service

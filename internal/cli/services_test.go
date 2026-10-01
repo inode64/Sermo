@@ -67,7 +67,7 @@ defaults: { policy: { cooldown: 5m } }
 
 	var out bytes.Buffer
 	app := App{Env: func(string) string { return "" }, Stdout: &out, Stderr: &bytes.Buffer{}, LoadConfig: testLoadConfigWithCatalog(catalogDir)}
-	if code := app.Run(context.Background(), []string{"--config", global, "services"}); code != exitSuccess {
+	if code := app.Run(context.Background(), []string{"--config", global, "services", "catalog"}); code != exitSuccess {
 		t.Fatalf("services exit = %d", code)
 	}
 	got := out.String()

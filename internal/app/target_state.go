@@ -31,6 +31,18 @@ const (
 	checkHealthWarning = "warning"
 )
 
+// ServiceStateNeedsAttention reports whether a ServiceState value is a problem
+// an operator should look at, as opposed to a healthy, settling, paused or
+// deliberately stopped service.
+func ServiceStateNeedsAttention(state string) bool {
+	switch state {
+	case TargetStateFailed, TargetStateWarning, TargetStateStale, TargetStateRestartRequired:
+		return true
+	default:
+		return false
+	}
+}
+
 // ServiceState folds config, backend status and monitoring health into the
 // operator-facing activity state shown by sermoctl and the web dashboard. The
 // state is intentionally a single service-axis value: "active" means a trusted
@@ -45,6 +57,14 @@ const (
 func ServiceState(enabled, monitored bool, backendStatus, checkHealth string, observed, observabilityReady, processActive, processesMissing, backendDegraded bool) string {
 	if !enabled {
 		return TargetStateDisabled
+	}
+	// A frozen VM or container (libvirt suspend, Docker pause) that nobody is
+	// watching was paused on purpose — a manual pause pauses monitoring — so it
+	// says so instead of reading stopped. A monitored one froze by itself
+	// (libvirt pauses a domain on an I/O error or a full disk) and keeps
+	// reading failed below: that is an outage, not a choice.
+	if !monitored && strings.EqualFold(backendStatus, string(servicemgr.StatusPaused)) {
+		return TargetStatePaused
 	}
 	if monitored && !observed {
 		if processActive && strings.EqualFold(backendStatus, string(servicemgr.StatusActive)) {

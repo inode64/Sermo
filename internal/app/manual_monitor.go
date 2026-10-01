@@ -23,8 +23,8 @@ type ManualMonitorChange struct {
 }
 
 // SyncManualActionMonitoring pauses monitoring after a successful
-// manual stop and restores it after a successful manual start when the stop
-// created the pause. Existing manual unmonitor state is preserved.
+// manual stop or pause and restores it after a successful manual start or
+// resume when the stop or pause created the monitoring pause. Existing manual unmonitor state is preserved.
 // activeAfterPostflightFailure restores monitoring for starts that reached the backend but
 // failed postflight when the service is still active.
 func SyncManualActionMonitoring(store MonitorStore, service, action string, result operation.Result, stopSource, restoreSource string, activeAfterPostflightFailure bool) (ManualMonitorChange, error) {
@@ -32,17 +32,20 @@ func SyncManualActionMonitoring(store MonitorStore, service, action string, resu
 		return ManualMonitorChange{}, nil
 	}
 	switch rules.ActionType(action) {
-	case rules.ActionStop:
+	case rules.ActionStop, rules.ActionPause:
+		// A stopped or paused target is not serving; keeping it monitored would
+		// alert on (and let remediation act against) the state the operator chose.
 		if !result.OK() {
 			return ManualMonitorChange{}, nil
 		}
-		return syncMonitorPause(store, service, service, stopSource, eventMessageMonitoringPausedAfterManualStop)
+		// The message names the action: "monitoring paused after manual stop".
+		return syncMonitorPause(store, service, service, stopSource, eventMessageMonitoringPausedAfterManual+action)
 	case rules.ActionStart, rules.ActionRestart, rules.ActionResume, rules.ActionType(operation.ActionRepair):
 		if !result.OK() && !activeAfterPostflightFailure {
 			return ManualMonitorChange{}, nil
 		}
 		return syncMonitorRestore(store, service, service, restoreSource,
-			eventMessageMonitoringResumedAfterManualStart, state.IsManualStopSource)
+			eventMessageMonitoringResumedAfterManual+action, state.IsManualStopSource)
 	default:
 		return ManualMonitorChange{}, nil
 	}

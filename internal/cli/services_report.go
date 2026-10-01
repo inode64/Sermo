@@ -60,7 +60,9 @@ func buildConfiguredNotifiers(cfg *config.Config) (map[string]notify.Notifier, [
 	return notify.Build(cfg.Notifiers(), notify.WithTemplateDir(cfg.Global.TemplateDir()))
 }
 
-func (a App) sendServicesReport(ctx context.Context, opts options, cfg *config.Config, reports []appinspect.Report, includeMissing bool) ([]string, int) {
+// sendServicesReport delivers one services report through the notifiers named
+// by --notify, returning their effective names.
+func (a App) sendServicesReport(ctx context.Context, opts options, cfg *config.Config, msg notify.Message) ([]string, int) {
 	registry, warnings := a.BuildReportNotifiers(cfg)
 	for _, warning := range warnings {
 		fmt.Fprintf(a.Stderr, cliWarningFormat, warning)
@@ -73,7 +75,6 @@ func (a App) sendServicesReport(ctx context.Context, opts options, cfg *config.C
 		return nil, a.fail(opts, "services --notify selected no enabled notifiers")
 	}
 
-	msg := servicesReportMessage(reports, includeMissing, time.Now())
 	sendCtx, cancel := context.WithTimeout(ctx, opts.timeout)
 	defer cancel()
 	for _, n := range selected {
@@ -120,26 +121,146 @@ func servicesReportNotifierNames(selection []string, registry map[string]notify.
 	return selection
 }
 
+// reportTone classifies one report row for its badge colour and the
+// distribution bar.
+type reportTone int
+
+const (
+	reportToneOK reportTone = iota
+	reportToneIssue
+	reportToneMuted
+)
+
+// reportRow is one table row of a services report.
+type reportRow struct {
+	Name   string
+	Detail string
+	Status string
+	Tone   reportTone
+}
+
+// reportStat is one labelled count; it is a plain-text summary line and, when
+// Color is set, an HTML card.
+type reportStat struct {
+	Label string
+	Value int
+	Color string
+}
+
+// servicesReport is what both services reports render: the configured-services
+// health report and the catalog inventory report.
+type servicesReport struct {
+	Kind          string // SERMO_REPORT
+	Muted         string // what a muted row is, for the subject: "not installed", "unmonitored"
+	Headline      string // HTML title
+	Scope         string
+	DetailHeading string // second table column
+	Empty         string
+	Source        string // footer: what the report is based on
+	Stats         []reportStat
+	Rows          []reportRow
+	Fields        map[string]string // per-report counters
+}
+
 func servicesReportMessage(reports []appinspect.Report, includeMissing bool, now time.Time) notify.Message {
 	stats := servicesReportSummary(reports)
-	host := reportHostname()
-	subject := fmt.Sprintf("[sermo] services report: %d ok, %d issue(s)", stats.OK, stats.Issues)
-	if stats.NotInstalled > 0 {
-		subject += fmt.Sprintf(", %d not installed", stats.NotInstalled)
+	rows := make([]reportRow, 0, len(reports))
+	for _, r := range reports {
+		tone := reportToneOK
+		if !r.Installed {
+			tone = reportToneMuted
+		} else if !r.OK {
+			tone = reportToneIssue
+		}
+		rows = append(rows, reportRow{Name: r.DisplayName, Detail: reportVersion(r), Status: r.Status, Tone: tone})
 	}
-	body := servicesReportText(reports, stats, includeMissing, host, now)
-	return notify.Message{
-		Subject: subject,
-		Body:    body,
-		HTML:    servicesReportHTML(reports, stats, includeMissing, host, now),
+	return servicesReportNotification(servicesReport{
+		Kind:          servicesReportKindCatalog,
+		Muted:         "not installed",
+		Headline:      "Service catalog health",
+		Scope:         reportScope(includeMissing),
+		DetailHeading: "Version",
+		Empty:         "No service catalog entries matched the report scope.",
+		Source:        "sermoctl services catalog",
+		Stats: []reportStat{
+			{Label: "Total", Value: stats.Total},
+			{Label: "Installed", Value: stats.Installed, Color: servicesReportColorInfo},
+			{Label: cliTextOK, Value: stats.OK, Color: servicesReportColorOK},
+			{Label: "Issues", Value: stats.Issues, Color: servicesReportColorIssue},
+			{Label: "Not installed", Value: stats.NotInstalled, Color: servicesReportColorMuted},
+			{Label: "Versions known", Value: stats.VersionKnown},
+		},
+		Rows: rows,
 		Fields: map[string]string{
-			cliFieldSermoReport:        commandServices,
-			cliFieldSermoReportHost:    host,
 			cliFieldSermoReportTotal:   strconv.Itoa(stats.Total),
 			cliFieldSermoReportOK:      strconv.Itoa(stats.OK),
 			cliFieldSermoReportIssues:  strconv.Itoa(stats.Issues),
 			cliFieldSermoReportMissing: strconv.Itoa(stats.NotInstalled),
 		},
+	}, now)
+}
+
+// configuredServicesReportMessage reports the health of the services this host
+// is configured to supervise.
+func configuredServicesReportMessage(services []configuredService, now time.Time) notify.Message {
+	rows := make([]reportRow, 0, len(services))
+	for _, s := range services {
+		rows = append(rows, reportRow{Name: s.DisplayName, Detail: s.Backend, Status: s.State, Tone: s.reportTone()})
+	}
+	counts := countTones(rows)
+	ok, issues, unmonitored := counts[reportToneOK], counts[reportToneIssue], counts[reportToneMuted]
+	return servicesReportNotification(servicesReport{
+		Kind:          commandServices,
+		Muted:         "unmonitored",
+		Headline:      "Configured services health",
+		Scope:         "configured services",
+		DetailHeading: "Type",
+		Empty:         "No services are configured.",
+		Source:        "sermoctl services",
+		Stats: []reportStat{
+			{Label: "Total", Value: len(services), Color: servicesReportColorInfo},
+			{Label: cliTextOK, Value: ok, Color: servicesReportColorOK},
+			{Label: "Issues", Value: issues, Color: servicesReportColorIssue},
+			{Label: "Unmonitored", Value: unmonitored, Color: servicesReportColorMuted},
+		},
+		Rows: rows,
+		Fields: map[string]string{
+			cliFieldSermoReportTotal:       strconv.Itoa(len(services)),
+			cliFieldSermoReportOK:          strconv.Itoa(ok),
+			cliFieldSermoReportIssues:      strconv.Itoa(issues),
+			cliFieldSermoReportUnmonitored: strconv.Itoa(unmonitored),
+		},
+	}, now)
+}
+
+// toneCounts counts report rows per tone, indexed by reportTone.
+type toneCounts [reportToneMuted + 1]int
+
+func countTones(rows []reportRow) toneCounts {
+	var counts toneCounts
+	for _, row := range rows {
+		counts[row.Tone]++
+	}
+	return counts
+}
+
+func servicesReportNotification(r servicesReport, now time.Time) notify.Message {
+	counts := countTones(r.Rows)
+	subject := fmt.Sprintf("[sermo] services report: %d ok, %d issue(s)", counts[reportToneOK], counts[reportToneIssue])
+	if counts[reportToneMuted] > 0 {
+		subject += fmt.Sprintf(", %d %s", counts[reportToneMuted], r.Muted)
+	}
+	host := reportHostname()
+	fields := map[string]string{
+		cliFieldSermoReport:     r.Kind,
+		cliFieldSermoReportHost: host,
+	}
+	maps.Copy(fields, r.Fields)
+	return notify.Message{
+		Subject: subject,
+		Body:    servicesReportText(r, host, now),
+		HTML:    servicesReportHTML(r, counts, host, now),
+		Fields:  fields,
 	}
 }
 
@@ -165,26 +286,28 @@ func servicesReportSummary(reports []appinspect.Report) servicesReportStats {
 	return stats
 }
 
-func servicesReportText(reports []appinspect.Report, stats servicesReportStats, includeMissing bool, host string, now time.Time) string {
+func servicesReportText(r servicesReport, host string, now time.Time) string {
 	var b strings.Builder
 	fmt.Fprint(&b, "Sermo services report\n")
 	fmt.Fprintf(&b, "Host: %s\n", host)
 	fmt.Fprintf(&b, "Generated: %s\n", now.Format(time.RFC3339))
-	fmt.Fprintf(&b, "Scope: %s\n\n", reportScope(includeMissing))
-	fmt.Fprintf(&b, "Total: %d\nInstalled: %d\nOK: %d\nIssues: %d\nNot installed: %d\nVersions known: %d\n\n",
-		stats.Total, stats.Installed, stats.OK, stats.Issues, stats.NotInstalled, stats.VersionKnown)
-	if len(reports) == 0 {
-		b.WriteString("No service catalog entries matched the report scope.\n")
+	fmt.Fprintf(&b, "Scope: %s\n\n", r.Scope)
+	for _, stat := range r.Stats {
+		fmt.Fprintf(&b, "%s: %d\n", stat.Label, stat.Value)
+	}
+	b.WriteString("\n")
+	if len(r.Rows) == 0 {
+		b.WriteString(r.Empty + "\n")
 		return b.String()
 	}
-	b.WriteString("SERVICE\tVERSION\tSTATUS\n")
-	for _, r := range reports {
-		fmt.Fprintf(&b, "%s\t%s\t%s\n", r.DisplayName, reportVersion(r), r.Status)
+	fmt.Fprintf(&b, "SERVICE\t%s\tSTATUS\n", strings.ToUpper(r.DetailHeading))
+	for _, row := range r.Rows {
+		fmt.Fprintf(&b, "%s\t%s\t%s\n", row.Name, row.Detail, row.Status)
 	}
 	return b.String()
 }
 
-func servicesReportHTML(reports []appinspect.Report, stats servicesReportStats, includeMissing bool, host string, now time.Time) string {
+func servicesReportHTML(r servicesReport, counts toneCounts, host string, now time.Time) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, `<!doctype html><html><body style="margin:0;padding:0;background:%s;color:%s;font-family:%s;">`,
 		servicesReportColorPageBG, servicesReportColorText, servicesReportFontSans)
@@ -193,38 +316,39 @@ func servicesReportHTML(reports []appinspect.Report, stats servicesReportStats, 
 		servicesReportColorPanel, servicesReportColorFrameBorder)
 	fmt.Fprintf(&b, `<tr><td style="background:%s;color:%s;padding:24px 28px;">`, servicesReportColorHeaderBG, servicesReportColorPanel)
 	fmt.Fprintf(&b, `<div style="font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:%s;">Sermo Services Report</div>`, servicesReportColorHeaderHint)
-	b.WriteString(`<div style="font-size:28px;font-weight:700;line-height:1.2;margin-top:6px;">Service catalog health</div>`)
+	fmt.Fprintf(&b, `<div style="font-size:28px;font-weight:700;line-height:1.2;margin-top:6px;">%s</div>`, esc(r.Headline))
 	fmt.Fprintf(&b, `<div style="font-size:13px;color:%s;margin-top:8px;">Host %s · %s · %s</div>`,
-		servicesReportColorHeaderMeta, esc(host), esc(now.Format(servicesReportDateLayout)), esc(reportScope(includeMissing)))
+		servicesReportColorHeaderMeta, esc(host), esc(now.Format(servicesReportDateLayout)), esc(r.Scope))
 	b.WriteString(`</td></tr>`)
 	b.WriteString(`<tr><td style="padding:22px 28px 8px;">`)
 	b.WriteString(`<table role="presentation" width="100%" cellspacing="0" cellpadding="0"><tr>`)
-	writeReportCard(&b, cliTextOK, stats.OK, servicesReportColorOK)
-	writeReportCard(&b, "Issues", stats.Issues, servicesReportColorIssue)
-	writeReportCard(&b, "Installed", stats.Installed, servicesReportColorInfo)
-	writeReportCard(&b, "Not installed", stats.NotInstalled, servicesReportColorMuted)
+	for _, stat := range r.Stats {
+		if stat.Color != "" {
+			writeReportCard(&b, stat.Label, stat.Value, stat.Color)
+		}
+	}
 	b.WriteString(`</tr></table>`)
 	b.WriteString(`</td></tr>`)
 	b.WriteString(`<tr><td style="padding:10px 28px 18px;">`)
-	writeDistributionBar(&b, stats)
+	writeDistributionBar(&b, counts, len(r.Rows))
 	b.WriteString(`</td></tr>`)
 	b.WriteString(`<tr><td style="padding:0 28px 28px;">`)
 	fmt.Fprintf(&b, `<table role="presentation" width="100%%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;border:1px solid %s;border-radius:10px;overflow:hidden;">`, servicesReportColorBorder)
 	fmt.Fprintf(&b, `<tr style="background:%s;">`, servicesReportColorTableHeadBG)
 	writeReportHeaderCell(&b, "Service")
-	writeReportHeaderCell(&b, "Version")
+	writeReportHeaderCell(&b, r.DetailHeading)
 	writeReportHeaderCell(&b, "Status")
 	b.WriteString(`</tr>`)
-	if len(reports) == 0 {
-		fmt.Fprintf(&b, `<tr><td colspan="3" style="padding:18px 12px;color:%s;">No service catalog entries matched the report scope.</td></tr>`, servicesReportColorMuted)
+	if len(r.Rows) == 0 {
+		fmt.Fprintf(&b, `<tr><td colspan="3" style="padding:18px 12px;color:%s;">%s</td></tr>`, servicesReportColorMuted, esc(r.Empty))
 	}
-	for _, r := range reports {
-		writeReportRow(&b, r)
+	for _, row := range r.Rows {
+		writeReportRow(&b, row)
 	}
 	b.WriteString(`</table>`)
 	b.WriteString(`</td></tr>`)
-	fmt.Fprintf(&b, `<tr><td style="padding:16px 28px;background:%s;border-top:1px solid %s;color:%s;font-size:12px;">Generated by <strong>Sermo</strong>. This report is based on <code style="font-family:%s;">sermoctl services</code> catalog probes.</td></tr>`,
-		servicesReportColorTableHeadBG, servicesReportColorBorder, servicesReportColorMuted, servicesReportFontMono)
+	fmt.Fprintf(&b, `<tr><td style="padding:16px 28px;background:%s;border-top:1px solid %s;color:%s;font-size:12px;">Generated by <strong>Sermo</strong>. This report is based on <code style="font-family:%s;">%s</code>.</td></tr>`,
+		servicesReportColorTableHeadBG, servicesReportColorBorder, servicesReportColorMuted, servicesReportFontMono, esc(r.Source))
 	b.WriteString(`</table></td></tr></table></body></html>`)
 	return b.String()
 }
@@ -243,39 +367,38 @@ func servicesReportDistributionSegment(pct float64, color string) string {
 	return fmt.Sprintf(`<span style="display:inline-block;height:12px;width:%.2f%%;background:%s;"></span>`, pct, color)
 }
 
-func writeDistributionBar(b *strings.Builder, stats servicesReportStats) {
-	total := max(stats.Total, 1)
-	okPct := float64(stats.OK) / float64(total) * metrics.PercentScale
-	issuePct := float64(stats.Issues) / float64(total) * metrics.PercentScale
-	missingPct := float64(stats.NotInstalled) / float64(total) * metrics.PercentScale
+func writeDistributionBar(b *strings.Builder, counts toneCounts, rows int) {
+	total := float64(max(rows, 1))
+	pct := func(tone reportTone) float64 { return float64(counts[tone]) / total * metrics.PercentScale }
 	fmt.Fprintf(b, `<div style="font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:%s;margin-bottom:8px;">Distribution</div>`, servicesReportColorMuted)
 	fmt.Fprintf(b, `<div style="height:12px;border-radius:999px;overflow:hidden;background:%s;">%s%s%s</div>`,
 		servicesReportColorBorder,
-		servicesReportDistributionSegment(okPct, servicesReportColorOK),
-		servicesReportDistributionSegment(issuePct, servicesReportColorIssue),
-		servicesReportDistributionSegment(missingPct, servicesReportColorMuted))
+		servicesReportDistributionSegment(pct(reportToneOK), servicesReportColorOK),
+		servicesReportDistributionSegment(pct(reportToneIssue), servicesReportColorIssue),
+		servicesReportDistributionSegment(pct(reportToneMuted), servicesReportColorMuted))
 }
 
-func writeReportRow(b *strings.Builder, r appinspect.Report) {
+func writeReportRow(b *strings.Builder, r reportRow) {
 	b.WriteString(`<tr>`)
 	fmt.Fprintf(b, `<td style="padding:10px 12px;border-bottom:1px solid %s;font-size:14px;color:%s;font-weight:600;">%s</td>`,
-		servicesReportColorBorder, servicesReportColorText, esc(r.DisplayName))
+		servicesReportColorBorder, servicesReportColorText, esc(r.Name))
 	fmt.Fprintf(b, `<td style="padding:10px 12px;border-bottom:1px solid %s;font-size:13px;color:%s;font-family:%s;">%s</td>`,
-		servicesReportColorBorder, servicesReportColorSecondary, servicesReportFontMono, esc(reportVersion(r)))
+		servicesReportColorBorder, servicesReportColorSecondary, servicesReportFontMono, esc(r.Detail))
 	fmt.Fprintf(b, `<td style="padding:10px 12px;border-bottom:1px solid %s;font-size:13px;">%s</td>`, servicesReportColorBorder, statusBadge(r))
 	b.WriteString(`</tr>`)
 }
 
-func statusBadge(r appinspect.Report) string {
-	color := servicesReportColorOK
-	bg := servicesReportColorOKBadgeBG
-	label := r.Status
-	if !r.Installed {
+func statusBadge(r reportRow) string {
+	var color, bg string
+	switch r.Tone {
+	case reportToneOK:
+		color, bg = servicesReportColorOK, servicesReportColorOKBadgeBG
+	case reportToneMuted:
 		color, bg = servicesReportColorMuted, servicesReportColorMuteBadgeBG
-	} else if !r.OK {
+	case reportToneIssue:
 		color, bg = servicesReportColorIssue, servicesReportColorBadBadgeBG
 	}
-	return fmt.Sprintf(`<span style="display:inline-block;border-radius:999px;padding:4px 9px;background:%s;color:%s;font-weight:700;">%s</span>`, bg, color, esc(label))
+	return fmt.Sprintf(`<span style="display:inline-block;border-radius:999px;padding:4px 9px;background:%s;color:%s;font-weight:700;">%s</span>`, bg, color, esc(r.Status))
 }
 
 func reportVersion(r appinspect.Report) string {

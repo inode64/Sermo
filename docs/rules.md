@@ -251,7 +251,8 @@ It requires readable systemd journals and a journalctl version with `--grep`.
 
 `expect_*` is a single pass/fail assertion. To grade an *otherwise-passing*
 command's output into **warning** or **error**, add an `analyze:` block. It references reusable rule sets from `catalog/patterns/`
-(category `patterns`, `sermoctl patterns`) and can add or silence rules per
+(category `patterns`; `sermoctl patterns catalog` lists them all,
+`sermoctl patterns` those in use) and can add or silence rules per
 check:
 
 ```yaml

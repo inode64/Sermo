@@ -99,7 +99,7 @@ defaults: { policy: { cooldown: 5m } }
 			return map[string]notify.Notifier{"ops": notifier}, nil
 		},
 	}
-	if code := app.Run(context.Background(), []string{"--config", global, "services", "--notify", "ops"}); code != exitSuccess {
+	if code := app.Run(context.Background(), []string{"--config", global, "services", "catalog", "--notify", "ops"}); code != exitSuccess {
 		t.Fatalf("services --notify exit = %d", code)
 	}
 	if !strings.Contains(stdout.String(), "sent services report to ops") {

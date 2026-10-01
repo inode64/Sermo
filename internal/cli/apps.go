@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"sermo/internal/app"
 	"sermo/internal/appinspect"
@@ -16,25 +17,40 @@ import (
 // command reports, and whether they resolve without error. Only installed apps
 // are shown unless `apps all` is given.
 func (a App) runApps(ctx context.Context, opts options) int {
-	return a.listCategory(ctx, opts, config.CategoryApp, commandApps, "installed applications", "APPLICATION")
+	return a.listCategory(ctx, opts, catalogListing{category: config.CategoryApp, jsonKey: commandApps, usage: commandApps, empty: "installed applications", heading: "APPLICATION"})
 }
 
 // runLibs lists catalog libraries (catalog/libs) services can watch for
 // changes, with the version each reports and whether it is present.
 func (a App) runLibs(ctx context.Context, opts options) int {
-	return a.listCategory(ctx, opts, config.CategoryLibrary, commandLibs, "libraries", "LIBRARY")
+	return a.listCategory(ctx, opts, catalogListing{category: config.CategoryLibrary, jsonKey: commandLibs, usage: commandLibs, empty: "libraries", heading: "LIBRARY"})
 }
 
-// runServices lists catalog service profiles (catalog/services): which
+// runServices lists the services this host is configured to supervise. With
+// `catalog` it lists catalog service profiles (catalog/services) instead: which
 // are installed, the version their version command reports, and whether they
 // resolve without error.
 func (a App) runServices(ctx context.Context, opts options) int {
-	return a.listCategory(ctx, opts, config.CategoryService, commandServices, "installed services", "SERVICE")
+	if len(opts.args) == 0 || opts.args[0] != commandArgCatalog {
+		return a.runConfiguredServices(ctx, opts)
+	}
+	opts.args = opts.args[1:]
+	return a.listCategory(ctx, opts, catalogListing{
+		category: config.CategoryService, jsonKey: commandServices, usage: commandServices + " " + commandArgCatalog,
+		empty: "installed services", heading: "SERVICE",
+	})
 }
 
-func (a App) listCategory(ctx context.Context, opts options, category, jsonKey, empty, heading string) int {
+// catalogListing names one catalog category lister: its JSON key, the command
+// words usage errors quote, and the table's empty text and first heading.
+type catalogListing struct {
+	category, jsonKey, usage, empty, heading string
+}
+
+func (a App) listCategory(ctx context.Context, opts options, l catalogListing) int {
+	category, jsonKey := l.category, l.jsonKey
 	if len(opts.args) > 1 || (len(opts.args) == 1 && opts.args[0] != commandArgAll) {
-		return a.commandUsageError(jsonKey, jsonKey+" accepts only optional `all`")
+		return a.commandUsageError(jsonKey, l.usage+" accepts only optional `all`")
 	}
 	if len(opts.notifyNames) > 0 && category != config.CategoryService {
 		return a.commandUsageError(jsonKey, "--notify is only supported by services")
@@ -64,7 +80,7 @@ func (a App) listCategory(ctx context.Context, opts options, category, jsonKey, 
 	var notified []string
 	if category == config.CategoryService && len(opts.notifyNames) > 0 {
 		var code int
-		notified, code = a.sendServicesReport(ctx, opts, cfg, reports, includeMissing)
+		notified, code = a.sendServicesReport(ctx, opts, cfg, servicesReportMessage(reports, includeMissing, time.Now()))
 		if code != exitSuccess {
 			return code
 		}
@@ -77,7 +93,7 @@ func (a App) listCategory(ctx context.Context, opts options, category, jsonKey, 
 		writeJSON(a.Stdout, out)
 		return exitSuccess
 	}
-	a.printApps(reports, empty, opts.long, heading)
+	a.printApps(reports, l.empty, opts.long, l.heading)
 	if notified != nil && !opts.quiet {
 		fmt.Fprintf(a.Stdout, "sent services report to %s\n", strings.Join(notified, ", "))
 	}

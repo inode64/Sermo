@@ -136,6 +136,7 @@ const targetStateStarting = "starting";
 const targetStateStopping = "stopping";
 const targetStateRestarting = "restarting";
 const targetStateResuming = "resuming";
+const targetStatePausing = "pausing";
 const targetStateReloading = "reloading";
 const targetStateWorking = "working";
 const operationStateRunning = "running";
@@ -210,7 +211,7 @@ const eventStatusPostflightFailed = "postflight_failed";
 const eventStatusOrphanProcesses = "orphan_processes";
 // Stop still opens the confirmation dialog; the engine does not run preflight
 // on stop, so the dialog's preflight runner stays disabled for that action.
-const serviceConfirmActions = [actionStart, actionStop, actionRestart, actionRepair];
+const serviceConfirmActions = [actionStart, actionStop, actionRestart, actionRepair, actionPause];
 const servicePreflightActions = [actionStart, actionRestart, actionRepair];
 // Only lifecycle actions that change the unit's running state propagate to
 // also_apply targets. Repair remains a deliberately one-service recovery.
@@ -218,7 +219,7 @@ const serviceCascadeActions = [actionStart, actionStop, actionRestart];
 // The engine operations (mirrors operation.IsServiceAction in the API): the
 // actions that run through the operation pipeline, so they are the ones this
 // browser tracks in liveOps and the ones a named lock blocks.
-const serviceTrackedActions = [actionStart, actionStop, actionRestart, actionReload, actionResume, actionRepair];
+const serviceTrackedActions = [actionStart, actionStop, actionRestart, actionReload, actionPause, actionResume, actionRepair];
 const activityCriticalStatuses = [targetStateFailed, mountStateError, eventStatusPreflightFailed, eventStatusPostflightFailed, eventStatusOrphanProcesses];
 const activityCriticalKinds = [mountStateError, eventKindHookFailed, eventKindNotifyFailed, eventKindExpandFailed, eventKindKillFailed, eventKindMakeStepFailed];
 const activityWarningKinds = [actionAlert, eventKindFiring, eventKindSuppressed, eventKindPanicSuppressed, eventKindNotifySuppressed, eventKindExpandSkipped, eventKindMakeStepSkipped];
@@ -227,6 +228,7 @@ const activityInfoKinds = [eventKindDryRun, eventKindReload];
 const serviceStatusFilterStates = [
   targetStateDisabled,
   targetStateStopped,
+  targetStatePaused,
   targetStateStarted,
   targetStateActive,
   targetStateStarting,
@@ -337,6 +339,7 @@ const targetStateClasses = {
   [targetStateStopping]: "state-starting",
   [targetStateRestarting]: "state-starting",
   [targetStateResuming]: "state-starting",
+  [targetStatePausing]: "state-starting",
   [targetStateReloading]: "state-starting",
 };
 const targetStateRanks = {
@@ -364,6 +367,7 @@ const targetStateRanks = {
   [targetStateStopping]: 1,
   [targetStateRestarting]: 1,
   [targetStateResuming]: 1,
+  [targetStatePausing]: 1,
   [targetStateReloading]: 1,
 };
 const operationActionStates = {
@@ -372,6 +376,7 @@ const operationActionStates = {
   [actionStop]: targetStateStopping,
   [actionRestart]: targetStateRestarting,
   [actionResume]: targetStateResuming,
+  [actionPause]: targetStatePausing,
   [actionReload]: targetStateReloading,
 };
 const runtimeMetricDefs = [
@@ -396,7 +401,7 @@ function isShareableExpansionKey(key) {
 function isServiceConfirmAction(action) { return serviceConfirmActions.includes(action); }
 function isServicePreflightAction(action) { return servicePreflightActions.includes(action); }
 function isServiceCascadeAction(action) { return serviceCascadeActions.includes(action); }
-function isDangerServiceAction(action) { return action === actionStop || action === actionRestart || action === actionRepair; }
+function isDangerServiceAction(action) { return action === actionStop || action === actionRestart || action === actionRepair || action === actionPause; }
 
 // Action feedback must survive the dashboard refresh that almost every action
 // triggers: load() ends with a status clear, which used to wipe e.g.
@@ -2531,14 +2536,7 @@ function stateCounts(items, stateOf, states) {
 }
 
 function normalizeServiceStatusFilter(v) {
-  switch (v) {
-    case targetStateRunning:
-      return filterAll;
-    case targetStatePaused:
-      return targetStateStopped;
-    default:
-      return v || filterAll;
-  }
+  return v === targetStateRunning ? filterAll : (v || filterAll);
 }
 
 function normalizeWatchStatusFilter(v) {
@@ -2677,6 +2675,7 @@ function serviceActionDisabled(s, action, busy) {
     case actionStop: return !!(busy || locked || stopped);
     case actionRestart: return !!(busy || locked);
     case actionResume: return !!(busy || locked || !paused);
+    case actionPause: return !!(busy || locked || st !== backendStatusActive);
     case actionReload: return !!(busy || locked || st !== backendStatusActive || !s.can_reload);
     case actionMonitor:
     case actionUnmonitor: return !!(busy || pendingMonitorToggles.has(serviceExpansionKey(s.name)));
@@ -2700,6 +2699,7 @@ function serviceActionDisabledReason(s, action, busy) {
       return serviceRepairAvailable(s) ? "" : "repair is available only for a failed or inactive service";
     case actionStop: return stopped ? "service is already stopped" : "";
     case actionResume: return !paused ? "service is not paused" : "";
+    case actionPause: return st !== backendStatusActive ? "service is not running" : "";
     case actionReload:
       if (!s.can_reload) return "service does not support reload";
       return st !== backendStatusActive ? "service is not running" : "";
@@ -2728,6 +2728,20 @@ function servicePowerAction(s) {
   return st === backendStatusActive || st === targetStatePaused ? actionStop : actionStart;
 }
 
+// serviceSuspendAction is the action the pause toggle sends: resume a paused
+// VM or container, otherwise pause it.
+function serviceSuspendAction(s) {
+  return (s.status || "").toLowerCase() === targetStatePaused ? actionResume : actionPause;
+}
+
+// serviceSuspendToggle is one button for pause and resume: the glyph stays the
+// pause bars and only its pressed state changes, the way a media pause key
+// latches. The accessible name still says which operation a press sends.
+function serviceSuspendToggle(s, busy) {
+  const action = serviceSuspendAction(s);
+  return serviceActionButton(s, action, busy, true, "", { glyphAction: actionPause, extraClass: "suspend-btn", pressed: action === actionResume });
+}
+
 function expandToggleAriaLabel(name, open, subject) {
   return `${open ? "Collapse" : "Expand"} ${subject} for ${name}`;
 }
@@ -2751,7 +2765,7 @@ const actionMeta = {
   [actionUnmonitor]: { glyph: "⊘", service: (n) => `Unmonitor service ${n}`, watch: (n) => `Unmonitor watch ${n}` },
   [actionExpand]: { watch: (n) => `Expand storage for watch ${n}` },
   [actionProbe]: { watch: (n) => `Probe watch ${n}` },
-  [actionPause]: { watch: (n) => `Pause RAID reconstruction for watch ${n}` },
+  [actionPause]: { glyph: "⏸", service: (n) => `Pause service ${n}`, watch: (n) => `Pause RAID reconstruction for watch ${n}` },
   [actionReplicationStart]: { watch: (n) => `Start replication for watch ${n}` },
 };
 
@@ -2799,25 +2813,30 @@ async function pressServiceButton(name, button) {
   scheduleRefresh();
 }
 
-function serviceActionButton(s, action, busy, compact = false, title = "") {
+// serviceActionButton renders one service action button. A toggle passes
+// toggle.glyphAction to keep one glyph across the actions it alternates,
+// toggle.pressed for its latched state and toggle.extraClass for its styling.
+function serviceActionButton(s, action, busy, compact = false, title = "", toggle = null) {
   const label = svcActionAriaLabel(s, action);
-  const glyph = compact ? serviceActionGlyph(action) : "";
+  const glyph = compact ? serviceActionGlyph((toggle && toggle.glyphAction) || action) : "";
   const disabled = serviceActionDisabled(s, action, busy);
   const reason = serviceActionDisabledReason(s, action, busy);
   const hintID = actionHintID("svc", s.name, action);
-  return tpl`${actionHint(hintID, disabled, reason)}<button class="${compact ? "icon-btn" : ""}" ?disabled=${disabled} data-service="${s.name}" data-service-action="${action}" title="${title || (compact ? label : nothing)}" aria-label="${label}" aria-describedby="${actionDescribedBy(hintID, disabled, reason)}">${glyph ? tpl`<span aria-hidden="true">${glyph}</span>` : action}</button>`;
+  const classes = [compact ? "icon-btn" : "", (toggle && toggle.extraClass) || ""].filter(Boolean).join(" ");
+  const pressed = toggle ? (toggle.pressed ? domBoolTrue : domBoolFalse) : nothing;
+  return tpl`${actionHint(hintID, disabled, reason)}<button class="${classes}" ?disabled=${disabled} data-service="${s.name}" data-service-action="${action}" aria-pressed="${pressed}" title="${title || (compact ? label : nothing)}" aria-label="${label}" aria-describedby="${actionDescribedBy(hintID, disabled, reason)}">${glyph ? tpl`<span aria-hidden="true">${glyph}</span>` : action}</button>`;
 }
 
 // serviceRowParts builds one service's main and optional expansion <tr> HTML.
 // Shared by the full tbody rebuild and the large-fleet in-place patch path.
-function serviceRowParts(s, opts = {}) {
+function serviceRowParts(s) {
   const state = serviceState(s);
   const category = categoryOf(s, defaultCategoryService);
   const label = displayName(s);
   const op = liveOps.get(s.name);
   const busy = serviceBusy(s);
   const stateParts = serviceStateParts(s);
-  const showResume = !!opts.showResume;
+  const showSuspend = !!s.can_pause;
   // With a liveOps entry the note names the action and its elapsed time. Without
   // one, operation_active still tells us the engine holds the lock, so the row
   // says so instead of looking idle while it churns.
@@ -2836,7 +2855,6 @@ function serviceRowParts(s, opts = {}) {
       ? `${svcActionAriaLabel(s, powerAction)}; also applies to: ${s.also_apply.join(", ")}`
       : svcActionAriaLabel(s, powerAction);
     const overflowActions = [
-      showResume ? serviceActionButton(s, actionResume, busy, true) : nothing,
       serviceActionButton(s, actionReload, busy, true),
       s.monitored
         ? serviceActionButton(s, actionUnmonitor, busy, true)
@@ -2847,6 +2865,7 @@ function serviceRowParts(s, opts = {}) {
     actions = me.can_act ? tpl`
         ${serviceActionButton(s, powerAction, busy, true, powerTitle)}
         ${powerAction !== actionRestart ? serviceActionButton(s, actionRestart, busy, true) : nothing}
+        ${showSuspend ? serviceSuspendToggle(s, busy) : nothing}
         ${overflowActions}`
       : tpl`<span class="muted">read-only</span>`;
   }
@@ -2856,7 +2875,7 @@ function serviceRowParts(s, opts = {}) {
   const name = tpl`<button type="button" class="name row-toggle" data-service-expand="${s.name}" aria-expanded="${open}" aria-controls="${open ? "exp-" + key : nothing}" aria-label="${expandToggleAriaLabel(label, open, "service details")}">${label}</button>`;
   const pinned = svcPinned.has(s.name);
   const pin = tpl`<button type="button" class="icon-btn pin-btn${pinned ? " pinned" : ""}" data-service-pin="${s.name}" aria-pressed="${pinned ? domBoolTrue : domBoolFalse}" title="${pinned ? "Unpin from top" : "Pin to top"}" aria-label="${(pinned ? "Unpin " : "Pin ") + label + (pinned ? " from the top of the list" : " to the top of the list")}">${pinned ? "★" : "☆"}</button>`;
-  const rowClass = state === targetStateFailed ? "row-failing" : ([targetStateWarning, targetStateRestartRequired].includes(state) ? "row-warning" : "");
+  const rowClass = serviceRowClass(state);
   const main = tpl`<tr id="svc-row-${s.name}" class="clickable ${rowClass}" data-exp-key="${key}">
     <td><div class="svc-main">${chev}${name}${pin}</div>${stateParts.hasReason ? tpl`<div class="svc-state-note">${stateParts.reason}</div>` : nothing}${busyText}</td>
     <td>${categoryBadge(category)}</td>
@@ -2876,8 +2895,14 @@ function serviceRowParts(s, opts = {}) {
   return { main, exp };
 }
 
-function serviceRowHTML(s, opts = {}) {
-  const parts = serviceRowParts(s, opts);
+function serviceRowClass(state) {
+  if (state === targetStateFailed) return "row-failing";
+  if (state === targetStatePaused) return "row-paused";
+  return [targetStateWarning, targetStateRestartRequired].includes(state) ? "row-warning" : "";
+}
+
+function serviceRowHTML(s) {
+  const parts = serviceRowParts(s);
   return parts.exp ? [parts.main, parts.exp] : [parts.main];
 }
 
@@ -2947,8 +2972,8 @@ function renderPrimaryServices() {
       : tpl`<tr><td colspan="11" class="muted">No services.</td></tr>`;
   } else {
     content = svcGrouped
-      ? renderGroupedRows(list, svcCollapsedGroups, "svc", "svc", (s) => categoryOf(s, defaultCategoryService), 11, (s) => serviceRowHTML(s), svcSort.key === "category" ? svcSort.dir : 1)
-      : list.flatMap((s) => serviceRowHTML(s));
+      ? renderGroupedRows(list, svcCollapsedGroups, "svc", "svc", (s) => categoryOf(s, defaultCategoryService), 11, serviceRowHTML, svcSort.key === "category" ? svcSort.dir : 1)
+      : list.flatMap(serviceRowHTML);
   }
   litRender(content, rows);
 }
@@ -2977,8 +3002,8 @@ function renderSplitServicePanel(panelKey) {
   const filtered = servicePanelFilterActive(panel.query, panel.status);
   const content = list.length
     ? (panel.grouped
-      ? renderGroupedRows(list, panel.collapsedGroups, panelKey, "svc", (s) => categoryOf(s, defaultCategoryService), 11, (s) => serviceRowHTML(s, { showResume: true }), panel.sort.key === "category" ? panel.sort.dir : 1)
-      : list.flatMap((s) => serviceRowHTML(s, { showResume: true })))
+      ? renderGroupedRows(list, panel.collapsedGroups, panelKey, "svc", (s) => categoryOf(s, defaultCategoryService), 11, serviceRowHTML, panel.sort.key === "category" ? panel.sort.dir : 1)
+      : list.flatMap(serviceRowHTML))
     : tpl`<tr><td colspan="11" class="muted">${filtered ? panel.emptyFiltered : panel.empty}</td></tr>`;
   litRender(content, rows);
 }
@@ -7891,6 +7916,8 @@ function renderActionConfirm() {
     ? "A safe restart stops the unit, verifies residual processes, then starts only if the stop phase is clean."
     : ctx.action === actionStart
       ? "Start will run through locks, guards and configured checks before the service is started."
+    : ctx.action === actionPause
+      ? "Pause freezes the VM or container in place: it stops serving until resumed, and its monitoring is paused until then. Locks and guards still apply."
       : "Stop will run through locks, guards and residual-process handling. It will not start the service again.";
   const cascadeTargets = (d.also_apply || []).filter(Boolean);
   const cascadeLine = cascadeTargets.length

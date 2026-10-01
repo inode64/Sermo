@@ -1153,8 +1153,8 @@ Read-only endpoints:
   `check_health`, `observability_ready`,
   `observability_missing`, `state_reason`, active locks, monitor state/source/timestamp,
   backend, unit, cooldown, remediation state, next eligible action and last
-  event. This is not `sermoctl services`, which lists catalog service profiles — see
-  [cli.md](cli.md#catalog-inventory). Process age is exposed as `uptime_seconds`;
+  event. `sermoctl services` reads this list for its STATE and MONITORED columns —
+  see [cli.md](cli.md#configured-services). Process age is exposed as `uptime_seconds`;
   clients format the duration for display.
 - `GET /api/services/{name}` — service detail: latest checks, rolling SLA, named
   runtime locks, discovered processes, automatic remediation policy state and
@@ -1745,8 +1745,10 @@ one enabled notifier. The Notifiers panel offers the same action to WebUI
 administrators. Both paths use the configured delivery target and timeout, do
 not trigger watches, hooks or remediation, and reject disabled notifiers.
 
-`sermoctl services --notify NAME[,NAME]` sends an ad-hoc services inventory
-report through configured notifiers. Email notifiers receive a multipart
+`sermoctl services --notify NAME[,NAME]` sends an ad-hoc health report of the
+configured services through configured notifiers, and
+`sermoctl services catalog [all] --notify NAME[,NAME]` the catalog inventory
+report. Email notifiers receive a multipart
 plain-text/HTML message with summary cards and a service table; Slack and Teams
 receive the text fallback, and terminal notifiers write the text report to
 logged-in TTY sessions. `--notify all` targets every enabled notifier, including

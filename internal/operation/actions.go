@@ -3,16 +3,17 @@ package operation
 import "sermo/internal/rules"
 
 // IsServiceAction reports whether action changes a service through the operation
-// engine. Repair is intentionally included here but not in rules: it is a
-// manual-only recovery action and can never be emitted by remediation rules.
+// engine. Repair and pause are intentionally included here but not in rules:
+// they are manual-only actions and can never be emitted by remediation rules.
 func IsServiceAction(action string) bool {
-	return rules.ActionType(action).IsOperation() || action == ActionRepair
+	t := rules.ActionType(action)
+	return t.IsOperation() || t.IsManualOperation()
 }
 
 // CascadesAlsoApply reports whether an action applies to a service's
 // also_apply targets. Only lifecycle actions that change the unit's running
-// state cascade; reload, resume and manual repair always affect just the named
-// service.
+// state cascade; reload, pause, resume and manual repair always affect just the
+// named service.
 func CascadesAlsoApply(action string) bool {
 	switch action {
 	case actionStart, actionStop, actionRestart:

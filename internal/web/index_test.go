@@ -930,7 +930,7 @@ func TestSourceCompactsRowActionsWithoutChangingDispatch(t *testing.T) {
 
 func TestSourceStopConfirmsWithoutEnginePreflight(t *testing.T) {
 	appJSMustContain(t, "stop confirm without engine preflight",
-		`const serviceConfirmActions = [actionStart, actionStop, actionRestart, actionRepair];`,
+		`const serviceConfirmActions = [actionStart, actionStop, actionRestart, actionRepair, actionPause];`,
 		`const servicePreflightActions = [actionStart, actionRestart, actionRepair];`,
 		`if (isServiceConfirmAction(action) && !(await confirmAction(name, action))) return;`,
 	)
