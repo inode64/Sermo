@@ -61,8 +61,12 @@ any `security:` toggle that tries to disable them.
 ## The operation engine
 
 Every start/stop/restart/reload/resume — manual (`sermoctl`) or automatic (`sermod`) —
-runs through the same engine. The manual-only `repair` action uses that engine
-too, but is never eligible for automatic remediation:
+runs through the same engine. The manual-only `repair` and `pause` actions use
+that engine too, but are never eligible for automatic remediation. `pause`
+(libvirt suspend, Docker pause) runs no preflight, like `stop`, but honors locks
+and guards — a guard that blocks `stop` also blocks `pause` — and succeeds only
+once the backend reports the target `paused`. A successful manual pause pauses
+monitoring, as a manual stop does, until `resume` restores it:
 
 The daemon worker, Web UI and CLI build that engine from the same resolved
 service runtime: control target, backend process roots, process selectors, check
@@ -243,8 +247,8 @@ service do). It manages services owned by different users and touches privileged
 areas, so several features need it:
 
 - **Service control** — start/stop/restart/reload via systemd/OpenRC,
-  start/stop/restart/resume of VM domains via libvirt when a service declares
-  `control.type: libvirt`, and start/stop/restart/resume of Docker containers
+  start/stop/restart/pause/resume of VM domains via libvirt when a service declares
+  `control.type: libvirt`, and start/stop/restart/pause/resume of Docker containers
   when it declares `control.type: docker`.
 - **Signalling other users' processes** — the stop policy reaps residual
   processes that match the `kill_only_if` selector, across UIDs.
@@ -280,7 +284,7 @@ Because the daemon runs as root:
   come from the trusted operator configuration. Code that builds paths from
   request parameters must validate those components before joining them;
   normalizing a path does not authorize its destination.
-- **The web UI** (when enabled) can start/stop/restart/reload/resume/repair services and
+- **The web UI** (when enabled) can start/stop/restart/reload/pause/resume/repair services and
   monitor/unmonitor targets as root, so it is hardened by default: it **binds to
   loopback** (`127.0.0.1`), supports
   **authentication** with a read-only guest role, requires the **`X-Sermo-Csrf`

@@ -183,7 +183,8 @@ func New(c Config) Engine {
 		Preflight:           sectionRunner(tree, deps, c.MetricSample),
 		Postflight:          verifyRunner(tree, deps, c.MetricSample),
 		ReloadFunc:          reloadClosure(reloadSpec, tree, deps, c.Manager, c.Backend, c.Unit, c.Discoverer, selectors),
-		ResumeFunc:          resumeClosure(c.Manager, c.Unit),
+		ResumeFunc:          optionalVerb(c.Manager, c.Unit, resumeManager.Resume),
+		PauseFunc:           optionalVerb(c.Manager, c.Unit, pauseManager.Pause),
 		RepairStalePIDFiles: repairStalePIDFiles(c.Manager, c.Unit, selectors, c.Discoverer.Reader, runtimeDirectory),
 		ObserveProcesses:    func() (process.Observation, error) { return c.Discoverer.Observe(selectors) },
 		Discover:            discover,
@@ -196,17 +197,24 @@ func New(c Config) Engine {
 	}
 }
 
+type pauseManager interface {
+	Pause(ctx context.Context, service string) error
+}
+
 type resumeManager interface {
 	Resume(ctx context.Context, service string) error
 }
 
-func resumeClosure(mgr servicemgr.Manager, unit string) func(context.Context) error {
-	rm, ok := mgr.(resumeManager)
+// optionalVerb binds a backend verb only some managers implement (pause,
+// resume) to unit. It returns nil when mgr lacks the verb, which the engine
+// reports as unsupported by the backend.
+func optionalVerb[T any](mgr servicemgr.Manager, unit string, verb func(T, context.Context, string) error) func(context.Context) error {
+	m, ok := mgr.(T)
 	if !ok {
 		return nil
 	}
 	return func(ctx context.Context) error {
-		return rm.Resume(ctx, unit)
+		return verb(m, ctx, unit)
 	}
 }
 

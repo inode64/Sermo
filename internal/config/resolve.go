@@ -12,6 +12,7 @@ import (
 	"sermo/internal/cfgval"
 	"sermo/internal/checks"
 	"sermo/internal/rules"
+	"sermo/internal/strutil"
 )
 
 const (
@@ -21,11 +22,14 @@ const (
 
 // Resolved is a fully flattened, variable-expanded service definition. Apps
 // records the catalog apps linked by the top-level document; the public apps
-// key remains consumed from Tree during resolution.
+// key remains consumed from Tree during resolution. PatternSets records the
+// pattern sets its checks name in `analyze.use`, sorted and unique: resolution
+// inlines their rules, so the names are gone from Tree.
 type Resolved struct {
-	Name string
-	Tree map[string]any
-	Apps []string
+	Name        string
+	Tree        map[string]any
+	Apps        []string
+	PatternSets []string
 }
 
 // resolutionInputs are invariant for one resolution pass. Keeping them local
@@ -94,17 +98,15 @@ func (c *Config) resolveServiceWithInputs(name string, pruneOptional bool, input
 		merged = pruneEnableIfMap(merged, nil, inputs.backend)
 	}
 
-	expanded, apps, errs := c.resolveExpandedService(merged, canonicalName, inputs)
-
-	return Resolved{Name: canonicalName, Tree: expanded, Apps: apps}, errs
+	return c.resolveExpandedService(merged, canonicalName, inputs)
 }
 
 // resolveExpandedService applies the one canonical resolution pipeline after a
 // service tree has been merged. Keep post-expansion catalog sugar here so every
 // resolved service has the same normalized shape.
-func (c *Config) resolveExpandedService(merged map[string]any, name string, inputs resolutionInputs) (map[string]any, []string, []string) {
+func (c *Config) resolveExpandedService(merged map[string]any, name string, inputs resolutionInputs) (Resolved, []string) {
 	if errs := serviceSectionErrors(merged); len(errs) > 0 {
-		return nil, nil, errs
+		return Resolved{Name: name}, errs
 	}
 	errs := namedEntryFlagErrors(merged)
 	prepareExpansionInputs(merged)
@@ -122,8 +124,9 @@ func (c *Config) resolveExpandedService(merged map[string]any, name string, inpu
 	errs = append(errs, expandStaleBinary(expanded)...)
 	errs = append(errs, expandStrays(expanded)...)
 	errs = append(errs, expandFDs(expanded)...)
+	patternSets := analyzePatternSets(expanded)
 	errs = append(errs, c.expandServiceSugar(expanded)...)
-	return expanded, apps, errs
+	return Resolved{Name: name, Tree: expanded, Apps: apps, PatternSets: patternSets}, errs
 }
 
 // expandPidfileSugar flattens `pidfile` (including its `{path, optional}`
@@ -439,40 +442,52 @@ func serviceArtifactPathValue(paths []string) any {
 // Check-only service watches are processed before they desugar into `checks:`.
 func (c *Config) expandAnalyze(tree map[string]any) []string {
 	var errs []string
+	forEachAnalyzeEntry(tree, func(scope string, entry map[string]any) {
+		errs = append(errs, c.expandAnalyzeEntry(scope, entry)...)
+	})
+	return errs
+}
+
+// forEachAnalyzeEntry visits, in stable order, every entry that may carry an
+// `analyze` block: checks, preflight and service watch checks.
+func forEachAnalyzeEntry(tree map[string]any, fn func(scope string, entry map[string]any)) {
 	for _, section := range []string{sectionChecks, sectionPreflight} {
-		if entries, ok := tree[section].(map[string]any); ok {
-			errs = append(errs, c.expandAnalyzeSection(section, entries)...)
+		entries, ok := tree[section].(map[string]any)
+		if !ok {
+			continue
+		}
+		for _, name := range slices.Sorted(maps.Keys(entries)) {
+			if entry, ok := entries[name].(map[string]any); ok {
+				fn(section+"."+name, entry)
+			}
 		}
 	}
 
 	watches, ok := tree[sectionWatches].(map[string]any)
-	if ok {
-		for _, name := range slices.Sorted(maps.Keys(watches)) {
-			entry, ok := watches[name].(map[string]any)
-			if !ok {
-				continue
-			}
-			check, ok := entry[WatchKeyCheck].(map[string]any)
-			if !ok {
-				continue
-			}
-			errs = append(errs, c.expandAnalyzeEntry(watchCheckPath(name), check)...)
-		}
+	if !ok {
+		return
 	}
-
-	return errs
-}
-
-func (c *Config) expandAnalyzeSection(section string, entries map[string]any) []string {
-	var errs []string
-	for _, name := range slices.Sorted(maps.Keys(entries)) {
-		entry, ok := entries[name].(map[string]any)
+	for _, name := range slices.Sorted(maps.Keys(watches)) {
+		entry, ok := watches[name].(map[string]any)
 		if !ok {
 			continue
 		}
-		errs = append(errs, c.expandAnalyzeEntry(section+"."+name, entry)...)
+		if check, ok := entry[WatchKeyCheck].(map[string]any); ok {
+			fn(watchCheckPath(name), check)
+		}
 	}
-	return errs
+}
+
+// analyzePatternSets returns the pattern-set names tree's analyze blocks use,
+// sorted and unique. It must run before expandAnalyze replaces those blocks.
+func analyzePatternSets(tree map[string]any) []string {
+	var names []string
+	forEachAnalyzeEntry(tree, func(_ string, entry map[string]any) {
+		if analyze, ok := entry[keyAnalyze].(map[string]any); ok {
+			names = append(names, cfgval.StringList(analyze[keyAnalyzeUse])...)
+		}
+	})
+	return strutil.SortedUnique(names)
 }
 
 func (c *Config) expandAnalyzeEntry(scope string, entry map[string]any) []string {

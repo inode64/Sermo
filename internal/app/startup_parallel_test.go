@@ -151,7 +151,7 @@ func TestNewWebBackendPreparesServicesInParallel(t *testing.T) {
 
 func TestForEachParallelVisitsEveryIndexOnce(t *testing.T) {
 	var visits [7]atomic.Int32
-	forEachParallel(len(visits), 0, func(i int) { visits[i].Add(1) })
+	ForEachParallel(len(visits), 0, func(i int) { visits[i].Add(1) })
 	for i := range visits {
 		if visits[i].Load() != 1 {
 			t.Fatalf("index %d visited %d times", i, visits[i].Load())

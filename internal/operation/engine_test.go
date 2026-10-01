@@ -29,6 +29,8 @@ type fakeManager struct {
 	startErr         error
 	reloadErr        error
 	resumeErr        error
+	pauseErr         error
+	pauseKeepsState  bool // Pause succeeds but the backend still reports the old status
 	resetErr         error
 	status           servicemgr.Status
 	statusSteps      []servicemgr.Status
@@ -72,6 +74,14 @@ func (m *fakeManager) Reload(_ context.Context, s string) error {
 func (m *fakeManager) Resume(_ context.Context, s string) error {
 	m.calls = append(m.calls, "resume "+s)
 	return m.resumeErr
+}
+
+func (m *fakeManager) Pause(_ context.Context, s string) error {
+	m.calls = append(m.calls, "pause "+s)
+	if m.pauseErr == nil && !m.pauseKeepsState {
+		m.status = servicemgr.StatusPaused
+	}
+	return m.pauseErr
 }
 
 func (m *fakeManager) SupportsReload(_ context.Context, s string) (bool, error) {
@@ -166,6 +176,7 @@ func (h *harness) engine() Engine {
 		Postflight:       func(context.Context) checks.Outcome { return h.postflight },
 		ReloadFunc:       func(ctx context.Context) error { return h.mgr.Reload(ctx, "mysqld") },
 		ResumeFunc:       func(ctx context.Context) error { return h.mgr.Resume(ctx, "mysqld") },
+		PauseFunc:        func(ctx context.Context) error { return h.mgr.Pause(ctx, "mysqld") },
 		Discover:         h.discover,
 		Reaper:           h.reaper,
 		KillPolicy:       h.killPolicy,
@@ -411,6 +422,55 @@ func TestResumeOK(t *testing.T) {
 	}
 	if !h.mgr.did("resume mysqld") {
 		t.Fatalf("expected resume call, calls=%v", h.mgr.calls)
+	}
+}
+
+// Pause freezes the workload in place: like stop it skips preflight (a failing
+// config check must not keep an operator from pausing), and it succeeds only
+// once the backend reports the target paused.
+func TestPauseOK(t *testing.T) {
+	h := defaultHarness()
+	h.preflight = checks.Outcome{OK: false, Results: []checks.Result{{Check: "config", OK: false}}}
+	res := h.action(t, ActionPause)
+	if !res.OK() {
+		t.Fatalf("status = %q, want ok (%s)", res.Status, res.Message)
+	}
+	if !h.mgr.did("pause mysqld") || h.mgr.did("stop mysqld") {
+		t.Fatalf("calls = %v, want only the pause", h.mgr.calls)
+	}
+	if h.released != 1 {
+		t.Fatalf("operation lock released %d times, want 1", h.released)
+	}
+}
+
+func TestPauseFailsWhenBackendDoesNotReportPaused(t *testing.T) {
+	h := defaultHarness()
+	h.mgr.pauseKeepsState = true
+	res := h.action(t, ActionPause)
+	if res.Status != ResultFailed || res.Message != "service not paused after pause" {
+		t.Fatalf("res = %s %q, want failed/not paused", res.Status, res.Message)
+	}
+}
+
+func TestPauseBackendErrorSurfaces(t *testing.T) {
+	h := defaultHarness()
+	h.mgr.pauseErr = errors.New("domain is not running")
+	res := h.action(t, ActionPause)
+	if res.Status != ResultFailed || !strings.Contains(res.Message, "domain is not running") {
+		t.Fatalf("res = %s %q, want the backend error", res.Status, res.Message)
+	}
+}
+
+func TestPauseUnsupported(t *testing.T) {
+	h := defaultHarness()
+	engine := h.engine()
+	engine.PauseFunc = nil
+	res := engine.Pause(context.Background())
+	if res.Status != ResultFailed || !strings.Contains(res.Message, "unsupported") {
+		t.Fatalf("res = %s %q, want failed/unsupported", res.Status, res.Message)
+	}
+	if h.mgr.did("pause mysqld") {
+		t.Fatalf("must not call manager without PauseFunc, calls=%v", h.mgr.calls)
 	}
 }
 
@@ -662,7 +722,7 @@ func TestRestartGuardBlocks(t *testing.T) {
 }
 
 func TestGuardBlocksStartStopReloadAndResume(t *testing.T) {
-	for _, action := range []string{"start", "stop", "reload", "resume"} {
+	for _, action := range []string{"start", "stop", "reload", "resume", ActionPause} {
 		t.Run(action, func(t *testing.T) {
 			h := defaultHarness()
 			h.guardBlocked = true

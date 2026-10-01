@@ -993,6 +993,49 @@ test("failed services prioritize restart and keep repair as a manual fallback", 
   await page.keyboard.press("Escape");
 });
 
+test("VM pause is one toggle and a paused VM row reads in its own colour", async ({ page }) => {
+  const vm = (name, status, state) => ({
+    name, display_name: `VM ${name}`, category: "virtual-machine", backend: "libvirt", unit: name,
+    enabled: true, monitored: status === "active", status, state, can_reload: false, can_pause: true,
+  });
+  await page.route("**/api/services/vm-run", async (route) => {
+    await route.fulfill({ json: { ...vm("vm-run", "active", "monitored"), checks: [], processes: [], locks: [], rules: [], sla: [] } });
+  });
+  await page.route("**/api/dashboard**", async (route) => {
+    const body = JSON.parse(JSON.stringify(dashboard));
+    body.services.push(vm("vm-run", "active", "monitored"), vm("vm-paused", "paused", "paused"));
+    await route.fulfill({ json: body });
+  });
+  await page.reload();
+
+  const running = page.locator("#svc-row-vm-run");
+  const paused = page.locator("#svc-row-vm-paused");
+  await expect(paused).toHaveClass(/row-paused/);
+  await expect(running).not.toHaveClass(/row-paused/);
+  await expect(paused.locator(".state-paused")).toHaveText("paused");
+
+  // One button per row: the same pause glyph, latched while paused.
+  const pause = running.locator(".suspend-btn");
+  const resume = paused.locator(".suspend-btn");
+  await expect(pause).toHaveCount(1);
+  await expect(resume).toHaveCount(1);
+  await expect(pause).toHaveText("⏸");
+  await expect(resume).toHaveText("⏸");
+  await expect(pause).toHaveAttribute("aria-pressed", "false");
+  await expect(pause).toHaveAttribute("data-service-action", "pause");
+  await expect(pause).toHaveAttribute("aria-label", "Pause service VM vm-run");
+  await expect(resume).toHaveAttribute("aria-pressed", "true");
+  await expect(resume).toHaveAttribute("data-service-action", "resume");
+  await expect(resume).toHaveAttribute("aria-label", "Resume service VM vm-paused");
+  // Only a service the API marks can_pause (VM domain, container) gets the toggle.
+  await expect(page.locator("#svc-row-web .suspend-btn")).toHaveCount(0);
+
+  await pause.click();
+  await expect(page.locator("#action-confirm")).toBeVisible();
+  await expect(page.locator("#confirm-body")).toContainText("freezes the VM or container in place");
+  await page.keyboard.press("Escape");
+});
+
 test("stop confirms without offering engine preflight", async ({ page }) => {
   await page.locator('#svc-row-web [data-service-action="stop"]').click();
   await expect(page.locator("#action-confirm")).toBeVisible();

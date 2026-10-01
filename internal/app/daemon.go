@@ -340,7 +340,7 @@ func BuildWorkers(ctx context.Context, cfg *config.Config, deps Deps, collector 
 	names := cfg.EnabledServiceNames()
 	resolutions := cfg.ResolveServices(names)
 	built := make([]builtService, len(names))
-	forEachParallel(len(names), deps.MaxParallel, func(i int) {
+	ForEachParallel(len(names), deps.MaxParallel, func(i int) {
 		built[i] = buildServiceWorker(ctx, resolutions[i], deps, collector, resolver, names[i])
 	})
 

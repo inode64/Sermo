@@ -18,6 +18,7 @@ const (
 	commandRestart   = actionRestart
 	commandReload    = actionReload
 	commandResume    = actionResume
+	commandPause     = actionPause
 	commandRepair    = actionRepair
 	commandMonitor   = "monitor"
 	commandUnmonitor = "unmonitor"
@@ -54,6 +55,7 @@ const (
 	commandStateCompact = "compact"
 	commandArgAll       = config.SelectionKeywordAll
 	commandArgClear     = "clear"
+	commandArgCatalog   = "catalog"
 )
 
 const (
@@ -87,4 +89,10 @@ const (
 	cliFieldSermoReportOK      = "SERMO_REPORT_OK"
 	cliFieldSermoReportIssues  = "SERMO_REPORT_ISSUES"
 	cliFieldSermoReportMissing = "SERMO_REPORT_MISSING"
+
+	cliFieldSermoReportUnmonitored = "SERMO_REPORT_UNMONITORED"
+
+	// servicesReportKindCatalog is SERMO_REPORT for `services catalog --notify`;
+	// the configured-services report uses commandServices.
+	servicesReportKindCatalog = "services-catalog"
 )

@@ -219,10 +219,14 @@ sermoctl backend
 sermoctl status nginx
 sermoctl is-active nginx
 
-# List catalog inventory, not configured runtime targets
-sermoctl services      # packaged catalog service profiles (nginx, mariadb, ...)
-sermoctl services all  # include profiles not installed on this host
-sermoctl services --notify ops-email  # email a services inventory report
+# Listar los servicios configurados (unidades init, contenedores Docker, VMs)
+sermoctl services                     # SERVICE / TYPE / STATE / MONITORED
+sermoctl services --notify ops-email  # enviar por email un informe de salud
+sermoctl patterns                     # juegos de patrones en uso
+
+# Listar el inventario del catálogo
+sermoctl services catalog      # perfiles de servicio del catálogo (nginx, mariadb, ...)
+sermoctl services catalog all  # incluir perfiles no instalados en este host
 sermoctl apps          # tools/runtimes (only installed)
 sermoctl apps all      # include not-installed
 sermoctl libs          # shared libraries (restart triggers)

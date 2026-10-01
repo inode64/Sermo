@@ -353,6 +353,16 @@ func TestValidateUnifiedWatchActions(t *testing.T) {
 	}
 }
 
+// A watch guard may block the manual-only operations too, as a service
+// guard can: a backup window must be able to forbid pausing the VM.
+func TestValidateUnifiedWatchGuardBlocksManualOperations(t *testing.T) {
+	base := "name: svc\nservice: x\npolicy: { cooldown: 5m }\n"
+	service := base + "watches:\n  w:\n    check: { type: tcp, host: 127.0.0.1, port: 80 }\n    then: { action: block, message: backup, blocks: [pause, repair] }\n"
+	if issues := validateService(t, service); len(issues) != 0 {
+		t.Fatalf("issues = %v, want none", issues)
+	}
+}
+
 func TestValidateUnifiedWatchOperationActions(t *testing.T) {
 	base := "name: svc\nservice: x\npolicy: { cooldown: 5m }\n"
 	for _, action := range []rules.ActionType{

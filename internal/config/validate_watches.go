@@ -331,8 +331,8 @@ func validateWatchThenAction(prefix, action string, then map[string]any, add add
 			add("%s requires a non-empty blocks: [list of actions] for a block (guard) action", prefix+"."+rules.RuleFieldThen)
 		}
 		for _, b := range blocks {
-			if !rules.ActionType(b).IsOperation() {
-				add("%s entry %q must be an operation action (restart/start/stop/reload/resume)", thenFieldPath(prefix, rules.RuleFieldBlocks), b)
+			if t := rules.ActionType(b); !t.IsOperation() && !t.IsManualOperation() {
+				add("%s entry %q must be an operation action (restart/start/stop/reload/resume/pause/repair)", thenFieldPath(prefix, rules.RuleFieldBlocks), b)
 			}
 		}
 	} else if action == string(rules.ActionAlert) {

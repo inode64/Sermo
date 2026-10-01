@@ -75,6 +75,7 @@ sermoctl watch resume RAID_WATCH
 sermoctl start SERVICE [--no-cascade]
 sermoctl stop SERVICE [--no-cascade]
 sermoctl restart SERVICE [--no-cascade]
+sermoctl pause SERVICE                  # libvirt VM (suspend) or Docker container only
 sermoctl resume SERVICE
 sermoctl reload SERVICE
 
@@ -100,10 +101,11 @@ sermoctl web hash-password [--stdin|--generate] [--hash bcrypt|sha256] [--cost N
 sermoctl daemon reload                 # reload sermod config, not services
 sermoctl notifier test NAME            # send an explicit test message through one notifier
 
-sermoctl services [all] [--long] [--notify NAME[,NAME]|all]   # catalog inventory, not runtime config
-sermoctl apps [all] [--long]                                  # catalog apps (see Catalog inventory)
+sermoctl services [--notify NAME[,NAME]|all]                         # configured services (init, docker, VMs)
+sermoctl services catalog [all] [--long] [--notify NAME[,NAME]|all]   # catalog inventory
+sermoctl apps [all] [--long]                                          # catalog apps (see Catalog inventory)
 sermoctl libs [all] [--long]
-sermoctl patterns
+sermoctl patterns [catalog]                                           # pattern sets in use (catalog: all)
 
 sermoctl sla [TARGET]                   # availability windows for every service and availability watch, or one
 sermoctl sla --series TARGET [--since DURATION]   # per-minute series; --since default 24h
@@ -161,7 +163,7 @@ Panic mode is a daemon-wide emergency switch for maintenance windows, attacks,
 denial-of-service, system malfunction or overload. While it is on, the daemon
 keeps running its checks (so status stays visible) but **suspends all hooks,
 alert notifications and automatic remediation**. Manual operations (`start`,
-`stop`, `restart`, `reload`, `resume`) stay available, so you can drive services
+`stop`, `restart`, `reload`, `pause`, `resume`) stay available, so you can drive services
 by hand without the daemon fighting you.
 
 ```bash
@@ -294,30 +296,59 @@ matching the daemon/web behavior used for historic init-service setups. There is
 no fallback for invalid `control:` targets or a per-backend `service:` map with
 no candidate for the active backend; those are configuration errors.
 
+## Configured services
+
+`sermoctl services` lists every service configured under `paths.services`,
+whatever its control backend: init units, Docker containers
+(`control: {type: docker}`) and libvirt VMs or networks
+(`control: {type: libvirt|libvirt-network}`). Disabled services are listed as
+`disabled`.
+
+```text
+SERVICE      TYPE     STATE      MONITORED
+nginx-main   systemd  monitored  yes
+web-ctr      docker   paused     yes
+vm-web01     libvirt  disabled   no
+```
+
+`TYPE` is the control backend. When `sermod` answers on its web API, `STATE` and
+`MONITORED` are the daemon's computed view (one `GET /api/services`), the same
+as the web UI **Services** panel. A service the daemon does not report, such as
+one added since its last reload, or every service when `sermod` is down, is
+probed locally the way `sermoctl status` does. A service that does not resolve is
+listed with state `error` and a warning on stderr.
+
+`--json` prints `{"services": [{"name", "display_name", "backend", "unit",
+"state", "monitored", "enabled", "error"}]}`. `--notify` sends a configured
+services health report: a monitored service in a failed, warning, stale,
+restart-required, stopped or `error` state counts as an issue, and disabled or
+unmonitored services are counted apart.
+
+`sermoctl patterns` lists only the output-analysis pattern sets that configured
+services name in `analyze.use`, with their rule count and the services using
+them (`USED BY`).
+
 ## Catalog inventory
 
-`sermoctl services`, `sermoctl apps`, `sermoctl libs` and `sermoctl patterns`
-list **catalog definitions** shipped in the packaged catalog (see
-[services.md](services.md)): which profiles are installed, the version their
-version command reports, and whether they resolve. Add `all` to include entries
-whose binary or library file is not present on the host.
-
-This is **not** the list of **configured runtime targets** that `sermod`
-monitors. Those are the service files under `paths.services` (and the
-matching names in the global config tree).
+`sermoctl services catalog`, `sermoctl apps`, `sermoctl libs` and
+`sermoctl patterns catalog` list **catalog definitions** shipped in the packaged
+catalog (see [services.md](services.md)): which profiles are installed, the
+version their version command reports, and whether they resolve. Add `all` to
+include entries whose binary or library file is not present on the host.
 
 | Question | Where to look |
 | --- | --- |
-| Which catalog service profiles exist / are installed? | `sermoctl services [all]` |
-| Which catalog apps / libs / pattern sets exist? | `sermoctl apps`, `sermoctl libs`, `sermoctl patterns` |
-| Which services are enabled in *my* config right now? | YAML under `paths.services`, or the web UI **Services** panel (`GET /api/services`) |
+| Which services does this host supervise, and in what state? | `sermoctl services` |
+| Which catalog service profiles exist / are installed? | `sermoctl services catalog [all]` |
+| Which catalog apps / libs exist? | `sermoctl apps`, `sermoctl libs` |
+| Which pattern sets are in use / exist? | `sermoctl patterns`, `sermoctl patterns catalog` |
 | One configured service's live state | `sermoctl status SERVICE`, `sermoctl is-active SERVICE` |
 | Availability history for services and availability watches | `sermoctl sla [TARGET]` |
 
-The web UI uses the same split: **Services** shows configured runtime services;
-**Applications** (`GET /api/applications`) and **Libraries**
-(`GET /api/libraries`) are installed catalog inventories, aligned with
-`sermoctl apps` and `sermoctl libs`, not `sermoctl services`.
+The web UI uses the same split: **Services** shows configured runtime services,
+like `sermoctl services`; **Applications** (`GET /api/applications`) and
+**Libraries** (`GET /api/libraries`) are installed catalog inventories, aligned
+with `sermoctl apps` and `sermoctl libs`.
 
 ## Reaping stray processes
 

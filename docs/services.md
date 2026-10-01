@@ -97,14 +97,14 @@ The directory sets the catalog category (`service` / `app` / `library` /
 `patterns`), so a top-level `kind:` is redundant and omitted; files placed
 directly in the packaged catalog root are rejected. Use one YAML file per catalog
 document: one service, app, lib or pattern in each file.
-`sermoctl services`, `sermoctl apps` and `sermoctl libs` list each category,
-showing which are installed, the version their version command reports, and
-whether they resolve without error (add `all` to include the not-installed).
-Configured service instances (under `paths.services`) are listed
-by the web UI and `GET /api/services`, not by `sermoctl services` — see
-[cli.md](cli.md#catalog-inventory).
-`sermoctl patterns` lists the pattern sets and their rule counts (see the
-`analyze:` block in [rules.md](rules.md)).
+`sermoctl services catalog`, `sermoctl apps` and `sermoctl libs` list each
+category, showing which are installed, the version their version command
+reports, and whether they resolve without error (add `all` to include the
+not-installed). Plain `sermoctl services` lists the configured service instances
+(under `paths.services`) instead — see [cli.md](cli.md#configured-services).
+`sermoctl patterns catalog` lists every pattern set and its rule count, and
+`sermoctl patterns` only the sets configured services use (see the `analyze:`
+block in [rules.md](rules.md)).
 
 Catalog documents may declare `aliases: [...]` for distro or package names that
 operators naturally type. For example, the canonical catalog service
@@ -480,7 +480,7 @@ type: "database"             # optional free-form classification; recorded, not 
 These fields are optional and behave differently when missing:
 
 - **`display_name`** is the label used wherever Sermo shows the catalog entry to
-  a human (e.g. `sermoctl services`, `sermoctl apps` and the Web UI). When it is
+  a human (e.g. `sermoctl services catalog`, `sermoctl apps` and the Web UI). When it is
   absent or blank, Sermo falls back to `name`. Set it only when it adds something
   over `name` — a proper brand (`MariaDB`, `PostgreSQL`, `OpenSSH`) or a version
   (`PHP-FPM 8.3`). If the display name would just repeat `name`, leave it out and
@@ -723,6 +723,8 @@ libvirt operations:
 - `stop` requests a graceful guest shutdown (`DomainShutdown`); it does not
   destroy the VM.
 - `restart` is still Sermo's safe stop+start flow.
+- `pause` suspends a running domain in place (`DomainSuspend`, like
+  `virsh suspend`): its vCPUs stop and its memory stays resident.
 - `resume` resumes a paused domain (`DomainResume`).
 - `reload` is unsupported for VM domains unless a future service-specific
   mechanism is added.
@@ -792,7 +794,7 @@ network operations:
   `guard_uri`: guests of another driver or of a session URI on the same bridge
   are not inspected.
 - `restart` is still Sermo's safe stop+start flow, so it inherits the guard.
-- `reload` and `resume` are unsupported for virtual networks.
+- `reload`, `pause` and `resume` are unsupported for virtual networks.
 
 Network state maps active → `active` and inactive → `stopped`/`failed`
 following the usual monitoring semantics.
@@ -851,6 +853,7 @@ Docker Engine API operations:
   Sermo's operation timeout is the outer bound, and residual handling remains in
   Sermo's stop policy.
 - `restart` is still Sermo's safe stop+start flow.
+- `pause` freezes every process of a running container (`POST /pause`).
 - `resume` unpauses a paused container.
 - `reload` is unsupported for Docker containers unless a future
   service-specific mechanism is added.
@@ -1000,12 +1003,14 @@ also_apply: [nginx, varnish]
   per target; with `--json` the single JSON result gains a `cascade` array of
   `{service, action, status, message, error}` objects (the final outcome of a
   retried target) instead.
-- `sermoctl reload <svc>` and `sermoctl resume <svc>` act on the primary only
+- `sermoctl reload <svc>`, `sermoctl pause <svc>` and `sermoctl resume <svc>` act on the primary only
   (no cascade). Use `sermoctl daemon reload` to reload the running `sermod`
   configuration. In the web UI the per-service **reload** button is enabled only
   when the service is `active` and Sermo reports `can_reload=true` from either
   the init backend (`ExecReload`/OpenRC `reload`) or a valid `reload:` fallback;
-  **resume** is enabled only while it is `paused`.
+  VM and container rows carry one **pause** toggle (⏸): it pauses an `active`
+  target and, latched while the target is `paused`, resumes it. A paused row
+  is tinted in its own colour and its state reads `paused`.
 
 `also_apply` (other services) and `also_service` (this service's init units) are
 complementary; a service may use both.
@@ -1786,8 +1791,8 @@ Python 3      Python 3.11.2                ok
 
 Only installed applications are shown; `sermoctl apps all` also lists the rest as
 `not installed`. The same `--long` and `all` apply to `sermoctl libs` and
-`sermoctl services`. With version templates this lists each installed version as
-its own row (e.g. `PHP-FPM 8.3`, `PHP-FPM 7.4`). For `sermoctl services`, version
+`sermoctl services catalog`. With version templates this lists each installed version as
+its own row (e.g. `PHP-FPM 8.3`, `PHP-FPM 7.4`). For `sermoctl services catalog`, version
 commands are best-effort inventory data: a failed distro-specific version probe
 leaves the version unknown instead of marking the installed service as an error.
 `--json` is unaffected by `--long` — it always emits both, with the structured
@@ -1795,7 +1800,7 @@ leaves the version unknown instead of marking the installed service as an error.
 `version_source`, `installed`, `ok` and `status`.
 
 When an app declares `health`, Sermo uses it as the preferred health probe for
-`sermoctl apps`/`libs`/`services` and the WebUI application list. Only the exit
+`sermoctl apps`/`libs`/`services catalog` and the WebUI application list. Only the exit
 code is evaluated (`expect_exit`, default `0`, or a list such as `[0, 1]`);
 stdout/stderr matchers and the printed output are ignored for health. The
 `version` command is only used as a fallback health probe when no `health`

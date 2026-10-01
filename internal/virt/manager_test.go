@@ -78,6 +78,11 @@ func (c *fakeClient) DomainResume(libvirt.Domain) error {
 	return nil
 }
 
+func (c *fakeClient) DomainSuspend(libvirt.Domain) error {
+	c.calls = append(c.calls, "suspend")
+	return nil
+}
+
 func managerFor(client *fakeClient, spec Spec) Manager {
 	return Manager{
 		Spec: spec,
@@ -129,6 +134,7 @@ func TestManagerActions(t *testing.T) {
 		{name: "start", run: func(m Manager) error { return m.Start(context.Background(), "svc") }, want: []string{"connect", "lookup-name vm01", "create", "disconnect"}},
 		{name: "stop", run: func(m Manager) error { return m.Stop(context.Background(), "svc") }, want: []string{"connect", "lookup-name vm01", "shutdown", "disconnect"}},
 		{name: "resume", run: func(m Manager) error { return m.Resume(context.Background(), "svc") }, want: []string{"connect", "lookup-name vm01", "resume", "disconnect"}},
+		{name: "pause", run: func(m Manager) error { return m.Pause(context.Background(), "svc") }, want: []string{"connect", "lookup-name vm01", "suspend", "disconnect"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

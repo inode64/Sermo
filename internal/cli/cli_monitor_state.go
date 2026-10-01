@@ -19,8 +19,14 @@ func (a App) serviceDisplayState(ctx context.Context, cfg *config.Config, servic
 	if serviceState, ok := a.FetchDaemonServiceState(ctx, cfg, service); ok && serviceState != "" {
 		return serviceState
 	}
-	// The local fallback has no runtime samples at all, so it can never tell an
-	// empty process tree from one it has not sampled: never processesMissing.
+	return localServiceState(status, mon)
+}
+
+// localServiceState is the operator-facing state derived from the backend
+// status alone, for when sermod does not answer. With no runtime samples at
+// all it can never tell an empty process tree from one it has not sampled, so
+// it never reports processes missing.
+func localServiceState(status servicemgr.ServiceStatus, mon monitorView) string {
 	return app.ServiceState(mon.Enabled, mon.Monitored(), string(status.Status), "", true, false, false, false, false)
 }
 
@@ -46,30 +52,56 @@ func serviceMonitorState(ctx context.Context, cfg *config.Config, service string
 		return view
 	}
 	if configured {
-		view.Configured = true
+		var tree map[string]any
 		if resolved, errs := cfg.Resolve(service); len(errs) == 0 {
-			if cfgval.Disabled(resolved.Tree) {
-				view.Enabled = false
-				view.Paused = true
-			}
-			if mode, _ := resolved.Tree[config.EntryKeyMonitor].(string); mode == config.MonitorDisabled {
-				view.Paused = true
-			}
+			tree = resolved.Tree
 		}
+		view = configuredMonitorView(tree)
 	}
 	// The persisted monitor state only enriches the view; an unreadable store
 	// leaves the configured view as it is.
 	withStateStore(ctx, cfg, func(error) int { return exitSuccess }, func(store *state.Store) int {
-		record, found, err := store.MonitorState(service)
-		if err != nil || !found {
-			return exitSuccess
+		if record, found, err := store.MonitorState(service); err == nil && found {
+			view = view.withRecord(record)
 		}
-		view.Paused = !record.Active
-		view.Source = record.Source
-		view.ChangedAt = recordChangedAt(record.UpdatedAt)
 		return exitSuccess
 	})
 	return view
+}
+
+// configuredMonitorView is the monitoring view a resolved service tree declares,
+// before the persisted state is applied. A nil tree (resolution failed) keeps
+// the service enabled and monitored.
+func configuredMonitorView(tree map[string]any) monitorView {
+	view := monitorView{Configured: true, Enabled: true}
+	if cfgval.Disabled(tree) {
+		view.Enabled = false
+		view.Paused = true
+	}
+	if mode, _ := tree[config.EntryKeyMonitor].(string); mode == config.MonitorDisabled {
+		view.Paused = true
+	}
+	return view
+}
+
+// storedMonitorStates reads every persisted monitor row in one query. The
+// persisted state only enriches the configured view, so an unreadable store
+// yields nil and each service keeps the monitoring its configuration declares.
+func storedMonitorStates(ctx context.Context, cfg *config.Config) map[string]state.MonitorRecord {
+	var stored map[string]state.MonitorRecord
+	withStateStore(ctx, cfg, func(error) int { return exitSuccess }, func(store *state.Store) int {
+		stored, _ = store.MonitorStates()
+		return exitSuccess
+	})
+	return stored
+}
+
+// withRecord overlays one persisted monitor row.
+func (m monitorView) withRecord(record state.MonitorRecord) monitorView {
+	m.Paused = !record.Active
+	m.Source = record.Source
+	m.ChangedAt = recordChangedAt(record.UpdatedAt)
+	return m
 }
 
 // metaSuffix renders the optional " source=… changed=…" trailer shared by the

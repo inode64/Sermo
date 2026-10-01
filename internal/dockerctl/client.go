@@ -46,6 +46,7 @@ const (
 	dockerEndpointStart       = "/start"
 	dockerEndpointStop        = "/stop"
 	dockerEndpointUnpause     = "/unpause"
+	dockerEndpointPause       = "/pause"
 	dockerQueryAll            = "?all=1"
 	dockerQueryNoKillStop     = "?t=-1"
 	dockerContainerPathPrefix = "/containers/"
@@ -311,19 +312,24 @@ func (c *Client) ListContainers(ctx context.Context, all bool) ([]ContainerSumma
 
 // Start starts a stopped container. Already-running is treated as success.
 func (c *Client) Start(ctx context.Context, container string) error {
-	return c.post(ctx, containerPath(container, dockerEndpointStart), nil, http.StatusNoContent, http.StatusNotModified)
+	return c.post(ctx, containerPath(container, dockerEndpointStart), http.StatusNoContent, http.StatusNotModified)
 }
 
 // Stop asks Docker to stop a container without delegating SIGKILL escalation to
 // Docker. `t=-1` waits indefinitely after SIGTERM; Sermo's operation context is
 // the outer bound and residual handling remains in the operation engine.
 func (c *Client) Stop(ctx context.Context, container string) error {
-	return c.post(ctx, containerPath(container, dockerEndpointStop)+dockerQueryNoKillStop, nil, http.StatusNoContent, http.StatusNotModified)
+	return c.post(ctx, containerPath(container, dockerEndpointStop)+dockerQueryNoKillStop, http.StatusNoContent, http.StatusNotModified)
 }
 
 // Unpause resumes a paused container. Already-unpaused is treated as success.
 func (c *Client) Unpause(ctx context.Context, container string) error {
-	return c.post(ctx, containerPath(container, dockerEndpointUnpause), nil, http.StatusNoContent, http.StatusNotModified)
+	return c.post(ctx, containerPath(container, dockerEndpointUnpause), http.StatusNoContent, http.StatusNotModified)
+}
+
+// Pause freezes every process of a running container (cgroup freezer).
+func (c *Client) Pause(ctx context.Context, container string) error {
+	return c.post(ctx, containerPath(container, dockerEndpointPause), http.StatusNoContent)
 }
 
 // get decodes a JSON response of at most limit bytes. A read error or a body
@@ -357,10 +363,10 @@ func (c *Client) get(ctx context.Context, path string, limit int64, out any) err
 	return nil
 }
 
-func (c *Client) post(ctx context.Context, path string, body io.Reader, ok ...int) error {
+func (c *Client) post(ctx context.Context, path string, ok ...int) error {
 	ctx, cancel := ensureDeadline(ctx)
 	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.Base+path, body)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.Base+path, http.NoBody)
 	if err != nil {
 		return fmt.Errorf("build Docker POST %s request: %w", path, err)
 	}

@@ -130,7 +130,7 @@ func TestWebBackendOperateStopStartSyncsMonitoring(t *testing.T) {
 	if _, found, _ := store.OperationSettling("web"); found {
 		t.Fatal("stop should clear operation settling after pausing monitoring")
 	}
-	if len(events) != 1 || events[0].Action != eventActionUnmonitor || events[0].Message != eventMessageMonitoringPausedAfterManualStop {
+	if len(events) != 1 || events[0].Action != eventActionUnmonitor || events[0].Message != "monitoring paused after manual stop" {
 		t.Fatalf("stop events = %+v", events)
 	}
 
@@ -148,7 +148,7 @@ func TestWebBackendOperateStopStartSyncsMonitoring(t *testing.T) {
 	if rec.Phase != state.OperationSettlingSettling {
 		t.Fatalf("start settling = %+v", rec)
 	}
-	if len(events) != 2 || events[1].Action != eventActionMonitor || events[1].Message != eventMessageMonitoringResumedAfterManualStart {
+	if len(events) != 2 || events[1].Action != eventActionMonitor || events[1].Message != "monitoring resumed after manual start" {
 		t.Fatalf("start events = %+v", events)
 	}
 }

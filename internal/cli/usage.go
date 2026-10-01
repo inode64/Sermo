@@ -29,7 +29,7 @@ var commandGroups = []commandGroup{
 	},
 	{
 		Title:    "Safe Service Operations",
-		Commands: []string{commandStart, commandStop, commandRestart, commandReload, commandResume, commandRepair, commandMonitor, commandUnmonitor, commandPreflight, commandProcesses, commandReap, commandLocks, commandLock},
+		Commands: []string{commandStart, commandStop, commandRestart, commandReload, commandPause, commandResume, commandRepair, commandMonitor, commandUnmonitor, commandPreflight, commandProcesses, commandReap, commandLocks, commandLock},
 	},
 	{
 		Title:    "Mounts",
@@ -231,6 +231,25 @@ var commandUsages = []commandUsage{
 		Examples: []string{
 			"sermoctl reload haproxy-main",
 			"sermoctl daemon reload",
+		},
+	},
+	{
+		Name:    commandPause,
+		Summary: "Pause (freeze in place) a VM or container through the safe operation engine.",
+		Usage: []string{
+			"sermoctl pause SERVICE",
+		},
+		Notes: []string{
+			"Only services with `control: {type: libvirt}` (virsh suspend) or",
+			"`control: {type: docker}` (docker pause) can be paused; other backends",
+			"fail as unsupported. Like stop it runs no preflight but honors locks and",
+			"guards; a guard that blocks stop also blocks pause. The operation succeeds",
+			"once the backend reports the target paused. A successful pause pauses",
+			"monitoring like a manual stop, and `sermoctl resume SERVICE` restores it.",
+		},
+		Examples: []string{
+			"sermoctl pause vm-web01",
+			"sermoctl resume vm-web01",
 		},
 	},
 	{
@@ -471,26 +490,33 @@ var commandUsages = []commandUsage{
 	},
 	{
 		Name:    commandServices,
-		Summary: "List packaged service catalog entries and installation status.",
+		Summary: "List configured services (or catalog entries with `catalog`).",
 		Usage: []string{
-			"sermoctl services [all] [--long] [--notify NAME[,NAME]|all]",
+			"sermoctl services [--notify NAME[,NAME]|all]",
+			"sermoctl services catalog [all] [--long] [--notify NAME[,NAME]|all]",
 		},
 		Flags: []string{
-			"all       include entries whose binary is not installed",
-			"--long    show full version command output",
+			"catalog   list catalog service profiles instead of configured services",
+			"all       with catalog: include entries whose binary is not installed",
+			"--long    with catalog: show full version command output",
 			"--notify  send an HTML report through selected configured notifiers",
 		},
 		Notes: []string{
-			"Lists catalog service profiles under catalog/services, not the configured",
-			"runtime services that sermod monitors. For live configured services use",
-			"the web UI Services panel (GET /api/services) or the YAML under",
-			"paths.services; for one service's state use status or is-active.",
+			"Without arguments lists every service under paths.services, whatever its",
+			"control backend (init unit, Docker container, libvirt VM or network):",
+			"SERVICE, TYPE (backend), STATE and MONITORED. Disabled services are listed",
+			"as disabled. When sermod is running with web enabled the state is the",
+			"daemon's computed one; otherwise each service is probed locally as",
+			"status does.",
+			"`services catalog` lists catalog service profiles under catalog/services",
+			"with their installation status and version.",
 		},
 		Examples: []string{
 			"sermoctl services",
-			"sermoctl services all --long",
+			"sermoctl --json services",
 			"sermoctl services --notify ops-email",
-			"sermoctl services all --notify all",
+			"sermoctl services catalog all --long",
+			"sermoctl services catalog all --notify all",
 		},
 	},
 	{
@@ -521,9 +547,21 @@ var commandUsages = []commandUsage{
 	},
 	{
 		Name:    commandPatterns,
-		Summary: "List output-analysis pattern sets and rule counts.",
+		Summary: "List output-analysis pattern sets in use (or all with `catalog`).",
 		Usage: []string{
 			"sermoctl patterns",
+			"sermoctl patterns catalog",
+		},
+		Flags: []string{
+			"catalog  list every known pattern set, used or not",
+		},
+		Notes: []string{
+			"Without arguments lists only the pattern sets configured services name in",
+			"`analyze.use`, with their rule count and the services using them.",
+		},
+		Examples: []string{
+			"sermoctl patterns",
+			"sermoctl --json patterns catalog",
 		},
 	},
 	{

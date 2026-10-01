@@ -19,6 +19,7 @@ type DockerClient interface {
 	Start(ctx context.Context, container string) error
 	Stop(ctx context.Context, container string) error
 	Unpause(ctx context.Context, container string) error
+	Pause(ctx context.Context, container string) error
 }
 
 // Manager implements service management over one Docker container.
@@ -81,6 +82,11 @@ func (Manager) Reload(context.Context, string) error {
 // Resume unpauses the configured container.
 func (m Manager) Resume(ctx context.Context, _ string) error {
 	return m.withContainerAction(ctx, "resume", DockerClient.Unpause)
+}
+
+// Pause freezes the configured container in place.
+func (m Manager) Pause(ctx context.Context, _ string) error {
+	return m.withContainerAction(ctx, "pause", DockerClient.Pause)
 }
 
 // PIDs returns the container's init PID as a process-discovery seed.

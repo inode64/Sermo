@@ -100,6 +100,16 @@ func bypassDomainResume(m virt.Manager, ctx context.Context) error {
 	return m.Resume(ctx, "vm")
 }
 
+func bypassDockerPause(m dockerctl.Manager, ctx context.Context) error {
+	// ruleid: service-lifecycle-must-use-operation
+	return m.Pause(ctx, "web")
+}
+
+func bypassDomainPause(m virt.Manager, ctx context.Context) error {
+	// ruleid: service-lifecycle-must-use-operation
+	return m.Pause(ctx, "vm")
+}
+
 func bypassNetworkStop(m virt.NetworkManager, ctx context.Context) error {
 	// ruleid: service-lifecycle-must-use-operation
 	return m.Stop(ctx, "net")

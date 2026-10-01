@@ -13,10 +13,11 @@ func startupParallelism(maxParallel int) int {
 	return max(maxParallel, 1)
 }
 
-// forEachParallel runs fn for every index below n with at most limit calls in
+// ForEachParallel runs fn for every index below n with at most limit calls in
 // flight and returns once all of them finished. Callers keep results per index
-// so the assembled order stays the sorted, deterministic one.
-func forEachParallel(n, limit int, fn func(i int)) {
+// so the assembled order stays the sorted, deterministic one. sermoctl uses it
+// for the same per-service backend queries when sermod does not answer.
+func ForEachParallel(n, limit int, fn func(i int)) {
 	sem := make(chan struct{}, startupParallelism(limit))
 	var wg sync.WaitGroup
 	for i := range n {

@@ -31,6 +31,9 @@ const (
 	// action: an operator must explicitly request removal of a proven-stale
 	// runtime pidfile before the normal guarded start path runs.
 	ActionRepair = string(rules.ActionRepair)
+	// ActionPause is a manual-only action that freezes a VM or container in
+	// place; remediation never takes a workload out of service this way.
+	ActionPause = string(rules.ActionPause)
 	// actionCloseSession is intentionally not a rule action: closing an
 	// interactive SSH terminal always requires an explicit web request and is
 	// never eligible for automatic remediation.
@@ -91,8 +94,11 @@ type Engine struct {
 	// a closure: a native signal/command that either overrides the backend reload
 	// (`when: always`) or stands in for it when the init has no reload of its own
 	// (`when: auto`). A nil closure means reload is unavailable.
-	ReloadFunc       func(ctx context.Context) error
-	ResumeFunc       func(ctx context.Context) error
+	ReloadFunc func(ctx context.Context) error
+	ResumeFunc func(ctx context.Context) error
+	// PauseFunc freezes the target in place (libvirt suspend, Docker pause). A
+	// nil closure means the backend cannot pause.
+	PauseFunc        func(ctx context.Context) error
 	ObserveProcesses func() (process.Observation, error)
 	Discover         func() ([]process.Process, error)
 	Reaper           process.Reaper
@@ -119,6 +125,7 @@ type plan struct {
 	stop                 bool
 	start                bool
 	resume               bool
+	pause                bool
 	reload               bool
 	postflight           bool
 	closeSession         *SessionTarget
@@ -191,6 +198,13 @@ func (e Engine) Reload(ctx context.Context) Result {
 // Resume runs preflight, resumes a paused service and verifies health.
 func (e Engine) Resume(ctx context.Context) Result {
 	return e.run(ctx, plan{action: actionResume, preflight: true, resume: true, postflight: true})
+}
+
+// Pause freezes the service in place and verifies the backend reports it
+// paused. Like stop it runs no preflight or postflight, but still honors locks
+// and guards; a guard that blocks stop also blocks pause.
+func (e Engine) Pause(ctx context.Context) Result {
+	return e.run(ctx, plan{action: ActionPause, pause: true})
 }
 
 // CloseSession gracefully terminates one operator-selected SSH session. It
@@ -393,6 +407,8 @@ func (e Engine) Do(ctx context.Context, action string) Result {
 		return e.Reload(ctx)
 	case actionResume:
 		return e.Resume(ctx)
+	case ActionPause:
+		return e.Pause(ctx)
 	case ActionRepair:
 		return e.Repair(ctx)
 	default:
@@ -468,7 +484,10 @@ func (e Engine) run(ctx context.Context, p plan) (result Result) {
 		return result
 	}
 
-	if p.resume && !e.resumeService(ctx, &result) {
+	if p.resume && !e.optionalBackendAction(ctx, &result, actionResume, e.ResumeFunc) {
+		return result
+	}
+	if p.pause && !e.optionalBackendAction(ctx, &result, ActionPause, e.PauseFunc) {
 		return result
 	}
 	if p.reload && !e.reloadService(ctx, &result) {
@@ -752,12 +771,14 @@ func failWait(ctx context.Context, result *Result, phase string) bool {
 	return false
 }
 
-func (e Engine) resumeService(ctx context.Context, result *Result) bool {
-	if e.ResumeFunc == nil {
-		result.Status, result.Message = ResultFailed, "resume: operation unsupported by backend"
+// optionalBackendAction runs a backend verb only some managers implement
+// (resume, pause); a nil closure means this service's backend lacks it.
+func (e Engine) optionalBackendAction(ctx context.Context, result *Result, action string, run func(context.Context) error) bool {
+	if run == nil {
+		result.Status, result.Message = ResultFailed, action+": operation unsupported by backend"
 		return false
 	}
-	return e.runBackendAction(ctx, result, actionResume, e.ResumeFunc)
+	return e.runBackendAction(ctx, result, action, run)
 }
 
 func (e Engine) reloadService(ctx context.Context, result *Result) bool {
@@ -802,8 +823,17 @@ func (e Engine) runBackendAction(ctx context.Context, result *Result, action str
 	return false
 }
 
-// ensureServiceHealthy judges the backend state after a start-like action.
-// final marks the last postflight attempt: until then a not-yet-active status
+// expectedStatusAfter is the backend status a backend action must reach. An
+// action absent here (reload) only has to avoid a failed status.
+var expectedStatusAfter = map[string]servicemgr.Status{
+	actionStart:   servicemgr.StatusActive,
+	actionRestart: servicemgr.StatusActive,
+	actionResume:  servicemgr.StatusActive,
+	ActionPause:   servicemgr.StatusPaused,
+}
+
+// ensureServiceHealthy judges the backend state after a backend action against
+// expectedStatusAfter. final marks the last postflight attempt: until then a not-yet-reached status
 // only reports settling=false so the bounded window keeps waiting — OpenRC
 // holds a starting service in `inactive` until its readiness callback runs,
 // and failing on that instant verdict aborted restarts of services that were
@@ -817,12 +847,17 @@ func (e Engine) ensureServiceHealthy(ctx context.Context, result *Result, action
 		result.Status, result.Message = ResultFailed, "service failed after "+action
 		return false, true
 	}
-	if (action == actionStart || action == actionRestart || action == actionResume) && status.Status != servicemgr.StatusActive {
+	if want, ok := expectedStatusAfter[action]; ok && status.Status != want {
 		if !final {
 			return false, false
 		}
-		result.Status, result.Message = ResultFailed, "service not active after "+action
+		result.Status, result.Message = ResultFailed, "service not "+string(want)+" after "+action
 		return false, true
+	}
+	// A paused workload keeps its processes frozen in place, so the resident
+	// process check below does not apply: the paused status is the verdict.
+	if action == ActionPause {
+		return true, true
 	}
 	if e.Lifecycle.ProcessMode == config.ServiceProcessResident {
 		observation, err := e.observeProcesses(ctx)

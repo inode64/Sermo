@@ -64,6 +64,7 @@ const (
 	domainActionStart  = "start"
 	domainActionStop   = "stop"
 	domainActionResume = "resume"
+	domainActionPause  = "pause"
 )
 
 // Spec describes one libvirt-controlled VM target.
@@ -179,6 +180,7 @@ type Client interface {
 	DomainCreate(dom libvirt.Domain) error
 	DomainShutdown(dom libvirt.Domain) error
 	DomainResume(dom libvirt.Domain) error
+	DomainSuspend(dom libvirt.Domain) error
 }
 
 // Status returns the normalized state of the managed domain.
@@ -254,6 +256,14 @@ func (Manager) Reload(context.Context, string) error {
 func (m Manager) Resume(ctx context.Context, _ string) error {
 	return m.withDomainAction(ctx, domainActionResume, func(c Client, dom libvirt.Domain) error {
 		return c.DomainResume(dom)
+	})
+}
+
+// Pause suspends a running libvirt domain in place (virsh suspend): its vCPUs
+// stop and its memory stays resident until Resume.
+func (m Manager) Pause(ctx context.Context, _ string) error {
+	return m.withDomainAction(ctx, domainActionPause, func(c Client, dom libvirt.Domain) error {
+		return c.DomainSuspend(dom)
 	})
 }
 

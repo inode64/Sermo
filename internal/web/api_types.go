@@ -49,6 +49,7 @@ type Service struct {
 	RemediationState string          `json:"remediation_state,omitempty"` // eligible | cooldown | rate limit | paused | pending | disabled
 	NextEligibleAt   string          `json:"next_eligible_at,omitempty"`  // RFC3339 when automatic remediation is next eligible
 	CanReload        bool            `json:"can_reload"`                  // true when init or native reload support is available
+	CanPause         bool            `json:"can_pause"`                   // true when the backend can freeze the target in place (libvirt domain, Docker container)
 	LastEvent        *Event          `json:"last_event,omitempty"`        // newest service event, when retained
 
 	// Current process-tree runtime summary. These fields intentionally mirror
