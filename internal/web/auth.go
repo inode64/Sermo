@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"slices"
 	"strings"
+	"time"
 
 	"sermo/internal/httpx"
 	"sermo/internal/webcred"
@@ -16,7 +17,7 @@ import (
 // resolves to loopback per RFC 6761.
 const hostLocalname = "localhost"
 
-// Auth controls access to the dashboard via HTTP Basic auth with two roles:
+// Auth controls access to the dashboard with two roles:
 //
 //   - admin: full access (read and actions). Granted by AdminCredentials.
 //   - guest: read-only (GET/HEAD only; state-changing requests are refused). Granted by
@@ -25,9 +26,11 @@ const hostLocalname = "localhost"
 // When no field is set, auth is disabled and every request is treated as admin
 // (the UI is open) — suitable only behind a trusted boundary.
 //
-// The password (not the username) determines the role: enter any username and any
-// of the passwords configured for that role. Passwords are compared in constant
-// time; see internal/webcred for the credential formats.
+// The password alone determines the role. Browsers present it once on the
+// /login form (a single password field password managers fill) and then carry
+// a session cookie; API clients such as sermoctl send it on every request as
+// HTTP Basic auth, where any username is accepted. Passwords are compared in
+// constant time; see internal/webcred for the credential formats.
 type Auth struct {
 	AdminCredentials webcred.List
 	GuestCredentials webcred.List
@@ -37,13 +40,21 @@ type Auth struct {
 	// <paths.runtime>/web.token. It exists because hashed credentials leave no
 	// password for the CLI to send. Empty disables it.
 	RuntimeToken string
+
+	// SessionTTL is how long a /login session lasts; zero uses
+	// defaultSessionTTL.
+	SessionTTL time.Duration
+	// PublicURL is web.public_url. Sermo serves no TLS itself, so an https
+	// public URL is what marks the session cookie Secure; its path scopes the
+	// cookie and the login redirects behind a reverse proxy.
+	PublicURL string
 }
 
 // String redacts the runtime token, which is an admin credential in its own
 // right and must not reach a log line through a formatted Auth or Server.
 func (a Auth) String() string {
-	return fmt.Sprintf("web.Auth{admin: %v, guest: %v, anonymous_guest: %v, runtime_token: %v}",
-		a.AdminCredentials, a.GuestCredentials, a.AnonymousGuest, a.RuntimeToken != "")
+	return fmt.Sprintf("web.Auth{admin: %v, guest: %v, anonymous_guest: %v, runtime_token: %v, session_ttl: %v}",
+		a.AdminCredentials, a.GuestCredentials, a.AnonymousGuest, a.RuntimeToken != "", a.sessionTTL())
 }
 
 // Enabled reports whether any access control is configured. The runtime token is
@@ -61,9 +72,10 @@ const (
 )
 
 const (
-	whoamiFieldAuth   = "auth"
-	whoamiFieldCanAct = "can_act"
-	whoamiFieldRole   = "role"
+	whoamiFieldAuth    = "auth"
+	whoamiFieldCanAct  = "can_act"
+	whoamiFieldRole    = "role"
+	whoamiFieldSession = "session"
 )
 
 const (
@@ -105,43 +117,111 @@ func canonicalHost(hostport string) string {
 	return strings.ToLower(strings.Trim(hostport, "[]"))
 }
 
-// role resolves a request to roleAdmin, roleGuest, or "" (unauthenticated).
-func (a Auth) role(r *http.Request) string {
-	if !a.Enabled() {
+// role resolves a request to roleAdmin, roleGuest, or "" (unauthenticated): an
+// explicit Basic credential first, then the /login session cookie, then the
+// anonymous guest fallback. session reports that the role came from the
+// cookie, the only login a browser can end with /logout.
+func (s *Server) role(r *http.Request) (role string, session bool) {
+	if !s.Auth.Enabled() {
+		return roleAdmin, false
+	}
+	if role := s.basicRole(r); role != "" {
+		return role, false
+	}
+	if c, err := r.Cookie(s.cookieName); err == nil {
+		if role := s.sessions.role(c.Value, s.now()); role != "" {
+			return role, true
+		}
+	}
+	if s.Auth.AnonymousGuest {
+		return roleGuest, false
+	}
+	return "", false
+}
+
+// basicRole checks an HTTP Basic password under the same per-client limit as
+// the login form, so the API is not a way around it. A client that has used up
+// its attempts gets no password check at all until its window ends; a session
+// cookie it also carries still works.
+func (s *Server) basicRole(r *http.Request) string {
+	_, pass, ok := r.BasicAuth()
+	if !ok {
+		return ""
+	}
+	client := clientAddress(r)
+	if _, allowed := s.loginLimiter.reserve(client, s.now()); !allowed {
+		return ""
+	}
+	role := s.Auth.passwordRole(r.Context(), pass)
+	if role != "" {
+		s.loginLimiter.succeed(client)
+	}
+	return role
+}
+
+// initLoginState prepares what the login routes and role resolution share:
+// the session store, the attempt limiter, the parsed public URL and the cookie
+// name. It runs once, when the auth middleware is built.
+func (s *Server) initLoginState() {
+	if s.now == nil {
+		s.now = time.Now
+	}
+	if s.sessions == nil {
+		s.sessions = newSessionStore(s.Auth.sessionTTL())
+	}
+	if s.loginLimiter == nil {
+		s.loginLimiter = newLoginLimiter()
+	}
+	s.site = newPublicSite(s.Auth.PublicURL)
+	s.cookieName = sessionCookieName(s.Hostname)
+}
+
+// passwordRole maps a presented password to the role it grants, or "".
+func (a Auth) passwordRole(ctx context.Context, pass string) string {
+	// The token is checked first: it is the cheap comparison, and it is what
+	// sermoctl sends on every call.
+	if a.RuntimeToken != "" && webcred.SecureEqual(pass, a.RuntimeToken) {
 		return roleAdmin
 	}
-	if _, pass, ok := r.BasicAuth(); ok {
-		// The token is checked first: it is the cheap comparison, and it is what
-		// sermoctl sends on every call.
-		if a.RuntimeToken != "" && webcred.SecureEqual(pass, a.RuntimeToken) {
-			return roleAdmin
-		}
-		ctx := r.Context()
-		if a.AdminCredentials.Verify(ctx, pass) {
-			return roleAdmin
-		}
-		if a.GuestCredentials.Verify(ctx, pass) {
-			return roleGuest
-		}
+	if a.AdminCredentials.Verify(ctx, pass) {
+		return roleAdmin
 	}
-	if a.AnonymousGuest {
+	if a.GuestCredentials.Verify(ctx, pass) {
 		return roleGuest
 	}
 	return ""
 }
 
+func (a Auth) sessionTTL() time.Duration {
+	if a.SessionTTL > 0 {
+		return a.SessionTTL
+	}
+	return defaultSessionTTL
+}
+
 type roleCtxKey struct{}
+
+type sessionCtxKey struct{}
 
 func roleFrom(ctx context.Context) string {
 	role, _ := ctx.Value(roleCtxKey{}).(string)
 	return role
 }
 
-// withAuth enforces the role on each request: unauthenticated requests get a Basic
-// challenge, guests may only read (GET/HEAD), and /login is an admin-only
-// endpoint that triggers the browser's login prompt then redirects home (used to
-// escalate from anonymous guest to admin).
+// sessionFrom reports whether the request's role came from a /login session.
+func sessionFrom(ctx context.Context) bool {
+	session, _ := ctx.Value(sessionCtxKey{}).(bool)
+	return session
+}
+
+// withAuth enforces the role on each request: an unauthenticated page load is
+// sent to the /login form, other unauthenticated requests get a plain 401, and
+// guests may only read (GET/HEAD). /login, /login/basic and /logout are handled
+// here, before routing: they are how a role is obtained or dropped. /login
+// takes the form POST a browser cannot add the CSRF header to; /logout passes
+// the CSRF check like any other state change.
 func (s *Server) withAuth(next http.Handler) http.Handler {
+	s.initLoginState()
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Plain liveness/readiness probes are public: monitors and load balancers
 		// carry no credentials. Verbose probes include inventory/runtime details,
@@ -150,21 +230,28 @@ func (s *Server) withAuth(next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
-		role := s.Auth.role(r)
+		role, session := s.role(r)
 		publishAccessActor(r.Context(), role)
 
 		// Open mode has no credential boundary, so a DNS-rebound page could
 		// drive the API from a hostile origin; only Hosts that name this server
-		// are served. With auth enabled the Basic credential check covers it (a
-		// rebound origin cannot attach credentials) and proxies keep their Host.
+		// are served. With auth enabled the credential check covers it (a
+		// rebound origin cannot attach Basic credentials or the host-scoped
+		// session cookie) and proxies keep their Host.
 		if !s.Auth.Enabled() && s.Addr != "" && !s.hostAllowed(r.Host) {
 			writeJSON(w, http.StatusMisdirectedRequest, ActionResult{OK: false, Message: authMessageForeignHost})
 			return
 		}
 
-		if r.URL.Path == routePathLogin {
+		switch r.URL.Path {
+		case routePathLogin:
+			s.handleLogin(w, r, role)
+			return
+		case routePathLoginBasic:
+			// The browser's own password dialog, kept as an alternative to the
+			// form: challenge until it sends an admin credential, then go home.
 			if role == roleAdmin {
-				http.Redirect(w, r, routePathRoot, http.StatusSeeOther)
+				redirectWithin(w, r, "")
 			} else {
 				s.challenge(w)
 			}
@@ -177,6 +264,10 @@ func (s *Server) withAuth(next http.Handler) http.Handler {
 			writeJSON(w, http.StatusForbidden, ActionResult{OK: false, Message: authMessageMissingCSRFHeader})
 			return
 		}
+		if r.URL.Path == routePathLogout {
+			s.handleLogout(w, r)
+			return
+		}
 		if role == "" {
 			s.denyUnauthenticated(w, r)
 			return
@@ -185,7 +276,8 @@ func (s *Server) withAuth(next http.Handler) http.Handler {
 			writeJSON(w, http.StatusForbidden, ActionResult{OK: false, Message: authMessageReadOnly})
 			return
 		}
-		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), roleCtxKey{}, role)))
+		ctx := context.WithValue(r.Context(), roleCtxKey{}, role)
+		next.ServeHTTP(w, r.WithContext(context.WithValue(ctx, sessionCtxKey{}, session)))
 	})
 }
 
@@ -239,27 +331,29 @@ func escapeHTTPQuotedString(s string) string {
 // box even though the user was doing nothing. Several dashboards open at once
 // multiply the reconnections and so the prompts.
 //
-// The challenge belongs on a document navigation, and on /login, which exists
-// precisely to summon the dialog and bounce back home. Everything else — API
-// calls, the stream — gets a plain 401 that the dashboard handles itself.
-func (s *Server) denyUnauthenticated(w http.ResponseWriter, r *http.Request) {
-	if wantsAuthDialog(r) {
-		s.challenge(w)
+// A document navigation is sent to the /login form instead, and only
+// /login/basic, which exists precisely to summon the browser dialog, ever
+// challenges. Everything else — API calls, the stream — gets a plain 401 that
+// the dashboard handles itself.
+func (*Server) denyUnauthenticated(w http.ResponseWriter, r *http.Request) {
+	if isPageLoad(r) {
+		redirectWithin(w, r, routePathLogin[1:])
 		return
 	}
 	writeJSON(w, http.StatusUnauthorized, ActionResult{OK: false, Message: authMessageRequired})
 }
 
-// wantsAuthDialog reports whether a 401 for r should carry the Basic challenge.
+// isPageLoad reports whether an unauthenticated request is a person loading a
+// page, who should be sent to the login form, rather than an API client.
 // Sec-Fetch-Mode is authoritative where the browser sends it: "navigate" is a
 // document load, while fetch and EventSource report cors/same-origin/no-cors.
 // Older clients fall back to Accept, where a document request asks for HTML and
 // the API asks for JSON or text/event-stream.
-func wantsAuthDialog(r *http.Request) bool {
-	// The two document routes always challenge, whatever the client sends: they
-	// are how a person reaches the dashboard, and the first login must work for
-	// a client that sets neither header.
-	if r.URL.Path == routePathRoot || r.URL.Path == routePathLogin {
+func isPageLoad(r *http.Request) bool {
+	// The dashboard root always counts as a page load, whatever the client
+	// sends: it is how a person reaches the dashboard, and the first login must
+	// work for a client that sets neither header.
+	if r.URL.Path == routePathRoot {
 		return true
 	}
 	if mode := r.Header.Get(headerSecFetchMode); mode != "" {
@@ -279,6 +373,9 @@ func (s *Server) handleWhoami(w http.ResponseWriter, r *http.Request) {
 		whoamiFieldRole:   role,
 		whoamiFieldCanAct: role == roleAdmin,
 		whoamiFieldAuth:   s.Auth.Enabled(),
+		// The dashboard offers "log out" only for a /login session: a browser's
+		// cached Basic credential cannot be dropped by the server.
+		whoamiFieldSession: sessionFrom(r.Context()),
 	})
 }
 

@@ -660,7 +660,7 @@ func countArtifactWatches(watches []*app.Watch, category string) int {
 
 // webAuth builds the web access control from the `web` block (admin
 // credentials, optional guest credentials, optional anonymous guest read
-// access).
+// access, the login session lifetime and the public URL that scopes its cookie).
 func webAuth(cfg *config.Config) web.Auth {
 	m := cfg.Global.WebSection()
 	if m == nil {
@@ -668,7 +668,10 @@ func webAuth(cfg *config.Config) web.Auth {
 	}
 	auth := web.Auth{
 		AdminCredentials: cfg.Global.WebCredentials(),
-		GuestCredentials: cfg.Global.WebGuestCredentials()}
+		GuestCredentials: cfg.Global.WebGuestCredentials(),
+		SessionTTL:       cfg.Global.WebSessionTTL(),
+		PublicURL:        cfg.Global.WebPublicURL(),
+	}
 	auth.AnonymousGuest, _ = m[config.WebKeyGuest].(bool)
 	return auth
 }

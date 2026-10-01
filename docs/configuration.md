@@ -952,34 +952,71 @@ web:
   sensitive authentication data and should be treated as such. `sermod`
   logs a warning at startup when the file is readable beyond its owner.
 
-#### The browser password prompt
+#### Logging in
 
-The dashboard authenticates with HTTP Basic, so the browser's own password box
-is the login form. It appears when a **document** is requested without a usable
-credential: the dashboard itself (`/`), and `/login`, which exists to summon the
-box on demand and then send you back home — that is how an anonymous guest
-escalates to admin.
+Browsers log in on the **`/login` form**: one password field
+(`autocomplete="current-password"`), no username. The password alone decides
+the role, so there is nothing else to ask, and a password manager such as
+Bitwarden fills and saves it like any other login form. Opening the dashboard
+(`/`) without a session sends you there.
 
-The challenge uses a **per-host realm**: `Basic realm="Sermo <hostname>"`, where
+A correct password starts a **session**: an opaque random cookie
+(`sermo_session_<hostname>`, `HttpOnly`, `SameSite=Lax`, `Path=/`) that carries
+the role it granted. The host identity in its name keeps two dashboards reached
+on one host name — `localhost:9797` and `localhost:9798` through SSH tunnels —
+from overwriting each other's login. It lasts `web.session_ttl` (default `12h`):
+
+```yaml
+web:
+  port: 9797
+  password_file: /etc/sermo/web.passwords
+  session_ttl: 8h          # how long a dashboard login lasts (default 12h)
+  public_url: "https://ops.example.com/sermo"
+```
+
+- Sessions live in the daemon's memory: restarting `sermod` logs everyone out,
+  and a password manager logs you back in with one click. A reload keeps them.
+  Logging in again replaces the browser's previous session.
+- The cookie is marked `Secure` when the request reached Sermo over https: the
+  proxy sent `X-Forwarded-Proto: https`, or the request names the host of an
+  `https://` `web.public_url`. Sermo serves no TLS itself, so opening
+  `host:9797` directly still works. Redirects are relative, so the form works
+  however the dashboard is reached, including under a reverse-proxy path.
+- **log out** in the top bar ends a form session. It is offered only for one:
+  the server cannot make a browser forget a cached Basic credential.
+- Every password attempt counts against its client — on the form and as HTTP
+  Basic auth alike — and only a success clears the count. After **5 attempts
+  that did not succeed in 15 minutes** the client is refused (the form answers
+  `429` with `Retry-After`) until that window ends. The client is the peer
+  address, or, when the peer is a reverse proxy on this host, the address it
+  appended to `X-Forwarded-For`, so one guesser cannot lock out everyone behind
+  the proxy.
+- The form only accepts a POST the browser marks as same-origin
+  (`Sec-Fetch-Site`), or, from a browser that does not send that, one whose
+  `Origin` names this server (`Host`, `X-Forwarded-Host` or `web.public_url`),
+  so another site cannot log a browser in. Every login, good or bad, is written
+  to the access log (`engine.access`) without the password, and to the daemon
+  log with the client address.
+- A notification's link to a row (`#…`) survives the detour through the form.
+- A guest password starts a read-only session; an anonymous guest escalates by
+  following **log in** in the top bar.
+
+**HTTP Basic auth keeps working** for API clients: `sermoctl` (with the runtime
+token), `curl -u any:PASSWORD` and scripts send the password on every request,
+with any username. The browser's own password dialog stays available as an
+alternative to the form at **`/login/basic`** (linked from the form): it
+challenges with a **per-host realm**, `Basic realm="Sermo <hostname>"`, where
 `<hostname>` is the same short host identity as `${hostname}` (first DNS label,
-or `SERMO_HOSTNAME` when set). On `algieba` the browser shows a realm of
-`Sermo algieba`, so the password manager can tell one dashboard from another when
-many tabs are open. If the host identity is unknown the realm falls back to
-`Sermo`.
+or `SERMO_HOSTNAME` when set), and returns home once you are admin.
 
-Everything else answers `401` **without** a `WWW-Authenticate` header: the JSON
-API, and `/api/stream`, the Server-Sent Events channel the dashboard keeps open.
-That distinction matters because the stream reconnects on its own, every five
-seconds by the server's own `retry` hint. When those replies still carried the
-challenge, a reconnect that arrived without the cached credential made the
-browser raise a modal password box at an operator who was doing nothing but
-reading — and several dashboards open at once multiplied the reconnections, so
-the prompts arrived every few minutes. The dashboard now handles a bare `401`
-itself by navigating to `/login`, which asks once, deliberately.
-
-A client that sets neither `Sec-Fetch-Mode` nor `Accept` is treated as an API
-caller, except on `/` and `/login`, which always challenge so a first login
-works from anything.
+Nothing else ever answers with a `WWW-Authenticate` challenge: the JSON API and
+`/api/stream`, the Server-Sent Events channel the dashboard keeps open, get a
+plain `401`. The stream reconnects on its own every five seconds, and when those
+replies carried the challenge the browser raised a modal password box at an
+operator who was only reading. The dashboard handles a bare `401` itself by
+going to the login form. A client that sets neither `Sec-Fetch-Mode` nor
+`Accept` is treated as an API caller, except on `/`, which always sends a person
+to the form.
 
 #### Hash formats
 
@@ -1128,7 +1165,10 @@ Notes:
 
 - The proxy and the dashboard share an **origin**, so the `X-Sermo-Csrf` header and
   Sermo's own admin/guest auth keep working through it — the browser forwards the
-  `Authorization` header. You can rely on Sermo's roles, add the proxy's own auth
+  session cookie and any `Authorization` header. Have the proxy send
+  `X-Forwarded-Proto` (or set `web.public_url` to its `https://` address) so the
+  session cookie is `Secure`, and `X-Forwarded-For` so failed logins are counted
+  per browser. You can rely on Sermo's roles, add the proxy's own auth
   (basic/OIDC/mTLS) on top, or both.
 - Redirect HTTP→HTTPS at the proxy and let it handle certificates (Sermo has no
   native TLS). Restrict access there too (allow-lists, SSO) if needed.

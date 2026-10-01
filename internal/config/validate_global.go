@@ -70,6 +70,7 @@ func validateWeb(webCfg map[string]any, add addFunc) {
 			add("%s %v", webPathPublicURL, err)
 		}
 	}
+	validatePositiveDurationField(webCfg, WebKeySessionTTL, webPathSessionTTL, add)
 }
 
 // validateWebCredentialFiles requires a non-empty path for every configured

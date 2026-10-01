@@ -39,7 +39,10 @@ const eventLogLimit = "500";
 const httpStatusServiceUnavailable = 503;
 const httpStatusUnauthorized = 401;
 const httpStatusPreconditionFailed = 412;
-const loginPath = "/login";
+// Relative, like the API paths, so the dashboard keeps working under a reverse
+// proxy path.
+const loginPath = "login";
+const logoutPath = "logout";
 const expansionPrefixApp = "app:";
 const expansionPrefixLibrary = "lib:";
 const expansionPrefixService = "svc:";
@@ -436,9 +439,12 @@ async function loadMe() {
     const res = await fetch(apiWhoamiPath);
     if (res.ok) me = await res.json();
   } catch { /* keep defaults */ }
+  // Only a /login session can be ended (me.session): the server cannot make a
+  // browser forget a cached Basic credential, so it offers no logout for one.
+  const logoutLink = me.session ? ' &middot; <button type="button" class="link-btn" data-logout>log out</button>' : "";
   if (!me.auth) { $("#me").innerHTML = ""; }
-  else if (me.role === "admin") { $("#me").textContent = "(admin)"; }
-  else { $("#me").innerHTML = 'read-only &middot; <a href="login">log in</a>'; }
+  else if (me.role === "admin") { $("#me").innerHTML = `(admin)${logoutLink}`; }
+  else { $("#me").innerHTML = `read-only &middot; <a href="login">log in</a>${logoutLink}`; }
   // Show admin-only controls (reload config, clear event log).
   const reloadBtn = $("#reload-btn");
   if (reloadBtn) reloadBtn.classList.toggle("admin-hidden", !me.can_act);
@@ -701,13 +707,11 @@ async function performLoad() {
   clearStatusAfterRefresh();
 }
 
-// redirectToLogin reacts to a 401 on an API call. The server sends the Basic
-// challenge only on a document navigation and on /login, so that a background
-// poll or an EventSource reconnect can no longer make the browser throw a
-// password box at someone who was just reading the dashboard. The cost of that
-// is that a 401 here would otherwise fail silently, so the page goes to /login,
-// which is the deliberate way to summon the dialog and return home. Guarded so
-// several concurrent polls cannot each start a navigation.
+// redirectToLogin reacts to a 401 on an API call. The server answers API calls
+// and the EventSource with a bare 401 — never the Basic challenge, which made the
+// browser throw a password box at someone who was just reading the dashboard —
+// so a 401 here would otherwise fail silently: the page goes to the login form
+// instead. Guarded so several concurrent polls cannot each start a navigation.
 let loginRedirectStarted = false;
 function redirectToLogin(res) {
   if (!res || res.status !== httpStatusUnauthorized) return false;
@@ -716,6 +720,18 @@ function redirectToLogin(res) {
     window.location.assign(loginPath);
   }
   return true;
+}
+
+// logout ends this browser's /login session, then shows the login form. The
+// session cookie is HttpOnly, so only the server can drop it. It claims the
+// redirect guard first, so a poll that hits the 401 meanwhile does not start a
+// second navigation.
+async function logout() {
+  loginRedirectStarted = true;
+  try {
+    await fetch(logoutPath, csrfPostOptions());
+  } catch { /* the form below is the outcome either way */ }
+  window.location.assign(loginPath);
 }
 
 // jsonOrThrow parses a POST response as JSON (tolerating an empty body) and throws
@@ -8656,6 +8672,7 @@ function initDelegatedHandlers() {
   // click target wins, mirroring the previous if/return chain. The plain-row
   // fallthrough stays outside because rowClick also needs the event.
   const clickRoutes = [
+    ["[data-logout]", () => logout()],
     ["[data-event-toggle]", (el) => toggleEventMsg(el.dataset.eventToggle || "")],
     ["[data-panel-target]", (el) => openPanelTarget(el.dataset.panelTarget || "")],
     ["[data-ssh-session-close]", (el) => closeSSHSession(
