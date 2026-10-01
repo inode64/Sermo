@@ -196,6 +196,8 @@ const (
 	// WebKeyPublicURL is web.public_url: the address operators open the
 	// dashboard at, which notifications link to.
 	WebKeyPublicURL = "public_url"
+	// WebKeySessionTTL is web.session_ttl: how long a dashboard login lasts.
+	WebKeySessionTTL = "session_ttl"
 )
 
 // SectionTelegramBot is the top-level interactive Telegram report-bot block. It

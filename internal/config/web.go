@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
+	"time"
 
 	"sermo/internal/cfgval"
 	"sermo/internal/netutil"
@@ -68,6 +69,15 @@ func (g Global) WebPublicURL() string {
 		return ""
 	}
 	return strings.TrimRight(cfgval.AsString(raw), "/")
+}
+
+// WebSessionTTL returns web.session_ttl, or 0 when unset or invalid
+// (validation reports an invalid value) so the web server applies its default.
+func (g Global) WebSessionTTL() time.Duration {
+	if ttl, ok := cfgval.ParseDuration(g.WebSection()[WebKeySessionTTL]); ok && ttl > 0 {
+		return ttl
+	}
+	return 0
 }
 
 // validatePublicURL accepts an absolute http(s) URL: the dashboard root,

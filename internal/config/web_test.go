@@ -3,6 +3,7 @@ package config
 import (
 	"errors"
 	"testing"
+	"time"
 )
 
 func TestWebBind(t *testing.T) {
@@ -107,5 +108,36 @@ defaults: { policy: { cooldown: 5m } }
 	}
 	if got := (Global{}).WebPublicURL(); got != "" {
 		t.Errorf("WebPublicURL without a web block = %q", got)
+	}
+}
+
+// web.session_ttl is how long a dashboard login lasts: a positive duration;
+// unset leaves the web server's default.
+func TestWebSessionTTL(t *testing.T) {
+	for _, bad := range []string{`"forever"`, `"-1h"`, `"0s"`, `5`} {
+		issues := validateGlobalDoc(t, `
+web: { port: 9797, session_ttl: `+bad+` }
+paths: { services: [ @ROOT@/services ] }
+defaults: { policy: { cooldown: 5m } }
+`)
+		if !hasIssue(issues, "web.session_ttl") {
+			t.Errorf("session_ttl %s: no issue in %v", bad, issues)
+		}
+	}
+	if issues := validateGlobalDoc(t, `
+web: { port: 9797, session_ttl: 8h }
+paths: { services: [ @ROOT@/services ] }
+defaults: { policy: { cooldown: 5m } }
+`); hasIssue(issues, "web.session_ttl") {
+		t.Errorf("session_ttl 8h: unexpected issue in %v", issues)
+	}
+	for raw, want := range map[any]time.Duration{"8h": 8 * time.Hour, "nope": 0} {
+		g := Global{Raw: map[string]any{SectionWeb: map[string]any{WebKeySessionTTL: raw}}}
+		if got := g.WebSessionTTL(); got != want {
+			t.Errorf("WebSessionTTL(%v) = %v, want %v", raw, got, want)
+		}
+	}
+	if got := (Global{}).WebSessionTTL(); got != 0 {
+		t.Errorf("WebSessionTTL without a web block = %v, want 0 (server default)", got)
 	}
 }

@@ -1,10 +1,12 @@
 // Package web serves a small read-and-act dashboard for the daemon: it lists the
 // monitored services with their status and lets an operator monitor/unmonitor and
-// start/stop/restart/reload/resume/repair them. It is deliberately minimal and depends on the daemon
+// start/stop/restart/reload/pause/resume/repair them. It is deliberately minimal and depends on the daemon
 // only through the Backend interface, so it stays decoupled and testable.
 //
-// Access is optional HTTP Basic auth with admin (read+act) and guest (read-only)
-// roles; state-changing POST requests also require an X-Sermo-Csrf header. When
+// Access is optional password auth with admin (read+act) and guest (read-only)
+// roles: browsers log in on the /login form and carry a session cookie, API
+// clients send HTTP Basic auth. State-changing POST requests also require an
+// X-Sermo-Csrf header. When
 // no passwords are configured the UI is open — bind to a trusted interface
 // (loopback by default) or set passwords / front it with an authenticating reverse
 // proxy. GET /livez and GET /readyz are always public for health probes.
@@ -32,7 +34,7 @@ import (
 	"sermo/internal/rules"
 )
 
-//go:embed index.html
+//go:embed index.html login.html
 var assets embed.FS
 
 const (
@@ -41,6 +43,14 @@ const (
 	headerContentType           = httpx.HeaderContentType
 	headerReferrerPolicy        = "Referrer-Policy"
 	headerSecFetchMode          = "Sec-Fetch-Mode"
+	headerSecFetchSite          = "Sec-Fetch-Site"
+	headerOrigin                = "Origin"
+	headerAllow                 = "Allow"
+	headerLocation              = "Location"
+	headerRetryAfter            = "Retry-After"
+	headerXForwardedFor         = "X-Forwarded-For"
+	headerXForwardedHost        = "X-Forwarded-Host"
+	headerXForwardedProto       = "X-Forwarded-Proto"
 	secFetchModeNavigate        = "navigate"
 	contentTypeHTML             = "text/html"
 	headerWWWAuthenticate       = "WWW-Authenticate"
@@ -85,7 +95,11 @@ const (
 	routePathLivez  = "/livez"
 	routePathReadyz = "/readyz"
 	routePathLogin  = "/login"
-	apiPathPrefix   = APIPathRoot + "/"
+	// routePathLoginBasic summons the browser's own password dialog, the
+	// alternative to the /login form.
+	routePathLoginBasic = "/login/basic"
+	routePathLogout     = "/logout"
+	apiPathPrefix       = APIPathRoot + "/"
 )
 
 // API path segment names used by routing and access-log classification.
@@ -310,10 +324,11 @@ type Server struct {
 	Auth    Auth
 	Logger  *slog.Logger
 
-	// Hostname is the short host identity used in the Basic auth realm
-	// (`Basic realm="Sermo <Hostname>"`) so multi-host operators can tell
-	// password prompts apart. Empty falls back to realm "Sermo". The daemon
-	// sets it from config.ShortHostname() (same source as ${hostname}).
+	// Hostname is the short host identity shown on the /login page and in the
+	// /login/basic realm (`Basic realm="Sermo <Hostname>"`), so multi-host
+	// operators and their password managers can tell dashboards apart. Empty
+	// falls back to realm "Sermo". The daemon sets it from
+	// config.ShortHostname() (same source as ${hostname}).
 	Hostname string
 
 	// AllowedHosts lists extra hostnames accepted in the Host header when auth
@@ -321,7 +336,8 @@ type Server struct {
 	// localhost, IP-literal Hosts and the bind host are always accepted; other
 	// names are refused (DNS-rebinding protection). The check needs Addr set
 	// (Run always has it) and does not apply with auth enabled: a DNS-rebound
-	// origin cannot attach Basic credentials, and proxies keep their Host.
+	// origin cannot attach credentials (Basic or the host-scoped session
+	// cookie), and proxies keep their Host.
 	AllowedHosts []string
 
 	// MaxSeriesWindow caps the history one series request may ask for. Zero uses
@@ -351,6 +367,16 @@ type Server struct {
 
 	started  time.Time       // when the server began serving; for /livez uptime
 	shutdown context.Context //nolint:containedctx // daemon lifetime; set in Run. Not a per-request context.
+
+	// sessions holds /login sessions and loginLimiter throttles guessing; both
+	// live as long as the server, so a daemon restart logs everyone out. site
+	// is Auth.PublicURL parsed once.
+	sessions     *sessionStore
+	loginLimiter *loginLimiter
+	site         publicSite
+	cookieName   string
+	// now is the clock for sessions and the login limiter; nil is time.Now.
+	now func() time.Time
 }
 
 type sessionInventorySource interface {

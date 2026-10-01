@@ -66,7 +66,7 @@ func (r *accessStatusRecorder) Unwrap() http.ResponseWriter {
 
 func (s *Server) withAccessLog(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if s.AccessLog == nil || isReadMethod(r.Method) || !strings.HasPrefix(r.URL.Path, apiPathPrefix) {
+		if s.AccessLog == nil || isReadMethod(r.Method) || !auditedPath(r.URL.Path) {
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -76,6 +76,12 @@ func (s *Server) withAccessLog(next http.Handler) http.Handler {
 		next.ServeHTTP(&rec, r)
 		s.recordWebAccess(r, rec.status, actor.role)
 	})
+}
+
+// auditedPath reports whether a state-changing request to path is an operator
+// action worth an audit record: every API mutation, plus logging in and out.
+func auditedPath(path string) bool {
+	return strings.HasPrefix(path, apiPathPrefix) || path == routePathLogin || path == routePathLogout
 }
 
 func (s *Server) recordWebAccess(r *http.Request, status int, actor string) {

@@ -163,6 +163,8 @@
   /* The pause toggle keeps its glyph; pressed (paused) it latches in the
      paused hue so the row's state reads from the button too. */
   .icon-btn.suspend-btn[aria-pressed="true"] { color: var(--paused); border-color: var(--paused); background: color-mix(in srgb, var(--paused) 14%, transparent); }
+  /* A button that reads as a link: the topbar "log out". */
+  .link-btn { padding: 0; border: 0; background: none; font: inherit; color: var(--accent); text-decoration: underline; cursor: pointer; }
   tr.clickable { cursor: pointer; }
   .exp { color: var(--text-2); margin-right: .35rem; user-select: none; font-size: .9em; display: inline-block; }
   .category-badge { display: inline-block; max-width: 8rem; overflow: hidden; text-overflow: ellipsis; vertical-align: top; color: var(--text-2); }

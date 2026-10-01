@@ -179,25 +179,24 @@ func TestCSRFGuardOnUnsafeMethods(t *testing.T) {
 	}
 }
 
-// The Basic challenge belongs on a document load. On a subresource it makes the
-// browser throw a modal password box at someone who was only reading the
-// dashboard: the page holds an EventSource on /api/stream that the server tells
-// to reconnect every 5s, and a reconnect arriving without the cached credential
-// used to be answered with WWW-Authenticate. Every request here is still 401.
-func TestAuthChallengesDocumentsOnly(t *testing.T) {
+// An unauthenticated page load goes to the /login form; everything else gets a
+// plain 401. No response here carries WWW-Authenticate: on a subresource it made
+// the browser throw a modal password box at someone who was only reading the
+// dashboard (the page holds an EventSource on /api/stream that reconnects every
+// 5s), and the form has replaced it on page loads too.
+func TestUnauthenticatedPageLoadsGoToLogin(t *testing.T) {
 	h := authServer(Auth{AdminCredentials: testCredentials(t, "secret")})
 	tests := []struct {
 		name      string
 		path      string
 		fetchMode string
 		accept    string
-		challenge bool
+		toLogin   bool
 	}{
-		{name: "root navigation", path: routePathRoot, fetchMode: secFetchModeNavigate, challenge: true},
-		{name: "root without headers", path: routePathRoot, challenge: true},
-		{name: "login route", path: routePathLogin, fetchMode: "cors", challenge: true},
-		{name: "html navigation", path: APIPathServices, fetchMode: secFetchModeNavigate, challenge: true},
-		{name: "legacy html client", path: APIPathServices, accept: "text/html,*/*", challenge: true},
+		{name: "root navigation", path: routePathRoot, fetchMode: secFetchModeNavigate, toLogin: true},
+		{name: "root without headers", path: routePathRoot, toLogin: true},
+		{name: "html navigation", path: APIPathServices, fetchMode: secFetchModeNavigate, toLogin: true},
+		{name: "legacy html client", path: APIPathServices, accept: "text/html,*/*", toLogin: true},
 		{name: "dashboard poll", path: APIPathServices, fetchMode: "cors", accept: contentTypeJSON},
 		{name: "event stream reconnect", path: APIPathServices, fetchMode: "cors", accept: streamContentType},
 		{name: "bare api client", path: APIPathServices},
@@ -213,12 +212,19 @@ func TestAuthChallengesDocumentsOnly(t *testing.T) {
 			}
 			rec := httptest.NewRecorder()
 			h.ServeHTTP(rec, r)
+			// Only /login/basic ever summons the browser dialog now.
+			if rec.Header().Get(headerWWWAuthenticate) != "" {
+				t.Fatalf("WWW-Authenticate = %q, want none", rec.Header().Get(headerWWWAuthenticate))
+			}
+			if tc.toLogin {
+				// Relative, so it also lands right under a reverse-proxy path.
+				if rec.Code != http.StatusSeeOther || landing(rec, tc.path) != routePathLogin || strings.HasPrefix(rec.Header().Get("Location"), "/") {
+					t.Fatalf("page load = %d loc=%q, want a relative 303 to %s", rec.Code, rec.Header().Get("Location"), routePathLogin)
+				}
+				return
+			}
 			if rec.Code != http.StatusUnauthorized {
 				t.Fatalf("status = %d, want 401", rec.Code)
-			}
-			got := rec.Header().Get(headerWWWAuthenticate) != ""
-			if got != tc.challenge {
-				t.Fatalf("WWW-Authenticate present = %v, want %v", got, tc.challenge)
 			}
 		})
 	}
@@ -248,7 +254,7 @@ func TestAuthRealmIncludesHostname(t *testing.T) {
 				Hostname: tc.hostname,
 			}).Handler()
 			rec := httptest.NewRecorder()
-			h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, routePathRoot, nil))
+			h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, routePathLoginBasic, nil))
 			if rec.Code != http.StatusUnauthorized {
 				t.Fatalf("status = %d, want 401", rec.Code)
 			}
@@ -491,19 +497,19 @@ func TestWhoamiWithoutResolvedRoleFailsClosed(t *testing.T) {
 	}
 }
 
-func TestLoginChallengesThenRedirects(t *testing.T) {
+func TestLoginBasicChallengesThenRedirects(t *testing.T) {
 	h := authServer(Auth{AdminCredentials: testCredentials(t, "secret"), AnonymousGuest: true})
-	// a guest hitting /login gets a Basic challenge (to escalate)
+	// a guest hitting /login/basic gets a Basic challenge (to escalate)
 	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, req(http.MethodGet, routePathLogin, "", ""))
-	if rec.Code != http.StatusUnauthorized {
-		t.Fatalf("/login as guest = %d, want 401", rec.Code)
+	h.ServeHTTP(rec, req(http.MethodGet, routePathLoginBasic, "", ""))
+	if rec.Code != http.StatusUnauthorized || rec.Header().Get(headerWWWAuthenticate) == "" {
+		t.Fatalf("/login/basic as guest = %d, want a 401 challenge", rec.Code)
 	}
 	// with admin creds it redirects home
 	rec = httptest.NewRecorder()
-	h.ServeHTTP(rec, req(http.MethodGet, routePathLogin, "admin", "secret"))
-	if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != routePathRoot {
-		t.Fatalf("/login as admin = %d loc=%q, want 303 /", rec.Code, rec.Header().Get("Location"))
+	h.ServeHTTP(rec, req(http.MethodGet, routePathLoginBasic, "admin", "secret"))
+	if rec.Code != http.StatusSeeOther || landing(rec, routePathLoginBasic) != routePathRoot {
+		t.Fatalf("/login/basic as admin = %d loc=%q, want 303 /", rec.Code, rec.Header().Get("Location"))
 	}
 }
 

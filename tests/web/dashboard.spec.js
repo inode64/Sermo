@@ -1929,6 +1929,30 @@ test("a 401 from the API navigates to the login route", async ({ page }) => {
 
 
 
+test("an admin on a cached Basic credential is offered no log out", async ({ page }) => {
+  await page.route("**/api/whoami", (route) => route.fulfill({ json: { can_act: true, role: "admin", auth: true, session: false } }));
+  await page.reload();
+  await expect(page.locator("#me")).toHaveText("(admin)");
+  await expect(page.locator("#me [data-logout]")).toHaveCount(0);
+});
+
+test("an admin logged in on the form can log out", async ({ page }) => {
+  await page.route("**/api/whoami", (route) => route.fulfill({ json: { can_act: true, role: "admin", auth: true, session: true } }));
+  let logoutPosted = false;
+  await page.route("**/logout", async (route) => {
+    logoutPosted = route.request().method() === "POST" && route.request().headers()["x-sermo-csrf"] === "1";
+    await route.fulfill({ json: { ok: true, message: "logged out" } });
+  });
+  await page.route("**/login", (route) => route.fulfill({ status: 200, contentType: "text/html", body: "<title>login reached</title>" }));
+  await page.reload();
+
+  const logout = page.locator("#me [data-logout]");
+  await expect(logout).toHaveText("log out");
+  await logout.click();
+  await page.waitForURL(/\/login$/, { timeout: 15000 });
+  expect(logoutPosted).toBe(true);
+});
+
 // A row expansion spans every column of an auto-layout table, so its content's
 // minimum width used to become the table's: on a phone the process table (a
 // truncated command beside two usage bars) was wider than the viewport, the
