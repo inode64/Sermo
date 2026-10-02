@@ -14,6 +14,7 @@ import (
 // operation to reconcile an active init marker without a live daemon.
 type Observation struct {
 	Processes []Process
+	Warnings  []string
 	Trusted   bool
 	// ReplacedExecutable permits stopping a daemon after a package upgrade,
 	// but cannot verify a successful start or a replacement generation.
@@ -23,6 +24,38 @@ type Observation struct {
 	// snapshot retains host-wide generation evidence independently of the
 	// current unit's attributed tree. It is immutable and excludes zombies.
 	snapshot map[int]Identity
+}
+
+// RetainSurvivors follows old generations across selector/cgroup changes.
+// Losing attribution is not evidence of exit. Changed identities stay visible
+// but lose signal authority, so neither escalation nor start can hide them.
+func (o Observation) RetainSurvivors(previous []Process) []Process {
+	procs := slices.Clone(o.Processes)
+	for _, old := range previous {
+		id, alive := o.snapshot[old.PID]
+		if !alive || old.Delegated {
+			continue
+		}
+		if old.StartTicks != 0 && id.StartTicksOK && id.StartTicks != old.StartTicks {
+			continue
+		}
+		index := slices.IndexFunc(procs, func(p Process) bool { return p.PID == old.PID })
+		if index < 0 {
+			p := toProcess(id, old.Role, old.Source)
+			p.SignalBlockReason = "tracked process remains outside service discovery"
+			procs = append(procs, p)
+			continue
+		}
+		if old.UID != id.UID || old.Cgroup != id.Cgroup ||
+			old.signalExecutable() != procs[index].signalExecutable() ||
+			old.ExeFile.Inode != 0 && old.ExeFile != id.ExeFile {
+			procs[index].SignalBlockReason = "tracked process identity changed during cleanup"
+		}
+		if old.SignalBlockReason != "" {
+			procs[index].SignalBlockReason = old.SignalBlockReason
+		}
+	}
+	return procs
 }
 
 // VerifyExited checks old generations against the complete observed process
@@ -52,8 +85,24 @@ func (o Observation) VerifyExited(procs []Process) error {
 // Observe reuses discovery and matching against one immutable snapshot. It does
 // not signal processes or mutate the init state.
 func (d Discoverer) Observe(selectors []Selector) (Observation, error) {
+	return d.observe(selectors, false)
+}
+
+// ObserveTracked retains a complete snapshot while following old generations,
+// even when the backend stops reporting PIDs and no selectors are configured.
+// It does not turn loss of backend attribution into proof of process exit.
+func (d Discoverer) ObserveTracked(selectors []Selector, previous []Process) (Observation, error) {
+	out, err := d.observe(selectors, len(previous) > 0)
+	if err != nil {
+		return out, err
+	}
+	out.Processes = out.RetainSurvivors(previous)
+	return out, nil
+}
+
+func (d Discoverer) observe(selectors []Selector, requireSnapshot bool) (Observation, error) {
 	backend := backendPIDSeeds(d.BackendPIDs)
-	if len(selectors) == 0 && len(backend) == 0 {
+	if len(selectors) == 0 && len(backend) == 0 && !requireSnapshot {
 		return Observation{}, nil
 	}
 	reader := d.reader()
@@ -77,19 +126,15 @@ func (d Discoverer) Observe(selectors []Selector) (Observation, error) {
 		}
 	}
 	out := Observation{snapshot: snapshot, Processes: procs, IdentityRequired: slices.ContainsFunc(identities, func(s Selector) bool { return !s.Delegated && s.HasStrictIdentity() })}
-	// A replaced executable is still a live daemon. This diagnostic permits a
-	// backend stop, never a signal, and must not be mistaken for absence.
-	stale := frozen.StaleBinariesIn(procs, selectors)
-	for _, binary := range stale {
-		if id, ok := snapshot[binary.PID]; ok && !slices.ContainsFunc(out.Processes, func(p Process) bool { return p.PID == id.PID }) {
-			out.Processes = append(out.Processes, toProcess(id, RoleMain, SelectorCommandMatch))
-		}
-	}
+	// ReplacedExecutable is diagnostic evidence for a backend stop, not signal
+	// authority. The added candidates need independent verification for cleanup.
+	out.Processes = frozen.addDeletedCandidates(out.Processes, selectors)
+	out.Warnings = warnings
 	for _, proc := range out.Processes {
 		if proc.Delegated || proc.Stray {
 			continue
 		}
-		if _, ok := frozen.StrictMatchPID(proc.PID, identities); ok {
+		if _, ok := frozen.StrictMatchPID(proc.PID, identities); ok && !proc.External {
 			out.Trusted = true
 		}
 		for i := range identities {

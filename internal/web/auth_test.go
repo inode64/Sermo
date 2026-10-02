@@ -14,6 +14,8 @@ import (
 	"sermo/internal/webcred"
 )
 
+const headerWWWAuthenticate = "WWW-Authenticate"
+
 func authServer(a Auth) http.Handler {
 	return (&Server{Backend: StaticBackend{Backend: &fakeBackend{services: []Service{{Name: "web"}}}}, Auth: a}).Handler()
 }
@@ -212,7 +214,7 @@ func TestUnauthenticatedPageLoadsGoToLogin(t *testing.T) {
 			}
 			rec := httptest.NewRecorder()
 			h.ServeHTTP(rec, r)
-			// Only /login/basic ever summons the browser dialog now.
+			// Authentication failures never summon the browser dialog.
 			if rec.Header().Get(headerWWWAuthenticate) != "" {
 				t.Fatalf("WWW-Authenticate = %q, want none", rec.Header().Get(headerWWWAuthenticate))
 			}
@@ -225,41 +227,6 @@ func TestUnauthenticatedPageLoadsGoToLogin(t *testing.T) {
 			}
 			if rec.Code != http.StatusUnauthorized {
 				t.Fatalf("status = %d, want 401", rec.Code)
-			}
-		})
-	}
-}
-
-// The realm names the host so operators with many dashboards open can tell
-// which password prompt belongs to which machine.
-func TestAuthRealmIncludesHostname(t *testing.T) {
-	tests := []struct {
-		name     string
-		hostname string
-		want     string
-	}{
-		{name: "with short host", hostname: "algieba", want: `Basic realm="Sermo algieba"`},
-		{name: "empty falls back", hostname: "", want: `Basic realm="Sermo"`},
-		{name: "whitespace only falls back", hostname: "  ", want: `Basic realm="Sermo"`},
-		{name: "quoted specials escaped", hostname: `a"b\c`, want: `Basic realm="Sermo a\"b\\c"`},
-	}
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			if got := basicAuthChallenge(tc.hostname); got != tc.want {
-				t.Fatalf("basicAuthChallenge(%q) = %q, want %q", tc.hostname, got, tc.want)
-			}
-			h := (&Server{
-				Backend:  StaticBackend{Backend: &fakeBackend{services: []Service{{Name: "web"}}}},
-				Auth:     Auth{AdminCredentials: testCredentials(t, "secret")},
-				Hostname: tc.hostname,
-			}).Handler()
-			rec := httptest.NewRecorder()
-			h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, routePathLoginBasic, nil))
-			if rec.Code != http.StatusUnauthorized {
-				t.Fatalf("status = %d, want 401", rec.Code)
-			}
-			if got := rec.Header().Get(headerWWWAuthenticate); got != tc.want {
-				t.Fatalf("WWW-Authenticate = %q, want %q", got, tc.want)
 			}
 		})
 	}
@@ -497,19 +464,45 @@ func TestWhoamiWithoutResolvedRoleFailsClosed(t *testing.T) {
 	}
 }
 
-func TestLoginBasicChallengesThenRedirects(t *testing.T) {
-	h := authServer(Auth{AdminCredentials: testCredentials(t, "secret"), AnonymousGuest: true})
-	// a guest hitting /login/basic gets a Basic challenge (to escalate)
-	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, req(http.MethodGet, routePathLoginBasic, "", ""))
-	if rec.Code != http.StatusUnauthorized || rec.Header().Get(headerWWWAuthenticate) == "" {
-		t.Fatalf("/login/basic as guest = %d, want a 401 challenge", rec.Code)
-	}
-	// with admin creds it redirects home
-	rec = httptest.NewRecorder()
-	h.ServeHTTP(rec, req(http.MethodGet, routePathLoginBasic, "admin", "secret"))
-	if rec.Code != http.StatusSeeOther || landing(rec, routePathLoginBasic) != routePathRoot {
-		t.Fatalf("/login/basic as admin = %d loc=%q, want 303 /", rec.Code, rec.Header().Get("Location"))
+func TestRemovedBrowserLoginUsesDefaultAccessPolicy(t *testing.T) {
+	for _, tc := range []struct {
+		name           string
+		password       string
+		anonymousGuest bool
+		navigation     bool
+		want           int
+	}{
+		{name: "anonymous page uses form", navigation: true, want: http.StatusSeeOther},
+		{name: "anonymous API denied", want: http.StatusUnauthorized},
+		{name: "anonymous guest has no old route", anonymousGuest: true, want: http.StatusNotFound},
+		{name: "guest session has no old route", password: "guestpw", want: http.StatusNotFound},
+		{name: "admin session has no old route", password: "secret", want: http.StatusNotFound},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			lh := newLoginHarness(Auth{
+				AdminCredentials: testCredentials(t, "secret"),
+				GuestCredentials: testCredentials(t, "guestpw"),
+				AnonymousGuest:   tc.anonymousGuest,
+			})
+			r := httptest.NewRequest(http.MethodGet, "/login/basic", nil)
+			if tc.navigation {
+				r.Header.Set(headerSecFetchMode, secFetchModeNavigate)
+			}
+			if tc.password != "" {
+				cookie := sessionCookieFrom(lh.do(loginPost(tc.password)))
+				if cookie == nil {
+					t.Fatal("form login set no session cookie")
+				}
+				withSession(r, cookie)
+			}
+			rec := lh.do(r)
+			if rec.Code != tc.want || rec.Header().Get(headerWWWAuthenticate) != "" {
+				t.Fatalf("removed route = %d challenge=%q, want %d without a challenge", rec.Code, rec.Header().Get(headerWWWAuthenticate), tc.want)
+			}
+			if tc.navigation && landing(rec, r.URL.Path) != routePathLogin {
+				t.Fatalf("page load redirects to %q, want login form", rec.Header().Get(headerLocation))
+			}
+		})
 	}
 }
 

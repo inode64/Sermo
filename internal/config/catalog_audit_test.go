@@ -480,6 +480,8 @@ func TestSSHCatalogDelegatesSessionsButNotTheListener(t *testing.T) {
 		privsepTitle  = "sshd-session: fran [priv]"
 		sessionTitle  = "sshd-session: fran@pts/0"
 		legacyTitle   = "sshd: fran@pts/1"
+		acceptedTitle = "sshd-session: [accepted]"
+		legacyPending = "sshd: [accepted]"
 	)
 
 	byRole := catalogSelectorsByRole(t, "ssh")
@@ -500,10 +502,12 @@ func TestSSHCatalogDelegatesSessionsButNotTheListener(t *testing.T) {
 	}
 
 	title := regexp.MustCompile(session.Cmd)
-	if title.MatchString(listenerTitle) {
-		t.Fatalf("session cmd %q matches the listener; a stop could then never clean it up", session.Cmd)
+	for _, unowned := range []string{listenerTitle, "sshd-session: [accepted]suffix", "sshd: /usr/sbin/sshd [accepted]"} {
+		if title.MatchString(unowned) {
+			t.Fatalf("session cmd %q matches non-session title %q", session.Cmd, unowned)
+		}
 	}
-	for _, connected := range []string{privsepTitle, sessionTitle, legacyTitle} {
+	for _, connected := range []string{privsepTitle, sessionTitle, legacyTitle, acceptedTitle, legacyPending} {
 		if !title.MatchString(connected) {
 			t.Fatalf("session cmd %q does not match %q", session.Cmd, connected)
 		}

@@ -117,6 +117,22 @@ as service names only in the conservative one-service case where a configured
 service has the same name as the catalog service, such as `name: smb`,
 `uses: smb`, with catalog alias `samba`.
 
+### GlusterFS thin arbiter
+
+The `gluster-ta-volume` profile requires a non-empty volume file at
+`/var/lib/glusterd/thin-arbiter/thin-arbiter.vol`. Override `variables.config`
+when the systemd unit uses another path. Installing the GlusterFS binary alone
+does not configure the arbiter; Sermo blocks operations that require preflight
+when this file is missing or empty. `sermoctl repair` does not generate it.
+
+The packaged arbiter unit and `glusterd` both use port 24007. Check the listening
+addresses and the clients' arbiter endpoint before configuring them on one host.
+Changing only the arbiter's listening port does not update its clients. The
+profile monitors the arbiter unit; an active unit does not establish volume
+quorum or replication health. Follow the
+[GlusterFS thin-arbiter setup](https://docs.gluster.org/en/latest/Administrator-Guide/Thin-Arbiter-Volumes/)
+for the storage configuration.
+
 ## Library services
 
 A library service describes a shared library so configured services can restart
@@ -850,8 +866,11 @@ Docker Engine API operations:
 
 - `start` calls the container start endpoint.
 - `stop` calls the container stop endpoint with no Docker-side kill escalation;
-  Sermo's operation timeout is the outer bound, and residual handling remains in
-  Sermo's stop policy.
+  the request and subsequent graceful observation share
+  `stop_policy.graceful_timeout` (10 seconds when omitted or zero). If that
+  deadline expires, Sermo records the request error, discovers residuals and
+  applies its stop policy. The overall operation timeout still bounds every
+  phase; expiring or cancelling it prevents further escalation and start.
 - `restart` is still Sermo's safe stop+start flow.
 - `pause` freezes every process of a running container (`POST /pause`).
 - `resume` unpauses a paused container.
@@ -868,6 +887,20 @@ For process metrics and residual-process reporting, Sermo reads the container's
 `State.Pid` from Docker inspect and discovers that process tree. You normally do
 not need a `processes:` selector for a controlled container. Residual signaling
 is still authorized only by `stop_policy.kill_only_if`.
+After a timed-out stop request, a container without selectors is considered
+stopped only when a fresh process snapshot proves the previous process
+generations exited and Docker confirms the container is inactive. An empty PID
+lookup or incomplete process snapshot is insufficient.
+After process exit, Sermo allows up to four seconds for Docker to publish its
+inactive state, within the same operation deadline. Inspection errors or a
+container that remains active block the following start.
+The same evidence ends the graceful wait early when the container has already
+stopped; a successful stop need not consume the entire grace period.
+
+Reloading Sermo while a container is stopped preserves process observation for
+its next start. Service events, including automatic recovery, refresh the web
+status cache so a completed repair does not leave the previous inactive status
+displayed until the periodic backend refresh.
 
 `sermoctl wizard docker` can generate this service shape from containers
 detected through the local Docker socket. The generated check requires
@@ -963,11 +996,13 @@ also_service:
 ```
 
 These are plain init units driven directly by the service manager (not separate
-monitored services — that is `also_apply`). They are acted on in **wrap /
-socket-activation order**: started **before** the primary (strict — a failure
-aborts the operation before the primary starts), and stopped **after** it
-(best-effort — a stop failure is reported in the result message but does not fail
-an already-successful stop). `reload` touches the primary only. The primary's
+monitored services — that is `also_apply`). They are started **before** the
+primary in declaration order (strict — a failure aborts the operation before
+the primary starts). On systemd, auxiliary `.socket`, `.timer` and `.path`
+units stop **before** the primary, preventing activation during its shutdown.
+Other auxiliary units stop **after** the primary. Each stop group runs in
+reverse declaration order; stop failures remain best-effort warnings in the
+operation result. Cancellation stops the sequence. `reload` touches the primary only. The primary's
 guards, locks and preflight wrap the whole operation. Listing the primary unit in
 `also_service` is rejected.
 
@@ -1044,6 +1079,12 @@ processes:
   and everything that shell runs, none of which would match a selector of its own.
   Use it when the unit stops only its main process — systemd `KillMode=process` —
   so that stopping the daemon does not take its workload down with it.
+
+  The SSH profile delegates authenticated sessions and connections still in
+  the `[accepted]` authentication phase. Detached user workloads such as a
+  `tmux` server can outlive their SSH parent; declare their verified executable
+  and user with `delegated: true` in the host override to preserve them across
+  restarts. An undeclared orphan still blocks the following start.
 - `user` / `group` — the process real UID / GID owner.
 
 Do not use a generic helper executable shared by several units as a service
@@ -1147,7 +1188,9 @@ After a **clean** stop, the engine can verify the service left nothing behind:
 stop_policy:
   graceful_timeout: 30s
   pidfile_absent: true                      # the declared pidfile must be gone
-  files_absent: [/run/postgresql/.s.PGSQL*] # stale sockets/locks (globs)
+  files_absent:                            # this instance's sockets/locks
+    - /run/postgresql/.s.PGSQL.5432
+    - /run/postgresql/.s.PGSQL.5432.lock
   clean_after_stop: false                   # master opt-in: delete on stop
 ```
 
@@ -1162,6 +1205,12 @@ stop_policy:
   1. **deletes** any lingering `pidfile_absent`/`files_absent` artifact (the old
      `rm`-on-stop behavior), re-warning only if the delete fails; and
   2. **deletes** the `clean_on_stop` list below.
+
+On Gentoo, PostgreSQL's init script can refuse to start after a crash because a
+stale socket still exists. Once the instance's socket directory and port are
+confirmed, opt into `clean_after_stop` with those exact paths so a Sermo restart
+removes the stale socket after proving the processes have exited. Avoid a
+wildcard spanning other PostgreSQL instances in the same directory.
 
 `clean_on_stop` lists files and directories to **delete** on a clean stop (a
 maintenance cleanup, distinct from the `files_absent` invariant). It only deletes
@@ -1183,6 +1232,21 @@ stop_policy:
   concrete (non-glob) path at least two levels deep and not the filesystem root or
   a shallow system directory (`/`, `/etc`, `/usr`, `/var`, `/var/lib`, …) — those
   are refused at validation time. A delete failure is a warning, not a failure.
+
+### Residuals after a package upgrade
+
+A stopped service can leave an auxiliary process whose binary was replaced by
+an upgrade. Both `sermoctl start SERVICE` and `sermoctl restart SERVICE` clean
+up authorized residuals before starting, using the same `stop_policy` as stop.
+`force_kill: false` still forbids that cleanup. A deleted executable needs the
+additional kernel-file and ownership verification described in
+[safety.md](safety.md#stop-and-signal-escalation); no extra YAML switch is needed.
+
+Use `sermoctl processes SERVICE` to inspect the same deleted-executable candidates
+that an operation sees. They retain their selector role and expose
+`exe_previous`, `external` and `signal_block_reason` where applicable. An external
+candidate that cannot be cleaned up blocks restart before stopping a healthy
+current daemon. A helper is never evidence of a successful new main process.
 
 ### Unclaimed control-group members (`reap`)
 
@@ -1660,6 +1724,12 @@ Put the exact systemd instance first in `service.systemd`, e.g.
 discovered PHP-FPM versions operate on the same unit. The pidfile check is
 optional because some systemd units publish `MainPID` even when the declared
 `PIDFile=` is not written.
+
+PHP-FPM's worker selector and residual cleanup policy use `variables.user`:
+`apache` on Gentoo and `www-data` otherwise. Set this variable to the pool's
+actual user when it differs. After a master crash, workers can survive without
+a usable pidfile; their exact executable and user must still match before
+Sermo can clean them up and start the service.
 
 ### Optional components (`enable_if`)
 

@@ -76,11 +76,14 @@ func TestLoginPageIsAPasswordOnlyForm(t *testing.T) {
 	body := rec.Body.String()
 	for _, want := range []string{
 		`type="password"`, `autocomplete="current-password"`, `method="post"`, `action="login"`,
-		`href="login/basic"`, "k2keu3",
+		"k2keu3",
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("login page missing %q", want)
 		}
+	}
+	if strings.Contains(body, "login/basic") {
+		t.Error("login page still offers the removed browser password dialog")
 	}
 	// One credential field: no username for a password manager to stumble on.
 	if strings.Count(body, "<input") != 1 {
@@ -498,7 +501,6 @@ func TestLoginRoutesAreMuxRoutes(t *testing.T) {
 	}{
 		{http.MethodPut, routePathLogin, "POST"},
 		{http.MethodDelete, routePathLogout, "POST"},
-		{http.MethodPost, routePathLoginBasic, "GET"},
 	} {
 		if rec := lh.do(req(tc.method, tc.path, "", "")); rec.Code != http.StatusUnauthorized {
 			t.Errorf("anonymous %s %s = %d, want 401", tc.method, tc.path, rec.Code)
@@ -510,11 +512,45 @@ func TestLoginRoutesAreMuxRoutes(t *testing.T) {
 	}
 }
 
-func TestEscapedLoginPathIsNotExempt(t *testing.T) {
-	lh := newLoginHarness(Auth{AdminCredentials: testCredentials(t, "secret")})
-	r := httptest.NewRequest(http.MethodGet, "/login%2Fbasic", nil)
-	if rec := lh.do(r); rec.Code != http.StatusUnauthorized && rec.Code != http.StatusSeeOther {
-		t.Fatalf("GET /login%%2Fbasic = %d, want the default unauthenticated answer", rec.Code)
+func TestLoginRouteAccessBoundaries(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		method string
+		path   string
+		csrf   bool
+		want   int
+	}{
+		{name: "form read", method: http.MethodGet, path: routePathLogin, want: http.StatusOK},
+		{name: "form head", method: http.MethodHead, path: routePathLogin, want: http.StatusOK},
+		{name: "escaped login segment", method: http.MethodGet, path: "/log%69n", want: http.StatusOK},
+		{name: "form submit with query", method: http.MethodPost, path: "/login?next=/", want: http.StatusSeeOther},
+		{name: "logout without session", method: http.MethodPost, path: routePathLogout, csrf: true, want: http.StatusOK},
+		{name: "logout needs CSRF", method: http.MethodPost, path: routePathLogout, want: http.StatusForbidden},
+		{name: "logout GET is not public", method: http.MethodGet, path: routePathLogout, want: http.StatusUnauthorized},
+		{name: "form PUT is not public", method: http.MethodPut, path: routePathLogin, csrf: true, want: http.StatusUnauthorized},
+		{name: "form suffix is not public", method: http.MethodGet, path: "/login/extra", want: http.StatusUnauthorized},
+		{name: "retired route is not public", method: http.MethodGet, path: "/login/basic", want: http.StatusUnauthorized},
+		{name: "encoded slash is not public", method: http.MethodGet, path: "/login%2Fbasic", want: http.StatusUnauthorized},
+		{name: "retired submit needs CSRF", method: http.MethodPost, path: "/login/basic", want: http.StatusForbidden},
+		{name: "retired submit needs auth", method: http.MethodPost, path: "/login/basic", csrf: true, want: http.StatusUnauthorized},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			lh := newLoginHarness(Auth{AdminCredentials: testCredentials(t, "secret")})
+			form := url.Values{loginFieldPassword: {"secret"}}
+			r := httptest.NewRequest(tc.method, tc.path, strings.NewReader(form.Encode()))
+			r.Header.Set(headerContentType, "application/x-www-form-urlencoded")
+			r.Header.Set(headerOrigin, "http://"+r.Host)
+			if tc.csrf {
+				r.Header.Set(HeaderCSRF, "1")
+			}
+			rec := lh.do(r)
+			if rec.Code != tc.want || rec.Header().Get(headerWWWAuthenticate) != "" {
+				t.Fatalf("%s %s = %d challenge=%q, want %d without a challenge", tc.method, tc.path, rec.Code, rec.Header().Get(headerWWWAuthenticate), tc.want)
+			}
+			if cookie := sessionCookieFrom(rec); cookie != nil && cookie.MaxAge > 0 && tc.want != http.StatusSeeOther {
+				t.Fatalf("%s %s unexpectedly issued a session", tc.method, tc.path)
+			}
+		})
 	}
 }
 

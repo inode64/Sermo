@@ -243,7 +243,7 @@ func TestServiceNoResidentProcessInfersInitServiceWithoutPIDs(t *testing.T) {
 		t.Fatalf("selectors = %+v, want none", selectors)
 	}
 	if !serviceNoResidentProcess(tree, selectors,
-		ServiceBackendPIDs(t.Context(), deps.Backend, "wait-online.service", deps.BackendPIDs, deps.ExecxRunner)) {
+		ServiceBackendPIDs(t.Context(), deps.Backend, "wait-online.service", deps.BackendPIDs, deps.ExecxRunner), deps.Backend) {
 		t.Fatal("service without selectors or backend PIDs must be treated as no resident process")
 	}
 }
@@ -255,8 +255,17 @@ func TestServiceNoResidentProcessKeepsBackendPIDServiceResident(t *testing.T) {
 	}
 
 	if serviceNoResidentProcess(map[string]any{}, nil,
-		ServiceBackendPIDs(t.Context(), deps.Backend, "web.service", deps.BackendPIDs, deps.ExecxRunner)) {
+		ServiceBackendPIDs(t.Context(), deps.Backend, "web.service", deps.BackendPIDs, deps.ExecxRunner), deps.Backend) {
 		t.Fatal("service with backend PIDs must not be treated as no resident process")
+	}
+}
+
+func TestServiceNoResidentProcessKeepsStoppedContainerResident(t *testing.T) {
+	if serviceNoResidentProcess(map[string]any{}, nil, func() []int { return nil }, servicemgr.BackendDocker) {
+		t.Fatal("a container without a PID during reload must retain process observation after recovery")
+	}
+	if !serviceNoResidentProcess(map[string]any{config.SectionProcesses: map[string]any{}}, nil, nil, servicemgr.BackendDocker) {
+		t.Fatal("explicit empty processes must retain its configured meaning")
 	}
 }
 

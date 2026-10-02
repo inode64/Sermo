@@ -98,17 +98,6 @@ func (s *Server) handleLoginForm(w http.ResponseWriter, r *http.Request) {
 	s.renderLogin(w, r, http.StatusOK, "")
 }
 
-// handleLoginBasic summons the browser's own password dialog, kept as an
-// alternative to the form: it challenges until the browser sends an admin
-// credential, then goes home.
-func (s *Server) handleLoginBasic(w http.ResponseWriter, r *http.Request) {
-	if roleFrom(r.Context()) == roleAdmin {
-		redirectWithin(w, r, "")
-		return
-	}
-	s.challenge(w)
-}
-
 // handleLoginSubmit checks the form's password. A correct one starts a session
 // cookie carrying the role it grants.
 func (s *Server) handleLoginSubmit(w http.ResponseWriter, r *http.Request) {

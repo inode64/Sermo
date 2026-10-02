@@ -1007,13 +1007,10 @@ web:
 
 **HTTP Basic auth keeps working** for API clients: `sermoctl` (with the runtime
 token), `curl -u any:PASSWORD` and scripts send the password on every request,
-with any username. The browser's own password dialog stays available as an
-alternative to the form at **`/login/basic`** (linked from the form): it
-challenges with a **per-host realm**, `Basic realm="Sermo <hostname>"`, where
-`<hostname>` is the same short host identity as `${hostname}` (first DNS label,
-or `SERMO_HOSTNAME` when set), and returns home once you are admin.
+with any username. Browser login uses only the **`/login` form** and its session
+cookie.
 
-Nothing else ever answers with a `WWW-Authenticate` challenge: the JSON API and
+Sermo never answers with a `WWW-Authenticate` challenge: the JSON API and
 `/api/stream`, the Server-Sent Events channel the dashboard keeps open, get a
 plain `401`. The stream reconnects on its own every five seconds, and when those
 replies carried the challenge the browser raised a modal password box at an
@@ -3874,6 +3871,7 @@ variable and have every `${var}` reference resolve to the new value.
 - Disable an inherited entry with `enabled: false`; delete it with
   `delete: true`. Both take the literals `true` or `false`: YAML 1.2 reads
   `no`, `yes` and quoted `"false"` as strings, and validation rejects them.
+  Disabled checks do not run or appear as pending checks in service monitoring.
 
 ## Per-host overrides (`<dir>.local`)
 

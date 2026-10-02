@@ -9,6 +9,7 @@ import (
 	"sermo/internal/app"
 	"sermo/internal/config"
 	"sermo/internal/process"
+	"sermo/internal/servicemgr"
 )
 
 func (a App) runProcesses(ctx context.Context, opts options) int {
@@ -32,16 +33,27 @@ func (a App) discoverProcesses(ctx context.Context, opts options, cfg *config.Co
 	discoverer := process.NewDiscovererWithUserLookup(app.EngineUserLookup(cfg, a.Runner))
 	dependencies, err := a.controlDependenciesFor(ctx, opts.backend)
 	if err != nil {
-		return discoverer.Discover(selectors)
+		return observedProcesses(discoverer, selectors)
 	}
 	target, err := a.resolveControlTarget(ctx, opts, service, resolved.Tree, dependencies.backend, dependencies.manager, dependencies.resolver)
 	if err != nil {
-		return discoverer.Discover(selectors)
+		return observedProcesses(discoverer, selectors)
 	}
 	if backendPIDs := app.ServiceBackendPIDs(ctx, target.Backend, target.Unit, target.BackendPIDs, a.Runner); backendPIDs != nil {
 		discoverer.BackendPIDs = backendPIDs
 	}
-	return discoverer.Discover(selectors)
+	discoverer.ProcessOwnership = func(id process.Identity) (bool, bool) {
+		return servicemgr.CgroupOwnership(id.Cgroup, target.Unit)
+	}
+	return observedProcesses(discoverer, selectors)
+}
+
+func observedProcesses(discoverer process.Discoverer, selectors []process.Selector) ([]process.Process, []string) {
+	observation, err := discoverer.Observe(selectors)
+	if err != nil {
+		observation.Warnings = append(observation.Warnings, err.Error())
+	}
+	return observation.Processes, observation.Warnings
 }
 
 func formatProcess(p process.Process) string {
@@ -56,12 +68,21 @@ func formatProcess(p process.Process) string {
 	if p.Stray {
 		line += " stray=true"
 	}
+	if p.External {
+		line += " external=true"
+	}
+	if p.SignalBlockReason != "" {
+		line += " blocked=" + strconv.Quote(p.SignalBlockReason)
+	}
 	return line
 }
 
 func processDisplayField(p process.Process) (key, value string) {
 	if p.ExeOK && p.Exe != "" {
 		return process.SelectorKeyExe, p.Exe
+	}
+	if p.ExePrev != "" {
+		return "exe_previous", strconv.Quote(p.ExePrev + " (deleted)")
 	}
 	if cmd := strings.TrimSpace(strings.Join(p.Cmdline, " ")); cmd != "" {
 		return process.SelectorKeyCmd, strconv.Quote(cmd)

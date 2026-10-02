@@ -4,8 +4,8 @@
 // resolved target of /proc/<pid>/exe, and the user match is on the real UID.
 // Cmdline may be used only by an explicit process cmd selector to narrow
 // discovery for shared binaries; it never authorizes signaling. An unresolvable
-// or "(deleted)" exe never matches an exe selector, so an unidentifiable process
-// is reported, never killed.
+// exe never matches an exe selector. Deleted-executable cleanup additionally
+// requires a verified kernel-held file and service ownership.
 //
 // Reads /proc directly through the Reader interface (hermetic in tests)
 // rather than pulling a procfs dependency, matching how internal/locks reads
@@ -53,9 +53,35 @@ type Process struct {
 
 	// ExePrev is the path of a binary replaced or removed on disk while this
 	// process kept running — typically a package upgrade without a restart.
-	// Diagnostic only: ExeOK stays false, so the process matches no exe
-	// selector and is never signalled.
+	// ExeOK stays false: this cannot prove a healthy new start. Cleanup may
+	// authorize it only with ExeFile and a matching exact path/real UID.
 	ExePrev string `json:"exe_previous,omitempty"`
+	// ExeFile identifies the still-open unlinked executable, not its replacement
+	// at ExePrev. It is collected only for deleted executables.
+	ExeFile ExecutableFile `json:"exe_file,omitzero"`
+	// External marks a deleted-executable candidate outside the attributed tree.
+	External bool `json:"external,omitempty"`
+	// SignalBlockReason retains an ownership refusal from fresh observation.
+	SignalBlockReason string `json:"signal_block_reason,omitempty"`
+	// Cgroup retains kernel ownership evidence for revalidation before a signal.
+	Cgroup string `json:"cgroup,omitempty"`
+}
+
+// ExecutableFile binds a deleted executable to the kernel's file object. The
+// path and real UID still authorize it; these numbers only bind revalidation.
+type ExecutableFile struct {
+	Device uint64 `json:"device"`
+	Inode  uint64 `json:"inode"`
+}
+
+func (p Process) signalExecutable() string {
+	if p.ExeOK && p.Exe != "" {
+		return p.Exe
+	}
+	if p.ExePrev != "" && p.ExeFile.Inode != 0 {
+		return p.ExePrev
+	}
+	return ""
 }
 
 // Strays keeps the processes the unit's control group attributes to the service
@@ -205,9 +231,9 @@ type Selector struct {
 //
 // ExePrev discriminates the "(deleted)" case from an unreadable link, which
 // ExeOK alone cannot: it is set only when the binary was replaced, and holds
-// the path it occupied. Diagnostic only — ExeOK stays false either way, so a
-// process whose binary was replaced still matches no exe selector and is never
-// signalled (see docs/safety.md).
+// the path it occupied. ExeOK stays false: a replaced binary cannot prove a
+// healthy new start. ExeFile permits separately authorized residual cleanup
+// (see docs/safety.md).
 type Identity struct {
 	PID  int
 	PPID int
@@ -227,6 +253,8 @@ type Identity struct {
 	Exe          string
 	ExeOK        bool
 	ExePrev      string // path of the replaced binary; empty unless it was deleted
+	ExeFile      ExecutableFile
+	Cgroup       string
 	State        string // /proc/<pid>/stat run state: R, S, D, Z (zombie), ...
 	Cmdline      []string
 }

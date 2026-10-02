@@ -1,6 +1,52 @@
 package config
 
-import "testing"
+import (
+	"slices"
+	"testing"
+
+	"sermo/internal/cfgval"
+)
+
+// Workers must remain discoverable and authorized for residual cleanup after
+// the master dies and its pidfile no longer anchors the process tree.
+func TestPHPFPMCatalogWorkerIdentity(t *testing.T) {
+	bindir := t.TempDir()
+	fakeBinary(t, bindir, "php-fpm8.4")
+	stubBinDirs(t, bindir)
+	for _, tt := range []struct {
+		name, os, override, want string
+	}{
+		{name: "gentoo", os: "gentoo", want: "apache"},
+		{name: "debian", os: "debian", want: "www-data"},
+		{name: "custom pool", os: "gentoo", override: "variables: {user: site}\n", want: "site"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			old := detectedOS
+			detectedOS = tt.os
+			t.Cleanup(func() { detectedOS = old })
+			global := writeConfig(t, map[string]string{
+				"sermo.yml":        "engine: {backend: openrc}\npaths: {services: [@ROOT@/services]}\ndefaults: {policy: {cooldown: 5m}}\n",
+				"services/php.yml": "name: php-fpm8.4\nuses: php-fpm8.4\n" + tt.override,
+			})
+			cfg, err := loadConfig(t, global, WithCatalogDirs(repoCatalogDir(repoRoot(t))), withServiceUnits("openrc", nil))
+			if err != nil {
+				t.Fatal(err)
+			}
+			resolved, errs := cfg.Resolve("php-fpm8.4")
+			if len(errs) != 0 {
+				t.Fatal(errs)
+			}
+			worker := nested(t, resolved.Tree, "processes", "workers")
+			if worker["user"] != tt.want || worker["exe"] == "" {
+				t.Fatalf("worker identity = %v, want exact executable and user %q", worker, tt.want)
+			}
+			kill := nested(t, resolved.Tree, "stop_policy", "kill_only_if")
+			if !slices.Contains(cfgval.StringList(kill["users"]), tt.want) || !slices.Contains(cfgval.StringList(kill["exe_any"]), cfgval.String(worker["exe"])) {
+				t.Fatalf("kill selector %v does not authorize worker identity %v", kill, worker)
+			}
+		})
+	}
+}
 
 // TestPHPFPMCatalogDisabledProbeValidates checks that the shipped php-fpm
 // template, with its fpm status probe disabled, validates on both init

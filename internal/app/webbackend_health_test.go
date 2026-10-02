@@ -288,6 +288,41 @@ func TestWebBackendServiceStateStartupCollectingMonitored(t *testing.T) {
 	}
 }
 
+func TestWebBackendDisabledCheckDoesNotBlockObservability(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		entry     any
+		wantReady bool
+	}{
+		{name: "disabled", entry: map[string]any{"type": "pidfile", "enabled": false}, wantReady: true},
+		{name: "enabled pending", entry: map[string]any{"type": "pidfile", "enabled": true}},
+		{name: "malformed remains visible", entry: "invalid"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			catalog := checkCatalog(map[string]any{"checks": map[string]any{
+				"http": map[string]any{"type": "http"}, "pidfile": tc.entry,
+			}}, 30*time.Second)
+			entry := &webEntry{
+				checkNames: catalog.names, checkTypes: catalog.types, checkIntervals: catalog.intervals,
+				noResidentProcess: true,
+				status:            func(context.Context) (servicemgr.Status, error) { return servicemgr.StatusActive, nil },
+			}
+			snaps := NewSnapshots()
+			snaps.publishWithCheckTypes("web", map[string]checks.Result{
+				"http": {Check: "http", OK: true},
+			}, map[string]bool{"http": true}, catalog.types)
+			backend := &WebBackend{snapshots: snaps}
+			svc := backend.view(t.Context(), "web", entry)
+			if svc.ObservabilityReady != tc.wantReady {
+				t.Fatalf("observability ready = %v, missing %v; want %v", svc.ObservabilityReady, svc.ObservabilityMissing, tc.wantReady)
+			}
+			if tc.wantReady && svc.State != TargetStateMonitored {
+				t.Fatalf("disabled check left service in %q; want monitored", svc.State)
+			}
+		})
+	}
+}
+
 // An active service whose process selectors match nothing used to sit in
 // "collecting" for as long as it ran, because the runtime indicator never
 // arrived and nothing distinguished "late" from "never".

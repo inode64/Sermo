@@ -200,42 +200,42 @@ func (w *procWatcher) runCycle(ctx context.Context) {
 
 	t := now()
 	seen := make(map[int]bool, len(samples))
-	for _, s := range samples {
+	for i := range samples {
 		if ctx.Err() != nil {
 			return
 		}
-		seen[s.PID] = true
-		st := w.state[s.PID]
-		if st != nil && st.supersededBy(s) {
+		seen[samples[i].PID] = true
+		st := w.state[samples[i].PID]
+		if st != nil && st.supersededBy(samples[i]) {
 			// Another process now holds this PID. The one we tracked is gone even
 			// though the number is still in use, and the sweep below only sees PIDs
 			// absent from the sample — so report it here, before dropping its state.
-			w.fireGone(ctx, s.PID, st, t)
+			w.fireGone(ctx, samples[i].PID, st, t)
 			st = nil
 		}
 		if st == nil {
 			st = &procState{firstSeen: t}
-			w.state[s.PID] = st
+			w.state[samples[i].PID] = st
 		}
 		// Adopt each start reading on the first sample that carries it: a transient
 		// /proc read failure must not pin this PID to the fallback age, nor leave it
 		// without the identity that detects PID reuse.
 		if st.startTime.IsZero() {
-			st.startTime = s.StartTime
+			st.startTime = samples[i].StartTime
 		}
 		if st.startTicks == 0 {
-			st.startTicks = s.StartTicks
+			st.startTicks = samples[i].StartTicks
 		}
 
-		fire, env, msg := w.evaluate(st, t, s)
+		fire, env, msg := w.evaluate(st, t, samples[i])
 		if fire && !st.fired && !observeOnlyCycle(ctx) {
-			w.fire(ctx, s, msg, env)
+			w.fire(ctx, samples[i], msg, env)
 		}
 		if !observeOnlyCycle(ctx) {
 			st.fired = fire
 		}
 		// Remember this sample for next cycle's rate computation.
-		st.prevCPU, st.prevIO, st.prevAt, st.hadIO = s.CPUTicks, s.IOBytes, t, s.HasIO
+		st.prevCPU, st.prevIO, st.prevAt, st.hadIO = samples[i].CPUTicks, samples[i].IOBytes, t, samples[i].HasIO
 	}
 
 	// Processes that vanished: fire `gone` (if configured) once per PID, then drop
@@ -305,12 +305,12 @@ func (w *procWatcher) publishSnapshot(samples []ProcInfo, ok bool) {
 func processWatchData(name, user string, samples []ProcInfo) map[string]any {
 	var rssTotal, cpuTicksTotal, ioTotal uint64
 	ioKnown := false
-	for _, sample := range samples {
-		rssTotal += sample.RSS
-		cpuTicksTotal += sample.CPUTicks
-		if sample.HasIO {
+	for i := range samples {
+		rssTotal += samples[i].RSS
+		cpuTicksTotal += samples[i].CPUTicks
+		if samples[i].HasIO {
 			ioKnown = true
-			ioTotal += sample.IOBytes
+			ioTotal += samples[i].IOBytes
 		}
 	}
 	data := map[string]any{
@@ -550,15 +550,17 @@ func (w *procWatcher) matchingProcess(pid int) (ProcInfo, bool) {
 	if !ok {
 		return ProcInfo{}, false
 	}
-	for _, sample := range samples {
-		if sample.PID == pid {
-			return sample, true
+	for i := range samples {
+		if samples[i].PID == pid {
+			return samples[i], true
 		}
 	}
 	return ProcInfo{}, false
 }
 
 func (s ProcInfo) asProcess() process.Process {
+	// Host process watches do not establish service ownership for a deleted
+	// executable, so they intentionally carry no ExeFile cleanup authority.
 	return process.Process{
 		PID:        s.PID,
 		StartTicks: s.StartTicks,

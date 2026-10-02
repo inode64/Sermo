@@ -52,26 +52,22 @@ const (
 	headerXForwardedProto       = "X-Forwarded-Proto"
 	secFetchModeNavigate        = "navigate"
 	contentTypeHTML             = "text/html"
-	headerWWWAuthenticate       = "WWW-Authenticate"
 	headerXContentTypeOptions   = "X-Content-Type-Options"
 	headerXFrameOptions         = "X-Frame-Options"
-	// authBasicRealmPrefix is the product name in WWW-Authenticate realms.
-	// challenge() appends the short hostname when known: `Basic realm="Sermo algieba"`.
-	authBasicRealmPrefix       = "Sermo"
-	contentTypeHTMLUTF8        = "text/html; charset=utf-8"
-	contentTypeJSON            = httpx.ContentTypeJSON
-	contentTypeTextUTF8        = "text/plain; charset=utf-8"
-	headerValueDeny            = "DENY"
-	headerValueNoCache         = "no-cache"
-	headerValueNoStore         = "no-store"
-	headerValueNoReferrer      = "no-referrer"
-	headerValueSameOrigin      = "same-origin"
-	headerValueNoSniff         = "nosniff"
-	cspNonceBytes              = 16
-	cspFallbackNonceBase       = 36
-	assetIndexHTML             = "index.html"
-	templateNoncePlaceholder   = "{{CSP_NONCE}}"
-	templateVersionPlaceholder = "{{VERSION}}"
+	contentTypeHTMLUTF8         = "text/html; charset=utf-8"
+	contentTypeJSON             = httpx.ContentTypeJSON
+	contentTypeTextUTF8         = "text/plain; charset=utf-8"
+	headerValueDeny             = "DENY"
+	headerValueNoCache          = "no-cache"
+	headerValueNoStore          = "no-store"
+	headerValueNoReferrer       = "no-referrer"
+	headerValueSameOrigin       = "same-origin"
+	headerValueNoSniff          = "nosniff"
+	cspNonceBytes               = 16
+	cspFallbackNonceBase        = 36
+	assetIndexHTML              = "index.html"
+	templateNoncePlaceholder    = "{{CSP_NONCE}}"
+	templateVersionPlaceholder  = "{{VERSION}}"
 )
 
 const (
@@ -95,11 +91,8 @@ const (
 	routePathLivez  = "/livez"
 	routePathReadyz = "/readyz"
 	routePathLogin  = "/login"
-	// routePathLoginBasic summons the browser's own password dialog, the
-	// alternative to the /login form.
-	routePathLoginBasic = "/login/basic"
-	routePathLogout     = "/logout"
-	apiPathPrefix       = APIPathRoot + "/"
+	routePathLogout = "/logout"
+	apiPathPrefix   = APIPathRoot + "/"
 )
 
 // API path segment names used by routing and access-log classification.
@@ -243,7 +236,6 @@ const (
 	routeIndex                        = routeMethodGet + routePathRoot
 	routeLoginForm                    = routeMethodGet + routePathLogin
 	routeLoginSubmit                  = routeMethodPost + routePathLogin
-	routeLoginBasic                   = routeMethodGet + routePathLoginBasic
 	routeLogout                       = routeMethodPost + routePathLogout
 	routeLivez                        = routeMethodGet + routePathLivez
 	routeReadyz                       = routeMethodGet + routePathReadyz
@@ -328,11 +320,9 @@ type Server struct {
 	Auth    Auth
 	Logger  *slog.Logger
 
-	// Hostname is the short host identity shown on the /login page and in the
-	// /login/basic realm (`Basic realm="Sermo <Hostname>"`), so multi-host
-	// operators and their password managers can tell dashboards apart. Empty
-	// falls back to realm "Sermo". The daemon sets it from
-	// config.ShortHostname() (same source as ${hostname}).
+	// Hostname is the short host identity shown on the /login page so operators
+	// and their password managers can tell dashboards apart. The daemon sets
+	// it from config.ShortHostname() (same source as ${hostname}).
 	Hostname string
 
 	// LoginMessage is web.login_message: a short plain-text note shown under
@@ -425,7 +415,6 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc(routeIndex, s.handleIndex)
 	mux.HandleFunc(routeLoginForm, s.handleLoginForm)
 	mux.HandleFunc(routeLoginSubmit, s.handleLoginSubmit)
-	mux.HandleFunc(routeLoginBasic, s.handleLoginBasic)
 	mux.HandleFunc(routeLogout, s.handleLogout)
 	mux.HandleFunc(routeLivez, s.handleLivez)
 	mux.HandleFunc(routeReadyz, s.handleReadyz)

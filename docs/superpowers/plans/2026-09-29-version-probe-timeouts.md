@@ -112,14 +112,14 @@ sarin tiene Salt en python3.14, así que fijar el intérprete era frágil.
 
 ```go
 func TestInspectMarksProbeTimeout(t *testing.T) {
-	cfg := configWithResolved(t, preflightResolved("/bin/true", "50ms")) // helper existente o equivalente
-	r := InspectOne(context.Background(), slowRunner{}, cfg, "x")
-	if !r.TimedOut {
-		t.Fatalf("a probe that exceeds its timeout must set TimedOut: %+v", r)
-	}
-	if r.ProbeDuration < 50*time.Millisecond {
-		t.Fatalf("ProbeDuration = %v, want >= timeout", r.ProbeDuration)
-	}
+    cfg := configWithResolved(t, preflightResolved("/bin/true", "50ms")) // helper existente o equivalente
+    r := InspectOne(context.Background(), slowRunner{}, cfg, "x")
+    if !r.TimedOut {
+        t.Fatalf("a probe that exceeds its timeout must set TimedOut: %+v", r)
+    }
+    if r.ProbeDuration < 50*time.Millisecond {
+        t.Fatalf("ProbeDuration = %v, want >= timeout", r.ProbeDuration)
+    }
 }
 ```
 
@@ -129,11 +129,11 @@ func TestInspectMarksProbeTimeout(t *testing.T) {
 
 ```go
 // Report
-	// ProbeDuration is how long the version command took (zero when no probe ran).
-	ProbeDuration time.Duration `json:"probe_duration,omitempty"`
-	// TimedOut marks a version probe that exceeded its own deadline: the app was
-	// not observed, which is not evidence that it is broken.
-	TimedOut bool `json:"timed_out,omitempty"`
+    // ProbeDuration is how long the version command took (zero when no probe ran).
+    ProbeDuration time.Duration `json:"probe_duration,omitempty"`
+    // TimedOut marks a version probe that exceeded its own deadline: the app was
+    // not observed, which is not evidence that it is broken.
+    TimedOut bool `json:"timed_out,omitempty"`
 ```
 
 En `runVersionProbe`, rellenar `duration: res.Duration` y
@@ -164,39 +164,39 @@ eros2 arranca ~10 JVM + Python en la misma ventana.
 
 ```go
 func TestProbeLimiterBoundsConcurrency(t *testing.T) {
-	l := newProbeLimiter(2)
-	var cur, peak atomic.Int32
-	var wg sync.WaitGroup
-	for range 8 {
-		wg.Go(func() {
-			release, err := l.acquire(context.Background())
-			if err != nil {
-				t.Error(err)
-				return
-			}
-			defer release()
-			if n := cur.Add(1); n > peak.Load() {
-				peak.Store(n)
-			}
-			time.Sleep(5 * time.Millisecond)
-			cur.Add(-1)
-		})
-	}
-	wg.Wait()
-	if peak.Load() > 2 {
-		t.Fatalf("peak concurrency = %d, want <= 2", peak.Load())
-	}
+    l := newProbeLimiter(2)
+    var cur, peak atomic.Int32
+    var wg sync.WaitGroup
+    for range 8 {
+        wg.Go(func() {
+            release, err := l.acquire(context.Background())
+            if err != nil {
+                t.Error(err)
+                return
+            }
+            defer release()
+            if n := cur.Add(1); n > peak.Load() {
+                peak.Store(n)
+            }
+            time.Sleep(5 * time.Millisecond)
+            cur.Add(-1)
+        })
+    }
+    wg.Wait()
+    if peak.Load() > 2 {
+        t.Fatalf("peak concurrency = %d, want <= 2", peak.Load())
+    }
 }
 
 func TestProbeLimiterHonoursCancel(t *testing.T) {
-	l := newProbeLimiter(1)
-	release, _ := l.acquire(context.Background())
-	defer release()
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-	if _, err := l.acquire(ctx); err == nil {
-		t.Fatal("acquire on a cancelled context must fail")
-	}
+    l := newProbeLimiter(1)
+    release, _ := l.acquire(context.Background())
+    defer release()
+    ctx, cancel := context.WithCancel(context.Background())
+    cancel()
+    if _, err := l.acquire(ctx); err == nil {
+        t.Fatal("acquire on a cancelled context must fail")
+    }
 }
 ```
 
@@ -208,8 +208,8 @@ func TestProbeLimiterHonoursCancel(t *testing.T) {
 package appinspect
 
 import (
-	"context"
-	"runtime"
+    "context"
+    "runtime"
 )
 
 // probeLimiter bounds how many catalog probes run at once across app watches,
@@ -221,12 +221,12 @@ type probeLimiter chan struct{}
 func newProbeLimiter(n int) probeLimiter { return make(probeLimiter, max(n, 1)) }
 
 func (l probeLimiter) acquire(ctx context.Context) (func(), error) {
-	select {
-	case l <- struct{}{}:
-		return func() { <-l }, nil
-	case <-ctx.Done():
-		return nil, ctx.Err()
-	}
+    select {
+    case l <- struct{}{}:
+        return func() { <-l }, nil
+    case <-ctx.Done():
+        return nil, ctx.Err()
+    }
 }
 
 // probeSlots is shared by every inspection in the process.
@@ -269,27 +269,27 @@ Semántica (fail-safe: `restart-on-change` nunca reinicia por una muestra no obs
 
 ```go
 func TestStoreAppVersionKeepsLastGoodOnSingleTimeout(t *testing.T) {
-	s := NewArtifactSamples()
-	s.RegisterApp("salt-minion")
-	s.StoreAppReport("salt-minion", appinspect.Report{Version: "salt-minion 3007.14", Status: appinspect.StatusOK})
-	s.StoreAppReport("salt-minion", appinspect.Report{Status: "error: timeout after 10s", TimedOut: true})
-	v, st, ok := s.AppVersion("salt-minion")
-	if !ok || st != appinspect.StatusOK || v != "salt-minion 3007.14" {
-		t.Fatalf("single timeout must keep last good sample, got %q %q %v", v, st, ok)
-	}
-	s.StoreAppReport("salt-minion", appinspect.Report{Status: "error: timeout after 10s", TimedOut: true})
-	if _, st, _ := s.AppVersion("salt-minion"); st == appinspect.StatusOK {
-		t.Fatal("second consecutive timeout must surface the timeout status")
-	}
+    s := NewArtifactSamples()
+    s.RegisterApp("salt-minion")
+    s.StoreAppReport("salt-minion", appinspect.Report{Version: "salt-minion 3007.14", Status: appinspect.StatusOK})
+    s.StoreAppReport("salt-minion", appinspect.Report{Status: "error: timeout after 10s", TimedOut: true})
+    v, st, ok := s.AppVersion("salt-minion")
+    if !ok || st != appinspect.StatusOK || v != "salt-minion 3007.14" {
+        t.Fatalf("single timeout must keep last good sample, got %q %q %v", v, st, ok)
+    }
+    s.StoreAppReport("salt-minion", appinspect.Report{Status: "error: timeout after 10s", TimedOut: true})
+    if _, st, _ := s.AppVersion("salt-minion"); st == appinspect.StatusOK {
+        t.Fatal("second consecutive timeout must surface the timeout status")
+    }
 }
 
 func TestStoreAppVersionTimeoutWithoutPriorSampleIsStored(t *testing.T) {
-	s := NewArtifactSamples()
-	s.RegisterApp("x")
-	s.StoreAppReport("x", appinspect.Report{Status: "error: timeout after 10s", TimedOut: true})
-	if _, st, ok := s.AppVersion("x"); !ok || st == appinspect.StatusOK {
-		t.Fatal("a first-ever timeout has no good sample to keep and must be stored as-is")
-	}
+    s := NewArtifactSamples()
+    s.RegisterApp("x")
+    s.StoreAppReport("x", appinspect.Report{Status: "error: timeout after 10s", TimedOut: true})
+    if _, st, ok := s.AppVersion("x"); !ok || st == appinspect.StatusOK {
+        t.Fatal("a first-ever timeout has no good sample to keep and must be stored as-is")
+    }
 }
 ```
 
@@ -306,33 +306,33 @@ como plantilla, con `Window` de 2 ciclos).
 
 ```go
 func (s *ArtifactSamples) StoreAppReport(name string, r appinspect.Report) {
-	if s == nil || name == "" {
-		return
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	prev := s.appVersions[name]
-	if r.TimedOut && prev.sampled && prev.report.Status == appinspect.StatusOK && prev.consecutiveTimeouts == 0 {
-		// One missed observation under host load is not a version change nor a
-		// broken app: keep the last good sample for rules, count the miss.
-		prev.consecutiveTimeouts = 1
-		s.appVersions[name] = prev
-		return
-	}
-	next := artifactAppSample{report: r, sampled: true}
-	if r.TimedOut {
-		next.consecutiveTimeouts = prev.consecutiveTimeouts + 1
-	}
-	s.appVersions[name] = next
+    if s == nil || name == "" {
+        return
+    }
+    s.mu.Lock()
+    defer s.mu.Unlock()
+    prev := s.appVersions[name]
+    if r.TimedOut && prev.sampled && prev.report.Status == appinspect.StatusOK && prev.consecutiveTimeouts == 0 {
+        // One missed observation under host load is not a version change nor a
+        // broken app: keep the last good sample for rules, count the miss.
+        prev.consecutiveTimeouts = 1
+        s.appVersions[name] = prev
+        return
+    }
+    next := artifactAppSample{report: r, sampled: true}
+    if r.TimedOut {
+        next.consecutiveTimeouts = prev.consecutiveTimeouts + 1
+    }
+    s.appVersions[name] = next
 }
 ```
 
 En `buildCatalogArtifactWatches`, tras `watch.FireOnFail = true`:
 
 ```go
-		// A single failed sample is usually a probe that ran out of time on a
-		// busy host; require it twice in a row before alerting.
-		watch.Window = rules.Rule{For: &rules.ForWindow{Cycles: artifactFailureCycles}}
+        // A single failed sample is usually a probe that ran out of time on a
+        // busy host; require it twice in a row before alerting.
+        watch.Window = rules.Rule{For: &rules.ForWindow{Cycles: artifactFailureCycles}}
 ```
 
 con `const artifactFailureCycles = 2`. Comprobar que el estado de ventana se persiste

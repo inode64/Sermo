@@ -35,6 +35,14 @@ type ReapResult struct {
 	Remaining []Process       // residuals still present at the end (orphans)
 	Signalled []int           // pids that were signalled, sorted
 	Failed    []SignalFailure // signal delivery failures, sorted by PID
+	Attempts  []SignalAttempt // ordered signal attempts, including failures
+}
+
+// SignalAttempt is the auditable outcome of one authorized signal delivery.
+type SignalAttempt struct {
+	PID    int    `json:"pid"`
+	Signal string `json:"signal"`
+	Error  string `json:"error,omitempty"`
 }
 
 // OK reports whether no residual processes remain (ok only if none
@@ -79,6 +87,9 @@ func (r Reaper) Reap(ctx context.Context, residuals []Process, policy KillPolicy
 	if resolve == nil {
 		resolve = DefaultUserLookup().ResolveUser
 	}
+	if !slices.ContainsFunc(residuals, func(p Process) bool { return policy.KillOnlyIf.Killable(p, resolve) }) {
+		return ReapResult{Remaining: residuals}
+	}
 	signaler := r.Signaler
 	if signaler == nil {
 		signaler = OSSignaler{}
@@ -91,27 +102,48 @@ func (r Reaper) Reap(ctx context.Context, residuals []Process, policy KillPolicy
 
 	signalled := map[int]bool{}
 	var failed []SignalFailure
+	var attempts []SignalAttempt
 	round := func(set []Process, sig syscall.Signal) {
-		failed = append(failed, signalRound(ctx, set, policy.KillOnlyIf, resolve, signaler, sig, signalled)...)
+		failures, sent := signalRound(ctx, set, policy.KillOnlyIf, resolve, signaler, sig, signalled)
+		failed = append(failed, failures...)
+		attempts = append(attempts, sent...)
 	}
 
+	termTargets := slices.Clone(residuals)
 	round(residuals, syscall.SIGTERM)
 	var err error
 	residuals, err = r.waitForExit(ctx, policy.TermTimeout)
 	if err != nil {
-		return ReapResult{Remaining: r.Rediscover(), Signalled: slices.Sorted(maps.Keys(signalled)), Failed: failed}
+		return ReapResult{Remaining: r.Rediscover(), Signalled: slices.Sorted(maps.Keys(signalled)), Failed: failed, Attempts: attempts}
 	}
 	if len(residuals) == 0 {
-		return ReapResult{Signalled: slices.Sorted(maps.Keys(signalled)), Failed: failed}
+		return ReapResult{Signalled: slices.Sorted(maps.Keys(signalled)), Failed: failed, Attempts: attempts}
 	}
 
+	residuals = restrictEscalation(residuals, termTargets)
 	round(residuals, syscall.SIGKILL)
 	residuals, err = r.waitForExit(ctx, policy.KillTimeout)
 	if err != nil {
-		return ReapResult{Remaining: r.Rediscover(), Signalled: slices.Sorted(maps.Keys(signalled)), Failed: failed}
+		return ReapResult{Remaining: restrictEscalation(r.Rediscover(), termTargets), Signalled: slices.Sorted(maps.Keys(signalled)), Failed: failed, Attempts: attempts}
 	}
 
-	return ReapResult{Remaining: residuals, Signalled: slices.Sorted(maps.Keys(signalled)), Failed: failed}
+	return ReapResult{Remaining: restrictEscalation(residuals, termTargets), Signalled: slices.Sorted(maps.Keys(signalled)), Failed: failed, Attempts: attempts}
+}
+
+// A fresh process may appear between rounds. SIGKILL is only for generations
+// considered for TERM; a replacement must never inherit the old authorization.
+func restrictEscalation(current, previous []Process) []Process {
+	out := slices.Clone(current)
+	for i, p := range out {
+		found := slices.ContainsFunc(previous, func(old Process) bool {
+			return old.PID == p.PID && old.StartTicks == p.StartTicks && old.UID == p.UID &&
+				old.signalExecutable() == p.signalExecutable() && old.ExeFile == p.ExeFile && old.Cgroup == p.Cgroup
+		})
+		if !found {
+			out[i].SignalBlockReason = "process generation or identity changed before SIGKILL"
+		}
+	}
+	return out
 }
 
 func (r Reaper) waitForExit(ctx context.Context, timeout time.Duration) ([]Process, error) {
@@ -141,16 +173,17 @@ func (r Reaper) Signal(ctx context.Context, procs []Process, selector KillSelect
 		signaler = OSSignaler{}
 	}
 	signalled := map[int]bool{}
-	failed := signalRound(ctx, procs, selector, resolve, signaler, sig, signalled)
+	failed, attempts := signalRound(ctx, procs, selector, resolve, signaler, sig, signalled)
 	remaining := procs
 	if r.Rediscover != nil {
 		remaining = r.Rediscover()
 	}
-	return ReapResult{Remaining: remaining, Signalled: slices.Sorted(maps.Keys(signalled)), Failed: failed}
+	return ReapResult{Remaining: remaining, Signalled: slices.Sorted(maps.Keys(signalled)), Failed: failed, Attempts: attempts}
 }
 
-func signalRound(ctx context.Context, set []Process, selector KillSelector, resolve UserResolver, signaler Signaler, sig syscall.Signal, signalled map[int]bool) []SignalFailure {
+func signalRound(ctx context.Context, set []Process, selector KillSelector, resolve UserResolver, signaler Signaler, sig syscall.Signal, signalled map[int]bool) ([]SignalFailure, []SignalAttempt) {
 	var failed []SignalFailure
+	var attempts []SignalAttempt
 	for i := range set {
 		if err := ctx.Err(); err != nil {
 			failed = append(failed, SignalFailure{PID: set[i].PID, Err: err})
@@ -161,15 +194,18 @@ func signalRound(ctx context.Context, set []Process, selector KillSelector, reso
 				failed = append(failed, SignalFailure{PID: set[i].PID, Err: err})
 				break
 			}
+			attempt := SignalAttempt{PID: set[i].PID, Signal: SignalName(sig)}
 			if err := SignalProcess(ctx, signaler, set[i], sig); err == nil {
 				signalled[set[i].PID] = true
 			} else {
 				failed = append(failed, SignalFailure{PID: set[i].PID, Err: err})
+				attempt.Error = err.Error()
 			}
+			attempts = append(attempts, attempt)
 		}
 	}
 	slices.SortFunc(failed, func(a, b SignalFailure) int { return cmp.Compare(a.PID, b.PID) })
-	return failed
+	return failed, attempts
 }
 
 type signalTargetProbe func(int) (Identity, bool)

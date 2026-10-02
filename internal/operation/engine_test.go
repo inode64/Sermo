@@ -2101,9 +2101,9 @@ func assertAlsoServiceWrapOrder(t *testing.T, alsoUnits, want []string) {
 }
 
 func TestAlsoServiceRestartWrapOrder(t *testing.T) {
-	// Wrap order: primary down first then also; also up first then primary.
+	// Disable activation before the primary stops; restore it before starting.
 	assertAlsoServiceWrapOrder(t, []string{"docker.socket"},
-		[]string{"stop mysqld", "stop docker.socket", "start docker.socket", "start mysqld"})
+		[]string{"stop docker.socket", "stop mysqld", "start docker.socket", "start mysqld"})
 }
 
 // With more than one also_service unit the teardown order matters: down in
@@ -2111,7 +2111,13 @@ func TestAlsoServiceRestartWrapOrder(t *testing.T) {
 // single-unit test cannot catch a forward-iteration regression.
 func TestAlsoServiceMultiUnitWrapOrder(t *testing.T) {
 	assertAlsoServiceWrapOrder(t, []string{"a.socket", "b.socket"},
-		[]string{"stop mysqld", "stop b.socket", "stop a.socket", "start a.socket", "start b.socket", "start mysqld"})
+		[]string{"stop b.socket", "stop a.socket", "stop mysqld", "start a.socket", "start b.socket", "start mysqld"})
+}
+
+func TestAlsoServiceMixedActivationAndCompanionOrder(t *testing.T) {
+	assertAlsoServiceWrapOrder(t, []string{"helper.service", "a.timer", "other.service", "b.path"},
+		[]string{"stop b.path", "stop a.timer", "stop mysqld", "stop other.service", "stop helper.service",
+			"start helper.service", "start a.timer", "start other.service", "start b.path", "start mysqld"})
 }
 
 func TestAlsoServiceStartStrictAborts(t *testing.T) {

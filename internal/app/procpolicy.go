@@ -179,12 +179,12 @@ func (w *processPolicyWatcher) runCycle(ctx context.Context) {
 	}
 	slices.SortFunc(samples, func(a, b ProcInfo) int { return cmp.Compare(a.PID, b.PID) })
 	violations := make([]processPolicyViolation, 0)
-	for _, sample := range samples {
+	for i := range samples {
 		if ctx.Err() != nil {
 			return
 		}
-		if reason := w.violationReason(sample); reason != "" {
-			violations = append(violations, processPolicyViolation{info: sample, reason: reason})
+		if reason := w.violationReason(samples[i]); reason != "" {
+			violations = append(violations, processPolicyViolation{info: samples[i], reason: reason})
 		}
 	}
 	w.publishSnapshot(samples, violations, true)
@@ -212,19 +212,19 @@ func (w *processPolicyWatcher) runCycle(ctx context.Context) {
 	}
 	now := w.clock()
 	next := make(map[processPolicyKey]processPolicyState, len(violations))
-	for _, violation := range violations {
-		key := processPolicyKey{pid: violation.info.PID, startTicks: violation.info.StartTicks}
+	for i := range violations {
+		key := processPolicyKey{pid: violations[i].info.PID, startTicks: violations[i].info.StartTicks}
 		state, fired := w.state[key]
 		if key.startTicks != 0 && fired {
 			if w.shouldRemind(state, now) {
-				w.notify(ctx, violation)
+				w.notify(ctx, violations[i])
 				state.lastNotify = now
 			}
 			next[key] = state
 			continue
 		}
 		notifyNow := !fired || w.shouldRemind(state, now)
-		w.fire(ctx, violation, notifyNow)
+		w.fire(ctx, violations[i], notifyNow)
 		if notifyNow {
 			state.lastNotify = now
 		}

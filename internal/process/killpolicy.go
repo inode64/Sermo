@@ -70,6 +70,24 @@ type KillPolicy struct {
 	KillOnlyIf      KillSelector
 }
 
+// BlockReason explains why residual cleanup cannot signal p under this policy.
+// It shares Killable with signal delivery, so previews cannot grant authority.
+func (p KillPolicy) BlockReason(proc Process, resolve UserResolver) string {
+	if proc.SignalBlockReason != "" {
+		return proc.SignalBlockReason
+	}
+	if !p.ForceKill {
+		return "stop_policy.force_kill disables residual cleanup"
+	}
+	if proc.ExePrev != "" && proc.ExeFile.Inode == 0 {
+		return "deleted executable file could not be verified"
+	}
+	if !p.KillOnlyIf.Killable(proc, resolve) {
+		return "process does not match an authorized executable and real UID"
+	}
+	return ""
+}
+
 // EnableAutomaticReaping resolves force_kill: auto into a signal policy. An
 // explicit kill_only_if remains authoritative; otherwise every named process
 // selector that declares an exact executable and real user supplies one paired
@@ -117,7 +135,8 @@ func EnableAutomaticReaping(policy KillPolicy, selectors []Selector) KillPolicy 
 
 // Killable reports whether p may be signalled. It requires a resolved exe that
 // exactly matches an exe_any entry AND a real UID matching a users entry. A
-// process with an unresolvable exe is never killable, a delegated process is
+// process with an unreadable exe is never killable; a deleted executable needs
+// a verified kernel-held file and ownership. A delegated process is
 // never killable, and an empty selector (no users or no exe) matches nothing —
 // all fail-safe.
 func (s KillSelector) Killable(p Process, resolve UserResolver) bool {
@@ -132,7 +151,11 @@ func (s KillSelector) Killable(p Process, resolve UserResolver) bool {
 	if p.Delegated {
 		return false
 	}
-	if !p.ExeOK {
+	if p.SignalBlockReason != "" {
+		return false
+	}
+	p.Exe = p.signalExecutable()
+	if p.Exe == "" {
 		return false
 	}
 	return s.explicitMatches(p, resolve) || s.pairMatches(p, resolve)

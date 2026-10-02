@@ -314,7 +314,7 @@ func TestManagerActionsAllowDependenciesWhenOptedIn(t *testing.T) {
 func TestManagerNonStateVerbsCarryNoIsolationFlag(t *testing.T) {
 	ctx := context.Background()
 
-	sysRec := &execxtest.Runner{}
+	sysRec := &execxtest.Runner{Default: execx.Result{Stdout: "failed\n"}}
 	sysMgr := systemdManager{runner: sysRec}
 	if err := sysMgr.Reload(ctx, "nginx"); err != nil {
 		t.Fatalf("Reload() error = %v", err)
@@ -324,6 +324,7 @@ func TestManagerNonStateVerbsCarryNoIsolationFlag(t *testing.T) {
 	}
 	want := []string{
 		"systemctl reload -- nginx.service",
+		"systemctl show -p ActiveState --value -- nginx.service",
 		"systemctl reset-failed -- nginx.service",
 	}
 	for i := range want {
@@ -334,12 +335,12 @@ func TestManagerNonStateVerbsCarryNoIsolationFlag(t *testing.T) {
 }
 
 func TestResetStateReconcilesInitState(t *testing.T) {
-	sysRec := &execxtest.Runner{}
+	sysRec := &execxtest.Runner{Default: execx.Result{Stdout: "failed\n"}}
 	if err := (systemdManager{runner: sysRec}).ResetState(context.Background(), "nginx"); err != nil {
 		t.Fatalf("systemd ResetState() error = %v", err)
 	}
-	if len(sysRec.Lines()) != 1 || sysRec.Lines()[0] != "systemctl reset-failed -- nginx.service" {
-		t.Fatalf("systemd calls = %v, want [systemctl reset-failed -- nginx.service]", sysRec.Lines())
+	if len(sysRec.Lines()) != 2 || sysRec.Lines()[1] != "systemctl reset-failed -- nginx.service" {
+		t.Fatalf("systemd calls = %v, want state query then reset-failed", sysRec.Lines())
 	}
 
 	rcRec := &execxtest.Runner{}

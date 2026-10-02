@@ -142,7 +142,8 @@ Operator policy: [docs/safety.md](docs/safety.md). Review checklist:
 - automatic remediation uses the same path, needs a positive resolved
   cooldown, and never triggers from a system-scoped metric
 - process authorization never uses name, basename, argv or cmdline alone;
-  signalable processes require exact resolved `exe` and `user`
+  signalable processes require exact resolved `exe` and `user`; deleted-executable
+  residual cleanup additionally verifies the kernel-held file and ownership
 - `SIGKILL` requires `force_kill` plus restrictive `kill_only_if`
 - unmatched residuals are orphans and block a following start
 - conditions are read-only; mutation belongs to actions

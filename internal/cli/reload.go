@@ -125,7 +125,7 @@ func (a App) findDaemon(pidfiles []string) (process.Process, bool) {
 // The executable basename is the proof because comm is writable by any process
 // through prctl. A daemon whose binary a package upgrade replaced is still
 // identified through its previous exe path so the operator gets the signaler's
-// refusal (a deleted exe is never signalled) instead of "no sermod running".
+// refusal (a deleted exe cannot authorize a reload) instead of "no sermod running".
 func daemonTarget(identify func(int) (process.Identity, bool), pid int) (process.Process, bool) {
 	id, ok := identify(pid)
 	if !ok || !id.StartTicksOK {

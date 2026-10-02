@@ -15,8 +15,9 @@ import (
 // reapSignaler records the exact (pid, signal) pairs a reap delivered, which the
 // shared recordingSignaler flattens into strings and cannot fail on demand.
 type reapSignaler struct {
-	calls []reapSignal
-	err   error
+	calls    []reapSignal
+	err      error
+	onSignal func(int, syscall.Signal)
 }
 
 type reapSignal struct {
@@ -26,6 +27,9 @@ type reapSignal struct {
 
 func (s *reapSignaler) Signal(pid int, sig syscall.Signal) error {
 	s.calls = append(s.calls, reapSignal{pid: pid, sig: sig})
+	if s.err == nil && s.onSignal != nil {
+		s.onSignal(pid, sig)
+	}
 	return s.err
 }
 

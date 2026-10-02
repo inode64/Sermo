@@ -11,8 +11,8 @@ func staleSelector(name, exe, user string) Selector {
 
 // TestDeletedExeNeverMatches pins the safety invariant documented in
 // docs/safety.md: a process whose binary was replaced resolves no exe, so it
-// matches no selector and can never be selected for signalling. Preserving the
-// deleted path for diagnostics must not change this.
+// matches no current-executable selector. The previous path alone must never
+// authorize signaling; verified cleanup uses separate file evidence.
 func TestDeletedExeNeverMatches(t *testing.T) {
 	d := Discoverer{
 		Reader: fakeReader{ids: map[int]Identity{

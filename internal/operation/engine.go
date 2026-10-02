@@ -49,7 +49,8 @@ const (
 	// postflightMaxAttempts lets a daemon finish binding its ready socket after
 	// its init manager reports a successful start. The retries remain within the
 	// operation's bounded context, so they never turn a failed readiness probe
-	// into an unbounded wait.
+	// into an unbounded wait. Docker stop uses the same window to publish its
+	// inactive state after the final process has exited.
 	postflightMaxAttempts   = 5
 	postflightRetryInterval = time.Second
 )
@@ -100,9 +101,13 @@ type Engine struct {
 	// nil closure means the backend cannot pause.
 	PauseFunc        func(ctx context.Context) error
 	ObserveProcesses func() (process.Observation, error)
-	Discover         func() ([]process.Process, error)
-	Reaper           process.Reaper
-	KillPolicy       process.KillPolicy
+	// ObserveTracked keeps generation evidence after backend PID attribution ends.
+	ObserveTracked func([]process.Process) (process.Observation, error)
+	Discover       func() ([]process.Process, error)
+	// DiscoverTracked retains old generations even when they leave discovery.
+	DiscoverTracked func([]process.Process) ([]process.Process, error)
+	Reaper          process.Reaper
+	KillPolicy      process.KillPolicy
 	// ReapSelector is the service's `reap.kill_only_if` authorization: the only
 	// thing that can turn a stray process into a signal target. The zero value is
 	// unconfigured and matches nothing, so a service that declares no `reap:`
@@ -320,6 +325,7 @@ func (e Engine) reapStrays(ctx context.Context, result *Result) {
 		KillTimeout: e.KillPolicy.KillTimeout,
 		KillOnlyIf:  e.ReapSelector,
 	})
+	result.Signals = outcome.Attempts
 	if discoveryErr != nil {
 		result.Status, result.Message = ResultFailed, actionReap+": "+discoveryErr.Error()
 		return
@@ -1144,13 +1150,15 @@ type residualOutcome struct {
 	remaining []process.Process
 	found     bool
 	accepted  bool
+	failed    []process.SignalFailure
+	signals   []process.SignalAttempt
 }
 
 // clearResiduals discovers residual processes after a stop and applies signal
 // escalation, returning one outcome that preserves whether any were initially
 // found. accept may acknowledge an already reactivated backend-owned process set
 // before the reaper can signal it.
-func (e Engine) clearResiduals(ctx context.Context, accept func([]process.Process) (bool, error)) (residualOutcome, error) {
+func (e Engine) clearResiduals(ctx context.Context, tracked []process.Process, accept func([]process.Process) (bool, error)) (residualOutcome, error) {
 	if e.Discover == nil {
 		return residualOutcome{}, nil
 	}
@@ -1159,12 +1167,19 @@ func (e Engine) clearResiduals(ctx context.Context, accept func([]process.Proces
 		if discoverErr != nil {
 			return nil
 		}
-		procs, err := e.Discover()
+		var procs []process.Process
+		var err error
+		if e.DiscoverTracked != nil {
+			procs, err = e.DiscoverTracked(tracked)
+		} else {
+			procs, err = e.Discover()
+		}
 		if err != nil {
 			discoverErr = err
 			return nil
 		}
-		return nonDelegatedResiduals(procs)
+		tracked = nonDelegatedResiduals(procs)
+		return tracked
 	}
 	residuals := discover()
 	outcome := residualOutcome{remaining: residuals, found: len(residuals) > 0}
@@ -1184,7 +1199,8 @@ func (e Engine) clearResiduals(ctx context.Context, accept func([]process.Proces
 	reaper := e.Reaper
 	reaper.Rediscover = discover // re-evaluate identity each round
 	reaper.Sleep = e.Sleep
-	outcome.remaining = reaper.Reap(ctx, residuals, e.KillPolicy).Remaining
+	reaped := reaper.Reap(ctx, residuals, e.KillPolicy)
+	outcome.remaining, outcome.failed, outcome.signals = reaped.Remaining, reaped.Failed, reaped.Attempts
 	if discoverErr != nil {
 		return outcome, discoverErr
 	}

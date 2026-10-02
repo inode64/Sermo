@@ -203,7 +203,7 @@ func OperationEventRecord(r operation.Result) state.EventRecord {
 }
 
 func eventFromOperationResult(r operation.Result) Event {
-	return Event{Service: r.Service, Kind: eventKindForResult(r), Action: r.Action, Status: string(r.Status), Message: r.Message}
+	return Event{Service: r.Service, Kind: eventKindForResult(r), Action: r.Action, Status: string(r.Status), Message: r.AuditMessage()}
 }
 
 // CascadeEventRecord converts an additional target's final cascade outcome into

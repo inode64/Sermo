@@ -9,6 +9,10 @@ service:
     - gluster-ta-volume
 apps:
   - glusterd
+variables:
+  config: /var/lib/glusterd/thin-arbiter/thin-arbiter.vol
+preflight:
+  config: { type: file, path: "${config}", non_empty: true }
 # The unit runs the shared Gluster daemon binary — sbin/glusterd, sbin/glusterfs
 # and sbin/glusterfsd are one executable — so exe and user alone cannot tell the
 # thin arbiter from glusterd, a brick or the self-heal daemon. The volfile id in
@@ -35,8 +39,8 @@ restart_on_change:
 watches:
   # No endpoint probe: the packaged unit binds port 24007, the same port glusterd
   # listens on, so a connect proves nothing about the arbiter wherever the two
-  # share a host. The unit state is the only unambiguous local evidence, and a
-  # replica 2 volume has no split-brain protection while it is down.
+  # share a host. Unit state reports this daemon, not the volume's quorum or
+  # replication health; those require separate cluster-level checks.
   service:
     check:
       type: service

@@ -1905,8 +1905,8 @@ test("graph selections remain isolated per service", async ({ page }) => {
 
 // The server no longer answers an API 401 with WWW-Authenticate, so a poll that
 // loses its credential can no longer make the browser raise a modal password
-// box on its own. The dashboard has to notice instead: it goes to /login, the
-// one route that still challenges deliberately and then returns home.
+// box on its own. The dashboard goes to the /login form, which starts a
+// session and returns home after a successful login.
 test("a 401 from the API navigates to the login route", async ({ page }) => {
   await page.route("**/login", async (route) => {
     await route.fulfill({ status: 200, contentType: "text/html", body: "<title>login reached</title>" });

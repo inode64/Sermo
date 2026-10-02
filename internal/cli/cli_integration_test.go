@@ -13,12 +13,18 @@ import (
 )
 
 // fakeSystemctl records every invocation to $SERMO_FAKE_LOG and answers
-// is-active from a temporary state file; start and stop update that state.
+// is-active and ActiveState from a temporary state file; start and stop update
+// that state.
 const fakeSystemctl = `#!/bin/sh
 echo "$*" >> "$SERMO_FAKE_LOG"
 case "$1" in
   start) echo active > "$SERMO_FAKE_LOG.state" ;;
   stop) echo inactive > "$SERMO_FAKE_LOG.state" ;;
+  show)
+    if [ "$3" = "ActiveState" ]; then
+      if [ -f "$SERMO_FAKE_LOG.state" ]; then cat "$SERMO_FAKE_LOG.state"; else echo active; fi
+    fi
+    ;;
   is-active)
     if [ -f "$SERMO_FAKE_LOG.state" ]; then cat "$SERMO_FAKE_LOG.state"; else echo active; fi
     ;;

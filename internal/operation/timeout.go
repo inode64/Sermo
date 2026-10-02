@@ -15,6 +15,11 @@ const DefaultOperationTimeout = 90 * time.Second
 // stop_policy signal waits.
 const backendMargin = 30 * time.Second
 
+// defaultDockerStopTimeout bounds Docker's no-kill stop request when the
+// operator has not configured a positive stop_policy.graceful_timeout.
+// It fits within backendMargin, preserving time for verification and start.
+const defaultDockerStopTimeout = 10 * time.Second
+
 // minimumTimeout is the shortest safe operation deadline implied by a resolved
 // stop policy: graceful wait plus signal escalation sleeps when force_kill is
 // enabled, plus backendMargin.

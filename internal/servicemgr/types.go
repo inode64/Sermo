@@ -46,18 +46,19 @@ const (
 	// here, and why it is opt-out per service rather than unconditional.
 	systemctlFlagIsolateJob = "--job-mode=ignore-dependencies"
 
-	systemctlFlagNoLegend      = "--no-legend"
-	systemctlFlagNoPager       = "--no-pager"
-	systemctlFlagProperty      = "-p"
-	systemctlFlagStateActive   = "--state=active"
-	systemctlFlagTypeService   = "--type=service"
-	systemctlFlagValue         = "--value"
-	systemctlPropertyCanReload = "CanReload"
-	systemctlPropertyCGroup    = "ControlGroup"
-	systemctlPropertyExecStart = "ExecStart"
-	systemctlPropertyLoadState = "LoadState"
-	systemctlPropertyMainPID   = "MainPID"
-	systemctlPropertyPIDFile   = "PIDFile"
+	systemctlFlagNoLegend        = "--no-legend"
+	systemctlFlagNoPager         = "--no-pager"
+	systemctlFlagProperty        = "-p"
+	systemctlFlagStateActive     = "--state=active"
+	systemctlFlagTypeService     = "--type=service"
+	systemctlFlagValue           = "--value"
+	systemctlPropertyActiveState = "ActiveState"
+	systemctlPropertyCanReload   = "CanReload"
+	systemctlPropertyCGroup      = "ControlGroup"
+	systemctlPropertyExecStart   = "ExecStart"
+	systemctlPropertyLoadState   = "LoadState"
+	systemctlPropertyMainPID     = "MainPID"
+	systemctlPropertyPIDFile     = "PIDFile"
 )
 
 // systemd tokens consumed from command output or used to normalize unit names.

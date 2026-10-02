@@ -341,7 +341,17 @@ func (a App) printOperation(opts options, r operation.Result) {
 		if p.Stray {
 			stray = " stray=true"
 		}
-		fmt.Fprintf(a.Stdout, "  residual pid=%d %s=%s%s\n", p.PID, key, value, stray)
+		fmt.Fprintf(a.Stdout, "  residual pid=%d %s=%s%s user=%s role=%s\n", p.PID, key, value, stray, orUnknown(p.User), p.Role)
+		if p.SignalBlockReason != "" {
+			fmt.Fprintf(a.Stdout, "    blocked: %s\n", p.SignalBlockReason)
+		}
+	}
+	for _, attempt := range r.Signals {
+		fmt.Fprintf(a.Stdout, "  signal pid=%d %s", attempt.PID, attempt.Signal)
+		if attempt.Error != "" {
+			fmt.Fprintf(a.Stdout, " failed: %s", attempt.Error)
+		}
+		fmt.Fprintln(a.Stdout)
 	}
 }
 
