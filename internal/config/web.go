@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"sermo/internal/cfgval"
 	"sermo/internal/netutil"
@@ -78,6 +79,36 @@ func (g Global) WebSessionTTL() time.Duration {
 		return ttl
 	}
 	return 0
+}
+
+// maxLoginMessageRunes bounds web.login_message: one short line under the host
+// name on the login page, not a banner.
+const maxLoginMessageRunes = 200
+
+// WebLoginMessage returns web.login_message trimmed, or "" when unset or
+// invalid (validation reports an invalid value).
+func (g Global) WebLoginMessage() string {
+	raw, present := g.WebSection()[WebKeyLoginMessage]
+	if !present || validateLoginMessage(raw) != nil {
+		return ""
+	}
+	return strings.TrimSpace(cfgval.AsString(raw))
+}
+
+// validateLoginMessage accepts a single line of at most maxLoginMessageRunes
+// characters. It is plain text: the login page escapes it.
+func validateLoginMessage(raw any) error {
+	s, isStr := raw.(string)
+	if !isStr {
+		return errors.New("must be a string")
+	}
+	if strings.ContainsAny(s, "\r\n") {
+		return errors.New("must be a single line")
+	}
+	if utf8.RuneCountInString(s) > maxLoginMessageRunes {
+		return fmt.Errorf("must be at most %d characters", maxLoginMessageRunes)
+	}
+	return nil
 }
 
 // validatePublicURL accepts an absolute http(s) URL: the dashboard root,

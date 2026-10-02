@@ -133,24 +133,24 @@ yaml-validate: yaml-fmt-check yaml-lint
 markdown-check:
 	@git ls-files -z -- '*.md' | $(LINT_PATH) xargs -0 -r $(MARKDOWNLINT) --config .markdownlint.yml
 
-# Regenerate the embedded dashboard (internal/web/index.html) from its sources
+# Regenerate the embedded dashboard (internal/web/index.html) and login page
+# (internal/web/login.html) from their sources
 # in internal/web/src using esbuild's Go API (in-process, no Node/npm). esbuild
 # lives in the nested WEB_BUILD_DIR module so sermod/sermoctl never require it.
 # Run this after editing anything under internal/web/src and commit the result.
 web:
-	go run -C $(WEB_BUILD_DIR) . -src ../src -out ../index.html
+	go run -C $(WEB_BUILD_DIR) . -src ../src -out ../index.html -login-out ../login.html
 
 # Fail if the committed internal/web/index.html is out of date with its sources.
 # Modeled on fmt-check; runs in CI via validate so a stale bundle can't land.
 web-check:
-	@set -e; tmp="$$(mktemp)"; \
-	go run -C $(WEB_BUILD_DIR) . -src ../src -out "$$tmp"; \
-	if ! cmp -s "$$tmp" internal/web/index.html; then \
-		rm -f "$$tmp"; \
-		echo "internal/web/index.html is stale; run 'make web' and commit the result"; \
+	@set -e; tmp="$$(mktemp)"; tmplogin="$$(mktemp)"; \
+	trap 'rm -f "$$tmp" "$$tmplogin"' EXIT; \
+	go run -C $(WEB_BUILD_DIR) . -src ../src -out "$$tmp" -login-out "$$tmplogin"; \
+	if ! cmp -s "$$tmp" internal/web/index.html || ! cmp -s "$$tmplogin" internal/web/login.html; then \
+		echo "internal/web/index.html or login.html is stale; run 'make web' and commit the result"; \
 		exit 1; \
-	fi; \
-	rm -f "$$tmp"
+	fi
 
 # Static analysis for the authored dashboard modules and browser tests. The
 # vendored lit-html module and generated bundle are excluded in eslint.config.mjs.

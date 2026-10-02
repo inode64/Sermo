@@ -89,10 +89,12 @@ func injectGenerated(tree map[string]any, section, name, noun, feature string, v
 // acts.
 func staleBinaryRule(allowRestart bool, message string) map[string]any {
 	// Stale binaries use failed: because a healthy sensor is not a restart trigger.
-	return generatedSensorRule(
+	rule := generatedSensorRule(
 		map[string]any{rules.ConditionFailed: map[string]any{rules.FieldCheck: staleBinaryCheckName}},
 		nil, allowRestart, message,
 	)
+	rule[rules.RuleFieldSeverity] = string(binaryChangeSeverity)
+	return rule
 }
 
 // generatedSensorRule keeps alert-before-restart ordering and the rule type

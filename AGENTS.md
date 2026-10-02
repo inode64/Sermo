@@ -44,7 +44,8 @@ Run targeted checks while developing. Finish with:
 
 `make check` is the full gate; do not add a second `go build`, `make lint` or
 `go test` pass after it. After editing `internal/web/src/`, run `make web` and
-keep the regenerated `internal/web/index.html` in the patch.
+keep the regenerated `internal/web/index.html` and `internal/web/login.html`
+in the patch.
 
 When asked to commit:
 
@@ -168,8 +169,10 @@ into a change that does not touch them.
 - Protocol probes: honor `cfg.Interface`; register in
   `internal/conn/registry.go`; dial with `BindDialer`, listen with
   `bindListenConfig`
-- Web UI: sources in `internal/web/src/`; generated
-  `internal/web/index.html`; repetitive watch-panel metadata in
+- Web UI: sources in `internal/web/src/` (design tokens in `tokens.css`,
+  shared by the dashboard and the login page); generated
+  `internal/web/index.html` and `internal/web/login.html`; repetitive
+  watch-panel metadata in
   `watch-panels.json`. lit-html, delegated `data-*` clicks (not inline or
   lit handlers), design tokens, no literal CSS colors, existing CSP.
   String-built SVG only in its container. Desktop/mobile and WCAG 2.2 AA

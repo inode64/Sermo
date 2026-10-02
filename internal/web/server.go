@@ -45,7 +45,6 @@ const (
 	headerSecFetchMode          = "Sec-Fetch-Mode"
 	headerSecFetchSite          = "Sec-Fetch-Site"
 	headerOrigin                = "Origin"
-	headerAllow                 = "Allow"
 	headerLocation              = "Location"
 	headerRetryAfter            = "Retry-After"
 	headerXForwardedFor         = "X-Forwarded-For"
@@ -66,6 +65,7 @@ const (
 	headerValueNoCache         = "no-cache"
 	headerValueNoStore         = "no-store"
 	headerValueNoReferrer      = "no-referrer"
+	headerValueSameOrigin      = "same-origin"
 	headerValueNoSniff         = "nosniff"
 	cspNonceBytes              = 16
 	cspFallbackNonceBase       = 36
@@ -241,6 +241,10 @@ const (
 
 const (
 	routeIndex                        = routeMethodGet + routePathRoot
+	routeLoginForm                    = routeMethodGet + routePathLogin
+	routeLoginSubmit                  = routeMethodPost + routePathLogin
+	routeLoginBasic                   = routeMethodGet + routePathLoginBasic
+	routeLogout                       = routeMethodPost + routePathLogout
 	routeLivez                        = routeMethodGet + routePathLivez
 	routeReadyz                       = routeMethodGet + routePathReadyz
 	routeAPIWhoami                    = routeMethodGet + apiPathWhoami
@@ -331,6 +335,10 @@ type Server struct {
 	// config.ShortHostname() (same source as ${hostname}).
 	Hostname string
 
+	// LoginMessage is web.login_message: a short plain-text note shown under
+	// the host name on the /login page. Empty shows none.
+	LoginMessage string
+
 	// AllowedHosts lists extra hostnames accepted in the Host header when auth
 	// is disabled (open mode), e.g. the public name of a fronting proxy.
 	// localhost, IP-literal Hosts and the bind host are always accepted; other
@@ -415,6 +423,10 @@ func (s *Server) Handler() http.Handler {
 	}
 	mux := http.NewServeMux()
 	mux.HandleFunc(routeIndex, s.handleIndex)
+	mux.HandleFunc(routeLoginForm, s.handleLoginForm)
+	mux.HandleFunc(routeLoginSubmit, s.handleLoginSubmit)
+	mux.HandleFunc(routeLoginBasic, s.handleLoginBasic)
+	mux.HandleFunc(routeLogout, s.handleLogout)
 	mux.HandleFunc(routeLivez, s.handleLivez)
 	mux.HandleFunc(routeReadyz, s.handleReadyz)
 	mux.HandleFunc(routeAPIWhoami, s.handleWhoami)

@@ -53,3 +53,63 @@ func TestLoadWatchPanelsRejectsDuplicateKeys(t *testing.T) {
 		t.Fatalf("loadWatchPanels duplicate error = %v", err)
 	}
 }
+
+// The login page is built from the same design tokens as the dashboard, so a
+// palette change reaches both; its html/template actions survive the build.
+func TestRenderLoginSharesTheDashboardTokens(t *testing.T) {
+	srcDir := filepath.Join("..", "src")
+	page, err := renderLogin(srcDir)
+	if err != nil {
+		t.Fatalf("renderLogin: %v", err)
+	}
+	dashboard, err := renderDashboard(srcDir)
+	if err != nil {
+		t.Fatalf("renderDashboard: %v", err)
+	}
+	// A few declarations from tokens.css, in both themes, must reach both pages.
+	for _, token := range []string{"--paused: #6639ba", "--paused: #a371f7", "--on-accent: #ffffff", "--crit: #b4232a"} {
+		if !strings.Contains(page, token) || !strings.Contains(dashboard, token) {
+			t.Errorf("token %q missing from the login page or the dashboard", token)
+		}
+	}
+	for _, action := range []string{loginNonceAction, "{{.Message}}", "{{.Version}}"} {
+		if !strings.Contains(page, action) {
+			t.Errorf("login page lost the template action %s", action)
+		}
+	}
+	if strings.Contains(page, cssMarker) {
+		t.Error("css marker left in the login page")
+	}
+}
+
+// A login shell the template engine rejects fails the build, and neither
+// page is written: the committed pair never goes out of step.
+func TestBuildWritesNothingWhenTheLoginPageIsBroken(t *testing.T) {
+	src := t.TempDir()
+	for _, name := range []string{webBuildShellFilename, webBuildStylesFilename, webBuildScriptFilename, watchPanelsFilename, loginStylesFilename, "tokens.css", "api.js", "format.js"} {
+		data, err := os.ReadFile(filepath.Join("..", "src", name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(src, name), data, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.CopyFS(filepath.Join(src, "vendor"), os.DirFS(filepath.Join("..", "src", "vendor"))); err != nil {
+		t.Fatal(err)
+	}
+	broken := "<style nonce=\"{{.Nonce}}\">" + cssMarker + "</style>{{.Nonce}"
+	if err := os.WriteFile(filepath.Join(src, loginShellFilename), []byte(broken), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	outDir := t.TempDir()
+	out, loginOut := filepath.Join(outDir, "index.html"), filepath.Join(outDir, "login.html")
+	if err := build(src, out, loginOut); err == nil || !strings.Contains(err.Error(), "not a valid template") {
+		t.Fatalf("build = %v, want a template error", err)
+	}
+	for _, path := range []string{out, loginOut} {
+		if _, err := os.Stat(path); !os.IsNotExist(err) {
+			t.Errorf("%s was written despite the failure", filepath.Base(path))
+		}
+	}
+}

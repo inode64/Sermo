@@ -214,12 +214,41 @@ func sessionFrom(ctx context.Context) bool {
 	return session
 }
 
+// authRoute relaxes the default access policy for the routes through which a
+// role is obtained or dropped. It is keyed by the mux pattern the request
+// matched — method included, matched the way the mux matches it — so it applies
+// to exactly the handler it names: an escaped path or another method that the
+// mux sends elsewhere never inherits it.
+type authRoute struct {
+	// anyRole serves the route whatever the caller's role, including none:
+	// it is how someone without a role gets one, or a guest drops theirs.
+	anyRole bool
+	// formPost exempts the route from the X-Sermo-Csrf header, which a plain
+	// HTML form cannot send; the handler checks the form's origin instead.
+	formPost bool
+}
+
+var authRoutes = map[string]authRoute{
+	routeLoginForm:   {anyRole: true},
+	routeLoginSubmit: {anyRole: true, formPost: true},
+	routeLoginBasic:  {anyRole: true},
+	routeLogout:      {anyRole: true},
+}
+
+// routePolicy is the relaxed policy of the mux route r will reach, if any.
+func routePolicy(next http.Handler, r *http.Request) authRoute {
+	mux, ok := next.(*http.ServeMux)
+	if !ok {
+		return authRoute{}
+	}
+	_, pattern := mux.Handler(r)
+	return authRoutes[pattern]
+}
+
 // withAuth enforces the role on each request: an unauthenticated page load is
 // sent to the /login form, other unauthenticated requests get a plain 401, and
-// guests may only read (GET/HEAD). /login, /login/basic and /logout are handled
-// here, before routing: they are how a role is obtained or dropped. /login
-// takes the form POST a browser cannot add the CSRF header to; /logout passes
-// the CSRF check like any other state change.
+// guests may only read (GET/HEAD). The routes in authRoutes relax that policy;
+// every handler finds the resolved role in its context (roleFrom).
 func (s *Server) withAuth(next http.Handler) http.Handler {
 	s.initLoginState()
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -243,29 +272,17 @@ func (s *Server) withAuth(next http.Handler) http.Handler {
 			return
 		}
 
-		switch r.URL.Path {
-		case routePathLogin:
-			s.handleLogin(w, r, role)
-			return
-		case routePathLoginBasic:
-			// The browser's own password dialog, kept as an alternative to the
-			// form: challenge until it sends an admin credential, then go home.
-			if role == roleAdmin {
-				redirectWithin(w, r, "")
-			} else {
-				s.challenge(w)
-			}
-			return
-		}
+		policy := routePolicy(next, r)
 		// CSRF: state-changing requests must carry the custom header (set by the
 		// dashboard's fetch). Checked before auth so a forged cross-site request is
 		// rejected even when the browser would attach cached credentials.
-		if !isReadMethod(r.Method) && r.Header.Get(HeaderCSRF) == "" {
+		if !isReadMethod(r.Method) && !policy.formPost && r.Header.Get(HeaderCSRF) == "" {
 			writeJSON(w, http.StatusForbidden, ActionResult{OK: false, Message: authMessageMissingCSRFHeader})
 			return
 		}
-		if r.URL.Path == routePathLogout {
-			s.handleLogout(w, r)
+		ctx := context.WithValue(context.WithValue(r.Context(), roleCtxKey{}, role), sessionCtxKey{}, session)
+		if policy.anyRole {
+			next.ServeHTTP(w, r.WithContext(ctx))
 			return
 		}
 		if role == "" {
@@ -276,8 +293,7 @@ func (s *Server) withAuth(next http.Handler) http.Handler {
 			writeJSON(w, http.StatusForbidden, ActionResult{OK: false, Message: authMessageReadOnly})
 			return
 		}
-		ctx := context.WithValue(r.Context(), roleCtxKey{}, role)
-		next.ServeHTTP(w, r.WithContext(context.WithValue(ctx, sessionCtxKey{}, session)))
+		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
 

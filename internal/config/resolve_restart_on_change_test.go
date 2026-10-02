@@ -9,6 +9,7 @@ import (
 	"sermo/internal/cfgval"
 	"sermo/internal/checks"
 	"sermo/internal/rules"
+	"sermo/internal/severity"
 )
 
 func mustHaveRestartOnChangeActions(t *testing.T, then map[string]any, wantMessage string) {
@@ -116,6 +117,10 @@ restart_on_change:
 	if cfgval.String(changed["path"]) != "/lib64/libc.so.6" {
 		t.Errorf("changed.path = %v, want /lib64/libc.so.6", changed["path"])
 	}
+	// A library replaced under the running service is a warning, not an outage.
+	if got := cfgval.String(nested(t, resolved.Tree, "rules", "restart-on-change-glibc")["severity"]); got != string(severity.Warning) {
+		t.Errorf("library change rule severity = %q, want warning", got)
+	}
 	preflight := nested(t, resolved.Tree, "preflight", "library-glibc-file")
 	if cfgval.String(preflight["type"]) != checks.CheckTypeFile || cfgval.String(preflight["path"]) != "/lib64/libc.so.6" || !cfgval.Bool(preflight[checks.CheckKeyNonEmpty]) {
 		t.Errorf("library preflight = %v, want file /lib64/libc.so.6", preflight)
@@ -184,6 +189,9 @@ apps: [containerd]
 			if got := cfgval.String(rule["type"]); got != "remediation" {
 				t.Fatalf("rule type = %q, want remediation", got)
 			}
+			if got := cfgval.String(rule["severity"]); got != string(severity.Warning) {
+				t.Fatalf("app version change rule severity = %q, want warning", got)
+			}
 			changed := nested(t, rule, "if", "changed")
 			if got := cfgval.String(changed["app"]); got != "containerd" {
 				t.Fatalf("changed.app = %q, want containerd", got)
@@ -223,6 +231,10 @@ restart_on_change:
 		t.Fatalf("changed.path = %q, want /etc/web/web.conf", got)
 	}
 	mustHaveRestartOnChangeActions(t, nested(t, rule, "then"), "web will restart after config change: ${change.path}")
+	// A config file change is not a binary change: it keeps the graded default.
+	if _, set := rule["severity"]; set {
+		t.Errorf("config change rule severity = %v, want unset", rule["severity"])
+	}
 }
 
 func TestRestartOnChangeMessagesCustomizeGeneratedAlerts(t *testing.T) {

@@ -198,6 +198,9 @@ const (
 	WebKeyPublicURL = "public_url"
 	// WebKeySessionTTL is web.session_ttl: how long a dashboard login lasts.
 	WebKeySessionTTL = "session_ttl"
+	// WebKeyLoginMessage is web.login_message: a short plain-text note shown
+	// under the host name on the login page.
+	WebKeyLoginMessage = "login_message"
 )
 
 // SectionTelegramBot is the top-level interactive Telegram report-bot block. It

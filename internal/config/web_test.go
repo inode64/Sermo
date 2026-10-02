@@ -2,6 +2,7 @@ package config
 
 import (
 	"errors"
+	"strings"
 	"testing"
 	"time"
 )
@@ -139,5 +140,34 @@ defaults: { policy: { cooldown: 5m } }
 	}
 	if got := (Global{}).WebSessionTTL(); got != 0 {
 		t.Errorf("WebSessionTTL without a web block = %v, want 0 (server default)", got)
+	}
+}
+
+// web.login_message is one short plain-text line under the host on the login
+// page.
+func TestWebLoginMessage(t *testing.T) {
+	for _, bad := range []string{`5`, `"` + strings.Repeat("x", maxLoginMessageRunes+1) + `"`, `"two\nlines"`} {
+		issues := validateGlobalDoc(t, `
+web: { port: 9797, login_message: `+bad+` }
+paths: { services: [ @ROOT@/services ] }
+defaults: { policy: { cooldown: 5m } }
+`)
+		if !hasIssue(issues, "web.login_message") {
+			t.Errorf("login_message %.20s…: no issue in %v", bad, issues)
+		}
+	}
+	if issues := validateGlobalDoc(t, `
+web: { port: 9797, login_message: "Producción · Takeachef" }
+paths: { services: [ @ROOT@/services ] }
+defaults: { policy: { cooldown: 5m } }
+`); hasIssue(issues, "web.login_message") {
+		t.Errorf("valid login_message: unexpected issue in %v", issues)
+	}
+	g := Global{Raw: map[string]any{SectionWeb: map[string]any{WebKeyLoginMessage: "  Solo sysadmins  "}}}
+	if got := g.WebLoginMessage(); got != "Solo sysadmins" {
+		t.Errorf("WebLoginMessage = %q, want it trimmed", got)
+	}
+	if got := (Global{}).WebLoginMessage(); got != "" {
+		t.Errorf("WebLoginMessage without a web block = %q", got)
 	}
 }

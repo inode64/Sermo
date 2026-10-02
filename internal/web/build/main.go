@@ -1,16 +1,20 @@
 // Command webbuild bundles the dashboard sources in internal/web/src into the
-// embedded internal/web/index.html.
+// embedded internal/web/index.html and the standalone login page
+// internal/web/login.html.
 //
 // It runs esbuild in-process via its Go API (github.com/evanw/esbuild/pkg/api)
 // — no Node, no npm, no spawned process — bundling src/app.js (and the modules
 // it imports, including the vendored lit-html) into a single minified IIFE and
 // minifying src/styles.css, then injecting both into the src/index.html shell.
+// The login page gets src/login.css injected into the src/login.html shell; both
+// stylesheets import src/tokens.css, so the palette is declared once.
 //
 // The {{CSP_NONCE}} (style + script) and {{VERSION}} placeholders are part of
 // the shell and are left untouched for internal/web/server.go to fill per
-// request. internal/web/index.html is a generated, committed artifact; run
-// `make web` after editing anything under internal/web/src and commit the
-// result. `make web-check` fails CI if the committed file is stale.
+// request; login.html keeps its html/template actions ({{.Nonce}} and friends)
+// for internal/web/login.go. Both outputs are generated, committed artifacts;
+// run `make web` after editing anything under internal/web/src and commit the
+// result. `make web-check` fails CI if a committed file is stale.
 package main
 
 import (
@@ -35,6 +39,11 @@ const (
 
 	webBuildShellFilename  = "index.html"
 	webBuildStylesFilename = "styles.css"
+	loginShellFilename     = "login.html"
+	loginStylesFilename    = "login.css"
+	// loginNonceAction is the template action the login page's <style> and
+	// <script> carry; internal/web/login.go fills it per request.
+	loginNonceAction       = "{{.Nonce}}"
 	webBuildScriptFilename = "app.js"
 	watchPanelsFilename    = "watch-panels.json"
 
@@ -105,77 +114,128 @@ var watchPanelTemplate = template.Must(template.New("watch-panel").Parse(`<h2 cl
 
 func main() {
 	srcDir := flag.String("src", "internal/web/src", "dashboard source directory")
-	out := flag.String("out", "internal/web/index.html", "generated output file")
+	out := flag.String("out", "internal/web/index.html", "generated dashboard file")
+	loginOut := flag.String("login-out", "internal/web/login.html", "generated login page file")
 	flag.Parse()
 
-	if err := build(*srcDir, *out); err != nil {
+	if err := build(*srcDir, *out, *loginOut); err != nil {
 		fmt.Fprintln(os.Stderr, "webbuild:", err)
 		//nolint:forbidigo // main cannot return an exit code; os.Exit here is the only way to propagate it.
 		os.Exit(webBuildFailureExitCode)
 	}
 }
 
-func build(srcDir, out string) error {
-	// srcDir/out come from CLI flags driven by the Makefile, not untrusted
-	// input; this is a developer build tool, so path-traversal taint is moot.
-	shell, err := os.ReadFile(filepath.Join(srcDir, webBuildShellFilename)) //nolint:gosec // G304: srcDir is a Makefile-driven build flag, not untrusted input.
+// build renders both pages before writing either, so a failure in one never
+// leaves the other regenerated and the committed pair out of step.
+func build(srcDir, out, loginOut string) error {
+	dashboard, err := renderDashboard(srcDir)
 	if err != nil {
-		return fmt.Errorf("read shell %s: %w", webBuildShellFilename, err)
+		return err
+	}
+	login, err := renderLogin(srcDir)
+	if err != nil {
+		return err
+	}
+	for _, file := range []struct{ path, page string }{{out, dashboard}, {loginOut, login}} {
+		if err := os.WriteFile(file.path, []byte(file.page), webBuildOutputFileMode); err != nil {
+			return fmt.Errorf("write %s: %w", file.path, err)
+		}
+	}
+	return nil
+}
+
+// readShell reads one HTML shell from srcDir, a Makefile-driven build flag.
+func readShell(srcDir, name string) (string, error) {
+	shell, err := os.ReadFile(filepath.Join(srcDir, name)) //nolint:gosec // G304: srcDir is a Makefile-driven build flag, not untrusted input.
+	if err != nil {
+		return "", fmt.Errorf("read shell %s: %w", name, err)
+	}
+	return string(shell), nil
+}
+
+// injectCSS bundles the stylesheet at cssEntry and puts it in place of the
+// shell's single css marker, inside its nonce'd <style>.
+func injectCSS(page, cssEntry string) (string, error) {
+	css, err := bundleCSS(cssEntry)
+	if err != nil {
+		return "", fmt.Errorf("css %s: %w", filepath.Base(cssEntry), err)
+	}
+	if strings.Count(page, cssMarker) != webBuildReplaceOnce {
+		return "", fmt.Errorf("css marker %q must occur once in the shell", cssMarker)
+	}
+	// A bundle that smuggled in a literal </style> would break the inline block,
+	// and a template action would be executed by the server; esbuild never
+	// emits either, but guard regardless.
+	if strings.Contains(css, "</style") || strings.Contains(css, "{{") {
+		return "", fmt.Errorf("css %s bundle contains </style or a template action", filepath.Base(cssEntry))
+	}
+	return strings.Replace(page, cssMarker, css, webBuildReplaceOnce), nil
+}
+
+// renderDashboard builds index.html: the shell with its watch panels, the
+// minified stylesheet and the bundled script.
+func renderDashboard(srcDir string) (string, error) {
+	page, err := readShell(srcDir, webBuildShellFilename)
+	if err != nil {
+		return "", err
 	}
 	watchPanels, err := loadWatchPanels(filepath.Join(srcDir, watchPanelsFilename))
 	if err != nil {
-		return fmt.Errorf("watch panels: %w", err)
+		return "", fmt.Errorf("watch panels: %w", err)
 	}
-	css, err := bundleCSS(filepath.Join(srcDir, webBuildStylesFilename))
-	if err != nil {
-		return fmt.Errorf("css: %w", err)
-	}
-	js, err := bundleJS(filepath.Join(srcDir, webBuildScriptFilename))
-	if err != nil {
-		return fmt.Errorf("js: %w", err)
-	}
-
-	page := string(shell)
 	for i := range watchPanels {
 		panel := &watchPanels[i]
 		marker := watchPanelMarker(panel.Key)
 		if strings.Count(page, marker) != webBuildReplaceOnce {
-			return fmt.Errorf("watch panel marker %q must occur once", marker)
+			return "", fmt.Errorf("watch panel marker %q must occur once", marker)
 		}
 		markup, err := renderWatchPanel(panel)
 		if err != nil {
-			return fmt.Errorf("watch panel %q: %w", panel.Key, err)
+			return "", fmt.Errorf("watch panel %q: %w", panel.Key, err)
 		}
 		page = strings.Replace(page, marker, markup, webBuildReplaceOnce)
 	}
-	if !strings.Contains(page, cssMarker) {
-		return fmt.Errorf("css marker %q not found in shell", cssMarker)
+	if page, err = injectCSS(page, filepath.Join(srcDir, webBuildStylesFilename)); err != nil {
+		return "", err
 	}
-	if !strings.Contains(page, jsMarker) {
-		return fmt.Errorf("js marker %q not found in shell", jsMarker)
+	js, err := bundleJS(filepath.Join(srcDir, webBuildScriptFilename))
+	if err != nil {
+		return "", fmt.Errorf("js: %w", err)
 	}
-	page = strings.Replace(page, cssMarker, css, webBuildReplaceOnce)
-	page = strings.Replace(page, jsMarker, js, webBuildReplaceOnce)
-
-	// A bundle that smuggled in a literal </script> or </style> would break the
-	// inline blocks; esbuild never emits one, but guard regardless.
+	if strings.Count(page, jsMarker) != webBuildReplaceOnce {
+		return "", fmt.Errorf("js marker %q must occur once in the shell", jsMarker)
+	}
 	if strings.Contains(js, "</script") {
-		return errors.New("js bundle contains </script")
+		return "", errors.New("js bundle contains </script")
 	}
-	if strings.Contains(css, "</style") {
-		return errors.New("css bundle contains </style")
-	}
+	page = strings.Replace(page, jsMarker, js, webBuildReplaceOnce)
 	// The server fills these per request; they must survive the build.
 	for _, ph := range []string{"{{CSP_NONCE}}", "{{VERSION}}"} {
 		if !strings.Contains(page, ph) {
-			return fmt.Errorf("placeholder %s missing from generated page", ph)
+			return "", fmt.Errorf("placeholder %s missing from generated page", ph)
 		}
 	}
+	return page, nil
+}
 
-	if err := os.WriteFile(out, []byte(page), webBuildOutputFileMode); err != nil { //nolint:gosec // G304,G703: out is the -out build flag of a developer tool, not untrusted input.
-		return fmt.Errorf("write %s: %w", out, err)
+// renderLogin builds login.html: the shell with the minified login stylesheet,
+// design tokens included. The result is an html/template the server executes,
+// so it is parsed here too: a broken action fails the build, not sermod's start.
+func renderLogin(srcDir string) (string, error) {
+	page, err := readShell(srcDir, loginShellFilename)
+	if err != nil {
+		return "", err
 	}
-	return nil
+	if page, err = injectCSS(page, filepath.Join(srcDir, loginStylesFilename)); err != nil {
+		return "", err
+	}
+	if !strings.Contains(page, loginNonceAction) {
+		return "", fmt.Errorf("template action %s missing from the login page", loginNonceAction)
+	}
+	if _, err := template.New(loginShellFilename).Parse(page); err != nil {
+		return "", fmt.Errorf("login page is not a valid template: %w", err)
+	}
+	return page, nil
 }
 
 func loadWatchPanels(path string) ([]watchPanelDescriptor, error) {
