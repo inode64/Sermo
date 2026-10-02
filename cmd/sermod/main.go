@@ -472,6 +472,7 @@ func run(args []string) int {
 			Backend:                webHolder,
 			Auth:                   auth,
 			Hostname:               config.ShortHostname(),
+			LoginMessage:           cfg.Global.WebLoginMessage(),
 			AllowedHosts:           webAllowedHosts(cfg),
 			Logger:                 logger,
 			AccessLog:              accessLog,

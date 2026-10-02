@@ -42,8 +42,9 @@ var loginPage = template.Must(template.ParseFS(assets, assetLoginHTML))
 type loginPageData struct {
 	Nonce   string
 	Host    string
+	Note    string // web.login_message, under the host name
 	Version string
-	Message string
+	Message string // the outcome of a failed attempt
 }
 
 // publicSite is what web.public_url says about how browsers reach the
@@ -87,28 +88,34 @@ func relativePath(r *http.Request, target string) string {
 	return prefix + target
 }
 
-// handleLogin serves the password form (GET) and checks it (POST). A correct
-// password starts a session cookie carrying the role it grants.
-func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request, role string) {
+// handleLoginForm serves the password form; an admin, or an open dashboard,
+// has nothing to log in to and goes home.
+func (s *Server) handleLoginForm(w http.ResponseWriter, r *http.Request) {
+	if !s.Auth.Enabled() || roleFrom(r.Context()) == roleAdmin {
+		redirectWithin(w, r, "")
+		return
+	}
+	s.renderLogin(w, r, http.StatusOK, "")
+}
+
+// handleLoginBasic summons the browser's own password dialog, kept as an
+// alternative to the form: it challenges until the browser sends an admin
+// credential, then goes home.
+func (s *Server) handleLoginBasic(w http.ResponseWriter, r *http.Request) {
+	if roleFrom(r.Context()) == roleAdmin {
+		redirectWithin(w, r, "")
+		return
+	}
+	s.challenge(w)
+}
+
+// handleLoginSubmit checks the form's password. A correct one starts a session
+// cookie carrying the role it grants.
+func (s *Server) handleLoginSubmit(w http.ResponseWriter, r *http.Request) {
 	if !s.Auth.Enabled() {
 		redirectWithin(w, r, "")
 		return
 	}
-	switch r.Method {
-	case http.MethodGet, http.MethodHead:
-		if role == roleAdmin {
-			redirectWithin(w, r, "")
-			return
-		}
-		s.renderLogin(w, r, http.StatusOK, "")
-	case http.MethodPost:
-		s.submitLogin(w, r)
-	default:
-		methodNotAllowed(w, http.MethodGet, http.MethodHead, http.MethodPost)
-	}
-}
-
-func (s *Server) submitLogin(w http.ResponseWriter, r *http.Request) {
 	// A plain HTML form cannot carry the X-Sermo-Csrf header, so the form's
 	// own origin is the cross-site check: a page elsewhere must not be able to
 	// log a browser into this dashboard.
@@ -181,22 +188,11 @@ func clientAddress(r *http.Request) string {
 // handleLogout ends the browser's session. withAuth has already required the
 // dashboard's X-Sermo-Csrf header, so another site cannot log you out.
 func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		methodNotAllowed(w, http.MethodPost)
-		return
-	}
 	if c, err := r.Cookie(s.cookieName); err == nil {
 		s.sessions.delete(c.Value)
 	}
 	http.SetCookie(w, s.sessionCookie(r, "", -1))
 	writeJSON(w, http.StatusOK, ActionResult{OK: true, Message: "logged out"})
-}
-
-// methodNotAllowed answers a method the auth routes, which withAuth serves
-// before the mux's method patterns, do not take.
-func methodNotAllowed(w http.ResponseWriter, allow ...string) {
-	w.Header().Set(headerAllow, strings.Join(allow, ", "))
-	writeJSON(w, http.StatusMethodNotAllowed, ActionResult{OK: false, Message: "method not allowed"})
 }
 
 // sessionCookie builds the session cookie; maxAge -1 deletes it. Lax, not
@@ -283,6 +279,7 @@ func (s *Server) renderLogin(w http.ResponseWriter, r *http.Request, status int,
 	err := loginPage.Execute(&page, loginPageData{
 		Nonce:   cspNonceFrom(r.Context()),
 		Host:    s.Hostname,
+		Note:    s.LoginMessage,
 		Version: buildinfo.Short(),
 		Message: message,
 	})
@@ -292,6 +289,12 @@ func (s *Server) renderLogin(w http.ResponseWriter, r *http.Request, status int,
 	}
 	w.Header().Set(headerContentType, contentTypeHTMLUTF8)
 	w.Header().Set(headerCacheControl, headerValueNoStore)
+	// The dashboard-wide no-referrer policy makes a browser send `Origin: null`
+	// on this page's form POST, which sameOriginForm must refuse — and over
+	// plain HTTP there is no Sec-Fetch-Site to fall back on. same-origin keeps
+	// the real Origin on the post to this server while still sending nothing
+	// to any other site.
+	w.Header().Set(headerReferrerPolicy, headerValueSameOrigin)
 	w.WriteHeader(status)
 	if r.Method != http.MethodHead {
 		_, _ = w.Write(page.Bytes())

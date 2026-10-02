@@ -998,6 +998,10 @@ web:
   to the access log (`engine.access`) without the password, and to the daemon
   log with the client address.
 - A notification's link to a row (`#…`) survives the detour through the form.
+- `web.login_message` adds a short note under the host name on the form — say
+  `"Producción · solo sysadmins"`. It is one line of plain text (at most 200
+  characters, no markup: the page is served before anyone logs in), read when
+  `sermod` starts like the rest of the `web` block.
 - A guest password starts a read-only session; an anonymous guest escalates by
   following **log in** in the top bar.
 
@@ -3364,7 +3368,9 @@ and reads as `warning` with no stated cause.
 `stale_binary` is diagnostic rather than an availability failure: it does not
 reduce service health or SLA. When it finds a replaced executable, the service
 is shown as `restart_required` with `state_reason: stale_binary`, while
-its generated rule continues to alert and, where allowed, restart safely.
+its generated rule continues to alert and, where allowed, restart safely. That
+rule is graded **`warning`**, not `error`: the service still serves (the old
+version), so a notifier with `min_severity: error` does not page for it.
 
 Restarting is the default. Set `restart_on_stale_binary: false` on a service
 to keep the alert and the notification but drop the restart, and `true` to

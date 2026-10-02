@@ -1,7 +1,8 @@
 # CodeQL scope for Sermo.
 #
-# internal/web/index.html is a generated, committed artifact: internal/web/build
-# minifies src/app.js and src/styles.css into the src/index.html shell. CodeQL
+# internal/web/index.html and internal/web/login.html are generated, committed
+# artifacts: internal/web/build minifies src/app.js and src/styles.css into the
+# src/index.html shell, and src/login.css into the src/login.html shell. CodeQL
 # analysed both it and the sources it is built from, so every JavaScript finding
 # arrived twice -- once against a readable line in internal/web/src/, and once
 # against a 6.8 KB minified line where the variables are named La and Wn. The
@@ -12,3 +13,4 @@ name: Sermo CodeQL config
 
 paths-ignore:
   - internal/web/index.html
+  - internal/web/login.html

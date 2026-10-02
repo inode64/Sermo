@@ -221,9 +221,9 @@ changes. Each has a permission gate, and every gate is settable per host:
 
 | Mechanism | Trigger | Gate | Notifies |
 |---|---|---|---|
-| `restart_on_change` | app version, library, config path | `config:` / `version:` | yes — alert, then restart |
+| `restart_on_change` | app version, library, config path | `config:` / `version:` | yes — alert, then restart (app version and library changes are graded `warning`) |
 | `reload_on_change` | config path | `config:` | **no** — reload only, no alert action |
-| [`restart_on_stale_binary`](configuration.md#stale_binary--service-running-a-replaced-binary) | binary replaced on disk | the flag itself | yes — alert, then restart |
+| [`restart_on_stale_binary`](configuration.md#stale_binary--service-running-a-replaced-binary) | binary replaced on disk | the flag itself | yes — alert, then restart (graded `warning`) |
 | [`restart_on_fds_high`](configuration.md#fds--descriptors-against-the-process-limit-fds_limit) | a process above `fds_limit` of its open-files limit for 3 minutes | explicit `true` (default `false`) | yes — alert; restart only when enabled |
 
 Two levels of granularity, both on the host, neither requiring a catalog edit:

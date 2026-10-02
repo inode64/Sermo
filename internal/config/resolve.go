@@ -12,6 +12,7 @@ import (
 	"sermo/internal/cfgval"
 	"sermo/internal/checks"
 	"sermo/internal/rules"
+	"sermo/internal/severity"
 	"sermo/internal/strutil"
 )
 
@@ -1111,7 +1112,7 @@ func (c *Config) addRestartOnChangeLibraryRules(tree, rulesMap map[string]any, l
 		preflight[preflightKey] = map[string]any{checks.CheckKeyType: checks.CheckTypeFile, checks.CheckKeyPath: path, checks.CheckKeyNonEmpty: true}
 		key := "restart-on-change-" + library
 		changed := map[string]any{rules.FieldLibrary: library, rules.FieldPath: path}
-		if err := addChangedRemediationRule(rulesMap, keyRestartOnChange, key, changed, restartOnChangeThen(message)); err != nil {
+		if err := addBinaryChangeRule(rulesMap, key, changed, restartOnChangeThen(message)); err != nil {
 			errs = append(errs, err.Error())
 			continue
 		}
@@ -1132,12 +1133,30 @@ func addRestartOnChangeAppRules(tree, rulesMap map[string]any, apps []restartOnC
 		}
 		key := "restart-on-change-" + app.name + "-version"
 		changed := map[string]any{rules.FieldApp: app.name, rules.FieldLevel: app.level}
-		if err := addChangedRemediationRule(rulesMap, keyRestartOnChange, key, changed, restartOnChangeThen(message)); err != nil {
+		if err := addBinaryChangeRule(rulesMap, key, changed, restartOnChangeThen(message)); err != nil {
 			errs = append(errs, err.Error())
 			continue
 		}
 	}
 	return errs
+}
+
+// binaryChangeSeverity grades the rules a changed binary drives: a library or
+// app upgraded under a running service, or a process still running a binary
+// replaced on disk. The service keeps serving the previous version, so it
+// needs attention — usually a restart — but it is not an outage.
+const binaryChangeSeverity = severity.Warning
+
+// addBinaryChangeRule adds a restart_on_change rule for a library or app
+// binary, graded binaryChangeSeverity.
+func addBinaryChangeRule(rulesMap map[string]any, key string, changed, then map[string]any) error {
+	if err := addChangedRemediationRule(rulesMap, keyRestartOnChange, key, changed, then); err != nil {
+		return err
+	}
+	if rule, ok := rulesMap[key].(map[string]any); ok {
+		rule[rules.RuleFieldSeverity] = string(binaryChangeSeverity)
+	}
+	return nil
 }
 
 // addChangedRemediationRule adds one generated remediation rule whose condition

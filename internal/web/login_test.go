@@ -94,6 +94,11 @@ func TestLoginPageIsAPasswordOnlyForm(t *testing.T) {
 	if rec.Header().Get(headerWWWAuthenticate) != "" {
 		t.Error("the form must not summon the browser dialog")
 	}
+	// no-referrer would make the browser post the form with `Origin: null`,
+	// which the origin check refuses: the login page must keep a real Origin.
+	if got := rec.Header().Get(headerReferrerPolicy); got != headerValueSameOrigin {
+		t.Errorf("Referrer-Policy = %q, want %q so the form posts its Origin", got, headerValueSameOrigin)
+	}
 }
 
 func TestLoginStartsAnAdminSession(t *testing.T) {
@@ -479,5 +484,50 @@ func TestSessionStoreEvictsWithinTheRole(t *testing.T) {
 	}
 	if store.role(admin, now) != roleAdmin {
 		t.Fatal("guest logins evicted the admin session")
+	}
+}
+
+// The login routes are ordinary mux routes: their relaxed policy covers only the
+// method and path the mux matched. Another method is an ordinary request — an
+// admin gets the mux's 405, an anonymous caller is refused before routing — and
+// an escaped path the mux sends elsewhere is not exempt either.
+func TestLoginRoutesAreMuxRoutes(t *testing.T) {
+	lh := newLoginHarness(Auth{AdminCredentials: testCredentials(t, "secret")})
+	for _, tc := range []struct {
+		method, path, allow string
+	}{
+		{http.MethodPut, routePathLogin, "POST"},
+		{http.MethodDelete, routePathLogout, "POST"},
+		{http.MethodPost, routePathLoginBasic, "GET"},
+	} {
+		if rec := lh.do(req(tc.method, tc.path, "", "")); rec.Code != http.StatusUnauthorized {
+			t.Errorf("anonymous %s %s = %d, want 401", tc.method, tc.path, rec.Code)
+		}
+		rec := lh.do(req(tc.method, tc.path, "admin", "secret"))
+		if rec.Code != http.StatusMethodNotAllowed || !strings.Contains(rec.Header().Get("Allow"), tc.allow) {
+			t.Errorf("%s %s = %d allow=%q, want 405 allowing %s", tc.method, tc.path, rec.Code, rec.Header().Get("Allow"), tc.allow)
+		}
+	}
+}
+
+func TestEscapedLoginPathIsNotExempt(t *testing.T) {
+	lh := newLoginHarness(Auth{AdminCredentials: testCredentials(t, "secret")})
+	r := httptest.NewRequest(http.MethodGet, "/login%2Fbasic", nil)
+	if rec := lh.do(r); rec.Code != http.StatusUnauthorized && rec.Code != http.StatusSeeOther {
+		t.Fatalf("GET /login%%2Fbasic = %d, want the default unauthenticated answer", rec.Code)
+	}
+}
+
+// web.login_message shows under the host as escaped plain text: the page is
+// served to anyone, so it never carries markup.
+func TestLoginPageShowsTheLoginMessage(t *testing.T) {
+	lh := newLoginHarness(Auth{AdminCredentials: testCredentials(t, "secret")}, func(s *Server) { s.LoginMessage = "Producción <b>prod</b>" })
+	body := lh.do(httptest.NewRequest(http.MethodGet, routePathLogin, nil)).Body.String()
+	if !strings.Contains(body, `<p class="login-note">Producción &lt;b&gt;prod&lt;/b&gt;</p>`) {
+		t.Fatalf("login page lacks the escaped note:\n%s", body)
+	}
+	plain := newLoginHarness(Auth{AdminCredentials: testCredentials(t, "secret")})
+	if strings.Contains(plain.do(httptest.NewRequest(http.MethodGet, routePathLogin, nil)).Body.String(), `<p class="login-note">`) {
+		t.Fatal("login page shows a note although none is configured")
 	}
 }

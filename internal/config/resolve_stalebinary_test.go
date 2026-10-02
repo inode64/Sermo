@@ -8,6 +8,7 @@ import (
 
 	"sermo/internal/checks"
 	"sermo/internal/rules"
+	"sermo/internal/severity"
 )
 
 func staleBinaryTree(extra map[string]any) map[string]any {
@@ -48,6 +49,10 @@ func TestStaleBinaryDefaultAllowsRestart(t *testing.T) {
 	}
 	if got := ruleActionTypes(t, rule); len(got) != 2 || got[0] != "alert" || got[1] != "restart" {
 		t.Fatalf("want alert then restart, got %v", got)
+	}
+	// A replaced binary is a warning: the service still serves, the old version.
+	if got := rule[rules.RuleFieldSeverity]; got != string(severity.Warning) {
+		t.Fatalf("stale-binary rule severity = %v, want warning", got)
 	}
 	checksMap, _ := tree[sectionChecks].(map[string]any)
 	entry, _ := checksMap[staleBinaryCheckName].(map[string]any)
