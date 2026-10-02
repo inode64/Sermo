@@ -102,7 +102,15 @@ func (b *WebBackend) viewWithRuntime(ctx context.Context, name string, e *webEnt
 	// backend's in-memory init-status cache directly. Its monitor-state transition
 	// is persisted after the operation; a newer change is therefore the bounded
 	// cross-process signal to refresh status before rendering the Web UI.
-	if monitorChangedAt.After(statusAt) {
+	// Automatic actions do not change manual monitoring state. A newer event
+	// also invalidates the cache, including the recovery event that may already
+	// have superseded the action. This matters for containers whose protocol
+	// check cannot supply a normalized service-check status below.
+	var eventAt time.Time
+	if lastEvent != nil {
+		eventAt, _ = time.Parse(time.RFC3339, lastEvent.Time)
+	}
+	if monitorChangedAt.After(statusAt) || eventAt.After(statusAt) {
 		e.invalidateStatusCache()
 		status, statusAt = e.backendStatusSnapshot(ctx, observation.at)
 	}

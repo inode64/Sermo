@@ -38,8 +38,10 @@ processes:
   # session from there, down to the user's shell and whatever it runs. Without it
   # the whole session tree counts as residuals of the stop, and a restart never
   # reaches its start phase while anyone is logged in.
+  # A newly accepted connection has no username yet. Delegate that session too,
+  # including its sshd-auth child, so a concurrent handshake cannot block stop.
   session:
-    cmd: '^sshd(-session)?: [^ /]+(@| \[priv\])'
+    cmd: '^sshd(-session)?: ([^ /]+(@| \[priv\])|\[accepted\]($| ))'
     delegated: true
 reload:
   signal: HUP

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"time"
 
 	"sermo/internal/config"
 	"sermo/internal/process"
@@ -15,14 +16,18 @@ var errProcessIdentity = errors.New("active service has no process matching conf
 
 // observeProcesses is deliberately separate from best-effort monitoring. Missing
 // capability cannot establish absence or turn a failed command into success.
-func (e Engine) observeProcesses(ctx context.Context) (process.Observation, error) {
+func (e Engine) observeProcesses(ctx context.Context, previous ...process.Process) (process.Observation, error) {
 	if err := ctx.Err(); err != nil {
 		return process.Observation{}, fmt.Errorf("observe service processes: %w", err)
 	}
-	if e.ObserveProcesses == nil {
+	observe := e.ObserveProcesses
+	if len(previous) > 0 && e.ObserveTracked != nil {
+		observe = func() (process.Observation, error) { return e.ObserveTracked(previous) }
+	}
+	if observe == nil {
 		return process.Observation{}, nil
 	}
-	out, err := e.ObserveProcesses()
+	out, err := observe()
 	if err == nil {
 		err = ctx.Err()
 	}
@@ -48,7 +53,11 @@ func (e Engine) reconcileInitState(ctx context.Context, result *Result) (bool, [
 	if status.Status != servicemgr.StatusInactive && status.Status != servicemgr.StatusFailed || e.Discover == nil {
 		return false, nil, nil
 	}
-	outcome, err := e.clearResiduals(ctx, nil)
+	outcome, err := e.clearResiduals(ctx, nil, nil)
+	outcome = e.recordResidualOutcome(result, outcome)
+	if ctx.Err() != nil {
+		return false, outcome.remaining, fmt.Errorf("residual cleanup: %w", ctx.Err())
+	}
 	if err != nil {
 		return false, outcome.remaining, fmt.Errorf("process discovery: %w", err)
 	}
@@ -110,11 +119,11 @@ func (e Engine) reconcileActive(ctx context.Context, result *Result) (bool, []pr
 
 // resetStopped revalidates absence immediately before clearing init bookkeeping,
 // then verifies the backend actually converged. No failure is silently discarded.
-func (e Engine) resetStopped(ctx context.Context, requireAbsence bool) error {
+func (e Engine) resetStopped(ctx context.Context, requireAbsence bool, previous ...process.Process) error {
 	if err := ctx.Err(); err != nil {
 		return fmt.Errorf("reconcile stopped state: %w", err)
 	}
-	observation, err := e.observeProcesses(ctx)
+	observation, err := e.observeProcesses(ctx, previous...)
 	if err != nil {
 		return err
 	}
@@ -122,7 +131,14 @@ func (e Engine) resetStopped(ctx context.Context, requireAbsence bool) error {
 		return errors.New("processes appeared before init state reconciliation")
 	}
 	if (observation.IdentityRequired || requireAbsence) && !observation.AbsenceKnown {
-		return errors.New("cannot prove process absence before init state reconciliation")
+		if err := e.verifyContainerExit(observation, previous); err != nil {
+			return fmt.Errorf("cannot prove process absence before init state reconciliation: %w", err)
+		}
+	}
+	if e.Backend == string(servicemgr.BackendDocker) {
+		if err := e.waitStoppedContainer(ctx); err != nil {
+			return err
+		}
 	}
 	if err := e.Manager.ResetState(ctx, e.Unit); err != nil {
 		return fmt.Errorf("reset stopped init state: %w", err)
@@ -137,17 +153,60 @@ func (e Engine) resetStopped(ctx context.Context, requireAbsence bool) error {
 	return nil
 }
 
+// A container with no selectors has no host-wide executable identity to query.
+// Accept only a confirmed inactive backend and proof that every old generation
+// exited; an empty or failed PID lookup alone never grants this exception.
+func (e Engine) verifyContainerExit(observation process.Observation, previous []process.Process) error {
+	previous = nonDelegatedResiduals(previous)
+	if e.Backend != string(servicemgr.BackendDocker) || observation.IdentityRequired || len(previous) == 0 {
+		return errors.New("no complete process identity evidence")
+	}
+	if err := observation.VerifyExited(previous); err != nil {
+		return fmt.Errorf("verify container process exit: %w", err)
+	}
+	return nil
+}
+
+// Docker can publish the stopped state just after the last process exits.
+// Allow the same bounded convergence window as start postflight, under the
+// operation deadline. Inspection errors never count as a stopped container.
+func (e Engine) waitStoppedContainer(ctx context.Context) error {
+	for attempt := range postflightMaxAttempts {
+		status, err := e.Manager.Status(ctx, e.Unit)
+		if err == nil {
+			err = ctx.Err()
+		}
+		if err != nil {
+			return fmt.Errorf("verify stopped container: %w", err)
+		}
+		if status.Status == servicemgr.StatusInactive {
+			return nil
+		}
+		if attempt+1 == postflightMaxAttempts {
+			return fmt.Errorf("container is %s, expected inactive", status.Status)
+		}
+		if err := process.Wait(ctx, e.Sleep, postflightRetryInterval); err != nil {
+			return fmt.Errorf("wait for stopped container: %w", err)
+		}
+	}
+	return nil
+}
+
 func (e Engine) stopService(ctx context.Context, result *Result) (stopped, reactivated bool) {
 	before, err := e.observeProcesses(ctx)
 	if err != nil {
 		result.Status, result.Message = ResultFailed, err.Error()
 		return false, false
 	}
+	if result.Action == actionRestart && !e.checkExternalResiduals(before, result) {
+		return false, false
+	}
+	e.stopAuxiliaryUnits(ctx, result, true)
 	if ctx.Err() != nil {
 		_ = failPhase(ctx, result, timeoutDuring("stop"), "stop: ", ctx.Err())
 		return false, false
 	}
-	stopErr := e.Manager.Stop(ctx, e.Unit)
+	grace, stopErr := e.stopPrimary(ctx)
 	if stopErr != nil {
 		result.Warnings = append(result.Warnings, "stop command: "+stopErr.Error())
 	}
@@ -155,21 +214,23 @@ func (e Engine) stopService(ctx context.Context, result *Result) (stopped, react
 		_ = failPhase(ctx, result, timeoutDuring("stop"), "stop: ", ctx.Err())
 		return false, false
 	}
-	for _, unit := range slices.Backward(e.Lifecycle.AuxiliaryUnits) {
-		if err := e.Manager.Stop(ctx, unit); err != nil {
-			result.Warnings = append(result.Warnings, fmt.Sprintf("also_service stop %s: %v", unit, err))
-		}
-	}
-	if err := e.waitGracefulStop(ctx, before, result.Action); err != nil {
+	e.stopAuxiliaryUnits(ctx, result, false)
+	if err := e.waitGracefulStop(ctx, before, result.Action, grace); err != nil {
 		result.Status, result.Message = ResultFailed, err.Error()
 		if ctx.Err() != nil {
 			_ = failWait(ctx, result, "graceful stop wait")
 		}
 		return false, false
 	}
-	residuals, err := e.clearResiduals(ctx, func(procs []process.Process) (bool, error) {
+	residuals, err := e.clearResiduals(ctx, before.Processes, func(procs []process.Process) (bool, error) {
 		return e.systemdReactivated(ctx, result.Action, before, procs)
 	})
+	residuals = e.recordResidualOutcome(result, residuals)
+	if ctx.Err() != nil {
+		result.Processes = residuals.remaining
+		_ = failWait(ctx, result, "residual process handling")
+		return false, false
+	}
 	if err != nil {
 		result.Status, result.Message, result.Processes = ResultFailed, "process discovery: "+err.Error(), residuals.remaining
 		return false, false
@@ -185,7 +246,7 @@ func (e Engine) stopService(ctx context.Context, result *Result) (stopped, react
 		}
 		return false, false
 	}
-	if err := e.resetStopped(ctx, stopErr != nil); err != nil {
+	if err := e.resetStopped(ctx, stopErr != nil, before.Processes...); err != nil {
 		result.Status, result.Message = ResultFailed, err.Error()
 		return false, false
 	}
@@ -193,16 +254,57 @@ func (e Engine) stopService(ctx context.Context, result *Result) (stopped, react
 	return true, false
 }
 
+// Docker's synchronous stop waits indefinitely after SIGTERM (t=-1), so its
+// request must not consume the residual-cleanup and start budget. Share one
+// grace period between the request and observation; only the parent deadline
+// cancels the whole operation. Native init jobs retain their existing deadlines.
+func (e Engine) stopPrimary(ctx context.Context) (time.Duration, error) {
+	grace := e.KillPolicy.GracefulTimeout
+	stopCtx := ctx
+	if e.Backend == string(servicemgr.BackendDocker) {
+		if grace <= 0 {
+			grace = defaultDockerStopTimeout
+		}
+		var cancel context.CancelFunc
+		stopCtx, cancel = context.WithTimeout(ctx, grace)
+		defer cancel()
+	}
+	started := time.Now()
+	err := e.Manager.Stop(stopCtx, e.Unit)
+	if e.Backend == string(servicemgr.BackendDocker) {
+		grace = max(0, grace-time.Since(started))
+	}
+	if err != nil {
+		return grace, fmt.Errorf("request stop: %w", err)
+	}
+	return grace, nil
+}
+
+// Activation units go down before their primary so traffic cannot revive it
+// during stop. Companion services retain their existing teardown order after
+// the primary. Both groups preserve reverse declaration order and warnings.
+func (e Engine) stopAuxiliaryUnits(ctx context.Context, result *Result, beforePrimary bool) {
+	for _, unit := range slices.Backward(e.Lifecycle.AuxiliaryUnits) {
+		activates := e.Backend == string(servicemgr.BackendSystemd) && servicemgr.IsSystemdActivationUnit(unit)
+		if activates != beforePrimary || ctx.Err() != nil {
+			continue
+		}
+		if err := e.Manager.Stop(ctx, unit); err != nil {
+			result.Warnings = append(result.Warnings, fmt.Sprintf("also_service stop %s: %v", unit, err))
+		}
+	}
+}
+
 // waitGracefulStop treats graceful_timeout as a maximum, not a fixed pause after
 // a synchronous backend stop. Only fresh, complete evidence may end it early.
-func (e Engine) waitGracefulStop(ctx context.Context, before process.Observation, action string) error {
-	if e.KillPolicy.GracefulTimeout <= 0 || e.ObserveProcesses == nil {
-		if err := process.Wait(ctx, e.Sleep, e.KillPolicy.GracefulTimeout); err != nil {
+func (e Engine) waitGracefulStop(ctx context.Context, before process.Observation, action string, grace time.Duration) error {
+	if grace <= 0 || e.ObserveProcesses == nil {
+		if err := process.Wait(ctx, e.Sleep, grace); err != nil {
 			return fmt.Errorf("wait for graceful stop: %w", err)
 		}
 		return nil
 	}
-	_, err := process.WaitUntil(ctx, e.Sleep, e.KillPolicy.GracefulTimeout, func() (bool, error) {
+	_, err := process.WaitUntil(ctx, e.Sleep, grace, func() (bool, error) {
 		if e.Lifecycle.ProcessMode == config.ServiceProcessNone {
 			status, err := e.Manager.Status(ctx, e.Unit)
 			if err != nil {
@@ -210,13 +312,26 @@ func (e Engine) waitGracefulStop(ctx context.Context, before process.Observation
 			}
 			return status.Status == servicemgr.StatusInactive, nil
 		}
-		observation, err := e.observeProcesses(ctx)
+		observation, err := e.observeProcesses(ctx, before.Processes...)
 		if err != nil {
 			return false, err
 		}
 		remaining := nonDelegatedResiduals(observation.Processes)
 		if len(remaining) == 0 {
-			return observation.AbsenceKnown, nil
+			if observation.AbsenceKnown {
+				return true, nil
+			}
+			// Missing exit proof keeps the grace period open; final
+			// reconciliation still requires positive evidence before start.
+			exitProven := e.verifyContainerExit(observation, before.Processes) == nil
+			if !exitProven {
+				return false, nil
+			}
+			status, err := e.Manager.Status(ctx, e.Unit)
+			if err != nil {
+				return false, fmt.Errorf("query container state during stop: %w", err)
+			}
+			return status.Status == servicemgr.StatusInactive, nil
 		}
 		// A replacement may start while the old generation is still exiting.
 		// Keep waiting until that exception is fully verified; clearResiduals

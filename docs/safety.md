@@ -26,9 +26,9 @@ any `security:` toggle that tries to disable them.
    `processes.<name>.cmd` regex narrows both discovery and the paired identity
    for shared binaries, so a daemon and its workload children never collapse
    into one kill set; cmdline only ever restricts and never authorizes a kill on
-   its own. A process whose exe cannot be resolved
-   (permission, or a `(deleted)` binary) is never killed — it is reported as a
-   residual instead.
+   its own. An unreadable executable never authorizes a signal. A deleted executable
+   permits residual cleanup only when the kernel-held file, exact previous path,
+   real UID and service ownership are verified as described below.
 6. **Never send terminating signals to PID 1 or kernel threads.** `SIGTERM`,
    `SIGKILL`, `SIGINT` and `SIGQUIT` are blocked centrally for PID 1 and for
    kernel threads (`kthreadd`/children with no userspace exe or cmdline). This is
@@ -82,10 +82,17 @@ decision.
 3. Run required preflight (start/restart/reload/resume/repair).
 4. Block if any guard blocks the action.
 5. Before start/restart, compare init state with fresh process evidence:
+   - An active service's restart also observes external deleted-executable
+     candidates before stop. A known unkillable candidate blocks the restart
+     while the current daemon is still running. Current unit members retain
+     their normal graceful stop, including a replaced main executable.
    - Stable `inactive`/`failed` with surviving non-delegated processes triggers
      cleanup under `stop_policy`. Unmatched survivors block start.
    - `active` with a proven-absent resident daemon triggers reconciliation.
-     OpenRC uses `zap`; systemd uses stop and, when stopped, `reset-failed`.
+     OpenRC uses `zap`; systemd uses stop and clears a failed marker with
+     `reset-failed`. An already inactive systemd unit needs no reset: systemd
+     may unload a cleanly stopped unit before reconciliation. An unreadable or
+     transitional state blocks reconciliation; reset failures remain errors.
      Unknown/transitional state, incomplete reads and missing identity do not
      prove a divergence. OpenRC `inactive` (started, readiness still pending,
      as with `mark_service_inactive`) is transitional, not a stable stop, and
@@ -95,7 +102,9 @@ decision.
    signal escalation. Incomplete rediscovery stops escalation, including
    SIGKILL. Before starting, Sermo revalidates process absence,
    reconciles init bookkeeping and verifies its inactive state. A reset error
-   or an inconsistent state blocks the next phase.
+   or an inconsistent state blocks the next phase. Previously observed process
+   generations remain tracked if they leave the cgroup or stop matching a
+   selector; disappearance from discovery is not proof of exit.
 7. A stop command error is retained while Sermo checks the actual outcome. Only
    confirmed process absence and successful init reconciliation permit recovery.
    A start command error requires a trusted live process and active init state;
@@ -461,13 +470,22 @@ Kill decisions depend on how process facts are read, so this is fixed:
   not make a process killable by itself.
 - A selector with several fields (`exe`, `cmd`, `user`, `group`) requires **all**
   of them to match.
-- **Unresolvable exe fails safe**: if `/proc/<pid>/exe` cannot be read or
-  resolves to a `(deleted)` path (binary replaced by an upgrade), the process
-  matches no exe selector — it is reported as a residual with exe unknown and
-  is never signaled. Sermo does record *which* path a deleted binary occupied,
-  so the `stale_binary` check can name it, but that is diagnostic only: such a
-  process still resolves no exe, matches nothing and is never signaled. Do not
-  make a deleted path authorize matching or killing.
+- **Unreadable exe fails safe**: an unreadable executable authorizes no signal.
+  A deleted executable remains distinct from a current executable: it cannot
+  prove a healthy new start or authorize a signal reload. Residual cleanup may
+  send TERM/KILL only when the exact previous path and real UID match the
+  configured policy, and opening `/proc/PID/exe` verifies a regular executable
+  with zero links in the same mount namespace. The file stays open during
+  delivery; device/inode, PID generation, UID, previous path and cgroup are
+  revalidated after opening the pidfd. The pathname alone is insufficient.
+  This exception is limited to service residual cleanup. Host process watches
+  lack service ownership evidence and continue to refuse deleted executables.
+- **External deleted executables require ownership evidence**: a process owned
+  by another service or container scope is excluded. A process from an old login
+  session can be a candidate when a strict named selector matches, cgroup
+  ownership is readable and a strict main selector rules out competing live
+  instances. Ambiguous or unknown ownership blocks cleanup. Use instance-specific
+  selectors for shared executables; Sermo never resolves ambiguity by process name.
 - **PID 1 and kernel threads are protected** from terminating signals even if a
   future selector or signal path would otherwise target them. Non-terminating
   reload signals such as `SIGHUP` are not blocked by this guard.
@@ -480,6 +498,11 @@ Kill decisions depend on how process facts are read, so this is fixed:
 Discovery order: backend information (systemd MainPID/cgroup; OpenRC status)
 → configured pidfiles → `processes:` selectors → child process tree from
 `/proc`, deduplicated by PID.
+Native init services exclude selector matches owned by a different init unit.
+Libvirt domains, libvirt networks and Docker targets do not use their target
+names as init unit names; their backend evidence and configured process
+selectors determine discovery. Missing ownership evidence still blocks cleanup
+of external deleted executables.
 Cgroup paths must be canonical absolute hierarchy paths below the cgroup root;
 the root itself and paths containing traversal components provide no PID
 ownership evidence. OpenRC unit names must be single local filenames before
@@ -498,20 +521,32 @@ restart:
 1. Backend `Stop`, observe processes until confirmed absent or `graceful_timeout`
    expires, then discover residuals. Process-free services use inactive init state
    instead of process absence. An incomplete observation fails closed.
+   Docker's stop request shares this grace period (10 seconds when omitted or
+   zero), so an unresponsive container cannot consume the whole operation deadline
+   before residual handling. A request timeout is retained as a warning; an
+   expired or cancelled overall operation prevents escalation and start.
+   For Docker containers without selectors, reconciliation after a request error
+   requires a complete snapshot proving the old process generations exited and
+   an inactive container state. Disappearing backend PIDs alone are insufficient.
 2. No residuals → clean stop.
 3. Residuals with `force_kill: false` → `orphan_processes` (and a restart does
    **not** start).
 4. Residuals with `force_kill: true` or `auto` → classify each one: KILLABLE
    only when every explicit `kill_only_if` field matches, or when it matches a
    single paired strict `processes:` identity (exact resolved exe **and** real
-   UID; unresolvable exe and protected PIDs are never killable). SIGTERM the
+   UID; deleted executables require the additional file and ownership proof
+   above, and protected PIDs are never killable). SIGTERM the
    killable set, wait up to `term_timeout`, rediscover; SIGKILL what remains of the
    killable set, wait up to `kill_timeout`, rediscover. Each wait ends early when
    fresh discovery confirms that no residual remains. A residual that never matched
-   is never signaled.
+   is never signaled. SIGKILL never targets a replacement generation that
+   appeared after the TERM round.
 5. The result is `ok` only when no residuals remain at all — whether the
    survivor was deliberately spared or outlived SIGKILL, the result is
-   `orphan_processes` and lists every remaining process.
+   `orphan_processes` and lists every remaining process. The CLI and operation
+   JSON retain the previous executable path, selector role and signal refusal
+   reason. Every attempted signal and delivery error is included in the single
+   persisted operation event, even when cleanup eventually succeeds.
 
 ## Stray processes and `reap`
 

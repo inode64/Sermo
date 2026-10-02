@@ -27,16 +27,21 @@ func checkCatalog(tree map[string]any, resolution time.Duration) serviceCheckCat
 		return serviceCheckCatalog{}
 	}
 	catalog := serviceCheckCatalog{
-		names:     slices.Sorted(maps.Keys(section)),
 		types:     make(map[string]string, len(section)),
 		intervals: make(map[string]time.Duration, len(section)),
 	}
 	if resolution > 0 {
 		catalog.cycles = make(map[string]int)
 	}
-	for _, name := range catalog.names {
-		catalog.intervals[name] = resolution
+	for _, name := range slices.Sorted(maps.Keys(section)) {
 		entry, ok := section[name].(map[string]any)
+		// Match the runnable check builder: disabled checks produce no sample
+		// and must not leave the service waiting for one forever.
+		if ok && cfgval.Disabled(entry) {
+			continue
+		}
+		catalog.names = append(catalog.names, name)
+		catalog.intervals[name] = resolution
 		if !ok {
 			catalog.types[name] = ""
 			continue

@@ -69,6 +69,11 @@ type Config struct {
 // closures, residual discovery, the kill policy and the reaper from the resolved
 // config tree.
 func New(c Config) Engine {
+	if c.Discoverer.ProcessOwnership == nil {
+		c.Discoverer.ProcessOwnership = func(id process.Identity) (bool, bool) {
+			return servicemgr.CgroupOwnership(id.Cgroup, c.Unit)
+		}
+	}
 	// Leave sleep nil when unset so process.Wait uses its cancellable timer in
 	// production (no goroutine leak on a cancelled stop); tests inject a fake.
 	sleep := c.Sleep
@@ -122,12 +127,16 @@ func New(c Config) Engine {
 	// (and may have been reused), defeating the reaper's per-round identity
 	// re-check (safety invariants 1, 4, 12). So invalidate the cache first when
 	// the reader is a CachingReader.
-	discover := func() ([]process.Process, error) {
-		observation, err := c.Discoverer.Observe(selectors)
+	observeTracked := func(previous []process.Process) (process.Observation, error) {
+		observation, err := c.Discoverer.ObserveTracked(selectors, previous)
 		if err != nil {
-			return observation.Processes, fmt.Errorf("%s: %w", runtimeDiscoveryWarningPrefix, err)
+			return observation, fmt.Errorf("%s: %w", runtimeDiscoveryWarningPrefix, err)
 		}
-		return observation.Processes, nil
+		return observation, nil
+	}
+	discoverTracked := func(previous []process.Process) ([]process.Process, error) {
+		observation, err := observeTracked(previous)
+		return observation.Processes, err
 	}
 
 	resolveUser := c.ResolveUser
@@ -187,7 +196,9 @@ func New(c Config) Engine {
 		PauseFunc:           optionalVerb(c.Manager, c.Unit, pauseManager.Pause),
 		RepairStalePIDFiles: repairStalePIDFiles(c.Manager, c.Unit, selectors, c.Discoverer.Reader, runtimeDirectory),
 		ObserveProcesses:    func() (process.Observation, error) { return c.Discoverer.Observe(selectors) },
-		Discover:            discover,
+		ObserveTracked:      observeTracked,
+		Discover:            func() ([]process.Process, error) { return discoverTracked(nil) },
+		DiscoverTracked:     discoverTracked,
 		Reaper:              reaper,
 		KillPolicy:          killPolicy,
 		ReapSelector:        reapSelector,

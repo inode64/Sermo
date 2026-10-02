@@ -269,6 +269,21 @@ func (m systemdManager) Reload(ctx context.Context, service string) error {
 }
 
 func (m systemdManager) ResetState(ctx context.Context, service string) error {
+	unit := systemdUnit(service)
+	result, err := runSystemctlShow(ctx, m.runner, defaultDetectTimeout, systemctlPropertyActiveState, unit)
+	if err != nil || result.ExitCode != 0 {
+		return fmt.Errorf("query state before resetting %s: %s", unit, execx.OperatorFailure(err, result, defaultDetectTimeout))
+	}
+	status := systemdStatus(strings.TrimSpace(result.Stdout))
+	if status == StatusUnknown {
+		return fmt.Errorf("cannot reset %s with indeterminate active state %q", unit, strings.TrimSpace(result.Stdout))
+	}
+	// systemd can unload a cleanly stopped unit immediately. reset-failed then
+	// fails with "Unit not loaded", although there is no failed state to clear.
+	// The operation engine still verifies process absence and the final status.
+	if status == StatusInactive {
+		return nil
+	}
 	return m.action(ctx, actionResetFailed, service)
 }
 
@@ -431,6 +446,14 @@ func actionError(command string, result execx.Result, err error) error {
 	}
 	msg := execx.OperatorFailureOr(err, result, execx.NoTimeout, err.Error())
 	return fmt.Errorf("%s: %s", command, msg)
+}
+
+// IsSystemdActivationUnit reports unit types that can start a service on demand.
+// Their listeners must be stopped before the primary service to avoid racing
+// socket traffic, timer expiry or path changes during a deliberate stop.
+func IsSystemdActivationUnit(unit string) bool {
+	return strings.HasSuffix(unit, systemdSocketSuffix) ||
+		strings.HasSuffix(unit, systemdTimerSuffix) || strings.HasSuffix(unit, systemdPathSuffix)
 }
 
 // systemdUnitSuffixes are the unit types systemd recognizes; a service name that

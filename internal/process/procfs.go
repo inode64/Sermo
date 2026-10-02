@@ -16,6 +16,7 @@ const (
 	procFileCmdline = "cmdline"
 	procFileComm    = "comm"
 	procFileExe     = "exe"
+	procFileCgroup  = "cgroup"
 	// ProcFileFD is the /proc/<pid>/fd directory name.
 	ProcFileFD = "fd"
 	// ProcFileCWD is the /proc/<pid>/cwd symlink name.
@@ -200,6 +201,12 @@ func (r OSReader) Identity(pid int) (Identity, bool) {
 		}
 	}
 	id.Exe, id.ExeOK, id.ExePrev = readExe(pid)
+	if cgroup, err := hostfs.ReadFile(PIDPath(pid, procFileCgroup)); err == nil {
+		id.Cgroup = strings.TrimSpace(string(cgroup))
+	}
+	if id.ExePrev != "" {
+		id.ExeFile = deletedExecutableIdentity(pid, id.ExePrev)
+	}
 	return id, true
 }
 
@@ -283,11 +290,14 @@ func readStatus(pid int) (ppid int, uid, gid uint32, state string, ok bool) {
 // selector.
 //
 // A deleted binary additionally reports prev = the path it occupied. That is
-// diagnostic only — ok stays false, so the safety rule that an unresolvable exe
-// matches nothing and is never signalled is unchanged. Callers that act on prev
-// must not treat it as an identity.
+// not sufficient signal authority: ok stays false. OSReader separately verifies
+// the kernel-held file for residual cleanup; a pathname alone authorizes nothing.
 func readExe(pid int) (exe string, ok bool, prev string) {
-	target, err := hostfs.Readlink(PIDPath(pid, procFileExe))
+	return readExeAt(PIDPath(pid, procFileExe))
+}
+
+func readExeAt(path string) (exe string, ok bool, prev string) {
+	target, err := hostfs.Readlink(path)
 	if err != nil || target == "" {
 		return "", false, ""
 	}

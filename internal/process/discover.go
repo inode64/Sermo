@@ -33,6 +33,10 @@ type Discoverer struct {
 	// failure mode is safe: a backend that names no principal makes the first
 	// live cgroup member look like one, which only ever leaves a stray unlabelled.
 	BackendPIDs func() []int
+	// ProcessOwnership classifies kernel cgroup evidence. foreign excludes a
+	// process owned by another unit; unknown ownership forbids signaling an
+	// unlinked executable found outside the attributed tree.
+	ProcessOwnership func(Identity) (foreign, known bool)
 }
 
 // NewDiscovererWithUserLookup returns a Discoverer backed by the host /proc and
@@ -128,6 +132,9 @@ func (d Discoverer) Discover(selectors []Selector) ([]Process, []string) {
 	}
 	for _, pid := range candidates {
 		id := snapshot[pid]
+		if !childrenComputed && d.foreignProcess(id) {
+			continue
+		}
 		for i := range selectors {
 			if selectors[i].Type == SelectorCommandMatch && d.matches(&selectors[i], id, resolve) {
 				add(id, selectors[i].Name, SelectorCommandMatch)
@@ -230,11 +237,9 @@ func (d Discoverer) markDelegated(selectors []Selector, found map[int]Process, i
 	// children. Delegation then flows down the tree because a workload owns
 	// everything it spawns.
 	//
-	// claimedBy also accepts a process whose binary was replaced on disk, and that
-	// case is the one that matters most here. An unresolvable exe already makes a
-	// process unkillable, so declining to delegate it is the worst combination
-	// there is: it stays a residual that nothing may ever signal, and every staged
-	// stop therefore ends in orphan_processes with the service left stopped.
+	// claimedBy also accepts a process whose binary was replaced on disk. The
+	// workload remains delegated after an upgrade, independently of whether its
+	// kernel-held executable can be verified for ordinary residual cleanup.
 	// Delegation only ever removes authority — it can never make a process
 	// signallable — so recognizing a stale-binary process here cannot widen what
 	// Sermo may signal.
@@ -309,8 +314,8 @@ type StaleBinary struct {
 //
 // It takes the processes discovery already produced for this cycle rather than
 // rediscovering them, and reads the snapshot the caller already holds. It is a
-// read-only diagnostic: it never widens what Discover selects, so a process
-// reported here is still never signalled.
+// read-only diagnostic: it never widens what Discover selects or authorizes
+// signaling. Operation observation separately verifies cleanup candidates.
 func (d Discoverer) StaleBinariesIn(attributed []Process, selectors []Selector) []StaleBinary {
 	var out []StaleBinary
 	var seen map[int]bool
@@ -584,9 +589,8 @@ func (d Discoverer) matchesAny(selectors []Selector, id Identity, resolve UserRe
 
 // claimedBy reports whether any selector in the set names id. Unlike matchesAny
 // it also accepts a process whose binary was replaced on disk, matched through
-// ExePrev: such a process is still the one the selector was written for, it just
-// can no longer prove its identity. It authorizes nothing either way — matches()
-// stays false for it, so it is never selected and never signalled.
+// ExePrev. This diagnostic authorizes nothing by itself: matches() stays false,
+// and cleanup requires separate executable-file and ownership verification.
 //
 // The two identity-resolved post-passes share this predicate so "a selector names
 // this process" cannot come to mean two different things: markDelegated removes
@@ -711,7 +715,7 @@ func selectorCmdRegexp(sel *Selector) *regexp.Regexp {
 // matchesDeletedExe reports whether sel would have matched id if id's binary had
 // not been replaced on disk: the deleted path is exactly the selector's exe and
 // every other field matches. It authorizes nothing — matches() still returns
-// false for such a process, so it is never selected and never signalled. This
+// false for such a process. Cleanup needs additional kernel-file proof. This
 // exists only so a package upgrade that silently breaks discovery can be
 // reported instead of surfacing as an unexplained absence of processes.
 func (d Discoverer) matchesDeletedExe(sel *Selector, id Identity, resolve UserResolver) bool {
@@ -760,6 +764,8 @@ func toProcess(id Identity, role, source string) Process {
 		GID:        id.GID,
 		Exe:        id.Exe,
 		ExeOK:      id.ExeOK,
+		ExeFile:    id.ExeFile,
+		Cgroup:     id.Cgroup,
 		Cmdline:    id.Cmdline,
 		Role:       role,
 		Source:     source,

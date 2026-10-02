@@ -57,6 +57,39 @@ func TestObserveRejectsIncompleteSnapshot(t *testing.T) {
 	}
 }
 
+func TestObserveTrackedWithoutSelectorsOrBackendPIDs(t *testing.T) {
+	t.Parallel()
+	old := []Process{{PID: 100, StartTicks: 10, Source: SourceBackend}}
+	for _, tc := range []struct {
+		name     string
+		ids      map[int]Identity
+		wantLive bool
+	}{
+		{name: "exited", ids: map[int]Identity{}},
+		{name: "escaped attribution", ids: map[int]Identity{100: {PID: 100, StartTicks: 10, StartTicksOK: true}}, wantLive: true},
+		{name: "PID reused", ids: map[int]Identity{100: {PID: 100, StartTicks: 20, StartTicksOK: true}}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			d := Discoverer{Reader: fakeReader{ids: tc.ids}}
+			out, err := d.ObserveTracked(nil, old)
+			if err != nil || (len(out.Processes) > 0) != tc.wantLive || out.AbsenceKnown {
+				t.Fatalf("tracked=%+v error=%v", out, err)
+			}
+			if err := out.VerifyExited(old); (err != nil) != tc.wantLive {
+				t.Fatalf("exit proof=%v, survivor=%v", err, tc.wantLive)
+			}
+		})
+	}
+	d := Discoverer{Reader: &errorAwareSnapshotReader{err: errors.New("unreadable snapshot")}}
+	if _, err := d.ObserveTracked(nil, old); err == nil {
+		t.Fatal("tracked exit must reject an incomplete snapshot")
+	}
+	if _, err := d.ObserveTracked(nil, nil); err != nil {
+		t.Fatal("unconfigured monitoring must keep its no-scan fast path")
+	}
+}
+
 func TestObserveUsesOneFreshSnapshot(t *testing.T) {
 	t.Parallel()
 	inner := &countingReader{ids: map[int]Identity{100: {PID: 100, UID: 0, Exe: "/opt/apache", ExeOK: true}}}

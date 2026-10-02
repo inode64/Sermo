@@ -10,6 +10,9 @@
 package operation
 
 import (
+	"fmt"
+	"strings"
+
 	"sermo/internal/checks"
 	"sermo/internal/locks"
 	"sermo/internal/process"
@@ -30,15 +33,38 @@ const (
 
 // Result is the single outcome emitted per operation.
 type Result struct {
-	Service   string            `json:"service"`
-	Action    string            `json:"action"`
-	Status    ResultStatus      `json:"status"`
-	Message   string            `json:"message,omitempty"`
-	Backend   string            `json:"backend,omitempty"`
-	Warnings  []string          `json:"warnings,omitempty"`
-	Checks    []checks.Result   `json:"checks,omitempty"`
-	Locks     []locks.Lock      `json:"locks,omitempty"`
-	Processes []process.Process `json:"processes,omitempty"`
+	Service   string                  `json:"service"`
+	Action    string                  `json:"action"`
+	Status    ResultStatus            `json:"status"`
+	Message   string                  `json:"message,omitempty"`
+	Backend   string                  `json:"backend,omitempty"`
+	Warnings  []string                `json:"warnings,omitempty"`
+	Checks    []checks.Result         `json:"checks,omitempty"`
+	Locks     []locks.Lock            `json:"locks,omitempty"`
+	Processes []process.Process       `json:"processes,omitempty"`
+	Signals   []process.SignalAttempt `json:"signals,omitempty"`
+}
+
+// AuditMessage preserves process identities, policy refusals and each attempted
+// signal in the operation's single persisted event, including successful cleanup.
+func (r Result) AuditMessage() string {
+	parts := make([]string, 0, 1+len(r.Processes)+len(r.Signals))
+	parts = append(parts, r.Message)
+	for _, proc := range r.Processes {
+		exe := proc.Exe
+		if proc.ExePrev != "" {
+			exe = proc.ExePrev + " (deleted)"
+		}
+		parts = append(parts, fmt.Sprintf("residual pid=%d uid=%d role=%s exe=%q blocked=%q", proc.PID, proc.UID, proc.Role, exe, proc.SignalBlockReason))
+	}
+	for _, attempt := range r.Signals {
+		message := fmt.Sprintf("pid=%d %s", attempt.PID, attempt.Signal)
+		if attempt.Error != "" {
+			message += ": " + attempt.Error
+		}
+		parts = append(parts, message)
+	}
+	return strings.Join(parts, "; ")
 }
 
 // OK reports whether the operation completed successfully.

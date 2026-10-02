@@ -33,6 +33,10 @@ variables:
   config: /etc/php/fpm-php${version}${sep}${instance}/php-fpm.conf
   status_path: /status
   listen_queue_max: 0
+os:
+  gentoo:
+    variables:
+      user: apache
 pidfile:
   optional: true
   path:

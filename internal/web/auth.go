@@ -228,13 +228,6 @@ type authRoute struct {
 	formPost bool
 }
 
-var authRoutes = map[string]authRoute{
-	routeLoginForm:   {anyRole: true},
-	routeLoginSubmit: {anyRole: true, formPost: true},
-	routeLoginBasic:  {anyRole: true},
-	routeLogout:      {anyRole: true},
-}
-
 // routePolicy is the relaxed policy of the mux route r will reach, if any.
 func routePolicy(next http.Handler, r *http.Request) authRoute {
 	mux, ok := next.(*http.ServeMux)
@@ -242,12 +235,19 @@ func routePolicy(next http.Handler, r *http.Request) authRoute {
 		return authRoute{}
 	}
 	_, pattern := mux.Handler(r)
-	return authRoutes[pattern]
+	switch pattern {
+	case routeLoginForm, routeLogout:
+		return authRoute{anyRole: true}
+	case routeLoginSubmit:
+		return authRoute{anyRole: true, formPost: true}
+	default:
+		return authRoute{}
+	}
 }
 
 // withAuth enforces the role on each request: an unauthenticated page load is
 // sent to the /login form, other unauthenticated requests get a plain 401, and
-// guests may only read (GET/HEAD). The routes in authRoutes relax that policy;
+// guests may only read (GET/HEAD). routePolicy supplies the login exceptions;
 // every handler finds the resolved role in its context (roleFrom).
 func (s *Server) withAuth(next http.Handler) http.Handler {
 	s.initLoginState()
@@ -297,46 +297,6 @@ func (s *Server) withAuth(next http.Handler) http.Handler {
 	})
 }
 
-func (s *Server) challenge(w http.ResponseWriter) {
-	w.Header().Set(headerWWWAuthenticate, basicAuthChallenge(s.Hostname))
-	writeJSON(w, http.StatusUnauthorized, ActionResult{OK: false, Message: authMessageRequired})
-}
-
-// basicAuthRealmValue is the unquoted realm string: "Sermo" or "Sermo <host>".
-func basicAuthRealmValue(shortHost string) string {
-	shortHost = strings.TrimSpace(shortHost)
-	if shortHost == "" {
-		return authBasicRealmPrefix
-	}
-	return authBasicRealmPrefix + " " + shortHost
-}
-
-// basicAuthChallenge builds the WWW-Authenticate value for a Basic challenge.
-// The realm includes the short hostname when known so Chrome's password manager
-// labels each dashboard distinctly across many open tabs.
-func basicAuthChallenge(shortHost string) string {
-	return `Basic realm="` + escapeHTTPQuotedString(basicAuthRealmValue(shortHost)) + `"`
-}
-
-// escapeHTTPQuotedString escapes \ and " for an RFC 7230 quoted-string.
-func escapeHTTPQuotedString(s string) string {
-	if !strings.ContainsAny(s, `\"`) {
-		return s
-	}
-	// Worst case every rune is escaped: double the length is enough headroom.
-	const escapeHeadroom = 2
-	var b strings.Builder
-	b.Grow(len(s) * escapeHeadroom)
-	for i := range len(s) {
-		switch s[i] {
-		case '\\', '"':
-			b.WriteByte('\\')
-		}
-		b.WriteByte(s[i])
-	}
-	return b.String()
-}
-
 // denyUnauthenticated refuses a request that carries no usable credential, and
 // decides whether the browser should be asked for one.
 //
@@ -347,10 +307,9 @@ func escapeHTTPQuotedString(s string) string {
 // box even though the user was doing nothing. Several dashboards open at once
 // multiply the reconnections and so the prompts.
 //
-// A document navigation is sent to the /login form instead, and only
-// /login/basic, which exists precisely to summon the browser dialog, ever
-// challenges. Everything else — API calls, the stream — gets a plain 401 that
-// the dashboard handles itself.
+// A document navigation is sent to the /login form. Everything else — API
+// calls, the stream — gets a plain 401 that the dashboard handles itself.
+// No response challenges the browser to open its own password dialog.
 func (*Server) denyUnauthenticated(w http.ResponseWriter, r *http.Request) {
 	if isPageLoad(r) {
 		redirectWithin(w, r, routePathLogin[1:])

@@ -87,6 +87,13 @@ func ServiceActiveAfterPostflightFailure(ctx context.Context, action string, res
 func BuildServiceRuntime(ctx context.Context, cfg ServiceRuntimeConfig) ServiceRuntime {
 	deps := cfg.Deps
 	discoverer := process.NewDiscovererWithUserLookup(deps.UserLookup)
+	// Only native init units share the cgroup ownership namespace. A libvirt
+	// domain, network or Docker target is not a systemd/OpenRC unit name.
+	if deps.Backend == servicemgr.BackendSystemd || deps.Backend == servicemgr.BackendOpenRC {
+		discoverer.ProcessOwnership = func(id process.Identity) (bool, bool) {
+			return servicemgr.CgroupOwnership(id.Cgroup, cfg.Unit)
+		}
+	}
 	if deps.ProcReader != nil {
 		discoverer.Reader = deps.ProcReader
 	}
@@ -96,7 +103,7 @@ func BuildServiceRuntime(ctx context.Context, cfg ServiceRuntimeConfig) ServiceR
 	}
 	needPidfileFallback := deps.Backend == servicemgr.BackendSystemd && backendPIDs != nil
 	selectors, processWarnings, procInfo := serviceProcessSelectors(ctx, cfg.Tree, deps, cfg.Unit, needPidfileFallback)
-	noResident := serviceNoResidentProcess(cfg.Tree, selectors, backendPIDs)
+	noResident := serviceNoResidentProcess(cfg.Tree, selectors, backendPIDs, deps.Backend)
 	metricSample := metricSampleForOperation(cfg.Service, cfg.Tree, deps.Collector, discoverer, selectors, noResident)
 	checkDeps := checks.Deps{
 		Service:        cfg.Service,
@@ -225,9 +232,14 @@ func noResidentProcess(tree map[string]any) bool {
 	return err == nil && lifecycle.ProcessMode == config.ServiceProcessNone
 }
 
-func serviceNoResidentProcess(tree map[string]any, selectors []process.Selector, backendPIDs func() []int) bool {
+func serviceNoResidentProcess(tree map[string]any, selectors []process.Selector, backendPIDs func() []int, backend servicemgr.Backend) bool {
 	if noResidentProcess(tree) {
 		return true
+	}
+	// A stopped container has no PID yet; that runtime fact must not permanently
+	// disable process observation when the daemon reloads during its recovery.
+	if backend == servicemgr.BackendDocker {
+		return false
 	}
 	if processes, configured := tree[config.SectionProcesses].(map[string]any); configured && len(processes) > 0 {
 		return false
