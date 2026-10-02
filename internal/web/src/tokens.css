@@ -1,0 +1,57 @@
+  /* ---- design tokens -------------------------------------------------------
+     One light/dark token set drives the whole document. Status colors stay in
+     the GitHub-ish palette the JS also emits inline (SVG fills), so both render
+     correctly on either scheme. Tints are derived with color-mix so a status
+     color needs declaring once. */
+  :root {
+    color-scheme: light dark;
+    --bg: #eef1f6;
+    --panel: #ffffff;
+    --panel-2: #f2f4f8;
+    --text: #1c2430;
+    --text-2: #5b6573; /* AA (>=4.5:1) for muted text on panel/panel-2/bg, incl. small thead labels */
+    --line: #dfe4ec;
+    --line-2: #788294; /* control/component boundary: >=3:1 (WCAG 1.4.11) on panel/panel-2/bg; --line stays subtle for decorative separators */
+    /* Darkened just enough that the colored status text clears AA (>=4.5:1) on its
+       own 11%/12% tint (the .target-state pills and the active filter chip), not
+       only on the plain panel. Dark mode already passes and keeps its palette. */
+    --ok: #157a32;
+    --warn: #795000;
+    --crit: #b4232a;
+    /* critical is a different hue from --crit, not a darker red: an outage and
+       one that needs someone now must stay apart for readers who cannot tell
+       red shades apart. AA on panel and on its own 14% tint. */
+    --critical: #9e1c68;
+    --info: #0860c8;
+    /* paused (a frozen VM or container) is its own hue: it is neither down
+       (--crit), degraded (--warn) nor running (--info). AA on panel and on
+       its own tint. */
+    --paused: #6639ba;
+    --accent: #0860c8;
+    --on-accent: #ffffff; /* text on an --accent fill */
+    --radius: 12px;
+    --radius-s: 7px;
+    --shadow: 0 1px 2px rgb(16 24 40 / .05), 0 1px 3px rgb(16 24 40 / .06);
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    --topbar-h: 0px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0d1117;
+      --panel: #151b23;
+      --panel-2: #1c232d;
+      --text: #e6ebf2;
+      --text-2: #8b96a5;
+      --line: #252e39;
+      --line-2: #647186; /* control/component boundary: >=3:1 (WCAG 1.4.11) on dark panel/panel-2/bg */
+      --ok: #3fb950;
+      --warn: #d29922;
+      --crit: #f85149;
+      --critical: #f778ba;
+      --info: #4493f8;
+      --paused: #a371f7;
+      --accent: #4493f8;
+      --on-accent: #0d1117;
+      --shadow: 0 1px 2px rgb(0 0 0 / .4);
+    }
+  }
