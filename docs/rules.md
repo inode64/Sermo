@@ -3276,7 +3276,11 @@ episode, then `recovered` is emitted when it clears; remediation rules emit
 that `recovered` event too. Use rule-level
 `emission.events` or `emission.notify` (`on_change` | `every_cycle`) to override
 the global emission policy for that rule. Operation result events remain audit
-events and are recorded whenever the operation is attempted.
+events and are recorded whenever the operation is attempted. While panic mode
+suppresses an operation, its accompanying alert follows the configured emission
+policy: `on_change` records episode transitions and severity escalation without
+repeating the same alert each cycle. No action cooldown is recorded until an
+operation is attempted.
 
 The separate [fleet-wide `event_notify` route](configuration.md#fleet-wide-event-alerts)
 can send these alert and recovery events even when the service is in `dry_run`.
