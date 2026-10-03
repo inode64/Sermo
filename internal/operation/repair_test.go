@@ -10,6 +10,8 @@ import (
 	"strings"
 	"testing"
 
+	"sermo/internal/checks"
+	"sermo/internal/config"
 	"sermo/internal/process"
 	"sermo/internal/rules"
 	"sermo/internal/servicemgr"
@@ -243,5 +245,28 @@ func TestRepairRefusesPIDFileOutsideRuntimeDirectory(t *testing.T) {
 	}
 	if _, err := os.Lstat(pidfile); err != nil {
 		t.Fatalf("outside pidfile must remain: %v", err)
+	}
+}
+
+func TestRepairRequiresActiveThroughPostflight(t *testing.T) {
+	for _, status := range []servicemgr.Status{servicemgr.StatusActive, servicemgr.StatusInactive, servicemgr.StatusUnknown, servicemgr.StatusFailed} {
+		t.Run(string(status), func(t *testing.T) {
+			h := defaultHarness()
+			h.mgr.stopped = true
+			e := h.engine()
+			e.Lifecycle.ProcessMode = config.ServiceProcessNone
+			e.RepairStalePIDFiles = func(context.Context) ([]string, error) { return nil, nil }
+			e.Postflight = func(context.Context) checks.Outcome {
+				h.mgr.status = status
+				return checks.Outcome{OK: true}
+			}
+			result := e.Repair(t.Context())
+			if result.OK() != (status == servicemgr.StatusActive) {
+				t.Fatalf("result=%+v, final backend=%s", result, status)
+			}
+			if !h.mgr.did("start mysqld") || len(h.emitted) != 1 || h.released != 1 {
+				t.Fatalf("calls=%v events=%v released=%d", h.mgr.calls, h.emitted, h.released)
+			}
+		})
 	}
 }

@@ -839,6 +839,7 @@ var expectedStatusAfter = map[string]servicemgr.Status{
 	actionStart:   servicemgr.StatusActive,
 	actionRestart: servicemgr.StatusActive,
 	actionResume:  servicemgr.StatusActive,
+	ActionRepair:  servicemgr.StatusActive,
 	ActionPause:   servicemgr.StatusPaused,
 }
 
