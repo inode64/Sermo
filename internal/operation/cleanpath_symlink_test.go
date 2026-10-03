@@ -47,3 +47,40 @@ func TestCleanStopPathDeletesRealTree(t *testing.T) {
 		t.Fatalf("target should be deleted, stat err = %v", err)
 	}
 }
+
+func TestAllStopArtifactCleanupRejectsSymlinkAncestors(t *testing.T) {
+	for _, kind := range []string{"file", "glob", "pidfile", "files_absent"} {
+		t.Run(kind, func(t *testing.T) {
+			root := t.TempDir()
+			realDir := filepath.Join(root, "real")
+			if err := os.Mkdir(realDir, 0o700); err != nil {
+				t.Fatal(err)
+			}
+			victim := filepath.Join(realDir, "demo.pid")
+			if err := os.WriteFile(victim, []byte("retained"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			link := filepath.Join(root, "link")
+			if err := os.Symlink(realDir, link); err != nil {
+				t.Fatal(err)
+			}
+			path := filepath.Join(link, "demo.pid")
+			var warnings []string
+			switch kind {
+			case "file":
+				warnings = cleanStopPath(config.CleanPath{Path: path})
+			case "glob":
+				warnings = cleanStopPath(config.CleanPath{Path: filepath.Join(link, "*.pid")})
+			case "pidfile", "files_absent":
+				e := Engine{StopArtifacts: config.StopArtifacts{CleanEnabled: true}}
+				warnings = e.stoppedPathWarnings(path, kind == "files_absent")
+			}
+			if len(warnings) != 1 || !strings.Contains(warnings[0], "symlink") {
+				t.Fatalf("warnings=%v", warnings)
+			}
+			if data, err := os.ReadFile(victim); err != nil || string(data) != "retained" {
+				t.Fatalf("victim=%q error=%v", data, err)
+			}
+		})
+	}
+}
