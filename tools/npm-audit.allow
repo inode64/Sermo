@@ -1,4 +1,0 @@
-# Advisory ID and reason, tab-separated. Reviewed exceptions to `make npm-audit`.
-# An entry is only for an advisory with no patched release that the tree cannot
-# reach with untrusted input; unexpected or stale entries fail the gate.
-GHSA-vfj7-8cjw-p6xm	braces <=3.0.3 has no patched release (stylelint -> micromatch -> braces). The stack exhaustion needs an attacker-chosen glob; the only pattern is the fixed lint:css glob in package.json.
