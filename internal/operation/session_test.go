@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -62,12 +63,60 @@ func TestResidualSessionReusesReapAuthorization(t *testing.T) {
 func TestConnectedSessionSurvivalIsNotSuccess(t *testing.T) {
 	h := defaultHarness()
 	e := h.engine()
-	e.SessionVerifier = func(context.Context, SessionTarget) (SessionBoundary, error) { return SessionBoundary{}, nil }
+	e.SessionVerifier = func(context.Context, SessionTarget) (SessionBoundary, error) {
+		return SessionBoundary{Exe: "/usr/lib/sshd-session", UID: 81}, nil
+	}
 	e.SessionSignaler = &recordingSignaler{}
 	e.SessionExited = func(int, uint64) (bool, error) { return false, nil }
 	e.OperationTimeout = 5 * time.Millisecond
 	res := e.CloseSession(t.Context(), SessionTarget{PID: 96, StartTicks: 1234, Terminal: "pts/1"})
 	if res.OK() || !strings.Contains(res.Message, "did not exit") || len(h.emitted) != 1 {
 		t.Fatalf("result=%+v", res)
+	}
+}
+
+// Session delivery must use the identity-aware boundary that OSSignaler uses,
+// not merely a fake accepting any numeric PID.
+type sessionIdentitySignaler struct {
+	t   *testing.T
+	got process.Process
+}
+
+func (s *sessionIdentitySignaler) Signal(int, syscall.Signal) error {
+	s.t.Fatal("numeric signal bypassed session identity")
+	return nil
+}
+
+func (s *sessionIdentitySignaler) SignalProcess(_ context.Context, proc process.Process, sig syscall.Signal) error {
+	if sig != syscall.SIGTERM {
+		s.t.Fatalf("unexpected signal %v", sig)
+	}
+	s.got = proc
+	return nil
+}
+
+func TestConnectedSessionCarriesExactSignalIdentity(t *testing.T) {
+	for _, exe := range []string{"/usr/lib/sshd-session", ""} {
+		t.Run(exe, func(t *testing.T) {
+			h := defaultHarness()
+			e := h.engine()
+			signaler := &sessionIdentitySignaler{t: t}
+			e.SessionSignaler = signaler
+			e.SessionVerifier = func(context.Context, SessionTarget) (SessionBoundary, error) {
+				return SessionBoundary{Exe: exe, UID: 81}, nil
+			}
+			e.SessionExited = func(int, uint64) (bool, error) { return true, nil }
+			res := e.CloseSession(t.Context(), SessionTarget{PID: 96, StartTicks: 1234, Terminal: "pts/1"})
+			if res.OK() != (exe != "") || len(h.emitted) != 1 {
+				t.Fatalf("result=%+v events=%v", res, h.emitted)
+			}
+			if exe == "" {
+				if signaler.got.PID != 0 {
+					t.Fatal("signalled without executable")
+				}
+			} else if got := signaler.got; got.PID != 96 || got.StartTicks != 1234 || got.Exe != exe || !got.ExeOK || got.UID != 81 {
+				t.Fatalf("signal identity=%+v", got)
+			}
+		})
 	}
 }

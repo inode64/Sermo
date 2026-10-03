@@ -140,7 +140,9 @@ named locks, guards, timeout and one-result event path, but does not restart or
 postflight the SSH daemon. For a connected session, immediately before the only signal, Sermo re-reads
 the logged-in terminal and its `/proc` ancestry to an exact configured `sshd`
 executable and real user, and requires the same terminal, session PID and
-process start ticks.
+process start ticks. The verified session executable and real UID are carried
+through to pidfd signal revalidation for ordinary and sudo sessions alike.
+An unreadable session executable disables direct close.
 Any missing boundary, changed terminal or recycled PID is rejected. A successful
 connected-session close sends one `SIGTERM` to the per-session process; it never escalates to
 `SIGKILL`.

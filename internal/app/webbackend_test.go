@@ -191,7 +191,7 @@ func TestWebBackendShowsAttributedSSHSessionsAndHeaderSummary(t *testing.T) {
 			}
 			return checks.SSHSessionSample{
 				Console: 2,
-				SSH:     []checks.SSHSession{{User: "root", Terminal: "pts/11", PID: 96, StartTicks: 1234, Idle: 2 * time.Minute}},
+				SSH:     []checks.SSHSession{{Exe: "/usr/lib/sshd-session", ExeOK: true, User: "root", Terminal: "pts/11", PID: 96, StartTicks: 1234, Idle: 2 * time.Minute}},
 			}, nil
 		},
 	}
@@ -288,7 +288,7 @@ func TestWebBackendKeepsVerifiedSSHSessionsWithPartialSource(t *testing.T) {
 		}},
 		sshSessionSampler: func(checks.SSHSessionConfig) (checks.SSHSessionSample, error) {
 			return checks.SSHSessionSample{
-				SSH:    []checks.SSHSession{{User: "root", Terminal: "pts/1", PID: 96, StartTicks: 1234}},
+				SSH:    []checks.SSHSession{{Exe: "/usr/lib/sshd-session", ExeOK: true, User: "root", Terminal: "pts/1", PID: 96, StartTicks: 1234}},
 				Issues: []checks.SSHSessionIssue{{User: "root", Terminal: "pts/0", Message: "executable /usr/lib/sshd-session was replaced", PID: 95, StartTicks: 1200, Remote: true}},
 			}, nil
 		},

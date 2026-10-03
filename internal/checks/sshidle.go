@@ -62,6 +62,9 @@ type SSHIdleConfig struct {
 // that may be closed; they stay zero when that boundary cannot be identified
 // safely.
 type SSHSession struct {
+	Exe        string
+	ExeOK      bool
+	UID        uint32
 	User       string
 	Terminal   string
 	PID        int
@@ -76,8 +79,6 @@ type SSHSession struct {
 type SudoSessionBoundary struct {
 	MonitorPID        int
 	MonitorStartTicks uint64
-	Exe               string
-	UID               uint32
 }
 
 // SSHSessionIssue is one remote login terminal that the inventory could not
@@ -420,7 +421,7 @@ func sampleSSHSessions(sessions []utmp.Session, snapshot map[int]process.Identit
 		if !ssh && err == nil && sudoBoundary != nil {
 			if sudo, ok := sudoBoundary(session, processes); ok {
 				ssh, target, unknown, residual = true, sudo.Frontend, false, true
-				sudoEvidence = &SudoSessionBoundary{MonitorPID: sudo.Monitor.PID, MonitorStartTicks: sudo.Monitor.StartTicks, Exe: sudo.Frontend.Exe, UID: sudo.Frontend.UID}
+				sudoEvidence = &SudoSessionBoundary{MonitorPID: sudo.Monitor.PID, MonitorStartTicks: sudo.Monitor.StartTicks}
 			}
 		}
 		if err != nil {
@@ -440,6 +441,7 @@ func sampleSSHSessions(sessions []utmp.Session, snapshot map[int]process.Identit
 			continue
 		}
 		sample.SSH = append(sample.SSH, SSHSession{
+			Exe: target.Exe, ExeOK: target.ExeOK, UID: target.UID,
 			User:       session.User,
 			Terminal:   session.Line,
 			PID:        target.PID,
@@ -619,6 +621,9 @@ func (s SSHSessionSample) VerifySSHSession(want SSHSession) error {
 		}
 		if got.StartTicks == 0 || got.StartTicks != want.StartTicks {
 			return errors.New("SSH session changed; refresh and try again")
+		}
+		if !got.ExeOK || !filepath.IsAbs(got.Exe) {
+			return errors.New("SSH session executable is unavailable")
 		}
 		return nil
 	}
