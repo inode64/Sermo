@@ -697,13 +697,14 @@ func (w *Worker) runFiringRemediation(ctx context.Context, ev *rules.Evaluator, 
 		}
 		return false
 	}
-	w.emitAlerts(ctx, ev, firing.Rule, true, firing.change, firing.severity)
 	if w.InPanic != nil && w.InPanic() {
+		w.emitAlerts(ctx, ev, firing.Rule, firing.announce(), firing.change, firing.severity)
 		if w.shouldEmitRuleEvent(firing.Rule, firing.announce()) {
 			w.emit(Event{Kind: eventKindSuppressed, Severity: firing.severity, Rule: firing.Name, Action: action, Message: "panic mode: remediation suppressed"})
 		}
 		return false
 	}
+	w.emitAlerts(ctx, ev, firing.Rule, true, firing.change, firing.severity)
 	w.executeRemediation(ctx, now, firing, action)
 	return true
 }

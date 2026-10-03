@@ -1929,3 +1929,39 @@ func TestSettlingDuplicateServiceAndAppNamesAdvanceReadiness(t *testing.T) {
 		t.Fatal("service and app monitors with the same display name must both advance readiness")
 	}
 }
+
+func TestPanicRemediationAlertsHonorEmission(t *testing.T) {
+	for _, tc := range []struct {
+		mode string
+		want int
+	}{
+		{emission.ModeOnChange, 1},
+		{emission.ModeEveryCycle, 3},
+	} {
+		t.Run(string(tc.mode), func(t *testing.T) {
+			h := &workerHarness{cache: failedCache("http"), opResult: operation.Result{Status: operation.ResultOK}}
+			w := h.worker(remediationTree("down", "http", "restart"), rules.Policy{Cooldown: time.Minute}, nil)
+			w.Rules[0].Actions = append(w.Rules[0].Actions, rules.Action{Type: rules.ActionAlert, Message: "http is down"})
+			w.GlobalEmission = emission.Policy{Events: tc.mode, Notify: emission.ModeOnChange}
+			n := &fakeNotifier{name: "ops"}
+			w.Notifiers = map[string]notify.Notifier{"ops": n}
+			w.GlobalNotify = []string{"ops"}
+			panicking := true
+			w.InPanic = func() bool { return panicking }
+			for range 3 {
+				w.RunCycle(t.Context())
+			}
+			if got := h.countEvents(eventKindAlert); got != tc.want {
+				t.Fatalf("alerts=%d, want %d", got, tc.want)
+			}
+			if len(h.ops) != 0 || len(n.msgs) != 0 || !w.State.LastActionAt.IsZero() {
+				t.Fatal("panic executed action, delivered alert or recorded cooldown")
+			}
+			panicking = false
+			w.RunCycle(t.Context())
+			if len(h.ops) != 1 || len(n.msgs) != 1 || h.countEvents(eventKindAlert) != tc.want+1 {
+				t.Fatalf("panic recovery: ops=%v messages=%v events=%v", h.ops, n.msgs, h.events)
+			}
+		})
+	}
+}
