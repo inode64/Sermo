@@ -520,7 +520,9 @@ restart:
 
 1. Backend `Stop`, observe processes until confirmed absent or `graceful_timeout`
    expires, then discover residuals. Process-free services use inactive init state
-   instead of process absence. An incomplete observation fails closed.
+   instead of process absence. An incomplete observation fails closed. A later
+   absent or stale pidfile candidate cannot erase an earlier read error; a live
+   candidate or backend process still supplies positive discovery evidence.
    Docker's stop request shares this grace period (10 seconds when omitted or
    zero), so an unresponsive container cannot consume the whole operation deadline
    before residual handling. A request timeout is retained as a warning; an
