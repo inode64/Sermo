@@ -39,9 +39,13 @@ func (m lockedStatusRecorder) Status(ctx context.Context, unit string) (servicem
 
 // configuredServicesTestApp answers every local status query as active through
 // a fake init manager, so no test touches a real init system, Docker or libvirt.
+// The runner knows no unit: without it unit resolution runs the host's real
+// `systemctl cat`, and a host that ships nginx.service (GitHub's runners do)
+// resolves it as a known unit and adds a second status query.
 func configuredServicesTestApp(load func(string, ...config.Option) (*config.Config, error), stdout, stderr *bytes.Buffer, statusCalls *[]string) App {
 	mu := &sync.Mutex{}
 	return App{
+		Runner:   statusUnitRunner{},
 		Detector: fakeBackendDetector{detection: servicemgr.BackendSystemd},
 		NewManager: func(servicemgr.Backend) (servicemgr.Manager, error) {
 			return lockedStatusRecorder{status: servicemgr.ServiceStatus{Status: servicemgr.StatusActive}, mu: mu, calls: statusCalls}, nil

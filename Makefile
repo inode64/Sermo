@@ -166,10 +166,12 @@ web-e2e: web-check web-lint
 
 # Known vulnerabilities in the npm dependency tree, the JavaScript counterpart
 # of govulncheck. Dev dependencies are in scope: they run in CI and on developer
-# machines, and a build-time tool is still an attack surface.
+# machines, and a build-time tool is still an attack surface. High and critical
+# advisories fail; tools/npm-audit.allow is the reviewed exception list for
+# advisories with no patched release. Unexpected or stale entries fail the gate.
 npm-audit:
 	@echo "npm audit"
-	@npm audit --audit-level=high
+	@python3 scripts/npm_audit_gate.py
 
 # Shell and Python helper scripts (deploy, mutation, YAML normalization).
 scripts-lint:
