@@ -166,7 +166,7 @@ func acquireExclusive(path string, payload lockFile, ttl time.Duration, proc Pro
 		existing, rerr := readLockFile(path)
 		if rerr != nil {
 			if isRetryableLockRead(rerr) {
-				continue // vanished or still being written; retry
+				continue // The lock disappeared; retry acquisition.
 			}
 			return ownedLock{}, fmt.Errorf(lockAcquireErrorFormat, path, rerr)
 		}
@@ -204,7 +204,7 @@ func acquireExclusive(path string, payload lockFile, ttl time.Duration, proc Pro
 // it, the unlink was unconditional: process A could classify a stale lock, then —
 // after B reclaimed it and created a fresh lock at the same path — delete B's live
 // lock, leaving both A and B believing they held it (mutual exclusion violated).
-// The exclusive create (O_EXCL) outside this section stays safe: a remove only
+// The no-replace publication outside this section stays safe: a remove only
 // happens under this same exclusion, including explicit and owner releases.
 func reclaimStale(path string, expected lockFile, proc ProcessProber, now func() time.Time) bool {
 	unlock, err := lockReclaimDir(path)
@@ -264,19 +264,21 @@ func lockReleaseDir(path string) (func(), error) {
 	}
 }
 
-// writeLockFileExclusive creates path with O_CREAT|O_EXCL, writes the payload
-// and fsyncs the file and its directory so a lock that exists is always complete
-// after a crash. An existing file yields os.ErrExist.
+// writeLockFileExclusive stages a complete, synced payload in an exclusively
+// created temporary file, then publishes it with a no-replace hard link. A crash
+// before publication leaves only an ignored temporary file, never a partial
+// lock. An existing destination yields os.ErrExist.
 func writeLockFileExclusive(path string, lf lockFile) error {
-	f, err := hostfs.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, lockFileMode)
-	if err != nil {
-		return fmt.Errorf("create lock %s: %w", path, err)
-	}
 	data, err := json.Marshal(lf)
 	if err != nil {
-		_ = f.Close()
 		return fmt.Errorf("marshal lock %s: %w", path, err)
 	}
+	temporary := path + "." + rand.Text() + ".tmp"
+	f, err := hostfs.OpenFile(temporary, os.O_CREATE|os.O_EXCL|os.O_WRONLY, lockFileMode)
+	if err != nil {
+		return fmt.Errorf("create lock staging file %s: %w", temporary, err)
+	}
+	defer func() { _ = os.Remove(temporary) }()
 	if _, err := f.Write(data); err != nil {
 		_ = f.Close()
 		return fmt.Errorf("write lock %s: %w", path, err)
@@ -287,6 +289,9 @@ func writeLockFileExclusive(path string, lf lockFile) error {
 	}
 	if err := f.Close(); err != nil {
 		return fmt.Errorf("close lock %s: %w", path, err)
+	}
+	if err := os.Link(temporary, path); err != nil {
+		return fmt.Errorf("publish lock %s: %w", path, err)
 	}
 	syncDir(filepath.Dir(path))
 	return nil
