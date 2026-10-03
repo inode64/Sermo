@@ -134,7 +134,9 @@ non-delegated processes are cleaned up under `stop_policy` or block the repair
 with `orphan_processes`. Only then, for a failed unit, does it clear the init
 backend's failed marker, after revalidating process absence and verifying the
 backend reports inactive, before the normal guarded start and postflight. A
-repair never starts a second instance beside a survivor.
+repair never starts a second instance beside a survivor. It must still report
+`active` at the end of postflight, including for services without resident
+processes; `inactive` or `unknown` cannot count as a successful repair.
 
 Stop-artifact cleanup (`clean_on_stop`, pidfiles and `files_absent` with
 `clean_after_stop`) rejects symlinked ancestors at deletion time. Each parent
