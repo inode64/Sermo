@@ -34,7 +34,10 @@ the types are `RuleType`, `ActionType` and `Action` in
   engine; a rule may keep firing while the policy suppresses execution.
 - A resolved policy needs a positive `cooldown`; a missing or zero value is a
   validation error. Manual actions skip cooldown only.
-- An unavailable or erroring guard leaf fails closed.
+- An unavailable or erroring guard leaf fails closed. Unavailable or skipped
+  observations remain unknown through boolean operators, even under `not`.
+  The explicit `failed` operator retains its probe-failure semantics for
+  unavailable checks in ordinary rules; skipped checks never count as failures.
 
 ## Severity
 

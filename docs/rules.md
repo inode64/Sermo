@@ -3456,8 +3456,15 @@ treating an observation failure as an empty connection set.
 This fail-closed rule applies to every check and to `metric:`, `process:` and
 `changed:` condition leaves: a timeout, unreadable source, malformed sample,
 missing source or not-ready metric is an unavailable observation, not a valid
-false condition. A valid sample that simply does not satisfy its predicate
-remains an ordinary false result. For `process:` leaves and `type: process`
+false condition. Value and state predicates do not match when an evaluated
+leaf is unavailable or skipped, including beneath `not`, `and` or `or`. In particular,
+`file: { exists: false }` requires observed absence, and `active` never treats
+a skipped check as a successful observation. Guards deny the operation on
+these gaps. The explicit `failed` operator retains its check-failure contract: an
+unavailable probe counts as a failure for ordinary rules (for example, an HTTP
+probe timeout), but a skipped probe does not. Guards still reject unavailable
+probes even under `failed`. A valid sample that simply does not satisfy its
+predicate remains an ordinary false result. For `process:` leaves and `type: process`
 checks, an incomplete process table or a `user` that does not resolve (for
 example an NSS/LDAP outage) proves neither presence nor absence and is
 unavailable; a live match is still reported as `running`.
