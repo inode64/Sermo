@@ -123,6 +123,9 @@ func (m *Monitor) Reload(ctx context.Context) {
 		// Rollback: restore previous generation and restart it (we stopped above).
 		m.cfg = prevCfg
 		m.deps = prevDeps
+		if m.deps.CheckLimiter != nil {
+			m.deps.CheckLimiter.SetLimit(prevDeps.MaxParallel)
+		}
 		m.scheduler = prevScheduler
 		if m.collector != nil && prevDeps.SystemFreshness > 0 {
 			m.collector.SystemFreshness = prevDeps.SystemFreshness
@@ -219,6 +222,11 @@ func (m *Monitor) applyConfig(cfg *config.Config) {
 	m.deps.DefaultTimeout = config.EngineDuration(cfg, config.EngineKeyDefaultTimeout, DefaultEngineCheckTimeout)
 	m.deps.OperationTimeout = config.EngineDuration(cfg, config.EngineKeyOperationTimeout, DefaultEngineOperationTimeout)
 	m.deps.MaxParallel = config.EngineInt(cfg, config.EngineKeyMaxParallelChecks, DefaultEngineMaxParallelChecks)
+	if m.deps.CheckLimiter == nil {
+		m.deps.CheckLimiter = checks.NewLimiter(m.deps.MaxParallel)
+	} else {
+		m.deps.CheckLimiter.SetLimit(m.deps.MaxParallel)
+	}
 	m.scheduler.Interval = m.deps.Interval
 	m.deps.UserLookup = EngineUserLookup(cfg, m.deps.ExecxRunner)
 	m.deps.SystemFreshness = m.deps.Interval / SystemFreshnessIntervalDivisor

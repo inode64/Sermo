@@ -98,6 +98,7 @@ type Samplers struct {
 
 // Deps are the host capabilities a built check set may need.
 type Deps struct {
+	Limiter        *Limiter // shared execution budget; nil is unbounded
 	Service        string
 	DefaultTimeout time.Duration
 	Runner         execx.Runner
@@ -239,7 +240,7 @@ func buildOne(name string, entry map[string]any, deps Deps, runner execx.Runner,
 		var check Check
 		check, failure = buildCheck(typ, b, entry, runner, client, deps)
 		if failure == nil {
-			return Built{Check: withSummary(check, entry), Optional: cfgval.Bool(entry[CheckKeyOptional])}, nil
+			return Built{Check: withLimiter(withSummary(check, entry), deps.Limiter, b.timeout), Optional: cfgval.Bool(entry[CheckKeyOptional])}, nil
 		}
 	}
 	return Built{}, &BuildIssue{

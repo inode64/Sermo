@@ -377,7 +377,7 @@ merges into a service:
 engine:
   backend: auto               # auto | systemd | openrc
   interval: 30s               # default cycle interval; per-service overridable
-  max_parallel_checks: 8        # bound on concurrent checks across all services
+  max_parallel_checks: 8        # shared concurrent probe limit (services and watches)
   default_timeout: 10s        # default per-check timeout
   operation_timeout: 90s        # outer deadline for safe service actions
   artifact_interval: 5m       # cadence for apps, libraries and service config/version artifacts
@@ -404,6 +404,14 @@ engine:
   # diagnostics: /var/log/sermo/diagnostics.log
   # diagnostics_interval: 1h  # scheduled diagnostics when diagnostics is set
 ```
+
+`max_parallel_checks` is shared by all service checks, host and service watches,
+inline rule probes, and operation preflight/postflight checks in one daemon.
+Waiting for a slot consumes the check timeout; cancellation while queued returns
+an unavailable observation without starting the probe. Reload preserves running
+checks in the same budget. A standalone `sermoctl` command has its own budget;
+separate processes do not share this in-memory limit.
+
 
 Optional `engine.access`, `engine.events` and `engine.diagnostics` enable
 append-only JSON Lines export under absolute paths. Each path must be absolute

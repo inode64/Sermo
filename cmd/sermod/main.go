@@ -20,6 +20,7 @@ import (
 	"sermo/internal/app"
 	"sermo/internal/buildinfo"
 	"sermo/internal/cfgval"
+	"sermo/internal/checks"
 	"sermo/internal/cliutil"
 	"sermo/internal/config"
 	"sermo/internal/control"
@@ -330,6 +331,7 @@ func run(args []string) int {
 		DefaultTimeout:   config.EngineDuration(cfg, config.EngineKeyDefaultTimeout, app.DefaultEngineCheckTimeout),
 		OperationTimeout: config.EngineDuration(cfg, config.EngineKeyOperationTimeout, app.DefaultEngineOperationTimeout),
 		MaxParallel:      config.EngineInt(cfg, config.EngineKeyMaxParallelChecks, app.DefaultEngineMaxParallelChecks),
+		CheckLimiter:     checks.NewLimiter(config.EngineInt(cfg, config.EngineKeyMaxParallelChecks, app.DefaultEngineMaxParallelChecks)),
 		//nolint:forbidigo // the engine's injectable Sleep seam; production wires the real clock, tests stub it.
 		Sleep: time.Sleep,
 		Now:   time.Now,

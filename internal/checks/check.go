@@ -296,8 +296,8 @@ type Built struct {
 
 // Run executes checks concurrently and returns one result per built check in
 // input order, including when cancellation prevents a check from starting.
-// maxParallel bounds concurrency; 0 means unbounded (the sermoctl one-shot
-// path; the daemon's global semaphore is a separate concern).
+// maxParallel bounds this batch's workers; 0 means unbounded workers. Built
+// checks also acquire their shared Deps.Limiter budget before executing.
 func Run(ctx context.Context, built []Built, maxParallel int) []Result {
 	results := make([]Result, len(built))
 	if len(built) == 0 {

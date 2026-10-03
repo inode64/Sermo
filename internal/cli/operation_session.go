@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"sermo/internal/app"
+	"sermo/internal/checks"
 	"sermo/internal/config"
 	"sermo/internal/control"
 	"sermo/internal/metrics"
@@ -23,14 +24,15 @@ type manualOperationRunner struct {
 // operationSession owns the backend detection, manager and prepared service
 // runtimes for one CLI command. A cascade prepares each target at most once.
 type operationSession struct {
-	app        App
-	opts       options
-	cfg        *config.Config
-	backend    servicemgr.Backend
-	manager    servicemgr.Manager
-	resolver   servicemgr.UnitResolver
-	eventStore *state.Store
-	prepared   map[string]*preparedOperation
+	app          App
+	opts         options
+	cfg          *config.Config
+	backend      servicemgr.Backend
+	manager      servicemgr.Manager
+	resolver     servicemgr.UnitResolver
+	eventStore   *state.Store
+	checkLimiter *checks.Limiter
+	prepared     map[string]*preparedOperation
 }
 
 type preparedOperation struct {
@@ -90,7 +92,8 @@ func (a App) newOperationSession(ctx context.Context, opts options, cfg *config.
 		return nil, err
 	}
 	return &operationSession{
-		app: a, opts: opts, cfg: cfg, backend: dependencies.backend, manager: dependencies.manager,
+		checkLimiter: checks.NewLimiter(config.EngineInt(cfg, config.EngineKeyMaxParallelChecks, app.DefaultEngineMaxParallelChecks)),
+		app:          a, opts: opts, cfg: cfg, backend: dependencies.backend, manager: dependencies.manager,
 		resolver: dependencies.resolver, eventStore: eventStore, prepared: map[string]*preparedOperation{},
 	}, nil
 }
@@ -114,6 +117,7 @@ func (s *operationSession) prepare(ctx context.Context, service string, resolved
 		Tree:    resolved.Tree,
 		Deps: app.Deps{
 			Backend:          target.Backend,
+			CheckLimiter:     s.checkLimiter,
 			Manager:          target.Manager,
 			BackendPIDs:      target.BackendPIDs,
 			Runtime:          s.cfg.Global.RuntimeDir(),

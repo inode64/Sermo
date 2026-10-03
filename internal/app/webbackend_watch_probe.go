@@ -16,6 +16,7 @@ import (
 func (b *WebBackend) watchCheckDeps() checks.Deps {
 	return watchInlineDeps(Deps{
 		DefaultTimeout: b.defaultTimeout,
+		CheckLimiter:   b.checkLimiter,
 		ExecxRunner:    b.execRunner,
 		RaidSampler:    b.raidSampler,
 	})
