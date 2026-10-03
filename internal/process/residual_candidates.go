@@ -79,7 +79,8 @@ func (d Discoverer) deletedCandidateBlock(id Identity, selectors []Selector, idx
 				continue
 			}
 			roots++
-			if d.foreignProcess(other) || roots > 1 {
+			foreign, known := d.ProcessOwnership(other)
+			if !known || foreign || roots > 1 {
 				return "ambiguous service ownership of external process"
 			}
 		}

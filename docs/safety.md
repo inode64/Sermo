@@ -484,7 +484,8 @@ Kill decisions depend on how process facts are read, so this is fixed:
   by another service or container scope is excluded. A process from an old login
   session can be a candidate when a strict named selector matches, cgroup
   ownership is readable and a strict main selector rules out competing live
-  instances. Ambiguous or unknown ownership blocks cleanup. Use instance-specific
+  instances. Every matching main root must also have readable, non-foreign
+  ownership. Ambiguous or unknown ownership blocks cleanup. Use instance-specific
   selectors for shared executables; Sermo never resolves ambiguity by process name.
 - **PID 1 and kernel threads are protected** from terminating signals even if a
   future selector or signal path would otherwise target them. Non-terminating
