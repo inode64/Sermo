@@ -100,6 +100,18 @@ func NewCheckResolverFactory(built []checks.Built, maxParallel int) func() RefRe
 // reference or an unsupported condition is an error, not a silent false, so the
 // caller (guard/remediation) can treat it conservatively.
 func (e *Evaluator) Eval(ctx context.Context, node map[string]any) (bool, error) {
+	match, err := e.eval(ctx, node)
+	if !e.FailOnUnavailable && errors.Is(err, errUnavailable) {
+		return false, nil
+	}
+	return match, err
+}
+
+var errUnavailable = errors.New("condition observation unavailable")
+
+// eval keeps unavailable observations distinct from false throughout the tree.
+// Only Eval converts them to a non-match for ordinary rules.
+func (e *Evaluator) eval(ctx context.Context, node map[string]any) (bool, error) {
 	operator, operand, err := conditionOperator(node)
 	if err != nil {
 		return false, err
@@ -115,17 +127,13 @@ func (e *Evaluator) Eval(ctx context.Context, node map[string]any) (bool, error)
 		if !ok {
 			return false, errors.New("not: must be a condition mapping")
 		}
-		result, err := e.Eval(ctx, child)
+		result, err := e.eval(ctx, child)
 		if err != nil {
 			return false, err
 		}
 		return !result, nil
 	case ConditionFailed:
-		res, err := e.probe(ctx, operand)
-		if err != nil {
-			return false, err
-		}
-		return !res.OK, nil
+		return e.evalFailed(ctx, operand)
 	case ConditionActive:
 		res, err := e.probe(ctx, operand)
 		if err != nil {
@@ -149,6 +157,21 @@ func (e *Evaluator) Eval(ctx context.Context, node map[string]any) (bool, error)
 	}
 }
 
+// evalFailed tests the explicit probe-failure contract, including observation
+// errors. Unlike active/metric/file predicates, failed asks whether probing
+// failed, not whether an unobserved value satisfies a comparison. Guards still
+// reject uncertainty and skipped probes never count as failures.
+func (e *Evaluator) evalFailed(ctx context.Context, operand any) (bool, error) {
+	res, err := e.probe(ctx, operand)
+	if err != nil {
+		if !e.FailOnUnavailable && res.Unavailable && !res.Skipped && errors.Is(err, errUnavailable) {
+			return true, nil
+		}
+		return false, err
+	}
+	return !res.OK, nil
+}
+
 // condMap asserts a condition operand is a mapping, returning a "<label> must be
 // a mapping" error otherwise. It collapses the assertion repeated by every leaf
 // evaluator into one call.
@@ -170,7 +193,7 @@ func (e *Evaluator) evalList(ctx context.Context, v any, and bool) (bool, error)
 		if !ok {
 			return false, errors.New("and/or item must be a condition mapping")
 		}
-		r, err := e.Eval(ctx, node)
+		r, err := e.eval(ctx, node)
 		if err != nil {
 			return false, err
 		}
@@ -211,8 +234,8 @@ func (e *Evaluator) probe(ctx context.Context, v any) (checks.Result, error) {
 		if !ok {
 			return checks.Result{}, fmt.Errorf("unknown check %q", ref)
 		}
-		if err := e.unavailableCheckError(ref, res); err != nil {
-			return checks.Result{}, err
+		if err := unavailableCheckError(ref, res); err != nil {
+			return res, err
 		}
 		return res, nil
 	}
@@ -269,7 +292,7 @@ func (e *Evaluator) evalProcess(v any) (bool, error) {
 		return false, err
 	}
 	if e.Deps.Processes == nil {
-		return e.unavailableSignal(errors.New("process condition has no process source"))
+		return unavailableSignal(errors.New("process condition has no process source"))
 	}
 	want := cfgval.AsString(m[FieldState])
 	if want == "" {
@@ -280,7 +303,7 @@ func (e *Evaluator) evalProcess(v any) (bool, error) {
 	if got == process.StateUnknown {
 		// An incomplete process table or an unresolvable user proves nothing;
 		// reading it as a state would let a guard allow the action.
-		return e.unavailableSignal(fmt.Errorf("process %s (user %q) state is unknown: process table or user unreadable", exe, user))
+		return unavailableSignal(fmt.Errorf("process %s (user %q) state is unknown: process table or user unreadable", exe, user))
 	}
 	return got == want, nil
 }
@@ -296,7 +319,7 @@ func (e *Evaluator) evalMetric(v any) (bool, error) {
 	}
 	name := cfgval.AsString(m[FieldName])
 	if e.Deps.Metrics == nil {
-		return e.unavailableSignal(fmt.Errorf("metric %q has no metric source", name))
+		return unavailableSignal(fmt.Errorf("metric %q has no metric source", name))
 	}
 	scope := cfgval.AsString(m[checks.CheckKeyScope])
 	if scope == "" {
@@ -304,7 +327,7 @@ func (e *Evaluator) evalMetric(v any) (bool, error) {
 	}
 	reading, ok := e.Deps.Metrics(scope, name)
 	if !ok || !reading.Ready {
-		return e.unavailableSignal(fmt.Errorf("metric %q is unavailable", name))
+		return unavailableSignal(fmt.Errorf("metric %q is unavailable", name))
 	}
 	match, err := metrics.Compare(reading, cfgval.AsString(m[FieldOp]), cfgval.String(m[FieldValue]))
 	if err != nil {
@@ -335,7 +358,7 @@ func (e *Evaluator) evalChanged(ctx context.Context, v any) (bool, error) {
 			levelName = name
 		}
 		if e.ChangedVersion == nil {
-			return e.unavailableSignal(fmt.Errorf("changed condition for app %q has no version source", app))
+			return unavailableSignal(fmt.Errorf("changed condition for app %q has no version source", app))
 		}
 		changed, err := e.ChangedVersion(ctx, app, level)
 		if err != nil {
@@ -351,7 +374,7 @@ func (e *Evaluator) evalChanged(ctx context.Context, v any) (bool, error) {
 		return false, errors.New("changed condition requires a path or app")
 	}
 	if e.Changed == nil {
-		return e.unavailableSignal(fmt.Errorf("changed condition for %s has no file source", path))
+		return unavailableSignal(fmt.Errorf("changed condition for %s has no file source", path))
 	}
 	changed, err := e.Changed(path)
 	if err != nil {
@@ -383,8 +406,8 @@ func (e *Evaluator) evalInline(ctx context.Context, typ string, v any) (bool, er
 func (e *Evaluator) runInline(ctx context.Context, name string, entry, keyParams map[string]any) (checks.Result, error) {
 	key := name + ":" + normalizeKey(keyParams)
 	if res, ok := e.memo[key]; ok {
-		if err := e.unavailableCheckError(name, res); err != nil {
-			return checks.Result{}, err
+		if err := unavailableCheckError(name, res); err != nil {
+			return res, err
 		}
 		return res, nil
 	}
@@ -398,30 +421,25 @@ func (e *Evaluator) runInline(ctx context.Context, name string, entry, keyParams
 		e.memo = map[string]checks.Result{}
 	}
 	e.memo[key] = res
-	if err := e.unavailableCheckError(name, res); err != nil {
-		return checks.Result{}, err
+	if err := unavailableCheckError(name, res); err != nil {
+		return res, err
 	}
 	return res, nil
 }
 
 // unavailableCheckError preserves guard fail-closed behavior for both named
-// checks and inline probes.
-func (e *Evaluator) unavailableCheckError(name string, res checks.Result) error {
-	if !e.FailOnUnavailable || !res.Unavailable {
+// checks and inline probes, including skipped checks.
+func unavailableCheckError(name string, res checks.Result) error {
+	if !res.Unavailable && !res.Skipped {
 		return nil
 	}
-	return fmt.Errorf("check %q is unavailable: %s", name, res.Message)
+	return fmt.Errorf("%w: check %q is unavailable or skipped: %s", errUnavailable, name, res.Message)
 }
 
-// unavailableSignal is how a missing or unusable leaf reading is reported.
-// Remediation treats it as false so an automatic action never fires on an
-// unobserved value. Guards set FailOnUnavailable so the same gap is an
-// evaluation error and the operation is denied.
-func (e *Evaluator) unavailableSignal(err error) (bool, error) {
-	if e.FailOnUnavailable {
-		return false, err
-	}
-	return false, nil
+// unavailableSignal propagates uncertainty through boolean operators. Guards
+// retain the error; ordinary rules become non-matches at the Eval boundary.
+func unavailableSignal(err error) (bool, error) {
+	return false, fmt.Errorf("%w: %w", errUnavailable, err)
 }
 
 // inlineEntry converts an inline {<type>: params} operand into a check entry.
