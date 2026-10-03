@@ -27,7 +27,10 @@ func NewNamedLocker(dir string) NamedLocker {
 // `lock SERVICE -- COMMAND` wrapper. Handle.Release unlinks it when COMMAND
 // exits; the TTL bounds the lock if the wrapper is killed.
 func (l NamedLocker) Hold(service, name, reason string, ttl time.Duration) (*Handle, error) {
-	pid, ticks := l.identity()
+	pid, ticks, err := selfOr(l.Self)
+	if err != nil {
+		return nil, err
+	}
 	return l.acquire(service, name, reason, ttl, pid, ticks)
 }
 
@@ -119,15 +122,15 @@ func (l NamedLocker) path(service, name string) (string, error) {
 	return lockPath(l.Dir, file+lockSuffix)
 }
 
-func (l NamedLocker) identity() (int, uint64) {
-	return selfOr(l.Self)
-}
-
-func selfOr(self func() (int, uint64)) (int, uint64) {
-	if self != nil {
-		return self()
+func selfOr(self func() (int, uint64)) (int, uint64, error) {
+	if self == nil {
+		return selfIdentity()
 	}
-	return selfIdentity()
+	pid, ticks := self()
+	if pid <= 0 || ticks == 0 {
+		return 0, 0, fmt.Errorf("cannot verify lock owner pid %d start time", pid)
+	}
+	return pid, ticks, nil
 }
 
 func (l NamedLocker) acquire(service, name, reason string, ttl time.Duration, ownerPID int, ownerTicks uint64) (*Handle, error) {

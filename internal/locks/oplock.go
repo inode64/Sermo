@@ -127,7 +127,10 @@ func (l OperationLocker) Acquire(service string, ttl time.Duration) (*Handle, er
 	if err != nil {
 		return nil, err
 	}
-	pid, ticks := selfOr(l.Self)
+	pid, ticks, err := selfOr(l.Self)
+	if err != nil {
+		return nil, err
+	}
 
 	var onReclaim func(string)
 	if l.OnReclaim != nil {
@@ -307,8 +310,11 @@ func syncDir(dir string) {
 	_ = d.Close()
 }
 
-func selfIdentity() (int, uint64) {
+func selfIdentity() (int, uint64, error) {
 	pid := os.Getpid()
-	ticks, _ := OSProcessProber{}.StartTicks(pid)
-	return pid, ticks
+	ticks, ok := OSProcessProber{}.StartTicks(pid)
+	if !ok || ticks == 0 {
+		return 0, 0, fmt.Errorf("cannot verify lock owner pid %d start time", pid)
+	}
+	return pid, ticks, nil
 }
