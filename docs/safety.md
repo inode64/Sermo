@@ -134,6 +134,13 @@ backend's failed marker, after revalidating process absence and verifying the
 backend reports inactive, before the normal guarded start and postflight. A
 repair never starts a second instance beside a survivor.
 
+Stop-artifact cleanup (`clean_on_stop`, pidfiles and `files_absent` with
+`clean_after_stop`) rejects symlinked ancestors at deletion time. Each parent
+is pinned before deleting, so replacing an ancestor after config validation or
+during traversal cannot redirect removal into another tree. A symlink at the
+final path is removed as a link; its target is preserved. Cleanup failures are
+retained as warnings in the operation result.
+
 The dashboard's **close SSH session** is a separate manual engine operation,
 never a rule action or automatic remediation. It takes the same operation and
 named locks, guards, timeout and one-result event path, but does not restart or

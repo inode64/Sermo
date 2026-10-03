@@ -13,6 +13,7 @@ import (
 
 	"sermo/internal/checks"
 	"sermo/internal/config"
+	"sermo/internal/hostfs"
 	"sermo/internal/locks"
 	"sermo/internal/process"
 	"sermo/internal/rules"
@@ -1024,7 +1025,7 @@ func (e Engine) stoppedPathWarnings(path string, isGlob bool) []string {
 	matches, warns := stoppedPathMatches(path, isGlob)
 	for _, match := range matches {
 		if e.StopArtifacts.CleanEnabled {
-			if err := os.Remove(match); err != nil {
+			if err := hostfs.RemoveNoSymlinkAncestors(match, false); err != nil {
 				warns = append(warns, fmt.Sprintf("could not remove stale %s: %v", match, err))
 			}
 			continue
@@ -1058,17 +1059,7 @@ func (e Engine) cleanOnStopWarnings() []string {
 
 func cleanStopPath(path config.CleanPath) []string {
 	if path.Recursive {
-		// The config validator proves the configured path is safe at load time,
-		// but a symlink planted in an ancestor afterwards would redirect the
-		// recursive delete elsewhere (e.g. an ancestor pointing at /etc). Refuse
-		// to delete through any symlinked component — fail safe rather than
-		// remove the wrong tree as root.
-		if link, err := firstSymlinkAncestor(path.Path); err != nil {
-			return []string{fmt.Sprintf("could not clean %s: %v", path.Path, err)}
-		} else if link != "" {
-			return []string{fmt.Sprintf("refusing to clean %s: %s is a symlink", path.Path, link)}
-		}
-		if err := os.RemoveAll(path.Path); err != nil {
+		if err := hostfs.RemoveNoSymlinkAncestors(path.Path, true); err != nil {
 			return []string{fmt.Sprintf("could not clean %s: %v", path.Path, err)}
 		}
 		return nil
@@ -1084,42 +1075,11 @@ func cleanStopPath(path config.CleanPath) []string {
 	}
 	var warns []string
 	for _, match := range matches {
-		if err := os.Remove(match); err != nil {
+		if err := hostfs.RemoveNoSymlinkAncestors(match, false); err != nil {
 			warns = append(warns, fmt.Sprintf("could not clean %s: %v", match, err))
 		}
 	}
 	return warns
-}
-
-// firstSymlinkAncestor returns the first ancestor of path (from root down,
-// excluding path itself) that is a symlink, or "" if none is. A missing
-// ancestor is not a symlink; a stat error other than not-exist is returned so
-// the caller fails safe. Checking ancestors (not path itself) is what matters
-// for a recursive delete: os.RemoveAll does not follow a symlink AT path, but
-// it does traverse symlinked parents.
-func firstSymlinkAncestor(path string) (string, error) {
-	clean := filepath.Clean(path)
-	var ancestors []string
-	for dir := filepath.Dir(clean); ; dir = filepath.Dir(dir) {
-		ancestors = append(ancestors, dir)
-		if dir == filepath.Dir(dir) {
-			break
-		}
-	}
-	// Walk root-first so the report names the highest symlink.
-	for _, dir := range slices.Backward(ancestors) {
-		info, err := os.Lstat(dir)
-		if err != nil {
-			if os.IsNotExist(err) {
-				continue
-			}
-			return "", fmt.Errorf("lstat %s: %w", dir, err)
-		}
-		if info.Mode()&os.ModeSymlink != 0 {
-			return dir, nil
-		}
-	}
-	return "", nil
 }
 
 // nonDelegatedResiduals drops the processes a service declared delegated. They
