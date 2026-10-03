@@ -893,6 +893,7 @@ func (e Engine) runPostflight(ctx context.Context, p plan, result *Result) bool 
 	var out checks.Outcome
 	postflightReady := false
 	for attempt := range postflightMaxAttempts {
+		readyForChecks := true
 		if p.start || p.resume {
 			healthy, settled := e.ensureServiceHealthy(ctx, result, result.Action, attempt+1 == postflightMaxAttempts)
 			if settled && !healthy {
@@ -902,9 +903,11 @@ func (e Engine) runPostflight(ctx context.Context, p plan, result *Result) bool 
 				// Not active yet: spend this attempt on the settle wait below
 				// instead of judging checks against a still-starting service.
 				postflightReady = false
+				readyForChecks = false
+				out = checks.Outcome{}
 			}
 		}
-		if !postflightReady {
+		if readyForChecks && !postflightReady {
 			out = e.Postflight(ctx)
 			postflightReady = out.OK
 		}

@@ -118,7 +118,9 @@ decision.
    process snapshot, including outside the unit's current cgroup. PID alone or an
    unchanged active daemon is insufficient evidence. Auxiliary units are still
    started again; only the primary start is skipped.
-9. Verify backend and resident-process state, then required postflight for
+9. Verify backend and resident-process state before sampling required postflight
+   checks. A settling attempt never runs or caches a successful probe; losing
+   readiness invalidates earlier postflight success. Verify required postflight for
    start/restart/reload/resume/repair. Reload/resume command errors remain errors:
    a running process alone cannot prove those effects.
 
