@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"sermo/internal/checks"
 	"sermo/internal/config"
 	"sermo/internal/execx"
 	"sermo/internal/operation"
@@ -69,4 +70,13 @@ func EngineUserLookup(cfg *config.Config, runner execx.Runner) *process.UserLook
 		Timeout: config.EngineDuration(cfg, config.EngineKeyUserLookupTimeout, process.DefaultUserLookupTimeout),
 		Runner:  runner,
 	})
+}
+
+// withCheckLimiter supplies a budget for standalone builders. The daemon passes
+// an existing limiter so all builders and configuration generations share it.
+func (d Deps) withCheckLimiter() Deps {
+	if d.CheckLimiter == nil && d.MaxParallel > 0 {
+		d.CheckLimiter = checks.NewLimiter(d.MaxParallel)
+	}
+	return d
 }

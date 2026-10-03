@@ -85,7 +85,7 @@ func ServiceActiveAfterPostflightFailure(ctx context.Context, action string, res
 // operation engine for one resolved service. The engine's per-service operation
 // lock serializes start/stop/restart/reload/resume across every caller.
 func BuildServiceRuntime(ctx context.Context, cfg ServiceRuntimeConfig) ServiceRuntime {
-	deps := cfg.Deps
+	deps := cfg.Deps.withCheckLimiter()
 	discoverer := process.NewDiscovererWithUserLookup(deps.UserLookup)
 	// Only native init units share the cgroup ownership namespace. A libvirt
 	// domain, network or Docker target is not a systemd/OpenRC unit name.
@@ -106,6 +106,7 @@ func BuildServiceRuntime(ctx context.Context, cfg ServiceRuntimeConfig) ServiceR
 	noResident := serviceNoResidentProcess(cfg.Tree, selectors, backendPIDs, deps.Backend)
 	metricSample := metricSampleForOperation(cfg.Service, cfg.Tree, deps.Collector, discoverer, selectors, noResident)
 	checkDeps := checks.Deps{
+		Limiter:        deps.CheckLimiter,
 		Service:        cfg.Service,
 		DefaultTimeout: deps.DefaultTimeout,
 		Runner:         deps.ExecxRunner,

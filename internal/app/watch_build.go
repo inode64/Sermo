@@ -36,6 +36,7 @@ const (
 // `version:`/`config:` blocks. Disabled or malformed entries are skipped with a
 // warning (like BuildWorkers).
 func BuildWatches(cfg *config.Config, deps Deps, defaultInterval time.Duration) ([]*Watch, []string) {
+	deps = deps.withCheckLimiter()
 	var watches []*Watch
 	var warnings []string
 
@@ -1131,6 +1132,7 @@ func watchInlineDeps(deps Deps) checks.Deps {
 		return *deps.WatchCheckDeps
 	}
 	checkDeps := checks.Deps{
+		Limiter:        deps.CheckLimiter,
 		DefaultTimeout: deps.DefaultTimeout,
 		Runner:         deps.ExecxRunner,
 		Samplers:       deps.Samplers,
@@ -1140,7 +1142,7 @@ func watchInlineDeps(deps Deps) checks.Deps {
 
 // monitorDeps maps the app Deps to the checks.Deps a synthesized monitor needs.
 func monitorDeps(deps Deps) checks.Deps {
-	return checks.Deps{DefaultTimeout: deps.DefaultTimeout, Runner: deps.ExecxRunner}
+	return checks.Deps{Limiter: deps.CheckLimiter, DefaultTimeout: deps.DefaultTimeout, Runner: deps.ExecxRunner}
 }
 
 // monitorWatch assembles a notify-only watch around a synthesized check.

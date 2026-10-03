@@ -158,8 +158,9 @@ type Deps struct {
 	// Interval is the global resolution (engine.interval). It is the base cycle
 	// rate and the unit a per-check `interval` is rounded to (a check runs every
 	// round(interval/resolution) cycles). A service's own `interval` overrides it.
-	Interval    time.Duration
-	MaxParallel int
+	Interval     time.Duration
+	MaxParallel  int
+	CheckLimiter *checks.Limiter // shared across services, watches and operations
 	// ArtifactSamples shares catalog app/library/file observations with workers so
 	// artifact changes are sampled at their artifact cadence, not per service cycle.
 	ArtifactSamples *ArtifactSamples
@@ -320,6 +321,7 @@ type Deps struct {
 // cache producer and an operation-engine Operate closure. Services
 // that are disabled or fail to resolve are skipped with a warning.
 func BuildWorkers(ctx context.Context, cfg *config.Config, deps Deps, collector *metrics.Collector) ([]*Worker, []*Watch, []string) {
+	deps = deps.withCheckLimiter()
 	var warnings []string
 	if collector == nil {
 		collector = metrics.New(metrics.OSReader{})

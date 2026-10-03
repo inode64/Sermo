@@ -207,6 +207,7 @@ type WebBackend struct {
 	sessionMetricCollector *metrics.Collector
 	emit                   func(Event)
 	defaultTimeout         time.Duration
+	checkLimiter           *checks.Limiter
 	operationTimeout       time.Duration
 	// diskIOWindow overrides how long a manual disk I/O probe watches the
 	// counters. Zero uses defaultDiskIOProbeWindow; tests shorten it.
@@ -266,6 +267,7 @@ func (b *WebBackend) operationContext(parent context.Context, secondaryFallback 
 // activated (by editing the service file and reloading). Only non-disabled services
 // get a full runtime engine, checks, and operation support.
 func NewWebBackend(ctx context.Context, cfg *config.Config, deps Deps) (*WebBackend, []string) {
+	deps = deps.withCheckLimiter()
 	if deps.UserLookup == nil {
 		deps.UserLookup = EngineUserLookup(cfg, deps.ExecxRunner)
 	}
@@ -328,6 +330,7 @@ func NewWebBackend(ctx context.Context, cfg *config.Config, deps Deps) (*WebBack
 		terminalProcessReader: terminalReader,
 		emit:                  deps.Emit,
 		defaultTimeout:        deps.DefaultTimeout,
+		checkLimiter:          deps.CheckLimiter,
 		operationTimeout:      deps.OperationTimeout,
 		now:                   deps.Now,
 		probes:                map[string]time.Time{},
