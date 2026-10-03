@@ -149,7 +149,7 @@ func classify(lf lockFile, now time.Time, proc ProcessProber) (State, string) {
 		if !proc.Alive(lf.OwnerPID) {
 			return StateStale, staleReasonDeadOwner
 		}
-		if ticks, ok := proc.StartTicks(lf.OwnerPID); ok && ticks != lf.OwnerStartTicks {
+		if ticks, ok := proc.StartTicks(lf.OwnerPID); ok && ticks > 0 && lf.OwnerStartTicks > 0 && ticks != lf.OwnerStartTicks {
 			return StateStale, staleReasonPIDReuse
 		}
 	}

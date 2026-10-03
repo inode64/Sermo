@@ -391,7 +391,10 @@ Lock files are JSON:
 
 `owner_start_ticks` is the owner's start time (field 22 of
 `/proc/<pid>/stat`), recorded so a stale lock can be told apart from a live one
-even after PID reuse.
+even after PID reuse. An owned lock cannot be acquired without a verified,
+non-zero start time. Older locks with an unknown start time stay active while
+the owner is alive, until TTL expiry; a later successful process read cannot
+turn that missing evidence into proof of PID reuse.
 
 Lifecycle:
 

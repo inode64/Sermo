@@ -392,3 +392,55 @@ func TestCorruptPublishedLockReportsParseError(t *testing.T) {
 		t.Fatalf("corrupt lock was removed: %q %v", data, err)
 	}
 }
+
+func TestOwnedLocksRejectUnknownStartTime(t *testing.T) {
+	for _, pid := range []int{0, 5000} {
+		l := opLocker(t, fakeProc{}, nil)
+		l.Self = func() (int, uint64) { return pid, 0 }
+		if _, err := l.Acquire("mysql", time.Hour); err == nil {
+			t.Fatal("operation lock accepted unknown owner identity")
+		}
+		named := NamedLocker{Dir: l.Dir, Self: l.Self, Proc: fakeProc{}, Now: l.Now}
+		if _, err := named.Hold("mysql", "backup", "", time.Hour); err == nil {
+			t.Fatal("named lock accepted unknown owner identity")
+		}
+		if entries, err := os.ReadDir(l.Dir); err != nil || len(entries) != 0 {
+			t.Fatalf("failed acquisition created files: %v %v", entries, err)
+		}
+		if _, err := named.Pin("mysql", "backup", "", time.Hour); err != nil {
+			t.Fatalf("ownerless persistent lock rejected: %v", err)
+		}
+	}
+}
+
+func TestLegacyUnknownOwnerStartTimeIsNotPIDReuse(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		alive   bool
+		ticks   uint64
+		expired bool
+		want    State
+	}{
+		{"read recovers", true, 123, false, StateActive},
+		{"read unavailable", true, 0, false, StateActive},
+		{"dead owner", false, 0, false, StateStale},
+		{"expired", true, 123, true, StateExpired},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			lf := lockFile{OwnerPID: 100, ExpiresAt: fixedNow.Add(time.Hour)}
+			if tc.expired {
+				lf.ExpiresAt = fixedNow
+			}
+			proc := fakeProc{alive: map[int]bool{100: tc.alive}, ticks: map[int]uint64{100: tc.ticks}}
+			if got, reason := classify(lf, fixedNow, proc); got != tc.want {
+				t.Fatalf("state=%s reason=%s, want %s", got, reason, tc.want)
+			}
+			l := opLocker(t, proc, nil)
+			writeLock(t, l.Dir, "mysql.lock", lf)
+			_, err := l.Acquire("mysql", time.Hour)
+			if (tc.want == StateActive) != isHeld(err) {
+				t.Fatalf("Acquire=%v, expected state=%s", err, tc.want)
+			}
+		})
+	}
+}
