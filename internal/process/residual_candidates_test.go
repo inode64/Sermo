@@ -10,7 +10,7 @@ func TestObserveDeletedHelperBeforeAndAfterStop(t *testing.T) {
 	t.Parallel()
 	const helper = "/opt/squid/pinger"
 	ids := map[int]Identity{
-		100: {PID: 100, PPID: 1, UID: 110, Exe: testExe, ExeOK: true},
+		100: {PID: 100, PPID: 1, UID: 110, Exe: testExe, ExeOK: true, Cgroup: "0::/system.slice/mysql.service"},
 		200: {PID: 200, PPID: 1, UID: 110, ExePrev: helper, ExeFile: ExecutableFile{Device: 1, Inode: 20}, Cgroup: "0::/user.slice/session-1.scope"},
 	}
 	backend := []int{100}
@@ -46,19 +46,23 @@ func TestDeletedCandidateOwnership(t *testing.T) {
 	for _, tc := range []struct {
 		name      string
 		group     string
+		mainGroup string
 		otherMain bool
 		wantCount int
 		wantBlock bool
 	}{
-		{name: "old session", group: "0::/user.slice/session-1.scope", wantCount: 2},
+		{name: "old session", mainGroup: "0::/system.slice/mysql.service", group: "0::/user.slice/session-1.scope", wantCount: 2},
 		{name: "other unit", group: "0::/system.slice/other.service", wantCount: 1},
 		{name: "unknown cgroup", wantCount: 2, wantBlock: true},
-		{name: "shared helper multiple instances", group: "0::/user.slice/session-1.scope", otherMain: true, wantCount: 2, wantBlock: true},
+		{name: "unknown main cgroup", group: "0::/user.slice/session-1.scope", wantCount: 2, wantBlock: true},
+		{name: "malformed main cgroup", mainGroup: "bad", group: "0::/user.slice/session-1.scope", wantCount: 2, wantBlock: true},
+		{name: "foreign main cgroup", mainGroup: "0::/system.slice/other.service", group: "0::/user.slice/session-1.scope", wantCount: 2, wantBlock: true},
+		{name: "shared helper multiple instances", mainGroup: "0::/system.slice/mysql.service", group: "0::/user.slice/session-1.scope", otherMain: true, wantCount: 2, wantBlock: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			ids := map[int]Identity{
-				100: {PID: 100, PPID: 1, UID: 110, Exe: testExe, ExeOK: true},
+				100: {PID: 100, PPID: 1, UID: 110, Exe: testExe, ExeOK: true, Cgroup: tc.mainGroup},
 				200: {PID: 200, PPID: 1, UID: 110, ExePrev: "/opt/helper", ExeFile: ExecutableFile{Inode: 20}, Cgroup: tc.group},
 			}
 			if tc.otherMain {
@@ -72,6 +76,9 @@ func TestDeletedCandidateOwnership(t *testing.T) {
 			}
 			if tc.wantCount > 1 && (out.Processes[1].SignalBlockReason != "") != tc.wantBlock {
 				t.Fatalf("candidate=%+v", out.Processes[1])
+			}
+			if tc.wantBlock && killPolicy.KillOnlyIf.Killable(out.Processes[1], d.resolveUser()) {
+				t.Fatal("uncertain candidate is signalable")
 			}
 		})
 	}
