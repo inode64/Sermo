@@ -1004,3 +1004,44 @@ func TestObserveAnyStateLiveMatchWinsOverZombies(t *testing.T) {
 		})
 	}
 }
+
+func TestPidfileCandidatesPreserveUncertainty(t *testing.T) {
+	dir := t.TempDir()
+	unreadable := filepath.Join(dir, "loop.pid")
+	if err := os.Symlink(unreadable, unreadable); err != nil {
+		t.Fatal(err)
+	}
+	missing := filepath.Join(dir, "missing.pid")
+	dead := filepath.Join(dir, "dead.pid")
+	if err := os.WriteFile(dead, []byte("999"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	live := filepath.Join(dir, "live.pid")
+	if err := os.WriteFile(live, []byte("100"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		name    string
+		paths   []string
+		backend []int
+		known   bool
+	}{
+		{"error then missing", []string{unreadable, missing}, nil, false},
+		{"error then dead", []string{unreadable, dead}, nil, false},
+		{"missing then error", []string{missing, unreadable}, nil, false},
+		{"all absent", []string{missing, dead}, nil, true},
+		{"live fallback", []string{unreadable, live}, nil, true},
+		{"backend evidence", []string{unreadable, missing}, []int{100}, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			d := Discoverer{Reader: fakeReader{ids: map[int]Identity{100: {PID: 100, Exe: testExe, ExeOK: true}}}, ResolveUser: fakeUsers(map[string]uint32{"root": 0}), BackendPIDs: func() []int { return tc.backend }}
+			out, err := d.Observe([]Selector{{Name: "pidfile", Type: SelectorPidfile, Paths: tc.paths}, {Name: RoleMain, Type: SelectorCommandMatch, Exe: "/opt/other", User: "root"}})
+			if (err == nil) != tc.known || out.AbsenceKnown != tc.known {
+				t.Fatalf("observation=%+v error=%v, want known=%v", out, err, tc.known)
+			}
+			if !tc.known && len(UncertainWarnings(out.Warnings)) == 0 {
+				t.Fatal("lost unreadable pidfile warning")
+			}
+		})
+	}
+}

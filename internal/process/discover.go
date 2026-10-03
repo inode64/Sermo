@@ -185,7 +185,7 @@ func addPidfileSelectors(selectors []Selector, snapshot map[int]Identity, add fu
 		if sel.Type != SelectorPidfile {
 			continue
 		}
-		var lastWarn string
+		var lastWarn, uncertainWarn string
 		matched := false
 		for _, path := range sel.Paths {
 			pid, err := ReadPidfile(path)
@@ -196,7 +196,7 @@ func addPidfileSelectors(selectors []Selector, snapshot map[int]Identity, add fu
 					// suffix lets UncertainWarnings tell the two apart.
 					lastWarn = fmt.Sprintf("pidfile %q (%s)%s", path, sel.Name, pidfileAbsentSuffix)
 				} else {
-					lastWarn = fmt.Sprintf("pidfile %q (%s): %v", path, sel.Name, err)
+					uncertainWarn = fmt.Sprintf("pidfile %q (%s): %v", path, sel.Name, err)
 				}
 				continue
 			}
@@ -209,6 +209,9 @@ func addPidfileSelectors(selectors []Selector, snapshot map[int]Identity, add fu
 			claimed[pid] = true
 			matched = true
 			break
+		}
+		if uncertainWarn != "" {
+			lastWarn = uncertainWarn
 		}
 		if !matched && lastWarn != "" && !hasBackendProcess {
 			warnings = append(warnings, lastWarn)
