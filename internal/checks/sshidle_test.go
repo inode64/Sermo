@@ -175,7 +175,7 @@ func TestSampleSSHSessionsSeparatesConsoleAndSSH(t *testing.T) {
 		t.Fatalf("sample = %+v, want one console and one SSH session", sample)
 	}
 	got := sample.SSH[0]
-	if got.User != "root" || got.Terminal != "pts/0" || got.PID != sshPeerPID || got.StartTicks != 1234 || got.Idle != 2*time.Minute {
+	if got.Exe != "/usr/lib/sshd-session" || !got.ExeOK || got.UID != 0 || got.User != "root" || got.Terminal != "pts/0" || got.PID != sshPeerPID || got.StartTicks != 1234 || got.Idle != 2*time.Minute {
 		t.Fatalf("SSH session = %+v, want verified SSH peer", got)
 	}
 	if err := sample.VerifySSHSession(got); err != nil {

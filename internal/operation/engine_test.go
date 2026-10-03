@@ -1882,7 +1882,7 @@ func TestCloseSessionRevalidatesThenSendsOnlyTERM(t *testing.T) {
 		if target != (SessionTarget{PID: 96, StartTicks: 1234, Terminal: "pts/11"}) {
 			t.Fatalf("target = %+v", target)
 		}
-		return SessionBoundary{}, nil
+		return SessionBoundary{Exe: "/usr/lib/sshd-session", UID: 81}, nil
 	}
 	e.SessionSignaler = signaler
 	e.SessionExited = func(int, uint64) (bool, error) { return true, nil }

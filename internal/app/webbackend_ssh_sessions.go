@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -155,10 +156,9 @@ func freshSSHSessionVerifier(deps Deps, filters []process.IdentityFilter) func(c
 		}
 		for _, session := range sample.SSH {
 			if session.PID == target.PID && session.Terminal == target.Terminal {
-				boundary := operation.SessionBoundary{Residual: session.Residual}
+				boundary := operation.SessionBoundary{Residual: session.Residual, Exe: session.Exe, UID: session.UID}
 				if sudo := session.Sudo; sudo != nil {
 					boundary.MonitorPID, boundary.MonitorStartTicks = sudo.MonitorPID, sudo.MonitorStartTicks
-					boundary.Exe, boundary.UID = sudo.Exe, sudo.UID
 				}
 				return boundary, nil
 			}
@@ -191,7 +191,7 @@ func sshSessionsToWeb(sample checks.SSHSessionSample) []web.SSHSession {
 			PID:         session.PID,
 			StartTicks:  session.StartTicks,
 			IdleSeconds: max(int64(session.Idle.Seconds()), 0),
-			CanClose:    session.PID > 0 && session.StartTicks > 0,
+			CanClose:    session.PID > 0 && session.StartTicks > 0 && session.ExeOK && filepath.IsAbs(session.Exe),
 			Residual:    session.Residual,
 		})
 	}

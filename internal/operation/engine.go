@@ -678,6 +678,9 @@ func (e Engine) closeSession(ctx context.Context, target SessionTarget, result *
 	if err := ctx.Err(); err != nil {
 		return failSession(result, prefix, err)
 	}
+	if !filepath.IsAbs(boundary.Exe) {
+		return failSession(result, prefix, errors.New("SSH session executable is unavailable"))
+	}
 	if boundary.Residual {
 		return e.closeResidualSession(ctx, target, boundary, result)
 	}
