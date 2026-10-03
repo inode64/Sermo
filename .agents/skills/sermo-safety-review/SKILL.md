@@ -25,7 +25,8 @@ touches them.
    they never share a directory and are never loaded from `/etc/sermo`.
    A named lock read/parse warning for the target service prevents its operation;
    do not treat a partially written lock as absent.
-5. Locks are created with `O_CREAT|O_EXCL` and are TTL-bounded. A stale lock
+5. Locks are staged with `O_CREAT|O_EXCL`, synced and closed before no-replace
+   hard-link publication, and are TTL-bounded. A stale lock
    (expired or dead owner) is reclaimed through a logged path, never silently
    overwritten.
 6. Every executed or blocked action records exactly one auditable event.

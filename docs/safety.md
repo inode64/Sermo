@@ -363,8 +363,8 @@ check for a regular runtime artifact, like `socket:`, and does not block
 operations unless the operator also writes an explicit guard rule.
 
 If a named lock for the service cannot be read or parsed, the operation fails
-before any service action. This also covers the short interval between exclusive
-file creation and completion of its JSON payload. An incomplete or corrupt lock
+before any service action. New locks publish their complete payload atomically.
+An incomplete or corrupt lock left by an older writer or external modification
 is not proof that maintenance has finished; lock listings retain the diagnostic
 warning. A malformed lock for a different service does not block this service.
 
@@ -395,9 +395,12 @@ even after PID reuse.
 
 Lifecycle:
 
-- **Acquire atomically** with `O_CREAT|O_EXCL`; write the JSON and fsync file
-  and directory. Until the write finishes, scanners may observe an incomplete
-  file; operations fail closed on that uncertainty.
+- **Acquire atomically**: create a staging file with `O_CREAT|O_EXCL`, write
+  and fsync its JSON, close it, then publish a hard link without replacing an
+  existing lock. Sync the directory. A crash before publication leaves only an
+  ignored `.tmp` file; a published lock always has a complete TTL. A corrupt
+  legacy lock still blocks operations with a parse diagnostic and requires
+  operator inspection; it is never guessed to be expired.
 - A lock is **stale** (ignored, reclaimable) when its TTL elapsed, its owner
   PID is dead, or the PID is alive with a different start time (reuse). A live
   lock is **never silently overwritten**.

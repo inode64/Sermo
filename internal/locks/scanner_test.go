@@ -247,8 +247,8 @@ func TestIsRetryableLockRead(t *testing.T) {
 	}
 
 	incomplete := fmt.Errorf("parse /x: %w", &json.SyntaxError{Offset: 0})
-	if !isRetryableLockRead(incomplete) {
-		t.Fatal("incomplete JSON should be retryable")
+	if isRetryableLockRead(incomplete) {
+		t.Fatal("incomplete published JSON must report corruption")
 	}
 
 	other := errors.New("permission denied")

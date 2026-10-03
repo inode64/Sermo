@@ -187,12 +187,9 @@ func isMissingLock(err error) bool {
 	return errors.Is(err, fs.ErrNotExist)
 }
 
-// isRetryableLockRead reports a read/parse failure that may clear on retry.
-// Another contender may have created the path (O_EXCL) but not finished writing.
+// isRetryableLockRead reports a lock that disappeared during acquisition.
+// Published payloads are complete; malformed JSON is a diagnostic error, not
+// evidence of an active holder or an in-progress publication.
 func isRetryableLockRead(err error) bool {
-	if isMissingLock(err) {
-		return true
-	}
-	_, ok := errors.AsType[*json.SyntaxError](err)
-	return ok
+	return isMissingLock(err)
 }

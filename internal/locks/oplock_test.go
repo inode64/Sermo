@@ -313,3 +313,82 @@ func TestAcquireReclaimRaceAbortsAsHeld(t *testing.T) {
 		t.Errorf("must not report reclaim when the race was lost, got %v", reclaimed)
 	}
 }
+
+func TestExclusivePublicationNeverExposesPartialPayload(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "mysql.lock")
+	payload := lockFile{Service: "mysql", Reason: strings.Repeat("x", 1<<20), ExpiresAt: fixedNow.Add(time.Hour)}
+	done := make(chan error, 1)
+	go func() { done <- writeLockFileExclusive(path, payload) }()
+	deadline := time.After(time.Second)
+	for {
+		lf, err := readLockFile(path)
+		if err == nil {
+			if lf.Reason != payload.Reason || !lf.ExpiresAt.Equal(payload.ExpiresAt) {
+				t.Fatal("published an incomplete lock")
+			}
+			break
+		}
+		if !isMissingLock(err) {
+			t.Fatalf("reader saw partial publication: %v", err)
+		}
+		select {
+		case <-deadline:
+			t.Fatal("publication timed out")
+		default:
+		}
+	}
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+	if err := writeLockFileExclusive(path, lockFile{Service: "other"}); !errors.Is(err, os.ErrExist) {
+		t.Fatalf("second publication = %v, want exists", err)
+	}
+	if lf, err := readLockFile(path); err != nil || lf.Service != payload.Service {
+		t.Fatalf("overwrote original: %+v %v", lf, err)
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil || len(entries) != 1 {
+		t.Fatalf("staging files leaked: %v %v", entries, err)
+	}
+}
+
+func TestFailedAndAbandonedLockStagingDoesNotHoldService(t *testing.T) {
+	l := opLocker(t, fakeProc{}, nil)
+	path := filepath.Join(l.Dir, "mysql.lock")
+	invalid := lockFile{CreatedAt: time.Date(10000, time.January, 1, 0, 0, 0, 0, time.UTC)}
+	if err := writeLockFileExclusive(path, invalid); err == nil {
+		t.Fatal("invalid timestamp was published")
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatalf("failed publication left a lock: %v", err)
+	}
+	if err := os.WriteFile(path+".abandoned.tmp", []byte("{"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	scanner := Scanner{Dir: l.Dir, Proc: fakeProc{}, Now: l.Now}
+	if report, err := scanner.Scan("mysql"); err != nil || len(report.Locks)+len(report.Warnings) != 0 {
+		t.Fatalf("abandoned staging blocked scanner: %+v %v", report, err)
+	}
+	h, err := l.Acquire("mysql", time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := h.Release(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestCorruptPublishedLockReportsParseError(t *testing.T) {
+	l := opLocker(t, fakeProc{}, nil)
+	path := filepath.Join(l.Dir, "mysql.lock")
+	if err := os.WriteFile(path, []byte("{"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := l.Acquire("mysql", time.Hour); err == nil || isHeld(err) || !strings.Contains(err.Error(), "parse") {
+		t.Fatalf("corrupt lock = %v, want parse diagnostic", err)
+	}
+	if data, err := os.ReadFile(path); err != nil || string(data) != "{" {
+		t.Fatalf("corrupt lock was removed: %q %v", data, err)
+	}
+}
