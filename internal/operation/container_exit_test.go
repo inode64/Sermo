@@ -96,6 +96,7 @@ func TestContainerGraceEndsOnlyWithExitAndInactiveProof(t *testing.T) {
 		name       string
 		ids        map[int]process.Identity
 		active     bool
+		failed     bool
 		noSnapshot bool
 		noTicks    bool
 		stateError bool
@@ -105,38 +106,46 @@ func TestContainerGraceEndsOnlyWithExitAndInactiveProof(t *testing.T) {
 		{name: "unrelated PID reuse", ids: map[int]process.Identity{100: {PID: 100, StartTicks: 20, StartTicksOK: true}}},
 		{name: "survivor", ids: map[int]process.Identity{100: {PID: 100, StartTicks: 10, StartTicksOK: true}}, wantWait: true},
 		{name: "still active", active: true, wantWait: true},
+		{name: "failed after the stop signal", failed: true},
 		{name: "missing snapshot", noSnapshot: true, wantWait: true},
 		{name: "unknown old generation", noTicks: true, wantWait: true},
 		{name: "inspection error", stateError: true},
 	} {
-		t.Run(tc.name, func(t *testing.T) {
-			h := defaultHarness()
-			h.mgr.status = servicemgr.StatusInactive
-			if tc.active {
-				h.mgr.status = servicemgr.StatusActive
-			}
-			if tc.stateError {
-				h.mgr.statusErr = errors.New("inspect unavailable")
-			}
-			e := h.engine()
-			e.Backend = string(servicemgr.BackendDocker)
-			d := process.Discoverer{Reader: &countingPIDReader{ids: tc.ids}}
-			e.ObserveProcesses = func() (process.Observation, error) { return d.Observe(nil) }
-			if !tc.noSnapshot {
-				e.ObserveTracked = func(previous []process.Process) (process.Observation, error) {
-					return d.ObserveTracked(nil, previous)
+		// A native init service without a strict selector has the same evidence
+		// and the same rule: only a verified exit plus an inactive unit ends the wait.
+		for _, backend := range []servicemgr.Backend{servicemgr.BackendDocker, servicemgr.BackendOpenRC, servicemgr.BackendSystemd} {
+			t.Run(tc.name+"/"+string(backend), func(t *testing.T) {
+				h := defaultHarness()
+				h.mgr.status = servicemgr.StatusInactive
+				if tc.active {
+					h.mgr.status = servicemgr.StatusActive
 				}
-			}
-			before := process.Observation{Processes: []process.Process{{PID: 100, StartTicks: 10, Source: process.SourceBackend}}}
-			if tc.noTicks {
-				before.Processes[0].StartTicks = 0
-			}
-			var waited time.Duration
-			e.Sleep = func(d time.Duration) { waited += d }
-			err := e.waitGracefulStop(t.Context(), before, actionStop, time.Second)
-			if (err != nil) != tc.stateError || (waited > 0) != tc.wantWait || waited > time.Second {
-				t.Fatalf("waited=%v error=%v, want wait=%v error=%v", waited, err, tc.wantWait, tc.stateError)
-			}
-		})
+				if tc.failed {
+					h.mgr.status = servicemgr.StatusFailed
+				}
+				if tc.stateError {
+					h.mgr.statusErr = errors.New("inspect unavailable")
+				}
+				e := h.engine()
+				e.Backend = string(backend)
+				d := process.Discoverer{Reader: &countingPIDReader{ids: tc.ids}}
+				e.ObserveProcesses = func() (process.Observation, error) { return d.Observe(nil) }
+				if !tc.noSnapshot {
+					e.ObserveTracked = func(previous []process.Process) (process.Observation, error) {
+						return d.ObserveTracked(nil, previous)
+					}
+				}
+				before := process.Observation{Processes: []process.Process{{PID: 100, StartTicks: 10, Source: process.SourceBackend}}}
+				if tc.noTicks {
+					before.Processes[0].StartTicks = 0
+				}
+				var waited time.Duration
+				e.Sleep = func(d time.Duration) { waited += d }
+				err := e.waitGracefulStop(t.Context(), before, actionStop, time.Second)
+				if (err != nil) != tc.stateError || (waited > 0) != tc.wantWait || waited > time.Second {
+					t.Fatalf("waited=%v error=%v, want wait=%v error=%v", waited, err, tc.wantWait, tc.stateError)
+				}
+			})
+		}
 	}
 }

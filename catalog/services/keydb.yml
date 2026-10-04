@@ -10,6 +10,13 @@ service:
     - keydb-server
 apps:
   - keydb
+policy:
+  cooldown: 15m
+  max_actions: 2
+  max_actions_window: 1h
+  backoff:
+    initial: 15m
+    max: 1h
 restart_on_change:
   apps:
     - keydb
@@ -17,9 +24,22 @@ restart_on_change:
     app: >-
       ${display_name} will restart after version change of ${change.app}: ${change.old_version} -> ${change.new_version}
 variables:
+  user: keydb
   host: 127.0.0.1
   port: 6379
   maxmemory_used_limit: 90
+processes:
+  keydb:
+    exe: ${keydb_binary}
+    user: ${user}
+stop_policy:
+  graceful_timeout: 90s
+  term_timeout: 60s
+  kill_only_if:
+    users:
+      - ${user}
+    exe_any:
+      - ${keydb_binary}
 watches:
   service:
     check:
@@ -39,6 +59,26 @@ watches:
       timeout: 3s
       expect:
         rdb_last_bgsave_status: ok
+  restart-if-tcp-failed:
+    check:
+      type: tcp
+      host: ${host}
+      port: ${port}
+      timeout: 2s
+    for:
+      cycles: 3
+    then:
+      action: restart
+  restart-if-ping-failed:
+    check:
+      type: redis
+      host: ${host}
+      port: ${port}
+      timeout: 3s
+    for:
+      cycles: 3
+    then:
+      action: restart
   restart-if-worker-thread-hot:
     check:
       type: metric

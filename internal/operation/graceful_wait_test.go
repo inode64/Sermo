@@ -8,6 +8,7 @@ import (
 
 	"sermo/internal/config"
 	"sermo/internal/process"
+	"sermo/internal/servicemgr"
 )
 
 func TestStopGracefulWait(t *testing.T) {
@@ -115,5 +116,45 @@ func TestRestartCancelledWhileObservingGrace(t *testing.T) {
 	}
 	if h.mgr.did("start mysqld") || len(h.emitted) != 1 || h.released != 1 {
 		t.Fatalf("calls=%v events=%d releases=%d", h.mgr.calls, len(h.emitted), h.released)
+	}
+}
+
+func TestStopOfIdleServiceSkipsGrace(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		status   servicemgr.Status
+		strict   bool
+		live     bool
+		wantWait time.Duration
+	}{
+		{name: "init inactive and nothing observed", status: servicemgr.StatusInactive},
+		// A failed PID lookup on a running service must not look like an idle one.
+		{name: "init active and nothing observed", status: servicemgr.StatusActive, wantWait: 2 * time.Second},
+		{name: "strict selector keeps the absence proof", status: servicemgr.StatusInactive, strict: true, wantWait: 2 * time.Second},
+		{name: "observed process", status: servicemgr.StatusInactive, live: true, wantWait: 2 * time.Second},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			h := defaultHarness()
+			h.mgr.status = tc.status
+			e := h.engine()
+			e.Lifecycle.ProcessMode = config.ServiceProcessResident
+			e.KillPolicy.GracefulTimeout = 2 * time.Second
+			var slept time.Duration
+			e.Sleep = func(d time.Duration) { slept += d }
+			e.ObserveProcesses = func() (process.Observation, error) {
+				out := process.Observation{IdentityRequired: tc.strict}
+				if tc.live && !h.mgr.stopped {
+					out.Processes = []process.Process{{PID: 100}}
+				}
+				return out, nil
+			}
+			result := e.Stop(t.Context())
+			if slept != tc.wantWait {
+				t.Fatalf("result=%+v waited=%v, want %v", result, slept, tc.wantWait)
+			}
+			if !h.mgr.did("stop mysqld") || len(h.emitted) != 1 || h.released != 1 {
+				t.Fatalf("calls=%v events=%d releases=%d", h.mgr.calls, len(h.emitted), h.released)
+			}
+		})
 	}
 }
