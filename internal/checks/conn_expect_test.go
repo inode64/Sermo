@@ -254,3 +254,95 @@ func TestBuildConnCheckExpect(t *testing.T) {
 		t.Fatal("invalid expect_latency value should warn")
 	}
 }
+
+func keysResult(n string) conn.Result {
+	return conn.Result{Extra: map[string]string{"keys": n}}
+}
+
+func TestConnMaxIncrease(t *testing.T) {
+	now := time.Unix(1_700_000_000, 0)
+	c := connCheck{
+		name: "c", timeout: time.Second,
+		proto:     fakeProto{},
+		cfg:       conn.Config{Host: "h", Port: 1},
+		probe:     probeSeq(keysResult("1000"), keysResult("1400"), keysResult("1700"), keysResult("900"), keysResult("950")),
+		increases: []connIncrease{{field: "keys", limit: 500, state: &counterWindow{}}},
+		window:    10 * time.Minute,
+		clock:     func() time.Time { return now },
+	}
+
+	// First cycle only baselines; +400 stays inside the bound.
+	for _, want := range []int{0, 400} {
+		r := c.Run(context.Background())
+		if !r.OK || r.Data["keys_increase"] != want {
+			t.Fatalf("growth %d should pass: %+v", want, r)
+		}
+		now = now.Add(time.Minute)
+	}
+	// +700 against the oldest sample in the window exceeds max_increase 500.
+	r := c.Run(context.Background())
+	if r.OK || r.Unavailable || !strings.Contains(r.Message, "keys grew by 700 in 2m0s (max_increase 500): 1700 now") {
+		t.Fatalf("growth 700 should fail: %+v", r)
+	}
+	if r.Data["keys_increase"] != 700 || r.Data[DataKeyWindow] != "10m0s" {
+		t.Fatalf("growth data = %+v", r.Data)
+	}
+	// A fall is not growth, and once the rise slides out of the window the
+	// baseline is a later sample.
+	now = now.Add(time.Minute)
+	if r := c.Run(context.Background()); !r.OK || r.Data["keys_increase"] != 0 {
+		t.Fatalf("a falling value should pass with +0: %+v", r)
+	}
+	now = now.Add(11 * time.Minute)
+	if r := c.Run(context.Background()); !r.OK || r.Data["keys_increase"] != 50 {
+		t.Fatalf("after the window moved on, growth is measured from the previous sample: %+v", r)
+	}
+}
+
+func TestConnMaxIncreaseMissingFieldAndExpectPrecedence(t *testing.T) {
+	inc := func() []connIncrease {
+		return []connIncrease{{field: "keys", limit: 5, state: &counterWindow{}}}
+	}
+	c := connCheckWithExpect(nil, conn.Result{Extra: map[string]string{"keys": "n/a"}})
+	c.increases, c.window = inc(), time.Minute
+	if r := c.Run(context.Background()); r.OK || !r.Unavailable || !strings.Contains(r.Message, `field "keys" not available as a number`) {
+		t.Fatalf("non-numeric field should be unavailable: %+v", r)
+	}
+
+	// A failing expect keeps its own message, and the window still samples.
+	c = connCheckWithExpect([]jsonAssertion{{path: "keys", valueMatcher: newValueMatcher("<", "10")}}, keysResult("50"))
+	c.increases, c.window = inc(), time.Minute
+	r := c.Run(context.Background())
+	if r.OK || !strings.Contains(r.Message, "not satisfied") || r.Data["keys_increase"] != 0 {
+		t.Fatalf("expect failure should win and still sample: %+v", r)
+	}
+}
+
+func TestBuildConnCheckMaxIncrease(t *testing.T) {
+	built, warns := Build(map[string]any{
+		"sessions": map[string]any{
+			"type": "redis", "max_increase": map[string]any{"keys": 20000, "evicted_keys": 100}, "within": "10m",
+		},
+	}, Deps{DefaultTimeout: time.Second})
+	if len(warns) != 0 || len(built) != 1 {
+		t.Fatalf("redis check with max_increase should build: warns=%v", warns)
+	}
+	cc := built[0].Check.(connCheck)
+	if len(cc.increases) != 2 || cc.increases[1].field != "keys" || cc.increases[1].limit != 20000 || cc.window != 10*time.Minute {
+		t.Fatalf("increases = %+v window = %s", cc.increases, cc.window)
+	}
+
+	for name, entry := range map[string]map[string]any{
+		"no within":      {"type": "redis", "max_increase": map[string]any{"keys": 1}},
+		"within alone":   {"type": "redis", "within": "10m"},
+		"not a mapping":  {"type": "redis", "max_increase": 5, "within": "10m"},
+		"zero bound":     {"type": "redis", "max_increase": map[string]any{"keys": 0}, "within": "10m"},
+		"empty mapping":  {"type": "redis", "max_increase": map[string]any{}, "within": "10m"},
+		"bad within":     {"type": "redis", "max_increase": map[string]any{"keys": 1}, "within": "soon"},
+		"negative bound": {"type": "redis", "max_increase": map[string]any{"keys": -3}, "within": "10m"},
+	} {
+		if _, warns := Build(map[string]any{"c": entry}, Deps{DefaultTimeout: time.Second}); len(warns) == 0 {
+			t.Errorf("%s: should warn", name)
+		}
+	}
+}

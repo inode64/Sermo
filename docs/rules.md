@@ -1353,7 +1353,13 @@ Protocols, in the order of the table above:
   `on_version_change`) plus health fields exposed for `expect:`: `role`,
   `master_link_status` (replicas), `rdb_last_bgsave_status`,
   `aof_last_write_status`, `loading`, `used_memory`, `maxmemory`,
-  `mem_fragmentation_ratio`, `connected_clients` and `uptime_seconds`.
+  `maxmemory_policy`, `evicted_keys`, `mem_fragmentation_ratio`,
+  `connected_clients` and `uptime_seconds`. Two fields are derived:
+  `maxmemory_used_pct` is `used_memory` as a percentage of `maxmemory` (`0` when
+  no limit is configured), and `keys` is the key count summed over every
+  database. Under `maxmemory-policy noeviction` a full server rejects writes
+  while still answering `PING`, so assert `maxmemory_used_pct` where that
+  matters; pair `keys` with `max_increase` to catch a store filling up fast.
 - `memcached` (alias `memcache`) — default port 11211; `socket` supported (Unix
   socket), `tls` supported. No auth (the ASCII text protocol). Sends a single
   `stats` command and verifies the server answers `STAT` lines terminated by
@@ -2345,6 +2351,30 @@ checks:
     password: "${env:REDIS_PASS}"
     expect_latency: { op: "<", value: 50 }   # alert when Redis answers slowly
 ```
+
+**Growth bound (`max_increase` + `within`).** Any protocol check can also bound
+how fast a numeric field rises. `max_increase` maps a result field to the largest
+rise allowed inside the sliding `within` window; the check fails while the rise
+since the oldest sample in the window exceeds it. Both keys are required
+together. It is evaluated after `expect`, so one check can hold a level and a
+growth bound:
+
+```yaml
+checks:
+  sessions:
+    type: redis
+    expect:
+      keys: { op: "<", value: 250000 }  # level: fail above this many keys
+    max_increase: { keys: 20000 }       # growth: fail on +20000 keys…
+    within: 10m                         # …inside this sliding window
+```
+
+The first cycle only baselines, a falling value is not growth, and a field that
+is missing or not a number makes the check unavailable. When no earlier sample
+is left inside the window (a `within` no longer than the check's interval), the
+previous sample is the baseline. The samples live in the check instance, so a
+config reload or daemon restart re-baselines. Result data carries
+`<field>_increase` and `window`.
 
 **Version-change detection (`on_version_change`).** Set `on_version_change: true`
 on a service check or host watch to alert when the server's version changes

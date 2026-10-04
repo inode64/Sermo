@@ -24,12 +24,31 @@ const (
 
 const (
 	redisInfoAOFLastWriteStatus = "aof_last_write_status"
+	redisInfoEvictedKeys        = "evicted_keys"
 	redisInfoLoading            = "loading"
 	redisInfoMasterLinkStatus   = "master_link_status"
 	redisInfoMaxMemory          = "maxmemory"
+	redisInfoMaxMemoryPolicy    = "maxmemory_policy"
 	redisInfoMemFragRatio       = "mem_fragmentation_ratio"
 	redisInfoRDBLastSaveStatus  = "rdb_last_bgsave_status"
 	redisInfoUsedMemory         = "used_memory"
+)
+
+// Derived fields: computed from INFO rather than copied, so an expect: rule can
+// compare one number against a threshold (expect has no field-to-field form).
+const (
+	redisExtraKeys             = "keys"
+	redisExtraMaxMemoryUsedPct = "maxmemory_used_pct"
+)
+
+const (
+	redisKeyspaceDBPrefix    = "db"
+	redisKeyspaceKeysPrefix  = "keys="
+	redisKeyspaceStatsSep    = ","
+	redisMaxMemoryUnlimited  = "0"
+	redisPercentScale        = 100
+	redisPercentDecimals     = 2
+	redisPercentFloatBitSize = 64
 )
 
 const (
@@ -108,11 +127,16 @@ func redisHandshake(rw io.ReadWriter, cfg Config) (Result, error) {
 			for _, k := range []string{
 				ExtraKeyRole, redisInfoMasterLinkStatus, ExtraKeyConnectedClients,
 				redisInfoUsedMemory, redisInfoMaxMemory, redisInfoMemFragRatio,
+				redisInfoMaxMemoryPolicy, redisInfoEvictedKeys,
 				redisInfoRDBLastSaveStatus, redisInfoAOFLastWriteStatus, redisInfoLoading,
 			} {
 				if v := fields[k]; v != "" {
 					res.Extra[k] = v
 				}
+			}
+			res.Extra[redisExtraKeys] = strconv.FormatUint(redisKeyspaceKeys(fields), numericBaseDecimal)
+			if pct, ok := redisMaxMemoryUsedPct(fields); ok {
+				res.Extra[redisExtraMaxMemoryUsedPct] = pct
 			}
 			if v := fields[redisInfoUptimeInSeconds]; v != "" {
 				res.Extra[extraUptime] = v
@@ -192,4 +216,48 @@ func parseRedisInfo(info string) map[string]string {
 		}
 	}
 	return out
+}
+
+// redisKeyspaceKeys sums the key count of every database in the INFO keyspace
+// section ("db0:keys=12,expires=3,avg_ttl=0"). A server with no keys reports no
+// dbN line at all, so the sum is 0 rather than a missing field.
+func redisKeyspaceKeys(fields map[string]string) uint64 {
+	var total uint64
+	for name, stats := range fields {
+		index, isDB := strings.CutPrefix(name, redisKeyspaceDBPrefix)
+		if !isDB {
+			continue
+		}
+		if _, err := strconv.ParseUint(index, numericBaseDecimal, strconv.IntSize); err != nil {
+			continue
+		}
+		for stat := range strings.SplitSeq(stats, redisKeyspaceStatsSep) {
+			raw, isKeys := strings.CutPrefix(stat, redisKeyspaceKeysPrefix)
+			if !isKeys {
+				continue
+			}
+			if n, err := strconv.ParseUint(raw, numericBaseDecimal, redisPercentFloatBitSize); err == nil {
+				total += n
+			}
+		}
+	}
+	return total
+}
+
+// redisMaxMemoryUsedPct reports used_memory as a percentage of maxmemory. With
+// no limit configured (maxmemory 0) there is nothing to fill, so it reports 0 —
+// a catalog threshold then stays quiet instead of failing on a missing field.
+func redisMaxMemoryUsedPct(fields map[string]string) (string, bool) {
+	limit, err := strconv.ParseFloat(fields[redisInfoMaxMemory], redisPercentFloatBitSize)
+	if err != nil || limit < 0 {
+		return "", false
+	}
+	if limit == 0 {
+		return redisMaxMemoryUnlimited, true
+	}
+	used, err := strconv.ParseFloat(fields[redisInfoUsedMemory], redisPercentFloatBitSize)
+	if err != nil {
+		return "", false
+	}
+	return strconv.FormatFloat(used*redisPercentScale/limit, 'f', redisPercentDecimals, redisPercentFloatBitSize), true
 }

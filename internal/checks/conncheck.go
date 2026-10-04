@@ -5,7 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"math"
 	"net"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -42,10 +44,37 @@ type connCheck struct {
 	// latencyAssertion optionally compares the probe's response time in ms
 	// (expect_latency), like the http check.
 	latencyAssertion valueMatcher
+	// increases optionally bounds how far a numeric probe field may rise within
+	// window (max_increase + within) — a key count, a queue depth, a connection
+	// total. Evaluated after expect, so both a level and a growth bound can fail
+	// the check. clock is injectable for tests.
+	increases []connIncrease
+	window    time.Duration
+	clock     func() time.Time
 	// ifaces optionally pins the probe to one or more egress interfaces
 	// (name/IP/MAC); ifaceAll requires every one to succeed (else any).
 	ifaces   []string
 	ifaceAll bool
+}
+
+// connIncrease is one max_increase bound: field may rise by at most limit within
+// the check's window. state holds the sliding samples; like connState it is a
+// pointer so it survives across cycles and re-baselines on a rebuild.
+type connIncrease struct {
+	field string
+	limit float64
+	state *counterWindow
+}
+
+// connGrowth is one field's reading for a cycle: its current value and the rise
+// since the oldest sample still inside the window.
+type connGrowth struct {
+	field   string
+	limit   float64
+	current int
+	growth  int
+	span    time.Duration
+	missing bool
 }
 
 type connState struct {
@@ -97,10 +126,69 @@ func (c connCheck) Run(ctx context.Context) Result {
 		return r
 	}
 	ok, msg, unavailable := c.evaluateResponse(res, elapsed, addr)
+	// Sample every cycle, whatever expect decided: a window that skipped the
+	// cycles where another assertion failed would measure growth across a gap.
+	growths := c.sampleIncreases(res)
+	if ok {
+		if fail, missing := increaseFailure(growths); fail != "" {
+			ok, unavailable = false, missing
+			msg = fmt.Sprintf("%s %s: %s", c.proto.Name(), addr, fail)
+		}
+	}
 	r := c.result(ok, msg, start)
 	r.Unavailable = unavailable
 	r.Data = c.resultData(elapsed, perIface, res)
+	for _, g := range growths {
+		if !g.missing {
+			r.Data[g.field+DataKeyIncreaseSuffix] = g.growth
+		}
+	}
+	if len(growths) > 0 {
+		r.Data[DataKeyWindow] = c.window.String()
+	}
 	return r
+}
+
+// sampleIncreases advances every max_increase window with this cycle's value. A
+// field the probe did not return, or one that is not a number, is reported as
+// missing and leaves its window untouched.
+func (c connCheck) sampleIncreases(res conn.Result) []connGrowth {
+	if len(c.increases) == 0 {
+		return nil
+	}
+	now := windowClock(c.clock)()
+	out := make([]connGrowth, 0, len(c.increases))
+	for _, inc := range c.increases {
+		g := connGrowth{field: inc.field, limit: inc.limit}
+		value, ok := cfgval.Float(res.Extra[inc.field])
+		if !ok {
+			g.missing = true
+			out = append(out, g)
+			continue
+		}
+		g.current = int(math.Round(value))
+		rise, span := inc.state.advance(now, g.current, c.window)
+		// A value can legitimately fall — keys expire, a queue drains — so only a
+		// rise is growth.
+		g.growth, g.span = max(rise, 0), span
+		out = append(out, g)
+	}
+	return out
+}
+
+// increaseFailure returns the first max_increase bound that does not hold ("" when
+// all do), plus whether it failed for lack of a usable value.
+func increaseFailure(growths []connGrowth) (string, bool) {
+	for _, g := range growths {
+		if g.missing {
+			return fmt.Sprintf("field %q not available as a number for %s", g.field, CheckKeyMaxIncrease), true
+		}
+		if float64(g.growth) > g.limit {
+			return fmt.Sprintf("%s grew by %d in %s (%s %s): %d now", g.field, g.growth,
+				g.span.Round(time.Second), CheckKeyMaxIncrease, formatThreshold(g.limit), g.current), false
+		}
+	}
+	return "", false
 }
 
 func (c connCheck) address() string {
@@ -296,6 +384,11 @@ func buildConnCheck(b base, proto conn.Protocol, entry map[string]any) (Check, s
 		return nil, protoName + " check: " + lwarn
 	}
 	c.latencyAssertion = newValueMatcher(lop, lval)
+	increases, window, iwarnMax := parseConnIncreases(entry)
+	if iwarnMax != "" {
+		return nil, protoName + " check: " + iwarnMax
+	}
+	c.increases, c.window = increases, window
 	c.onChange = cfgval.Bool(entry[CheckKeyOnChange])
 	c.onVersionChange = cfgval.Bool(entry[CheckKeyOnVersionChange])
 	if c.onChange || c.onVersionChange {
@@ -308,6 +401,36 @@ func buildConnCheck(b base, proto conn.Protocol, entry map[string]any) (Check, s
 	}
 	c.ifaceAll = all
 	return c, ""
+}
+
+// parseConnIncreases parses max_increase (field -> positive integer) and its
+// within span. Growth is measured over wall-clock time, not cycles, so one
+// requires the other — the same contract as the strays check.
+func parseConnIncreases(entry map[string]any) ([]connIncrease, time.Duration, string) {
+	raw, present := entry[CheckKeyMaxIncrease]
+	if !present {
+		if _, hasWindow := entry[CheckKeyWithin]; hasWindow {
+			return nil, 0, CheckKeyWithin + " requires " + CheckKeyMaxIncrease
+		}
+		return nil, 0, ""
+	}
+	m, ok := raw.(map[string]any)
+	if !ok || len(m) == 0 {
+		return nil, 0, CheckKeyMaxIncrease + " must be a mapping of field -> positive integer"
+	}
+	window := cfgval.Duration(entry[CheckKeyWithin])
+	if window <= 0 {
+		return nil, 0, CheckKeyMaxIncrease + " requires " + CheckKeyWithin + " as a positive duration"
+	}
+	out := make([]connIncrease, 0, len(m))
+	for _, field := range slices.Sorted(maps.Keys(m)) {
+		n, ok := cfgval.Int(m[field])
+		if !ok || n < 1 {
+			return nil, 0, CheckKeyMaxIncrease + "." + field + " must be a positive integer"
+		}
+		out = append(out, connIncrease{field: field, limit: float64(n), state: &counterWindow{}})
+	}
+	return out, window, ""
 }
 
 func baseConnectionConfig(entry map[string]any) conn.Config {

@@ -18,14 +18,31 @@ Docker, SMART or Web UI thresholds into catalog, docs or production defaults.
 - Use Sermo's own tools for the setup flow: `sermoctl` for validation/discovery/wizards and `sermod run` for the temporary daemon.
 - Configure only services that are currently active on the remote server according to its init backend. Do not configure inactive services, stopped units, disabled candidates, volumes, interfaces, or VMs unless the user explicitly expands the scope for that run.
 - If a code/catalog/schema change is required after any host has already been installed or configured, rebuild and redeploy the fixed payload/config to every already-touched host before continuing with new hosts. Do not leave earlier hosts on stale behavior.
-- To expose the panel, set:
+- To expose the panel, point `web` at hashed credential files. The `password`
+  and `guest_password` keys are retired and rejected by `config validate`:
 
 ```yaml
 web:
   address: 0.0.0.0
-  password: "sermo-remote-admin"
-  guest_password: "sermo-remote-readonly"
+  port: 9797
+  password_file: /tmp/sermo-remote-test-XXX/credentials.env
+  guest_password_file: /tmp/sermo-remote-test-XXX/guest-credentials.env  # optional
 ```
+
+Create each file with the run's own `sermoctl`, one hashed credential per line,
+mode `0600`; `sermod` refuses to start when a configured file is unreadable or
+holds no credential. `--generate` writes the hash line to stdout and the secret
+once to stderr; keep that secret in the local result directory, never in the
+repository or this skill:
+
+```sh
+umask 077
+/tmp/sermo-remote-test-XXX/sermoctl web hash-password --generate --name remote-test \
+  > /tmp/sermo-remote-test-XXX/credentials.env
+```
+
+A validation run that does not need the panel omits the `web` section; the
+daemon then opens no port and alerts are read from `sermod.log`.
 
 Keep the chosen `web.port` and auth settings explicit. Prefer `9797`; if it is already used by a verified `sermod` process, terminate that Sermo process and reuse `9797`.
 When the requested run includes activating or exposing the Web UI, that request
@@ -272,8 +289,10 @@ requests. It overrides the validation-only `/tmp` restrictions above.
   manual Web UI controls for expand, mount, umount or mount-user alerts, verify
   those controls also respect target dry-run. If they do not, fix the project
   code first, add tests, rebuild and redeploy.
-- Web UI defaults are `address: 0.0.0.0`, `port: 9797`, password
-  `sermo-remote-admin`. Verify `/livez`, `/readyz`, HTML, `/api/services`,
+- Web UI defaults are `address: 0.0.0.0`, `port: 9797` and
+  `password_file: /etc/sermo/credentials.env` (hashed, mode `0600`, provisioned
+  by the credentials deploy tooling; never a readable password in `sermo.yml`).
+  Verify `/livez`, `/readyz`, HTML, `/api/services`,
   `/api/watches` and `/api/mounts` after apply.
 - Measure and report daemon/Web UI speed on every apply or update: seconds from
   restart/start command completion until `/livez` succeeds, seconds until
