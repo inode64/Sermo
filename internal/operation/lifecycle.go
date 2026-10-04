@@ -157,14 +157,32 @@ func (e Engine) resetStopped(ctx context.Context, requireAbsence bool, previous 
 // Accept only a confirmed inactive backend and proof that every old generation
 // exited; an empty or failed PID lookup alone never grants this exception.
 func (e Engine) verifyContainerExit(observation process.Observation, previous []process.Process) error {
+	if e.Backend != string(servicemgr.BackendDocker) {
+		return errNoIdentityEvidence
+	}
 	previous = nonDelegatedResiduals(previous)
-	if e.Backend != string(servicemgr.BackendDocker) || observation.IdentityRequired || len(previous) == 0 {
-		return errors.New("no complete process identity evidence")
+	if observation.IdentityRequired || len(previous) == 0 {
+		return errNoIdentityEvidence
 	}
 	if err := observation.VerifyExited(previous); err != nil {
 		return fmt.Errorf("verify container process exit: %w", err)
 	}
 	return nil
+}
+
+var errNoIdentityEvidence = errors.New("no complete process identity evidence")
+
+// observedExited reports that every process generation seen before the stop
+// is gone from the complete process table. It is the only exit evidence a
+// service without a strict selector can offer: such a service can never report
+// AbsenceKnown, so nothing else could end its grace period early. An empty
+// earlier observation proves nothing.
+func observedExited(observation process.Observation, previous []process.Process) bool {
+	previous = nonDelegatedResiduals(previous)
+	if observation.IdentityRequired || len(previous) == 0 {
+		return false
+	}
+	return observation.VerifyExited(previous) == nil
 }
 
 // Docker can publish the stopped state just after the last process exits.
@@ -206,7 +224,13 @@ func (e Engine) stopService(ctx context.Context, result *Result) (stopped, react
 		_ = failPhase(ctx, result, timeoutDuring("stop"), "stop: ", ctx.Err())
 		return false, false
 	}
+	idle := e.idleBeforeStop(ctx, before)
 	grace, stopErr := e.stopPrimary(ctx)
+	if idle && stopErr == nil {
+		// Init already reported the unit inactive and discovery saw no process:
+		// the stop request was a no-op, so there is no exit to wait for.
+		grace = 0
+	}
 	if stopErr != nil {
 		result.Warnings = append(result.Warnings, "stop command: "+stopErr.Error())
 	}
@@ -252,6 +276,20 @@ func (e Engine) stopService(ctx context.Context, result *Result) (stopped, react
 	}
 	result.Warnings = append(result.Warnings, e.verifyStopped()...)
 	return true, false
+}
+
+// idleBeforeStop reports a stop request against a service that was already
+// down: init inactive before the request and no process observed. Only the
+// state sampled before the request counts — an inactive unit after it says
+// nothing about processes a failed PID lookup never saw. A service with a
+// strict selector keeps the AbsenceKnown path instead.
+func (e Engine) idleBeforeStop(ctx context.Context, before process.Observation) bool {
+	if e.Manager == nil || e.ObserveProcesses == nil || before.IdentityRequired || len(before.Processes) > 0 ||
+		e.Lifecycle.ProcessMode == config.ServiceProcessNone {
+		return false
+	}
+	status, err := e.Manager.Status(ctx, e.Unit)
+	return err == nil && status.Status == servicemgr.StatusInactive
 }
 
 // Docker's synchronous stop waits indefinitely after SIGTERM (t=-1), so its
@@ -323,15 +361,17 @@ func (e Engine) waitGracefulStop(ctx context.Context, before process.Observation
 			}
 			// Missing exit proof keeps the grace period open; final
 			// reconciliation still requires positive evidence before start.
-			exitProven := e.verifyContainerExit(observation, before.Processes) == nil
-			if !exitProven {
+			if !observedExited(observation, before.Processes) {
 				return false, nil
 			}
 			status, err := e.Manager.Status(ctx, e.Unit)
 			if err != nil {
-				return false, fmt.Errorf("query container state during stop: %w", err)
+				return false, fmt.Errorf("query init state during stop: %w", err)
 			}
-			return status.Status == servicemgr.StatusInactive, nil
+			// systemd records a daemon that died of the stop signal as failed
+			// (exit 143 without SuccessExitStatus). With every old generation
+			// proven gone that is a completed stop, not a reason to keep waiting.
+			return status.Status == servicemgr.StatusInactive || status.Status == servicemgr.StatusFailed, nil
 		}
 		// A replacement may start while the old generation is still exiting.
 		// Keep waiting until that exception is fully verified; clearResiduals

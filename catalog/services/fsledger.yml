@@ -36,13 +36,19 @@ processes:
     exe: ${fsledger_binary}
     user: root
 # SIGTERM stops the watchers, finishes pending work and reconciles; the daemon
-# exits within its own 270 s shutdown grace. The stop waits 300 s, like the
-# packaged units, and never kills it halfway through a Git commit. SIGHUP does
-# not reload the configuration, so there is no reload: apply changes with a
-# restart.
+# exits within its own 270 s shutdown grace. A residual fsledgerd — the daemon
+# left behind when OpenRC's supervise-daemon dies — gets that same SIGTERM and
+# the full 300 s of the packaged units before SIGKILL, so a restart can recover
+# the service without cutting a Git commit short. SIGHUP does not reload the
+# configuration, so there is no reload: apply changes with a restart.
 stop_policy:
-  force_kill: false
+  force_kill: true
   term_timeout: 300s
+  kill_only_if:
+    users:
+      - root
+    exe_any:
+      - ${fsledger_binary}
 preflight:
   # Strict YAML, source patterns, exclusions and location conflicts; absent
   # sources are valid. Creates nothing.
