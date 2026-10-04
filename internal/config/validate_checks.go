@@ -497,6 +497,36 @@ func validateConnExpectations(prefix string, fields map[string]any, add addFunc)
 		}
 	}
 	validateExpectLatency(prefix, fields, add)
+	validateConnMaxIncrease(prefix, fields, add)
+}
+
+// validateConnMaxIncrease validates max_increase (field -> positive integer) and
+// its within span on a connection check: growth is measured over wall-clock
+// time, so each requires the other.
+func validateConnMaxIncrease(prefix string, fields map[string]any, add addFunc) {
+	raw, hasIncrease := fields[checks.CheckKeyMaxIncrease]
+	_, hasWindow := fields[checks.CheckKeyWithin]
+	if !hasIncrease {
+		if hasWindow {
+			add("%s.%s is only accepted with %s", prefix, checks.CheckKeyWithin, checks.CheckKeyMaxIncrease)
+		}
+		return
+	}
+	m, ok := raw.(map[string]any)
+	if !ok || len(m) == 0 {
+		add("%s.%s must be a mapping of field -> positive integer", prefix, checks.CheckKeyMaxIncrease)
+	} else {
+		for _, field := range slices.Sorted(maps.Keys(m)) {
+			if n, ok := cfgval.Int(m[field]); !ok || n < 1 {
+				add("%s.%s.%s must be a positive integer", prefix, checks.CheckKeyMaxIncrease, field)
+			}
+		}
+	}
+	if !hasWindow {
+		add("%s.%s requires %s, the wall-clock span the growth is measured over", prefix, checks.CheckKeyMaxIncrease, checks.CheckKeyWithin)
+	} else if !isPositiveDuration(cfgval.String(fields[checks.CheckKeyWithin])) {
+		add("%s.%s must be a valid positive duration", prefix, checks.CheckKeyWithin)
+	}
 }
 
 func validateExpectLatency(prefix string, fields map[string]any, add addFunc) {

@@ -2095,6 +2095,24 @@ watches:
     enabled: true
 ```
 
+Redis and KeyDB also provide an opt-in `alert-if-maxmemory-near-limit` watch:
+a warning when `used_memory` stays at or above `variables.maxmemory_used_limit`
+percent of `maxmemory` (default `90`) for five minutes. Enable it where reaching
+the limit hurts — under `maxmemory-policy noeviction` a full server rejects
+writes while the process, the port and `PING` all stay healthy, and a session
+store under an LRU policy silently evicts live sessions. Leave it disabled on a
+pure LRU cache, which sits at its limit by design.
+
+```yaml
+name: redis-main
+uses: redis                  # keydb supports the same watch
+variables:
+  maxmemory_used_limit: 85
+watches:
+  alert-if-maxmemory-near-limit:
+    enabled: true
+```
+
 PHP-FPM's `fpm` check compares the current `listen_queue` with
 `variables.listen_queue_max` (default `0`). Add a sustained alert after
 configuring the pool's `ping.path` and `pm.status_path`; the rule reuses the

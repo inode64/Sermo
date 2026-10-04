@@ -56,7 +56,8 @@ func TestRedisHandshakeNoAuth(t *testing.T) {
 func TestRedisHandshakeExtraFields(t *testing.T) {
 	info := "# Server\r\nredis_version:7.2.4\r\nuptime_in_seconds:3600\r\n" +
 		"# Clients\r\nconnected_clients:12\r\n" +
-		"# Memory\r\nused_memory:1048576\r\nmaxmemory:0\r\nmem_fragmentation_ratio:1.20\r\n" +
+		"# Memory\r\nused_memory:1048576\r\nmaxmemory:0\r\nmaxmemory_policy:noeviction\r\nmem_fragmentation_ratio:1.20\r\n" +
+		"# Stats\r\nevicted_keys:7\r\n" +
 		"# Persistence\r\nloading:0\r\nrdb_last_bgsave_status:ok\r\naof_last_write_status:ok\r\n" +
 		"# Replication\r\nrole:slave\r\nmaster_link_status:up\r\n"
 	conn := rw{in: strings.NewReader("+PONG\r\n" + infoBulk(info)), out: &bytes.Buffer{}}
@@ -69,7 +70,9 @@ func TestRedisHandshakeExtraFields(t *testing.T) {
 		"role": "slave", "master_link_status": "up", ExtraKeyConnectedClients: "12",
 		"used_memory": "1048576", "maxmemory": "0", "mem_fragmentation_ratio": "1.20",
 		"rdb_last_bgsave_status": "ok", "aof_last_write_status": "ok", "loading": "0",
-		"uptime_seconds": "3600",
+		"uptime_seconds": "3600", "maxmemory_policy": "noeviction", "evicted_keys": "7",
+		// No dbN line and no maxmemory limit: both derived fields are 0, not missing.
+		"keys": "0", "maxmemory_used_pct": "0",
 	}
 	for k, v := range want {
 		if res.Extra[k] != v {
@@ -139,5 +142,34 @@ func TestReadRESPBoundsBulkReplies(t *testing.T) {
 				t.Fatalf("reply length=%d err=%v", len(got), err)
 			}
 		})
+	}
+}
+
+func TestRedisHandshakeDerivedFields(t *testing.T) {
+	info := "# Memory\r\nused_memory:966367642\r\nmaxmemory:1073741824\r\n" +
+		"# Keyspace\r\ndb0:keys=144074,expires=144070,avg_ttl=359349753\r\ndb3:keys=26,expires=0,avg_ttl=0\r\n" +
+		"dbsize_hint:keys=999\r\n"
+	conn := rw{in: strings.NewReader("+PONG\r\n" + infoBulk(info)), out: &bytes.Buffer{}}
+
+	res, err := redisHandshake(conn, Config{})
+	if err != nil {
+		t.Fatalf("handshake: %v", err)
+	}
+	if got := res.Extra["keys"]; got != "144100" {
+		t.Errorf("keys = %q, want the sum over dbN lines only (144100)", got)
+	}
+	if got := res.Extra["maxmemory_used_pct"]; got != "90.00" {
+		t.Errorf("maxmemory_used_pct = %q, want 90.00", got)
+	}
+}
+
+func TestRedisMaxMemoryUsedPctUnavailable(t *testing.T) {
+	for name, fields := range map[string]map[string]string{
+		"no maxmemory field": {"used_memory": "10"},
+		"bad used_memory":    {"used_memory": "x", "maxmemory": "100"},
+	} {
+		if pct, ok := redisMaxMemoryUsedPct(fields); ok {
+			t.Errorf("%s: got %q, want unavailable", name, pct)
+		}
 	}
 }

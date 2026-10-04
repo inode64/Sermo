@@ -15,6 +15,7 @@ variables:
   user: redis
   host: 127.0.0.1
   port: 6379
+  maxmemory_used_limit: 90
 pidfile:
   - /run/redis/redis.pid
   - /run/redis.pid
@@ -134,6 +135,26 @@ watches:
       action: alert
       message: >-
         During ${rule.duration}, ${display_name} single-thread CPU usage stayed above ${check.threshold} (current ${check.value})
+  # Enable where reaching maxmemory hurts: under `noeviction` writes are
+  # rejected, and a store whose keys must survive (sessions) loses them to
+  # eviction. A pure LRU cache sits at its limit by design. The field reads 0
+  # when no maxmemory is configured.
+  alert-if-maxmemory-near-limit:
+    enabled: false
+    check:
+      type: redis
+      host: ${host}
+      port: ${port}
+      timeout: 3s
+      severity: warning
+      expect:
+        maxmemory_used_pct: { op: "<", value: "${maxmemory_used_limit}" }
+    for:
+      duration: 5m
+    then:
+      action: alert
+      message: >-
+        During ${rule.duration}, ${display_name} used memory stayed at or above ${maxmemory_used_limit}% of maxmemory
   # Enable on instances using appendonly; INFO omits this field otherwise.
   alert-if-aof-write-failed:
     enabled: false
