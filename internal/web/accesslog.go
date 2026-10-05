@@ -28,7 +28,8 @@ const (
 	apiAccessTargetSegments  = 3
 	apiAccessTargetSegment   = 2
 	apiAccessActionSegments  = 4
-	apiAccessActionSegment   = 3
+	// apiAccessNestedActionSegments is /api/<resource>/<target>/<kind>/<item>/<action>.
+	apiAccessNestedActionSegments = 6
 )
 
 type accessStatusRecorder struct {
@@ -118,8 +119,15 @@ func parseAPIAccessTarget(path string) (target, action string) {
 		if len(parts) >= apiAccessTargetSegments {
 			target = parts[apiAccessTargetSegment]
 		}
-		if len(parts) >= apiAccessActionSegments {
-			action = parts[apiAccessActionSegment]
+		switch {
+		case len(parts) >= apiAccessNestedActionSegments:
+			// A nested route (/services/x/sessions/{pid}/close) names its
+			// action after the item it acts on.
+			action = parts[len(parts)-1]
+		case len(parts) >= apiAccessActionSegments:
+			// A flat route (/services/x/restart, /services/x/button/{name})
+			// names it right after the target.
+			action = parts[apiAccessActionSegments-1]
 		}
 	case apiSegmentLocks:
 		if len(parts) >= apiAccessTargetSegments {

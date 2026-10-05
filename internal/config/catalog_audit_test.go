@@ -3365,3 +3365,30 @@ func TestCatalogResourceAlertsAreGraded(t *testing.T) {
 		t.Fatal("no catalog resource alert was inspected")
 	}
 }
+
+// The catalog may observe running statements but never stops one: an automatic
+// kill_query is an operator decision for one host's own override, and every
+// catalog database watch stays alert-only.
+func TestCatalogNeverShipsAnAutomaticQueryKill(t *testing.T) {
+	root := repoRoot(t)
+	seen := 0
+	walkCatalogDocs(t, filepath.Join(repoCatalogDir(root), "services"), func(path string, body map[string]any) {
+		watches, _ := body[sectionWatches].(map[string]any)
+		for name, raw := range watches {
+			entry, _ := raw.(map[string]any)
+			check, _ := entry[WatchKeyCheck].(map[string]any)
+			if check[checks.CheckKeyType] != checks.CheckTypeDBQueries {
+				continue
+			}
+			seen++
+			if then, ok := entry["then"].(map[string]any); ok {
+				if _, kills := then[WatchThenKeyKillQuery]; kills {
+					t.Errorf("%s: watch %s ships then.kill_query", path, name)
+				}
+			}
+		}
+	})
+	if seen < 3 {
+		t.Fatalf("db_queries watches in the catalog = %d, want mysql, mariadb and postgres", seen)
+	}
+}

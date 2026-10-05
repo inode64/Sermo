@@ -201,7 +201,6 @@ const (
 	apiQueryUser        = "user"
 	apiQueryMultiplexer = "multiplexer"
 	apiQuerySession     = "session"
-	apiQueryIdentity    = "identity"
 	apiQueryVerbose     = "verbose"
 	apiQueryWatch       = "watch"
 )
@@ -226,7 +225,6 @@ const (
 	apiPathNotifiers  = apiPathPrefix + apiSegmentNotifiers
 	apiPathPanic      = apiPathPrefix + apiSegmentPanic
 	apiPathReload     = apiPathPrefix + apiSegmentReload
-	apiPathSessions   = apiPathPrefix + apiSegmentSessions
 	apiPathState      = apiPathPrefix + apiSegmentState
 	apiPathStream     = apiPathPrefix + apiSegmentStream
 	apiPathWhoami     = apiPathPrefix + apiSegmentWhoami
@@ -241,7 +239,7 @@ const (
 	routeReadyz                       = routeMethodGet + routePathReadyz
 	routeAPIWhoami                    = routeMethodGet + apiPathWhoami
 	routeAPIServices                  = routeMethodGet + APIPathServices
-	routeAPISessions                  = routeMethodGet + apiPathSessions
+	routeAPISessions                  = routeMethodGet + APIPathSessions
 	routeAPIWatches                   = routeMethodGet + APIPathWatches
 	routeAPIWatchAction               = routeMethodPost + APIPathWatches + "/" + routeVarName + "/" + routeVarAction
 	routeAPIWatchSeries               = routeMethodGet + APIPathWatches + "/" + routeVarName + "/" + apiSegmentSLA
@@ -277,6 +275,7 @@ const (
 	routeAPISessionClose              = routeMethodPost + APIPathServices + "/" + routeVarName + "/" + apiSegmentSessions + "/{" + apiParamPID + "}/" + apiActionClose
 	routeAPITerminalSessionClose      = routeMethodPost + APIPathServices + "/" + routeVarName + "/" + apiSegmentTerminalSessions + "/{" + apiQueryCheck + "}/" + apiActionClose
 	routeAPIEmptyTerminalSessionClose = routeMethodPost + APIPathServices + "/" + routeVarName + "/" + apiSegmentTerminalSessions + "/{" + apiQueryCheck + "}/" + apiActionCloseEmpty
+	routeAPIDBQueryKill               = routeMethodPost + APIPathServices + "/" + routeVarName + "/" + APISegmentDBQueries + "/{" + apiQueryWatch + "}/" + APIActionKill
 	routeAPIAction                    = routeMethodPost + APIPathServices + "/" + routeVarName + "/" + routeVarAction
 	routeAPIReload                    = routeMethodPost + apiPathReload
 )
@@ -456,6 +455,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc(routeAPISessionClose, s.handleSSHSessionClose)
 	mux.HandleFunc(routeAPITerminalSessionClose, s.handleTerminalSessionClose)
 	mux.HandleFunc(routeAPIEmptyTerminalSessionClose, s.handleEmptyTerminalSessionClose)
+	mux.HandleFunc(routeAPIDBQueryKill, s.handleDBQueryKill)
 	mux.HandleFunc(routeAPIAction, s.handleAction)
 	mux.HandleFunc(routeAPIReload, s.handleReload)
 	return securityHeaders(s.withAccessLog(s.withAuth(mux)))

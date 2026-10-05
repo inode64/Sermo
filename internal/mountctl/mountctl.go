@@ -44,6 +44,8 @@ const (
 	ActionMount = "mount"
 	// ActionUmount is the Result.Action value and umount(8) subcommand for unmounting.
 	ActionUmount = "umount"
+	// ActionRemount is the Result.Action value for repairing a hung or missing mount.
+	ActionRemount = "remount"
 
 	// DefaultFstabPath is the system fstab file Sermo reads by default.
 	DefaultFstabPath          = "/etc/fstab"
@@ -74,6 +76,7 @@ const (
 	mountMessageKillSelectorRequired  = "kill blockers requires mount.stop_policy.kill_only_if"
 	mountMessageLazyUnmounted         = "lazy unmounted"
 	mountMessageMounted               = "mounted"
+	mountMessageRemounted             = "remounted"
 	mountMessageRefcountAcquired      = "acquired, already mounted"
 	mountMessageRefcountReleasedInUse = "released, still in use"
 	mountMessageUnmounted             = "unmounted"
@@ -168,6 +171,13 @@ type Controller struct {
 	Now            func() time.Time
 	CommandTimeout time.Duration
 	LockTTL        time.Duration
+	// Unmount detaches the mount at a path with umount2(2) flags; nil uses the
+	// system call. Remount calls it directly: umount(8) canonicalizes the path
+	// and its NFS helper talks to the server, so on a hung mount it hangs too.
+	Unmount func(path string, flags int) error
+	// Answers probes that a path answers statfs within a timeout; nil uses
+	// checks.StatfsAnswers.
+	Answers func(path string, timeout time.Duration) error
 }
 
 // OperationBudget is the longest a mount or unmount of spec may take when

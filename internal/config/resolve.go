@@ -664,6 +664,11 @@ func expandServiceWatches(tree map[string]any) []string {
 			delete(watches, name)
 			continue
 		}
+		if check, _ := entry[WatchKeyCheck].(map[string]any); isWatchOnlyType(check) {
+			// A stateful watch that tracks a set of items has no single-shot
+			// check to promote (validateServiceWatches owns it).
+			continue
+		}
 		rawThen, hasThen := entry[rules.RuleFieldThen]
 		then, _ := rawThen.(map[string]any)
 		action := cfgval.String(then[rules.RuleFieldAction])
@@ -716,7 +721,32 @@ func expandServiceWatches(tree map[string]any) []string {
 	if len(watches) == 0 {
 		delete(tree, sectionWatches)
 	}
+	inheritDryRun(tree[keyDryRun], watches)
 	return errs
+}
+
+func isWatchOnlyType(check map[string]any) bool {
+	_, ok := checks.WatchOnlyTypeInfo(cfgval.String(check[checks.CheckKeyType]))
+	return ok
+}
+
+// inheritDryRun gives each watch the dry_run its owner declares — the global
+// defaults for host watches, the service for its own watches — unless the watch
+// sets its own. A watch runs its hooks and native actions itself, so without
+// this a dry-run service would let its watches act for real.
+func inheritDryRun(v any, watches map[string]any) {
+	if v == nil {
+		return
+	}
+	for _, raw := range watches {
+		entry, ok := raw.(map[string]any)
+		if !ok {
+			continue
+		}
+		if _, present := entry[keyDryRun]; !present {
+			entry[keyDryRun] = deepCopy(v)
+		}
+	}
 }
 
 type serviceWatchRuleTarget struct {
@@ -1634,19 +1664,7 @@ func (c *Config) defaultsPerService() map[string]any {
 }
 
 func (c *Config) applyWatchDefaults(raw map[string]any) {
-	v, ok := c.Global.Defaults()[keyDryRun]
-	if !ok {
-		return
-	}
-	for _, entry := range raw {
-		watch, ok := entry.(map[string]any)
-		if !ok {
-			continue
-		}
-		if _, present := watch[keyDryRun]; !present {
-			watch[keyDryRun] = deepCopy(v)
-		}
-	}
+	inheritDryRun(c.Global.Defaults()[keyDryRun], raw)
 }
 
 // stripMeta returns a copy of a document body without the resolution-control

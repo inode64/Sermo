@@ -357,3 +357,24 @@ func TestParseProcLimitsOpenFiles(t *testing.T) {
 func (r swapReader) MemoryTotals(_ time.Duration) MemoryTotals {
 	return MemoryTotals{MemoryTotal: r.memTotal, MemoryUsed: r.memUsed, MemoryOK: r.memTotal > 0, SwapTotal: r.swapTotal, SwapUsed: r.swapUsed, SwapOK: r.swapOK}
 }
+
+// The per-thread readers read /proc/<pid>/task/<tid>; the test process's main
+// thread is readable under its own id.
+func TestThreadReadersReadOwnThread(t *testing.T) {
+	pid := os.Getpid()
+	thread, ok := (OSReader{}).ThreadCPU(pid, pid)
+	if !ok {
+		t.Fatal("ThreadCPU of the main thread must be readable")
+	}
+	// One thread's CPU is part of its process's: a per-thread read, not the
+	// thread group's total.
+	if process, ok := (OSReader{}).ProcessCPU(pid); !ok || thread > process {
+		t.Fatalf("thread ticks %d exceed process ticks %d", thread, process)
+	}
+	if _, _, ok := (OSReader{}).ThreadIO(pid, pid); !ok {
+		t.Fatal("ThreadIO of the main thread must be readable")
+	}
+	if ticks, ok := (OSReader{}).ThreadCPU(-1, -1); ok || ticks != 0 {
+		t.Fatal("an invalid tid has no counters")
+	}
+}

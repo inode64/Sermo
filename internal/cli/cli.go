@@ -83,33 +83,34 @@ const (
 )
 
 const (
-	cliFlagSetName   = "sermoctl"
-	cliFlagApply     = "apply"
-	cliFlagBackend   = commandBackend
-	cliFlagBefore    = web.APIQueryBefore
-	cliFlagConfig    = commandConfig
-	cliFlagConfirm   = "confirm"
-	cliFlagCost      = "cost"
-	cliFlagForce     = "force"
-	cliFlagGenerate  = "generate"
-	cliFlagHash      = "hash"
-	cliFlagHelp      = commandHelp
-	cliFlagJSON      = "json"
-	cliFlagKill      = "kill-blockers"
-	cliFlagLazy      = "lazy"
-	cliFlagLimit     = web.APIQueryLimit
-	cliFlagLong      = "long"
-	cliFlagName      = config.EntryKeyName
-	cliFlagNoCascade = "no-cascade"
-	cliFlagNotify    = rules.RuleFieldNotify
-	cliFlagQuiet     = "quiet"
-	cliFlagReason    = "reason"
-	cliFlagSeries    = "series"
-	cliFlagSince     = "since"
-	cliFlagStdin     = "stdin"
-	cliFlagTimeout   = checks.CheckKeyTimeout
-	cliFlagTTL       = "ttl"
-	cliFlagVersion   = commandVersion
+	cliFlagSetName    = "sermoctl"
+	cliFlagApply      = "apply"
+	cliFlagBackend    = commandBackend
+	cliFlagBefore     = web.APIQueryBefore
+	cliFlagConfig     = commandConfig
+	cliFlagConfirm    = "confirm"
+	cliFlagConnection = checks.DBQueryKillModeConnection
+	cliFlagCost       = "cost"
+	cliFlagForce      = "force"
+	cliFlagGenerate   = "generate"
+	cliFlagHash       = "hash"
+	cliFlagHelp       = commandHelp
+	cliFlagJSON       = "json"
+	cliFlagKill       = "kill-blockers"
+	cliFlagLazy       = "lazy"
+	cliFlagLimit      = web.APIQueryLimit
+	cliFlagLong       = "long"
+	cliFlagName       = config.EntryKeyName
+	cliFlagNoCascade  = "no-cascade"
+	cliFlagNotify     = rules.RuleFieldNotify
+	cliFlagQuiet      = "quiet"
+	cliFlagReason     = "reason"
+	cliFlagSeries     = "series"
+	cliFlagSince      = "since"
+	cliFlagStdin      = "stdin"
+	cliFlagTimeout    = checks.CheckKeyTimeout
+	cliFlagTTL        = "ttl"
+	cliFlagVersion    = commandVersion
 )
 
 const (
@@ -241,6 +242,7 @@ type options struct {
 	lazy       bool // --lazy: allow umount -l during `sermoctl umount`
 	kill       bool // --kill-blockers: allow policy-gated signalling during `sermoctl umount`
 	apply      bool // --apply: signal the authorized strays during `sermoctl reap` (without it, preview only)
+	connection bool // --connection: `sermoctl sessions kill` closes the connection instead of cancelling the statement
 	help       bool
 	version    bool // --version / -V
 	timeout    time.Duration
@@ -396,6 +398,7 @@ var commandHandlers = map[string]commandHandler{
 	commandLibs:      App.runLibs,
 	commandPatterns:  func(a App, _ context.Context, opts options) int { return a.runPatterns(opts) },
 	commandServices:  App.runServices,
+	commandSessions:  App.runSessions,
 	commandState:     App.runState,
 	commandLock:      App.runLock,
 	commandUnmonitor: func(a App, ctx context.Context, opts options) int { return a.runMonitor(ctx, opts, true) },
@@ -458,6 +461,9 @@ func (a App) prepareOptions(args []string) (options, int, bool) {
 	// be accepted anywhere it would be silently ignored.
 	if opts.command != commandReap && opts.apply {
 		return options{}, a.commandUsageError(opts.command, "--apply is only supported by "+commandReap), true
+	}
+	if opts.command != commandSessions && opts.connection {
+		return options{}, a.commandUsageError(opts.command, "--connection is only supported by "+commandSessions+" kill"), true
 	}
 	return opts, exitSuccess, false
 }
@@ -541,7 +547,9 @@ func (a App) fail(opts options, msg string) int {
 // not given. Backend actions can legitimately take much longer than a probe.
 func defaultTimeout(command string) time.Duration {
 	switch command {
-	case commandStart, commandStop, commandRestart, commandReload, commandResume, commandPause, commandRepair, commandMount, commandUmount, commandState:
+	// A sessions kill runs through the service's operation engine, which
+	// re-samples the database before cancelling the statement.
+	case commandStart, commandStop, commandRestart, commandReload, commandResume, commandPause, commandRepair, commandMount, commandUmount, commandState, commandSessions:
 		return app.DefaultEngineOperationTimeout
 	case commandStatus, commandIsActive:
 		// Config loading and control-target resolution are part of a live service
@@ -574,6 +582,7 @@ func parseArgs(args []string) (options, error) {
 	fs.BoolVar(&opts.lazy, cliFlagLazy, false, "")
 	fs.BoolVar(&opts.kill, cliFlagKill, false, "")
 	fs.BoolVar(&opts.apply, cliFlagApply, false, "")
+	fs.BoolVar(&opts.connection, cliFlagConnection, false, "")
 	fs.BoolVar(&opts.series, cliFlagSeries, false, "")
 	fs.BoolVar(&opts.long, cliFlagLong, false, "")
 	fs.StringArrayVar(&notifyValues, cliFlagNotify, nil, "")

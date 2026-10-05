@@ -155,19 +155,23 @@ func TestGeneratedControlledServicesPassConfigValidation(t *testing.T) {
 }
 
 func TestGeneratedMountsPassConfigValidation(t *testing.T) {
-	body := buildMountUnit(MountCandidate{Path: "/mnt/backup"}, mountSettings{refcount: true})
+	nfs := buildMountUnit(MountCandidate{Path: "/mnt/nas", FSType: "nfs4"}, mountSettings{refcount: true})
+	if _, ok := nfs[config.WatchKeyThen].(map[string]any)[config.WatchThenKeyRemount]; !ok {
+		t.Fatalf("an NFS mount unit carries no then.remount: %v", nfs)
+	}
 	cfg := &config.Config{
 		Global: config.Global{
 			Raw: map[string]any{
 				config.SectionWatches: map[string]any{
-					"mount-mnt-backup": body,
+					"mount-mnt-backup": buildMountUnit(MountCandidate{Path: "/mnt/backup"}, mountSettings{refcount: true}),
+					"mount-mnt-nas":    nfs,
 				},
 				"defaults": map[string]any{rules.SectionPolicy: map[string]any{rules.PolicyKeyCooldown: "5m"}},
 			},
 		},
 	}
 	for _, issue := range config.Validate(cfg) {
-		if issue.Scope == "watch mount-mnt-backup" {
+		if issue.Scope == "watch mount-mnt-backup" || issue.Scope == "watch mount-mnt-nas" {
 			t.Errorf("wizard-generated mount failed validation: %s", issue)
 		}
 	}

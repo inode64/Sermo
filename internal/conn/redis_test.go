@@ -57,7 +57,7 @@ func TestRedisHandshakeExtraFields(t *testing.T) {
 	info := "# Server\r\nredis_version:7.2.4\r\nuptime_in_seconds:3600\r\n" +
 		"# Clients\r\nconnected_clients:12\r\n" +
 		"# Memory\r\nused_memory:1048576\r\nmaxmemory:0\r\nmaxmemory_policy:noeviction\r\nmem_fragmentation_ratio:1.20\r\n" +
-		"# Stats\r\nevicted_keys:7\r\n" +
+		"# Stats\r\nevicted_keys:7\r\nsync_full:2\r\n" +
 		"# Persistence\r\nloading:0\r\nrdb_last_bgsave_status:ok\r\naof_last_write_status:ok\r\n" +
 		"# Replication\r\nrole:slave\r\nmaster_link_status:up\r\n"
 	conn := rw{in: strings.NewReader("+PONG\r\n" + infoBulk(info)), out: &bytes.Buffer{}}
@@ -71,6 +71,7 @@ func TestRedisHandshakeExtraFields(t *testing.T) {
 		"used_memory": "1048576", "maxmemory": "0", "mem_fragmentation_ratio": "1.20",
 		"rdb_last_bgsave_status": "ok", "aof_last_write_status": "ok", "loading": "0",
 		"uptime_seconds": "3600", "maxmemory_policy": "noeviction", "evicted_keys": "7",
+		"sync_full": "2",
 		// No dbN line and no maxmemory limit: both derived fields are 0, not missing.
 		"keys": "0", "maxmemory_used_pct": "0",
 	}
@@ -171,5 +172,40 @@ func TestRedisMaxMemoryUsedPctUnavailable(t *testing.T) {
 		if pct, ok := redisMaxMemoryUsedPct(fields); ok {
 			t.Errorf("%s: got %q, want unavailable", name, pct)
 		}
+	}
+}
+
+func TestRedisHandshakeRejectedCalls(t *testing.T) {
+	info := "# Server\r\nredis_version:7.2.4\r\n# Commandstats\r\n" +
+		"cmdstat_set:calls=900,usec=4500,usec_per_call=5.00,rejected_calls=12,failed_calls=0\r\n" +
+		"cmdstat_get:calls=1200,usec=2400,usec_per_call=2.00,rejected_calls=117,failed_calls=3\r\n"
+	conn := rw{in: strings.NewReader("+PONG\r\n" + infoBulk(info)), out: &bytes.Buffer{}}
+
+	res, err := redisHandshake(conn, Config{})
+	if err != nil {
+		t.Fatalf("handshake: %v", err)
+	}
+	if got := res.Extra["rejected_calls"]; got != "129" || res.Version != "7.2.4" {
+		t.Errorf("rejected_calls = %q version = %q, want the sum over every command (129) from the same reply", got, res.Version)
+	}
+}
+
+func TestRedisRejectedCallsMissingOnOldServers(t *testing.T) {
+	fields := parseRedisInfo("cmdstat_get:calls=10,usec=20,usec_per_call=2.00\r\n")
+	if total, ok := redisRejectedCalls(fields); ok {
+		t.Fatalf("a server without the counter reported %d", total)
+	}
+}
+
+// The health fields and the command stats come from one INFO all: one round
+// trip per probe.
+func TestRedisHandshakeSendsOneInfoAll(t *testing.T) {
+	conn := rw{in: strings.NewReader("+PONG\r\n" + infoBulk("redis_version:7.2.4\r\n")), out: &bytes.Buffer{}}
+	if _, err := redisHandshake(conn, Config{}); err != nil {
+		t.Fatalf("handshake: %v", err)
+	}
+	sent := conn.out.String()
+	if strings.Count(sent, redisCommandInfo) != 1 || !strings.Contains(sent, "$3\r\nall\r\n") {
+		t.Fatalf("want exactly one INFO all, sent %q", sent)
 	}
 }

@@ -75,7 +75,7 @@ func validateWatches(watches map[string]any, locksDir string, notifiers map[stri
 			// The one single-shot type with its own case: a storage watch may carry
 			// a then.expand action, so its hook block allows expand.
 			validateStorageFields(checkPath, check, add)
-			validateHookBlock(prefix, entry, watchNativeActions{expand: true, recoverHook: true}, defaultNotify, add)
+			validateHookBlock(prefix, entry, watchNativeActions{expand: true, remount: true, recoverHook: true}, defaultNotify, add)
 		case checks.CheckTypeNet:
 			validateNetCheck(name, check, entry, defaultNotify, add)
 		case checks.CheckTypeICMP:
@@ -88,6 +88,8 @@ func validateWatches(watches map[string]any, locksDir string, notifiers map[stri
 			validateProcessWatch(name, check, entry, defaultNotify, add)
 		case checks.CheckTypeProcessPolicy:
 			validateProcessPolicyWatch(name, check, entry, defaultNotify, add)
+		case checks.CheckTypeDBQueries:
+			validateDBQueriesWatch(name, check, entry, false, defaultNotify, add)
 		case "":
 			add(validationRequiredFormat, watchCheckFieldPath(name, checks.CheckKeyType))
 		default:
@@ -208,6 +210,10 @@ func validateServiceWatch(name string, entry map[string]any, locksDir string, no
 		add(validationRequiredFormat, watchCheckFieldPath(name, checks.CheckKeyType))
 		return
 	}
+	if typ == checks.CheckTypeDBQueries {
+		validateDBQueriesWatch(name, check, entry, true, defaultNotify, add)
+		return
+	}
 	validateCheckLevels(checkPath, typ, check, checks.DeclaredSeverity(entry, check), add)
 	rawThen, hasThen := entry[rules.RuleFieldThen]
 	then, _ := rawThen.(map[string]any)
@@ -224,7 +230,8 @@ func validateServiceWatch(name string, entry map[string]any, locksDir string, no
 		validateWatchThenAction(prefix, action, then, add)
 		return
 	}
-	validateHookBlock(prefix, entry, watchNativeActions{expand: typ == checks.CheckTypeStorage, makeStep: typ == checks.CheckTypeClock, recoverHook: true}, defaultNotify, add)
+	storage := typ == checks.CheckTypeStorage
+	validateHookBlock(prefix, entry, watchNativeActions{expand: storage, remount: storage, makeStep: typ == checks.CheckTypeClock, recoverHook: true}, defaultNotify, add)
 }
 
 func validateWatchHeader(name string, entry map[string]any, add addFunc) {
@@ -310,7 +317,7 @@ func validateWatchThenAction(prefix, action string, then map[string]any, add add
 		add(validationNotOneOfFormat, thenFieldPath(prefix, rules.RuleFieldAction), action, rules.RuleActionSummary)
 		return
 	}
-	for _, k := range []string{WatchThenKeyHook, WatchThenKeyExpand, WatchThenKeyKill, WatchThenKeyMakeStep} {
+	for _, k := range []string{WatchThenKeyHook, WatchThenKeyExpand, WatchThenKeyKill, WatchThenKeyMakeStep, WatchThenKeyRemount} {
 		if _, has := then[k]; has {
 			add("%s cannot be combined with an action (a watch is either an operation/alert or a fire-and-forget %s)", thenFieldPath(prefix, k), k)
 		}
@@ -389,12 +396,44 @@ func validateWatchMakeStepAction(prefix string, block, then map[string]any, allo
 	return hasStep
 }
 
+// validateWatchRemountAction checks a storage watch's `then.remount` action:
+// detach a hung or missing mount and mount it again. It needs the check to
+// assert `mounted: true` — that assertion is what reports the mount hung or
+// missing — and, like then.makestep, a positive policy.cooldown: a forced
+// unmount fails the I/O its users have pending, so it must be paced.
+func validateWatchRemountAction(prefix string, block, then map[string]any, allow bool, add addFunc) bool {
+	raw, present := then[WatchThenKeyRemount]
+	remount, hasRemount := raw.(map[string]any)
+	switch {
+	case present && !hasRemount:
+		add(validationMappingFormat, thenRemountPath(prefix))
+	case hasRemount && !allow:
+		add("%s is only valid on a storage watch", thenRemountPath(prefix))
+	case hasRemount:
+		for _, key := range slices.Sorted(maps.Keys(remount)) {
+			add(validationNotSupportedFormat, thenRemountPath(prefix)+"."+key)
+		}
+		check, _ := block[WatchKeyCheck].(map[string]any)
+		if mounted, ok := check[checks.CheckKeyMounted].(bool); !ok || !mounted {
+			add("%s requires %s: true", thenRemountPath(prefix), prefix+"."+WatchKeyCheck+"."+checks.CheckKeyMounted)
+		}
+		policy, _ := block[sectionPolicy].(map[string]any)
+		if !isPositiveDuration(cfgval.String(policy[rules.PolicyKeyCooldown])) {
+			add("%s requires %s as a positive duration: a forced unmount must be paced",
+				thenRemountPath(prefix), prefix+"."+policyPathCooldown)
+		}
+	}
+	return hasRemount
+}
+
 // watchNativeActions names the native then-actions a watch type permits. A
 // struct rather than three adjacent booleans, which no call site could read.
 type watchNativeActions struct {
-	expand   bool
-	kill     bool
-	makeStep bool
+	expand    bool
+	remount   bool
+	killQuery bool
+	kill      bool
+	makeStep  bool
 	// recoverHook admits then.recover_hook: only single-check watches carry the
 	// failed-to-ok edge it runs on.
 	recoverHook bool
@@ -423,12 +462,17 @@ func validateHookBlock(prefix string, block map[string]any, allow watchNativeAct
 	hasExpand := validateWatchExpandAction(prefix, then, allow.expand, add)
 	hasKill := validateWatchKillAction(prefix, then, allow.kill, add)
 	hasMakeStep := validateWatchMakeStepAction(prefix, block, then, allow.makeStep, add)
+	hasRemount := validateWatchRemountAction(prefix, block, then, allow.remount, add)
+	_, hasKillQuery := then[WatchThenKeyKillQuery]
+	if hasKillQuery && !allow.killQuery {
+		add("%s is only valid on a service db_queries watch", thenFieldPath(prefix, WatchThenKeyKillQuery))
+	}
 	// An explicit `then: { notify: [none] }` (or with a hook/expand/kill too) is a
 	// deliberate monitor-only watch (state in the dashboard and events, no
 	// delivery). A present `then` that selects nothing is rejected. Omitting the
 	// `then` key entirely is another supported way to get alert-only behavior.
-	if !hasHook && !hasRecoverHook && !hasNotifyOn && !HasEffectiveNotifyAction(notify, defaultNotify) && !hasExpand && !hasKill && !hasMakeStep && !NotifyOptedOut(notify) {
-		add("%s requires a hook, notify, kill, expand and/or makestep", prefix+"."+rules.RuleFieldThen)
+	if !hasHook && !hasRecoverHook && !hasNotifyOn && !HasEffectiveNotifyAction(notify, defaultNotify) && !hasExpand && !hasKill && !hasMakeStep && !hasRemount && !hasKillQuery && !NotifyOptedOut(notify) {
+		add("%s requires a hook, notify, kill, expand, remount and/or makestep", prefix+"."+rules.RuleFieldThen)
 		return
 	}
 	validateWatchHookAction(prefix, WatchThenKeyHook, hook, hasHook, add)
@@ -964,7 +1008,7 @@ func validateAlertOnlyWatchThen(name string, entry map[string]any, defaultNotify
 
 var watchActionKeys = set(rules.RuleFieldAction, rules.RuleFieldMessage, rules.RuleFieldBlocks, rules.RuleFieldNotify)
 
-var watchThenKeys = set(WatchThenKeyHook, WatchThenKeyRecoverHook, rules.RuleFieldNotify, WatchThenKeyNotifyInterval, WatchThenKeyNotifyOn, WatchThenKeyExpand, WatchThenKeyKill, WatchThenKeyMakeStep)
+var watchThenKeys = set(WatchThenKeyHook, WatchThenKeyRecoverHook, rules.RuleFieldNotify, WatchThenKeyNotifyInterval, WatchThenKeyNotifyOn, WatchThenKeyExpand, WatchThenKeyKill, WatchThenKeyKillQuery, WatchThenKeyMakeStep, WatchThenKeyRemount)
 
 var raidNotifyEvents = set(checks.RaidNotifyEvents...)
 var lvmNotifyEvents = set(checks.LVMNotifyOnChange)

@@ -4,6 +4,8 @@ import (
 	"context"
 	"net/http"
 	"strconv"
+
+	"sermo/internal/checks"
 )
 
 // SSHSession is one current interactive terminal attributed to the selected
@@ -103,11 +105,57 @@ type SessionIssue struct {
 	ManagedByLogind bool   `json:"managed_by_logind,omitempty"`
 }
 
-// SessionInventory is the dashboard-wide view of interactive sessions.
+// DBQuerySession is one statement a database server is running, listed by a
+// db_queries watch. CanKill requires a service watch (the kill runs through the
+// service's operation engine) and an exact statement identity.
+type DBQuerySession struct {
+	Service        string `json:"service,omitempty"`
+	Watch          string `json:"watch"`
+	Engine         string `json:"engine"`
+	ID             int64  `json:"id"`
+	User           string `json:"user"`
+	Host           string `json:"host,omitempty"`
+	Database       string `json:"database,omitempty"`
+	Command        string `json:"command,omitempty"`
+	State          string `json:"state,omitempty"`
+	ElapsedSeconds int64  `json:"elapsed_seconds"`
+	Query          string `json:"query"`
+	Truncated      bool   `json:"truncated,omitempty"`
+	Long           bool   `json:"long"`
+	Identity       string `json:"identity,omitempty"`
+	CanKill        bool   `json:"can_kill"`
+	// Stopping marks a statement the server is already stopping (cancelled
+	// and rolling back), which is why it cannot be killed again.
+	Stopping bool `json:"stopping,omitempty"`
+	// SessionUsage is the statement's CPU and memory, in the same shape as the
+	// SSH and terminal rows (IO is never measured per statement).
+	SessionUsage
+}
+
+// SessionInventory is the dashboard-wide view of interactive sessions and
+// running database statements.
 type SessionInventory struct {
 	Sources  []SessionSource   `json:"sources"`
 	SSH      []SSHSession      `json:"ssh"`
 	Terminal []TerminalSession `json:"terminal"`
+	Database []DBQuerySession  `json:"database"`
+}
+
+// SessionKindDatabase identifies a db_queries statement source.
+const SessionKindDatabase = "database"
+
+// DBQueryKillRequest names one listed statement to stop: the identity the
+// inventory displayed and how to stop it.
+type DBQueryKillRequest struct {
+	Watch    string
+	ID       int64
+	Identity string
+	Mode     string
+}
+
+// dbQueryKiller is the optional backend capability behind the kill route.
+type dbQueryKiller interface {
+	KillDBQuery(ctx context.Context, service string, req DBQueryKillRequest) ActionResult
 }
 
 func (s *Server) handleSessions(w http.ResponseWriter, r *http.Request) {
@@ -173,7 +221,7 @@ func (s *Server) handleTerminalSessionClose(w http.ResponseWriter, r *http.Reque
 	session := TerminalSession{
 		Check: r.PathValue(apiQueryCheck), Multiplexer: r.URL.Query().Get(apiQueryMultiplexer),
 		Name: r.URL.Query().Get(apiQuerySession), User: r.URL.Query().Get(apiQueryUser),
-		Identity: r.URL.Query().Get(apiQueryIdentity),
+		Identity: r.URL.Query().Get(APIQueryIdentity),
 	}
 	if session.Check == "" || session.Name == "" || session.User == "" || session.Identity == "" ||
 		!isTerminalSessionKind(session.Multiplexer) {
@@ -200,6 +248,44 @@ func (s *Server) handleEmptyTerminalSessionClose(w http.ResponseWriter, r *http.
 	}
 	s.operate(w, backend, func(ctx context.Context, backend Backend) (bool, any) {
 		res := backend.CloseEmptyTerminalSession(ctx, r.PathValue(apiParamName), check)
+		return res.OK, res
+	})
+}
+
+// handleDBQueryKill accepts the statement id and identity a preceding inventory
+// read displayed. The backend re-samples the server through the watch's own
+// configured connection and requires that exact statement before cancelling it
+// (mode query) or closing its connection (mode connection).
+func (s *Server) handleDBQueryKill(w http.ResponseWriter, r *http.Request) {
+	backend, ok := s.mutationBackend(w, r)
+	if !ok {
+		return
+	}
+	killer, ok := backend.(dbQueryKiller)
+	if !ok {
+		writeError(w, http.StatusNotImplemented, "query kill is not available")
+		return
+	}
+	query := r.URL.Query()
+	id, err := strconv.ParseInt(query.Get(APIQueryID), 10, 64)
+	if err != nil || id <= 0 {
+		writeError(w, http.StatusBadRequest, "invalid statement id")
+		return
+	}
+	req := DBQueryKillRequest{Watch: r.PathValue(apiQueryWatch), ID: id, Identity: query.Get(APIQueryIdentity), Mode: query.Get(APIQueryMode)}
+	if req.Watch == "" || req.Identity == "" {
+		writeError(w, http.StatusBadRequest, "invalid statement identity")
+		return
+	}
+	if req.Mode == "" {
+		req.Mode = checks.DBQueryKillModeQuery
+	}
+	if !checks.ValidDBQueryKillMode(req.Mode) {
+		writeError(w, http.StatusBadRequest, "mode must be "+checks.DBQueryKillModeSummary)
+		return
+	}
+	s.operate(w, backend, func(ctx context.Context, _ Backend) (bool, any) {
+		res := killer.KillDBQuery(ctx, r.PathValue(apiParamName), req)
 		return res.OK, res
 	})
 }

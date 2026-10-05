@@ -22,6 +22,13 @@ variables:
   backup_user: mysql
   host: 127.0.0.1
   port: 3306
+  # alert-if-query-long-running connects the way the mysql client run by root
+  # does: over the socket, with the [client] credentials of this option file
+  # (user defaults to root). A missing file just means no password.
+  db_socket: /run/mysqld/mysqld.sock
+  defaults_file: /root/.my.cnf
+  # One warning per statement running longer than this.
+  long_query_duration: 5m
   memory_alert_threshold: 80%
   # The alert escalates from warning to error past this share of host memory.
   memory_error_threshold: 90%
@@ -29,7 +36,7 @@ variables:
     - /etc/mysql/my.cnf
     - /etc/my.cnf
 socket:
-  path: /run/mysqld/mysqld.sock
+  path: ${db_socket}
   optional: true
 preflight:
   config:
@@ -81,6 +88,16 @@ rules:
       action: block
       message: ${display_name} backup is running; stop and restart denied
 watches:
+  # One warning per statement that outlives long_query_duration, with its
+  # text; the Sessions panel lists the running statements and can cancel one.
+  alert-if-query-long-running:
+    check:
+      type: db_queries
+      engine: mysql
+      socket: ${db_socket}
+      defaults_file: ${defaults_file}
+      min_duration: ${long_query_duration}
+      severity: warning
   service:
     check:
       type: service

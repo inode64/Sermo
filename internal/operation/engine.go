@@ -42,6 +42,10 @@ const (
 	// actionCloseTerminalSource is intentionally not a rule action: closing an
 	// empty tmux server always requires an explicit web request.
 	actionCloseTerminalSource = string(rules.ActionCloseTerminalSource)
+	// actionKillQuery cancels one database statement a db_queries watch
+	// listed. It is never a rule action: an operator requests it, or the
+	// watch's own opt-in then.kill_query does under its policy.
+	actionKillQuery = string(rules.ActionKillQuery)
 	// actionReap is intentionally not a rule action: a stray is a process Sermo
 	// cannot name, so clearing one always requires an operator who decided that
 	// the service's reap.kill_only_if selector describes it.
@@ -92,6 +96,11 @@ type Engine struct {
 	// EmptyTerminalSessionCloser revalidates and closes one configured empty
 	// tmux server through its own client. It remains a manual-only operation.
 	EmptyTerminalSessionCloser func(ctx context.Context, target TerminalSessionSourceTarget) error
+	// DBQueryKiller re-verifies one listed database statement against a fresh
+	// sample and cancels it (or closes its connection). It returns the
+	// operator-facing description of what it stopped. Nil means the service
+	// has no db_queries watch.
+	DBQueryKiller func(ctx context.Context, target DBQueryTarget) (string, error)
 	// ReloadFunc reloads the service's config in place. A `reload:` block builds
 	// a closure: a native signal/command that either overrides the backend reload
 	// (`when: always`) or stands in for it when the init has no reload of its own
@@ -137,6 +146,7 @@ type plan struct {
 	closeSession         *SessionTarget
 	closeTerminalSession *TerminalSessionTarget
 	closeTerminalSource  *TerminalSessionSourceTarget
+	killQuery            *DBQueryTarget
 	reap                 bool
 	repair               bool
 }
@@ -176,6 +186,14 @@ type TerminalSessionTarget struct {
 // from a browser request.
 type TerminalSessionSourceTarget struct {
 	Check string
+}
+
+// DBQueryTarget is one statement a service's db_queries watch listed. The
+// watch's connection configuration stays server-side; only the statement's
+// identity comes from the request.
+type DBQueryTarget struct {
+	Watch string
+	checks.DBQueryKill
 }
 
 // Restart composes verified stop and start under one operation lock and timeout.
@@ -234,6 +252,13 @@ func (e Engine) CloseTerminalSession(ctx context.Context, target TerminalSession
 // through the same lock, guard, timeout and event path as other manual closes.
 func (e Engine) CloseEmptyTerminalSession(ctx context.Context, target TerminalSessionSourceTarget) Result {
 	return e.run(ctx, plan{action: actionCloseTerminalSource, closeTerminalSource: &target})
+}
+
+// KillDBQuery cancels one listed database statement through the same lock,
+// guard, timeout and event path as the manual session closes. The killer
+// re-verifies the statement immediately before acting.
+func (e Engine) KillDBQuery(ctx context.Context, target DBQueryTarget) Result {
+	return e.run(ctx, plan{action: actionKillQuery, killQuery: &target})
 }
 
 // Reap reports the service's stray processes — the members of its init unit's
@@ -611,7 +636,28 @@ func (e Engine) runCloseAction(ctx context.Context, p plan, result *Result) bool
 		}
 		return true
 	}
+	if p.killQuery != nil {
+		e.killQuery(ctx, *p.killQuery, result)
+		return true
+	}
 	return false
+}
+
+func (e Engine) killQuery(ctx context.Context, target DBQueryTarget, result *Result) {
+	const prefix = "kill query: "
+	if e.DBQueryKiller == nil {
+		failUnavailable(result, "query kill is unavailable for this service")
+		return
+	}
+	var stopped string
+	closer := func(ctx context.Context) error {
+		var err error
+		stopped, err = e.DBQueryKiller(ctx, target)
+		return err
+	}
+	if runSessionCloser(ctx, result, closer, "", prefix) {
+		result.Message = prefix + stopped
+	}
 }
 
 // runReconciliation applies the start/restart stale-init guard and translates

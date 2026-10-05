@@ -72,6 +72,7 @@ required there.
 - [Disabling and deleting inherited entries](#disabling-and-deleting-inherited-entries)
 - [Monitoring flag](#monitoring-flag)
 - [Blocking operations while clients are connected](#blocking-operations-while-clients-are-connected)
+- [Long-running database statements](#long-running-database-statements)
 - [PostgreSQL replication watches](#postgresql-replication-watches)
 - [Exim hints database maintenance](#exim-hints-database-maintenance)
 - [Exim mail-volume alerts](#exim-mail-volume-alerts)
@@ -2226,6 +2227,62 @@ database examples count application sessions with read-only SQL; Redis uses its
 native `connected_clients` metric; FTP uses `tcp_connections`, which counts
 control-channel TCP sockets rather than authenticated users. See
 [connection guards](rules.md#connection-guards) for the safety behavior.
+
+## Long-running database statements
+
+The `mysql`, `mariadb` and `postgres` catalog services ship the
+`alert-if-query-long-running` watch, a [`db_queries`](rules.md#running-database-statements-db_queries)
+sensor: one `warning` per statement that runs longer than
+`long_query_duration` (default `5m`), with the statement text, user, database
+and client host, recovered when the statement ends. Each statement is its own
+`event_notify` incident. The dashboard's Sessions panel and
+`sermoctl sessions SERVICE` list the running statements.
+
+| service | variable | default | meaning |
+|---|---|---|---|
+| `mysql`, `mariadb` | `db_socket` | `/run/mysqld/mysqld.sock` | Unix socket the watch connects to |
+| `mysql`, `mariadb` | `defaults_file` | `/root/.my.cnf` | option file whose `[client]` credentials it uses |
+| `postgres` | `host`, `port`, `monitor_user`, `database` | `127.0.0.1`, `5432`, `postgres`, `postgres` | connection, shared with the replication watches |
+| all three | `long_query_duration` | `5m` | the alert threshold |
+
+**Credentials.** On MySQL/MariaDB the watch connects the way `mysql` run by
+root does: over `db_socket`, with the `user`/`password` of the `[client]`
+(also `[client-server]`, `[client-mariadb]`, `[mysql]`) groups of
+`defaults_file`. A missing file just means no password and the user defaults
+to `root`, which works with the `unix_socket` authentication most
+distributions give root. To list other accounts' statements the account needs
+`PROCESS`; to cancel them from the Sessions panel it needs `CONNECTION_ADMIN`
+(MySQL 8) or `SUPER`, or it can only cancel its own. On PostgreSQL
+`monitor_user` needs `pg_monitor` to read other roles' statement text (the
+default `postgres` superuser has it) and `pg_signal_backend` (or ownership of
+the backend) to cancel a statement.
+
+**Tuning per host** — a `services.local` override, without editing the service
+file:
+
+```yaml
+# /etc/sermo/services.local/mariadb.yml — reporting server: long queries are normal
+name: mariadb
+variables:
+  long_query_duration: 30m
+watches:
+  alert-if-query-long-running:
+    check:
+      exclude_users: [backup, etl]
+```
+
+```yaml
+# /etc/sermo/services.local/mysql.yml — no statement alerts on this host
+name: mysql
+watches:
+  alert-if-query-long-running:
+    enabled: false
+```
+
+The catalog never ships an automatic kill. To cancel statements automatically,
+add an explicit, scoped `then.kill_query` with its own `policy:` to the
+concrete service — see [killing a statement](rules.md#running-database-statements-db_queries)
+and [safety](safety.md#database-statement-kills).
 
 ## PostgreSQL replication watches
 

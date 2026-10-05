@@ -29,6 +29,10 @@ variables:
   # sees NULL there and the lag watches would silently never fire.
   monitor_user: postgres
   database: postgres
+  # One warning per statement running longer than this (as monitor_user,
+  # which needs pg_monitor to read other roles' statements, and
+  # pg_signal_backend to cancel them from the Sessions panel).
+  long_query_duration: 5m
   # Thresholds are plain numbers: a sql check compares numerically and does not
   # accept size suffixes, so the queries return MiB (and seconds) directly.
   # A healthy primary already retains ~16 MiB (one WAL segment) because a
@@ -106,6 +110,18 @@ reload_on_change:
   paths:
     - ${config_dir}
 watches:
+  # One warning per statement that outlives long_query_duration, with its
+  # text; the Sessions panel lists the running statements and can cancel one.
+  alert-if-query-long-running:
+    check:
+      type: db_queries
+      engine: postgres
+      host: ${host}
+      port: ${port}
+      user: ${monitor_user}
+      database: ${database}
+      min_duration: ${long_query_duration}
+      severity: warning
   service:
     check:
       type: service

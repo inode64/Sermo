@@ -41,6 +41,9 @@ type connCheck struct {
 	// shared operator. All must hold for the check to pass (additive to the
 	// liveness probe). Reuses the expect_json assertion shape and valueMatcher.
 	expect []jsonAssertion
+	// expectGrades are the kept `levels:` tiers: each restates some expect
+	// fields with a looser bound and raises a failure that breaches it too.
+	expectGrades grades[[]jsonAssertion]
 	// latencyAssertion optionally compares the probe's response time in ms
 	// (expect_latency), like the http check.
 	latencyAssertion valueMatcher
@@ -137,6 +140,7 @@ func (c connCheck) Run(ctx context.Context) Result {
 	}
 	r := c.result(ok, msg, start)
 	r.Unavailable = unavailable
+	r = gradeExpectResult(r, c.expectGrades, res)
 	r.Data = c.resultData(elapsed, perIface, res)
 	for _, g := range growths {
 		if !g.missing {
@@ -327,21 +331,46 @@ func (c connCheck) resultData(elapsed time.Duration, perIface map[string]any, re
 	return data
 }
 
+// expectField returns the probe value an expect assertion reads: "version" (the
+// Result.Version) or a key of Result.Extra.
+func expectField(res conn.Result, path string) (string, bool) {
+	if path == DataKeyVersion {
+		return res.Version, true
+	}
+	v, ok := res.Extra[path]
+	return v, ok
+}
+
+// gradeExpectResult raises a failed check to the highest tier one of whose looser
+// assertions fails too. A field the probe did not return, or one a tier cannot
+// compare (not a number), never escalates: the base failure already reports it.
+func gradeExpectResult(r Result, tiers grades[[]jsonAssertion], res conn.Result) Result {
+	if len(tiers) == 0 || r.Observation() != ObservationFailing {
+		return r
+	}
+	return raiseSeverity(r, tiers.highest(func(assertions []jsonAssertion) bool {
+		for _, a := range assertions {
+			got, ok := expectField(res, a.path)
+			if !ok {
+				continue
+			}
+			if pass, err := a.compare(got); err == nil && !pass {
+				return true
+			}
+		}
+		return false
+	}))
+}
+
 // evalExpect checks every configured assertion against the probe result and
 // returns the first failure ("" when all hold or none are configured), plus
 // whether the value needed to evaluate it was unavailable. A field is "version"
 // (the Result.Version) or a key of Result.Extra.
 func (c connCheck) evalExpect(res conn.Result) (string, bool) {
 	for _, a := range c.expect {
-		var got string
-		if a.path == DataKeyVersion {
-			got = res.Version
-		} else {
-			v, ok := res.Extra[a.path]
-			if !ok {
-				return fmt.Sprintf("field %q not available", a.path), true
-			}
-			got = v
+		got, ok := expectField(res, a.path)
+		if !ok {
+			return fmt.Sprintf("field %q not available", a.path), true
 		}
 		ok, err := a.compare(got)
 		if err != nil {
@@ -379,6 +408,10 @@ func buildConnCheck(b base, proto conn.Protocol, entry map[string]any) (Check, s
 		return nil, protoName + " check: " + ewarn
 	}
 	c.expect = expect
+	c.expectGrades = parseGrades(b.levels, func(tier map[string]any) ([]jsonAssertion, bool) {
+		assertions, warn := parseAssertionMap(tier[CheckKeyExpect], CheckKeyExpect)
+		return assertions, warn == "" && len(assertions) > 0
+	})
 	lop, lval, lwarn := parseExpectLatency(entry)
 	if lwarn != "" {
 		return nil, protoName + " check: " + lwarn
@@ -403,9 +436,10 @@ func buildConnCheck(b base, proto conn.Protocol, entry map[string]any) (Check, s
 	return c, ""
 }
 
-// parseConnIncreases parses max_increase (field -> positive integer) and its
-// within span. Growth is measured over wall-clock time, not cycles, so one
-// requires the other — the same contract as the strays check.
+// parseConnIncreases parses max_increase (field -> non-negative integer; 0
+// fails on any rise) and its within span. Growth is measured over wall-clock
+// time, not cycles, so one requires the other — the same contract as the
+// strays check.
 func parseConnIncreases(entry map[string]any) ([]connIncrease, time.Duration, string) {
 	raw, present := entry[CheckKeyMaxIncrease]
 	if !present {
@@ -416,7 +450,7 @@ func parseConnIncreases(entry map[string]any) ([]connIncrease, time.Duration, st
 	}
 	m, ok := raw.(map[string]any)
 	if !ok || len(m) == 0 {
-		return nil, 0, CheckKeyMaxIncrease + " must be a mapping of field -> positive integer"
+		return nil, 0, CheckKeyMaxIncrease + " must be a mapping of field -> non-negative integer"
 	}
 	window := cfgval.Duration(entry[CheckKeyWithin])
 	if window <= 0 {
@@ -425,8 +459,8 @@ func parseConnIncreases(entry map[string]any) ([]connIncrease, time.Duration, st
 	out := make([]connIncrease, 0, len(m))
 	for _, field := range slices.Sorted(maps.Keys(m)) {
 		n, ok := cfgval.Int(m[field])
-		if !ok || n < 1 {
-			return nil, 0, CheckKeyMaxIncrease + "." + field + " must be a positive integer"
+		if !ok || n < 0 {
+			return nil, 0, CheckKeyMaxIncrease + "." + field + " must be a non-negative integer"
 		}
 		out = append(out, connIncrease{field: field, limit: float64(n), state: &counterWindow{}})
 	}

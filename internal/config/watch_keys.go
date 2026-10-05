@@ -41,7 +41,9 @@ const (
 	WatchThenKeyRecoverHook    = "recover_hook"
 	WatchThenKeyExpand         = "expand"
 	WatchThenKeyKill           = "kill"
+	WatchThenKeyKillQuery      = "kill_query"
 	WatchThenKeyMakeStep       = "makestep"
+	WatchThenKeyRemount        = "remount"
 	WatchThenKeyNotifyInterval = "notify_interval"
 	WatchThenKeyNotifyOn       = "notify_on"
 )

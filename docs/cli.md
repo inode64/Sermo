@@ -22,7 +22,9 @@ are shown by `sermoctl help COMMAND`.
 Without `--timeout`, live service queries (`status` and `is-active`) use the
 10-second engine check budget; service operations (and `watch pause|resume`) use
 `engine.operation_timeout` (default `90s`), the same budget as the daemon and the
-Web UI, which a service's `stop_policy` may raise. `notifier test` uses
+Web UI, which a service's `stop_policy` may raise. `sessions` uses the same
+90-second default (a statement kill runs through the daemon's operation engine),
+while each request to the daemon keeps its 10-second web client bound. `notifier test` uses
 `engine.default_timeout` (default `10s`), like the Web UI's test button. Other
 short probe commands keep their 2-second CLI budget.
 `--timeout` must be a positive duration; `0` or a negative value is a usage
@@ -87,6 +89,8 @@ sermoctl mount list
 sermoctl preflight SERVICE
 sermoctl processes SERVICE
 sermoctl reap SERVICE [--apply]        # list the service's stray processes; --apply signals the authorized ones
+sermoctl sessions [list] [SERVICE]     # SSH, tmux/screen sessions and running database statements
+sermoctl sessions kill SERVICE WATCH ID [--connection]   # cancel one listed statement (or close its connection)
 sermoctl locks SERVICE
 sermoctl monitor SERVICE
 sermoctl unmonitor SERVICE
@@ -379,6 +383,52 @@ the `reap:` block.
 [`levels:`](rules.md#graded-levels-levels) tier Sermo ignores because it is not
 stricter than the threshold below it — and still exits `0`, since the
 configuration loads and runs; `--json` lists them under `warnings`.
+
+## Sessions
+
+`sermoctl sessions` prints the running daemon's session inventory — the same
+data as the Web UI's [Sessions panel](configuration.md#sessions-panel): SSH
+terminals, tmux/screen sessions and the statements each
+[`db_queries`](rules.md#running-database-statements-db_queries) watch last
+sampled. It needs `sermod` with `web.port` set (the same credentials as other
+daemon queries) and never connects to a database itself.
+
+```bash
+sermoctl sessions                 # every source on this host
+sermoctl sessions mysql           # only the rows and sources of one service
+sermoctl --json sessions mysql    # the raw inventory (GET /api/sessions), filtered
+```
+
+```text
+Database statements:
+SERVICE  WATCH                         ENGINE   ID    USER  DB    RUNNING  LONG  QUERY
+mysql    alert-if-query-long-running   mariadb  4242  app   shop  1h 2m 3s LONG  SELECT * FROM orders WHERE note LIKE '%gift%' AND created …
+mysql    alert-if-query-long-running   mariadb  4250  app   shop  4s       -     UPDATE carts SET touched = NOW() WHERE id = 991
+```
+
+`LONG` marks a statement past the watch's `min_duration` and filters (the same
+rule its alert uses), `STOPPING` one the server is already stopping; the query column is
+cut to fit a terminal (use `--json` for the full, already redacted text). A
+source that is still `collecting` or `unavailable` is reported on stderr with
+its reason, so an empty table is never mistaken for an idle server.
+
+`sermoctl sessions kill SERVICE WATCH ID` cancels one statement. It reads the
+inventory first to obtain the statement's exact identity — an id that is not
+listed fails with "not listed; refresh" — then asks the daemon to cancel it.
+`--connection` closes the statement's connection instead. The daemon re-lists
+the server and refuses if the statement changed or ended, and the kill goes
+through the service's operation lock, guards (`blocks: [kill_query]`) and
+audit event; see [safety](safety.md#database-statement-kills).
+
+```bash
+sermoctl sessions kill mysql alert-if-query-long-running 4242
+sermoctl sessions kill postgres alert-if-query-long-running 31337 --connection
+```
+
+Exit codes: `0` cancelled, `75` refused by the daemon (statement changed or
+finished, guard, lock), `2` when the statement is not listed or cannot be
+killed, or the daemon cannot be reached. `--connection` is rejected by every
+other command.
 
 ## Exit codes
 

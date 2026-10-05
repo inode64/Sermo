@@ -64,7 +64,12 @@ func StatFields(pid int) ([]string, bool) {
 // apply. A thread that exits between listing the task directory and this read
 // simply reports not-ok, the same as a vanished process.
 func ThreadStatFields(pid, tid int) ([]string, bool) {
-	return statFieldsAt(filepath.Join(PIDPath(pid, ProcFileTask), strconv.Itoa(tid), ProcFileStat))
+	return statFieldsAt(ThreadPath(pid, tid, ProcFileStat))
+}
+
+// ThreadPath is one thread's procfs file: /proc/<pid>/task/<tid>/<name>.
+func ThreadPath(pid, tid int, name string) string {
+	return filepath.Join(PIDPath(pid, ProcFileTask), strconv.Itoa(tid), name)
 }
 
 // statFieldsAt is the shared decoder behind StatFields and ThreadStatFields: the

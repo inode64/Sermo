@@ -164,7 +164,7 @@ func TestMountForPathReturnsDeepestContainingMount(t *testing.T) {
 
 func TestMountForPathPrefersRealMountOverAutofsPlaceholder(t *testing.T) {
 	realMount := Mount{Device: "192.0.2.100:/", MountPoint: "/var/lib/libvirt/images", FSType: "ceph"}
-	autofsMount := Mount{Device: "systemd-1", MountPoint: realMount.MountPoint, FSType: fsTypeAutofs}
+	autofsMount := Mount{Device: "systemd-1", MountPoint: realMount.MountPoint, FSType: FSTypeAutofs}
 	for _, tt := range []struct {
 		name   string
 		mounts []Mount
@@ -269,5 +269,49 @@ func TestStorageHungStatfsIsBoundedAndNotStacked(t *testing.T) {
 			t.Fatalf("the mount answered again but the check still reports %q", res.Message)
 		}
 		time.Sleep(5 * time.Millisecond)
+	}
+}
+
+// A path that must be mounted and does not answer fails the mount assertion:
+// the watch window grades it like a missing mount and then.remount can act on
+// it, instead of an unavailable probe that never runs an action.
+func TestStorageHungMountFailsTheMountAssertion(t *testing.T) {
+	nfs := Mount{Device: "nas:/linux", MountPoint: "/net/nas/linux", FSType: "nfs"}
+	for _, tc := range []struct {
+		name  string
+		preds []levelPred
+		want  severity.Level
+	}{
+		{"mount only", nil, severity.Warning},
+		{"with space thresholds", []levelPred{{"free_pct", "<", 20}}, severity.Error},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			release := make(chan struct{})
+			defer close(release)
+			c := storageCheck{
+				name: "fs", condition: true, severity: severity.Warning,
+				timeout: 10 * time.Millisecond,
+				path:    nfs.MountPoint + "-" + t.Name(),
+				preds:   tc.preds,
+				mount:   mountCond{active: true, expectMount: true},
+				usage: func(string) (StorageStats, error) {
+					<-release
+					return StorageStats{}, nil
+				},
+			}
+			nfs.MountPoint = c.path
+			c.mountSampler = fakeMounts(nfs)
+			res := c.Run(context.Background())
+			if !res.OK || res.Observation() == ObservationUnavailable || res.Data[DataKeyMountFailure] != MountFailureHung || res.Severity.Resolved() != tc.want {
+				t.Fatalf("result = ok %v observation %v data %v severity %q", res.OK, res.Observation(), res.Data, res.Severity)
+			}
+		})
+	}
+}
+
+func TestStorageMissingMountRecordsTheFailure(t *testing.T) {
+	c := storageMount(mountCond{active: true, expectMount: true}, fakeMounts())
+	if res := c.Run(context.Background()); !res.OK || res.Data[DataKeyMountFailure] != MountFailureMissing {
+		t.Fatalf("result = ok %v data %v, want a missing mount failure", res.OK, res.Data)
 	}
 }

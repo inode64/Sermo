@@ -33,6 +33,7 @@ const (
 	commandDaemon    = "daemon"
 	commandNotifier  = "notifier"
 	commandServices  = "services"
+	commandSessions  = "sessions"
 	commandApps      = "apps"
 	commandLibs      = "libs"
 	commandPatterns  = "patterns"

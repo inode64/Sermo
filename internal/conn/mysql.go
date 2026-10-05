@@ -52,7 +52,7 @@ func (mysqlProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	}
 	defer func() { _ = db.Close() }()
 
-	return pingAndVersion(ctx, db, "SELECT VERSION()")
+	return queryVersion(ctx, db, "SELECT VERSION()")
 }
 
 // OpenMySQLDB opens a MySQL pool whose connector retains the bound DialFunc;

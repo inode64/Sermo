@@ -268,6 +268,30 @@ func TestStoreSkipsPersistedInvalidSnapshotObservation(t *testing.T) {
 	if _, kept := snapshots["web"]["service"]; !kept || len(snapshots["web"]) != 1 {
 		t.Fatalf("snapshots = %+v, want only the decodable service row", snapshots)
 	}
+	// The skipped row was deleted: a target no longer configured never rewrites
+	// it, so keeping it would report it on every start.
+	if again, err := s.ServiceCheckSnapshots(); err != nil || len(again["web"]) != 1 {
+		t.Fatalf("second read = %+v, %v; want the decodable row and no error", again, err)
+	}
+}
+
+func TestStoreDeletesUndecodableWatchSnapshot(t *testing.T) {
+	s := openTemp(t)
+	for _, slot := range []string{"result", "legacy"} {
+		if err := s.SetWatchCheckSnapshot("clock", slot, CheckSnapshotRecord{CheckType: "clock", Observation: checks.ObservationHealthy, OK: true}); err != nil {
+			t.Fatalf("write watch snapshot: %v", err)
+		}
+	}
+	if _, err := s.db.ExecContext(context.Background(), `UPDATE watch_check_snapshot SET observation = '' WHERE slot = 'legacy';`); err != nil {
+		t.Fatalf("corrupt watch snapshot observation: %v", err)
+	}
+	if _, err := s.WatchCheckSnapshots(); err == nil || !strings.Contains(err.Error(), "clock/legacy skipped") {
+		t.Fatalf("first read error = %v, want the skipped row named", err)
+	}
+	again, err := s.WatchCheckSnapshots()
+	if err != nil || len(again["clock"]) != 1 {
+		t.Fatalf("second read = %+v, %v; want only the decodable slot and no error", again, err)
+	}
 }
 
 func TestStoreEventAppDimensionRoundTrip(t *testing.T) {

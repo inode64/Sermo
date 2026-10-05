@@ -45,6 +45,8 @@ export const apiQueryManagedByLogind = "managed_by_logind";
 export const apiQueryStatus = "status";
 export const apiQueryTerminal = "terminal";
 export const apiQueryIdentity = "identity";
+const apiQueryID = "id";
+const apiQueryMode = "mode";
 export const apiQueryMultiplexer = "multiplexer";
 export const apiQuerySession = "session";
 export const apiQueryUser = "user";
@@ -53,6 +55,7 @@ export const apiQueryWatch = "watch";
 const eventRecentLimit = "200";
 export const apiEventsRecentPath = `${apiEventsPath}?${apiQueryLimit}=${eventRecentLimit}`;
 const apiSuffixBlockers = "/blockers";
+const apiSuffixDBQueries = "/db-queries";
 const apiSuffixEvents = "/events";
 const apiSuffixMetrics = "/metrics";
 const apiSuffixPreflight = "/preflight";
@@ -64,6 +67,7 @@ const apiSuffixTest = "/test";
 const apiSuffixTerminalSessions = "/terminal-sessions";
 const apiActionClose = "close";
 const apiActionCloseEmpty = "close-empty";
+const apiActionKill = "kill";
 const apiQueryVerbose = "verbose";
 export const readyVerbosePath = `readyz?${apiQueryVerbose}`;
 export const liveVerbosePath = `livez?${apiQueryVerbose}`;
@@ -126,6 +130,13 @@ export function terminalSessionCloseAPI(service, check, multiplexer, session, us
 }
 export function emptyTerminalSessionCloseAPI(service, check) {
   return terminalSessionAPI(service, check, `/${apiActionCloseEmpty}`);
+}
+// dbQueryKillAPI cancels one running statement (mode "query") or closes its
+// whole connection (mode "connection"); identity pins the exact statement the
+// operator reviewed, so a reused connection id is refused rather than killed.
+export function dbQueryKillAPI(service, watch, id, identity, mode) {
+  const query = new URLSearchParams({ [apiQueryID]: String(id), [apiQueryIdentity]: identity, [apiQueryMode]: mode });
+  return serviceAPI(service, `${apiSuffixDBQueries}/${encodeURIComponent(watch)}/${apiActionKill}?${query.toString()}`);
 }
 export function stateCompactAPI(query = "") { return `${apiStateCompactPath}${query}`; }
 export function watchAPI(name, suffix = "") { return apiEntityPath(apiWatchesPath, name, suffix); }

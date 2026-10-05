@@ -29,7 +29,7 @@ var commandGroups = []commandGroup{
 	},
 	{
 		Title:    "Safe Service Operations",
-		Commands: []string{commandStart, commandStop, commandRestart, commandReload, commandPause, commandResume, commandRepair, commandMonitor, commandUnmonitor, commandPreflight, commandProcesses, commandReap, commandLocks, commandLock},
+		Commands: []string{commandStart, commandStop, commandRestart, commandReload, commandPause, commandResume, commandRepair, commandMonitor, commandUnmonitor, commandPreflight, commandProcesses, commandReap, commandSessions, commandLocks, commandLock},
 	},
 	{
 		Title:    "Mounts",
@@ -348,6 +348,33 @@ var commandUsages = []commandUsage{
 		Examples: []string{
 			"sermoctl reap sermo",
 			"sermoctl reap sermo --apply",
+		},
+	},
+	{
+		Name:    commandSessions,
+		Summary: "List SSH, tmux/screen sessions and running database statements; kill one statement.",
+		Usage: []string{
+			"sermoctl sessions [list] [SERVICE]",
+			"sermoctl sessions kill SERVICE WATCH ID [--connection]",
+		},
+		Flags: []string{
+			"--connection  close the statement's connection instead of cancelling the statement",
+			"--json        print the inventory, or the kill result, as JSON",
+		},
+		Notes: []string{
+			"Reads the running daemon's inventory (sermod with web enabled); sermoctl",
+			"never connects to the database itself. Database rows come from",
+			"db_queries watches; LONG marks a statement past the watch's min_duration.",
+			"kill looks the statement up in the inventory and sends its exact identity;",
+			"the daemon re-lists it and refuses if it changed or ended. The kill runs",
+			"through the service's operation engine: guards (blocks: kill_query), locks",
+			"and panic mode apply. A refusal exits 75.",
+		},
+		Examples: []string{
+			"sermoctl sessions",
+			"sermoctl sessions mysql",
+			"sermoctl sessions kill mysql alert-if-query-long-running 4242",
+			"sermoctl sessions kill postgres alert-if-query-long-running 31337 --connection",
 		},
 	},
 	{

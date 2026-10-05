@@ -77,6 +77,8 @@ func URLErrorCause(err error) error {
 const (
 	// LoopbackIPv4 is the IPv4 loopback address used for local-only defaults.
 	LoopbackIPv4 = "127.0.0.1"
+	// Localhost is the host name every resolver maps to the loopback address.
+	Localhost = "localhost"
 	// NetworkUnix is the net package network name for Unix-domain sockets.
 	NetworkUnix = "unix"
 )

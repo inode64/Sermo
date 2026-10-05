@@ -98,6 +98,9 @@ const (
 	eventKindMakeStep        = config.WatchThenKeyMakeStep
 	eventKindMakeStepSkipped = config.WatchThenKeyMakeStep + eventKindSkippedSuffix
 	eventKindMakeStepFailed  = config.WatchThenKeyMakeStep + eventKindFailedSuffix
+	eventKindRemount         = config.WatchThenKeyRemount
+	eventKindRemountSkipped  = config.WatchThenKeyRemount + eventKindSkippedSuffix
+	eventKindRemountFailed   = config.WatchThenKeyRemount + eventKindFailedSuffix
 )
 
 // Event status values for Event.Status — the outcome of an emitted action:

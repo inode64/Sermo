@@ -685,3 +685,25 @@ defaults: { policy: { cooldown: 5m }, dry_run: true }
 		t.Errorf("ResolveWatches wrote dry_run into the loaded config: %v", raw["variables"])
 	}
 }
+
+// A service watch runs its own hooks and native actions (db_queries
+// kill_query), so it must not act for real while its service is dry-run.
+func TestServiceWatchesInheritServiceDryRun(t *testing.T) {
+	tree := map[string]any{
+		"dry_run": true,
+		"watches": map[string]any{
+			"long":     map[string]any{"check": map[string]any{"type": "db_queries", "engine": "mariadb", "min_duration": "5m"}},
+			"explicit": map[string]any{"dry_run": false, "check": map[string]any{"type": "db_queries", "engine": "mariadb", "min_duration": "5m"}},
+		},
+	}
+	if errs := expandServiceWatches(tree); len(errs) != 0 {
+		t.Fatalf("errs = %v", errs)
+	}
+	watches := tree["watches"].(map[string]any)
+	if watches["long"].(map[string]any)["dry_run"] != true {
+		t.Fatalf("long = %+v, want the service's dry_run", watches["long"])
+	}
+	if watches["explicit"].(map[string]any)["dry_run"] != false {
+		t.Fatalf("explicit = %+v, an explicit watch dry_run wins", watches["explicit"])
+	}
+}

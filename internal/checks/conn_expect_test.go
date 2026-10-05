@@ -299,6 +299,42 @@ func TestConnMaxIncrease(t *testing.T) {
 	}
 }
 
+func TestConnMaxIncreaseZeroFailsOnAnyRise(t *testing.T) {
+	now := time.Unix(1_700_000_000, 0)
+	c := connCheckWithExpect(nil, conn.Result{})
+	c.probe = probeSeq(evictedResult("4"), evictedResult("4"), evictedResult("5"), evictedResult("5"))
+	c.increases = []connIncrease{{field: "evicted_keys", limit: 0, state: &counterWindow{}}}
+	c.window, c.clock = 2*time.Minute, func() time.Time { return now }
+
+	// A counter already above zero is history, not an event: it only baselines.
+	for range 2 {
+		if r := c.Run(context.Background()); !r.OK {
+			t.Fatalf("an unchanged counter should pass: %+v", r)
+		}
+		now = now.Add(time.Minute)
+	}
+	if r := c.Run(context.Background()); r.OK || !strings.Contains(r.Message, "evicted_keys grew by 1") {
+		t.Fatalf("one new eviction should fail max_increase 0: %+v", r)
+	}
+	now = now.Add(3 * time.Minute)
+	if r := c.Run(context.Background()); !r.OK {
+		t.Fatalf("once the rise leaves the window the check recovers: %+v", r)
+	}
+}
+
+func evictedResult(n string) conn.Result {
+	return conn.Result{Extra: map[string]string{"evicted_keys": n}}
+}
+
+func TestBuildConnCheckZeroMaxIncrease(t *testing.T) {
+	built, warns := Build(map[string]any{
+		"evictions": map[string]any{"type": "redis", "max_increase": map[string]any{"evicted_keys": 0}, "within": "10m"},
+	}, Deps{DefaultTimeout: time.Second})
+	if len(warns) != 0 || len(built) != 1 || built[0].Check.(connCheck).increases[0].limit != 0 {
+		t.Fatalf("max_increase 0 should build: built=%+v warns=%v", built, warns)
+	}
+}
+
 func TestConnMaxIncreaseMissingFieldAndExpectPrecedence(t *testing.T) {
 	inc := func() []connIncrease {
 		return []connIncrease{{field: "keys", limit: 5, state: &counterWindow{}}}
@@ -336,7 +372,6 @@ func TestBuildConnCheckMaxIncrease(t *testing.T) {
 		"no within":      {"type": "redis", "max_increase": map[string]any{"keys": 1}},
 		"within alone":   {"type": "redis", "within": "10m"},
 		"not a mapping":  {"type": "redis", "max_increase": 5, "within": "10m"},
-		"zero bound":     {"type": "redis", "max_increase": map[string]any{"keys": 0}, "within": "10m"},
 		"empty mapping":  {"type": "redis", "max_increase": map[string]any{}, "within": "10m"},
 		"bad within":     {"type": "redis", "max_increase": map[string]any{"keys": 1}, "within": "soon"},
 		"negative bound": {"type": "redis", "max_increase": map[string]any{"keys": -3}, "within": "10m"},

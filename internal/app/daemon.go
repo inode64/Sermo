@@ -283,6 +283,9 @@ type Deps struct {
 	// Observability tracks when a service has completed a normal observed cycle
 	// and has fresh indicators available for the web/CLI state view.
 	Observability *ObservabilityRegistry
+	// DBQueryEngine, set by the service build for its own watches, runs a
+	// db_queries watch's automatic kill through the service's operation engine.
+	DBQueryEngine func(context.Context, operation.DBQueryTarget) operation.Result
 	// ExecxRunner is used for executing hook commands from watches (file, process,
 	// and generic watches). If nil, OSHookRunner will use execx.CommandRunner{}.
 	ExecxRunner execx.Runner
@@ -312,6 +315,10 @@ type Deps struct {
 	// Optional: nil uses conn.MakeStep. Tests inject a fake so no real chronyd is
 	// ever commanded.
 	ClockStepper ClockStepper
+	// MountRemounter repairs a hung or missing mount for a storage watch's
+	// `then.remount`. Optional: nil uses mountctl.Controller. Tests inject a
+	// fake so no real filesystem is ever unmounted.
+	MountRemounter MountRemounter
 	// Settling tracks per-target startup observation for the web UI and suppresses
 	// premature alerts and remediation. Optional: nil disables settling gates.
 	Settling *Settling
@@ -627,7 +634,9 @@ func buildWorker(ctx context.Context, name, unit string, tree map[string]any, de
 	// Watches run independently of the worker and must not capture its cycle cache.
 	watchDeps := runtime.CheckDeps
 	newMetricSource := watchMetricSourceFactory(name, discoverer, selectors, deps.SystemFreshness)
-	watches, watchWarnings := serviceWatches(name, tree, watchDeps, newMetricSource, deps, resolution)
+	watchBuildDeps := deps
+	watchBuildDeps.DBQueryEngine = engine.KillDBQuery
+	watches, watchWarnings := serviceWatches(name, tree, watchDeps, newMetricSource, watchBuildDeps, resolution)
 	warnings = append(warnings, watchWarnings...)
 	return worker, watches, warnings
 }

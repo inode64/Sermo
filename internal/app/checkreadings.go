@@ -2,7 +2,6 @@ package app
 
 import (
 	"cmp"
-	"encoding/json"
 	"fmt"
 	"math"
 	"strconv"
@@ -105,6 +104,10 @@ const (
 	watchReadingLabelModel                    = "Model"
 	watchReadingLabelObjectPath               = "Object path"
 	watchReadingLabelOldestIdle               = "Oldest idle"
+	watchReadingLabelEngine                   = "Engine"
+	watchReadingLabelRunningStatements        = "Running statements"
+	watchReadingLabelLongRunning              = "Long-running"
+	watchReadingLabelOldestStatement          = "Oldest statement"
 	watchReadingLabelOf                       = "Of"
 	watchReadingLabelOwner                    = "Owner"
 	watchReadingLabelPath                     = "Path"
@@ -394,6 +397,7 @@ var checkReadingsByType = map[string]func(map[string]any) []web.WatchReading{
 	checks.CheckTypeFileExists:       fileCheckReadings,
 	checks.CheckTypeProcess:          processCheckReadings,
 	checks.CheckTypeProcessPolicy:    processPolicyCheckReadings,
+	checks.CheckTypeDBQueries:        dbQueriesCheckReadings,
 	checks.CheckTypeStaleBinary:      staleBinaryCheckReadings,
 	checks.CheckTypeStrays:           straysCheckReadings,
 	checks.CheckTypeSize:             sizeCheckReadings,
@@ -655,7 +659,7 @@ func raidCheckReadings(data map[string]any) []web.WatchReading {
 	if size, ok := cfgval.Uint(data[checks.DataKeyTotalBytes]); ok && size > 0 {
 		rb.add(checks.DataKeyTotalBytes, watchReadingLabelSize, checks.HumanizeSignedBytes(uintToInt64(size)))
 	}
-	for _, detail := range hardwareRAIDDetails[checks.RaidArrayStatus](data[checks.DataKeyRaidMembers]) {
+	for _, detail := range checks.DecodeDataSlice[checks.RaidArrayStatus](data[checks.DataKeyRaidMembers]) {
 		rb.add(watchReadingFieldRAIDArrayPrefix+detail.Name, detail.Name, raidArrayReading(detail))
 	}
 	return rb.readings()
@@ -785,6 +789,17 @@ func processPolicyCheckReadings(data map[string]any) []web.WatchReading {
 		addInt(checks.DataKeyViolationCount, watchReadingLabelViolationCount).
 		addString(checks.DataKeyPIDs, watchReadingLabelPIDs).
 		addString(checks.DataKeyViolations, watchReadingLabelViolations).
+		readings()
+}
+
+// dbQueriesCheckReadings summarises a db_queries sample; the statements
+// themselves are listed in the Sessions panel.
+func dbQueriesCheckReadings(data map[string]any) []web.WatchReading {
+	return readingsFrom(data).
+		addString(checks.DataKeyEngine, watchReadingLabelEngine).
+		addInt(checks.DataKeyCount, watchReadingLabelRunningStatements).
+		addInt(checks.DataKeyLongCount, watchReadingLabelLongRunning).
+		addDurationSeconds(checks.DataKeyOldestSeconds, watchReadingLabelOldestStatement).
 		readings()
 }
 
@@ -1003,7 +1018,7 @@ func hardwareRAIDCheckReadings(data map[string]any) []web.WatchReading {
 }
 
 func appendHardwareRAIDDetails[T any](out []web.WatchReading, raw any, kind, label string, render func(T) (string, string)) []web.WatchReading {
-	for _, detail := range hardwareRAIDDetails[T](raw) {
+	for _, detail := range checks.DecodeDataSlice[T](raw) {
 		id, value := render(detail)
 		out = append(out, web.WatchReading{Field: hardwareRAIDReadingField(kind, id), Label: label + id, Value: value})
 	}
@@ -1118,28 +1133,6 @@ func hardwareRAIDReadingField(kind, id string) string {
 		}
 	}
 	return strings.TrimSuffix(field.String(), "_")
-}
-
-// hardwareRAIDDetails accepts both a live typed slice and the []any/map form a
-// persisted snapshot has after JSON hydration. The owning checks structs remain
-// the sole schema; JSON only restores that schema instead of duplicating a
-// field-by-field parser in the Web adapter.
-func hardwareRAIDDetails[T any](value any) []T {
-	if typed, ok := value.([]T); ok {
-		return typed
-	}
-	if value == nil {
-		return nil
-	}
-	raw, err := json.Marshal(value)
-	if err != nil {
-		return nil
-	}
-	var details []T
-	if json.Unmarshal(raw, &details) != nil {
-		return nil
-	}
-	return details
 }
 
 // smartCheckReadings renders one drive's SMART report: what the disk is, what

@@ -116,12 +116,18 @@ func postWebhook(ctx context.Context, label, webhook string, headers map[string]
 		// URL; for Telegram that URL carries the bot token, and this error is
 		// surfaced in notify-failed events and the web UI. Report only the
 		// underlying cause so no credential ever reaches an event or log.
-		return fmt.Errorf("post %s webhook: %w", label, netutil.URLErrorCause(err))
+		// A transport failure (a lookup that timed out, a refused or reset
+		// connection) may succeed a moment later.
+		return Temporary(fmt.Errorf("post %s webhook: %w", label, netutil.URLErrorCause(err)))
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	if !httpx.SuccessStatus(resp.StatusCode) {
-		return fmt.Errorf("%s webhook returned %s: %s", label, resp.Status, httpx.ErrorBody(resp, httpx.ErrorBodyLimit))
+		err := fmt.Errorf("%s webhook returned %s: %s", label, resp.Status, httpx.ErrorBody(resp, httpx.ErrorBodyLimit))
+		if resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= http.StatusInternalServerError {
+			return Temporary(err)
+		}
+		return err
 	}
 	return nil
 }

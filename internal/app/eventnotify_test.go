@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"io"
 	"log/slog"
 	"path/filepath"
@@ -323,5 +324,46 @@ func TestEventNotifierRetainDropsIncidentsNoTargetCanClose(t *testing.T) {
 		if !slices.ContainsFunc(got, func(g string) bool { return strings.Contains(g, body) }) {
 			t.Fatalf("reminders = %q, missing %q", got, body)
 		}
+	}
+}
+
+type flakyNotifier struct {
+	errs  []error
+	calls int
+}
+
+func (n *flakyNotifier) Name() string { return "ops" }
+func (n *flakyNotifier) Type() string { return notify.TypeSlack }
+func (n *flakyNotifier) Send(context.Context, notify.Message) error {
+	n.calls++
+	if n.calls <= len(n.errs) {
+		return n.errs[n.calls-1]
+	}
+	return nil
+}
+
+func TestEventNotifierRetriesOnlyTemporaryFailures(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	lookup := notify.Temporary(errors.New("lookup hooks.slack.com: server misbehaving"))
+	for _, tc := range []struct {
+		name      string
+		errs      []error
+		wantCalls int
+		wantErr   bool
+	}{
+		{"recovers after a lookup failure", []error{lookup}, 2, false},
+		{"gives up after the last retry", []error{lookup, lookup, lookup}, 3, true},
+		{"does not retry a rejection", []error{errors.New("slack webhook returned 404")}, 1, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			target := &flakyNotifier{errs: tc.errs}
+			router := NewEventNotifier("host-a", logger, nil, nil)
+			var slept []time.Duration
+			router.sleep = func(d time.Duration) { slept = append(slept, d) }
+			err := router.sendWithRetry(t.Context(), target, notify.Message{Subject: "x"})
+			if (err != nil) != tc.wantErr || target.calls != tc.wantCalls || len(slept) != tc.wantCalls-1 {
+				t.Fatalf("err=%v calls=%d slept=%v", err, target.calls, slept)
+			}
+		})
 	}
 }
