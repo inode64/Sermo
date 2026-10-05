@@ -163,6 +163,21 @@ func mustIndexCheckSpecs(specs []checkSpec) map[string]checkSpec {
 	return out
 }
 
+// watchOnlyTypes are built by internal/app as stateful watches that track a
+// set of items (processes, statements), never as a single-shot check: they are
+// rejected under checks: and never promoted from a service watch to one.
+var watchOnlyTypes = map[string]TypeInfo{
+	CheckTypeProcessPolicy: healthTypeInfo(CheckTypeProcessPolicy),
+	CheckTypeDBQueries:     healthTypeInfo(CheckTypeDBQueries),
+}
+
+// WatchOnlyTypeInfo describes a watch-only type, chiefly its reporting mode
+// (whether it fires on failure).
+func WatchOnlyTypeInfo(typ string) (TypeInfo, bool) {
+	info, ok := watchOnlyTypes[typ]
+	return info, ok
+}
+
 // TypeInfoFor returns static metadata for a built-in check type.
 func TypeInfoFor(typ string) (TypeInfo, bool) {
 	spec, ok := checkSpecByName[typ]

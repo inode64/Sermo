@@ -49,6 +49,7 @@ configuration omits it.
   - [Operator buttons (buttons:)](#operator-buttons-buttons)
   - [Per-check interval](#per-check-interval)
 - [Web UI](#web-ui)
+  - [Sessions panel](#sessions-panel)
   - [Authentication](#authentication)
   - [Behind a reverse proxy (required to expose it)](#behind-a-reverse-proxy-required-to-expose-it)
   - [Liveness (/livez)](#liveness-livez)
@@ -62,6 +63,7 @@ configuration omits it.
 - [Telegram report bot](#telegram-report-bot)
 - [Host watches](#host-watches)
   - [then.expand — volume growth (storage watch)](#thenexpand--volume-growth-storage-watch)
+  - [then.remount — repair a hung or missing mount (storage watch)](#thenremount--repair-a-hung-or-missing-mount-storage-watch)
   - [then.makestep — forced clock correction (clock watch)](#thenmakestep--forced-clock-correction-clock-watch)
   - [Manual RAID reconstruction control](#manual-raid-reconstruction-control)
   - [Service watches (scoped to a service)](#service-watches-scoped-to-a-service)
@@ -426,6 +428,8 @@ Omit a key to leave that channel off.
   Web records carry the parsed target and action (services, watches, mounts,
   locks, …) and the request query string when present (for example
   `umount?kill=1` or `clear?before=24h`), so action-changing flags are audited.
+  A nested route records its last segment as the action: `close` for a session,
+  `close-empty` for an empty tmux server, `kill` for a database statement.
   Routine GET polling is not logged.
 - `engine.diagnostics` runs scheduled configuration/host diagnostics in the
   background (default interval `1h`, overridable with `engine.diagnostics_interval`)
@@ -908,6 +912,47 @@ when it builds the listener and API endpoints.
 - **Authentication** is optional but recommended before exposing it. Without it,
   the UI binds to **loopback (`127.0.0.1`) by default** and is fully open.
 
+### Sessions panel
+
+The dashboard's **Sessions** panel lists, for the whole host:
+
+- interactive SSH terminals of SSH services, and tmux/screen sessions from
+  [`terminal_sessions`](rules.md#terminal-sessions-terminal_sessions) checks,
+  with idle time and process-tree CPU, memory and IO; an administrator can close
+  one verified row (see [safety](safety.md));
+- the statements each [`db_queries`](rules.md#running-database-statements-db_queries)
+  watch last sampled (the catalog `mysql`, `mariadb` and `postgres` services
+  ship one): engine, user, database, client host, connection id,
+  command/state, running time, CPU, memory, IO read/write and the redacted
+  statement text,
+  longest first. A statement past the watch's `min_duration` is marked long. For
+  a local server (Unix socket or loopback) CPU and IO are what the statement's
+  own thread (MySQL/MariaDB, read under `/proc/<pid>/task/<tid>`) or backend
+  process (PostgreSQL) used since the previous sample — CPU as a share of the
+  host's CPUs, IO as storage bytes per second (MySQL/MariaDB write mostly from
+  background threads, so a statement's write rate is usually low); memory is
+  MariaDB's per-connection `MEMORY_USED`
+  or the PostgreSQL backend's resident memory. Neither is measured for a remote
+  server, nor for a thread that does not belong to the server's own executable
+  (`mysqld`, `mariadbd`, `postgres`) — a containerized server reached over
+  loopback reports ids from another PID namespace. MySQL reports no
+  per-connection memory, and MySQL thread CPU and IO need read access to
+  `performance_schema.threads`. On a service watch, an
+  administrator can **cancel** a statement or **close its connection**; Sermo
+  re-lists the server and refuses if the statement changed or ended
+  ([contract](safety.md#database-statement-kills)).
+
+Closing or killing any session shows its progress in place, like a service
+operation: the row reads `closing…` or `killing…` from the confirmation until
+the next sample no longer lists it, and a statement the server is already
+stopping (`Killed`) reads `killing…`.
+
+Every source also reports its state: `collecting` before its first sample (or
+when the sample is stale), `unavailable` with the reason when the database or
+multiplexer could not be read or the service is not active. The panel never
+opens a database connection itself: it reads the daemon's published samples.
+`sermoctl sessions` prints the same inventory ([cli](cli.md#sessions)).
+
 ### Authentication
 
 Set hashed credential files on the `web` block for HTTP Basic auth with two
@@ -1220,6 +1265,16 @@ Read-only endpoints:
   HTTP-time client run. After a forced close, a stale utmp entry is ignored only
   when both its terminal and recorded process are proven absent. Permission or
   other read errors remain visible; Sermo does not rewrite login accounting.
+  The `database` list carries the statements every `db_queries` watch last
+  published (`service` — empty for a host watch —, `watch`, `engine`, `id`,
+  `user`, `host`, `database`, `command`, `state`, `elapsed_seconds`, `query`,
+  `truncated`, `long`, `identity`, `can_kill`, `stopping` — the server is
+  already stopping it —, and the usage fields of the
+  other session rows: `cpu`/`cpu_ready`, `rss`/`memory_ready`,
+  `io_read`/`io_write`/`io_ready`), longest first,
+  and each such
+  watch adds a source of kind `database`. It is read from the published samples;
+  the request never connects to a database.
 - `GET /api/services/{name}/sla?since=24h` — availability history at the
   resolution that window is stored at (see [Stored history
   resolution](#stored-history-resolution)); `since` is a duration, default 24h,
@@ -1291,6 +1346,15 @@ accepted operation cannot switch targets during a concurrent reload.
   socket. The server must still have zero sessions; Sermo invokes tmux's exact
   `kill-server` argv, verifies the namespace has disappeared and removes only
   an unchanged stale socket left by tmux.
+- `POST /api/services/{name}/db-queries/{watch}/kill?id=ID&identity=IDENTITY&mode=query|connection`
+  — cancel one statement listed by the service's `db_queries` watch (`mode`
+  defaults to `query`; `connection` closes the connection). `id` and `identity`
+  come from `GET /api/sessions`; the connection comes from the watch's own
+  configuration. Sermo re-lists the server and requires the same statement
+  before acting, through the service's operation lock, guards (`blocks:
+  [kill_query]`), timeout and event path. Answers `200` when cancelled and
+  `409` when refused (changed or finished statement, guard, lock). Equivalent
+  to `sermoctl sessions kill`. See [safety](safety.md#database-statement-kills).
 - `POST /api/watches/{name}/{action}` — watch action. `action` is
   `monitor`, `unmonitor`, `expand`, `probe`, `pause` or `resume`. `probe` is
   read-only and is available for diskio, LVM, RAID, SMART and hdparm watches. `pause`/`resume`
@@ -1936,6 +2000,11 @@ gravest level each one heard.
 A watch whose check becomes unavailable and later available again tracks that
 as its own incident, so the check coming back never announces a still-firing
 watch as recovered.
+A delivery that fails for a reason that may pass — a connection or DNS
+failure, an HTTP 429 or 5xx answer — is retried twice, after 2 and 5 seconds,
+before it is logged as `event notification failed`; a rejected message (a wrong
+URL or token) is not retried. Retries run on the notification queue and never
+delay a monitoring cycle.
 Delivery state survives daemon restarts and config reloads. An open incident
 whose service, check, rule, watch or app is no longer configured (or no longer
 enabled) after a restart or reload is forgotten, since nothing can send its
@@ -1948,7 +2017,11 @@ per 24 hours by default, or to `repeat_interval` when set. One-shot notices (a
 service restart notice, a reclaimed stale operation lock) are sent every time
 they occur; they open no incident and are never reminded.
 The detailed event log remains unchanged, including per-PID `process_policy`
-events; Slack groups those under their watch. A `process_policy` watch emits
+events; Slack groups those under their watch. A
+[`db_queries`](rules.md#running-database-statements-db_queries) watch opens one
+incident **per statement** (its event check is `query:<key>`): each long
+statement is announced on its own and recovered when it ends, with each target's
+`min_severity` applied as usual. A `process_policy` watch emits
 one aggregate recovery when its violations clear, including after a daemon
 restart.
 
@@ -2088,8 +2161,8 @@ document never merges into a service. (A service can also declare its own
 > for mount operations are not monitored entries, so the mount assistant skips those questions.
 
 A watch's `then` block (when present) declares the actions taken when it
-fires — a `hook`, a `notify` list, an `expand` (storage only), a `kill`
-(process only), or any combination.
+fires — a `hook`, a `notify` list, an `expand` or `remount` (storage only), a
+`kill` (process only), or any combination.
 
 **Omitting `then` entirely** is supported and means *alert-only / monitor-only*:
 the `check` + `for` (or per-metric conditions) are still evaluated; when the
@@ -2204,7 +2277,7 @@ Dry-run applies only to automatic actions driven by monitoring/rules:
   `resume`) are evaluated but not executed;
 - service-owned `version.on_change` / `config.on_change` monitors inherit the
   service's `dry_run` flag, so their non-console notifications are suppressed;
-- watch actions (`hook`, `expand`, `kill`, `makestep`) are evaluated but not executed;
+- watch actions (`hook`, `expand`, `remount`, `kill`, `makestep`) are evaluated but not executed;
 - notifications are suppressed except `wall`, which is still delivered for local
   console visibility. The separate top-level `event_notify` event route remains
   active unless panic mode is enabled.
@@ -2247,7 +2320,7 @@ watches:
 ```
 
 Use `dry_run` for host watches while you are proving thresholds, hook argv/env,
-notifier routing or `then.expand` / `then.kill` / `then.makestep` policy gating. Remove it when
+notifier routing or `then.expand` / `then.remount` / `then.kill` / `then.makestep` policy gating. Remove it when
 automatic actions should actually execute. If you only want a long-term
 dashboard/log signal, omit `then` entirely or use `notify: [none]`; those are
 monitor-only configurations, not action rehearsals.
@@ -2399,6 +2472,60 @@ lock under `<paths.runtime>/ops`, and each is bounded by
 path is still running is refused, not queued, so the volume never grows twice
 for one request; the refusal is recorded as `expand-skipped`, and when it hits
 the automatic action it also starts that watch's cooldown.
+
+### `then.remount` — repair a hung or missing mount (storage watch)
+
+A storage watch whose check asserts `mounted: true` can repair its mount: when
+the path is not mounted, or is mounted but does not answer (an NFS server that
+went away, a mount left hung by a network cut), Sermo detaches it and mounts it
+again. One entry serves any NFS mount, from `/etc/fstab` or from autofs:
+
+```yaml
+# /etc/sermo/mounts/mount-nas.yml
+name: mount-nas
+category: storage
+interval: 1m
+check:
+  type: storage
+  path: /mnt/nas
+  mounted: true                       # required: it reports the mount hung or missing
+  free_pct: { op: "<", value: "10%" }
+  timeout: 10s                        # how long statfs may take before the mount is hung
+for: { cycles: 3 }                    # a slow server that wakes up within 3 cycles is left alone
+policy: { cooldown: 30m }             # required: at most one remount per 30m
+then:
+  remount: {}
+  notify: [ops-email]
+```
+
+The repair, all under the mount's operation lock (the one manual
+`sermoctl mount`/`umount` use):
+
+1. a forced unmount (`umount2` with `MNT_FORCE`, which fails the requests a
+   dead NFS server left pending), then a lazy one (`MNT_DETACH`) if the
+   filesystem is still there. Sermo calls the system call itself: `umount(8)`
+   resolves the path and its NFS helper talks to the server, so on a hung
+   mount they hang as well;
+2. `mount <path>` when `/etc/fstab` declares the path, or nothing when an
+   autofs mount (the path itself or a parent such as `/net`) mounts it again on
+   access. A path that is neither is a failure, reported as such;
+3. a `statfs` of the path within `timeout` confirms the new mount answers.
+
+It never signals the processes using the mount; a process blocked in the old
+mount gets an I/O error when the forced unmount aborts its request. The
+refcount of a `mount:` block is not touched. The root filesystem is refused.
+
+The action runs only when the check reports a mount failure — `mount_failure`
+is `missing` or `hung` (`SERMO_MOUNT_FAILURE` to a hook). A watch firing for
+space alone is not remounted, and a watch firing for its mount never runs
+`then.expand`, which would grow the volume under the parent filesystem.
+
+**`policy.cooldown` is required and must be positive**, as for `then.makestep`:
+every attempt, successful or not, starts it, so a server that stays down is not
+unmounted on every cycle. Outcomes are recorded as `remount` /
+`remount-skipped` / `remount-failed` events, and top-level `event_notify`
+delivers a failure. `dry_run: true` reports `would run remount` instead, and
+panic mode suppresses it like every other action.
 
 ### `then.makestep` — forced clock correction (clock watch)
 
@@ -2592,7 +2719,7 @@ evaluate its watch window or run a rule, notifier, hook or remediation action.
 
 A service can carry its own `watches:` block — the same entry shape as a host
 watch (a `check:`, an optional `for`/`within` window, and a `then` block with a
-fire-and-forget `hook`, `notify`, `expand`, `kill` or `makestep`, or a service `action`) —
+fire-and-forget `hook`, `notify`, `expand`, `remount`, `kill` or `makestep`, or a service `action`) —
 declared **inside the service document**. Events are labelled
 `<service>:<watch>`. Fire-and-forget entries reuse the host-watch runtime
 (firing/recovered windows, hooks, notifiers, dry-run); entries with
@@ -2796,7 +2923,13 @@ then:
 ```
 
 A storage check needs **at least one** of a space/inode predicate or a mount
-condition (mount-only is fine). The mount is checked first from `/proc/mounts`: if
+condition (mount-only is fine). With `mounted: true` the path must also answer:
+a `statfs` that does not return within the check's `timeout` (a hard NFS mount
+whose server is gone) fails the mount condition as `hung`, exactly like a
+missing mount, so the watch's `for` window grades it and
+[`then.remount`](#thenremount--repair-a-hung-or-missing-mount-storage-watch)
+can repair it. The failure is reported as `mount_failure` (`missing` or `hung`).
+Without `mounted: true` a hung mount makes the check unavailable instead. The mount is checked first from `/proc/mounts`: if
 it is missing when `mounted: true` (or present when `mounted: false`), the check
 alerts on that and the space predicates are skipped (their numbers would be
 meaningless). `fstype`, `device` and `options` are not configurable predicates;
@@ -3226,6 +3359,10 @@ Unavailable observations are unhealthy, but they never satisfy a watch
 condition and never run watch actions. The watch emits one `error` event when
 observation becomes unavailable and one `recovered` event when a valid sample
 returns; this edge state survives daemon restarts and configuration reloads.
+A watch that had observed before probes once more, two seconds later, before
+announcing the loss, so a single lookup timeout or dropped packet does not raise
+an `error`. A watch that has never observed since the daemon started reports
+its first unavailable result at once.
 
 ```yaml
 check:
@@ -3719,7 +3856,7 @@ line is used only to make an allow entry narrower; it is never copied into the
 WebUI, events, notification environment or generated inventory.
 
 This is intentionally an **alert-only** check. Its `then:` block may contain
-only `notify` and `notify_interval`; `hook`, `kill`, `expand`, `makestep` and a
+only `notify` and `notify_interval`; `hook`, `kill`, `expand`, `remount`, `makestep` and a
 `policy:` block are invalid. It cannot restart, signal, repair or otherwise
 change the watched account. Violations fire once per PID incarnation (PID plus
 start time), re-arming for a new process that reuses the same PID. When the
@@ -3807,7 +3944,10 @@ reuses only strict named `processes:` identities that declare both `exe` and
 without a verified identity as `orphan_processes`.
 
 `defaults.dry_run` is optional and defaults to `false`; a service or watch may
-override it with its own top-level `dry_run`.
+override it with its own top-level `dry_run`. A watch declared inside a service
+(`watches:` in the service document) inherits that service's `dry_run` unless it
+sets its own, so a dry-run service never runs a watch hook or native action
+(such as a `db_queries` `then.kill_query`) for real.
 
 Service restarts always use verified stop and start phases. The retired
 `restart_policy` setting is rejected; remove it from defaults and service overrides. See

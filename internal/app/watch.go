@@ -15,7 +15,9 @@ import (
 	"sermo/internal/checks"
 	"sermo/internal/config"
 	"sermo/internal/emission"
+	"sermo/internal/mountctl"
 	"sermo/internal/notify"
+	"sermo/internal/process"
 	"sermo/internal/rules"
 	"sermo/internal/severity"
 	"sermo/internal/state"
@@ -42,6 +44,13 @@ type VolumeExpander interface {
 // group's free space).
 type ExpandSpec struct {
 	By int64
+}
+
+// MountRemounter repairs a hung or missing mount. Satisfied by
+// mountctl.Controller; injected so a watch's remount action can be tested
+// without unmounting a real filesystem.
+type MountRemounter interface {
+	Remount(ctx context.Context, spec mountctl.Spec) (mountctl.Result, error)
 }
 
 // ClockStepper asks the local time daemon to correct the system clock now.
@@ -98,7 +107,10 @@ type Watch struct {
 	Severity severity.Level
 	Interval time.Duration
 	Now      func() time.Time
-	Emit     func(Event)
+	// Sleep paces the confirming re-run of a check that just became
+	// unavailable; nil uses a real, cancellable timer.
+	Sleep func(time.Duration)
+	Emit  func(Event)
 	// Publish records the latest daemon-cycle check result for the web UI. It is
 	// intentionally best-effort: watch actions and alerts must not depend on the
 	// dashboard cache.
@@ -159,7 +171,12 @@ type Watch struct {
 	// storage and a clock watch, so there is at most one native action.
 	MakeStep *MakeStepSpec
 	Stepper  ClockStepper
-	Policy   rules.Policy
+	// Remount, when set, repairs the storage watch's mount on a firing cycle
+	// whose check reports it hung or missing. It shares Policy with Expand,
+	// which a cooldown makes mandatory for it.
+	Remount   bool
+	Remounter MountRemounter
+	Policy    rules.Policy
 
 	state          rules.WindowState
 	policyState    rules.RemediationState
@@ -170,6 +187,9 @@ type Watch struct {
 	stateRestored  bool
 	persistedState state.WatchRuntimeRecord // immutable snapshot; replaced after successful persistence
 	unavailable    bool
+	// everAvailable records that the check produced a reading at least once,
+	// so a later unavailability is a change worth confirming.
+	everAvailable bool
 	// legacyNotified marks a restored episode whose record predates the
 	// notified level but shows a notification: the first graded cycle adopts
 	// it at the episode's grade.
@@ -197,7 +217,7 @@ func (w *Watch) RunCycle(ctx context.Context) {
 	}
 	w.loadRuntimeState()
 	defer w.persistRuntimeState()
-	res := checks.Execute(ctx, w.Check)
+	res := w.confirmedResult(ctx, checks.Execute(ctx, w.Check))
 	if ctx.Err() != nil {
 		return
 	}
@@ -252,6 +272,31 @@ func (w *Watch) runCheckCycle(ctx context.Context, res checks.Result, observeOnl
 		return
 	}
 	w.dispatchFiringActions(ctx, res, step)
+}
+
+// watchUnavailableRetryDelay is the pause before a check that just became
+// unavailable is run once more.
+const watchUnavailableRetryDelay = 2 * time.Second
+
+// confirmedResult re-runs, once and after a short pause, a check that worked
+// and has just become unavailable, and returns the second result. A single
+// failed lookup or a dropped packet (a DNS server slow for a moment) then never
+// opens an availability incident, while a lasting fault (a hung mount, a dead
+// device) fails again and is announced a few seconds later. A watch already
+// known to be unavailable is not re-run, nor one that never produced a reading:
+// a rate's first, baseline-less sample is unavailable by design.
+func (w *Watch) confirmedResult(ctx context.Context, res checks.Result) checks.Result {
+	if res.Observation() != checks.ObservationUnavailable {
+		w.everAvailable = true
+		return res
+	}
+	if w.unavailable || !w.everAvailable {
+		return res
+	}
+	if process.Wait(ctx, w.Sleep, watchUnavailableRetryDelay) != nil {
+		return res
+	}
+	return checks.Execute(ctx, w.Check)
 }
 
 // watchAvailabilityCheck is the notification identity of a watch's
@@ -399,7 +444,7 @@ func (w *Watch) dispatchFiringActions(ctx context.Context, res checks.Result, st
 	if step.announce {
 		w.emit(Event{Watch: w.Name, Kind: eventKindFiring, Severity: step.level, Message: res.Message, Output: resultOutput(res)})
 	}
-	if len(w.Hook.Command) == 0 && len(w.Notifiers) == 0 && w.Expand == nil && w.MakeStep == nil {
+	if len(w.Hook.Command) == 0 && len(w.Notifiers) == 0 && w.Expand == nil && w.MakeStep == nil && !w.Remount {
 		return
 	}
 	env := hookEnv(w.Name, w.CheckType, res, step.level)
@@ -412,11 +457,14 @@ func (w *Watch) dispatchFiringActions(ctx context.Context, res checks.Result, st
 	}
 	if w.InPanic != nil && w.InPanic() {
 		if step.announce {
-			w.emit(Event{Watch: w.Name, Kind: eventKindPanicSuppressed, Message: "panic mode: hook/notify/expand/makestep suppressed"})
+			w.emit(Event{Watch: w.Name, Kind: eventKindPanicSuppressed, Message: "panic mode: hook/notify/expand/makestep/remount suppressed"})
 		}
 		return
 	}
 
+	if w.Remount && w.Remounter != nil {
+		w.runRemount(ctx, res, step.announce)
+	}
 	if w.Expand != nil && w.Expander != nil {
 		w.runExpand(ctx, res, step.announce)
 	}
@@ -677,6 +725,14 @@ func (w *Watch) emissionPolicy() emission.Policy {
 // the volume stays low; an attempt (success or failure) records the time so a
 // failing expansion is not retried every cycle.
 func (w *Watch) runExpand(ctx context.Context, res checks.Result, emitSkipped bool) {
+	// A missing or hung mount makes the path read the parent filesystem, or
+	// nothing: growing a volume then grows the wrong one.
+	if failure := cfgval.String(res.Data[checks.DataKeyMountFailure]); failure != "" {
+		if emitSkipped {
+			w.emit(Event{Watch: w.Name, Kind: eventKindExpandSkipped, Message: "mount " + failure + ", not a space shortage"})
+		}
+		return
+	}
 	at := w.clock()
 	if allowed, reason := w.Policy.Allow(&w.policyState, at); !allowed {
 		if emitSkipped {
@@ -700,6 +756,32 @@ func (w *Watch) runExpand(ctx context.Context, res checks.Result, emitSkipped bo
 		return
 	}
 	w.emit(Event{Watch: w.Name, Kind: eventKindExpand, Message: expandSuccessMessage(path, r)})
+}
+
+// runRemount repairs a hung or missing mount on a firing cycle, gated by
+// Policy like the other native actions: an attempt, successful or not, starts
+// the cooldown, so a server that stays down is not unmounted every cycle. A
+// watch firing for space alone has nothing to remount.
+func (w *Watch) runRemount(ctx context.Context, res checks.Result, emitSkipped bool) {
+	failure := cfgval.String(res.Data[checks.DataKeyMountFailure])
+	if failure == "" {
+		return
+	}
+	at := w.clock()
+	if allowed, reason := w.Policy.Allow(&w.policyState, at); !allowed {
+		if emitSkipped {
+			w.emit(Event{Watch: w.Name, Kind: eventKindRemountSkipped, Message: reason})
+		}
+		return
+	}
+	path := cfgval.String(res.Data[checks.DataKeyPath])
+	r, err := w.Remounter.Remount(ctx, mountctl.Spec{Name: w.Name, Path: path})
+	w.policyState.Record(at, w.Policy)
+	if err != nil {
+		w.emit(Event{Watch: w.Name, Kind: eventKindRemountFailed, Message: fmt.Sprintf("%s (%s): %v", path, failure, err)})
+		return
+	}
+	w.emit(Event{Watch: w.Name, Kind: eventKindRemount, Message: fmt.Sprintf("%s (%s): %s", path, failure, r.Message)})
 }
 
 // runMakeStep asks the local time daemon to step the clock on a firing cycle.
@@ -775,6 +857,9 @@ func (w *Watch) dryRunMessage() string {
 	}
 	if w.MakeStep != nil {
 		native = append(native, config.WatchThenKeyMakeStep)
+	}
+	if w.Remount {
+		native = append(native, config.WatchThenKeyRemount)
 	}
 	msg := watchDryRunMessage(w.Hook, w.Notifiers, native...)
 	if len(native) == 0 {

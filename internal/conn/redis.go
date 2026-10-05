@@ -31,6 +31,7 @@ const (
 	redisInfoMaxMemoryPolicy    = "maxmemory_policy"
 	redisInfoMemFragRatio       = "mem_fragmentation_ratio"
 	redisInfoRDBLastSaveStatus  = "rdb_last_bgsave_status"
+	redisInfoSyncFull           = "sync_full"
 	redisInfoUsedMemory         = "used_memory"
 )
 
@@ -39,6 +40,18 @@ const (
 const (
 	redisExtraKeys             = "keys"
 	redisExtraMaxMemoryUsedPct = "maxmemory_used_pct"
+	redisExtraRejectedCalls    = "rejected_calls"
+)
+
+// The probe reads INFO all: the default sections leave out commandstats (one
+// "cmdstat_<name>:calls=…,rejected_calls=…,…" line per command), and several
+// sections in one INFO need Redis 7, while "all" is understood by every
+// Redis, Valkey and KeyDB — one round trip for the health fields and the
+// rejected calls.
+const (
+	redisInfoSectionAll      = "all"
+	redisCommandStatsPrefix  = "cmdstat_"
+	redisRejectedCallsPrefix = "rejected_calls="
 )
 
 const (
@@ -49,6 +62,7 @@ const (
 	redisPercentScale        = 100
 	redisPercentDecimals     = 2
 	redisPercentFloatBitSize = 64
+	redisCounterBitSize      = 64
 )
 
 const (
@@ -115,35 +129,55 @@ func redisHandshake(rw io.ReadWriter, cfg Config) (Result, error) {
 	}
 
 	// Server identity and health: best effort; a successful PING already proves
-	// connect + auth. A single INFO carries version plus role, replication,
-	// persistence and memory fields, each exposed in Extra so an expect: rule can
-	// assert on it (e.g. role == master, master_link_status == up,
-	// rdb_last_bgsave_status == ok).
+	// connect + auth. A single INFO all carries version plus role, replication,
+	// persistence, memory and command fields, each exposed in Extra so an
+	// expect: rule can assert on it (e.g. role == master, master_link_status ==
+	// up, rdb_last_bgsave_status == ok).
 	res := Result{Extra: map[string]string{}}
-	if writeRESP(rw, redisCommandInfo) == nil {
-		if info, err := readRESP(br); err == nil {
-			fields := parseRedisInfo(info)
-			res.Version = fields[redisInfoVersion]
-			for _, k := range []string{
-				ExtraKeyRole, redisInfoMasterLinkStatus, ExtraKeyConnectedClients,
-				redisInfoUsedMemory, redisInfoMaxMemory, redisInfoMemFragRatio,
-				redisInfoMaxMemoryPolicy, redisInfoEvictedKeys,
-				redisInfoRDBLastSaveStatus, redisInfoAOFLastWriteStatus, redisInfoLoading,
-			} {
-				if v := fields[k]; v != "" {
-					res.Extra[k] = v
-				}
-			}
-			res.Extra[redisExtraKeys] = strconv.FormatUint(redisKeyspaceKeys(fields), numericBaseDecimal)
-			if pct, ok := redisMaxMemoryUsedPct(fields); ok {
-				res.Extra[redisExtraMaxMemoryUsedPct] = pct
-			}
-			if v := fields[redisInfoUptimeInSeconds]; v != "" {
-				res.Extra[extraUptime] = v
-			}
+	info, ok := redisRequest(rw, br, redisCommandInfo, redisInfoSectionAll)
+	if !ok {
+		return res, nil
+	}
+	fields := parseRedisInfo(info)
+	res.Version = fields[redisInfoVersion]
+	addRedisInfoExtra(res.Extra, fields)
+	return res, nil
+}
+
+// redisRequest sends one best-effort command after the handshake and reads its
+// reply; ok is false when either step failed (the probe has proven the server
+// already, so a failed INFO only leaves the health fields out).
+func redisRequest(rw io.ReadWriter, br *bufio.Reader, args ...string) (string, bool) {
+	if writeRESP(rw, args...) != nil {
+		return "", false
+	}
+	reply, err := readRESP(br)
+	return reply, err == nil
+}
+
+// addRedisInfoExtra copies the INFO health fields and the derived ones into
+// extra.
+func addRedisInfoExtra(extra, fields map[string]string) {
+	for _, k := range []string{
+		ExtraKeyRole, redisInfoMasterLinkStatus, ExtraKeyConnectedClients,
+		redisInfoUsedMemory, redisInfoMaxMemory, redisInfoMemFragRatio,
+		redisInfoMaxMemoryPolicy, redisInfoEvictedKeys, redisInfoSyncFull,
+		redisInfoRDBLastSaveStatus, redisInfoAOFLastWriteStatus, redisInfoLoading,
+	} {
+		if v := fields[k]; v != "" {
+			extra[k] = v
 		}
 	}
-	return res, nil
+	extra[redisExtraKeys] = strconv.FormatUint(redisKeyspaceKeys(fields), numericBaseDecimal)
+	if pct, ok := redisMaxMemoryUsedPct(fields); ok {
+		extra[redisExtraMaxMemoryUsedPct] = pct
+	}
+	if v := fields[redisInfoUptimeInSeconds]; v != "" {
+		extra[extraUptime] = v
+	}
+	if total, ok := redisRejectedCalls(fields); ok {
+		extra[redisExtraRejectedCalls] = strconv.FormatUint(total, numericBaseDecimal)
+	}
 }
 
 // writeRESP encodes args as a RESP array of bulk strings.
@@ -236,12 +270,37 @@ func redisKeyspaceKeys(fields map[string]string) uint64 {
 			if !isKeys {
 				continue
 			}
-			if n, err := strconv.ParseUint(raw, numericBaseDecimal, redisPercentFloatBitSize); err == nil {
+			if n, err := strconv.ParseUint(raw, numericBaseDecimal, redisCounterBitSize); err == nil {
 				total += n
 			}
 		}
 	}
 	return total
+}
+
+// redisRejectedCalls sums rejected_calls — commands refused before they ran
+// (OOM under noeviction, LOADING, a wrong arity) — over every command in an
+// INFO commandstats section. A server that predates the counter reports none,
+// so the field is then missing rather than a misleading 0.
+func redisRejectedCalls(fields map[string]string) (uint64, bool) {
+	var total uint64
+	found := false
+	for name, stats := range fields {
+		if !strings.HasPrefix(name, redisCommandStatsPrefix) {
+			continue
+		}
+		for stat := range strings.SplitSeq(stats, redisKeyspaceStatsSep) {
+			raw, isRejected := strings.CutPrefix(stat, redisRejectedCallsPrefix)
+			if !isRejected {
+				continue
+			}
+			if n, err := strconv.ParseUint(raw, numericBaseDecimal, redisCounterBitSize); err == nil {
+				total += n
+				found = true
+			}
+		}
+	}
+	return total, found
 }
 
 // redisMaxMemoryUsedPct reports used_memory as a percentage of maxmemory. With

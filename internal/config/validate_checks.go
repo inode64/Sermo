@@ -500,7 +500,7 @@ func validateConnExpectations(prefix string, fields map[string]any, add addFunc)
 	validateConnMaxIncrease(prefix, fields, add)
 }
 
-// validateConnMaxIncrease validates max_increase (field -> positive integer) and
+// validateConnMaxIncrease validates max_increase (field -> non-negative integer) and
 // its within span on a connection check: growth is measured over wall-clock
 // time, so each requires the other.
 func validateConnMaxIncrease(prefix string, fields map[string]any, add addFunc) {
@@ -514,11 +514,11 @@ func validateConnMaxIncrease(prefix string, fields map[string]any, add addFunc) 
 	}
 	m, ok := raw.(map[string]any)
 	if !ok || len(m) == 0 {
-		add("%s.%s must be a mapping of field -> positive integer", prefix, checks.CheckKeyMaxIncrease)
+		add("%s.%s must be a mapping of field -> non-negative integer", prefix, checks.CheckKeyMaxIncrease)
 	} else {
 		for _, field := range slices.Sorted(maps.Keys(m)) {
-			if n, ok := cfgval.Int(m[field]); !ok || n < 1 {
-				add("%s.%s.%s must be a positive integer", prefix, checks.CheckKeyMaxIncrease, field)
+			if n, ok := cfgval.Int(m[field]); !ok || n < 0 {
+				add("%s.%s.%s must be a non-negative integer", prefix, checks.CheckKeyMaxIncrease, field)
 			}
 		}
 	}

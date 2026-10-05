@@ -136,7 +136,12 @@ func buildSQLCheck(b base, entry map[string]any) (Check, string) {
 }
 
 // sqlConnConfig builds a conn.Config for a mysql/postgres sql check, defaulting
-// the port to the engine's standard port (via the conn registry).
+// the port to the engine's standard port (via the conn registry). A mysql
+// check may connect over a Unix socket instead of host:port.
 func sqlConnConfig(engine string, entry map[string]any) conn.Config {
-	return preparedConnectionConfig(engine, databaseConnectionConfig(entry), entry)
+	cfg := databaseConnectionConfig(entry)
+	if driver, _ := sqlEngineDriver(engine); driver == SQLEngineMySQL {
+		cfg.Socket = cfgval.AsString(entry[CheckKeySocket])
+	}
+	return preparedConnectionConfig(engine, cfg, entry)
 }

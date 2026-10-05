@@ -39,6 +39,9 @@ const dashboard = {
       { kind: "tmux", service: "web", check: "tmux-root", user: "root", state: "available" },
       { kind: "tmux", service: "web", check: "tmux-empty", user: "root", state: "available", can_close_empty: true },
       { kind: "screen", service: "web", check: "screen-root", user: "root", state: "available" },
+      { kind: "database", service: "mariadb", check: "alert-if-query-long-running", state: "available" },
+      { kind: "database", service: "db", check: "pg-queries", state: "available" },
+      { kind: "database", service: "", check: "host-queries", state: "available" },
     ],
     ssh: [{ service: "web", user: "root", terminal: "pts/11", pid: 96, start_ticks: 1234, idle_seconds: 120, can_close: true, memory_ready: true, rss: 1048576, cpu_ready: true, cpu: 1.5, io_ready: true, io_read: 1000, io_write: 250 }],
     terminal: [
@@ -46,6 +49,29 @@ const dashboard = {
       // screen reports no window count: the row shows the name alone.
       { service: "web", check: "screen-root", multiplexer: "screen", user: "root", name: "16128.pts-0.fixture", pids: [301], state: "attached", idle_seconds: 30, has_idle: true },
       { service: "web", check: "tmux-root", multiplexer: "tmux", user: "root", name: "build", pids: [202, 203], state: "detached", windows: 1, idle_seconds: 60, has_idle: true, memory_ready: true, rss: 524288, cpu_ready: true, cpu: 0, io_ready: true, io_read: 0, io_write: 0, identity: "$8:91", can_close: true },
+    ],
+    database: [
+      {
+        service: "mariadb", watch: "alert-if-query-long-running", engine: "mariadb",
+        id: 36762377, user: "tac_prod", host: "localhost:45732", database: "tac_prod",
+        command: "Query", state: "Sending data", elapsed_seconds: 239096,
+        query: "SELECT ga.geoare_id, ga.geoare_name, COUNT(*) AS bookings FROM geo_areas ga JOIN bookings b ON b.geoare_id = ga.geoare_id WHERE b.created_at > ? GROUP BY ga.geoare_id",
+        truncated: true, long: true, identity: "36762377:279932773", can_kill: true,
+        cpu_ready: true, cpu: 12.5, memory_ready: true, rss: 226448,
+        io_ready: true, io_read: 1048576, io_write: 65536,
+      },
+      {
+        service: "db", watch: "pg-queries", engine: "postgres",
+        id: 4711, user: "reporting", host: "10.0.0.8:51234", database: "analytics",
+        command: "", state: "active", elapsed_seconds: 12,
+        query: "SELECT count(*) FROM events", truncated: false, long: false, identity: "4711:99", can_kill: true,
+      },
+      {
+        service: "", watch: "host-queries", engine: "mysql",
+        id: 812, user: "backup", host: "localhost", database: "inventory",
+        command: "Query", state: "executing", elapsed_seconds: 45,
+        query: "SELECT * FROM parts", truncated: false, long: false, identity: "812:7", can_kill: false,
+      },
     ],
   },
   mounts: [{
@@ -1501,6 +1527,216 @@ test("sessions panel shows metrics, sorts columns and closes verified SSH and tm
   expect(tmuxCloseRequest.searchParams.get("identity")).toBe("$7:90");
 });
 
+// db_queries watches list running statements in their own table of the
+// sessions panel: CPU, memory, IO and idle do not apply to a statement.
+test("database statements render in their own table, longest first", async ({ page }) => {
+  const queries = page.getByRole("table", { name: "Running database statements" });
+  await expect(queries).toBeVisible();
+  const rows = queries.locator("tbody tr");
+  await expect(rows).toHaveCount(3);
+  await expect(rows.first()).toContainText("tac_prod");
+  await expect(rows.first()).toHaveClass(/row-warning/);
+  await expect(rows.first()).toContainText(/SELECT ga\.geoare_id/);
+  await expect(rows.nth(1)).toContainText("SELECT * FROM parts");
+  await expect(rows.nth(2)).toContainText("SELECT count(*) FROM events");
+  await expect(rows.nth(2)).not.toHaveClass(/row-warning/);
+  // A long statement expands to its full text and says the daemon cut it.
+  const long = rows.first().locator("details.db-query-more");
+  await long.locator("summary").click();
+  await expect(long).toContainText("GROUP BY ga.geoare_id…");
+  await expect(long).toContainText("truncated by the daemon");
+  // A host watch's statement has no service to act through.
+  await expect(rows.nth(1)).toContainText("unavailable");
+  await expect(rows.nth(1).locator("[data-db-query-kill]")).toHaveCount(0);
+  await expect(page.locator('[data-sf="database"]')).toContainText("database 3");
+});
+
+test("the database filter and search narrow the statements", async ({ page }) => {
+  const sessions = page.getByRole("table", { name: "Current SSH, tmux and screen sessions" });
+  const queries = page.getByRole("table", { name: "Running database statements" });
+  await page.locator('[data-sf="database"]').click();
+  await expect(sessions).toBeHidden();
+  await expect(queries.locator("tbody tr")).toHaveCount(3);
+  await page.locator("#session-search").fill("analytics");
+  await expect(queries.locator("tbody tr")).toHaveCount(1);
+  await expect(queries).toContainText("reporting");
+  await page.locator("#session-search").fill("geo_areas");
+  await expect(queries.locator("tbody tr")).toHaveCount(1);
+  await expect(queries).toContainText("tac_prod");
+  await page.locator("#session-search").fill("");
+  await page.locator('[data-sf="ssh"]').click();
+  await expect(queries).toBeHidden();
+  await expect(sessions).toBeVisible();
+});
+
+test("a database source that cannot list statements says why", async ({ page }) => {
+  await page.route("**/api/dashboard**", (route) => route.fulfill({ json: {
+    ...dashboard,
+    sessions: {
+      sources: [
+        { kind: "database", service: "mariadb", check: "alert-if-query-long-running", state: "unavailable", message: "access denied for user sermo" },
+        { kind: "database", service: "db", check: "pg-queries", state: "collecting" },
+      ],
+    },
+  } }));
+  await page.reload();
+  await expect(page.locator("#sessions-section")).toBeVisible();
+  await expect(page.getByRole("table", { name: "Current SSH, tmux and screen sessions" })).toBeHidden();
+  const queries = page.getByRole("table", { name: "Running database statements" });
+  await expect(queries.locator("tr", { hasText: "access denied for user sermo" })).toContainText("unavailable");
+  await expect(queries.locator("tr", { hasText: "pg-queries" })).toContainText("Waiting for a sample");
+});
+
+test("a guest sees database statements without kill buttons", async ({ page }) => {
+  await page.route("**/api/whoami", (route) => route.fulfill({ json: { can_act: false, role: "viewer", auth: true } }));
+  await page.reload();
+  const queries = page.getByRole("table", { name: "Running database statements" });
+  await expect(queries.locator("tbody tr")).toHaveCount(3);
+  await expect(queries.locator("[data-db-query-kill]")).toHaveCount(0);
+  await expect(queries.locator("tbody tr").first()).toContainText("read-only");
+});
+
+for (const scenario of [
+  { mode: "query", tick: false, okLabel: "cancel query" },
+  { mode: "connection", tick: true, okLabel: "kill connection" },
+]) {
+  test(`killing a database statement posts mode=${scenario.mode}`, async ({ page }) => {
+    let killRequest = null;
+    await page.route("**/api/services/mariadb/db-queries/alert-if-query-long-running/kill**", async (route) => {
+      killRequest = route.request();
+      await route.fulfill({ json: { ok: true, message: "statement cancelled" } });
+    });
+    const queries = page.getByRole("table", { name: "Running database statements" });
+    const kill = queries.getByRole("button", { name: "Kill mariadb statement 36762377 of tac_prod" });
+    await expect(kill).toHaveText("✕");
+    await kill.click();
+    const dialog = page.locator("#simple-confirm");
+    await expect(dialog).toBeVisible();
+    await expect(page.locator("#simple-confirm-title")).toHaveText("Cancel mariadb statement 36762377?");
+    await expect(page.locator("#simple-confirm-message")).toContainText("tac_prod on tac_prod");
+    await expect(page.locator("#simple-confirm-detail")).toContainText("SELECT ga.geoare_id");
+    await expect(page.locator("#simple-confirm-ok")).toHaveText("cancel query");
+    if (scenario.tick) await page.locator("#simple-confirm-choice").check();
+    await expect(page.locator("#simple-confirm-ok")).toHaveText(scenario.okLabel);
+    await page.locator("#simple-confirm-ok").click();
+    await expect.poll(() => killRequest !== null).toBe(true);
+    const url = new URL(killRequest.url());
+    expect(killRequest.method()).toBe("POST");
+    expect(`${url.pathname}${url.search}`).toBe(`/api/services/mariadb/db-queries/alert-if-query-long-running/kill?id=36762377&identity=36762377%3A279932773&mode=${scenario.mode}`);
+    expect(killRequest.headers()["x-sermo-csrf"]).toBe("1");
+    expect(killRequest.headers()["x-sermo-generation"]).toBe("7");
+    await expect(page.locator("#err")).toContainText("statement cancelled");
+  });
+}
+
+test("a rejected database kill reports the daemon's reason", async ({ page }) => {
+  await page.route("**/api/services/db/db-queries/pg-queries/kill**", (route) => route.fulfill({
+    status: 409, json: { ok: false, message: "the statement is no longer running; refresh the list" },
+  }));
+  await page.getByRole("button", { name: "Kill postgres statement 4711 of reporting" }).click();
+  // The choice resets for every confirmation.
+  await expect(page.locator("#simple-confirm-choice")).not.toBeChecked();
+  await page.locator("#simple-confirm-ok").click();
+  await expect(page.locator("#err")).toContainText("no longer running");
+});
+
+test("database statements show CPU, memory and IO columns, without a separate service column", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name === "mobile", "desktop columns");
+  const queries = page.getByRole("table", { name: "Running database statements" });
+  // The header's own text, without the sort indicator or the hidden actions label.
+  const headers = await queries.locator("thead th").evaluateAll((cells) =>
+    cells.map((cell) => (cell.firstChild && cell.firstChild.nodeType === Node.TEXT_NODE ? cell.firstChild.textContent.trim() : "")));
+  expect(headers.filter(Boolean)).toEqual(["Type", "User", "DB", "Client", "ID", "State", "Running", "CPU", "Memory", "IO R/W", "Query"]);
+  const row = queries.locator("tbody tr", { hasText: "36762377" });
+  await expect(row.locator("td").nth(7)).toContainText("12.5");
+  await expect(row.locator("td").nth(8)).toContainText("KiB");
+  await expect(row.locator("td").nth(9)).toContainText("/");
+  // A statement that was not measured reads a dash, not zero.
+  await expect(queries.locator("tbody tr", { hasText: "4711" }).locator("td").nth(7)).toHaveText("—");
+});
+
+test("a database kill shows killing in place until the statement leaves the list", async ({ page }) => {
+  let release = null;
+  await page.route("**/api/services/mariadb/db-queries/alert-if-query-long-running/kill**", async (route) => {
+    await new Promise((resolve) => { release = resolve; });
+    await route.fulfill({ json: { ok: true, message: "kill query: cancelled mariadb query 36762377" } });
+  });
+  const queries = page.getByRole("table", { name: "Running database statements" });
+  const row = queries.locator("tbody tr", { hasText: "36762377" });
+  await queries.getByRole("button", { name: "Kill mariadb statement 36762377 of tac_prod" }).click();
+  await page.locator("#simple-confirm-ok").click();
+  // In flight: the button gives way to a status, like a service operation.
+  await expect(row.getByRole("status")).toHaveText("killing…");
+  await expect(row.locator("[data-db-query-kill]")).toHaveCount(0);
+  await expect.poll(() => release !== null).toBe(true);
+  release();
+  await expect(page.locator("#err")).toContainText("cancelled mariadb query 36762377");
+  // The daemon still lists it until its next sample: it keeps saying so.
+  await expect(row.getByRole("status")).toHaveText("killing…");
+  // Once the inventory no longer lists it, the row and its status are gone.
+  await page.route("**/api/dashboard**", (route) => route.fulfill({ json: {
+    ...dashboard,
+    sessions: { ...dashboard.sessions, database: dashboard.sessions.database.filter((query) => query.id !== 36762377) },
+  } }));
+  await page.reload();
+  await expect(queries.locator("tbody tr", { hasText: "36762377" })).toHaveCount(0);
+});
+
+test("a failed database kill gives the button back", async ({ page }) => {
+  await page.route("**/api/services/db/db-queries/pg-queries/kill**", (route) => route.fulfill({
+    status: 409, json: { ok: false, message: "the statement is no longer running; refresh the list" },
+  }));
+  const kill = page.getByRole("button", { name: "Kill postgres statement 4711 of reporting" });
+  await kill.click();
+  await page.locator("#simple-confirm-ok").click();
+  await expect(page.locator("#err")).toContainText("no longer running");
+  await expect(kill).toBeVisible();
+});
+
+test("a statement the server is already stopping reads killing, not unavailable", async ({ page }) => {
+  await page.route("**/api/dashboard**", (route) => route.fulfill({ json: {
+    ...dashboard,
+    sessions: {
+      ...dashboard.sessions,
+      database: dashboard.sessions.database.map((query) => (query.id === 36762377 ? { ...query, command: "Killed", can_kill: false, stopping: true } : query)),
+    },
+  } }));
+  await page.reload();
+  const row = page.getByRole("table", { name: "Running database statements" }).locator("tbody tr", { hasText: "36762377" });
+  await expect(row.getByRole("status")).toHaveText("killing…");
+  await expect(row).not.toContainText("unavailable");
+});
+
+test("an SSH close shows closing in place while it runs", async ({ page }) => {
+  let release = null;
+  await page.route("**/api/services/web/sessions/96/close**", async (route) => {
+    await new Promise((resolve) => { release = resolve; });
+    await route.fulfill({ json: { ok: true, message: "close SSH session ok" } });
+  });
+  const sessions = page.getByRole("table", { name: "Current SSH, tmux and screen sessions" });
+  const row = sessions.locator("tbody tr", { hasText: "pts/11" });
+  await row.locator('[data-ssh-session-pid="96"]').click();
+  await page.locator("#simple-confirm-ok").click();
+  await expect(row.getByRole("status")).toHaveText("closing…");
+  await expect.poll(() => release !== null).toBe(true);
+  release();
+  await expect(page.locator("#err")).toContainText("close SSH session ok");
+  await expect(row.getByRole("status")).toHaveText("closing…");
+});
+
+test("phone database statements keep the query and the kill button", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "mobile", "phone layout only");
+  await page.locator("#db-query-block").scrollIntoViewIfNeeded();
+  const queries = page.getByRole("table", { name: "Running database statements" });
+  await expect(queries.locator("thead th", { hasText: "Client" })).toBeHidden();
+  await expect(queries.locator("thead th", { hasText: "ID" })).toBeHidden();
+  await expect(queries.locator("thead th", { hasText: "Running" })).toBeVisible();
+  await expect(queries.locator("thead th", { hasText: "Query" })).toBeVisible();
+  await expect(queries.getByRole("button", { name: "Kill mariadb statement 36762377 of tac_prod" })).toBeVisible();
+  const scrollWidth = await page.evaluate(() => document.documentElement.scrollWidth);
+  expect(scrollWidth).toBeLessThanOrEqual(page.viewportSize().width);
+});
+
 test("empty tmux sources use a red state and close the server through the API", async ({ page }) => {
   let emptyCloseRequest = null;
   await page.route("**/api/services/web/terminal-sessions/tmux-empty/close-empty", async (route) => {
@@ -1508,7 +1744,7 @@ test("empty tmux sources use a red state and close the server through the API", 
     await route.fulfill({ json: { ok: true, message: "close empty terminal session source ok" } });
   });
 
-  await expect(page.locator('[data-sf="all"]')).toContainText("all 6");
+  await expect(page.locator('[data-sf="all"]')).toContainText("all 9");
   await expect(page.locator('[data-sf="ssh"]')).toContainText("ssh 1");
   await expect(page.locator('[data-sf="tmux"]')).toContainText("tmux 2");
   await expect(page.locator('[data-sf="screen"]')).toContainText("screen 1");

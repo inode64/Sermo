@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"sermo/internal/cfgval"
+	"sermo/internal/conn"
 	"sermo/internal/metrics"
 	"sermo/internal/severity"
 )
@@ -43,6 +44,11 @@ const (
 	// gradeCertDays restates a certificate expiry window in days; a level
 	// breaches when fewer days than its window remain.
 	gradeCertDays
+	// gradeExpect restates the ordered fields of a connection protocol's
+	// expect: assertions. Like gradeOutput each assertion states the passing
+	// side, so a level loosens a field's bound and breaches when that looser
+	// assertion fails as well.
+	gradeExpect
 )
 
 // gradeSupport is one check type's `levels:` capability.
@@ -111,6 +117,22 @@ var gradeSupports = map[string]gradeSupport{
 	CheckTypeCommand:          {kind: gradeOutput, keys: fixedKeys(CheckKeyExpectStdout)},
 	CheckTypeCert:             {kind: gradeCertDays, keys: fixedKeys(CheckKeyExpiresInDays), floor: severity.Warning},
 	CheckTypeHTTP:             {kind: gradeCertDays, keys: fixedKeys(CheckKeyCertExpiresInDays), floor: severity.Warning},
+}
+
+// connExpectGrade grades every connection protocol (redis, mysql, …): the
+// protocols come from the conn registry, so they are matched by lookup rather
+// than listed in gradeSupports.
+var connExpectGrade = gradeSupport{kind: gradeExpect, keys: fixedKeys(CheckKeyExpect)}
+
+// gradeSupportFor returns typ's `levels:` capability.
+func gradeSupportFor(typ string) (gradeSupport, bool) {
+	if support, ok := gradeSupports[typ]; ok {
+		return support, true
+	}
+	if _, ok := conn.Lookup(typ); ok {
+		return connExpectGrade, true
+	}
+	return gradeSupport{}, false
 }
 
 func countGradeKeys(entry map[string]any) []string {
@@ -227,7 +249,7 @@ func ValidateLevels(typ string, entry map[string]any, declared severity.Level) L
 			return LevelCheck{Ignored: []string{fmt.Sprintf("%s grade the default %s: %s, not %s; ignored", CheckKeyLevels, CheckKeyReports, info.DefaultReports, reports)}}
 		}
 	}
-	support, supported := gradeSupports[typ]
+	support, supported := gradeSupportFor(typ)
 	if !supported {
 		return LevelCheck{Errors: []string{fmt.Sprintf("%s are not supported on a %s check", CheckKeyLevels, typ)}}
 	}
@@ -309,7 +331,14 @@ func (out *LevelCheck) keep(support gradeSupport, keys []string, base []levelThr
 		tier, _ := support.thresholds(keys, spec.entry, false)
 		reason := ""
 		for _, t := range tier {
-			if prev, shared := below[t.key]; shared {
+			prev, shared := below[t.key]
+			if !shared && support.kind == gradeExpect {
+				// The check fails only on its own expect fields, so a tier on a
+				// field the base does not bound would grade another field's failure.
+				reason = fmt.Sprintf("%s.%s.%s has no ordered %s.%s below it to loosen", path, CheckKeyExpect, t.key, CheckKeyExpect, t.key)
+				break
+			}
+			if shared {
 				if reason = looserThan(support.kind, prev, t); reason != "" {
 					reason = fmt.Sprintf("%s.%s %s", path, t.key, reason)
 					break
@@ -337,7 +366,7 @@ func thresholdDirection(kind gradeKind, op string) int {
 	case cfgval.CompareOpLess, cfgval.CompareOpLessEqual:
 		direction = -1
 	}
-	if kind == gradeOutput {
+	if kind == gradeOutput || kind == gradeExpect {
 		// The assertion states the passing side: `<= 200` alarms above 200, so
 		// the stricter alarm is the larger bound.
 		direction = -direction
@@ -377,6 +406,8 @@ func (g gradeSupport) thresholds(keys []string, entry map[string]any, base bool)
 		return outputThreshold(entry, base)
 	case gradeCertDays:
 		return certDaysThreshold(keys[0], entry)
+	case gradeExpect:
+		return expectThresholds(entry, base)
 	case gradePredicates:
 		// named level predicates, read below
 	}
@@ -442,6 +473,51 @@ func outputThreshold(entry map[string]any, base bool) ([]levelThreshold, error) 
 		return nil, fmt.Errorf("%s value %w", CheckKeyExpectStdout, err)
 	}
 	return []levelThreshold{{key: CheckKeyExpectStdout, op: op, value: value}}, nil
+}
+
+// expectThresholds reads the ordered numeric assertions of an expect: block,
+// one threshold per field. On the check's own entry an equality, a pattern or a
+// string value is simply not a gradable bound; in a level it is an error.
+func expectThresholds(entry map[string]any, base bool) ([]levelThreshold, error) {
+	raw, present := entry[CheckKeyExpect]
+	if !present {
+		return nil, nil
+	}
+	fields, isMap := raw.(map[string]any)
+	if !isMap {
+		if base {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("%s must be a mapping of field -> {op, value}", CheckKeyExpect)
+	}
+	var out []levelThreshold
+	var errs []error
+	for _, field := range slices.Sorted(maps.Keys(fields)) {
+		path := CheckKeyExpect + "." + field
+		assertion, isMap := fields[field].(map[string]any)
+		if !isMap {
+			if !base {
+				errs = append(errs, fmt.Errorf("%s must be an {op, value} mapping", path))
+			}
+			continue
+		}
+		op := cfgval.String(assertion[CheckKeyOp])
+		if thresholdDirection(gradeExpect, op) == 0 {
+			if !base {
+				errs = append(errs, fmt.Errorf("%s op %q must be an ordered comparison (>, >=, <, <=)", path, op))
+			}
+			continue
+		}
+		value, err := parseFiniteThreshold(assertion[CheckKeyValue])
+		if err != nil {
+			if !base {
+				errs = append(errs, fmt.Errorf("%s value %w", path, err))
+			}
+			continue
+		}
+		out = append(out, levelThreshold{key: field, op: op, value: value})
+	}
+	return out, errors.Join(errs...)
 }
 
 func certDaysThreshold(key string, entry map[string]any) ([]levelThreshold, error) {

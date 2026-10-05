@@ -18,6 +18,7 @@
   - [SQLite integrity (sqlite / sqlite3)](#sqlite-integrity-sqlite--sqlite3)
   - [Replication (replication)](#replication-replication)
   - [SQL query (sql)](#sql-query-sql)
+  - [Running database statements (db_queries)](#running-database-statements-db_queries)
   - [MongoDB query (mongodb-query)](#mongodb-query-mongodb-query)
   - [InfluxDB query (influxdb-query)](#influxdb-query-influxdb-query)
   - [Size growth (size)](#size-growth-size)
@@ -70,6 +71,7 @@ Connection-protocol checks (MySQL, PostgreSQL, Redis, Docker, libvirt, etc.) are
 | `libraries`   | health | all DT_NEEDED shared libraries of the binary can be resolved with the binary's ELF class and machine, each library's own RUNPATH/`$ORIGIN` searched first (native debug/elf, no ldd) |
 | `process`     | health | a process matching `exe`/`user` is in `state` (running/zombie/absent); an `absent` reading that a replaced binary explains names it and becomes a verdictless state (the service reads `restart_required`, not failed) |
 | `process_policy` | health | every process of a user account satisfies the allow/deny policy (alert-only; see configuration.md) |
+| `db_queries` | health | no MySQL/MariaDB/PostgreSQL statement has run longer than `min_duration`; one incident per statement (watch-only; see Running database statements) |
 | `metric`      | condition | a sampled metric satisfies `op value` (see Metrics)                |
 | `count`       | condition | the number of entries in a directory satisfies `op value` (see Count)|
 | `log`         | condition | the lines appended to a log file (or glob) that match `regex` within `within` satisfy `count {op, value}` (see Log matches) |
@@ -104,7 +106,7 @@ Connection-protocol checks (MySQL, PostgreSQL, Redis, Docker, libvirt, etc.) are
 | `zombies`     | condition | the count of zombie processes satisfies `count {op, value}`         |
 | `oom`         | condition | the kernel OOM-kill count rose by `delta {op, value}` since last cycle|
 | `cert`        | health | a TLS certificate is expiring/invalid, or its algorithm/issuer changed (see Cert)|
-| `mysql` / `mariadb` | health | a MySQL/MariaDB server answers: with no credentials it reads the handshake greeting (liveness + version); with a user/password it authenticates and pings (see Database) |
+| `mysql` / `mariadb` | health | a MySQL/MariaDB server answers: with no credentials it reads the handshake greeting (liveness + version); with a user/password it authenticates and reads the version in one query (see Database) |
 | `mongodb` / `mongo` | health | a connection to a MongoDB server authenticates, pings and reports its version and replica-set `role` for `expect`/`on_change` (see Database) |
 | `postgres` / `postgresql` | health | a connection to a PostgreSQL server authenticates and responds (see Database) |
 | `redis` / `valkey` | health | a connection to a Redis/Valkey server authenticates and answers PING; exposes role, replication, persistence and memory from INFO for `expect` (see Database) |
@@ -815,7 +817,11 @@ for: { cycles: 3 }
   passing side, the level loosens the bound and breaches when that looser
   assertion fails too: base `{ op: "<=", value: 200 }` warns above 200 messages,
   level `error: { expect_stdout: { op: "<=", value: 1000 } }` escalates above
-  1000. Output that is not a number never escalates. For `cert` and `http`, a
+  1000. Output that is not a number never escalates. A connection protocol's
+  `expect:` works the same way per field: a level restates some of the base's
+  ordered fields, `error: { expect: { maxmemory_used_pct: { op: "<", value: 85 } } }`,
+  and breaches when one of them fails too; a field the base does not bound with
+  an ordered comparison cannot be graded. For `cert` and `http`, a
   level `{ expires_in_days: 7 }` breaches when fewer than 7 days remain,
   including an expired certificate. `smart` ORs its predicates, as its base
   does.
@@ -858,12 +864,13 @@ Types that accept `levels:`, and the threshold keys a level restates:
 | per metric | `icmp` | `latency` with `threshold`: `threshold` |
 | metric threshold | `metric` | `op` + `value` |
 | output assertion | `command` | `expect_stdout` (`{op, value}` with `>`, `>=`, `<`, `<=`) |
+| field assertions | connection protocols (`redis`, `mysql`, …) | `expect` (its ordered `{op, value}` fields) |
 | expiry window | `cert` | `expires_in_days` |
 | expiry window | `http` | `cert_expires_in_days` |
 
-Latency probes (`tcp`, `http` latency, connection protocols), composite health
-verdicts (`lvm`, `storcli`, `ssacli`), the host `process` and `process_policy`
-watches, and state, speed, address and change metrics have no single ordered
+Latency probes (`tcp`, `http` latency, a connection protocol's
+`expect_latency`), composite health verdicts (`lvm`, `storcli`, `ssacli`), the host `process`, `process_policy`
+and `db_queries` watches, and state, speed, address and change metrics have no single ordered
 threshold and reject `levels:`.
 
 #### Escalate and hold
@@ -1329,7 +1336,8 @@ Protocols, in the order of the table above:
   **optional**: with no user/password it reads the server's initial handshake
   packet (sent before auth) to prove liveness and report the version — no
   credentials, like the smtp/amqp greeting probes. With a user/password it
-  authenticates and pings via `github.com/go-sql-driver/mysql` (the deeper
+  authenticates and reads `SELECT VERSION()` in one round trip via
+  `github.com/go-sql-driver/mysql` (the deeper
   check). An ERR handshake (host blocked, too many connections) fails the probe.
 - `mongodb` (alias `mongo`) — default port 27017; `tls` supported. `user` is
   **optional** (MongoDB may run without auth); with credentials it authenticates
@@ -1349,15 +1357,22 @@ Protocols, in the order of the table above:
 - `redis` (alias `valkey`) — default port 6379; `tls` supported. `user` is
   **optional** (legacy `requirepass` uses a password only, or no auth at all); a
   password-only check sends `AUTH <password>`. Verifies `PING` → `PONG` over RESP
-  (no driver). A single `INFO` then reports the server `version` (pair with
+  (no driver). A single `INFO all` (one round trip, understood by every Redis,
+  Valkey and KeyDB) then reports the server `version` (pair with
   `on_version_change`) plus health fields exposed for `expect:`: `role`,
   `master_link_status` (replicas), `rdb_last_bgsave_status`,
   `aof_last_write_status`, `loading`, `used_memory`, `maxmemory`,
-  `maxmemory_policy`, `evicted_keys`, `mem_fragmentation_ratio`,
-  `connected_clients` and `uptime_seconds`. Two fields are derived:
+  `maxmemory_policy`, `evicted_keys`, `sync_full` (full resynchronizations
+  served to replicas), `mem_fragmentation_ratio`, `connected_clients` and
+  `uptime_seconds`. Three fields are derived:
   `maxmemory_used_pct` is `used_memory` as a percentage of `maxmemory` (`0` when
-  no limit is configured), and `keys` is the key count summed over every
-  database. Under `maxmemory-policy noeviction` a full server rejects writes
+  no limit is configured), `keys` is the key count summed over every
+  database, and `rejected_calls` sums the commands refused before they ran
+  (an `OOM` under `noeviction`, `LOADING`, a wrong arity) over every command of
+  the reply's `commandstats` section; a server that predates the counter leaves
+  it out. `evicted_keys`, `sync_full` and `rejected_calls` count
+  since the server started, so bound their rise with `max_increase` rather
+  than their value. Under `maxmemory-policy noeviction` a full server rejects writes
   while still answering `PING`, so assert `maxmemory_used_pct` where that
   matters; pair `keys` with `max_increase` to catch a store filling up fast.
 - `memcached` (alias `memcache`) — default port 11211; `socket` supported (Unix
@@ -2044,7 +2059,8 @@ watches:
     check:
       type: replication
       engine: mariadb              # mysql | mariadb (default mariadb; same wire protocol)
-      host: 127.0.0.1              # same connection fields as the mysql checks
+      host: 127.0.0.1              # same connection fields as the mysql checks,
+                                   # or socket: /run/mysqld/mysqld.sock
       user: root
       password: "${env:SERMO_MYSQL_PASSWORD}"
       behind: { op: "<", value: 60 }   # optional: fail when the lag breaks this bound
@@ -2110,11 +2126,155 @@ checks:
 - **Engines:** `mysql`/`mariadb` and `postgres`/`postgresql` use the same
   connection fields as their protocol checks (`host`/`port`/`user`/`password`/
   `database`/`tls`) and **require a `user`**; `sqlite`/`sqlite3` take a `path`
-  and open it **read-only**.
+  and open it **read-only**. A `mysql`/`mariadb` engine also accepts `socket`
+  (a Unix socket path, e.g. `/run/mysqld/mysqld.sock`) in place of
+  `host`/`port`; the `replication` check honours it the same way.
 - Result data carries `engine`, `query`, `op`, `threshold`, the raw `result`
   string and, when numeric, a `value` for hooks/rules. A query error, a missing
   database or a `NULL` result fails the check. The check only reads — point it at
   a read-only user.
+
+### Running database statements (`db_queries`)
+
+A `db_queries` watch lists the statements a MySQL, MariaDB or PostgreSQL server
+is running and alerts once **per statement** that outlives `min_duration`. It
+is watch-only (a host watch under `watches:` or a service watch); it cannot be a
+service `checks:` entry or a preflight. The catalog `mysql`, `mariadb` and
+`postgres` services ship one as `alert-if-query-long-running` (see
+[services](services.md#long-running-database-statements)).
+
+```yaml
+watches:
+  long-queries:
+    interval: 30s
+    check:
+      type: db_queries
+      engine: mariadb            # mysql | mariadb | postgres | postgresql
+      socket: /run/mysqld/mysqld.sock   # mysql/mariadb only; or host/port
+      defaults_file: /root/.my.cnf      # mysql/mariadb only
+      min_duration: 5m           # required
+      exclude_users: [backup]    # optional filters: which statements alert
+      severity: warning
+      summary: "query ${id} by ${user} on ${database} running ${elapsed}: ${query}"
+```
+
+- **`engine`** (required): `mysql`/`mariadb` read
+  `information_schema.PROCESSLIST`, `postgres`/`postgresql` read
+  `pg_stat_activity`. A MySQL/MariaDB server's flavour and whether it answers
+  the thread columns (MariaDB `TID`, MySQL `performance_schema.threads`) are
+  detected once, so a sample is one query; a failed sample detects them again.
+- **`host`, `port`, `user`, `password`, `database`, `tls`**: the usual database
+  connection fields; PostgreSQL requires `user`.
+- **`socket`** (MySQL/MariaDB only): a Unix socket path instead of `host`/`port`.
+- **`defaults_file`** (MySQL/MariaDB only): an option file read natively for the
+  fields the check leaves unset (see Credentials below).
+- **`min_duration`** (required): a statement running at least this long is an
+  incident.
+- **`users`/`exclude_users`**, **`databases`/`exclude_databases`**: only
+  statements of (not of) these accounts, in (not in) these databases, alert.
+- **`states`** (PostgreSQL only): the `pg_stat_activity.state` values listed
+  (default `[active]`; add `idle in transaction` to see open transactions).
+- **`max_query_length`**: statement text kept per row, in characters (default
+  `1000`). **`max_rows`**: rows published to the dashboard, longest first
+  (default `50`).
+- **`timeout`**, **`severity`**, **`summary`**: as for any check.
+
+**What is listed.** The watch's own connection never appears. MySQL/MariaDB
+skip idle and server threads: `Sleep`, `Daemon`, `Binlog Dump*`, `Slave_*`,
+`Connect` and `Register Slave` commands, the `system user` and
+`event_scheduler` accounts, and rows with no statement text. PostgreSQL lists
+client backends only, in the configured `states`. The filters decide which
+statements *alert*; the dashboard still lists every statement, so a filtered one
+is visible but never an incident. MariaDB reports elapsed time to the
+millisecond; MySQL's `TIME` counts whole seconds.
+
+**Credentials.** `defaults_file` reads the `[client]`, `[client-server]`,
+`[client-mariadb]` and `[mysql]` groups of a MySQL option file (`user`,
+`password`, `socket`, `host`, `port`) for every field the check does not set
+itself — the same credentials the `mysql` client run by root uses. A missing
+file means no options, and `user` defaults to `root`. MySQL needs the `PROCESS`
+privilege to list other accounts' threads; PostgreSQL needs `pg_monitor` (or
+superuser) to read other roles' statement text.
+
+**Per-statement incidents.** Each statement that crosses `min_duration` (and
+passes the filters) emits one `firing` event at the watch's `severity`, whose
+message names the engine, connection id, elapsed time, user, database, client
+host, command/state and the statement text. When the statement finishes — or
+its connection starts another one — the watch emits `recovered`. Each statement
+is its own incident in [`event_notify`](configuration.md#fleet-wide-event-alerts)
+(the event's check is `query:<key>`), so two slow statements are two alerts,
+each recovered on its own, and every target's `min_severity` applies. The
+watch's published result is failing while any statement is over the threshold,
+with `count`, `long_count` and `oldest_seconds` in its data.
+
+**Restarts.** The alerted statements are persisted with the watch's sample. A
+restarted or reloaded `sermod` restores them as already announced: a statement
+still running is not alerted twice, and one that ended while the daemon was
+down is recovered on the first cycle.
+
+**Failures and stopped services.** A connection or query failure publishes the
+watch as unavailable and reports one availability incident; it recovers on the
+first good sample. A service watch skips its sample while the service is not
+`active`, so a stopped database is not reported as a broken probe.
+
+**Hooks and notifiers.** `then.notify` and `then.hook` work as on any watch,
+once per statement; when a notifier announced the statement live, its
+recovery is dispatched too. The hook environment adds `SERMO_DB_ENGINE`,
+`SERMO_DB_QUERY_ID`, `SERMO_DB_USER`, `SERMO_DB_NAME`, `SERMO_DB_HOST`,
+`SERMO_ELAPSED_SECONDS`, `SERMO_QUERY` and `SERMO_CHANGE` (`long` when the
+statement crosses the threshold, `ended` on its recovery). `summary:` may use
+`${id}`, `${user}`, `${database}`, `${host}`, `${query}`, `${elapsed}` and
+`${value}` (elapsed seconds). `levels:` and `then.action` are rejected: the
+watch alerts once per statement at its own `severity`.
+
+**Redaction.** Statement text is redacted before it is stored, shown, logged or
+handed to a hook: the secret after `IDENTIFIED BY`, `PASSWORD(...)`,
+`SET PASSWORD`, `MASTER_PASSWORD`/`SOURCE_PASSWORD` and PostgreSQL's
+`PASSWORD '...'` becomes `'***'`. Whitespace is collapsed to single spaces, then
+the text is cut to `max_query_length`.
+
+**Killing a statement.** The dashboard's Sessions panel and
+`sermoctl sessions kill` cancel one listed statement of a *service* watch
+(`kill_query`, a guard-blockable manual action; see
+[safety](safety.md#database-statement-kills)). A service watch may also opt
+into an automatic kill:
+
+```yaml
+# services/mariadb.yml
+uses: mariadb
+watches:
+  alert-if-query-long-running:
+    check:
+      min_duration: 5m
+    then:
+      kill_query:
+        after: 30m               # required; at least check.min_duration
+        mode: query              # query (default) | connection
+        users: [report]          # users and/or databases: required
+        databases: [analytics]
+    policy:
+      cooldown: 10m              # required, positive
+      max_actions: 3
+      max_actions_window: 1h
+```
+
+The kill is never shipped by the catalog and only exists on a service watch: it
+runs through the service's operation engine. At most one statement is killed per
+cycle, the longest eligible one first, and only one the watch counts as long —
+past `min_duration` and within the check's own `users`/`exclude_users`/
+`databases`/`exclude_databases` filters, so it never stops a statement it was
+told to ignore — that has run at least `after` and matches the kill's
+`users`/`databases` (both lists, when given, must match). Immediately before
+acting, the engine re-samples the server and requires the same statement
+identity and the same `after`, selector and filter condition; otherwise it does
+nothing. The watch's own `policy:` paces the kills, separately from the
+service's restart budget, and only a kill that stopped a statement spends it (a
+held-back kill is reported once per statement). `dry_run: true` reports `would
+kill_query` once per statement, panic mode holds the kill back until it clears,
+and a guard that blocks `kill_query` blocks it. A PostgreSQL session `idle in
+transaction` runs no statement to cancel: `mode: query` refuses it, so watching
+that state with an automatic kill needs `mode: connection`. `policy:` is only
+accepted together with `then.kill_query`.
 
 ### MongoDB query (`mongodb-query`)
 
@@ -2355,7 +2515,9 @@ checks:
 **Growth bound (`max_increase` + `within`).** Any protocol check can also bound
 how fast a numeric field rises. `max_increase` maps a result field to the largest
 rise allowed inside the sliding `within` window; the check fails while the rise
-since the oldest sample in the window exceeds it. Both keys are required
+since the oldest sample in the window exceeds it. A bound of `0` fails on any
+rise, which turns a since-start counter into an event: the check fails for one
+`within` after the counter moves, then recovers. Both keys are required
 together. It is evaluated after `expect`, so one check can hold a level and a
 growth bound:
 
@@ -2367,6 +2529,11 @@ checks:
       keys: { op: "<", value: 250000 }  # level: fail above this many keys
     max_increase: { keys: 20000 }       # growth: fail on +20000 keys…
     within: 10m                         # …inside this sliding window
+  evictions:
+    type: redis
+    severity: error
+    max_increase: { evicted_keys: 0, rejected_calls: 0, sync_full: 0 }  # any new one
+    within: 15m
 ```
 
 The first cycle only baselines, a falling value is not growth, and a field that
@@ -3447,8 +3614,10 @@ a validation error.
 
 `blocks:` accepts `restart`, `start`, `stop`, `reload`, `resume` and the
 manual-only operations `repair`, `reap` (`sermoctl reap --apply`),
-`close_session` (closing an SSH or terminal session) and
-`close_terminal_source` (closing an empty tmux server). Any other value is a
+`close_session` (closing an SSH or terminal session),
+`close_terminal_source` (closing an empty tmux server) and `kill_query`
+(cancelling a database statement listed by a [`db_queries`](#running-database-statements-db_queries)
+watch, manually or through its opt-in `then.kill_query`). Any other value is a
 validation error, so a typo cannot silently disable a guard. A guard applies to
 the action it names **and** to every action that performs that step:
 
@@ -3458,7 +3627,17 @@ the action it names **and** to every action that performs that step:
 | `stop` | `restart`, `reap` |
 
 Session closes signal one session process and do not start or stop the service,
-so only `close_session` / `close_terminal_source` deny them.
+so only `close_session` / `close_terminal_source` deny them. Likewise only
+`kill_query` denies a statement kill:
+
+```yaml
+rules:
+  no-kills-during-batch:
+    type: guard
+    blocks: [kill_query]
+    if: { file: { path: /run/batch/nightly.lock, exists: true } }
+    then: { action: block, message: "nightly batch running; statements are not cancelled" }
+```
 
 #### Connection guards
 

@@ -128,6 +128,7 @@ var watchTypeConditionBuilders = map[string]func(map[string]any) []web.WatchCond
 	checks.CheckTypeFile:          fileWatchConditions,
 	checks.CheckTypeProcess:       processWatchConditions,
 	checks.CheckTypeProcessPolicy: processPolicyWatchConditions,
+	checks.CheckTypeDBQueries:     dbQueriesWatchConditions,
 	checks.CheckTypeRoute:         routeWatchConditions,
 	checks.CheckTypeFirewallRules: firewallWatchConditions,
 	checks.CheckTypeFailedUnits:   failedUnitsWatchConditions,
@@ -175,6 +176,10 @@ func processWatchConditions(check map[string]any) []web.WatchCondition {
 
 func processPolicyWatchConditions(check map[string]any) []web.WatchCondition {
 	return appendValue(nil, checks.CheckKeyUser, cfgval.AsString(check[checks.CheckKeyUser]))
+}
+
+func dbQueriesWatchConditions(check map[string]any) []web.WatchCondition {
+	return appendCompare(nil, checks.CheckKeyMinDuration, cfgval.CompareOpGreaterEqual, cfgval.AsString(check[checks.CheckKeyMinDuration]))
 }
 
 func routeWatchConditions(check map[string]any) []web.WatchCondition {

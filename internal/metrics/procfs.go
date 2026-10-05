@@ -257,6 +257,25 @@ func (OSReader) ProcessIO(pid int) (read, write uint64, ok bool) {
 	return parseProcIO(string(data))
 }
 
+// ThreadCPU sums utime+stime of one thread from /proc/<pid>/task/<tid>/stat.
+func (OSReader) ThreadCPU(pid, tid int) (uint64, bool) {
+	fields, ok := process.ThreadStatFields(pid, tid)
+	if !ok {
+		return 0, false
+	}
+	return cpuTicks(fields)
+}
+
+// ThreadIO reads one thread's cumulative storage read/write bytes from
+// /proc/<pid>/task/<tid>/io.
+func (OSReader) ThreadIO(pid, tid int) (read, write uint64, ok bool) {
+	data, err := hostfs.ReadFile(process.ThreadPath(pid, tid, process.ProcFileIO))
+	if err != nil {
+		return 0, 0, false
+	}
+	return parseProcIO(string(data))
+}
+
 func parseProcIO(data string) (read, write uint64, ok bool) {
 	read, haveR := ScanUintField(data, procIOReadBytesPrefix)
 	write, haveW := ScanUintField(data, procIOWriteBytesPrefix)

@@ -74,6 +74,10 @@ const (
 	ActionReap                ActionType = "reap"
 	ActionCloseSession        ActionType = "close_session"
 	ActionCloseTerminalSource ActionType = "close_terminal_source"
+	// ActionKillQuery cancels one running database statement (or closes its
+	// connection) listed by a db_queries watch: on an operator request, or by
+	// the watch's own opt-in then.kill_query — never as a rule action.
+	ActionKillQuery ActionType = "kill_query"
 	// ActionPause freezes a VM or container in place (libvirt suspend, Docker
 	// pause). Remediation never pauses a service: a paused workload stops
 	// serving, which no rule can judge safe.
@@ -88,7 +92,8 @@ const (
 		string(ActionRepair) + ", " +
 		string(ActionReap) + ", " +
 		string(ActionCloseSession) + ", " +
-		string(ActionCloseTerminalSource)
+		string(ActionCloseTerminalSource) + ", " +
+		string(ActionKillQuery)
 )
 
 // IsGuardTarget reports whether t may appear in a guard's `blocks:` list: a
@@ -97,7 +102,7 @@ const (
 // guard.
 func (t ActionType) IsGuardTarget() bool {
 	switch t {
-	case ActionReap, ActionCloseSession, ActionCloseTerminalSource:
+	case ActionReap, ActionCloseSession, ActionCloseTerminalSource, ActionKillQuery:
 		return true
 	default:
 		return t.IsOperation() || t.IsManualOperation()

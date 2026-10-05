@@ -675,15 +675,15 @@ func refIDLabel(id uint32) string {
 	return label
 }
 
-// pingAndVersion verifies a database/sql pool answers a ping and best-effort
-// reads the server version with versionQuery — a successful ping already proves
-// connect + auth. The probe tail shared by the SQL-backed protocols.
-func pingAndVersion(ctx context.Context, db *sql.DB, versionQuery string) (Result, error) {
-	if err := db.PingContext(ctx); err != nil {
-		return Result{}, fmt.Errorf("ping: %w", err)
-	}
+// queryVersion reads the server version with versionQuery, the probe tail
+// shared by the SQL-backed protocols. The query opens the pool's connection,
+// so answering it proves connect + auth in one round trip; any account may run
+// it, so a failure is the server's, not a missing privilege.
+func queryVersion(ctx context.Context, db *sql.DB, versionQuery string) (Result, error) {
 	var version string
-	_ = db.QueryRowContext(ctx, versionQuery).Scan(&version)
+	if err := db.QueryRowContext(ctx, versionQuery).Scan(&version); err != nil {
+		return Result{}, fmt.Errorf("query: %w", err)
+	}
 	return Result{Version: version}, nil
 }
 

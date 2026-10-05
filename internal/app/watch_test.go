@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
@@ -9,6 +10,7 @@ import (
 
 	"sermo/internal/checks"
 	"sermo/internal/emission"
+	"sermo/internal/mountctl"
 	"sermo/internal/notify"
 	"sermo/internal/rules"
 	"sermo/internal/volume"
@@ -903,5 +905,64 @@ func TestWatchWithRealOSHookRunner(t *testing.T) {
 	}
 	if hookEvents[0].Kind != eventKindHook {
 		t.Fatalf("expected hook success event, got %s", hookEvents[0].Kind)
+	}
+}
+
+type fakeRemounter struct {
+	specs []mountctl.Spec
+	err   error
+}
+
+func (r *fakeRemounter) Remount(_ context.Context, spec mountctl.Spec) (mountctl.Result, error) {
+	r.specs = append(r.specs, spec)
+	return mountctl.Result{Message: "remounted after a forced unmount"}, r.err
+}
+
+// A hung mount is repaired once per cooldown and never expanded; a watch
+// firing for space alone is never remounted.
+func TestWatchRemountsAHungMountWithinItsCooldown(t *testing.T) {
+	at := time.Date(2026, 10, 5, 12, 0, 0, 0, time.UTC)
+	data := map[string]any{"path": "/net/nas/linux", checks.DataKeyMountFailure: checks.MountFailureHung}
+	rem := &fakeRemounter{}
+	exp := &fakeExpander{}
+	var events []Event
+	w := &Watch{
+		Name:      "storage-nas",
+		CheckType: "storage",
+		Check:     stubCheck{name: "storage", ok: true, data: data},
+		Remount:   true,
+		Remounter: rem,
+		Expand:    &ExpandSpec{By: 1 << 30},
+		Expander:  exp,
+		Emission:  emission.Policy{Events: emission.ModeEveryCycle},
+		Policy:    rules.Policy{Cooldown: 10 * time.Minute},
+		Now:       func() time.Time { return at },
+		Emit:      func(e Event) { events = append(events, e) },
+	}
+	w.RunCycle(t.Context())
+	w.RunCycle(t.Context())
+	if len(rem.specs) != 1 || rem.specs[0].Name != "storage-nas" || rem.specs[0].Path != "/net/nas/linux" || len(exp.calls) != 0 {
+		t.Fatalf("remounts %v expands %v, want one remount and no expansion", rem.specs, exp.calls)
+	}
+	if !hasEventKind(events, eventKindRemount) || !hasEventKind(events, eventKindRemountSkipped) || !hasEventKind(events, eventKindExpandSkipped) {
+		t.Fatalf("events = %v", eventKinds(events))
+	}
+	at = at.Add(11 * time.Minute)
+	rem.err = errors.New("still does not answer")
+	w.RunCycle(t.Context())
+	if len(rem.specs) != 2 || !hasEventKind(events, eventKindRemountFailed) {
+		t.Fatalf("remounts %v events %v, want a failed retry after the cooldown", rem.specs, eventKinds(events))
+	}
+
+	spaceOnly := &fakeRemounter{}
+	w = &Watch{
+		Name: "storage-full", CheckType: "storage",
+		Check:   stubCheck{name: "storage", ok: true, data: map[string]any{"path": "/srv", "free_pct": 1.0}},
+		Remount: true, Remounter: spaceOnly, Policy: rules.Policy{Cooldown: time.Minute},
+		Emit: func(Event) {},
+	}
+	w.RunCycle(t.Context())
+	if len(spaceOnly.specs) != 0 {
+		t.Fatalf("a space alert remounted %v", spaceOnly.specs)
 	}
 }

@@ -283,6 +283,9 @@ func IsHealthType(typ string) bool {
 	if info, ok := TypeInfoFor(typ); ok {
 		return info.DefaultReports == ReportsHealth
 	}
+	if info, ok := WatchOnlyTypeInfo(typ); ok {
+		return info.DefaultReports == ReportsHealth
+	}
 	_, ok := conn.Lookup(typ)
 	return ok
 }

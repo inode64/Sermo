@@ -157,6 +157,7 @@ func BuildServiceRuntime(ctx context.Context, cfg ServiceRuntimeConfig) ServiceR
 		OperationTimeout: deps.OperationTimeout,
 		Emit:             cfg.RecordOperation,
 	})
+	engine.DBQueryKiller = dbQueryKiller(cfg.Tree, checks.KillDBQuery)
 	return ServiceRuntime{
 		Engine:            engine,
 		CheckDeps:         checkDeps,

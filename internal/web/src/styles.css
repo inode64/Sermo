@@ -84,6 +84,23 @@
   .mount-table { min-width: 64rem; font-size: .85rem; }
   .sessions-table { min-width: 78rem; font-size: .85rem; font-variant-numeric: tabular-nums; }
   .sessions-table th, .sessions-table td { overflow-wrap: anywhere; vertical-align: top; }
+  /* Running database statements: a subtable of the sessions panel. The query
+     text is the widest value, so it wraps inside a bounded column instead of
+     deciding the table's width. */
+  .panel-subhead { font-size: .95rem; margin: 1rem 0 .35rem; }
+  .db-queries-table { min-width: 64rem; font-size: .85rem; font-variant-numeric: tabular-nums; }
+  .db-queries-table td { overflow-wrap: anywhere; vertical-align: top; }
+  .db-queries-table th { vertical-align: top; }
+  .db-queries-table td:nth-child(11) { min-width: 16rem; max-width: 36rem; }
+  .db-query-text { font-family: var(--mono); font-size: .82rem; white-space: pre-wrap; overflow-wrap: anywhere; }
+  /* The statement preview is a <details> inside a cell, not a panel card:
+     undo the card and card-header looks every section <details> carries. */
+  .db-queries-table details.db-query-more { background: none; border: 0; border-radius: 0; box-shadow: none; margin: 0; padding: 0; }
+  .db-queries-table .db-query-more > summary { display: block; padding: 0; margin: 0; font-size: inherit; font-weight: 400; user-select: text; }
+  .db-queries-table .db-query-more > summary::before { margin-right: .3rem; }
+  .db-queries-table .db-query-more[open] > summary { border-bottom: 0; margin-bottom: 0; }
+  .db-queries-table .db-query-more[open] > summary > code { display: none; }
+  #db-query-rows tr.row-warning > td { background: color-mix(in srgb, var(--warn) 9%, transparent); }
   .mount-table th, .mount-table td { vertical-align: top; }
   .mount-table .actions { min-width: 5.5rem; }
   .mount-table .mount-processes { min-width: 12rem; max-width: 24rem; }
@@ -410,6 +427,7 @@
   .confirm-cascade-line { margin-top: .5rem; }
   .detail-warn { margin-top: .25rem; }
   .svc-busy, .svc-state-note { margin-left: 1.15rem; }
+  .session-busy { white-space: nowrap; }
   /* A state reason is a sentence: it wraps between words and only breaks inside
      one when a word alone is wider than the cell, so a narrow first column grows
      downwards by whole words instead of shattering the text letter by letter. */
@@ -613,6 +631,14 @@
     .sessions-table th:nth-child(7), .sessions-table td:nth-child(7),
     .sessions-table th:nth-child(8), .sessions-table td:nth-child(8),
     .sessions-table th:nth-child(9), .sessions-table td:nth-child(9) { display: none; }
+    /* database statements (1 Type · 2 User · 3 DB · 4 Client · 5 ID ·
+       6 State · 7 Running · 8 CPU · 9 Memory · 10 IO · 11 Query · 12 Actions): the
+       client address, the thread state and the IO rates are wide-screen
+       detail; the kill dialog names the rest. */
+    .db-queries-table { min-width: 0; }
+    .db-queries-table th:nth-child(4), .db-queries-table td:nth-child(4),
+    .db-queries-table th:nth-child(6), .db-queries-table td:nth-child(6),
+    .db-queries-table th:nth-child(10), .db-queries-table td:nth-child(10) { display: none; }
     /* watches: keep Name and the trailing Last activity · State · Actions.
        Type-specific tables also retain their leading live metric. */
     .watch-table th:not(:first-child):not(:nth-last-child(-n+3)),
@@ -724,6 +750,23 @@
     .sessions-table th:nth-child(1), .sessions-table td:nth-child(1),
     .sessions-table th:nth-child(4), .sessions-table td:nth-child(4),
     .sessions-table th:nth-child(5), .sessions-table td:nth-child(5) { display: none; }
+    /* database statements -> User · Running · Query · Actions. The engine,
+       database and connection id are in the kill dialog and the search; the
+       type filter still splits them from the terminal sessions, and CPU,
+       memory and IO are desk detail. */
+    .db-queries-table th, .db-queries-table td { padding: .34rem .38rem; }
+    .db-queries-table th:nth-child(1), .db-queries-table td:nth-child(1),
+    .db-queries-table th:nth-child(3), .db-queries-table td:nth-child(3),
+    .db-queries-table th:nth-child(5), .db-queries-table td:nth-child(5),
+    .db-queries-table th:nth-child(8), .db-queries-table td:nth-child(8),
+    .db-queries-table th:nth-child(9), .db-queries-table td:nth-child(9),
+    .db-queries-table th:nth-child(10), .db-queries-table td:nth-child(10) { display: none; }
+    /* Keep the user and running time whole; the statement is the one value
+       that wraps freely. */
+    .db-queries-table td:nth-child(2) { min-width: 4rem; overflow-wrap: break-word; }
+    .db-queries-table td:nth-child(7) { min-width: 3.5rem; overflow-wrap: normal; }
+    .db-queries-table td:nth-child(11) { min-width: 0; max-width: none; }
+    .db-queries-table td:nth-child(12) { overflow-wrap: normal; }
     .services-table .unit-cell, .services-table .event-cell, .apps-table .event-cell { max-width: 60vw; }
     /* Process rows keep PID, command, CPU and memory on a phone; two bars at
        the desktop width plus the truncated command exceed the expansion, so
@@ -859,6 +902,8 @@
   .modal-title { font-size: 1.05rem; margin: 0; }
   .modal-subtitle { font-size: .85rem; margin-top: .15rem; }
   .modal-message { margin: 0; }
+  .modal-detail { margin: .75rem 0 0; max-height: 14rem; overflow: auto; padding: .5rem .6rem; background: var(--panel-2); border: 1px solid var(--line); border-radius: var(--radius); font-family: var(--mono); font-size: .82rem; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .modal-choice { display: flex; align-items: center; gap: .4rem; margin-top: .75rem; font-size: .9rem; }
   .confirm-cascade-wrap { font-size: .85rem; margin: .35rem 0 .15rem; }
   .confirm-cascade-wrap.is-hidden { display: none; }
   .admin-hidden { display: none; }

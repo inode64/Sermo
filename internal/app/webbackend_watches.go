@@ -297,7 +297,8 @@ func watchReadingsWarning(readings []web.WatchReading) bool {
 func isWatchActivityKind(kind string) bool {
 	switch kind {
 	case eventKindFiring, eventKindRecovered, eventKindDryRun, eventKindHook, eventKindNotify, eventKindHookFail, eventKindNotifyFail, eventKindExpand, eventKindExpandSkipped, eventKindExpandFailed, eventKindKill, eventKindKillFailed,
-		eventKindMakeStep, eventKindMakeStepSkipped, eventKindMakeStepFailed:
+		eventKindMakeStep, eventKindMakeStepSkipped, eventKindMakeStepFailed,
+		eventKindRemount, eventKindRemountSkipped, eventKindRemountFailed:
 		return true
 	default:
 		return false

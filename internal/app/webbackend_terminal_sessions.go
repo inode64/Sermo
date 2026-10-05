@@ -105,6 +105,7 @@ func (b *WebBackend) Sessions(_ context.Context) web.SessionInventory {
 		b.appendSSHSessions(&result, seenSSH, service, entry)
 		b.appendTerminalSessions(&result, service, entry)
 	}
+	b.appendDBQueries(&result)
 	b.attachSessionMetrics(&result)
 	slices.SortFunc(result.SSH, compareWebSSHSessions)
 	slices.SortFunc(result.Terminal, compareWebTerminalSessions)

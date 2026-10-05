@@ -10,7 +10,7 @@ import {
   apiQueryWatch, apiReloadPath, notifierTestAPI,
   apiServicesPath, apiSessionsPath, apiStreamPath, apiWatchesPath, apiWhoamiPath, applicationEventsAPI,
   csrfPostOptions, dashboardAPI, daemonMetricsAPI, eventsAPI, eventsClearAPI,
-  emptyTerminalSessionCloseAPI,
+  dbQueryKillAPI, emptyTerminalSessionCloseAPI,
   liveVerbosePath, lockReleaseAPI, mountAPI, mountBlockersAPI, panicAPI,
   readyVerbosePath, serviceAPI, serviceButtonAPI, serviceEventsAPI, serviceMetricsAPI,
   servicePreflightAPI, serviceRuntimeAPI, serviceSLAAPI, sshSessionCloseAPI, terminalSessionCloseAPI, stateCompactAPI, watchAPI,
@@ -202,6 +202,9 @@ const eventKindKillFailed = "kill-failed";
 const eventKindMakeStep = "makestep";
 const eventKindMakeStepFailed = "makestep-failed";
 const eventKindMakeStepSkipped = "makestep-skipped";
+const eventKindRemount = "remount";
+const eventKindRemountFailed = "remount-failed";
+const eventKindRemountSkipped = "remount-skipped";
 const eventKindNotify = "notify";
 const eventKindNotifyFailed = "notify-failed";
 const eventKindNotifySuppressed = "notify-suppressed";
@@ -224,9 +227,9 @@ const serviceCascadeActions = [actionStart, actionStop, actionRestart];
 // browser tracks in liveOps and the ones a named lock blocks.
 const serviceTrackedActions = [actionStart, actionStop, actionRestart, actionReload, actionPause, actionResume, actionRepair];
 const activityCriticalStatuses = [targetStateFailed, mountStateError, eventStatusPreflightFailed, eventStatusPostflightFailed, eventStatusOrphanProcesses];
-const activityCriticalKinds = [mountStateError, eventKindHookFailed, eventKindNotifyFailed, eventKindExpandFailed, eventKindKillFailed, eventKindMakeStepFailed];
-const activityWarningKinds = [actionAlert, eventKindFiring, eventKindSuppressed, eventKindPanicSuppressed, eventKindNotifySuppressed, eventKindExpandSkipped, eventKindMakeStepSkipped];
-const activityOKKinds = [eventKindAction, eventKindCascade, eventKindHook, eventKindNotify, eventKindRecovered, actionExpand, eventKindKill, eventKindMakeStep];
+const activityCriticalKinds = [mountStateError, eventKindHookFailed, eventKindNotifyFailed, eventKindExpandFailed, eventKindKillFailed, eventKindMakeStepFailed, eventKindRemountFailed];
+const activityWarningKinds = [actionAlert, eventKindFiring, eventKindSuppressed, eventKindPanicSuppressed, eventKindNotifySuppressed, eventKindExpandSkipped, eventKindMakeStepSkipped, eventKindRemountSkipped];
+const activityOKKinds = [eventKindAction, eventKindCascade, eventKindHook, eventKindNotify, eventKindRecovered, actionExpand, eventKindKill, eventKindMakeStep, eventKindRemount];
 const activityInfoKinds = [eventKindDryRun, eventKindReload];
 const serviceStatusFilterStates = [
   targetStateDisabled,
@@ -248,7 +251,15 @@ const sessionKindSSH = "ssh";
 const sessionKindTmux = "tmux";
 const sessionKindScreen = "screen";
 const terminalSessionKinds = [sessionKindTmux, sessionKindScreen];
-const sessionTypeFilterStates = [sessionKindSSH, ...terminalSessionKinds];
+// A db_queries watch lists running statements under its own source kind; its
+// rows have their own table, since their columns (database, client, running
+// time, statement) differ from a terminal's.
+const sessionKindDatabase = "database";
+const sessionTypeFilterStates = [sessionKindSSH, ...terminalSessionKinds, sessionKindDatabase];
+const dbQueryKillModeQuery = "query";
+const dbQueryKillModeConnection = "connection";
+// A statement longer than this shows a preview that expands to the full text.
+const dbQueryPreviewChars = 100;
 const sessionSourceAvailable = "available";
 const sessionSourceUnavailable = "unavailable";
 const sessionSourcePartial = "partial";
@@ -1342,6 +1353,8 @@ let latestSessionInventory = {};
 let sessionQuery = "";
 let sessionFilter = filterAll;
 let sessionSort = { key: "", dir: 1 };
+// The longest-running statement is the one an operator came to see.
+let dbQuerySort = { key: "running", dir: -1 };
 let svcQuery = "";
 let svcStatus = filterAll; // all | disabled | stopped | started | starting | collecting | monitored | failed
 let svcCategory = filterAll;
@@ -1439,6 +1452,9 @@ function restoreUIState() {
     }
     if (s.sessionSort && typeof s.sessionSort.key === "string") {
       sessionSort = { key: s.sessionSort.key, dir: s.sessionSort.dir === -1 ? -1 : 1 };
+    }
+    if (s.dbQuerySort && typeof s.dbQuerySort.key === "string") {
+      dbQuerySort = { key: s.dbQuerySort.key, dir: s.dbQuerySort.dir === -1 ? -1 : 1 };
     }
     if (s.splitServicePanels && typeof s.splitServicePanels === "object") {
       for (const [key, saved] of Object.entries(s.splitServicePanels)) {
@@ -1538,7 +1554,7 @@ function restoreEventFilters(ef) {
 function saveUIState() {
   try {
     localStorage.setItem(UI_STATE_KEY, JSON.stringify({
-      svcQuery, svcStatus, svcCategory, svcGrouped, svcSort, sessionSort,
+      svcQuery, svcStatus, svcCategory, svcGrouped, svcSort, sessionSort, dbQuerySort,
       mountQuery, mountStatus, mountCategory, mountGrouped, mountSort,
       appQuery, appStatus, appSort, appGrouped,
       libraryQuery, libraryStatus, librarySort, libraryGrouped,
@@ -4101,7 +4117,76 @@ function checkSLAHTML(service, c) {
   return tpl`<div id="${checkSLADomId(service, c.name)}" class="muted sla-check-strip">loading…</div>`;
 }
 
+// pendingSessionActions is the session analogue of liveOps: a close or kill
+// this browser started. From the confirmation until the daemon's inventory no
+// longer lists the session, its action cell says what is happening instead of
+// offering the button again; a failed request clears it so the button returns.
+const pendingSessionActions = new Map();
+// sessionActionHoldMs caps a pending entry whose session the inventory never
+// drops (a refresh that keeps failing), so the button cannot stay hidden.
+const sessionActionHoldMs = 2 * 60 * millisecondsPerSecond;
+const sessionActionClosing = "closing";
+const sessionActionKilling = "killing";
+// sessionActionKeySeparator joins a session action key's parts; NUL never
+// occurs in a service, check or identity.
+const sessionActionKeySeparator = "\u0000";
+const sessionActionKeyTerminal = "terminal";
+const sessionActionKeyEmpty = "empty";
+
+function sessionActionKey(...parts) {
+  return parts.map((part) => String(part ?? "")).join(sessionActionKeySeparator);
+}
+const sshSessionActionKey = (service, pid, startTicks) => sessionActionKey(sessionKindSSH, service, pid, startTicks);
+const terminalSessionActionKey = (service, check, identity) => sessionActionKey(sessionActionKeyTerminal, service, check, identity);
+const emptySourceActionKey = (service, check) => sessionActionKey(sessionActionKeyEmpty, service, check);
+const dbQueryActionKey = (service, watch, identity) => sessionActionKey(sessionKindDatabase, service, watch, identity);
+
+function pendingSessionAction(key) {
+  const pending = pendingSessionActions.get(key);
+  if (!pending) return null;
+  if (Date.now() - pending.started > sessionActionHoldMs) {
+    pendingSessionActions.delete(key);
+    return null;
+  }
+  return pending;
+}
+
+function sessionActionBadge(verb, title) {
+  return tpl`<span class="session-busy inactive" role="status" aria-live="polite" title="${title || ""}">${verb}…</span>`;
+}
+
+// pendingSessionBadge is the action cell of a session with an action in
+// flight, or null when the regular button applies.
+function pendingSessionBadge(key) {
+  const pending = pendingSessionAction(key);
+  return pending ? sessionActionBadge(pending.verb, pending.label) : null;
+}
+
+// presentSessionActionKeys lists every session the inventory still shows, so a
+// finished action is forgotten once its session is gone.
+function presentSessionActionKeys(inventory) {
+  const keys = new Set();
+  for (const session of inventory.ssh || []) keys.add(sshSessionActionKey(session.service, session.pid, session.start_ticks));
+  for (const source of inventory.sources || []) {
+    for (const issue of source.issues || []) keys.add(sshSessionActionKey(source.service, issue.pid, issue.start_ticks));
+    if (source.can_close_empty) keys.add(emptySourceActionKey(source.service, source.check));
+  }
+  for (const session of inventory.terminal || []) keys.add(terminalSessionActionKey(session.service, session.check, session.identity));
+  for (const query of inventory.database || []) keys.add(dbQueryActionKey(query.service, query.watch, query.identity));
+  return keys;
+}
+
+function forgetFinishedSessionActions(inventory) {
+  if (!pendingSessionActions.size) return;
+  const present = presentSessionActionKeys(inventory);
+  for (const [key, pending] of pendingSessionActions) {
+    if (pending.done && !present.has(key)) pendingSessionActions.delete(key);
+  }
+}
+
 function sshSessionCloseButton(service, session) {
+  const pending = pendingSessionBadge(sshSessionActionKey(service, session.pid, session.start_ticks));
+  if (pending) return pending;
   if (!me.can_act) return tpl`<span class="muted">read-only</span>`;
   const label = `Close SSH session ${session.terminal || ""} of ${session.user || "unknown user"}`;
   if (!session.can_close) return tpl`<button class="icon-btn danger-btn" disabled aria-label="${label}" title="${session.message || "Session identity cannot be verified safely"}">${closeGlyph}</button>`;
@@ -4113,6 +4198,8 @@ function sshSessionCloseButton(service, session) {
 const closeGlyph = tpl`<span aria-hidden="true">✕</span>`;
 
 function terminalSessionCloseButton(session) {
+  const pending = pendingSessionBadge(terminalSessionActionKey(session.service, session.check, session.identity));
+  if (pending) return pending;
   if (!me.can_act) return tpl`<span class="muted">read-only</span>`;
   if (!session.can_close) return tpl`<span class="muted">unavailable</span>`;
   const label = `Close ${session.multiplexer || "terminal"} session ${session.name || ""} of ${session.user || "unknown user"}`;
@@ -4129,6 +4216,8 @@ function sessionStateCell(state) {
 
 function emptySessionCloseButton(source) {
   if (source.state !== sessionSourceAvailable || !source.can_close_empty) return nothing;
+  const pending = pendingSessionBadge(emptySourceActionKey(source.service, source.check));
+  if (pending) return pending;
   if (!me.can_act) return tpl`<span class="muted">read-only</span>`;
   const label = `Close the empty ${source.kind || "terminal"} server of ${source.user || "unknown user"}`;
   return tpl`<button class="icon-btn danger-btn" data-empty-session-close="1"
@@ -4165,6 +4254,7 @@ function unmeasuredSessionUsageRow() {
 }
 
 function sessionRows(inventory) {
+  const sources = (inventory.sources || []).filter((source) => source.kind !== sessionKindDatabase);
   const ssh = (inventory.ssh || []).map((session) => ({
     kind: sessionKindSSH, service: session.service || "", user: session.user || "",
     name: session.terminal || "", pid: session.pid || 0, pidSort: session.pid || 0, state: session.residual ? sessionStateResidual : sessionStateActive,
@@ -4182,7 +4272,7 @@ function sessionRows(inventory) {
     ...sessionUsageRow(session, session.has_idle),
     action: terminalSessionCloseButton(session),
   }));
-  const issues = (inventory.sources || []).flatMap((source) => (source.issues || []).map((issue) => ({
+  const issues = sources.flatMap((source) => (source.issues || []).map((issue) => ({
     kind: source.kind || "", service: source.service || "", user: issue.user || source.user || "",
     name: issue.terminal || source.check || "—", pid: issue.pid || 0, pidSort: issue.pid || 0, state: sessionSourceUnavailable,
     detail: issue.message || source.message || "Session attribution unavailable",
@@ -4193,7 +4283,7 @@ function sessionRows(inventory) {
   // unavailable or collecting source is a problem or a wait worth seeing, and
   // an empty tmux server with a socket is a process an admin can close. An
   // available ssh or screen source with nobody connected says nothing — no row.
-  const emptySources = (inventory.sources || [])
+  const emptySources = sources
     .filter((source) => !(source.issues || []).length)
     .filter((source) => !sourceHasSession(source, inventory))
     .filter((source) => source.state !== sessionSourceAvailable || source.can_close_empty)
@@ -4208,13 +4298,137 @@ function sessionRows(inventory) {
   return [...ssh, ...terminal, ...issues, ...emptySources];
 }
 
-function sessionFilterCounts(inventory, rows) {
+// dbQueryKillButton cancels one running statement; the confirmation offers
+// closing its whole connection instead. A host watch's statement has no
+// service to act through, so the daemon reports it can_kill false.
+function dbQueryKillButton(query) {
+  const pending = pendingSessionBadge(dbQueryActionKey(query.service, query.watch, query.identity));
+  if (pending) return pending;
+  // Cancelled from here, another tab, sermoctl or the server itself: the
+  // daemon reports it is being stopped, which is not "cannot be killed".
+  if (query.stopping) return sessionActionBadge(sessionActionKilling, "The server is stopping this statement");
+  if (!me.can_act) return tpl`<span class="muted">read-only</span>`;
+  if (!query.can_kill) return tpl`<span class="muted" title="This statement cannot be cancelled from the dashboard">unavailable</span>`;
+  const label = `Kill ${query.engine || "database"} statement ${query.id} of ${query.user || "unknown user"}`;
+  return tpl`<button class="icon-btn danger-btn" data-db-query-kill="1"
+    data-db-query-service="${query.service || ""}" data-db-query-watch="${query.watch || ""}"
+    data-db-query-id="${query.id}" data-db-query-identity="${query.identity || ""}" aria-label="${label}" title="${label}">${closeGlyph}</button>`;
+}
+
+function dbQueryText(query) {
+  return `${query.query || ""}${query.truncated ? "…" : ""}`;
+}
+
+// dbQueryCell shows a short statement whole; a long one shows a preview that
+// expands in place, since a tooltip never reaches a phone.
+function dbQueryCell(query) {
+  const text = query.query || "";
+  const note = query.truncated ? tpl`<span class="muted"> (truncated by the daemon)</span>` : nothing;
+  if (!text) return tpl`<span class="muted">—</span>`;
+  const full = dbQueryText(query);
+  if (text.length <= dbQueryPreviewChars) return tpl`<code class="db-query-text" title="${full}">${full}</code>${note}`;
+  return tpl`<details class="db-query-more"><summary><code class="db-query-text">${text.slice(0, dbQueryPreviewChars)}…</code></summary><code class="db-query-text">${full}</code>${note}</details>`;
+}
+
+function dbQueryRows(inventory) {
+  const queries = (inventory.database || []).map((query) => {
+    const state = [query.command, query.state].filter(Boolean).join(" · ");
+    return {
+      kind: query.engine || sessionKindDatabase, service: query.service || "", user: query.user || "",
+      database: query.database || "", client: query.host || "", id: query.id || 0,
+      state, running: query.elapsed_seconds || 0, long: !!query.long,
+      search: [query.watch, query.query].join(" "),
+      query: dbQueryCell(query), stateCell: state || "—",
+      cpu: query.cpu || 0, cpuReady: !!query.cpu_ready,
+      memory: query.rss || 0, memoryReady: !!query.memory_ready,
+      ioRead: query.io_read || 0, ioWrite: query.io_write || 0, ioReady: !!query.io_ready,
+      action: dbQueryKillButton(query),
+    };
+  });
+  // An available source with no statements is the normal quiet case; only a
+  // source that is waiting or failing has something to say.
+  const sources = (inventory.sources || [])
+    .filter((source) => source.kind === sessionKindDatabase && source.state !== sessionSourceAvailable)
+    .map((source) => {
+      const state = source.state || targetStateCollecting;
+      return {
+        kind: sessionKindDatabase, service: source.service || "", user: "", database: "", client: "", id: 0,
+        state, running: -1, long: false, search: [source.check, source.message].join(" "),
+        query: tpl`<span class="muted">${[source.service || "host", source.check].filter(Boolean).join(":")}: ${source.message || (state === targetStateCollecting ? "Waiting for a sample" : "Statement list unavailable")}</span>`,
+        stateCell: sessionStateCell(state), action: nothing,
+      };
+    });
+  return [...queries, ...sources];
+}
+
+const dbQuerySortKeys = {
+  type: (row) => row.kind,
+  user: (row) => row.user,
+  database: (row) => row.database,
+  client: (row) => row.client,
+  id: (row) => row.id,
+  state: (row) => row.state,
+  running: (row) => row.running,
+  cpu: (row) => row.cpuReady ? row.cpu : -1,
+  memory: (row) => row.memoryReady ? row.memory : -1,
+  io: (row) => row.ioReady ? row.ioRead + row.ioWrite : -1,
+};
+
+function setDBQuerySort(key) { toggleSort(dbQuerySort, key, renderSessions); }
+
+function sortDBQueryRows(rows) {
+  const value = dbQuerySortKeys[dbQuerySort.key];
+  if (!value) return rows;
+  rows.sort((a, b) => compareSortValues(value(a), value(b)) * dbQuerySort.dir
+    || compareSortValues(a.id, b.id));
+  return rows;
+}
+
+function dbQueryRunningCell(row) {
+  if (row.running < 0) return tpl`<span class="muted">—</span>`;
+  if (!row.long) return fmtDuration(row.running);
+  return tpl`<span class="lvl-warning" title="Running longer than the watch's min_duration">${fmtDuration(row.running)}</span>`;
+}
+
+function renderDBQueries(rows) {
+  const block = $("#db-query-block");
+  const body = $("#db-query-rows");
+  const hasSource = (latestSessionInventory.sources || []).some((source) => source.kind === sessionKindDatabase)
+    || (latestSessionInventory.database || []).length > 0;
+  const show = hasSource && (sessionFilter === filterAll || sessionFilter === sessionKindDatabase);
+  if (block) block.hidden = !show;
+  const count = $("#db-queries-count");
+  if (count) count.textContent = String((latestSessionInventory.database || []).length);
+  if (body) {
+    sortDBQueryRows(rows);
+    const content = rows.length ? rows.map((row) => tpl`<tr class="${row.long ? "row-warning" : ""}">
+      <td title="${row.service ? `service ${row.service}` : "host watch"}">${row.kind || "—"}</td><td>${row.user || "—"}</td>
+      <td>${row.database || "—"}</td><td class="mono">${row.client || "—"}</td><td class="mono">${row.id || "—"}</td>
+      <td>${row.stateCell}</td><td>${dbQueryRunningCell(row)}</td><td>${sessionCPUCell(row)}</td><td>${sessionMemoryCell(row)}</td>
+      <td>${sessionIOCell(row)}</td><td>${row.query}</td><td>${row.action}</td>
+    </tr>`) : tpl`<tr><td colspan="12" class="muted">No statements match the filter.</td></tr>`;
+    litRender(content, body);
+  }
+  updateSortIndicatorsFor("dqi", dbQuerySort, "#db-query-block th.sortable[data-db-query-sort]", "dbQuerySort");
+}
+
+// sessionFieldsMatch is the Sessions search: every listed field, any case.
+function sessionFieldsMatch(fields) {
+  return !sessionQuery || fields.join(" ").toLowerCase().includes(sessionQuery);
+}
+
+function dbQueryRowMatches(row) {
+  return sessionFieldsMatch([row.kind, row.service, row.user, row.database, row.client, row.id, row.state, row.search]);
+}
+
+function sessionFilterCounts(inventory, rows, dbRows) {
   const sessions = [
     ...(inventory.ssh || []).map(() => ({ kind: sessionKindSSH })),
     ...(inventory.terminal || []),
+    ...(inventory.database || []).map(() => ({ kind: sessionKindDatabase })),
   ];
   const counts = stateCounts(sessions, (session) => session.multiplexer || session.kind, sessionTypeFilterStates);
-  counts[filterAll] = rows.length;
+  counts[filterAll] = rows.length + dbRows.length;
   return counts;
 }
 
@@ -4280,15 +4494,25 @@ function sessionIOCell(row) {
 
 function renderSessions(inventory = latestSessionInventory) {
   latestSessionInventory = inventory || {};
+  forgetFinishedSessionActions(latestSessionInventory);
   const sources = latestSessionInventory.sources || [];
-  setPanelVisible($("#sessions-section"), sources.length > 0);
+  const database = latestSessionInventory.database || [];
+  setPanelVisible($("#sessions-section"), sources.length > 0 || database.length > 0);
   const rows = sessionRows(latestSessionInventory);
-  renderFilterButtonCounts("#session-filters", sessionFilterCounts(latestSessionInventory, rows));
+  const dbRows = dbQueryRows(latestSessionInventory);
+  renderFilterButtonCounts("#session-filters", sessionFilterCounts(latestSessionInventory, rows, dbRows));
   const filtered = rows.filter((row) => {
     if (sessionFilter !== filterAll && row.kind !== sessionFilter) return false;
-    return !sessionQuery || [row.kind, row.service, row.user, row.name, row.pid, row.state].join(" ").toLowerCase().includes(sessionQuery);
+    return sessionFieldsMatch([row.kind, row.service, row.user, row.name, row.pid, row.state]);
   });
+  const dbFiltered = dbRows.filter(dbQueryRowMatches);
+  const dbShown = sessionFilter === filterAll || sessionFilter === sessionKindDatabase ? dbFiltered : [];
   sortSessionRows(filtered);
+  // A host whose only session sources are db_queries watches, or the database
+  // filter, has nothing for the terminal table to say.
+  const table = $("#sessions-section .sessions-table");
+  if (table) table.hidden = sessionFilter === sessionKindDatabase || !sources.some((source) => source.kind !== sessionKindDatabase);
+  renderDBQueries(dbShown);
   const body = $("#session-rows");
   if (body) {
     const content = filtered.length ? filtered.map((row) => tpl`<tr>
@@ -4300,11 +4524,11 @@ function renderSessions(inventory = latestSessionInventory) {
     </tr>`) : tpl`<tr><td colspan="10" class="muted">No sessions match the filter.</td></tr>`;
     litRender(content, body);
   }
-  const activeCount = (latestSessionInventory.ssh || []).length + (latestSessionInventory.terminal || []).length;
+  const activeCount = (latestSessionInventory.ssh || []).length + (latestSessionInventory.terminal || []).length + database.length;
   const count = $("#sessions-count");
   if (count) count.textContent = String(activeCount);
   const filterCount = $("#session-filter-count");
-  if (filterCount) filterCount.textContent = `${filtered.length}/${rows.length}`;
+  if (filterCount) filterCount.textContent = `${filtered.length + dbShown.length}/${rows.length + dbRows.length}`;
   updateSortIndicatorsFor("ssi", sessionSort, "#sessions-section .sessions-table th.sortable[data-session-sort]", "sessionSort");
   updateSectionNav();
 }
@@ -7328,17 +7552,28 @@ async function closeSSHSession(name, pid, startTicks, terminal, user, managedByL
     okLabel: "close session",
     danger: true,
   }))) return;
-  await postSessionClose(`close SSH session ${label}`, sshSessionCloseAPI(name, sessionPID, sessionStartTicks, terminal, managedByLogind), generation);
+  await postSessionClose(`close SSH session ${label}`, sshSessionCloseAPI(name, sessionPID, sessionStartTicks, terminal, managedByLogind), generation,
+    sshSessionActionKey(name, sessionPID, sessionStartTicks), sessionActionClosing);
 }
 
-async function postSessionClose(statusLabel, endpoint, generation) {
+// postSessionClose runs one confirmed session close or kill. Like a service
+// operation it shows its progress in place: the session's action cell reads
+// "closing…"/"killing…" from the request until the inventory drops the session.
+async function postSessionClose(statusLabel, endpoint, generation, key, verb) {
   setStatus("");
+  const pending = { verb, label: statusLabel, started: Date.now(), done: false };
+  pendingSessionActions.set(key, pending);
+  renderSessions();
   try {
     const res = await fetch(endpoint, targetPostOptions({}, generation));
     const body = await jsonOrThrow(res);
-    setStatus(`${statusLabel}: ${body.message || feedbackStatusOK}`, feedbackStatusOK);
+    pending.done = true;
+    pending.label = `${statusLabel}: ${body.message || feedbackStatusOK}`;
+    setStatus(pending.label, feedbackStatusOK);
     load();
   } catch (e) {
+    pendingSessionActions.delete(key);
+    renderSessions();
     setStatus(`${statusLabel}: ${e.message}`, feedbackStatusErr);
   }
 }
@@ -7394,7 +7629,8 @@ async function closeTerminalSession(service, check, multiplexer, session, user, 
     okLabel: "close session",
     danger: true,
   }))) return;
-  await postSessionClose(`close ${label}`, terminalSessionCloseAPI(service, check, multiplexer, session, user, identity), generation);
+  await postSessionClose(`close ${label}`, terminalSessionCloseAPI(service, check, multiplexer, session, user, identity), generation,
+    terminalSessionActionKey(service, check, identity), sessionActionClosing);
 }
 
 async function closeEmptySessionSource(service, check) {
@@ -7412,7 +7648,38 @@ async function closeEmptySessionSource(service, check) {
     okLabel: "close empty server",
     danger: true,
   }))) return;
-  await postSessionClose(`close empty ${label}`, emptyTerminalSessionCloseAPI(service, check), generation);
+  await postSessionClose(`close empty ${label}`, emptyTerminalSessionCloseAPI(service, check), generation,
+    emptySourceActionKey(service, check), sessionActionClosing);
+}
+
+// killDBQuery confirms against the statement the operator is looking at: the
+// row is re-read from the latest inventory, and its identity travels with the
+// request so the daemon refuses a statement that has since changed.
+async function killDBQuery(service, watch, id, identity) {
+  const generation = dashboardGeneration;
+  const queryID = Number(id);
+  const query = (latestSessionInventory.database || []).find((candidate) =>
+    candidate.service === service && candidate.watch === watch && candidate.identity === identity);
+  if (!service || !watch || !identity || !Number.isSafeInteger(queryID) || queryID <= 0 || !query || !query.can_kill) {
+    setStatus("kill statement: statement changed; refresh and try again", feedbackStatusErr);
+    return;
+  }
+  const engine = query.engine || "database";
+  const who = `${query.user || "unknown user"}${query.database ? ` on ${query.database}` : ""}`;
+  const choice = { label: "Kill the whole connection instead of only this statement", okLabel: "kill connection" };
+  if (!(await promptConfirm({
+    title: `Cancel ${engine} statement ${queryID}?`,
+    message: `${who}, running for ${fmtDuration(query.elapsed_seconds || 0)}. Cancelling stops only this statement; `
+      + "killing the connection also ends the client's session and rolls back its open transaction. Neither can be undone.",
+    detail: dbQueryText(query),
+    okLabel: "cancel query",
+    choice,
+    danger: true,
+  }))) return;
+  const mode = choice.checked ? dbQueryKillModeConnection : dbQueryKillModeQuery;
+  const statusLabel = `${mode === dbQueryKillModeConnection ? "kill connection" : "cancel query"} ${engine} ${queryID}`;
+  await postSessionClose(statusLabel, dbQueryKillAPI(service, watch, queryID, identity, mode), generation,
+    dbQueryActionKey(service, watch, identity), sessionActionKilling);
 }
 
 async function actWatch(name, action) {
@@ -7730,26 +7997,57 @@ async function confirmWatchExpand(name) {
 }
 
 let promptConfirmResolve = null;
+let promptConfirmChoice = null;
+// promptConfirmChoiceChange relabels the OK button for the open dialog's
+// choice; the checkbox's one listener calls it (no inline handlers: CSP).
+let promptConfirmChoiceChange = null;
 
 // promptConfirm is the shared yes/no dialog for destructive or irreversible
 // actions. Native <dialog> handles focus and Esc; callers await the boolean.
+// promptConfirm asks one question. opts.detail adds a preformatted block (a
+// statement, a command line). opts.choice = { label, okLabel } adds one
+// checkbox that turns the OK button into opts.choice.okLabel while ticked;
+// when confirmed, opts.choice.checked holds what the operator chose.
 function promptConfirm(opts) {
   const dlg = $("#simple-confirm");
   const title = $("#simple-confirm-title");
   const msg = $("#simple-confirm-message");
+  const detail = $("#simple-confirm-detail");
   const okBtn = $("#simple-confirm-ok");
   const o = opts || {};
   if (!dlg || typeof dlg.showModal !== "function") {
-    const text = [o.title, o.message].filter(Boolean).join("\n\n");
+    const text = [o.title, o.message, o.detail].filter(Boolean).join("\n\n");
     return Promise.resolve(window.confirm(text || "Continue?"));
   }
   if (title) title.textContent = o.title || "Confirm";
   if (msg) msg.textContent = o.message || "";
-  if (okBtn) {
-    const okLabel = o.okLabel || "confirm";
+  if (detail) {
+    detail.textContent = o.detail || "";
+    detail.hidden = !o.detail;
+  }
+  const setOKLabel = (okLabel) => {
+    if (!okBtn) return;
     okBtn.textContent = okLabel;
-    okBtn.className = o.danger ? "danger-btn" : "";
     okBtn.setAttribute("aria-label", okLabel === "confirm" ? "Confirm action" : `Confirm: ${okLabel}`);
+  };
+  const baseLabel = o.okLabel || "confirm";
+  if (okBtn) okBtn.className = o.danger ? "danger-btn" : "";
+  setOKLabel(baseLabel);
+  const choiceWrap = $("#simple-confirm-choice-wrap");
+  const choice = $("#simple-confirm-choice");
+  const choiceLabel = $("#simple-confirm-choice-label");
+  promptConfirmChoice = o.choice || null;
+  if (choiceWrap && choice) {
+    choiceWrap.hidden = !o.choice;
+    choice.checked = false;
+    if (choiceLabel) choiceLabel.textContent = o.choice ? o.choice.label : "";
+    promptConfirmChoiceChange = o.choice ? () => setOKLabel(choice.checked ? o.choice.okLabel || baseLabel : baseLabel) : null;
+    if (!choice.dataset.choiceBound) {
+      choice.addEventListener("change", () => {
+        if (promptConfirmChoiceChange) promptConfirmChoiceChange();
+      });
+      choice.dataset.choiceBound = "1";
+    }
   }
   return new Promise((resolve) => {
     promptConfirmResolve = resolve;
@@ -7763,6 +8061,9 @@ function closePromptConfirm(ok) {
   if (dlg && dlg.open) dlg.close();
   const resolve = promptConfirmResolve;
   promptConfirmResolve = null;
+  const choice = $("#simple-confirm-choice");
+  if (promptConfirmChoice) promptConfirmChoice.checked = !!ok && !!choice && choice.checked;
+  promptConfirmChoice = null;
   if (resolve) resolve(!!ok);
 }
 
@@ -8487,6 +8788,19 @@ function bindFilterButtons(el, dataKey, apply) {
   });
 }
 
+// bindSessionControls wires the sessions panel: one search and type filter
+// over both the terminal sessions and the database statements tables.
+function bindSessionControls() {
+  bindSearchBox($("#session-search"), setSessionQuery);
+  bindFilterButtons($("#session-filters"), "sf", setSessionFilter);
+  document.querySelectorAll("#sessions-section .sessions-table th.sortable[data-session-sort]").forEach((th) => {
+    bindSortHeader(th, () => setSessionSort(th.dataset.sessionSort || ""));
+  });
+  document.querySelectorAll("#db-query-block th.sortable[data-db-query-sort]").forEach((th) => {
+    bindSortHeader(th, () => setDBQuerySort(th.dataset.dbQuerySort || ""));
+  });
+}
+
 function initStaticHandlers() {
   const targetSearch = $("#target-search");
   if (targetSearch) {
@@ -8538,11 +8852,7 @@ function initStaticHandlers() {
 
   bindSearchBox($("#svc-search"), setSvcQuery);
   bindFilterButtons($("#svc-filters"), "f", setSvcStatus);
-  bindSearchBox($("#session-search"), setSessionQuery);
-  bindFilterButtons($("#session-filters"), "sf", setSessionFilter);
-  document.querySelectorAll("#sessions-section .sessions-table th.sortable[data-session-sort]").forEach((th) => {
-    bindSortHeader(th, () => setSessionSort(th.dataset.sessionSort || ""));
-  });
+  bindSessionControls();
 
   const svcCategorySelect = $("#svc-category");
   if (svcCategorySelect) svcCategorySelect.addEventListener(domEventChange, () => setSvcCategory(svcCategorySelect.value));
@@ -8684,6 +8994,9 @@ function initDelegatedHandlers() {
       el.dataset.terminalSession || "", el.dataset.terminalUser || "", el.dataset.terminalIdentity || "")],
     ["[data-empty-session-close]", (el) => closeEmptySessionSource(
       el.dataset.emptySessionService || "", el.dataset.emptySessionCheck || "")],
+    ["[data-db-query-kill]", (el) => killDBQuery(
+      el.dataset.dbQueryService || "", el.dataset.dbQueryWatch || "",
+      el.dataset.dbQueryId || "", el.dataset.dbQueryIdentity || "")],
     ["[data-service-action][data-service]", (el) => act(el.dataset.service || "", el.dataset.serviceAction || "")],
     ["[data-service-button][data-service]", (el) => pressServiceButton(el.dataset.service || "", el.dataset.serviceButton || "")],
     ["[data-watch-action][data-watch]", (el) => actWatch(el.dataset.watch || "", el.dataset.watchAction || "")],

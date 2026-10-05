@@ -122,6 +122,7 @@ const (
 	DataKeyMode               = "mode"
 	DataKeyModel              = "model"
 	DataKeyMountSampleError   = "mount_sample_error"
+	DataKeyMountFailure       = "mount_failure"
 	DataKeyModifiedAt         = "modified_at"
 	DataKeyMounted            = CheckKeyMounted
 	DataKeyMountPoint         = "mount_point"

@@ -57,6 +57,11 @@ any `security:` toggle that tries to disable them.
     attached) against the network name and its bridge; any attachment, or any
     guest that cannot be verified, blocks the destroy. No configuration option
     relaxes this.
+12. **A database statement is cancelled only after it is re-verified.** A
+    `kill_query` (manual or the opt-in automatic one) re-lists the server and
+    requires the exact listed statement identity before acting; a changed or
+    finished statement is never killed. See
+    [Database statement kills](#database-statement-kills).
 
 ## The operation engine
 
@@ -226,6 +231,71 @@ daemon's rule evaluation before the engine is called, which is how manual and
 automatic actions share one engine while only automatic remediation is rate
 limited.
 
+### Database statement kills
+
+A [`db_queries`](rules.md#running-database-statements-db_queries) watch lists
+the statements a MySQL, MariaDB or PostgreSQL server is running. Cancelling one
+is the `kill_query` operation. It sends no OS signal; it asks the database
+server to cancel a statement or close a connection.
+
+**Who can request it.** An administrator, from the dashboard's Sessions panel or
+with `sermoctl sessions kill SERVICE WATCH ID [--connection]`
+(`POST /api/services/{name}/db-queries/{watch}/kill`), and a service watch's own
+opt-in `then.kill_query`. It is never a rule action, and a host watch cannot
+kill: the operation needs a service's engine.
+
+**The request carries only an identity.** The client sends the statement id and
+the opaque identity the inventory displayed. The connection, credentials and
+engine come from the service's own configured watch, never from the request.
+
+**One engine path.** The kill runs through the service's operation engine like
+a session close: operation lock, named runtime locks, guards (`blocks:
+[kill_query]` — only that entry denies it, since a kill neither starts nor stops
+the service), the operation timeout and exactly one audit event with action
+`kill_query`. Panic mode suppresses the automatic kill; a manual kill stays
+available, like every other manual operation.
+
+**Re-verification.** Immediately before acting, the engine opens a fresh
+connection, re-lists the statements and requires the same connection id *and*
+the same statement (its fingerprint and start time). A statement that finished,
+or a connection now running another statement, is refused with "the statement
+is no longer running; refresh the list". The automatic kill additionally
+re-checks its own condition (`after` and the `users`/`databases` selector) on
+that fresh sample.
+
+**What is cancelled, per engine.**
+
+- **MariaDB** cancels by statement: `KILL QUERY ID <query_id>` stops exactly the
+  verified statement and can never reach a later one on the same connection.
+- **MySQL** has no per-statement kill: `KILL QUERY <id>` targets the connection.
+  If the verified statement ends in the sub-second gap between the re-listing
+  and the `KILL`, the next statement of that connection may be cancelled
+  instead. That race is inherent to MySQL and is why the automatic kill must be
+  scoped to named users or databases.
+- **PostgreSQL** verifies and signals in **one** statement:
+  `pg_cancel_backend(pid)` (or `pg_terminate_backend`) runs only for the row
+  whose pid, `backend_start` and `query_start` still match, so a recycled pid or
+  a new statement is never signalled. A backend `idle in transaction` runs no
+  statement: cancelling it would succeed and stop nothing, so `mode: query`
+  refuses it and only `mode: connection` ends such a session.
+- `mode: connection` (`--connection`) closes the whole connection
+  (`KILL CONNECTION`, `pg_terminate_backend`) instead of cancelling the
+  statement; the client sees its session dropped.
+
+**Automatic kill contract.** `then.kill_query` is opt-in per service watch and
+never shipped by the catalog (a catalog test enforces it). Validation requires
+`after` at least the check's `min_duration`, at least one of `users` or
+`databases`, and a `policy:` with a positive `cooldown`. At most one statement is
+killed per cycle, the longest eligible first. The watch's policy budget is its
+own — it is not the service's restart budget, and a kill never consumes or
+resets it. A kill the policy holds back, a dry-run (`would kill_query`) and a
+panic-suppressed kill are each reported once per statement. `dry_run: true`
+never kills.
+
+**Redaction.** Statement text is redacted (`IDENTIFIED BY`, `PASSWORD()`,
+`SET PASSWORD`, `MASTER_PASSWORD`/`SOURCE_PASSWORD`, PostgreSQL
+`PASSWORD '…'`) before it reaches the inventory, events, notifiers or hooks.
+
 ## Rate limiting
 
 Only *automatic* remediation is rate limited (`cooldown`, `max_actions`,
@@ -289,13 +359,16 @@ least-privilege setup.
 
 Because the daemon runs as root:
 
-- **`then.expand` and `then.makestep` are policy-gated.** Both
-  `then.makestep` change the host, so they run at most once per
+- **`then.expand`, `then.remount` and `then.makestep` are policy-gated.** They
+  change the host, so they run at most once per
   `policy.cooldown`, and every attempt starts the cooldown so a failing target is
   not retried each cycle. `then.makestep` — which asks the local chronyd to step
   the system clock — additionally *requires* a positive cooldown and acts only on
   an offset breach. **Never enable it on a ceph mon or osd host**: a clock jump
-  can cost a monitor its quorum, so alert there instead.
+  can cost a monitor its quorum, so alert there instead. `then.remount`
+  likewise requires a positive cooldown and acts only on a missing or hung
+  mount: its forced unmount fails the I/O pending on that mount, never signals
+  a process, and refuses `/`.
 - **The config is trusted, root-owned input.** `command` checks and watch `hook`s
   run their `argv` **as root** (never via a shell). Keep `/etc/sermo` writable
   only by root; anyone who can edit it can run code as root. Secrets belong in the

@@ -32,7 +32,7 @@ func (postgresProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	defer func() { _ = db.Close() }()
 
 	// SHOW server_version gives a clean number (vs the verbose version()).
-	return pingAndVersion(ctx, db, "SHOW server_version")
+	return queryVersion(ctx, db, "SHOW server_version")
 }
 
 // OpenPostgresDB opens a PostgreSQL pool via pgx, routing TCP dials through

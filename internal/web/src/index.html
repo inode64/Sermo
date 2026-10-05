@@ -79,6 +79,7 @@
       <button data-sf="ssh" aria-pressed="false">SSH</button>
       <button data-sf="tmux" aria-pressed="false">tmux</button>
       <button data-sf="screen" aria-pressed="false">screen</button>
+      <button data-sf="database" aria-pressed="false">database</button>
     </span>
     <span id="session-filter-count" class="muted"></span>
   </div>
@@ -98,6 +99,27 @@
     </tr></thead>
     <tbody id="session-rows"></tbody>
   </table>
+  <div id="db-query-block" hidden>
+    <h3 class="panel-subhead">Database queries <span id="db-queries-count" class="muted"></span></h3>
+    <table class="db-queries-table">
+      <caption class="visually-hidden">Running database statements</caption>
+      <thead><tr>
+        <th scope="col" class="sortable" data-db-query-sort="type">Type<span class="sort-ind" data-dqi="type"></span></th>
+        <th scope="col" class="sortable" data-db-query-sort="user">User<span class="sort-ind" data-dqi="user"></span></th>
+        <th scope="col" class="sortable" data-db-query-sort="database">DB<span class="sort-ind" data-dqi="database"></span></th>
+        <th scope="col" class="sortable" data-db-query-sort="client">Client<span class="sort-ind" data-dqi="client"></span></th>
+        <th scope="col" class="sortable" data-db-query-sort="id">ID<span class="sort-ind" data-dqi="id"></span></th>
+        <th scope="col" class="sortable" data-db-query-sort="state">State<span class="sort-ind" data-dqi="state"></span></th>
+        <th scope="col" class="sortable" data-db-query-sort="running">Running<span class="sort-ind" data-dqi="running"></span></th>
+        <th scope="col" class="sortable" data-db-query-sort="cpu">CPU<span class="sort-ind" data-dqi="cpu"></span></th>
+        <th scope="col" class="sortable" data-db-query-sort="memory">Memory<span class="sort-ind" data-dqi="memory"></span></th>
+        <th scope="col" class="sortable" data-db-query-sort="io">IO R/W<span class="sort-ind" data-dqi="io"></span></th>
+        <th scope="col">Query</th>
+        <th scope="col"><span class="visually-hidden">Actions</span></th>
+      </tr></thead>
+      <tbody id="db-query-rows"></tbody>
+    </table>
+  </div>
 </details>
 
 <h2 class="visually-hidden">Services</h2>
@@ -568,6 +590,8 @@
   </div>
   <div class="modal-body">
     <p id="simple-confirm-message" class="modal-message"></p>
+    <pre id="simple-confirm-detail" class="modal-detail" hidden></pre>
+    <label id="simple-confirm-choice-wrap" class="modal-choice" hidden><input id="simple-confirm-choice" type="checkbox"> <span id="simple-confirm-choice-label"></span></label>
   </div>
   <div class="modal-foot">
     <button type="button" data-simple-result="false" aria-label="Cancel confirmation">cancel</button>

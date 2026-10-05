@@ -68,17 +68,15 @@ func (c storageCheck) Run(_ context.Context) Result {
 		reason, info := c.mount.evaluate(mounts, c.path)
 		storageMountData(data, info != nil, info)
 		if reason != "" {
-			res := c.result(true, c.path+" "+reason, start)
-			if len(c.preds) > 0 {
-				// A declared severity grades the space thresholds (the first
-				// rung of a used/free ladder): a wrong or absent mount is never
-				// merely advisory. A mount-only check keeps its declaration.
-				res = raiseSeverity(res, severity.Error)
+			if c.mount.expectMount {
+				data[DataKeyMountFailure] = MountFailureMissing
 			}
-			res.Data = data
-			return res
+			return c.mountFailure(c.path+" "+reason, data, start)
 		}
 		if len(c.preds) == 0 {
+			if err := c.mountAnswers(); err != nil {
+				return c.hungMount(err, data, start)
+			}
 			res := c.result(false, c.path+" mounted as expected", start)
 			res.Data = data
 			return res
@@ -99,6 +97,9 @@ func (c storageCheck) Run(_ context.Context) Result {
 	}
 	st, err := boundedUsage(usage, c.path, c.timeout)
 	if err != nil {
+		if c.assertsMounted() && errors.Is(err, errStatfsHung) {
+			return c.hungMount(err, data, start)
+		}
 		data[DataKeySampleError] = err.Error()
 		res := c.unavailableResult(fmt.Sprintf("statfs %s: %v", c.path, err), start)
 		if errors.Is(err, errStatfsHung) && len(c.preds) > 0 {
@@ -139,6 +140,52 @@ func (c storageCheck) Run(_ context.Context) Result {
 	return res
 }
 
+// Mount failures a storage check with `mounted: true` reports under
+// DataKeyMountFailure: the path is not mounted, or it is and does not answer.
+const (
+	MountFailureMissing = "missing"
+	MountFailureHung    = "hung"
+)
+
+// mountFailure is the failing result of a mount assertion. A declared severity
+// grades the space thresholds (the first rung of a used/free ladder): a wrong,
+// absent or hung mount is never merely advisory. A mount-only check keeps its
+// declaration.
+func (c storageCheck) mountFailure(message string, data map[string]any, start time.Time) Result {
+	res := c.result(true, message, start)
+	if len(c.preds) > 0 {
+		res = raiseSeverity(res, severity.Error)
+	}
+	res.Data = data
+	return res
+}
+
+// assertsMounted reports whether the check requires path to be a mount. Such
+// a path is asserted to answer as well: a hung mount fails that assertion like
+// a missing one, so the watch window grades it and then.remount can repair it,
+// rather than it being a probe that could not observe.
+func (c storageCheck) assertsMounted() bool {
+	return c.mount.active && c.mount.expectMount
+}
+
+// mountAnswers probes a mount-only check's path; only a hung answer counts, as
+// any other statfs error says nothing a mount-only check asserts.
+func (c storageCheck) mountAnswers() error {
+	if !c.assertsMounted() {
+		return nil
+	}
+	if err := probeStatfs(c.usage, c.path, c.timeout); errors.Is(err, errStatfsHung) {
+		return err
+	}
+	return nil
+}
+
+func (c storageCheck) hungMount(err error, data map[string]any, start time.Time) Result {
+	data[DataKeyMountFailure] = MountFailureHung
+	data[DataKeySampleError] = err.Error()
+	return c.mountFailure(fmt.Sprintf("%s %v", c.path, err), data, start)
+}
+
 func storageMountData(data map[string]any, mounted bool, info *Mount) {
 	data[DataKeyMounted] = mounted
 	if info == nil {
@@ -158,6 +205,22 @@ var statfsInFlight sync.Map
 
 // errStatfsHung marks a statfs that did not answer: the mount is hung.
 var errStatfsHung = errors.New("hung mount")
+
+// probeStatfs asks whether path answers statfs within timeout, sharing the
+// in-flight guard of the usage sample.
+func probeStatfs(usage StorageUsageFunc, path string, timeout time.Duration) error {
+	if usage == nil {
+		usage = statfsUsage
+	}
+	_, err := boundedUsage(usage, path, timeout)
+	return err
+}
+
+// StatfsAnswers reports whether path answers statfs within timeout: nil when it
+// does, an error wrapping the hung-mount cause when it does not.
+func StatfsAnswers(path string, timeout time.Duration) error {
+	return probeStatfs(nil, path, timeout)
+}
 
 // boundedUsage runs usage for path within timeout (unbounded when timeout is
 // not positive).

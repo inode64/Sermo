@@ -11,6 +11,7 @@ import (
 
 	"sermo/internal/config"
 	"sermo/internal/notify"
+	"sermo/internal/process"
 	"sermo/internal/severity"
 	"sermo/internal/state"
 )
@@ -58,7 +59,14 @@ type EventNotifier struct {
 	policy  config.EventNotification
 	// memory is used only by tests that do not provide a persistent store.
 	memory map[string]state.EventNotifyRecord
+	// sleep paces delivery retries; nil uses a real, cancellable timer.
+	sleep func(time.Duration)
 }
+
+// eventNotifyRetryDelays are the pauses before each retry of a delivery that
+// failed for a reason that may pass (a lookup timeout, a 5xx, a rate limit):
+// the queue runs outside the monitoring cycles, so waiting costs no check.
+var eventNotifyRetryDelays = []time.Duration{2 * time.Second, 5 * time.Second}
 
 // NewEventNotifier creates a bounded, asynchronous route for daemon alarms.
 func NewEventNotifier(host string, logger *slog.Logger, inPanic func() bool, store EventNotifyStore) *EventNotifier {
@@ -329,7 +337,7 @@ func (n *EventNotifier) deliverTo(ctx context.Context, target notify.Notifier, e
 }
 
 func (n *EventNotifier) send(ctx context.Context, target notify.Notifier, e Event, msg notify.Message) bool {
-	if err := sendEventNotification(ctx, target, msg); err != nil {
+	if err := n.sendWithRetry(ctx, target, msg); err != nil {
 		n.logger.Error("event notification failed", "notifier", target.Name(),
 			eventFieldKind, e.Kind, eventFieldService, e.Service,
 			eventFieldWatch, e.Watch, eventFieldApp, e.App, "error", err)
@@ -365,7 +373,7 @@ func (n *EventNotifier) remind(ctx context.Context) {
 				continue
 			}
 			msg := notify.Message{Subject: rec.Subject + " (continues)", Body: rec.Body, Severity: level}
-			if err := sendEventNotification(ctx, target, msg); err != nil {
+			if err := n.sendWithRetry(ctx, target, msg); err != nil {
 				n.logger.Error("event reminder failed", "notifier", target.Name(), "error", err)
 				continue
 			}
@@ -374,6 +382,22 @@ func (n *EventNotifier) remind(ctx context.Context) {
 			}
 		}
 	}
+}
+
+// sendWithRetry delivers msg, retrying a failure that may pass. A notifier
+// that rejected the message (a wrong webhook, a bad token) is not retried.
+func (n *EventNotifier) sendWithRetry(ctx context.Context, target notify.Notifier, msg notify.Message) error {
+	err := sendEventNotification(ctx, target, msg)
+	for _, delay := range eventNotifyRetryDelays {
+		if err == nil || !notify.IsTemporary(err) {
+			return err
+		}
+		if process.Wait(ctx, n.sleep, delay) != nil {
+			return err
+		}
+		err = sendEventNotification(ctx, target, msg)
+	}
+	return err
 }
 
 func sendEventNotification(ctx context.Context, target notify.Notifier, msg notify.Message) error {
@@ -456,7 +480,7 @@ func eventNotifyIdentity(e Event) (key string, active bool, phase string) {
 		phase = eventNotifyPhaseRecovered
 	case eventKindDryRun, eventKindSuppressed, eventKindAction:
 		phase = eventKindFiring
-	case eventKindError, eventKindHookFail, eventKindExpandFailed, eventKindKillFailed, eventKindMakeStepFailed:
+	case eventKindError, eventKindHookFail, eventKindExpandFailed, eventKindKillFailed, eventKindMakeStepFailed, eventKindRemountFailed:
 		// An advisory incident's error stays a health incident, so the
 		// recovery that follows it closes it.
 		if e.advisoryError() {
@@ -531,7 +555,7 @@ func eventNeedsNotification(e Event) bool {
 	switch e.Kind {
 	case eventKindFiring, eventKindRecovered, eventKindAlert,
 		eventKindError, eventKindHookFail, eventKindExpandFailed,
-		eventKindKillFailed, eventKindMakeStepFailed:
+		eventKindKillFailed, eventKindMakeStepFailed, eventKindRemountFailed:
 		return true
 	case eventKindDryRun, eventKindSuppressed, eventKindAction:
 		// A service check claimed by a remediation rule has no standalone firing

@@ -8,6 +8,7 @@ import (
 	"sermo/internal/cfgval"
 	"sermo/internal/checks"
 	"sermo/internal/config"
+	"sermo/internal/rules"
 	"sermo/internal/severity"
 )
 
@@ -17,7 +18,13 @@ const (
 	mountCandidateStateMounted    = "mounted"
 	mountCandidateStateNotMounted = "not mounted"
 	mountSourceDetailSeparator    = " on "
+	// mountRemountCooldown paces the automatic repair of a hung NFS mount.
+	mountRemountCooldown = "30m"
 )
+
+// nfsFSTypes are the filesystems whose mount units repair a hung or vanished
+// mount on their own (then.remount).
+var nfsFSTypes = map[string]bool{"nfs": true, "nfs4": true}
 
 func (mountAssistant) Name() string { return AssistantNameMount }
 func (mountAssistant) Title() string {
@@ -57,7 +64,7 @@ func askMountSettings(p *Prompt, label string) mountSettings {
 }
 
 func buildMountUnit(c MountCandidate, s mountSettings) map[string]any {
-	return map[string]any{
+	unit := map[string]any{
 		config.EntryKeyCategory: config.WatchCategoryStorage,
 		config.WatchKeyCheck: map[string]any{
 			checks.CheckKeyType:    checks.CheckTypeStorage,
@@ -74,6 +81,11 @@ func buildMountUnit(c MountCandidate, s mountSettings) map[string]any {
 			config.MountKeyRefcount: s.refcount,
 		},
 	}
+	if nfsFSTypes[strings.ToLower(c.FSType)] {
+		unit[config.WatchKeyThen] = map[string]any{config.WatchThenKeyRemount: map[string]any{}}
+		unit[rules.SectionPolicy] = map[string]any{rules.PolicyKeyCooldown: mountRemountCooldown}
+	}
+	return unit
 }
 
 func mountResult(mounts map[string]any) Result {

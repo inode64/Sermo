@@ -30,7 +30,10 @@ func TestRulesDocTableCoversEveryBuiltinCheckType(t *testing.T) {
 	}
 	// Watch-only forms: built by watch_build's dispatch, not builtinCheckSpecs.
 	// process_policy fires on violations like the health family does.
-	required := map[string]bool{CheckTypeProcessPolicy: true}
+	required := map[string]bool{}
+	for name, info := range watchOnlyTypes {
+		required[name] = info.DefaultReports == ReportsHealth
+	}
 	for _, spec := range builtinCheckSpecs {
 		required[spec.info.Name] = spec.info.DefaultReports == ReportsHealth
 	}
@@ -77,7 +80,7 @@ func TestRulesDocLevelsTableMatchesGradableTypes(t *testing.T) {
 		}
 	}
 	for typ := range documented {
-		if _, ok := gradeSupports[typ]; !ok {
+		if _, ok := gradeSupportFor(typ); !ok {
 			t.Errorf("docs/rules.md levels table lists %q, which rejects levels", typ)
 		}
 	}

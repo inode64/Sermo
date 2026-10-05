@@ -364,6 +364,30 @@ watches:
     check: { type: sqlite, path: /var/lib/demo/demo.db, quick: true }
     then: { notify: [ops-email] }
 
+  # One incident per statement running past min_duration (recovered when it
+  # ends). Host watches only alert; a kill needs a service watch.
+  pg-long-queries:
+    monitor: disabled
+    interval: 30s
+    check:
+      type: db_queries
+      engine: postgres  # mysql | mariadb | postgres | postgresql
+      host: 127.0.0.1
+      port: 5432
+      user: monitor  # needs pg_monitor to read other roles' statements
+      password: "${env:PGPASSWORD:-}"
+      database: postgres
+      min_duration: 10m
+      states: [active, idle in transaction]  # postgres only; default [active]
+      exclude_users: [replicator]
+      exclude_databases: [template1]
+      max_query_length: 500  # characters kept (redacted, whitespace collapsed)
+      max_rows: 20  # rows published to the Sessions panel, longest first
+      timeout: 5s
+      severity: warning
+      summary: "pg ${id} by ${user} on ${database} for ${elapsed}: ${query}"
+    then: { notify: [ops-email] }
+
   firewall-loaded:
     monitor: disabled
     check: { type: firewall_rules, backend: auto, min_rules: 1 }
@@ -1040,6 +1064,23 @@ watches:
       host: 127.0.0.1
       password: "${env:REDIS_PASS:-}"
       on_version_change: true
+  # A protocol expect graded per field: each level loosens the bound and
+  # breaches when the looser assertion fails too.
+  redis-maxmemory:
+    check:
+      type: redis
+      expect: { maxmemory_used_pct: { op: "<", value: 80 } }
+      severity: warning
+      levels:
+        error: { expect: { maxmemory_used_pct: { op: "<", value: 85 } } }
+        critical: { expect: { maxmemory_used_pct: { op: "<", value: 95 } } }
+  # Since-start counters as events: max_increase 0 fails on any new one.
+  redis-events:
+    check:
+      type: redis
+      severity: error
+      max_increase: { evicted_keys: 0, rejected_calls: 0, sync_full: 0 }
+      within: 15m
   docker:
     check:
       type: docker
@@ -1409,8 +1450,10 @@ check:
     error: { used_pct: { op: ">=", value: "95%" } }
     critical: { used_pct: { op: ">=", value: "99%" } }
 for: { cycles: 3 }
+policy: { cooldown: 30m }  # required by then.remount
 then:
   notify: [ops-email]
+  remount: { }  # detach and mount again when hung or missing (needs mounted: true)
 mount:
   refcount: true  # default: only unmount when all Sermo users released it
   umount:
@@ -1447,3 +1490,30 @@ policy:  # pace the expand action (full policy extras)
   max_actions: 3
   max_actions_window: 24h
   backoff: { initial: 1h, factor: 2, max: 12h }
+
+---
+# ---------------------------------------------------------------------------
+# 13. service — catalog database with an opt-in automatic statement kill
+# ---------------------------------------------------------------------------
+# location: services
+name: mariadb-main
+uses: mariadb
+monitor: disabled
+variables:
+  long_query_duration: 10m  # alert-if-query-long-running threshold
+watches:
+  alert-if-query-long-running:
+    check:
+      users: [app, report]  # only these accounts' statements alert
+      databases: [shop, analytics]
+    then:
+      notify: [ops-email]
+      kill_query:  # never shipped by the catalog; a service watch only
+        after: 30m  # >= check.min_duration
+        mode: query  # query (cancel the statement) | connection
+        users: [report]  # users and/or databases: required
+        databases: [analytics]
+    policy:  # required with kill_query: a positive cooldown
+      cooldown: 10m
+      max_actions: 3
+      max_actions_window: 1h

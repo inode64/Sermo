@@ -372,3 +372,27 @@ func TestWatchEscalatesAndHoldsWithinEpisode(t *testing.T) {
 		t.Fatalf("events = %v, want %v: one announcement per escalation, none when the grade eases", got, want)
 	}
 }
+
+// A watch that worked and fails once (a DNS server slow for a moment) is
+// re-run before anything is announced; a fault that lasts is announced.
+func TestWatchConfirmsAnUnavailabilityBeforeAnnouncingIt(t *testing.T) {
+	ok := checks.Result{Check: "clock", OK: true, Message: "offset 2ms"}
+	gone := checks.Result{Check: "clock", Unavailable: true, Message: "lookup time.cloudflare.com: i/o timeout"}
+	check := &scriptedCheck{results: []checks.Result{ok, gone, ok, gone, gone}}
+	var events []Event
+	slept := 0
+	w := &Watch{
+		Name: "watch-clock-drift", CheckType: checks.CheckTypeClock, Check: check, FireOnFail: true,
+		Sleep: func(time.Duration) { slept++ },
+		Emit:  func(e Event) { events = append(events, e) },
+	}
+	w.RunCycle(context.Background()) // ok
+	w.RunCycle(context.Background()) // blip, re-run answers ok
+	if len(events) != 0 || slept != 1 {
+		t.Fatalf("a transient unavailability must stay silent: events=%+v slept=%d", events, slept)
+	}
+	w.RunCycle(context.Background()) // fails twice: announced
+	if len(events) != 1 || events[0].Kind != eventKindError || events[0].Check != watchAvailabilityCheck {
+		t.Fatalf("a lasting unavailability must be announced: %+v", events)
+	}
+}

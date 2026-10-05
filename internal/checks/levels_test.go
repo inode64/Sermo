@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"sermo/internal/conn"
 	"sermo/internal/execx/execxtest"
 	"sermo/internal/metrics"
 	"sermo/internal/severity"
@@ -336,5 +337,83 @@ func TestLevelFloorAndGradableTypes(t *testing.T) {
 		if support.kind == gradePredicates && support.keys == nil && len(PredicateFieldsFor(typ)) == 0 {
 			t.Errorf("gradable type %q grades predicates but declares none", typ)
 		}
+	}
+}
+
+// redisMaxMemoryLevels is the maxmemory ladder: warning at 80%, error at 85%,
+// critical at 95%. Each expect states the passing side.
+func redisMaxMemoryLevels() map[string]any {
+	return map[string]any{
+		CheckKeyType:     "redis",
+		CheckKeyExpect:   map[string]any{"maxmemory_used_pct": pred("<", 80), "role": "master"},
+		CheckKeySeverity: "warning",
+		CheckKeyLevels: map[string]any{
+			"error":    map[string]any{CheckKeyExpect: map[string]any{"maxmemory_used_pct": pred("<", 85)}},
+			"critical": map[string]any{CheckKeyExpect: map[string]any{"maxmemory_used_pct": pred("<", 95)}},
+		},
+	}
+}
+
+func TestConnExpectLevels(t *testing.T) {
+	tests := []struct {
+		pct  string
+		role string
+		ok   bool
+		want severity.Level
+	}{
+		{"70", "master", true, severity.Warning},
+		{"82", "master", false, severity.Warning},
+		{"90", "master", false, severity.Error},
+		{"97.5", "master", false, severity.Critical},
+		{"n/a", "master", false, severity.Warning}, // not a number: never escalates
+		{"70", "slave", false, severity.Warning},   // another field failed: no tier breaches
+	}
+	for _, tt := range tests {
+		check, err := BuildInline("maxmemory", redisMaxMemoryLevels(), Deps{DefaultTimeout: time.Second})
+		if err != nil {
+			t.Fatalf("build: %v", err)
+		}
+		cc := check.(connCheck)
+		cc.probe = probeReturning(conn.Result{Extra: map[string]string{"maxmemory_used_pct": tt.pct, "role": tt.role}})
+		res := cc.Run(context.Background())
+		if res.OK != tt.ok || res.Severity != tt.want {
+			t.Errorf("pct %s role %s: ok=%v severity=%q, want ok=%v severity=%q", tt.pct, tt.role, res.OK, res.Severity, tt.ok, tt.want)
+		}
+	}
+}
+
+func TestValidateConnExpectLevels(t *testing.T) {
+	if lc := ValidateLevels("redis", redisMaxMemoryLevels(), severity.Warning); len(lc.Errors) != 0 || len(lc.Ignored) != 0 || len(lc.kept) != 2 {
+		t.Fatalf("maxmemory ladder: %+v", lc)
+	}
+	tier := func(expect any) map[string]any {
+		entry := redisMaxMemoryLevels()
+		entry[CheckKeyLevels] = map[string]any{"error": map[string]any{CheckKeyExpect: expect}}
+		return entry
+	}
+	for name, tt := range map[string]struct {
+		expect      any
+		wantError   string
+		wantIgnored string
+	}{
+		"equality":        {expect: map[string]any{"maxmemory_used_pct": pred("==", 90)}, wantError: "must be an ordered comparison"},
+		"bare value":      {expect: map[string]any{"maxmemory_used_pct": 90}, wantError: "must be an {op, value} mapping"},
+		"not numeric":     {expect: map[string]any{"maxmemory_used_pct": pred("<", "lots")}, wantError: "value"},
+		"not a mapping":   {expect: "90", wantError: "must be a mapping of field"},
+		"not looser":      {expect: map[string]any{"maxmemory_used_pct": pred("<", 75)}, wantIgnored: "is not stricter than"},
+		"opposite":        {expect: map[string]any{"maxmemory_used_pct": pred(">", 90)}, wantIgnored: "opposite direction"},
+		"unbounded field": {expect: map[string]any{"keys": pred("<", 1000)}, wantIgnored: "has no ordered expect.keys below it"},
+	} {
+		lc := ValidateLevels("redis", tier(tt.expect), severity.Warning)
+		got := strings.Join(append(lc.Errors, lc.Ignored...), "; ")
+		if (tt.wantError != "" && (len(lc.Errors) == 0 || !strings.Contains(got, tt.wantError))) ||
+			(tt.wantIgnored != "" && (len(lc.Ignored) == 0 || !strings.Contains(got, tt.wantIgnored))) {
+			t.Errorf("%s: errors=%v ignored=%v", name, lc.Errors, lc.Ignored)
+		}
+	}
+	entry := redisMaxMemoryLevels()
+	delete(entry, CheckKeyExpect)
+	if lc := ValidateLevels("redis", entry, severity.Warning); len(lc.Errors) == 0 {
+		t.Fatal("levels without a base expect bound should be rejected")
 	}
 }

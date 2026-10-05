@@ -776,7 +776,7 @@ func TestValidateNotifyReferences(t *testing.T) {
 			},
 		},
 	})
-	if !hasIssue(noDefault, "watches.no-action.then requires a hook, notify, kill, expand and/or makestep") {
+	if !hasIssue(noDefault, "watches.no-action.then requires a hook, notify, kill, expand, remount and/or makestep") {
 		t.Fatalf("expected empty then without global notify to fail, got %v", noDefault)
 	}
 	if hasIssue(noDefault, "watches.dry-run-only") {
@@ -1605,5 +1605,57 @@ func TestValidateWatchMakeStepAction(t *testing.T) {
 				"watches": map[string]any{"clock-step": tc.entry},
 			}, tc.want)
 		})
+	}
+}
+
+func TestValidateWatchRemountAction(t *testing.T) {
+	mountedCheck := map[string]any{"type": "storage", "path": "/net/nas/linux", "mounted": true}
+	assertNoWatchIssues(t, map[string]any{
+		"watches": map[string]any{
+			"nfs": map[string]any{
+				"check":  mountedCheck,
+				"then":   map[string]any{"notify": []any{"none"}, "remount": map[string]any{}},
+				"policy": map[string]any{"cooldown": "10m"},
+			},
+		},
+	})
+	bad := validateRawGlobal(t, map[string]any{
+		"watches": map[string]any{
+			"no-cooldown": map[string]any{
+				"check": mountedCheck,
+				"then":  map[string]any{"remount": map[string]any{}},
+			},
+			"not-asserted": map[string]any{
+				"check":  map[string]any{"type": "storage", "path": "/srv", "used_pct": map[string]any{"op": ">=", "value": 90}},
+				"then":   map[string]any{"remount": map[string]any{}},
+				"policy": map[string]any{"cooldown": "10m"},
+			},
+			"unknown-key": map[string]any{
+				"check":  mountedCheck,
+				"then":   map[string]any{"remount": map[string]any{"lazy": true}},
+				"policy": map[string]any{"cooldown": "10m"},
+			},
+			"not-storage": map[string]any{
+				"check":  map[string]any{"type": "load", "load1": map[string]any{"op": ">", "value": 4}},
+				"then":   map[string]any{"remount": map[string]any{}},
+				"policy": map[string]any{"cooldown": "10m"},
+			},
+			"scalar": map[string]any{
+				"check":  mountedCheck,
+				"then":   map[string]any{"remount": true},
+				"policy": map[string]any{"cooldown": "10m"},
+			},
+		},
+	})
+	for _, w := range []string{
+		"watches.no-cooldown.then.remount requires watches.no-cooldown.policy.cooldown",
+		"watches.not-asserted.then.remount requires watches.not-asserted.check.mounted: true",
+		"watches.unknown-key.then.remount.lazy",
+		"watches.not-storage.then.remount is only valid on a storage watch",
+		"watches.scalar.then.remount must be a mapping",
+	} {
+		if !hasIssue(bad, w) {
+			t.Errorf("missing issue %q in %v", w, bad)
+		}
 	}
 }

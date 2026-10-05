@@ -384,17 +384,17 @@ service: x
 checks:
   growth:
     type: redis
-    max_increase: { keys: 20000 }
+    max_increase: { keys: 20000, evicted_keys: 0 }
     within: 10m
 `); len(issues) != 0 {
 		t.Fatalf("valid max_increase rejected: %v", issues)
 	}
 
 	for body, want := range map[string]string{
-		"max_increase: 5\n    within: 10m":           "max_increase must be a mapping of field -> positive integer",
-		"max_increase: { keys: 0 }\n    within: 10m": "max_increase.keys must be a positive integer",
-		"max_increase: { keys: 10 }":                 "max_increase requires within",
-		"max_increase: { keys: 10 }\n    within: no": "within must be a valid positive duration",
+		"max_increase: 5\n    within: 10m":            "max_increase must be a mapping of field -> non-negative integer",
+		"max_increase: { keys: -1 }\n    within: 10m": "max_increase.keys must be a non-negative integer",
+		"max_increase: { keys: 10 }":                  "max_increase requires within",
+		"max_increase: { keys: 10 }\n    within: no":  "within must be a valid positive duration",
 		"within: 10m": "within is only accepted with max_increase",
 	} {
 		mustHave(t, validateService(t, "\nname: cache\nservice: x\nchecks:\n  growth:\n    type: redis\n    "+body+"\n"), want)

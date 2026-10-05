@@ -2260,3 +2260,62 @@ func TestBackendActionFailsWhenPostActionStatusIsUnknown(t *testing.T) {
 		}
 	}
 }
+
+func TestKillDBQueryUsesOperationSafetyPath(t *testing.T) {
+	h := defaultHarness()
+	e := h.engine()
+	want := DBQueryTarget{Watch: "long-queries", ID: 7, Identity: "7:70", Mode: "query"}
+	killed := 0
+	e.DBQueryKiller = func(_ context.Context, target DBQueryTarget) (string, error) {
+		killed++
+		if target.Watch != want.Watch || target.ID != want.ID || target.Identity != want.Identity {
+			t.Fatalf("target = %+v, want %+v", target, want)
+		}
+		return "cancelled mariadb query 7", nil
+	}
+	res := e.KillDBQuery(context.Background(), want)
+	if res.Status != ResultOK || res.Action != actionKillQuery || killed != 1 || !strings.Contains(res.Message, "cancelled mariadb query 7") {
+		t.Fatalf("result = %+v killed=%d", res, killed)
+	}
+	if len(h.mgr.calls) != 0 {
+		t.Fatalf("manager calls = %v, a query kill must not touch the service", h.mgr.calls)
+	}
+	if len(h.emitted) != 1 || h.emitted[0].Action != actionKillQuery {
+		t.Fatalf("events = %+v, want one kill_query event", h.emitted)
+	}
+}
+
+func TestKillDBQueryFailsClosed(t *testing.T) {
+	target := DBQueryTarget{Watch: "w", ID: 7, Identity: "7:70", Mode: "query"}
+	for _, tt := range []struct {
+		name   string
+		killer func(context.Context, DBQueryTarget) (string, error)
+		guard  bool
+		want   string
+	}{
+		{name: "unavailable", want: "unavailable"},
+		{name: "changed", killer: func(context.Context, DBQueryTarget) (string, error) { return "", checks.ErrDBQueryChanged }, want: "no longer running"},
+		{name: "guarded", killer: func(context.Context, DBQueryTarget) (string, error) {
+			t.Fatal("a guard-blocked kill must not reach the killer")
+			return "", nil
+		}, guard: true, want: "blocked"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			h := defaultHarness()
+			e := h.engine()
+			e.DBQueryKiller = tt.killer
+			if tt.guard {
+				e.Guard = func(_ context.Context, action string) (bool, string, error) {
+					return action == actionKillQuery, "blocked: backup running", nil
+				}
+			}
+			res := e.KillDBQuery(context.Background(), target)
+			if res.Status == ResultOK || !strings.Contains(res.Message, tt.want) {
+				t.Fatalf("result = %+v, want failure containing %q", res, tt.want)
+			}
+			if len(h.emitted) != 1 {
+				t.Fatalf("events = %+v, want exactly one audit event", h.emitted)
+			}
+		})
+	}
+}

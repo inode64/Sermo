@@ -40,6 +40,7 @@ func (s *Store) ServiceCheckSnapshots() (map[string]map[string]CheckSnapshotReco
 	return s.groupedCheckSnapshots(
 		`SELECT service, check_name, check_type, observation, ok, condition, optional, skipped, unavailable, message, data, ran, at, config_id, severity
 		   FROM service_check_snapshot ORDER BY service, check_name;`,
+		`DELETE FROM service_check_snapshot WHERE service = ? AND check_name = ?;`,
 		"service check snapshots",
 	)
 }
@@ -99,6 +100,7 @@ func (s *Store) WatchCheckSnapshots() (map[string]map[string]CheckSnapshotRecord
 	return s.groupedCheckSnapshots(
 		`SELECT watch, slot, check_type, observation, ok, condition, optional, skipped, unavailable, message, data, ran, at, config_id, severity
 		   FROM watch_check_snapshot ORDER BY watch, slot;`,
+		`DELETE FROM watch_check_snapshot WHERE watch = ? AND slot = ?;`,
 		"watch check snapshots",
 	)
 }
@@ -107,8 +109,10 @@ func (s *Store) WatchCheckSnapshots() (map[string]map[string]CheckSnapshotRecord
 // (a legacy row with no observation, a slot a removed check left behind) is
 // skipped rather than discarding every other snapshot: the result holds the
 // decodable rows, and the error names each skipped one. Snapshots are a cache
-// the next cycle rewrites for every slot still configured.
-func (s *Store) groupedCheckSnapshots(query, label string) (map[string]map[string]CheckSnapshotRecord, error) {
+// the next cycle rewrites for every slot still configured, so a skipped row is
+// also deleted with deleteSQL (group, slot): a row whose target is no longer
+// configured is never rewritten and would otherwise be reported on every start.
+func (s *Store) groupedCheckSnapshots(query, deleteSQL, label string) (map[string]map[string]CheckSnapshotRecord, error) {
 	rows, err := s.reads().QueryContext(s.sqlCtx(), query)
 	if err != nil {
 		return nil, fmt.Errorf("load %s: %w", label, err)
@@ -117,6 +121,7 @@ func (s *Store) groupedCheckSnapshots(query, label string) (map[string]map[strin
 
 	out := map[string]map[string]CheckSnapshotRecord{}
 	var skipped []error
+	var undecodable [][2]string
 	for rows.Next() {
 		group, slot, record, err := scanCheckSnapshotRow(rows, label)
 		if err != nil {
@@ -124,6 +129,7 @@ func (s *Store) groupedCheckSnapshots(query, label string) (map[string]map[strin
 				return nil, err // the row itself could not be scanned
 			}
 			skipped = append(skipped, fmt.Errorf("%s/%s skipped: %w", group, slot, err))
+			undecodable = append(undecodable, [2]string{group, slot})
 			continue
 		}
 		if out[group] == nil {
@@ -134,7 +140,32 @@ func (s *Store) groupedCheckSnapshots(query, label string) (map[string]map[strin
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("iterate %s: %w", label, err)
 	}
+	if err := s.deleteSnapshotRows(deleteSQL, undecodable); err != nil {
+		skipped = append(skipped, err)
+	}
 	return out, errors.Join(skipped...)
+}
+
+// deleteSnapshotRows removes the (group, slot) rows a load could not decode,
+// in one transaction.
+func (s *Store) deleteSnapshotRows(deleteSQL string, keys [][2]string) error {
+	if len(keys) == 0 {
+		return nil
+	}
+	tx, err := s.db.BeginTx(s.sqlCtx(), nil)
+	if err != nil {
+		return fmt.Errorf("begin delete of skipped snapshots: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	for _, key := range keys {
+		if _, err := tx.ExecContext(s.sqlCtx(), deleteSQL, key[0], key[1]); err != nil {
+			return fmt.Errorf("delete skipped %s/%s: %w", key[0], key[1], err)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit delete of skipped snapshots: %w", err)
+	}
+	return nil
 }
 
 // scanCheckSnapshotRow scans one (group, slot) check-snapshot row. The service

@@ -171,6 +171,10 @@ func thenKillPath(prefix string) string {
 	return thenFieldPath(prefix, WatchThenKeyKill)
 }
 
+func thenRemountPath(prefix string) string {
+	return thenFieldPath(prefix, WatchThenKeyRemount)
+}
+
 func thenMakeStepPath(prefix string) string {
 	return thenFieldPath(prefix, WatchThenKeyMakeStep)
 }
