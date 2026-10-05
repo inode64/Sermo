@@ -387,11 +387,7 @@ func validateWatchMakeStepAction(prefix string, block, then map[string]any, allo
 			add("%s %q must be an absolute path to chronyd's command socket",
 				thenMakeStepPath(prefix)+"."+WatchMakeStepKeySocket, socket)
 		}
-		policy, _ := block[sectionPolicy].(map[string]any)
-		if !isPositiveDuration(cfgval.String(policy[rules.PolicyKeyCooldown])) {
-			add("%s requires %s as a positive duration: a forced clock step must be paced",
-				thenMakeStepPath(prefix), prefix+"."+policyPathCooldown)
-		}
+		requireWatchCooldown(prefix, thenMakeStepPath(prefix), block, "a forced clock step must be paced", add)
 	}
 	return hasStep
 }
@@ -417,13 +413,19 @@ func validateWatchRemountAction(prefix string, block, then map[string]any, allow
 		if mounted, ok := check[checks.CheckKeyMounted].(bool); !ok || !mounted {
 			add("%s requires %s: true", thenRemountPath(prefix), prefix+"."+WatchKeyCheck+"."+checks.CheckKeyMounted)
 		}
-		policy, _ := block[sectionPolicy].(map[string]any)
-		if !isPositiveDuration(cfgval.String(policy[rules.PolicyKeyCooldown])) {
-			add("%s requires %s as a positive duration: a forced unmount must be paced",
-				thenRemountPath(prefix), prefix+"."+policyPathCooldown)
-		}
+		requireWatchCooldown(prefix, thenRemountPath(prefix), block, "a forced unmount must be paced", add)
 	}
 	return hasRemount
+}
+
+// requireWatchCooldown rejects a native action at actionPath unless the watch
+// declares a positive policy.cooldown: an ungated action runs every firing
+// cycle, and why is the action's own reason.
+func requireWatchCooldown(prefix, actionPath string, block map[string]any, why string, add addFunc) {
+	policy, _ := block[sectionPolicy].(map[string]any)
+	if !isPositiveDuration(cfgval.String(policy[rules.PolicyKeyCooldown])) {
+		add("%s requires %s as a positive duration: %s", actionPath, prefix+"."+policyPathCooldown, why)
+	}
 }
 
 // watchNativeActions names the native then-actions a watch type permits. A

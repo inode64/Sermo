@@ -14,4 +14,8 @@ variables:
 preflight:
   binary: { type: binary, path: "${binary}" }
   pmpause: { type: binary, path: "${pmpause_binary}", optional: true }
-  health: { type: command, command: ["${binary}", "-?"], timeout: 10s, expect_exit: [0, 1] }
+  # No health probe: pmie_farm is the rc wrapper of the pmie_farm service, not a
+  # command. Every PCP release since it appeared (5.3.5) hands all of its
+  # arguments to pmie_check — `-?` included — so a probe would run that check every
+  # cycle, and its "pmie_check failed" lands in syslog. Its service is watched
+  # instead (catalog/services/pmie_farm.yml).

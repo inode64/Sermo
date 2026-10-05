@@ -58,7 +58,7 @@ any `security:` toggle that tries to disable them.
     guest that cannot be verified, blocks the destroy. No configuration option
     relaxes this.
 12. **A database statement is cancelled only after it is re-verified.** A
-    `kill_query` (manual or the opt-in automatic one) re-lists the server and
+    `kill_query` (manual or the opt-in automatic one) re-reads the target and
     requires the exact listed statement identity before acting; a changed or
     finished statement is never killed. See
     [Database statement kills](#database-statement-kills).
@@ -256,9 +256,9 @@ the service), the operation timeout and exactly one audit event with action
 available, like every other manual operation.
 
 **Re-verification.** Immediately before acting, the engine opens a fresh
-connection, re-lists the statements and requires the same connection id *and*
-the same statement (its fingerprint and start time). A statement that finished,
-or a connection now running another statement, is refused with "the statement
+connection, reads only the requested statement and requires the same connection
+id *and* the same statement (its fingerprint and start time). A statement that
+finished, or a connection now running another statement, is refused with "the statement
 is no longer running; refresh the list". The automatic kill additionally
 re-checks its own condition (`after` and the `users`/`databases` selector) on
 that fresh sample.
@@ -268,7 +268,7 @@ that fresh sample.
 - **MariaDB** cancels by statement: `KILL QUERY ID <query_id>` stops exactly the
   verified statement and can never reach a later one on the same connection.
 - **MySQL** has no per-statement kill: `KILL QUERY <id>` targets the connection.
-  If the verified statement ends in the sub-second gap between the re-listing
+  If the verified statement ends in the sub-second gap between the target read
   and the `KILL`, the next statement of that connection may be cancelled
   instead. That race is inherent to MySQL and is why the automatic kill must be
   scoped to named users or databases.

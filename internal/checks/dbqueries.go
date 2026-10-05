@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"maps"
 	"net"
 	"regexp"
 	"slices"
@@ -395,15 +396,18 @@ func SampleDBQueries(ctx context.Context, cfg DBQueryConfig) ([]DBQuery, error) 
 		return nil, err
 	}
 	defer func() { _ = db.Close() }()
-	return cfg.sample(ctx, db)
+	return cfg.sample(ctx, db, 0)
 }
 
-// sample lists the statements on an open connection, per engine.
-func (cfg DBQueryConfig) sample(ctx context.Context, db *sql.DB) ([]DBQuery, error) {
+// sample reads statements on an open connection, per engine. A positive id
+// restricts the read to the kill target before ordering and limiting the rows;
+// zero lists all statements, longest first. Both paths use the same filters
+// and decoding, so a targeted read never admits an idle or server thread.
+func (cfg DBQueryConfig) sample(ctx context.Context, db *sql.DB, id int64) ([]DBQuery, error) {
 	if cfg.Engine == SQLEngineMySQL {
-		return sampleMySQLQueries(ctx, db, cfg.MaxLength, cfg.server)
+		return sampleMySQLQueries(ctx, db, cfg.MaxLength, cfg.server, id)
 	}
-	return samplePostgresQueries(ctx, db, cfg.States, cfg.MaxLength)
+	return samplePostgresQueries(ctx, db, cfg.States, cfg.MaxLength, id)
 }
 
 func (cfg DBQueryConfig) open(ctx context.Context) (*sql.DB, error) {
@@ -450,14 +454,23 @@ func mysqlProcesslistQuery(mariadb, threadSource bool) string {
 	case threadSource:
 		tid, join = "t.THREAD_OS_ID", "LEFT JOIN performance_schema.threads t ON t.PROCESSLIST_ID = p.ID"
 	}
+	startedMS := fmt.Sprintf("CAST(ROUND(UNIX_TIMESTAMP(NOW(3)) * %d - %s) AS SIGNED)", msPerSecond, elapsedMS)
+	crc := "CRC32(p.INFO)"
+	if mariadb {
+		// QUERY_ID supplies MariaDB's exact identity. Only rows without one
+		// need the text fingerprint and estimated start used by MySQL.
+		startedMS = "CASE WHEN QUERY_ID > 0 THEN 0 ELSE " + startedMS + " END"
+		crc = "CASE WHEN QUERY_ID > 0 THEN NULL ELSE " + crc + " END"
+	}
 	return fmt.Sprintf(`SELECT p.ID, p.USER, IFNULL(p.HOST, ''), IFNULL(p.DB, ''), p.COMMAND, IFNULL(p.STATE, ''),
-  CAST(ROUND(%[1]s) AS SIGNED), CAST(ROUND(UNIX_TIMESTAMP(NOW(3)) * %[8]d - %[1]s) AS SIGNED), %[2]s,
-  LEFT(p.INFO, ?), CHAR_LENGTH(p.INFO), CRC32(p.INFO), %[6]s, %[7]s
+  CAST(ROUND(%[1]s) AS SIGNED), %[8]s, %[2]s,
+  LEFT(p.INFO, ?), CHAR_LENGTH(p.INFO), %[10]s, %[6]s, %[7]s
 FROM information_schema.PROCESSLIST p %[9]s
 WHERE p.ID <> CONNECTION_ID() AND p.INFO IS NOT NULL
   AND p.COMMAND NOT IN (%[3]s) AND p.USER NOT IN (%[4]s)
+  AND (? = 0 OR p.ID = ?)
 ORDER BY 7 DESC LIMIT %[5]d`, elapsedMS, queryID, sqlStringList(mysqlExcludedCommands), sqlStringList(mysqlExcludedUsers),
-		dbQueryFetchLimit, tid, memory, msPerSecond, join)
+		dbQueryFetchLimit, tid, memory, startedMS, join, crc)
 }
 
 func sqlStringList(values []string) string {
@@ -468,13 +481,13 @@ func sqlStringList(values []string) string {
 	return strings.Join(quoted, ", ")
 }
 
-func sampleMySQLQueries(ctx context.Context, db *sql.DB, maxLength int, server *mysqlServerInfo) ([]DBQuery, error) {
+func sampleMySQLQueries(ctx context.Context, db *sql.DB, maxLength int, server *mysqlServerInfo, id int64) ([]DBQuery, error) {
 	if server == nil {
 		server = &mysqlServerInfo{}
 	}
 	server.mu.Lock()
 	defer server.mu.Unlock()
-	out, err := server.sample(ctx, db, maxLength)
+	out, err := server.sample(ctx, db, maxLength, id)
 	if err != nil {
 		server.known = false // detect afresh: the server may have changed
 	}
@@ -495,17 +508,17 @@ func (s *mysqlServerInfo) detect(ctx context.Context, db *sql.DB) error {
 	return nil
 }
 
-func (s *mysqlServerInfo) sample(ctx context.Context, db *sql.DB, maxLength int) ([]DBQuery, error) {
+func (s *mysqlServerInfo) sample(ctx context.Context, db *sql.DB, maxLength int, id int64) ([]DBQuery, error) {
 	if err := s.detect(ctx, db); err != nil {
 		return nil, err
 	}
 	mariadb := s.mariadb
-	rows, err := db.QueryContext(ctx, mysqlProcesslistQuery(mariadb, s.threadSource), maxLength+1)
+	rows, err := db.QueryContext(ctx, mysqlProcesslistQuery(mariadb, s.threadSource), maxLength+1, id, id)
 	if err != nil && s.threadSource {
 		// An older MariaDB without TID, or a MySQL that refuses
 		// performance_schema: list the statements without threads, and keep
 		// doing so rather than paying the failing query every cycle.
-		rows, err = db.QueryContext(ctx, mysqlProcesslistQuery(mariadb, false), maxLength+1)
+		rows, err = db.QueryContext(ctx, mysqlProcesslistQuery(mariadb, false), maxLength+1, id, id)
 		if err == nil {
 			s.threadSource = false
 		}
@@ -540,9 +553,8 @@ type mysqlProcessRow struct {
 func (r mysqlProcessRow) query(mariadb bool, maxLength int) DBQuery {
 	q := DBQuery{
 		Engine: SQLEngineMySQL, ID: r.id, User: r.user, Host: r.host, Database: r.db,
-		Command: r.command, State: r.state, StartedUnixMS: r.startedMS,
+		Command: r.command, State: r.state,
 		ElapsedSeconds: max(r.elapsedMS, 0) / msPerSecond,
-		Fingerprint:    fmt.Sprintf("%08x%s%d", uint32(r.crc.Int64), dbQueryIdentitySep, r.length.Int64), //nolint:gosec // CRC32 fits uint32
 		OSThreadID:     r.tid.Int64, MemoryBytes: r.memory.Int64, MemoryReady: r.memory.Valid,
 	}
 	q.Query, q.Truncated = dbQueryText(r.info.String, maxLength)
@@ -553,6 +565,8 @@ func (r mysqlProcessRow) query(mariadb bool, maxLength int) DBQuery {
 		q.Engine, q.QueryID = SQLEngineMariaDB, r.queryID.Int64
 		q.Identity = dbQueryIdentity(r.id, formatInt(r.queryID.Int64))
 	} else {
+		q.StartedUnixMS = r.startedMS
+		q.Fingerprint = fmt.Sprintf("%08x%s%d", uint32(r.crc.Int64), dbQueryIdentitySep, r.length.Int64) //nolint:gosec // CRC32 fits uint32
 		q.Identity = dbQueryIdentity(r.id, q.Fingerprint, formatInt(r.startedMS))
 	}
 	return q
@@ -572,10 +586,11 @@ var postgresActivityQuery = fmt.Sprintf(`SELECT pid, COALESCE(usename, ''), COAL
 FROM pg_stat_activity
 WHERE backend_type = 'client backend' AND pid <> pg_backend_pid()
   AND query_start IS NOT NULL AND state = ANY($1)
+  AND ($3::bigint = 0 OR pid = $3)
 ORDER BY query_start LIMIT %d`, pgEpochMicros("backend_start"), pgEpochMicros("query_start"), msPerSecond, dbQueryFetchLimit)
 
-func samplePostgresQueries(ctx context.Context, db *sql.DB, states []string, maxLength int) ([]DBQuery, error) {
-	rows, err := db.QueryContext(ctx, postgresActivityQuery, states, maxLength+1)
+func samplePostgresQueries(ctx context.Context, db *sql.DB, states []string, maxLength int, id int64) ([]DBQuery, error) {
+	rows, err := db.QueryContext(ctx, postgresActivityQuery, states, maxLength+1, id)
 	if err != nil {
 		return nil, fmt.Errorf("db_queries: pg_stat_activity: %w", err)
 	}
@@ -716,8 +731,16 @@ func readMySQLOptionFile(path string) (map[string]string, error) {
 			group = strings.ToLower(strings.TrimSpace(line[1 : len(line)-1]))
 			continue
 		}
+		if !slices.Contains(mysqlClientGroups, group) {
+			continue
+		}
 		key, value, _ := strings.Cut(line, "=")
 		key = strings.ReplaceAll(strings.ToLower(strings.TrimSpace(key)), "_", "-")
+		switch key {
+		case mysqlOptionUser, mysqlOptionPassword, mysqlOptionSocket, mysqlOptionHost, mysqlOptionPort:
+		default:
+			continue
+		}
 		if byGroup[group] == nil {
 			byGroup[group] = map[string]string{}
 		}
@@ -725,11 +748,7 @@ func readMySQLOptionFile(path string) (map[string]string, error) {
 	}
 	out := map[string]string{}
 	for _, g := range mysqlClientGroups {
-		for _, key := range []string{mysqlOptionUser, mysqlOptionPassword, mysqlOptionSocket, mysqlOptionHost, mysqlOptionPort} {
-			if v, ok := byGroup[g][key]; ok {
-				out[key] = v
-			}
-		}
+		maps.Copy(out, byGroup[g])
 	}
 	return out, nil
 }
@@ -800,7 +819,7 @@ type DBQueryKillRequirement struct {
 // finished, or its connection now runs another statement).
 var ErrDBQueryChanged = errors.New("the statement is no longer running; refresh the list")
 
-// KillDBQuery stops one statement after re-verifying, against a fresh sample,
+// KillDBQuery stops one statement after re-verifying, against a fresh target read,
 // that the connection still runs exactly the listed statement. MariaDB cancels
 // by QUERY_ID and PostgreSQL verifies and signals in one statement, so neither
 // can hit a later statement; MySQL's KILL QUERY targets the connection, which
@@ -817,7 +836,7 @@ func KillDBQuery(ctx context.Context, cfg DBQueryConfig, req DBQueryKill) (DBQue
 		return DBQuery{}, err
 	}
 	defer func() { _ = db.Close() }()
-	current, err := cfg.sample(ctx, db)
+	current, err := cfg.sample(ctx, db, req.ID)
 	if err != nil {
 		return DBQuery{}, err
 	}
@@ -855,22 +874,24 @@ func verifyDBQueryTarget(current []DBQuery, req DBQueryKill) (DBQuery, error) {
 	return DBQuery{}, ErrDBQueryChanged
 }
 
-// identityMatches compares a fresh statement with a listed identity: exactly,
-// except MySQL's derived start, which tolerates the whole-second counter.
+// identityMatches decodes a listed identity for SameStatement, the owner of
+// statement comparison and MySQL's whole-second start tolerance.
 func identityMatches(q DBQuery, identity string) bool {
-	if q.Engine != SQLEngineMySQL {
-		return q.Identity == identity
+	listed := q
+	listed.Identity = identity
+	if q.Engine == SQLEngineMySQL {
+		// A matching prefix already establishes the connection and fingerprint.
+		rest, ok := strings.CutPrefix(identity, q.ItemKey()+dbQueryIdentitySep)
+		if !ok {
+			return false
+		}
+		started, err := strconv.ParseInt(rest, dbQueryNumberBase, 64)
+		if err != nil {
+			return false
+		}
+		listed.StartedUnixMS = started
 	}
-	rest, ok := strings.CutPrefix(identity, q.ItemKey()+dbQueryIdentitySep)
-	if !ok {
-		return false
-	}
-	started, err := strconv.ParseInt(rest, dbQueryNumberBase, 64)
-	if err != nil {
-		return false
-	}
-	// The key matched id and fingerprint; only the derived start can differ.
-	return (time.Duration(q.StartedUnixMS-started) * time.Millisecond).Abs() <= mysqlStartTolerance
+	return q.SameStatement(listed)
 }
 
 func killMySQLQuery(ctx context.Context, db *sql.DB, target DBQuery, mode string) error {

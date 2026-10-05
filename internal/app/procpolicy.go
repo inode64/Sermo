@@ -370,9 +370,7 @@ func (w *processPolicyWatcher) notify(ctx context.Context, violation processPoli
 // really reached the notifiers — not in dry-run, not under panic — which
 // decides whether the incident's recovery goes out.
 func (w *processPolicyWatcher) notifyViolation(ctx context.Context, message string, env map[string]string) {
-	live := len(w.notifiers) > 0 && !w.dryRun && (w.inPanic == nil || !w.inPanic())
-	w.notifyMessage(ctx, message, env)
-	if live && w.active && !w.announced {
+	if w.notifyMessage(ctx, message, env) && w.active && !w.announced {
 		w.announced = true
 		w.persistActiveState()
 	}
@@ -390,11 +388,11 @@ func (w *processPolicyWatcher) message(violation processPolicyViolation) (string
 	return message, env
 }
 
-func (w *processPolicyWatcher) notifyMessage(ctx context.Context, message string, env map[string]string) {
+func (w *processPolicyWatcher) notifyMessage(ctx context.Context, message string, env map[string]string) bool {
 	if len(w.notifiers) == 0 {
-		return
+		return false
 	}
-	dispatchWatchFire(ctx, watchFireSpec{
+	return dispatchWatchFire(ctx, watchFireSpec{
 		name:        w.name,
 		notifiers:   w.notifiers,
 		inPanic:     w.inPanic,

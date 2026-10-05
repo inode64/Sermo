@@ -160,7 +160,10 @@ func (b *WebBackend) attachSessionMetrics(inventory *web.SessionInventory) {
 	}
 	b.sessionMetricsMu.Lock()
 	defer b.sessionMetricsMu.Unlock()
-	snapshot := newSessionProcessSnapshot(b.terminalProcessReader)
+	var snapshot sessionProcessSnapshot
+	if len(inventory.SSH) > 0 || len(inventory.Terminal) > 0 {
+		snapshot = newSessionProcessSnapshot(b.terminalProcessReader)
+	}
 	active := make(map[string]struct{}, len(inventory.SSH)+len(inventory.Terminal))
 	for i := range inventory.SSH {
 		session := &inventory.SSH[i]

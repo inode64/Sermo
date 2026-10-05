@@ -21,7 +21,9 @@ import (
 // the refcount alone: the mount is the same unit, only repaired.
 func (c Controller) Remount(ctx context.Context, spec Spec) (Result, error) {
 	if reason := UmountDisabledReason(spec.Path); reason != "" {
-		return disabledRemountResult(spec, reason), errors.New(reason)
+		res := disabledUmountResult(spec, reason)
+		res.Action = ActionRemount
+		return res, errors.New(reason)
 	}
 	return c.withLock(spec, func() (Result, error) {
 		res := Result{Name: spec.Name, Path: spec.Path, Action: ActionRemount, Status: ResultFailed}
@@ -56,22 +58,21 @@ func (c Controller) Remount(ctx context.Context, spec Spec) (Result, error) {
 // a lazy one if it is still there; lazy reports that the second was needed.
 func (c Controller) detach(ctx context.Context, path string) (lazy bool, err error) {
 	ferr := c.unmountWithin(ctx, path, unix.MNT_FORCE)
-	if gone, rerr := c.realMountGone(path); rerr == nil && gone {
+	if !c.stillMounted(path) {
 		return false, nil
 	}
 	lerr := c.unmountWithin(ctx, path, unix.MNT_DETACH)
-	if gone, rerr := c.realMountGone(path); rerr == nil && gone {
+	if !c.stillMounted(path) {
 		return true, nil
 	}
 	return true, fmt.Errorf("%s could not be detached: %w", path, errors.Join(ferr, lerr))
 }
 
-func (c Controller) realMountGone(path string) (bool, error) {
+// stillMounted reports a filesystem at path; an unreadable mount table counts
+// as mounted, so a read failure never passes for a successful detach.
+func (c Controller) stillMounted(path string) bool {
 	table, err := c.sampleMounts()
-	if err != nil {
-		return false, err
-	}
-	return !realMountAt(table, path), nil
+	return err != nil || realMountAt(table, path)
 }
 
 // unmountWithin runs one umount2(2) bounded by the command timeout: a forced
@@ -151,10 +152,4 @@ func remountMessage(res Result) string {
 	default:
 		return mountMessageMounted
 	}
-}
-
-func disabledRemountResult(spec Spec, message string) Result {
-	res := disabledUmountResult(spec, message)
-	res.Action = ActionRemount
-	return res
 }

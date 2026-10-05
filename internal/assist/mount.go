@@ -22,10 +22,6 @@ const (
 	mountRemountCooldown = "30m"
 )
 
-// nfsFSTypes are the filesystems whose mount units repair a hung or vanished
-// mount on their own (then.remount).
-var nfsFSTypes = map[string]bool{"nfs": true, "nfs4": true}
-
 func (mountAssistant) Name() string { return AssistantNameMount }
 func (mountAssistant) Title() string {
 	return "Manage fstab-backed mount units"
@@ -81,7 +77,8 @@ func buildMountUnit(c MountCandidate, s mountSettings) map[string]any {
 			config.MountKeyRefcount: s.refcount,
 		},
 	}
-	if nfsFSTypes[strings.ToLower(c.FSType)] {
+	switch strings.ToLower(c.FSType) {
+	case "nfs", "nfs4":
 		unit[config.WatchKeyThen] = map[string]any{config.WatchThenKeyRemount: map[string]any{}}
 		unit[rules.SectionPolicy] = map[string]any{rules.PolicyKeyCooldown: mountRemountCooldown}
 	}

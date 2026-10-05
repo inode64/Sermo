@@ -171,10 +171,9 @@ type Watch struct {
 	// storage and a clock watch, so there is at most one native action.
 	MakeStep *MakeStepSpec
 	Stepper  ClockStepper
-	// Remount, when set, repairs the storage watch's mount on a firing cycle
-	// whose check reports it hung or missing. It shares Policy with Expand,
-	// which a cooldown makes mandatory for it.
-	Remount   bool
+	// Remounter, when set, repairs the storage watch's mount on a firing cycle
+	// whose check reports it hung or missing (`then.remount`). It shares Policy
+	// with Expand, which a cooldown makes mandatory for it.
 	Remounter MountRemounter
 	Policy    rules.Policy
 
@@ -444,7 +443,7 @@ func (w *Watch) dispatchFiringActions(ctx context.Context, res checks.Result, st
 	if step.announce {
 		w.emit(Event{Watch: w.Name, Kind: eventKindFiring, Severity: step.level, Message: res.Message, Output: resultOutput(res)})
 	}
-	if len(w.Hook.Command) == 0 && len(w.Notifiers) == 0 && w.Expand == nil && w.MakeStep == nil && !w.Remount {
+	if len(w.Hook.Command) == 0 && len(w.Notifiers) == 0 && w.Expand == nil && w.MakeStep == nil && w.Remounter == nil {
 		return
 	}
 	env := hookEnv(w.Name, w.CheckType, res, step.level)
@@ -462,7 +461,7 @@ func (w *Watch) dispatchFiringActions(ctx context.Context, res checks.Result, st
 		return
 	}
 
-	if w.Remount && w.Remounter != nil {
+	if w.Remounter != nil {
 		w.runRemount(ctx, res, step.announce)
 	}
 	if w.Expand != nil && w.Expander != nil {
@@ -728,16 +727,11 @@ func (w *Watch) runExpand(ctx context.Context, res checks.Result, emitSkipped bo
 	// A missing or hung mount makes the path read the parent filesystem, or
 	// nothing: growing a volume then grows the wrong one.
 	if failure := cfgval.String(res.Data[checks.DataKeyMountFailure]); failure != "" {
-		if emitSkipped {
-			w.emit(Event{Watch: w.Name, Kind: eventKindExpandSkipped, Message: "mount " + failure + ", not a space shortage"})
-		}
+		w.skipNativeAction(eventKindExpandSkipped, "mount "+failure+", not a space shortage", emitSkipped)
 		return
 	}
-	at := w.clock()
-	if allowed, reason := w.Policy.Allow(&w.policyState, at); !allowed {
-		if emitSkipped {
-			w.emit(Event{Watch: w.Name, Kind: eventKindExpandSkipped, Message: reason})
-		}
+	at, allowed := w.allowNativeAction(eventKindExpandSkipped, emitSkipped)
+	if !allowed {
 		return
 	}
 	path := cfgval.String(res.Data[checks.DataKeyPath])
@@ -746,9 +740,7 @@ func (w *Watch) runExpand(ctx context.Context, res checks.Result, emitSkipped bo
 	// that expansion is already growing the volume this cycle wanted to grow.
 	w.policyState.Record(at, w.Policy)
 	if errors.Is(err, errExpandInProgress) {
-		if emitSkipped {
-			w.emit(Event{Watch: w.Name, Kind: eventKindExpandSkipped, Message: err.Error()})
-		}
+		w.skipNativeAction(eventKindExpandSkipped, err.Error(), emitSkipped)
 		return
 	}
 	if err != nil {
@@ -756,6 +748,26 @@ func (w *Watch) runExpand(ctx context.Context, res checks.Result, emitSkipped bo
 		return
 	}
 	w.emit(Event{Watch: w.Name, Kind: eventKindExpand, Message: expandSuccessMessage(path, r)})
+}
+
+// allowNativeAction applies the watch policy to a native action (expand,
+// remount, makestep) and returns the attempt time the caller records once the
+// action ran. A refusal is reported as skippedKind on announcing cycles.
+func (w *Watch) allowNativeAction(skippedKind string, emitSkipped bool) (time.Time, bool) {
+	at := w.clock()
+	allowed, reason := w.Policy.Allow(&w.policyState, at)
+	if !allowed {
+		w.skipNativeAction(skippedKind, reason, emitSkipped)
+	}
+	return at, allowed
+}
+
+// skipNativeAction reports why a native action did not run, only on the cycles
+// that announce, so a lasting condition does not log a skip every cycle.
+func (w *Watch) skipNativeAction(kind, reason string, emitSkipped bool) {
+	if emitSkipped {
+		w.emit(Event{Watch: w.Name, Kind: kind, Message: reason})
+	}
 }
 
 // runRemount repairs a hung or missing mount on a firing cycle, gated by
@@ -767,11 +779,8 @@ func (w *Watch) runRemount(ctx context.Context, res checks.Result, emitSkipped b
 	if failure == "" {
 		return
 	}
-	at := w.clock()
-	if allowed, reason := w.Policy.Allow(&w.policyState, at); !allowed {
-		if emitSkipped {
-			w.emit(Event{Watch: w.Name, Kind: eventKindRemountSkipped, Message: reason})
-		}
+	at, allowed := w.allowNativeAction(eventKindRemountSkipped, emitSkipped)
+	if !allowed {
 		return
 	}
 	path := cfgval.String(res.Data[checks.DataKeyPath])
@@ -794,16 +803,11 @@ func (w *Watch) runMakeStep(ctx context.Context, res checks.Result, emitSkipped 
 	// clock by an unknown or zero correction, which is the harm this guard
 	// exists to prevent.
 	if code := cfgval.String(res.Data[checks.DataKeyClockFailure]); code != checks.ClockFailureOffset {
-		if emitSkipped {
-			w.emit(Event{Watch: w.Name, Kind: eventKindMakeStepSkipped, Message: makeStepSkipReason(code)})
-		}
+		w.skipNativeAction(eventKindMakeStepSkipped, makeStepSkipReason(code), emitSkipped)
 		return
 	}
-	at := w.clock()
-	if allowed, reason := w.Policy.Allow(&w.policyState, at); !allowed {
-		if emitSkipped {
-			w.emit(Event{Watch: w.Name, Kind: eventKindMakeStepSkipped, Message: reason})
-		}
+	at, allowed := w.allowNativeAction(eventKindMakeStepSkipped, emitSkipped)
+	if !allowed {
 		return
 	}
 	err := w.Stepper(ctx, w.MakeStep.Socket)
@@ -858,7 +862,7 @@ func (w *Watch) dryRunMessage() string {
 	if w.MakeStep != nil {
 		native = append(native, config.WatchThenKeyMakeStep)
 	}
-	if w.Remount {
+	if w.Remounter != nil {
 		native = append(native, config.WatchThenKeyRemount)
 	}
 	msg := watchDryRunMessage(w.Hook, w.Notifiers, native...)
@@ -938,23 +942,25 @@ func runWatchHook(ctx context.Context, hook HookSpec, runner HookRunner, emit fu
 }
 
 // dispatchWatchFire applies the dry-run → panic → hook → action → notify tail
-// every watcher fire ends with.
-func dispatchWatchFire(ctx context.Context, spec watchFireSpec, msg string, env map[string]string) {
+// every watcher fire ends with. It reports whether live actions were allowed;
+// individual delivery failures are reported through events.
+func dispatchWatchFire(ctx context.Context, spec watchFireSpec, msg string, env map[string]string) bool {
 	env[sermoEnvSeverity] = spec.severity.Resolved().String()
 	if spec.dryRun {
 		spec.emit(Event{Watch: spec.name, Kind: eventKindDryRun, Message: spec.dryRunLabel + ": " + msg})
 		dispatchDryRunNotify(ctx, spec.notifiers, watchMessage(spec.name, msg, env), spec.name, spec.emit)
-		return
+		return false
 	}
 	if spec.inPanic != nil && spec.inPanic() {
 		spec.emit(Event{Watch: spec.name, Kind: eventKindPanicSuppressed, Message: spec.panicLabel + ": " + msg})
-		return
+		return false
 	}
 	runWatchHook(ctx, spec.hook, spec.runner, spec.emit, spec.name, msg, env)
 	if spec.action != nil {
 		spec.action()
 	}
 	dispatchNotify(ctx, spec.notifiers, watchMessage(spec.name, msg, env), spec.name, spec.emit)
+	return true
 }
 
 func watchMessage(name, message string, env map[string]string) notify.Message {

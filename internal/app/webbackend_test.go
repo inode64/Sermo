@@ -461,6 +461,41 @@ func TestSessionUsageUsesServiceReadingSemantics(t *testing.T) {
 	}
 }
 
+func TestSessionMetricsWithoutProcessSessionsSkipsProcAndForgetsRates(t *testing.T) {
+	for _, tt := range []struct {
+		name      string
+		inventory web.SessionInventory
+	}{
+		{name: "empty"},
+		{name: "database only", inventory: web.SessionInventory{Database: []web.DBQuerySession{{ID: 7, Engine: checks.SQLEngineMariaDB}}}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			calls := 0
+			reader := &liveCPUReader{cpu: map[int]uint64{1: 100}, ioRead: map[int]uint64{1: 100}, hz: 100, ncpu: 1}
+			collector := metrics.New(reader)
+			now := time.Unix(100, 0)
+			collector.Now = func() time.Time { return now }
+			const vanished = "vanished-session"
+			collector.SampleService(vanished, []int{1})
+			b := &WebBackend{
+				terminalProcessReader:  countingProcReader{calls: &calls},
+				sessionMetricCollector: collector,
+				sessionMetricKeys:      map[string]struct{}{vanished: {}},
+			}
+			b.attachSessionMetrics(&tt.inventory)
+			if calls != 0 || len(b.sessionMetricKeys) != 0 {
+				t.Fatalf("process reads = %d, tracked sessions = %v", calls, b.sessionMetricKeys)
+			}
+			now = now.Add(time.Second)
+			reader.cpu[1], reader.ioRead[1] = 200, 200
+			sample := collector.SampleService(vanished, []int{1})
+			if sample[metrics.MetricCPU].Ready || sample[metrics.MetricIORead].Ready {
+				t.Fatalf("a disappeared session retained rate baselines: %+v", sample)
+			}
+		})
+	}
+}
+
 func TestTerminalSessionMetricKeyKeepsComponentsDistinct(t *testing.T) {
 	left := terminalSessionMetricKey(web.TerminalSession{
 		Multiplexer: web.SessionKindTmux, Service: "shells:root", Check: "sessions", Identity: "$7:90",

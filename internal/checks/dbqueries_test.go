@@ -51,8 +51,11 @@ func TestParseDBQueryConfig(t *testing.T) {
 
 func TestReadMySQLOptionFile(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "my.cnf")
-	body := "# root client\n[client]\nuser = monitor\npassword=\"s3 cret\"\nsocket=/run/mysqld/mysqld.sock\n" +
-		"[mysqladmin]\npassword=other\n[mysql]\nport=3307 # comment\n!includedir /etc/mysql/conf.d\n"
+	// Group precedence is independent of file order, and repeated groups
+	// retain earlier options. Unrelated groups and options do not contribute.
+	body := "# root client\n[mysql]\nuser=monitor\n[client-mariadb]\nuser=mariadb\n" +
+		"[client-server]\nuser=shared\n[client]\nuser=client\npassword=\"s3 cret\"\nsocket=/run/mysqld/mysqld.sock\nssl-ca=/unused\n" +
+		"[mysqladmin]\npassword=other\n[mysqld]\nsocket=/unused\n[mysql]\nport=3307 # comment\n!includedir /etc/mysql/conf.d\n"
 	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -60,7 +63,7 @@ func TestReadMySQLOptionFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read: %v", err)
 	}
-	if opts["user"] != "monitor" || opts["password"] != "s3 cret" || opts["socket"] != "/run/mysqld/mysqld.sock" || opts["port"] != "3307" {
+	if len(opts) != 4 || opts["user"] != "monitor" || opts["password"] != "s3 cret" || opts["socket"] != "/run/mysqld/mysqld.sock" || opts["port"] != "3307" {
 		t.Fatalf("opts = %v", opts)
 	}
 
@@ -120,20 +123,34 @@ func TestMySQLProcessRowIdentity(t *testing.T) {
 	if maria.Engine != SQLEngineMariaDB || maria.Identity != "36762377:279932773" || maria.ElapsedSeconds != 240831 || !maria.Truncated {
 		t.Fatalf("mariadb row = %+v", maria)
 	}
+	if maria.Fingerprint != "" || maria.StartedUnixMS != 0 {
+		t.Fatalf("MariaDB's native identity retained unused fallback data: %+v", maria)
+	}
 	mysql := row.query(false, 1000)
 	if mysql.Engine != SQLEngineMySQL || mysql.Identity != "36762377:deadbeef:1500:1700000000000" || mysql.ItemKey() != "36762377:deadbeef:1500" {
 		t.Fatalf("mysql row = %+v", mysql)
 	}
-	// The whole-second counter jitters the derived start: a second later is the
-	// same statement, five seconds later a new one on the same connection.
-	later := mysql
-	later.StartedUnixMS += 1000
-	if !identityMatches(later, mysql.Identity) {
-		t.Fatal("a 1s start jitter must match")
+	for _, queryID := range []sql.NullInt64{{}, {Int64: 0, Valid: true}, {Int64: -1, Valid: true}} {
+		row.queryID = queryID
+		fallback := row.query(true, 1000)
+		if fallback != mysql || !identityMatches(fallback, mysql.Identity) {
+			t.Fatalf("MariaDB without a valid QUERY_ID lost its fallback identity: %+v", fallback)
+		}
 	}
-	later.StartedUnixMS += 4000
-	if identityMatches(later, mysql.Identity) || mysql.SameStatement(later) {
-		t.Fatal("a 5s start shift is another statement")
+	// Tracking and cancellation share the same tolerance in both directions.
+	for _, shift := range []int64{-2001, -2000, -1000, 0, 1000, 2000, 2001} {
+		other := mysql
+		other.StartedUnixMS += shift
+		other.Identity = dbQueryIdentity(other.ID, other.Fingerprint, formatInt(other.StartedUnixMS))
+		want := shift >= -2000 && shift <= 2000
+		if mysql.SameStatement(other) != want || other.SameStatement(mysql) != want || identityMatches(mysql, other.Identity) != want {
+			t.Errorf("shift %d: tracking and cancellation must match=%v", shift, want)
+		}
+	}
+	for _, identity := range []string{"", "36762378:deadbeef:1500:1700000000000", "36762377:ffffffff:1500:1700000000000", "36762377:deadbeef:1500:invalid"} {
+		if identityMatches(mysql, identity) {
+			t.Errorf("invalid identity %q matched", identity)
+		}
 	}
 }
 
@@ -179,6 +196,10 @@ func TestVerifyDBQueryTarget(t *testing.T) {
 	require.After, require.Selector.Users = time.Minute, []string{"other"}
 	if _, err := verifyDBQueryTarget(current, DBQueryKill{ID: 7, Identity: "7:70", Require: require}); err == nil {
 		t.Fatal("the automatic kill must re-check the selector")
+	}
+	require.Selector.Users, require.Filter.ExcludeUsers = []string{"report"}, []string{"report"}
+	if _, err := verifyDBQueryTarget(current, DBQueryKill{ID: 7, Identity: "7:70", Require: require}); err == nil {
+		t.Fatal("the automatic kill must re-check the watch's exclusions")
 	}
 }
 

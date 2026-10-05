@@ -3,7 +3,6 @@ package config
 import (
 	"time"
 
-	"sermo/internal/cfgval"
 	"sermo/internal/checks"
 	"sermo/internal/rules"
 )
@@ -65,15 +64,11 @@ func validateKillQueryAction(name string, raw any, minDuration time.Duration, ad
 // validateDBQueriesPolicy requires a positive cooldown with kill_query (a zero
 // policy would allow a kill every cycle) and rejects a policy without it.
 func validateDBQueriesPolicy(name string, entry map[string]any, hasKill bool, add addFunc) {
-	raw, present := entry[sectionPolicy]
+	_, present := entry[sectionPolicy]
 	switch {
-	case hasKill && !present:
-		add("%s requires a policy with a positive cooldown", thenFieldPath(watchPath(name), WatchThenKeyKillQuery))
 	case hasKill:
-		policy, _ := raw.(map[string]any)
-		if cfgval.Duration(policy[rules.PolicyKeyCooldown]) <= 0 {
-			add("%s requires a policy with a positive cooldown", thenFieldPath(watchPath(name), WatchThenKeyKillQuery))
-		}
+		prefix := watchPath(name)
+		requireWatchCooldown(prefix, thenFieldPath(prefix, WatchThenKeyKillQuery), entry, "an automatic query kill must be paced", add)
 	case present:
 		add("%s is only valid with then.%s on a db_queries watch", watchFieldPath(name, sectionPolicy), WatchThenKeyKillQuery)
 	}

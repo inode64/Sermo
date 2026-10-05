@@ -290,6 +290,13 @@ func readStatus(pid int) (ppid int, uid, gid uint32, state string, ok bool) {
 	return ppid, uid, gid, state, gotPPID && gotUID
 }
 
+// Executable reads only the current executable path. Missing and deleted
+// executables report not-ok, as they do in Identity.
+func Executable(pid int) (string, bool) {
+	exe, ok, _ := readExe(pid)
+	return exe, ok
+}
+
 // readExe resolves /proc/<pid>/exe. It returns ok=false when the link cannot be
 // read or points at a deleted binary, so such a process never matches an exe
 // selector.
