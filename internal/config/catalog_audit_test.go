@@ -1259,6 +1259,8 @@ func TestCatalogAppsDeclareHealthOrVersionSource(t *testing.T) {
 		"lxc-monitord":     "it requires runtime monitor arguments; version comes from lxc",
 		"nfs-blkmap":       "blkmapd has no side-effect-free health command; version comes from rpc-mountd",
 		"nfsdcld":          "upstream documents no help/version option; version comes from rpc-mountd",
+		"pmie_farm":        "rc wrapper that passes every argument to pmie_check (syslogs a failure); version comes from pcp",
+		"pmlogger_farm":    "rc wrapper that passes every argument to pmlogger_check (syslogs a failure); version comes from pcp",
 		"proxmox-firewall": "daemon invocation is not a health probe; version comes from proxmox-ve",
 		"pve-cluster":      "pmxcfs invocation is not a health probe; version comes from proxmox-ve",
 		"pve-firewall":     "daemon invocation is not a health probe; version comes from proxmox-ve",
@@ -2321,6 +2323,22 @@ func TestCatalogPCPFarmsDoNotCrossAttributeSharedPMPause(t *testing.T) {
 		svc := catalogWatchCheck(t, body, "service")
 		if !cfgval.Bool(svc["verify"]) {
 			t.Fatalf("%s start-verification must remain on checks.service", service)
+		}
+	}
+}
+
+// The PCP farm "binaries" are rc wrappers that pass every argument to
+// pmlogger_check/pmie_check: probing one with `-?` runs that check each cycle
+// and fills syslog with "_check failed". Their apps keep the binary check only.
+func TestCatalogPCPFarmAppsDoNotRunTheirWrapper(t *testing.T) {
+	root := repoRoot(t)
+	for _, app := range []string{"pmlogger_farm", "pmie_farm"} {
+		body := catalogDocByName(t, root, "apps", app)
+		for name, raw := range nested(t, body, "preflight") {
+			check, _ := raw.(map[string]any)
+			if cfgval.String(check["type"]) != "binary" {
+				t.Errorf("apps/%s preflight.%s is a %v check; the farm wrapper must never be executed", app, name, check["type"])
+			}
 		}
 	}
 }

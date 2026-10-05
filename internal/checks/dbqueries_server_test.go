@@ -5,10 +5,13 @@ import (
 	"database/sql"
 	"database/sql/driver"
 	"errors"
+	"fmt"
 	"io"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 )
 
 // fakeMySQLServer answers the db_queries sampler's statements and records
@@ -18,6 +21,7 @@ type fakeMySQLServer struct {
 	queries  []string
 	noTID    bool
 	failNext bool
+	query    func(context.Context, string, []driver.NamedValue) (driver.Rows, error)
 }
 
 func (s *fakeMySQLServer) count(prefix string) int {
@@ -51,11 +55,21 @@ func (fakeMySQLConn) Prepare(string) (driver.Stmt, error) { return nil, errors.N
 func (fakeMySQLConn) Close() error                        { return nil }
 func (fakeMySQLConn) Begin() (driver.Tx, error)           { return nil, errors.New("not supported") }
 
-func (c fakeMySQLConn) QueryContext(_ context.Context, query string, _ []driver.NamedValue) (driver.Rows, error) {
+func (fakeMySQLConn) CheckNamedValue(v *driver.NamedValue) error {
+	if _, ok := v.Value.([]string); ok {
+		return nil // PostgreSQL's states parameter.
+	}
+	return driver.ErrSkip
+}
+
+func (c fakeMySQLConn) QueryContext(ctx context.Context, query string, args []driver.NamedValue) (driver.Rows, error) {
 	s := c.server
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.queries = append(s.queries, query)
+	if s.query != nil {
+		return s.query(ctx, query, args)
+	}
 	if s.failNext {
 		s.failNext = false
 		return nil, errors.New("server gone away")
@@ -91,6 +105,7 @@ func openFakeMySQL(t *testing.T, server *fakeMySQLServer) *sql.DB {
 	t.Helper()
 	registerFakeMySQL.Do(func() { sql.Register("fakemysql", fakeMySQLDriver{}) })
 	fakeMySQLServers.Store(t.Name(), server)
+	t.Cleanup(func() { fakeMySQLServers.Delete(t.Name()) })
 	db, err := sql.Open("fakemysql", t.Name())
 	if err != nil {
 		t.Fatal(err)
@@ -106,7 +121,7 @@ func TestMySQLSamplerRemembersWhatTheServerSupports(t *testing.T) {
 	db := openFakeMySQL(t, server)
 	info := &mysqlServerInfo{}
 	for range 3 {
-		if _, err := sampleMySQLQueries(context.Background(), db, 100, info); err != nil {
+		if _, err := sampleMySQLQueries(context.Background(), db, 100, info, 0); err != nil {
 			t.Fatalf("sample: %v", err)
 		}
 	}
@@ -126,13 +141,116 @@ func TestMySQLSamplerRemembersWhatTheServerSupports(t *testing.T) {
 	server.mu.Lock()
 	server.failNext = true
 	server.mu.Unlock()
-	if _, err := sampleMySQLQueries(context.Background(), db, 100, info); err == nil {
+	if _, err := sampleMySQLQueries(context.Background(), db, 100, info, 0); err == nil {
 		t.Fatal("want the failed sample's error")
 	}
-	if _, err := sampleMySQLQueries(context.Background(), db, 100, info); err != nil {
+	if _, err := sampleMySQLQueries(context.Background(), db, 100, info, 0); err != nil {
 		t.Fatalf("sample after the error: %v", err)
 	}
 	if got := server.count("SELECT VERSION()"); got != 2 {
 		t.Fatalf("a failed sample must re-detect the server: version queried %d times", got)
+	}
+}
+
+func TestDBQuerySampleRestrictsTheTargetBeforeTheLimit(t *testing.T) {
+	for _, tt := range []struct {
+		name, engine   string
+		mariadb, noTID bool
+		row            []driver.Value
+	}{
+		{name: "mysql", engine: SQLEngineMySQL,
+			row: []driver.Value{int64(7), "app", "localhost", "app", "Query", "", int64(400000), int64(1000), nil, "SELECT 1", int64(8), int64(42), nil, nil}},
+		{name: "mariadb without TID", engine: SQLEngineMySQL, mariadb: true, noTID: true,
+			row: []driver.Value{int64(7), "app", "localhost", "app", "Query", "", int64(400000), int64(0), int64(70), "SELECT 1", int64(8), nil, nil, nil}},
+		{name: "mariadb without QUERY_ID", engine: SQLEngineMySQL, mariadb: true,
+			row: []driver.Value{int64(7), "app", "localhost", "app", "Query", "", int64(400000), int64(1000), nil, "SELECT 1", int64(8), int64(42), nil, nil}},
+		{name: "postgres", engine: SQLEnginePostgres,
+			row: []driver.Value{int64(7), "app", "app", "localhost", "active", "", int64(1000000), int64(2000000), int64(400000), "SELECT 1", int64(8)}},
+	} {
+		for _, id := range []int64{0, 7} {
+			t.Run(fmt.Sprintf("%s/id=%d", tt.name, id), func(t *testing.T) {
+				cfg := DBQueryConfig{Engine: tt.engine, MaxLength: 100, States: []string{pgStateActive},
+					server: &mysqlServerInfo{known: true, mariadb: tt.mariadb, threadSource: true}}
+				calls := 0
+				server := &fakeMySQLServer{query: func(_ context.Context, query string, args []driver.NamedValue) (driver.Rows, error) {
+					calls++
+					wantArgs := []any{int64(101), id, id}
+					predicate := "AND (? = 0 OR p.ID = ?)"
+					if tt.engine == SQLEnginePostgres {
+						wantArgs = []any{cfg.States, int64(101), id}
+						predicate = "AND ($3::bigint = 0 OR pid = $3)"
+						for _, filter := range []string{"backend_type = 'client backend'", "pid <> pg_backend_pid()", "query_start IS NOT NULL", "state = ANY($1)"} {
+							if !strings.Contains(query, filter) {
+								t.Errorf("target read lost filter %q: %s", filter, query)
+							}
+						}
+					}
+					var gotArgs []any
+					for _, arg := range args {
+						gotArgs = append(gotArgs, arg.Value)
+					}
+					if !reflect.DeepEqual(gotArgs, wantArgs) {
+						t.Errorf("query args = %v, want %v", gotArgs, wantArgs)
+					}
+					if at := strings.Index(query, predicate); at < 0 || at > strings.Index(query, "ORDER BY") {
+						t.Errorf("target must be filtered before ordering and LIMIT: %s", query)
+					}
+					if tt.noTID && strings.Contains(query, fakeTIDColumn) {
+						return nil, errors.New("Unknown column 'TID'")
+					}
+					return &fakeRows{columns: make([]string, len(tt.row)), rows: [][]driver.Value{tt.row}}, nil
+				}}
+				got, err := cfg.sample(t.Context(), openFakeMySQL(t, server), id)
+				if err != nil || len(got) != 1 || got[0].ID != 7 || got[0].ElapsedSeconds != 400 || got[0].Query != "SELECT 1" || !got[0].Killable() {
+					t.Fatalf("sample = %+v, %v", got, err)
+				}
+				wantCalls := 1
+				if tt.noTID {
+					wantCalls++
+				}
+				if calls != wantCalls {
+					t.Fatalf("queries = %d, want %d", calls, wantCalls)
+				}
+			})
+		}
+	}
+}
+
+func TestDBQueryTargetReadFailure(t *testing.T) {
+	readErr := errors.New("read denied")
+	for _, engine := range []string{SQLEngineMySQL, SQLEnginePostgres} {
+		for _, tt := range []struct {
+			name string
+			err  error
+		}{
+			{name: "ended"},
+			{name: "failed", err: readErr},
+			{name: "timeout", err: context.DeadlineExceeded},
+		} {
+			t.Run(engine+"/"+tt.name, func(t *testing.T) {
+				cfg := DBQueryConfig{Engine: engine, MaxLength: 100, States: []string{pgStateActive}, server: &mysqlServerInfo{known: true}}
+				server := &fakeMySQLServer{query: func(ctx context.Context, _ string, _ []driver.NamedValue) (driver.Rows, error) {
+					if errors.Is(tt.err, context.DeadlineExceeded) {
+						<-ctx.Done()
+						return nil, ctx.Err()
+					}
+					if tt.err != nil {
+						return nil, tt.err
+					}
+					return &fakeRows{}, nil
+				}}
+				ctx, cancel := context.WithTimeout(t.Context(), 10*time.Millisecond)
+				defer cancel()
+				got, err := cfg.sample(ctx, openFakeMySQL(t, server), 7)
+				if !errors.Is(err, tt.err) {
+					t.Fatalf("sample error = %v, want %v", err, tt.err)
+				}
+				if err == nil {
+					if _, err := verifyDBQueryTarget(got, DBQueryKill{ID: 7, Identity: "7:70"}); !errors.Is(err, ErrDBQueryChanged) {
+						t.Fatalf("an absent target must be refused: %v", err)
+					}
+				}
+			})
+		}
 	}
 }

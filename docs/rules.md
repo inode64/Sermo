@@ -2265,7 +2265,7 @@ past `min_duration` and within the check's own `users`/`exclude_users`/
 `databases`/`exclude_databases` filters, so it never stops a statement it was
 told to ignore — that has run at least `after` and matches the kill's
 `users`/`databases` (both lists, when given, must match). Immediately before
-acting, the engine re-samples the server and requires the same statement
+acting, the engine re-reads only the target and requires the same statement
 identity and the same `after`, selector and filter condition; otherwise it does
 nothing. The watch's own `policy:` paces the kills, separately from the
 service's restart budget, and only a kill that stopped a statement spends it (a

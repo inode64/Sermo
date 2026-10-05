@@ -1,7 +1,6 @@
 package app
 
 import (
-	"cmp"
 	"context"
 	"fmt"
 	"path/filepath"
@@ -79,8 +78,7 @@ type dbQueryProcfs interface {
 type osDBQueryProcfs struct{ metrics.OSReader }
 
 func (osDBQueryProcfs) ThreadExe(tid int) (string, bool) {
-	id, ok := process.OSReader{}.Identity(tid)
-	return id.Exe, ok && id.ExeOK
+	return process.Executable(tid)
 }
 
 // dbServerExes are the executable names of each engine's server process.
@@ -91,7 +89,7 @@ var dbServerExes = map[string][]string{
 }
 
 // isDBServerExe reports whether exe is a server executable of engine; a
-// deleted or versioned binary ("mysqld-8.0", "postgres (deleted)") counts.
+// versioned binary ("mysqld-8.0") counts.
 func isDBServerExe(engine, exe string) bool {
 	base := filepath.Base(exe)
 	for _, name := range dbServerExes[engine] {
@@ -118,7 +116,7 @@ type dbQueryWatcher struct {
 	runner    HookRunner
 	now       func() time.Time
 	emit      func(Event)
-	sample    func(context.Context, checks.DBQueryConfig) ([]checks.DBQuery, error)
+	sample    func(context.Context, checks.DBQueryConfig) ([]checks.DBQuery, error) // longest first
 	publish   func(string, string, checks.Result)
 	restore   func() []checks.DBQuery
 	// status, set for a service watch, skips cycles while the service is not
@@ -156,9 +154,8 @@ func buildDBQueriesWatch(name string, entry, checkEntry map[string]any, deps Dep
 		return nil, watchSubjectPrefix + name + ": then.kill_query requires a service watch: the kill runs through the service operation engine"
 	}
 	actions, err := resolveWatchActions(entry, deps, watchActionOptions{
-		checkType:      checks.CheckTypeDBQueries,
-		allowKillQuery: true,
-		emptyMessage:   "then requires a hook, notify or kill_query, or omit then for dashboard/event-log alerts",
+		checkType:    checks.CheckTypeDBQueries,
+		emptyMessage: "then requires a hook, notify or kill_query, or omit then for dashboard/event-log alerts",
 	})
 	if err != nil {
 		return nil, watchSubjectPrefix + name + ": " + err.Error()
@@ -251,8 +248,6 @@ func (w *dbQueryWatcher) runCycle(ctx context.Context) {
 		return
 	}
 	w.reportAvailability(ctx, nil)
-	slices.SortFunc(queries, func(a, b checks.DBQuery) int { return cmp.Compare(b.ElapsedSeconds, a.ElapsedSeconds) })
-
 	observe := observeOnlyCycle(ctx)
 	now := clockOrNow(w.now)()
 	local := cfg.Local()
@@ -390,8 +385,7 @@ func (w *dbQueryWatcher) dispatch(ctx context.Context, check, message string, en
 	if len(w.hook.Command) == 0 && len(w.notifiers) == 0 {
 		return false
 	}
-	live := !w.dryRun && (w.inPanic == nil || !w.inPanic())
-	dispatchWatchFire(ctx, watchFireSpec{
+	return dispatchWatchFire(ctx, watchFireSpec{
 		name:        w.name,
 		hook:        w.hook,
 		runner:      w.runner,
@@ -403,7 +397,6 @@ func (w *dbQueryWatcher) dispatch(ctx context.Context, check, message string, en
 		panicLabel:  "panic mode: hook/notify suppressed",
 		severity:    w.severity,
 	}, message, env)
-	return live
 }
 
 // dbQueryEventCheck is a statement's own event_notify incident identity.
@@ -628,8 +621,6 @@ func (w *dbQueryWatcher) autoKill(ctx context.Context, now time.Time) {
 	if result.Status == operation.ResultOK {
 		w.policyState.Record(now, w.policy)
 		w.persistPolicyState()
-	}
-	if result.Status == operation.ResultOK {
 		w.emitEvent(Event{Watch: w.name, Kind: eventKindKill, Check: check, Severity: w.severity, Message: result.Message})
 		return
 	}

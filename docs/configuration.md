@@ -939,7 +939,7 @@ The dashboard's **Sessions** panel lists, for the whole host:
   per-connection memory, and MySQL thread CPU and IO need read access to
   `performance_schema.threads`. On a service watch, an
   administrator can **cancel** a statement or **close its connection**; Sermo
-  re-lists the server and refuses if the statement changed or ended
+  re-reads the target and refuses if the statement changed or ended
   ([contract](safety.md#database-statement-kills)).
 
 Closing or killing any session shows its progress in place, like a service
@@ -1350,7 +1350,7 @@ accepted operation cannot switch targets during a concurrent reload.
   — cancel one statement listed by the service's `db_queries` watch (`mode`
   defaults to `query`; `connection` closes the connection). `id` and `identity`
   come from `GET /api/sessions`; the connection comes from the watch's own
-  configuration. Sermo re-lists the server and requires the same statement
+  configuration. Sermo re-reads the target and requires the same statement
   before acting, through the service's operation lock, guards (`blocks:
   [kill_query]`), timeout and event path. Answers `200` when cancelled and
   `409` when refused (changed or finished statement, guard, lock). Equivalent

@@ -91,11 +91,7 @@ func (c storageCheck) Run(_ context.Context) Result {
 		data[DataKeyMountSampleError] = mountErr.Error()
 	}
 
-	usage := c.usage
-	if usage == nil {
-		usage = statfsUsage
-	}
-	st, err := boundedUsage(usage, c.path, c.timeout)
+	st, err := boundedUsage(c.usageFunc(), c.path, c.timeout)
 	if err != nil {
 		if c.assertsMounted() && errors.Is(err, errStatfsHung) {
 			return c.hungMount(err, data, start)
@@ -169,15 +165,24 @@ func (c storageCheck) assertsMounted() bool {
 }
 
 // mountAnswers probes a mount-only check's path; only a hung answer counts, as
-// any other statfs error says nothing a mount-only check asserts.
+// any other statfs error says nothing a mount-only check asserts. Its caller
+// has already found the mount condition active.
 func (c storageCheck) mountAnswers() error {
-	if !c.assertsMounted() {
+	if !c.mount.expectMount {
 		return nil
 	}
-	if err := probeStatfs(c.usage, c.path, c.timeout); errors.Is(err, errStatfsHung) {
+	if _, err := boundedUsage(c.usageFunc(), c.path, c.timeout); errors.Is(err, errStatfsHung) {
 		return err
 	}
 	return nil
+}
+
+// usageFunc is the injected usage sampler, or statfs.
+func (c storageCheck) usageFunc() StorageUsageFunc {
+	if c.usage != nil {
+		return c.usage
+	}
+	return statfsUsage
 }
 
 func (c storageCheck) hungMount(err error, data map[string]any, start time.Time) Result {
@@ -206,20 +211,12 @@ var statfsInFlight sync.Map
 // errStatfsHung marks a statfs that did not answer: the mount is hung.
 var errStatfsHung = errors.New("hung mount")
 
-// probeStatfs asks whether path answers statfs within timeout, sharing the
-// in-flight guard of the usage sample.
-func probeStatfs(usage StorageUsageFunc, path string, timeout time.Duration) error {
-	if usage == nil {
-		usage = statfsUsage
-	}
-	_, err := boundedUsage(usage, path, timeout)
-	return err
-}
-
 // StatfsAnswers reports whether path answers statfs within timeout: nil when it
-// does, an error wrapping the hung-mount cause when it does not.
+// does, an error wrapping the hung-mount cause when it does not. It shares the
+// in-flight guard of the storage check's usage sample.
 func StatfsAnswers(path string, timeout time.Duration) error {
-	return probeStatfs(nil, path, timeout)
+	_, err := boundedUsage(statfsUsage, path, timeout)
+	return err
 }
 
 // boundedUsage runs usage for path within timeout (unbounded when timeout is

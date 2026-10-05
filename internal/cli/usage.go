@@ -366,7 +366,7 @@ var commandUsages = []commandUsage{
 			"never connects to the database itself. Database rows come from",
 			"db_queries watches; LONG marks a statement past the watch's min_duration.",
 			"kill looks the statement up in the inventory and sends its exact identity;",
-			"the daemon re-lists it and refuses if it changed or ended. The kill runs",
+			"the daemon re-reads it and refuses if it changed or ended. The kill runs",
 			"through the service's operation engine: guards (blocks: kill_query), locks",
 			"and panic mode apply. A refusal exits 75.",
 		},

@@ -197,30 +197,44 @@ func findDBQuerySession(inventory web.SessionInventory, service, watch string, i
 // filterSessionInventory keeps the rows and sources of one service; an empty
 // service keeps everything. Slices stay non-nil so --json prints [] not null.
 func filterSessionInventory(inventory web.SessionInventory, service string) web.SessionInventory {
+	if service == "" {
+		if inventory.Sources == nil {
+			inventory.Sources = []web.SessionSource{}
+		}
+		if inventory.SSH == nil {
+			inventory.SSH = []web.SSHSession{}
+		}
+		if inventory.Terminal == nil {
+			inventory.Terminal = []web.TerminalSession{}
+		}
+		if inventory.Database == nil {
+			inventory.Database = []web.DBQuerySession{}
+		}
+		return inventory
+	}
 	out := web.SessionInventory{
 		Sources:  []web.SessionSource{},
 		SSH:      []web.SSHSession{},
 		Terminal: []web.TerminalSession{},
 		Database: []web.DBQuerySession{},
 	}
-	keep := func(s string) bool { return service == "" || s == service }
 	for _, source := range inventory.Sources {
-		if keep(source.Service) {
+		if source.Service == service {
 			out.Sources = append(out.Sources, source)
 		}
 	}
 	for _, row := range inventory.SSH {
-		if keep(row.Service) {
+		if row.Service == service {
 			out.SSH = append(out.SSH, row)
 		}
 	}
 	for _, row := range inventory.Terminal {
-		if keep(row.Service) {
+		if row.Service == service {
 			out.Terminal = append(out.Terminal, row)
 		}
 	}
 	for _, row := range inventory.Database {
-		if keep(row.Service) {
+		if row.Service == service {
 			out.Database = append(out.Database, row)
 		}
 	}

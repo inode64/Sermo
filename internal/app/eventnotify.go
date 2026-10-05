@@ -389,7 +389,7 @@ func (n *EventNotifier) remind(ctx context.Context) {
 func (n *EventNotifier) sendWithRetry(ctx context.Context, target notify.Notifier, msg notify.Message) error {
 	err := sendEventNotification(ctx, target, msg)
 	for _, delay := range eventNotifyRetryDelays {
-		if err == nil || !notify.IsTemporary(err) {
+		if !notify.IsTemporary(err) {
 			return err
 		}
 		if process.Wait(ctx, n.sleep, delay) != nil {

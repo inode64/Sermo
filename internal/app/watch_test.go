@@ -930,7 +930,6 @@ func TestWatchRemountsAHungMountWithinItsCooldown(t *testing.T) {
 		Name:      "storage-nas",
 		CheckType: "storage",
 		Check:     stubCheck{name: "storage", ok: true, data: data},
-		Remount:   true,
 		Remounter: rem,
 		Expand:    &ExpandSpec{By: 1 << 30},
 		Expander:  exp,
@@ -957,8 +956,8 @@ func TestWatchRemountsAHungMountWithinItsCooldown(t *testing.T) {
 	spaceOnly := &fakeRemounter{}
 	w = &Watch{
 		Name: "storage-full", CheckType: "storage",
-		Check:   stubCheck{name: "storage", ok: true, data: map[string]any{"path": "/srv", "free_pct": 1.0}},
-		Remount: true, Remounter: spaceOnly, Policy: rules.Policy{Cooldown: time.Minute},
+		Check:     stubCheck{name: "storage", ok: true, data: map[string]any{"path": "/srv", "free_pct": 1.0}},
+		Remounter: spaceOnly, Policy: rules.Policy{Cooldown: time.Minute},
 		Emit: func(Event) {},
 	}
 	w.RunCycle(t.Context())

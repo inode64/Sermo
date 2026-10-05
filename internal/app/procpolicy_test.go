@@ -7,8 +7,22 @@ import (
 	"time"
 
 	"sermo/internal/checks"
+	"sermo/internal/notify"
 	"sermo/internal/process"
 )
+
+func TestProcessPolicyAnnouncementUsesTheDispatchDecision(t *testing.T) {
+	n := &fakeNotifier{name: "ops"}
+	calls := 0
+	w := &processPolicyWatcher{
+		name: "execution-policy", active: true, notifiers: []notify.Notifier{n},
+		inPanic: func() bool { calls++; return calls > 1 },
+	}
+	w.notifyViolation(t.Context(), "unexpected process", map[string]string{})
+	if !w.announced || len(n.msgs) != 1 || calls != 1 {
+		t.Fatalf("announced=%v messages=%d panic reads=%d", w.announced, len(n.msgs), calls)
+	}
+}
 
 func testProcessPolicyWatcher(t *testing.T, sampler ProcSampler, allow map[string]any) (*processPolicyWatcher, *[]Event, *checks.Result) {
 	t.Helper()

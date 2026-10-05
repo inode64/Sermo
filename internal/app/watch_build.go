@@ -340,7 +340,6 @@ func buildSingleWatch(name string, entry, checkEntry map[string]any, deps Deps, 
 		if w.Policy.Cooldown <= 0 {
 			return nil, watchSubjectPrefix + name + ": then.remount requires a positive policy.cooldown"
 		}
-		w.Remount = true
 		w.Remounter = configuredMountRemounter(deps)
 	}
 	return w, ""
@@ -352,11 +351,7 @@ func configuredMountRemounter(deps Deps) MountRemounter {
 	if deps.MountRemounter != nil {
 		return deps.MountRemounter
 	}
-	return mountctl.Controller{
-		Runtime:        deps.Runtime,
-		Runner:         execx.RunnerOrDefault(deps.ExecxRunner),
-		CommandTimeout: mountctl.DefaultCommandTimeout,
-	}
+	return mountctl.Controller{Runtime: deps.Runtime, Runner: deps.ExecxRunner}
 }
 
 // configuredClockStepper returns the injected stepper or the real chrony one.
@@ -831,10 +826,7 @@ type watchActionOptions struct {
 	// shapes wire the recovery edge; the stateful file/process watches fire one
 	// hook per path/PID and have no single recovered state to hang it on.
 	parseRecoverHook bool
-	// allowKillQuery counts a db_queries watch's then.kill_query as an action.
-	// The watch parses it itself: its rules need the check's min_duration.
-	allowKillQuery bool
-	emptyMessage   string
+	emptyMessage     string
 }
 
 func resolveWatchActions(entry map[string]any, deps Deps, opts watchActionOptions) (watchActions, error) {
@@ -881,7 +873,7 @@ func resolveWatchActions(entry map[string]any, deps Deps, opts watchActionOption
 			return watchActions{}, err
 		}
 	}
-	remount, err := parseRemount(thenBlock, opts)
+	remount, err := parseRemount(thenBlock, opts.checkType)
 	if err != nil {
 		return watchActions{}, err
 	}
@@ -893,7 +885,7 @@ func resolveWatchActions(entry map[string]any, deps Deps, opts watchActionOption
 		}
 	}
 	_, killQuery := thenBlock[config.WatchThenKeyKillQuery]
-	hasKillQuery := killQuery && opts.allowKillQuery
+	hasKillQuery := killQuery && opts.checkType == checks.CheckTypeDBQueries
 	if len(hook.Command) == 0 && !config.HasNotifyAction(effectiveNames) && expand == nil && !config.NotifyOptedOut(names) && kill == nil && makeStep == nil && !remount && len(recoverHook.Command) == 0 && !hasKillQuery {
 		return watchActions{}, errors.New(opts.emptyMessage)
 	}
@@ -983,9 +975,8 @@ func parseMakeStep(then map[string]any, checkType string) (*MakeStepSpec, error)
 }
 
 // parseRemount reads a `then.remount` action. It is only valid on a storage
-// watch, whose check reports the mount hung or missing; the watch shapes that
-// parse expand are the ones that may carry it.
-func parseRemount(then map[string]any, opts watchActionOptions) (bool, error) {
+// watch, whose check reports the mount hung or missing.
+func parseRemount(then map[string]any, checkType string) (bool, error) {
 	raw, present := then[config.WatchThenKeyRemount]
 	if !present {
 		return false, nil
@@ -993,8 +984,8 @@ func parseRemount(then map[string]any, opts watchActionOptions) (bool, error) {
 	if _, ok := raw.(map[string]any); !ok {
 		return false, errors.New("then.remount must be a mapping")
 	}
-	if !opts.parseExpand || !isStorageCheckType(opts.checkType) {
-		return false, fmt.Errorf("then.remount is only valid on a storage watch, not %q", opts.checkType)
+	if !isStorageCheckType(checkType) {
+		return false, fmt.Errorf("then.remount is only valid on a storage watch, not %q", checkType)
 	}
 	return true, nil
 }

@@ -65,7 +65,7 @@ func TestDBQueryWatchFiresOncePerStatementAndRecovers(t *testing.T) {
 	if got := f.cycle(); len(got) != 0 {
 		t.Fatalf("a short statement must not fire: %v", kinds(got))
 	}
-	f.queries = []checks.DBQuery{mariaQuery(7, 70, 400, "app"), mariaQuery(8, 80, 239096, "tac_prod")}
+	f.queries = []checks.DBQuery{mariaQuery(8, 80, 239096, "tac_prod"), mariaQuery(7, 70, 400, "app")}
 	got := f.cycle()
 	if len(got) != 2 || got[0].Kind != eventKindFiring || got[1].Kind != eventKindFiring {
 		t.Fatalf("two long statements must fire twice: %v", kinds(got))
@@ -161,9 +161,9 @@ func TestDBQueryWatchAutoKill(t *testing.T) {
 		return operation.Result{Status: operation.ResultOK, Action: string(rules.ActionKillQuery), Message: "kill query: cancelled"}
 	}
 	f.queries = []checks.DBQuery{
+		mariaQuery(3, 30, 7200, "report"),
 		mariaQuery(1, 10, 3600, "tac_prod"), // long, but not selected
 		mariaQuery(2, 20, 3600, "report"),
-		mariaQuery(3, 30, 7200, "report"),
 	}
 	got := f.cycle()
 	if len(targets) != 1 || targets[0].ID != 3 || targets[0].Watch != "long-queries" || targets[0].Require == nil {
@@ -405,6 +405,43 @@ func TestDBQueryWatchRunsTheHookOnRecovery(t *testing.T) {
 	f.cycle()
 	if len(envs) != 2 || envs[1][sermoEnvChange] != dbQueryChangeEnded {
 		t.Fatalf("hook runs = %+v", envs)
+	}
+}
+
+func TestDBQueryWatchAnnouncementUsesTheDispatchDecision(t *testing.T) {
+	for _, tt := range []struct {
+		name          string
+		dryRun, panic bool
+	}{
+		{name: "live"},
+		{name: "panic", panic: true},
+		{name: "dry run", dryRun: true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			f := newDBQueryFixture(t)
+			n := &fakeNotifier{name: "ops"}
+			f.w.notifiers, f.w.dryRun = []notify.Notifier{n}, tt.dryRun
+			calls := 0
+			f.w.inPanic = func() bool {
+				calls++
+				if calls == 1 {
+					return tt.panic
+				}
+				return !tt.panic // A second read would contradict the first.
+			}
+			f.queries = []checks.DBQuery{mariaQuery(8, 80, 600, "app")}
+			f.cycle()
+			q := checks.DBQueriesFromData(f.results[0].Data)[0]
+			want := !tt.dryRun && !tt.panic
+			if q.Announced != want || (len(n.msgs) == 1) != want || calls > 1 {
+				t.Fatalf("announced=%v messages=%d panic reads=%d, want live=%v", q.Announced, len(n.msgs), calls, want)
+			}
+			f.w.inPanic, f.w.dryRun, f.queries = nil, false, nil
+			f.cycle()
+			if (len(n.msgs) == 2) != want {
+				t.Fatalf("recovery messages=%d, want recovery=%v", len(n.msgs), want)
+			}
+		})
 	}
 }
 
