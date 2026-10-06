@@ -25,9 +25,8 @@ import (
 
 // CheckTypeDBQueries lists the statements a MySQL/MariaDB or PostgreSQL server
 // is running. It is a watch-only type built by internal/app (like
-// process_policy): the watch tracks every running statement as an item, alerts
-// once per statement that outlives min_duration and publishes the list the
-// Sessions panel shows.
+// process_policy): the watch tracks duration or resource incidents per statement
+// and publishes a bounded list for the Sessions panel.
 const CheckTypeDBQueries = "db_queries"
 
 // db_queries check keys.
@@ -50,12 +49,16 @@ const (
 // db_queries result data keys, and the per-statement keys a fire's summary
 // template reads.
 const (
-	DataKeyDBQueries     = "db_queries"
-	DataKeyLongCount     = "long_count"
-	DataKeyOldestSeconds = "oldest_seconds"
-	DataKeyID            = CheckKeyID
-	DataKeyUser          = CheckKeyUser
-	DataKeyElapsed       = "elapsed"
+	DataKeyDBQueries        = "db_queries"
+	DataKeyDBQueryIncidents = "db_query_incidents"
+	DataKeyComplete         = "complete"
+	DataKeyLongCount        = "long_count"
+	DataKeyMatchedCount     = "matched_count"
+	DataKeyUnknownCount     = "unknown_count"
+	DataKeyOldestSeconds    = "oldest_seconds"
+	DataKeyID               = CheckKeyID
+	DataKeyUser             = CheckKeyUser
+	DataKeyElapsed          = "elapsed"
 )
 
 // Kill modes: cancel the running statement, or close its whole connection.
@@ -74,8 +77,8 @@ func ValidDBQueryKillMode(mode string) bool {
 const (
 	dbQueryDefaultMaxLength = 1000
 	dbQueryDefaultMaxRows   = 50
-	// dbQueryFetchLimit bounds one sample regardless of max_rows, so a server
-	// with thousands of connections cannot make a cycle unbounded.
+	// dbQueryFetchLimit bounds one sample regardless of max_rows. SQL fetches
+	// one additional row to distinguish an exact limit from an incomplete list.
 	dbQueryFetchLimit = 500
 	// mysqlStartTolerance absorbs MySQL's whole-second TIME column when a
 	// statement's start is derived from it.
@@ -112,10 +115,17 @@ type DBQuery struct {
 	Truncated      bool   `json:"truncated,omitempty"`
 	Fingerprint    string `json:"fingerprint,omitempty"`
 	Identity       string `json:"identity"`
-	// Long marks a statement past its watch's min_duration and filters, the
-	// one rule the alert, the Sessions panel and sermoctl share.
+	// DisplayIdentity stays stable while the watcher recognises the same
+	// statement, including MySQL's estimated-start jitter. Presentation only:
+	// cancellation always uses the latest Identity and fresh re-verification.
+	DisplayIdentity string `json:"display_identity,omitempty"`
+	// Long marks a match in a duration-only watch. A resource watch's optional
+	// minimum age is an evaluation gate, not a duration incident.
 	Long bool `json:"long,omitempty"`
-	// Alerted marks a statement its watch already announced as long-running,
+	// Matched marks a statement currently satisfying this watch's thresholds.
+	// Alerted retains an open incident while a required sample is unavailable.
+	Matched bool `json:"matched,omitempty"`
+	// Alerted marks a statement its watch already announced as an incident,
 	// so a restarted daemon neither repeats the alert nor loses its recovery;
 	// Announced, that the alert reached a live hook or notifier, which then
 	// hears the recovery too.
@@ -124,6 +134,13 @@ type DBQuery struct {
 	// OSThreadID is the host thread (MySQL/MariaDB) or process (PostgreSQL)
 	// running the statement, 0 when the server does not say.
 	OSThreadID int64 `json:"os_tid,omitempty"`
+	DBQueryUsage
+}
+
+// DBQueryUsage is a statement's sampled resource use, separate from the
+// database's statement identity and alert state. Ready flags distinguish a
+// measured zero from an unavailable sample.
+type DBQueryUsage struct {
 	// MemoryBytes is the connection's memory: MariaDB's MEMORY_USED, or the
 	// PostgreSQL backend's resident memory. MemoryReady tells a measured zero
 	// from an unknown.
@@ -131,8 +148,11 @@ type DBQuery struct {
 	MemoryReady bool  `json:"memory_ready,omitempty"`
 	// CPU is the statement's thread or backend CPU share of the host since the
 	// previous sample (the watch derives it from /proc for a local server).
-	CPU      float64 `json:"cpu,omitempty"`
-	CPUReady bool    `json:"cpu_ready,omitempty"`
+	CPU float64 `json:"cpu,omitempty"`
+	// CPUThread uses the same thread sample against one logical CPU: 100%
+	// means that thread occupied a whole CPU. CPUReady applies to both rates.
+	CPUThread float64 `json:"cpu_thread,omitempty"`
+	CPUReady  bool    `json:"cpu_ready,omitempty"`
 	// IORead/IOWrite are the thread's or backend's storage bytes per second
 	// since the previous sample.
 	IORead  float64 `json:"io_read,omitempty"`
@@ -221,6 +241,7 @@ type DBQueryConfig struct {
 	MaxLength    int
 	MaxRows      int
 	Timeout      time.Duration
+	resources    []levelPred
 	// server remembers what the MySQL/MariaDB server supports, shared by the
 	// copies of this config; nil re-detects on every sample.
 	server *mysqlServerInfo
@@ -291,14 +312,22 @@ func ParseDBQueryConfig(entry map[string]any) (DBQueryConfig, error) {
 			SQLEngineMySQL, SQLEngineMariaDB, SQLEnginePostgres, SQLEnginePostgreSQL)
 	}
 	minDuration := cfgval.Duration(entry[CheckKeyMinDuration])
-	if minDuration <= 0 {
-		return DBQueryConfig{}, errors.New("db_queries check requires min_duration as a positive duration")
+	if _, present := entry[CheckKeyMinDuration]; present && minDuration <= 0 {
+		return DBQueryConfig{}, errors.New("db_queries min_duration must be a positive duration")
+	}
+	resources, err := parseLevelPreds(entry, DBQueryResourceFields())
+	if err != nil {
+		return DBQueryConfig{}, err
+	}
+	if minDuration == 0 && len(resources) == 0 {
+		return DBQueryConfig{}, errors.New("db_queries requires min_duration or a cpu, cpu_thread or memory threshold")
 	}
 	cfg := DBQueryConfig{
 		Engine:       driver,
 		Conn:         dbQueryConnConfig(engine, driver, entry),
 		DefaultsFile: cfgval.AsString(entry[CheckKeyDefaultsFile]),
 		MinDuration:  minDuration,
+		resources:    resources,
 		Selector: DBQuerySelector{
 			Users:            cfgval.StringList(entry[CheckKeyUsers]),
 			ExcludeUsers:     cfgval.StringList(entry[CheckKeyExcludeUsers]),
@@ -358,10 +387,16 @@ type DBQueryKillSpec struct {
 	Selector DBQuerySelector
 }
 
-// ParseDBQueryKill parses then.kill_query for a check whose min_duration is
-// minDuration. It is the one owner of the rules: the config validator reports
+// ParseDBQueryKill parses then.kill_query for a duration-only check.
+// It is the one owner of the rules: the config validator reports
 // its error under the field's path, the watch builder refuses to build.
-func ParseDBQueryKill(raw any, minDuration time.Duration) (DBQueryKillSpec, error) {
+func ParseDBQueryKill(raw any, cfg DBQueryConfig) (DBQueryKillSpec, error) {
+	// A fresh target read can revalidate duration and selectors, but cannot
+	// revalidate a CPU rate without another sampling interval. Resource checks
+	// remain alert-only rather than acting on an old resource observation.
+	if cfg.HasResourceThresholds() {
+		return DBQueryKillSpec{}, errors.New("resource thresholds cannot be combined with then.kill_query; use a separate duration watch for automatic cancellation")
+	}
 	m, ok := raw.(map[string]any)
 	if !ok {
 		return DBQueryKillSpec{}, errors.New("must be a mapping")
@@ -377,8 +412,8 @@ func ParseDBQueryKill(raw any, minDuration time.Duration) (DBQueryKillSpec, erro
 	switch {
 	case spec.After <= 0:
 		return DBQueryKillSpec{}, fmt.Errorf("%s is required as a positive duration", CheckKeyAfter)
-	case spec.After < minDuration:
-		return DBQueryKillSpec{}, fmt.Errorf("%s must be at least %s (%s)", CheckKeyAfter, CheckKeyMinDuration, minDuration)
+	case spec.After < cfg.MinDuration:
+		return DBQueryKillSpec{}, fmt.Errorf("%s must be at least %s (%s)", CheckKeyAfter, CheckKeyMinDuration, cfg.MinDuration)
 	case !ValidDBQueryKillMode(spec.Mode):
 		return DBQueryKillSpec{}, fmt.Errorf("%s must be %s", CheckKeyMode, DBQueryKillModeSummary)
 	case len(spec.Selector.Users) == 0 && len(spec.Selector.Databases) == 0:
@@ -387,16 +422,36 @@ func ParseDBQueryKill(raw any, minDuration time.Duration) (DBQueryKillSpec, erro
 	return spec, nil
 }
 
+// DBQuerySample is a bounded observation. An incomplete list cannot establish
+// that an unlisted statement ended or that no other statement exceeds a limit.
+type DBQuerySample struct {
+	Queries  []DBQuery
+	Complete bool
+}
+
 // SampleDBQueries lists the statements the server is running, longest first.
 // The probe's own connection, idle connections and server threads
 // (replication, event scheduler) are never listed.
-func SampleDBQueries(ctx context.Context, cfg DBQueryConfig) ([]DBQuery, error) {
+func SampleDBQueries(ctx context.Context, cfg DBQueryConfig) (DBQuerySample, error) {
 	db, err := cfg.open(ctx)
 	if err != nil {
-		return nil, err
+		return DBQuerySample{}, err
 	}
 	defer func() { _ = db.Close() }()
-	return cfg.sample(ctx, db, 0)
+	return cfg.sampleList(ctx, db)
+}
+
+func (cfg DBQueryConfig) sampleList(ctx context.Context, db *sql.DB) (DBQuerySample, error) {
+	queries, err := cfg.sample(ctx, db, 0)
+	if err != nil {
+		return DBQuerySample{}, err
+	}
+	sample := DBQuerySample{Queries: queries, Complete: true}
+	if len(queries) > dbQueryFetchLimit {
+		sample.Complete = false
+		sample.Queries = slices.Clip(queries[:dbQueryFetchLimit])
+	}
+	return sample, nil
 }
 
 // sample reads statements on an open connection, per engine. A positive id
@@ -470,7 +525,7 @@ WHERE p.ID <> CONNECTION_ID() AND p.INFO IS NOT NULL
   AND p.COMMAND NOT IN (%[3]s) AND p.USER NOT IN (%[4]s)
   AND (? = 0 OR p.ID = ?)
 ORDER BY 7 DESC LIMIT %[5]d`, elapsedMS, queryID, sqlStringList(mysqlExcludedCommands), sqlStringList(mysqlExcludedUsers),
-		dbQueryFetchLimit, tid, memory, startedMS, join, crc)
+		dbQueryFetchLimit+1, tid, memory, startedMS, join, crc)
 }
 
 func sqlStringList(values []string) string {
@@ -587,7 +642,7 @@ FROM pg_stat_activity
 WHERE backend_type = 'client backend' AND pid <> pg_backend_pid()
   AND query_start IS NOT NULL AND state = ANY($1)
   AND ($3::bigint = 0 OR pid = $3)
-ORDER BY query_start LIMIT %d`, pgEpochMicros("backend_start"), pgEpochMicros("query_start"), msPerSecond, dbQueryFetchLimit)
+ORDER BY query_start LIMIT %d`, pgEpochMicros("backend_start"), pgEpochMicros("query_start"), msPerSecond, dbQueryFetchLimit+1)
 
 func samplePostgresQueries(ctx context.Context, db *sql.DB, states []string, maxLength int, id int64) ([]DBQuery, error) {
 	rows, err := db.QueryContext(ctx, postgresActivityQuery, states, maxLength+1, id)
@@ -785,7 +840,21 @@ func mysqlOptionValue(raw string) string {
 // It returns a new slice: the decoded one may be the live slice a watch
 // published, which readers share and must never modify.
 func DBQueriesFromData(data map[string]any) []DBQuery {
-	decoded := DecodeDataSlice[DBQuery](data[DataKeyDBQueries])
+	return dbQueriesFromValue(data[DataKeyDBQueries])
+}
+
+// DBQueryIncidentsFromData restores open incidents independently of the current
+// list. Legacy snapshots stored them with the visible rows; preserve those
+// incidents when upgrading so a restart neither repeats nor loses an alert.
+func DBQueryIncidentsFromData(data map[string]any) []DBQuery {
+	if incidents, present := data[DataKeyDBQueryIncidents]; present {
+		return dbQueriesFromValue(incidents)
+	}
+	return DBQueriesFromData(data)
+}
+
+func dbQueriesFromValue(value any) []DBQuery {
+	decoded := DecodeDataSlice[DBQuery](value)
 	out := make([]DBQuery, 0, len(decoded))
 	for i := range decoded {
 		if decoded[i].Engine != "" && decoded[i].ID > 0 {

@@ -33,6 +33,7 @@ const (
 	sermoEnvMemory     = sermoEnvPrefix + "MEMORY"
 	sermoEnvUser       = sermoEnvPrefix + "USER"
 	sermoEnvCPU        = sermoEnvPrefix + "CPU"
+	sermoEnvCPUThread  = sermoEnvPrefix + "CPU_THREAD"
 	sermoEnvIO         = sermoEnvPrefix + "IO"
 
 	envFormatBase         = 10

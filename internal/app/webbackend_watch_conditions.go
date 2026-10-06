@@ -229,12 +229,16 @@ func watchCommonConditions(check map[string]any) []web.WatchCondition {
 
 func watchConditionFields(check map[string]any) []string {
 	checkType := cfgval.AsString(check[checks.CheckKeyType])
-	if checkType == checks.CheckTypeProcess {
-		// The stateful host process watch is built by internal/app rather than the
-		// service-scoped single-shot process check in checks' registry.
+	// Stateful watches are built by internal/app outside the single-shot
+	// registry. Reuse their predicate owners for the same presentation.
+	switch checkType {
+	case checks.CheckTypeProcess:
 		return checks.ProcessWatchPredFields
+	case checks.CheckTypeDBQueries:
+		return checks.DBQueryResourceFields()
+	default:
+		return checks.PredicateFieldsFor(checkType)
 	}
-	return checks.PredicateFieldsFor(checkType)
 }
 
 func fileWatchConditions(check map[string]any) []web.WatchCondition {

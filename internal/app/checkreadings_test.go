@@ -596,3 +596,38 @@ func TestNetCheckReadingsPublishAssignedAddresses(t *testing.T) {
 		t.Fatalf("address count = %+v, want an explicitly labelled count", got)
 	}
 }
+
+func TestProtocolReadingsExposeSharedContext(t *testing.T) {
+	for _, typ := range []string{conn.ProtocolNamePostgres, conn.ProtocolNameRedis, conn.ProtocolNameDocker, checks.CheckTypeTCP} {
+		t.Run(typ, func(t *testing.T) {
+			data := map[string]any{checks.DataKeyProtocol: typ, checks.DataKeyHost: "::1", checks.DataKeyPort: 1234,
+				checks.DataKeyVersion: "1.2.3", checks.DataKeyLatencyMS: 2}
+			readings := checkReadings(typ, data)
+			for field, want := range map[string]string{checks.DataKeyHost: "::1", checks.DataKeyPort: "1234", checks.DataKeyVersion: "1.2.3"} {
+				if got := readingByField(readings, field).Value; got != want {
+					t.Fatalf("%s = %q, want %q", field, got, want)
+				}
+			}
+			delete(data, checks.DataKeyHost)
+			delete(data, checks.DataKeyPort)
+			data[checks.DataKeySocket] = "/run/example.sock"
+			if got := readingByField(checkReadings(typ, data), checks.DataKeySocket).Value; got != "/run/example.sock" {
+				t.Fatalf("socket = %q", got)
+			}
+		})
+	}
+}
+
+func TestCheckReadingsDoNotRepeatProtocolGraphMetrics(t *testing.T) {
+	readings := checkReadings(conn.ProtocolNameSMTPAcceptance, map[string]any{
+		checks.DataKeyProtocol:  conn.ProtocolNameSMTPAcceptance,
+		checks.DataKeyLatencyMS: 12,
+	})
+	counts := map[string]int{}
+	for _, reading := range readings {
+		counts[reading.Field]++
+	}
+	if len(readings) != 2 || counts[checks.DataKeyProtocol] != 1 || counts[checks.DataKeyLatencyMS] != 1 {
+		t.Fatalf("protocol and graph readings repeat: %+v", readings)
+	}
+}

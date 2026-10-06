@@ -388,6 +388,24 @@ watches:
       summary: "pg ${id} by ${user} on ${database} for ${elapsed}: ${query}"
     then: { notify: [ops-email] }
 
+  pg-resource-queries:
+    monitor: disabled
+    interval: 30s
+    check:
+      type: db_queries
+      engine: postgres
+      host: 127.0.0.1
+      user: monitor
+      password: "${env:PGPASSWORD:-}"
+      database: postgres
+      min_duration: 30s  # optional age filter when resource thresholds exist
+      cpu: { op: ">", value: "20%" }  # percentage of all host CPUs
+      cpu_thread: { op: ">", value: "90%" }  # percentage of one logical CPU
+      memory: { op: ">", value: 256MiB }  # any resource predicate can alert
+      severity: warning
+      summary: "query ${id}: CPU ${cpu}%, thread ${cpu_thread}%, memory ${memory} bytes"
+    then: { notify: [ops-email] }  # resource thresholds cannot use kill_query
+
   firewall-loaded:
     monitor: disabled
     check: { type: firewall_rules, backend: auto, min_rules: 1 }

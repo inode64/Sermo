@@ -84,22 +84,14 @@
   .mount-table { min-width: 64rem; font-size: .85rem; }
   .sessions-table { min-width: 78rem; font-size: .85rem; font-variant-numeric: tabular-nums; }
   .sessions-table th, .sessions-table td { overflow-wrap: anywhere; vertical-align: top; }
-  /* Running database statements: a subtable of the sessions panel. The query
-     text is the widest value, so it wraps inside a bounded column instead of
-     deciding the table's width. */
+  /* SQL and extended metadata occupy a separate row across the whole table. */
   .panel-subhead { font-size: .95rem; margin: 1rem 0 .35rem; }
-  .db-queries-table { min-width: 64rem; font-size: .85rem; font-variant-numeric: tabular-nums; }
-  .db-queries-table td { overflow-wrap: anywhere; vertical-align: top; }
-  .db-queries-table th { vertical-align: top; }
-  .db-queries-table td:nth-child(11) { min-width: 16rem; max-width: 36rem; }
-  .db-query-text { font-family: var(--mono); font-size: .82rem; white-space: pre-wrap; overflow-wrap: anywhere; }
-  /* The statement preview is a <details> inside a cell, not a panel card:
-     undo the card and card-header looks every section <details> carries. */
-  .db-queries-table details.db-query-more { background: none; border: 0; border-radius: 0; box-shadow: none; margin: 0; padding: 0; }
-  .db-queries-table .db-query-more > summary { display: block; padding: 0; margin: 0; font-size: inherit; font-weight: 400; user-select: text; }
-  .db-queries-table .db-query-more > summary::before { margin-right: .3rem; }
-  .db-queries-table .db-query-more[open] > summary { border-bottom: 0; margin-bottom: 0; }
-  .db-queries-table .db-query-more[open] > summary > code { display: none; }
+  .db-queries-table { min-width: 0; font-size: .85rem; font-variant-numeric: tabular-nums; }
+  .db-queries-table th, .db-query-row > td { vertical-align: top; white-space: nowrap; }
+  .db-cell-text { display: block; max-width: 8.5rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .db-query-detail h4 { margin: .75rem 0 .35rem; }
+  .db-query-text { margin: 0; font-family: var(--mono); font-size: .82rem; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .db-query-source { overflow-wrap: anywhere; }
   #db-query-rows tr.row-warning > td { background: color-mix(in srgb, var(--warn) 9%, transparent); }
   .mount-table th, .mount-table td { vertical-align: top; }
   .mount-table .actions { min-width: 5.5rem; }
@@ -294,6 +286,14 @@
   td.status-cell { font-weight: 600; }
   .truncate { display: inline-block; max-width: min(28rem, 34vw); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
   .process-cmd { font-family: var(--mono); font-size: .82em; }
+  .check-readings { display: flex; flex-wrap: wrap; gap: .25rem 1rem; margin: 0 0 .25rem; }
+  .check-readings > div { display: flex; flex-wrap: wrap; gap: .2rem .4rem; min-width: 0; }
+  .check-readings dt, .check-readings dd { margin: 0; overflow-wrap: anywhere; }
+  .service-connections { margin: .75rem 0; border-block: 1px solid var(--line); }
+  .connection-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(12rem, 100%), 1fr)); gap: .45rem 1rem; padding: .65rem 0; font-size: .9rem; }
+  .connection-grid + .connection-grid { border-top: 1px solid var(--line); }
+  .connection-grid > div { min-width: 0; overflow-wrap: anywhere; }
+  .connection-source { margin-top: .15rem; }
   .check-message { max-width: none; white-space: normal; overflow-wrap: anywhere; }
   .name { cursor: pointer; text-decoration: none; border-bottom: 1px dotted var(--text-2); color: inherit; }
   .name:hover { color: var(--accent); border-bottom-color: var(--accent); }
@@ -433,6 +433,7 @@
      downwards by whole words instead of shattering the text letter by letter. */
   .svc-state-note { display: block; margin-top: .1rem; font-weight: 400; overflow-wrap: break-word; }
   .state-reason { overflow-wrap: break-word; }
+  .runtime-grid .state-reason { display: block; }
   .admin-before-input { max-width: 11rem; }
   .proc-tree { display: inline-flex; align-items: center; gap: .28rem; min-width: 0; padding-left: calc(var(--proc-depth, 0) * .9rem); }
   .proc-branch { flex: 0 0 auto; color: var(--text-2); font-family: var(--mono); font-size: .9em; letter-spacing: 0; }
@@ -631,14 +632,10 @@
     .sessions-table th:nth-child(7), .sessions-table td:nth-child(7),
     .sessions-table th:nth-child(8), .sessions-table td:nth-child(8),
     .sessions-table th:nth-child(9), .sessions-table td:nth-child(9) { display: none; }
-    /* database statements (1 Type · 2 User · 3 DB · 4 Client · 5 ID ·
-       6 State · 7 Running · 8 CPU · 9 Memory · 10 IO · 11 Query · 12 Actions): the
-       client address, the thread state and the IO rates are wide-screen
-       detail; the kill dialog names the rest. */
-    .db-queries-table { min-width: 0; }
-    .db-queries-table th:nth-child(4), .db-queries-table td:nth-child(4),
-    .db-queries-table th:nth-child(6), .db-queries-table td:nth-child(6),
-    .db-queries-table th:nth-child(10), .db-queries-table td:nth-child(10) { display: none; }
+    /* Hide wide metadata columns, keeping their values in the expansion. */
+    .db-queries-table .db-col-state, .db-queries-table .db-col-cpu-thread, .db-queries-table .db-col-cpu,
+    .db-queries-table .db-col-memory, .db-queries-table .db-col-io { display: none; }
+    .db-query-row .db-cell-text { max-width: min(8.5rem, 12vw); }
     /* watches: keep Name and the trailing Last activity · State · Actions.
        Type-specific tables also retain their leading live metric. */
     .watch-table th:not(:first-child):not(:nth-last-child(-n+3)),
@@ -750,23 +747,12 @@
     .sessions-table th:nth-child(1), .sessions-table td:nth-child(1),
     .sessions-table th:nth-child(4), .sessions-table td:nth-child(4),
     .sessions-table th:nth-child(5), .sessions-table td:nth-child(5) { display: none; }
-    /* database statements -> User · Running · Query · Actions. The engine,
-       database and connection id are in the kill dialog and the search; the
-       type filter still splits them from the terminal sessions, and CPU,
-       memory and IO are desk detail. */
+    /* Database statements -> expandable User · Running · Actions. All metadata
+       and the SQL remain available in the full-width expansion. */
     .db-queries-table th, .db-queries-table td { padding: .34rem .38rem; }
-    .db-queries-table th:nth-child(1), .db-queries-table td:nth-child(1),
-    .db-queries-table th:nth-child(3), .db-queries-table td:nth-child(3),
-    .db-queries-table th:nth-child(5), .db-queries-table td:nth-child(5),
-    .db-queries-table th:nth-child(8), .db-queries-table td:nth-child(8),
-    .db-queries-table th:nth-child(9), .db-queries-table td:nth-child(9),
-    .db-queries-table th:nth-child(10), .db-queries-table td:nth-child(10) { display: none; }
-    /* Keep the user and running time whole; the statement is the one value
-       that wraps freely. */
-    .db-queries-table td:nth-child(2) { min-width: 4rem; overflow-wrap: break-word; }
-    .db-queries-table td:nth-child(7) { min-width: 3.5rem; overflow-wrap: normal; }
-    .db-queries-table td:nth-child(11) { min-width: 0; max-width: none; }
-    .db-queries-table td:nth-child(12) { overflow-wrap: normal; }
+    .db-queries-table .db-col-type, .db-queries-table .db-col-database,
+    .db-queries-table .db-col-id { display: none; }
+    .db-query-row .db-cell-text { max-width: 27vw; }
     .services-table .unit-cell, .services-table .event-cell, .apps-table .event-cell { max-width: 60vw; }
     /* Process rows keep PID, command, CPU and memory on a phone; two bars at
        the desktop width plus the truncated command exceed the expansion, so
@@ -806,6 +792,7 @@
     /* Service-detail "General data": a compact two-column mosaic instead of one
        tall vertical stack (the default auto-fit drops to a single column once the
        12rem cell minimum no longer fits the phone viewport). */
+    .connection-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .runtime-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: .8rem; }
     /* Expanded service tables must contribute no wide intrinsic minimum to the
        outer services table: process, check and lock headings would otherwise

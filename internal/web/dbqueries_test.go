@@ -89,7 +89,7 @@ func TestDBQueryKillAccessLogAction(t *testing.T) {
 }
 
 func TestSessionInventoryDatabaseJSON(t *testing.T) {
-	raw, err := json.Marshal(SessionInventory{Database: []DBQuerySession{{Service: "mariadb", Watch: "w", Engine: "mariadb", ID: 7, Query: "SELECT 1", Identity: "7:70", CanKill: true}}})
+	raw, err := json.Marshal(SessionInventory{Database: []DBQuerySession{{Service: "mariadb", Watch: "w", Engine: "mariadb", ID: 7, Query: "SELECT 1", Identity: "7:70", CanKill: true, CPUThread: 100, CPU: 12.5, CPUReady: true}}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -101,6 +101,9 @@ func TestSessionInventoryDatabaseJSON(t *testing.T) {
 	row, _ := rows[0].(map[string]any)
 	if row["can_kill"] != true || row["identity"] != "7:70" || row["elapsed_seconds"] != float64(0) {
 		t.Fatalf("database row = %v", row)
+	}
+	if row["cpu_thread"] != float64(100) || row["cpu"] != 12.5 || row["cpu_ready"] != true {
+		t.Fatalf("CPU readings = %v", row)
 	}
 }
 

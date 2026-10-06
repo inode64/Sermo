@@ -21,6 +21,7 @@ import (
 type dbQueryFixture struct {
 	w       *dbQueryWatcher
 	queries []checks.DBQuery
+	partial bool
 	err     error
 	events  []Event
 	results []checks.Result
@@ -36,8 +37,8 @@ func newDBQueryFixture(t *testing.T) *dbQueryFixture {
 		cfg:      checks.DBQueryConfig{Engine: checks.SQLEngineMySQL, MinDuration: 5 * time.Minute, MaxRows: 50, Timeout: time.Second},
 		now:      func() time.Time { return f.now },
 		emit:     func(e Event) { f.events = append(f.events, e) },
-		sample: func(context.Context, checks.DBQueryConfig) ([]checks.DBQuery, error) {
-			return append([]checks.DBQuery(nil), f.queries...), f.err
+		sample: func(context.Context, checks.DBQueryConfig) (checks.DBQuerySample, error) {
+			return checks.DBQuerySample{Queries: append([]checks.DBQuery(nil), f.queries...), Complete: !f.partial}, f.err
 		},
 		publish: func(_, _ string, r checks.Result) { f.results = append(f.results, r) },
 		procfs:  &fakeDBProcfs{},
@@ -142,9 +143,9 @@ func TestDBQueryWatchReportsUnavailableOnce(t *testing.T) {
 func TestDBQueryWatchSkipsAStoppedService(t *testing.T) {
 	f := newDBQueryFixture(t)
 	f.w.status = func(context.Context) (servicemgr.Status, error) { return servicemgr.StatusInactive, nil }
-	f.w.sample = func(context.Context, checks.DBQueryConfig) ([]checks.DBQuery, error) {
+	f.w.sample = func(context.Context, checks.DBQueryConfig) (checks.DBQuerySample, error) {
 		t.Fatal("a stopped service must not be sampled")
-		return nil, nil
+		return checks.DBQuerySample{}, nil
 	}
 	if got := f.cycle(); len(got) != 0 || !f.results[0].Skipped {
 		t.Fatalf("events = %v result = %+v", kinds(got), f.results)
@@ -232,6 +233,9 @@ func TestWebBackendListsDBQueriesFromSnapshots(t *testing.T) {
 	snapshots.now = func() time.Time { return now }
 	long := mariaQuery(8, 80, 239096, "tac_prod")
 	long.Alerted = true
+	long.Long = true
+	long.OSThreadID = 4102
+	long.CPU, long.CPUThread, long.CPUReady = 12.5, 100, true
 	short := mariaQuery(9, 90, 30, "app")
 	killed := mariaQuery(10, 100, 900, "app")
 	killed.Command = "Killed"
@@ -262,6 +266,12 @@ func TestWebBackendListsDBQueriesFromSnapshots(t *testing.T) {
 	if len(inv.Database) != 3 || inv.Database[0].ID != 8 || !inv.Database[0].Long || !inv.Database[0].CanKill {
 		t.Fatalf("rows = %+v", inv.Database)
 	}
+	if row := inv.Database[0]; row.QueryID != 80 || row.OSThreadID != 4102 || row.At != now.Format(time.RFC3339) {
+		t.Fatalf("statement metadata = %+v", row)
+	}
+	if row := inv.Database[0]; !row.CPUReady || row.CPU != 12.5 || row.CPUThread != 100 {
+		t.Fatalf("statement CPU readings = %+v", row)
+	}
 	for _, row := range inv.Database {
 		if row.ID == 10 && row.CanKill {
 			t.Fatal("a statement already being killed cannot be killed again")
@@ -269,6 +279,40 @@ func TestWebBackendListsDBQueriesFromSnapshots(t *testing.T) {
 		if row.ID == 9 && row.Long {
 			t.Fatal("a short statement is not long")
 		}
+		if row.ID == 9 && row.OSThreadID != 0 {
+			t.Fatal("a missing OS thread ID must not use the connection ID")
+		}
+	}
+	// Resource warmup retains the live list; a database failure's held
+	// incidents must still never be presented as current statements.
+	snapshots.publishConfigured("mariadb:long-queries", checks.CheckTypeDBQueries, checks.Result{
+		Check: "mariadb:long-queries", Unavailable: true, Message: "resource readings unavailable",
+		Data: map[string]any{checks.DataKeyCount: 1, checks.DataKeyUnknownCount: 1, checks.DataKeyDBQueries: []checks.DBQuery{short}},
+	}, "")
+	var pending web.SessionInventory
+	b.appendDBQueries(&pending)
+	if len(pending.Database) != 1 || pending.Sources[0].State != web.SessionSourcePartial {
+		t.Fatalf("resource warmup must keep current statements visible: %+v", pending)
+	}
+	for _, data := range []map[string]any{
+		{checks.DataKeyCount: 1, checks.DataKeyUnknownCount: 1, checks.DataKeyMatchedCount: 1, checks.DataKeyComplete: true, checks.DataKeyDBQueries: []checks.DBQuery{long}},
+		{checks.DataKeyCount: 1, checks.DataKeyComplete: false, checks.DataKeyDBQueries: []checks.DBQuery{long}},
+	} {
+		snapshots.publishConfigured("mariadb:long-queries", checks.CheckTypeDBQueries, checks.Result{
+			Check: "mariadb:long-queries", Message: "partial sample", Data: data,
+		}, "")
+		var partial web.SessionInventory
+		b.appendDBQueries(&partial)
+		if len(partial.Database) != 1 || partial.Sources[0].State != web.SessionSourcePartial || partial.Sources[0].Message != "partial sample" {
+			t.Fatalf("known failure hid incomplete data: %+v", partial)
+		}
+	}
+	// An expired sample must not keep a statement or its metadata in the UI.
+	now = now.Add(4 * time.Minute)
+	var expired web.SessionInventory
+	b.appendDBQueries(&expired)
+	if len(expired.Database) != 0 || expired.Sources[0].State != web.SessionSourceCollecting {
+		t.Fatalf("expired inventory = %+v", expired)
 	}
 }
 
@@ -276,10 +320,13 @@ func TestWebBackendListsDBQueriesFromSnapshots(t *testing.T) {
 // watcher reads them: /proc/<tid>/task/<tid>.
 type fakeDBProcfs struct {
 	exe         string
+	exeCalls    int
 	ticks       map[int]uint64
 	read, write map[int]uint64
 	rss         map[int]uint64
 }
+
+func (*fakeDBProcfs) NumCPU() int { return 8 }
 
 func (f *fakeDBProcfs) ThreadCPU(pid, tid int) (uint64, bool) {
 	v, ok := f.ticks[tid]
@@ -293,6 +340,7 @@ func (f *fakeDBProcfs) ProcessRSS(pid int) (uint64, bool) { v, ok := f.rss[pid];
 
 // ThreadExe answers like a local server's thread unless exe overrides it.
 func (f *fakeDBProcfs) ThreadExe(int) (string, bool) {
+	f.exeCalls++
 	if f.exe != "" {
 		return f.exe, true
 	}
@@ -323,7 +371,7 @@ func TestDBQueryWatchMeasuresTheStatementThread(t *testing.T) {
 	proc.write[tid] += 10 * (64 << 10) // 64 KiB/s
 	f.cycle()
 	second := f.results[len(f.results)-1].Data[checks.DataKeyDBQueries].([]checks.DBQuery)[0]
-	if !second.CPUReady || second.CPU <= 0 || !second.IOReady || second.IORead != 1<<20 || second.IOWrite != 64<<10 {
+	if !second.CPUReady || second.CPU != 12.5 || second.CPUThread != 100 || !second.IOReady || second.IORead != 1<<20 || second.IOWrite != 64<<10 {
 		t.Fatalf("second sample must carry the thread's CPU and IO rates: %+v", second)
 	}
 
@@ -333,6 +381,47 @@ func TestDBQueryWatchMeasuresTheStatementThread(t *testing.T) {
 	f.cycle()
 	if remote := f.results[len(f.results)-1].Data[checks.DataKeyDBQueries].([]checks.DBQuery)[0]; remote.CPUReady || remote.IOReady {
 		t.Fatalf("a remote statement must stay unmeasured: %+v", remote)
+	}
+}
+
+func TestDBQueryWatchCPUReadiness(t *testing.T) {
+	for _, tt := range []struct {
+		name        string
+		ticks       uint64
+		elapsed     time.Duration
+		missing     bool
+		replacement bool
+		wantReady   bool
+	}{
+		{name: "idle", ticks: 1000, elapsed: time.Second, wantReady: true},
+		{name: "counter reset", ticks: 999, elapsed: time.Second},
+		{name: "no elapsed time", ticks: 1000},
+		{name: "unreadable thread", missing: true, elapsed: time.Second},
+		{name: "replacement statement", ticks: 1100, elapsed: time.Second, replacement: true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			f := newDBQueryFixture(t)
+			f.w.cfg.Conn.Host = "127.0.0.1"
+			proc := &fakeDBProcfs{ticks: map[int]uint64{4102: 1000}}
+			f.w.procfs = proc
+			q := mariaQuery(8, 80, 600, "app")
+			q.OSThreadID = 4102
+			f.queries = []checks.DBQuery{q}
+			f.cycle()
+			f.now = f.now.Add(tt.elapsed)
+			proc.ticks[4102] = tt.ticks
+			if tt.missing {
+				delete(proc.ticks, 4102)
+			}
+			if tt.replacement {
+				f.queries[0].Identity = "8:81"
+			}
+			f.cycle()
+			got := checks.DBQueriesFromData(f.results[len(f.results)-1].Data)[0]
+			if got.CPUReady != tt.wantReady || got.CPU != 0 || got.CPUThread != 0 {
+				t.Fatalf("CPU readings = (%v, %v, %v), want (0, 0, %v)", got.CPU, got.CPUThread, got.CPUReady, tt.wantReady)
+			}
+		})
 	}
 }
 
@@ -356,7 +445,7 @@ func TestDBQueryWatchKeepsAlertedStatementsInSamplelessSnapshots(t *testing.T) {
 	f.cycle()
 	f.err = errors.New("connection refused")
 	f.cycle()
-	held := checks.DBQueriesFromData(f.results[len(f.results)-1].Data)
+	held := checks.DBQueryIncidentsFromData(f.results[len(f.results)-1].Data)
 	if len(held) != 1 || !held[0].Alerted || held[0].ID != 8 {
 		t.Fatalf("an unavailable snapshot must keep the alerted statement: %+v", held)
 	}

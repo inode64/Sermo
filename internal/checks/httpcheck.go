@@ -190,7 +190,7 @@ func (c *httpCheck) success(resp *http.Response, elapsed time.Duration, verifyEr
 	}
 	if c.certHost == "" {
 		res := c.result(true, statusMsg, start)
-		res.Data = map[string]any{DataKeyStatus: resp.StatusCode, DataKeyLatencyMS: elapsed.Milliseconds(), DataKeyProtocol: resp.Proto}
+		res.Data = map[string]any{DataKeyStatus: resp.StatusCode, DataKeyLatencyMS: elapsed.Milliseconds(), DataKeyProtocol: resp.Proto, DataKeySummary: fmt.Sprintf("HTTP %d", resp.StatusCode)}
 		return res
 	}
 	leaf := resp.TLS.PeerCertificates[0]

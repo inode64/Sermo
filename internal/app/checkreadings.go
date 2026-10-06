@@ -107,6 +107,8 @@ const (
 	watchReadingLabelEngine                   = "Engine"
 	watchReadingLabelRunningStatements        = "Running statements"
 	watchReadingLabelLongRunning              = "Long-running"
+	watchReadingLabelMatchingStatements       = "Matching statements"
+	watchReadingLabelUnknownResources         = "Unknown resource readings"
 	watchReadingLabelOldestStatement          = "Oldest statement"
 	watchReadingLabelOf                       = "Of"
 	watchReadingLabelOwner                    = "Owner"
@@ -157,6 +159,7 @@ const (
 	watchReadingLabelUtilization              = "Utilization"
 	watchReadingLabelUser                     = "User"
 	watchReadingLabelValue                    = "Value"
+	watchReadingLabelVersion                  = "Reported version"
 	watchReadingLabelViolationCount           = "Policy violations"
 	watchReadingLabelViolations               = "Violations"
 	watchReadingLabelVGFree                   = "VG free"
@@ -456,10 +459,38 @@ func checkReadings(checkType string, data map[string]any) []web.WatchReading {
 	if _, ok := data[checks.DataKeyConnectedClients]; ok {
 		return redisCheckReadings(data)
 	}
-	if graphMetrics := checks.GraphMetrics(checkType); len(graphMetrics) > 0 && !gaugedCountSample(checkType, data) {
-		return metricCheckReadings(checkType, data)
+	var out []web.WatchReading
+	if cfgval.String(data[checks.DataKeyProtocol]) != "" {
+		out = connCheckReadings(data)
 	}
-	return nil
+	if graphMetrics := checks.GraphMetrics(checkType); len(graphMetrics) > 0 && !gaugedCountSample(checkType, data) {
+		out = append(out, metricCheckReadings(checkType, data)...)
+	}
+	return dedupeReadings(out)
+}
+
+// dedupeReadings combines shared fields from protocol/graph readings and from
+// multi-metric watches. A field is one observation even when several builders
+// include it, such as protocol latency or a net watch's interface identity.
+//
+// Only value rows collapse. An error or a warning row is a report about one
+// metric, so two metrics failing at once are two distinct findings even though
+// they share a field name, and collapsing them would hide one of them.
+func dedupeReadings(readings []web.WatchReading) []web.WatchReading {
+	seen := make(map[string]bool, len(readings))
+	out := make([]web.WatchReading, 0, len(readings))
+	for _, r := range readings {
+		if r.Error != "" || r.Warning != "" {
+			out = append(out, r)
+			continue
+		}
+		if seen[r.Field] {
+			continue
+		}
+		seen[r.Field] = true
+		out = append(out, r)
+	}
+	return out
 }
 
 // routeCheckReadings shows what the route check actually matched: the address
@@ -795,10 +826,15 @@ func processPolicyCheckReadings(data map[string]any) []web.WatchReading {
 // dbQueriesCheckReadings summarises a db_queries sample; the statements
 // themselves are listed in the Sessions panel.
 func dbQueriesCheckReadings(data map[string]any) []web.WatchReading {
+	countKey, countLabel := checks.DataKeyLongCount, watchReadingLabelLongRunning
+	if _, present := data[checks.DataKeyMatchedCount]; present {
+		countKey, countLabel = checks.DataKeyMatchedCount, watchReadingLabelMatchingStatements
+	}
 	return readingsFrom(data).
 		addString(checks.DataKeyEngine, watchReadingLabelEngine).
 		addInt(checks.DataKeyCount, watchReadingLabelRunningStatements).
-		addInt(checks.DataKeyLongCount, watchReadingLabelLongRunning).
+		addInt(countKey, countLabel).
+		addInt(checks.DataKeyUnknownCount, watchReadingLabelUnknownResources).
 		addDurationSeconds(checks.DataKeyOldestSeconds, watchReadingLabelOldestStatement).
 		readings()
 }
@@ -858,6 +894,7 @@ func connCheckReadings(data map[string]any) []web.WatchReading {
 		addInt(checks.DataKeyPort, watchReadingLabelPort).
 		addString(checks.DataKeySocket, watchReadingLabelSocket).
 		addString(checks.DataKeyProtocol, watchReadingLabelProtocol).
+		addString(checks.DataKeyVersion, watchReadingLabelVersion).
 		addIntMetric(checks.DataKeyLatencyMS, watchReadingLabelLatency, metrics.MetricUnitMilliseconds).
 		readings()
 }

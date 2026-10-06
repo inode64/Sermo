@@ -71,7 +71,7 @@ Connection-protocol checks (MySQL, PostgreSQL, Redis, Docker, libvirt, etc.) are
 | `libraries`   | health | all DT_NEEDED shared libraries of the binary can be resolved with the binary's ELF class and machine, each library's own RUNPATH/`$ORIGIN` searched first (native debug/elf, no ldd) |
 | `process`     | health | a process matching `exe`/`user` is in `state` (running/zombie/absent); an `absent` reading that a replaced binary explains names it and becomes a verdictless state (the service reads `restart_required`, not failed) |
 | `process_policy` | health | every process of a user account satisfies the allow/deny policy (alert-only; see configuration.md) |
-| `db_queries` | health | no MySQL/MariaDB/PostgreSQL statement has run longer than `min_duration`; one incident per statement (watch-only; see Running database statements) |
+| `db_queries` | health | no MySQL/MariaDB/PostgreSQL statement matches the configured duration or resource thresholds; incidents tracked per statement (watch-only; see Running database statements) |
 | `metric`      | condition | a sampled metric satisfies `op value` (see Metrics)                |
 | `count`       | condition | the number of entries in a directory satisfies `op value` (see Count)|
 | `log`         | condition | the lines appended to a log file (or glob) that match `regex` within `within` satisfy `count {op, value}` (see Log matches) |
@@ -2137,7 +2137,7 @@ checks:
 ### Running database statements (`db_queries`)
 
 A `db_queries` watch lists the statements a MySQL, MariaDB or PostgreSQL server
-is running and alerts once **per statement** that outlives `min_duration`. It
+is running and alerts **per statement** on duration, CPU or memory thresholds. It
 is watch-only (a host watch under `watches:` or a service watch); it cannot be a
 service `checks:` entry or a preflight. The catalog `mysql`, `mariadb` and
 `postgres` services ship one as `alert-if-query-long-running` (see
@@ -2152,7 +2152,7 @@ watches:
       engine: mariadb            # mysql | mariadb | postgres | postgresql
       socket: /run/mysqld/mysqld.sock   # mysql/mariadb only; or host/port
       defaults_file: /root/.my.cnf      # mysql/mariadb only
-      min_duration: 5m           # required
+      min_duration: 5m           # duration-only alert
       exclude_users: [backup]    # optional filters: which statements alert
       severity: warning
       summary: "query ${id} by ${user} on ${database} running ${elapsed}: ${query}"
@@ -2168,8 +2168,21 @@ watches:
 - **`socket`** (MySQL/MariaDB only): a Unix socket path instead of `host`/`port`.
 - **`defaults_file`** (MySQL/MariaDB only): an option file read natively for the
   fields the check leaves unset (see Credentials below).
-- **`min_duration`** (required): a statement running at least this long is an
-  incident.
+- **`min_duration`**: without resource thresholds, a statement running at least
+  this long is an incident. With resource thresholds, this is an optional minimum
+  age before resources are evaluated. If supplied, it must be positive. At least
+  `min_duration` or one resource threshold is required.
+  Only a duration-only watch marks a statement as long-running; passing a
+  resource watch's age gate does not itself mark or alert the statement.
+- **`cpu`**, **`cpu_thread`**, **`memory`**: optional `{op, value}` resource
+  predicates, evaluated against each statement's own sample. Any matching
+  resource predicate triggers the statement's incident, after `min_duration`
+  when set and only within the account/database filters. `cpu` is a percentage
+  of all host CPUs; `cpu_thread` is a percentage of one logical CPU (100% means
+  one fully occupied CPU). CPU thresholds accept numbers or `%` in 0..100.
+  `memory` is bytes and requires a size suffix, for example `256MiB` or `1G`.
+  It is MariaDB's per-connection memory or a PostgreSQL backend's resident
+  memory; MySQL does not supply per-connection memory.
 - **`users`/`exclude_users`**, **`databases`/`exclude_databases`**: only
   statements of (not of) these accounts, in (not in) these databases, alert.
 - **`states`** (PostgreSQL only): the `pg_stat_activity.state` values listed
@@ -2178,6 +2191,40 @@ watches:
   `1000`). **`max_rows`**: rows published to the dashboard, longest first
   (default `50`).
 - **`timeout`**, **`severity`**, **`summary`**: as for any check.
+
+For example, this service watch alerts when a statement at least 30 seconds old
+exceeds **either** 90% of one CPU **or** 256 MiB. Add `cpu` to watch total CPU
+share as another independent limit. On eight logical CPUs, a thread using 100%
+has a total CPU share of 12.5%.
+
+```yaml
+watches:
+  resource-heavy-queries:
+    interval: 30s
+    check:
+      type: db_queries
+      engine: mariadb
+      socket: /run/mysqld/mysqld.sock
+      defaults_file: /root/.my.cnf
+      min_duration: 30s
+      cpu_thread: { op: ">", value: "90%" }
+      memory: { op: ">", value: 256MiB }
+      exclude_users: [backup]
+      severity: warning
+```
+
+The same check works in a host watch. Omit `min_duration` to evaluate resource
+limits as soon as the readings are ready; CPU still needs two samples. CPU
+requires a local database and a readable, verified server thread. PostgreSQL
+memory also requires a local backend; MariaDB reports its connection memory
+through SQL, including for remote connections. Missing readings are unknown,
+never zero: a known matching resource can fire, but otherwise a missing reading
+makes the result unavailable. An open incident stays open through missing
+samples. These watches do not support `for:`, `within:` or `levels:`.
+If the statement's OS thread changes, CPU and IO need a new baseline on the
+verified replacement thread; counters from different threads are never combined.
+The dashboard's check predicates show every configured resource threshold and
+the minimum age when present.
 
 **What is listed.** The watch's own connection never appears. MySQL/MariaDB
 skip idle and server threads: `Sleep`, `Daemon`, `Binlog Dump*`, `Slave_*`,
@@ -2196,21 +2243,45 @@ file means no options, and `user` defaults to `root`. MySQL needs the `PROCESS`
 privilege to list other accounts' threads; PostgreSQL needs `pg_monitor` (or
 superuser) to read other roles' statement text.
 
-**Per-statement incidents.** Each statement that crosses `min_duration` (and
-passes the filters) emits one `firing` event at the watch's `severity`, whose
+**Per-statement incidents.** Each matching statement emits one `firing` event
+at the watch's `severity`, whose
 message names the engine, connection id, elapsed time, user, database, client
-host, command/state and the statement text. When the statement finishes — or
+host, command/state and the statement text; a resource alert also names the
+matching thresholds and their measured values. A resource incident recovers
+when a valid sample no longer meets any configured threshold, and can fire
+again if usage rises. When the statement finishes — or
 its connection starts another one — the watch emits `recovered`. Each statement
 is its own incident in [`event_notify`](configuration.md#fleet-wide-event-alerts)
 (the event's check is `query:<key>`), so two slow statements are two alerts,
 each recovered on its own, and every target's `min_severity` applies. The
 watch's published result is failing while any statement is over the threshold,
-with `count`, `long_count` and `oldest_seconds` in its data.
+with `count`, `long_count` and `oldest_seconds` in its data. Resource watches
+also publish `matched_count`, and `unknown_count` when readings are missing.
+
+**Bounded samples.** Each cycle evaluates at most the 500 oldest statements.
+The sampler reads one extra row to detect an incomplete list; exactly 500 rows
+can still be complete. An incomplete sample publishes `complete: false` and
+cannot report a healthy watch just because none of the sampled statements
+matches. Counts describe the sampled rows. Open incidents for unlisted statements
+stay pending until a later observation establishes their recovery. A different
+statement observed on the same connection confirms that the previous one ended,
+even in a partial sample. Pending incidents are persisted separately from the
+current statement list and are not
+shown as live sessions or considered for automatic cancellation. The Sessions
+source reads `partial` when the list is incomplete or required resource readings
+are missing, even when another statement has already crossed a threshold.
 
 **Restarts.** The alerted statements are persisted with the watch's sample. A
 restarted or reloaded `sermod` restores them as already announced: a statement
-still running is not alerted twice, and one that ended while the daemon was
-down is recovered on the first cycle.
+still running is not alerted twice. The initial observation-only cycle does not
+fire hooks, send notifications or close incidents, including when a connection
+has started a replacement statement. Pending recoveries survive another restart
+and are dispatched on a live cycle once the observation confirms them.
+
+The Sessions expansion follows the same statement across refreshes, including
+small changes in MySQL's estimated start time. Its stable presentation identity
+is separate from the latest identity used to re-verify cancellation; a new
+statement on the same connection starts collapsed.
 
 **Failures and stopped services.** A connection or query failure publishes the
 watch as unavailable and reports one availability incident; it recovers on the
@@ -2218,14 +2289,17 @@ first good sample. A service watch skips its sample while the service is not
 `active`, so a stopped database is not reported as a broken probe.
 
 **Hooks and notifiers.** `then.notify` and `then.hook` work as on any watch,
-once per statement; when a notifier announced the statement live, its
+once per statement incident; when a notifier announced the statement live, its
 recovery is dispatched too. The hook environment adds `SERMO_DB_ENGINE`,
 `SERMO_DB_QUERY_ID`, `SERMO_DB_USER`, `SERMO_DB_NAME`, `SERMO_DB_HOST`,
-`SERMO_ELAPSED_SECONDS`, `SERMO_QUERY` and `SERMO_CHANGE` (`long` when the
-statement crosses the threshold, `ended` on its recovery). `summary:` may use
+`SERMO_ELAPSED_SECONDS`, `SERMO_QUERY` and `SERMO_CHANGE` (`long` for a duration
+alert, `threshold` for a resource alert, `cleared` when resource usage recovers,
+`ended` when the statement finishes). Measured samples also supply `SERMO_CPU`,
+`SERMO_CPU_THREAD` (percentages) and `SERMO_MEMORY` (bytes). `summary:` may use
 `${id}`, `${user}`, `${database}`, `${host}`, `${query}`, `${elapsed}` and
-`${value}` (elapsed seconds). `levels:` and `then.action` are rejected: the
-watch alerts once per statement at its own `severity`.
+`${value}` (elapsed duration), plus `${cpu}`, `${cpu_thread}` and `${memory}`
+(bytes); a missing resource renders as `unavailable`. `levels:` and
+`then.action` are rejected: each statement uses the watch's own `severity`.
 
 **Redaction.** Statement text is redacted before it is stored, shown, logged or
 handed to a hook: the secret after `IDENTIFIED BY`, `PASSWORD(...)`,
@@ -2275,6 +2349,12 @@ and a guard that blocks `kill_query` blocks it. A PostgreSQL session `idle in
 transaction` runs no statement to cancel: `mode: query` refuses it, so watching
 that state with an automatic kill needs `mode: connection`. `policy:` is only
 accepted together with `then.kill_query`.
+
+Resource thresholds cannot be combined with `then.kill_query`: its fresh target
+read revalidates duration and selectors, but cannot revalidate a CPU rate
+without a second sample. Use a separate duration-only watch for automatic
+cancellation. Resource watches still permit manual cancellation through the
+usual identity verification, operation locks and guards.
 
 ### MongoDB query (`mongodb-query`)
 

@@ -104,17 +104,16 @@
     <table class="db-queries-table">
       <caption class="visually-hidden">Running database statements</caption>
       <thead><tr>
-        <th scope="col" class="sortable" data-db-query-sort="type">Type<span class="sort-ind" data-dqi="type"></span></th>
+        <th scope="col" class="sortable db-col-type" data-db-query-sort="type">Type<span class="sort-ind" data-dqi="type"></span></th>
         <th scope="col" class="sortable" data-db-query-sort="user">User<span class="sort-ind" data-dqi="user"></span></th>
-        <th scope="col" class="sortable" data-db-query-sort="database">DB<span class="sort-ind" data-dqi="database"></span></th>
-        <th scope="col" class="sortable" data-db-query-sort="client">Client<span class="sort-ind" data-dqi="client"></span></th>
-        <th scope="col" class="sortable" data-db-query-sort="id">ID<span class="sort-ind" data-dqi="id"></span></th>
-        <th scope="col" class="sortable" data-db-query-sort="state">State<span class="sort-ind" data-dqi="state"></span></th>
+        <th scope="col" class="sortable db-col-database" data-db-query-sort="database">DB<span class="sort-ind" data-dqi="database"></span></th>
+        <th scope="col" class="sortable db-col-id" data-db-query-sort="id">ID<span class="sort-ind" data-dqi="id"></span></th>
+        <th scope="col" class="sortable db-col-state" data-db-query-sort="state">State<span class="sort-ind" data-dqi="state"></span></th>
         <th scope="col" class="sortable" data-db-query-sort="running">Running<span class="sort-ind" data-dqi="running"></span></th>
-        <th scope="col" class="sortable" data-db-query-sort="cpu">CPU<span class="sort-ind" data-dqi="cpu"></span></th>
-        <th scope="col" class="sortable" data-db-query-sort="memory">Memory<span class="sort-ind" data-dqi="memory"></span></th>
-        <th scope="col" class="sortable" data-db-query-sort="io">IO R/W<span class="sort-ind" data-dqi="io"></span></th>
-        <th scope="col">Query</th>
+        <th scope="col" class="sortable db-col-cpu-thread" data-db-query-sort="cpu_thread" title="Statement thread CPU: 100% = one logical CPU">CPU thread<span class="sort-ind" data-dqi="cpu_thread"></span></th>
+        <th scope="col" class="sortable db-col-cpu" data-db-query-sort="cpu" title="Statement CPU as a share of all host CPUs">CPU total<span class="sort-ind" data-dqi="cpu"></span></th>
+        <th scope="col" class="sortable db-col-memory" data-db-query-sort="memory">Memory<span class="sort-ind" data-dqi="memory"></span></th>
+        <th scope="col" class="sortable db-col-io" data-db-query-sort="io">IO R/W<span class="sort-ind" data-dqi="io"></span></th>
         <th scope="col"><span class="visually-hidden">Actions</span></th>
       </tr></thead>
       <tbody id="db-query-rows"></tbody>

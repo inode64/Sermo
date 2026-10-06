@@ -119,7 +119,8 @@ func (c connCheck) Run(ctx context.Context) Result {
 	res, elapsed, perIface, err := c.probeResult(ctx)
 	if err != nil {
 		r := c.base.unavailableResult(fmt.Sprintf("%s %s: %v", c.proto.Name(), addr, err), start)
-		r.Data = ifaceData(perIface)
+		r.Data = c.resultData(0, perIface, conn.Result{})
+		delete(r.Data, DataKeyLatencyMS)
 		return r
 	}
 	if problems, extra, changed := c.changed(res); changed {
@@ -142,6 +143,9 @@ func (c connCheck) Run(ctx context.Context) Result {
 	r.Unavailable = unavailable
 	r = gradeExpectResult(r, c.expectGrades, res)
 	r.Data = c.resultData(elapsed, perIface, res)
+	if r.Observation() == ObservationHealthy {
+		r.Data[DataKeySummary] = "Probe succeeded"
+	}
 	for _, g := range growths {
 		if !g.missing {
 			r.Data[g.field+DataKeyIncreaseSuffix] = g.growth

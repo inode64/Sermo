@@ -34,10 +34,21 @@ func (c tcpCheck) Run(ctx context.Context) Result {
 	})
 	if err != nil {
 		r := c.unavailableResult(err.Error(), start)
-		r.Data = ifaceData(perIface)
+		r.Data = c.resultData(perIface)
 		return r
 	}
 	r := c.result(true, "connected to "+addr+ifaceSuffix(chosen), start)
-	r.Data = ifaceData(perIface)
+	r.Data = c.resultData(perIface)
+	r.Data[DataKeyLatencyMS] = r.Latency.Milliseconds()
+	r.Data[DataKeySummary] = "Connected" + ifaceSuffix(chosen)
 	return r
+}
+
+// resultData keeps the attempted target available even when dialing fails.
+func (c tcpCheck) resultData(perIface map[string]any) map[string]any {
+	data := map[string]any{DataKeyHost: c.host, DataKeyPort: c.port, DataKeyProtocol: conn.TransportTCP}
+	if perIface != nil {
+		data[DataKeyInterfaces] = perIface
+	}
+	return data
 }

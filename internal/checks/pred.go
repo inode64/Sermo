@@ -278,7 +278,8 @@ func parseLevelPreds(entry map[string]any, fields []string) ([]levelPred, error)
 }
 
 // ParsePredicate parses a named {op, value} threshold without host I/O. The
-// field selects the value grammar: *_bytes, *_pct, or a finite numeric value.
+// field selects the value grammar: *_bytes/memory, *_pct/cpu/cpu_thread,
+// or a finite numeric value.
 // Configuration validation and runtime builders use the same restrictions.
 func ParsePredicate(field string, raw any) (op string, value float64, err error) {
 	m, ok := raw.(map[string]any)
@@ -401,14 +402,14 @@ func deltaOrZero(cur, prev uint64) uint64 {
 // parseLevelPredValue parses one predicate value by its field's form.
 func parseLevelPredValue(field string, raw any) (float64, error) {
 	value := cfgval.String(raw)
-	if strings.HasSuffix(field, LevelFieldSuffixBytes) {
+	if strings.HasSuffix(field, LevelFieldSuffixBytes) || field == metrics.MetricMemory {
 		n, ok := cfgval.ByteSize(raw)
 		if !ok {
 			return 0, fmt.Errorf("%s value %q must include a size suffix (K, M, G or T; e.g. 10G)", field, value)
 		}
 		return float64(n), nil
 	}
-	if strings.HasSuffix(field, LevelFieldSuffixPct) {
+	if strings.HasSuffix(field, LevelFieldSuffixPct) || field == metrics.MetricCPU || field == metrics.MetricCPUThread {
 		val, ok := cfgval.Percent(raw)
 		if !ok {
 			return 0, fmt.Errorf("%s value %q must be a percentage in %s (e.g. 90 or 90%%)", field, value, cfgval.PercentRange())

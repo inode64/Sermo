@@ -132,3 +132,17 @@ func TestSummaryFormatsMetricValuesAndThresholdsWithTheirUnit(t *testing.T) {
 		t.Fatalf("summary = %q, want %q", result.Message, want)
 	}
 }
+
+func TestConfiguredSummaryOverridesCompactHint(t *testing.T) {
+	original := Result{OK: true, Message: "redis 127.0.0.1:6379 ok", Data: map[string]any{DataKeySummary: "Probe succeeded", DataKeyConnectedClients: 12}}
+	result := ApplySummary("Cache has ${result.connected_clients} clients", nil, original)
+	if result.Message != "Cache has 12 clients" {
+		t.Fatalf("message = %q", result.Message)
+	}
+	if _, ok := result.Data[DataKeySummary]; ok {
+		t.Fatal("compact hint hides configured summary")
+	}
+	if original.Data[DataKeySummary] != "Probe succeeded" {
+		t.Fatal("mutated the underlying result data")
+	}
+}

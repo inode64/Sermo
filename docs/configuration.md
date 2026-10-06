@@ -922,20 +922,41 @@ The dashboard's **Sessions** panel lists, for the whole host:
   one verified row (see [safety](safety.md));
 - the statements each [`db_queries`](rules.md#running-database-statements-db_queries)
   watch last sampled (the catalog `mysql`, `mariadb` and `postgres` services
-  ship one): engine, user, database, client host, connection id,
-  command/state, running time, CPU, memory, IO read/write and the redacted
-  statement text,
-  longest first. A statement past the watch's `min_duration` is marked long. For
-  a local server (Unix socket or loopback) CPU and IO are what the statement's
+  ship one): engine, user, database, session ID, command/state, running time,
+  thread CPU, total CPU, memory and IO read/write, longest first. Click anywhere on the row, except
+  its action button, or use the user toggle with the keyboard to read the
+  redacted SQL across the full table width, together with the source service and
+  check, client, query ID when available and sample time. Details omit fields
+  already visible in the summary columns. As the viewport narrows on tablets
+  and phones, fields from hidden columns appear in the expansion automatically.
+  MySQL and MariaDB show the connection ID separately from the reported OS thread ID
+  (TID); PostgreSQL shows its backend PID. Missing thread IDs remain unknown.
+  Truncated SQL is labelled. The expansion follows the exact statement through
+  refresh, sorting and filtering; a replacement statement or an expired sample
+  closes it. Statements without an exact identity close on the next refresh.
+  On phones, the summary keeps the user, running time and action, with all other
+  fields available in the expansion.
+  A duration-only watch marks a statement past `min_duration` as long. With
+  resource thresholds, `min_duration` only gates evaluation; a matching resource
+  highlights the row without marking it as a duration incident. Incomplete
+  sampling or missing required readings mark the SQL source as partial, even
+  when another statement already exceeds its threshold;
+  see [per-statement resource thresholds](rules.md#running-database-statements-db_queries).
+  For a local server (Unix socket or loopback), CPU and IO are what the statement's
   own thread (MySQL/MariaDB, read under `/proc/<pid>/task/<tid>`) or backend
-  process (PostgreSQL) used since the previous sample — CPU as a share of the
-  host's CPUs, IO as storage bytes per second (MySQL/MariaDB write mostly from
+  process (PostgreSQL) used since the previous sample. **CPU thread** (`cpu_thread`)
+  is relative to one logical CPU: 100% means the thread occupied a whole CPU.
+  **CPU total** (`cpu`) is that same usage as a share of all host CPUs; on a host
+  with eight logical CPUs, 100% thread CPU equals 12.5% total CPU. Both need two
+  samples (`cpu_ready`); an unknown reading shows a dash, while a measured idle
+  thread shows 0%. IO is storage bytes per second (MySQL/MariaDB write mostly from
   background threads, so a statement's write rate is usually low); memory is
   MariaDB's per-connection `MEMORY_USED`
-  or the PostgreSQL backend's resident memory. Neither is measured for a remote
-  server, nor for a thread that does not belong to the server's own executable
+  or the PostgreSQL backend's resident memory. CPU, IO and PostgreSQL memory
+  require a local server and a thread that belongs to the server's own executable
   (`mysqld`, `mariadbd`, `postgres`) — a containerized server reached over
-  loopback reports ids from another PID namespace. MySQL reports no
+  loopback reports ids from another PID namespace. MariaDB reports connection
+  memory through SQL, including remotely. MySQL reports no
   per-connection memory, and MySQL thread CPU and IO need read access to
   `performance_schema.threads`. On a service watch, an
   administrator can **cancel** a statement or **close its connection**; Sermo
@@ -1267,6 +1288,7 @@ Read-only endpoints:
   other read errors remain visible; Sermo does not rewrite login accounting.
   The `database` list carries the statements every `db_queries` watch last
   published (`service` — empty for a host watch —, `watch`, `engine`, `id`,
+  `query_id` and `os_tid` when available, `at` (RFC3339 sample time),
   `user`, `host`, `database`, `command`, `state`, `elapsed_seconds`, `query`,
   `truncated`, `long`, `identity`, `can_kill`, `stopping` — the server is
   already stopping it —, and the usage fields of the
@@ -1473,9 +1495,26 @@ effective check intervals, with a 30-second minimum) and while it still matches
 the configured check type; otherwise the detail marks it stale and waits for a
 new cycle rather than showing old values.
 Host-watch readings use the same persisted latest-observed path, with stale
-samples hidden after their normal freshness window. The Graphs section uses one
-window selector for SLA and runtime
-measurements. Its SLA timeline comes from the same data as `sermoctl sla`: it
+samples hidden after their normal freshness window.
+
+Before the service graphs, connection details group the current checks by their
+host/port or Unix socket. Target, protocol and reported version appear once per
+target. Connections use the newest available sample for each protocol, with the
+source check and sample age shown; equal timestamps use check-name order. Samples
+are never added or averaged. Stale and skipped samples do not populate this
+summary. Multiple ports, sockets and differing reported versions stay distinct.
+These fields are also available in host-watch readings.
+
+Check rows show compact readings and, where the check supplies one, a short
+success message. Shared connection fields, latency readings and the original
+message behind a compact success result are omitted from the check table.
+Failures, warnings, state sensors, configured `summary:` messages and results
+without a compact representation retain their diagnostic text. On phones, where
+the per-check table is hidden, connection details remain above the graphs.
+In the service's general information, the state and its explanation appear on
+separate lines.
+
+The Graphs section uses one window selector for SLA and runtime measurements. Its SLA timeline comes from the same data as `sermoctl sla`: it
 plots the per-minute samples over the selected window (1h/24h/7d/30d/1y), marks
 each degraded minute as an incident at its local time, and leaves gaps where the
 service was unmonitored.

@@ -349,3 +349,27 @@ func TestCertIssuerChangeAlone(t *testing.T) {
 		t.Fatalf("issuer change alone must alert: %+v", res)
 	}
 }
+
+func TestCertCompactSummaryOnlyForHealthyMaterial(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		expires time.Time
+		want    bool
+	}{
+		{name: "healthy", expires: time.Now().Add(60 * 24 * time.Hour), want: true},
+		{name: "expired", expires: time.Now().Add(-time.Hour)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			sample := healthyCert()
+			sample.NotAfter = tc.expires
+			c := certCheck{name: "cert", timeout: time.Second, host: "example.test", port: "443", sampler: fakeCert(sample)}
+			res := c.Run(t.Context())
+			if _, ok := res.Data[DataKeySummary]; ok != tc.want {
+				t.Fatalf("summary = %v, message = %s", res.Data, res.Message)
+			}
+			if !strings.Contains(res.Message, "example.test") {
+				t.Fatalf("original target missing: %s", res.Message)
+			}
+		})
+	}
+}

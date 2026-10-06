@@ -17,7 +17,7 @@ func TestDedupeWatchReadingsCollapsesRepeatedContext(t *testing.T) {
 		{Field: "mac", Label: "MAC", Value: "34:5a:60:00:1c:92"},
 		{Field: "speed", Label: "Speed", Value: "25000 Mbps"},
 	}
-	got := dedupeWatchReadings(in)
+	got := dedupeReadings(in)
 	var fields []string
 	for _, r := range got {
 		fields = append(fields, r.Field)
@@ -44,7 +44,7 @@ func TestDedupeWatchReadingsKeepsEveryFailure(t *testing.T) {
 		{Field: "interface", Label: "Interface", Value: "eth0"},
 		{Field: watchReadingFieldWarning, Label: "Warning", Warning: "eth0 speed 25000->1000"},
 	}
-	got := dedupeWatchReadings(in)
+	got := dedupeReadings(in)
 	var problems []string
 	for _, r := range got {
 		if r.Error != "" {

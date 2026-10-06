@@ -502,9 +502,12 @@ type Check struct {
 	// Severity grades a failing check for the row that renders it: a grade
 	// below error (debug, info, warning) reads amber like an optional check,
 	// error (the default) reads red and critical is marked apart.
-	Severity string         `json:"severity,omitempty"`
-	Skipped  bool           `json:"skipped,omitempty"` // gated off (requires/skip_when_changed)
-	Message  string         `json:"message,omitempty"`
+	Severity string `json:"severity,omitempty"`
+	Skipped  bool   `json:"skipped,omitempty"` // gated off (requires/skip_when_changed)
+	Message  string `json:"message,omitempty"`
+	// Summary is an optional compact success message. Message remains the full
+	// diagnostic, and configured check summaries never receive this hint.
+	Summary  string         `json:"summary,omitempty"`
 	Readings []WatchReading `json:"readings,omitempty"`
 	Ran      bool           `json:"ran"`          // false if not observed yet
 	At       string         `json:"at,omitempty"` // RFC3339 when the check last ran (cached checks keep prior time)

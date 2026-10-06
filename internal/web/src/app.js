@@ -72,6 +72,8 @@ const defaultCategoryLibrary = "library";
 // "FDs / Threads" also reports the thread count, which has no column of its own.
 // TestIndexDetailDedupesVisibleColumns pins these against both the CSS and the
 // fields that use them.
+// SQL details use the same breakpoints: State, both CPU readings, Memory and
+// IO R/W move at 1420px; Type, Database and ID move at 640px.
 const colDupWide = "col-dup col-dup-1420";
 const colDupPhone = "col-dup col-dup-640";
 // Key of the host watch panel in watch-panels.json. Distinct from
@@ -259,7 +261,6 @@ const sessionTypeFilterStates = [sessionKindSSH, ...terminalSessionKinds, sessio
 const dbQueryKillModeQuery = "query";
 const dbQueryKillModeConnection = "connection";
 // A statement longer than this shows a preview that expands to the full text.
-const dbQueryPreviewChars = 100;
 const sessionSourceAvailable = "available";
 const sessionSourceUnavailable = "unavailable";
 const sessionSourcePartial = "partial";
@@ -1355,6 +1356,7 @@ let sessionFilter = filterAll;
 let sessionSort = { key: "", dir: 1 };
 // The longest-running statement is the one an operator came to see.
 let dbQuerySort = { key: "running", dir: -1 };
+const expandedDBQueries = new Set();
 let svcQuery = "";
 let svcStatus = filterAll; // all | disabled | stopped | started | starting | collecting | monitored | failed
 let svcCategory = filterAll;
@@ -3259,9 +3261,9 @@ window.addEventListener(domEventHashChange, () => { hashScrolled = false; applyH
 
 // rowClick expands a row from a click anywhere on it, except on interactive
 // elements (action buttons and links) which keep their own behaviour.
-function rowClick(event, key) {
+function rowClick(event, key, toggle = toggleExpand) {
   if (closestFrom(event, "button, a, input, select, summary")) return;
-  toggleExpand(key);
+  toggle(key);
 }
 
 // Expansion detail cells are rendered only through litRender into the cell
@@ -3440,7 +3442,7 @@ function procTreeLabel(row) {
   const depth = Number(row.depth || 0);
   const p = row.p || {};
   const branch = depth > 0
-    ? tpl`<span class="proc-branch" title="child process of PID ${p.ppid || ""}" aria-label="child process of PID ${p.ppid || ""}"></span>`
+    ? tpl`<span class="proc-branch" role="img" title="child process of PID ${p.ppid || ""}" aria-label="child process of PID ${p.ppid || ""}"></span>`
     : nothing;
   return tpl`<span class="proc-tree${depth > 0 ? " proc-tree-child" : ""}" style="--proc-depth:${depth}">${branch}${procLabel(p)}</span>`;
 }
@@ -3920,7 +3922,7 @@ function slaStrip(points, win, opts = {}) {
       cell = { pct: pctClamp(b.up / b.total * percentScale), down: slaDownPct(b.up, b.total), downBuckets: b.downBuckets };
       lastCell = cell;
     } else if (lastCell != null) { cell = lastCell; held = true; }
-    if (cell == null) return `<span class="sla-bar-seg sla-gap" title="${esc(when + " · " + slaNoData)}" aria-label="${esc(when)}: ${slaNoData}"></span>`;
+    if (cell == null) return `<span class="sla-bar-seg sla-gap" role="img" title="${esc(when + " · " + slaNoData)}" aria-label="${esc(when)}: ${slaNoData}"></span>`;
     const pctText = fmtPct(cell.pct);
     const affected = slaAffectedText(cell.down, cell.downBuckets);
     const tip = held
@@ -3930,7 +3932,7 @@ function slaStrip(points, win, opts = {}) {
     // (sla-down-low is the warn token): a RAID array rebuilding is a thing to
     // watch, not an outage, and red is reserved for the bands that mean one.
     const band = opts.warn && cell.down > 0 ? "sla-down-low" : slaDownBand(cell.down);
-    return `<span class="sla-bar-seg ${band}" title="${esc(tip)}" aria-label="${esc(when)}: ${esc(pctText)} available, ${esc(affected)}${held ? " (held)" : ""}"></span>`;
+    return `<span class="sla-bar-seg ${band}" role="img" title="${esc(tip)}" aria-label="${esc(when)}: ${esc(pctText)} available, ${esc(affected)}${held ? " (held)" : ""}"></span>`;
   }).join("");
   const incidents = slaIncidentPoints(points, startMs, endMs);
   const affectedMinutes = slaAffectedMinutes(incidents);
@@ -4319,15 +4321,37 @@ function dbQueryText(query) {
   return `${query.query || ""}${query.truncated ? "…" : ""}`;
 }
 
-// dbQueryCell shows a short statement whole; a long one shows a preview that
-// expands in place, since a tooltip never reaches a phone.
-function dbQueryCell(query) {
-  const text = query.query || "";
-  const note = query.truncated ? tpl`<span class="muted"> (truncated by the daemon)</span>` : nothing;
-  if (!text) return tpl`<span class="muted">—</span>`;
-  const full = dbQueryText(query);
-  if (text.length <= dbQueryPreviewChars) return tpl`<code class="db-query-text" title="${full}">${full}</code>${note}`;
-  return tpl`<details class="db-query-more"><summary><code class="db-query-text">${text.slice(0, dbQueryPreviewChars)}…</code></summary><code class="db-query-text">${full}</code>${note}</details>`;
+function dbQueryExpansionKey(query) {
+  return JSON.stringify([query.service || "", query.watch || "", query.engine || "", query.id, query.display_identity || query.identity || ""]);
+}
+
+function toggleDBQueryExpansion(key) {
+  if (!(latestSessionInventory.database || []).some((query) => dbQueryExpansionKey(query) === key)) return;
+  if (expandedDBQueries.has(key)) expandedDBQueries.delete(key);
+  else expandedDBQueries.add(key);
+  renderSessions();
+}
+
+function dbQueryDetail(row) {
+  const query = row.query;
+  const postgres = query.engine === "postgres";
+  const fields = [
+    ["Engine", query.engine, colDupPhone], ["Service", query.service || "Host watch"], ["Check", query.watch],
+    ["Database", query.database, colDupPhone], ["Client", query.host],
+    [postgres ? "Backend PID" : "Connection ID", query.id, colDupPhone],
+    ...(!postgres ? [["OS TID", query.os_tid]] : []),
+    ...(query.query_id ? [["Query ID", query.query_id]] : []),
+    ["Command", query.command, colDupWide], ["State", query.state, colDupWide],
+    ["Sample", query.at ? `${fmtTime(query.at)} · ${fmtAge(query.at)}` : ""],
+    ["CPU thread", dbQueryCPUThreadCell(row), colDupWide], ["CPU total", sessionCPUCell(row), colDupWide],
+    ["Memory", sessionMemoryCell(row), colDupWide], ["IO R/W", sessionIOCell(row), colDupWide],
+  ];
+  return tpl`<div class="exp-body db-query-detail">
+    <div class="runtime-grid">${fields.map(([label, value, cls]) => tpl`<div class="${cls || nothing}"><span class="muted">${label}</span><br>${value || "—"}</div>`)}</div>
+    <h4>SQL</h4>
+    <pre class="db-query-text"><code>${query.query ? dbQueryText(query) : "No statement text available."}</code></pre>
+    ${query.truncated ? tpl`<p class="muted">Statement truncated by the daemon.</p>` : nothing}
+  </div>`;
 }
 
 function dbQueryRows(inventory) {
@@ -4336,10 +4360,10 @@ function dbQueryRows(inventory) {
     return {
       kind: query.engine || sessionKindDatabase, service: query.service || "", user: query.user || "",
       database: query.database || "", client: query.host || "", id: query.id || 0,
-      state, running: query.elapsed_seconds || 0, long: !!query.long,
-      search: [query.watch, query.query].join(" "),
-      query: dbQueryCell(query), stateCell: state || "—",
-      cpu: query.cpu || 0, cpuReady: !!query.cpu_ready,
+      state, running: query.elapsed_seconds || 0, long: !!query.long, matched: !!query.matched, alerted: !!query.alerted,
+      search: [query.watch, query.query, query.os_tid, query.query_id].join(" "),
+      key: dbQueryExpansionKey(query), query, stateCell: state || "—",
+      cpu: query.cpu || 0, cpuThread: query.cpu_thread || 0, cpuReady: !!query.cpu_ready,
       memory: query.rss || 0, memoryReady: !!query.memory_ready,
       ioRead: query.io_read || 0, ioWrite: query.io_write || 0, ioReady: !!query.io_ready,
       action: dbQueryKillButton(query),
@@ -4354,7 +4378,7 @@ function dbQueryRows(inventory) {
       return {
         kind: sessionKindDatabase, service: source.service || "", user: "", database: "", client: "", id: 0,
         state, running: -1, long: false, search: [source.check, source.message].join(" "),
-        query: tpl`<span class="muted">${[source.service || "host", source.check].filter(Boolean).join(":")}: ${source.message || (state === targetStateCollecting ? "Waiting for a sample" : "Statement list unavailable")}</span>`,
+        message: `${[source.service || "host", source.check].filter(Boolean).join(":")}: ${source.message || (state === targetStateCollecting ? "Waiting for a sample" : "Statement list unavailable")}`,
         stateCell: sessionStateCell(state), action: nothing,
       };
     });
@@ -4369,6 +4393,7 @@ const dbQuerySortKeys = {
   id: (row) => row.id,
   state: (row) => row.state,
   running: (row) => row.running,
+  cpu_thread: (row) => row.cpuReady ? row.cpuThread : -1,
   cpu: (row) => row.cpuReady ? row.cpu : -1,
   memory: (row) => row.memoryReady ? row.memory : -1,
   io: (row) => row.ioReady ? row.ioRead + row.ioWrite : -1,
@@ -4390,6 +4415,28 @@ function dbQueryRunningCell(row) {
   return tpl`<span class="lvl-warning" title="Running longer than the watch's min_duration">${fmtDuration(row.running)}</span>`;
 }
 
+function dbQueryCPUThreadCell(row) {
+  return row.cpuReady ? usageBarMini(pctClamp(row.cpuThread), fmtPct(row.cpuThread), `${fmtPct(row.cpuThread)} of one logical CPU`) : sessionMetricPlaceholder(row);
+}
+
+function dbQueryRow(row) {
+  if (!row.query) return tpl`<tr class="db-query-source"><td colspan="11">${row.stateCell} <span class="muted">${row.message}</span></td></tr>`;
+  const open = expandedDBQueries.has(row.key);
+  const detailID = `db-query-${detailDomKey(row.key)}`;
+  const label = `${row.kind} statement ${row.id} of ${row.user || "unknown user"}`;
+  return tpl`<tr class="clickable db-query-row${row.matched || row.alerted ? " row-warning" : ""}" data-db-query-key="${row.key}">
+    <td class="db-col-type">${row.kind || "—"}</td>
+    <td><button type="button" class="row-toggle" data-db-query-expand="${row.key}" aria-expanded="${open}" aria-controls="${open ? detailID : nothing}" aria-label="${expandToggleAriaLabel(label, open, "SQL details")}">
+      <span class="exp" aria-hidden="true">${open ? "▾" : "▸"}</span><span class="db-cell-text" title="${row.user}">${row.user || "—"}</span>
+    </button></td>
+    <td class="db-col-database"><span class="db-cell-text" title="${row.database}">${row.database || "—"}</span></td>
+    <td class="db-col-id mono">${row.id || "—"}</td>
+    <td class="db-col-state"><span class="db-cell-text" title="${row.state}">${row.stateCell}</span></td>
+    <td>${dbQueryRunningCell(row)}</td><td class="db-col-cpu-thread">${dbQueryCPUThreadCell(row)}</td><td class="db-col-cpu">${sessionCPUCell(row)}</td>
+    <td class="db-col-memory">${sessionMemoryCell(row)}</td><td class="db-col-io">${sessionIOCell(row)}</td><td>${row.action}</td>
+  </tr>${open ? tpl`<tr class="exp-row db-query-expansion" id="${detailID}"><td colspan="11">${dbQueryDetail(row)}</td></tr>` : nothing}`;
+}
+
 function renderDBQueries(rows) {
   const block = $("#db-query-block");
   const body = $("#db-query-rows");
@@ -4401,12 +4448,7 @@ function renderDBQueries(rows) {
   if (count) count.textContent = String((latestSessionInventory.database || []).length);
   if (body) {
     sortDBQueryRows(rows);
-    const content = rows.length ? rows.map((row) => tpl`<tr class="${row.long ? "row-warning" : ""}">
-      <td title="${row.service ? `service ${row.service}` : "host watch"}">${row.kind || "—"}</td><td>${row.user || "—"}</td>
-      <td>${row.database || "—"}</td><td class="mono">${row.client || "—"}</td><td class="mono">${row.id || "—"}</td>
-      <td>${row.stateCell}</td><td>${dbQueryRunningCell(row)}</td><td>${sessionCPUCell(row)}</td><td>${sessionMemoryCell(row)}</td>
-      <td>${sessionIOCell(row)}</td><td>${row.query}</td><td>${row.action}</td>
-    </tr>`) : tpl`<tr><td colspan="12" class="muted">No statements match the filter.</td></tr>`;
+    const content = rows.length ? rows.map(dbQueryRow) : tpl`<tr><td colspan="11" class="muted">No statements match the filter.</td></tr>`;
     litRender(content, body);
   }
   updateSortIndicatorsFor("dqi", dbQuerySort, "#db-query-block th.sortable[data-db-query-sort]", "dbQuerySort");
@@ -4493,7 +4535,13 @@ function sessionIOCell(row) {
 }
 
 function renderSessions(inventory = latestSessionInventory) {
+  // Filtering/sorting keeps expansions. A fresh sample must still identify the
+  // exact statement, not just reuse its connection ID or SQL text.
+  const fresh = inventory !== latestSessionInventory;
   latestSessionInventory = inventory || {};
+  const present = new Set((latestSessionInventory.database || [])
+    .filter((query) => !fresh || query.identity).map(dbQueryExpansionKey));
+  for (const key of expandedDBQueries) if (!present.has(key)) expandedDBQueries.delete(key);
   forgetFinishedSessionActions(latestSessionInventory);
   const sources = latestSessionInventory.sources || [];
   const database = latestSessionInventory.database || [];
@@ -4548,20 +4596,110 @@ function setSessionFilter(value) {
   renderSessions();
 }
 
-function serviceCheckRows(d) {
+// Connection context comes from structured readings, never from parsing messages.
+const serviceConnectionFields = new Set(["host", "port", "socket", "protocol", "version", "connected_clients"]);
+
+function checkConnectionTarget(c) {
+  const values = new Map((c.readings || []).filter((r) => !r.error && !r.warning).map((r) => [r.field, r.value]));
+  const socket = values.get("socket");
+  if (socket) return { key: JSON.stringify(["socket", socket]), label: socket };
+  const host = values.get("host"), port = values.get("port");
+  if (!host || !port) return null;
+  const address = host.includes(":") && !host.startsWith("[") ? `[${host}]` : host;
+  return { key: JSON.stringify(["host", host, port]), label: `${address}:${port}` };
+}
+
+function serviceConnectionGroups(d) {
+  const groups = new Map();
+  for (const c of d.checks || []) {
+    if (c.stale || c.skipped || !c.at) continue;
+    const target = checkConnectionTarget(c);
+    if (!target) continue;
+    if (!groups.has(target.key)) groups.set(target.key, { ...target, checks: [] });
+    groups.get(target.key).checks.push(c);
+  }
+  return [...groups.values()];
+}
+
+function connectionValues(group, field) {
+  return [...new Set(group.checks.flatMap((c) => (c.readings || [])
+    .filter((r) => r.field === field && r.value && !r.error && !r.warning).map((r) => r.value)))];
+}
+
+// Choose one real sample per protocol. Equal timestamps use the check name, so
+// reordering the API cannot change the displayed reading. Never sum/average probes.
+function connectionSamples(group) {
+  const samples = new Map();
+  const ordered = [...group.checks].sort((a, b) =>
+    Date.parse(b.at) - Date.parse(a.at) || a.name.localeCompare(b.name));
+  for (const c of ordered) {
+    const protocol = (c.readings || []).find((r) => r.field === "protocol")?.value || c.type;
+    const reading = (c.readings || []).find((r) => r.field === "connected_clients" && r.value && !r.error && !r.warning);
+    if (reading && !samples.has(protocol)) samples.set(protocol, { check: c, reading, protocol });
+  }
+  return [...samples.values()];
+}
+
+function serviceConnectionDetail(groups) {
+  if (!groups.length) return nothing;
+  return tpl`<section class="service-connections" aria-label="Connection details">${groups.map((group) => {
+    const protocols = connectionValues(group, "protocol");
+    const versions = connectionValues(group, "version");
+    const samples = connectionSamples(group);
+    return tpl`<div class="connection-grid">
+      <div><span class="muted">Target</span><br><b>${group.label}</b></div>
+      ${protocols.length ? tpl`<div><span class="muted">Protocol</span><br><b>${protocols.join(" · ")}</b></div>` : nothing}
+      ${versions.length ? tpl`<div><span class="muted">Reported version</span><br><b>${versions.join(" · ")}</b></div>` : nothing}
+      ${samples.map(({ check, reading, protocol }) => tpl`<div>
+        <span class="muted">Connections${samples.length > 1 ? ` · ${protocol}` : ""}</span><br>
+        <b>${reading.value.endsWith(" connections") ? reading.value.slice(0, -" connections".length) : reading.value}</b>
+        <div class="muted connection-source">${check.name} · ${fmtAge(check.at)}</div>
+      </div>`)}
+    </div>`;
+  })}</section>`;
+}
+
+function checkReadingValue(r) {
+  if (r.error) return tpl`<span class="watch-reading-value bad">${r.error}</span>`;
+  if (r.warning) return tpl`<span class="watch-reading-value inactive">${r.warning}</span>`;
+  return tpl`<b class="watch-reading-value${r.good ? " good" : ""}">${r.value || "—"}</b>`;
+}
+
+function renderCheckReadings(readings) {
+  if (!readings.length) return nothing;
+  return tpl`<dl class="check-readings">${readings.map((r) => tpl`<div>
+    <dt>${r.label || r.field || "Sample"}</dt><dd>${checkReadingValue(r)}</dd>
+  </div>`)}</dl>`;
+}
+
+function serviceCheckResult(c, shared) {
+  // A hint belongs only to an ordinary healthy result. Fallback messages,
+  // operator summaries and all diagnostics remain visible in full.
+  const compact = c.summary && c.ok && !c.skipped && !c.stale && !verdictlessCheck(c);
+  const readings = c.readings || [];
+  const visible = readings.filter((r) => {
+    if (r.field === "latency_ms") return false;
+    if (r.error || r.warning) return true;
+    if (shared && serviceConnectionFields.has(r.field)) return false;
+    if (!compact) return true;
+    if (c.type === "cert") return false;
+    return !(["http", "https"].includes(c.type) && ["status", "protocol"].includes(r.field));
+  });
+  const message = compact ? c.summary : c.message;
+  const messageView = message ? tpl`<span class="truncate check-message" title="${message}">${message}</span>` : nothing;
+  return tpl`${renderCheckReadings(visible)}${messageView}
+    ${!visible.length && !message ? "—" : nothing}`;
+}
+
+function serviceCheckRows(d, groups) {
+  const sharedChecks = new Set(groups.flatMap((group) => group.checks));
   const checkRows = (d.checks || []).map((c) => {
     const age = c.at ? tpl` <span class="muted">· ${fmtAge(c.at)}</span>` : nothing;
     const state = checkStateHTML(c, age);
-    const readings = (c.readings && c.readings.length) ? renderWatchReadings(c.readings) : nothing;
-    const msg = c.message
-      ? tpl`<span class="truncate check-message" title="${c.message || ""}">${c.message || ""}</span>`
-      : nothing;
-    const hasReadings = !!(c.readings && c.readings.length);
-    const detailCell = (hasReadings || c.message) ? tpl`${readings}${msg}` : "—";
     return tpl`<tr><td>${c.name}</td><td class="muted">${c.type || ""}</td>
       <td>${state}${c.optional ? tpl` <span class="muted">(optional)</span>` : nothing}</td>
       <td class="sla-cell">${checkSLAHTML(d.name, c)}</td>
-      <td class="muted">${detailCell}</td></tr>`;
+      <td class="muted">${serviceCheckResult(c, sharedChecks.has(c))}</td></tr>`;
   });
   return checkRows.length ? checkRows : tpl`<tr><td colspan="5" class="muted">No checks.</td></tr>`;
 }
@@ -4787,7 +4925,8 @@ function serviceGeneralDetail(d, processGeneral) {
 }
 
 function renderServiceDetail(d) {
-  const checks = serviceCheckRows(d);
+  const connections = serviceConnectionGroups(d);
+  const checks = serviceCheckRows(d, connections);
   const locks = serviceLockDetail(d);
   const processes = serviceProcessDetail(d);
   const disabledNote = !d.enabled
@@ -4796,6 +4935,7 @@ function renderServiceDetail(d) {
   return tpl`<div class="service-detail" data-service-detail="${d.name}">
     ${disabledNote}
     ${serviceGeneralDetail(d, processes.general)}
+    ${serviceConnectionDetail(connections)}
     ${serviceGraphDetail(d)}
     ${processes.section}
     <section data-detail-section="checks">
@@ -5347,15 +5487,7 @@ function renderWatchReadings(readings) {
 	const field = r.field || "";
 	const longValue = ["issuer", "dns_names"].includes(field) ||
 	  ["raid_controller_", "raid_cache_", "raid_volume_", "raid_drive_"].some((prefix) => field.startsWith(prefix));
-    // An advisory reading uses the same amber the SMART/LVM health cell and the
-    // preflight "warn" row use, so one colour means one thing across the panel.
-    const value = r.error
-      ? tpl`<span class="watch-reading-value bad">${r.error}</span>`
-      : r.warning
-        ? tpl`<span class="watch-reading-value inactive">${r.warning}</span>`
-        : r.good
-          ? tpl`<b class="watch-reading-value good">${r.value || "—"}</b>`
-          : tpl`<b class="watch-reading-value">${r.value || "—"}</b>`;
+    const value = checkReadingValue(r);
     return tpl`<div class="watch-reading${longValue ? " watch-reading-long" : ""}"><span class="muted">${label}</span><br>${value}</div>`;
   });
   return tpl`<div class="watch-grid">${cells}</div>`;
@@ -8997,6 +9129,7 @@ function initDelegatedHandlers() {
     ["[data-db-query-kill]", (el) => killDBQuery(
       el.dataset.dbQueryService || "", el.dataset.dbQueryWatch || "",
       el.dataset.dbQueryId || "", el.dataset.dbQueryIdentity || "")],
+    ["[data-db-query-expand]", (el) => toggleDBQueryExpansion(el.dataset.dbQueryExpand || "")],
     ["[data-service-action][data-service]", (el) => act(el.dataset.service || "", el.dataset.serviceAction || "")],
     ["[data-service-button][data-service]", (el) => pressServiceButton(el.dataset.service || "", el.dataset.serviceButton || "")],
     ["[data-watch-action][data-watch]", (el) => actWatch(el.dataset.watch || "", el.dataset.watchAction || "")],
@@ -9042,6 +9175,8 @@ function initDelegatedHandlers() {
 
     const row = closestFrom(e, "[data-exp-key]");
     if (row) rowClick(e, row.dataset.expKey || "");
+    const queryRow = closestFrom(e, "[data-db-query-key]");
+    if (queryRow) rowClick(e, queryRow.dataset.dbQueryKey || "", toggleDBQueryExpansion);
   });
 
   document.addEventListener(domEventKeydown, (e) => {
