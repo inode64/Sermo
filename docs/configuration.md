@@ -2764,6 +2764,12 @@ declared **inside the service document**. Events are labelled
 (firing/recovered windows, hooks, notifiers, dry-run); entries with
 `then.action` are desugared to `checks:` + `rules:`.
 
+A stateful `file` watch with `then.notify` or `then.hook` uses `check.paths`
+(a list) and the same change conditions as a
+[host file watch](#file--filedirectory-attributes-and-freshness),
+including `older_than`. A check-only `file` entry, or one with `then.action`,
+uses the single-shot file check's `path` and optional `non_empty` instead.
+
 What "inside a service" adds over a host watch is the service's **check
 context**, scoped to **everything discovery attributes to the service**: on an
 init backend that reports them, the unit's whole control group, plus the
