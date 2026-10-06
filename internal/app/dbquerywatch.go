@@ -1,6 +1,7 @@
 package app
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"path/filepath"
@@ -40,6 +41,8 @@ const (
 	dbQueryPolicyStateSlot  = "db-queries-policy"
 	dbQueryChangeLong       = "long"
 	dbQueryChangeEnded      = "ended"
+	dbQueryChangeThreshold  = "threshold"
+	dbQueryChangeCleared    = "cleared"
 )
 
 // dbQueryKillFunc stops one listed statement (checks.KillDBQuery).
@@ -67,6 +70,7 @@ type dbQueryState struct {
 // process (PostgreSQL) counters. /proc/<tid>/stat and io answer for the whole
 // thread group, so a thread is read under /proc/<tgid>/task/<tid>.
 type dbQueryProcfs interface {
+	NumCPU() int
 	ThreadCPU(pid, tid int) (uint64, bool)
 	ThreadIO(pid, tid int) (read, write uint64, ok bool)
 	ProcessRSS(pid int) (uint64, bool)
@@ -100,9 +104,8 @@ func isDBServerExe(engine, exe string) bool {
 	return false
 }
 
-// dbQueryWatcher tracks the statements a database server runs. It fires once
-// per statement that outlives min_duration — its own event_notify incident —
-// and recovers it when the statement ends. A service watch may also stop
+// dbQueryWatcher tracks the statements a database server runs. It owns each
+// statement's resource or duration incident and its recovery. A service watch may also stop
 // statements through the service's operation engine (then.kill_query).
 type dbQueryWatcher struct {
 	name      string
@@ -116,7 +119,7 @@ type dbQueryWatcher struct {
 	runner    HookRunner
 	now       func() time.Time
 	emit      func(Event)
-	sample    func(context.Context, checks.DBQueryConfig) ([]checks.DBQuery, error) // longest first
+	sample    func(context.Context, checks.DBQueryConfig) (checks.DBQuerySample, error) // longest first
 	publish   func(string, string, checks.Result)
 	restore   func() []checks.DBQuery
 	// status, set for a service watch, skips cycles while the service is not
@@ -205,7 +208,7 @@ func parseKillQuery(entry map[string]any, cfg checks.DBQueryConfig) (*checks.DBQ
 	if !present {
 		return nil, nil //nolint:nilnil // absent optional kill_query has no parse error
 	}
-	spec, err := checks.ParseDBQueryKill(raw, cfg.MinDuration)
+	spec, err := checks.ParseDBQueryKill(raw, cfg)
 	if err != nil {
 		return nil, fmt.Errorf("then.%s: %w", config.WatchThenKeyKillQuery, err)
 	}
@@ -218,7 +221,7 @@ func restoreDBQueries(snapshots *WatchSnapshots, name string) []checks.DBQuery {
 	snaps := snapshots.Get(name, checks.CheckTypeDBQueries)
 	out := make([]checks.DBQuery, 0, len(snaps))
 	for _, snap := range snaps {
-		out = append(out, checks.DBQueriesFromData(snap.Data)...)
+		out = append(out, checks.DBQueryIncidentsFromData(snap.Data)...)
 	}
 	return out
 }
@@ -233,10 +236,10 @@ func (w *dbQueryWatcher) runCycle(ctx context.Context) {
 	}
 	// One defaults_file read per cycle serves both the sample and Local.
 	cfg, err := w.cfg.Resolved()
-	queries := []checks.DBQuery{}
+	var sample checks.DBQuerySample
 	if err == nil {
 		sampleCtx, cancel := context.WithTimeout(ctx, cfg.Timeout)
-		queries, err = w.sample(sampleCtx, cfg)
+		sample, err = w.sample(sampleCtx, cfg)
 		cancel()
 	}
 	if ctx.Err() != nil {
@@ -251,42 +254,77 @@ func (w *dbQueryWatcher) runCycle(ctx context.Context) {
 	observe := observeOnlyCycle(ctx)
 	now := clockOrNow(w.now)()
 	local := cfg.Local()
+	queries := sample.Queries
 	seen := make(map[string]bool, len(queries))
+	connections := make(map[int64]bool, len(queries))
+	unknownCount := 0
 	for i := range queries {
 		key := queries[i].ItemKey()
 		seen[key] = true
-		st := w.state[key]
-		if st != nil && !st.query.SameStatement(queries[i]) {
-			// Another statement took the connection under the same key.
-			w.recover(ctx, key, st)
-			st = nil
+		connections[queries[i].ID] = true
+		if !w.updateStatement(ctx, &queries[i], now, local, observe) {
+			unknownCount++
 		}
-		if st == nil {
-			st = &dbQueryState{}
-			w.state[key] = st
-		}
-		if local {
-			w.measure(st, &queries[i], now)
-		}
-		// The tracked statement carries whether it was already alerted.
-		queries[i].Alerted, queries[i].Announced = st.query.Alerted, st.query.Announced
-		queries[i].Long = w.long(queries[i])
-		if !queries[i].Alerted && queries[i].Long && !observe {
-			queries[i].Alerted = true
-			queries[i].Announced = w.fire(ctx, key, queries[i])
-		}
-		st.query = queries[i]
 	}
 	if !observe {
 		for key, st := range w.state {
 			if !seen[key] {
-				w.recover(ctx, key, st)
+				if !sample.Complete && st.query.Alerted && !connections[st.query.ID] {
+					// Absence alone proves nothing, but a different statement on
+					// the same connection confirms that this one ended.
+					continue
+				}
+				w.recover(ctx, key, st, dbQueryChangeEnded)
 				delete(w.state, key)
 			}
 		}
-		w.autoKill(ctx, now)
+		w.autoKill(ctx, now, seen)
 	}
-	w.publishQueries(queries)
+	w.publishQueries(sample, unknownCount)
+}
+
+// updateStatement owns a sampled statement's incident transitions. Observation
+// may refresh its readings but cannot announce, recover or discard an incident.
+// It returns whether the configured predicates have a decisive reading.
+func (w *dbQueryWatcher) updateStatement(ctx context.Context, q *checks.DBQuery, now time.Time, local, observe bool) bool {
+	key := q.ItemKey()
+	st := w.state[key]
+	replaced := st != nil && !st.query.SameStatement(*q)
+	if replaced {
+		if !observe {
+			w.recover(ctx, key, st, dbQueryChangeEnded)
+		}
+		st = nil
+	}
+	q.DisplayIdentity = q.Identity
+	if st == nil {
+		st = &dbQueryState{}
+	} else if q.Identity != "" {
+		q.DisplayIdentity = cmp.Or(st.query.DisplayIdentity, st.query.Identity, q.Identity)
+	}
+	if local {
+		w.measure(st, q, now)
+	}
+	q.Alerted, q.Announced = st.query.Alerted, st.query.Announced
+	matched, ready := w.cfg.QueryMatches(*q)
+	q.Matched, q.Long = matched, matched && !w.cfg.HasResourceThresholds()
+	if !observe {
+		if !q.Alerted && matched {
+			q.Alerted = true
+			q.Announced = w.fire(ctx, key, *q)
+		} else if q.Alerted && !matched && ready {
+			st.query = *q
+			w.recover(ctx, key, st, dbQueryChangeCleared)
+			q.Alerted, q.Announced = false, false
+		}
+	}
+	st.query = *q
+	if !observe || !replaced {
+		// A replacement during observation leaves the old incident pending.
+		// The next live cycle recovers it before tracking the replacement.
+		w.state[key] = st
+	}
+	return ready
 }
 
 // measure fills a local statement's CPU share and IO rates since the previous
@@ -294,6 +332,10 @@ func (w *dbQueryWatcher) runCycle(ctx context.Context) {
 // and a PostgreSQL backend's resident memory. The caller measures only a local
 // server: a remote server's thread ids name nothing on this host.
 func (w *dbQueryWatcher) measure(st *dbQueryState, q *checks.DBQuery, now time.Time) {
+	if st.query.OSThreadID != q.OSThreadID {
+		st.serverThread = 0
+		st.hadCPU, st.hadIO = false, false
+	}
 	tid := int(q.OSThreadID)
 	if tid <= 0 {
 		return
@@ -315,7 +357,8 @@ func (w *dbQueryWatcher) measure(st *dbQueryState, q *checks.DBQuery, now time.T
 	}
 	ticks, cpuOK := w.procfs.ThreadCPU(tid, tid)
 	if cpuOK && st.hadCPU {
-		q.CPU, q.CPUReady = cpuPercent(st.prevTicks, ticks, st.prevAt, now)
+		q.CPUThread, q.CPUReady = metrics.CPUPercent(st.prevTicks, ticks, st.prevAt, now, metrics.LinuxClockTicks, 1)
+		q.CPU = q.CPUThread / float64(max(w.procfs.NumCPU(), 1))
 	}
 	read, write, ioOK := w.procfs.ThreadIO(tid, tid)
 	r, rOK := ioBytesPerSec(st.prevRead, read, st.hadIO, ioOK, st.prevAt, now)
@@ -329,12 +372,6 @@ func (w *dbQueryWatcher) measure(st *dbQueryState, q *checks.DBQuery, now time.T
 			q.MemoryBytes, q.MemoryReady = uintToInt64(rss), true
 		}
 	}
-}
-
-// long reports whether a statement counts against min_duration and the
-// check's users/databases filters.
-func (w *dbQueryWatcher) long(q checks.DBQuery) bool {
-	return q.Elapsed() >= w.cfg.MinDuration && w.cfg.Selector.Matches(q)
 }
 
 // loadState restores the statements the previous daemon already alerted, so a
@@ -357,21 +394,30 @@ func (w *dbQueryWatcher) loadState() {
 }
 
 func (w *dbQueryWatcher) fire(ctx context.Context, key string, q checks.DBQuery) bool {
-	message := w.summaryMessage(q, dbQueryFireMessage(q))
+	message := dbQueryFireMessage(q)
+	change := dbQueryChangeLong
+	if w.cfg.HasResourceThresholds() {
+		message += "; " + w.cfg.ResourceMatchSummary(q)
+		change = dbQueryChangeThreshold
+	}
+	message = w.summaryMessage(q, message)
 	check := dbQueryEventCheck(key)
 	w.emitEvent(Event{Watch: w.name, Kind: eventKindFiring, Severity: w.severity, Check: check, Message: message})
-	return w.dispatch(ctx, check, message, w.env(q, dbQueryChangeLong, message))
+	return w.dispatch(ctx, check, message, w.env(q, change, message))
 }
 
-func (w *dbQueryWatcher) recover(ctx context.Context, key string, st *dbQueryState) {
+func (w *dbQueryWatcher) recover(ctx context.Context, key string, st *dbQueryState, change string) {
 	if !st.query.Alerted {
 		return
 	}
 	message := dbQueryRecoverMessage(st.query)
+	if change == dbQueryChangeCleared {
+		message = fmt.Sprintf("%s (%s) no longer matches the configured thresholds", dbQuerySubject(st.query), dbQueryOrigin(st.query))
+	}
 	check := dbQueryEventCheck(key)
 	w.emitEvent(Event{Watch: w.name, Kind: eventKindRecovered, Severity: w.severity, Check: check, Message: message})
 	if st.query.Announced {
-		env := w.env(st.query, dbQueryChangeEnded, message)
+		env := w.env(st.query, change, message)
 		env[sermoEnvEvent] = eventKindRecovered
 		w.dispatch(ctx, check, recoveredMessagePrefix+message, env)
 	}
@@ -403,7 +449,7 @@ func (w *dbQueryWatcher) dispatch(ctx context.Context, check, message string, en
 func dbQueryEventCheck(key string) string { return dbQueryEventCheckPrefix + key }
 
 func (w *dbQueryWatcher) env(q checks.DBQuery, change, message string) map[string]string {
-	return map[string]string{
+	env := map[string]string{
 		sermoEnvWatch:          w.name,
 		sermoEnvCheckType:      checks.CheckTypeDBQueries,
 		sermoEnvMessage:        message,
@@ -416,6 +462,14 @@ func (w *dbQueryWatcher) env(q checks.DBQuery, change, message string) map[strin
 		sermoEnvElapsedSeconds: envAgeSeconds(q.Elapsed()),
 		sermoEnvQuery:          q.Query,
 	}
+	if q.CPUReady {
+		env[sermoEnvCPU] = strconv.FormatFloat(q.CPU, envFloatFormat, procWatchCPUPrecision, envFloatBits)
+		env[sermoEnvCPUThread] = strconv.FormatFloat(q.CPUThread, envFloatFormat, procWatchCPUPrecision, envFloatBits)
+	}
+	if q.MemoryReady {
+		env[sermoEnvMemory] = strconv.FormatInt(q.MemoryBytes, envFormatBase)
+	}
+	return env
 }
 
 func (w *dbQueryWatcher) summaryMessage(q checks.DBQuery, message string) string {
@@ -428,6 +482,14 @@ func (w *dbQueryWatcher) summaryMessage(q checks.DBQuery, message string) string
 		checks.DataKeyValue: q.Elapsed(), checks.DataKeyElapsed: q.Elapsed(),
 		checks.DataKeyID: q.ID, checks.DataKeyUser: q.User, checks.DataKeyDatabase: q.Database,
 		checks.DataKeyHost: q.Host, checks.DataKeyQuery: q.Query,
+	}
+	for field, value := range q.ResourceValues() {
+		data[field] = value
+	}
+	for _, field := range checks.DBQueryResourceFields() {
+		if _, known := data[field]; !known {
+			data[field] = "unavailable"
+		}
 	}
 	return checks.ApplySummary(summary, w.check, checks.Result{Check: w.name, Message: message, Data: data}).Message
 }
@@ -481,11 +543,12 @@ func (w *dbQueryWatcher) reportAvailability(ctx context.Context, err error) {
 	}
 }
 
-func (w *dbQueryWatcher) publishQueries(queries []checks.DBQuery) {
+func (w *dbQueryWatcher) publishQueries(sample checks.DBQuerySample, unknownCount int) {
 	if w.publish == nil {
 		return
 	}
-	longCount, oldest := 0, int64(0)
+	queries := sample.Queries
+	longCount, matchedCount, oldest := 0, 0, int64(0)
 	if len(queries) > 0 {
 		oldest = queries[0].ElapsedSeconds // sorted longest first
 	}
@@ -493,11 +556,13 @@ func (w *dbQueryWatcher) publishQueries(queries []checks.DBQuery) {
 		if queries[i].Long {
 			longCount++
 		}
+		if queries[i].Matched {
+			matchedCount++
+		}
 	}
 	listed := queries
 	if len(listed) > w.cfg.MaxRows {
-		// The rest are dropped from the list, except the alerted ones: a
-		// restarted daemon restores its open incidents from this snapshot.
+		// Keep current alerted statements visible even beyond max_rows.
 		listed = slices.Clip(queries[:w.cfg.MaxRows])
 		for i := w.cfg.MaxRows; i < len(queries); i++ {
 			if queries[i].Alerted {
@@ -507,19 +572,38 @@ func (w *dbQueryWatcher) publishQueries(queries []checks.DBQuery) {
 	}
 	message := fmt.Sprintf("%s: %d running statement%s, %d over %s", w.cfg.Engine, len(queries),
 		pluralSuffix(len(queries), "statement"), longCount, units.HumanizeDuration(w.cfg.MinDuration))
+	if w.cfg.HasResourceThresholds() {
+		message = fmt.Sprintf("%s: %d running statements, %d matching resource thresholds", w.cfg.Engine, len(queries), matchedCount)
+	}
+	if unknownCount > 0 {
+		message += fmt.Sprintf("; resource readings unavailable for %d statements", unknownCount)
+	}
+	if !sample.Complete {
+		message += "; statement sample incomplete: older statements reached the sampling limit"
+	}
+	complete := sample.Complete && unknownCount == 0
 	result := checks.Result{
-		Check:   w.name,
-		OK:      longCount == 0,
-		Message: message,
+		Check:       w.name,
+		OK:          matchedCount == 0 && complete,
+		Unavailable: matchedCount == 0 && !complete,
+		Message:     message,
 		Data: map[string]any{
-			checks.DataKeyEngine:        w.cfg.Engine,
-			checks.DataKeyCount:         len(queries),
-			checks.DataKeyLongCount:     longCount,
-			checks.DataKeyOldestSeconds: oldest,
-			checks.DataKeyDBQueries:     listed,
+			checks.DataKeyEngine:           w.cfg.Engine,
+			checks.DataKeyCount:            len(queries),
+			checks.DataKeyLongCount:        longCount,
+			checks.DataKeyOldestSeconds:    oldest,
+			checks.DataKeyDBQueries:        listed,
+			checks.DataKeyComplete:         sample.Complete,
+			checks.DataKeyDBQueryIncidents: w.openIncidents(),
 		},
 	}
-	if longCount > 0 {
+	if w.cfg.HasResourceThresholds() {
+		result.Data[checks.DataKeyMatchedCount] = matchedCount
+	}
+	if unknownCount > 0 {
+		result.Data[checks.DataKeyUnknownCount] = unknownCount
+	}
+	if matchedCount > 0 {
 		result.Severity = w.severity
 	}
 	w.publish(w.name, checks.CheckTypeDBQueries, result)
@@ -545,27 +629,28 @@ func (w *dbQueryWatcher) publishSkipped(status string) {
 	})
 }
 
-// heldData is a sampleless snapshot's data: no listing, but the statements
-// still alerted, so a daemon restarted meanwhile keeps their open incidents.
+// heldData has no current listing. Open incidents survive missing samples and
+// restarts without making unobserved statements appear live in the API.
 func (w *dbQueryWatcher) heldData() map[string]any {
-	data := map[string]any{checks.DataKeyEngine: w.cfg.Engine}
+	return map[string]any{checks.DataKeyEngine: w.cfg.Engine, checks.DataKeyDBQueryIncidents: w.openIncidents()}
+}
+
+func (w *dbQueryWatcher) openIncidents() []checks.DBQuery {
 	var held []checks.DBQuery
 	for _, st := range w.state {
 		if st.query.Alerted {
 			held = append(held, st.query)
 		}
 	}
-	if len(held) > 0 {
-		data[checks.DataKeyDBQueries] = held
-	}
-	return data
+	slices.SortFunc(held, func(a, b checks.DBQuery) int { return strings.Compare(a.Identity, b.Identity) })
+	return held
 }
 
 // autoKill stops at most one eligible statement per cycle through the
 // service's operation engine (locks, guards, re-verification, one audit
 // event), paced by the watch's own policy — never the service's restart
 // budget. Each statement is acted on, or reported as held back, once.
-func (w *dbQueryWatcher) autoKill(ctx context.Context, now time.Time) {
+func (w *dbQueryWatcher) autoKill(ctx context.Context, now time.Time, seen map[string]bool) {
 	if w.kill == nil {
 		return
 	}
@@ -575,7 +660,7 @@ func (w *dbQueryWatcher) autoKill(ctx context.Context, now time.Time) {
 		q := &st.query
 		// Long already holds min_duration and the check's own filters: the
 		// watch never stops a statement it was told to ignore.
-		if st.killTried || !q.Long || !q.Killable() || q.Elapsed() < w.kill.After || !w.kill.Selector.Matches(*q) {
+		if !seen[k] || st.killTried || !q.Long || !q.Killable() || q.Elapsed() < w.kill.After || !w.kill.Selector.Matches(*q) {
 			continue
 		}
 		if target == nil || q.ElapsedSeconds > target.query.ElapsedSeconds || (q.ElapsedSeconds == target.query.ElapsedSeconds && k < key) {

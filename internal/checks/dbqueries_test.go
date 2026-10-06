@@ -224,7 +224,7 @@ func TestDBQuerySelector(t *testing.T) {
 
 func TestDBQueriesFromPersistedData(t *testing.T) {
 	in := []DBQuery{{Engine: SQLEnginePostgres, ID: 4711, User: "app", ElapsedSeconds: 600, Query: "SELECT pg_sleep(900)", Identity: "4711:1:2", BackendStartUS: 1,
-		OSThreadID: 4711, MemoryBytes: 1 << 20, MemoryReady: true, CPU: 12.5, CPUReady: true}}
+		OSThreadID: 4711, MemoryBytes: 1 << 20, MemoryReady: true, CPU: 12.5, CPUThread: 100, CPUReady: true, Matched: true, Alerted: true}}
 	raw, err := json.Marshal(map[string]any{DataKeyDBQueries: in})
 	if err != nil {
 		t.Fatal(err)
@@ -243,7 +243,7 @@ func TestDBQueriesFromPersistedData(t *testing.T) {
 }
 
 func TestParseDBQueryKill(t *testing.T) {
-	spec, err := ParseDBQueryKill(map[string]any{"after": "30m", "users": []any{"report"}}, 5*time.Minute)
+	spec, err := ParseDBQueryKill(map[string]any{"after": "30m", "users": []any{"report"}}, DBQueryConfig{MinDuration: 5 * time.Minute})
 	if err != nil || spec.After != 30*time.Minute || spec.Mode != DBQueryKillModeQuery || spec.Selector.Users[0] != "report" {
 		t.Fatalf("spec = %+v, %v", spec, err)
 	}
@@ -254,7 +254,7 @@ func TestParseDBQueryKill(t *testing.T) {
 		"bad mode":        map[string]any{"after": "30m", "mode": "nuke", "users": []any{"r"}},
 		"no selector":     map[string]any{"after": "30m"},
 	} {
-		if _, err := ParseDBQueryKill(raw, 5*time.Minute); err == nil {
+		if _, err := ParseDBQueryKill(raw, DBQueryConfig{MinDuration: 5 * time.Minute}); err == nil {
 			t.Errorf("%s: want an error", name)
 		}
 	}
@@ -331,6 +331,31 @@ func TestDBQueriesFromDataDoesNotModifyThePublishedSlice(t *testing.T) {
 	got := DBQueriesFromData(map[string]any{DataKeyDBQueries: published})
 	if len(got) != 1 || got[0].ID != 7 || published[0].ID != 0 || published[1].ID != 7 {
 		t.Fatalf("got = %+v published = %+v", got, published)
+	}
+}
+
+func TestDBQueryIncidentsPreferExplicitStateAndRestoreLegacySnapshots(t *testing.T) {
+	old := DBQuery{Engine: SQLEngineMariaDB, ID: 7, Identity: "7:70", Alerted: true}
+	current := DBQuery{Engine: SQLEngineMariaDB, ID: 8, Identity: "8:80", Alerted: true}
+	for _, tt := range []struct {
+		name string
+		data map[string]any
+		want int64
+	}{
+		{name: "legacy", data: map[string]any{DataKeyDBQueries: []DBQuery{old}}, want: 7},
+		{name: "explicit incidents", data: map[string]any{DataKeyDBQueries: []DBQuery{current}, DataKeyDBQueryIncidents: []DBQuery{old}}, want: 7},
+		{name: "explicit empty", data: map[string]any{DataKeyDBQueries: []DBQuery{old}, DataKeyDBQueryIncidents: nil}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			got := DBQueryIncidentsFromData(tt.data)
+			if tt.want == 0 {
+				if len(got) != 0 {
+					t.Fatalf("cleared incidents were restored: %+v", got)
+				}
+			} else if len(got) != 1 || got[0].ID != tt.want {
+				t.Fatalf("restored incidents = %+v, want id %d", got, tt.want)
+			}
+		})
 	}
 }
 

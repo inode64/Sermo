@@ -286,6 +286,9 @@ func (c *certCheck) Run(ctx context.Context) Result {
 	}
 	res := gradeCert(c.result(healthy, msg, start), c.severity, c.certOptions, grade, daysLeft, hasExpiry)
 	res.Data = certData(src, c.host, c.path, s, daysLeft, hasExpiry)
+	if healthy && hasExpiry {
+		res.Data[DataKeySummary] = fmt.Sprintf("Valid for %d days", daysLeft)
+	}
 	return res
 }
 

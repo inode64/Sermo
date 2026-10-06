@@ -254,3 +254,59 @@ func TestDBQueryTargetReadFailure(t *testing.T) {
 		}
 	}
 }
+
+func TestDBQueryListReportsCompleteness(t *testing.T) {
+	for _, engine := range []string{SQLEngineMySQL, SQLEnginePostgres} {
+		for _, count := range []int{0, 499, 500, 501} {
+			t.Run(fmt.Sprintf("%s/rows=%d", engine, count), func(t *testing.T) {
+				cfg := DBQueryConfig{Engine: engine, MaxLength: 100, States: []string{pgStateActive}, server: &mysqlServerInfo{known: true, mariadb: true}}
+				server := &fakeMySQLServer{query: func(_ context.Context, query string, _ []driver.NamedValue) (driver.Rows, error) {
+					if !strings.Contains(query, "LIMIT 501") {
+						t.Fatalf("listing needs an extra row to detect truncation: %s", query)
+					}
+					columns := 14
+					if engine == SQLEnginePostgres {
+						columns = 11
+					}
+					rows := make([][]driver.Value, count)
+					for i := range rows {
+						id := int64(i + 1)
+						rows[i] = []driver.Value{id, "app", "localhost", "app", "Query", "", int64(400000), int64(0), id, "SELECT 1", int64(8), nil, nil, nil}
+						if engine == SQLEnginePostgres {
+							rows[i] = []driver.Value{id, "app", "app", "localhost", "active", "", int64(1000000), int64(2000000), int64(400000), "SELECT 1", int64(8)}
+						}
+					}
+					return &fakeRows{columns: make([]string, columns), rows: rows}, nil
+				}}
+				got, err := cfg.sampleList(t.Context(), openFakeMySQL(t, server))
+				if err != nil || got.Complete != (count <= 500) || len(got.Queries) != min(count, 500) {
+					t.Fatalf("sample complete=%v count=%d err=%v", got.Complete, len(got.Queries), err)
+				}
+			})
+		}
+	}
+}
+
+func TestDBQueryListFailureIsNotACompleteEmptySample(t *testing.T) {
+	for _, timeout := range []bool{false, true} {
+		t.Run(fmt.Sprint("timeout=", timeout), func(t *testing.T) {
+			cfg := DBQueryConfig{Engine: SQLEnginePostgres, MaxLength: 100}
+			server := &fakeMySQLServer{query: func(ctx context.Context, _ string, _ []driver.NamedValue) (driver.Rows, error) {
+				if timeout {
+					<-ctx.Done()
+					return nil, ctx.Err()
+				}
+				return nil, errors.New("read denied")
+			}}
+			ctx, cancel := context.WithTimeout(t.Context(), 10*time.Millisecond)
+			defer cancel()
+			got, err := cfg.sampleList(ctx, openFakeMySQL(t, server))
+			if err == nil || got.Complete || len(got.Queries) != 0 {
+				t.Fatalf("failed read claimed an observation: %+v %v", got, err)
+			}
+			if timeout && !errors.Is(err, context.DeadlineExceeded) {
+				t.Fatalf("lost cancellation: %v", err)
+			}
+		})
+	}
+}

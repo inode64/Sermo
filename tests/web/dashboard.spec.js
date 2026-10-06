@@ -54,15 +54,17 @@ const dashboard = {
       {
         service: "mariadb", watch: "alert-if-query-long-running", engine: "mariadb",
         id: 36762377, user: "tac_prod", host: "localhost:45732", database: "tac_prod",
+        query_id: 279932773, os_tid: 4102, at: "2026-07-10T12:00:00Z",
         command: "Query", state: "Sending data", elapsed_seconds: 239096,
         query: "SELECT ga.geoare_id, ga.geoare_name, COUNT(*) AS bookings FROM geo_areas ga JOIN bookings b ON b.geoare_id = ga.geoare_id WHERE b.created_at > ? GROUP BY ga.geoare_id",
-        truncated: true, long: true, identity: "36762377:279932773", can_kill: true,
-        cpu_ready: true, cpu: 12.5, memory_ready: true, rss: 226448,
+        truncated: true, long: true, matched: true, alerted: true, identity: "36762377:279932773", can_kill: true,
+        cpu_ready: true, cpu: 12.5, cpu_thread: 100, memory_ready: true, rss: 226448,
         io_ready: true, io_read: 1048576, io_write: 65536,
       },
       {
         service: "db", watch: "pg-queries", engine: "postgres",
         id: 4711, user: "reporting", host: "10.0.0.8:51234", database: "analytics",
+        os_tid: 4711, at: "2026-07-10T12:00:00Z",
         command: "", state: "active", elapsed_seconds: 12,
         query: "SELECT count(*) FROM events", truncated: false, long: false, identity: "4711:99", can_kill: true,
       },
@@ -603,7 +605,11 @@ test("stale binary has a distinct restart-required state and visible reason", as
 
   await row.locator(".row-toggle").click();
   const detail = page.locator('[data-service-detail="stale"]');
-  await expect(detail.locator(".runtime-grid .state-reason")).toHaveText("binary replaced on disk");
+  const reason = detail.locator(".runtime-grid .state-reason");
+  await expect(reason).toHaveText("binary replaced on disk");
+  const badgeBox = await detail.locator(".runtime-grid .target-state").first().boundingBox();
+  const reasonBox = await reason.boundingBox();
+  expect(reasonBox.y).toBeGreaterThanOrEqual(badgeBox.y + badgeBox.height);
 });
 
 // splitWordsIn lists the words (4+ characters) inside selector that a narrow
@@ -1527,24 +1533,28 @@ test("sessions panel shows metrics, sorts columns and closes verified SSH and tm
   expect(tmuxCloseRequest.searchParams.get("identity")).toBe("$7:90");
 });
 
-// db_queries watches list running statements in their own table of the
-// sessions panel: CPU, memory, IO and idle do not apply to a statement.
+// Database statements have their own summary and SQL expansion.
 test("database statements render in their own table, longest first", async ({ page }) => {
   const queries = page.getByRole("table", { name: "Running database statements" });
   await expect(queries).toBeVisible();
-  const rows = queries.locator("tbody tr");
+  const rows = queries.locator(".db-query-row");
   await expect(rows).toHaveCount(3);
   await expect(rows.first()).toContainText("tac_prod");
   await expect(rows.first()).toHaveClass(/row-warning/);
-  await expect(rows.first()).toContainText(/SELECT ga\.geoare_id/);
-  await expect(rows.nth(1)).toContainText("SELECT * FROM parts");
-  await expect(rows.nth(2)).toContainText("SELECT count(*) FROM events");
+  await expect(queries).not.toContainText("SELECT");
   await expect(rows.nth(2)).not.toHaveClass(/row-warning/);
-  // A long statement expands to its full text and says the daemon cut it.
-  const long = rows.first().locator("details.db-query-more");
-  await long.locator("summary").click();
+  // SQL occupies a separate full-width row, including its truncation notice.
+  await rows.first().locator("[data-db-query-expand]").click();
+  const long = queries.locator(".db-query-expansion");
   await expect(long).toContainText("GROUP BY ga.geoare_id…");
   await expect(long).toContainText("truncated by the daemon");
+  await expect(long).toContainText("Connection ID");
+  await expect(long).toContainText("OS TID");
+  await expect(long).toContainText("4102");
+  await expect(long).toContainText("279932773");
+  await expect(long).toContainText("localhost:45732");
+  await expect(long).toContainText("Sample");
+  await expect(long.locator("td")).toHaveAttribute("colspan", "11");
   // A host watch's statement has no service to act through.
   await expect(rows.nth(1)).toContainText("unavailable");
   await expect(rows.nth(1).locator("[data-db-query-kill]")).toHaveCount(0);
@@ -1569,6 +1579,181 @@ test("the database filter and search narrow the statements", async ({ page }) =>
   await expect(sessions).toBeVisible();
 });
 
+test("database rows toggle from any summary cell and keep detail and action clicks independent", async ({ page }) => {
+  const table = page.locator(".db-queries-table");
+  const row = table.locator(".db-query-row").first();
+  const toggle = row.locator("[data-db-query-expand]");
+  const running = row.locator("td").nth(5);
+  await running.click();
+  await expect(toggle).toHaveAttribute("aria-expanded", "true");
+  await table.locator(".db-query-text").click();
+  await table.locator(".db-query-detail .runtime-grid > div").filter({ hasText: /^Client/ }).click();
+  await expect(toggle).toHaveAttribute("aria-expanded", "true");
+  await row.locator("[data-db-query-kill]").click();
+  await expect(page.locator("#simple-confirm")).toBeVisible();
+  await expect(toggle).toHaveAttribute("aria-expanded", "true");
+  await page.locator('#simple-confirm [data-simple-result="false"]').click();
+  // Empty space beside an action button also belongs to the row.
+  await row.locator("td").last().click({ position: { x: 2, y: 2 } });
+  await expect(toggle).toHaveAttribute("aria-expanded", "false");
+  await toggle.focus();
+  await page.keyboard.press("Space");
+  await expect(toggle).toHaveAttribute("aria-expanded", "true");
+  await running.click();
+  await expect(table.locator(".db-query-expansion")).toHaveCount(0);
+});
+
+test("database details show each summary field only when its column is hidden, including after resizing", async ({ page }) => {
+  const inventory = structuredClone(dashboard.sessions);
+  inventory.database[0].user = "reporting_application_user_with_a_long_name";
+  inventory.database[0].database = "production_analytics_database_with_a_long_name";
+  await page.route("**/api/dashboard**", (route) => route.fulfill({ json: { ...dashboard, sessions: inventory } }));
+  await page.reload();
+  const table = page.locator(".db-queries-table");
+  const row = table.locator(".db-query-row").first();
+  await row.locator("[data-db-query-expand]").click();
+  const detail = table.locator(".db-query-detail");
+  const field = label => detail.locator(".runtime-grid > div").filter({ has: page.locator("span.muted", { hasText: new RegExp(`^${label}$`) }) });
+  const columns = [
+    ["type", ["Engine"]], ["database", ["Database"]], ["id", ["Connection ID"]],
+    ["state", ["Command", "State"]], ["cpu-thread", ["CPU thread"]], ["cpu", ["CPU total"]], ["memory", ["Memory"]], ["io", ["IO R/W"]],
+  ];
+  for (const width of [1440, 1420, 641, 640, 390, 1440]) {
+    await page.setViewportSize({ width, height: 1000 });
+    await expect(detail).toBeVisible();
+    for (const [column, labels] of columns) {
+      const visible = await row.locator(`.db-col-${column}`).isVisible();
+      for (const label of labels) {
+        await expect(field(label), `${label} at ${width}px`).toBeVisible({ visible: !visible });
+      }
+    }
+    for (const label of ["Service", "Check", "Client", "OS TID", "Query ID", "Sample"]) {
+      await expect(field(label)).toBeVisible();
+    }
+    await expect(field("User")).toHaveCount(0);
+    await expect(field("Running")).toHaveCount(0);
+    await expect(detail.locator("code")).toContainText("SELECT ga.geoare_id");
+    expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBeLessThanOrEqual(1);
+  }
+});
+
+test("database expansions follow exact statements through refresh, sorting and filtering", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  const inventory = structuredClone(dashboard.sessions);
+  await page.route("**/api/dashboard**", (route) => route.fulfill({ json: { ...dashboard, sessions: inventory } }));
+  await page.reload();
+  const table = page.locator(".db-queries-table");
+  const row = table.locator(".db-query-row", { hasText: "36762377" });
+  const toggle = row.locator("[data-db-query-expand]");
+  await toggle.focus();
+  await page.keyboard.press("Enter");
+  await expect(toggle).toHaveAttribute("aria-expanded", "true");
+  const expansion = table.locator(".db-query-expansion");
+  await expect(expansion).toContainText("SELECT ga.geoare_id");
+  const controlledID = await toggle.getAttribute("aria-controls");
+  expect(await expansion.getAttribute("id")).toBe(controlledID);
+
+  await page.locator('[data-db-query-sort="id"]').click();
+  await expect(toggle).toHaveAttribute("aria-expanded", "true");
+  await page.locator("#session-search").fill("analytics");
+  await expect(expansion).toHaveCount(0);
+  await page.locator("#session-search").fill("");
+  await expect(expansion).toContainText("SELECT ga.geoare_id");
+  inventory.database[0].elapsed_seconds += 30;
+  await page.locator("#refresh-now").click();
+  await expect(expansion).toHaveAttribute("id", controlledID);
+
+  // A new statement on the same connection must start collapsed.
+  inventory.database[0].identity = "36762377:replacement";
+  inventory.database[0].query = "SELECT 'replacement'";
+  await page.locator("#refresh-now").click();
+  await expect(expansion).toHaveCount(0);
+  await expect(toggle).toHaveAttribute("aria-expanded", "false");
+  await toggle.click();
+  await expect(expansion).toContainText("SELECT 'replacement'");
+  inventory.database.shift();
+  await page.locator("#refresh-now").click();
+  await expect(expansion).toHaveCount(0);
+  await expect(toggle).toHaveCount(0);
+});
+
+test("MySQL details survive estimated start jitter and keep the latest cancellation identity", async ({ page }) => {
+  const inventory = structuredClone(dashboard.sessions);
+  const query = {
+    service: "mysql", watch: "queries", engine: "mysql", id: 7, user: "app",
+    query: "SELECT slow()", elapsed_seconds: 600, can_kill: true,
+    identity: "7:abcd:20:10000", display_identity: "7:abcd:20:10000",
+  };
+  inventory.database = [query];
+  await page.route("**/api/dashboard**", (route) => route.fulfill({ json: { ...dashboard, sessions: inventory } }));
+  await page.reload();
+  const row = page.locator(".db-query-row");
+  const expansion = page.locator(".db-query-expansion");
+  await row.locator("[data-db-query-expand]").click();
+  await expect(expansion).toContainText("SELECT slow()");
+  const detailID = await expansion.getAttribute("id");
+  // MySQL's whole-second elapsed time moves the estimated start slightly.
+  query.identity = "7:abcd:20:10500";
+  query.elapsed_seconds += 30;
+  await page.locator("#refresh-now").click();
+  await expect(row.locator("[data-db-query-kill]")).toHaveAttribute("data-db-query-identity", query.identity);
+  await expect(expansion).toHaveAttribute("id", detailID);
+  // A replacement with the same SQL and connection still starts collapsed.
+  query.identity = "7:abcd:20:20000";
+  query.display_identity = query.identity;
+  await page.locator("#refresh-now").click();
+  await expect(expansion).toHaveCount(0);
+  await expect(row.locator("[data-db-query-expand]")).toHaveAttribute("aria-expanded", "false");
+});
+
+test("database details distinguish sources, PIDs and missing identity and render SQL as text", async ({ page }) => {
+  const inventory = structuredClone(dashboard.sessions);
+  inventory.database = [
+    { ...inventory.database[1], service: "one", query: "SELECT '<img src=x onerror=alert(1)>'" },
+    { ...inventory.database[1], service: "two", engine: "mysql", os_tid: undefined, identity: "", query: "SELECT 'second'" },
+  ];
+  await page.route("**/api/dashboard**", (route) => route.fulfill({ json: { ...dashboard, sessions: inventory } }));
+  await page.reload();
+  const table = page.locator(".db-queries-table");
+  const toggles = table.locator("[data-db-query-expand]");
+  await toggles.nth(0).click();
+  await toggles.nth(1).click();
+  const expansions = table.locator(".db-query-expansion");
+  await expect(expansions).toHaveCount(2);
+  expect(await toggles.nth(0).getAttribute("aria-controls")).not.toBe(await toggles.nth(1).getAttribute("aria-controls"));
+  await expect(expansions.first()).toContainText("Backend PID");
+  await expect(expansions.first()).not.toContainText("OS TID");
+  await expect(expansions.first().locator("code")).toContainText("<img src=x onerror=alert(1)>");
+  await expect(expansions.locator("img")).toHaveCount(0);
+  await expect(expansions.last().locator(".runtime-grid > div").filter({ hasText: /^OS TID/ })).toHaveText("OS TID—");
+  await page.locator("#refresh-now").click();
+  await expect(expansions).toHaveCount(1);
+  await expect(expansions.first()).toContainText("Backend PID");
+  const results = await new AxeBuilder({ page }).include("#db-query-block").withTags(["wcag2a", "wcag2aa", "wcag22aa"]).analyze();
+  expect(results.violations.map(({ id, nodes }) => ({ id, targets: nodes.map((n) => n.target) }))).toEqual([]);
+});
+
+test("database summary values stay on one line and details use the full width", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  const table = page.locator(".db-queries-table");
+  const row = table.locator(".db-query-row").first();
+  const wrapped = await row.evaluate(row => [...row.cells].filter(cell => {
+    const walker = document.createTreeWalker(cell, NodeFilter.SHOW_TEXT);
+    for (let text = walker.nextNode(); text; text = walker.nextNode()) {
+      if (!text.textContent.trim() || text.parentElement.closest(".visually-hidden")) continue;
+      const range = document.createRange(); range.selectNodeContents(text);
+      if (new Set([...range.getClientRects()].map(rect => Math.round(rect.top))).size > 1) return true;
+    }
+    return false;
+  }).map(cell => cell.innerText));
+  expect(wrapped).toEqual([]);
+  await row.locator("[data-db-query-expand]").click();
+  const sql = await table.locator(".db-query-text").boundingBox();
+  const bounds = await table.boundingBox();
+  expect(sql.width).toBeGreaterThan(bounds.width * .95);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBeLessThanOrEqual(1);
+});
+
 test("a database source that cannot list statements says why", async ({ page }) => {
   await page.route("**/api/dashboard**", (route) => route.fulfill({ json: {
     ...dashboard,
@@ -1585,6 +1770,7 @@ test("a database source that cannot list statements says why", async ({ page }) 
   const queries = page.getByRole("table", { name: "Running database statements" });
   await expect(queries.locator("tr", { hasText: "access denied for user sermo" })).toContainText("unavailable");
   await expect(queries.locator("tr", { hasText: "pg-queries" })).toContainText("Waiting for a sample");
+  await expect(queries.locator("[data-db-query-key]")).toHaveCount(0);
 });
 
 test("a guest sees database statements without kill buttons", async ({ page }) => {
@@ -1610,6 +1796,7 @@ for (const scenario of [
     const kill = queries.getByRole("button", { name: "Kill mariadb statement 36762377 of tac_prod" });
     await expect(kill).toHaveText("✕");
     await kill.click();
+    await expect(queries.locator(".db-query-expansion")).toHaveCount(0);
     const dialog = page.locator("#simple-confirm");
     await expect(dialog).toBeVisible();
     await expect(page.locator("#simple-confirm-title")).toHaveText("Cancel mariadb statement 36762377?");
@@ -1640,19 +1827,59 @@ test("a rejected database kill reports the daemon's reason", async ({ page }) =>
   await expect(page.locator("#err")).toContainText("no longer running");
 });
 
-test("database statements show CPU, memory and IO columns, without a separate service column", async ({ page }, testInfo) => {
+test("database statements distinguish thread and total CPU, with memory and IO columns", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name === "mobile", "desktop columns");
+  await page.setViewportSize({ width: 1440, height: 1000 });
   const queries = page.getByRole("table", { name: "Running database statements" });
   // The header's own text, without the sort indicator or the hidden actions label.
   const headers = await queries.locator("thead th").evaluateAll((cells) =>
     cells.map((cell) => (cell.firstChild && cell.firstChild.nodeType === Node.TEXT_NODE ? cell.firstChild.textContent.trim() : "")));
-  expect(headers.filter(Boolean)).toEqual(["Type", "User", "DB", "Client", "ID", "State", "Running", "CPU", "Memory", "IO R/W", "Query"]);
+  expect(headers.filter(Boolean)).toEqual(["Type", "User", "DB", "ID", "State", "Running", "CPU thread", "CPU total", "Memory", "IO R/W"]);
   const row = queries.locator("tbody tr", { hasText: "36762377" });
-  await expect(row.locator("td").nth(7)).toContainText("12.5");
-  await expect(row.locator("td").nth(8)).toContainText("KiB");
-  await expect(row.locator("td").nth(9)).toContainText("/");
+  await expect(row.locator(".db-col-cpu")).toContainText("12.5");
+  await expect(row.locator(".db-col-cpu-thread")).toBeVisible();
+  await expect(row.locator(".db-col-cpu-thread")).toContainText("100%");
+  await expect(row.locator(".db-col-cpu-thread [title]")).toHaveAttribute("title", "100% of one logical CPU");
+  await expect(row.locator(".db-col-cpu [title]")).toHaveAttribute("title", "12.5% of host CPUs");
+  await expect(row.locator(".db-col-memory")).toContainText("KiB");
+  await expect(row.locator(".db-col-io")).toContainText("/");
   // A statement that was not measured reads a dash, not zero.
-  await expect(queries.locator("tbody tr", { hasText: "4711" }).locator("td").nth(7)).toHaveText("—");
+  await expect(queries.locator("tbody tr", { hasText: "4711" }).locator(".db-col-cpu")).toHaveText("—");
+  await expect(queries.locator("tbody tr", { hasText: "4711" }).locator(".db-col-cpu-thread")).toHaveText("—");
+});
+
+test("database thread CPU sorts independently and distinguishes idle from unknown readings", async ({ page }) => {
+  const inventory = structuredClone(dashboard.sessions);
+  // One idle reading omits its zero-valued fields, as the Go JSON encoder does.
+  inventory.database[2].cpu_ready = true;
+  await page.route("**/api/dashboard**", (route) => route.fulfill({ json: { ...dashboard, sessions: inventory } }));
+  await page.reload();
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  const table = page.locator(".db-queries-table");
+  const rows = table.locator(".db-query-row");
+  await expect(rows.filter({ hasText: "812" }).locator(".db-col-cpu-thread")).toHaveText("0%");
+  await expect(rows.filter({ hasText: "4711" }).locator(".db-col-cpu-thread")).toHaveText("—");
+  await table.locator('[data-db-query-sort="cpu_thread"]').click();
+  await table.locator('[data-db-query-sort="cpu_thread"]').click();
+  await expect(rows.locator(".db-col-id")).toHaveText(["36762377", "812", "4711"]);
+  await rows.first().locator("td").nth(5).click();
+  await page.setViewportSize({ width: 390, height: 844 });
+  const field = table.locator(".db-query-detail .runtime-grid > div").filter({ hasText: /^CPU thread/ });
+  await expect(field).toBeVisible();
+  await expect(field).toContainText("100%");
+  await expect(rows.first().locator(".db-col-cpu-thread")).toBeHidden();
+});
+
+test("a resource threshold highlights a SQL statement without calling it long-running", async ({ page }) => {
+  const inventory = structuredClone(dashboard.sessions);
+  inventory.database[0].long = false;
+  inventory.database[0].elapsed_seconds = 10;
+  await page.route("**/api/dashboard**", (route) => route.fulfill({ json: { ...dashboard, sessions: inventory } }));
+  await page.reload();
+  const row = page.locator(".db-query-row", { hasText: "36762377" });
+  await expect(row).toHaveClass(/row-warning/);
+  await expect(row.locator("td").nth(5)).toHaveText("10s");
+  await expect(row.locator("td").nth(5).locator(".lvl-warning")).toHaveCount(0);
 });
 
 test("a database kill shows killing in place until the statement leaves the list", async ({ page }) => {
@@ -1724,14 +1951,20 @@ test("an SSH close shows closing in place while it runs", async ({ page }) => {
   await expect(row.getByRole("status")).toHaveText("closing…");
 });
 
-test("phone database statements keep the query and the kill button", async ({ page }, testInfo) => {
+test("phone database statements expand SQL across the table and keep the kill button", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "mobile", "phone layout only");
   await page.locator("#db-query-block").scrollIntoViewIfNeeded();
   const queries = page.getByRole("table", { name: "Running database statements" });
-  await expect(queries.locator("thead th", { hasText: "Client" })).toBeHidden();
+  await expect(queries.locator("thead th", { hasText: "Client" })).toHaveCount(0);
   await expect(queries.locator("thead th", { hasText: "ID" })).toBeHidden();
   await expect(queries.locator("thead th", { hasText: "Running" })).toBeVisible();
-  await expect(queries.locator("thead th", { hasText: "Query" })).toBeVisible();
+  await expect(queries.locator("thead th", { hasText: "Query" })).toHaveCount(0);
+  await queries.locator("[data-db-query-expand]").first().click();
+  const sql = queries.locator(".db-query-text");
+  await expect(sql).toBeVisible();
+  const sqlBox = await sql.boundingBox();
+  const tableBox = await queries.boundingBox();
+  expect(sqlBox.width).toBeGreaterThan(tableBox.width * .85);
   await expect(queries.getByRole("button", { name: "Kill mariadb statement 36762377 of tac_prod" })).toBeVisible();
   const scrollWidth = await page.evaluate(() => document.documentElement.scrollWidth);
   expect(scrollWidth).toBeLessThanOrEqual(page.viewportSize().width);
@@ -2257,4 +2490,95 @@ test("notifiers show the lowest severity they receive", async ({ page }) => {
   await expect(ops.locator(".sev-warning")).toHaveText("≥ warning");
   // debug filters nothing.
   await expect(page.locator("#notifier-rows tr", { hasText: "everything" })).toContainText("all");
+});
+
+function connectionCheck(name, values = {}, extra = {}) {
+  const fields = { host: "127.0.0.1", port: "6379", protocol: "redis", version: "6.3.4", latency_ms: "1 ms", connected_clients: "12 connections", ...values };
+  return {
+    name, type: "redis", ok: true, ran: true, at: "2026-07-10T12:00:00Z",
+    summary: "Probe succeeded", message: `redis ${fields.host}:${fields.port} ok (${fields.version})`,
+    readings: Object.entries(fields).filter(([, value]) => value !== null).map(([field, value]) => ({ field, label: field, value })),
+    ...extra,
+  };
+}
+
+async function showConnectionChecks(page, checks) {
+  const detail = { ...serviceDetail("web"), checks };
+  await page.route("**/api/services/web", (route) => route.fulfill({ json: detail }));
+  await page.locator('[data-service-expand="web"]').click();
+  await expect(page.locator('[data-service-detail="web"]')).toBeVisible();
+  return detail;
+}
+
+test("service connections summarize targets and a real sample before graphs", async ({ page }) => {
+  const checks = [
+    connectionCheck("z-health"),
+    connectionCheck("a-health", { connected_clients: "15 connections" }),
+    connectionCheck("older", { connected_clients: "99 connections" }, { at: "2026-07-10T11:59:00Z" }),
+    connectionCheck("other-port", { port: "6380", connected_clients: "0 connections" }),
+    connectionCheck("unix", { host: null, port: null, socket: "/run/cache.sock" }),
+    connectionCheck("ipv6", { host: "::1" }),
+    connectionCheck("stale", { port: "9999" }, { stale: true, ran: false }),
+    connectionCheck("skipped", { port: "9998" }, { skipped: true }),
+  ];
+  const response = await showConnectionChecks(page, checks);
+  const detail = page.locator('[data-service-detail="web"]');
+  const summary = detail.locator(".service-connections");
+  await expect(summary).toBeVisible();
+  await expect(summary.locator(".connection-grid")).toHaveCount(4);
+  await expect(summary).toContainText("127.0.0.1:6379");
+  await expect(summary).toContainText("127.0.0.1:6380");
+  await expect(summary).toContainText("[::1]:6379");
+  await expect(summary).toContainText("/run/cache.sock");
+  await expect(summary).not.toContainText("9999");
+  await expect(summary).not.toContainText("9998");
+  const first = summary.locator(".connection-grid").first();
+  await expect(first).toContainText("a-health");
+  await expect(first).toContainText("15");
+  await expect(first).not.toContainText("99");
+  expect(await summary.evaluate((el) => !!(el.compareDocumentPosition(el.parentElement.querySelector(".metric-grid")) & Node.DOCUMENT_POSITION_FOLLOWING))).toBe(true);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBeLessThanOrEqual(1);
+  const results = await new AxeBuilder({ page }).include('[data-service-detail="web"]').withTags(["wcag2a", "wcag2aa", "wcag22aa"]).analyze();
+  expect(results.violations.map(({ id, nodes }) => ({ id, targets: nodes.map((n) => n.target) }))).toEqual([]);
+
+  // The choice is stable across ordering changes and follows a newer sample.
+  response.checks.reverse();
+  await page.locator("#refresh-now").click();
+  await expect(summary.locator(".connection-grid").filter({ hasText: "127.0.0.1:6379" })).toContainText("a-health");
+  response.checks.find((c) => c.name === "z-health").at = "2026-07-10T12:01:00Z";
+  await page.locator("#refresh-now").click();
+  await expect(summary.locator(".connection-grid").filter({ hasText: "127.0.0.1:6379" })).toContainText("z-health");
+});
+
+test("compact service checks omit details and latency but retain diagnostics", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await showConnectionChecks(page, [
+    connectionCheck("healthy"),
+    connectionCheck("warning", {}, { ok: false, severity: "warning", message: "writes rejected: quota exceeded" }),
+    connectionCheck("custom", {}, { summary: undefined, message: "Custom: keep this operator message" }),
+    { name: "unknown", type: "command", ok: true, ran: true, message: "unexpected but useful diagnostic" },
+    { name: "certificate", type: "cert", ok: true, ran: true, summary: "Valid for 68 days", message: "valid 68 days, issuer Example CA", readings: [{ field: "issuer", value: "Example CA" }] },
+    { name: "http", type: "http", ok: true, ran: true, summary: "HTTP 200", message: "status 200", readings: [{ field: "status", value: "200" }, { field: "latency_ms", label: "Latency", value: "2 ms" }] },
+    { name: "latency-only", type: "tcp", ok: true, ran: true, readings: [{ field: "latency_ms", label: "Latency", value: "3 ms" }] },
+  ]);
+  const table = page.locator('[data-service-detail="web"] .detail-checks-table');
+  const healthy = table.locator("tr").filter({ has: page.locator("td:first-child", { hasText: /^healthy$/ }) });
+  const cell = healthy.locator("td").last();
+  await expect(cell).toHaveText("Probe succeeded");
+  await expect(table.locator("details")).toHaveCount(0);
+  await expect(table).not.toContainText("127.0.0.1");
+  await expect(table).not.toContainText("12 connections");
+  await expect(table.locator(".check-readings")).not.toContainText(["latency_ms"]);
+  await expect(table).not.toContainText("Latency");
+  await expect(table.locator("tr").filter({ has: page.locator("td:first-child", { hasText: /^latency-only$/ }) }).locator("td").last()).toHaveText("—");
+  await page.locator("#refresh-now").click();
+  await expect(cell).toHaveText("Probe succeeded");
+  await expect(table.locator("details")).toHaveCount(0);
+  expect(await table.innerText()).toContain("writes rejected: quota exceeded");
+  expect(await table.innerText()).toContain("Custom: keep this operator message");
+  expect(await table.innerText()).toContain("unexpected but useful diagnostic");
+  expect(await table.innerText()).toContain("Valid for 68 days");
+  expect(await table.innerText()).not.toContain("Example CA");
+  expect(await table.innerText()).toContain("HTTP 200");
+  expect(await table.innerText()).not.toContain("status 200");
 });

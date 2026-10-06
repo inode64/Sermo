@@ -1019,3 +1019,36 @@ func TestConnCheckOnChangeIgnoresAnIdentitylessObservation(t *testing.T) {
 		t.Fatalf("the retained baseline must be the last real identity: %v", res.Data)
 	}
 }
+
+func TestConnCheckCompactSummaryAndFailedTarget(t *testing.T) {
+	for _, tc := range []struct {
+		name        string
+		result      conn.Result
+		err         error
+		wantSummary bool
+	}{
+		{name: "success", result: conn.Result{Version: "8.0"}, wantSummary: true},
+		{name: "protocol failure", result: conn.Result{Failure: "access denied"}},
+		{name: "timeout", err: context.DeadlineExceeded},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			c := connCheck{name: "db", timeout: time.Second, proto: fakeProto{}, cfg: conn.Config{Host: "db.test", Port: 3306},
+				probe: func(context.Context, conn.Config) (conn.Result, error) { return tc.result, tc.err }}
+			res := c.Run(t.Context())
+			if _, ok := res.Data[DataKeySummary]; ok != tc.wantSummary {
+				t.Fatalf("compact summary = %v", res.Data)
+			}
+			if res.Data[DataKeyHost] != "db.test" || res.Data[DataKeyPort] != 3306 {
+				t.Fatalf("target lost: %v", res.Data)
+			}
+			if tc.err != nil {
+				if _, ok := res.Data[DataKeyLatencyMS]; ok {
+					t.Fatal("timeout reports a successful latency sample")
+				}
+				if !res.Unavailable || !strings.Contains(res.Message, tc.err.Error()) {
+					t.Fatalf("diagnostic lost: %+v", res)
+				}
+			}
+		})
+	}
+}

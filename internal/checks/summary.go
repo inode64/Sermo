@@ -63,6 +63,10 @@ func ApplySummary(template string, entry map[string]any, result Result) Result {
 	if template == "" || result.Unavailable {
 		return result
 	}
+	if _, ok := result.Data[DataKeySummary]; ok {
+		result.Data = maps.Clone(result.Data)
+		delete(result.Data, DataKeySummary)
+	}
 	result.Message = summaryReference.ReplaceAllStringFunc(template, func(match string) string {
 		name := strings.TrimSpace(strings.TrimSuffix(strings.TrimPrefix(match, "${"), "}"))
 		value, ok := summaryValue(name, entry, result.Data)

@@ -343,6 +343,9 @@ func (o serviceObservation) checkView(cn string, e *webEntry) web.Check {
 		ch.Severity = cs.severityOr(severity.Level(e.checkSeverities[cn])).String()
 		ch.Skipped = cs.Skipped
 		ch.Message = cs.Message
+		if cs.healthy() && !cs.Skipped && !checks.VerdictlessMode(ch.Reports) {
+			ch.Summary = cfgval.String(cs.Data[checks.DataKeySummary])
+		}
 		ch.Readings = checkReadings(e.checkTypes[cn], cs.Data)
 	}
 	if seen && !cs.At.IsZero() {

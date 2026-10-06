@@ -109,10 +109,15 @@ type SessionIssue struct {
 // db_queries watch. CanKill requires a service watch (the kill runs through the
 // service's operation engine) and an exact statement identity.
 type DBQuerySession struct {
-	Service        string `json:"service,omitempty"`
-	Watch          string `json:"watch"`
-	Engine         string `json:"engine"`
-	ID             int64  `json:"id"`
+	Service string `json:"service,omitempty"`
+	Watch   string `json:"watch"`
+	Engine  string `json:"engine"`
+	ID      int64  `json:"id"`
+	QueryID int64  `json:"query_id,omitempty"`
+	// OSThreadID is a MySQL/MariaDB OS thread ID or a PostgreSQL backend PID,
+	// as reported by the database; it is not the connection ID.
+	OSThreadID     int64  `json:"os_tid,omitempty"`
+	At             string `json:"at"` // RFC3339 sample time
 	User           string `json:"user"`
 	Host           string `json:"host,omitempty"`
 	Database       string `json:"database,omitempty"`
@@ -122,13 +127,21 @@ type DBQuerySession struct {
 	Query          string `json:"query"`
 	Truncated      bool   `json:"truncated,omitempty"`
 	Long           bool   `json:"long"`
+	Matched        bool   `json:"matched"`
+	Alerted        bool   `json:"alerted"`
 	Identity       string `json:"identity,omitempty"`
-	CanKill        bool   `json:"can_kill"`
+	// DisplayIdentity preserves row expansion across samples of one statement.
+	// Identity, not this presentation key, authorizes a cancellation request.
+	DisplayIdentity string `json:"display_identity,omitempty"`
+	CanKill         bool   `json:"can_kill"`
 	// Stopping marks a statement the server is already stopping (cancelled
 	// and rolling back), which is why it cannot be killed again.
 	Stopping bool `json:"stopping,omitempty"`
-	// SessionUsage is the statement's CPU and memory, in the same shape as the
-	// SSH and terminal rows (IO is never measured per statement).
+	// CPUThread is the statement thread's CPU against one logical CPU;
+	// SessionUsage.CPU is its share of the host, and CPUReady covers both.
+	CPUThread float64 `json:"cpu_thread,omitempty"`
+	// SessionUsage is the statement's CPU, memory and IO, in the same shape as the
+	// SSH and terminal rows.
 	SessionUsage
 }
 

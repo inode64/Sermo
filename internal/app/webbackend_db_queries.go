@@ -5,7 +5,9 @@ import (
 	"context"
 	"slices"
 	"strings"
+	"time"
 
+	"sermo/internal/cfgval"
 	"sermo/internal/checks"
 	"sermo/internal/operation"
 	"sermo/internal/rules"
@@ -37,22 +39,31 @@ func (b *WebBackend) appendDBQueries(result *web.SessionInventory) {
 			continue
 		}
 		snap := snaps[0]
-		if snap.Unavailable || snap.Skipped {
+		_, sampled := snap.Data[checks.DataKeyCount]
+		if snap.Skipped || (snap.Unavailable && !sampled) {
 			source.State, source.Message = web.SessionSourceUnavailable, snap.Message
 			result.Sources = append(result.Sources, source)
 			continue
 		}
 		source.State = web.SessionSourceAvailable
+		complete, hasComplete := snap.Data[checks.DataKeyComplete].(bool)
+		unknown, _ := cfgval.Int(snap.Data[checks.DataKeyUnknownCount])
+		if snap.Unavailable || (hasComplete && !complete) || unknown > 0 {
+			// Partial data and a known failing threshold can coexist. Preserve
+			// the missing-data reason independently of the check's verdict.
+			source.State, source.Message = web.SessionSourcePartial, snap.Message
+		}
 		result.Sources = append(result.Sources, source)
 		listed := checks.DBQueriesFromData(snap.Data)
 		for i := range listed {
 			q := &listed[i]
 			result.Database = append(result.Database, web.DBQuerySession{
 				Service: service, Watch: watch, Engine: q.Engine, ID: q.ID, User: q.User, Host: q.Host,
+				QueryID: q.QueryID, OSThreadID: q.OSThreadID, At: snap.At.UTC().Format(time.RFC3339),
 				Database: q.Database, Command: q.Command, State: q.State, ElapsedSeconds: q.ElapsedSeconds,
-				Query: q.Query, Truncated: q.Truncated, Identity: q.Identity,
-				Long: q.Long || q.Alerted, CanKill: w.serviceScoped && q.Killable(), Stopping: q.Stopping(),
-				RSS: q.MemoryBytes, MemoryReady: q.MemoryReady, CPU: q.CPU, CPUReady: q.CPUReady,
+				Query: q.Query, Truncated: q.Truncated, Identity: q.Identity, DisplayIdentity: q.DisplayIdentity,
+				Long: q.Long, Matched: q.Matched, Alerted: q.Alerted, CanKill: w.serviceScoped && q.Killable(), Stopping: q.Stopping(),
+				RSS: q.MemoryBytes, MemoryReady: q.MemoryReady, CPU: q.CPU, CPUThread: q.CPUThread, CPUReady: q.CPUReady,
 				IORead: q.IORead, IOWrite: q.IOWrite, IOReady: q.IOReady,
 			})
 		}

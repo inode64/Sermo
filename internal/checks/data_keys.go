@@ -194,6 +194,9 @@ const (
 	DataKeyStatus             = "status"
 	DataKeyStratum            = "stratum"
 	DataKeySubject            = "subject"
+	// DataKeySummary is an optional compact rendering of a successful result.
+	// Message retains the full diagnostic; configured summaries override this hint.
+	DataKeySummary            = CheckKeySummary
 	DataKeySubprotocol        = CheckKeySubprotocol
 	DataKeySynchronized       = "synchronized"
 	DataKeyThreshold          = CheckKeyThreshold

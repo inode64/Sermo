@@ -186,9 +186,10 @@ func (a App) killDaemonDBQuery(ctx context.Context, cfg *config.Config, row web.
 }
 
 func findDBQuerySession(inventory web.SessionInventory, service, watch string, id int64) (web.DBQuerySession, bool) {
-	for _, row := range inventory.Database {
+	for i := range inventory.Database {
+		row := &inventory.Database[i]
 		if row.Service == service && row.Watch == watch && row.ID == id {
-			return row, true
+			return *row, true
 		}
 	}
 	return web.DBQuerySession{}, false
@@ -233,9 +234,10 @@ func filterSessionInventory(inventory web.SessionInventory, service string) web.
 			out.Terminal = append(out.Terminal, row)
 		}
 	}
-	for _, row := range inventory.Database {
+	for i := range inventory.Database {
+		row := &inventory.Database[i]
 		if row.Service == service {
-			out.Database = append(out.Database, row)
+			out.Database = append(out.Database, *row)
 		}
 	}
 	return out
@@ -273,7 +275,8 @@ func (a App) writeSessionInventory(inventory web.SessionInventory) {
 		section("Database statements:")
 		tw := newTabWriter(a.Stdout)
 		fmt.Fprintln(tw, "SERVICE\tWATCH\tENGINE\tID\tUSER\tDB\tRUNNING\tLONG\tQUERY")
-		for _, q := range inventory.Database {
+		for i := range inventory.Database {
+			q := &inventory.Database[i]
 			long := sessionsEmptyCell
 			switch {
 			case q.Stopping:

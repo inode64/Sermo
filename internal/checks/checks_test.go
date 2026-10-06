@@ -54,6 +54,8 @@ func TestTCPCheck(t *testing.T) {
 	open := tcpCheck{name: "open", timeout: time.Second, host: "127.0.0.1", port: port}
 	if res := open.Run(context.Background()); !res.OK {
 		t.Errorf("open port should pass: %s", res.Message)
+	} else if res.Data[DataKeyHost] != "127.0.0.1" || res.Data[DataKeyPort] != port || res.Data[DataKeySummary] != "Connected" {
+		t.Fatalf("TCP target/summary = %v", res.Data)
 	}
 
 	// A bound, non-existent interface must fail the dial (never silently use the
@@ -68,6 +70,8 @@ func TestTCPCheck(t *testing.T) {
 	closed := tcpCheck{name: "closed", timeout: time.Second, host: "127.0.0.1", port: port}
 	if res := closed.Run(context.Background()); res.OK {
 		t.Errorf("closed port should fail")
+	} else if res.Data[DataKeyHost] != "127.0.0.1" || res.Data[DataKeyPort] != port || res.Data[DataKeySummary] != nil {
+		t.Fatalf("failed TCP target/summary = %v", res.Data)
 	}
 }
 
@@ -84,6 +88,8 @@ func TestHTTPCheck(t *testing.T) {
 	ok := httpCheck{name: "h", timeout: time.Second, client: srv.Client(), url: srv.URL + "/health", method: "GET", expect: statusMatcher{codes: []int{200}}}
 	if res := ok.Run(context.Background()); !res.OK {
 		t.Errorf("200 should pass: %s", res.Message)
+	} else if res.Data[DataKeySummary] != "HTTP 200" || res.Message != "status 200" {
+		t.Fatalf("HTTP summary/diagnostic = %+v", res)
 	}
 
 	bad := httpCheck{name: "h", timeout: time.Second, client: srv.Client(), url: srv.URL + "/down", method: "GET", expect: statusMatcher{codes: []int{200}}}

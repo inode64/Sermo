@@ -1649,6 +1649,32 @@ func TestWatchConditionsUseCheckPredicateRegistry(t *testing.T) {
 	}
 }
 
+func TestDBQueriesWatchConditionsIncludeResourcePredicates(t *testing.T) {
+	for _, duration := range []string{"", "30s"} {
+		check := map[string]any{
+			"type": "db_queries", "engine": "mariadb",
+			"cpu":        map[string]any{"op": ">", "value": 10},
+			"cpu_thread": map[string]any{"op": ">=", "value": "90%"},
+			"memory":     map[string]any{"op": ">", "value": "256MiB"},
+		}
+		want := []web.WatchCondition{
+			{Field: "cpu", Op: ">", Value: "10"},
+			{Field: "cpu_thread", Op: ">=", Value: "90%"},
+			{Field: "memory", Op: ">", Value: "256MiB"},
+		}
+		if duration != "" {
+			check["min_duration"] = duration
+			want = append(want, web.WatchCondition{Field: "min_duration", Op: ">=", Value: duration})
+		}
+		if _, err := checks.ParseDBQueryConfig(check); err != nil {
+			t.Fatal(err)
+		}
+		if got := watchConditions(check, nil); !slices.Equal(got, want) {
+			t.Fatalf("duration %q: conditions=%+v, want %+v", duration, got, want)
+		}
+	}
+}
+
 func TestWatchMetricConditionsComparisons(t *testing.T) {
 	conditions := watchMetricConditions(map[string]any{
 		"errors": map[string]any{
