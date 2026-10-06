@@ -223,6 +223,12 @@ func validateServiceWatch(name string, entry map[string]any, locksDir string, no
 		}
 		return
 	}
+	// A file watch with native actions runs the stateful watcher, whose paths
+	// and change conditions differ from the single-shot file check grammar.
+	if typ == checks.CheckTypeFile && cfgval.String(then[rules.RuleFieldAction]) == "" {
+		validateFileCheck(name, check, entry, defaultNotify, add)
+		return
+	}
 	if !validateServiceWatchType(name, typ, checkPath, check, locksDir, add) {
 		return
 	}
@@ -843,7 +849,7 @@ func validateICMPMetricCondition(prefix, metric string, m map[string]any, add ad
 	}
 }
 
-// validateFileCheck validates a file watch: path or paths, optional recursive
+// validateFileCheck validates a file watch: paths, optional recursive
 // traversal flags, and at least one attribute condition (size threshold/change,
 // permissions/owner on change, existence on delete, older_than), plus the entry's hook.
 func validateFileCheck(name string, check, entry map[string]any, defaultNotify []string, add addFunc) {

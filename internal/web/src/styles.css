@@ -530,6 +530,7 @@
   .lvl-error { color: var(--crit); font-weight: 600; }
   .lvl-warning { color: var(--warn); font-weight: 600; }
   #event-controls { display: flex; gap: .45rem; align-items: center; flex-wrap: wrap; margin: .1rem 0 .6rem; }
+  #event-controls select { min-width: 0; max-width: 100%; }
   #event-controls input[type="text"] { width: 8.5rem; }
   .event-group td { background: color-mix(in srgb, var(--text) 4%, transparent); font-weight: 600; }
   .event-msg button {
@@ -543,6 +544,8 @@
   /* ---- watch widgets --------------------------------------------------------- */
   .watch-table { min-width: 72rem; font-size: .85rem; }
   .watch-table th, .watch-table td { vertical-align: top; }
+  .watch-table td { overflow-wrap: anywhere; }
+  .watch-table .row-toggle { white-space: normal; overflow-wrap: anywhere; }
   .watch-type-heading { display: flex; align-items: baseline; justify-content: space-between; gap: .65rem; flex-wrap: wrap; }
   .watch-type-heading h3 { margin-bottom: .35rem; }
   .watch-type-filter { display: inline-flex; align-items: center; gap: .35rem; color: var(--text-2); font-size: .85rem; }

@@ -153,3 +153,68 @@ func TestValidateServiceWatches(t *testing.T) {
 		t.Errorf("absent watches section should have no issues, got: %v", got)
 	}
 }
+
+func TestValidateServiceFileWatchGrammar(t *testing.T) {
+	for _, tt := range []struct {
+		name    string
+		check   map[string]any
+		then    map[string]any
+		wantErr string
+	}{
+		{
+			name:  "native freshness watch",
+			check: map[string]any{"type": "file", "paths": []any{"/var/log/worker.log"}, "older_than": "5m"},
+			then:  map[string]any{"notify": []any{"none"}},
+		},
+		{
+			name:    "native watch rejects single-shot path",
+			check:   map[string]any{"type": "file", "path": "/var/log/worker.log", "older_than": "5m"},
+			then:    map[string]any{"notify": []any{"none"}},
+			wantErr: "file check paths is required",
+		},
+		{
+			name:    "native watch requires paths",
+			check:   map[string]any{"type": "file", "paths": []any{}, "older_than": "5m"},
+			then:    map[string]any{"notify": []any{"none"}},
+			wantErr: "paths must be a non-empty list",
+		},
+		{
+			name:    "native watch validates duration",
+			check:   map[string]any{"type": "file", "paths": []any{"/var/log/worker.log"}, "older_than": "0s"},
+			then:    map[string]any{"notify": []any{"none"}},
+			wantErr: "older_than must be a valid positive duration",
+		},
+		{
+			name:    "native watch requires condition",
+			check:   map[string]any{"type": "file", "paths": []any{"/var/log/worker.log"}},
+			then:    map[string]any{"notify": []any{"none"}},
+			wantErr: "requires at least one of",
+		},
+		{
+			name:  "check-only retains single-shot grammar",
+			check: map[string]any{"type": "file", "path": "/var/log/worker.log", "non_empty": true},
+		},
+		{
+			name:  "rule action retains single-shot grammar",
+			check: map[string]any{"type": "file", "path": "/var/log/worker.log", "non_empty": true},
+			then:  map[string]any{"action": "alert", "message": "Worker log is missing or empty"},
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			entry := map[string]any{"check": tt.check}
+			if tt.then != nil {
+				entry["then"] = tt.then
+			}
+			issues := collect(func(add func(string, ...any)) {
+				validateServiceWatch("progress", entry, "/run/sermo/locks", nil, nil, add)
+			})
+			if tt.wantErr == "" {
+				if len(issues) != 0 {
+					t.Fatalf("unexpected validation issues: %v", issues)
+				}
+			} else if !strings.Contains(strings.Join(issues, "\n"), tt.wantErr) {
+				t.Fatalf("validation issues = %v, want %q", issues, tt.wantErr)
+			}
+		})
+	}
+}
