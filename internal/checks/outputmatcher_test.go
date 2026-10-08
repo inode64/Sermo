@@ -87,6 +87,22 @@ func TestOutputMatcherMatch(t *testing.T) {
 	})
 }
 
+func TestOutputMatcherDetailQuotesObservedOutput(t *testing.T) {
+	m := OutputMatcher{assertion: newValueMatcher("=~", `^Result=success$`)}
+	ok, detail := m.Match("LoadState=loaded\nResult=exit-code\n")
+	if ok {
+		t.Fatal("Match() = true, want a mismatch")
+	}
+	want := `=~ "^Result=success$" not satisfied; got "LoadState=loaded Result=exit-code"`
+	if detail != want {
+		t.Fatalf("detail = %q, want %q", detail, want)
+	}
+	ok, detail = OutputMatcher{Substring: "pong"}.Match("  pang \n")
+	if ok || detail != `does not contain "pong"; got "pang"` {
+		t.Fatalf("substring detail = (%v, %q)", ok, detail)
+	}
+}
+
 func TestValidateAssertionValue(t *testing.T) {
 	cases := []struct {
 		name    string

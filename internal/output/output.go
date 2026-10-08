@@ -27,6 +27,27 @@ func FirstNonEmptyLine(s string) string {
 	return ""
 }
 
+// observedMaxRunes bounds Observed: enough for a few property lines or a
+// version banner, short enough to keep an event message on one line.
+const (
+	observedMaxRunes = 120
+	observedEllipsis = "…"
+	observedSpace    = " "
+)
+
+// Observed renders captured output as the value an assertion saw: whitespace
+// runs (including line breaks) collapse to one space and the result is bounded,
+// so "LoadState=loaded\nResult=exit-code" reads as one short phrase in a
+// mismatch message instead of being hidden behind the expected pattern.
+func Observed(s string) string {
+	collapsed := strings.Join(strings.Fields(s), observedSpace)
+	if utf8.RuneCountInString(collapsed) <= observedMaxRunes {
+		return collapsed
+	}
+	runes := []rune(collapsed)
+	return string(runes[:observedMaxRunes]) + observedEllipsis
+}
+
 // causeIntroducer ends a line that only introduces the reason on the next one.
 const causeIntroducer = ":"
 

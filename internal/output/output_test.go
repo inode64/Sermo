@@ -61,6 +61,20 @@ func TestBoundTailKeepsWholeCharactersOnALongLine(t *testing.T) {
 	}
 }
 
+func TestObservedCollapsesWhitespaceAndBounds(t *testing.T) {
+	if got := Observed(" LoadState=loaded\n\tResult=exit-code \n"); got != "LoadState=loaded Result=exit-code" {
+		t.Fatalf("Observed() = %q", got)
+	}
+	long := strings.Repeat("ñ", observedMaxRunes+5)
+	got := Observed(long)
+	if utf8.RuneCountInString(got) != observedMaxRunes+1 || !strings.HasSuffix(got, observedEllipsis) {
+		t.Fatalf("Observed(long) = %d runes, suffix %q", utf8.RuneCountInString(got), got[len(got)-len(observedEllipsis):])
+	}
+	if Observed("   ") != "" {
+		t.Fatal("Observed(blank) must be empty")
+	}
+}
+
 func TestFirstNonEmptyLineUsesTrim(t *testing.T) {
 	if got := FirstNonEmptyLine("\n\n  \nreal line\n\n  \n"); got != "real line" {
 		t.Fatalf("FirstNonEmptyLine after trim gave %q", got)

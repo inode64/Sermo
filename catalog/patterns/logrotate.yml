@@ -1,0 +1,10 @@
+name: logrotate
+display_name: "Logrotate output signals"
+description: "Grade `logrotate --debug` output: every `error:` line is a file that the next scheduled run skips or fails on; the debug-mode notice is noise."
+rules:
+  # `--debug` always opens with this notice; it is not a finding.
+  - { id: debug-mode, match: '(?i)logrotate in debug mode', severity: ok }
+  # Invalid directive, unknown user/group, missing directory, unreadable file.
+  - { id: error, match: '(?i)^error:', severity: error }
+  # Directive problems logrotate tolerates (ignored options, ownership notices).
+  - { id: warning, match: '(?i)^warning:', severity: warning }
