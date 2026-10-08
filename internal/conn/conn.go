@@ -330,19 +330,12 @@ const (
 	httpHeaderSyncthingAuth = "X-Api-Key"
 
 	tlsSkipVerify = TLSModeSkipVerify
-	tlsModeFalse  = "false"
-	tlsModeYes    = "yes"
-	tlsModeNo     = "no"
-	tlsModeOn     = "on"
-	tlsModeOff    = "off"
-	// tlsModeRequired is the shared friendly spelling of "true"; pgx only
-	// knows the sslmode "require", so postgres must translate it.
-	tlsModeRequired = "required"
-	tlsDisable      = "disable"
-	tlsRequire      = "require"
-	tlsPrefer       = "prefer"
-	tlsVerifyCA     = "verify-ca"
-	tlsVerifyFull   = "verify-full"
+	// pgx's own sslmode names; the shared friendly spellings are netutil's.
+	tlsDisable    = "disable"
+	tlsRequire    = "require"
+	tlsPrefer     = "prefer"
+	tlsVerifyCA   = "verify-ca"
+	tlsVerifyFull = "verify-full"
 	// schemeHTTP and schemeHTTPS are the URL schemes an HTTP-based probe selects
 	// by whether TLS is in use.
 	schemeHTTP         = netutil.URLSchemeHTTP

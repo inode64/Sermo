@@ -155,7 +155,7 @@ checks:
 	if !hasIssue(issues, "variable ${missing} used in checks.http.url") {
 		t.Errorf("missing undefined-variable issue: %v", issues)
 	}
-	if !hasIssue(issues, "must resolve to a port in 1..65535") {
+	if !hasIssue(issues, `checks.http.port "99999" must be an integer in 1..65535`) {
 		t.Errorf("missing port-range issue: %v", issues)
 	}
 }

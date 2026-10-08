@@ -79,12 +79,12 @@ type Spec struct {
 
 // SpecFromTree reads a service's optional `control: {type: libvirt, ...}` block.
 func SpecFromTree(tree map[string]any) (Spec, bool, error) {
-	m, present, ok := cfgval.MapAt(tree, sectionControl)
+	m, present, err := cfgval.MappingSection(tree, sectionControl)
+	if err != nil {
+		return Spec{}, true, fmt.Errorf("libvirt: %w", err)
+	}
 	if !present {
 		return Spec{}, false, nil
-	}
-	if !ok {
-		return Spec{}, true, errors.New("control must be a mapping")
 	}
 	if typ := cfgval.String(m[ControlKeyType]); typ != ControlType {
 		return Spec{}, true, fmt.Errorf("%s %q is not supported", controlPathType, typ)

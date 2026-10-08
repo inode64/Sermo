@@ -3,6 +3,9 @@ package web
 import (
 	"context"
 	"time"
+
+	"sermo/internal/appinspect"
+	"sermo/internal/checks"
 )
 
 // ServiceButton is one configured operator button of a service: the name the
@@ -157,19 +160,12 @@ type MountAlertResult struct {
 // library. It mirrors the sermoctl `apps` and `libs` reports so every surface
 // agrees about versions, locations and inspection status.
 type CatalogItem struct {
-	Name          string `json:"name"`
-	DisplayName   string `json:"display_name"`
-	Category      string `json:"category,omitempty"`
-	Binary        string `json:"binary"`                   // resolved binary path (file location)
-	Permissions   string `json:"permissions,omitempty"`    // binary mode, e.g. "-rwxr-xr-x (0755)"
-	User          string `json:"user,omitempty"`           // owner username of the binary
-	Group         string `json:"group,omitempty"`          // owner group of the binary
-	Version       string `json:"version"`                  // raw first line of the version command
-	VersionShort  string `json:"version_short"`            // numeric version, at most the patchlevel
-	VersionSource string `json:"version_source,omitempty"` // app whose version probe supplied this version
-	Status        string `json:"status"`                   // ok, or an error description
-	State         string `json:"state,omitempty"`          // starting | ok | failed | warning
-	LastEvent     *Event `json:"last_event,omitempty"`     // populated with the newest retained application event
+	// Report is the application or library inspection as appinspect reports it
+	// (name, binary, ownership, version, status): one schema for the CLI, the
+	// daemon and this API.
+	appinspect.Report
+	State     string `json:"state,omitempty"`      // starting | ok | failed | warning
+	LastEvent *Event `json:"last_event,omitempty"` // populated with the newest retained application event
 
 	// KeepsSLA marks an application that maps to a monitored service, so the
 	// dashboard draws it that service's SLA section — the same panel, selector
@@ -239,6 +235,26 @@ type Watch struct {
 	// /api/watches/{name}/metrics?metric=NAME and drawn with the panel a service
 	// check's metric gets. A watch has exactly one check, so nothing here names it.
 	Metrics []CheckMetric `json:"metrics,omitempty"`
+	// Processes lists the processes an unowned_processes watch currently
+	// reports, each with the identity its kill button must send back.
+	Processes []WatchProcess `json:"processes,omitempty"`
+}
+
+// WatchProcess is one process an unowned_processes watch reports: the fields a
+// service Process row shows (pid, user, exe, cpu, rss) plus the reason it is
+// listed and whether an admin may signal it from the dashboard. StartTicks is
+// the PID's incarnation; a kill request must echo it so a recycled PID is never
+// signalled. It carries no command line: the watch never publishes one. The
+// check's own row type is the one schema, live, persisted and on the wire.
+type WatchProcess = checks.UnownedProcess
+
+// WatchProcessKillRequest names one listed process to signal: the PID and the
+// start ticks the watch displayed. Escalate asks for SIGKILL after the TERM
+// grace when the process survives; without it only SIGTERM is sent.
+type WatchProcessKillRequest struct {
+	PID        int
+	StartTicks uint64
+	Escalate   bool
 }
 
 // WatchProbe reports a manual host-watch probe currently running in the daemon.

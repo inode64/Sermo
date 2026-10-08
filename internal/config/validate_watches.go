@@ -88,6 +88,8 @@ func validateWatches(watches map[string]any, locksDir string, notifiers map[stri
 			validateProcessWatch(name, check, entry, defaultNotify, add)
 		case checks.CheckTypeProcessPolicy:
 			validateProcessPolicyWatch(name, check, entry, defaultNotify, add)
+		case checks.CheckTypeUnownedProcesses:
+			validateUnownedProcessesWatch(name, check, entry, defaultNotify, add)
 		case checks.CheckTypeDBQueries:
 			validateDBQueriesWatch(name, check, entry, false, defaultNotify, add)
 		case "":
@@ -318,10 +320,19 @@ func isRuleClassAction(action string) bool {
 // rule-class action. It desugars to a generated check + rule, so its then accepts
 // action/message/blocks/notify but not fire-and-forget hook/expand/kill side
 // effects or watch-only notification cadence.
-func validateWatchThenAction(prefix, action string, then map[string]any, add addFunc) {
+// validateWatchThenAction validates the grammar of a service watch's
+// then.action and reports whether it is sound: the desugarer only emits a
+// rule for a sound action, so the rule validator never repeats these issues
+// under the rule's path.
+func validateWatchThenAction(prefix, action string, then map[string]any, report addFunc) bool {
+	ok := true
+	add := func(format string, args ...any) {
+		ok = false
+		report(format, args...)
+	}
 	if !isRuleClassAction(action) {
 		add(validationNotOneOfFormat, thenFieldPath(prefix, rules.RuleFieldAction), action, rules.RuleActionSummary)
-		return
+		return false
 	}
 	for _, k := range []string{WatchThenKeyHook, WatchThenKeyExpand, WatchThenKeyKill, WatchThenKeyMakeStep, WatchThenKeyRemount} {
 		if _, has := then[k]; has {
@@ -355,6 +366,7 @@ func validateWatchThenAction(prefix, action string, then map[string]any, add add
 	} else if _, hasBlocks := then[rules.RuleFieldBlocks]; hasBlocks {
 		add("%s is only valid with action: block", thenFieldPath(prefix, rules.RuleFieldBlocks))
 	}
+	return ok
 }
 
 func validateWatchMetadata(name string, entry map[string]any, add addFunc) {
@@ -563,7 +575,7 @@ func validateWatchKillAction(prefix string, then map[string]any, allowKill bool,
 	case present && !hasKill:
 		add(validationMappingFormat, thenKillPath(prefix))
 	case hasKill && !allowKill:
-		add("%s is only valid on a process watch", thenKillPath(prefix))
+		add("%s is only valid on a process or unowned_processes watch", thenKillPath(prefix))
 	case hasKill:
 		validateKillAction(prefix, kill, add)
 	}
@@ -988,29 +1000,79 @@ func validateProcessPolicyWatch(name string, check, entry map[string]any, defaul
 		add("%s %s", allowPath+issue.PathSuffix, problem)
 	}
 	if _, present := entry[sectionPolicy]; present {
-		add("%s is not valid on an alert-only process_policy watch", watchFieldPath(name, sectionPolicy))
+		add("%s is not valid on an %s", watchFieldPath(name, sectionPolicy), ProcessPolicyActions.Description())
 	}
-	validateAlertOnlyWatchThen(name, entry, defaultNotify, add)
+	validateSetWatchThen(name, entry, defaultNotify, ProcessPolicyActions, add)
 }
 
-// validateAlertOnlyWatchThen permits only notification delivery on an
-// execution-policy watch. Omitting then remains valid and records a dashboard
-// and event-log alert without running an external action.
-func validateAlertOnlyWatchThen(name string, entry map[string]any, defaultNotify []string, add addFunc) {
+// validateUnownedProcessesWatch checks a host watch that lists the processes no
+// init unit accounts for or whose executable belongs to no installed package.
+// Its then block delivers notifications and, with an explicit kill_only_if
+// selector, may signal the listed processes the selector authorizes; detection
+// alone never authorizes a kill.
+func validateUnownedProcessesWatch(name string, check, entry map[string]any, defaultNotify []string, add addFunc) {
+	validateStatefulWatchEntry(name, checks.CheckTypeUnownedProcesses, entry, add)
+	if _, present := check[checks.CheckKeyMinAge]; present {
+		validatePositiveDurationField(check, checks.CheckKeyMinAge, watchCheckFieldPath(name, checks.CheckKeyMinAge), add)
+	}
+	if raw, present := check[checks.CheckKeyUsers]; present {
+		if users, err := cfgval.StrictStringList(raw); err != nil || len(users) == 0 {
+			add("%s must be a non-empty list of user names or ids", watchCheckFieldPath(name, checks.CheckKeyUsers))
+		}
+	}
+	_, ignoreIssues := ParseProcessIdentityRules(check[checks.CheckKeyIgnore], checks.CheckTypeUnownedProcesses, checks.CheckKeyIgnore, false)
+	ignorePath := watchCheckFieldPath(name, checks.CheckKeyIgnore)
+	for _, issue := range ignoreIssues {
+		add("%s %s", ignorePath+issue.PathSuffix, issue.Problem)
+	}
+	if _, present := entry[sectionPolicy]; present {
+		add("%s is not valid on an %s", watchFieldPath(name, sectionPolicy), UnownedProcessesActions.Description())
+	}
+	validateSetWatchThen(name, entry, defaultNotify, UnownedProcessesActions, add)
+}
+
+// validateSetWatchThen permits only the then vocabulary of a set-evaluating
+// process watch: notification delivery and, when the shape allows it, a
+// then.kill action with its own kill_only_if selector. Omitting then remains
+// valid and records a dashboard and event-log alert without running an
+// external action.
+func validateSetWatchThen(name string, entry map[string]any, defaultNotify []string, shape SetWatchActions, add addFunc) {
 	prefix := watchPath(name)
 	then, ok := watchThenMapping(prefix, entry, add)
 	if !ok {
 		return
 	}
 	for _, key := range slices.Sorted(maps.Keys(then)) {
-		if !IsAlertOnlyWatchThenKey(key) {
-			add("%s is not valid on an alert-only process_policy watch", thenFieldPath(prefix, key))
+		if !shape.Accepts(key) {
+			add("%s is not valid on an %s", thenFieldPath(prefix, key), shape.Description())
 		}
 	}
 	notify := cfgval.StringList(then[rules.RuleFieldNotify])
 	validateWatchNotifyInterval(prefix, then, false, notify, defaultNotify, add)
+	// A shape without kill already rejected then.kill in the Accepts loop above;
+	// the kill grammar is only validated where the key is accepted.
+	if shape.Kill && validateWatchKillAction(prefix, then, true, add) {
+		validateWatchKillOnlyIf(prefix, then, add)
+	}
 	if len(then) == 0 {
-		add("%s requires notify or omit then for dashboard/event-log alerts", prefix+"."+rules.RuleFieldThen)
+		add("%s %s", prefix+"."+rules.RuleFieldThen, shape.EmptyThenMessage())
+	}
+}
+
+// validateWatchKillOnlyIf requires the paired users/exe_any selector on a watch
+// whose kill targets are found by host-wide classification rather than by a
+// name the operator wrote: without it the action has no authority at all.
+func validateWatchKillOnlyIf(prefix string, then map[string]any, add addFunc) {
+	kill, _ := then[WatchThenKeyKill].(map[string]any)
+	path := thenKillPath(prefix) + "." + process.StopPolicyKeyKillOnlyIf
+	selector, warnings := process.ParseKillOnlyIf(kill[process.StopPolicyKeyKillOnlyIf], path)
+	for _, warning := range warnings {
+		add("%s", warning)
+	}
+	for _, exe := range selector.ExeAny {
+		if !filepath.IsAbs(exe) {
+			add(validationPathAbsoluteFormat, path+"."+process.StopPolicyKeyExeAny, exe)
+		}
 	}
 }
 

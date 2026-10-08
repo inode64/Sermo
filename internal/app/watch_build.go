@@ -102,6 +102,8 @@ func buildWatchEntry(name string, entry map[string]any, deps Deps, defaultInterv
 		return watchOrWarn(buildProcWatch(name, entry, checkEntry, deps, interval))(warnings)
 	case checks.CheckTypeProcessPolicy:
 		return watchOrWarn(buildProcessPolicyWatch(name, entry, checkEntry, deps, interval))(warnings)
+	case checks.CheckTypeUnownedProcesses:
+		return watchOrWarn(buildUnownedProcessesWatch(name, entry, checkEntry, deps, interval))(warnings)
 	case checks.CheckTypeDBQueries:
 		return watchOrWarn(buildDBQueriesWatch(name, entry, checkEntry, deps, interval))(warnings)
 	default:
@@ -277,6 +279,8 @@ func unsupportedServiceWatchType(entry map[string]any) string {
 		return "the process watch matches host-wide (and can kill); use process_count or metric for service-scoped process monitoring, or declare a host watch"
 	case checks.CheckTypeProcessPolicy:
 		return "the process_policy watch audits a host-wide user account; declare it under the global watches: section"
+	case checks.CheckTypeUnownedProcesses:
+		return "the unowned_processes watch scans the whole host process table; declare it under the global watches: section"
 	}
 	return ""
 }
@@ -440,6 +444,28 @@ func buildMetricWatches(name string, entry, checkEntry map[string]any, deps Deps
 // leaves every existing watch exactly as it is.
 func watchSeverity(trees ...map[string]any) severity.Level {
 	return checks.DeclaredSeverity(trees...).Resolved()
+}
+
+// defaultWatchSeverity is the grade a watch type carries when its entry
+// declares none. Every type is an error — the historical default — except an
+// unowned_processes listing, which is an audit finding rather than an outage.
+func defaultWatchSeverity(ctype string) severity.Level {
+	if ctype == checks.CheckTypeUnownedProcesses {
+		return severity.Warning
+	}
+	return severity.Error
+}
+
+// watchSeverityFor resolves a watch's grade from its declarations and its
+// type's default, the one chain the daemon builder and the dashboard share.
+func watchSeverityFor(ctype string, trees ...map[string]any) severity.Level {
+	return severity.Resolve(checks.DeclaredSeverity(trees...), defaultWatchSeverity(ctype))
+}
+
+// newPIDKiller wires the shared single-PID kill path from the daemon's
+// dependencies; nil signaller and sleeper mean the real ones.
+func newPIDKiller(deps Deps, watch string, resolve process.UserResolver) pidKiller {
+	return pidKiller{watch: watch, signaler: deps.ProcessSignaler, resolve: resolve, sleep: deps.Sleep, emit: deps.Emit}
 }
 
 // withSeverity copies entry with the layered declared severity written in — or
@@ -609,11 +635,11 @@ func buildProcWatch(name string, entry, checkEntry map[string]any, deps Deps, in
 		check:     checkEntry,
 		hook:      actions.hook,
 		kill:      actions.kill,
+		killer:    newPIDKiller(deps, name, resolve),
 		notifiers: resolveNotifiers(actions.effectiveNames, deps.Notifiers),
 		dryRun:    config.DryRun(entry),
 		inPanic:   deps.Panic.Active,
 		runner:    OSHookRunner{Runner: deps.ExecxRunner},
-		resolve:   resolve,
 		now:       deps.Now,
 		emit:      deps.Emit,
 		sampler:   procSamplerFromDeps(deps),
@@ -948,6 +974,16 @@ func parseKill(then map[string]any) (*killSpec, error) {
 	}
 	if ks.killTimeout <= 0 {
 		ks.killTimeout = defaultWatchKillTimeout
+	}
+	// kill_only_if declares the paired user + executable selector a host-wide
+	// watch (unowned_processes) signals through; a process watch binds its own
+	// selector from check.name/check.user instead and overrides this.
+	if raw, present := m[process.StopPolicyKeyKillOnlyIf]; present {
+		selector, warnings := process.ParseKillOnlyIf(raw, "then.kill."+process.StopPolicyKeyKillOnlyIf)
+		if len(warnings) > 0 {
+			return nil, errors.New(warnings[0])
+		}
+		ks.selector = selector
 	}
 	return ks, nil
 }

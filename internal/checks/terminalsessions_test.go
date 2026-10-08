@@ -414,7 +414,7 @@ func makeStaleUnixSocket(t *testing.T, path string) {
 
 func TestTerminalSessionsFromDataAcceptsJSONHydration(t *testing.T) {
 	sessions := TerminalSessionsFromData(map[string]any{DataKeyTerminalSessions: []any{
-		map[string]any{CheckKeyMultiplexer: TerminalMultiplexerTmux, CheckKeyName: "ops", CheckKeyUser: "deploy", CheckKeyState: TerminalSessionStateAttached, DataKeyWindows: float64(2)},
+		map[string]any{CheckKeyMultiplexer: TerminalMultiplexerTmux, CheckKeyName: "ops", CheckKeyUser: "deploy", CheckKeyState: TerminalSessionStateAttached, "windows": float64(2)},
 		map[string]any{CheckKeyMultiplexer: TerminalMultiplexerScreen, CheckKeyName: "120.backup", CheckKeyUser: "backup", CheckKeyState: TerminalSessionStateDetached},
 		map[string]any{CheckKeyMultiplexer: "unknown", CheckKeyName: "skip", CheckKeyUser: "root", CheckKeyState: TerminalSessionStateAttached},
 	}})

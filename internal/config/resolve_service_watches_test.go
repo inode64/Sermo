@@ -348,7 +348,15 @@ func TestValidateUnifiedWatchActions(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			mustHave(t, validateService(t, base+tc.body), tc.want)
+			issues := validateService(t, base+tc.body)
+			mustHave(t, issues, tc.want)
+			// The unsound action never became a rule, so nothing is repeated
+			// under rules.w: one issue per mistake, at the path the operator wrote.
+			for _, issue := range issues {
+				if strings.HasPrefix(issue.Msg, "rules.") {
+					t.Fatalf("unsound watch action re-reported as a rule issue: %q", issue.Msg)
+				}
+			}
 		})
 	}
 }

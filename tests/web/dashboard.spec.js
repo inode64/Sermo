@@ -248,6 +248,19 @@ const watches = [{
     { field: "health", label: "Health", value: "missing" },
   ],
   summary: "smart /dev/sdz: device missing", interval: "1d",
+}, {
+  name: "unowned-procs", display_name: "Unowned processes", category: "security",
+  enabled: true, monitored: true, state: "warning", check_type: "unowned_processes",
+  summary: "2 unowned processes", interval: "5m",
+  readings: [
+    { field: "scanned", label: "Scanned", value: "312" },
+    { field: "violation_count", label: "Unowned", value: "2", warning: "2 unowned" },
+    { field: "package_db", label: "Package DB", value: "dpkg" },
+  ],
+  processes: [ // the daemon lists them sorted by pid
+    { pid: 310, start_ticks: 1200, user: "root", exe: "/usr/local/sbin/agent", exe_resolved: true, rss: 1048576, reason: "no unit accounts for the process", can_kill: false, kill_reason: "no kill selector authorizes root processes" },
+    { pid: 4242, start_ticks: 987654, user: "deploy", exe: "/opt/tools/miner", exe_resolved: true, rss: 52428800, cpu: 97.5, has_cpu: true, reason: "no package owns the executable", can_kill: true },
+  ],
 }];
 
 const applications = [{
@@ -1093,6 +1106,7 @@ const generationConfirmationCases = [
   { name: "watch", button: '#wat-row-db-replication [data-watch-action="replication-start"]', dialog: "#simple-confirm", confirm: "#simple-confirm-ok", path: "/api/watches/db-replication/replication-start" },
   { name: "notifier", section: "#notifiers-section", button: '[data-notifier-test="ops"]', dialog: "#simple-confirm", confirm: "#simple-confirm-ok", path: "/api/notifiers/ops/test" },
   { name: "SSH session", section: "#sessions-section", button: '[data-ssh-session-pid="96"]', dialog: "#simple-confirm", confirm: "#simple-confirm-ok", path: "/api/services/web/sessions/96/close" },
+  { name: "watch process", open: "#wat-row-unowned-procs .row-toggle", button: '[id="exp-wat:unowned-procs"] [data-watch-process-kill]', dialog: "#simple-confirm", confirm: "#simple-confirm-ok", path: "/api/watches/unowned-procs/processes/4242/kill" },
   { name: "mount", section: "#mounts-section", button: '[data-mount="data.mount"][data-mount-action="umount"]', dialog: "#mount-umount-confirm", confirm: '[data-mount-umount-result="true"]', path: "/api/mounts/data.mount/umount" },
 ];
 
@@ -1101,6 +1115,7 @@ for (const scenario of generationConfirmationCases) {
     if (scenario.section && await page.locator(scenario.section).getAttribute("open") === null) {
       await page.locator(`${scenario.section} > summary`).click();
     }
+    if (scenario.open) await page.locator(scenario.open).click();
     await page.locator(scenario.button).click();
     await expect(page.locator(scenario.dialog)).toBeVisible();
     await reloadBehindConfirmation(page);
@@ -2193,6 +2208,110 @@ test("declining the reap confirmation signals nothing", async ({ page }) => {
   await page.locator('[data-simple-result="false"]').click();
   await delay(100);
   expect(posted).toBe(0);
+});
+
+async function openUnownedProcesses(page) {
+  await page.locator("#wat-row-unowned-procs .row-toggle").click();
+  const detail = page.locator('[id="exp-wat:unowned-procs"]');
+  const table = detail.getByRole("table", { name: "Unowned processes" });
+  await expect(table).toBeVisible();
+  return { detail, table };
+}
+
+test("an unowned_processes watch lists its processes with a kill button per authorized row", async ({ page }) => {
+  await page.setViewportSize({ width: 1600, height: 900 });
+  const row = page.locator("#wat-row-unowned-procs");
+  // The profile columns come from the watch's readings.
+  await expect(row).toContainText("312");
+  await expect(row).toContainText("dpkg");
+  const { table } = await openUnownedProcesses(page);
+  await expect(table.locator("thead th")).toHaveText(["PID", "CMD", "User", "Reason", "CPU", "Mem", "Action"]);
+  const rows = table.locator("tbody tr");
+  await expect(rows).toHaveCount(2);
+  // Rows keep the daemon's order (sorted by pid).
+  await expect(rows.nth(0)).toContainText("310");
+  await expect(rows.nth(0)).toContainText("/usr/local/sbin/agent");
+  await expect(rows.nth(0)).toContainText("no unit accounts for the process");
+  await expect(rows.nth(1)).toContainText("4242");
+  await expect(rows.nth(1)).toContainText("deploy");
+  await expect(rows.nth(1)).toContainText("/opt/tools/miner");
+  await expect(rows.nth(1)).toContainText("50 MiB");
+  // Only the row the daemon may signal gets a button; the other says why not.
+  await expect(table.locator("[data-watch-process-kill]")).toHaveCount(1);
+  const kill = table.getByRole("button", { name: "Kill process 4242 of deploy" });
+  await expect(kill).toHaveText("✕");
+  await expect(kill).toHaveAttribute("data-watch-process-watch", "unowned-procs");
+  await expect(kill).toHaveAttribute("data-watch-process-start-ticks", "987654");
+  const unavailable = rows.nth(0).locator("td").last().locator("span");
+  await expect(unavailable).toHaveText("unavailable");
+  await expect(unavailable).toHaveAttribute("title", "no kill selector authorizes root processes");
+});
+
+for (const scenario of [
+  { escalate: false, tick: false },
+  { escalate: true, tick: true },
+]) {
+  test(`killing an unowned process posts escalate=${scenario.escalate}`, async ({ page }) => {
+    let killRequest = null;
+    await page.route("**/api/watches/unowned-procs/processes/4242/kill**", async (route) => {
+      killRequest = route.request();
+      await route.fulfill({ json: { ok: true, message: "SIGTERM sent" } });
+    });
+    const { table } = await openUnownedProcesses(page);
+    await table.getByRole("button", { name: "Kill process 4242 of deploy" }).click();
+    await expect(page.locator("#simple-confirm")).toBeVisible();
+    await expect(page.locator("#simple-confirm-title")).toHaveText("Kill process 4242?");
+    await expect(page.locator("#simple-confirm-message")).toContainText("deploy /opt/tools/miner, listed as no package owns the executable");
+    await expect(page.locator("#simple-confirm-message")).toContainText("SIGTERM");
+    await expect(page.locator("#simple-confirm-choice-label")).toContainText("Escalate to SIGKILL");
+    await expect(page.locator("#simple-confirm-choice")).not.toBeChecked();
+    if (scenario.tick) await page.locator("#simple-confirm-choice").check();
+    await expect(page.locator("#simple-confirm-ok")).toHaveText("kill");
+    await page.locator("#simple-confirm-ok").click();
+    await expect.poll(() => killRequest !== null).toBe(true);
+    const url = new URL(killRequest.url());
+    expect(killRequest.method()).toBe("POST");
+    expect(`${url.pathname}${url.search}`).toBe(`/api/watches/unowned-procs/processes/4242/kill?start_ticks=987654&escalate=${scenario.escalate}`);
+    expect(killRequest.headers()["x-sermo-csrf"]).toBe("1");
+    expect(killRequest.headers()["x-sermo-generation"]).toBe("7");
+    await expect(page.locator("#err")).toContainText("SIGTERM sent");
+  });
+}
+
+test("declining the process kill confirmation signals nothing", async ({ page }) => {
+  let posted = 0;
+  page.on("request", (req) => {
+    if (req.method() === "POST" && new URL(req.url()).pathname.endsWith("/kill")) posted += 1;
+  });
+  const { table } = await openUnownedProcesses(page);
+  await table.getByRole("button", { name: "Kill process 4242 of deploy" }).click();
+  await expect(page.locator("#simple-confirm")).toBeVisible();
+  await page.locator('[data-simple-result="false"]').click();
+  await delay(100);
+  expect(posted).toBe(0);
+  await expect(table.getByRole("button", { name: "Kill process 4242 of deploy" })).toBeVisible();
+});
+
+test("a rejected process kill reports the daemon's reason", async ({ page }) => {
+  await page.route("**/api/watches/unowned-procs/processes/4242/kill**", (route) => route.fulfill({
+    status: 409, json: { ok: false, message: "the process is no longer listed; refresh and try again" },
+  }));
+  const { table } = await openUnownedProcesses(page);
+  await table.getByRole("button", { name: "Kill process 4242 of deploy" }).click();
+  await page.locator("#simple-confirm-ok").click();
+  await expect(page.locator("#err")).toContainText("no longer listed");
+  // A failed kill gives the button back instead of leaving a stuck badge.
+  await expect(table.getByRole("button", { name: "Kill process 4242 of deploy" })).toBeVisible();
+});
+
+test("a guest sees unowned processes without kill buttons", async ({ page }) => {
+  await page.route("**/api/whoami", (route) => route.fulfill({ json: { can_act: false, role: "viewer", auth: true } }));
+  await page.reload();
+  const { table } = await openUnownedProcesses(page);
+  await expect(table.locator("tbody tr")).toHaveCount(2);
+  await expect(table.locator("[data-watch-process-kill]")).toHaveCount(0);
+  await expect(table.locator("tbody tr").nth(1)).toContainText("read-only");
+  await expect(table.locator("tbody tr").nth(0)).toContainText("read-only");
 });
 
 test("the reap button is disabled while an operation holds the service", async ({ page }) => {

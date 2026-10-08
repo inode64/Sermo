@@ -189,14 +189,9 @@ func (s *Server) handleSSHSessionClose(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	pid, err := strconv.Atoi(r.PathValue(apiParamPID))
-	if err != nil || pid <= 0 {
-		writeError(w, http.StatusBadRequest, "invalid SSH session pid")
-		return
-	}
-	startTicks, err := strconv.ParseUint(r.URL.Query().Get(apiQueryStartTicks), 10, 64)
-	if err != nil || startTicks == 0 {
-		writeError(w, http.StatusBadRequest, "invalid SSH session start_ticks")
+	pid, startTicks, err := parseProcessIdentity(r, "SSH session")
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 	terminal := r.URL.Query().Get(apiQueryTerminal)

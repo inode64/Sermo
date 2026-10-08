@@ -303,6 +303,11 @@ func TestSourceAPIUsesSharedContractValues(t *testing.T) {
 		`export const apiWatchesPath = "` + strings.TrimPrefix(APIPathWatches, "/") + `";`,
 		`export const apiQueryBefore = "` + APIQueryBefore + `";`,
 		`export const apiQueryLimit = "` + APIQueryLimit + `";`,
+		`export const apiQueryStartTicks = "` + APIQueryStartTicks + `";`,
+		`const apiQueryEscalate = "` + APIQueryEscalate + `";`,
+		`const apiSuffixDBQueries = "/` + APISegmentDBQueries + `";`,
+		`const apiSuffixProcesses = "/` + APISegmentProcesses + `";`,
+		`const apiActionKill = "` + APIActionKill + `";`,
 	} {
 		if !strings.Contains(text, marker) {
 			t.Errorf("API module missing shared contract value %q", marker)

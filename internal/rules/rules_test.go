@@ -158,10 +158,8 @@ func TestGuardFailsSafeOnInlineUnavailableCheck(t *testing.T) {
 func TestGuardFailsSafeOnInlineSamplerFailure(t *testing.T) {
 	ev := &Evaluator{Deps: checks.Deps{
 		DefaultTimeout: time.Second,
-		Samplers: checks.Samplers{
-			MemorySampler: func() (checks.MemorySample, error) {
-				return checks.MemorySample{}, errors.New("read meminfo: permission denied")
-			},
+		MemorySampler: func() (checks.MemorySample, error) {
+			return checks.MemorySample{}, errors.New("read meminfo: permission denied")
 		},
 	}}
 	condition := map[string]any{"active": map[string]any{"memory": map[string]any{

@@ -95,20 +95,7 @@ func (b *WebBackend) sampledAppReport(category, name string) (appinspect.Report,
 }
 
 func catalogItemFromReport(r appinspect.Report) web.CatalogItem {
-	return web.CatalogItem{
-		Name:          r.Name,
-		DisplayName:   r.DisplayName,
-		Category:      r.Category,
-		Binary:        r.Binary,
-		Permissions:   r.Permissions,
-		User:          r.User,
-		Group:         r.Group,
-		Version:       r.Version,
-		VersionShort:  r.VersionShort,
-		VersionSource: r.VersionSource,
-		Status:        r.Status,
-		State:         applicationStateFromReport(r),
-	}
+	return web.CatalogItem{Report: r, State: applicationStateFromReport(r)}
 }
 
 func applicationStateFromReport(r appinspect.Report) string {

@@ -896,7 +896,7 @@ func cleanMountPaths(mountPaths []string) []string {
 	seen := map[string]struct{}{}
 	out := make([]string, 0, len(mountPaths))
 	for _, mountPath := range mountPaths {
-		clean := filepath.Clean(mountPath)
+		clean := mounts.CleanPath(mountPath)
 		if !filepath.IsAbs(clean) {
 			continue
 		}

@@ -71,6 +71,7 @@ Connection-protocol checks (MySQL, PostgreSQL, Redis, Docker, libvirt, etc.) are
 | `libraries`   | health | all DT_NEEDED shared libraries of the binary can be resolved with the binary's ELF class and machine, each library's own RUNPATH/`$ORIGIN` searched first (native debug/elf, no ldd) |
 | `process`     | health | a process matching `exe`/`user` is in `state` (running/zombie/absent); an `absent` reading that a replaced binary explains names it and becomes a verdictless state (the service reads `restart_required`, not failed) |
 | `process_policy` | health | every process of a user account satisfies the allow/deny policy (alert-only; see configuration.md) |
+| `unowned_processes` | health | no process sits outside every init unit or runs an executable no installed package owns (watch-only; optional `then.kill` gated by `kill_only_if`; see configuration.md) |
 | `db_queries` | health | no MySQL/MariaDB/PostgreSQL statement matches the configured duration or resource thresholds; incidents tracked per statement (watch-only; see Running database statements) |
 | `metric`      | condition | a sampled metric satisfies `op value` (see Metrics)                |
 | `count`       | condition | the number of entries in a directory satisfies `op value` (see Count)|

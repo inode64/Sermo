@@ -28,6 +28,7 @@ import (
 	"sermo/internal/execx"
 	"sermo/internal/logfile"
 	"sermo/internal/metrics"
+	"sermo/internal/pkgdb"
 	"sermo/internal/process"
 	"sermo/internal/rules"
 	"sermo/internal/servicemgr"
@@ -363,6 +364,7 @@ func run(args []string) int {
 		SystemFreshness:      interval / app.SystemFreshnessIntervalDivisor,
 		ExecxRunner:          runner,
 		UserLookup:           userLookup,
+		PackageIndex:         pkgdb.New(pkgdb.Options{Runner: runner}),
 		Settling:             settling,
 	}
 

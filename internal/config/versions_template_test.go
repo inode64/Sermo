@@ -17,10 +17,11 @@ func TestMaterializedTemplateMatchesUsesAllBinaryCandidates(t *testing.T) {
 	second := filepath.Join(root, "second")
 	makeVersionedBinaries(t, second, "php", "php-fpm", "8.2", "8.3")
 
-	tok := tokenFor("php-fpm%v")
-	if tok == nil {
+	toks := tokensFor("php-fpm%v")
+	if len(toks) == 0 {
 		t.Fatal("missing version token")
 	}
+	tok := &toks[0]
 	paths := []string{
 		filepath.Join(first, "php${version}", "bin", "php-fpm"),
 		filepath.Join(second, "php${version}", "bin", "php-fpm"),

@@ -85,6 +85,7 @@ configuration omits it.
   - [file — file/directory attributes and freshness](#file--filedirectory-attributes-and-freshness)
   - [process — process by name](#process--process-by-name)
   - [process_policy — alert-only user execution policy](#process_policy--alert-only-user-execution-policy)
+  - [unowned_processes — processes no unit or package accounts for](#unowned_processes--processes-no-unit-or-package-accounts-for)
 - [Global defaults](#global-defaults)
 - [Resolution order](#resolution-order)
 - [Merge rules](#merge-rules)
@@ -3965,6 +3966,124 @@ watches:
 
 Other resource types will be added as new check `type` values using the same
 watch/hook structure.
+
+### `unowned_processes` — processes no unit or package accounts for
+
+An `unowned_processes` host watch scans the **whole process table** and lists
+every process that no running service accounts for: one that sits outside every
+init unit, or one — outside every unit — whose executable belongs to no
+installed package. A member of a service, scope or user-manager unit is that
+unit's process whatever its binary (a daemon installed outside the package
+manager, a service's plugin helpers, `sermod` itself) and is never listed. It is
+the host-wide counterpart of the service-scoped [`strays`](#strays--processes-the-service-cannot-account-for)
+check, which only looks inside one unit's control group.
+
+A process no unit owns is listed for one or both of these reasons:
+
+| Reason | Evidence |
+| --- | --- |
+| `outside every init unit` | its control group is the root group (or a bare slice) on a host whose init places every process in a unit: systemd always, OpenRC only with per-service cgroups (`rc_cgroup_mode=unified`) |
+| `outlived its closed login session` | its control group is a logind `session-N.scope` whose session logind no longer records, or records as `closing` — the `nohup … &` that survived a logout |
+| `executable belongs to no installed package` | it runs in a login session or the root group and its resolved `/proc/<pid>/exe` (or, for a replaced binary, the previous path) is in no package of the host's database: Gentoo (`/var/db/pkg`), dpkg, pacman and apk are read natively; rpm is asked with one `rpm -qf` per cycle |
+
+Processes in another mount namespace than PID 1 (containers) are never judged by
+either criterion: a container under a cgroupfs driver sits in `/docker/<id>`,
+`/kubepods/…` or `/lxc/<name>`, a path that names no host unit yet is no stray,
+and its `/usr/bin` is not the host's. Only a process confirmed in init's mount
+namespace is judged by those two criteria; when the daemon cannot read PID 1's
+namespace, or a process's own, the message says so (`init mount namespace
+unreadable`, `N with unreadable mount namespace`) and those processes are not
+listed on either criterion. A `session-N.scope` member is judged by logind's own
+record, which needs no such confirmation; a record logind still holds but the
+daemon cannot read is never called closed, and when the session directory itself
+cannot be listed the message says `logind session records unreadable` and no
+session is called closed.
+Everything under `init.scope`, a service, a non-session scope (`docker-*`,
+`machine-*`) or a `user@N.service` user manager counts as owned. When attribution
+is impossible — no per-unit control groups, no package database, an executable
+the daemon cannot read — the watch says so in its message and lists nothing on
+that criterion: absence of evidence is never a finding.
+
+A `users` name the host cannot resolve is reported in the message
+(`unresolved users: …`); the scan still runs over the accounts that resolve.
+When none resolves every process is excluded, and the watch reports a failed
+result instead of a clean host.
+
+```yaml
+name: unowned-processes
+display_name: Unowned processes
+category: security
+monitor: enabled
+interval: 5m
+dry_run: true
+check:
+  type: unowned_processes
+  min_age: 5m                       # optional, default 5m: younger processes are never listed
+  users: [root, www-data]           # optional: only these accounts (names or numeric ids)
+  ignore:                           # optional: exact executables to leave alone
+    screen: { exe: /usr/bin/SCREEN }
+    agent:
+      exe: /opt/acme/bin/agent
+      cmd: '^/opt/acme/bin/agent --daemon$'   # anchored RE2 that narrows the entry
+then:                               # optional; omit for dashboard/event-only alerting
+  notify: [security]
+  notify_interval: 1h
+  kill:                             # optional: signal the listed processes kill_only_if authorizes
+    signal: TERM                    # TERM (default) or KILL
+    escalate: true                  # follow TERM with SIGKILL for a survivor
+    term_timeout: 10s
+    kill_timeout: 5s
+    kill_only_if:                   # required with kill: both users and exe_any
+      users: [www-data]
+      exe_any: [/usr/bin/php, /usr/bin/python3.12]
+```
+
+Never listed: PID 1 and kernel threads, zombies (see [`zombies`](#zombies--defunct-processes)),
+processes younger than `min_age` or whose start time cannot be read, accounts
+outside `users:`, and processes matching an `ignore` entry. Each `ignore` entry
+uses the `process_policy` allow grammar: a clean absolute resolved `exe` path and
+an optional `cmd` expression anchored with `^` and `$`.
+
+Findings are graded `warning` unless the entry declares a `severity:`; they
+fire **once per PID incarnation** (PID plus start time) and re-arm for a new
+process that reuses the PID; `notify_interval` paces reminders while a process
+stays listed. The watch emits one aggregate `recovered` event when
+nothing is left, and that transition survives a daemon restart. Its `then:`
+block accepts only `notify`, `notify_interval` and `kill`; `hook`, `expand`,
+`remount`, `makestep`, a `policy:` block and the entry-level `for`/`within`/
+`clear` fields are rejected. It is host-only: declare it under the global
+`watches:` section.
+
+The published result carries `scanned`, `violation_count`, `violations`,
+`pids`, `unit_attribution` (`available` or `unavailable`), `package_db`
+(`gentoo`, `dpkg`, `pacman`, `apk`, `rpm` or `none`) and `processes`: up to 100
+rows with `pid`, `start_ticks`, `user`, `exe`, `rss`, `cpu` (from the second
+cycle a process is listed), the `reason`, and `can_kill` with a `kill_reason`
+when the dashboard may not signal it. The dashboard shows those rows as a
+process table with a kill button per row. No row, event or notification ever
+carries a command line.
+
+**Killing.** Being listed authorizes nothing (see [safety.md](safety.md), invariant 10):
+
+- `then.kill` signals, when a finding fires, only the listed processes its own
+  `kill_only_if` selector names — the same paired real-user plus exact-executable
+  gate `stop_policy` and `reap` use. Everything else stays listed and untouched.
+  The signal, escalation and grace fields are those of the `process` watch's
+  [`then.kill`](#thenkill--terminate-the-matched-process); the escalated SIGKILL
+  re-verifies that the PID still belongs to the same process and is still
+  unowned. Every finding a cycle signals gets its first signal as it fires; the
+  escalations are then finished together, waiting each grace period once for
+  the whole cycle rather than once per finding.
+- The dashboard's per-row kill (`POST /api/watches/{name}/processes/{pid}/kill?start_ticks=…&escalate=…`,
+  administrators only) re-reads the process immediately before acting: same
+  PID and start time as displayed, an exact resolved executable (a replaced or
+  unreadable one is refused, which the row shows as `kill_reason`) and still
+  classified unowned by the watch's own rules. It sends SIGTERM through a
+  selector bound to that verified identity, and SIGKILL after the TERM grace
+  only when the operator ticked the escalation. One kill runs at a time per
+  watch.
+- With `dry_run: true` both record a `dry-run` event naming the signal they
+  would send and signal nothing; the manual kill answers with that message.
 
 ## Global defaults
 

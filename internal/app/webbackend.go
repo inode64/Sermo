@@ -204,6 +204,8 @@ type WebBackend struct {
 	mountAlerter           MountUserAlerter
 	sshSessionSampler      checks.SSHSessionSamplerFunc
 	terminalProcessReader  process.Reader
+	unowned                unownedRuntime
+	unownedKiller          pidKiller
 	sessionMetricCollector *metrics.Collector
 	emit                   func(Event)
 	defaultTimeout         time.Duration
@@ -295,6 +297,9 @@ func NewWebBackend(ctx context.Context, cfg *config.Config, deps Deps) (*WebBack
 	if daemonMetrics == nil {
 		daemonMetrics = NewDaemonMetricSampler(deps.Collector, deps.Now, deps.DaemonMetrics)
 	}
+	// The dashboard's per-process kill verifies through this runtime and must
+	// resolve users the same way when it signals.
+	unowned := unownedRuntimeFromDeps(deps)
 	wb := &WebBackend{
 		actionTimeout:         MaxOperationTimeout(cfg, deps.OperationTimeout),
 		entries:               map[string]*webEntry{},
@@ -328,6 +333,8 @@ func NewWebBackend(ctx context.Context, cfg *config.Config, deps Deps) (*WebBack
 		mountAlerter:          mountAlerter,
 		sshSessionSampler:     sshSessionSampler,
 		terminalProcessReader: terminalReader,
+		unowned:               unowned,
+		unownedKiller:         newPIDKiller(deps, "", unowned.resolve),
 		emit:                  deps.Emit,
 		defaultTimeout:        deps.DefaultTimeout,
 		checkLimiter:          deps.CheckLimiter,
@@ -576,11 +583,16 @@ func newWebWatch(name string, entry map[string]any, globalNotify []string, defau
 	if controlConfig, ok := entry[config.WatchKeyReplicationControl].(map[string]any); ok {
 		replicationControl = cfgval.Bool(controlConfig[config.ReplicationControlKeyStart])
 	}
-	if then, ok := entry[rules.RuleFieldThen].(map[string]any); ok {
-		if h, ok := then[config.WatchThenKeyHook].(map[string]any); ok && len(h) > 0 {
-			if cmd := h[config.WatchHookKeyCommand]; cmd != nil {
-				hookCommand = cfgval.StringArray(cmd)
-			}
+	// The same then grammar the daemon builds from: a malformed block is the
+	// row's warning, never a silently empty action.
+	then, err := thenMap(entry)
+	if err != nil {
+		warn = err.Error()
+	} else if then != nil {
+		if hook, err := parseHookMap(then, config.WatchThenKeyHook); err != nil {
+			warn = err.Error()
+		} else {
+			hookCommand = hook.Command
 		}
 		notifierNames = effectiveNotify(cfgval.StringList(then[rules.RuleFieldNotify]), globalNotify)
 		if parsed, err := parseExpand(then, ctype); err != nil {
@@ -606,7 +618,7 @@ func newWebWatch(name string, entry map[string]any, globalNotify []string, defau
 		dryRun:             config.DryRun(entry),
 		check:              checkMap(entry),
 		metrics:            metricsMap(entry),
-		severity:           checks.DeclaredSeverity(entry, checkMap(entry)),
+		severity:           watchSeverityFor(ctype, entry, checkMap(entry)),
 		expand:             expand,
 		raidControl:        raidControl,
 		replicationControl: replicationControl,

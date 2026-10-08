@@ -12,7 +12,6 @@ import (
 	"strconv"
 	"strings"
 
-	"sermo/internal/cfgval"
 	"sermo/internal/execx"
 	"sermo/internal/metrics"
 	"sermo/internal/process"
@@ -174,44 +173,19 @@ func terminalMultiplexerAdapterFor(name string) (terminalMultiplexerAdapter, boo
 // JSON-backed snapshots rehydrate slices as []any maps, so the conversion keeps
 // the service detail working after a daemon restart as well as in live memory.
 func TerminalSessionsFromData(data map[string]any) []TerminalSession {
-	raw := data[DataKeyTerminalSessions]
-	switch values := raw.(type) {
-	case []TerminalSession:
-		return slices.Clone(values)
-	case []any:
-		out := make([]TerminalSession, 0, len(values))
-		for _, value := range values {
-			entry, ok := value.(map[string]any)
-			if !ok {
-				continue
-			}
-			session, ok := terminalSessionFromMap(entry)
-			if ok {
-				out = append(out, session)
-			}
+	decoded := DecodeDataSlice[TerminalSession](data[DataKeyTerminalSessions])
+	out := make([]TerminalSession, 0, len(decoded))
+	for _, session := range decoded {
+		// A row is a session only with a known multiplexer, a name, an owner and
+		// a state the UI can show; counts never go negative.
+		if !IsTerminalMultiplexer(session.Multiplexer) || session.Name == "" || session.User == "" || !isTerminalSessionState(session.State) {
+			continue
 		}
-		return out
-	default:
-		return nil
+		session.Windows = max(session.Windows, 0)
+		session.ActivityUnix = max(session.ActivityUnix, 0)
+		out = append(out, session)
 	}
-}
-
-func terminalSessionFromMap(entry map[string]any) (TerminalSession, bool) {
-	multiplexer := cfgval.String(entry[CheckKeyMultiplexer])
-	name := cfgval.String(entry[CheckKeyName])
-	user := cfgval.String(entry[CheckKeyUser])
-	state := cfgval.String(entry[CheckKeyState])
-	if !IsTerminalMultiplexer(multiplexer) || name == "" || user == "" || !isTerminalSessionState(state) {
-		return TerminalSession{}, false
-	}
-	windows, _ := cfgval.Int(entry[DataKeyWindows])
-	activityUnix, _ := cfgval.Int(entry[DataKeyActivityUnix])
-	pids, _ := cfgval.IntList(entry[DataKeyPIDs])
-	return TerminalSession{
-		Multiplexer: multiplexer, Name: name, User: user, State: state, Windows: max(windows, 0),
-		ActivityUnix: int64(max(activityUnix, 0)), Identity: cfgval.String(entry[DataKeyIdentity]), PIDs: pids,
-		TTY: cfgval.String(entry[DataKeyTTY]),
-	}, true
+	return out
 }
 
 func isTerminalSessionState(state string) bool {

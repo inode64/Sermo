@@ -170,6 +170,90 @@ func TestValidateProcessPolicyWatch(t *testing.T) {
 		"then.hook is not valid on an alert-only process_policy watch",
 		"then.kill is not valid on an alert-only process_policy watch",
 	)
+	// The rejected key gets one message, not a second one from the kill grammar.
+	var killIssues []string
+	for _, issue := range watchIssues(validateRawGlobal(t, invalid)) {
+		if strings.Contains(issue.Msg, "then.kill") {
+			killIssues = append(killIssues, issue.Msg)
+		}
+	}
+	if len(killIssues) != 1 {
+		t.Fatalf("then.kill on a process_policy watch must yield one issue, got %v", killIssues)
+	}
+}
+
+func TestValidateUnownedProcessesWatch(t *testing.T) {
+	assertNoWatchIssues(t, map[string]any{
+		"notifiers": map[string]any{"ops": map[string]any{"type": "wall"}},
+		"watches": map[string]any{"unowned": map[string]any{
+			"check": map[string]any{
+				"type":    "unowned_processes",
+				"min_age": "10m",
+				"users":   []any{"root", "www-data"},
+				"ignore": map[string]any{
+					"screen": map[string]any{"exe": "/usr/bin/SCREEN"},
+					"agent":  map[string]any{"exe": "/opt/acme/bin/agent", "cmd": "^/opt/acme/bin/agent --daemon$"},
+				},
+			},
+			"then": map[string]any{
+				"notify":          []any{"ops"},
+				"notify_interval": "1h",
+				"kill": map[string]any{
+					"signal": "TERM", "escalate": true, "term_timeout": "10s",
+					"kill_only_if": map[string]any{"users": []any{"www-data"}, "exe_any": []any{"/usr/bin/php"}},
+				},
+			},
+		}},
+	})
+	// Alert-only (no then) and kill-only shapes are both valid.
+	assertNoWatchIssues(t, map[string]any{"watches": map[string]any{"unowned": map[string]any{
+		"check": map[string]any{"type": "unowned_processes"},
+	}}})
+	assertNoWatchIssues(t, map[string]any{"watches": map[string]any{"unowned": map[string]any{
+		"check": map[string]any{"type": "unowned_processes"},
+		"then":  map[string]any{"kill": map[string]any{"kill_only_if": map[string]any{"users": []any{"root"}, "exe_any": []any{"/usr/bin/sleep"}}}},
+	}}})
+
+	invalid := map[string]any{
+		"watches": map[string]any{
+			"unowned": map[string]any{
+				"for":    "2m",
+				"policy": map[string]any{"cooldown": "5m"},
+				"check": map[string]any{
+					"type":    "unowned_processes",
+					"min_age": "0s",
+					"users":   []any{},
+					"ignore":  map[string]any{"bad": map[string]any{"exe": "../agent", "cmd": "agent", "extra": true}},
+				},
+				"then": map[string]any{
+					"hook": map[string]any{"command": []any{"/bin/false"}},
+					"kill": map[string]any{"signal": "HUP", "kill_only_if": map[string]any{"users": []any{"root"}, "exe_any": []any{"sleep"}}},
+				},
+			},
+			"unowned-no-selector": map[string]any{
+				"check": map[string]any{"type": "unowned_processes"},
+				"then":  map[string]any{"kill": map[string]any{}},
+			},
+			"unowned-empty-then": map[string]any{
+				"check": map[string]any{"type": "unowned_processes"},
+				"then":  map[string]any{},
+			},
+		},
+	}
+	assertWatchIssues(t, invalid,
+		"watches.unowned.for is not valid on a unowned_processes watch",
+		"watches.unowned.policy is not valid on an unowned_processes watch",
+		"watches.unowned.check.min_age",
+		"watches.unowned.check.users must be a non-empty list",
+		"watches.unowned.check.ignore.bad.exe must be a clean absolute resolved executable path",
+		"watches.unowned.check.ignore.bad.cmd must be anchored with ^ and $",
+		"watches.unowned.check.ignore.bad.extra is not supported",
+		"watches.unowned.then.hook is not valid on an unowned_processes watch",
+		"watches.unowned.then.kill.signal",
+		"watches.unowned.then.kill.kill_only_if.exe_any",
+		"watches.unowned-no-selector.then.kill.kill_only_if must be a mapping",
+		"watches.unowned-empty-then.then requires notify and/or kill",
+	)
 }
 
 func TestValidateRaidNotifyOn(t *testing.T) {
@@ -588,7 +672,7 @@ func TestValidateProcessWatchKillErrors(t *testing.T) {
 		"watches.bad-timeout.then.kill.term_timeout \"soon\" must be a valid positive duration",
 		"watches.basename-kill.then.kill requires check.name to be an absolute resolved exe path",
 		"watches.missing-user-kill.then.kill requires check.user",
-		"watches.kill-on-storage.then.kill is only valid on a process watch")
+		"watches.kill-on-storage.then.kill is only valid on a process or unowned_processes watch")
 }
 
 func TestValidateStorageInodesWatch(t *testing.T) {
@@ -1441,14 +1525,21 @@ func TestValidateDiskIOWatch(t *testing.T) {
 }
 
 func TestValidateWatchPortRangeMatchesServices(t *testing.T) {
-	// A tcp/connection check used as a watch enforces the same 1..65535 port
-	// range walkScalars applies to resolved services.
+	// Every check type validates the 1..65535 port range once, as a watch or
+	// as a resolved service check; a required port missing is its own issue.
 	assertWatchIssues(t, watchConfigs(map[string]any{
-		"tcp-high":  map[string]any{"type": "tcp", "port": 99999},
-		"conn-high": map[string]any{"type": "smtp", "host": "127.0.0.1", "port": 99999},
+		"tcp-high":    map[string]any{"type": "tcp", "port": 99999},
+		"tcp-missing": map[string]any{"type": "tcp"},
+		"conn-high":   map[string]any{"type": "smtp", "host": "127.0.0.1", "port": 99999},
 	}),
-		"watches.tcp-high.check.port is required and must be a port in 1..65535",
+		`watches.tcp-high.check.port "99999" must be an integer in 1..65535`,
+		"watches.tcp-missing.check.port is required for a tcp check",
 		`watches.conn-high.check.port "99999" must be an integer in 1..65535`)
+	for _, issue := range watchIssues(validateRawGlobal(t, watchConfigs(map[string]any{"tcp-high": map[string]any{"type": "tcp", "port": 99999}}))) {
+		if strings.Contains(issue.Msg, "port") && !strings.Contains(issue.Msg, `"99999" must be an integer`) {
+			t.Fatalf("an out-of-range port must yield one issue, got %q", issue.Msg)
+		}
+	}
 }
 
 func TestValidateDBusWatchTarget(t *testing.T) {

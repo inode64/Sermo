@@ -55,6 +55,42 @@ func IsAlertOnlyWatchThenKey(key string) bool {
 	return key == rules.RuleFieldNotify || key == WatchThenKeyNotifyInterval
 }
 
+// SetWatchActions is the then vocabulary of a watch that evaluates the host
+// process table as a set: notification delivery and, for the one type whose
+// kill is gated by its own kill_only_if selector, then.kill. Validation and
+// the runtime builders share these values so neither can widen the other.
+type SetWatchActions struct {
+	Type string
+	Kill bool
+}
+
+// ProcessPolicyActions is the alert-only vocabulary of a process_policy watch.
+var ProcessPolicyActions = SetWatchActions{Type: checks.CheckTypeProcessPolicy}
+
+// UnownedProcessesActions is the vocabulary of an unowned_processes watch.
+var UnownedProcessesActions = SetWatchActions{Type: checks.CheckTypeUnownedProcesses, Kill: true}
+
+// Accepts reports whether a then key belongs to this vocabulary.
+func (a SetWatchActions) Accepts(key string) bool {
+	return IsAlertOnlyWatchThenKey(key) || (a.Kill && key == WatchThenKeyKill)
+}
+
+// Description names the watch in a rejection, after "not valid on an".
+func (a SetWatchActions) Description() string {
+	if a.Kill {
+		return a.Type + " watch; it accepts " + rules.RuleFieldNotify + ", " + WatchThenKeyNotifyInterval + " and " + WatchThenKeyKill
+	}
+	return "alert-only " + a.Type + " watch"
+}
+
+// EmptyThenMessage explains a present then block that selects nothing.
+func (a SetWatchActions) EmptyThenMessage() string {
+	if a.Kill {
+		return "requires notify and/or kill, or omit then for dashboard/event-log alerts"
+	}
+	return "requires notify or omit then for dashboard/event-log alerts"
+}
+
 // WatchMakeStepKeySocket addresses chronyd's command socket for a clock watch's
 // then.makestep action. It aliases the check key so `socket` has one spelling.
 const WatchMakeStepKeySocket = checks.CheckKeySocket

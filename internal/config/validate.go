@@ -499,7 +499,7 @@ func validateDocument(cfg *Config, doc *Document) ([]Issue, bool) {
 	}
 	// mergedService folds a catalog service's body without following its own
 	// `uses`; only templates inherit a base (templateBody), one level deep.
-	if _, has := doc.Body[ServiceKeyUses]; has && doc.Category == CategoryService && tokenFor(doc.Name) == nil {
+	if _, has := doc.Body[ServiceKeyUses]; has && doc.Category == CategoryService && !hasTemplateToken(doc.Name) {
 		addDoc("%s is only supported on catalog service templates; nothing would inherit this base", ServiceKeyUses)
 	}
 	validateEnableIfTree(doc.Body, addDoc)
@@ -1003,6 +1003,11 @@ func validateResolved(name string, tree map[string]any, runtime string, notifier
 	walkScalars(tree, func(path, key, value string) {
 		switch key {
 		case checks.CheckKeyPort:
+			// A check entry's port is validated by its typed validator; this pass
+			// covers a resolved port anywhere else in the tree.
+			if section, _, _ := strings.Cut(path, "."); section == sectionChecks || section == sectionPreflight || section == rules.SectionRules {
+				return
+			}
 			if n, ok := cfgval.Int(value); !ok || !cfgval.ValidTCPPort(n) {
 				add("%s = %q must resolve to a port in %s", path, value, cfgval.TCPPortRange())
 			}

@@ -7,6 +7,8 @@ import (
 	"net/url"
 	"strings"
 
+	"sermo/internal/netutil"
+
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/stdlib"
 )
@@ -81,18 +83,16 @@ func buildPGDSNWithTarget(target probeTarget) string {
 // only "skip-verify" encrypts without verification ("require"). The native
 // sslmodes pass through.
 func sslMode(tls string) string {
-	switch strings.ToLower(strings.TrimSpace(tls)) {
-	case "", tlsModeFalse, tlsModeNo, tlsModeOff, tlsDisable:
+	// The shared friendly spellings (true/false/yes/no/on/off/required/skip-verify)
+	// are netutil's; only pgx's own sslmode names are translated here.
+	switch mode := netutil.NormalizeTLS(tls); mode {
+	case "":
 		return tlsDisable
-	case ParamValueTrue, tlsModeYes, tlsModeOn, tlsModeRequired, tlsVerifyFull:
+	case netutil.TLSModeTrue:
 		return tlsVerifyFull
-	case tlsRequire, tlsSkipVerify:
+	case netutil.TLSModeSkipVerify:
 		return tlsRequire
-	case tlsPrefer:
-		return tlsPrefer
-	case tlsVerifyCA:
-		return tlsVerifyCA
 	default:
-		return tls // allow a valid sslmode passed through
+		return strings.ToLower(strings.TrimSpace(mode)) // a native sslmode passes through
 	}
 }

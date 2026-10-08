@@ -353,7 +353,6 @@ func validateClockFields(prefix string, fields map[string]any, add addFunc) {
 	if raw, present := fields[checks.CheckKeyMaxRootDispersion]; present && !isPositiveDuration(cfgval.String(raw)) {
 		add("%s.max_root_dispersion must be a valid positive duration", prefix)
 	}
-	validateOptionalTCPPort(prefix, fields, add)
 }
 
 // validatePortSpec returns "" when spec is a valid comma-separated list of ports
@@ -414,7 +413,6 @@ func validateConnFields(prefix, protocol string, fields map[string]any, requireU
 	if requireUser && cfgval.String(fields[checks.CheckKeyUser]) == "" {
 		add("%s.user is required for a connection check", prefix)
 	}
-	validateOptionalTCPPort(prefix, fields, add)
 	validateConnTLS(prefix, protocol, fields, add)
 	validateConnExpectations(prefix, fields, add)
 	validateConnChangeFlags(prefix, fields, add)
@@ -1020,6 +1018,10 @@ func singleShotThreshold(fields []string) singleShotCheckValidator {
 }
 
 func validateSingleShotCheckFields(path, typ string, entry map[string]any, locksDir string, add addFunc) bool {
+	// Every check type that takes a port takes a TCP/UDP port number; the
+	// range is checked once here, so a type's own validator only has to say
+	// whether the key is required.
+	validateOptionalTCPPort(path, entry, add)
 	if !checks.IsSingleShotType(typ) {
 		// A connection-protocol check (mysql, …): the type names a protocol in
 		// the conn registry, validated generically below.
@@ -1686,7 +1688,6 @@ func validateCertFields(prefix string, fields map[string]any, add addFunc) {
 	case host != "" && path != "":
 		add("%s.host and %s.path are mutually exclusive", prefix, prefix)
 	}
-	validateOptionalTCPPort(prefix, fields, add)
 	if v, present := fields[checks.CheckKeyServerName]; present {
 		if _, ok := v.(string); !ok {
 			add("%s.server_name must be a string (SNI + hostname to verify)", prefix)
@@ -1732,8 +1733,10 @@ func validatePressureFields(prefix string, fields map[string]any, add addFunc) {
 	validateThresholdPreds(prefix, fields, checks.PressurePredFields, add)
 }
 
+// validateCheckPort requires the port key; its range is validated once by
+// validateSingleShotCheckFields for every check type.
 func validateCheckPort(path string, entry map[string]any, typ string, add addFunc) {
-	if n, ok := cfgval.Int(entry[checks.CheckKeyPort]); !ok || !cfgval.ValidTCPPort(n) {
-		add("%s.port is required and must be a port in %s for a %s check", path, cfgval.TCPPortRange(), typ)
+	if _, present := entry[checks.CheckKeyPort]; !present {
+		add("%s.port is required for a %s check", path, typ)
 	}
 }

@@ -11,6 +11,7 @@ import (
 
 	"sermo/internal/cfgval"
 	"sermo/internal/checks"
+	"sermo/internal/mounts"
 	"sermo/internal/rules"
 	"sermo/internal/severity"
 	"sermo/internal/strutil"
@@ -193,24 +194,17 @@ func (c *Config) ResolveStorages() ([]Resolved, []string) {
 // StorageNameByPath returns the configured storage watch name whose resolved path
 // matches path. Empty means no configured storage watch currently owns that path.
 func (c *Config) StorageNameByPath(path string) string {
-	cleanPath := cleanMountPath(path)
+	cleanPath := mounts.CleanPath(path)
 	storages, errs := c.ResolveStorages()
 	if len(errs) > 0 {
 		return ""
 	}
 	for _, resolved := range storages {
-		if cleanMountPath(cfgval.String(resolved.Tree[keyPath])) == cleanPath {
+		if mounts.CleanPath(cfgval.String(resolved.Tree[keyPath])) == cleanPath {
 			return resolved.Name
 		}
 	}
 	return ""
-}
-
-func cleanMountPath(path string) string {
-	if path == "" {
-		return ""
-	}
-	return filepath.Clean(path)
 }
 
 // StorageMountNames returns the storage watches that expose mount operations.
@@ -690,26 +684,19 @@ func expandServiceWatches(tree map[string]any) []string {
 			continue // fire-and-forget watch (or invalid action): left for validateServiceWatches
 		}
 		// Validate the action grammar here (this entry is removed before the
-		// resolved-tree validators run, so they never see it).
-		validateWatchThenAction(watchPath(name), action, then, add)
+		// resolved-tree validators run, so they never see it). An unsound action
+		// still promotes its check, but emits no rule: the rule validator would
+		// only repeat the same issues under rules.<name>.
+		actionOK := validateWatchThenAction(watchPath(name), action, then, add)
 		validateServiceWatchGrading(name, entry, add)
 		check, ok := entry[WatchKeyCheck].(map[string]any)
 		if !ok {
 			add(validationRequiredFormat, watchCheckPath(name))
 			continue
 		}
-		if _, exists := rulesMap[name]; exists {
-			add("%s would overwrite existing rule %q; rename the watch", watchPath(name), name)
-			continue
+		if promoteServiceWatchRule(checksMap, rulesMap, name, entry, check, serviceWatchAction{then: then, action: action, sound: actionOK}, add) {
+			delete(watches, name)
 		}
-
-		target, ok := promoteServiceWatchCheck(checksMap, name, entry, check, add)
-		if !ok {
-			continue
-		}
-		rulesMap[name] = buildServiceWatchRule(entry, then, action, target)
-
-		delete(watches, name)
 	}
 
 	if len(checksMap) > 0 {
@@ -758,6 +745,32 @@ var serviceWatchCheckEntryFields = [...]string{keyEnabled, keyVerify, keyRequire
 
 // promoteServiceWatchCheck promotes an embedded watch check to checks.<watch-name>,
 // returning the generated rule target.
+// serviceWatchAction is a service watch's then.action as the desugarer read
+// it; sound is the grammar validator's verdict.
+type serviceWatchAction struct {
+	then   map[string]any
+	action string
+	sound  bool
+}
+
+// promoteServiceWatchRule promotes an action watch's check and, for a sound
+// action, emits its remediation rule. It reports whether the watch entry was
+// consumed; a rule of the same name or an unpromotable check leaves it alone.
+func promoteServiceWatchRule(checksMap, rulesMap map[string]any, name string, entry, check map[string]any, act serviceWatchAction, add addFunc) bool {
+	if _, exists := rulesMap[name]; exists {
+		add("%s would overwrite existing rule %q; rename the watch", watchPath(name), name)
+		return false
+	}
+	target, ok := promoteServiceWatchCheck(checksMap, name, entry, check, add)
+	if !ok {
+		return false
+	}
+	if act.sound {
+		rulesMap[name] = buildServiceWatchRule(entry, act.then, act.action, target)
+	}
+	return true
+}
+
 func promoteServiceWatchCheck(checksMap map[string]any, name string, entry, check map[string]any, add addFunc) (serviceWatchRuleTarget, bool) {
 	if _, exists := checksMap[name]; exists {
 		add("%s would overwrite existing check %q; rename the watch", watchPath(name), name)

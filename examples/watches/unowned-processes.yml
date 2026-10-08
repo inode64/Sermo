@@ -1,0 +1,31 @@
+name: unowned-processes
+display_name: Unowned processes
+category: security
+# List the processes that belong to no running init unit (outside every systemd
+# or OpenRC control group, or left behind by a closed login session) or whose
+# executable belongs to no installed package. Being listed authorizes nothing:
+# the watch alerts, the dashboard shows each process with its CPU and memory,
+# and an administrator may kill one from there after Sermo re-verifies its
+# identity. Add `then.kill` with a `kill_only_if` selector to let the watch
+# signal the listed processes that selector names on its own.
+#
+# EXAMPLE — enable deliberately and keep dry_run until the findings are
+# reviewed: a host with many hand-started daemons lists them all.
+monitor: disabled
+interval: 5m
+dry_run: true
+check:
+  type: unowned_processes
+  min_age: 5m  # a process younger than this is never listed (default 5m)
+  # users: [root, www-data]  # optional: only these accounts
+  ignore:  # exact executables to leave alone; cmd (anchored RE2) narrows an entry
+    screen: { exe: /usr/bin/SCREEN }
+    tmux: { exe: /usr/bin/tmux }
+then:
+  notify: [none]  # dashboard and event log only; name notifiers to deliver, with notify_interval for reminders
+  # kill:  # optional: signal the listed processes kill_only_if authorizes
+  #   signal: TERM
+  #   escalate: true
+  #   kill_only_if:
+  #     users: [www-data]
+  #     exe_any: [/usr/bin/php]

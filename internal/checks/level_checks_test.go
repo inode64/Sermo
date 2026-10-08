@@ -24,7 +24,7 @@ func TestLevelChecks(t *testing.T) {
 			dataKey:     DataKeyZombies,
 			value:       35,
 			entry:       map[string]any{"type": "zombies", "count": map[string]any{"op": ">", "value": 10}},
-			deps:        Deps{Samplers: Samplers{ZombieSampler: func() (uint64, bool) { return 50, true }}},
+			deps:        Deps{ZombieSampler: func() (uint64, bool) { return 50, true }},
 		},
 	}
 	for _, tc := range tests {

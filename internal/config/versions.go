@@ -70,15 +70,11 @@ const (
 // to another app document.
 const AppKeyVersionFrom = keyVersionFrom
 
-// tokenFor returns the template token a name carries, or nil if it is not a
-// version template.
-func tokenFor(name string) *tmplToken {
-	for i := range tmplTokens {
-		if strings.Contains(name, tmplTokens[i].placeholder) {
-			return &tmplTokens[i]
-		}
-	}
-	return nil
+// hasTemplateToken reports whether a catalog name is a version template.
+func hasTemplateToken(name string) bool {
+	return slices.ContainsFunc(tmplTokens, func(t tmplToken) bool {
+		return strings.Contains(name, t.placeholder)
+	})
 }
 
 // tokensFor returns every template token a name carries, in left-to-right order
@@ -133,7 +129,7 @@ func (c *Config) materializeVersionTemplates(ctx context.Context) {
 func (c *Config) materializeRegistry(ctx context.Context, names []string, reg map[string]*Document, kind string) {
 	var templates []*Document
 	for _, name := range names {
-		if tokenFor(name) != nil {
+		if hasTemplateToken(name) {
 			if doc, ok := reg[name]; ok {
 				templates = append(templates, doc)
 			}
@@ -160,7 +156,7 @@ func (c *Config) recordTemplateValidationIssues(tmpl *Document) {
 	// templateBody silently skips a base it cannot find, and folds a base
 	// template's raw, unmaterialized body; both would drop the inheritance.
 	if base := cfgval.String(tmpl.Body[ServiceKeyUses]); base != "" && tmpl.Kind == kindService {
-		if _, ok := c.CatalogServices[base]; !ok || tokenFor(base) != nil {
+		if _, ok := c.CatalogServices[base]; !ok || hasTemplateToken(base) {
 			c.validationIssues = append(c.validationIssues, Issue{
 				Scope: documentScope(tmpl),
 				Msg:   fmt.Sprintf("%s %q must name an existing catalog service that is not a template", ServiceKeyUses, base),
@@ -216,11 +212,17 @@ func (c *Config) materializeTemplate(ctx context.Context, tmpl *Document, body m
 // runtime binary is not installed does not produce a catalog service that would dangle a
 // link to an unmaterialized binary app.
 func versionsRequire(body map[string]any) []string {
+	return versionsStringList(body, keyVersionsRequire)
+}
+
+// versionsStringList reads one string-list key of a template's `versions:`
+// block; an absent block or key is an empty list.
+func versionsStringList(body map[string]any, key string) []string {
 	v, ok := body[keyVersions].(map[string]any)
 	if !ok {
 		return nil
 	}
-	return cfgval.StringList(v[keyVersionsRequire])
+	return cfgval.StringList(v[key])
 }
 
 func requireSatisfied(require []string, vals map[string]string, toks []tmplToken) bool {
@@ -598,11 +600,7 @@ func stripVersionSuffixes(matches []templateMatch, options map[string]any) []tem
 }
 
 func versionsSuffixGlobs(body map[string]any) []string {
-	v, ok := body[keyVersions].(map[string]any)
-	if !ok {
-		return nil
-	}
-	return cfgval.StringList(v[keyVersionsSuffix])
+	return versionsStringList(body, keyVersionsSuffix)
 }
 
 // trimVersionSuffix removes the longest match of any suffix glob anchored at the
@@ -1065,11 +1063,7 @@ func versionFromPaths(raw any, backend string) []string {
 }
 
 func versionsCurrentFromCandidates(body map[string]any) []string {
-	v, ok := body[keyVersions].(map[string]any)
-	if !ok {
-		return nil
-	}
-	return cfgval.StringList(v[keyVersionsCurrentFrom])
+	return versionsStringList(body, keyVersionsCurrentFrom)
 }
 
 func versionUnversionedEnabled(body map[string]any, tok tmplToken) bool {

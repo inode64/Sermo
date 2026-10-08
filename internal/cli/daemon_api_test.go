@@ -171,7 +171,7 @@ watches:
 	if got := requestCount.Load(); got != 1 {
 		t.Errorf("daemon requests = %d, want one snapshot GET", got)
 	}
-	want := `{"last_checked_at":"2026-09-01T12:34:56Z","readings":[{"field":"free_pct","label":"Free","value":"4.2%","error":"","warning":""}],"state":"warning","watch":"storage-root"}`
+	want := `{"last_checked_at":"2026-09-01T12:34:56Z","readings":[{"field":"free_pct","label":"Free","value":"4.2%"}],"state":"warning","watch":"storage-root"}`
 	if got := strings.TrimSpace(stdout.String()); got != want {
 		t.Fatalf("stdout = %q, want %q", got, want)
 	}

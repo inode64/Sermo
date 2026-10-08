@@ -5,6 +5,19 @@ import (
 	"testing"
 )
 
+func TestSSLModeSharesTheFriendlySpellings(t *testing.T) {
+	t.Parallel()
+	for in, want := range map[string]string{
+		"": "disable", "false": "disable", "No": "disable", "off": "disable", "disable": "disable",
+		"true": "verify-full", "yes": "verify-full", "ON": "verify-full", "required": "verify-full", "verify-full": "verify-full",
+		"skip-verify": "require", "require": "require", " Prefer ": "prefer", "verify-ca": "verify-ca",
+	} {
+		if got := sslMode(in); got != want {
+			t.Errorf("sslMode(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
 func TestBuildPGDSN(t *testing.T) {
 	dsn := postgresDSNForTest(Config{
 		Host: "db.example", Port: 5433, User: "monitor",
