@@ -815,6 +815,10 @@ type EventPage struct {
 //
 //nolint:interfacebloat // dashboard API surface; splitting would fragment the web backend contract
 type Backend interface {
+	// ServiceCount returns the configured service count, including disabled
+	// services, from in-memory configuration only. Health probes must not collect
+	// service status, query storage or scan the host just to count targets.
+	ServiceCount() int
 	// Services returns the current view of every configured service (including those
 	// with `enabled: false` in their YAML so they remain visible for activation).
 	Services(ctx context.Context) []Service

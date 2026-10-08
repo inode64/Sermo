@@ -582,6 +582,9 @@ func checkHealthSummary(snap map[string]CheckSnapshot, checkNames []string, seve
 	return TargetStateOK
 }
 
+// ServiceCount returns the count from this immutable configuration generation.
+func (b *WebBackend) ServiceCount() int { return len(b.order) }
+
 // Services returns the web view of every configured service.
 func (b *WebBackend) Services(ctx context.Context) []web.Service {
 	return b.servicesWithLockReports(ctx, b.lockReportsByService())

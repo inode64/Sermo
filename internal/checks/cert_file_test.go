@@ -18,6 +18,8 @@ import (
 	"time"
 
 	"golang.org/x/crypto/ssh"
+
+	"sermo/internal/severity"
 )
 
 func writeTemp(t *testing.T, name string, data []byte) string {
@@ -191,6 +193,58 @@ func TestCertFileMissingIsAlert(t *testing.T) {
 	res := certForPath(filepath.Join(t.TempDir(), "nope.pem")).Run(context.Background())
 	if res.OK {
 		t.Fatalf("a missing file must fail: %q", res.Message)
+	}
+}
+
+func TestCertFilePEMBundle(t *testing.T) {
+	now := time.Now()
+	key := makeRSAKeyPEM(t)
+	certificate := func(before, after time.Time) []byte {
+		cert := mustSelfSigned(t, before, after)
+		return pem.EncodeToMemory(&pem.Block{Type: certPEMTypeCertificate, Bytes: cert.Raw})
+	}
+	healthy := certificate(now.Add(-time.Hour), now.Add(60*24*time.Hour))
+	expiring := certificate(now.Add(-time.Hour), now.Add(10*24*time.Hour))
+	expired := certificate(now.Add(-48*time.Hour), now.Add(-time.Hour))
+	future := certificate(now.Add(time.Hour), now.Add(60*24*time.Hour))
+	invalid := pem.EncodeToMemory(&pem.Block{Type: certPEMTypeCertificate, Bytes: []byte("invalid")})
+	cases := []struct {
+		name    string
+		blocks  [][]byte
+		ok      bool
+		grade   severity.Level
+		message string
+	}{
+		{name: "key before healthy certificate", blocks: [][]byte{key, healthy}, ok: true},
+		{name: "key before expiring certificate", blocks: [][]byte{key, expiring}, grade: severity.Warning, message: "expires in"},
+		{name: "key before expired certificate", blocks: [][]byte{key, expired}, grade: severity.Critical, message: "expired"},
+		{name: "key before future certificate", blocks: [][]byte{key, future}, grade: severity.Critical, message: "not yet valid"},
+		{name: "certificate before key", blocks: [][]byte{expiring, key}, grade: severity.Warning, message: "expires in"},
+		{name: "first certificate in chain", blocks: [][]byte{key, expired, healthy}, grade: severity.Critical, message: "expired"},
+		{name: "request before certificate", blocks: [][]byte{makeCSRPEM(t), expiring}, grade: severity.Warning, message: "expires in"},
+		{name: "invalid certificate after key", blocks: [][]byte{key, invalid, healthy}, message: "parse X.509 certificate"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var data []byte
+			for _, block := range tc.blocks {
+				data = append(data, block...)
+			}
+			check := certForPath(writeTemp(t, "bundle.pem", data))
+			check.expiresInDays = 15
+			res := check.Run(context.Background())
+			if res.OK != tc.ok || !strings.Contains(res.Message, tc.message) {
+				t.Fatalf("Run() = %+v, want OK=%v and message containing %q", res, tc.ok, tc.message)
+			}
+			if tc.grade.Valid() && res.Severity != tc.grade {
+				t.Errorf("severity = %v, want %v", res.Severity, tc.grade)
+			}
+			if tc.message != "parse X.509 certificate" {
+				if res.Data[DataKeyKind] != certKindCertificate || res.Data[DataKeyNotAfter] == nil {
+					t.Errorf("certificate validity missing from bundle result: %+v", res.Data)
+				}
+			}
+		})
 	}
 }
 

@@ -135,8 +135,19 @@ func TestReadyzStartingReturns503(t *testing.T) {
 	}
 }
 
+type healthProbeBackend struct {
+	*fakeBackend
+	serviceReads int
+}
+
+func (b *healthProbeBackend) Services(context.Context) []Service {
+	b.serviceReads++
+	return nil
+}
+
 func TestLivezVerbose(t *testing.T) {
-	s := &Server{Backend: StaticBackend{Backend: &fakeBackend{services: []Service{{Name: "web"}}}}}
+	backend := &healthProbeBackend{fakeBackend: &fakeBackend{services: []Service{{Name: "web"}}}}
+	s := &Server{Backend: StaticBackend{Backend: backend}}
 	h := s.Handler() // open
 	s.started = time.Now().Add(-2 * time.Minute)
 	rec := httptest.NewRecorder()
@@ -155,6 +166,23 @@ func TestLivezVerbose(t *testing.T) {
 	}
 	if got.Status != apiStatusOK || got.UptimeSeconds < 120 || got.Services != 1 || got.Go == "" {
 		t.Fatalf("unexpected livez verbose: %+v", got)
+	}
+	if backend.serviceReads != 0 {
+		t.Fatal("liveness collected service status instead of reading configuration")
+	}
+}
+
+func TestReadyzFallbackDoesNotCollectServices(t *testing.T) {
+	backend := &healthProbeBackend{fakeBackend: &fakeBackend{services: []Service{{Name: "web"}}}}
+	s := &Server{Backend: StaticBackend{Backend: backend}}
+	rec := httptest.NewRecorder()
+	s.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, testFlagQuery(routePathReadyz), nil))
+	var got ReadyReport
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if rec.Code != http.StatusOK || !got.Ready || got.Services != 1 || backend.serviceReads != 0 {
+		t.Fatalf("readiness fallback = %+v, status=%d, service reads=%d", got, rec.Code, backend.serviceReads)
 	}
 }
 

@@ -355,9 +355,11 @@ func certData(source, host, path string, s CertSample, daysLeft int, hasExpiry b
 // material formats: PEM certificate, certificate request (CSR), PKCS#1/EC/PKCS#8
 // private keys, PKIX public key, OpenSSH private key, and OpenSSH public key
 // (authorized_keys line). Unknown PEM blocks (e.g. DH PARAMETERS) are reported by
-// kind with a fingerprint. It returns an error when nothing is recognised.
+// kind with a fingerprint. A PEM bundle uses its first certificate, even when
+// a key precedes it; without a certificate it uses the first block. It returns
+// an error when nothing is recognised.
 func parseCertMaterial(data []byte) (CertSample, error) {
-	block, _ := pem.Decode(data)
+	block := certMaterialPEMBlock(data)
 	if block == nil {
 		// Not PEM — try an OpenSSH authorized_keys public key line.
 		if pub, _, _, _, err := ssh.ParseAuthorizedKey(data); err == nil {
@@ -438,6 +440,18 @@ func parseCertMaterial(data []byte) (CertSample, error) {
 			Fingerprint: fp,
 		}, nil
 	}
+}
+
+// certMaterialPEMBlock keeps certificate validity visible in combined key/cert
+// files while preserving standalone key, request and parameter inspection.
+func certMaterialPEMBlock(data []byte) *pem.Block {
+	first, rest := pem.Decode(data)
+	for block := first; block != nil; block, rest = pem.Decode(rest) {
+		if block.Type == certPEMTypeCertificate {
+			return block
+		}
+	}
+	return first
 }
 
 // privateKeySample builds a CertSample for a parsed private key of the given kind.

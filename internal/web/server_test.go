@@ -72,6 +72,7 @@ type fakeBackend struct {
 	watches                     []Watch
 }
 
+func (f *fakeBackend) ServiceCount() int                         { return len(f.services) }
 func (f *fakeBackend) Services(context.Context) []Service        { return f.services }
 func (f *fakeBackend) Sessions(context.Context) SessionInventory { return f.sessions }
 func (f *fakeBackend) Watches(context.Context) []Watch           { return f.watches }

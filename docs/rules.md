@@ -1276,6 +1276,14 @@ above; material that does not expire (keys, CSRs) fails only on
 the check fail** (a local configuration problem, unlike a transient network
 error). `cert_verify`, `port` and `server_name` do not apply to files.
 
+For a PEM bundle, the check inspects the **first certificate**, even when a
+private key or CSR appears before it. Keep the leaf certificate before its
+intermediates. Its validity, fingerprint and issuer drive the result; a
+decoded certificate block with invalid X.509 data fails parsing instead of
+falling back to the key.
+When a file contains no certificate, the first PEM block supplies the key,
+request or parameter information described above.
+
 **Result data** exposes `kind` (certificate / certificate_request / private_key /
 public_key / openssh_private_key / openssh_public_key / …), `source`,
 `signature_algorithm`, `public_key_algorithm`, `key_bits`, `subject` and
