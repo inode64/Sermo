@@ -1412,6 +1412,8 @@ curl -fsS http://127.0.0.1:9797/livez            # -> ok
 curl -fsS -u admin:secret http://127.0.0.1:9797/livez?verbose
 ```
 
+The verbose service count comes from the loaded configuration, including disabled
+services. It does not collect service status or read the database or host files.
 It reports process liveness only; for configuration/host/database health use
 [diagnostics](#diagnostics).
 

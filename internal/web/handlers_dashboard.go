@@ -151,7 +151,7 @@ func (s *Server) readyReportFromBackend(ctx context.Context, backend Backend) Re
 	if s.Readiness != nil {
 		return s.Readiness.Report(ctx)
 	}
-	return readyFallback(len(backend.Services(ctx)))
+	return readyFallback(backend.ServiceCount())
 }
 
 func readyFallback(services int) ReadyReport {
@@ -196,5 +196,5 @@ func (s *Server) handleLivez(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	s.writeBackendJSON(w, http.StatusOK, s.liveReport(now, len(backend.Services(r.Context()))), generation)
+	s.writeBackendJSON(w, http.StatusOK, s.liveReport(now, backend.ServiceCount()), generation)
 }
