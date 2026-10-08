@@ -1,0 +1,9 @@
+name: logrotate
+display_name: "Logrotate"
+category: system
+description: "Log rotation utility run by a systemd timer or a cron job."
+variables:
+  binary: ${bindir}/logrotate
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["${binary}", "--version"], timeout: 10s }

@@ -1,0 +1,88 @@
+name: logrotate
+display_name: Logrotate
+category: system
+description: Scheduled log rotation driven by the logrotate systemd timer.
+# The timer is the unit an operator enables, starts and stops; it stays active
+# (waiting) between runs. The rotation itself is the oneshot logrotate.service,
+# which is inactive except while it runs, so its outcome is read from its last
+# result instead of its active state. OpenRC installations run logrotate from
+# cron.daily and have no init unit to control.
+service:
+  systemd:
+    - logrotate.timer
+apps:
+  - logrotate
+variables:
+  config: /etc/logrotate.conf
+  # The oneshot unit the timer triggers.
+  run_unit: logrotate.service
+  # Where logrotate records the last rotation of every log. The path is set at
+  # build time (`logrotate --version` prints it as "Default state file path").
+  state_file: /var/lib/logrotate/logrotate.status
+  # The timer fires daily with up to one hour of random delay; a state file
+  # older than this means rotation has not run for two scheduled days.
+  state_max_age: 50h
+os:
+  gentoo:
+    variables:
+      state_file: /var/lib/misc/logrotate.status
+  debian:
+    variables:
+      state_file: /var/lib/logrotate/status
+  ubuntu:
+    variables:
+      state_file: /var/lib/logrotate/status
+preflight:
+  config:
+    # `--debug` parses every configuration file and reports what it would do
+    # without rotating, compressing or writing the state file. It exits 1 when
+    # a file under /etc/logrotate.d is invalid, which makes the next scheduled
+    # run skip that file silently or fail outright. Exit 1 is accepted so the
+    # pattern set grades the output and the finding names the broken file
+    # instead of the debug-mode notice that always opens stderr.
+    type: command
+    command: ["${logrotate_binary}", --debug, "${config}"]
+    expect_exit: [0, 1]
+    timeout: 60s
+    severity: error
+    analyze:
+      use:
+        - logrotate
+# A timer has no resident process.
+processes: { }
+stop_policy:
+  graceful_timeout: 1s
+watches:
+  service:
+    check:
+      type: service
+      expect: active
+      verify: true
+  last-run:
+    interval: 5m
+    check:
+      # systemd keeps the result of the last oneshot invocation; `success` is
+      # also the value before the first run after boot. LoadState makes a
+      # removed unit fail the check instead of reporting that default.
+      type: command
+      command: [systemctl, show, "${run_unit}", "--property=LoadState,Result"]
+      expect_stdout:
+        op: "=~"
+        value: '^(LoadState=loaded\nResult=success|Result=success\nLoadState=loaded)$'
+      timeout: 5s
+      requires:
+        - service
+      severity: error
+  state:
+    interval: 15m
+    check:
+      type: file
+      paths:
+        - ${state_file}
+      older_than: ${state_max_age}
+      summary: "${path} last written ${value} ago, limit ${older_than}"
+    # Monitor-only: the stale-state event is visible in the panel, the log
+    # and the fleet-wide event_notify route without naming a notifier here.
+    then:
+      notify:
+        - none

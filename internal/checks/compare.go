@@ -6,6 +6,7 @@ import (
 	"math"
 	"regexp"
 	"sermo/internal/cfgval"
+	"sermo/internal/output"
 	"slices"
 	"strconv"
 	"strings"
@@ -158,19 +159,21 @@ func ParseOutputMatcher(v any) (OutputMatcher, string) {
 // Active reports whether the matcher carries an expectation.
 func (m OutputMatcher) Active() bool { return m.Substring != "" || m.assertion.op != "" }
 
-// Match evaluates output against the matcher. ok is true when the expectation is
-// satisfied (or none is set); detail describes the mismatch for a result message.
-func (m OutputMatcher) Match(output string) (ok bool, detail string) {
-	if m.Substring != "" && !strings.Contains(output, m.Substring) {
-		return false, fmt.Sprintf("does not contain %q", m.Substring)
+// Match evaluates text against the matcher. ok is true when the expectation is
+// satisfied (or none is set); detail describes the mismatch for a result message
+// and quotes what was observed, so a failed `=~` names the actual output
+// instead of only repeating the pattern.
+func (m OutputMatcher) Match(text string) (ok bool, detail string) {
+	if m.Substring != "" && !strings.Contains(text, m.Substring) {
+		return false, fmt.Sprintf("does not contain %q; got %q", m.Substring, output.Observed(text))
 	}
 	if m.assertion.op != "" {
-		res, err := m.assertion.compare(strings.TrimSpace(output))
+		res, err := m.assertion.compare(strings.TrimSpace(text))
 		if err != nil {
 			return false, err.Error()
 		}
 		if !res {
-			return false, fmt.Sprintf("%s %q not satisfied", m.assertion.op, m.assertion.value)
+			return false, fmt.Sprintf("%s %q not satisfied; got %q", m.assertion.op, m.assertion.value, output.Observed(text))
 		}
 	}
 	return true, ""
@@ -236,26 +239,26 @@ func (m VersionMatcher) Active() bool {
 	return len(m.Contains) > 0 || len(m.Excludes) > 0 || len(m.regexps) > 0
 }
 
-// Match evaluates output against the configured identity rules.
-func (m VersionMatcher) Match(output string) (ok bool, detail string) {
+// Match evaluates text against the configured identity rules.
+func (m VersionMatcher) Match(text string) (ok bool, detail string) {
 	if !m.Active() {
 		return true, ""
 	}
-	if strings.TrimSpace(output) == "" {
+	if strings.TrimSpace(text) == "" {
 		return false, "has no version output"
 	}
 	for _, value := range m.Contains {
-		if !strings.Contains(output, value) {
+		if !strings.Contains(text, value) {
 			return false, fmt.Sprintf("does not contain required %q", value)
 		}
 	}
 	for _, value := range m.Excludes {
-		if strings.Contains(output, value) {
+		if strings.Contains(text, value) {
 			return false, fmt.Sprintf("contains excluded %q", value)
 		}
 	}
 	for _, matcher := range m.regexps {
-		if !matcher.re.MatchString(output) {
+		if !matcher.re.MatchString(text) {
 			return false, fmt.Sprintf("does not match regex %q", matcher.pattern)
 		}
 	}

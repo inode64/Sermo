@@ -697,6 +697,18 @@ This checks the last result, not whether the task has ever run or how recently
 it completed. `LoadState=loaded` also ensures a removed unit fails the check,
 even if systemd still reports its default `Result=success`.
 
+When a timer schedules the oneshot, make the **timer** the controlled unit: it
+is what an operator enables, starts and stops, and it stays `active` between
+runs, so the `service` check and start verification apply to it. Read the
+oneshot's last result with the same `command` check as a service watch, and
+watch the freshness of whatever the task writes to prove it keeps running. The
+`logrotate` profile is the reference: `logrotate.timer` is the service, a
+`last-run` watch reads `logrotate.service`'s result, a monitor-only `file` watch
+alerts when the state file is older than two scheduled runs, and the config
+preflight runs `logrotate --debug` so a broken file under `/etc/logrotate.d` is
+reported before the night it is skipped. OpenRC installations run logrotate from
+`cron.daily` and have no unit, so the profile declares none for that backend.
+
 ### `control: libvirt` — QEMU/libvirt virtual machines
 
 A service can be controlled as a libvirt/QEMU virtual machine instead of a
