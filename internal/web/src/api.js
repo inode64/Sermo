@@ -41,6 +41,7 @@ export const apiQueryOnlyErrors = "only_errors";
 export const apiQueryService = "service";
 export const apiQuerySince = "since";
 export const apiQueryStartTicks = "start_ticks";
+const apiQueryEscalate = "escalate";
 export const apiQueryManagedByLogind = "managed_by_logind";
 export const apiQueryStatus = "status";
 export const apiQueryTerminal = "terminal";
@@ -59,6 +60,7 @@ const apiSuffixDBQueries = "/db-queries";
 const apiSuffixEvents = "/events";
 const apiSuffixMetrics = "/metrics";
 const apiSuffixPreflight = "/preflight";
+const apiSuffixProcesses = "/processes";
 const apiSuffixRelease = "/release";
 const apiSuffixRuntime = "/runtime";
 const apiSuffixSessions = "/sessions";
@@ -137,6 +139,13 @@ export function emptyTerminalSessionCloseAPI(service, check) {
 export function dbQueryKillAPI(service, watch, id, identity, mode) {
   const query = new URLSearchParams({ [apiQueryID]: String(id), [apiQueryIdentity]: identity, [apiQueryMode]: mode });
   return serviceAPI(service, `${apiSuffixDBQueries}/${encodeURIComponent(watch)}/${apiActionKill}?${query.toString()}`);
+}
+// watchProcessKillAPI signals one process an unowned_processes watch lists.
+// start_ticks pins the PID incarnation the operator reviewed, so a recycled PID
+// is refused rather than killed; escalate asks for SIGKILL after the TERM grace.
+export function watchProcessKillAPI(name, pid, startTicks, escalate = false) {
+  const query = new URLSearchParams({ [apiQueryStartTicks]: String(startTicks), [apiQueryEscalate]: escalate ? "true" : "false" });
+  return watchAPI(name, `${apiSuffixProcesses}/${encodeURIComponent(pid)}/${apiActionKill}?${query.toString()}`);
 }
 export function stateCompactAPI(query = "") { return `${apiStateCompactPath}${query}`; }
 export function watchAPI(name, suffix = "") { return apiEntityPath(apiWatchesPath, name, suffix); }

@@ -47,10 +47,21 @@ any `security:` toggle that tries to disable them.
    `reap.kill_only_if` selector, checked by the same gate as every other kill. No
    rule action can reap, and a service with no `reap:` block reports its strays
    and signals none.
-10. **`process_policy` only observes and alerts.** It has no operation runner,
-    service backend or signal path. Validation permits only `then.notify` and
-    `then.notify_interval`; a policy violation cannot restart, repair, kill or
-    otherwise alter a process or service.
+10. **`process_policy` only observes and alerts, and `unowned_processes`
+    detection authorizes nothing.** `process_policy` has no operation runner,
+    service backend or signal path: validation permits only `then.notify` and
+    `then.notify_interval`, so a policy violation cannot restart, repair, kill
+    or otherwise alter a process or service. `unowned_processes` lists the
+    processes no init unit accounts for or whose executable belongs to no
+    installed package; being listed never makes a process a signal target. Its
+    `then.kill` signals only what its own `kill_only_if` (users **and**
+    `exe_any`) authorizes, through the same gate as every other kill, and a
+    dashboard kill signals only a process an administrator picked whose
+    identity (PID, start time, exact executable, real user) was re-read
+    immediately before — SIGTERM, with SIGKILL only on explicit request. Both
+    honour the watch's `dry_run`. When attribution is impossible (no per-unit
+    control groups, no package database, an unreadable executable) the watch
+    reports that and lists nothing.
 11. **A libvirt virtual network with live guest interfaces is never
     destroyed.** `control: libvirt-network` stop/restart verifies every
     non-shut-off domain (paused and crashed included — their taps stay
@@ -242,7 +253,9 @@ server to cancel a statement or close a connection.
 with `sermoctl sessions kill SERVICE WATCH ID [--connection]`
 (`POST /api/services/{name}/db-queries/{watch}/kill`), and a service watch's own
 opt-in `then.kill_query`. It is never a rule action, and a host watch cannot
-kill: the operation needs a service's engine.
+kill a statement: the operation needs a service's engine. (The one host watch
+that signals OS processes, [`unowned_processes`](configuration.md#unowned_processes--processes-no-unit-or-package-accounts-for),
+is bound by invariant 10 above.)
 
 **The request carries only an identity.** The client sends the statement id and
 the opaque identity the inventory displayed. The connection, credentials and

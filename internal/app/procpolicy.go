@@ -3,46 +3,19 @@ package app
 import (
 	"cmp"
 	"context"
-	"errors"
 	"fmt"
-	"maps"
-	"regexp"
 	"slices"
 	"strconv"
-	"strings"
 	"time"
 
 	"sermo/internal/cfgval"
 	"sermo/internal/checks"
 	"sermo/internal/config"
-	"sermo/internal/notify"
 	"sermo/internal/process"
-	"sermo/internal/rules"
-	"sermo/internal/severity"
-	persistedstate "sermo/internal/state"
 )
 
 // processPolicyAllow is one exact executable identity permitted for a watched
 // real user. Cmd can only narrow that identity; it is never emitted anywhere.
-type processPolicyAllow struct {
-	filter process.IdentityFilter
-	cmd    *regexp.Regexp
-}
-
-// processPolicyKey identifies one sampled process. Non-zero start ticks keep a
-// recycled PID from inheriting the previous process's alert edge state.
-type processPolicyKey struct {
-	pid        int
-	startTicks uint64
-}
-
-// processPolicyState retains notification cadence for a current violation. A
-// zero StartTicks value cannot establish a PID incarnation, so it paces delivery
-// without suppressing a fresh firing event from a potentially reused PID.
-type processPolicyState struct {
-	lastNotify time.Time
-}
-
 // processPolicyViolation is deliberately presentation-safe: it names a PID and
 // resolved executable state, never the process command line or its arguments.
 type processPolicyViolation struct {
@@ -63,30 +36,10 @@ const (
 // an allowlisted executable identity. It is alert-only: it has no hook, signal,
 // command runner or other remediation capability.
 type processPolicyWatcher struct {
-	name           string
-	user           string
-	allows         []processPolicyAllow
-	summary        string
-	check          map[string]any
-	notifiers      []notify.Notifier
-	notifyInterval time.Duration
-	dryRun         bool
-	inPanic        func() bool
-	now            func() time.Time
-	emit           func(Event)
-	sampler        ProcSampler
-	resolve        process.UserResolver
-	publish        func(string, string, checks.Result)
-	stateStore     WatchStateStore
-	activeLoaded   bool
-	active         bool
-	// announced records that the open incident notified someone live, so the
-	// aggregate recovery goes out only for an incident its notifiers heard.
-	announced bool
-	// severity grades every violation this watch reports.
-	severity severity.Level
-
-	state map[processPolicyKey]processPolicyState
+	setProcessWatch
+	user    string
+	allows  []processIdentityRule
+	resolve process.UserResolver
 }
 
 // buildProcessPolicyWatch builds an alert-only host watch. Validation enforces
@@ -97,7 +50,7 @@ func buildProcessPolicyWatch(name string, entry, checkEntry map[string]any, deps
 	if user == "" {
 		return nil, watchSubjectPrefix + name + ": process_policy check requires a user"
 	}
-	if err := rejectProcessPolicyActions(entry); err != nil {
+	if err := rejectSetWatchActions(entry, config.ProcessPolicyActions); err != nil {
 		return nil, watchSubjectPrefix + name + ": " + err.Error()
 	}
 	allows, err := parseProcessPolicyAllows(user, checkEntry)
@@ -106,7 +59,7 @@ func buildProcessPolicyWatch(name string, entry, checkEntry map[string]any, deps
 	}
 	actions, err := resolveWatchActions(entry, deps, watchActionOptions{
 		checkType:    checks.CheckTypeProcessPolicy,
-		emptyMessage: "then requires notify or omit then for dashboard/event-log alerts",
+		emptyMessage: "then " + config.ProcessPolicyActions.EmptyThenMessage(),
 	})
 	if err != nil {
 		return nil, watchSubjectPrefix + name + ": " + err.Error()
@@ -116,59 +69,20 @@ func buildProcessPolicyWatch(name string, entry, checkEntry map[string]any, deps
 		resolve = deps.UserLookup.ResolveUser
 	}
 	pw := &processPolicyWatcher{
-		name:           name,
-		user:           user,
-		allows:         allows,
-		summary:        cfgval.String(checkEntry[checks.CheckKeySummary]),
-		check:          checkEntry,
-		notifiers:      resolveNotifiers(actions.effectiveNames, deps.Notifiers),
-		notifyInterval: actions.notifyInterval,
-		dryRun:         config.DryRun(entry),
-		inPanic:        deps.Panic.Active,
-		now:            deps.Now,
-		emit:           deps.Emit,
-		sampler:        procSamplerFromDeps(deps),
-		resolve:        resolve,
-		publish:        publishWatchSnapshots(deps.WatchSnapshots, deps.watchConfigID),
-		stateStore:     deps.WatchState,
-		severity:       watchSeverity(entry, checkEntry),
+		setProcessWatch: newSetProcessWatch(name, checks.CheckTypeProcessPolicy, processPolicyStateSlot, entry, checkEntry, actions, deps, watchSeverity(entry, checkEntry)),
+		user:            user,
+		allows:          allows,
+		resolve:         resolve,
 	}
 	return newStatefulWatch(name, checks.CheckTypeProcessPolicy, entry, deps, interval, pw.runCycle), ""
 }
 
-// rejectProcessPolicyActions is the build-time counterpart to the config
-// validator. Notifications are the only optional delivery mechanism; a missing
-// then block keeps the dashboard/event-log-only mode.
-func rejectProcessPolicyActions(entry map[string]any) error {
-	if _, present := entry[rules.SectionPolicy]; present {
-		return errors.New("policy is not valid on an alert-only process_policy watch")
-	}
-	then, err := thenMap(entry)
-	if err != nil || then == nil {
-		return err
-	}
-	for _, key := range slices.Sorted(maps.Keys(then)) {
-		if !config.IsAlertOnlyWatchThenKey(key) {
-			return fmt.Errorf("then.%s is not valid on an alert-only process_policy watch", key)
-		}
-	}
-	return nil
-}
-
-func parseProcessPolicyAllows(user string, check map[string]any) ([]processPolicyAllow, error) {
+func parseProcessPolicyAllows(user string, check map[string]any) ([]processIdentityRule, error) {
 	parsed, issues := config.ParseProcessPolicyAllows(check[checks.CheckKeyAllow])
 	if len(issues) > 0 {
 		return nil, issues[0]
 	}
-	allows := make([]processPolicyAllow, 0, len(parsed))
-	for _, entry := range parsed {
-		filter, err := process.NewIdentityFilter(entry.Exe, user, "")
-		if err != nil {
-			return nil, fmt.Errorf("prepare process_policy allow %q: %w", entry.Name, err)
-		}
-		allows = append(allows, processPolicyAllow{filter: filter, cmd: entry.Cmd})
-	}
-	return allows, nil
+	return newProcessIdentityRules(parsed, user, "process_policy allow")
 }
 
 func (w *processPolicyWatcher) runCycle(ctx context.Context) {
@@ -192,93 +106,22 @@ func (w *processPolicyWatcher) runCycle(ctx context.Context) {
 	if observeOnlyCycle(ctx) {
 		return
 	}
-	w.loadActiveState()
-	if len(violations) == 0 && w.active {
-		announced := w.announced
-		w.active, w.announced = false, false
-		w.persistActiveState()
-		message := processPolicySubject(w.user) + ": no violations"
-		w.emitEvent(Event{Watch: w.name, Kind: eventKindRecovered, Severity: w.severity, Message: message})
-		if announced {
-			w.notifyMessage(ctx, recoveredMessagePrefix+message, map[string]string{
-				sermoEnvWatch: w.name, sermoEnvUser: w.user, sermoEnvCheckType: checks.CheckTypeProcessPolicy,
-				sermoEnvMessage: message, sermoEnvEvent: eventKindRecovered,
-			})
-		}
-	}
-	if len(violations) > 0 && !w.active {
-		w.active = true
-		w.persistActiveState()
-	}
-	now := w.clock()
-	next := make(map[processPolicyKey]processPolicyState, len(violations))
-	for i := range violations {
-		key := processPolicyKey{pid: violations[i].info.PID, startTicks: violations[i].info.StartTicks}
-		state, fired := w.state[key]
-		if key.startTicks != 0 && fired {
-			if w.shouldRemind(state, now) {
-				w.notify(ctx, violations[i])
-				state.lastNotify = now
-			}
-			next[key] = state
-			continue
-		}
-		notifyNow := !fired || w.shouldRemind(state, now)
-		w.fire(ctx, violations[i], notifyNow)
-		if notifyNow {
-			state.lastNotify = now
-		}
-		next[key] = state
-	}
-	w.state = next
-}
-
-func (w *processPolicyWatcher) loadActiveState() {
-	if w.activeLoaded || w.stateStore == nil {
-		return
-	}
-	w.activeLoaded = true
-	rec, found, err := w.stateStore.WatchRuntimeState(w.name, processPolicyStateSlot)
-	if err != nil {
-		w.emitEvent(Event{Watch: w.name, Kind: eventKindError, Message: "load process policy state: " + err.Error()})
-		return
-	}
-	if found {
-		w.active = rec.Firing
-		w.announced = rec.Firing && rec.NotifiedSeverity != ""
-	}
-}
-
-func (w *processPolicyWatcher) persistActiveState() {
-	if w.stateStore == nil {
-		return
-	}
-	rec := persistedstate.WatchRuntimeRecord{Firing: w.active}
-	if w.announced {
-		rec.NotifiedSeverity = w.severity.Resolved().String()
-	}
-	if err := w.stateStore.SetWatchRuntimeState(w.name, processPolicyStateSlot, rec); err != nil {
-		w.emitEvent(Event{Watch: w.name, Kind: eventKindError, Message: "persist process policy state: " + err.Error()})
-	}
-}
-
-func (w *processPolicyWatcher) clock() time.Time {
-	return clockOrNow(w.now)()
-}
-
-func (w *processPolicyWatcher) shouldRemind(state processPolicyState, now time.Time) bool {
-	return w.notifyInterval > 0 && now.Sub(state.lastNotify) >= w.notifyInterval
+	w.settle(ctx, len(violations), processPolicySubject(w.user)+": no violations", map[string]string{sermoEnvUser: w.user})
+	keys := incidentKeys(violations, func(v processPolicyViolation) ProcInfo { return v.info })
+	w.incidents.cycle(w.clock(), keys,
+		func(i int, notifyNow bool) { w.fire(ctx, violations[i], notifyNow) },
+		func(i int) { w.remind(ctx, violations[i]) })
 }
 
 func (w *processPolicyWatcher) violationReason(info ProcInfo) string {
 	hasExecutableMatch := false
 	for _, allow := range w.allows {
-		matched, err := allow.filter.Match(info.Identity, w.resolve, nil)
-		if err != nil || matched != process.IdentityMatched {
+		identity, allowed := allow.match(info, w.resolve)
+		if !identity {
 			continue
 		}
 		hasExecutableMatch = true
-		if allow.cmd == nil || allow.cmd.MatchString(strings.Join(info.Cmdline, " ")) {
+		if allowed {
 			return ""
 		}
 	}
@@ -295,30 +138,15 @@ func (w *processPolicyWatcher) violationReason(info ProcInfo) string {
 }
 
 func (w *processPolicyWatcher) publishSnapshot(samples []ProcInfo, violations []processPolicyViolation, ok bool) {
-	if w.publish == nil {
-		return
-	}
 	if !ok {
-		w.publish(w.name, checks.CheckTypeProcessPolicy, checks.Result{
-			Check:   w.name,
-			OK:      false,
-			Message: processPolicySubject(w.user) + ": sample unavailable",
-			Data:    map[string]any{watchReadingFieldUser: w.user},
-		})
+		w.publishUnavailable(processPolicySubject(w.user), map[string]any{watchReadingFieldUser: w.user})
 		return
 	}
-	data := processPolicyData(w.user, samples, violations)
 	message := fmt.Sprintf("%s: %d active process%s, %d violation%s", processPolicySubject(w.user), len(samples), pluralSuffix(len(samples), "process"), len(violations), pluralSuffix(len(violations), "violation"))
 	if len(violations) > 0 {
 		message += ": " + processPolicyViolationList(violations)
 	}
-	result := checks.Result{
-		Check:   w.name,
-		OK:      len(violations) == 0,
-		Message: message,
-		Data:    data,
-	}
-	w.publish(w.name, checks.CheckTypeProcessPolicy, checks.ApplySummary(w.summary, w.check, result))
+	w.publishResult(checks.Result{OK: len(violations) == 0, Message: message, Data: processPolicyData(w.user, samples, violations)})
 }
 
 func processPolicyData(user string, samples []ProcInfo, violations []processPolicyViolation) map[string]any {
@@ -357,51 +185,16 @@ func (w *processPolicyWatcher) fire(ctx context.Context, violation processPolicy
 	message, env := w.message(violation)
 	w.emitEvent(Event{Watch: w.name, Kind: eventKindFiring, Severity: w.severity, Message: message})
 	if notifyNow {
-		w.notifyViolation(ctx, message, env)
+		w.notify(ctx, message, env)
 	}
 }
 
-func (w *processPolicyWatcher) notify(ctx context.Context, violation processPolicyViolation) {
+func (w *processPolicyWatcher) remind(ctx context.Context, violation processPolicyViolation) {
 	message, env := w.message(violation)
-	w.notifyViolation(ctx, message, env)
-}
-
-// notifyViolation sends a violation's notification and records whether it
-// really reached the notifiers — not in dry-run, not under panic — which
-// decides whether the incident's recovery goes out.
-func (w *processPolicyWatcher) notifyViolation(ctx context.Context, message string, env map[string]string) {
-	if w.notifyMessage(ctx, message, env) && w.active && !w.announced {
-		w.announced = true
-		w.persistActiveState()
-	}
+	w.notify(ctx, message, env)
 }
 
 func (w *processPolicyWatcher) message(violation processPolicyViolation) (string, map[string]string) {
 	message := processPolicySubject(w.user) + ": " + processPolicyViolationText(violation)
-	env := map[string]string{
-		sermoEnvPID:       strconv.Itoa(violation.info.PID),
-		sermoEnvUser:      w.user,
-		sermoEnvWatch:     w.name,
-		sermoEnvCheckType: checks.CheckTypeProcessPolicy,
-		sermoEnvMessage:   message,
-	}
-	return message, env
+	return message, w.env(message, map[string]string{sermoEnvPID: strconv.Itoa(violation.info.PID), sermoEnvUser: w.user})
 }
-
-func (w *processPolicyWatcher) notifyMessage(ctx context.Context, message string, env map[string]string) bool {
-	if len(w.notifiers) == 0 {
-		return false
-	}
-	return dispatchWatchFire(ctx, watchFireSpec{
-		name:        w.name,
-		notifiers:   w.notifiers,
-		inPanic:     w.inPanic,
-		dryRun:      w.dryRun,
-		emit:        w.emitEvent,
-		dryRunLabel: watchDryRunMessage(HookSpec{}, w.notifiers),
-		panicLabel:  "panic mode: notifications suppressed",
-		severity:    w.severity,
-	}, message, env)
-}
-
-func (w *processPolicyWatcher) emitEvent(event Event) { emitSafe(w.emit, event) }

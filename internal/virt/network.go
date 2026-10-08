@@ -57,12 +57,12 @@ type NetworkSpec struct {
 // NetworkSpecFromTree reads a service's optional
 // `control: {type: libvirt-network, ...}` block.
 func NetworkSpecFromTree(tree map[string]any) (NetworkSpec, bool, error) {
-	m, present, ok := cfgval.MapAt(tree, sectionControl)
+	m, present, err := cfgval.MappingSection(tree, sectionControl)
+	if err != nil {
+		return NetworkSpec{}, true, fmt.Errorf("libvirt network: %w", err)
+	}
 	if !present {
 		return NetworkSpec{}, false, nil
-	}
-	if !ok {
-		return NetworkSpec{}, true, errors.New("control must be a mapping")
 	}
 	if typ := cfgval.String(m[ControlKeyType]); typ != NetworkControlType {
 		return NetworkSpec{}, true, fmt.Errorf("%s %q is not supported", controlPathType, typ)
@@ -223,11 +223,6 @@ func (m NetworkManager) Stop(ctx context.Context, _ string) error {
 // ResetState come from the embedded servicemgr.ExternalLifecycle.
 func (NetworkManager) Reload(context.Context, string) error {
 	return errors.New("reload is not supported for libvirt networks")
-}
-
-// Resume is not meaningful for a virtual network: it has no paused state.
-func (NetworkManager) Resume(context.Context, string) error {
-	return errors.New("resume is not supported for libvirt networks")
 }
 
 func (m NetworkManager) networkAction(ctx context.Context, action string, fn func(NetworkClient, libvirt.Network) error) error {

@@ -51,11 +51,11 @@ func Observed(s string) string {
 // causeIntroducer ends a line that only introduces the reason on the next one.
 const causeIntroducer = ":"
 
-// Cause returns the line a failing command states its reason on: the first
+// cause returns the line a failing command states its reason on: the first
 // non-empty line, joined with the next non-empty one when it only introduces
 // it — Apache's configtest reports "AH00526: Syntax error on line 3 of FILE:"
 // and the directive it rejected on the line below.
-func Cause(s string) string {
+func cause(s string) string {
 	var first string
 	for line := range strings.SplitSeq(s, outputLineSeparator) {
 		t := strings.TrimSpace(line)
@@ -77,10 +77,10 @@ func Cause(s string) string {
 // FailureCause is a failing command's stated reason: Cause of stderr, or of
 // stdout for a command that reports errors there.
 func FailureCause(stdout, stderr string) string {
-	if cause := Cause(stderr); cause != "" {
+	if cause := cause(stderr); cause != "" {
 		return cause
 	}
-	return Cause(stdout)
+	return cause(stdout)
 }
 
 // Bounds for Bounded: command output kept in an event is capped so a chatty

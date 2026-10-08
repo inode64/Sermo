@@ -122,17 +122,18 @@ func comparisonCondition(field string, values map[string]any) web.WatchCondition
 }
 
 var watchTypeConditionBuilders = map[string]func(map[string]any) []web.WatchCondition{
-	checks.CheckTypeRAID:          raidWatchConditions,
-	checks.CheckTypeReplication:   replicationWatchConditions,
-	checks.CheckTypeCount:         countWatchConditions,
-	checks.CheckTypeFile:          fileWatchConditions,
-	checks.CheckTypeProcess:       processWatchConditions,
-	checks.CheckTypeProcessPolicy: processPolicyWatchConditions,
-	checks.CheckTypeDBQueries:     dbQueriesWatchConditions,
-	checks.CheckTypeRoute:         routeWatchConditions,
-	checks.CheckTypeFirewallRules: firewallWatchConditions,
-	checks.CheckTypeFailedUnits:   failedUnitsWatchConditions,
-	checks.CheckTypeSize:          sizeWatchConditions,
+	checks.CheckTypeRAID:             raidWatchConditions,
+	checks.CheckTypeReplication:      replicationWatchConditions,
+	checks.CheckTypeCount:            countWatchConditions,
+	checks.CheckTypeFile:             fileWatchConditions,
+	checks.CheckTypeProcess:          processWatchConditions,
+	checks.CheckTypeProcessPolicy:    processPolicyWatchConditions,
+	checks.CheckTypeUnownedProcesses: unownedProcessesWatchConditions,
+	checks.CheckTypeDBQueries:        dbQueriesWatchConditions,
+	checks.CheckTypeRoute:            routeWatchConditions,
+	checks.CheckTypeFirewallRules:    firewallWatchConditions,
+	checks.CheckTypeFailedUnits:      failedUnitsWatchConditions,
+	checks.CheckTypeSize:             sizeWatchConditions,
 }
 
 func replicationWatchConditions(check map[string]any) []web.WatchCondition {
@@ -176,6 +177,11 @@ func processWatchConditions(check map[string]any) []web.WatchCondition {
 
 func processPolicyWatchConditions(check map[string]any) []web.WatchCondition {
 	return appendValue(nil, checks.CheckKeyUser, cfgval.AsString(check[checks.CheckKeyUser]))
+}
+
+func unownedProcessesWatchConditions(check map[string]any) []web.WatchCondition {
+	out := appendCompare(nil, checks.CheckKeyMinAge, cfgval.CompareOpGreaterEqual, cfgval.String(check[checks.CheckKeyMinAge]))
+	return appendValue(out, checks.CheckKeyUsers, strings.Join(cfgval.StringList(check[checks.CheckKeyUsers]), displayListSeparator))
 }
 
 func dbQueriesWatchConditions(check map[string]any) []web.WatchCondition {

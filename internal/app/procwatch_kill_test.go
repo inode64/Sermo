@@ -45,21 +45,21 @@ func killProcInfo() ProcInfo {
 // first cycle, keeping the kill assertions independent of age bookkeeping.
 func killWatcher(h *procHarness, ks *killSpec, sig *fakeSignaler, sampler ProcSampler, onGone, dryRun bool) *procWatcher {
 	ks.selector = process.KillSelector{Users: []string{"root"}, ExeAny: []string{"/usr/bin/sudo"}}
+	emit := func(e Event) { h.events = append(h.events, e) }
 	w := &procWatcher{
-		name:     "pw",
-		match:    ProcMatch{Name: "/usr/bin/sudo", User: "root"},
-		cond:     procCond{minAge: time.Second, onGone: onGone},
-		kill:     ks,
-		signaler: sig,
-		resolve: func(user string) (uint32, bool) {
-			if user == "root" {
-				return 0, true
-			}
-			return 0, false
+		name:  "pw",
+		match: ProcMatch{Name: "/usr/bin/sudo", User: "root"},
+		cond:  procCond{minAge: time.Second, onGone: onGone},
+		kill:  ks,
+		killer: pidKiller{
+			watch:    "pw",
+			signaler: sig,
+			resolve:  func(user string) (uint32, bool) { return 0, user == "root" },
+			sleep:    func(time.Duration) {}, // never wait for real in tests
+			emit:     emit,
 		},
-		sleep:   func(time.Duration) {}, // never wait for real in tests
 		dryRun:  dryRun,
-		emit:    func(e Event) { h.events = append(h.events, e) },
+		emit:    emit,
 		now:     func() time.Time { return h.clock },
 		sampler: sampler,
 	}

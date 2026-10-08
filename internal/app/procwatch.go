@@ -22,10 +22,14 @@ import (
 )
 
 // ProcMatch selects which processes a process watch tracks: by name (the exe
-// basename or its full resolved path) and optionally the owning user.
+// basename or its full resolved path) and optionally the owning user. All
+// selects every process on the host; a watch that evaluates the whole process
+// table sets it explicitly, so an empty selector keeps matching nothing.
 type ProcMatch struct {
 	Name string
 	User string
+	All  bool
+	PID  int // > 0: only this process, whatever its name or user; for re-verifying one PID
 }
 
 // ProcInfo is one matched process's current resource counters. CPU and IO are
@@ -165,13 +169,11 @@ type procWatcher struct {
 	check     map[string]any
 	hook      HookSpec
 	kill      *killSpec
+	killer    pidKiller // the shared signal path then.kill runs through
 	notifiers []notify.Notifier
 	dryRun    bool
 	inPanic   func() bool
 	runner    HookRunner
-	signaler  process.Signaler     // nil -> process.OSSignaler{} (real kill(2))
-	resolve   process.UserResolver // nil -> process.DefaultUserLookup().ResolveUser
-	sleep     func(time.Duration)  // nil -> process.Wait's cancellable timer
 	now       func() time.Time
 	emit      func(Event)
 	sampler   ProcSampler
@@ -470,74 +472,10 @@ func (w *procWatcher) dryRunActions(killable bool) string {
 	return watchDryRunMessage(w.hook, w.notifiers, config.WatchThenKeyKill)
 }
 
-// doKill signals a matched PID through process.Reaper and process.KillSelector.
-// With escalate it follows the first signal with SIGKILL after termTimeout,
-// re-verifying the PID's identity first so a recycled PID is never killed.
+// doKill signals a matched PID through the shared pidKiller: the first signal,
+// then — with escalate — a re-verified SIGKILL after the grace period.
 func (w *procWatcher) doKill(ctx context.Context, info ProcInfo, msg string) {
-	first := w.reaper().Signal(ctx, []process.Process{info.asProcess()}, w.kill.selector, w.kill.signal)
-	if !w.emitSignalResult(msg, w.kill.signal, first) {
-		return
-	}
-
-	if !w.kill.escalate || w.kill.signal == syscall.SIGKILL {
-		return
-	}
-	// Wait out the grace period (cancellable), then re-verify the PID still
-	// matches this watch before escalating — over the wait it may have exited and
-	// the number been reused by an unrelated process.
-	if err := process.Wait(ctx, w.sleep, w.kill.termTimeout); err != nil {
-		return
-	}
-	current, ok := w.matchingProcess(info.PID)
-	if !ok || !current.sameProcessAs(info) {
-		// Either the PID is gone, or the number now belongs to another process that
-		// happens to match this watch's name and user. Only the start time tells the
-		// two apart, and escalating on a namesake would SIGKILL an innocent process.
-		return
-	}
-	kill := w.reaper().Signal(ctx, []process.Process{current.asProcess()}, w.kill.selector, syscall.SIGKILL)
-	if !w.emitSignalResult(msg, syscall.SIGKILL, kill) {
-		return
-	}
-	// After the kill grace, a PID that still matches is unkillable from here (an
-	// uninterruptible sleep, or a zombie whose parent has not reaped it) — surface
-	// it rather than claim success, mirroring the reaper's final rediscover.
-	if err := process.Wait(ctx, w.sleep, w.kill.killTimeout); err != nil {
-		return
-	}
-	// Same identity caveat as the escalation above: a namesake that took the PID
-	// is not our target surviving, and reporting it as one would raise a
-	// kill-failed for a process we never signalled.
-	if survivor, ok := w.matchingProcess(info.PID); ok && survivor.sameProcessAs(info) {
-		w.emitEvent(Event{Watch: w.name, Kind: eventKindKillFailed, Message: fmt.Sprintf("%s: pid %d survived SIGKILL", msg, info.PID)})
-	}
-}
-
-func (w *procWatcher) reaper() process.Reaper {
-	return process.Reaper{
-		Signaler:    w.signaler,
-		ResolveUser: w.resolve,
-		Sleep:       w.sleep,
-	}
-}
-
-func (w *procWatcher) emitSignalResult(msg string, sig syscall.Signal, result process.ReapResult) bool {
-	if len(result.Signalled) > 0 {
-		pid := result.Signalled[0]
-		if sig == syscall.SIGKILL && w.kill.signal != syscall.SIGKILL {
-			w.emitEvent(Event{Watch: w.name, Kind: eventKindKill, Message: fmt.Sprintf("%s: escalated to SIGKILL for pid %d", msg, pid)})
-		} else {
-			w.emitEvent(Event{Watch: w.name, Kind: eventKindKill, Message: fmt.Sprintf("%s: sent %s to pid %d", msg, process.SignalName(sig), pid)})
-		}
-		return true
-	}
-	if len(result.Failed) > 0 {
-		failure := result.Failed[0]
-		w.emitEvent(Event{Watch: w.name, Kind: eventKindKillFailed, Message: fmt.Sprintf("%s: %s pid %d: %v", msg, process.SignalName(sig), failure.PID, failure.Err)})
-		return false
-	}
-	w.emitEvent(Event{Watch: w.name, Kind: eventKindKillFailed, Message: msg + ": pid did not match kill selector"})
-	return false
+	w.killer.kill(ctx, killTarget{info: info, spec: *w.kill, resample: w.matchingProcess, msg: msg})
 }
 
 // matchingProcess re-samples the watch's selector and returns pid's current
@@ -570,6 +508,7 @@ func (s ProcInfo) asProcess() process.Process {
 		ExeOK:      s.ExeOK,
 		ExePrev:    s.ExePrev,
 		Cmdline:    s.Cmdline,
+		Cgroup:     s.Cgroup,
 	}
 }
 
@@ -604,9 +543,15 @@ type osProcSampler struct {
 func (s osProcSampler) Sample(m ProcMatch) ([]ProcInfo, bool) {
 	lookup := s.userLookup
 	pr := process.OSReader{LookupUserName: lookup.Username}
-	pids, err := pr.PIDs()
-	if err != nil {
-		return nil, false
+	var pids []int
+	if m.PID > 0 {
+		pids = []int{m.PID}
+	} else {
+		var err error
+		pids, err = pr.PIDs()
+		if err != nil {
+			return nil, false
+		}
 	}
 	mr := metrics.OSReader{}
 
@@ -616,7 +561,7 @@ func (s osProcSampler) Sample(m ProcMatch) ([]ProcInfo, bool) {
 		if !ok || !procMatchesWithLookup(m, id, lookup) {
 			continue
 		}
-		info := ProcInfo{PID: pid, User: id.User, UID: id.UID, Exe: id.Exe, ExeOK: id.ExeOK, ExePrev: id.ExePrev, Cmdline: id.Cmdline}
+		info := ProcInfo{Identity: id}
 		if ticks, at, ok := mr.ProcessStart(pid); ok {
 			info.StartTicks, info.StartTime = ticks, at
 		}
@@ -636,7 +581,15 @@ func (s osProcSampler) Sample(m ProcMatch) ([]ProcInfo, bool) {
 
 // procMatchesWithLookup reports whether a process matches the selector: its name
 // against the resolved exe (full path or basename) and, if set, the owning user.
+// All matches every process, PID exactly one; without either an empty selector
+// matches none.
 func procMatchesWithLookup(m ProcMatch, id process.Identity, lookup *process.UserLookup) bool {
+	if m.PID > 0 {
+		return id.PID == m.PID
+	}
+	if m.All {
+		return true
+	}
 	if m.Name != "" {
 		if !id.ExeOK || (m.Name != id.Exe && m.Name != filepath.Base(id.Exe)) {
 			return false

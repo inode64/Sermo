@@ -441,11 +441,10 @@ func hasParentMountOnSameDevice(existing []checks.Mount, child checks.Mount) boo
 }
 
 func cleanMountpoint(path string) string {
-	path = strings.TrimRight(path, "/")
-	if path == "" {
-		return "/"
+	if clean := mounts.CleanPath(path); clean != "" {
+		return clean
 	}
-	return path
+	return "/"
 }
 
 // procMounts reads the mount table via the shared /proc/mounts parser.

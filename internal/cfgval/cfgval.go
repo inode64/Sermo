@@ -259,6 +259,16 @@ func MapAt(tree map[string]any, key string) (mapping map[string]any, present, ok
 	return mapping, true, ok
 }
 
+// MappingSection reads an optional mapping section: absent is (nil, false, nil),
+// a present value that is not a mapping is the standard error.
+func MappingSection(tree map[string]any, key string) (mapping map[string]any, present bool, err error) {
+	mapping, present, ok := MapAt(tree, key)
+	if present && !ok {
+		return nil, true, fmt.Errorf("%s must be a mapping", key)
+	}
+	return mapping, present, nil
+}
+
 // Int coerces a scalar — integer, float or decimal string — to an int, reporting
 // whether the coercion succeeded. Surrounding whitespace in a string is ignored.
 func Int(v any) (int, bool) {

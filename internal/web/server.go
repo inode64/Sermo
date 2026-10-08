@@ -196,7 +196,6 @@ const (
 	apiQueryOnlyErrors  = "only_errors"
 	apiQuerySince       = "since"
 	apiQueryStatus      = "status"
-	apiQueryStartTicks  = "start_ticks"
 	apiQueryTerminal    = "terminal"
 	apiQueryUser        = "user"
 	apiQueryMultiplexer = "multiplexer"
@@ -242,6 +241,7 @@ const (
 	routeAPISessions                  = routeMethodGet + APIPathSessions
 	routeAPIWatches                   = routeMethodGet + APIPathWatches
 	routeAPIWatchAction               = routeMethodPost + APIPathWatches + "/" + routeVarName + "/" + routeVarAction
+	routeAPIWatchProcessKill          = routeMethodPost + APIPathWatches + "/" + routeVarName + "/" + APISegmentProcesses + "/{" + apiParamPID + "}/" + APIActionKill
 	routeAPIWatchSeries               = routeMethodGet + APIPathWatches + "/" + routeVarName + "/" + apiSegmentSLA
 	routeAPIWatchMetrics              = routeMethodGet + APIPathWatches + "/" + routeVarName + "/" + apiSegmentMetrics
 	routeAPINotifiers                 = routeMethodGet + apiPathNotifiers
@@ -423,6 +423,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc(routeAPIServices, s.handleServices)
 	mux.HandleFunc(routeAPIWatches, s.handleWatches)
 	mux.HandleFunc(routeAPIWatchAction, s.handleWatchAction)
+	mux.HandleFunc(routeAPIWatchProcessKill, s.handleWatchProcessKill)
 	mux.HandleFunc(routeAPIWatchSeries, s.handleWatchSeries)
 	mux.HandleFunc(routeAPIWatchMetrics, s.handleWatchMetrics)
 	mux.HandleFunc(routeAPINotifiers, s.handleNotifiers)

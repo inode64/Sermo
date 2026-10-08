@@ -144,8 +144,10 @@ const (
 	DataKeyOutput             = "output"
 	DataKeyPath               = CheckKeyPath
 	DataKeyPaths              = "paths"
+	DataKeyPackageDB          = "package_db"
 	DataKeyPID                = "pid"
 	DataKeyPIDs               = "pids"
+	DataKeyProcesses          = "processes"
 	DataKeyPort               = fieldPort
 	DataKeyPowerCycles        = "power_cycles"
 	DataKeyPresent            = "present"
@@ -201,11 +203,12 @@ const (
 	DataKeySynchronized       = "synchronized"
 	DataKeyThreshold          = CheckKeyThreshold
 	DataKeyTrigger            = "trigger"
-	DataKeyTTY                = "tty"
 	DataKeyTotal              = fieldTotal
 	DataKeyTotalBytes         = fieldTotalBytes
 	DataKeyType               = CheckKeyType
+	DataKeyScanned            = "scanned"
 	DataKeyUnit               = "unit"
+	DataKeyUnitAttribution    = "unit_attribution"
 	DataKeyUnits              = "units"
 	DataKeyUnreadable         = "unreadable"
 	DataKeyUsers              = "users"
@@ -228,9 +231,6 @@ const (
 	DataKeyViolations         = "violations"
 	DataKeyWWN                = "wwn"
 	DataKeyWindow             = "window"
-	DataKeyWindows            = "windows"
-	DataKeyActivityUnix       = "activity_unix"
-	DataKeyIdentity           = "identity"
 	DataKeyNumberFiles        = "number_files"
 	DataKeyZombies            = "zombies"
 )

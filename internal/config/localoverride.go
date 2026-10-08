@@ -120,7 +120,7 @@ func (c *Config) loadKindOverrideDir(dir, kind string, recursive bool) error {
 		// A template is only materialized from the base directories, so a
 		// template name here would be registered as a literal, never-expanded
 		// document instead of reaching its template or its instances.
-		if tokenFor(doc.Name) != nil {
+		if hasTemplateToken(doc.Name) {
 			return fmt.Errorf("%s: %s override %q names a version template; a %s override adjusts one materialized instance", doc.Path, kind, doc.Name, localDirSuffix)
 		}
 		base := c.registryFor(doc.registryKey())[doc.Name]

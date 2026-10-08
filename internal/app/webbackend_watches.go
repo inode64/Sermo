@@ -63,6 +63,7 @@ func (b *WebBackend) watchView(w *webWatch, system metrics.Snapshot, activity wa
 		CanControlReplication: !w.disabled && w.replicationControl && w.checkType == checks.CheckTypeReplication,
 	}
 	view.Summary = watchSummary(w, storage, summary, view.Conditions)
+	view.Processes = observation.unownedProcessRows(w)
 	b.applyWatchRuntimeView(&view, w, activity, observation)
 	return view
 }

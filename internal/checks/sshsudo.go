@@ -2,10 +2,9 @@ package checks
 
 import (
 	"fmt"
-	"path/filepath"
-	"strings"
 
 	"sermo/internal/process"
+	"sermo/internal/servicemgr"
 	"sermo/internal/utmp"
 )
 
@@ -74,11 +73,8 @@ func (s sshSudoBoundary) cgroup(pid int) string {
 	data, err := s.readFile(fmt.Sprintf("/proc/%d/cgroup", pid))
 	group := ""
 	if err == nil {
-		for line := range strings.SplitSeq(string(data), "\n") {
-			if path, ok := strings.CutPrefix(line, "0::"); ok && filepath.IsAbs(path) && path != "/" && filepath.Clean(path) == path {
-				group = path
-				break
-			}
+		if path, ok := servicemgr.UnifiedCgroupPath(string(data)); ok && path != "/" {
+			group = path
 		}
 	}
 	s.cgroups[pid] = group

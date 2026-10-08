@@ -11,10 +11,6 @@ import (
 const (
 	// selfCgroupPath is where the kernel publishes the calling process's cgroup.
 	selfCgroupPath = "/proc/self/cgroup"
-	// unifiedCgroupPrefix opens the single line cgroup v2 writes for a process
-	// ("0::/system.slice/sermod.service"). A v1 hierarchy writes one line per
-	// controller instead, with no such entry.
-	unifiedCgroupPrefix = "0::"
 )
 
 // SelfUnitCgroupPIDs returns every PID in the caller's own control group, plus
@@ -79,18 +75,20 @@ func InSelfCgroup(readFile func(string) ([]byte, error), pid int) bool {
 }
 
 // unifiedCgroupPath extracts the cgroup v2 path from /proc/self/cgroup content,
-// or "" when the process is not in a unified hierarchy.
+// or "" when the process is not in a unified hierarchy or sits in the root group.
 func unifiedCgroupPath(content string) string {
-	for line := range strings.SplitSeq(content, serviceOutputLineSeparator) {
-		line = strings.TrimSpace(line)
-		if !strings.HasPrefix(line, unifiedCgroupPrefix) {
-			continue
-		}
-		path := strings.TrimPrefix(line, unifiedCgroupPrefix)
-		if path == "" || path == "/" {
-			return ""
-		}
-		return path
+	path, ok := UnifiedCgroupPath(content)
+	if !ok || path == "/" {
+		return ""
 	}
-	return ""
+	return path
+}
+
+// UnifiedCgroupPath extracts the cgroup v2 record ("0::/path") from
+// /proc/<pid>/cgroup content as a clean absolute path. Unlike ProcfsCgroupPath
+// it ignores a v1 name=systemd record: callers that map the path onto the
+// unified mount, or require unified membership as evidence, must not accept a
+// hierarchy that mount does not have.
+func UnifiedCgroupPath(content string) (string, bool) {
+	return cgroupRecordPath(content, false)
 }

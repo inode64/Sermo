@@ -118,7 +118,7 @@ func watchSnapshotReadings(checkType string, level severity.Level, snap CheckSna
 	if len(readings) == 0 && snap.Message != "" && !gauged {
 		readings = []web.WatchReading{{Field: watchReadingFieldResult, Label: watchReadingLabelResult, Value: snap.Message}}
 	}
-	if !snap.healthy() && snap.Message != "" {
+	if !snap.healthy() && snap.Message != "" && !readingsCarryVerdict(checkType) {
 		// An advisory reports through Warning, never Error: a non-empty Error is
 		// precisely what paints the row red.
 		bad := web.WatchReading{Field: watchReadingFieldError, Label: watchReadingLabelError, Error: snap.Message}
@@ -128,6 +128,13 @@ func watchSnapshotReadings(checkType string, level severity.Level, snap CheckSna
 		readings = append([]web.WatchReading{bad}, readings...)
 	}
 	return readings
+}
+
+// readingsCarryVerdict names the types whose readings already grade the
+// sample (a counted finding shown as a warning) and whose findings are their
+// own table, so the result message must not be repeated above them.
+func readingsCarryVerdict(checkType string) bool {
+	return checkType == checks.CheckTypeUnownedProcesses
 }
 
 func watchSnapshotSummary(snap CheckSnapshot, readings []web.WatchReading) string {

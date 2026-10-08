@@ -294,8 +294,7 @@ func (f *fakeBackend) ServiceRuntime(_ context.Context, name string, since time.
 			return ServiceRuntimeMetrics{
 				Since: since.String(),
 				Current: ServiceRuntime{
-					At:            "2026-06-07T10:00:00Z",
-					ProcessTotals: ProcessTotals{Count: 2, RSS: 2048, IORead: 100, IOWrite: 200, CPU: 3.5, HasCPU: true},
+					At: "2026-06-07T10:00:00Z", Count: 2, RSS: 2048, IORead: 100, IOWrite: 200, CPU: 3.5, HasCPU: true,
 					UptimeSeconds: 3600,
 				},
 				CPU:    MetricSeries{Check: "runtime", Metric: "cpu", Unit: "%", Points: []MetricPoint{{Start: "2026-06-07T10:00:00Z", N: 1, Avg: 3.5, Min: 3.5, Max: 3.5}}},
@@ -736,8 +735,7 @@ func TestListApplications(t *testing.T) {
 		Name: "nginx", DisplayName: "Nginx", Category: "web", Binary: "/usr/bin/nginx",
 		Permissions: "-rwxr-xr-x (0755)", User: "root", Group: "root",
 		Version:      "nginx version: nginx/1.30.2",
-		VersionShort: "1.30.2", VersionSource: "nginx-bin", Status: apiStatusOK,
-	}}}
+		VersionShort: "1.30.2", VersionSource: "nginx-bin", Status: apiStatusOK}}}
 	got := getJSON[[]CatalogItem](t, b, APIPathApplications)
 	if len(got) != 1 || got[0].Name != "nginx" || got[0].VersionShort != "1.30.2" ||
 		got[0].Binary != "/usr/bin/nginx" || got[0].Permissions != "-rwxr-xr-x (0755)" ||
@@ -751,8 +749,7 @@ func TestListLibraries(t *testing.T) {
 	b := &fakeBackend{libraries: []CatalogItem{{
 		Name: "openssl", DisplayName: "OpenSSL", Category: "crypto", Binary: "/usr/lib64/libssl.so",
 		Permissions: "-rwxr-xr-x (0755)", User: "root", Group: "root",
-		Version: "OpenSSL 3.5.1", VersionShort: "3.5.1", Status: apiStatusOK,
-	}}}
+		Version: "OpenSSL 3.5.1", VersionShort: "3.5.1", Status: apiStatusOK}}}
 	got := getJSON[[]CatalogItem](t, b, apiPathLibraries)
 	if len(got) != 1 || got[0].Name != "openssl" || got[0].VersionShort != "3.5.1" ||
 		got[0].Binary != "/usr/lib64/libssl.so" || got[0].Category != "crypto" {
@@ -1576,10 +1573,10 @@ func TestSSHSessionCloseEndpointRequiresFullSessionIdentity(t *testing.T) {
 
 	for _, query := range []string{
 		"",
-		testQueryParam(apiQueryStartTicks, "1234"),
+		testQueryParam(APIQueryStartTicks, "1234"),
 		testQueryParam(apiQueryTerminal, "pts/11"),
-		testQueryParams(apiQueryStartTicks, "zero", apiQueryTerminal, "pts/11"),
-		testQueryParams(apiQueryStartTicks, "1234", apiQueryTerminal, "pts/11", apiQueryManagedByLogind, "maybe"),
+		testQueryParams(APIQueryStartTicks, "zero", apiQueryTerminal, "pts/11"),
+		testQueryParams(APIQueryStartTicks, "1234", apiQueryTerminal, "pts/11", apiQueryManagedByLogind, "maybe"),
 	} {
 		rec := httptest.NewRecorder()
 		h.ServeHTTP(rec, postReq(testPathQuery(path, query)))
@@ -1589,7 +1586,7 @@ func TestSSHSessionCloseEndpointRequiresFullSessionIdentity(t *testing.T) {
 	}
 
 	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, postReq(testPathQuery(path, testQueryParams(apiQueryStartTicks, "1234", apiQueryTerminal, "pts/11"))))
+	h.ServeHTTP(rec, postReq(testPathQuery(path, testQueryParams(APIQueryStartTicks, "1234", apiQueryTerminal, "pts/11"))))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("close session status = %d: %s", rec.Code, rec.Body.String())
 	}
@@ -1599,7 +1596,7 @@ func TestSSHSessionCloseEndpointRequiresFullSessionIdentity(t *testing.T) {
 
 	rec = httptest.NewRecorder()
 	h.ServeHTTP(rec, postReq(testPathQuery(path, testQueryParams(
-		apiQueryStartTicks, "1234", apiQueryTerminal, "pts/11", apiQueryManagedByLogind, "true",
+		APIQueryStartTicks, "1234", apiQueryTerminal, "pts/11", apiQueryManagedByLogind, "true",
 	))))
 	if rec.Code != http.StatusOK || len(b.sshSessionsClosed) != 2 || !b.sshSessionsClosed[1].ManagedByLogind {
 		t.Fatalf("managed close status=%d sessions=%+v", rec.Code, b.sshSessionsClosed)

@@ -301,6 +301,13 @@ type Deps struct {
 	// SSHSessionSignaler sends the single SIGTERM used to close a freshly
 	// revalidated interactive SSH session. Optional: nil uses process.OSSignaler.
 	SSHSessionSignaler process.Signaler
+	// ProcessSignaler delivers an unowned_processes watch's kill action and the
+	// dashboard's per-process kill. Optional: nil uses process.OSSignaler.
+	ProcessSignaler process.Signaler
+	// PackageIndex answers which executables installed packages own, shared by
+	// the unowned_processes watch cycle and the dashboard's manual kill so the
+	// package database is parsed once. Optional: nil builds one on first use.
+	PackageIndex PackageOwner
 	// ManagedSSHSessionCloser terminates an exact systemd-logind SSH session.
 	// Optional: nil uses the native login1 D-Bus client on systemd services.
 	ManagedSSHSessionCloser func(context.Context, operation.SessionTarget) error

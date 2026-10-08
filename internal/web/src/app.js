@@ -14,7 +14,7 @@ import {
   liveVerbosePath, lockReleaseAPI, mountAPI, mountBlockersAPI, panicAPI,
   readyVerbosePath, serviceAPI, serviceButtonAPI, serviceEventsAPI, serviceMetricsAPI,
   servicePreflightAPI, serviceRuntimeAPI, serviceSLAAPI, sshSessionCloseAPI, terminalSessionCloseAPI, stateCompactAPI, watchAPI,
-  watchMetricsAPI, watchSLAAPI,
+  watchMetricsAPI, watchProcessKillAPI, watchSLAAPI,
 } from "./api.js";
 import {
   fmtAge, fmtBytes, fmtBytesPerSecond, fmtDuration, fmtMetricValue, fmtNum, fmtPct, fmtRemain,
@@ -47,6 +47,9 @@ const expansionPrefixApp = "app:";
 const expansionPrefixLibrary = "lib:";
 const expansionPrefixService = "svc:";
 const expansionPrefixWatch = "wat:";
+// watchTypeUnownedProcesses is the one watch type whose expansion lists
+// processes with a kill button; its rows arrive in w.processes.
+const watchTypeUnownedProcesses = "unowned_processes";
 const globalTargetService = "service";
 const globalTargetWatch = "watch";
 const globalTargetApplication = "application";
@@ -3280,8 +3283,13 @@ function expansionCell(key) {
 // renderWatchExpansionInto renders one watch expansion cell from an
 // already-fetched events response, shared by the first-open fetch and the
 // per-poll refresh so expanded watches never each download their own copy.
+// watchExpansionEvents keeps the events each open watch expansion was last
+// drawn with, so an in-place re-render (a kill badge) needs no new download.
+const watchExpansionEvents = new Map();
+
 function renderWatchExpansionInto(key, events) {
   const name = expansionName(key, expansionPrefixWatch);
+  watchExpansionEvents.set(key, events || []);
   const html = renderWatchExpansion((allWatches || []).find((x) => x.name === name),
     (events || []).filter((e) => e.watch === name));
   expCache.set(key, html);
@@ -3292,6 +3300,14 @@ function renderWatchExpansionInto(key, events) {
     loadSLAPanel(watchSLAKey(name));
     if (w) loadWatchMetrics(w);
   }
+}
+
+// rerenderWatchExpansion redraws one open watch expansion from the current
+// watch list and the events it last showed.
+function rerenderWatchExpansion(name) {
+  const key = expansionKey(expansionPrefixWatch, name);
+  if (!expanded.has(key)) return;
+  renderWatchExpansionInto(key, watchExpansionEvents.get(key) || []);
 }
 
 // sharedLoad deduplicates concurrent loads of one resource: while a load for
@@ -3379,6 +3395,13 @@ function procMaxCoreCell(p) {
   return tpl`<td>${cpuBarMini(peak, p.max_core_exact
     ? `${shown} of one core, this process's busiest thread`
     : `at most ${shown} of one core: not measured per thread, bounded by the process rate`)}</td>`;
+}
+// procMemCell shows a process's resident memory as a share of host RAM when the
+// host total is known, else the plain figure; hostMem is read once per table.
+function procMemCell(p, hostMem) {
+  if (!p.rss) return tpl`<td>—</td>`;
+  if (!(hostMem > 0)) return tpl`<td>${fmtBytes(p.rss)}</td>`;
+  return tpl`<td>${usageBarMini(pctClamp((Number(p.rss) || 0) / hostMem * percentScale), fmtBytes(p.rss))}</td>`;
 }
 function procIoFdThreadCells(p) {
   const io = (p.io_read || p.io_write) ? `${fmtBytes(p.io_read || 0)} / ${fmtBytes(p.io_write || 0)}` : '—';
@@ -3756,6 +3779,30 @@ const holdersTopCount = 5;
 // host with "libvirtd 872172 (99%)" names the thing to look at. The figures are
 // the ones the service table already shows in its own column, and each name opens
 // that service, so this adds an answer rather than another reading of the count.
+// renderWatchProcessesSection lists the processes an unowned_processes watch
+// reports, each with the kill button its identity allows. The rows carry no
+// command line (the watch publishes the resolved executable only), so procLabel
+// shows the exe, or the previous exe of a binary replaced on disk.
+function renderWatchProcessesSection(w) {
+  const procs = w.processes || []; // already sorted by pid by the daemon
+  if (!procs.length) {
+    return w.check_type === watchTypeUnownedProcesses ? tpl`<div class="muted">No unowned processes.</div>` : nothing;
+  }
+  const hostMem = hostMemTotalBytes();
+  return tpl`<table class="detail-compact-table watch-process-table">
+    <caption class="visually-hidden">Unowned processes</caption>
+    <thead><tr><th scope="col">PID</th><th scope="col">CMD</th><th scope="col">User</th><th scope="col">Reason</th><th scope="col" title="CPU used by this process, normalized to one core">CPU</th><th scope="col">Mem</th><th scope="col"><span class="visually-hidden">Action</span></th></tr></thead>
+    <tbody>${procs.map((p) => tpl`<tr class="watch-process-row">
+      <td>${p.pid}</td>
+      <td>${procLabel(p)}</td>
+      <td class="muted">${p.user || ""}</td>
+      <td>${p.reason || ""}</td>
+      ${procCpuCell(p)}
+      ${procMemCell(p, hostMem)}
+      <td>${watchProcessKillButton(w.name, p)}</td>
+    </tr>`)}</tbody></table>`;
+}
+
 function renderCountHoldersSection(w) {
   const holder = hostCountHolders[w && w.check_type];
   if (!holder) return nothing;
@@ -4142,6 +4189,8 @@ const sshSessionActionKey = (service, pid, startTicks) => sessionActionKey(sessi
 const terminalSessionActionKey = (service, check, identity) => sessionActionKey(sessionActionKeyTerminal, service, check, identity);
 const emptySourceActionKey = (service, check) => sessionActionKey(sessionActionKeyEmpty, service, check);
 const dbQueryActionKey = (service, watch, identity) => sessionActionKey(sessionKindDatabase, service, watch, identity);
+const sessionActionKeyWatchProcess = "watch-process";
+const watchProcessActionKey = (watch, pid, startTicks) => sessionActionKey(sessionActionKeyWatchProcess, watch, pid, startTicks);
 
 function pendingSessionAction(key) {
   const pending = pendingSessionActions.get(key);
@@ -4175,6 +4224,11 @@ function presentSessionActionKeys(inventory) {
   }
   for (const session of inventory.terminal || []) keys.add(terminalSessionActionKey(session.service, session.check, session.identity));
   for (const query of inventory.database || []) keys.add(dbQueryActionKey(query.service, query.watch, query.identity));
+  // A watch's listed processes share the pending map: a kill is forgotten
+  // once the watch no longer lists the process it signalled.
+  for (const w of allWatches || []) {
+    for (const p of w.processes || []) keys.add(watchProcessActionKey(w.name, p.pid, p.start_ticks));
+  }
   return keys;
 }
 
@@ -4300,21 +4354,50 @@ function sessionRows(inventory) {
   return [...ssh, ...terminal, ...issues, ...emptySources];
 }
 
+// rowKillButton is the action cell of one row the daemon may signal: the
+// pending badge while its action is in flight, "killing…" when the server is
+// already stopping it, "read-only" for a viewer, "unavailable" (titled with the
+// daemon's reason) when it cannot be signalled, else the caller's danger
+// button. The button is passed in because lit binds only static attribute
+// names and each row kind carries its own data-* identity.
+function rowKillButton({ pendingKey, stopping, stoppingHint, canKill, unavailableTitle, button }) {
+  const pending = pendingSessionBadge(pendingKey);
+  if (pending) return pending;
+  if (stopping) return sessionActionBadge(sessionActionKilling, stoppingHint);
+  if (!me.can_act) return tpl`<span class="muted">read-only</span>`;
+  if (!canKill) return tpl`<span class="muted" title="${unavailableTitle}">unavailable</span>`;
+  return button();
+}
+
 // dbQueryKillButton cancels one running statement; the confirmation offers
 // closing its whole connection instead. A host watch's statement has no
 // service to act through, so the daemon reports it can_kill false.
 function dbQueryKillButton(query) {
-  const pending = pendingSessionBadge(dbQueryActionKey(query.service, query.watch, query.identity));
-  if (pending) return pending;
-  // Cancelled from here, another tab, sermoctl or the server itself: the
-  // daemon reports it is being stopped, which is not "cannot be killed".
-  if (query.stopping) return sessionActionBadge(sessionActionKilling, "The server is stopping this statement");
-  if (!me.can_act) return tpl`<span class="muted">read-only</span>`;
-  if (!query.can_kill) return tpl`<span class="muted" title="This statement cannot be cancelled from the dashboard">unavailable</span>`;
   const label = `Kill ${query.engine || "database"} statement ${query.id} of ${query.user || "unknown user"}`;
-  return tpl`<button class="icon-btn danger-btn" data-db-query-kill="1"
-    data-db-query-service="${query.service || ""}" data-db-query-watch="${query.watch || ""}"
-    data-db-query-id="${query.id}" data-db-query-identity="${query.identity || ""}" aria-label="${label}" title="${label}">${closeGlyph}</button>`;
+  return rowKillButton({
+    pendingKey: dbQueryActionKey(query.service, query.watch, query.identity),
+    // Cancelled from here, another tab, sermoctl or the server itself: the
+    // daemon reports it is being stopped, which is not "cannot be killed".
+    stopping: query.stopping, stoppingHint: "The server is stopping this statement",
+    canKill: query.can_kill, unavailableTitle: "This statement cannot be cancelled from the dashboard",
+    button: () => tpl`<button class="icon-btn danger-btn" data-db-query-kill="1"
+      data-db-query-service="${query.service || ""}" data-db-query-watch="${query.watch || ""}"
+      data-db-query-id="${query.id}" data-db-query-identity="${query.identity || ""}" aria-label="${label}" title="${label}">${closeGlyph}</button>`,
+  });
+}
+
+// watchProcessKillButton signals one process an unowned_processes watch lists.
+// The daemon decides can_kill per row from the watch's kill selector and the
+// identity it could verify; kill_reason says why a row is unavailable.
+function watchProcessKillButton(watch, p) {
+  const label = `Kill process ${p.pid} of ${p.user || "unknown user"}`;
+  return rowKillButton({
+    pendingKey: watchProcessActionKey(watch, p.pid, p.start_ticks),
+    canKill: p.can_kill, unavailableTitle: p.kill_reason || "This process cannot be signalled from the dashboard",
+    button: () => tpl`<button class="icon-btn danger-btn" data-watch-process-kill="1"
+      data-watch-process-watch="${watch}" data-watch-process-pid="${p.pid}" data-watch-process-start-ticks="${p.start_ticks || ""}"
+      aria-label="${label}" title="${label}">${closeGlyph}</button>`,
+  });
 }
 
 function dbQueryText(query) {
@@ -4743,7 +4826,6 @@ function serviceProcessDetail(d) {
   // When the host RAM total is known, show each process's resident memory as a
   // share of host RAM (a compact bar).
   const hostMem = hostMemTotalBytes();
-  const memPct = (rss) => hostMem > 0 ? pctClamp((Number(rss) || 0) / hostMem * percentScale) : 0;
   // The whole-tree totals (memory, cpu, IO, fds, threads, process count) are the
   // General data grid's job; a summary line above the table would restate every
   // one of them. Discovery warnings are listed individually just below, so their
@@ -4761,7 +4843,7 @@ function serviceProcessDetail(d) {
           <td class="muted">${procRoleCell(p)}</td>
           ${procCpuCell(p)}
           ${procMaxCoreCell(p)}
-          <td>${p.rss ? (hostMem > 0 ? usageBarMini(memPct(p.rss), fmtBytes(p.rss)) : fmtBytes(p.rss)) : '—'}</td>
+          ${procMemCell(p, hostMem)}
           ${procIoFdThreadCells(p)}
         </tr>`; })}</tbody></table>`
     : tpl`<div class="${procWarnings.length ? "bad" : "muted"}">${procWarnings.length ? "No processes discovered; check discovery warnings." : "No processes found."}</div>`;
@@ -5495,7 +5577,7 @@ function renderWatchReadings(readings) {
 
 const storageWatchTypes = new Set(["diskio", "hdparm", "lvm", "raid", "smart", "ssacli", "storcli", "storage"]);
 const networkWatchTypes = new Set(["conntrack", "firewall_rules", "icmp", "net", "route", "tcp_connections"]);
-const securityWatchTypes = new Set(["cert", "file"]);
+const securityWatchTypes = new Set(["cert", "file", watchTypeUnownedProcesses]);
 const summaryFileWatchType = "file-summary";
 
 const watchScopeHost = "host";
@@ -6016,6 +6098,14 @@ const watchTypeProfiles = {
       textReadingColumn("user", "User"),
       numericReadingColumn("matches", "Processes"),
       numericReadingColumn("violation_count", "Violations"),
+    ],
+  },
+  [watchTypeUnownedProcesses]: {
+    label: "Unowned processes",
+    columns: [
+      numericReadingColumn("scanned", "Scanned"),
+      numericReadingColumn("violation_count", "Unowned"),
+      textReadingColumn("package_db", "Package DB"),
     ],
   },
   route: {
@@ -6619,7 +6709,7 @@ function renderWatchExpansion(w, events) {
     <div><span class="muted">Notifies</span><br>${notifiers}</div>
     <div><span class="muted">Dry run</span><br><b>${w.dry_run ? "yes" : "no"}</b></div>
   </div>`;
-  const live = tpl`${renderStorageWatch(w.storage)}${renderMeterWatch(w.meter)}${renderWatchReadings(w.readings)}${renderCountHoldersSection(w)}${renderWatchMetricsSection(w)}${w.keeps_sla ? renderSLASection(watchSLAKey(w.name)) : nothing}`;
+  const live = tpl`${renderStorageWatch(w.storage)}${renderMeterWatch(w.meter)}${renderWatchReadings(w.readings)}${renderWatchProcessesSection(w)}${renderCountHoldersSection(w)}${renderWatchMetricsSection(w)}${w.keeps_sla ? renderSLASection(watchSLAKey(w.name)) : nothing}`;
   const conditions = renderConditionRows(w.conditions || []);
   if (!events || !events.length) return tpl`${cfg}${live}${conditions}<div class="muted">No recent activity.</div>`;
   const rows = events.slice(0, 50).map((e) => {
@@ -7688,14 +7778,15 @@ async function closeSSHSession(name, pid, startTicks, terminal, user, managedByL
     sshSessionActionKey(name, sessionPID, sessionStartTicks), sessionActionClosing);
 }
 
-// postSessionClose runs one confirmed session close or kill. Like a service
-// operation it shows its progress in place: the session's action cell reads
-// "closing…"/"killing…" from the request until the inventory drops the session.
-async function postSessionClose(statusLabel, endpoint, generation, key, verb) {
+// postPendingRowAction runs one confirmed close or kill of a listed row. Like a
+// service operation it shows its progress in place: the row's action cell reads
+// "closing…"/"killing…" from the request until the list drops the row. rerender
+// redraws the view that owns the row so the badge appears at once.
+async function postPendingRowAction(statusLabel, endpoint, generation, key, verb, rerender) {
   setStatus("");
   const pending = { verb, label: statusLabel, started: Date.now(), done: false };
   pendingSessionActions.set(key, pending);
-  renderSessions();
+  rerender();
   try {
     const res = await fetch(endpoint, targetPostOptions({}, generation));
     const body = await jsonOrThrow(res);
@@ -7705,9 +7796,14 @@ async function postSessionClose(statusLabel, endpoint, generation, key, verb) {
     load();
   } catch (e) {
     pendingSessionActions.delete(key);
-    renderSessions();
+    rerender();
     setStatus(`${statusLabel}: ${e.message}`, feedbackStatusErr);
   }
+}
+
+// postSessionClose is postPendingRowAction for the session inventory.
+function postSessionClose(statusLabel, endpoint, generation, key, verb) {
+  return postPendingRowAction(statusLabel, endpoint, generation, key, verb, renderSessions);
 }
 
 // reapStrays clears the processes a service cannot account for. It is confirmed
@@ -7812,6 +7908,33 @@ async function killDBQuery(service, watch, id, identity) {
   const statusLabel = `${mode === dbQueryKillModeConnection ? "kill connection" : "cancel query"} ${engine} ${queryID}`;
   await postSessionClose(statusLabel, dbQueryKillAPI(service, watch, queryID, identity, mode), generation,
     dbQueryActionKey(service, watch, identity), sessionActionKilling);
+}
+
+// killWatchProcess confirms against the row the operator is looking at: it is
+// re-read from the latest watch list, and its pid plus start ticks travel with
+// the request so the daemon refuses a process that has since been recycled.
+async function killWatchProcess(watch, pid, startTicks) {
+  const generation = dashboardGeneration;
+  const processPID = Number(pid);
+  const ticks = String(startTicks || "");
+  const w = (allWatches || []).find((item) => item && item.name === watch);
+  const p = w && (w.processes || []).find((candidate) =>
+    Number(candidate.pid) === processPID && String(candidate.start_ticks || "") === ticks);
+  if (!watch || !Number.isSafeInteger(processPID) || processPID <= 0 || !/^[1-9]\d*$/.test(ticks) || !p || !p.can_kill) {
+    setStatus("kill process: process changed; refresh and try again", feedbackStatusErr);
+    return;
+  }
+  const choice = { label: "Escalate to SIGKILL if it survives the TERM grace", okLabel: "kill" };
+  if (!(await promptConfirm({
+    title: `Kill process ${processPID}?`,
+    message: `${p.user || "unknown user"} ${p.exe || p.exe_previous || "unknown executable"}, listed as ${p.reason || "unowned"}. `
+      + "Sermo sends SIGTERM through the watch's verified identity; this cannot be undone.",
+    okLabel: "kill",
+    choice,
+    danger: true,
+  }))) return;
+  await postPendingRowAction(`kill process ${processPID}`, watchProcessKillAPI(watch, processPID, ticks, choice.checked), generation,
+    watchProcessActionKey(watch, processPID, ticks), sessionActionKilling, () => rerenderWatchExpansion(watch));
 }
 
 async function actWatch(name, action) {
@@ -9130,6 +9253,8 @@ function initDelegatedHandlers() {
       el.dataset.dbQueryService || "", el.dataset.dbQueryWatch || "",
       el.dataset.dbQueryId || "", el.dataset.dbQueryIdentity || "")],
     ["[data-db-query-expand]", (el) => toggleDBQueryExpansion(el.dataset.dbQueryExpand || "")],
+    ["[data-watch-process-kill]", (el) => killWatchProcess(
+      el.dataset.watchProcessWatch || "", el.dataset.watchProcessPid || "", el.dataset.watchProcessStartTicks || "")],
     ["[data-service-action][data-service]", (el) => act(el.dataset.service || "", el.dataset.serviceAction || "")],
     ["[data-service-button][data-service]", (el) => pressServiceButton(el.dataset.service || "", el.dataset.serviceButton || "")],
     ["[data-watch-action][data-watch]", (el) => actWatch(el.dataset.watch || "", el.dataset.watchAction || "")],

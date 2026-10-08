@@ -141,6 +141,13 @@ const CheckTypeTCPConnections = "tcp_connections"
 // because it evaluates every process of one real user as a set.
 const CheckTypeProcessPolicy = "process_policy"
 
+// CheckTypeUnownedProcesses is a host-only watch that lists the processes no
+// init unit accounts for or whose executable belongs to no installed package.
+// Like process_policy it is built by internal/app because it evaluates the
+// whole host process table as a set; unlike it, it may signal the processes a
+// declared kill selector authorizes.
+const CheckTypeUnownedProcesses = "unowned_processes"
+
 var checkSpecByName = mustIndexCheckSpecs(builtinCheckSpecs)
 
 func mustIndexCheckSpecs(specs []checkSpec) map[string]checkSpec {
@@ -167,8 +174,9 @@ func mustIndexCheckSpecs(specs []checkSpec) map[string]checkSpec {
 // set of items (processes, statements), never as a single-shot check: they are
 // rejected under checks: and never promoted from a service watch to one.
 var watchOnlyTypes = map[string]TypeInfo{
-	CheckTypeProcessPolicy: healthTypeInfo(CheckTypeProcessPolicy),
-	CheckTypeDBQueries:     healthTypeInfo(CheckTypeDBQueries),
+	CheckTypeProcessPolicy:    healthTypeInfo(CheckTypeProcessPolicy),
+	CheckTypeUnownedProcesses: healthTypeInfo(CheckTypeUnownedProcesses),
+	CheckTypeDBQueries:        healthTypeInfo(CheckTypeDBQueries),
 }
 
 // WatchOnlyTypeInfo describes a watch-only type, chiefly its reporting mode

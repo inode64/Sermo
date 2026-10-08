@@ -13,54 +13,84 @@ import (
 	"sermo/internal/process"
 )
 
-// ProcessPolicyAllow is one validated executable identity from a
-// process_policy allow mapping. Cmd can only narrow the exact executable
-// and user match applied by the daemon.
-type ProcessPolicyAllow struct {
+// ProcessIdentityRule is one validated executable identity from a mapping of
+// named rules: a process_policy allow entry or an unowned_processes ignore
+// entry. Cmd can only narrow the exact executable and user match applied by
+// the daemon.
+type ProcessIdentityRule struct {
 	Name string
 	Exe  string
 	Cmd  *regexp.Regexp
 }
 
-// ProcessPolicyAllowError identifies one invalid field below check.allow.
-// PathSuffix is appended to the caller's canonical check.allow path.
-type ProcessPolicyAllowError struct {
+// ProcessPolicyAllow is the process_policy name of a ProcessIdentityRule.
+type ProcessPolicyAllow = ProcessIdentityRule
+
+// ProcessIdentityRuleError identifies one invalid field below a rule mapping.
+// PathSuffix is appended to the caller's canonical check.<key> path.
+type ProcessIdentityRuleError struct {
+	CheckType  string
+	Key        string
 	PathSuffix string
 	Problem    string
 }
 
+// ProcessPolicyAllowError is the process_policy name of a ProcessIdentityRuleError.
+type ProcessPolicyAllowError = ProcessIdentityRuleError
+
 // Error renders an issue for unchecked builder callers that do not have a
 // configuration document path.
-func (e ProcessPolicyAllowError) Error() string {
-	return "process_policy check." + checks.CheckKeyAllow + e.PathSuffix + " " + e.Problem
+func (e ProcessIdentityRuleError) Error() string {
+	return e.CheckType + " check." + e.Key + e.PathSuffix + " " + e.Problem
 }
 
-// ParseProcessPolicyAllows validates and compiles the allow mapping shared by
-// configuration validation and the fail-closed daemon builder. It reports all
-// independent field issues so validation can preserve its aggregate output.
+// ParseProcessPolicyAllows validates and compiles a process_policy allow
+// mapping, which must be non-empty: an empty allowlist would make every
+// process of the account a violation.
 func ParseProcessPolicyAllows(raw any) ([]ProcessPolicyAllow, []ProcessPolicyAllowError) {
-	rawAllows, ok := raw.(map[string]any)
-	if !ok || len(rawAllows) == 0 {
-		return nil, []ProcessPolicyAllowError{{Problem: "is required and must be a non-empty mapping"}}
+	return ParseProcessIdentityRules(raw, checks.CheckTypeProcessPolicy, checks.CheckKeyAllow, true)
+}
+
+// ParseProcessIdentityRules validates and compiles a mapping of named
+// executable identities shared by configuration validation and the
+// fail-closed daemon builders. required rejects an absent or empty mapping;
+// otherwise an absent key yields no rules. It reports all independent field
+// issues so validation can preserve its aggregate output.
+func ParseProcessIdentityRules(raw any, checkType, key string, required bool) ([]ProcessIdentityRule, []ProcessIdentityRuleError) {
+	issue := func(suffix, problem string) ProcessIdentityRuleError {
+		return ProcessIdentityRuleError{CheckType: checkType, Key: key, PathSuffix: suffix, Problem: problem}
+	}
+	rawRules, ok := raw.(map[string]any)
+	if !ok || len(rawRules) == 0 {
+		if raw == nil && !required {
+			return nil, nil
+		}
+		if required {
+			return nil, []ProcessIdentityRuleError{issue("", "is required and must be a non-empty mapping")}
+		}
+		return nil, []ProcessIdentityRuleError{issue("", "must be a non-empty mapping")}
 	}
 
-	allows := make([]ProcessPolicyAllow, 0, len(rawAllows))
-	var issues []ProcessPolicyAllowError
-	for _, name := range slices.Sorted(maps.Keys(rawAllows)) {
-		allow, allowIssues := parseProcessPolicyAllow(name, rawAllows[name])
-		issues = append(issues, allowIssues...)
-		if len(allowIssues) == 0 {
-			allows = append(allows, allow)
+	rules := make([]ProcessIdentityRule, 0, len(rawRules))
+	var issues []ProcessIdentityRuleError
+	for _, name := range slices.Sorted(maps.Keys(rawRules)) {
+		rule, ruleIssues := parseProcessIdentityRule(name, rawRules[name])
+		for i := range ruleIssues {
+			ruleIssues[i].CheckType, ruleIssues[i].Key = checkType, key
+		}
+		issues = append(issues, ruleIssues...)
+		if len(ruleIssues) == 0 {
+			rules = append(rules, rule)
 		}
 	}
-	return allows, issues
+	return rules, issues
 }
 
-func parseProcessPolicyAllow(name string, raw any) (ProcessPolicyAllow, []ProcessPolicyAllowError) {
+func parseProcessIdentityRule(name string, raw any) (ProcessIdentityRule, []ProcessIdentityRuleError) {
 	suffix := "." + name
 	rawAllow, ok := raw.(map[string]any)
 	if !ok {
-		return ProcessPolicyAllow{}, []ProcessPolicyAllowError{{PathSuffix: suffix, Problem: "must be a mapping"}}
+		return ProcessIdentityRule{}, []ProcessIdentityRuleError{{PathSuffix: suffix, Problem: "must be a mapping"}}
 	}
 
 	issues := unsupportedProcessPolicyAllowFields(rawAllow, suffix)
@@ -70,7 +100,7 @@ func parseProcessPolicyAllow(name string, raw any) (ProcessPolicyAllow, []Proces
 	}
 	cmd, commandIssues := processPolicyAllowCommand(rawAllow, suffix)
 	issues = append(issues, commandIssues...)
-	return ProcessPolicyAllow{Name: name, Exe: exe, Cmd: cmd}, issues
+	return ProcessIdentityRule{Name: name, Exe: exe, Cmd: cmd}, issues
 }
 
 func unsupportedProcessPolicyAllowFields(rawAllow map[string]any, suffix string) []ProcessPolicyAllowError {

@@ -416,6 +416,30 @@ watches:
     check: { type: failed_units, backend: auto, count: { op: ">", value: 0 } }
     then: { notify: [ops-email] }
 
+  unowned-processes:
+    monitor: disabled
+    category: security
+    interval: 5m
+    dry_run: true
+    check:
+      type: unowned_processes
+      min_age: 5m
+      users: [root, www-data]
+      ignore:
+        screen: { exe: /usr/bin/SCREEN }
+        agent: { exe: /opt/acme/bin/agent, cmd: '^/opt/acme/bin/agent --daemon$' }
+    then:
+      notify: [ops-email]
+      notify_interval: 1h
+      kill:  # signals only the listed processes kill_only_if authorizes
+        signal: TERM
+        escalate: true
+        term_timeout: 10s
+        kill_timeout: 5s
+        kill_only_if:
+          users: [www-data]
+          exe_any: [/usr/bin/php, /usr/bin/python3.12]
+
   inotify-limits:
     monitor: disabled
     check: { type: inotify, used_pct: { op: ">=", value: "80%" } }

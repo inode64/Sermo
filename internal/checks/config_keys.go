@@ -77,6 +77,7 @@ const (
 	CheckKeyHost                  = "host"
 	CheckKeyHTTP3                 = "http3"
 	CheckKeyID                    = "id"
+	CheckKeyIgnore                = "ignore"
 	CheckKeyIncludeHidden         = "include_hidden"
 	CheckKeyIdleFor               = "idle_for"
 	CheckKeyInterface             = "interface"
@@ -90,6 +91,7 @@ const (
 	CheckKeyMailFrom              = conn.ParamKeySMTPMailFrom
 	CheckKeyMatch                 = "match"
 	CheckKeyMax                   = "max"
+	CheckKeyMinAge                = "min_age"
 	CheckKeyMaxIncrease           = "max_increase"
 	CheckKeyMaxOffset             = "max_offset"
 	CheckKeyMaxRootDispersion     = "max_root_dispersion"

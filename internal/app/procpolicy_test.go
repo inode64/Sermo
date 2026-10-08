@@ -15,12 +15,12 @@ func TestProcessPolicyAnnouncementUsesTheDispatchDecision(t *testing.T) {
 	n := &fakeNotifier{name: "ops"}
 	calls := 0
 	w := &processPolicyWatcher{
-		name: "execution-policy", active: true, notifiers: []notify.Notifier{n},
-		inPanic: func() bool { calls++; return calls > 1 },
-	}
-	w.notifyViolation(t.Context(), "unexpected process", map[string]string{})
-	if !w.announced || len(n.msgs) != 1 || calls != 1 {
-		t.Fatalf("announced=%v messages=%d panic reads=%d", w.announced, len(n.msgs), calls)
+		name: "execution-policy", notifiers: []notify.Notifier{n},
+		inPanic:   func() bool { calls++; return calls > 1 },
+		incidents: &pidIncidents{watch: "execution-policy", activeLoaded: true, active: true}}
+	w.notify(t.Context(), "unexpected process", map[string]string{})
+	if !w.incidents.announced || len(n.msgs) != 1 || calls != 1 {
+		t.Fatalf("announced=%v messages=%d panic reads=%d", w.incidents.announced, len(n.msgs), calls)
 	}
 }
 
@@ -32,19 +32,22 @@ func testProcessPolicyWatcher(t *testing.T, sampler ProcSampler, allow map[strin
 	}
 	events := []Event{}
 	var snapshot checks.Result
+	emit := func(event Event) { events = append(events, event) }
 	watcher := &processPolicyWatcher{
-		name:    "postgres-execution-policy",
-		user:    "postgres",
-		allows:  allows,
-		sampler: sampler,
-		resolve: func(user string) (uint32, bool) { return 70, user == "postgres" },
-		emit:    func(event Event) { events = append(events, event) },
+		name:      "postgres-execution-policy",
+		checkType: checks.CheckTypeProcessPolicy,
+		incidents: &pidIncidents{watch: "postgres-execution-policy", slot: processPolicyStateSlot, emit: emit},
+		sampler:   sampler,
+		emit:      emit,
 		publish: func(watch, checkType string, result checks.Result) {
 			if watch != "postgres-execution-policy" || checkType != checks.CheckTypeProcessPolicy {
 				t.Fatalf("published %s/%s, want process policy snapshot", watch, checkType)
 			}
 			snapshot = result
 		},
+		user:    "postgres",
+		allows:  allows,
+		resolve: func(user string) (uint32, bool) { return 70, user == "postgres" },
 	}
 	return watcher, &events, &snapshot
 }
@@ -95,13 +98,13 @@ func TestProcessPolicyWatcherRecoversAfterRestart(t *testing.T) {
 	allow := map[string]any{"postgres": map[string]any{checks.CheckKeyExe: "/usr/bin/postgres"}}
 	invalid := ProcInfo{PID: 42, UID: 70, Exe: "/usr/bin/bash", ExeOK: true, StartTicks: 100}
 	first, firstEvents, _ := testProcessPolicyWatcher(t, &fakeProcSampler{cycles: [][]ProcInfo{{invalid}}}, allow)
-	first.stateStore = store
+	first.incidents.stateStore = store
 	first.runCycle(t.Context())
 	if len(*firstEvents) != 1 || (*firstEvents)[0].Kind != eventKindFiring {
 		t.Fatalf("initial policy events = %+v", *firstEvents)
 	}
 	second, secondEvents, _ := testProcessPolicyWatcher(t, &fakeProcSampler{cycles: [][]ProcInfo{{}}}, allow)
-	second.stateStore = store
+	second.incidents.stateStore = store
 	second.runCycle(t.Context())
 	second.runCycle(t.Context())
 	if len(*secondEvents) != 1 || (*secondEvents)[0].Kind != eventKindRecovered {
@@ -118,7 +121,7 @@ func TestProcessPolicyWatcherPacesUnknownPIDNotifications(t *testing.T) {
 	notifier := &fakeNotifier{name: "ops"}
 	now := time.Date(2026, 8, 18, 12, 0, 0, 0, time.UTC)
 	watcher.notifiers = append(watcher.notifiers, notifier)
-	watcher.notifyInterval = 10 * time.Minute
+	watcher.incidents.notifyInterval = 10 * time.Minute
 	watcher.now = func() time.Time { return now }
 
 	watcher.runCycle(context.Background()) // initial unknown process → notify

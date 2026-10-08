@@ -1,6 +1,8 @@
 package web
 
-import "net/url"
+import (
+	"net/url"
+)
 
 // Shared daemon HTTP contract used by the dashboard and sermoctl. Keep these
 // values stable: changing one changes the public daemon API.
@@ -29,6 +31,15 @@ const (
 	APIQueryID          = "id"
 	APIQueryIdentity    = "identity"
 	APIQueryMode        = "mode"
+
+	// APISegmentProcesses, APIQueryStartTicks and APIQueryEscalate build the
+	// unowned_processes kill route
+	// POST /api/watches/{watch}/processes/{pid}/kill?start_ticks=&escalate=.
+	// start_ticks is the PID incarnation the watch displayed; the SSH session
+	// close route names its session with the same query.
+	APISegmentProcesses = "processes"
+	APIQueryStartTicks  = "start_ticks"
+	APIQueryEscalate    = "escalate"
 )
 
 // DBQueryKillPath is the kill route of one service's db_queries watch, without

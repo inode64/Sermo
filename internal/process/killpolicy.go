@@ -183,6 +183,15 @@ func protectedKillProcess(p Process) bool {
 	return p.PID <= 1 || protectedKernelProcess(p.PID, p.PPID, p.ExeOK, p.Cmdline)
 }
 
+// ProtectedIdentity reports whether a process must never be a signal target
+// nor counted as a host workload: PID 1, or a kernel thread (PID 2 and its
+// children, which resolve no executable and carry no command line). It is the
+// same predicate every kill gate applies, exported so host-wide inventories
+// skip exactly what the reaper refuses.
+func ProtectedIdentity(id Identity) bool {
+	return id.PID <= 1 || protectedKernelProcess(id.PID, id.PPID, id.ExeOK, id.Cmdline)
+}
+
 func protectedKernelProcess(pid, ppid int, exeOK bool, cmdline []string) bool {
 	return (pid == 2 || ppid == 2) && !exeOK && len(cmdline) == 0
 }
@@ -266,20 +275,32 @@ func ParseReapPolicy(tree map[string]any) (KillSelector, []string) {
 			warnings = append(warnings, SectionReap+"."+key+" is not supported; the block accepts "+ReapKeyKillOnlyIf)
 		}
 	}
-	koi, ok := block[ReapKeyKillOnlyIf].(map[string]any)
+	selector, selectorWarnings := ParseKillOnlyIf(block[ReapKeyKillOnlyIf], ReapKillOnlyIfPath)
+	return selector, append(warnings, selectorWarnings...)
+}
+
+// ParseKillOnlyIf parses one strict paired kill_only_if selector: a mapping of
+// exactly users and exe_any, both non-empty. path names the block in the
+// warnings. A missing, malformed or half-written selector yields the empty
+// selector — which authorizes nothing — never the half it does carry. It is the
+// single parser for every explicit kill authorization outside stop_policy
+// (reap, watch kill actions).
+func ParseKillOnlyIf(raw any, path string) (KillSelector, []string) {
+	koi, ok := raw.(map[string]any)
 	if !ok {
-		return selector, append(warnings, ReapKillOnlyIfPath+" must be a mapping defining both "+ReapKeyUsers+" and "+ReapKeyExeAny)
+		return KillSelector{}, []string{path + " must be a mapping defining both " + ReapKeyUsers + " and " + ReapKeyExeAny}
 	}
+	var warnings []string
 	for _, key := range slices.Sorted(maps.Keys(koi)) {
 		if key != ReapKeyUsers && key != ReapKeyExeAny {
-			warnings = append(warnings, ReapKillOnlyIfPath+"."+key+" is not supported; it accepts "+ReapKeyUsers+" and "+ReapKeyExeAny)
+			warnings = append(warnings, path+"."+key+" is not supported; it accepts "+ReapKeyUsers+" and "+ReapKeyExeAny)
 		}
 	}
-	selector = NewKillSelector(cfgval.StringList(koi[ReapKeyUsers]), cfgval.StringList(koi[ReapKeyExeAny]))
+	selector := NewKillSelector(cfgval.StringList(koi[ReapKeyUsers]), cfgval.StringList(koi[ReapKeyExeAny]))
 	if !selector.Configured() {
 		// Return the empty selector, not the partial one: a half-written selector
 		// must authorize nothing rather than whatever half it does carry.
-		return KillSelector{}, append(warnings, ReapKillOnlyIfPath+" must define both "+ReapKeyUsers+" and "+ReapKeyExeAny+", each non-empty")
+		return KillSelector{}, append(warnings, path+" must define both "+ReapKeyUsers+" and "+ReapKeyExeAny+", each non-empty")
 	}
 	return selector, warnings
 }

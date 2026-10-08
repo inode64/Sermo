@@ -20,16 +20,10 @@ import (
 	"sermo/internal/web"
 )
 
-type daemonWatchReading struct {
-	Field string `json:"field"`
-	Label string `json:"label"`
-	Value string `json:"value"`
-	Error string `json:"error"`
-	// Warning carries the same bad news as Error for a watch graded an advisory
-	// (`severity: warning`). It is a separate field on the wire so the dashboard
-	// can colour it amber; here both simply become the reading's text.
-	Warning string `json:"warning"`
-}
+// daemonWatchReading is the daemon's own reading row: one schema on the wire
+// for the dashboard and the CLI, so a field the daemon adds (good, warning) is
+// never lost here.
+type daemonWatchReading = web.WatchReading
 
 type daemonWatchDetail struct {
 	Name          string               `json:"name"`
@@ -38,15 +32,10 @@ type daemonWatchDetail struct {
 	Readings      []daemonWatchReading `json:"readings"`
 }
 
-type daemonWatchProbe struct {
-	OK       bool                 `json:"ok"`
-	Message  string               `json:"message"`
-	Readings []daemonWatchReading `json:"readings"`
-	// Severity is "warning" when the watch graded its own failures advisories.
-	// The daemon still answers 409 — the condition did fire — but the operator is
-	// told it is an advisory rather than a failure.
-	Severity string `json:"severity"`
-}
+// daemonWatchProbe is the probe's answer as the daemon sends it: a 409 still
+// carries the graded result, and Severity says when a fired condition is only
+// an advisory.
+type daemonWatchProbe = web.ActionResult
 
 const (
 	watchCommandTargetArgCount = 2

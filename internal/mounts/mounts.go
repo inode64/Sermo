@@ -28,6 +28,15 @@ var escapedFieldReplacer = strings.NewReplacer(
 	mountFieldBackslash,
 )
 
+// CleanPath normalises a configured or observed mount path: filepath.Clean,
+// with an empty path kept empty rather than becoming ".".
+func CleanPath(path string) string {
+	if path == "" {
+		return ""
+	}
+	return filepath.Clean(path)
+}
+
 // UnescapeField decodes the octal escapes used in /proc/mounts and /etc/fstab
 // fields for space, tab, newline and backslash.
 func UnescapeField(s string) string {

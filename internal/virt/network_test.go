@@ -255,8 +255,12 @@ func TestNetworkManagerReloadAndResumeUnsupported(t *testing.T) {
 	if err := m.Reload(context.Background(), "x"); err == nil {
 		t.Fatal("Reload() = nil, want unsupported error")
 	}
-	if err := m.Resume(context.Background(), "x"); err == nil {
-		t.Fatal("Resume() = nil, want unsupported error")
+	// Resume is not implemented at all: the engine reports an absent optional
+	// verb as unsupported, so a stub returning an error would only duplicate it.
+	if _, ok := any(m).(interface {
+		Resume(context.Context, string) error
+	}); ok {
+		t.Fatal("NetworkManager must not implement Resume; a virtual network has no paused state")
 	}
 	if ok, err := m.SupportsReload(context.Background(), "x"); err != nil || ok {
 		t.Fatalf("SupportsReload() = %v, %v; want false, nil", ok, err)

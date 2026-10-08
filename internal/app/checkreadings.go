@@ -12,6 +12,7 @@ import (
 	"sermo/internal/checks"
 	"sermo/internal/conn"
 	"sermo/internal/metrics"
+	"sermo/internal/pkgdb"
 	"sermo/internal/units"
 	"sermo/internal/web"
 )
@@ -31,7 +32,6 @@ const (
 	watchReadingLabelAddress                  = "Address"
 	watchReadingLabelAttached                 = "Attached"
 	watchReadingLabelAvailable                = "Available"
-	watchReadingLabelAwait                    = "Await"
 	watchReadingLabelBackend                  = "Backend"
 	watchReadingLabelBaselineCount            = "Baseline count"
 	watchReadingLabelBusID                    = "Bus ID"
@@ -121,7 +121,6 @@ const (
 	watchReadingLabelProcesses                = "Active processes"
 	watchReadingLabelProperty                 = "Property"
 	watchReadingLabelProtocol                 = "Protocol"
-	watchReadingLabelRead                     = "Read"
 	watchReadingLabelRecovering               = "Recovering"
 	watchReadingLabelResource                 = "Resource"
 	watchReadingLabelResult                   = "Result"
@@ -156,11 +155,14 @@ const (
 	watchReadingLabelUsed                     = "Used"
 	watchReadingLabelUsedBytes                = "Used bytes"
 	watchReadingLabelUniqueName               = "Unique name"
-	watchReadingLabelUtilization              = "Utilization"
 	watchReadingLabelUser                     = "User"
 	watchReadingLabelValue                    = "Value"
 	watchReadingLabelVersion                  = "Reported version"
 	watchReadingLabelViolationCount           = "Policy violations"
+	watchReadingLabelScanned                  = "Scanned processes"
+	watchReadingLabelUnowned                  = "Unowned processes"
+	watchReadingLabelPackageDB                = "Package database"
+	watchReadingLabelUnitAttribution          = "Unit attribution"
 	watchReadingLabelViolations               = "Violations"
 	watchReadingLabelVGFree                   = "VG free"
 	watchReadingLabelVGFreePct                = "VG free %"
@@ -169,7 +171,6 @@ const (
 	watchReadingLabelVolumeGroup              = "VG"
 	watchReadingLabelWWN                      = "WWN"
 	watchReadingLabelWindow                   = "Window"
-	watchReadingLabelWrite                    = "Write"
 	watchReadingLabelLeap                     = "Leap"
 	watchReadingLabelOffset                   = "Offset"
 	watchReadingLabelOffsetAbs                = "Offset abs"
@@ -210,6 +211,15 @@ type readingBuilder struct {
 
 func readingsFrom(data map[string]any) *readingBuilder {
 	return &readingBuilder{data: data}
+}
+
+// addWarning appends a reading whose value is itself the advisory: the row
+// shows it and paints it as a warning.
+func (rb *readingBuilder) addWarning(field, label, value string) *readingBuilder {
+	if value != "" {
+		rb.out = append(rb.out, web.WatchReading{Field: field, Label: label, Value: value, Warning: value})
+	}
+	return rb
 }
 
 // add appends a reading with an already-formatted value; empty values are skipped.
@@ -400,6 +410,7 @@ var checkReadingsByType = map[string]func(map[string]any) []web.WatchReading{
 	checks.CheckTypeFileExists:       fileCheckReadings,
 	checks.CheckTypeProcess:          processCheckReadings,
 	checks.CheckTypeProcessPolicy:    processPolicyCheckReadings,
+	checks.CheckTypeUnownedProcesses: unownedProcessesCheckReadings,
 	checks.CheckTypeDBQueries:        dbQueriesCheckReadings,
 	checks.CheckTypeStaleBinary:      staleBinaryCheckReadings,
 	checks.CheckTypeStrays:           straysCheckReadings,
@@ -823,6 +834,33 @@ func processPolicyCheckReadings(data map[string]any) []web.WatchReading {
 		readings()
 }
 
+// unownedProcessesCheckReadings summarises an unowned_processes sample: the
+// counts and the two attribution sources. The processes themselves are the
+// watch's own table, so neither their PIDs nor the findings are repeated here,
+// and the count carries the verdict instead of a copy of the result message.
+func unownedProcessesCheckReadings(data map[string]any) []web.WatchReading {
+	rb := readingsFrom(data).addInt(checks.DataKeyScanned, watchReadingLabelScanned)
+	if unowned, _ := cfgval.Int(data[checks.DataKeyViolationCount]); unowned > 0 {
+		rb = rb.addWarning(checks.DataKeyViolationCount, watchReadingLabelUnowned, fmt.Sprintf("%d unowned", unowned))
+	} else {
+		rb = rb.addInt(checks.DataKeyViolationCount, watchReadingLabelUnowned)
+	}
+	// The two attribution sources read as a warning when absent: the watch is
+	// then blind on that criterion, which the row should say before its count.
+	for _, source := range []struct{ field, label, blind string }{
+		{checks.DataKeyPackageDB, watchReadingLabelPackageDB, string(pkgdb.BackendNone)},
+		{checks.DataKeyUnitAttribution, watchReadingLabelUnitAttribution, unownedAttributionUnavailable},
+	} {
+		value := cfgval.String(data[source.field])
+		if value == source.blind {
+			rb = rb.addWarning(source.field, source.label, value)
+			continue
+		}
+		rb = rb.add(source.field, source.label, value)
+	}
+	return rb.readings()
+}
+
 // dbQueriesCheckReadings summarises a db_queries sample; the statements
 // themselves are listed in the Sessions panel.
 func dbQueriesCheckReadings(data map[string]any) []web.WatchReading {
@@ -984,17 +1022,14 @@ func diskioCheckReadings(data map[string]any) []web.WatchReading {
 		readings()
 }
 
-// diskIOReadingMetrics are the rate and total rows a disk I/O sample renders.
-// The cumulative totals close the question a window of zeroes leaves open:
-// whether the device is merely idle or has never been used at all.
-var diskIOReadingMetrics = []checks.GraphMetric{
-	{Key: checks.DiskIOFieldUtilPct, Label: watchReadingLabelUtilization, Unit: metrics.MetricUnitPercent, Decimals: watchReadingDefaultMetricDecimals},
-	{Key: checks.DiskIOFieldReadBytes, Label: watchReadingLabelRead, Unit: metrics.MetricUnitBytesPerSecond},
-	{Key: checks.DiskIOFieldWriteBytes, Label: watchReadingLabelWrite, Unit: metrics.MetricUnitBytesPerSecond},
-	{Key: checks.DiskIOFieldAwaitMs, Label: watchReadingLabelAwait, Unit: metrics.MetricUnitMilliseconds, Decimals: 1},
-	{Key: checks.DiskIOFieldReadTotalBytes, Label: watchReadingLabelReadTotal, Unit: metrics.MetricUnitBytes},
-	{Key: checks.DiskIOFieldWriteTotalBytes, Label: watchReadingLabelWriteTotal, Unit: metrics.MetricUnitBytes},
-}
+// diskIOReadingMetrics are the rows a disk I/O sample renders: the graph
+// catalog's own rate metrics (one label and precision per metric, wherever it
+// is shown) plus the cumulative totals, which close the question a window of
+// zeroes leaves open: whether the device is merely idle or has never been used.
+var diskIOReadingMetrics = append(checks.GraphMetrics(checks.CheckTypeDiskIO),
+	checks.GraphMetric{Key: checks.DiskIOFieldReadTotalBytes, Label: watchReadingLabelReadTotal, Unit: metrics.MetricUnitBytes},
+	checks.GraphMetric{Key: checks.DiskIOFieldWriteTotalBytes, Label: watchReadingLabelWriteTotal, Unit: metrics.MetricUnitBytes},
+)
 
 // sensorsCheckReadings prepends the matching-input count and the configured
 // chip/label filters to the graphable sensor aggregates.
