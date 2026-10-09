@@ -52,6 +52,8 @@ func TestValidateSingleShotNetICMPSwapErrors(t *testing.T) {
 		"route list interface":         {`c: { type: route, interface: [ppp0, eth0] }`, "single interface name"},
 		"dns resolvconf not bool":      {`c: { type: dns, resolvconf: si }`, "resolvconf must be a boolean"},
 		"dns resolvconf plus host":     {`c: { type: dns, host: 1.1.1.1, resolvconf: true }`, "host and resolvconf are mutually exclusive"},
+		"dns bad qtype":                {`c: { type: dns, host: 1.1.1.1, qtype: ANY }`, "qtype must be one of"},
+		"dns qtype not string":         {`c: { type: dns, host: 1.1.1.1, qtype: 6 }`, "qtype must be one of"},
 	}
 	for name, c := range cases {
 		t.Run(name, func(t *testing.T) {

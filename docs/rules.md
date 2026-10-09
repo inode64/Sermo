@@ -1444,15 +1444,29 @@ Protocols, in the order of the table above:
   `idle_processes`, `total_processes`, `listen_queue`, `max_listen_queue`,
   `max_active_processes`, `max_children_reached`, `slow_requests`,
   `accepted_conn` and `uptime_seconds`.
-- `dns` — default port 53 (UDP). No auth. Sends an `A` query for `query` (default
-  `localhost`) and verifies the answer: `NOERROR`/`NXDOMAIN` pass (the server is up
-  and speaking DNS); `SERVFAIL`, `REFUSED`, a timeout or a transport error fail.
-  Result data: the `rcode`, answer count and the resolved `addresses` (the
-  answer's A/AAAA records, sorted and comma-joined) — so `expect` can require an
-  actual resolution (`rcode: NOERROR`, `answers: {op: ">", value: 0}`) or a
-  specific address (`addresses: {op: "=~", value: "93\\.184\\..*"}`). Set
-  `query` to a name the server should answer (e.g. a zone it is authoritative
-  for). With `resolvconf: true` (instead of `host`, mutually exclusive) the
+- `dns` — default port 53 (UDP). No auth. Sends a query for `query` (default
+  `localhost`) of type `qtype` (default `A`; also `AAAA`, `CNAME`, `MX`, `NS`,
+  `PTR`, `SOA`, `SRV`, `TXT`) and verifies the answer: `NOERROR`/`NXDOMAIN` pass
+  (the server is up and speaking DNS). `SERVFAIL`, `REFUSED` and the other error
+  rcodes are a **protocol verdict**: the server answered and rejected the lookup,
+  so the check **fails** (firing, then recovered once the server answers again)
+  with the rcode kept in its result data — never an *unavailable* observation.
+  A timeout or a transport error is unavailable, like any probe that could not
+  look. A resolver that refuses a client's address (`allow-query`/
+  `allow-recursion` ACLs) or that cannot validate a domain (DNSSEC → `SERVFAIL`)
+  therefore shows as a failing watch, not as a broken check.
+  Result data: the `rcode`, `qtype`, answer count and the resolved `addresses`
+  (the answer's A/AAAA records, sorted and comma-joined), plus the header flags
+  `aa` (authoritative answer: the data came from the zone the server serves),
+  `ad` (authenticated data: a validating resolver verified the DNSSEC chain; the
+  probe sets the AD bit in its query so validating resolvers report it) and `tc`
+  (truncated reply) as `true`/`false` — so `expect` can require an actual
+  resolution (`rcode: NOERROR`, `answers: {op: ">", value: 0}`), a specific
+  address (`addresses: {op: "=~", value: "93\\.184\\..*"}`), that a zone is
+  served with authority (`qtype: SOA`, `aa: true`) or that DNSSEC validation is
+  in effect for a signed name (`ad: true`). Set `query` to a name the server
+  should answer (e.g. a zone it is authoritative for), or to a reverse name
+  with `qtype: PTR`. With `resolvconf: true` (instead of `host`, mutually exclusive) the
   probe asks the first `nameserver` of `/etc/resolv.conf` — the server the
   system would ask first; with pppd's `usepeerdns`, the provider's
   resolver, which is how the `pppd` catalog service verifies resolution through

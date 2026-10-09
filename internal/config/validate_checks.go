@@ -418,6 +418,26 @@ func validateConnFields(prefix, protocol string, fields map[string]any, requireU
 	validateConnChangeFlags(prefix, fields, add)
 }
 
+// validateDNSFields checks the dns-only keys: `resolvconf` (a boolean that
+// excludes `host`) and `qtype` (one of the record types the probe can send).
+func validateDNSFields(prefix string, fields map[string]any, add addFunc) {
+	if v, present := fields[checks.CheckKeyResolvconf]; present {
+		if _, ok := v.(bool); !ok {
+			add(validationBooleanFormat, prefix+"."+checks.CheckKeyResolvconf)
+		} else if cfgval.Bool(v) && cfgval.String(fields[checks.CheckKeyHost]) != "" {
+			add("%s host and resolvconf are mutually exclusive", prefix)
+		}
+	}
+	if v, present := fields[checks.CheckKeyQType]; present {
+		qtype, ok := v.(string)
+		if !ok {
+			add("%s.qtype must be one of %s", prefix, conn.DNSQTypeSummary)
+		} else if _, _, err := conn.ParseDNSQType(qtype); err != nil {
+			add("%s.qtype must be one of %s, got %q", prefix, conn.DNSQTypeSummary, qtype)
+		}
+	}
+}
+
 func validateDBusFields(prefix string, fields map[string]any, add addFunc) {
 	invalid := false
 	for _, field := range checks.DBusTargetStringFields() {
@@ -1038,13 +1058,7 @@ func validateSingleShotCheckFields(path, typ string, entry map[string]any, locks
 				rejectDBusFields(path, typ, entry, add)
 			}
 			if proto.Name() == conn.ProtocolNameDNS {
-				if v, present := entry[checks.CheckKeyResolvconf]; present {
-					if _, ok := v.(bool); !ok {
-						add(validationBooleanFormat, path+"."+checks.CheckKeyResolvconf)
-					} else if cfgval.Bool(v) && cfgval.String(entry[checks.CheckKeyHost]) != "" {
-						add("%s host and resolvconf are mutually exclusive", path)
-					}
-				}
+				validateDNSFields(path, entry, add)
 			}
 			return true
 		}

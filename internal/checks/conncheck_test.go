@@ -1052,3 +1052,32 @@ func TestConnCheckCompactSummaryAndFailedTarget(t *testing.T) {
 		})
 	}
 }
+
+func TestConnCheckProtocolFailureIsFailingNotUnavailable(t *testing.T) {
+	c := connCheck{name: "resolver", timeout: time.Second, proto: fakeProto{}, cfg: conn.Config{Host: "10.0.0.1", Port: 53},
+		expect: []jsonAssertion{{path: "rcode", valueMatcher: newValueMatcher("==", "NOERROR")}},
+		probe: func(context.Context, conn.Config) (conn.Result, error) {
+			return conn.Result{Failure: `DNS query for "example.com" returned REFUSED`, Extra: map[string]string{"rcode": "REFUSED", "answers": "0"}}, nil
+		}}
+	res := c.Run(t.Context())
+	if res.Unavailable || res.Observation() != ObservationFailing {
+		t.Fatalf("a protocol verdict must fail the check, not mark it unavailable: %+v", res)
+	}
+	if !strings.Contains(res.Message, "REFUSED") || res.Data["rcode"] != "REFUSED" {
+		t.Fatalf("verdict evidence lost: %+v", res)
+	}
+}
+
+func TestConfigureDNSQType(t *testing.T) {
+	var cfg conn.Config
+	if err := configureDNS(&cfg, map[string]any{CheckKeyQType: "soa"}); err != nil || cfg.Params[conn.ParamKeyQType] != "SOA" {
+		t.Fatalf("qtype not normalised into params: %v %v", cfg.Params, err)
+	}
+	cfg = conn.Config{}
+	if err := configureDNS(&cfg, map[string]any{}); err != nil || cfg.Params[conn.ParamKeyQType] != "" {
+		t.Fatalf("absent qtype must leave params alone: %v %v", cfg.Params, err)
+	}
+	if err := configureDNS(&cfg, map[string]any{CheckKeyQType: "ANY"}); err == nil || !strings.Contains(err.Error(), "qtype") {
+		t.Fatalf("unsupported qtype must be rejected: %v", err)
+	}
+}

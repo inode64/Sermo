@@ -17,10 +17,14 @@ import (
 	"sermo/internal/netutil"
 )
 
-// dnsProtocol probes a DNS server natively: it sends an A query (over UDP) for a
-// configurable name (default "localhost") and verifies the server answers. A
-// NOERROR or NXDOMAIN reply means the server is up and speaking DNS; SERVFAIL,
-// REFUSED, a transport error or a timeout fail the check. No authentication.
+// dnsProtocol probes a DNS server natively: it sends a query (over UDP, type A
+// unless `qtype` says otherwise) for a configurable name (default "localhost")
+// and verifies the server answers. A NOERROR or NXDOMAIN reply means the server
+// is up and speaking DNS. SERVFAIL, REFUSED and the other error rcodes are a
+// protocol verdict (Result.Failure): the server answered and rejected the
+// lookup, so the rcode and counts stay available as evidence and the check
+// fails instead of becoming unavailable. A transport error or a timeout is a
+// probe error. No authentication.
 // Message encoding/parsing uses golang.org/x/net/dns/dnsmessage (the package the
 // standard library resolver builds on) rather than a hand-rolled wire codec.
 type dnsProtocol struct{}
@@ -53,7 +57,53 @@ const (
 )
 
 const (
-	dnsQTypeA        = 1
+	dnsQTypeA     uint16 = 1
+	dnsQTypeNS    uint16 = 2
+	dnsQTypeCNAME uint16 = 5
+	dnsQTypeSOA   uint16 = 6
+	dnsQTypePTR   uint16 = 12
+	dnsQTypeMX    uint16 = 15
+	dnsQTypeTXT   uint16 = 16
+	dnsQTypeAAAA  uint16 = 28
+	dnsQTypeSRV   uint16 = 33
+)
+
+// dnsQTypeNames maps the supported `qtype` spellings to their wire values, in
+// the order DNSQTypeSummary lists them.
+var dnsQTypeNames = []struct {
+	name  string
+	qtype uint16
+}{
+	{"A", dnsQTypeA}, {"AAAA", dnsQTypeAAAA}, {"CNAME", dnsQTypeCNAME}, {"MX", dnsQTypeMX},
+	{"NS", dnsQTypeNS}, {"PTR", dnsQTypePTR}, {"SOA", dnsQTypeSOA}, {"SRV", dnsQTypeSRV}, {"TXT", dnsQTypeTXT},
+}
+
+// DNSQTypeSummary lists the record types a dns check's `qtype` accepts, for
+// validation messages.
+var DNSQTypeSummary = func() string {
+	names := make([]string, 0, len(dnsQTypeNames))
+	for _, q := range dnsQTypeNames {
+		names = append(names, q.name)
+	}
+	return strings.Join(names, ", ")
+}()
+
+// ParseDNSQType resolves a `qtype` value (case-insensitive; empty means A) to
+// its wire type and canonical upper-case name.
+func ParseDNSQType(value string) (uint16, string, error) {
+	if value == "" {
+		return dnsQTypeA, dnsQTypeNames[0].name, nil
+	}
+	upper := strings.ToUpper(strings.TrimSpace(value))
+	for _, q := range dnsQTypeNames {
+		if q.name == upper {
+			return q.qtype, q.name, nil
+		}
+	}
+	return 0, "", fmt.Errorf("dns qtype must be one of %s, got %q", DNSQTypeSummary, value)
+}
+
+const (
 	dnsRCodeNoError  = 0
 	dnsRCodeFormErr  = 1
 	dnsRCodeServFail = 2
@@ -95,9 +145,13 @@ func (dnsProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	if name == "" {
 		name = dnsDefaultQuery
 	}
+	qtype, qtypeName, err := ParseDNSQType(cfg.Params[ParamKeyQType])
+	if err != nil {
+		return Result{}, err
+	}
 
 	id := dnsID()
-	query, err := buildDNSQuery(id, name, dnsQTypeA)
+	query, err := buildDNSQuery(id, name, qtype)
 	if err != nil {
 		return Result{}, err
 	}
@@ -117,22 +171,27 @@ func (dnsProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	if err != nil {
 		return Result{}, probeErr(ProtocolNameDNS, stepReply, err)
 	}
-	rid, rcode, answers, addrs, err := parseDNSReply(buf[:n])
+	reply, err := parseDNSReply(buf[:n])
 	if err != nil {
 		return Result{}, err
 	}
-	if rid != id {
+	if reply.id != id {
 		return Result{}, errors.New("DNS response id mismatch")
 	}
-	if !dnsResponseOK(rcode) {
-		return Result{}, fmt.Errorf("DNS query for %q returned %s", name, rcodeName(rcode))
+	res := Result{Extra: map[string]string{
+		ExtraKeyDNSQuery:         name,
+		ExtraKeyDNSQType:         qtypeName,
+		ExtraKeyDNSRCode:         rcodeName(reply.rcode),
+		ExtraKeyDNSAnswers:       strconv.Itoa(reply.answers),
+		ExtraKeyDNSAddresses:     strings.Join(reply.addrs, ","),
+		ExtraKeyDNSAuthoritative: strconv.FormatBool(reply.authoritative),
+		ExtraKeyDNSAuthenticated: strconv.FormatBool(reply.authenticated),
+		ExtraKeyDNSTruncated:     strconv.FormatBool(reply.truncated),
+	}}
+	if !dnsResponseOK(reply.rcode) {
+		res.Failure = fmt.Sprintf("DNS query for %q returned %s", name, rcodeName(reply.rcode))
 	}
-	return Result{Extra: map[string]string{
-		ExtraKeyDNSQuery:     name,
-		ExtraKeyDNSRCode:     rcodeName(rcode),
-		ExtraKeyDNSAnswers:   strconv.Itoa(answers),
-		ExtraKeyDNSAddresses: strings.Join(addrs, ","),
-	}}, nil
+	return res, nil
 }
 
 // firstNameserver returns the first `nameserver` entry of a resolv.conf-style
@@ -231,14 +290,16 @@ func dnsID() uint16 {
 }
 
 // buildDNSQuery builds a standard recursive query message (header + one question)
-// for name and qtype, packed with dnsmessage.
+// for name and qtype, packed with dnsmessage. The AD bit is set so a validating
+// resolver reports whether it authenticated the answer (RFC 6840 §5.7); a
+// resolver that does not validate ignores it.
 func buildDNSQuery(id uint16, name string, qtype uint16) ([]byte, error) {
 	qname, err := dnsmessage.NewName(dnsFQDN(name))
 	if err != nil {
 		return nil, probeErr(ProtocolNameDNS, stepDNSBuildQuery, err)
 	}
 	msg := dnsmessage.Message{
-		ID: id, RecursionDesired: true,
+		ID: id, RecursionDesired: true, AuthenticData: true,
 		Questions: []dnsmessage.Question{{
 			Name:  qname,
 			Type:  dnsmessage.Type(qtype),
@@ -261,29 +322,49 @@ func dnsFQDN(name string) string {
 	return name + "."
 }
 
-// parseDNSReply parses a DNS response with dnsmessage: it returns the id, RCODE,
-// the header's answer count and the A/AAAA addresses (sorted). It errors on a
-// too-short message or a query (QR=0). The answer section is parsed leniently —
-// a malformed record stops collection and yields what was read so far — so a
-// truncated reply still reports liveness rather than failing the probe.
-func parseDNSReply(b []byte) (id uint16, rcode, answers int, addrs []string, err error) {
+// dnsReply is what parseDNSReply reads from a response: the header fields a
+// check can assert on and the A/AAAA addresses of the answer section.
+type dnsReply struct {
+	id            uint16
+	rcode         int
+	answers       int
+	addrs         []string
+	authoritative bool // AA: the answer came from the zone's own data
+	authenticated bool // AD: a validating resolver verified the DNSSEC chain
+	truncated     bool // TC: the UDP reply was cut; the client should retry over TCP
+}
+
+// parseDNSReply parses a DNS response with dnsmessage: the id, RCODE, the
+// header's answer count and flags, and the A/AAAA addresses (sorted). It errors
+// on a too-short message or a query (QR=0). The answer section is parsed
+// leniently — a malformed record stops collection and yields what was read so
+// far — so a truncated reply still reports liveness rather than failing the
+// probe.
+func parseDNSReply(b []byte) (dnsReply, error) {
 	var p dnsmessage.Parser
 	hdr, err := p.Start(b)
 	if err != nil {
-		return 0, 0, 0, nil, probeErr(ProtocolNameDNS, stepDNSParseReply, err)
+		return dnsReply{}, probeErr(ProtocolNameDNS, stepDNSParseReply, err)
 	}
 	if !hdr.Response {
-		return hdr.ID, 0, 0, nil, errors.New("not a DNS response (QR=0)")
+		return dnsReply{id: hdr.ID}, errors.New("not a DNS response (QR=0)")
+	}
+	reply := dnsReply{
+		id:            hdr.ID,
+		rcode:         int(hdr.RCode),
+		authoritative: hdr.Authoritative,
+		authenticated: hdr.AuthenticData,
+		truncated:     hdr.Truncated,
 	}
 	if len(b) >= dnsHeaderBytes { // guaranteed by Parser.Start; keeps the slice bound explicit.
-		answers = int(binary.BigEndian.Uint16(b[dnsANCountStart:dnsANCountEnd]))
+		reply.answers = int(binary.BigEndian.Uint16(b[dnsANCountStart:dnsANCountEnd]))
 	}
 	// Collect A/AAAA answers; a malformed question/answer section still leaves a
 	// valid header for the liveness verdict, so it is not a probe error.
 	if p.SkipAllQuestions() == nil {
-		addrs = dnsAnswerAddrs(&p)
+		reply.addrs = dnsAnswerAddrs(&p)
 	}
-	return hdr.ID, int(hdr.RCode), answers, addrs, nil
+	return reply, nil
 }
 
 // dnsAnswerAddrs walks a parser positioned at the answer section and returns the

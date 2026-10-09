@@ -15,6 +15,9 @@ variables:
   port: 53
   user: named
   query: localhost
+  # Name the opt-in `recursion` and `resolver` watches resolve: a public name
+  # every recursive server must answer.
+  recursion_query: example.com
 os:
   ubuntu:
     variables:
@@ -50,6 +53,39 @@ watches:
       host: ${host}
       port: ${port}
       query: ${query}
+  # Enable on a recursive resolver: the server must actually resolve a public
+  # name, not merely answer. REFUSED (an `allow-recursion`/`allow-query` ACL
+  # that leaves out the probed address) and SERVFAIL (upstream unreachable,
+  # DNSSEC validation failure) fail the watch with the rcode in its data; the
+  # `port` check alone keeps passing because the daemon is up. Add one watch
+  # per listener address a client population uses (LAN, VPN) so an ACL that
+  # covers only some networks is caught.
+  recursion:
+    enabled: false
+    check:
+      type: dns
+      host: ${host}
+      port: ${port}
+      query: ${recursion_query}
+      timeout: 3s
+      expect:
+        rcode: NOERROR
+        answers: { op: '>', value: 0 }
+    for: { cycles: 2 }
+  # Enable where the host's own resolv.conf points at this server (or has no
+  # fallback): when named stops answering, the host itself loses name
+  # resolution, including the one Sermo needs to deliver notifications.
+  resolver:
+    enabled: false
+    check:
+      type: dns
+      resolvconf: true
+      query: ${recursion_query}
+      timeout: 3s
+      expect:
+        rcode: NOERROR
+        answers: { op: '>', value: 0 }
+    for: { cycles: 2 }
   alert-if-memory-high:
     check:
       type: metric

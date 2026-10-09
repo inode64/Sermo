@@ -604,6 +604,13 @@ func DBusTargetFromEntry(entry map[string]any) conn.DBusTarget {
 }
 
 func configureDNS(cfg *conn.Config, entry map[string]any) error {
+	if qtype := cfgval.AsString(entry[CheckKeyQType]); qtype != "" {
+		_, name, err := conn.ParseDNSQType(qtype)
+		if err != nil {
+			return fmt.Errorf("dns check: %w", err)
+		}
+		setConnParam(cfg, conn.ParamKeyQType, name)
+	}
 	if !cfgval.Bool(entry[CheckKeyResolvconf]) {
 		return nil
 	}
