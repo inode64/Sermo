@@ -1135,6 +1135,13 @@ watches:
       host: 1.1.1.1
       query: example.com
       expect: { rcode: NOERROR, answers: { op: ">", value: 0 } }
+  dns-zone-authoritative:
+    check:
+      type: dns
+      host: 127.0.0.1
+      query: example.internal
+      qtype: SOA  # A (default), AAAA, CNAME, MX, NS, PTR, SOA, SRV, TXT
+      expect: { rcode: NOERROR, aa: true }  # header flags aa/ad/tc are "true"/"false"
   dbus-libvirt:
     check:
       type: dbus

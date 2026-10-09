@@ -2126,6 +2126,53 @@ watches:
     enabled: true
 ```
 
+BIND's `named` profile keeps one liveness probe (`port`: an `A` query for
+`variables.query`, default `localhost`) and offers two opt-in watches for a
+recursive resolver. `recursion` asks `variables.host` to resolve
+`variables.recursion_query` (default `example.com`) and fails on `REFUSED`
+(an `allow-recursion`/`allow-query` ACL that leaves out the probed address) or
+`SERVFAIL` (upstream unreachable, DNSSEC validation failure), with the rcode in
+the watch data; the liveness probe alone keeps passing because the daemon is
+up. Declare one such watch per listener address a client population uses
+(LAN, VPN) so an ACL that covers only some networks is caught. `resolver`
+resolves the same name through the host's own `/etc/resolv.conf`
+(`resolvconf: true`) and belongs on a host whose resolver is this server with
+no fallback: when named stops answering, the host itself loses name
+resolution, including the one Sermo needs to deliver notifications.
+
+```yaml
+name: named
+uses: named
+watches:
+  recursion:
+    enabled: true
+  recursion-vpn:            # a second listener address with its own ACL
+    check:
+      type: dns
+      host: 10.200.200.1
+      query: example.com
+      timeout: 3s
+      expect: { rcode: NOERROR, answers: { op: ">", value: 0 } }
+    for: { cycles: 2 }
+  resolver:
+    enabled: true
+  zone-authoritative:       # the zone the server is primary for is loaded
+    check:
+      type: dns
+      host: 127.0.0.1
+      query: example.internal
+      qtype: SOA
+      expect: { rcode: NOERROR, aa: true }
+```
+
+A log watch on named's own log catches what a probe from one address cannot:
+`security: info: client ... denied (allow-` lines name every client an ACL
+rejected, and `lame-servers: info: (broken trust chain|no valid RRSIG|RRSIG
+failed to verify)` lines are real DNSSEC validation failures (each one a
+`SERVFAIL` to a client). The `dnssec: info: validating ...: no valid signature
+found` lines are not: a validating resolver logs them for every unsigned
+delegation it proves insecure and still answers `NOERROR`.
+
 PHP-FPM's `fpm` check compares the current `listen_queue` with
 `variables.listen_queue_max` (default `0`). Add a sustained alert after
 configuring the pool's `ping.path` and `pm.status_path`; the rule reuses the

@@ -137,6 +137,7 @@ const (
 	CheckKeyRegex                 = "regex"
 	CheckKeyReports               = "reports"
 	CheckKeyResolvconf            = "resolvconf"
+	CheckKeyQType                 = "qtype"
 	CheckKeyResource              = "resource"
 	CheckKeyResult                = "result"
 	CheckKeyRequires              = "requires"
