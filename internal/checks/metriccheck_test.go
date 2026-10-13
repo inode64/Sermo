@@ -2,10 +2,29 @@ package checks
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"sermo/internal/metrics"
 )
+
+func TestMetricCheckFDsWithoutDenominator(t *testing.T) {
+	for _, count := range []float64{0, 7} {
+		c := metricCheck{name: "fds", scope: "service", metric: metrics.MetricFds, op: ">", value: "80%",
+			source: func(_, _ string) (metrics.Reading, bool) {
+				return metrics.Reading{Absolute: count, HasAbsolute: true, Ready: true}, true
+			}}
+		res := c.Run(t.Context())
+		if res.Observation() != ObservationUnavailable || !strings.Contains(res.Message, "no process with a usable open-file limit") {
+			t.Fatalf("count=%v: %+v", count, res)
+		}
+		c.value = "5"
+		res = c.Run(t.Context())
+		if res.Unavailable || res.OK != (count > 5) {
+			t.Fatalf("absolute count must remain usable: %+v", res)
+		}
+	}
+}
 
 func TestMetricCheckRun(t *testing.T) {
 	src := func(ready bool, v float64) MetricReader {

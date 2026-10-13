@@ -115,11 +115,11 @@ func (c connCheck) Run(ctx context.Context) Result {
 	defer run.close()
 	start := run.start
 
-	addr := c.address()
 	res, elapsed, perIface, err := c.probeResult(ctx)
+	addr := targetAddress(c.resultTarget(res))
 	if err != nil {
 		r := c.base.unavailableResult(fmt.Sprintf("%s %s: %v", c.proto.Name(), addr, err), start)
-		r.Data = c.resultData(0, perIface, conn.Result{})
+		r.Data = c.resultData(0, perIface, res)
 		delete(r.Data, DataKeyLatencyMS)
 		return r
 	}
@@ -199,8 +199,13 @@ func increaseFailure(growths []connGrowth) (string, bool) {
 	return "", false
 }
 
-func (c connCheck) address() string {
-	return targetAddress(c.cfg.Socket, c.cfg.Host, c.cfg.Port)
+// resultTarget keeps messages and structured data on the same endpoint when a
+// protocol selects its peer dynamically (for example, DNS via resolv.conf).
+func (c connCheck) resultTarget(res conn.Result) (socket, host string, port int) {
+	if res.TargetHost != "" {
+		return "", res.TargetHost, res.TargetPort
+	}
+	return c.cfg.Socket, c.cfg.Host, c.cfg.Port
 }
 
 // targetAddress renders a probe target for messages and result data: a Unix
@@ -227,6 +232,9 @@ func (c connCheck) probeResult(ctx context.Context) (conn.Result, time.Duration,
 		t0 := time.Now()
 		r, e := probe(ctx, cfg)
 		if e != nil {
+			if !hasProtocolFailure {
+				res = r
+			}
 			return e
 		}
 		took := time.Since(t0)
@@ -318,10 +326,11 @@ func (c connCheck) evaluateResponse(res conn.Result, elapsed time.Duration, addr
 
 func (c connCheck) resultData(elapsed time.Duration, perIface map[string]any, res conn.Result) map[string]any {
 	data := map[string]any{DataKeyProtocol: c.proto.Name(), DataKeyLatencyMS: elapsed.Milliseconds()}
-	if c.cfg.Socket != "" {
-		data[DataKeySocket] = c.cfg.Socket
+	socket, host, port := c.resultTarget(res)
+	if socket != "" {
+		data[DataKeySocket] = socket
 	} else {
-		data[DataKeyHost], data[DataKeyPort] = c.cfg.Host, c.cfg.Port
+		data[DataKeyHost], data[DataKeyPort] = host, port
 	}
 	if perIface != nil {
 		data[DataKeyInterfaces] = perIface

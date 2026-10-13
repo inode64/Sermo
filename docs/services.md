@@ -2513,6 +2513,11 @@ process and that is the one that will fail `accept()` with `EMFILE`; see
 [Metrics](rules.md#metrics) and
 [`fds_limit`](configuration.md#fds--descriptors-against-the-process-limit-fds_limit).
 
+If no process supplies a usable open-file limit, the percentage is unavailable;
+it is not zero and the configured percentage threshold is still valid. An
+absolute descriptor count can remain available. The service-state check reports
+a stopped service independently.
+
 Services whose control group holds workload they do not own get no sensor: the
 ones that delegate part of their tree (`docker`, `containerd`, `virtnetworkd`,
 `glusterd`, `ssh`) automatically, and `libvirtd` through an explicit

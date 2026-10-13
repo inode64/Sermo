@@ -89,6 +89,7 @@ type fileWatcher struct {
 	runner    HookRunner
 	emit      func(Event)
 	publish   func(string, string, checks.Result)
+	observe   func(context.Context, checks.Result, bool)
 	// recordBand persists one per-cycle state sample of the size threshold:
 	// true while no watched path breaches it (an absent path counting whatever
 	// absentOK says). nil disables recording. Level-triggered on purpose, where
@@ -110,14 +111,20 @@ func (w *fileWatcher) runCycle(ctx context.Context) {
 	}
 	now := w.clock()
 	current := w.scan(now)
+	paths := slices.Sorted(maps.Keys(current)) // shared deterministic order for events and health
 	w.numberFiles = fileWatchNumberFiles(current)
-	defer w.publishSnapshot(current)
+	defer func() {
+		result := w.snapshot(current, paths)
+		if w.observe != nil {
+			w.observe(ctx, result, observeOnlyCycle(ctx))
+		} else if w.publish != nil {
+			w.publish(w.name, checks.CheckTypeFile, result)
+		}
+	}()
 	// The sample reads the fresh scan, never the baseline: observe-only cycles
 	// rewrite the baseline's breached flag to preserve edge detection, and a
 	// state series must report the level the scan actually saw.
 	w.recordBandSample(current, now)
-
-	paths := slices.Sorted(maps.Keys(current)) // deterministic event order
 
 	var stale []staleFile
 	observeOnly := observeOnlyCycle(ctx)
@@ -198,57 +205,76 @@ func (w *fileWatcher) recordBandSample(current map[string]fileState, at time.Tim
 	w.recordBand(ok, at)
 }
 
-func (w *fileWatcher) publishSnapshot(current map[string]fileState) {
-	if w.publish == nil {
-		return
+func (w *fileWatcher) snapshot(current map[string]fileState, paths []string) checks.Result {
+	path, sample, roots := firstFileWatchRoot(w.paths, current)
+	failedPath, trigger, message := w.failure(current, paths)
+	if failedPath != "" {
+		path, sample = failedPath, current[failedPath]
 	}
-	data := map[string]any{checks.DataKeyPaths: w.paths}
-	if len(w.paths) == 1 {
-		data[checks.DataKeyPath] = w.paths[0]
+	if path == "" {
+		path = w.paths[0]
 	}
-	if len(current) == 0 {
-		// Name the path: "no watched path exists" says what happened, the path
-		// says to what, and the column is where the operator reads it.
-		message := w.paths[0] + ": not found"
-		if w.absentOK {
-			message = w.paths[0] + ": absent (ok)"
+	data := map[string]any{checks.DataKeyPaths: w.paths, checks.DataKeyPath: path}
+	result := checks.Result{Check: w.name, OK: failedPath == "", Message: message, Data: data}
+	if _, present := current[path]; !present {
+		if result.OK {
+			result.Message = path + ": absent (ok)"
 		}
-		result := checks.Result{
-			Check:   w.name,
-			OK:      w.absentOK,
-			Message: message,
-			Data:    data,
-		}
-		w.publish(w.name, checks.CheckTypeFile, checks.ApplySummary(w.summary, w.check, result))
-		return
+		// An absent path has no measurement for a summary template. Keep the
+		// absence diagnostic instead of substituting a different path's data.
+		return result
 	}
-	rootPath, root, roots := firstFileWatchRoot(w.paths, current)
-	data[checks.DataKeyKind] = root.kind
-	data[checks.DataKeySize] = root.size
-	data[checks.DataKeyMode] = fmt.Sprintf(fileModeFormat, root.perm)
-	data[checks.CheckKeyOwner] = fmt.Sprintf(fileOwnerFormat, root.uid, root.gid)
-	data[checks.DataKeyModifiedAt] = root.modifiedAt.UTC().Format(time.RFC3339)
+	data[checks.DataKeyKind] = sample.kind
+	data[checks.DataKeySize] = sample.size
+	data[checks.DataKeyMode] = fmt.Sprintf(fileModeFormat, sample.perm)
+	data[checks.CheckKeyOwner] = fmt.Sprintf(fileOwnerFormat, sample.uid, sample.gid)
+	data[checks.DataKeyModifiedAt] = sample.modifiedAt.UTC().Format(time.RFC3339)
 	if w.cond.olderThan > 0 {
-		data[checks.DataKeyAge] = units.HumanizeDuration(root.age.Round(time.Second))
+		data[checks.DataKeyAge] = units.HumanizeDuration(sample.age.Round(time.Second))
 	}
 	if w.recursive {
-		entries := max(len(current)-roots, 0)
-		data[watchReadingFieldEntries] = entries
+		data[watchReadingFieldEntries] = max(len(current)-roots, 0)
 	}
-	result := checks.Result{
-		Check:   w.name,
-		OK:      true,
-		Message: fmt.Sprintf("%s size %d", rootPath, root.size),
-		Data:    data,
+	if result.Message == "" {
+		result.Message = fmt.Sprintf("%s size %d", path, sample.size)
 	}
 	if w.summary != "" {
 		data[checks.DataKeyNumberFiles] = w.numberFiles
-		if w.cond.olderThan > 0 {
-			data[checks.DataKeyTrigger] = fileChangeOlderThan
-			data[checks.DataKeyValue] = root.age
+		if trigger == fileChangeSizeThreshold || w.cond.olderThan == 0 {
+			data[checks.DataKeyValue] = sample.size
+		} else {
+			data[checks.DataKeyValue] = sample.age
+			if trigger == "" {
+				trigger = fileChangeOlderThan
+			}
+		}
+		data[checks.DataKeyTrigger] = trigger
+	}
+	return checks.ApplySummary(w.summary, w.check, result)
+}
+
+// failure keeps level predicates separate from attribute-change edges: a stale
+// or oversized file remains unhealthy until repaired, while a permission or
+// ownership change alone does not create a permanent failure. Its path selects
+// the same measurement for the message, structured data and summary template.
+func (w *fileWatcher) failure(current map[string]fileState, paths []string) (path, trigger, message string) {
+	if !w.absentOK {
+		for _, path := range w.paths {
+			if _, exists := current[path]; !exists {
+				return path, "", path + ": not found"
+			}
 		}
 	}
-	w.publish(w.name, checks.CheckTypeFile, checks.ApplySummary(w.summary, w.check, result))
+	for _, path := range paths {
+		st := current[path]
+		if st.breached {
+			return path, fileChangeSizeThreshold, w.sizeThresholdMessage(path, st)
+		}
+		if st.older {
+			return path, fileChangeOlderThan, w.olderThanMessage(path, st)
+		}
+	}
+	return "", "", ""
 }
 
 func fileWatchNumberFiles(current map[string]fileState) int {
@@ -320,11 +346,16 @@ func (w *fileWatcher) stateOf(info fs.FileInfo, now time.Time) fileState {
 func (w *fileWatcher) fireSizeThreshold(ctx context.Context, path string, cur fileState) {
 	val := strconv.FormatFloat(w.cond.sizeValue, envFloatFormat, envFloatPrecisionAuto, envFloatBits)
 	w.fire(ctx, path, fileChangeSizeThreshold,
-		fmt.Sprintf("%s size %d %s %s", path, cur.size, w.cond.sizeOp, val), map[string]any{
+		w.sizeThresholdMessage(path, cur), map[string]any{
 			sermoEnvSize:  cur.size,
 			sermoEnvOp:    w.cond.sizeOp,
 			sermoEnvValue: val,
 		})
+}
+
+func (w *fileWatcher) sizeThresholdMessage(path string, cur fileState) string {
+	value := strconv.FormatFloat(w.cond.sizeValue, envFloatFormat, envFloatPrecisionAuto, envFloatBits)
+	return fmt.Sprintf("%s size %d %s %s", path, cur.size, w.cond.sizeOp, value)
 }
 
 // diff fires a hook for each configured attribute that changed between prev and

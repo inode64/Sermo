@@ -169,7 +169,7 @@ func TestDBQuerySampleRestrictsTheTargetBeforeTheLimit(t *testing.T) {
 	} {
 		for _, id := range []int64{0, 7} {
 			t.Run(fmt.Sprintf("%s/id=%d", tt.name, id), func(t *testing.T) {
-				cfg := DBQueryConfig{Engine: tt.engine, MaxLength: 100, States: []string{pgStateActive},
+				cfg := DBQueryConfig{Engine: tt.engine, MaxLength: 100, States: []string{pgStateActive}, postgres: &postgresServerInfo{version: postgresVersionBackendType},
 					server: &mysqlServerInfo{known: true, mariadb: tt.mariadb, threadSource: true}}
 				calls := 0
 				server := &fakeMySQLServer{query: func(_ context.Context, query string, args []driver.NamedValue) (driver.Rows, error) {
@@ -228,7 +228,7 @@ func TestDBQueryTargetReadFailure(t *testing.T) {
 			{name: "timeout", err: context.DeadlineExceeded},
 		} {
 			t.Run(engine+"/"+tt.name, func(t *testing.T) {
-				cfg := DBQueryConfig{Engine: engine, MaxLength: 100, States: []string{pgStateActive}, server: &mysqlServerInfo{known: true}}
+				cfg := DBQueryConfig{Engine: engine, MaxLength: 100, States: []string{pgStateActive}, postgres: &postgresServerInfo{version: postgresVersionBackendType}, server: &mysqlServerInfo{known: true}}
 				server := &fakeMySQLServer{query: func(ctx context.Context, _ string, _ []driver.NamedValue) (driver.Rows, error) {
 					if errors.Is(tt.err, context.DeadlineExceeded) {
 						<-ctx.Done()
@@ -259,7 +259,7 @@ func TestDBQueryListReportsCompleteness(t *testing.T) {
 	for _, engine := range []string{SQLEngineMySQL, SQLEnginePostgres} {
 		for _, count := range []int{0, 499, 500, 501} {
 			t.Run(fmt.Sprintf("%s/rows=%d", engine, count), func(t *testing.T) {
-				cfg := DBQueryConfig{Engine: engine, MaxLength: 100, States: []string{pgStateActive}, server: &mysqlServerInfo{known: true, mariadb: true}}
+				cfg := DBQueryConfig{Engine: engine, MaxLength: 100, States: []string{pgStateActive}, postgres: &postgresServerInfo{version: postgresVersionBackendType}, server: &mysqlServerInfo{known: true, mariadb: true}}
 				server := &fakeMySQLServer{query: func(_ context.Context, query string, _ []driver.NamedValue) (driver.Rows, error) {
 					if !strings.Contains(query, "LIMIT 501") {
 						t.Fatalf("listing needs an extra row to detect truncation: %s", query)

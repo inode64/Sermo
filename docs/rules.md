@@ -2166,6 +2166,12 @@ service `checks:` entry or a preflight. The catalog `mysql`, `mariadb` and
 `postgres` services ship one as `alert-if-query-long-running` (see
 [services](services.md#long-running-database-statements)).
 
+PostgreSQL activity sampling selects the columns available on the server,
+including the `procpid`/`current_query` layout used before 9.2. Cancellation
+requires PostgreSQL 10 or newer so the atomic identity check can also verify
+that the target is a client backend. Older servers remain available for
+read-only monitoring; they are not authorized for cancellation.
+
 ```yaml
 watches:
   long-queries:

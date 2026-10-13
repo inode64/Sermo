@@ -216,11 +216,18 @@ func (w *Watch) RunCycle(ctx context.Context) {
 		return
 	}
 	w.loadRuntimeState()
-	defer w.persistRuntimeState()
 	res := w.confirmedResult(ctx, checks.Execute(ctx, w.Check))
+	w.observeResult(ctx, res, observeOnly)
+}
+
+// observeResult feeds a sampled result through the shared incident lifecycle.
+// Stateful scanners use it without re-running their scan or their edge actions.
+func (w *Watch) observeResult(ctx context.Context, res checks.Result, observeOnly bool) {
 	if ctx.Err() != nil {
 		return
 	}
+	w.loadRuntimeState()
+	defer w.persistRuntimeState()
 	w.publish(res)
 	w.runCheckCycle(ctx, res, observeOnly)
 }
