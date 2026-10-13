@@ -2031,10 +2031,11 @@ This route sends `firing`, `warning`, `alert`, `recovered`, `error`, failed
 watch-action events, and automatic service remediation outcomes (including
 `dry-run` and `suppressed`). It includes the host and target in the message and
 does not send routine manual successful actions. The first failure or warning
-for each service check, rule, watch or app is sent immediately; unchanged
+for each service check, rule, watch or app is sent immediately within the
+burst budget described below; unchanged
 incidents are suppressed even when their event text or PID changes. An
-escalation to a graver severity, a recovery, or a new episode is sent
-immediately; a lower severity inside an open incident is held (see
+escalation to a graver severity, a recovery, or a new episode is eligible
+for immediate delivery; a lower severity inside an open incident is held (see
 [Escalate and hold](rules.md#escalate-and-hold)). Each target's `min_severity`
 applies: a target below the incident's level is skipped and keeps no record of
 it, and a recovery goes to exactly the targets that heard the incident, at the
@@ -2047,7 +2048,15 @@ failure, an HTTP 429 or 5xx answer — is retried twice, after 2 and 5 seconds,
 before it is logged as `event notification failed`; a rejected message (a wrong
 URL or token) is not retried. Retries run on the notification queue and never
 delay a monitoring cycle.
-Delivery state survives daemon restarts and config reloads. An open incident
+Delivery state survives daemon restarts and config reloads when it can be
+persisted. If SQLite cannot write (for example, a full root filesystem),
+confirmed deliveries remain in a bounded memory overlay. That overlay also
+holds recovery and reminder receipts, so an old database row cannot repeat an
+already delivered message. Persistence retries at most once per minute during
+an outage, even without reminders configured; recovery flushes receipts without
+resending them. A restart before the receipts become durable can repeat an
+initial alert. At 4096 pending receipts, new deliveries are skipped and a bounded
+error is logged; existing receipts are never evicted to make room. An open incident
 whose service, check, rule, watch or app is no longer configured (or no longer
 enabled) after a restart or reload is forgotten, since nothing can send its
 recovery any more; it is not reminded again. If `repeat_interval` is set, an open incident is reminded at that interval, even
@@ -2057,7 +2066,8 @@ announced only on state changes. A remediation rule's episode closes with the
 new episode. Operational errors without a recovery edge are limited to once
 per 24 hours by default, or to `repeat_interval` when set. One-shot notices (a
 service restart notice, a reclaimed stale operation lock) are sent every time
-they occur; they open no incident and are never reminded.
+they occur, subject to the burst budget; they open no incident and are never
+reminded.
 The detailed event log remains unchanged, including per-PID `process_policy`
 events; Slack groups those under their watch. A
 [`db_queries`](rules.md#running-database-statements-db_queries) watch opens one
@@ -2066,6 +2076,36 @@ statement is announced on its own and recovered when it ends, with each target's
 `min_severity` applied as usual. A `process_policy` watch emits
 one aggregate recovery when its violations clear, including after a daemon
 restart.
+
+**Burst protection.** Per daemon and named notifier, `event_notify` allows 20
+individual delivery attempts per minute, plus 5 reserved for critical alerts or
+severity escalations. Excess deliveries are coalesced by incident into at most
+one summary per minute, with up to 20 entries, highest severity first. The
+summary names affected targets and includes shortened details; the ordinary
+event history remains available subject to storage health. Only a successfully
+delivered summary advances the included incidents' delivery state. Transport
+retries retain the bounded retry policy above.
+A queued escalation keeps its highest severity when the individual-delivery
+budget resets; a lower-grade sample cannot erase it before delivery.
+
+The summary queue holds at most 256 incident entries per notifier; additional
+omitted deliveries are counted in the next summary. A fault that clears before
+its opening summary is delivered is dropped without an orphan recovery. Queued
+summaries are memory-only and can be lost on restart. These budgets apply to
+services, watches, apps, one-shot notices and reminders on this route; per-site
+`then.notify`/rule notifications are independent. To avoid duplicate messages,
+use a single route to each channel (for example, `event_notify` plus explicit
+`notify: none` on action sites that would otherwise reach that channel).
+
+Internal service-cycle, rule and watch state-write errors are grouped into one daemon
+`state-persistence` incident. The event/log reports at most once per minute while
+writers fail, and recovery follows when the failing writers succeed or are
+removed from configuration. Watch cycles retry failed state writes even when
+the monitored state stops changing; retrying a saved action's policy state
+does not execute the action again. After a restart, the first successful state write
+can close a previously delivered persistence incident. Snapshot/event-log write errors and notification
+queue overflow logs are also rate-limited. Service operation outcomes keep their
+individual audit events.
 
 This route is independent of per-site `notify` selections and of `dry_run`:
 it delivers health events while automatic remediation and hooks stay simulated.

@@ -278,20 +278,21 @@ func run(args []string) int {
 	notifiers, notifyWarnings := app.BuildNotifiers(cfg)
 	app.LogBuildNotices(logger, "build notifiers", notifyWarnings)
 
+	reportPersistence := app.PersistenceErrorLogger(logger)
 	eventLog, err := app.NewPersistentEventLog(daemonEventLogLimit, store, func(err error) {
-		logger.Warn("persist event failed", logFieldError, err)
+		reportPersistence("persist event failed", err)
 	})
 	if err != nil {
 		logger.Warn("load persisted events failed", logFieldError, err)
 	}
 	snapshots, err := app.NewPersistentSnapshots(store, func(err error) {
-		logger.Warn("persist service snapshots failed", logFieldError, err)
+		reportPersistence("persist service snapshots failed", err)
 	})
 	if err != nil {
 		logger.Warn("load persisted service snapshots failed", logFieldError, err)
 	}
 	watchSnapshots, err := app.NewPersistentWatchSnapshots(store, func(err error) {
-		logger.Warn("persist watch snapshots failed", logFieldError, err)
+		reportPersistence("persist watch snapshots failed", err)
 	})
 	if err != nil {
 		logger.Warn("load persisted watch snapshots failed", logFieldError, err)
@@ -319,6 +320,7 @@ func run(args []string) int {
 	webChanges := web.NewBroadcaster()
 	eventNotifier := app.NewEventNotifier(config.ShortHostname(), logger, panicGate.Active, store)
 	eventNotifier.Update(config.EventNotifyConfig(cfg.Global.Raw), notifiers)
+	persistenceEvents := app.NewPersistenceEvents(app.MultiEmit(app.SlogEmitter(logger), eventLog.Add, func(app.Event) { webChanges.Notify() }, eventNotifier.Emit), eventNotifier)
 	eventNotifyDone := goTracked(func() { eventNotifier.Run(ctx) })
 	userLookup := app.EngineUserLookup(cfg, runner)
 	readiness := app.NewReadiness(string(backend), 0, 0)
@@ -338,7 +340,7 @@ func run(args []string) int {
 		Now:   time.Now,
 		// Events go to slog, to the persisted ring the web UI reads, and to
 		// the dashboard change stream.
-		Emit:                 app.MultiEmit(app.SlogEmitter(logger), eventLog.Add, func(app.Event) { webChanges.Notify() }, eventNotifier.Emit),
+		Emit:                 persistenceEvents.Emit,
 		Monitor:              store,
 		OperationSettling:    store,
 		ServiceRestartNotice: store,
@@ -349,6 +351,7 @@ func run(args []string) int {
 		DaemonMetrics:        store,
 		Notifiers:            notifiers,
 		EventNotify:          eventNotifier,
+		PersistenceEvents:    persistenceEvents,
 		GlobalNotify:         config.NotifyDefault(cfg.Global.Raw),
 		GlobalEmission:       emission.Merge(cfg.Global.Raw[emission.Section], emission.Default()),
 		GlobalClear:          rules.ClearWindowOrDefault(cfg.Global.Defaults()[rules.SectionClearWindow]),

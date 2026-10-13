@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"sermo/internal/config"
@@ -20,6 +21,7 @@ const (
 	eventNotifyQueueSize      = 256
 	eventNotifyTimeout        = 15 * time.Second
 	eventNotifyScanInterval   = time.Minute
+	eventNotifyLogInterval    = time.Minute
 	eventNotifyErrorInterval  = 24 * time.Hour
 	eventNotifyPhaseRecovered = "recovered"
 )
@@ -57,10 +59,21 @@ type EventNotifier struct {
 	mu      sync.RWMutex
 	targets []notify.Notifier
 	policy  config.EventNotification
-	// memory is used only by tests that do not provide a persistent store.
-	memory map[string]state.EventNotifyRecord
+	// deliveryMu serializes delivery and retention across config generations.
+	deliveryMu sync.Mutex
+	// memory overlays records not yet durable; a failed write must never undo
+	// a successful external delivery. Without a store it holds all records.
+	memory         map[string]state.EventNotifyRecord
+	persistRetryAt time.Time
+	persistFailed  bool
+	queueDropped   atomic.Uint64
+	queueLogAt     atomic.Int64
 	// sleep paces delivery retries; nil uses a real, cancellable timer.
-	sleep func(time.Duration)
+	sleep         func(time.Duration)
+	bursts        map[string]*eventNotifyBurst
+	scope         *eventNotifyScope
+	readLogAt     time.Time
+	capacityLogAt time.Time
 }
 
 // eventNotifyRetryDelays are the pauses before each retry of a delivery that
@@ -74,6 +87,7 @@ func NewEventNotifier(host string, logger *slog.Logger, inPanic func() bool, sto
 		host: host, logger: logger, inPanic: inPanic, store: store,
 		now: time.Now, queue: make(chan Event, eventNotifyQueueSize),
 		memory: make(map[string]state.EventNotifyRecord),
+		bursts: make(map[string]*eventNotifyBurst),
 	}
 }
 
@@ -108,8 +122,12 @@ func (n *EventNotifier) Emit(e Event) {
 	select {
 	case n.queue <- e:
 	default:
-		n.logger.Error("event notification queue full", eventFieldKind, e.Kind,
-			eventFieldService, e.Service, eventFieldWatch, e.Watch, eventFieldApp, e.App)
+		n.queueDropped.Add(1)
+		now := time.Now().UnixNano()
+		last := n.queueLogAt.Load()
+		if now-last >= int64(eventNotifyLogInterval) && n.queueLogAt.CompareAndSwap(last, now) {
+			n.logger.Error("event notification queue full", "dropped", n.queueDropped.Swap(0))
+		}
 	}
 }
 
@@ -136,10 +154,37 @@ func (n *EventNotifier) Run(ctx context.Context) {
 // emit again: a removed or renamed service, check, rule, watch or app never
 // sends the recovery that would close them, so with repeat_interval they would
 // be reminded forever. It runs when a generation starts, before its workers,
-// and only against the persistent store; the in-memory fallback is owned by
-// the Run goroutine and used only in tests.
+// and also removes pending in-memory delivery records.
 func (n *EventNotifier) Retain(scope eventNotifyScope) {
-	if n == nil || n.store == nil {
+	if n == nil {
+		return
+	}
+	n.deliveryMu.Lock()
+	defer n.deliveryMu.Unlock()
+	n.scope = &scope
+	targets, _ := n.deliveryConfig()
+	enabled := make(map[string]bool, len(targets))
+	for _, target := range targets {
+		enabled[target.Name()] = true
+	}
+	for name := range n.bursts {
+		if !enabled[name] {
+			delete(n.bursts, name)
+		}
+	}
+	for _, burst := range n.bursts {
+		for key, pending := range burst.pending {
+			if pending.record.Active && !pending.notice && !scope.live(pending.record.IncidentKey) {
+				delete(burst.pending, key)
+			}
+		}
+	}
+	for key, rec := range n.memory {
+		if rec.Active && !scope.live(rec.IncidentKey) {
+			delete(n.memory, key)
+		}
+	}
+	if n.store == nil {
 		return
 	}
 	keys, err := n.store.ActiveEventNotifyIncidents()
@@ -257,6 +302,8 @@ func (n *EventNotifier) deliveryConfig() ([]notify.Notifier, time.Duration) {
 }
 
 func (n *EventNotifier) deliver(ctx context.Context, e Event) {
+	n.deliveryMu.Lock()
+	defer n.deliveryMu.Unlock()
 	if n.inPanic != nil && n.inPanic() {
 		return
 	}
@@ -270,26 +317,29 @@ func (n *EventNotifier) deliver(ctx context.Context, e Event) {
 			// edge follows, so persisting it would open an incident that nothing
 			// closes: it would silence the next notice and be reminded forever.
 			if notify.Accepts(target, level) {
-				n.send(ctx, target, e, n.message(e, level))
+				n.dispatch(ctx, target, e, n.message(e, level), level == severity.Critical)
 			}
+			continue
+		}
+		if !n.canRemember(key, target.Name()) {
 			continue
 		}
 		rec, found, err := n.load(key, target.Name())
 		if err != nil {
-			n.logger.Error("load event notification state", "notifier", target.Name(), "error", err)
+			if n.readLogAt.IsZero() || now.Sub(n.readLogAt) >= eventNotifyLogInterval {
+				n.readLogAt = now
+				n.logger.Error("load event notification state", "notifier", target.Name(), "error", err)
+			}
 			continue
 		}
+		n.reconcilePending(target.Name(), key, e, rec, found)
 		sent, ok := n.deliverTo(ctx, target, e, deliveryEdge{active: active, phase: phase, level: level, rec: rec, found: found, now: now, interval: interval})
 		if !ok {
 			continue
 		}
-		rec = state.EventNotifyRecord{
-			IncidentKey: key, Notifier: target.Name(), Phase: phase,
-			Active: active, LastSentAt: now, Subject: sent.Subject, Body: sent.Body, Severity: sent.Severity.String(),
-		}
-		if err := n.save(rec); err != nil {
-			n.logger.Error("persist event notification state", "notifier", target.Name(), "error", err)
-		}
+		rec = eventNotifyRecord(e, target.Name(), sent)
+		rec.LastSentAt = now
+		n.save(rec)
 	}
 }
 
@@ -319,7 +369,7 @@ func (n *EventNotifier) deliverTo(ctx context.Context, target notify.Notifier, e
 			return notify.Message{}, false
 		}
 		msg := n.message(e, severity.Level(edge.rec.Severity))
-		return msg, n.send(ctx, target, e, msg)
+		return msg, n.dispatch(ctx, target, e, msg, false)
 	}
 	if !notify.Accepts(target, edge.level) || !shouldDeliverEvent(edge) {
 		return notify.Message{}, false
@@ -329,28 +379,32 @@ func (n *EventNotifier) deliverTo(ctx context.Context, target notify.Notifier, e
 		held = severity.Max(severity.Level(edge.rec.Severity), edge.level)
 	}
 	msg := n.message(e, edge.level)
-	if !n.send(ctx, target, e, msg) {
+	priority := edge.level == severity.Critical || (edge.found && edge.level.Rank() > severity.Level(edge.rec.Severity).Resolved().Rank())
+	if !n.dispatch(ctx, target, e, msg, priority) {
 		return notify.Message{}, false
 	}
 	msg.Severity = held
 	return msg, true
 }
 
-func (n *EventNotifier) send(ctx context.Context, target notify.Notifier, e Event, msg notify.Message) bool {
+func (n *EventNotifier) send(ctx context.Context, target notify.Notifier, msg notify.Message) bool {
 	if err := n.sendWithRetry(ctx, target, msg); err != nil {
 		n.logger.Error("event notification failed", "notifier", target.Name(),
-			eventFieldKind, e.Kind, eventFieldService, e.Service,
-			eventFieldWatch, e.Watch, eventFieldApp, e.App, "error", err)
+			"subject", msg.Subject, "error", err)
 		return false
 	}
 	return true
 }
 
 func (n *EventNotifier) remind(ctx context.Context) {
+	n.deliveryMu.Lock()
+	defer n.deliveryMu.Unlock()
+	n.retryPersistence()
 	if n.inPanic != nil && n.inPanic() {
 		return
 	}
 	targets, interval := n.deliveryConfig()
+	n.flushSummaries(ctx, targets)
 	if interval <= 0 {
 		return
 	}
@@ -362,24 +416,22 @@ func (n *EventNotifier) remind(ctx context.Context) {
 			continue
 		}
 		for _, rec := range due {
+			if !n.canRemember(rec.IncidentKey, target.Name()) {
+				break
+			}
 			level := severity.Level(rec.Severity).Resolved()
 			rec.LastSentAt = now
 			if !notify.Accepts(target, level) {
 				// A reload raised this notifier's minimum above the incident:
 				// keep the record quiet rather than remind it every scan.
-				if err := n.save(rec); err != nil {
-					n.logger.Error("persist event reminder state", "notifier", target.Name(), "error", err)
-				}
+				n.save(rec)
 				continue
 			}
 			msg := notify.Message{Subject: rec.Subject + " (continues)", Body: rec.Body, Severity: level}
-			if err := n.sendWithRetry(ctx, target, msg); err != nil {
-				n.logger.Error("event reminder failed", "notifier", target.Name(), "error", err)
+			if !n.dispatchReminder(ctx, target, rec, msg) {
 				continue
 			}
-			if err := n.save(rec); err != nil {
-				n.logger.Error("persist event reminder state", "notifier", target.Name(), "error", err)
-			}
+			n.save(rec)
 		}
 	}
 }
@@ -416,49 +468,6 @@ func normalizeLegacyNotifyRecord(rec state.EventNotifyRecord) state.EventNotifyR
 		rec.Phase, rec.Severity = eventKindFiring, severity.Warning.String()
 	}
 	return rec
-}
-
-func (n *EventNotifier) load(key, target string) (state.EventNotifyRecord, bool, error) {
-	if n.store != nil {
-		rec, found, err := n.store.EventNotifyState(key, target)
-		if err != nil {
-			return state.EventNotifyRecord{}, false, fmt.Errorf("load incident state: %w", err)
-		}
-		return normalizeLegacyNotifyRecord(rec), found, nil
-	}
-	rec, found := n.memory[key+"\x00"+target]
-	return rec, found, nil
-}
-
-func (n *EventNotifier) save(rec state.EventNotifyRecord) error {
-	if n.store != nil {
-		if err := n.store.SetEventNotifyState(rec); err != nil {
-			return fmt.Errorf("save incident state: %w", err)
-		}
-		return nil
-	}
-	n.memory[rec.IncidentKey+"\x00"+rec.Notifier] = rec
-	return nil
-}
-
-func (n *EventNotifier) due(target string, before time.Time) ([]state.EventNotifyRecord, error) {
-	if n.store != nil {
-		records, err := n.store.DueEventNotifyStates(target, before)
-		if err != nil {
-			return nil, fmt.Errorf("load due reminders: %w", err)
-		}
-		for i := range records {
-			records[i] = normalizeLegacyNotifyRecord(records[i])
-		}
-		return records, nil
-	}
-	var due []state.EventNotifyRecord
-	for _, rec := range n.memory {
-		if rec.Notifier == target && rec.Active && !rec.LastSentAt.After(before) {
-			due = append(due, rec)
-		}
-	}
-	return due, nil
 }
 
 // eventNotifyIdentity groups all PID-level process-policy events under their

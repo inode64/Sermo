@@ -133,6 +133,9 @@ defaults:
 # Automatic firing/alert events and notifications emit only when something
 # changes by default. Rules and watches may override this with their own
 # `emission:` block; services do not have a service-wide override.
+# For fleet alarms, event_notify also groups bursts and preserves delivery
+# receipts in memory if the state disk is full. Use one route per channel:
+# docs/configuration.md#fleet-wide-event-alerts
 # emission:
 #   events: on_change      # on_change | every_cycle
 #   notify: on_change      # on_change | every_cycle

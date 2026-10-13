@@ -227,6 +227,8 @@ type Deps struct {
 	Notifiers map[string]notify.Notifier
 	// EventNotify routes all health/alarm events, independently of dry_run.
 	EventNotify *EventNotifier
+	// PersistenceEvents aggregates internal write failures across workers.
+	PersistenceEvents *PersistenceEvents
 	// GlobalNotify is the top-level `notify` default selection (notifier names): the
 	// fallback for any notify site (watch or rule alert) that declares none of its
 	// own. Empty means no default. See config.NotifyDefault.
@@ -917,6 +919,8 @@ func bandSeriesName(check, metric string) string {
 // bandSeriesSeparator joins a check name and a band metric into one series key.
 const bandSeriesSeparator = ":"
 
+const cycleStateSource = "cycle"
+
 // RecordCycle writes the staged measurements plus, for observed cycles, check
 // and service SLA after checks complete. A failed batch rolls back the entire
 // cycle and emits one best-effort error event; it never blocks rule evaluation
@@ -933,8 +937,8 @@ func (w *cycleWriter) RecordCycle(ctx context.Context, cycle cycleRecord) {
 	err := w.batch.WithBatch(ctx, func(records state.Batch) error {
 		return w.writeCycle(records, cycle)
 	})
-	if err != nil && !errors.Is(err, context.Canceled) {
-		emitSafe(w.emit, Event{Service: w.name, Kind: eventKindError, Message: "record cycle: " + err.Error()})
+	if !errors.Is(err, context.Canceled) {
+		reportPersistenceResult(w.emit, Event{Service: w.name}, cycleStateSource, "record cycle", err)
 	}
 }
 

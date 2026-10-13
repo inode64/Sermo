@@ -18,6 +18,10 @@ import (
 
 // Event records what a worker cycle did, for the operator-visible log.
 type Event struct {
+	// persistenceSource identifies an internal state write result. Only the
+	// daemon persistence emitter consumes it; service operations never set it.
+	persistenceSource string
+
 	Service string
 	Watch   string // set for host-watch events (instead of Service)
 	App     string // set for installed-application monitoring events (instead of Service/Watch)
@@ -71,6 +75,8 @@ func isErrorKind(kind string) bool {
 // Event kind values for Event.Kind.
 const (
 	eventKindFailedSuffix = "-failed"
+	// Internal acknowledgement consumed by PersistenceEvents before public emitters.
+	eventKindPersistence = "persistence"
 
 	eventKindAction           = "action"
 	eventKindAlert            = string(rules.ActionAlert)

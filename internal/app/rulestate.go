@@ -1,7 +1,6 @@
 package app
 
 import (
-	"fmt"
 	"maps"
 	"slices"
 	"time"
@@ -9,6 +8,11 @@ import (
 	"sermo/internal/rules"
 	"sermo/internal/severity"
 	"sermo/internal/state"
+)
+
+const (
+	remediationStateSource = "remediation"
+	ruleWindowStateSource  = "rule-windows"
 )
 
 func loadRuleState(store RuleStateStore, service string, ruleSet []rules.Rule) (*rules.RemediationState, map[string]*rules.WindowState, []string) {
@@ -67,20 +71,15 @@ func ruleStatePersister(store RuleStateStore, emit func(Event), service string, 
 			return
 		}
 
-		persisted := true
 		context := "persist remediation state"
 		if !plan.hasRemediation {
 			context = "delete remediation state"
 		}
-		if err := store.SetRemediationState(service, remediationRecord); err != nil {
-			emitRuleStateError(emit, service, context, err)
-			persisted = false
-		}
-		if err := store.SetRuleWindowStates(service, records); err != nil {
-			emitRuleStateError(emit, service, "persist rule window state", err)
-			persisted = false
-		}
-		if persisted {
+		remediationErr := store.SetRemediationState(service, remediationRecord)
+		reportPersistenceResult(emit, Event{Service: service}, remediationStateSource, context, remediationErr)
+		windowsErr := store.SetRuleWindowStates(service, records)
+		reportPersistenceResult(emit, Event{Service: service}, ruleWindowStateSource, "persist rule window state", windowsErr)
+		if remediationErr == nil && windowsErr == nil {
 			lastPrimed, lastRemediation, lastWindows = true, remediationRecord, records
 			return
 		}
@@ -204,8 +203,4 @@ func ruleWindowRecord(window *rules.WindowState) state.RuleWindowRecord {
 		NotifiedSeverity: snapshot.NotifiedSeverity.String(),
 		Rungs:            snapshot.Rungs,
 	}
-}
-
-func emitRuleStateError(emit func(Event), service, action string, err error) {
-	emitSafe(emit, Event{Service: service, Kind: eventKindError, Message: fmt.Sprintf("%s: %v", action, err)})
 }

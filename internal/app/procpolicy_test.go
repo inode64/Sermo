@@ -32,7 +32,7 @@ func testProcessPolicyWatcher(t *testing.T, sampler ProcSampler, allow map[strin
 	}
 	events := []Event{}
 	var snapshot checks.Result
-	emit := func(event Event) { events = append(events, event) }
+	emit := NewPersistenceEvents(func(event Event) { events = append(events, event) }, nil).Emit
 	watcher := &processPolicyWatcher{
 		name:      "postgres-execution-policy",
 		checkType: checks.CheckTypeProcessPolicy,

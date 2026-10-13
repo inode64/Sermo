@@ -260,7 +260,9 @@ func (m *Monitor) startGenerationLocked(ctx context.Context, firstBoot bool) {
 
 	// Before any worker can open a new incident, drop the open ones this
 	// generation no longer has a target to close.
-	m.deps.EventNotify.Retain(eventNotifyScopeOf(m.workers, m.watches))
+	scope := eventNotifyScopeOf(m.workers, m.watches)
+	m.deps.PersistenceEvents.retain(scope)
+	m.deps.EventNotify.Retain(scope)
 
 	sched := m.scheduler
 	// startup_delay applies once per process: the first boot fixes its deadline
