@@ -3535,14 +3535,19 @@ The conditions (declare at least one):
   duration. A path already stale on the first cycle fires immediately; it re-arms
   once the path is modified or removed.
 
-The watch's own state answers **"do the configured paths exist"** — the conditions
-above signal through events, not through it. So a watch none of whose paths exist
-reads as failed by default, which is what a config file or a database directory
-needs. Set **`absent_ok: true`** to invert that for a watch whose job is to report
-a file *appearing* — `/root/dead.letter`, a crash dump, `/forcefsck`. There the
-absence is the healthy state, and without it the watch sits red on every host that
-has nothing wrong with it. The conditions are unaffected: the file showing up over
-its `size` threshold still fires.
+The watch's state remains failed while any path breaches a `size` threshold or
+`older_than`, or while a configured root is missing. These conditions open one
+global `event_notify` incident per watch, including in `dry_run`, and recover
+when every path is healthy. Attribute changes keep their edge-triggered actions;
+they do not by themselves make the watch permanently unhealthy.
+Set **`absent_ok: true`** for a watch whose job is to report a file *appearing* —
+`/root/dead.letter`, a crash dump, `/forcefsck`. Absence is then healthy, but a
+present file over its size or age threshold still reports a failure.
+
+The failed watch's message, measured values and `summary` describe the path
+causing the failure, including a descendant of a recursive watch. A size breach
+uses the measured size for `${value}`; an age breach uses its age. Missing paths
+keep the explicit absence message because there is no sample for the template.
 
 When `recursive: true` and a selected path is a directory, every entry in that
 subtree is tracked independently (symlinks are watched as links, never followed).

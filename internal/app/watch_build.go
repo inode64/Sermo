@@ -592,7 +592,11 @@ func buildFileWatch(name string, entry, checkEntry map[string]any, deps Deps, in
 		now:           deps.Now,
 		severity:      watchSeverity(entry, checkEntry),
 	}
-	return newStatefulWatch(name, checks.CheckTypeFile, entry, deps, interval, fw.runCycle), ""
+	watch := newStatefulWatch(name, checks.CheckTypeFile, entry, deps, interval, fw.runCycle)
+	watch.FireOnFail = true
+	watch.Publish = fw.publish
+	fw.observe = watch.observeResult
+	return watch, ""
 }
 
 // buildProcWatch builds a stateful process watch: a procWatcher (its own per-PID

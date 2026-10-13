@@ -89,7 +89,6 @@ const (
 	// dbQueryCommandKilled is the processlist command of a statement the
 	// server is already stopping (rolling back before it disappears).
 	dbQueryCommandKilled = "Killed"
-	pgStateActive        = "active"
 	mariaDBVersionTag    = "MariaDB"
 	// dbQueryIdentitySep joins the parts of a statement identity.
 	dbQueryIdentitySep = ":"
@@ -244,7 +243,8 @@ type DBQueryConfig struct {
 	resources    []levelPred
 	// server remembers what the MySQL/MariaDB server supports, shared by the
 	// copies of this config; nil re-detects on every sample.
-	server *mysqlServerInfo
+	server   *mysqlServerInfo
+	postgres *postgresServerInfo
 }
 
 // mysqlServerInfo is what a MySQL/MariaDB server was found to support: its
@@ -339,6 +339,7 @@ func ParseDBQueryConfig(entry map[string]any) (DBQueryConfig, error) {
 		MaxRows:   dbQueryDefaultMaxRows,
 		Timeout:   cfgval.Duration(entry[CheckKeyTimeout]),
 		server:    &mysqlServerInfo{},
+		postgres:  &postgresServerInfo{},
 	}
 	if driver == SQLEngineMySQL {
 		if len(cfg.States) > 0 {
@@ -462,7 +463,7 @@ func (cfg DBQueryConfig) sample(ctx context.Context, db *sql.DB, id int64) ([]DB
 	if cfg.Engine == SQLEngineMySQL {
 		return sampleMySQLQueries(ctx, db, cfg.MaxLength, cfg.server, id)
 	}
-	return samplePostgresQueries(ctx, db, cfg.States, cfg.MaxLength, id)
+	return samplePostgresQueries(ctx, db, cfg.States, cfg.MaxLength, id, cfg.postgres)
 }
 
 func (cfg DBQueryConfig) open(ctx context.Context) (*sql.DB, error) {
@@ -625,56 +626,6 @@ func (r mysqlProcessRow) query(mariadb bool, maxLength int) DBQuery {
 		q.Identity = dbQueryIdentity(r.id, q.Fingerprint, formatInt(r.startedMS))
 	}
 	return q
-}
-
-// pgEpochMicros renders a timestamp column as epoch microseconds, the form
-// statement identities and the kill's re-verification compare.
-func pgEpochMicros(column string) string {
-	return fmt.Sprintf("(extract(epoch FROM %s) * %d)::bigint", column, msPerSecond*usPerMs)
-}
-
-var postgresActivityQuery = fmt.Sprintf(`SELECT pid, COALESCE(usename, ''), COALESCE(datname, ''),
-  COALESCE(host(client_addr) || ':' || client_port, ''), COALESCE(state, ''),
-  COALESCE(wait_event_type || '/' || wait_event, ''),
-  %s, %s, (extract(epoch FROM (now() - query_start)) * %d)::bigint,
-  left(query, $2), char_length(query)
-FROM pg_stat_activity
-WHERE backend_type = 'client backend' AND pid <> pg_backend_pid()
-  AND query_start IS NOT NULL AND state = ANY($1)
-  AND ($3::bigint = 0 OR pid = $3)
-ORDER BY query_start LIMIT %d`, pgEpochMicros("backend_start"), pgEpochMicros("query_start"), msPerSecond, dbQueryFetchLimit+1)
-
-func samplePostgresQueries(ctx context.Context, db *sql.DB, states []string, maxLength int, id int64) ([]DBQuery, error) {
-	rows, err := db.QueryContext(ctx, postgresActivityQuery, states, maxLength+1, id)
-	if err != nil {
-		return nil, fmt.Errorf("db_queries: pg_stat_activity: %w", err)
-	}
-	defer func() { _ = rows.Close() }()
-	var out []DBQuery
-	for rows.Next() {
-		var (
-			q      = DBQuery{Engine: SQLEnginePostgres}
-			text   string
-			ms     int64
-			length sql.NullInt64
-		)
-		// The backend state is pg's "command"; its wait event the "state".
-		if err := rows.Scan(&q.ID, &q.User, &q.Database, &q.Host, &q.Command, &q.State, &q.BackendStartUS, &q.QueryStartUS, &ms, &text, &length); err != nil {
-			return nil, fmt.Errorf("db_queries: scan: %w", err)
-		}
-		q.StartedUnixMS, q.ElapsedSeconds = q.QueryStartUS/usPerMs, max(ms, 0)/msPerSecond
-		q.Query, q.Truncated = dbQueryText(text, maxLength)
-		if length.Int64 > int64(maxLength) {
-			q.Truncated = true
-		}
-		q.Identity = dbQueryIdentity(q.ID, formatInt(q.BackendStartUS), formatInt(q.QueryStartUS))
-		q.OSThreadID = q.ID // a PostgreSQL backend is its own process
-		out = append(out, q)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("db_queries: pg_stat_activity: %w", err)
-	}
-	return out, nil
 }
 
 // dbQueryText redacts credentials, collapses whitespace and truncates a
@@ -975,35 +926,6 @@ func killMySQLQuery(ctx context.Context, db *sql.DB, target DBQuery, mode string
 	}
 	if _, err := db.ExecContext(ctx, stmt); err != nil {
 		return fmt.Errorf("%s: %w", stmt, err)
-	}
-	return nil
-}
-
-// killPostgresQuery verifies the backend and signals it in one statement, so
-// the identity cannot change between the check and the signal.
-func killPostgresQuery(ctx context.Context, db *sql.DB, target DBQuery, mode string) error {
-	fn := "pg_cancel_backend"
-	if mode == DBQueryKillModeConnection {
-		fn = "pg_terminate_backend"
-	} else if target.Command != pgStateActive {
-		// pg_cancel_backend cancels a running statement; a session idle in a
-		// transaction runs none, so cancelling would report success and leave
-		// it holding its locks.
-		return fmt.Errorf("backend %d is %q with no running statement to cancel; kill its connection instead", target.ID, target.Command)
-	}
-	var signalled bool
-	err := db.QueryRowContext(ctx, `SELECT `+fn+`(pid) FROM pg_stat_activity
-WHERE pid = $1 AND backend_type = 'client backend'
-  AND `+pgEpochMicros("backend_start")+` = $2 AND `+pgEpochMicros("query_start")+` = $3`,
-		target.ID, target.BackendStartUS, target.QueryStartUS).Scan(&signalled)
-	if errors.Is(err, sql.ErrNoRows) {
-		return ErrDBQueryChanged
-	}
-	if err != nil {
-		return fmt.Errorf("%s(%d): %w", fn, target.ID, err)
-	}
-	if !signalled {
-		return fmt.Errorf("%s(%d) was refused by the server", fn, target.ID)
 	}
 	return nil
 }

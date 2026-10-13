@@ -7,4 +7,10 @@ preflight:
   binary: { type: binary, path: "${binary}" }
   # mosquitto has no --version flag; -h prints the usage with
   # "mosquitto version 2.0.22" as its first line.
-  version: { type: command, command: ["${binary}", "-h"], timeout: 10s }
+  # Releases such as 2.0.18 return MOSQ_ERR_INVAL (3) for help.
+  version:
+    type: command
+    command: ["${binary}", "-h"]
+    expect_exit: [0, 3]
+    expect_stdout: { op: '=~', value: '^mosquitto version [0-9]+\.' }
+    timeout: 10s

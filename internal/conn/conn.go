@@ -511,6 +511,10 @@ type Config struct {
 type Result struct {
 	Version string
 	Extra   map[string]string
+	// TargetHost and TargetPort report a dynamically selected peer, including
+	// on errors (for example a DNS nameserver selected from resolv.conf).
+	TargetHost string
+	TargetPort int
 	// Failure is a trustworthy negative protocol verdict. Unlike an I/O or
 	// decoding error, it means the peer answered and rejected the requested
 	// operation, so consumers can preserve Extra as structured evidence.

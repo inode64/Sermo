@@ -285,6 +285,9 @@ func TestDNSProbeResolvconf(t *testing.T) {
 	if res.Extra["addresses"] != "203.0.113.7" || res.Extra["rcode"] != "NOERROR" {
 		t.Fatalf("extra = %v, want the resolved address", res.Extra)
 	}
+	if res.TargetHost != host || res.TargetPort != n {
+		t.Fatalf("resolver target = %s:%d, want %s:%d", res.TargetHost, res.TargetPort, host, n)
+	}
 }
 
 // dnsFakeServer answers every query with the response respond builds from the
@@ -335,9 +338,9 @@ func TestDNSProbeRefusedIsProtocolFailure(t *testing.T) {
 }
 
 func TestDNSProbeQTypeAndHeaderFlags(t *testing.T) {
-	var gotQType uint16
+	queryTypes := make(chan uint16, 1)
 	port := dnsFakeServer(t, func(req []byte) []byte {
-		gotQType = binary.BigEndian.Uint16(req[len(req)-4:])
+		queryTypes <- binary.BigEndian.Uint16(req[len(req)-4:])
 		resp := dnsResponse(binary.BigEndian.Uint16(req), 0, 0)
 		resp[2] |= 0x04 // AA
 		resp[3] |= 0x20 // AD
@@ -350,8 +353,13 @@ func TestDNSProbeQTypeAndHeaderFlags(t *testing.T) {
 	if err != nil || res.Failure != "" {
 		t.Fatalf("Probe: %v %q", err, res.Failure)
 	}
-	if gotQType != dnsQTypeSOA {
-		t.Fatalf("server saw qtype %d, want SOA", gotQType)
+	select {
+	case gotQType := <-queryTypes:
+		if gotQType != dnsQTypeSOA {
+			t.Fatalf("server saw qtype %d, want SOA", gotQType)
+		}
+	case <-ctx.Done():
+		t.Fatal("server did not record the query type")
 	}
 	want := map[string]string{"qtype": "SOA", "aa": "true", "ad": "true", "tc": "false", "rcode": "NOERROR"}
 	for k, v := range want {

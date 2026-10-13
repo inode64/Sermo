@@ -266,6 +266,7 @@ func TestFileWatchSnapshotNamesTheMeasuredRoot(t *testing.T) {
 	h := &fileWatchHarness{}
 	w := h.watcher(missing, true, fileCond{sizeChange: true})
 	w.paths = []string{missing, first, second}
+	w.absentOK = true
 	var got checks.Result
 	w.publish = func(_, _ string, res checks.Result) { got = res }
 
@@ -688,11 +689,7 @@ func TestFileWatchAbsentOKReportsHealthyUntilTheFileAppears(t *testing.T) {
 	if len(h.fired) != 1 {
 		t.Fatalf("the file appearing over the threshold must still fire, got %d", len(h.fired))
 	}
-	// The published state of a stateful file watch answers "do the paths exist",
-	// never "is the condition met" — every condition signals through the edge
-	// event instead. absent_ok only flips the answer for an empty scan, so a
-	// present file reads OK here exactly as it does for every other file watch.
-	if !got.OK {
-		t.Fatalf("a present path publishes OK for every file watch, got %+v", got)
+	if got.OK {
+		t.Fatalf("a present file over its size threshold must remain unhealthy, got %+v", got)
 	}
 }

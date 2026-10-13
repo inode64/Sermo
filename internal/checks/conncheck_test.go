@@ -139,6 +139,40 @@ func TestConnCheckRunOKWithVersion(t *testing.T) {
 	}
 }
 
+func TestConnCheckReportsTargetOnSuccessAndError(t *testing.T) {
+	for _, tt := range []struct {
+		name                  string
+		cfg                   conn.Config
+		probe                 conn.Result
+		address, host, socket string
+		port                  int
+	}{
+		{name: "configured", cfg: conn.Config{Host: "127.0.0.1", Port: 53}, address: "127.0.0.1:53", host: "127.0.0.1", port: 53},
+		{name: "dynamic", cfg: conn.Config{Host: "127.0.0.1", Port: 53}, probe: conn.Result{TargetHost: "192.0.2.53", TargetPort: 5353}, address: "192.0.2.53:5353", host: "192.0.2.53", port: 5353},
+		{name: "dynamic IPv6", cfg: conn.Config{Host: "127.0.0.1", Port: 53}, probe: conn.Result{TargetHost: "2001:db8::53", TargetPort: 5353}, address: "[2001:db8::53]:5353", host: "2001:db8::53", port: 5353},
+		{name: "socket", cfg: conn.Config{Socket: "/run/probe.sock"}, address: "/run/probe.sock", socket: "/run/probe.sock"},
+		{name: "dynamic replaces socket", cfg: conn.Config{Socket: "/run/probe.sock"}, probe: conn.Result{TargetHost: "192.0.2.53", TargetPort: 5353}, address: "192.0.2.53:5353", host: "192.0.2.53", port: 5353},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			for _, probeErr := range []error{nil, context.DeadlineExceeded} {
+				c := connCheck{name: "dns", timeout: time.Second, proto: fakeProto{}, cfg: tt.cfg,
+					probe: func(context.Context, conn.Config) (conn.Result, error) { return tt.probe, probeErr }}
+				res := c.Run(t.Context())
+				if !strings.Contains(res.Message, tt.address) || res.Unavailable != (probeErr != nil) {
+					t.Fatalf("target result: %+v", res)
+				}
+				if tt.socket != "" {
+					if res.Data[DataKeySocket] != tt.socket || res.Data[DataKeyHost] != nil || res.Data[DataKeyPort] != nil {
+						t.Fatalf("socket target data: %v", res.Data)
+					}
+				} else if res.Data[DataKeyHost] != tt.host || res.Data[DataKeyPort] != tt.port || res.Data[DataKeySocket] != nil {
+					t.Fatalf("host target data: %v", res.Data)
+				}
+			}
+		})
+	}
+}
+
 func TestConnCheckAllMatchReportsWorstPath(t *testing.T) {
 	// In interface_match: all every interface must succeed; the reported
 	// latency/version should reflect the worst (slowest) path, not whichever
