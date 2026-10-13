@@ -46,14 +46,15 @@ func (w *Watch) persistRuntimeState() {
 		return
 	}
 	rec := w.runtimeRecord()
-	if watchRuntimeRecordsEqual(rec, w.persistedState) {
+	if !w.stateDirty && watchRuntimeRecordsEqual(rec, w.persistedState) {
 		return
 	}
-	if err := w.StateStore.SetWatchRuntimeState(w.runtimeStateName(), w.runtimeStateSlot(), rec); err != nil {
-		w.emitWatchStateError("persist watch state", err)
-		return
+	err := w.StateStore.SetWatchRuntimeState(w.runtimeStateName(), w.runtimeStateSlot(), rec)
+	w.stateDirty = err != nil
+	if err == nil {
+		w.persistedState = rec
 	}
-	w.persistedState = rec
+	reportPersistenceResult(w.emit, Event{Watch: w.Name}, w.runtimeStateSlot(), "persist watch state", err)
 }
 
 func (w *Watch) runtimeRecord() state.WatchRuntimeRecord {

@@ -50,6 +50,7 @@ type pidIncidents struct {
 
 	activeLoaded bool
 	active       bool
+	activeDirty  bool
 	// announced records that the open incident notified someone live, so the
 	// aggregate recovery goes out only for an incident its notifiers heard.
 	announced bool
@@ -86,9 +87,9 @@ func (t *pidIncidents) persistActive() {
 	if t.announced {
 		rec.NotifiedSeverity = t.severity.Resolved().String()
 	}
-	if err := t.stateStore.SetWatchRuntimeState(t.watch, t.slot, rec); err != nil {
-		emitSafe(t.emit, Event{Watch: t.watch, Kind: eventKindError, Message: "persist " + t.slot + " state: " + err.Error()})
-	}
+	err := t.stateStore.SetWatchRuntimeState(t.watch, t.slot, rec)
+	t.activeDirty = err != nil
+	reportPersistenceResult(t.emit, Event{Watch: t.watch}, t.slot, "persist "+t.slot+" state", err)
 }
 
 // settle updates the aggregate incident for this cycle's offender count. It
@@ -100,14 +101,15 @@ func (t *pidIncidents) settle(offenders int) (recovered, announced bool) {
 	if offenders == 0 && t.active {
 		announced = t.announced
 		t.active, t.announced = false, false
-		t.persistActive()
-		return true, announced
+		recovered, t.activeDirty = true, true
 	}
 	if offenders > 0 && !t.active {
-		t.active = true
+		t.active, t.activeDirty = true, true
+	}
+	if t.activeDirty {
 		t.persistActive()
 	}
-	return false, false
+	return recovered, announced
 }
 
 // announce records that a live notification went out for the open incident.

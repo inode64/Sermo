@@ -184,6 +184,7 @@ type Watch struct {
 	settled        bool      // true after the startup observation cycle completed
 	stateLoaded    bool
 	stateRestored  bool
+	stateDirty     bool                     // a failed write must retry even if readings return to persistedState
 	persistedState state.WatchRuntimeRecord // immutable snapshot; replaced after successful persistence
 	unavailable    bool
 	// everAvailable records that the check produced a reading at least once,

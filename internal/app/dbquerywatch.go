@@ -137,6 +137,7 @@ type dbQueryWatcher struct {
 	unavailable  bool
 	policyState  rules.RemediationState
 	policyLoaded bool
+	policyDirty  bool
 }
 
 // buildDBQueriesWatch builds a db_queries watch. kill is only reachable from a
@@ -227,6 +228,11 @@ func restoreDBQueries(snapshots *WatchSnapshots, name string) []checks.DBQuery {
 }
 
 func (w *dbQueryWatcher) runCycle(ctx context.Context) {
+	// Persist an already executed action without executing it again, even if
+	// its statement has ended or the monitored service is now stopped.
+	if w.policyDirty && ctx.Err() == nil {
+		w.persistPolicyState()
+	}
 	w.loadState()
 	if w.status != nil {
 		if st, err := w.status(ctx); err == nil && st != servicemgr.StatusActive {
@@ -732,9 +738,9 @@ func (w *dbQueryWatcher) persistPolicyState() {
 		return
 	}
 	rec := state.WatchRuntimeRecord{Policy: remediationToRecord(&w.policyState)}
-	if err := w.stateStore.SetWatchRuntimeState(w.name, dbQueryPolicyStateSlot, rec); err != nil {
-		w.emitEvent(Event{Watch: w.name, Kind: eventKindError, Message: "persist kill_query policy state: " + err.Error()})
-	}
+	err := w.stateStore.SetWatchRuntimeState(w.name, dbQueryPolicyStateSlot, rec)
+	w.policyDirty = err != nil
+	reportPersistenceResult(w.emitEvent, Event{Watch: w.name}, dbQueryPolicyStateSlot, "persist kill_query policy state", err)
 }
 
 // watchLocalName is a service watch's own name ("<service>:<watch>" → "<watch>").
