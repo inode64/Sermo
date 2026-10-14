@@ -73,6 +73,7 @@ required there.
 - [Monitoring flag](#monitoring-flag)
 - [Blocking operations while clients are connected](#blocking-operations-while-clients-are-connected)
 - [Long-running database statements](#long-running-database-statements)
+- [Binary log size](#binary-log-size)
 - [PostgreSQL replication watches](#postgresql-replication-watches)
 - [Exim hints database maintenance](#exim-hints-database-maintenance)
 - [Exim mail-volume alerts](#exim-mail-volume-alerts)
@@ -2342,6 +2343,46 @@ The catalog never ships an automatic kill. To cancel statements automatically,
 add an explicit, scoped `then.kill_query` with its own `policy:` to the
 concrete service — see [killing a statement](rules.md#running-database-statements-db_queries)
 and [safety](safety.md#database-statement-kills).
+
+## Binary log size
+
+The `mysql` and `mariadb` catalog services also ship `alert-if-binlog-large`,
+a [`size`](rules.md#size-growth-size) check over the binary logs. It opens one
+`error` incident while the files matching `binlog_pattern` take more than
+`binlog_max_size` in total, or after they grow by `binlog_grow_by` within
+`binlog_grow_within` — a bulk load, a replica that stopped purging or an
+`expire_logs_days` that no longer fits the volume. Both limits belong to the
+same check: while the total is already over `binlog_max_size`, a burst of
+growth keeps that incident open and its message names both causes, but it
+does not send a second alert.
+
+The default pattern matches the usual basenames (`mariadb-bin.000123`,
+`mysql-bin.000123`, `<host>-bin.000123`, `binlog.000123`) and the relay logs
+under `/var/lib/mysql`. A host without binary logging matches nothing and
+stays healthy. The directory before the first wildcard must exist: when
+`datadir` lives elsewhere the check is unavailable until `binlog_pattern`
+points at it, so a wrong path is never mistaken for "no binlogs".
+
+| variable | default | meaning |
+|---|---|---|
+| `binlog_pattern` | `/var/lib/mysql/*bin*.[0-9]*` | glob summed on each run; set it when `datadir` or `log_bin_basename` differ |
+| `binlog_max_size` | `20G` | error while the total exceeds this |
+| `binlog_grow_by`, `binlog_grow_within` | `1G`, `30m` | error when the total grows this much within this window |
+| `binlog_check_interval` | `5m` | how often the check runs; one glob and one `stat` per binlog each time |
+
+Set a limit's variables to `""` to switch that limit off; at least one must
+stay configured.
+
+```yaml
+# /etc/sermo/services.local/mariadb.yml — 7-day retention on a large volume,
+# no growth alert
+name: mariadb
+variables:
+  binlog_max_size: 60G
+  binlog_pattern: "/srv/mysql/mariadb-bin.[0-9]*"
+  binlog_grow_by: ""
+  binlog_grow_within: ""
+```
 
 ## PostgreSQL replication watches
 

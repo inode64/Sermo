@@ -60,7 +60,9 @@ func TestGraphMetricsAreWrittenIntoResultData(t *testing.T) {
 					Users: []InotifyUserUsage{{UID: 0, Instances: 36, Watches: 400}}}, nil
 			}}},
 		{CheckTypeSize, map[string]any{"path": "/var/log", "grow_by": "10M", "within": "1h"}, Deps{DefaultTimeout: second,
-			SizeSampler: func(context.Context, string, bool) (int64, error) { return 4 << 20, nil }}},
+			SizeSampler: func(context.Context, string, bool) (SizeMeasure, error) {
+				return SizeMeasure{Bytes: 4 << 20, Files: 1}, nil
+			}}},
 	}
 
 	for _, tc := range cases {

@@ -79,6 +79,8 @@ const (
 	watchReadingLabelGlusterVolumesExpected   = "Gluster volumes expected"
 	watchReadingLabelGlusterVolumesStarted    = "Gluster volumes started"
 	watchReadingLabelGrowth                   = "Growth"
+	watchReadingLabelFiles                    = "Files"
+	watchReadingLabelMax                      = "Max"
 	watchReadingLabelHealth                   = "Health"
 	watchReadingLabelHost                     = "Host"
 	watchReadingLabelInputs                   = "Inputs"
@@ -894,7 +896,9 @@ func staleBinaryCheckReadings(data map[string]any) []web.WatchReading {
 func sizeCheckReadings(data map[string]any) []web.WatchReading {
 	rb := readingsFrom(data).
 		addString(checks.DataKeyPath, watchReadingLabelPath).
-		addBytes(checks.DataKeyCurrentBytes, watchReadingLabelCurrentSize)
+		addBytes(checks.DataKeyCurrentBytes, watchReadingLabelCurrentSize).
+		addInt(checks.DataKeyFiles, watchReadingLabelFiles).
+		addBytes(checks.DataKeyMaxBytes, watchReadingLabelMax)
 	if v, ok := cfgval.Int(data[checks.DataKeyGrowthBytes]); ok {
 		rb.add(checks.DataKeyGrowthBytes, watchReadingLabelGrowth, checks.HumanizeSignedBytes(int64(v)))
 	}

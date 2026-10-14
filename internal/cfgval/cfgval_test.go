@@ -482,6 +482,20 @@ func TestDurationOr(t *testing.T) {
 	}
 }
 
+func TestIsGlobPattern(t *testing.T) {
+	for path, want := range map[string]bool{
+		"/var/lib/mysql/mariadb-bin.000001": false,
+		"/var/lib/mysql/*bin*.[0-9]*":       true,
+		"/var/log/app?.log":                 true,
+		"/srv/[ab]/data":                    true,
+		"":                                  false,
+	} {
+		if got := IsGlobPattern(path); got != want {
+			t.Errorf("IsGlobPattern(%q) = %v, want %v", path, got, want)
+		}
+	}
+}
+
 // TestCompareFloatCoversCompareOps locks the two halves of the operator
 // vocabulary together: every op IsCompareOp accepts must be implemented by
 // CompareFloat (an accepted-but-unimplemented op would silently never fire),

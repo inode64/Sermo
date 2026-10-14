@@ -10,6 +10,7 @@ policy: { cooldown: 5m }
 checks:
   no-path:    { type: log, regex: "a", count: { op: ">", value: 1 }, within: 5m }
   rel-path:   { type: log, path: logs/x.log, regex: "a", count: { op: ">", value: 1 }, within: 5m }
+  bad-glob:   { type: log, path: "/var/log/[x.log", regex: "a", count: { op: ">", value: 1 }, within: 5m }
   no-regex:   { type: log, path: /var/log/x.log, count: { op: ">", value: 1 }, within: 5m }
   bad-regex:  { type: log, path: /var/log/x.log, regex: "(", count: { op: ">", value: 1 }, within: 5m }
   no-count:   { type: log, path: /var/log/x.log, regex: "a", within: 5m }
@@ -20,6 +21,7 @@ checks:
 `)
 	mustHave(t, bad, "no-path log check requires a path")
 	mustHave(t, bad, "rel-path log check path must be absolute")
+	mustHave(t, bad, `bad-glob log check path "/var/log/[x.log" is not a valid glob`)
 	mustHave(t, bad, "no-regex log check requires a regex")
 	mustHave(t, bad, "bad-regex log check regex is invalid")
 	mustHave(t, bad, "no-count log check requires a count {op, value}")

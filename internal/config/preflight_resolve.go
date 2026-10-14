@@ -104,7 +104,7 @@ func selectResourcePath(typ string, raw any) (selected string, ok bool) {
 		}
 		// A glob candidate offers whatever it matches, lexically first; the
 		// fallback prefers a literal, whose failure message names a real path.
-		if strings.ContainsAny(path, globMetaChars) {
+		if cfgval.IsGlobPattern(path) {
 			matches, err := filepath.Glob(path)
 			if err != nil {
 				continue

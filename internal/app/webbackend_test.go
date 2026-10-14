@@ -1621,6 +1621,31 @@ func TestFailedUnitsWatchConditions(t *testing.T) {
 	}
 }
 
+// A size check shows each configured limit: the absolute max, the growth
+// window, or both; an absent one leaves no row behind.
+func TestSizeWatchConditions(t *testing.T) {
+	both := watchConditions(map[string]any{
+		checks.CheckKeyType: checks.CheckTypeSize, checks.CheckKeyPath: "/var/lib/mysql/mariadb*",
+		checks.CheckKeyMax: "20G", checks.CheckKeyGrowBy: "1G", checks.CheckKeyWithin: "30m",
+	}, nil)
+	want := []web.WatchCondition{
+		{Field: "path", Value: "/var/lib/mysql/mariadb*"},
+		{Field: "size", Op: ">", Value: "20G"},
+		{Field: "growth", Op: ">=", Value: "1G"},
+		{Field: "within", Value: "30m"},
+	}
+	if !slices.Equal(both, want) {
+		t.Fatalf("conditions = %+v, want %+v", both, want)
+	}
+	maxOnly := watchConditions(map[string]any{
+		checks.CheckKeyType: checks.CheckTypeSize, checks.CheckKeyPath: "/var/spool", checks.CheckKeyMax: "5G",
+	}, nil)
+	wantMaxOnly := []web.WatchCondition{{Field: "path", Value: "/var/spool"}, {Field: "size", Op: ">", Value: "5G"}}
+	if !slices.Equal(maxOnly, wantMaxOnly) {
+		t.Fatalf("max-only conditions = %+v, want %+v", maxOnly, wantMaxOnly)
+	}
+}
+
 func TestWatchConditionsUseCheckPredicateRegistry(t *testing.T) {
 	tests := []struct {
 		name      string

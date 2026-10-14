@@ -113,10 +113,6 @@ func firstExistingPath(candidates []any) string {
 	return firstExistingStringPath(cfgval.StringList(candidates))
 }
 
-// globMetaChars are the filepath.Match metacharacters that make a candidate a
-// pattern rather than a literal path.
-const globMetaChars = "*?["
-
 func firstExistingStringPath(candidates []string) string {
 	var firstLiteral, firstAny string
 	for _, p := range candidates {
@@ -127,7 +123,7 @@ func firstExistingStringPath(candidates []string) string {
 		if firstAny == "" {
 			firstAny = p
 		}
-		if strings.ContainsAny(p, globMetaChars) {
+		if cfgval.IsGlobPattern(p) {
 			if matches, err := filepath.Glob(p); err == nil && len(matches) > 0 {
 				return matches[0]
 			}

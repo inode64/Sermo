@@ -218,7 +218,7 @@ func validateCleanOnStop(raw any, add addFunc) {
 			// /var/log/../.. cannot sidestep the protected-dir check.
 			clean := filepath.Clean(path)
 			_, isProtected := protectedDirs[clean]
-			if strings.ContainsAny(path, "*?[") {
+			if cfgval.IsGlobPattern(path) {
 				add("%s recursive path %q must not be a glob", entryPath, path)
 			} else if isProtected || pathDepth(clean) < 2 {
 				add("%s refuses to recursively delete %q (root/shallow/system path)", entryPath, path)

@@ -117,6 +117,7 @@ const (
 	DataKeyLoad5              = fieldLoad5
 	DataKeyLoad15             = fieldLoad15
 	DataKeyMax                = "max"
+	DataKeyMaxBytes           = "max_bytes"
 	DataKeyMetric             = fieldMetric
 	DataKeyMinRules           = CheckKeyMinRules
 	DataKeyMode               = "mode"

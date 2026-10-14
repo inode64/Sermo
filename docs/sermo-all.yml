@@ -328,6 +328,11 @@ watches:
     check: { type: size, path: /var/log/audit/audit.log, grow_by: 500M, within: 1h }
     then: { notify: [ops-email] }
 
+  binlog-size:
+    monitor: disabled
+    check: { type: size, path: "/var/lib/mysql/mariadb*", max: 20G, grow_by: 1G, within: 30m, severity: error }
+    then: { notify: [ops-email] }
+
   file-count:
     monitor: disabled
     check:

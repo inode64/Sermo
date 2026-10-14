@@ -218,6 +218,7 @@ func failedUnitsWatchConditions(check map[string]any) []web.WatchCondition {
 
 func sizeWatchConditions(check map[string]any) []web.WatchCondition {
 	out := appendValue(nil, checks.DataKeyPath, cfgval.AsString(check[checks.CheckKeyPath]))
+	out = appendCompare(out, checks.DataKeySize, cfgval.CompareOpGreater, cfgval.String(check[checks.CheckKeyMax]))
 	out = appendCompare(out, watchConditionFieldGrowth, cfgval.CompareOpGreaterEqual, cfgval.String(check[checks.CheckKeyGrowBy]))
 	out = appendValue(out, checks.CheckKeyWithin, cfgval.String(check[checks.CheckKeyWithin]))
 	return appendFlag(out, check, checks.CheckKeyIncludeHidden, checks.CheckKeyIncludeHidden)
