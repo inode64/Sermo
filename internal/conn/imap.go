@@ -11,6 +11,7 @@ import (
 const (
 	imapGreetingOKPrefix      = "* OK"
 	imapGreetingPreauthPrefix = "* PREAUTH"
+	imapGreetingByePrefix     = "* BYE"
 	imapLoginCommand          = "LOGIN"
 	imapLogoutCommand         = "LOGOUT"
 	imapStatusOK              = "OK"
@@ -34,7 +35,8 @@ func (imapProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	return probeBanner(ctx, cfg, defaultPortIMAP, imapHandshake)
 }
 
-// imapHandshake reads the server greeting (which must be OK or PREAUTH), performs
+// imapHandshake reads the server greeting (which must be OK or PREAUTH; a BYE
+// greeting that says the refusal is temporary is a busy verdict), performs
 // a LOGIN when credentials are supplied (and the server is not already
 // pre-authenticated), and logs out. The greeting banner is returned in Extra.
 func imapHandshake(rw io.ReadWriter, cfg Config) (Result, error) {
@@ -45,6 +47,12 @@ func imapHandshake(rw io.ReadWriter, cfg Config) (Result, error) {
 	}
 	res := Result{Extra: map[string]string{extraGreeting: strings.TrimSpace(greeting)}}
 
+	if reason, bye := strings.CutPrefix(strings.TrimSpace(greeting), imapGreetingByePrefix); bye {
+		if busy, ok := refusalBusy(replyBye, reason); ok {
+			return busyResult(res, busy), nil
+		}
+		return Result{}, fmt.Errorf("server refused the connection: %s", strings.TrimSpace(greeting))
+	}
 	preauth := strings.HasPrefix(greeting, imapGreetingPreauthPrefix)
 	if !strings.HasPrefix(greeting, imapGreetingOKPrefix) && !preauth {
 		return Result{}, fmt.Errorf("unexpected greeting: %s", strings.TrimSpace(greeting))

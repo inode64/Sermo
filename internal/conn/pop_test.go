@@ -19,5 +19,12 @@ func TestPOPHandshakeLoginFails(t *testing.T) {
 }
 
 func TestPOPHandshakeBadGreeting(t *testing.T) {
-	assertHandshakeFails(t, popHandshake, "-ERR server unavailable\r\n", Config{})
+	assertHandshakeFails(t, popHandshake, "garbage\r\n", Config{})
+}
+
+// A -ERR greeting is the server refusing the session: busy. A -ERR to PASS
+// stays an authentication failure (TestPOPHandshakeLoginFails).
+func TestPOPHandshakeBusyGreeting(t *testing.T) {
+	assertHandshakeBusy(t, popHandshake, "-ERR [SYS/TEMP] Maximum number of connections exceeded\r\n", Config{}, "-ERR")
+	assertHandshakeFails(t, popHandshake, "-ERR [SYS/PERM] Configuration error\r\n", Config{})
 }

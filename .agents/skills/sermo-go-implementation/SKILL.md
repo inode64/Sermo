@@ -61,6 +61,12 @@ DHCP's per-datagram `IP_PKTINFO` path. A protocol may rebuild an endpoint only
 when its wire format genuinely selects a different target, with the reason
 documented at that call.
 
+A server that answers it cannot serve now (too many connections, loading,
+starting up, a 421 greeting) is a busy verdict, not an error: classify it
+through `internal/conn/busy.go` and return `busyResult(...)` with a nil error,
+or `AsBusy` for driver errors. Add new codes there, as constants, so probes,
+`sql` and `db_queries` share one vocabulary.
+
 Variable length and count fields on the wire go through the `wire*` helpers in
 `internal/conn/wire.go`; they return an error instead of truncating. A conversion
 with an explicit local bound, such as FastCGI string lengths below 128, can

@@ -33,7 +33,9 @@ watches:
       op: '>'
       value: 60%
       optional: true
-  restart-if-worker-thread-hot:
+  # A busy cache is not a broken one: restarting it empties the cache and
+  # sends every miss to the backend at once.
+  alert-if-cpu-thread-high:
     check:
       type: metric
       scope: service
@@ -41,10 +43,34 @@ watches:
       op: '>'
       value: 90%
       optional: true
+      severity: warning
+      levels:
+        error: { op: '>', value: 98% }
     for:
-      duration: 6m
+      duration: 5m
     then:
-      action: restart
+      action: alert
+      message: >-
+        During ${rule.duration}, ${display_name} single-thread CPU usage stayed above ${check.threshold} (current ${check.value})
+  # One error when memcached refuses clients: past its connection limit (-c)
+  # it accepts, answers "Too many open connections" and closes, and counts it
+  # in rejected_connections. Sermo reports the refusal as busy and never
+  # restarts for it; raise -c or find the client that leaks connections.
+  alert-if-connections-rejected:
+    check:
+      type: memcached
+      host: ${host}
+      port: ${port}
+      timeout: 3s
+      optional: true
+      severity: error
+      max_increase:
+        rejected_connections: 0
+      within: 10m
+    then:
+      action: alert
+      message: >-
+        ${display_name} refused client connections: its connection limit (-c) is exhausted
   restart-if-memcached-failed:
     check:
       type: memcached

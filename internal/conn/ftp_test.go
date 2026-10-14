@@ -44,5 +44,11 @@ func TestFTPHandshakeLoginFails(t *testing.T) {
 }
 
 func TestFTPHandshakeBadGreeting(t *testing.T) {
-	assertHandshakeFails(t, ftpHandshake, "421 service not available\r\n", Config{})
+	assertHandshakeFails(t, ftpHandshake, "554 no service here\r\n", Config{})
+}
+
+// A server past MaxClients (421) or one not ready yet (120) answered: busy.
+func TestFTPHandshakeBusyGreeting(t *testing.T) {
+	assertHandshakeBusy(t, ftpHandshake, "421 Too many users, sorry\r\n", Config{}, "421")
+	assertHandshakeBusy(t, ftpHandshake, "120 Service ready in 5 minutes\r\n", Config{}, "120")
 }

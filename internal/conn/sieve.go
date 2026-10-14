@@ -14,7 +14,7 @@ const (
 	sieveCapabilityNameIndex      = 1
 	sieveCapabilityValueIndex     = 3
 	sieveGreetingLimit            = 64
-	sieveReplyBye                 = "BYE"
+	sieveReplyBye                 = replyBye
 	sieveReplyNo                  = "NO"
 	sieveReplyOK                  = "OK"
 )
@@ -52,6 +52,12 @@ func (sieveProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 				}
 				return Result{Version: impl, Extra: extra}, nil
 			case strings.HasPrefix(upper, sieveReplyNo), strings.HasPrefix(upper, sieveReplyBye):
+				// The server refused the session instead of greeting it: busy
+				// when it says the refusal is temporary.
+				code, reason, _ := strings.Cut(strings.TrimSpace(line), " ")
+				if busy, ok := refusalBusy(strings.ToUpper(code), reason); ok {
+					return busyResult(Result{Extra: map[string]string{extraGreeting: line}}, busy), nil
+				}
 				return Result{}, fmt.Errorf("ManageSieve greeting refused: %s", line)
 			default:
 				if v, ok := sieveImplementation(line); ok {

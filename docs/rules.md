@@ -863,7 +863,7 @@ Types that accept `levels:`, and the threshold keys a level restates:
 | per metric | `swap` | `usage`: `used_pct` / `free_pct` / `free_bytes`; `io`: `delta` |
 | per metric | `net` | `errors`: `delta` |
 | per metric | `icmp` | `latency` with `threshold`: `threshold` |
-| metric threshold | `metric` | `op` + `value` |
+| metric threshold | `metric`, `sql` | `op` + `value` |
 | output assertion | `command` | `expect_stdout` (`{op, value}` with `>`, `>=`, `<`, `<=`) |
 | field assertions | connection protocols (`redis`, `mysql`, …) | `expect` (its ordered `{op, value}` fields) |
 | expiry window | `cert` | `expires_in_days` |
@@ -1339,6 +1339,71 @@ keep the per-protocol entries short:
 HTTP-based protocol exchanges reject response-body read errors, including
 timeouts and premature disconnects; a matching partial response is not accepted.
 
+#### Busy servers
+
+A server that answers "too many connections", "loading", "starting up" or
+"try again later" is **alive**: it refused this client, it did not crash. The
+cause is never the daemon itself (a full disk, a leaking client, a load
+spike, a dataset still loading), so restarting it cannot fix it — it drops
+every client still being served and usually makes the outage longer. Sermo
+reports such an answer as **busy**:
+
+- the check result carries `busy_reason` (the server's message) and
+  `error_code` (its own code, when it sends one), and its message reads
+  `<protocol> <address>: server busy: Too many connections (1040)`;
+- a health check (`mysql`, `redis`, `postgres`, …) reads it as **failing**,
+  so dashboards, SLA and `event_notify` see the outage; a condition or
+  verdictless check (`sql`, `reports: state`) reads it as **unavailable**,
+  because it never got the reading its comparison needs;
+- **no operation ever fires on it**: a rule or watch whose `then` restarts,
+  starts, stops, reloads or resumes the service reads a busy check as unknown,
+  so it does not fire and a busy cycle resets its `for:` window. Alert rules
+  see the failure; guards fail closed, as they do on any unavailable check
+  (see [the evaluation table](#unavailable-and-busy-observations));
+- when only such operation rules read the check, Sermo raises the alarm
+  itself: one `firing` event ending in "automatic remediation withheld (the
+  server answered)", and one `recovered` event when the server serves again.
+  Within the service's `policy.cooldown` after an automatic operation of
+  Sermo's own, that notice waits: a database still recovering or a dataset
+  still loading is the service settling, and it is announced only if it is
+  still busy once the cooldown ends;
+- a watch whose check is busy announces and notifies its firing but runs no
+  action — no `hook`, `expand`, `makestep` or `remount` — and records a
+  `suppressed` event saying so, so a hook cannot restart a saturated server.
+
+A server that does not answer at all — connection refused, timeout, a closed
+socket — is not busy, and a restart rule still fires for it.
+
+| Protocol | Busy answers |
+|---|---|
+| `mysql` / `mariadb` | errors 1040 too many connections, 1041 out of resources, 1129 host blocked, 1135 cannot create thread, 1203 `max_user_connections`, 1226 user resource limit |
+| `postgres` | SQLSTATE class `53` (too many clients, disk full, out of memory, configuration limit) and `57P03` (starting up, in recovery, shutting down) |
+| `redis` (Valkey, KeyDB) | `LOADING`, `BUSY`, `MASTERDOWN`, `MISCONF`, `ERR max number of clients reached` |
+| `memcached` | `ERROR Too many open connections` |
+| `mqtt` | CONNACK return code 3, server unavailable |
+| `smtp`, `smtp_acceptance` | reply 421 |
+| `ftp` | greeting 421 or 120 |
+| `imap`, `sieve` | a `BYE` (sieve also `NO`) instead of the greeting, when it says the refusal is temporary |
+| `pop` | a `-ERR` greeting, when it says the refusal is temporary |
+
+The `sql` and `replication` checks and the `db_queries` watch classify their
+MySQL and PostgreSQL driver errors with the same codes. A mail greeting
+refusal is busy only when it says it is temporary: the RFC response codes
+`[UNAVAILABLE]`, `[LIMIT]`, `[SYS/TEMP]`, `[IN-USE]` or `TRYLATER`, or words
+such as "too many", "try again", "temporarily", "shutting down", "maximum
+number" or "busy". Any other refusal — `* BYE Internal error`, `-ERR
+[SYS/PERM]` — stays an ordinary failure, so a broken server is still
+restarted.
+
+Some saturated servers never answer: a postfix whose smtpd processes are all
+busy leaves the connection in the backlog until it times out, and mosquitto
+at `max_connections` closes the socket without a CONNACK. Those look exactly
+like a dead server, so they stay unavailable. Watch connection usage before the
+limit instead: the `mysql`, `mariadb`, `postgres`, `redis` and `keydb` catalog
+services ship `alert-if-connections-near-limit`, and `memcached` ships
+`alert-if-connections-rejected` (see
+[services](services.md#saturated-servers)).
+
 Protocols, in the order of the table above:
 
 - `mysql` (alias `mariadb`) — default port 3306; `tls` supported. `user` is
@@ -1347,7 +1412,9 @@ Protocols, in the order of the table above:
   credentials, like the smtp/amqp greeting probes. With a user/password it
   authenticates and reads `SELECT VERSION()` in one round trip via
   `github.com/go-sql-driver/mysql` (the deeper
-  check). An ERR handshake (host blocked, too many connections) fails the probe.
+  check). An ERR handshake that says the server is saturated (too many
+  connections, host blocked, …) is [busy](#busy-servers); any other ERR fails
+  the probe with the server's message and error number.
 - `mongodb` (alias `mongo`) — default port 27017; `tls` supported. `user` is
   **optional** (MongoDB may run without auth); with credentials it authenticates
   against `auth_source` (defaults to `database`, then `admin`). It connects
@@ -1362,7 +1429,8 @@ Protocols, in the order of the table above:
   PostgreSQL sslmodes (`disable`/`require`/`prefer`/`verify-ca`/`verify-full`).
   `tls: true` is `sslmode=verify-full` (certificate chain and host name checked
   against the system roots); `skip-verify` is `sslmode=require` (encrypted,
-  unverified). Uses `github.com/jackc/pgx/v5`.
+  unverified). Uses `github.com/jackc/pgx/v5`. A startup refusal with SQLSTATE
+  class `53` or `57P03` is [busy](#busy-servers).
 - `redis` (alias `valkey`) — default port 6379; `tls` supported. `user` is
   **optional** (legacy `requirepass` uses a password only, or no auth at all); a
   password-only check sends `AUTH <password>`. Verifies `PING` → `PONG` over RESP
@@ -1372,10 +1440,14 @@ Protocols, in the order of the table above:
   `master_link_status` (replicas), `rdb_last_bgsave_status`,
   `aof_last_write_status`, `loading`, `used_memory`, `maxmemory`,
   `maxmemory_policy`, `evicted_keys`, `sync_full` (full resynchronizations
-  served to replicas), `mem_fragmentation_ratio`, `connected_clients` and
-  `uptime_seconds`. Three fields are derived:
+  served to replicas), `mem_fragmentation_ratio`, `connected_clients`,
+  `maxclients` and `uptime_seconds`. Four fields are derived:
   `maxmemory_used_pct` is `used_memory` as a percentage of `maxmemory` (`0` when
-  no limit is configured), `keys` is the key count summed over every
+  no limit is configured), `connected_clients_pct` is `connected_clients` as a
+  percentage of `maxclients` (absent when the server does not report
+  `maxclients`; a server whose INFO predates the field, before Redis 6.2 and
+  KeyDB 6.3, is asked with `CONFIG GET maxclients`, and the field is left out
+  only when that is refused too), `keys` is the key count summed over every
   database, and `rejected_calls` sums the commands refused before they ran
   (an `OOM` under `noeviction`, `LOADING`, a wrong arity) over every command of
   the reply's `commandstats` section; a server that predates the counter leaves
@@ -1384,6 +1456,8 @@ Protocols, in the order of the table above:
   than their value. Under `maxmemory-policy noeviction` a full server rejects writes
   while still answering `PING`, so assert `maxmemory_used_pct` where that
   matters; pair `keys` with `max_increase` to catch a store filling up fast.
+  A `LOADING`, `BUSY`, `MASTERDOWN`, `MISCONF` or maxclients answer to `PING`
+  or `AUTH` is [busy](#busy-servers).
 - `memcached` (alias `memcache`) — default port 11211; `socket` supported (Unix
   socket), `tls` supported. No auth (the ASCII text protocol). Sends a single
   `stats` command and verifies the server answers `STAT` lines terminated by
@@ -1392,15 +1466,21 @@ Protocols, in the order of the table above:
   `curr_connections`, `total_connections`, `rejected_connections`, `cmd_get`,
   `cmd_set`, `get_hits`, `get_misses`, `curr_items`, `total_items`, `bytes`,
   `evictions`, `limit_maxbytes` and `threads` (all numeric, so `>`/`<`/`==` work).
+  Past its connection limit (`-c`) memcached answers `ERROR Too many open
+  connections`, which is [busy](#busy-servers); bound `rejected_connections`
+  with `max_increase` to see it before it happens to the probe.
 - `imap` — default port 143; `tls` supported (implicit TLS / IMAPS — use port
   993). `user` is **optional**: with no credentials it verifies the server greets
-  `* OK`; with a user/password it performs an IMAP `LOGIN`. RFC 3501.
+  `* OK`; with a user/password it performs an IMAP `LOGIN`. A `* BYE` greeting
+  (a connection limit, a shutdown) is [busy](#busy-servers). RFC 3501.
 - `pop` (alias `pop3`) — default port 110; `tls` supported (POP3S — use port 995).
   `user` is **optional**: anonymous verifies the `+OK` greeting; with a
-  user/password it performs `USER`/`PASS`. RFC 1939.
+  user/password it performs `USER`/`PASS`. A `-ERR` greeting is
+  [busy](#busy-servers). RFC 1939.
 - `smtp` — default port 25; `tls` supported (SMTPS — use port 465; submission
   587). `user` is **optional**: anonymous checks the `220` greeting + `EHLO`; with
-  a user/password it performs `AUTH PLAIN`. RFC 5321.
+  a user/password it performs `AUTH PLAIN`. A `421` greeting (too many
+  concurrent connections, shutting down) is [busy](#busy-servers). RFC 5321.
 - `smtp_acceptance` — default port 25. Resolves the MX records of `recipient`,
   connects through the selected `interface`, sends `EHLO`, upgrades with
   STARTTLS, then tests `MAIL FROM` and `RCPT TO`. On acceptance it sends `RSET`
@@ -1411,7 +1491,8 @@ Protocols, in the order of the table above:
   Result data includes `mx_host`, `recipient_domain`, `starttls`, `accepted`,
   `smtp_stage`, and `smtp_status` (`accepted`, `temporary`, `permanent`,
   `policy`, or `protocol`); an SMTP rejection also includes `smtp_code`, the
-  bounded `smtp_reply`, and the enhanced status when supplied. MX targets are
+  bounded `smtp_reply`, and the enhanced status when supplied. A `421` at any
+  stage is also [busy](#busy-servers). MX targets are
   tried in preference order, up to three: a transport failure advances to the
   next target, while the first SMTP or local-policy verdict is retained so a
   lower-priority MX cannot mask it. A STARTTLS certificate that fails
@@ -1426,7 +1507,8 @@ Protocols, in the order of the table above:
   it performs `AUTHINFO USER`/`PASS`. RFC 3977/4643.
 - `ftp` — default port 21; `tls` supported (FTPS — use port 990). `user` is
   **optional**: anonymous checks the `220` greeting; with a user/password it
-  performs `USER`/`PASS` (a password with no user logs in as `anonymous`). RFC 959.
+  performs `USER`/`PASS` (a password with no user logs in as `anonymous`). A
+  `421` or `120` greeting is [busy](#busy-servers). RFC 959.
 - `ssh` — default port 22 (no `tls`: SSH has its own transport crypto). `user` is
   **optional**: anonymous completes the key exchange to capture the server's host
   key (authentication then fails, which is expected); with a user/password login
@@ -1940,15 +2022,16 @@ Protocols, in the order of the table above:
   (implicit TLS). No auth. On connect the server sends a greeting of capability
   lines terminated by an `OK` response (RFC 5804); reading it and seeing the `OK`
   proves the server is up. The `IMPLEMENTATION` capability is reported as the server
-  `version` (a `NO`/`BYE` greeting, e.g. a connection-limit refusal, fails the
-  check).
+  `version` (a `NO`/`BYE` greeting, e.g. a connection-limit refusal, is
+  [busy](#busy-servers)).
 - `mqtt` — default port 1883 (TCP); `tls` supported (MQTTS, port 8883). Performs an
   MQTT 3.1.1 `CONNECT` handshake and verifies the broker answers `CONNACK`
   accepting the connection (return code 0). With no credentials it is an anonymous
   connect; `user`/`password` authenticate (MQTT 3.1.1 allows no `password`
-  without a `user`; the check fails before connecting). A refused CONNACK (e.g. `not-authorized`,
-  `bad-username-or-password`) fails the check with the reason; result data: the
-  `connack` status.
+  without a `user`; the check fails before connecting). Return code 3
+  (`server-unavailable`) is [busy](#busy-servers); any other refused CONNACK
+  (e.g. `not-authorized`, `bad-username-or-password`) fails the check with the
+  reason; result data: the `connack` status.
 - `amqp` (alias `rabbitmq`) — default port 5672 (TCP); no auth. Sends the AMQP
   0-9-1 protocol header and verifies the broker's unprompted Connection.Start
   method. Reports the broker `version` plus best-effort `product`, `platform`
@@ -2152,10 +2235,37 @@ checks:
   and open it **read-only**. A `mysql`/`mariadb` engine also accepts `socket`
   (a Unix socket path, e.g. `/run/mysqld/mysqld.sock`) in place of
   `host`/`port`; the `replication` check honours it the same way.
+- **`defaults_file`** (`mysql`/`mariadb` only, an absolute path) reads a MySQL
+  option file exactly as [`db_queries`](#running-database-statements-db_queries)
+  does: the `[client]` groups fill every connection field the check leaves
+  unset, and `user` is no longer required (it defaults to `root`). That is how
+  the mysql client run by root connects, and root keeps the server's one
+  reserved connection, so the check still reads while ordinary clients get
+  "too many connections".
+- **`levels:`** restate `op` + `value` with a stricter bound to escalate a
+  matching result, e.g. warning from 80 and error from 95:
+
+  ```yaml
+  checks:
+    connections:
+      type: sql
+      engine: mariadb
+      socket: /run/mysqld/mysqld.sock
+      defaults_file: /root/.my.cnf
+      query: SELECT ROUND(100 * COUNT(*) / @@GLOBAL.max_connections, 1) FROM information_schema.PROCESSLIST
+      op: ">="
+      value: 80
+      severity: warning
+      levels:
+        error: { op: ">=", value: 95 }
+  ```
+
 - Result data carries `engine`, `query`, `op`, `threshold`, the raw `result`
   string and, when numeric, a `value` for hooks/rules. A query error, a missing
-  database or a `NULL` result fails the check. The check only reads — point it at
-  a read-only user.
+  database or a `NULL` result fails the check. A server that refuses the
+  connection or the query as saturated or not ready is
+  [busy](#busy-servers), with `busy_reason` and `error_code`. The check only
+  reads — point it at a read-only user.
 
 ### Running database statements (`db_queries`)
 
@@ -2286,6 +2396,11 @@ each recovered on its own, and every target's `min_severity` applies. The
 watch's published result is failing while any statement is over the threshold,
 with `count`, `long_count` and `oldest_seconds` in its data. Resource watches
 also publish `matched_count`, and `unknown_count` when readings are missing.
+
+A server that refuses the watch's own connection as saturated ("Too many
+connections", "sorry, too many clients already") is [busy](#busy-servers): the
+watch reports `server busy: Too many connections (1040)` with `busy_reason` and
+`error_code` instead of a driver error, and keeps its open incidents.
 
 **Bounded samples.** Each cycle evaluates at most the 500 oldest statements.
 The sampler reads one extra row to detect an incomplete list; exactly 500 rows
@@ -3728,6 +3843,14 @@ without that the built-in default is **5 minutes**. `clear: {cycles: 1}` (or a
 `clear_window` of one cycle) opts a target back into immediate clearing: one
 false cycle ends the episode.
 
+Only an observed false counts toward clearing. While an alert rule is firing,
+a cycle in which its condition cannot be decided — its check unavailable,
+[busy](#busy-servers) or skipped — holds the episode as it is: it neither
+recovers it nor advances its clear window. A connection-usage alert therefore
+stays open while the saturated server also refuses the monitor's own
+connection. A rule with an operation is not held: an unknown cycle ends its
+window, so it never acts on what it could not observe.
+
 Service rule-window progress is persisted in `paths.state`. If `sermod`
 restarts while a `for` window is at 2/3 consecutive matches, the next observed
 matching cycle continues from 2/3 instead of starting from zero. Duration-based
@@ -3810,7 +3933,10 @@ This fail-closed rule applies to every check and to `metric:`, `process:` and
 `changed:` condition leaves: a timeout, unreadable source, malformed sample,
 missing source or not-ready metric is an unavailable observation, not a valid
 false condition. Value and state predicates do not match when an evaluated
-leaf is unavailable or skipped, including beneath `not`, `and` or `or`. In particular,
+leaf is unavailable or skipped, including beneath `not` or `and`; an `or`
+holds as soon as one of its operands holds, and is unknown only when none
+does and one could not be observed, so its outcome never depends on the order
+of its operands. In particular,
 `file: { exists: false }` requires observed absence, and `active` never treats
 a skipped check as a successful observation. Guards deny the operation on
 these gaps. The explicit `failed` operator retains its check-failure contract: an
@@ -3954,6 +4080,21 @@ Because a `sql` check reports "not ok" when the connection itself fails, a
 database that is down never raises the threshold alert — cover that case with a
 separate connection check (`type: postgres`, `type: mysql`, …) rather than by
 relaxing the query.
+
+#### Unavailable and busy observations
+
+How a `failed:` leaf, and every other leaf, reads a check that could not
+observe (unavailable) or whose server answered it is [busy](#busy-servers):
+
+| Who evaluates | `failed:` on an unavailable check | `failed:` on a busy check | other leaves, also under `not:` |
+|---|---|---|---|
+| a guard | error: the action is denied | error: the action is denied | error: the action is denied |
+| a rule whose `then` restarts, starts, stops, reloads or resumes | true | unknown: no match, and the `for:` window resets | unknown: no match |
+| an alert rule, or a remediation with no operation | true | true | unknown, except a busy health check, which is a plain failing value |
+
+A skipped check is unknown everywhere. No option makes a busy check trigger an
+operation: the cause of a busy server is outside the daemon, and a restart
+would only drop the clients it still serves.
 
 ## Remediation policy
 

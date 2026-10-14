@@ -33,6 +33,12 @@ variables:
   # which needs pg_monitor to read other roles' statements, and
   # pg_signal_backend to cancel them from the Sessions panel).
   long_query_duration: 5m
+  # alert-if-connections-near-limit warns while client connections stay at
+  # or above this share of the server's connection limit, and escalates to
+  # error past the second one. At the limit the server answers "too many
+  # connections": Sermo reports that as busy and never restarts for it.
+  connections_used_limit: 80
+  connections_used_error_limit: 95
   # Thresholds are plain numbers: a sql check compares numerically and does not
   # accept size suffixes, so the queries return MiB (and seconds) directly.
   # A healthy primary already retains ~16 MiB (one WAL segment) because a
@@ -164,6 +170,38 @@ watches:
       cycles: 3
     then:
       action: restart
+  # One warning while database backends stay at or above connections_used_limit
+  # % of the connections clients may use (max_connections minus the slots
+  # reserved for superusers), an error past connections_used_error_limit %.
+  # Backends without a database (checkpointer, WAL writer, physical WAL
+  # senders) are left out; the query runs on every PostgreSQL from 8.2.
+  # monitor_user, a superuser by default, keeps a reserved slot, so the reading
+  # survives "too many clients already".
+  alert-if-connections-near-limit:
+    check:
+      type: sql
+      engine: postgres
+      host: ${host}
+      port: ${port}
+      user: ${monitor_user}
+      database: ${database}
+      timeout: 10s
+      optional: true
+      severity: warning
+      query: >-
+        SELECT round(100.0 * count(*) / greatest(current_setting('max_connections')::int
+        - current_setting('superuser_reserved_connections')::int, 1), 1)
+        FROM pg_stat_activity WHERE datid IS NOT NULL
+      op: '>='
+      value: ${connections_used_limit}
+      levels:
+        error: { op: '>=', value: "${connections_used_error_limit}" }
+    for:
+      duration: 2m
+    then:
+      action: alert
+      message: >-
+        During ${rule.duration}, ${display_name} client connections stayed at or above ${check.threshold}% of the usable max_connections (current ${check.value}%)
   # A watch `then` takes a single action, so the restart watches above cannot
   # also alert. This one reports the outage on its own, one cycle before the
   # restart fires, so an incident resolved by the restart is still visible.

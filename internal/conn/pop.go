@@ -38,6 +38,13 @@ func popHandshake(rw io.ReadWriter, cfg Config) (Result, error) {
 	br := bufio.NewReader(rw)
 	greeting, err := readPOPReply(br)
 	if err != nil {
+		if refused, ok := errors.AsType[replyError](err); ok {
+			// A -ERR greeting that says the refusal is temporary (too many
+			// connections, shutting down): alive, but not serving now.
+			if busy, ok := refusalBusy(popReplyERR, string(refused)); ok {
+				return busyResult(Result{}, busy), nil
+			}
+		}
 		return Result{}, fmt.Errorf("greeting: %w", err)
 	}
 	res := Result{Extra: map[string]string{extraGreeting: greeting}}
@@ -62,7 +69,7 @@ func popHandshake(rw io.ReadWriter, cfg Config) (Result, error) {
 }
 
 // readPOPReply reads one status line: "+OK <text>" returns the text; "-ERR
-// <text>" returns it as an error.
+// <text>" returns it as a replyError.
 func readPOPReply(br *bufio.Reader) (string, error) {
 	line, err := readCRLFLine(br)
 	if err != nil {
@@ -72,7 +79,7 @@ func readPOPReply(br *bufio.Reader) (string, error) {
 	case strings.HasPrefix(line, popReplyOK):
 		return strings.TrimSpace(strings.TrimPrefix(line, popReplyOK)), nil
 	case strings.HasPrefix(line, popReplyERR):
-		return "", errors.New(strings.TrimSpace(strings.TrimPrefix(line, popReplyERR)))
+		return "", replyError(strings.TrimSpace(strings.TrimPrefix(line, popReplyERR)))
 	default:
 		return "", fmt.Errorf("unexpected reply: %s", line)
 	}

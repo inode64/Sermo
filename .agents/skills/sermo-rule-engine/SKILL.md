@@ -35,9 +35,20 @@ the types are `RuleType`, `ActionType` and `Action` in
 - A resolved policy needs a positive `cooldown`; a missing or zero value is a
   validation error. Manual actions skip cooldown only.
 - An unavailable or erroring guard leaf fails closed. Unavailable or skipped
-  observations remain unknown through boolean operators, even under `not`.
+  observations remain unknown through `not` and `and`; an `or` holds as soon
+  as one operand holds, so its outcome never depends on operand order.
+  `Evaluator.Unknown` reports an undecided condition: the worker holds an open
+  alert episode on such a cycle (only an observed false clears it), never an
+  operation rule's.
   The explicit `failed` operator retains its probe-failure semantics for
   unavailable checks in ordinary rules; skipped checks never count as failures.
+- A busy check (`checks.Result.Busy`: the server answered it cannot serve now)
+  is a failure for alerts and unknown for any rule with an operation; guards
+  fail closed on it. The worker evaluates every rule with `EvalRule`, which
+  decides that per rule; a plain `Eval` keeps busy unknown. A check only
+  operation rules read gets its busy episode from the worker's health reporter.
+  A watch withholds its actions (hook, expand, makestep, remount) on a busy
+  result. No option makes busy trigger an operation.
 
 ## Severity
 

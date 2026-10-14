@@ -24,7 +24,15 @@ func TestIMAPHandshakeLoginFails(t *testing.T) {
 }
 
 func TestIMAPHandshakeBadGreeting(t *testing.T) {
-	assertHandshakeFails(t, imapHandshake, "* BYE Too many connections\r\n", Config{})
+	assertHandshakeFails(t, imapHandshake, "garbage\r\n", Config{})
+}
+
+// A BYE greeting that says the refusal is temporary is busy; any other BYE
+// (an internal error) stays a failure, so a broken server can be restarted.
+func TestIMAPHandshakeBusyGreeting(t *testing.T) {
+	assertHandshakeBusy(t, imapHandshake, "* BYE Too many connections\r\n", Config{}, "BYE")
+	assertHandshakeBusy(t, imapHandshake, "* BYE [UNAVAILABLE] Server shutting down\r\n", Config{}, "BYE")
+	assertHandshakeFails(t, imapHandshake, "* BYE Internal error occurred. Refer to server log\r\n", Config{})
 }
 
 func TestIMAPHandshakePreauth(t *testing.T) {

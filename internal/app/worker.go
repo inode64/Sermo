@@ -68,6 +68,10 @@ type Worker struct {
 
 	// reportedChecks indexes the immutable rule set; reloading replaces the worker.
 	reportedChecks map[string]bool
+	// busyReportedChecks are the ruled checks only operation rules read. Those
+	// rules never fire on a busy result, so the health reporter announces a
+	// busy episode on them itself; otherwise a saturated server would be silent.
+	busyReportedChecks map[string]bool
 
 	// checkNames lists the configured checks whose health events this worker
 	// can emit, so event_notify can tell a renamed check's open incident apart.
@@ -333,48 +337,22 @@ func (w *Worker) reportCheckHealthChanges(cache map[string]checks.Result) {
 		w.checkEpisodes = map[string]checkEpisode{}
 	}
 	if w.reportedChecks == nil {
-		w.reportedChecks = checksReportedByRules(w.Rules)
+		w.reportedChecks, w.busyReportedChecks = ruledChecks(w.Rules)
 	}
-	ruled := w.reportedChecks
 	for _, name := range slices.Sorted(maps.Keys(cache)) {
-		if ruled[name] {
-			continue
-		}
 		result := cache[name]
-		observation := result.Observation()
-		// Only checks that ran this cycle carry a fresh observation: a cached
-		// result reused because of a per-check interval says nothing new, and a
-		// skipped or verdictless check asserts nothing at all. A nil cycleRan
-		// means the caller does not track it, which the gate logic also reads as
-		// "do not filter".
-		if (w.cycleRan != nil && !w.cycleRan[name]) || result.Optional || !observation.AffectsHealth() {
+		if !w.freshObservation(name, result) {
 			continue
 		}
-		episode, wasFailing := w.checkEpisodes[name]
-		if observation.Healthy() {
-			if wasFailing {
-				delete(w.checkEpisodes, name)
-				w.emit(Event{Kind: eventKindRecovered, Severity: episode.held, Check: name, Message: checkHealthChangeMessage(name, result)})
-			}
-			continue
+		switch {
+		case w.busyReportedChecks[name]:
+			w.reportBusyEpisode(name, result)
+		case w.reportedChecks[name]:
+			// A rule reads this check and owns its alarm.
+		default:
+			episode, open := w.checkEpisodes[name]
+			w.advanceEpisode(name, result, episode, open, false)
 		}
-		// A failing check opens an episode at its grade and escalates at once
-		// when the grade rises (a health edge has no window to sustain); a grade
-		// that eases off is held until the check recovers.
-		graded := result.Severity.Resolved()
-		if wasFailing && episode.restored {
-			// Announced before the restart, at a grade the snapshot only
-			// bounds from below: adopt the graver one without announcing it.
-			w.checkEpisodes[name] = checkEpisode{held: severity.Max(episode.held, graded)}
-			continue
-		}
-		if wasFailing && graded.Rank() <= episode.held.Rank() {
-			continue
-		}
-		w.checkEpisodes[name] = checkEpisode{held: graded}
-		// The message states the cause; Output carries the command's own words
-		// (a configtest's full report) for the notification body.
-		w.emit(Event{Kind: eventKindFiring, Severity: graded, Check: name, Message: checkHealthChangeMessage(name, result), Output: resultOutput(result)})
 	}
 	// Forget checks the running configuration no longer produces, so a reload
 	// that drops a check cannot leave a stale "failing" memory that reports a
@@ -390,24 +368,124 @@ type checkEpisode struct {
 	// the last grade, not the gravest, so held is a lower bound: the next
 	// failing observation raises it without announcing it again.
 	restored bool
+	// busy marks the episode of a server that answered it is alive but cannot
+	// serve (checks.Result.Busy) on a check only operation rules read.
+	busy bool
 }
 
-// checksReportedByRules lists the check names some rule condition reads, so the
-// health reporter can stay out of their way. It walks the same and/or/not tree
-// the rule runtime does, and only named `check:` references count — an inline
-// metric belongs to no named check.
-func checksReportedByRules(ruleSet []rules.Rule) map[string]bool {
-	out := map[string]bool{}
+// busyWithheldSuffix closes a busy episode's message: the operation rules that
+// read the check stay idle on purpose, and the reader should know why.
+const busyWithheldSuffix = "; automatic remediation withheld (the server answered)"
+
+// freshObservation reports whether result carries a health verdict this cycle.
+// Only checks that ran this cycle carry a fresh observation: a cached result
+// reused because of a per-check interval says nothing new, and a skipped,
+// optional or verdictless check asserts nothing at all. A nil cycleRan means
+// the caller does not track it, which the gate logic also reads as "do not
+// filter".
+func (w *Worker) freshObservation(name string, result checks.Result) bool {
+	return (w.cycleRan == nil || w.cycleRan[name]) && !result.Optional && result.Observation().AffectsHealth()
+}
+
+// advanceEpisode moves name's health episode with this cycle's result. A
+// healthy result closes an open episode with one recovery. A failing check
+// opens an episode at its grade and escalates at once when the grade rises (a
+// health edge has no window to sustain); a grade that eases off is held until
+// the check recovers. busy marks the busy episode of a check only operation
+// rules read, whose firing says the remediation was withheld.
+func (w *Worker) advanceEpisode(name string, result checks.Result, episode checkEpisode, open, busy bool) {
+	if result.Observation().Healthy() {
+		if open {
+			delete(w.checkEpisodes, name)
+			w.emit(Event{Kind: eventKindRecovered, Severity: episode.held, Check: name, Message: checkHealthChangeMessage(name, result)})
+		}
+		return
+	}
+	graded := result.Severity.Resolved()
+	if open && episode.restored {
+		// Announced before the restart, at a grade the snapshot only bounds
+		// from below: adopt the graver one without announcing it.
+		w.checkEpisodes[name] = checkEpisode{held: severity.Max(episode.held, graded), busy: busy}
+		return
+	}
+	if open && graded.Rank() <= episode.held.Rank() {
+		return
+	}
+	w.checkEpisodes[name] = checkEpisode{held: graded, busy: busy}
+	message := checkHealthChangeMessage(name, result)
+	if busy {
+		message += busyWithheldSuffix
+	}
+	// The message states the cause; Output carries the command's own words
+	// (a configtest's full report) for the notification body.
+	w.emit(Event{Kind: eventKindFiring, Severity: graded, Check: name, Message: message, Output: resultOutput(result)})
+}
+
+// reportBusyEpisode announces a busy server on a check only operation rules
+// read: one firing when it turns busy (escalating if its grade rises), one
+// recovery when the check is healthy again. A non-busy failure while the
+// episode is open belongs to the operation rule, which owns that alarm, so it
+// is held silently; a check that was never busy is left to its rules.
+func (w *Worker) reportBusyEpisode(name string, result checks.Result) {
+	episode, open := w.checkEpisodes[name]
+	open = open && episode.busy
+	switch {
+	case !open && !result.Busy:
+		// A restored non-busy episode on a ruled check: its rule owns it.
+		delete(w.checkEpisodes, name)
+	case !open && w.settlingAfterOperation():
+		// Busy right after Sermo's own operation — a database still
+		// recovering, a dataset still loading — is the service settling, and
+		// a "remediation withheld" notice would contradict the remediation that
+		// just ran. It is announced only if still busy once the cooldown ends.
+	case open && !result.Busy && !result.Observation().Healthy():
+		// The server stopped answering at all: the operation rule's alarm.
+	default:
+		w.advanceEpisode(name, result, episode, open, true)
+	}
+}
+
+// settlingAfterOperation reports whether an automatic operation ran within the
+// service's cooldown.
+func (w *Worker) settlingAfterOperation() bool {
+	if w.State == nil || w.State.LastActionAt.IsZero() {
+		return false
+	}
+	return clockOrNow(w.Now)().Sub(w.State.LastActionAt) < w.Policy.Cooldown
+}
+
+// ruledChecks indexes, in one walk of every rule tree, the named checks the
+// rules read: read holds every one of them, so the health reporter stays out of
+// their way, and operationOnly those read by some rule with an operation
+// (restart, start, stop, reload, resume) and by no alert or operation-less
+// remediation, whose busy episodes the reporter announces itself. Guards count
+// as readers but never as operation rules: they report through their own block
+// events. Only named `check:` references count — an inline metric belongs to
+// no named check.
+func ruledChecks(ruleSet []rules.Rule) (read, operationOnly map[string]bool) {
+	read, operationOnly = map[string]bool{}, map[string]bool{}
+	readByOther := map[string]bool{}
 	for i := range ruleSet {
 		var candidates []ruleCheckCandidate
 		collectRuleCheckCandidates(ruleSet[i].If, &candidates)
+		_, hasOperation := ruleSet[i].Operation()
+		guard := ruleSet[i].Type == rules.RuleGuard
 		for _, c := range candidates {
-			if c.ref != "" {
-				out[c.ref] = true
+			if c.ref == "" {
+				continue
+			}
+			read[c.ref] = true
+			switch {
+			case guard:
+			case hasOperation:
+				operationOnly[c.ref] = true
+			default:
+				readByOther[c.ref] = true
 			}
 		}
 	}
-	return out
+	maps.DeleteFunc(operationOnly, func(name string, _ bool) bool { return readByOther[name] })
+	return read, operationOnly
 }
 
 // checkHealthChangeMessage names the check and repeats its own message, which is
@@ -637,9 +715,10 @@ func failingChecksOutput(cache map[string]checks.Result) string {
 }
 
 type ruleEvalResult struct {
-	cond   bool
-	err    error
-	change rules.ChangeContext
+	cond    bool
+	unknown bool
+	err     error
+	change  rules.ChangeContext
 }
 
 func (w *Worker) ruleEvalCache() map[string]ruleEvalResult {
@@ -976,6 +1055,13 @@ func (w *Worker) fires(ctx context.Context, ev *rules.Evaluator, r rules.Rule, a
 	// window as already elapsed, which made rising unobservable (alerts were
 	// silently never emitted while recovered fired on every episode end).
 	wasFiring, notified := window.Firing(), window.Notified()
+	if _, hasOperation := r.Operation(); ev.Unknown && wasFiring && !hasOperation {
+		// An open alert cannot be observed this cycle (its check is busy,
+		// unavailable or skipped): only a real observation may recover it, so a
+		// saturated server that also refuses the monitor never reads as healed.
+		// An operation rule is not held: its unknown cycle ends the episode.
+		return ruleFiringState{firing: true, notified: notified, severity: window.Severity(), change: ev.Change}
+	}
 	step := window.FiresGradedAt(r, cond, ev.RuleSeverity(r), at)
 	return ruleFiringState{
 		firing:    step.Firing,
@@ -1003,15 +1089,15 @@ func (w *Worker) shouldNotifyRule(r rules.Rule, rising bool) bool {
 func (*Worker) evalRule(ctx context.Context, ev *rules.Evaluator, r rules.Rule, evals map[string]ruleEvalResult) (bool, error) {
 	if evals != nil {
 		if res, ok := evals[r.Name]; ok {
-			ev.Change = res.change
+			ev.Change, ev.Unknown = res.change, res.unknown
 			return res.cond, res.err
 		}
 	}
 	ev.Change = rules.ChangeContext{}
-	cond, err := ev.Eval(ctx, r.If)
+	cond, err := ev.EvalRule(ctx, r)
 	change := ev.Change
 	if evals != nil {
-		evals[r.Name] = ruleEvalResult{cond: cond, err: err, change: change}
+		evals[r.Name] = ruleEvalResult{cond: cond, unknown: ev.Unknown, err: err, change: change}
 	}
 	if err != nil {
 		return cond, fmt.Errorf("evaluate rule condition: %w", err)

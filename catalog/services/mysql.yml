@@ -29,6 +29,12 @@ variables:
   defaults_file: /root/.my.cnf
   # One warning per statement running longer than this.
   long_query_duration: 5m
+  # alert-if-connections-near-limit warns while client connections stay at
+  # or above this share of the server's connection limit, and escalates to
+  # error past the second one. At the limit the server answers "too many
+  # connections": Sermo reports that as busy and never restarts for it.
+  connections_used_limit: 80
+  connections_used_error_limit: 95
   # Binary logs (and relay logs) under the data directory, a glob summed by
   # alert-if-binlog-large: mariadb-bin.000123, mysql-bin.000123,
   # <host>-bin.000123, binlog.000123 and the relay-bin files all match. The
@@ -114,6 +120,32 @@ watches:
       defaults_file: ${defaults_file}
       min_duration: ${long_query_duration}
       severity: warning
+  # One warning while client connections stay at or above
+  # connections_used_limit % of max_connections, an error past
+  # connections_used_error_limit %. It connects like the mysql client run by
+  # root, which keeps the server's one reserved connection, so it still reads
+  # the count while ordinary clients already get "too many connections".
+  alert-if-connections-near-limit:
+    check:
+      type: sql
+      engine: mysql
+      socket: ${db_socket}
+      defaults_file: ${defaults_file}
+      timeout: 5s
+      optional: true
+      severity: warning
+      query: >-
+        SELECT ROUND(100 * COUNT(*) / @@GLOBAL.max_connections, 1) FROM information_schema.PROCESSLIST
+      op: '>='
+      value: ${connections_used_limit}
+      levels:
+        error: { op: '>=', value: "${connections_used_error_limit}" }
+    for:
+      duration: 2m
+    then:
+      action: alert
+      message: >-
+        During ${rule.duration}, ${display_name} client connections stayed at or above ${check.threshold}% of max_connections (current ${check.value}%)
   # One error incident while the binary logs are over binlog_max_size in
   # total or have grown binlog_grow_by within binlog_grow_within.
   alert-if-binlog-large:

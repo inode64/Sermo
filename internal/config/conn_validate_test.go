@@ -74,6 +74,55 @@ checks:
 			absent: []string{"checks.rows"},
 		},
 		{
+			name: "mysql sql check with a defaults_file needs no user",
+			service: `
+name: db
+service: x
+checks:
+  conns:
+    type: sql
+    engine: mariadb
+    socket: /run/mysqld/mysqld.sock
+    defaults_file: /root/.my.cnf
+    query: "select 1"
+    op: ">="
+    value: 80
+    severity: warning
+    levels: { error: { op: ">=", value: 95 } }
+`,
+			absent: []string{"checks.conns"},
+		},
+		{
+			name: "mysql sql check without user or defaults_file",
+			service: `
+name: db
+service: x
+checks:
+  conns: { type: sql, engine: mysql, query: "select 1", op: ">=", value: 80 }
+`,
+			want: []string{"checks.conns.user is required for a mysql sql check without a defaults_file"},
+		},
+		{
+			name: "sql defaults_file must be absolute",
+			service: `
+name: db
+service: x
+checks:
+  conns: { type: sql, engine: mysql, defaults_file: my.cnf, query: "select 1", op: ">=", value: 80 }
+`,
+			want: []string{"checks.conns.defaults_file must be an absolute path"},
+		},
+		{
+			name: "sql defaults_file is mysql only",
+			service: `
+name: db
+service: x
+checks:
+  conns: { type: sql, engine: postgres, user: u, defaults_file: /root/.my.cnf, query: "select 1", op: ">=", value: 80 }
+`,
+			want: []string{"checks.conns.defaults_file applies to mysql and mariadb sql checks only"},
+		},
+		{
 			name: "sslmode rejected for mongodb query check",
 			service: `
 name: db

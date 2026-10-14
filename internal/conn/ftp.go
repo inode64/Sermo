@@ -31,14 +31,18 @@ func (ftpProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	return probeBanner(ctx, cfg, defaultPortFTP, ftpHandshake)
 }
 
-// ftpHandshake reads the 220 greeting, logs in with USER/PASS when credentials
-// are supplied, and quits. FTP shares SMTP's multi-line reply format.
+// ftpHandshake reads the 220 greeting (421 and 120 are busy verdicts), logs in
+// with USER/PASS when credentials are supplied, and quits. FTP shares SMTP's
+// multi-line reply format.
 func ftpHandshake(rw io.ReadWriter, cfg Config) (Result, error) {
 	tp, code, greeting, err := readTextGreeting(rw)
 	if err != nil {
 		return Result{}, err
 	}
 	res := Result{Extra: map[string]string{extraGreeting: greeting}}
+	if busy, ok := greetingBusy(code, greeting, replyCodeServiceNotAvailable, ftpReplyCodeReadyLater); ok {
+		return busyResult(res, busy), nil
+	}
 	if code != ftpStatusReady {
 		return Result{}, unexpectedGreeting(code, greeting)
 	}

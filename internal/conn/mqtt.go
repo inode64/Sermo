@@ -49,8 +49,8 @@ const (
 // CONNECT handshake and verifies the broker answers with a CONNACK accepting the
 // connection (return code 0). With no credentials it is an anonymous connect;
 // `user`/`password` authenticate. `tls` enables MQTTS (port 8883). A CONNACK is
-// proof the broker speaks MQTT; a non-zero return code (refused) fails the check
-// with the reason.
+// proof the broker speaks MQTT; return code 3 (server unavailable) is a busy
+// verdict, any other non-zero code (refused) fails the check with the reason.
 type mqttProtocol struct{}
 
 func (mqttProtocol) Name() string       { return ProtocolNameMQTT }
@@ -78,6 +78,9 @@ func (mqttProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	code, sessionPresent, err := parseMQTTConnack(ack[:])
 	if err != nil {
 		return Result{}, err
+	}
+	if code == mqttConnackCodeServerUnavailable {
+		return busyResult(Result{}, Busy{Code: strconv.Itoa(int(code)), Reason: mqttConnackName(code)}), nil
 	}
 	if code != mqttConnackCodeAccepted {
 		return Result{}, fmt.Errorf("MQTT connection refused: %s", mqttConnackName(code))

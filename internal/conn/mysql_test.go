@@ -5,6 +5,8 @@ import (
 	"io"
 	"net"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -41,13 +43,39 @@ func TestMySQLGreeting(t *testing.T) {
 	}
 }
 
+// mysqlERRReply builds an ERR packet: 0xff, the 2-byte LE number, then the
+// message (optionally after a "#SQLSTATE" marker).
+func mysqlERRReply(number uint16, message string) []byte {
+	payload := append([]byte{0xff, byte(number), byte(number >> 8)}, message...)
+	return append([]byte{byte(len(payload)), 0, 0, 0}, payload...)
+}
+
+// A saturation refusal is busy, with and without the SQLSTATE marker; any
+// other refusal (host not allowed) stays an error carrying its number.
 func TestMySQLGreetingErrPacket(t *testing.T) {
-	// 0xff ERR packet: code(2, LE) + message. The server is up but refusing.
-	payload := append([]byte{0xff, 0x10, 0x04}, "Host blocked"...)
-	reply := append([]byte{byte(len(payload)), 0, 0, 0}, payload...)
-	if _, err := (mysqlProtocol{}).Probe(context.Background(),
-		Config{Host: "127.0.0.1", Port: serveMySQL(t, reply)}); err == nil {
-		t.Fatal("an ERR handshake must fail the probe")
+	for _, tc := range []struct {
+		name    string
+		number  uint16
+		message string
+		reason  string
+	}{
+		{"too many connections", 1040, "Too many connections", "Too many connections"},
+		{"with sqlstate", 1040, "#08004Too many connections", "Too many connections"},
+		{"host blocked", 1129, "Host 'x' is blocked because of many connection errors", "Host 'x' is blocked because of many connection errors"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			res, err := (mysqlProtocol{}).Probe(context.Background(),
+				Config{Host: "127.0.0.1", Port: serveMySQL(t, mysqlERRReply(tc.number, tc.message))})
+			assertBusy(t, res, err, strconv.Itoa(int(tc.number)))
+			if res.Extra[ExtraKeyBusyReason] != tc.reason {
+				t.Fatalf("reason = %q, want %q", res.Extra[ExtraKeyBusyReason], tc.reason)
+			}
+		})
+	}
+	_, err := (mysqlProtocol{}).Probe(context.Background(),
+		Config{Host: "127.0.0.1", Port: serveMySQL(t, mysqlERRReply(1130, "Host 'x' is not allowed to connect"))})
+	if err == nil || !strings.Contains(err.Error(), "(1130)") {
+		t.Fatalf("a non-busy refusal must fail with its number: %v", err)
 	}
 }
 

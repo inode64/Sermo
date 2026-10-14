@@ -171,6 +171,28 @@ func assertHandshakeFails(t *testing.T, fn handshakeFn, replies string, cfg Conf
 	}
 }
 
+// assertBusy asserts res is a busy verdict carrying code (empty: none) and a
+// reason, with the "server busy" Failure every consumer reports.
+func assertBusy(t *testing.T, res Result, err error, code string) {
+	t.Helper()
+	if err != nil {
+		t.Fatalf("a busy reply is a verdict, not an error: %v", err)
+	}
+	if !res.Busy || !strings.Contains(res.Failure, busyFailurePrefix) {
+		t.Fatalf("want a busy verdict, got %+v", res)
+	}
+	if res.Extra[ExtraKeyErrorCode] != code || res.Extra[ExtraKeyBusyReason] == "" {
+		t.Fatalf("busy evidence = %v, want error_code %q and a reason", res.Extra, code)
+	}
+}
+
+// assertHandshakeBusy runs fn against canned replies and asserts a busy verdict.
+func assertHandshakeBusy(t *testing.T, fn handshakeFn, replies string, cfg Config, code string) {
+	t.Helper()
+	res, err := fn(newRW(replies), cfg)
+	assertBusy(t, res, err, code)
+}
+
 // serveOnce listens on a loopback port, accepts a single connection and hands it
 // to onConn, then returns the port. The listener and connection are closed on
 // cleanup / when onConn returns.

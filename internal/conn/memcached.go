@@ -24,6 +24,7 @@ const (
 	memcachedCommandStats            = "stats\r\n"
 	memcachedFieldSeparator          = " "
 	memcachedReplyEnd                = "END"
+	memcachedReplyErrorPrefix        = "ERROR "
 	memcachedReplyStatPrefix         = "STAT "
 	memcachedStatBytes               = "bytes"
 	memcachedStatCmdGet              = "cmd_get"
@@ -55,7 +56,8 @@ func (memcachedProtocol) Probe(ctx context.Context, cfg Config) (Result, error) 
 
 // memcachedStats sends `stats` and parses the `STAT <key> <value>` lines up to
 // the terminating `END`. It publishes the version and a curated set of counters
-// in Result.Extra; any non-STAT/non-END line (e.g. an ERROR reply, or a server
+// in Result.Extra. "ERROR Too many open connections" (the -c limit) is a busy
+// verdict; any other non-STAT/non-END line (e.g. an ERROR reply, or a server
 // that is not memcached) fails the probe.
 func memcachedStats(rw io.ReadWriter) (Result, error) {
 	if _, err := io.WriteString(rw, memcachedCommandStats); err != nil {
@@ -73,6 +75,10 @@ func memcachedStats(rw io.ReadWriter) (Result, error) {
 		}
 		rest, ok := strings.CutPrefix(line, memcachedReplyStatPrefix)
 		if !ok {
+			if reason, refused := strings.CutPrefix(line, memcachedReplyErrorPrefix); refused &&
+				strings.Contains(reason, memcachedErrorTooManyConnections) {
+				return busyResult(Result{}, Busy{Reason: strings.TrimSpace(reason)}), nil
+			}
 			return Result{}, fmt.Errorf("unexpected memcached stats reply %q", line)
 		}
 		if k, v, ok := strings.Cut(rest, memcachedFieldSeparator); ok {

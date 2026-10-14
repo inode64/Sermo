@@ -88,6 +88,8 @@ restarts after a stop that left residual processes
 leaks the operation lock on an early return
 does not log a blocked action
 adds a config toggle that disables a hard invariant
+lets a busy observation (too many connections, loading) drive a lifecycle action
+evaluates a rule for an operation with Eval instead of EvalRule
 lets named locks and operation locks share a directory or load from /etc
 serializes every service through one loop
 ```

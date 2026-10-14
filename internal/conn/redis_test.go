@@ -118,7 +118,46 @@ func TestRedisHandshakeAuthError(t *testing.T) {
 }
 
 func TestRedisHandshakePingError(t *testing.T) {
-	assertHandshakeFails(t, redisHandshake, "-LOADING server is loading\r\n", Config{})
+	assertHandshakeFails(t, redisHandshake, "-ERR unknown command 'PING'\r\n", Config{})
+}
+
+// A server that answers it cannot serve now is busy, whether it says so to
+// PING or to AUTH; an authentication refusal stays an error.
+func TestRedisHandshakeBusyReplies(t *testing.T) {
+	for _, tc := range []struct {
+		name, reply, code string
+		cfg               Config
+	}{
+		{"loading", "-LOADING Redis is loading the dataset in memory\r\n", "LOADING", Config{}},
+		{"script", "-BUSY Redis is busy running a script\r\n", "BUSY", Config{}},
+		{"replica", "-MASTERDOWN Link with MASTER is down\r\n", "MASTERDOWN", Config{}},
+		{"disk full", "-MISCONF Redis is configured to save RDB snapshots, but it's currently unable to persist to disk\r\n", "MISCONF", Config{}},
+		{"maxclients", "-ERR max number of clients reached\r\n", "", Config{}},
+		{"maxclients on auth", "-ERR max number of clients reached\r\n", "", Config{Password: "secret"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			assertHandshakeBusy(t, redisHandshake, tc.reply, tc.cfg, tc.code)
+		})
+	}
+}
+
+func TestRedisConnectedClientsPct(t *testing.T) {
+	extra := map[string]string{}
+	addRedisInfoExtra(extra, map[string]string{ExtraKeyConnectedClients: "16", redisInfoMaxClients: "32736"})
+	if extra[redisInfoMaxClients] != "32736" || extra[redisExtraConnectedClientsPct] != "0.05" {
+		t.Fatalf("extra = %v, want maxclients 32736 and connected_clients_pct 0.05", extra)
+	}
+	for name, fields := range map[string]map[string]string{
+		"no maxclients":   {ExtraKeyConnectedClients: "16"},
+		"zero maxclients": {ExtraKeyConnectedClients: "16", redisInfoMaxClients: "0"},
+		"no clients":      {redisInfoMaxClients: "100"},
+	} {
+		extra := map[string]string{}
+		addRedisInfoExtra(extra, fields)
+		if _, ok := extra[redisExtraConnectedClientsPct]; ok {
+			t.Errorf("%s: connected_clients_pct must be left out: %v", name, extra)
+		}
+	}
 }
 
 func TestReadRESPBoundsBulkReplies(t *testing.T) {
@@ -207,5 +246,37 @@ func TestRedisHandshakeSendsOneInfoAll(t *testing.T) {
 	sent := conn.out.String()
 	if strings.Count(sent, redisCommandInfo) != 1 || !strings.Contains(sent, "$3\r\nall\r\n") {
 		t.Fatalf("want exactly one INFO all, sent %q", sent)
+	}
+}
+
+// A server whose INFO lacks maxclients (Redis before 6.2, KeyDB before 6.3)
+// still yields connected_clients_pct through CONFIG GET; a refused CONFIG
+// leaves it out, and a newer server is not asked at all.
+func TestRedisMaxClientsFallsBackToConfigGet(t *testing.T) {
+	old := infoBulk("redis_version:6.0.16\r\nconnected_clients:250\r\n")
+	conn := rw{in: strings.NewReader("+PONG\r\n" + old + "*2\r\n$10\r\nmaxclients\r\n$4\r\n1000\r\n"), out: &bytes.Buffer{}}
+	res, err := redisHandshake(conn, Config{})
+	if err != nil {
+		t.Fatalf("handshake: %v", err)
+	}
+	if res.Extra[redisInfoMaxClients] != "1000" || res.Extra[redisExtraConnectedClientsPct] != "25.00" {
+		t.Fatalf("extra = %v, want maxclients 1000 and connected_clients_pct 25.00 from CONFIG GET", res.Extra)
+	}
+	if !strings.Contains(conn.out.String(), "$6\r\nCONFIG\r\n$3\r\nGET\r\n$10\r\nmaxclients\r\n") {
+		t.Fatalf("CONFIG GET not sent: %q", conn.out.String())
+	}
+
+	refused := rw{in: strings.NewReader("+PONG\r\n" + old + "-NOPERM this user has no permissions to run the 'config|get' command\r\n"), out: &bytes.Buffer{}}
+	res, err = redisHandshake(refused, Config{})
+	if err != nil {
+		t.Fatalf("a refused CONFIG must not fail the probe: %v", err)
+	}
+	if _, ok := res.Extra[redisExtraConnectedClientsPct]; ok {
+		t.Fatalf("a refused CONFIG must leave connected_clients_pct out: %v", res.Extra)
+	}
+
+	current := rw{in: strings.NewReader("+PONG\r\n" + infoBulk("redis_version:7.2.4\r\nconnected_clients:10\r\nmaxclients:100\r\n")), out: &bytes.Buffer{}}
+	if _, err := redisHandshake(current, Config{}); err != nil || strings.Contains(current.out.String(), "CONFIG") {
+		t.Fatalf("a server reporting maxclients must not be asked: %v %q", err, current.out.String())
 	}
 }

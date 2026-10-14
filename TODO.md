@@ -334,3 +334,19 @@ allowing a dependency declaration to control another target implicitly.
       the service. Add a PID-tree-scoped variant (constrain matching and any kill
       to the service's discovered process set) to offer it safely; today use
       `process_count`/`metric` for service-scoped process monitoring.
+- [ ] Busy servers — follow-ups to the busy verdict (`internal/conn/busy.go`,
+      `rules.Evaluator.EvalRule`):
+      - MQTT 5 reason codes 0x88 (server unavailable), 0x89 (server busy) and
+        0x97 (quota exceeded): the probe speaks MQTT 3.1.1, so only CONNACK
+        code 3 is classified today.
+      - Saturation that never answers looks dead: mosquitto at
+        `max_connections` closes without a CONNACK, postfix with every smtpd
+        busy leaves the connection in the backlog until it times out. Pair
+        those probes with a connection-usage reading before trusting a restart.
+      - `verify:` treats a busy check as a failed postflight; Redis `LOADING`
+        right after a restart could instead count as settling until the
+        operation deadline.
+      - A busy badge in the dashboard's check list, next to unavailable.
+      - Review the `restart-if-worker-thread-hot` CPU-saturation restarts the
+        other ~20 catalog profiles still ship (apache, nginx, exim, squid,
+        varnishd, …); redis, keydb and memcached already alert instead.
