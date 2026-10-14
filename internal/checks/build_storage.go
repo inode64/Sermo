@@ -36,7 +36,7 @@ func buildSizeCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 	if err != nil {
 		return nil, err.Error()
 	}
-	c.base, c.sampler, c.state = b, deps.SizeSampler, &sizeState{}
+	c.base, c.sampler, c.state = b, deps.SizeSampler, &byteWindow{}
 	return &c, ""
 }
 

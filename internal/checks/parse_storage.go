@@ -3,7 +3,6 @@ package checks
 import (
 	"errors"
 	"fmt"
-	"path/filepath"
 	"regexp"
 	"time"
 
@@ -20,15 +19,9 @@ func ValidateLogCheck(entry map[string]any) error {
 func parseLogFields(entry map[string]any) (logCheck, error) {
 	var c logCheck
 	var errs []error
-	c.path = cfgval.String(entry[CheckKeyPath])
-	switch {
-	case c.path == "":
-		errs = append(errs, errors.New("log check requires a path"))
-	case !filepath.IsAbs(c.path):
-		errs = append(errs, errors.New("log check path must be absolute"))
-	default:
-		c.path = filepath.Clean(c.path)
-	}
+	var pathErr error
+	c.path, pathErr = parsePatternPath(entry, CheckTypeLog)
+	errs = append(errs, pathErr)
 	pattern := cfgval.String(entry[CheckKeyRegex])
 	if pattern == "" {
 		errs = append(errs, errors.New("log check requires a regex"))
@@ -124,22 +117,36 @@ func ValidateSizeCheck(entry map[string]any) error {
 }
 
 func parseSizeFields(entry map[string]any) (sizeCheck, error) {
-	c := sizeCheck{path: cfgval.String(entry[CheckKeyPath])}
+	var c sizeCheck
 	var errs []error
-	if c.path == "" {
-		errs = append(errs, errors.New("path is required for a size check"))
-	}
 	var err error
+	c.path, err = parsePatternPath(entry, CheckTypeSize)
+	errs = append(errs, err)
 	c.includeHidden, err = parseStorageBool(entry, CheckKeyIncludeHidden, CheckTypeSize)
 	errs = append(errs, err)
-	growBy := cfgval.String(entry[CheckKeyGrowBy])
-	if growBy == "" {
-		errs = append(errs, errors.New("grow_by is required for a size check (e.g. 1G)"))
-	} else if c.growBy, err = parseSize(growBy); err != nil {
-		errs = append(errs, fmt.Errorf("grow_by %q must be a positive size with a K/M/G/T suffix (e.g. 1G, 500M)", growBy))
+	// An empty value counts as absent, so a catalog variable set to "" switches
+	// that half of the check off instead of failing validation.
+	maxRaw := cfgval.String(entry[CheckKeyMax])
+	if maxRaw != "" {
+		if c.max, err = parseSize(maxRaw); err != nil {
+			errs = append(errs, fmt.Errorf("max %q must be a positive size with a K/M/G/T suffix (e.g. 20G)", maxRaw))
+		}
 	}
-	c.window, err = parseWithin(entry, "for a size check (e.g. 1h)")
-	return c, errors.Join(append(errs, err)...)
+	growBy := cfgval.String(entry[CheckKeyGrowBy])
+	within := cfgval.String(entry[CheckKeyWithin])
+	switch {
+	case growBy == "" && within == "" && maxRaw == "":
+		errs = append(errs, errors.New("a size check needs max (e.g. 20G), or grow_by with within (e.g. 1G within 1h)"))
+	case growBy == "" && within != "":
+		errs = append(errs, errors.New("grow_by is required with within for a size check (e.g. 1G)"))
+	case growBy != "":
+		if c.growBy, err = parseSize(growBy); err != nil {
+			errs = append(errs, fmt.Errorf("grow_by %q must be a positive size with a K/M/G/T suffix (e.g. 1G, 500M)", growBy))
+		}
+		c.window, err = parseWithin(entry, "with grow_by for a size check (e.g. 1h)")
+		errs = append(errs, err)
+	}
+	return c, errors.Join(errs...)
 }
 
 func parseStorageBool(entry map[string]any, key, checkType string) (bool, error) {

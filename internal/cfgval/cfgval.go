@@ -548,6 +548,18 @@ func IsAssertOp(op string) bool {
 	}
 }
 
+// globMetaChars are the filepath.Match metacharacters that make a configured
+// path a pattern rather than a literal path.
+const globMetaChars = "*?["
+
+// IsGlobPattern reports whether a configured path is a filepath.Match pattern
+// rather than a literal path. Shared by the checks that measure or tail every
+// match (log, size), candidate path resolution and stop-policy validation, so
+// the pattern grammar cannot drift between them.
+func IsGlobPattern(path string) bool {
+	return strings.ContainsAny(path, globMetaChars)
+}
+
 // Disabled reports whether a config entry opts out via `enabled: false`. An
 // absent or non-boolean `enabled` means enabled — the shared reading across
 // checks, rules, watches, services and diagnostics.

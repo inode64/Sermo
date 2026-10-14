@@ -210,6 +210,23 @@ func TestCheckReadingsForAllTypes(t *testing.T) {
 			want: map[string]string{"size": "220 B", "age": "2d3h"},
 		},
 		{
+			// The total, how many files it spans, the max it is judged against
+			// and the growth over the window are what a binlog alert needs.
+			name: "size",
+			typ:  checks.CheckTypeSize,
+			data: map[string]any{
+				checks.DataKeyPath:         "/var/lib/mysql/mariadb*",
+				checks.DataKeyCurrentBytes: int64(26 << 30),
+				checks.DataKeyFiles:        27,
+				checks.DataKeyMaxBytes:     int64(20 << 30),
+				checks.DataKeyGrowthBytes:  int64(1 << 30),
+			},
+			want: map[string]string{
+				checks.DataKeyPath: "/var/lib/mysql/mariadb*", checks.DataKeyCurrentBytes: "26 GiB", checks.DataKeyFiles: "27",
+				checks.DataKeyMaxBytes: "20 GiB", checks.DataKeyGrowthBytes: "1 GiB",
+			},
+		},
+		{
 			name: "tcp",
 			typ:  "tcp",
 			data: map[string]any{"host": "127.0.0.1", "port": 443, "latency_ms": int64(12), "protocol": "tcp"},

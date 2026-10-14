@@ -7,10 +7,8 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"regexp"
 	"slices"
-	"strings"
 	"syscall"
 	"time"
 
@@ -25,7 +23,6 @@ const (
 	// log that explodes cannot stall the worker: the remainder is skipped, the
 	// result says so, and the count is a lower bound for that cycle.
 	logReadBudgetBytes = 8 * units.BytesPerMiB
-	logGlobMeta        = "*?["
 	logNewline         = '\n'
 )
 
@@ -83,7 +80,7 @@ func (c logCheck) Run(ctx context.Context) Result {
 	defer run.close()
 	start := run.start
 
-	paths, err := c.expand()
+	paths, _, err := expandPathGlob(c.path)
 	if err != nil {
 		return c.unavailableResult(fmt.Sprintf("log %s: %v", c.path, err), start)
 	}
@@ -127,21 +124,6 @@ func (c logCheck) readBudget() int64 {
 		return c.budget
 	}
 	return logReadBudgetBytes
-}
-
-// expand resolves the configured path: a glob when it holds a metacharacter,
-// otherwise the literal file. The list is sorted so state and results are
-// stable across cycles.
-func (c logCheck) expand() ([]string, error) {
-	if !strings.ContainsAny(c.path, logGlobMeta) {
-		return []string{c.path}, nil
-	}
-	paths, err := filepath.Glob(c.path)
-	if err != nil {
-		return nil, fmt.Errorf("glob: %w", err)
-	}
-	slices.Sort(paths)
-	return paths, nil
 }
 
 // countWithin retains batches by observation time, including the current batch

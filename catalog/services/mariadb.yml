@@ -32,6 +32,22 @@ variables:
   defaults_file: /root/.my.cnf
   # One warning per statement running longer than this.
   long_query_duration: 5m
+  # Binary logs (and relay logs) under the data directory, a glob summed by
+  # alert-if-binlog-large: mariadb-bin.000123, mysql-bin.000123,
+  # <host>-bin.000123, binlog.000123 and the relay-bin files all match. The
+  # directory before the first wildcard must exist, so a wrong datadir is
+  # reported unavailable instead of "no binlogs". One error incident opens
+  # while they take more than binlog_max_size in total, or after they grow by
+  # binlog_grow_by within binlog_grow_within (a bulk load, or a replica that
+  # stopped purging, fills the volume fast). Set a limit's variables to "" to
+  # switch that limit off.
+  binlog_pattern: "/var/lib/mysql/*bin*.[0-9]*"
+  binlog_max_size: 20G
+  binlog_grow_by: 1G
+  binlog_grow_within: 30m
+  # The total moves slowly next to those limits: sampling it every 5 minutes
+  # keeps the glob and one stat per binlog off every worker cycle.
+  binlog_check_interval: 5m
   config:
     - /etc/mysql/my.cnf
     - /etc/my.cnf
@@ -94,6 +110,17 @@ watches:
       defaults_file: ${defaults_file}
       min_duration: ${long_query_duration}
       severity: warning
+  # One error incident while the binary logs are over binlog_max_size in
+  # total or have grown binlog_grow_by within binlog_grow_within.
+  alert-if-binlog-large:
+    interval: ${binlog_check_interval}
+    check:
+      type: size
+      path: ${binlog_pattern}
+      max: ${binlog_max_size}
+      grow_by: ${binlog_grow_by}
+      within: ${binlog_grow_within}
+      severity: error
   service:
     check:
       type: service

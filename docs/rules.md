@@ -171,7 +171,7 @@ Connection-protocol checks (MySQL, PostgreSQL, Redis, Docker, libvirt, etc.) are
 | `sql`         | condition | a SQL query's scalar result compares (`== != > >= < <= contains =~`) against a value (see SQL query) |
 | `mongodb-query` | condition | a MongoDB document count / aggregation / command result compares against a value (see MongoDB query) |
 | `influxdb-query` | condition | an InfluxQL (1.x) or Flux (2.x) query's scalar result compares against a value (see InfluxDB query) |
-| `size`        | condition | a file/directory grows by at least `grow_by` within `within` (runaway growth) (see Size growth) |
+| `size`        | condition | the total size of a file, directory or glob pattern exceeds `max`, or grows by at least `grow_by` within `within` (runaway growth) (see Size growth) |
 | `websocket` | health | a WebSocket endpoint completes the RFC 6455 opening handshake (see WebSocket) |
 
 The `storage` check also verifies the **mount** of its `path` — see
@@ -2492,10 +2492,17 @@ checks:
 
 ### Size growth (`size`)
 
-A `size` check watches a file or directory and **alerts when it grows** by at
-least `grow_by` within the `within` window — useful to catch a runaway log, a
-disk-filling spool or a leaking cache. Only **increases** trip it: a steady or
-shrinking path passes. It is **condition-style** (`OK == true` means "grew too
+A `size` check measures a file, a directory (recursive sum of its regular
+files) or a **glob pattern** (sum of every match) and **alerts when the total
+exceeds `max`**, or **grows** by at least `grow_by` within the `within`
+window — useful to catch a runaway log, a disk-filling spool, a leaking cache
+or database binary logs that stop expiring. Configure `max`, `grow_by` with
+`within`, or both: each is an independent condition and either trips the
+check. They are still one check with one incident: while `max` already holds
+it open, growth adds its cause to the message but sends no second alert. An
+empty value counts as absent, so a catalog variable set to `""` switches its
+limit off. Only **increases** trip the growth window: a steady or shrinking
+path passes. It is **condition-style** (`OK == true` means "too big" or "grew too
 fast", so `active: {check: …}` fires) and **stateful**. Growth history persists
 while the service worker or watch is alive and resets when that worker/watch is
 rebuilt, for example after a config reload.
@@ -2510,6 +2517,14 @@ watches:
       within: 1h               # …within this sliding window
     then:
       notify: [ops-email]      # and/or a hook
+  binlogs:
+    check:
+      type: size
+      path: "/var/lib/mysql/mariadb*"   # a glob: the sum of every match
+      max: 20G                          # alert while the total is over this…
+      grow_by: 1G                       # …or when it grows 1 GiB
+      within: 30m                       #    within half an hour
+      severity: error
 ```
 
 (The examples in this file use compact global `watches:` maps. In a file under
@@ -2520,19 +2535,34 @@ the inner fields at the top level.)
 growth window — not the watch-level `within: {cycles|duration, min_matches}`
 firing window, which a size watch normally does not need.)
 
-Each cycle it samples the path's size (a file's bytes, or the recursive sum of
-regular-file sizes under a directory), keeps the samples seen in the last
-`within`, and compares the current size against the oldest one still in the
-window. It fails when `current − baseline ≥ grow_by`. The first cycle only
-baselines (no alert). `grow_by` uses the same size grammar as every other size
-field (`free_bytes`, `expand.by`): an explicit `K`/`M`/`G`/`T` suffix (optional
-`B`/`iB`), binary units (`1G` = 2³⁰), with plain byte counts rejected. It must
-be positive and fit a signed 64-bit byte count. Result
-data carries `current_bytes`, `baseline_bytes`,
-`growth_bytes`, the `window` and `value` (the growth) for hooks/rules. A
-directory walk skips hidden descendants by default; set `include_hidden: true` to
-include them. A hidden path named directly is always sampled. Point it at a bounded
-path.
+`path` must be absolute. When it contains `*`, `?` or `[` it is a glob
+pattern, and a malformed one is a validation error. Every match — a file or a
+whole directory tree — is summed, and a name the pattern selects is measured
+even when it starts with `.`. A pattern that matches nothing measures
+**0 bytes** and is healthy, because an empty binlog set is a fine answer. The
+directory before the first wildcard must exist, though: a missing one makes
+the check unavailable, exactly like a missing literal path, so a wrong
+directory is never read as "nothing there". A match that vanishes between the
+glob and its stat — a log rotated away — is skipped, as a directory entry that
+vanishes during the walk is.
+
+Each cycle it samples the total, keeps the samples seen in the last `within`,
+and compares the current size against the oldest one still in the window.
+`max` trips when `current > max`, from the very first cycle: it is an absolute
+limit and needs no baseline. The growth window trips when
+`current − baseline ≥ grow_by`; its first cycle only baselines (no alert).
+`max` and `grow_by` use the same size grammar as every other size field
+(`free_bytes`, `expand.by`): an explicit `K`/`M`/`G`/`T` suffix (optional
+`B`/`iB`), binary units (`1G` = 2³⁰), with plain byte counts rejected. Each
+must be positive and fit a signed 64-bit byte count; `grow_by` and `within`
+come together. The message names the measured total, the number of files when
+it is not exactly one, the `max` it is over (or under) and the growth over the
+window. Result data carries `current_bytes`, `files`, `max_bytes` when `max`
+is set and, when a window is set, `baseline_bytes`, `growth_bytes` and the
+`window`; `value` is the growth when a window is configured, otherwise the
+current total. A directory walk skips hidden descendants by default; set
+`include_hidden: true` to include them. A hidden path named directly is
+always sampled. Point it at a bounded path.
 
 ### WebSocket (`websocket`)
 
@@ -3418,7 +3448,8 @@ checks:
 - **`path`** must be absolute and point to regular files. FIFOs, sockets,
   directories and devices are rejected, including through symlinks; opening a
   FIFO does not wait for a writer. A glob (`*`, `?`, `[`) matches files whose
-  matches are summed; the result data reports `files`. Keep the glob tight
+  matches are summed; the result data reports `files`. A malformed pattern is
+  a validation error, and the directory before the first wildcard must exist. Keep the glob tight
   (`*_err.log`, never `*_err.log*`): a rotated copy that matches the glob is a
   new file and would be read from its start.
 - **The first cycle only baselines** at the end of every file: lines already
