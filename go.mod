@@ -10,7 +10,7 @@ require (
 	github.com/go-ldap/ldap/v3 v3.4.15
 	github.com/go-sql-driver/mysql v1.10.1
 	github.com/goccy/go-yaml v1.19.2
-	github.com/godbus/dbus/v5 v5.2.2
+	github.com/godbus/dbus/v5 v5.2.3
 	github.com/google/nftables v0.3.0
 	github.com/gosnmp/gosnmp v1.45.0
 	github.com/jackc/pgx/v5 v5.11.0
