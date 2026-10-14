@@ -16,6 +16,12 @@ variables:
   host: 127.0.0.1
   port: 6379
   maxmemory_used_limit: 90
+  # alert-if-connections-near-limit warns while client connections stay at
+  # or above this share of maxclients, and escalates to error past the second
+  # one. At maxclients the server answers "max number of clients reached":
+  # Sermo reports that as busy and never restarts for it.
+  connections_used_limit: 80
+  connections_used_error_limit: 95
 pidfile:
   - /run/redis/redis.pid
   - /run/redis.pid
@@ -57,18 +63,6 @@ watches:
     check:
       type: service
       expect: active
-  restart-if-worker-thread-hot:
-    check:
-      type: metric
-      scope: service
-      name: cpu_thread
-      op: '>'
-      value: 90%
-      optional: true
-    for:
-      duration: 6m
-    then:
-      action: restart
   restart-if-tcp-failed:
     check:
       type: tcp
@@ -90,6 +84,30 @@ watches:
       cycles: 3
     then:
       action: restart
+  # One warning while client connections stay at or above
+  # connections_used_limit % of maxclients, an error past
+  # connections_used_error_limit %. An older server without maxclients in INFO
+  # is asked with CONFIG GET; where that is refused too (an ACL, a renamed
+  # CONFIG), disable this watch. At maxclients the server
+  # refuses new clients: Sermo reports that as busy and never restarts for it.
+  alert-if-connections-near-limit:
+    check:
+      type: redis
+      host: ${host}
+      port: ${port}
+      timeout: 3s
+      optional: true
+      severity: warning
+      expect:
+        connected_clients_pct: { op: "<", value: "${connections_used_limit}" }
+      levels:
+        error: { expect: { connected_clients_pct: { op: "<", value: "${connections_used_error_limit}" } } }
+    for:
+      duration: 2m
+    then:
+      action: alert
+      message: >-
+        During ${rule.duration}, ${display_name} client connections stayed at or above ${connections_used_limit}% of maxclients, or the server stopped accepting clients
   alert-if-persistence-failed:
     check:
       type: redis

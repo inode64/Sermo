@@ -5,19 +5,22 @@ import (
 	"database/sql"
 	"fmt"
 	"strings"
+	"time"
 
 	"sermo/internal/cfgval"
 	"sermo/internal/conn"
 )
 
 // sqlCheck is condition-style: OK means the scalar query result matches
-// op/value. The query is run as given; use a read-only user.
+// op/value. The query is run as given; use a read-only user. levels: tiers
+// (op/value) escalate a match's severity.
 type sqlCheck struct {
 	base
 	engine string
 	open   func(context.Context) (*sql.DB, error)
 	query  string
 	valueMatcher
+	grades grades[valueMatcher]
 }
 
 func (c sqlCheck) Run(ctx context.Context) Result {
@@ -25,24 +28,40 @@ func (c sqlCheck) Run(ctx context.Context) Result {
 	defer run.close()
 	start := run.start
 
+	data := map[string]any{
+		DataKeyEngine: c.engine,
+		DataKeyQuery:  c.query,
+	}
 	db, err := c.open(ctx)
 	if err != nil {
-		return c.base.unavailableResult(fmt.Sprintf("sql %s: %v", c.engine, err), start)
+		return c.failure(err, start, data)
 	}
 	defer func() { _ = db.Close() }()
 
 	result, isNull, err := sqlScalarDB(ctx, db, c.query)
 	if err != nil {
-		return c.base.unavailableResult(fmt.Sprintf("sql %s: %v", c.engine, err), start)
+		return c.failure(err, start, data)
 	}
 	if isNull {
 		return c.base.unavailableResult(fmt.Sprintf("sql %s: query returned NULL", c.engine), start)
 	}
 
-	return finishScalarCompare(c.base, "sql "+c.engine, result, c.valueMatcher, start, map[string]any{
-		DataKeyEngine: c.engine,
-		DataKeyQuery:  c.query,
-	})
+	res := finishScalarCompare(c.base, "sql "+c.engine, result, c.valueMatcher, start, data)
+	return c.grade(res, result)
+}
+
+// failure reports a connection or query error (see driverFailure).
+func (c sqlCheck) failure(err error, start time.Time, data map[string]any) Result {
+	return c.base.driverFailure("sql "+c.engine, err, start, data)
+}
+
+// grade raises a matching result to the gravest levels: tier its value also
+// matches; an unmatched or unavailable result keeps its declared severity.
+func (c sqlCheck) grade(res Result, value string) Result {
+	return raiseSeverity(res, c.grades.highest(func(m valueMatcher) bool {
+		ok, err := m.compare(value)
+		return err == nil && ok
+	}))
 }
 
 // sqlScalarDB runs query and returns the first column of the first row as a
@@ -72,6 +91,13 @@ func sqlValueString(v any) string {
 	default:
 		return strings.TrimSpace(fmt.Sprintf("%v", t))
 	}
+}
+
+// IsMySQLEngine reports whether engine speaks the MySQL protocol (mysql or
+// mariadb): the engines that accept a socket and a defaults_file.
+func IsMySQLEngine(engine string) bool {
+	driver, _ := sqlEngineDriver(engine)
+	return driver == SQLEngineMySQL
 }
 
 // sqlEngineDriver maps an engine token to its database/sql driver name.
@@ -122,17 +148,52 @@ func buildSQLCheck(b base, entry map[string]any) (Check, string) {
 			return db, nil
 		}
 	default:
-		if cfgval.AsString(entry[CheckKeyUser]) == "" {
-			return nil, "sql check (" + engine + ") requires a user"
-		}
-		cfg := sqlConnConfig(engine, entry)
-		if driver == SQLEngineMySQL {
-			open = func(ctx context.Context) (*sql.DB, error) { return conn.OpenMySQLDB(ctx, cfg) }
-		} else {
-			open = func(ctx context.Context) (*sql.DB, error) { return conn.OpenPostgresDB(ctx, cfg) }
+		var msg string
+		if open, msg = sqlServerOpener(engine, driver, entry); msg != "" {
+			return nil, msg
 		}
 	}
-	return sqlCheck{base: b, engine: engine, open: open, query: query, valueMatcher: newValueMatcher(op, value)}, ""
+	return sqlCheck{base: b, engine: engine, open: open, query: query, valueMatcher: newValueMatcher(op, value),
+		grades: sqlGrades(b.levels)}, ""
+}
+
+// sqlServerOpener returns the opener for a mysql or postgres sql check. A mysql
+// check with a defaults_file resolves its target per run, like db_queries: its
+// own fields first, then the option file (whose [client] user defaults to
+// root, the account that keeps a reserved connection on a saturated server),
+// then the protocol defaults.
+func sqlServerOpener(engine, driver string, entry map[string]any) (func(context.Context) (*sql.DB, error), string) {
+	defaultsFile := cfgval.AsString(entry[CheckKeyDefaultsFile])
+	if driver == SQLEngineMySQL && defaultsFile != "" {
+		own := ownConnConfig(engine, driver, entry)
+		return func(ctx context.Context) (*sql.DB, error) {
+			target, err := mysqlTarget(own, defaultsFile)
+			if err != nil {
+				return nil, err
+			}
+			return conn.OpenMySQLDB(ctx, target)
+		}, ""
+	}
+	if cfgval.AsString(entry[CheckKeyUser]) == "" {
+		return nil, "sql check (" + engine + ") requires a user"
+	}
+	cfg := sqlConnConfig(engine, entry)
+	if driver == SQLEngineMySQL {
+		return func(ctx context.Context) (*sql.DB, error) { return conn.OpenMySQLDB(ctx, cfg) }, ""
+	}
+	return func(ctx context.Context) (*sql.DB, error) { return conn.OpenPostgresDB(ctx, cfg) }, ""
+}
+
+// sqlGrades parses the kept levels: tiers of a sql check, each restating the
+// op/value comparison with a stricter bound.
+func sqlGrades(specs []levelSpec) grades[valueMatcher] {
+	return parseGrades(specs, func(tier map[string]any) (valueMatcher, bool) {
+		op := cfgval.String(tier[CheckKeyOp])
+		if op == "" {
+			return valueMatcher{}, false
+		}
+		return newValueMatcher(op, cfgval.String(tier[CheckKeyValue])), true
+	})
 }
 
 // sqlConnConfig builds a conn.Config for a mysql/postgres sql check, defaulting

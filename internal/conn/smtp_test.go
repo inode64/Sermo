@@ -55,7 +55,12 @@ func TestSMTPHandshakeAuthFails(t *testing.T) {
 }
 
 func TestSMTPHandshakeBadGreeting(t *testing.T) {
-	assertHandshakeFails(t, smtpHandshake, "421 service not available\r\n", Config{})
+	assertHandshakeFails(t, smtpHandshake, "554 no service here\r\n", Config{})
+}
+
+// A 421 greeting (too many concurrent connections, shutting down) is busy.
+func TestSMTPHandshakeBusyGreeting(t *testing.T) {
+	assertHandshakeBusy(t, smtpHandshake, "421 mx.example.com Too many concurrent SMTP connections; please try again later\r\n", Config{}, "421")
 }
 
 func TestSMTPHandshakeHELOFallback(t *testing.T) {

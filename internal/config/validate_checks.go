@@ -1651,12 +1651,25 @@ func validateSQLFields(prefix string, fields map[string]any, add addFunc) {
 	}
 	requireCheckField(prefix, checks.CheckKeyQuery, "a sql check", fields, add)
 	validateAssertionFields(prefix, fields, add)
+	defaultsFile := cfgval.String(fields[checks.CheckKeyDefaultsFile])
 	switch engine {
 	case checks.SQLEngineSQLite, checks.SQLEngineSQLite3:
 		requireCheckField(prefix, checks.CheckKeyPath, "a sqlite sql check", fields, add)
-	case checks.SQLEngineMySQL, checks.SQLEngineMariaDB, checks.SQLEnginePostgres, checks.SQLEnginePostgreSQL:
+	case checks.SQLEngineMySQL, checks.SQLEngineMariaDB:
+		// A defaults_file supplies the account (root when it names none), the
+		// way the mysql client run by root connects.
+		if defaultsFile == "" {
+			requireCheckField(prefix, checks.CheckKeyUser, "a "+engine+" sql check without a defaults_file", fields, add)
+		} else if !filepath.IsAbs(defaultsFile) {
+			add("%s.%s must be an absolute path", prefix, checks.CheckKeyDefaultsFile)
+		}
+		validateConnTLS(prefix, engine, fields, add)
+	case checks.SQLEnginePostgres, checks.SQLEnginePostgreSQL:
 		requireCheckField(prefix, checks.CheckKeyUser, "a "+engine+" sql check", fields, add)
 		validateConnTLS(prefix, engine, fields, add)
+	}
+	if defaultsFile != "" && !checks.IsMySQLEngine(engine) {
+		add("%s.%s applies to mysql and mariadb sql checks only", prefix, checks.CheckKeyDefaultsFile)
 	}
 }
 

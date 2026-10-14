@@ -50,9 +50,23 @@ type Evaluator struct {
 	// Change is populated when a changed: leaf evaluates true, so callers can
 	// expand rule messages with the concrete changed path/app/library.
 	Change ChangeContext
+	// Unknown reports whether the last Eval could not decide its condition
+	// because an observation was unavailable, busy or skipped. An ordinary rule
+	// reads that as false; a caller holding an open alert episode uses it to
+	// keep the episode open until a real observation says it recovered.
+	Unknown bool
 	// FailOnUnavailable turns an unavailable check into an evaluation error.
 	// Guards enable it so failed observation never authorizes an operation.
 	FailOnUnavailable bool
+
+	// busyFails says whether a busy result (a server that answered it is alive
+	// but cannot serve now, checks.Result.Busy) counts as a failure. EvalRule
+	// sets it per rule: an alert sees the failure, a rule that would start,
+	// stop, restart, reload or resume the service sees an unknown, because the
+	// cause of a busy server is never the daemon and an operation cannot fix
+	// it. Its zero value — a plain Eval, and every guard — keeps busy unknown,
+	// so no new caller can act on it by accident.
+	busyFails bool
 
 	memo map[string]checks.Result
 }
@@ -96,12 +110,26 @@ func NewCheckResolverFactory(built []checks.Built, maxParallel int) func() RefRe
 	}
 }
 
+// EvalRule evaluates r's condition for the action r takes: a rule with an
+// operation (restart, start, stop, reload, resume) reads a busy check as
+// unknown — it never fires on it, and a busy cycle resets its for: window —
+// while any other rule reads it as a failure. Use it for every rule a worker
+// decides to act on; Guard owns guard evaluation.
+func (e *Evaluator) EvalRule(ctx context.Context, r Rule) (bool, error) {
+	previous := e.busyFails
+	_, hasOperation := r.Operation()
+	e.busyFails = !hasOperation
+	defer func() { e.busyFails = previous }()
+	return e.Eval(ctx, r.If)
+}
+
 // Eval evaluates a condition node, returning its boolean value. An unresolvable
 // reference or an unsupported condition is an error, not a silent false, so the
 // caller (guard/remediation) can treat it conservatively.
 func (e *Evaluator) Eval(ctx context.Context, node map[string]any) (bool, error) {
 	match, err := e.eval(ctx, node)
-	if !e.FailOnUnavailable && errors.Is(err, errUnavailable) {
+	e.Unknown = errors.Is(err, errUnavailable)
+	if !e.FailOnUnavailable && e.Unknown {
 		return false, nil
 	}
 	return match, err
@@ -164,12 +192,22 @@ func (e *Evaluator) eval(ctx context.Context, node map[string]any) (bool, error)
 func (e *Evaluator) evalFailed(ctx context.Context, operand any) (bool, error) {
 	res, err := e.probe(ctx, operand)
 	if err != nil {
-		if !e.FailOnUnavailable && res.Unavailable && !res.Skipped && errors.Is(err, errUnavailable) {
+		if !e.FailOnUnavailable && !res.Skipped && errors.Is(err, errUnavailable) && e.unobservedFails(res) {
 			return true, nil
 		}
 		return false, err
 	}
 	return !res.OK, nil
+}
+
+// unobservedFails reports whether an unavailable or busy result satisfies
+// failed: for an ordinary rule: an unavailable probe failed, a busy one only
+// when this rule may read busy as a failure (busyFails).
+func (e *Evaluator) unobservedFails(res checks.Result) bool {
+	if res.Busy {
+		return e.busyFails
+	}
+	return res.Unavailable
 }
 
 // condMap asserts a condition operand is a mapping, returning a "<label> must be
@@ -188,6 +226,7 @@ func (e *Evaluator) evalList(ctx context.Context, v any, and bool) (bool, error)
 	if !ok || len(items) == 0 {
 		return false, errors.New("and/or requires a non-empty list")
 	}
+	var unknown error
 	for _, item := range items {
 		node, ok := item.(map[string]any)
 		if !ok {
@@ -195,6 +234,13 @@ func (e *Evaluator) evalList(ctx context.Context, v any, and bool) (bool, error)
 		}
 		r, err := e.eval(ctx, node)
 		if err != nil {
+			// An OR holds as soon as one operand holds, whatever its unknown
+			// siblings say, so the outcome cannot depend on operand order. An
+			// AND, and any other error, stops at the first uncertainty.
+			if !and && errors.Is(err, errUnavailable) {
+				unknown = err
+				continue
+			}
 			return false, err
 		}
 		if and && !r {
@@ -203,6 +249,9 @@ func (e *Evaluator) evalList(ctx context.Context, v any, and bool) (bool, error)
 		if !and && r {
 			return true, nil // short-circuit OR
 		}
+	}
+	if unknown != nil {
+		return false, unknown // OR: nothing held, something was unknown
 	}
 	return and, nil // AND: all true; OR: none true
 }
@@ -234,7 +283,7 @@ func (e *Evaluator) probe(ctx context.Context, v any) (checks.Result, error) {
 		if !ok {
 			return checks.Result{}, fmt.Errorf("unknown check %q", ref)
 		}
-		if err := unavailableCheckError(ref, res); err != nil {
+		if err := e.unavailableCheckError(ref, res); err != nil {
 			return res, err
 		}
 		return res, nil
@@ -406,7 +455,7 @@ func (e *Evaluator) evalInline(ctx context.Context, typ string, v any) (bool, er
 func (e *Evaluator) runInline(ctx context.Context, name string, entry, keyParams map[string]any) (checks.Result, error) {
 	key := name + ":" + normalizeKey(keyParams)
 	if res, ok := e.memo[key]; ok {
-		if err := unavailableCheckError(name, res); err != nil {
+		if err := e.unavailableCheckError(name, res); err != nil {
 			return res, err
 		}
 		return res, nil
@@ -421,19 +470,22 @@ func (e *Evaluator) runInline(ctx context.Context, name string, entry, keyParams
 		e.memo = map[string]checks.Result{}
 	}
 	e.memo[key] = res
-	if err := unavailableCheckError(name, res); err != nil {
+	if err := e.unavailableCheckError(name, res); err != nil {
 		return res, err
 	}
 	return res, nil
 }
 
 // unavailableCheckError preserves guard fail-closed behavior for both named
-// checks and inline probes, including skipped checks.
-func unavailableCheckError(name string, res checks.Result) error {
-	if !res.Unavailable && !res.Skipped {
+// checks and inline probes, including skipped checks. A busy result is unknown
+// too unless this evaluation reads busy as a failure (see busyFails); a guard
+// never does.
+func (e *Evaluator) unavailableCheckError(name string, res checks.Result) error {
+	busyUnknown := res.Busy && (e.FailOnUnavailable || !e.busyFails)
+	if !res.Unavailable && !res.Skipped && !busyUnknown {
 		return nil
 	}
-	return fmt.Errorf("%w: check %q is unavailable or skipped: %s", errUnavailable, name, res.Message)
+	return fmt.Errorf("%w: check %q is unavailable, busy or skipped: %s", errUnavailable, name, res.Message)
 }
 
 // unavailableSignal propagates uncertainty through boolean operators. Guards
@@ -481,6 +533,7 @@ func Guard(ctx context.Context, ruleSet []Rule, action string, ev *Evaluator) (b
 		ev.Cache, ev.memo = guardEvaluator.Cache, guardEvaluator.memo
 	}()
 	guardEvaluator.FailOnUnavailable = true
+	guardEvaluator.busyFails = false
 	classes := guardedBy(action)
 	for i := range ruleSet {
 		if ruleSet[i].Type != RuleGuard || !slices.ContainsFunc(ruleSet[i].Blocks, func(b string) bool { return slices.Contains(classes, b) }) {

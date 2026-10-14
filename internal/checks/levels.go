@@ -114,6 +114,7 @@ var gradeSupports = map[string]gradeSupport{
 	CheckTypeNet:              {kind: gradePredicates, keys: netGradeKeys},
 	CheckTypeICMP:             {kind: gradePredicates, keys: icmpGradeKeys},
 	CheckTypeMetric:           {kind: gradeMetric, keys: fixedKeys(CheckKeyOp, CheckKeyValue)},
+	CheckTypeSQL:              {kind: gradeMetric, keys: fixedKeys(CheckKeyOp, CheckKeyValue)},
 	CheckTypeCommand:          {kind: gradeOutput, keys: fixedKeys(CheckKeyExpectStdout)},
 	CheckTypeCert:             {kind: gradeCertDays, keys: fixedKeys(CheckKeyExpiresInDays), floor: severity.Warning},
 	CheckTypeHTTP:             {kind: gradeCertDays, keys: fixedKeys(CheckKeyCertExpiresInDays), floor: severity.Warning},

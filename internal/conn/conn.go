@@ -165,38 +165,43 @@ const (
 	ExtraKeyContainerRestarts = "container.restartcount"
 	ExtraKeyContainerExitCode = "container.exitcode"
 	ExtraKeyConnectedClients  = "connected_clients"
-	ExtraKeyDockerContainers  = "containers"
-	ExtraKeyDockerRunning     = "containers.running"
-	ExtraKeyDockerPaused      = "containers.paused"
-	ExtraKeyDockerStopped     = "containers.stopped"
-	ExtraKeyDockerImages      = "images"
-	ExtraKeyDockerWarnings    = "warnings"
-	ExtraKeyDNSQuery          = "query"
-	ExtraKeyDNSRCode          = "rcode"
-	ExtraKeyDNSAnswers        = "answers"
-	ExtraKeyDNSAddresses      = "addresses"
-	ExtraKeyDNSQType          = "qtype"
-	ExtraKeyDNSAuthoritative  = "aa"
-	ExtraKeyDNSAuthenticated  = "ad"
-	ExtraKeyDNSTruncated      = "tc"
-	ExtraKeyDomain            = "domain"
-	ExtraKeyDomainCount       = "domains"
-	ExtraKeyDomainActive      = "domains.active"
-	ExtraKeyDomainInactive    = "domains.inactive"
-	ExtraKeyDomainState       = "domain.state"
-	ExtraKeyDomainRunning     = "domain.running"
-	ExtraKeyInode             = "inode"
-	ExtraKeyKafkaAPICount     = "api_count"
-	ExtraKeyKafkaErrorCode    = "error_code"
-	ExtraKeyKafkaProduceAPI   = "produce_api"
-	ExtraKeyKafkaVoteAPI      = "vote_api"
-	ExtraKeyLocalAddress      = "local_address"
-	ExtraKeyMongoReadOnly     = "read_only"
-	ExtraKeyMongoSetName      = "set_name"
-	ExtraKeyNodeCPUs          = "node.cpus"
-	ExtraKeyNodeMemoryMB      = "node.memory_mb"
-	ExtraKeyPort              = "port"
-	ExtraKeyState             = "state"
+	// ExtraKeyBusyReason is the server's message in a busy verdict.
+	ExtraKeyBusyReason = "busy_reason"
+	// ExtraKeyErrorCode is the server's own error or reply code: a busy
+	// verdict's MySQL number, SQLSTATE or Redis prefix, or Kafka's error code.
+	ExtraKeyErrorCode        = "error_code"
+	ExtraKeyDockerContainers = "containers"
+	ExtraKeyDockerRunning    = "containers.running"
+	ExtraKeyDockerPaused     = "containers.paused"
+	ExtraKeyDockerStopped    = "containers.stopped"
+	ExtraKeyDockerImages     = "images"
+	ExtraKeyDockerWarnings   = "warnings"
+	ExtraKeyDNSQuery         = "query"
+	ExtraKeyDNSRCode         = "rcode"
+	ExtraKeyDNSAnswers       = "answers"
+	ExtraKeyDNSAddresses     = "addresses"
+	ExtraKeyDNSQType         = "qtype"
+	ExtraKeyDNSAuthoritative = "aa"
+	ExtraKeyDNSAuthenticated = "ad"
+	ExtraKeyDNSTruncated     = "tc"
+	ExtraKeyDomain           = "domain"
+	ExtraKeyDomainCount      = "domains"
+	ExtraKeyDomainActive     = "domains.active"
+	ExtraKeyDomainInactive   = "domains.inactive"
+	ExtraKeyDomainState      = "domain.state"
+	ExtraKeyDomainRunning    = "domain.running"
+	ExtraKeyInode            = "inode"
+	ExtraKeyKafkaAPICount    = "api_count"
+	ExtraKeyKafkaErrorCode   = ExtraKeyErrorCode
+	ExtraKeyKafkaProduceAPI  = "produce_api"
+	ExtraKeyKafkaVoteAPI     = "vote_api"
+	ExtraKeyLocalAddress     = "local_address"
+	ExtraKeyMongoReadOnly    = "read_only"
+	ExtraKeyMongoSetName     = "set_name"
+	ExtraKeyNodeCPUs         = "node.cpus"
+	ExtraKeyNodeMemoryMB     = "node.memory_mb"
+	ExtraKeyPort             = "port"
+	ExtraKeyState            = "state"
 )
 
 // DNSRCodeNoErrorName is the DNS response code name for a successful response.
@@ -519,6 +524,10 @@ type Result struct {
 	// decoding error, it means the peer answered and rejected the requested
 	// operation, so consumers can preserve Extra as structured evidence.
 	Failure string
+	// Busy marks a Failure in which the peer said it is alive but cannot serve
+	// now (see Busy): saturated, loading or starting up. It is reported as a
+	// failure and is never a reason for a lifecycle action.
+	Busy bool
 }
 
 // Protocol describes and runs one registered connection probe. Values returned
@@ -680,10 +689,14 @@ func refIDLabel(id uint32) string {
 // queryVersion reads the server version with versionQuery, the probe tail
 // shared by the SQL-backed protocols. The query opens the pool's connection,
 // so answering it proves connect + auth in one round trip; any account may run
-// it, so a failure is the server's, not a missing privilege.
+// it, so a failure is the server's, not a missing privilege. A server that
+// answers it is saturated or not ready yet is a busy verdict, not an error.
 func queryVersion(ctx context.Context, db *sql.DB, versionQuery string) (Result, error) {
 	var version string
 	if err := db.QueryRowContext(ctx, versionQuery).Scan(&version); err != nil {
+		if busy, ok := AsBusy(err); ok {
+			return busyResult(Result{}, busy), nil
+		}
 		return Result{}, fmt.Errorf("query: %w", err)
 	}
 	return Result{Version: version}, nil

@@ -15,6 +15,8 @@ import (
 const (
 	maxRedisBulk             = units.BytesPerMiB
 	redisCommandAuth         = "AUTH"
+	redisCommandConfig       = "CONFIG"
+	redisConfigGet           = "GET"
 	redisCommandInfo         = "INFO"
 	redisCommandPing         = "PING"
 	redisInfoVersion         = "redis_version"
@@ -27,6 +29,7 @@ const (
 	redisInfoEvictedKeys        = "evicted_keys"
 	redisInfoLoading            = "loading"
 	redisInfoMasterLinkStatus   = "master_link_status"
+	redisInfoMaxClients         = "maxclients"
 	redisInfoMaxMemory          = "maxmemory"
 	redisInfoMaxMemoryPolicy    = "maxmemory_policy"
 	redisInfoMemFragRatio       = "mem_fragmentation_ratio"
@@ -38,9 +41,10 @@ const (
 // Derived fields: computed from INFO rather than copied, so an expect: rule can
 // compare one number against a threshold (expect has no field-to-field form).
 const (
-	redisExtraKeys             = "keys"
-	redisExtraMaxMemoryUsedPct = "maxmemory_used_pct"
-	redisExtraRejectedCalls    = "rejected_calls"
+	redisExtraConnectedClientsPct = "connected_clients_pct"
+	redisExtraKeys                = "keys"
+	redisExtraMaxMemoryUsedPct    = "maxmemory_used_pct"
+	redisExtraRejectedCalls       = "rejected_calls"
 )
 
 // The probe reads INFO all: the default sections leave out commandstats (one
@@ -75,10 +79,14 @@ const (
 	redisRESPPayloadOffset       = 1
 	redisRESPBulkTerminatorBytes = 2
 	redisRESPTypeOffset          = 0
+	redisRESPTypeArray           = '*'
 	redisRESPTypeBulkString      = '$'
-	redisRESPTypeError           = '-'
-	redisRESPTypeInteger         = ':'
-	redisRESPTypeSimpleString    = '+'
+	// redisConfigPairLen is the length of a CONFIG GET reply for one setting:
+	// its name, then its value.
+	redisConfigPairLen        = 2
+	redisRESPTypeError        = '-'
+	redisRESPTypeInteger      = ':'
+	redisRESPTypeSimpleString = '+'
 )
 
 // redisProtocol probes a Redis (or Valkey) server natively over RESP — no
@@ -99,7 +107,9 @@ func (redisProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 }
 
 // redisHandshake runs the RESP handshake on rw: optional AUTH, a PING that must
-// answer PONG, then a best-effort INFO for the server version.
+// answer PONG, then a best-effort INFO for the server version. A server that
+// answers AUTH or PING with a saturation or not-ready error (LOADING, BUSY,
+// maxclients, …) is a busy verdict.
 func redisHandshake(rw io.ReadWriter, cfg Config) (Result, error) {
 	br := bufio.NewReader(rw)
 
@@ -113,6 +123,9 @@ func redisHandshake(rw io.ReadWriter, cfg Config) (Result, error) {
 			return Result{}, err
 		}
 		if _, err := readRESP(br); err != nil {
+			if busy, ok := redisBusyReply(err); ok {
+				return busyResult(Result{}, busy), nil
+			}
 			return Result{}, fmt.Errorf("auth: %w", err)
 		}
 	}
@@ -122,6 +135,9 @@ func redisHandshake(rw io.ReadWriter, cfg Config) (Result, error) {
 	}
 	pong, err := readRESP(br)
 	if err != nil {
+		if busy, ok := redisBusyReply(err); ok {
+			return busyResult(Result{}, busy), nil
+		}
 		return Result{}, err
 	}
 	if !strings.EqualFold(pong, redisPong) {
@@ -140,8 +156,46 @@ func redisHandshake(rw io.ReadWriter, cfg Config) (Result, error) {
 	}
 	fields := parseRedisInfo(info)
 	res.Version = fields[redisInfoVersion]
+	if fields[redisInfoMaxClients] == "" {
+		// INFO carries maxclients from Redis 6.2 and KeyDB 6.3; an older
+		// server still answers CONFIG GET, so connected_clients_pct is
+		// published there too.
+		if limit, ok := redisConfigValue(rw, br, redisInfoMaxClients); ok {
+			fields[redisInfoMaxClients] = limit
+		}
+	}
 	addRedisInfoExtra(res.Extra, fields)
 	return res, nil
+}
+
+// redisConfigValue reads one setting with CONFIG GET, best effort: a refused
+// command (a renamed CONFIG, an ACL) or an unexpected reply leaves it unknown.
+func redisConfigValue(rw io.ReadWriter, br *bufio.Reader, name string) (string, bool) {
+	if writeRESP(rw, redisCommandConfig, redisConfigGet, name) != nil {
+		return "", false
+	}
+	header, err := readCRLFLine(br)
+	if err != nil || header == "" || header[redisRESPTypeOffset] != redisRESPTypeArray {
+		return "", false
+	}
+	if n, err := strconv.Atoi(header[redisRESPPayloadOffset:]); err != nil || n != redisConfigPairLen {
+		return "", false
+	}
+	key, err := readRESP(br)
+	if err != nil || !strings.EqualFold(key, name) {
+		return "", false
+	}
+	value, err := readRESP(br)
+	return value, err == nil && value != ""
+}
+
+// redisBusyReply classifies err when it is a Redis error reply.
+func redisBusyReply(err error) (Busy, bool) {
+	reply, ok := errors.AsType[replyError](err)
+	if !ok {
+		return Busy{}, false
+	}
+	return redisBusy(string(reply))
 }
 
 // redisRequest sends one best-effort command after the handshake and reads its
@@ -159,7 +213,7 @@ func redisRequest(rw io.ReadWriter, br *bufio.Reader, args ...string) (string, b
 // extra.
 func addRedisInfoExtra(extra, fields map[string]string) {
 	for _, k := range []string{
-		ExtraKeyRole, redisInfoMasterLinkStatus, ExtraKeyConnectedClients,
+		ExtraKeyRole, redisInfoMasterLinkStatus, ExtraKeyConnectedClients, redisInfoMaxClients,
 		redisInfoUsedMemory, redisInfoMaxMemory, redisInfoMemFragRatio,
 		redisInfoMaxMemoryPolicy, redisInfoEvictedKeys, redisInfoSyncFull,
 		redisInfoRDBLastSaveStatus, redisInfoAOFLastWriteStatus, redisInfoLoading,
@@ -171,6 +225,9 @@ func addRedisInfoExtra(extra, fields map[string]string) {
 	extra[redisExtraKeys] = strconv.FormatUint(redisKeyspaceKeys(fields), numericBaseDecimal)
 	if pct, ok := redisMaxMemoryUsedPct(fields); ok {
 		extra[redisExtraMaxMemoryUsedPct] = pct
+	}
+	if pct, ok := redisConnectedClientsPct(fields); ok {
+		extra[redisExtraConnectedClientsPct] = pct
 	}
 	if v := fields[redisInfoUptimeInSeconds]; v != "" {
 		extra[extraUptime] = v
@@ -210,7 +267,7 @@ func readRESP(br *bufio.Reader) (string, error) {
 	case redisRESPTypeSimpleString, redisRESPTypeInteger:
 		return line[redisRESPPayloadOffset:], nil
 	case redisRESPTypeError:
-		return "", errors.New(line[redisRESPPayloadOffset:])
+		return "", replyError(line[redisRESPPayloadOffset:])
 	case redisRESPTypeBulkString:
 		n, err := strconv.Atoi(line[redisRESPPayloadOffset:])
 		if err != nil {
@@ -319,4 +376,20 @@ func redisMaxMemoryUsedPct(fields map[string]string) (string, bool) {
 		return "", false
 	}
 	return strconv.FormatFloat(used*redisPercentScale/limit, 'f', redisPercentDecimals, redisPercentFloatBitSize), true
+}
+
+// redisConnectedClientsPct derives connected_clients as a percentage of
+// maxclients (from INFO, or CONFIG GET on an older server), so an expect: rule
+// can warn before the server starts refusing clients. It is left out when
+// either field is missing or maxclients is not positive.
+func redisConnectedClientsPct(fields map[string]string) (string, bool) {
+	limit, err := strconv.ParseFloat(fields[redisInfoMaxClients], redisPercentFloatBitSize)
+	if err != nil || limit <= 0 {
+		return "", false
+	}
+	clients, err := strconv.ParseFloat(fields[ExtraKeyConnectedClients], redisPercentFloatBitSize)
+	if err != nil || clients < 0 {
+		return "", false
+	}
+	return strconv.FormatFloat(clients*redisPercentScale/limit, 'f', redisPercentDecimals, redisPercentFloatBitSize), true
 }

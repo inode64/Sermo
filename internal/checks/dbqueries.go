@@ -292,7 +292,15 @@ func (cfg DBQueryConfig) target() (conn.Config, error) {
 	if cfg.Engine != SQLEngineMySQL {
 		return cfg.Conn, nil
 	}
-	c, err := mysqlConnWithDefaults(cfg.Conn, cfg.DefaultsFile)
+	return mysqlTarget(cfg.Conn, cfg.DefaultsFile)
+}
+
+// mysqlTarget resolves the connection a mysql/mariadb check dials (db_queries,
+// sql with a defaults_file): its own fields first, then the option file, then
+// the protocol defaults — resolved after the option file, so the file's socket,
+// host and port are honoured.
+func mysqlTarget(own conn.Config, defaultsFile string) (conn.Config, error) {
+	c, err := mysqlConnWithDefaults(own, defaultsFile)
 	if err != nil {
 		return c, err
 	}
@@ -324,7 +332,7 @@ func ParseDBQueryConfig(entry map[string]any) (DBQueryConfig, error) {
 	}
 	cfg := DBQueryConfig{
 		Engine:       driver,
-		Conn:         dbQueryConnConfig(engine, driver, entry),
+		Conn:         ownConnConfig(engine, driver, entry),
 		DefaultsFile: cfgval.AsString(entry[CheckKeyDefaultsFile]),
 		MinDuration:  minDuration,
 		resources:    resources,
@@ -368,10 +376,11 @@ func ParseDBQueryConfig(entry map[string]any) (DBQueryConfig, error) {
 	return cfg, nil
 }
 
-// dbQueryConnConfig is the check's own connection fields. A mysql check is
-// left unresolved: its defaults_file fills what the check leaves unset before
-// the protocol defaults do (see target).
-func dbQueryConnConfig(engine, driver string, entry map[string]any) conn.Config {
+// ownConnConfig is a database check's own connection fields (db_queries, and
+// sql with a defaults_file). A mysql check is left unresolved: its
+// defaults_file fills what the check leaves unset before the protocol defaults
+// do (see mysqlTarget).
+func ownConnConfig(engine, driver string, entry map[string]any) conn.Config {
 	if driver != SQLEngineMySQL {
 		return sqlConnConfig(engine, entry)
 	}

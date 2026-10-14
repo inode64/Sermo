@@ -598,11 +598,13 @@ func buildWorker(ctx context.Context, name, unit string, tree map[string]any, de
 	warnings = append(warnings, stateWarnings...)
 
 	configID := serviceSnapshotConfigID(tree)
+	reportedChecks, busyReportedChecks := ruledChecks(ruleSet)
 	worker = &Worker{
 		Service:              name,
 		Unit:                 unit,
 		Rules:                ruleSet,
-		reportedChecks:       checksReportedByRules(ruleSet),
+		reportedChecks:       reportedChecks,
+		busyReportedChecks:   busyReportedChecks,
 		checkNames:           builtCheckNames(built),
 		MetricChecks:         rules.ReferencedChecks(tree),
 		Policy:               rules.ParsePolicy(tree),
@@ -667,7 +669,10 @@ func checkEpisodesFromSnapshots(snapshots *Snapshots, service string, checkTypes
 			continue
 		}
 		if !snapshot.healthy() {
-			restored[name] = checkEpisode{held: severity.Level(snapshot.Severity).Resolved(), restored: true}
+			// A busy reason in the data marks the busy episode of a check only
+			// operation rules read, so the restart does not announce it again.
+			_, busy := snapshot.Data[checks.DataKeyBusyReason]
+			restored[name] = checkEpisode{held: severity.Level(snapshot.Severity).Resolved(), restored: true, busy: busy}
 		}
 	}
 	if len(restored) == 0 {

@@ -75,7 +75,8 @@ func (c replicationCheck) Run(ctx context.Context) Result {
 
 	rows, err := c.sample(ctx)
 	if err != nil {
-		return c.unavailableResult("replication "+c.engine+": "+err.Error(), start)
+		// A saturated server is busy, so no rule restarts a replica over it.
+		return c.driverFailure("replication "+c.engine, err, start, nil)
 	}
 	rows = filterReplicationRows(rows, c.connection)
 	if len(rows) == 0 {

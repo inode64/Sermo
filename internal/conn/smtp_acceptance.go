@@ -232,6 +232,12 @@ func smtpAcceptanceStepResult(res Result, stage string, err error) (Result, erro
 		res.Extra[ExtraKeySMTPEnhancedStatus] = enhanced
 	}
 	res.Failure = fmt.Sprintf("%s rejected: %d %s", stage, replyErr.Code, reply)
+	if busy, ok := greetingBusy(replyErr.Code, reply, replyCodeServiceNotAvailable); ok {
+		// 421 at any stage: the MX is alive but will not serve now. The
+		// message keeps the stage that refused.
+		res = busyResult(res, busy)
+		res.Failure = stage + " rejected: " + res.Failure
+	}
 	return res, nil
 }
 

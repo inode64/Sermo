@@ -5,16 +5,19 @@ import "sermo/internal/conn"
 // Result data-map keys shared by check implementations and consumers. These
 // names are part of the event/web surface that Result.Data exposes.
 const (
-	DataKeyAllocated                = "allocated"
-	DataKeyAge                      = "age"
-	DataKeyAddresses                = "addresses"
-	DataKeyAttached                 = "attached"
-	DataKeyAvailablePct             = fieldAvailablePct
-	DataKeyArrays                   = fieldArrays
-	DataKeyArray                    = CheckKeyArray
-	DataKeyAvailableBytes           = fieldAvailableBytes
-	DataKeyBackend                  = CheckKeyBackend
-	DataKeyBaselineCount            = "baseline_count"
+	DataKeyAllocated      = "allocated"
+	DataKeyAge            = "age"
+	DataKeyAddresses      = "addresses"
+	DataKeyAttached       = "attached"
+	DataKeyAvailablePct   = fieldAvailablePct
+	DataKeyArrays         = fieldArrays
+	DataKeyArray          = CheckKeyArray
+	DataKeyAvailableBytes = fieldAvailableBytes
+	DataKeyBackend        = CheckKeyBackend
+	DataKeyBaselineCount  = "baseline_count"
+	// DataKeyBusyReason marks a busy verdict's evidence (conn.Busy.Evidence);
+	// its presence is what restores Busy from a snapshot.
+	DataKeyBusyReason               = conn.ExtraKeyBusyReason
 	DataKeyBytesRead                = "bytes_read"
 	DataKeyFiles                    = "files"
 	DataKeyRegex                    = CheckKeyRegex

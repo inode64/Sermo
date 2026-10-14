@@ -113,10 +113,15 @@ type Result struct {
 	Skipped  bool           `json:"skipped,omitempty"` // gated off this cycle (requires/skip_when_changed)
 	// Unavailable marks a failed observation that a guard must treat as unsafe
 	// rather than as a false condition.
-	Unavailable bool           `json:"-"`
-	Message     string         `json:"message,omitempty"`
-	Latency     time.Duration  `json:"latency_ns,omitempty"`
-	Data        map[string]any `json:"data,omitempty"`
+	Unavailable bool `json:"-"`
+	// Busy marks a failure in which the probed server answered that it is
+	// alive but cannot serve now (conn.Busy): saturated, loading or starting
+	// up. Health and alerts see it as a failure; no lifecycle action ever fires
+	// on it (rules.Evaluator.EvalRule). Persisted through DataKeyBusyReason.
+	Busy    bool           `json:"-"`
+	Message string         `json:"message,omitempty"`
+	Latency time.Duration  `json:"latency_ns,omitempty"`
+	Data    map[string]any `json:"data,omitempty"`
 }
 
 // ObservationState is the canonical interpretation of one check result. Raw OK
@@ -450,6 +455,43 @@ func (b base) unavailableResult(message string, start time.Time) Result {
 	res := b.result(false, message, start)
 	res.Unavailable = true
 	return res
+}
+
+// busyResult builds the result of a server that answered it cannot serve now.
+// A health check reads it as failing — the service is not serving — while a
+// condition or verdictless check reads it as unavailable: it never got the
+// reading its comparison needs. Either way Busy keeps lifecycle actions off it.
+func (b base) busyResult(message string, start time.Time) Result {
+	res := b.result(false, message, start)
+	res.Busy = true
+	res.Unavailable = b.condition || VerdictlessMode(b.reports)
+	return res
+}
+
+// driverFailure reports a database driver error (sql, replication): a server
+// that answered it is saturated or not ready is a busy verdict with its
+// evidence in data, anything else an observation the check could not make.
+func (b base) driverFailure(label string, err error, start time.Time, data map[string]any) Result {
+	if busy, ok := conn.AsBusy(err); ok {
+		res := b.busyResult(label+": "+busy.Message(), start)
+		if data == nil {
+			data = map[string]any{}
+		}
+		AddBusyEvidence(data, busy)
+		res.Data = data
+		return res
+	}
+	res := b.unavailableResult(label+": "+err.Error(), start)
+	res.Data = data
+	return res
+}
+
+// AddBusyEvidence records a busy verdict's evidence in a result's data, under
+// the keys a probe publishes, so every check reports a saturated server alike.
+func AddBusyEvidence(data map[string]any, busy conn.Busy) {
+	for key, value := range busy.Evidence() {
+		data[key] = value
+	}
 }
 
 // samplerOr returns the check's injected sampler, falling back to the package

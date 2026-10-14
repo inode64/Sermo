@@ -3,6 +3,7 @@ package conn
 import (
 	"context"
 	"net"
+	"strings"
 	"testing"
 )
 
@@ -44,9 +45,15 @@ func TestSieveProbeGreetingOK(t *testing.T) {
 	}
 }
 
+// A BYE or NO instead of the greeting is the server refusing the session: busy.
 func TestSieveProbeRefused(t *testing.T) {
-	port := serveSieve(t, []string{`BYE "Too many connections"`})
+	for _, reply := range []string{`BYE "Too many connections"`, `NO (TRYLATER) "Server shutting down"`} {
+		port := serveSieve(t, []string{reply})
+		res, err := (sieveProtocol{}).Probe(context.Background(), Config{Host: "127.0.0.1", Port: port})
+		assertBusy(t, res, err, strings.Fields(reply)[0])
+	}
+	port := serveSieve(t, []string{`NO "Internal error"`})
 	if _, err := (sieveProtocol{}).Probe(context.Background(), Config{Host: "127.0.0.1", Port: port}); err == nil {
-		t.Fatal("a BYE greeting must fail the probe")
+		t.Fatal("a refusal that is not temporary must stay a failure")
 	}
 }

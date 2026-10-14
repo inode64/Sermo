@@ -73,6 +73,10 @@ any `security:` toggle that tries to disable them.
     requires the exact listed statement identity before acting; a changed or
     finished statement is never killed. See
     [Database statement kills](#database-statement-kills).
+13. **A busy server is never restarted, started, stopped, reloaded or
+    resumed for being busy.** A server that answers "too many connections",
+    "loading" or "starting up" is alive; no rule operation fires on that
+    answer and no option re-enables it. See [Busy servers](#busy-servers).
 
 ## The operation engine
 
@@ -344,6 +348,29 @@ trigger to restart one service, so it is allowed only in `alert` rules — never
 remediation rules, directly or via a check reference. See
 [Metrics](rules.md#metrics) for the `scope: service` and `scope: system` metric
 lists.
+
+## Busy servers
+
+A probe whose server answers that it cannot serve now — MySQL error 1040
+"Too many connections", PostgreSQL "sorry, too many clients already", Redis
+`LOADING`, an SMTP or FTP `421` — reports the service as failing, with the
+server's own reason, and never as a reason to act on it. The cause is outside
+the daemon: a full disk that stalls commits, a client that leaks connections,
+a load spike, a dataset that is still loading. A restart drops every client the
+server still serves, throws away the load in progress and, on a database, can
+add minutes of recovery: a monitor that restarts MariaDB on "Too many
+connections" while commits wait for disk space turns a saturation into a long
+outage, and the disk is still full when it comes back.
+
+So a rule or watch whose `then` restarts, starts, stops, reloads or resumes
+the service reads a busy check as unknown: it does not fire, and a busy cycle
+resets its `for:` window. A watch whose check is busy runs none of its
+actions either — no hook, expand, makestep or remount — so a hook cannot
+restart the server behind Sermo's back. Alerts and `event_notify` still report
+the failure, and guards still fail closed. A server that does not answer at all — refused,
+timed out, closed — is not busy, and its restart rule fires as before. The
+codes each protocol reports as busy are listed in
+[rules](rules.md#busy-servers).
 
 ## Privileges: the daemon runs as root
 

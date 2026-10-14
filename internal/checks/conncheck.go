@@ -123,6 +123,14 @@ func (c connCheck) Run(ctx context.Context) Result {
 		delete(r.Data, DataKeyLatencyMS)
 		return r
 	}
+	if res.Busy {
+		// The server answered it cannot serve now. Return before the change
+		// and growth state: a refusal carries no version or counters, so it must
+		// neither read as a version change nor advance a max_increase window.
+		r := c.base.busyResult(fmt.Sprintf("%s %s: %s", c.proto.Name(), addr, res.Failure), start)
+		r.Data = c.resultData(elapsed, perIface, res)
+		return r
+	}
 	if problems, extra, changed := c.changed(res); changed {
 		r := c.result(false, fmt.Sprintf("%s %s: %s", c.proto.Name(), addr, strings.Join(problems, "; ")), start)
 		r.Data = c.resultData(elapsed, perIface, res)

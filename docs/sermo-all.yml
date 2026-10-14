@@ -1008,6 +1008,20 @@ watches:
       query: "select 1"
       op: "=="
       value: 1
+  # Connection usage as root through the option file (no user needed), graded
+  # warning from 80 % and error from 95 %.
+  sql-mysql-connections:
+    check:
+      type: sql
+      engine: mariadb
+      socket: /run/mysqld/mysqld.sock
+      defaults_file: /root/.my.cnf
+      query: "SELECT ROUND(100 * COUNT(*) / @@GLOBAL.max_connections, 1) FROM information_schema.PROCESSLIST"
+      op: ">="
+      value: 80
+      severity: warning
+      levels:
+        error: { op: ">=", value: 95 }
   mongo-command:
     check:
       type: mongodb-query
@@ -1121,6 +1135,22 @@ watches:
       levels:
         error: { expect: { maxmemory_used_pct: { op: "<", value: 85 } } }
         critical: { expect: { maxmemory_used_pct: { op: "<", value: 95 } } }
+  # Client connections as a share of maxclients, before the server refuses new
+  # clients with "max number of clients reached".
+  redis-connections:
+    check:
+      type: redis
+      expect: { connected_clients_pct: { op: "<", value: 80 } }
+      severity: warning
+      levels:
+        error: { expect: { connected_clients_pct: { op: "<", value: 95 } } }
+  # memcached past its -c limit: any refused client is an error.
+  memcached-rejections:
+    check:
+      type: memcached
+      severity: error
+      max_increase: { rejected_connections: 0 }
+      within: 10m
   # Since-start counters as events: max_increase 0 fails on any new one.
   redis-events:
     check:

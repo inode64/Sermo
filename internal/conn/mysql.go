@@ -83,16 +83,23 @@ const (
 	mysqlServerVersionOffset          = 1
 	mysqlProtocolVersion10       byte = 0x0a
 	mysqlPacketERR               byte = 0xff
+	mysqlERRCodeOffset                = 1
+	mysqlERRCodeHighShift             = 8
 	mysqlERRMessageOffset             = 3
-	mysqlNullTerminator          byte = 0
+	// mysqlERRSQLStateMarker opens the optional "#" + 5-character SQLSTATE
+	// that precedes the message in protocol-4.1 ERR packets.
+	mysqlERRSQLStateMarker byte = '#'
+	mysqlERRSQLStateBytes       = 6
+	mysqlNullTerminator    byte = 0
 )
 
 // mysqlGreeting reads the server's Initial Handshake Packet — sent unprompted on
 // connect, before authentication — and extracts the server version. A
 // well-formed protocol-10 handshake proves the peer is a live MySQL/MariaDB
 // server without any credentials. An ERR packet (0xff) means the server answered
-// but refused the connection (host blocked, too many connections, …); it is
-// returned as an error carrying the server's message.
+// but refused the connection: a saturation refusal (too many connections, host
+// blocked, …) is a busy verdict, any other code an error carrying the server's
+// message and number.
 func mysqlGreeting(r io.Reader) (Result, error) {
 	var hdr [mysqlPacketHeaderBytes]byte
 	if _, err := io.ReadFull(r, hdr[:]); err != nil {
@@ -119,14 +126,30 @@ func mysqlGreeting(r io.Reader) (Result, error) {
 		}
 		return Result{Version: string(ver)}, nil
 	case mysqlPacketERR:
-		msg := ""
-		if len(payload) > mysqlERRMessageOffset {
-			msg = strings.TrimSpace(string(payload[mysqlERRMessageOffset:]))
+		number, msg := mysqlERRPacket(payload)
+		if busy, ok := mysqlBusy(number, msg); ok {
+			return busyResult(Result{}, busy), nil
 		}
-		return Result{}, fmt.Errorf("mysql: server refused connection: %s", msg)
+		return Result{}, fmt.Errorf("mysql: server refused connection: %s (%d)", msg, number)
 	default:
 		return Result{}, fmt.Errorf("mysql: unexpected handshake protocol byte 0x%02x (not MySQL)", payload[mysqlProtocolVersionOffset])
 	}
+}
+
+// mysqlERRPacket decodes an ERR packet payload (0xff, a 2-byte little-endian
+// error number, an optional "#SQLSTATE", then the message).
+func mysqlERRPacket(payload []byte) (number uint16, message string) {
+	if len(payload) > mysqlERRCodeOffset+1 {
+		number = uint16(payload[mysqlERRCodeOffset]) | uint16(payload[mysqlERRCodeOffset+1])<<mysqlERRCodeHighShift
+	}
+	if len(payload) <= mysqlERRMessageOffset {
+		return number, ""
+	}
+	rest := payload[mysqlERRMessageOffset:]
+	if rest[0] == mysqlERRSQLStateMarker && len(rest) >= mysqlERRSQLStateBytes {
+		rest = rest[mysqlERRSQLStateBytes:]
+	}
+	return number, strings.TrimSpace(string(rest))
 }
 
 // buildMySQLConfigWithTarget binds TCP dials to cfg.Interface when configured.

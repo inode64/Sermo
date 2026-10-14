@@ -13,6 +13,7 @@ import (
 	"sermo/internal/cfgval"
 	"sermo/internal/checks"
 	"sermo/internal/config"
+	"sermo/internal/conn"
 	"sermo/internal/metrics"
 	"sermo/internal/notify"
 	"sermo/internal/operation"
@@ -252,8 +253,9 @@ func (w *dbQueryWatcher) runCycle(ctx context.Context) {
 		return
 	}
 	if err != nil {
-		w.publishUnavailable(err)
-		w.reportAvailability(ctx, err)
+		failure := classifySampleFailure(err)
+		w.publishUnavailable(failure)
+		w.reportAvailability(ctx, &failure)
 		return
 	}
 	w.reportAvailability(ctx, nil)
@@ -535,15 +537,15 @@ func dbQueryOrigin(q checks.DBQuery) string {
 
 // reportAvailability reports the first failed sample and the first good one
 // after it, each once, as the watch's availability incident.
-func (w *dbQueryWatcher) reportAvailability(ctx context.Context, err error) {
+func (w *dbQueryWatcher) reportAvailability(ctx context.Context, failure *sampleFailure) {
 	if observeOnlyCycle(ctx) {
 		return
 	}
 	switch {
-	case err != nil && !w.unavailable:
+	case failure != nil && !w.unavailable:
 		w.unavailable = true
-		w.emitEvent(Event{Watch: w.name, Kind: eventKindError, Severity: w.severity, Check: watchAvailabilityCheck, Message: checkUnavailablePrefix + err.Error()})
-	case err == nil && w.unavailable:
+		w.emitEvent(Event{Watch: w.name, Kind: eventKindError, Severity: w.severity, Check: watchAvailabilityCheck, Message: checkUnavailablePrefix + failure.message})
+	case failure == nil && w.unavailable:
 		w.unavailable = false
 		w.emitEvent(Event{Watch: w.name, Kind: eventKindRecovered, Check: watchAvailabilityCheck, Message: "check available: " + w.cfg.Engine})
 	}
@@ -615,14 +617,37 @@ func (w *dbQueryWatcher) publishQueries(sample checks.DBQuerySample, unknownCoun
 	w.publish(w.name, checks.CheckTypeDBQueries, result)
 }
 
-func (w *dbQueryWatcher) publishUnavailable(err error) {
+func (w *dbQueryWatcher) publishUnavailable(failure sampleFailure) {
 	if w.publish == nil {
 		return
 	}
-	w.publish(w.name, checks.CheckTypeDBQueries, checks.Result{
-		Check: w.name, Unavailable: true, Message: w.cfg.Engine + ": " + err.Error(),
+	result := checks.Result{
+		Check: w.name, Unavailable: true, Busy: failure.isBusy, Message: w.cfg.Engine + ": " + failure.message,
 		Data: w.heldData(),
-	})
+	}
+	if failure.isBusy {
+		// The server answered it cannot take this connection: no listing, but
+		// its evidence, so the dashboard says why.
+		checks.AddBusyEvidence(result.Data, failure.busy)
+	}
+	w.publish(w.name, checks.CheckTypeDBQueries, result)
+}
+
+// sampleFailure is a failed statement sample, classified once.
+type sampleFailure struct {
+	message string
+	busy    conn.Busy
+	isBusy  bool
+}
+
+// classifySampleFailure reads a failed sample: a server that answered it is
+// saturated or not ready says so with its code ("server busy: Too many
+// connections (1040)"); anything else keeps the sampler's own error.
+func classifySampleFailure(err error) sampleFailure {
+	if busy, ok := conn.AsBusy(err); ok {
+		return sampleFailure{message: busy.Message(), busy: busy, isBusy: true}
+	}
+	return sampleFailure{message: err.Error()}
 }
 
 func (w *dbQueryWatcher) publishSkipped(status string) {

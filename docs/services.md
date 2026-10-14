@@ -73,6 +73,7 @@ required there.
 - [Monitoring flag](#monitoring-flag)
 - [Blocking operations while clients are connected](#blocking-operations-while-clients-are-connected)
 - [Long-running database statements](#long-running-database-statements)
+- [Saturated servers](#saturated-servers)
 - [Binary log size](#binary-log-size)
 - [PostgreSQL replication watches](#postgresql-replication-watches)
 - [Exim hints database maintenance](#exim-hints-database-maintenance)
@@ -2073,7 +2074,9 @@ Catalog alerts are graded (see [Severity](rules.md#severity-severity)) so each
 notifier's `min_severity` can filter them. The resource alerts are advisories
 that escalate: `alert-if-memory-high` warns above 30 % of host RAM and becomes
 an error above 50 %, `alert-if-cpu-thread-high` warns above 90 % of one core and
-becomes an error above 98 %. A stopped service or missing daemon is `critical`;
+becomes an error above 98 %, and `alert-if-connections-near-limit` warns at
+80 % of the server's connection limit and becomes an error at 95 % (see
+[saturated servers](#saturated-servers)). A stopped service or missing daemon is `critical`;
 a certificate inside its renewal window is a `warning` and an expired one is
 `critical`. Override the base threshold and the level together on an instance
 that needs different numbers, for example
@@ -2343,6 +2346,49 @@ The catalog never ships an automatic kill. To cancel statements automatically,
 add an explicit, scoped `then.kill_query` with its own `policy:` to the
 concrete service — see [killing a statement](rules.md#running-database-statements-db_queries)
 and [safety](safety.md#database-statement-kills).
+
+## Saturated servers
+
+A database or cache that answers "too many connections", "loading" or
+"starting up" is [busy](rules.md#busy-servers): alive, refusing new work for a
+cause outside the daemon. The catalog restart watches (`restart-if-ping-failed`,
+`restart-if-ready-failed`, `restart-if-memcached-failed`, …) never fire on that
+answer; the service shows as failing with the server's reason, and when only a
+restart watch reads the probe Sermo sends one event saying the remediation was
+withheld. A server that stops answering at all is still restarted.
+
+To see saturation coming, these services also warn before the limit:
+
+| service | watch | reading |
+|---|---|---|
+| `mysql`, `mariadb` | `alert-if-connections-near-limit` | `PROCESSLIST` rows as a share of `max_connections`, read as root through `db_socket` and `defaults_file` |
+| `postgres` | `alert-if-connections-near-limit` | backends attached to a database as a share of `max_connections` minus `superuser_reserved_connections`, read as `monitor_user` (PostgreSQL 8.2 or later) |
+| `redis`, `keydb` | `alert-if-connections-near-limit` | `connected_clients_pct`, `connected_clients` as a share of `maxclients` (from INFO, or `CONFIG GET` on an older server) |
+| `memcached` | `alert-if-connections-rejected` | any rise of `rejected_connections` within 10 minutes, an `error` |
+
+The `alert-if-connections-near-limit` watches are a `warning` from
+`connections_used_limit` (80 %) and an `error` from
+`connections_used_error_limit` (95 %), held for 2 minutes. Raise both together
+on an instance that runs close to its limit by design:
+
+```yaml
+# /etc/sermo/services.local/mariadb.yml — a pooled application keeps 85 % open
+name: mariadb
+variables:
+  connections_used_limit: 90
+  connections_used_error_limit: 98
+```
+
+The MySQL and MariaDB reading connects like the mysql client run by root, which
+keeps the server's one reserved connection, so it still answers while ordinary
+clients already get error 1040. Find who holds the connections with
+`sermoctl sessions mariadb` and the Sessions panel.
+
+A cache that is merely busy is not broken either: `redis`, `keydb` and
+`memcached` alert on a hot worker thread (`alert-if-cpu-thread-high`, a
+`warning` above 90 % of one core for 5 minutes, an `error` above 98 %) instead
+of restarting it, which would drop every client and empty or reload the
+dataset.
 
 ## Binary log size
 

@@ -306,6 +306,10 @@ func (w *Watch) confirmedResult(ctx context.Context, res checks.Result) checks.R
 	return checks.Execute(ctx, w.Check)
 }
 
+// busyActionsWithheld explains why a firing watch whose server answered it is
+// busy ran none of its actions.
+const busyActionsWithheld = "server busy: hook/expand/makestep/remount withheld; the server answered and is not restarted"
+
 // watchAvailabilityCheck is the notification identity of a watch's
 // availability edges. It keeps them a separate incident from the watch's
 // firing episode, so a probe that comes back cannot announce a still-firing
@@ -466,6 +470,15 @@ func (w *Watch) dispatchFiringActions(ctx context.Context, res checks.Result, st
 		if step.announce {
 			w.emit(Event{Watch: w.Name, Kind: eventKindPanicSuppressed, Message: "panic mode: hook/notify/expand/makestep/remount suppressed"})
 		}
+		return
+	}
+	if res.Busy {
+		// The server answered it is alive but cannot serve now: report it,
+		// never act on it, so a hook cannot restart a saturated server.
+		if step.announce {
+			w.emit(Event{Watch: w.Name, Kind: eventKindSuppressed, Message: busyActionsWithheld})
+		}
+		w.notifyFiring(ctx, step, watchMessage(w.Name, res.Message, env))
 		return
 	}
 

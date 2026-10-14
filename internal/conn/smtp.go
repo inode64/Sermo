@@ -31,15 +31,19 @@ func (smtpProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	return probeBanner(ctx, cfg, defaultPortSMTP, smtpHandshake)
 }
 
-// smtpHandshake reads the 220 greeting, greets with EHLO (falling back to HELO),
-// authenticates with AUTH PLAIN when a user is supplied, and quits. The
-// multi-line RFC 959 reply format is parsed by net/textproto.
+// smtpHandshake reads the 220 greeting (a 421 greeting is a busy verdict),
+// greets with EHLO (falling back to HELO), authenticates with AUTH PLAIN when a
+// user is supplied, and quits. The multi-line RFC 959 reply format is parsed by
+// net/textproto.
 func smtpHandshake(rw io.ReadWriter, cfg Config) (Result, error) {
 	tp, code, greeting, err := readTextGreeting(rw)
 	if err != nil {
 		return Result{}, err
 	}
 	res := Result{Extra: map[string]string{extraGreeting: greeting}}
+	if busy, ok := greetingBusy(code, greeting, replyCodeServiceNotAvailable); ok {
+		return busyResult(res, busy), nil
+	}
 	if code != smtpStatusGreetingReady {
 		return Result{}, unexpectedGreeting(code, greeting)
 	}
