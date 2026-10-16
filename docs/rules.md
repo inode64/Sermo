@@ -2165,20 +2165,48 @@ watches:
     check:
       type: replication
       engine: mariadb              # mysql | mariadb (default mariadb; same wire protocol)
-      host: 127.0.0.1              # same connection fields as the mysql checks,
-                                   # or socket: /run/mysqld/mysqld.sock
-      user: root
-      password: "${env:SERMO_MYSQL_PASSWORD}"
+      socket: /run/mysqld/mysqld.sock   # or host/port, the same fields as the mysql checks
+      defaults_file: /root/.my.cnf # [client] account of the option file (root when it names none)
+      # user: monitor              # or name the account: user plus
+      # password: "${env:SERMO_MYSQL_PASSWORD}"
       behind: { op: "<", value: 60 }   # optional: fail when the lag breaks this bound
+      # source_defaults_file: /etc/sermo/mariadb-source.cnf  # optional: measure the binlog pending from the source
+      # pending_bytes: { op: "<", value: 512M }   # optional, needs source_defaults_file
       # connection: primary        # optional: scope to one MariaDB multi-source connection
     replication_control:
       start: true                  # offer the manual START REPLICA repair in the dashboard
 ```
 
+- **Credentials** resolve like the [`sql`](#sql-query-sql) check with a
+  `defaults_file`: the check's own `user`, `password`, `socket`, `host` and
+  `port` first, then the option file's `[client]` groups, so the account
+  `mysql` run by root uses needs no secret in the Sermo configuration. Without
+  a `defaults_file` the check must name its `user`. The account needs
+  `REPLICA MONITOR` (MariaDB 10.5.9 and later; `REPLICATION CLIENT` on MySQL),
+  and `replication_control` needs the privilege to start the replica.
 - With **no `connection`**, every replication connection the server reports must
   be healthy; the published lag is the **worst** across connections. With
   `connection:`, only that MariaDB multi-source connection (or MySQL channel) is
   judged, and an unknown name fails the check by name.
+- **Pending binlog** (`source_defaults_file`, an absolute path): an option file
+  whose `[client]` groups name an account on the source. The check asks each
+  connection's source, at the status row's `Master_Host`/`Master_Port` (the
+  option file's own host, port and socket are not used), for
+  `SHOW BINARY LOGS`, and publishes in bytes of the source's binary log what
+  the replica has not received yet (`unreceived_bytes`: from the IO thread's
+  read position to the end of the source's current log), what it has received
+  but not applied (`unapplied_bytes`) and their sum `pending_bytes`, which
+  graphs. `Seconds_Behind_Master` cannot see the first part: an IO thread
+  whose connection died without notice still reads `Yes` until
+  `slave_net_timeout` (an hour by default), and with its relay log applied the
+  replica reports 0 seconds behind. `pending_bytes: {op, value}` (a size such as
+  `512M` or `1G`) fails the check when the backlog breaks it or cannot be
+  measured: source unreachable, account refused, or a position in a binary log
+  the source has already purged. Without the bound an unmeasured backlog only
+  shows in the message. The account needs `BINLOG MONITOR` on the source
+  (`REPLICATION CLIENT` on MySQL); the source connection does not use TLS.
+  With several connections each source is asked once per run and the worst
+  backlog is published.
 - **Thread states** publish as `io_stopped`/`sql_stopped` (0 ok / 1 stopped) and
   render as SLA-style **bands**; the lag graphs as `behind_seconds`. A stopped
   thread's message and reading quote the server's own `Last_IO_Error`/
@@ -2194,7 +2222,9 @@ watches:
   explicitly requested admin action behind confirmation — never autonomous —
   and it cannot skip or discard replication events.
 - A server with no replication configured fails the check: declaring the watch
-  asserts replication exists.
+  asserts replication exists. The `mariadb` and `mysql` catalog services ship it
+  disabled as
+  [`alert-if-replication-broken`](services.md#mariadb-and-mysql-replication-watch).
 
 ### SQL query (`sql`)
 

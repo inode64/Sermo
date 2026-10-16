@@ -5678,8 +5678,12 @@ function readingValue(w, field) {
 }
 
 // readingRaw returns a reading's raw string value (no error markup) for sorting.
+function findReading(w, field) {
+  return ((w && w.readings) || []).find((x) => x && x.field === field);
+}
+
 function readingRaw(w, field) {
-  const r = ((w && w.readings) || []).find((x) => x && x.field === field);
+  const r = findReading(w, field);
   return r && r.value != null ? String(r.value) : "";
 }
 
@@ -5838,7 +5842,11 @@ function watchConditionValue(w, field) {
   return [condition.op, condition.value].filter(Boolean).join(" ") || "—";
 }
 
+// A reading with a number sorts by it, so "900 B" stays below "1.2 GiB";
+// otherwise by the leading number of its text, or the text itself.
 function readingSortValue(w, field) {
+  const r = findReading(w, field);
+  if (r && Number.isFinite(r.number)) return r.number;
   const raw = readingRaw(w, field);
   const number = Number.parseFloat(raw);
   return Number.isFinite(number) ? number : raw.toLowerCase();
@@ -6135,6 +6143,7 @@ const watchTypeProfiles = {
       { key: "io_stopped", label: "IO thread", cell: (w) => readingValue(w, "io_stopped"), sort: (w) => readingRaw(w, "io_stopped") },
       { key: "sql_stopped", label: "SQL thread", cell: (w) => readingValue(w, "sql_stopped"), sort: (w) => readingRaw(w, "sql_stopped") },
       numericReadingColumn("behind_seconds", "Behind"),
+      numericReadingColumn("pending_bytes", "Pending"),
     ],
   },
 };

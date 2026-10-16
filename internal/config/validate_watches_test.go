@@ -975,16 +975,39 @@ func TestValidateReplicationWatch(t *testing.T) {
 			"type": "replication", "user": "root",
 			"behind": map[string]any{"op": "<", "value": 300},
 		},
+		"option-file": map[string]any{
+			"type": "replication", "socket": "/run/mysqld/mysqld.sock", "defaults_file": "/root/.my.cnf",
+		},
+		"pending": map[string]any{
+			"type": "replication", "defaults_file": "/root/.my.cnf",
+			"source_defaults_file": "/etc/sermo/mariadb-source.cnf",
+			"pending_bytes":        map[string]any{"op": "<", "value": "512M"},
+		},
 	}))
 	assertWatchIssues(t, watchConfigs(map[string]any{
-		"no-user": map[string]any{"type": "replication"},
-		"bad-eng": map[string]any{"type": "replication", "user": "root", "engine": "postgres"},
-		"bad-lag": map[string]any{"type": "replication", "user": "root", "behind": map[string]any{"op": "<>", "value": "x"}},
+		"no-user":      map[string]any{"type": "replication"},
+		"relative-cnf": map[string]any{"type": "replication", "defaults_file": "root/.my.cnf"},
+		"bad-eng":      map[string]any{"type": "replication", "user": "root", "engine": "postgres"},
+		"bad-lag":      map[string]any{"type": "replication", "user": "root", "behind": map[string]any{"op": "<>", "value": "x"}},
+		"no-source": map[string]any{
+			"type": "replication", "user": "root", "pending_bytes": map[string]any{"op": "<", "value": "1G"},
+		},
+		"relative-source": map[string]any{
+			"type": "replication", "user": "root", "source_defaults_file": "etc/source.cnf",
+		},
+		"unitless-pending": map[string]any{
+			"type": "replication", "user": "root", "source_defaults_file": "/etc/source.cnf",
+			"pending_bytes": map[string]any{"op": "<", "value": 1024},
+		},
 	}),
-		"watches.no-user.check.user is required for a replication check",
+		"watches.no-user.check.user is required for a replication check without a defaults_file",
+		"watches.relative-cnf.check.defaults_file must be an absolute path",
 		"watches.bad-eng.check.engine must be mysql or mariadb for a replication check",
 		"watches.bad-lag.check.behind has an invalid op \"<>\"",
-		`watches.bad-lag.check.behind value "x" must be numeric`)
+		`watches.bad-lag.check.behind value "x" must be numeric`,
+		"watches.no-source.check.pending_bytes requires source_defaults_file",
+		"watches.relative-source.check.source_defaults_file must be an absolute path",
+		`watches.unitless-pending.check.pending_bytes value "1024" must include a size suffix (K, M, G or T; e.g. 10G)`)
 }
 
 func TestValidateReplicationControlBlock(t *testing.T) {

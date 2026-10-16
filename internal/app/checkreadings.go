@@ -145,6 +145,10 @@ const (
 	watchReadingLabelIOThread                 = "IO thread"
 	watchReadingLabelSQLThread                = "SQL thread"
 	watchReadingLabelBehind                   = "Behind"
+	watchReadingLabelPending                  = "Pending"
+	watchReadingLabelPendingUnknown           = "Pending unknown"
+	watchReadingLabelNotReceived              = "Not received"
+	watchReadingLabelNotApplied               = "Not applied"
 	watchReadingLabelSocket                   = "Socket"
 	watchReadingLabelSomeAvg10                = "Some avg10"
 	watchReadingLabelSomeAvg60                = "Some avg60"
@@ -232,6 +236,21 @@ func (rb *readingBuilder) add(field, label, value string) *readingBuilder {
 	return rb
 }
 
+// addNumber appends a formatted reading that also carries its number, the
+// value a table sorts by. A non-finite number is left out: JSON cannot encode
+// it, and the formatted text still shows what the check reported.
+func (rb *readingBuilder) addNumber(field, label, value string, number float64) *readingBuilder {
+	if value == "" {
+		return rb
+	}
+	reading := web.WatchReading{Field: field, Label: label, Value: value}
+	if !math.IsNaN(number) && !math.IsInf(number, 0) {
+		reading.Number = &number
+	}
+	rb.out = append(rb.out, reading)
+	return rb
+}
+
 // addString appends the field's string value when present.
 func (rb *readingBuilder) addString(field, label string) *readingBuilder {
 	return rb.add(field, label, cfgval.String(rb.data[field]))
@@ -269,7 +288,7 @@ func (rb *readingBuilder) addState(field, label, okText, badText string, warn bo
 // addInt appends the field's integer value when present.
 func (rb *readingBuilder) addInt(field, label string) *readingBuilder {
 	if v, ok := cfgval.Int(rb.data[field]); ok {
-		rb.add(field, label, strconv.Itoa(v))
+		rb.addNumber(field, label, strconv.Itoa(v), float64(v))
 	}
 	return rb
 }
@@ -278,7 +297,7 @@ func (rb *readingBuilder) addInt(field, label string) *readingBuilder {
 // growth reading needs: "+5" says the count rose, where "5" reads as a total.
 func (rb *readingBuilder) addSignedInt(field, label string) *readingBuilder {
 	if v, ok := cfgval.Int(rb.data[field]); ok {
-		rb.add(field, label, fmt.Sprintf("%+d", v))
+		rb.addNumber(field, label, fmt.Sprintf("%+d", v), float64(v))
 	}
 	return rb
 }
@@ -297,7 +316,7 @@ func (rb *readingBuilder) addGrowthWindow() *readingBuilder {
 // addIntMetric appends the field's integer value with a unit suffix.
 func (rb *readingBuilder) addIntMetric(field, label, unit string) *readingBuilder {
 	if v, ok := cfgval.Int(rb.data[field]); ok {
-		rb.add(field, label, checks.FormatDisplayValueWithUnit(checks.DataKeyValue, int64(v), unit))
+		rb.addNumber(field, label, checks.FormatDisplayValueWithUnit(checks.DataKeyValue, int64(v), unit), float64(v))
 	}
 	return rb
 }
@@ -306,7 +325,7 @@ func (rb *readingBuilder) addIntMetric(field, label, unit string) *readingBuilde
 // byte formatter, so meters and event messages render bytes identically.
 func (rb *readingBuilder) addBytes(field, label string) *readingBuilder {
 	if v, ok := cfgval.Uint(rb.data[field]); ok {
-		rb.add(field, label, checks.HumanizeSignedBytes(uintToInt64(v)))
+		rb.addNumber(field, label, checks.HumanizeSignedBytes(uintToInt64(v)), float64(v))
 	}
 	return rb
 }
@@ -314,7 +333,7 @@ func (rb *readingBuilder) addBytes(field, label string) *readingBuilder {
 // addMetric appends the field's float value formatted with decimals and unit.
 func (rb *readingBuilder) addMetric(field, label string, decimals int, unit string) *readingBuilder {
 	if v, ok := cfgval.Float(rb.data[field]); ok {
-		rb.add(field, label, watchReadingMetricValue(v, decimals, unit))
+		rb.addNumber(field, label, watchReadingMetricValue(v, decimals, unit), v)
 	}
 	return rb
 }
@@ -327,7 +346,7 @@ func (rb *readingBuilder) addMetric(field, label string, decimals int, unit stri
 func (rb *readingBuilder) addMetrics(list []checks.GraphMetric) *readingBuilder {
 	for _, m := range list {
 		if v, ok := checks.NumericData(rb.data[m.Key]); ok {
-			rb.add(m.Key, watchReadingMetricLabel(m), watchReadingGraphMetricValue(m, v))
+			rb.addNumber(m.Key, watchReadingMetricLabel(m), watchReadingGraphMetricValue(m, v), v)
 		}
 	}
 	return rb
@@ -350,7 +369,7 @@ func (rb *readingBuilder) addDeviceIdentity() *readingBuilder {
 // addDurationSeconds appends a finite, nonnegative duration in seconds.
 func (rb *readingBuilder) addDurationSeconds(field, label string) *readingBuilder {
 	if v, ok := cfgval.Float(rb.data[field]); ok {
-		rb.add(field, label, watchReadingDuration(v, time.Second))
+		rb.addNumber(field, label, watchReadingDuration(v, time.Second), v)
 	}
 	return rb
 }
@@ -367,13 +386,13 @@ func watchReadingDuration(v float64, unit time.Duration) string {
 // their own keys precisely so they can never be mistaken for a live sample.
 func (rb *readingBuilder) addLastKnown(list []checks.GraphMetric) *readingBuilder {
 	if v, ok := cfgval.Float(rb.data[checks.DataKeyLastSeenSeconds]); ok && v > 0 {
-		rb.add(checks.DataKeyLastSeenSeconds, watchReadingLabelLastSeen, watchReadingDuration(v, time.Second))
+		rb.addNumber(checks.DataKeyLastSeenSeconds, watchReadingLabelLastSeen, watchReadingDuration(v, time.Second), v)
 	}
 	rb.add(checks.DataKeyLastHealth, watchReadingLabelHealth+watchReadingLastSuffix, cfgval.String(rb.data[checks.DataKeyLastHealth]))
 	for _, m := range list {
 		key := checks.LastSampleKey(m.Key)
 		if v, ok := checks.NumericData(rb.data[key]); ok {
-			rb.add(key, watchReadingMetricLabel(m)+watchReadingLastSuffix, watchReadingGraphMetricValue(m, v))
+			rb.addNumber(key, watchReadingMetricLabel(m)+watchReadingLastSuffix, watchReadingGraphMetricValue(m, v), v)
 		}
 	}
 	return rb
@@ -667,7 +686,8 @@ func raidStateText(data map[string]any, field, word string) string {
 
 // replicationCheckReadings shows what a DBA asks first: where the data comes
 // from, whether both threads run (with the server's own last error when not),
-// and how far behind the replica is.
+// how far behind the replica is and, with a source account, how much source
+// binlog it has still to receive and apply.
 func replicationCheckReadings(data map[string]any) []web.WatchReading {
 	return readingsFrom(data).
 		addString(checks.DataKeySourceHost, watchReadingLabelSource).
@@ -677,6 +697,10 @@ func replicationCheckReadings(data map[string]any) []web.WatchReading {
 		addState(checks.DataKeySQLStopped, watchReadingLabelSQLThread, "running",
 			replicationStopText(data, checks.DataKeyLastSQLError), false).
 		addMetric(checks.DataKeyBehindSeconds, watchReadingLabelBehind, watchReadingWholeDecimals, metrics.MetricUnitSeconds).
+		addBytes(checks.DataKeyPendingBytes, watchReadingLabelPending).
+		addBytes(checks.DataKeyUnreceivedBytes, watchReadingLabelNotReceived).
+		addBytes(checks.DataKeyUnappliedBytes, watchReadingLabelNotApplied).
+		addString(checks.DataKeyPendingError, watchReadingLabelPendingUnknown).
 		readings()
 }
 

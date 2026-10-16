@@ -1,6 +1,8 @@
 package app
 
 import (
+	"encoding/json"
+	"math"
 	"testing"
 
 	"sermo/internal/checks"
@@ -516,6 +518,52 @@ func TestCheckReadingsForAllTypes(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// A numeric reading carries its number, so the dashboard sorts "900 B" below
+// "1.2 GiB" by magnitude instead of by the formatted text; text and state
+// readings carry none.
+func TestReadingsCarryTheirNumberForSorting(t *testing.T) {
+	readings := checkReadings(checks.CheckTypeReplication, map[string]any{
+		checks.DataKeySourceHost:      "fr1.vrack",
+		checks.DataKeyIOStopped:       0.0,
+		checks.DataKeyBehindSeconds:   12.0,
+		checks.DataKeyPendingBytes:    int64(1288490188),
+		checks.DataKeyUnreceivedBytes: int64(900),
+	})
+	numbers := map[string]float64{}
+	for _, r := range readings {
+		if r.Number != nil {
+			numbers[r.Field] = *r.Number
+		}
+	}
+	want := map[string]float64{
+		checks.DataKeyBehindSeconds:   12,
+		checks.DataKeyPendingBytes:    1288490188,
+		checks.DataKeyUnreceivedBytes: 900,
+	}
+	if len(numbers) != len(want) {
+		t.Fatalf("numbers = %v, want %v (text and state readings carry none)", numbers, want)
+	}
+	for field, n := range want {
+		if numbers[field] != n {
+			t.Errorf("%s number = %v, want %v", field, numbers[field], n)
+		}
+	}
+}
+
+// JSON cannot encode NaN or ±Inf: such a reading keeps its text and drops the
+// number rather than breaking the whole dashboard payload.
+func TestReadingNumberSkipsNonFinite(t *testing.T) {
+	for _, n := range []float64{math.NaN(), math.Inf(1), math.Inf(-1)} {
+		readings := readingsFrom(nil).addNumber("value", "Value", "n/a", n).readings()
+		if len(readings) != 1 || readings[0].Number != nil || readings[0].Value != "n/a" {
+			t.Fatalf("%v: readings = %+v", n, readings)
+		}
+		if _, err := json.Marshal(readings); err != nil {
+			t.Fatalf("%v: marshal: %v", n, err)
+		}
 	}
 }
 

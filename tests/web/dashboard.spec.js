@@ -120,18 +120,32 @@ const watches = [{
   name: "db-replication", display_name: "DB replication", category: "database",
   enabled: true, monitored: true, state: "ok", check_type: "replication",
   can_control_replication: true,
-  summary: "replication ok: io and sql running, 0s behind (source 172.31.27.30)",
+  summary: "replication ok: io and sql running, 0s behind, 1.2 GiB pending (source 172.31.27.30)",
   interval: "1m",
   metrics: [
     { name: "io_stopped", band: true, severity: "error", label: "IO thread" },
     { name: "sql_stopped", band: true, severity: "error", label: "SQL thread" },
     { name: "behind_seconds", unit: "s" },
+    { name: "pending_bytes", unit: "bytes" },
   ],
   readings: [
     { field: "source_host", label: "Source", value: "172.31.27.30" },
     { field: "io_stopped", label: "IO thread", value: "running", good: true },
     { field: "sql_stopped", label: "SQL thread", value: "running", good: true },
-    { field: "behind_seconds", label: "Behind", value: "0 s" },
+    { field: "behind_seconds", label: "Behind", value: "0 s", number: 0 },
+    { field: "pending_bytes", label: "Pending", value: "1.2 GiB", number: 1288490188 },
+  ],
+}, {
+  name: "db-replication-eu", display_name: "DB replication EU", category: "database",
+  enabled: true, monitored: true, state: "ok", check_type: "replication",
+  summary: "replication ok: io and sql running, 0s behind, 900 B pending (source fr1.vrack)",
+  interval: "1m",
+  readings: [
+    { field: "source_host", label: "Source", value: "fr1.vrack" },
+    { field: "io_stopped", label: "IO thread", value: "running", good: true },
+    { field: "sql_stopped", label: "SQL thread", value: "running", good: true },
+    { field: "behind_seconds", label: "Behind", value: "0 s", number: 0 },
+    { field: "pending_bytes", label: "Pending", value: "900 B", number: 900 },
   ],
 }, {
   name: "geoip-database-freshness", display_name: "GeoIP database freshness", category: "files",
@@ -1206,6 +1220,22 @@ test("the fds watch table names its column Allocated", async ({ page }) => {
   await expect(fdsHeader.first()).toBeVisible();
   await expect(fdsHeader.first()).toHaveText("Allocated");
   await expect(page.locator('th[data-watch-type-sort-type="fds"][data-watch-type-sort="value"]')).toHaveCount(0);
+});
+
+// A byte column sorts by the reading's number, not its text: sorted as text,
+// "1.2 GiB" would read as 1.2 and land below "900 B". Below 1420px the typed
+// table hides its middle columns, so the header is clicked on a wide desktop.
+test("the replication table sorts pending binlog by size, not by its text", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop", "wide desktop layout only");
+  await page.setViewportSize({ width: 1600, height: 900 });
+  const header = page.locator('th[data-watch-type-sort-type="replication"][data-watch-type-sort="pending_bytes"]').first();
+  await expect(header).toHaveText("Pending");
+  const table = page.locator("table.watch-type-table").filter({ has: header });
+  const order = () => table.locator('tbody > tr[id^="wat-row-"]').evaluateAll((rows) => rows.map((row) => row.id));
+  await header.click();
+  await expect.poll(order).toEqual(["wat-row-db-replication-eu", "wat-row-db-replication"]);
+  await header.click();
+  await expect.poll(order).toEqual(["wat-row-db-replication", "wat-row-db-replication-eu"]);
 });
 
 test("diagnostic watch columns keep freshness, network identity, and SMART interface visible", async ({ page }) => {

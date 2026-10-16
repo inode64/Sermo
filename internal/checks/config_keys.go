@@ -44,6 +44,8 @@ const (
 	CheckKeyDatabase              = "database"
 	CheckKeyConnection            = "connection"
 	CheckKeyBehind                = "behind"
+	CheckKeyPendingBytes          = "pending_bytes"
+	CheckKeySourceDefaultsFile    = "source_defaults_file"
 	CheckKeyDefault               = "default"
 	CheckKeyDelta                 = "delta"
 	CheckKeyDevice                = "device"

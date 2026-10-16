@@ -77,8 +77,13 @@ var graphMetrics = map[string][]GraphMetric{
 	CheckTypeICMP: {{Key: DataKeyLatencyMS, Unit: metrics.MetricUnitMilliseconds, Label: "Latency", Decimals: hundredthsDecimals}},
 	// The one raid number that is a magnitude rather than a state: the kernel's
 	// mismatch_cnt after a check/repair pass.
-	CheckTypeRAID:        {{Key: DataKeyRaidMismatchCount, Unit: metrics.MetricUnitNone, Label: "Mismatch count"}},
-	CheckTypeReplication: {{Key: DataKeyBehindSeconds, Unit: metrics.MetricUnitSeconds, Label: "Behind source"}},
+	CheckTypeRAID: {{Key: DataKeyRaidMismatchCount, Unit: metrics.MetricUnitNone, Label: "Mismatch count"}},
+	// The lag, and with a source account the source binlog still to receive
+	// and apply (scoped out per entry below when the check has no source).
+	CheckTypeReplication: {
+		{Key: DataKeyBehindSeconds, Unit: metrics.MetricUnitSeconds, Label: "Behind source"},
+		{Key: DataKeyPendingBytes, Unit: metrics.MetricUnitBytes, Label: "Pending binlog"},
+	},
 
 	// The level checks: the figures an operator writes thresholds against. A check
 	// that computes a number every cycle and compares it to a limit is exactly a
@@ -207,12 +212,18 @@ const graphMetricValueLabel = "Value"
 
 // graphMetricEntryScope narrows types whose metrics exist only in some of their
 // configured forms: an icmp watch measures latency only when its `metric:` says
-// so, and advertising the panel on a state watch would offer a series nothing
+// so, and a replication check measures pending binlog only with a source
+// account; advertising the panel otherwise would offer a series nothing
 // writes. Keyed by metric key; absent means the metric always applies.
 var graphMetricEntryScope = map[string]map[string]func(entry map[string]any) bool{
 	CheckTypeICMP: {
 		DataKeyLatencyMS: func(entry map[string]any) bool {
 			return cfgval.AsString(entry[CheckKeyMetric]) == IcmpMetricLatency
+		},
+	},
+	CheckTypeReplication: {
+		DataKeyPendingBytes: func(entry map[string]any) bool {
+			return cfgval.AsString(entry[CheckKeySourceDefaultsFile]) != ""
 		},
 	},
 }

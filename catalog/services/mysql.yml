@@ -51,6 +51,9 @@ variables:
   # The total moves slowly next to those limits: sampling it every 5 minutes
   # keeps the glob and one stat per binlog off every worker cycle.
   binlog_check_interval: 5m
+  # alert-if-replication-broken also fails while the replica stays more than
+  # this many seconds behind its source.
+  replication_behind_limit: 900
   memory_alert_threshold: 80%
   # The alert escalates from warning to error past this share of host memory.
   memory_error_threshold: 90%
@@ -157,6 +160,29 @@ watches:
       grow_by: ${binlog_grow_by}
       within: ${binlog_grow_within}
       severity: error
+  # One error incident while a replica thread (IO or SQL) stays stopped, or the
+  # replica stays more than replication_behind_limit seconds behind, for 5
+  # minutes; the event quotes the server's Last_IO_Error / Last_SQL_Error.
+  # Disabled: a server without replication fails the check. Enable it on every
+  # replica, both nodes of a source-source pair included. With a
+  # source_defaults_file account it also bounds the binlog still pending from
+  # the source (pending_bytes); see docs/services.md.
+  alert-if-replication-broken:
+    enabled: false
+    interval: 1m
+    check:
+      type: replication
+      engine: mysql
+      socket: ${db_socket}
+      defaults_file: ${defaults_file}
+      timeout: 10s
+      behind: { op: '<', value: "${replication_behind_limit}" }
+    for:
+      duration: 5m
+    then:
+      action: alert
+      message: >-
+        During ${rule.duration}, ${display_name} replication stayed stopped, more than ${replication_behind_limit} seconds behind its source, or past its pending binlog limit
   service:
     check:
       type: service

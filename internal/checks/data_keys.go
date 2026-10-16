@@ -53,6 +53,10 @@ const (
 	DataKeyIOStopped                = "io_stopped"
 	DataKeySQLStopped               = "sql_stopped"
 	DataKeyBehindSeconds            = "behind_seconds"
+	DataKeyPendingBytes             = CheckKeyPendingBytes
+	DataKeyUnreceivedBytes          = "unreceived_bytes"
+	DataKeyUnappliedBytes           = "unapplied_bytes"
+	DataKeyPendingError             = "pending_error"
 	DataKeySourceHost               = "source_host"
 	DataKeyLastIOError              = "last_io_error"
 	DataKeyLastSQLError             = "last_sql_error"
