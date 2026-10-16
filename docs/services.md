@@ -75,6 +75,7 @@ required there.
 - [Long-running database statements](#long-running-database-statements)
 - [Saturated servers](#saturated-servers)
 - [Binary log size](#binary-log-size)
+- [MariaDB and MySQL replication watch](#mariadb-and-mysql-replication-watch)
 - [PostgreSQL replication watches](#postgresql-replication-watches)
 - [Exim hints database maintenance](#exim-hints-database-maintenance)
 - [Exim mail-volume alerts](#exim-mail-volume-alerts)
@@ -2429,6 +2430,74 @@ variables:
   binlog_grow_by: ""
   binlog_grow_within: ""
 ```
+
+## MariaDB and MySQL replication watch
+
+The `mariadb` and `mysql` catalog services ship `alert-if-replication-broken`, a
+[`replication`](rules.md#replication-replication) check that opens one `error`
+incident when, for 5 minutes, a replica thread (IO or SQL) is not running or the
+replica is more than `replication_behind_limit` seconds (default `900`) behind its
+source. The alert quotes the server's `Last_IO_Error` or `Last_SQL_Error`, for
+example a source binlog cut short when the source ran out of disk. A replica
+whose IO thread stops this way stays stopped until an administrator moves it
+to the next binary log; nothing restarts it on its own.
+
+It connects like the other catalog database watches, as the mysql client run
+by root does: over `db_socket`, with the `[client]` account of `defaults_file`.
+No password goes into the Sermo configuration.
+
+The watch ships **disabled**, because a server without replication fails the
+check. Enable it on every replica. In a master-master pair each node is the
+other's replica, so enable it on both:
+
+```yaml
+# /etc/sermo/services.local/mariadb.yml — this server replicates
+name: mariadb
+watches:
+  alert-if-replication-broken:
+    enabled: true
+```
+
+Raise `replication_behind_limit` on a replica that applies large transactions,
+where the lag spikes while one of them runs. Add
+`replication_control: {start: true}` to the watch to offer the confirmed manual
+`START REPLICA` in the dashboard.
+
+The lag alone misses a replica that stopped receiving: until
+`slave_net_timeout` expires its IO thread still reads `Yes` and, with its relay
+log applied, it reports 0 seconds behind. To measure the
+[binlog still pending](rules.md#replication-replication) from the source, give
+the replica an account on the source with only `BINLOG MONITOR`, in an option
+file, and add it to the watch with a bound. In a master-master pair the
+account statements replicate to the other node:
+
+```sql
+-- on the source
+CREATE USER 'sermo'@'10.0.0.%' IDENTIFIED BY 'change-me';
+GRANT BINLOG MONITOR ON *.* TO 'sermo'@'10.0.0.%';
+```
+
+```ini
+# /etc/sermo/mariadb-source.cnf on the replica, owned by root, mode 0600
+[client]
+user=sermo
+password=change-me
+```
+
+```yaml
+# /etc/sermo/services.local/mariadb.yml
+name: mariadb
+watches:
+  alert-if-replication-broken:
+    enabled: true
+    check:
+      source_defaults_file: /etc/sermo/mariadb-source.cnf
+      pending_bytes: { op: '<', value: 1G }
+```
+
+The watch then also opens its incident when, for 5 minutes, more than 1 GiB
+of the source's binary log is pending (not received or not applied), or when
+the source cannot be asked.
 
 ## PostgreSQL replication watches
 

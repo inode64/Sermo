@@ -246,6 +246,9 @@ var (
 	// OOMPredFields is the optional OOM-kill delta predicate. Absent, the check
 	// defaults to firing on any observed kill.
 	OOMPredFields = []string{CheckKeyDelta}
+	// ReplicationPredFields are the optional bounds of a replication check: the
+	// lag in seconds and the source binlog still pending, a size.
+	ReplicationPredFields = []string{CheckKeyBehind, CheckKeyPendingBytes}
 	// InotifyPredFields are the predicates of an inotify check: the headline
 	// used_pct (the worse of both limits) plus each dimension on its own.
 	InotifyPredFields = []string{

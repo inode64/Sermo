@@ -144,6 +144,9 @@ func replicationWatchConditions(check map[string]any) []web.WatchCondition {
 	if behind, ok := check[checks.CheckKeyBehind].(map[string]any); ok {
 		out = append(out, comparisonCondition(checks.DataKeyBehindSeconds, behind))
 	}
+	if pending, ok := check[checks.CheckKeyPendingBytes].(map[string]any); ok {
+		out = append(out, comparisonCondition(checks.DataKeyPendingBytes, pending))
+	}
 	return out
 }
 

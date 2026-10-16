@@ -278,7 +278,11 @@ type WatchReading struct {
 	Field string `json:"field"`
 	Label string `json:"label,omitempty"`
 	Value string `json:"value,omitempty"`
-	Error string `json:"error,omitempty"`
+	// Number is the value in the reading's own unit (bytes, seconds, percent,
+	// a count) when it has one, so a table sorts "900 B" below "1.2 GiB" instead
+	// of comparing the formatted Value text. Absent for text and state readings.
+	Number *float64 `json:"number,omitempty"`
+	Error  string   `json:"error,omitempty"`
 	// Warning carries the same bad news as Error for a watch its operator graded
 	// an advisory. The two are separate fields because Error is what turns the
 	// dashboard row red, and the whole point of a warning is that it must not.

@@ -1364,9 +1364,15 @@ func validateParsedCheck(path string, err error, add addFunc) {
 
 func validateProcessCountCheck(path string, entry map[string]any, _ string, add addFunc) {
 	validateThresholdPreds(path, entry, checks.ProcessCountPredFields, add)
-	for _, field := range []string{checks.CheckKeyExe, checks.CheckKeyExeDir} {
-		if value := cfgval.String(entry[field]); value != "" && !filepath.IsAbs(value) {
-			add("%s.%s must be an absolute path", path, field)
+	validateAbsoluteCheckPaths(path, entry, add, checks.CheckKeyExe, checks.CheckKeyExeDir)
+}
+
+// validateAbsoluteCheckPaths reports each named check field that is set to a
+// relative path.
+func validateAbsoluteCheckPaths(prefix string, fields map[string]any, add addFunc, keys ...string) {
+	for _, key := range keys {
+		if value := cfgval.String(fields[key]); value != "" && !filepath.IsAbs(value) {
+			add("%s.%s must be an absolute path", prefix, key)
 		}
 	}
 }
@@ -1656,13 +1662,7 @@ func validateSQLFields(prefix string, fields map[string]any, add addFunc) {
 	case checks.SQLEngineSQLite, checks.SQLEngineSQLite3:
 		requireCheckField(prefix, checks.CheckKeyPath, "a sqlite sql check", fields, add)
 	case checks.SQLEngineMySQL, checks.SQLEngineMariaDB:
-		// A defaults_file supplies the account (root when it names none), the
-		// way the mysql client run by root connects.
-		if defaultsFile == "" {
-			requireCheckField(prefix, checks.CheckKeyUser, "a "+engine+" sql check without a defaults_file", fields, add)
-		} else if !filepath.IsAbs(defaultsFile) {
-			add("%s.%s must be an absolute path", prefix, checks.CheckKeyDefaultsFile)
-		}
+		validateMySQLAccount(prefix, "a "+engine+" sql check", fields, add)
 		validateConnTLS(prefix, engine, fields, add)
 	case checks.SQLEnginePostgres, checks.SQLEnginePostgreSQL:
 		requireCheckField(prefix, checks.CheckKeyUser, "a "+engine+" sql check", fields, add)
@@ -1673,17 +1673,34 @@ func validateSQLFields(prefix string, fields map[string]any, add addFunc) {
 	}
 }
 
+// validateMySQLAccount validates how a mysql/mariadb check (sql, replication)
+// authenticates: a defaults_file supplies the account (root when it names
+// none), the way the mysql client run by root connects; without one the check
+// must name its user. what names the check, with its article.
+func validateMySQLAccount(prefix, what string, fields map[string]any, add addFunc) {
+	if cfgval.String(fields[checks.CheckKeyDefaultsFile]) == "" {
+		requireCheckField(prefix, checks.CheckKeyUser, what+" without a defaults_file", fields, add)
+	}
+	validateAbsoluteCheckPaths(prefix, fields, add, checks.CheckKeyDefaultsFile)
+}
+
 // validateReplicationFields validates a replication check: a mysql/mariadb
-// engine (defaulting to mariadb), a required user, and optional connection
-// scope and behind {op, value} lag bound.
+// engine (defaulting to mariadb), a user or a defaults_file, optional
+// connection scope, an optional behind {op, value} lag bound, and the source
+// account (source_defaults_file) that a pending_bytes bound needs.
 func validateReplicationFields(prefix string, fields map[string]any, add addFunc) {
 	if engine := cfgval.String(fields[checks.CheckKeyEngine]); engine != "" &&
 		engine != checks.SQLEngineMySQL && engine != checks.SQLEngineMariaDB {
 		add("%s.engine must be mysql or mariadb for a replication check", prefix)
 	}
-	requireCheckField(prefix, checks.CheckKeyUser, "a replication check", fields, add)
+	validateMySQLAccount(prefix, "a replication check", fields, add)
 	validateConnTLS(prefix, conn.ProtocolNameMySQL, fields, add)
-	validatePresentThresholds(prefix, fields, []string{checks.CheckKeyBehind}, add)
+	validatePresentThresholds(prefix, fields, checks.ReplicationPredFields, add)
+	validateAbsoluteCheckPaths(prefix, fields, add, checks.CheckKeySourceDefaultsFile)
+	if _, hasPending := fields[checks.CheckKeyPendingBytes]; hasPending &&
+		cfgval.String(fields[checks.CheckKeySourceDefaultsFile]) == "" {
+		add("%s.%s requires %s", prefix, checks.CheckKeyPendingBytes, checks.CheckKeySourceDefaultsFile)
+	}
 }
 
 // requireCheckField reports the shared "field is required" issue when the check

@@ -253,6 +253,9 @@ monitoring script never reads an unobserved watch as healthy.
 When the daemon has current watch readings, `sermoctl watch status WATCH` also
 prints them (including RAID operation and rebuild percentage) and the separate
 last-check timestamp; `--json` exposes the same readings in a `readings` array.
+A numeric reading there also carries `number`, its value in the reading's own
+unit (bytes, seconds, percent, a count), beside the formatted `value`; scripts
+compare that instead of parsing `1.2 GiB`.
 
 `sermoctl watch monitor|unmonitor WATCH` pauses or resumes a single watch,
 persisted under `paths.state` and read live by the daemon. `WATCH` is a host

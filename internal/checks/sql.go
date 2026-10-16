@@ -157,31 +157,46 @@ func buildSQLCheck(b base, entry map[string]any) (Check, string) {
 		grades: sqlGrades(b.levels)}, ""
 }
 
-// sqlServerOpener returns the opener for a mysql or postgres sql check. A mysql
-// check with a defaults_file resolves its target per run, like db_queries: its
-// own fields first, then the option file (whose [client] user defaults to
-// root, the account that keeps a reserved connection on a saturated server),
-// then the protocol defaults.
+// sqlServerOpener returns the opener for a mysql or postgres sql check; a mysql
+// check connects through mysqlServerOpener.
 func sqlServerOpener(engine, driver string, entry map[string]any) (func(context.Context) (*sql.DB, error), string) {
-	defaultsFile := cfgval.AsString(entry[CheckKeyDefaultsFile])
-	if driver == SQLEngineMySQL && defaultsFile != "" {
-		own := ownConnConfig(engine, driver, entry)
+	requiresUser := "sql check (" + engine + ") requires a user"
+	if driver == SQLEngineMySQL {
+		open, ok := mysqlServerOpener(engine, entry)
+		if !ok {
+			return nil, requiresUser
+		}
+		return open, ""
+	}
+	if cfgval.AsString(entry[CheckKeyUser]) == "" {
+		return nil, requiresUser
+	}
+	cfg := sqlConnConfig(engine, entry)
+	return func(ctx context.Context) (*sql.DB, error) { return conn.OpenPostgresDB(ctx, cfg) }, ""
+}
+
+// mysqlServerOpener returns the opener for a mysql/mariadb check (sql,
+// replication). With a defaults_file the target resolves per run, like
+// db_queries: its own fields first, then the option file (whose [client] user
+// defaults to root, the account that keeps a reserved connection on a
+// saturated server), then the protocol defaults. Without one the check must
+// name its user; ok is false when it names neither.
+func mysqlServerOpener(engine string, entry map[string]any) (open func(context.Context) (*sql.DB, error), ok bool) {
+	if defaultsFile := cfgval.AsString(entry[CheckKeyDefaultsFile]); defaultsFile != "" {
+		own := ownConnConfig(engine, SQLEngineMySQL, entry)
 		return func(ctx context.Context) (*sql.DB, error) {
 			target, err := mysqlTarget(own, defaultsFile)
 			if err != nil {
 				return nil, err
 			}
 			return conn.OpenMySQLDB(ctx, target)
-		}, ""
+		}, true
 	}
 	if cfgval.AsString(entry[CheckKeyUser]) == "" {
-		return nil, "sql check (" + engine + ") requires a user"
+		return nil, false
 	}
 	cfg := sqlConnConfig(engine, entry)
-	if driver == SQLEngineMySQL {
-		return func(ctx context.Context) (*sql.DB, error) { return conn.OpenMySQLDB(ctx, cfg) }, ""
-	}
-	return func(ctx context.Context) (*sql.DB, error) { return conn.OpenPostgresDB(ctx, cfg) }, ""
+	return func(ctx context.Context) (*sql.DB, error) { return conn.OpenMySQLDB(ctx, cfg) }, true
 }
 
 // sqlGrades parses the kept levels: tiers of a sql check, each restating the

@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"sermo/internal/cfgval"
-	"sermo/internal/conn"
 )
 
 // StartReplication is the manual repair a DBA performs on a stopped replica,
@@ -42,8 +41,11 @@ func StartReplication(ctx context.Context, entry map[string]any) ReplicationCont
 	if connection != "" && !replicationConnectionName.MatchString(connection) {
 		return ReplicationControlResult{Message: "replication connection name " + strconv.Quote(connection) + " is not startable"}
 	}
-	cfg := sqlConnConfig(SQLEngineMySQL, entry)
-	db, err := conn.OpenMySQLDB(ctx, cfg)
+	open, ok := mysqlServerOpener(replicationEngine(entry), entry)
+	if !ok {
+		return ReplicationControlResult{Message: replicationAccountRequired}
+	}
+	db, err := open(ctx)
 	if err != nil {
 		return ReplicationControlResult{Message: "replication: open: " + err.Error()}
 	}
@@ -121,7 +123,7 @@ func replicationStartStatements(connection string, rows []replicationRow) []stri
 		return []string{"START SLAVE '" + connection + "'"}
 	}
 	for _, row := range rows {
-		if row["Connection_name"] != "" {
+		if row[mariadbConnectionColumn] != "" {
 			return []string{"START ALL REPLICAS", "START ALL SLAVES"}
 		}
 	}
