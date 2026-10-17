@@ -148,6 +148,7 @@ type plan struct {
 	closeTerminalSource  *TerminalSessionSourceTarget
 	killQuery            *DBQueryTarget
 	reap                 bool
+	reapTarget           *ReapTarget
 	repair               bool
 }
 
@@ -168,6 +169,9 @@ type SessionBoundary struct {
 	MonitorPID        int
 	MonitorStartTicks uint64
 	Exe               string
+	ExePrev           string
+	ExeFile           process.ExecutableFile
+	Cgroup            string
 	UID               uint32
 }
 
@@ -299,6 +303,9 @@ func (e Engine) previewReap() Result {
 		return result
 	}
 	result.Processes = strays
+	for i := range result.Processes {
+		result.Processes[i].SignalBlockReason = e.ReapBlockReason(result.Processes[i])
+	}
 	if len(strays) == 0 {
 		result.Message = "no stray processes"
 		return result
@@ -312,8 +319,8 @@ func (e Engine) previewReap() Result {
 // reapStrays signals the authorized strays and records the outcome. It is
 // terminal for the operation either way, so the caller's deferred event emission
 // remains the single audit path.
-func (e Engine) reapStrays(ctx context.Context, result *Result) {
-	strays, err := e.discoverStrays()
+func (e Engine) reapStrays(ctx context.Context, result *Result, target *ReapTarget) {
+	strays, err := e.discoverReapTargets(target, true)
 	if err != nil {
 		result.Status, result.Message = ResultFailed, actionReap+": "+err.Error()
 		return
@@ -336,7 +343,7 @@ func (e Engine) reapStrays(ctx context.Context, result *Result) {
 	var discoveryErr error
 	reaper.Rediscover = func() []process.Process {
 		var current []process.Process
-		current, discoveryErr = e.discoverStrays()
+		current, discoveryErr = e.discoverReapTargets(target, false)
 		if discoveryErr != nil {
 			return nil
 		}
@@ -485,7 +492,10 @@ func (e Engine) run(ctx context.Context, p plan) (result Result) {
 		return result
 	}
 	if p.reap {
-		e.reapStrays(ctx, &result)
+		e.reapStrays(ctx, &result, p.reapTarget)
+		if p.reapTarget != nil {
+			result.Message = fmt.Sprintf("pid %d: %s", p.reapTarget.PID, result.Message)
+		}
 		return result
 	}
 	if p.repair {
@@ -628,6 +638,8 @@ func (e Engine) runCloseAction(ctx context.Context, p plan, result *Result) bool
 		if e.closeTerminalSession(ctx, *p.closeTerminalSession, result) {
 			result.Message = "close terminal session ok"
 		}
+		target := p.closeTerminalSession
+		result.Message += fmt.Sprintf("; multiplexer=%q session=%q user=%q check=%q identity=%q", target.Multiplexer, target.Name, target.User, target.Check, target.Identity)
 		return true
 	}
 	if p.closeTerminalSource != nil {
@@ -725,7 +737,7 @@ func (e Engine) closeSession(ctx context.Context, target SessionTarget, result *
 	if err := ctx.Err(); err != nil {
 		return failSession(result, prefix, err)
 	}
-	if !filepath.IsAbs(boundary.Exe) {
+	if !filepath.IsAbs(boundary.Exe) && !(filepath.IsAbs(boundary.ExePrev) && boundary.ExeFile.Inode != 0 && boundary.Cgroup != "") {
 		return failSession(result, prefix, errors.New("SSH session executable is unavailable"))
 	}
 	if boundary.Residual {
@@ -735,7 +747,7 @@ func (e Engine) closeSession(ctx context.Context, target SessionTarget, result *
 	if signaler == nil {
 		signaler = process.OSSignaler{}
 	}
-	proc := process.Process{PID: target.PID, StartTicks: target.StartTicks, Exe: boundary.Exe, ExeOK: true, UID: boundary.UID}
+	proc := process.Process{PID: target.PID, StartTicks: target.StartTicks, Exe: boundary.Exe, ExeOK: boundary.ExePrev == "", ExePrev: boundary.ExePrev, ExeFile: boundary.ExeFile, Cgroup: boundary.Cgroup, UID: boundary.UID}
 	if err := process.SignalProcess(ctx, signaler, proc, syscall.SIGTERM); err != nil {
 		return failSession(result, prefix, err)
 	}

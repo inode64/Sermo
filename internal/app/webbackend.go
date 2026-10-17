@@ -204,6 +204,7 @@ type WebBackend struct {
 	mountAlerter           MountUserAlerter
 	sshSessionSampler      checks.SSHSessionSamplerFunc
 	terminalProcessReader  process.Reader
+	terminalAccessedAt     func(uint64) (time.Time, bool)
 	unowned                unownedRuntime
 	unownedKiller          pidKiller
 	sessionMetricCollector *metrics.Collector

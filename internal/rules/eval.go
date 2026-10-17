@@ -204,7 +204,7 @@ func (e *Evaluator) evalFailed(ctx context.Context, operand any) (bool, error) {
 // failed: for an ordinary rule: an unavailable probe failed, a busy one only
 // when this rule may read busy as a failure (busyFails).
 func (e *Evaluator) unobservedFails(res checks.Result) bool {
-	if res.Busy {
+	if res.Busy || res.ActionBlocked {
 		return e.busyFails
 	}
 	return res.Unavailable
@@ -481,11 +481,11 @@ func (e *Evaluator) runInline(ctx context.Context, name string, entry, keyParams
 // too unless this evaluation reads busy as a failure (see busyFails); a guard
 // never does.
 func (e *Evaluator) unavailableCheckError(name string, res checks.Result) error {
-	busyUnknown := res.Busy && (e.FailOnUnavailable || !e.busyFails)
+	busyUnknown := (res.Busy || res.ActionBlocked) && (e.FailOnUnavailable || !e.busyFails)
 	if !res.Unavailable && !res.Skipped && !busyUnknown {
 		return nil
 	}
-	return fmt.Errorf("%w: check %q is unavailable, busy or skipped: %s", errUnavailable, name, res.Message)
+	return fmt.Errorf("%w: check %q is unavailable, advisory, busy or skipped: %s", errUnavailable, name, res.Message)
 }
 
 // unavailableSignal propagates uncertainty through boolean operators. Guards

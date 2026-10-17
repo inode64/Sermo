@@ -370,6 +370,9 @@ func (a App) printReap(opts options, r operation.Result) {
 	for _, p := range r.Processes {
 		key, value := processDisplayField(p)
 		fmt.Fprintf(a.Stdout, "  stray pid=%d user=%s %s=%s\n", p.PID, orUnknown(p.User), key, value)
+		if p.SignalBlockReason != "" {
+			fmt.Fprintf(a.Stdout, "    blocked: %s\n", p.SignalBlockReason)
+		}
 	}
 	if !opts.apply && len(r.Processes) > 0 {
 		fmt.Fprintf(a.Stdout, "nothing was signalled; run `sermoctl %s %s --%s` to signal the authorized strays\n",

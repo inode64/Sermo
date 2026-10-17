@@ -543,7 +543,9 @@ func newCheckWatch(spec checkWatchSpec, deps Deps) *Watch {
 	watch.Severity = spec.severity
 	watch.Runner = OSHookRunner{Runner: deps.ExecxRunner}
 	watch.IsPaused = monitorPaused(deps.Monitor, WatchMonitorKey(spec.name))
-	watch.FireOnFail = checks.IsHealthType(spec.checkType)
+	// stale_libraries is a verdictless inventory whose OK means nothing stale,
+	// so its host alert uses failed polarity like its service rule does.
+	watch.FireOnFail = checks.IsHealthType(spec.checkType) || spec.checkType == checks.CheckTypeStaleLibraries
 	watch.Publish = publishWatchSnapshots(deps.WatchSnapshots, deps.watchConfigID)
 	watch.ForceSLA = spec.forceSLA
 	if !spec.slaOff {

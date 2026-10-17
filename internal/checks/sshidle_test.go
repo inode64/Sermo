@@ -167,10 +167,7 @@ func TestSampleSSHSessionsSeparatesConsoleAndSSH(t *testing.T) {
 		}
 	}
 
-	sample, err := sampleSSHSessions([]utmp.Session{{User: "root", Line: "pts/0"}, {User: "console", Line: "tty1"}}, snapshot, terminal, now, mustSSHDFilters(t), testSSHLookup().ResolveUser, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
+	sample := sampleSSHSessions([]utmp.Session{{User: "root", Line: "pts/0"}, {User: "console", Line: "tty1"}}, snapshot, terminal, now, mustSSHDFilters(t), testSSHLookup().ResolveUser, nil)
 	if sample.Console != 1 || len(sample.SSH) != 1 {
 		t.Fatalf("sample = %+v, want one console and one SSH session", sample)
 	}
@@ -189,14 +186,11 @@ func TestSampleSSHSessionsSeparatesConsoleAndSSH(t *testing.T) {
 
 func TestSampleSSHSessionsReportsUnknownTerminalAncestry(t *testing.T) {
 	now := time.Date(2026, time.August, 5, 12, 0, 0, 0, time.UTC)
-	sample, err := sampleSSHSessions(
+	sample := sampleSSHSessions(
 		[]utmp.Session{{User: "root", Line: "pts/0"}},
 		map[int]process.Identity{sshShellPID: {PID: sshShellPID, PPID: sshdPID, TTY: testTTY, TTYOK: true, Exe: "/bin/bash", ExeOK: true}},
 		testSSHTerminal(now), now, mustSSHDFilters(t), testSSHLookup().ResolveUser, nil,
 	)
-	if err != nil {
-		t.Fatal(err)
-	}
 	if len(sample.SSH) != 0 || sample.Console != 0 || len(sample.Issues) != 1 {
 		t.Fatalf("sample = %+v, want one unavailable terminal issue", sample)
 	}
@@ -215,13 +209,10 @@ func TestSampleSSHSessionsReportsSSHDWithAnotherUser(t *testing.T) {
 	listener := snapshot[sshdPID]
 	listener.UID = 1
 	snapshot[sshdPID] = listener
-	sample, err := sampleSSHSessions(
+	sample := sampleSSHSessions(
 		[]utmp.Session{{User: "root", Line: "pts/0"}}, snapshot, testSSHTerminal(now), now,
 		[]process.IdentityFilter{filter}, testSSHLookup().ResolveUser, nil,
 	)
-	if err != nil {
-		t.Fatal(err)
-	}
 	if len(sample.Issues) != 1 || len(sample.SSH) != 0 {
 		t.Fatalf("sample = %+v, want unsafe ancestry issue", sample)
 	}
@@ -251,13 +242,10 @@ func TestSampleSSHSessionsKeepsVerifiedSessionBesideReplacedBinary(t *testing.T)
 			return utmp.Terminal{}, errors.New("unknown terminal")
 		}
 	}
-	sample, err := sampleSSHSessions([]utmp.Session{
+	sample := sampleSSHSessions([]utmp.Session{
 		{User: "root", Line: "pts/0", Host: "192.0.2.10"},
 		{PID: stalePeerPID, User: "root", Line: "pts/1", Host: "192.0.2.11"},
 	}, snapshot, terminal, now, mustSSHDFilters(t), testSSHLookup().ResolveUser, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
 	if len(sample.SSH) != 1 || sample.SSH[0].Terminal != "pts/0" || len(sample.Issues) != 1 {
 		t.Fatalf("sample = %+v, want verified pts/0 plus unavailable pts/1", sample)
 	}
@@ -296,13 +284,10 @@ func TestSampleSSHSessionsSkipsMultiplexerWindows(t *testing.T) {
 			return utmp.Terminal{}, errors.New("unknown terminal")
 		}
 	}
-	sample, err := sampleSSHSessions([]utmp.Session{
+	sample := sampleSSHSessions([]utmp.Session{
 		{PID: windowShell, User: "root", Line: "pts/1", Host: "192.0.2.10:S.0"},
 		{PID: staleShell, User: "root", Line: "pts/2", Host: "192.0.2.10:S.1"},
 	}, snapshot, terminal, now, mustSSHDFilters(t), testSSHLookup().ResolveUser, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
 	if len(sample.SSH) != 0 || len(sample.Issues) != 0 || sample.Console != 0 {
 		t.Fatalf("sample = %+v, want screen windows left to the terminal-session source", sample)
 	}
@@ -370,13 +355,10 @@ func TestSampleSSHSessionsKeepsSSHSessionRunningAMultiplexerClient(t *testing.T)
 	now := time.Date(2026, time.August, 5, 12, 0, 0, 0, time.UTC)
 	snapshot := sshSnapshot()
 	snapshot[sshShellPID+1] = process.Identity{PID: sshShellPID + 1, PPID: sshShellPID, UID: testUserID, Exe: "/usr/bin/tmux", ExeOK: true, TTY: testTTY, TTYOK: true}
-	sample, err := sampleSSHSessions(
+	sample := sampleSSHSessions(
 		[]utmp.Session{{User: "root", Line: "pts/0", Host: "192.0.2.10"}}, snapshot,
 		testSSHTerminal(now), now, mustSSHDFilters(t), testSSHLookup().ResolveUser, nil,
 	)
-	if err != nil {
-		t.Fatal(err)
-	}
 	if len(sample.SSH) != 1 || len(sample.Issues) != 0 {
 		t.Fatalf("sample = %+v, want the SSH session kept", sample)
 	}
@@ -387,13 +369,10 @@ func TestSampleSSHSessionsDoesNotCountPreservedRemoteTerminalAsConsole(t *testin
 	snapshot := map[int]process.Identity{
 		sshShellPID: {PID: sshShellPID, PPID: 1, UID: testUserID, Exe: "/bin/bash", ExeOK: true, TTY: testTTY, TTYOK: true},
 	}
-	sample, err := sampleSSHSessions(
+	sample := sampleSSHSessions(
 		[]utmp.Session{{User: "root", Line: "pts/0", Host: "192.0.2.10"}}, snapshot,
 		testSSHTerminal(now), now, mustSSHDFilters(t), testSSHLookup().ResolveUser, nil,
 	)
-	if err != nil {
-		t.Fatal(err)
-	}
 	if sample.Console != 0 || len(sample.Issues) != 1 {
 		t.Fatalf("sample = %+v, want preserved remote terminal issue rather than console", sample)
 	}

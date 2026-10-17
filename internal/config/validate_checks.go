@@ -868,14 +868,15 @@ var singleShotCheckValidators = map[string]singleShotCheckValidator{
 	checks.CheckTypeCommand: func(path string, entry map[string]any, _ string, add addFunc) {
 		validateCommandFields(path, entry, true, add)
 	},
-	checks.CheckTypeClock:       singleShotNoLock(validateClockFields),
-	checks.CheckTypeService:     validateServiceCheck,
-	checks.CheckTypeProcess:     validateProcessCheck,
-	checks.CheckTypeStaleBinary: singleShotNoLock(validateStaleBinaryCheck),
-	checks.CheckTypeStrays:      singleShotNoLock(validateStraysCheck),
-	checks.CheckTypeFileExists:  validateFileExistsCheck,
-	checks.CheckTypeFile:        validateSingleShotFileCheck,
-	checks.CheckTypeLockfile:    validateLockfileCheck,
+	checks.CheckTypeClock:          singleShotNoLock(validateClockFields),
+	checks.CheckTypeService:        validateServiceCheck,
+	checks.CheckTypeProcess:        validateProcessCheck,
+	checks.CheckTypeStaleBinary:    singleShotNoLock(validateStaleBinaryCheck),
+	checks.CheckTypeStaleLibraries: singleShotNoLock(validateStaleLibrariesCheck),
+	checks.CheckTypeStrays:         singleShotNoLock(validateStraysCheck),
+	checks.CheckTypeFileExists:     validateFileExistsCheck,
+	checks.CheckTypeFile:           validateSingleShotFileCheck,
+	checks.CheckTypeLockfile:       validateLockfileCheck,
 	checks.CheckTypeBinary: func(path string, entry map[string]any, _ string, add addFunc) {
 		validateRequiredStringField(path, entry, checks.CheckKeyPath, checks.CheckTypeBinary, add)
 	},

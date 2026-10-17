@@ -179,6 +179,15 @@ telegram_bot:
 # paused. `monitor: previous` restores the persisted state from paths.state.
 watches:
   # -- single-shot checks as host watches -----------------------------------
+  stale-libraries:
+    monitor: disabled
+    interval: 5m
+    check:
+      type: stale_libraries
+      timeout: 30s
+      reports: state
+    then: { notify: [ops-email] }  # host inventories never execute hooks
+
   webapp-health:
     monitor: disabled
     check:
@@ -1259,6 +1268,12 @@ reap:
 # and `max_increase` are bounds the check fails ABOVE, so OK keeps meaning healthy
 # and a rule keeps using `failed:` — op/value would invert that and are rejected.
 checks:
+  loaded-libraries:
+    type: stale_libraries
+    interval: 1m
+    timeout: 30s
+    stable_for: 5m
+    reports: state
   strays-high:
     type: strays
     max: 20  # a busy host parks a few in its cgroup; twenty is a leak

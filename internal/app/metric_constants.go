@@ -28,6 +28,7 @@ const (
 const (
 	stateReasonConfigurationInvalid  = "configuration_invalid"
 	stateReasonStaleBinary           = "stale_binary"
+	stateReasonStaleLibraries        = "stale_libraries"
 	stateReasonFailedUnitLiveProcess = "failed_unit_live_process"
 )
 

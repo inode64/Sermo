@@ -1298,6 +1298,14 @@ Read-only endpoints:
   and each such
   watch adds a source of kind `database`. It is read from the published samples;
   the request never connects to a database.
+  The `strays` array contains currently observed unclaimed service processes,
+  including `pid`, `ppid`, `start_ticks`, `exe_previous`, `identity`, `can_close`
+  and `close_reason`. These rows come from daemon samples, not HTTP-time scans.
+- `POST /api/services/{name}/strays/{pid}/reap?start_ticks=...&identity=...`
+  terminates one freshly revalidated stray through the service's manual reap
+  policy. It requires the same admin, CSRF and generation checks as other
+  mutations. Missing authorization or changed identity refuses the action.
+
 - `GET /api/services/{name}/sla?since=24h` — availability history at the
   resolution that window is stored at (see [Stored history
   resolution](#stored-history-resolution)); `since` is a duration, default 24h,
@@ -3628,6 +3636,105 @@ beats both the default and the catalog.
 A process whose executable was replaced still resolves no exe, so it matches no
 `exe` selector and is never signalled — see [safety.md](safety.md). This check
 reports the condition; it does not relax that rule.
+
+### `stale_libraries` — processes using replaced shared libraries
+
+Opt-in on services and host watches. Reads `/proc/PID/maps` in native Go,
+including executable `.so`/`.so.*` mappings loaded dynamically (PAM modules,
+OpenSSL, NSS and other plugins). Compares the mapped device/inode with the
+current regular file. It detects replacements that happened before Sermo
+started. Unlike `libraries`, this examines running processes; unlike
+`restart_on_change.libraries`, it does not need a previous installed-file
+baseline. Anonymous mappings, memfd/JIT mappings and the main executable are
+excluded. Libraries without `.so` names and in-place writes to an unchanged
+inode are outside this check's coverage.
+
+Default reporting is `state`, severity `warning`: an old library does not by
+itself mean the service is down. `OK` means no stale libraries; use `failed:`,
+not `active:`, to alert. No check or restart rule is injected automatically.
+
+```yaml
+# Merge into an existing service file.
+checks:
+  loaded-libraries:
+    type: stale_libraries
+    interval: 1m
+    timeout: 30s
+    stable_for: 5m
+    reports: state
+rules:
+  old-libraries:
+    type: alert
+    severity: warning
+    if: { failed: { check: loaded-libraries } }
+    then: { action: alert, message: "Processes still use replaced libraries; inspect loaded-libraries" }
+```
+
+The result contains PID, process start ticks, library path, old/new device and
+inode, replacement timestamps, missing-file status and restart eligibility in
+`data.libraries`. The check details show paths and PIDs. A stable, actionable
+service finding shows `restart_required` with `state_reason: stale_libraries`.
+An incomplete scan retains available findings and reports unavailable.
+
+Scanning has an internal minimum interval of one minute; `interval` can make
+it less frequent. `stable_for` defaults to five minutes and must be positive.
+The complete finding set must remain unchanged across samples for that long;
+changed files, process generations or read errors reset the window. Restarting
+Sermo also resets it. This is an observation window, **not proof that a package
+transaction finished**.
+
+To authorize automatic restart, add a separate service remediation rule:
+
+```yaml
+policy:
+  cooldown: 30m
+  max_actions: 1
+  max_actions_window: 1h
+rules:
+  reload-installed-libraries:
+    type: remediation
+    if: { failed: { check: loaded-libraries } }
+    then: { action: restart }
+```
+
+Before enabling this rule, arrange for package updates to hold Sermo's named
+lock for every service allowed to restart. For one service, for example:
+
+```sh
+sermoctl lock sshd --name package-update --reason "PAM update" --ttl 2h -- emerge --oneshot sys-libs/pam
+```
+
+Choose a TTL longer than the update and use the actual configured service name.
+Unwrapped package-manager commands are not detected automatically. Locks,
+guards, required preflight, operation deadlines and the service action budget
+apply through the normal operation engine. Multiple stale libraries produce
+one check verdict and one service restart. Normal health verification follows
+the operation; the next library scan confirms that the new mappings are clean.
+
+Automatic action additionally requires a unique main process matching the
+service's exact executable and real-user selector, complete reads, a stable
+replacement file and the same mount namespace and filesystem root as Sermo.
+Missing replacements, foreign containers/chroots, PID/identity changes,
+unreadable maps, ambiguous masters and child-only findings set
+`action_blocked: true`. These observations can alert but cannot drive an
+operation, even through a negated rule condition. Old SSH sessions therefore
+remain visible for separate closure instead of repeatedly restarting a clean
+listener. Keep SSH, databases and D-Bus advisory until their restart policy and
+update locking have been reviewed.
+
+A host inventory uses the same check and is always advisory; watch hooks and
+other actions are withheld, while notifications remain available:
+
+```yaml
+# /etc/sermo/watches/stale-libraries.yml
+name: stale-libraries
+interval: 5m
+check:
+  type: stale_libraries
+  timeout: 30s
+then:
+  notify: [ops-email]  # use an existing notifier name
+```
 
 ### `fds` — descriptors against the process limit (`fds_limit`)
 

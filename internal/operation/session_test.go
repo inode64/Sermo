@@ -120,3 +120,17 @@ func TestConnectedSessionCarriesExactSignalIdentity(t *testing.T) {
 		})
 	}
 }
+
+func TestDeletedSessionCarriesPinnedFileEvidence(t *testing.T) {
+	h := defaultHarness()
+	e := h.engine()
+	signaler := &sessionIdentitySignaler{t: t}
+	e.SessionSignaler = signaler
+	boundary := SessionBoundary{ExePrev: "/usr/lib64/misc/sshd-session", ExeFile: process.ExecutableFile{Device: 1, Inode: 99}, Cgroup: "0::/openrc.sshd"}
+	e.SessionVerifier = func(context.Context, SessionTarget) (SessionBoundary, error) { return boundary, nil }
+	e.SessionExited = func(int, uint64) (bool, error) { return true, nil }
+	res := e.CloseSession(t.Context(), SessionTarget{PID: 96, StartTicks: 1234, Terminal: "pts/1"})
+	if !res.OK() || signaler.got.ExeOK || signaler.got.ExePrev != boundary.ExePrev || signaler.got.ExeFile != boundary.ExeFile || signaler.got.Cgroup != boundary.Cgroup {
+		t.Fatalf("result=%+v identity=%+v", res, signaler.got)
+	}
+}

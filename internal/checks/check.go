@@ -114,6 +114,9 @@ type Result struct {
 	// Unavailable marks a failed observation that a guard must treat as unsafe
 	// rather than as a false condition.
 	Unavailable bool `json:"-"`
+	// ActionBlocked retains advisory evidence for alerts while preventing it
+	// from driving operations or watch hooks, including through negation.
+	ActionBlocked bool `json:"action_blocked,omitempty"`
 	// Busy marks a failure in which the probed server answered that it is
 	// alive but cannot serve now (conn.Busy): saturated, loading or starting
 	// up. Health and alerts see it as a failure; no lifecycle action ever fires

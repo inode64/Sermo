@@ -352,10 +352,11 @@ var commandUsages = []commandUsage{
 	},
 	{
 		Name:    commandSessions,
-		Summary: "List SSH, tmux/screen sessions and running database statements; kill one statement.",
+		Summary: "List sessions, statements and unclaimed processes; terminate a selected target.",
 		Usage: []string{
 			"sermoctl sessions [list] [SERVICE]",
 			"sermoctl sessions kill SERVICE WATCH ID [--connection]",
+			"sermoctl sessions reap SERVICE PID",
 		},
 		Flags: []string{
 			"--connection  close the statement's connection instead of cancelling the statement",
@@ -365,6 +366,7 @@ var commandUsages = []commandUsage{
 			"Reads the running daemon's inventory (sermod with web enabled); sermoctl",
 			"never connects to the database itself. Database rows come from",
 			"db_queries watches; LONG marks a statement past the watch's min_duration.",
+			"reap selects one listed process, revalidating its identity and reap.kill_only_if.",
 			"kill looks the statement up in the inventory and sends its exact identity;",
 			"the daemon re-reads it and refuses if it changed or ended. The kill runs",
 			"through the service's operation engine: guards (blocks: kill_query), locks",

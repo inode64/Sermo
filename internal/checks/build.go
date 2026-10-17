@@ -132,6 +132,8 @@ type Deps struct {
 	// or removed on disk, for `stale_binary` checks. It is read-only: such a
 	// process resolves no exe, so it is still never signalled.
 	StaleBinaries StaleBinariesFunc
+	// StaleLibraries inspects only this service's attributed processes.
+	StaleLibraries StaleLibrariesFunc
 	// Strays reports this service's control-group members that no selector
 	// claims, for `strays` checks. Read-only: reporting a stray authorizes
 	// nothing, and only `sermoctl reap --apply` can signal one.
@@ -284,6 +286,7 @@ var builtinCheckSpecs = []checkSpec{
 	// Condition, not health: OK means "nothing is stale", so a rule fires it
 	// with `active:` the same way it would an alert-style predicate.
 	{info: serviceConditionTypeInfo(CheckTypeStaleBinary), build: func(in checkBuildInput) (Check, string) { return buildStaleBinaryCheck(in.base, in.deps) }},
+	{info: TypeInfo{Name: CheckTypeStaleLibraries, DefaultReports: ReportsState}, build: func(in checkBuildInput) (Check, string) { return buildStaleLibrariesCheck(in.base, in.entry, in.deps) }},
 	// Condition too, and for the same reason: OK means the service's control group
 	// holds nothing Sermo cannot account for.
 	{info: serviceConditionTypeInfo(CheckTypeStrays), build: func(in checkBuildInput) (Check, string) { return buildStraysCheck(in.base, in.entry, in.deps) }},

@@ -9,11 +9,11 @@ import (
 	"sermo/internal/hostfs"
 )
 
-const executableBits = 0o111
-
 // openDeletedExecutable follows procfs's magic link, never the old on-disk
 // pathname. fstat distinguishes a genuinely unlinked file from a filename that
 // happens to end in " (deleted)". The open file stays pinned through signaling.
+// Its mode may have been cleared during package removal; the kernel's exe link
+// proves its role, independently of permission to execute that inode again.
 func openDeletedExecutable(pid int, previous string) (*os.File, ExecutableFile, error) {
 	reader := executableReader{open: hostfs.Open, readlink: hostfs.Readlink}
 	return reader.openDeleted(pid, previous)
@@ -40,7 +40,7 @@ func (r executableReader) openDeleted(pid int, previous string) (*os.File, Execu
 	}
 	info, statErr := f.Stat()
 	link, linkErr := r.readlink(path)
-	if statErr == nil && linkErr == nil && link == previous+procDeletedSuffix && info.Mode().IsRegular() && info.Mode().Perm()&executableBits != 0 {
+	if statErr == nil && linkErr == nil && link == previous+procDeletedSuffix && info.Mode().IsRegular() {
 		if stat, ok := info.Sys().(*syscall.Stat_t); ok && stat.Nlink == 0 && stat.Ino != 0 {
 			return f, ExecutableFile{Device: stat.Dev, Inode: stat.Ino}, nil
 		}

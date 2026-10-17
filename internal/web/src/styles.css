@@ -428,6 +428,7 @@
   .detail-warn { margin-top: .25rem; }
   .svc-busy, .svc-state-note { margin-left: 1.15rem; }
   .session-busy { white-space: nowrap; }
+  .row-action-error { display: block; max-width: 12rem; white-space: normal; overflow-wrap: anywhere; }
   /* A state reason is a sentence: it wraps between words and only breaks inside
      one when a word alone is wider than the cell, so a narrow first column grows
      downwards by whole words instead of shattering the text letter by letter. */

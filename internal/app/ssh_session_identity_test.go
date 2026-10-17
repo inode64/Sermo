@@ -5,6 +5,7 @@ import (
 
 	"sermo/internal/checks"
 	"sermo/internal/operation"
+	"sermo/internal/process"
 )
 
 func TestFreshSSHSessionVerifierPreservesSignalIdentity(t *testing.T) {
@@ -48,5 +49,19 @@ func TestFreshSSHSessionVerifierPreservesSignalIdentity(t *testing.T) {
 				t.Fatal("web capability does not reflect available identity")
 			}
 		})
+	}
+}
+
+func TestFreshSSHSessionVerifierKeepsDeletedFileEvidence(t *testing.T) {
+	session := checks.SSHSession{PID: 96, StartTicks: 1234, Terminal: "pts/1", ExePrev: "/usr/lib64/misc/sshd-session", ExeFile: process.ExecutableFile{Device: 1, Inode: 99}, Cgroup: "0::/openrc.sshd"}
+	sample := checks.SSHSessionSample{SSH: []checks.SSHSession{session}}
+	verify := freshSSHSessionVerifier(Deps{SSHSessionVerifier: func(checks.SSHSessionConfig) (checks.SSHSessionSample, error) { return sample, nil }}, nil)
+	boundary, err := verify(t.Context(), operation.SessionTarget{PID: 96, StartTicks: 1234, Terminal: "pts/1"})
+	if err != nil || boundary.ExePrev != session.ExePrev || boundary.ExeFile != session.ExeFile || boundary.Cgroup != session.Cgroup || !sshSessionsToWeb(sample)[0].CanClose {
+		t.Fatalf("boundary=%+v err=%v", boundary, err)
+	}
+	sample.SSH[0].ExeFile = process.ExecutableFile{}
+	if _, err := verify(t.Context(), operation.SessionTarget{PID: 96, StartTicks: 1234, Terminal: "pts/1"}); err == nil {
+		t.Fatal("unverified deleted executable accepted")
 	}
 }

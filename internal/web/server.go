@@ -455,6 +455,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc(routeAPIPreflight, s.handlePreflight)
 	mux.HandleFunc(routeAPISessionClose, s.handleSSHSessionClose)
 	mux.HandleFunc(routeAPITerminalSessionClose, s.handleTerminalSessionClose)
+	mux.HandleFunc(routeAPIStrayReap, s.handleStrayReap)
 	mux.HandleFunc(routeAPIEmptyTerminalSessionClose, s.handleEmptyTerminalSessionClose)
 	mux.HandleFunc(routeAPIDBQueryKill, s.handleDBQueryKill)
 	mux.HandleFunc(routeAPIAction, s.handleAction)

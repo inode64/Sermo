@@ -13,7 +13,7 @@ import {
   dbQueryKillAPI, emptyTerminalSessionCloseAPI,
   liveVerbosePath, lockReleaseAPI, mountAPI, mountBlockersAPI, panicAPI,
   readyVerbosePath, serviceAPI, serviceButtonAPI, serviceEventsAPI, serviceMetricsAPI,
-  servicePreflightAPI, serviceRuntimeAPI, serviceSLAAPI, sshSessionCloseAPI, terminalSessionCloseAPI, stateCompactAPI, watchAPI,
+  strayReapAPI, servicePreflightAPI, serviceRuntimeAPI, serviceSLAAPI, sshSessionCloseAPI, terminalSessionCloseAPI, stateCompactAPI, watchAPI,
   watchMetricsAPI, watchProcessKillAPI, watchSLAAPI,
 } from "./api.js";
 import {
@@ -123,6 +123,7 @@ const targetStateStale = "stale";
 // Mirrors stateReason* in internal/app/metric_constants.go.
 const stateReasonConfigurationInvalid = "configuration_invalid";
 const stateReasonStaleBinary = "stale_binary";
+const stateReasonStaleLibraries = "stale_libraries";
 const stateReasonFailedUnitLiveProcess = "failed_unit_live_process";
 const watchSampleStateFresh = "fresh";
 const targetStateOK = "ok";
@@ -255,6 +256,7 @@ const mountStatusFilterStates = [mountStateActive, mountStateInactive];
 const sessionKindSSH = "ssh";
 const sessionKindTmux = "tmux";
 const sessionKindScreen = "screen";
+const sessionKindStray = "stray";
 const terminalSessionKinds = [sessionKindTmux, sessionKindScreen];
 // A db_queries watch lists running statements under its own source kind; its
 // rows have their own table, since their columns (database, client, running
@@ -273,7 +275,9 @@ const sessionStateAttached = "attached";
 const sessionStateDetached = "detached";
 const sessionStateEmpty = "empty";
 const sessionStateUnknown = "unknown";
+const sessionStateMember = "session member";
 const sessionStateBadges = {
+  [sessionStateMember]: [targetStateActive, sessionStateMember],
   [targetStateCollecting]: [targetStateCollecting, targetStateCollecting],
   [sessionSourceUnavailable]: [targetStateFailed, sessionSourceUnavailable],
   [sessionSourcePartial]: [targetStateWarning, sessionSourcePartial],
@@ -1701,6 +1705,7 @@ function serviceStateParts(s) {
     : "";
   const missing = (st === targetStateCollecting && indicators) ? `Collecting ${indicators}` : "";
   const staleBinary = st === targetStateRestartRequired && s && s.state_reason === stateReasonStaleBinary;
+  const staleLibraries = st === targetStateRestartRequired && s && s.state_reason === stateReasonStaleLibraries;
   const configurationInvalid = st === targetStateWarning && s && s.state_reason === stateReasonConfigurationInvalid;
   const failedUnitLiveProcess = st === targetStateWarning && s && s.state_reason === stateReasonFailedUnitLiveProcess;
   const blind = (st === targetStateWarning && indicators && !staleBinary && !failedUnitLiveProcess)
@@ -1714,7 +1719,7 @@ function serviceStateParts(s) {
     : "";
   const restartRequired = staleBinary
     ? "The running binary was replaced on disk; restart the service to run the installed version"
-    : "";
+    : staleLibraries ? "The main process still maps replaced libraries; restart the service to load the installed versions" : "";
   const active = st === targetStateActive
     ? "Process confirmed; checks and runtime metrics are not available yet"
     : "";
@@ -1745,6 +1750,9 @@ function serviceStateReason(s) {
   }
   if (s && s.state_reason === stateReasonStaleBinary) {
     return "binary replaced on disk";
+  }
+  if (s && s.state_reason === stateReasonStaleLibraries) {
+    return "libraries replaced on disk";
   }
   if (s && s.state_reason === stateReasonFailedUnitLiveProcess) {
     return "init unit failed; workload healthy";
@@ -4169,11 +4177,15 @@ function checkSLAHTML(service, c) {
 // pendingSessionActions is the session analogue of liveOps: a close or kill
 // this browser started. From the confirmation until the daemon's inventory no
 // longer lists the session, its action cell says what is happening instead of
-// offering the button again; a failed request clears it so the button returns.
+// offering the button again. A failed request retains its reason beside the button.
 const pendingSessionActions = new Map();
+// Confirmed row actions share the daemon's service/watch operation scope.
+// Separate targets remain concurrent; the server still revalidates every action.
+const pendingRowTargets = new Map();
 // sessionActionHoldMs caps a pending entry whose session the inventory never
 // drops (a refresh that keeps failing), so the button cannot stay hidden.
 const sessionActionHoldMs = 2 * 60 * millisecondsPerSecond;
+const sessionActionQueued = "queued";
 const sessionActionClosing = "closing";
 const sessionActionKilling = "killing";
 // sessionActionKeySeparator joins a session action key's parts; NUL never
@@ -4195,7 +4207,7 @@ const watchProcessActionKey = (watch, pid, startTicks) => sessionActionKey(sessi
 function pendingSessionAction(key) {
   const pending = pendingSessionActions.get(key);
   if (!pending) return null;
-  if (Date.now() - pending.started > sessionActionHoldMs) {
+  if (pending.done && !pending.error && Date.now() - pending.started > sessionActionHoldMs) {
     pendingSessionActions.delete(key);
     return null;
   }
@@ -4210,13 +4222,19 @@ function sessionActionBadge(verb, title) {
 // flight, or null when the regular button applies.
 function pendingSessionBadge(key) {
   const pending = pendingSessionAction(key);
-  return pending ? sessionActionBadge(pending.verb, pending.label) : null;
+  return pending && !pending.error ? sessionActionBadge(pending.verb, pending.label) : null;
+}
+
+function rowActionFeedback(key, button) {
+  const error = pendingSessionAction(key)?.error;
+  return error ? tpl`<span class="row-action-error bad" role="alert">${error}</span>${button}` : button;
 }
 
 // presentSessionActionKeys lists every session the inventory still shows, so a
 // finished action is forgotten once its session is gone.
 function presentSessionActionKeys(inventory) {
   const keys = new Set();
+  for (const row of inventory.strays || []) keys.add(terminalSessionActionKey(row.service, sessionKindStray, row.identity));
   for (const session of inventory.ssh || []) keys.add(sshSessionActionKey(session.service, session.pid, session.start_ticks));
   for (const source of inventory.sources || []) {
     for (const issue of source.issues || []) keys.add(sshSessionActionKey(source.service, issue.pid, issue.start_ticks));
@@ -4246,7 +4264,7 @@ function sshSessionCloseButton(service, session) {
   if (!me.can_act) return tpl`<span class="muted">read-only</span>`;
   const label = `Close SSH session ${session.terminal || ""} of ${session.user || "unknown user"}`;
   if (!session.can_close) return tpl`<button class="icon-btn danger-btn" disabled aria-label="${label}" title="${session.message || "Session identity cannot be verified safely"}">${closeGlyph}</button>`;
-  return tpl`<button class="icon-btn danger-btn" data-ssh-session-close="1" data-ssh-service="${service}" data-ssh-session-pid="${session.pid}" data-ssh-session-start-ticks="${session.start_ticks}" data-ssh-session-terminal="${session.terminal}" data-ssh-session-user="${session.user || ""}" data-ssh-session-managed="${!!session.managed_by_logind}" aria-label="${label}" title="${label}">${closeGlyph}</button>`;
+  return rowActionFeedback(sshSessionActionKey(service, session.pid, session.start_ticks), tpl`<button class="icon-btn danger-btn" data-ssh-session-close="1" data-ssh-service="${service}" data-ssh-session-pid="${session.pid}" data-ssh-session-start-ticks="${session.start_ticks}" data-ssh-session-terminal="${session.terminal}" data-ssh-session-user="${session.user || ""}" data-ssh-session-managed="${!!session.managed_by_logind}" aria-label="${label}" title="${label}">${closeGlyph}</button>`);
 }
 
 // closeGlyph is the one mark every session close button shows; the button's
@@ -4259,10 +4277,20 @@ function terminalSessionCloseButton(session) {
   if (!me.can_act) return tpl`<span class="muted">read-only</span>`;
   if (!session.can_close) return tpl`<span class="muted">unavailable</span>`;
   const label = `Close ${session.multiplexer || "terminal"} session ${session.name || ""} of ${session.user || "unknown user"}`;
-  return tpl`<button class="icon-btn danger-btn" data-terminal-session-close="1"
+  return rowActionFeedback(terminalSessionActionKey(session.service, session.check, session.identity), tpl`<button class="icon-btn danger-btn" data-terminal-session-close="1"
     data-terminal-service="${session.service || ""}" data-terminal-check="${session.check || ""}"
     data-terminal-multiplexer="${session.multiplexer || ""}" data-terminal-session="${session.name || ""}"
-    data-terminal-user="${session.user || ""}" data-terminal-identity="${session.identity || ""}" aria-label="${label}" title="${label}">${closeGlyph}</button>`;
+    data-terminal-user="${session.user || ""}" data-terminal-identity="${session.identity || ""}" aria-label="${label}" title="${label}">${closeGlyph}</button>`);
+}
+
+function strayReapButton(row) {
+  const pending = pendingSessionBadge(terminalSessionActionKey(row.service, sessionKindStray, row.identity));
+  if (pending) return pending;
+  if (!me.can_act) return tpl`<span class="muted">read-only</span>`;
+  const label = `Terminate process ${row.pid} (${row.exe_previous || row.exe || "unknown executable"})`;
+  return rowActionFeedback(terminalSessionActionKey(row.service, sessionKindStray, row.identity), tpl`<button class="icon-btn danger-btn" ?disabled=${!row.can_close}
+    data-stray-reap="1" data-stray-service="${row.service}" data-stray-pid="${row.pid}"
+    data-stray-identity="${row.identity}" aria-label="${label}" title="${row.close_reason || label}">${closeGlyph}</button>`);
 }
 
 function sessionStateCell(state) {
@@ -4276,9 +4304,9 @@ function emptySessionCloseButton(source) {
   if (pending) return pending;
   if (!me.can_act) return tpl`<span class="muted">read-only</span>`;
   const label = `Close the empty ${source.kind || "terminal"} server of ${source.user || "unknown user"}`;
-  return tpl`<button class="icon-btn danger-btn" data-empty-session-close="1"
+  return rowActionFeedback(emptySourceActionKey(source.service, source.check), tpl`<button class="icon-btn danger-btn" data-empty-session-close="1"
     data-empty-session-service="${source.service || ""}"
-    data-empty-session-check="${source.check || ""}" aria-label="${label}" title="${label}">${closeGlyph}</button>`;
+    data-empty-session-check="${source.check || ""}" aria-label="${label}" title="${label}">${closeGlyph}</button>`);
 }
 
 function sourceHasSession(source, inventory) {
@@ -4351,7 +4379,16 @@ function sessionRows(inventory) {
     ...unmeasuredSessionUsageRow(),
     action: emptySessionCloseButton(source),
   }));
-  return [...ssh, ...terminal, ...issues, ...emptySources];
+  const strays = (inventory.strays || []).map((row) => ({
+    kind: sessionKindStray, service: row.service, user: row.user,
+    name: row.exe_previous || row.exe || "Unknown executable", pid: row.pid, pidSort: row.pid,
+    state: row.terminal ? sessionStateMember : row.exe_previous ? "executable deleted" : "unclaimed",
+    detail: row.terminal
+      ? `${row.terminal.multiplexer} ${row.terminal.name} · process action requires its own authorization${row.exe_previous ? " · executable deleted" : ""}${row.close_reason ? ` · ${row.close_reason}` : ""}`
+      : `${row.service} · parent PID ${row.ppid}${row.close_reason ? ` · ${row.close_reason}` : ""}`,
+    ...sessionUsageRow(row, row.has_idle), action: strayReapButton(row),
+  }));
+  return [...ssh, ...terminal, ...strays, ...issues, ...emptySources];
 }
 
 // rowKillButton is the action cell of one row the daemon may signal: the
@@ -4366,7 +4403,7 @@ function rowKillButton({ pendingKey, stopping, stoppingHint, canKill, unavailabl
   if (stopping) return sessionActionBadge(sessionActionKilling, stoppingHint);
   if (!me.can_act) return tpl`<span class="muted">read-only</span>`;
   if (!canKill) return tpl`<span class="muted" title="${unavailableTitle}">unavailable</span>`;
-  return button();
+  return rowActionFeedback(pendingKey, button());
 }
 
 // dbQueryKillButton cancels one running statement; the confirmation offers
@@ -4628,7 +4665,7 @@ function renderSessions(inventory = latestSessionInventory) {
   forgetFinishedSessionActions(latestSessionInventory);
   const sources = latestSessionInventory.sources || [];
   const database = latestSessionInventory.database || [];
-  setPanelVisible($("#sessions-section"), sources.length > 0 || database.length > 0);
+  setPanelVisible($("#sessions-section"), sources.length > 0 || database.length > 0 || (latestSessionInventory.strays || []).length > 0);
   const rows = sessionRows(latestSessionInventory);
   const dbRows = dbQueryRows(latestSessionInventory);
   renderFilterButtonCounts("#session-filters", sessionFilterCounts(latestSessionInventory, rows, dbRows));
@@ -4642,7 +4679,7 @@ function renderSessions(inventory = latestSessionInventory) {
   // A host whose only session sources are db_queries watches, or the database
   // filter, has nothing for the terminal table to say.
   const table = $("#sessions-section .sessions-table");
-  if (table) table.hidden = sessionFilter === sessionKindDatabase || !sources.some((source) => source.kind !== sessionKindDatabase);
+  if (table) table.hidden = sessionFilter === sessionKindDatabase || (!sources.some((source) => source.kind !== sessionKindDatabase) && !(latestSessionInventory.strays || []).length);
   renderDBQueries(dbShown);
   const body = $("#session-rows");
   if (body) {
@@ -4655,7 +4692,7 @@ function renderSessions(inventory = latestSessionInventory) {
     </tr>`) : tpl`<tr><td colspan="10" class="muted">No sessions match the filter.</td></tr>`;
     litRender(content, body);
   }
-  const activeCount = (latestSessionInventory.ssh || []).length + (latestSessionInventory.terminal || []).length + database.length;
+  const activeCount = (latestSessionInventory.ssh || []).length + (latestSessionInventory.terminal || []).length + (latestSessionInventory.strays || []).length + database.length;
   const count = $("#sessions-count");
   if (count) count.textContent = String(activeCount);
   const filterCount = $("#session-filter-count");
@@ -7784,35 +7821,49 @@ async function closeSSHSession(name, pid, startTicks, terminal, user, managedByL
     danger: true,
   }))) return;
   await postSessionClose(`close SSH session ${label}`, sshSessionCloseAPI(name, sessionPID, sessionStartTicks, terminal, managedByLogind), generation,
-    sshSessionActionKey(name, sessionPID, sessionStartTicks), sessionActionClosing);
+    sshSessionActionKey(name, sessionPID, sessionStartTicks), sessionActionClosing, name);
 }
 
 // postPendingRowAction runs one confirmed close or kill of a listed row. Like a
 // service operation it shows its progress in place: the row's action cell reads
 // "closing…"/"killing…" from the request until the list drops the row. rerender
 // redraws the view that owns the row so the badge appears at once.
-async function postPendingRowAction(statusLabel, endpoint, generation, key, verb, rerender) {
-  setStatus("");
-  const pending = { verb, label: statusLabel, started: Date.now(), done: false };
+async function postPendingRowAction(statusLabel, endpoint, generation, key, verb, rerender, target) {
+  const existing = pendingSessionAction(key);
+  if (existing && !existing.error) return;
+  const previous = pendingRowTargets.get(target);
+  let release;
+  const completion = new Promise((resolve) => { release = resolve; });
+  pendingRowTargets.set(target, completion);
+  const pending = { verb: previous ? sessionActionQueued : verb, label: statusLabel, started: Date.now(), done: false };
   pendingSessionActions.set(key, pending);
-  rerender();
   try {
+    setStatus("");
+    rerender();
+    if (previous) await previous;
+    pending.verb = verb;
+    rerender();
     const res = await fetch(endpoint, targetPostOptions({}, generation));
     const body = await jsonOrThrow(res);
     pending.done = true;
+    pending.started = Date.now();
     pending.label = `${statusLabel}: ${body.message || feedbackStatusOK}`;
     setStatus(pending.label, feedbackStatusOK);
     load();
   } catch (e) {
-    pendingSessionActions.delete(key);
+    pending.done = true;
+    pending.error = e.message;
     rerender();
     setStatus(`${statusLabel}: ${e.message}`, feedbackStatusErr);
+  } finally {
+    if (pendingRowTargets.get(target) === completion) pendingRowTargets.delete(target);
+    release();
   }
 }
 
 // postSessionClose is postPendingRowAction for the session inventory.
-function postSessionClose(statusLabel, endpoint, generation, key, verb) {
-  return postPendingRowAction(statusLabel, endpoint, generation, key, verb, renderSessions);
+function postSessionClose(statusLabel, endpoint, generation, key, verb, service) {
+  return postPendingRowAction(statusLabel, endpoint, generation, key, verb, renderSessions, serviceExpansionKey(service));
 }
 
 // reapStrays clears the processes a service cannot account for. It is confirmed
@@ -7853,6 +7904,21 @@ async function reapStrays(name) {
   }
 }
 
+async function reapSelectedProcess(service, pid, identity) {
+  const generation = dashboardGeneration;
+  const row = (latestSessionInventory.strays || []).find((candidate) =>
+    candidate.service === service && String(candidate.pid) === String(pid) && candidate.identity === identity);
+  if (!row || !row.can_close) {
+    setStatus("Selected process is unavailable; refresh and check its authorization", feedbackStatusErr);
+    return;
+  }
+  if (!(await promptConfirm({ title: `Terminate process ${pid}?`,
+    message: `Send SIGTERM to PID ${pid} (${row.exe_previous || row.exe}) owned by ${row.user}? Its children or attached sessions may also exit when this process terminates.`,
+    okLabel: "terminate process", danger: true }))) return;
+  await postSessionClose(`reap ${service} PID ${pid}`, strayReapAPI(service, pid, row.start_ticks, identity), generation,
+    terminalSessionActionKey(service, sessionKindStray, identity), sessionActionClosing, service);
+}
+
 async function closeTerminalSession(service, check, multiplexer, session, user, identity) {
   const generation = dashboardGeneration;
   if (!service || !check || !session || !user || !identity || !terminalSessionKinds.includes(multiplexer)) {
@@ -7862,12 +7928,12 @@ async function closeTerminalSession(service, check, multiplexer, session, user, 
   const label = `${multiplexer} ${session} for ${user}`;
   if (!(await promptConfirm({
     title: `Close ${label}?`,
-    message: "This asks the multiplexer to close only that exact session. It cannot be undone.",
+    message: "This closes the entire session, including all its windows, panes and running programs. Attached clients will disconnect. It cannot be undone.",
     okLabel: "close session",
     danger: true,
   }))) return;
   await postSessionClose(`close ${label}`, terminalSessionCloseAPI(service, check, multiplexer, session, user, identity), generation,
-    terminalSessionActionKey(service, check, identity), sessionActionClosing);
+    terminalSessionActionKey(service, check, identity), sessionActionClosing, service);
 }
 
 async function closeEmptySessionSource(service, check) {
@@ -7886,7 +7952,7 @@ async function closeEmptySessionSource(service, check) {
     danger: true,
   }))) return;
   await postSessionClose(`close empty ${label}`, emptyTerminalSessionCloseAPI(service, check), generation,
-    emptySourceActionKey(service, check), sessionActionClosing);
+    emptySourceActionKey(service, check), sessionActionClosing, service);
 }
 
 // killDBQuery confirms against the statement the operator is looking at: the
@@ -7916,7 +7982,7 @@ async function killDBQuery(service, watch, id, identity) {
   const mode = choice.checked ? dbQueryKillModeConnection : dbQueryKillModeQuery;
   const statusLabel = `${mode === dbQueryKillModeConnection ? "kill connection" : "cancel query"} ${engine} ${queryID}`;
   await postSessionClose(statusLabel, dbQueryKillAPI(service, watch, queryID, identity, mode), generation,
-    dbQueryActionKey(service, watch, identity), sessionActionKilling);
+    dbQueryActionKey(service, watch, identity), sessionActionKilling, service);
 }
 
 // killWatchProcess confirms against the row the operator is looking at: it is
@@ -7943,7 +8009,7 @@ async function killWatchProcess(watch, pid, startTicks) {
     danger: true,
   }))) return;
   await postPendingRowAction(`kill process ${processPID}`, watchProcessKillAPI(watch, processPID, ticks, choice.checked), generation,
-    watchProcessActionKey(watch, processPID, ticks), sessionActionKilling, () => rerenderWatchExpansion(watch));
+    watchProcessActionKey(watch, processPID, ticks), sessionActionKilling, () => rerenderWatchExpansion(watch), watchExpansionKey(watch));
 }
 
 async function actWatch(name, action) {
@@ -9253,6 +9319,7 @@ function initDelegatedHandlers() {
       el.dataset.sshService || "", el.dataset.sshSessionPid || "", el.dataset.sshSessionStartTicks || "",
       el.dataset.sshSessionTerminal || "", el.dataset.sshSessionUser || "",
       el.dataset.sshSessionManaged === domBoolTrue)],
+    ["[data-stray-reap]", (el) => reapSelectedProcess(el.dataset.strayService, el.dataset.strayPid, el.dataset.strayIdentity)],
     ["[data-terminal-session-close]", (el) => closeTerminalSession(
       el.dataset.terminalService || "", el.dataset.terminalCheck || "", el.dataset.terminalMultiplexer || "",
       el.dataset.terminalSession || "", el.dataset.terminalUser || "", el.dataset.terminalIdentity || "")],

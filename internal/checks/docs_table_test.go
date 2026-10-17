@@ -30,22 +30,18 @@ func TestRulesDocTableCoversEveryBuiltinCheckType(t *testing.T) {
 	}
 	// Watch-only forms: built by watch_build's dispatch, not builtinCheckSpecs.
 	// process_policy fires on violations like the health family does.
-	required := map[string]bool{}
+	required := map[string]string{}
 	for name, info := range watchOnlyTypes {
-		required[name] = info.DefaultReports == ReportsHealth
+		required[name] = info.DefaultReports
 	}
 	for _, spec := range builtinCheckSpecs {
-		required[spec.info.Name] = spec.info.DefaultReports == ReportsHealth
+		required[spec.info.Name] = spec.info.DefaultReports
 	}
-	for name, health := range required {
+	for name, want := range required {
 		style, ok := documented[name]
 		if !ok {
 			t.Errorf("docs/rules.md check-type table is missing a row for %q", name)
 			continue
-		}
-		want := "condition"
-		if health {
-			want = "health"
 		}
 		if style != want {
 			t.Errorf("docs/rules.md style for %q = %q, want %q (from the registry)", name, style, want)

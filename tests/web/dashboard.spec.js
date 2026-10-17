@@ -639,6 +639,17 @@ test("stale binary has a distinct restart-required state and visible reason", as
   expect(reasonBox.y).toBeGreaterThanOrEqual(badgeBox.y + badgeBox.height);
 });
 
+test("stale libraries explain the restart without claiming a replaced executable", async ({ page }) => {
+  const body = JSON.parse(JSON.stringify(dashboard));
+  body.services.find((service) => service.name === "stale").state_reason = "stale_libraries";
+  await page.route("**/api/dashboard**", (route) => route.fulfill({ json: body }));
+  await page.locator("#refresh-now").click();
+  const row = page.locator("#svc-row-stale");
+  await expect(row).toContainText("restart required");
+  await expect(row.locator(".svc-state-note")).toHaveText("libraries replaced on disk");
+  await expect(row).toHaveClass(/row-warning/);
+});
+
 // splitWordsIn lists the words (4+ characters) inside selector that a narrow
 // column broke across two line boxes. Truncated cells, headings, buttons and
 // screen-reader tables are excluded: they are clipped or hidden on purpose.
@@ -2731,3 +2742,163 @@ test("compact service checks omit details and latency but retain diagnostics", a
   expect(await table.innerText()).toContain("HTTP 200");
   expect(await table.innerText()).not.toContain("status 200");
 });
+
+
+test("deleted executables remain visible without a terminal client and reap selects one process", async ({ page }) => {
+  await page.setViewportSize({ width: 1600, height: 900 });
+  const strays = [
+    { service: "web", pid: 301, ppid: 1, start_ticks: 100, user: "root", exe_previous: "/usr/bin/screen-old", identity: "deleted-identity", can_close: true, has_idle: true, idle_seconds: 120, memory_ready: true, rss: 10485760, cpu_ready: true, cpu: 12.5, io_ready: true, io_read: 1024, io_write: 2048 },
+    { service: "web", pid: 302, ppid: 1, start_ticks: 101, user: "root", exe: "/usr/bin/tmux", identity: "live-identity", can_close: false, close_reason: "requires reap.kill_only_if" },
+  ];
+  await page.route("**/api/dashboard**", (route) => route.fulfill({ json: {
+    ...dashboard, sessions: { sources: [], ssh: [], terminal: [], database: [], strays },
+  } }));
+  await page.route("**/api/services/web/strays/301/reap**", (route) => route.fulfill({ json: { ok: true, message: "selected reap ok" } }));
+  await page.reload();
+  const deleted = page.locator("#session-rows tr", { hasText: "/usr/bin/screen-old" });
+  await expect(deleted).toBeVisible();
+  await expect(deleted).toContainText("executable deleted");
+  await expect(deleted).toContainText("12.5%");
+  await expect(deleted).toContainText("10 MiB");
+  await expect(deleted).toContainText("120s");
+  await expect(deleted).toContainText("1.02 KB/s");
+  await expect(deleted).toContainText("2.05 KB/s");
+  const live = page.locator("#session-rows tr", { hasText: "/usr/bin/tmux" });
+  await expect(live.getByRole("button")).toBeDisabled();
+  await expect(live).toContainText("requires reap.kill_only_if");
+  const request = page.waitForRequest((req) => req.method() === "POST" && new URL(req.url()).pathname === "/api/services/web/strays/301/reap");
+  await deleted.getByRole("button").click();
+  await page.locator('[data-simple-result="true"]').click();
+  const sent = await request;
+  expect(new URL(sent.url()).searchParams.get("identity")).toBe("deleted-identity");
+  expect(new URL(sent.url()).searchParams.get("start_ticks")).toBe("100");
+  expect(sent.headers()["x-sermo-generation"]).toBe("7");
+  expect(sent.headers()["x-sermo-csrf"]).toBe("1");
+  await expect(live).toBeVisible();
+});
+
+test("process rows never redirect a selected process action to whole-session close", async ({ page }) => {
+  const terminal = { service: "web", check: "tmux-root", multiplexer: "tmux", name: "ops", user: "root", state: "attached", identity: "$0:100", can_close: true, pids: [302] };
+  await page.route("**/api/dashboard**", (route) => route.fulfill({ json: {
+    ...dashboard, sessions: { sources: [], ssh: [], terminal: [terminal], database: [], strays: [
+      { service: "web", pid: 302, ppid: 301, start_ticks: 100, user: "root", exe: "/usr/bin/bash", identity: "workload", can_close: false, close_reason: "process does not match an authorized executable and real UID", terminal },
+      { service: "web", pid: 301, ppid: 1, start_ticks: 99, user: "root", exe: "/usr/bin/tmux", identity: "server", can_close: true, terminal },
+    ] },
+  } }));
+  const posts = [];
+  page.on("request", (req) => { if (req.method() === "POST") posts.push(new URL(req.url())); });
+  await page.reload();
+  const row = page.locator("#session-rows tr", { hasText: "/usr/bin/bash" });
+  await expect(row).toContainText("session member");
+  await expect(row).toContainText("tmux ops");
+  await expect(row.locator("[data-terminal-session-close]")).toHaveCount(0);
+  await expect(row.getByRole("button", { name: "Terminate process 302 (/usr/bin/bash)", exact: true })).toBeDisabled();
+  expect(posts).toHaveLength(0);
+  const server = page.locator("#session-rows tr", { hasText: "/usr/bin/tmux" });
+  await expect(server.locator("[data-terminal-session-close]")).toHaveCount(0);
+  await server.getByRole("button", { name: "Terminate process 301 (/usr/bin/tmux)", exact: true }).click();
+  await expect(page.locator("#simple-confirm-message")).toContainText("children or attached sessions may also exit");
+  await page.locator('[data-simple-result="false"]').click();
+  expect(posts).toHaveLength(0);
+  const close = page.locator('#session-rows [data-terminal-session-close]');
+  await expect(close).toHaveCount(1);
+  await close.click();
+  await expect(page.locator("#simple-confirm-message")).toContainText("all its windows, panes and running programs");
+  await page.locator('[data-simple-result="false"]').click();
+  expect(posts).toHaveLength(0);
+});
+
+async function showConsecutiveSessionRows(page) {
+  const terminal = { service: "web", check: "tmux-root", multiplexer: "tmux", name: "queued-session", user: "root", identity: "$9:100", can_close: true, pids: [504] };
+  await page.route("**/api/dashboard**", (route) => route.fulfill({ json: {
+    ...dashboard, sessions: { sources: [], ssh: [], terminal: [terminal], database: [], strays: [
+      { service: "web", pid: 501, ppid: 1, start_ticks: 101, user: "root", exe: "/usr/bin/bash", identity: "first", can_close: true },
+      { service: "web", pid: 502, ppid: 1, start_ticks: 102, user: "root", exe_previous: "/usr/bin/bash", identity: "second", can_close: true },
+      { service: "db", pid: 503, ppid: 1, start_ticks: 103, user: "root", exe: "/usr/bin/bash", identity: "independent", can_close: true },
+    ] },
+  } }));
+  await page.reload();
+}
+
+async function confirmSessionButton(page, selector) {
+  await page.locator(selector).click();
+  await page.locator('[data-simple-result="true"]').click();
+}
+
+test("consecutive session actions queue by service while other services remain independent", async ({ page }) => {
+  await showConsecutiveSessionRows(page);
+  const posts = [];
+  let release;
+  const held = new Promise((resolve) => { release = resolve; });
+  await page.route(/\/api\/services\/(web|db)\/(strays|terminal-sessions)\//, async (route) => {
+    const request = route.request();
+    posts.push({ path: new URL(request.url()).pathname, generation: request.headers()["x-sermo-generation"] });
+    if (request.url().includes("/strays/501/")) await held;
+    await route.fulfill({ json: { ok: true, message: "closed selected target" } });
+  });
+  try {
+    await confirmSessionButton(page, '[data-stray-pid="501"]');
+    await expect.poll(() => posts.length).toBe(1);
+    await confirmSessionButton(page, '[data-stray-pid="502"]');
+    const second = page.locator("#session-rows tr", { hasText: "502" });
+    await expect(second).toContainText("queued…");
+    await expect(second.locator("[data-stray-reap]")).toHaveCount(0);
+    await confirmSessionButton(page, '[data-terminal-session="queued-session"]');
+    await expect(page.locator("#session-rows tr", { hasText: "queued-session" })).toContainText("queued…");
+    await confirmSessionButton(page, '[data-stray-pid="503"]');
+    await expect.poll(() => posts.length).toBe(2);
+    expect(posts.map((p) => p.path)).toEqual(["/api/services/web/strays/501/reap", "/api/services/db/strays/503/reap"]);
+    // A slow operation must not expire its pending rows and expose duplicates.
+    await page.clock.install();
+    await page.clock.fastForward(121000);
+    await page.locator("#refresh-now").click();
+    await expect(second).toContainText("queued…");
+    expect(posts).toHaveLength(2);
+    release();
+    await expect.poll(() => posts.length).toBe(4);
+    expect(posts.slice(2).map((p) => p.path)).toEqual([
+      "/api/services/web/strays/502/reap", "/api/services/web/terminal-sessions/tmux-root/close",
+    ]);
+    expect(posts.every((p) => p.generation === "7")).toBe(true);
+    await expect(second).toContainText("closing…");
+  } finally { release(); }
+});
+
+for (const failure of ["blocked", "network"]) {
+  test(`a ${failure} session action keeps its row error and releases the next confirmed action`, async ({ page }) => {
+    await showConsecutiveSessionRows(page);
+    let release;
+    const held = new Promise((resolve) => { release = resolve; });
+    const posts = [];
+    let firstAttempts = 0;
+    await page.route("**/api/services/web/strays/**", async (route) => {
+      const path = new URL(route.request().url()).pathname;
+      posts.push(path);
+      if (path.includes("/501/") && ++firstAttempts === 1) {
+        await held;
+        if (failure === "network") await route.abort("failed");
+        else await route.fulfill({ status: 409, json: { ok: false, message: "operation in progress" } });
+        return;
+      }
+      await route.fulfill({ json: { ok: true, message: "selected process exited" } });
+    });
+    try {
+      await confirmSessionButton(page, '[data-stray-pid="501"]');
+      await confirmSessionButton(page, '[data-stray-pid="502"]');
+      await expect(page.locator("#session-rows tr", { hasText: "502" })).toContainText("queued…");
+      release();
+      await expect.poll(() => posts.length).toBe(2);
+      await expect(page.locator("#err")).toContainText("selected process exited");
+      const first = page.locator('[data-stray-pid="501"]').locator("xpath=ancestor::tr");
+      await expect(first.getByRole("alert")).toContainText(failure === "network" ? "Failed to fetch" : "operation in progress");
+      await page.locator("#refresh-now").click();
+      await expect(first.getByRole("alert")).toBeVisible();
+      await expect(first.getByRole("button")).toBeEnabled();
+      expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBeLessThanOrEqual(1);
+      await confirmSessionButton(page, '[data-stray-pid="501"]');
+      await expect.poll(() => posts.length).toBe(3);
+      expect(posts).toEqual(["/api/services/web/strays/501/reap", "/api/services/web/strays/502/reap", "/api/services/web/strays/501/reap"]);
+      await expect(page.locator("#session-rows [role=alert]")).toHaveCount(0);
+    } finally { release(); }
+  });
+}

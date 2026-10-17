@@ -8,13 +8,10 @@ import (
 	"sermo/internal/utmp"
 )
 
-// sshSudoBoundary recognizes a sudo-owned PTY left behind after SSH exits.
-// Neither utmp nor cgroup membership alone authorizes a close: the exact live
-// sudo frontend, its direct sudo PTY monitor with the same resolved utmp real
-// UID, and a configured live
-// sshd in the same non-root cgroup v2 are all required. No child workload's
-// executable (possibly replaced after an upgrade) authorizes the signal.
-type sshSudoBoundary struct {
+// sshSessionOwnership shares the process snapshot and cgroup evidence used to
+// verify sudo residuals and split OpenSSH session servers. A cgroup or utmp
+// record alone never authorizes a close.
+type sshSessionOwnership struct {
 	snapshot    map[int]process.Identity
 	filters     []process.IdentityFilter
 	resolveUser process.UserResolver
@@ -33,7 +30,7 @@ type sshSudoProcesses struct {
 	Monitor  process.Identity
 }
 
-func (s sshSudoBoundary) target(session utmp.Session, processes []process.Identity) (sshSudoProcesses, bool) {
+func (s sshSessionOwnership) target(session utmp.Session, processes []process.Identity) (sshSudoProcesses, bool) {
 	leader, ok := s.snapshot[session.PID]
 	if !ok || session.Host == "" || leader.PPID != 1 || !leader.TTYOK || leader.TTY != 0 {
 		return sshSudoProcesses{}, false
@@ -54,7 +51,7 @@ func (s sshSudoBoundary) target(session utmp.Session, processes []process.Identi
 	return sshSudoProcesses{}, false
 }
 
-func (s sshSudoBoundary) trustedSSHGroup(group string) bool {
+func (s sshSessionOwnership) trustedSSHGroup(group string) bool {
 	for _, id := range s.snapshot {
 		for _, filter := range s.filters {
 			matched, err := filter.Match(id, s.resolveUser, nil)
@@ -66,7 +63,7 @@ func (s sshSudoBoundary) trustedSSHGroup(group string) bool {
 	return false
 }
 
-func (s sshSudoBoundary) cgroup(pid int) string {
+func (s sshSessionOwnership) cgroup(pid int) string {
 	if group, cached := s.cgroups[pid]; cached {
 		return group
 	}

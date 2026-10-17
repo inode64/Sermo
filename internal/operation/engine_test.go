@@ -1900,6 +1900,7 @@ func TestCloseSessionRevalidatesThenSendsOnlyTERM(t *testing.T) {
 	if len(h.emitted) != 1 || h.emitted[0].Action != actionCloseSession {
 		t.Fatalf("events = %+v, want one close-session event", h.emitted)
 	}
+
 }
 
 func TestCloseSessionNeverSignalsWhenVerificationRejectsIt(t *testing.T) {
@@ -1982,6 +1983,11 @@ func TestCloseTerminalSessionUsesOperationSafetyPath(t *testing.T) {
 	}
 	if len(h.emitted) != 1 || h.emitted[0].Action != actionCloseSession {
 		t.Fatalf("events = %+v, want one close-session event", h.emitted)
+	}
+	for _, field := range []string{`multiplexer="tmux"`, `session="ops"`, `user="deploy"`, `check="tmux"`, `identity="$7:90"`} {
+		if !strings.Contains(res.Message, field) || !strings.Contains(h.emitted[0].Message, field) {
+			t.Fatalf("result/event missing target %s: %+v / %+v", field, res, h.emitted)
+		}
 	}
 }
 
