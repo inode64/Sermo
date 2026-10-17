@@ -156,6 +156,8 @@ const (
 	DataKeyPID                = "pid"
 	DataKeyPIDs               = "pids"
 	DataKeyProcesses          = "processes"
+	DataKeyLibraries          = "libraries"
+	DataKeyActionBlocked      = "action_blocked"
 	DataKeyPort               = fieldPort
 	DataKeyPowerCycles        = "power_cycles"
 	DataKeyPresent            = "present"

@@ -157,3 +157,9 @@ export function watchSLAAPI(name, since, metric = "") {
 export function watchMetricsAPI(name, metric, since) {
   return watchAPI(name, `${apiSinceSuffix(apiSuffixMetrics, since)}&${apiQueryMetric}=${encodeURIComponent(metric)}`);
 }
+
+// The server revalidates the complete displayed identity before selected reap.
+export function strayReapAPI(service, pid, startTicks, identity) {
+  const query = new URLSearchParams({ [apiQueryStartTicks]: String(startTicks), [apiQueryIdentity]: identity });
+  return serviceAPI(service, `/strays/${encodeURIComponent(pid)}/reap?${query.toString()}`);
+}

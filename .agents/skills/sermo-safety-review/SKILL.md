@@ -63,8 +63,10 @@ touches them.
 - Signal delivery uses a pidfd bound before revalidating the discovered start
   time, exact exe and real UID. Missing pidfd support fails closed; never fall
   back to signaling a numeric PID after authorizing a process snapshot.
-- An unreadable or `(deleted)` exe never matches. Leaving an unidentified
-  process alive beats killing the wrong one.
+- An unreadable exe never matches. A `(deleted)` exe cannot prove a healthy
+  start; residual cleanup, including selected manual reap, requires the exact
+  previous path, real UID, verified kernel-held file and service ownership.
+  Leaving an unidentified process alive beats killing the wrong one.
 - Prefer extra evidence: pidfile, systemd cgroup or MainPID, parent tree,
   OpenRC supervise metadata, a listening port owned by the PID.
 - `SIGKILL` requires `force_kill: true` plus a `kill_only_if` clause with both
@@ -75,6 +77,16 @@ touches them.
 - External commands are argv arrays through the `execx` runner with a context
   and timeout; no shell, no interpolated user input, no ignored errors or
   cancellation.
+
+Manual session close is distinct from service residual cleanup: split OpenSSH
+session servers may survive their listener and remain delegated during stop.
+Closing one requires remote utmp/terminal ancestry, an exact helper executable
+and real UID, the live configured listener's non-root cgroup, fresh generation
+verification, and pidfd delivery. A deleted helper also needs its pinned
+kernel-held file. A UI association with tmux/screen grants no reap authority.
+Process rows must keep their own selected-process action, never redirect it to
+whole-session close. Whole-session close belongs only on the session row, with
+its effects on windows, programs and attached clients explicit in confirmation.
 
 ## Red flags
 

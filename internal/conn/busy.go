@@ -3,6 +3,7 @@ package conn
 import (
 	"errors"
 	"fmt"
+	"io"
 	"maps"
 	"slices"
 	"strconv"
@@ -43,6 +44,18 @@ func (b Busy) String() string {
 // busyFailurePrefix opens every busy verdict, so the message says the server
 // answered before it says why.
 const busyFailurePrefix = "server busy: "
+
+// OpenSSH sends this pre-identification refusal when connection admission
+// limits reject a client. Only a complete reply followed by EOF establishes
+// that verdict; a timeout or arbitrary banner remains a transport error.
+const sshAdmissionRefused = "Not allowed at this time"
+
+func sshBannerBusy(raw []byte, err error) (Busy, bool) {
+	if errors.Is(err, io.EOF) && strings.TrimRight(string(raw), protocolTrimCRLF) == sshAdmissionRefused {
+		return Busy{Reason: sshAdmissionRefused}, true
+	}
+	return Busy{}, false
+}
 
 // Message is the verdict as every consumer reports it: Result.Failure, a sql
 // or db_queries failure ("server busy: Too many connections (1040)").

@@ -104,7 +104,7 @@ func TestResidualSudoSSHSession(t *testing.T) {
 				}
 				return testSSHLookup().ResolveUser(name)
 			}
-			evidence := sshSudoBoundary{snapshot: p, filters: mustSSHDFilters(t), resolveUser: resolveUser, cgroups: make(map[int]string), readFile: func(path string) ([]byte, error) {
+			evidence := sshSessionOwnership{snapshot: p, filters: mustSSHDFilters(t), resolveUser: resolveUser, cgroups: make(map[int]string), readFile: func(path string) ([]byte, error) {
 				var pid int
 				if _, err := fmt.Sscanf(path, "/proc/%d/cgroup", &pid); err != nil {
 					return nil, err
@@ -115,10 +115,7 @@ func TestResidualSudoSSHSession(t *testing.T) {
 				}
 				return nil, errors.New("unreadable")
 			}}
-			sample, err := sampleSSHSessions([]utmp.Session{session}, p, testSSHTerminal(now), now, evidence.filters, evidence.resolveUser, evidence.target)
-			if err != nil {
-				t.Fatal(err)
-			}
+			sample := sampleSSHSessions([]utmp.Session{session}, p, testSSHTerminal(now), now, evidence.filters, evidence.resolveUser, evidence.target)
 			if got := len(sample.SSH) == 1; got != tc.want {
 				t.Fatalf("sample=%+v, want verified=%v", sample, tc.want)
 			}

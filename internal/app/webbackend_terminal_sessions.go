@@ -15,7 +15,6 @@ import (
 	"sermo/internal/metrics"
 	"sermo/internal/operation"
 	"sermo/internal/process"
-	"sermo/internal/utmp"
 	"sermo/internal/web"
 )
 
@@ -104,6 +103,7 @@ func (b *WebBackend) Sessions(_ context.Context) web.SessionInventory {
 		}
 		b.appendSSHSessions(&result, seenSSH, service, entry)
 		b.appendTerminalSessions(&result, service, entry)
+		b.appendStraySessions(&result, service, entry)
 	}
 	b.appendDBQueries(&result)
 	b.attachSessionMetrics(&result)
@@ -161,10 +161,12 @@ func (b *WebBackend) attachSessionMetrics(inventory *web.SessionInventory) {
 	b.sessionMetricsMu.Lock()
 	defer b.sessionMetricsMu.Unlock()
 	var snapshot sessionProcessSnapshot
-	if len(inventory.SSH) > 0 || len(inventory.Terminal) > 0 {
+	if len(inventory.SSH) > 0 || len(inventory.Terminal) > 0 || len(inventory.Strays) > 0 {
 		snapshot = newSessionProcessSnapshot(b.terminalProcessReader)
 	}
-	active := make(map[string]struct{}, len(inventory.SSH)+len(inventory.Terminal))
+	b.attachStrayTerminals(inventory, snapshot)
+	active := make(map[string]struct{}, len(inventory.SSH)+len(inventory.Terminal)+len(inventory.Strays))
+	accessedAt := cachedTerminalAccess(b.terminalAccessedAt)
 	for i := range inventory.SSH {
 		session := &inventory.SSH[i]
 		key := sshSessionMetricKey(*session)
@@ -181,8 +183,9 @@ func (b *WebBackend) attachSessionMetrics(inventory *web.SessionInventory) {
 		if b.sessionMetricCollector != nil && len(pids) > 0 {
 			session.SessionUsage = sessionUsage(b.sessionMetricCollector.SampleService(key, pids))
 		}
-		attachTerminalSessionIdle(snapshot, session, pids, b.webNow())
+		attachTerminalSessionIdle(snapshot, session, pids, b.webNow(), accessedAt)
 	}
+	b.attachStrayMetrics(inventory, snapshot, active, accessedAt)
 	if b.sessionMetricCollector != nil {
 		for key := range b.sessionMetricKeys {
 			if _, ok := active[key]; !ok {
@@ -210,7 +213,7 @@ func sessionUsage(sample metrics.Snapshot) web.SessionUsage {
 	return result
 }
 
-func attachTerminalSessionIdle(snapshot sessionProcessSnapshot, session *web.TerminalSession, pids []int, now time.Time) {
+func attachTerminalSessionIdle(snapshot sessionProcessSnapshot, session *web.TerminalSession, pids []int, now time.Time, accessedAt func(uint64) (time.Time, bool)) {
 	if session.ActivityUnix > 0 {
 		session.IdleSeconds = max(now.Unix()-session.ActivityUnix, 0)
 		session.HasIdle = true
@@ -222,7 +225,7 @@ func attachTerminalSessionIdle(snapshot sessionProcessSnapshot, session *web.Ter
 		if !identity.TTYOK || identity.TTY == 0 {
 			continue
 		}
-		if at, ok := utmp.TerminalAccessedAt(utmp.DevRoot, identity.TTY); ok && at.After(latest) {
+		if at, ok := accessedAt(identity.TTY); ok && at.After(latest) {
 			latest = at
 		}
 	}

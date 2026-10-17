@@ -43,7 +43,8 @@ func TestOpenDeletedExecutablePinsUnlinkedFile(t *testing.T) {
 	}{
 		{name: "unlinked executable", want: true},
 		{name: "literal suffix is not unlink", linked: true},
-		{name: "non executable", noExec: true},
+		{name: "permissions cleared after execution", noExec: true, want: true},
+		{name: "cleared permissions do not prove unlink", noExec: true, linked: true},
 		{name: "other namespace", otherNamespace: true},
 		{name: "changed proc link", badLink: true},
 		{name: "unreadable", unreadable: true},
@@ -52,9 +53,6 @@ func TestOpenDeletedExecutablePinsUnlinkedFile(t *testing.T) {
 			t.Parallel()
 			path := filepath.Join(t.TempDir(), "executable")
 			mode := os.FileMode(0o700)
-			if tc.noExec {
-				mode = 0o600
-			}
 			if err := os.WriteFile(path, []byte("fixture"), mode); err != nil {
 				t.Fatal(err)
 			}
@@ -63,6 +61,11 @@ func TestOpenDeletedExecutablePinsUnlinkedFile(t *testing.T) {
 				t.Fatal(err)
 			}
 			t.Cleanup(func() { _ = f.Close() })
+			if tc.noExec {
+				if err := f.Chmod(0); err != nil {
+					t.Fatal(err)
+				}
+			}
 			if !tc.linked {
 				if err := os.Remove(path); err != nil {
 					t.Fatal(err)

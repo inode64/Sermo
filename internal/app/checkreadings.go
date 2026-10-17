@@ -434,6 +434,7 @@ var checkReadingsByType = map[string]func(map[string]any) []web.WatchReading{
 	checks.CheckTypeUnownedProcesses: unownedProcessesCheckReadings,
 	checks.CheckTypeDBQueries:        dbQueriesCheckReadings,
 	checks.CheckTypeStaleBinary:      staleBinaryCheckReadings,
+	checks.CheckTypeStaleLibraries:   staleBinaryCheckReadings,
 	checks.CheckTypeStrays:           straysCheckReadings,
 	checks.CheckTypeSize:             sizeCheckReadings,
 	checks.CheckTypeTCP:              connCheckReadings,

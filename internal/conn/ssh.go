@@ -51,6 +51,9 @@ func (sshProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	// bytes are consumed) and replay it to the ssh handshake via prefixConn.
 	raw, banner, err := readSSHBanner(c)
 	if err != nil {
+		if busy, ok := sshBannerBusy(raw, err); ok {
+			return busyResult(Result{}, busy), nil
+		}
 		return Result{}, fmt.Errorf("read ssh banner: %w", err)
 	}
 	if !strings.HasPrefix(banner, sshBannerPrefix) {

@@ -118,7 +118,7 @@ func TestTerminalSessionsCheckRunsReadOnlyClientAsConfiguredUser(t *testing.T) {
 		t.Fatalf("result = %+v, want available firing condition", result)
 	}
 	calls := runner.Calls()
-	if len(calls) != 1 || calls[0].User != "deploy" || calls[0].Name != "/usr/bin/tmux" || !reflect.DeepEqual(calls[0].Args, []string{"list-sessions", "-F", tmuxSessionFormat}) || !runner.SawDeadline() {
+	if len(calls) != 1 || calls[0].User != "deploy" || calls[0].Name != "/usr/bin/tmux" || !reflect.DeepEqual(calls[0].Args, []string{"list-panes", "-a", "-F", tmuxSessionFormat}) || !runner.SawDeadline() {
 		t.Fatalf("RunUser calls = %+v (deadline=%v), want configured tmux query", calls, runner.SawDeadline())
 	}
 	if result.Data[DataKeyCount] != 2 || result.Data[DataKeyAttached] != 1 || result.Data[DataKeyDetached] != 1 || result.Data[DataKeyPresent] != true {
@@ -235,9 +235,9 @@ func TestCloseEmptyTmuxServer(t *testing.T) {
 			name:    "closes only an empty live server",
 			results: []execx.Result{{ExitCode: execx.ExitCodeSuccess}, {ExitCode: execx.ExitCodeSuccess}, {ExitCode: 1, Stderr: "no server running on /tmp/tmux-1000/default"}},
 			wantCalls: [][]string{
-				{"deploy", "/usr/bin/tmux", "-S", "/tmp/tmux-1000/default", "list-sessions", "-F", tmuxSessionFormat},
+				{"deploy", "/usr/bin/tmux", "-S", "/tmp/tmux-1000/default", "list-panes", "-a", "-F", tmuxSessionFormat},
 				{"deploy", "/usr/bin/tmux", "-S", "/tmp/tmux-1000/default", "kill-server"},
-				{"deploy", "/usr/bin/tmux", "-S", "/tmp/tmux-1000/default", "list-sessions", "-F", tmuxSessionFormat},
+				{"deploy", "/usr/bin/tmux", "-S", "/tmp/tmux-1000/default", "list-panes", "-a", "-F", tmuxSessionFormat},
 			},
 		},
 		{
@@ -245,7 +245,7 @@ func TestCloseEmptyTmuxServer(t *testing.T) {
 			results: []execx.Result{{ExitCode: 1, Stderr: "no server running on /tmp/tmux-1000/default"}},
 			wantErr: "no longer active",
 			wantCalls: [][]string{
-				{"deploy", "/usr/bin/tmux", "-S", "/tmp/tmux-1000/default", "list-sessions", "-F", tmuxSessionFormat},
+				{"deploy", "/usr/bin/tmux", "-S", "/tmp/tmux-1000/default", "list-panes", "-a", "-F", tmuxSessionFormat},
 			},
 		},
 		{
@@ -253,7 +253,7 @@ func TestCloseEmptyTmuxServer(t *testing.T) {
 			results: []execx.Result{{ExitCode: execx.ExitCodeSuccess, Stdout: "ops\t0\t1\t100\t$1\t90\t201\t/dev/pts/1\n"}},
 			wantErr: "has active sessions",
 			wantCalls: [][]string{
-				{"deploy", "/usr/bin/tmux", "-S", "/tmp/tmux-1000/default", "list-sessions", "-F", tmuxSessionFormat},
+				{"deploy", "/usr/bin/tmux", "-S", "/tmp/tmux-1000/default", "list-panes", "-a", "-F", tmuxSessionFormat},
 			},
 		},
 		{
@@ -261,9 +261,9 @@ func TestCloseEmptyTmuxServer(t *testing.T) {
 			results: []execx.Result{{ExitCode: execx.ExitCodeSuccess}, {ExitCode: execx.ExitCodeSuccess}, {ExitCode: execx.ExitCodeSuccess}},
 			wantErr: "remains active",
 			wantCalls: [][]string{
-				{"deploy", "/usr/bin/tmux", "-S", "/tmp/tmux-1000/default", "list-sessions", "-F", tmuxSessionFormat},
+				{"deploy", "/usr/bin/tmux", "-S", "/tmp/tmux-1000/default", "list-panes", "-a", "-F", tmuxSessionFormat},
 				{"deploy", "/usr/bin/tmux", "-S", "/tmp/tmux-1000/default", "kill-server"},
-				{"deploy", "/usr/bin/tmux", "-S", "/tmp/tmux-1000/default", "list-sessions", "-F", tmuxSessionFormat},
+				{"deploy", "/usr/bin/tmux", "-S", "/tmp/tmux-1000/default", "list-panes", "-a", "-F", tmuxSessionFormat},
 			},
 		},
 	}
@@ -481,5 +481,44 @@ func TestCloseTerminalSessionUsesExactScreenClientTarget(t *testing.T) {
 	wantClose := []string{"deploy", "/usr/bin/screen", "-S", "120.ops", "-X", "quit"}
 	if len(runner.calls) != 2 || !reflect.DeepEqual(runner.calls[1], wantClose) {
 		t.Fatalf("calls = %#v, want exact close %#v", runner.calls, wantClose)
+	}
+}
+
+func TestTmuxSessionsIncludeAllPanes(t *testing.T) {
+	rows := "main\t1\t2\t100\t$0\t90\t201\t/dev/pts/1\nmain\t1\t2\t100\t$0\t90\t202\t/dev/pts/2\nother\t0\t1\t100\t$1\t91\t203\t/dev/pts/3"
+	sessions, err := parseTmuxSessions(TerminalSessionConfig{User: "root"}, rows)
+	if err != nil || len(sessions) != 2 || !reflect.DeepEqual(sessions[0].PIDs, []int{201, 202}) {
+		t.Fatalf("sessions=%+v err=%v", sessions, err)
+	}
+}
+
+func TestTmuxRetainedDeadPaneHasNoTTY(t *testing.T) {
+	sessions, err := parseTmuxSessions(TerminalSessionConfig{User: "root"}, "finished\t0\t1\t100\t$0\t90\t201\t\n")
+	if err != nil || len(sessions) != 1 || sessions[0].Identity != "$0:90" || sessions[0].TTY != "" {
+		t.Fatalf("sessions=%+v err=%v", sessions, err)
+	}
+}
+
+func TestTmuxEmptyPaneListRequiresIndependentEmptySessionList(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		result  execx.Result
+		wantErr bool
+	}{
+		{name: "empty", result: execx.Result{ExitCode: 0}},
+		{name: "session appeared", result: execx.Result{ExitCode: 0, Stdout: "ops\t0\t1\t100\t$7\t90\t201\t/dev/pts/1"}, wantErr: true},
+		{name: "error", result: execx.Result{ExitCode: 1, Stderr: "denied"}, wantErr: true},
+		{name: "command unavailable", result: execx.Result{ExitCode: execx.ExitCodeRunFailure}, wantErr: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			runner := &terminalSessionSequenceRunner{results: []execx.Result{{ExitCode: 1, Stderr: "no current target"}, tc.result}}
+			sample, err := sampleTerminalSessions(t.Context(), runner, TerminalSessionConfig{Multiplexer: TerminalMultiplexerTmux, Binary: "/usr/bin/tmux", User: "root", Socket: "/tmp/tmux-0/default"})
+			if (err != nil) != tc.wantErr || !tc.wantErr && (!sample.Present || len(sample.Sessions) != 0) {
+				t.Fatalf("sample=%+v err=%v", sample, err)
+			}
+			if len(runner.calls) != 2 || !reflect.DeepEqual(runner.calls[1], []string{"root", "/usr/bin/tmux", "-S", "/tmp/tmux-0/default", "list-sessions", "-F", tmuxSessionFormat}) {
+				t.Fatalf("calls=%v", runner.calls)
+			}
+		})
 	}
 }

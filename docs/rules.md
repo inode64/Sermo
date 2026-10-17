@@ -88,6 +88,7 @@ Connection-protocol checks (MySQL, PostgreSQL, Redis, Docker, libvirt, etc.) are
 | `raid`        | condition | a Linux md software-RAID array is degraded/recovering (`degraded`/`recovering`/`arrays`) (see Hardware sensors)|
 | `lvm`         | health | every LVM volume group and logical volume reports healthy (see Hardware sensors) |
 | `stale_binary` | condition | no attributed process runs a binary replaced on disk since it started (service-injected; also available explicitly) |
+| `stale_libraries` | state | no executable shared-library mapping differs from the installed inode; `failed:` alerts, explicit service rules can restart after stable, complete main-process evidence; host inventories are advisory |
 | `strays`      | condition | the init unit's control group holds no process outside the configured selectors (service-injected; also available explicitly) |
 | `edac`        | condition | ECC memory errors from EDAC (`ce` correctable / `ue` uncorrectable) (see Hardware sensors)|
 | `memory`      | condition | system RAM vs the kernel's MemAvailable (used_pct/available_pct/available_bytes) |
@@ -988,9 +989,12 @@ user through the installed `tmux` or GNU `screen` client. It is a
 condition-style check; use `reports: state` to make it an informational
 active/inactive sensor. The result exposes total `count`, `attached` and
 `detached` sessions. The Web UI shows the individual sessions in its top-level
-Sessions panel, together with SSH sessions. An administrator may close one row;
+Sessions panel, together with SSH sessions. An administrator may close a session row;
 the action re-lists that configured namespace and requires the same session
 generation before invoking the multiplexer client's exact close command.
+Closing a session terminates all its windows, panes and programs and disconnects
+attached clients. Associated process rows retain their own selected-process
+action and authorization; they never redirect to whole-session close.
 An explicitly socket-configured tmux server that is live but has zero sessions
 appears as `empty`; an administrator may close that server manually. Sermo
 re-lists it, refuses the action if a session appeared, then invokes tmux's
@@ -1339,6 +1343,16 @@ keep the per-protocol entries short:
 HTTP-based protocol exchanges reject response-body read errors, including
 timeouts and premature disconnects; a matching partial response is not accepted.
 
+#### Advisory library observations
+
+`stale_libraries` returns `action_blocked: true` while its inventory is
+incomplete, replacements are missing or unstable, only child processes are
+affected, or its scope is the host. Alerts can report the finding; rules with
+operations treat that observation as unknown, including under `not`. Guards
+fail closed. Host watches notify but withhold both firing and recovery hooks.
+See [running library checks](configuration.md#stale_libraries--processes-using-replaced-shared-libraries)
+for update locks, ownership requirements and the opt-in restart example.
+
 #### Busy servers
 
 A server that answers "too many connections", "loading", "starting up" or
@@ -1376,6 +1390,7 @@ socket — is not busy, and a restart rule still fires for it.
 
 | Protocol | Busy answers |
 |---|---|
+| `ssh` | Exact pre-identification `Not allowed at this time` refusal followed by EOF (OpenSSH connection admission limits) |
 | `mysql` / `mariadb` | errors 1040 too many connections, 1041 out of resources, 1129 host blocked, 1135 cannot create thread, 1203 `max_user_connections`, 1226 user resource limit |
 | `postgres` | SQLSTATE class `53` (too many clients, disk full, out of memory, configuration limit) and `57P03` (starting up, in recovery, shutting down) |
 | `redis` (Valkey, KeyDB) | `LOADING`, `BUSY`, `MASTERDOWN`, `MISCONF`, `ERR max number of clients reached` |

@@ -8,8 +8,8 @@ import (
 )
 
 func TestPIDFDSignalChecksIdentity(t *testing.T) {
-	target := Process{PID: 100, StartTicks: 42, UID: 110, Exe: testExe, ExeOK: true}
-	valid := Identity{PID: 100, StartTicks: 42, StartTicksOK: true, UID: 110, Exe: testExe, ExeOK: true}
+	target := Process{PID: 100, StartTicks: 42, UID: 110, Exe: testExe, ExeOK: true, Cgroup: "0::/service"}
+	valid := Identity{PID: 100, StartTicks: 42, StartTicksOK: true, UID: 110, Exe: testExe, ExeOK: true, Cgroup: "0::/service"}
 	tests := []struct {
 		name        string
 		change      func(*Identity)
@@ -21,6 +21,7 @@ func TestPIDFDSignalChecksIdentity(t *testing.T) {
 		wantErr     bool
 	}{
 		{name: "matching generation", wantSend: true},
+		{name: "changed cgroup", change: func(id *Identity) { id.Cgroup = "0::/other" }, wantErr: true},
 		{name: "recycled pid", change: func(id *Identity) { id.StartTicks++ }, wantErr: true},
 		{name: "changed exe", change: func(id *Identity) { id.Exe = "/other" }, wantErr: true},
 		{name: "changed user", change: func(id *Identity) { id.UID++ }, wantErr: true},

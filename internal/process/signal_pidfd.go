@@ -92,6 +92,9 @@ func sameSignalIdentity(target Process, id Identity) bool {
 	if !id.StartTicksOK || id.StartTicks != target.StartTicks || id.UID != target.UID {
 		return false
 	}
+	if target.Cgroup != "" && id.Cgroup != target.Cgroup {
+		return false
+	}
 	if target.ExePrev != "" {
 		return !id.ExeOK && id.ExePrev == target.ExePrev && id.ExeFile == target.ExeFile && id.ExeFile.Inode != 0 && id.Cgroup == target.Cgroup
 	}

@@ -130,6 +130,12 @@ func straysData(strays []process.Process, exes []string, threshold float64) map[
 		DataKeyThreshold: threshold,
 	}
 	if len(strays) > 0 {
+		rows := make([]process.Process, len(strays))
+		copy(rows, strays)
+		for i := range rows {
+			rows[i].Cmdline = nil
+		}
+		data[DataKeyProcesses] = rows
 		data[DataKeyPIDs] = joinedPIDs(strays, func(stray process.Process) int { return stray.PID })
 		data[DataKeyPath] = strings.Join(exes, ",")
 	}

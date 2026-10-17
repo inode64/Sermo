@@ -85,14 +85,21 @@ func (o Observation) VerifyExited(procs []Process) error {
 // Observe reuses discovery and matching against one immutable snapshot. It does
 // not signal processes or mutate the init state.
 func (d Discoverer) Observe(selectors []Selector) (Observation, error) {
-	return d.observe(selectors, false)
+	return d.observe(selectors, false, true)
+}
+
+// ObserveCached shares the monitor's bounded-freshness snapshot. It is for
+// read-only inventory; consumers must revalidate live identities before using
+// the result as evidence. Operations always use Observe or ObserveTracked.
+func (d Discoverer) ObserveCached(selectors []Selector) (Observation, error) {
+	return d.observe(selectors, false, false)
 }
 
 // ObserveTracked retains a complete snapshot while following old generations,
 // even when the backend stops reporting PIDs and no selectors are configured.
 // It does not turn loss of backend attribution into proof of process exit.
 func (d Discoverer) ObserveTracked(selectors []Selector, previous []Process) (Observation, error) {
-	out, err := d.observe(selectors, len(previous) > 0)
+	out, err := d.observe(selectors, len(previous) > 0, true)
 	if err != nil {
 		return out, err
 	}
@@ -100,13 +107,13 @@ func (d Discoverer) ObserveTracked(selectors []Selector, previous []Process) (Ob
 	return out, nil
 }
 
-func (d Discoverer) observe(selectors []Selector, requireSnapshot bool) (Observation, error) {
+func (d Discoverer) observe(selectors []Selector, requireSnapshot, fresh bool) (Observation, error) {
 	backend := backendPIDSeeds(d.BackendPIDs)
 	if len(selectors) == 0 && len(backend) == 0 && !requireSnapshot {
 		return Observation{}, nil
 	}
 	reader := d.reader()
-	if inv, ok := reader.(interface{ Invalidate() }); ok {
+	if inv, ok := reader.(interface{ Invalidate() }); ok && fresh {
 		inv.Invalidate()
 	}
 	snapshot, err := Snapshot(reader)

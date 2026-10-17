@@ -129,6 +129,7 @@ func BuildServiceRuntime(ctx context.Context, cfg ServiceRuntimeConfig) ServiceR
 		PidfileFallbackPIDs: pidfileFallbackPIDs(needPidfileFallback, backendPIDs, procInfo),
 		PidfileClaim:        pidfileClaim(discoverer, selectors, backendPIDs),
 		StaleBinaries:       func() []process.StaleBinary { return discoverer.StaleBinaries(selectors) },
+		StaleLibraries:      serviceStaleLibraries(discoverer, selectors),
 		Strays: func() []process.Process {
 			procs, _ := discoverer.Discover(selectors)
 			return process.Strays(procs)

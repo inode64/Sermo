@@ -606,8 +606,10 @@ Kill decisions depend on how process facts are read, so this is fixed:
   A deleted executable remains distinct from a current executable: it cannot
   prove a healthy new start or authorize a signal reload. Residual cleanup may
   send TERM/KILL only when the exact previous path and real UID match the
-  configured policy, and opening `/proc/PID/exe` verifies a regular executable
-  with zero links in the same mount namespace. The file stays open during
+  configured policy, and opening `/proc/PID/exe` verifies a regular file
+  with zero links in the same mount namespace. Permissions may have been cleared
+  during package removal: the kernel's executable link proves the file's role,
+  without requiring permission to execute it again. The file stays open during
   delivery; device/inode, PID generation, UID, previous path and cgroup are
   revalidated after opening the pidfd. The pathname alone is insufficient.
   This exception is limited to service residual cleanup. Host process watches
@@ -761,6 +763,12 @@ relaxes no invariant:
 - The result is `ok` only when no stray remains; a spared or surviving one makes it
   `orphan_processes` and lists what is left.
 
+Selected reaping from Sessions uses the same authorization, locks and guards,
+restricted to the displayed PID generation and executable/UID/cgroup identity.
+It never expands to descendants. Leaving the service's inventory without a
+verified process exit is a failure, not successful cleanup. A deleted executable
+uses the same held-file verification as residual cleanup.
+
 No rule action can reap. Reaping means terminating a process Sermo cannot name,
 and that decision stays with the operator.
 
@@ -823,3 +831,31 @@ then at most one operation.
 
 A start, restart, reload or resume is reported as failed when the backend status
 cannot be read after the action, even when no postflight checks are configured.
+
+The opt-in `stale_libraries` check is read-only. Only complete, stable findings
+on a unique main process with an exact executable and real-user selector may
+drive an explicitly configured service restart rule. Host inventories,
+child-only findings, missing replacements and uncertain identities remain
+advisory (`action_blocked`), including under negated conditions. The operation
+engine retains every normal lock, guard and preflight. Package transactions
+must hold the affected services' named locks; the observation stability window
+does not detect an update's completion. See the
+[configuration and limits](configuration.md#stale_libraries--processes-using-replaced-shared-libraries).
+
+### Surviving interactive sessions
+
+A manual SSH session close may identify a split OpenSSH session server whose
+listener has exited. Sermo verifies the remote utmp leader, exact helper
+executable and real UID, live terminal ancestry and the configured listener's
+non-root cgroup v2. Deleted executables require the kernel-held file identity,
+revalidated through a pidfd before SIGTERM. This session-specific authority
+never changes delegated-workload protection during service stop or restart.
+
+A diagnostic process associated with a terminal session keeps its own selected
+process action; association never redirects that action to the whole session or
+grants process signal authority. Every selected process requires explicit
+service-local `reap.kill_only_if` authorization. Only the session row offers
+whole-session close, which terminates its windows, panes and programs and
+disconnects attached clients. The configured client revalidates the named
+session generation. Signalling a parent process can also cause its children or
+attached sessions to exit, even though Sermo selects only that PID.

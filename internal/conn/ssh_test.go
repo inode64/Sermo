@@ -2,9 +2,12 @@ package conn
 
 import (
 	"bytes"
+	"context"
+	"io"
 	"net"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestParseSSHBanner(t *testing.T) {
@@ -73,5 +76,39 @@ func TestReadSSHBannerReportsServerRejection(t *testing.T) {
 	}
 	if banner != "" || string(raw) != "Not allowed at this time\r\n" {
 		t.Fatalf("raw/banner = %q/%q, want the rejected pre-banner only", raw, banner)
+	}
+}
+
+func TestSSHAdmissionRefusalIsBusy(t *testing.T) {
+	port := serveBanner(t, "Not allowed at this time\r\n", nil)
+	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+	defer cancel()
+	res, err := (sshProtocol{}).Probe(ctx, Config{Host: "127.0.0.1", Port: port})
+	if err != nil || !res.Busy || res.Failure == "" || res.Extra[ExtraKeyBusyReason] != sshAdmissionRefused {
+		t.Fatalf("probe = %+v, %v; want an explicit busy refusal", res, err)
+	}
+}
+
+func TestSSHBannerBusyRequiresExactCompletedRefusal(t *testing.T) {
+	for _, tt := range []struct {
+		name string
+		raw  string
+		err  error
+		want bool
+	}{
+		{name: "refusal", raw: "Not allowed at this time\r\n", err: io.EOF, want: true},
+		{name: "timeout", raw: "Not allowed at this time\r\n", err: context.DeadlineExceeded},
+		{name: "cancelled", raw: "Not allowed at this time\r\n", err: context.Canceled},
+		{name: "no error", raw: "Not allowed at this time\r\n"},
+		{name: "unknown refusal", raw: "Access denied\r\n", err: io.EOF},
+		{name: "empty close", err: io.EOF},
+		{name: "valid banner", raw: "Not allowed at this time\r\nSSH-2.0-test\r\n", err: io.EOF},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			_, got := sshBannerBusy([]byte(tt.raw), tt.err)
+			if got != tt.want {
+				t.Fatalf("busy = %v, want %v", got, tt.want)
+			}
+		})
 	}
 }

@@ -154,6 +154,9 @@ preflight:
 
 Set a top-level `interval` on an app or library profile to override the global
 `engine.artifact_interval` (default `5m`) used for artifact inspection.
+For processes that still map an older library after an update, use the opt-in
+[`stale_libraries` check](configuration.md#stale_libraries--processes-using-replaced-shared-libraries).
+It inspects running mappings and also detects updates made before Sermo started.
 When a service subscribes through `restart_on_change.libraries`, Sermo also
 adds that library file as a required preflight check for start, restart, reload
 and resume; a missing, non-regular or empty library file blocks the operation.
@@ -1300,6 +1303,67 @@ Detection is separate from clearing: Sermo injects a `strays` check into every
 init-managed service that declares selectors, reporting the count and the
 executables without alerting. See
 [configuration.md](configuration.md#strays--processes-the-service-cannot-account-for).
+
+The Sessions panel and `sermoctl sessions SERVICE` also show unclaimed processes
+from the current `strays` sample, including the previous path of an executable
+removed from disk. These are diagnostic rows: an unclaimed process can still be
+useful work. A missing screen/tmux client does not hide the process inventory.
+Each row explains missing cleanup authorization. CPU, memory and I/O metrics
+measure that PID alone, including when its executable was deleted. CPU and I/O
+rates require two samples. Idle measures terminal activity (including descendant
+terminals for a multiplexer server); without a readable terminal it is unknown.
+A reused PID does not inherit the previous process's metric baselines.
+
+To terminate exactly one listed process, use the row's terminate button or:
+
+```sh
+sermoctl sessions reap ssh 12345
+```
+
+This reuses `reap.kill_only_if`, operation locks, guards and audit reporting.
+The displayed executable, real UID, cgroup and process generation must still
+match. Deleted executables additionally require the verified kernel-held file.
+Only that PID generation is selected; descendants and other sessions are not
+selected implicitly. Sermo verifies exit before reporting success. Prefer this
+to broad reaping when an SSH cgroup also contains active terminal workloads.
+Terminating a parent can still cause its children or attached sessions to exit.
+
+In one browser tab, confirmed session/process closes for the same service run
+in order. Later rows show **queued** until the preceding request finishes;
+other services remain independent. Each request retains the confirmed identity
+and configuration generation, which the server revalidates before acting.
+Failures remain visible beside the affected row's button and can be retried
+explicitly. Operations from other tabs or clients can still hold the service
+lock; a refusal is reported rather than retried automatically.
+
+Processes belonging to a listed tmux or screen session are labelled **session
+member**. Their action still targets only that process and requires its own
+`reap.kill_only_if` authorization. Whole-session close is offered only on the
+session row and terminates its windows, panes and programs. Association
+does not grant permission to reap the individual workload. All tmux panes
+are sampled, including inactive windows and retained dead panes. When pane
+listing reports no current target, a separate successful empty session listing
+is required before Sermo offers to close an empty tmux server. A shared server is not attributed to
+one session when several sessions use it. Other unclaimed processes remain
+visible with their exact authorization refusal. To enable individual cleanup,
+configure `reap.kill_only_if` for the reviewed executable and real user; do not
+infer that a detached session or a deleted executable is abandoned work.
+
+On cgroup v2 hosts, the SSH inventory also recognizes a split OpenSSH
+`sshd-session` server reparented to PID 1 after the listener was restarted.
+Recognition requires the remote utmp leader, its terminal's live ancestry,
+a known absolute OpenSSH helper path, the configured listener's real UID and
+shared non-root cgroup. A replaced helper additionally needs its verified
+kernel-held executable. Manual close sends SIGTERM through the operation engine
+and verifies exit; it never terminates the current listener. Unverifiable
+sessions remain unavailable. Local graphical consoles are not SSH sessions.
+A missing utmp database still makes the SSH source unavailable; it does not
+prevent independent tmux or screen sources from working.
+
+If a terminal client was uninstalled, disable its obsolete `terminal_sessions`
+watch in `services.local` after reviewing the remaining processes. If upgraded,
+update its `binary` to the installed, resolved executable. Do not execute the
+unlinked executable through `/proc/PID/exe` as a replacement client.
 
 ### `pidfile:` and `pidfiles:` shorthand (selectors + health checks)
 

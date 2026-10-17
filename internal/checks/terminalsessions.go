@@ -243,6 +243,9 @@ func sampleTerminalSessions(ctx context.Context, runner execx.Runner, config Ter
 	runner = execx.RunnerOrDefault(runner)
 	result, err := execx.RunUser(ctx, runner, execx.NoTimeout, config.User, config.Binary, adapter.args(config)...)
 	output := strings.TrimSpace(result.Stdout + "\n" + result.Stderr)
+	if config.Multiplexer == TerminalMultiplexerTmux && result.ExitCode == 1 && output == "no current target" {
+		return sampleEmptyTmuxServer(ctx, runner, config)
+	}
 	absent := adapter.sessionsAbsent(output)
 	listed := adapter.listedDespiteExit != nil && adapter.listedDespiteExit(result.ExitCode, output)
 	if err := terminalUserCommandError(result, err, fmt.Sprintf("list %s sessions for user %q", config.Multiplexer, config.User), absent || listed); err != nil {
@@ -258,11 +261,29 @@ func sampleTerminalSessions(ctx context.Context, runner execx.Runner, config Ter
 	return TerminalSessionSample{Sessions: sessions, Present: true}, nil
 }
 
+// list-panes cannot select a target on an empty server. Independently ask
+// list-sessions before presenting an empty-server close; a newly appeared
+// session or another error must never grant kill-server authority.
+func sampleEmptyTmuxServer(ctx context.Context, runner execx.Runner, config TerminalSessionConfig) (TerminalSessionSample, error) {
+	args := []string{"list-sessions", "-F", tmuxSessionFormat}
+	if config.Socket != "" {
+		args = append([]string{"-S", config.Socket}, args...)
+	}
+	result, err := execx.RunUser(ctx, runner, execx.NoTimeout, config.User, config.Binary, args...)
+	if err := terminalUserCommandError(result, err, "verify empty tmux server", false); err != nil {
+		return TerminalSessionSample{}, err
+	}
+	if strings.TrimSpace(result.Stdout) != "" || strings.TrimSpace(result.Stderr) != "" {
+		return TerminalSessionSample{}, errors.New("tmux sessions changed while checking empty server; refresh and try again")
+	}
+	return TerminalSessionSample{Present: true}, nil
+}
+
 func tmuxSessionArgs(config TerminalSessionConfig) []string {
 	if config.Socket == "" {
-		return []string{"list-sessions", "-F", tmuxSessionFormat}
+		return []string{"list-panes", "-a", "-F", tmuxSessionFormat}
 	}
-	return []string{"-S", config.Socket, "list-sessions", "-F", tmuxSessionFormat}
+	return []string{"-S", config.Socket, "list-panes", "-a", "-F", tmuxSessionFormat}
 }
 
 func screenSessionArgs(TerminalSessionConfig) []string {
@@ -307,7 +328,7 @@ func parseTmuxSessions(config TerminalSessionConfig, output string) ([]TerminalS
 		return nil, nil
 	}
 	sessions := make([]TerminalSession, 0)
-	for line := range strings.SplitSeq(strings.TrimSpace(output), "\n") {
+	for line := range strings.SplitSeq(strings.Trim(output, "\r\n"), "\n") {
 		parts := strings.Split(line, "\t")
 		if len(parts) != tmuxSessionFieldCount || strings.TrimSpace(parts[tmuxSessionNameField]) == "" {
 			return nil, fmt.Errorf("parse tmux session line %q", line)
@@ -346,7 +367,26 @@ func parseTmuxSessions(config TerminalSessionConfig, output string) ([]TerminalS
 			PIDs: []int{pid}, TTY: strings.TrimSpace(parts[tmuxSessionTTYField]),
 		})
 	}
-	return sortedTerminalSessions(sessions), nil
+	return sortedTerminalSessions(mergeTmuxPanes(sessions)), nil
+}
+
+// mergeTmuxPanes retains every pane instead of only the active pane of one window.
+func mergeTmuxPanes(panes []TerminalSession) []TerminalSession {
+	sessions := make([]TerminalSession, 0)
+	byIdentity := make(map[string]int)
+	for _, pane := range panes {
+		if i, ok := byIdentity[pane.Identity]; ok {
+			sessions[i].PIDs = append(sessions[i].PIDs, pane.PIDs...)
+			continue
+		}
+		byIdentity[pane.Identity] = len(sessions)
+		sessions = append(sessions, pane)
+	}
+	for i := range sessions {
+		slices.Sort(sessions[i].PIDs)
+		sessions[i].PIDs = slices.Compact(sessions[i].PIDs)
+	}
+	return sessions
 }
 
 func parseScreenSessions(config TerminalSessionConfig, output string) ([]TerminalSession, error) {

@@ -64,6 +64,9 @@ type SSHIdleConfig struct {
 type SSHSession struct {
 	Exe        string
 	ExeOK      bool
+	ExePrev    string
+	ExeFile    process.ExecutableFile
+	Cgroup     string
 	UID        uint32
 	User       string
 	Terminal   string
@@ -72,6 +75,12 @@ type SSHSession struct {
 	Idle       time.Duration
 	Residual   bool
 	Sudo       *SudoSessionBoundary
+}
+
+// CanClose reports whether a verified session carries a complete signal identity.
+func (s SSHSession) CanClose() bool {
+	return s.PID > 1 && s.StartTicks > 0 &&
+		(s.ExeOK && filepath.IsAbs(s.Exe) || filepath.IsAbs(s.ExePrev) && s.ExeFile.Inode != 0 && s.Cgroup != "")
 }
 
 // SudoSessionBoundary is the minimal immutable evidence needed to revalidate
@@ -284,8 +293,10 @@ func newSSHSessionSampler(reader process.Reader, lookup *process.UserLookup, ses
 		if err != nil {
 			return SSHSessionSample{}, err
 		}
-		sudo := sshSudoBoundary{snapshot: snapshot, filters: sshdFilters, resolveUser: lookup.ResolveUser, readFile: hostfs.ReadFile, cgroups: make(map[int]string)}
-		return sampleSSHSessions(loggedIn, snapshot, terminal, now(), sshdFilters, lookup.ResolveUser, sudo.target)
+		sudo := sshSessionOwnership{snapshot: snapshot, filters: sshdFilters, resolveUser: lookup.ResolveUser, readFile: hostfs.ReadFile, cgroups: make(map[int]string)}
+		sample := sampleSSHSessions(loggedIn, snapshot, terminal, now(), sshdFilters, lookup.ResolveUser, sudo.target)
+		sudo.recoverOrphanSessions(&sample, loggedIn, terminal, now())
+		return sample, nil
 	}
 }
 
@@ -385,7 +396,7 @@ func sshIdleTerminalIsSSH(line string, processes []process.Identity, snapshot ma
 	return ssh, nil
 }
 
-func sampleSSHSessions(sessions []utmp.Session, snapshot map[int]process.Identity, terminal func(string) (utmp.Terminal, error), now time.Time, sshdFilters []process.IdentityFilter, resolveUser process.UserResolver, sudoBoundary func(utmp.Session, []process.Identity) (sshSudoProcesses, bool)) (SSHSessionSample, error) {
+func sampleSSHSessions(sessions []utmp.Session, snapshot map[int]process.Identity, terminal func(string) (utmp.Terminal, error), now time.Time, sshdFilters []process.IdentityFilter, resolveUser process.UserResolver, sudoBoundary func(utmp.Session, []process.Identity) (sshSudoProcesses, bool)) SSHSessionSample {
 	seen := map[string]bool{}
 	var sample SSHSessionSample
 	for _, session := range sessions {
@@ -433,7 +444,7 @@ func sampleSSHSessions(sessions []utmp.Session, snapshot map[int]process.Identit
 			continue
 		}
 		if !ssh {
-			if session.Host != "" {
+			if session.Host != "" && !strings.HasPrefix(session.Line, "tty") {
 				addSSHSessionIssue(&sample, session, snapshot, "no configured sshd identity in the live process ancestry")
 				continue
 			}
@@ -451,7 +462,7 @@ func sampleSSHSessions(sessions []utmp.Session, snapshot map[int]process.Identit
 			Sudo:       sudoEvidence,
 		})
 	}
-	return sample, nil
+	return sample
 }
 
 func addSSHSessionIssue(s *SSHSessionSample, session utmp.Session, snapshot map[int]process.Identity, message string) {
@@ -622,7 +633,7 @@ func (s SSHSessionSample) VerifySSHSession(want SSHSession) error {
 		if got.StartTicks == 0 || got.StartTicks != want.StartTicks {
 			return errors.New("SSH session changed; refresh and try again")
 		}
-		if !got.ExeOK || !filepath.IsAbs(got.Exe) {
+		if !got.CanClose() {
 			return errors.New("SSH session executable is unavailable")
 		}
 		return nil

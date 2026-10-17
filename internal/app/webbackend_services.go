@@ -124,7 +124,7 @@ func (b *WebBackend) viewWithRuntime(ctx context.Context, name string, e *webEnt
 	if backendDegraded {
 		stateReason = stateReasonFailedUnitLiveProcess
 		health = checkHealthWarning
-	} else if health == TargetStateOK && stateReason == stateReasonStaleBinary {
+	} else if health == TargetStateOK && (stateReason == stateReasonStaleBinary || stateReason == stateReasonStaleLibraries) {
 		health = checkHealthWarning
 	}
 	svc.CheckHealth = health
@@ -143,7 +143,7 @@ func (b *WebBackend) viewWithRuntime(ctx context.Context, name string, e *webEnt
 	svc.ObservabilityReady, svc.ObservabilityMissing = b.serviceObservability(name, e, observation, svc.Status, svc.CheckHealth, svc.Monitored, observed)
 	svc.State = ServiceState(svc.Enabled, svc.Monitored, svc.Status, svc.CheckHealth, observed, svc.ObservabilityReady,
 		processActive, onlyMissingProcesses(svc.ObservabilityMissing), backendDegraded)
-	if svc.State == TargetStateWarning && stateReason == stateReasonStaleBinary && baseHealth == TargetStateOK &&
+	if svc.State == TargetStateWarning && (stateReason == stateReasonStaleBinary || stateReason == stateReasonStaleLibraries) && baseHealth == TargetStateOK &&
 		!onlyMissingProcesses(svc.ObservabilityMissing) {
 		svc.State = TargetStateRestartRequired
 	}
@@ -257,6 +257,12 @@ func (o serviceObservation) serviceStateReason(e *webEntry) string {
 	for cs := range o.currentSnapshotsOfType(e, checks.CheckTypeProcess) {
 		if !cs.OK && cs.Data[checks.DataKeyReplacedBinaries] != nil {
 			return stateReasonStaleBinary
+		}
+	}
+	for cs := range o.currentSnapshotsOfType(e, checks.CheckTypeStaleLibraries) {
+		blocked, known := cs.Data[checks.DataKeyActionBlocked].(bool)
+		if !cs.OK && !cs.Unavailable && known && !blocked {
+			return stateReasonStaleLibraries
 		}
 	}
 	return ""

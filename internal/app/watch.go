@@ -431,7 +431,7 @@ func (w *Watch) notifyRecovery(ctx context.Context, res checks.Result, announced
 // runRecoverHook executes the recovery-edge hook, honoring the same dry-run and
 // panic gates the firing-side actions honor.
 func (w *Watch) runRecoverHook(ctx context.Context, res checks.Result, level severity.Level) {
-	if len(w.RecoverHook.Command) == 0 {
+	if len(w.RecoverHook.Command) == 0 || res.ActionBlocked {
 		return
 	}
 	if w.DryRun {
@@ -472,11 +472,15 @@ func (w *Watch) dispatchFiringActions(ctx context.Context, res checks.Result, st
 		}
 		return
 	}
-	if res.Busy {
+	if res.Busy || res.ActionBlocked {
 		// The server answered it is alive but cannot serve now: report it,
 		// never act on it, so a hook cannot restart a saturated server.
 		if step.announce {
-			w.emit(Event{Watch: w.Name, Kind: eventKindSuppressed, Message: busyActionsWithheld})
+			message := busyActionsWithheld
+			if res.ActionBlocked {
+				message = "advisory observation: hook/expand/makestep/remount withheld"
+			}
+			w.emit(Event{Watch: w.Name, Kind: eventKindSuppressed, Message: message})
 		}
 		w.notifyFiring(ctx, step, watchMessage(w.Name, res.Message, env))
 		return

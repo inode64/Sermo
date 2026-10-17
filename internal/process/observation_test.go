@@ -3,6 +3,7 @@ package process
 import (
 	"errors"
 	"testing"
+	"time"
 )
 
 func TestObserveDistinguishesAbsenceFromUncertainty(t *testing.T) {
@@ -102,6 +103,26 @@ func TestObserveUsesOneFreshSnapshot(t *testing.T) {
 	}
 	if inner.pidCalls != 2 {
 		t.Fatalf("snapshot walks=%d, want one per observation", inner.pidCalls)
+	}
+}
+
+func TestObserveCachedSharesMonitoringSnapshot(t *testing.T) {
+	inner := &countingReader{ids: map[int]Identity{100: {PID: 100, UID: 0, Exe: "/opt/apache", ExeOK: true}}}
+	d := Discoverer{Reader: NewCachingReader(inner, time.Hour), ResolveUser: fakeUsers(map[string]uint32{"root": 0})}
+	selectors := []Selector{{Type: SelectorCommandMatch, Exe: "/opt/apache", User: "root"}}
+	for range 2 {
+		if _, err := d.ObserveCached(selectors); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if inner.pidCalls != 1 {
+		t.Fatalf("monitoring repeated host scan %d times", inner.pidCalls)
+	}
+	if _, err := d.Observe(selectors); err != nil {
+		t.Fatal(err)
+	}
+	if inner.pidCalls != 2 {
+		t.Fatal("operation reused monitoring snapshot")
 	}
 }
 
