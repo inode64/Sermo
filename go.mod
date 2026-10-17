@@ -14,7 +14,7 @@ require (
 	github.com/google/nftables v0.3.0
 	github.com/gosnmp/gosnmp v1.45.0
 	github.com/jackc/pgx/v5 v5.11.0
-	github.com/quic-go/quic-go v0.63.0
+	github.com/quic-go/quic-go v0.64.0
 	github.com/spf13/pflag v1.0.10
 	github.com/vishvananda/netlink v1.3.1
 	github.com/wneessen/go-mail v0.8.1
@@ -60,7 +60,7 @@ require (
 	golang.org/x/mod v0.42.0 // indirect
 	golang.org/x/sync v0.24.0 // indirect
 	golang.org/x/text v0.43.0 // indirect
-	modernc.org/libc v1.78.0 // indirect
+	modernc.org/libc v1.79.0 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.12.1 // indirect
 )
