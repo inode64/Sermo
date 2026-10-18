@@ -1070,13 +1070,15 @@ web:
   `429` with `Retry-After`) until that window ends. The client is the peer
   address, or, when the peer is a reverse proxy on this host, the address it
   appended to `X-Forwarded-For`, so one guesser cannot lock out everyone behind
-  the proxy.
+  the proxy. Only a valid IP address from the last forwarded hop is accepted;
+  malformed values fall back to the peer. Addresses are normalized, including
+  IPv4-mapped IPv6, so alternate spellings share the same attempt counter.
 - The form only accepts a POST the browser marks as same-origin
   (`Sec-Fetch-Site`), or, from a browser that does not send that, one whose
   `Origin` names this server (`Host`, `X-Forwarded-Host` or `web.public_url`),
   so another site cannot log a browser in. Every login, good or bad, is written
   to the access log (`engine.access`) without the password, and to the daemon
-  log with the client address.
+  log with the validated client IP address, never raw forwarded-header text.
 - A notification's link to a row (`#…`) survives the detour through the form.
 - `web.login_message` adds a short note under the host name on the form — say
   `"Producción · solo sysadmins"`. It is one line of plain text (at most 200

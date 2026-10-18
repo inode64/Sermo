@@ -1,7 +1,9 @@
 package web
 
 import (
+	"bytes"
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -433,6 +435,105 @@ func TestClientAddressBehindLocalProxy(t *testing.T) {
 	r.RemoteAddr = "198.51.100.7:5555"
 	if got := clientAddress(r); got != "198.51.100.7" {
 		t.Fatalf("remote peer = %q, want its own address (X-Forwarded-For ignored)", got)
+	}
+}
+
+func TestClientAddressValidatesIP(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		peer      string
+		forwarded []string
+		want      string
+	}{
+		{name: "direct IPv4", peer: "198.51.100.7:5555", want: "198.51.100.7"},
+		{name: "direct IPv6", peer: "[2001:db8::7]:5555", want: "2001:db8::7"},
+		{name: "peer zone", peer: "[fe80::7%eth0]:5555", want: "fe80::7"},
+		{name: "invalid peer", peer: "secret\nforged", want: loginClientUnknown},
+		{name: "untrusted proxy", peer: "198.51.100.7:5555", forwarded: []string{"203.0.113.5"}, want: "198.51.100.7"},
+		{name: "last header and hop", forwarded: []string{"192.0.2.3", "10.0.0.1, 203.0.113.5"}, want: "203.0.113.5"},
+		{name: "IPv4 with port", forwarded: []string{"203.0.113.5:54321"}, want: "203.0.113.5"},
+		{name: "IPv6 with port", forwarded: []string{"[2001:db8::5]:54321"}, want: "2001:db8::5"},
+		{name: "normalized IPv6", forwarded: []string{"2001:0DB8:0:0:0:0:0:5"}, want: "2001:db8::5"},
+		{name: "mapped IPv4", forwarded: []string{"::ffff:203.0.113.5"}, want: "203.0.113.5"},
+		{name: "mapped loopback peer", peer: "[::ffff:127.0.0.1]:5555", forwarded: []string{"203.0.113.5"}, want: "203.0.113.5"},
+		{name: "empty last header", forwarded: []string{"203.0.113.5", ""}, want: "127.0.0.1"},
+		{name: "empty last hop", forwarded: []string{"203.0.113.5, "}, want: "127.0.0.1"},
+		{name: "hostname", forwarded: []string{"private.example"}, want: "127.0.0.1"},
+		{name: "secret", forwarded: []string{"Bearer private-token"}, want: "127.0.0.1"},
+		{name: "line injection", forwarded: []string{"203.0.113.5\r\nforged=true"}, want: "127.0.0.1"},
+		{name: "markup injection", forwarded: []string{"<script>alert(1)</script>"}, want: "127.0.0.1"},
+		{name: "zone injection", forwarded: []string{"fe80::5%secret\nforged"}, want: "127.0.0.1"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := httptest.NewRequest(http.MethodPost, routePathLogin, nil)
+			r.RemoteAddr = "127.0.0.1:41000"
+			if tc.peer != "" {
+				r.RemoteAddr = tc.peer
+			}
+			for _, value := range tc.forwarded {
+				r.Header.Add(headerXForwardedFor, value)
+			}
+			if got := clientAddress(r); got != tc.want {
+				t.Fatalf("clientAddress = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestLoginAuditOnlyRecordsValidatedClient(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		password string
+		attempts int
+		status   int
+		role     string
+		result   string
+		level    string
+	}{
+		{name: "success", password: "secret", status: http.StatusSeeOther, role: roleAdmin, result: loginResultOK, level: "INFO"},
+		{name: "failure", password: "wrong-guess", status: http.StatusUnauthorized, result: loginResultFailed, level: "WARN"},
+		{name: "limited", password: "secret", attempts: loginMaxFailures, status: http.StatusTooManyRequests, result: loginResultLimited, level: "WARN"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var output bytes.Buffer
+			lh := newLoginHarness(Auth{AdminCredentials: testCredentials(t, "secret")}, func(s *Server) {
+				s.Logger = slog.New(slog.NewJSONHandler(&output, nil))
+			})
+			for i := range tc.attempts {
+				r := loginPost("wrong-guess")
+				r.RemoteAddr = "127.0.0.1:41000"
+				// Changing arbitrary header text cannot create fresh limiter buckets.
+				r.Header.Set(headerXForwardedFor, strings.Repeat("private-token", i+1))
+				if rec := lh.do(r); rec.Code != http.StatusUnauthorized {
+					t.Fatalf("attempt %d status = %d, want 401", i, rec.Code)
+				}
+			}
+			output.Reset()
+			r := loginPost(tc.password)
+			r.RemoteAddr = "127.0.0.1:41000"
+			r.Header.Set(headerXForwardedFor, "private-token\r\nforged=true<script>")
+			r.Header.Set("Authorization", "Bearer private-authorization")
+			r.Header.Set("Cookie", "private-cookie=private-value")
+			if rec := lh.do(r); rec.Code != tc.status {
+				t.Fatalf("login status = %d, want %d", rec.Code, tc.status)
+			}
+			var entry map[string]any
+			if err := json.Unmarshal(output.Bytes(), &entry); err != nil {
+				t.Fatalf("expected exactly one JSON log record: %v", err)
+			}
+			for key, want := range map[string]string{
+				"msg": logMsgLogin, "level": tc.level, logFieldClient: "127.0.0.1", logFieldRole: tc.role, logFieldResult: tc.result,
+			} {
+				if entry[key] != want {
+					t.Errorf("log field %s = %v, want %s", key, entry[key], want)
+				}
+			}
+			for _, forbidden := range []string{"private-", "forged", "<script>", "secret", "wrong-guess"} {
+				if strings.Contains(output.String(), forbidden) {
+					t.Errorf("login log contains request data %q", forbidden)
+				}
+			}
+		})
 	}
 }
 
