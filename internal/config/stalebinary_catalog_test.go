@@ -177,7 +177,7 @@ func TestDefaultsRestartOnStaleBinaryOptsOutWholeHost(t *testing.T) {
 	}
 	global := filepath.Join(dir, "sermo.yml")
 	body := "engine: { backend: systemd }\n" +
-		"paths:\n  services: [" + enabled + "]\n  runtime: /run/sermo\n" +
+		"paths:\n  services: [" + enabled + "]\n" +
 		"defaults:\n  policy: { cooldown: 5m }\n  restart_on_stale_binary: false\n"
 	if err := os.WriteFile(global, []byte(body), 0o644); err != nil {
 		t.Fatal(err)

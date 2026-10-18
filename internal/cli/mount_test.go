@@ -18,11 +18,13 @@ import (
 func writeMountConfig(t *testing.T) string {
 	t.Helper()
 	global := writeServiceConfig(t, `
+engine:
+  runtime: @ROOT@/run
+  state: @ROOT@/state
 paths:
   services: [ @ROOT@/services ]
   watches: [ @ROOT@/mounts ]
-  runtime: @ROOT@/run
-  state: @ROOT@/state
+
 defaults:
   policy:
     cooldown: 5m

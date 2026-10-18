@@ -126,7 +126,7 @@ var commandUsages = []commandUsage{
 			"when sermod or its web API does not answer it reports state=unknown",
 			"and exits 2.",
 			"monitor/unmonitor pause or resume a single watch, persisted under",
-			"paths.state and read live by the daemon. WATCH is a host watch name or",
+			"engine.state and read live by the daemon. WATCH is a host watch name or",
 			"a service watch \"<service>:<watch>\"; a watch's monitor state is",
 			"independent of its service's.",
 			"probe is a read-only short sample for diskio, hdparm, LVM, RAID and SMART",

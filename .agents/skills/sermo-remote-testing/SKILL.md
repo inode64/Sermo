@@ -168,8 +168,9 @@ For each host:
 3. Write `config.yml` in that directory. Minimal shape for catalog/app checks:
 
 ```yaml
-paths:
+engine:
   runtime: /tmp/sermo-remote-test-XXX/run
+  state: /tmp/sermo-remote-test-XXX/state
 
 defaults:
   policy: { cooldown: 5m }

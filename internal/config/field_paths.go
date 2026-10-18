@@ -11,13 +11,13 @@ const (
 	enginePathDiagnostics         = SectionEngine + "." + EngineKeyDiagnostics
 	enginePathDiagnosticsInterval = SectionEngine + "." + EngineKeyDiagnosticsInterval
 	enginePathMaxParallelChecks   = SectionEngine + "." + EngineKeyMaxParallelChecks
+	enginePathRuntime             = SectionEngine + "." + EngineKeyRuntime
 	enginePathStartupDelay        = SectionEngine + "." + EngineKeyStartupDelay
 	enginePathStateCacheSize      = SectionEngine + "." + EngineKeyStateCacheSize
 	enginePathUserLookup          = SectionEngine + "." + EngineKeyUserLookup
 	enginePathUserLookupTimeout   = SectionEngine + "." + EngineKeyUserLookupTimeout
 
-	pathsPathLocks   = SectionPaths + "." + pathKeyLocks
-	pathsPathRuntime = SectionPaths + "." + pathKeyRuntime
+	pathsPathLocks = SectionPaths + "." + pathKeyLocks
 
 	webPathAddress           = SectionWeb + "." + WebKeyAddress
 	webPathAllowedHosts      = SectionWeb + "." + WebKeyAllowedHosts

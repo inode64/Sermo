@@ -6,9 +6,7 @@ const (
 	pathKeyApps      = "apps"
 	pathKeyLocks     = "locks"
 	pathKeyNotifiers = "notifiers"
-	pathKeyRuntime   = "runtime"
 	pathKeyServices  = "services"
-	pathKeyState     = "state"
 	pathKeyTemplates = "templates"
 	pathKeyWatches   = "watches"
 )

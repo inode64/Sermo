@@ -176,7 +176,7 @@ sermoctl panic status    # show the current state (default when no argument)
 sermoctl panic off       # resume normal operation
 ```
 
-The flag is persisted in the state database (`paths.state`), so it survives
+The flag is persisted in the state database (`engine.state`), so it survives
 daemon restarts until you turn it off, and the CLI works without the web UI
 enabled. The running daemon picks up a change within ~1 second. While active,
 the daemon status reported by `/readyz` and the web header shows **`panic
@@ -258,7 +258,7 @@ unit (bytes, seconds, percent, a count), beside the formatted `value`; scripts
 compare that instead of parsing `1.2 GiB`.
 
 `sermoctl watch monitor|unmonitor WATCH` pauses or resumes a single watch,
-persisted under `paths.state` and read live by the daemon. `WATCH` is a host
+persisted under `engine.state` and read live by the daemon. `WATCH` is a host
 watch name or a service-embedded watch `"<service>:<watch>"`; a watch's monitor
 state is independent of its service's, so `unmonitor` on a service never pauses
 its watches. Repeating either command after that state is already effective is

@@ -680,10 +680,11 @@ func TestDefaultsRestartOnChangeValidatesFlagsOnly(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			globalCfg := `
 engine:
+  runtime: /run/sermo
   backend: auto
 paths:
   services: [ @ROOT@/services ]
-  runtime: /run/sermo
+
 defaults:
   restart_on_change: ` + tt.defaultROC + `
   policy:

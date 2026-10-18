@@ -68,11 +68,12 @@ func TestResolveDryRunDefaultsTargets(t *testing.T) {
 	global := writeConfig(t, map[string]string{
 		"sermo.yml": `
 engine:
+  runtime: /run/sermo
   backend: auto
 paths:
   services: [ @ROOT@/services ]
   watches: [ @ROOT@/watches ]
-  runtime: /run/sermo
+
 defaults:
   dry_run: true
   policy: { cooldown: 5m }
@@ -503,10 +504,10 @@ checks:
 func TestResolveWatchesExpandsCustomVars(t *testing.T) {
 	global := writeConfig(t, map[string]string{
 		"sermo.yml": `
-engine: { backend: auto }
+engine: { backend: auto, runtime: /run/sermo }
 paths:
   services: [ @ROOT@/services ]
-  runtime: /run/sermo
+
 defaults:
   policy: { cooldown: 5m }
   variables: { cdir: /var/spool }
@@ -668,7 +669,9 @@ rules:
 func TestResolveWatchesExpandsWatchNamedVariables(t *testing.T) {
 	cfg := loadCatalog(t, map[string]string{
 		"sermo.yml": `
-paths: { watches: [ "@ROOT@/watches" ], runtime: /run/sermo }
+engine:
+  runtime: /run/sermo
+paths: { watches: [ "@ROOT@/watches" ]}
 defaults: { policy: { cooldown: 5m }, dry_run: true }
 `,
 		"watches/variables.yml": "name: variables\ncheck: { type: file, path: \"${undefined_var}\" }\n",

@@ -60,8 +60,8 @@ checks:
 	catalogService("sambanone", filepath.Join(root, "missing"))
 	global := filepath.Join(root, "sermo.yml")
 	if err := os.WriteFile(global, fmt.Appendf(nil, `
-engine: { backend: auto }
-paths: { services: [ %s ], runtime: /run/sermo }
+engine: { backend: auto, runtime: /run/sermo }
+paths: { services: [ %s ]}
 defaults: { policy: { cooldown: 5m } }
 `, servicesDir), 0o644); err != nil {
 		t.Fatal(err)
@@ -164,8 +164,8 @@ checks:
 
 	global := filepath.Join(root, "sermo.yml")
 	if err := os.WriteFile(global, fmt.Appendf(nil, `
-engine: { backend: auto }
-paths: { services: [ %s ], runtime: /run/sermo }
+engine: { backend: auto, runtime: /run/sermo }
+paths: { services: [ %s ]}
 defaults: { policy: { cooldown: 5m } }
 `, servicesDir), 0o644); err != nil {
 		t.Fatal(err)
@@ -245,8 +245,8 @@ preflight:
 
 	global := filepath.Join(root, "sermo.yml")
 	if err := os.WriteFile(global, fmt.Appendf(nil, `
-engine: { backend: auto }
-paths: { services: [ %s ], runtime: /run/sermo }
+engine: { backend: auto, runtime: /run/sermo }
+paths: { services: [ %s ]}
 defaults: { policy: { cooldown: 5m } }
 `, servicesDir), 0o644); err != nil {
 		t.Fatal(err)
@@ -321,8 +321,8 @@ checks:
 
 	global := filepath.Join(root, "sermo.yml")
 	if err := os.WriteFile(global, fmt.Appendf(nil, `
-engine: { backend: auto }
-paths: { services: [ %s ], runtime: /run/sermo }
+engine: { backend: auto, runtime: /run/sermo }
+paths: { services: [ %s ]}
 defaults: { policy: { cooldown: 5m } }
 `, servicesDir), 0o644); err != nil {
 		t.Fatal(err)
@@ -467,7 +467,9 @@ func TestEnableIfPrunesHostWatches(t *testing.T) {
 	}
 	cfg := loadCatalog(t, map[string]string{
 		"sermo.yml": `
-paths: { watches: [ "@ROOT@/watches" ], runtime: /run/sermo }
+engine:
+  runtime: /run/sermo
+paths: { watches: [ "@ROOT@/watches" ]}
 defaults: { policy: { cooldown: 5m } }
 `,
 		"watches/kept.yml":   watch("kept", conf, load),

@@ -86,8 +86,8 @@ preflight:
 
 	global := filepath.Join(root, "sermo.yml")
 	if err := os.WriteFile(global, fmt.Appendf(nil, `
-engine: { backend: auto }
-paths: { services: [ %s ], runtime: /run/sermo }
+engine: { backend: auto, runtime: /run/sermo }
+paths: { services: [ %s ]}
 defaults: { policy: { cooldown: 5m } }
 `, servicesDir), 0o644); err != nil {
 		t.Fatal(err)
@@ -169,8 +169,8 @@ preflight:
 
 	global := filepath.Join(root, "sermo.yml")
 	if err := os.WriteFile(global, fmt.Appendf(nil, `
-engine: { backend: auto }
-paths: { services: [ %s ], runtime: /run/sermo }
+engine: { backend: auto, runtime: /run/sermo }
+paths: { services: [ %s ]}
 defaults: { policy: { cooldown: 5m } }
 `, servicesDir), 0o644); err != nil {
 		t.Fatal(err)

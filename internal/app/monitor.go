@@ -334,10 +334,10 @@ func reloadConfigCompatibilityError(current, next *config.Config) string {
 		return ""
 	}
 	if current.Global.RuntimeDir() != next.Global.RuntimeDir() {
-		return "paths.runtime changed; restart sermod"
+		return "engine.runtime changed; restart sermod"
 	}
 	if current.Global.StateDir() != next.Global.StateDir() {
-		return "paths.state changed; restart sermod"
+		return "engine.state changed; restart sermod"
 	}
 	if !reflect.DeepEqual(current.Global.Raw[config.SectionWeb], next.Global.Raw[config.SectionWeb]) {
 		return "web configuration changed; restart sermod"

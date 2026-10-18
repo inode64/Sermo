@@ -15,7 +15,7 @@ func TestServiceWatchesSurviveResolution(t *testing.T) {
 	root := repoRoot(t)
 	dir := t.TempDir()
 	global := filepath.Join(dir, "sermo.yml")
-	body := "paths:\n  services: [" + filepath.Join(root, "examples", "services") + "]\n  runtime: /run/sermo\n" +
+	body := "paths:\n  services: [" + filepath.Join(root, "examples", "services") + "]\n" +
 		"defaults:\n  policy: { cooldown: 5m }\n"
 	if err := os.WriteFile(global, []byte(body), 0o644); err != nil {
 		t.Fatal(err)

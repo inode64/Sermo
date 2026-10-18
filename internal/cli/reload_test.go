@@ -26,7 +26,7 @@ func reloadTestApp(t *testing.T, pidfile string, scan []int, ids map[int]process
 	t.Helper()
 	tmp := t.TempDir()
 	cfgPath := filepath.Join(tmp, "sermo.yml")
-	minCfg := []byte("paths:\n  runtime: " + tmp + "\ndefaults:\n  policy:\n    cooldown: 5m\n")
+	minCfg := []byte("engine:\n  runtime: " + tmp + "\ndefaults:\n  policy:\n    cooldown: 5m\n")
 	if err := os.WriteFile(cfgPath, minCfg, 0o644); err != nil {
 		t.Fatal(err)
 	}

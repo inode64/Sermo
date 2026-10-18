@@ -179,9 +179,11 @@ func loadGlobal(path string) (Global, []Issue, error) {
 		if g.WatchPaths, err = pathSpecList(paths[pathKeyWatches], pathsLabelWatches); err != nil {
 			return Global{}, nil, parseGlobalConfigError(path, err)
 		}
-		g.Runtime = cfgval.String(paths[pathKeyRuntime])
-		g.State = cfgval.String(paths[pathKeyState])
 		g.Templates = cfgval.String(paths[pathKeyTemplates])
+	}
+	if engine, ok := raw[SectionEngine].(map[string]any); ok {
+		g.Runtime = cfgval.String(engine[EngineKeyRuntime])
+		g.State = cfgval.String(engine[EngineKeyState])
 	}
 	resolveConfigPaths(path, &g)
 	issues := resolveWebCredentials(&g)

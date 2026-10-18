@@ -9,11 +9,12 @@ import (
 // loader path can be exercised from one config.
 const kindDerivationGlobal = `
 engine:
+  runtime: /run/sermo
   backend: auto
 paths:
   services: [ @ROOT@/services ]
   apps: [ @ROOT@/apps ]
-  runtime: /run/sermo
+
 defaults:
   policy:
     cooldown: 5m

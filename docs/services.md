@@ -1482,7 +1482,7 @@ On resolution this creates a `lockfile` health check gated by
 accepts a scalar path, a candidate list, or `{path: ..., optional: true}`. It is
 only evidence that the service left its own runtime lock artifact; it does not
 block start/stop/restart/reload/resume and must not point under
-`<paths.runtime>/locks`, which is reserved for Sermo operation locks.
+`<engine.runtime>/locks`, which is reserved for Sermo operation locks.
 
 ### D-Bus service health
 
@@ -2311,7 +2311,7 @@ With `monitor`, the worker exists and only check/rule execution changes.
 
 The live state is toggled at runtime with `sermoctl monitor <svc>` /
 `sermoctl unmonitor <svc>` and persisted in the state database under
-`paths.state` (see [configuration](configuration.md)). Because that database
+`engine.state` (see [configuration](configuration.md)). Because that database
 survives reboots, a `previous` service comes back up in whatever state an
 operator last left it.
 

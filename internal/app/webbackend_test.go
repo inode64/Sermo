@@ -2965,9 +2965,11 @@ func TestWatchSnapshotsFeedProcessPolicyView(t *testing.T) {
 func TestWebBackendPropagatesCustomExecxRunnerToWatchHooks(t *testing.T) {
 	// Minimal config with a watch that has a hook. The check is a simple command that always succeeds.
 	cfgContent := `
+engine:
+  runtime: /tmp
 paths:
   services: []
-  runtime: /tmp
+
 defaults:
   policy:
     cooldown: 1m

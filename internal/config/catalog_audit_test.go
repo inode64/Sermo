@@ -340,7 +340,7 @@ func writeServicesGlobal(t *testing.T, dir, enabled, backend string) string {
 	t.Helper()
 	global := filepath.Join(dir, "sermo.yml")
 	body := "engine: { backend: " + backend + " }\n" +
-		"paths:\n  services: [" + enabled + "]\n  runtime: /run/sermo\n" +
+		"paths:\n  services: [" + enabled + "]\n" +
 		"defaults:\n  policy: { cooldown: 5m }\n"
 	if err := os.WriteFile(global, []byte(body), 0o644); err != nil {
 		t.Fatal(err)
@@ -792,7 +792,7 @@ func TestShippedServiceConfigExamplesValidate(t *testing.T) {
 
 	dir := t.TempDir()
 	global := filepath.Join(dir, "sermo.yml")
-	body := "paths:\n  services: [" + servicesDir + "]\n  runtime: /run/sermo\n" +
+	body := "paths:\n  services: [" + servicesDir + "]\n" +
 		"defaults:\n  policy: { cooldown: 5m }\n"
 	if err := os.WriteFile(global, []byte(body), 0o644); err != nil {
 		t.Fatal(err)
@@ -862,7 +862,7 @@ func TestGentooCatalogPidfileOverrides(t *testing.T) {
 	}
 	global := filepath.Join(dir, "sermo.yml")
 	body := "engine: { backend: openrc }\n" +
-		"paths:\n  services: [" + enabled + "]\n  runtime: /run/sermo\n" +
+		"paths:\n  services: [" + enabled + "]\n" +
 		"defaults:\n  policy: { cooldown: 5m }\n"
 	if err := os.WriteFile(global, []byte(body), 0o644); err != nil {
 		t.Fatal(err)
@@ -2548,7 +2548,7 @@ func TestUbuntuCatalogOverrides(t *testing.T) {
 	dir := t.TempDir()
 	global := filepath.Join(dir, "sermo.yml")
 	body := "engine: { backend: systemd }\n" +
-		"paths:\n  services: []\n  runtime: /run/sermo\n" +
+		"paths:\n  services: []\n\n" +
 		"defaults:\n  policy: { cooldown: 5m }\n"
 	if err := os.WriteFile(global, []byte(body), 0o644); err != nil {
 		t.Fatal(err)

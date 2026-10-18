@@ -11,12 +11,12 @@ const (
 	runtimeDirOps   = "ops"
 )
 
-// RuntimeLocksDir is the named runtime lock directory under paths.runtime.
+// RuntimeLocksDir is the named runtime lock directory under engine.runtime.
 func RuntimeLocksDir(runtimeDir string) string {
 	return filepath.Join(runtimeDir, runtimeDirLocks)
 }
 
-// RuntimeOpsDir is the operation lock directory under paths.runtime.
+// RuntimeOpsDir is the operation lock directory under engine.runtime.
 func RuntimeOpsDir(runtimeDir string) string {
 	return filepath.Join(runtimeDir, runtimeDirOps)
 }

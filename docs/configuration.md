@@ -125,9 +125,13 @@ normalized to `/run`, must be documented as explicit exceptions at the owner.
 /etc/sermo/<dir>.local/*.yml per-host overrides a deployment never overwrites
 ```
 
-The configurable directories Sermo reads come from `paths` in the global config:
+`paths` locates configuration documents and templates. `engine.runtime` and
+`engine.state` locate the engine's volatile and persistent data directories:
 
 ```yaml
+engine:
+  runtime: /run/sermo
+  state: /var/lib/sermo
 paths:
   services:
     - /etc/sermo/services
@@ -140,8 +144,6 @@ paths:
     - /etc/sermo/networks
     - /etc/sermo/storages
     - /etc/sermo/mounts
-  runtime: /run/sermo
-  state: /var/lib/sermo
   templates: /etc/sermo/templates
 ```
 
@@ -168,7 +170,7 @@ descends the whole subtree, still loading files in deterministic sorted order.
 Unknown keys under `paths` are rejected so typos do not silently disable a
 configured source.
 
-`paths.runtime` is the root for named runtime locks (`<runtime>/locks`, one file
+`engine.runtime` (default `/run/sermo`) is the root for named runtime locks (`<runtime>/locks`, one file
 per lock named `<service>[.<name>].lock`) and internal operation locks
 (`<runtime>/ops/<service>.lock`). It lives on tmpfs and is wiped on reboot.
 `paths.locks` is **not** supported. See [Locks](safety.md#locks) for the TTL and
@@ -269,14 +271,17 @@ owner of the binary path. A local `variables:` entry with the same prefixed or
 unprefixed name still wins for host-specific overrides. When several apps are
 linked, use the prefixed names to avoid ambiguity.
 
-`paths.state` (default `/var/lib/sermo`) is the root for the persistent state
-database `sermo.db` (SQLite). Unlike `paths.runtime`, it survives reboots, which
+`engine.state` (default `/var/lib/sermo`) is the root for the persistent state
+database `sermo.db` (SQLite). Unlike `engine.runtime`, it survives reboots, which
 is what lets a service's or watch's `monitor: previous` flag restore its last
 monitoring state. It also stores automatic-remediation cooldown/backoff, rule
 `for`/`within` window progress and the latest service-check and host-watch
 readings, so restarting `sermod` does not reset when a rule may act again or make
 the dashboard lose the last real daemon-cycle result. SLA and check measurements,
 plus service and daemon process metric history shown in the web UI live there too.
+
+Both engine directory settings must be non-empty absolute path strings when
+specified. They are global settings and are not inherited by services or watches.
 
 Both directories are created **0700, owner root**. On systemd they come from the
 shipped `tmpfiles.d/sermo.conf` (installed at `/usr/lib/tmpfiles.d/sermo.conf`),
@@ -357,8 +362,8 @@ With `mount.refcount: true` (the default), every successful `mount` increments
 Sermo's runtime counter and `umount` decrements it. The real `umount` only runs
 when the counter reaches zero; if the path is not mounted yet, the first
 `mount` runs `mount <path>` and requires a matching `/etc/fstab` entry. The
-counter is kept under `<paths.runtime>/mounts/state`, and each mount operation
-uses a per-target lock under `<paths.runtime>/mounts/ops`. Both are keyed by
+counter is kept under `<engine.runtime>/mounts/state`, and each mount operation
+uses a per-target lock under `<engine.runtime>/mounts/ops`. Both are keyed by
 the storage watch name, or by the escaped path for a path with no storage
 watch, so two different mounts never share a counter or a lock. A counter file
 that records a different path is refused rather than reused.
@@ -558,7 +563,7 @@ falls back to `rc-status -a` and trusts the init state.
 
 Safe service actions (`start`, `stop`, `restart`, `reload`, `resume`) run
 without a global concurrency cap. Each service is still serialized by its own
-cross-process operation lock (`<paths.runtime>/ops/<service>.lock`), automatic
+cross-process operation lock (`<engine.runtime>/ops/<service>.lock`), automatic
 remediation is rate-limited by the mandatory per-service `policy` block
 (cooldown, `max_actions`, backoff), and every action is bounded by
 `engine.operation_timeout`.
@@ -615,7 +620,7 @@ match. For critical stop policies, numeric UIDs/GIDs are the most deterministic
 form.
 
 `engine.state_cache_size` (default `64M`) sets the SQLite page cache for the
-state database (`paths.state`). The state DB accumulates SLA, measurement and
+state database (`engine.state`). The state DB accumulates SLA, measurement and
 metric history whose indexes grow into the tens of MB; the cache
 keeps those hot pages in memory so a per-cycle write burst does not read them back
 from disk and stall an interactive `monitor`/`unmonitor` (every statement shares
@@ -682,7 +687,7 @@ Per-service runtime state is preserved across reload: monitoring cycle counters
 and the watched-file and app-version baselines for `changed:` conditions stay in
 memory, while
 remediation cooldown/backoff and rule `for`/`within` windows are also persisted
-in `paths.state` and survive a full `sermod` process restart. Invalid config, or
+in `engine.state` and survive a full `sermod` process restart. Invalid config, or
 a config with no included services or watches, is rejected and the current
 generation keeps running; a `reload` or `error` event is recorded. Reload does
 not repeat `startup_delay` and does not mark `/readyz` as shutting down. A reload
@@ -690,7 +695,7 @@ during the startup wait keeps only what is left of it, and a reload before every
 target has completed its first cycle keeps `/readyz` at `starting` until the new
 generation's targets have reported.
 
-`paths.runtime` and `paths.state` are process-lifetime resources: they contain
+`engine.runtime` and `engine.state` are process-lifetime resources: they contain
 the daemon singleton/operation locks and its open persistent store. Changing
 either requires a full `sermod` restart; a configuration reload rejects that
 change and leaves the current generation running.
@@ -705,7 +710,7 @@ inherit the global cadence. `engine.operation_timeout` is also reloadable; web
 action responses extend their deadline from the active configuration, including
 a resolved per-service `stop_policy` timeout. Per-service CPU rate baselines are
 reset only when a service is removed from the running config; persisted metric
-and event history remains in `paths.state` until the configured retention prunes
+and event history remains in `engine.state` until the configured retention prunes
 it or an explicit `sermoctl state compact` runs.
 
 Trigger a daemon configuration reload with:
@@ -730,13 +735,13 @@ running and is reported in Sermo's event log and daemon log. `sermod` claims
 its workers (for example a `systemctl reload` right after a start) is applied
 once startup completes, and several such requests coalesce into one reload.
 
-Only one `sermod` instance may run per `<paths.runtime>` directory (default
+Only one `sermod` instance may run per `<engine.runtime>` directory (default
 `/run/sermo`). At startup it takes an exclusive lock on
-`<paths.runtime>/sermod.lock`; if another instance already holds it, the new
+`<engine.runtime>/sermod.lock`; if another instance already holds it, the new
 process logs a warning, exits with status **1**, and does not start a second
 monitor loop.
 
-The daemon writes `<paths.runtime>/sermod.pid` (default `/run/sermo/sermod.pid`)
+The daemon writes `<engine.runtime>/sermod.pid` (default `/run/sermo/sermod.pid`)
 at startup to make `sermoctl daemon reload` reliable. Before signalling, the CLI
 checks that the PID is still a `sermod` process (its `/proc/<pid>/exe` basename
 is `sermod`); a pidfile left behind by a killed daemon whose PID now belongs to
@@ -746,7 +751,7 @@ process by name — a native scan of `/proc`, no external `pidof`/`pgrep` needed
 and applies the same executable check to each candidate.
 
 While the dashboard requires authentication, the daemon also writes
-`<paths.runtime>/web.token` (mode `0600`, removed when it stops): the admin
+`<engine.runtime>/web.token` (mode `0600`, removed when it stops): the admin
 credential `sermoctl` uses to reach the web API, which hashed passwords cannot
 supply. See [Hash formats](#hash-formats).
 
@@ -1146,13 +1151,13 @@ The interactive prompt turns terminal echo off while you type; interrupting it
 
 Because a hash cannot be turned back into a password, `sermoctl` cannot send one.
 It authenticates with the **runtime token** `sermod` writes to
-`<paths.runtime>/web.token` (mode `0600`, removed when the daemon stops), which
+`<engine.runtime>/web.token` (mode `0600`, removed when the daemon stops), which
 grants admin access to whoever can read it — the same trust model as the control
 socket. `sermoctl` resolves its credential in this order:
 
 1. `$SERMO_WEB_PASSWORD` — needed for a remote daemon, or when running as a user
    that cannot read the token.
-2. `<paths.runtime>/web.token`.
+2. `<engine.runtime>/web.token`.
 
 The **password**, not the username, selects the role — at the browser prompt enter
 any username and the admin or guest password; passwords are compared in constant
@@ -1500,7 +1505,7 @@ feed; a service's detail shows its own events.
 The detail's check results are the **latest observed** by the worker (published
 each cycle), so they cost nothing to view and reflect each check's own cadence
 (see [per-check interval](#per-check-interval)); they are rehydrated from
-`paths.state` after a daemon restart, and a check not run yet shows "not run
+`engine.state` after a daemon restart, and a check not run yet shows "not run
 yet". A service result is used only through its normal freshness window (two
 effective check intervals, with a 30-second minimum) and while it still matches
 the configured check type; otherwise the detail marks it stale and waits for a
@@ -2557,7 +2562,7 @@ When the web UI is enabled, a storage watch with `then.expand` also shows an
 `expand.by` values from YAML; the browser does not send a path or size.
 
 Manual and automatic expansions of the same `check.path` share one operation
-lock under `<paths.runtime>/ops`, and each is bounded by
+lock under `<engine.runtime>/ops`, and each is bounded by
 `engine.operation_timeout`. An expansion requested while another one of that
 path is still running is refused, not queued, so the volume never grows twice
 for one request; the refusal is recorded as `expand-skipped`, and when it hits
@@ -4650,7 +4655,7 @@ array. Every finding has `level` (`error` / `warning` / `info`), `scope` and
   `/sys/class/block` entry; `hdparm`/`smart` device paths) and **kernel PSI**
   (a `pressure` check on a kernel without `/proc/pressure` — `CONFIG_PSI=n` —
   which would otherwise silently never fire).
-- **Locks** — malformed lock files under `<paths.runtime>/locks`.
+- **Locks** — malformed lock files under `<engine.runtime>/locks`.
 
 Rotate and retain `engine.diagnostics` with your host's log tooling (see
 [Rotating the export logs](#rotating-the-export-logs)); Sermo does not prune

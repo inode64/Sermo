@@ -47,7 +47,7 @@ func TestServiceBuiltinFollowsActiveBackend(t *testing.T) {
 		t.Run(backend, func(t *testing.T) {
 			resolved := resolveInstance(t, map[string]string{
 				"sermo.yml": "engine: { backend: " + backend + " }\n" +
-					"paths: { services: [ \"@ROOT@/services\" ], runtime: /run/sermo }\n" +
+					"paths: { services: [ \"@ROOT@/services\" ]}\n" +
 					"defaults: { policy: { cooldown: 5m } }\n",
 				"services/foo.yml": `
 name: foo

@@ -135,10 +135,10 @@ func TestWatchMonitorUnmonitorCommand(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(root, "sermo.yml"), fmt.Appendf(nil, `
-engine: { backend: auto }
-paths: { services: [ %s ], runtime: %s, state: %s }
+engine: { backend: auto, runtime: %s, state: %s }
+paths: { services: [ %s ]}
 defaults: { policy: { cooldown: 5m } }
-`, servicesDir, runDir, stateDir), 0o644); err != nil {
+`, runDir, stateDir, servicesDir), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	global := filepath.Join(root, "sermo.yml")
@@ -299,10 +299,10 @@ func writeCatalogServiceConfig(t *testing.T) (root, global string) {
 	write(filepath.Join(catalogServicesDir, "nginx.yml"), "name: nginx\nservice: nginx\n")
 	write(filepath.Join(servicesDir, "web.yml"), "name: web\nuses: nginx\n")
 	write(filepath.Join(root, "sermo.yml"), fmt.Sprintf(`
-engine: { backend: auto }
-paths: { services: [ %s ], runtime: %s, state: %s }
+engine: { backend: auto, runtime: %s, state: %s }
+paths: { services: [ %s ]}
 defaults: { policy: { cooldown: 5m } }
-`, servicesDir, runDir, stateDir))
+`, runDir, stateDir, servicesDir))
 	return root, filepath.Join(root, "sermo.yml")
 }
 

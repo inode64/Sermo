@@ -35,10 +35,10 @@ uses: redis
 	}
 	global := filepath.Join(configDir, "sermo.yml")
 	if err := os.WriteFile(global, []byte(`
-engine: { backend: auto }
+engine: { backend: auto, runtime: /run/sermo }
 paths:
   services: [services]
-  runtime: /run/sermo
+
 defaults:
   policy: { cooldown: 5m }
 watches:
@@ -83,7 +83,7 @@ func TestDefaultServiceAndAppDirs(t *testing.T) {
 func TestLoadUsesConfigRelativeDefaultServiceDirsWhenServiceDirsOmitted(t *testing.T) {
 	global := writeConfig(t, map[string]string{
 		"sermo.yml": `
-paths:
+engine:
   runtime: /run/sermo
 `,
 		"services/web.yml": `
@@ -108,7 +108,7 @@ name: web
 func TestLoadDoesNotUseConfigRelativeDefaultWatchDirsWhenWatchesOmitted(t *testing.T) {
 	global := writeConfig(t, map[string]string{
 		"sermo.yml": `
-paths:
+engine:
   runtime: /run/sermo
 `,
 		"watches/data.yml": `
@@ -133,6 +133,8 @@ mount: {}
 func TestLoadPathSpecsRecursiveOptIn(t *testing.T) {
 	global := writeConfig(t, map[string]string{
 		"sermo.yml": `
+engine:
+  runtime: /run/sermo
 paths:
   services:
     - path: @ROOT@/services-flat
@@ -156,7 +158,7 @@ paths:
     - path: @ROOT@/watches-flat
     - path: @ROOT@/watches-recursive
       recursive: true
-  runtime: /run/sermo
+
 defaults:
   policy: { cooldown: 5m }
 notify: [ops]
@@ -350,9 +352,11 @@ func TestLoadRelativeConfigPathResolvesDirsAbsolute(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(root, "conf", "sermo.yml"), []byte(`
+engine:
+  runtime: /run/sermo
 paths:
   services: [services]
-  runtime: /run/sermo
+
 defaults:
   policy: { cooldown: 5m }
 `), 0o644); err != nil {

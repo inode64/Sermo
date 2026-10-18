@@ -203,7 +203,7 @@ func (a App) operateWithManualState(ctx context.Context, cfg *config.Config, res
 	return result, err
 }
 
-// openStateStore opens the persistent state store under paths.state. It passes
+// openStateStore opens the persistent state store under engine.state. It passes
 // the engine's cache and retention settings so sermoctl reads history through the
 // same resolution ladder the daemon writes it with.
 func openStateStore(ctx context.Context, cfg *config.Config) (*state.Store, error) {
