@@ -323,7 +323,7 @@ func TestWebBackendListsAndControlsServiceWatches(t *testing.T) {
 		t.Fatal(err)
 	}
 	global := filepath.Join(dir, "sermo.yml")
-	if err := os.WriteFile(global, []byte("paths:\n  services: ["+svcDir+"]\n  runtime: /tmp\n"), 0o644); err != nil {
+	if err := os.WriteFile(global, []byte("paths:\n  services: ["+svcDir+"]\nengine:\n  runtime: /tmp\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	cfg, err := config.Load(global)

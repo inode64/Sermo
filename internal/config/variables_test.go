@@ -348,10 +348,10 @@ checks:
 func TestGlobalCustomVariables(t *testing.T) {
 	global := writeConfig(t, map[string]string{
 		"sermo.yml": `
-engine: { backend: auto }
+engine: { backend: auto, runtime: /run/sermo }
 paths:
   services: [ @ROOT@/services ]
-  runtime: /run/sermo
+
 defaults:
   policy: { cooldown: 5m }
   variables:
@@ -481,8 +481,8 @@ checks:
 `)
 	global := filepath.Join(root, "sermo.yml")
 	if err := os.WriteFile(global, fmt.Appendf(nil, `
-engine: { backend: auto }
-paths: { services: [ %s ], runtime: /run/sermo }
+engine: { backend: auto, runtime: /run/sermo }
+paths: { services: [ %s ]}
 defaults: { policy: { cooldown: 5m } }
 `, servicesDir), 0o644); err != nil {
 		t.Fatal(err)
@@ -597,8 +597,8 @@ checks:
 	write(filepath.Join(servicesDir, "rack.yml"), "name: rack\nuses: upsdrv.rack.snmp\n")
 	global := filepath.Join(root, "sermo.yml")
 	write(global, fmt.Sprintf(`
-engine: { backend: systemd }
-paths: { services: [ %s ], runtime: /run/sermo }
+engine: { backend: systemd, runtime: /run/sermo }
+paths: { services: [ %s ]}
 defaults: { policy: { cooldown: 5m } }
 `, servicesDir))
 

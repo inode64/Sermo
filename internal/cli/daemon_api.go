@@ -83,7 +83,7 @@ func (a App) applyDaemonWebAuth(req *http.Request, cfg *config.Config) {
 //
 //  1. $SERMO_WEB_PASSWORD — an explicit operator choice, and the only option
 //     when the daemon is not on this host.
-//  2. <paths.runtime>/web.token — the daemon's own runtime token, but only for a
+//  2. <engine.runtime>/web.token — the daemon's own runtime token, but only for a
 //     daemon on this host: the token of a local sermod means nothing to a remote
 //     one. It is what makes hashed credentials usable, since a hash cannot be
 //     turned back into the password the API expects.
@@ -124,7 +124,7 @@ func daemonIsLocal(cfg *config.Config) bool {
 // daemon refuses the request. Hashed credentials cannot be sent as a password,
 // so the runtime token or SERMO_WEB_PASSWORD is the way in.
 const daemonWebAuthHint = " — run as the daemon user so " + config.DaemonWebTokenFilename +
-	" under paths.runtime is readable, or set " + config.EnvWebPassword
+	" under engine.runtime is readable, or set " + config.EnvWebPassword
 
 // daemonWebStatusHint appends the credential hint to a refused request, and
 // nothing to any other failure.

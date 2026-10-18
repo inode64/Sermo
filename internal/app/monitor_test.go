@@ -28,10 +28,11 @@ func TestMonitorReloadPreservesWorkerState(t *testing.T) {
 	enabled := filepath.Join(dir, "services")
 
 	baseCfg := fmt.Sprintf(`engine:
+  runtime: %[2]q
   interval: 100ms
 paths:
   services: [%[1]q]
-  runtime: %[2]q
+
 defaults:
   policy: { cooldown: 1m }
 `, enabled, filepath.Join(dir, "run"))
@@ -128,10 +129,11 @@ func TestMonitorReloadRejectsInvalidConfig(t *testing.T) {
 	enabled := filepath.Join(dir, "services")
 	global := filepath.Join(dir, "sermo.yml")
 	valid := fmt.Sprintf(`engine:
+  runtime: %[2]q
   interval: 100ms
 paths:
-  services: [%q]
-  runtime: %q
+  services: [%[1]q]
+
 defaults:
   policy: { cooldown: 1m }
 `, enabled, filepath.Join(dir, "run"))
@@ -169,10 +171,11 @@ checks:
 	waitReady(t, ready)
 
 	invalid := fmt.Sprintf(`engine:
+  runtime: %[2]q
   interval: notaduration
 paths:
-  services: [%q]
-  runtime: %q
+  services: [%[1]q]
+
 defaults:
   policy: { cooldown: 1m }
 `, enabled, filepath.Join(dir, "run"))
@@ -213,12 +216,12 @@ func TestReloadConfigCompatibilityRejectsProcessLifetimeChanges(t *testing.T) {
 		{
 			name: "runtime changed",
 			next: reloadCompatibilityConfig("/run/sermo-next", "/var/lib/sermo", "current"),
-			want: "paths.runtime changed; restart sermod",
+			want: "engine.runtime changed; restart sermod",
 		},
 		{
 			name: "state changed",
 			next: reloadCompatibilityConfig("/run/sermo", "/var/lib/sermo-next", "current"),
-			want: "paths.state changed; restart sermod",
+			want: "engine.state changed; restart sermod",
 		},
 		{
 			name: "web auth changed",
@@ -301,10 +304,11 @@ func TestMonitorReloadEmptyFleetRestoresSchedulerAndCollector(t *testing.T) {
 	global := filepath.Join(dir, "sermo.yml")
 	runtimeDir := filepath.Join(dir, "run")
 	initial := fmt.Sprintf(`engine:
+  runtime: %[2]q
   interval: 100ms
 paths:
-  services: [%q]
-  runtime: %q
+  services: [%[1]q]
+
 defaults:
   policy: { cooldown: 1m }
 `, servicesDir, runtimeDir)
@@ -346,10 +350,11 @@ checks:
 	waitReady(t, ready)
 
 	empty := fmt.Sprintf(`engine:
+  runtime: %[2]q
   interval: 10s
 paths:
-  services: [%q]
-  runtime: %q
+  services: [%[1]q]
+
 defaults:
   policy: { cooldown: 1m }
 `, emptyServicesDir, runtimeDir)

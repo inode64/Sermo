@@ -1,5 +1,5 @@
 // Package state is Sermo's persistent store, a SQLite database kept under
-// paths.state (default /var/lib/sermo/sermo.db).
+// engine.state (default /var/lib/sermo/sermo.db).
 //
 // Unlike the runtime locks and pause markers under /run (tmpfs, wiped on
 // reboot), this store survives reboots. That durability is what lets the

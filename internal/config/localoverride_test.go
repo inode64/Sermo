@@ -15,13 +15,13 @@ import (
 func localOverrideFiles() map[string]string {
 	return map[string]string{
 		"sermo.yml": `
-engine: { backend: auto }
+engine: { backend: auto, runtime: /run/sermo }
 paths:
   services: [ "@ROOT@/services" ]
   apps: [ "@ROOT@/apps" ]
   notifiers: [ "@ROOT@/notifiers" ]
   watches: [ "@ROOT@/watches", "@ROOT@/storages" ]
-  runtime: /run/sermo
+
 defaults: { policy: { cooldown: 5m } }
 `,
 		"catalog/services/demo.yml": `
@@ -220,8 +220,8 @@ preflight:
 func TestLocalServiceOverrideDemandsTemplateInstance(t *testing.T) {
 	files := map[string]string{
 		"sermo.yml": `
-engine: { backend: systemd }
-paths: { services: [ "@ROOT@/services" ], apps: [ "@ROOT@/apps" ], runtime: /run/sermo }
+engine: { backend: systemd, runtime: /run/sermo }
+paths: { services: [ "@ROOT@/services" ], apps: [ "@ROOT@/apps" ]}
 defaults: { policy: { cooldown: 5m } }
 `,
 		"catalog/services/vpn.yml": `

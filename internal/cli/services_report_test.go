@@ -81,7 +81,7 @@ preflight: { binary: { type: binary, path: "`+binary+`" } }
 	}
 	global := filepath.Join(root, "sermo.yml")
 	if err := os.WriteFile(global, []byte(`
-paths:
+engine:
   runtime: /run/sermo
 defaults: { policy: { cooldown: 5m } }
 `), 0o644); err != nil {

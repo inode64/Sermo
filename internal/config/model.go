@@ -112,6 +112,10 @@ const SectionPaths = sectionPaths
 const (
 	// SectionEngine is the top-level engine configuration block.
 	SectionEngine = "engine"
+	// EngineKeyRuntime is engine.runtime, the volatile runtime root.
+	EngineKeyRuntime = "runtime"
+	// EngineKeyState is engine.state, the persistent state root.
+	EngineKeyState = "state"
 	// EngineKeyAccess is engine.access.
 	EngineKeyAccess = "access"
 	// EngineKeyArtifactInterval is engine.artifact_interval.
@@ -723,7 +727,7 @@ func catalogCategoryForKind(kind string) string {
 	}
 }
 
-// DefaultRuntime is the runtime root used when paths.runtime is unset.
+// DefaultRuntime is the runtime root used when engine.runtime is unset.
 const DefaultRuntime = "/run/sermo"
 
 // DaemonPIDFilename is the sermod pidfile name written under the runtime root.
@@ -734,7 +738,7 @@ const DaemonPIDFilename = "sermod.pid"
 // the web API, so it is written owner-only and removed when the daemon stops.
 const DaemonWebTokenFilename = "web.token"
 
-// DefaultState is the persistent state root used when paths.state is unset. It
+// DefaultState is the persistent state root used when engine.state is unset. It
 // lives under /var/lib so it survives reboots, unlike the runtime root on tmpfs.
 const DefaultState = "/var/lib/sermo"
 

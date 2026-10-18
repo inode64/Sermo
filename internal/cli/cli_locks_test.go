@@ -30,9 +30,11 @@ func writeLocksConfig(t *testing.T, root string) (string, string) {
 	t.Helper()
 	global := filepath.Join(root, "sermo.yml")
 	mustWrite(t, global, `
+engine:
+  runtime: `+root+`/run
 paths:
   services: [ `+root+`/services ]
-  runtime: `+root+`/run
+
 defaults:
   policy:
     cooldown: 5m

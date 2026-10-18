@@ -29,7 +29,7 @@ type Report struct {
 }
 
 // Scanner reads named runtime locks from a single locks directory
-// (<paths.runtime>/locks).
+// (<engine.runtime>/locks).
 type Scanner struct {
 	Dir  string
 	Proc ProcessProber

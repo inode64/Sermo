@@ -111,7 +111,7 @@ func TestWebBackendMounts(t *testing.T) {
 	runtime := filepath.Join(root, "run")
 	cfg := &config.Config{
 		Global: config.Global{Runtime: runtime, Raw: map[string]any{
-			"paths": map[string]any{"runtime": runtime},
+			config.SectionEngine: map[string]any{config.EngineKeyRuntime: runtime},
 			"watches": map[string]any{
 				"mount-backup": map[string]any{
 					"name":  "mount-backup",
@@ -163,7 +163,7 @@ func TestWebBackendMountsUsesGenerationSpecsAndOneMountSample(t *testing.T) {
 	runtime := t.TempDir()
 	cfg := &config.Config{
 		Global: config.Global{Runtime: runtime, Raw: map[string]any{
-			"paths": map[string]any{"runtime": runtime},
+			config.SectionEngine: map[string]any{config.EngineKeyRuntime: runtime},
 			"watches": map[string]any{
 				"mount-archive": map[string]any{
 					"check": map[string]any{"type": "storage", "path": "/mnt/archive", "mounted": true},
@@ -670,7 +670,7 @@ func mountTestConfig(t *testing.T) *config.Config {
 	runtime := filepath.Join(root, "run")
 	return &config.Config{
 		Global: config.Global{Runtime: runtime, Raw: map[string]any{
-			"paths": map[string]any{"runtime": runtime},
+			config.SectionEngine: map[string]any{config.EngineKeyRuntime: runtime},
 			"watches": map[string]any{
 				"mount-backup": map[string]any{
 					"name":  "mount-backup",
@@ -709,7 +709,7 @@ func rootMountTestConfig(t *testing.T) *config.Config {
 	runtime := filepath.Join(root, "run")
 	return &config.Config{
 		Global: config.Global{Runtime: runtime, Raw: map[string]any{
-			"paths": map[string]any{"runtime": runtime},
+			config.SectionEngine: map[string]any{config.EngineKeyRuntime: runtime},
 			"watches": map[string]any{
 				"mount-root": map[string]any{
 					"name":  "mount-root",

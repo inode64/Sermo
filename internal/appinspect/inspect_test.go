@@ -247,7 +247,7 @@ func TestListFiltersMissingBinaries(t *testing.T) {
 		"catalog/apps/absent.yml":  "name: absent\nvariables:\n  binary: /nonexistent/absent\n",
 		"services/.keep":           "",
 		"sermo.yml": "engine: { backend: systemd }\n" +
-			"paths:\n  services: [" + filepath.Join(root, "services") + "]\n  runtime: /run/sermo\n" +
+			"paths:\n  services: [" + filepath.Join(root, "services") + "]\n" +
 			"defaults:\n  policy: { cooldown: 5m }\n",
 	})
 	cfg, err := config.Load(filepath.Join(root, "sermo.yml"), config.WithCatalogDirs(filepath.Join(root, "catalog")))
@@ -381,7 +381,7 @@ preflight:
 		"catalog/services/mariadb.yml": "name: mariadb\ndisplay_name: \"MariaDB\"\nservice: { systemd: [mariadb] }\napps: [mariadb]\n",
 		"catalog/services/mysql.yml":   "name: mysql\ndisplay_name: \"MySQL\"\nservice: { systemd: [mysql] }\napps: [mysql]\n",
 		"sermo.yml": "engine: { backend: systemd }\n" +
-			"paths:\n  services: [" + servicesDir + "]\n  runtime: /run/sermo\n" +
+			"paths:\n  services: [" + servicesDir + "]\n" +
 			"defaults:\n  policy: { cooldown: 5m }\n",
 	}
 	writeConfigTree(t, root, files)
@@ -452,7 +452,7 @@ preflight:
 `, local, local),
 		"services/.keep": "",
 		"sermo.yml": "engine: { backend: systemd }\n" +
-			"paths:\n  services: [" + filepath.Join(root, "services") + "]\n  runtime: /run/sermo\n" +
+			"paths:\n  services: [" + filepath.Join(root, "services") + "]\n" +
 			"defaults:\n  policy: { cooldown: 5m }\n",
 	})
 	cfg, err := config.Load(filepath.Join(root, "sermo.yml"), config.WithCatalogDirs(filepath.Join(root, "catalog")))
@@ -505,7 +505,7 @@ preflight:
 `, filepath.Join(binDir, "php${version}")),
 		"services/.keep": "",
 		"sermo.yml": "engine: { backend: systemd }\n" +
-			"paths:\n  services: [" + filepath.Join(root, "services") + "]\n  runtime: /run/sermo\n" +
+			"paths:\n  services: [" + filepath.Join(root, "services") + "]\n" +
 			"defaults:\n  policy: { cooldown: 5m }\n",
 	})
 	cfg, err := config.Load(filepath.Join(root, "sermo.yml"), config.WithCatalogDirs(filepath.Join(root, "catalog")))

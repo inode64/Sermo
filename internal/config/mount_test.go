@@ -8,11 +8,12 @@ import (
 
 const mountGlobal = `
 engine:
+  runtime: /run/sermo
   backend: auto
 paths:
   services: [ @ROOT@/services ]
   watches: [ @ROOT@/mounts ]
-  runtime: /run/sermo
+
 defaults:
   policy:
     cooldown: 5m

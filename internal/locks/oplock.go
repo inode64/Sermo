@@ -90,7 +90,7 @@ type Handle = ownedLock
 
 // OperationLocker acquires the internal operation lock that serializes
 // start/stop/restart/reload/resume for one service. It lives under
-// <paths.runtime>/ops, separate from named runtime locks.
+// <engine.runtime>/ops, separate from named runtime locks.
 type OperationLocker struct {
 	Dir  string
 	Proc ProcessProber
@@ -102,7 +102,7 @@ type OperationLocker struct {
 	OnReclaim func(service, reason string)
 }
 
-// NewOperationLocker returns a locker over dir (<paths.runtime>/ops) using the
+// NewOperationLocker returns a locker over dir (<engine.runtime>/ops) using the
 // real host for process probing, the wall clock and this process's identity.
 func NewOperationLocker(dir string) OperationLocker {
 	return OperationLocker{Dir: dir, Proc: OSProcessProber{}, Now: time.Now}

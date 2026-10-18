@@ -33,10 +33,11 @@ func TestRunRejectsInvalidConfig(t *testing.T) {
 	}
 	global := filepath.Join(dir, "sermo.yml")
 	content := fmt.Sprintf(`engine:
+  runtime: /run/sermo
   interval: notaduration
 paths:
   services: [%s]
-  runtime: /run/sermo
+
 defaults:
   policy: { cooldown: 5m }
 `, filepath.Join(dir, "enabled"))
@@ -468,17 +469,18 @@ func TestRunSmokeLifecycle(t *testing.T) {
 	port := freeTCPPort(t)
 	global := filepath.Join(dir, "sermo.yml")
 	content := fmt.Sprintf(`engine:
+  runtime: %[2]s
+  state: %[3]s
   backend: auto
   interval: 1s
 paths:
-  services: [%s]
-  runtime: %s
-  state: %s
+  services: [%[1]s]
+
 defaults:
   policy: { cooldown: 5m }
 web:
   address: 127.0.0.1
-  port: %d
+  port: %[4]d
 watches:
   smoke:
     monitor: disabled

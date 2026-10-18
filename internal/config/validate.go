@@ -68,9 +68,7 @@ var rejectedSecurityToggles = []string{
 var validGlobalPathKeys = set(
 	pathKeyApps,
 	pathKeyNotifiers,
-	pathKeyRuntime,
 	pathKeyServices,
-	pathKeyState,
 	pathKeyTemplates,
 	pathKeyWatches,
 )
@@ -153,8 +151,10 @@ var validEngineKeys = set(
 	EngineKeyRetention1d,
 	EngineKeyRetentionEvents,
 	EngineKeyRollupInterval,
+	EngineKeyRuntime,
 	EngineKeyServiceRestartNotice,
 	EngineKeyStartupDelay,
+	EngineKeyState,
 	EngineKeyStateCacheSize,
 	EngineKeyUserLookup,
 	EngineKeyUserLookupTimeout,
@@ -200,6 +200,7 @@ func validateGlobalEngine(cfg *Config, raw map[string]any, add addFunc) {
 	for key := range unknownBlockKeys(engine, validEngineKeys) {
 		add(validationNotSupportedFormat, engineFieldPath(key))
 	}
+	validateEngineDirectories(engine, add)
 	backend := cfgval.String(engine[EngineKeyBackend])
 	if _, err := servicemgr.ParseBackend(backend); err != nil {
 		add(validationNotOneOfFormat, enginePathBackend, backend, servicemgr.BackendInitSummary)
@@ -301,6 +302,19 @@ func validatePositiveDurationField(fields map[string]any, key, path string, add 
 	}
 }
 
+func validateEngineDirectories(engine map[string]any, add addFunc) {
+	for _, key := range []string{EngineKeyRuntime, EngineKeyState} {
+		value, present := engine[key]
+		if !present {
+			continue
+		}
+		path, ok := value.(string)
+		if !ok || path == "" || !filepath.IsAbs(path) {
+			add("%s must be an absolute directory", engineFieldPath(key))
+		}
+	}
+}
+
 func validateGlobalPaths(cfg *Config, raw map[string]any, add addFunc) {
 	paths, ok := raw[sectionPaths].(map[string]any)
 	if !ok {
@@ -308,21 +322,15 @@ func validateGlobalPaths(cfg *Config, raw map[string]any, add addFunc) {
 	}
 	for _, key := range slices.Sorted(maps.Keys(paths)) {
 		if key == pathKeyLocks {
-			add("%s is not supported; runtime locks derive from %s", pathsPathLocks, pathsPathRuntime)
+			add("%s is not supported; runtime locks derive from %s", pathsPathLocks, enginePathRuntime)
 			continue
 		}
 		if _, known := validGlobalPathKeys[key]; !known {
 			add(validationNotSupportedFormat, pathsFieldPath(key))
 		}
 	}
-	for _, path := range []struct{ key, value string }{
-		{pathKeyRuntime, cfgval.String(paths[pathKeyRuntime])},
-		{pathKeyState, cfgval.String(paths[pathKeyState])},
-		{pathKeyTemplates, cfgval.String(paths[pathKeyTemplates])},
-	} {
-		if path.value != "" && !filepath.IsAbs(path.value) {
-			add("%s %q must be an absolute directory", pathsFieldPath(path.key), path.value)
-		}
+	if templates := cfgval.String(paths[pathKeyTemplates]); templates != "" && !filepath.IsAbs(templates) {
+		add("%s %q must be an absolute directory", pathsFieldPath(pathKeyTemplates), templates)
 	}
 	for name, specs := range map[string][]PathSpec{
 		pathKeyApps: cfg.Global.AppPaths, pathKeyNotifiers: cfg.Global.NotifierPaths,

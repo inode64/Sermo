@@ -24,10 +24,12 @@ import (
 func writeActionConfig(t *testing.T) string {
 	t.Helper()
 	global := writeServiceConfig(t, `
-paths:
-  services: [ @ROOT@/services ]
+engine:
   runtime: @ROOT@/run
   state: @ROOT@/state
+paths:
+  services: [ @ROOT@/services ]
+
 defaults:
   policy:
     cooldown: 5m
@@ -43,11 +45,13 @@ service: web
 func writeInvalidActionConfig(t *testing.T) string {
 	t.Helper()
 	global := writeServiceConfig(t, `
+engine:
+  runtime: @ROOT@/run
+  state: @ROOT@/state
 paths:
   services: [ @ROOT@/services ]
-  runtime: @ROOT@/run
   locks: @ROOT@/locks
-  state: @ROOT@/state
+
 defaults:
   policy:
     cooldown: 5m
@@ -63,10 +67,12 @@ service: web
 func writeReloadCommandConfig(t *testing.T) string {
 	t.Helper()
 	global := writeServiceConfig(t, `
-paths:
-  services: [ @ROOT@/services ]
+engine:
   runtime: @ROOT@/run
   state: @ROOT@/state
+paths:
+  services: [ @ROOT@/services ]
+
 defaults:
   policy:
     cooldown: 5m
@@ -177,10 +183,12 @@ func TestRestartUsesCanonicalServiceAlias(t *testing.T) {
 	root := t.TempDir()
 	global := filepath.Join(root, "sermo.yml")
 	mustWrite(t, global, `
-paths:
-  services: [ `+root+`/services ]
+engine:
   runtime: `+root+`/run
   state: `+root+`/state
+paths:
+  services: [ `+root+`/services ]
+
 defaults:
   policy:
     cooldown: 5m
@@ -370,10 +378,12 @@ func TestStopStartPreservesExistingUnmonitor(t *testing.T) {
 func writeCascadeConfig(t *testing.T) string {
 	t.Helper()
 	global := writeServiceConfig(t, `
-paths:
-  services: [ @ROOT@/services ]
+engine:
   runtime: @ROOT@/run
   state: @ROOT@/state
+paths:
+  services: [ @ROOT@/services ]
+
 defaults:
   policy:
     cooldown: 5m
@@ -474,10 +484,12 @@ func TestCascadeRetriesBlockedTarget(t *testing.T) {
 
 func TestCascadeResolveErrorDowngradesPrimary(t *testing.T) {
 	global := writeServiceConfig(t, `
-paths:
-  services: [ @ROOT@/services ]
+engine:
   runtime: @ROOT@/run
   state: @ROOT@/state
+paths:
+  services: [ @ROOT@/services ]
+
 defaults:
   policy:
     cooldown: 5m
@@ -771,11 +783,12 @@ func TestManualOperationUsesEngineOperationTimeout(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			global := writeServiceConfig(t, `
 engine:
+  runtime: @ROOT@/run
+  state: @ROOT@/state
   operation_timeout: 7m
 paths:
   services: [ @ROOT@/services ]
-  runtime: @ROOT@/run
-  state: @ROOT@/state
+
 defaults:
   policy:
     cooldown: 5m
@@ -1008,10 +1021,12 @@ func TestOperationSessionUsesCanonicalServiceCheckDependencies(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			global := writeServiceConfig(t, `
-paths:
-  services: [ @ROOT@/services ]
+engine:
   runtime: @ROOT@/run
   state: @ROOT@/state
+paths:
+  services: [ @ROOT@/services ]
+
 defaults:
   policy:
     cooldown: 5m
@@ -1067,10 +1082,12 @@ func TestPreflightUsesCanonicalServiceCheckDependencies(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			global := writeServiceConfig(t, `
-paths:
-  services: [ @ROOT@/services ]
+engine:
   runtime: @ROOT@/run
   state: @ROOT@/state
+paths:
+  services: [ @ROOT@/services ]
+
 defaults:
   policy:
     cooldown: 5m

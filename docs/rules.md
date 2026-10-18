@@ -3896,7 +3896,7 @@ stays open while the saturated server also refuses the monitor's own
 connection. A rule with an operation is not held: an unknown cycle ends its
 window, so it never acts on what it could not observe.
 
-Service rule-window progress is persisted in `paths.state`. If `sermod`
+Service rule-window progress is persisted in `engine.state`. If `sermod`
 restarts while a `for` window is at 2/3 consecutive matches, the next observed
 matching cycle continues from 2/3 instead of starting from zero. Duration-based
 windows persist their timestamps too, so a restart does not restart a pending
@@ -4160,7 +4160,7 @@ after consecutive remediations) or once `max_actions` is reached in the window.
 `backoff` grows the effective cooldown after each consecutive remediation:
 `initial` the first time, then multiplied by `factor` each subsequent time,
 capped at `max`. `factor` **defaults to `2`** when omitted (or set to ≤0).
-Automatic-remediation state is also persisted in `paths.state`: `LastActionAt`,
+Automatic-remediation state is also persisted in `engine.state`: `LastActionAt`,
 recent action timestamps used by `max_actions`, and the current backoff survive a
 `sermod` restart, so restarting the daemon does not bypass cooldown or rate
 limits.

@@ -63,8 +63,8 @@ func countLevel(r Result, level Level) (n int) {
 }
 
 const baseGlobal = `
-engine: { backend: auto, interval: 30s }
-paths: { services: [ @ROOT@/services ], state: @ROOT@/state }
+engine: { backend: auto, interval: 30s, state: @ROOT@/state }
+paths: { services: [ @ROOT@/services ]}
 defaults: { policy: { cooldown: 5m } }
 `
 

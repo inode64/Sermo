@@ -12,6 +12,9 @@
 # before using it on a host with matching real services.
 
 engine:
+  # Keep local runs out of /run and /var/lib.
+  runtime: /tmp/sermo-dev/run
+  state: /tmp/sermo-dev/state
   backend: auto
   interval: 30s
   max_parallel_checks: 8
@@ -35,10 +38,6 @@ paths:
     - networks
     - storages
     - mounts
-
-  # Keep local runs out of /run and /var/lib.
-  runtime: /tmp/sermo-dev/run
-  state: /tmp/sermo-dev/state
 
 defaults:
   stop_policy:

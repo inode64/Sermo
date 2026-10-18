@@ -19,8 +19,8 @@ func TestEnsureConfigPathDirPreservesOperatorText(t *testing.T) {
 	}{
 		{
 			name:     "block list with comments",
-			input:    "# Operator notes\nengine:\n  backend: auto # pinned\npaths:\n  watches:\n    - net.d # first\n  runtime: /run/sermo\n# trailer\n",
-			keep:     []string{"# Operator notes", "backend: auto # pinned", "- net.d # first", "# trailer", "engine:\n  backend"},
+			input:    "# Operator notes\nengine:\n  runtime: /run/sermo\n  backend: auto # pinned\npaths:\n  watches:\n    - net.d # first\n# trailer\n",
+			keep:     []string{"# Operator notes", "backend: auto # pinned", "- net.d # first", "# trailer", "engine:\n  runtime"},
 			wantList: []string{"net.d", "storages"},
 		},
 		{
@@ -37,8 +37,8 @@ func TestEnsureConfigPathDirPreservesOperatorText(t *testing.T) {
 		},
 		{
 			name:     "missing key",
-			input:    "# head\npaths:\n  runtime: /run/sermo # rt\n",
-			keep:     []string{"# head", "runtime: /run/sermo # rt"},
+			input:    "# head\npaths:\n  templates: /etc/sermo/templates # tpl\n",
+			keep:     []string{"# head", "templates: /etc/sermo/templates # tpl"},
 			wantList: []string{"storages"},
 		},
 		{
@@ -51,7 +51,7 @@ func TestEnsureConfigPathDirPreservesOperatorText(t *testing.T) {
 			// Not expressible as a syntax edit: falls back to a plain render
 			// that is still the correct config.
 			name:     "flow mapping falls back",
-			input:    "paths: {runtime: /run/x}\n",
+			input:    "engine:\n  runtime: /run/x\npaths: {}\n",
 			wantList: []string{"storages"},
 		},
 		{

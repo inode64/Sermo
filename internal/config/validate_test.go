@@ -69,11 +69,11 @@ func TestValidateGlobalErrors(t *testing.T) {
 	global := writeConfig(t, map[string]string{
 		"sermo.yml": `
 engine:
+  runtime: relative/path
   backend: bogus
 paths:
   services: [ @ROOT@/services ]
   locks: /run/sermo/locks
-  runtime: relative/path
   templates: relative/templates
   unexpected: /tmp/sermo
 defaults:
@@ -91,8 +91,8 @@ security:
 	issues := Validate(cfg)
 	wantSubstrings := []string{
 		"engine.backend",
-		"paths.locks is not supported; runtime locks derive from paths.runtime",
-		"paths.runtime",
+		"paths.locks is not supported; runtime locks derive from engine.runtime",
+		"engine.runtime",
 		"paths.templates",
 		"paths.unexpected is not supported",
 		"security.allow_sigkill_by_default",
@@ -113,7 +113,9 @@ security:
 func TestValidateRejectsUnknownTopLevelKeys(t *testing.T) {
 	cfg := loadCatalog(t, map[string]string{
 		"sermo.yml": `
-paths: { services: [ "@ROOT@/services" ], watches: [ "@ROOT@/watches" ], runtime: /run/sermo }
+engine:
+  runtime: /run/sermo
+paths: { services: [ "@ROOT@/services" ], watches: [ "@ROOT@/watches" ]}
 defaults: { policy: { cooldown: 5m } }
 securty: { allow_sigkill_by_default: true }
 `,

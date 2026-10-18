@@ -131,8 +131,8 @@ checks:
 		}
 		global := filepath.Join(root, "sermo-"+backend+".yml")
 		if err := os.WriteFile(global, fmt.Appendf(nil, `
-engine: { backend: %s }
-paths: { services: [ %s ], runtime: /run/sermo }
+engine: { backend: %s, runtime: /run/sermo }
+paths: { services: [ %s ]}
 defaults: { policy: { cooldown: 5m } }
 `, backend, servicesDir), 0o644); err != nil {
 			t.Fatal(err)
@@ -233,8 +233,8 @@ variables:
 	}
 	global := filepath.Join(root, "sermo.yml")
 	if err := os.WriteFile(global, fmt.Appendf(nil, `
-engine: { backend: openrc }
-paths: { services: [ %s ], runtime: /run/sermo }
+engine: { backend: openrc, runtime: /run/sermo }
+paths: { services: [ %s ]}
 defaults: { policy: { cooldown: 5m } }
 `, servicesDir), 0o644); err != nil {
 		t.Fatal(err)
@@ -328,10 +328,10 @@ checks: { service: { type: service, expect: active } }
 
 	global := filepath.Join(root, "sermo.yml")
 	if err := os.WriteFile(global, fmt.Appendf(nil, `
-engine: { backend: systemd }
+engine: { backend: systemd, runtime: /run/sermo }
 paths:
   services: [ %s ]
-  runtime: /run/sermo
+
 defaults:
   policy: { cooldown: 5m }
 `, servicesDir), 0o644); err != nil {
@@ -405,10 +405,10 @@ checks: { service: { type: service, expect: active } }
 
 	global := filepath.Join(root, "sermo.yml")
 	if err := os.WriteFile(global, fmt.Appendf(nil, `
-engine: { backend: auto }
+engine: { backend: auto, runtime: /run/sermo }
 paths:
   services: [ %s ]
-  runtime: /run/sermo
+
 defaults:
   policy: { cooldown: 5m }
 `, servicesDir), 0o644); err != nil {
@@ -504,8 +504,8 @@ checks:
 	}
 	global := filepath.Join(root, "sermo.yml")
 	if err := os.WriteFile(global, fmt.Appendf(nil, `
-engine: { backend: auto }
-paths: { services: [ %s ], runtime: /run/sermo }
+engine: { backend: auto, runtime: /run/sermo }
+paths: { services: [ %s ]}
 defaults: { policy: { cooldown: 5m } }
 `, servicesDir), 0o644); err != nil {
 		t.Fatal(err)
@@ -583,8 +583,8 @@ preflight:
 	}
 	global := filepath.Join(root, "sermo.yml")
 	if err := os.WriteFile(global, fmt.Appendf(nil, `
-engine: { backend: auto }
-paths: { services: [ %s ], runtime: /run/sermo }
+engine: { backend: auto, runtime: /run/sermo }
+paths: { services: [ %s ]}
 defaults: { policy: { cooldown: 5m } }
 `, servicesDir), 0o644); err != nil {
 		t.Fatal(err)
@@ -686,8 +686,8 @@ preflight:
 	}
 	global := filepath.Join(root, "sermo.yml")
 	if err := os.WriteFile(global, fmt.Appendf(nil, `
-engine: { backend: auto }
-paths: { services: [ %s ], runtime: /run/sermo }
+engine: { backend: auto, runtime: /run/sermo }
+paths: { services: [ %s ]}
 defaults: { policy: { cooldown: 5m } }
 `, servicesDir), 0o644); err != nil {
 		t.Fatal(err)
@@ -792,8 +792,8 @@ variables:
 `, bin))
 	global := filepath.Join(root, "sermo.yml")
 	if err := os.WriteFile(global, fmt.Appendf(nil, `
-engine: { backend: auto }
-paths: { services: [ %s ], runtime: /run/sermo }
+engine: { backend: auto, runtime: /run/sermo }
+paths: { services: [ %s ]}
 defaults: { policy: { cooldown: 5m } }
 `, servicesDir), 0o644); err != nil {
 		t.Fatal(err)
@@ -905,8 +905,8 @@ preflight:
 `, bin, jvm, jvm, jvm, jvm))
 	global := filepath.Join(root, "sermo.yml")
 	if err := os.WriteFile(global, fmt.Appendf(nil, `
-engine: { backend: auto }
-paths: { services: [ %s ], runtime: /run/sermo }
+engine: { backend: auto, runtime: /run/sermo }
+paths: { services: [ %s ]}
 defaults: { policy: { cooldown: 5m } }
 `, servicesDir), 0o644); err != nil {
 		t.Fatal(err)
@@ -1154,8 +1154,8 @@ variables:
 	writeFile(t, filepath.Join(catalogDir, "services"), "openvpn.yml", tmpl)
 	global := filepath.Join(root, "sermo.yml")
 	if err := os.WriteFile(global, fmt.Appendf(nil, `
-engine: { backend: openrc }
-paths: { services: [ %s ], runtime: /run/sermo }
+engine: { backend: openrc, runtime: /run/sermo }
+paths: { services: [ %s ]}
 defaults: { policy: { cooldown: 5m } }
 `, servicesDir), 0o644); err != nil {
 		t.Fatal(err)
@@ -1220,8 +1220,8 @@ func TestInstanceTemplateMaterializesConfiguredFailedService(t *testing.T) {
 func TestConfiguredServiceTemplateSkipsInactiveBackend(t *testing.T) {
 	global := writeConfig(t, map[string]string{
 		"sermo.yml": `
-engine: { backend: systemd }
-paths: { services: [@ROOT@/services], runtime: /run/sermo }
+engine: { backend: systemd, runtime: /run/sermo }
+paths: { services: [@ROOT@/services]}
 defaults: { policy: { cooldown: 5m } }
 `,
 		"catalog/services/openvpn.yml": `
@@ -1280,8 +1280,8 @@ uses: nebula-nebula0
 	}
 	global := filepath.Join(root, "sermo.yml")
 	if err := os.WriteFile(global, fmt.Appendf(nil, `
-engine: { backend: %s }
-paths: { services: [ %s ], runtime: /run/sermo }
+engine: { backend: %s, runtime: /run/sermo }
+paths: { services: [ %s ]}
 defaults: { policy: { cooldown: 5m } }
 `, backend, servicesDir), 0o644); err != nil {
 		t.Fatal(err)
@@ -1363,10 +1363,10 @@ apps: ["php-fpm-${version}"]
 
 	global := filepath.Join(root, "sermo.yml")
 	if err := os.WriteFile(global, fmt.Appendf(nil, `
-engine: { backend: auto }
+engine: { backend: auto, runtime: /run/sermo }
 paths:
   services: [ %s ]
-  runtime: /run/sermo
+
 defaults:
   policy: { cooldown: 5m }
 `, servicesDir), 0o644); err != nil {
@@ -1462,10 +1462,10 @@ checks: { service: { type: service, expect: active } }
 
 	global := filepath.Join(root, "sermo.yml")
 	if err := os.WriteFile(global, fmt.Appendf(nil, `
-engine: { backend: systemd }
+engine: { backend: systemd, runtime: /run/sermo }
 paths:
   services: [ %s ]
-  runtime: /run/sermo
+
 defaults:
   policy: { cooldown: 5m }
 `, servicesDir), 0o644); err != nil {
@@ -1543,10 +1543,10 @@ checks: { service: { type: service, expect: active } }
 	}
 	global := filepath.Join(root, "sermo.yml")
 	if err := os.WriteFile(global, fmt.Appendf(nil, `
-engine: { backend: systemd }
+engine: { backend: systemd, runtime: /run/sermo }
 paths:
   services: [ %s ]
-  runtime: /run/sermo
+
 defaults:
   policy: { cooldown: 5m }
 `, servicesDir), 0o644); err != nil {
@@ -1593,8 +1593,8 @@ checks:
 `, confd))
 	global := filepath.Join(root, "sermo.yml")
 	if err := os.WriteFile(global, fmt.Appendf(nil, `
-engine: { backend: auto }
-paths: { services: [ %s ], runtime: /run/sermo }
+engine: { backend: auto, runtime: /run/sermo }
+paths: { services: [ %s ]}
 defaults: { policy: { cooldown: 5m } }
 `, servicesDir), 0o644); err != nil {
 		t.Fatal(err)
@@ -1646,8 +1646,8 @@ checks:
 	}
 	global := filepath.Join(root, "sermo.yml")
 	if err := os.WriteFile(global, fmt.Appendf(nil, `
-engine: { backend: systemd }
-paths: { services: [ %s ], runtime: /run/sermo }
+engine: { backend: systemd, runtime: /run/sermo }
+paths: { services: [ %s ]}
 defaults: { policy: { cooldown: 5m } }
 `, servicesDir), 0o644); err != nil {
 		t.Fatal(err)
@@ -1721,8 +1721,8 @@ checks:
 	}
 	global := filepath.Join(root, "sermo.yml")
 	if err := os.WriteFile(global, fmt.Appendf(nil, `
-engine: { backend: auto }
-paths: { services: [ %s ], runtime: /run/sermo }
+engine: { backend: auto, runtime: /run/sermo }
+paths: { services: [ %s ]}
 defaults: { policy: { cooldown: 5m } }
 `, servicesDir), 0o644); err != nil {
 		t.Fatal(err)
@@ -1783,8 +1783,8 @@ checks:
 	}
 	global := filepath.Join(root, "sermo.yml")
 	if err := os.WriteFile(global, fmt.Appendf(nil, `
-engine: { backend: auto }
-paths: { services: [ %s ], runtime: /run/sermo }
+engine: { backend: auto, runtime: /run/sermo }
+paths: { services: [ %s ]}
 defaults: { policy: { cooldown: 5m } }
 `, servicesDir), 0o644); err != nil {
 		t.Fatal(err)

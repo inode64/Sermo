@@ -27,6 +27,8 @@
 # ---------------------------------------------------------------------------
 
 engine:
+  runtime: /run/sermo  # volatile: locks (tmpfs)
+  state: /var/lib/sermo  # persistent: monitor state, SLA, measurements, runtime metrics
   backend: auto  # auto | systemd | openrc
   interval: 30s  # default check cycle for services and watches
   max_parallel_checks: 8  # global probe pool, all workers together
@@ -71,8 +73,6 @@ paths:
     - networks  # network/uplink watch documents
     - storages  # storage watch documents
     - mounts  # fstab-backed storage mount watch documents
-  runtime: /run/sermo  # volatile: locks (tmpfs)
-  state: /var/lib/sermo  # persistent: monitor state, SLA, measurements, runtime metrics
   templates: /etc/sermo/templates  # notification templates, e.g. default-alert.yml
   # Do not add /var/run paths to Sermo-owned config. Use /run directly. Linux
   # still exposes /var/run for older init metadata and packaged configs, so
@@ -176,7 +176,7 @@ telegram_bot:
 # `name:` document under any directory listed in paths.watches. Storage checks
 # use the same watch document shape.
 # `enabled: false` omits the watch entirely, while `monitor: disabled` builds it
-# paused. `monitor: previous` restores the persisted state from paths.state.
+# paused. `monitor: previous` restores the persisted state from engine.state.
 watches:
   # -- single-shot checks as host watches -----------------------------------
   stale-libraries:
@@ -518,7 +518,7 @@ watches:
 
   # -- host levels: one compact example per family --------------------------
   load:
-    monitor: previous  # restore the persisted monitor state from paths.state
+    monitor: previous  # restore the persisted monitor state from engine.state
     check: { type: load, per_cpu: true, load5: { op: ">", value: 1.5 } }
     for: { cycles: 3 }
     then: { notify: [ops-email] }

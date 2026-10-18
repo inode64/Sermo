@@ -14,10 +14,10 @@ import (
 func TestStateCompactPrunesOldHistory(t *testing.T) {
 	root := t.TempDir()
 	mustWrite(t, filepath.Join(root, "sermo.yml"), `
-engine: { backend: auto, interval: 30s }
+engine: { backend: auto, interval: 30s, state: `+root+`/state }
 paths:
   services: [ `+root+`/services ]
-  state: `+root+`/state
+
 defaults: { policy: { cooldown: 5m } }
 `)
 	global := filepath.Join(root, "sermo.yml")

@@ -370,10 +370,12 @@ func writeFallbackUnitConfig(t *testing.T) string {
 	root := t.TempDir()
 	global := filepath.Join(root, "sermo.yml")
 	mustWrite(t, global, `
-paths:
-  services: [`+filepath.Join(root, "services")+`]
+engine:
   runtime: `+filepath.Join(root, "run")+`
   state: `+filepath.Join(root, "state")+`
+paths:
+  services: [`+filepath.Join(root, "services")+`]
+
 defaults:
   policy: { cooldown: 5m }
 `)
@@ -652,7 +654,7 @@ func TestDaemonReloadNoPid(t *testing.T) {
 	tmp := t.TempDir()
 	cfgPath := filepath.Join(tmp, "sermo.yml")
 	// Minimal valid global config with a runtime under the temp dir (no pidfile will exist).
-	minCfg := []byte("paths:\n  runtime: " + tmp + "\ndefaults:\n  policy:\n    cooldown: 5m\n")
+	minCfg := []byte("engine:\n  runtime: " + tmp + "\ndefaults:\n  policy:\n    cooldown: 5m\n")
 	if err := os.WriteFile(cfgPath, minCfg, 0o644); err != nil {
 		t.Fatal(err)
 	}

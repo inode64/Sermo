@@ -318,7 +318,7 @@ never kills.
 Only *automatic* remediation is rate limited (`cooldown`, `max_actions`,
 `backoff`). Manual `sermoctl` actions are deliberate and not subject to cooldown,
 but remain subject to locks, guards and preflight.
-The automatic-remediation rate-limit state is stored in `paths.state`, so a
+The automatic-remediation rate-limit state is stored in `engine.state`, so a
 `sermod` restart or host reboot does not clear cooldown/backoff or the
 `max_actions` window.
 
@@ -328,7 +328,7 @@ The automatic-remediation rate-limit state is stored in `paths.state`, so a
 resumes it. While paused, the daemon runs no checks, rules or remediation for that
 service — useful during maintenance so a deliberate stop is not "remediated" by an
 automatic restart. The pause is recorded in the persistent state store under
-`paths.state` (the `monitor_state` table), so it persists across daemon
+`engine.state` (the `monitor_state` table), so it persists across daemon
 restarts and reboots until cleared. `sermoctl status SERVICE` shows
 the single operator state `started` or `stopped` while monitoring is paused
 (`"state": "started"`/`"stopped"` and `"paused": true` in `--json`). Pausing only
@@ -471,7 +471,7 @@ that identifier remain readable and can be reclaimed under the same exclusion.
 
 Two complementary blocking mechanisms guard operations:
 
-1. **Named runtime locks** — files under `<paths.runtime>/locks` (default
+1. **Named runtime locks** — files under `<engine.runtime>/locks` (default
    `/run/sermo/locks`), named `<service>[\<name>].lock`. A literal backslash
    separates the service and lock name. The operation engine blocks automatically
    on any active one; no rule is needed. Created by
@@ -479,7 +479,7 @@ Two complementary blocking mechanisms guard operations:
    (see [cli.md](cli.md)).
 2. **External lock checks gated by a guard** — a check (`file_exists`,
    `process`, …) over a signal Sermo does *not* own: a backup process, a
-   foreign flag file. Never point such a check under `<paths.runtime>/locks` —
+   foreign flag file. Never point such a check under `<engine.runtime>/locks` —
    that duplicates mechanism 1.
 
 A service-created `lockfile:` in the catalog is different: it is a gated health
@@ -492,7 +492,7 @@ An incomplete or corrupt lock left by an older writer or external modification
 is not proof that maintenance has finished; lock listings retain the diagnostic
 warning. A malformed lock for a different service does not block this service.
 
-The **internal operation lock** (`<paths.runtime>/ops/<service>.lock`)
+The **internal operation lock** (`<engine.runtime>/ops/<service>.lock`)
 serializes start/stop/restart/reload/resume/repair for one service. It is deliberately outside the
 named-lock namespace so it cannot collide with a user lock named `op`, is never
 listed as a named lock, and cannot be released by `sermoctl lock release`. A
@@ -548,7 +548,7 @@ daemon-cycle remediation. They still use the same safety posture:
 - Mount source, type and options come only from `/etc/fstab`. Sermo runs
   `mount <path>` / `umount <path>` with argv directly and a timeout; it never
   builds a shell command from YAML.
-- Each target has an operation lock under `<paths.runtime>/mounts/ops`, so two
+- Each target has an operation lock under `<engine.runtime>/mounts/ops`, so two
   callers cannot race the same mount. Lock and counter identifiers are
   injective: distinct mounts never share either, and a counter recording
   another path is refused.

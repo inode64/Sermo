@@ -1,9 +1,70 @@
 package config
 
 import (
+	"path/filepath"
 	"testing"
 	"time"
 )
+
+func TestLoadEngineDirectories(t *testing.T) {
+	for _, tc := range []struct {
+		name        string
+		body        string
+		wantRuntime string
+		wantState   string
+	}{
+		{name: "defaults", body: "engine: {}\n", wantRuntime: DefaultRuntime, wantState: DefaultState},
+		{name: "configured", body: "engine:\n  runtime: ${env:SERMO_TEST_RUNTIME}\n  state: ${env:SERMO_TEST_STATE}\n"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			root := t.TempDir()
+			runtimeDir, stateDir := filepath.Join(root, "run"), filepath.Join(root, "state")
+			t.Setenv("SERMO_TEST_RUNTIME", runtimeDir)
+			t.Setenv("SERMO_TEST_STATE", stateDir)
+			path := writeConfig(t, map[string]string{"sermo.yml": tc.body})
+			global, issues, err := loadGlobal(path)
+			if err != nil || len(issues) != 0 {
+				t.Fatalf("loadGlobal: %v, issues: %v", err, issues)
+			}
+			wantRuntime, wantState := tc.wantRuntime, tc.wantState
+			if wantRuntime == "" {
+				wantRuntime, wantState = runtimeDir, stateDir
+			}
+			if global.RuntimeDir() != wantRuntime || global.StateDir() != wantState {
+				t.Fatalf("directories = %q, %q; want %q, %q", global.RuntimeDir(), global.StateDir(), wantRuntime, wantState)
+			}
+		})
+	}
+}
+
+func TestValidateEngineDirectories(t *testing.T) {
+	for _, key := range []string{EngineKeyRuntime, EngineKeyState} {
+		for _, tc := range []struct {
+			name      string
+			value     any
+			wantIssue bool
+		}{
+			{name: "absolute", value: "/srv/sermo"},
+			{name: "relative", value: "sermo", wantIssue: true},
+			{name: "empty", value: "", wantIssue: true},
+			{name: "null", value: nil, wantIssue: true},
+			{name: "boolean", value: true, wantIssue: true},
+			{name: "number", value: 42, wantIssue: true},
+			{name: "list", value: []any{"/srv/sermo"}, wantIssue: true},
+			{name: "mapping", value: map[string]any{"path": "/srv/sermo"}, wantIssue: true},
+		} {
+			t.Run(key+"/"+tc.name, func(t *testing.T) {
+				cfg := &Config{Global: Global{Raw: map[string]any{
+					SectionEngine: map[string]any{key: tc.value},
+				}}}
+				issues := validateGlobal(cfg)
+				if got := hasIssue(issues, engineFieldPath(key)); got != tc.wantIssue {
+					t.Fatalf("issues = %v, want issue = %t", issues, tc.wantIssue)
+				}
+			})
+		}
+	}
+}
 
 func TestEngineDuration(t *testing.T) {
 	fallback := 45 * time.Second

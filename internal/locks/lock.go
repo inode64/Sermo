@@ -1,8 +1,8 @@
 // Package locks reads and classifies Sermo named runtime locks under
-// <paths.runtime>/locks. It reports locks for `sermoctl locks
+// <engine.runtime>/locks. It reports locks for `sermoctl locks
 // SERVICE` and backs `sermoctl lock` acquire/release/wrap operations.
 //
-// The internal operation lock under <paths.runtime>/ops is a separate namespace
+// The internal operation lock under <engine.runtime>/ops is a separate namespace
 // and is never reported here.
 package locks
 

@@ -20,7 +20,7 @@ func monitorVerb(pause bool) string {
 // runMonitor pauses (`unmonitor`) or resumes (`monitor`) monitoring of a service.
 // A paused service keeps its config but the daemon runs no checks, rules or
 // remediation for it until resumed. The state lives in the persistent store
-// under paths.state (default /var/lib/sermo), so it survives daemon restarts and
+// under engine.state (default /var/lib/sermo), so it survives daemon restarts and
 // reboots — and a service whose `monitor` flag is `previous` is restored to it on
 // the next daemon start.
 func (a App) runMonitor(ctx context.Context, opts options, pause bool) int {

@@ -37,7 +37,7 @@ type Auth struct {
 	AnonymousGuest   bool
 
 	// RuntimeToken is the daemon-generated admin credential sermoctl reads from
-	// <paths.runtime>/web.token. It exists because hashed credentials leave no
+	// <engine.runtime>/web.token. It exists because hashed credentials leave no
 	// password for the CLI to send. Empty disables it.
 	RuntimeToken string
 

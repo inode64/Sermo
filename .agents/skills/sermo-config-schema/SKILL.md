@@ -38,7 +38,7 @@ here. This skill records the design decisions a change must respect.
   the resolver changes.
 - `restart_on_change.libraries` and other catalog sugar desugar at resolution
   into the canonical runtime tree; the sugar never reaches the daemon.
-- `paths.runtime` is the single runtime root. `paths.locks` and
+- `engine.runtime` is the single runtime root. `paths.locks` and
   `/etc/sermo/locks.d` are not supported.
 - Classified watch directories (`watches/`, `networks/`, `storages/`,
   `mounts/`) are all listed under `paths.watches`; each `.local` sibling is
@@ -64,7 +64,7 @@ here. This skill records the design decisions a change must respect.
 - Reading a numeric field before expansion, or comparing metric values without
   honoring the `%` suffix.
 - A `scope: system` metric driving anything but `alert`.
-- A `file_exists` check pointing under `<paths.runtime>/locks`.
+- A `file_exists` check pointing under `<engine.runtime>/locks`.
 - A version template whose `%v` token also appears in the body; the body uses
   `${version}`.
 

@@ -134,9 +134,10 @@ func writeDocsExampleGlobal(t *testing.T, dir, globalDoc, servicesDir string, wa
 	global["paths"] = map[string]any{
 		"services": []any{servicesDir},
 		"watches":  stringsToAny(mapValues(watchDirs)),
-		"runtime":  filepath.Join(dir, "runtime"),
-		"state":    filepath.Join(dir, "state"),
 	}
+	engine := global[SectionEngine].(map[string]any)
+	engine[EngineKeyRuntime] = filepath.Join(dir, "runtime")
+	engine[EngineKeyState] = filepath.Join(dir, "state")
 	patched, err := yaml.Marshal(global)
 	if err != nil {
 		t.Fatal(err)

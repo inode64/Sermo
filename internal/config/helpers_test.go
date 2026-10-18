@@ -215,10 +215,11 @@ func assertExpandedVar(t *testing.T, key, value string) {
 
 const baseGlobal = `
 engine:
+  runtime: /run/sermo
   backend: auto
 paths:
   services: [ @ROOT@/services ]
-  runtime: /run/sermo
+
 defaults:
   policy:
     cooldown: 5m

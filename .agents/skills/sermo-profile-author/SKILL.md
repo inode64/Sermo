@@ -140,7 +140,7 @@ the lock is active. Use `sermoctl locks SERVICE` to inspect active locks and
 `sermoctl lock acquire` / `release` for persistent holds. Add a guard only for a
 foreign signal Sermo does not own, such as a backup process or a flag file
 created by another tool. Do not point a `file_exists` check at
-`<paths.runtime>/locks/` (default `/run/sermo/locks/`).
+`<engine.runtime>/locks/` (default `/run/sermo/locks/`).
 
 Example:
 

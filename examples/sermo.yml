@@ -8,6 +8,14 @@
 # /etc/sermo and /usr/share/sermo locations.
 
 engine:
+  # Volatile runtime data (locks, operation markers) on tmpfs; wiped on reboot.
+  runtime: /run/sermo
+  # Persistent state database (monitoring/remediation/rule-window control state,
+  # latest service/watch readings, SLA history, measurements, runtime metrics).
+  # Lives under /var/lib so it survives reboots — required for
+  # `monitor: previous`, for the dashboard to keep last real readings, and for automatic
+  # remediation not to reset its cooldown/windows after a sermod restart.
+  state: /var/lib/sermo
   backend: auto
   interval: 30s
   max_parallel_checks: 8
@@ -86,15 +94,6 @@ paths:
   # `monitor: disabled` so copying them cannot immediately run hooks or send
   # notifications. After adapting thresholds, hooks and notify targets for the
   # host, set each entry to `monitor: enabled` or `monitor: previous`.
-
-  # Volatile runtime data (locks, operation markers) on tmpfs; wiped on reboot.
-  runtime: /run/sermo
-  # Persistent state database (monitoring/remediation/rule-window control state,
-  # latest service/watch readings, SLA history, measurements, runtime metrics).
-  # Lives under /var/lib so it survives reboots — required for
-  # `monitor: previous`, for the dashboard to keep last real readings, and for automatic
-  # remediation not to reset its cooldown/windows after a sermod restart.
-  state: /var/lib/sermo
   # Notification templates. `make install` installs default-alert.yml here.
   templates: /etc/sermo/templates
 

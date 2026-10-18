@@ -11,7 +11,7 @@ import (
 // runPanic enables, disables or reports the daemon-wide panic mode. While panic
 // mode is on the daemon keeps monitoring (so status stays visible) but suspends
 // hooks, alerts and automatic remediation. The flag lives in the persistent
-// store under paths.state, so it survives daemon restarts and the daemon picks
+// store under engine.state, so it survives daemon restarts and the daemon picks
 // up the change within a second — no running web UI is required.
 func (a App) runPanic(ctx context.Context, opts options) int {
 	sub := ""

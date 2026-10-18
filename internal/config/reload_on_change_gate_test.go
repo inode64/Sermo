@@ -26,7 +26,7 @@ func writeHostConfig(t *testing.T, catalogService, defaultsBlock, serviceExtra s
 		t.Fatal(err)
 	}
 	global := "engine: { backend: systemd }\n" +
-		"paths:\n  services: [" + enabled + "]\n  runtime: /run/sermo\n" +
+		"paths:\n  services: [" + enabled + "]\n" +
 		"defaults:\n  policy: { cooldown: 5m }\n" + defaultsBlock
 	path := filepath.Join(dir, "sermo.yml")
 	if err := os.WriteFile(path, []byte(global), 0o644); err != nil {

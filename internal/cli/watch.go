@@ -185,7 +185,7 @@ func configuredHostWatch(cfg *config.Config, name string) (map[string]any, bool)
 
 // runWatchMonitor pauses (`unmonitor`) or resumes (`monitor`) a single watch by
 // its name — a host watch or a service-embedded watch ("<service>:<watch>"). The
-// state persists under paths.state keyed independently of any service, so
+// state persists under engine.state keyed independently of any service, so
 // unmonitoring a service never touches its watches and vice versa. The daemon
 // reads this key live each cycle.
 func (a App) runWatchMonitor(ctx context.Context, opts options, pause bool) int {

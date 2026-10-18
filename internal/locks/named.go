@@ -8,7 +8,7 @@ import (
 )
 
 // NamedLocker creates and releases named runtime locks under
-// <paths.runtime>/locks. These guard against external work (e.g. a
+// <engine.runtime>/locks. These guard against external work (e.g. a
 // backup) and are checked automatically by the operation engine. The CLI uses it
 // for `sermoctl lock` acquire/release/wrap operations.
 type NamedLocker struct {
@@ -18,7 +18,7 @@ type NamedLocker struct {
 	Self func() (pid int, startTicks uint64)
 }
 
-// NewNamedLocker returns a locker over dir (<paths.runtime>/locks).
+// NewNamedLocker returns a locker over dir (<engine.runtime>/locks).
 func NewNamedLocker(dir string) NamedLocker {
 	return NamedLocker{Dir: dir, Proc: OSProcessProber{}, Now: time.Now}
 }

@@ -164,10 +164,10 @@ func TestSLACommandUnknownService(t *testing.T) {
 		}
 	}
 	if err := os.WriteFile(filepath.Join(root, "sermo.yml"), fmt.Appendf(nil, `
-engine: { backend: auto }
-paths: { services: [ %s ], state: %s }
+engine: { backend: auto, state: %s }
+paths: { services: [ %s ]}
 defaults: { policy: { cooldown: 5m } }
-`, servicesDir, stateDir), 0o644); err != nil {
+`, stateDir, servicesDir), 0o644); err != nil {
 		t.Fatal(err)
 	}
 

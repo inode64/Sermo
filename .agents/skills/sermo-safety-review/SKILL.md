@@ -21,7 +21,7 @@ touches them.
    from a `scope: system` metric. Manual actions skip cooldown only; they still
    pass guards, locks and preflight.
 4. The operation lock is released on every exit path. Named runtime locks live
-   under `<paths.runtime>/locks`, operation locks under `<paths.runtime>/ops`;
+   under `<engine.runtime>/locks`, operation locks under `<engine.runtime>/ops`;
    they never share a directory and are never loaded from `/etc/sermo`.
    A named lock read/parse warning for the target service prevents its operation;
    do not treat a partially written lock as absent.
@@ -113,7 +113,7 @@ A safety-sensitive change covers the relevant rows:
 ```text
 guard blocks start/stop/restart/reload/resume
 required preflight failure blocks; optional preflight warns
-lock blocks every action; paths.locks rejected; lock dirs derive from paths.runtime
+lock blocks every action; paths.locks rejected; lock dirs derive from engine.runtime
 force_kill false never sends SIGKILL; force_kill true requires kill_only_if
 exe matched by resolved /proc/<pid>/exe; substring/basename/name-only rejected
 unresolvable or (deleted) exe never matches
