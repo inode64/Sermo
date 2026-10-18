@@ -5,8 +5,8 @@ import (
 	"context"
 	"html/template"
 	"log/slog"
-	"net"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"strconv"
 	"strings"
@@ -33,6 +33,7 @@ const (
 	loginResultOK       = "ok"
 	loginResultFailed   = "failed"
 	loginResultLimited  = "rate_limited"
+	loginClientUnknown  = "unknown"
 )
 
 // loginPage is the standalone /login document: one password field, which is
@@ -158,20 +159,28 @@ func retryAfterSeconds(wait time.Duration) string {
 // appended to X-Forwarded-For. Without that, every browser behind the proxy
 // would share one bucket, and five bad guesses from anyone would lock every
 // operator out. A remote peer's X-Forwarded-For is ignored: anyone can send it.
+// Only parsed IP addresses become limiter keys or log fields. Invalid forwarded
+// values fall back to the peer; arbitrary header text must never reach the log.
 func clientAddress(r *http.Request) string {
-	peer := canonicalHost(r.RemoteAddr)
-	if ip := net.ParseIP(peer); ip == nil || !ip.IsLoopback() {
-		return peer
+	peer, err := netip.ParseAddr(canonicalHost(r.RemoteAddr))
+	if err != nil {
+		return loginClientUnknown
 	}
-	forwarded := r.Header.Values(headerXForwardedFor)
+	peer = peer.WithZone("").Unmap()
+	if !peer.IsLoopback() {
+		return peer.String()
+	}
+	forwarded := r.Header[headerXForwardedFor]
 	if len(forwarded) == 0 {
-		return peer
+		return peer.String()
 	}
 	hops := strings.Split(forwarded[len(forwarded)-1], ",")
-	if last := strings.TrimSpace(hops[len(hops)-1]); last != "" {
-		return canonicalHost(last)
+	last := strings.TrimSpace(hops[len(hops)-1])
+	ip, err := netip.ParseAddr(canonicalHost(last))
+	if err != nil || ip.Zone() != "" {
+		return peer.String()
 	}
-	return peer
+	return ip.Unmap().String()
 }
 
 // handleLogout ends the browser's session. withAuth has already required the
