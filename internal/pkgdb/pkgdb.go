@@ -14,7 +14,6 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
-	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -269,7 +268,7 @@ func (x *Index) detect() (Backend, string, error) {
 	}
 	for _, m := range markers {
 		path := x.join(m.path)
-		info, err := os.Stat(path)
+		info, err := hostfs.Stat(path)
 		if err != nil {
 			if errors.Is(err, fs.ErrNotExist) || errors.Is(err, syscall.ENOTDIR) {
 				continue

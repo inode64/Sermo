@@ -8,8 +8,8 @@ import (
 
 	"sermo/internal/app"
 	"sermo/internal/config"
+	"sermo/internal/operation"
 	"sermo/internal/process"
-	"sermo/internal/servicemgr"
 )
 
 func (a App) runProcesses(ctx context.Context, opts options) int {
@@ -43,9 +43,7 @@ func (a App) discoverProcesses(ctx context.Context, opts options, cfg *config.Co
 	if backendPIDs := app.ServiceBackendPIDs(ctx, target.Backend, target.Unit, target.BackendPIDs, a.Runner); backendPIDs != nil {
 		discoverer.BackendPIDs = backendPIDs
 	}
-	discoverer.ProcessOwnership = func(id process.Identity) (bool, bool) {
-		return servicemgr.CgroupOwnership(id.Cgroup, target.Unit)
-	}
+	discoverer.ProcessOwnership = operation.UnitProcessOwnership(target.Unit)
 	return observedProcesses(discoverer, selectors)
 }
 

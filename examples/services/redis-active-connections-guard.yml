@@ -14,6 +14,7 @@ checks:
   active-connections:
     type: redis
     reports: state
+    optional: true
     host: "${host}"
     port: "${port}"
     password: "${env:SERMO_REDIS_PASSWORD}"

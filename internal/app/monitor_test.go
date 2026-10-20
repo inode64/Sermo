@@ -12,7 +12,7 @@ import (
 
 	"sermo/internal/checks"
 	"sermo/internal/config"
-	"sermo/internal/execx"
+	"sermo/internal/execx/execxtest"
 	"sermo/internal/metrics"
 	"sermo/internal/rules"
 	"sermo/internal/servicemgr"
@@ -54,13 +54,10 @@ checks:
 		t.Fatal(err)
 	}
 
-	cfg, err := config.Load(global)
-	if err != nil {
-		t.Fatal(err)
-	}
+	cfg := loadTestConfig(t, global)
 	ready := NewReadiness(string(servicemgr.BackendSystemd), 1, 0)
-	deps := Deps{Interval: 100 * time.Millisecond, Now: time.Now, Emit: func(Event) {}, ExecxRunner: execx.CommandRunner{}, Settling: NewSettling(ready)}
-	collector := metrics.New(metrics.OSReader{})
+	deps := Deps{Interval: 100 * time.Millisecond, Now: time.Now, Emit: func(Event) {}, ExecxRunner: &execxtest.Runner{}, Settling: NewSettling(ready)}
+	collector := metrics.New(fakeSwapReader{})
 	workers, _, _ := BuildWorkers(t.Context(), cfg, deps, collector)
 	if len(workers) != 1 {
 		t.Fatalf("workers = %d, want 1", len(workers))
@@ -80,6 +77,7 @@ checks:
 
 	mon := NewMonitor(cfg, deps, Scheduler{Interval: 20 * time.Millisecond}, ready, collector, nil, workers, nil)
 	mon.ConfigPath = global
+	hermeticMonitor(t, mon)
 	mon.Logger = slog.Default()
 
 	ctx := t.Context()
@@ -150,13 +148,10 @@ checks:
 		t.Fatal(err)
 	}
 
-	cfg, err := config.Load(global)
-	if err != nil {
-		t.Fatal(err)
-	}
+	cfg := loadTestConfig(t, global)
 	ready := NewReadiness(string(servicemgr.BackendSystemd), 1, 0)
-	deps := Deps{Interval: 100 * time.Millisecond, Now: time.Now, Emit: func(Event) {}, ExecxRunner: execx.CommandRunner{}, Settling: NewSettling(ready)}
-	collector := metrics.New(metrics.OSReader{})
+	deps := Deps{Interval: 100 * time.Millisecond, Now: time.Now, Emit: func(Event) {}, ExecxRunner: &execxtest.Runner{}, Settling: NewSettling(ready)}
+	collector := metrics.New(fakeSwapReader{})
 	workers, _, _ := BuildWorkers(t.Context(), cfg, deps, collector)
 	forceWorkerBackendActive(workers)
 	const seededCycle = 5
@@ -164,6 +159,7 @@ checks:
 
 	mon := NewMonitor(cfg, deps, Scheduler{Interval: 20 * time.Millisecond}, ready, collector, nil, workers, nil)
 	mon.ConfigPath = global
+	hermeticMonitor(t, mon)
 	mon.Logger = slog.Default()
 
 	ctx := t.Context()
@@ -324,18 +320,16 @@ checks:
 `), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	cfg, err := config.Load(global)
-	if err != nil {
-		t.Fatal(err)
-	}
+	cfg := loadTestConfig(t, global)
 	ready := NewReadiness(string(servicemgr.BackendSystemd), 1, 0)
-	deps := Deps{Interval: 100 * time.Millisecond, SystemFreshness: 50 * time.Millisecond, Now: time.Now, Emit: func(Event) {}, ExecxRunner: execx.CommandRunner{}, Settling: NewSettling(ready)}
-	collector := metrics.New(metrics.OSReader{})
+	deps := Deps{Interval: 100 * time.Millisecond, SystemFreshness: 50 * time.Millisecond, Now: time.Now, Emit: func(Event) {}, ExecxRunner: &execxtest.Runner{}, Settling: NewSettling(ready)}
+	collector := metrics.New(fakeSwapReader{})
 	collector.SystemFreshness = deps.SystemFreshness
 	workers, _, _ := BuildWorkers(t.Context(), cfg, deps, collector)
 	forceWorkerBackendActive(workers)
 	mon := NewMonitor(cfg, deps, Scheduler{Interval: deps.Interval}, ready, collector, nil, workers, nil)
 	mon.ConfigPath = global
+	hermeticMonitor(t, mon)
 	mon.Logger = slog.Default()
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
@@ -404,6 +398,7 @@ func TestMonitorRejectsReloadOutsideRun(t *testing.T) {
 	var events []Event
 	mon := NewMonitor(&config.Config{}, Deps{Emit: func(event Event) { events = append(events, event) }}, Scheduler{}, nil, nil, nil, nil, nil)
 	mon.ConfigPath = filepath.Join(t.TempDir(), "unused.yml")
+	hermeticMonitor(t, mon)
 	mon.Logger = slog.Default()
 	for _, phase := range []string{"before run", "after shutdown"} {
 		mon.Reload(t.Context())

@@ -317,7 +317,7 @@ func loadAllCatalogServices(t *testing.T, catalogDir, backend string) *Config {
 	if err := os.MkdirAll(emptyEnabled, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	probe, err := Load(writeServicesGlobal(t, probeDir, emptyEnabled, backend), WithCatalogDirs(catalogDir))
+	probe, err := loadConfig(t, writeServicesGlobal(t, probeDir, emptyEnabled, backend), WithCatalogDirs(catalogDir))
 	if err != nil {
 		t.Fatalf("Load (probe): %v", err)
 	}
@@ -327,7 +327,7 @@ func loadAllCatalogServices(t *testing.T, catalogDir, backend string) *Config {
 		t.Fatal(err)
 	}
 	writeAllCatalogAuditServices(t, enabled, probe.CatalogServiceNames)
-	cfg, err := Load(writeServicesGlobal(t, dir, enabled, backend), WithCatalogDirs(catalogDir))
+	cfg, err := loadConfig(t, writeServicesGlobal(t, dir, enabled, backend), WithCatalogDirs(catalogDir))
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
@@ -608,7 +608,7 @@ func TestCatalogServicesRestartOnLinkedAppVersionChanges(t *testing.T) {
 func TestShippedGlobalConfigValidates(t *testing.T) {
 	root := repoRoot(t)
 
-	cfg, err := Load(filepath.Join(root, "examples", "sermo.yml"),
+	cfg, err := loadConfig(t, filepath.Join(root, "examples", "sermo.yml"),
 		WithCatalogDirs(repoCatalogDir(root)),
 		withPathDirs("services"),
 		withPathDirs("apps"),
@@ -628,7 +628,7 @@ func TestShippedGlobalConfigValidates(t *testing.T) {
 
 func TestRepoDevConfigLoadsExampleTree(t *testing.T) {
 	root := repoRoot(t)
-	cfg, err := Load(filepath.Join(root, "examples", "sermo-dev.yml"), WithCatalogDirs(repoCatalogDir(root)))
+	cfg, err := loadConfig(t, filepath.Join(root, "examples", "sermo-dev.yml"), WithCatalogDirs(repoCatalogDir(root)))
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
@@ -2157,7 +2157,7 @@ func TestCatalogEximDatabaseMaintenanceKeepsOneCommandPerDatabase(t *testing.T) 
 // thresholds coming back. They were one host's live readings — 451 B/s for ssh
 // against 32 MB/s for ceph-osd — so nearly every service alerted on normal work.
 func TestCatalogServiceIOAlertsShareOneCeiling(t *testing.T) {
-	const ceiling = "104857600"
+	const ceiling, errorCeiling = "104857600", "524288000"
 	walkCatalogDocs(t, filepath.Join(repoRoot(t), "catalog", "services"), func(path string, body map[string]any) {
 		watches, _ := body["watches"].(map[string]any)
 		for name, raw := range watches {
@@ -2171,6 +2171,11 @@ func TestCatalogServiceIOAlertsShareOneCeiling(t *testing.T) {
 			}
 			if got := cfgval.String(check["value"]); got != ceiling {
 				t.Errorf("%s watch %s: io threshold = %q, want the shared ceiling %s", path, name, got, ceiling)
+			}
+			levels, _ := check[checks.CheckKeyLevels].(map[string]any)
+			errorLevel, _ := levels["error"].(map[string]any)
+			if check[checks.CheckKeySeverity] != "warning" || cfgval.String(errorLevel["value"]) != errorCeiling {
+				t.Errorf("%s watch %s: io alert must warn and escalate to error past %s, got %v", path, name, errorCeiling, check)
 			}
 		}
 	})
@@ -3342,7 +3347,7 @@ func TestCatalogResourceAlertsAreGraded(t *testing.T) {
 			continue
 		}
 		checkEntries, _ := resolved.Tree[sectionChecks].(map[string]any)
-		for _, alert := range []string{"alert-if-memory-high", "alert-if-cpu-thread-high"} {
+		for _, alert := range []string{"alert-if-memory-high", "alert-if-cpu-thread-high", "alert-if-io-high"} {
 			entry, ok := checkEntries[alert].(map[string]any)
 			if !ok {
 				continue
@@ -3384,5 +3389,208 @@ func TestCatalogNeverShipsAnAutomaticQueryKill(t *testing.T) {
 	})
 	if seen < 3 {
 		t.Fatalf("db_queries watches in the catalog = %d, want mysql, mariadb and postgres", seen)
+	}
+}
+
+// warningAlertExemptions lists the catalog warning alerts that have no error
+// tier, with the reason; anything else declaring severity: warning escalates.
+var warningAlertExemptions = map[string]string{
+	"alert-if-replication-slot-inactive": "a count of idle slots; the WAL they retain is graded by alert-if-replication-slot-backlog",
+	"alert-if-query-long-running":        "db_queries has no ordered threshold for levels: to grade",
+}
+
+// A catalog alert that warns must also say when the same reading becomes an
+// outage: a warning that never escalates hides the moment it matters.
+func TestCatalogWarningAlertsEscalate(t *testing.T) {
+	seen, exempted := 0, map[string]bool{}
+	walkCatalogDocs(t, filepath.Join(repoCatalogDir(repoRoot(t)), "services"), func(path string, body map[string]any) {
+		watches, _ := body[sectionWatches].(map[string]any)
+		for name, raw := range watches {
+			if !strings.HasPrefix(name, "alert-if-") {
+				continue
+			}
+			entry, _ := raw.(map[string]any)
+			check, _ := entry[WatchKeyCheck].(map[string]any)
+			if check[checks.CheckKeySeverity] != "warning" {
+				continue
+			}
+			if _, exempt := warningAlertExemptions[name]; exempt {
+				exempted[name] = true
+				continue
+			}
+			seen++
+			levels, _ := check[checks.CheckKeyLevels].(map[string]any)
+			if levels["error"] == nil {
+				t.Errorf("%s: %s warns without a levels.error tier", path, name)
+			}
+		}
+	})
+	if seen == 0 {
+		t.Fatal("no catalog warning alert was inspected")
+	}
+	for name := range warningAlertExemptions {
+		if !exempted[name] {
+			t.Errorf("exemption %s matches no catalog warning alert; drop it", name)
+		}
+	}
+}
+
+// The example host watches for exhaustible resources show the graded shape an
+// operator copies: warn first, error before the resource runs out.
+func TestExampleResourceWatchesAreGraded(t *testing.T) {
+	dir := filepath.Join(repoRoot(t), "examples", "watches")
+	for _, name := range []string{"memory", "fds", "load", "pid-table", "conntrack", "inotify", "mem-pressure", "diskio", "zombies", "swap"} {
+		t.Run(name, func(t *testing.T) {
+			body := readYAMLMap(t, filepath.Join(dir, name+".yml"))
+			graded := []map[string]any{nested(t, body, WatchKeyCheck)}
+			if metrics, ok := body[sectionMetrics].(map[string]any); ok {
+				graded = graded[:0]
+				for _, metric := range metrics {
+					block, _ := metric.(map[string]any)
+					graded = append(graded, block)
+				}
+			}
+			for _, block := range graded {
+				levels, _ := block[checks.CheckKeyLevels].(map[string]any)
+				if block[checks.CheckKeySeverity] != "warning" || levels["error"] == nil {
+					t.Errorf("%s is not graded warning with an error level: %v", name, block)
+				}
+			}
+		})
+	}
+}
+
+// A top-level `rules:` block in a catalog profile holds guards only: an
+// automatic action belongs to a watch or to restart_on_change, where cooldown
+// and the injected stale-binary rule already govern it.
+func TestCatalogServicesDeclareOnlyGuardRules(t *testing.T) {
+	walkCatalogDocs(t, filepath.Join(repoCatalogDir(repoRoot(t)), "services"), func(path string, body map[string]any) {
+		ruleMap, _ := body[rules.SectionRules].(map[string]any)
+		for name, raw := range ruleMap {
+			rule, _ := raw.(map[string]any)
+			if typ := cfgval.String(rule[rules.RuleFieldType]); typ != string(rules.RuleGuard) {
+				t.Errorf("%s: top-level rule %s is %q, want guard", path, name, typ)
+			}
+		}
+	})
+}
+
+// guardSensorNames returns the checks a guard's condition tree reads.
+func guardSensorNames(cond any) []string {
+	var out []string
+	switch v := cond.(type) {
+	case map[string]any:
+		for key, child := range v {
+			if key == rules.FieldCheck {
+				if name := cfgval.String(child); name != "" {
+					out = append(out, name)
+				}
+				continue
+			}
+			out = append(out, guardSensorNames(child)...)
+		}
+	case []any:
+		for _, child := range v {
+			out = append(out, guardSensorNames(child)...)
+		}
+	}
+	return out
+}
+
+// A guard's sensor reports state, not health: it must not read the service as
+// down while a backup runs, nor while it cannot connect to count sessions. Every
+// check a guard reads is a `reports: state` sensor that is `optional: true`.
+func TestGuardSensorsAreOptionalStateSensors(t *testing.T) {
+	root := repoRoot(t)
+	inspect := func(t *testing.T, cfg *Config, names []string) int {
+		t.Helper()
+		seen := 0
+		for _, name := range names {
+			resolved, errs := cfg.Resolve(name)
+			if len(errs) > 0 || resolved.Tree == nil {
+				continue
+			}
+			checkMap, _ := resolved.Tree[sectionChecks].(map[string]any)
+			ruleMap, _ := resolved.Tree[rules.SectionRules].(map[string]any)
+			for ruleName, raw := range ruleMap {
+				rule, _ := raw.(map[string]any)
+				if cfgval.String(rule[rules.RuleFieldType]) != string(rules.RuleGuard) {
+					continue
+				}
+				for _, sensor := range guardSensorNames(rule[rules.RuleFieldIf]) {
+					check, _ := checkMap[sensor].(map[string]any)
+					seen++
+					if cfgval.String(check[checks.CheckKeyReports]) != checks.ReportsState || check[checks.CheckKeyOptional] != true {
+						t.Errorf("%s guard %s reads %s, which is not an optional state sensor: %v", name, ruleName, sensor, check)
+					}
+				}
+			}
+		}
+		return seen
+	}
+	t.Run("catalog", func(t *testing.T) {
+		cfg := loadAllCatalogServices(t, repoCatalogDir(root), backendSystemd)
+		if inspect(t, cfg, cfg.ServiceNames) == 0 {
+			t.Fatal("no catalog guard sensor was inspected")
+		}
+	})
+	t.Run("examples", func(t *testing.T) {
+		cfg, err := loadConfig(t, filepath.Join(root, "examples", "sermo-dev.yml"), WithCatalogDirs(repoCatalogDir(root)))
+		if err != nil {
+			t.Fatalf("Load: %v", err)
+		}
+		if inspect(t, cfg, cfg.ServiceNames) == 0 {
+			t.Fatal("no example guard sensor was inspected")
+		}
+	})
+}
+
+// Database and cache profiles stop with a long graceful window and may SIGKILL
+// only their own daemon: kill_only_if names exactly a strict (exe and user, not
+// delegated) process selector, and force_kill is never turned off. Asserted on
+// the raw documents, so postgres's version template is covered too.
+func TestDatabaseCatalogServicesPinStopPolicy(t *testing.T) {
+	root := repoRoot(t)
+	for _, tc := range []struct {
+		service        string
+		graceful, term time.Duration
+	}{
+		{"mysql", 120 * time.Second, 60 * time.Second},
+		{"mariadb", 120 * time.Second, 60 * time.Second},
+		{"postgres-%v", 120 * time.Second, 60 * time.Second},
+		{"redis", 90 * time.Second, 60 * time.Second},
+		{"keydb", 90 * time.Second, 60 * time.Second},
+		{"etcd", 60 * time.Second, 30 * time.Second},
+		{"patroni", 60 * time.Second, 30 * time.Second},
+		{"mongod", 120 * time.Second, 60 * time.Second},
+		{"influxdb", 120 * time.Second, 60 * time.Second},
+		{"memcached", 90 * time.Second, 60 * time.Second},
+	} {
+		t.Run(tc.service, func(t *testing.T) {
+			body := catalogDocByName(t, root, "services", tc.service)
+			policy := nested(t, body, process.SectionStopPolicy)
+			graceful := cfgval.Duration(policy[process.StopPolicyKeyGracefulTimeout])
+			term := cfgval.Duration(policy[process.StopPolicyKeyTermTimeout])
+			if graceful != tc.graceful || term != tc.term {
+				t.Fatalf("graceful/term = %v/%v, want %v/%v", graceful, term, tc.graceful, tc.term)
+			}
+			if policy[process.StopPolicyKeyForceKill] == false {
+				t.Fatal("database profile turns force_kill off")
+			}
+			killOnlyIf := nested(t, policy, process.StopPolicyKeyKillOnlyIf)
+			users := cfgval.StringList(killOnlyIf[process.StopPolicyKeyUsers])
+			exes := cfgval.StringList(killOnlyIf[process.StopPolicyKeyExeAny])
+			selectors, _ := body[process.SectionProcesses].(map[string]any)
+			strict := false
+			for _, raw := range selectors {
+				sel, _ := raw.(map[string]any)
+				strict = strict || sel[process.SelectorKeyDelegated] != true &&
+					slices.Contains(exes, cfgval.String(sel[process.SelectorKeyExe])) &&
+					slices.Contains(users, cfgval.String(sel[process.SelectorKeyUser]))
+			}
+			if len(exes) == 0 || len(users) == 0 || !strict {
+				t.Fatalf("kill_only_if users=%v exe_any=%v names no strict selector of %v", users, exes, selectors)
+			}
+		})
 	}
 }

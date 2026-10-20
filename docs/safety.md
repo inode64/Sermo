@@ -555,7 +555,9 @@ Lifecycle:
   PID is dead, or the PID is alive with a different start time (reuse). A live
   lock is **never silently overwritten**.
 - **Reclaim is logged**: read, confirm still stale, unlink, acquire fresh;
-  abort if it turned active in between.
+  abort if it turned active in between. Every reclaim — of an operation,
+  named, watch-control, expansion or mount lock, by the daemon, the Web UI or
+  `sermoctl` — is recorded as a `warning` event ("reclaimed stale … (reason)").
 - The wrap form unlinks the lock when the wrapped command exits (any path);
   the TTL still bounds the lock's lifetime if the owner crashes. Pick a TTL
   safely above the protected work's real duration — one that expires

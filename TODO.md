@@ -314,6 +314,18 @@ allowing a dependency declaration to control another target implicitly.
 
 ### Other engine and config work
 
+- [ ] Hermetic tests — binary discovery: `internal/config` tests still probe the
+      host's `/usr/bin`, `/usr/sbin` and `/usr/local/*` through `binDirSearch`
+      and the version-template `Stat`/`Glob` discovery. Add one seam for those
+      probes (defaulting to the host) so a test states which binaries exist;
+      stubbing `binDirSearch` alone breaks ~90 assertions that rely on today's
+      first-candidate fallback.
+- [ ] Hermetic tests — remaining `/proc` defaults in `internal/app`:
+      `daemon.go`, `procwatch.go`, `restartnotice.go` and `serviceruntime.go`
+      still build `process.OSReader{}` when their caller injects nothing; route
+      them through `Deps.ProcReader` so a test never reads the host process
+      table by omission.
+
 - [ ] Service priorities: configurable per-service `priority` (integer or named
       tier), validation and defaults; use in remediation ordering when multiple
       services queue actions in the same cycle; expose in `sermoctl services`

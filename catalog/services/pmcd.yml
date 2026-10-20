@@ -110,9 +110,14 @@ watches:
       # (451 B/s for ssh, 32 MB/s for ceph-osd), so nearly every service alerted
       # on normal work. `io` is a rate in B/s and has no percentage form, so one
       # deliberately generous ceiling is the closest a packaged default gets to
-      # true everywhere; a storage-plane host raises it in services.local/.
+      # true everywhere; it warns, and a sustained 500 MB/s is an error. A
+      # storage-plane host raises value and levels.error together in
+      # services.local/.
       value: 104857600
       optional: true
+      severity: warning
+      levels:
+        error: { op: '>', value: 524288000 }
     for:
       duration: 5m
     then:

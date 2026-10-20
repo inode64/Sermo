@@ -53,11 +53,16 @@ func TestStopNamesStrayResidualsAndTheSettingThatKeepsThem(t *testing.T) {
 	survivor := strayProc(4711, "/usr/bin/tmux")
 	claimed := process.Process{PID: 4712, User: "root", Exe: "/usr/sbin/sshd", ExeOK: true, Source: process.SourceBackend}
 	h.discoverSteps = [][]process.Process{{survivor, claimed}}
+	signaler := &pidSignaler{}
+	h.reaper = process.Reaper{Signaler: signaler, ResolveUser: rootOnlyResolveUser}
 
 	res := h.action(t, "stop")
 
 	if res.Status != ResultOrphanProcesses {
 		t.Fatalf("status = %q (%s), want %q", res.Status, res.Message, ResultOrphanProcesses)
+	}
+	if len(signaler.calls) != 0 {
+		t.Fatalf("a residual without kill authority was signalled: %v", signaler.calls)
 	}
 	keep := process.StopPolicyFieldPath(process.StopPolicyKeyKeepChildren)
 	for _, want := range []string{"2 residual process(es) remain after stop", "1 stray", keep} {
@@ -74,10 +79,42 @@ func TestStopResidualsWithoutStraysKeepTheirWording(t *testing.T) {
 	h.discoverSteps = [][]process.Process{{
 		{PID: 4712, User: "root", Exe: "/usr/sbin/sshd", ExeOK: true, Source: process.SourceBackend},
 	}}
+	signaler := &pidSignaler{}
+	h.reaper = process.Reaper{Signaler: signaler, ResolveUser: rootOnlyResolveUser}
 
 	res := h.action(t, "stop")
 
 	if want := "1 residual process(es) remain after stop"; res.Message != want {
 		t.Fatalf("message = %q, want exactly %q", res.Message, want)
+	}
+	if len(signaler.calls) != 0 {
+		t.Fatalf("a residual without kill authority was signalled: %v", signaler.calls)
+	}
+}
+
+// A residual Sermo may terminate but cannot signal (the kernel refuses with
+// EPERM) stays an orphan: the stop reports the refusal and the restart never
+// starts on top of it.
+func TestRestartBlocksWhenResidualSignalIsRefused(t *testing.T) {
+	h := defaultHarness()
+	residual := process.Process{PID: 4242, StartTicks: 9, UID: 0, User: "root", Exe: "/usr/bin/tmux", ExeOK: true, Cgroup: "0::/system.slice/mysqld.service"}
+	h.discoverSteps = [][]process.Process{{residual}}
+	h.killPolicy = process.KillPolicy{Member: func(process.Process) bool { return true }}
+	signaler := &pidSignaler{err: syscall.EPERM}
+	h.reaper = process.Reaper{Signaler: signaler, ResolveUser: rootOnlyResolveUser}
+
+	res := h.restart(t)
+
+	if res.Status != ResultOrphanProcesses {
+		t.Fatalf("status = %q (%s), want %q", res.Status, res.Message, ResultOrphanProcesses)
+	}
+	if want := "residual pid 4242: deliver signal: operation not permitted"; !strings.Contains(res.Message, want) {
+		t.Fatalf("message %q must report %q", res.Message, want)
+	}
+	if len(signaler.calls) == 0 || signaler.calls[0] != (pidSignal{pid: 4242, sig: syscall.SIGTERM}) {
+		t.Fatalf("signals = %v, want a SIGTERM attempt on 4242", signaler.calls)
+	}
+	if h.mgr.did("start mysqld") {
+		t.Fatalf("restart started after a refused residual signal: %v", h.mgr.calls)
 	}
 }

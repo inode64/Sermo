@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io/fs"
 	"maps"
-	"os"
 	"path/filepath"
 	"slices"
 	"strconv"
@@ -15,6 +14,7 @@ import (
 
 	"sermo/internal/cfgval"
 	"sermo/internal/checks"
+	"sermo/internal/hostfs"
 	"sermo/internal/notify"
 	"sermo/internal/severity"
 	"sermo/internal/units"
@@ -293,7 +293,7 @@ func fileWatchNumberFiles(current map[string]fileState) int {
 func (w *fileWatcher) scan(now time.Time) map[string]fileState {
 	out := map[string]fileState{}
 	for _, root := range w.paths {
-		info, err := os.Lstat(root)
+		info, err := hostfs.LstatTarget(root)
 		if err != nil {
 			continue // missing roots are handled as deletions against the baseline
 		}

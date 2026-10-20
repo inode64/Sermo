@@ -10,6 +10,7 @@ import (
 
 	"sermo/internal/checks"
 	"sermo/internal/emission"
+	"sermo/internal/execx/execxtest"
 	"sermo/internal/mountctl"
 	"sermo/internal/notify"
 	"sermo/internal/rules"
@@ -885,14 +886,15 @@ func TestWatchForDurationRequiresElapsedTime(t *testing.T) {
 
 func TestWatchWithRealOSHookRunner(t *testing.T) {
 	var hookEvents []Event
+	fake := &execxtest.Runner{}
 	w := &Watch{
 		Name:      "storage-root",
 		CheckType: "storage",
 		Check:     stubCheck{name: "storage", ok: true, data: map[string]any{"path": "/"}},
-		Hook:      HookSpec{Command: []string{"/bin/true"}, Timeout: time.Second},
-		// Use the real OSHookRunner (which now goes through execx) instead of mock Func.
-		// This exercises defaultHookRunner path + real execution in a Watch context.
-		Runner: OSHookRunner{},
+		Hook:      HookSpec{Command: []string{"/usr/local/bin/on-storage"}, Timeout: time.Second},
+		// Use the real OSHookRunner (which goes through execx) instead of a mock
+		// Func, over a scripted runner, in a Watch context.
+		Runner: OSHookRunner{Runner: fake},
 		Emit: func(e Event) {
 			if e.Kind == eventKindHook || e.Kind == eventKindHookFail {
 				hookEvents = append(hookEvents, e)
@@ -905,6 +907,9 @@ func TestWatchWithRealOSHookRunner(t *testing.T) {
 	}
 	if hookEvents[0].Kind != eventKindHook {
 		t.Fatalf("expected hook success event, got %s", hookEvents[0].Kind)
+	}
+	if calls := fake.Calls(); len(calls) != 1 || calls[0].Line() != "/usr/local/bin/on-storage" {
+		t.Fatalf("hook calls = %+v", calls)
 	}
 }
 

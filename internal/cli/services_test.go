@@ -66,7 +66,7 @@ defaults: { policy: { cooldown: 5m } }
 	global := filepath.Join(root, "sermo.yml")
 
 	var out bytes.Buffer
-	app := App{Env: func(string) string { return "" }, Stdout: &out, Stderr: &bytes.Buffer{}, LoadConfig: testLoadConfigWithCatalog(catalogDir)}
+	app := hermeticApp(t, App{Env: func(string) string { return "" }, Stdout: &out, Stderr: &bytes.Buffer{}, LoadConfig: testLoadConfigWithCatalog(catalogDir)})
 	if code := app.Run(context.Background(), []string{"--config", global, "services", "catalog"}); code != exitSuccess {
 		t.Fatalf("services exit = %d", code)
 	}

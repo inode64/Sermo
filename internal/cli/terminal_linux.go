@@ -13,6 +13,7 @@ import (
 
 	"golang.org/x/sys/unix"
 
+	"sermo/internal/hostfs"
 	"sermo/internal/process"
 )
 
@@ -31,7 +32,7 @@ func stdinIsTerminal(r io.Reader) bool {
 	if err != nil || info.Mode()&os.ModeCharDevice == 0 {
 		return false
 	}
-	target, err := os.Readlink(filepath.Join(process.SelfPath(process.ProcFileFD), strconv.Itoa(int(f.Fd()))))
+	target, err := hostfs.Readlink(filepath.Join(process.SelfPath(process.ProcFileFD), strconv.Itoa(int(f.Fd()))))
 	if err != nil {
 		return false
 	}

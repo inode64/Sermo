@@ -4,6 +4,8 @@ import (
 	"context"
 	"os"
 	"time"
+
+	"sermo/internal/hostfs"
 )
 
 const binaryExecutableModeMask = 0o111
@@ -16,7 +18,7 @@ type binaryCheck struct {
 
 func (c binaryCheck) Run(_ context.Context) Result {
 	start := time.Now()
-	info, err := os.Stat(c.path)
+	info, err := hostfs.StatTarget(c.path)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return c.result(false, c.path+" not found", start)

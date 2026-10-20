@@ -2,10 +2,9 @@ package config
 
 import (
 	"fmt"
-	"os"
-	"path/filepath"
 
 	"sermo/internal/cfgval"
+	"sermo/internal/hostfs"
 	"sermo/internal/webcred"
 )
 
@@ -49,7 +48,7 @@ func loadWebCredentials(web map[string]any, base, fileKey string) (webcred.List,
 	// to read here.
 	if path := cfgval.AsString(web[fileKey]); path != "" {
 		path = resolveConfigPath(base, path)
-		data, err := os.ReadFile(filepath.Clean(path))
+		data, err := hostfs.ReadFile(path)
 		if err != nil {
 			return webcred.List{}, fmt.Errorf("cannot be read: %w", err)
 		}

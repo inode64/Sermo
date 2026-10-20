@@ -16,6 +16,10 @@ type NamedLocker struct {
 	Proc ProcessProber
 	Now  func() time.Time
 	Self func() (pid int, startTicks uint64)
+	// OnReclaim is called for each stale lock an acquisition reclaimed, with
+	// the reason (expired, dead owner, pid reuse), once that acquisition holds
+	// the lock or has given up; see OperationLocker.OnReclaim.
+	OnReclaim func(service, name, reason string)
 }
 
 // NewNamedLocker returns a locker over dir (<engine.runtime>/locks).
@@ -147,9 +151,13 @@ func (l NamedLocker) acquire(service, name, reason string, ttl time.Duration, ow
 	if err != nil {
 		return nil, err
 	}
+	var onReclaim func(string)
+	if l.OnReclaim != nil {
+		onReclaim = func(stale string) { l.OnReclaim(service, name, stale) }
+	}
 	ol, err := acquireExclusive(path, lockFile{
 		Service: service, Name: name, Reason: reason, OwnerPID: ownerPID, OwnerStartTicks: ownerTicks,
-	}, ttl, proc, now, nil)
+	}, ttl, proc, now, onReclaim)
 	if err != nil {
 		return nil, err
 	}

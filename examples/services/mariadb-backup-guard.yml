@@ -23,6 +23,7 @@ watches:
   mariadb-backup:
     check:
       type: process
+      reports: state
       optional: true
       exe: "${mariadb_backup_binary}"
       user: "${user}"

@@ -7,11 +7,17 @@ check: { type: swap }
 metrics:
   usage:
     used_pct: { op: ">=", value: 80 }
+    severity: warning
+    levels:
+      error: { used_pct: { op: ">=", value: 95 } }
     then:
       hook:
         command: [/usr/local/bin/sermo-swap-usage.sh]
   io:
     delta: { op: ">", value: 1000 }  # pages swapped in+out per cycle
+    severity: warning
+    levels:
+      error: { delta: { op: ">", value: 10000 } }
     then:
       hook:
         command: [/usr/local/bin/sermo-swap-io.sh]

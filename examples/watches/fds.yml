@@ -6,6 +6,9 @@ interval: 30s
 check:
   type: fds
   used_pct: { op: ">=", value: 85 }
+  severity: warning
+  levels:
+    error: { used_pct: { op: ">=", value: 95 } }
 for: { cycles: 3 }
 then:
   hook:

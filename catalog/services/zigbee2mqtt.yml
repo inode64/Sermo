@@ -19,14 +19,6 @@ policy:
   backoff:
     initial: 15m
     max: 1h
-rules:
-  restart-if-node-binary-changed:
-    type: remediation
-    if:
-      changed:
-        path: ${node_binary}
-    then:
-      action: restart
 variables:
   port: 8080
 watches:

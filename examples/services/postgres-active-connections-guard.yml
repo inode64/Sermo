@@ -18,6 +18,7 @@ checks:
   active-connections:
     type: sql
     reports: state
+    optional: true
     engine: postgres
     host: "${host}"
     port: "${port}"

@@ -90,9 +90,7 @@ func BuildServiceRuntime(ctx context.Context, cfg ServiceRuntimeConfig) ServiceR
 	// Only native init units share the cgroup ownership namespace. A libvirt
 	// domain, network or Docker target is not a systemd/OpenRC unit name.
 	if deps.Backend.HasUnitCgroups() {
-		discoverer.ProcessOwnership = func(id process.Identity) (bool, bool) {
-			return servicemgr.CgroupOwnership(id.Cgroup, cfg.Unit)
-		}
+		discoverer.ProcessOwnership = operation.UnitProcessOwnership(cfg.Unit)
 	}
 	if deps.ProcReader != nil {
 		discoverer.Reader = deps.ProcReader

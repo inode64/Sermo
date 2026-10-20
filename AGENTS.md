@@ -105,6 +105,9 @@ Volatile paths go under `/run`. Normalize host-reported `/var/run/...` to
 - Files Sermo locates on the host (procfs, sysfs, catalog, pidfiles, runtime
   locks and logs) are read through `internal/hostfs`, which accepts only
   absolute, clean paths. Operator-supplied paths are resolved by the CLI first.
+  A path the operator, the catalog or a verified process names (a check
+  target, a variable's candidate) uses the `hostfs` `*Target` functions, read
+  as written; forbidigo rejects a direct `os` read.
 - Every blocking command, network, database or file operation has a timeout
   from engine configuration or a named constant. Tests may use short literals
   to bound the test.

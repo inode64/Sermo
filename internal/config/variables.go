@@ -7,9 +7,11 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"sermo/internal/cfgval"
 	"slices"
 	"strings"
+
+	"sermo/internal/cfgval"
+	"sermo/internal/hostfs"
 )
 
 // varRef matches a single ${name} reference. There is no escape syntax in the
@@ -132,7 +134,7 @@ func firstExistingStringPath(candidates []string) string {
 		if firstLiteral == "" {
 			firstLiteral = p
 		}
-		if _, err := os.Stat(p); err == nil {
+		if _, err := hostfs.StatTarget(p); err == nil {
 			return p
 		}
 	}

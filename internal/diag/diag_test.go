@@ -37,7 +37,7 @@ func loadCfg(t *testing.T, global, svc string) *config.Config {
 	if svc != "" {
 		write("services/svc.yml", svc)
 	}
-	cfg, err := config.Load(filepath.Join(root, "sermo.yml"))
+	cfg, err := config.Load(filepath.Join(root, "sermo.yml"), config.WithCatalogDirs(t.TempDir()))
 	if err != nil {
 		t.Fatalf("load: %v", err)
 	}

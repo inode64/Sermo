@@ -4,12 +4,12 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
-	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 
 	"sermo/internal/cfgval"
+	"sermo/internal/hostfs"
 )
 
 // parsePatternPath reads the `path` of a check that accepts a glob (log,
@@ -47,7 +47,7 @@ func expandPathGlob(path string) (paths []string, glob bool, err error) {
 		return []string{path}, false, nil
 	}
 	base := globBase(path)
-	info, err := os.Stat(base)
+	info, err := hostfs.StatTarget(base)
 	if err != nil {
 		return nil, true, fmt.Errorf("glob: %w", err)
 	}

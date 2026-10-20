@@ -1,6 +1,7 @@
 package app
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -355,7 +356,7 @@ func configuredMountRemounter(deps Deps) MountRemounter {
 	if deps.MountRemounter != nil {
 		return deps.MountRemounter
 	}
-	return mountctl.Controller{Runtime: deps.Runtime, Runner: deps.ExecxRunner}
+	return mountctl.Controller{Runtime: deps.Runtime, Runner: deps.ExecxRunner, OnLockReclaimed: mountLockReclaimEvent(deps.Emit)}
 }
 
 // configuredClockStepper returns the injected stepper or the real chrony one.
@@ -377,7 +378,7 @@ func configuredVolumeExpander(deps Deps) VolumeExpander {
 		runner = execx.RunnerOrDefault(runner)
 		inner = volume.Expander{Runner: runner}
 	}
-	return lockedVolumeExpander{inner: inner, runtimeDir: deps.Runtime, timeout: deps.OperationTimeout}
+	return lockedVolumeExpander{inner: inner, runtimeDir: deps.Runtime, timeout: deps.OperationTimeout, emit: deps.Emit}
 }
 
 // buildMetricWatches expands one multi-metric watch entry (net/icmp/swap) into
@@ -835,6 +836,15 @@ func parseHookMap(then map[string]any, key string) (HookSpec, error) {
 	return hook, nil
 }
 
+// boundedHook gives a hook without its own timeout engine.default_timeout (or
+// the built-in check timeout), so no hook command can run unbounded.
+func boundedHook(hook HookSpec, deps Deps) HookSpec {
+	if len(hook.Command) > 0 {
+		hook.Timeout = cmp.Or(hook.Timeout, deps.DefaultTimeout, DefaultEngineCheckTimeout)
+	}
+	return hook
+}
+
 type watchActions struct {
 	hook HookSpec
 	// recoverHook runs once on the failed-to-ok edge — when a firing watch
@@ -880,6 +890,7 @@ func resolveWatchActions(entry map[string]any, deps Deps, opts watchActionOption
 	if len(recoverHook.Command) > 0 && !opts.parseRecoverHook {
 		return watchActions{}, errors.New("then.recover_hook is not supported on this watch type")
 	}
+	hook, recoverHook = boundedHook(hook, deps), boundedHook(recoverHook, deps)
 	effectiveNames := effectiveNotify(names, deps.GlobalNotify)
 	raidNotifyEvents, err := parseRaidNotifyEvents(thenBlock)
 	if err != nil {

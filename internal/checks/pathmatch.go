@@ -5,6 +5,8 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	"sermo/internal/hostfs"
 )
 
 type pathMatch struct {
@@ -17,7 +19,7 @@ type pathMatch struct {
 
 func firstMatchingPath(paths []string, predicate func(string, os.FileInfo) pathMatch, kindMsg string) pathMatch {
 	match := firstPathMatch(paths, func(path string) pathMatch {
-		info, err := os.Stat(path)
+		info, err := hostfs.StatTarget(path)
 		if err != nil {
 			if os.IsNotExist(err) {
 				return pathMatch{missing: true}

@@ -65,14 +65,25 @@ type Config struct {
 	Emit             func(Result)
 }
 
+// UnitProcessOwnership returns unit's process.Discoverer.ProcessOwnership
+// probe: the kernel cgroup verdict of each process against the unit's own
+// service group.
+func UnitProcessOwnership(unit string) func(process.Identity) (foreign, known bool) {
+	return func(id process.Identity) (bool, bool) { return servicemgr.CgroupOwnership(id.Cgroup, unit) }
+}
+
+// UnitCgroupMember returns unit's process.KillPolicy.Member probe: positive
+// kernel evidence that a residual sits in the unit's own service group.
+func UnitCgroupMember(unit string) func(process.Process) bool {
+	return func(p process.Process) bool { return servicemgr.CgroupOwnedBy(p.Cgroup, unit) }
+}
+
 // New builds an Engine from real components, deriving preflight/verification/guard
 // closures, residual discovery, the kill policy and the reaper from the resolved
 // config tree.
 func New(c Config) Engine {
 	if c.Discoverer.ProcessOwnership == nil {
-		c.Discoverer.ProcessOwnership = func(id process.Identity) (bool, bool) {
-			return servicemgr.CgroupOwnership(id.Cgroup, c.Unit)
-		}
+		c.Discoverer.ProcessOwnership = UnitProcessOwnership(c.Unit)
 	}
 	// Leave sleep nil when unset so process.Wait uses its cancellable timer in
 	// production (no goroutine leak on a cancelled stop); tests inject a fake.
@@ -112,8 +123,7 @@ func New(c Config) Engine {
 	// Only native init units have a service cgroup a residual can be proven to
 	// belong to.
 	if servicemgr.Backend(c.Backend).HasUnitCgroups() {
-		unit := c.Unit
-		killPolicy.Member = func(p process.Process) bool { return servicemgr.CgroupOwnedBy(p.Cgroup, unit) }
+		killPolicy.Member = UnitCgroupMember(c.Unit)
 	}
 	configErr := cmp.Or(
 		warningError(process.SectionStopPolicy, stopPolicyWarnings),

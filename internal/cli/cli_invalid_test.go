@@ -28,7 +28,7 @@ func TestCLIRejectsUnknownFlags(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			var stderr bytes.Buffer
-			app := App{Env: func(string) string { return "" }, Stdout: &bytes.Buffer{}, Stderr: &stderr}
+			app := hermeticApp(t, App{Env: func(string) string { return "" }, Stdout: &bytes.Buffer{}, Stderr: &stderr})
 			code := app.Run(context.Background(), tc.args)
 			if code != exitUsage {
 				t.Fatalf("Run(%v) exit = %d, want %d", tc.args, code, exitUsage)
@@ -94,12 +94,12 @@ func TestCLIRejectsMalformedCommands(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			var stderr bytes.Buffer
-			app := App{
+			app := hermeticApp(t, App{
 				Env:        func(string) string { return "" },
 				Stdout:     &bytes.Buffer{},
 				Stderr:     &stderr,
-				LoadConfig: config.Load,
-			}
+				LoadConfig: testConfigLoader(t),
+			})
 			args := append([]string{"--config", global}, tc.args...)
 			code := app.Run(context.Background(), args)
 			if code != exitUsage {
@@ -115,8 +115,8 @@ func TestCLIRejectsMalformedCommands(t *testing.T) {
 func TestConfiguredStatusRejectsUnknownService(t *testing.T) {
 	global := writeActionConfig(t)
 	var stderr bytes.Buffer
-	app := App{
-		LoadConfig: config.Load,
+	app := hermeticApp(t, App{
+		LoadConfig: testConfigLoader(t),
 		Detector:   fakeBackendDetector{detection: servicemgr.BackendSystemd},
 		NewManager: func(servicemgr.Backend) (servicemgr.Manager, error) {
 			return fakeManager{status: servicemgr.ServiceStatus{
@@ -129,7 +129,7 @@ func TestConfiguredStatusRejectsUnknownService(t *testing.T) {
 		Env:    func(string) string { return "" },
 		Stdout: &bytes.Buffer{},
 		Stderr: &stderr,
-	}
+	})
 
 	code := app.Run(context.Background(), []string{"--config", global, "status", "ghost"})
 	if code != exitRuntimeError {
@@ -143,7 +143,7 @@ func TestConfiguredStatusRejectsUnknownService(t *testing.T) {
 func TestConfigValidateRejectsServiceArgumentBeforeLoadingConfig(t *testing.T) {
 	var stderr bytes.Buffer
 	loadCalled := false
-	app := App{
+	app := hermeticApp(t, App{
 		Env:    func(string) string { return "" },
 		Stdout: &bytes.Buffer{},
 		Stderr: &stderr,
@@ -151,7 +151,7 @@ func TestConfigValidateRejectsServiceArgumentBeforeLoadingConfig(t *testing.T) {
 			loadCalled = true
 			return nil, errNoConfigForInvalidTest
 		},
-	}
+	})
 
 	code := app.Run(context.Background(), []string{"--config", "/tmp/missing-sermo.yml", "config", "validate", "ghost"})
 	if loadCalled {
@@ -167,7 +167,7 @@ func TestConfigValidateRejectsServiceArgumentBeforeLoadingConfig(t *testing.T) {
 
 func TestStatusStillAllowsDirectUnitWhenNoConfigLoads(t *testing.T) {
 	var stdout bytes.Buffer
-	app := App{
+	app := hermeticApp(t, App{
 		LoadConfig: func(string, ...config.Option) (*config.Config, error) {
 			return nil, errNoConfigForInvalidTest
 		},
@@ -183,7 +183,7 @@ func TestStatusStillAllowsDirectUnitWhenNoConfigLoads(t *testing.T) {
 		Env:    func(string) string { return "" },
 		Stdout: &stdout,
 		Stderr: &bytes.Buffer{},
-	}
+	})
 
 	code := app.Run(context.Background(), []string{"status", "nginx"})
 	if code != exitSuccess {

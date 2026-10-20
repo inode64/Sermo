@@ -2986,10 +2986,7 @@ watches:
 	if err := os.WriteFile(globalPath, []byte(cfgContent), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	cfg, err := config.Load(globalPath)
-	if err != nil {
-		t.Fatalf("load config: %v", err)
-	}
+	cfg := loadTestConfig(t, globalPath)
 
 	fake := &execxtest.Runner{}
 	deps := Deps{

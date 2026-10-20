@@ -7,12 +7,13 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"sermo/internal/cfgval"
-	"sermo/internal/hostfs"
-	"sermo/internal/servicemgr"
 	"slices"
 	"strconv"
 	"strings"
+
+	"sermo/internal/cfgval"
+	"sermo/internal/hostfs"
+	"sermo/internal/servicemgr"
 )
 
 // tmplToken is a version-template placeholder. A catalog service name carrying one (e.g.
@@ -235,7 +236,7 @@ func requireSatisfied(require []string, vals map[string]string, toks []tmplToken
 	}
 	repl := strings.NewReplacer(pairs...)
 	for _, cand := range require {
-		if _, err := os.Stat(repl.Replace(cand)); err == nil {
+		if _, err := hostfs.StatTarget(repl.Replace(cand)); err == nil {
 			return true
 		}
 	}
@@ -977,11 +978,11 @@ func templateMatchMatchesAnyPath(match templateMatch, paths []string) bool {
 }
 
 func sameFile(a, b string) bool {
-	ainfo, err := os.Stat(a)
+	ainfo, err := hostfs.StatTarget(a)
 	if err != nil {
 		return false
 	}
-	binfo, err := os.Stat(b)
+	binfo, err := hostfs.StatTarget(b)
 	if err != nil {
 		return false
 	}
@@ -1094,7 +1095,7 @@ func unversionedVersionPath(discoverPath string, tok tmplToken) (string, bool) {
 		return "", false
 	}
 	path := strings.ReplaceAll(discoverPath, marker, "")
-	_, err := os.Stat(path)
+	_, err := hostfs.StatTarget(path)
 	return path, err == nil
 }
 

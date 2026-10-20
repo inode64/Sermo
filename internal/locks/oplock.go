@@ -97,8 +97,10 @@ type OperationLocker struct {
 	Now  func() time.Time
 	// Self reports the current process identity written into the lock.
 	Self func() (pid int, startTicks uint64)
-	// OnReclaim is called after a stale lock is reclaimed, with the reason
-	// (expired, dead owner, pid reuse) so callers can log it.
+	// OnReclaim is called for each stale lock an acquisition reclaimed, with
+	// the reason (expired, dead owner, pid reuse), once that acquisition holds
+	// the lock or has given up, so callers can audit it without leaving the
+	// path free meanwhile.
 	OnReclaim func(service, reason string)
 }
 
@@ -149,12 +151,23 @@ func (l OperationLocker) Acquire(service string, ttl time.Duration) (*Handle, er
 // and named lockers. On success it returns the owned lock. It stamps a fresh
 // payload on each attempt, deriving the
 // expiry from the exact creation timestamp. OnReclaim, when non-nil, is invoked
-// with the stale reason after a stale lock is reclaimed. After a failed reclaim
-// the lock is re-read: if it turned active it is reported as held, otherwise the
-// loop retries. Bounding the loop at maxAcquireAttempts keeps a pathologically
-// contended lock from spinning without limit.
+// with the stale reason of every lock this call reclaimed, once acquisition has
+// settled: a reclaim is reported (and may be audited, which can take a while)
+// only after this call holds the lock or has given up, never while the path
+// stands free for another acquirer. After a failed reclaim the lock is re-read:
+// if it turned active it is reported as held, otherwise the loop retries.
+// Bounding the loop at maxAcquireAttempts keeps a pathologically contended lock
+// from spinning without limit.
 func acquireExclusive(path string, payload lockFile, ttl time.Duration, proc ProcessProber, now func() time.Time, onReclaim func(string)) (ownedLock, error) {
 	payload.AcquisitionID = rand.Text()
+	var reclaimed []string
+	defer func() {
+		if onReclaim != nil {
+			for _, reason := range reclaimed {
+				onReclaim(reason)
+			}
+		}
+	}()
 	for range maxAcquireAttempts {
 		payload.CreatedAt = now()
 		payload.ExpiresAt = payload.CreatedAt.Add(ttl)
@@ -180,9 +193,7 @@ func acquireExclusive(path string, payload lockFile, ttl time.Duration, proc Pro
 		}
 
 		if reclaimStale(path, existing, proc, now) {
-			if onReclaim != nil {
-				onReclaim(staleReason)
-			}
+			reclaimed = append(reclaimed, staleReason)
 			continue // reclaimed; retry the exclusive create
 		}
 		// Could not reclaim: it changed under us. Re-classify; if it went active,

@@ -14,7 +14,7 @@ import (
 func TestNotifierTestSendsMarkedMessage(t *testing.T) {
 	notifier := &fakeReportNotifier{name: "ops"}
 	var stdout bytes.Buffer
-	app := App{
+	app := hermeticApp(t, App{
 		Env:        func(string) string { return "" },
 		Stdout:     &stdout,
 		Stderr:     &bytes.Buffer{},
@@ -22,7 +22,7 @@ func TestNotifierTestSendsMarkedMessage(t *testing.T) {
 		BuildNotifiers: func(*config.Config) (map[string]notify.Notifier, []string) {
 			return map[string]notify.Notifier{"ops": notifier}, nil
 		},
-	}
+	})
 	if code := app.Run(context.Background(), []string{"notifier", "test", "ops"}); code != exitSuccess {
 		t.Fatalf("notifier test exit = %d", code)
 	}
@@ -63,7 +63,7 @@ func TestNotifierTestUsesEngineDefaultTimeout(t *testing.T) {
 			cfg := &config.Config{Global: config.Global{Raw: map[string]any{
 				config.SectionEngine: map[string]any{config.EngineKeyDefaultTimeout: "25s"},
 			}}}
-			app := App{
+			app := hermeticApp(t, App{
 				Env:        func(string) string { return "" },
 				Stdout:     &bytes.Buffer{},
 				Stderr:     &bytes.Buffer{},
@@ -71,7 +71,7 @@ func TestNotifierTestUsesEngineDefaultTimeout(t *testing.T) {
 				BuildNotifiers: func(*config.Config) (map[string]notify.Notifier, []string) {
 					return map[string]notify.Notifier{"ops": notifier}, nil
 				},
-			}
+			})
 			if code := app.Run(context.Background(), append(tc.args, "notifier", "test", "ops")); code != exitSuccess {
 				t.Fatalf("notifier test exit = %d", code)
 			}
@@ -84,7 +84,7 @@ func TestNotifierTestUsesEngineDefaultTimeout(t *testing.T) {
 
 func TestNotifierTestRejectsUnknownOrDisabledNotifier(t *testing.T) {
 	var stderr bytes.Buffer
-	app := App{
+	app := hermeticApp(t, App{
 		Env:        func(string) string { return "" },
 		Stdout:     &bytes.Buffer{},
 		Stderr:     &stderr,
@@ -92,7 +92,7 @@ func TestNotifierTestRejectsUnknownOrDisabledNotifier(t *testing.T) {
 		BuildNotifiers: func(*config.Config) (map[string]notify.Notifier, []string) {
 			return map[string]notify.Notifier{}, nil
 		},
-	}
+	})
 	if code := app.Run(context.Background(), []string{"notifier", "test", "muted"}); code != exitUsage {
 		t.Fatalf("notifier test exit = %d", code)
 	}

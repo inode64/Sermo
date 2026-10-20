@@ -8,9 +8,8 @@ import (
 	"slices"
 	"strings"
 
-	"sermo/internal/hostfs"
-
 	"sermo/internal/execx"
+	"sermo/internal/hostfs"
 	"sermo/internal/strutil"
 )
 
@@ -162,7 +161,7 @@ func collectLibrarySearchDirs(binary string, ef *elf.File) []string {
 	// Best-effort augmentation from ld.so.conf and fragments.
 	dirs = append(dirs, parseLdSoConf(ldSoConfFile)...)
 	// Common drop-in directory even if main conf doesn't include it.
-	if entries, err := os.ReadDir(ldSoConfDir); err == nil {
+	if entries, err := hostfs.ReadDir(ldSoConfDir); err == nil {
 		for _, e := range entries {
 			if strings.HasSuffix(e.Name(), ldSoConfSuffix) {
 				dirs = append(dirs, parseLdSoConf(filepath.Join(ldSoConfDir, e.Name()))...)

@@ -117,6 +117,31 @@ func TestCandidateGlobFallbackPrefersLiteral(t *testing.T) {
 	}
 }
 
+// A candidate is the operator's or the catalog's text and is probed as
+// written: a trailing slash or a doubled separator still finds the directory.
+func TestCandidateExistsAsWritten(t *testing.T) {
+	dir := t.TempDir()
+	for _, written := range []string{dir + "/", filepath.Dir(dir) + "//" + filepath.Base(dir)} {
+		if got := firstExistingStringPath([]string{written, "/nonexistent/fallback"}); got != written {
+			t.Fatalf("firstExistingStringPath(%q) = %q, want the existing candidate as written", written, got)
+		}
+	}
+}
+
+// Dropping a version marker that fills a whole path component leaves a doubled
+// separator; the unversioned path must still be found.
+func TestUnversionedVersionPathKeepsDoubledSeparator(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "app", "bin"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	tok := tmplToken{placeholder: "%v", variable: "version"}
+	path, ok := unversionedVersionPath(filepath.Join(dir, "app")+"/"+tok.marker()+"/bin", tok)
+	if !ok || path != filepath.Join(dir, "app")+"//bin" {
+		t.Fatalf("unversionedVersionPath = %q, %v; want the existing unversioned directory", path, ok)
+	}
+}
+
 func TestPidfileRejectsRelativeCandidate(t *testing.T) {
 	global := writeConfig(t, map[string]string{
 		"sermo.yml": baseGlobal,

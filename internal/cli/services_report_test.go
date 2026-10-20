@@ -90,7 +90,7 @@ defaults: { policy: { cooldown: 5m } }
 
 	notifier := &fakeReportNotifier{name: "ops"}
 	var stdout bytes.Buffer
-	app := App{
+	app := hermeticApp(t, App{
 		Env:        func(string) string { return "" },
 		Stdout:     &stdout,
 		Stderr:     &bytes.Buffer{},
@@ -98,7 +98,7 @@ defaults: { policy: { cooldown: 5m } }
 		BuildReportNotifiers: func(*config.Config) (map[string]notify.Notifier, []string) {
 			return map[string]notify.Notifier{"ops": notifier}, nil
 		},
-	}
+	})
 	if code := app.Run(context.Background(), []string{"--config", global, "services", "catalog", "--notify", "ops"}); code != exitSuccess {
 		t.Fatalf("services --notify exit = %d", code)
 	}

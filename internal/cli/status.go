@@ -5,10 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
-	"os"
 
 	"sermo/internal/config"
 	"sermo/internal/control"
+	"sermo/internal/hostfs"
 	"sermo/internal/servicemgr"
 )
 
@@ -134,7 +134,7 @@ func (a App) statusConfig(opts options) *config.Config {
 	path := opts.globalPath()
 	cfg, err := a.LoadConfig(path)
 	if err != nil {
-		if _, statErr := os.Stat(path); !errors.Is(statErr, fs.ErrNotExist) && !opts.quiet {
+		if _, statErr := hostfs.Stat(path); !errors.Is(statErr, fs.ErrNotExist) && !opts.quiet {
 			fmt.Fprintf(a.Stderr, "warning: config not loaded, treating %s as an init unit: %v\n", opts.service(), err)
 		}
 		return nil

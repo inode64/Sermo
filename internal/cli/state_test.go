@@ -56,7 +56,7 @@ defaults: { policy: { cooldown: 5m } }
 	}
 
 	var stdout, stderr bytes.Buffer
-	app := App{Env: func(string) string { return "" }, Stdout: &stdout, Stderr: &stderr}
+	app := hermeticApp(t, App{Env: func(string) string { return "" }, Stdout: &stdout, Stderr: &stderr})
 	code := app.Run(context.Background(), []string{"--config", global, "state", "compact", "--before", recent.Format(time.RFC3339)})
 	if code != exitSuccess {
 		t.Fatalf("state compact exit=%d stderr=%s", code, stderr.String())

@@ -1,11 +1,11 @@
 package app
 
 import (
-	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 
+	"sermo/internal/hostfs"
 	"sermo/internal/web"
 )
 
@@ -74,15 +74,11 @@ type hostTypeFact struct {
 }
 
 func hostTypeInfo() *web.HostTypeInfo {
-	info := detectHostType(os.ReadFile)
+	info := detectHostType(hostfs.ReadFile)
 	return &info
 }
 
 func detectHostType(readFile func(string) ([]byte, error)) web.HostTypeInfo {
-	if readFile == nil {
-		readFile = os.ReadFile
-	}
-
 	facts := readDMIHostTypeFacts(readFile)
 	if platform, label := virtualPlatformFromText(joinHostTypeFacts(facts)); platform != "" {
 		return web.HostTypeInfo{

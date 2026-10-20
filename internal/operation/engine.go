@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -937,7 +936,7 @@ func stoppedPathMatches(path string, isGlob bool) ([]string, []string) {
 		}
 		return matches, nil
 	}
-	if _, err := os.Stat(path); err == nil {
+	if _, err := hostfs.StatTarget(path); err == nil {
 		return []string{path}, nil
 	}
 	return nil, nil
@@ -963,7 +962,7 @@ func cleanStopPath(path config.CleanPath) []string {
 		return []string{fmt.Sprintf("bad clean_on_stop pattern %q: %v", path.Path, err)}
 	}
 	if matches == nil {
-		if _, err := os.Stat(path.Path); err == nil {
+		if _, err := hostfs.StatTarget(path.Path); err == nil {
 			matches = []string{path.Path}
 		}
 	}

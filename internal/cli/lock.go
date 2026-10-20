@@ -31,6 +31,11 @@ func (a App) runLock(ctx context.Context, opts options) int {
 		return code
 	}
 	locker := locks.NewNamedLocker(locks.RuntimeLocksDir(cfg.Global.RuntimeDir()))
+	reclaims := a.newLockReclaimLog()
+	locker.OnReclaim = reclaims.named
+	// Wrap persists its reclaims while its command runs, instead of after it
+	// for however long it takes; this flush covers acquire.
+	defer a.flushLockReclaims(ctx, cfg, reclaims)
 
 	switch opts.args[0] {
 	case commandLockAcquire:
@@ -38,7 +43,7 @@ func (a App) runLock(ctx context.Context, opts options) int {
 	case commandLockRelease:
 		return a.runLockRelease(opts, cfg, locker, opts.args[1:])
 	default:
-		return a.runLockWrap(ctx, opts, cfg, locker, opts.args[0])
+		return a.runLockWrap(ctx, opts, cfg, locker, reclaims, opts.args[0])
 	}
 }
 
@@ -120,7 +125,7 @@ func namedLockMayExist(scanner locks.Scanner, service, name string) bool {
 	return false
 }
 
-func (a App) runLockWrap(ctx context.Context, opts options, cfg *config.Config, locker locks.NamedLocker, service string) int {
+func (a App) runLockWrap(ctx context.Context, opts options, cfg *config.Config, locker locks.NamedLocker, reclaims *lockReclaimLog, service string) int {
 	if len(opts.args) > 1 {
 		return a.commandUsageError(commandLock, "lock wrap takes exactly one service name before --")
 	}
@@ -141,12 +146,21 @@ func (a App) runLockWrap(ctx context.Context, opts options, cfg *config.Config, 
 		return a.reportLockError(opts, err)
 	}
 	defer func() { _ = handle.Release() }()
+	// The reclaim audit runs alongside the wrapped command, not ahead of it: it
+	// may wait on a busy state store, and the protected work must not.
+	recorded := make(chan struct{})
+	go func() {
+		defer close(recorded)
+		a.flushLockReclaims(ctx, cfg, reclaims)
+	}()
 
 	cmd := exec.CommandContext(ctx, opts.commandArgs[0], opts.commandArgs[1:]...) //nolint:gosec // G204: runs the operator-provided locked command, by design
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	if err := runLockedCommand(cmd); err != nil {
+	err = runLockedCommand(cmd)
+	<-recorded
+	if err != nil {
 		if exitErr, ok := errors.AsType[*exec.ExitError](err); ok {
 			code := lockedCommandExitCode(exitErr)
 			a.recordAccess(cfg, accessCommandLockWrap, service, accessStatusError, fmt.Sprintf("exit %d", code))

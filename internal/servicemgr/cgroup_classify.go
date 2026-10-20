@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"sermo/internal/hostfs"
 )
 
 // CgroupClass names the init-level owner of a process's control group, as the
@@ -133,7 +135,7 @@ func classifyUserSlice(parts []string) CgroupOwner {
 // readDir defaults to os.ReadDir on cgroupRoot.
 func OpenRCUnitCgroupsPresent(readDir func(string) ([]os.DirEntry, error)) bool {
 	if readDir == nil {
-		readDir = os.ReadDir
+		readDir = hostfs.ReadDir
 	}
 	entries, err := readDir(cgroupRoot)
 	if err != nil {

@@ -40,7 +40,8 @@ those cheap to follow.
 - HTTP uses `internal/httpx`, never `http.DefaultClient`.
 - Files Sermo locates on the host (procfs, sysfs, catalog, pidfiles, runtime
   locks and logs) are read through `internal/hostfs`, which accepts only
-  absolute, clean paths.
+  absolute, clean paths; operator- or catalog-named targets use its `*Target`
+  functions (`StatTarget`, `ReadFileTarget`, …), read as written.
 - Fix analyzer findings at the source. A `//nolint` names the analyzer and the
   design reason.
 

@@ -134,7 +134,7 @@ func (p KillPolicy) BlockReason(proc Process, resolve UserResolver) string {
 		return ""
 	}
 	if !p.ForceKill {
-		return "stop_policy.force_kill disables residual cleanup"
+		return StopPolicyFieldPath(StopPolicyKeyForceKill) + " disables residual cleanup"
 	}
 	if proc.ExePrev != "" && proc.ExeFile.Inode == 0 {
 		return "deleted executable file could not be verified"
@@ -303,9 +303,9 @@ func ParseStopPolicy(tree map[string]any) (KillPolicy, []string) {
 		}
 	}
 	if koi, ok := sp[StopPolicyKeyKillOnlyIf].(map[string]any); ok {
-		policy.KillOnlyIf = NewKillSelector(cfgval.StringList(koi[StopPolicyKeyUsers]), cfgval.StringList(koi[StopPolicyKeyExeAny]))
+		policy.KillOnlyIf = KillSelectorFromConfig(koi)
 		if !cfgval.IsNonEmptyStringList(koi[StopPolicyKeyUsers]) || !cfgval.IsNonEmptyStringList(koi[StopPolicyKeyExeAny]) {
-			warnings = append(warnings, StopPolicyFieldPath(StopPolicyKeyKillOnlyIf)+" must define both "+StopPolicyKeyUsers+" and "+StopPolicyKeyExeAny+", each non-empty")
+			warnings = append(warnings, killOnlyIfIncomplete(StopPolicyFieldPath(StopPolicyKeyKillOnlyIf)))
 		}
 	} else if policy.ForceKill {
 		warnings = append(warnings, StopPolicyFieldPath(StopPolicyKeyForceKill)+"=true requires "+StopPolicyKeyKillOnlyIf)
@@ -330,13 +330,26 @@ func ParseKillOnlyIf(raw any, path string) (KillSelector, []string) {
 			warnings = append(warnings, path+"."+key+" is not supported; it accepts "+StopPolicyKeyUsers+" and "+StopPolicyKeyExeAny)
 		}
 	}
-	selector := NewKillSelector(cfgval.StringList(koi[StopPolicyKeyUsers]), cfgval.StringList(koi[StopPolicyKeyExeAny]))
+	selector := KillSelectorFromConfig(koi)
 	if !selector.Configured() {
 		// Return the empty selector, not the partial one: a half-written selector
 		// must authorize nothing rather than whatever half it does carry.
-		return KillSelector{}, append(warnings, path+" must define both "+StopPolicyKeyUsers+" and "+StopPolicyKeyExeAny+", each non-empty")
+		return KillSelector{}, append(warnings, killOnlyIfIncomplete(path))
 	}
 	return selector, warnings
+}
+
+// KillSelectorFromConfig builds the selector a kill_only_if mapping declares
+// from its users and exe_any lists. It does not judge completeness: a selector
+// missing either list is not Configured and authorizes nothing.
+func KillSelectorFromConfig(koi map[string]any) KillSelector {
+	return NewKillSelector(cfgval.StringList(koi[StopPolicyKeyUsers]), cfgval.StringList(koi[StopPolicyKeyExeAny]))
+}
+
+// killOnlyIfIncomplete is the warning for the kill_only_if at path when it
+// lacks either of its lists.
+func killOnlyIfIncomplete(path string) string {
+	return path + " must define both " + StopPolicyKeyUsers + " and " + StopPolicyKeyExeAny + ", each non-empty"
 }
 
 func stopPolicyDuration(stopPolicy map[string]any, key string, warnings *[]string) time.Duration {

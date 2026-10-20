@@ -67,6 +67,43 @@ watches:
 	}
 }
 
+// An absolute configured path is cleaned like a relative one: a trailing slash
+// or a dot segment must not reach the filesystem layer, which reads only clean
+// absolute paths.
+func TestLoadCleansAbsolutePaths(t *testing.T) {
+	root := t.TempDir()
+	serviceDir := filepath.Join(root, "services")
+	if err := os.MkdirAll(serviceDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(serviceDir, "web.yml"), []byte("name: web\nservice: web\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	global := filepath.Join(root, "sermo.yml")
+	if err := os.WriteFile(global, []byte(`
+engine: { runtime: `+root+`/./run/ }
+paths:
+  services: [`+serviceDir+`/]
+defaults:
+  policy: { cooldown: 5m }
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := loadConfig(t, global)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if got := cfg.Global.ServicePaths[0].Path; got != serviceDir {
+		t.Fatalf("ServicePaths[0].Path = %q, want %q", got, serviceDir)
+	}
+	if got, want := cfg.Global.Runtime, filepath.Join(root, "run"); got != want {
+		t.Fatalf("Runtime = %q, want %q", got, want)
+	}
+	if len(cfg.Services) != 1 {
+		t.Fatalf("Services = %d, want 1", len(cfg.Services))
+	}
+}
+
 func TestDefaultServiceAndAppDirs(t *testing.T) {
 	wantServices := []string{"/etc/sermo/services"}
 	gotServices := defaultConfigDirs(DefaultGlobalPath, defaultServiceDirs)

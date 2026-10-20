@@ -6,7 +6,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"strings"
 	"time"
 
@@ -40,7 +39,7 @@ func (p OSProbe) CommandExists(name string) bool {
 
 // PathExists reports whether path exists.
 func (OSProbe) PathExists(path string) bool {
-	_, err := os.Stat(path)
+	_, err := hostfs.Stat(path)
 	return err == nil
 }
 

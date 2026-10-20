@@ -20,6 +20,7 @@ import (
 	"sermo/internal/checks"
 	"sermo/internal/config"
 	"sermo/internal/execx"
+	"sermo/internal/hostfs"
 	"sermo/internal/output"
 	"sermo/internal/process"
 )
@@ -293,7 +294,7 @@ func inspectResolved(
 		r.Status = StatusNoBinaryConfigured
 		return r
 	}
-	info, err := os.Stat(r.Binary)
+	info, err := hostfs.StatTarget(r.Binary)
 	if err != nil {
 		r.Status = StatusNotInstalled
 		return r

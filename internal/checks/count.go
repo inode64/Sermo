@@ -4,12 +4,12 @@ import (
 	"context"
 	"fmt"
 	"io/fs"
-	"os"
 	"path/filepath"
 	"time"
 
 	"sermo/internal/cfgval"
 	"sermo/internal/execx"
+	"sermo/internal/hostfs"
 )
 
 // countCheck is condition-style: OK means the entry count or count growth
@@ -90,7 +90,7 @@ func (c countCheck) tally(ctx context.Context) (int, error) {
 	if c.recursive {
 		return c.tallyRecursive(ctx)
 	}
-	entries, err := os.ReadDir(c.path)
+	entries, err := hostfs.ReadDirTarget(c.path)
 	if err != nil {
 		return 0, fmt.Errorf("read entries in %q: %w", c.path, err)
 	}

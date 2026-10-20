@@ -6,13 +6,13 @@ import (
 	"fmt"
 	"io/fs"
 	"math"
-	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
 	"sermo/internal/cfgval"
 	"sermo/internal/execx"
+	"sermo/internal/hostfs"
 )
 
 // SizeMeasure is one measurement of a path or glob: the byte total and the
@@ -145,7 +145,7 @@ func dirOrFileSize(ctx context.Context, path string, includeHidden bool) (SizeMe
 	if err := ctx.Err(); err != nil {
 		return SizeMeasure{}, fmt.Errorf("measure size of %q: %w", path, err)
 	}
-	info, err := os.Stat(path)
+	info, err := hostfs.StatTarget(path)
 	if err != nil {
 		return SizeMeasure{}, fmt.Errorf("stat size path %q: %w", path, err)
 	}

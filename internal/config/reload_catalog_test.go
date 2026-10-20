@@ -40,7 +40,7 @@ func validateCatalogReloadServices(t *testing.T, catalogDir, backend string) {
 		t.Fatal(err)
 	}
 	writeReloadTestServices(t, enabled, services)
-	cfg, err := Load(writeServicesGlobal(t, dir, enabled, backend), WithCatalogDirs(catalogDir))
+	cfg, err := loadConfig(t, writeServicesGlobal(t, dir, enabled, backend), WithCatalogDirs(catalogDir))
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
@@ -57,7 +57,7 @@ func loadCatalogReloadSignalServices(t *testing.T, catalogDir, backend string) [
 	if err := os.MkdirAll(enabled, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	cfg, err := Load(writeServicesGlobal(t, dir, enabled, backend), WithCatalogDirs(catalogDir))
+	cfg, err := loadConfig(t, writeServicesGlobal(t, dir, enabled, backend), WithCatalogDirs(catalogDir))
 	if err != nil {
 		t.Fatalf("Load (probe): %v", err)
 	}

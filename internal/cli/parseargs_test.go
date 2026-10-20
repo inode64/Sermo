@@ -1,6 +1,8 @@
 package cli
 
 import (
+	"os"
+	"path/filepath"
 	"reflect"
 	"testing"
 	"time"
@@ -20,6 +22,28 @@ func optionsView(o options) parsedOptionsView {
 		command: o.command, config: o.config, service: o.service(), json: o.json, quiet: o.quiet, noCascade: o.noCascade,
 		force: o.force, lazy: o.lazy, kill: o.kill, help: o.help, since: o.since,
 		notify: o.notifyNames, commandArgs: o.commandArgs, eventLimit: o.eventLimit,
+	}
+}
+
+// A relative --config resolves against the working directory once, at parse
+// time, into the absolute clean path every later read uses.
+func TestParseArgsResolvesConfigPath(t *testing.T) {
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct{ in, want string }{
+		{"examples/sermo.yml", filepath.Join(wd, "examples", "sermo.yml")},
+		{"./conf/../sermo.yml", filepath.Join(wd, "sermo.yml")},
+		{"/etc//sermo/./sermo.yml", "/etc/sermo/sermo.yml"},
+	} {
+		o, err := parseArgs([]string{"--config", tc.in, "status"})
+		if err != nil {
+			t.Fatalf("parseArgs(--config %s): %v", tc.in, err)
+		}
+		if o.config != tc.want {
+			t.Fatalf("--config %s resolved to %q, want %q", tc.in, o.config, tc.want)
+		}
 	}
 }
 

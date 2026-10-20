@@ -66,12 +66,13 @@ func (ttyMountUserAlerter) AlertMountUsers(ctx context.Context, spec mountctl.Sp
 
 func (b *WebBackend) mountController() mountctl.Controller {
 	ctrl := mountctl.Controller{
-		Runner:         b.execRunner,
-		DiscoverUsers:  b.mountUsers,
-		Signaler:       b.mountSignaler,
-		CommandTimeout: b.mountTimeout(),
-		Mounts:         b.mountSampler,
-		UserLookup:     b.userLookup,
+		Runner:          b.execRunner,
+		DiscoverUsers:   b.mountUsers,
+		Signaler:        b.mountSignaler,
+		CommandTimeout:  b.mountTimeout(),
+		Mounts:          b.mountSampler,
+		UserLookup:      b.userLookup,
+		OnLockReclaimed: mountLockReclaimEvent(b.emit),
 	}
 	if b.cfg != nil {
 		ctrl.Runtime = b.cfg.Global.RuntimeDir()
@@ -422,7 +423,7 @@ func (b *WebBackend) MountAction(ctx context.Context, name, action string, opts 
 				Path:    spec.Path,
 				Action:  action,
 				Status:  mountctl.ResultFailed,
-				Message: "kill blockers requires mount.stop_policy.kill_only_if",
+				Message: mountctl.MessageKillSelectorRequired,
 			}
 		}
 	default:

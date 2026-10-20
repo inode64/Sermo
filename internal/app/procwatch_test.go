@@ -519,8 +519,9 @@ func TestProcWatchReusedPIDReArms(t *testing.T) {
 }
 
 // TestProcWatchWithRealOSHookRunner exercises the real OSHookRunner (execx path)
-// in a procWatcher using /bin/true.
+// in a procWatcher over a scripted runner.
 func TestProcWatchWithRealOSHookRunner(t *testing.T) {
+	fake := &execxtest.Runner{}
 	h := &procHarness{clock: time.Unix(1_000_000, 0)}
 	s := &fakeProcSampler{cycles: [][]ProcInfo{
 		{{PID: 42, RSS: 123}},
@@ -530,8 +531,8 @@ func TestProcWatchWithRealOSHookRunner(t *testing.T) {
 		name:    "pw-real",
 		match:   ProcMatch{Name: "worker"},
 		cond:    procCond{memOp: ">", memValue: 100},
-		hook:    HookSpec{Command: []string{"/bin/true"}, Timeout: time.Second},
-		runner:  OSHookRunner{},
+		hook:    HookSpec{Command: []string{"/usr/local/bin/on-proc"}, Timeout: time.Second},
+		runner:  OSHookRunner{Runner: fake},
 		now:     func() time.Time { return h.clock },
 		emit:    func(e Event) { h.events = append(h.events, e) },
 		sampler: s,
@@ -539,6 +540,9 @@ func TestProcWatchWithRealOSHookRunner(t *testing.T) {
 	h.tick(w, time.Second)
 	if len(h.events) != 1 || h.events[0].Kind != eventKindHook {
 		t.Fatalf("expected one hook event via real OSHookRunner, got %d events: %v", len(h.events), h.events)
+	}
+	if calls := fake.Calls(); len(calls) != 1 || calls[0].Line() != "/usr/local/bin/on-proc" {
+		t.Fatalf("hook calls = %+v", calls)
 	}
 }
 

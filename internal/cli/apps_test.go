@@ -104,7 +104,7 @@ defaults: { policy: { cooldown: 5m } }
 	})
 
 	var jstdout bytes.Buffer
-	app := App{Env: func(string) string { return "" }, Stdout: &jstdout, Stderr: &bytes.Buffer{}, Runner: runner, LoadConfig: testLoadConfigWithCatalog(catalogDir)}
+	app := hermeticApp(t, App{Env: func(string) string { return "" }, Stdout: &jstdout, Stderr: &bytes.Buffer{}, Runner: runner, LoadConfig: testLoadConfigWithCatalog(catalogDir)})
 	if code := app.Run(context.Background(), []string{"--config", global, "--json", "apps"}); code != exitSuccess {
 		t.Fatalf("apps --json exit = %d", code)
 	}
@@ -183,13 +183,13 @@ defaults: { policy: { cooldown: 5m } }
 
 	run := func(args ...string) string {
 		var stdout bytes.Buffer
-		app := App{
+		app := hermeticApp(t, App{
 			Env:        func(string) string { return "" },
 			Stdout:     &stdout,
 			Stderr:     &bytes.Buffer{},
 			Runner:     runner,
 			LoadConfig: testLoadConfigWithCatalog(catalogDir),
-		}
+		})
 		if code := app.Run(context.Background(), append([]string{"--config", global}, args...)); code != exitSuccess {
 			t.Fatalf("apps %v exit = %d", args, code)
 		}
@@ -225,7 +225,7 @@ defaults: { policy: { cooldown: 5m } }
 
 	// JSON carries the structured fields.
 	var jstdout bytes.Buffer
-	app := App{Env: func(string) string { return "" }, Stdout: &jstdout, Stderr: &bytes.Buffer{}, Runner: runner, LoadConfig: testLoadConfigWithCatalog(catalogDir)}
+	app := hermeticApp(t, App{Env: func(string) string { return "" }, Stdout: &jstdout, Stderr: &bytes.Buffer{}, Runner: runner, LoadConfig: testLoadConfigWithCatalog(catalogDir)})
 	if code := app.Run(context.Background(), []string{"--config", global, "--json", "apps"}); code != exitSuccess {
 		t.Fatalf("apps --json exit = %d", code)
 	}

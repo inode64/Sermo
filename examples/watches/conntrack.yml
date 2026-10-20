@@ -6,6 +6,9 @@ interval: 30s
 check:
   type: conntrack
   used_pct: { op: ">=", value: 90 }
+  severity: warning
+  levels:
+    error: { used_pct: { op: ">=", value: 97 } }
 for: { cycles: 3 }
 then:
   hook:

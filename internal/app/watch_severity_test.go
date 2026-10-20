@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"sermo/internal/checks"
-	"sermo/internal/execx"
+	"sermo/internal/execx/execxtest"
 	"sermo/internal/notify"
 	"sermo/internal/severity"
 	"sermo/internal/web"
@@ -63,7 +63,7 @@ func TestBuildWatchesSeverityPrecedence(t *testing.T) {
 			},
 		},
 	})
-	watches, warns := BuildWatches(cfg, Deps{DefaultTimeout: time.Second, ExecxRunner: execx.CommandRunner{}}, 30*time.Second)
+	watches, warns := BuildWatches(cfg, Deps{DefaultTimeout: time.Second, ExecxRunner: &execxtest.Runner{}}, 30*time.Second)
 	if len(warns) != 0 {
 		t.Fatalf("unexpected warnings: %v", warns)
 	}
@@ -129,7 +129,7 @@ func TestBuildWatchesSeverityMetricOverridesCheck(t *testing.T) {
 			},
 		},
 	})
-	watches, warns := BuildWatches(cfg, Deps{DefaultTimeout: time.Second, ExecxRunner: execx.CommandRunner{}}, 30*time.Second)
+	watches, warns := BuildWatches(cfg, Deps{DefaultTimeout: time.Second, ExecxRunner: &execxtest.Runner{}}, 30*time.Second)
 	if len(warns) != 0 {
 		t.Fatalf("unexpected warnings: %v", warns)
 	}

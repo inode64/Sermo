@@ -16,12 +16,12 @@ import (
 func runWebCommand(t *testing.T, stdin string, args ...string) (int, string, string) {
 	t.Helper()
 	var stdout, stderr bytes.Buffer
-	app := App{
+	app := hermeticApp(t, App{
 		Stdout: &stdout,
 		Stderr: &stderr,
 		Stdin:  strings.NewReader(stdin),
 		Env:    func(string) string { return "" },
-	}
+	})
 	code := app.Run(t.Context(), args)
 	return code, stdout.String(), stderr.String()
 }
@@ -316,12 +316,12 @@ func TestDaemonWebPasswordPrecedence(t *testing.T) {
 			} else if err := os.RemoveAll(tokenPath); err != nil {
 				t.Fatal(err)
 			}
-			app := App{Env: func(name string) string {
+			app := hermeticApp(t, App{Env: func(name string) string {
 				if name == config.EnvWebPassword {
 					return tc.env
 				}
 				return ""
-			}}
+			}})
 			if got := app.daemonWebPassword(tc.cfg); got != tc.want {
 				t.Errorf("daemonWebPassword() = %q, want %q", got, tc.want)
 			}

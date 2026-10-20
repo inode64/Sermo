@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
-	"sermo/internal/config"
 	"slices"
 	"strings"
 	"syscall"
@@ -15,6 +14,7 @@ import (
 	"time"
 
 	"sermo/internal/checks"
+	"sermo/internal/config"
 	"sermo/internal/locks"
 	"sermo/internal/metrics"
 	"sermo/internal/process"
@@ -225,7 +225,7 @@ func newInvalidTreeEngineWithCheckDeps(t *testing.T, service, unit string, tree 
 		Manager:    mgr,
 		Locker:     &locker,
 		Scanner:    locks.NewScanner(locks.RuntimeLocksDir(dir)),
-		Discoverer: process.NewDiscovererWithUserLookup(nil),
+		Discoverer: process.Discoverer{Reader: &countingPIDReader{}},
 		CheckDeps:  checkDeps,
 		Sleep:      func(time.Duration) {},
 	})
@@ -365,7 +365,7 @@ func TestNewWiresVerifyChecksAsPostflight(t *testing.T) {
 		Manager:    &fakeManager{status: servicemgr.StatusActive},
 		Locker:     &locker,
 		Scanner:    locks.NewScanner(locks.RuntimeLocksDir(dir)),
-		Discoverer: process.NewDiscovererWithUserLookup(nil),
+		Discoverer: process.Discoverer{Reader: &countingPIDReader{}},
 		Sleep:      func(time.Duration) {},
 	})
 	out := engine.Postflight(context.Background())

@@ -14,7 +14,7 @@ const sessionExitPollInterval = 100 * time.Millisecond
 
 func (e Engine) closeResidualSession(ctx context.Context, target SessionTarget, boundary SessionBoundary, result *Result) bool {
 	const prefix = "close residual SSH session: "
-	if boundary.MonitorPID <= 1 || boundary.MonitorStartTicks == 0 || boundary.Exe == "" {
+	if boundary.MonitorPID <= 1 || boundary.MonitorStartTicks == 0 || target.StartTicks == 0 || boundary.Exe == "" {
 		return failSession(result, prefix, errors.New("incomplete sudo process identity"))
 	}
 	// The verified session evidence is the authority, as for a connected session

@@ -40,7 +40,7 @@ const daemonSystemdUnit = daemonName + servicemgr.SystemdServiceSuffix
 // whose name is not exactly the packaged daemon unit is left untouched.
 type SelfStrayHygiene struct {
 	// ReadFile reads /proc/self/cgroup and the cgroup's process list; nil uses
-	// os.ReadFile.
+	// hostfs.ReadFile.
 	ReadFile func(string) ([]byte, error)
 	// Self is the daemon's own PID; 0 uses os.Getpid().
 	Self int

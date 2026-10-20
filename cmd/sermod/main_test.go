@@ -45,6 +45,8 @@ defaults:
 		t.Fatal(err)
 	}
 
+	daemonLoadOptions = []config.Option{config.WithCatalogDirs(t.TempDir())}
+	t.Cleanup(func() { daemonLoadOptions = nil })
 	if code := run([]string{"run", "--config", global}); code != exitConfigInvalid {
 		t.Fatalf("run() exit = %d, want %d", code, exitConfigInvalid)
 	}
@@ -57,6 +59,9 @@ defaults:
 func TestRepoDevConfigHasMonitorTargets(t *testing.T) {
 	root := repoRoot(t)
 	global := filepath.Join(root, "examples", "sermo-dev.yml")
+	// The repository catalog's version templates list the active units; an
+	// empty PATH makes that a failure to start instead of a query of this host.
+	t.Setenv("PATH", "")
 
 	cfg, err := config.Load(global, config.WithCatalogDirs(filepath.Join(root, "catalog")))
 	if err != nil {
@@ -144,6 +149,25 @@ func TestParseArgsVerbose(t *testing.T) {
 	}
 }
 
+// A relative --config resolves against the working directory at parse time,
+// and the packaged default stays as it is.
+func TestParseArgsResolvesConfigPath(t *testing.T) {
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	parsed, err := parseArgs([]string{"run", "--config", "conf/../sermo.yml"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := filepath.Join(wd, "sermo.yml"); parsed.globalPath != want {
+		t.Fatalf("globalPath = %q, want %q", parsed.globalPath, want)
+	}
+	if parsed, err := parseArgs([]string{"run"}); err != nil || parsed.globalPath != config.DefaultGlobalPath {
+		t.Fatalf("default globalPath = %q, err = %v", parsed.globalPath, err)
+	}
+}
+
 func TestVersionSubcommandOnlyAsFirstArg(t *testing.T) {
 	// `version` as the first argument prints the build string and exits 0.
 	if code := run([]string{"version"}); code != 0 {
@@ -157,14 +181,19 @@ func TestVersionSubcommandOnlyAsFirstArg(t *testing.T) {
 }
 
 func TestParseArgsConfig(t *testing.T) {
-	// Both --config and --config= forms.
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Both --config and --config= forms; a relative path resolves against the
+	// working directory.
 	for _, c := range []struct {
 		args []string
 		want string
 	}{
 		{[]string{"run", "--config", "/etc/sermo/sermo.yml"}, "/etc/sermo/sermo.yml"},
 		{[]string{"run", "--config=/tmp/c.yml"}, "/tmp/c.yml"},
-		{[]string{"run", "--config=./local.yml", "-v"}, "./local.yml"},
+		{[]string{"run", "--config=./local.yml", "-v"}, filepath.Join(wd, "local.yml")},
 	} {
 		parsed, err := parseArgs(c.args)
 		if err != nil {
@@ -256,7 +285,7 @@ func TestWebAuthFromConfig(t *testing.T) {
 	if err := os.WriteFile(global, []byte(content), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	cfg, err := config.Load(global)
+	cfg, err := config.Load(global, config.WithCatalogDirs(t.TempDir()))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -454,11 +483,15 @@ func TestEngineAndNotifierAccessors(t *testing.T) {
 // TestRunSmokeLifecycle boots the whole daemon against a temp config — workers,
 // watches, state store, web server — waits until it reports ready, exercises a
 // SIGHUP reload, and shuts it down with SIGTERM expecting a clean exit. This is
-// the integration smoke for run(): the startup path no unit test covers.
+// the integration smoke for run(): the startup path no unit test covers. It is
+// the named exception that reads this host's init backend (read-only status
+// queries); its config still loads against an empty catalog.
 func TestRunSmokeLifecycle(t *testing.T) {
 	if _, err := servicemgr.NewDetector().Detect(context.Background(), servicemgr.BackendAuto); err != nil {
 		t.Skipf("no init backend available: %v", err)
 	}
+	daemonLoadOptions = []config.Option{config.WithCatalogDirs(t.TempDir())}
+	t.Cleanup(func() { daemonLoadOptions = nil })
 
 	dir := t.TempDir()
 	for _, sub := range []string{"enabled"} {

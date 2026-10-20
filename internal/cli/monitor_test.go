@@ -22,7 +22,7 @@ func TestMonitorUnmonitorCommand(t *testing.T) {
 
 	run := func(args ...string) int {
 		var out bytes.Buffer
-		app := App{Env: func(string) string { return "" }, Stdout: &out, Stderr: &bytes.Buffer{}, LoadConfig: testLoadConfigWithCatalog(catalogDir)}
+		app := hermeticApp(t, App{Env: func(string) string { return "" }, Stdout: &out, Stderr: &bytes.Buffer{}, LoadConfig: testLoadConfigWithCatalog(catalogDir)})
 		return app.Run(context.Background(), append([]string{"--config", global}, args...))
 	}
 
@@ -109,7 +109,7 @@ func TestUpdateMonitorState(t *testing.T) {
 
 func TestPrintMonitorStatusAlreadyPaused(t *testing.T) {
 	var out bytes.Buffer
-	app := App{Stdout: &out}
+	app := hermeticApp(t, App{Stdout: &out})
 	app.printMonitorStatus("watch storage-root", monitorStatusAlreadyPaused, "")
 	if got := out.String(); got != "monitoring already paused for watch storage-root\n" {
 		t.Fatalf("output = %q", got)
@@ -145,7 +145,7 @@ defaults: { policy: { cooldown: 5m } }
 
 	run := func(args ...string) int {
 		var out bytes.Buffer
-		app := App{Env: func(string) string { return "" }, Stdout: &out, Stderr: &bytes.Buffer{}}
+		app := hermeticApp(t, App{Env: func(string) string { return "" }, Stdout: &out, Stderr: &bytes.Buffer{}})
 		return app.Run(context.Background(), append([]string{"--config", global}, args...))
 	}
 	watchPaused := func(name string) bool {
@@ -200,7 +200,7 @@ defaults: { policy: { cooldown: 5m } }
 func TestMonitorJSONIncludesSource(t *testing.T) {
 	root, global := writeCatalogServiceConfig(t)
 	var out bytes.Buffer
-	app := monitorTestApp(root, &out)
+	app := monitorTestApp(t, root, &out)
 	if code := app.Run(context.Background(), []string{"--config", global, "--json", "unmonitor", "web"}); code != exitSuccess {
 		t.Fatalf("unmonitor exit = %d", code)
 	}
@@ -218,7 +218,7 @@ func TestMonitorJSONIncludesSource(t *testing.T) {
 
 func TestStatusShowsPauseSource(t *testing.T) {
 	root, global := writeCatalogServiceConfig(t)
-	app := monitorTestApp(root, nil)
+	app := monitorTestApp(t, root, nil)
 	if code := app.Run(context.Background(), []string{"--config", global, "unmonitor", "web"}); code != exitSuccess {
 		t.Fatalf("unmonitor exit = %d", code)
 	}
@@ -254,7 +254,7 @@ func TestStatusShowsDisabledState(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root, "services", "web.yml"), []byte("name: web\nuses: nginx\nenabled: false\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	app := monitorTestApp(root, nil)
+	app := monitorTestApp(t, root, nil)
 
 	var out bytes.Buffer
 	app.Stdout = &out
@@ -306,7 +306,8 @@ defaults: { policy: { cooldown: 5m } }
 	return root, filepath.Join(root, "sermo.yml")
 }
 
-func monitorTestApp(root string, stdout *bytes.Buffer) App {
+func monitorTestApp(t *testing.T, root string, stdout *bytes.Buffer) App {
+	t.Helper()
 	if stdout == nil {
 		stdout = &bytes.Buffer{}
 	}
@@ -314,7 +315,7 @@ func monitorTestApp(root string, stdout *bytes.Buffer) App {
 		Service: "web", Backend: servicemgr.BackendSystemd,
 		Unit: "nginx.service", Status: servicemgr.StatusActive,
 	}
-	return App{
+	return hermeticApp(t, App{
 		Detector: fakeBackendDetector{detection: servicemgr.BackendSystemd},
 		NewManager: func(servicemgr.Backend) (servicemgr.Manager, error) {
 			return fakeManager{status: status}, nil
@@ -323,7 +324,7 @@ func monitorTestApp(root string, stdout *bytes.Buffer) App {
 		Stdout:     stdout,
 		Stderr:     &bytes.Buffer{},
 		LoadConfig: testLoadConfigWithCatalog(filepath.Join(root, "catalog")),
-	}
+	})
 }
 
 func TestMetaSuffix(t *testing.T) {

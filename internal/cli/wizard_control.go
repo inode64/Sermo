@@ -11,13 +11,14 @@ import (
 
 	"sermo/internal/assist"
 	"sermo/internal/dockerctl"
+	"sermo/internal/hostfs"
 	"sermo/internal/virt"
 )
 
 const dockerContainerIDShortLength = 12
 
 func listWizardDockerContainers(ctx context.Context, timeout time.Duration) ([]assist.DockerCandidate, error) {
-	if _, err := os.Stat(dockerctl.DefaultSocket); err != nil {
+	if _, err := hostfs.Stat(dockerctl.DefaultSocket); err != nil {
 		if os.IsNotExist(err) {
 			return nil, nil
 		}
@@ -97,7 +98,7 @@ func listWizardVMs(ctx context.Context, timeout time.Duration) ([]assist.VMCandi
 }
 
 func localSocketExists(path string) (bool, error) {
-	if _, err := os.Stat(path); err != nil {
+	if _, err := hostfs.Stat(path); err != nil {
 		if os.IsNotExist(err) {
 			return false, nil
 		}

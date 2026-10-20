@@ -47,6 +47,9 @@ watches:
       op: ">"
       value: 50000
       optional: true
+      severity: warning
+      levels:
+        error: { op: ">", value: 200000 }
     within:
       cycles: 10
       min_matches: 3

@@ -192,6 +192,9 @@ type App struct {
 	// daemonIdentity reads the identity `daemon reload` uses to prove a PID is
 	// sermod before signalling it. nil reads /proc.
 	daemonIdentity func(pid int) (process.Identity, bool)
+	// expectedDaemon returns the executables and real UID a reloaded sermod must
+	// have. nil derives them from this sermoctl's own process identity.
+	expectedDaemon func() (daemonExpectation, error)
 	// signalDaemon delivers the reload signal. nil uses the pidfd signaler.
 	signalDaemon func(ctx context.Context, target process.Process, sig syscall.Signal) error
 	// FetchEvents is injectable for `sermoctl events` (listing recent events via
@@ -591,6 +594,13 @@ func parseArgs(args []string) (options, error) {
 
 	if err := fs.Parse(flagArgs); err != nil {
 		return opts, cliutil.NormalizePflagError(err) //nolint:wrapcheck // the normalized message is printed verbatim as the usage error; wrapping would re-add the pflag prefix noise the helper strips
+	}
+	if opts.config != "" {
+		abs, err := cliutil.AbsPath(cliFlagConfig, opts.config)
+		if err != nil {
+			return opts, err //nolint:wrapcheck // AbsPath already names the flag and value
+		}
+		opts.config = abs
 	}
 	opts.timeoutSet = fs.Changed(cliFlagTimeout)
 	// An explicit 0 or negative timeout would silently become the command's

@@ -11,6 +11,7 @@ import (
 
 	"sermo/internal/cfgval"
 	"sermo/internal/checks"
+	"sermo/internal/hostfs"
 )
 
 var wholeVarRef = regexp.MustCompile(`^\$\{\s*([^}:][^}]*)\s*\}$`)
@@ -127,7 +128,7 @@ func selectResourcePath(typ string, raw any) (selected string, ok bool) {
 }
 
 func resourceCandidateMatches(typ, path string) bool {
-	info, err := os.Stat(path)
+	info, err := hostfs.StatTarget(path)
 	if err != nil {
 		return false
 	}

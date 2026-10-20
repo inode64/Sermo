@@ -5,11 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
-	"os"
 	"path/filepath"
-	"sermo/internal/hostfs"
 	"strings"
 	"time"
+
+	"sermo/internal/hostfs"
 )
 
 // devNodePrefix is the /dev path prefix a configured device may carry: the smart
@@ -77,7 +77,7 @@ func defaultBlockDeviceBus(device string) string {
 	if name == "" {
 		return ""
 	}
-	target, err := os.Readlink(filepath.Join(sysBlockPath, name))
+	target, err := hostfs.Readlink(filepath.Join(sysBlockPath, name))
 	if err != nil {
 		return ""
 	}

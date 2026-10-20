@@ -9,6 +9,8 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"sermo/internal/hostfs"
 )
 
 // TTYPath resolves a utmp terminal line below devRoot without permitting an
@@ -40,7 +42,7 @@ func TerminalInfo(devRoot, line string) (Terminal, error) {
 	if !ok {
 		return Terminal{}, fmt.Errorf("unsafe terminal line %q", line)
 	}
-	info, err := os.Stat(path)
+	info, err := hostfs.Stat(path)
 	if err != nil {
 		return Terminal{}, fmt.Errorf("stat terminal %s: %w", path, err)
 	}
@@ -58,7 +60,7 @@ func TerminalInfo(devRoot, line string) (Terminal, error) {
 // Multiplexer sessions expose the device but not necessarily its pts path, so
 // this bounded /dev/pts lookup keeps idle attribution native and exact.
 func TerminalAccessedAt(devRoot string, device uint64) (time.Time, bool) {
-	entries, err := os.ReadDir(filepath.Join(devRoot, "pts"))
+	entries, err := hostfs.ReadDir(filepath.Join(devRoot, "pts"))
 	if err != nil {
 		return time.Time{}, false
 	}

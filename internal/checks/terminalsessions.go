@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"sermo/internal/execx"
+	"sermo/internal/hostfs"
 	"sermo/internal/metrics"
 	"sermo/internal/process"
 )
@@ -524,7 +525,7 @@ func terminalUserCommandError(result execx.Result, runErr error, action string, 
 // Callers use it as a generation marker before a close operation, never as
 // permission to remove a newly created path.
 func unixSocketInfo(path string) (fs.FileInfo, bool, error) {
-	info, err := os.Lstat(path)
+	info, err := hostfs.LstatTarget(path)
 	if err != nil {
 		return nil, false, fmt.Errorf("lstat socket %q: %w", path, err)
 	}

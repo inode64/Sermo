@@ -94,7 +94,7 @@ func TestLocksReports(t *testing.T) {
 			writeLockFixture(t, locksDir, tc.lockFile, tc.fixture)
 
 			var stdout bytes.Buffer
-			app := App{Env: func(string) string { return "" }, Stdout: &stdout, Stderr: &bytes.Buffer{}}
+			app := hermeticApp(t, App{Env: func(string) string { return "" }, Stdout: &stdout, Stderr: &bytes.Buffer{}})
 			code := app.Run(context.Background(), []string{"--config", global, "locks", "mysql"})
 			if code != exitSuccess {
 				t.Fatalf("Run() exit = %d, want %d", code, exitSuccess)
@@ -114,7 +114,7 @@ func TestLocksNoneFound(t *testing.T) {
 	global, _ := writeLocksConfig(t, root)
 
 	var stdout bytes.Buffer
-	app := App{Env: func(string) string { return "" }, Stdout: &stdout, Stderr: &bytes.Buffer{}}
+	app := hermeticApp(t, App{Env: func(string) string { return "" }, Stdout: &stdout, Stderr: &bytes.Buffer{}})
 	code := app.Run(context.Background(), []string{"--config", global, "locks", "mysql"})
 	if code != exitSuccess {
 		t.Fatalf("Run() exit = %d, want %d", code, exitSuccess)
@@ -135,7 +135,7 @@ func TestLocksJSON(t *testing.T) {
 	})
 
 	var stdout bytes.Buffer
-	app := App{Env: func(string) string { return "" }, Stdout: &stdout, Stderr: &bytes.Buffer{}}
+	app := hermeticApp(t, App{Env: func(string) string { return "" }, Stdout: &stdout, Stderr: &bytes.Buffer{}})
 	code := app.Run(context.Background(), []string{"--config", global, "--json", "locks", "mysql"})
 	if code != exitSuccess {
 		t.Fatalf("Run() exit = %d, want %d", code, exitSuccess)
@@ -158,7 +158,7 @@ func TestLocksJSON(t *testing.T) {
 func runLockCLI(t *testing.T, args ...string) (int, string, string) {
 	t.Helper()
 	var stdout, stderr bytes.Buffer
-	app := App{Env: func(string) string { return "" }, Stdout: &stdout, Stderr: &stderr}
+	app := hermeticApp(t, App{Env: func(string) string { return "" }, Stdout: &stdout, Stderr: &stderr})
 	code := app.Run(context.Background(), args)
 	return code, stdout.String(), stderr.String()
 }
@@ -295,5 +295,57 @@ func TestLockWrapHoldsDuringCommand(t *testing.T) {
 	}
 	if _, err := os.Stat(lockPath); !os.IsNotExist(err) {
 		t.Fatalf("lock should be released after wrapper: %v", err)
+	}
+}
+
+// A stale named lock reclaimed by `lock acquire` or by the wrap form is
+// reported on stderr and recorded as the same warning event sermod records for
+// its own reclaims; the wrap form records it while its command runs.
+func TestLockRecordsReclaimedStaleLock(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		args []string
+	}{
+		{name: "acquire", args: []string{"lock", "acquire", "mysql", "--name", "backup", "--reason", "nightly", "--ttl", "1h"}},
+		{name: "wrap", args: []string{"lock", "mysql", "--name", "backup", "--reason", "nightly", "--ttl", "1h", "--", "sh", "-c", "exit 0"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			root := t.TempDir()
+			global, locksDir := writeLocksConfig(t, root)
+			mustWrite(t, global, `
+engine:
+  runtime: `+root+`/run
+  state: `+root+`/state
+paths:
+  services: [ `+root+`/services ]
+
+defaults:
+  policy:
+    cooldown: 5m
+`)
+			writeLockFixture(t, locksDir, "mysql\\backup.lock", map[string]any{
+				"service":    "mysql",
+				"name":       "backup",
+				"expires_at": time.Now().Add(-time.Hour).UTC().Format(time.RFC3339),
+			})
+
+			code, out, errOut := runLockCLI(t, append([]string{"--config", global}, tc.args...)...)
+			if code != exitSuccess {
+				t.Fatalf("%s: code=%d out=%q stderr=%q", tc.name, code, out, errOut)
+			}
+			const want = "reclaimed stale lock mysql.backup (expired)"
+			if !strings.Contains(errOut, "mysql: "+want) {
+				t.Fatalf("stderr = %q, want %q", errOut, want)
+			}
+			store := openTestStateStore(t, global)
+			defer func() { _ = store.Close() }()
+			events, err := store.RecentEventsBefore(0, 10)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(events) != 1 || events[0].Service != "mysql" || events[0].Message != want || events[0].Severity != "warning" {
+				t.Fatalf("events = %+v, want one warning %q", events, want)
+			}
+		})
 	}
 }

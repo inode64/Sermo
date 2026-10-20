@@ -39,6 +39,7 @@ func TestSameGenerationNeedsPIDAndStartTicks(t *testing.T) {
 		{name: "same generation, other fields differ", other: Process{PID: 100, StartTicks: 10, Exe: "/usr/bin/other"}, want: true},
 		{name: "recycled pid", other: Process{PID: 100, StartTicks: 11}},
 		{name: "other pid", other: Process{PID: 101, StartTicks: 10}},
+		{name: "other start tick unknown", other: Process{PID: 100}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			if got := daemon.SameGeneration(tc.other); got != tc.want {
@@ -48,5 +49,20 @@ func TestSameGenerationNeedsPIDAndStartTicks(t *testing.T) {
 				t.Fatalf("ContainsGeneration = %v, want %v", got, tc.want)
 			}
 		})
+	}
+}
+
+// An unknown start tick proves no generation: two snapshots of a PID whose
+// start time could not be read are never treated as the same process.
+func TestSameGenerationRejectsUnknownStartTicks(t *testing.T) {
+	unknown := Process{PID: 100}
+	if unknown.SameGeneration(Process{PID: 100}) {
+		t.Fatal("two unknown start ticks matched")
+	}
+	if unknown.SameGeneration(Process{PID: 100, StartTicks: 10}) {
+		t.Fatal("unknown start tick matched a known one")
+	}
+	if ContainsGeneration([]Process{{PID: 100}}, unknown) {
+		t.Fatal("ContainsGeneration held a generation with unknown start tick")
 	}
 }

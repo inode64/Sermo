@@ -253,6 +253,15 @@ linters:
           msg: use context deadlines or time.After/NewTimer; Sleep blocks without cancellation
         - pattern: ^http\.DefaultClient$
           msg: use an explicit http.Client with a timeout (see internal/httpx)
+        # Host reads go through internal/hostfs: paths Sermo determines itself
+        # (procfs, sysfs, its config tree, runtime and pidfiles) through the
+        # checked functions, which refuse a relative or unclean path; paths the
+        # operator, the catalog or a verified process names through the *Target
+        # functions, read as written. analyze-types also catches the function
+        # passed as a value (readFile = os.ReadFile). Not covered: filepath.Glob,
+        # filepath.WalkDir and filepath.EvalSymlinks.
+        - pattern: ^os\.(ReadFile|ReadDir|Readlink|Stat|Lstat|Open|OpenFile)$
+          msg: read host paths through internal/hostfs, the checked functions for paths Sermo determines and the *Target functions for operator- or catalog-named ones
     dupl:
       # The default is 150 tokens, which only sees very large clones. 60 is the
       # lowest value production code is clean at, and only with the three

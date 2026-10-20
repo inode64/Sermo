@@ -72,16 +72,13 @@ func writeParallelServicesConfig(t *testing.T, n int) *config.Config {
 			t.Fatal(err)
 		}
 	}
-	cfg, err := config.Load(globalPath)
-	if err != nil {
-		t.Fatalf("load config: %v", err)
-	}
+	cfg := loadTestConfig(t, globalPath)
 	return cfg
 }
 
 func parallelStartupDeps(t *testing.T, runner execx.Runner) (Deps, *metrics.Collector) {
 	t.Helper()
-	collector := metrics.New(metrics.OSReader{})
+	collector := metrics.New(fakeSwapReader{})
 	return Deps{
 		Backend:          servicemgr.BackendSystemd,
 		Manager:          fakeManager{},

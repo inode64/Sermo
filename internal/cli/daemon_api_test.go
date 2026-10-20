@@ -62,16 +62,16 @@ name: mysql
 service: mysql.service
 `)
 
-	cfg, err := config.Load(global)
+	cfg, err := loadTestConfig(t, global)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	loadCalls := 0
-	app := App{Env: os.Getenv, LoadConfig: func(string, ...config.Option) (*config.Config, error) {
+	app := hermeticApp(t, App{Env: os.Getenv, LoadConfig: func(string, ...config.Option) (*config.Config, error) {
 		loadCalls++
 		return cfg, nil
-	}}
+	}})
 	opts := options{config: global}
 
 	st, ok := app.fetchDaemonServiceStateWithConfig(context.Background(), app.statusConfig(opts), "mysql")
@@ -91,7 +91,7 @@ service: mysql.service
 
 func TestFetchDaemonServiceStateConfigFailureIsSilent(t *testing.T) {
 	var stderr bytes.Buffer
-	app := App{Env: os.Getenv, LoadConfig: config.Load, Stderr: &stderr}
+	app := hermeticApp(t, App{Env: os.Getenv, LoadConfig: testConfigLoader(t), Stderr: &stderr})
 	opts := options{config: filepath.Join(t.TempDir(), "missing.yml")}
 
 	if state, ok := app.fetchDaemonServiceStateWithConfig(context.Background(), app.statusConfig(opts), "mysql"); ok || state != "" {
@@ -104,12 +104,12 @@ func TestFetchDaemonServiceStateConfigFailureIsSilent(t *testing.T) {
 
 func TestEventsConfigFailureIsReportedOnce(t *testing.T) {
 	var stdout, stderr bytes.Buffer
-	app := App{
+	app := hermeticApp(t, App{
 		LoadConfig: func(string, ...config.Option) (*config.Config, error) {
 			return nil, errors.New("unreadable config")
 		},
 		Stdout: &stdout, Stderr: &stderr,
-	}
+	})
 	if code := app.Run(context.Background(), []string{"--json", "events"}); code != exitRuntimeError {
 		t.Fatalf("events exit = %d, want %d", code, exitRuntimeError)
 	}
@@ -151,13 +151,13 @@ watches:
 `)
 	var stdout bytes.Buffer
 	loadCalls := 0
-	app := App{
+	app := hermeticApp(t, App{
 		LoadConfig: func(string, ...config.Option) (*config.Config, error) {
 			loadCalls++
 			return cfg, nil
 		},
 		Stdout: &stdout,
-	}
+	})
 
 	code := app.Run(context.Background(), []string{
 		"--config", global, "--json", "watch", "status", "storage-root",
@@ -223,7 +223,7 @@ web:
   port: PORT
 paths:
 `)
-			app := App{Env: os.Getenv, LoadConfig: func(string, ...config.Option) (*config.Config, error) { return cfg, nil }}
+			app := hermeticApp(t, App{Env: os.Getenv, LoadConfig: func(string, ...config.Option) (*config.Config, error) { return cfg, nil }})
 
 			events, err := app.fetchEvents(context.Background(), cfg, tc.service, 7)
 			if err != nil {
@@ -262,7 +262,7 @@ web:
 paths:
   watches: [WATCHES]
 `)
-	app := App{Env: os.Getenv, LoadConfig: func(string, ...config.Option) (*config.Config, error) { return cfg, nil }}
+	app := hermeticApp(t, App{Env: os.Getenv, LoadConfig: func(string, ...config.Option) (*config.Config, error) { return cfg, nil }})
 	result, err := app.probeDaemonWatch(context.Background(), cfg, "disk-speed")
 	if err != nil || !result.OK || len(result.Readings) != 1 || result.Readings[0].Value != "166.67 MB/s" {
 		t.Fatalf("probe result=%+v err=%v", result, err)
@@ -305,7 +305,7 @@ web:
 paths:
   watches: [WATCHES]
 `)
-	app := App{Env: os.Getenv, LoadConfig: func(string, ...config.Option) (*config.Config, error) { return cfg, nil }}
+	app := hermeticApp(t, App{Env: os.Getenv, LoadConfig: func(string, ...config.Option) (*config.Config, error) { return cfg, nil }})
 	result, err := app.probeDaemonWatch(context.Background(), cfg, "diskio-sdd")
 	if err != nil {
 		t.Fatalf("probe failed: %v", err)
@@ -328,7 +328,7 @@ web:
   port: PORT
 paths:
 `)
-	app := App{Env: os.Getenv, LoadConfig: func(string, ...config.Option) (*config.Config, error) { return cfg, nil }}
+	app := hermeticApp(t, App{Env: os.Getenv, LoadConfig: func(string, ...config.Option) (*config.Config, error) { return cfg, nil }})
 
 	states := app.fetchDaemonApplicationStates(context.Background(), cfg)
 	if got := states["git"]; got != "starting" {
@@ -362,7 +362,7 @@ func daemonAPITestConfig(t *testing.T, serverURL, template string) (root, global
 	content = strings.ReplaceAll(content, "WATCHES", filepath.Join(root, "watches"))
 	global = filepath.Join(root, "sermo.yml")
 	mustWrite(t, global, content)
-	cfg, err = config.Load(global)
+	cfg, err = loadTestConfig(t, global)
 	if err != nil {
 		t.Fatal(err)
 	}

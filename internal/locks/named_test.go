@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -147,6 +148,43 @@ func TestNamedReclaimsExpired(t *testing.T) {
 	}
 	if lf, _ := readLockFile(path); lf.Reason != "again" {
 		t.Fatalf("expired lock should have been reclaimed and rewritten, got %+v", lf)
+	}
+}
+
+// Every reclaimed named lock reaches OnReclaim exactly once, so it can be
+// audited; an active lock reclaims nothing.
+func TestNamedReclaimReportsOnReclaim(t *testing.T) {
+	type reclaim struct{ service, name, reason string }
+	for _, tc := range []struct {
+		name    string
+		expires time.Time
+		want    []reclaim
+		wantErr bool
+	}{
+		{name: "expired lock", expires: fixedNow.Add(-time.Hour), want: []reclaim{{"mysql", "backup", "expired"}}},
+		{name: "active lock", expires: fixedNow.Add(time.Hour), wantErr: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			l := namedLocker(t.TempDir(), fakeProc{})
+			var got []reclaim
+			l.OnReclaim = func(service, name, reason string) { got = append(got, reclaim{service, name, reason}) }
+			writeLock(t, l.Dir, "mysql\\backup.lock", lockFile{Service: "mysql", Name: "backup", ExpiresAt: tc.expires})
+			_, err := l.Pin("mysql", "backup", "again", time.Hour)
+			if (err != nil) != tc.wantErr {
+				t.Fatalf("Pin() error = %v, wantErr %v", err, tc.wantErr)
+			}
+			if !slices.Equal(got, tc.want) {
+				t.Fatalf("reclaims = %+v, want %+v", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestNamedReclaimWithoutOnReclaimIsSafe(t *testing.T) {
+	l := namedLocker(t.TempDir(), fakeProc{})
+	writeLock(t, l.Dir, "mysql.lock", lockFile{Service: "mysql", ExpiresAt: fixedNow.Add(-time.Hour)})
+	if _, err := l.Pin("mysql", "", "again", time.Hour); err != nil {
+		t.Fatalf("Pin() error = %v", err)
 	}
 }
 

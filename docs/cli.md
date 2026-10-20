@@ -52,13 +52,18 @@ sermod --version
 ```
 
 - `--config PATH` loads the global config file. The default is
-  `/etc/sermo/sermo.yml`. Use the same path with `sermoctl --config` when
-  validating or reloading a non-standard tree.
+  `/etc/sermo/sermo.yml`. A relative path is resolved against the current
+  directory when the command starts. Use the same path with
+  `sermoctl --config` when validating or reloading a non-standard tree.
 - `--verbose` / `-v` enables debug logging, including config load details,
   backend detection and monitor-target counts.
 
 Use `sermoctl daemon reload` to ask a running daemon to re-read the config file
-it was started with.
+it was started with. It signals only the `sermod` installed alongside this
+`sermoctl` (its sibling binary or `../sbin/sermod`, symlinks resolved) running as
+the caller's own user, or under any account when the caller is root; a process
+merely named `sermod` is refused with the reason, and a daemon whose binary a package upgrade replaced must be restarted
+instead.
 
 ## Command surface
 

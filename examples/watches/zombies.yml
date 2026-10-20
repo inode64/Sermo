@@ -6,6 +6,9 @@ interval: 1m
 check:
   type: zombies
   count: { op: ">", value: 20 }
+  severity: warning
+  levels:
+    error: { count: { op: ">", value: 100 } }
 for: { cycles: 3 }
 then:
   hook:

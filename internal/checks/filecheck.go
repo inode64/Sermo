@@ -6,6 +6,8 @@ import (
 	"os"
 	"syscall"
 	"time"
+
+	"sermo/internal/hostfs"
 )
 
 // fileExistsCheck passes when a path exists. It must point at a
@@ -17,7 +19,7 @@ type fileExistsCheck struct {
 
 func (c fileExistsCheck) Run(_ context.Context) Result {
 	start := time.Now()
-	if _, err := os.Stat(c.path); err != nil {
+	if _, err := hostfs.StatTarget(c.path); err != nil {
 		if os.IsNotExist(err) {
 			res := c.result(false, c.path+" does not exist", start)
 			res.Data = map[string]any{DataKeyPath: c.path}
@@ -39,7 +41,7 @@ type fileCheck struct {
 
 func (c fileCheck) Run(_ context.Context) Result {
 	start := time.Now()
-	info, err := os.Stat(c.path)
+	info, err := hostfs.StatTarget(c.path)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return c.pathResult(false, c.path+" does not exist", start)

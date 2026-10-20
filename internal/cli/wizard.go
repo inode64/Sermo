@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"maps"
 	"net"
 	"os"
@@ -22,6 +23,7 @@ import (
 	"sermo/internal/checks"
 	"sermo/internal/config"
 	"sermo/internal/dockerctl"
+	"sermo/internal/hostfs"
 	"sermo/internal/mountctl"
 	"sermo/internal/servicemgr"
 	"sermo/internal/volume"
@@ -333,7 +335,7 @@ func hasNonLoopbackIface(ifaces []assist.Iface) bool {
 }
 
 func listIfacesFromSysfs(root string) ([]assist.Iface, error) {
-	entries, err := os.ReadDir(root)
+	entries, err := hostfs.ReadDir(root)
 	if err != nil {
 		return nil, fmt.Errorf("read network sysfs %s: %w", root, err)
 	}
@@ -527,8 +529,8 @@ func planStaleDeletes(p *assist.Prompt, dir, noun, directoryLabel string, detect
 	if len(detected) == 0 {
 		return nil, nil
 	}
-	entries, err := os.ReadDir(dir)
-	if os.IsNotExist(err) {
+	entries, err := hostfs.ReadDir(dir)
+	if errors.Is(err, fs.ErrNotExist) {
 		return nil, nil
 	}
 	if err != nil {
@@ -725,9 +727,9 @@ func planConfigFiles(targetDir, noun string, docs map[string]map[string]any) ([]
 			return nil, fmt.Errorf("%s files %q and %q both map to %s; not overwriting", noun, previous, name, file)
 		}
 		plannedPaths[file] = name
-		if _, err := os.Stat(file); err == nil {
+		if _, err := hostfs.Stat(file); err == nil {
 			return nil, fmt.Errorf("%s file %s already exists; not overwriting", noun, file)
-		} else if !os.IsNotExist(err) {
+		} else if !errors.Is(err, fs.ErrNotExist) {
 			return nil, fmt.Errorf("stat %s: %w", file, err)
 		}
 		data, err := yaml.Marshal(docs[name])
@@ -771,7 +773,7 @@ func ensureConfigPathDir(globalPath, pathKey, relDir, targetDir string) (string,
 	if resolved, err := filepath.EvalSymlinks(globalPath); err == nil {
 		globalPath = resolved
 	}
-	orig, err := os.ReadFile(globalPath) //nolint:gosec // G304: global sermo.yml path from --config / defaults
+	orig, err := hostfs.ReadFile(globalPath)
 	if err != nil {
 		return "", fmt.Errorf("read %s: %w", globalPath, err)
 	}
@@ -793,7 +795,7 @@ func ensureConfigPathDir(globalPath, pathKey, relDir, targetDir string) (string,
 	if err != nil {
 		return "", fmt.Errorf("render %s: %w", globalPath, err)
 	}
-	info, err := os.Stat(globalPath)
+	info, err := hostfs.Stat(globalPath)
 	if err != nil {
 		return "", fmt.Errorf("stat %s: %w", globalPath, err)
 	}

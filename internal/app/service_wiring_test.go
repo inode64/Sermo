@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"sermo/internal/execx"
+	"sermo/internal/execx/execxtest"
 	"sermo/internal/operation"
 	"sermo/internal/process"
 	"sermo/internal/servicemgr"
@@ -23,11 +24,16 @@ func TestServiceScopedProcessCountNeverCountsTheHost(t *testing.T) {
 			"main": map[string]any{"exe": "/nonexistent/uninstalled-daemon", "user": "root"},
 		},
 	}
+	// A host full of unrelated processes, none of them the service's.
+	host := serviceOwnershipReader{}
+	for pid := 100; pid < 110; pid++ {
+		host[pid] = process.Identity{PID: pid, PPID: 1, StartTicks: uint64(pid), StartTicksOK: true, Exe: "/usr/bin/other", ExeOK: true}
+	}
 	runtime := BuildServiceRuntime(t.Context(), ServiceRuntimeConfig{
 		Service: "gone", Unit: "gone", Tree: tree,
 		Deps: Deps{
 			Backend: servicemgr.BackendOpenRC, Manager: fakeManager{}, Runtime: t.TempDir(),
-			ExecxRunner: execx.CommandRunner{},
+			ProcReader: host, ExecxRunner: &execxtest.Runner{},
 		},
 	})
 	scoped := runtime.CheckDeps.ProcessCount
@@ -35,8 +41,8 @@ func TestServiceScopedProcessCountNeverCountsTheHost(t *testing.T) {
 		t.Fatalf("scoped filterless count = %d, want 0 (selectors match nothing)", got)
 	}
 	// The host-wide count the old wiring used is emphatically not zero.
-	if host := process.NewDiscovererWithUserLookup(nil).CountMatching("", "", ""); host == 0 {
-		t.Fatal("sanity: host has processes")
+	if got := (process.Discoverer{Reader: host}).CountMatching("", "", ""); got != len(host) {
+		t.Fatalf("sanity: host-wide count = %d, want %d", got, len(host))
 	}
 }
 
@@ -87,7 +93,7 @@ func TestServiceBackendPIDsUsesOnlyResolvedProviders(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			got := ServiceBackendPIDs(t.Context(), tc.backend, "svc", tc.configured, execx.CommandRunner{})
+			got := ServiceBackendPIDs(t.Context(), tc.backend, "svc", tc.configured, &execxtest.Runner{})
 			if tc.wantNil {
 				if got != nil {
 					t.Fatal("ServiceBackendPIDs() is non-nil")

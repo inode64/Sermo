@@ -3,11 +3,13 @@ package cli
 import (
 	"bytes"
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"sermo/internal/assist"
 	"sermo/internal/cfgval"
@@ -136,6 +138,30 @@ func TestResolveWizardServiceUnitPrefersActiveCandidate(t *testing.T) {
 	}
 	if unit != "php8.2" || status != servicemgr.StatusActive {
 		t.Fatalf("unit/status = %s/%s, want php8.2/active", unit, status)
+	}
+}
+
+// A hung init backend must not stall the wizard: every unit status query runs
+// under the resolver's timeout, or the probe default when it has none.
+func TestServiceUnitStatusIsBounded(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		timeout time.Duration
+		want    time.Duration
+	}{
+		{name: "resolver timeout", timeout: 7 * time.Second, want: 7 * time.Second},
+		{name: "probe default", want: defaultProbeCommandTimeout},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var deadlines []time.Duration
+			manager := wizardManager{statuses: map[string]servicemgr.Status{"nginx": servicemgr.StatusActive}, deadlines: &deadlines}
+			if got := serviceUnitStatus(context.Background(), manager, "nginx", tc.timeout); got != servicemgr.StatusActive {
+				t.Fatalf("status = %s, want active", got)
+			}
+			if len(deadlines) != 1 || deadlines[0] > tc.want || deadlines[0] < tc.want-time.Second {
+				t.Fatalf("deadlines = %v, want about %v", deadlines, tc.want)
+			}
+		})
 	}
 }
 
@@ -446,9 +472,18 @@ func (wizardNotFoundError) Error() string { return "not found" }
 
 type wizardManager struct {
 	statuses map[string]servicemgr.Status
+	// deadlines records, per Status call, the deadline its context carried.
+	deadlines *[]time.Duration
 }
 
-func (m wizardManager) Status(_ context.Context, service string) (servicemgr.ServiceStatus, error) {
+func (m wizardManager) Status(ctx context.Context, service string) (servicemgr.ServiceStatus, error) {
+	if m.deadlines != nil {
+		deadline, ok := ctx.Deadline()
+		if !ok {
+			return servicemgr.ServiceStatus{}, errors.New("status query without a deadline")
+		}
+		*m.deadlines = append(*m.deadlines, time.Until(deadline))
+	}
 	status := m.statuses[service]
 	if status == "" {
 		status = servicemgr.StatusUnknown

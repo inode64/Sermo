@@ -129,7 +129,7 @@ func (s *operationSession) prepare(ctx context.Context, service string, resolved
 		},
 		LibraryBaseline: app.NewArtifactBaseline(),
 		LockReclaimed: func(service, reason string) {
-			fmt.Fprintf(s.app.Stderr, "reclaimed stale operation lock for %s (%s)\n", service, reason)
+			s.recordLockReclaim(ctx, app.OperationLockReclaim(service, reason))
 		},
 		RecordOperation: func(result operation.Result) {
 			if prepared.recordOperation != nil {
@@ -139,6 +139,16 @@ func (s *operationSession) prepare(ctx context.Context, service string, resolved
 	})
 	s.prepared[service] = prepared
 	return prepared, nil
+}
+
+// recordLockReclaim reports a reclaimed operation lock on stderr and records its
+// warning event at once, so it precedes the event of the operation it let run.
+// The reclaim already happened, so a store failure only warns.
+func (s *operationSession) recordLockReclaim(ctx context.Context, r app.LockReclaim) {
+	printLockReclaim(s.app.Stderr, r)
+	if s.eventStore != nil {
+		s.app.recordLockReclaims(ctx, s.eventStore, r)
+	}
 }
 
 func (s *operationSession) operate(ctx context.Context, resolved config.Resolved, service, action string) (operation.Result, error) {

@@ -107,8 +107,8 @@ watches:
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			var stdout, stderr bytes.Buffer
-			app := App{Env: func(string) string { return "" }, Stdout: &stdout, Stderr: &stderr,
-				FetchDaemonWatchDetail: func(context.Context, *config.Config, string) (daemonWatchDetail, bool) { return tc.detail, tc.detailOK }}
+			app := hermeticApp(t, App{Env: func(string) string { return "" }, Stdout: &stdout, Stderr: &stderr,
+				FetchDaemonWatchDetail: func(context.Context, *config.Config, string) (daemonWatchDetail, bool) { return tc.detail, tc.detailOK }})
 
 			code := app.Run(context.Background(), append([]string{"--config", global}, tc.args...))
 			if code != tc.wantCode {
@@ -126,11 +126,11 @@ watches:
 
 func TestWatchStatusRejectsMissingConfig(t *testing.T) {
 	var stdout, stderr bytes.Buffer
-	app := App{Env: func(string) string { return "" }, Stdout: &stdout, Stderr: &stderr,
+	app := hermeticApp(t, App{Env: func(string) string { return "" }, Stdout: &stdout, Stderr: &stderr,
 		FetchDaemonWatchDetail: func(context.Context, *config.Config, string) (daemonWatchDetail, bool) {
 			t.Fatal("daemon queried without a config")
 			return daemonWatchDetail{}, false
-		}}
+		}})
 	code := app.Run(context.Background(), []string{"--config", filepath.Join(t.TempDir(), "missing.yml"), "watch", "status", "x"})
 	if code != exitRuntimeError || stdout.Len() != 0 || !strings.Contains(stderr.String(), "load config failed") {
 		t.Fatalf("exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
@@ -152,14 +152,14 @@ func TestWatchProbeRendersAnAdvisoryAsAWarning(t *testing.T) {
 		"name: hdparm-sdd\nseverity: warning\ncheck:\n  type: hdparm\n  device: /dev/sdd\n  read: { op: \"<\", value: 20 }\n")
 
 	var stdout bytes.Buffer
-	app := App{Env: func(string) string { return "" }, Stdout: &stdout, Stderr: &bytes.Buffer{},
+	app := hermeticApp(t, App{Env: func(string) string { return "" }, Stdout: &stdout, Stderr: &bytes.Buffer{},
 		ProbeDaemonWatch: func(context.Context, *config.Config, string) (daemonWatchProbe, error) {
 			return daemonWatchProbe{
 				Message:  "hdparm /dev/sdd read=0.4 MB/s",
 				Severity: string(severity.Warning),
 				Readings: []daemonWatchReading{{Field: "warning", Label: "Warning", Warning: "hdparm /dev/sdd read=0.4 MB/s"}},
 			}, errors.New("probe failed (409): hdparm /dev/sdd read=0.4 MB/s")
-		}}
+		}})
 	app.Run(context.Background(), []string{"--config", global, "watch", "probe", "hdparm-sdd"})
 	out := stdout.String()
 	if !strings.HasPrefix(out, cliTextWarn+" watch hdparm-sdd:") {
@@ -185,11 +185,11 @@ func TestWatchProbeUsesDaemonAndSupportsHdparm(t *testing.T) {
 
 	var stdout bytes.Buffer
 	called := false
-	app := App{Env: func(string) string { return "" }, Stdout: &stdout, Stderr: &bytes.Buffer{},
+	app := hermeticApp(t, App{Env: func(string) string { return "" }, Stdout: &stdout, Stderr: &bytes.Buffer{},
 		ProbeDaemonWatch: func(_ context.Context, _ *config.Config, watch string) (daemonWatchProbe, error) {
 			called = watch == "disk-speed"
 			return daemonWatchProbe{OK: true, Message: "hdparm /dev/sda read=166.67 MB/s", Readings: []daemonWatchReading{{Field: "read", Label: "Read", Value: "167 MB/s"}}}, nil
-		}}
+		}})
 	if code := app.Run(context.Background(), []string{"--config", global, "watch", "probe", "disk-speed"}); code != exitSuccess {
 		t.Fatalf("watch probe exit = %d, stderr=%q", code, app.Stderr)
 	}
@@ -213,21 +213,21 @@ func TestWatchProbeRendersTheGradeOfAFailingSample(t *testing.T) {
 		"name: hdparm-sdd\ncheck:\n  type: hdparm\n  device: /dev/sdd\n  read: { op: \"<\", value: 20 }\n")
 	for level, label := range map[severity.Level]string{severity.Error: cliTextFail, severity.Critical: cliTextCrit} {
 		var stdout bytes.Buffer
-		app := App{Env: func(string) string { return "" }, Stdout: &stdout, Stderr: &bytes.Buffer{},
+		app := hermeticApp(t, App{Env: func(string) string { return "" }, Stdout: &stdout, Stderr: &bytes.Buffer{},
 			ProbeDaemonWatch: func(context.Context, *config.Config, string) (daemonWatchProbe, error) {
 				return daemonWatchProbe{Message: "hdparm /dev/sdd read=0.4 MB/s", Severity: string(level)},
 					errors.New("probe failed (409): hdparm /dev/sdd read=0.4 MB/s")
-			}}
+			}})
 		code := app.Run(context.Background(), []string{"--config", global, "watch", "probe", "hdparm-sdd"})
 		if code != exitNotActive || !strings.HasPrefix(stdout.String(), label+" watch hdparm-sdd:") {
 			t.Fatalf("%s: exit=%d stdout=%q, want exit %d leading with %s", level, code, stdout.String(), exitNotActive, label)
 		}
 	}
 	var stderr bytes.Buffer
-	app := App{Env: func(string) string { return "" }, Stdout: &bytes.Buffer{}, Stderr: &stderr,
+	app := hermeticApp(t, App{Env: func(string) string { return "" }, Stdout: &bytes.Buffer{}, Stderr: &stderr,
 		ProbeDaemonWatch: func(context.Context, *config.Config, string) (daemonWatchProbe, error) {
 			return daemonWatchProbe{}, errors.New("talking to daemon web UI: connection refused")
-		}}
+		}})
 	if code := app.Run(context.Background(), []string{"--config", global, "watch", "probe", "hdparm-sdd"}); code == exitSuccess || !strings.Contains(stderr.String(), "connection refused") {
 		t.Fatalf("transport failure exit=%d stderr=%q, want a command failure", code, stderr.String())
 	}

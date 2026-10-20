@@ -63,7 +63,7 @@ func buildUnownedProcessesWatch(name string, entry, checkEntry map[string]any, d
 	}
 	if actions.kill != nil && !actions.kill.selector.Configured() {
 		// The validator requires it; an unchecked Config must not widen the kill.
-		return nil, watchSubjectPrefix + name + ": then.kill requires " + process.StopPolicyKeyKillOnlyIf + " with users and exe_any"
+		return nil, watchSubjectPrefix + name + ": then.kill requires " + process.StopPolicyKeyKillOnlyIf + " with " + process.StopPolicyKeyUsers + " and " + process.StopPolicyKeyExeAny
 	}
 	level := watchSeverityFor(checks.CheckTypeUnownedProcesses, entry, checkEntry)
 	w := &unownedWatcher{

@@ -16,7 +16,7 @@ import (
 func monitorTestDeps() Deps {
 	return Deps{
 		Notifiers:   map[string]notify.Notifier{"ops": &fakeNotifier{name: "ops"}},
-		ExecxRunner: execx.CommandRunner{},
+		ExecxRunner: &execxtest.Runner{},
 		Now:         time.Now,
 		Emit:        func(Event) {},
 	}

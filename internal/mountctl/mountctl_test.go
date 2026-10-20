@@ -14,6 +14,7 @@ import (
 	"sermo/internal/checks"
 	"sermo/internal/config"
 	"sermo/internal/execx"
+	"sermo/internal/locks"
 	"sermo/internal/process"
 )
 
@@ -638,7 +639,7 @@ func TestReleaseKillBlockersRequiresSelector(t *testing.T) {
 	if err == nil {
 		t.Fatal("Release with kill blockers and no selector succeeded")
 	}
-	if res.Message != mountMessageKillSelectorRequired || len(res.Blockers) != 1 {
+	if res.Message != MessageKillSelectorRequired || len(res.Blockers) != 1 {
 		t.Fatalf("Release = %+v, want selector error with blockers", res)
 	}
 }
@@ -661,5 +662,27 @@ func TestControllerRunTimeoutMessage(t *testing.T) {
 	}
 	if strings.Contains(err.Error(), "context deadline exceeded") {
 		t.Fatalf("error = %q, want operator-facing timeout without raw context error", err.Error())
+	}
+}
+
+// A stale mount operation lock the controller reclaims reaches OnLockReclaimed,
+// so every path that mounts or unmounts can audit it.
+func TestWithLockReportsReclaimedStaleLock(t *testing.T) {
+	mounted := false
+	runner := &fakeRunner{mounted: &mounted}
+	c := testController(t, &mounted, runner)
+	spec := EphemeralSpec("/mnt/backup")
+	stale := locks.NewOperationLocker(mountOpsDir(c.Runtime))
+	stale.Now = func() time.Time { return time.Now().Add(-2 * time.Hour) }
+	if _, err := stale.Acquire(stateID(spec), time.Hour); err != nil {
+		t.Fatal(err)
+	}
+	var reclaimed []string
+	c.OnLockReclaimed = func(got Spec, reason string) { reclaimed = append(reclaimed, got.Path+":"+reason) }
+	if _, err := c.Acquire(t.Context(), spec); err != nil {
+		t.Fatalf("Acquire: %v", err)
+	}
+	if len(reclaimed) != 1 || reclaimed[0] != "/mnt/backup:expired" {
+		t.Fatalf("reclaims = %v", reclaimed)
 	}
 }
