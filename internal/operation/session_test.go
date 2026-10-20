@@ -11,18 +11,26 @@ import (
 	"sermo/internal/process"
 )
 
-func TestResidualSessionReusesReapAuthorization(t *testing.T) {
+// A residual sudo terminal is authorized by its own verified session evidence,
+// with no configuration: only the exact sudo executable, only this terminal's
+// frontend and monitor, revalidated before every escalation.
+func TestResidualSudoSessionUsesVerifiedEvidence(t *testing.T) {
 	for _, tc := range []struct {
-		name                                      string
-		authorized, changed, survives, probeError bool
-		wantSignals                               int
-		wantOK                                    bool
+		name                          string
+		exe                           string
+		monitorPID                    int
+		changed, survives, probeError bool
+		wantSignals                   int
+		wantOK                        bool
+		wantMessage                   string
 	}{
-		{name: "authorized cleanup", authorized: true, wantSignals: 4, wantOK: true},
-		{name: "unconfigured", wantSignals: 0},
-		{name: "identity changed", authorized: true, changed: true, wantSignals: 2},
-		{name: "survivor", authorized: true, survives: true, wantSignals: 4},
-		{name: "unreadable", authorized: true, probeError: true, wantSignals: 2},
+		{name: "verified cleanup", exe: "/usr/bin/sudo", monitorPID: 97, wantSignals: 4, wantOK: true},
+		{name: "legacy sudo path", exe: "/bin/sudo", monitorPID: 97, wantSignals: 4, wantOK: true},
+		{name: "not sudo", exe: "/usr/bin/bash", monitorPID: 97, wantMessage: "is not sudo"},
+		{name: "incomplete identity", exe: "/usr/bin/sudo", wantMessage: "incomplete sudo process identity"},
+		{name: "identity changed", exe: "/usr/bin/sudo", monitorPID: 97, changed: true, wantSignals: 2},
+		{name: "survivor", exe: "/usr/bin/sudo", monitorPID: 97, survives: true, wantSignals: 4},
+		{name: "unreadable", exe: "/usr/bin/sudo", monitorPID: 97, probeError: true, wantSignals: 2},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			h := defaultHarness()
@@ -30,7 +38,7 @@ func TestResidualSessionReusesReapAuthorization(t *testing.T) {
 			signaler := &recordingSignaler{}
 			e.SessionSignaler = signaler
 			e.Sleep = func(time.Duration) {}
-			want := SessionBoundary{Residual: true, MonitorPID: 97, MonitorStartTicks: 1235, Exe: "/usr/bin/sudo", UID: 81}
+			want := SessionBoundary{Residual: true, MonitorPID: tc.monitorPID, MonitorStartTicks: 1235, Exe: tc.exe, UID: 81}
 			verified := 0
 			e.SessionVerifier = func(context.Context, SessionTarget) (SessionBoundary, error) {
 				verified++
@@ -46,15 +54,15 @@ func TestResidualSessionReusesReapAuthorization(t *testing.T) {
 				}
 				return len(signaler.calls) == 4 && !tc.survives, nil
 			}
-			if tc.authorized {
-				e.ReapSelector = process.KillSelector{ExeAny: []string{"/usr/bin/sudo"}, Users: []string{"81"}}
-			}
 			res := e.CloseSession(t.Context(), SessionTarget{PID: 96, StartTicks: 1234, Terminal: "pts/1"})
 			if res.OK() != tc.wantOK || len(signaler.calls) != tc.wantSignals || len(h.emitted) != 1 || len(h.mgr.calls) != 0 {
 				t.Fatalf("result=%+v signals=%v events=%v", res, signaler.calls, h.emitted)
 			}
 			if tc.wantSignals == 4 && !strings.Contains(signaler.calls[2], "killed") {
 				t.Fatalf("signals=%v", signaler.calls)
+			}
+			if tc.wantMessage != "" && !strings.Contains(res.Message, tc.wantMessage) {
+				t.Fatalf("message = %q, want %q", res.Message, tc.wantMessage)
 			}
 		})
 	}

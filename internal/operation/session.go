@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"sermo/internal/checks"
 	"sermo/internal/process"
 )
 
@@ -16,18 +17,19 @@ func (e Engine) closeResidualSession(ctx context.Context, target SessionTarget, 
 	if boundary.MonitorPID <= 1 || boundary.MonitorStartTicks == 0 || boundary.Exe == "" {
 		return failSession(result, prefix, errors.New("incomplete sudo process identity"))
 	}
-	// Manual reap authorization, narrowed to this terminal's verified sudo
-	// monitor and frontend. Workloads, listeners and other sessions stay outside.
+	// The verified session evidence is the authority, as for a connected session
+	// close: a remote utmp leader reparented to PID 1, the exact sudo executable,
+	// the utmp user's real UID and a monitor child in the sshd listener's cgroup.
+	// Only this terminal's frontend and monitor are members; the pidfd revalidates
+	// each generation, and the verifier the whole boundary, before every signal.
+	if !checks.IsSudoExecutable(boundary.Exe) {
+		return failSession(result, prefix, fmt.Errorf("residual executable %s is not sudo", boundary.Exe))
+	}
 	procs := []process.Process{
 		{PID: boundary.MonitorPID, StartTicks: boundary.MonitorStartTicks, Exe: boundary.Exe, ExeOK: true, UID: boundary.UID},
 		{PID: target.PID, StartTicks: target.StartTicks, Exe: boundary.Exe, ExeOK: true, UID: boundary.UID},
 	}
-	resolve := e.reapResolver()
-	for _, proc := range procs {
-		if !e.ReapSelector.Killable(proc, resolve) {
-			return failSession(result, prefix, errors.New("requires matching reap.kill_only_if for the residual sudo processes"))
-		}
-	}
+	verified := func(p process.Process) bool { return process.ContainsGeneration(procs, p) }
 	reaper := e.Reaper
 	reaper.Sleep, reaper.Signaler = e.Sleep, e.SessionSignaler
 	var verificationErr error
@@ -65,7 +67,7 @@ func (e Engine) closeResidualSession(ctx context.Context, target SessionTarget, 
 		return failSession(result, prefix, err)
 	}
 	outcome := reaper.Reap(ctx, procs, process.KillPolicy{
-		ForceKill: true, KillOnlyIf: e.ReapSelector,
+		ForceKill: true, Member: verified,
 		TermTimeout: e.KillPolicy.TermTimeout, KillTimeout: e.KillPolicy.KillTimeout,
 	})
 	if verificationErr != nil {

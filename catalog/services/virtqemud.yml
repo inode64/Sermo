@@ -17,6 +17,10 @@ processes:
   main:
     exe: ${virtqemud_binary}
     user: root
+# Only the daemon must exit on stop: running guests (qemu, virtiofsd) keep
+# running. Every other process is kept and never signalled.
+stop_policy:
+  keep_children: true
 watches:
   service:
     check:

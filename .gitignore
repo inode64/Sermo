@@ -33,7 +33,7 @@ go.work
 go.work.sum
 
 # Environment and host inventory files
-/.env.ssh
+/hosts
 .env*
 
 # Operator-owned fleet tooling. These files are intentionally local and must

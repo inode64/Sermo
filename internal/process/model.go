@@ -12,7 +12,10 @@
 // /proc and keeping precise control over the fail-safe exe semantics.
 package process
 
-import "regexp"
+import (
+	"regexp"
+	"slices"
+)
 
 // Process is a discovered process belonging to a service.
 type Process struct {
@@ -46,9 +49,8 @@ type Process struct {
 	//
 	// It is resolved by identity for the same reason Delegated is: a backend seed
 	// labels every cgroup PID Role "main" before a command selector can name one.
-	// The label authorizes nothing on its own — only a service's own
-	// `reap.kill_only_if` can turn a stray into a signal target, through the same
-	// KillSelector that gates every other kill decision.
+	// The label authorizes nothing on its own: a stray is signalled only as a
+	// residual of a stop, through the same gates as every other residual.
 	Stray bool `json:"stray,omitempty"`
 
 	// ExePrev is the path of a binary replaced or removed on disk while this
@@ -84,14 +86,25 @@ func (p Process) signalExecutable() string {
 	return ""
 }
 
+// SameGeneration reports whether p and o are one process generation: the same
+// PID started at the same kernel tick. A recycled PID is a different process.
+func (p Process) SameGeneration(o Process) bool {
+	return p.PID == o.PID && p.StartTicks == o.StartTicks
+}
+
+// ContainsGeneration reports whether procs holds p's generation.
+func ContainsGeneration(procs []Process, p Process) bool {
+	return slices.ContainsFunc(procs, p.SameGeneration)
+}
+
 // Strays keeps the processes the unit's control group attributes to the service
 // that no selector claims. It is the single definition of "which of these
-// processes are strays", shared by the reap operation, the `strays` check and
-// every report that names them.
+// processes are strays", shared by the `strays` check and every report that
+// names them.
 //
 // Delegated is re-checked here even though classification already excludes it: a
-// delegated workload must never become a reap target through a future change to
-// either side.
+// delegated or kept process must never be reported as a stray through a future
+// change to either side.
 func Strays(procs []Process) []Process {
 	var out []Process
 	for _, proc := range procs {
@@ -162,30 +175,13 @@ const (
 	StopPolicyForceKillAuto = "auto"
 	// StopPolicyKeyKillOnlyIf is stop_policy.kill_only_if.
 	StopPolicyKeyKillOnlyIf = "kill_only_if"
+	// StopPolicyKeyKeepChildren is stop_policy.keep_children: only the principal
+	// processes must exit on stop; every other process is kept alive.
+	StopPolicyKeyKeepChildren = "keep_children"
 	// StopPolicyKeyUsers is stop_policy.kill_only_if.users.
 	StopPolicyKeyUsers = "users"
 	// StopPolicyKeyExeAny is stop_policy.kill_only_if.exe_any.
 	StopPolicyKeyExeAny = "exe_any"
-)
-
-// Reap policy field keys, the per-service authorization for signalling strays.
-// They deliberately reuse the stop_policy selector spelling — and its parsed
-// type — so there is one paired identity gate in the system rather than a second
-// vocabulary that could drift from it.
-const (
-	// SectionReap is the optional block authorizing `sermoctl reap` to signal a
-	// service's stray processes. Absent, strays are reported and never signalled.
-	SectionReap = "reap"
-	// ReapKeyKillOnlyIf is reap.kill_only_if.
-	ReapKeyKillOnlyIf = StopPolicyKeyKillOnlyIf
-	// ReapKeyUsers is reap.kill_only_if.users.
-	ReapKeyUsers = StopPolicyKeyUsers
-	// ReapKeyExeAny is reap.kill_only_if.exe_any.
-	ReapKeyExeAny = StopPolicyKeyExeAny
-	// ReapKillOnlyIfPath is the dotted path of the authorization, for the operator
-	// messages that say where to declare it. One definition so the config warnings,
-	// the refused reap and the residual report cannot spell it three ways.
-	ReapKillOnlyIfPath = SectionReap + "." + ReapKeyKillOnlyIf
 )
 
 // Discovery source labels.

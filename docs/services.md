@@ -54,7 +54,8 @@ required there.
   - [also_apply — cascade to other services](#also_apply--cascade-to-other-services)
   - [processes: by executable or cmdline](#processes-by-executable-or-cmdline)
   - [Stopped-state invariants (stop_policy)](#stopped-state-invariants-stop_policy)
-  - [Unclaimed control-group members (reap)](#unclaimed-control-group-members-reap)
+  - [Stray processes](#stray-processes)
+  - [Session closes](#session-closes)
   - [pidfile: and pidfiles: shorthand (selectors + health checks)](#pidfile-and-pidfiles-shorthand-selectors--health-checks)
   - [socket: shorthand (gated health check)](#socket-shorthand-gated-health-check)
   - [lockfile: shorthand (gated health check)](#lockfile-shorthand-gated-health-check)
@@ -737,10 +738,9 @@ watches:
       params: { domain: web01 }
 
 processes:
-  qemu:
-    exe: /usr/bin/qemu-system-x86_64
-    cmd: "web01|2b3f3d26-bb45-4b25-b65a-1e3ef86fc1a4"
-    user: qemu
+  main:                                 # observe-only: libvirt owns the guest
+    cmd: '^\S*qemu-system\S* -name guest=web01,.*$'
+    delegated: true
 ```
 
 `control.domain` is the libvirt domain Sermo operates. `uri` defaults to
@@ -771,12 +771,16 @@ restart keeps waiting until the domain is shut off. The CLI and web UI still exp
 service state is `failed` while monitoring is active, or `stopped` when Sermo
 monitoring is paused.
 
-Process discovery is intentionally explicit in this first VM integration. If you
-want process metrics or residual-process reporting for the QEMU process, add a
-restrictive `processes:` selector as above: exact `exe` and `user` plus a `cmd`
-regex that narrows the shared QEMU binary to the intended domain or UUID. The
-cmdline selector narrows discovery; residual signaling is still
-authorized only by `stop_policy.kill_only_if`.
+Process discovery is explicit for VM domains. To give the row uptime, CPU,
+memory, FDs, IO, runtime graphs and stale-binary reporting for the guest's QEMU
+process, attribute it with an observe-only selector as above. The `cmd` regex
+matches the `-name guest=<domain>,` argument libvirt passes to QEMU, the one
+handle that stays stable across guest restarts (the systemd scope name embeds a
+changing domain id); keep it single-quoted, because a double-quoted YAML scalar
+treats `\S` as an escape. `delegated: true` keeps the guest out of every kill
+decision: Sermo observes QEMU and never signals it, the stop never counts it as
+a residual, and it authorizes nothing. Lifecycle stays with libvirt. The fleet
+installer generates VM services with exactly this selector.
 
 `sermoctl wizard vm` can generate this service shape from domains
 detected through the local libvirt socket. It probes both
@@ -835,13 +839,13 @@ Network state maps active → `active` and inactive → `stopped`/`failed`
 following the usual monitoring semantics.
 
 Why manage networks at all: libvirt spawns one dnsmasq pair per NAT network,
-and that pair deliberately survives daemon restarts (see the packaged
-`virtnetworkd` profile, where it is `delegated`). After a dnsmasq package
-upgrade those processes keep running the replaced binary and only a
+and that pair deliberately survives daemon restarts (the packaged
+`virtnetworkd` profile keeps it with `stop_policy.keep_children`). After a
+dnsmasq package upgrade those processes keep running the replaced binary and only a
 **network** restart renews them — so the generated network service is the one
 target whose `stale-binary` finding a restart genuinely fixes. Attribute the
-pair with `delegated: true` selectors like the example above: Sermo observes
-it, libvirt owns its lifecycle.
+pair with observe-only `delegated: true` selectors like the example above:
+Sermo observes it and never signals it, libvirt owns its lifecycle.
 
 The fleet installer generates one such service per **active network with a
 libvirt-owned IP** (the shape that spawns dnsmasq); bridge-mode networks are
@@ -954,8 +958,8 @@ dead process tree; monitoring can still report them independently.
   reconciliation, without a second stop or graceful wait. `reset-failed` cannot
   deactivate an active unit.
 - **Init inactive/failed, daemon alive:** Sermo handles survivors under the same
-  `stop_policy` as a stop, excluding delegated workloads. Any surviving orphan or
-  discovery error blocks a following start. A successful cleanup reconciles init
+  `stop_policy` as a stop, excluding delegated and kept processes. Any
+  surviving orphan or discovery error blocks a following start. A successful cleanup reconciles init
   before proceeding.
 
 The stop phase runs the backend stop, waits up to `graceful_timeout` for fresh
@@ -995,8 +999,9 @@ redundant primary start. Auxiliary units stopped by this operation are started
 again before health verification. Finding the unchanged daemon active is not
 proof of a restart.
 
-Delegated workloads, including container shims and Gluster workers, remain
-excluded from residual cleanup. Auxiliary units declared by `also_service`
+Kept children (`stop_policy.keep_children`: container shims, Gluster bricks,
+SSH sessions) and processes matched by a `delegated` selector remain excluded
+from residual cleanup. Auxiliary units declared by `also_service`
 participate in the same stop/start ordering below.
 
 ### `also_service` — auxiliary init units
@@ -1089,21 +1094,22 @@ processes:
   **and** the real UID — but it does narrow the identity `force_kill: auto`
   derives, so a daemon that shares its executable with its own workload keeps
   that distinction when residuals are signalled.
-- `delegated` — `true` marks processes the service owns but Sermo must never
-  signal: a workload tree the init unit deliberately keeps alive across a daemon
-  restart (GlusterFS bricks and self-heal, container shims). They stay visible in
-  monitoring, are never counted as residuals of a stop, and contribute no kill
-  authority. **Delegation flows down the process tree**, because a workload
-  process owns whatever it spawns: marking an SSH session covers the user's shell
-  and everything that shell runs, none of which would match a selector of its own.
-  Use it when the unit stops only its main process — systemd `KillMode=process` —
-  so that stopping the daemon does not take its workload down with it.
+- `delegated` — `true` makes the selector **observe-only**. Sermo attributes the
+  matched processes, and everything they spawn, to the service for monitoring —
+  uptime, CPU, memory, FDs, IO, graphs, stale-binary reporting — but never
+  signals them, never counts them as residuals of a stop, takes no kill
+  authority from them and never reports them as strays. Use it for a target
+  whose lifecycle another backend owns: the generated libvirt VM services
+  ([`control: libvirt`](#control-libvirt--qemulibvirt-virtual-machines)) and
+  libvirt network services (the network's `dnsmasq` pair), where libvirt, not
+  Sermo, starts and stops those processes. The packaged catalog ships no
+  `delegated` selector.
 
-  The SSH profile delegates authenticated sessions and connections still in
-  the `[accepted]` authentication phase. Detached user workloads such as a
-  `tmux` server can outlive their SSH parent; declare their verified executable
-  and user with `delegated: true` in the host override to preserve them across
-  restarts. An undeclared orphan still blocks the following start.
+  To keep a daemon's own workload alive across its restart, use
+  [`stop_policy.keep_children`](#kept-children-stop_policykeep_children)
+  instead: it needs no process title or regex. The SSH profile relies on it, so
+  every session tree, connections still authenticating and a detached `tmux`
+  server that outlived its SSH parent are kept without matching a title.
 - `user` / `group` — the process real UID / GID owner.
 
 Do not use a generic helper executable shared by several units as a service
@@ -1120,7 +1126,7 @@ CPU and replaced-binary notices separate. With no live backend or pidfile root,
 selectors still discover processes across the host; shared executables need a
 restrictive instance-specific `cmd` for that fallback.
 
-These feed monitoring **and** the residual reaper, so a richer selector lets a
+These feed monitoring **and** residual cleanup, so a richer selector lets a
 stop catch and kill more leftovers (an unkillable residual stays
 `orphan_processes`). The `process` *check* still matches by `exe`/`user` only.
 
@@ -1129,11 +1135,15 @@ an exact `exe` and `user` authorize cleanup of that same residual identity.
 Sermo keeps each executable/user pair together — plus that selector's `cmd`, when
 it declares one — sends TERM, rediscovers, then sends KILL only to the same
 verified survivor. A selector with only `cmd`, an unresolved executable, a
-`delegated` selector, or a process outside the configured identities remains
-an `orphan_processes` failure and the restart never starts a second daemon.
+`delegated` selector, or a process outside the configured identities authorizes
+nothing. Such a residual still receives `SIGTERM` when the kernel places it in
+the unit's own control group (`SIGKILL` too with `force_kill: true` or `auto`);
+with `keep_children` only a surviving principal can be such a residual. One that
+survives, or that has no control-group proof, remains an `orphan_processes`
+failure and the restart never starts a second daemon.
 `force_kill: true` still requires the explicit `kill_only_if` selector and is
 the appropriate override when the configured process identities are not the
-desired kill set; `force_kill: false` disables escalation.
+desired kill set; `force_kill: false` rules out `SIGKILL` altogether.
 
 ### Dependency isolation (`allow_dependencies`)
 
@@ -1216,7 +1226,7 @@ stop_policy:
 - A lingering pidfile or `files_absent` match is a **warning** (the stop still
   succeeds, `ResultOK`) folded into the result message and surfaced in CLI/web —
   it means the service crashed or left junk. Residual *processes* keep their
-  stronger `orphan_processes` (red) handling via the reaper.
+  stronger `orphan_processes` (red) handling through residual cleanup.
 - **`clean_after_stop`** is the single master switch for *all* active deletion
   after a clean stop. It is **opt-in (default `false`)**: with it off the engine
   only **verifies and warns** — it never deletes. Set it to `true` to enable
@@ -1252,12 +1262,64 @@ stop_policy:
   a shallow system directory (`/`, `/etc`, `/usr`, `/var`, `/var/lib`, …) — those
   are refused at validation time. A delete failure is a warning, not a failure.
 
+### Kept children (`stop_policy.keep_children`)
+
+Some daemons hand their clients to processes that must survive a daemon
+restart: SSH sessions, GlusterFS bricks, libvirt guests and network `dnsmasq`,
+container shims, running cron jobs. Others must take every client down with
+them — a restarted Samba should not leave old `smbd` children serving clients.
+`keep_children` chooses per service:
+
+```yaml
+stop_policy:
+  keep_children: true   # default false
+processes:
+  main:                 # the principal: required, exact exe + user
+    exe: /usr/sbin/sshd
+    user: root
+```
+
+- **`true`** — only the **principal** processes must exit: a process matched by
+  a non-delegated selector that descends from no process matched by the same
+  selector, a pidfile PID, and — failing closed — a process whose executable
+  cannot be read outside any matched tree. Everything else the service owns
+  is kept: never a residual, never signalled, never blocking the start. A process
+  the daemon forked is kept even when it runs the same binary (a cron job runner),
+  but an earlier daemon instance reparented to PID 1 is still a principal, so a
+  second daemon is never started beside it. Validation requires a non-delegated
+  selector with an exact `exe` and `user`.
+- **`false`** (default) — every residual must go before the start. A residual the
+  kernel places in the unit's own control group receives `SIGTERM`, and `SIGKILL`
+  with `force_kill: true` or `auto`; a survivor, or a residual with no
+  control-group proof,
+  is `orphan_processes` and the service is not started.
+
+`delegated` and `keep_children` both keep Sermo from signalling a process and
+from treating it as a residual, but they answer different questions:
+
+| | `delegated: true` (selector) | `keep_children: true` (stop_policy) |
+|---|---|---|
+| Purpose | observe processes another backend owns | keep the daemon's own workload alive across a restart |
+| Names | the processes to observe, by exe and/or cmdline | the **principal** that must exit |
+| Any other non-principal process | is a residual | is kept |
+| Breaks when | the observed process's cmdline or path changes | the principal selector is wrong |
+
+Use `keep_children` for a unit whose workload outlives the daemon by design
+(systemd `KillMode=process`). The packaged profiles that keep children are ssh,
+glusterd, libvirtd, virtqemud, virtnetworkd, containerd, docker, cron, fcron,
+networkmanager and lxc-monitord; none of them declares a `delegated` selector.
+Use `delegated` for a target whose processes another manager starts and stops,
+such as the generated libvirt VM and network services.
+See [safety.md](safety.md#kept-children-keep_children) for the exact rules.
+
 ### Residuals after a package upgrade
 
 A stopped service can leave an auxiliary process whose binary was replaced by
 an upgrade. Both `sermoctl start SERVICE` and `sermoctl restart SERVICE` clean
 up authorized residuals before starting, using the same `stop_policy` as stop.
-`force_kill: false` still forbids that cleanup. A deleted executable needs the
+`force_kill: false` still rules out `SIGKILL` there, while a residual proven to
+belong to the unit's own control group still receives `SIGTERM`. A deleted
+executable needs the
 additional kernel-file and ownership verification described in
 [safety.md](safety.md#stop-and-signal-escalation); no extra YAML switch is needed.
 
@@ -1267,87 +1329,45 @@ that an operation sees. They retain their selector role and expose
 candidate that cannot be cleaned up blocks restart before stopping a healthy
 current daemon. A helper is never evidence of a successful new main process.
 
-### Unclaimed control-group members (`reap`)
+### Stray processes
 
 The init backend attributes a whole control group to the service, so Sermo sees
 processes there that no `processes:` selector claims. When such a process is also
 outside the unit's principal process tree — reparented to PID 1 while still
 counted against the unit — it is a **stray**: a probe that daemonized, a child the
-daemon never reaped, a survivor of an earlier incarnation.
+daemon abandoned, a survivor of an earlier incarnation. A process kept by
+`stop_policy.keep_children` or matched by a `delegated` selector is never a stray.
 
-Strays are always reported (`sermoctl processes` shows `stray=true`). The optional
-`reap:` block is what lets an operator clear them:
-
-```yaml
-reap:
-  kill_only_if:
-    users: [root]
-    exe_any: [/usr/bin/dbus-daemon]
-```
-
-- Without the block, `sermoctl reap SERVICE --apply` lists every stray and signals
-  none. Authorization is opt-in per service and is never inherited from
-  `defaults:`: one global selector would hand every service the same kill authority
-  over processes none of them can name.
-- `kill_only_if` is the same paired selector `stop_policy` uses and passes the same
-  gate — exact resolved `exe` **and** real UID; a delegated process never, an
-  unresolvable exe never, PID 1 and kernel threads never.
-- Unknown keys under `reap:` are rejected at validation time. A stray is reached by
-  control-group membership rather than by a selector that named it, so a typo must
-  not leave the action authorized by something you did not write.
-- No rule action can reap, and a stop never consults this block — a restart reports
-  a stray it cannot clear rather than killing it. See [safety.md](safety.md) for the
-  full contract and [cli.md](cli.md) for the command.
-
-Detection is separate from clearing: Sermo injects a `strays` check into every
-init-managed service that declares selectors, reporting the count and the
-executables without alerting. See
+Strays are a diagnostic. `sermoctl processes` shows them as `stray=true`, the
+dashboard shows them in the process table and the Strays column, and Sermo
+injects a `strays` check into every init-managed service that declares
+selectors, reporting the count and the executables without alerting. See
 [configuration.md](configuration.md#strays--processes-the-service-cannot-account-for).
 
-The Sessions panel and `sermoctl sessions SERVICE` also show unclaimed processes
-from the current `strays` sample, including the previous path of an executable
-removed from disk. These are diagnostic rows: an unclaimed process can still be
-useful work. A missing screen/tmux client does not hide the process inventory.
-Each row explains missing cleanup authorization. CPU, memory and I/O metrics
-measure that PID alone, including when its executable was deleted. CPU and I/O
-rates require two samples. Idle measures terminal activity (including descendant
-terminals for a multiplexer server); without a readable terminal it is unknown.
-A reused PID does not inherit the previous process's metric baselines.
+No command or rule action signals a process for being a stray. On a stop or
+restart it is a residual like any other: one the kernel places in the unit's own
+control group receives `SIGTERM`, and `SIGKILL` with `force_kill: true` or
+`auto`; one that survives, or that has no control-group proof, leaves the
+service stopped with
+`orphan_processes`. When a unit keeps such a workload on purpose, set
+`stop_policy.keep_children: true`; when it is a role Sermo should know, add a
+selector. See [safety.md](safety.md#stray-processes) for the full contract.
 
-To terminate exactly one listed process, use the row's terminate button or:
+### Session closes
 
-```sh
-sermoctl sessions reap ssh 12345
-```
+In one browser tab, confirmed session closes for the same service run in order.
+Later rows show **queued** until the preceding request finishes; other services
+remain independent. Each request retains the confirmed identity and
+configuration generation, which the server revalidates before acting. Failures
+remain visible beside the affected row's button and can be retried explicitly.
+Operations from other tabs or clients can still hold the service lock; a refusal
+is reported rather than retried automatically.
 
-This reuses `reap.kill_only_if`, operation locks, guards and audit reporting.
-The displayed executable, real UID, cgroup and process generation must still
-match. Deleted executables additionally require the verified kernel-held file.
-Only that PID generation is selected; descendants and other sessions are not
-selected implicitly. Sermo verifies exit before reporting success. Prefer this
-to broad reaping when an SSH cgroup also contains active terminal workloads.
-Terminating a parent can still cause its children or attached sessions to exit.
-
-In one browser tab, confirmed session/process closes for the same service run
-in order. Later rows show **queued** until the preceding request finishes;
-other services remain independent. Each request retains the confirmed identity
-and configuration generation, which the server revalidates before acting.
-Failures remain visible beside the affected row's button and can be retried
-explicitly. Operations from other tabs or clients can still hold the service
-lock; a refusal is reported rather than retried automatically.
-
-Processes belonging to a listed tmux or screen session are labelled **session
-member**. Their action still targets only that process and requires its own
-`reap.kill_only_if` authorization. Whole-session close is offered only on the
-session row and terminates its windows, panes and programs. Association
-does not grant permission to reap the individual workload. All tmux panes
-are sampled, including inactive windows and retained dead panes. When pane
-listing reports no current target, a separate successful empty session listing
-is required before Sermo offers to close an empty tmux server. A shared server is not attributed to
-one session when several sessions use it. Other unclaimed processes remain
-visible with their exact authorization refusal. To enable individual cleanup,
-configure `reap.kill_only_if` for the reviewed executable and real user; do not
-infer that a detached session or a deleted executable is abandoned work.
+Whole-session close is offered only on a tmux or screen session row and
+terminates its windows, panes and programs. When pane listing reports no current
+target, a separate successful empty session listing is required before Sermo
+offers to close an empty tmux server. Do not infer that a detached session is
+abandoned work.
 
 On cgroup v2 hosts, the SSH inventory also recognizes a split OpenSSH
 `sshd-session` server reparented to PID 1 after the listener was restarted.
@@ -1357,6 +1377,16 @@ shared non-root cgroup. A replaced helper additionally needs its verified
 kernel-held executable. Manual close sends SIGTERM through the operation engine
 and verifies exit; it never terminates the current listener. Unverifiable
 sessions remain unavailable. Local graphical consoles are not SSH sessions.
+
+A terminal that `sudo` kept alive after the SSH client disconnected is listed as
+`residual`. Closing it needs no configuration: the authority is the verified
+session evidence — a remote utmp leader reparented to PID 1, the exact
+`/usr/bin/sudo` or `/bin/sudo` executable, the utmp user's real UID, a monitor
+child running the same executable, both in the sshd listener's cgroup — re-checked
+before each signalling round, with every delivery revalidated through a pidfd.
+Sermo sends `SIGTERM`, then
+`SIGKILL` after the service's `stop_policy.term_timeout` to what survives. See
+[safety.md](safety.md#the-operation-engine).
 A missing utmp database still makes the SSH source unavailable; it does not
 prevent independent tmux or screen sources from working.
 
@@ -2688,9 +2718,10 @@ systemd and `main-openrc` (`user: ${openrc_user}`, default `root`, OpenRC's
 phase signals a residual Alloy it can verify and never a process it cannot
 name. Override the variable of your backend when the host runs Alloy as another
 user; an exact selector that never matches a live process blocks every
-operation. Survivors reparented to PID 1 are strays, which a restart reports
-but does not signal; `reap.kill_only_if` authorizes `sermoctl reap alloy
---apply` for an Alloy binary owned by one of those two users only.
+operation. Any other survivor the kernel still places in the unit's own control
+group receives `SIGTERM`, and `SIGKILL` through `force_kill: auto`; one without
+that proof stays `orphan_processes` and the restart does not start a second
+Alloy beside it.
 
 Enable `otlp` only on an Alloy instance with an OTLP/HTTP receiver, and
 override the port if needed:
@@ -2738,11 +2769,13 @@ it is not zero and the configured percentage threshold is still valid. An
 absolute descriptor count can remain available. The service-state check reports
 a stopped service independently.
 
-Services whose control group holds workload they do not own get no sensor: the
-ones that delegate part of their tree (`docker`, `containerd`, `virtnetworkd`,
-`glusterd`, `ssh`) automatically, and `libvirtd` through an explicit
-`fds_limit: false`, because a guest's helper near its own limit describes the
-guest rather than the daemon. A host that runs a daemon with a deliberately
+Services whose control group holds workload they do not own get no sensor: a
+service with any `delegated` selector or with `stop_policy.keep_children` is
+skipped automatically. Among the packaged profiles that is `ssh`, `glusterd`,
+`docker`, `containerd`, `virtnetworkd`, `virtqemud`, `libvirtd`, `cron`,
+`fcron`, `networkmanager` and `lxc-monitord`, all through `keep_children`;
+`libvirtd` also sets an explicit `fds_limit: false`, because a guest's helper
+near its own limit describes the guest rather than the daemon. A host that runs a daemon with a deliberately
 small limit, or one that lives near it by design, tunes or vetoes the sensor
 per service without a catalog edit:
 

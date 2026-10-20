@@ -68,13 +68,70 @@ type KillPolicy struct {
 	ForceKill       bool
 	Automatic       bool
 	KillOnlyIf      KillSelector
+	// KeepChildren is stop_policy.keep_children. Discovery delegates every
+	// non-principal process, so a stop waits only for the principals and never
+	// signals the rest. Without it every residual must go before a start.
+	KeepChildren bool
+	// Member reports positive evidence that a residual belongs to what this
+	// operation targets: kernel cgroup membership of the service's own init unit
+	// for a stop (the authority systemd's KillMode=control-group uses), or the
+	// verified processes of one SSH session for its close. A member may receive
+	// SIGTERM even without kill_only_if, and SIGKILL with force_kill true or
+	// auto. A process keep_children keeps is delegated by discovery, so it never
+	// reaches this authority. Nil grants nothing.
+	Member func(Process) bool
+}
+
+// TermAllowed reports whether residual cleanup may send SIGTERM to proc.
+func (p KillPolicy) TermAllowed(proc Process, resolve UserResolver) bool {
+	return p.ForceKill && p.KillOnlyIf.Killable(proc, resolve) || p.memberSignallable(proc)
+}
+
+// KillAllowed reports whether residual cleanup may escalate proc to SIGKILL.
+// kill_only_if needs force_kill; a member of the service's own cgroup needs
+// force_kill true or auto, even when auto found no strict identity to pair. A
+// service that sets force_kill: false is never killed outright.
+func (p KillPolicy) KillAllowed(proc Process, resolve UserResolver) bool {
+	if p.ForceKill && p.KillOnlyIf.Killable(proc, resolve) {
+		return true
+	}
+	return (p.ForceKill || p.Automatic) && p.memberSignallable(proc)
+}
+
+// memberSignallable applies the membership authority with the same fail-safe
+// exclusions as KillSelector.Killable: protected, delegated, blocked and
+// unverifiable processes are never signalled. Delivery revalidates the recorded
+// generation, executable, real UID and cgroup through the pidfd, so a process
+// that changed or left its group is spared.
+func (p KillPolicy) memberSignallable(proc Process) bool {
+	if !signalCandidate(proc) || proc.ExePrev != "" && proc.ExeFile.Inode == 0 {
+		return false
+	}
+	return p.IsMember(proc)
+}
+
+// IsMember reports positive membership evidence for proc: a Member probe that
+// accepts it.
+func (p KillPolicy) IsMember(proc Process) bool {
+	return p.Member != nil && p.Member(proc)
+}
+
+// signalCandidate applies the exclusions every signal authority shares: PID 1
+// and kernel threads, a recorded refusal, an executable that cannot be resolved,
+// and a delegated process — the service's workload, kept alive on purpose by an
+// init unit that stops only its main process, reported but never signalled.
+func signalCandidate(proc Process) bool {
+	return !protectedKillProcess(proc) && !proc.Delegated && proc.SignalBlockReason == "" && proc.signalExecutable() != ""
 }
 
 // BlockReason explains why residual cleanup cannot signal p under this policy.
-// It shares Killable with signal delivery, so previews cannot grant authority.
+// It shares TermAllowed with signal delivery, so previews cannot grant authority.
 func (p KillPolicy) BlockReason(proc Process, resolve UserResolver) string {
 	if proc.SignalBlockReason != "" {
 		return proc.SignalBlockReason
+	}
+	if p.memberSignallable(proc) {
+		return ""
 	}
 	if !p.ForceKill {
 		return "stop_policy.force_kill disables residual cleanup"
@@ -104,12 +161,9 @@ func EnableAutomaticReaping(policy KillPolicy, selectors []Selector) KillPolicy 
 	pairs := make([]killIdentity, 0, len(selectors))
 	seen := map[killIdentityKey]bool{}
 	for _, selector := range selectors {
-		if !selector.HasStrictIdentity() {
-			continue
-		}
 		// A delegated selector names processes the service owns but Sermo must
 		// never signal, so it contributes no authority at all.
-		if selector.Delegated {
+		if !selector.IsStrictPrincipal() {
 			continue
 		}
 		key := killIdentityKey{user: selector.User, exe: selectorExePath(&selector), cmd: selector.Cmd}
@@ -143,21 +197,10 @@ func (s KillSelector) Killable(p Process, resolve UserResolver) bool {
 	if !s.Configured() {
 		return false
 	}
-	if protectedKillProcess(p) {
-		return false
-	}
-	// A delegated process is the service's workload, kept alive on purpose by an
-	// init unit that stops only its main process. It is reported, never signalled.
-	if p.Delegated {
-		return false
-	}
-	if p.SignalBlockReason != "" {
+	if !signalCandidate(p) {
 		return false
 	}
 	p.Exe = p.signalExecutable()
-	if p.Exe == "" {
-		return false
-	}
 	return s.explicitMatches(p, resolve) || s.pairMatches(p, resolve)
 }
 
@@ -217,6 +260,19 @@ func (s KillSelector) userMatches(uid uint32, resolve UserResolver) bool {
 	return false
 }
 
+// StopPolicyFieldPath is the user-facing path of one stop_policy field.
+func StopPolicyFieldPath(field string) string {
+	return SectionStopPolicy + "." + field
+}
+
+// KeepChildren reports the resolved stop_policy.keep_children flag, for the
+// discoverers that need it without parsing the whole stop policy.
+func KeepChildren(tree map[string]any) bool {
+	sp, _ := tree[SectionStopPolicy].(map[string]any)
+	keep, _ := sp[StopPolicyKeyKeepChildren].(bool)
+	return keep
+}
+
 // ParseStopPolicy extracts the resolved stop_policy section into a KillPolicy,
 // reporting malformed durations as warnings.
 func ParseStopPolicy(tree map[string]any) (KillPolicy, []string) {
@@ -236,71 +292,49 @@ func ParseStopPolicy(tree map[string]any) (KillPolicy, []string) {
 		} else if value == StopPolicyForceKillAuto {
 			policy.Automatic = true
 		} else {
-			warnings = append(warnings, SectionStopPolicy+"."+StopPolicyKeyForceKill+" must be a boolean or \""+StopPolicyForceKillAuto+"\"")
+			warnings = append(warnings, StopPolicyFieldPath(StopPolicyKeyForceKill)+" must be a boolean or \""+StopPolicyForceKillAuto+"\"")
+		}
+	}
+	if value, present := sp[StopPolicyKeyKeepChildren]; present {
+		if v, ok := value.(bool); ok {
+			policy.KeepChildren = v
+		} else {
+			warnings = append(warnings, StopPolicyFieldPath(StopPolicyKeyKeepChildren)+" must be a boolean")
 		}
 	}
 	if koi, ok := sp[StopPolicyKeyKillOnlyIf].(map[string]any); ok {
 		policy.KillOnlyIf = NewKillSelector(cfgval.StringList(koi[StopPolicyKeyUsers]), cfgval.StringList(koi[StopPolicyKeyExeAny]))
 		if !cfgval.IsNonEmptyStringList(koi[StopPolicyKeyUsers]) || !cfgval.IsNonEmptyStringList(koi[StopPolicyKeyExeAny]) {
-			warnings = append(warnings, SectionStopPolicy+"."+StopPolicyKeyKillOnlyIf+" must define both "+StopPolicyKeyUsers+" and "+StopPolicyKeyExeAny+", each non-empty")
+			warnings = append(warnings, StopPolicyFieldPath(StopPolicyKeyKillOnlyIf)+" must define both "+StopPolicyKeyUsers+" and "+StopPolicyKeyExeAny+", each non-empty")
 		}
 	} else if policy.ForceKill {
-		warnings = append(warnings, SectionStopPolicy+"."+StopPolicyKeyForceKill+"=true requires "+StopPolicyKeyKillOnlyIf)
+		warnings = append(warnings, StopPolicyFieldPath(StopPolicyKeyForceKill)+"=true requires "+StopPolicyKeyKillOnlyIf)
 	}
 	return policy, warnings
-}
-
-// ParseReapPolicy extracts the resolved `reap:` block into the selector that
-// authorizes signalling the service's stray processes. An absent block yields an
-// unconfigured selector, which matches nothing: reaping a stray is opt-in per
-// service, and the fail-safe is to report the process and touch it.
-//
-// Unlike stop_policy it rejects unknown keys. A stray is reached by cgroup
-// membership rather than by a selector that named it, so a mistyped subkey would
-// silently hand the action a selector the operator did not write; the same typo
-// under stop_policy leaves the existing (narrower) authority in place.
-func ParseReapPolicy(tree map[string]any) (KillSelector, []string) {
-	var selector KillSelector
-	block, ok := tree[SectionReap].(map[string]any)
-	if !ok {
-		if _, present := tree[SectionReap]; present {
-			return selector, []string{SectionReap + " must be a mapping with " + ReapKeyKillOnlyIf}
-		}
-		return selector, nil
-	}
-
-	var warnings []string
-	for _, key := range slices.Sorted(maps.Keys(block)) {
-		if key != ReapKeyKillOnlyIf {
-			warnings = append(warnings, SectionReap+"."+key+" is not supported; the block accepts "+ReapKeyKillOnlyIf)
-		}
-	}
-	selector, selectorWarnings := ParseKillOnlyIf(block[ReapKeyKillOnlyIf], ReapKillOnlyIfPath)
-	return selector, append(warnings, selectorWarnings...)
 }
 
 // ParseKillOnlyIf parses one strict paired kill_only_if selector: a mapping of
 // exactly users and exe_any, both non-empty. path names the block in the
 // warnings. A missing, malformed or half-written selector yields the empty
 // selector — which authorizes nothing — never the half it does carry. It is the
-// single parser for every explicit kill authorization outside stop_policy
-// (reap, watch kill actions).
+// single parser for every explicit kill authorization outside stop_policy (host
+// watch kill actions).
 func ParseKillOnlyIf(raw any, path string) (KillSelector, []string) {
 	koi, ok := raw.(map[string]any)
 	if !ok {
-		return KillSelector{}, []string{path + " must be a mapping defining both " + ReapKeyUsers + " and " + ReapKeyExeAny}
+		return KillSelector{}, []string{path + " must be a mapping defining both " + StopPolicyKeyUsers + " and " + StopPolicyKeyExeAny}
 	}
 	var warnings []string
 	for _, key := range slices.Sorted(maps.Keys(koi)) {
-		if key != ReapKeyUsers && key != ReapKeyExeAny {
-			warnings = append(warnings, path+"."+key+" is not supported; it accepts "+ReapKeyUsers+" and "+ReapKeyExeAny)
+		if key != StopPolicyKeyUsers && key != StopPolicyKeyExeAny {
+			warnings = append(warnings, path+"."+key+" is not supported; it accepts "+StopPolicyKeyUsers+" and "+StopPolicyKeyExeAny)
 		}
 	}
-	selector := NewKillSelector(cfgval.StringList(koi[ReapKeyUsers]), cfgval.StringList(koi[ReapKeyExeAny]))
+	selector := NewKillSelector(cfgval.StringList(koi[StopPolicyKeyUsers]), cfgval.StringList(koi[StopPolicyKeyExeAny]))
 	if !selector.Configured() {
 		// Return the empty selector, not the partial one: a half-written selector
 		// must authorize nothing rather than whatever half it does carry.
-		return KillSelector{}, append(warnings, path+" must define both "+ReapKeyUsers+" and "+ReapKeyExeAny+", each non-empty")
+		return KillSelector{}, append(warnings, path+" must define both "+StopPolicyKeyUsers+" and "+StopPolicyKeyExeAny+", each non-empty")
 	}
 	return selector, warnings
 }
@@ -312,7 +346,7 @@ func stopPolicyDuration(stopPolicy map[string]any, key string, warnings *[]strin
 	}
 	d, ok := cfgval.ParseDuration(v)
 	if !ok || d <= 0 {
-		field := SectionStopPolicy + "." + key
+		field := StopPolicyFieldPath(key)
 		*warnings = append(*warnings, fmt.Sprintf("%s %q must be a valid positive duration", field, cfgval.String(v)))
 		return 0
 	}

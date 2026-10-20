@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 
+	"sermo/internal/process"
 	"sermo/internal/rules"
 )
 
@@ -55,8 +56,6 @@ const (
 
 	stopPolicyPathCleanOnStop = sectionStopPolicy + "." + keyCleanOnStop
 	stopPolicyPathFilesAbsent = sectionStopPolicy + "." + keyFilesAbsent
-
-	reapPathKillOnlyIf = sectionReap + "." + keyKillOnlyIf
 )
 
 func engineFieldPath(field string) string {
@@ -132,7 +131,7 @@ func serviceMonitorOnChangeFieldPath(monitor, field string) string {
 }
 
 func stopPolicyFieldPath(field string) string {
-	return sectionStopPolicy + "." + field
+	return process.StopPolicyFieldPath(field)
 }
 
 func stopPolicyCleanOnStopEntryPath(i int) string {

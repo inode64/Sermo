@@ -54,9 +54,6 @@ const (
 	// actionPause is manual-only: it freezes a libvirt VM or Docker container
 	// in place, which remediation never does.
 	actionPause = operation.ActionPause
-	// actionReap is not a rule action: a stray process is one Sermo cannot name,
-	// so clearing one is always an operator's decision, never a remediation.
-	actionReap = process.SectionReap
 )
 
 const (
@@ -84,7 +81,6 @@ const (
 
 const (
 	cliFlagSetName    = "sermoctl"
-	cliFlagApply      = "apply"
 	cliFlagBackend    = commandBackend
 	cliFlagBefore     = web.APIQueryBefore
 	cliFlagConfig     = commandConfig
@@ -241,7 +237,6 @@ type options struct {
 	force      bool // --force: allow umount -f during `sermoctl umount`
 	lazy       bool // --lazy: allow umount -l during `sermoctl umount`
 	kill       bool // --kill-blockers: allow policy-gated signalling during `sermoctl umount`
-	apply      bool // --apply: signal the authorized strays during `sermoctl reap` (without it, preview only)
 	connection bool // --connection: `sermoctl sessions kill` closes the connection instead of cancelling the statement
 	help       bool
 	version    bool // --version / -V
@@ -387,7 +382,6 @@ var commandHandlers = map[string]commandHandler{
 	commandConfig:    func(a App, _ context.Context, opts options) int { return a.runConfig(opts) },
 	commandLocks:     func(a App, _ context.Context, opts options) int { return a.runLocks(opts) },
 	commandProcesses: App.runProcesses,
-	commandReap:      App.runActionCommand,
 	commandPreflight: App.runPreflight,
 	commandDaemon:    App.runDaemon,
 	commandNotifier:  App.runNotifier,
@@ -456,11 +450,6 @@ func (a App) prepareOptions(args []string) (options, int, bool) {
 	}
 	if opts.command != commandUmount && (opts.force || opts.lazy || opts.kill) {
 		return options{}, a.commandUsageError(opts.command, "--force, --lazy and --kill-blockers are only supported by umount"), true
-	}
-	// --apply is the only thing that lets a command signal a stray, so it must not
-	// be accepted anywhere it would be silently ignored.
-	if opts.command != commandReap && opts.apply {
-		return options{}, a.commandUsageError(opts.command, "--apply is only supported by "+commandReap), true
 	}
 	if opts.command != commandSessions && opts.connection {
 		return options{}, a.commandUsageError(opts.command, "--connection is only supported by "+commandSessions+" kill"), true
@@ -581,7 +570,6 @@ func parseArgs(args []string) (options, error) {
 	fs.BoolVar(&opts.force, cliFlagForce, false, "")
 	fs.BoolVar(&opts.lazy, cliFlagLazy, false, "")
 	fs.BoolVar(&opts.kill, cliFlagKill, false, "")
-	fs.BoolVar(&opts.apply, cliFlagApply, false, "")
 	fs.BoolVar(&opts.connection, cliFlagConnection, false, "")
 	fs.BoolVar(&opts.series, cliFlagSeries, false, "")
 	fs.BoolVar(&opts.long, cliFlagLong, false, "")

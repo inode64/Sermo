@@ -20,6 +20,10 @@ processes:
   main:
     exe: ${networkmanager_binary}
     user: root
+# Only the daemon must exit on stop: per-connection helpers (dhclient, dnsmasq)
+# keep the network up. Every other process is kept and never signalled.
+stop_policy:
+  keep_children: true
 reload:
   command:
     - ${networkmanager_nmcli}

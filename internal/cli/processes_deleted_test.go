@@ -21,7 +21,7 @@ func TestDeletedResidualReporting(t *testing.T) {
 	}
 	var out bytes.Buffer
 	a := App{Stdout: &out}
-	a.printOperation(options{}, operation.Result{Service: "squid", Action: actionRestart, Status: operation.ResultOrphanProcesses,
+	a.printOperation(operation.Result{Service: "squid", Action: actionRestart, Status: operation.ResultOrphanProcesses,
 		Processes: []process.Process{p}, Signals: []process.SignalAttempt{{PID: 200, Signal: "SIGTERM", Error: "permission denied"}}})
 	for _, want := range []string{"exe_previous=", "blocked: cannot verify service ownership", "signal pid=200 SIGTERM", "permission denied"} {
 		if !strings.Contains(out.String(), want) {

@@ -2,6 +2,7 @@ package checks
 
 import (
 	"fmt"
+	"slices"
 
 	"sermo/internal/process"
 	"sermo/internal/servicemgr"
@@ -19,9 +20,17 @@ type sshSessionOwnership struct {
 	cgroups     map[int]string
 }
 
+// sudoExecutables are the exact packaged sudo paths a residual sudo terminal
+// may run. A residual close signals nothing else.
+var sudoExecutables = []string{"/usr/bin/sudo", "/bin/sudo"}
+
+// IsSudoExecutable reports whether exe is one of the exact sudo paths.
+func IsSudoExecutable(exe string) bool {
+	return slices.Contains(sudoExecutables, exe)
+}
+
 func sessionSudo(id process.Identity, uid uint32) bool {
-	return id.PID > 1 && id.UID == uid && id.ExeOK &&
-		(id.Exe == "/usr/bin/sudo" || id.Exe == "/bin/sudo") &&
+	return id.PID > 1 && id.UID == uid && id.ExeOK && IsSudoExecutable(id.Exe) &&
 		id.StartTicksOK && id.StartTicks > 0 && id.State != process.ProcStateZombie
 }
 

@@ -40,8 +40,8 @@ type Service struct {
 	StateReason string `json:"state_reason,omitempty"`
 	// Strays counts the processes the init unit's control group holds that no
 	// configured selector claims, from the strays check's published snapshot. It is
-	// what the Strays column and the reap button read; 0 means either none found or
-	// no current sample, a distinction the detail's check row makes.
+	// what the Strays column reads; 0 means either none found or no current sample,
+	// a distinction the detail's check row makes.
 	Strays int `json:"strays,omitempty"`
 	// Buttons are the service's configured operator buttons: explicit admin
 	// commands offered in the dashboard, run exactly as configured.
@@ -880,10 +880,6 @@ type Backend interface {
 	PruneEvents(ctx context.Context, before time.Time) (int, error)
 	// Operate runs start|stop|restart|reload|resume|repair on a service through the safe engine.
 	Operate(ctx context.Context, name, action string, opts OperateOpts) ActionResult
-	// ReapStrays signals the service's stray processes, gated by its own
-	// reap.kill_only_if selector: with none declared it reports them and signals
-	// nothing. It changes no unit state.
-	ReapStrays(ctx context.Context, name string) ActionResult
 	// CloseSSHSession gracefully closes one freshly verified terminal session
 	// owned by the named SSH service.
 	CloseSSHSession(ctx context.Context, name string, session SSHSession) ActionResult

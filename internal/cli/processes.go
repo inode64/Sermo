@@ -31,6 +31,7 @@ func (a App) discoverProcesses(ctx context.Context, opts options, cfg *config.Co
 		return a.Discover(selectors)
 	}
 	discoverer := process.NewDiscovererWithUserLookup(app.EngineUserLookup(cfg, a.Runner))
+	discoverer.KeepChildren = process.KeepChildren(resolved.Tree)
 	dependencies, err := a.controlDependenciesFor(ctx, opts.backend)
 	if err != nil {
 		return observedProcesses(discoverer, selectors)

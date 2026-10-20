@@ -136,7 +136,7 @@ type Deps struct {
 	StaleLibraries StaleLibrariesFunc
 	// Strays reports this service's control-group members that no selector
 	// claims, for `strays` checks. Read-only: reporting a stray authorizes
-	// nothing, and only `sermoctl reap --apply` can signal one.
+	// nothing; only a stop of the service signals one, as a residual.
 	Strays StraysFunc
 	Samplers
 }

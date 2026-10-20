@@ -50,16 +50,6 @@ stop_policy:
   force_kill: auto
   term_timeout: 10s
   kill_timeout: 5s
-# A previous incarnation reparented to PID 1 but still counted against the
-# unit is a stray a restart cannot clear; `sermoctl reap alloy --apply` may
-# signal it, and only an Alloy binary owned by one of its users.
-reap:
-  kill_only_if:
-    users:
-      - ${user}
-      - ${openrc_user}
-    exe_any:
-      - ${alloy_binary}
 policy:
   cooldown: 15m
   max_actions: 2

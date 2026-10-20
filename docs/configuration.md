@@ -1305,13 +1305,6 @@ Read-only endpoints:
   and each such
   watch adds a source of kind `database`. It is read from the published samples;
   the request never connects to a database.
-  The `strays` array contains currently observed unclaimed service processes,
-  including `pid`, `ppid`, `start_ticks`, `exe_previous`, `identity`, `can_close`
-  and `close_reason`. These rows come from daemon samples, not HTTP-time scans.
-- `POST /api/services/{name}/strays/{pid}/reap?start_ticks=...&identity=...`
-  terminates one freshly revalidated stray through the service's manual reap
-  policy. It requires the same admin, CSRF and generation checks as other
-  mutations. Missing authorization or changed identity refuses the action.
 
 - `GET /api/services/{name}/sla?since=24h` — availability history at the
   resolution that window is stored at (see [Stored history
@@ -1369,12 +1362,11 @@ accepted operation cannot switch targets during a concurrent reload.
   init-unit marker through the backend manager, then uses the same guarded start
   path. It refuses live PIDs, symlinks, malformed pidfiles and paths outside
   `/run`.
-- `POST /api/services/{name}/reap` — signal the service's stray processes, gated
-  by its own `reap.kill_only_if`: with none declared the reply reports every stray
-  and nothing is signalled. Equivalent to `sermoctl reap SERVICE --apply`. It changes
-  no unit state, so it neither pauses monitoring nor opens a settling window.
 - `POST /api/services/{name}/sessions/{pid}/close?start_ticks=TICKS&terminal=PTS`
-  — close one freshly revalidated SSH terminal with `SIGTERM`.
+  — close one freshly revalidated SSH terminal with `SIGTERM`; a residual
+  `sudo` terminal also gets `SIGKILL` after the service's
+  `stop_policy.term_timeout` if it survives (see
+  [safety](safety.md#the-operation-engine)).
 - `POST /api/services/{name}/terminal-sessions/{check}/close?multiplexer=TYPE&session=NAME&user=USER&identity=IDENTITY`
   — close one freshly revalidated tmux or screen session through its configured
   client. The operation requires the exact published generation identity and
@@ -3792,11 +3784,15 @@ uses: gitea
 restart_on_fds_high: false
 ```
 
-A service that delegates part of its tree (`processes.<name>.delegated: true`:
-a container runtime's shims, SSH sessions, Gluster bricks) gets no sensor: the
-metric is measured over every process discovery attributes, and a container or
-a user's shell near its own limit says nothing about the daemon. The packaged
-`libvirtd` profile opts out with `fds_limit: false` for the same reason. Like
+A service with any observe-only selector (`processes.<name>.delegated: true`,
+such as a generated libvirt VM or network target) or that keeps its children
+(`stop_policy.keep_children: true`: SSH sessions, cron jobs, container shims,
+Gluster bricks) gets no sensor: the metric is measured over every process
+discovery attributes, and a guest, a container or a user's shell near its own
+limit says nothing about the daemon. Among the packaged profiles that skips
+`ssh`, `glusterd`, `docker`, `containerd`, `virtnetworkd`, `virtqemud`,
+`libvirtd`, `cron`, `fcron`, `networkmanager` and `lxc-monitord`, all through
+`keep_children`; `libvirtd` also sets an explicit `fds_limit: false`. Like
 every remediation the restart only simulates under `dry_run: true`.
 
 Choose host-specific thresholds from representative normal and peak load.
@@ -3817,8 +3813,10 @@ Top-level `event_notify` can still deliver the resulting alarm events.
 
 Service-scoped. Reports the members of the service's init unit control group that
 no configured selector claims and that no longer hang off the unit's principal
-process — a probe that daemonized, a child the daemon never reaped, a survivor of
-an earlier incarnation. See [safety.md](safety.md) for the full definition.
+process — a probe that daemonized, a child the daemon abandoned, a survivor of
+an earlier incarnation. A process kept by `stop_policy.keep_children` or matched
+by a `delegated` selector is never a stray. See
+[safety.md](safety.md#stray-processes) for the full definition.
 
 Sermo injects it, named `strays`, into every init-managed service that declares
 `processes:` or `pidfile:`, with no fields: what counts as a stray follows from the
@@ -3829,9 +3827,6 @@ a pidfile whose live PID belongs to `/sys/fs/cgroup/openrc.<service>/cgroup.proc
 That PID is the principal; reparented members outside its live tree can therefore
 be reported instead of silently disappearing from the inventory. Without both
 pieces of evidence, Sermo does not guess ownership from a process name.
-Residual sudo terminals can be closed individually from the Sessions panel;
-the SSH service must explicitly authorize their exact sudo executable and real
-users in `reap.kill_only_if`. See [the verified terminal-close boundary](safety.md).
 
 Two optional bounds are accepted when you declare your own instance:
 
@@ -3863,14 +3858,14 @@ something merely accumulated beside it.
 A replaced executable belonging only to a stray is reported here, not as a
 `stale_binary` reason to restart the service: restarting the listener cannot
 repair a detached user's old workload.
-Delegated workloads are also excluded from `stale_binary`: updating them is
-the responsibility of their owner, not a reason to restart this service.
+Kept children and delegated processes are also excluded from `stale_binary`:
+updating them is the responsibility of their owner, not a reason to restart this
+service.
 
-Unlike `stale_binary`, **no rule is injected with it**. On real hosts the raw
-condition is dominated by workloads a profile has legitimately marked
-`delegated: true` (container shims, Gluster bricks, libvirt's `dnsmasq` pairs), so
-a fleet-wide alert would mostly report incomplete catalog coverage — and the remedy
-for that is a selector, not a reap. Alerting is therefore the operator's call.
+Unlike `stale_binary`, **no rule is injected with it**. A stray is a leftover
+beside a serving daemon, not an outage, and on a fleet the raw condition mostly
+reports incomplete catalog coverage — whose remedy is `keep_children` or a
+selector in the profile. Alerting is therefore the operator's call.
 
 The injected check is enough for "tell me when anything is unaccounted for":
 
@@ -3924,9 +3919,11 @@ Services with an external `control:` backend (docker, libvirt) get no injected
 check: there the whole container or domain PID set is attributed to the service,
 so a process no selector names is ordinary rather than a leftover.
 
-Clearing a stray is a separate, manual step — `sermoctl reap SERVICE --apply`,
-gated by the service's own `reap.kill_only_if` (see [services.md](services.md)).
-No rule action can reap.
+The check never signals anything, and no rule action targets a stray as such.
+On a stop or restart a stray is a residual like any other: it receives `SIGTERM`
+when the kernel places it in the service's own control group (`SIGKILL` only with
+`force_kill`), and one that survives or lacks that proof leaves the service
+stopped with `orphan_processes`; see [safety.md](safety.md#stray-processes).
 
 #### Why this is not a process count
 
@@ -3944,7 +3941,7 @@ Every other instrument counts a superset and cannot separate them:
 | `process_count` in a service's `watches:` | everything discovery attributes to the service | yes |
 | `process_count` metric (`scope: service`) | the same set, sampled per cycle | yes |
 | Dashboard process totals (count, memory, FDs, threads) | the same set | yes |
-| `strays` | that set minus the principal, its live tree, pidfile and selector matches, and delegated processes | it is only that |
+| `strays` | that set minus the principal, its live tree, pidfile and selector matches, and delegated or kept processes | it is only that |
 
 Two consequences worth knowing:
 
@@ -4077,8 +4074,8 @@ violations clear; that transition survives a daemon restart.
 #### `then.kill` — terminate the matched process
 
 A process watch can **terminate the matched PID natively**, without an external
-hook script, with a `then.kill` action. It reuses the same guarded process
-reaper as service stop and mount blocker-signalling policies. Because it signals real
+hook script, with a `then.kill` action. It reuses the same guarded signal path
+as service residual cleanup and mount blocker signalling. Because it signals real
 processes, `then.kill` requires `check.name` to be an absolute resolved
 `/proc/<pid>/exe` path and `check.user` to be set; basename-only process watches
 may still monitor and notify, but cannot kill.
@@ -4228,7 +4225,7 @@ carries a command line.
 
 - `then.kill` signals, when a finding fires, only the listed processes its own
   `kill_only_if` selector names — the same paired real-user plus exact-executable
-  gate `stop_policy` and `reap` use. Everything else stays listed and untouched.
+  gate `stop_policy` uses. Everything else stays listed and untouched.
   The signal, escalation and grace fields are those of the `process` watch's
   [`then.kill`](#thenkill--terminate-the-matched-process); the escalated SIGKILL
   re-verifies that the PID still belongs to the same process and is still
@@ -4258,15 +4255,16 @@ for the inherited `config`/`version` permission flags. Engine-wide settings (`in
 windows and `rollup_interval`, and `service_restart_notice`) are daemon
 configuration and never merge into a service.
 
-A service's `reap:` block is deliberately **not** a `defaults` key either: one
-global `kill_only_if` would hand every service the same kill authority over
-processes none of them can name.
-
 For service residual cleanup, `defaults.stop_policy.force_kill` accepts `false`,
 `true` or `auto`. `true` requires an explicit `kill_only_if` selector. `auto`
 reuses only strict named `processes:` identities that declare both `exe` and
 `user`; it does not authorize a process by name or cmdline and leaves services
-without a verified identity as `orphan_processes`.
+without a verified identity as `orphan_processes`. Independently of
+`force_kill`, a residual the kernel places in the service's own control group
+receives `SIGTERM` (and `SIGKILL` with `force_kill: true` or `auto`); with
+`stop_policy.keep_children: true` every non-principal process is kept instead,
+so only a surviving principal can be such a residual; see
+[services.md](services.md#kept-children-stop_policykeep_children).
 
 `defaults.dry_run` is optional and defaults to `false`; a service or watch may
 override it with its own top-level `dry_run`. A watch declared inside a service

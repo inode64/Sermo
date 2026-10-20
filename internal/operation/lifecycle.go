@@ -342,6 +342,11 @@ func (e Engine) waitGracefulStop(ctx context.Context, before process.Observation
 		}
 		return nil
 	}
+	// The init's stop never addresses a stray, so it will not exit on its own:
+	// waiting for one only prolongs the outage, and residual handling deals with
+	// it as soon as the service's own processes are gone.
+	strays := process.Strays(before.Processes)
+	previous := withoutGenerations(before.Processes, strays)
 	_, err := process.WaitUntil(ctx, e.Sleep, grace, func() (bool, error) {
 		if e.Lifecycle.ProcessMode == config.ServiceProcessNone {
 			status, err := e.Manager.Status(ctx, e.Unit)
@@ -354,14 +359,14 @@ func (e Engine) waitGracefulStop(ctx context.Context, before process.Observation
 		if err != nil {
 			return false, err
 		}
-		remaining := nonDelegatedResiduals(observation.Processes)
+		remaining := withoutGenerations(nonDelegatedResiduals(observation.Processes), strays)
 		if len(remaining) == 0 {
 			if observation.AbsenceKnown {
 				return true, nil
 			}
 			// Missing exit proof keeps the grace period open; final
 			// reconciliation still requires positive evidence before start.
-			if !observedExited(observation, before.Processes) {
+			if !observedExited(observation, previous) {
 				return false, nil
 			}
 			status, err := e.Manager.Status(ctx, e.Unit)
@@ -435,9 +440,7 @@ func replacedGeneration(before, after []process.Process) (bool, error) {
 			if old.StartTicks == 0 {
 				return false, errors.New("unverified process generation before stop")
 			}
-			if old.PID == proc.PID && old.StartTicks == proc.StartTicks {
-				same = true
-			}
+			same = same || old.SameGeneration(proc)
 		}
 		retained = retained || same
 		replaced = replaced || !same

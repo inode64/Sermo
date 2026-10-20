@@ -418,13 +418,11 @@ func TestApacheCatalogRestartsOnHotWorkerThread(t *testing.T) {
 	}
 }
 
-// glusterd, its bricks and its self-heal daemon are all the same executable
-// running as root, so the profile has to separate them by cmdline: `main` is the
-// only role Sermo may ever stop, and the workload roles are delegated so a stop
-// neither counts nor signals them. The negative case carries as much weight as
-// the positive one — a brick's cmdline contains `glusterd-uuid`, which a careless
-// pattern would match, taking the node's storage down with the daemon.
-func TestGlusterdCatalogSeparatesDaemonFromDelegatedWorkload(t *testing.T) {
+// glusterd keeps its workload with stop_policy.keep_children, and every brick,
+// self-heal and client daemon runs the same executable as root as glusterd
+// itself. Only the main selector's cmd keeps them out of the principal set: if it
+// matched one, a stop would wait for that brick and signal it.
+func TestGlusterdCatalogKeepsItsWorkload(t *testing.T) {
 	const (
 		daemonCmdline = "/usr/sbin/glusterd -p /run/glusterd.pid --log-level INFO"
 		brickCmdline  = "/usr/sbin/glusterfsd -s sirio --volfile-id images.sirio.srv-cluster-images " +
@@ -432,85 +430,63 @@ func TestGlusterdCatalogSeparatesDaemonFromDelegatedWorkload(t *testing.T) {
 			"--process-name brick --brick-port 60759"
 		selfHealCmdline = "/usr/sbin/glusterfs -s localhost --volfile-id shd/images " +
 			"--process-name glustershd --client-pid=-6"
+		fuseCmdline = "/usr/sbin/glusterfs --process-name fuse --volfile-server=localhost --volfile-id=/images /var/lib/images"
 	)
 
+	if !process.KeepChildren(resolveCatalogService(t, "glusterd", backendSystemd).Tree) {
+		t.Fatal("glusterd must keep its workload with stop_policy.keep_children")
+	}
 	byRole := catalogSelectorsByRole(t, "glusterd")
-
 	main, ok := byRole[process.RoleMain]
 	if !ok {
 		t.Fatalf("glusterd declares no %q process role", process.RoleMain)
 	}
-	if main.Delegated {
-		t.Fatal("the management daemon must stay signallable; only its workload is delegated")
+	if !main.IsStrictPrincipal() || main.Cmd == "" {
+		t.Fatalf("main = %+v, want a strict principal narrowed by cmd", main)
 	}
-	if main.Cmd == "" {
-		t.Fatal("main must narrow by cmd: exe and user alone cannot separate glusterd from its workload")
+	if len(byRole) != 1 {
+		t.Fatalf("glusterd declares %d process roles, want only main: every non-delegated role is a principal", len(byRole))
 	}
 	mainCmd := regexp.MustCompile(main.Cmd)
 	if !mainCmd.MatchString(daemonCmdline) {
 		t.Fatalf("main cmd %q does not match the management daemon", main.Cmd)
 	}
-
-	for role, cmdline := range map[string]string{"brick": brickCmdline, "selfheal": selfHealCmdline} {
+	for role, cmdline := range map[string]string{"brick": brickCmdline, "selfheal": selfHealCmdline, "fuse": fuseCmdline} {
 		if mainCmd.MatchString(cmdline) {
 			t.Fatalf("main cmd %q also matches the %s cmdline; a stop would signal the workload", main.Cmd, role)
-		}
-		selector, ok := byRole[role]
-		if !ok {
-			t.Fatalf("glusterd declares no %q process role", role)
-		}
-		if !selector.Delegated {
-			t.Fatalf("process role %q must be delegated so it is never signalled", role)
-		}
-		if !regexp.MustCompile(selector.Cmd).MatchString(cmdline) {
-			t.Fatalf("process role %q cmd %q does not match its own cmdline", role, selector.Cmd)
 		}
 	}
 }
 
-// sshd's unit is KillMode=process, so a stop leaves every connected session
-// alive. Those sessions are the service's own descendants, so unless the profile
-// declares them delegated they count as residuals and a restart never reaches its
-// start phase while anyone is logged in. The listener has to stay signallable
-// though, and its process title shares the `sshd: ` prefix — so the pattern is
-// only useful if it tells the two apart.
-func TestSSHCatalogDelegatesSessionsButNotTheListener(t *testing.T) {
-	const (
-		listenerTitle = "sshd: /usr/sbin/sshd -D -e [listener] 0 of 10-100 startups"
-		privsepTitle  = "sshd-session: fran [priv]"
-		sessionTitle  = "sshd-session: fran@pts/0"
-		legacyTitle   = "sshd: fran@pts/1"
-		acceptedTitle = "sshd-session: [accepted]"
-		legacyPending = "sshd: [accepted]"
-	)
-
-	byRole := catalogSelectorsByRole(t, "ssh")
-
-	main, ok := byRole[process.RoleMain]
-	if !ok {
-		t.Fatalf("ssh declares no %q process role", process.RoleMain)
-	}
-	if main.Delegated {
-		t.Fatal("the listener must stay signallable; only its sessions are delegated")
-	}
-	session, ok := byRole["session"]
-	if !ok {
-		t.Fatal("ssh declares no session process role")
-	}
-	if !session.Delegated {
-		t.Fatal("the session role must be delegated so a stop never signals a connected user")
-	}
-
-	title := regexp.MustCompile(session.Cmd)
-	for _, unowned := range []string{listenerTitle, "sshd-session: [accepted]suffix", "sshd: /usr/sbin/sshd [accepted]"} {
-		if title.MatchString(unowned) {
-			t.Fatalf("session cmd %q matches non-session title %q", session.Cmd, unowned)
-		}
-	}
-	for _, connected := range []string{privsepTitle, sessionTitle, legacyTitle, acceptedTitle, legacyPending} {
-		if !title.MatchString(connected) {
-			t.Fatalf("session cmd %q does not match %q", session.Cmd, connected)
-		}
+// Services whose init unit keeps its workload alive across a daemon restart
+// declare stop_policy.keep_children, with a strict principal so the daemon can
+// never be mistaken for a kept child. Services whose clients must be cut off by
+// a restart keep the default and lose every residual.
+func TestCatalogKeepChildrenServices(t *testing.T) {
+	for _, tc := range []struct {
+		service string
+		keep    bool
+	}{
+		{"ssh", true}, {"glusterd", true}, {"virtnetworkd", true}, {"virtqemud", true}, {"libvirtd", true},
+		{"containerd", true}, {"docker", true}, {"cron", true}, {"fcron", true}, {"networkmanager", true},
+		{"lxc-monitord", true},
+		{"smb", false}, {"smbd", false}, {"postfix", false}, {"dovecot", false}, {"exim", false},
+		{"apache", false}, {"nginx", false}, {"mysql", false},
+		{"mariadb", false}, {"supervisord", false},
+	} {
+		t.Run(tc.service, func(t *testing.T) {
+			resolved := resolveCatalogService(t, tc.service, backendSystemd)
+			if got := process.KeepChildren(resolved.Tree); got != tc.keep {
+				t.Fatalf("keep_children = %v, want %v", got, tc.keep)
+			}
+			if !tc.keep {
+				return
+			}
+			selectors, _ := process.ParseSelectors(resolved.Tree)
+			if !process.HasStrictPrincipal(selectors) {
+				t.Fatal("keep_children needs a non-delegated selector with exact exe and user")
+			}
+		})
 	}
 }
 

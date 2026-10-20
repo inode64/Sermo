@@ -122,9 +122,16 @@ func validateStopPolicy(tree map[string]any, add addFunc) {
 	if !ok {
 		return
 	}
-	_, warnings := process.ParseStopPolicy(tree)
+	policy, warnings := process.ParseStopPolicy(tree)
 	for _, warning := range warnings {
 		add("%s", warning)
+	}
+	// keep_children spares every process that is not a principal, so the
+	// principal must be named by an identity a stop can rely on; without one the
+	// daemon itself could be mistaken for a kept child.
+	if policy.KeepChildren && !hasStrictPrincipal(tree) {
+		add("%s requires a non-delegated %s selector with exact exe and user to identify the principal processes",
+			stopPolicyFieldPath(process.StopPolicyKeyKeepChildren), process.SectionProcesses)
 	}
 	// Stopped-state invariants (verified after a clean stop). clean_after_stop is
 	// the master opt-in that enables deleting stale leftovers and the clean_on_stop
@@ -140,29 +147,6 @@ func validateStopPolicy(tree map[string]any, add addFunc) {
 		add("%s must be a non-empty list of paths/globs", stopPolicyPathFilesAbsent)
 	}
 	validateCleanOnStop(sp[keyCleanOnStop], add)
-}
-
-// validateReapPolicy checks the optional `reap:` block, the per-service
-// authorization `sermoctl reap` needs before it may signal a stray process. It
-// accepts exactly one key, kill_only_if, with the same paired users/exe_any
-// selector stop_policy uses.
-//
-// Unknown keys are rejected here, unlike under stop_policy: a stray is reached by
-// control-group membership rather than by a selector that named it, so a mistyped
-// subkey would leave the action running against a selector the operator did not
-// write. Absolute exe paths are required for the same reason the selector matches
-// on the resolved /proc/<pid>/exe — a relative path could never match, so it can
-// only be a mistake.
-func validateReapPolicy(tree map[string]any, add addFunc) {
-	selector, warnings := process.ParseReapPolicy(tree)
-	for _, warning := range warnings {
-		add("%s", warning)
-	}
-	for _, exe := range selector.ExeAny {
-		if !filepath.IsAbs(exe) {
-			add(validationPathAbsoluteFormat, reapPathKillOnlyIf+"."+keyExeAny, exe)
-		}
-	}
 }
 
 // protectedDirs are absolute paths that clean_on_stop must never delete
@@ -569,3 +553,8 @@ var libvirtControlKeys = set(virt.ControlKeyType, virt.ControlKeyURI, virt.Contr
 var libvirtNetworkControlKeys = set(virt.ControlKeyType, virt.ControlKeyURI, virt.ControlKeyNetwork, virt.ControlKeySocket, virt.ControlKeyGuardSocket, virt.ControlKeyGuardURI, virt.ControlKeyHost, virt.ControlKeyPort)
 var dockerControlKeys = set(dockerctl.ControlKeyType, dockerctl.ControlKeySocket, dockerctl.ControlKeyHost, dockerctl.ControlKeyPort, dockerctl.ControlKeyTLS, dockerctl.ControlKeyContainer)
 var buttonKeys = set(ButtonKeyLabel, ButtonKeyCommand, ButtonKeyTimeout)
+
+func hasStrictPrincipal(tree map[string]any) bool {
+	selectors, _ := process.ParseSelectors(tree)
+	return process.HasStrictPrincipal(selectors)
+}

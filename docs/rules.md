@@ -3921,7 +3921,7 @@ they do not support `for:` or `within:` windows; declaring either on a guard is
 a validation error.
 
 `blocks:` accepts `restart`, `start`, `stop`, `reload`, `resume` and the
-manual-only operations `repair`, `reap` (`sermoctl reap --apply`),
+manual-only operations `repair`,
 `close_session` (closing an SSH or terminal session),
 `close_terminal_source` (closing an empty tmux server) and `kill_query`
 (cancelling a database statement listed by a [`db_queries`](#running-database-statements-db_queries)
@@ -3932,7 +3932,7 @@ the action it names **and** to every action that performs that step:
 | `blocks:` entry | also denies |
 |---|---|
 | `start` | `restart`, `repair` |
-| `stop` | `restart`, `reap` |
+| `stop` | `restart` |
 
 Session closes signal one session process and do not start or stop the service,
 so only `close_session` / `close_terminal_source` deny them. Likewise only

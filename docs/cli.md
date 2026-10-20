@@ -88,7 +88,6 @@ sermoctl mount list
 
 sermoctl preflight SERVICE
 sermoctl processes SERVICE
-sermoctl reap SERVICE [--apply]        # list the service's stray processes; --apply signals the authorized ones
 sermoctl sessions [list] [SERVICE]     # SSH, tmux/screen sessions and running database statements
 sermoctl sessions kill SERVICE WATCH ID [--connection]   # cancel one listed statement (or close its connection)
 sermoctl locks SERVICE
@@ -357,35 +356,24 @@ like `sermoctl services`; **Applications** (`GET /api/applications`) and
 **Libraries** (`GET /api/libraries`) are installed catalog inventories, aligned
 with `sermoctl apps` and `sermoctl libs`.
 
-## Reaping stray processes
-
-A **stray** is a process the init backend attributes to the service's control
-group that no `processes:` selector or pidfile claims and that no longer hangs off
-the unit's principal process — a probe that daemonized, a child the daemon never
-reaped, a survivor of an earlier incarnation. `sermoctl processes SERVICE` flags
-them with `stray=true`, and the injected `strays` check reports them every cycle.
-
-A stop never reaps, so a restart that a stray blocks ends in `orphan_processes` and
-names it; clearing it is this command's job.
-
-`sermoctl reap SERVICE` is a preview: it lists every stray, reports how many would
-be signalled, and touches nothing — no operation lock, no event.
-
-`sermoctl reap SERVICE --apply` signals them, gated by the service's own
-`reap.kill_only_if` selector. With no such block nothing is authorized, so the
-command reports every stray, signals none and exits `75`. Otherwise the exit code
-follows the usual operation mapping: `0` when no stray remains, `1` when one was
-spared or outlived SIGKILL (`orphan_processes`), `2` on a failure.
-
-`--apply` is rejected by every other command, and no rule action can reap — see
-[safety.md](safety.md) for the whole contract and [services.md](services.md) for
-the `reap:` block.
-
 `sermoctl config validate` prints each validation error as `ERROR` and exits
 `78`. It also prints advisory findings as `WARN` — today a
 [`levels:`](rules.md#graded-levels-levels) tier Sermo ignores because it is not
 stricter than the threshold below it — and still exits `0`, since the
 configuration loads and runs; `--json` lists them under `warnings`.
+
+## Stray processes
+
+`sermoctl processes SERVICE` marks with `stray=true` each process the init
+backend places in the service's control group that no `processes:` selector or
+pidfile claims and that no longer hangs off the unit's principal process. The
+injected `strays` check reports the same set every cycle. It is a diagnostic: no
+command signals a stray as such. A stop or restart does not wait for it to exit
+on its own; as a residual it receives `SIGTERM` when the kernel places it in the
+unit's own control group (`SIGKILL` too with `force_kill: true` or `auto`), and
+a survivor ends the operation in `orphan_processes`. A service that sets
+`stop_policy.keep_children: true` has no strays: it keeps them. See
+[safety.md](safety.md#stray-processes).
 
 ## Sessions
 

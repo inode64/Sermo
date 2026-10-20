@@ -10,6 +10,15 @@ restart_on_change:
   messages:
     app: >-
       ${display_name} will restart after version change of ${change.app}: ${change.old_version} -> ${change.new_version}
+processes:
+  main:
+    exe: ${libvirtd_binary}
+    user: root
+# Only the daemon must exit on stop: running guests (qemu, virtiofsd) and
+# network dnsmasq keep running; on OpenRC they share the daemon's control group.
+# Every other process is kept and never signalled.
+stop_policy:
+  keep_children: true
 policy:
   cooldown: 15m
   max_actions: 2

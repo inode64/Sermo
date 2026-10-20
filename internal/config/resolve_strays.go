@@ -15,10 +15,10 @@ const straysCheckName = "strays"
 //
 // Unlike stale-binary it injects **no rule**. A replaced binary is unambiguously a
 // defect with one remedy; a stray is only unexplained, and on real hosts the raw
-// condition is dominated by workloads a profile has legitimately marked
-// `delegated: true` (container shims, Gluster bricks, libvirt's dnsmasq pairs).
-// A fleet-wide alert would therefore mostly report incomplete catalog coverage,
-// whose remedy is a selector rather than a reap. So the check reports state — it
+// condition is dominated by workloads a unit keeps alive on purpose. A fleet-wide
+// alert would therefore mostly report incomplete catalog coverage, whose remedy
+// is a selector or stop_policy.keep_children rather than a kill. So the check
+// reports state — it
 // appears in the dashboard and in `sermoctl status` with the count and the
 // executables, and never touches health or SLA — and an operator who wants to be
 // paged writes a rule on it:

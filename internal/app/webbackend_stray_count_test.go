@@ -1,8 +1,6 @@
 package app
 
 import (
-	"context"
-	"strings"
 	"testing"
 	"time"
 
@@ -126,44 +124,5 @@ func TestServiceStrayCountZeroWithoutAStraysCheck(t *testing.T) {
 
 	if got := b.observeService("web", b.entries["web"]).serviceStrayCount(b.entries["web"]); got != 0 {
 		t.Fatalf("stray count = %d, want 0 when no strays check is declared", got)
-	}
-}
-
-// Every rejection path must name the service and emit an error event, the same
-// contract the session closes follow.
-func TestReapStraysRejectsUnknownAndDisabledServices(t *testing.T) {
-	for _, tc := range []struct {
-		name    string
-		service string
-		setup   func(*WebBackend)
-		want    string
-	}{
-		{name: "unknown service", service: "ghost", want: "unknown service"},
-		{
-			name:    "disabled service",
-			service: "web",
-			setup:   func(b *WebBackend) { b.entries["web"].disabled = true },
-			want:    "is disabled in configuration",
-		},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			var events []Event
-			b := straysSnapshotBackend(t, 1, 0)
-			b.emit = func(e Event) { events = append(events, e) }
-			if tc.setup != nil {
-				tc.setup(b)
-			}
-
-			res := b.ReapStrays(context.Background(), tc.service)
-			if res.OK {
-				t.Fatalf("want a refusal, got %+v", res)
-			}
-			if !strings.Contains(res.Message, tc.want) {
-				t.Fatalf("message = %q, want it to contain %q", res.Message, tc.want)
-			}
-			if len(events) != 1 || events[0].Kind != eventKindError || events[0].Action != reapActionLabel {
-				t.Fatalf("events = %+v, want one reap error event", events)
-			}
-		})
 	}
 }

@@ -89,7 +89,7 @@ func BuildServiceRuntime(ctx context.Context, cfg ServiceRuntimeConfig) ServiceR
 	discoverer := process.NewDiscovererWithUserLookup(deps.UserLookup)
 	// Only native init units share the cgroup ownership namespace. A libvirt
 	// domain, network or Docker target is not a systemd/OpenRC unit name.
-	if deps.Backend == servicemgr.BackendSystemd || deps.Backend == servicemgr.BackendOpenRC {
+	if deps.Backend.HasUnitCgroups() {
 		discoverer.ProcessOwnership = func(id process.Identity) (bool, bool) {
 			return servicemgr.CgroupOwnership(id.Cgroup, cfg.Unit)
 		}
@@ -97,6 +97,7 @@ func BuildServiceRuntime(ctx context.Context, cfg ServiceRuntimeConfig) ServiceR
 	if deps.ProcReader != nil {
 		discoverer.Reader = deps.ProcReader
 	}
+	discoverer.KeepChildren = process.KeepChildren(cfg.Tree)
 	backendPIDs := ServiceBackendPIDs(ctx, deps.Backend, cfg.Unit, deps.BackendPIDs, deps.ExecxRunner)
 	if backendPIDs != nil {
 		discoverer.BackendPIDs = backendPIDs
@@ -200,7 +201,7 @@ func ServiceBackendPIDs(ctx context.Context, backend servicemgr.Backend, unit st
 	if configured != nil {
 		return configured
 	}
-	if backend != servicemgr.BackendSystemd && backend != servicemgr.BackendOpenRC {
+	if !backend.HasUnitCgroups() {
 		return nil
 	}
 	return servicemgr.BackendPIDsFuncWithRunner(ctx, backend, unit, runner, nil)

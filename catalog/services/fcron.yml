@@ -16,6 +16,10 @@ processes:
   main:
     exe: ${fcron_binary}
     user: root
+# Only the daemon must exit on stop: jobs already running finish. Every other
+# process is kept and never signalled.
+stop_policy:
+  keep_children: true
 reload:
   signal: HUP
 watches:

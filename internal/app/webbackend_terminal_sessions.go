@@ -15,6 +15,7 @@ import (
 	"sermo/internal/metrics"
 	"sermo/internal/operation"
 	"sermo/internal/process"
+	"sermo/internal/utmp"
 	"sermo/internal/web"
 )
 
@@ -103,7 +104,6 @@ func (b *WebBackend) Sessions(_ context.Context) web.SessionInventory {
 		}
 		b.appendSSHSessions(&result, seenSSH, service, entry)
 		b.appendTerminalSessions(&result, service, entry)
-		b.appendStraySessions(&result, service, entry)
 	}
 	b.appendDBQueries(&result)
 	b.attachSessionMetrics(&result)
@@ -161,11 +161,10 @@ func (b *WebBackend) attachSessionMetrics(inventory *web.SessionInventory) {
 	b.sessionMetricsMu.Lock()
 	defer b.sessionMetricsMu.Unlock()
 	var snapshot sessionProcessSnapshot
-	if len(inventory.SSH) > 0 || len(inventory.Terminal) > 0 || len(inventory.Strays) > 0 {
+	if len(inventory.SSH) > 0 || len(inventory.Terminal) > 0 {
 		snapshot = newSessionProcessSnapshot(b.terminalProcessReader)
 	}
-	b.attachStrayTerminals(inventory, snapshot)
-	active := make(map[string]struct{}, len(inventory.SSH)+len(inventory.Terminal)+len(inventory.Strays))
+	active := make(map[string]struct{}, len(inventory.SSH)+len(inventory.Terminal))
 	accessedAt := cachedTerminalAccess(b.terminalAccessedAt)
 	for i := range inventory.SSH {
 		session := &inventory.SSH[i]
@@ -185,7 +184,6 @@ func (b *WebBackend) attachSessionMetrics(inventory *web.SessionInventory) {
 		}
 		attachTerminalSessionIdle(snapshot, session, pids, b.webNow(), accessedAt)
 	}
-	b.attachStrayMetrics(inventory, snapshot, active, accessedAt)
 	if b.sessionMetricCollector != nil {
 		for key := range b.sessionMetricKeys {
 			if _, ok := active[key]; !ok {
@@ -194,6 +192,28 @@ func (b *WebBackend) attachSessionMetrics(inventory *web.SessionInventory) {
 		}
 	}
 	b.sessionMetricKeys = active
+}
+
+// Cache terminal lookups within one inventory, including unavailable devices.
+func cachedTerminalAccess(read func(uint64) (time.Time, bool)) func(uint64) (time.Time, bool) {
+	if read == nil {
+		read = func(device uint64) (time.Time, bool) {
+			return utmp.TerminalAccessedAt(utmp.DevRoot, device)
+		}
+	}
+	type access struct {
+		at time.Time
+		ok bool
+	}
+	cache := make(map[uint64]access)
+	return func(device uint64) (time.Time, bool) {
+		if result, found := cache[device]; found {
+			return result.at, result.ok
+		}
+		at, ok := read(device)
+		cache[device] = access{at: at, ok: ok}
+		return at, ok
+	}
 }
 
 func sessionUsage(sample metrics.Snapshot) web.SessionUsage {

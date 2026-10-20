@@ -146,12 +146,17 @@ No se pueden desactivar en YAML — la validación rechaza cualquier toggle
    remediación.
 3. **Los locks de runtime con nombre activos siempre bloquean las acciones de
    servicio** — comprobado automáticamente, sin necesidad de regla.
-4. **Nunca SIGKILL por defecto** — `force_kill` es false salvo que se habilite
-   explícitamente.
+4. **SIGKILL solo donde `force_kill` lo permite** — el valor por defecto del
+   motor es `false`; el `sermo.yml` que se instala fija `auto`, que solo escala
+   con identidades estrictas de `processes:` y con procesos que el kernel sitúa
+   en el grupo de control propio del servicio. `false` descarta SIGKILL para un
+   servicio.
 5. **Nunca matar por nombre de proceso** — un kill requiere coincidencia exacta
    de la ruta `/proc/<pid>/exe` resuelta **y** del UID real contra un selector
-   `kill_only_if` explícito; cualquier cosa que no pueda identificar
-   positivamente se *reporta, no se mata*.
+   `kill_only_if` explícito o una identidad estricta de `processes:`, o la
+   prueba del kernel de que el proceso está en el grupo de control propio del
+   servicio; cualquier cosa que no pueda identificar positivamente se *reporta,
+   no se mata*.
 6. **Nunca enviar señales de terminación a PID 1 ni a hilos del kernel** —
    bloqueado centralmente, no configurable.
 7. **`force_kill: true` requiere `kill_only_if`** con selectores `users` y

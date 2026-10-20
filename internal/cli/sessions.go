@@ -40,9 +40,6 @@ const (
 // daemon, which re-verifies the statement through the service's operation engine.
 func (a App) runSessions(ctx context.Context, opts options) int {
 	args := opts.args
-	if len(args) > 0 && args[0] == commandReap {
-		return a.runSessionsReap(ctx, opts)
-	}
 	if len(args) > 0 && args[0] == commandSessionsKill {
 		return a.runSessionsKill(ctx, opts)
 	}
@@ -202,9 +199,6 @@ func findDBQuerySession(inventory web.SessionInventory, service, watch string, i
 // service keeps everything. Slices stay non-nil so --json prints [] not null.
 func filterSessionInventory(inventory web.SessionInventory, service string) web.SessionInventory {
 	if service == "" {
-		if inventory.Strays == nil {
-			inventory.Strays = []web.StraySession{}
-		}
 		if inventory.Sources == nil {
 			inventory.Sources = []web.SessionSource{}
 		}
@@ -220,16 +214,10 @@ func filterSessionInventory(inventory web.SessionInventory, service string) web.
 		return inventory
 	}
 	out := web.SessionInventory{
-		Strays:   []web.StraySession{},
 		Sources:  []web.SessionSource{},
 		SSH:      []web.SSHSession{},
 		Terminal: []web.TerminalSession{},
 		Database: []web.DBQuerySession{},
-	}
-	for _, row := range inventory.Strays {
-		if row.Service == service {
-			out.Strays = append(out.Strays, row)
-		}
 	}
 	for _, source := range inventory.Sources {
 		if source.Service == service {
@@ -282,10 +270,6 @@ func (a App) writeSessionInventory(inventory web.SessionInventory) {
 				sessionsCell(s.State), s.Windows, sessionsSeconds(s.IdleSeconds, s.HasIdle))
 		}
 		_ = tw.Flush()
-	}
-	if len(inventory.Strays) > 0 {
-		section("Unclaimed service processes:")
-		a.writeStraySessions(inventory.Strays)
 	}
 	if len(inventory.Database) > 0 {
 		section("Database statements:")

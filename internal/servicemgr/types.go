@@ -22,6 +22,13 @@ const (
 	BackendInitSummary = string(BackendAuto) + ", " + string(BackendSystemd) + " or " + string(BackendOpenRC)
 )
 
+// HasUnitCgroups reports a native init backend (systemd, OpenRC) whose units
+// own a per-service cgroup and share the cgroup ownership namespace. A libvirt
+// domain or network and a Docker target are not such units.
+func (b Backend) HasUnitCgroups() bool {
+	return b == BackendSystemd || b == BackendOpenRC
+}
+
 // Init-system command binaries invoked through the execx runner.
 const (
 	cmdSystemctl = "systemctl"
