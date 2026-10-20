@@ -15,6 +15,7 @@ import (
 	"sermo/internal/config"
 	"sermo/internal/control"
 	"sermo/internal/execx"
+	"sermo/internal/execx/execxtest"
 	"sermo/internal/metrics"
 	"sermo/internal/process"
 	"sermo/internal/servicemgr"
@@ -43,10 +44,7 @@ defaults:
 	if err := os.WriteFile(filepath.Join(enabled, serviceFile), []byte(body), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	cfg, err := config.Load(globalPath)
-	if err != nil {
-		t.Fatalf("load config: %v", err)
-	}
+	cfg := loadTestConfig(t, globalPath)
 	return cfg
 }
 
@@ -60,14 +58,19 @@ pidfile: `+pidfile+`
 }
 
 func TestWebBackendDetailProcessesRealPidfile(t *testing.T) {
+	const daemonPID = 4242
 	dir := t.TempDir()
-	pidfile := filepath.Join(dir, "self.pid")
-	if err := os.WriteFile(pidfile, []byte(strconv.Itoa(os.Getpid())), 0o644); err != nil {
+	pidfile := filepath.Join(dir, "mysqld.pid")
+	if err := os.WriteFile(pidfile, []byte(strconv.Itoa(daemonPID)), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	cfg := writeWebProcessConfig(t, pidfile)
+	procs := serviceOwnershipReader{daemonPID: {
+		PID: daemonPID, PPID: 1, StartTicks: 77, StartTicksOK: true, UID: 27, Exe: "/usr/sbin/mysqld", ExeOK: true,
+		Cgroup: "0::/system.slice/mysql.service",
+	}}
 
-	wb, warnings := NewWebBackend(t.Context(), cfg, Deps{Backend: servicemgr.BackendSystemd, Manager: fakeManager{}, ExecxRunner: execx.CommandRunner{}})
+	wb, warnings := NewWebBackend(t.Context(), cfg, Deps{Backend: servicemgr.BackendSystemd, Manager: fakeManager{}, ProcReader: procs, ExecxRunner: &execxtest.Runner{}})
 	if len(warnings) > 0 {
 		t.Fatalf("NewWebBackend warnings: %v", warnings)
 	}
@@ -81,7 +84,7 @@ func TestWebBackendDetailProcessesRealPidfile(t *testing.T) {
 	}
 	found := false
 	for _, p := range detail.Processes {
-		if p.PID == os.Getpid() {
+		if p.PID == daemonPID {
 			found = true
 			if p.Source != "pidfile" {
 				t.Fatalf("self process source = %q, want pidfile", p.Source)
@@ -92,13 +95,13 @@ func TestWebBackendDetailProcessesRealPidfile(t *testing.T) {
 		}
 	}
 	if !found {
-		t.Fatalf("processes = %+v, want pid %d", detail.Processes, os.Getpid())
+		t.Fatalf("processes = %+v, want pid %d", detail.Processes, daemonPID)
 	}
 }
 
 func TestWebBackendDetailProcessesNone(t *testing.T) {
 	cfg := writeWebProcessConfig(t, "/nonexistent/pidfile.pid")
-	wb, _ := NewWebBackend(t.Context(), cfg, Deps{Backend: servicemgr.BackendSystemd, Manager: fakeManager{}, ExecxRunner: execx.CommandRunner{}})
+	wb, _ := NewWebBackend(t.Context(), cfg, Deps{Backend: servicemgr.BackendSystemd, Manager: fakeManager{}, ExecxRunner: &execxtest.Runner{}})
 
 	detail, ok := wb.Detail(context.Background(), "mysql-main")
 	if !ok {
@@ -504,7 +507,7 @@ service: web
 processes:
   main: {}
 `)
-	wb, warnings := NewWebBackend(t.Context(), cfg, Deps{Backend: servicemgr.BackendOpenRC, Manager: fakeManager{}, ExecxRunner: execx.CommandRunner{}})
+	wb, warnings := NewWebBackend(t.Context(), cfg, Deps{Backend: servicemgr.BackendOpenRC, Manager: fakeManager{}, ExecxRunner: &execxtest.Runner{}})
 	if len(warnings) > 0 {
 		t.Fatalf("NewWebBackend warnings: %v", warnings)
 	}

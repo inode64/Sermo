@@ -358,6 +358,9 @@ func NewWebBackend(ctx context.Context, cfg *config.Config, deps Deps) (*WebBack
 	wb.measure, _ = deps.SLA.(MeasurementReader)
 	resolver := servicemgr.NewUnitResolver()
 	resolver.Manager = deps.Manager
+	if deps.ExecxRunner != nil {
+		resolver.Runner = deps.ExecxRunner
+	}
 
 	// Preparing a service means resolving it and querying the init backend
 	// for its unit, processes and reload support; wired one after another,

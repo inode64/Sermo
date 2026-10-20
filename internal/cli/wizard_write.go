@@ -17,6 +17,7 @@ import (
 	"github.com/goccy/go-yaml/parser"
 
 	"sermo/internal/config"
+	"sermo/internal/hostfs"
 )
 
 const (
@@ -162,7 +163,7 @@ func writeConfigBackup(path string, data []byte, mode fs.FileMode) (string, erro
 		case attempt > 1:
 			bak = stamp + "." + strconv.Itoa(attempt-1)
 		}
-		f, err := os.OpenFile(bak, os.O_WRONLY|os.O_CREATE|os.O_EXCL, mode) //nolint:gosec // G304: backup path derives from the operator-selected global config
+		f, err := hostfs.OpenFile(bak, os.O_WRONLY|os.O_CREATE|os.O_EXCL, mode)
 		if errors.Is(err, fs.ErrExist) {
 			continue
 		}

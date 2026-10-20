@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"maps"
-	"os"
 	"slices"
 	"strconv"
 	"strings"
@@ -16,6 +15,7 @@ import (
 	"sermo/internal/checks"
 	"sermo/internal/config"
 	"sermo/internal/emission"
+	"sermo/internal/hostfs"
 	"sermo/internal/metrics"
 	"sermo/internal/notify"
 	"sermo/internal/operation"
@@ -1188,7 +1188,7 @@ func (w *Worker) compareAppVersion(app string, level int, raw string) (bool, err
 // modification time. A missing or unreadable file yields "", distinct from any
 // real file, so install/removal counts as a change.
 func fileFingerprint(path string) string {
-	info, err := os.Stat(path)
+	info, err := hostfs.StatTarget(path)
 	if err != nil {
 		return ""
 	}

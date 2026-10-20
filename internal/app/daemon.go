@@ -347,6 +347,9 @@ func BuildWorkers(ctx context.Context, cfg *config.Config, deps Deps, collector 
 	}
 	resolver := servicemgr.NewUnitResolver()
 	resolver.Manager = deps.Manager
+	if deps.ExecxRunner != nil {
+		resolver.Runner = deps.ExecxRunner
+	}
 	if notice, ok := config.EngineServiceRestartNotice(cfg); ok {
 		deps.RestartNotice = &notice
 	}

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"sermo/internal/checks"
+	"sermo/internal/execx/execxtest"
 	"sermo/internal/notify"
 )
 
@@ -521,8 +522,10 @@ func TestFileWatchRecursiveOneEventPerChange(t *testing.T) {
 }
 
 // TestFileWatchWithRealOSHookRunner exercises the real OSHookRunner (execx-backed)
-// inside a fileWatcher, using /bin/true so the hook "succeeds" and emits "hook" event.
+// inside a fileWatcher over a scripted runner, so the hook "succeeds" and emits a
+// "hook" event carrying the watched path.
 func TestFileWatchWithRealOSHookRunner(t *testing.T) {
+	fake := &execxtest.Runner{}
 	f := filepath.Join(t.TempDir(), "size.txt")
 	writeSize(t, f, 10)
 
@@ -531,9 +534,9 @@ func TestFileWatchWithRealOSHookRunner(t *testing.T) {
 		name:  "fw-real",
 		paths: []string{f},
 		cond:  fileCond{sizeChange: true},
-		hook:  HookSpec{Command: []string{"/bin/true"}, Timeout: time.Second},
-		// Use real OSHookRunner (not the test Func) to cover default path + execx.
-		runner: OSHookRunner{},
+		hook:  HookSpec{Command: []string{"/usr/local/bin/on-change"}, Timeout: time.Second},
+		// Use the real OSHookRunner (not the test Func) to cover the execx path.
+		runner: OSHookRunner{Runner: fake},
 		emit: func(e Event) {
 			if e.Kind == eventKindHook || e.Kind == eventKindHookFail {
 				hookEvents = append(hookEvents, e)
@@ -553,6 +556,9 @@ func TestFileWatchWithRealOSHookRunner(t *testing.T) {
 
 	if len(hookEvents) != 1 || hookEvents[0].Kind != eventKindHook {
 		t.Fatalf("expected one successful hook event, got %d: %v", len(hookEvents), hookEvents)
+	}
+	if calls := fake.Calls(); len(calls) != 1 || calls[0].Line() != "/usr/local/bin/on-change" {
+		t.Fatalf("hook calls = %+v", calls)
 	}
 }
 

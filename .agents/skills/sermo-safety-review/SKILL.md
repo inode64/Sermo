@@ -29,7 +29,9 @@ touches them.
 5. Locks are staged with `O_CREAT|O_EXCL`, synced and closed before no-replace
    hard-link publication, and are TTL-bounded. A stale lock
    (expired or dead owner) is reclaimed through a logged path, never silently
-   overwritten.
+   overwritten: every locker (operation, named, watch control, expansion,
+   mount) reports the reclaim, and daemon, web and sermoctl record it as the
+   same warning event (`app.LockReclaim`).
 6. Every executed or blocked action records exactly one auditable event.
 7. One slow service never blocks monitoring of another; shared check
    concurrency stays bounded.
@@ -77,9 +79,9 @@ touches them.
   or, without one, the exe+user(+cmd) pairs `EnableAutomaticReaping` derives
   from strict principal selectors; or proven membership of the unit's own
   cgroup with `force_kill: true` or `auto`. Unset or `false` rules out SIGKILL.
-  The mysql, mariadb, postgres, redis, keydb, etcd and patroni profiles pair
-  the inherited `auto` with an explicit `kill_only_if` and long grace periods;
-  mongod, influxdb, memcached and garbd declare no stop policy of their own.
+  The mysql, mariadb, postgres, mongod, influxdb, redis, keydb, memcached, etcd
+  and patroni profiles pair the inherited `auto` with an explicit `kill_only_if`
+  and long grace periods; only garbd, which holds no data, keeps the defaults.
 - Residuals after stop: under `force_kill: true` or `auto`, processes matching
   `kill_only_if` (or an `auto`-derived pair) get SIGTERM, then SIGKILL after the
   term timeout. A residual the kernel places in
@@ -107,7 +109,16 @@ touches them.
   sermod's own unit cgroup).
 - External commands are argv arrays through the `execx` runner with a context
   and timeout; no shell, no interpolated user input, no ignored errors or
-  cancellation.
+  cancellation. A hook without its own `timeout` inherits
+  `engine.default_timeout`.
+- `sermoctl daemon reload` signals only the sermod installed alongside the
+  sermoctl that runs it (its sibling or `../sbin/sermod`, symlinks resolved),
+  running as the caller's real UID (any UID for a root caller), through the
+  pidfd signaler. A program
+  merely named sermod is refused with the reason.
+- Generation checks treat an unknown start tick (0) as no generation:
+  `SameGeneration` never matches it, so SIGKILL never escalates onto it.
+  `CgroupOwnedBy` never matches an empty unit.
 
 Manual session close is distinct from service residual cleanup: split OpenSSH
 session servers may survive their listener and stay kept (`keep_children`)

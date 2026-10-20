@@ -2,18 +2,18 @@ package cli
 
 import (
 	"fmt"
-	"os"
 
 	"github.com/goccy/go-yaml"
 
 	"sermo/internal/config"
+	"sermo/internal/hostfs"
 )
 
 // readYAMLMap peeks at one wizard-managed document without applying the full
 // config loader contract. Cleanup discovery is best-effort, so unreadable or
 // malformed documents are ignored.
 func readYAMLMap(path string) map[string]any {
-	data, err := os.ReadFile(path) //nolint:gosec // G304: wizard-owned config path under a configured directory
+	data, err := hostfs.ReadFile(path)
 	if err != nil {
 		return nil
 	}

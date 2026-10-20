@@ -43,8 +43,8 @@ mount: {}
 
 func mountApp(t *testing.T, mounted *bool, out *bytes.Buffer) App {
 	t.Helper()
-	return App{
-		LoadConfig: config.Load,
+	return hermeticApp(t, App{
+		LoadConfig: testConfigLoader(t),
 		Env:        func(string) string { return "" },
 		Stdout:     out,
 		Stderr:     &bytes.Buffer{},
@@ -62,7 +62,7 @@ func mountApp(t *testing.T, mounted *bool, out *bytes.Buffer) App {
 				InFstab: func(path string) (bool, error) { return path == "/mnt/backup", nil },
 			}
 		},
-	}
+	})
 }
 
 type fakeMountRunner struct{ mounted *bool }
@@ -112,11 +112,11 @@ func TestMountCommandByName(t *testing.T) {
 
 func TestMountControllerUsesMountDefaultTimeoutUnlessFlagSet(t *testing.T) {
 	global := writeMountConfig(t)
-	cfg, err := config.Load(global)
+	cfg, err := loadTestConfig(t, global)
 	if err != nil {
 		t.Fatal(err)
 	}
-	app := App{Runner: execx.CommandRunner{}}
+	app := hermeticApp(t, App{Runner: execx.CommandRunner{}})
 
 	ctrl := app.mountController(cfg, options{timeout: time.Hour})
 	if ctrl.CommandTimeout != 0 {
@@ -138,7 +138,7 @@ func TestConfiguredMountSpecPreservesFailureExitCodes(t *testing.T) {
 		},
 	}}}
 	var stdout, stderr bytes.Buffer
-	app := App{Stdout: &stdout, Stderr: &stderr}
+	app := hermeticApp(t, App{Stdout: &stdout, Stderr: &stderr})
 
 	if _, code := app.configuredMountSpec(options{}, cfg, "observed-only"); code != exitRuntimeError {
 		t.Fatalf("storage without mount exit = %d, want %d", code, exitRuntimeError)

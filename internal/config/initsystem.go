@@ -1,9 +1,9 @@
 package config
 
 import (
-	"os"
 	"strings"
 
+	"sermo/internal/hostfs"
 	"sermo/internal/servicemgr"
 )
 
@@ -20,13 +20,13 @@ func detectInit() string {
 	if v := envOverride(envInitOverride); v != "" {
 		return strings.ToLower(v)
 	}
-	if _, err := os.Stat(servicemgr.SystemdRuntimeDir); err == nil {
+	if _, err := hostfs.Stat(servicemgr.SystemdRuntimeDir); err == nil {
 		return backendSystemd
 	}
-	if _, err := os.Stat(servicemgr.OpenRCRuntimeDir); err == nil {
+	if _, err := hostfs.Stat(servicemgr.OpenRCRuntimeDir); err == nil {
 		return backendOpenRC
 	}
-	if _, err := os.Stat(initOpenRCBinaryPath); err == nil {
+	if _, err := hostfs.Stat(initOpenRCBinaryPath); err == nil {
 		return backendOpenRC
 	}
 	return backendSystemd

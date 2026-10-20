@@ -46,6 +46,7 @@ watches:
         op: '>'
         value: 1
       reports: state
+      optional: true
     then:
       action: block
       blocks:

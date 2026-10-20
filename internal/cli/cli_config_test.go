@@ -70,7 +70,7 @@ defaults:
 func TestConfigValidateOK(t *testing.T) {
 	global := writeTempConfig(t)
 	var stdout bytes.Buffer
-	app := App{Env: func(string) string { return "" }, Stdout: &stdout, Stderr: &bytes.Buffer{}}
+	app := hermeticApp(t, App{Env: func(string) string { return "" }, Stdout: &stdout, Stderr: &bytes.Buffer{}})
 
 	code := app.Run(context.Background(), []string{"--config", global, "config", "validate"})
 	if code != exitSuccess {
@@ -98,7 +98,7 @@ checks:
 	global := filepath.Join(root, "sermo.yml")
 
 	var stdout, stderr bytes.Buffer
-	app := App{Env: func(string) string { return "" }, Stdout: &stdout, Stderr: &stderr}
+	app := hermeticApp(t, App{Env: func(string) string { return "" }, Stdout: &stdout, Stderr: &stderr})
 
 	code := app.Run(context.Background(), []string{"--config", global, "config", "validate"})
 	if code != exitConfigInvalid {

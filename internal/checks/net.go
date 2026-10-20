@@ -4,15 +4,14 @@ import (
 	"context"
 	"fmt"
 	"net"
-	"os"
 	"path/filepath"
-	"sermo/internal/hostfs"
 	"slices"
 	"strconv"
 	"strings"
 	"time"
 
 	"sermo/internal/cfgval"
+	"sermo/internal/hostfs"
 )
 
 // Link-state values reported and expected by net/icmp state checks. Exported so
@@ -289,7 +288,7 @@ func defaultNetSampler(iface string) (NetSample, error) {
 
 func netIdentityFromSysfs(iface, root string) NetIdentity {
 	dir := sysfsIfaceDir(root, iface)
-	if _, err := os.Stat(dir); err != nil {
+	if _, err := hostfs.Stat(dir); err != nil {
 		return NetIdentity{}
 	}
 	id := NetIdentity{
@@ -338,7 +337,7 @@ func sysfsIfaceDevtype(dir string) string {
 func InterfaceExists(iface string) bool {
 	ifi, err := net.InterfaceByName(iface)
 	if err != nil {
-		_, statErr := os.Stat(sysfsIfaceDir(SysfsNetClassPath, iface))
+		_, statErr := hostfs.Stat(sysfsIfaceDir(SysfsNetClassPath, iface))
 		return statErr == nil
 	}
 	return ifi != nil
@@ -348,7 +347,7 @@ func sampleNetFromSysfs(iface, root string) (NetSample, error) {
 	ifi, err := net.InterfaceByName(iface)
 	dir := sysfsIfaceDir(root, iface)
 	if err != nil {
-		if _, statErr := os.Stat(dir); statErr != nil {
+		if _, statErr := hostfs.Stat(dir); statErr != nil {
 			return NetSample{}, fmt.Errorf("interface %s: %w", iface, err)
 		}
 	}

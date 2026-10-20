@@ -20,7 +20,7 @@ import (
 func TestVersionCommand(t *testing.T) {
 	for _, arg := range []string{"version", "--version", "-V", "--json version"} {
 		var stdout bytes.Buffer
-		app := App{Env: func(string) string { return "" }, Stdout: &stdout, Stderr: &bytes.Buffer{}}
+		app := hermeticApp(t, App{Env: func(string) string { return "" }, Stdout: &stdout, Stderr: &bytes.Buffer{}})
 		if code := app.Run(context.Background(), strings.Fields(arg)); code != exitSuccess {
 			t.Fatalf("Run(%q) exit = %d, want %d", arg, code, exitSuccess)
 		}
@@ -106,7 +106,7 @@ func TestHelpTopics(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			var stdout, stderr bytes.Buffer
-			app := App{Env: func(string) string { return "" }, Stdout: &stdout, Stderr: &stderr}
+			app := hermeticApp(t, App{Env: func(string) string { return "" }, Stdout: &stdout, Stderr: &stderr})
 
 			code := app.Run(context.Background(), tc.args)
 			if code != tc.wantExit {
@@ -131,12 +131,12 @@ func TestHelpTopics(t *testing.T) {
 func TestBackendCommandPrintsDetectedBackend(t *testing.T) {
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	app := App{
+	app := hermeticApp(t, App{
 		Detector: fakeBackendDetector{detection: servicemgr.BackendSystemd},
 		Env:      func(string) string { return "" },
 		Stdout:   &stdout,
 		Stderr:   &stderr,
-	}
+	})
 
 	code := app.Run(context.Background(), []string{"backend"})
 	if code != exitSuccess {
@@ -149,11 +149,11 @@ func TestBackendCommandPrintsDetectedBackend(t *testing.T) {
 
 func TestBackendCommandJSON(t *testing.T) {
 	var stdout bytes.Buffer
-	app := App{
+	app := hermeticApp(t, App{
 		Detector: fakeBackendDetector{detection: servicemgr.BackendSystemd},
 		Env:      func(string) string { return "" },
 		Stdout:   &stdout,
-	}
+	})
 
 	code := app.Run(context.Background(), []string{"--json", "backend"})
 	if code != exitSuccess {
@@ -166,11 +166,11 @@ func TestBackendCommandJSON(t *testing.T) {
 
 func TestBackendDetectionFailureExitCode(t *testing.T) {
 	var stderr bytes.Buffer
-	app := App{
+	app := hermeticApp(t, App{
 		Detector: fakeBackendDetector{err: errors.New("no supported init backend detected")},
 		Env:      func(string) string { return "" },
 		Stderr:   &stderr,
-	}
+	})
 
 	code := app.Run(context.Background(), []string{"backend"})
 	if code != exitRuntimeError {
@@ -192,7 +192,7 @@ func TestActiveServiceCommandText(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			var stdout bytes.Buffer
-			app := statusApp(servicemgr.ServiceStatus{
+			app := statusApp(t, servicemgr.ServiceStatus{
 				Service: "mysql", Backend: servicemgr.BackendSystemd,
 				Unit: "mysql.service", Status: servicemgr.StatusActive,
 			}, nil, &stdout, nil)
@@ -210,7 +210,7 @@ func TestActiveServiceCommandText(t *testing.T) {
 
 func TestStatusUsesDaemonStateWhenAvailable(t *testing.T) {
 	var stdout bytes.Buffer
-	app := statusApp(servicemgr.ServiceStatus{
+	app := statusApp(t, servicemgr.ServiceStatus{
 		Service: "mysql", Backend: servicemgr.BackendSystemd,
 		Unit: "mysql.service", Status: servicemgr.StatusInactive,
 	}, nil, &stdout, nil)
@@ -229,7 +229,7 @@ func TestStatusUsesDaemonStateWhenAvailable(t *testing.T) {
 
 func TestStatusShowsDaemonRestartRequiredState(t *testing.T) {
 	var stdout bytes.Buffer
-	app := statusApp(servicemgr.ServiceStatus{
+	app := statusApp(t, servicemgr.ServiceStatus{
 		Service: "acpid", Backend: servicemgr.BackendSystemd,
 		Unit: "acpid.service", Status: servicemgr.StatusActive,
 	}, nil, &stdout, nil)
@@ -248,7 +248,7 @@ func TestStatusShowsDaemonRestartRequiredState(t *testing.T) {
 
 func TestStatusUsesRequestedServiceForDaemonState(t *testing.T) {
 	var stdout bytes.Buffer
-	app := statusApp(servicemgr.ServiceStatus{
+	app := statusApp(t, servicemgr.ServiceStatus{
 		Service: "sshd", Backend: servicemgr.BackendOpenRC,
 		Unit: "sshd", Status: servicemgr.StatusActive,
 	}, nil, &stdout, nil)
@@ -272,7 +272,7 @@ func TestStatusUsesRequestedServiceForDaemonState(t *testing.T) {
 
 func TestStatusCommandJSON(t *testing.T) {
 	var stdout bytes.Buffer
-	app := statusApp(servicemgr.ServiceStatus{
+	app := statusApp(t, servicemgr.ServiceStatus{
 		Service: "mysql", Backend: servicemgr.BackendSystemd,
 		Unit: "mysql.service", Status: servicemgr.StatusActive,
 	}, nil, &stdout, nil)
@@ -320,7 +320,7 @@ checks:
 name: rpc-mountd
 uses: rpc-mountd
 `)
-	cfg, err := config.Load(filepath.Join(root, "sermo.yml"), config.WithCatalogDirs(catalogDir))
+	cfg, err := loadTestConfig(t, filepath.Join(root, "sermo.yml"), config.WithCatalogDirs(catalogDir))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -329,7 +329,7 @@ uses: rpc-mountd
 	var stderr bytes.Buffer
 	var statusCalls []string
 	loadCalls := 0
-	app := App{
+	app := hermeticApp(t, App{
 		Detector: fakeBackendDetector{detection: servicemgr.BackendSystemd},
 		NewManager: fakeStatusManager(servicemgr.ServiceStatus{
 			Service: "rpc-mountd", Backend: servicemgr.BackendSystemd,
@@ -343,7 +343,7 @@ uses: rpc-mountd
 		Env:    func(string) string { return "" },
 		Stdout: &stdout,
 		Stderr: &stderr,
-	}
+	})
 
 	code := app.Run(context.Background(), []string{"status", "rpc-mountd"})
 	if code != exitSuccess {
@@ -392,8 +392,8 @@ func TestStatusFallsBackToConfiguredServiceUnit(t *testing.T) {
 	global := writeFallbackUnitConfig(t)
 	var stdout, stderr bytes.Buffer
 	var statusCalls []string
-	app := App{
-		LoadConfig: config.Load,
+	app := hermeticApp(t, App{
+		LoadConfig: testConfigLoader(t),
 		Detector:   fakeBackendDetector{detection: servicemgr.BackendSystemd},
 		NewManager: fakeStatusManager(servicemgr.ServiceStatus{
 			Service: "legacy", Backend: servicemgr.BackendSystemd,
@@ -403,7 +403,7 @@ func TestStatusFallsBackToConfiguredServiceUnit(t *testing.T) {
 		Env:    func(string) string { return "" },
 		Stdout: &stdout,
 		Stderr: &stderr,
-	}
+	})
 
 	code := app.Run(context.Background(), []string{"--config", global, "status", "legacy"})
 	if code != exitSuccess {
@@ -440,7 +440,7 @@ func TestSingleServiceCommandsRequireAService(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.command, func(t *testing.T) {
 			var stderr bytes.Buffer
-			app := App{Env: func(string) string { return "" }, Stdout: &bytes.Buffer{}, Stderr: &stderr}
+			app := hermeticApp(t, App{Env: func(string) string { return "" }, Stdout: &bytes.Buffer{}, Stderr: &stderr})
 
 			code := app.Run(context.Background(), []string{tt.command})
 			if code != exitUsage {
@@ -459,7 +459,7 @@ func TestSingleServiceCommandsRequireAService(t *testing.T) {
 
 func TestIsActiveInactiveExitOne(t *testing.T) {
 	var stdout bytes.Buffer
-	app := statusApp(servicemgr.ServiceStatus{
+	app := statusApp(t, servicemgr.ServiceStatus{
 		Service: "mysql", Backend: servicemgr.BackendSystemd,
 		Unit: "mysql.service", Status: servicemgr.StatusInactive,
 	}, nil, &stdout, nil)
@@ -472,7 +472,7 @@ func TestIsActiveInactiveExitOne(t *testing.T) {
 
 func TestIsActiveQuietSuppressesOutput(t *testing.T) {
 	var stdout bytes.Buffer
-	app := statusApp(servicemgr.ServiceStatus{
+	app := statusApp(t, servicemgr.ServiceStatus{
 		Service: "mysql", Backend: servicemgr.BackendSystemd,
 		Unit: "mysql.service", Status: servicemgr.StatusInactive,
 	}, nil, &stdout, nil)
@@ -505,11 +505,11 @@ func TestIsActiveWarnsWhenExistingConfigDoesNotLoad(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			var stderr bytes.Buffer
-			app := statusApp(servicemgr.ServiceStatus{
+			app := statusApp(t, servicemgr.ServiceStatus{
 				Service: "mysql", Backend: servicemgr.BackendSystemd,
 				Unit: "mysql.service", Status: servicemgr.StatusActive,
 			}, nil, nil, &stderr)
-			app.LoadConfig = config.Load
+			app.LoadConfig = testConfigLoader(t)
 			if code := app.Run(context.Background(), tc.args); code != exitSuccess {
 				t.Fatalf("Run() exit = %d, want %d", code, exitSuccess)
 			}
@@ -525,7 +525,7 @@ func TestIsActiveWarnsWhenExistingConfigDoesNotLoad(t *testing.T) {
 
 func TestStatusQueryErrorExitTwo(t *testing.T) {
 	var stderr bytes.Buffer
-	app := statusApp(servicemgr.ServiceStatus{}, errors.New("boom"), nil, &stderr)
+	app := statusApp(t, servicemgr.ServiceStatus{}, errors.New("boom"), nil, &stderr)
 
 	code := app.Run(context.Background(), []string{"status", "mysql"})
 	if code != exitRuntimeError {
@@ -536,14 +536,15 @@ func TestStatusQueryErrorExitTwo(t *testing.T) {
 	}
 }
 
-func statusApp(status servicemgr.ServiceStatus, statusErr error, stdout, stderr *bytes.Buffer) App {
+func statusApp(t *testing.T, status servicemgr.ServiceStatus, statusErr error, stdout, stderr *bytes.Buffer) App {
+	t.Helper()
 	if stdout == nil {
 		stdout = &bytes.Buffer{}
 	}
 	if stderr == nil {
 		stderr = &bytes.Buffer{}
 	}
-	return App{
+	return hermeticApp(t, App{
 		Detector: fakeBackendDetector{detection: status.Backend},
 		NewManager: func(servicemgr.Backend) (servicemgr.Manager, error) {
 			return fakeManager{status: status, err: statusErr}, nil
@@ -554,7 +555,7 @@ func statusApp(status servicemgr.ServiceStatus, statusErr error, stdout, stderr 
 		Env:    func(string) string { return "" },
 		Stdout: stdout,
 		Stderr: stderr,
-	}
+	})
 }
 
 type statusUnitRunner struct {
@@ -659,8 +660,8 @@ func TestDaemonReloadNoPid(t *testing.T) {
 	}
 
 	var stderr bytes.Buffer
-	app := App{
-		LoadConfig: config.Load,
+	app := hermeticApp(t, App{
+		LoadConfig: testConfigLoader(t),
 		Stderr:     &stderr,
 		Stdout:     &bytes.Buffer{},
 		// Hermetic discovery: no absolute fallbacks and a name probe that finds
@@ -668,7 +669,7 @@ func TestDaemonReloadNoPid(t *testing.T) {
 		// up a sermod daemon that happens to run on the host.
 		FindPID:          func(string) ([]int, error) { return nil, nil },
 		pidfileFallbacks: []string{},
-	}
+	})
 
 	code := app.Run(context.Background(), []string{"--config", cfgPath, "daemon", "reload"})
 	if code != exitRuntimeError {
@@ -705,7 +706,7 @@ func TestEventsList(t *testing.T) {
 		{Time: "2026-06-13T09:58:00Z", App: "salt-minion", Kind: "firing", Message: "error: cancelled"},
 		{Time: "2026-06-13T09:55:00Z", Service: "web", Kind: "recovered", Rule: "alert-if-memory-high", Message: "rule condition recovered"},
 	}
-	app := App{
+	app := hermeticApp(t, App{
 		LoadConfig: func(string, ...config.Option) (*config.Config, error) { loadCalls++; return cfg, nil },
 		FetchEvents: func(ctx context.Context, loaded *config.Config, service string, limit int) ([]event, error) {
 			if loaded != cfg {
@@ -718,7 +719,7 @@ func TestEventsList(t *testing.T) {
 		Stdout: &stdout,
 		Stderr: &stderr,
 		Stdin:  strings.NewReader(""),
-	}
+	})
 
 	// global list
 	code := app.runEvents(context.Background(), options{args: nil, json: false})
@@ -775,7 +776,7 @@ func TestEventActivityClear(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			var stdout, stderr bytes.Buffer
 			called := false
-			app := App{
+			app := hermeticApp(t, App{
 				Env:        func(string) string { return "" },
 				LoadConfig: func(string, ...config.Option) (*config.Config, error) { return &config.Config{}, nil },
 				PruneEvents: func(_ context.Context, _ *config.Config, before time.Time) (int, error) {
@@ -788,7 +789,7 @@ func TestEventActivityClear(t *testing.T) {
 				Stdout: &stdout,
 				Stderr: &stderr,
 				Stdin:  strings.NewReader(""),
-			}
+			})
 			code := app.Run(context.Background(), tc.args)
 			if code != exitSuccess {
 				t.Fatalf("%v exit=%d stderr=%s", tc.args, code, stderr.String())
@@ -805,7 +806,7 @@ func TestEventActivityClear(t *testing.T) {
 
 func TestActivityRequiresClear(t *testing.T) {
 	var stderr bytes.Buffer
-	app := App{Env: func(string) string { return "" }, Stdout: &bytes.Buffer{}, Stderr: &stderr}
+	app := hermeticApp(t, App{Env: func(string) string { return "" }, Stdout: &bytes.Buffer{}, Stderr: &stderr})
 	code := app.Run(context.Background(), []string{"activity"})
 	if code != exitUsage {
 		t.Fatalf("activity without clear exit=%d, want %d", code, exitUsage)

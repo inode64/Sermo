@@ -2,12 +2,15 @@ package operation
 
 import (
 	"context"
+	"maps"
 	"slices"
+	"strings"
 	"syscall"
 	"testing"
 	"time"
 
 	"sermo/internal/config"
+	"sermo/internal/locks"
 	"sermo/internal/process"
 	"sermo/internal/servicemgr"
 )
@@ -44,7 +47,7 @@ func TestRestartTerminatesUnitCgroupResiduals(t *testing.T) {
 			h.discoverSteps = [][]process.Process{{tc.residual}, after}
 			h.killPolicy = process.KillPolicy{
 				ForceKill: tc.forceKill,
-				Member:    func(p process.Process) bool { return servicemgr.CgroupOwnedBy(p.Cgroup, "mysqld") },
+				Member:    UnitCgroupMember("mysqld"),
 			}
 			signaler := &pidSignaler{}
 			h.reaper = process.Reaper{Signaler: signaler, ResolveUser: rootOnlyResolveUser}
@@ -129,7 +132,7 @@ func TestRestartClearsTrackedStrayStillInTheUnitCgroup(t *testing.T) {
 			h.reaper = process.Reaper{Signaler: signaler, ResolveUser: rootOnlyResolveUser}
 			h.killPolicy = process.KillPolicy{
 				GracefulTimeout: grace, TermTimeout: 5 * time.Second,
-				Member: func(p process.Process) bool { return servicemgr.CgroupOwnedBy(p.Cgroup, "mysqld") },
+				Member: UnitCgroupMember("mysqld"),
 			}
 			e := h.engine()
 			e.Lifecycle.ProcessMode = config.ServiceProcessResident
@@ -154,6 +157,106 @@ func TestRestartClearsTrackedStrayStillInTheUnitCgroup(t *testing.T) {
 			}
 			if started := h.mgr.did("start mysqld"); started != (tc.want == ResultOK) {
 				t.Fatalf("started = %v, calls = %v", started, h.mgr.calls)
+			}
+		})
+	}
+}
+
+// keepChildrenTable is the process table of a daemon whose session child
+// outlives it in the unit's cgroup: the daemon goes with the stop (the child
+// reparents to PID 1), a replacement appears with the start, and the child exits
+// only when it is signalled.
+type keepChildrenTable struct {
+	mgr                          *fakeManager
+	daemon, session, replacement process.Identity
+	sessionGone                  bool
+}
+
+func (r *keepChildrenTable) current() map[int]process.Identity {
+	ids := map[int]process.Identity{}
+	started := slices.ContainsFunc(r.mgr.calls, func(call string) bool { return strings.HasPrefix(call, "start ") })
+	switch {
+	case started:
+		ids[r.replacement.PID] = r.replacement
+	case !r.mgr.stopped:
+		ids[r.daemon.PID] = r.daemon
+	}
+	if !r.sessionGone {
+		session := r.session
+		if r.mgr.stopped || started {
+			session.PPID = 1
+		}
+		ids[session.PID] = session
+	}
+	return ids
+}
+
+func (r *keepChildrenTable) PIDs() ([]int, error) { return slices.Collect(maps.Keys(r.current())), nil }
+
+func (r *keepChildrenTable) Identity(pid int) (process.Identity, bool) {
+	id, ok := r.current()[pid]
+	return id, ok
+}
+
+// stop_policy.keep_children reaches discovery through New: with it the session
+// child that outlives its daemon in the unit's cgroup is kept and never
+// signalled; without it the same child is a residual of the unit's own cgroup,
+// terminated before the start.
+func TestNewKeepChildrenReachesDiscovery(t *testing.T) {
+	const cgroup = "0::/system.slice/sshd.service"
+	daemon := process.Identity{PID: 100, PPID: 1, UID: 0, StartTicks: 10, StartTicksOK: true, Exe: "/opt/sermo-test/sshd", ExeOK: true, Cgroup: cgroup, State: "S"}
+	session := process.Identity{PID: 200, PPID: 100, UID: 0, StartTicks: 20, StartTicksOK: true, Exe: "/opt/sermo-test/sshd-session", ExeOK: true, Cgroup: cgroup, State: "S"}
+	replacement := daemon
+	replacement.PID, replacement.StartTicks = 300, 30
+	for _, tc := range []struct {
+		name        string
+		keep        bool
+		wantSignals []pidSignal
+	}{
+		{name: "keep_children keeps the session", keep: true},
+		{name: "default terminates the unit-cgroup residual", wantSignals: []pidSignal{{pid: 200, sig: syscall.SIGTERM}}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			locker := locks.NewOperationLocker(locks.RuntimeOpsDir(dir))
+			mgr := &fakeManager{status: servicemgr.StatusActive}
+			table := &keepChildrenTable{mgr: mgr, daemon: daemon, session: session, replacement: replacement}
+			engine := New(Config{
+				Service: "sshd",
+				Unit:    "sshd",
+				Backend: string(servicemgr.BackendSystemd),
+				Tree: map[string]any{
+					process.SectionStopPolicy: map[string]any{process.StopPolicyKeyKeepChildren: tc.keep},
+					process.SectionProcesses: map[string]any{
+						"main": map[string]any{process.SelectorKeyExe: "/opt/sermo-test/sshd", process.SelectorKeyUser: "root"},
+					},
+				},
+				Manager: mgr,
+				Locker:  &locker,
+				Scanner: locks.NewScanner(locks.RuntimeLocksDir(dir)),
+				Discoverer: process.Discoverer{
+					Reader:      table,
+					ResolveUser: rootOnlyResolveUser,
+					BackendPIDs: func() []int { return slices.Sorted(maps.Keys(table.current())) },
+				},
+				Sleep: func(time.Duration) {},
+			})
+			signaler := &pidSignaler{onSignal: func(pid int, _ syscall.Signal) {
+				if pid == session.PID {
+					table.sessionGone = true
+				}
+			}}
+			engine.Reaper.Signaler = signaler
+
+			res := engine.Restart(context.Background())
+			if res.Status != ResultOK {
+				t.Fatalf("status = %q (%s), want ok", res.Status, res.Message)
+			}
+			if !slices.Equal(signaler.calls, tc.wantSignals) {
+				t.Fatalf("signals = %v, want %v", signaler.calls, tc.wantSignals)
+			}
+			if table.sessionGone == tc.keep {
+				t.Fatalf("session gone = %v with keep_children %v", table.sessionGone, tc.keep)
 			}
 		})
 	}

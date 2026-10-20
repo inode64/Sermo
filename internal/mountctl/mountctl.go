@@ -11,7 +11,6 @@ import (
 	"maps"
 	"os"
 	"path/filepath"
-	"sermo/internal/hostfs"
 	"slices"
 	"strings"
 	"time"
@@ -20,6 +19,7 @@ import (
 	"sermo/internal/checks"
 	"sermo/internal/config"
 	"sermo/internal/execx"
+	"sermo/internal/hostfs"
 	"sermo/internal/locks"
 	"sermo/internal/mounts"
 	"sermo/internal/process"
@@ -67,13 +67,16 @@ const (
 	// ResultOK is the Result.Status value for a successful mount/umount action.
 	ResultOK = "ok"
 
+	// MessageKillSelectorRequired refuses a blocker kill on a mount without its
+	// own kill_only_if selector.
+	MessageKillSelectorRequired = "kill blockers requires " + config.StorageKeyMount + "." + config.MountKeyStopPolicy + "." + process.StopPolicyKeyKillOnlyIf
+
 	mountStateActive   = "active"
 	mountStateInactive = "inactive"
 
 	mountMessageAlreadyUnmounted      = "already unmounted"
 	mountMessageBusy                  = "mount is busy"
 	mountMessageForceUnmounted        = "force unmounted"
-	mountMessageKillSelectorRequired  = "kill blockers requires mount.stop_policy.kill_only_if"
 	mountMessageLazyUnmounted         = "lazy unmounted"
 	mountMessageMounted               = "mounted"
 	mountMessageRemounted             = "remounted"
@@ -171,6 +174,9 @@ type Controller struct {
 	Now            func() time.Time
 	CommandTimeout time.Duration
 	LockTTL        time.Duration
+	// OnLockReclaimed, when non-nil, audits a stale mount operation lock this
+	// controller reclaimed, with the reason it was stale.
+	OnLockReclaimed func(spec Spec, reason string)
 	// Unmount detaches the mount at a path with umount2(2) flags; nil uses the
 	// system call. Remount calls it directly: umount(8) canonicalizes the path
 	// and its NFS helper talks to the server, so on a hung mount it hangs too.
@@ -234,7 +240,7 @@ func SpecFromStorageTree(name string, tree map[string]any) Spec {
 	}
 	if sp, ok := mount[config.MountKeyStopPolicy].(map[string]any); ok {
 		if koi, ok := sp[config.StopPolicyKeyKillOnlyIf].(map[string]any); ok {
-			spec.KillOnlyIf = process.NewKillSelector(cfgval.StringList(koi[config.StopPolicyKeyUsers]), cfgval.StringList(koi[config.StopPolicyKeyExeAny]))
+			spec.KillOnlyIf = process.KillSelectorFromConfig(koi)
 		}
 	}
 	return spec
@@ -444,6 +450,9 @@ func (c Controller) withLock(spec Spec, fn func() (Result, error)) (Result, erro
 		ttl = defaultLockTTL
 	}
 	locker := locks.NewOperationLocker(mountOpsDir(c.runtime()))
+	if c.OnLockReclaimed != nil {
+		locker.OnReclaim = func(_, reason string) { c.OnLockReclaimed(spec, reason) }
+	}
 	handle, err := locker.Acquire(stateID(spec), ttl)
 	if err != nil {
 		return Result{}, fmt.Errorf("acquire mount operation lock for %s: %w", spec.Path, err)
@@ -489,7 +498,7 @@ func (c Controller) unmount(ctx context.Context, spec Spec, opts ReleaseOptions)
 		result.Message = fmt.Sprintf("mount is busy (could not enumerate blockers: %s)", execx.FormatContextOrError(derr, c.commandTimeout()))
 	}
 	if opts.KillBlockers && !spec.KillOnlyIf.Configured() {
-		result.Message = mountMessageKillSelectorRequired
+		result.Message = MessageKillSelectorRequired
 		return result, fmt.Errorf("%s", result.Message)
 	}
 	if opts.KillBlockers && len(blockers) > 0 {
@@ -921,7 +930,7 @@ func pidUsesMounts(ctx context.Context, pid int, mountPaths []string) ([]string,
 		}
 	}
 	fdDir := process.PIDPath(pid, process.ProcFileFD)
-	entries, err := os.ReadDir(fdDir)
+	entries, err := hostfs.ReadDir(fdDir)
 	if err == nil {
 		for _, entry := range entries {
 			if err := linkMountMatches(ctx, filepath.Join(fdDir, entry.Name()), mountPaths, matches); err != nil {
@@ -936,7 +945,7 @@ func linkMountMatches(ctx context.Context, link string, mountPaths []string, mat
 	if err := ctx.Err(); err != nil {
 		return fmt.Errorf("inspect mount link context: %w", err)
 	}
-	target, err := os.Readlink(link)
+	target, err := hostfs.Readlink(link)
 	if err == nil && filepath.IsAbs(target) {
 		target = process.TrimDeletedSuffix(target)
 		cleanTarget := filepath.Clean(target)

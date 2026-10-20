@@ -56,7 +56,7 @@ func (b *WebBackend) KillWatchProcess(ctx context.Context, name string, req web.
 		return b.unownedKillRefusal(name, err.Error())
 	}
 	started := false
-	ok, message := runLockedControl(ctx, b.cfg.Global.RuntimeDir(), unownedKillLockPrefix+name, "watch "+name, b.operationTimeout, func(opCtx context.Context) (bool, string) {
+	ok, message := runLockedControl(ctx, b.cfg.Global.RuntimeDir(), unownedKillLockPrefix+name, "watch "+name, b.operationTimeout, watchLockReclaimEvent(b.emit, name), func(opCtx context.Context) (bool, string) {
 		started = true
 		result := b.killUnownedProcess(opCtx, w, classifier, req)
 		return result.OK, result.Message

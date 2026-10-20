@@ -153,6 +153,28 @@ func TestAcquireReclaimsStale(t *testing.T) {
 	}
 }
 
+// A reclaim is reported only once this acquisition holds the lock: an audit
+// that takes its time must not leave the path free for another acquirer.
+func TestAcquireReportsReclaimWhileHoldingTheLock(t *testing.T) {
+	l := opLocker(t, fakeProc{}, nil)
+	writeLock(t, l.Dir, "mysql.lock", lockFile{Service: "mysql", OwnerPID: 100, OwnerStartTicks: 1, ExpiresAt: fixedNow.Add(-time.Hour)})
+	path := filepath.Join(l.Dir, "mysql.lock")
+	reported := 0
+	l.OnReclaim = func(service, reason string) {
+		reported++
+		lf, err := readLockFile(path)
+		if err != nil || lf.OwnerPID != 5000 {
+			t.Errorf("reclaim of %s (%s) reported while the lock is %+v, %v; want it held by us", service, reason, lf, err)
+		}
+	}
+	if _, err := l.Acquire("mysql", time.Hour); err != nil {
+		t.Fatalf("Acquire() error = %v", err)
+	}
+	if reported != 1 {
+		t.Fatalf("reclaims reported = %d, want 1", reported)
+	}
+}
+
 func TestReleaseRemovesOwnLock(t *testing.T) {
 	l := opLocker(t, fakeProc{}, nil)
 	handle, err := l.Acquire("mysql", time.Hour)

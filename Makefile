@@ -344,9 +344,10 @@ fuzz:
 	@echo "fuzz config (LoadGlobal, LoadDocument) $(FUZZ_TIME)"
 	go test -run '^$$' -fuzz '^FuzzLoadGlobal$$' -fuzztime=$(FUZZ_TIME) ./internal/config
 	go test -run '^$$' -fuzz '^FuzzLoadDocument$$' -fuzztime=$(FUZZ_TIME) ./internal/config
-	@echo "fuzz process (ParseSelectors, ParseStopPolicy, ParseSignal, ParseKillSignal) $(FUZZ_TIME)"
+	@echo "fuzz process (ParseSelectors, ParseStopPolicy, ParseKillOnlyIf, ParseSignal, ParseKillSignal) $(FUZZ_TIME)"
 	go test -run '^$$' -fuzz '^FuzzParseSelectors$$' -fuzztime=$(FUZZ_TIME) ./internal/process
 	go test -run '^$$' -fuzz '^FuzzParseStopPolicy$$' -fuzztime=$(FUZZ_TIME) ./internal/process
+	go test -run '^$$' -fuzz '^FuzzParseKillOnlyIf$$' -fuzztime=$(FUZZ_TIME) ./internal/process
 	go test -run '^$$' -fuzz '^FuzzParseSignal$$' -fuzztime=$(FUZZ_TIME) ./internal/process
 	go test -run '^$$' -fuzz '^FuzzParseKillSignal$$' -fuzztime=$(FUZZ_TIME) ./internal/process
 	@echo "fuzz rules (ParseRules) $(FUZZ_TIME)"

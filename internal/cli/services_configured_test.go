@@ -42,9 +42,10 @@ func (m lockedStatusRecorder) Status(ctx context.Context, unit string) (servicem
 // The runner knows no unit: without it unit resolution runs the host's real
 // `systemctl cat`, and a host that ships nginx.service (GitHub's runners do)
 // resolves it as a known unit and adds a second status query.
-func configuredServicesTestApp(load func(string, ...config.Option) (*config.Config, error), stdout, stderr *bytes.Buffer, statusCalls *[]string) App {
+func configuredServicesTestApp(t *testing.T, load func(string, ...config.Option) (*config.Config, error), stdout, stderr *bytes.Buffer, statusCalls *[]string) App {
+	t.Helper()
 	mu := &sync.Mutex{}
-	return App{
+	return hermeticApp(t, App{
 		Runner:   statusUnitRunner{},
 		Detector: fakeBackendDetector{detection: servicemgr.BackendSystemd},
 		NewManager: func(servicemgr.Backend) (servicemgr.Manager, error) {
@@ -54,7 +55,7 @@ func configuredServicesTestApp(load func(string, ...config.Option) (*config.Conf
 		Stdout:     stdout,
 		Stderr:     stderr,
 		LoadConfig: load,
-	}
+	})
 }
 
 func writeConfiguredServices(t *testing.T, servicesDir string) {
@@ -80,7 +81,7 @@ func TestConfiguredServicesLocal(t *testing.T) {
 
 	var stdout, stderr bytes.Buffer
 	var statusCalls []string
-	app := configuredServicesTestApp(testLoadConfigWithCatalog(filepath.Join(root, "catalog")), &stdout, &stderr, &statusCalls)
+	app := configuredServicesTestApp(t, testLoadConfigWithCatalog(filepath.Join(root, "catalog")), &stdout, &stderr, &statusCalls)
 	if code := app.Run(context.Background(), []string{"--config", global, "services"}); code != exitSuccess {
 		t.Fatalf("services exit = %d, stderr = %s", code, stderr.String())
 	}
@@ -165,7 +166,7 @@ defaults:
 
 	var stdout, stderr bytes.Buffer
 	var statusCalls []string
-	app := configuredServicesTestApp(config.Load, &stdout, &stderr, &statusCalls)
+	app := configuredServicesTestApp(t, testConfigLoader(t), &stdout, &stderr, &statusCalls)
 	if code := app.Run(context.Background(), []string{"--config", global, "--json", "services"}); code != exitSuccess {
 		t.Fatalf("services exit = %d, stderr = %s", code, stderr.String())
 	}
@@ -197,7 +198,7 @@ func TestConfiguredServicesNotifySendsReport(t *testing.T) {
 	root, global := writeCatalogServiceConfig(t)
 	notifier := &fakeReportNotifier{name: "ops"}
 	var stdout, stderr bytes.Buffer
-	app := configuredServicesTestApp(testLoadConfigWithCatalog(filepath.Join(root, "catalog")), &stdout, &stderr, nil)
+	app := configuredServicesTestApp(t, testLoadConfigWithCatalog(filepath.Join(root, "catalog")), &stdout, &stderr, nil)
 	app.BuildReportNotifiers = func(*config.Config) (map[string]notify.Notifier, []string) {
 		return map[string]notify.Notifier{"ops": notifier}, nil
 	}
@@ -247,7 +248,7 @@ func TestConfiguredServicesNoneConfigured(t *testing.T) {
 		t.Fatal(err)
 	}
 	var stdout bytes.Buffer
-	app := configuredServicesTestApp(testLoadConfigWithCatalog(filepath.Join(root, "catalog")), &stdout, &bytes.Buffer{}, nil)
+	app := configuredServicesTestApp(t, testLoadConfigWithCatalog(filepath.Join(root, "catalog")), &stdout, &bytes.Buffer{}, nil)
 	if code := app.Run(context.Background(), []string{"--config", global, "services"}); code != exitSuccess {
 		t.Fatalf("services exit = %d", code)
 	}
@@ -258,7 +259,7 @@ func TestConfiguredServicesNoneConfigured(t *testing.T) {
 
 func TestConfiguredServicesApplyPersistedMonitorState(t *testing.T) {
 	root, global := writeCatalogServiceConfig(t)
-	app := monitorTestApp(root, nil)
+	app := monitorTestApp(t, root, nil)
 	if code := app.Run(context.Background(), []string{"--config", global, "unmonitor", "web"}); code != exitSuccess {
 		t.Fatalf("unmonitor exit = %d", code)
 	}

@@ -170,7 +170,7 @@ defaults: { policy: { cooldown: 5m } }
 `, servicesDir), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	cfg, err := Load(global, WithCatalogDirs(filepath.Dir(catalogDir)))
+	cfg, err := loadConfig(t, global, WithCatalogDirs(filepath.Dir(catalogDir)))
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -251,7 +251,7 @@ defaults: { policy: { cooldown: 5m } }
 `, servicesDir), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	cfg, err := Load(global, WithCatalogDirs(filepath.Dir(catalogDir)))
+	cfg, err := loadConfig(t, global, WithCatalogDirs(filepath.Dir(catalogDir)))
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -327,7 +327,7 @@ defaults: { policy: { cooldown: 5m } }
 `, servicesDir), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	cfg, err := Load(global, WithCatalogDirs(filepath.Dir(catalogDir)))
+	cfg, err := loadConfig(t, global, WithCatalogDirs(filepath.Dir(catalogDir)))
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}

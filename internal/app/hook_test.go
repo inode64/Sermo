@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"slices"
 	"testing"
 	"time"
 
@@ -99,26 +100,46 @@ func TestHookRunnerRejectsEmptyCommand(t *testing.T) {
 }
 
 func TestOSHookRunnerExecutesViaExecx(t *testing.T) {
-	// Success path using real command (exercises OSHookRunner + execx.RunEnv + env merge)
-	spec := HookSpec{Command: []string{"/bin/true"}, Timeout: time.Second}
-	err := spec.Run(context.Background(), OSHookRunner{}, map[string]string{"SERMO_WATCH": "test-watch"})
-	if err != nil {
-		t.Fatalf("OSHookRunner with /bin/true failed: %v", err)
+	// The hook runs through execx with its argv, the merged environment and its
+	// exit status asserted; a scripted runner stands in for the processes.
+	fake := &execxtest.Runner{ByName: map[string]execx.Result{
+		"/usr/local/bin/ok":   {ExitCode: 0},
+		"/usr/local/bin/fail": {ExitCode: 1},
+	}}
+	spec := HookSpec{Command: []string{"/usr/local/bin/ok", "--now"}, Timeout: time.Second}
+	if err := spec.Run(context.Background(), OSHookRunner{Runner: fake}, map[string]string{"SERMO_WATCH": "test-watch"}); err != nil {
+		t.Fatalf("successful hook failed: %v", err)
+	}
+	calls := fake.Calls()
+	if len(calls) != 1 || calls[0].Line() != "/usr/local/bin/ok --now" || !slices.Contains(calls[0].Env, "SERMO_WATCH=test-watch") {
+		t.Fatalf("calls = %+v, want the argv with SERMO_WATCH in its environment", calls)
 	}
 
-	// Failure path (non-zero exit should surface as error)
-	spec = HookSpec{Command: []string{"/bin/false"}, Timeout: time.Second}
-	err = spec.Run(context.Background(), OSHookRunner{}, nil)
-	if err == nil {
-		t.Fatal("OSHookRunner with /bin/false should have returned error")
+	// A non-zero exit surfaces as an error.
+	spec = HookSpec{Command: []string{"/usr/local/bin/fail"}, Timeout: time.Second}
+	if err := spec.Run(context.Background(), OSHookRunner{Runner: fake}, nil); err == nil {
+		t.Fatal("hook exiting 1 should have returned an error")
 	}
 }
 
+// hangingRunner blocks every command until its context ends, as a hung hook
+// would, and reports the cancellation the way the real runner does.
+type hangingRunner struct{}
+
+func (hangingRunner) Run(ctx context.Context, _ string, _ ...string) (execx.Result, error) {
+	<-ctx.Done()
+	return execx.Result{ExitCode: execx.ExitCodeRunFailure}, ctx.Err()
+}
+
+func (r hangingRunner) RunEnv(ctx context.Context, _ []string, name string, args ...string) (execx.Result, error) {
+	return r.Run(ctx, name, args...)
+}
+
 func TestOSHookRunnerRespectsTimeout(t *testing.T) {
-	// Command that takes too long should be killed by the timeout in RunHook / execx
-	spec := HookSpec{Command: []string{"sleep", "2"}, Timeout: 50 * time.Millisecond}
+	// A hook that never returns is cut off by its timeout.
+	spec := HookSpec{Command: []string{"/usr/local/bin/hang"}, Timeout: 50 * time.Millisecond}
 	start := time.Now()
-	err := spec.Run(context.Background(), OSHookRunner{}, nil)
+	err := spec.Run(context.Background(), OSHookRunner{Runner: hangingRunner{}}, nil)
 	elapsed := time.Since(start)
 	if err == nil {
 		t.Fatal("expected timeout error from long-running hook")

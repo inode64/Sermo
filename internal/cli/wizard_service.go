@@ -9,9 +9,7 @@ import (
 	"io"
 	"maps"
 	"net"
-	"os"
 	"path/filepath"
-	"sermo/internal/hostfs"
 	"slices"
 	"strconv"
 	"strings"
@@ -22,6 +20,7 @@ import (
 	"sermo/internal/config"
 	"sermo/internal/dockerctl"
 	"sermo/internal/execx"
+	"sermo/internal/hostfs"
 	"sermo/internal/procnet"
 	"sermo/internal/servicemgr"
 	"sermo/internal/strutil"
@@ -178,7 +177,7 @@ func resolveWizardServiceUnit(ctx context.Context, resolver servicemgr.UnitResol
 		if err != nil {
 			continue
 		}
-		status := serviceUnitStatus(ctx, manager, unit)
+		status := serviceUnitStatus(ctx, manager, unit, resolver.Timeout)
 		if firstUnit == "" {
 			firstUnit, firstStatus = unit, status
 		}
@@ -192,10 +191,14 @@ func resolveWizardServiceUnit(ctx context.Context, resolver servicemgr.UnitResol
 	return "", servicemgr.StatusUnknown, errors.New("resolve service unit: no candidate is installed")
 }
 
-func serviceUnitStatus(ctx context.Context, manager servicemgr.Manager, unit string) servicemgr.Status {
+// serviceUnitStatus queries unit's state under timeout (the probe default when
+// unset), so one hung backend query cannot stall the wizard.
+func serviceUnitStatus(ctx context.Context, manager servicemgr.Manager, unit string, timeout time.Duration) servicemgr.Status {
 	if manager == nil {
 		return servicemgr.StatusUnknown
 	}
+	ctx, cancel := context.WithTimeout(ctx, cmp.Or(timeout, defaultProbeCommandTimeout))
+	defer cancel()
 	status, err := manager.Status(ctx, unit)
 	if err != nil {
 		return servicemgr.StatusUnknown
@@ -411,7 +414,7 @@ func specificListenerHost(hosts []string) (string, bool) {
 }
 
 func pathExists(p string) bool {
-	_, err := os.Stat(p)
+	_, err := hostfs.StatTarget(p)
 	return err == nil
 }
 

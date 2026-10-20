@@ -90,6 +90,31 @@ func TestReadHostFiles(t *testing.T) {
 	}
 }
 
+// Stat follows a final symlink and Lstat describes the link itself; a missing
+// file reports the file system's own not-exist error.
+func TestStatAndLstat(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "file")
+	if err := os.WriteFile(path, []byte("data"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(dir, "link")
+	if err := os.Symlink(path, link); err != nil {
+		t.Fatal(err)
+	}
+	if info, err := Stat(link); err != nil || !info.Mode().IsRegular() || info.Size() != 4 {
+		t.Fatalf("Stat(link) = %v, %v; want the regular target", info, err)
+	}
+	if info, err := Lstat(link); err != nil || info.Mode()&os.ModeSymlink == 0 {
+		t.Fatalf("Lstat(link) = %v, %v; want the symlink", info, err)
+	}
+	for name, stat := range map[string]func(string) (os.FileInfo, error){"Stat": Stat, "Lstat": Lstat} {
+		if _, err := stat(filepath.Join(dir, "missing")); !errors.Is(err, os.ErrNotExist) || errors.Is(err, ErrPath) {
+			t.Fatalf("%s(missing) = %v, want the file system's not-exist error", name, err)
+		}
+	}
+}
+
 // Every entry point must reject unsafe syntax before accessing the filesystem.
 // The target exists so a missing-file error cannot hide a missing check call.
 func TestHostOperationsRejectUnsafePaths(t *testing.T) {
@@ -119,6 +144,8 @@ func TestHostOperationsRejectUnsafePaths(t *testing.T) {
 			}
 			return err
 		}},
+		{name: "Stat", run: func(path string) error { _, err := Stat(path); return err }},
+		{name: "Lstat", run: func(path string) error { _, err := Lstat(path); return err }},
 	}
 	paths := []struct {
 		name string

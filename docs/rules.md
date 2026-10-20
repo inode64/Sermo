@@ -215,7 +215,8 @@ failure; the exit code and matchers stay the verdict. The same holds for the
 
 The same `expect_exit` / `expect_stdout` / `expect_stderr` fields are available
 on a watch hook (`then.hook`) to validate the hook command's result, but
-`then.hook` does not use `user`. A single-check watch may also declare
+`then.hook` does not use `user`. A hook's `timeout` is optional: without one it
+gets `engine.default_timeout`, so no hook command runs unbounded. A single-check watch may also declare
 `then.recover_hook` with the same shape: it runs **once on the failed-to-ok
 edge** — when a firing watch stops firing — never while healthy and never per
 healthy cycle, with the same environment as `then.hook` plus

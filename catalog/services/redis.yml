@@ -15,7 +15,10 @@ variables:
   user: redis
   host: 127.0.0.1
   port: 6379
+  # alert-if-maxmemory-near-limit (opt-in) warns at or above this share of
+  # maxmemory and escalates to error past the second one.
   maxmemory_used_limit: 90
+  maxmemory_used_error_limit: 98
   # alert-if-connections-near-limit warns while client connections stay at
   # or above this share of maxclients, and escalates to error past the second
   # one. At maxclients the server answers "max number of clients reached":
@@ -167,6 +170,8 @@ watches:
       severity: warning
       expect:
         maxmemory_used_pct: { op: "<", value: "${maxmemory_used_limit}" }
+      levels:
+        error: { expect: { maxmemory_used_pct: { op: "<", value: "${maxmemory_used_error_limit}" } } }
     for:
       duration: 5m
     then:

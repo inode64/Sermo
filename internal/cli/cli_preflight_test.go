@@ -12,7 +12,6 @@ import (
 
 	appcore "sermo/internal/app"
 	"sermo/internal/checks"
-	"sermo/internal/config"
 	"sermo/internal/operation"
 	"sermo/internal/servicemgr"
 	"sermo/internal/severity"
@@ -52,7 +51,7 @@ func TestPreflightPassesWithOptionalWarning(t *testing.T) {
 	global := writePreflightConfig(t, bin)
 
 	var stdout bytes.Buffer
-	app := App{Env: func(string) string { return "" }, Stdout: &stdout, Stderr: &bytes.Buffer{}}
+	app := hermeticApp(t, App{Env: func(string) string { return "" }, Stdout: &stdout, Stderr: &bytes.Buffer{}})
 	code := app.Run(context.Background(), []string{"--config", global, "preflight", "apache-main"})
 	if code != exitSuccess {
 		t.Fatalf("Run() exit = %d, want %d (required passed); out=%s", code, exitSuccess, stdout.String())
@@ -71,7 +70,7 @@ func TestPreflightFailsOnRequiredCheck(t *testing.T) {
 	global := writePreflightConfig(t, "/definitely/missing/apache2")
 
 	var stdout bytes.Buffer
-	app := App{Env: func(string) string { return "" }, Stdout: &stdout, Stderr: &bytes.Buffer{}}
+	app := hermeticApp(t, App{Env: func(string) string { return "" }, Stdout: &stdout, Stderr: &bytes.Buffer{}})
 	code := app.Run(context.Background(), []string{"--config", global, "preflight", "apache-main"})
 	if code != exitNotActive {
 		t.Fatalf("Run() exit = %d, want %d (required failed)", code, exitNotActive)
@@ -91,7 +90,7 @@ service: web
 
 	var called, hadDeadline bool
 	var stdout bytes.Buffer
-	cliApp := App{
+	cliApp := hermeticApp(t, App{
 		Detector: fakeBackendDetector{detection: servicemgr.BackendSystemd},
 		NewManager: func(servicemgr.Backend) (servicemgr.Manager, error) {
 			return fakeManager{}, nil
@@ -108,10 +107,10 @@ service: web
 			}
 		},
 		Env:        func(string) string { return "" },
-		LoadConfig: config.Load,
+		LoadConfig: testConfigLoader(t),
 		Stdout:     &stdout,
 		Stderr:     &bytes.Buffer{},
-	}
+	})
 
 	if code := cliApp.Run(t.Context(), []string{"--config", global, "preflight", "web"}); code != exitSuccess {
 		t.Fatalf("Run() exit = %d, want %d; stdout=%s", code, exitSuccess, stdout.String())
@@ -146,7 +145,7 @@ preflight:
 `)
 
 	var stdout, stderr bytes.Buffer
-	app := App{Env: func(string) string { return "" }, Stdout: &stdout, Stderr: &stderr}
+	app := hermeticApp(t, App{Env: func(string) string { return "" }, Stdout: &stdout, Stderr: &stderr})
 	code := app.Run(context.Background(), []string{"--config", global, "preflight", "apache-main"})
 	if code != exitNotActive {
 		t.Fatalf("Run() exit = %d, want %d; stdout=%s stderr=%s", code, exitNotActive, stdout.String(), stderr.String())
@@ -171,7 +170,7 @@ func TestPreflightJSON(t *testing.T) {
 	global := writePreflightConfig(t, bin)
 
 	var stdout bytes.Buffer
-	app := App{Env: func(string) string { return "" }, Stdout: &stdout, Stderr: &bytes.Buffer{}}
+	app := hermeticApp(t, App{Env: func(string) string { return "" }, Stdout: &stdout, Stderr: &bytes.Buffer{}})
 	code := app.Run(context.Background(), []string{"--config", global, "--json", "preflight", "apache-main"})
 	if code != exitSuccess {
 		t.Fatalf("Run() exit = %d, want %d", code, exitSuccess)
@@ -196,7 +195,7 @@ func TestPreflightJSON(t *testing.T) {
 // labelled a warning; an optional one never blocks, so it always is.
 func TestPreflightLabelsFollowWhetherTheCheckBlocks(t *testing.T) {
 	var stdout bytes.Buffer
-	app := App{Stdout: &stdout}
+	app := hermeticApp(t, App{Stdout: &stdout})
 	app.printPreflight("web", checks.Outcome{Results: []checks.Result{
 		{Check: "required-warning", Severity: severity.Warning, Message: "graded warning"},
 		{Check: "optional-error", Optional: true, Message: "graded error"},

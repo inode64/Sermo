@@ -12,6 +12,9 @@ check:
   # read_bytes: { op: ">", value: "200M" }   # bytes/s, K/M/G/T suffix
   # write_bytes: { op: ">", value: "200M" }  # bytes/s
   # await_ms: { op: ">", value: 20 }         # avg I/O latency (ms)
+  severity: warning
+  levels:
+    error: { util_pct: { op: ">=", value: "98%" } }
 for: { cycles: 3 }
 then:
   hook:

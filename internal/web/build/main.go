@@ -146,7 +146,7 @@ func build(srcDir, out, loginOut string) error {
 
 // readShell reads one HTML shell from srcDir, a Makefile-driven build flag.
 func readShell(srcDir, name string) (string, error) {
-	shell, err := os.ReadFile(filepath.Join(srcDir, name)) //nolint:gosec // G304: srcDir is a Makefile-driven build flag, not untrusted input.
+	shell, err := os.ReadFile(filepath.Join(srcDir, name)) //nolint:forbidigo,gosec // build tool reading its -src tree, not the host; G304: srcDir is a Makefile-driven build flag, not untrusted input.
 	if err != nil {
 		return "", fmt.Errorf("read shell %s: %w", name, err)
 	}
@@ -239,7 +239,7 @@ func renderLogin(srcDir string) (string, error) {
 }
 
 func loadWatchPanels(path string) ([]watchPanelDescriptor, error) {
-	data, err := os.ReadFile(path) //nolint:gosec // G304: path is derived from the -src build flag of a developer tool, not untrusted input.
+	data, err := os.ReadFile(path) //nolint:forbidigo,gosec // build tool reading its -src tree, not the host; G304: path is derived from the -src build flag of a developer tool, not untrusted input.
 	if err != nil {
 		return nil, fmt.Errorf("read watch panels %s: %w", path, err)
 	}

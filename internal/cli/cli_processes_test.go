@@ -32,7 +32,7 @@ func TestProcessesUsesSelectorsAndReports(t *testing.T) {
 
 	var gotSelectors []process.Selector
 	var stdout bytes.Buffer
-	app := App{
+	app := hermeticApp(t, App{
 		Env:    func(string) string { return "" },
 		Stdout: &stdout,
 		Stderr: &bytes.Buffer{},
@@ -43,7 +43,7 @@ func TestProcessesUsesSelectorsAndReports(t *testing.T) {
 				{PID: 200, PPID: 100, UID: 110, ExeOK: false, Cmdline: []string{"/usr/sbin/apache2", "-D", "INFO"}, Source: "child"},
 			}, nil
 		},
-	}
+	})
 
 	code := app.Run(context.Background(), []string{"--config", global, "processes", "mysql-main"})
 	if code != exitSuccess {
@@ -64,14 +64,14 @@ func TestProcessesUsesSelectorsAndReports(t *testing.T) {
 func TestProcessesJSON(t *testing.T) {
 	global := writeProcessConfig(t, "/run/x.pid")
 	var stdout bytes.Buffer
-	app := App{
+	app := hermeticApp(t, App{
 		Env:    func(string) string { return "" },
 		Stdout: &stdout,
 		Stderr: &bytes.Buffer{},
 		Discover: func([]process.Selector) ([]process.Process, []string) {
 			return []process.Process{{PID: 100, Source: "pidfile"}}, nil
 		},
-	}
+	})
 	code := app.Run(context.Background(), []string{"--config", global, "--json", "processes", "mysql-main"})
 	if code != exitSuccess {
 		t.Fatalf("Run() exit = %d, want %d", code, exitSuccess)
@@ -104,12 +104,12 @@ func TestProcessesNoResults(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			global := writeProcessConfig(t, "/run/x.pid")
 			var stdout, stderr bytes.Buffer
-			app := App{
+			app := hermeticApp(t, App{
 				Env:      func(string) string { return "" },
 				Stdout:   &stdout,
 				Stderr:   &stderr,
 				Discover: func([]process.Selector) ([]process.Process, []string) { return nil, nil },
-			}
+			})
 			code := app.Run(context.Background(), []string{"--config", global, "processes", tc.service})
 			if code != tc.wantExit {
 				t.Fatalf("Run() exit = %d, want %d", code, tc.wantExit)
@@ -128,13 +128,13 @@ func TestProcessesNoResults(t *testing.T) {
 func TestProcessesUsesSystemdMainPIDWhenPidfileMissing(t *testing.T) {
 	global := writeProcessConfig(t, "/run/missing-node-exporter.pid")
 	var stdout, stderr bytes.Buffer
-	app := App{
+	app := hermeticApp(t, App{
 		Detector: fakeBackendDetector{detection: servicemgr.BackendSystemd},
 		Runner:   processSystemdRunner{pid: os.Getpid()},
 		Env:      func(string) string { return "" },
 		Stdout:   &stdout,
 		Stderr:   &stderr,
-	}
+	})
 
 	code := app.Run(context.Background(), []string{"--config", global, "processes", "mysql-main"})
 	if code != exitSuccess {
@@ -181,7 +181,7 @@ func TestProcessesRealPidfileSelf(t *testing.T) {
 	global := writeProcessConfig(t, pidfile)
 
 	var stdout bytes.Buffer
-	app := App{Env: func(string) string { return "" }, Stdout: &stdout, Stderr: &bytes.Buffer{}}
+	app := hermeticApp(t, App{Env: func(string) string { return "" }, Stdout: &stdout, Stderr: &bytes.Buffer{}})
 	code := app.Run(context.Background(), []string{"--config", global, "processes", "mysql-main"})
 	if code != exitSuccess {
 		t.Fatalf("Run() exit = %d, want %d", code, exitSuccess)

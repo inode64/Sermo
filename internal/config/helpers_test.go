@@ -38,12 +38,19 @@ func writeConfig(t *testing.T, files map[string]string) string {
 func loadConfig(t *testing.T, global string, opts ...Option) (*Config, error) {
 	t.Helper()
 	// A test without its own catalog gets an empty one, never the host's
-	// installed catalog and the services it would detect there.
+	// installed catalog and the services it would detect there. No unit is
+	// active on either backend unless the test says so with its own
+	// withServiceUnits, so discovery never lists the host's units.
 	catalogDir := filepath.Join(filepath.Dir(global), "catalog")
 	if _, err := os.Stat(catalogDir); err != nil {
 		catalogDir = t.TempDir()
 	}
-	return Load(global, append([]Option{WithCatalogDirs(catalogDir)}, opts...)...)
+	hermetic := []Option{
+		WithCatalogDirs(catalogDir),
+		withServiceUnits(backendSystemd, nil),
+		withServiceUnits(backendOpenRC, nil),
+	}
+	return Load(global, append(hermetic, opts...)...)
 }
 
 func withPathDirs(kind string) Option {

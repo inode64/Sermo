@@ -15,11 +15,29 @@ restart_on_change:
 variables:
   host: 127.0.0.1
   port: 11211
+  # Debian and Ubuntu run memcached as `memcache`.
   user: memcached
+os:
+  debian:
+    variables:
+      user: memcache
+  ubuntu:
+    variables:
+      user: memcache
 processes:
   main:
     exe: ${memcached_binary}
     user: ${user}
+# A cache holds no durable state, but its clients still drain: a generous
+# graceful window, then SIGKILL only the exact daemon binary under its user.
+stop_policy:
+  graceful_timeout: 90s
+  term_timeout: 60s
+  kill_only_if:
+    users:
+      - ${user}
+    exe_any:
+      - ${memcached_binary}
 watches:
   service:
     check:

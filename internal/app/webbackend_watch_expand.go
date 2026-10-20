@@ -41,7 +41,7 @@ func (b *WebBackend) ExpandWatch(ctx context.Context, name string) web.ActionRes
 	}
 	opCtx, cancel := b.operationContext(ctx, 0)
 	defer cancel()
-	res, err := b.expander.ExpandPath(opCtx, path, w.expand.By)
+	res, err := b.expander.ExpandPath(withExpandWatch(opCtx, name), path, w.expand.By)
 	if errors.Is(err, errExpandInProgress) {
 		msg := err.Error()
 		b.emitWatchExpandEvent(name, eventKindExpandSkipped, eventStatusBlocked, msg)

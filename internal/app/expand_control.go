@@ -28,6 +28,18 @@ type lockedVolumeExpander struct {
 	inner      VolumeExpander
 	runtimeDir string
 	timeout    time.Duration
+	// emit, when non-nil, audits a reclaimed stale expansion lock, attributed
+	// to the storage watch withExpandWatch put on the context.
+	emit func(Event)
+}
+
+// expandWatchKey carries the storage watch an expansion runs for.
+type expandWatchKey struct{}
+
+// withExpandWatch tags ctx with the storage watch an expansion runs for, so a
+// stale expansion lock it reclaims is reported against that watch.
+func withExpandWatch(ctx context.Context, watch string) context.Context {
+	return context.WithValue(ctx, expandWatchKey{}, watch)
 }
 
 func (e lockedVolumeExpander) ExpandPath(ctx context.Context, path string, by int64) (volume.Result, error) {
@@ -39,7 +51,12 @@ func (e lockedVolumeExpander) ExpandPath(ctx context.Context, path string, by in
 	// expansion it protects is still running.
 	opCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
-	handle, err := configureOperationLocker(e.runtimeDir, nil).Acquire(expandLockName(path), timeout)
+	var reclaimed func(reason string)
+	if e.emit != nil {
+		watch, _ := ctx.Value(expandWatchKey{}).(string)
+		reclaimed = func(reason string) { e.emit(ExpansionLockReclaim(watch, path, reason).event()) }
+	}
+	handle, err := configureOperationLocker(e.runtimeDir, reclaimReason(reclaimed)).Acquire(expandLockName(path), timeout)
 	if err != nil {
 		if _, held := errors.AsType[*locks.HeldError](err); held {
 			return volume.Result{}, fmt.Errorf("storage path %q: %w", path, errExpandInProgress)

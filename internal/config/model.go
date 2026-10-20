@@ -218,8 +218,6 @@ const (
 	keyTermTimeout     = process.StopPolicyKeyTermTimeout
 	keyKillTimeout     = process.StopPolicyKeyKillTimeout
 	keyKillOnlyIf      = process.StopPolicyKeyKillOnlyIf
-	keyUsers           = process.StopPolicyKeyUsers
-	keyExeAny          = process.StopPolicyKeyExeAny
 	keyPidfileAbsent   = "pidfile_absent"
 	keyFilesAbsent     = "files_absent"
 	keyCleanAfterStop  = "clean_after_stop"
@@ -266,10 +264,6 @@ const (
 	StopPolicyKeyKillTimeout = keyKillTimeout
 	// StopPolicyKeyKillOnlyIf is stop_policy.kill_only_if.
 	StopPolicyKeyKillOnlyIf = keyKillOnlyIf
-	// StopPolicyKeyUsers is stop_policy.kill_only_if.users.
-	StopPolicyKeyUsers = keyUsers
-	// StopPolicyKeyExeAny is stop_policy.kill_only_if.exe_any.
-	StopPolicyKeyExeAny = keyExeAny
 )
 
 // Storage mount field keys.

@@ -3,10 +3,11 @@ package checks
 import (
 	"context"
 	"fmt"
-	"os"
 	"strconv"
 	"strings"
 	"time"
+
+	"sermo/internal/hostfs"
 )
 
 const (
@@ -170,7 +171,7 @@ func calculateDiskIORates(prev, cur DiskIOSample, elapsed time.Duration) DiskIOR
 // device name: reads, reads-merged, sectors-read, ms-reading, writes,
 // writes-merged, sectors-written, ms-writing, in-flight, io-ticks-ms, ….
 func defaultDiskIOSampler(device string) (DiskIOSample, error) {
-	data, err := os.ReadFile(procDiskstatsPath)
+	data, err := hostfs.ReadFile(procDiskstatsPath)
 	if err != nil {
 		return DiskIOSample{}, fmt.Errorf("read %s: %w", procDiskstatsPath, err)
 	}

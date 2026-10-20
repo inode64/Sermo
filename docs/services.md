@@ -2209,7 +2209,8 @@ watches:
 
 Redis and KeyDB also provide an opt-in `alert-if-maxmemory-near-limit` watch:
 a warning when `used_memory` stays at or above `variables.maxmemory_used_limit`
-percent of `maxmemory` (default `90`) for five minutes. Enable it where reaching
+percent of `maxmemory` (default `90`) for five minutes, escalating to an error
+at `variables.maxmemory_used_error_limit` (default `98`). Enable it where reaching
 the limit hurts — under `maxmemory-policy noeviction` a full server rejects
 writes while the process, the port and `PING` all stay healthy, and a session
 store under an LRU policy silently evicts live sessions. Leave it disabled on a
@@ -2220,6 +2221,7 @@ name: redis-main
 uses: redis                  # keydb supports the same watch
 variables:
   maxmemory_used_limit: 85
+  maxmemory_used_error_limit: 95
 watches:
   alert-if-maxmemory-near-limit:
     enabled: true
@@ -2604,10 +2606,19 @@ check: `alert-if-replication-slot-backlog`, `alert-if-logical-slot-unconfirmed`,
 |---|---|---|
 | `monitor_user` | `postgres` | role the replication queries connect as |
 | `database` | `postgres` | database the queries connect to |
-| `slot_backlog_mib` | `1024` | WAL retained by the most lagging slot, in MiB |
-| `logical_unconfirmed_mib` | `512` | data a logical consumer has not confirmed, in MiB |
-| `replay_lag_mib` | `256` | sent but not replayed by the most lagging replica, in MiB |
-| `standby_delay_seconds` | `300` | how far behind a standby may fall, in seconds |
+| `slot_backlog_mib` | `1024` | WAL retained by the most lagging slot, in MiB (warning) |
+| `slot_backlog_error_mib` | `4096` | the same, escalating to error |
+| `logical_unconfirmed_mib` | `512` | data a logical consumer has not confirmed, in MiB (warning) |
+| `logical_unconfirmed_error_mib` | `2048` | the same, escalating to error |
+| `replay_lag_mib` | `256` | sent but not replayed by the most lagging replica, in MiB (warning) |
+| `replay_lag_error_mib` | `1024` | the same, escalating to error |
+| `standby_delay_seconds` | `300` | how far behind a standby may fall, in seconds (warning) |
+| `standby_delay_error_seconds` | `1800` | the same, escalating to error |
+
+Each sensor is a `warning` at its first variable and
+[escalates](rules.md#escalate-and-hold) to `error` past the `*_error_*` one;
+raise both together. `alert-if-replication-slot-inactive` counts idle slots and
+stays a `warning`: the WAL they retain is what the backlog watch grades.
 
 The thresholds are plain numbers because a `sql` check compares numerically and
 does not take size suffixes, so the queries return MiB and seconds directly.
@@ -2650,7 +2661,7 @@ variable:
 |---|---|---|---|
 | `alert-if-queue-high` | `exim -bpc` above the limit for 3 minutes | `queue_limit` (`200`) | `queue_error_limit` (`1000`) |
 | `alert-if-msglog-backlog-high` | files under `msglog_dir`, counted recursively | `msglog_backlog_limit` (`200`) | `msglog_backlog_error_limit` (`1000`) |
-| `alert-if-msglog-backlog-growing-fast` | msglog growth inside `msglog_growth_window` | `msglog_growth_limit` (`100`), `msglog_growth_window` (`2m`) | — |
+| `alert-if-msglog-backlog-growing-fast` | msglog growth inside `msglog_growth_window` | `msglog_growth_limit` (`100`), `msglog_growth_window` (`2m`) | `msglog_growth_error_limit` (`500`) |
 | `alert-if-memory-high` | resident memory of the Exim processes | `memory_limit_bytes` (`104857600`, 100 MiB) | `memory_error_limit_bytes` (`524288000`, 500 MiB) |
 
 Each alert is a `warning` at its first variable and

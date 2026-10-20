@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"sermo/internal/hostfs"
 	"sermo/internal/process"
 	"sermo/internal/servicemgr"
 	"sermo/internal/strutil"
@@ -127,7 +128,7 @@ func repairPIDFilePaths(selectors []process.Selector) []string {
 
 func repairableRuntimePIDFile(path, runtimeDir string) (bool, error) {
 	cleanPath := filepath.Clean(path)
-	info, err := os.Lstat(cleanPath)
+	info, err := hostfs.Lstat(cleanPath)
 	if errors.Is(err, os.ErrNotExist) {
 		return false, nil
 	}

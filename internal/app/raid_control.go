@@ -27,14 +27,15 @@ type RAIDControlResult struct {
 // runLockedControl is the shared ritual of every manual control action: bound
 // it by timeout, serialize it under a named operation lock (reporting a held
 // lock as "already has an operation in progress"), and run the action inside
-// both. subject names the thing being controlled in the two lock messages.
-func runLockedControl(ctx context.Context, runtimeDir, lockName, subject string, timeout time.Duration, run func(context.Context) (bool, string)) (ok bool, message string) {
+// both. subject names the thing being controlled in the two lock messages;
+// onReclaim, when non-nil, audits a reclaimed stale lock.
+func runLockedControl(ctx context.Context, runtimeDir, lockName, subject string, timeout time.Duration, onReclaim func(reason string), run func(context.Context) (bool, string)) (ok bool, message string) {
 	if timeout <= 0 {
 		timeout = DefaultEngineOperationTimeout
 	}
 	opCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
-	locker := configureOperationLocker(runtimeDir, nil)
+	locker := configureOperationLocker(runtimeDir, reclaimReason(onReclaim))
 	handle, err := locker.Acquire(lockName, timeout)
 	if err != nil {
 		if _, held := errors.AsType[*locks.HeldError](err); held {
@@ -48,12 +49,13 @@ func runLockedControl(ctx context.Context, runtimeDir, lockName, subject string,
 
 // ControlRAID serializes a pause/resume request for one md array, bounds it by
 // timeout and delegates the live preflight plus sysfs post-verification to the
-// checks package. It is shared by the CLI and Web backend.
-func ControlRAID(ctx context.Context, runtimeDir, array, action string, timeout time.Duration) RAIDControlResult {
+// checks package. It is shared by the CLI and Web backend; onReclaim audits a
+// reclaimed stale lock.
+func ControlRAID(ctx context.Context, runtimeDir, array, action string, timeout time.Duration, onReclaim func(reason string)) RAIDControlResult {
 	if action != RaidControlPause && action != RaidControlResume {
 		return RAIDControlResult{Message: fmt.Sprintf("unsupported RAID action %q", action)}
 	}
-	ok, message := runLockedControl(ctx, runtimeDir, raidControlLockPrefix+array, fmt.Sprintf("RAID array %q", array), timeout, func(opCtx context.Context) (bool, string) {
+	ok, message := runLockedControl(ctx, runtimeDir, raidControlLockPrefix+array, fmt.Sprintf("RAID array %q", array), timeout, onReclaim, func(opCtx context.Context) (bool, string) {
 		resume := action == RaidControlResume
 		if _, err := checks.SetRaidRebuildState(opCtx, array, resume); err != nil {
 			return false, err.Error()

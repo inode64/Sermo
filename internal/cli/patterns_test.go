@@ -30,7 +30,7 @@ rules:
 	mustWrite(t, filepath.Join(servicesDir, "api.yml"), "name: api\nservice: api\n"+check)
 
 	var stdout bytes.Buffer
-	app := monitorTestApp(root, &stdout)
+	app := monitorTestApp(t, root, &stdout)
 	if code := app.Run(context.Background(), []string{"--config", global, "patterns"}); code != exitSuccess {
 		t.Fatalf("patterns exit = %d", code)
 	}
@@ -73,7 +73,7 @@ rules:
 func TestPatternsNoneInUse(t *testing.T) {
 	root, global := writeCatalogServiceConfig(t)
 	var stdout bytes.Buffer
-	app := monitorTestApp(root, &stdout)
+	app := monitorTestApp(t, root, &stdout)
 	if code := app.Run(context.Background(), []string{"--config", global, "patterns"}); code != exitSuccess {
 		t.Fatalf("patterns exit = %d", code)
 	}

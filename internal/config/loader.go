@@ -2,14 +2,17 @@ package config
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	"os"
+	"io/fs"
 	"path/filepath"
-	"sermo/internal/cfgval"
 	"slices"
 	"strings"
 
 	"github.com/goccy/go-yaml"
+
+	"sermo/internal/cfgval"
+	"sermo/internal/hostfs"
 )
 
 // DefaultGlobalPath is the standard location of the global configuration.
@@ -62,6 +65,12 @@ func Load(globalPath string, opts ...Option) (*Config, error) {
 	var o loadOptions
 	for _, opt := range opts {
 		opt(&o)
+	}
+	// The CLIs resolve --config before calling; a library caller passing a
+	// relative path gets it resolved once here, so every later read receives
+	// the absolute, clean path hostfs requires.
+	if abs, err := filepath.Abs(globalPath); err == nil {
+		globalPath = abs
 	}
 
 	global, globalIssues, err := loadGlobal(globalPath)
@@ -150,7 +159,7 @@ func Load(globalPath string, opts ...Option) (*Config, error) {
 }
 
 func loadGlobal(path string) (Global, []Issue, error) {
-	data, err := os.ReadFile(filepath.Clean(path))
+	data, err := hostfs.ReadFile(path)
 	if err != nil {
 		return Global{}, nil, fmt.Errorf("read global config %s: %w", path, err)
 	}
@@ -260,9 +269,14 @@ func resolvePathList(base string, dirs []string) []string {
 	return out
 }
 
+// resolveConfigPath resolves p against base and cleans it, absolute or not, so
+// every configured path reaches hostfs in the clean form it requires.
 func resolveConfigPath(base, p string) string {
-	if p == "" || filepath.IsAbs(p) {
+	if p == "" {
 		return p
+	}
+	if filepath.IsAbs(p) {
+		return filepath.Clean(p)
 	}
 	return filepath.Clean(filepath.Join(base, p))
 }
@@ -484,9 +498,9 @@ func (c *Config) loadCategoryDir(dir, category string, recursive bool) error {
 }
 
 func configDirEntries(dir, label string) (names, subdirs []string, err error) {
-	entries, err := os.ReadDir(dir)
+	entries, err := hostfs.ReadDir(dir)
 	if err != nil {
-		if os.IsNotExist(err) {
+		if errors.Is(err, fs.ErrNotExist) {
 			return nil, nil, nil
 		}
 		if label == "" {
@@ -601,7 +615,7 @@ func notifierEntryFromDocument(doc *Document) (string, any, error) {
 }
 
 func loadDocument(path string) (*Document, error) {
-	data, err := os.ReadFile(filepath.Clean(path))
+	data, err := hostfs.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("read %s: %w", path, err)
 	}

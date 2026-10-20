@@ -8,6 +8,8 @@ import (
 	"strings"
 
 	_ "modernc.org/sqlite" // registers the "sqlite" database/sql driver (pure Go)
+
+	"sermo/internal/hostfs"
 )
 
 const (
@@ -38,7 +40,7 @@ func (c sqliteCheck) Run(ctx context.Context) Result {
 	defer run.close()
 	start := run.start
 
-	if _, err := os.Stat(c.path); err != nil {
+	if _, err := hostfs.StatTarget(c.path); err != nil {
 		if os.IsNotExist(err) {
 			return c.result(false, fmt.Sprintf("%s: %v", c.path, err), start)
 		}

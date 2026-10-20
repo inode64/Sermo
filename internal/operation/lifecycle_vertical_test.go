@@ -64,7 +64,7 @@ func lifecycleMatrixEngine(t *testing.T, backend servicemgr.Backend, tree map[st
 		Manager:    manager,
 		Locker:     &locker,
 		Scanner:    locks.NewScanner(locks.RuntimeLocksDir(runtimeDir)),
-		Discoverer: process.NewDiscovererWithUserLookup(nil),
+		Discoverer: process.Discoverer{Reader: &countingPIDReader{}},
 		Sleep:      func(time.Duration) {},
 	})
 	return engine, manager

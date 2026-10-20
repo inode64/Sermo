@@ -20,6 +20,21 @@ variables:
   host: 127.0.0.1
   port: 8086
   config: /etc/influxdb2/config.toml
+  user: influxdb
+processes:
+  influxd:
+    exe: ${influxdb_binary}
+    user: ${user}
+# A database stop flushes and checkpoints: give it a long graceful window, and
+# SIGKILL only the exact daemon binary under its own user if it still hangs.
+stop_policy:
+  graceful_timeout: 120s
+  term_timeout: 60s
+  kill_only_if:
+    users:
+      - ${user}
+    exe_any:
+      - ${influxdb_binary}
 config_files:
   - ${config}
 preflight:

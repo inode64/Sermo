@@ -153,7 +153,9 @@ func (a App) runWatchRAIDControl(ctx context.Context, opts options, action strin
 		return a.commandUsageError(commandWatch, "watch pause requires --confirm "+array)
 	}
 	timeout := manualOperationTimeout(cfg, opts)
-	result := app.ControlRAID(ctx, cfg.Global.RuntimeDir(), array, action, timeout)
+	reclaims := a.newLockReclaimLog()
+	result := app.ControlRAID(ctx, cfg.Global.RuntimeDir(), array, action, timeout, reclaims.watch(opts.args[1]))
+	a.flushLockReclaims(ctx, cfg, reclaims)
 	if opts.json {
 		writeJSON(a.Stdout, map[string]any{cliJSONKeyWatch: opts.args[1], cliJSONKeyOK: result.OK, cliJSONKeyMessage: result.Message})
 	} else {

@@ -21,7 +21,7 @@ func TestSLATargetsSortServices(t *testing.T) {
 		"alpha": {},
 	}}
 
-	targets, code := (App{}).slaTargets(options{}, cfg)
+	targets, code := (hermeticApp(t, App{})).slaTargets(options{}, cfg)
 	if code != exitSuccess {
 		t.Fatalf("slaTargets() exit = %d, want %d", code, exitSuccess)
 	}
@@ -148,7 +148,7 @@ func slaRunner(t *testing.T, global, catalogDir string) func(args ...string) (st
 	t.Helper()
 	return func(args ...string) (string, int) {
 		var out bytes.Buffer
-		app := App{Env: func(string) string { return "" }, Stdout: &out, Stderr: &bytes.Buffer{}, LoadConfig: testLoadConfigWithCatalog(catalogDir)}
+		app := hermeticApp(t, App{Env: func(string) string { return "" }, Stdout: &out, Stderr: &bytes.Buffer{}, LoadConfig: testLoadConfigWithCatalog(catalogDir)})
 		code := app.Run(context.Background(), append([]string{"--config", global}, args...))
 		return out.String(), code
 	}
@@ -172,7 +172,7 @@ defaults: { policy: { cooldown: 5m } }
 	}
 
 	var out bytes.Buffer
-	app := App{Env: func(string) string { return "" }, Stdout: &out, Stderr: &bytes.Buffer{}}
+	app := hermeticApp(t, App{Env: func(string) string { return "" }, Stdout: &out, Stderr: &bytes.Buffer{}})
 	code := app.Run(context.Background(), []string{"--config", filepath.Join(root, "sermo.yml"), "sla", "ghost"})
 	if code == exitSuccess {
 		t.Fatal("sla of unknown service should fail")

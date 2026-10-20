@@ -2,14 +2,13 @@ package app
 
 import (
 	"context"
-	"os"
 	"runtime"
-	"sermo/internal/hostfs"
 	"strconv"
 	"strings"
 	"time"
 
 	"sermo/internal/config"
+	"sermo/internal/hostfs"
 	"sermo/internal/metrics"
 	"sermo/internal/web"
 )
@@ -26,7 +25,7 @@ const (
 // read natively from /proc/uptime. The second return is false when the host
 // uptime is unavailable (e.g. the file is missing on non-Linux systems).
 func hostUptime() (time.Duration, bool) {
-	data, err := os.ReadFile(procUptimePath)
+	data, err := hostfs.ReadFile(procUptimePath)
 	if err != nil {
 		return 0, false
 	}

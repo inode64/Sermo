@@ -52,18 +52,13 @@ func (a App) runUmount(ctx context.Context, opts options) int {
 	if cfg == nil {
 		return code
 	}
-	spec, code := a.mountSpec(opts, cfg, opts.args[0])
-	if code != exitSuccess {
-		return code
-	}
-	controller := a.mountController(cfg, opts)
-	res, err := controller.ReleaseWithOptions(ctx, spec, mountctl.ReleaseOptions{
-		AllowForce:   opts.force,
-		AllowLazy:    opts.lazy,
-		KillBlockers: opts.kill,
+	return a.runMountOperation(ctx, opts, cfg, opts.args[0], mountctl.ActionUmount, func(c mountctl.Controller, spec mountctl.Spec) (mountctl.Result, error) {
+		return c.ReleaseWithOptions(ctx, spec, mountctl.ReleaseOptions{
+			AllowForce:   opts.force,
+			AllowLazy:    opts.lazy,
+			KillBlockers: opts.kill,
+		})
 	})
-	a.syncStorageMountMonitoring(ctx, cfg, spec.Name, mountctl.ActionUmount, err == nil && res.Status == mountctl.ResultOK)
-	return a.printMountResult(opts, res, err)
 }
 
 func (a App) runMountAcquire(ctx context.Context, opts options, target string) int {
@@ -71,13 +66,25 @@ func (a App) runMountAcquire(ctx context.Context, opts options, target string) i
 	if cfg == nil {
 		return code
 	}
+	return a.runMountOperation(ctx, opts, cfg, target, mountctl.ActionMount, func(c mountctl.Controller, spec mountctl.Spec) (mountctl.Result, error) {
+		return c.Acquire(ctx, spec)
+	})
+}
+
+// runMountOperation runs one mount or umount of target: it audits any stale
+// mount lock the controller reclaims, keeps the storage watch's monitoring in
+// step with the outcome and prints the result.
+func (a App) runMountOperation(ctx context.Context, opts options, cfg *config.Config, target, action string, run func(mountctl.Controller, mountctl.Spec) (mountctl.Result, error)) int {
 	spec, code := a.mountSpec(opts, cfg, target)
 	if code != exitSuccess {
 		return code
 	}
 	controller := a.mountController(cfg, opts)
-	res, err := controller.Acquire(ctx, spec)
-	a.syncStorageMountMonitoring(ctx, cfg, spec.Name, mountctl.ActionMount, err == nil && res.Status == mountctl.ResultOK)
+	reclaims := a.newLockReclaimLog()
+	controller.OnLockReclaimed = reclaims.mount
+	res, err := run(controller, spec)
+	a.flushLockReclaims(ctx, cfg, reclaims)
+	a.syncStorageMountMonitoring(ctx, cfg, spec.Name, action, err == nil && res.Status == mountctl.ResultOK)
 	return a.printMountResult(opts, res, err)
 }
 

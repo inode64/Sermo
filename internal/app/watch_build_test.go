@@ -10,7 +10,7 @@ import (
 
 	"sermo/internal/config"
 	"sermo/internal/emission"
-	"sermo/internal/execx"
+	"sermo/internal/execx/execxtest"
 	"sermo/internal/notify"
 	"sermo/internal/rules"
 )
@@ -41,7 +41,7 @@ func TestBuildWatchesProcessKillAction(t *testing.T) {
 			"then":  map[string]any{"kill": map[string]any{"signal": "TERM"}},
 		},
 	})
-	watches, warns := BuildWatches(cfg, Deps{DefaultTimeout: time.Second, ExecxRunner: execx.CommandRunner{}}, 30*time.Second)
+	watches, warns := BuildWatches(cfg, Deps{DefaultTimeout: time.Second, ExecxRunner: &execxtest.Runner{}}, 30*time.Second)
 	if len(warns) != 0 {
 		t.Fatalf("a kill-only process watch should build cleanly, got warnings: %v", warns)
 	}
@@ -78,7 +78,7 @@ func TestBuildWatchesProcessKillActionRejectsUnsafeSelector(t *testing.T) {
 			"then":  map[string]any{"kill": map[string]any{"signal": "TERM"}},
 		},
 	})
-	watches, warns := BuildWatches(cfg, Deps{DefaultTimeout: time.Second, ExecxRunner: execx.CommandRunner{}}, 30*time.Second)
+	watches, warns := BuildWatches(cfg, Deps{DefaultTimeout: time.Second, ExecxRunner: &execxtest.Runner{}}, 30*time.Second)
 	if len(watches) != 0 {
 		t.Fatalf("unsafe kill watch should not build, got %d watches", len(watches))
 	}
@@ -100,7 +100,7 @@ func TestBuildWatchesStorageExpandAction(t *testing.T) {
 			"then":   map[string]any{"expand": map[string]any{"by": "5G"}},
 		},
 	})
-	watches, warns := BuildWatches(cfg, Deps{DefaultTimeout: time.Second, ExecxRunner: execx.CommandRunner{}}, 30*time.Second)
+	watches, warns := BuildWatches(cfg, Deps{DefaultTimeout: time.Second, ExecxRunner: &execxtest.Runner{}}, 30*time.Second)
 	if len(warns) != 0 {
 		t.Fatalf("unexpected warnings: %v", warns)
 	}
@@ -240,7 +240,7 @@ func TestBuildWatchesStorageExpandNotifyNoneSuppressesDefault(t *testing.T) {
 	})
 	watches, warns := BuildWatches(cfg, Deps{
 		DefaultTimeout: time.Second,
-		ExecxRunner:    execx.CommandRunner{},
+		ExecxRunner:    &execxtest.Runner{},
 		GlobalNotify:   []string{"ops"},
 		Notifiers:      map[string]notify.Notifier{"ops": &fakeNotifier{name: "ops"}},
 	}, 30*time.Second)
@@ -408,7 +408,7 @@ func TestBuildWatchesExpandRejectedOnNonStorage(t *testing.T) {
 			"then":  map[string]any{"expand": map[string]any{"by": "5G"}},
 		},
 	})
-	watches, warns := BuildWatches(cfg, Deps{DefaultTimeout: time.Second, ExecxRunner: execx.CommandRunner{}}, 30*time.Second)
+	watches, warns := BuildWatches(cfg, Deps{DefaultTimeout: time.Second, ExecxRunner: &execxtest.Runner{}}, 30*time.Second)
 	if len(watches) != 0 || len(warns) == 0 {
 		t.Fatalf("then.expand on a non-storage watch must warn and not build: watches=%d warns=%v", len(watches), warns)
 	}
@@ -426,7 +426,7 @@ func TestBuildWatchesBuildsStorage(t *testing.T) {
 			"then": map[string]any{"hook": map[string]any{"command": []any{"/usr/local/bin/alert.sh"}, "expect_exit": []any{0, 1}}},
 		},
 	})
-	watches, warns := BuildWatches(cfg, Deps{DefaultTimeout: time.Second, ExecxRunner: execx.CommandRunner{}}, 30*time.Second)
+	watches, warns := BuildWatches(cfg, Deps{DefaultTimeout: time.Second, ExecxRunner: &execxtest.Runner{}}, 30*time.Second)
 	if len(warns) != 0 {
 		t.Fatalf("unexpected warnings: %v", warns)
 	}
@@ -492,7 +492,7 @@ func TestBuildWatchesBuildsSingleWatch(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			cfg := cfgWithWatches(map[string]any{tc.watchName: tc.watch})
-			watches, warns := BuildWatches(cfg, Deps{DefaultTimeout: time.Second, ExecxRunner: execx.CommandRunner{}}, 30*time.Second)
+			watches, warns := BuildWatches(cfg, Deps{DefaultTimeout: time.Second, ExecxRunner: &execxtest.Runner{}}, 30*time.Second)
 			if len(warns) != 0 {
 				t.Fatalf("unexpected warnings: %v", warns)
 			}
@@ -623,7 +623,7 @@ func TestBuildWatchesExpandsMetrics(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			cfg := cfgWithWatches(map[string]any{tc.watchName: tc.watch})
-			watches, warns := BuildWatches(cfg, Deps{DefaultTimeout: time.Second, ExecxRunner: execx.CommandRunner{}}, 30*time.Second)
+			watches, warns := BuildWatches(cfg, Deps{DefaultTimeout: time.Second, ExecxRunner: &execxtest.Runner{}}, 30*time.Second)
 			if len(warns) != 0 {
 				t.Fatalf("unexpected warnings: %v", warns)
 			}
@@ -743,7 +743,7 @@ func TestBuildWatchesServiceCheckAsWatch(t *testing.T) {
 			"then":  map[string]any{"hook": map[string]any{"command": []any{"/a.sh"}}},
 		},
 	})
-	watches, warns := BuildWatches(cfg, Deps{DefaultTimeout: time.Second, ExecxRunner: execx.CommandRunner{}}, 30*time.Second)
+	watches, warns := BuildWatches(cfg, Deps{DefaultTimeout: time.Second, ExecxRunner: &execxtest.Runner{}}, 30*time.Second)
 	if len(warns) != 0 {
 		t.Fatalf("unexpected warnings: %v", warns)
 	}
@@ -910,7 +910,7 @@ func TestHasConfiguredTargets(t *testing.T) {
 			"check":   map[string]any{"type": "storage", "path": "/"},
 		},
 	})
-	watches, _ := BuildWatches(disabledWatch, Deps{DefaultTimeout: time.Second, ExecxRunner: execx.CommandRunner{}}, time.Second)
+	watches, _ := BuildWatches(disabledWatch, Deps{DefaultTimeout: time.Second, ExecxRunner: &execxtest.Runner{}}, time.Second)
 	if len(watches) != 0 {
 		t.Fatalf("disabled watch should not build, got %d", len(watches))
 	}
@@ -1144,5 +1144,44 @@ func TestBuildWatchMakeStepWiresTheStepper(t *testing.T) {
 	}
 	if len(called) != 1 {
 		t.Fatalf("Deps.ClockStepper must be used verbatim, calls = %v", called)
+	}
+}
+
+// A hook without its own timeout inherits engine.default_timeout (or the
+// built-in check timeout), so no hook command can run unbounded.
+func TestResolveWatchActionsBoundsHookTimeout(t *testing.T) {
+	hookEntry := func(key string, timeout any) map[string]any {
+		hook := map[string]any{config.WatchHookKeyCommand: []any{"/usr/local/bin/hook"}}
+		if timeout != nil {
+			hook[config.WatchHookKeyTimeout] = timeout
+		}
+		return map[string]any{config.WatchKeyThen: map[string]any{key: hook}}
+	}
+	for _, tc := range []struct {
+		name          string
+		key           string
+		timeout       any
+		engineDefault time.Duration
+		want          time.Duration
+	}{
+		{name: "hook inherits engine default", key: config.WatchThenKeyHook, engineDefault: 45 * time.Second, want: 45 * time.Second},
+		{name: "explicit hook timeout wins", key: config.WatchThenKeyHook, timeout: "5s", engineDefault: 45 * time.Second, want: 5 * time.Second},
+		{name: "hook without engine default", key: config.WatchThenKeyHook, want: DefaultEngineCheckTimeout},
+		{name: "recover hook inherits engine default", key: config.WatchThenKeyRecoverHook, engineDefault: 45 * time.Second, want: 45 * time.Second},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			actions, err := resolveWatchActions(hookEntry(tc.key, tc.timeout), Deps{DefaultTimeout: tc.engineDefault},
+				watchActionOptions{parseRecoverHook: true, emptyMessage: "empty"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			got := actions.hook
+			if tc.key == config.WatchThenKeyRecoverHook {
+				got = actions.recoverHook
+			}
+			if got.Timeout != tc.want {
+				t.Fatalf("timeout = %v, want %v", got.Timeout, tc.want)
+			}
+		})
 	}
 }

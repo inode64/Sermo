@@ -11,7 +11,7 @@ import (
 
 	"sermo/internal/checks"
 	"sermo/internal/config"
-	"sermo/internal/execx"
+	"sermo/internal/execx/execxtest"
 	"sermo/internal/metrics"
 	"sermo/internal/servicemgr"
 	"sermo/internal/web"
@@ -287,7 +287,7 @@ func TestBuildWorkerEmitsServiceWatches(t *testing.T) {
 		Manager:        fakeManager{},
 		Runtime:        t.TempDir(),
 		DefaultTimeout: time.Second,
-		ExecxRunner:    execx.CommandRunner{},
+		ExecxRunner:    &execxtest.Runner{},
 		Now:            time.Now,
 		Emit:           func(Event) {},
 	}, nil)
@@ -326,10 +326,7 @@ func TestWebBackendListsAndControlsServiceWatches(t *testing.T) {
 	if err := os.WriteFile(global, []byte("paths:\n  services: ["+svcDir+"]\nengine:\n  runtime: /tmp\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	cfg, err := config.Load(global)
-	if err != nil {
-		t.Fatalf("load: %v", err)
-	}
+	cfg := loadTestConfig(t, global)
 	now := time.Date(2026, 7, 16, 18, 0, 0, 0, time.UTC)
 	snapshots := NewWatchSnapshots()
 	snapshots.now = func() time.Time { return now }
@@ -349,7 +346,7 @@ func TestWebBackendListsAndControlsServiceWatches(t *testing.T) {
 	}, watchSnapshotConfigID(watchEntry))
 	store := newFakeStore()
 	b, warns := NewWebBackend(t.Context(), cfg, Deps{
-		Backend: servicemgr.BackendSystemd, Manager: fakeManager{}, ExecxRunner: execx.CommandRunner{},
+		Backend: servicemgr.BackendSystemd, Manager: fakeManager{}, ExecxRunner: &execxtest.Runner{},
 		DefaultTimeout: time.Second, Now: func() time.Time { return now }, Emit: func(Event) {}, Monitor: store,
 		WatchSnapshots: snapshots,
 	})

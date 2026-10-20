@@ -32,7 +32,7 @@ func writeHostConfig(t *testing.T, catalogService, defaultsBlock, serviceExtra s
 	if err := os.WriteFile(path, []byte(global), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	cfg, err := Load(path, WithCatalogDirs(repoCatalogDir(root)))
+	cfg, err := loadConfig(t, path, WithCatalogDirs(repoCatalogDir(root)))
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}

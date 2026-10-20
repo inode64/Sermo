@@ -24,7 +24,7 @@ func resolveCatalogService(t *testing.T, catalogService, backend string) Resolve
 	if err := os.WriteFile(filepath.Join(enabled, catalogService+".yml"), []byte(body), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	cfg, err := Load(writeServicesGlobal(t, dir, enabled, backend), WithCatalogDirs(repoCatalogDir(root)))
+	cfg, err := loadConfig(t, writeServicesGlobal(t, dir, enabled, backend), WithCatalogDirs(repoCatalogDir(root)))
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
@@ -183,7 +183,7 @@ func TestDefaultsRestartOnStaleBinaryOptsOutWholeHost(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cfg, err := Load(global, WithCatalogDirs(repoCatalogDir(root)))
+	cfg, err := loadConfig(t, global, WithCatalogDirs(repoCatalogDir(root)))
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}

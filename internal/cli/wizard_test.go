@@ -149,13 +149,13 @@ func runWizard(t *testing.T, subcommand string, env func(*config.Config) assist.
 		t.Fatal(err)
 	}
 	var stdout bytes.Buffer
-	app := App{
+	app := hermeticApp(t, App{
 		Stdin:         strings.NewReader(script),
 		Stdout:        &stdout,
 		Stderr:        &bytes.Buffer{},
-		LoadConfig:    config.Load,
+		LoadConfig:    testConfigLoader(t),
 		wizardEnvFunc: env,
-	}
+	})
 	code := app.Run(context.Background(), []string{"--config", cfgPath, "wizard", subcommand})
 	if code != exitSuccess {
 		t.Fatalf("exit = %d, want success; out=%s", code, stdout.String())
@@ -199,7 +199,7 @@ func TestRunWizardVolumeMergesConfig(t *testing.T) {
 	if strings.Contains(string(watchFile), "watches:") || strings.Contains(string(watchFile), "capacity:") || !strings.Contains(string(watchFile), "check:") || !strings.Contains(string(watchFile), "free_pct") {
 		t.Fatalf("storage watch document wrong: %s", watchFile)
 	}
-	loaded, err := config.Load(cfgPath)
+	loaded, err := loadTestConfig(t, cfgPath)
 	if err != nil {
 		t.Fatalf("load merged config: %v", err)
 	}
@@ -249,7 +249,7 @@ func assertWizardWritesService(t *testing.T, subcommand string, env func(*config
 	if strings.Contains(text, "kind:") {
 		t.Fatalf("service file should not write a kind:\n%s", text)
 	}
-	loaded, err := config.Load(cfgPath)
+	loaded, err := loadTestConfig(t, cfgPath)
 	if err != nil {
 		t.Fatalf("load merged config: %v", err)
 	}
@@ -322,7 +322,7 @@ func TestRunWizardMountWritesStorageMountUnit(t *testing.T) {
 	if !strings.Contains(string(merged), "watches:") || !strings.Contains(string(merged), "mounts") {
 		t.Fatalf("paths.watches not updated with mounts: %s", merged)
 	}
-	loaded, err := config.Load(cfgPath)
+	loaded, err := loadTestConfig(t, cfgPath)
 	if err != nil {
 		t.Fatalf("load merged config: %v", err)
 	}
@@ -368,13 +368,13 @@ func TestRunWizardUnknownAssistant(t *testing.T) {
 	tmp := t.TempDir()
 	cfgPath := filepath.Join(tmp, "sermo.yml")
 	_ = os.WriteFile(cfgPath, []byte("engine: {}\n"), 0o644)
-	app := App{
+	app := hermeticApp(t, App{
 		Stdin:         strings.NewReader(""),
 		Stdout:        &bytes.Buffer{},
 		Stderr:        &bytes.Buffer{},
-		LoadConfig:    config.Load,
+		LoadConfig:    testConfigLoader(t),
 		wizardEnvFunc: fakeWizardEnv,
-	}
+	})
 	if code := app.Run(context.Background(), []string{"--config", cfgPath, "wizard", "nope"}); code != exitUsage {
 		t.Fatalf("unknown assistant exit = %d, want usage error", code)
 	}
@@ -386,7 +386,7 @@ func TestWizardRejectsLoadedWatchCollision(t *testing.T) {
 	if err := os.WriteFile(cfgPath, []byte("watches:\n  storage-root: {}\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	cfg, err := config.Load(cfgPath)
+	cfg, err := loadTestConfig(t, cfgPath)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -576,13 +576,13 @@ func TestRunWizardVolumeCanDeleteExistingStorageFilesIndividually(t *testing.T) 
 	script := strings.Join([]string{"1", "1", "", "1", "10", "", "", "3", "1", "n", "n", "y", "y", "y"}, "\n") + "\n"
 
 	var out bytes.Buffer
-	app := App{
+	app := hermeticApp(t, App{
 		Stdin:         strings.NewReader(script),
 		Stdout:        &out,
 		Stderr:        &bytes.Buffer{},
-		LoadConfig:    config.Load,
+		LoadConfig:    testConfigLoader(t),
 		wizardEnvFunc: fakeWizardEnv,
-	}
+	})
 	code := app.Run(context.Background(), []string{"--config", cfgPath, "wizard", "volume"})
 	if code != exitSuccess {
 		t.Fatalf("exit = %d, want success; out=%s", code, out.String())
@@ -721,14 +721,14 @@ func TestRunWizardAbortsOnTruncatedInput(t *testing.T) {
 	}
 
 	var out, errOut bytes.Buffer
-	app := App{
+	app := hermeticApp(t, App{
 		// One unusable answer for the volume menu, then EOF.
 		Stdin:         strings.NewReader("zzz\n"),
 		Stdout:        &out,
 		Stderr:        &errOut,
-		LoadConfig:    config.Load,
+		LoadConfig:    testConfigLoader(t),
 		wizardEnvFunc: fakeWizardEnv,
-	}
+	})
 	code := app.Run(context.Background(), []string{"--config", cfgPath, "wizard", "volume"})
 	if code != exitUsage {
 		t.Fatalf("exit = %d, want %d (usage); out=%s err=%s", code, exitUsage, out.String(), errOut.String())

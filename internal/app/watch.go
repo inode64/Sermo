@@ -760,7 +760,7 @@ func (w *Watch) runExpand(ctx context.Context, res checks.Result, emitSkipped bo
 		return
 	}
 	path := cfgval.String(res.Data[checks.DataKeyPath])
-	r, err := w.Expander.ExpandPath(ctx, path, w.Expand.By)
+	r, err := w.Expander.ExpandPath(withExpandWatch(ctx, w.Name), path, w.Expand.By)
 	// A collision with a running (manual) expansion also starts the cooldown:
 	// that expansion is already growing the volume this cycle wanted to grow.
 	w.policyState.Record(at, w.Policy)

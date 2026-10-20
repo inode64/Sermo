@@ -17,6 +17,7 @@ watches:
   wal-g-mysql:
     check:
       type: process
+      reports: state
       optional: true
       exe: "${wal_g_mysql_binary}"
       user: "${user}"

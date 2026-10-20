@@ -20,6 +20,7 @@ func TestResidualSudoSessionUsesVerifiedEvidence(t *testing.T) {
 		exe                           string
 		monitorPID                    int
 		changed, survives, probeError bool
+		unknownTicks                  bool
 		wantSignals                   int
 		wantOK                        bool
 		wantMessage                   string
@@ -28,6 +29,7 @@ func TestResidualSudoSessionUsesVerifiedEvidence(t *testing.T) {
 		{name: "legacy sudo path", exe: "/bin/sudo", monitorPID: 97, wantSignals: 4, wantOK: true},
 		{name: "not sudo", exe: "/usr/bin/bash", monitorPID: 97, wantMessage: "is not sudo"},
 		{name: "incomplete identity", exe: "/usr/bin/sudo", wantMessage: "incomplete sudo process identity"},
+		{name: "unknown target generation", exe: "/usr/bin/sudo", monitorPID: 97, unknownTicks: true, wantMessage: "incomplete sudo process identity"},
 		{name: "identity changed", exe: "/usr/bin/sudo", monitorPID: 97, changed: true, wantSignals: 2},
 		{name: "survivor", exe: "/usr/bin/sudo", monitorPID: 97, survives: true, wantSignals: 4},
 		{name: "unreadable", exe: "/usr/bin/sudo", monitorPID: 97, probeError: true, wantSignals: 2},
@@ -54,7 +56,11 @@ func TestResidualSudoSessionUsesVerifiedEvidence(t *testing.T) {
 				}
 				return len(signaler.calls) == 4 && !tc.survives, nil
 			}
-			res := e.CloseSession(t.Context(), SessionTarget{PID: 96, StartTicks: 1234, Terminal: "pts/1"})
+			target := SessionTarget{PID: 96, StartTicks: 1234, Terminal: "pts/1"}
+			if tc.unknownTicks {
+				target.StartTicks = 0
+			}
+			res := e.CloseSession(t.Context(), target)
 			if res.OK() != tc.wantOK || len(signaler.calls) != tc.wantSignals || len(h.emitted) != 1 || len(h.mgr.calls) != 0 {
 				t.Fatalf("result=%+v signals=%v events=%v", res, signaler.calls, h.emitted)
 			}

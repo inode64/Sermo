@@ -222,7 +222,7 @@ func (b *WebBackend) ControlReplication(ctx context.Context, name string) web.Ac
 	if w.disabled || !w.replicationControl || w.checkType != checks.CheckTypeReplication {
 		return web.ActionResult{Message: fmt.Sprintf("watch %q has no replication start control configured", name)}
 	}
-	result := ControlReplicationStart(ctx, b.cfg.Global.RuntimeDir(), name, w.check, b.operationTimeout)
+	result := ControlReplicationStart(ctx, b.cfg.Global.RuntimeDir(), name, w.check, b.operationTimeout, watchLockReclaimEvent(b.emit, name))
 	return b.finishWatchControl(name, eventActionReplicationStart, result.OK, result.Message)
 }
 
@@ -258,7 +258,7 @@ func (b *WebBackend) ControlRAID(ctx context.Context, name, action, confirmation
 		b.emitWatchMonitorEvent(name, eventActionRAIDPause, eventKindSuppressed, eventStatusBlocked, msg)
 		return web.ActionResult{Message: msg}
 	}
-	result := ControlRAID(ctx, b.cfg.Global.RuntimeDir(), array, action, b.operationTimeout)
+	result := ControlRAID(ctx, b.cfg.Global.RuntimeDir(), array, action, b.operationTimeout, watchLockReclaimEvent(b.emit, name))
 	eventAction := eventActionRAIDPause
 	if action == RaidControlResume {
 		eventAction = eventActionRAIDResume

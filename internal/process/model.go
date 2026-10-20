@@ -87,12 +87,14 @@ func (p Process) signalExecutable() string {
 }
 
 // SameGeneration reports whether p and o are one process generation: the same
-// PID started at the same kernel tick. A recycled PID is a different process.
+// PID started at the same kernel tick. A recycled PID is a different process,
+// and an unknown start tick (0) proves no generation, so it never matches.
 func (p Process) SameGeneration(o Process) bool {
-	return p.PID == o.PID && p.StartTicks == o.StartTicks
+	return p.PID == o.PID && p.StartTicks != 0 && p.StartTicks == o.StartTicks
 }
 
-// ContainsGeneration reports whether procs holds p's generation.
+// ContainsGeneration reports whether procs holds p's generation; a process with
+// an unknown start tick is never held.
 func ContainsGeneration(procs []Process, p Process) bool {
 	return slices.ContainsFunc(procs, p.SameGeneration)
 }

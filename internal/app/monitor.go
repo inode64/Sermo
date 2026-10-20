@@ -23,7 +23,10 @@ import (
 // runtime state, stops the current generation gracefully, and starts a new one.
 type Monitor struct {
 	ConfigPath string
-	Logger     interface {
+	// LoadOptions are appended to every reload's config.Load; tests pin an
+	// empty catalog so a reload never reads the host's installed one.
+	LoadOptions []config.Option
+	Logger      interface {
 		Info(msg string, args ...any)
 		Warn(msg string, args ...any)
 		Error(msg string, args ...any)
@@ -44,6 +47,18 @@ type Monitor struct {
 	running   bool
 	// startupDelayUntil is when the first boot's engine.startup_delay ends.
 	startupDelayUntil time.Time
+	// newProcReader wraps the /proc readers a reload rebuilds; nil reads the
+	// host's /proc. Tests return a fake process table.
+	newProcReader func(process.OSReader) process.Reader
+}
+
+// cachedProcReader returns the cached /proc reader a reload installs for os.
+func (m *Monitor) cachedProcReader(os process.OSReader, freshness time.Duration) *process.CachingReader {
+	var inner process.Reader = os
+	if m.newProcReader != nil {
+		inner = m.newProcReader(os)
+	}
+	return process.NewCachingReader(inner, freshness)
 }
 
 const (
@@ -148,7 +163,8 @@ func (m *Monitor) Reload(ctx context.Context) {
 // reload error and returning nil when the current generation must keep running.
 func (m *Monitor) loadReloadConfig(ctx context.Context) *config.Config {
 	// WithLoadContext binds ctx for service-unit discovery during Load.
-	newCfg, err := config.Load(m.ConfigPath, config.WithLoadContext(ctx)) //nolint:contextcheck // option injects ctx; Load's signature has no context param
+	opts := append([]config.Option{config.WithLoadContext(ctx)}, m.LoadOptions...)
+	newCfg, err := config.Load(m.ConfigPath, opts...) //nolint:contextcheck // option injects ctx; Load's signature has no context param
 	if err != nil {
 		m.emitReloadError(fmt.Sprintf("load config: %v", err))
 		return nil
@@ -235,8 +251,8 @@ func (m *Monitor) applyConfig(cfg *config.Config) {
 	}
 	// Recreate the shared /proc reader so reloads can change user/group lookup
 	// policy as well as the freshness window.
-	m.deps.ProcReader = process.NewCachingReader(process.OSReader{LookupUserName: m.deps.UserLookup.Username}, m.deps.SystemFreshness)
-	terminalReader := process.NewCachingReader(process.OSReader{
+	m.deps.ProcReader = m.cachedProcReader(process.OSReader{LookupUserName: m.deps.UserLookup.Username}, m.deps.SystemFreshness)
+	terminalReader := m.cachedProcReader(process.OSReader{
 		LookupUserName:  m.deps.UserLookup.Username,
 		LookupGroupName: m.deps.UserLookup.GroupName,
 		ReadTTY:         true,

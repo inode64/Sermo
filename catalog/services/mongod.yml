@@ -15,6 +15,33 @@ variables:
   host: 127.0.0.1
   port: 27017
   config: /etc/mongod.conf
+  # The upstream RPM packages run mongod as `mongod`; the Debian/Ubuntu packages
+  # and Gentoo as `mongodb`.
+  user: mongod
+os:
+  debian:
+    variables:
+      user: mongodb
+  ubuntu:
+    variables:
+      user: mongodb
+  gentoo:
+    variables:
+      user: mongodb
+processes:
+  mongod:
+    exe: ${mongod_binary}
+    user: ${user}
+# A database stop flushes and checkpoints: give it a long graceful window, and
+# SIGKILL only the exact daemon binary under its own user if it still hangs.
+stop_policy:
+  graceful_timeout: 120s
+  term_timeout: 60s
+  kill_only_if:
+    users:
+      - ${user}
+    exe_any:
+      - ${mongod_binary}
 preflight:
   config:
     type: command

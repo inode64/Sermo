@@ -28,7 +28,7 @@ func TestSeverityLabel(t *testing.T) {
 
 func TestEventsTableShowsSeverity(t *testing.T) {
 	var stdout bytes.Buffer
-	app := App{Stdout: &stdout}
+	app := hermeticApp(t, App{Stdout: &stdout})
 	app.writeEventsTable([]event{
 		{Time: "2026-09-30T10:00:00Z", Watch: "disk-root", Kind: "firing", Severity: "critical", Message: "used 99%"},
 		{Time: "2026-09-30T09:00:00Z", Service: "web", Kind: "action", Action: "restart", Message: "restarted"},
@@ -69,7 +69,7 @@ watches:
 `)
 	global := filepath.Join(root, "sermo.yml")
 	var stdout, stderr bytes.Buffer
-	app := App{Env: func(string) string { return "" }, Stdout: &stdout, Stderr: &stderr}
+	app := hermeticApp(t, App{Env: func(string) string { return "" }, Stdout: &stdout, Stderr: &stderr})
 	if code := app.Run(context.Background(), []string{"--config", global, "config", "validate"}); code != exitSuccess {
 		t.Fatalf("exit = %d, want success; stderr = %s", code, stderr.String())
 	}

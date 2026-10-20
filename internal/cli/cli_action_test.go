@@ -89,22 +89,23 @@ reload:
 }
 
 // actionApp builds an App whose operation engine is replaced by a canned result.
-func actionApp(result operation.Result, opErr error, stdout, stderr *bytes.Buffer) App {
+func actionApp(t *testing.T, result operation.Result, opErr error, stdout, stderr *bytes.Buffer) App {
+	t.Helper()
 	if stdout == nil {
 		stdout = &bytes.Buffer{}
 	}
 	if stderr == nil {
 		stderr = &bytes.Buffer{}
 	}
-	return App{
-		LoadConfig: config.Load,
+	return hermeticApp(t, App{
+		LoadConfig: testConfigLoader(t),
 		Operate: func(context.Context, options, *config.Config, config.Resolved, string, string) (operation.Result, error) {
 			return result, opErr
 		},
 		Env:    func(string) string { return "" },
 		Stdout: stdout,
 		Stderr: stderr,
-	}
+	})
 }
 
 // okOperate is an App.Operate stub that echoes the request as a successful result.
@@ -116,7 +117,7 @@ func okOperate(_ context.Context, _ options, _ *config.Config, _ config.Resolved
 // caller is responsible for closing the returned store.
 func openTestStateStore(t *testing.T, global string) *state.Store {
 	t.Helper()
-	cfg, err := config.Load(global)
+	cfg, err := loadTestConfig(t, global)
 	if err != nil {
 		t.Fatalf("load config: %v", err)
 	}
@@ -164,7 +165,7 @@ func writeMonitorRecord(t *testing.T, global, service string, active bool, sourc
 func TestRestartOKThroughEngine(t *testing.T) {
 	global := writeActionConfig(t)
 	var stdout bytes.Buffer
-	app := actionApp(operation.Result{Service: "web", Action: "restart", Status: operation.ResultOK}, nil, &stdout, nil)
+	app := actionApp(t, operation.Result{Service: "web", Action: "restart", Status: operation.ResultOK}, nil, &stdout, nil)
 
 	code := app.Run(context.Background(), []string{"--config", global, "restart", "web"})
 	if code != exitSuccess {
@@ -201,7 +202,7 @@ service: web
 
 	var stdout bytes.Buffer
 	var gotService string
-	app := actionApp(operation.Result{}, nil, &stdout, nil)
+	app := actionApp(t, operation.Result{}, nil, &stdout, nil)
 	app.Operate = func(_ context.Context, _ options, _ *config.Config, _ config.Resolved, service, action string) (operation.Result, error) {
 		gotService = service
 		return operation.Result{Service: service, Action: action, Status: operation.ResultOK}, nil
@@ -222,7 +223,7 @@ service: web
 func TestRestartBlockedExit75(t *testing.T) {
 	global := writeActionConfig(t)
 	var stdout bytes.Buffer
-	app := actionApp(operation.Result{Service: "web", Action: "restart", Status: operation.ResultBlocked, Message: "backup running"}, nil, &stdout, nil)
+	app := actionApp(t, operation.Result{Service: "web", Action: "restart", Status: operation.ResultBlocked, Message: "backup running"}, nil, &stdout, nil)
 
 	code := app.Run(context.Background(), []string{"--config", global, "restart", "web"})
 	if code != exitBlocked {
@@ -236,7 +237,7 @@ func TestRestartBlockedExit75(t *testing.T) {
 
 func TestRestartBlockedByBackupNotifiesInteractiveUser(t *testing.T) {
 	global := writeActionConfig(t)
-	app := actionApp(operation.Result{Service: "db", Action: "restart", Status: operation.ResultBlocked, Message: "database backup is running"}, nil, nil, nil)
+	app := actionApp(t, operation.Result{Service: "db", Action: "restart", Status: operation.ResultBlocked, Message: "database backup is running"}, nil, nil, nil)
 	app.InteractiveUser = func() (string, bool) { return "fran", true }
 	var notified operation.Result
 	var notifiedUser string
@@ -261,7 +262,7 @@ func TestRestartBlockedByBackupNotifiesInteractiveUser(t *testing.T) {
 func assertBlockedDoesNotNotify(t *testing.T, msg string, interactive func() (string, bool)) {
 	t.Helper()
 	global := writeActionConfig(t)
-	app := actionApp(operation.Result{Service: "db", Action: "restart", Status: operation.ResultBlocked, Message: msg}, nil, nil, nil)
+	app := actionApp(t, operation.Result{Service: "db", Action: "restart", Status: operation.ResultBlocked, Message: msg}, nil, nil, nil)
 	app.InteractiveUser = interactive
 	app.NotifyBlockedAction = func(context.Context, operation.Result, string) error {
 		t.Fatal("blocked action must not notify a terminal user")
@@ -285,7 +286,7 @@ func TestRestartBlockedForNonBackupDoesNotNotify(t *testing.T) {
 func TestPreflightFailedExit1(t *testing.T) {
 	global := writeActionConfig(t)
 	var stdout bytes.Buffer
-	app := actionApp(operation.Result{Service: "web", Action: "restart", Status: operation.ResultPreflightFailed, Message: "preflight failed"}, nil, &stdout, nil)
+	app := actionApp(t, operation.Result{Service: "web", Action: "restart", Status: operation.ResultPreflightFailed, Message: "preflight failed"}, nil, &stdout, nil)
 
 	code := app.Run(context.Background(), []string{"--config", global, "restart", "web"})
 	if code != exitNotActive {
@@ -298,7 +299,7 @@ func TestPreflightFailedExit1(t *testing.T) {
 func TestPausePausesMonitoringAndResumeRestores(t *testing.T) {
 	global := writeActionConfig(t)
 	var stdout bytes.Buffer
-	app := actionApp(operation.Result{}, nil, &stdout, nil)
+	app := actionApp(t, operation.Result{}, nil, &stdout, nil)
 	app.Operate = okOperate
 
 	if code := app.Run(context.Background(), []string{"--config", global, "pause", "web"}); code != exitSuccess {
@@ -317,7 +318,7 @@ func TestPausePausesMonitoringAndResumeRestores(t *testing.T) {
 
 func TestActionFailedExit2(t *testing.T) {
 	global := writeActionConfig(t)
-	app := actionApp(operation.Result{Service: "web", Action: "stop", Status: operation.ResultFailed, Message: "stop: boom"}, nil, nil, nil)
+	app := actionApp(t, operation.Result{Service: "web", Action: "stop", Status: operation.ResultFailed, Message: "stop: boom"}, nil, nil, nil)
 
 	code := app.Run(context.Background(), []string{"--config", global, "stop", "web"})
 	if code != exitRuntimeError {
@@ -328,7 +329,7 @@ func TestActionFailedExit2(t *testing.T) {
 func TestStopPausesMonitoringAndStartRestores(t *testing.T) {
 	global := writeActionConfig(t)
 	var stdout bytes.Buffer
-	app := actionApp(operation.Result{}, nil, &stdout, nil)
+	app := actionApp(t, operation.Result{}, nil, &stdout, nil)
 	app.Operate = okOperate
 
 	if code := app.Run(context.Background(), []string{"--config", global, "stop", "web"}); code != exitSuccess {
@@ -358,7 +359,7 @@ func TestStopPausesMonitoringAndStartRestores(t *testing.T) {
 func TestStopStartPreservesExistingUnmonitor(t *testing.T) {
 	global := writeActionConfig(t)
 	writeMonitorRecord(t, global, "web", false, state.SourceCLI)
-	app := actionApp(operation.Result{}, nil, nil, nil)
+	app := actionApp(t, operation.Result{}, nil, nil, nil)
 	app.Operate = okOperate
 
 	if code := app.Run(context.Background(), []string{"--config", global, "stop", "web"}); code != exitSuccess {
@@ -406,7 +407,7 @@ service: db
 // the exit code reflects the failure.
 func TestCascadeTargetErrorDowngradesPrimary(t *testing.T) {
 	global := writeCascadeConfig(t)
-	app := actionApp(operation.Result{}, nil, nil, nil)
+	app := actionApp(t, operation.Result{}, nil, nil, nil)
 	app.Operate = func(_ context.Context, _ options, _ *config.Config, _ config.Resolved, service, action string) (operation.Result, error) {
 		if service == "db" {
 			return operation.Result{}, errors.New("db: engine boom")
@@ -425,7 +426,7 @@ func TestCascadeTargetErrorDowngradesPrimary(t *testing.T) {
 func TestCascadeJSONIsOneDocument(t *testing.T) {
 	global := writeCascadeConfig(t)
 	var stdout bytes.Buffer
-	app := actionApp(operation.Result{}, nil, &stdout, nil)
+	app := actionApp(t, operation.Result{}, nil, &stdout, nil)
 	calls := map[string]int{}
 	app.Operate = func(_ context.Context, _ options, _ *config.Config, _ config.Resolved, service, action string) (operation.Result, error) {
 		calls[service]++
@@ -462,7 +463,7 @@ func TestCascadeJSONIsOneDocument(t *testing.T) {
 
 func TestCascadeRetriesBlockedTarget(t *testing.T) {
 	global := writeCascadeConfig(t)
-	app := actionApp(operation.Result{}, nil, nil, nil)
+	app := actionApp(t, operation.Result{}, nil, nil, nil)
 	calls := map[string]int{}
 	app.Operate = func(_ context.Context, _ options, _ *config.Config, _ config.Resolved, service, action string) (operation.Result, error) {
 		calls[service]++
@@ -507,7 +508,7 @@ checks:
 `,
 	})
 	var stderr bytes.Buffer
-	app := actionApp(operation.Result{}, nil, nil, &stderr)
+	app := actionApp(t, operation.Result{}, nil, nil, &stderr)
 	app.Operate = okOperate
 
 	code := app.Run(t.Context(), []string{"--config", global, "restart", "web"})
@@ -530,7 +531,7 @@ checks:
 
 func TestRepairDoesNotCascadeAlsoApply(t *testing.T) {
 	global := writeCascadeConfig(t)
-	app := actionApp(operation.Result{}, nil, nil, nil)
+	app := actionApp(t, operation.Result{}, nil, nil, nil)
 	var calls []string
 	app.Operate = func(_ context.Context, _ options, _ *config.Config, _ config.Resolved, service, action string) (operation.Result, error) {
 		calls = append(calls, action+" "+service)
@@ -547,7 +548,7 @@ func TestRepairDoesNotCascadeAlsoApply(t *testing.T) {
 
 func TestCascadeBackupBlockNotifiesInteractiveUser(t *testing.T) {
 	global := writeCascadeConfig(t)
-	app := actionApp(operation.Result{}, nil, nil, nil)
+	app := actionApp(t, operation.Result{}, nil, nil, nil)
 	app.InteractiveUser = func() (string, bool) { return "fran", true }
 	var notified operation.Result
 	app.NotifyBlockedAction = func(_ context.Context, result operation.Result, _ string) error {
@@ -573,7 +574,7 @@ func TestCascadeBackupBlockNotifiesInteractiveUser(t *testing.T) {
 func TestActionJSON(t *testing.T) {
 	global := writeActionConfig(t)
 	var stdout bytes.Buffer
-	app := actionApp(operation.Result{Service: "web", Action: "restart", Status: operation.ResultOK, Backend: "systemd"}, nil, &stdout, nil)
+	app := actionApp(t, operation.Result{Service: "web", Action: "restart", Status: operation.ResultOK, Backend: "systemd"}, nil, &stdout, nil)
 
 	code := app.Run(context.Background(), []string{"--config", global, "--json", "restart", "web"})
 	if code != exitSuccess {
@@ -595,7 +596,7 @@ func TestActionJSON(t *testing.T) {
 func TestActionWiringErrorExit2(t *testing.T) {
 	global := writeActionConfig(t)
 	var stderr bytes.Buffer
-	app := actionApp(operation.Result{}, errors.New("backend detection failed: none"), nil, &stderr)
+	app := actionApp(t, operation.Result{}, errors.New("backend detection failed: none"), nil, &stderr)
 
 	code := app.Run(context.Background(), []string{"--config", global, "restart", "web"})
 	if code != exitRuntimeError {
@@ -610,7 +611,7 @@ func TestReloadValidatesConfigBeforeOperate(t *testing.T) {
 	global := writeInvalidActionConfig(t)
 	var stderr bytes.Buffer
 	called := false
-	app := actionApp(operation.Result{Service: "web", Action: "reload", Status: operation.ResultOK}, nil, nil, &stderr)
+	app := actionApp(t, operation.Result{Service: "web", Action: "reload", Status: operation.ResultOK}, nil, nil, &stderr)
 	app.Operate = func(context.Context, options, *config.Config, config.Resolved, string, string) (operation.Result, error) {
 		called = true
 		return operation.Result{}, nil
@@ -642,7 +643,7 @@ func TestReloadPreconditionDoesNotOperate(t *testing.T) {
 			global := writeActionConfig(t)
 			var stderr bytes.Buffer
 			called := false
-			app := actionApp(operation.Result{Service: "web", Action: "reload", Status: operation.ResultOK}, nil, nil, &stderr)
+			app := actionApp(t, operation.Result{Service: "web", Action: "reload", Status: operation.ResultOK}, nil, nil, &stderr)
 			app.Detector = fakeBackendDetector{detection: servicemgr.BackendOpenRC}
 			app.NewManager = func(servicemgr.Backend) (servicemgr.Manager, error) {
 				return tc.manager, nil
@@ -672,7 +673,7 @@ func TestReloadPreconditionDoesNotOperate(t *testing.T) {
 func TestActionUnknownService(t *testing.T) {
 	global := writeActionConfig(t)
 	var stderr bytes.Buffer
-	app := actionApp(operation.Result{}, nil, nil, &stderr)
+	app := actionApp(t, operation.Result{}, nil, nil, &stderr)
 
 	code := app.Run(context.Background(), []string{"--config", global, "restart", "nope"})
 	if code != exitRuntimeError {
@@ -689,8 +690,8 @@ func TestReloadNativeCommandUsesAppRunner(t *testing.T) {
 	var actions []string
 	var stdout bytes.Buffer
 	noReload := false
-	app := App{
-		LoadConfig: config.Load,
+	app := hermeticApp(t, App{
+		LoadConfig: testConfigLoader(t),
 		Detector:   fakeBackendDetector{detection: servicemgr.BackendOpenRC},
 		NewManager: func(servicemgr.Backend) (servicemgr.Manager, error) {
 			return fakeManager{actions: &actions, supportsReload: &noReload}, nil
@@ -699,7 +700,7 @@ func TestReloadNativeCommandUsesAppRunner(t *testing.T) {
 		Env:    func(string) string { return "" },
 		Stdout: &stdout,
 		Stderr: &bytes.Buffer{},
-	}
+	})
 
 	code := app.Run(context.Background(), []string{"--config", global, "reload", "web"})
 	if code != exitSuccess {
@@ -744,7 +745,7 @@ func TestReloadPreparesBackendOnce(t *testing.T) {
 	detectCalls := 0
 	managerCalls := 0
 	var actions []string
-	app := App{
+	app := hermeticApp(t, App{
 		Detector: countingDetector{calls: &detectCalls, detection: servicemgr.BackendSystemd},
 		NewManager: func(servicemgr.Backend) (servicemgr.Manager, error) {
 			managerCalls++
@@ -756,7 +757,7 @@ func TestReloadPreparesBackendOnce(t *testing.T) {
 		Runner: statusUnitRunner{known: "web.service"},
 		Stdout: &bytes.Buffer{},
 		Stderr: &bytes.Buffer{},
-	}
+	})
 
 	if code := app.Run(t.Context(), []string{"--config", global, "reload", "web"}); code != exitSuccess {
 		t.Fatalf("Run() exit = %d, want %d", code, exitSuccess)
@@ -795,7 +796,7 @@ defaults:
 `, map[string]string{"services/web.yml": "name: web\nservice: web\n"})
 			var got time.Duration
 			var actions []string
-			app := App{
+			app := hermeticApp(t, App{
 				Detector: fakeBackendDetector{detection: servicemgr.BackendSystemd},
 				NewManager: func(servicemgr.Backend) (servicemgr.Manager, error) {
 					return fakeManager{actions: &actions, status: servicemgr.ServiceStatus{Status: servicemgr.StatusActive}}, nil
@@ -807,7 +808,7 @@ defaults:
 				Runner: statusUnitRunner{known: "web.service"},
 				Stdout: &bytes.Buffer{},
 				Stderr: &bytes.Buffer{},
-			}
+			})
 			args := append(append([]string{"--config", global}, tc.args...), "reload", "web")
 			if code := app.Run(t.Context(), args); code != exitSuccess {
 				t.Fatalf("Run() exit = %d, want %d", code, exitSuccess)
@@ -844,7 +845,7 @@ func (m deadlineStatusManager) Status(ctx context.Context, service string) (serv
 
 func TestOperationSessionPostflightStatusReusesPreparedTarget(t *testing.T) {
 	global := writeActionConfig(t)
-	cfg, err := config.Load(global)
+	cfg, err := loadTestConfig(t, global)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -855,7 +856,7 @@ func TestOperationSessionPostflightStatusReusesPreparedTarget(t *testing.T) {
 	detectCalls := 0
 	managerCalls := 0
 	hadDeadline := false
-	app := App{
+	app := hermeticApp(t, App{
 		Detector: countingDetector{calls: &detectCalls, detection: servicemgr.BackendSystemd},
 		NewManager: func(servicemgr.Backend) (servicemgr.Manager, error) {
 			managerCalls++
@@ -867,7 +868,7 @@ func TestOperationSessionPostflightStatusReusesPreparedTarget(t *testing.T) {
 		Runner: statusUnitRunner{known: "web.service"},
 		Stdout: &bytes.Buffer{},
 		Stderr: &bytes.Buffer{},
-	}
+	})
 	session, err := app.newOperationSession(t.Context(), options{config: global}, cfg, nil)
 	if err != nil {
 		t.Fatalf("newOperationSession: %v", err)
@@ -898,7 +899,7 @@ func TestOperationSessionPostflightStatusReusesPreparedTarget(t *testing.T) {
 
 func TestActionTimeoutNotConsumedByDetection(t *testing.T) {
 	global := writeActionConfig(t)
-	cfg, err := config.Load(global)
+	cfg, err := loadTestConfig(t, global)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -911,8 +912,8 @@ func TestActionTimeoutNotConsumedByDetection(t *testing.T) {
 	opTimeout := 200 * time.Millisecond
 	var remaining time.Duration
 
-	app := App{
-		LoadConfig: config.Load,
+	app := hermeticApp(t, App{
+		LoadConfig: testConfigLoader(t),
 		Detector: slowDetector{
 			delay:     detectDelay,
 			detection: servicemgr.BackendSystemd,
@@ -922,7 +923,7 @@ func TestActionTimeoutNotConsumedByDetection(t *testing.T) {
 		},
 		Stdout: &bytes.Buffer{},
 		Stderr: &bytes.Buffer{},
-	}
+	})
 
 	_, err = runProductionOperation(context.Background(), app, options{timeout: opTimeout, config: global}, cfg, resolved, "web", "start")
 	if err != nil {
@@ -938,7 +939,7 @@ func TestActionTimeoutNotConsumedByDetection(t *testing.T) {
 func TestExplicitActionTimeoutBoundsEngineBudget(t *testing.T) {
 	global := writeActionConfig(t)
 	var remaining time.Duration
-	app := App{
+	app := hermeticApp(t, App{
 		Detector: fakeBackendDetector{detection: servicemgr.BackendSystemd},
 		NewManager: func(servicemgr.Backend) (servicemgr.Manager, error) {
 			return deadlineManager{status: servicemgr.ServiceStatus{Status: servicemgr.StatusActive}, remaining: &remaining}, nil
@@ -946,7 +947,7 @@ func TestExplicitActionTimeoutBoundsEngineBudget(t *testing.T) {
 		Runner: statusUnitRunner{known: "web.service"},
 		Stdout: &bytes.Buffer{},
 		Stderr: &bytes.Buffer{},
-	}
+	})
 	if code := app.Run(t.Context(), []string{"--config", global, "start", "web", "--timeout", "2s"}); code != exitRuntimeError {
 		t.Fatalf("exit = %d; stdout = %s; stderr = %s", code, app.Stdout, app.Stderr)
 	}
@@ -965,7 +966,7 @@ func TestExplicitActionTimeoutBoundsEngineBudget(t *testing.T) {
 }
 
 func TestWithDefaultsLeavesProductionOperationToSession(t *testing.T) {
-	app := (App{}).withDefaults()
+	app := (hermeticApp(t, App{})).withDefaults()
 	if app.Operate != nil {
 		t.Fatal("withDefaults installed a second production operation path")
 	}
@@ -973,7 +974,7 @@ func TestWithDefaultsLeavesProductionOperationToSession(t *testing.T) {
 
 func TestOperationSessionFallsBackToConfiguredServiceUnit(t *testing.T) {
 	global := writeFallbackUnitConfig(t)
-	cfg, err := config.Load(global)
+	cfg, err := loadTestConfig(t, global)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -984,8 +985,8 @@ func TestOperationSessionFallsBackToConfiguredServiceUnit(t *testing.T) {
 
 	var actions []string
 	var stderr bytes.Buffer
-	app := App{
-		LoadConfig: config.Load,
+	app := hermeticApp(t, App{
+		LoadConfig: testConfigLoader(t),
 		Detector:   fakeBackendDetector{detection: servicemgr.BackendSystemd},
 		NewManager: func(servicemgr.Backend) (servicemgr.Manager, error) {
 			return fakeManager{actions: &actions, status: servicemgr.ServiceStatus{Status: servicemgr.StatusActive}}, nil
@@ -993,7 +994,7 @@ func TestOperationSessionFallsBackToConfiguredServiceUnit(t *testing.T) {
 		Runner: statusUnitRunner{},
 		Stdout: &bytes.Buffer{},
 		Stderr: &stderr,
-	}
+	})
 
 	result, err := runProductionOperation(context.Background(), app, options{config: global}, cfg, resolved, "legacy", "start")
 	if err != nil {
@@ -1039,7 +1040,7 @@ preflight:
     type: ` + tc.checkType + `
 `,
 			})
-			cfg, err := config.Load(global)
+			cfg, err := loadTestConfig(t, global)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -1049,14 +1050,14 @@ preflight:
 			}
 
 			var actions []string
-			app := App{
+			app := hermeticApp(t, App{
 				Detector: fakeBackendDetector{detection: servicemgr.BackendSystemd},
 				NewManager: func(servicemgr.Backend) (servicemgr.Manager, error) {
 					return fakeManager{actions: &actions, status: servicemgr.ServiceStatus{Status: servicemgr.StatusActive}}, nil
 				},
 				Stdout: &bytes.Buffer{},
 				Stderr: &bytes.Buffer{},
-			}
+			})
 			result, err := runProductionOperation(t.Context(), app, options{config: global}, cfg, resolved, "web", "start")
 			if err != nil {
 				t.Fatalf("production operation: %v", err)
@@ -1101,7 +1102,7 @@ preflight:
 `,
 			})
 			var stdout bytes.Buffer
-			app := App{
+			app := hermeticApp(t, App{
 				Detector: fakeBackendDetector{detection: servicemgr.BackendSystemd},
 				NewManager: func(servicemgr.Backend) (servicemgr.Manager, error) {
 					return fakeManager{status: servicemgr.ServiceStatus{Status: servicemgr.StatusActive}}, nil
@@ -1109,7 +1110,7 @@ preflight:
 				Runner: statusUnitRunner{known: "web.service"},
 				Stdout: &stdout,
 				Stderr: &bytes.Buffer{},
-			}
+			})
 			if code := app.Run(t.Context(), []string{"--config", global, "preflight", "web"}); code != exitSuccess {
 				t.Fatalf("Run() exit = %d, want %d; output=%s", code, exitSuccess, stdout.String())
 			}
@@ -1119,7 +1120,7 @@ preflight:
 
 func TestOperationSessionPersistsOneOperationEvent(t *testing.T) {
 	global := writeActionConfig(t)
-	cfg, err := config.Load(global)
+	cfg, err := loadTestConfig(t, global)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1130,14 +1131,14 @@ func TestOperationSessionPersistsOneOperationEvent(t *testing.T) {
 
 	var actions []string
 	liveStatus := servicemgr.StatusActive
-	app := App{
+	app := hermeticApp(t, App{
 		Detector: fakeBackendDetector{detection: servicemgr.BackendSystemd},
 		NewManager: func(servicemgr.Backend) (servicemgr.Manager, error) {
 			return fakeManager{actions: &actions, liveStatus: &liveStatus, status: servicemgr.ServiceStatus{Status: servicemgr.StatusActive}}, nil
 		},
 		Stdout: &bytes.Buffer{},
 		Stderr: &bytes.Buffer{},
-	}
+	})
 	result, err := runProductionOperation(context.Background(), app, options{config: global}, cfg, resolved, "web", "restart")
 	if err != nil {
 		t.Fatalf("production operation: %v", err)
@@ -1163,7 +1164,7 @@ func TestOperationSessionPersistsOneOperationEvent(t *testing.T) {
 
 func TestOperationSessionDoesNotActWithoutEventStore(t *testing.T) {
 	global := writeActionConfig(t)
-	cfg, err := config.Load(global)
+	cfg, err := loadTestConfig(t, global)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1176,14 +1177,14 @@ func TestOperationSessionDoesNotActWithoutEventStore(t *testing.T) {
 	}
 
 	var actions []string
-	app := App{
+	app := hermeticApp(t, App{
 		Detector: fakeBackendDetector{detection: servicemgr.BackendSystemd},
 		NewManager: func(servicemgr.Backend) (servicemgr.Manager, error) {
 			return fakeManager{actions: &actions}, nil
 		},
 		Stdout: &bytes.Buffer{},
 		Stderr: &bytes.Buffer{},
-	}
+	})
 	_, err = runProductionOperation(context.Background(), app, options{config: global}, cfg, resolved, "web", "restart")
 	if err == nil || !strings.Contains(err.Error(), "operation event store unavailable") {
 		t.Fatalf("production operation error = %v", err)

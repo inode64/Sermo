@@ -6,7 +6,12 @@ category: system
 # new login can start a user manager. used_pct is the worse of the two limits.
 monitor: disabled
 interval: 1m
-check: { type: inotify, used_pct: { op: ">=", value: "80%" } }
+check:
+  type: inotify
+  used_pct: { op: ">=", value: "80%" }
+  severity: warning
+  levels:
+    error: { used_pct: { op: ">=", value: "95%" } }
 for: { cycles: 3 }
 then:
   notify: [none]

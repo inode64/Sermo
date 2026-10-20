@@ -110,7 +110,7 @@ func (s *scriptedRediscover) next() []Process {
 }
 
 func killableProc(pid int) Process {
-	return Process{PID: pid, UID: 110, Exe: testExe, ExeOK: true}
+	return Process{PID: pid, StartTicks: uint64(pid) * 10, UID: 110, Exe: testExe, ExeOK: true}
 }
 
 var killPolicy = KillPolicy{
@@ -225,6 +225,23 @@ func TestReapEscalatesToKill(t *testing.T) {
 	sigs := sig.sigsFor(100)
 	if len(sigs) != 2 || sigs[0] != syscall.SIGTERM || sigs[1] != syscall.SIGKILL {
 		t.Fatalf("pid 100 signals = %v, want [SIGTERM SIGKILL]", sigs)
+	}
+}
+
+// A residual whose start tick is unknown proves no generation: it may receive
+// SIGTERM, but SIGKILL never escalates onto a process that could be a recycled
+// PID.
+func TestReapUnknownStartTicksNeverEscalatesToKill(t *testing.T) {
+	sig := &recSignaler{}
+	unknown := killableProc(100)
+	unknown.StartTicks = 0
+	r := newReaper(sig, [][]Process{{unknown}, {unknown}})
+	res := r.Reap(context.Background(), []Process{unknown}, killPolicy)
+	if res.OK() {
+		t.Fatal("unknown generation survivor must be reported as orphan")
+	}
+	if sigs := sig.sigsFor(100); len(sigs) != 1 || sigs[0] != syscall.SIGTERM {
+		t.Fatalf("pid 100 signals = %v, want [SIGTERM]", sigs)
 	}
 }
 

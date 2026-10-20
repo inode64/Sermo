@@ -26,6 +26,7 @@ import (
 	"sermo/internal/control"
 	"sermo/internal/emission"
 	"sermo/internal/execx"
+	"sermo/internal/hostfs"
 	"sermo/internal/logfile"
 	"sermo/internal/metrics"
 	"sermo/internal/pkgdb"
@@ -188,10 +189,15 @@ func parseRunArgs(args []string) (cliArgs, error) {
 	return parsed, nil
 }
 
+// daemonLoadOptions are appended to every config.Load the daemon makes, at
+// startup and on each reload. Production leaves it nil; tests pin an empty
+// catalog so a daemon they boot never reads the host's installed one.
+var daemonLoadOptions []config.Option
+
 // loadDaemonConfig returns a non-nil config with exit code 0, or nil with a
 // non-zero code; callers gate on the nil config so the pairing stays checkable.
 func loadDaemonConfig(logger *slog.Logger, globalPath string) (*config.Config, int) {
-	cfg, err := config.Load(globalPath)
+	cfg, err := config.Load(globalPath, daemonLoadOptions...)
 	if err != nil {
 		logger.Error("load config", logFieldError, err)
 		return nil, exitFailure
@@ -530,6 +536,7 @@ func run(args []string) int {
 		StartupDelay: startupDelay,
 	}, readiness, collector, webHolder, workers, watches)
 	monitor.ConfigPath = globalPath
+	monitor.LoadOptions = daemonLoadOptions
 	monitor.Logger = logger
 
 	engineLogs := []*logfile.Writer{accessLog, eventFile, diagFile}
@@ -630,6 +637,12 @@ func parseArgs(args []string) (cliArgs, error) {
 	if err := fs.Parse(args); err != nil {
 		return cliArgs{}, fmt.Errorf("parse flags: %w", cliutil.NormalizePflagError(err))
 	}
+
+	globalPath, err := cliutil.AbsPath(flagConfig, parsed.globalPath)
+	if err != nil {
+		return cliArgs{}, err //nolint:wrapcheck // AbsPath already names the flag and value
+	}
+	parsed.globalPath = globalPath
 
 	rest := fs.Args()
 	if len(rest) > 0 {
@@ -734,7 +747,7 @@ func writeFileAtomic(path string, data []byte, mode os.FileMode) error {
 // refusing to start over a permission bit would be worse than saying so.
 func warnWorldReadableSecret(logger *slog.Logger, cfg *config.Config) {
 	for _, path := range cfg.Global.WebCredentialFiles() {
-		info, err := os.Stat(path)
+		info, err := hostfs.Stat(path)
 		if err != nil {
 			continue
 		}

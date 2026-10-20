@@ -8,6 +8,9 @@ check:
   per_cpu: true
   load5: { op: ">", value: 1.5 }
   load15: { op: ">", value: 1.0 }
+  severity: warning
+  levels:
+    error: { load5: { op: ">", value: 3 }, load15: { op: ">", value: 2 } }
 for: { cycles: 3 }
 then:
   hook:

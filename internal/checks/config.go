@@ -3,10 +3,10 @@ package checks
 import (
 	"context"
 	"fmt"
-	"os"
 	"strings"
 
 	"sermo/internal/execx"
+	"sermo/internal/hostfs"
 	"sermo/internal/output"
 )
 
@@ -69,7 +69,7 @@ func (c configCheck) Run(ctx context.Context) Result {
 func configFingerprint(paths []string) string {
 	var b strings.Builder
 	for _, p := range paths {
-		fi, err := os.Stat(p)
+		fi, err := hostfs.StatTarget(p)
 		if err != nil {
 			b.WriteString(p + ":missing;")
 			continue

@@ -22,6 +22,7 @@ import (
 
 	"sermo/internal/cfgval"
 	"sermo/internal/conn"
+	"sermo/internal/hostfs"
 	"sermo/internal/severity"
 	"sermo/internal/units"
 )
@@ -243,7 +244,7 @@ func (c *certCheck) Run(ctx context.Context) Result {
 	if c.path != "" {
 		// File source: a missing/unreadable/unparseable file is a configuration
 		// problem, so it is an alert (unlike a transient network error below).
-		data, err := os.ReadFile(c.path)
+		data, err := hostfs.ReadFileTarget(c.path)
 		if err != nil {
 			if os.IsNotExist(err) {
 				// The material is gone: nothing the service could serve from it.

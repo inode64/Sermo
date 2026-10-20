@@ -43,10 +43,16 @@ variables:
   # accept size suffixes, so the queries return MiB (and seconds) directly.
   # A healthy primary already retains ~16 MiB (one WAL segment) because a
   # logical slot's restart_lsn trails by design, so stay far above that.
+  # Each replication alert warns past its first threshold and escalates to
+  # error past its *_error_* one.
   slot_backlog_mib: 1024
+  slot_backlog_error_mib: 4096
   logical_unconfirmed_mib: 512
+  logical_unconfirmed_error_mib: 2048
   replay_lag_mib: 256
+  replay_lag_error_mib: 1024
   standby_delay_seconds: 300
+  standby_delay_error_seconds: 1800
   data_dir: /var/lib/postgresql/${version}/data
   config_dir: /var/lib/postgresql/${version}/data
 os:
@@ -259,6 +265,9 @@ watches:
       op: '>'
       unit: MiB
       value: ${slot_backlog_mib}
+      severity: warning
+      levels:
+        error: { op: '>', value: "${slot_backlog_error_mib}" }
       summary: >-
         ${display_name} retains ${value} MiB of WAL for its most lagging replication slot (limit ${check.value} MiB)
     for:
@@ -288,6 +297,9 @@ watches:
       op: '>'
       unit: MiB
       value: ${logical_unconfirmed_mib}
+      severity: warning
+      levels:
+        error: { op: '>', value: "${logical_unconfirmed_error_mib}" }
       summary: >-
         ${display_name} has ${value} MiB unconfirmed by its logical replication consumer (limit ${check.value} MiB)
     for:
@@ -312,6 +324,9 @@ watches:
       op: '>'
       unit: slots
       value: 0
+      # A count of idle slots has no meaningful second tier: the WAL they
+      # retain is what alert-if-replication-slot-backlog grades.
+      severity: warning
       summary: >-
         ${display_name} has ${value} replication slot(s) with no consumer connected, still retaining WAL
     for:
@@ -337,6 +352,9 @@ watches:
       op: '>'
       unit: MiB
       value: ${replay_lag_mib}
+      severity: warning
+      levels:
+        error: { op: '>', value: "${replay_lag_error_mib}" }
       summary: >-
         ${display_name} sent ${value} MiB not yet replayed by its most lagging replica (limit ${check.value} MiB)
     for:
@@ -368,6 +386,9 @@ watches:
       op: '>'
       unit: s
       value: ${standby_delay_seconds}
+      severity: warning
+      levels:
+        error: { op: '>', value: "${standby_delay_error_seconds}" }
       summary: >-
         ${display_name} standby is ${value} seconds behind the primary (limit ${check.value} s)
     for:

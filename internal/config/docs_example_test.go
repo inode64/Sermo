@@ -24,7 +24,7 @@ func TestDocsSermoAllValidates(t *testing.T) {
 		t.Skipf("docs/sermo-all.yml not found: %v", err)
 	}
 	layout := materializeDocsExample(t, raw)
-	cfg, err := Load(layout.globalPath, WithCatalogDirs(filepath.Join(root, "catalog"), layout.catalogExtra))
+	cfg, err := loadConfig(t, layout.globalPath, WithCatalogDirs(filepath.Join(root, "catalog"), layout.catalogExtra))
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}

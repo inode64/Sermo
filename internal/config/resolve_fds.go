@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"slices"
 
 	"sermo/internal/cfgval"
 	"sermo/internal/checks"
@@ -131,10 +132,5 @@ func fdsApplies(tree map[string]any) bool {
 		return false
 	}
 	selectors, _ := process.ParseSelectors(tree)
-	for _, selector := range selectors {
-		if selector.Delegated {
-			return false
-		}
-	}
-	return true
+	return !slices.ContainsFunc(selectors, func(s process.Selector) bool { return s.Delegated })
 }

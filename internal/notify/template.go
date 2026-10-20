@@ -6,13 +6,14 @@ import (
 	"errors"
 	"fmt"
 	"maps"
-	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 	"text/template"
 
 	"github.com/goccy/go-yaml"
+
+	"sermo/internal/hostfs"
 )
 
 // Template applies a YAML notification template to a Message before delivery.
@@ -107,7 +108,7 @@ func LoadTemplate(dir, name string) (*Template, error) {
 	if local := filepath.Join(filepath.Clean(dir)+localDirSuffix, name+templateFileSuffix); fileExists(local) {
 		path = local
 	}
-	data, err := os.ReadFile(filepath.Clean(path))
+	data, err := hostfs.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("read template %s: %w", path, err)
 	}
@@ -221,7 +222,7 @@ func (n *templatedNotifier) Send(ctx context.Context, msg Message) error {
 // fileExists reports whether path is a readable regular file, so a directory or
 // a dangling entry never shadows a packaged template.
 func fileExists(path string) bool {
-	info, err := os.Stat(filepath.Clean(path))
+	info, err := hostfs.Stat(path)
 	if err != nil || info == nil {
 		return false
 	}

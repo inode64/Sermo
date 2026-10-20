@@ -2072,7 +2072,7 @@ announced only on state changes. A remediation rule's episode closes with the
 `recovered` event emitted when its condition clears, so its next firing is a
 new episode. Operational errors without a recovery edge are limited to once
 per 24 hours by default, or to `repeat_interval` when set. One-shot notices (a
-service restart notice, a reclaimed stale operation lock) are sent every time
+service restart notice, a reclaimed stale lock) are sent every time
 they occur, subject to the burst budget; they open no incident and are never
 reminded.
 The detailed event log remains unchanged, including per-PID `process_policy`
@@ -2478,7 +2478,7 @@ These conventions keep the per-type sections below short:
   then:
     hook:
       command: [/usr/local/bin/notify, alert]
-      timeout: 10s
+      timeout: 10s                            # optional; default engine.default_timeout
       expect_exit: 0                          # default; success exit code
       expect_stdout: "queued"                 # output must contain this
       expect_stderr: { op: "==", value: "" }  # …or an {op, value} comparison
@@ -4357,7 +4357,10 @@ the one of the same `name:`:
 name: prometheus
 watches:
   alert-if-io-high:
-    check: { value: 838860800 }
+    check:
+      value: 838860800           # warning above 800 MB/s
+      levels:                    # raise the error level with it
+        error: { op: '>', value: 1677721600 }
 ```
 
 The layer exists because a fleet's servers do not share one workload. Packaged

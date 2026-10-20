@@ -3,9 +3,10 @@ package checks
 import (
 	"context"
 	"fmt"
-	"os"
 	"strconv"
 	"strings"
+
+	"sermo/internal/hostfs"
 )
 
 const (
@@ -42,7 +43,7 @@ func (c fdsCheck) Run(_ context.Context) Result {
 // field (free handles) is always 0 on modern kernels, so allocated is the
 // in-use count.
 func defaultFdsSampler() (FdsSample, error) {
-	data, err := os.ReadFile(procFileNRPath)
+	data, err := hostfs.ReadFile(procFileNRPath)
 	if err != nil {
 		return FdsSample{}, fmt.Errorf("read %s: %w", procFileNRPath, err)
 	}

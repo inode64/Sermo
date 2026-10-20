@@ -13,6 +13,7 @@ checks:
   active-control-connections:
     type: tcp_connections
     reports: state
+    optional: true
     port: "${port}"
     count: { op: ">", value: "${restart_block_connections}" }
 

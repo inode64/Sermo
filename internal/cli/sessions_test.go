@@ -13,7 +13,6 @@ import (
 	"testing"
 
 	"sermo/internal/checks"
-	"sermo/internal/config"
 	"sermo/internal/web"
 )
 
@@ -88,7 +87,7 @@ defaults:
 	mustWrite(t, filepath.Join(servicesDir, "mysql.yml"), "name: mysql\nservice: mysql.service\n")
 	mustWrite(t, filepath.Join(servicesDir, "sshd.yml"), "name: sshd\nservice: sshd.service\n")
 	var stdout, stderr bytes.Buffer
-	app := App{Env: func(string) string { return "" }, LoadConfig: config.Load, Stdout: &stdout, Stderr: &stderr}
+	app := hermeticApp(t, App{Env: func(string) string { return "" }, LoadConfig: testConfigLoader(t), Stdout: &stdout, Stderr: &stderr})
 	return app, &stdout, &stderr, global
 }
 

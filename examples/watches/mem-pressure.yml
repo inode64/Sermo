@@ -8,6 +8,9 @@ check:
   type: pressure
   resource: memory
   some_avg60: { op: ">", value: 10 }
+  severity: warning
+  levels:
+    error: { some_avg60: { op: ">", value: 30 } }
 for: { cycles: 3 }
 then:
   hook:

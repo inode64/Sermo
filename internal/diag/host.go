@@ -1,8 +1,8 @@
 package diag
 
 import (
-	"os"
 	"sermo/internal/checks"
+	"sermo/internal/hostfs"
 )
 
 // OSHost implements Host against the real machine: the filesystem, the network
@@ -11,7 +11,7 @@ type OSHost struct{}
 
 // PathExists reports whether path exists on the host filesystem.
 func (OSHost) PathExists(path string) bool {
-	_, err := os.Stat(path)
+	_, err := hostfs.StatTarget(path)
 	return err == nil
 }
 

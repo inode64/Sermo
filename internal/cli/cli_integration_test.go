@@ -12,22 +12,27 @@ import (
 	"sermo/internal/servicemgr"
 )
 
+// These integration tests are the named exception to "tests never run a
+// command": they execute the real servicemgr managers against shim systemctl
+// and rc-service scripts, the only end-to-end proof of the argv that reaches
+// the service manager (--job-mode=…). PATH holds nothing but the shim
+// directory, and the shims use shell builtins only, so no host command runs.
+
 // fakeSystemctl records every invocation to $SERMO_FAKE_LOG and answers
 // is-active and ActiveState from a temporary state file; start and stop update
 // that state.
 const fakeSystemctl = `#!/bin/sh
 echo "$*" >> "$SERMO_FAKE_LOG"
+state() {
+  if [ -f "$SERMO_FAKE_LOG.state" ]; then read -r s < "$SERMO_FAKE_LOG.state"; echo "$s"; else echo active; fi
+}
 case "$1" in
   start) echo active > "$SERMO_FAKE_LOG.state" ;;
   stop) echo inactive > "$SERMO_FAKE_LOG.state" ;;
   show)
-    if [ "$3" = "ActiveState" ]; then
-      if [ -f "$SERMO_FAKE_LOG.state" ]; then cat "$SERMO_FAKE_LOG.state"; else echo active; fi
-    fi
+    if [ "$3" = "ActiveState" ]; then state; fi
     ;;
-  is-active)
-    if [ -f "$SERMO_FAKE_LOG.state" ]; then cat "$SERMO_FAKE_LOG.state"; else echo active; fi
-    ;;
+  is-active) state ;;
 esac
 exit 0
 `
@@ -40,7 +45,7 @@ func withFakeSystemctl(t *testing.T) string {
 	if err := os.WriteFile(filepath.Join(bin, "systemctl"), []byte(fakeSystemctl), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("PATH", bin)
 	logPath := filepath.Join(t.TempDir(), "calls.log")
 	t.Setenv("SERMO_FAKE_LOG", logPath)
 	return logPath
@@ -48,11 +53,13 @@ func withFakeSystemctl(t *testing.T) string {
 
 // systemdApp builds an App that uses the real servicemgr manager (backed by the
 // fake systemctl) but a forced systemd backend, plus the real operation engine.
-func systemdApp(stdout, stderr *bytes.Buffer) App {
+// Configs still load against an empty catalog.
+func systemdApp(t *testing.T, stdout, stderr *bytes.Buffer) App {
+	t.Helper()
 	return App{
 		Detector:   fakeBackendDetector{detection: servicemgr.BackendSystemd},
 		NewManager: servicemgr.NewManager,
-		LoadConfig: nil, // defaults to config.Load
+		LoadConfig: testConfigLoader(t),
 		Env:        func(string) string { return "" },
 		Stdout:     stdout,
 		Stderr:     stderr,
@@ -84,7 +91,7 @@ func TestIntegrationStatusViaFakeRCService(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(bin, "rc-service"), []byte(fakeRCService), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("PATH", bin)
 	t.Setenv("SERMO_FAKE_LOG", filepath.Join(t.TempDir(), "calls.log"))
 
 	var stdout bytes.Buffer
@@ -110,7 +117,7 @@ func TestIntegrationStatusViaFakeRCService(t *testing.T) {
 func TestIntegrationStatusViaFakeSystemctl(t *testing.T) {
 	withFakeSystemctl(t)
 	var stdout bytes.Buffer
-	app := systemdApp(&stdout, &bytes.Buffer{})
+	app := systemdApp(t, &stdout, &bytes.Buffer{})
 	app.LoadConfig = func(string, ...config.Option) (*config.Config, error) {
 		return nil, errNoConfigForInvalidTest
 	}
@@ -143,7 +150,7 @@ service: svc
 `)
 
 	var stdout bytes.Buffer
-	app := systemdApp(&stdout, &bytes.Buffer{})
+	app := systemdApp(t, &stdout, &bytes.Buffer{})
 	code := app.Run(context.Background(), []string{"--config", filepath.Join(root, "sermo.yml"), "restart", "svc"})
 	if code != exitSuccess {
 		t.Fatalf("Run() exit = %d, want %d; out=%s", code, exitSuccess, stdout.String())
@@ -196,7 +203,7 @@ rules:
 `)
 
 	var stdout bytes.Buffer
-	app := systemdApp(&stdout, &bytes.Buffer{})
+	app := systemdApp(t, &stdout, &bytes.Buffer{})
 	code := app.Run(context.Background(), []string{"--config", filepath.Join(root, "sermo.yml"), "restart", "svc"})
 	if code != exitBlocked {
 		t.Fatalf("Run() exit = %d, want %d (blocked); out=%s", code, exitBlocked, stdout.String())
