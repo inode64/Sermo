@@ -15,7 +15,11 @@ the safety rows.
   answers by command line, by name, queued or fixed, with recorded calls,
   `RunEnv`/`RunUser` support and `RunOnly` for fail-closed tests.
 - Temporary directories; no dependency on ambient `/etc`, `/proc`, network or
-  init state. Tests run with `-shuffle=on`, so order must not matter.
+  init state. Tests run with `-shuffle=on`, so order must not matter. The
+  Makefile also pins the default catalog to a path that cannot exist
+  (`GO_TEST_LDFLAGS`); a targeted run outside `make` needs
+  `-shuffle=on -ldflags '-X sermo/internal/config.defaultCatalogDir=/nonexistent/sermo-test-catalog'`
+  or a host with Sermo installed leaks its catalog into the test.
 - Preserve contract distinctions such as nil versus empty.
 - Short literal timeouts are fine to bound the test itself.
 

@@ -16,9 +16,11 @@ the types are `RuleType`, `ActionType` and `Action` in
   guards use `block`, and a guard must list `blocks`.
 - Condition leaves: `and`, `or`, `not`, `failed`, `active`, `metric`,
   `service`, `process`, `file`, `command`, `changed`.
-- `for: { cycles }` counts consecutive matches; `within: { cycles,
-  min_matches }` is a rolling window. A rule declares at most one of them.
-  `mode` belongs only to `defaults.rule_window`.
+- `for: { cycles | duration }` counts consecutive matches; `within: { cycles |
+  duration, min_matches }` (default `min_matches: 1`) is a rolling window. A
+  rule declares at most one of them, a guard neither, and `clear:` is valid only
+  on alert rules. `mode` belongs only to the `rule_window` fallback (global
+  `defaults`, or a catalog service or service), never to a rule's `for`/`within`.
 
 ## Invariants
 
@@ -33,7 +35,8 @@ the types are `RuleType`, `ActionType` and `Action` in
   `policy`, not per-rule. The daemon consults the policy before the operation
   engine; a rule may keep firing while the policy suppresses execution.
 - A resolved policy needs a positive `cooldown`; a missing or zero value is a
-  validation error. Manual actions skip cooldown only.
+  validation error. Manual actions bypass the whole policy (cooldown,
+  `max_actions`, backoff) but never guards, locks or preflight.
 - An unavailable or erroring guard leaf fails closed. Unavailable or skipped
   observations remain unknown through `not` and `and`; an `or` holds as soon
   as one operand holds, so its outcome never depends on operand order.
@@ -68,12 +71,13 @@ the types are `RuleType`, `ActionType` and `Action` in
 
 ```text
 1. run declared checks and inline probes once; cache per cycle
-2. evaluate guard rules
-3. evaluate remediation and alert rules
-4. for a requested action, evaluate the guards that block it
-5. apply the service policy (cooldown, max_actions); log and skip if suppressed
-6. execute through internal/operation
-7. update window and policy state; record the event
+2. evaluate the remediation rules
+3. for each requested action: evaluate the guards that block it, apply the
+   service policy (cooldown, max_actions, backoff; log and skip if suppressed),
+   then execute through internal/operation, which re-checks guards, locks and
+   preflight and records the event
+4. evaluate the alert rules
+5. publish the rule windows and persist rule and policy state
 ```
 
 Two kinds of state exist and must not be conflated: per-rule window history
