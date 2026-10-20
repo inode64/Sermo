@@ -1,6 +1,6 @@
 ---
 name: sermo-remote-testing
-description: Use when running Sermo validation or exploratory tests on remote Linux servers over SSH, using .env.ssh, local GOAMD64=v1 builds, staged all-host runs, temporary /tmp validation, or explicit remote installation under /etc/sermo.
+description: Use when running Sermo validation or exploratory tests on remote Linux servers over SSH, using the hosts inventory, local GOAMD64=v1 builds, staged all-host runs, temporary /tmp validation, or explicit remote installation under /etc/sermo.
 ---
 
 # Sermo Remote Testing
@@ -44,12 +44,13 @@ umask 077
 A validation run that does not need the panel omits the `web` section; the
 daemon then opens no port and alerts are read from `sermod.log`.
 
-Keep the chosen `web.port` and auth settings explicit. Prefer `9797`; if it is already used by a verified `sermod` process, terminate that Sermo process and reuse `9797`.
-When the requested run includes activating or exposing the Web UI, that request
-is explicit permission to reclaim the chosen web port from another verified
-`sermod` listener, including a non-temporary Sermo instance. Verify identity
-before signaling, record what was stopped, and never kill a non-Sermo or
-unverified listener.
+Keep the chosen `web.port` and auth settings explicit. Prefer `9797` when it is
+free. The fleet runs an installed `sermod` on `0.0.0.0:9797`, so a temporary run
+on such a host uses another explicit high port. Reclaim a port only from a
+verified temporary `sermod` under `/tmp/sermo-remote-test-*`; never signal an
+installed `sermod` outside its init system. Stopping the installed daemon needs
+the user's explicit authorization for that host, goes through the init system,
+and the daemon is started again the same way at cleanup.
 
 - Preserve remote system behavior: do not start, stop, restart, reload, kill, package-install, or write permanent host config unless the user explicitly asks.
 - Mutating remote install/update/apply scripts must never change type, mode, uid
@@ -72,7 +73,7 @@ unverified listener.
     regression introduced by the run. Stop before touching further hosts, fix it
     locally, validate it and redeploy the fixed artifact to every host already touched.
 - Never configure or execute `then.hook` during remote tests. Hooks can alter the server.
-- To verify alert triggering without non-console side effects, prefer alert-only watches or target-level `dry_run: true` with a `notify` selection. Dry run logs/events what would happen and skips hook, expand, kill and non-wall notify delivery.
+- To verify alert triggering without non-console side effects, prefer alert-only watches or target-level `dry_run: true` with a `notify` selection. Dry run logs/events what would happen and skips service remediation operations, the watch actions `hook`, `expand`, `remount`, `kill` and `makestep`, and non-wall notify delivery. The top-level `event_notify` route still delivers unless panic mode is on.
 
 ## Local Preparation
 
@@ -90,6 +91,12 @@ unverified listener.
    GOAMD64=v1 SERMO_DATADIR="$REMOTE_DIR" make build
    ```
 
+   This overwrites `bin/sermod` and `bin/sermoctl` with binaries whose catalog
+   path is the temporary directory. `update_fleet.sh --skip-build` and
+   `deploy_binaries_only_fleet.sh` ship `bin/` as it is, so rebuild with
+   `SERMO_DATADIR=/usr/share/sermo` (or let `update_fleet.sh` build) before any
+   fleet deploy.
+
 3. Package the current catalog if the remote test needs catalog discovery:
 
    ```sh
@@ -100,14 +107,15 @@ Use the current checkout as the source of truth. If remote findings require code
 
 ## SSH Workflow
 
-- Use `.env.ssh` as the authoritative host list for remote test runs.
-- Treat each non-empty, non-comment line in `.env.ssh` as one SSH target.
-- Preserve the line value as provided, including user, host, port, aliases, or SSH options if present.
-- Do not invent, scan, or prompt for additional hosts while `.env.ssh` exists; if it is missing or has no usable hosts, stop and report that there are no remote targets to test.
+- Use the repository-root `hosts` file as the authoritative host list for remote test runs.
+- Treat the first column of each non-empty, non-comment line in `hosts` as one SSH target. The other columns hold customer data: never print, log or report them.
+- The target is a bare `[user@]host` (alphanumerics, `@`, `.`, `_`, `-`); one without a user logs in as `root`. Record and skip an entry carrying a port, option or any other character, and never pass the other columns to `ssh`.
+- The inventory includes this workstation (sarin2): its `/tmp`, `bin/` and running `sermod` are local ones, and a local run directory must not reuse a remote work-dir name.
+- Do not invent, scan, or prompt for additional hosts while `hosts` exists; if it is missing or has no usable hosts, stop and report that there are no remote targets to test.
 - When the user asks for the first `N` servers/hosts, use exactly the first `N`
-  usable non-comment entries from `.env.ssh`.
+  usable non-comment entries from `hosts`.
 - When a full-fleet scope includes a **mutating** Sermo action—temporary artifact execution, installation, update, config apply, daemon activation or service-manager change—run in two stages:
-  1. Run the requested mutating workflow end-to-end on only the first four usable `.env.ssh` entries.
+  1. Run the requested mutating workflow end-to-end on only the first four usable `hosts` entries.
   2. Review the first-four results before continuing. Continue with the remaining entries when every first-stage outcome is either successful or a documented host-local skip, and no Sermo blocker indicates a project/catalog/deployment bug that would invalidate the rest of the run.
 - The first-four gate does **not** apply to read-only collection or analysis: inventory, logs, events, service status and other SSH reads may cover every selected host in one pass. Record failures and Sermo findings, but do not pause that read-only collection after the first four hosts.
 - Apply the same first-four gate to any selected mutating set larger than four hosts, including "first N" installation or update requests.
@@ -135,12 +143,10 @@ Run this before copying or executing Sermo artifacts on each host:
 - Check architecture and skip hosts that cannot run the locally built `GOAMD64=v1` Linux amd64 binaries.
 - Check that `/tmp` is writable and executable, including a tiny executable probe; if `/tmp` is `noexec`, skip that host and continue.
 - Check free space in `/tmp`; skip that host when there is not enough room for binaries, catalog, config, logs and JSON outputs. Report the filesystem, available bytes and required artifact size; never delete data or expand storage automatically.
-- Check whether port `9797` is free before choosing it for the web panel. If the
-  run includes activating or exposing the Web UI and the port is occupied by
-  another verified Sermo daemon, terminate that process and reuse `9797`,
-  including when the listener is not under `/tmp`. If it is occupied by anything
-  other than Sermo, do not touch it; choose another explicit high port and
-  report it.
+- Check whether port `9797` is free before choosing it for the web panel. If it
+  is held by a verified temporary test `sermod` under `/tmp/sermo-remote-test-*`,
+  reclaim it as below; if it is held by the installed `sermod` or by anything
+  else, do not touch it: choose another explicit high port and report it.
 
 ## Port 9797 Reuse
 
@@ -148,13 +154,13 @@ When `9797` is already listening:
 
 - Identify the listener PID with `ss -ltnp` or an equivalent read-only command.
 - Verify the process before signaling it: `/proc/<pid>/exe` or `/proc/<pid>/cmdline` must identify `sermod`.
-- Prefer reclaiming temporary test instances whose command path or working
-  directory is under `/tmp/sermo-remote-test-*`. When the requested scope
-  includes activating or exposing the Web UI, do not fall back to another port
-  solely because the verified `sermod` listener is non-temporary; stop that
-  verified Sermo process and reuse `9797`.
-- If the listener is a verified `sermod`, record PID, exe, cmdline, and log path when known, then send `SIGTERM` and wait briefly.
-- If the same verified `sermod` PID is still alive after the graceful wait, send `SIGKILL` only to that PID and record it in the final report.
+- Reclaim only temporary test instances whose command path or working directory
+  is under `/tmp/sermo-remote-test-*`. An installed `sermod` (for example
+  `/usr/bin/sermod` under systemd or OpenRC) is never signalled directly: use
+  another port, or, with the user's explicit authorization, stop it through the
+  init system and start it again the same way at cleanup.
+- If the listener is a verified temporary `sermod`, record PID, exe, cmdline, and log path when known, then send `SIGTERM` and wait briefly.
+- If the same verified temporary `sermod` PID is still alive after the graceful wait, send `SIGKILL` only to that PID and record it in the final report.
 - If PID identity cannot be verified, or the listener is not Sermo, do not kill it; select another explicit high port and report why `9797` was not reclaimed.
 
 ## Remote Setup
@@ -177,10 +183,14 @@ defaults:
 
 web:
   address: 0.0.0.0
-  port: 9797
+  port: 9797   # another explicit high port when the installed sermod holds 9797
+  password_file: /tmp/sermo-remote-test-XXX/credentials.env
 ```
 
-Use the real remote directory instead of `XXX`. Do not add a catalog path to the
+Use the real remote directory instead of `XXX`. Never expose the panel without
+`password_file`: with no credentials it serves admin actions to anyone who can
+reach the port. Drop the `web:` block entirely when the run does not need the
+panel. Do not add a catalog path to the
 config; for catalog/app checks, unpack the catalog archive to
 `/tmp/sermo-remote-test-XXX/catalog` and use binaries built with
 `SERMO_DATADIR=/tmp/sermo-remote-test-XXX`. If a wizard-generated config is
@@ -212,7 +222,7 @@ When the task asks to add remote targets:
 - Use the Sermo wizard/assist flow only against temporary config files under `/tmp`.
 - Select only services reported active by the remote init backend.
 - Skip volumes, interfaces, and VMs unless the user explicitly asks for them in the current task.
-- For ICMP/uplink checks, use `8.8.8.8` as the default check host unless the user or an existing generated config gives a different target.
+- For ICMP/uplink checks, follow the fleet generator: a complete install pings the default gateway. In the wizard keep its default target (`1.1.1.1`) unless the user or an existing generated config gives a different one.
 - Preview generated entries before running `sermod`.
 - Prefer detected names. Do not ask the operator to invent service, volume, interface, or VM names when discovery provides candidates.
 - If a generated path does not exist on a host, record the host, app/service, expected path, and observed alternative. Fix the local project catalog/config generation, then redeploy.
@@ -246,10 +256,15 @@ requests. It overrides the validation-only `/tmp` restrictions above.
 - Stage read-only host evidence first: active init units, catalog service
   discovery, `findmnt`, `/etc/fstab`, `/proc/mounts`, `/proc/swaps`, `lsblk`,
   network inventory, cert candidates and feature probes.
-- Generate the installed config from scratch under `/etc/sermo` when requested.
+- Regenerate the generated directories under `/etc/sermo` when requested; keep
+  the operator layers (`services.local`, `storages.local` and every other
+  `<dir>.local`), `credentials.env` and `templates/`, and never list a `.local`
+  directory under `paths`.
   List `/etc/sermo/watches`, `/etc/sermo/networks`, `/etc/sermo/storages` and
   `/etc/sermo/mounts` under `paths.watches`.
-- Configure only catalog-supported services whose init unit is currently active.
+- Configure only catalog-supported services whose init unit is active or
+  failed; inactive units only on explicit request
+  (`--include-inactive-installed-services`).
   Record active services that cannot be represented instead of inventing service
   definitions.
 - Include running Docker containers and running libvirt/QEMU virtual machines in
@@ -259,8 +274,14 @@ requests. It overrides the validation-only `/tmp` restrictions above.
   read-only `type: docker` watch; VM services use `category: virtual-machine`,
   `control.type: libvirt`, `control.domain`, `uri: qemu:///system`, the detected
   local libvirt socket and a read-only `type: libvirt` watch. Keep them
-  `dry_run: true`. Do not monitor stopped containers or shutoff domains unless
-  the user explicitly asks for inactive targets; report them as skipped.
+  `dry_run: true`. VM services also attribute the guest's QEMU process with an
+  observe-only `processes.main` (`cmd` matching `-name guest=<domain>,`,
+  `delegated: true`), and every active libvirt network with a libvirt-owned IP
+  becomes a `control.type: libvirt-network` service. Do not monitor stopped
+  containers or shutoff domains unless the user explicitly asks for inactive
+  targets; report them as skipped. The exception is a container with restart
+  policy `always`, `unless-stopped` or `on-failure` that exited non-zero: it is
+  generated, because it is down by failure, not by choice.
 - Treat Docker and libvirt/QEMU discovery as a required persistent-install
   checklist item, not a best-effort afterthought. For every host, record running
   containers/VMs generated, stopped containers/VMs skipped, missing socket/tool
@@ -286,19 +307,21 @@ requests. It overrides the validation-only `/tmp` restrictions above.
   selector with a narrow command-line regex for `cloudflared ... tunnel run`;
   leave stop/kill policy on the catalog exact executable guard so deleted or
   untrusted executables remain fail-safe for operations.
-- Default every generated service and watch to `dry_run: true`. Before exposing
-  manual Web UI controls for expand, mount, umount or mount-user alerts, verify
-  those controls also respect target dry-run. If they do not, fix the project
-  code first, add tests, rebuild and redeploy.
+- Default every generated service and watch to `dry_run: true`. Dry run gates
+  only automatic actions: manual CLI/Web UI start, stop, restart, expand, mount
+  and umount run for real on a `dry_run: true` target, by design. Never expose
+  the panel without `password_file`.
 - Web UI defaults are `address: 0.0.0.0`, `port: 9797` and
   `password_file: /etc/sermo/credentials.env` (hashed, mode `0600`, provisioned
   by the credentials deploy tooling; never a readable password in `sermo.yml`).
   Verify `/livez`, `/readyz`, HTML, `/api/services`,
-  `/api/watches` and `/api/mounts` after apply.
+  `/api/watches` and `/api/mounts` after apply; on an authenticated install the
+  daemon's runtime token (`<engine.runtime>/web.token`) works as the Basic-auth
+  password for these API reads.
 - Measure and report daemon/Web UI speed on every apply or update: seconds from
   restart/start command completion until `/livez` succeeds, seconds until
   `/readyz` returns `ready:true`, and the HTTP response time/status for the HTML
-  shell plus `/api/status` or equivalent Web UI API. If `/livez` is fast but
+  shell plus `/api/dashboard` (or `/api/services`). If `/livez` is fast but
   `/readyz` is still false, wait at least one scheduler cycle before treating it
   as a failure, then report both the initial and final timings.
 - Storage defaults are `free_pct: { op: "<", value: "5%" }`, `mounted: true`
@@ -307,7 +330,10 @@ requests. It overrides the validation-only `/tmp` restrictions above.
 - Generate SMART watches every `24h` and hdparm watches every `6h` when the host
   exposes the corresponding tool/device safely.
 - Generate mount units for every currently mounted, non-root, non-pseudo,
-  fstab-backed target that can be represented safely. The root filesystem keeps
+  fstab-backed target that can be represented safely, plus every fstab-declared
+  network filesystem even when it is not currently mounted (an unmounted share
+  is exactly what the watch must report), except `noauto` and
+  `x-systemd.automount` entries. The root filesystem keeps
   its capacity watch but must not receive a `mount:` block or appear in the Web
   UI Mount units panel:
   - Local non-root storage targets use the same `storage-*` watch file under
@@ -318,8 +344,8 @@ requests. It overrides the validation-only `/tmp` restrictions above.
     files under `/etc/sermo/mounts` when keeping them mount-only avoids stale
     `statfs` behavior.
   - Never create mount units for pseudo filesystems, container/runtime mounts,
-    transient bind mounts, unmounted fstab guesses, or paths not declared in
-    `/etc/fstab`.
+    transient bind mounts, `noauto`/`x-systemd.automount` entries, or paths not
+    declared in `/etc/fstab`.
 - After applying config, run `sermoctl config validate`, restart/enable `sermod`
   through the host init system, wait for `readyz.ready=true`, and report service
   count, watch file count, monitored target count, generated mount units and the
@@ -419,6 +445,7 @@ check:
   type: storage
   path: /mnt/backup
   mounted: true
+  free_pct: { op: "<", value: "5%" }
 mount:
   refcount: true
   umount:
@@ -429,10 +456,10 @@ mount:
   Do not write `source`, `fstype`, `options` or class metadata into the mount
   YAML. If a target is not present in `/etc/fstab`, report it as skipped instead
   of inventing a mount unit.
-  The retired `allow_sigkill` and `allow_lazy` options are not supported. Do not
-  silently drop an old no-kill policy during migration: retain a read-only
-  storage watch without `mount:` controls when the workflow does not authorize
-  the current unmount policy.
+  The retired `allow_sigkill` and `allow_lazy` options are not supported;
+  `remote_normalize_retired_umount_keys.sh` removes them and keeps `mount:`.
+  That is safe: killing blockers now needs both `--kill-blockers` and
+  `mount.stop_policy.kill_only_if`, and a lazy unmount needs `--lazy`.
 - Include certificate watches for `/etc/ssl` on every complete config. Discover
   only candidate certificate-like regular files (`*.crt`, `*.cer`, `*.pem`) that
   are immediate children of `/etc/ssl`, using read-only commands equivalent to
@@ -440,23 +467,23 @@ mount:
   check is non-recursive and must not descend into `/etc/ssl/certs`,
   `/etc/ssl/private` or any other subdirectory unless the user explicitly
   expands the scope for that run. Generate at most one watch per discovered
-  direct file. Skip non-certificate private key material unless the user
-  explicitly asks to monitor keys too.
+  direct file. The fleet generator does not filter key material: a private key
+  stored as a `*.pem` directly under `/etc/ssl` gets a watch that reports it
+  unparseable, so report such files instead of hiding the finding.
   Missing, unreadable or unparseable files must be treated as alert findings.
   Expired certificates, not-yet-valid certificates and certificates with fewer
-  than 15 days left must notify through the selected safe notification mode.
-  Use `type: cert`, `path`, `expires_in_days: 15`, and optional stateful change
-  checks:
+  than 14 days left must notify through the selected safe notification mode.
+  Match the fleet generator: `type: cert`, `path`, `expires_in_days: 14`,
+  `on_algorithm_change: true`, `interval: 6h` and `for: { cycles: 1 }`:
 
 ```yaml
 name: cert-etc-ssl-example
-interval: 12h
+interval: 6h
 check:
   type: cert
   path: /etc/ssl/example.pem
-  expires_in_days: 15
+  expires_in_days: 14
   on_algorithm_change: true
-  on_issuer_change: true
 ```
 
   Do not set `host`, `port`, `server_name` or `verify` for file-based certificate
@@ -544,9 +571,9 @@ If a remote host has active services that Sermo cannot map to a catalog service 
 
 ## Operation Test Safety
 
-- Do not test start, stop, restart, reload, resume or signal operations on arbitrary remote services.
+- Do not test start, stop, restart, reload, pause, resume, repair, mount/umount, watch pause/resume or signal operations on arbitrary remote services.
 - When an operation test is required, use only `acpid` for start, stop, restart and reload paths.
-- Skip `resume` operation tests unless a future explicitly supported control target has a real paused state.
+- Skip `pause`/`resume` tests: they apply only to libvirt and Docker control targets, which are production VMs and containers, unless the user names a disposable target.
 - Before testing `acpid`, confirm it is active and represented by the temporary config.
 - If `acpid` is missing, inactive, unsupported, or its config/preflight fails, skip operation testing and report why.
 - Run operation tests through Sermo's normal command path with the temporary config; do not call `systemctl`, `rc-service`, `kill`, or init scripts directly except for read-only status inspection.
@@ -567,7 +594,8 @@ Never bypass these blockers during remote tests. If one is active, report the se
 Use one of these safe modes:
 
 ```yaml
-# Alert-only: visible in web/events/logs, no hook and no notification delivery.
+# Alert-only: visible in web/events/logs, no hook and no notification delivery
+# (a top-level event_notify route, when configured, still delivers events).
 name: sample
 check: { type: load, load1: { op: ">", value: 0 } }
 ```
@@ -668,8 +696,8 @@ Summarize:
   checks, and local/network/USB mount units generated or skipped;
 - complete host-watch coverage: the run-time inventory source, every generated
   watch type/target and every discovered type skipped with its reason;
-- direct-file `/etc/ssl` certificate findings: expiring within 15 days,
-  expired, not yet valid, missing/unreadable/unparseable, issuer or algorithm
+- direct-file `/etc/ssl` certificate findings: expiring within 14 days,
+  expired, not yet valid, missing/unreadable/unparseable, algorithm
   changes, and any weak/obsolete-looking algorithm or key-size review notes;
 - `acpid` operation tests run or skipped, with reason;
 - missing paths, unsupported apps, or catalog gaps to fix locally;

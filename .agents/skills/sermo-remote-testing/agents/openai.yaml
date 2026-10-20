@@ -1,4 +1,4 @@
 interface:
   display_name: "Sermo Remote Testing"
   short_description: "Run safe Sermo remote checks and installation discovery"
-  default_prompt: "Use $sermo-remote-testing to run safe Sermo validation, or full host discovery only for remote installation/configuration requests, on the hosts in .env.ssh."
+  default_prompt: "Use $sermo-remote-testing to run safe Sermo validation, or full host discovery only for remote installation/configuration requests, on the hosts listed in the repository-root hosts inventory."
