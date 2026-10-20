@@ -108,14 +108,16 @@ func New(c Config) Engine {
 	selectors, selectorWarnings := process.ParseSelectors(tree)
 	reloadSpec, reloadErr := config.ParseReload(tree)
 	killPolicy = process.EnableAutomaticReaping(killPolicy, selectors)
-	// A malformed `reap:` block is a config error like a malformed stop_policy:
-	// the block's only purpose is to authorize signalling, so running the service
-	// while half of that authorization was misread is not an option.
-	reapSelector, reapWarnings := process.ParseReapPolicy(tree)
+	c.Discoverer.KeepChildren = killPolicy.KeepChildren
+	// Only native init units have a service cgroup a residual can be proven to
+	// belong to.
+	if servicemgr.Backend(c.Backend).HasUnitCgroups() {
+		unit := c.Unit
+		killPolicy.Member = func(p process.Process) bool { return servicemgr.CgroupOwnedBy(p.Cgroup, unit) }
+	}
 	configErr := cmp.Or(
 		warningError(process.SectionStopPolicy, stopPolicyWarnings),
 		warningError(selectorWarningPrefix, selectorWarnings),
-		warningError(process.SectionReap, reapWarnings),
 		lifecycleErr,
 		reloadErr,
 	)
@@ -201,7 +203,6 @@ func New(c Config) Engine {
 		DiscoverTracked:     discoverTracked,
 		Reaper:              reaper,
 		KillPolicy:          killPolicy,
-		ReapSelector:        reapSelector,
 		Sleep:               sleep,
 		OperationTimeout:    operationTimeout,
 		Emit:                c.Emit,

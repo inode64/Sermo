@@ -12,17 +12,27 @@ any `security:` toggle that tries to disable them.
    never runs. A guard that references a malformed check also denies the action,
    reporting the original construction error, including for optional checks.
    A guard that blocks `start` also denies `restart` and `repair`, and one that
-   blocks `stop` also denies `restart` and `reap`: what an action performs, not
-   its name, decides which guards apply.
+   blocks `stop` also denies `restart`: what an action performs, not its name,
+   decides which guards apply.
 3. **Active named runtime locks always block service actions.** The operation
    engine checks `<runtime>/locks` automatically — no rule needed.
 4. **Never signal an unverified residual.** `force_kill: auto` derives authority
    only from named `processes:` selectors with both an exact executable and real
-   user; a selector marked `delegated: true` is never signalled and contributes
-   no authority at all; `force_kill: false` disables escalation.
+   user; a selector marked `delegated: true` is observe-only: never signalled,
+   never a residual and contributes no authority at all; `force_kill: false`
+   disables escalation to `SIGKILL`.
+   The only other authority is kernel attribution: a residual the kernel places
+   in the service's own control group (systemd `<unit>.service`, OpenRC
+   `openrc.<unit>`) may receive `SIGTERM`, and `SIGKILL` only with `force_kill`
+   (`true` or `auto`). A process `stop_policy.keep_children` keeps is delegated
+   and never reaches this authority.
 5. **Never kill by process name.** A kill requires an exact match on the
    resolved `/proc/<pid>/exe` path **and** the real UID against an explicit
-   `kill_only_if` selector or one paired strict `processes:` identity. A
+   `kill_only_if` selector or one paired strict `processes:` identity, or
+   kernel proof that the residual is a member of the service's own control
+   group (revalidated through the pidfd before delivery), or — only for the
+   manual close of a residual SSH `sudo` terminal — the verified session
+   evidence described in [The operation engine](#the-operation-engine). A
    `processes.<name>.cmd` regex narrows both discovery and the paired identity
    for shared binaries, so a daemon and its workload children never collapse
    into one kill set; cmdline only ever restricts and never authorizes a kill on
@@ -36,17 +46,19 @@ any `security:` toggle that tries to disable them.
 7. **`force_kill: true` requires `kill_only_if`** with both a `users` selector
    and an `exe_any` selector, each non-empty. **`force_kill: auto`** requires
    no broad fallback: it authorizes only strict `processes:` identities and
-   leaves services without one as `orphan_processes`.
+   leaves services without one as `orphan_processes` unless their residuals are
+   proven members of the unit's control group.
 8. **Restart always verifies stop and start under the common gates.** Locks,
    preflight, guards, process identity, timeout and postflight wrap the complete
    operation. An init command error is recoverable only after verifying the
    requested state; surviving processes or uncertain evidence block a new start.
-9. **A stray process is never signalled without its own authorization.** A
-   control-group member that no selector claims can only be signalled by
-   `sermoctl reap --apply`, and only through the service's own
-   `reap.kill_only_if` selector, checked by the same gate as every other kill. No
-   rule action can reap, and a service with no `reap:` block reports its strays
-   and signals none.
+9. **A stray process is a diagnostic, never a target of its own.** A
+   control-group member that no selector claims is reported, and no command,
+   dashboard button or rule action signals it as a stray. A stop or restart
+   handles it like any other residual under invariant 4: `SIGTERM` when the
+   kernel places it in the service's own control group, `SIGKILL` only with
+   `force_kill`, nothing at all when the service sets
+   `stop_policy.keep_children`. See [Stray processes](#stray-processes).
 10. **`process_policy` only observes and alerts, and `unowned_processes`
     detection authorizes nothing.** `process_policy` has no operation runner,
     service backend or signal path: validation permits only `then.notify` and
@@ -106,8 +118,9 @@ decision.
      candidates before stop. A known unkillable candidate blocks the restart
      while the current daemon is still running. Current unit members retain
      their normal graceful stop, including a replaced main executable.
-   - Stable `inactive`/`failed` with surviving non-delegated processes triggers
-     cleanup under `stop_policy`. Unmatched survivors block start.
+   - Stable `inactive`/`failed` with surviving processes that are neither
+     delegated nor kept triggers cleanup under `stop_policy`. Unmatched
+     survivors block start.
    - `active` with a proven-absent resident daemon triggers reconciliation.
      OpenRC uses `zap`; systemd uses stop and clears a failed marker with
      `reset-failed`. An already inactive systemd unit needs no reset: systemd
@@ -150,8 +163,8 @@ remove only a regular pidfile below `/run` whose exact PID is absent from
 `/proc`; a live PID, a PID or process table that cannot be read completely, a
 malformed file, symlink or non-runtime path fails closed.
 It then applies the same survivor reconciliation as start (step 5): surviving
-non-delegated processes are cleaned up under `stop_policy` or block the repair
-with `orphan_processes`. Only then, for a failed unit, does it clear the init
+processes that are neither delegated nor kept are cleaned up under
+`stop_policy` or block the repair with `orphan_processes`. Only then, for a failed unit, does it clear the init
 backend's failed marker, after revalidating process absence and verifying the
 backend reports inactive, before the normal guarded start and postflight. A
 repair never starts a second instance beside a survivor. It must still report
@@ -185,24 +198,33 @@ process start ticks plus an exact login1 session ID, leader PID, terminal,
 `Remote=true` and `Service=sshd`. Other unavailable issues remain non-actionable.
 
 A remote terminal left alive by `sudo` after SSH disconnects is shown as
-`residual`, not as an active network connection. Its manual close requires a
-live utmp leader reparented to PID 1 with no controlling terminal, an exact
-resolved `/usr/bin/sudo` or `/bin/sudo` executable, and its direct sudo monitor
-on the displayed PTY. Both real UIDs must match the resolved account recorded
-by utmp: sudo's effective root UID is not its real user identity.
-Both must have valid process start
-ticks and share a non-root cgroup v2 with a live, exactly configured sshd
-identity. Closing a residual also requires the service's explicit
-`reap.kill_only_if` to authorize both sudo processes. It reuses manual reaping's
-TERM, wait, fresh identity verification, KILL, wait and exit-verification path,
-narrowed to the selected terminal's monitor and frontend. A stopped child can
+`residual`, not as an active network connection. Its manual close needs no
+configuration: the authority is the verified session evidence itself, never a
+`kill_only_if` selector. Sermo requires:
+
+- a remote utmp session whose leader is reparented to PID 1 with no
+  controlling terminal;
+- a leader whose resolved executable is exactly `/usr/bin/sudo` or
+  `/bin/sudo` and whose real UID is the account utmp records (sudo's effective
+  root UID is not its real user identity);
+- a direct monitor child on the displayed PTY running the same executable with
+  the same real UID;
+- valid process start ticks for both, and both in the non-root cgroup v2 of a
+  live, exactly configured sshd listener.
+
+The session verifier re-checks the whole boundary, cgroup included, before the
+first signal and again before escalating, and each delivery revalidates the
+process through a pidfd: generation, executable and real UID. Sermo sends
+`SIGTERM`, waits up to the
+service's `stop_policy.term_timeout`, verifies the survivors again, sends
+`SIGKILL` to what is left of the pair and waits for exit. A stopped child can
 keep sudo alive after TERM, so successful signal delivery alone is not success.
 No other session, listener, workload PID or entire cgroup is directly signalled.
-Missing reap authorization blocks the close. A replaced
-workload binary does not invalidate the verified sudo boundary, but a replaced
-sudo binary does. Missing cgroup evidence fails closed. No automatic remediation
-uses this path. The session user remains the account recorded by utmp, which
-may be the account selected through sudo rather than the original SSH user.
+A replaced workload binary does not invalidate the verified sudo boundary, but
+a replaced sudo binary does. Missing cgroup evidence fails closed. No automatic
+remediation uses this path. The session user remains the account recorded by
+utmp, which may be the account selected through sudo rather than the original
+SSH user.
 
 Administrators always see a close button on SSH session and attribution-issue
 rows. It is disabled, with an explanation, when no safe close identity is
@@ -382,8 +404,8 @@ areas, so several features need it:
   start/stop/restart/pause/resume of VM domains via libvirt when a service declares
   `control.type: libvirt`, and start/stop/restart/pause/resume of Docker containers
   when it declares `control.type: docker`.
-- **Signalling other users' processes** — the stop policy reaps residual
-  processes that match the `kill_only_if` selector, across UIDs.
+- **Signalling other users' processes** — the stop policy signals the residual
+  processes it authorizes, across UIDs.
 - **Cross-user `/proc` inspection** — resolving a process's `/proc/<pid>/exe`,
   status and the per-process IO (`/proc/<pid>/io`) of another user's process.
 - **`icmp` checks** — opening a raw ICMP socket needs `CAP_NET_RAW` (root, or that
@@ -435,14 +457,15 @@ Because the daemon runs as root:
 - **No shell, no name-based kills, no SIGKILL by default** — see the hard
   invariants above; these bound what even a misconfiguration can do.
 
-A failure to rediscover processes during `sermoctl reap --apply` stops escalation
-and records a failed outcome. An unreadable process table is never treated as
+A failure to rediscover processes between signal rounds stops escalation and
+records a failed outcome. An unreadable process table is never treated as
 proof that all survivors exited. Signal rounds check cancellation before each
 process and again after user resolution; an expired operation cannot begin a
 new TERM or KILL delivery.
 
-Process discovery records the kernel start time. Reaping, process-watch signals,
-SSH session closes and native signal reloads bind delivery to a Linux pidfd and
+Process discovery records the kernel start time. Residual cleanup, mount blocker
+signalling, process-watch signals, SSH session closes and native signal reloads
+bind delivery to a Linux pidfd and
 revalidate that generation, resolved executable and real UID before sending.
 An unreadable identity, changed generation or unavailable pidfd support blocks
 delivery; there is no fallback to a numeric-PID signal. Operators using these
@@ -567,8 +590,8 @@ daemon-cycle remediation. They still use the same safety posture:
 - Mount blocker signalling requires `mount.stop_policy.kill_only_if` with
   restrictive `users` and `exe_any` selectors. Only blockers that match that
   selector are signalled; cmdline is display data and never authorizes a kill.
-  Delivery uses the same pidfd path as reaping, bound to the blocker's start
-  time, exact executable and real UID; a blocker whose identity cannot be
+  Delivery uses the same pidfd path as residual cleanup, bound to the blocker's
+  start time, exact executable and real UID; a blocker whose identity cannot be
   verified is reported, not signalled, and each refused delivery is named in
   the result.
 - Forced and lazy unmount are per-action choices: `--force` / Web `force`
@@ -660,6 +683,9 @@ restart:
    reports the unit inactive and every process generation observed before the
    stop is gone from the complete process table; a stop request against a unit
    that was already inactive with no observed process does not wait at all.
+   A process that was already a stray before the stop is never waited for: the
+   init's stop does not address it, so it would not exit on its own, and the
+   wait ends as soon as the service's own processes are gone.
    Declaring the selector remains the stronger evidence. An incomplete
    observation fails closed. A later
    absent or stale pidfile candidate cannot erase an earlier read error; a live
@@ -672,13 +698,19 @@ restart:
    requires a complete snapshot proving the old process generations exited and
    an inactive container state. Disappearing backend PIDs alone are insufficient.
 2. No residuals → clean stop.
-3. Residuals with `force_kill: false` → `orphan_processes` (and a restart does
-   **not** start).
+3. With `stop_policy.keep_children: true`, discovery has already kept every
+   process that is not a principal (see
+   [Kept children](#kept-children-keep_children)), so only principals can be
+   residuals. Otherwise every residual must go before a start: one the kernel
+   places in the unit's own control group is a `SIGTERM` target even with
+   `force_kill: false`. With `force_kill: false` nothing else is signalled and a
+   survivor is `orphan_processes` (and a restart does **not** start).
 4. Residuals with `force_kill: true` or `auto` → classify each one: KILLABLE
-   only when every explicit `kill_only_if` field matches, or when it matches a
+   only when every explicit `kill_only_if` field matches, when it matches a
    single paired strict `processes:` identity (exact resolved exe **and** real
    UID; deleted executables require the additional file and ownership proof
-   above, and protected PIDs are never killable). SIGTERM the
+   above, and protected PIDs are never killable), or when it is a proven member
+   of the unit's control group. SIGTERM the
    killable set, wait up to `term_timeout`, rediscover; SIGKILL what remains of the
    killable set, wait up to `kill_timeout`, rediscover. Each wait ends early when
    fresh discovery confirms that no residual remains. A residual that never matched
@@ -691,7 +723,47 @@ restart:
    reason. Every attempted signal and delivery error is included in the single
    persisted operation event, even when cleanup eventually succeeds.
 
-## Stray processes and `reap`
+## Kept children (`keep_children`)
+
+`stop_policy.keep_children: true` declares that only the service's **principal**
+processes must exit on stop; everything else it owns — SSH sessions, GlusterFS
+bricks, guest and network helpers, container shims, running cron jobs — is kept
+alive, never signalled and never a residual. It is the declarative form of an
+init unit with `KillMode=process`.
+
+A principal is:
+
+- a pidfile PID — the pidfile names the daemon explicitly;
+- a process matched by a non-delegated `processes:` selector, including a binary
+  replaced on disk (`exe_previous`), that descends from no process matched by
+  that same selector;
+- a process whose executable cannot be read and that descends from no matched
+  process at all — it cannot be told apart from the daemon (fail closed).
+
+Every other discovered process is kept. What the daemon forked is kept even when
+it re-executes the same binary as the same user (a cronie job runner, an OpenSSH
+< 9.8 session), while a surviving earlier daemon instance — reparented to PID 1 —
+is still a principal and still blocks the start, so a second daemon is never
+started beside it. A supervisor declared by its own selector stays a principal
+without hiding the daemon below it. The backend's first PID is deliberately not
+trusted on its own: once a systemd unit's daemon has exited, the first PID it
+lists is just a kept workload process (a shim, a job). An explicit
+`delegated: true` selector is applied first and always wins. Validation rejects
+`keep_children: true` without a non-delegated selector that has an exact `exe`
+and `user`.
+
+Without `keep_children` (the default) a restart needs every residual gone; see
+step 3 of [Stop and signal escalation](#stop-and-signal-escalation).
+
+`processes.<name>.delegated: true` is a different tool: an **observe-only**
+selector. Sermo attributes the matched processes and their descendants to the
+service for monitoring, but never signals them, never counts them as residuals
+and never takes kill authority from them. It is meant for processes whose
+lifecycle another backend owns, such as a libvirt guest's QEMU process; to keep
+a daemon's own workload alive across a restart, use `keep_children`. See
+[services.md](services.md#processes-by-executable-or-cmdline).
+
+## Stray processes
 
 A **stray** is a process the init backend attributes to the service's control
 group that no configured selector claims (no `processes:` match, no pidfile), that
@@ -704,73 +776,61 @@ is what makes the label useful: a daemon's workers are its descendants, so a
 healthy unit produces no strays at all, while a process that reached the control
 group without an ancestry chain back to the principal was reparented to PID 1.
 That is the signature of a leftover — a probe that daemonized, a child the daemon
-never reaped, a survivor of an earlier incarnation.
+abandoned, a survivor of an earlier incarnation.
 
 Strays appear in `sermoctl processes` as `stray=true`, in the dashboard's process
-table with `stray` in the Role column, and as the injected `strays` check (see
-[configuration.md](configuration.md)). Nothing else changes: a stray is still
-discovered, still counted in the service's process totals, and still a residual of
-a stop like any other process.
+table with `stray` in the Role column and in the services table's Strays count,
+and as the injected `strays` check (see
+[configuration.md](configuration.md#strays--processes-the-service-cannot-account-for)).
+A stray is a diagnostic: no command, dashboard button or rule action signals a
+process because it is a stray. It is still discovered, still counted in the
+service's process totals, and still a residual of a stop like any other process.
+A process kept by `stop_policy.keep_children` or matched by a `delegated: true`
+selector is never a stray.
 
-### A stop never reaps
+### What a stop or restart does with a stray
 
-`reap.kill_only_if` is **not** consulted during a stop, so a restart never clears a
-stray. The stop phase signals exactly what `stop_policy` authorizes, and a stray it
-cannot identify is reported, not killed.
-
-Whether that blocks a restart depends on the unit's `KillMode`:
+Whether a stray survives a stop, and whether it blocks the restart, depends on
+the unit's `KillMode` and on `stop_policy.keep_children`:
 
 - `KillMode=control-group` (the systemd default): the stop takes the whole control
-  group with it, so no stray survives to be a residual and nothing changes.
-- `KillMode=process` / `none` (sshd, NetworkManager, libvirt's daemons): survivors
-  remain. Those a `delegated: true` selector claims are excluded from residuals by
-  design; a stray is not, so it ends the operation in `orphan_processes` with the
-  service left stopped.
+  group with it, so no stray survives to be a residual.
+- `KillMode=process` / `none`, or OpenRC: survivors remain.
+  - With `keep_children: true` (the catalog's sshd, NetworkManager, libvirt,
+    container and cron profiles) every non-principal process is kept, so there
+    is no stray at all: no residual, no signal, no blocked start.
+  - Otherwise a residual the kernel places in the service's own control group
+    (systemd `<unit>.service`, OpenRC `openrc.<unit>`) receives `SIGTERM`, even
+    with `force_kill: false`, and `SIGKILL` only with `force_kill: true` or
+    `auto`. This also covers a stray that discovery only tracks from before the
+    stop — an OpenRC unit stops listing its control group once the daemon takes
+    its pidfile along: membership of the unit's own group still proves
+    ownership, while one that moved to another group keeps its refusal. A
+    residual that survives, or one without control-group proof (such as on an
+    OpenRC host without per-service cgroups), ends the operation in
+    `orphan_processes` with the service left stopped.
 
-When a stray blocks the restart, the result names the strays and points at the verb that clears
-them:
+When a stray blocks the restart, the result names it and the setting that keeps
+such a workload on purpose:
 
 ```console
-$ sermoctl restart ssh
-ssh restart orphan_processes
+$ sermoctl restart myapp
+myapp restart orphan_processes
 reason: 1 residual process(es) remain after stop (1 stray, unaccounted for by any
-  selector; `sermoctl reap` lists them and, with reap.kill_only_if declared, clears them)
+  selector; set stop_policy.keep_children if the unit keeps it alive on purpose)
   residual pid=4711 exe=/usr/bin/tmux stray=true
 ```
 
-The operator then chooses: mark it `delegated: true` if the unit keeps it alive on
-purpose, add a selector if it is a role Sermo should know, or declare
-`reap.kill_only_if` and clear it. Making a stop reap on its own would mean
-automatic remediation killing processes Sermo cannot name, which is the risk this
-design refuses.
+The operator then chooses:
 
-`sermoctl reap SERVICE` lists them and reports how many would be signalled. It
-takes no lock, emits no event and touches nothing.
+- set `stop_policy.keep_children: true` if the unit keeps its workload alive on
+  purpose;
+- add a `processes:` selector if the process is a role Sermo should know;
+- or let the next stop or restart terminate it.
 
-`sermoctl reap SERVICE --apply` signals them through the normal operation path —
-operation lock, active named runtime locks, guards, exactly one event — and
-relaxes no invariant:
-
-- Authority comes only from the service's own `reap.kill_only_if`, the same paired
-  `users` + `exe_any` selector `stop_policy` uses, checked by the same gate.
-  Without the block nothing is authorized, so `--apply` reports every stray and
-  signals none.
-- Delegated processes, an unresolvable exe, PID 1 and kernel threads are refused
-  exactly as they are during a stop.
-- Escalation is SIGTERM, `term_timeout`, rediscover, SIGKILL, `kill_timeout`,
-  rediscover, using the service's own `stop_policy` timings and re-reading live
-  `/proc` between rounds.
-- The result is `ok` only when no stray remains; a spared or surviving one makes it
-  `orphan_processes` and lists what is left.
-
-Selected reaping from Sessions uses the same authorization, locks and guards,
-restricted to the displayed PID generation and executable/UID/cgroup identity.
-It never expands to descendants. Leaving the service's inventory without a
-verified process exit is a failure, not successful cleanup. A deleted executable
-uses the same held-file verification as residual cleanup.
-
-No rule action can reap. Reaping means terminating a process Sermo cannot name,
-and that decision stays with the operator.
+A residual that survives the signals its stop policy allows, or that Sermo
+cannot attribute, stays `orphan_processes`: review it and end it yourself before
+starting the service.
 
 ### sermod's own startup hygiene
 
@@ -848,14 +908,12 @@ A manual SSH session close may identify a split OpenSSH session server whose
 listener has exited. Sermo verifies the remote utmp leader, exact helper
 executable and real UID, live terminal ancestry and the configured listener's
 non-root cgroup v2. Deleted executables require the kernel-held file identity,
-revalidated through a pidfd before SIGTERM. This session-specific authority
-never changes delegated-workload protection during service stop or restart.
+revalidated through a pidfd before SIGTERM. A residual `sudo` terminal is closed
+on its own verified evidence, with no configured authority; see
+[The operation engine](#the-operation-engine). This session-specific authority
+never changes the protection `stop_policy.keep_children` gives the sessions
+during service stop or restart.
 
-A diagnostic process associated with a terminal session keeps its own selected
-process action; association never redirects that action to the whole session or
-grants process signal authority. Every selected process requires explicit
-service-local `reap.kill_only_if` authorization. Only the session row offers
-whole-session close, which terminates its windows, panes and programs and
-disconnects attached clients. The configured client revalidates the named
-session generation. Signalling a parent process can also cause its children or
-attached sessions to exit, even though Sermo selects only that PID.
+Only a tmux or screen session row offers whole-session close, which terminates
+its windows, panes and programs and disconnects attached clients. The
+configured client revalidates the named session generation.

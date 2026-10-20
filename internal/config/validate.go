@@ -115,7 +115,7 @@ var validServiceDocumentKeys = set(append(slices.Clone(perServiceDefaults),
 	ServiceKeyRestartPolicy, ServiceKeyConfigFiles,
 	ServiceKeyPidfile, ServiceKeyPidfiles, artifactSocket, artifactLockfile, keyAnalyze,
 	sectionProcesses, sectionChecks, sectionPreflight, rules.SectionRules, sectionWatches,
-	sectionCommands, sectionButtons, sectionControl, sectionReload, sectionReap,
+	sectionCommands, sectionButtons, sectionControl, sectionReload,
 	ServiceMonitorKeyVersion, ServiceMonitorKeyConfig,
 	emission.Section, keyUnsupportedRemediation, keyEnableIf,
 )...)
@@ -1032,7 +1032,6 @@ func validateResolved(name string, tree map[string]any, runtime string, notifier
 	validateProcesses(tree, add)
 	validatePidfiles(tree, add)
 	validateStopPolicy(tree, add)
-	validateReapPolicy(tree, add)
 	validateRestartPolicy(tree, add)
 	validateAllowDependencies(tree, add)
 	validatePolicyExtras(tree, add)

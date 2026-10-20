@@ -117,10 +117,6 @@ func TestAlloyCatalogRestartsOnSaturation(t *testing.T) {
 	if got := cfgval.String(nested(t, body, "stop_policy")["force_kill"]); got != "auto" {
 		t.Fatalf("alloy stop_policy.force_kill = %q, want auto", got)
 	}
-	reap := nested(t, body, "reap", "kill_only_if")
-	if len(cfgval.StringList(reap["users"])) == 0 || len(cfgval.StringList(reap["exe_any"])) == 0 {
-		t.Fatalf("alloy reap.kill_only_if must pair users and exe_any: %v", reap)
-	}
 
 	for _, tc := range []struct{ backend, user string }{
 		{backend: "systemd", user: "alloy"},

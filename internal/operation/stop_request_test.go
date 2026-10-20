@@ -90,13 +90,13 @@ func TestDockerStopRequestLeavesResidualBudget(t *testing.T) {
 				procs, err := e.Discover()
 				return process.Observation{Processes: procs, Trusted: len(procs) > 0, AbsenceKnown: len(procs) == 0}, err
 			}
-			signaler := &reapSignaler{onSignal: func(_ int, sig syscall.Signal) {
+			signaler := &pidSignaler{onSignal: func(_ int, sig syscall.Signal) {
 				if sig == syscall.SIGKILL {
 					live = nil
 					h.mgr.stopped = true
 				}
 			}}
-			e.Reaper = process.Reaper{Signaler: signaler, ResolveUser: reapResolveUser}
+			e.Reaper = process.Reaper{Signaler: signaler, ResolveUser: rootOnlyResolveUser}
 			var graceWait time.Duration
 			e.Sleep = func(d time.Duration) { graceWait += d }
 			result := e.Do(ctx, tc.action)

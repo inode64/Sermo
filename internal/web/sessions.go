@@ -24,8 +24,8 @@ type SSHSession struct {
 	SessionUsage
 }
 
-// SessionUsage holds resource samples for a session tree or an individual
-// stray process. Ready fields distinguish measured zeroes from missing samples.
+// SessionUsage holds resource samples for a session tree. Ready fields
+// distinguish measured zeroes from missing samples.
 type SessionUsage struct {
 	RSS         int64   `json:"rss,omitempty"`
 	MemoryReady bool    `json:"memory_ready"`
@@ -147,7 +147,6 @@ type DBQuerySession struct {
 // SessionInventory is the dashboard-wide view of interactive sessions and
 // running database statements.
 type SessionInventory struct {
-	Strays   []StraySession    `json:"strays"`
 	Sources  []SessionSource   `json:"sources"`
 	SSH      []SSHSession      `json:"ssh"`
 	Terminal []TerminalSession `json:"terminal"`

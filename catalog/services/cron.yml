@@ -17,6 +17,11 @@ processes:
   main:
     exe: ${cron_binary}
     user: ${user}
+# Only the daemon must exit on stop: jobs already running finish; a job runner
+# re-executes the daemon binary but descends from it, so it is kept. Every other
+# process is kept and never signalled.
+stop_policy:
+  keep_children: true
 watches:
   service:
     check:

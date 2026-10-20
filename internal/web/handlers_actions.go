@@ -49,11 +49,6 @@ func (s *Server) handleAction(w http.ResponseWriter, r *http.Request) {
 			res := backend.Operate(ctx, name, action, opts)
 			return res.OK, res
 		})
-	case action == apiActionReap:
-		s.operate(w, backend, func(ctx context.Context, backend Backend) (bool, any) {
-			res := backend.ReapStrays(ctx, name)
-			return res.OK, res
-		})
 	case monitorActions[action]:
 		writeMonitorAction(w, backend.SetMonitored(r.Context(), name, action == apiActionMonitor))
 	default:

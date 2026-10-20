@@ -650,7 +650,6 @@ func TestGuardAppliesToActionsThatPerformTheBlockedStep(t *testing.T) {
 		{name: "start guard blocks repair", blocks: []string{"start"}, action: ActionRepair, want: true},
 		{name: "start guard blocks restart", blocks: []string{"start"}, action: ActionRestart, want: true},
 		{name: "stop guard blocks restart", blocks: []string{"stop"}, action: ActionRestart, want: true},
-		{name: "stop guard blocks reap", blocks: []string{"stop"}, action: ActionReap, want: true},
 		{name: "stop guard blocks pause", blocks: []string{"stop"}, action: ActionPause, want: true},
 		{name: "pause named literally", blocks: []string{"pause"}, action: ActionPause, want: true},
 		{name: "start guard leaves pause alone", blocks: []string{"start"}, action: ActionPause, want: false},

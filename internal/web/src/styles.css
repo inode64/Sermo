@@ -740,8 +740,8 @@
       padding: .34rem .38rem;
     }
     /* services -> Service · State · Actions. Strays (10) moves into the expansion
-       as a col-dup-640 field, so the count and its reap button stay reachable on a
-       phone without a tenth column. */
+       as a col-dup-640 field, so the count stays reachable on a phone without a
+       tenth column. */
     .services-table > thead > tr > th:nth-child(9), .services-table > tbody > tr > td:nth-child(9),
     .services-table > thead > tr > th:nth-child(10), .services-table > tbody > tr > td:nth-child(10) { display: none; }
     .services-table td { white-space: normal; }

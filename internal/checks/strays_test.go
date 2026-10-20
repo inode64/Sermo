@@ -49,7 +49,7 @@ func TestStraysCheckReportsExecutablesAndCount(t *testing.T) {
 	if res.OK {
 		t.Fatal("want not OK when strays exist")
 	}
-	for _, want := range []string{"/usr/bin/node", "/usr/bin/dbus-daemon", "sermoctl reap"} {
+	for _, want := range []string{"/usr/bin/node", "/usr/bin/dbus-daemon", "keep_children"} {
 		if !strings.Contains(res.Message, want) {
 			t.Fatalf("message %q must contain %q", res.Message, want)
 		}

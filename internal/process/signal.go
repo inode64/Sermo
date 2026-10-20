@@ -67,19 +67,19 @@ type Reaper struct {
 
 // Reap escalates signals against residuals according to policy:
 //
-//   - no residuals          -> ok.
-//   - force_kill=false       -> signal nothing; residuals are orphans.
-//   - force_kill=true        -> SIGTERM the killable set, wait up to term_timeout,
-//     rediscover; SIGKILL survivors, wait up to kill_timeout, rediscover; whatever
-//     remains is an orphan.
+//   - no residuals -> ok.
+//   - SIGTERM every residual TermAllowed permits, wait up to term_timeout and
+//     rediscover; SIGKILL the survivors KillAllowed permits (force_kill only),
+//     wait up to kill_timeout and rediscover. Whatever remains is an orphan.
 //
-// Only processes that exactly match kill_only_if are ever signalled; a residual
-// that does not match is reported, never touched.
+// A residual is signalled only when it matches kill_only_if under force_kill or
+// the kernel places it in the service's own cgroup; a delegated or kept process
+// and any other residual are reported, never touched.
 func (r Reaper) Reap(ctx context.Context, residuals []Process, policy KillPolicy) ReapResult {
 	if len(residuals) == 0 {
 		return ReapResult{}
 	}
-	if !policy.ForceKill || ctx.Err() != nil {
+	if ctx.Err() != nil {
 		return ReapResult{Remaining: residuals}
 	}
 
@@ -87,7 +87,9 @@ func (r Reaper) Reap(ctx context.Context, residuals []Process, policy KillPolicy
 	if resolve == nil {
 		resolve = DefaultUserLookup().ResolveUser
 	}
-	if !slices.ContainsFunc(residuals, func(p Process) bool { return policy.KillOnlyIf.Killable(p, resolve) }) {
+	termAllowed := func(p Process) bool { return policy.TermAllowed(p, resolve) }
+	killAllowed := func(p Process) bool { return policy.KillAllowed(p, resolve) }
+	if !slices.ContainsFunc(residuals, termAllowed) {
 		return ReapResult{Remaining: residuals}
 	}
 	signaler := r.Signaler
@@ -103,31 +105,37 @@ func (r Reaper) Reap(ctx context.Context, residuals []Process, policy KillPolicy
 	signalled := map[int]bool{}
 	var failed []SignalFailure
 	var attempts []SignalAttempt
-	round := func(set []Process, sig syscall.Signal) {
-		failures, sent := signalRound(ctx, set, policy.KillOnlyIf, resolve, signaler, sig, signalled)
+	result := func(remaining []Process) ReapResult {
+		return ReapResult{Remaining: remaining, Signalled: slices.Sorted(maps.Keys(signalled)), Failed: failed, Attempts: attempts}
+	}
+	round := func(set []Process, sig syscall.Signal, allowed func(Process) bool) {
+		failures, sent := signalRound(ctx, set, allowed, signaler, sig, signalled)
 		failed = append(failed, failures...)
 		attempts = append(attempts, sent...)
 	}
 
 	termTargets := slices.Clone(residuals)
-	round(residuals, syscall.SIGTERM)
+	round(residuals, syscall.SIGTERM, termAllowed)
 	var err error
 	residuals, err = r.waitForExit(ctx, policy.TermTimeout)
 	if err != nil {
-		return ReapResult{Remaining: r.Rediscover(), Signalled: slices.Sorted(maps.Keys(signalled)), Failed: failed, Attempts: attempts}
+		return result(r.Rediscover())
 	}
 	if len(residuals) == 0 {
-		return ReapResult{Signalled: slices.Sorted(maps.Keys(signalled)), Failed: failed, Attempts: attempts}
+		return result(nil)
 	}
 
 	residuals = restrictEscalation(residuals, termTargets)
-	round(residuals, syscall.SIGKILL)
+	if !slices.ContainsFunc(residuals, killAllowed) {
+		return result(residuals)
+	}
+	round(residuals, syscall.SIGKILL, killAllowed)
 	residuals, err = r.waitForExit(ctx, policy.KillTimeout)
 	if err != nil {
-		return ReapResult{Remaining: restrictEscalation(r.Rediscover(), termTargets), Signalled: slices.Sorted(maps.Keys(signalled)), Failed: failed, Attempts: attempts}
+		return result(restrictEscalation(r.Rediscover(), termTargets))
 	}
 
-	return ReapResult{Remaining: restrictEscalation(residuals, termTargets), Signalled: slices.Sorted(maps.Keys(signalled)), Failed: failed, Attempts: attempts}
+	return result(restrictEscalation(residuals, termTargets))
 }
 
 // A fresh process may appear between rounds. SIGKILL is only for generations
@@ -136,7 +144,7 @@ func restrictEscalation(current, previous []Process) []Process {
 	out := slices.Clone(current)
 	for i, p := range out {
 		found := slices.ContainsFunc(previous, func(old Process) bool {
-			return old.PID == p.PID && old.StartTicks == p.StartTicks && old.UID == p.UID &&
+			return old.SameGeneration(p) && old.UID == p.UID &&
 				old.signalExecutable() == p.signalExecutable() && old.ExeFile == p.ExeFile && old.Cgroup == p.Cgroup
 		})
 		if !found {
@@ -173,7 +181,8 @@ func (r Reaper) Signal(ctx context.Context, procs []Process, selector KillSelect
 		signaler = OSSignaler{}
 	}
 	signalled := map[int]bool{}
-	failed, attempts := signalRound(ctx, procs, selector, resolve, signaler, sig, signalled)
+	allowed := func(p Process) bool { return selector.Killable(p, resolve) }
+	failed, attempts := signalRound(ctx, procs, allowed, signaler, sig, signalled)
 	remaining := procs
 	if r.Rediscover != nil {
 		remaining = r.Rediscover()
@@ -181,7 +190,7 @@ func (r Reaper) Signal(ctx context.Context, procs []Process, selector KillSelect
 	return ReapResult{Remaining: remaining, Signalled: slices.Sorted(maps.Keys(signalled)), Failed: failed, Attempts: attempts}
 }
 
-func signalRound(ctx context.Context, set []Process, selector KillSelector, resolve UserResolver, signaler Signaler, sig syscall.Signal, signalled map[int]bool) ([]SignalFailure, []SignalAttempt) {
+func signalRound(ctx context.Context, set []Process, allowed func(Process) bool, signaler Signaler, sig syscall.Signal, signalled map[int]bool) ([]SignalFailure, []SignalAttempt) {
 	var failed []SignalFailure
 	var attempts []SignalAttempt
 	for i := range set {
@@ -189,7 +198,7 @@ func signalRound(ctx context.Context, set []Process, selector KillSelector, reso
 			failed = append(failed, SignalFailure{PID: set[i].PID, Err: err})
 			break
 		}
-		if selector.Killable(set[i], resolve) {
+		if allowed(set[i]) {
 			if err := ctx.Err(); err != nil {
 				failed = append(failed, SignalFailure{PID: set[i].PID, Err: err})
 				break

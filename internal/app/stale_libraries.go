@@ -44,7 +44,7 @@ func serviceStaleLibraries(discoverer process.Discoverer, selectors []process.Se
 func libraryRestartPrincipal(discoverer process.Discoverer, selectors []process.Selector, procs []process.Process) int {
 	var main []process.Selector
 	for _, selector := range selectors {
-		if selector.Name == process.RoleMain && selector.HasStrictIdentity() && !selector.Delegated {
+		if selector.Name == process.RoleMain && selector.IsStrictPrincipal() {
 			main = append(main, selector)
 		}
 	}

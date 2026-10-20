@@ -213,8 +213,14 @@ validate: modules-check analyzer-pins-check lint actions-lint scripts-lint scrip
 #   make test GO_TEST_FLAGS=
 GO_TEST_FLAGS ?= -shuffle=on
 
+# Tests never see the host's installed catalog: on a workstation that runs Sermo
+# the default catalog directory would otherwise validate every fixture against
+# whatever version is installed there. CI has no such directory, so pointing the
+# default at a path that cannot exist makes both environments identical.
+GO_TEST_LDFLAGS = -X sermo/internal/config.defaultCatalogDir=/nonexistent/sermo-test-catalog
+
 test: validate
-	go test $(GO_TEST_FLAGS) $(GO_PACKAGES)
+	go test $(GO_TEST_FLAGS) -ldflags '$(GO_TEST_LDFLAGS)' $(GO_PACKAGES)
 	go test -C $(WEB_BUILD_DIR) $(GO_TEST_FLAGS) .
 
 vet:
@@ -329,7 +335,7 @@ actions-lint:
 # Race instrumentation is substantially slower than normal tests, so CI runs it
 # in its own job instead of extending the default PR gate.
 race:
-	go test -race -count=1 $(GO_TEST_FLAGS) $(GO_PACKAGES)
+	go test -race -count=1 $(GO_TEST_FLAGS) -ldflags '$(GO_TEST_LDFLAGS)' $(GO_PACKAGES)
 
 # Keep fuzzing bounded and focused on untrusted configuration and safety
 # parsers. Each Fuzz* runs for FUZZ_TIME; scheduled CI can raise FUZZ_TIME.
@@ -400,7 +406,7 @@ check: vet test cover-gate
 
 # Coverage: print the total and write a browsable HTML report.
 cover: validate
-	go test $(GO_TEST_FLAGS) -coverprofile=coverage.out $(GO_PACKAGES)
+	go test $(GO_TEST_FLAGS) -ldflags '$(GO_TEST_LDFLAGS)' -coverprofile=coverage.out $(GO_PACKAGES)
 	@go tool cover -func=coverage.out | tail -1
 	@go tool cover -html=coverage.out -o coverage.html
 	@echo "wrote coverage.html"
@@ -409,7 +415,7 @@ cover: validate
 # Skips validate so it can run after `make test` without re-running the full gate.
 cover-gate:
 	@echo "cover-gate $(SAFETY_PACKAGES)"
-	@go test $(GO_TEST_FLAGS) -coverprofile=coverage-safety.out $(SAFETY_PACKAGES)
+	@go test $(GO_TEST_FLAGS) -ldflags '$(GO_TEST_LDFLAGS)' -coverprofile=coverage-safety.out $(SAFETY_PACKAGES)
 	@$(LINT_PATH) python3 scripts/cover_gate.py coverage-safety.out
 
 tidy:

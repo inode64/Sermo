@@ -173,7 +173,7 @@ func TestReloadClosureCommandStartErrorUsesOperatorMessage(t *testing.T) {
 func TestReloadClosureSignalSentToMainPID(t *testing.T) {
 	pid := 4242
 	runner := &execxtest.Runner{ByName: map[string]execx.Result{"systemctl": {Stdout: strconv.Itoa(pid) + "\n"}}}
-	signaler := &reapSignaler{}
+	signaler := &pidSignaler{}
 	discoverer := reloadDiscoverer(map[int]process.Identity{pid: {PID: pid, StartTicks: 42, StartTicksOK: true, UID: 1001, Exe: "/usr/sbin/svc", ExeOK: true}})
 	reload := nativeSignalReloadFunc(syscall.SIGUSR1, runner, "systemd", "myd", "", discoverer, nil, signaler)
 	if err := reload(context.Background()); err != nil {
@@ -215,7 +215,7 @@ func TestReloadClosureSignalUsesPidfileWhenNoMainPID(t *testing.T) {
 		{Name: "identity", Type: process.SelectorCommandMatch, Exe: "/usr/sbin/svc", User: "svcuser"},
 	}
 	discoverer := reloadDiscoverer(map[int]process.Identity{pid: {PID: pid, StartTicks: 42, StartTicksOK: true, UID: 1001, Exe: "/usr/sbin/svc", ExeOK: true}})
-	signaler := &reapSignaler{}
+	signaler := &pidSignaler{}
 	reload := nativeSignalReloadFunc(syscall.SIGUSR2, &execxtest.Runner{}, "openrc", "svc", pidfile, discoverer, selectors, signaler)
 	if err := reload(context.Background()); err != nil {
 		t.Fatal(err)

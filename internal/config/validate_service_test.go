@@ -747,6 +747,33 @@ stop_policy:
 	mustHave(t, invalidList, "kill_only_if must define both users and exe_any")
 }
 
+func TestValidateStopPolicyKeepChildrenNeedsStrictPrincipal(t *testing.T) {
+	const want = "stop_policy.keep_children requires a non-delegated processes selector with exact exe and user"
+	for _, tc := range []struct {
+		name, processes string
+		wantIssue       bool
+	}{
+		{name: "strict principal", processes: "  main: { exe: /usr/sbin/sshd, user: root }\n"},
+		{name: "no selector", wantIssue: true},
+		{name: "cmd only", processes: "  main: { cmd: '^salt-minion', user: root }\n", wantIssue: true},
+		{name: "only delegated", processes: "  session: { exe: /usr/sbin/sshd, user: root, delegated: true }\n", wantIssue: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			body := "name: svc\nservice: x\nstop_policy:\n  keep_children: true\n"
+			if tc.processes != "" {
+				body += "processes:\n" + tc.processes
+			}
+			issues := validateService(t, body)
+			if tc.wantIssue {
+				mustHave(t, issues, want)
+				return
+			}
+			mustNotHave(t, issues, "keep_children")
+		})
+	}
+	mustHave(t, validateService(t, "name: svc\nservice: x\nstop_policy:\n  keep_children: maybe\n"), "stop_policy.keep_children must be a boolean")
+}
+
 // Paired good/bad validation: good must produce no issue mentioning goodToken,
 // bad must produce every substring in want. Rows go here instead of one function
 // each; assertServiceValidation does the work.
@@ -1041,7 +1068,7 @@ rules:
     then: { action: block, message: "backup running" }
   block-manual-during-backup:
     type: guard
-    blocks: [repair, reap, close_session, close_terminal_source]
+    blocks: [repair, close_session, close_terminal_source]
     if: { file: { path: /run/backup/flag, exists: true } }
     then: { action: block, message: "backup running" }
   warn-cpu:

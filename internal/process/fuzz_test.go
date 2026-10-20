@@ -37,15 +37,14 @@ func FuzzParseStopPolicy(f *testing.F) {
 	})
 }
 
-// FuzzParseReapPolicy fuzzes the other parser that produces kill authority. It
+// FuzzParseKillOnlyIf fuzzes the other parser that produces kill authority. It
 // must never panic and must never hand back a configured selector from malformed
-// input: a KillSelector that reports Configured() is one `sermoctl reap --apply`
+// input: a KillSelector that reports Configured() is one a host watch's then.kill
 // would act on.
-func FuzzParseReapPolicy(f *testing.F) {
-	f.Add([]byte("reap:\n  kill_only_if:\n    users: [root]\n    exe_any: [/usr/bin/dbus-daemon]\n"))
-	f.Add([]byte("reap:\n  kill_only_if:\n    users: [root]\n"))
-	f.Add([]byte("reap: root\n"))
-	f.Add([]byte("reap:\n  kill_if: {}\n"))
+func FuzzParseKillOnlyIf(f *testing.F) {
+	f.Add([]byte("users: [root]\nexe_any: [/usr/bin/dbus-daemon]\n"))
+	f.Add([]byte("users: [root]\n"))
+	f.Add([]byte("exe_any: [/usr/bin/x]\nexe: /usr/bin/x\n"))
 	f.Add([]byte{})
 
 	f.Fuzz(func(t *testing.T, source []byte) {
@@ -53,12 +52,12 @@ func FuzzParseReapPolicy(f *testing.F) {
 		if !ok {
 			return
 		}
-		selector, warnings := ParseReapPolicy(tree)
+		selector, warnings := ParseKillOnlyIf(tree, "then.kill.kill_only_if")
 		if !selector.Configured() {
 			return
 		}
 		// A configured selector must carry both halves: users alone would authorize
-		// on UID, exe_any alone on the binary, and either would widen what a reap
+		// on UID, exe_any alone on the binary, and either would widen what a kill
 		// may signal beyond what the operator wrote.
 		if len(selector.Users) == 0 || len(selector.ExeAny) == 0 {
 			t.Fatalf("configured selector from %q lacks a half: users=%v exe_any=%v (warnings %v)",

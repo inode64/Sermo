@@ -71,7 +71,6 @@ const (
 // operator request, but they still pass the service's guards.
 const (
 	ActionRepair              ActionType = "repair"
-	ActionReap                ActionType = "reap"
 	ActionCloseSession        ActionType = "close_session"
 	ActionCloseTerminalSource ActionType = "close_terminal_source"
 	// ActionKillQuery cancels one running database statement (or closes its
@@ -90,7 +89,6 @@ const (
 		string(ActionResume) + ", " +
 		string(ActionPause) + ", " +
 		string(ActionRepair) + ", " +
-		string(ActionReap) + ", " +
 		string(ActionCloseSession) + ", " +
 		string(ActionCloseTerminalSource) + ", " +
 		string(ActionKillQuery)
@@ -102,7 +100,7 @@ const (
 // guard.
 func (t ActionType) IsGuardTarget() bool {
 	switch t {
-	case ActionReap, ActionCloseSession, ActionCloseTerminalSource, ActionKillQuery:
+	case ActionCloseSession, ActionCloseTerminalSource, ActionKillQuery:
 		return true
 	default:
 		return t.IsOperation() || t.IsManualOperation()
@@ -119,8 +117,9 @@ func (t ActionType) IsManualOperation() bool {
 // guardedBy lists the `blocks:` entries that deny action: the action itself
 // plus every lifecycle action it performs. A guard that forbids a start must
 // also stop a restart or a repair (which start the service), and a guard that
-// forbids a stop must also stop a restart, a reap (which terminate service
-// processes) or a pause (which takes the workload out of service) — safety invariant 2 is about what an action does, not its name.
+// forbids a stop must also stop a restart (which terminates service processes)
+// or a pause (which takes the workload out of service) — safety invariant 2 is
+// about what an action does, not its name.
 // Session closes signal one session process and change no service lifecycle,
 // so only their own name blocks them.
 func guardedBy(action string) []string {
@@ -129,7 +128,7 @@ func guardedBy(action string) []string {
 		return []string{action, string(ActionStop), string(ActionStart)}
 	case ActionRepair:
 		return []string{action, string(ActionStart)}
-	case ActionReap, ActionPause:
+	case ActionPause:
 		return []string{action, string(ActionStop)}
 	default:
 		return []string{action}

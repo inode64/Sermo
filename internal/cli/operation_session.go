@@ -154,7 +154,7 @@ func (s *operationSession) operate(ctx context.Context, resolved config.Resolved
 		eventErr = recordManualActionEvent(ctx, s.eventStore, app.OperationEventRecord(result))
 	}
 	defer func() { prepared.recordOperation = nil }()
-	result := runEngineAction(ctx, prepared.runtime.Engine, s.opts, action)
+	result := prepared.runtime.Engine.Do(ctx, action)
 	if eventErr != nil {
 		return result, fmt.Errorf("%s applied with result %q, but its audit event could not be recorded: %w",
 			action, result.Status, eventErr)

@@ -73,7 +73,7 @@ func (a App) runAction(ctx context.Context, opts options, action string) int {
 	if opts.json {
 		writeJSON(a.Stdout, actionJSON{Result: result, Cascade: cascade})
 	} else if !opts.quiet {
-		a.printOperation(opts, result)
+		a.printOperation(result)
 	}
 	return operationExit(result.Status)
 }
@@ -104,8 +104,8 @@ type cascadeTargetJSON struct {
 // primary's result is returned and drives the exit code.
 func (a App) operateWithCascade(ctx context.Context, opts options, cfg *config.Config, resolved config.Resolved, service, action string, actionStore *state.Store, runner manualOperationRunner) (operation.Result, []cascadeTargetJSON, error) {
 	targets := config.CascadeTargets(resolved.Tree)
-	// also_apply cascades only lifecycle actions that change running state. Manual
-	// repair and reap always act on the one service the operator named.
+	// also_apply cascades only lifecycle actions that change running state. A
+	// manual repair always acts on the one service the operator named.
 	if opts.noCascade || !operation.CascadesAlsoApply(action) || len(targets) == 0 {
 		result, err := a.operateWithManualState(ctx, cfg, resolved, service, action, actionStore, runner)
 		return result, nil, err
@@ -291,22 +291,7 @@ func recordManualActionEvent(ctx context.Context, store manualActionRecorder, re
 	}
 }
 
-// runEngineAction dispatches one CLI action on a built engine. Everything the
-// rule vocabulary knows goes through Engine.Do; reap does not, deliberately —
-// it is a manual-only verb with its own --apply gate, so it must be named here
-// rather than reachable from an action string a rule could produce.
-func runEngineAction(ctx context.Context, engine operation.Engine, opts options, action string) operation.Result {
-	if action == actionReap {
-		return engine.Reap(ctx, opts.apply)
-	}
-	return engine.Do(ctx, action)
-}
-
-func (a App) printOperation(opts options, r operation.Result) {
-	if r.Action == actionReap {
-		a.printReap(opts, r)
-		return
-	}
+func (a App) printOperation(r operation.Result) {
 	switch r.Status {
 	case operation.ResultOK:
 		fmt.Fprintf(a.Stdout, "%s %s ok\n", r.Service, r.Action)
@@ -352,31 +337,6 @@ func (a App) printOperation(opts options, r operation.Result) {
 			fmt.Fprintf(a.Stdout, " failed: %s", attempt.Error)
 		}
 		fmt.Fprintln(a.Stdout)
-	}
-}
-
-// printReap renders a reap. Its listed processes are strays, not residuals of a
-// stop, and without --apply nothing was touched — so it says so, and says how to
-// ask for it, instead of reading like a completed operation.
-func (a App) printReap(opts options, r operation.Result) {
-	if r.Status == operation.ResultBlocked {
-		fmt.Fprintf(a.Stdout, "BLOCKED %s %s\n", r.Service, r.Action)
-	} else {
-		fmt.Fprintf(a.Stdout, "%s %s %s\n", r.Service, r.Action, r.Status)
-	}
-	if r.Message != "" {
-		fmt.Fprintf(a.Stdout, "reason: %s\n", r.Message)
-	}
-	for _, p := range r.Processes {
-		key, value := processDisplayField(p)
-		fmt.Fprintf(a.Stdout, "  stray pid=%d user=%s %s=%s\n", p.PID, orUnknown(p.User), key, value)
-		if p.SignalBlockReason != "" {
-			fmt.Fprintf(a.Stdout, "    blocked: %s\n", p.SignalBlockReason)
-		}
-	}
-	if !opts.apply && len(r.Processes) > 0 {
-		fmt.Fprintf(a.Stdout, "nothing was signalled; run `sermoctl %s %s --%s` to signal the authorized strays\n",
-			commandReap, r.Service, cliFlagApply)
 	}
 }
 

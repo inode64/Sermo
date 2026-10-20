@@ -28,3 +28,25 @@ func TestGenerationExited(t *testing.T) {
 		})
 	}
 }
+
+func TestSameGenerationNeedsPIDAndStartTicks(t *testing.T) {
+	daemon := Process{PID: 100, StartTicks: 10, Exe: "/usr/sbin/sshd"}
+	for _, tc := range []struct {
+		name  string
+		other Process
+		want  bool
+	}{
+		{name: "same generation, other fields differ", other: Process{PID: 100, StartTicks: 10, Exe: "/usr/bin/other"}, want: true},
+		{name: "recycled pid", other: Process{PID: 100, StartTicks: 11}},
+		{name: "other pid", other: Process{PID: 101, StartTicks: 10}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := daemon.SameGeneration(tc.other); got != tc.want {
+				t.Fatalf("SameGeneration = %v, want %v", got, tc.want)
+			}
+			if got := ContainsGeneration([]Process{{PID: 7, StartTicks: 1}, tc.other}, daemon); got != tc.want {
+				t.Fatalf("ContainsGeneration = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}

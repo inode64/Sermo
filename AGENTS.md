@@ -38,9 +38,12 @@ Run targeted checks while developing. Finish with:
 
 | Change | Command |
 |---|---|
-| Markdown only | `make markdown-check` |
-| YAML only | `make yaml-validate` |
+| Markdown only | `make markdown-check docs-sync` |
+| YAML formatting/CI files only | `make yaml-validate` |
 | Anything else | `make check` |
+
+Catalog, examples and docs YAML are validated by Go tests, so changing them
+needs `make check`.
 
 `make check` is the full gate; do not add a second `go build`, `make lint` or
 `go test` pass after it. After editing `internal/web/src/`, run `make web` and
@@ -84,10 +87,14 @@ Volatile paths go under `/run`. Normalize host-reported `/var/run/...` to
 
 ## Execution
 
-- Start, stop, restart, reload, resume and signal go through
-  `internal/operation`. CLI, daemon and web do not call backends or signal
-  processes; primitive backend/process implementations and their fakes are
-  the exception.
+- Service lifecycle actions (start, stop, restart, reload, resume, pause,
+  repair) and the manual closes and `kill_query` go through
+  `internal/operation`. CLI, daemon and web never call backend lifecycle
+  methods. Any other signal (host watch `then.kill`, the dashboard's
+  unowned-process kill, `engine.reap_own_strays`, mount blockers,
+  `sermoctl reload`) goes through `process.Signaler`/`process.Reaper` (pidfd)
+  with its own explicit authority. Primitive backend/process implementations
+  and their fakes are the exception.
 - Prefer the Go standard library or a module. Required external commands use
   the injectable `execx` runner, argv, a context and a timeout — no shell, no
   `os/exec` in production. The only product exception is
@@ -142,10 +149,26 @@ Operator policy: [docs/safety.md](docs/safety.md). Review checklist:
 - automatic remediation uses the same path, needs a positive resolved
   cooldown, and never triggers from a system-scoped metric
 - process authorization never uses name, basename, argv or cmdline alone;
-  signalable processes require exact resolved `exe` and `user`; deleted-executable
-  residual cleanup additionally verifies the kernel-held file and ownership
-- `SIGKILL` requires `force_kill` plus restrictive `kill_only_if`
-- unmatched residuals are orphans and block a following start
+  signalable processes require exact resolved `exe` and `user`, kernel proof
+  of membership in the service's own cgroup, or — only for the manual close of
+  a residual SSH `sudo` terminal — the verified utmp/sudo/listener-cgroup
+  session evidence, always revalidated through the pidfd at delivery;
+  deleted-executable residual cleanup additionally verifies the kernel-held
+  file and ownership
+- `SIGKILL` requires `force_kill: true` plus restrictive `kill_only_if`;
+  `force_kill: auto` (its explicit `kill_only_if`, or else the exe+user pairs
+  derived from strict principal selectors); or proven unit-cgroup membership
+  under `true` or `auto`. Unset or `false` never escalates; the manual
+  residual `sudo` close escalates after
+  `stop_policy.term_timeout` on its own revalidated evidence
+- a `delegated: true` selector is observe-only: never signalled, never a
+  residual or stray, no kill authority
+- `stop_policy.keep_children` keeps every non-principal process; otherwise
+  every residual must go, and a surviving or unattributed one is an orphan that
+  blocks the following start
+- service strays are diagnostic only; nothing signals a process for being a
+  stray, except sermod's startup hygiene `engine.reap_own_strays` (SIGTERM
+  only, sermod's own unit cgroup)
 - conditions are read-only; mutation belongs to actions
 - named locks and operation locks stay separate, atomically acquired,
   TTL-bounded and auditable when reclaimed

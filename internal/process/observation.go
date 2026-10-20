@@ -26,6 +26,11 @@ type Observation struct {
 	snapshot map[int]Identity
 }
 
+// ReasonTrackedOutsideDiscovery refuses a signal to a survivor that discovery no
+// longer attributes to the service: losing attribution is not evidence of exit,
+// but it is not proof of ownership either.
+const ReasonTrackedOutsideDiscovery = "tracked process remains outside service discovery"
+
 // RetainSurvivors follows old generations across selector/cgroup changes.
 // Losing attribution is not evidence of exit. Changed identities stay visible
 // but lose signal authority, so neither escalation nor start can hide them.
@@ -42,7 +47,7 @@ func (o Observation) RetainSurvivors(previous []Process) []Process {
 		index := slices.IndexFunc(procs, func(p Process) bool { return p.PID == old.PID })
 		if index < 0 {
 			p := toProcess(id, old.Role, old.Source)
-			p.SignalBlockReason = "tracked process remains outside service discovery"
+			p.SignalBlockReason = ReasonTrackedOutsideDiscovery
 			procs = append(procs, p)
 			continue
 		}
@@ -127,12 +132,12 @@ func (d Discoverer) observe(selectors []Selector, requireSnapshot, fresh bool) (
 	procs, warnings := frozen.Discover(selectors)
 	identities := selectors
 	for _, sel := range selectors {
-		if sel.Name == RoleMain && !sel.Delegated && sel.HasStrictIdentity() {
+		if sel.Name == RoleMain && sel.IsStrictPrincipal() {
 			identities = []Selector{sel}
 			break
 		}
 	}
-	out := Observation{snapshot: snapshot, Processes: procs, IdentityRequired: slices.ContainsFunc(identities, func(s Selector) bool { return !s.Delegated && s.HasStrictIdentity() })}
+	out := Observation{snapshot: snapshot, Processes: procs, IdentityRequired: HasStrictPrincipal(identities)}
 	// ReplacedExecutable is diagnostic evidence for a backend stop, not signal
 	// authority. The added candidates need independent verification for cleanup.
 	out.Processes = frozen.addDeletedCandidates(out.Processes, selectors)
@@ -146,7 +151,7 @@ func (d Discoverer) observe(selectors []Selector, requireSnapshot, fresh bool) (
 		}
 		for i := range identities {
 			sel := &identities[i]
-			if !sel.Delegated && sel.HasStrictIdentity() && frozen.matchesDeletedExe(sel, snapshot[proc.PID], frozen.resolveUser()) {
+			if sel.IsStrictPrincipal() && frozen.matchesDeletedExe(sel, snapshot[proc.PID], frozen.resolveUser()) {
 				out.ReplacedExecutable = true
 			}
 		}

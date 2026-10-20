@@ -91,7 +91,7 @@ defaults:  # shared defaults for services and watches where applicable
     graceful_timeout: 30s
     term_timeout: 15s
     kill_timeout: 5s
-    force_kill: auto  # exact processes: identities authorize TERM then KILL
+    force_kill: auto  # strict processes: identities and unit-cgroup residuals get TERM then KILL
   policy:
     cooldown: 5m  # required and positive: loop prevention
     max_actions: 4
@@ -704,7 +704,7 @@ preflight:  # gate start/restart/reload/resume
     binary: "${binary}"
     optional: true  # best-effort: warns, never blocks
 
-processes:  # discovery selectors (used by metrics/reaper)
+processes:  # discovery selectors (used by metrics and residual cleanup)
   workers:
     exe: "${binary}"  # exact resolved /proc/<pid>/exe
     user: "${user}"
@@ -1246,6 +1246,7 @@ stop_policy:
   kill_only_if:
     users: ["${user}", root]
     exe_any: ["${binary}"]
+  keep_children: false  # true: only the principal processes must exit on stop
   pidfile_absent: true
   files_absent: [/run/demo/*.sock, /run/demo/*.lock]
   clean_after_stop: false  # true enables deletion after a clean stop
@@ -1253,15 +1254,6 @@ stop_policy:
     - /run/demo/tmpfile
     - /run/demo/*.tmp
     - { path: /var/cache/demo/runtime, recursive: true, }
-
-# Authorizes `sermoctl reap SERVICE --apply` to signal the service's stray
-# processes: control-group members no selector claims that no longer hang off the
-# unit's principal process. Without this block strays are reported and never
-# signalled; it is never inherited from defaults:.
-reap:
-  kill_only_if:
-    users: [root]
-    exe_any: [/usr/bin/dbus-daemon]
 
 # Named checks for a service. The `strays` check is injected automatically (see
 # rules.alert-on-strays below); these two add the bounds a leak alert needs. `max`
@@ -1324,9 +1316,10 @@ rules:
     type: remediation
     if: { process: { exe: "${binary}", user: "${user}", state: absent } }
     then: { action: stop }
-  # The injected `strays` check reports control-group members no selector claims,
-  # but never alerts on its own: on most hosts the raw condition is a workload a
-  # profile marked `delegated: true`. Alerting is opt-in, per service.
+  # The injected `strays` check reports control-group members no selector claims
+  # (a diagnostic: it signals nothing), but never alerts on its own: on a fleet
+  # the raw condition mostly reports a profile missing keep_children or a
+  # selector. Alerting is opt-in, per service.
   alert-on-strays:
     type: alert
     if: { failed: { check: strays } }
@@ -1514,6 +1507,13 @@ control:
   domain: demo-vm
   socket: /run/libvirt/virtqemud-sock  # modular libvirt/QEMU daemon socket
   # uuid: 2b3f3d26-bb45-4b25-b65a-1e3ef86fc1a4
+# Observe-only selector: the guest's QEMU process gets uptime, CPU, memory, FDs,
+# IO, graphs and stale-binary reporting, but is never signalled, never a residual
+# and authorizes nothing; libvirt owns its lifecycle. Single quotes keep \S literal.
+processes:
+  main:
+    cmd: '^\S*qemu-system\S* -name guest=demo-vm,.*$'
+    delegated: true
 
 ---
 # ---------------------------------------------------------------------------

@@ -27,3 +27,12 @@ func CgroupOwnership(content, unit string) (foreign, known bool) {
 	}
 	return false, true
 }
+
+// CgroupOwnedBy reports positive kernel evidence that a process belongs to
+// unit's own service group: the systemd `<unit>.service` or OpenRC
+// `openrc.<unit>` cgroup. Root, slice, session, scope and unknown membership
+// never qualify, so a host without per-service cgroups proves nothing.
+func CgroupOwnedBy(content, unit string) bool {
+	owner := ClassifyCgroup(content)
+	return owner.Class == CgroupClassService && owner.Owner == strings.TrimSuffix(unit, systemdServiceSuffix)
+}

@@ -9,35 +9,20 @@ apps:
 # leaves the bricks and the self-heal daemon serving across a glusterd restart.
 # Every one of them is the same executable running as root — sbin/glusterd is a
 # symlink to glusterfsd — so exe and user alone cannot tell the management daemon
-# from its workload. Each role therefore carries the cmdline that identifies it,
-# and the workload roles are delegated: discovered and monitored, never counted
-# as a residual and never signalled. Only `main` is ever stopped, which is
-# exactly what KillMode=process expresses.
+# from its workload. The management daemon therefore carries the cmdline that
+# identifies it, and keep_children below keeps every brick, self-heal and client
+# daemon: never counted as a residual and never signalled. Only `main` is ever
+# stopped, which is exactly what KillMode=process expresses.
 processes:
   main:
     exe: ${glusterd_binary}
     cmd: '^(\S*/)?glusterd(\s|$)'
     user: root
-  brick:
-    exe: ${glusterd_binary}
-    cmd: '--process-name brick(\s|$)'
-    user: root
-    delegated: true
-  selfheal:
-    exe: ${glusterd_binary}
-    cmd: '--process-name glustershd(\s|$)'
-    user: root
-    delegated: true
-  # The optional daemons glusterd manages, plus the FUSE client that mounts a
-  # volume on this same node — `--process-name fuse`, seen on hosts that back
-  # libvirt images with Gluster. A client mount is workload as much as a brick
-  # is: signalling it would tear the mountpoint out from under whatever is using
-  # it, so it is delegated too.
-  daemon:
-    exe: ${glusterd_binary}
-    cmd: '--process-name (?:quotad|bitd|scrub|gfproxyd|nfs|fuse)(\s|$)'
-    user: root
-    delegated: true
+# Only the daemon must exit on stop: bricks, self-heal and client daemons serve
+# the volumes and mounts; only the management daemon restarts. Every other
+# process is kept and never signalled.
+stop_policy:
+  keep_children: true
 # Storage service: keep automatic remediation rare.
 policy:
   cooldown: 15m

@@ -65,7 +65,7 @@ func TestDeletedResidualLifecycle(t *testing.T) {
 				}
 				ctx, cancel := context.WithCancel(t.Context())
 				defer cancel()
-				signaler := &reapSignaler{onSignal: func(pid int, sig syscall.Signal) {
+				signaler := &pidSignaler{onSignal: func(pid int, sig syscall.Signal) {
 					if tc.cancel {
 						cancel()
 						return

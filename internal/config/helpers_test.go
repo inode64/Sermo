@@ -37,11 +37,13 @@ func writeConfig(t *testing.T, files map[string]string) string {
 
 func loadConfig(t *testing.T, global string, opts ...Option) (*Config, error) {
 	t.Helper()
+	// A test without its own catalog gets an empty one, never the host's
+	// installed catalog and the services it would detect there.
 	catalogDir := filepath.Join(filepath.Dir(global), "catalog")
-	if _, err := os.Stat(catalogDir); err == nil {
-		opts = append([]Option{WithCatalogDirs(catalogDir)}, opts...)
+	if _, err := os.Stat(catalogDir); err != nil {
+		catalogDir = t.TempDir()
 	}
-	return Load(global, opts...)
+	return Load(global, append([]Option{WithCatalogDirs(catalogDir)}, opts...)...)
 }
 
 func withPathDirs(kind string) Option {

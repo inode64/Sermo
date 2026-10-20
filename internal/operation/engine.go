@@ -46,10 +46,6 @@ const (
 	// listed. It is never a rule action: an operator requests it, or the
 	// watch's own opt-in then.kill_query does under its policy.
 	actionKillQuery = string(rules.ActionKillQuery)
-	// actionReap is intentionally not a rule action: a stray is a process Sermo
-	// cannot name, so clearing one always requires an operator who decided that
-	// the service's reap.kill_only_if selector describes it.
-	actionReap = string(rules.ActionReap)
 
 	// postflightMaxAttempts lets a daemon finish binding its ready socket after
 	// its init manager reports a successful start. The retries remain within the
@@ -118,11 +114,6 @@ type Engine struct {
 	DiscoverTracked func([]process.Process) ([]process.Process, error)
 	Reaper          process.Reaper
 	KillPolicy      process.KillPolicy
-	// ReapSelector is the service's `reap.kill_only_if` authorization: the only
-	// thing that can turn a stray process into a signal target. The zero value is
-	// unconfigured and matches nothing, so a service that declares no `reap:`
-	// block reports its strays and signals none of them.
-	ReapSelector process.KillSelector
 	// RepairStalePIDFiles removes only the proven-dead runtime pidfiles that
 	// prevent a failed or inactive service from starting. Build wires it from
 	// the service's declared pidfile selectors; keeping it injectable makes the
@@ -147,8 +138,6 @@ type plan struct {
 	closeTerminalSession *TerminalSessionTarget
 	closeTerminalSource  *TerminalSessionSourceTarget
 	killQuery            *DBQueryTarget
-	reap                 bool
-	reapTarget           *ReapTarget
 	repair               bool
 }
 
@@ -239,9 +228,9 @@ func (e Engine) Pause(ctx context.Context) Result {
 // shares the service operation lock, named locks, guards, timeout and event
 // path with normal service actions, but deliberately skips service pre/post
 // flight because the SSH daemon itself remains running. Connected process closes
-// send only SIGTERM; residual sudo terminals require explicit reap authorization.
+// send only SIGTERM and never escalate; a residual sudo terminal is authorized
+// by its own verified session evidence and escalates through the reaper.
 // Managed closes use the independently verified login manager.
-// Connected sessions never escalate; authorized residuals reuse the reaper.
 func (e Engine) CloseSession(ctx context.Context, target SessionTarget) Result {
 	return e.run(ctx, plan{action: actionCloseSession, closeSession: &target})
 }
@@ -265,23 +254,6 @@ func (e Engine) KillDBQuery(ctx context.Context, target DBQueryTarget) Result {
 	return e.run(ctx, plan{action: actionKillQuery, killQuery: &target})
 }
 
-// Reap reports the service's stray processes — the members of its init unit's
-// control group that no selector claims and that no longer hang off its principal
-// process — and, with apply set, signals the ones the service's
-// reap.kill_only_if selector authorizes.
-//
-// Without apply it is a read-only preview: no operation lock, no guards, no
-// event. Listing what a service cannot account for must stay as available as
-// `sermoctl processes`, and an operation already in flight is no reason to refuse
-// a read. Signalling is the action, and only the action takes the audited path:
-// the operation lock, named runtime locks, guards and exactly one event.
-func (e Engine) Reap(ctx context.Context, apply bool) Result {
-	if !apply {
-		return e.previewReap()
-	}
-	return e.run(ctx, plan{action: actionReap, reap: true})
-}
-
 // Repair clears a proven-stale runtime pidfile, then starts a failed or inactive
 // service through the same preflight, locks, guards and postflight as Start.
 // It is deliberately manual-only; rules cannot dispatch this recovery action.
@@ -289,145 +261,11 @@ func (e Engine) Repair(ctx context.Context) Result {
 	return e.run(ctx, plan{action: ActionRepair, preflight: true, repair: true, reconcile: true, start: true, postflight: true})
 }
 
-// previewReap lists the strays and says which ones the service authorized,
-// without touching any of them.
-func (e Engine) previewReap() Result {
-	result := Result{Service: e.Service, Action: actionReap, Backend: e.Backend, Status: ResultOK}
-	if e.ConfigError != nil {
-		result.Status, result.Message = ResultFailed, "config: "+e.ConfigError.Error()
-		return result
-	}
-	strays, err := e.discoverStrays()
-	if err != nil {
-		result.Status, result.Message = ResultFailed, actionReap+": "+err.Error()
-		return result
-	}
-	result.Processes = strays
-	for i := range result.Processes {
-		result.Processes[i].SignalBlockReason = e.ReapBlockReason(result.Processes[i])
-	}
-	if len(strays) == 0 {
-		result.Message = "no stray processes"
-		return result
-	}
-	// The message names no CLI flag: the engine states what it would do, and each
-	// front end says how to ask for it.
-	result.Message = fmt.Sprintf("preview: %d of %d stray process(es) would be signalled", len(e.authorizedStrays(strays)), len(strays))
-	return result
-}
-
-// reapStrays signals the authorized strays and records the outcome. It is
-// terminal for the operation either way, so the caller's deferred event emission
-// remains the single audit path.
-func (e Engine) reapStrays(ctx context.Context, result *Result, target *ReapTarget) {
-	strays, err := e.discoverReapTargets(target, true)
-	if err != nil {
-		result.Status, result.Message = ResultFailed, actionReap+": "+err.Error()
-		return
-	}
-	if len(strays) == 0 {
-		result.Message = actionReap + " ok (no stray processes)"
-		return
-	}
-	result.Processes = strays
-	if len(e.authorizedStrays(strays)) == 0 {
-		// The fail-safe: an undeclared or non-matching selector reports every stray
-		// and signals none. Blocked rather than failed — nothing went wrong, the
-		// service simply never authorized this.
-		result.Status, result.Message = ResultBlocked, fmt.Sprintf("%s: %d stray process(es) reported, none authorized by %s",
-			actionReap, len(strays), process.ReapKillOnlyIfPath)
-		return
-	}
-
-	reaper := e.Reaper
-	var discoveryErr error
-	reaper.Rediscover = func() []process.Process {
-		var current []process.Process
-		current, discoveryErr = e.discoverReapTargets(target, false)
-		if discoveryErr != nil {
-			return nil
-		}
-		return current
-	}
-	reaper.Sleep = e.Sleep
-	outcome := reaper.Reap(ctx, strays, process.KillPolicy{
-		ForceKill: true,
-		// Escalation timing is the service's own stop policy: a stray is one of its
-		// processes, and there is no second place to tune how long it may take to die.
-		TermTimeout: e.KillPolicy.TermTimeout,
-		KillTimeout: e.KillPolicy.KillTimeout,
-		KillOnlyIf:  e.ReapSelector,
-	})
-	result.Signals = outcome.Attempts
-	if discoveryErr != nil {
-		result.Status, result.Message = ResultFailed, actionReap+": "+discoveryErr.Error()
-		return
-	}
-	result.Processes = outcome.Remaining
-	applyReapOutcome(ctx, result, len(strays), outcome)
-}
-
-// applyReapOutcome turns one reap escalation into the operation result: ok only
-// when no stray is left, orphan_processes when any survives or was never
-// authorized, and a signal-delivery failure reported rather than swallowed.
-func applyReapOutcome(ctx context.Context, result *Result, found int, outcome process.ReapResult) {
-	signalled := fmt.Sprintf("signalled %d of %d stray process(es)", len(outcome.Signalled), found)
-	if len(outcome.Failed) > 0 {
-		failures := make([]string, 0, len(outcome.Failed))
-		for _, failure := range outcome.Failed {
-			failures = append(failures, fmt.Sprintf("pid %d: %v", failure.PID, failure.Err))
-		}
-		result.Status = ResultFailed
-		result.Message = fmt.Sprintf("%s: %s; %s", actionReap, signalled, strings.Join(failures, "; "))
-		return
-	}
-	if timedOut(ctx) {
-		result.Status, result.Message = ResultFailed, timeoutDuring(actionReap)
-		return
-	}
-	if len(outcome.Remaining) > 0 {
-		result.Status = ResultOrphanProcesses
-		result.Message = fmt.Sprintf("%s: %s; %d remain", actionReap, signalled, len(outcome.Remaining))
-		return
-	}
-	result.Message = fmt.Sprintf("%s ok (%s)", actionReap, signalled)
-}
-
-// discoverStrays re-reads live /proc through the engine's discovery closure and
-// keeps only the strays. Reading live is what makes escalation safe (safety
-// invariants 1, 4 and 12): a stale process table would target PIDs that already
-// exited and may have been reused.
-func (e Engine) discoverStrays() ([]process.Process, error) {
-	if e.Discover == nil {
-		return nil, errors.New("process discovery is unavailable for this service")
-	}
-	procs, err := e.Discover()
-	if err != nil {
-		return nil, fmt.Errorf("process discovery: %w", err)
-	}
-	return process.Strays(procs), nil
-}
-
-func (e Engine) reapResolver() process.UserResolver {
+func (e Engine) userResolver() process.UserResolver {
 	if e.Reaper.ResolveUser != nil {
 		return e.Reaper.ResolveUser
 	}
 	return process.DefaultUserLookup().ResolveUser
-}
-
-// authorizedStrays returns the strays the service's reap selector allows to be
-// signalled. Killable is the same gate every other kill decision passes through,
-// so a delegated process, an unresolvable exe, PID 1 and kernel threads are
-// refused here for free — and an unconfigured selector refuses everything.
-func (e Engine) authorizedStrays(strays []process.Process) []process.Process {
-	resolve := e.reapResolver()
-	var authorized []process.Process
-	for _, stray := range strays {
-		if e.ReapSelector.Killable(stray, resolve) {
-			authorized = append(authorized, stray)
-		}
-	}
-	return authorized
 }
 
 // Do dispatches one action name to the matching operation, returning its Result.
@@ -489,13 +327,6 @@ func (e Engine) run(ctx context.Context, p plan) (result Result) {
 		return result
 	}
 	if e.runCloseAction(ctx, p, &result) {
-		return result
-	}
-	if p.reap {
-		e.reapStrays(ctx, &result, p.reapTarget)
-		if p.reapTarget != nil {
-			result.Message = fmt.Sprintf("pid %d: %s", p.reapTarget.PID, result.Message)
-		}
 		return result
 	}
 	if p.repair {
@@ -706,15 +537,16 @@ func (e Engine) runReconciliation(ctx context.Context, p plan, result *Result) (
 // It calls out how many are strays. A stray survives a stop precisely because
 // nothing in the configuration accounts for it, so "residual process" alone sends
 // the operator looking for a selector that was never written; naming it, and the
-// verb that can clear it, is the difference between a dead end and a next step.
+// setting that keeps such a workload on purpose, is the difference between a
+// dead end and a next step.
 func residualsRemain(remaining []process.Process, phase string) string {
 	message := fmt.Sprintf("%d residual process(es) remain %s", len(remaining), phase)
 	strays := len(process.Strays(remaining))
 	if strays == 0 {
 		return message
 	}
-	return fmt.Sprintf("%s (%d stray, unaccounted for by any selector; `sermoctl %s` lists them and, with %s declared, clears them)",
-		message, strays, actionReap, process.ReapKillOnlyIfPath)
+	return fmt.Sprintf("%s (%d stray, unaccounted for by any selector; set %s if the unit keeps it alive on purpose)",
+		message, strays, process.StopPolicyFieldPath(process.StopPolicyKeyKeepChildren))
 }
 
 func (e Engine) closeSession(ctx context.Context, target SessionTarget, result *Result) bool {
@@ -1203,7 +1035,7 @@ func (e Engine) clearResiduals(ctx context.Context, tracked []process.Process, a
 			discoverErr = err
 			return nil
 		}
-		tracked = nonDelegatedResiduals(procs)
+		tracked = nonDelegatedResiduals(e.reattributeUnitMembers(procs))
 		return tracked
 	}
 	residuals := discover()

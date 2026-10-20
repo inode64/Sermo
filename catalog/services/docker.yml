@@ -44,13 +44,10 @@ processes:
   main:
     exe: ${docker_daemon}
     user: root
-  # One docker-proxy per published container port; it belongs to the container,
-  # not to the daemon, and survives a dockerd restart on purpose. Delegated keeps
-  # it monitored while barring it from every kill decision.
-  proxy:
-    exe: ${docker_proxy_binary}
-    user: root
-    delegated: true
+# Only the daemon must exit on stop: docker-proxy and live-restore containers
+# keep running. Every other process is kept and never signalled.
+stop_policy:
+  keep_children: true
 pidfile: /run/docker.pid
 reload:
   signal: HUP

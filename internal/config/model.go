@@ -37,12 +37,6 @@ const (
 // invariants (pidfile/file cleanup) the engine enforces.
 const sectionStopPolicy = process.SectionStopPolicy
 
-// sectionReap is the per-service block authorizing `sermoctl reap` to signal the
-// service's stray processes. It is deliberately absent from perServiceDefaults:
-// a global default would hand every service the same kill authority over
-// processes none of them can name.
-const sectionReap = process.SectionReap
-
 // sectionPolicy is the remediation policy block; sectionRuleWindow is the
 // firing-window fallback block owned by the rules grammar.
 const (

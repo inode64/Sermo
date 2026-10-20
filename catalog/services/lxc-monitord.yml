@@ -13,6 +13,10 @@ processes:
   main:
     exe: ${lxc_monitord_binary}
     user: ${user}
+# Only the daemon must exit on stop: LXC containers keep running. Every other
+# process is kept and never signalled.
+stop_policy:
+  keep_children: true
 watches:
   service:
     check:

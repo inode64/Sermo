@@ -30,7 +30,6 @@ import (
 	"sermo/internal/httpx"
 	"sermo/internal/logfile"
 	"sermo/internal/operation"
-	"sermo/internal/process"
 	"sermo/internal/rules"
 )
 
@@ -126,13 +125,10 @@ const (
 
 // HTTP action names accepted by the dashboard API.
 const (
-	apiActionReload    = string(rules.ActionReload)
-	apiActionResume    = string(rules.ActionResume)
-	apiActionMonitor   = "monitor"
-	apiActionUnmonitor = "unmonitor"
-	// apiActionReap is deliberately not a service operation: it does not change
-	// unit state, so it gets its own branch rather than joining the engine path.
-	apiActionReap             = process.SectionReap
+	apiActionReload           = string(rules.ActionReload)
+	apiActionResume           = string(rules.ActionResume)
+	apiActionMonitor          = "monitor"
+	apiActionUnmonitor        = "unmonitor"
 	apiActionExpand           = "expand"
 	apiActionProbe            = "probe"
 	apiActionPause            = "pause"
@@ -455,7 +451,6 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc(routeAPIPreflight, s.handlePreflight)
 	mux.HandleFunc(routeAPISessionClose, s.handleSSHSessionClose)
 	mux.HandleFunc(routeAPITerminalSessionClose, s.handleTerminalSessionClose)
-	mux.HandleFunc(routeAPIStrayReap, s.handleStrayReap)
 	mux.HandleFunc(routeAPIEmptyTerminalSessionClose, s.handleEmptyTerminalSessionClose)
 	mux.HandleFunc(routeAPIDBQueryKill, s.handleDBQueryKill)
 	mux.HandleFunc(routeAPIAction, s.handleAction)

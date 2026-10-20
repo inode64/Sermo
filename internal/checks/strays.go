@@ -17,10 +17,11 @@ import (
 // the unit's principal process.
 type StraysFunc func() []process.Process
 
-// StrayReapHint is the remedy for an accumulating stray. The check and the
-// residual report of a failed stop both end with it, so the two never word the
-// same fix differently.
-const StrayReapHint = "`sermoctl reap` lists them and, with reap.kill_only_if declared, clears them"
+// strayHint is what happens to an accumulating stray and how to keep one on
+// purpose. Every message of the check ends with it, so they never word the same
+// remedy differently.
+const strayHint = "a stop or restart terminates them unless the service sets " +
+	process.SectionStopPolicy + "." + process.StopPolicyKeyKeepChildren
 
 // straysCheck reports processes the init backend attributes to this service that
 // nothing in its configuration accounts for. It is a condition check whose OK
@@ -90,12 +91,12 @@ func (c straysCheck) growthResult(strays []process.Process, exes []string, start
 	switch {
 	case !ok:
 		message = fmt.Sprintf("stray processes grew by %d in %s (max_increase %s): %d now (%s); %s",
-			growth, span, formatThreshold(c.maxIncrease), len(strays), strings.Join(exes, ", "), StrayReapHint)
+			growth, span, formatThreshold(c.maxIncrease), len(strays), strings.Join(exes, ", "), strayHint)
 	case c.hasMax && float64(len(strays)) > c.max:
 		// Both bounds fail the check: a large but stable leak has no growth.
 		ok = false
 		message = fmt.Sprintf("%d stray process(es) above max %s, %+d in %s (%s); %s",
-			len(strays), formatThreshold(c.max), growth, span, strings.Join(exes, ", "), StrayReapHint)
+			len(strays), formatThreshold(c.max), growth, span, strings.Join(exes, ", "), strayHint)
 	}
 
 	res := c.result(ok, message, start)
@@ -116,7 +117,7 @@ func (c straysCheck) levelMessage(count int, exes []string) string {
 			count, formatThreshold(c.max), strings.Join(exes, ", "))
 	}
 	return fmt.Sprintf("%d stray process(es) unaccounted for by any selector (%s); %s",
-		count, strings.Join(exes, ", "), StrayReapHint)
+		count, strings.Join(exes, ", "), strayHint)
 }
 
 // straysData is the payload both forms share. op and threshold describe the bound the

@@ -24,7 +24,6 @@ const (
 	commandUnmonitor = "unmonitor"
 	commandPreflight = "preflight"
 	commandProcesses = "processes"
-	commandReap      = actionReap
 	commandLocks     = "locks"
 	commandLock      = "lock"
 	commandMount     = mountctl.ActionMount

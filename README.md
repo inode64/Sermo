@@ -136,11 +136,15 @@ that tries. In full in [docs/safety.md](docs/safety.md):
 2. **No action a guard blocks** — guards are evaluated before remediation.
 3. **Active named runtime locks always block service actions** — checked
    automatically, no rule needed.
-4. **Never SIGKILL by default** — `force_kill` is false unless explicitly enabled.
+4. **SIGKILL only where `force_kill` allows it** — the engine default is `false`;
+   the shipped `sermo.yml` sets `auto`, which escalates only for strict
+   `processes:` identities and for processes the kernel places in the service's
+   own control group. `false` rules SIGKILL out for a service.
 5. **Never kill by process name** — a kill requires an exact match on the
    resolved `/proc/<pid>/exe` path **and** the real UID against an explicit
-   `kill_only_if` selector; anything it cannot positively identify is *reported,
-   not killed*.
+   `kill_only_if` selector or a strict `processes:` identity, or kernel proof
+   that the process sits in the service's own control group; anything it cannot
+   positively identify is *reported, not killed*.
 6. **Never send terminating signals to PID 1 or kernel threads** — blocked
    centrally, not configurable.
 7. **`force_kill: true` requires `kill_only_if`** with non-empty `users` and

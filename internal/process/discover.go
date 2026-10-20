@@ -37,6 +37,10 @@ type Discoverer struct {
 	// process owned by another unit; unknown ownership forbids signaling an
 	// unlinked executable found outside the attributed tree.
 	ProcessOwnership func(Identity) (foreign, known bool)
+	// KeepChildren is the service's stop_policy.keep_children: every discovered
+	// process that is not a principal is delegated, so a stop never waits for or
+	// signals it. See markKeptChildren.
+	KeepChildren bool
 }
 
 // NewDiscovererWithUserLookup returns a Discoverer backed by the host /proc and
@@ -155,6 +159,9 @@ func (d Discoverer) Discover(selectors []Selector) ([]Process, []string) {
 	// cheap fast path and owns the extra identity/tree work for the few services
 	// that need it.
 	d.markDelegated(selectors, found, idx, resolve)
+	if d.KeepChildren {
+		d.markKeptChildren(selectors, found, idx, resolve, pidfileClaimed)
+	}
 
 	// 5. stray marking, after delegation so a delegated workload is never also a
 	// stray. Only cgroup members outside the principal's tree are examined, which
@@ -263,6 +270,72 @@ func (d Discoverer) markDelegated(selectors []Selector, found map[int]Process, i
 	}
 }
 
+// markKeptChildren applies stop_policy.keep_children: every discovered process
+// that is not a principal is delegated, so a stop neither waits for it nor
+// signals it. It runs after markDelegated, so an explicit delegated selector
+// still wins. Delegation only ever removes signal authority, so this cannot
+// widen what Sermo may signal.
+//
+// A principal is a pidfile PID, a process matched by a non-delegated selector
+// (a binary replaced on disk included) that descends from no process matched by
+// that same selector, or — failing closed — a process whose executable cannot be
+// read and that descends from no matched process at all. What the daemon forked
+// is kept even when it re-executes the same binary as the same user (a cronie
+// job runner); a surviving earlier daemon instance is reparented to PID 1, so it
+// is still a principal and still blocks the start. A supervisor declared by its
+// own selector does not hide the daemon below it. The backend's first PID is
+// not trusted on its own: once a systemd unit's daemon exits, the first PID it
+// lists is just a kept workload process.
+func (d Discoverer) markKeptChildren(selectors []Selector, found map[int]Process, idx *snapshotIndex, resolve UserResolver, pidfileClaimed map[int]bool) {
+	principalSelectors := slices.DeleteFunc(slices.Clone(selectors), func(s Selector) bool { return s.Delegated })
+	claims := map[int][]int{}
+	for pid := range found {
+		for i := range principalSelectors {
+			if d.claimedBy(principalSelectors[i:i+1], idx.byPID[pid], resolve) {
+				claims[pid] = append(claims[pid], i)
+			}
+		}
+	}
+	for pid, proc := range found {
+		if proc.Delegated || pidfileClaimed[pid] {
+			continue
+		}
+		id := idx.byPID[pid]
+		if own := claims[pid]; len(own) > 0 {
+			if !hasAncestor(idx, pid, func(ancestor int) bool { return sharesSelector(claims[ancestor], own) }) {
+				continue
+			}
+		} else if !id.ExeOK && id.ExePrev == "" {
+			if !hasAncestor(idx, pid, func(ancestor int) bool { return len(claims[ancestor]) > 0 }) {
+				continue
+			}
+		}
+		proc.Delegated = true
+		found[pid] = proc
+	}
+}
+
+// hasAncestor reports whether any ancestor of pid in the snapshot satisfies
+// match. The walk is bounded by the snapshot size, so a malformed parent cycle
+// ends.
+func hasAncestor(idx *snapshotIndex, pid int, match func(int) bool) bool {
+	for range len(idx.byPID) {
+		id, ok := idx.byPID[pid]
+		if !ok || id.PPID <= 0 || id.PPID == pid {
+			return false
+		}
+		pid = id.PPID
+		if match(pid) {
+			return true
+		}
+	}
+	return false
+}
+
+func sharesSelector(a, b []int) bool {
+	return slices.ContainsFunc(a, func(i int) bool { return slices.Contains(b, i) })
+}
+
 // markStrays flags the cgroup members the init backend attributes to the unit
 // that nothing claims: not the principal process, not part of its live process
 // tree, named by no pidfile and matched by no command selector. Cgroup
@@ -277,9 +350,9 @@ func (d Discoverer) markDelegated(selectors []Selector, found map[int]Process, i
 // workers on a service that declares no `processes:` block, where every selector
 // match is unavailable and reporting the whole cgroup would be noise.
 //
-// The label is descriptive only. Reaping a stray still requires the service's own
-// reap.kill_only_if selector and passes through KillSelector.Killable like every
-// other signal, so nothing here widens what Sermo may signal.
+// The label is descriptive only: a stray is signalled only as a residual of a
+// stop, through KillPolicy like every other residual, so nothing here widens
+// what Sermo may signal.
 func (d Discoverer) markStrays(selectors []Selector, found map[int]Process, idx *snapshotIndex, resolve UserResolver, principal int, pidfileClaimed map[int]bool) {
 	// No backend seed means no cgroup attribution to reason about: without one,
 	// every discovered process came from a selector that named it.
@@ -695,6 +768,18 @@ func selectorExePath(sel *Selector) string {
 // definition of it rather than restating the predicate apart from each other.
 func (s Selector) HasStrictIdentity() bool {
 	return s.Type == SelectorCommandMatch && s.Exe != "" && s.User != ""
+}
+
+// IsStrictPrincipal reports a selector that names the service's own processes
+// with a strict identity: not delegated, exact executable and real user. It is
+// the identity a stop can rely on and the only one that derives kill authority.
+func (s Selector) IsStrictPrincipal() bool {
+	return !s.Delegated && s.HasStrictIdentity()
+}
+
+// HasStrictPrincipal reports whether any selector is a strict principal.
+func HasStrictPrincipal(selectors []Selector) bool {
+	return slices.ContainsFunc(selectors, Selector.IsStrictPrincipal)
 }
 
 // selectorCmdRegexp returns the selector's compiled cmd regex, compiling lazily
