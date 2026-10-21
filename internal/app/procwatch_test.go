@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"math"
 	"testing"
 	"time"
@@ -664,5 +665,45 @@ func TestProcWatcherKillRecheckUsesResampler(t *testing.T) {
 	w.resampler = nil
 	if _, ok := w.matchingProcess(10); !ok {
 		t.Fatal("without a resampler the re-check must read the sampler")
+	}
+}
+
+// incompleteSnapshot is a shared reader whose last /proc walk failed: it
+// serves what it read together with the error.
+type incompleteSnapshot struct{ serviceOwnershipReader }
+
+func (r incompleteSnapshot) SnapshotWithError() (map[int]process.Identity, error) {
+	return r.serviceOwnershipReader, errors.New("list process IDs: too many open files")
+}
+
+type failingProcList struct{ serviceOwnershipReader }
+
+func (failingProcList) PIDs() ([]int, error) {
+	return nil, errors.New("read /proc: too many open files")
+}
+
+// An incomplete shared snapshot is not used: the cycle walks /proc itself, so
+// an unreadable listing reports the sample unavailable instead of an empty one
+// that would fire `gone` for every tracked process.
+func TestOSProcSamplerIgnoresAnIncompleteSharedSnapshot(t *testing.T) {
+	worker := process.Identity{PID: 10, PPID: 1, StartTicks: 100, StartTicksOK: true, Exe: "/usr/bin/worker", ExeOK: true}
+	counters := fakeProcCounters{starts: map[int]uint64{10: 100, 20: 200}}
+	sampler := osProcSampler{
+		userLookup: process.DefaultUserLookup(),
+		shared:     incompleteSnapshot{serviceOwnershipReader{}},
+		host:       failingProcList{},
+		counters:   counters,
+	}
+	if samples, ok := sampler.Sample(ProcMatch{Name: "worker"}); ok || samples != nil {
+		t.Fatalf("unlistable /proc: samples = %+v, ok %v; want the sample unavailable", samples, ok)
+	}
+
+	sampler.shared = incompleteSnapshot{serviceOwnershipReader{10: worker}}
+	sampler.host = serviceOwnershipReader{
+		20: {PID: 20, PPID: 1, StartTicks: 200, StartTicksOK: true, Exe: "/usr/bin/worker", ExeOK: true},
+	}
+	samples, ok := sampler.Sample(ProcMatch{Name: "worker"})
+	if !ok || len(samples) != 1 || samples[0].PID != 20 {
+		t.Fatalf("incomplete snapshot: samples = %+v, ok %v; want the sampler's own walk", samples, ok)
 	}
 }
