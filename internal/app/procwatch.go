@@ -562,21 +562,29 @@ func ioBytesPerSec(prevIO, curIO uint64, hadIO, hasIO bool, prevAt, now time.Tim
 type osProcSampler struct {
 	userLookup *process.UserLookup
 	// shared, when set, serves identities from the daemon's shared snapshot.
-	// Counters are still read live, and a process whose live start time no
-	// longer matches the snapshot (it exited, or its PID was reused) is left
-	// out.
+	// Counters are still read live, and a process whose live start ticks no
+	// longer match the snapshot (it exited, or its PID was reused) is left out.
 	shared process.Reader
-	// counters reads the live counters; nil uses metrics.OSReader.
+	// counters reads the live counters; nil uses osProcCounters.
 	counters procCounterReader
 }
 
-// procCounterReader reads one process's live counters (metrics.OSReader).
+// procCounterReader reads one process's live counters (osProcCounters).
 type procCounterReader interface {
+	// StartTicks reads only the start time in clock ticks. Unlike
+	// ProcessStart it needs no boot time, so it alone decides whether a PID
+	// still holds the same process.
+	StartTicks(pid int) (uint64, bool)
 	ProcessStart(pid int) (uint64, time.Time, bool)
 	ProcessCPU(pid int) (uint64, bool)
 	ProcessRSS(pid int) (uint64, bool)
 	ProcessIO(pid int) (read, write uint64, ok bool)
 }
+
+// osProcCounters reads live counters from the host /proc.
+type osProcCounters struct{ metrics.OSReader }
+
+func (osProcCounters) StartTicks(pid int) (uint64, bool) { return process.StartTicks(pid) }
 
 func (s osProcSampler) Sample(m ProcMatch) ([]ProcInfo, bool) {
 	lookup := s.userLookup
@@ -594,7 +602,7 @@ func (s osProcSampler) Sample(m ProcMatch) ([]ProcInfo, bool) {
 			return nil, false
 		}
 	}
-	var mr procCounterReader = metrics.OSReader{}
+	var mr procCounterReader = osProcCounters{}
 	if s.counters != nil {
 		mr = s.counters
 	}
@@ -607,7 +615,7 @@ func (s osProcSampler) Sample(m ProcMatch) ([]ProcInfo, bool) {
 		}
 		info := ProcInfo{Identity: id}
 		ticks, at, started := mr.ProcessStart(pid)
-		if s.shared != nil && (!started || id.StartTicksOK && ticks != id.StartTicks) {
+		if s.shared != nil && !sharedIdentityCurrent(mr, id, ticks, started) {
 			continue
 		}
 		if started {
@@ -625,6 +633,18 @@ func (s osProcSampler) Sample(m ProcMatch) ([]ProcInfo, bool) {
 		out = append(out, info)
 	}
 	return out, true
+}
+
+// sharedIdentityCurrent reports whether a snapshot identity still names a live
+// process: its PID still runs and, when the snapshot knew its start ticks, the
+// same process. ProcessStart also fails when only the boot time in /proc/stat is
+// unreadable, so the ticks are read on their own before counting the process
+// as gone; dropping a live one would fire `gone` for it.
+func sharedIdentityCurrent(mr procCounterReader, id process.Identity, ticks uint64, started bool) bool {
+	if !started {
+		ticks, started = mr.StartTicks(id.PID)
+	}
+	return started && (!id.StartTicksOK || ticks == id.StartTicks)
 }
 
 // procMatchesWithLookup reports whether a process matches the selector: its name
