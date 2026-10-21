@@ -787,3 +787,54 @@ func TestBulkServiceStatesMatchIndividualReads(t *testing.T) {
 		t.Fatalf("settling=%v individual=%v found=%v err=%v", settling, transition, found, err)
 	}
 }
+
+// A transaction holding the single write connection still finds its cached
+// statements while another write prepares a new one and waits for that
+// connection: the cache lock is never held across a prepare.
+func TestStatementCacheNeverHoldsItsLockWhilePreparing(t *testing.T) {
+	s := openTemp(t)
+	ctx := t.Context()
+	if err := s.statements.warm(ctx, s.db.PrepareContext, deleteServiceCheckSnapshotSQL); err != nil {
+		t.Fatalf("warm: %v", err)
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatalf("begin: %v", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	waits := s.db.Stats().WaitCount
+	prepared := make(chan error, 1)
+	go func() {
+		// Not cached yet: preparing it waits for the connection tx holds.
+		_, err := s.exec(ctx, deleteWatchCheckSnapshotSQL, "clock", "result")
+		prepared <- err
+	}()
+	poll := time.NewTicker(time.Millisecond)
+	defer poll.Stop()
+	giveUp := time.After(5 * time.Second)
+	for s.db.Stats().WaitCount == waits {
+		select {
+		case <-poll.C:
+		case <-giveUp:
+			t.Fatal("the second write never waited for the connection")
+		}
+	}
+
+	inTx := make(chan error, 1)
+	go func() { inTx <- s.statements.execInTx(ctx, tx, deleteServiceCheckSnapshotSQL, "web", "http") }()
+	select {
+	case err := <-inTx:
+		if err != nil {
+			t.Fatalf("execInTx: %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("the transaction blocked on the statement cache while a prepare waited for its connection")
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatalf("commit: %v", err)
+	}
+	if err := <-prepared; err != nil {
+		t.Fatalf("waiting write: %v", err)
+	}
+}

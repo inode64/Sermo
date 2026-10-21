@@ -159,7 +159,10 @@ func (s *Store) exec(ctx context.Context, query string, args ...any) (sql.Result
 
 // statementCache owns prepared statements for one database or transaction.
 // Preparing once avoids SQLite compilation on every per-cycle write. Its lock
-// protects both cache lookup and preparation, but never covers execution.
+// covers only the map, never preparation or execution: a store-level prepare
+// waits for the single write connection, and a transaction holding that
+// connection looks its statements up here (execInTx), so a lock held across
+// the wait would deadlock the two.
 type statementCache struct {
 	mu    sync.Mutex
 	stmts map[string]*sql.Stmt
@@ -205,26 +208,39 @@ func (c *statementCache) execInTx(ctx context.Context, tx *sql.Tx, query string,
 // closed in between.
 var errStatementCacheClosed = errors.New("exec state statement: statement cache closed")
 
-// warm prepares each query the cache does not hold yet (storing a cached
-// statement again changes nothing).
+// warm prepares each query the cache does not hold yet, outside the lock. When
+// two callers prepare the same query at once, the first stored statement wins
+// and the other is closed.
 func (c *statementCache) warm(ctx context.Context, prepare func(context.Context, string) (*sql.Stmt, error), queries ...string) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
 	for _, query := range queries {
-		stmt, ok := c.stmts[query]
-		if !ok {
-			var err error
-			stmt, err = prepare(ctx, query)
-			if err != nil {
-				return fmt.Errorf("prepare state statement: %w", err)
-			}
+		c.mu.Lock()
+		_, cached := c.stmts[query]
+		c.mu.Unlock()
+		if cached {
+			continue
 		}
-		if c.stmts == nil {
-			c.stmts = map[string]*sql.Stmt{}
+		stmt, err := prepare(ctx, query)
+		if err != nil {
+			return fmt.Errorf("prepare state statement: %w", err)
 		}
-		c.stmts[query] = stmt
+		c.store(query, stmt)
 	}
 	return nil
+}
+
+// store caches stmt for query unless another caller already did, closing the
+// statement that is not kept.
+func (c *statementCache) store(query string, stmt *sql.Stmt) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if _, cached := c.stmts[query]; cached {
+		_ = stmt.Close()
+		return
+	}
+	if c.stmts == nil {
+		c.stmts = map[string]*sql.Stmt{}
+	}
+	c.stmts[query] = stmt
 }
 
 func (c *statementCache) close() {
