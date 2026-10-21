@@ -397,15 +397,19 @@ func run(args []string) int {
 	// One shared /proc snapshot for service discovery: concurrent workers and web
 	// runtime queries within a cycle reuse a single walk instead of each scanning
 	// every PID. Freshness mirrors the metrics collector's SystemFreshness.
-	deps.ProcReader = process.NewCachingReader(process.OSReader{LookupUserName: userLookup.Username}, deps.SystemFreshness)
+	procReader := process.NewCachingReader(process.OSReader{LookupUserName: userLookup.Username}, deps.SystemFreshness)
+	deps.ProcReader = procReader
+	deps.ZombieSampler = checks.NewZombieSampler(procReader)
 
 	// A second collector dedicated to the web's per-cycle live CPU sampling, kept
 	// separate from the engine's so their rate deltas never corrupt each other.
 	deps.LiveCollector = metrics.New(metrics.OSReader{})
 	deps.ArtifactSamples = app.NewArtifactSamples()
 	// One resolution cache per startup generation: the workers build and the web
-	// backend build probe each service unit once and log its warning once.
+	// backend build probe each service unit once and log its warning once. They
+	// also share each service's `changed:` baseline.
 	deps.Targets = control.NewTargetCache()
+	deps.ArtifactBaselines = app.NewArtifactBaselines()
 
 	workers, svcWatches, warnings := app.BuildWorkers(ctx, cfg, deps, collector)
 	app.LogBuildNotices(logger, "build workers", warnings)
@@ -490,7 +494,7 @@ func run(args []string) int {
 			Logger:                 logger,
 			AccessLog:              accessLog,
 			MaxSeriesWindow:        app.EngineRetention(cfg).MaxWindow(),
-			OperationTimeout:       app.MaxOperationTimeout(cfg, deps.OperationTimeout),
+			OperationTimeout:       webHolder.MaxOperationTimeout(),
 			OperationTimeoutSource: webHolder.MaxOperationTimeout,
 			Readiness:              readiness,
 			Changes:                webChanges,
@@ -568,6 +572,10 @@ func run(args []string) int {
 	if !drainOrTimeout(maintenanceDone, shutdownPruneDrainTimeout) {
 		logger.Warn("state maintenance still running at shutdown; closing the store without it")
 	}
+	// Publishes store only readings that changed; write the latest times of
+	// the rest so the next start hydrates them as fresh.
+	snapshots.Flush()
+	watchSnapshots.Flush()
 	// Since Go 1.26 NotifyContext records the received signal as the
 	// cancellation cause; name it so operators can tell SIGTERM from SIGINT.
 	if cause := context.Cause(ctx); cause != nil && !errors.Is(cause, context.Canceled) {

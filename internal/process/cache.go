@@ -73,6 +73,19 @@ func (c *CachingReader) SnapshotWithError() (map[int]Identity, error) {
 	return idx.byPID, c.err
 }
 
+// CachedSnapshot returns the shared snapshot only while it is fresh and
+// complete, without rebuilding it. A caller that can read what it needs more
+// cheaply than a full identity walk reuses another consumer's walk this way and
+// falls back to its own read.
+func (c *CachingReader) CachedSnapshot() (map[int]Identity, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if !c.primed || c.err != nil || c.freshness <= 0 || c.now().Sub(c.at) >= c.freshness {
+		return nil, false
+	}
+	return c.idx.byPID, true
+}
+
 // snapshotIndex serves the pre-derived snapshot index (sorted PIDs, children
 // map) built once per refresh, so per-service discovery does not rebuild it.
 func (c *CachingReader) snapshotIndex() *snapshotIndex {
@@ -120,4 +133,51 @@ func Snapshot(reader Reader) (map[int]Identity, error) {
 		return sr.Snapshot(), nil
 	}
 	return readSnapshot(reader)
+}
+
+// CachedPIDs shares one backend PID query among a unit's discoverers for a
+// freshness window, the way CachingReader shares the /proc walk: otherwise the
+// worker, the web runtime and every metric watch of one service each run the
+// init system's query on every discovery. Fresh always queries and refreshes
+// the cache; Discoverer.FreshBackendPIDs uses it for the observations an
+// operation acts on. A freshness of 0 disables caching. Safe for concurrent
+// use; the query runs under the lock, so concurrent callers share one run.
+type CachedPIDs struct {
+	query     func() []int
+	freshness time.Duration
+	now       func() time.Time
+
+	mu     sync.Mutex
+	pids   []int
+	at     time.Time
+	primed bool
+}
+
+// NewCachedPIDs returns a CachedPIDs over query.
+func NewCachedPIDs(query func() []int, freshness time.Duration) *CachedPIDs {
+	return &CachedPIDs{query: query, freshness: freshness, now: time.Now}
+}
+
+// PIDs returns the cached answer, querying again once it is freshness old.
+func (c *CachedPIDs) PIDs() []int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.primed && c.freshness > 0 && c.now().Sub(c.at) < c.freshness {
+		return slices.Clone(c.pids)
+	}
+	return c.refreshLocked()
+}
+
+// Fresh queries the backend now and refreshes the cached answer.
+func (c *CachedPIDs) Fresh() []int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.refreshLocked()
+}
+
+func (c *CachedPIDs) refreshLocked() []int {
+	c.at = c.now()
+	c.pids = c.query()
+	c.primed = true
+	return slices.Clone(c.pids)
 }

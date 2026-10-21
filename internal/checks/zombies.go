@@ -10,8 +10,38 @@ import (
 )
 
 // ZombieSamplerFunc counts the zombie (defunct) processes, reporting ok = false
-// when /proc cannot be read. Injected for tests; the default scans /proc.
+// when /proc cannot be read. sermod installs NewZombieSampler; the default
+// scans /proc.
 type ZombieSamplerFunc func() (uint64, bool)
+
+// CachedSnapshotReader serves a shared process snapshot only while it is fresh
+// (process.CachingReader).
+type CachedSnapshotReader interface {
+	CachedSnapshot() (map[int]process.Identity, bool)
+}
+
+// NewZombieSampler counts zombies in reader's shared /proc snapshot while it is
+// fresh, and scans /proc itself otherwise: the stat-only scan is cheaper than
+// rebuilding the identity snapshot just to count.
+func NewZombieSampler(reader CachedSnapshotReader) ZombieSamplerFunc {
+	return newZombieSampler(reader, defaultZombieSampler)
+}
+
+func newZombieSampler(reader CachedSnapshotReader, scan ZombieSamplerFunc) ZombieSamplerFunc {
+	return func() (uint64, bool) {
+		snapshot, ok := reader.CachedSnapshot()
+		if !ok {
+			return scan()
+		}
+		var n uint64
+		for _, id := range snapshot {
+			if id.State == process.ProcStateZombie {
+				n++
+			}
+		}
+		return n, true
+	}
+}
 
 // zombieCheck is a level check for zombie process count.
 type zombieCheck struct {

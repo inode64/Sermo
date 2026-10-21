@@ -649,7 +649,8 @@ func buildProcWatch(name string, entry, checkEntry map[string]any, deps Deps, in
 		runner:    OSHookRunner{Runner: deps.ExecxRunner},
 		now:       deps.Now,
 		emit:      deps.Emit,
-		sampler:   procSamplerFromDeps(deps),
+		sampler:   procCycleSamplerFromDeps(deps, interval),
+		resampler: procSamplerFromDeps(deps),
 		publish:   publishWatchSnapshots(deps.WatchSnapshots, deps.watchConfigID),
 		severity:  watchSeverity(entry, checkEntry),
 	}

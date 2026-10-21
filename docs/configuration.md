@@ -1500,10 +1500,13 @@ The detail's check results are the **latest observed** by the worker (published
 each cycle), so they cost nothing to view and reflect each check's own cadence
 (see [per-check interval](#per-check-interval)); they are rehydrated from
 `engine.state` after a daemon restart, and a check not run yet shows "not run
-yet". A service result is used only through its normal freshness window (two
-effective check intervals, with a 30-second minimum) and while it still matches
-the configured check type; otherwise the detail marks it stale and waits for a
-new cycle rather than showing old values.
+yet". `sermod` writes a reading to `engine.state` only when it changes and
+stores the latest check times when it stops cleanly; after a crash, a reading
+that had not changed comes back with the time it was last stored, so it shows
+stale until its next cycle. A service result is used only through its normal
+freshness window (two effective check intervals, with a 30-second minimum) and
+while it still matches the configured check type; otherwise the detail marks it
+stale and waits for a new cycle rather than showing old values.
 Host-watch readings use the same persisted latest-observed path, with stale
 samples hidden after their normal freshness window.
 

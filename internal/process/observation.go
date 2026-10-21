@@ -113,7 +113,11 @@ func (d Discoverer) ObserveTracked(selectors []Selector, previous []Process) (Ob
 }
 
 func (d Discoverer) observe(selectors []Selector, requireSnapshot, fresh bool) (Observation, error) {
-	backend := backendPIDSeeds(d.BackendPIDs)
+	backendPIDs := d.BackendPIDs
+	if fresh && d.FreshBackendPIDs != nil {
+		backendPIDs = d.FreshBackendPIDs
+	}
+	backend := backendPIDSeeds(backendPIDs)
 	if len(selectors) == 0 && len(backend) == 0 && !requireSnapshot {
 		return Observation{}, nil
 	}
@@ -127,7 +131,7 @@ func (d Discoverer) observe(selectors []Selector, requireSnapshot, fresh bool) (
 	}
 	snapshot = withoutZombieIdentities(snapshot)
 	frozen := d
-	frozen.BackendPIDs = func() []int { return backend }
+	frozen.BackendPIDs, frozen.FreshBackendPIDs = func() []int { return backend }, nil
 	frozen.Reader = observationReader{idx: buildSnapshotIndex(snapshot)}
 	procs, warnings := frozen.Discover(selectors)
 	identities := selectors

@@ -585,3 +585,65 @@ func TestProcWatchWithCustomInjectedRunnerVerifiesEnv(t *testing.T) {
 		t.Fatalf("custom runner did not receive expected SERMO_ env from proc data + match: %v", call.Env)
 	}
 }
+
+type fakeProcCounters struct {
+	starts map[int]uint64
+}
+
+func (c fakeProcCounters) ProcessStart(pid int) (uint64, time.Time, bool) {
+	ticks, ok := c.starts[pid]
+	return ticks, time.Unix(int64(ticks), 0), ok
+}
+func (fakeProcCounters) ProcessCPU(int) (uint64, bool)        { return 1, true }
+func (fakeProcCounters) ProcessRSS(int) (uint64, bool)        { return 1, true }
+func (fakeProcCounters) ProcessIO(int) (uint64, uint64, bool) { return 0, 0, true }
+
+// A cycle served from the shared snapshot keeps only processes whose live
+// start time still matches it: one that exited, or whose PID now belongs to
+// another process, is left out.
+func TestOSProcSamplerSharedSnapshotDropsGoneAndReusedPIDs(t *testing.T) {
+	shared := serviceOwnershipReader{
+		10: {PID: 10, PPID: 1, StartTicks: 100, StartTicksOK: true, Exe: "/usr/bin/worker", ExeOK: true},
+		11: {PID: 11, PPID: 1, StartTicks: 110, StartTicksOK: true, Exe: "/usr/bin/worker", ExeOK: true},
+		12: {PID: 12, PPID: 1, StartTicks: 120, StartTicksOK: true, Exe: "/usr/bin/worker", ExeOK: true},
+	}
+	sampler := osProcSampler{
+		userLookup: process.DefaultUserLookup(),
+		shared:     shared,
+		counters:   fakeProcCounters{starts: map[int]uint64{10: 100, 12: 999}},
+	}
+	samples, ok := sampler.Sample(ProcMatch{Name: "worker"})
+	if !ok || len(samples) != 1 || samples[0].PID != 10 || samples[0].CPUTicks != 1 {
+		t.Fatalf("samples = %+v, ok %v; want only the live, unchanged PID 10", samples, ok)
+	}
+}
+
+func TestProcCycleSamplerUsesSharedSnapshotOnlyAtItsPace(t *testing.T) {
+	reader := serviceOwnershipReader{}
+	deps := Deps{UserLookup: process.DefaultUserLookup(), ProcReader: reader, SystemFreshness: 15 * time.Second}
+	if got, ok := procCycleSamplerFromDeps(deps, 30*time.Second).(osProcSampler); !ok || got.shared == nil {
+		t.Fatalf("watch at the snapshot's pace = %+v, want the shared snapshot", got)
+	}
+	if got, ok := procCycleSamplerFromDeps(deps, 5*time.Second).(osProcSampler); !ok || got.shared != nil {
+		t.Fatalf("faster watch = %+v, want its own walk", got)
+	}
+	injected := &fakeProcSampler{}
+	deps.ProcSampler = injected
+	if got := procCycleSamplerFromDeps(deps, time.Minute); got != injected {
+		t.Fatalf("injected sampler replaced by %T", got)
+	}
+}
+
+// The kill re-check reads through the resampler, never the cycle's sampler.
+func TestProcWatcherKillRecheckUsesResampler(t *testing.T) {
+	cycle := fixedSampler{infos: []ProcInfo{{PID: 10}}, ok: true}
+	fresh := fixedSampler{ok: true}
+	w := &procWatcher{match: ProcMatch{Name: "worker"}, sampler: cycle, resampler: fresh}
+	if _, ok := w.matchingProcess(10); ok {
+		t.Fatal("kill re-check answered from the cycle sampler")
+	}
+	w.resampler = nil
+	if _, ok := w.matchingProcess(10); !ok {
+		t.Fatal("without a resampler the re-check must read the sampler")
+	}
+}

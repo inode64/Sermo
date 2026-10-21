@@ -18,6 +18,7 @@ import (
 	"sermo/internal/execx/execxtest"
 	"sermo/internal/notify"
 	"sermo/internal/rules"
+	"sermo/internal/servicemgr"
 )
 
 func TestArtifactWatchInterval(t *testing.T) {
@@ -632,4 +633,29 @@ type countingRunner struct {
 func (r *countingRunner) Run(context.Context, string, ...string) (execx.Result, error) {
 	r.calls.Add(1)
 	return r.result, nil
+}
+
+// A service's worker and its web runtime share one `changed:` baseline per
+// generation, so a manual action sees the fingerprints the worker acknowledged.
+func TestArtifactBaselinesShareOneBaselinePerService(t *testing.T) {
+	registry := NewArtifactBaselines()
+	w, _, warnings := buildWorker(t.Context(), "web", "web.service", map[string]any{}, Deps{
+		Backend: servicemgr.BackendSystemd, Manager: fakeManager{}, Runtime: t.TempDir(),
+		DefaultTimeout: time.Second, OperationTimeout: time.Second, ExecxRunner: &execxtest.Runner{},
+		Emit: func(Event) {}, ArtifactBaselines: registry,
+	}, nil)
+	if len(warnings) != 0 {
+		t.Fatalf("buildWorker warnings = %v", warnings)
+	}
+	if w.libBaseline != registry.For("web") {
+		t.Fatal("the worker's baseline is not the one the web runtime receives")
+	}
+	if registry.For("db") == registry.For("web") {
+		t.Fatal("services share a baseline")
+	}
+	var none *ArtifactBaselines
+	worker, web := none.For("web"), none.For("web")
+	if worker == web {
+		t.Fatal("without a registry each caller must get its own baseline")
+	}
 }

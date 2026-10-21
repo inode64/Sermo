@@ -63,10 +63,10 @@ func TestStateColumnMigrationsHealAnOldDatabase(t *testing.T) {
 	}
 	defer func() { _ = s.Close() }()
 
-	if err := s.SetServiceCheckSnapshots("web", map[string]CheckSnapshotRecord{
+	if err := s.UpdateServiceCheckSnapshots(map[string]CheckSnapshotDelta{"web": {Upsert: map[string]CheckSnapshotRecord{
 		"http": {CheckType: "http", Observation: "healthy", OK: true,
 			Message: "ok", Ran: true, Severity: "warning"},
-	}); err != nil {
+	}}}); err != nil {
 		t.Fatalf("persist into the migrated table: %v", err)
 	}
 	snapshots, err := s.ServiceCheckSnapshots()

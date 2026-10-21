@@ -96,9 +96,9 @@ func BuildServiceRuntime(ctx context.Context, cfg ServiceRuntimeConfig) ServiceR
 		discoverer.Reader = deps.ProcReader
 	}
 	discoverer.KeepChildren = process.KeepChildren(cfg.Tree)
-	backendPIDs := ServiceBackendPIDs(ctx, deps.Backend, cfg.Unit, deps.BackendPIDs, deps.ExecxRunner)
+	backendPIDs, freshBackendPIDs := serviceRuntimeBackendPIDs(ctx, deps, cfg.Unit)
 	if backendPIDs != nil {
-		discoverer.BackendPIDs = backendPIDs
+		discoverer.BackendPIDs, discoverer.FreshBackendPIDs = backendPIDs, freshBackendPIDs
 	}
 	needPidfileFallback := deps.Backend == servicemgr.BackendSystemd && backendPIDs != nil
 	selectors, processWarnings, procInfo := serviceProcessSelectors(ctx, cfg.Tree, deps, cfg.Unit, needPidfileFallback)
@@ -203,6 +203,25 @@ func ServiceBackendPIDs(ctx context.Context, backend servicemgr.Backend, unit st
 		return nil
 	}
 	return servicemgr.BackendPIDsFuncWithRunner(ctx, backend, unit, runner, nil)
+}
+
+// serviceRuntimeBackendPIDs returns the service's backend PID source and its
+// live form. An init unit's source is shared through the generation's target
+// cache, so the worker, web and metric-watch discoverers of one unit query the
+// init system once per SystemFreshness window; operations observe through the
+// live form (process.Discoverer.FreshBackendPIDs). Without a target cache, or
+// for an explicit provider, every call queries.
+func serviceRuntimeBackendPIDs(ctx context.Context, deps Deps, unit string) (cached, fresh func() []int) {
+	if deps.Targets == nil || deps.BackendPIDs != nil || !deps.Backend.HasUnitCgroups() {
+		return ServiceBackendPIDs(ctx, deps.Backend, unit, deps.BackendPIDs, deps.ExecxRunner), nil
+	}
+	shared := deps.Targets.BackendPIDs(deps.Backend, unit, deps.SystemFreshness, func() func() []int {
+		return ServiceBackendPIDs(ctx, deps.Backend, unit, nil, deps.ExecxRunner)
+	})
+	if shared == nil {
+		return nil, nil
+	}
+	return shared.PIDs, shared.Fresh
 }
 
 // serviceProcessSelectors returns the process selectors a service should use

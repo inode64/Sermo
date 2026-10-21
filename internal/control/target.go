@@ -6,10 +6,12 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"time"
 
 	"sermo/internal/cfgval"
 	"sermo/internal/config"
 	"sermo/internal/dockerctl"
+	"sermo/internal/process"
 	"sermo/internal/servicemgr"
 	"sermo/internal/virt"
 )
@@ -142,28 +144,61 @@ func UnsupportedOnBackend(tree map[string]any, backend servicemgr.Backend, name 
 // stat) and every resolution warning is logged twice. Create a fresh cache per
 // config generation — entries never expire, and the warning is returned only
 // to the first resolver so it reaches the log once. It also memoizes each
-// unit's init-provided process identity, which both builds derive the same way.
+// unit's init-provided process identity, which both builds derive the same way,
+// and shares each unit's backend PID source.
 type TargetCache struct {
-	mu       sync.Mutex
-	entries  map[string]Target
-	procInfo map[procInfoKey]servicemgr.ProcInfo
+	mu          sync.Mutex
+	entries     map[string]Target
+	procInfo    map[unitKey]servicemgr.ProcInfo
+	backendPIDs map[unitKey]*process.CachedPIDs
 }
 
-type procInfoKey struct {
+type unitKey struct {
 	backend servicemgr.Backend
 	unit    string
 }
 
 // NewTargetCache returns an empty per-generation resolution cache.
 func NewTargetCache() *TargetCache {
-	return &TargetCache{entries: map[string]Target{}, procInfo: map[procInfoKey]servicemgr.ProcInfo{}}
+	return &TargetCache{
+		entries:     map[string]Target{},
+		procInfo:    map[unitKey]servicemgr.ProcInfo{},
+		backendPIDs: map[unitKey]*process.CachedPIDs{},
+	}
+}
+
+// BackendPIDs returns the unit's backend PID source for this generation,
+// building its query with build only on the first request; nil when build
+// returns none. The worker, web and metric-watch discoverers of one unit share
+// it, so their discoveries within freshness query the init system once.
+func (c *TargetCache) BackendPIDs(backend servicemgr.Backend, unit string, freshness time.Duration, build func() func() []int) *process.CachedPIDs {
+	key := unitKey{backend: backend, unit: unit}
+	c.mu.Lock()
+	cached, ok := c.backendPIDs[key]
+	c.mu.Unlock()
+	if ok {
+		return cached
+	}
+	// build may read init metadata (OpenRC), so it runs unlocked; a concurrent
+	// first request keeps the source stored first, so the unit has one.
+	var built *process.CachedPIDs
+	if query := build(); query != nil {
+		built = process.NewCachedPIDs(query, freshness)
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if cached, ok := c.backendPIDs[key]; ok {
+		return cached
+	}
+	c.backendPIDs[key] = built
+	return built
 }
 
 // ProcInfo returns the unit's init-provided process identity (systemd
 // properties or OpenRC supervise metadata), calling detect only on the first
 // request for that backend unit in this generation.
 func (c *TargetCache) ProcInfo(backend servicemgr.Backend, unit string, detect func() servicemgr.ProcInfo) servicemgr.ProcInfo {
-	key := procInfoKey{backend: backend, unit: unit}
+	key := unitKey{backend: backend, unit: unit}
 	c.mu.Lock()
 	cached, ok := c.procInfo[key]
 	c.mu.Unlock()

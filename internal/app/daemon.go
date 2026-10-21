@@ -140,6 +140,10 @@ type Deps struct {
 	// resolution warning once. Optional: nil resolves directly. Create a fresh
 	// cache per config load/reload.
 	Targets *control.TargetCache
+	// ArtifactBaselines shares each service's `changed:` baseline between its
+	// worker and its web runtime. Optional: nil gives each its own. Create a
+	// fresh registry per config load/reload, next to Targets.
+	ArtifactBaselines *ArtifactBaselines
 	// BackendPIDs reports backend-owned process roots for the resolved service
 	// (systemd cgroup PIDs, Docker container init PID, etc.). Optional: nil lets
 	// the runtime derive init-backend PIDs when that is supported.
@@ -507,7 +511,7 @@ func acknowledgeCascadeTarget(byName map[string]*Worker, action string) func(str
 }
 
 func buildWorker(ctx context.Context, name, unit string, tree map[string]any, deps Deps, collector *metrics.Collector) (*Worker, []*Watch, []string) {
-	libBaseline := NewArtifactBaseline()
+	libBaseline := deps.ArtifactBaselines.For(name)
 	runtime := BuildServiceRuntime(ctx, ServiceRuntimeConfig{
 		Service: name, Unit: unit, Tree: tree, Deps: deps, LibraryBaseline: libBaseline,
 	})

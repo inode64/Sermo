@@ -40,7 +40,7 @@ type Snapshots struct {
 	mu          sync.RWMutex
 	now         func() time.Time
 	byService   map[string]map[string]CheckSnapshot
-	store       serviceSnapshotStore
+	persistence *snapshotPersistence // nil without a store
 	reportError func(error)
 }
 
@@ -51,14 +51,13 @@ func NewSnapshots() *Snapshots {
 
 type serviceSnapshotStore interface {
 	ServiceCheckSnapshots() (map[string]map[string]state.CheckSnapshotRecord, error)
-	SetServiceCheckSnapshots(service string, records map[string]state.CheckSnapshotRecord) error
+	UpdateServiceCheckSnapshots(deltas map[string]state.CheckSnapshotDelta) error
 }
 
 // NewPersistentSnapshots returns a registry hydrated from store and persists
-// future publishes back to it.
+// the readings future publishes change back to it.
 func NewPersistentSnapshots(store serviceSnapshotStore, reportError func(error)) (*Snapshots, error) {
 	s := NewSnapshots()
-	s.store = store
 	s.reportError = reportError
 	if store == nil {
 		return s, nil
@@ -69,6 +68,7 @@ func NewPersistentSnapshots(store serviceSnapshotStore, reportError func(error))
 	for service, checkRecords := range records {
 		s.byService[service] = serviceSnapshotsFromRecords(checkRecords)
 	}
+	s.persistence = newSnapshotPersistence(records, true, store.UpdateServiceCheckSnapshots)
 	if err != nil {
 		return s, fmt.Errorf("load service check snapshots: %w", err)
 	}
@@ -96,10 +96,22 @@ func (s *Snapshots) publishConfigured(service string, cache map[string]checks.Re
 	}
 	s.byService[service] = m
 	s.mu.Unlock()
-	if s.store != nil {
-		if err := s.store.SetServiceCheckSnapshots(service, serviceSnapshotRecords(m)); err != nil {
+	if s.persistence != nil && s.persistence.changed(service, m) {
+		if err := s.persistence.persist([]string{service}, s.Get, false); err != nil {
 			s.reportStoreError(err)
 		}
+	}
+}
+
+// Flush writes every published reading whose time is newer than its stored
+// row. Publishes skip a reading that did not change; sermod flushes when it
+// stops so the next start hydrates each reading with the time it was taken.
+func (s *Snapshots) Flush() {
+	if s == nil {
+		return
+	}
+	if err := s.persistence.flush(&s.mu, s.byService, s.Get); err != nil {
+		s.reportStoreError(err)
 	}
 }
 
@@ -121,7 +133,7 @@ type WatchSnapshots struct {
 	mu          sync.RWMutex
 	now         func() time.Time
 	byWatch     map[string]map[string]CheckSnapshot
-	store       watchSnapshotStore
+	persistence *snapshotPersistence // nil without a store
 	reportError func(error)
 }
 
@@ -132,14 +144,13 @@ func NewWatchSnapshots() *WatchSnapshots {
 
 type watchSnapshotStore interface {
 	WatchCheckSnapshots() (map[string]map[string]state.CheckSnapshotRecord, error)
-	SetWatchCheckSnapshot(watch, slot string, rec state.CheckSnapshotRecord) error
+	UpdateWatchCheckSnapshots(deltas map[string]state.CheckSnapshotDelta) error
 }
 
 // NewPersistentWatchSnapshots returns a host-watch registry hydrated from store
-// and persists future publishes back to it.
+// and persists the readings future publishes change back to it.
 func NewPersistentWatchSnapshots(store watchSnapshotStore, reportError func(error)) (*WatchSnapshots, error) {
 	s := NewWatchSnapshots()
-	s.store = store
 	s.reportError = reportError
 	if store == nil {
 		return s, nil
@@ -153,6 +164,7 @@ func NewPersistentWatchSnapshots(store watchSnapshotStore, reportError func(erro
 			s.byWatch[watch][slot] = snapshotFromRecord(rec)
 		}
 	}
+	s.persistence = newSnapshotPersistence(records, false, store.UpdateWatchCheckSnapshots)
 	if err != nil {
 		return s, fmt.Errorf("load watch check snapshots: %w", err)
 	}
@@ -173,11 +185,29 @@ func (s *WatchSnapshots) publishConfigured(watch, checkType string, r checks.Res
 	}
 	s.byWatch[watch][slot] = snap
 	s.mu.Unlock()
-	if s.store != nil {
-		rec := snapshotRecord(snap)
-		if err := s.store.SetWatchCheckSnapshot(watch, slot, rec); err != nil {
+	if s.persistence != nil && s.persistence.changed(watch, map[string]CheckSnapshot{slot: snap}) {
+		if err := s.persistence.persist([]string{watch}, s.slots, false); err != nil {
 			s.reportStoreError(err)
 		}
+	}
+}
+
+// slots copies a watch's published snapshots; publishes update the map in
+// place.
+func (s *WatchSnapshots) slots(watch string) map[string]CheckSnapshot {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return maps.Clone(s.byWatch[watch])
+}
+
+// Flush writes every published reading whose time is newer than its stored
+// row, like Snapshots.Flush.
+func (s *WatchSnapshots) Flush() {
+	if s == nil {
+		return
+	}
+	if err := s.persistence.flush(&s.mu, s.byWatch, s.slots); err != nil {
+		s.reportStoreError(err)
 	}
 }
 
@@ -220,14 +250,6 @@ func serviceSnapshotsFromRecords(records map[string]state.CheckSnapshotRecord) m
 	out := make(map[string]CheckSnapshot, len(records))
 	for name, rec := range records {
 		out[name] = snapshotFromRecord(rec)
-	}
-	return out
-}
-
-func serviceSnapshotRecords(snaps map[string]CheckSnapshot) map[string]state.CheckSnapshotRecord {
-	out := make(map[string]state.CheckSnapshotRecord, len(snaps))
-	for name, snap := range snaps {
-		out[name] = snapshotRecord(snap)
 	}
 	return out
 }

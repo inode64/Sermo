@@ -186,8 +186,11 @@ func (m *Monitor) buildGenerationLocked(ctx context.Context, newCfg *config.Conf
 		m.deps.ArtifactSamples = NewArtifactSamples()
 	}
 	// Fresh resolution cache per reload generation: workers and the web backend
-	// resolve each service unit once against the new config.
+	// resolve each service unit once against the new config, and share each
+	// service's `changed:` baseline (Reload restores it from the old worker
+	// before the web backend reloads).
 	m.deps.Targets = control.NewTargetCache()
+	m.deps.ArtifactBaselines = NewArtifactBaselines()
 
 	reloadDeps := m.deps
 	workers, svcWatches, warnings := BuildWorkers(ctx, newCfg, reloadDeps, m.collector)
@@ -251,7 +254,9 @@ func (m *Monitor) applyConfig(cfg *config.Config) {
 	}
 	// Recreate the shared /proc reader so reloads can change user/group lookup
 	// policy as well as the freshness window.
-	m.deps.ProcReader = m.cachedProcReader(process.OSReader{LookupUserName: m.deps.UserLookup.Username}, m.deps.SystemFreshness)
+	procReader := m.cachedProcReader(process.OSReader{LookupUserName: m.deps.UserLookup.Username}, m.deps.SystemFreshness)
+	m.deps.ProcReader = procReader
+	m.deps.ZombieSampler = checks.NewZombieSampler(procReader)
 	terminalReader := m.cachedProcReader(process.OSReader{
 		LookupUserName:  m.deps.UserLookup.Username,
 		LookupGroupName: m.deps.UserLookup.GroupName,

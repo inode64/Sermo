@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"sermo/internal/config"
 	"sermo/internal/dockerctl"
@@ -216,5 +217,26 @@ func TestResolveLibvirtNetworkControlRequiresNetwork(t *testing.T) {
 	}, servicemgr.BackendSystemd, nil, servicemgr.UnitResolver{})
 	if err == nil {
 		t.Fatal("Resolve() = nil error, want required-network error")
+	}
+}
+
+func TestTargetCacheSharesOneBackendPIDSourcePerUnit(t *testing.T) {
+	cache := NewTargetCache()
+	builds := 0
+	build := func() func() []int { builds++; return func() []int { return []int{1} } }
+	first := cache.BackendPIDs(servicemgr.BackendSystemd, "web.service", time.Minute, build)
+	second := cache.BackendPIDs(servicemgr.BackendSystemd, "web.service", time.Minute, build)
+	if first == nil || first != second || builds != 1 {
+		t.Fatalf("same unit: first=%p second=%p builds=%d, want one shared source", first, second, builds)
+	}
+	if other := cache.BackendPIDs(servicemgr.BackendSystemd, "db.service", time.Minute, build); other == first || builds != 2 {
+		t.Fatalf("another unit shared the source or was not built: builds=%d", builds)
+	}
+	none := func() func() []int { builds++; return nil }
+	if got := cache.BackendPIDs(servicemgr.BackendOpenRC, "cron", time.Minute, none); got != nil {
+		t.Fatalf("no query = %p, want nil", got)
+	}
+	if got := cache.BackendPIDs(servicemgr.BackendOpenRC, "cron", time.Minute, none); got != nil || builds != 3 {
+		t.Fatalf("no query rebuilt: builds=%d", builds)
 	}
 }

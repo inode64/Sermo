@@ -177,6 +177,9 @@ type procWatcher struct {
 	now       func() time.Time
 	emit      func(Event)
 	sampler   ProcSampler
+	// resampler re-reads the processes for the kill re-check; it never serves
+	// the daemon's shared /proc snapshot. nil uses sampler.
+	resampler ProcSampler
 	publish   func(string, string, checks.Result)
 
 	state map[int]*procState
@@ -343,6 +346,22 @@ func procSamplerFromDeps(deps Deps) ProcSampler {
 	return osProcSampler{userLookup: lookup}
 }
 
+// procCycleSamplerFromDeps is the sampler a process watch's cycle reads: the
+// daemon's shared /proc snapshot (deps.ProcReader) when the watch runs no
+// faster than that snapshot refreshes, so the cycle does not walk /proc again;
+// otherwise its own walk. Acting on a process still re-reads it live: the kill
+// re-check uses procSamplerFromDeps and the signal revalidates through the
+// pidfd.
+func procCycleSamplerFromDeps(deps Deps, interval time.Duration) ProcSampler {
+	sampler := procSamplerFromDeps(deps)
+	osSampler, ok := sampler.(osProcSampler)
+	if !ok || deps.ProcReader == nil || interval < deps.SystemFreshness {
+		return sampler
+	}
+	osSampler.shared = deps.ProcReader
+	return osSampler
+}
+
 // procEnv is the hook environment both firing paths share — a presence threshold
 // and a `gone` disappearance — so the identity and age they report cannot drift
 // apart. The presence path adds its own reading-derived variables on top.
@@ -484,7 +503,11 @@ func (w *procWatcher) doKill(ctx context.Context, info ProcInfo, msg string) {
 // callers acting on the result must also compare the start time (see
 // sameProcessAs). A transient sampling failure fails safe (no kill).
 func (w *procWatcher) matchingProcess(pid int) (ProcInfo, bool) {
-	samples, ok := w.sampler.Sample(w.match)
+	sampler := w.resampler
+	if sampler == nil {
+		sampler = w.sampler
+	}
+	samples, ok := sampler.Sample(w.match)
 	if !ok {
 		return ProcInfo{}, false
 	}
@@ -538,11 +561,29 @@ func ioBytesPerSec(prevIO, curIO uint64, hadIO, hasIO bool, prevAt, now time.Tim
 // osProcSampler reads matching processes and their counters from the host /proc.
 type osProcSampler struct {
 	userLookup *process.UserLookup
+	// shared, when set, serves identities from the daemon's shared snapshot.
+	// Counters are still read live, and a process whose live start time no
+	// longer matches the snapshot (it exited, or its PID was reused) is left
+	// out.
+	shared process.Reader
+	// counters reads the live counters; nil uses metrics.OSReader.
+	counters procCounterReader
+}
+
+// procCounterReader reads one process's live counters (metrics.OSReader).
+type procCounterReader interface {
+	ProcessStart(pid int) (uint64, time.Time, bool)
+	ProcessCPU(pid int) (uint64, bool)
+	ProcessRSS(pid int) (uint64, bool)
+	ProcessIO(pid int) (read, write uint64, ok bool)
 }
 
 func (s osProcSampler) Sample(m ProcMatch) ([]ProcInfo, bool) {
 	lookup := s.userLookup
-	pr := process.OSReader{LookupUserName: lookup.Username}
+	var pr process.Reader = process.OSReader{LookupUserName: lookup.Username}
+	if s.shared != nil {
+		pr = s.shared
+	}
 	var pids []int
 	if m.PID > 0 {
 		pids = []int{m.PID}
@@ -553,7 +594,10 @@ func (s osProcSampler) Sample(m ProcMatch) ([]ProcInfo, bool) {
 			return nil, false
 		}
 	}
-	mr := metrics.OSReader{}
+	var mr procCounterReader = metrics.OSReader{}
+	if s.counters != nil {
+		mr = s.counters
+	}
 
 	var out []ProcInfo
 	for _, pid := range pids {
@@ -562,7 +606,11 @@ func (s osProcSampler) Sample(m ProcMatch) ([]ProcInfo, bool) {
 			continue
 		}
 		info := ProcInfo{Identity: id}
-		if ticks, at, ok := mr.ProcessStart(pid); ok {
+		ticks, at, started := mr.ProcessStart(pid)
+		if s.shared != nil && (!started || id.StartTicksOK && ticks != id.StartTicks) {
+			continue
+		}
+		if started {
 			info.StartTicks, info.StartTime = ticks, at
 		}
 		if v, ok := mr.ProcessCPU(pid); ok {
