@@ -1,6 +1,6 @@
 module sermo
 
-go 1.27.2
+go 1.27.3
 
 require (
 	github.com/OpenPrinting/goipp v1.2.0
@@ -14,7 +14,7 @@ require (
 	github.com/google/nftables v0.3.0
 	github.com/gosnmp/gosnmp v1.45.0
 	github.com/jackc/pgx/v5 v5.11.0
-	github.com/quic-go/quic-go v0.64.0
+	github.com/quic-go/quic-go v0.64.1
 	github.com/spf13/pflag v1.0.10
 	github.com/vishvananda/netlink v1.3.1
 	github.com/wneessen/go-mail v0.8.1
