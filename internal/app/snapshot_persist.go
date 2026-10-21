@@ -1,6 +1,8 @@
 package app
 
 import (
+	"errors"
+	"fmt"
 	"maps"
 	"reflect"
 	"slices"
@@ -67,7 +69,9 @@ func (p *snapshotPersistence) changed(group string, published map[string]CheckSn
 // from the stored row, or whose time does too when withTime is set. current
 // returns a group's published snapshots; it is read once writeMu is held, so
 // the store ends with the latest of concurrent publishes. A failed write leaves
-// stored as it was, and the next publish of that group retries.
+// stored as it was, and the next publish of that group retries. A reading
+// whose data cannot be encoded (a NaN, say) is reported and left out, so it
+// never keeps the other rows of the call from being written.
 func (p *snapshotPersistence) persist(groups []string, current func(string) map[string]CheckSnapshot, withTime bool) error {
 	p.writeMu.Lock()
 	defer p.writeMu.Unlock()
@@ -77,39 +81,21 @@ func (p *snapshotPersistence) persist(groups []string, current func(string) map[
 	}
 	deltas := map[string]state.CheckSnapshotDelta{}
 	written := map[string]map[string]storedSnapshot{}
+	var unencodable []error
 	p.mu.Lock()
 	for group, snaps := range published {
-		stored := p.stored[group]
-		var delta state.CheckSnapshotDelta
-		rows := map[string]storedSnapshot{}
-		for name, snap := range snaps {
-			row := newStoredSnapshot(snap)
-			if prev, ok := stored[name]; ok && prev.sameReading(row, withTime) {
-				continue
-			}
-			if delta.Upsert == nil {
-				delta.Upsert = map[string]state.CheckSnapshotRecord{}
-			}
-			delta.Upsert[name] = snapshotRecord(snap)
-			rows[name] = row
-		}
-		if p.dropMissing {
-			for name := range stored {
-				if _, ok := snaps[name]; !ok {
-					delta.Delete = append(delta.Delete, name)
-				}
-			}
-		}
+		delta, rows, errs := p.deltaLocked(group, snaps, withTime)
+		unencodable = append(unencodable, errs...)
 		if len(delta.Upsert) > 0 || len(delta.Delete) > 0 {
 			deltas[group], written[group] = delta, rows
 		}
 	}
 	p.mu.Unlock()
 	if len(deltas) == 0 {
-		return nil
+		return errors.Join(unencodable...)
 	}
 	if err := p.write(deltas); err != nil {
-		return err
+		return errors.Join(append(unencodable, err)...)
 	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -124,7 +110,40 @@ func (p *snapshotPersistence) persist(groups []string, current func(string) map[
 			delete(stored, name)
 		}
 	}
-	return nil
+	return errors.Join(unencodable...)
+}
+
+// deltaLocked compares one group's published snapshots with its stored rows:
+// the delta to write, the rows it stores, and the readings left out because
+// their data cannot be encoded. p.mu must be held.
+func (p *snapshotPersistence) deltaLocked(group string, snaps map[string]CheckSnapshot, withTime bool) (state.CheckSnapshotDelta, map[string]storedSnapshot, []error) {
+	stored := p.stored[group]
+	var delta state.CheckSnapshotDelta
+	var unencodable []error
+	rows := map[string]storedSnapshot{}
+	for name, snap := range snaps {
+		row := newStoredSnapshot(snap)
+		if row.encodeErr != nil {
+			unencodable = append(unencodable, fmt.Errorf("check snapshot %s/%s: %w", group, name, row.encodeErr))
+			continue
+		}
+		if prev, ok := stored[name]; ok && prev.sameReading(row, withTime) {
+			continue
+		}
+		if delta.Upsert == nil {
+			delta.Upsert = map[string]state.CheckSnapshotRecord{}
+		}
+		delta.Upsert[name] = snapshotRecord(snap)
+		rows[name] = row
+	}
+	if p.dropMissing {
+		for name := range stored {
+			if _, ok := snaps[name]; !ok {
+				delta.Delete = append(delta.Delete, name)
+			}
+		}
+	}
+	return delta, rows, unencodable
 }
 
 // flush writes every published reading of published whose time is newer than
@@ -146,23 +165,21 @@ func (p *snapshotPersistence) flush(mu *sync.RWMutex, published map[string]map[s
 type storedSnapshot struct {
 	snap CheckSnapshot
 	data string
+	// encodeErr is why the data cannot be stored: such a reading never equals
+	// a stored row, and persist reports it instead of writing it.
+	encodeErr error
 }
 
 func newStoredSnapshot(snap CheckSnapshot) storedSnapshot {
 	data, err := state.EncodeCheckSnapshotData(snap.Data)
-	if err != nil {
-		// Never equal to a stored row, so the write is attempted and the store
-		// reports the encoding error.
-		data = ""
-	}
 	snap.Data = nil
-	return storedSnapshot{snap: snap, data: data}
+	return storedSnapshot{snap: snap, data: data, encodeErr: err}
 }
 
 // sameReading reports whether two rows hold the same reading; withTime also
 // requires the same time.
 func (a storedSnapshot) sameReading(b storedSnapshot, withTime bool) bool {
-	if a.data != b.data || withTime && !a.snap.At.Equal(b.snap.At) {
+	if a.encodeErr != nil || b.encodeErr != nil || a.data != b.data || withTime && !a.snap.At.Equal(b.snap.At) {
 		return false
 	}
 	a.snap.At, b.snap.At = time.Time{}, time.Time{}

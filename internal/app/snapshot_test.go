@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"maps"
+	"math"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -511,5 +513,45 @@ func TestStoredSnapshotSameReadingComparesEveryField(t *testing.T) {
 		if newStoredSnapshot(base).sameReading(newStoredSnapshot(changed), false) {
 			t.Fatalf("a change of %s is not detected", field.Name)
 		}
+	}
+}
+
+// A reading whose data cannot be encoded (a NaN) is reported and left out; the
+// other rows of the same write, and of the shutdown flush, are still stored.
+func TestPersistentSnapshotsSkipAnUnencodableReading(t *testing.T) {
+	t0 := time.Date(2026, 10, 21, 9, 0, 0, 0, time.UTC)
+	store := &snapshotStoreFake{}
+	var reported []error
+	s, err := NewPersistentSnapshots(store, func(err error) { reported = append(reported, err) })
+	if err != nil {
+		t.Fatalf("NewPersistentSnapshots: %v", err)
+	}
+	publishAt := func(at time.Time, service string, cache map[string]checks.Result) {
+		s.now = func() time.Time { return at }
+		ran := map[string]bool{}
+		for name := range cache {
+			ran[name] = true
+		}
+		s.publishForTest(service, cache, ran)
+	}
+	broken := map[string]checks.Result{
+		"http": {Check: "http", OK: true},
+		"load": {Check: "load", OK: true, Data: map[string]any{"value": math.NaN()}},
+	}
+	publishAt(t0, "web", broken)
+	publishAt(t0, "db", map[string]checks.Result{"tcp": {Check: "tcp", OK: true}})
+	if _, kept := store.service["web"]["load"]; kept || !store.service["web"]["http"].OK {
+		t.Fatalf("stored web rows = %+v, want http without the unencodable load", store.service["web"])
+	}
+	if len(reported) == 0 || !strings.Contains(reported[len(reported)-1].Error(), "web/load") {
+		t.Fatalf("reported = %v, want the unencodable reading named", reported)
+	}
+
+	later := t0.Add(time.Minute)
+	publishAt(later, "web", broken)
+	publishAt(later, "db", map[string]checks.Result{"tcp": {Check: "tcp", OK: true}})
+	s.Flush()
+	if got := store.service["db"]["tcp"].At; !got.Equal(later) {
+		t.Fatalf("flushed db time = %v, want %v despite web's unencodable reading", got, later)
 	}
 }
