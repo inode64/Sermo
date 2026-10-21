@@ -88,6 +88,23 @@ func drainOrTimeout(done <-chan struct{}, timeout time.Duration) bool {
 	}
 }
 
+// finishStateWrites waits, bounded by timeout, for state maintenance to stop and
+// then runs flush: the snapshot registries write the latest times of the
+// readings their publishes did not rewrite, so the next start hydrates them as
+// fresh. Maintenance that outlives the wait still holds the single write
+// connection, and a flush would wait for it past the init system's stop
+// timeout; it is skipped, so unchanged readings load stale after the restart,
+// as after a crash.
+func finishStateWrites(logger *slog.Logger, maintenanceDone <-chan struct{}, timeout time.Duration, flush ...func()) {
+	if !drainOrTimeout(maintenanceDone, timeout) {
+		logger.Warn("state maintenance still running at shutdown; closing the store without it and without the snapshot flush")
+		return
+	}
+	for _, f := range flush {
+		f()
+	}
+}
+
 // goTracked runs fn in a goroutine and reports its completion on the returned
 // channel, so shutdown can drain it before the store closes.
 func goTracked(fn func()) <-chan struct{} {
@@ -569,13 +586,7 @@ func run(args []string) int {
 		<-botDone
 	}
 	<-eventNotifyDone
-	if !drainOrTimeout(maintenanceDone, shutdownPruneDrainTimeout) {
-		logger.Warn("state maintenance still running at shutdown; closing the store without it")
-	}
-	// Publishes store only readings that changed; write the latest times of
-	// the rest so the next start hydrates them as fresh.
-	snapshots.Flush()
-	watchSnapshots.Flush()
+	finishStateWrites(logger, maintenanceDone, shutdownPruneDrainTimeout, snapshots.Flush, watchSnapshots.Flush)
 	// Since Go 1.26 NotifyContext records the received signal as the
 	// cancellation cause; name it so operators can tell SIGTERM from SIGINT.
 	if cause := context.Cause(ctx); cause != nil && !errors.Is(cause, context.Canceled) {

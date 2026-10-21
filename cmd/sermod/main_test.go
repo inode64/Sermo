@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -378,6 +379,29 @@ func TestRunStateMaintenanceRepeatsOnTheInterval(t *testing.T) {
 	}
 	cancel()
 	<-done
+}
+
+// The snapshot flush runs only once state maintenance has stopped: a prune that
+// outlives the drain still holds the write connection, and flushing would wait
+// for it past the init system's stop timeout.
+func TestFinishStateWritesFlushesOnlyAfterMaintenance(t *testing.T) {
+	logger := slog.New(slog.DiscardHandler)
+	var flushed []string
+	flush := func(name string) func() { return func() { flushed = append(flushed, name) } }
+
+	stuck := make(chan struct{})
+	defer close(stuck)
+	finishStateWrites(logger, stuck, 20*time.Millisecond, flush("services"), flush("watches"))
+	if len(flushed) != 0 {
+		t.Fatalf("flushed %v while maintenance still ran", flushed)
+	}
+
+	done := make(chan struct{})
+	close(done)
+	finishStateWrites(logger, done, time.Second, flush("services"), flush("watches"))
+	if !slices.Equal(flushed, []string{"services", "watches"}) {
+		t.Fatalf("flushed %v, want both registries once maintenance stopped", flushed)
+	}
 }
 
 func TestDrainOrTimeout(t *testing.T) {
