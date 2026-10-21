@@ -561,10 +561,14 @@ func ioBytesPerSec(prevIO, curIO uint64, hadIO, hasIO bool, prevAt, now time.Tim
 // osProcSampler reads matching processes and their counters from the host /proc.
 type osProcSampler struct {
 	userLookup *process.UserLookup
-	// shared, when set, serves identities from the daemon's shared snapshot.
-	// Counters are still read live, and a process whose live start ticks no
-	// longer match the snapshot (it exited, or its PID was reused) is left out.
+	// shared, when set, serves identities from the daemon's shared snapshot
+	// while that snapshot is complete. Counters are still read live, and a
+	// process whose live start ticks no longer match the snapshot (it exited,
+	// or its PID was reused) is left out.
 	shared process.Reader
+	// host walks /proc when the shared snapshot is not used; nil uses
+	// process.OSReader.
+	host process.Reader
 	// counters reads the live counters; nil uses osProcCounters.
 	counters procCounterReader
 }
@@ -588,19 +592,9 @@ func (osProcCounters) StartTicks(pid int) (uint64, bool) { return process.StartT
 
 func (s osProcSampler) Sample(m ProcMatch) ([]ProcInfo, bool) {
 	lookup := s.userLookup
-	var pr process.Reader = process.OSReader{LookupUserName: lookup.Username}
-	if s.shared != nil {
-		pr = s.shared
-	}
-	var pids []int
-	if m.PID > 0 {
-		pids = []int{m.PID}
-	} else {
-		var err error
-		pids, err = pr.PIDs()
-		if err != nil {
-			return nil, false
-		}
+	ids, shared, ok := s.identities(m)
+	if !ok {
+		return nil, false
 	}
 	var mr procCounterReader = osProcCounters{}
 	if s.counters != nil {
@@ -608,14 +602,14 @@ func (s osProcSampler) Sample(m ProcMatch) ([]ProcInfo, bool) {
 	}
 
 	var out []ProcInfo
-	for _, pid := range pids {
-		id, ok := pr.Identity(pid)
-		if !ok || !procMatchesWithLookup(m, id, lookup) {
+	for _, id := range ids {
+		if !procMatchesWithLookup(m, id, lookup) {
 			continue
 		}
+		pid := id.PID
 		info := ProcInfo{Identity: id}
 		ticks, at, started := mr.ProcessStart(pid)
-		if s.shared != nil && !sharedIdentityCurrent(mr, id, ticks, started) {
+		if shared && !sharedIdentityCurrent(mr, id, ticks, started) {
 			continue
 		}
 		if started {
@@ -633,6 +627,42 @@ func (s osProcSampler) Sample(m ProcMatch) ([]ProcInfo, bool) {
 		out = append(out, info)
 	}
 	return out, true
+}
+
+// identities returns the processes a sample matches against and whether they
+// come from the shared snapshot. That snapshot is used only when it is
+// complete: one that could not list /proc or read a live process falls back to
+// the sampler's own walk, so a read failure never looks like every process is
+// gone. ok is false when /proc cannot be listed.
+func (s osProcSampler) identities(m ProcMatch) (ids []process.Identity, shared, ok bool) {
+	if s.shared != nil {
+		if snapshot, err := process.Snapshot(s.shared); err == nil {
+			if m.PID > 0 {
+				if id, found := snapshot[m.PID]; found {
+					return []process.Identity{id}, true, true
+				}
+				return nil, true, true
+			}
+			return slices.Collect(maps.Values(snapshot)), true, true
+		}
+	}
+	host := s.host
+	if host == nil {
+		host = process.OSReader{LookupUserName: s.userLookup.Username}
+	}
+	pids := []int{m.PID}
+	if m.PID <= 0 {
+		var err error
+		if pids, err = host.PIDs(); err != nil {
+			return nil, false, false
+		}
+	}
+	for _, pid := range pids {
+		if id, found := host.Identity(pid); found {
+			ids = append(ids, id)
+		}
+	}
+	return ids, false, true
 }
 
 // sharedIdentityCurrent reports whether a snapshot identity still names a live
