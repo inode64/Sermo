@@ -30,6 +30,36 @@ type artifactBaselineState struct {
 	versionsLast map[string]string
 }
 
+// ArtifactBaselines hands a service's worker and its web runtime the same
+// ArtifactBaseline for one generation, so a manual action from the web
+// evaluates `changed:` against the fingerprints the worker acknowledged. Create
+// one per config load or reload. Safe for concurrent use.
+type ArtifactBaselines struct {
+	mu        sync.Mutex
+	byService map[string]*ArtifactBaseline
+}
+
+// NewArtifactBaselines returns an empty per-generation registry.
+func NewArtifactBaselines() *ArtifactBaselines {
+	return &ArtifactBaselines{byService: map[string]*ArtifactBaseline{}}
+}
+
+// For returns service's baseline, creating it on first use. A nil registry
+// returns a new baseline of the caller's own.
+func (b *ArtifactBaselines) For(service string) *ArtifactBaseline {
+	if b == nil {
+		return NewArtifactBaseline()
+	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	baseline, ok := b.byService[service]
+	if !ok {
+		baseline = NewArtifactBaseline()
+		b.byService[service] = baseline
+	}
+	return baseline
+}
+
 // NewArtifactBaseline returns an empty baseline.
 func NewArtifactBaseline() *ArtifactBaseline {
 	return &ArtifactBaseline{

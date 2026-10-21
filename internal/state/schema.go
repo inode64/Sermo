@@ -33,6 +33,10 @@ var storageSchema = []string{
 		);`,
 	`CREATE INDEX IF NOT EXISTS event_log_at_idx ON event_log (at DESC, id DESC);`,
 	`CREATE INDEX IF NOT EXISTS event_log_service_at_idx ON event_log (service, at DESC, id DESC);`,
+	// A target's newest events (RecentEventsForColumn, the dashboard's last event
+	// per service) read in id order; this index serves them without sorting
+	// every event of the service.
+	`CREATE INDEX IF NOT EXISTS event_log_service_id_idx ON event_log (service, id DESC);`,
 	// event_notify_state tracks externally delivered incident edges and reminders.
 	// It is separate from the event log: detailed events remain auditable even
 	// when repeated notifications are suppressed.

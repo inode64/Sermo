@@ -33,6 +33,11 @@ type Discoverer struct {
 	// failure mode is safe: a backend that names no principal makes the first
 	// live cgroup member look like one, which only ever leaves a stray unlabelled.
 	BackendPIDs func() []int
+	// FreshBackendPIDs reports the same PIDs as BackendPIDs, read live. When
+	// BackendPIDs serves a shared cached answer (CachedPIDs), Observe and
+	// ObserveTracked use this instead, so the evidence an operation acts on
+	// never comes from a cached backend answer. Optional.
+	FreshBackendPIDs func() []int
 	// ProcessOwnership classifies kernel cgroup evidence. foreign excludes a
 	// process owned by another unit; unknown ownership forbids signaling an
 	// unlinked executable found outside the attributed tree.

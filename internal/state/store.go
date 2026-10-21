@@ -166,26 +166,65 @@ type statementCache struct {
 }
 
 func (c *statementCache) exec(ctx context.Context, query string, prepare func(context.Context, string) (*sql.Stmt, error), args ...any) (sql.Result, error) {
+	if err := c.warm(ctx, prepare, query); err != nil {
+		return nil, err
+	}
 	c.mu.Lock()
-	stmt, ok := c.stmts[query]
-	if !ok {
-		var err error
-		stmt, err = prepare(ctx, query)
-		if err != nil {
-			c.mu.Unlock()
-			return nil, fmt.Errorf("prepare state statement: %w", err)
+	stmt := c.stmts[query]
+	c.mu.Unlock()
+	if stmt == nil {
+		return nil, errStatementCacheClosed
+	}
+	res, err := stmt.ExecContext(ctx, args...)
+	if err != nil {
+		return nil, fmt.Errorf("exec state statement: %w", err)
+	}
+	return res, nil
+}
+
+// execInTx runs query's cached statement inside tx. The statement belongs to
+// the connection it was prepared on, so the caller warms it before the
+// transaction pins the single write connection; the transaction then reuses it
+// there.
+func (c *statementCache) execInTx(ctx context.Context, tx *sql.Tx, query string, args ...any) error {
+	c.mu.Lock()
+	stmt := c.stmts[query]
+	c.mu.Unlock()
+	if stmt == nil {
+		return errStatementCacheClosed
+	}
+	txStmt := tx.StmtContext(ctx, stmt)
+	defer func() { _ = txStmt.Close() }()
+	if _, err := txStmt.ExecContext(ctx, args...); err != nil {
+		return fmt.Errorf("exec state statement: %w", err)
+	}
+	return nil
+}
+
+// errStatementCacheClosed reports a statement missing after warm: the store
+// closed in between.
+var errStatementCacheClosed = errors.New("exec state statement: statement cache closed")
+
+// warm prepares each query the cache does not hold yet (storing a cached
+// statement again changes nothing).
+func (c *statementCache) warm(ctx context.Context, prepare func(context.Context, string) (*sql.Stmt, error), queries ...string) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for _, query := range queries {
+		stmt, ok := c.stmts[query]
+		if !ok {
+			var err error
+			stmt, err = prepare(ctx, query)
+			if err != nil {
+				return fmt.Errorf("prepare state statement: %w", err)
+			}
 		}
 		if c.stmts == nil {
 			c.stmts = map[string]*sql.Stmt{}
 		}
 		c.stmts[query] = stmt
 	}
-	c.mu.Unlock()
-	res, err := stmt.ExecContext(ctx, args...)
-	if err != nil {
-		return nil, fmt.Errorf("exec state statement: %w", err)
-	}
-	return res, nil
+	return nil
 }
 
 func (c *statementCache) close() {

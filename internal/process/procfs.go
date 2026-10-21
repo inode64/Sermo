@@ -259,10 +259,15 @@ func readStatus(pid int) (ppid int, uid, gid uint32, state string, ok bool) {
 	if err != nil {
 		return 0, 0, 0, "", false
 	}
-	var gotPPID, gotUID bool
+	// The four lines come early in the file; stop once all are read.
+	var gotPPID, gotUID, seenState, seenGID bool
 	for line := range strings.SplitSeq(string(data), procLineSeparator) {
+		if seenState && gotPPID && gotUID && seenGID {
+			break
+		}
 		switch {
 		case strings.HasPrefix(line, procStatusStatePrefix):
+			seenState = true
 			if fields := strings.Fields(strings.TrimPrefix(line, procStatusStatePrefix)); len(fields) > procStatusFirstField {
 				state = fields[procStatusFirstField] // single char: R, S, Z, ...
 			}
@@ -279,6 +284,7 @@ func readStatus(pid int) (ppid int, uid, gid uint32, state string, ok bool) {
 			}
 		case strings.HasPrefix(line, procStatusGIDPrefix):
 			// real GID is the first field, like Uid; best-effort (not required).
+			seenGID = true
 			fields := strings.Fields(strings.TrimPrefix(line, procStatusGIDPrefix))
 			if len(fields) > procStatusFirstField {
 				if v, err := strconv.ParseUint(fields[procStatusFirstField], numericIDBase, numericIDBits); err == nil {

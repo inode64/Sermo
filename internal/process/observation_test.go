@@ -168,3 +168,41 @@ func TestObservationVerifiesExitedGenerations(t *testing.T) {
 		})
 	}
 }
+
+// Monitoring discovery reads the shared backend answer; the observations an
+// operation acts on read the backend live.
+func TestObserveReadsBackendPIDsLive(t *testing.T) {
+	t.Parallel()
+	inner := fakeReader{ids: map[int]Identity{100: {PID: 100, PPID: 1, UID: 0, Exe: "/opt/apache", ExeOK: true}}}
+	var cached, live int
+	d := Discoverer{
+		Reader:           inner,
+		ResolveUser:      fakeUsers(map[string]uint32{"root": 0}),
+		BackendPIDs:      func() []int { cached++; return []int{100} },
+		FreshBackendPIDs: func() []int { live++; return []int{100} },
+	}
+	if procs, _ := d.Discover(nil); len(procs) != 1 {
+		t.Fatalf("Discover = %+v, want the backend process", procs)
+	}
+	if _, err := d.ObserveCached(nil); err != nil {
+		t.Fatal(err)
+	}
+	if cached != 2 || live != 0 {
+		t.Fatalf("monitoring reads: cached=%d live=%d, want 2 and 0", cached, live)
+	}
+	for _, observe := range []func() (Observation, error){
+		func() (Observation, error) { return d.Observe(nil) },
+		func() (Observation, error) { return d.ObserveTracked(nil, nil) },
+	} {
+		observation, err := observe()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(observation.Processes) != 1 {
+			t.Fatalf("observation = %+v, want the backend process", observation)
+		}
+	}
+	if cached != 2 || live != 2 {
+		t.Fatalf("operation reads: cached=%d live=%d, want 2 and 2", cached, live)
+	}
+}

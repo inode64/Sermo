@@ -181,29 +181,37 @@ func TestStoreCheckSnapshotsPersistAcrossReopen(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
-	if err := first.SetServiceCheckSnapshots("web", map[string]CheckSnapshotRecord{
+	if err := first.UpdateServiceCheckSnapshots(map[string]CheckSnapshotDelta{"web": {Upsert: map[string]CheckSnapshotRecord{
 		"http": {
 			CheckType: "http", ConfigID: "service-config", Observation: checks.ObservationHealthy, OK: true, Message: "status 200", Data: map[string]any{"status": float64(200)}, Ran: true, At: at,
 		},
 		"stale": {
 			Observation: checks.ObservationFailing, OK: false, Message: "old", Ran: true, At: at.Add(-time.Minute),
 		},
-	}); err != nil {
-		t.Fatalf("SetServiceCheckSnapshots initial: %v", err)
-	}
-	if err := first.SetServiceCheckSnapshots("web", map[string]CheckSnapshotRecord{
-		"http": {
-			CheckType: "http", ConfigID: "service-config", Observation: checks.ObservationHealthy, OK: true, Message: "status 200", Data: map[string]any{"status": float64(200)}, Ran: true, At: at,
-			Severity: string(severity.Warning),
+		"kept": {
+			Observation: checks.ObservationHealthy, OK: true, Message: "unchanged", At: at.Add(-time.Hour),
 		},
-	}); err != nil {
-		t.Fatalf("SetServiceCheckSnapshots replace: %v", err)
+	}}}); err != nil {
+		t.Fatalf("UpdateServiceCheckSnapshots initial: %v", err)
 	}
-	if err := first.SetWatchCheckSnapshot("clock", "result", CheckSnapshotRecord{
+	// A delta upserts the rows it names and deletes the removed ones; a row
+	// it leaves out stays as it was.
+	if err := first.UpdateServiceCheckSnapshots(map[string]CheckSnapshotDelta{"web": {
+		Upsert: map[string]CheckSnapshotRecord{
+			"http": {
+				CheckType: "http", ConfigID: "service-config", Observation: checks.ObservationHealthy, OK: true, Message: "status 200", Data: map[string]any{"status": float64(200)}, Ran: true, At: at,
+				Severity: string(severity.Warning),
+			},
+		},
+		Delete: []string{"stale"},
+	}}); err != nil {
+		t.Fatalf("UpdateServiceCheckSnapshots delta: %v", err)
+	}
+	if err := first.UpdateWatchCheckSnapshots(map[string]CheckSnapshotDelta{"clock": {Upsert: map[string]CheckSnapshotRecord{"result": {
 		CheckType: "clock", ConfigID: "watch-config", Observation: checks.ObservationUnavailable, OK: false, Unavailable: true, Message: "offset 1200ms",
 		Data: map[string]any{"offset_ms": float64(1200)}, Ran: true, At: at, Severity: string(severity.Warning),
-	}); err != nil {
-		t.Fatalf("SetWatchCheckSnapshot: %v", err)
+	}}}}); err != nil {
+		t.Fatalf("UpdateWatchCheckSnapshots: %v", err)
 	}
 	if err := first.Close(); err != nil {
 		t.Fatalf("close: %v", err)
@@ -220,8 +228,8 @@ func TestStoreCheckSnapshotsPersistAcrossReopen(t *testing.T) {
 		t.Fatalf("ServiceCheckSnapshots: %v", err)
 	}
 	service := serviceSnapshots["web"]
-	if len(service) != 1 {
-		t.Fatalf("service snapshots = %+v, want only current row", service)
+	if _, stale := service["stale"]; stale || len(service) != 2 || service["kept"].Message != "unchanged" || !service["kept"].At.Equal(at.Add(-time.Hour)) {
+		t.Fatalf("service snapshots = %+v, want the upserted and the untouched rows", service)
 	}
 	if got := service["http"]; got.CheckType != "http" || got.ConfigID != "service-config" || got.Observation != checks.ObservationHealthy || !got.OK || got.Message != "status 200" || got.Data["status"] != float64(200) || !got.Ran || !got.At.Equal(at) || got.Severity != string(severity.Warning) {
 		t.Fatalf("service snapshot did not round-trip: %+v", got)
@@ -239,10 +247,10 @@ func TestStoreCheckSnapshotsPersistAcrossReopen(t *testing.T) {
 
 func TestStoreRejectsInvalidSnapshotObservation(t *testing.T) {
 	s := openTemp(t)
-	if err := s.SetServiceCheckSnapshots("web", map[string]CheckSnapshotRecord{"http": {OK: true}}); err == nil || !strings.Contains(err.Error(), "invalid observation") {
+	if err := s.UpdateServiceCheckSnapshots(map[string]CheckSnapshotDelta{"web": {Upsert: map[string]CheckSnapshotRecord{"http": {OK: true}}}}); err == nil || !strings.Contains(err.Error(), "invalid observation") {
 		t.Fatalf("service snapshot error = %v, want invalid observation", err)
 	}
-	if err := s.SetWatchCheckSnapshot("clock", "result", CheckSnapshotRecord{Skipped: true}); err == nil || !strings.Contains(err.Error(), "invalid observation") {
+	if err := s.UpdateWatchCheckSnapshots(map[string]CheckSnapshotDelta{"clock": {Upsert: map[string]CheckSnapshotRecord{"result": {Skipped: true}}}}); err == nil || !strings.Contains(err.Error(), "invalid observation") {
 		t.Fatalf("watch snapshot error = %v, want invalid observation", err)
 	}
 }
@@ -252,10 +260,10 @@ func TestStoreRejectsInvalidSnapshotObservation(t *testing.T) {
 // the episodes they would have restored.
 func TestStoreSkipsPersistedInvalidSnapshotObservation(t *testing.T) {
 	s := openTemp(t)
-	if err := s.SetServiceCheckSnapshots("web", map[string]CheckSnapshotRecord{
+	if err := s.UpdateServiceCheckSnapshots(map[string]CheckSnapshotDelta{"web": {Upsert: map[string]CheckSnapshotRecord{
 		"http":    {CheckType: checks.CheckTypeHTTP, Observation: checks.ObservationHealthy, OK: true},
 		"service": {CheckType: checks.CheckTypeService, Observation: checks.ObservationFailing},
-	}); err != nil {
+	}}}); err != nil {
 		t.Fatalf("write valid snapshot: %v", err)
 	}
 	if _, err := s.db.ExecContext(context.Background(), `UPDATE service_check_snapshot SET observation = '' WHERE service = 'web' AND check_name = 'http';`); err != nil {
@@ -278,7 +286,7 @@ func TestStoreSkipsPersistedInvalidSnapshotObservation(t *testing.T) {
 func TestStoreDeletesUndecodableWatchSnapshot(t *testing.T) {
 	s := openTemp(t)
 	for _, slot := range []string{"result", "legacy"} {
-		if err := s.SetWatchCheckSnapshot("clock", slot, CheckSnapshotRecord{CheckType: "clock", Observation: checks.ObservationHealthy, OK: true}); err != nil {
+		if err := s.UpdateWatchCheckSnapshots(map[string]CheckSnapshotDelta{"clock": {Upsert: map[string]CheckSnapshotRecord{slot: {CheckType: "clock", Observation: checks.ObservationHealthy, OK: true}}}}); err != nil {
 			t.Fatalf("write watch snapshot: %v", err)
 		}
 	}

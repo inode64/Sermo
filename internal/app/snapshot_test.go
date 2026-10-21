@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"errors"
+	"maps"
 	"reflect"
 	"testing"
 	"time"
@@ -275,32 +276,46 @@ type snapshotStoreFake struct {
 	// loadErr is returned with the rows, the way a load that skipped an
 	// undecodable row reports it.
 	loadErr error
+	// writeErr fails every update; writes counts the update calls.
+	writeErr error
+	writes   int
 }
 
 func (s *snapshotStoreFake) ServiceCheckSnapshots() (map[string]map[string]state.CheckSnapshotRecord, error) {
 	return s.service, s.loadErr
 }
 
-func (s *snapshotStoreFake) SetServiceCheckSnapshots(service string, records map[string]state.CheckSnapshotRecord) error {
-	if s.service == nil {
-		s.service = map[string]map[string]state.CheckSnapshotRecord{}
-	}
-	s.service[service] = records
-	return nil
+func (s *snapshotStoreFake) UpdateServiceCheckSnapshots(deltas map[string]state.CheckSnapshotDelta) error {
+	return s.update(&s.service, deltas)
 }
 
 func (s *snapshotStoreFake) WatchCheckSnapshots() (map[string]map[string]state.CheckSnapshotRecord, error) {
 	return s.watch, s.loadErr
 }
 
-func (s *snapshotStoreFake) SetWatchCheckSnapshot(watch, slot string, rec state.CheckSnapshotRecord) error {
-	if s.watch == nil {
-		s.watch = map[string]map[string]state.CheckSnapshotRecord{}
+func (s *snapshotStoreFake) UpdateWatchCheckSnapshots(deltas map[string]state.CheckSnapshotDelta) error {
+	return s.update(&s.watch, deltas)
+}
+
+func (s *snapshotStoreFake) update(table *map[string]map[string]state.CheckSnapshotRecord, deltas map[string]state.CheckSnapshotDelta) error {
+	s.writes++
+	if s.writeErr != nil {
+		return s.writeErr
 	}
-	if s.watch[watch] == nil {
-		s.watch[watch] = map[string]state.CheckSnapshotRecord{}
+	if *table == nil {
+		*table = map[string]map[string]state.CheckSnapshotRecord{}
 	}
-	s.watch[watch][slot] = rec
+	for group, delta := range deltas {
+		rows := (*table)[group]
+		if rows == nil {
+			rows = map[string]state.CheckSnapshotRecord{}
+			(*table)[group] = rows
+		}
+		for _, name := range delta.Delete {
+			delete(rows, name)
+		}
+		maps.Copy(rows, delta.Upsert)
+	}
 	return nil
 }
 
@@ -325,5 +340,176 @@ func TestCheckSnapshotIsolatesMutableResultData(t *testing.T) {
 	result.Data["count"] = 4
 	if snapshot.Data["count"] != 3 {
 		t.Fatalf("snapshot changed with cached result: %v", snapshot.Data)
+	}
+}
+
+// A publish writes only readings that changed: re-running a check with the
+// same reading leaves the stored row (and its time) alone, a changed reading
+// rewrites that row, and a check the service no longer publishes is deleted.
+func TestPersistentSnapshotsWriteOnlyChangedReadings(t *testing.T) {
+	t0 := time.Date(2026, 10, 21, 9, 0, 0, 0, time.UTC)
+	store := &snapshotStoreFake{}
+	s, err := NewPersistentSnapshots(store, nil)
+	if err != nil {
+		t.Fatalf("NewPersistentSnapshots: %v", err)
+	}
+	publishAt := func(at time.Time, cache map[string]checks.Result) {
+		t.Helper()
+		s.now = func() time.Time { return at }
+		ran := map[string]bool{}
+		for name := range cache {
+			ran[name] = true
+		}
+		s.publishForTest("web", cache, ran)
+	}
+	healthy := map[string]checks.Result{
+		"http":    {Check: "http", OK: true, Message: "status 200", Data: map[string]any{"status": 200}},
+		"service": {Check: "service", OK: true, Message: "active"},
+	}
+	publishAt(t0, healthy)
+	if store.writes != 1 || len(store.service["web"]) != 2 {
+		t.Fatalf("first publish: writes=%d rows=%+v, want one write of both rows", store.writes, store.service["web"])
+	}
+
+	publishAt(t0.Add(time.Minute), healthy)
+	if store.writes != 1 {
+		t.Fatalf("unchanged publish wrote: writes=%d", store.writes)
+	}
+	if got := s.Get("web")["http"].At; !got.Equal(t0.Add(time.Minute)) {
+		t.Fatalf("published time = %v, want the latest run in memory", got)
+	}
+	if got := store.service["web"]["http"].At; !got.Equal(t0) {
+		t.Fatalf("stored time = %v, want the last written one", got)
+	}
+
+	changed := map[string]checks.Result{
+		"http":    {Check: "http", OK: false, Message: "status 503", Data: map[string]any{"status": 503}},
+		"service": healthy["service"],
+	}
+	publishAt(t0.Add(2*time.Minute), changed)
+	if store.writes != 2 || store.service["web"]["http"].Message != "status 503" || !store.service["web"]["service"].At.Equal(t0) {
+		t.Fatalf("changed publish: writes=%d rows=%+v, want only the http row rewritten", store.writes, store.service["web"])
+	}
+
+	publishAt(t0.Add(3*time.Minute), map[string]checks.Result{"service": healthy["service"]})
+	if _, kept := store.service["web"]["http"]; kept || store.writes != 3 {
+		t.Fatalf("removed check: writes=%d rows=%+v, want the http row deleted", store.writes, store.service["web"])
+	}
+}
+
+// A reading decoded from the store (numbers as float64) equals the same
+// reading fresh from a check, so a restart does not rewrite every row.
+func TestPersistentSnapshotsHydratedReadingIsNotRewritten(t *testing.T) {
+	t0 := time.Date(2026, 10, 21, 9, 0, 0, 0, time.UTC)
+	store := &snapshotStoreFake{service: map[string]map[string]state.CheckSnapshotRecord{"web": {
+		"http": {Observation: checks.ObservationHealthy, OK: true, Message: "status 200", Data: map[string]any{"status": float64(200)}, Ran: true, At: t0},
+	}}}
+	s, err := NewPersistentSnapshots(store, nil)
+	if err != nil {
+		t.Fatalf("NewPersistentSnapshots: %v", err)
+	}
+	s.now = func() time.Time { return t0.Add(time.Minute) }
+	s.publishForTest("web", map[string]checks.Result{
+		"http": {Check: "http", OK: true, Message: "status 200", Data: map[string]any{"status": 200}},
+	}, map[string]bool{"http": true})
+	if store.writes != 0 {
+		t.Fatalf("hydrated reading rewritten: writes=%d", store.writes)
+	}
+}
+
+// A failed write is reported and retried by the next publish of the same
+// reading, since the stored rows did not change.
+func TestPersistentSnapshotsRetryAFailedWrite(t *testing.T) {
+	store := &snapshotStoreFake{writeErr: errors.New("disk full")}
+	var reported []error
+	s, err := NewPersistentSnapshots(store, func(err error) { reported = append(reported, err) })
+	if err != nil {
+		t.Fatalf("NewPersistentSnapshots: %v", err)
+	}
+	cache := map[string]checks.Result{"http": {Check: "http", OK: true}}
+	s.publishForTest("web", cache, map[string]bool{"http": true})
+	if len(reported) != 1 || store.writes != 1 {
+		t.Fatalf("failed write: reported=%v writes=%d", reported, store.writes)
+	}
+	store.writeErr = nil
+	s.publishForTest("web", cache, map[string]bool{"http": true})
+	if store.writes != 2 || !store.service["web"]["http"].OK {
+		t.Fatalf("retry: writes=%d rows=%+v, want the reading written", store.writes, store.service["web"])
+	}
+}
+
+// Flush writes the times unchanged publishes left behind, once, so a clean
+// restart hydrates current readings.
+func TestSnapshotsFlushWritesNewerTimes(t *testing.T) {
+	t0 := time.Date(2026, 10, 21, 9, 0, 0, 0, time.UTC)
+	services := &snapshotStoreFake{}
+	s, err := NewPersistentSnapshots(services, nil)
+	if err != nil {
+		t.Fatalf("NewPersistentSnapshots: %v", err)
+	}
+	watchStore := &snapshotStoreFake{}
+	w, err := NewPersistentWatchSnapshots(watchStore, nil)
+	if err != nil {
+		t.Fatalf("NewPersistentWatchSnapshots: %v", err)
+	}
+	for i := range 3 {
+		at := t0.Add(time.Duration(i) * time.Minute)
+		s.now, w.now = func() time.Time { return at }, func() time.Time { return at }
+		s.publishForTest("web", map[string]checks.Result{"http": {Check: "http", OK: true}}, map[string]bool{"http": true})
+		w.publish("clock", checks.CheckTypeClock, checks.Result{Check: "clock", OK: true, Message: "offset 4ms"})
+	}
+	if services.writes != 1 || watchStore.writes != 1 {
+		t.Fatalf("unchanged publishes wrote: services=%d watches=%d", services.writes, watchStore.writes)
+	}
+
+	s.Flush()
+	w.Flush()
+	latest := t0.Add(2 * time.Minute)
+	if got := services.service["web"]["http"].At; services.writes != 2 || !got.Equal(latest) {
+		t.Fatalf("service flush: writes=%d at=%v, want %v", services.writes, got, latest)
+	}
+	if got := watchStore.watch["clock"]["clock"].At; watchStore.writes != 2 || !got.Equal(latest) {
+		t.Fatalf("watch flush: writes=%d at=%v, want %v", watchStore.writes, got, latest)
+	}
+	s.Flush()
+	w.Flush()
+	if services.writes != 2 || watchStore.writes != 2 {
+		t.Fatalf("second flush wrote again: services=%d watches=%d", services.writes, watchStore.writes)
+	}
+}
+
+// Every stored field takes part in the change comparison except the time.
+func TestStoredSnapshotSameReadingComparesEveryField(t *testing.T) {
+	base := CheckSnapshot{CheckType: checks.CheckTypeHTTP, ConfigID: "v1", Observation: checks.ObservationHealthy, OK: true,
+		Message: "ok", Data: map[string]any{"status": 200}, Ran: true, At: time.Unix(100, 0), Severity: string(severity.Warning)}
+	if !newStoredSnapshot(base).sameReading(newStoredSnapshot(base), true) {
+		t.Fatal("identical snapshots differ")
+	}
+	later := base
+	later.At = base.At.Add(time.Second)
+	if !newStoredSnapshot(base).sameReading(newStoredSnapshot(later), false) || newStoredSnapshot(base).sameReading(newStoredSnapshot(later), true) {
+		t.Fatal("time must matter only withTime")
+	}
+	record := reflect.ValueOf(state.CheckSnapshotRecord{})
+	for i := range record.NumField() {
+		field := record.Type().Field(i)
+		if field.Name == "At" {
+			continue
+		}
+		changed := base
+		value := reflect.ValueOf(&changed).Elem().FieldByName(field.Name)
+		switch value.Kind() {
+		case reflect.String:
+			value.SetString(value.String() + "-changed")
+		case reflect.Bool:
+			value.SetBool(!value.Bool())
+		case reflect.Map:
+			value.Set(reflect.ValueOf(map[string]any{"status": 503}))
+		default:
+			t.Fatalf("field %s of kind %s is not covered by this test", field.Name, value.Kind())
+		}
+		if newStoredSnapshot(base).sameReading(newStoredSnapshot(changed), false) {
+			t.Fatalf("a change of %s is not detected", field.Name)
+		}
 	}
 }

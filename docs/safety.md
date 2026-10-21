@@ -658,6 +658,13 @@ Kill decisions depend on how process facts are read, so this is fixed:
 Discovery order: backend information (systemd MainPID/cgroup; OpenRC status)
 → configured pidfiles → `processes:` selectors → child process tree from
 `/proc`, deduplicated by PID.
+Monitoring (worker cycles, the dashboard, service metric watches, the `zombies`
+check, and host `type: process` watches that run no faster than that window)
+shares one `/proc` snapshot and one backend PID answer per unit for half an
+`engine.interval`. Every
+observation an operation acts on (stop, residual cleanup, reaper rounds, start
+verification) and every kill re-check reads both live, and the pidfd
+revalidates the process at delivery.
 Native init services exclude selector matches owned by a different init unit.
 Libvirt domains, libvirt networks and Docker targets do not use their target
 names as init unit names; their backend evidence and configured process

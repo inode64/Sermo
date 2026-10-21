@@ -3,9 +3,11 @@ package app
 import (
 	"context"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
+	"sermo/internal/control"
 	"sermo/internal/execx"
 	"sermo/internal/execx/execxtest"
 	"sermo/internal/operation"
@@ -190,4 +192,47 @@ func TestPidfileClaimUsesSelectorsThenBackendPIDs(t *testing.T) {
 	if _, known := pidfileClaim(discoverer, nil, nil)(12); known {
 		t.Error("a service without executable selectors cannot judge pidfile identity")
 	}
+}
+
+// The worker and web runtimes of one unit share its backend PID query within
+// SystemFreshness; an operation's observation still queries the backend live.
+func TestBuildServiceRuntimeSharesBackendPIDsPerUnit(t *testing.T) {
+	runner := &countingMainPIDRunner{}
+	host := serviceOwnershipReader{
+		700: {PID: 700, PPID: 1, StartTicks: 700, StartTicksOK: true, Exe: "/usr/sbin/nginx", ExeOK: true},
+	}
+	deps := Deps{
+		Backend: servicemgr.BackendSystemd, Manager: fakeManager{}, Runtime: t.TempDir(),
+		ProcReader: host, ExecxRunner: runner, Targets: control.NewTargetCache(), SystemFreshness: time.Hour,
+	}
+	build := func() ServiceRuntime {
+		return BuildServiceRuntime(t.Context(), ServiceRuntimeConfig{Service: "web", Unit: "nginx.service", Tree: map[string]any{}, Deps: deps})
+	}
+	worker, web := build(), build()
+	worker.Discoverer.Discover(worker.Selectors)
+	web.Discoverer.Discover(web.Selectors)
+	if runner.mainPIDCalls != 1 {
+		t.Fatalf("MainPID queries = %d, want one shared by both runtimes", runner.mainPIDCalls)
+	}
+	if _, err := web.Discoverer.Observe(web.Selectors); err != nil {
+		t.Fatal(err)
+	}
+	if runner.mainPIDCalls != 2 {
+		t.Fatalf("MainPID queries = %d, want an operation observation to query live", runner.mainPIDCalls)
+	}
+}
+
+type countingMainPIDRunner struct {
+	mu           sync.Mutex
+	mainPIDCalls int
+}
+
+func (r *countingMainPIDRunner) Run(_ context.Context, _ string, args ...string) (execx.Result, error) {
+	if strings.Contains(strings.Join(args, " "), "-p MainPID") {
+		r.mu.Lock()
+		r.mainPIDCalls++
+		r.mu.Unlock()
+		return execx.Result{Stdout: "700\n"}, nil
+	}
+	return execx.Result{}, nil
 }

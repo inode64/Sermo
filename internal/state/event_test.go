@@ -2,6 +2,7 @@ package state
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 )
@@ -105,5 +106,15 @@ func TestStoreActiveEventNotifyIncidentsAndDelete(t *testing.T) {
 	}
 	if rec, found, err := s.EventNotifyState("closed", "ops"); err != nil || !found || rec.Phase != "recovered" {
 		t.Fatalf("unrelated incident changed: %+v found=%v err=%v", rec, found, err)
+	}
+}
+
+// A target's newest events come straight off the service index, without
+// sorting every event the service ever recorded.
+func TestRecentEventsForServiceUsesTheServiceIDIndex(t *testing.T) {
+	s := openTemp(t)
+	plan := queryPlan(t, s, eventSelectPrefix+` WHERE service = ? ORDER BY id DESC LIMIT ?;`, "web", 1)
+	if !strings.Contains(plan, "event_log_service_id_idx") || strings.Contains(plan, "TEMP B-TREE") {
+		t.Fatalf("query plan = %q, want event_log_service_id_idx without a sort", plan)
 	}
 }

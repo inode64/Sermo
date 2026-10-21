@@ -169,17 +169,19 @@ type watchActivity struct {
 	Severity severity.Level
 }
 
+// lastServiceEvents is each configured service's newest event, read per
+// service through the store's service index (lastServiceEvent) so a quiet
+// service keeps its last event however busy the others are, and an event
+// sermoctl recorded from its own process is included.
 func (b *WebBackend) lastServiceEvents() map[string]*web.Event {
 	if b.events == nil {
 		return nil
 	}
 	out := map[string]*web.Event{}
-	for _, ev := range b.events.Page(0, activitySummaryEventScanLimit) {
-		if b.entries[ev.Service] == nil || out[ev.Service] != nil {
-			continue
+	for name := range b.entries {
+		if ev := b.lastServiceEvent(name); ev != nil {
+			out[name] = ev
 		}
-		webEv := loggedEventToWeb(ev)
-		out[ev.Service] = &webEv
 	}
 	return out
 }

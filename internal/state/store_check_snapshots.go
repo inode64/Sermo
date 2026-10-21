@@ -34,38 +34,120 @@ type CheckSnapshotRecord struct {
 	Severity string
 }
 
+// The two snapshot tables share one column shape; each keeps its own
+// compile-time SQL keyed by its own group column.
+const (
+	upsertServiceCheckSnapshotSQL = `INSERT INTO service_check_snapshot
+	   (service, check_name, check_type, observation, ok, condition, optional, skipped, unavailable, message, data, ran, at, config_id, severity)
+	 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	 ON CONFLICT(service, check_name) DO UPDATE SET` + checkSnapshotUpdateColumns
+	deleteServiceCheckSnapshotSQL = `DELETE FROM service_check_snapshot WHERE service = ? AND check_name = ?;`
+	upsertWatchCheckSnapshotSQL   = `INSERT INTO watch_check_snapshot
+	   (watch, slot, check_type, observation, ok, condition, optional, skipped, unavailable, message, data, ran, at, config_id, severity)
+	 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	 ON CONFLICT(watch, slot) DO UPDATE SET` + checkSnapshotUpdateColumns
+	deleteWatchCheckSnapshotSQL = `DELETE FROM watch_check_snapshot WHERE watch = ? AND slot = ?;`
+	checkSnapshotUpdateColumns  = `
+	   check_type = excluded.check_type,
+	   config_id  = excluded.config_id,
+	   observation = excluded.observation,
+	   ok         = excluded.ok,
+	   condition  = excluded.condition,
+	   optional   = excluded.optional,
+	   skipped    = excluded.skipped,
+	   unavailable = excluded.unavailable,
+	   message    = excluded.message,
+	   data       = excluded.data,
+	   ran        = excluded.ran,
+	   at         = excluded.at,
+	   severity   = excluded.severity;`
+)
+
+// CheckSnapshotDelta is the change one snapshot group (a service or a watch)
+// needs in the store: the rows to upsert, keyed by check name or watch slot,
+// and the names whose rows to delete.
+type CheckSnapshotDelta struct {
+	Upsert map[string]CheckSnapshotRecord
+	Delete []string
+}
+
 // ServiceCheckSnapshots returns every persisted service check snapshot, grouped
 // by service name and keyed by check name.
 func (s *Store) ServiceCheckSnapshots() (map[string]map[string]CheckSnapshotRecord, error) {
 	return s.groupedCheckSnapshots(
 		`SELECT service, check_name, check_type, observation, ok, condition, optional, skipped, unavailable, message, data, ran, at, config_id, severity
 		   FROM service_check_snapshot ORDER BY service, check_name;`,
-		`DELETE FROM service_check_snapshot WHERE service = ? AND check_name = ?;`,
+		deleteServiceCheckSnapshotSQL,
 		"service check snapshots",
 	)
 }
 
-// SetServiceCheckSnapshots replaces one service's latest check snapshots.
-func (s *Store) SetServiceCheckSnapshots(service string, records map[string]CheckSnapshotRecord) error {
-	return replaceServiceRows(s, service, `DELETE FROM service_check_snapshot WHERE service = ?;`,
-		"service check snapshot", records, func(tx *sql.Tx, name string, rec CheckSnapshotRecord) error {
+// UpdateServiceCheckSnapshots applies each service's snapshot delta in one
+// transaction.
+func (s *Store) UpdateServiceCheckSnapshots(deltas map[string]CheckSnapshotDelta) error {
+	return s.updateCheckSnapshots(upsertServiceCheckSnapshotSQL, deleteServiceCheckSnapshotSQL, "service check snapshot", deltas)
+}
+
+// UpdateWatchCheckSnapshots applies each host watch's slot delta in one
+// transaction.
+func (s *Store) UpdateWatchCheckSnapshots(deltas map[string]CheckSnapshotDelta) error {
+	return s.updateCheckSnapshots(upsertWatchCheckSnapshotSQL, deleteWatchCheckSnapshotSQL, "watch check snapshot", deltas)
+}
+
+// updateCheckSnapshots writes snapshot deltas in group and name order. Rows are
+// validated and encoded, and both statements warmed in the store's prepared
+// cache, before the transaction takes the single write connection; the
+// transaction then reuses them on that connection.
+func (s *Store) updateCheckSnapshots(upsertSQL, deleteSQL, what string, deltas map[string]CheckSnapshotDelta) error {
+	type upsertRow struct {
+		group, name string
+		args        []any
+	}
+	var rows []upsertRow
+	var deletes [][2]string
+	for _, group := range slices.Sorted(maps.Keys(deltas)) {
+		delta := deltas[group]
+		for _, name := range slices.Sorted(slices.Values(delta.Delete)) {
+			deletes = append(deletes, [2]string{group, name})
+		}
+		for _, name := range slices.Sorted(maps.Keys(delta.Upsert)) {
+			rec := delta.Upsert[name]
 			if err := validateCheckSnapshotObservation(rec.Observation); err != nil {
-				return fmt.Errorf("service check snapshot %s/%s: %w", service, name, err)
+				return fmt.Errorf("%s %s/%s: %w", what, group, name, err)
 			}
-			data, err := encodeSnapshotData(rec.Data)
+			data, err := EncodeCheckSnapshotData(rec.Data)
 			if err != nil {
-				return err
+				return fmt.Errorf("%s %s/%s: %w", what, group, name, err)
 			}
-			if _, err := tx.ExecContext(s.sqlCtx(),
-				`INSERT INTO service_check_snapshot
-				   (service, check_name, check_type, observation, ok, condition, optional, skipped, unavailable, message, data, ran, at, config_id, severity)
-				 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
-				checkSnapshotArgs(rec, data, service, name)...,
-			); err != nil {
-				return fmt.Errorf("insert service check snapshot %s/%s: %w", service, name, err)
-			}
-			return nil
-		})
+			rows = append(rows, upsertRow{group: group, name: name, args: checkSnapshotArgs(rec, data, group, name)})
+		}
+	}
+	if len(rows) == 0 && len(deletes) == 0 {
+		return nil
+	}
+	ctx := s.sqlCtx()
+	if err := s.statements.warm(ctx, s.db.PrepareContext, upsertSQL, deleteSQL); err != nil {
+		return fmt.Errorf("prepare %s update: %w", what, err)
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin %s update: %w", what, err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	for _, key := range deletes {
+		if err := s.statements.execInTx(ctx, tx, deleteSQL, key[0], key[1]); err != nil {
+			return fmt.Errorf("delete %s %s/%s: %w", what, key[0], key[1], err)
+		}
+	}
+	for _, row := range rows {
+		if err := s.statements.execInTx(ctx, tx, upsertSQL, row.args...); err != nil {
+			return fmt.Errorf("upsert %s %s/%s: %w", what, row.group, row.name, err)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit %s update: %w", what, err)
+	}
+	return nil
 }
 
 // replaceServiceRows swaps one service's rows in a name-keyed table inside a
@@ -100,7 +182,7 @@ func (s *Store) WatchCheckSnapshots() (map[string]map[string]CheckSnapshotRecord
 	return s.groupedCheckSnapshots(
 		`SELECT watch, slot, check_type, observation, ok, condition, optional, skipped, unavailable, message, data, ran, at, config_id, severity
 		   FROM watch_check_snapshot ORDER BY watch, slot;`,
-		`DELETE FROM watch_check_snapshot WHERE watch = ? AND slot = ?;`,
+		deleteWatchCheckSnapshotSQL,
 		"watch check snapshots",
 	)
 }
@@ -202,41 +284,6 @@ func scanCheckSnapshotRow(rows *sql.Rows, label string) (string, string, CheckSn
 	return group, slot, record, nil
 }
 
-// SetWatchCheckSnapshot upserts one host-watch snapshot slot.
-func (s *Store) SetWatchCheckSnapshot(watch, slot string, rec CheckSnapshotRecord) error {
-	if err := validateCheckSnapshotObservation(rec.Observation); err != nil {
-		return fmt.Errorf("watch check snapshot %s/%s: %w", watch, slot, err)
-	}
-	data, err := encodeSnapshotData(rec.Data)
-	if err != nil {
-		return err
-	}
-	_, err = s.exec(s.sqlCtx(),
-		`INSERT INTO watch_check_snapshot
-		   (watch, slot, check_type, observation, ok, condition, optional, skipped, unavailable, message, data, ran, at, config_id, severity)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-		 ON CONFLICT(watch, slot) DO UPDATE SET
-		   check_type = excluded.check_type,
-		   config_id  = excluded.config_id,
-		   observation = excluded.observation,
-		   ok         = excluded.ok,
-		   condition  = excluded.condition,
-		   optional   = excluded.optional,
-		   skipped    = excluded.skipped,
-		   unavailable = excluded.unavailable,
-		   message    = excluded.message,
-		   data       = excluded.data,
-		   ran        = excluded.ran,
-		   at         = excluded.at,
-		   severity   = excluded.severity;`,
-		checkSnapshotArgs(rec, data, watch, slot)...,
-	)
-	if err != nil {
-		return fmt.Errorf("set watch check snapshot %s/%s: %w", watch, slot, err)
-	}
-	return nil
-}
-
 // checkSnapshotArgs builds the bind arguments both check-snapshot tables take:
 // the caller's key columns followed by the shared reading payload, in the column
 // order the two INSERTs declare. One definition keeps the service and watch
@@ -255,7 +302,10 @@ func validateCheckSnapshotObservation(observation checks.ObservationState) error
 	return nil
 }
 
-func encodeSnapshotData(data map[string]any) (string, error) {
+// EncodeCheckSnapshotData is the stored form of a snapshot's data. Callers that
+// compare readings against stored rows use it so a reading decoded from the
+// store and one fresh from a check compare equal.
+func EncodeCheckSnapshotData(data map[string]any) (string, error) {
 	if data == nil {
 		return "{}", nil
 	}

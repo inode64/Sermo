@@ -91,6 +91,9 @@ func TestCachingReaderSnapshotReturnsProcError(t *testing.T) {
 	if !errors.Is(err, want) {
 		t.Fatalf("Snapshot() error = %v, want %v", err, want)
 	}
+	if _, ok := cached.CachedSnapshot(); ok {
+		t.Fatal("an incomplete snapshot was served as cached")
+	}
 }
 
 func TestSnapshotIdentitiesUsesErrorAwareSnapshot(t *testing.T) {
@@ -142,4 +145,59 @@ func (r *errorAwareSnapshotReader) Snapshot() map[int]Identity {
 func (r *errorAwareSnapshotReader) SnapshotWithError() (map[int]Identity, error) {
 	r.errorCalls++
 	return r.snapshot, r.err
+}
+
+func TestCachedPIDsSharesOneQueryWithinFreshness(t *testing.T) {
+	queries := 0
+	now := time.Unix(0, 0)
+	c := NewCachedPIDs(func() []int { queries++; return []int{10, 11} }, 5*time.Second)
+	c.now = func() time.Time { return now }
+
+	first := c.PIDs()
+	first[0] = 99 // callers own their copy
+	if got := c.PIDs(); queries != 1 || got[0] != 10 {
+		t.Fatalf("queries=%d pids=%v; want one query and an unaltered cached answer", queries, got)
+	}
+	now = now.Add(6 * time.Second)
+	c.PIDs()
+	if queries != 2 {
+		t.Fatalf("queries=%d; want a new query after freshness", queries)
+	}
+	c.Fresh()
+	if queries != 3 {
+		t.Fatalf("queries=%d; Fresh must always query", queries)
+	}
+	c.PIDs()
+	if queries != 3 {
+		t.Fatalf("queries=%d; Fresh must refresh the cached answer", queries)
+	}
+}
+
+func TestCachedPIDsZeroFreshnessAlwaysQueries(t *testing.T) {
+	queries := 0
+	c := NewCachedPIDs(func() []int { queries++; return nil }, 0)
+	c.PIDs()
+	c.PIDs()
+	if queries != 2 {
+		t.Fatalf("queries=%d; want every call to query with caching disabled", queries)
+	}
+}
+
+func TestCachingReaderCachedSnapshotNeverRebuilds(t *testing.T) {
+	inner := &countingReader{ids: map[int]Identity{100: {PID: 100, PPID: 1, State: ProcStateZombie}}}
+	now := time.Unix(0, 0)
+	cr := NewCachingReader(inner, 5*time.Second)
+	cr.now = func() time.Time { return now }
+
+	if _, ok := cr.CachedSnapshot(); ok || inner.pidCalls != 0 {
+		t.Fatalf("unprimed cache served a snapshot or walked /proc (walks=%d)", inner.pidCalls)
+	}
+	cr.Snapshot()
+	if snapshot, ok := cr.CachedSnapshot(); !ok || snapshot[100].State != ProcStateZombie || inner.pidCalls != 1 {
+		t.Fatalf("fresh snapshot = %v, %v (walks=%d), want the primed one", snapshot, ok, inner.pidCalls)
+	}
+	now = now.Add(5 * time.Second)
+	if _, ok := cr.CachedSnapshot(); ok || inner.pidCalls != 1 {
+		t.Fatalf("expired snapshot served or rebuilt (walks=%d)", inner.pidCalls)
+	}
 }

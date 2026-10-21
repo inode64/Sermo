@@ -82,38 +82,45 @@ Work items, highest expected effect first. Each is a self-contained change
 with tests; measure before and after with the same three numbers (write bytes
 per cycle from `/proc/<pid>/io`, CPU per cycle, seconds to `/readyz`).
 
-- [ ] Cut disk writes per cycle by an order of magnitude:
-      service check snapshots are `DELETE` + one raw `INSERT` per check in
-      their own transaction on every cycle, unconditionally
-      (`internal/app/snapshot.go` `Publish`, `internal/state/store_check_snapshots.go`).
-      Change-gate them like `watchstate.go` and `rulestate.go` already do,
-      upsert instead of delete+insert, use the prepared-statement cache, and
-      batch every host-watch write (snapshot, metric, band, SLA, runtime state)
-      into one transaction per cycle the way `cycleWriter.RecordCycle` does for
-      services (`internal/app/watch.go` `RunCycle`). A watch with a `for:`
-      duration window rewrites its runtime record every cycle because
-      `TimedHistory` grows; give that a cheaper equality or a rate limit.
+- [ ] Cut disk writes per cycle by an order of magnitude. Done: service and
+      watch check snapshots are written only when a reading changes (upsert of
+      the changed rows through the prepared-statement cache, delete of removed
+      checks; `internal/app/snapshot_persist.go`), and sermod flushes the
+      latest times on a clean stop. Left: checks whose data or message carries
+      a live value (latency, load, memory, metric values) still change every
+      cycle; batch every host-watch write (snapshot, metric, band, SLA,
+      runtime state) into one transaction per cycle the way
+      `cycleWriter.RecordCycle` does for services (`internal/app/watch.go`
+      `RunCycle`); measure the result. A watch or rule window rewrites its
+      runtime record every cycle while its condition holds: `within:`
+      durations append a `TimedHistory` sample per true cycle, cycle-counted
+      windows and the clear hold advance their counters
+      (`internal/rules/window.go`); `for: {duration}` is stable. Give those a
+      cheaper record or a rate limit.
 - [ ] Make readiness real instead of a fixed interval: stagger first cycles by
       a bounded step (for example 100-250 ms per target, capped) or spread only
       app/library watches across their own 5 min interval, so `/readyz` flips
       after the first real cycle instead of after `engine.interval`. Keep the
       documented staggering guarantee in `docs/configuration.md` in step.
-- [ ] One process sample per service per cycle: every `type: metric` service
-      watch builds its own collector and runs a full `Discover` (two
-      `systemctl show` forks via `BackendPIDs`) plus a full per-PID procfs
-      sweep, bypassing the worker's per-cycle memo
-      (`internal/app/daemon.go` `watchMetricSourceFactory`, `discoverPIDs`).
-      Share the worker's `processesForCycle` and key the sample by service;
-      TTL-cache `BackendPIDs` on `SystemFreshness`.
+- [ ] One process sample per service per cycle. Done: `BackendPIDs` is one
+      `process.CachedPIDs` per unit and generation (`control.TargetCache`),
+      shared by the worker, web and metric-watch discoverers for
+      `SystemFreshness`; operations still query live. Left: a `type: metric`
+      service watch keeps its own per-PID counter sweep
+      (`internal/app/daemon.go` `watchMetricSourceFactory`); it runs on its own
+      goroutine and schedule, so it cannot read the worker's per-cycle memo,
+      but it could share a time-bounded observation through
+      `Collector.SampleServiceObserved` while keeping its own rate baselines.
 - [ ] Stop re-parsing static host facts per sample: `OSReader.NumCPU` reads
       all of `/proc/stat` and `SampleService` re-parses `/proc/meminfo` on
       every call (`internal/metrics/procfs.go`, `collector.go`). Cache both
       like `bootTimeCache` already does.
-- [ ] Use the shared caching `/proc` reader everywhere: `osProcSampler`
-      (`internal/app/procwatch.go`) and the `zombies` check
-      (`internal/checks/zombies.go`) build a bare `process.OSReader` and walk
-      all of `/proc` on every cycle although `deps.ProcReader` holds the same
-      snapshot; keep the fresh read only on the kill re-validation path.
+- [ ] Use the shared caching `/proc` reader everywhere. Done: a host
+      `type: process` watch at least as slow as `SystemFreshness` samples
+      identities from `deps.ProcReader` (kill re-checks stay live), and the
+      `zombies` check counts the shared snapshot while it is fresh. Left: the
+      set-process watches (`unowned_processes`, process policy, incidents) still
+      walk `/proc` per cycle through `procSamplerFromDeps`.
 - [ ] One `systemctl` status query per cycle instead of one fork per service:
       the `service` check forks `systemctl is-active` (plus `show -p LoadState`
       when inactive) for every service every cycle
@@ -126,39 +133,34 @@ per cycle from `/proc/<pid>/io`, CPU per cycle, seconds to `/readyz`).
       entries just to count them (`internal/app/daemon.go`,
       `internal/metrics/procfs.go`). Count with an unsorted read, reuse the
       thread count, and make the detail-only totals interval-bound.
-- [ ] Build the service runtime once per generation: `BuildServiceRuntime`
-      runs for the worker and again for the web backend, and inside one call
-      `DetectProcInfo` runs twice, so a systemd host pays 6-11 `systemctl`
-      forks per service at startup (`internal/app/service_wiring.go`,
-      `daemon.go`, `webbackend.go`). Cache the runtime per service like
-      `control.TargetCache` caches units, and fetch `CanReload` lazily instead
-      of blocking the listener bind on it.
-- [ ] Cache config resolution per `*Config`: a service is fully resolved about
-      seven times per start (validation twice, worker, service watches,
-      artifact dependencies, web entry, `MaxOperationTimeout`) and
-      `ResolveWatches` at least five times (`internal/config/resolve.go` call
-      sites). Memoize on the config object, which is rebuilt on reload anyway,
-      and run `BuildWatches` and `BuildArtifactWatches` through the existing
-      `forEachParallel` alongside `BuildWorkers`.
+- [ ] Fetch `CanReload` lazily instead of blocking the listener bind on it
+      (`internal/app/webbackend.go` `attachServiceRuntime`). The worker and web
+      runtimes stay separate (operation recording, session closers and reload
+      support differ); their duplicated `systemctl` queries are shared through
+      `control.TargetCache` (unit, process identity, backend PIDs).
+- [ ] Run `BuildWatches` and `BuildArtifactWatches` through the existing
+      `forEachParallel` alongside `BuildWorkers`. Config resolution repeats
+      per start (about seven service passes and nine watch passes) but was
+      measured at about 2.5 ms per service pass and 0.3 ms per watch pass on a
+      25-service, 55-watch host, about 20 ms per start, so it is not cached;
+      a cache on `*Config` would also break the `from_file` refresh
+      `ResolveServices` promises.
 - [ ] Startup I/O on the single write connection: `applyMonitorMode` writes
       one row per service and per watch and `loadRuleState` reads two per
       service while eight wiring goroutines wait behind `SetMaxOpenConns(1)`;
       batch them into one read and one write. Delay the first state
       maintenance pass until readiness instead of running it at t=0. Probe
       only the requested init backend when `engine.backend` is explicit.
-- [ ] Dashboard request cost: `lastServiceEvents` and `ActivitySummary` each
-      scan 500 event rows from SQLite on every poll although the in-memory
-      ring holds them (`internal/app/webbackend_watches.go`,
-      `webbackend_events.go`, `eventlog.go`); keep a `lastByService` index like
-      `lastByWatch`. Memoize the per-watch `checkreadings` rendering by
-      snapshot time so repeat polls do not rebuild every reading.
+- [ ] Dashboard request cost: memoize the per-watch `checkreadings` rendering
+      by snapshot time so repeat polls do not rebuild every reading. The last
+      event per service now reads `event_log_service_id_idx` per service
+      instead of scanning 500 rows (the store, not the ring, is authoritative:
+      sermoctl records events from its own process).
 - [ ] Allocation trims on the hot path: precompile `op: regex` assertions at
       build time (`internal/checks/compare.go`), store the joined cmdline on
       `process.Identity` instead of joining it for every PID × selector
       (`internal/process/discover.go`), stop the format-then-parse round trip
-      of the service runtime timestamp (`internal/app/serviceruntime.go`), and
-      early-exit `readStatus` once its four fields are read
-      (`internal/process/procfs.go`).
+      of the service runtime timestamp (`internal/app/serviceruntime.go`).
 - [ ] Add a repeatable measurement: a `make` target or `sermoctl` diagnostic
       that reports write bytes per cycle, CPU per cycle and seconds to ready,
       so every item above lands with a before/after number.

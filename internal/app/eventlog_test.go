@@ -300,10 +300,15 @@ func TestWebBackendLastServiceEventIsNotBoundedByGlobalScan(t *testing.T) {
 		}
 	}
 
-	b := &WebBackend{entries: map[string]*webEntry{"web": {}}, events: log}
+	b := &WebBackend{entries: map[string]*webEntry{"web": {}, "other": {}}, events: log}
 	last := b.lastServiceEvent("web")
 	if last == nil || last.ID != wanted {
 		t.Fatalf("last service event = %+v, want persisted ID %d beyond the global scan", last, wanted)
+	}
+	// The service list shows the same event, however busy the other services are.
+	listed := b.lastServiceEvents()
+	if listed["web"] == nil || listed["web"].ID != wanted || listed["other"] == nil {
+		t.Fatalf("listed service events = %+v, want web's ID %d and other's newest", listed, wanted)
 	}
 }
 
