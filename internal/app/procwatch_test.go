@@ -588,10 +588,21 @@ func TestProcWatchWithCustomInjectedRunnerVerifiesEnv(t *testing.T) {
 
 type fakeProcCounters struct {
 	starts map[int]uint64
+	// bootUnknown makes ProcessStart fail as when /proc/stat's boot time is
+	// unreadable, while StartTicks still reads the process.
+	bootUnknown bool
+}
+
+func (c fakeProcCounters) StartTicks(pid int) (uint64, bool) {
+	ticks, ok := c.starts[pid]
+	return ticks, ok
 }
 
 func (c fakeProcCounters) ProcessStart(pid int) (uint64, time.Time, bool) {
 	ticks, ok := c.starts[pid]
+	if c.bootUnknown {
+		return 0, time.Time{}, false
+	}
 	return ticks, time.Unix(int64(ticks), 0), ok
 }
 func (fakeProcCounters) ProcessCPU(int) (uint64, bool)        { return 1, true }
@@ -615,6 +626,14 @@ func TestOSProcSamplerSharedSnapshotDropsGoneAndReusedPIDs(t *testing.T) {
 	samples, ok := sampler.Sample(ProcMatch{Name: "worker"})
 	if !ok || len(samples) != 1 || samples[0].PID != 10 || samples[0].CPUTicks != 1 {
 		t.Fatalf("samples = %+v, ok %v; want only the live, unchanged PID 10", samples, ok)
+	}
+
+	// An unreadable boot time fails ProcessStart for a live process; the start
+	// ticks still keep it, so the watch does not report it gone.
+	sampler.counters = fakeProcCounters{starts: map[int]uint64{10: 100, 12: 999}, bootUnknown: true}
+	samples, ok = sampler.Sample(ProcMatch{Name: "worker"})
+	if !ok || len(samples) != 1 || samples[0].PID != 10 || samples[0].StartTicks != 100 {
+		t.Fatalf("boot time unknown: samples = %+v, ok %v; want live PID 10 kept", samples, ok)
 	}
 }
 
