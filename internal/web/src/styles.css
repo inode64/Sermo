@@ -201,11 +201,12 @@
      sanctioned approach for charts — and give every meter track a visible
      CanvasText border so it stays perceivable when its surface collapses to
      Canvas. Each SLA segment carries its own border because the band draws no
-     track of its own. */
+     track of its own. An action button's outcome badge keeps a border too, so
+     its flattened disc still reads as a mark. */
   @media (forced-colors: active) {
     .usagebar { border: 1px solid CanvasText; }
     .usagebar-fill, .sla-bar-seg { forced-color-adjust: none; }
-    .sla-bar-seg { border: 1px solid CanvasText; }
+    .sla-bar-seg, .outcome-badge { border: 1px solid CanvasText; }
   }
 
   /* ---- controls ------------------------------------------------------------ */
@@ -389,6 +390,28 @@
   .pin-btn { width: 1.3rem; height: 1.3rem; font-size: .8rem; opacity: .55; flex-shrink: 0; }
   tr:hover .pin-btn, .pin-btn.pinned, .pin-btn:focus-visible { opacity: 1; }
   .pin-btn.pinned { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, var(--line-2)); }
+  /* Operation outcome marks on service action buttons: amber when the engine
+     refused the action before touching anything (blocked), red when it failed
+     (--crit, not --critical: that magenta is the critical-severity grade). The
+     ring and badge stay; the pulse runs three times when the mark first
+     appears (2.4s, under WCAG 2.2.2's 5s) and the reduced-motion block above
+     cuts it to nothing. The badge is absolute, so a mark never shifts the row. */
+  .outcome-blocked { --outcome: var(--warn); }
+  .outcome-failed { --outcome: var(--crit); }
+  .outcome-blocked, .outcome-failed { position: relative; border-color: var(--outcome); box-shadow: inset 0 0 0 1px var(--outcome); }
+  .outcome-blocked:hover, .outcome-failed:hover { border-color: var(--outcome); }
+  /* A pressed toggle (the paused VM's resume) keeps its paused fill but shows
+     the outcome border, beating .icon-btn.suspend-btn[aria-pressed="true"]. */
+  .icon-btn.outcome-blocked[aria-pressed="true"], .icon-btn.outcome-failed[aria-pressed="true"] { border-color: var(--outcome); }
+  @keyframes outcome-pulse { 50% { box-shadow: inset 0 0 0 1px var(--outcome), 0 0 0 .3rem color-mix(in srgb, var(--outcome) 40%, transparent); } }
+  .outcome-pulse { animation: outcome-pulse .8s ease-in-out 3; }
+  .outcome-badge {
+    position: absolute; top: -.35rem; right: -.3rem;
+    min-width: .85rem; height: .85rem; padding: 0 .15rem; border-radius: 999px;
+    background: var(--outcome); color: var(--bg);
+    font-size: .6rem; font-weight: 700; line-height: .85rem; text-align: center;
+    pointer-events: none;
+  }
   #app-footer {
     flex-shrink: 0;
     display: flex; align-items: center; flex-wrap: wrap; gap: .35rem .75rem;
@@ -877,6 +900,7 @@
   .op-dot { width: .55rem; height: .55rem; border-radius: 50%; background: var(--warn); display: inline-block; animation: beat 1.2s ease-in-out infinite; }
   .op-dot.ok { background: var(--ok); animation: none; }
   .op-dot.failed { background: var(--crit); animation: none; }
+  .op-dot.blocked { animation: none; }
   #attention { display: none; margin: .8rem 0 0; padding: .75rem .85rem; border: 1px solid color-mix(in srgb, var(--crit) 35%, transparent); border-left: 3px solid var(--crit); border-radius: var(--radius-s); background: color-mix(in srgb, var(--crit) 7%, var(--panel)); box-shadow: var(--shadow); }
   .attn-head { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; flex-wrap: wrap; margin-bottom: .45rem; }
   .attn-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr)); gap: .5rem; }

@@ -524,8 +524,14 @@ checks:
 	if err != nil {
 		t.Fatalf("recent events: %v", err)
 	}
-	if len(events) != 1 || events[0].Service != "db" || events[0].Kind != "cascade" || events[0].Status != string(operation.ResultFailed) {
+	// Newest first: the downgraded primary, so web's own buttons show the
+	// cascade failed, then the failed relationship for db.
+	if len(events) != 2 || events[1].Service != "db" || events[1].Kind != "cascade" || events[1].Status != string(operation.ResultFailed) {
 		t.Fatalf("events = %+v, want failed cascade relationship for db", events)
+	}
+	if events[0].Service != "web" || events[0].Action != "restart" || events[0].Status != string(operation.ResultFailed) ||
+		!strings.Contains(events[0].Message, "cascade target failed") {
+		t.Fatalf("events = %+v, want web's downgraded restart", events)
 	}
 }
 

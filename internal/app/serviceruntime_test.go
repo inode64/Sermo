@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"sermo/internal/process"
 	"sermo/internal/state"
 	"sermo/internal/web"
 )
@@ -22,11 +23,11 @@ func TestServiceMetricSamplerReadsPersistedHistory(t *testing.T) {
 	first.record(t.Context(), "web", web.ServiceRuntime{
 		At:    base.UTC().Format(time.RFC3339),
 		Count: 1, RSS: 1024, IORead: 1000, IOWrite: 2000, CPU: 10, HasCPU: true,
-	}, base.UTC())
+	}, process.PrincipalIdentity{}, base.UTC())
 	first.record(t.Context(), "web", web.ServiceRuntime{
 		At:    base.Add(time.Minute).UTC().Format(time.RFC3339),
 		Count: 1, RSS: 2048, IORead: 7000, IOWrite: 5000, CPU: 20, HasCPU: true,
-	}, base.Add(time.Minute).UTC())
+	}, process.PrincipalIdentity{}, base.Add(time.Minute).UTC())
 
 	second := NewServiceMetricSampler(store)
 	afterRestart := second.Series("web", web.ServiceRuntime{
@@ -54,7 +55,7 @@ func TestServiceMetricSamplerSeriesDoesNotRecordDashboardReads(t *testing.T) {
 	sampler.record(t.Context(), "web", web.ServiceRuntime{
 		At:    base.UTC().Format(time.RFC3339),
 		Count: 1, RSS: 1024, CPU: 10, HasCPU: true,
-	}, base.UTC())
+	}, process.PrincipalIdentity{}, base.UTC())
 	current := web.ServiceRuntime{
 		At:    base.Add(time.Minute).UTC().Format(time.RFC3339),
 		Count: 1, RSS: 4096, CPU: 40, HasCPU: true,
@@ -76,24 +77,24 @@ func TestServiceMetricSamplerSeriesDoesNotRecordDashboardReads(t *testing.T) {
 func TestServiceMetricSamplerRetainsSubsecondTime(t *testing.T) {
 	sampler := NewServiceMetricSampler(nil)
 	at := time.Date(2026, 1, 1, 0, 0, 0, 123, time.UTC)
-	sampler.record(t.Context(), "web", web.ServiceRuntime{Count: 1, IORead: 100}, at)
+	sampler.record(t.Context(), "web", web.ServiceRuntime{Count: 1, IORead: 100}, process.PrincipalIdentity{}, at)
 	later := at.Add(500 * time.Millisecond)
-	sampler.record(t.Context(), "web", web.ServiceRuntime{Count: 1, IORead: 200}, later)
-	current, observed, ok := sampler.LatestWithAt("web")
-	if !ok || !observed.Equal(later) || !current.IOReady || current.IOReadRate != 200 {
-		t.Fatalf("sample=%+v at=%v present=%v", current, observed, ok)
+	sampler.record(t.Context(), "web", web.ServiceRuntime{Count: 1, IORead: 200}, process.PrincipalIdentity{}, later)
+	last, _, ok := sampler.latest("web")
+	if !ok || !last.at.Equal(later) || !last.current.IOReady || last.current.IOReadRate != 200 {
+		t.Fatalf("sample=%+v present=%v", last, ok)
 	}
 }
 
 func TestResetRemovedServiceMetricsForgetsRetiredServiceSamples(t *testing.T) {
 	at := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	sampler := NewServiceMetricSampler(nil)
-	sampler.record(t.Context(), "web", web.ServiceRuntime{Count: 1, IORead: 100}, at)
-	sampler.record(t.Context(), "old-name", web.ServiceRuntime{Count: 1, IORead: 100}, at)
+	sampler.record(t.Context(), "web", web.ServiceRuntime{Count: 1, IORead: 100}, process.PrincipalIdentity{}, at)
+	sampler.record(t.Context(), "old-name", web.ServiceRuntime{Count: 1, IORead: 100}, process.PrincipalIdentity{}, at)
 
 	resetRemovedServiceMetrics(nil, sampler, []*Worker{{Service: "web"}, {Service: "old-name"}}, []*Worker{{Service: "web"}})
 
-	if _, _, ok := sampler.LatestWithAt("web"); !ok {
+	if _, _, ok := sampler.latest("web"); !ok {
 		t.Fatal("a service kept by the reload lost its samples")
 	}
 	sampler.mu.Lock()

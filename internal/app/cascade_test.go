@@ -125,6 +125,48 @@ func TestCascaderDowngradesPrimaryWhenAdditionalFails(t *testing.T) {
 	}
 }
 
+// Downgraded hears the root's final result only when the cascade turned its
+// own success into a failure.
+func TestCascaderReportsADowngradedPrimaryOnce(t *testing.T) {
+	for _, tc := range []struct {
+		name          string
+		primary, dep  operation.ResultStatus
+		wantDowngrade bool
+	}{
+		{name: "target failed", primary: operation.ResultOK, dep: operation.ResultFailed, wantDowngrade: true},
+		{name: "target ok", primary: operation.ResultOK, dep: operation.ResultOK},
+		{name: "target blocked", primary: operation.ResultOK, dep: operation.ResultBlocked},
+		{name: "primary failed on its own", primary: operation.ResultFailed, dep: operation.ResultFailed},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			op := func(_ context.Context, svc, action string) (operation.Result, error) {
+				st := tc.primary
+				if svc == "dep" {
+					st = tc.dep
+				}
+				return operation.Result{Service: svc, Action: action, Status: st}, nil
+			}
+			var downgraded []operation.Result
+			c := cascader{
+				config: CascadeConfig{
+					Operate:    op,
+					Lookup:     func(s string) []string { return map[string][]string{"primary": {"dep"}}[s] },
+					Emit:       func(Event) {},
+					Downgraded: func(r operation.Result) { downgraded = append(downgraded, r) },
+				},
+				sleep: func(time.Duration) {},
+			}
+			res, _ := c.run(context.Background(), "primary", "restart")
+			if got := len(downgraded) == 1; got != tc.wantDowngrade || len(downgraded) > 1 {
+				t.Fatalf("downgraded = %+v, want one report: %v", downgraded, tc.wantDowngrade)
+			}
+			if tc.wantDowngrade && (downgraded[0].Service != "primary" || downgraded[0].Status != res.Status) {
+				t.Fatalf("downgraded = %+v, want the returned primary %+v", downgraded[0], res)
+			}
+		})
+	}
+}
+
 func TestCascaderRetriesBlockedTarget(t *testing.T) {
 	calls := 0
 	op := func(_ context.Context, svc, action string) (operation.Result, error) {

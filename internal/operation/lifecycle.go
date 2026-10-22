@@ -12,7 +12,11 @@ import (
 	"sermo/internal/servicemgr"
 )
 
-var errProcessIdentity = errors.New("active service has no process matching configured exact exe/user selectors")
+var (
+	errProcessIdentity = errors.New("active service has no process matching configured exact exe/user selectors")
+	errProcessAbsent   = errors.New("init reports active but service process is absent")
+	errReplacedBinary  = errors.New("service process runs a binary replaced on disk; restart it to verify the new one")
+)
 
 // observeProcesses is deliberately separate from best-effort monitoring. Missing
 // capability cannot establish absence or turn a failed command into success.
@@ -82,10 +86,10 @@ func (e Engine) reconcileActive(ctx context.Context, result *Result) (bool, []pr
 		return false, nil, err
 	}
 	remaining := nonDelegatedResiduals(observation.Processes)
+	if err := e.identityRefusal(observation.Principal()); err != nil {
+		return false, remaining, err
+	}
 	if len(remaining) > 0 {
-		if observation.IdentityRequired && !observation.Trusted && !observation.ReplacedExecutable {
-			return false, remaining, errProcessIdentity
-		}
 		return false, nil, nil
 	}
 	if !observation.AbsenceKnown {
@@ -115,6 +119,45 @@ func (e Engine) reconcileActive(ctx context.Context, result *Result) (bool, []pr
 		return false, nil, err
 	}
 	return true, nil, nil
+}
+
+// identityRefusal is the one rule that refuses to treat an active service's
+// processes as its daemon: a resident service whose processes cannot be tied to
+// its strict principal identity. Start and restart apply it to a fresh
+// observation; ForecastActive applies it to the monitor's latest cycle.
+func (e Engine) identityRefusal(p process.PrincipalIdentity) error {
+	if e.Lifecycle.ProcessMode != config.ServiceProcessResident || !p.Unverified() {
+		return nil
+	}
+	return errProcessIdentity
+}
+
+// healthIdentityError is why a resident service's processes cannot prove it
+// healthy after an action that keeps the running generation: none attributed,
+// or none matching its strict identity. A replaced binary permits a stop but
+// never proves a healthy daemon. Postflight and ForecastActive share it.
+func (e Engine) healthIdentityError(p process.PrincipalIdentity) error {
+	switch {
+	case e.Lifecycle.ProcessMode != config.ServiceProcessResident:
+		return nil
+	case !p.Attributed:
+		return errProcessAbsent
+	case !p.Required || p.Trusted:
+		return nil
+	case p.ReplacedExecutable:
+		return errReplacedBinary
+	default:
+		return errProcessIdentity
+	}
+}
+
+// reconciliationStatus classifies a refused reconciliation: an unverifiable
+// process identity blocks the operation before it acts, anything else fails it.
+func reconciliationStatus(err error) ResultStatus {
+	if errors.Is(err, errProcessIdentity) {
+		return ResultBlocked
+	}
+	return ResultFailed
 }
 
 // resetStopped revalidates absence immediately before clearing init bookkeeping,

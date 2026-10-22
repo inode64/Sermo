@@ -188,39 +188,60 @@ type DBQueryTarget struct {
 	checks.DBQueryKill
 }
 
+// lifecyclePlans is the one list of service lifecycle actions and their
+// phases, in the guard vocabulary's order. Do dispatches through it, and
+// ServiceActions, IsServiceAction and ForecastActive derive from it.
+var lifecyclePlans = []plan{
+	{action: actionRestart, preflight: true, reconcile: true, stop: true, start: true, postflight: true},
+	{action: actionStart, preflight: true, reconcile: true, start: true, postflight: true},
+	{action: actionStop, stop: true},
+	{action: actionReload, preflight: true, reload: true, postflight: true},
+	{action: actionResume, preflight: true, resume: true, postflight: true},
+	{action: ActionPause, pause: true},
+	{action: ActionRepair, preflight: true, repair: true, reconcile: true, start: true, postflight: true},
+}
+
+func lifecyclePlan(action string) (plan, bool) {
+	i := slices.IndexFunc(lifecyclePlans, func(p plan) bool { return p.action == action })
+	if i < 0 {
+		return plan{}, false
+	}
+	return lifecyclePlans[i], true
+}
+
 // Restart composes verified stop and start under one operation lock and timeout.
 func (e Engine) Restart(ctx context.Context) Result {
-	return e.run(ctx, plan{action: actionRestart, preflight: true, reconcile: true, stop: true, start: true, postflight: true})
+	return e.Do(ctx, actionRestart)
 }
 
 // Start runs preflight, starts the service and verifies health.
 func (e Engine) Start(ctx context.Context) Result {
-	return e.run(ctx, plan{action: actionStart, preflight: true, reconcile: true, start: true, postflight: true})
+	return e.Do(ctx, actionStart)
 }
 
 // Stop stops the service and clears residuals. Stop runs no preflight or
 // postflight but still honors locks and guards.
 func (e Engine) Stop(ctx context.Context) Result {
-	return e.run(ctx, plan{action: actionStop, stop: true})
+	return e.Do(ctx, actionStop)
 }
 
 // Reload runs preflight (the config check), asks the init system to reload the
 // service's configuration in place (no stop/start), and verifies health. It is
 // the non-disruptive remediation for daemons that reload rather than restart.
 func (e Engine) Reload(ctx context.Context) Result {
-	return e.run(ctx, plan{action: actionReload, preflight: true, reload: true, postflight: true})
+	return e.Do(ctx, actionReload)
 }
 
 // Resume runs preflight, resumes a paused service and verifies health.
 func (e Engine) Resume(ctx context.Context) Result {
-	return e.run(ctx, plan{action: actionResume, preflight: true, resume: true, postflight: true})
+	return e.Do(ctx, actionResume)
 }
 
 // Pause freezes the service in place and verifies the backend reports it
 // paused. Like stop it runs no preflight or postflight, but still honors locks
 // and guards; a guard that blocks stop also blocks pause.
 func (e Engine) Pause(ctx context.Context) Result {
-	return e.run(ctx, plan{action: ActionPause, pause: true})
+	return e.Do(ctx, ActionPause)
 }
 
 // CloseSession gracefully terminates one operator-selected SSH session. It
@@ -257,7 +278,7 @@ func (e Engine) KillDBQuery(ctx context.Context, target DBQueryTarget) Result {
 // service through the same preflight, locks, guards and postflight as Start.
 // It is deliberately manual-only; rules cannot dispatch this recovery action.
 func (e Engine) Repair(ctx context.Context) Result {
-	return e.run(ctx, plan{action: ActionRepair, preflight: true, repair: true, reconcile: true, start: true, postflight: true})
+	return e.Do(ctx, ActionRepair)
 }
 
 func (e Engine) userResolver() process.UserResolver {
@@ -272,24 +293,11 @@ func (e Engine) userResolver() process.UserResolver {
 // the web UI; an unrecognized action yields a failed Result without running
 // anything.
 func (e Engine) Do(ctx context.Context, action string) Result {
-	switch action {
-	case actionStart:
-		return e.Start(ctx)
-	case actionStop:
-		return e.Stop(ctx)
-	case actionRestart:
-		return e.Restart(ctx)
-	case actionReload:
-		return e.Reload(ctx)
-	case actionResume:
-		return e.Resume(ctx)
-	case ActionPause:
-		return e.Pause(ctx)
-	case ActionRepair:
-		return e.Repair(ctx)
-	default:
+	p, ok := lifecyclePlan(action)
+	if !ok {
 		return Result{Service: e.Service, Action: action, Status: ResultFailed, Message: "unknown action " + action}
 	}
+	return e.run(ctx, p)
 }
 
 func (e Engine) run(ctx context.Context, p plan) (result Result) {
@@ -512,10 +520,7 @@ func (e Engine) runReconciliation(ctx context.Context, p plan, result *Result) (
 	}
 	reconciled, remaining, err := e.reconcileInitState(ctx, result)
 	if err != nil {
-		result.Status = ResultFailed
-		if errors.Is(err, errProcessIdentity) {
-			result.Status = ResultBlocked
-		}
+		result.Status = reconciliationStatus(err)
 		result.Message = err.Error()
 		result.Processes = remaining
 		return false, false
@@ -765,11 +770,11 @@ func (e Engine) ensureServiceHealthy(ctx context.Context, result *Result, action
 			result.Status, result.Message = ResultFailed, err.Error()
 			return false, true
 		}
-		if len(nonDelegatedResiduals(observation.Processes)) == 0 || observation.IdentityRequired && !observation.Trusted {
+		if err := e.healthIdentityError(observation.Principal()); err != nil {
 			if !final {
 				return false, false
 			}
-			result.Status, result.Message = ResultFailed, "init reports active but service process is absent"
+			result.Status, result.Message = ResultFailed, err.Error()
 			return false, true
 		}
 	}

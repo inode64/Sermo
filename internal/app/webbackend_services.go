@@ -11,6 +11,7 @@ import (
 	"sermo/internal/checks"
 	"sermo/internal/config"
 	"sermo/internal/locks"
+	"sermo/internal/process"
 	"sermo/internal/servicemgr"
 	"sermo/internal/severity"
 	"sermo/internal/state"
@@ -26,7 +27,9 @@ type serviceObservation struct {
 	runtime        web.ServiceRuntime
 	runtimeFresh   bool
 	runtimeTracked bool
-	at             time.Time
+	// principal is the identity evidence of the runtime sample's cycle.
+	principal process.PrincipalIdentity
+	at        time.Time
 }
 
 func (b *WebBackend) observeService(name string, e *webEntry) serviceObservation {
@@ -35,8 +38,9 @@ func (b *WebBackend) observeService(name string, e *webEntry) serviceObservation
 		return o
 	}
 	o.runtimeTracked = !e.noResidentProcess && b.serviceMetrics != nil
-	cur, at, ok := b.latestPublishedServiceRuntime(name, e)
-	o.runtime, o.runtimeFresh = cur, ok && o.at.Sub(at) <= runtimePublishMaxAge(e.interval)
+	last, principal, ok := b.latestPublishedServiceRuntime(name, e)
+	o.runtime, o.principal = last.current, principal
+	o.runtimeFresh = ok && o.at.Sub(last.at) <= runtimePublishMaxAge(e.interval)
 	snapshots := b.snapshots.Get(name)
 	o.rawSnapshots = snapshots
 	if snapshots == nil {
@@ -49,6 +53,25 @@ func (b *WebBackend) observeService(name string, e *webEntry) serviceObservation
 		}
 	}
 	return o
+}
+
+// operationForecast reports the lifecycle actions the engine would refuse, or
+// that would fail their health check, for this service, judged from the
+// identity evidence of the fresh runtime sample. A stale sample forecasts
+// nothing.
+func (o serviceObservation) operationForecast(e *webEntry, status string) []web.OperationForecast {
+	if !o.runtimeFresh {
+		return nil
+	}
+	forecasts := e.engine.ForecastActive(servicemgr.Status(status), o.principal)
+	out := make([]web.OperationForecast, 0, len(forecasts))
+	for _, f := range forecasts {
+		out = append(out, web.OperationForecast{Action: f.Action, Status: string(f.Status), Message: f.Message})
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 // serviceLockView carries one service's already-scanned lock state, so the
@@ -116,6 +139,7 @@ func (b *WebBackend) viewWithRuntime(ctx context.Context, name string, e *webEnt
 	}
 	status = observation.freshServiceCheckStatus(e, status, statusAt)
 	svc.Status = status
+	svc.OperationForecast = observation.operationForecast(e, status)
 	health := observation.serviceCheckHealth(e, svc.Monitored)
 	baseHealth := health
 	stateReason := observation.serviceStateReason(e)
@@ -599,6 +623,7 @@ func (b *WebBackend) Services(ctx context.Context) []web.Service {
 func (b *WebBackend) servicesWithLockReports(ctx context.Context, reports map[string]locks.Report) []web.Service {
 	out := make([]web.Service, 0, len(b.order))
 	lastEvents := b.lastServiceEvents()
+	lastOperations := b.lastOperations("")
 	operating := b.operationActiveByService()
 	monitored := b.monitorRecords()
 	var settling map[string]state.OperationSettlingRecord
@@ -615,12 +640,14 @@ func (b *WebBackend) servicesWithLockReports(ctx context.Context, reports map[st
 		if e == nil {
 			continue
 		}
-		out = append(out, b.viewWithRuntime(ctx, name, e, b.observeService(name, e), lastEvents[name], serviceLockView{
+		svc := b.viewWithRuntime(ctx, name, e, b.observeService(name, e), lastEvents[name], serviceLockView{
 			active:         activeLockNamesFromReport(reports[name]),
 			monitorRecords: monitored, settlingRecords: settling,
 			operationActive: operating[name],
 			ready:           true,
-		}))
+		})
+		svc.LastOperation = lastOperations[name]
+		out = append(out, svc)
 	}
 	return out
 }
@@ -632,13 +659,17 @@ func (b *WebBackend) Detail(ctx context.Context, name string) (web.Detail, bool)
 		return web.Detail{}, false
 	}
 	observation := b.observeService(name, e)
+	lastOperation := b.lastOperations(name)[name]
 	if e.disabled {
-		return web.Detail{Service: b.viewWithRuntime(ctx, name, e, observation, b.lastServiceEvent(name), serviceLockView{})}, true
+		svc := b.viewWithRuntime(ctx, name, e, observation, b.lastServiceEvent(name), serviceLockView{})
+		svc.LastOperation = lastOperation
+		return web.Detail{Service: svc}, true
 	}
 	report, lockErr := serviceLocksReport(b.cfg, name)
 	d := web.Detail{Service: b.viewWithRuntime(ctx, name, e, observation, b.lastServiceEvent(name), serviceLockView{
 		active: activeLockNamesFromReport(report), operationActive: operationActive(b.cfg, name), ready: true,
 	})}
+	d.Service.LastOperation = lastOperation
 	now := observation.at
 
 	for _, cn := range e.checkNames {

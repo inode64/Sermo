@@ -787,6 +787,33 @@ func TestIndexAccessibilityForcedColors(t *testing.T) {
 	)
 }
 
+// TestIndexOperationOutcomeMarks pins the service button outcome marks: amber
+// for a blocked operation, red (--crit, not the critical-severity --critical)
+// for a failed one, and a pulse bounded to three .8s iterations, under the 5s
+// WCAG 2.2.2 limit for motion nobody asked for.
+func TestIndexOperationOutcomeMarks(t *testing.T) {
+	cssBundleMustContain(t, "operation outcome marks",
+		".outcome-blocked{--outcome:var(--warn)}",
+		".outcome-failed{--outcome:var(--crit)}",
+		".outcome-pulse{animation:outcome-pulse.8sease-in-out3}",
+		"@keyframesoutcome-pulse{",
+		".outcome-badge{",
+		".op-dot.blocked{animation:none}",
+		// The pressed suspend toggle shows the outcome border, not its paused one.
+		".icon-btn.outcome-blocked[aria-pressed=true],.icon-btn.outcome-failed[aria-pressed=true]{border-color:var(--outcome)}",
+		".sla-bar-seg,.outcome-badge{border:1pxsolidCanvasText}}",
+	)
+	appJSMustContain(t, "operation outcome marks",
+		`const outcomePulseClass = "outcome-pulse";`,
+		"const outcomePulseMs = 2400;",
+		"outcome-${mark.outcome}",
+		`<span class="outcome-badge" aria-hidden="true">`,
+		`actionHintID("svc", s.name, action, "outcome")`,
+		"noteOperationOutcomes(services);",
+		"document.addEventListener(domEventAnimationEnd,",
+	)
+}
+
 func TestIndexWatchReadingLongValuesWrap(t *testing.T) {
 	css := strings.ReplaceAll(bundledCSS(t), " ", "")
 	for _, needle := range []string{

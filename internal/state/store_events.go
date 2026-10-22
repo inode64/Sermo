@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"slices"
+	"strings"
 	"time"
 )
 
@@ -98,6 +99,50 @@ func (s *Store) RecentEventsForColumn(column, name string, limit int) ([]EventRe
 	}
 	defer func() { _ = rows.Close() }()
 	return scanEventRows(rows)
+}
+
+// LatestOperationOutcomes returns each service's newest event that records
+// the outcome of one of actions: a row naming the service, one of those
+// actions and a result status. Later events of other kinds never hide it. An
+// empty service reads every service in one query; a named one reads only its
+// own. Both go through event_log_service_outcome_idx.
+func (s *Store) LatestOperationOutcomes(service string, actions []string) ([]EventRecord, error) {
+	if len(actions) == 0 {
+		return nil, nil
+	}
+	args := make([]any, 0, len(actions)+1)
+	if service != "" {
+		args = append(args, service)
+	}
+	for _, action := range actions {
+		args = append(args, action)
+	}
+	rows, err := s.reads().QueryContext(s.sqlCtx(), latestOperationOutcomesQuery(service != "", len(actions)), args...)
+	if err != nil {
+		return nil, fmt.Errorf("load latest operation outcomes: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	return scanEventRows(rows)
+}
+
+// latestOperationOutcomesQuery selects each service's newest row among those
+// naming one of n actions with a status, optionally for one service.
+func latestOperationOutcomesQuery(oneService bool, n int) string {
+	target := `service <> ''`
+	if oneService {
+		target = `service = ?`
+	}
+	placeholders := strings.TrimSuffix(strings.Repeat("?, ", n), ", ")
+	return eventSelectPrefix + ` WHERE id IN (
+		SELECT MAX(id) FROM event_log
+		 WHERE status <> '' AND ` + target + ` AND action IN (` + placeholders + `)
+		 GROUP BY service);`
+}
+
+// IsOutcomeOf reports whether r records the outcome of one of actions on a
+// service: the rows LatestOperationOutcomes selects.
+func (r EventRecord) IsOutcomeOf(actions []string) bool {
+	return r.Service != "" && r.Status != "" && slices.Contains(actions, r.Action)
 }
 
 // EventColumnService and EventColumnApp name the event_log dimension a

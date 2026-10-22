@@ -42,6 +42,9 @@ type ServiceMetricSampler struct {
 	store   ServiceMetricStore
 	prev    map[string]serviceMetricCounters
 	samples map[string][]serviceMetricSample
+	// principals keeps only each service's latest identity evidence, the
+	// input of the dashboard's operation forecast; history never reads it.
+	principals map[string]process.PrincipalIdentity
 }
 
 type serviceMetricCounters struct {
@@ -60,13 +63,14 @@ type serviceMetricSample struct {
 // store, when non-nil, persists CPU, memory and IO buckets across daemon restarts.
 func NewServiceMetricSampler(store ServiceMetricStore) *ServiceMetricSampler {
 	return &ServiceMetricSampler{
-		store:   store,
-		prev:    map[string]serviceMetricCounters{},
-		samples: map[string][]serviceMetricSample{},
+		store:      store,
+		prev:       map[string]serviceMetricCounters{},
+		samples:    map[string][]serviceMetricSample{},
+		principals: map[string]process.PrincipalIdentity{},
 	}
 }
 
-func (s *ServiceMetricSampler) record(ctx context.Context, name string, cur web.ServiceRuntime, at time.Time) {
+func (s *ServiceMetricSampler) record(ctx context.Context, name string, cur web.ServiceRuntime, principal process.PrincipalIdentity, at time.Time) {
 	if s == nil {
 		return
 	}
@@ -76,12 +80,12 @@ func (s *ServiceMetricSampler) record(ctx context.Context, name string, cur web.
 	cur.At = at.UTC().Format(time.RFC3339)
 
 	s.mu.Lock()
-	cur = s.recordLocked(name, cur, at)
+	cur = s.recordLocked(name, cur, principal, at)
 	s.mu.Unlock()
 	s.recordPersistent(ctx, name, cur, at)
 }
 
-func (s *ServiceMetricSampler) recordLocked(name string, cur web.ServiceRuntime, at time.Time) web.ServiceRuntime {
+func (s *ServiceMetricSampler) recordLocked(name string, cur web.ServiceRuntime, principal process.PrincipalIdentity, at time.Time) web.ServiceRuntime {
 	prev := s.prev[name]
 	if prev.ok && cur.Count > 0 && cur.IORead >= prev.ioRead && cur.IOWrite >= prev.ioWrite {
 		wall := at.Sub(prev.at).Seconds()
@@ -94,6 +98,7 @@ func (s *ServiceMetricSampler) recordLocked(name string, cur web.ServiceRuntime,
 	}
 	s.prev[name] = serviceMetricCounters{at: at, ioRead: cur.IORead, ioWrite: cur.IOWrite, ok: cur.Count > 0}
 	s.samples[name] = append(s.samples[name], serviceMetricSample{at: at, current: cur})
+	s.principals[name] = principal
 	s.trimLocked(name, at.Add(-daemonMetricRetention))
 	return cur
 }
@@ -109,21 +114,22 @@ func (s *ServiceMetricSampler) Forget(name string) {
 	defer s.mu.Unlock()
 	delete(s.samples, name)
 	delete(s.prev, name)
+	delete(s.principals, name)
 }
 
-// LatestWithAt returns the latest worker-published sample and its observation time.
-func (s *ServiceMetricSampler) LatestWithAt(name string) (web.ServiceRuntime, time.Time, bool) {
+// latest returns the latest worker-published sample and the identity evidence
+// of the same cycle.
+func (s *ServiceMetricSampler) latest(name string) (serviceMetricSample, process.PrincipalIdentity, bool) {
 	if s == nil {
-		return web.ServiceRuntime{}, time.Time{}, false
+		return serviceMetricSample{}, process.PrincipalIdentity{}, false
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	samples := s.samples[name]
 	if len(samples) == 0 {
-		return web.ServiceRuntime{}, time.Time{}, false
+		return serviceMetricSample{}, process.PrincipalIdentity{}, false
 	}
-	last := samples[len(samples)-1]
-	return last.current, last.at, true
+	return samples[len(samples)-1], s.principals[name], true
 }
 
 // Series returns the selected historical window for CPU, memory and IO without
@@ -215,11 +221,11 @@ func (b *WebBackend) ServiceRuntime(_ context.Context, name string, since time.D
 	if e == nil || e.noResidentProcess {
 		return web.ServiceRuntimeMetrics{}, false
 	}
-	cur, at, _ := b.latestPublishedServiceRuntime(name, e)
+	last, _, _ := b.latestPublishedServiceRuntime(name, e)
 	if b.serviceMetrics == nil {
-		return web.ServiceRuntimeMetrics{Since: since.String(), Current: cur}, true
+		return web.ServiceRuntimeMetrics{Since: since.String(), Current: last.current}, true
 	}
-	return b.serviceMetrics.Series(name, cur, since, at), true
+	return b.serviceMetrics.Series(name, last.current, since, last.at), true
 }
 
 func (b *WebBackend) decorateServiceRuntime(name string, e *webEntry, svc *web.Service, observation serviceObservation) {
@@ -259,16 +265,16 @@ func applyServiceRuntimeFields(svc *web.Service, cur web.ServiceRuntime) {
 // latestPublishedServiceRuntime returns the last process-tree sample produced
 // by the worker. Runtime history reads use it even when old: At exposes its age,
 // and a web request must never start a second process discovery pass.
-func (b *WebBackend) latestPublishedServiceRuntime(name string, e *webEntry) (web.ServiceRuntime, time.Time, bool) {
+func (b *WebBackend) latestPublishedServiceRuntime(name string, e *webEntry) (serviceMetricSample, process.PrincipalIdentity, bool) {
 	if e == nil || e.disabled || e.noResidentProcess || b.serviceMetrics == nil {
-		return web.ServiceRuntime{}, time.Time{}, false
+		return serviceMetricSample{}, process.PrincipalIdentity{}, false
 	}
-	cur, at, ok := b.serviceMetrics.LatestWithAt(name)
+	last, principal, ok := b.serviceMetrics.latest(name)
 	if !ok {
-		return web.ServiceRuntime{}, time.Time{}, false
+		return serviceMetricSample{}, process.PrincipalIdentity{}, false
 	}
-	attachLiveTotals(&cur.ProcessTotals, b.live, name)
-	return cur, at, true
+	attachLiveTotals(&last.current.ProcessTotals, b.live, name)
+	return last, principal, true
 }
 
 func (b *WebBackend) probeServiceRuntime(name string, e *webEntry) web.ServiceRuntime {

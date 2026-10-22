@@ -12,19 +12,23 @@ import (
 	"sermo/internal/web"
 )
 
-func TestServiceMetricSamplerLatestWithAt(t *testing.T) {
+func TestServiceMetricSamplerLatest(t *testing.T) {
 	s := NewServiceMetricSampler(nil)
 	t0 := time.Date(2026, 6, 16, 12, 0, 0, 0, time.UTC)
 	s.record(t.Context(), "web", web.ServiceRuntime{
 		At:    t0.UTC().Format(time.RFC3339),
 		Count: 2, RSS: 4096,
-	}, t0.UTC())
-	if _, _, ok := s.LatestWithAt("missing"); ok {
-		t.Fatal("LatestWithAt on missing service should be false")
+	}, process.PrincipalIdentity{Attributed: true}, t0.UTC())
+	if _, _, ok := s.latest("missing"); ok {
+		t.Fatal("latest on missing service should be false")
 	}
-	cur, at, ok := s.LatestWithAt("web")
-	if !ok || at != t0 || cur.Count != 2 || cur.RSS != 4096 {
-		t.Fatalf("LatestWithAt = %+v at=%v ok=%v", cur, at, ok)
+	last, principal, ok := s.latest("web")
+	if !ok || last.at != t0 || last.current.Count != 2 || last.current.RSS != 4096 || !principal.Attributed {
+		t.Fatalf("latest = %+v principal=%+v ok=%v", last, principal, ok)
+	}
+	s.Forget("web")
+	if _, principal, ok := s.latest("web"); ok || principal.Attributed {
+		t.Fatalf("forgotten service kept principal=%+v ok=%v", principal, ok)
 	}
 }
 
@@ -39,7 +43,7 @@ func TestWebBackendListRuntimeUsesPublishedSample(t *testing.T) {
 		StartedAt:     t0.Add(-time.Hour).UTC().Format(time.RFC3339),
 		UptimeSeconds: 3600,
 		Count:         3, RSS: 8192, CPU: 12.5, HasCPU: true,
-	}, t0.UTC())
+	}, process.PrincipalIdentity{}, t0.UTC())
 	b := &WebBackend{
 		order: []string{"web"},
 		entries: map[string]*webEntry{
@@ -98,7 +102,7 @@ func TestWebBackendRuntimeSeriesNeverDiscoversProcesses(t *testing.T) {
 				sampler.record(t.Context(), "web", web.ServiceRuntime{
 					At:    t0.Format(time.RFC3339),
 					Count: 1, RSS: tt.wantRSS,
-				}, t0)
+				}, process.PrincipalIdentity{}, t0)
 			}
 			b := &WebBackend{
 				entries: map[string]*webEntry{
@@ -137,7 +141,7 @@ func TestWebBackendListRuntimeHiddenWhenServiceStopped(t *testing.T) {
 		StartedAt:     t0.Add(-time.Hour).UTC().Format(time.RFC3339),
 		UptimeSeconds: 3600,
 		Count:         2, RSS: 8192, CPU: 12.5, HasCPU: true,
-	}, t0.UTC())
+	}, process.PrincipalIdentity{}, t0.UTC())
 	b := &WebBackend{
 		order: []string{"lldpd"},
 		entries: map[string]*webEntry{

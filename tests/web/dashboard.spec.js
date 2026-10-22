@@ -1115,6 +1115,293 @@ test("stop confirms without offering engine preflight", async ({ page }) => {
   await page.keyboard.press("Escape");
 });
 
+// Operation outcome marks: the engine's verdict on a service action stays on
+// its button — amber when it refused before acting, red when it failed — until
+// a newer outcome supersedes it, pulsing only when it first appears.
+const selectorsMessage = "active service has no process matching configured exact exe/user selectors";
+
+// serveWeb answers the dashboard and the web service detail with fields merged
+// into the web service; a function is read on every request, so a test can
+// change what the next poll sees.
+async function serveWeb(page, fields) {
+  const current = () => (typeof fields === "function" ? fields() : fields);
+  await page.route("**/api/dashboard**", (route) => {
+    const body = JSON.parse(JSON.stringify(dashboard));
+    Object.assign(body.services.find((s) => s.name === "web"), current());
+    return route.fulfill({ json: body });
+  });
+  await page.route("**/api/services/web", (route) => route.fulfill({ json: { ...serviceDetail("web"), ...current() } }));
+}
+
+// serveExtraService adds one service to the dashboard; a function is read on
+// every request, and one that returns null leaves the service out.
+async function serveExtraService(page, service) {
+  await page.route("**/api/dashboard**", (route) => {
+    const body = JSON.parse(JSON.stringify(dashboard));
+    const extra = typeof service === "function" ? service() : service;
+    if (extra) body.services.push(extra);
+    return route.fulfill({ json: body });
+  });
+}
+
+function serviceButton(page, name, action) {
+  return page.locator(`#svc-row-${name} [data-service-action="${action}"]`);
+}
+
+function webButton(page, action) {
+  return serviceButton(page, "web", action);
+}
+
+function webOperation(id, status, message, action = "restart") {
+  return {
+    id, time: new Date(Date.now() - 5 * 60 * 1000).toISOString(), service: "web",
+    kind: status === "blocked" ? "suppressed" : "action", action, status, message,
+  };
+}
+
+async function confirmWebRestart(page) {
+  await webButton(page, "restart").click();
+  await expect(page.locator("#action-confirm")).toBeVisible();
+  await page.locator("#confirm-action-btn").click();
+}
+
+// outcomeHint matches a mark's hint text; its age is whatever the canonical
+// duration formatter makes of a few minutes.
+function outcomeHint(prefix, message) {
+  const escape = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`^${escape(prefix)} (\\S+ ago|just now): ${escape(message)}$`);
+}
+
+async function horizontalOverflow(page) {
+  return page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+}
+
+async function refreshDashboard(page) {
+  const response = page.waitForResponse((res) => new URL(res.url()).pathname === "/api/dashboard");
+  await page.locator("#refresh-now").click();
+  await response;
+  await page.evaluate(() => new Promise((resolve) => { requestAnimationFrame(() => resolve()); }));
+}
+
+test("a blocked restart reads amber and stays on its button", async ({ page }, testInfo) => {
+  let outcome = null;
+  await serveWeb(page, () => ({ last_operation: outcome }));
+  await page.route("**/api/services/web/restart**", async (route) => {
+    outcome = { ...webOperation(41, "blocked", selectorsMessage), time: new Date().toISOString() };
+    await route.fulfill({ status: 409, json: { ok: false, status: "blocked", message: selectorsMessage } });
+  });
+  await confirmWebRestart(page);
+
+  await expect(page.locator("#err")).toHaveClass(/status-warn/);
+  await expect(page.locator("#err")).toContainText(`restart web blocked: ${selectorsMessage}`);
+  await expect(page.locator("#op-live .op-dot")).toHaveClass(/blocked/);
+  await expect(page.locator("#op-live")).toContainText("blocked");
+  await expect(page.locator("#svc-web-busy")).toContainText("restart blocked");
+  await expect(page.locator("#svc-web-busy")).toHaveClass(/inactive/);
+
+  const restart = webButton(page, "restart");
+  await expect(restart).toHaveClass(/outcome-blocked/);
+  await expect(restart).toHaveClass(/outcome-pulse/);
+  await expect(restart.locator(".outcome-badge")).toHaveText("!");
+  await expect(restart).toBeEnabled();
+  await expect(restart).toHaveAttribute("aria-describedby", /svc-web-restart-outcome/);
+  await expect(restart).toHaveAttribute("title", /Last restart blocked/);
+  await expect(page.locator("#svc-web-restart-outcome")).toHaveText(outcomeHint("Last restart blocked", selectorsMessage));
+  await expect(webButton(page, "stop")).not.toHaveClass(/outcome-/);
+
+  const results = await new AxeBuilder({ page })
+    .include("#svc-row-web")
+    .withTags(["wcag2a", "wcag2aa", "wcag22aa"])
+    .analyze();
+  expect(results.violations).toEqual([]);
+  expect(await horizontalOverflow(page)).toBeLessThanOrEqual(1);
+  if (testInfo.project.name === "mobile") {
+    await page.setViewportSize({ width: 400, height: 915 });
+    expect(await horizontalOverflow(page)).toBeLessThanOrEqual(1);
+  }
+
+  // The pulse ends on its own; a later poll keeps the mark steady.
+  await expect(restart).not.toHaveClass(/outcome-pulse/, { timeout: 5000 });
+  await refreshDashboard(page);
+  await expect(restart).toHaveClass(/outcome-blocked/);
+  expect(await restart.getAttribute("class")).not.toMatch(/outcome-pulse/);
+});
+
+test("a restart that left orphans reads red and keeps a failed mark", async ({ page }) => {
+  const message = "residual process 4242 (/usr/sbin/webserverd, www) survived the stop";
+  let outcome = null;
+  await serveWeb(page, () => ({ last_operation: outcome }));
+  await page.route("**/api/services/web/restart**", async (route) => {
+    outcome = webOperation(42, "orphan_processes", message);
+    await route.fulfill({ status: 409, json: { ok: false, status: "orphan_processes", message } });
+  });
+  await confirmWebRestart(page);
+
+  await expect(page.locator("#err")).toHaveClass(/status-err/);
+  await expect(page.locator("#err")).toContainText(`restart web: ${message}`);
+  await expect(page.locator("#op-live .op-dot")).toHaveClass(/failed/);
+  await expect(page.locator("#svc-web-busy")).toHaveClass(/bad/);
+
+  const restart = webButton(page, "restart");
+  await expect(restart).toHaveClass(/outcome-failed/);
+  await expect(restart.locator(".outcome-badge")).toHaveText("✕");
+  await expect(page.locator("#svc-web-restart-outcome")).toHaveText(outcomeHint("Last restart failed (orphan_processes)", message));
+});
+
+test("a newer successful operation clears the outcome mark", async ({ page }) => {
+  let outcome = webOperation(43, "blocked", selectorsMessage);
+  await serveWeb(page, () => ({ last_operation: outcome }));
+  await page.reload();
+  const restart = webButton(page, "restart");
+  await expect(restart).toHaveClass(/outcome-blocked/);
+
+  outcome = { ...webOperation(44, "ok", "restarted"), time: new Date().toISOString() };
+  await refreshDashboard(page);
+  await expect(restart).not.toHaveClass(/outcome-/);
+  await expect(page.locator("#svc-row-web .outcome-badge")).toHaveCount(0);
+  await expect(page.locator("#svc-web-restart-outcome")).toHaveCount(0);
+});
+
+test("an outcome whose button left the row marks the power button", async ({ page }) => {
+  await serveWeb(page, {
+    status: "failed", state: "failed",
+    last_operation: webOperation(45, "postflight_failed", "unit did not stop in time", "stop"),
+  });
+  await page.reload();
+  // A failed service's power button is restart; the failed stop names itself.
+  await expect(webButton(page, "restart")).toHaveClass(/outcome-failed/);
+  await expect(page.locator("#svc-web-restart-outcome")).toHaveText(outcomeHint("Last stop failed (postflight_failed)", "unit did not stop in time"));
+  await expect(page.locator("#svc-row-web .outcome-badge")).toHaveCount(1);
+});
+
+test("an operation forecast marks only the restart a running service shows", async ({ page }) => {
+  await serveWeb(page, { operation_forecast: [
+    { action: "restart", status: "blocked", message: selectorsMessage },
+    { action: "start", status: "blocked", message: selectorsMessage },
+  ] });
+  await page.reload();
+
+  await expect(webButton(page, "restart")).toHaveClass(/outcome-blocked/);
+  await expect(page.locator("#svc-web-restart-outcome")).toHaveText(`Restart would be blocked: ${selectorsMessage}`);
+  await expect(webButton(page, "stop")).not.toHaveClass(/outcome-/);
+  await expect(page.locator("#svc-row-web .outcome-badge")).toHaveCount(1);
+
+  await page.locator("#svc-row-web .row-toggle").click();
+  await expect(page.locator('[data-service-detail="web"] .runtime-grid')).toContainText(`Restart, start would be blocked: ${selectorsMessage}`);
+});
+
+test("forecast entries mark each action with its own outcome and reason", async ({ page }) => {
+  const replaced = "service process runs a binary replaced on disk; restart it to verify the new one";
+  await serveWeb(page, { operation_forecast: [
+    { action: "restart", status: "blocked", message: selectorsMessage },
+    { action: "start", status: "blocked", message: selectorsMessage },
+    { action: "reload", status: "failed", message: replaced },
+  ] });
+  await page.reload();
+
+  const restart = webButton(page, "restart");
+  const reload = webButton(page, "reload");
+  await expect(restart).toHaveClass(/outcome-blocked/);
+  await expect(restart.locator(".outcome-badge")).toHaveText("!");
+  await expect(reload).toHaveClass(/outcome-failed/);
+  await expect(reload.locator(".outcome-badge")).toHaveText("✕");
+  await expect(reload).toBeEnabled();
+  await expect(page.locator("#svc-web-reload-outcome")).toHaveText(`Reload would fail: ${replaced}`);
+  await expect(reload).toHaveAttribute("aria-describedby", /svc-web-reload-outcome/);
+  await expect(webButton(page, "stop")).not.toHaveClass(/outcome-/);
+  await expect(page.locator("#svc-row-web .outcome-badge")).toHaveCount(2);
+
+  await page.locator("#svc-row-web .row-toggle").click();
+  const grid = page.locator('[data-service-detail="web"] .runtime-grid');
+  await expect(grid.locator(".inactive", { hasText: `Restart, start would be blocked: ${selectorsMessage}` })).toHaveCount(1);
+  await expect(grid.locator(".bad", { hasText: `Reload would fail: ${replaced}` })).toHaveCount(1);
+});
+
+test("reduced motion keeps the outcome mark without the pulse", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await serveWeb(page, { last_operation: webOperation(46, "blocked", selectorsMessage) });
+  const pulse = page.evaluate(() => new Promise((resolve) => {
+    document.addEventListener("animationend", (e) => {
+      if (e.animationName === "outcome-pulse") resolve(e.elapsedTime);
+    });
+  }));
+  await refreshDashboard(page);
+
+  // The pulse ran, cut to nothing, and left the steady ring and badge.
+  expect(await pulse).toBeLessThan(0.01);
+  const restart = webButton(page, "restart");
+  await expect(restart).toHaveClass(/outcome-blocked/);
+  await expect(restart).not.toHaveClass(/outcome-pulse/);
+  await expect(restart.locator(".outcome-badge")).toBeVisible();
+  expect(await restart.evaluate((el) => getComputedStyle(el).boxShadow)).toContain("inset");
+});
+
+test("an outcome already recorded when the page loads does not pulse", async ({ page }) => {
+  await serveWeb(page, { last_operation: webOperation(47, "blocked", selectorsMessage) });
+  await page.reload();
+
+  const restart = webButton(page, "restart");
+  await expect(restart).toHaveClass(/outcome-blocked/);
+  expect(await restart.getAttribute("class")).not.toMatch(/outcome-pulse/);
+  await refreshDashboard(page);
+  expect(await restart.getAttribute("class")).not.toMatch(/outcome-pulse/);
+
+  // Touch has no tooltip: the expansion spells the outcome out.
+  await page.locator("#svc-row-web .row-toggle").click();
+  const grid = page.locator('[data-service-detail="web"] .runtime-grid');
+  await expect(grid).toContainText("Last operation");
+  await expect(grid).toContainText(`restart blocked ${selectorsMessage}`);
+  await expect(grid.locator(".activity-time.activity-warn")).toHaveCount(1);
+});
+
+test("a service a later snapshot adds keeps its old outcome still and pulses a newer one", async ({ page }) => {
+  let late = null;
+  await serveExtraService(page, () => late);
+  const lateOperation = (id) => ({ ...webOperation(id, "blocked", selectorsMessage), service: "late" });
+  // The first snapshot (beforeEach) had no such service; a config reload adds
+  // it already carrying an outcome recorded before this page saw it.
+  late = {
+    name: "late", display_name: "Late service", category: "service", enabled: true,
+    monitored: true, status: "active", state: "active", last_operation: lateOperation(60),
+  };
+  await refreshDashboard(page);
+  const restart = serviceButton(page, "late", "restart");
+  await expect(restart).toHaveClass(/outcome-blocked/);
+  await expect(restart.locator(".outcome-badge")).toHaveText("!");
+  expect(await restart.getAttribute("class")).not.toMatch(/outcome-pulse/);
+
+  late = { ...late, last_operation: { ...lateOperation(61), time: new Date().toISOString() } };
+  await refreshDashboard(page);
+  await expect(restart).toHaveClass(/outcome-pulse/);
+});
+
+test("a pressed resume toggle shows its failed outcome border, not the paused one", async ({ page }) => {
+  await serveExtraService(page, {
+    name: "vm-paused", display_name: "VM vm-paused", category: "virtual-machine", backend: "libvirt", unit: "vm-paused",
+    enabled: true, monitored: false, status: "paused", state: "paused", can_reload: false, can_pause: true,
+    last_operation: { ...webOperation(62, "failed", "domain did not resume", "resume"), service: "vm-paused" },
+  });
+  await page.reload();
+
+  const resume = serviceButton(page, "vm-paused", "resume");
+  await expect(resume).toHaveAttribute("aria-pressed", "true");
+  await expect(resume).toHaveClass(/outcome-failed/);
+  await expect(resume.locator(".outcome-badge")).toHaveText("✕");
+  const colors = await resume.evaluate((el) => {
+    const token = (name) => {
+      const probe = document.createElement("span");
+      probe.style.color = `var(${name})`;
+      document.body.append(probe);
+      const color = getComputedStyle(probe).color;
+      probe.remove();
+      return color;
+    };
+    return { border: getComputedStyle(el).borderTopColor, crit: token("--crit"), paused: token("--paused") };
+  });
+  expect(colors.border).toBe(colors.crit);
+  expect(colors.border).not.toBe(colors.paused);
+});
+
 async function reloadBehindConfirmation(page) {
   await page.route("**/api/dashboard**", (route) => route.fulfill({ json: {
     ...dashboard, generation: 8, daemon: { ...dashboard.daemon, hostname: "reloaded" },

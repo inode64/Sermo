@@ -30,6 +30,9 @@ type EventStore interface {
 	// event_log column naming that dimension (state.EventColumnService and
 	// friends).
 	RecentEventsForColumn(column, name string, limit int) ([]state.EventRecord, error)
+	// LatestOperationOutcomes returns each service's newest outcome of one of
+	// actions, or only the named service's.
+	LatestOperationOutcomes(service string, actions []string) ([]state.EventRecord, error)
 	PruneEvents(ctx context.Context, before time.Time) (int64, error)
 }
 
@@ -173,6 +176,37 @@ func (l *EventLog) Recent(service string, limit int) []LoggedEvent {
 		l.reportStoreError(err)
 	}
 	return l.recentFiltered(func(LoggedEvent) bool { return true }, limit)
+}
+
+// LatestOperationOutcomes returns each service's newest outcome of one of
+// actions, keyed by service; a non-empty service limits it to that one. Like
+// Recent it reads the store first, so an operation sermoctl ran in its own
+// process counts; without a store, or when the query fails, it falls back to
+// the ring.
+func (l *EventLog) LatestOperationOutcomes(service string, actions []string) map[string]LoggedEvent {
+	if l == nil {
+		return nil
+	}
+	out := map[string]LoggedEvent{}
+	if l.store != nil {
+		records, err := l.store.LatestOperationOutcomes(service, actions)
+		if err == nil {
+			for _, rec := range records {
+				out[rec.Service] = loggedEventFromRecord(rec)
+			}
+			return out
+		}
+		l.reportStoreError(err)
+	}
+	isOutcome := func(e LoggedEvent) bool {
+		return (service == "" || e.Service == service) && eventRecordFromLogged(e).IsOutcomeOf(actions)
+	}
+	for _, e := range l.recentFiltered(isOutcome, 0) {
+		if _, newer := out[e.Service]; !newer {
+			out[e.Service] = e
+		}
+	}
+	return out
 }
 
 // recentForTarget reads one target's events from the store, falling back to the

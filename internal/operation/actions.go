@@ -6,8 +6,18 @@ import "sermo/internal/rules"
 // engine. Repair and pause are intentionally included here but not in rules:
 // they are manual-only actions and can never be emitted by remediation rules.
 func IsServiceAction(action string) bool {
-	t := rules.ActionType(action)
-	return t.IsOperation() || t.IsManualOperation()
+	_, ok := lifecyclePlan(action)
+	return ok
+}
+
+// ServiceActions lists every service lifecycle action, in the guard
+// vocabulary's order.
+func ServiceActions() []string {
+	out := make([]string, len(lifecyclePlans))
+	for i, p := range lifecyclePlans {
+		out[i] = p.action
+	}
+	return out
 }
 
 // CascadesAlsoApply reports whether an action applies to a service's

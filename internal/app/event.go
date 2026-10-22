@@ -218,12 +218,13 @@ func eventFromOperationResult(r operation.Result) Event {
 // CascadeEventRecord converts an additional target's final cascade outcome into
 // the same relationship event emitted by daemon and web operations.
 func CascadeEventRecord(root string, r operation.Result) state.EventRecord {
-	return eventRecordFromLogged(LoggedEvent{
-		Service: r.Service,
-		Kind:    eventKindCascade,
-		Action:  r.Action,
-		Status:  string(r.Status),
-		Message: "cascade from " + root})
+	return eventRecordFromLogged(LoggedEvent{Event: cascadeEvent(root, r)})
+}
+
+// cascadeEvent is the relationship event recording an additional target's
+// final outcome in root's cascade.
+func cascadeEvent(root string, r operation.Result) Event {
+	return Event{Service: r.Service, Kind: eventKindCascade, Action: r.Action, Status: string(r.Status), Message: "cascade from " + root}
 }
 
 // eventKindForResult maps an operation result to the event-log kind. Successful

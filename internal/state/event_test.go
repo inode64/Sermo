@@ -118,3 +118,64 @@ func TestRecentEventsForServiceUsesTheServiceIDIndex(t *testing.T) {
 		t.Fatalf("query plan = %q, want event_log_service_id_idx without a sort", plan)
 	}
 }
+
+// The newest operation outcome per service survives later events of other
+// kinds and ignores rows that record no outcome.
+func TestLatestOperationOutcomes(t *testing.T) {
+	s := openTemp(t)
+	at := time.Date(2026, 10, 22, 10, 0, 0, 0, time.UTC)
+	rows := []EventRecord{
+		{Service: "alloy", Kind: "action", Action: "restart", Status: "ok"},
+		{Service: "alloy", Kind: "suppressed", Action: "restart", Status: "blocked", Message: "identity"},
+		{Service: "alloy", Kind: "firing", Message: "check service"},
+		{Service: "alloy", Kind: "dry-run", Rule: "ready", Action: "restart", Message: "would restart"},
+		{Service: "alloy", Kind: "suppressed", Rule: "ready", Action: "restart", Message: "cooldown"},
+		{Service: "alloy", Kind: "warning", Action: "release_lock", Status: "ok"},
+		{Service: "web", Kind: "error", Action: "stop", Status: "orphan_processes"},
+		{Service: "web", Kind: "action", Action: "start", Status: "ok"},
+		{Watch: "storage-root", Kind: "error", Action: "restart", Status: "failed"},
+		{Service: "db", Kind: "firing", Message: "never operated"},
+	}
+	for i, row := range rows {
+		row.At = at.Add(time.Duration(i) * time.Second)
+		if _, err := s.RecordEvent(row); err != nil {
+			t.Fatal(err)
+		}
+	}
+	actions := []string{"restart", "start", "stop"}
+	got, err := s.LatestOperationOutcomes("", actions)
+	if err != nil {
+		t.Fatal(err)
+	}
+	byService := map[string]EventRecord{}
+	for _, rec := range got {
+		byService[rec.Service] = rec
+	}
+	if len(byService) != 2 || byService["alloy"].Status != "blocked" || byService["alloy"].Message != "identity" ||
+		byService["web"].Action != "start" || byService["web"].Status != "ok" {
+		t.Fatalf("latest outcomes = %+v", got)
+	}
+	one, err := s.LatestOperationOutcomes("web", actions)
+	if err != nil || len(one) != 1 || one[0].Service != "web" || one[0].Action != "start" {
+		t.Fatalf("one service = %+v, %v", one, err)
+	}
+	if none, err := s.LatestOperationOutcomes("", nil); err != nil || none != nil {
+		t.Fatalf("no actions = %+v, %v", none, err)
+	}
+}
+
+func TestLatestOperationOutcomesUsesTheOutcomeIndex(t *testing.T) {
+	s := openTemp(t)
+	for _, tc := range []struct {
+		oneService bool
+		args       []any
+	}{
+		{args: []any{"restart", "stop"}},
+		{oneService: true, args: []any{"web", "restart", "stop"}},
+	} {
+		plan := queryPlan(t, s, latestOperationOutcomesQuery(tc.oneService, 2), tc.args...)
+		if !strings.Contains(plan, "event_log_service_outcome_idx") || containsAny(plan, "SCAN event_log;", "TEMP B-TREE") {
+			t.Fatalf("one service=%v: query plan = %q, want the partial outcome index", tc.oneService, plan)
+		}
+	}
+}

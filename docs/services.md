@@ -1053,9 +1053,11 @@ also_apply: [nginx, varnish]
 - **Best-effort & loop-safe**: a blocked target is retried once; if it remains
   blocked, it is reported by a non-fatal `cascade` event. A failed or unresolved
   target is also reported and makes the overall cascade result fail, while the
-  remaining targets are still attempted. Cycles are cut by a visited set. These
-  ordering, retry and result rules are identical for remediation, CLI and Web UI
-  actions.
+  remaining targets are still attempted. A primary that succeeded on its own
+  then records that failed result (`cascade target failed`) after its own
+  success event, so its dashboard buttons show the cascade failed. Cycles are
+  cut by a visited set. These ordering, retry and result rules are identical
+  for remediation, CLI and Web UI actions.
 - Entries must be configured services and must not include the service itself.
 - `sermoctl start|stop|restart <svc> --no-cascade` acts on exactly one service.
   Without it, text output adds one `cascade <target>: <action> <status>` line
@@ -2728,8 +2730,10 @@ systemd and `main-openrc` (`user: ${openrc_user}`, default `root`, OpenRC's
 `command_user`) under OpenRC — with `stop_policy.force_kill: auto`, so the stop
 phase signals a residual Alloy it can verify and never a process it cannot
 name. Override the variable of your backend when the host runs Alloy as another
-user; an exact selector that never matches a live process blocks every
-operation. Any other survivor the kernel still places in the unit's own control
+user (a systemd drop-in with `User=root`, for example, needs `variables.user:
+root`); an exact selector that never matches a live process blocks restart and
+start (a reload still runs, then fails its health check), and the dashboard
+marks Restart amber and Reload red until it matches. Any other survivor the kernel still places in the unit's own control
 group receives `SIGTERM`, and `SIGKILL` through `force_kill: auto`; one without
 that proof stays `orphan_processes` and the restart does not start a second
 Alloy beside it.

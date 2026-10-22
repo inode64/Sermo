@@ -352,6 +352,21 @@ func (s *stubEventStore) RecentEventsForColumn(column, name string, limit int) (
 	}, limit), nil
 }
 
+func (s *stubEventStore) LatestOperationOutcomes(service string, actions []string) ([]state.EventRecord, error) {
+	s.queries = append(s.queries, "outcomes")
+	if s.failFor == "outcomes" {
+		return nil, errors.New("store unavailable")
+	}
+	seen := map[string]bool{}
+	return s.newest(func(r state.EventRecord) bool {
+		if !r.IsOutcomeOf(actions) || service != "" && r.Service != service || seen[r.Service] {
+			return false
+		}
+		seen[r.Service] = true
+		return true
+	}, 0), nil
+}
+
 func (s *stubEventStore) newest(match func(state.EventRecord) bool, limit int) []state.EventRecord {
 	var out []state.EventRecord
 	for _, v := range slices.Backward(s.rows) {
