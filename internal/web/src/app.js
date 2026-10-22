@@ -92,6 +92,7 @@ const storageBoolTrue = "1";
 const storageBoolFalse = "0";
 const domBoolTrue = "true";
 const domBoolFalse = "false";
+const domEventAnimationEnd = "animationend";
 const domEventChange = "change";
 const domEventClick = "click";
 const domEventClose = "close";
@@ -217,6 +218,8 @@ const eventKindPanicSuppressed = "panic-suppressed";
 const eventKindRecovered = "recovered";
 const eventKindReload = "reload";
 const eventKindSuppressed = "suppressed";
+const eventStatusOK = "ok";
+const eventStatusBlocked = "blocked";
 const eventStatusPreflightFailed = "preflight_failed";
 const eventStatusPostflightFailed = "postflight_failed";
 const eventStatusOrphanProcesses = "orphan_processes";
@@ -232,6 +235,22 @@ const serviceCascadeActions = [actionStart, actionStop, actionRestart];
 // browser tracks in liveOps and the ones a named lock blocks.
 const serviceTrackedActions = [actionStart, actionStop, actionRestart, actionReload, actionPause, actionResume, actionRepair];
 const activityCriticalStatuses = [targetStateFailed, mountStateError, eventStatusPreflightFailed, eventStatusPostflightFailed, eventStatusOrphanProcesses];
+// operationOutcomeStyles is the one presentation of an operation outcome
+// (operationOutcome): the class of its state text (op card, row note, detail
+// status), its button mark's badge, its status-line tone and how a forecast of
+// it reads. "" is an operation still running, amber like a blocked one.
+const operationOutcomeStyles = {
+  "": { cls: "inactive", badge: "", tone: "", forecast: "" },
+  [eventStatusOK]: { cls: targetStateOK, badge: "", tone: feedbackStatusOK, forecast: "" },
+  [eventStatusBlocked]: { cls: "inactive", badge: "!", tone: feedbackStatusWarn, forecast: "would be blocked" },
+  [targetStateFailed]: { cls: "bad", badge: "✕", tone: feedbackStatusErr, forecast: "would fail" },
+};
+// An outcome mark pulses when it first appears: the class (and its CSS
+// animation, same name) runs three .8s iterations, under the 5s WCAG 2.2.2
+// bound for unrequested motion, and a row rendered after this window does not
+// carry it.
+const outcomePulseClass = "outcome-pulse";
+const outcomePulseMs = 2400;
 const activityCriticalKinds = [mountStateError, eventKindHookFailed, eventKindNotifyFailed, eventKindExpandFailed, eventKindKillFailed, eventKindMakeStepFailed, eventKindRemountFailed];
 const activityWarningKinds = [actionAlert, eventKindFiring, eventKindSuppressed, eventKindPanicSuppressed, eventKindNotifySuppressed, eventKindExpandSkipped, eventKindMakeStepSkipped, eventKindRemountSkipped];
 const activityOKKinds = [eventKindAction, eventKindCascade, eventKindHook, eventKindNotify, eventKindRecovered, actionExpand, eventKindKill, eventKindMakeStep, eventKindRemount];
@@ -764,8 +783,13 @@ async function actionResult(res) {
   return { body, failed: !res.ok || body.ok === false, status: res.status };
 }
 
+// actionError is the thrown form of a refused action. resultStatus keeps the
+// body's operation result status, so a service action can tell a blocked
+// operation from a failed one.
 function actionError(body, status) {
-  return new Error(body.message || ("HTTP " + status));
+  const err = new Error(body.message || ("HTTP " + status));
+  err.resultStatus = body.status || "";
+  return err;
 }
 
 async function jsonOrThrow(res) {
@@ -1319,12 +1343,27 @@ function activitySeverity(kind, status, severity) {
     return severity === targetStateWarning ? healthStatusWarningShort : healthStatusInfo;
   }
   if (activityCriticalStatuses.includes(st)) return healthStatusCriticalShort;
-  if (st === policyStateBlocked) return healthStatusWarningShort;
+  if (st === eventStatusBlocked) return healthStatusWarningShort;
   if (activityCriticalKinds.includes(k)) return healthStatusCriticalShort;
   if (activityWarningKinds.includes(k)) return healthStatusWarningShort;
   if (activityOKKinds.includes(k)) return healthStatusOK;
   if (activityInfoKinds.includes(k)) return healthStatusInfo;
   return healthStatusMuted;
+}
+
+// operationOutcome classifies an operation result status, in step with
+// activitySeverity: ok, blocked (the engine refused before acting) or failed —
+// every other status, the critical ones and any it does not know. "" for none.
+function operationOutcome(status) {
+  const st = String(status || "").toLowerCase();
+  return !st || st === eventStatusOK || st === eventStatusBlocked ? st : targetStateFailed;
+}
+
+// operationMarkOutcome is the outcome a button mark shows: blocked or failed,
+// "" for ok or none.
+function operationMarkOutcome(status) {
+  const outcome = operationOutcome(status);
+  return outcome === eventStatusOK ? "" : outcome;
 }
 
 function activityDateCell(e) {
@@ -1655,6 +1694,11 @@ let dashboardHostname = "";
 // second phase after the aggregate dashboard. Stays false until the first
 // complete snapshot so a reload never flashes a partial/false alert.
 let firstSnapshotDone = false;
+// outcomeMarksSeen keeps, per service name, the newest marking operation
+// outcome (operationSeq) and forecast this page has seen and when their pulse
+// windows close, so a poll, a re-render or a forecast flapping back never
+// replays a pulse.
+const outcomeMarksSeen = new Map();
 
 function targetStateClass(state) {
   return targetStateClasses[state] || healthStatusMuted;
@@ -2366,7 +2410,7 @@ function opElapsed(op) {
 }
 function opStateText(op) {
   if (!op.finished) return operationStateRunning;
-  return op.ok ? operationStateCompleted : targetStateFailed;
+  return op.outcome === eventStatusOK ? operationStateCompleted : op.outcome;
 }
 function beginOperation(name, action) {
   liveOps.set(name, {
@@ -2374,17 +2418,19 @@ function beginOperation(name, action) {
     action,
     started: Date.now(),
     finished: 0,
-    ok: false,
+    outcome: "",
     message: "operation in progress",
   });
   ensureLiveOpsTimer();
   updateLiveOps();
 }
-function finishOperation(name, ok, message) {
+// finishOperation records an operation's outcome (operationOutcome): ok,
+// blocked or failed.
+function finishOperation(name, outcome, message) {
   const op = liveOps.get(name) || { name, action: "operation", started: Date.now() };
   op.finished = Date.now();
-  op.ok = !!ok;
-  op.message = message || (ok ? operationStateCompleted : targetStateFailed);
+  op.outcome = outcome;
+  op.message = message || opStateText(op);
   liveOps.set(name, op);
   renderOperationLive();
   renderServices();
@@ -2425,13 +2471,12 @@ function renderOperationLive() {
   box.classList.remove("live-hidden");
   const html = ops.map((op) => {
     const state = opStateText(op);
-    const cls = op.finished ? (op.ok ? targetStateOK : targetStateFailed) : "";
     const since = op.finished ? `${fmtDuration(opElapsed(op))} total` : `${fmtDuration(opElapsed(op))} elapsed`;
     return `<div class="op-card">
-      <span class="op-dot ${cls}" aria-hidden="true"></span>
+      <span class="op-dot ${op.outcome}" aria-hidden="true"></span>
       <b>${esc(op.action)}</b>
       <span>${esc(op.name)}</span>
-      <span class="${cls || 'inactive'}">${esc(state)}</span>
+      <span class="${operationOutcomeStyles[op.outcome].cls}">${esc(state)}</span>
       <span class="muted">${esc(since)}</span>
       ${op.message ? `<span class="muted">${esc(op.message)}</span>` : ""}
     </div>`;
@@ -2744,17 +2789,24 @@ function serviceActionDisabledReason(s, action, busy) {
   }
 }
 
-function actionHintID(kind, name, action) {
-  return `${kind}-${name}-${action}-hint`;
+function actionHintID(kind, name, action, suffix = "hint") {
+  return `${kind}-${name}-${action}-${suffix}`;
+}
+
+// hiddenDescription is the visually hidden text an aria-describedby names.
+function hiddenDescription(id, text) {
+  return tpl`<span id="${id}" class="visually-hidden">${text}</span>`;
 }
 
 function actionHint(id, disabled, reason) {
   if (!disabled || !reason) return nothing;
-  return tpl`<span id="${id}" class="visually-hidden">${reason}</span>`;
+  return hiddenDescription(id, reason);
 }
 
-function actionDescribedBy(id, disabled, reason) {
-  return disabled && reason ? id : nothing;
+// actionDescribedBy names the disabled-reason hint and, when the button carries
+// one, its other description (an operation outcome mark).
+function actionDescribedBy(id, disabled, reason, otherID = "") {
+  return [disabled && reason ? id : "", otherID].filter(Boolean).join(" ") || nothing;
 }
 
 function servicePowerAction(s) {
@@ -2771,12 +2823,129 @@ function serviceSuspendAction(s) {
   return (s.status || "").toLowerCase() === targetStatePaused ? actionResume : actionPause;
 }
 
-// serviceSuspendToggle is one button for pause and resume: the glyph stays the
+// serviceSuspendButton is one button for pause and resume: the glyph stays the
 // pause bars and only its pressed state changes, the way a media pause key
 // latches. The accessible name still says which operation a press sends.
-function serviceSuspendToggle(s, busy) {
+function serviceSuspendButton(s) {
   const action = serviceSuspendAction(s);
-  return serviceActionButton(s, action, busy, true, "", { glyphAction: actionPause, extraClass: "suspend-btn", pressed: action === actionResume });
+  return { action, glyphAction: actionPause, extraClass: "suspend-btn", pressed: action === actionResume };
+}
+
+function isSuspendAction(action) { return action === actionPause || action === actionResume; }
+
+// operationSeq orders a service's recorded operation outcomes: event ids only
+// grow; an outcome without one falls back to its time.
+function operationSeq(op) {
+  return Number(op.id) || Date.parse(op.time) || 0;
+}
+
+// markingOperation is the service's last recorded operation when it marks a
+// button (blocked or failed), else null.
+function markingOperation(s) {
+  const op = s && s.last_operation;
+  return op && operationMarkOutcome(op.status) ? op : null;
+}
+
+const noForecasts = Object.freeze([]);
+
+// markingForecasts lists the service's operation forecast entries that mark a
+// button: an action the engine would refuse (blocked) or that would fail.
+function markingForecasts(s) {
+  const forecasts = s && s.operation_forecast;
+  if (!Array.isArray(forecasts) || !forecasts.length) return noForecasts;
+  return forecasts.filter((f) => f && f.action && operationMarkOutcome(f.status));
+}
+
+// noteOperationOutcomes opens the pulse window of an outcome mark the first time
+// a services snapshot carries it: a newer marking operation, or a forecast that
+// differs from the last one seen. Before the first complete snapshot it only
+// records them, so a page reload does not pulse marks that were already there.
+function noteOperationOutcomes(services) {
+  const pulseEnd = firstSnapshotDone ? Date.now() + outcomePulseMs : 0;
+  for (const s of Array.isArray(services) ? services : []) {
+    if (!s || !s.name) continue;
+    let seen = outcomeMarksSeen.get(s.name);
+    // A service seen for the first time (the first snapshot, or one a reload
+    // added) records what it already carries without pulsing it.
+    const pulseUntil = seen ? pulseEnd : 0;
+    if (!seen) {
+      seen = { opSeq: 0, opPulseUntil: 0, forecast: "", forecastPulseUntil: 0 };
+      outcomeMarksSeen.set(s.name, seen);
+    }
+    const op = markingOperation(s);
+    if (op && operationSeq(op) > seen.opSeq) {
+      seen.opSeq = operationSeq(op);
+      seen.opPulseUntil = pulseUntil;
+    }
+    const forecastKey = markingForecasts(s).map((f) => `${f.action}:${f.status}#${f.message || ""}`).sort().join("|");
+    if (forecastKey && forecastKey !== seen.forecast) {
+      seen.forecast = forecastKey;
+      seen.forecastPulseUntil = pulseUntil;
+    }
+  }
+}
+
+// lastOperationMarkText says what the last recorded operation did, when and why.
+function lastOperationMarkText(op) {
+  const status = String(op.status || "").toLowerCase();
+  const outcome = operationMarkOutcome(status);
+  const said = outcome === status ? outcome : `${outcome} (${status})`;
+  const age = op.time ? ` ${fmtAge(op.time)}` : "";
+  return `Last ${op.action || "operation"} ${said}${age}${op.message ? ": " + op.message : ""}`;
+}
+
+// operationForecastText is the one sentence for forecast entries that share an
+// outcome and a reason: the actions, what the engine would do with them and why.
+function operationForecastText(outcome, actions, message) {
+  const list = actions.join(", ");
+  return `${list.charAt(0).toUpperCase()}${list.slice(1)} ${operationOutcomeStyles[outcome].forecast}${message ? ": " + message : ""}`;
+}
+
+// operationForecastSentences groups forecast entries by outcome and reason, in
+// their order, into one sentence each.
+function operationForecastSentences(forecasts) {
+  const groups = new Map();
+  for (const f of forecasts) {
+    const outcome = operationMarkOutcome(f.status);
+    const message = f.message || "";
+    const key = `${outcome}#${message}`;
+    if (!groups.has(key)) groups.set(key, { outcome, message, actions: [] });
+    groups.get(key).actions.push(f.action);
+  }
+  return [...groups.values()].map((g) => ({ outcome: g.outcome, text: operationForecastText(g.outcome, g.actions, g.message) }));
+}
+
+// noOperationMarks is the shared result for the common row without a mark;
+// nothing adds to it.
+const noOperationMarks = new Map();
+
+// serviceOperationMarks places a service's operation outcomes on the row's
+// action buttons (shown), as Map(action -> {outcome, text, pulse}). The newest
+// recorded outcome (last_operation, from any source) marks its action's button
+// unless it succeeded; when that button is not in the row (a failed stop on a
+// service now down) the power button carries it, naming the real action. Pause
+// and resume share the suspend toggle. Each forecast entry then marks its
+// action, when shown and not marked yet, with its own outcome. A mark never
+// disables a button: the operator may retry.
+function serviceOperationMarks(s, shown, powerAction) {
+  const op = markingOperation(s);
+  const forecasts = markingForecasts(s);
+  if (!op && !forecasts.length) return noOperationMarks;
+  const seen = outcomeMarksSeen.get(s.name) || {};
+  const now = Date.now();
+  const marks = new Map();
+  if (op) {
+    const suspend = shown.find(isSuspendAction);
+    let target = shown.includes(op.action) ? op.action : powerAction;
+    if (suspend && isSuspendAction(op.action)) target = suspend;
+    marks.set(target, { outcome: operationMarkOutcome(op.status), text: lastOperationMarkText(op), pulse: seen.opPulseUntil > now });
+  }
+  for (const f of forecasts) {
+    if (!shown.includes(f.action) || marks.has(f.action)) continue;
+    const outcome = operationMarkOutcome(f.status);
+    marks.set(f.action, { outcome, text: operationForecastText(outcome, [f.action], f.message), pulse: seen.forecastPulseUntil > now });
+  }
+  return marks;
 }
 
 function expandToggleAriaLabel(name, open, subject) {
@@ -2851,17 +3020,27 @@ async function pressServiceButton(name, button) {
 }
 
 // serviceActionButton renders one service action button. A toggle passes
-// toggle.glyphAction to keep one glyph across the actions it alternates,
-// toggle.pressed for its latched state and toggle.extraClass for its styling.
-function serviceActionButton(s, action, busy, compact = false, title = "", toggle = null) {
+// opts.glyphAction to keep one glyph across the actions it alternates,
+// opts.pressed for its latched state and opts.extraClass for its styling.
+// opts.mark (serviceOperationMarks) outlines the button amber (blocked) or red
+// (failed) with a badge, pulsing while its window is open, and describes it.
+function serviceActionButton(s, action, busy, compact = false, title = "", opts = {}) {
   const label = svcActionAriaLabel(s, action);
-  const glyph = compact ? serviceActionGlyph((toggle && toggle.glyphAction) || action) : "";
+  const glyph = compact ? serviceActionGlyph(opts.glyphAction || action) : "";
   const disabled = serviceActionDisabled(s, action, busy);
   const reason = serviceActionDisabledReason(s, action, busy);
   const hintID = actionHintID("svc", s.name, action);
-  const classes = [compact ? "icon-btn" : "", (toggle && toggle.extraClass) || ""].filter(Boolean).join(" ");
-  const pressed = toggle ? (toggle.pressed ? domBoolTrue : domBoolFalse) : nothing;
-  return tpl`${actionHint(hintID, disabled, reason)}<button class="${classes}" ?disabled=${disabled} data-service="${s.name}" data-service-action="${action}" aria-pressed="${pressed}" title="${title || (compact ? label : nothing)}" aria-label="${label}" aria-describedby="${actionDescribedBy(hintID, disabled, reason)}">${glyph ? tpl`<span aria-hidden="true">${glyph}</span>` : action}</button>`;
+  const mark = opts.mark;
+  const outcomeID = mark ? actionHintID("svc", s.name, action, "outcome") : "";
+  const classes = [
+    compact ? "icon-btn" : "", opts.extraClass || "",
+    mark ? `outcome-${mark.outcome}` : "", mark && mark.pulse ? outcomePulseClass : "",
+  ].filter(Boolean).join(" ");
+  const pressed = "pressed" in opts ? (opts.pressed ? domBoolTrue : domBoolFalse) : nothing;
+  const tip = [title || (compact ? label : ""), mark ? mark.text : ""].filter(Boolean).join("\n");
+  const outcomeHint = mark ? hiddenDescription(outcomeID, mark.text) : nothing;
+  const badge = mark ? tpl`<span class="outcome-badge" aria-hidden="true">${operationOutcomeStyles[mark.outcome].badge}</span>` : nothing;
+  return tpl`${actionHint(hintID, disabled, reason)}${outcomeHint}<button class="${classes}" ?disabled=${disabled} data-service="${s.name}" data-service-action="${action}" aria-pressed="${pressed}" title="${tip || nothing}" aria-label="${label}" aria-describedby="${actionDescribedBy(hintID, disabled, reason, outcomeID)}">${glyph ? tpl`<span aria-hidden="true">${glyph}</span>` : action}${badge}</button>`;
 }
 
 // serviceRowParts builds one service's main and optional expansion <tr> HTML.
@@ -2873,12 +3052,11 @@ function serviceRowParts(s) {
   const op = liveOps.get(s.name);
   const busy = serviceBusy(s);
   const stateParts = serviceStateParts(s);
-  const showSuspend = !!s.can_pause;
   // With a liveOps entry the note names the action and its elapsed time. Without
   // one, operation_active still tells us the engine holds the lock, so the row
   // says so instead of looking idle while it churns.
   const busyText = op
-    ? tpl`<div id="svc-${s.name}-busy" class="svc-busy ${op.finished ? (op.ok ? 'ok' : 'bad') : 'inactive'}" role="status" aria-live="polite">${op.action} ${opStateText(op)} · ${fmtDuration(opElapsed(op))}${op.message ? tpl` <span class="muted">${op.message}</span>` : nothing}</div>`
+    ? tpl`<div id="svc-${s.name}-busy" class="svc-busy ${operationOutcomeStyles[op.outcome].cls}" role="status" aria-live="polite">${op.action} ${opStateText(op)} · ${fmtDuration(opElapsed(op))}${op.message ? tpl` <span class="muted">${op.message}</span>` : nothing}</div>`
     : (s.operation_active
       ? tpl`<div id="svc-${s.name}-busy" class="svc-busy inactive" role="status" aria-live="polite">operation in progress</div>`
       : nothing);
@@ -2891,19 +3069,20 @@ function serviceRowParts(s) {
     const powerTitle = alsoApply
       ? `${svcActionAriaLabel(s, powerAction)}; also applies to: ${s.also_apply.join(", ")}`
       : svcActionAriaLabel(s, powerAction);
-    const overflowActions = [
-      serviceActionButton(s, actionReload, busy, true),
-      s.monitored
-        ? serviceActionButton(s, actionUnmonitor, busy, true)
-        : serviceActionButton(s, actionMonitor, busy, true),
-      serviceRepairAvailable(s) ? serviceActionButton(s, actionRepair, busy, true) : nothing,
-      ...serviceCustomButtons(s, busy),
-    ];
-    actions = me.can_act ? tpl`
-        ${serviceActionButton(s, powerAction, busy, true, powerTitle)}
-        ${powerAction !== actionRestart ? serviceActionButton(s, actionRestart, busy, true) : nothing}
-        ${showSuspend ? serviceSuspendToggle(s, busy) : nothing}
-        ${overflowActions}`
+    // The row's buttons, in order; the operation outcome marks go on the same
+    // list, so a mark only ever lands on a button the row shows. A space after
+    // each keeps a gap wide enough for a neighbour's outcome badge.
+    const buttons = [
+      { action: powerAction, title: powerTitle },
+      powerAction !== actionRestart && { action: actionRestart },
+      s.can_pause && serviceSuspendButton(s),
+      { action: actionReload },
+      { action: s.monitored ? actionUnmonitor : actionMonitor },
+      serviceRepairAvailable(s) && { action: actionRepair },
+    ].filter(Boolean);
+    const marks = serviceOperationMarks(s, buttons.map((b) => b.action), powerAction);
+    actions = me.can_act
+      ? tpl`${buttons.map((b) => tpl`${serviceActionButton(s, b.action, busy, true, b.title, { ...b, mark: marks.get(b.action) })} `)}${serviceCustomButtons(s, busy)}`
       : tpl`<span class="muted">read-only</span>`;
   }
   const key = serviceExpansionKey(s.name);
@@ -2951,7 +3130,10 @@ function finishSvcRender() {
 // render receives fresh data on each refresh; cache it, then render through the
 // active filter. Calls with no argument re-render the cache (filter changes).
 function render(services) {
-  if (services) allServices = services;
+  if (services) {
+    allServices = services;
+    noteOperationOutcomes(services);
+  }
   scheduleGlobalTargetSync();
   renderServices();
   applyHash();
@@ -4976,7 +5158,21 @@ function serviceGraphDetail(d) {
     </div>`;
 }
 
+// lastOperationCell spells out the newest recorded operation outcome — the
+// reason behind a button's mark, readable where its tooltip is not (touch).
+function lastOperationCell(d) {
+  const op = d && d.last_operation;
+  if (!op || !op.time) return tpl`<span class="muted">—</span>`;
+  return tpl`${activityDateCell(op)}<div>${op.action || "operation"} <span class="${operationOutcomeStyles[operationOutcome(op.status)].cls}">${op.status || backendStatusUnknown}</span>${op.message ? tpl` <span class="muted">${op.message}</span>` : nothing}</div>`;
+}
+
+function operationForecastCell(forecasts) {
+  return operationForecastSentences(forecasts).map((sentence, i) =>
+    tpl`${i ? tpl`<br>` : nothing}<span class="${operationOutcomeStyles[sentence.outcome].cls}">${sentence.text}</span>`);
+}
+
 function serviceGeneralDetail(d, processGeneral) {
+  const forecasts = markingForecasts(d);
   // Name leads the grid: the row's own heading was dropped as a repeat of the
   // component, and an expansion scrolled away from its row otherwise has nothing
   // identifying it. Name and State stay put at every width for that reason; every
@@ -4993,6 +5189,8 @@ function serviceGeneralDetail(d, processGeneral) {
       <div><span class="muted">Policy</span><br>${policyCell(d)}</div>
       <div><span class="muted">Locks</span><br>${locksCell(d)}</div>
       <div class="${colDupPhone}"><span class="muted">Last event</span><br>${lastEventCell(d)}</div>
+      <div><span class="muted">Last operation</span><br>${lastOperationCell(d)}</div>
+      ${forecasts.length ? tpl`<div><span class="muted">Operation forecast</span><br>${operationForecastCell(forecasts)}</div>` : nothing}
       <div class="${colDupPhone}"><span class="muted">Strays</span><br>${serviceStraysCell(d)}</div>
       <div><span class="muted">Next remediation</span><br>${nextRemediationCell(d)}</div>
       <div><span class="muted">Remediation</span><br>${renderRemediation(d.remediation)}</div>
@@ -7752,10 +7950,13 @@ async function act(name, action) {
     const q = noCascade ? `?${apiQueryNoCascade}=${queryBoolOne}` : "";
     const res = await fetch(serviceAPI(name, apiActionSuffix(action, q)), targetPostOptions({}, generation));
     const body = await jsonOrThrow(res);
-    if (tracked) finishOperation(name, true, body.message || "operation completed");
+    if (tracked) finishOperation(name, eventStatusOK, body.message || "operation completed");
   } catch (e) {
-    if (tracked) finishOperation(name, false, e.message);
-    setStatus(`${action} ${name}: ${e.message}`, feedbackStatusErr);
+    // A refusal's result status tells a blocked operation (the engine touched
+    // nothing) from a failed one; any other error is a failure.
+    const outcome = operationMarkOutcome(e.resultStatus) || targetStateFailed;
+    if (tracked) finishOperation(name, outcome, e.message);
+    setStatus(`${action} ${name}${outcome === eventStatusBlocked ? " blocked" : ""}: ${e.message}`, operationOutcomeStyles[outcome].tone);
   } finally {
     releaseMonitorToggleAfterRefresh(toggleKey, renderServices);
   }
@@ -9281,6 +9482,13 @@ function initDelegatedHandlers() {
     if (row) rowClick(e, row.dataset.expKey || "");
     const queryRow = closestFrom(e, "[data-db-query-key]");
     if (queryRow) rowClick(e, queryRow.dataset.dbQueryKey || "", toggleDBQueryExpansion);
+  });
+
+  // An outcome mark pulses once: when its animation ends the button drops the
+  // class, and lit leaves it dropped, since the bound class string only changes
+  // when the pulse window closes.
+  document.addEventListener(domEventAnimationEnd, (e) => {
+    if (e.animationName === outcomePulseClass && e.target instanceof Element) e.target.classList.remove(outcomePulseClass);
   });
 
   document.addEventListener(domEventKeydown, (e) => {

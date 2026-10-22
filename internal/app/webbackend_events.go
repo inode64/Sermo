@@ -3,10 +3,10 @@ package app
 import (
 	"context"
 	"slices"
-	"strings"
 	"time"
 
 	"sermo/internal/config"
+	"sermo/internal/operation"
 	"sermo/internal/rules"
 	"sermo/internal/web"
 )
@@ -19,17 +19,10 @@ const (
 	webEventPageMaxScan           = 5000
 )
 
-// serviceOperationActions is the read-only operation action vocabulary.
-var serviceOperationActions = func() []string {
-	actions := strings.Split(rules.RuleActionSummary, ", ")
-	out := make([]string, 0, len(actions))
-	for _, action := range actions {
-		if rules.ActionType(action).IsOperation() {
-			out = append(out, action)
-		}
-	}
-	return out
-}()
+// serviceLifecycleActions is every service lifecycle action, manual-only
+// repair and pause included: the outcomes that mark a service's buttons and
+// the actions an active named lock blocks.
+var serviceLifecycleActions = operation.ServiceActions()
 
 // ActivitySummary returns a rollup of recent events for the dashboard.
 func (b *WebBackend) ActivitySummary(_ context.Context) web.ActivitySummary {
@@ -225,6 +218,22 @@ func loggedEventToWeb(event LoggedEvent) web.Event {
 		Output:   event.Output,
 		Severity: event.Severity.String(),
 	}
+}
+
+// lastOperations returns each service's newest lifecycle operation outcome
+// (last_operation), from the web, sermoctl, a rule or a cascade; a non-empty
+// service limits it to that one.
+func (b *WebBackend) lastOperations(service string) map[string]*web.Event {
+	if b.events == nil {
+		return nil
+	}
+	outcomes := b.events.LatestOperationOutcomes(service, serviceLifecycleActions)
+	out := make(map[string]*web.Event, len(outcomes))
+	for name, event := range outcomes {
+		webEvent := loggedEventToWeb(event)
+		out[name] = &webEvent
+	}
+	return out
 }
 
 func (b *WebBackend) lastServiceEvent(name string) *web.Event {

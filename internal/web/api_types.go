@@ -54,6 +54,14 @@ type Service struct {
 	CanReload        bool            `json:"can_reload"`                  // true when init or native reload support is available
 	CanPause         bool            `json:"can_pause"`                   // true when the backend can freeze the target in place (libvirt domain, Docker container)
 	LastEvent        *Event          `json:"last_event,omitempty"`        // newest service event, when retained
+	// LastOperation is the newest recorded outcome of a lifecycle operation
+	// (start, stop, restart, reload, resume, pause, repair) from the web,
+	// sermoctl, a rule or a cascade. Later events of other kinds never replace it.
+	LastOperation *Event `json:"last_operation,omitempty"`
+	// OperationForecast lists the actions the engine would refuse, or that would
+	// fail their health check, right now, judged from the monitor's latest
+	// process observation. It authorizes nothing.
+	OperationForecast []OperationForecast `json:"operation_forecast,omitempty"`
 
 	// Current process-tree runtime summary. These fields intentionally mirror
 	// ProcessTotals so the service list and detail expansion use the same
@@ -483,6 +491,18 @@ type ActionResult struct {
 	// manual probe of an advisory watch is not announced as a failure while the
 	// dashboard shows it amber.
 	Severity string `json:"severity,omitempty"`
+	// Status is a service operation's result status (ok, blocked,
+	// preflight_failed, postflight_failed, failed, orphan_processes), so the
+	// client can tell a refused action from a failed one. Other actions omit it.
+	Status string `json:"status,omitempty"`
+}
+
+// OperationForecast is the result an action would record on this service: its
+// status (blocked or failed) and the engine's message.
+type OperationForecast struct {
+	Action  string `json:"action"`
+	Status  string `json:"status"`
+	Message string `json:"message"`
 }
 
 // OperateOpts controls optional service-operation behavior from the web API.

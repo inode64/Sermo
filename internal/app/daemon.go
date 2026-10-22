@@ -569,7 +569,10 @@ func buildWorker(ctx context.Context, name, unit string, tree map[string]any, de
 		return discoverer.CountIn(processesForCycle(), user, exe, exeDir)
 	}
 	sampleMetrics := metricSampler(name, tree, collector, observe)
-	liveSample := liveSampler(name, deps.LiveCollector, deps.Live, deps.ServiceMetrics, processesForCycle, observe, deps.Now)
+	principal := func(procs []process.Process) process.PrincipalIdentity {
+		return discoverer.PrincipalIdentityIn(procs, selectors)
+	}
+	liveSample := liveSampler(name, deps.LiveCollector, deps.Live, deps.ServiceMetrics, processesForCycle, principal, observe, deps.Now)
 	if noResident {
 		liveSample = nil
 	}
@@ -1197,7 +1200,7 @@ func processPIDs(procs []process.Process) []int {
 // collector (deps.LiveCollector) so CPU rate deltas never collide with the
 // engine's metric sampling. Returns nil when no live/runtime destination is
 // wired.
-func liveSampler(service string, lc *metrics.Collector, live *LiveMetrics, serviceMetrics *ServiceMetricSampler, procs func() []process.Process, observe func() *metrics.ProcessObservation, now func() time.Time) func(context.Context) {
+func liveSampler(service string, lc *metrics.Collector, live *LiveMetrics, serviceMetrics *ServiceMetricSampler, procs func() []process.Process, principal func([]process.Process) process.PrincipalIdentity, observe func() *metrics.ProcessObservation, now func() time.Time) func(context.Context) {
 	if lc == nil || (live == nil && serviceMetrics == nil) {
 		return nil
 	}
@@ -1234,7 +1237,7 @@ func liveSampler(service string, lc *metrics.Collector, live *LiveMetrics, servi
 		if started, ok := serviceStartTime(procList, lc.Reader, at); ok {
 			cur.StartedAt, cur.UptimeSeconds = serviceRuntimeUptime(started, at)
 		}
-		serviceMetrics.record(ctx, service, cur, at)
+		serviceMetrics.record(ctx, service, cur, principal(procList), at)
 	}
 }
 

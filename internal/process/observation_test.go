@@ -206,3 +206,68 @@ func TestObserveReadsBackendPIDsLive(t *testing.T) {
 		t.Fatalf("operation reads: cached=%d live=%d, want 2 and 2", cached, live)
 	}
 }
+
+// The operation's fresh observation and the monitor's forecast over the
+// cycle's discovery reach the same verdict on the same process table.
+func TestPrincipalIdentityUnverified(t *testing.T) {
+	t.Parallel()
+	asAlloy := Selector{Name: RoleMain, Type: SelectorCommandMatch, Exe: "/usr/bin/alloy", User: "alloy"}
+	asRoot := Selector{Name: RoleMain, Type: SelectorCommandMatch, Exe: "/usr/bin/alloy", User: "root"}
+	alloy := map[int]Identity{100: {PID: 100, UID: 0, PPID: 1, Exe: "/usr/bin/alloy", ExeOK: true}}
+	replacedAlloy := map[int]Identity{100: {PID: 100, UID: 0, PPID: 1, ExePrev: "/usr/bin/alloy"}}
+	main := Selector{Name: RoleMain, Type: SelectorCommandMatch, Exe: "/opt/apache", User: "root"}
+	worker := Selector{Name: "worker", Type: SelectorCommandMatch, Exe: "/opt/apache", User: "apache"}
+	tests := []struct {
+		name       string
+		selectors  []Selector
+		ids        map[int]Identity
+		unverified bool
+	}{
+		{name: "unit runs the daemon as another user", selectors: []Selector{asAlloy}, ids: alloy, unverified: true},
+		{name: "replaced binary under another user", selectors: []Selector{asAlloy}, ids: replacedAlloy, unverified: true},
+		{name: "matching user", selectors: []Selector{asRoot}, ids: alloy},
+		{name: "replaced binary of the matching user", selectors: []Selector{asRoot}, ids: replacedAlloy},
+		{name: "no strict selector to judge by", selectors: []Selector{{Name: RoleMain, Type: SelectorCommandMatch, Cmd: "alloy"}}, ids: alloy},
+		{name: "delegated selector is observe-only", selectors: []Selector{{Name: RoleMain, Type: SelectorCommandMatch, Exe: "/usr/bin/alloy", User: "alloy", Delegated: true}}, ids: alloy},
+		{name: "worker is not the main", selectors: []Selector{main, worker}, ids: map[int]Identity{100: {PID: 100, UID: 33, PPID: 1, Exe: "/opt/apache", ExeOK: true}}, unverified: true},
+		{name: "deleted worker is not main evidence", selectors: []Selector{main, worker}, ids: map[int]Identity{100: {PID: 100, UID: 33, PPID: 1, ExePrev: "/opt/apache"}}, unverified: true},
+		{name: "unrelated attributed deleted exe", selectors: []Selector{main}, ids: map[int]Identity{100: {PID: 100, UID: 0, PPID: 1, ExePrev: "/opt/unrelated"}}, unverified: true},
+		{name: "replaced main outside the attributed tree", selectors: []Selector{main}, ids: map[int]Identity{
+			100: {PID: 100, UID: 33, PPID: 1, Exe: "/opt/other", ExeOK: true},
+			200: {PID: 200, UID: 0, PPID: 1, ExePrev: "/opt/apache"},
+		}},
+		{name: "replaced worker with nothing attributed", selectors: []Selector{main, worker}, ids: map[int]Identity{
+			200: {PID: 200, UID: 33, PPID: 1, ExePrev: "/opt/apache"},
+		}, unverified: true},
+	}
+	users := fakeUsers(map[string]uint32{"root": 0, "apache": 33, "alloy": 993})
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			d := Discoverer{Reader: fakeReader{ids: tt.ids}, ResolveUser: users, BackendPIDs: func() []int { return []int{100} }}
+			out, err := d.Observe(tt.selectors)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := out.Principal().Unverified(); got != tt.unverified {
+				t.Fatalf("operation principal=%+v unverified=%v, want %v", out.Principal(), got, tt.unverified)
+			}
+			discovered, _ := d.Discover(tt.selectors)
+			if got := d.PrincipalIdentityIn(discovered, tt.selectors).Unverified(); got != tt.unverified {
+				t.Fatalf("monitor forecast unverified=%v, want %v", got, tt.unverified)
+			}
+		})
+	}
+}
+
+// A process the cycle discovered that has since left the shared snapshot is no
+// evidence either way: it must not forecast a refusal for a healthy service.
+func TestPrincipalIdentityInIgnoresAVanishedProcess(t *testing.T) {
+	t.Parallel()
+	main := Selector{Name: RoleMain, Type: SelectorCommandMatch, Exe: "/opt/apache", User: "root"}
+	d := Discoverer{Reader: fakeReader{ids: map[int]Identity{}}, ResolveUser: fakeUsers(map[string]uint32{"root": 0})}
+	got := d.PrincipalIdentityIn([]Process{{PID: 100, Role: RoleMain, Source: SourceBackend}}, []Selector{main})
+	if got.Attributed || got.Unverified() {
+		t.Fatalf("vanished process principal = %+v, want no evidence", got)
+	}
+}

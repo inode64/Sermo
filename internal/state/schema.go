@@ -37,6 +37,10 @@ var storageSchema = []string{
 	// per service) read in id order; this index serves them without sorting
 	// every event of the service.
 	`CREATE INDEX IF NOT EXISTS event_log_service_id_idx ON event_log (service, id DESC);`,
+	// Only operation outcomes and a few other audited actions carry a status,
+	// so the newest outcome per service (LatestOperationOutcomes, the dashboard's
+	// button marks) reads this small partial index instead of every event.
+	`CREATE INDEX IF NOT EXISTS event_log_service_outcome_idx ON event_log (service, action, id DESC) WHERE status <> '';`,
 	// event_notify_state tracks externally delivered incident edges and reminders.
 	// It is separate from the event log: detailed events remain auditable even
 	// when repeated notifications are suppressed.

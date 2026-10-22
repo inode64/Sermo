@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"sermo/internal/checks"
+	"sermo/internal/process"
 	"sermo/internal/servicemgr"
 	"sermo/internal/severity"
 	"sermo/internal/web"
@@ -116,7 +117,7 @@ func TestWebBackendFailedUnitWithHealthyLiveProcessWarns(t *testing.T) {
 		At:        at.UTC().Format(time.RFC3339),
 		StartedAt: at.Add(-time.Minute).UTC().Format(time.RFC3339),
 		Count:     1,
-	}, at.UTC())
+	}, process.PrincipalIdentity{}, at.UTC())
 	entry := &webEntry{
 		checkNames: []string{"management"},
 		interval:   time.Minute,
@@ -361,7 +362,7 @@ func TestWebBackendServiceStateEmptyProcessTreeWarnsInsteadOfCollectingForever(t
 	}
 
 	// A completed cycle that attributed no process is a definite answer.
-	metrics.record(t.Context(), "rpcbind", web.ServiceRuntime{At: now.UTC().Format(time.RFC3339)}, now.UTC())
+	metrics.record(t.Context(), "rpcbind", web.ServiceRuntime{At: now.UTC().Format(time.RFC3339)}, process.PrincipalIdentity{}, now.UTC())
 	svc = b.view(context.Background(), "rpcbind", b.entries["rpcbind"])
 	if svc.State != TargetStateWarning {
 		t.Fatalf("service with an empty process tree = %+v, want %q", svc, TargetStateWarning)
@@ -378,7 +379,7 @@ func TestWebBackendServiceStateEmptyProcessTreeWarnsInsteadOfCollectingForever(t
 	metrics.record(t.Context(), "rpcbind", web.ServiceRuntime{
 		At:    now.UTC().Format(time.RFC3339),
 		Count: 1, HasCPU: true,
-	}, now.UTC())
+	}, process.PrincipalIdentity{}, now.UTC())
 	svc = b.view(context.Background(), "rpcbind", b.entries["rpcbind"])
 	if svc.State == TargetStateWarning || !slices.Contains(svc.ObservabilityMissing, observabilityMissingRuntime) {
 		t.Fatalf("service with a visible process = %+v, want collecting on runtime metrics", svc)

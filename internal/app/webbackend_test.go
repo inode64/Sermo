@@ -974,7 +974,7 @@ func TestWebBackendLastEventIndexes(t *testing.T) {
 
 func TestWebBackendActivitySummaryCountsErrors(t *testing.T) {
 	events := NewEventLog(16)
-	for _, action := range serviceOperationActions {
+	for _, action := range serviceLifecycleActions {
 		events.Add(Event{Service: "web", Kind: eventKindAction, Action: action, Status: eventStatusOK})
 	}
 	// Cascade targets mirror the primary's kind mapping: a successful or
@@ -3246,7 +3246,9 @@ func TestReloadSupportRefreshHasDeadline(t *testing.T) {
 
 // view is concise fixture setup for service row projection tests.
 func (b *WebBackend) view(ctx context.Context, name string, e *webEntry) web.Service {
-	return b.viewWithRuntime(ctx, name, e, b.observeService(name, e), b.lastServiceEvent(name), serviceLockView{})
+	svc := b.viewWithRuntime(ctx, name, e, b.observeService(name, e), b.lastServiceEvent(name), serviceLockView{})
+	svc.LastOperation = b.lastOperations(name)[name]
+	return svc
 }
 
 // applicationsForTest exercises publication and cache ownership with an injected loader.

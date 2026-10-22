@@ -96,6 +96,8 @@ func (b *WebBackend) Operate(ctx context.Context, name, action string, opts web.
 			},
 			Lookup: lookup,
 			Emit:   b.emit,
+			// The root's own event already recorded its success.
+			Downgraded: func(primary operation.Result) { emitSafe(b.emit, eventFromOperationResult(primary)) },
 		}
 		r, _ = RunCascade(ctx, name, action, cfg)
 	}
@@ -107,7 +109,7 @@ func webActionResultFrom(r operation.Result) web.ActionResult {
 	if msg == "" {
 		msg = string(r.Status)
 	}
-	return web.ActionResult{OK: r.OK(), Message: msg}
+	return web.ActionResult{OK: r.OK(), Message: msg, Status: string(r.Status)}
 }
 
 func (b *WebBackend) operationResultWithMonitor(ctx context.Context, name, action string) operation.Result {

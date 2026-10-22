@@ -869,6 +869,37 @@ identity. If the init backend says the unit is active but Sermo cannot match the
 configured executable/user, the restart is blocked before stop/start so a bad
 daemon binary path cannot make Sermo act on an untrusted service identity.
 
+The dashboard keeps the last outcome of each service operation on the button
+that ran it, whether it came from the Web UI, `sermoctl` or an automatic rule.
+An amber ring with `!` means the last attempt was **blocked** before acting (a
+guard, a held lock, or the identity check above): the service was left as it
+was. A red ring with `✕` means it **failed**: `preflight_failed` refused it
+before acting, while `failed`, `postflight_failed` and `orphan_processes` come
+after the engine acted and may have left the service stopped. When a cascade
+target in `also_apply` fails, the primary's button turns red too (`cascade
+target failed`), from every source. The mark pulses three times when it first
+appears, then stays until a later operation on that service records a new
+outcome. The tooltip, the screen-reader hint and the service detail's **Last
+operation** field carry its age and message.
+
+Independently, the dashboard forecasts from the monitor's latest cycle what an
+action on an active service would record before anyone presses it. Restart
+turns amber when the identity check above would refuse it, and Reload turns red
+when it would run and then fail its health check, because only a process that
+matches the configured executable and user proves the reloaded daemon healthy.
+Both happen when a unit runs the daemon as `root` while the catalog selector
+expects its packaged user; Reload alone when the running binary was replaced on
+disk (restart instead). Override the selector's user variable to clear the
+first case (the Grafana Alloy profile reads `variables.user` on systemd and
+`variables.openrc_user` on OpenRC):
+
+```yaml
+# /etc/sermo/services.local/alloy.yml
+name: alloy
+variables:
+  user: root
+```
+
 A service normally resolves to a systemd/OpenRC unit. It can instead declare a
 per-service `control:` target for non-init resources: `control.type: libvirt`
 for QEMU/libvirt VMs or `control.type: docker` for Docker containers. Those
@@ -1275,8 +1306,12 @@ Read-only endpoints:
   `started`, `starting`, `collecting`, `monitored`, `restart_required`, `warning`, `failed`), backend status,
   `check_health`, `observability_ready`,
   `observability_missing`, `state_reason`, active locks, monitor state/source/timestamp,
-  backend, unit, cooldown, remediation state, next eligible action and last
-  event. `sermoctl services` reads this list for its STATE and MONITORED columns —
+  backend, unit, cooldown, remediation state, next eligible action, last
+  event, `last_operation` (the newest lifecycle operation outcome, which later
+  events of other kinds never replace) and `operation_forecast` (one
+  `action`, `status`, `message` entry per action the engine would refuse
+  (`blocked`) or that would fail its health check (`failed`) right now;
+  present only while the service is active). `sermoctl services` reads this list for its STATE and MONITORED columns —
   see [cli.md](cli.md#configured-services). Process age is exposed as `uptime_seconds`;
   clients format the duration for display.
 - `GET /api/services/{name}` — service detail: latest checks, rolling SLA, named
@@ -1361,7 +1396,10 @@ accepted operation cannot switch targets during a concurrent reload.
   pidfile under `/run` only after confirming its PID is dead, resets a failed
   init-unit marker through the backend manager, then uses the same guarded start
   path. It refuses live PIDs, symlinks, malformed pidfiles and paths outside
-  `/run`.
+  `/run`. The response is `{"ok": …, "message": …, "status": …}` with HTTP `200`
+  on success and `409` otherwise; `status` is the operation's result status
+  (see [safety.md](safety.md#the-operation-engine)), so a client can tell a
+  `blocked` request, which changed nothing, from a failed one.
 - `POST /api/services/{name}/sessions/{pid}/close?start_ticks=TICKS&terminal=PTS`
   — close one freshly revalidated SSH terminal with `SIGTERM`; a residual
   `sudo` terminal also gets `SIGKILL` after the service's

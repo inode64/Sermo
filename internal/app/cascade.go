@@ -22,11 +22,18 @@ const (
 // CascadeConfig supplies the service graph and the one guarded operation used by
 // every cascade caller. Target observes each additional target after its final
 // attempt; Emit records the canonical cascade relationship event.
+//
+// Downgraded receives the root's result when it succeeded on its own but an
+// additional target failed, so the cascade reports it failed. A caller whose
+// root operation already recorded its own success records that final result
+// through it, as the daemon worker does for the result RunCascade returns; the
+// root's buttons then show the cascade failed from every source.
 type CascadeConfig struct {
-	Operate func(ctx context.Context, service, action string) (operation.Result, error)
-	Lookup  func(service string) []string
-	Target  func(service string, result operation.Result, err error)
-	Emit    func(Event)
+	Operate    func(ctx context.Context, service, action string) (operation.Result, error)
+	Lookup     func(service string) []string
+	Target     func(service string, result operation.Result, err error)
+	Emit       func(Event)
+	Downgraded func(primary operation.Result)
 }
 
 // cascader orchestrates an action across a service and the services it lists in
@@ -73,10 +80,13 @@ func (c cascader) run(ctx context.Context, root, action string) (operation.Resul
 		if c.config.Target != nil {
 			c.config.Target(svc, res, err)
 		}
-		emitSafe(c.config.Emit, Event{Service: svc, Kind: eventKindCascade, Action: action,
-			Status: string(res.Status), Message: "cascade from " + root})
+		emitSafe(c.config.Emit, cascadeEvent(root, res))
 	}
-	return downgradePrimaryOnCascadeFailure(primary, cascadeFailed), primaryErr
+	final := downgradePrimaryOnCascadeFailure(primary, cascadeFailed)
+	if final.Status != primary.Status && c.config.Downgraded != nil {
+		c.config.Downgraded(final)
+	}
+	return final, primaryErr
 }
 
 func cascadeResult(service, action string, result operation.Result, err error) operation.Result {

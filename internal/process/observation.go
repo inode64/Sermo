@@ -26,6 +26,102 @@ type Observation struct {
 	snapshot map[int]Identity
 }
 
+// PrincipalIdentity is how a service's discovered processes relate to its
+// strict principal identity (exact executable and real user). One rule serves
+// the operation's fresh observation and the monitor's cycle; on the monitor it
+// is only a forecast and authorizes nothing.
+type PrincipalIdentity struct {
+	// Attributed reports at least one non-delegated process.
+	Attributed bool
+	// Required reports a strict principal selector to judge them by.
+	Required bool
+	// Trusted reports a process that matches that identity now.
+	Trusted bool
+	// ReplacedExecutable reports a process that would match it but for its
+	// binary having been replaced on disk. It is judged only while no process
+	// is trusted: a trusted daemon needs no replaced-binary evidence.
+	ReplacedExecutable bool
+}
+
+// Unverified reports processes that cannot be tied to the service's own
+// identity: an operation refuses to treat such an active service as its daemon.
+func (p PrincipalIdentity) Unverified() bool {
+	return p.Attributed && p.Required && !p.Trusted && !p.ReplacedExecutable
+}
+
+// Principal returns the observation's identity evidence.
+func (o Observation) Principal() PrincipalIdentity {
+	return PrincipalIdentity{
+		Attributed:         hasNonDelegated(o.Processes),
+		Required:           o.IdentityRequired,
+		Trusted:            o.Trusted,
+		ReplacedExecutable: o.ReplacedExecutable,
+	}
+}
+
+// PrincipalIdentityIn judges the processes a monitoring cycle already
+// discovered by the rule operations apply to a fresh observation, reading the
+// shared snapshot instead of rescanning /proc. Deleted-executable candidates
+// outside the attributed tree, which an operation always adds, are looked up
+// only when the attributed processes alone neither trust the service nor show
+// its replaced binary, so a healthy service costs one match. A process that
+// left the snapshot since the cycle's discovery is no evidence at all. It is a
+// forecast for reporting: an operation always observes afresh.
+func (d Discoverer) PrincipalIdentityIn(attributed []Process, selectors []Selector) PrincipalIdentity {
+	if !HasStrictPrincipal(selectors) {
+		return PrincipalIdentity{Attributed: hasNonDelegated(attributed)}
+	}
+	out := d.principalIdentity(attributed, selectors)
+	if !out.Trusted && !out.ReplacedExecutable {
+		out = d.principalIdentity(d.addDeletedCandidates(slices.Clone(attributed), selectors), selectors)
+	}
+	return out
+}
+
+// principalIdentity narrows the evidence to the strict main selector when one
+// exists, so a worker cannot stand in for the main process. An external
+// candidate can show a replaced binary but never trust. The first trusted
+// process settles the verdict.
+func (d Discoverer) principalIdentity(procs []Process, selectors []Selector) PrincipalIdentity {
+	identities := selectors
+	for _, sel := range selectors {
+		if sel.Name == RoleMain && sel.IsStrictPrincipal() {
+			identities = []Selector{sel}
+			break
+		}
+	}
+	out := PrincipalIdentity{Required: HasStrictPrincipal(identities)}
+	reader, resolve := d.reader(), d.resolveUser()
+	for _, proc := range procs {
+		if proc.Delegated {
+			continue
+		}
+		id, ok := reader.Identity(proc.PID)
+		if !ok {
+			continue
+		}
+		out.Attributed = true
+		if proc.Stray {
+			continue
+		}
+		for i := range identities {
+			sel := &identities[i]
+			if !proc.External && sel.HasStrictIdentity() && d.matches(sel, id, resolve) {
+				out.Trusted = true
+				return out
+			}
+			if sel.IsStrictPrincipal() && d.matchesDeletedExe(sel, id, resolve) {
+				out.ReplacedExecutable = true
+			}
+		}
+	}
+	return out
+}
+
+func hasNonDelegated(procs []Process) bool {
+	return slices.ContainsFunc(procs, func(p Process) bool { return !p.Delegated })
+}
+
 // ReasonTrackedOutsideDiscovery refuses a signal to a survivor that discovery no
 // longer attributes to the service: losing attribution is not evidence of exit,
 // but it is not proof of ownership either.
@@ -134,32 +230,13 @@ func (d Discoverer) observe(selectors []Selector, requireSnapshot, fresh bool) (
 	frozen.BackendPIDs, frozen.FreshBackendPIDs = func() []int { return backend }, nil
 	frozen.Reader = observationReader{idx: buildSnapshotIndex(snapshot)}
 	procs, warnings := frozen.Discover(selectors)
-	identities := selectors
-	for _, sel := range selectors {
-		if sel.Name == RoleMain && sel.IsStrictPrincipal() {
-			identities = []Selector{sel}
-			break
-		}
-	}
-	out := Observation{snapshot: snapshot, Processes: procs, IdentityRequired: HasStrictPrincipal(identities)}
+	out := Observation{snapshot: snapshot, Processes: procs}
 	// ReplacedExecutable is diagnostic evidence for a backend stop, not signal
 	// authority. The added candidates need independent verification for cleanup.
 	out.Processes = frozen.addDeletedCandidates(out.Processes, selectors)
 	out.Warnings = warnings
-	for _, proc := range out.Processes {
-		if proc.Delegated || proc.Stray {
-			continue
-		}
-		if _, ok := frozen.StrictMatchPID(proc.PID, identities); ok && !proc.External {
-			out.Trusted = true
-		}
-		for i := range identities {
-			sel := &identities[i]
-			if sel.IsStrictPrincipal() && frozen.matchesDeletedExe(sel, snapshot[proc.PID], frozen.resolveUser()) {
-				out.ReplacedExecutable = true
-			}
-		}
-	}
+	principal := frozen.principalIdentity(out.Processes, selectors)
+	out.IdentityRequired, out.Trusted, out.ReplacedExecutable = principal.Required, principal.Trusted, principal.ReplacedExecutable
 	out.AbsenceKnown = len(UncertainWarnings(warnings)) == 0 && frozen.absenceKnown(selectors, snapshot)
 	if !out.Trusted && !out.ReplacedExecutable && len(UncertainWarnings(warnings)) > 0 {
 		return out, fmt.Errorf("runtime discovery: %s", strings.Join(UncertainWarnings(warnings), "; "))

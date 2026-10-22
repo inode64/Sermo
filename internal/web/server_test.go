@@ -312,7 +312,7 @@ func (f *fakeBackend) Operate(_ context.Context, name, action string, opts Opera
 	}
 	f.operated = append(f.operated, name+"/"+action+suffix)
 	if f.failOp {
-		return ActionResult{OK: false, Message: "blocked"}
+		return ActionResult{OK: false, Message: "blocked", Status: "blocked"}
 	}
 	return ActionResult{OK: true, Message: "ok"}
 }
@@ -1522,6 +1522,10 @@ func TestFailedOperateIsConflict(t *testing.T) {
 	newServer(&fakeBackend{failOp: true}).ServeHTTP(rec, postReq(testServicePath("web", apiActionRestart)))
 	if rec.Code != http.StatusConflict {
 		t.Fatalf("failed operate = %d, want 409", rec.Code)
+	}
+	var res ActionResult
+	if err := json.Unmarshal(rec.Body.Bytes(), &res); err != nil || res.OK || res.Status != "blocked" {
+		t.Fatalf("body = %s (%v), want the refused operation's status", rec.Body.String(), err)
 	}
 }
 

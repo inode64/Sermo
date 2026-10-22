@@ -136,7 +136,17 @@ func (a App) operateWithCascade(ctx context.Context, opts options, cfg *config.C
 		}
 		return config.CascadeTargets(res.Tree)
 	}
+	// record persists one cascade event, keeping the first failure to report
+	// after the cascade; without a store nothing is recorded.
 	var cascadeEventErr error
+	record := func(subject, what string, rec state.EventRecord) {
+		if actionStore == nil {
+			return
+		}
+		if err := recordManualActionEvent(ctx, actionStore, rec); err != nil && cascadeEventErr == nil {
+			cascadeEventErr = fmt.Errorf("record cascade %s for %s: %w", what, subject, err)
+		}
+	}
 	cascadeCfg := app.CascadeConfig{
 		Lookup: lookup,
 		Operate: func(ctx context.Context, svc, action string) (operation.Result, error) {
@@ -147,11 +157,7 @@ func (a App) operateWithCascade(ctx context.Context, opts options, cfg *config.C
 			return a.operateWithManualState(ctx, cfg, res, svc, action, actionStore, runner)
 		},
 		Target: func(svc string, out operation.Result, err error) {
-			if actionStore != nil {
-				if recordErr := recordManualActionEvent(ctx, actionStore, app.CascadeEventRecord(service, out)); recordErr != nil && cascadeEventErr == nil {
-					cascadeEventErr = fmt.Errorf("record cascade event for %s: %w", svc, recordErr)
-				}
-			}
+			record(svc, "event", app.CascadeEventRecord(service, out))
 			cascade.record(svc, action, out, err)
 			if err != nil {
 				fmt.Fprintf(a.Stderr, "cascade %s: %v\n", svc, err)
@@ -161,6 +167,10 @@ func (a App) operateWithCascade(ctx context.Context, opts options, cfg *config.C
 			if err == nil {
 				a.notifyInteractiveBlockedAction(ctx, out)
 			}
+		},
+		// The root's own event already recorded its success.
+		Downgraded: func(primary operation.Result) {
+			record(service, "result", app.OperationEventRecord(primary))
 		},
 	}
 	primary, primaryErr := app.RunCascade(ctx, service, action, cascadeCfg)
