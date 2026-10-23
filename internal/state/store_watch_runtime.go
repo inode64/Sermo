@@ -44,7 +44,7 @@ func (s *Store) WatchRuntimeState(watch, slot string) (WatchRuntimeRecord, bool,
 		transition         string
 	)
 	found, err := scanOne(func() error {
-		return s.reads().QueryRowContext(s.sqlCtx(),
+		return s.reader.QueryRowContext(s.sqlCtx(),
 			`SELECT firing, unavailable, last_notify_at, consecutive, history, true_since,
 		        timed_history, last_action_at, recent_actions, current_backoff_ns,
 		        clear_since, clear_consecutive, severity, severity_windows, notified_severity,

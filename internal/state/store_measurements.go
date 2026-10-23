@@ -60,9 +60,10 @@ func daemonRuntimeSeries(metric string) metricSeries {
 }
 
 // kind and target name the series for an error message, derived from the scope and
-// the key columns. They are called only from the error branches: record runs for
+// the key columns. record calls them only from its error branches: it runs for
 // every service, check and declared metric on every cycle, so building the target
-// eagerly would allocate once per call for a message that is almost never used.
+// eagerly there would allocate once per call for a message that is almost never
+// used.
 func (m metricSeries) kind() string {
 	switch m.scope {
 	case metricScopeLatency:
@@ -110,7 +111,7 @@ func recordMetric(ctx context.Context, exec statementExecutor, m metricSeries, v
 func (s *Store) summary(m metricSeries, span time.Duration, now time.Time) (MeasurementStat, error) {
 	from := now.Add(-span)
 	stored := s.retention.archiveFor(from, now)
-	return summaryFromRow(s.reads().QueryRowContext(s.sqlCtx(), metricSummaryStmt,
+	return summaryFromRow(s.reader.QueryRowContext(s.sqlCtx(), metricSummaryStmt,
 		stored.Res, m.scope, m.service, m.check, m.metric, alignBucket(from, stored.Res)))
 }
 
@@ -121,15 +122,31 @@ func (s *Store) series(m metricSeries, from, to time.Time) ([]MeasurementPoint, 
 	stored := s.retention.archiveFor(from, to)
 	// As in loadSLASeries the upper bound covers the bucket holding `to`, so the
 	// newest still-filling bucket stays in the series.
-	rows, err := s.reads().QueryContext(s.sqlCtx(), metricSeriesStmt,
+	rows, err := s.reader.QueryContext(s.sqlCtx(), metricSeriesStmt,
 		stored.Res, m.scope, m.service, m.check, m.metric,
 		alignBucket(from, stored.Res), alignBucket(to, stored.Res)+stored.Res)
-	kind, target := m.kind(), m.target()
-	description := kind + " series for " + target
 	if err != nil {
-		return nil, fmt.Errorf("load %s: %w", description, err)
+		return nil, fmt.Errorf("load %s series for %s: %w", m.kind(), m.target(), err)
 	}
-	return measurementPointsFromRows(rows, kind+" series row for "+target, description)
+	defer func() { _ = rows.Close() }()
+
+	var out []MeasurementPoint
+	for rows.Next() {
+		var bucket, n int64
+		var sum, minValue, maxValue float64
+		if err := rows.Scan(&bucket, &n, &sum, &minValue, &maxValue); err != nil {
+			return nil, fmt.Errorf("scan %s series row for %s: %w", m.kind(), m.target(), err)
+		}
+		avg := 0.0
+		if n > 0 {
+			avg = sum / float64(n)
+		}
+		out = append(out, MeasurementPoint{Start: time.Unix(bucket, 0).UTC(), N: n, Avg: avg, Min: minValue, Max: maxValue})
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate %s series for %s: %w", m.kind(), m.target(), err)
+	}
+	return out, nil
 }
 
 // MeasurementSummary returns the average/min/max and sample count for a check over
@@ -192,28 +209,4 @@ func summaryFromRow(row *sql.Row) (MeasurementStat, error) {
 		stat.Max = maxV.Float64
 	}
 	return stat, nil
-}
-
-// measurementPointsFromRows scans per-minute aggregate rows shared by every
-// metric history table. The callers keep their distinct SQL and error context.
-func measurementPointsFromRows(rows *sql.Rows, scanContext, iterateContext string) ([]MeasurementPoint, error) {
-	defer func() { _ = rows.Close() }()
-
-	var out []MeasurementPoint
-	for rows.Next() {
-		var bucket, n int64
-		var sum, minValue, maxValue float64
-		if err := rows.Scan(&bucket, &n, &sum, &minValue, &maxValue); err != nil {
-			return nil, fmt.Errorf("scan %s: %w", scanContext, err)
-		}
-		avg := 0.0
-		if n > 0 {
-			avg = sum / float64(n)
-		}
-		out = append(out, MeasurementPoint{Start: time.Unix(bucket, 0).UTC(), N: n, Avg: avg, Min: minValue, Max: maxValue})
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate %s: %w", iterateContext, err)
-	}
-	return out, nil
 }

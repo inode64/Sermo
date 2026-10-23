@@ -615,7 +615,7 @@ func TestPruneBeforeDropsHistoryAtEveryResolution(t *testing.T) {
 		t.Fatalf("pruneBefore = %+v (pruned %d), want 6 archive rows and 1 event", result, result.Pruned())
 	}
 
-	if value, err := s.sumSLA("web", "", 2*time.Minute, now); err != nil || value.Total != 1 {
+	if value, err := s.sumSLA("web", 2*time.Minute, now); err != nil || value.Total != 1 {
 		t.Fatalf("recent SLA total=%d err=%v, want 1", value.Total, err)
 	}
 	if stat, err := s.MeasurementSummary("web", "http", 2*time.Minute, now); err != nil || stat.Count != 1 {

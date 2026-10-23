@@ -80,7 +80,7 @@ type Store struct {
 	// reader is a separate read-only connection. Under WAL a reader runs
 	// concurrently with the single writer connection, so a cold rolling-year
 	// SLA aggregation no longer stalls the daemon's per-cycle writes behind
-	// it. Nil (tests constructing Store directly) falls back to db.
+	// it.
 	reader *sql.DB
 	now    func() time.Time
 	ctx    context.Context //nolint:containedctx // store Open cancel; SQL methods use this instead of a per-query argument.
@@ -252,10 +252,6 @@ func (c *statementCache) close() {
 }
 
 // reads returns the connection SELECT-only paths should use.
-func (s *Store) reads() *sql.DB {
-	return s.reader
-}
-
 // sqlCtx is the context passed to database/sql *Context methods.
 func (s *Store) sqlCtx() context.Context {
 	return s.ctx

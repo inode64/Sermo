@@ -4,7 +4,9 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"sermo/internal/rules"
+	"slices"
 	"time"
 )
 
@@ -50,7 +52,7 @@ func (s *Store) RemediationState(service string) (RemediationRecord, bool, error
 		currentBackoffNS int64
 	)
 	found, err := scanOne(func() error {
-		return s.reads().QueryRowContext(s.sqlCtx(),
+		return s.reader.QueryRowContext(s.sqlCtx(),
 			`SELECT last_action_at, recent_actions, current_backoff_ns
 		   FROM remediation_state WHERE service = ?;`,
 			service,
@@ -105,7 +107,7 @@ func (s *Store) SetRemediationState(service string, rec RemediationRecord) error
 // RuleWindowStates returns the persisted for/within progress for a service's
 // rules, keyed by rule name.
 func (s *Store) RuleWindowStates(service string) (map[string]RuleWindowRecord, error) {
-	rows, err := s.reads().QueryContext(s.sqlCtx(),
+	rows, err := s.reader.QueryContext(s.sqlCtx(),
 		`SELECT rule_name, consecutive, history, true_since, timed_history,
 		        firing, clear_since, clear_consecutive, severity, notified_severity, severity_windows
 		   FROM rule_window_state WHERE service = ? ORDER BY rule_name;`,
@@ -169,32 +171,50 @@ func (s *Store) RuleWindowStates(service string) (map[string]RuleWindowRecord, e
 // SetRuleWindowStates replaces the persisted rule-window state for a service.
 // Passing an empty map removes stale rows for rules that no longer exist.
 func (s *Store) SetRuleWindowStates(service string, records map[string]RuleWindowRecord) error {
-	return replaceServiceRows(s, service, `DELETE FROM rule_window_state WHERE service = ?;`,
-		"rule window state", records, func(tx *sql.Tx, name string, rec RuleWindowRecord) error {
-			history, err := json.Marshal(rec.History)
-			if err != nil {
-				return fmt.Errorf("encode rule window history for %s/%s: %w", service, name, err)
-			}
-			timed, err := encodeRuleWindowSamples(rec.TimedHistory)
-			if err != nil {
-				return err
-			}
-			rungs, err := encodeSeverityWindows(rec.Rungs)
-			if err != nil {
-				return err
-			}
-			firing := boolInt(rec.Firing)
-			if _, err := tx.ExecContext(s.sqlCtx(),
-				`INSERT INTO rule_window_state (service, rule_name, consecutive, history, true_since, timed_history,
-				                                firing, clear_since, clear_consecutive, severity, notified_severity, severity_windows)
-				 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
-				service, name, rec.Consecutive, string(history), timeUnixNano(rec.TrueSince), timed,
-				firing, timeUnixNano(rec.ClearSince), rec.ClearConsecutive, rec.Severity, rec.NotifiedSeverity, rungs,
-			); err != nil {
-				return fmt.Errorf("insert rule window state for %s/%s: %w", service, name, err)
-			}
-			return nil
-		})
+	tx, err := s.db.BeginTx(s.sqlCtx(), nil)
+	if err != nil {
+		return fmt.Errorf("begin rule window state update for %s: %w", service, err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if _, err := tx.ExecContext(s.sqlCtx(), `DELETE FROM rule_window_state WHERE service = ?;`, service); err != nil {
+		return fmt.Errorf("clear rule window states for %s: %w", service, err)
+	}
+	for _, name := range slices.Sorted(maps.Keys(records)) {
+		if err := s.insertRuleWindowState(tx, service, name, records[name]); err != nil {
+			return err
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit rule window states for %s: %w", service, err)
+	}
+	return nil
+}
+
+func (s *Store) insertRuleWindowState(tx *sql.Tx, service, name string, rec RuleWindowRecord) error {
+	history, err := json.Marshal(rec.History)
+	if err != nil {
+		return fmt.Errorf("encode rule window history for %s/%s: %w", service, name, err)
+	}
+	timed, err := encodeRuleWindowSamples(rec.TimedHistory)
+	if err != nil {
+		return err
+	}
+	rungs, err := encodeSeverityWindows(rec.Rungs)
+	if err != nil {
+		return err
+	}
+	firing := boolInt(rec.Firing)
+	if _, err := tx.ExecContext(s.sqlCtx(),
+		`INSERT INTO rule_window_state (service, rule_name, consecutive, history, true_since, timed_history,
+		                                firing, clear_since, clear_consecutive, severity, notified_severity, severity_windows)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
+		service, name, rec.Consecutive, string(history), timeUnixNano(rec.TrueSince), timed,
+		firing, timeUnixNano(rec.ClearSince), rec.ClearConsecutive, rec.Severity, rec.NotifiedSeverity, rungs,
+	); err != nil {
+		return fmt.Errorf("insert rule window state for %s/%s: %w", service, name, err)
+	}
+	return nil
 }
 
 // The two JSON-encoded history columns (rule window timestamps and rule window

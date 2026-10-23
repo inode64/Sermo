@@ -26,7 +26,7 @@ const slaTestService = "web"
 // service-level series is keyed by an empty check name.
 func archiveRow(t *testing.T, s *Store, res, bucket int64) (up, total, down int64, found bool) {
 	t.Helper()
-	rows, err := s.reads().QueryContext(context.Background(),
+	rows, err := s.reader.QueryContext(context.Background(),
 		`SELECT up_count, total_count, down_buckets FROM sla_archive
 		  WHERE res = ? AND service = ? AND check_name = ? AND bucket = ?;`,
 		res, slaTestService, "", bucket)

@@ -69,7 +69,7 @@ func (s *Store) RecentEventsBefore(beforeID int64, limit int) ([]EventRecord, er
 	}
 	query += ` ORDER BY id DESC LIMIT ?;`
 	args = append(args, limit)
-	rows, err := s.reads().QueryContext(s.sqlCtx(), query, args...)
+	rows, err := s.reader.QueryContext(s.sqlCtx(), query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("load recent events: %w", err)
 	}
@@ -83,17 +83,17 @@ func (s *Store) RecentEventsBefore(beforeID int64, limit int) ([]EventRecord, er
 // sermoctl runs a service operation in its own process and records the event
 // straight to this store, so a ring-only per-target view silently omits every
 // operator action until the daemon restarts and rehydrates. Callers pass a
-// column from eventTargetColumns; anything else is rejected rather than
-// interpolated into the query.
+// column recentEventsQueries knows; anything else is rejected rather than
+// interpolated into a query.
 func (s *Store) RecentEventsForColumn(column, name string, limit int) ([]EventRecord, error) {
-	if !slices.Contains(eventTargetColumns, column) {
+	query, ok := recentEventsQueries[column]
+	if !ok {
 		return nil, fmt.Errorf("load recent events: unsupported event target column %q", column)
 	}
 	if limit <= 0 {
 		limit = -1
 	}
-	query := eventSelectPrefix + ` WHERE ` + column + ` = ? ORDER BY id DESC LIMIT ?;`
-	rows, err := s.reads().QueryContext(s.sqlCtx(), query, name, limit)
+	rows, err := s.reader.QueryContext(s.sqlCtx(), query, name, limit)
 	if err != nil {
 		return nil, fmt.Errorf("load recent events for %s %q: %w", column, name, err)
 	}
@@ -117,7 +117,7 @@ func (s *Store) LatestOperationOutcomes(service string, actions []string) ([]Eve
 	for _, action := range actions {
 		args = append(args, action)
 	}
-	rows, err := s.reads().QueryContext(s.sqlCtx(), latestOperationOutcomesQuery(service != "", len(actions)), args...)
+	rows, err := s.reader.QueryContext(s.sqlCtx(), latestOperationOutcomesQuery(service != "", len(actions)), args...)
 	if err != nil {
 		return nil, fmt.Errorf("load latest operation outcomes: %w", err)
 	}
@@ -155,9 +155,13 @@ const (
 	EventColumnApp     = "app"
 )
 
-// eventTargetColumns is the allow-list RecentEventsForColumn validates against,
-// so no caller can reach the query builder with an arbitrary identifier.
-var eventTargetColumns = []string{EventColumnService, EventColumnApp}
+// recentEventsQueries is the allow-list RecentEventsForColumn reads from: one
+// query per target column, each a constant, so no caller can reach the SQL with
+// an arbitrary identifier.
+var recentEventsQueries = map[string]string{
+	EventColumnService: eventSelectPrefix + ` WHERE ` + EventColumnService + ` = ? ORDER BY id DESC LIMIT ?;`,
+	EventColumnApp:     eventSelectPrefix + ` WHERE ` + EventColumnApp + ` = ? ORDER BY id DESC LIMIT ?;`,
+}
 
 func scanEventRows(rows *sql.Rows) ([]EventRecord, error) {
 	var out []EventRecord

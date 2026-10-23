@@ -48,7 +48,7 @@ func (s *Store) MonitorState(service string) (MonitorRecord, bool, error) {
 
 // MonitorStates reads monitoring policy once for a dashboard snapshot.
 func (s *Store) MonitorStates() (map[string]MonitorRecord, error) {
-	rows, err := s.reads().QueryContext(s.sqlCtx(), `SELECT service, active, source, updated_at FROM monitor_state;`)
+	rows, err := s.reader.QueryContext(s.sqlCtx(), `SELECT service, active, source, updated_at FROM monitor_state;`)
 	if err != nil {
 		return nil, fmt.Errorf("load monitor states: %w", err)
 	}
@@ -73,7 +73,7 @@ func (s *Store) MonitorStates() (map[string]MonitorRecord, error) {
 
 // OperationSettlingStates reads operation transitions once for a service list.
 func (s *Store) OperationSettlingStates() (map[string]OperationSettlingRecord, error) {
-	rows, err := s.reads().QueryContext(s.sqlCtx(), `SELECT service, phase, updated_at FROM operation_settling;`)
+	rows, err := s.reader.QueryContext(s.sqlCtx(), `SELECT service, phase, updated_at FROM operation_settling;`)
 	if err != nil {
 		return nil, fmt.Errorf("load operation settling states: %w", err)
 	}
@@ -101,7 +101,7 @@ func (s *Store) loadFlagRow(query string, key any, errContext string) (on bool, 
 	var v int
 	var updated string
 	found, err = scanOne(func() error {
-		return s.reads().QueryRowContext(s.sqlCtx(), query, key).Scan(&v, &source, &updated)
+		return s.reader.QueryRowContext(s.sqlCtx(), query, key).Scan(&v, &source, &updated)
 	})
 	if err != nil {
 		return false, "", time.Time{}, false, fmt.Errorf("%s: %w", errContext, err)
@@ -164,7 +164,7 @@ func (s *Store) SetOperationSettling(service, phase string) error {
 func (s *Store) OperationSettling(service string) (OperationSettlingRecord, bool, error) {
 	var phase, updated string
 	found, err := scanOne(func() error {
-		return s.reads().QueryRowContext(s.sqlCtx(),
+		return s.reader.QueryRowContext(s.sqlCtx(),
 			`SELECT phase, updated_at FROM operation_settling WHERE service = ?;`,
 			service,
 		).Scan(&phase, &updated)
@@ -196,7 +196,7 @@ func (s *Store) ServiceRestartNotice(service string) (ServiceRestartNoticeRecord
 	var ticks int64
 	var started string
 	found, err := scanOne(func() error {
-		return s.reads().QueryRowContext(s.sqlCtx(),
+		return s.reader.QueryRowContext(s.sqlCtx(),
 			`SELECT pid, start_ticks, started_at FROM service_restart_notice WHERE service = ?;`, service,
 		).Scan(&pid, &ticks, &started)
 	})

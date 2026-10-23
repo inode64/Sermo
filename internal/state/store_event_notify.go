@@ -28,7 +28,7 @@ func (s *Store) EventNotifyState(incidentKey, notifier string) (EventNotifyRecor
 	var rec EventNotifyRecord
 	var active int
 	var lastSentAt int64
-	err := s.reads().QueryRowContext(s.sqlCtx(),
+	err := s.reader.QueryRowContext(s.sqlCtx(),
 		`SELECT phase, active, last_sent_at, subject, body, severity FROM event_notify_state
 		 WHERE incident_key = ? AND notifier = ?`, incidentKey, notifier,
 	).Scan(&rec.Phase, &active, &lastSentAt, &rec.Subject, &rec.Body, &rec.Severity)
@@ -63,7 +63,7 @@ func (s *Store) SetEventNotifyState(rec EventNotifyRecord) error {
 // DueEventNotifyStates lists active incidents whose last notification is old
 // enough for a reminder. The caller supplies its configured interval.
 func (s *Store) DueEventNotifyStates(notifier string, before time.Time) ([]EventNotifyRecord, error) {
-	rows, err := s.reads().QueryContext(s.sqlCtx(),
+	rows, err := s.reader.QueryContext(s.sqlCtx(),
 		`SELECT incident_key, phase, last_sent_at, subject, body, severity FROM event_notify_state
 		 WHERE notifier = ? AND active = 1 AND last_sent_at <= ? ORDER BY last_sent_at`,
 		notifier, before.UTC().UnixNano(),
@@ -91,7 +91,7 @@ func (s *Store) DueEventNotifyStates(notifier string, before time.Time) ([]Event
 // ActiveEventNotifyIncidents lists the distinct incident keys that still have
 // an open (reminder-eligible) delivery at any notifier.
 func (s *Store) ActiveEventNotifyIncidents() ([]string, error) {
-	rows, err := s.reads().QueryContext(s.sqlCtx(),
+	rows, err := s.reader.QueryContext(s.sqlCtx(),
 		`SELECT DISTINCT incident_key FROM event_notify_state WHERE active = 1 ORDER BY incident_key`)
 	if err != nil {
 		return nil, fmt.Errorf("list active event notifications: %w", err)
