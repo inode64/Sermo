@@ -14,6 +14,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"sermo/internal/config"
 	"sermo/internal/web"
@@ -383,4 +384,41 @@ func daemonAPIStub(path string, payload any) *httptest.Server {
 func writeDaemonAPITestJSON(w http.ResponseWriter, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(v)
+}
+
+// A cutoff from a host east of UTC carries a "+hh:mm" offset; it must reach
+// the daemon intact through query decoding, where a bare "+" is a space.
+func TestPruneDaemonEventsSendsADecodableCutoff(t *testing.T) {
+	before := time.Date(2026, time.October, 23, 10, 0, 0, 0, time.FixedZone("CEST", 2*60*60))
+	var got time.Time
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != web.APIPathEventsClear {
+			http.NotFound(w, r)
+			return
+		}
+		parsed, err := time.Parse(time.RFC3339, r.URL.Query().Get(web.APIQueryBefore))
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		got = parsed
+		writeDaemonAPITestJSON(w, map[string]any{"ok": true, "pruned": 3})
+	}))
+	defer srv.Close()
+
+	_, _, cfg := daemonAPITestConfig(t, srv.URL, `
+web:
+  address: HOST
+  port: PORT
+paths:
+`)
+	app := hermeticApp(t, App{Env: os.Getenv, LoadConfig: func(string, ...config.Option) (*config.Config, error) { return cfg, nil }})
+
+	n, err := app.pruneDaemonEvents(context.Background(), cfg, before)
+	if err != nil {
+		t.Fatalf("pruneDaemonEvents() error = %v", err)
+	}
+	if n != 3 || !got.Equal(before) {
+		t.Fatalf("pruned=%d cutoff=%v, want 3 and %v", n, got, before)
+	}
 }
