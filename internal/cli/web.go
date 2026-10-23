@@ -107,11 +107,7 @@ func (a App) webHashPasswordInput(opts options) (string, bool, error) {
 		if opts.stdin {
 			return "", false, fmt.Errorf("--%s and --%s are mutually exclusive", cliFlagGenerate, cliFlagStdin)
 		}
-		secret, err := webcred.GenerateSecret()
-		if err != nil {
-			return "", false, fmt.Errorf("generate secret: %w", err)
-		}
-		return secret, true, nil
+		return webcred.GenerateSecret(), true, nil
 	case opts.stdin:
 		password, err := readPasswordLine(bufio.NewReader(a.stdinReader()))
 		if err != nil {

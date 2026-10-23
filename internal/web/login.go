@@ -128,11 +128,7 @@ func (s *Server) handleLoginSubmit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.loginLimiter.succeed(client)
-	token, err := s.sessions.create(role, s.now())
-	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, ActionResult{OK: false, Message: "cannot start a session: " + err.Error()})
-		return
-	}
+	token := s.sessions.create(role, s.now())
 	// A new login replaces this browser's previous session rather than
 	// leaving it valid for the rest of its lifetime.
 	if old, err := r.Cookie(s.cookieName); err == nil {

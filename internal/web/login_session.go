@@ -51,11 +51,8 @@ func newSessionStore(ttl time.Duration) *sessionStore {
 }
 
 // create starts a session for role at now and returns the cookie token.
-func (s *sessionStore) create(role string, now time.Time) (string, error) {
-	token, err := webcred.GenerateSecret()
-	if err != nil {
-		return "", err //nolint:wrapcheck // GenerateSecret already names what failed.
-	}
+func (s *sessionStore) create(role string, now time.Time) string {
+	token := webcred.GenerateSecret()
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for key, sess := range s.sessions {
@@ -71,7 +68,7 @@ func (s *sessionStore) create(role string, now time.Time) (string, error) {
 		}
 	}
 	s.sessions[sha256.Sum256([]byte(token))] = session{role: role, expires: now.Add(s.ttl)}
-	return token, nil
+	return token
 }
 
 // role returns the role of a session live at now, or "" for an unknown or

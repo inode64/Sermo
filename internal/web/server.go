@@ -63,7 +63,6 @@ const (
 	headerValueSameOrigin       = "same-origin"
 	headerValueNoSniff          = "nosniff"
 	cspNonceBytes               = 16
-	cspFallbackNonceBase        = 36
 	assetIndexHTML              = "index.html"
 	templateNoncePlaceholder    = "{{CSP_NONCE}}"
 	templateVersionPlaceholder  = "{{VERSION}}"
@@ -495,9 +494,7 @@ func contentSecurityPolicy(nonce string) string {
 
 func cspNonce() string {
 	var b [cspNonceBytes]byte
-	if _, err := rand.Read(b[:]); err != nil {
-		return strconv.FormatInt(time.Now().UnixNano(), cspFallbackNonceBase)
-	}
+	_, _ = rand.Read(b[:]) // never fails; see crypto/rand.Read
 	return base64.RawStdEncoding.EncodeToString(b[:])
 }
 
