@@ -386,7 +386,7 @@ func ownConnConfig(engine, driver string, entry map[string]any) conn.Config {
 	}
 	c := databaseConnectionConfig(entry)
 	c.Socket = cfgval.AsString(entry[CheckKeySocket])
-	c.Port = connectionPort(entry, 0)
+	c.Port = connectionPort(entry)
 	return c
 }
 
