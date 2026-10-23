@@ -928,7 +928,7 @@ func dispatchNotifyFiltered(ctx context.Context, notifiers []notify.Notifier, ms
 }
 
 func dryRunConsoleNotifier(n notify.Notifier) bool {
-	return n != nil && n.Type() == "wall"
+	return n != nil && n.Type() == notify.TypeWall
 }
 
 // watchMessage builds a notification from a fired watch's message and hook env.

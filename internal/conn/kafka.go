@@ -129,7 +129,7 @@ func readKafkaAPIVersions(r io.Reader) (Result, error) {
 
 	res := Result{Extra: map[string]string{
 		ExtraKeyKafkaAPICount:   strconv.Itoa(int(count)),
-		ExtraKeyKafkaErrorCode:  strconv.Itoa(int(errorCode)),
+		ExtraKeyErrorCode:       strconv.Itoa(int(errorCode)),
 		ExtraKeyKafkaProduceAPI: yesNo(keys[kafkaProduceKey]),
 		ExtraKeyKafkaVoteAPI:    yesNo(keys[kafkaVoteKey]),
 	}}

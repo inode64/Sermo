@@ -33,7 +33,6 @@ const Filename = "sermo.db"
 
 const (
 	stateDirMode        = 0o700
-	secondsPerMinute    = units.SecondsPerMinute
 	sqliteBusyTimeoutMS = 5000
 	sqliteDriverName    = "sqlite"
 )
@@ -263,7 +262,6 @@ func (s *Store) sqlCtx() context.Context {
 }
 
 const (
-	hoursPerDay          = units.HoursPerDay
 	historyRetentionDays = 366
 	eventQueryMaxArgs    = 2
 	tableServiceSnapshot = "service_check_snapshot"
@@ -272,7 +270,7 @@ const (
 
 // DefaultSeriesWindow is the normal lookback used when a series request omits
 // its `since` window.
-const DefaultSeriesWindow = hoursPerDay * time.Hour
+const DefaultSeriesWindow = units.HoursPerDay * time.Hour
 
 // DefaultCacheBytes is the SQLite page-cache size used when the caller does not
 // override it. The archive tables and their indexes grow into the tens of MB;

@@ -509,7 +509,7 @@ func (b *WebBackend) decorateRemediation(name string, svc *web.Service) {
 		return
 	}
 	if !svc.Monitored {
-		svc.RemediationState = remediationStatePaused
+		svc.RemediationState = TargetStatePaused
 		return
 	}
 	if b.remediation == nil {

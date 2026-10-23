@@ -54,7 +54,6 @@ const (
 )
 
 const (
-	daemonPIDFilename    = config.DaemonPIDFilename
 	instanceLockFilename = "sermod.lock"
 	daemonEventLogLimit  = 1000
 	daemonPIDFileMode    = 0o644
@@ -450,7 +449,7 @@ func run(args []string) int {
 	// This augments the pidfile managed by OpenRC (/run/sermod.pid) and
 	// systemd's $MAINPID. Best-effort; failure is only logged.
 	{
-		pidPath := filepath.Join(rt, daemonPIDFilename)
+		pidPath := filepath.Join(rt, config.DaemonPIDFilename)
 		if err := os.WriteFile(pidPath, []byte(strconv.Itoa(os.Getpid())+"\n"), daemonPIDFileMode); err != nil {
 			logger.Warn("write pidfile failed (daemon reload via sermoctl may need to fall back)", logFieldPath, pidPath, logFieldError, err)
 		} else {

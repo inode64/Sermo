@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sermo/internal/dockerctl"
 )
 
 // protocolRegistration is one built-in protocol and the aliases that resolve
@@ -42,7 +43,7 @@ var builtinProtocolRegistrations = []protocolRegistration{
 	{protocol: dhclientProtocol{}, aliases: []string{protocolAliasDHClient}, defaultHost: dhclientDefaultHost},
 	{protocol: dhcpProtocol{}, aliases: []string{protocolAliasDHCPD}},
 	{protocol: dnsProtocol{}},
-	{protocol: dockerProtocol{}, defaultSocket: DefaultDockerSocket},
+	{protocol: dockerProtocol{}, defaultSocket: dockerctl.DefaultSocket},
 	{protocol: fail2banProtocol, defaultSocket: DefaultFail2banSocket, socketOnly: true},
 	{protocol: fpmProtocol{}, aliases: []string{protocolAliasPHPFPM}, socket: true},
 	{protocol: ftpProtocol{}, socket: true},

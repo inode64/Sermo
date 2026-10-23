@@ -42,7 +42,6 @@ const (
 )
 
 const (
-	remediationStatePaused   = TargetStatePaused
 	remediationStatePending  = "pending"
 	remediationStateEligible = "eligible"
 	remediationStateBlocked  = "blocked"
@@ -61,7 +60,6 @@ const (
 	// (one reading per RAID member, suffixed with the array name).
 	watchReadingFieldRAIDArrayPrefix = "raid_array_"
 	watchReadingFieldSample          = "sample"
-	watchCategoryFallback            = config.WatchCategoryWatch
 	watchReadingFieldUser            = checks.CheckKeyUser
 	lockOwnerStatusLive              = "live"
 	lockReleaseDefaultRule           = "default"
@@ -612,7 +610,7 @@ func newWebWatch(name string, entry map[string]any, globalNotify []string, defau
 	return &webWatch{
 		name:               name,
 		displayName:        config.DisplayName(entry, name),
-		category:           config.CategoryLabel(entry, watchCategoryFallback),
+		category:           config.CategoryLabel(entry, config.WatchCategoryWatch),
 		checkType:          ctype,
 		configID:           watchSnapshotConfigID(entry),
 		bands:              checks.DeclaredBandMetrics(ctype, checkMap(entry)),

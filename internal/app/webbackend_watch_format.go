@@ -88,7 +88,7 @@ func byteUsage(r metrics.Reading) (used, total, free uint64, ok bool) {
 // no extra probe). nil for any other type, or when the needed data is unavailable.
 func watchMeter(checkType string, system metrics.Snapshot) *web.WatchMeter {
 	switch checkType {
-	case metrics.MetricMemory:
+	case checks.CheckTypeMemory:
 		r := system[metrics.MetricTotalMemory]
 		_, total, available, ok := byteUsage(r)
 		if !ok {

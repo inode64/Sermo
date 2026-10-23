@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"testing"
 
+	"sermo/internal/config"
 	"sermo/internal/process"
 )
 
@@ -34,7 +35,7 @@ func reloadTestApp(t *testing.T, pidfile string, scan []int, ids map[int]process
 		t.Fatal(err)
 	}
 	if pidfile != "" {
-		if err := os.WriteFile(filepath.Join(tmp, daemonPIDFilename), []byte(pidfile+"\n"), 0o644); err != nil {
+		if err := os.WriteFile(filepath.Join(tmp, config.DaemonPIDFilename), []byte(pidfile+"\n"), 0o644); err != nil {
 			t.Fatal(err)
 		}
 	}

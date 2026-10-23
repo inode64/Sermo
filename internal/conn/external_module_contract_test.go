@@ -10,6 +10,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"sermo/internal/netutil"
 	"sync"
 	"testing"
 	"time"
@@ -79,7 +80,7 @@ func testExternalModuleTLSPolicy(t *testing.T) {
 		wantErr bool
 	}{
 		{name: "normal verification rejects untrusted certificate", mode: ParamValueTrue, wantErr: true},
-		{name: "skip verify accepts untrusted certificate", mode: tlsSkipVerify},
+		{name: "skip verify accepts untrusted certificate", mode: netutil.TLSModeSkipVerify},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

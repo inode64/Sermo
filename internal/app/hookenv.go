@@ -3,8 +3,6 @@ package app
 import (
 	"strconv"
 	"time"
-
-	"sermo/internal/checks"
 )
 
 const (
@@ -42,8 +40,6 @@ const (
 	envFloatPrecisionAuto = -1
 	procWatchCPUPrecision = 2
 	procWatchIOPrecision  = 0
-	fileModeFormat        = checks.FileModeFormat
-	fileOwnerFormat       = checks.FileOwnerFormat
 )
 
 // envAgeSeconds renders a duration as the whole seconds SERMO_AGE_SECONDS

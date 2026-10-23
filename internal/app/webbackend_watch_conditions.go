@@ -15,13 +15,8 @@ import (
 )
 
 const (
-	watchConditionFieldGrowth  = "growth"
-	watchMetricFieldSeparator  = "."
-	watchMetricSuffixChange    = checks.CheckKeyChange
-	watchMetricSuffixDelta     = checks.CheckKeyDelta
-	watchMetricSuffixExpect    = checks.CheckKeyExpect
-	watchMetricSuffixOn        = checks.CheckKeyOn
-	watchMetricSuffixThreshold = checks.CheckKeyThreshold
+	watchConditionFieldGrowth = "growth"
+	watchMetricFieldSeparator = "."
 )
 
 func checkMap(entry map[string]any) map[string]any {
@@ -291,22 +286,19 @@ func watchMetricConditions(metricEntries map[string]any) []web.WatchCondition {
 			continue
 		}
 		if on := cfgval.AsString(entry[checks.CheckKeyOn]); on != "" {
-			out = append(out, web.WatchCondition{Field: watchMetricConditionField(metric, watchMetricSuffixOn), Value: on})
+			out = append(out, web.WatchCondition{Field: watchMetricConditionField(metric, checks.CheckKeyOn), Value: on})
 		}
 		if expect := cfgval.AsString(entry[checks.CheckKeyExpect]); expect != "" {
-			out = append(out, web.WatchCondition{Field: watchMetricConditionField(metric, watchMetricSuffixExpect), Op: cfgval.CompareOpEqual, Value: expect})
+			out = append(out, web.WatchCondition{Field: watchMetricConditionField(metric, checks.CheckKeyExpect), Op: cfgval.CompareOpEqual, Value: expect})
 		}
-		for _, comparison := range []struct{ source, suffix string }{
-			{checks.CheckKeyDelta, watchMetricSuffixDelta},
-			{checks.CheckKeyThreshold, watchMetricSuffixThreshold},
-		} {
-			if values, ok := entry[comparison.source].(map[string]any); ok {
-				out = append(out, watchMetricComparisonCondition(metric, comparison.suffix, values))
+		for _, key := range []string{checks.CheckKeyDelta, checks.CheckKeyThreshold} {
+			if values, ok := entry[key].(map[string]any); ok {
+				out = append(out, watchMetricComparisonCondition(metric, key, values))
 			}
 		}
 		if change, ok := entry[checks.CheckKeyChange].(map[string]any); ok {
 			out = append(out, web.WatchCondition{
-				Field: watchMetricConditionField(metric, watchMetricSuffixChange),
+				Field: watchMetricConditionField(metric, checks.CheckKeyChange),
 				Op:    cfgval.CompareOpGreater,
 				Value: cfgval.String(change[checks.CheckKeyDelta]),
 			})

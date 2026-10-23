@@ -3,6 +3,7 @@
 package utmp
 
 import (
+	"encoding/binary"
 	"os"
 	"path/filepath"
 	"testing"
@@ -10,8 +11,8 @@ import (
 
 func record(typ uint16, pid int32, line, user, host string) []byte {
 	rec := make([]byte, recordSize)
-	nativeEndian.PutUint16(rec[:2], typ)
-	nativeEndian.PutUint32(rec[pidOffset:pidOffset+pidSize], uint32(pid))
+	binary.NativeEndian.PutUint16(rec[:2], typ)
+	binary.NativeEndian.PutUint32(rec[pidOffset:pidOffset+pidSize], uint32(pid))
 	copy(rec[lineOffset:lineOffset+lineSize], line)
 	copy(rec[userOffset:userOffset+userSize], user)
 	copy(rec[hostOffset:hostOffset+hostSize], host)

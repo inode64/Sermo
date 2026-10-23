@@ -12,7 +12,7 @@ import (
 	"sermo/internal/execx/execxtest"
 )
 
-func staticMounts(ms ...checks.Mount) MountSource {
+func staticMounts(ms ...checks.Mount) checks.MountSamplerFunc {
 	return func() ([]checks.Mount, error) { return ms, nil }
 }
 

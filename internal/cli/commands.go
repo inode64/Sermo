@@ -75,8 +75,6 @@ const (
 	monitorStatusAlreadyPaused = "already-paused"
 )
 
-const daemonPIDFilename = config.DaemonPIDFilename
-
 const (
 	cliFieldSermoService = "SERMO_SERVICE"
 	cliFieldSermoAction  = "SERMO_ACTION"

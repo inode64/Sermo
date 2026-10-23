@@ -19,7 +19,6 @@ import (
 )
 
 const (
-	influxAuthHeader      = httpx.HeaderAuthorization
 	influxAuthTokenPrefix = "Token "
 	influxFluxAccept      = "application/csv"
 	influxFluxContentType = "application/vnd.flux"
@@ -87,7 +86,7 @@ func (c influxCheck) influxqlScalar(ctx context.Context, client *http.Client, ba
 	}
 	switch {
 	case c.token != "":
-		req.Header.Set(influxAuthHeader, influxAuthTokenPrefix+c.token)
+		req.Header.Set(httpx.HeaderAuthorization, influxAuthTokenPrefix+c.token)
 	case c.cfg.User != "":
 		req.SetBasicAuth(c.cfg.User, c.cfg.Password)
 	}
@@ -154,7 +153,7 @@ func (c influxCheck) fluxScalar(ctx context.Context, client *http.Client, base s
 	if err != nil {
 		return "", false, fmt.Errorf("build influxdb request: %w", err)
 	}
-	req.Header.Set(influxAuthHeader, influxAuthTokenPrefix+c.token)
+	req.Header.Set(httpx.HeaderAuthorization, influxAuthTokenPrefix+c.token)
 	req.Header.Set(httpx.HeaderContentType, influxFluxContentType)
 	req.Header.Set(httpx.HeaderAccept, influxFluxAccept)
 

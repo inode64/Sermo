@@ -28,9 +28,9 @@ func (unifiProtocol) RequiresUser() bool { return false }
 func (unifiProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	// UniFi controllers ship a self-signed certificate; skip verification unless
 	// the operator explicitly opts into it with tls: true.
-	tlsMode := tlsSkipVerify
-	if netutil.NormalizeTLS(cfg.TLS) == ParamValueTrue {
-		tlsMode = ParamValueTrue
+	tlsMode := netutil.TLSModeSkipVerify
+	if netutil.NormalizeTLS(cfg.TLS) == netutil.TLSModeTrue {
+		tlsMode = netutil.TLSModeTrue
 	}
 	client, base := httpProbeBaseWithTLSMode(cfg, defaultPortUniFi, tlsMode)
 	url := base + unifiStatusEndpoint

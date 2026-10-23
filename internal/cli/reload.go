@@ -30,7 +30,7 @@ func (a App) runServiceReload(ctx context.Context, opts options) int {
 // after the configured runtime dir. Keep this list restricted to current
 // supported paths; old package locations are intentionally not searched.
 func defaultReloadPidfileFallbacks() []string {
-	return []string{filepath.Join(config.DefaultRuntime, daemonPIDFilename)}
+	return []string{filepath.Join(config.DefaultRuntime, config.DaemonPIDFilename)}
 }
 
 func daemonReloadPidfileCandidates(primary string, fallbacks []string) []string {
@@ -55,7 +55,7 @@ func (a App) runReload(ctx context.Context, opts options) int {
 	if fallbacks == nil {
 		fallbacks = defaultReloadPidfileFallbacks()
 	}
-	candidates := daemonReloadPidfileCandidates(filepath.Join(runtimeDir, daemonPIDFilename), fallbacks)
+	candidates := daemonReloadPidfileCandidates(filepath.Join(runtimeDir, config.DaemonPIDFilename), fallbacks)
 
 	target, err := a.findDaemon(candidates)
 	if err != nil {

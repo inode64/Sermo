@@ -10,6 +10,7 @@ package state
 // resolution stays inside that key prefix.
 
 import (
+	"sermo/internal/units"
 	"time"
 )
 
@@ -28,7 +29,7 @@ const (
 // nothing finer exists to store. TestArchiveLadderIsConsolidatable pins that
 // every rung consolidates exactly into the next one.
 const (
-	resMinute   int64 = secondsPerMinute
+	resMinute   int64 = units.SecondsPerMinute
 	res5Minutes int64 = int64(slaHourArchiveSpan / time.Second)
 	resHour     int64 = int64(slaDayArchiveSpan / time.Second)
 	res6Hours   int64 = int64(slaWeekArchiveSpan / time.Second)

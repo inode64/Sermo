@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"sermo/internal/metrics"
+	"sermo/internal/units"
 )
 
 // SLAWindow names a rolling availability window and its length. The windows are
@@ -27,7 +28,7 @@ const (
 	slaRollingMonthDays = 30
 	slaRollingYearDays  = 365
 
-	slaSpanDay   = hoursPerDay * time.Hour
+	slaSpanDay   = units.HoursPerDay * time.Hour
 	slaSpanWeek  = slaRollingWeekDays * slaSpanDay
 	slaSpanMonth = slaRollingMonthDays * slaSpanDay
 	slaSpanYear  = slaRollingYearDays * slaSpanDay
