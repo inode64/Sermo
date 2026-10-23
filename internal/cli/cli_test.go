@@ -15,6 +15,7 @@ import (
 	"sermo/internal/config"
 	"sermo/internal/execx"
 	"sermo/internal/servicemgr"
+	"sermo/internal/web"
 )
 
 func TestVersionCommand(t *testing.T) {
@@ -700,7 +701,7 @@ func TestEventsList(t *testing.T) {
 	var gotLimit int
 	cfg := &config.Config{}
 	loadCalls := 0
-	sample := []event{
+	sample := []web.Event{
 		{Time: "2026-06-13T10:05:00Z", Service: "web", Kind: "action", Action: "restart", Status: "ok", Message: "restarted"},
 		{Time: "2026-06-13T10:00:00Z", Watch: "storage-root", Kind: "alert", Message: "high usage"},
 		{Time: "2026-06-13T09:58:00Z", App: "salt-minion", Kind: "firing", Message: "error: cancelled"},
@@ -708,7 +709,7 @@ func TestEventsList(t *testing.T) {
 	}
 	app := hermeticApp(t, App{
 		LoadConfig: func(string, ...config.Option) (*config.Config, error) { loadCalls++; return cfg, nil },
-		FetchEvents: func(ctx context.Context, loaded *config.Config, service string, limit int) ([]event, error) {
+		FetchEvents: func(ctx context.Context, loaded *config.Config, service string, limit int) ([]web.Event, error) {
 			if loaded != cfg {
 				t.Fatal("fetch did not receive command configuration")
 			}

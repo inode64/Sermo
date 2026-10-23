@@ -36,7 +36,7 @@ func (a App) runAction(ctx context.Context, opts options, action string) int {
 		err         error
 	)
 	if operation.IsServiceAction(action) {
-		actionStore, err = openStateStore(ctx, cfg)
+		actionStore, err = app.OpenStateStore(ctx, cfg)
 		if err != nil {
 			a.recordAccess(cfg, action, service, accessStatusError, err.Error())
 			return a.fail(opts, fmt.Sprintf("operation state unavailable: %v", err))
@@ -213,19 +213,11 @@ func (a App) operateWithManualState(ctx context.Context, cfg *config.Config, res
 	return result, err
 }
 
-// openStateStore opens the persistent state store under engine.state. It passes
-// the engine's cache and retention settings so sermoctl reads history through the
-// same resolution ladder the daemon writes it with.
-func openStateStore(ctx context.Context, cfg *config.Config) (*state.Store, error) {
-	//nolint:wrapcheck // each command prefixes its own "<verb> failed:" context.
-	return app.OpenStateStore(ctx, cfg)
-}
-
 // withStateStore opens the store, runs fn, and always closes the store. onOpenErr
 // maps an open failure to a command exit code (typically a.fail with a prefix).
-// Prefer this over openStateStore + defer Close at each call site.
+// Prefer this over app.OpenStateStore + defer Close at each call site.
 func withStateStore(ctx context.Context, cfg *config.Config, onOpenErr func(error) int, fn func(*state.Store) int) int {
-	store, err := openStateStore(ctx, cfg)
+	store, err := app.OpenStateStore(ctx, cfg)
 	if err != nil {
 		return onOpenErr(err)
 	}

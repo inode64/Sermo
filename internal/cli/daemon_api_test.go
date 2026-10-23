@@ -130,11 +130,11 @@ func TestWatchStatusFetchesOneDaemonSnapshot(t *testing.T) {
 			http.NotFound(w, r)
 			return
 		}
-		writeDaemonAPITestJSON(w, []daemonWatchDetail{{
+		writeDaemonAPITestJSON(w, []web.Watch{{
 			Name:          "storage-root",
 			State:         "warning",
 			LastCheckedAt: "2026-09-01T12:34:56Z",
-			Readings: []daemonWatchReading{{
+			Readings: []web.WatchReading{{
 				Field: "free_pct", Label: "Free", Value: "4.2%",
 			}},
 		}})
@@ -188,13 +188,13 @@ func TestFetchEventsHTTP(t *testing.T) {
 		{
 			name:    "global cursor page",
 			path:    "/api/events",
-			payload: map[string]any{"events": []event{{Service: "web", Kind: "alert", Message: "down"}}, "has_more": true},
+			payload: map[string]any{"events": []web.Event{{Service: "web", Kind: "alert", Message: "down"}}, "has_more": true},
 		},
 		{
 			name:    "service event array",
 			service: "web",
 			path:    "/api/services/web/events",
-			payload: []event{{Service: "web", Kind: "recovered", Message: "up"}},
+			payload: []web.Event{{Service: "web", Kind: "recovered", Message: "up"}},
 		},
 	}
 
@@ -252,7 +252,7 @@ func TestProbeDaemonWatchHTTP(t *testing.T) {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}
-		writeDaemonAPITestJSON(w, daemonWatchProbe{OK: true, Message: "hdparm /dev/sda read=166.67 MB/s", Readings: []daemonWatchReading{{Field: "read", Label: "Read", Value: "166.67 MB/s"}}})
+		writeDaemonAPITestJSON(w, web.ActionResult{OK: true, Message: "hdparm /dev/sda read=166.67 MB/s", Readings: []web.WatchReading{{Field: "read", Label: "Read", Value: "166.67 MB/s"}}})
 	}))
 	defer srv.Close()
 
@@ -284,7 +284,7 @@ func TestProbeDaemonWatchSendsTheBackendGeneration(t *testing.T) {
 			if auth := r.Header.Get("Authorization"); auth != "Basic YWRtaW46c2VjcmV0" {
 				t.Errorf("generation Authorization = %q, want configured Basic auth", auth)
 			}
-			writeDaemonAPITestJSON(w, []daemonWatchDetail{})
+			writeDaemonAPITestJSON(w, []web.Watch{})
 			return
 		}
 		if r.Method != http.MethodPost || r.URL.Path != "/api/watches/diskio-sdd/probe" {
@@ -295,7 +295,7 @@ func TestProbeDaemonWatchSendsTheBackendGeneration(t *testing.T) {
 			http.Error(w, "X-Sermo-Generation header is required", http.StatusPreconditionRequired)
 			return
 		}
-		writeDaemonAPITestJSON(w, daemonWatchProbe{OK: true, Message: "diskio sdd util 0.0%"})
+		writeDaemonAPITestJSON(w, web.ActionResult{OK: true, Message: "diskio sdd util 0.0%"})
 	}))
 	defer srv.Close()
 

@@ -59,7 +59,7 @@ func (a App) prepareManualOperationRunner(ctx context.Context, opts options, cfg
 	eventStore := actionStore
 	if a.Operate == nil && eventStore == nil {
 		var err error
-		eventStore, err = openStateStore(ctx, cfg)
+		eventStore, err = app.OpenStateStore(ctx, cfg)
 		if err != nil {
 			return manualOperationRunner{}, closeRunner, fmt.Errorf("operation event store unavailable: %w", err)
 		}

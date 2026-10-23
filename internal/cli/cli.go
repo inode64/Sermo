@@ -200,16 +200,16 @@ type App struct {
 	// FetchEvents is injectable for `sermoctl events` (listing recent events via
 	// the daemon web API). Defaults to fetching over HTTP using the config's web
 	// address/port (and password for auth if present).
-	FetchEvents func(ctx context.Context, cfg *config.Config, service string, limit int) ([]event, error)
+	FetchEvents func(ctx context.Context, cfg *config.Config, service string, limit int) ([]web.Event, error)
 	// FetchDaemonServiceState returns the daemon-computed service state when
 	// sermod is running and the web API is reachable. ok is false when unavailable.
 	FetchDaemonServiceState func(ctx context.Context, cfg *config.Config, service string) (string, bool)
 	// FetchDaemonWatchDetail returns the current daemon-published snapshot for
 	// one watch. ok is false when sermod or its web API is unavailable.
-	FetchDaemonWatchDetail func(ctx context.Context, cfg *config.Config, watch string) (daemonWatchDetail, bool)
+	FetchDaemonWatchDetail func(ctx context.Context, cfg *config.Config, watch string) (web.Watch, bool)
 	// ProbeDaemonWatch asks the active daemon to run and record one safe manual
 	// host-watch sample through the authenticated Web API.
-	ProbeDaemonWatch func(ctx context.Context, cfg *config.Config, watch string) (daemonWatchProbe, error)
+	ProbeDaemonWatch func(ctx context.Context, cfg *config.Config, watch string) (web.ActionResult, error)
 	// PruneEvents is injectable for `sermoctl events clear` and
 	// `sermoctl activity clear`. Defaults to pruning the daemon's persisted event
 	// feed over HTTP using the config's web address/port (and password for auth if
@@ -270,12 +270,6 @@ type options struct {
 	hash     string // --hash: credential format (bcrypt or sha256)
 	cost     int    // --cost: bcrypt work factor (0 means the default)
 }
-
-// event and eventPage preserve the local CLI names while sharing the daemon's
-// JSON model and event-target semantics.
-type event = web.Event
-
-type eventPage = web.EventPage
 
 // globalPath returns the --config path, or the packaged default.
 func (o options) globalPath() string {

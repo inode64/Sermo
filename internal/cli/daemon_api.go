@@ -188,17 +188,17 @@ func (a App) fetchDaemonServiceStateWithConfig(ctx context.Context, cfg *config.
 	return detail.State, true
 }
 
-func (a App) fetchDaemonWatchDetail(ctx context.Context, cfg *config.Config, watch string) (daemonWatchDetail, bool) {
-	var watches []daemonWatchDetail
+func (a App) fetchDaemonWatchDetail(ctx context.Context, cfg *config.Config, watch string) (web.Watch, bool) {
+	var watches []web.Watch
 	if !a.daemonAPIJSONWithConfig(ctx, cfg, web.APIPathWatches, &watches) {
-		return daemonWatchDetail{}, false
+		return web.Watch{}, false
 	}
-	for _, detail := range watches {
-		if detail.Name == watch {
-			return detail, true
+	for i := range watches {
+		if watches[i].Name == watch {
+			return watches[i], true
 		}
 	}
-	return daemonWatchDetail{}, false
+	return web.Watch{}, false
 }
 
 // fetchDaemonServices returns the daemon's computed view of its configured

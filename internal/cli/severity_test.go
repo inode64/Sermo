@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"sermo/internal/severity"
+	"sermo/internal/web"
 )
 
 func TestSeverityLabel(t *testing.T) {
@@ -29,7 +30,7 @@ func TestSeverityLabel(t *testing.T) {
 func TestEventsTableShowsSeverity(t *testing.T) {
 	var stdout bytes.Buffer
 	app := hermeticApp(t, App{Stdout: &stdout})
-	app.writeEventsTable([]event{
+	app.writeEventsTable([]web.Event{
 		{Time: "2026-09-30T10:00:00Z", Watch: "disk-root", Kind: "firing", Severity: "critical", Message: "used 99%"},
 		{Time: "2026-09-30T09:00:00Z", Service: "web", Kind: "action", Action: "restart", Message: "restarted"},
 	})

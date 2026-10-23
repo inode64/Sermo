@@ -20,23 +20,6 @@ import (
 	"sermo/internal/web"
 )
 
-// daemonWatchReading is the daemon's own reading row: one schema on the wire
-// for the dashboard and the CLI, so a field the daemon adds (good, warning) is
-// never lost here.
-type daemonWatchReading = web.WatchReading
-
-type daemonWatchDetail struct {
-	Name          string               `json:"name"`
-	State         string               `json:"state"`
-	LastCheckedAt string               `json:"last_checked_at"`
-	Readings      []daemonWatchReading `json:"readings"`
-}
-
-// daemonWatchProbe is the probe's answer as the daemon sends it: a 409 still
-// carries the graded result, and Severity says when a fired condition is only
-// an advisory.
-type daemonWatchProbe = web.ActionResult
-
 const (
 	watchCommandTargetArgCount = 2
 	// watchStateUnknown is reported when sermod cannot supply the watch state.
@@ -106,18 +89,18 @@ func (a App) runWatchProbe(ctx context.Context, opts options) int {
 	return exitNotActive
 }
 
-func (a App) probeDaemonWatch(ctx context.Context, cfg *config.Config, watch string) (daemonWatchProbe, error) {
+func (a App) probeDaemonWatch(ctx context.Context, cfg *config.Config, watch string) (web.ActionResult, error) {
 	path := web.APIPathWatches + "/" + url.PathEscape(watch) + "/probe"
 	resp, err := a.daemonWebDo(ctx, cfg, http.MethodPost, "probe", true, func(base string) string {
 		return base + path
 	})
 	if err != nil {
-		return daemonWatchProbe{}, err
+		return web.ActionResult{}, err
 	}
 	defer func() { _ = resp.Body.Close() }()
-	var result daemonWatchProbe
+	var result web.ActionResult
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return daemonWatchProbe{}, fmt.Errorf("decode probe response: %w", err)
+		return web.ActionResult{}, fmt.Errorf("decode probe response: %w", err)
 	}
 	if resp.StatusCode != http.StatusOK {
 		if result.Message == "" {
@@ -288,7 +271,7 @@ func (a App) runWatchStatus(ctx context.Context, opts options) int {
 	return code
 }
 
-func printWatchReading(out io.Writer, reading daemonWatchReading) {
+func printWatchReading(out io.Writer, reading web.WatchReading) {
 	label := reading.Label
 	if label == "" {
 		label = reading.Field
