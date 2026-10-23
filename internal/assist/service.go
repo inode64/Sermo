@@ -194,9 +194,9 @@ func askServiceProps(p *Prompt, env Env, c ServiceCandidate, reviewPort bool) (s
 	}
 	if c.Generic {
 		if pidfile := askServicePidfile(p, c); pidfile != "" {
-			body[config.ServiceKeyPidfile] = pidfile
+			body[process.ServiceKeyPidfile] = pidfile
 		} else if selector, label := detectedProcessSelector(c); selector != nil && p.Confirm("No pidfile — match "+c.Name+" by "+label+"?", true) {
-			body[config.SectionProcesses] = map[string]any{process.RoleMain: selector}
+			body[process.SectionProcesses] = map[string]any{process.RoleMain: selector}
 		}
 	}
 	return c.Name, body
@@ -301,7 +301,7 @@ func serviceLabel(c ServiceCandidate) string {
 	}
 	switch {
 	case c.Pidfile != "":
-		details = append(details, labelField(config.ServiceKeyPidfile, c.Pidfile))
+		details = append(details, labelField(process.ServiceKeyPidfile, c.Pidfile))
 	case c.Cmd != "":
 		details = append(details, "cmd match")
 	case c.Exe != "":

@@ -69,7 +69,7 @@ const (
 
 	// MessageKillSelectorRequired refuses a blocker kill on a mount without its
 	// own kill_only_if selector.
-	MessageKillSelectorRequired = "kill blockers requires " + config.StorageKeyMount + "." + config.MountKeyStopPolicy + "." + process.StopPolicyKeyKillOnlyIf
+	MessageKillSelectorRequired = "kill blockers requires " + config.StorageKeyMount + "." + process.SectionStopPolicy + "." + process.StopPolicyKeyKillOnlyIf
 
 	mountStateActive   = "active"
 	mountStateInactive = "inactive"
@@ -232,14 +232,14 @@ func SpecFromStorageTree(name string, tree map[string]any) Spec {
 	if ref, ok := mount[config.MountKeyRefcount].(bool); ok {
 		spec.Refcount = ref
 	}
-	if d := cfgval.Duration(umount[config.StopPolicyKeyTermTimeout]); d > 0 {
+	if d := cfgval.Duration(umount[process.StopPolicyKeyTermTimeout]); d > 0 {
 		spec.Umount.TermTimeout = d
 	}
-	if d := cfgval.Duration(umount[config.StopPolicyKeyKillTimeout]); d > 0 {
+	if d := cfgval.Duration(umount[process.StopPolicyKeyKillTimeout]); d > 0 {
 		spec.Umount.KillTimeout = d
 	}
-	if sp, ok := mount[config.MountKeyStopPolicy].(map[string]any); ok {
-		if koi, ok := sp[config.StopPolicyKeyKillOnlyIf].(map[string]any); ok {
+	if sp, ok := mount[process.SectionStopPolicy].(map[string]any); ok {
+		if koi, ok := sp[process.StopPolicyKeyKillOnlyIf].(map[string]any); ok {
 			spec.KillOnlyIf = process.KillSelectorFromConfig(koi)
 		}
 	}

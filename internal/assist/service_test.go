@@ -103,10 +103,10 @@ func TestServiceAssistantCatalogThenGenericServices(t *testing.T) {
 	if nginx[config.ServiceKeyUses] != "nginx" {
 		t.Fatalf("nginx uses = %v, want nginx", nginx[config.ServiceKeyUses])
 	}
-	if _, ok := nginx[config.ServiceKeyPidfile]; ok {
+	if _, ok := nginx[process.ServiceKeyPidfile]; ok {
 		t.Fatalf("catalog service must inherit pidfile from catalog: %v", nginx)
 	}
-	if _, ok := nginx[config.SectionProcesses]; ok {
+	if _, ok := nginx[process.SectionProcesses]; ok {
 		t.Fatalf("catalog service must inherit processes from catalog: %v", nginx)
 	}
 	custom := res.Services["customd"].(map[string]any)
@@ -121,8 +121,8 @@ func TestServiceAssistantCatalogThenGenericServices(t *testing.T) {
 	if serviceCheck[checks.CheckKeyType] != checks.CheckTypeService || serviceCheck[checks.CheckKeyExpect] != string(servicemgr.StatusActive) {
 		t.Fatalf("generic service check = %v, want service/active", serviceCheck)
 	}
-	if custom[config.ServiceKeyPidfile] != "/run/customd.pid" {
-		t.Fatalf("generic pidfile = %v, want /run/customd.pid", custom[config.ServiceKeyPidfile])
+	if custom[process.ServiceKeyPidfile] != "/run/customd.pid" {
+		t.Fatalf("generic pidfile = %v, want /run/customd.pid", custom[process.ServiceKeyPidfile])
 	}
 }
 
@@ -147,10 +147,10 @@ func TestServiceAssistantCatalogDetectedPidfileIsInherited(t *testing.T) {
 		ServiceCandidate{Name: "nginx", Title: "Nginx", Unit: "nginx", Status: string(servicemgr.StatusActive), Pidfile: "/run/nginx.pid"},
 	), "1", "1", "", "n")
 	svc := res.Services["nginx"].(map[string]any)
-	if _, ok := svc[config.ServiceKeyPidfile]; ok {
+	if _, ok := svc[process.ServiceKeyPidfile]; ok {
 		t.Fatalf("catalog service must not write pidfile override: %v", svc)
 	}
-	if _, ok := svc[config.SectionProcesses]; ok {
+	if _, ok := svc[process.SectionProcesses]; ok {
 		t.Fatalf("catalog service must not write processes override: %v", svc)
 	}
 }
@@ -179,8 +179,8 @@ func TestServiceAssistantGenericDetectedPidfile(t *testing.T) {
 		ServiceCandidate{Name: "customd", Title: "customd", Unit: "customd", Status: string(servicemgr.StatusActive), Generic: true, Pidfile: "/run/customd.pid"},
 	), "y", "1", "", "1", "", "n")
 	svc := res.Services["customd"].(map[string]any)
-	if svc[config.ServiceKeyPidfile] != "/run/customd.pid" {
-		t.Fatalf("pidfile = %v, want /run/customd.pid", svc[config.ServiceKeyPidfile])
+	if svc[process.ServiceKeyPidfile] != "/run/customd.pid" {
+		t.Fatalf("pidfile = %v, want /run/customd.pid", svc[process.ServiceKeyPidfile])
 	}
 }
 
@@ -202,8 +202,8 @@ func TestServiceAssistantRejectsNonAbsolutePidfile(t *testing.T) {
 		t.Fatalf("expected validation message, got:\n%s", out)
 	}
 	svc := res.Services["customd"].(map[string]any)
-	if svc[config.ServiceKeyPidfile] != "/run/customd.pid" {
-		t.Fatalf("pidfile = %v, want /run/customd.pid", svc[config.ServiceKeyPidfile])
+	if svc[process.ServiceKeyPidfile] != "/run/customd.pid" {
+		t.Fatalf("pidfile = %v, want /run/customd.pid", svc[process.ServiceKeyPidfile])
 	}
 }
 
@@ -214,7 +214,7 @@ func TestServiceAssistantCommandMatchFallback(t *testing.T) {
 	res, _ := runServiceAssistant(t, serviceEnv(
 		ServiceCandidate{Name: "sshd", Title: "OpenSSH", Unit: "sshd", Status: string(servicemgr.StatusActive), Generic: true, Exe: "/usr/sbin/sshd"},
 	), "y", "1", "", "y", "1", "", "n")
-	procs := res.Services["sshd"].(map[string]any)[config.SectionProcesses].(map[string]any)
+	procs := res.Services["sshd"].(map[string]any)[process.SectionProcesses].(map[string]any)
 	main := procs[process.RoleMain].(map[string]any)
 	if _, present := main[config.EntryKeyType]; present || main[process.SelectorKeyExe] != "/usr/sbin/sshd" {
 		t.Fatalf("processes.main = %v, want /usr/sbin/sshd without type", main)
@@ -228,7 +228,7 @@ func TestServiceAssistantCommandPatternFallback(t *testing.T) {
 	res, _ := runServiceAssistant(t, serviceEnv(
 		ServiceCandidate{Name: "homeassistant", Title: "Home Assistant", Unit: "homeassistant", Status: string(servicemgr.StatusActive), Generic: true, Cmd: `(^|[[:space:]])/usr/bin/hass($|[[:space:]])`, User: "homeassistant"},
 	), "y", "1", "", "y", "1", "", "n")
-	procs := res.Services["homeassistant"].(map[string]any)[config.SectionProcesses].(map[string]any)
+	procs := res.Services["homeassistant"].(map[string]any)[process.SectionProcesses].(map[string]any)
 	main := procs[process.RoleMain].(map[string]any)
 	if _, present := main[config.EntryKeyType]; present || main[process.SelectorKeyCmd] != `(^|[[:space:]])/usr/bin/hass($|[[:space:]])` || main[process.SelectorKeyUser] != "homeassistant" {
 		t.Fatalf("processes.main = %v, want cmd+user without type", main)

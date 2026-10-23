@@ -29,7 +29,7 @@ func TestResolvedLifecycleDrivesInitBackendMatrix(t *testing.T) {
 					string(servicemgr.BackendSystemd): []any{"demo.socket"},
 					string(servicemgr.BackendOpenRC):  []any{"demo-helper"},
 				},
-				config.SectionProcesses: map[string]any{},
+				process.SectionProcesses: map[string]any{},
 			}
 			engine, manager := lifecycleMatrixEngine(t, tt.backend, tree)
 			if engine.Lifecycle.ProcessMode != config.ServiceProcessNone {

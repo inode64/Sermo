@@ -2,6 +2,7 @@ package config
 
 import (
 	"sermo/internal/cfgval"
+	"sermo/internal/process"
 )
 
 // ServiceProcessMode describes where a resolved service obtains its process
@@ -41,19 +42,19 @@ func resolvedProcessMode(tree map[string]any) ServiceProcessMode {
 	if hasConfiguredProcessIdentity(tree) {
 		return ServiceProcessResident
 	}
-	if _, explicit := tree[SectionProcesses]; explicit {
+	if _, explicit := tree[process.SectionProcesses]; explicit {
 		return ServiceProcessNone
 	}
 	return ServiceProcessInit
 }
 
 func hasConfiguredProcessIdentity(tree map[string]any) bool {
-	if len(cfgval.StringList(tree[ServiceKeyPidfile])) > 0 {
+	if len(cfgval.StringList(tree[process.ServiceKeyPidfile])) > 0 {
 		return true
 	}
-	if pidfiles, ok := tree[ServiceKeyPidfiles].(map[string]any); ok && len(pidfiles) > 0 {
+	if pidfiles, ok := tree[process.ServiceKeyPidfiles].(map[string]any); ok && len(pidfiles) > 0 {
 		return true
 	}
-	processes, ok := tree[SectionProcesses].(map[string]any)
+	processes, ok := tree[process.SectionProcesses].(map[string]any)
 	return ok && len(processes) > 0
 }

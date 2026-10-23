@@ -3,6 +3,7 @@ package config
 import (
 	"sermo/internal/checks"
 	"sermo/internal/metrics"
+	"sermo/internal/process"
 	"sermo/internal/rules"
 )
 
@@ -108,8 +109,8 @@ const (
 const (
 	WatchKillKeySignal      = "signal"
 	WatchKillKeyEscalate    = "escalate"
-	WatchKillKeyTermTimeout = keyTermTimeout
-	WatchKillKeyKillTimeout = keyKillTimeout
+	WatchKillKeyTermTimeout = process.StopPolicyKeyTermTimeout
+	WatchKillKeyKillTimeout = process.StopPolicyKeyKillTimeout
 )
 
 // WatchExpandKeyBy configures the amount for a storage watch's then.expand action.

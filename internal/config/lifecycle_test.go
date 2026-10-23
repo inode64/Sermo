@@ -1,6 +1,7 @@
 package config
 
 import (
+	"sermo/internal/process"
 	"slices"
 	"testing"
 )
@@ -19,24 +20,24 @@ func TestResolveServiceLifecycle(t *testing.T) {
 		},
 		{
 			name: "explicit resident",
-			tree: map[string]any{SectionProcesses: map[string]any{"main": map[string]any{"exe": "/usr/sbin/demo"}}},
+			tree: map[string]any{process.SectionProcesses: map[string]any{"main": map[string]any{"exe": "/usr/sbin/demo"}}},
 			want: ServiceLifecycle{ProcessMode: ServiceProcessResident},
 		},
 		{
 			name: "no resident process",
-			tree: map[string]any{SectionProcesses: map[string]any{}},
+			tree: map[string]any{process.SectionProcesses: map[string]any{}},
 			want: ServiceLifecycle{ProcessMode: ServiceProcessNone},
 		},
 		{
 			name: "named pidfile is resident",
-			tree: map[string]any{SectionProcesses: map[string]any{}, ServiceKeyPidfiles: map[string]any{"main": "/run/demo.pid"}},
+			tree: map[string]any{process.SectionProcesses: map[string]any{}, process.ServiceKeyPidfiles: map[string]any{"main": "/run/demo.pid"}},
 			want: ServiceLifecycle{ProcessMode: ServiceProcessResident},
 		},
 		{
 			name: "full operational contract",
 			tree: map[string]any{
 				ServiceKeyAlsoService: map[string]any{backendSystemd: []any{"demo.socket"}},
-				SectionProcesses: map[string]any{
+				process.SectionProcesses: map[string]any{
 					"main":   map[string]any{"exe": "/usr/bin/demo"},
 					"worker": map[string]any{"exe": "/usr/bin/demo-worker"},
 				},

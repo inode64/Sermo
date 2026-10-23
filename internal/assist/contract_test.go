@@ -11,6 +11,7 @@ import (
 	"sermo/internal/checks"
 	"sermo/internal/config"
 	"sermo/internal/notify"
+	"sermo/internal/process"
 	"sermo/internal/rules"
 	"sermo/internal/servicemgr"
 )
@@ -103,8 +104,8 @@ func TestGeneratedGenericServicePassesConfigValidation(t *testing.T) {
 							},
 						},
 					},
-					config.ServiceKeyPidfile: "/run/customd.pid",
-					config.EntryKeyDryRun:    true,
+					process.ServiceKeyPidfile: "/run/customd.pid",
+					config.EntryKeyDryRun:     true,
 				},
 			},
 		},
