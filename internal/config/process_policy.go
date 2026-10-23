@@ -23,9 +23,6 @@ type ProcessIdentityRule struct {
 	Cmd  *regexp.Regexp
 }
 
-// ProcessPolicyAllow is the process_policy name of a ProcessIdentityRule.
-type ProcessPolicyAllow = ProcessIdentityRule
-
 // ProcessIdentityRuleError identifies one invalid field below a rule mapping.
 // PathSuffix is appended to the caller's canonical check.<key> path.
 type ProcessIdentityRuleError struct {
@@ -34,9 +31,6 @@ type ProcessIdentityRuleError struct {
 	PathSuffix string
 	Problem    string
 }
-
-// ProcessPolicyAllowError is the process_policy name of a ProcessIdentityRuleError.
-type ProcessPolicyAllowError = ProcessIdentityRuleError
 
 // Error renders an issue for unchecked builder callers that do not have a
 // configuration document path.
@@ -47,7 +41,7 @@ func (e ProcessIdentityRuleError) Error() string {
 // ParseProcessPolicyAllows validates and compiles a process_policy allow
 // mapping, which must be non-empty: an empty allowlist would make every
 // process of the account a violation.
-func ParseProcessPolicyAllows(raw any) ([]ProcessPolicyAllow, []ProcessPolicyAllowError) {
+func ParseProcessPolicyAllows(raw any) ([]ProcessIdentityRule, []ProcessIdentityRuleError) {
 	return ParseProcessIdentityRules(raw, checks.CheckTypeProcessPolicy, checks.CheckKeyAllow, true)
 }
 
@@ -93,38 +87,38 @@ func parseProcessIdentityRule(name string, raw any) (ProcessIdentityRule, []Proc
 		return ProcessIdentityRule{}, []ProcessIdentityRuleError{{PathSuffix: suffix, Problem: "must be a mapping"}}
 	}
 
-	issues := unsupportedProcessPolicyAllowFields(rawAllow, suffix)
-	exe, exeIssue := processPolicyAllowExecutable(rawAllow, suffix)
+	issues := unsupportedProcessIdentityFields(rawAllow, suffix)
+	exe, exeIssue := processIdentityExecutable(rawAllow, suffix)
 	if exeIssue != nil {
 		issues = append(issues, *exeIssue)
 	}
-	cmd, commandIssues := processPolicyAllowCommand(rawAllow, suffix)
+	cmd, commandIssues := processIdentityCommand(rawAllow, suffix)
 	issues = append(issues, commandIssues...)
 	return ProcessIdentityRule{Name: name, Exe: exe, Cmd: cmd}, issues
 }
 
-func unsupportedProcessPolicyAllowFields(rawAllow map[string]any, suffix string) []ProcessPolicyAllowError {
-	var issues []ProcessPolicyAllowError
-	for key := range unknownBlockKeys(rawAllow, processPolicyAllowKeys) {
-		issues = append(issues, ProcessPolicyAllowError{PathSuffix: suffix + "." + key, Problem: "is not supported"})
+func unsupportedProcessIdentityFields(rawAllow map[string]any, suffix string) []ProcessIdentityRuleError {
+	var issues []ProcessIdentityRuleError
+	for key := range unknownBlockKeys(rawAllow, processIdentityKeys) {
+		issues = append(issues, ProcessIdentityRuleError{PathSuffix: suffix + "." + key, Problem: "is not supported"})
 	}
 	return issues
 }
 
-func processPolicyAllowExecutable(rawAllow map[string]any, suffix string) (string, *ProcessPolicyAllowError) {
+func processIdentityExecutable(rawAllow map[string]any, suffix string) (string, *ProcessIdentityRuleError) {
 	exe := cfgval.String(rawAllow[checks.CheckKeyExe])
 	path := suffix + "." + checks.CheckKeyExe
 	switch {
 	case exe == "":
-		return exe, &ProcessPolicyAllowError{PathSuffix: path, Problem: "is required"}
+		return exe, &ProcessIdentityRuleError{PathSuffix: path, Problem: "is required"}
 	case !filepath.IsAbs(exe) || filepath.Clean(exe) != exe:
-		return exe, &ProcessPolicyAllowError{PathSuffix: path, Problem: "must be a clean absolute resolved executable path"}
+		return exe, &ProcessIdentityRuleError{PathSuffix: path, Problem: "must be a clean absolute resolved executable path"}
 	default:
 		return exe, nil
 	}
 }
 
-func processPolicyAllowCommand(rawAllow map[string]any, suffix string) (*regexp.Regexp, []ProcessPolicyAllowError) {
+func processIdentityCommand(rawAllow map[string]any, suffix string) (*regexp.Regexp, []ProcessIdentityRuleError) {
 	rawCommand, present := rawAllow[process.SelectorKeyCmd]
 	if !present {
 		return nil, nil
@@ -132,22 +126,22 @@ func processPolicyAllowCommand(rawAllow map[string]any, suffix string) (*regexp.
 	command, ok := rawCommand.(string)
 	path := suffix + "." + process.SelectorKeyCmd
 	if !ok || command == "" {
-		return nil, []ProcessPolicyAllowError{{PathSuffix: path, Problem: "must be a non-empty anchored RE2 expression"}}
+		return nil, []ProcessIdentityRuleError{{PathSuffix: path, Problem: "must be a non-empty anchored RE2 expression"}}
 	}
 
-	var issues []ProcessPolicyAllowError
+	var issues []ProcessIdentityRuleError
 	if !strings.HasPrefix(command, "^") || !strings.HasSuffix(command, "$") {
-		issues = append(issues, ProcessPolicyAllowError{PathSuffix: path, Problem: "must be anchored with ^ and $"})
+		issues = append(issues, ProcessIdentityRuleError{PathSuffix: path, Problem: "must be anchored with ^ and $"})
 	}
 	// The ^…$ check above is textual: `^a|b$` passes it, yet its top-level
 	// alternation leaves each branch anchored at one end only. Wrapping the
 	// whole expression anchors every branch at both ends.
 	compiled, err := regexp.Compile(`^(?:` + command + `)$`)
 	if err != nil {
-		issues = append(issues, ProcessPolicyAllowError{PathSuffix: path, Problem: fmt.Sprintf("is invalid: %v", err)})
+		issues = append(issues, ProcessIdentityRuleError{PathSuffix: path, Problem: fmt.Sprintf("is invalid: %v", err)})
 		return nil, issues
 	}
 	return compiled, issues
 }
 
-var processPolicyAllowKeys = set(checks.CheckKeyExe, process.SelectorKeyCmd)
+var processIdentityKeys = set(checks.CheckKeyExe, process.SelectorKeyCmd)
