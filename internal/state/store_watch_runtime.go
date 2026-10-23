@@ -3,7 +3,6 @@ package state
 import (
 	"encoding/json"
 	"fmt"
-	"sermo/internal/rules"
 	"time"
 )
 
@@ -20,23 +19,8 @@ type WatchRuntimeRecord struct {
 	// TransitionSeverity is the gravest failing RAID/LVM transition a
 	// notify_on watch delivered since its last healthy one.
 	TransitionSeverity string
-	Window             WatchWindowRecord
+	Window             WindowRecord
 	Policy             RemediationRecord
-}
-
-// WatchWindowRecord is the persisted for/within progress for a watch. The
-// firing episode belongs to WatchRuntimeRecord.Firing, which is the sole owner
-// of the watch_runtime_state firing column.
-type WatchWindowRecord struct {
-	Consecutive      int
-	History          []bool
-	TrueSince        time.Time
-	TimedHistory     []rules.WindowSample
-	ClearConsecutive int
-	ClearSince       time.Time
-	// Rungs is a graded watch's per-severity window progress; nil when the
-	// watch never graded a sample.
-	Rungs []rules.EntryWindowSnapshot
 }
 
 // WatchRuntimeState returns one watch slot's persisted episode and pacing state.
@@ -104,7 +88,7 @@ func (s *Store) WatchRuntimeState(watch, slot string) (WatchRuntimeRecord, bool,
 		Severity:           level,
 		NotifiedSeverity:   notified,
 		TransitionSeverity: transition,
-		Window: WatchWindowRecord{
+		Window: WindowRecord{
 			Rungs:            rungs,
 			Consecutive:      consecutive,
 			History:          history,

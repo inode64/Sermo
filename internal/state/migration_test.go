@@ -267,7 +267,7 @@ func TestSeverityStateRoundTrips(t *testing.T) {
 	if rec := windows["mem"]; rec.Severity != "critical" || rec.NotifiedSeverity != "error" || !reflect.DeepEqual(rec.Rungs, rungs) {
 		t.Fatalf("rule window = %+v", rec)
 	}
-	if err := s.SetWatchRuntimeState("disk", "result", WatchRuntimeRecord{Firing: true, Severity: "error", NotifiedSeverity: "warning", Window: WatchWindowRecord{Rungs: rungs}}); err != nil {
+	if err := s.SetWatchRuntimeState("disk", "result", WatchRuntimeRecord{Firing: true, Severity: "error", NotifiedSeverity: "warning", Window: WindowRecord{Rungs: rungs}}); err != nil {
 		t.Fatal(err)
 	}
 	watch, found, err := s.WatchRuntimeState("disk", "result")
@@ -283,7 +283,7 @@ func TestSeverityStateRoundTrips(t *testing.T) {
 		t.Fatalf("raid runtime = %+v (found %v, err %v)", raid, found, err)
 	}
 	// A watch whose rungs carry no progress has nothing to remember.
-	if err := s.SetWatchRuntimeState("disk", "result", WatchRuntimeRecord{Window: WatchWindowRecord{Rungs: make([]rules.EntryWindowSnapshot, 4)}}); err != nil {
+	if err := s.SetWatchRuntimeState("disk", "result", WatchRuntimeRecord{Window: WindowRecord{Rungs: make([]rules.EntryWindowSnapshot, 4)}}); err != nil {
 		t.Fatal(err)
 	}
 	if _, found, _ := s.WatchRuntimeState("disk", "result"); found {

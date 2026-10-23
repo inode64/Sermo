@@ -16,23 +16,29 @@ type RemediationRecord struct {
 	CurrentBackoff time.Duration
 }
 
-// RuleWindowRecord is the persisted for/within progress for one rule, plus its
-// firing episode and clear-window progress.
-type RuleWindowRecord struct {
+// WindowRecord is the persisted for/within and clear-window progress a rule
+// and a watch share.
+type WindowRecord struct {
 	Consecutive      int
 	History          []bool
 	TrueSince        time.Time
 	TimedHistory     []rules.WindowSample
-	Firing           bool
 	ClearConsecutive int
 	ClearSince       time.Time
+	// Rungs is a graded window's per-severity progress; nil when it never
+	// graded a sample.
+	Rungs []rules.EntryWindowSnapshot
+}
+
+// RuleWindowRecord is the persisted window progress for one rule, plus its
+// firing episode.
+type RuleWindowRecord struct {
+	WindowRecord
+	Firing bool
 	// Severity is the open episode's high-water mark ("" outside an episode).
 	Severity string
 	// NotifiedSeverity is the gravest level the open episode notified at.
 	NotifiedSeverity string
-	// Rungs is a graded rule's per-severity window progress; nil when the rule
-	// never graded a sample.
-	Rungs []rules.EntryWindowSnapshot
 }
 
 // RemediationState returns a service's persisted automatic-remediation state.
@@ -142,16 +148,16 @@ func (s *Store) RuleWindowStates(service string) (map[string]RuleWindowRecord, e
 			return nil, err
 		}
 		out[name] = RuleWindowRecord{
-			Severity:         level,
-			NotifiedSeverity: notified,
 			Rungs:            rungs,
 			Consecutive:      consecutive,
 			History:          history,
 			TrueSince:        unixNanoTime(trueSince),
 			TimedHistory:     timed,
-			Firing:           firing != 0,
 			ClearSince:       unixNanoTime(clearSince),
 			ClearConsecutive: clearConsecutive,
+			Severity:         level,
+			NotifiedSeverity: notified,
+			Firing:           firing != 0,
 		}
 	}
 	if err := rows.Err(); err != nil {
