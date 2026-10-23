@@ -216,6 +216,11 @@ func (l *EventLog) LatestOperationOutcomes(service string, actions []string) map
 // The store is set once at construction and never replaced, so it is read
 // without the mutex here exactly as Page does.
 func (l *EventLog) recentForTarget(column, name string, limit int, match func(LoggedEvent) bool) []LoggedEvent {
+	if limit <= 0 {
+		// Bounded like the ring it replaces, as Recent("") is, instead of
+		// loading the target's whole persisted history.
+		limit = l.size
+	}
 	if l.store == nil {
 		return l.recentFiltered(match, limit)
 	}
