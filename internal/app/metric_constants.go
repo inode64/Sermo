@@ -37,5 +37,4 @@ const (
 	watchFailedUnitsDefaultCount = "0"
 	watchDefaultLockName         = "(default)"
 	watchFallbackFilesystem      = "filesystem"
-	watchFirewallDefaultMinRules = uint64(1)
 )

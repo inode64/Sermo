@@ -200,7 +200,7 @@ func routeWatchConditions(check map[string]any) []web.WatchCondition {
 func firewallWatchConditions(check map[string]any) []web.WatchCondition {
 	backend := cmp.Or(cfgval.AsString(check[checks.CheckKeyBackend]), checks.FirewallBackendAuto)
 	minRules := cmp.Or(cfgval.String(check[checks.CheckKeyMinRules]),
-		strconv.FormatUint(watchFirewallDefaultMinRules, watchReadingNumericBase))
+		strconv.FormatUint(checks.FirewallDefaultMinRules, watchReadingNumericBase))
 	return []web.WatchCondition{
 		{Field: checks.DataKeyBackend, Op: cfgval.CompareOpEqual, Value: backend},
 		{Field: checks.DataKeyRules, Op: cfgval.CompareOpGreaterEqual, Value: minRules},
