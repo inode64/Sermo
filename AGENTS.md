@@ -24,9 +24,18 @@ skill and the code disagree, fix the skill in the same change.
 
 ## Workflow
 
-Before editing: `git status --short --branch`. Work in the current checkout
-unless asked for a branch. Preserve unrelated changes. Commit, push or merge
-only when asked.
+Before editing: `git status --short --branch`. Work on the current branch in
+the current checkout: creating or switching a branch or worktree — a
+subagent's `isolation: worktree` included — needs the user's explicit request.
+Parallel subagents may read and analyze freely; parallel edits need disjoint
+files. Preserve unrelated changes. Commit, push or merge only when asked.
+Plans, specs and notes from process skills stay outside the repository (the
+session scratchpad or a temporary directory).
+
+Choose the simplest change that meets the request: least code, dependencies,
+abstractions and future maintenance. Search for an existing function, type or
+interface before adding one; add an abstraction only for a second real caller
+or a test seam.
 
 Find the owner of the concept and put the behavior there. If that owner cannot
 hold it without becoming a second parser, validator, monitor, notifier or
@@ -34,12 +43,15 @@ dispatcher, extract or move — do not add a parallel owner. A generally useful
 check, option or behavior belongs on both services and host watches unless an
 owner-level limitation is documented in code and user docs.
 
-Run targeted checks while developing. Finish with:
+Run targeted checks while developing: `go test -shuffle=on ./internal/<pkg>/`
+and `bin/custom-gcl run ./internal/<pkg>/...` (built by `make custom-gcl`).
+Finish with:
 
 | Change | Command |
 |---|---|
 | Markdown only | `make markdown-check docs-sync` |
 | YAML formatting/CI files only | `make yaml-validate` |
+| Concurrency or shared state | `make check` and `make race` |
 | Anything else | `make check` |
 
 Catalog, examples and docs YAML are validated by Go tests, so changing them
@@ -76,8 +88,10 @@ value when the name carries meaning (state, kind, config key, protocol, unit,
 default, timeout, threshold). The `mnd` and `goconst` analyzers decide the
 rest; do not hide fixture data or a one-off error message behind a constant.
 
-One canonical config shape. Remove the old shape from parsing, validation,
-examples, docs and tests in the same change unless the user or an external
+One canonical shape, in config and in code. When a change replaces a config
+shape, logic or procedure, remove the old one in the same change — parsing,
+validation, callers, wrappers, aliases, fallbacks, examples, docs and the
+tests and fixtures that only exercised it — unless the user or an external
 compatibility or safety requirement says otherwise. Catalog sugar is valid
 only when resolution desugars it into the canonical runtime tree and drops
 the sugar.
@@ -95,9 +109,9 @@ Volatile paths go under `/run`. Normalize host-reported `/var/run/...` to
   `sermoctl reload`) goes through `process.Signaler`/`process.Reaper` (pidfd)
   with its own explicit authority. Primitive backend/process implementations
   and their fakes are the exception.
-- Prefer the Go standard library or a module. Required external commands use
-  the injectable `execx` runner, argv, a context and a timeout — no shell, no
-  `os/exec` in production. The only product exception is
+- Use Go code (see Dependencies) instead of external commands. Required
+  external commands use the injectable `execx` runner, argv, a context and a
+  timeout — no shell, no `os/exec` in production. The only product exception is
   `sermoctl lock … -- COMMAND`.
 - Add checks, watches, notifiers and rule actions through
   `internal/checks/build.go`, `internal/app/watch_build.go`, `internal/notify`
@@ -112,7 +126,24 @@ Volatile paths go under `/run`. Normalize host-reported `/var/run/...` to
   from engine configuration or a named constant. Tests may use short literals
   to bound the test.
 - Treat every daemon-cycle path as hot: reuse samples within a cycle, avoid
-  repeated host scans, and make expensive work interval-bound.
+  repeated host scans, and make expensive work interval-bound. Fix the
+  algorithm before micro-optimizing. A performance change keeps only what
+  `benchstat` shows as a significant gain in before/after benchmarks at
+  worst-case sizes (process count, services, concurrency) on hermetic
+  fixtures.
+
+## Dependencies
+
+Reuse repository code; otherwise use the standard library when it suffices.
+For complex functionality (a protocol, a file format, a database client)
+search for a module before writing one. Compare the two or three best
+candidates briefly with current, dated data — releases and commits,
+maintainers, adoption, advisories, transitive modules, CGO need, license
+compatible with Apache-2.0 — pick the maintained, widely adopted one, and
+record the comparison in the commit's Evidence. Write it yourself only when
+every candidate is abandoned, has the wrong semantics or brings far more than
+the feature needs. A new direct dependency needs its `gomodguard_v2` entry in
+`.golangci.yml`.
 
 ## Documentation
 
@@ -125,7 +156,8 @@ Planned behavior goes in `TODO.md`.
 
 Write for Linux administrators: direct explanations, realistic YAML,
 copy-pasteable commands, explicit safety notes. Link to the owner instead of
-copying inventories.
+copying inventories. Code comments say why — a constraint, an invariant, a
+non-obvious reason — and never restate the code.
 
 ## Quality gates
 

@@ -13,12 +13,8 @@ those cheap to follow.
   builder. Put new behavior there, or extract/move if that owner cannot hold
   it. A new helper sits beside the owner, not in a new package, until ownership
   actually crosses a boundary.
-- Use the public model field name for the concept everywhere: variables,
-  parameters, struct fields, comments, JSON, YAML.
 - Split functions by responsibility. Do not extract a private helper just to
   shrink a function that the complexity analyzers already accept.
-- Pass `context.Context` into every blocking call and bound it with a timeout
-  from configuration or a named constant.
 - Wrap errors with what was attempted, for a sysadmin reader:
 
   ```text
@@ -38,12 +34,6 @@ those cheap to follow.
 
   The `Result` carries stdout, stderr, exit code and duration.
 - HTTP uses `internal/httpx`, never `http.DefaultClient`.
-- Files Sermo locates on the host (procfs, sysfs, catalog, pidfiles, runtime
-  locks and logs) are read through `internal/hostfs`, which accepts only
-  absolute, clean paths; operator- or catalog-named targets use its `*Target`
-  functions (`StatTarget`, `ReadFileTarget`, …), read as written.
-- Fix analyzer findings at the source. A `//nolint` names the analyzer and the
-  design reason.
 
 ## Protocol probes
 
@@ -84,7 +74,4 @@ files; offer cleanup only for targets proven absent by detection.
 
 ## Tests that accompany code
 
-Cover the success, failure, timeout, invalid-input and unsafe-input paths the
-change actually has, with table-driven subtests, fake runners and temporary
-directories. Do not invent a blocked or timeout case for a pure formatter.
-Never run real service commands or signal host processes from a test.
+`sermo-test-engineer`.
