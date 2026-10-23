@@ -688,10 +688,11 @@ func (d Discoverer) claimedBy(selectors []Selector, id Identity, resolve UserRes
 	return false
 }
 
-// StrictMatchPID reports whether pid currently matches a process selector
-// that declares both exact resolved exe and real user. Pidfile-only evidence is
-// intentionally ignored: callers that are about to signal a process need the
-// stronger identity check used by the signaling safety invariants.
+// StrictMatchPID reports whether pid currently matches a strict principal
+// selector: not delegated, exact resolved exe and real user. Pidfile-only
+// evidence is intentionally ignored: callers that are about to signal a process
+// need the stronger identity check used by the signaling safety invariants, and
+// a delegated selector never authorizes a signal.
 func (d Discoverer) StrictMatchPID(pid int, selectors []Selector) (Process, bool) {
 	if pid <= 0 {
 		return Process{}, false
@@ -702,7 +703,7 @@ func (d Discoverer) StrictMatchPID(pid int, selectors []Selector) (Process, bool
 	}
 	resolve := d.resolveUser()
 	for i := range selectors {
-		if !selectors[i].HasStrictIdentity() {
+		if !selectors[i].IsStrictPrincipal() {
 			continue
 		}
 		if d.matches(&selectors[i], id, resolve) {

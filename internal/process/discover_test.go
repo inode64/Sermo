@@ -609,6 +609,20 @@ func TestStrictMatchPIDRequiresExactExeAndUser(t *testing.T) {
 	}
 }
 
+func TestStrictMatchPIDIgnoresDelegatedSelectors(t *testing.T) {
+	d := Discoverer{
+		Reader: fakeReader{ids: map[int]Identity{
+			100: {PID: 100, UID: 110, Exe: testExe, ExeOK: true, State: "S"},
+		}},
+		ResolveUser: fakeUsers(map[string]uint32{"mysql": 110}),
+	}
+	delegated := []Selector{{Name: "workload", Type: SelectorCommandMatch, Exe: testExe, User: "mysql", Delegated: true}}
+
+	if proc, ok := d.StrictMatchPID(100, delegated); ok {
+		t.Fatalf("StrictMatchPID matched delegated selector: %+v", proc)
+	}
+}
+
 func TestClaimsPIDNamesOnlySelectorProcesses(t *testing.T) {
 	d := Discoverer{
 		Reader: fakeReader{ids: map[int]Identity{
