@@ -1,6 +1,6 @@
 ---
 name: sermo-test-engineer
-description: Use when adding or reviewing tests for Sermo, especially config resolution, backend detection, rule evaluation, locks, guards, process discovery, and safe operations.
+description: Use when adding or reviewing tests or benchmarks for Sermo, especially config resolution, backend detection, rule evaluation, locks, guards, process discovery, safe operations, and performance comparisons.
 ---
 
 Match the owning package's existing test style before adding a pattern of
@@ -46,21 +46,20 @@ the safety rows.
 - Preserve contract distinctions such as nil versus empty.
 - Short literal timeouts are fine to bound the test itself.
 
-## Never in a test
-
-```text
-systemctl or rc-service start/stop/restart/reload
-kill, pkill, killall, sudo, doas against real processes
-```
-
-Mock command execution and process tables instead.
-
 ## What to cover
 
-Cover the paths the change actually has: success, invalid input, blocked
-unsafe input, timeout/error. Do not invent a blocked or timeout case for a
-pure formatter. Safety-sensitive changes also cover the relevant rows in
+AGENTS.md lists the paths. Do not invent a blocked or timeout case for a pure
+formatter. Safety-sensitive changes also cover the relevant rows in
 `sermo-safety-review`.
+
+## Benchmarks
+
+A benchmark that decides a change runs on a hermetic fixture (fake process
+table, generated config) at worst-case sizes and reports the size with
+`b.ReportMetric`. A live-host benchmark such as `BenchmarkSnapshot` is a smoke
+reading, too noisy to decide. Compare old and new with
+`-run '^$' -bench <Name> -benchmem -count=10` and `benchstat`
+(`go install golang.org/x/perf/cmd/benchstat@latest`).
 
 ## Fixtures
 

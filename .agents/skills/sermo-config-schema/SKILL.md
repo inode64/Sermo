@@ -46,10 +46,7 @@ here. This skill records the design decisions a change must respect.
   the per-host override. Source-tree validation uses
   `SERMO_DATADIR=$PWD make build` and `examples/sermo-dev.yml`.
 - Dangerous behavior needs explicit configuration, and no option may disable a
-  hard safety invariant (required preflight, guards, named and operation locks,
-  the SIGKILL gate — `force_kill: true` plus `kill_only_if`, or kernel-proven
-  unit-cgroup membership under `true`/`auto`; `false` never SIGKILLs — and the
-  exact exe+user kill identity).
+  hard safety invariant (AGENTS.md → Safety; `sermo-safety-review`).
 - Validation errors name the target (and the file for load/document errors or a
   `.local` override), the field path and the reason.
 - There is no resolved-config rendering subcommand; do not document one.

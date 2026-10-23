@@ -242,7 +242,8 @@ Use this section for explicit remote installation or persistent configuration
 requests. It overrides the validation-only `/tmp` restrictions above.
 
 - Keep reusable install/generation tooling outside Git or in a locally ignored
-  path. Never commit fleet-specific scripts, targets, credentials, IP addresses
+  path; the fleet scripts this skill names live in the ignored
+  `scripts/remote-deploy/`. Never commit fleet-specific scripts, targets, credentials, IP addresses
   or server names to this repository.
 - Build locally with `GOAMD64=v1` and `SERMO_DATADIR=/usr/share/sermo`, package
   `sermoctl`, `sermod`, units and catalog locally, then copy the payload to the
