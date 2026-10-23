@@ -189,7 +189,9 @@ func (a App) pruneDaemonEvents(ctx context.Context, cfg *config.Config, before t
 	resp, err := a.daemonWebDo(ctx, cfg, http.MethodPost, "clear events", true, func(base string) string {
 		u := base + web.APIPathEventsClear
 		if !before.IsZero() {
-			u += "?" + web.APIQueryBefore + "=" + before.Format(time.RFC3339)
+			// Encoded and in UTC: a local offset such as +02:00 would otherwise
+			// reach the daemon's query decoder with its "+" read as a space.
+			u += "?" + url.Values{web.APIQueryBefore: {before.UTC().Format(time.RFC3339)}}.Encode()
 		}
 		return u
 	})
