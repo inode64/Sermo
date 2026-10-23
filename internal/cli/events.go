@@ -56,7 +56,7 @@ func eventListTarget(opts options, cfg *config.Config) (string, int) {
 	return canonicalServiceIfKnown(cfg, opts.args[0]), limit
 }
 
-func (a App) writeEvents(opts options, service string, evs []event) {
+func (a App) writeEvents(opts options, service string, evs []web.Event) {
 	if opts.json {
 		writeJSON(a.Stdout, evs)
 		return
@@ -73,7 +73,7 @@ func (a App) writeEvents(opts options, service string, evs []event) {
 	a.writeEventsTable(evs)
 }
 
-func (a App) writeEventsTable(evs []event) {
+func (a App) writeEventsTable(evs []web.Event) {
 	tw := newTabWriter(a.Stdout)
 	fmt.Fprintln(tw, "TIME\tTARGET\tKIND\tSEVERITY\tRULE\tACTION\tMESSAGE")
 	for _, e := range evs {
@@ -94,7 +94,7 @@ type eventTableRow struct {
 	message   string
 }
 
-func eventTableFields(e event) eventTableRow {
+func eventTableFields(e web.Event) eventTableRow {
 	timestamp := eventTableValue(e.Time, eventsTableTimestampWidth)
 
 	// The event's identity dimension is owned by the daemon's event model.
@@ -218,7 +218,7 @@ func (a App) pruneDaemonEvents(ctx context.Context, cfg *config.Config, before t
 
 // fetchEvents (the default for App.FetchEvents) calls the daemon web API to retrieve
 // recent events. If service != "", uses the per-service endpoint.
-func (a App) fetchEvents(ctx context.Context, cfg *config.Config, service string, limit int) ([]event, error) {
+func (a App) fetchEvents(ctx context.Context, cfg *config.Config, service string, limit int) ([]web.Event, error) {
 	// no CSRF needed for GET; auth is attached when configured
 	resp, err := a.daemonWebDo(ctx, cfg, http.MethodGet, "events", false, func(base string) string {
 		if service != "" {
@@ -237,14 +237,14 @@ func (a App) fetchEvents(ctx context.Context, cfg *config.Config, service string
 	}
 
 	if service != "" {
-		var events []event
+		var events []web.Event
 		if err := json.NewDecoder(resp.Body).Decode(&events); err != nil {
 			return nil, fmt.Errorf("decode service events: %w", err)
 		}
 		return events, nil
 	}
 
-	var page eventPage
+	var page web.EventPage
 	if err := json.NewDecoder(resp.Body).Decode(&page); err != nil {
 		return nil, fmt.Errorf("decode events: %w", err)
 	}
