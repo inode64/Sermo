@@ -294,8 +294,7 @@ func TestBuildCountCheck(t *testing.T) {
 			"of":             "file",
 			"recursive":      true,
 			"include_hidden": true,
-			"op":             "<=",
-			"value":          10,
+			"count":          map[string]any{"op": "<=", "value": 10},
 		},
 	}
 	built, warns := Build(section, Deps{})
@@ -346,10 +345,11 @@ func TestBuildCountDeltaCheck(t *testing.T) {
 
 func TestBuildCountCheckRejectsBadInput(t *testing.T) {
 	cases := []map[string]any{
-		{"type": "count", "op": ">", "value": 1},                               // no path
-		{"type": "count", "path": "/tmp", "op": "><", "value": 1},              // bad op
-		{"type": "count", "path": "/tmp", "op": ">", "value": "lots"},          // non-numeric value
-		{"type": "count", "path": "/tmp", "of": "pipe", "op": ">", "value": 1}, // bad kind
+		{"type": "count", "count": map[string]any{"op": ">", "value": 1}},                               // no path
+		{"type": "count", "path": "/tmp", "count": map[string]any{"op": "><", "value": 1}},              // bad op
+		{"type": "count", "path": "/tmp", "count": map[string]any{"op": ">", "value": "lots"}},          // non-numeric value
+		{"type": "count", "path": "/tmp", "of": "pipe", "count": map[string]any{"op": ">", "value": 1}}, // bad kind
+		{"type": "count", "path": "/tmp", "op": ">", "value": 1},                                        // flat threshold
 		{
 			"type": "count", "path": "/tmp",
 			"delta": map[string]any{"op": ">", "value": 1},
@@ -376,7 +376,7 @@ func TestBuildCountCheckRejectsBadInput(t *testing.T) {
 			"delta": map[string]any{"op": ">", "value": 1}, "within": "2m",
 		}, // mixed modes
 		{
-			"type": "count", "path": "/tmp", "op": ">", "value": 1, "within": "2m",
+			"type": "count", "path": "/tmp", "count": map[string]any{"op": ">", "value": 1}, "within": "2m",
 		}, // window without delta
 	}
 	for i, entry := range cases {

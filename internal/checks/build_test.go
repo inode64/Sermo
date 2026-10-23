@@ -666,12 +666,6 @@ func TestThresholdBuildersRejectNonFiniteValues(t *testing.T) {
 		build func(any) (Check, string)
 	}{
 		{
-			name: "count top level",
-			build: func(value any) (Check, string) {
-				return buildCountCheck(base{}, map[string]any{"path": "/tmp", "op": ">", "value": value})
-			},
-		},
-		{
 			name: "count named predicate",
 			build: func(value any) (Check, string) {
 				return buildCountCheck(base{}, map[string]any{"path": "/tmp", "count": map[string]any{"op": ">", "value": value}})

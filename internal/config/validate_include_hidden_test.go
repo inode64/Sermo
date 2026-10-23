@@ -11,7 +11,7 @@ func TestValidateIncludeHiddenForRecursiveChecks(t *testing.T) {
 		"checks": map[string]any{
 			"count-files": map[string]any{
 				"type": "count", "path": "/var/lib/app", "of": "file", "recursive": true,
-				"include_hidden": true, "op": ">", "value": 10,
+				"include_hidden": true, "count": map[string]any{"op": ">", "value": 10},
 			},
 			"size-tree": map[string]any{
 				"type": "size", "path": "/var/lib/app", "include_hidden": true,
@@ -26,7 +26,7 @@ func TestValidateIncludeHiddenForRecursiveChecks(t *testing.T) {
 	invalid := validateIncludeHidden(t, map[string]any{
 		"checks": map[string]any{
 			"count-files": map[string]any{
-				"type": "count", "path": "/var/lib/app", "include_hidden": "yes", "op": ">", "value": 10,
+				"type": "count", "path": "/var/lib/app", "include_hidden": "yes", "count": map[string]any{"op": ">", "value": 10},
 			},
 			"size-tree": map[string]any{
 				"type": "size", "path": "/var/lib/app", "include_hidden": "yes",

@@ -731,7 +731,7 @@ func TestBuildWatchesServiceCheckAsWatch(t *testing.T) {
 			"then":  map[string]any{"hook": map[string]any{"command": []any{"/x.sh"}}},
 		},
 		"backlog": map[string]any{
-			"check": map[string]any{"type": "count", "path": "/tmp", "op": ">", "value": 100},
+			"check": map[string]any{"type": "count", "path": "/tmp", "count": map[string]any{"op": ">", "value": 100}},
 			"then":  map[string]any{"hook": map[string]any{"command": []any{"/y.sh"}}},
 		},
 		"ws": map[string]any{

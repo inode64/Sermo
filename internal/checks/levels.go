@@ -397,8 +397,7 @@ func looserThan(kind gradeKind, prev, next levelThreshold) string {
 }
 
 // thresholds reads the ordered thresholds entry declares among keys. base marks
-// the check's own entry, which may spell a threshold in a legacy shape (a count
-// check's top-level op/value).
+// the check's own entry rather than a levels tier.
 func (g gradeSupport) thresholds(keys []string, entry map[string]any, base bool) ([]levelThreshold, error) {
 	switch g.kind {
 	case gradeMetric:
@@ -416,11 +415,6 @@ func (g gradeSupport) thresholds(keys []string, entry map[string]any, base bool)
 	var errs []error
 	for _, key := range keys {
 		raw, present := entry[key]
-		if !present && base && key == CheckKeyCount {
-			if _, top := entry[CheckKeyOp]; top {
-				raw, present = entry, true // count check: top-level op/value
-			}
-		}
 		if !present {
 			continue
 		}

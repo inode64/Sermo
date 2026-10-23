@@ -3546,8 +3546,7 @@ checks:
     of: file                      # any (default) | file | dir | symlink
     recursive: false              # optional, default false
     include_hidden: false         # optional, default false for recursive scans
-    op: ">"                       # >=, >, <=, <, ==, !=
-    value: 1000                   # numeric threshold
+    count: { op: ">", value: 1000 } # >=, >, <=, <, ==, != and a numeric threshold
 ```
 
 ```yaml
@@ -3569,9 +3568,8 @@ checks:
   count them. Default counts only the immediate entries.
 - A missing or unreadable `path` makes the check fail. The observed total is
   exposed in the check's result data as `count`.
-- The threshold may also be written as a nested predicate —
-  `count: { op: ">", value: 1000 }` — matching the `{op, value}` form the other
-  checks use. Use one form or the other, not both.
+- The threshold is the `count: {op, value}` predicate, the `{op, value}` form
+  the other checks use; a top-level `op`/`value` is rejected.
 - **`delta` + `within`** is stateful. Each cycle samples the count, keeps samples
   in the last `within`, and compares the current count against the oldest sample
   still in the window. When no earlier sample is left in the window (a `within`
