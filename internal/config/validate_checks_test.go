@@ -50,11 +50,11 @@ name: svc
 service: x
 policy: { cooldown: 5m }
 checks:
-  no-path: { type: count, op: ">", value: 1 }
-  bad-kind: { type: count, path: /var/log, of: pipe, op: ">", value: 1 }
-  bad-op:   { type: count, path: /var/log, op: "=>", value: 1 }
-  bad-val:  { type: count, path: /var/log, op: ">", value: lots }
-  bad-rec:  { type: count, path: /var/log, recursive: "yes", op: ">", value: 1 }
+  no-path: { type: count, count: { op: ">", value: 1 } }
+  bad-kind: { type: count, path: /var/log, of: pipe, count: { op: ">", value: 1 } }
+  bad-op:   { type: count, path: /var/log, count: { op: "=>", value: 1 } }
+  bad-val:  { type: count, path: /var/log, count: { op: ">", value: lots } }
+  bad-rec:  { type: count, path: /var/log, recursive: "yes", count: { op: ">", value: 1 } }
   delta-no-window:
     type: count
     path: /var/log
@@ -90,8 +90,7 @@ checks:
   window-no-delta:
     type: count
     path: /var/log
-    op: ">"
-    value: 10
+    count: { op: ">", value: 10 }
     within: 2m
 `)
 	mustHave(t, bad, "count check requires a path")
@@ -104,7 +103,7 @@ checks:
 	mustHave(t, bad, "delta has an invalid op")
 	mustHave(t, bad, `delta value "many" must be numeric`)
 	mustHave(t, bad, "count check must not mix a count threshold with delta")
-	mustHave(t, bad, "count check must not mix top-level op/value with delta")
+	mustHave(t, bad, "count check takes its threshold as count: {op, value}, not top-level op/value")
 	mustHave(t, bad, "within requires delta")
 
 	good := validateService(t, `
@@ -112,7 +111,7 @@ name: svc
 service: x
 policy: { cooldown: 5m }
 checks:
-  tmp-files: { type: count, path: /tmp, of: file, recursive: true, op: "<=", value: 100 }
+  tmp-files: { type: count, path: /tmp, of: file, recursive: true, count: { op: "<=", value: 100 } }
   tmp-growth:
     type: count
     path: /tmp

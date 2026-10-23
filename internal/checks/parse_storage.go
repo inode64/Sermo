@@ -67,6 +67,13 @@ func parseCountFields(entry map[string]any) (countCheck, error) {
 	c.recursive, recursiveErr = parseStorageBool(entry, CheckKeyRecursive, CheckTypeCount)
 	c.includeHidden, hiddenErr = parseStorageBool(entry, CheckKeyIncludeHidden, CheckTypeCount)
 	errs = append(errs, recursiveErr, hiddenErr)
+	// The threshold is count: {op, value}; a top-level op/value is rejected
+	// rather than ignored, since other check types accept those keys.
+	_, hasOp := entry[CheckKeyOp]
+	_, hasValue := entry[CheckKeyValue]
+	if hasOp || hasValue {
+		errs = append(errs, errors.New("count check takes its threshold as count: {op, value}, not top-level op/value"))
+	}
 	if delta, present := entry[CheckKeyDelta]; present {
 		errs = append(errs, parseCountDelta(&c, entry, delta))
 	} else {
@@ -80,11 +87,6 @@ func parseCountDelta(c *countCheck, entry map[string]any, delta any) error {
 	if _, hasCount := entry[CheckKeyCount]; hasCount {
 		errs = append(errs, errors.New("count check must not mix a count threshold with delta"))
 	}
-	_, hasOp := entry[CheckKeyOp]
-	_, hasValue := entry[CheckKeyValue]
-	if hasOp || hasValue {
-		errs = append(errs, errors.New("count check must not mix top-level op/value with delta"))
-	}
 	var predicateErr, windowErr error
 	c.deltaOp, c.deltaValue, predicateErr = ParsePredicate(CheckKeyDelta, delta)
 	c.window, windowErr = parseWithin(entry, "when count delta is set (e.g. 2m)")
@@ -96,17 +98,8 @@ func parseCountThreshold(c *countCheck, entry map[string]any) error {
 	if cfgval.String(entry[CheckKeyWithin]) != "" {
 		errs = append(errs, errors.New("within requires delta {op, value}"))
 	}
-	var threshold any = entry
-	if raw, present := entry[CheckKeyCount]; present {
-		_, hasOp := entry[CheckKeyOp]
-		_, hasValue := entry[CheckKeyValue]
-		if hasOp || hasValue {
-			errs = append(errs, errors.New("count check must not mix a nested count {op, value} with top-level op/value"))
-		}
-		threshold = raw
-	}
 	var err error
-	c.op, c.value, err = ParsePredicate("count check", threshold)
+	c.op, c.value, err = ParsePredicate("count check", entry[CheckKeyCount])
 	return errors.Join(append(errs, err)...)
 }
 

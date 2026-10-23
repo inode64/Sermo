@@ -838,7 +838,7 @@ policy: { cooldown: 5m }
 checks:
   backlog: { type: count, path: /var/spool, op: ">", value: 5, count: { op: ">", value: 1000 } }
 `,
-			want: []string{"count check must not mix a nested count {op, value} with top-level op/value"},
+			want: []string{"count check takes its threshold as count: {op, value}, not top-level op/value"},
 		},
 		{
 			name: "rule window min_matches optional",

@@ -157,10 +157,6 @@ func countWatchConditions(check map[string]any) []web.WatchCondition {
 	out = appendFlag(out, check, checks.CheckKeyIncludeHidden, checks.CheckKeyIncludeHidden)
 	if count, ok := check[checks.CheckKeyCount].(map[string]any); ok {
 		out = append(out, comparisonCondition(checks.DataKeyCount, count))
-	} else if op := cfgval.AsString(check[checks.CheckKeyOp]); op != "" {
-		// The flat `op:`/`value:` spelling: gated on the operator, not the
-		// value, so `op: > ` with an absent value still reports the operator.
-		out = append(out, web.WatchCondition{Field: checks.DataKeyCount, Op: op, Value: cfgval.String(check[checks.CheckKeyValue])})
 	}
 	if delta, ok := check[checks.CheckKeyDelta].(map[string]any); ok {
 		out = append(out, comparisonCondition(checks.CheckKeyDelta, delta))
