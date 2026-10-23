@@ -6,7 +6,6 @@ import (
 	"database/sql"
 	"fmt"
 	"io"
-	"maps"
 	"strings"
 
 	"github.com/go-sql-driver/mysql"
@@ -46,7 +45,7 @@ func (mysqlProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 		return mysqlGreeting(c)
 	}
 
-	db, err := OpenMySQLDB(ctx, cfg)
+	db, err := OpenMySQLDB(cfg)
 	if err != nil {
 		return Result{}, probeErr(ProtocolNameMySQL, stepOpen, err)
 	}
@@ -57,7 +56,7 @@ func (mysqlProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 
 // OpenMySQLDB opens a MySQL pool whose connector retains the bound DialFunc;
 // formatting the config back to a DSN would discard that function.
-func OpenMySQLDB(_ context.Context, cfg Config) (*sql.DB, error) {
+func OpenMySQLDB(cfg Config) (*sql.DB, error) {
 	target := newProbeTarget(cfg, defaultPortMySQL)
 	connector, err := mysql.NewConnector(buildMySQLConfigWithTarget(target))
 	if err != nil {
@@ -173,6 +172,5 @@ func buildMySQLConfigWithTarget(target probeTarget) *mysql.Config {
 	if tls := netutil.NormalizeTLS(cfg.TLS); tls != "" {
 		c.TLSConfig = tls
 	}
-	c.Params = maps.Clone(cfg.Params)
 	return c
 }

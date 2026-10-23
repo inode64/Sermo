@@ -93,7 +93,7 @@ func TestSQLCheckBusy(t *testing.T) {
 	saturated := &mysql.MySQLError{Number: 1040, Message: "Too many connections"}
 	for name, c := range map[string]sqlCheck{
 		"open": {base: base{name: "conns", timeout: time.Second, condition: true}, engine: "mariadb",
-			open: func(context.Context) (*sql.DB, error) { return nil, saturated }},
+			open: func() (*sql.DB, error) { return nil, saturated }},
 	} {
 		res := c.Run(t.Context())
 		if !res.Busy || !res.Unavailable || res.OK || res.Data[conn.ExtraKeyErrorCode] != "1040" ||
@@ -102,7 +102,7 @@ func TestSQLCheckBusy(t *testing.T) {
 		}
 	}
 	plain := sqlCheck{name: "conns", timeout: time.Second, condition: true, engine: "mariadb",
-		open: func(context.Context) (*sql.DB, error) { return nil, errors.New("dial unix: no such file") }}
+		open: func() (*sql.DB, error) { return nil, errors.New("dial unix: no such file") }}
 	if res := plain.Run(t.Context()); res.Busy || !res.Unavailable {
 		t.Fatalf("a transport error is not busy: %+v", res)
 	}

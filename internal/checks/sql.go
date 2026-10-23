@@ -17,7 +17,7 @@ import (
 type sqlCheck struct {
 	base
 	engine string
-	open   func(context.Context) (*sql.DB, error)
+	open   func() (*sql.DB, error)
 	query  string
 	valueMatcher
 	grades grades[valueMatcher]
@@ -32,7 +32,7 @@ func (c sqlCheck) Run(ctx context.Context) Result {
 		DataKeyEngine: c.engine,
 		DataKeyQuery:  c.query,
 	}
-	db, err := c.open(ctx)
+	db, err := c.open()
 	if err != nil {
 		return c.failure(err, start, data)
 	}
@@ -132,7 +132,7 @@ func buildSQLCheck(b base, entry map[string]any) (Check, string) {
 		return nil, msg
 	}
 
-	var open func(context.Context) (*sql.DB, error)
+	var open func() (*sql.DB, error)
 	switch driver {
 	case SQLEngineSQLite:
 		path := cfgval.AsString(entry[CheckKeyPath])
@@ -140,7 +140,7 @@ func buildSQLCheck(b base, entry map[string]any) (Check, string) {
 			return nil, "sql check (sqlite) requires a path"
 		}
 		dsn := sqliteReadOnlyDSN(path)
-		open = func(context.Context) (*sql.DB, error) {
+		open = func() (*sql.DB, error) {
 			db, err := sql.Open(SQLEngineSQLite, dsn)
 			if err != nil {
 				return nil, fmt.Errorf("open %s: %w", engine, err)
@@ -159,7 +159,7 @@ func buildSQLCheck(b base, entry map[string]any) (Check, string) {
 
 // sqlServerOpener returns the opener for a mysql or postgres sql check; a mysql
 // check connects through mysqlServerOpener.
-func sqlServerOpener(engine, driver string, entry map[string]any) (func(context.Context) (*sql.DB, error), string) {
+func sqlServerOpener(engine, driver string, entry map[string]any) (func() (*sql.DB, error), string) {
 	requiresUser := "sql check (" + engine + ") requires a user"
 	if driver == SQLEngineMySQL {
 		open, ok := mysqlServerOpener(engine, entry)
@@ -172,7 +172,7 @@ func sqlServerOpener(engine, driver string, entry map[string]any) (func(context.
 		return nil, requiresUser
 	}
 	cfg := sqlConnConfig(engine, entry)
-	return func(ctx context.Context) (*sql.DB, error) { return conn.OpenPostgresDB(ctx, cfg) }, ""
+	return func() (*sql.DB, error) { return conn.OpenPostgresDB(cfg) }, ""
 }
 
 // mysqlServerOpener returns the opener for a mysql/mariadb check (sql,
@@ -181,22 +181,22 @@ func sqlServerOpener(engine, driver string, entry map[string]any) (func(context.
 // defaults to root, the account that keeps a reserved connection on a
 // saturated server), then the protocol defaults. Without one the check must
 // name its user; ok is false when it names neither.
-func mysqlServerOpener(engine string, entry map[string]any) (open func(context.Context) (*sql.DB, error), ok bool) {
+func mysqlServerOpener(engine string, entry map[string]any) (open func() (*sql.DB, error), ok bool) {
 	if defaultsFile := cfgval.AsString(entry[CheckKeyDefaultsFile]); defaultsFile != "" {
 		own := ownConnConfig(engine, SQLEngineMySQL, entry)
-		return func(ctx context.Context) (*sql.DB, error) {
+		return func() (*sql.DB, error) {
 			target, err := mysqlTarget(own, defaultsFile)
 			if err != nil {
 				return nil, err
 			}
-			return conn.OpenMySQLDB(ctx, target)
+			return conn.OpenMySQLDB(target)
 		}, true
 	}
 	if cfgval.AsString(entry[CheckKeyUser]) == "" {
 		return nil, false
 	}
 	cfg := sqlConnConfig(engine, entry)
-	return func(ctx context.Context) (*sql.DB, error) { return conn.OpenMySQLDB(ctx, cfg) }, true
+	return func() (*sql.DB, error) { return conn.OpenMySQLDB(cfg) }, true
 }
 
 // sqlGrades parses the kept levels: tiers of a sql check, each restating the

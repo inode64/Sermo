@@ -524,8 +524,8 @@ func replicationEngine(entry map[string]any) string {
 
 // sampleReplication opens a driver connection and returns the first status
 // vocabulary the server answers.
-func sampleReplication(ctx context.Context, open func(context.Context) (*sql.DB, error)) ([]replicationRow, error) {
-	db, err := open(ctx)
+func sampleReplication(ctx context.Context, open func() (*sql.DB, error)) ([]replicationRow, error) {
+	db, err := open()
 	if err != nil {
 		return nil, fmt.Errorf("replication: open: %w", err)
 	}
@@ -544,7 +544,7 @@ func sourceBinlogSampler(defaultsFile string) binlogSampler {
 		if err != nil {
 			return nil, err
 		}
-		db, err := conn.OpenMySQLDB(ctx, target)
+		db, err := conn.OpenMySQLDB(target)
 		if err != nil {
 			return nil, fmt.Errorf("open: %w", err)
 		}

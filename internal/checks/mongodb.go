@@ -48,7 +48,7 @@ func (c mongoCheck) Run(ctx context.Context) Result {
 	defer run.close()
 	start := run.start
 
-	client, err := conn.MongoConnect(ctx, c.cfg)
+	client, err := conn.MongoConnect(c.cfg)
 	if err != nil {
 		return c.unavailableResult("mongodb: "+err.Error(), start)
 	}

@@ -443,7 +443,7 @@ type DBQuerySample struct {
 // The probe's own connection, idle connections and server threads
 // (replication, event scheduler) are never listed.
 func SampleDBQueries(ctx context.Context, cfg DBQueryConfig) (DBQuerySample, error) {
-	db, err := cfg.open(ctx)
+	db, err := cfg.open()
 	if err != nil {
 		return DBQuerySample{}, err
 	}
@@ -475,19 +475,19 @@ func (cfg DBQueryConfig) sample(ctx context.Context, db *sql.DB, id int64) ([]DB
 	return samplePostgresQueries(ctx, db, cfg.States, cfg.MaxLength, id, cfg.postgres)
 }
 
-func (cfg DBQueryConfig) open(ctx context.Context) (*sql.DB, error) {
+func (cfg DBQueryConfig) open() (*sql.DB, error) {
 	if cfg.Engine == SQLEngineMySQL {
 		c, err := cfg.target()
 		if err != nil {
 			return nil, err
 		}
-		db, err := conn.OpenMySQLDB(ctx, c)
+		db, err := conn.OpenMySQLDB(c)
 		if err != nil {
 			return nil, fmt.Errorf("db_queries: connect: %w", err)
 		}
 		return db, nil
 	}
-	db, err := conn.OpenPostgresDB(ctx, cfg.Conn)
+	db, err := conn.OpenPostgresDB(cfg.Conn)
 	if err != nil {
 		return nil, fmt.Errorf("db_queries: connect: %w", err)
 	}
@@ -856,7 +856,7 @@ func KillDBQuery(ctx context.Context, cfg DBQueryConfig, req DBQueryKill) (DBQue
 	if !ValidDBQueryKillMode(req.Mode) {
 		return DBQuery{}, fmt.Errorf("kill mode must be %s", DBQueryKillModeSummary)
 	}
-	db, err := cfg.open(ctx)
+	db, err := cfg.open()
 	if err != nil {
 		return DBQuery{}, err
 	}
