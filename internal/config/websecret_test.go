@@ -192,22 +192,31 @@ func TestWebPasswordFileIssues(t *testing.T) {
 		want    string
 	}{
 		{
-			name: "inline password is retired",
+			name: "inline password is rejected",
 			sermo: `
 web:
   port: 9797
   password: "s3cret"
 `,
-			want: "web.password is no longer supported; use web.password_file with hashed credentials",
+			want: "web.password is not supported",
 		},
 		{
-			name: "inline guest password is retired",
+			name: "misspelt credential source",
+			sermo: `
+web:
+  port: 9797
+  pasword_file: secrets/web.pass
+`,
+			want: "web.pasword_file is not supported",
+		},
+		{
+			name: "inline guest password is rejected",
 			sermo: `
 web:
   port: 9797
   guest_password: "lookonly"
 `,
-			want: "web.guest_password is no longer supported; use web.guest_password_file with hashed credentials",
+			want: "web.guest_password is not supported",
 		},
 		{
 			name: "empty path",
@@ -287,13 +296,13 @@ web:
 			want:    "more than 64 credentials",
 		},
 		{
-			name: "inline hash is retired too",
+			name: "inline hash is rejected too",
 			sermo: `
 web:
   port: 9797
   password: "$md5$deadbeef"
 `,
-			want: `web.password is no longer supported; use web.password_file with hashed credentials`,
+			want: `web.password is not supported`,
 		},
 	}
 	for _, tc := range tests {

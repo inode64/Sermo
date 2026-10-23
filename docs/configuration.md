@@ -1053,8 +1053,10 @@ web:
   rotates without a cut, and how each operator gets their own.
 - A **relative** path resolves against the directory holding `sermo.yml`, like
   the `paths.*` directories. `${env:...}` works in the path as anywhere else.
-- The retired `password` and `guest_password` keys are rejected. This prevents
-  a readable password from being reintroduced into `sermo.yml` by mistake.
+- A key the `web` block does not document is rejected, the retired `password`
+  and `guest_password` included. A misspelt `password_file` therefore never
+  leaves the dashboard open, and a readable password cannot be reintroduced
+  into `sermo.yml` by mistake.
 - If the file cannot be read, `sermod` **refuses to start** (exit `78`, the
   standard configuration-error code) and logs the reason. It never falls back to
   an open dashboard. `sermoctl` still runs, and `config validate` reports the
