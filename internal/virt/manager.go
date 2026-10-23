@@ -173,7 +173,7 @@ func NewManager(spec Spec) Manager {
 type Client interface {
 	ConnectToURI(uri libvirt.ConnectURI) error
 	Disconnect() error
-	Domains() ([]libvirt.Domain, error)
+	ConnectListAllDomains(needResults int32, flags libvirt.ConnectListAllDomainsFlags) ([]libvirt.Domain, uint32, error)
 	DomainLookupByName(name string) (libvirt.Domain, error)
 	DomainLookupByUUID(uuid libvirt.UUID) (libvirt.Domain, error)
 	DomainGetState(dom libvirt.Domain, flags uint32) (int32, int32, error)
@@ -210,9 +210,9 @@ func ListDomains(ctx context.Context, spec Spec) ([]DomainSummary, error) {
 
 func listDomains(ctx context.Context, m Manager) ([]DomainSummary, error) {
 	return runWithClient(ctx, m, func(c Client) ([]DomainSummary, error) {
-		domains, err := c.Domains()
+		domains, err := allDomains(c)
 		if err != nil {
-			return nil, fmt.Errorf("list domains: %w", err)
+			return nil, err
 		}
 		out := make([]DomainSummary, 0, len(domains))
 		for _, dom := range domains {
@@ -312,6 +312,25 @@ func lookupDomain(c Client, spec Spec) (libvirt.Domain, error) {
 		return libvirt.Domain{}, fmt.Errorf("domain %q: %w", spec.Domain, err)
 	}
 	return dom, nil
+}
+
+// domainLister is the listing call both libvirt client surfaces share.
+type domainLister interface {
+	ConnectListAllDomains(needResults int32, flags libvirt.ConnectListAllDomainsFlags) ([]libvirt.Domain, uint32, error)
+}
+
+// listAllDomainsNeedResults asks libvirt for the domains themselves, not only
+// their count.
+const listAllDomainsNeedResults = 1
+
+// allDomains lists every defined domain, active or not, as `virsh list --all`
+// does; go-libvirt's deprecated Domains wraps exactly this call.
+func allDomains(c domainLister) ([]libvirt.Domain, error) {
+	domains, _, err := c.ConnectListAllDomains(listAllDomainsNeedResults, libvirt.ConnectListDomainsActive|libvirt.ConnectListDomainsInactive)
+	if err != nil {
+		return nil, fmt.Errorf("list domains: %w", err)
+	}
+	return domains, nil
 }
 
 func runWithClient[T any](ctx context.Context, m Manager, fn func(Client) (T, error)) (T, error) {

@@ -120,7 +120,7 @@ type NetworkClient interface {
 	NetworkCreate(net libvirt.Network) error
 	NetworkDestroy(net libvirt.Network) error
 	NetworkGetXMLDesc(net libvirt.Network, flags uint32) (string, error)
-	Domains() ([]libvirt.Domain, error)
+	ConnectListAllDomains(needResults int32, flags libvirt.ConnectListAllDomainsFlags) ([]libvirt.Domain, uint32, error)
 	DomainGetState(dom libvirt.Domain, flags uint32) (int32, int32, error)
 	DomainGetXMLDesc(dom libvirt.Domain, flags libvirt.DomainXMLFlags) (string, error)
 }
@@ -269,9 +269,9 @@ func domainHoldsInterfaces(state libvirt.DomainState) bool {
 // Every lookup failure is returned rather than skipped: an unverifiable guest
 // must block the destroy, not vanish from the check.
 func attachedGuests(c NetworkClient, network, bridge string) ([]string, error) {
-	domains, err := c.Domains()
+	domains, err := allDomains(c)
 	if err != nil {
-		return nil, fmt.Errorf("list domains: %w", err)
+		return nil, err
 	}
 	var guests []string
 	for _, dom := range domains {

@@ -48,9 +48,12 @@ func (c *fakeClient) DomainLookupByName(name string) (libvirt.Domain, error) {
 	return libvirt.Domain{Name: name}, nil
 }
 
-func (c *fakeClient) Domains() ([]libvirt.Domain, error) {
+func (c *fakeClient) ConnectListAllDomains(needResults int32, flags libvirt.ConnectListAllDomainsFlags) ([]libvirt.Domain, uint32, error) {
 	c.calls = append(c.calls, "domains")
-	return c.domains, nil
+	if needResults != 1 || flags != libvirt.ConnectListDomainsActive|libvirt.ConnectListDomainsInactive {
+		return nil, 0, errors.New("listing must return active and inactive domains")
+	}
+	return c.domains, uint32(len(c.domains)), nil
 }
 
 func (c *fakeClient) DomainLookupByUUID(uuid libvirt.UUID) (libvirt.Domain, error) {
