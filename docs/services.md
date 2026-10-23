@@ -938,8 +938,7 @@ startup grace period are not rejected by the health predicate. Configure
 `sermoctl restart SERVICE` always composes stop and start inside one operation:
 one lock, one timeout, required preflight, guards, process identity verification,
 postflight and one auditable result. Sermo does not invoke the init backend's
-`restart` command. The former `restart_policy` setting is rejected; remove it
-from defaults and service overrides when upgrading.
+`restart` command.
 
 Before start or restart, Sermo compares the init state with a fresh process
 observation. An active resident service with no processes can be reconciled only

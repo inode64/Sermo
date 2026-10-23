@@ -25,10 +25,7 @@ func TestRealCatalogLifecycleBackendMatrix(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			resolved := resolveCatalogService(t, tt.service, tt.backend)
-			lifecycle, err := ResolveServiceLifecycle(resolved.Tree, tt.backend)
-			if err != nil {
-				t.Fatalf("ResolveServiceLifecycle: %v", err)
-			}
+			lifecycle := ResolveServiceLifecycle(resolved.Tree, tt.backend)
 			if lifecycle.ProcessMode != tt.processMode ||
 				!slices.Equal(lifecycle.AuxiliaryUnits, tt.auxiliaryUnits) {
 				t.Fatalf("lifecycle = %+v, want process=%q auxiliary=%v", lifecycle, tt.processMode, tt.auxiliaryUnits)

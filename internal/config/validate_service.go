@@ -110,13 +110,6 @@ func validateAllowDependencies(tree map[string]any, add addFunc) {
 	}
 }
 
-// validateRestartPolicy rejects the retired strategy rather than silently changing an operator override.
-func validateRestartPolicy(tree map[string]any, add addFunc) {
-	if _, err := ResolveServiceLifecycle(tree, ""); err != nil {
-		add("%s", err)
-	}
-}
-
 func validateStopPolicy(tree map[string]any, add addFunc) {
 	sp, ok := tree[sectionStopPolicy].(map[string]any)
 	if !ok {

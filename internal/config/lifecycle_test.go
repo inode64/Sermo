@@ -50,10 +50,7 @@ func TestResolveServiceLifecycle(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			got, err := ResolveServiceLifecycle(tt.tree, backendSystemd)
-			if err != nil {
-				t.Fatalf("ResolveServiceLifecycle: %v", err)
-			}
+			got := ResolveServiceLifecycle(tt.tree, backendSystemd)
 			if got.ProcessMode != tt.want.ProcessMode ||
 				!slices.Equal(got.AuxiliaryUnits, tt.want.AuxiliaryUnits) {
 				t.Fatalf("lifecycle = %+v, want %+v", got, tt.want)
