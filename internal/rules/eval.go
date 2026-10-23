@@ -340,7 +340,7 @@ func (e *Evaluator) evalProcess(v any) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	if e.Deps.Processes == nil {
+	if e.Deps.ProcessesAny == nil {
 		return unavailableSignal(errors.New("process condition has no process source"))
 	}
 	want := cfgval.AsString(m[FieldState])
@@ -348,7 +348,7 @@ func (e *Evaluator) evalProcess(v any) (bool, error) {
 		want = ProcessStateRunning
 	}
 	exe, user := cfgval.AsString(m[FieldExe]), cfgval.AsString(m[FieldUser])
-	got := e.Deps.Processes(exe, user)
+	got := e.Deps.ProcessesAny([]string{exe}, user)
 	if got == process.StateUnknown {
 		// An incomplete process table or an unresolvable user proves nothing;
 		// reading it as a state would let a guard allow the action.

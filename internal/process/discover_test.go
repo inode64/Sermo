@@ -500,29 +500,29 @@ func TestDiscoverMainPIDDedupedWithSelector(t *testing.T) {
 	}
 }
 
-func TestObserveState(t *testing.T) {
+func TestObserveAnyStateSingleExe(t *testing.T) {
 	d := func(ids map[int]Identity) Discoverer {
 		return Discoverer{Reader: fakeReader{ids: ids}, ResolveUser: fakeUsers(map[string]uint32{"mysql": 110})}
 	}
 
 	running := d(map[int]Identity{100: {PID: 100, UID: 110, Exe: testExe, ExeOK: true, State: "S"}})
-	if got := running.ObserveState(testExe, "mysql"); got != StateRunning {
-		t.Errorf("ObserveState = %q, want running", got)
+	if got := running.ObserveAnyState([]string{testExe}, "mysql"); got != StateRunning {
+		t.Errorf("ObserveAnyState = %q, want running", got)
 	}
 
 	zombie := d(map[int]Identity{100: {PID: 100, UID: 110, Exe: testExe, ExeOK: true, State: "Z"}})
-	if got := zombie.ObserveState(testExe, "mysql"); got != StateZombie {
-		t.Errorf("ObserveState = %q, want zombie", got)
+	if got := zombie.ObserveAnyState([]string{testExe}, "mysql"); got != StateZombie {
+		t.Errorf("ObserveAnyState = %q, want zombie", got)
 	}
 
 	absent := d(map[int]Identity{100: {PID: 100, UID: 999, Exe: testExe, ExeOK: true, State: "S"}})
-	if got := absent.ObserveState(testExe, "mysql"); got != StateAbsent {
-		t.Errorf("ObserveState = %q, want absent (wrong user)", got)
+	if got := absent.ObserveAnyState([]string{testExe}, "mysql"); got != StateAbsent {
+		t.Errorf("ObserveAnyState = %q, want absent (wrong user)", got)
 	}
 
 	unresolved := d(map[int]Identity{100: {PID: 100, UID: 110, ExeOK: false, State: "S"}})
-	if got := unresolved.ObserveState(testExe, "mysql"); got != StateAbsent {
-		t.Errorf("ObserveState = %q, want absent (unresolvable exe)", got)
+	if got := unresolved.ObserveAnyState([]string{testExe}, "mysql"); got != StateAbsent {
+		t.Errorf("ObserveAnyState = %q, want absent (unresolvable exe)", got)
 	}
 }
 

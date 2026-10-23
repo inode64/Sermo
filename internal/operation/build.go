@@ -102,9 +102,6 @@ func New(c Config) Engine {
 			return st.Status, nil
 		}
 	}
-	if deps.Processes == nil {
-		deps.Processes = c.Discoverer.ObserveState
-	}
 	if deps.ProcessesAny == nil {
 		deps.ProcessesAny = c.Discoverer.ObserveAnyState
 	}
