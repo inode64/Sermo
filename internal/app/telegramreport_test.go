@@ -3,6 +3,7 @@ package app
 import (
 	"slices"
 	"testing"
+	"time"
 
 	"sermo/internal/config"
 	"sermo/internal/state"
@@ -63,5 +64,32 @@ func TestTelegramSLAFormatKeepsAffectedMinutes(t *testing.T) {
 	}
 	if got, want := formatSLARatio(state.SLAValue{}), "n/a"; got != want {
 		t.Errorf("formatSLARatio() = %q, want %q", got, want)
+	}
+}
+
+type recordingSLAReader struct{ asked []string }
+
+func (r *recordingSLAReader) SLAReport(service string, _ time.Time) ([]state.SLAValue, error) {
+	r.asked = append(r.asked, service)
+	return nil, nil
+}
+
+// `/sla MySQL` finds service mysql ignoring case, so the archive must be read
+// under the configured name: its rows match the service column exactly.
+func TestTelegramSLAReadsTheConfiguredServiceName(t *testing.T) {
+	backend := &WebBackend{cfg: &config.Config{}, order: []string{"mysql"}, entries: map[string]*webEntry{"mysql": {}}}
+	holder := &WebBackendHolder{}
+	holder.current.Store(&webGeneration{backend: backend, generation: initialWebBackendGeneration})
+	sla := &recordingSLAReader{}
+	reporter := NewTelegramReporter(holder, sla, nil)
+
+	if _, found, err := reporter.SLA(t.Context(), "MySQL"); err != nil || !found {
+		t.Fatalf("SLA(MySQL) found=%v err=%v", found, err)
+	}
+	if _, found, _ := reporter.SLA(t.Context(), "postgres"); found {
+		t.Fatal("SLA found a service that is not configured")
+	}
+	if !slices.Equal(sla.asked, []string{"mysql"}) {
+		t.Fatalf("SLA archive read for %q, want only the configured name", sla.asked)
 	}
 }

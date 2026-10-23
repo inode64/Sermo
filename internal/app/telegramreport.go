@@ -96,8 +96,9 @@ func (r *telegramReporter) Watches(ctx context.Context) ([]telegrambot.WatchLine
 	}), nil
 }
 
-func (r *telegramReporter) SLA(ctx context.Context, service string) ([]telegrambot.SLAWindow, bool, error) {
-	if !r.serviceExists(ctx, service) {
+func (r *telegramReporter) SLA(_ context.Context, service string) ([]telegrambot.SLAWindow, bool, error) {
+	service, ok := r.serviceName(service)
+	if !ok {
 		return nil, false, nil
 	}
 	values, err := r.sla.SLAReport(service, r.now())
@@ -118,9 +119,14 @@ func (r *telegramReporter) Events(ctx context.Context, limit int) ([]telegrambot
 	}), nil
 }
 
-func (r *telegramReporter) serviceExists(ctx context.Context, name string) bool {
-	services := r.backend().Services(ctx)
-	return slices.ContainsFunc(services, func(service web.Service) bool { return strings.EqualFold(service.Name, name) })
+// serviceName finds the configured service a command names, ignoring case,
+// and returns its configured spelling: the SLA archive stores rows under it.
+func (r *telegramReporter) serviceName(name string) (string, bool) {
+	order := r.backend().order
+	if i := slices.IndexFunc(order, func(service string) bool { return strings.EqualFold(service, name) }); i >= 0 {
+		return order[i], true
+	}
+	return "", false
 }
 
 // formatSLARatio renders one window's availability, naming the affected minutes
