@@ -247,12 +247,12 @@ func lookupNetwork(c NetworkClient, name string) (libvirt.Network, error) {
 	return net, nil
 }
 
-func (m NetworkManager) sessionClient(socket string) func(time.Duration) (NetworkClient, error) {
-	return func(timeout time.Duration) (NetworkClient, error) {
+func (m NetworkManager) sessionClient(socket string) func(context.Context, time.Duration) (NetworkClient, error) {
+	return func(ctx context.Context, timeout time.Duration) (NetworkClient, error) {
 		if m.NewClient != nil {
 			return m.NewClient(m.Spec, socket, timeout)
 		}
-		return newLibvirtRPC(socket, m.Spec.Host, m.Spec.Port, timeout), nil
+		return newLibvirtRPC(ctx, socket, m.Spec.Host, m.Spec.Port, timeout), nil
 	}
 }
 
