@@ -14,17 +14,17 @@ func TestPushMessageFields(t *testing.T) {
 	tests := []struct {
 		name string
 		msg  Message
-		want map[string]string
+		want map[string]any
 	}{
 		{
 			name: "subject only",
 			msg:  Message{Subject: "recovered"},
-			want: map[string]string{pushPayloadMessageKey: "recovered"},
+			want: map[string]any{pushPayloadMessageKey: "recovered"},
 		},
 		{
 			name: "subject and body",
 			msg:  Message{Subject: "disk full", Body: "SERMO_PATH=/"},
-			want: map[string]string{pushPayloadTitleKey: "disk full", pushPayloadMessageKey: "SERMO_PATH=/"},
+			want: map[string]any{pushPayloadTitleKey: "disk full", pushPayloadMessageKey: "SERMO_PATH=/"},
 		},
 	}
 	for _, test := range tests {

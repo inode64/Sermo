@@ -40,8 +40,8 @@ func webhookPayload(v any) []byte {
 
 // pushMessageFields renders the title/message fields shared by Gotify and
 // ntfy. A subject-only notification travels as the message without a title.
-func pushMessageFields(msg Message) map[string]string {
-	fields := map[string]string{pushPayloadMessageKey: msg.Subject}
+func pushMessageFields(msg Message) map[string]any {
+	fields := map[string]any{pushPayloadMessageKey: msg.Subject}
 	if msg.Body != "" {
 		fields[pushPayloadTitleKey] = msg.Subject
 		fields[pushPayloadMessageKey] = msg.Body

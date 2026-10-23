@@ -38,11 +38,7 @@ func buildGotify(name string, entry map[string]any) (Notifier, error) {
 // the detail (the SERMO_* fields) as the message. A subject-only notification
 // travels as the message alone.
 func gotifyPayload(msg Message) []byte {
-	fields := pushMessageFields(msg)
-	body := make(map[string]any, len(fields))
-	for name, value := range fields {
-		body[name] = value
-	}
+	body := pushMessageFields(msg)
 	// The severity sets how loudly the client announces it; a tap opens the
 	// dashboard row.
 	body[gotifyPriorityKey] = tonePriorities[msg.tone()] * gotifyPriorityScale
