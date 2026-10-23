@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -313,10 +314,7 @@ func (a App) writeSessionInventory(inventory web.SessionInventory) {
 }
 
 func sessionsCell(value string) string {
-	if value == "" {
-		return sessionsEmptyCell
-	}
-	return value
+	return cmp.Or(value, sessionsEmptyCell)
 }
 
 func sessionsPID(pid int) string {

@@ -509,11 +509,7 @@ func serverWriteTimeout(maxOp time.Duration) time.Duration {
 	if maxOp <= 0 {
 		maxOp = defaultOperationTimeout
 	}
-	wt := maxOp + writeTimeoutMargin
-	if wt < minWriteTimeout {
-		return minWriteTimeout
-	}
-	return wt
+	return max(maxOp+writeTimeoutMargin, minWriteTimeout)
 }
 
 func (s *Server) actionWriteTimeout() time.Duration {

@@ -1,6 +1,7 @@
 package web
 
 import (
+	"cmp"
 	"context"
 	"time"
 
@@ -800,16 +801,7 @@ type Event struct {
 // host watch, then catalog application. An event without a subject returns an
 // empty string so each presenter can choose its own placeholder.
 func (e Event) Target() string {
-	switch {
-	case e.Service != "":
-		return e.Service
-	case e.Watch != "":
-		return e.Watch
-	case e.App != "":
-		return e.App
-	default:
-		return ""
-	}
+	return cmp.Or(e.Service, e.Watch, e.App)
 }
 
 // EventQuery selects one cursor page from the global event feed.

@@ -271,15 +271,7 @@ func serviceNoResidentProcess(tree map[string]any, selectors []process.Selector,
 }
 
 func hasBackendPIDs(backendPIDs func() []int) bool {
-	if backendPIDs == nil {
-		return false
-	}
-	for _, pid := range backendPIDs() {
-		if pid > 0 {
-			return true
-		}
-	}
-	return false
+	return backendPIDs != nil && slices.ContainsFunc(backendPIDs(), func(pid int) bool { return pid > 0 })
 }
 
 func initDerivedProcessSelectors(info servicemgr.ProcInfo) []process.Selector {
