@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sermo/internal/cfgval"
+	"sermo/internal/process"
 	"slices"
 	"strings"
 )
@@ -26,7 +27,7 @@ const (
 )
 
 var (
-	enableIfSections = set(sectionChecks, sectionPreflight, sectionProcesses, sectionWatches)
+	enableIfSections = set(sectionChecks, sectionPreflight, process.SectionProcesses, sectionWatches)
 	enableIfKeys     = set(keyEnableIfFile, keyEnableIfKey, keyEnableIfContains, keyEnableIfEquals, keyEnableIfMatches, keyEnableIfInit)
 )
 

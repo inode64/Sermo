@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"sermo/internal/cfgval"
+	"sermo/internal/process"
 	"sermo/internal/rules"
 )
 
@@ -228,9 +229,9 @@ func TestCatalogNFSAllowsInitDependencies(t *testing.T) {
 	t.Parallel()
 
 	systemd := resolveCatalogService(t, "nfs", backendSystemd)
-	processes, ok := systemd.Tree[SectionProcesses].(map[string]any)
+	processes, ok := systemd.Tree[process.SectionProcesses].(map[string]any)
 	if !ok || len(processes) != 0 {
-		t.Fatalf("nfs processes = %v, want an explicit no-resident-process map", systemd.Tree[SectionProcesses])
+		t.Fatalf("nfs processes = %v, want an explicit no-resident-process map", systemd.Tree[process.SectionProcesses])
 	}
 	if !AllowDependencies(systemd.Tree) {
 		t.Fatal("nfs systemd must allow init dependencies")

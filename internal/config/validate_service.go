@@ -111,7 +111,7 @@ func validateAllowDependencies(tree map[string]any, add addFunc) {
 }
 
 func validateStopPolicy(tree map[string]any, add addFunc) {
-	sp, ok := tree[sectionStopPolicy].(map[string]any)
+	sp, ok := tree[process.SectionStopPolicy].(map[string]any)
 	if !ok {
 		return
 	}
@@ -214,7 +214,7 @@ func pathDepth(p string) int {
 }
 
 func validateProcesses(tree map[string]any, add addFunc) {
-	processes := validateMappingSection(tree, sectionProcesses, add)
+	processes := validateMappingSection(tree, process.SectionProcesses, add)
 	for _, name := range slices.Sorted(maps.Keys(processes)) {
 		path := processEntryPath(name)
 		entry, ok := processes[name].(map[string]any)
@@ -231,11 +231,11 @@ func validateProcesses(tree map[string]any, add addFunc) {
 }
 
 func validatePidfiles(tree map[string]any, add addFunc) {
-	pidfiles, ok := tree[ServiceKeyPidfiles].(map[string]any)
+	pidfiles, ok := tree[process.ServiceKeyPidfiles].(map[string]any)
 	if !ok {
 		return
 	}
-	processes, _ := tree[sectionProcesses].(map[string]any)
+	processes, _ := tree[process.SectionProcesses].(map[string]any)
 	for _, role := range slices.Sorted(maps.Keys(pidfiles)) {
 		path := pidfilesRolePath(role)
 		entry, ok := processes[role].(map[string]any)
@@ -367,8 +367,8 @@ func reloadSignalNeedsPidfileIdentity(tree map[string]any, backend string) bool 
 }
 
 func reloadSignalPidfileIdentity(tree map[string]any) (pidfile, identity bool) {
-	pidfile = len(cfgval.StringList(tree[ServiceKeyPidfile])) > 0
-	procs, ok := tree[SectionProcesses].(map[string]any)
+	pidfile = len(cfgval.StringList(tree[process.ServiceKeyPidfile])) > 0
+	procs, ok := tree[process.SectionProcesses].(map[string]any)
 	if !ok {
 		return pidfile, false
 	}

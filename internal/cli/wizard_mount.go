@@ -9,6 +9,7 @@ import (
 	"sermo/internal/cfgval"
 	"sermo/internal/checks"
 	"sermo/internal/config"
+	"sermo/internal/process"
 )
 
 // writeWizardMounts renders generated mount watches under paths.watches.
@@ -89,7 +90,7 @@ func wizardMountStorageDoc(name string, body any) map[string]any {
 		if existing, ok := b[config.WatchKeyCheck].(map[string]any); ok {
 			maps.Copy(check, existing)
 		}
-		for _, key := range []string{config.MountKeyRefcount, config.MountKeyUmount, config.MountKeyStopPolicy} {
+		for _, key := range []string{config.MountKeyRefcount, config.MountKeyUmount, process.SectionStopPolicy} {
 			if v, present := b[key]; present {
 				mount[key] = v
 			}

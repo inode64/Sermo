@@ -12,6 +12,7 @@ import (
 	"sermo/internal/cfgval"
 	"sermo/internal/checks"
 	"sermo/internal/mounts"
+	"sermo/internal/process"
 	"sermo/internal/rules"
 	"sermo/internal/severity"
 	"sermo/internal/strutil"
@@ -295,7 +296,7 @@ const reloadOnChangePathPaths = keyReloadOnChange + "." + keyPaths
 // resolved tree as the service's single pidfile source; process discovery and
 // OpenRC signal reload derive their internal pidfile selector from it.
 func expandPidfile(tree map[string]any) []string {
-	raw, present := tree[ServiceKeyPidfile]
+	raw, present := tree[process.ServiceKeyPidfile]
 	if !present {
 		return nil
 	}
@@ -304,7 +305,7 @@ func expandPidfile(tree map[string]any) []string {
 		return errs
 	}
 	pathValue := serviceArtifactPathValue(decl.paths)
-	tree[ServiceKeyPidfile] = pathValue
+	tree[process.ServiceKeyPidfile] = pathValue
 
 	// Gated health check, unless the service already defines one.
 	ensureServiceArtifactCheck(tree, artifactPidfile, artifactPidfile, pathValue, decl.optional)
@@ -316,12 +317,12 @@ func expandPidfile(tree map[string]any) []string {
 // set of alternative paths for one process, `pidfiles` declares several process
 // roles that must each have a live pidfile while the service is active.
 func expandPidfiles(tree map[string]any) []string {
-	raw, present := tree[ServiceKeyPidfiles]
+	raw, present := tree[process.ServiceKeyPidfiles]
 	if !present {
 		return nil
 	}
 	var errs []string
-	if _, hasPidfile := tree[ServiceKeyPidfile]; hasPidfile {
+	if _, hasPidfile := tree[process.ServiceKeyPidfile]; hasPidfile {
 		errs = append(errs, "pidfile and pidfiles are mutually exclusive")
 	}
 	pidfiles, ok := raw.(map[string]any)
@@ -346,7 +347,7 @@ func expandPidfiles(tree map[string]any) []string {
 		normalized[role] = pathValue
 		ensureServiceArtifactCheck(tree, artifactPidfile+"-"+role, artifactPidfile, pathValue, false)
 	}
-	tree[ServiceKeyPidfiles] = normalized
+	tree[process.ServiceKeyPidfiles] = normalized
 	return errs
 }
 

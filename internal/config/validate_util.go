@@ -6,6 +6,7 @@ import (
 	"slices"
 
 	"sermo/internal/cfgval"
+	"sermo/internal/process"
 	"sermo/internal/rules"
 	"sermo/internal/strutil"
 )
@@ -82,7 +83,7 @@ func validateMappingSection(tree map[string]any, key string, add addFunc) map[st
 func serviceSectionErrors(tree map[string]any) []string {
 	var errs []string
 	add := func(format string, args ...any) { errs = append(errs, fmt.Sprintf(format, args...)) }
-	for _, section := range []string{sectionChecks, sectionPreflight, rules.SectionRules, sectionProcesses, sectionCommands} {
+	for _, section := range []string{sectionChecks, sectionPreflight, rules.SectionRules, process.SectionProcesses, sectionCommands} {
 		validateMappingSection(tree, section, add)
 	}
 	return errs

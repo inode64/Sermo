@@ -229,7 +229,7 @@ func serviceRuntimeBackendPIDs(ctx context.Context, deps Deps, unit string) (cac
 // otherwise we derive the safest init-provided identity we can detect.
 func serviceProcessSelectors(ctx context.Context, tree map[string]any, deps Deps, unit string, needPidfileFallback bool) ([]process.Selector, []string, servicemgr.ProcInfo) {
 	selectors, warnings := process.ParseSelectors(tree)
-	_, configured := tree[config.SectionProcesses]
+	_, configured := tree[process.SectionProcesses]
 	needSelectors := !configured && len(selectors) == 0
 	var info servicemgr.ProcInfo
 	if needSelectors || needPidfileFallback {
@@ -261,10 +261,10 @@ func serviceNoResidentProcess(tree map[string]any, selectors []process.Selector,
 	if backend == servicemgr.BackendDocker {
 		return false
 	}
-	if processes, configured := tree[config.SectionProcesses].(map[string]any); configured && len(processes) > 0 {
+	if processes, configured := tree[process.SectionProcesses].(map[string]any); configured && len(processes) > 0 {
 		return false
 	}
-	if len(selectors) > 0 || len(cfgval.StringList(tree[config.ServiceKeyPidfile])) > 0 {
+	if len(selectors) > 0 || len(cfgval.StringList(tree[process.ServiceKeyPidfile])) > 0 {
 		return false
 	}
 	return !hasBackendPIDs(backendPIDs)

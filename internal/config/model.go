@@ -33,10 +33,6 @@ const (
 	kindWatch    = "watch"
 )
 
-// sectionStopPolicy is the per-service/mount block declaring the stopped-state
-// invariants (pidfile/file cleanup) the engine enforces.
-const sectionStopPolicy = process.SectionStopPolicy
-
 // sectionPolicy is the remediation policy block; sectionRuleWindow is the
 // firing-window fallback block owned by the rules grammar.
 const (
@@ -215,14 +211,10 @@ func SectionMap(raw map[string]any, section string) map[string]any {
 
 // stop_policy timeout and kill-guard field keys.
 const (
-	keyTermTimeout     = process.StopPolicyKeyTermTimeout
-	keyKillTimeout     = process.StopPolicyKeyKillTimeout
-	keyKillOnlyIf      = process.StopPolicyKeyKillOnlyIf
-	keyPidfileAbsent   = "pidfile_absent"
-	keyFilesAbsent     = "files_absent"
-	keyCleanAfterStop  = "clean_after_stop"
-	keyCleanOnStop     = "clean_on_stop"
-	keyMountStopPolicy = sectionStopPolicy
+	keyPidfileAbsent  = "pidfile_absent"
+	keyFilesAbsent    = "files_absent"
+	keyCleanAfterStop = "clean_after_stop"
+	keyCleanOnStop    = "clean_on_stop"
 )
 
 // keyDryRun is the per-target flag that simulates automatic actions.
@@ -256,24 +248,12 @@ const keyFDsLimit = "fds_limit"
 // keyRestartOnFDsHigh permits the generated fds rule to restart.
 const keyRestartOnFDsHigh = "restart_on_fds_high"
 
-// Stop policy field keys.
-const (
-	// StopPolicyKeyTermTimeout is stop_policy.term_timeout.
-	StopPolicyKeyTermTimeout = keyTermTimeout
-	// StopPolicyKeyKillTimeout is stop_policy.kill_timeout.
-	StopPolicyKeyKillTimeout = keyKillTimeout
-	// StopPolicyKeyKillOnlyIf is stop_policy.kill_only_if.
-	StopPolicyKeyKillOnlyIf = keyKillOnlyIf
-)
-
 // Storage mount field keys.
 const (
 	// MountKeyUmount is mount.umount.
 	MountKeyUmount = keyUmount
 	// MountKeyRefcount is mount.refcount.
 	MountKeyRefcount = keyRefcount
-	// MountKeyStopPolicy is mount.stop_policy.
-	MountKeyStopPolicy = keyMountStopPolicy
 )
 
 // Check-gate / check-entry field keys.
@@ -382,10 +362,6 @@ const (
 	ServiceKeyService = "service"
 	// ServiceKeyUses is the catalog service reference field.
 	ServiceKeyUses = "uses"
-	// ServiceKeyPidfile is the primary pidfile field.
-	ServiceKeyPidfile = process.ServiceKeyPidfile
-	// ServiceKeyPidfiles is the named pidfile roles field.
-	ServiceKeyPidfiles = process.ServiceKeyPidfiles
 	// ServiceKeyAlsoService is the auxiliary init units field.
 	ServiceKeyAlsoService = "also_service"
 	// ServiceKeyAlsoApply is the cascading Sermo services field.
@@ -444,13 +420,6 @@ const sectionPreflight = "preflight"
 
 // SectionPreflight is the service preflight check block.
 const SectionPreflight = sectionPreflight
-
-// sectionProcesses is the service block of named process selectors (exe/user)
-// used for discovery and kill matching.
-const sectionProcesses = process.SectionProcesses
-
-// SectionProcesses is the service block of named process selectors.
-const SectionProcesses = sectionProcesses
 
 // sectionVariables is the ${var} definition block (on defaults, a service, a
 // storage doc or an app) expanded during resolution.
@@ -516,7 +485,7 @@ var metaKeys = map[string]struct{}{
 
 // perServiceDefaults are the only parts of global `defaults` that merge into a
 // service. Engine-wide settings never reach individual services.
-var perServiceDefaults = []string{keyDryRun, keyAllowDependencies, keyRestartOnChange, keyReloadOnChange, keyRestartOnStaleBinary, keyFDsLimit, keyRestartOnFDsHigh, sectionStopPolicy, sectionPolicy, sectionRuleWindow, sectionClearWindow}
+var perServiceDefaults = []string{keyDryRun, keyAllowDependencies, keyRestartOnChange, keyReloadOnChange, keyRestartOnStaleBinary, keyFDsLimit, keyRestartOnFDsHigh, process.SectionStopPolicy, sectionPolicy, sectionRuleWindow, sectionClearWindow}
 
 // Document is a single loaded catalog definition or configured target in raw,
 // unexpanded form.
@@ -924,15 +893,15 @@ type StopArtifacts struct {
 // warned about but nothing is deleted. All zero when absent.
 func StopInvariants(tree map[string]any) StopArtifacts {
 	var out StopArtifacts
-	sp, ok := tree[sectionStopPolicy].(map[string]any)
+	sp, ok := tree[process.SectionStopPolicy].(map[string]any)
 	if !ok {
 		return out
 	}
 	out.CleanEnabled, _ = sp[keyCleanAfterStop].(bool)
 	out.Files = cfgval.StringList(sp[keyFilesAbsent])
 	if pa, _ := sp[keyPidfileAbsent].(bool); pa {
-		out.PidfilePaths = append(out.PidfilePaths, cfgval.StringList(tree[ServiceKeyPidfile])...)
-		if pidfiles, ok := tree[ServiceKeyPidfiles].(map[string]any); ok {
+		out.PidfilePaths = append(out.PidfilePaths, cfgval.StringList(tree[process.ServiceKeyPidfile])...)
+		if pidfiles, ok := tree[process.ServiceKeyPidfiles].(map[string]any); ok {
 			for _, role := range sortedPidfileRoles(tree) {
 				out.PidfilePaths = append(out.PidfilePaths, cfgval.StringList(pidfiles[role])...)
 			}
@@ -958,7 +927,7 @@ func StopInvariants(tree map[string]any) StopArtifacts {
 }
 
 func sortedPidfileRoles(tree map[string]any) []string {
-	pidfiles, ok := tree[ServiceKeyPidfiles].(map[string]any)
+	pidfiles, ok := tree[process.ServiceKeyPidfiles].(map[string]any)
 	if !ok {
 		return nil
 	}

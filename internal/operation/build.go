@@ -396,7 +396,7 @@ type reloadPIDSource string
 
 const (
 	reloadPIDMain    reloadPIDSource = "mainpid"
-	reloadPIDPidfile reloadPIDSource = config.ServiceKeyPidfile
+	reloadPIDPidfile reloadPIDSource = process.ServiceKeyPidfile
 )
 
 func reloadPID(ctx context.Context, runner execx.Runner, backend, unit, pidfile string) (int, reloadPIDSource, error) {
@@ -416,7 +416,7 @@ func reloadPID(ctx context.Context, runner execx.Runner, backend, unit, pidfile 
 		}
 		return pid, reloadPIDPidfile, nil
 	}
-	return 0, "", fmt.Errorf("reload: cannot resolve a pid to signal: backend exposes no MainPID (OpenRC) and the service declares no %s; add %s: so the signal target can be found", config.ServiceKeyPidfile, config.ServiceKeyPidfile)
+	return 0, "", fmt.Errorf("reload: cannot resolve a pid to signal: backend exposes no MainPID (OpenRC) and the service declares no %s; add %s: so the signal target can be found", process.ServiceKeyPidfile, process.ServiceKeyPidfile)
 }
 
 // reloadContextError builds the operator-facing context failure as a
@@ -429,7 +429,7 @@ func reloadContextError(err error) error {
 // reloadPidfile returns the service's top-level pidfile path, used as the signal
 // target when the backend has no MainPID (OpenRC).
 func reloadPidfile(tree map[string]any) string {
-	if paths := cfgval.StringList(tree[config.ServiceKeyPidfile]); len(paths) > 0 {
+	if paths := cfgval.StringList(tree[process.ServiceKeyPidfile]); len(paths) > 0 {
 		return paths[0]
 	}
 	return ""

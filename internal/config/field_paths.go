@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 
+	"sermo/internal/process"
 	"sermo/internal/rules"
 )
 
@@ -44,7 +45,7 @@ const (
 
 	mountPath           = StorageKeyMount
 	mountPathRefcount   = mountPath + "." + MountKeyRefcount
-	mountPathStopPolicy = mountPath + "." + MountKeyStopPolicy
+	mountPathStopPolicy = mountPath + "." + process.SectionStopPolicy
 	mountPathUmount     = mountPath + "." + MountKeyUmount
 
 	controlPathType = SectionControl + "." + keyType
@@ -53,8 +54,8 @@ const (
 	reloadPathSignal  = SectionReload + "." + ReloadKeySignal
 	reloadPathWhen    = SectionReload + "." + ReloadKeyWhen
 
-	stopPolicyPathCleanOnStop = sectionStopPolicy + "." + keyCleanOnStop
-	stopPolicyPathFilesAbsent = sectionStopPolicy + "." + keyFilesAbsent
+	stopPolicyPathCleanOnStop = process.SectionStopPolicy + "." + keyCleanOnStop
+	stopPolicyPathFilesAbsent = process.SectionStopPolicy + "." + keyFilesAbsent
 )
 
 func engineFieldPath(field string) string {
@@ -98,7 +99,7 @@ func variableFieldPath(name, field string) string {
 }
 
 func processEntryPath(name string) string {
-	return SectionProcesses + "." + name
+	return process.SectionProcesses + "." + name
 }
 
 func processFieldPath(name, field string) string {
@@ -106,7 +107,7 @@ func processFieldPath(name, field string) string {
 }
 
 func pidfilesRolePath(role string) string {
-	return ServiceKeyPidfiles + "." + role
+	return process.ServiceKeyPidfiles + "." + role
 }
 
 func serviceBackendPath(backend string) string {

@@ -30,8 +30,8 @@ const (
 		process.UserLookupNative + ", " +
 		process.UserLookupGetent + ", " +
 		process.UserLookupNumeric
-	mountUmountKeySummary = StopPolicyKeyTermTimeout + ", " +
-		StopPolicyKeyKillTimeout
+	mountUmountKeySummary = process.StopPolicyKeyTermTimeout + ", " +
+		process.StopPolicyKeyKillTimeout
 
 	securityKeyAllowSIGKILLByDefault         = "allow_sigkill_by_default"
 	securityKeyBlockRestartOnActiveLock      = "block_restart_on_active_lock"
@@ -113,8 +113,8 @@ var validServiceDocumentKeys = set(append(slices.Clone(perServiceDefaults),
 	sectionVariables, VariableKeyPort, keyApps,
 	ServiceKeyService, ServiceKeyAlsoService, ServiceKeyAlsoApply,
 	ServiceKeyConfigFiles,
-	ServiceKeyPidfile, ServiceKeyPidfiles, artifactSocket, artifactLockfile, keyAnalyze,
-	sectionProcesses, sectionChecks, sectionPreflight, rules.SectionRules, sectionWatches,
+	process.ServiceKeyPidfile, process.ServiceKeyPidfiles, artifactSocket, artifactLockfile, keyAnalyze,
+	process.SectionProcesses, sectionChecks, sectionPreflight, rules.SectionRules, sectionWatches,
 	sectionCommands, sectionButtons, sectionControl, sectionReload,
 	ServiceMonitorKeyVersion, ServiceMonitorKeyConfig,
 	emission.Section, keyEnableIf,
@@ -954,19 +954,19 @@ func validateStorageMount(mount map[string]any, add addFunc) {
 		for key := range unknownBlockKeys(umount, mountUmountKeys) {
 			add("%s key %q is not one of %s", mountPathUmount, key, mountUmountKeySummary)
 		}
-		for _, field := range []string{StopPolicyKeyTermTimeout, StopPolicyKeyKillTimeout} {
+		for _, field := range []string{process.StopPolicyKeyTermTimeout, process.StopPolicyKeyKillTimeout} {
 			validatePositiveDurationField(umount, field, mountUmountFieldPath(field), add)
 		}
 	}
 
-	if sp, ok := mount[sectionStopPolicy].(map[string]any); ok {
+	if sp, ok := mount[process.SectionStopPolicy].(map[string]any); ok {
 		for key := range unknownBlockKeys(sp, mountStopPolicyKeys) {
-			add("%s key %q is not one of %s", mountPathStopPolicy, key, keyKillOnlyIf)
+			add("%s key %q is not one of %s", mountPathStopPolicy, key, process.StopPolicyKeyKillOnlyIf)
 		}
-	} else if _, present := mount[sectionStopPolicy]; present {
+	} else if _, present := mount[process.SectionStopPolicy]; present {
 		add(validationMappingFormat, mountPathStopPolicy)
 	}
-	validateStopPolicy(map[string]any{sectionStopPolicy: mount[sectionStopPolicy]}, func(format string, args ...any) {
+	validateStopPolicy(map[string]any{process.SectionStopPolicy: mount[process.SectionStopPolicy]}, func(format string, args ...any) {
 		add(mountPath + "." + fmt.Sprintf(format, args...))
 	})
 }
@@ -1078,11 +1078,11 @@ func documentScope(doc *Document) string {
 	return scope
 }
 
-var mountKeys = set(MountKeyRefcount, MountKeyUmount, MountKeyStopPolicy)
+var mountKeys = set(MountKeyRefcount, MountKeyUmount, process.SectionStopPolicy)
 
-var mountUmountKeys = set(StopPolicyKeyTermTimeout, StopPolicyKeyKillTimeout)
+var mountUmountKeys = set(process.StopPolicyKeyTermTimeout, process.StopPolicyKeyKillTimeout)
 
-var mountStopPolicyKeys = set(keyKillOnlyIf)
+var mountStopPolicyKeys = set(process.StopPolicyKeyKillOnlyIf)
 
 var serviceRestartNoticeKeys = set(
 	ServiceRestartNoticeKeyUptimeBelow,

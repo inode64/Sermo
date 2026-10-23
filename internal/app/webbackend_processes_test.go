@@ -267,7 +267,7 @@ func TestServiceNoResidentProcessKeepsStoppedContainerResident(t *testing.T) {
 	if serviceNoResidentProcess(map[string]any{}, nil, func() []int { return nil }, servicemgr.BackendDocker) {
 		t.Fatal("a container without a PID during reload must retain process observation after recovery")
 	}
-	if !serviceNoResidentProcess(map[string]any{config.SectionProcesses: map[string]any{}}, nil, nil, servicemgr.BackendDocker) {
+	if !serviceNoResidentProcess(map[string]any{process.SectionProcesses: map[string]any{}}, nil, nil, servicemgr.BackendDocker) {
 		t.Fatal("explicit empty processes must retain its configured meaning")
 	}
 }
