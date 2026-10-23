@@ -7,6 +7,10 @@ import (
 	"time"
 
 	"sermo/internal/checks"
+	"sermo/internal/config"
+	"sermo/internal/execx"
+	"sermo/internal/execx/execxtest"
+	"sermo/internal/severity"
 )
 
 // The check's own `timeout:` is the operator's declared budget for that probe. It
@@ -146,5 +150,38 @@ func TestProbeContextWithUnsetTimeoutIsBounded(t *testing.T) {
 	cancel()
 	if ctx.Err() != context.Canceled {
 		t.Fatalf("cancel: %v", ctx.Err())
+	}
+}
+
+// A watch that declares no severity lets its check grade its own finding. The
+// manual probe must hand the check that same absence, not the watch's resolved
+// error default, or a controller with an advisory reads as an outage only when
+// probed.
+func TestManualProbeLetsTheCheckGradeItsOwnFinding(t *testing.T) {
+	const storcli = "/usr/bin/storcli64"
+	envelope := func(data string) string {
+		return `{"Controllers":[{"Command Status":{"Controller":0,"Status":"Success"},"Response Data":` + data + `}]}`
+	}
+	runner := &execxtest.Runner{ByLine: map[string]execx.Result{
+		storcli + " /call show all J": {Stdout: envelope(`{"Status":{"Controller Status":"Optimal"}}`)},
+		storcli + " /call/eall/sall show all J": {Stdout: envelope(`{
+		  "Drive /c0/e252/s0": [{"EID:Slt":"252:0","State":"Onln"}],
+		  "Drive /c0/e252/s0 - Detailed Information": {"Drive /c0/e252/s0 State": {"Media Error Count": 2}}}`)},
+		storcli + " /call/vall show all J": {Stdout: envelope(`{"/c0/v0":[{"DG/VD":"0/0","State":"Optl"}]}`)},
+	}, Default: execx.Result{ExitCode: 1}}
+	w, warn := newWebWatch("raid", map[string]any{
+		config.WatchKeyCheck: map[string]any{checks.CheckKeyType: checks.CheckTypeStorCLI, checks.CheckKeyBinary: storcli},
+	}, nil, time.Minute, false)
+	if warn != "" {
+		t.Fatal(warn)
+	}
+	b := &WebBackend{defaultTimeout: 5 * time.Second, execRunner: runner}
+
+	result, err := b.probeWatchResult(context.Background(), w)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.OK || result.Severity != severity.Warning {
+		t.Fatalf("probe ok=%v severity=%q, want a warning: %s", result.OK, result.Severity, result.Message)
 	}
 }

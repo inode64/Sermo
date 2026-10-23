@@ -129,11 +129,15 @@ type webWatch struct {
 	dryRun      bool
 	check       map[string]any
 	metrics     map[string]any
-	// severity is the gravity the watch entry and its check block declare
-	// (unset when neither does). A metric block narrows it further; severityFor
-	// applies that last step, so the dashboard resolves the same chain the daemon
-	// builder does, and a manual probe hands the check the same declaration.
-	severity           severity.Level
+	// severity is the watch's resolved gravity: what the entry and its check
+	// block declare, or the type's default. A metric block narrows it further;
+	// severityFor applies that last step, so the dashboard resolves the same
+	// chain the daemon builder does.
+	severity severity.Level
+	// declared is what the entry and check block declare, unset when neither
+	// does. A manual probe hands the check exactly this, as the daemon builder
+	// does, so a check that grades its own finding still can.
+	declared           severity.Level
 	expand             *ExpandSpec
 	raidControl        bool
 	replicationControl bool
@@ -623,6 +627,7 @@ func newWebWatch(name string, entry map[string]any, globalNotify []string, defau
 		check:              checkMap(entry),
 		metrics:            metricsMap(entry),
 		severity:           watchSeverityFor(ctype, entry, checkMap(entry)),
+		declared:           checks.DeclaredSeverity(entry, checkMap(entry)),
 		expand:             expand,
 		raidControl:        raidControl,
 		replicationControl: replicationControl,

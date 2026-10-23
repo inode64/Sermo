@@ -34,7 +34,7 @@ func (b *WebBackend) probeWatchResult(ctx context.Context, w *webWatch) (checks.
 	}
 	// The check receives the watch's layered declaration, exactly as the daemon
 	// builds it, so its self-grade and its levels grade the probe the same way.
-	check, err := checks.BuildInline(w.name, withSeverity(w.check, w.severity), b.watchCheckDeps())
+	check, err := checks.BuildInline(w.name, withSeverity(w.check, w.declared), b.watchCheckDeps())
 	if err != nil {
 		return checks.Result{}, fmt.Errorf("build check: %w", err)
 	}
