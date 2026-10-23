@@ -469,7 +469,9 @@ func Uint(v any) (uint64, bool) {
 		return n, err == nil
 	}
 	f, ok := Float(v)
-	if !ok || f < 0 || f > math.MaxUint64 {
+	// float64(math.MaxUint64) rounds up to 2^64, so `>` would let 2^64 through
+	// to an implementation-defined conversion; see ByteSize.
+	if !ok || f < 0 || f >= math.Exp2(numericBits64) {
 		return 0, false
 	}
 	return uint64(f), true
