@@ -1502,13 +1502,7 @@ func validateCommandUser(path string, entry map[string]any, add addFunc) {
 }
 
 func validateFirewallRulesFields(prefix string, fields map[string]any, add addFunc) {
-	backend := cfgval.String(fields[checks.CheckKeyBackend])
-	if backend == checks.FirewallBackendNftAlias {
-		backend = checks.FirewallBackendNftables
-	}
-	switch backend {
-	case "", checks.FirewallBackendAuto, checks.FirewallBackendNftables, checks.FirewallBackendIptables:
-	default:
+	if _, ok := checks.ParseFirewallBackend(cfgval.String(fields[checks.CheckKeyBackend])); !ok {
 		add("%s.backend must be %s", prefix, checks.FirewallBackendSummary)
 	}
 	if v, present := fields[checks.CheckKeyMinRules]; present {

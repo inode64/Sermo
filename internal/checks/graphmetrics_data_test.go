@@ -50,7 +50,7 @@ func TestGraphMetricsAreWrittenIntoResultData(t *testing.T) {
 			ConntrackSampler: func() (ConntrackSample, error) { return ConntrackSample{Count: 1200, Max: 262144}, nil }}},
 		{CheckTypeZombies, map[string]any{"count": pred(">", 5)}, Deps{DefaultTimeout: second,
 			ZombieSampler: func() (uint64, bool) { return 2, true }}},
-		{CheckTypeFirewallRules, map[string]any{"backend": "nft", "min_rules": 2}, Deps{DefaultTimeout: second,
+		{CheckTypeFirewallRules, map[string]any{"backend": "nftables", "min_rules": 2}, Deps{DefaultTimeout: second,
 			FirewallRulesSampler: func(context.Context, string, execx.Runner) (FirewallRulesSample, error) {
 				return FirewallRulesSample{Backend: FirewallBackendNftables, Rules: 17}, nil
 			}}},

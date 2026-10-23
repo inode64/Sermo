@@ -17,10 +17,11 @@ const (
 	FirewallBackendAuto     = "auto"
 	FirewallBackendNftables = "nftables"
 	FirewallBackendIptables = "iptables"
-	// FirewallBackendNftAlias is the accepted shorthand for the nftables backend.
-	FirewallBackendNftAlias = "nft"
 	// FirewallBackendSummary is the user-facing list of firewall backend selectors.
 	FirewallBackendSummary = FirewallBackendAuto + ", " + FirewallBackendNftables + " or " + FirewallBackendIptables
+	// FirewallDefaultMinRules is the rule count below which an unset
+	// min_rules reports a firewall as missing.
+	FirewallDefaultMinRules = 1
 )
 
 const (
@@ -80,17 +81,11 @@ func (c firewallRulesCheck) Run(ctx context.Context) Result {
 }
 
 func buildFirewallRulesCheck(b base, entry map[string]any, runner execx.Runner, deps Deps) (Check, string) {
-	backend := cfgval.AsString(entry[CheckKeyBackend])
-	if backend == "" {
-		backend = FirewallBackendAuto
-	}
-	if backend == FirewallBackendNftAlias {
-		backend = FirewallBackendNftables
-	}
-	if !validFirewallBackend(backend) {
+	backend, ok := ParseFirewallBackend(cfgval.AsString(entry[CheckKeyBackend]))
+	if !ok {
 		return nil, "firewall_rules check backend must be " + FirewallBackendSummary
 	}
-	minRules := uint64(1)
+	minRules := uint64(FirewallDefaultMinRules)
 	if v, present := entry[CheckKeyMinRules]; present {
 		n, ok := cfgval.Int(v)
 		if !ok || n < 1 {
@@ -107,12 +102,16 @@ func buildFirewallRulesCheck(b base, entry map[string]any, runner execx.Runner, 
 	}, ""
 }
 
-func validFirewallBackend(backend string) bool {
-	switch backend {
+// ParseFirewallBackend reads a `backend:` selector, unset meaning auto. Config
+// validation and the builder share it, so both accept the same vocabulary.
+func ParseFirewallBackend(raw string) (string, bool) {
+	switch raw {
+	case "":
+		return FirewallBackendAuto, true
 	case FirewallBackendAuto, FirewallBackendNftables, FirewallBackendIptables:
-		return true
+		return raw, true
 	default:
-		return false
+		return "", false
 	}
 }
 
