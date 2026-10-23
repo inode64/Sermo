@@ -2,7 +2,6 @@ package cli
 
 import (
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -74,7 +73,8 @@ func (a App) daemonWebGeneration(ctx context.Context, cfg *config.Config) string
 
 func (a App) applyDaemonWebAuth(req *http.Request, cfg *config.Config) {
 	if pw := a.daemonWebPassword(cfg); pw != "" {
-		req.Header.Set(daemonWebHeaderAuthorization, daemonWebBasicAuth(pw))
+		// The daemon accepts any user name; the password is the credential.
+		req.SetBasicAuth(daemonWebAuthUser, pw)
 	}
 }
 
@@ -143,11 +143,6 @@ func readDaemonWebToken(runtimeDir string) string {
 		return ""
 	}
 	return strings.TrimSpace(string(data))
-}
-
-func daemonWebBasicAuth(password string) string {
-	cred := base64.StdEncoding.EncodeToString([]byte(daemonWebAuthUserPrefix + password))
-	return daemonWebBasicAuthPrefix + cred
 }
 
 // daemonAPIJSONWithConfig performs best-effort enrichment using the command's

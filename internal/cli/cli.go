@@ -21,7 +21,6 @@ import (
 	"sermo/internal/cliutil"
 	"sermo/internal/config"
 	"sermo/internal/execx"
-	"sermo/internal/httpx"
 	"sermo/internal/mountctl"
 	"sermo/internal/notify"
 	"sermo/internal/operation"
@@ -65,11 +64,9 @@ const (
 )
 
 const (
-	daemonProcessName            = "sermod"
-	daemonWebSchemeHTTP          = checks.URLSchemeHTTP
-	daemonWebAuthUserPrefix      = "admin:"
-	daemonWebHeaderAuthorization = httpx.HeaderAuthorization
-	daemonWebBasicAuthPrefix     = "Basic "
+	daemonProcessName   = "sermod"
+	daemonWebSchemeHTTP = checks.URLSchemeHTTP
+	daemonWebAuthUser   = "admin"
 	// daemonWebLocalhostName is the hostname that always resolves to loopback
 	// (RFC 6761), so a web.address spelled that way names a local daemon.
 	daemonWebLocalhostName = "localhost"
