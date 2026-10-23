@@ -209,6 +209,9 @@ type fakeBotAPI struct {
 	replies  map[string][]string
 }
 
+// fakeBotAPIPageSize is getUpdates' default limit.
+const fakeBotAPIPageSize = 100
+
 func newFakeBotAPI() *fakeBotAPI {
 	return &fakeBotAPI{queued: map[string][]update{}, arrivals: map[string][]update{}, polled: map[string]bool{}, replies: map[string][]string{}}
 }
@@ -224,9 +227,17 @@ func (f *fakeBotAPI) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			Offset int64 `json:"offset"`
 		}
 		_ = json.NewDecoder(r.Body).Decode(&body)
+		// The Bot API's semantics: a negative offset returns the last -offset
+		// updates and forgets the earlier ones; otherwise at most one page of
+		// updates from the offset on.
 		var out []update
-		for _, u := range f.queued[token] {
-			if u.UpdateID >= body.Offset {
+		queued := f.queued[token]
+		if body.Offset < 0 {
+			queued = queued[max(len(queued)+int(body.Offset), 0):]
+			f.queued[token] = queued
+		}
+		for _, u := range queued {
+			if (body.Offset < 0 || u.UpdateID >= body.Offset) && len(out) < fakeBotAPIPageSize {
 				out = append(out, u)
 			}
 		}
@@ -305,6 +316,32 @@ func TestRunSkipsBacklogAfterTokenChange(t *testing.T) {
 	}
 	if got := api.repliesFor("a"); len(got) != 0 {
 		t.Fatalf("old backlog replayed: %q", got)
+	}
+}
+
+// A backlog longer than one getUpdates page is still skipped whole: commands
+// queued before the bot started are never run, however many there are.
+func TestRunSkipsBacklogLongerThanOnePage(t *testing.T) {
+	api := newFakeBotAPI()
+	for id := range int64(fakeBotAPIPageSize + 50) {
+		api.queued["a"] = append(api.queued["a"], commandUpdate(id+1, "/help"))
+	}
+	api.arrivals["a"] = []update{commandUpdate(fakeBotAPIPageSize+51, "/status")}
+	srv := httptest.NewServer(api)
+	defer srv.Close()
+
+	b := &Bot{reporter: &fakeReporter{status: StatusReport{Host: "h"}}, log: discardLogger(), idle: time.Millisecond}
+	setBotConfig(b, Config{Enabled: true, Token: "a", AllowedChats: []int64{42}, PollInterval: time.Second}, srv.URL)
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() { b.Run(ctx); close(done) }()
+	defer func() { cancel(); <-done }()
+
+	waitForReply(t, api, "a")
+	time.Sleep(50 * time.Millisecond)
+	replies := api.repliesFor("a")
+	if len(replies) != 1 || !strings.Contains(replies[0], "Sermo status") {
+		t.Fatalf("replies = %d (first %q), want only the /status sent after start", len(replies), replies[0])
 	}
 }
 

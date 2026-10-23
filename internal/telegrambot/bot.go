@@ -21,6 +21,9 @@ const (
 	// maxReplyParts caps how many messages one command reply is split into;
 	// the last part is truncated beyond it.
 	maxReplyParts = 8
+	// forgetBacklogOffset asks getUpdates for the last queued update only;
+	// the Bot API then forgets every earlier one.
+	forgetBacklogOffset = -1
 )
 
 // Bot is a read-only Telegram command bot driven by long polling. Construct it
@@ -136,10 +139,12 @@ func (b *Bot) idleInterval() time.Duration {
 }
 
 // skipBacklog advances the offset past updates already queued for cl's token
-// without acting on them. Best effort: on error the offset stays at zero and
-// the main loop proceeds.
+// without acting on them. A negative offset makes the Bot API forget every
+// earlier update and return only the last one, so a backlog larger than one
+// getUpdates page is skipped whole. Best effort: on error the offset stays at
+// zero and the main loop proceeds.
 func (b *Bot) skipBacklog(ctx context.Context, cl *client) {
-	updates, err := cl.getUpdates(ctx, 0, 0)
+	updates, err := cl.getUpdates(ctx, forgetBacklogOffset, 0)
 	if err != nil {
 		return
 	}
