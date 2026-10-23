@@ -12,17 +12,22 @@ import (
 	"sermo/internal/telegrambot"
 )
 
-const (
-	retiredWebKeyPassword      = "password"
-	retiredWebKeyGuestPassword = "guest_password"
+// validWebKeys are the keys of the global `web` block. Any other key is
+// rejected: a misspelt password_file would otherwise leave no credential
+// source, and the dashboard would treat every request as admin.
+var validWebKeys = set(
+	WebKeyAddress, WebKeyAllowedHosts, WebKeyGuest, WebKeyGuestPasswordFile,
+	WebKeyLoginMessage, WebKeyPasswordFile, WebKeyPort, WebKeyPublicURL,
+	WebKeySessionTTL,
 )
 
-// validateWatches checks each host-watch entry: a known check type with valid
-// thresholds and a local action or inherited global notify default.
 // validateWeb checks the global `web` block. The UI is enabled only when `port`
 // is set to a valid TCP port; a `web` block without `port` (or with port omitted)
 // is valid and leaves the dashboard disabled, matching sermod.
 func validateWeb(webCfg map[string]any, add addFunc) {
+	for key := range unknownBlockKeys(webCfg, validWebKeys) {
+		add(validationNotSupportedFormat, SectionWeb+"."+key)
+	}
 	if portRaw, present := webCfg[WebKeyPort]; present {
 		port, ok := cfgval.Int(portRaw)
 		if !ok || !cfgval.ValidTCPPort(port) {
@@ -34,25 +39,21 @@ func validateWeb(webCfg map[string]any, add addFunc) {
 			add("%s must be a string", webPathAddress)
 		}
 	}
+	// Loading and parsing the credential files happen in resolveWebCredentials.
 	for _, pathAndKey := range [][2]string{
 		{webPathPasswordFile, WebKeyPasswordFile},
 		{webPathGuestPasswordFile, WebKeyGuestPasswordFile},
 	} {
 		path, key := pathAndKey[0], pathAndKey[1]
-		if v, present := webCfg[key]; present {
-			if _, isStr := v.(string); !isStr {
-				add("%s must be a string", path)
-			}
+		raw, present := webCfg[key]
+		if !present {
+			continue
 		}
-	}
-	validateWebCredentialFiles(webCfg, add)
-	for _, fields := range [][2]string{
-		{retiredWebKeyPassword, webPathPasswordFile},
-		{retiredWebKeyGuestPassword, webPathGuestPasswordFile},
-	} {
-		retired, replacement := fields[0], fields[1]
-		if _, present := webCfg[retired]; present {
-			add("%s.%s is no longer supported; use %s with hashed credentials", SectionWeb, retired, replacement)
+		switch s, isStr := raw.(string); {
+		case !isStr:
+			add("%s must be a string", path)
+		case strings.TrimSpace(s) == "":
+			add("%s must name a file holding hashed credentials", path)
 		}
 	}
 	if v, present := webCfg[WebKeyGuest]; present {
@@ -74,24 +75,6 @@ func validateWeb(webCfg map[string]any, add addFunc) {
 	if v, present := webCfg[WebKeyLoginMessage]; present {
 		if err := validateLoginMessage(v); err != nil {
 			add("%s %v", webPathLoginMessage, err)
-		}
-	}
-}
-
-// validateWebCredentialFiles requires a non-empty path for every configured
-// hashed-credential source. Loading and parsing happen in resolveWebCredentials.
-func validateWebCredentialFiles(webCfg map[string]any, add addFunc) {
-	for _, pair := range [][2]string{
-		{WebKeyPasswordFile, webPathPasswordFile},
-		{WebKeyGuestPasswordFile, webPathGuestPasswordFile},
-	} {
-		fileKey, filePath := pair[0], pair[1]
-		raw, present := webCfg[fileKey]
-		if !present {
-			continue
-		}
-		if s, isStr := raw.(string); isStr && strings.TrimSpace(s) == "" {
-			add("%s must name a file holding hashed credentials", filePath)
 		}
 	}
 }
