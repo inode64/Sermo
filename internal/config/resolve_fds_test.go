@@ -112,6 +112,8 @@ func TestFDsRejectsMalformedKeys(t *testing.T) {
 	for name, extra := range map[string]map[string]any{
 		"limit true":       {keyFDsLimit: true},
 		"limit absolute":   {keyFDsLimit: "50000"},
+		"limit bare int":   {keyFDsLimit: 90},
+		"limit bare text":  {keyFDsLimit: "90"},
 		"limit text":       {keyFDsLimit: "lots"},
 		"restart not bool": {keyRestartOnFDsHigh: "yes"},
 	} {
