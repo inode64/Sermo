@@ -804,13 +804,9 @@ func DBQueriesFromData(data map[string]any) []DBQuery {
 }
 
 // DBQueryIncidentsFromData restores open incidents independently of the current
-// list. Legacy snapshots stored them with the visible rows; preserve those
-// incidents when upgrading so a restart neither repeats nor loses an alert.
+// list, so a restart neither repeats nor loses an alert.
 func DBQueryIncidentsFromData(data map[string]any) []DBQuery {
-	if incidents, present := data[DataKeyDBQueryIncidents]; present {
-		return dbQueriesFromValue(incidents)
-	}
-	return DBQueriesFromData(data)
+	return dbQueriesFromValue(data[DataKeyDBQueryIncidents])
 }
 
 func dbQueriesFromValue(value any) []DBQuery {

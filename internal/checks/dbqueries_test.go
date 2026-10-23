@@ -334,7 +334,7 @@ func TestDBQueriesFromDataDoesNotModifyThePublishedSlice(t *testing.T) {
 	}
 }
 
-func TestDBQueryIncidentsPreferExplicitStateAndRestoreLegacySnapshots(t *testing.T) {
+func TestDBQueryIncidentsAreRestoredFromTheirOwnKey(t *testing.T) {
 	old := DBQuery{Engine: SQLEngineMariaDB, ID: 7, Identity: "7:70", Alerted: true}
 	current := DBQuery{Engine: SQLEngineMariaDB, ID: 8, Identity: "8:80", Alerted: true}
 	for _, tt := range []struct {
@@ -342,7 +342,7 @@ func TestDBQueryIncidentsPreferExplicitStateAndRestoreLegacySnapshots(t *testing
 		data map[string]any
 		want int64
 	}{
-		{name: "legacy", data: map[string]any{DataKeyDBQueries: []DBQuery{old}}, want: 7},
+		{name: "no incidents key", data: map[string]any{DataKeyDBQueries: []DBQuery{old}}},
 		{name: "explicit incidents", data: map[string]any{DataKeyDBQueries: []DBQuery{current}, DataKeyDBQueryIncidents: []DBQuery{old}}, want: 7},
 		{name: "explicit empty", data: map[string]any{DataKeyDBQueries: []DBQuery{old}, DataKeyDBQueryIncidents: nil}},
 	} {
