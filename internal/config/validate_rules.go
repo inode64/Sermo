@@ -162,6 +162,9 @@ func validateRules(tree map[string]any, notifiers map[string]struct{}, add addFu
 }
 
 func validateRule(path string, entry map[string]any, notifiers, checkNames, systemMetricChecks map[string]struct{}, add addFunc) {
+	for key := range unknownBlockKeys(entry, validRuleKeys) {
+		add(validationNotSupportedFormat, path+"."+key)
+	}
 	if _, present := entry[rules.RuleFieldNotify]; present {
 		validateNotifySelection(path+".notify", entry[rules.RuleFieldNotify], notifiers, add)
 	}

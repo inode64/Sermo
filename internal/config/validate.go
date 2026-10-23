@@ -132,6 +132,20 @@ var validHostWatchKeys = set(
 	WatchKeyRAIDControl, WatchKeyReplicationControl, keyMount,
 )
 
+// validServiceWatchKeys are the keys of a service watch entry: a host watch's,
+// plus the check-entry fields promotion copies onto the generated check.
+var validServiceWatchKeys = set(append(slices.Collect(maps.Keys(validHostWatchKeys)), serviceWatchCheckEntryFields[:]...)...)
+
+// validRuleKeys are the keys of a rules.<name> entry. A misspelt window key
+// would otherwise drop the window and let a remediation act on the first
+// failing cycle.
+var validRuleKeys = set(
+	rules.RuleFieldType, rules.RuleFieldIf, rules.RuleFieldThen,
+	rules.RuleFieldFor, rules.RuleFieldWithin, rules.RuleFieldClear,
+	rules.RuleFieldBlocks, rules.RuleFieldNotify, rules.RuleFieldSeverity,
+	emission.Section, keyEnabled, keyDelete,
+)
+
 var validEngineKeys = set(
 	keyInterval,
 	EngineKeyAccess,
