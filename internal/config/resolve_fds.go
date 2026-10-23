@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"slices"
+	"strings"
 
 	"sermo/internal/cfgval"
 	"sermo/internal/checks"
@@ -107,10 +108,12 @@ func fdsSettings(tree map[string]any) (limit string, allowRestart bool, errs []s
 			}
 			limit = ""
 		default:
-			if _, ok := cfgval.Percent(raw); !ok {
+			limit = cfgval.String(raw)
+			// A bare number would reach the metric check as an absolute
+			// descriptor count, not a share of the process's own limit.
+			if _, ok := cfgval.Percent(raw); !ok || !strings.HasSuffix(strings.TrimSpace(limit), cfgval.PercentSuffix) {
 				errs = append(errs, fmt.Sprintf("%s must be a percentage such as %s, or false to disable the check", keyFDsLimit, defaultFDsLimit))
 			}
-			limit = cfgval.String(raw)
 		}
 	}
 	if raw, present := tree[keyRestartOnFDsHigh]; present {
