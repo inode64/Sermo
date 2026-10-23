@@ -112,12 +112,12 @@ var validServiceDocumentKeys = set(append(slices.Clone(perServiceDefaults),
 	keyVersions, keyInterval, keyMonitor, keyEnabled, sectionNotify,
 	sectionVariables, VariableKeyPort, keyApps,
 	ServiceKeyService, ServiceKeyAlsoService, ServiceKeyAlsoApply,
-	ServiceKeyRestartPolicy, ServiceKeyConfigFiles,
+	ServiceKeyConfigFiles,
 	ServiceKeyPidfile, ServiceKeyPidfiles, artifactSocket, artifactLockfile, keyAnalyze,
 	sectionProcesses, sectionChecks, sectionPreflight, rules.SectionRules, sectionWatches,
 	sectionCommands, sectionButtons, sectionControl, sectionReload,
 	ServiceMonitorKeyVersion, ServiceMonitorKeyConfig,
-	emission.Section, keyUnsupportedRemediation, keyEnableIf,
+	emission.Section, keyEnableIf,
 )...)
 
 // validHostWatchKeys are the top-level keys of a host watch entry (kind and
@@ -983,8 +983,6 @@ func effectiveBackend(cfg *Config) string {
 	return detectedInit
 }
 
-const keyUnsupportedRemediation = "remediation"
-
 func validateResolved(name string, tree map[string]any, runtime string, notifiers, services map[string]struct{}, backend string) []Issue {
 	var issues []Issue
 	add := func(format string, args ...any) {
@@ -1006,9 +1004,6 @@ func validateResolved(name string, tree map[string]any, runtime string, notifier
 		if _, ok := v.(bool); !ok {
 			add(validationBooleanLiteralFormat, keyEnabled)
 		}
-	}
-	if _, present := tree[keyUnsupportedRemediation]; present {
-		add("remediation is not supported; use top-level dry_run")
 	}
 	if _, present := tree[emission.Section]; present {
 		add("%s is not supported on services; configure global emission or a rules.*.emission override", emission.Section)
@@ -1046,7 +1041,6 @@ func validateResolved(name string, tree map[string]any, runtime string, notifier
 	validateProcesses(tree, add)
 	validatePidfiles(tree, add)
 	validateStopPolicy(tree, add)
-	validateRestartPolicy(tree, add)
 	validateAllowDependencies(tree, add)
 	validatePolicyExtras(tree, add)
 	validateControl(tree, add)

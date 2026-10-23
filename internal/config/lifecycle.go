@@ -1,7 +1,6 @@
 package config
 
 import (
-	"fmt"
 	"sermo/internal/cfgval"
 )
 
@@ -29,18 +28,13 @@ type ServiceLifecycle struct {
 }
 
 // ResolveServiceLifecycle derives the operational lifecycle contract for a
-// resolved service tree and active backend. A retired restart policy is returned
-// as an error; structural validation remains owned by the config validator.
-func ResolveServiceLifecycle(tree map[string]any, backend string) (ServiceLifecycle, error) {
-	if _, present := tree[ServiceKeyRestartPolicy]; present {
-		return ServiceLifecycle{}, fmt.Errorf("%s is no longer supported; restart always uses verified stop and start", ServiceKeyRestartPolicy)
-	}
-
-	lifecycle := ServiceLifecycle{
+// resolved service tree and active backend; structural validation remains owned
+// by the config validator.
+func ResolveServiceLifecycle(tree map[string]any, backend string) ServiceLifecycle {
+	return ServiceLifecycle{
 		ProcessMode:    resolvedProcessMode(tree),
 		AuxiliaryUnits: AdditionalUnits(tree, backend),
 	}
-	return lifecycle, nil
 }
 
 func resolvedProcessMode(tree map[string]any) ServiceProcessMode {

@@ -113,7 +113,7 @@ func New(c Config) Engine {
 	// Derive the lifecycle and stop_policy invariants from the resolved tree here,
 	// consistent with how the kill policy/selectors below are parsed — callers
 	// pass only the Tree, not parallel pre-parsed forms.
-	lifecycle, lifecycleErr := config.ResolveServiceLifecycle(tree, c.Backend)
+	lifecycle := config.ResolveServiceLifecycle(tree, c.Backend)
 	stopArtifacts := config.StopInvariants(tree)
 	killPolicy, stopPolicyWarnings := process.ParseStopPolicy(tree)
 	selectors, selectorWarnings := process.ParseSelectors(tree)
@@ -128,7 +128,6 @@ func New(c Config) Engine {
 	configErr := cmp.Or(
 		warningError(process.SectionStopPolicy, stopPolicyWarnings),
 		warningError(selectorWarningPrefix, selectorWarnings),
-		lifecycleErr,
 		reloadErr,
 	)
 

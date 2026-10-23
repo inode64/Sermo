@@ -4317,8 +4317,7 @@ override it with its own top-level `dry_run`. A watch declared inside a service
 sets its own, so a dry-run service never runs a watch hook or native action
 (such as a `db_queries` `then.kill_query`) for real.
 
-Service restarts always use verified stop and start phases. The retired
-`restart_policy` setting is rejected; remove it from defaults and service overrides. See
+Service restarts always use verified stop and start phases. See
 [verified restart](services.md#verified-restart).
 
 `defaults.policy.cooldown` is **required and positive**: every resolved service

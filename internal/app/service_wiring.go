@@ -249,8 +249,7 @@ func serviceProcessSelectors(ctx context.Context, tree map[string]any, deps Deps
 }
 
 func noResidentProcess(tree map[string]any) bool {
-	lifecycle, err := config.ResolveServiceLifecycle(tree, "")
-	return err == nil && lifecycle.ProcessMode == config.ServiceProcessNone
+	return config.ResolveServiceLifecycle(tree, "").ProcessMode == config.ServiceProcessNone
 }
 
 func serviceNoResidentProcess(tree map[string]any, selectors []process.Selector, backendPIDs func() []int, backend servicemgr.Backend) bool {
