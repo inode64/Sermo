@@ -116,7 +116,6 @@ func BuildServiceRuntime(ctx context.Context, cfg ServiceRuntimeConfig) ServiceR
 			}
 			return st.Status, nil
 		},
-		Processes:    discoverer.ObserveState,
 		ProcessesAny: discoverer.ObserveAnyState,
 		// Service scope, not host scope: a process_count check inside a service
 		// counts what discovery attributes to that service (docs promise exactly

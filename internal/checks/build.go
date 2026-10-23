@@ -110,8 +110,6 @@ type Deps struct {
 	Status func(context.Context) (servicemgr.Status, error)
 	// Metrics reads a sampled metric value, for `metric` checks.
 	Metrics MetricReader
-	// Processes reports the observed state for single-selector rule conditions.
-	Processes func(exe, user string) string
 	// ProcessesAny reports the observed state of processes matching any exact
 	// resolved executable in exes with the same user. Nil makes process checks unavailable.
 	ProcessesAny func(exes []string, user string) string

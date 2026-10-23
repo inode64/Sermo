@@ -481,7 +481,7 @@ func backendPIDSeeds(fn func() []int) []int {
 	return seeds
 }
 
-// Process states reported by ObserveState.
+// Process states reported by ObserveAnyState.
 const (
 	StateRunning = "running"
 	StateZombie  = "zombie"
@@ -495,20 +495,14 @@ const (
 	StateSummary = StateRunning + ", " + StateZombie + ", " + StateAbsent
 )
 
-// ObserveState reports the state of processes matching an exe/user selector,
-// using the exact resolved-exe and real-UID rules:
+// ObserveAnyState reports the state of processes matching any exact resolved
+// executable in exes with the same real-user selector:
 //
 //   - running: at least one live (non-zombie) process matches;
 //   - zombie:  matches exist but all are defunct;
 //   - absent:  no process matches in a complete process table;
 //   - unknown: no live match, and the table was incomplete or the user
 //     selector could not be resolved.
-func (d Discoverer) ObserveState(exe, user string) string {
-	return d.ObserveAnyState([]string{exe}, user)
-}
-
-// ObserveAnyState reports the state of processes matching any exact resolved
-// executable in exes with the same real-user selector.
 func (d Discoverer) ObserveAnyState(exes []string, user string) string {
 	reader := d.reader()
 	resolve := d.resolveUser()

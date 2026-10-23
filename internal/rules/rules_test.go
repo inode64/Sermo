@@ -205,7 +205,7 @@ func TestGuardFailsSafeOnUnavailableLeaf(t *testing.T) {
 		{
 			// Incomplete /proc or an unresolvable user: "absent" is unproven.
 			name: "unknown process state",
-			ev: &Evaluator{Deps: checks.Deps{Processes: func(string, string) string {
+			ev: &Evaluator{Deps: checks.Deps{ProcessesAny: func([]string, string) string {
 				return process.StateUnknown
 			}}},
 			leaf: processLeaf,
@@ -386,13 +386,13 @@ func TestEvalMetricNotReadyOrAbsentIsFalse(t *testing.T) {
 }
 
 func TestEvalProcessCondition(t *testing.T) {
-	observe := func(exe, user string) string {
-		if exe == "/usr/bin/mariadb-backup" && user == "mysql" {
+	observe := func(exes []string, user string) string {
+		if slices.Equal(exes, []string{"/usr/bin/mariadb-backup"}) && user == "mysql" {
 			return "running"
 		}
 		return "absent"
 	}
-	ev := &Evaluator{Deps: checks.Deps{Processes: observe}}
+	ev := &Evaluator{Deps: checks.Deps{ProcessesAny: observe}}
 
 	node := map[string]any{"process": map[string]any{"exe": "/usr/bin/mariadb-backup", "user": "mysql", "state": "running"}}
 	if !evalNode(t, ev, node) {
