@@ -127,8 +127,8 @@ func TestSampleNetFromSysfsFallback(t *testing.T) {
 		t.Fatal(err)
 	}
 	files := map[string]string{
-		filepath.Join(dir, SysfsIfaceFlagsFile):     "0x1003\n",
-		filepath.Join(dir, SysfsIfaceOperstateFile): NetStateUp + "\n",
+		filepath.Join(dir, sysfsIfaceFlagsFile):     "0x1003\n",
+		filepath.Join(dir, sysfsIfaceOperstateFile): NetStateUp + "\n",
 		filepath.Join(dir, sysfsIfaceSpeedFile):     "1000\n",
 		filepath.Join(statDir, NetCounterRXErrors):  "7\n",
 		filepath.Join(statDir, NetCounterTXErrors):  "11\n",
@@ -168,7 +168,7 @@ func TestSampleNetFromSysfsZeroSpeedKnown(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(dir, sysfsIfaceStatisticsDir), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	for name, body := range map[string]string{SysfsIfaceFlagsFile: "0x1003\n", SysfsIfaceOperstateFile: NetStateUp + "\n", sysfsIfaceSpeedFile: "0\n"} {
+	for name, body := range map[string]string{sysfsIfaceFlagsFile: "0x1003\n", sysfsIfaceOperstateFile: NetStateUp + "\n", sysfsIfaceSpeedFile: "0\n"} {
 		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o644); err != nil {
 			t.Fatal(err)
 		}
@@ -194,26 +194,26 @@ func TestSampleNetFromSysfsMissingDirErrors(t *testing.T) {
 func TestSysfsIfaceUp(t *testing.T) {
 	mk := func(flags, operstate string) string {
 		d := t.TempDir()
-		if err := os.WriteFile(filepath.Join(d, SysfsIfaceFlagsFile), []byte(flags), 0o644); err != nil {
+		if err := os.WriteFile(filepath.Join(d, sysfsIfaceFlagsFile), []byte(flags), 0o644); err != nil {
 			t.Fatal(err)
 		}
-		if err := os.WriteFile(filepath.Join(d, SysfsIfaceOperstateFile), []byte(operstate), 0o644); err != nil {
+		if err := os.WriteFile(filepath.Join(d, sysfsIfaceOperstateFile), []byte(operstate), 0o644); err != nil {
 			t.Fatal(err)
 		}
 		return d
 	}
 	// IFF_UP set: operstate "up" and "unknown" both count as up; "down" does not.
-	if !sysfsIfaceUp(mk("0x1\n", NetStateUp+"\n")) {
+	if !SysfsIfaceUp(mk("0x1\n", NetStateUp+"\n")) {
 		t.Error("operstate up must be up")
 	}
-	if !sysfsIfaceUp(mk("0x1\n", NetStateUnknown+"\n")) {
+	if !SysfsIfaceUp(mk("0x1\n", NetStateUnknown+"\n")) {
 		t.Error("operstate unknown must be up")
 	}
-	if sysfsIfaceUp(mk("0x1\n", NetStateDown+"\n")) {
+	if SysfsIfaceUp(mk("0x1\n", NetStateDown+"\n")) {
 		t.Error("operstate down must be down")
 	}
 	// IFF_UP clear is never up.
-	if sysfsIfaceUp(mk("0x0\n", NetStateUp+"\n")) {
+	if SysfsIfaceUp(mk("0x0\n", NetStateUp+"\n")) {
 		t.Error("IFF_UP clear must be down")
 	}
 }
