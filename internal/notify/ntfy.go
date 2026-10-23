@@ -69,13 +69,11 @@ func buildNtfy(name string, entry map[string]any) (Notifier, error) {
 // notification title and the detail (the SERMO_* fields) as the message. A
 // subject-only notification travels as the message alone.
 func ntfyPayload(topic string, msg Message) []byte {
-	fields := pushMessageFields(msg)
+	body := pushMessageFields(msg)
 	// ntfy delivers a message over its size limit as a file attachment (or
 	// rejects it when attachments are disabled), hiding the alert text.
-	fields[pushPayloadMessageKey] = truncateBytes(fields[pushPayloadMessageKey], ntfyMessageLimit)
-	body := make(map[string]any, len(fields))
-	for name, value := range fields {
-		body[name] = value
+	if message, ok := body[pushPayloadMessageKey].(string); ok {
+		body[pushPayloadMessageKey] = truncateBytes(message, ntfyMessageLimit)
 	}
 	body[ntfyTopicKey] = topic
 	// The severity sets how loudly the phone announces it; a tap opens the
