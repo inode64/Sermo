@@ -13,10 +13,7 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-const (
-	defaultDHCPExchangeTimeout = 5 * time.Second
-	networkIP4                 = "ip4"
-)
+const defaultDHCPExchangeTimeout = 5 * time.Second
 
 // dhcpExchange sends packet and returns the first DHCP reply matching xid. When
 // iface is set it broadcasts out that link (255.255.255.255:67); otherwise it
@@ -69,7 +66,7 @@ func dhcpExchange(ctx context.Context, iface, serverHost string, serverPort int,
 	}
 	_ = pc.SetDeadline(deadline)
 
-	dst, err := dhcpDestination(iface, serverHost, serverPort)
+	dst, err := dhcpDestination(ctx, iface, serverHost, serverPort)
 	if err != nil {
 		return nil, err
 	}
@@ -126,13 +123,13 @@ func dhcpIngressIndex(cm *ipv4.ControlMessage) int {
 
 // dhcpDestination is the limited broadcast address for a per-interface probe, or
 // the resolved server address for a unicast probe.
-func dhcpDestination(iface, serverHost string, serverPort int) (*net.UDPAddr, error) {
+func dhcpDestination(ctx context.Context, iface, serverHost string, serverPort int) (*net.UDPAddr, error) {
 	if iface != "" {
 		return &net.UDPAddr{IP: net.IPv4bcast, Port: dhcpServerPort}, nil
 	}
-	ip, err := net.ResolveIPAddr(networkIP4, serverHost)
+	addr, err := resolveUDPAddr(ctx, networkIP4, net.JoinHostPort(serverHost, strconv.Itoa(serverPort)))
 	if err != nil {
 		return nil, probeErr(ProtocolNameDHCP, stepResolveServer, err)
 	}
-	return &net.UDPAddr{IP: ip.IP, Port: serverPort}, nil
+	return addr, nil
 }

@@ -115,6 +115,28 @@ func (t probeTarget) openUDP(ctx context.Context) (net.Conn, error) {
 // connection and closes it. It folds the dial / defer-close prologue that every
 // banner protocol's Probe repeats; the protocol supplies only its default port
 // and handshake.
+// resolveUDPAddr resolves a host:port UDP address within ctx, so a name the
+// resolver is slow to answer cannot outlive the probe's timeout as a plain
+// net.ResolveUDPAddr would. ipNetwork is "ip", "ip4" or "ip6".
+func resolveUDPAddr(ctx context.Context, ipNetwork, address string) (*net.UDPAddr, error) {
+	host, service, err := net.SplitHostPort(address)
+	if err != nil {
+		return nil, fmt.Errorf("parse address %q: %w", address, err)
+	}
+	port, err := net.DefaultResolver.LookupPort(ctx, networkUDP, service)
+	if err != nil {
+		return nil, fmt.Errorf("resolve port %q: %w", service, err)
+	}
+	ips, err := net.DefaultResolver.LookupNetIP(ctx, ipNetwork, host)
+	if err != nil {
+		return nil, fmt.Errorf("resolve host %q: %w", host, err)
+	}
+	if len(ips) == 0 {
+		return nil, fmt.Errorf("resolve host %q: no addresses", host)
+	}
+	return &net.UDPAddr{IP: ips[0].AsSlice(), Port: port, Zone: ips[0].Zone()}, nil
+}
+
 func probeBanner(ctx context.Context, cfg Config, defaultPort int, handshake func(io.ReadWriter, Config) (Result, error)) (Result, error) {
 	c, err := newProbeTarget(cfg, defaultPort).openStream(ctx)
 	if err != nil {
