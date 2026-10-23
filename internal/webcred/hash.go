@@ -77,21 +77,17 @@ func hashSHA256(password string) (string, error) {
 		return "", errNoCredentials
 	}
 	salt := make([]byte, saltLen)
-	if _, err := rand.Read(salt); err != nil {
-		return "", fmt.Errorf("read random salt: %w", err)
-	}
+	_, _ = rand.Read(salt) // never fails; see crypto/rand.Read
 	digest := saltedDigest(salt, password)
 	return PrefixSHA256 + encode(salt) + fieldSeparator + encode(digest[:]), nil
 }
 
 // GenerateSecret returns a new random secret, used both for a generated
 // dashboard credential and for the daemon's runtime token.
-func GenerateSecret() (string, error) {
+func GenerateSecret() string {
 	secret := make([]byte, secretLen)
-	if _, err := rand.Read(secret); err != nil {
-		return "", fmt.Errorf("read random secret: %w", err)
-	}
-	return base64.RawURLEncoding.EncodeToString(secret), nil
+	_, _ = rand.Read(secret) // never fails; see crypto/rand.Read
+	return base64.RawURLEncoding.EncodeToString(secret)
 }
 
 // encode renders a credential field. Raw (unpadded) standard base64 has no `$`,

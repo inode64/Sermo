@@ -706,11 +706,8 @@ func writeWebToken(logger *slog.Logger, runtimeDir string, auth web.Auth) (strin
 		return "", func() {}
 	}
 	path := filepath.Join(runtimeDir, config.DaemonWebTokenFilename)
-	token, err := webcred.GenerateSecret()
-	if err == nil {
-		err = writeFileAtomic(path, []byte(token+"\n"), daemonWebTokenFileMode)
-	}
-	if err != nil {
+	token := webcred.GenerateSecret()
+	if err := writeFileAtomic(path, []byte(token+"\n"), daemonWebTokenFileMode); err != nil {
 		logger.Warn("write web token failed (sermoctl will need SERMO_WEB_PASSWORD)", logFieldPath, path, logFieldError, err)
 		return "", func() {}
 	}

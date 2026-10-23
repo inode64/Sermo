@@ -312,16 +312,12 @@ func TestVerifyHonorsContextWhileQueued(t *testing.T) {
 }
 
 func TestHashRoundTrip(t *testing.T) {
-	secret, err := GenerateSecret()
-	if err != nil {
-		t.Fatalf("GenerateSecret() error = %v", err)
-	}
+	secret := GenerateSecret()
 	if len(secret) < secretLen {
 		t.Errorf("GenerateSecret() = %q, want at least %d characters", secret, secretLen)
 	}
-	other, err := GenerateSecret()
-	if err != nil || other == secret {
-		t.Errorf("GenerateSecret() repeated itself (%v)", err)
+	if other := GenerateSecret(); other == secret {
+		t.Error("GenerateSecret() repeated itself")
 	}
 
 	for _, tc := range []struct {

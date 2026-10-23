@@ -112,10 +112,7 @@ func (c *websocketCheck) handshake(ctx context.Context, iface string, start time
 		nc = tlsConn
 	}
 
-	key, err := wsKey()
-	if err != nil {
-		return c.unavailableResult("websocket: "+err.Error(), start)
-	}
+	key := wsKey()
 	if _, err := nc.Write([]byte(c.handshakeRequest(key))); err != nil {
 		return c.unavailableResult(fmt.Sprintf("websocket %s: %v", netutil.RedactURL(c.rawURL), netutil.URLErrorCause(err)), start)
 	}
@@ -224,12 +221,10 @@ func websocketDefaultPort(secure bool) string {
 }
 
 // wsKey returns a fresh base64 Sec-WebSocket-Key (16 random bytes).
-func wsKey() (string, error) {
+func wsKey() string {
 	var b [wsKeySize]byte
-	if _, err := rand.Read(b[:]); err != nil {
-		return "", fmt.Errorf("generate websocket key: %w", err)
-	}
-	return base64.StdEncoding.EncodeToString(b[:]), nil
+	_, _ = rand.Read(b[:]) // never fails; see crypto/rand.Read
+	return base64.StdEncoding.EncodeToString(b[:])
 }
 
 // wsAccept computes the expected Sec-WebSocket-Accept for a client key.

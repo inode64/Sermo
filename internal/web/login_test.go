@@ -265,15 +265,10 @@ func TestLoginInOpenModeGoesHome(t *testing.T) {
 func TestSessionStoreBoundsItsSize(t *testing.T) {
 	now := time.Now()
 	store := newSessionStore(time.Hour)
-	first, err := store.create(roleGuest, now)
-	if err != nil {
-		t.Fatal(err)
-	}
+	first := store.create(roleGuest, now)
 	for range maxSessions {
 		now = now.Add(time.Second)
-		if _, err := store.create(roleGuest, now); err != nil {
-			t.Fatal(err)
-		}
+		store.create(roleGuest, now)
 	}
 	if len(store.sessions) != maxSessions || store.role(first, now) != "" {
 		t.Fatalf("sessions = %d, first role = %q; want the oldest dropped at the cap", len(store.sessions), store.role(first, now))
@@ -576,15 +571,10 @@ func TestWhoamiReportsSessionAndReloginReplacesIt(t *testing.T) {
 func TestSessionStoreEvictsWithinTheRole(t *testing.T) {
 	now := time.Now()
 	store := newSessionStore(time.Hour)
-	admin, err := store.create(roleAdmin, now)
-	if err != nil {
-		t.Fatal(err)
-	}
+	admin := store.create(roleAdmin, now)
 	for range maxSessions + 10 {
 		now = now.Add(time.Second)
-		if _, err := store.create(roleGuest, now); err != nil {
-			t.Fatal(err)
-		}
+		store.create(roleGuest, now)
 	}
 	if store.role(admin, now) != roleAdmin {
 		t.Fatal("guest logins evicted the admin session")
