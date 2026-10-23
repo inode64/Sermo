@@ -14,8 +14,6 @@ import (
 	"sermo/internal/process"
 )
 
-// processPolicyAllow is one exact executable identity permitted for a watched
-// real user. Cmd can only narrow that identity; it is never emitted anywhere.
 // processPolicyViolation is deliberately presentation-safe: it names a PID and
 // resolved executable state, never the process command line or its arguments.
 type processPolicyViolation struct {

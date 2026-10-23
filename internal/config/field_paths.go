@@ -3,7 +3,6 @@ package config
 import (
 	"fmt"
 
-	"sermo/internal/process"
 	"sermo/internal/rules"
 )
 
@@ -128,10 +127,6 @@ func serviceMonitorOnChangePath(monitor string) string {
 
 func serviceMonitorOnChangeFieldPath(monitor, field string) string {
 	return serviceMonitorOnChangePath(monitor) + "." + field
-}
-
-func stopPolicyFieldPath(field string) string {
-	return process.StopPolicyFieldPath(field)
 }
 
 func stopPolicyCleanOnStopEntryPath(i int) string {

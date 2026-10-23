@@ -124,7 +124,7 @@ func validateStopPolicy(tree map[string]any, add addFunc) {
 	// daemon itself could be mistaken for a kept child.
 	if policy.KeepChildren && !hasStrictPrincipal(tree) {
 		add("%s requires a non-delegated %s selector with exact exe and user to identify the principal processes",
-			stopPolicyFieldPath(process.StopPolicyKeyKeepChildren), process.SectionProcesses)
+			process.StopPolicyFieldPath(process.StopPolicyKeyKeepChildren), process.SectionProcesses)
 	}
 	// Stopped-state invariants (verified after a clean stop). clean_after_stop is
 	// the master opt-in that enables deleting stale leftovers and the clean_on_stop
@@ -132,7 +132,7 @@ func validateStopPolicy(tree map[string]any, add addFunc) {
 	for _, b := range []string{keyPidfileAbsent, keyCleanAfterStop} {
 		if v, present := sp[b]; present {
 			if _, ok := v.(bool); !ok {
-				add(validationBooleanLiteralFormat, stopPolicyFieldPath(b))
+				add(validationBooleanLiteralFormat, process.StopPolicyFieldPath(b))
 			}
 		}
 	}
