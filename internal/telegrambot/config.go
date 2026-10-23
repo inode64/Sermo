@@ -52,7 +52,7 @@ func ParseConfig(raw map[string]any) Config {
 	cfg := Config{
 		Enabled:      !cfgval.Disabled(raw),
 		Token:        cfgval.String(raw[KeyToken]),
-		PollInterval: clampInterval(cfgval.DurationOr(raw[KeyPollInterval], DefaultPollInterval)),
+		PollInterval: min(max(cfgval.DurationOr(raw[KeyPollInterval], DefaultPollInterval), MinPollInterval), MaxPollInterval),
 	}
 	if ids, ok := cfgval.IntList(raw[KeyAllowedChats]); ok {
 		cfg.AllowedChats = make([]int64, len(ids))
@@ -61,17 +61,6 @@ func ParseConfig(raw map[string]any) Config {
 		}
 	}
 	return cfg
-}
-
-func clampInterval(d time.Duration) time.Duration {
-	switch {
-	case d < MinPollInterval:
-		return MinPollInterval
-	case d > MaxPollInterval:
-		return MaxPollInterval
-	default:
-		return d
-	}
 }
 
 // active reports whether the bot should poll: enabled and holding a token.

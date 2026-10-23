@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"strconv"
@@ -93,8 +94,5 @@ func processDisplayField(p process.Process) (key, value string) {
 }
 
 func orUnknown(s string) string {
-	if s == "" {
-		return cliDisplayUnknown
-	}
-	return s
+	return cmp.Or(s, cliDisplayUnknown)
 }

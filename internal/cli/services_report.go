@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"html"
@@ -172,7 +173,7 @@ func servicesReportMessage(reports []appinspect.Report, includeMissing bool, now
 		} else if !r.OK {
 			tone = reportToneIssue
 		}
-		rows = append(rows, reportRow{Name: r.DisplayName, Detail: reportVersion(r), Status: r.Status, Tone: tone})
+		rows = append(rows, reportRow{Name: r.DisplayName, Detail: cmp.Or(r.VersionShort, r.Version, "-"), Status: r.Status, Tone: tone})
 	}
 	return servicesReportNotification(servicesReport{
 		Kind:          servicesReportKindCatalog,
@@ -399,16 +400,6 @@ func statusBadge(r reportRow) string {
 		color, bg = servicesReportColorIssue, servicesReportColorBadBadgeBG
 	}
 	return fmt.Sprintf(`<span style="display:inline-block;border-radius:999px;padding:4px 9px;background:%s;color:%s;font-weight:700;">%s</span>`, bg, color, esc(r.Status))
-}
-
-func reportVersion(r appinspect.Report) string {
-	if r.VersionShort != "" {
-		return r.VersionShort
-	}
-	if r.Version != "" {
-		return r.Version
-	}
-	return "-"
 }
 
 func reportScope(includeMissing bool) string {

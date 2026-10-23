@@ -126,10 +126,7 @@ func cmdEvents(ctx context.Context, b *Bot, args []string) (string, error) {
 			limit = n
 		}
 	}
-	if limit > EventsMaxLimit {
-		limit = EventsMaxLimit
-	}
-	lines, err := b.reporter.Events(ctx, limit)
+	lines, err := b.reporter.Events(ctx, min(limit, EventsMaxLimit))
 	if err != nil {
 		return "", fmt.Errorf("events: %w", err)
 	}

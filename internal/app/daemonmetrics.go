@@ -261,12 +261,7 @@ func (s *DaemonMetricSampler) persistentSeries(sample daemonMetricSample, since 
 type persistentMetricRecorder func(string, float64, time.Time) error
 
 func hasReadyPersistentMetric(values [3]persistentMetricValue) bool {
-	for _, value := range values {
-		if value.ready {
-			return true
-		}
-	}
-	return false
+	return slices.ContainsFunc(values[:], func(value persistentMetricValue) bool { return value.ready })
 }
 
 // recordPersistentMetrics records every ready value and returns the first
@@ -402,12 +397,7 @@ func addDaemonMetric(agg daemonMetricAgg, value float64) daemonMetricAgg {
 	if agg.n == 0 {
 		agg.min, agg.max = value, value
 	} else {
-		if value < agg.min {
-			agg.min = value
-		}
-		if value > agg.max {
-			agg.max = value
-		}
+		agg.min, agg.max = min(agg.min, value), max(agg.max, value)
 	}
 	agg.n++
 	agg.sum += value
