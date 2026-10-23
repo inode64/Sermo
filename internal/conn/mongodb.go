@@ -36,7 +36,7 @@ func (mongodbProtocol) RequiresUser() bool { return false }
 
 // Probe pings MongoDB and returns version/topology extras.
 func (mongodbProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
-	client, err := MongoConnect(ctx, cfg)
+	client, err := MongoConnect(cfg)
 	if err != nil {
 		return Result{}, err
 	}
@@ -97,7 +97,7 @@ func mongoRole(primary, secondary, arbiter bool, setName string) string {
 }
 
 // MongoConnect builds a lazy MongoDB client from cfg.
-func MongoConnect(_ context.Context, cfg Config) (*mongo.Client, error) {
+func MongoConnect(cfg Config) (*mongo.Client, error) {
 	client, err := mongo.Connect(mongoClientOptions(cfg))
 	if err != nil {
 		return nil, probeErr(ProtocolNameMongoDB, stepConnect, err)

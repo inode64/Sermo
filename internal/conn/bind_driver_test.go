@@ -18,7 +18,7 @@ func testExternalModuleInterfaceBinding(t *testing.T) {
 	}{
 		{"mongo", func(t *testing.T) {
 			t.Helper()
-			client, err := MongoConnect(context.Background(), Config{Host: "127.0.0.1", Interface: "eth0"})
+			client, err := MongoConnect(Config{Host: "127.0.0.1", Interface: "eth0"})
 			if err != nil {
 				t.Fatalf("MongoConnect: %v", err)
 			}

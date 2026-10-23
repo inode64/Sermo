@@ -45,7 +45,7 @@ func StartReplication(ctx context.Context, entry map[string]any) ReplicationCont
 	if !ok {
 		return ReplicationControlResult{Message: replicationAccountRequired}
 	}
-	db, err := open(ctx)
+	db, err := open()
 	if err != nil {
 		return ReplicationControlResult{Message: "replication: open: " + err.Error()}
 	}
