@@ -8,13 +8,10 @@ import (
 	"sync"
 	"time"
 
-	"sermo/internal/checks"
 	"sermo/internal/config"
 	"sermo/internal/control"
-	"sermo/internal/emission"
 	"sermo/internal/metrics"
 	"sermo/internal/process"
-	"sermo/internal/rules"
 	"sermo/internal/telegrambot"
 )
 
@@ -50,15 +47,6 @@ type Monitor struct {
 	// newProcReader wraps the /proc readers a reload rebuilds; nil reads the
 	// host's /proc. Tests return a fake process table.
 	newProcReader func(process.OSReader) process.Reader
-}
-
-// cachedProcReader returns the cached /proc reader a reload installs for os.
-func (m *Monitor) cachedProcReader(os process.OSReader, freshness time.Duration) *process.CachingReader {
-	var inner process.Reader = os
-	if m.newProcReader != nil {
-		inner = m.newProcReader(os)
-	}
-	return process.NewCachingReader(inner, freshness)
 }
 
 const (
@@ -236,40 +224,13 @@ func (m *Monitor) installGenerationLocked(ctx context.Context, newCfg *config.Co
 
 func (m *Monitor) applyConfig(cfg *config.Config) {
 	m.cfg = cfg
-	m.deps.Runtime = cfg.Global.RuntimeDir()
-	m.deps.Interval = config.EngineInterval(cfg, config.DefaultEngineInterval)
-	m.deps.DefaultTimeout = config.EngineDuration(cfg, config.EngineKeyDefaultTimeout, DefaultEngineCheckTimeout)
-	m.deps.OperationTimeout = config.EngineDuration(cfg, config.EngineKeyOperationTimeout, DefaultEngineOperationTimeout)
-	m.deps.MaxParallel = config.EngineInt(cfg, config.EngineKeyMaxParallelChecks, DefaultEngineMaxParallelChecks)
-	if m.deps.CheckLimiter == nil {
-		m.deps.CheckLimiter = checks.NewLimiter(m.deps.MaxParallel)
-	} else {
-		m.deps.CheckLimiter.SetLimit(m.deps.MaxParallel)
-	}
+	ApplyEngineConfig(&m.deps, cfg, m.newProcReader)
 	m.scheduler.Interval = m.deps.Interval
-	m.deps.UserLookup = EngineUserLookup(cfg, m.deps.ExecxRunner)
-	m.deps.SystemFreshness = m.deps.Interval / SystemFreshnessIntervalDivisor
 	if m.collector != nil && m.deps.SystemFreshness > 0 {
 		m.collector.SystemFreshness = m.deps.SystemFreshness
 	}
-	// Recreate the shared /proc reader so reloads can change user/group lookup
-	// policy as well as the freshness window.
-	procReader := m.cachedProcReader(process.OSReader{LookupUserName: m.deps.UserLookup.Username}, m.deps.SystemFreshness)
-	m.deps.ProcReader = procReader
-	m.deps.ZombieSampler = checks.NewZombieSampler(procReader)
-	terminalReader := m.cachedProcReader(process.OSReader{
-		LookupUserName:  m.deps.UserLookup.Username,
-		LookupGroupName: m.deps.UserLookup.GroupName,
-		ReadTTY:         true,
-	}, m.deps.SystemFreshness)
-	m.deps.SSHIdleSampler = checks.NewSSHIdleSampler(terminalReader, m.deps.UserLookup)
-	m.deps.SSHSessionSampler = checks.NewSSHSessionSampler(terminalReader, m.deps.UserLookup)
-	m.deps.TerminalProcessReader = terminalReader
 	notifiers, warns := BuildNotifiers(cfg)
 	m.deps.Notifiers = notifiers
-	m.deps.GlobalNotify = config.NotifyDefault(cfg.Global.Raw)
-	m.deps.GlobalEmission = emission.Merge(cfg.Global.Raw[emission.Section], emission.Default())
-	m.deps.GlobalClear = rules.ClearWindowOrDefault(cfg.Global.Defaults()[rules.SectionClearWindow])
 	for _, w := range warns {
 		m.Logger.Warn("reload notifiers", monitorLogFieldWarning, w)
 	}

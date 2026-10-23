@@ -20,18 +20,15 @@ import (
 	"sermo/internal/app"
 	"sermo/internal/buildinfo"
 	"sermo/internal/cfgval"
-	"sermo/internal/checks"
 	"sermo/internal/cliutil"
 	"sermo/internal/config"
 	"sermo/internal/control"
-	"sermo/internal/emission"
 	"sermo/internal/execx"
 	"sermo/internal/hostfs"
 	"sermo/internal/logfile"
 	"sermo/internal/metrics"
 	"sermo/internal/pkgdb"
 	"sermo/internal/process"
-	"sermo/internal/rules"
 	"sermo/internal/servicemgr"
 	"sermo/internal/state"
 	"sermo/internal/telegrambot"
@@ -329,7 +326,6 @@ func run(args []string) int {
 	}
 	diagFile := openEngineLog(logger, cfg, config.EngineKeyDiagnostics)
 
-	interval := config.EngineInterval(cfg, config.DefaultEngineInterval)
 	runner := execx.CommandRunner{}
 	var diagnosticLog *app.DiagnosticLog
 	if diagFile != nil {
@@ -345,19 +341,12 @@ func run(args []string) int {
 	eventNotifier.Update(config.EventNotifyConfig(cfg.Global.Raw), notifiers)
 	persistenceEvents := app.NewPersistenceEvents(app.MultiEmit(app.SlogEmitter(logger), eventLog.Add, func(app.Event) { webChanges.Notify() }, eventNotifier.Emit), eventNotifier)
 	eventNotifyDone := goTracked(func() { eventNotifier.Run(ctx) })
-	userLookup := app.EngineUserLookup(cfg, runner)
 	readiness := app.NewReadiness(string(backend), 0, 0)
 	readiness.WatchPanic(panicGate.Active)
 	settling := app.NewSettling(readiness)
 	deps := app.Deps{
-		Backend:          backend,
-		Manager:          manager,
-		Runtime:          cfg.Global.RuntimeDir(),
-		Interval:         interval,
-		DefaultTimeout:   config.EngineDuration(cfg, config.EngineKeyDefaultTimeout, app.DefaultEngineCheckTimeout),
-		OperationTimeout: config.EngineDuration(cfg, config.EngineKeyOperationTimeout, app.DefaultEngineOperationTimeout),
-		MaxParallel:      config.EngineInt(cfg, config.EngineKeyMaxParallelChecks, app.DefaultEngineMaxParallelChecks),
-		CheckLimiter:     checks.NewLimiter(config.EngineInt(cfg, config.EngineKeyMaxParallelChecks, app.DefaultEngineMaxParallelChecks)),
+		Backend: backend,
+		Manager: manager,
 		//nolint:forbidigo // the engine's injectable Sleep seam; production wires the real clock, tests stub it.
 		Sleep: time.Sleep,
 		Now:   time.Now,
@@ -375,9 +364,6 @@ func run(args []string) int {
 		Notifiers:            notifiers,
 		EventNotify:          eventNotifier,
 		PersistenceEvents:    persistenceEvents,
-		GlobalNotify:         config.NotifyDefault(cfg.Global.Raw),
-		GlobalEmission:       emission.Merge(cfg.Global.Raw[emission.Section], emission.Default()),
-		GlobalClear:          rules.ClearWindowOrDefault(cfg.Global.Defaults()[rules.SectionClearWindow]),
 		Snapshots:            snapshots,
 		WatchSnapshots:       watchSnapshots,
 		Live:                 app.NewLiveMetrics(),
@@ -387,12 +373,11 @@ func run(args []string) int {
 		RuleWindows:          app.NewRuleWindowRegistry(),
 		Events:               eventLog,
 		DiagnosticLog:        diagnosticLog,
-		SystemFreshness:      interval / app.SystemFreshnessIntervalDivisor,
 		ExecxRunner:          runner,
-		UserLookup:           userLookup,
 		PackageIndex:         pkgdb.New(pkgdb.Options{Runner: runner}),
 		Settling:             settling,
 	}
+	app.ApplyEngineConfig(&deps, cfg, nil)
 
 	// Startup hygiene, before anything spawns a child of our own: whatever is left
 	// in sermod's control group at this point belongs to a previous incarnation the
@@ -411,13 +396,6 @@ func run(args []string) int {
 	deps.Collector = collector
 	deps.DaemonMetricSampler = app.NewDaemonMetricSampler(collector, time.Now, store)
 
-	// One shared /proc snapshot for service discovery: concurrent workers and web
-	// runtime queries within a cycle reuse a single walk instead of each scanning
-	// every PID. Freshness mirrors the metrics collector's SystemFreshness.
-	procReader := process.NewCachingReader(process.OSReader{LookupUserName: userLookup.Username}, deps.SystemFreshness)
-	deps.ProcReader = procReader
-	deps.ZombieSampler = checks.NewZombieSampler(procReader)
-
 	// A second collector dedicated to the web's per-cycle live CPU sampling, kept
 	// separate from the engine's so their rate deltas never corrupt each other.
 	deps.LiveCollector = metrics.New(metrics.OSReader{})
@@ -432,7 +410,7 @@ func run(args []string) int {
 	app.LogBuildNotices(logger, "build workers", warnings)
 	phases.mark("build workers")
 
-	watches, watchWarnings := app.BuildWatches(cfg, deps, interval)
+	watches, watchWarnings := app.BuildWatches(cfg, deps, deps.Interval)
 	app.LogBuildNotices(logger, "build watches", watchWarnings)
 	phases.mark("build host watches")
 	hostWatches := len(watches)
@@ -553,7 +531,7 @@ func run(args []string) int {
 	logger.Info("sermod starting", logFieldBackend, backend, logFieldServices, len(workers), logFieldWatches, len(watches))
 
 	monitor := app.NewMonitor(cfg, deps, app.Scheduler{
-		Interval:     interval,
+		Interval:     deps.Interval,
 		StartupDelay: startupDelay,
 	}, readiness, collector, webHolder, workers, watches)
 	monitor.ConfigPath = globalPath
