@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"sermo/internal/config"
+	"sermo/internal/severity"
 )
 
 // fakeHost answers from in-memory sets.
@@ -46,14 +47,14 @@ func loadCfg(t *testing.T, global, svc string) *config.Config {
 
 func has(r Result, substr string) bool {
 	for _, f := range r.Findings {
-		if f.Level == LevelWarning && strings.Contains(f.Message, substr) {
+		if f.Level == severity.Warning && strings.Contains(f.Message, substr) {
 			return true
 		}
 	}
 	return false
 }
 
-func countLevel(r Result, level Level) (n int) {
+func countLevel(r Result, level severity.Level) (n int) {
 	for _, f := range r.Findings {
 		if f.Level == level {
 			n++
@@ -116,7 +117,7 @@ watches:
 		ifaces: map[string]bool{"eth0": true},
 		mounts: map[string]bool{"/data": true},
 	})
-	if n := countLevel(clean, LevelWarning); n != 0 {
+	if n := countLevel(clean, severity.Warning); n != 0 {
 		t.Fatalf("expected no host warnings when present: %+v", clean.Findings)
 	}
 }
@@ -180,7 +181,7 @@ watches:
 		"/proc/pressure/memory": true,
 		"/dev/sdz":              true,
 	}})
-	if n := countLevel(clean, LevelWarning); n != 0 {
+	if n := countLevel(clean, severity.Warning); n != 0 {
 		t.Fatalf("expected no warnings when resources exist: %+v", clean.Findings)
 	}
 }

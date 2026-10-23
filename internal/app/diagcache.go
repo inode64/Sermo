@@ -8,6 +8,7 @@ import (
 	"sermo/internal/config"
 	"sermo/internal/diag"
 	"sermo/internal/logfile"
+	"sermo/internal/severity"
 )
 
 // DiagnosticLog runs scheduled diagnostics and appends snapshots to
@@ -97,11 +98,11 @@ func collectDiagnosticFindings(cfg *config.Config, host diag.Host) []diag.Findin
 func countDiagFindingLevels(findings []diag.Finding) (errors, warnings int) {
 	for _, f := range findings {
 		switch f.Level {
-		case diag.LevelError:
+		case severity.Error:
 			errors++
-		case diag.LevelWarning:
+		case severity.Warning:
 			warnings++
-		default: // info findings are not counted
+		default: // diagnostics grade nothing else
 		}
 	}
 	return errors, warnings
@@ -114,10 +115,10 @@ func lockDiagFindings(cfg *config.Config) []diag.Finding {
 	warnings, err := locksScanner(cfg).ScanDir()
 	var out []diag.Finding
 	if err != nil {
-		out = append(out, diag.Finding{Level: diag.LevelError, Scope: diagScopeLocks, Message: err.Error()})
+		out = append(out, diag.Finding{Level: severity.Error, Scope: diagScopeLocks, Message: err.Error()})
 	}
 	for _, w := range warnings {
-		out = append(out, diag.Finding{Level: diag.LevelWarning, Scope: diagScopeLocks, Message: w})
+		out = append(out, diag.Finding{Level: severity.Warning, Scope: diagScopeLocks, Message: w})
 	}
 	return out
 }
