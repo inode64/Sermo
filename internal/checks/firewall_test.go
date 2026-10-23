@@ -125,6 +125,12 @@ func TestDefaultFirewallRulesSampler(t *testing.T) {
 			nft:     func(context.Context) (uint64, error) { return 0, errors.New("permission denied") },
 			wantErr: "nftables: permission denied",
 		},
+		{
+			name:    "auto names each failed backend once",
+			backend: FirewallBackendAuto,
+			nft:     func(context.Context) (uint64, error) { return 0, errors.New("permission denied") },
+			wantErr: "nftables: permission denied; iptables: ",
+		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -137,8 +143,8 @@ func TestDefaultFirewallRulesSampler(t *testing.T) {
 
 			got, err := defaultFirewallRulesSampler(context.Background(), tc.backend, firewallRunner(tc.runner))
 			if tc.wantErr != "" {
-				if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
-					t.Fatalf("error = %v, want substring %q", err, tc.wantErr)
+				if err == nil || !strings.Contains(err.Error(), tc.wantErr) || strings.Count(err.Error(), "nftables:") != 1 {
+					t.Fatalf("error = %v, want substring %q naming nftables once", err, tc.wantErr)
 				}
 				return
 			}

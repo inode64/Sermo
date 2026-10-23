@@ -127,7 +127,7 @@ func defaultFirewallRulesSampler(ctx context.Context, backend string, runner exe
 			return nft, nil
 		}
 		if err != nil {
-			errs = append(errs, fmt.Errorf("nftables: %w", err))
+			errs = append(errs, err) // sampleNftablesRules names the backend
 		}
 		iptables, err := sampleIptablesRules(ctx, runner)
 		if err == nil {
