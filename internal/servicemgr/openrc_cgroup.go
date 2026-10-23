@@ -26,7 +26,9 @@ func openRCBackendPIDs(unit string, readFile func(string) ([]byte, error)) func(
 		if info.Pidfile == "" {
 			return nil
 		}
-		pidData, err := readFile(info.Pidfile)
+		// Read like discovery reads a pidfile: without blocking, so a FIFO at
+		// its path cannot stall every discoverer of this unit.
+		pidData, err := hostfs.ReadRegularFile(info.Pidfile, hostfs.MaxPidfileBytes)
 		if err != nil {
 			return nil
 		}
