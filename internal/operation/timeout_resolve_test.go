@@ -36,3 +36,25 @@ func TestResolvedTimeout(t *testing.T) {
 		t.Errorf("resolveTimeout(1ns) = %v, want the policy minimum %v", got, minEmpty)
 	}
 }
+
+// Reap waits term_timeout for any unit-cgroup residual, and kill_timeout
+// whenever force_kill is true or auto, so the deadline budgets both waits even
+// when no kill_only_if identity sets ForceKill.
+func TestMinimumTimeoutBudgetsResidualWaits(t *testing.T) {
+	waits := process.KillPolicy{GracefulTimeout: 20 * time.Second, TermTimeout: 30 * time.Second, KillTimeout: 10 * time.Second}
+	for _, tc := range []struct {
+		name   string
+		policy func(process.KillPolicy) process.KillPolicy
+		want   time.Duration
+	}{
+		{"force_kill false", func(p process.KillPolicy) process.KillPolicy { return p }, 50*time.Second + backendMargin},
+		{"auto without identity", func(p process.KillPolicy) process.KillPolicy { p.Automatic = true; return p }, 60*time.Second + backendMargin},
+		{"force_kill true", func(p process.KillPolicy) process.KillPolicy { p.ForceKill = true; return p }, 60*time.Second + backendMargin},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := minimumTimeout(tc.policy(waits)); got != tc.want {
+				t.Fatalf("minimumTimeout = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}

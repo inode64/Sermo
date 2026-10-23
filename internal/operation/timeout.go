@@ -21,12 +21,13 @@ const backendMargin = 30 * time.Second
 const defaultDockerStopTimeout = 10 * time.Second
 
 // minimumTimeout is the shortest safe operation deadline implied by a resolved
-// stop policy: graceful wait plus signal escalation sleeps when force_kill is
-// enabled, plus backendMargin.
+// stop policy: the graceful wait, the SIGTERM wait (a residual in the unit's
+// own cgroup gets it even without force_kill), the SIGKILL wait when force_kill
+// is true or auto, plus backendMargin.
 func minimumTimeout(policy process.KillPolicy) time.Duration {
-	d := policy.GracefulTimeout
-	if policy.ForceKill {
-		d += policy.TermTimeout + policy.KillTimeout
+	d := policy.GracefulTimeout + policy.TermTimeout
+	if policy.ForceKill || policy.Automatic {
+		d += policy.KillTimeout
 	}
 	return d + backendMargin
 }
