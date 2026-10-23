@@ -75,9 +75,12 @@ func (c *fakeNetworkClient) NetworkGetXMLDesc(libvirt.Network, uint32) (string, 
 	return c.netXML, nil
 }
 
-func (c *fakeNetworkClient) Domains() ([]libvirt.Domain, error) {
+func (c *fakeNetworkClient) ConnectListAllDomains(needResults int32, flags libvirt.ConnectListAllDomainsFlags) ([]libvirt.Domain, uint32, error) {
 	c.calls = append(c.calls, "domains")
-	return c.domains, nil
+	if needResults != 1 || flags != libvirt.ConnectListDomainsActive|libvirt.ConnectListDomainsInactive {
+		return nil, 0, errors.New("listing must return active and inactive domains")
+	}
+	return c.domains, uint32(len(c.domains)), nil
 }
 
 func (c *fakeNetworkClient) DomainGetState(dom libvirt.Domain, _ uint32) (int32, int32, error) {
