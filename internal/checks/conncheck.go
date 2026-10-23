@@ -412,7 +412,7 @@ func buildConnCheck(b base, proto conn.Protocol, entry map[string]any) (Check, s
 	if cfg.User == "" && proto.RequiresUser() {
 		return nil, protoName + " check requires a user"
 	}
-	cfg.Port = connectionPort(entry, 0)
+	cfg.Port = connectionPort(entry)
 	cfg.Socket = cfgval.AsString(entry[CheckKeySocket])
 	cfg.Query = cfgval.AsString(entry[CheckKeyQuery])
 	// cfg.Interface is set per-attempt by connCheck.Run from the interface set;
@@ -504,15 +504,17 @@ func databaseConnectionConfig(entry map[string]any) conn.Config {
 	return cfg
 }
 
-func connectionPort(entry map[string]any, defaultPort int) int {
+// connectionPort is the check's own port, or 0 to let the protocol's default
+// apply.
+func connectionPort(entry map[string]any) int {
 	if port, ok := cfgval.Int(entry[CheckKeyPort]); ok {
 		return port
 	}
-	return defaultPort
+	return 0
 }
 
 func preparedConnectionConfig(protocol string, cfg conn.Config, entry map[string]any) conn.Config {
-	cfg.Port = connectionPort(entry, 0)
+	cfg.Port = connectionPort(entry)
 	if _, resolved, ok := conn.Prepare(protocol, cfg); ok {
 		return resolved
 	}

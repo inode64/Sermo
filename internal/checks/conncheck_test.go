@@ -45,11 +45,11 @@ func TestConnectionConfigDefaultsAndOverrides(t *testing.T) {
 	if database.Database != "metrics" {
 		t.Fatalf("databaseConnectionConfig = %+v", database)
 	}
-	if port := connectionPort(entry, 1234); port != 7443 {
+	if port := connectionPort(entry); port != 7443 {
 		t.Fatalf("connectionPort override = %d, want 7443", port)
 	}
-	if port := connectionPort(map[string]any{}, 1234); port != 1234 {
-		t.Fatalf("connectionPort default = %d, want 1234", port)
+	if port := connectionPort(map[string]any{}); port != 0 {
+		t.Fatalf("connectionPort unset = %d, want 0 for the protocol default", port)
 	}
 }
 
