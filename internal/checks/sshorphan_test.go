@@ -81,6 +81,19 @@ func TestRecoverOrphanSSHSession(t *testing.T) {
 				g[pid] = "0::/"
 			}
 		}},
+		{name: "hybrid hierarchy", want: true, mutate: func(p map[int]process.Identity, _ *utmp.Session, g map[int]string) {
+			for pid := range g {
+				g[pid] = "12:pids:/openrc.sshd\n1:name=openrc:/openrc.sshd\n0::/openrc.sshd"
+				id := p[pid]
+				id.Cgroup = g[pid]
+				p[pid] = id
+			}
+		}},
+		{name: "leader record missing", mutate: func(p map[int]process.Identity, _ *utmp.Session, _ map[int]string) {
+			id := p[leaderPID]
+			id.Cgroup = ""
+			p[leaderPID] = id
+		}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			now := time.Now()
@@ -92,6 +105,12 @@ func TestRecoverOrphanSSHSession(t *testing.T) {
 				shellPID:  {PID: shellPID, PPID: peerPID, Exe: "/bin/bash", ExeOK: true, StartTicks: 102, StartTicksOK: true, TTY: testTTY, TTYOK: true},
 			}
 			groups := map[int]string{sshdPID: "0::/openrc.sshd", leaderPID: "0::/openrc.sshd", peerPID: "0::/openrc.sshd", shellPID: "0::/openrc.sshd"}
+			// The snapshot carries the same /proc/<pid>/cgroup records the
+			// reader serves, as OSReader.Identity does.
+			for pid, id := range p {
+				id.Cgroup = groups[pid]
+				p[pid] = id
+			}
 			if tc.mutate != nil {
 				tc.mutate(p, &session, groups)
 			}
@@ -114,7 +133,7 @@ func TestRecoverOrphanSSHSession(t *testing.T) {
 			}
 			if tc.want {
 				got := sample.SSH[0]
-				if got.PID != leaderPID || got.StartTicks != 100 || len(sample.Issues) != 0 || got.Cgroup != "0::/openrc.sshd" {
+				if got.PID != leaderPID || got.StartTicks != 100 || len(sample.Issues) != 0 || got.Cgroup != p[leaderPID].Cgroup {
 					t.Fatalf("identity=%+v", got)
 				}
 			} else if len(sample.Issues) != 1 {

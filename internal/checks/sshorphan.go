@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"sermo/internal/process"
+	"sermo/internal/servicemgr"
 	"sermo/internal/utmp"
 )
 
@@ -65,9 +66,14 @@ func (s sshSessionOwnership) orphanSSHLeader(session utmp.Session, tty uint64) (
 	if !known {
 		return process.Identity{}, false
 	}
+	// Delivery compares the boundary with /proc/<pid>/cgroup as the kernel
+	// writes it, every hierarchy line of a hybrid host included, so the
+	// leader keeps its own record, which must name the group just verified.
+	if path, ok := servicemgr.UnifiedCgroupPath(leader.Cgroup); !ok || path != group {
+		return process.Identity{}, false
+	}
 	for _, id := range terminalProcesses(s.snapshot, tty) {
 		if id.UID == uid && s.orphanSSHAncestry(id, leader, group) {
-			leader.Cgroup = "0::" + group
 			return leader, true
 		}
 	}
