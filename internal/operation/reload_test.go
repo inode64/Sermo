@@ -225,6 +225,28 @@ func TestReloadClosureSignalUsesPidfileWhenNoMainPID(t *testing.T) {
 	}
 }
 
+func TestReloadClosureSignalNeverReachesDelegatedProcess(t *testing.T) {
+	pid := 4242
+	pidfile := t.TempDir() + "/svc.pid"
+	if err := os.WriteFile(pidfile, []byte(strconv.Itoa(pid)+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	selectors := []process.Selector{
+		{Name: "main", Type: process.SelectorPidfile, Paths: []string{pidfile}},
+		{Name: "workload", Type: process.SelectorCommandMatch, Exe: "/usr/sbin/svc", User: "svcuser", Delegated: true},
+	}
+	discoverer := reloadDiscoverer(map[int]process.Identity{pid: {PID: pid, StartTicks: 42, StartTicksOK: true, UID: 1001, Exe: "/usr/sbin/svc", ExeOK: true}})
+	signaler := &pidSignaler{}
+	reload := nativeSignalReloadFunc(syscall.SIGUSR2, &execxtest.Runner{}, "openrc", "svc", pidfile, discoverer, selectors, signaler)
+
+	if err := reload(context.Background()); err == nil {
+		t.Fatal("reload signalled a process only a delegated selector names")
+	}
+	if len(signaler.calls) != 0 {
+		t.Fatalf("signals: %v", signaler.calls)
+	}
+}
+
 func TestReloadClosureSignalPidfileRequiresStrictIdentity(t *testing.T) {
 	dir := t.TempDir()
 	pidfile := dir + "/svc.pid"
