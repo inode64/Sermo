@@ -39,10 +39,10 @@ type HeldError struct {
 
 func (*HeldError) Error() string { return "operation in progress" }
 
-// ownedLock is the owner-checked release shared by the operation and named
-// lockers: the file is removed only while it still carries this owner's
+// Handle is an operation or named lock this process acquired. Its release is
+// owner-checked: the file is removed only while it still carries this owner's
 // identity; a lock reclaimed by someone else is left untouched.
-type ownedLock struct {
+type Handle struct {
 	path            string
 	ownerPID        int
 	ownerStartTicks uint64
@@ -52,7 +52,7 @@ type ownedLock struct {
 
 // Release removes the lock, but only if it is still this owner's lock. Safe on
 // a nil handle, so callers can defer it unconditionally.
-func (h *ownedLock) Release() error {
+func (h *Handle) Release() error {
 	if h == nil {
 		return nil
 	}
@@ -84,9 +84,6 @@ func (h *ownedLock) Release() error {
 	h.released = true
 	return nil
 }
-
-// Handle is an acquired operation lock owned by this process.
-type Handle = ownedLock
 
 // OperationLocker acquires the internal operation lock that serializes
 // start/stop/restart/reload/resume for one service. It lives under
@@ -158,7 +155,7 @@ func (l OperationLocker) Acquire(service string, ttl time.Duration) (*Handle, er
 // if it turned active it is reported as held, otherwise the loop retries.
 // Bounding the loop at maxAcquireAttempts keeps a pathologically contended lock
 // from spinning without limit.
-func acquireExclusive(path string, payload lockFile, ttl time.Duration, proc ProcessProber, now func() time.Time, onReclaim func(string)) (ownedLock, error) {
+func acquireExclusive(path string, payload lockFile, ttl time.Duration, proc ProcessProber, now func() time.Time, onReclaim func(string)) (Handle, error) {
 	payload.AcquisitionID = rand.Text()
 	var reclaimed []string
 	defer func() {
@@ -173,23 +170,25 @@ func acquireExclusive(path string, payload lockFile, ttl time.Duration, proc Pro
 		payload.ExpiresAt = payload.CreatedAt.Add(ttl)
 		err := writeLockFileExclusive(path, payload)
 		if err == nil {
-			return ownedLock{path: path, ownerPID: payload.OwnerPID, ownerStartTicks: payload.OwnerStartTicks, acquisitionID: payload.AcquisitionID}, nil
+			return Handle{path: path, ownerPID: payload.OwnerPID, ownerStartTicks: payload.OwnerStartTicks, acquisitionID: payload.AcquisitionID}, nil
 		}
 		if !errors.Is(err, os.ErrExist) {
-			return ownedLock{}, fmt.Errorf(lockAcquireErrorFormat, path, err)
+			return Handle{}, fmt.Errorf(lockAcquireErrorFormat, path, err)
 		}
 
 		existing, rerr := readLockFile(path)
 		if rerr != nil {
-			if isRetryableLockRead(rerr) {
-				continue // The lock disappeared; retry acquisition.
+			// A lock that disappeared is retried. A malformed published payload
+			// is a diagnostic error, not a holder or a publication in progress.
+			if isMissingLock(rerr) {
+				continue
 			}
-			return ownedLock{}, fmt.Errorf(lockAcquireErrorFormat, path, rerr)
+			return Handle{}, fmt.Errorf(lockAcquireErrorFormat, path, rerr)
 		}
 
 		state, staleReason := classify(existing, now(), proc)
 		if state == StateActive {
-			return ownedLock{}, &HeldError{Service: payload.Service, Lock: toLock(existing, path, state, staleReason)}
+			return Handle{}, &HeldError{Service: payload.Service, Lock: toLock(existing, path, state, staleReason)}
 		}
 
 		if reclaimStale(path, existing, proc, now) {
@@ -200,12 +199,12 @@ func acquireExclusive(path string, payload lockFile, ttl time.Duration, proc Pro
 		// it is held, otherwise loop and try again.
 		if cur, err := readLockFile(path); err == nil {
 			if st, rs := classify(cur, now(), proc); st == StateActive {
-				return ownedLock{}, &HeldError{Service: payload.Service, Lock: toLock(cur, path, st, rs)}
+				return Handle{}, &HeldError{Service: payload.Service, Lock: toLock(cur, path, st, rs)}
 			}
 		}
 	}
 
-	return ownedLock{}, &HeldError{Service: payload.Service, Lock: Lock{Service: payload.Service, Name: payload.Name, Path: path, State: StateActive}}
+	return Handle{}, &HeldError{Service: payload.Service, Lock: Lock{Service: payload.Service, Name: payload.Name, Path: path, State: StateActive}}
 }
 
 // reclaimStale re-reads a lock, confirms it is still the same stale lock, and

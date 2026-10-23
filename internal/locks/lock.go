@@ -111,8 +111,9 @@ func toLock(lf lockFile, path string, state State, staleReason string) Lock {
 	}
 }
 
-// toLockWithIDs fills legacy payloads that omitted their service or lock name
-// from the identity already resolved from the filename or caller.
+// toLockWithIDs fills a payload that omits its service or lock name, such as a
+// hand-written lock file, from the identity resolved from the filename or
+// caller.
 func toLockWithIDs(lf lockFile, path string, state State, staleReason, service, name string) Lock {
 	lock := toLock(lf, path, state, staleReason)
 	if lock.Service == "" {

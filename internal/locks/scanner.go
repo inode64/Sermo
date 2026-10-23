@@ -186,10 +186,3 @@ func readLockFile(path string) (lockFile, error) {
 func isMissingLock(err error) bool {
 	return errors.Is(err, fs.ErrNotExist)
 }
-
-// isRetryableLockRead reports a lock that disappeared during acquisition.
-// Published payloads are complete; malformed JSON is a diagnostic error, not
-// evidence of an active holder or an in-progress publication.
-func isRetryableLockRead(err error) bool {
-	return isMissingLock(err)
-}
