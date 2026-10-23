@@ -23,9 +23,11 @@ package hostfs
 import (
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 )
 
 // ErrPath reports a path this package refuses to open.
@@ -91,6 +93,35 @@ func OpenFile(path string, flag int, perm os.FileMode) (*os.File, error) {
 	return checked(path, func(path string) (*os.File, error) {
 		return os.OpenFile(path, flag, perm) //nolint:forbidigo,gosec // hostfs is the checked door; see checked
 	})
+}
+
+// MaxPidfileBytes bounds a pidfile read. Only the first line is parsed;
+// PostgreSQL's postmaster.pid, the longest common format, is a few hundred
+// bytes.
+const MaxPidfileBytes = 4096
+
+// ReadRegularFile reads at most limit bytes of the named host file and refuses
+// anything but a regular file. It opens without blocking and checks the opened
+// descriptor, so a FIFO at a path another user controls, such as a daemon's
+// pidfile, cannot stall the caller until a writer appears.
+func ReadRegularFile(path string, limit int64) ([]byte, error) {
+	fh, err := OpenFile(path, os.O_RDONLY|syscall.O_NONBLOCK, 0)
+	if err != nil {
+		return nil, fmt.Errorf("open: %w", err)
+	}
+	defer func() { _ = fh.Close() }()
+	info, err := fh.Stat()
+	if err != nil {
+		return nil, fmt.Errorf("stat: %w", err)
+	}
+	if !info.Mode().IsRegular() {
+		return nil, errors.New("not a regular file")
+	}
+	data, err := io.ReadAll(io.LimitReader(fh, limit))
+	if err != nil {
+		return nil, fmt.Errorf("read: %w", err)
+	}
+	return data, nil
 }
 
 // StatTarget describes an operator- or catalog-named path, read as written.

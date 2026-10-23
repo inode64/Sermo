@@ -3,10 +3,8 @@ package process
 import (
 	"errors"
 	"fmt"
-	"io"
 	"io/fs"
 	"maps"
-	"os"
 	"path/filepath"
 	"regexp"
 	"sermo/internal/cfgval"
@@ -15,7 +13,6 @@ import (
 	"slices"
 	"strconv"
 	"strings"
-	"syscall"
 )
 
 // Discoverer finds a service's processes through its selectors and the process
@@ -1013,7 +1010,7 @@ func UncertainWarnings(warnings []string) []string {
 // then picks up the rest of the group as children. `-1` and `-0` are refused:
 // in kill semantics -1 means every process, so it identifies no service.
 func ReadPidfile(path string) (int, error) {
-	data, err := readPidfilePrefix(filepath.Clean(path))
+	data, err := hostfs.ReadRegularFile(filepath.Clean(path), hostfs.MaxPidfileBytes)
 	if err != nil {
 		return 0, fmt.Errorf("read pidfile %s: %w", path, err)
 	}
@@ -1034,35 +1031,6 @@ func ReadPidfile(path string) (int, error) {
 		return 0, fmt.Errorf("invalid pid %d", pid)
 	}
 	return pid, nil
-}
-
-// maxPidfileBytes bounds how much of a pidfile is read. Only the first line is
-// parsed; PostgreSQL's postmaster.pid, the longest common format, is a few
-// hundred bytes.
-const maxPidfileBytes = 4096
-
-// readPidfilePrefix reads at most maxPidfileBytes of a regular pidfile. The path
-// goes through hostfs, so a relative one is refused. It opens without blocking
-// and checks the opened descriptor: a FIFO at the pidfile path would otherwise
-// stall the discovery cycle until some writer appeared.
-func readPidfilePrefix(path string) ([]byte, error) {
-	fh, err := hostfs.OpenFile(path, os.O_RDONLY|syscall.O_NONBLOCK, 0)
-	if err != nil {
-		return nil, fmt.Errorf("open: %w", err)
-	}
-	defer func() { _ = fh.Close() }()
-	info, err := fh.Stat()
-	if err != nil {
-		return nil, fmt.Errorf("stat: %w", err)
-	}
-	if !info.Mode().IsRegular() {
-		return nil, errors.New("not a regular file")
-	}
-	data, err := io.ReadAll(io.LimitReader(fh, maxPidfileBytes))
-	if err != nil {
-		return nil, fmt.Errorf("read: %w", err)
-	}
-	return data, nil
 }
 
 // ParseSelectors extracts typed process selectors from a resolved service tree.
