@@ -506,3 +506,31 @@ func TestLoggedEventNormalizesLegacyWarningRows(t *testing.T) {
 		t.Fatalf("graded row = %+v", got)
 	}
 }
+
+// limit <= 0 means "as many as the ring retains" on every read: with a store, a
+// service's or an application's events must not become the whole persisted
+// history.
+func TestRecentTargetWithoutLimitIsBoundedByTheRing(t *testing.T) {
+	store, err := state.OpenContextWith(context.Background(), filepath.Join(t.TempDir(), state.Filename), state.Options{})
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	defer store.Close()
+	log, err := NewPersistentEventLog(3, store, nil)
+	if err != nil {
+		t.Fatalf("NewPersistentEventLog: %v", err)
+	}
+	for range 5 {
+		for _, rec := range []state.EventRecord{{Service: "web", Kind: eventKindAction}, {App: "nginx", Kind: eventKindAction}} {
+			if _, err := store.RecordEvent(rec); err != nil {
+				t.Fatalf("record: %v", err)
+			}
+		}
+	}
+	if got := len(log.Recent("web", 0)); got != 3 {
+		t.Fatalf("Recent(web, 0) = %d events, want the ring's 3", got)
+	}
+	if got := len(log.RecentApp("nginx", 0)); got != 3 {
+		t.Fatalf("RecentApp(nginx, 0) = %d events, want the ring's 3", got)
+	}
+}
