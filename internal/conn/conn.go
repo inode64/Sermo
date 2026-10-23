@@ -325,6 +325,9 @@ const (
 	networkTCP  = TransportTCP
 	networkUDP  = TransportUDP
 	networkUnix = netutil.NetworkUnix
+	// networkIP and networkIP4 name address families for resolver lookups.
+	networkIP  = "ip"
+	networkIP4 = "ip4"
 	// networkUnixgram is the datagram Unix-socket network. Only chronyd's command
 	// socket needs it: it is SOCK_DGRAM, so the stream networkUnix cannot reach it.
 	networkUnixgram = "unixgram"

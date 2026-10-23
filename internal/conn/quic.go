@@ -46,23 +46,10 @@ func BindQUICDialer(iface string) func(
 }
 
 func resolveQUICAddress(ctx context.Context, address string) (*net.UDPAddr, string, string, error) {
-	host, service, err := net.SplitHostPort(address)
+	remote, err := resolveUDPAddr(ctx, networkIP, address)
 	if err != nil {
-		return nil, "", "", fmt.Errorf("parse QUIC address %q: %w", address, err)
+		return nil, "", "", fmt.Errorf("resolve QUIC address: %w", err)
 	}
-	port, err := net.DefaultResolver.LookupPort(ctx, networkUDP, service)
-	if err != nil {
-		return nil, "", "", fmt.Errorf("resolve QUIC port %q: %w", service, err)
-	}
-	addresses, err := net.DefaultResolver.LookupIPAddr(ctx, host)
-	if err != nil {
-		return nil, "", "", fmt.Errorf("resolve QUIC host %q: %w", host, err)
-	}
-	if len(addresses) == 0 {
-		return nil, "", "", fmt.Errorf("resolve QUIC host %q: no addresses", host)
-	}
-
-	remote := &net.UDPAddr{IP: addresses[0].IP, Port: port, Zone: addresses[0].Zone}
 	if remote.IP.To4() != nil {
 		return remote, "udp4", "0.0.0.0:0", nil
 	}
