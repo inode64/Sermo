@@ -3,7 +3,11 @@ package virt
 import (
 	"context"
 	"errors"
+	"io"
+	"net"
+	"path/filepath"
 	"reflect"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -302,5 +306,50 @@ func TestRunWithClientDisconnectsOnContextCancel(t *testing.T) {
 		// disconnected promptly after cancellation
 	case <-time.After(2 * time.Second):
 		t.Fatal("connection was not disconnected promptly after context cancel")
+	}
+}
+
+// A libvirtd that accepts but never answers must not pin the session: the
+// connection closes at the caller's deadline and the operation never runs.
+func TestRunWithClientReleasesHungDaemonConnection(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "libvirt-sock")
+	ln, err := net.Listen("unix", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = ln.Close() }()
+	closed := make(chan error, 1)
+	go func() {
+		c, err := ln.Accept()
+		if err != nil {
+			closed <- err
+			return
+		}
+		defer func() { _ = c.Close() }()
+		// Never reply; the read ends only when the client closes.
+		_, err = io.Copy(io.Discard, c)
+		closed <- err
+	}()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+	var ran atomic.Bool
+	mgr := Manager{Spec: Spec{URI: "qemu:///system", Socket: path, Domain: "vm01"}}
+	if _, err := runWithClient(ctx, mgr, func(Client) (struct{}, error) {
+		ran.Store(true)
+		return struct{}{}, nil
+	}); err == nil {
+		t.Fatal("session with a silent daemon succeeded")
+	}
+	select {
+	case err := <-closed:
+		if err != nil && !errors.Is(err, net.ErrClosed) {
+			t.Fatalf("server side ended with %v, want client close", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("libvirt session left the connection open after its deadline")
+	}
+	if ran.Load() {
+		t.Fatal("operation ran after the caller's deadline")
 	}
 }

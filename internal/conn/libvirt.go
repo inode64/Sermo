@@ -52,11 +52,11 @@ func (libvirtProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	target := newProbeTarget(cfg, defaultPortLibvirt)
 	mode, addr, uri := libvirtTransportWithTarget(target)
 	// Every probe context ends, even one without a deadline, so the dialed
-	// connection is always closed by libvirtDialer.
+	// connection is always closed by LibvirtDialer.
 	ctx, cancel := context.WithTimeout(ctx, netutil.TimeoutFromContext(ctx, DefaultLibvirtTimeout))
 	defer cancel()
 
-	l := libvirt.NewWithDialer(libvirtDialer{ctx: ctx, dial: func(ctx context.Context) (net.Conn, error) {
+	l := libvirt.NewWithDialer(LibvirtDialer{ctx: ctx, dial: func(ctx context.Context) (net.Conn, error) {
 		if mode == libvirtTransportSocket {
 			return dialUnix(ctx, addr)
 		}
@@ -64,25 +64,33 @@ func (libvirtProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	}})
 
 	// go-libvirt's connect/RPC calls are not context-aware; probeWithDeadline
-	// returns on time and libvirtDialer releases the abandoned call.
+	// returns on time and LibvirtDialer releases the abandoned call.
 	return probeWithDeadline(ctx, func(context.Context) (Result, error) {
 		return libvirtProbe(l, uri, mode, cfg.Params[ParamKeyDomain])
 	})
 }
 
-// libvirtDialer closes the connection it dialed once ctx ends. go-libvirt
+// LibvirtDialer closes the connection it dialed once ctx ends. go-libvirt
 // waits for RPC replies without a timeout, so a daemon that accepts but never
-// answers would otherwise pin the probe goroutine, go-libvirt's reader and the
-// socket forever, one set per cycle. A read deadline is not enough: the reader
-// treats the timeout as temporary and spins; closing ends the reader and fails
-// the pending call with ErrInterrupted. Closing after a normal Disconnect is a
-// no-op.
-type libvirtDialer struct {
-	ctx  context.Context //nolint:containedctx // go-libvirt's Dial() takes no context; the probe's context must reach it.
+// answers would otherwise pin the caller's goroutine, go-libvirt's reader and
+// the socket forever, one set per call. A read deadline is not enough: the
+// reader treats the timeout as temporary and spins; closing ends the reader
+// and fails the pending call with ErrInterrupted. Closing after a normal
+// Disconnect is a no-op. The probe and internal/virt's control sessions both
+// dial through it.
+type LibvirtDialer struct {
+	ctx  context.Context //nolint:containedctx // go-libvirt's Dial() takes no context; the caller's context must reach it.
 	dial func(context.Context) (net.Conn, error)
 }
 
-func (d libvirtDialer) Dial() (net.Conn, error) {
+// NewLibvirtDialer returns a LibvirtDialer that opens its connection with dial
+// and closes it once ctx ends.
+func NewLibvirtDialer(ctx context.Context, dial func(context.Context) (net.Conn, error)) LibvirtDialer {
+	return LibvirtDialer{ctx: ctx, dial: dial}
+}
+
+// Dial implements go-libvirt's socket.Dialer.
+func (d LibvirtDialer) Dial() (net.Conn, error) {
 	c, err := d.dial(d.ctx)
 	if err != nil {
 		return nil, probeErr(ProtocolNameLibvirt, stepDial, err)

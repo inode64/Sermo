@@ -2,6 +2,7 @@
 package virt
 
 import (
+	"cmp"
 	"context"
 	"encoding/hex"
 	"errors"
@@ -14,7 +15,6 @@ import (
 	"time"
 
 	"github.com/digitalocean/go-libvirt"
-	"github.com/digitalocean/go-libvirt/socket/dialers"
 
 	"sermo/internal/cfgval"
 	"sermo/internal/conn"
@@ -325,15 +325,20 @@ type rpcSession interface {
 	Disconnect() error
 }
 
-func runWithSession[C rpcSession, T any](ctx context.Context, uri string, newClient func(time.Duration) (C, error), fn func(C) (T, error)) (T, error) {
+func runWithSession[C rpcSession, T any](ctx context.Context, uri string, newClient func(context.Context, time.Duration) (C, error), fn func(C) (T, error)) (T, error) {
 	type out struct {
 		value T
 		err   error
 	}
 	ch := make(chan out, 1)
 	timeout := netutil.TimeoutFromContext(ctx, conn.DefaultLibvirtTimeout)
+	// Every session context ends, even a caller's without a deadline, so the
+	// connection conn.LibvirtDialer opened is always closed and an abandoned
+	// connect, RPC or Disconnect cannot pin the goroutine.
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
 	go func() {
-		client, err := newClient(timeout)
+		client, err := newClient(ctx, timeout)
 		if err != nil {
 			ch <- out{err: err}
 			return
@@ -342,11 +347,19 @@ func runWithSession[C rpcSession, T any](ctx context.Context, uri string, newCli
 			ch <- out{err: err}
 			return
 		}
+		// A connect that returned after the caller gave up must not start the
+		// operation: the caller has already reported a timeout.
+		if err := ctx.Err(); err != nil {
+			_ = client.Disconnect()
+			ch <- out{err: err}
+			return
+		}
 		// Disconnect exactly once, and do it promptly when the caller's context
 		// ends: a cancelled or timed-out call would otherwise keep the libvirt
 		// connection (and its in-flight RPC) open until fn returned on its own,
-		// so repeated timeouts could pile up live connections. Closing the socket
-		// also interrupts the in-flight RPC, which is the intended cancellation.
+		// so repeated timeouts could pile up live connections. The dialer also
+		// closes the socket when the context ends, which interrupts an RPC the
+		// daemon never answers, Disconnect's own included.
 		var once sync.Once
 		disconnect := func() { once.Do(func() { _ = client.Disconnect() }) }
 		stop := make(chan struct{})
@@ -371,29 +384,25 @@ func runWithSession[C rpcSession, T any](ctx context.Context, uri string, newCli
 	}
 }
 
-func (m Manager) client(timeout time.Duration) (Client, error) {
+func (m Manager) client(ctx context.Context, timeout time.Duration) (Client, error) {
 	if m.NewClient != nil {
 		return m.NewClient(m.Spec, timeout)
 	}
-	return newLibvirtRPC(m.Spec.Socket, m.Spec.Host, m.Spec.Port, timeout), nil
+	return newLibvirtRPC(ctx, m.Spec.Socket, m.Spec.Host, m.Spec.Port, timeout), nil
 }
 
 // newLibvirtRPC builds the RPC client for a local socket or a remote
-// host:port; shared by the domain and network managers.
-func newLibvirtRPC(socket, host string, port int, timeout time.Duration) *libvirt.Libvirt {
+// host:port; shared by the domain and network managers. Its connection closes
+// when ctx ends.
+func newLibvirtRPC(ctx context.Context, socket, host string, port int, timeout time.Duration) *libvirt.Libvirt {
+	network, address := netutil.NetworkUnix, filepath.Clean(cmp.Or(socket, DefaultSocket))
 	if host != "" {
-		return libvirt.NewWithDialer(dialers.NewRemote(host,
-			dialers.UsePort(strconv.Itoa(port)),
-			dialers.WithRemoteTimeout(timeout),
-		))
+		network, address = conn.TransportTCP, net.JoinHostPort(host, strconv.Itoa(port))
 	}
-	if socket == "" {
-		socket = DefaultSocket
-	}
-	return libvirt.NewWithDialer(dialers.NewLocal(
-		dialers.WithSocket(filepath.Clean(socket)),
-		dialers.WithLocalTimeout(timeout),
-	))
+	dialer := net.Dialer{Timeout: timeout}
+	return libvirt.NewWithDialer(conn.NewLibvirtDialer(ctx, func(ctx context.Context) (net.Conn, error) {
+		return dialer.DialContext(ctx, network, address)
+	}))
 }
 
 func statusFromDomainState(state libvirt.DomainState) servicemgr.Status {
