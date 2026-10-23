@@ -12,7 +12,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"strconv"
 	"strings"
 	"unicode"
 
@@ -346,21 +345,11 @@ func listIfacesFromSysfs(root string) ([]assist.Iface, error) {
 		}
 		name := entry.Name()
 		dir := filepath.Join(root, name)
-		flags := sysfsIfaceFlags(filepath.Join(dir, checks.SysfsIfaceFlagsFile))
-		operstate := strings.TrimSpace(checks.ReadTextFile(filepath.Join(dir, checks.SysfsIfaceOperstateFile)))
-		loopback := flags&checks.SysfsIfaceFlagLoopback != 0 || name == loopbackIfaceName
-		up := flags&checks.SysfsIfaceFlagUp != 0 && (flags&checks.SysfsIfaceFlagRunning != 0 || operstate == checks.NetStateUp || operstate == checks.NetStateUnknown)
-		out = append(out, assist.Iface{Name: name, Up: up, Loopback: loopback})
+		loopback := checks.SysfsIfaceFlags(dir)&checks.SysfsIfaceFlagLoopback != 0 || name == loopbackIfaceName
+		out = append(out, assist.Iface{Name: name, Up: checks.SysfsIfaceUp(dir), Loopback: loopback})
 	}
 	slices.SortFunc(out, func(a, b assist.Iface) int { return cmp.Compare(a.Name, b.Name) })
 	return out, nil
-}
-
-func sysfsIfaceFlags(path string) uint64 {
-	raw := strings.TrimSpace(checks.ReadTextFile(path))
-	raw = strings.TrimPrefix(raw, checks.SysfsIfaceHexValuePrefix)
-	flags, _ := strconv.ParseUint(raw, checks.SysfsIfaceFlagsBase, checks.SysfsIfaceFlagsBits)
-	return flags
 }
 
 func defaultRouteIfaces() []string {

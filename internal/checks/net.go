@@ -41,25 +41,25 @@ const (
 )
 
 const (
-	// SysfsIfaceFlagUp is Linux IFF_UP from /sys/class/net/<iface>/flags.
-	SysfsIfaceFlagUp uint64 = 0x1
+	// sysfsIfaceFlagUp is Linux IFF_UP from /sys/class/net/<iface>/flags.
+	sysfsIfaceFlagUp uint64 = 0x1
 	// SysfsIfaceFlagLoopback is Linux IFF_LOOPBACK from /sys/class/net/<iface>/flags.
 	SysfsIfaceFlagLoopback uint64 = 0x8
-	// SysfsIfaceFlagRunning is Linux IFF_RUNNING from /sys/class/net/<iface>/flags.
-	SysfsIfaceFlagRunning uint64 = 0x40
+	// sysfsIfaceFlagRunning is Linux IFF_RUNNING from /sys/class/net/<iface>/flags.
+	sysfsIfaceFlagRunning uint64 = 0x40
 
 	// SysfsNetClassPath is Linux's sysfs network-interface root.
 	SysfsNetClassPath = "/sys/class/net"
-	// SysfsIfaceFlagsFile is the sysfs file containing interface flag bits.
-	SysfsIfaceFlagsFile = "flags"
-	// SysfsIfaceOperstateFile is the sysfs file containing interface state.
-	SysfsIfaceOperstateFile = "operstate"
-	// SysfsIfaceHexValuePrefix prefixes hexadecimal sysfs flag values.
-	SysfsIfaceHexValuePrefix = "0x"
-	// SysfsIfaceFlagsBase is the integer base for sysfs flag parsing.
-	SysfsIfaceFlagsBase = 16
-	// SysfsIfaceFlagsBits is the bit width for sysfs flag parsing.
-	SysfsIfaceFlagsBits = 64
+	// sysfsIfaceFlagsFile is the sysfs file containing interface flag bits.
+	sysfsIfaceFlagsFile = "flags"
+	// sysfsIfaceOperstateFile is the sysfs file containing interface state.
+	sysfsIfaceOperstateFile = "operstate"
+	// sysfsIfaceHexValuePrefix prefixes hexadecimal sysfs flag values.
+	sysfsIfaceHexValuePrefix = "0x"
+	// sysfsIfaceFlagsBase is the integer base for sysfs flag parsing.
+	sysfsIfaceFlagsBase = 16
+	// sysfsIfaceFlagsBits is the bit width for sysfs flag parsing.
+	sysfsIfaceFlagsBits = 64
 
 	sysfsIfaceSpeedFile     = "speed"
 	sysfsIfaceStatisticsDir = "statistics"
@@ -355,7 +355,7 @@ func sampleNetFromSysfs(iface, root string) (NetSample, error) {
 	if err == nil && ifi.Flags&net.FlagUp != 0 && ifi.Flags&net.FlagRunning != 0 {
 		state = NetStateUp
 	}
-	if err != nil && sysfsIfaceUp(dir) {
+	if err != nil && SysfsIfaceUp(dir) {
 		state = NetStateUp
 	}
 	sample := NetSample{State: state, Counters: map[string]uint64{}}
@@ -404,16 +404,24 @@ func sysfsIfaceDir(root, iface string) string {
 	return filepath.Join(root, filepath.Base(iface))
 }
 
-func sysfsIfaceUp(dir string) bool {
-	flags := sysfsIfaceFlagBits(filepath.Join(dir, SysfsIfaceFlagsFile))
-	operstate := readTrim(filepath.Join(dir, SysfsIfaceOperstateFile))
-	return flags&SysfsIfaceFlagUp != 0 && (flags&SysfsIfaceFlagRunning != 0 || operstate == NetStateUp || operstate == NetStateUnknown)
+// SysfsIfaceUp reports whether the sysfs interface directory dir is
+// administratively up and carrying traffic (running, or an operstate of up or
+// unknown, which virtual links report).
+func SysfsIfaceUp(dir string) bool {
+	flags := sysfsIfaceFlagBits(filepath.Join(dir, sysfsIfaceFlagsFile))
+	operstate := readTrim(filepath.Join(dir, sysfsIfaceOperstateFile))
+	return flags&sysfsIfaceFlagUp != 0 && (flags&sysfsIfaceFlagRunning != 0 || operstate == NetStateUp || operstate == NetStateUnknown)
+}
+
+// SysfsIfaceFlags reads the IFF_* flag bits of the sysfs interface directory dir.
+func SysfsIfaceFlags(dir string) uint64 {
+	return sysfsIfaceFlagBits(filepath.Join(dir, sysfsIfaceFlagsFile))
 }
 
 func sysfsIfaceFlagBits(path string) uint64 {
 	raw := readTrim(path)
-	raw = strings.TrimPrefix(raw, SysfsIfaceHexValuePrefix)
-	flags, _ := strconv.ParseUint(raw, SysfsIfaceFlagsBase, SysfsIfaceFlagsBits)
+	raw = strings.TrimPrefix(raw, sysfsIfaceHexValuePrefix)
+	flags, _ := strconv.ParseUint(raw, sysfsIfaceFlagsBase, sysfsIfaceFlagsBits)
 	return flags
 }
 
