@@ -101,7 +101,7 @@ func logArchiveSizes(t *testing.T, s *Store, path string) {
 	if info, err := os.Stat(path); err == nil {
 		t.Logf("database file: %.1f MiB", float64(info.Size())/(1<<20))
 	}
-	rows, err := s.reads().QueryContext(context.Background(),
+	rows, err := s.reader.QueryContext(context.Background(),
 		`SELECT name, SUM(pgsize) FROM dbstat GROUP BY name ORDER BY 2 DESC;`)
 	if err != nil {
 		t.Logf("dbstat unavailable (%v); per-object sizes not reported", err)
@@ -123,7 +123,7 @@ func logArchiveSizes(t *testing.T, s *Store, path string) {
 
 func queryPlan(t *testing.T, s *Store, stmt string, args ...any) string {
 	t.Helper()
-	rows, err := s.reads().QueryContext(context.Background(), "EXPLAIN QUERY PLAN "+stmt, args...)
+	rows, err := s.reader.QueryContext(context.Background(), "EXPLAIN QUERY PLAN "+stmt, args...)
 	if err != nil {
 		t.Fatalf("explain: %v", err)
 	}

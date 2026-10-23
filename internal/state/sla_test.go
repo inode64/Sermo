@@ -15,7 +15,7 @@ func TestSLAWindowsSumOnlyWithinSpan(t *testing.T) {
 	mustRecord(t, s, false, now.Add(-30*time.Minute))
 	mustRecord(t, s, true, now.Add(-2*time.Hour))
 
-	hour, err := s.sumSLA(slaTestService, "", time.Hour, now)
+	hour, err := s.sumSLA(slaTestService, time.Hour, now)
 	if err != nil {
 		t.Fatalf("sum hour: %v", err)
 	}
@@ -26,7 +26,7 @@ func TestSLAWindowsSumOnlyWithinSpan(t *testing.T) {
 	// The day window is served by the 5-minute archive, so it sees the samples once
 	// they have been consolidated — what the daemon's maintenance pass does.
 	mustRollup(t, s, now)
-	day, err := s.sumSLA(slaTestService, "", slaSpanDay, now)
+	day, err := s.sumSLA(slaTestService, slaSpanDay, now)
 	if err != nil {
 		t.Fatalf("sum day: %v", err)
 	}
@@ -156,19 +156,23 @@ func TestMaintainDropsHistoryPastTheDayRetention(t *testing.T) {
 	// A window past the day archive's retention resolves to it anyway, so the
 	// 400-day-old sample is gone and the recent one survives.
 	beyond := DefaultRetention1d + slaSpanDay
-	service, err := s.sumSLA(slaTestService, "", beyond, now)
+	service, err := s.sumSLA(slaTestService, beyond, now)
 	if err != nil {
 		t.Fatalf("sum service SLA: %v", err)
 	}
 	if service.Total != 1 {
 		t.Fatalf("after maintenance total=%d, want 1 (recent sample kept)", service.Total)
 	}
-	check, err := s.sumSLA(slaTestService, "http", beyond, now)
+	points, err := s.CheckSLASeries(slaTestService, "http", now.Add(-beyond), now)
 	if err != nil {
-		t.Fatalf("sum check SLA: %v", err)
+		t.Fatalf("check SLA series: %v", err)
 	}
-	if check.Total != 1 {
-		t.Fatalf("after prune check total=%d, want 1 (recent sample kept)", check.Total)
+	var checkTotal int64
+	for _, p := range points {
+		checkTotal += p.Total
+	}
+	if checkTotal != 1 {
+		t.Fatalf("after prune check total=%d, want 1 (recent sample kept)", checkTotal)
 	}
 }
 

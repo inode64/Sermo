@@ -370,7 +370,7 @@ func (s *Store) pruneArchive(ctx context.Context, table archiveTable, res, cutof
 // walking from the epoch.
 func (s *Store) oldestBucket(ctx context.Context, table archiveTable, res int64) (int64, bool, error) {
 	var oldest sql.NullInt64
-	if err := s.reads().QueryRowContext(ctx, table.oldest, res).Scan(&oldest); err != nil {
+	if err := s.reader.QueryRowContext(ctx, table.oldest, res).Scan(&oldest); err != nil {
 		return 0, false, fmt.Errorf("read oldest %s %ds bucket: %w", table.name, res, err)
 	}
 	return oldest.Int64, oldest.Valid, nil
@@ -381,7 +381,7 @@ func (s *Store) oldestBucket(ctx context.Context, table archiveTable, res int64)
 func (s *Store) rollupWatermark(ctx context.Context, res int64) (int64, error) {
 	var watermark int64
 	found, err := scanOne(func() error {
-		return s.reads().QueryRowContext(ctx, rollupWatermarkSelect, res).Scan(&watermark)
+		return s.reader.QueryRowContext(ctx, rollupWatermarkSelect, res).Scan(&watermark)
 	})
 	if err != nil {
 		return 0, fmt.Errorf("read %ds rollup watermark: %w", res, err)

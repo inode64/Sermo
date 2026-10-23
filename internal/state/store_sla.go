@@ -68,7 +68,11 @@ func (c SLACounts) Ratio() (float64, bool) {
 // PercentText renders the availability as a percentage, or slaUnavailable when
 // the window has no observations.
 func (c SLACounts) PercentText() string {
-	return slaPercentText(c.Up, c.Total)
+	ratio, ok := c.Ratio()
+	if !ok {
+		return slaUnavailable
+	}
+	return fmt.Sprintf("%.2f%%", ratio*metrics.PercentScale)
 }
 
 // SLAValue is the availability of one service over one rolling window.
@@ -119,13 +123,6 @@ type SLAPoint struct {
 	SLACounts
 }
 
-func slaPercentText(up, total int64) string {
-	if total <= 0 {
-		return slaUnavailable
-	}
-	return fmt.Sprintf("%.2f%%", float64(up)/float64(total)*metrics.PercentScale)
-}
-
 // SLASeries returns a service's availability points in [from, to), oldest first,
 // at the resolution that window is stored at. Unmonitored buckets are absent
 // (gaps) rather than zero rows, so a caller can render excluded periods
@@ -140,17 +137,17 @@ func (s *Store) CheckSLASeries(service, check string, from, to time.Time) ([]SLA
 	return s.loadSLASeries(service, check, from, to)
 }
 
-// sumSLA totals one series over the rolling window ending at now. The archive is
-// chosen from the requested span, so a report window and a series for the same
-// range resolve to the same stored buckets.
-func (s *Store) sumSLA(service, check string, span time.Duration, now time.Time) (SLAValue, error) {
+// sumSLA totals a service's series over the rolling window ending at now. The
+// archive is chosen from the requested span, so a report window and a series
+// for the same range resolve to the same stored buckets.
+func (s *Store) sumSLA(service string, span time.Duration, now time.Time) (SLAValue, error) {
 	from := now.Add(-span)
 	stored := s.retention.archiveFor(from, now)
 	var value SLAValue
-	if err := s.reads().QueryRowContext(s.sqlCtx(), slaSumStmt,
-		stored.Res, service, check, alignBucket(from, stored.Res),
+	if err := s.reader.QueryRowContext(s.sqlCtx(), slaSumStmt,
+		stored.Res, service, "", alignBucket(from, stored.Res),
 	).Scan(&value.Up, &value.Total, &value.DownBuckets); err != nil {
-		return SLAValue{}, fmt.Errorf("sum %s for %s: %w", slaKind(check), slaTarget(service, check), err)
+		return SLAValue{}, fmt.Errorf("sum %s for %s: %w", slaKind(""), slaTarget(service, ""), err)
 	}
 	return value, nil
 }
@@ -165,7 +162,7 @@ func (s *Store) loadSLASeries(service, check string, from, to time.Time) ([]SLAP
 	// its start, so the newest (still filling) bucket is not dropped from the
 	// series. A bucket start is never in the future, so nothing beyond `to` can
 	// appear.
-	rows, err := s.reads().QueryContext(s.sqlCtx(), slaSeriesStmt,
+	rows, err := s.reader.QueryContext(s.sqlCtx(), slaSeriesStmt,
 		stored.Res, service, check,
 		alignBucket(from, stored.Res), alignBucket(to, stored.Res)+stored.Res)
 	if err != nil {
@@ -200,17 +197,9 @@ func (s *Store) SeriesResolution(from, to time.Time) time.Duration {
 // SLAReport returns a service's availability across every SLAWindow, ordered as
 // SLAWindows (hour..year).
 func (s *Store) SLAReport(service string, now time.Time) ([]SLAValue, error) {
-	return reportWindows(func(span time.Duration) (SLAValue, error) {
-		return s.sumSLA(service, "", span, now)
-	})
-}
-
-// reportWindows collects one SLAValue per SLAWindow from the given sum reader;
-// the loop shared by the service- and check-level reports.
-func reportWindows(sum func(span time.Duration) (SLAValue, error)) ([]SLAValue, error) {
 	out := make([]SLAValue, 0, len(SLAWindows))
 	for _, w := range SLAWindows {
-		value, err := sum(w.Span)
+		value, err := s.sumSLA(service, w.Span, now)
 		if err != nil {
 			return nil, err
 		}

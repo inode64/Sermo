@@ -150,32 +150,6 @@ func (s *Store) updateCheckSnapshots(upsertSQL, deleteSQL, what string, deltas m
 	return nil
 }
 
-// replaceServiceRows swaps one service's rows in a name-keyed table inside a
-// transaction: DELETE via deleteSQL, then insert each record in sorted-name
-// order. what labels the transaction-step errors ("<what> update",
-// "clear <what>s", "commit <what>s"); insert keeps each table's own SQL and
-// per-row error context.
-func replaceServiceRows[T any](s *Store, service, deleteSQL, what string, records map[string]T, insert func(tx *sql.Tx, name string, rec T) error) error {
-	tx, err := s.db.BeginTx(s.sqlCtx(), nil)
-	if err != nil {
-		return fmt.Errorf("begin %s update for %s: %w", what, service, err)
-	}
-	defer func() { _ = tx.Rollback() }()
-
-	if _, err := tx.ExecContext(s.sqlCtx(), deleteSQL, service); err != nil {
-		return fmt.Errorf("clear %ss for %s: %w", what, service, err)
-	}
-	for _, name := range slices.Sorted(maps.Keys(records)) {
-		if err := insert(tx, name, records[name]); err != nil {
-			return err
-		}
-	}
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("commit %ss for %s: %w", what, service, err)
-	}
-	return nil
-}
-
 // WatchCheckSnapshots returns every persisted host-watch snapshot, grouped by
 // watch name and keyed by the stable result slot.
 func (s *Store) WatchCheckSnapshots() (map[string]map[string]CheckSnapshotRecord, error) {
@@ -195,7 +169,7 @@ func (s *Store) WatchCheckSnapshots() (map[string]map[string]CheckSnapshotRecord
 // also deleted with deleteSQL (group, slot): a row whose target is no longer
 // configured is never rewritten and would otherwise be reported on every start.
 func (s *Store) groupedCheckSnapshots(query, deleteSQL, label string) (map[string]map[string]CheckSnapshotRecord, error) {
-	rows, err := s.reads().QueryContext(s.sqlCtx(), query)
+	rows, err := s.reader.QueryContext(s.sqlCtx(), query)
 	if err != nil {
 		return nil, fmt.Errorf("load %s: %w", label, err)
 	}
