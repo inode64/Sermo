@@ -33,6 +33,30 @@ rules:
 	mustHave(t, issues, `then.action "explode" is not one of`)
 }
 
+// A misspelt window key would drop the window and let the restart act on the
+// first failing cycle, so rule and service-watch entries reject unknown keys.
+func TestValidateRejectsUnknownRuleAndWatchKeys(t *testing.T) {
+	issues := validateService(t, `
+name: svc
+service: x
+checks:
+  http: { type: http, url: "http://127.0.0.1/" }
+rules:
+  restart-if-down:
+    type: remediation
+    if: { failed: { check: http } }
+    fro: { cycles: 3 }
+    then: { action: restart }
+watches:
+  port:
+    check: { type: tcp, host: 127.0.0.1, port: 80 }
+    fro: { cycles: 3 }
+    then: { action: restart }
+`)
+	mustHave(t, issues, "rules.restart-if-down.fro is not supported")
+	mustHave(t, issues, "watches.port.fro is not supported")
+}
+
 func TestValidateClearWindowSection(t *testing.T) {
 	issues := validateService(t, `
 name: svc

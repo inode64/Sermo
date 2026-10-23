@@ -4679,8 +4679,10 @@ sermoctl config validate          # whole Sermo configuration
 
 Unknown top-level keys are errors in `sermo.yml`, in service and catalog
 service documents and in host watch documents, as they are under `engine`,
-`paths` and `defaults`. A misspelling such as `dryrun: true` would otherwise
-be ignored and leave the service performing real remediation.
+`paths`, `defaults` and `web`, and in each `rules.<name>` and service
+`watches.<name>` entry. A misspelling such as `dryrun: true` would otherwise
+be ignored and leave the service performing real remediation, and a misspelt
+`for:` would let a restart act on the first failing cycle.
 
 ## Diagnostics
 

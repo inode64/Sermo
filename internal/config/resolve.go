@@ -658,6 +658,11 @@ func expandServiceWatches(tree map[string]any) []string {
 			delete(watches, name)
 			continue
 		}
+		// Checked here because promotion consumes most entries before the
+		// resolved-tree validators run, and drops any key it does not copy.
+		for key := range unknownBlockKeys(entry, validServiceWatchKeys) {
+			add(validationNotSupportedFormat, watchFieldPath(name, key))
+		}
 		if check, _ := entry[WatchKeyCheck].(map[string]any); isWatchOnlyType(check) {
 			// A stateful watch that tracks a set of items has no single-shot
 			// check to promote (validateServiceWatches owns it).
