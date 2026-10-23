@@ -584,3 +584,45 @@ func TestHardwareRAIDStateFindingOutranksAdvisories(t *testing.T) {
 		t.Fatalf("advisories = %v, want only the counter", got)
 	}
 }
+
+// StorCLI reports drives and volumes as JSON object members, which Go maps
+// iterate in random order. The published details and issues must not reorder
+// between cycles: the dashboard rows would jump and every cycle would rewrite
+// the snapshot.
+func TestStorCLIDetailsKeepAStableOrder(t *testing.T) {
+	drives := `{"Controllers": [{"Command Status": {"Controller": 0, "Status": "Success"}, "Response Data": {
+	  "Drive /c0/e252/s0": [{"EID:Slt": "252:0", "State": "Offln"}],
+	  "Drive /c0/e252/s1": [{"EID:Slt": "252:1", "State": "Onln"}],
+	  "Drive /c0/e252/s2": [{"EID:Slt": "252:2", "State": "Offln"}],
+	  "Drive /c0/e252/s3": [{"EID:Slt": "252:3", "State": "Onln"}]
+	}}]}`
+	volumes := `{"Controllers": [{"Command Status": {"Controller": 0, "Status": "Success"}, "Response Data": {
+	  "/c0/v0": [{"DG/VD": "0/0", "State": "Dgrd"}],
+	  "/c0/v1": [{"DG/VD": "1/1", "State": "Optl"}],
+	  "/c0/v2": [{"DG/VD": "2/2", "State": "Dgrd"}]
+	}}]}`
+	ids := func(o hardwareRAIDObservation) string {
+		var out []string
+		for _, d := range o.DriveDetails {
+			out = append(out, d.ID)
+		}
+		for _, v := range o.VolumeDetails {
+			out = append(out, v.ID)
+		}
+		return strings.Join(append(out, o.Issues...), ",")
+	}
+	first, err := parseStorCLIReports(healthyStorCLIController, drives, volumes, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := ids(first)
+	for range 50 {
+		o, err := parseStorCLIReports(healthyStorCLIController, drives, volumes, "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := ids(o); got != want {
+			t.Fatalf("order changed between parses:\n got %s\nwant %s", got, want)
+		}
+	}
+}

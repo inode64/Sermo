@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"regexp"
 	"slices"
 	"strconv"
@@ -525,7 +526,8 @@ func parseStorCLIDrives(envelope storCLIEnvelope, observation *hardwareRAIDObser
 	for _, controller := range envelope.Controllers {
 		id := fmt.Sprintf("c%d", controller.CommandStatus.Controller)
 		checkStorCLICommandStatus(id, controller.CommandStatus.Status, controller.CommandStatus.Description, observation)
-		for key, raw := range controller.ResponseData {
+		for _, key := range slices.Sorted(maps.Keys(controller.ResponseData)) {
+			raw := controller.ResponseData[key]
 			if !strings.HasPrefix(key, "Drive /") || strings.HasSuffix(key, " - Detailed Information") {
 				continue
 			}
@@ -540,7 +542,8 @@ func parseStorCLIDrives(envelope storCLIEnvelope, observation *hardwareRAIDObser
 		// Detailed attributes deliberately run after the summary table. Both are
 		// JSON object members and therefore unordered; the detail section may omit
 		// media type while still supplying the more precise raw capacity.
-		for key, raw := range controller.ResponseData {
+		for _, key := range slices.Sorted(maps.Keys(controller.ResponseData)) {
+			raw := controller.ResponseData[key]
 			if strings.HasSuffix(key, " - Detailed Information") {
 				parseStorCLIDriveDetail(raw, observation)
 			}
@@ -566,7 +569,8 @@ func parseStorCLIDriveDetail(raw json.RawMessage, observation *hardwareRAIDObser
 	if json.Unmarshal(raw, &sections) != nil {
 		return
 	}
-	for key, sectionRaw := range sections {
+	for _, key := range slices.Sorted(maps.Keys(sections)) {
+		sectionRaw := sections[key]
 		suffix, supported := storCLIDriveSectionSuffix(key)
 		if !supported {
 			continue
@@ -625,12 +629,14 @@ func parseStorCLIVolumes(envelope storCLIEnvelope, observation *hardwareRAIDObse
 }
 
 func parseStorCLIControllerVolumes(controller string, response map[string]json.RawMessage, observation *hardwareRAIDObservation) {
-	for key, raw := range response {
+	for _, key := range slices.Sorted(maps.Keys(response)) {
+		raw := response[key]
 		if strings.HasPrefix(key, "/"+controller+"/v") {
 			parseStorCLIVolumeRows(controller, key, raw, observation)
 		}
 	}
-	for key, raw := range response {
+	for _, key := range slices.Sorted(maps.Keys(response)) {
+		raw := response[key]
 		if strings.HasPrefix(key, "VD") && strings.HasSuffix(key, " Properties") {
 			parseStorCLIVolumeProperties(controller, key, raw, observation)
 		}
@@ -694,7 +700,8 @@ func parseStorCLIVolumeProperties(controller, key string, raw json.RawMessage, o
 func parseStorCLIRebuild(envelope storCLIEnvelope, observation *hardwareRAIDObservation) {
 	for _, controller := range envelope.Controllers {
 		parseStorCLIRebuildRows(controller, controller.ResponseRows, observation)
-		for key, raw := range controller.ResponseData {
+		for _, key := range slices.Sorted(maps.Keys(controller.ResponseData)) {
+			raw := controller.ResponseData[key]
 			if !strings.Contains(strings.ToLower(key), "rebuild") {
 				continue
 			}
