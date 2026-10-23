@@ -234,7 +234,7 @@ func TestScanServicesMalformedFileWarnsMatchingService(t *testing.T) {
 	}
 }
 
-func TestIsRetryableLockRead(t *testing.T) {
+func TestIsMissingLock(t *testing.T) {
 	missing := fmt.Errorf("read /x: %w", fs.ErrNotExist)
 	if !isMissingLock(missing) {
 		t.Fatal("isMissingLock must see through readLockFile wrapping")
@@ -242,18 +242,14 @@ func TestIsRetryableLockRead(t *testing.T) {
 	if os.IsNotExist(missing) {
 		t.Fatal("os.IsNotExist must not be used on readLockFile errors")
 	}
-	if !isRetryableLockRead(missing) {
-		t.Fatal("missing lock should be retryable")
-	}
-
 	incomplete := fmt.Errorf("parse /x: %w", &json.SyntaxError{Offset: 0})
-	if isRetryableLockRead(incomplete) {
-		t.Fatal("incomplete published JSON must report corruption")
+	if isMissingLock(incomplete) {
+		t.Fatal("incomplete published JSON must report corruption, not a missing lock")
 	}
 
 	other := errors.New("permission denied")
-	if isRetryableLockRead(other) {
-		t.Fatal("non-transient errors must not be retryable")
+	if isMissingLock(other) {
+		t.Fatal("non-transient errors must not read as a missing lock")
 	}
 }
 
