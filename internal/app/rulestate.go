@@ -98,11 +98,15 @@ func remediationRecordsEqual(a, b state.RemediationRecord) bool {
 }
 
 func ruleWindowRecordsEqual(a, b state.RuleWindowRecord) bool {
-	return a.Consecutive == b.Consecutive && a.Firing == b.Firing && a.ClearConsecutive == b.ClearConsecutive &&
+	return windowRecordsEqual(a.WindowRecord, b.WindowRecord) && a.Firing == b.Firing &&
+		a.Severity == b.Severity && a.NotifiedSeverity == b.NotifiedSeverity
+}
+
+func windowRecordsEqual(a, b state.WindowRecord) bool {
+	return a.Consecutive == b.Consecutive && a.ClearConsecutive == b.ClearConsecutive &&
 		a.TrueSince.Equal(b.TrueSince) && a.ClearSince.Equal(b.ClearSince) &&
 		slices.Equal(a.History, b.History) &&
 		slices.EqualFunc(a.TimedHistory, b.TimedHistory, windowSamplesEqual) &&
-		a.Severity == b.Severity && a.NotifiedSeverity == b.NotifiedSeverity &&
 		(a.Rungs == nil) == (b.Rungs == nil) && slices.EqualFunc(a.Rungs, b.Rungs, entryWindowsEqual)
 }
 
@@ -196,11 +200,11 @@ func ruleWindowRecord(window *rules.WindowState) state.RuleWindowRecord {
 		History:          snapshot.History,
 		TrueSince:        snapshot.TrueSince,
 		TimedHistory:     snapshot.TimedHistory,
-		Firing:           snapshot.Firing,
 		ClearConsecutive: snapshot.ClearConsecutive,
 		ClearSince:       snapshot.ClearSince,
+		Rungs:            snapshot.Rungs,
+		Firing:           snapshot.Firing,
 		Severity:         snapshot.Severity.String(),
 		NotifiedSeverity: snapshot.NotifiedSeverity.String(),
-		Rungs:            snapshot.Rungs,
 	}
 }

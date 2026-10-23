@@ -68,30 +68,15 @@ func (w *Watch) runtimeRecord() state.WatchRuntimeRecord {
 		Policy:             remediationToRecord(&w.policyState),
 	}
 	if w.Window.For != nil || w.Window.Within != nil || w.Window.Clear != nil {
-		rec.Window = watchWindowRecord(&w.state)
+		rec.Window = ruleWindowRecord(&w.state).WindowRecord
 	}
 	return rec
 }
 
 func watchWindowStateFromRecord(rec state.WatchRuntimeRecord) *rules.WindowState {
-	window := watchWindowAsRuleRecord(rec.Window)
-	window.Firing = rec.Firing
-	window.Severity = rec.Severity
-	window.NotifiedSeverity = rec.NotifiedSeverity
-	return windowStateFromRecord(window)
-}
-
-func watchWindowRecord(window *rules.WindowState) state.WatchWindowRecord {
-	rec := ruleWindowRecord(window)
-	return state.WatchWindowRecord{
-		Consecutive:      rec.Consecutive,
-		History:          rec.History,
-		TrueSince:        rec.TrueSince,
-		TimedHistory:     rec.TimedHistory,
-		ClearConsecutive: rec.ClearConsecutive,
-		ClearSince:       rec.ClearSince,
-		Rungs:            rec.Rungs,
-	}
+	return windowStateFromRecord(state.RuleWindowRecord{
+		WindowRecord: rec.Window, Firing: rec.Firing, Severity: rec.Severity, NotifiedSeverity: rec.NotifiedSeverity,
+	})
 }
 
 // reconcileRestoredEpisode closes an episode the previous process left open
@@ -144,18 +129,6 @@ func watchRuntimeRecordsEqual(a, b state.WatchRuntimeRecord) bool {
 		a.LastNotifyAt.Equal(b.LastNotifyAt) &&
 		a.Severity == b.Severity && a.NotifiedSeverity == b.NotifiedSeverity &&
 		a.TransitionSeverity == b.TransitionSeverity &&
-		ruleWindowRecordsEqual(watchWindowAsRuleRecord(a.Window), watchWindowAsRuleRecord(b.Window)) &&
+		windowRecordsEqual(a.Window, b.Window) &&
 		remediationRecordsEqual(a.Policy, b.Policy)
-}
-
-func watchWindowAsRuleRecord(rec state.WatchWindowRecord) state.RuleWindowRecord {
-	return state.RuleWindowRecord{
-		Consecutive:      rec.Consecutive,
-		History:          rec.History,
-		TrueSince:        rec.TrueSince,
-		TimedHistory:     rec.TimedHistory,
-		ClearConsecutive: rec.ClearConsecutive,
-		ClearSince:       rec.ClearSince,
-		Rungs:            rec.Rungs,
-	}
 }
