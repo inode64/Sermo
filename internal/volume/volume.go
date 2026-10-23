@@ -67,10 +67,6 @@ const (
 	lvExtendSizeArgFormat = "-L+%db"
 )
 
-// MountSource returns the current mount table. Injected for tests; the default
-// reads /proc/mounts.
-type MountSource = checks.MountSamplerFunc
-
 // Target is a resolved expansion target: the containing mounted filesystem and
 // the LVM logical volume backing it.
 type Target struct {
@@ -90,8 +86,8 @@ type Result struct {
 // Expander runs LVM/filesystem expansion through an injected command runner.
 type Expander struct {
 	Runner  execx.Runner
-	Mounts  MountSource   // nil -> /proc/mounts
-	Timeout time.Duration // per command; 0 -> DefaultCommandTimeout
+	Mounts  checks.MountSamplerFunc // nil -> /proc/mounts
+	Timeout time.Duration           // per command; 0 -> DefaultCommandTimeout
 	// FSSize reports a mounted filesystem's total size in bytes; nil uses
 	// statfs(2). Injected for tests.
 	FSSize func(mountpoint string) (int64, error)
@@ -352,7 +348,7 @@ func (e Expander) vgFreeBytes(ctx context.Context, vg string) (int64, error) {
 // sysfs, cgroup, ...), autofs placeholders and duplicate mount points. It is
 // the candidate list the volume wizard offers. source is injectable for tests;
 // nil reads /proc/mounts.
-func List(source MountSource) ([]checks.Mount, error) {
+func List(source checks.MountSamplerFunc) ([]checks.Mount, error) {
 	if source == nil {
 		source = procMounts
 	}

@@ -226,8 +226,8 @@ func (w *fileWatcher) snapshot(current map[string]fileState, paths []string) che
 	}
 	data[checks.DataKeyKind] = sample.kind
 	data[checks.DataKeySize] = sample.size
-	data[checks.DataKeyMode] = fmt.Sprintf(fileModeFormat, sample.perm)
-	data[checks.CheckKeyOwner] = fmt.Sprintf(fileOwnerFormat, sample.uid, sample.gid)
+	data[checks.DataKeyMode] = fmt.Sprintf(checks.FileModeFormat, sample.perm)
+	data[checks.CheckKeyOwner] = fmt.Sprintf(checks.FileOwnerFormat, sample.uid, sample.gid)
 	data[checks.DataKeyModifiedAt] = sample.modifiedAt.UTC().Format(time.RFC3339)
 	if w.cond.olderThan > 0 {
 		data[checks.DataKeyAge] = units.HumanizeDuration(sample.age.Round(time.Second))
@@ -374,16 +374,16 @@ func (w *fileWatcher) diff(ctx context.Context, path string, prev, cur fileState
 		w.fireSizeThreshold(ctx, path, cur)
 	}
 	if c.permChange && cur.perm != prev.perm {
-		w.fire(ctx, path, fileChangePermissions, fmt.Sprintf("%s permissions %04o -> %04o", path, prev.perm, cur.perm), map[string]any{
-			sermoEnvOld: fmt.Sprintf(fileModeFormat, prev.perm),
-			sermoEnvNew: fmt.Sprintf(fileModeFormat, cur.perm),
+		w.fire(ctx, path, fileChangePermissions, fmt.Sprintf("%s permissions "+checks.FileModeFormat+" -> "+checks.FileModeFormat, path, prev.perm, cur.perm), map[string]any{
+			sermoEnvOld: fmt.Sprintf(checks.FileModeFormat, prev.perm),
+			sermoEnvNew: fmt.Sprintf(checks.FileModeFormat, cur.perm),
 		})
 	}
 	if c.ownerChange && (cur.uid != prev.uid || cur.gid != prev.gid) {
 		w.fire(ctx, path, fileChangeOwner,
 			fmt.Sprintf("%s owner %d:%d -> %d:%d", path, prev.uid, prev.gid, cur.uid, cur.gid), map[string]any{
-				sermoEnvOld: fmt.Sprintf(fileOwnerFormat, prev.uid, prev.gid),
-				sermoEnvNew: fmt.Sprintf(fileOwnerFormat, cur.uid, cur.gid),
+				sermoEnvOld: fmt.Sprintf(checks.FileOwnerFormat, prev.uid, prev.gid),
+				sermoEnvNew: fmt.Sprintf(checks.FileOwnerFormat, cur.uid, cur.gid),
 			})
 	}
 }

@@ -17,7 +17,6 @@ import (
 )
 
 const (
-	controlKeyType     = config.EntryKeyType
 	controlTypeSummary = virt.ControlType + ", " + virt.NetworkControlType + ", " + dockerctl.ControlType
 )
 
@@ -238,5 +237,5 @@ func controlType(tree map[string]any) (string, bool, error) {
 	if !ok {
 		return "", true, errors.New("control must be a mapping")
 	}
-	return cfgval.String(control[controlKeyType]), true, nil
+	return cfgval.String(control[config.EntryKeyType]), true, nil
 }

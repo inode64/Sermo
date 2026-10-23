@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"io"
 	"net"
+	"sermo/internal/netutil"
 	"testing"
 	"time"
 )
@@ -72,7 +73,7 @@ func TestLDAPProbeHonorsDeadlineAfterSlowHandshake(t *testing.T) {
 	defer cancel()
 	probe, _ := Lookup(ProtocolNameLDAP)
 	start := time.Now()
-	_, err := probe.Probe(ctx, Config{Host: "127.0.0.1", Port: port, TLS: TLSModeSkipVerify})
+	_, err := probe.Probe(ctx, Config{Host: "127.0.0.1", Port: port, TLS: netutil.TLSModeSkipVerify})
 	elapsed := time.Since(start)
 	if err == nil {
 		t.Fatal("probe of a silent directory succeeded")

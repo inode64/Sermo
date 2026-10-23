@@ -192,7 +192,6 @@ const (
 	ExtraKeyDomainRunning    = "domain.running"
 	ExtraKeyInode            = "inode"
 	ExtraKeyKafkaAPICount    = "api_count"
-	ExtraKeyKafkaErrorCode   = ExtraKeyErrorCode
 	ExtraKeyKafkaProduceAPI  = "produce_api"
 	ExtraKeyKafkaVoteAPI     = "vote_api"
 	ExtraKeyLocalAddress     = "local_address"
@@ -243,19 +242,15 @@ const (
 // ParamValueTrue is the string form used for true boolean values in Config.Params.
 const ParamValueTrue = "true"
 
-// TLSModeSkipVerify is the tls mode that enables TLS without certificate
-// verification.
-const TLSModeSkipVerify = netutil.TLSModeSkipVerify
-
 const (
 	// TLSValueSummary is the user-facing list of accepted connection-check TLS values.
-	TLSValueSummary = "a boolean or " + TLSModeSkipVerify
+	TLSValueSummary = "a boolean or " + netutil.TLSModeSkipVerify
 	// PostgresTLSValueSummary extends TLSValueSummary with the sslmode names
 	// only the postgres protocol accepts.
 	PostgresTLSValueSummary = TLSValueSummary + ", or a PostgreSQL sslmode (" +
 		tlsDisable + "/" + tlsPrefer + "/" + tlsRequire + "/" + tlsVerifyCA + "/" + tlsVerifyFull + ")"
 	// TLSScalarSummary is the user-facing scalar form accepted in YAML.
-	TLSScalarSummary = "true/false/" + TLSModeSkipVerify
+	TLSScalarSummary = "true/false/" + netutil.TLSModeSkipVerify
 )
 
 // Transport names accepted by protocol params that expose a network transport.
@@ -342,7 +337,6 @@ const (
 	httpHeaderServer        = httpx.HeaderServer
 	httpHeaderSyncthingAuth = "X-Api-Key"
 
-	tlsSkipVerify = TLSModeSkipVerify
 	// pgx's own sslmode names; the shared friendly spellings are netutil's.
 	tlsDisable    = "disable"
 	tlsRequire    = "require"

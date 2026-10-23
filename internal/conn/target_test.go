@@ -117,7 +117,7 @@ func TestResolveProtocolTarget(t *testing.T) {
 		{
 			name:     "local socket default",
 			protocol: ProtocolNameDocker,
-			want:     Config{Host: DefaultHost, Port: dockerctl.DefaultPort, Socket: DefaultDockerSocket},
+			want:     Config{Host: DefaultHost, Port: dockerctl.DefaultPort, Socket: dockerctl.DefaultSocket},
 		},
 		{
 			name:     "acpid socket default",

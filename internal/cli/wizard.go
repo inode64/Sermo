@@ -257,7 +257,7 @@ func listVolumes() ([]assist.Volume, error) {
 	return listVolumesFrom(nil)
 }
 
-func listVolumesFrom(source volume.MountSource) ([]assist.Volume, error) {
+func listVolumesFrom(source checks.MountSamplerFunc) ([]assist.Volume, error) {
 	mounts, err := volume.List(source)
 	if err != nil {
 		return nil, fmt.Errorf("list volumes: %w", err)

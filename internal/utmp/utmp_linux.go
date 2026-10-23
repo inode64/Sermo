@@ -32,8 +32,6 @@ const (
 	utmpLegacyRunPath = "/var/run/utmp"
 )
 
-var nativeEndian = binary.NativeEndian
-
 // defaultPaths are the usual utmp locations; /run/utmp is canonical, with the
 // legacy /var/run/utmp kept as a fallback.
 var defaultPaths = []string{utmpRunPath, utmpLegacyRunPath}
@@ -65,10 +63,10 @@ func parse(data []byte) []Session {
 	for len(data) >= recordSize {
 		rec := data[:recordSize]
 		data = data[recordSize:]
-		if nativeEndian.Uint16(rec[:2]) != userProcess {
+		if binary.NativeEndian.Uint16(rec[:2]) != userProcess {
 			continue
 		}
-		pidBits := nativeEndian.Uint32(rec[pidOffset : pidOffset+pidSize])
+		pidBits := binary.NativeEndian.Uint32(rec[pidOffset : pidOffset+pidSize])
 		pid := 0
 		if pidBits <= math.MaxInt32 {
 			pid = int(pidBits)

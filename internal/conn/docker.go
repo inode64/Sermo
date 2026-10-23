@@ -7,9 +7,6 @@ import (
 	"sermo/internal/dockerctl"
 )
 
-// DefaultDockerSocket is Docker Engine's local Unix API socket.
-const DefaultDockerSocket = dockerctl.DefaultSocket
-
 // DockerContainerStatusRunning is the running status emitted in
 // ExtraKeyContainerStatus.
 const DockerContainerStatusRunning = dockerctl.ContainerStatusRunning

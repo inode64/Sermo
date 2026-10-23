@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sermo/internal/config"
 	"sermo/internal/hostfs"
 	"strconv"
 	"strings"
@@ -44,7 +45,7 @@ func acquireInstanceLock(runtimeDir string) (*os.File, error) {
 // readDaemonPID returns the PID from <runtime>/sermod.pid when present and
 // parseable. It is best-effort context for an already-running warning.
 func readDaemonPID(runtimeDir string) int {
-	data, err := hostfs.ReadFile(filepath.Join(runtimeDir, daemonPIDFilename))
+	data, err := hostfs.ReadFile(filepath.Join(runtimeDir, config.DaemonPIDFilename))
 	if err != nil {
 		return 0
 	}
