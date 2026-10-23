@@ -15,28 +15,14 @@ import (
 	"slices"
 
 	"sermo/internal/config"
-)
-
-// Level is a finding's severity.
-type Level string
-
-// Finding severity levels.
-const (
-	LevelError   Level = "error"
-	LevelWarning Level = "warning"
-)
-
-const (
-	levelRankError = iota
-	levelRankWarning
-	levelRankInfo
+	"sermo/internal/severity"
 )
 
 // Finding is one diagnostic result.
 type Finding struct {
-	Level   Level  `json:"level"`
-	Scope   string `json:"scope"`
-	Message string `json:"message"`
+	Level   severity.Level `json:"level"`
+	Scope   string         `json:"scope"`
+	Message string         `json:"message"`
 }
 
 // Result is the full set of findings.
@@ -69,32 +55,21 @@ func Diagnose(cfg *config.Config, host Host) Result {
 
 type builder struct{ findings []Finding }
 
-func (b *builder) addf(level Level, scope, format string, args ...any) {
+func (b *builder) addf(level severity.Level, scope, format string, args ...any) {
 	b.findings = append(b.findings, Finding{Level: level, Scope: scope, Message: fmt.Sprintf(format, args...)})
 }
 
 func (b *builder) sort() {
 	slices.SortStableFunc(b.findings, func(a, b Finding) int {
-		return cmp.Or(cmp.Compare(levelRank(a.Level), levelRank(b.Level)), cmp.Compare(a.Scope, b.Scope))
+		return cmp.Or(cmp.Compare(b.Level.Rank(), a.Level.Rank()), cmp.Compare(a.Scope, b.Scope))
 	})
-}
-
-func levelRank(level Level) int {
-	switch level {
-	case LevelError:
-		return levelRankError
-	case LevelWarning:
-		return levelRankWarning
-	default:
-		return levelRankInfo
-	}
 }
 
 func diagConfig(b *builder, cfg *config.Config) {
 	for _, iss := range config.Validate(cfg) {
-		b.addf(LevelError, iss.Scope, "%s", iss.Msg)
+		b.addf(severity.Error, iss.Scope, "%s", iss.Msg)
 	}
 	for _, iss := range config.Warnings(cfg) {
-		b.addf(LevelWarning, iss.Scope, "%s", iss.Msg)
+		b.addf(severity.Warning, iss.Scope, "%s", iss.Msg)
 	}
 }

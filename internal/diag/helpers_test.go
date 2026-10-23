@@ -1,29 +1,28 @@
 package diag
 
 import (
+	"sermo/internal/severity"
 	"strings"
 	"testing"
 	"time"
 )
 
-// builder.sort orders findings by severity (error < warning < info) and then by
-// scope. Pin the exact order so a flipped comparison (sort by scope first, or
-// reversed severity/scope) is caught.
+// builder.sort orders findings gravest first and then by scope. Pin the exact
+// order so a flipped comparison (sort by scope first, or reversed
+// severity/scope) is caught.
 func TestBuilderSort(t *testing.T) {
-	const testLevelOther Level = "info"
-
 	b := &builder{}
-	b.addf(LevelWarning, "alpha", "w")   // rank 1
-	b.addf(LevelError, "zeta", "e1")     // rank 0
-	b.addf(LevelError, "beta", "e2")     // rank 0
-	b.addf(testLevelOther, "gamma", "i") // rank 2
+	b.addf(severity.Warning, "alpha", "w")
+	b.addf(severity.Error, "zeta", "e1")
+	b.addf(severity.Error, "beta", "e2")
+	b.addf(severity.Info, "gamma", "i")
 	b.sort()
 
 	want := []Finding{
-		{Level: LevelError, Scope: "beta"},
-		{Level: LevelError, Scope: "zeta"},
-		{Level: LevelWarning, Scope: "alpha"},
-		{Level: testLevelOther, Scope: "gamma"},
+		{Level: severity.Error, Scope: "beta"},
+		{Level: severity.Error, Scope: "zeta"},
+		{Level: severity.Warning, Scope: "alpha"},
+		{Level: severity.Info, Scope: "gamma"},
 	}
 	if len(b.findings) != len(want) {
 		t.Fatalf("findings len = %d, want %d", len(b.findings), len(want))

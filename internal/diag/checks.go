@@ -9,6 +9,7 @@ import (
 	"sermo/internal/cfgval"
 	"sermo/internal/checks"
 	"sermo/internal/config"
+	"sermo/internal/severity"
 )
 
 const (
@@ -78,7 +79,7 @@ func diagWatches(b *builder, cfg *config.Config, global time.Duration, host Host
 			if paths, err := config.FileWatchPaths(check); err == nil {
 				for _, path := range paths {
 					if !host.PathExists(path) {
-						b.addf(LevelWarning, scope, diagMessagePathMissing, path)
+						b.addf(severity.Warning, scope, diagMessagePathMissing, path)
 					}
 				}
 			}
@@ -98,13 +99,13 @@ func diagCheckResources(b *builder, scope string, entry map[string]any, host Hos
 		diagStorageResources(b, scope, entry, host)
 	case checks.CheckTypeCount:
 		if p := cfgval.AsString(entry[checks.CheckKeyPath]); p != "" && !host.PathExists(p) {
-			b.addf(LevelWarning, scope, "directory %q does not exist", p)
+			b.addf(severity.Warning, scope, "directory %q does not exist", p)
 		}
 	case checks.CheckTypeDiskIO:
 		warnMissingKernelResource(b, scope, entry, checks.CheckKeyDevice, checks.SysBlockPath, "block device %q does not exist (no /sys/class/block entry)", host)
 	case checks.CheckTypeHdparm, checks.CheckTypeSmart:
 		if dev := cfgval.AsString(entry[checks.CheckKeyDevice]); dev != "" && !host.PathExists(dev) {
-			b.addf(LevelWarning, scope, "device %q does not exist", dev)
+			b.addf(severity.Warning, scope, "device %q does not exist", dev)
 		}
 	case checks.CheckTypeRoute:
 		warnMissingInterface(b, scope, entry, host)
@@ -118,13 +119,13 @@ func diagCheckResources(b *builder, scope string, entry map[string]any, host Hos
 func warnMissingKernelResource(b *builder, scope string, entry map[string]any, key, root, message string, host Host) {
 	resource := cfgval.AsString(entry[key])
 	if resource != "" && !host.PathExists(root+"/"+resource) {
-		b.addf(LevelWarning, scope, message, resource)
+		b.addf(severity.Warning, scope, message, resource)
 	}
 }
 
 func warnMissingInterface(b *builder, scope string, entry map[string]any, host Host) {
 	if iface := cfgval.AsString(entry[checks.CheckKeyInterface]); iface != "" && !host.InterfaceExists(iface) {
-		b.addf(LevelWarning, scope, "network interface %q does not exist", iface)
+		b.addf(severity.Warning, scope, "network interface %q does not exist", iface)
 	}
 }
 
@@ -136,11 +137,11 @@ func diagStorageResources(b *builder, scope string, fields map[string]any, host 
 		return
 	}
 	if !host.PathExists(p) {
-		b.addf(LevelWarning, scope, diagMessagePathMissing, p)
+		b.addf(severity.Warning, scope, diagMessagePathMissing, p)
 		return
 	}
 	if hasMountCondition(fields) && !host.IsMountPoint(p) {
-		b.addf(LevelWarning, scope, "%q has mount conditions but is not currently a mount point", p)
+		b.addf(severity.Warning, scope, "%q has mount conditions but is not currently a mount point", p)
 	}
 }
 
@@ -154,6 +155,6 @@ func hasMountCondition(fields map[string]any) bool {
 // checkAlignment uses the same interval policy as scheduling and snapshot freshness.
 func checkAlignment(b *builder, scope string, d, resolution time.Duration) {
 	if _, warning := checks.ResolveInterval(d, resolution); warning != "" {
-		b.addf(LevelWarning, scope, "%s", warning)
+		b.addf(severity.Warning, scope, "%s", warning)
 	}
 }
