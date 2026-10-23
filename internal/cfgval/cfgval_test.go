@@ -634,7 +634,7 @@ func TestUintAndFloatAcceptEveryNumericShape(t *testing.T) {
 			t.Errorf("Uint(%s %v) = %d/%v, want 7", name, v, got, ok)
 		}
 	}
-	for name, v := range map[string]any{"negative int": -1, "negative float": -0.5, "text": "seven", "nil": nil, "bool": true} {
+	for name, v := range map[string]any{"negative int": -1, "negative float": -0.5, "text": "seven", "nil": nil, "bool": true, "2^64 float": math.Exp2(64)} {
 		if _, ok := Uint(v); ok {
 			t.Errorf("Uint(%s) must fail", name)
 		}
