@@ -230,3 +230,15 @@ func TestClientGetReportsOversizedAndBrokenBodies(t *testing.T) {
 		t.Fatalf("Inspect() error = %v, want a body read error", err)
 	}
 }
+
+// A TCP daemon is reached directly: an ambient HTTP(S)_PROXY would measure and
+// control the proxy instead, and bypass the probe's interface-bound dialer.
+func TestTCPClientIgnoresProxyEnvironment(t *testing.T) {
+	t.Setenv("HTTP_PROXY", "http://proxy.invalid:3128")
+	t.Setenv("HTTPS_PROXY", "http://proxy.invalid:3128")
+	c := NewClient(Spec{Host: "192.0.2.10", Port: DefaultPort})
+	tr, ok := c.HTTP.Transport.(*http.Transport)
+	if !ok || tr.Proxy != nil {
+		t.Fatalf("transport = %#v, want an own transport with no proxy", c.HTTP.Transport)
+	}
+}

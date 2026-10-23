@@ -210,7 +210,9 @@ func NewClient(spec Spec) *Client {
 		scheme = dockerSchemeHTTPS
 		opts.TLS = netutil.TLSClientConfigForMode(host, mode)
 	}
-	return &Client{HTTP: httpx.NewClient(opts), Base: scheme + netutil.URLSchemeSeparator + netutil.JoinHostPort(host, port)}
+	// A probe client never takes the HTTP(S)_PROXY environment: a proxy would
+	// stand in for the daemon and escape the injected interface-bound dialer.
+	return &Client{HTTP: httpx.NewProbeClient(opts), Base: scheme + netutil.URLSchemeSeparator + netutil.JoinHostPort(host, port)}
 }
 
 // CloseIdleConnections closes idle HTTP transport connections.
