@@ -4168,7 +4168,8 @@ after consecutive remediations) or once `max_actions` is reached in the window.
 
 `backoff` grows the effective cooldown after each consecutive remediation:
 `initial` the first time, then multiplied by `factor` each subsequent time,
-capped at `max`. `factor` **defaults to `2`** when omitted (or set to ≤0).
+capped at `max`, including when `factor` is very large. `factor` must be a finite
+number; it **defaults to `2`** when omitted (or set to ≤0).
 Automatic-remediation state is also persisted in `engine.state`: `LastActionAt`,
 recent action timestamps used by `max_actions`, and the current backoff survive a
 `sermod` restart, so restarting the daemon does not bypass cooldown or rate

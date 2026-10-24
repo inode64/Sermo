@@ -2,6 +2,7 @@ package config
 
 import (
 	"maps"
+	"math"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -265,6 +266,12 @@ func validatePolicyExtras(tree map[string]any, add addFunc) {
 	}
 	validatePositiveDurationField(policy, rules.PolicyKeyMaxActionsWindow, policyPathMaxActionsWindow, add)
 	if bo, ok := policy[rules.PolicyKeyBackoff].(map[string]any); ok {
+		if raw, present := bo[rules.BackoffKeyFactor]; present {
+			factor, valid := cfgval.Float(raw)
+			if !valid || math.IsNaN(factor) || math.IsInf(factor, 0) {
+				add("%s must be a finite number", policyPathBackoffFactor)
+			}
+		}
 		initial, initialOK := cfgval.ParseDuration(bo[rules.BackoffKeyInitial])
 		limit, limitOK := cfgval.ParseDuration(bo[rules.BackoffKeyMax])
 		initialOK = initialOK && initial > 0

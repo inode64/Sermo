@@ -31,6 +31,7 @@ const (
 	webPathLoginMessage      = SectionWeb + "." + WebKeyLoginMessage
 
 	policyPathBackoff          = sectionPolicy + "." + rules.PolicyKeyBackoff
+	policyPathBackoffFactor    = policyPathBackoff + "." + rules.BackoffKeyFactor
 	policyPathBackoffInitial   = policyPathBackoff + "." + rules.BackoffKeyInitial
 	policyPathBackoffMax       = policyPathBackoff + "." + rules.BackoffKeyMax
 	policyPathCooldown         = sectionPolicy + "." + rules.PolicyKeyCooldown
