@@ -415,8 +415,11 @@ engine:
 
 `max_parallel_checks` is shared by all service checks, host and service watches,
 inline rule probes, and operation preflight/postflight checks in one daemon.
-Waiting for a slot consumes the check timeout; cancellation while queued returns
-an unavailable observation without starting the probe. Reload preserves running
+A check's timeout starts when it gets a slot, so a check queued behind a burst
+(the daemon's first cycles, several `hdparm` benchmarks, an init system that
+stalls after a reload) runs late instead of reporting unavailable. Cancellation
+while queued (shutdown, reload, an operation's deadline) returns an unavailable
+observation without starting the probe. Reload preserves running
 checks in the same budget. A standalone `sermoctl` command has its own budget;
 separate processes do not share this in-memory limit.
 
