@@ -12,6 +12,15 @@ import (
 
 const blockedActionTTYNotifierName = "operator-tty"
 
+// The catalog guards that deny a restart while a database backup or restore
+// runs (mysql, mariadb, postgres and pgBackRest). The terminal notice keys on
+// the guard, so an override that rewords its message keeps the notice, and
+// another block whose message mentions a backup does not raise it.
+const (
+	guardBlockRestartDuringBackup          = "block-restart-during-backup"
+	guardBlockRestartDuringBackupOrRestore = "block-restart-during-backup-or-restore"
+)
+
 func (a App) notifyInteractiveBlockedAction(ctx context.Context, result operation.Result) {
 	if !shouldNotifyInteractiveBlockedAction(result) {
 		return
@@ -30,7 +39,7 @@ func (a App) notifyInteractiveBlockedAction(ctx context.Context, result operatio
 func shouldNotifyInteractiveBlockedAction(result operation.Result) bool {
 	return result.Status == operation.ResultBlocked &&
 		result.Action == actionRestart &&
-		strings.Contains(strings.ToLower(result.Message), "backup")
+		(result.Guard == guardBlockRestartDuringBackup || result.Guard == guardBlockRestartDuringBackupOrRestore)
 }
 
 func (a App) interactiveUser() (string, bool) {

@@ -506,8 +506,8 @@ func collectVerifyChecks(tree map[string]any) map[string]any {
 
 // guardClosure evaluates guards with lazy named checks. Each referenced check
 // runs at most once per evaluation; unrelated checks never perform I/O.
-func guardClosure(tree map[string]any, deps checks.Deps, sample func(context.Context) checks.MetricReader, changed func(string) (bool, error)) func(context.Context, string) (bool, string, error) {
-	return func(ctx context.Context, action string) (bool, string, error) {
+func guardClosure(tree map[string]any, deps checks.Deps, sample func(context.Context) checks.MetricReader, changed func(string) (bool, error)) func(context.Context, string) (string, string, error) {
+	return func(ctx context.Context, action string) (string, string, error) {
 		runDeps := checkDepsForEval(ctx, deps, sample)
 		ruleSet, _ := rules.ParseRules(tree)
 		section, _ := tree[config.SectionChecks].(map[string]any)

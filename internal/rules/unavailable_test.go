@@ -64,8 +64,8 @@ func TestFailedReportsObservationErrorsButNotSkippedChecks(t *testing.T) {
 			t.Fatalf("not active turned unavailable into true: %v %v", got, err)
 		}
 		guard := []Rule{{Type: RuleGuard, Name: "guard", Blocks: []string{string(ActionRestart)}, If: failed}}
-		if blocked, _, err := Guard(t.Context(), guard, string(ActionRestart), ev); blocked || err == nil {
-			t.Fatalf("guard accepted uncertainty: blocked=%v error=%v", blocked, err)
+		if blocking, _, err := Guard(t.Context(), guard, string(ActionRestart), ev); blocking != "" || err == nil {
+			t.Fatalf("guard accepted uncertainty: blocked=%v error=%v", blocking, err)
 		}
 	}
 }
@@ -119,8 +119,8 @@ func TestBusyChecksNeverTriggerOperations(t *testing.T) {
 		if _, err := ev.EvalRule(t.Context(), Rule{Type: RuleAlert, If: failed, Actions: []Action{{Type: ActionAlert, Message: "x"}}}); err != nil {
 			t.Fatal(err)
 		}
-		if blocked, _, err := Guard(t.Context(), guard, string(ActionRestart), ev); blocked || err == nil {
-			t.Fatalf("guard on busy %s check: blocked=%v error=%v; want fail closed", check, blocked, err)
+		if blocking, _, err := Guard(t.Context(), guard, string(ActionRestart), ev); blocking != "" || err == nil {
+			t.Fatalf("guard on busy %s check: blocked=%v error=%v; want fail closed", check, blocking, err)
 		}
 		notActive := map[string]any{ConditionNot: map[string]any{ConditionActive: map[string]any{FieldCheck: check}}}
 		if got, err := ev.EvalRule(t.Context(), Rule{If: notActive, Actions: []Action{{Type: ActionRestart}}}); got || err != nil {
@@ -194,9 +194,9 @@ func TestOrHoldsDespiteUnknownSibling(t *testing.T) {
 		map[string]any{ConditionFailed: map[string]any{FieldCheck: "smtp_587"}},
 	}}
 	guard := []Rule{{Type: RuleGuard, Name: "guard", Blocks: []string{string(ActionRestart)}, If: holds}}
-	if blocked, _, err := Guard(t.Context(), guard, string(ActionRestart), &Evaluator{Cache: map[string]checks.Result{
+	if blocking, _, err := Guard(t.Context(), guard, string(ActionRestart), &Evaluator{Cache: map[string]checks.Result{
 		"skipped": {OK: true, Skipped: true}, "smtp_587": {OK: false},
-	}}); !blocked || err != nil {
-		t.Fatalf("a guard whose or holds must block: blocked=%v err=%v", blocked, err)
+	}}); blocking == "" || err != nil {
+		t.Fatalf("a guard whose or holds must block: blocked=%v err=%v", blocking, err)
 	}
 }

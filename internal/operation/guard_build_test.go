@@ -27,9 +27,9 @@ func TestGuardPreservesReferencedBuildIssues(t *testing.T) {
 						"count": map[string]any{"op": ">", "value": 1}, "within": "5m", "optional": optional,
 					}}
 					guard := guardClosure(tree, checks.Deps{DefaultTimeout: time.Second}, nil, nil)
-					blocked, _, err := guard(t.Context(), "restart")
-					if blocked || err == nil || !strings.Contains(err.Error(), "regex is invalid") || strings.Contains(err.Error(), "unknown check") {
-						t.Fatalf("malformed reference: blocked=%v err=%v, want original build error", blocked, err)
+					blocking, _, err := guard(t.Context(), "restart")
+					if blocking != "" || err == nil || !strings.Contains(err.Error(), "regex is invalid") || strings.Contains(err.Error(), "unknown check") {
+						t.Fatalf("malformed reference: blocked by %q err=%v, want original build error", blocking, err)
 					}
 				})
 			}
@@ -51,13 +51,13 @@ func TestGuardBuildIssuesPreserveReferencePrecedence(t *testing.T) {
 			tree["preflight"] = map[string]any{"probe": preflight}
 			runner := execxtest.Outputs("ok")
 			guard := guardClosure(tree, checks.Deps{Runner: runner, DefaultTimeout: time.Second}, nil, nil)
-			blocked, _, err := guard(t.Context(), "restart")
+			blocking, _, err := guard(t.Context(), "restart")
 			if validCheck {
-				if blocked || err != nil || len(runner.Calls()) != 1 {
-					t.Fatalf("valid service check must win: blocked=%v err=%v calls=%v", blocked, err, runner.Calls())
+				if blocking != "" || err != nil || len(runner.Calls()) != 1 {
+					t.Fatalf("valid service check must win: blocked by %q err=%v calls=%v", blocking, err, runner.Calls())
 				}
-			} else if blocked || err == nil || !strings.Contains(err.Error(), "command") || len(runner.Calls()) != 0 {
-				t.Fatalf("invalid service check must not fall back to preflight: blocked=%v err=%v calls=%v", blocked, err, runner.Calls())
+			} else if blocking != "" || err == nil || !strings.Contains(err.Error(), "command") || len(runner.Calls()) != 0 {
+				t.Fatalf("invalid service check must not fall back to preflight: blocked by %q err=%v calls=%v", blocking, err, runner.Calls())
 			}
 		})
 	}
@@ -78,10 +78,10 @@ func TestGuardDoesNotRunUnreferencedChecks(t *testing.T) {
 	}
 	runner := execxtest.Outputs("ok")
 	guard := guardClosure(tree, checks.Deps{Runner: runner, DefaultTimeout: time.Second}, nil, nil)
-	if blocked, _, err := guard(t.Context(), "start"); blocked || err != nil || len(runner.Calls()) != 0 {
-		t.Fatalf("unrelated action: blocked=%v err=%v calls=%v", blocked, err, runner.Calls())
+	if blocking, _, err := guard(t.Context(), "start"); blocking != "" || err != nil || len(runner.Calls()) != 0 {
+		t.Fatalf("unrelated action: blocked by %q err=%v calls=%v", blocking, err, runner.Calls())
 	}
-	if blocked, _, err := guard(t.Context(), "restart"); blocked || err != nil || len(runner.Calls()) != 1 {
-		t.Fatalf("referenced guard: blocked=%v err=%v calls=%v", blocked, err, runner.Calls())
+	if blocking, _, err := guard(t.Context(), "restart"); blocking != "" || err != nil || len(runner.Calls()) != 1 {
+		t.Fatalf("referenced guard: blocked by %q err=%v calls=%v", blocking, err, runner.Calls())
 	}
 }
