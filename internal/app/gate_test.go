@@ -95,6 +95,29 @@ func TestApplyGatesRequiresReadsConditionHealth(t *testing.T) {
 	}
 }
 
+// A state sensor asserts nothing about health, but its reading is exactly what
+// a gate on it asks: the catalog senses `nmcli` with `reports: state` so the
+// probe that execs it runs only where the binary exists.
+func TestApplyGatesRequiresReadsAStateSensor(t *testing.T) {
+	w := &Worker{Gates: map[string]CheckGate{"status": {Requires: []string{"nmcli"}}}, cycleRan: ranChecks("nmcli", "status")}
+	absent := map[string]checks.Result{
+		"nmcli":  {Check: "nmcli", Reports: checks.ReportsState, OK: false},
+		"status": {Check: "status", OK: false, Message: "run /usr/bin/nmcli: no such file or directory"},
+	}
+	w.applyGates(absent)
+	if !absent["status"].Skipped {
+		t.Fatalf("status ran while its sensor reads absent: %+v", absent["status"])
+	}
+	present := map[string]checks.Result{
+		"nmcli":  {Check: "nmcli", Reports: checks.ReportsState, OK: true},
+		"status": {Check: "status", OK: false, Message: "boom"},
+	}
+	w.applyGates(present)
+	if present["status"].Skipped {
+		t.Fatalf("status skipped while its sensor reads present: %+v", present["status"])
+	}
+}
+
 // TestApplyGatesRequiresChainIsDeterministic: with port down, query (requires
 // port) and deep (requires query) both failing, deep must be skipped on every
 // cycle. Judging it against query's already rewritten Skipped/OK result made

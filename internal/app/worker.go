@@ -658,12 +658,23 @@ func (w *Worker) gateReason(gate CheckGate, cache map[string]checks.Result) stri
 		if !ok {
 			continue
 		}
-		// Health, not OK: a condition check is OK when its predicate fires.
-		if !d.Healthy() {
+		if !requirementMet(d) {
 			return "requires check " + dep
 		}
 	}
 	return ""
+}
+
+// requirementMet reports whether a `requires` dependency lets its dependent run.
+// A state sensor asserts nothing about health, but its reading is exactly what
+// a gate on it asks (the catalog senses a binary so the probe that execs it
+// runs only where it exists), so it gates by OK. Every other dependency gates
+// by health: a condition check is OK when its predicate fires, i.e. failing.
+func requirementMet(d checks.Result) bool {
+	if d.Verdictless() && !d.Unavailable && !d.Skipped {
+		return d.OK
+	}
+	return d.Healthy()
 }
 
 // requiredCheckFailing is the shared availability and failure-output predicate.
