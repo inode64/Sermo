@@ -45,6 +45,7 @@ configuration omits it.
 - [Storage and mount units](#storage-and-mount-units)
 - [Engine settings](#engine-settings)
   - [Rotating the export logs](#rotating-the-export-logs)
+  - [Principal-process restart notice](#principal-process-restart-notice)
   - [Per-service interval](#per-service-interval)
   - [Operator buttons (buttons:)](#operator-buttons-buttons)
   - [Per-check interval](#per-check-interval)
@@ -60,6 +61,7 @@ configuration omits it.
 - [Notifications](#notifications)
   - [Notification templates](#notification-templates)
   - [Default selection and precedence](#default-selection-and-precedence)
+  - [Fleet-wide event alerts](#fleet-wide-event-alerts)
 - [Telegram report bot](#telegram-report-bot)
 - [Host watches](#host-watches)
   - [then.expand — volume growth (storage watch)](#thenexpand--volume-growth-storage-watch)
@@ -83,6 +85,10 @@ configuration omits it.
   - [zombies — defunct processes](#zombies--defunct-processes)
   - [Check summaries](#check-summaries)
   - [file — file/directory attributes and freshness](#file--filedirectory-attributes-and-freshness)
+  - [stale_binary — service running a replaced binary](#stale_binary--service-running-a-replaced-binary)
+  - [stale_libraries — processes using replaced shared libraries](#stale_libraries--processes-using-replaced-shared-libraries)
+  - [fds — descriptors against the process limit (fds_limit)](#fds--descriptors-against-the-process-limit-fds_limit)
+  - [strays — processes the service cannot account for](#strays--processes-the-service-cannot-account-for)
   - [process — process by name](#process--process-by-name)
   - [process_policy — alert-only user execution policy](#process_policy--alert-only-user-execution-policy)
   - [unowned_processes — processes no unit or package accounts for](#unowned_processes--processes-no-unit-or-package-accounts-for)
@@ -321,7 +327,7 @@ check:
   used_pct: { op: ">=", value: "90%" }
 for: { cycles: 3 }
 then:
-  notify: default
+  notify: [ops-email]
 
 mount:
   refcount: true
@@ -843,7 +849,7 @@ the already configured `gluster` client to check peer membership, volume and
 brick availability, self-heal daemons, and optional pending-heal limits. The
 remote deployment generator derives its expected peers and volumes from the
 host's read-only Gluster XML inventory; an explicit configuration follows the
-same shape. See [the check reference](rules.md#ports) for its full contract.
+same shape. See [the check reference](rules.md#gluster-cluster-gluster_cluster) for its full contract.
 
 ```yaml
 watches:
@@ -1197,10 +1203,10 @@ socket. `sermoctl` resolves its credential in this order:
    that cannot read the token.
 2. `<engine.runtime>/web.token`.
 
-The **password**, not the username, selects the role — at the browser prompt enter
-any username and the admin or guest password; passwords are compared in constant
-time. With `guest: true` the dashboard loads read-only without a prompt, and a
-**"log in"** link (`GET /login`) triggers the prompt to escalate to admin. The UI
+The **password**, not the username, selects the role — on the `/login` form, or
+as the HTTP Basic password with any username; passwords are compared in constant
+time. With `guest: true` the dashboard loads read-only without logging in, and a
+**"log in"** link (`GET /login`) opens the form to escalate to admin. The UI
 hides the action buttons for guests; the API enforces it regardless. When no
 password/guest is set, auth is disabled (open) and the daemon **logs a warning**
 at startup. `GET /api/whoami` reports the caller's role.
@@ -1308,7 +1314,8 @@ Read-only endpoints:
   remain available and are used as a browser fallback.
 - `GET /api/services` — **configured runtime** service list (the service
   files under `paths.services`): name, `state` (`disabled`, `stopped`,
-  `started`, `starting`, `collecting`, `monitored`, `restart_required`, `warning`, `failed`), backend status,
+  `started`, `paused`, `starting`, `active`, `collecting`, `monitored`,
+  `restart_required`, `warning`, `failed`), backend status,
   `check_health`, `observability_ready`,
   `observability_missing`, `state_reason`, active locks, monitor state/source/timestamp,
   backend, unit, cooldown, remediation state, next eligible action, last
@@ -1395,8 +1402,11 @@ accepted operation cannot switch targets during a concurrent reload.
 - `POST /api/services/{name}/preflight` — run the same preflight checks as
   `sermoctl preflight SERVICE`, without starting or stopping anything.
 - `POST /api/services/{name}/{action}` — service action. `action` is `monitor`,
-  `unmonitor`, `start`, `stop`, `restart`, `reload`, `resume` or `repair`;
-  start/stop/restart/reload/resume go through the safe operation engine. `repair`
+  `unmonitor`, `start`, `stop`, `restart`, `reload`, `pause`, `resume` or
+  `repair`; start/stop/restart/reload/pause/resume go through the safe operation
+  engine (`pause` only for a backend that can freeze the target, a libvirt VM or
+  a Docker container). `no_cascade=1` acts on this service alone, without its
+  `also_apply` targets, like `sermoctl … --no-cascade`. `repair`
   is manual-only: it accepts only a failed/inactive service, removes a regular
   pidfile under `/run` only after confirming its PID is dead, resets a failed
   init-unit marker through the backend manager, then uses the same guarded start
@@ -1429,9 +1439,13 @@ accepted operation cannot switch targets during a concurrent reload.
   `409` when refused (changed or finished statement, guard, lock). Equivalent
   to `sermoctl sessions kill`. See [safety](safety.md#database-statement-kills).
 - `POST /api/watches/{name}/{action}` — watch action. `action` is
-  `monitor`, `unmonitor`, `expand`, `probe`, `pause` or `resume`. `probe` is
-  read-only and is available for diskio, LVM, RAID, SMART and hdparm watches. `pause`/`resume`
-  require the RAID control block below.
+  `monitor`, `unmonitor`, `expand`, `probe`, `pause`, `resume` or
+  `replication-start`. `probe` takes one explicit sample of a host diskio,
+  LVM, RAID (`raid`, `storcli`, `ssacli`), SMART or hdparm watch; it is
+  read-only except for SMART, where it starts a short self-test (see below).
+  `pause`/`resume` require the RAID control block below; `replication-start`
+  requires a `replication` watch with `replication_control.start: true` (see
+  [rules](rules.md#replication-replication)).
 - `POST /api/locks/{service}/release?name=NAME` — release an inactive
   stale/expired named runtime lock; active locks are refused.
 - `POST /api/events/clear?before=TIME` — clear the persisted event/activity log;
@@ -1507,7 +1521,9 @@ cycle completes.
 A plain request returns `ok` or `starting` / `shutting_down` as `text/plain`;
 `GET /readyz?verbose` returns JSON with `ready`, `status`, `backend`,
 `services`, `watches` (host watches plus installed-app monitors) and an optional
-`message`. Like `/livez`, only the plain probe is public; the verbose form
+`message`. While panic mode is on, a ready daemon still answers `200` (plain
+`ok`), and the verbose form adds `panic: true` with `status: panic mode`. Like
+`/livez`, only the plain probe is public; the verbose form
 follows normal read authentication when web auth is configured:
 
 ```sh
@@ -1573,9 +1589,10 @@ In the service's general information, the state and its explanation appear on
 separate lines.
 
 The Graphs section uses one window selector for SLA and runtime measurements. Its SLA timeline comes from the same data as `sermoctl sla`: it
-plots the per-minute samples over the selected window (1h/24h/7d/30d/1y), marks
-each degraded minute as an incident at its local time, and leaves gaps where the
-service was unmonitored.
+plots the stored buckets of the selected window (1h/24h/7d/30d/1y, at the
+resolution [Stored history resolution](#stored-history-resolution) gives it),
+marks each bucket that saw a degraded minute as an incident at its local time,
+and leaves gaps where the service was unmonitored.
 
 ### Latency graph
 
@@ -1622,7 +1639,10 @@ created the pause.
 
 The dashboard and `GET /api/services` / `GET /api/watches` expose `state`,
 `monitored`, `monitor_source` and `monitor_changed_at` separately. A service can
-show `started` while its backend is active but monitoring is paused,
+show `started` while its backend is active but monitoring is paused, `paused`
+for a frozen VM or container (libvirt suspend, Docker pause) whose monitoring
+is paused, `active` while fresh process evidence confirms the daemon but its
+check or runtime indicators are still filling,
 `collecting` while monitoring is active but runtime/check/SLA indicators are
 still filling, `warning` when an advisory application configuration check fails
 or the only indicator left is one that will not
@@ -1633,8 +1653,11 @@ replaced executable, and `monitored` once those indicators are ready. Host
 watches do not have service-manager `started` or `stopped` states; their `state`
 is `disabled` when configuration or monitor state excludes them from active
 checks, `starting` before the first monitored sample, `failed` for an active
-failing condition, and `ok` otherwise. Their separate monitor flag is still
-exposed for actions and metadata.
+failing condition, `warning` for an advisory one, `collecting` or `stale` while
+the latest sample is missing or past its freshness window, a device-operation
+state (`testing`, `recovering`, … — see the RAID/LVM/SMART notes under [Host
+watches](#host-watches)) while a device works, and `ok` otherwise. Their
+separate monitor flag is still exposed for actions and metadata.
 
 Operations take the per-service operation lock, so they never overlap a worker's
 action on the same service. The state store also carries a short-lived
@@ -1664,8 +1687,10 @@ required checks is always available. Health-style checks (`tcp`, `http`,
 `service`, `process`, `cert`, `firewall_rules`, etc.) fail when `OK=false`;
 condition-style checks (`fds`, `oom`, resource thresholds, etc.) fail only when
 the alerting condition fires. Samples are accumulated into per-minute buckets in
-the state DB (`/var/lib/sermo/sermo.db`); the daemon prunes buckets older than a
-year on startup.
+the state DB (`<engine.state>/sermo.db`, by default `/var/lib/sermo/sermo.db`)
+and consolidated into coarser archives; `sermod` prunes each archive to its
+retention at startup and every `engine.rollup_interval` (see [Stored history
+resolution](#stored-history-resolution)).
 
 When a resolved service declares `preflight.config`, Sermo also injects a
 periodic service check named `configuration`. It reuses that exact command,
@@ -1701,28 +1726,33 @@ Report availability over rolling windows (the last hour, day, week, month and
 year) with `sermoctl sla`:
 
 ```sh
-sermoctl sla                 # every configured service
-sermoctl sla apache-main     # one service
-sermoctl --json sla          # machine-readable: up/total/ratio per window
+sermoctl sla                 # every configured service and availability watch
+sermoctl sla apache-main     # one service (or watch)
+sermoctl --json sla          # machine-readable: up/total/down_buckets/ratio per window
 ```
 
-A window with no samples reads `n/a` (availability unknown), not `0%`.
+A window with no samples reads `n/a` (availability unknown), not `0%`. Which
+host watches keep an availability series is described in
+[cli.md](cli.md#availability).
 
 ### Availability time series
 
-Samples are kept as per-minute buckets, which is also the raw **time series** a
-graph is built from. Export one service's series (oldest first) with `--series`:
+The stored buckets are also the raw **time series** a graph is built from.
+Export one target's series (oldest first) with `--series`. The bucket span is
+that of the archive the window resolves to ([Stored history
+resolution](#stored-history-resolution)); the table states it on its first line:
 
 ```sh
-sermoctl sla --series apache-main                  # last 24h (default)
-sermoctl sla --series apache-main --since 168h     # last 7 days
-sermoctl --json sla --series apache-main           # points: start, up, total, ratio
+sermoctl sla --series apache-main                  # last 24h (default): 5-minute rows
+sermoctl sla --series apache-main --since 168h     # last 7 days: hourly rows
+sermoctl --json sla --series apache-main           # series: start, up, total, down_buckets, ratio
 ```
 
-Each point is one monitored minute; **unmonitored minutes are absent**
-(gaps), so a graph can render an excluded period (Sermo down, or the service
-paused/disabled) distinctly from real downtime. The web dashboard uses the same
-points to place incident markers at the minute the problem was observed.
+Each point is one observed bucket; **unobserved buckets are absent** (gaps), so
+a graph can render an excluded period (Sermo down, or the service
+paused/disabled) distinctly from real downtime. `down_buckets` counts the
+one-minute buckets inside the point that saw a failure. The web dashboard uses
+the same points for its SLA strip and incident markers.
 
 ## Notifications
 
@@ -2299,7 +2329,10 @@ document never merges into a service. (A service can also declare its own
 
 A watch's `then` block (when present) declares the actions taken when it
 fires — a `hook`, a `notify` list, an `expand` or `remount` (storage only), a
-`kill` (process only), or any combination.
+`kill` (`process` and `unowned_processes` only), a `makestep` (clock only), a
+`kill_query` (service `db_queries` only), or any combination. A single-check
+watch may add a `recover_hook` that runs once when it stops firing (see
+[Checks](rules.md#checks)).
 
 **Omitting `then` entirely** is supported and means *alert-only / monitor-only*:
 the `check` + `for` (or per-metric conditions) are still evaluated; when the
@@ -2414,7 +2447,8 @@ Dry-run applies only to automatic actions driven by monitoring/rules:
   `resume`) are evaluated but not executed;
 - service-owned `version.on_change` / `config.on_change` monitors inherit the
   service's `dry_run` flag, so their non-console notifications are suppressed;
-- watch actions (`hook`, `expand`, `remount`, `kill`, `makestep`) are evaluated but not executed;
+- watch actions (`hook`, `recover_hook`, `expand`, `remount`, `kill`,
+  `kill_query`, `makestep`) are evaluated but not executed;
 - notifications are suppressed except `wall`, which is still delivered for local
   console visibility. The separate top-level `event_notify` event route remains
   active unless panic mode is enabled.
@@ -2436,6 +2470,8 @@ defaults:
 name: apache-main
 uses: apache
 dry_run: false  # override the global default for this service
+checks:
+  http: { type: http, url: "http://127.0.0.1/" }
 rules:
   restart-http:
     type: remediation
@@ -2712,7 +2748,9 @@ with the reason recorded.
 
 `dry_run` suppresses watch action-site notifiers except `wall`; it is for
 rehearsing a watch you intend to arm. For an alert-only tier, configure a watch
-without the action — that is what tiers 1 and 3 do. Top-level `event_notify`
+without the action — that is what `examples/watches/clock.yml` and
+`examples/watches/clock-ceph.yml` do (`clock-makestep.yml` carries the
+action). Top-level `event_notify`
 can separately deliver the watch's alarm events while it stays in dry-run.
 
 Results are recorded as `makestep` / `makestep-skipped` / `makestep-failed`
@@ -2817,7 +2855,7 @@ activatable name passes by default; set `require_owner: true` for a resident
 daemon so losing its D-Bus owner is a failure even while its unit remains
 active. These fields work unchanged in host watches and service-embedded
 watches. See
-[the D-Bus check](rules.md#database-protocols).
+[the D-Bus check](rules.md#database-connection-mysql--mariadb).
 
 A watch fires its hook on the check's **alert** outcome: threshold crossed for
 condition checks, **failure** for health checks
@@ -2834,8 +2872,8 @@ When the Web UI is enabled, `GET /api/watches` renders watch readings from the
 latest daemon watch cycle; it does not start its own command, network, SQL,
 firewall, count, disk I/O, `hdparm` or `smart` probes on each dashboard poll.
 The Web UI and `sermoctl watch probe` can request one explicit sample for
-configured `diskio`, `hdparm`, `lvm`, `raid` and `smart` host watches. `diskio`,
-`hdparm`, `lvm` and `raid` are read-only samples — a `diskio` probe reads the
+configured `diskio`, `hdparm`, `lvm`, `raid`, `storcli`, `ssacli` and `smart`
+host watches. All but `smart` are read-only samples — a `diskio` probe reads the
 counters twice around a short (2s) pause, because its rates are the delta between two
 readings and a single one would only be a baseline; the check `timeout:` bounds each
 reading, not the pause; a manual `smart` probe instead starts the device's
@@ -2856,7 +2894,8 @@ evaluate its watch window or run a rule, notifier, hook or remediation action.
 
 A service can carry its own `watches:` block — the same entry shape as a host
 watch (a `check:`, an optional `for`/`within` window, and a `then` block with a
-fire-and-forget `hook`, `notify`, `expand`, `remount`, `kill` or `makestep`, or a service `action`) —
+fire-and-forget `hook`, `recover_hook`, `notify`, `expand`, `remount`,
+`makestep` or a `db_queries` watch's `kill_query`, or a service `action`) —
 declared **inside the service document**. Events are labelled
 `<service>:<watch>`. Fire-and-forget entries reuse the host-watch runtime
 (firing/recovered windows, hooks, notifiers, dry-run); entries with
@@ -4164,11 +4203,12 @@ watches:
   `panic-suppressed` event is emitted instead), like hooks and non-console
   notifications.
 - `kill` can stand alone (a pure kill watch) or accompany a `hook` and/or
-  `notify`. It is **only valid on a `process` watch** (like `then.expand` is
-  storage-only). Because it signals real processes, the daemon must have
-  permission to do so (typically running as root). The absolute `name` plus
-  `user` pair scopes which PIDs can be killed; every matching PID that crosses the
-  condition.
+  `notify`. It is **only valid on a `process` or
+  [`unowned_processes`](#unowned_processes--processes-no-unit-or-package-accounts-for)
+  watch** (like `then.expand` is storage-only). Because it signals real
+  processes, the daemon must have permission to do so (typically running as
+  root). The absolute `name` plus `user` pair scopes which PIDs can be killed;
+  every matching PID that crosses the condition.
 
 Other resource types will be added as new check `type` values using the same
 watch/hook structure.
@@ -4294,13 +4334,15 @@ carries a command line.
 ## Global defaults
 
 Only target-safe parts of `defaults` merge into configured targets:
-`dry_run` applies to services and watches; `stop_policy`, `policy` and
-`rule_window` apply to services; `restart_on_change` applies to services only
-for the inherited `config`/`version` permission flags. Engine-wide settings (`interval`,
-`max_parallel_checks`, `default_timeout`,
-`operation_timeout`, `artifact_interval`, `startup_delay`, `backend`, `user_lookup`,
-`user_lookup_timeout`, `reap_own_strays`, `state_cache_size`, the `retention_*`
-windows and `rollup_interval`, and `service_restart_notice`) are daemon
+`dry_run` applies to services and watches; `clear_window` is the recovery
+window fallback for service rules and watches; `allow_dependencies`,
+`stop_policy`, `policy`, `rule_window`, `restart_on_stale_binary`, `fds_limit`
+and `restart_on_fds_high` apply to services; `restart_on_change` applies to
+services only for the inherited `config`/`version` permission flags, and
+`reload_on_change` only for its `config` flag. `defaults.variables` is covered
+under [Global custom variables](#global-custom-variables-defaultsvariables).
+Any other key under `defaults` is rejected. Engine-wide settings (every
+`engine.*` key, see [Engine settings](#engine-settings)) are daemon
 configuration and never merge into a service.
 
 For service residual cleanup, `defaults.stop_policy.force_kill` accepts `false`,
@@ -4642,8 +4684,9 @@ defaults:
 ### Secrets from the environment
 
 `${env:NAME}` resolves to the environment variable `NAME` **anywhere** in the
-config — service fields *and* the global blocks (notifier DSNs/webhooks, the web
-password, …) — so secrets are never written in the file:
+config — service fields *and* the global blocks (notifier DSNs/webhooks and
+tokens, the web credential file paths, …) — so secrets are never written in the
+file:
 
 ```yaml
 watches:
@@ -4664,7 +4707,7 @@ notifiers:
   `NAME` is unset or empty.
 - An unset variable expands to its default (or empty) and is **never** a
   validation error — but if it feeds a required field (a notifier `dsn`, the web
-  `password`), that field then reads as missing. Run `config validate` with the
+  `password_file`), that field then reads as missing. Run `config validate` with the
   same environment as the daemon (e.g. systemd's `EnvironmentFile`) to check the
   secrets resolve.
 - Unlike `${var}`, `${env:...}` is resolved separately, so it also works in the

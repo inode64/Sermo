@@ -26,8 +26,7 @@ variables:
   spool_dir: /var/spool/exim
   db_dir: /var/spool/exim/db
   # Exim 4.99+ names the SQLite hints table tblblob. Older supported Exim
-  # releases use tbl; fleet discovery overrides each table independently from
-  # read-only sqlite_schema evidence.
+  # releases use tbl: set callout_db_table/retry_db_table to tbl there.
   callout_db_table: tblblob
   retry_db_table: tblblob
   db_cleanup_record_limit: "100"

@@ -13,14 +13,6 @@ plugin ABI and cross-target dependency orchestration are post-1.0 work.
 "Fully functional for 1.0" means every path inside that boundary passes the
 release gate, not that every future integration in this file has landed.
 
-- [x] Core product baseline: configuration loading and validation, catalog
-      resolution, service/watch monitoring, persistence and SLA, CLI/Web
-      representation, notifications, systemd/OpenRC control and the guarded
-      operation engine are implemented and covered by repository tests.
-- [x] Automated quality baseline: `make check` owns formatting, static and
-      security analysis, dependency/YAML/Markdown validation, unit/integration
-      tests, Web UI and WCAG checks, and the safety-package coverage floor; CI
-      also runs the race detector, bounded fuzzing and CodeQL.
 - [ ] Freeze and document the public 1.0 contract: supported distributions,
       init systems and architectures; privilege and remote-Web/TLS model;
       configuration, CLI and Web API stability; state-database migration;
@@ -111,27 +103,24 @@ per cycle from `/proc/<pid>/io`, CPU per cycle, seconds to `/readyz`).
       goroutine and schedule, so it cannot read the worker's per-cycle memo,
       but it could share a time-bounded observation through
       `Collector.SampleServiceObserved` while keeping its own rate baselines.
-- [ ] Stop re-parsing static host facts per sample: `OSReader.NumCPU` reads
-      all of `/proc/stat` and `SampleService` re-parses `/proc/meminfo` on
-      every call (`internal/metrics/procfs.go`, `collector.go`). Cache both
-      like `bootTimeCache` already does.
 - [ ] Use the shared caching `/proc` reader everywhere. Done: a host
-      `type: process` watch at least as slow as `SystemFreshness` samples
-      identities from `deps.ProcReader` (kill re-checks stay live), and the
-      `zombies` check counts the shared snapshot while it is fresh. Left: the
-      set-process watches (`unowned_processes`, process policy, incidents) still
-      walk `/proc` per cycle through `procSamplerFromDeps`.
+      `type: process` watch and the alert-only `process_policy` watch, when at
+      least as slow as `SystemFreshness`, sample identities from
+      `deps.ProcReader` (kill re-checks stay live), and the `zombies` check
+      counts the shared snapshot while it is fresh. Left: the
+      `unowned_processes` watch, which has a kill path, still walks `/proc` per
+      cycle through `procSamplerFromDeps`.
 - [ ] One `systemctl` status query per cycle instead of one fork per service:
       the `service` check forks `systemctl is-active` (plus `show -p LoadState`
       when inactive) for every service every cycle
       (`internal/checks/servicecheck.go`, `internal/servicemgr/manager.go`).
       The web backend already caches this fleet-wide; give the daemon path the
       same single `list-units` refresh per cycle.
-- [ ] Trim the live sampler: `liveSampler` reads `statm`, `io`, `fd/` and
-      `task/` per PID on top of what `SampleServiceCPU` already read, and
-      `processEntryCount` uses `os.ReadDir`, which sorts thousands of fd
-      entries just to count them (`internal/app/daemon.go`,
-      `internal/metrics/procfs.go`). Count with an unsorted read, reuse the
+- [ ] Trim the live sampler. Done: one `metrics.ProcessObservation` per
+      worker cycle shares each PID's `statm`, `io`, `fd/` and `task/` readings
+      between `liveSampler` and the engine sampler. Left: `processEntryCount`
+      uses `os.ReadDir`, which sorts thousands of fd entries just to count them
+      (`internal/metrics/procfs.go`). Count with an unsorted read, reuse the
       thread count, and make the detail-only totals interval-bound.
 - [ ] Fetch `CanReload` lazily instead of blocking the listener bind on it
       (`internal/app/webbackend.go` `attachServiceRuntime`). The worker and web
@@ -139,28 +128,26 @@ per cycle from `/proc/<pid>/io`, CPU per cycle, seconds to `/readyz`).
       support differ); their duplicated `systemctl` queries are shared through
       `control.TargetCache` (unit, process identity, backend PIDs).
 - [ ] Run `BuildWatches` and `BuildArtifactWatches` through the existing
-      `forEachParallel` alongside `BuildWorkers`. Config resolution repeats
+      `ForEachParallel` alongside `BuildWorkers`. Config resolution repeats
       per start (about seven service passes and nine watch passes) but was
       measured at about 2.5 ms per service pass and 0.3 ms per watch pass on a
       25-service, 55-watch host, about 20 ms per start, so it is not cached;
       a cache on `*Config` would also break the `from_file` refresh
       `ResolveServices` promises.
-- [ ] Startup I/O on the single write connection: `applyMonitorMode` writes
-      one row per service and per watch and `loadRuleState` reads two per
-      service while eight wiring goroutines wait behind `SetMaxOpenConns(1)`;
-      batch them into one read and one write. Delay the first state
-      maintenance pass until readiness instead of running it at t=0. Probe
-      only the requested init backend when `engine.backend` is explicit.
+- [ ] Startup I/O on the single write connection: `applyMonitorModeFor`
+      writes one row per service and per watch and `loadRuleState` reads two
+      per service while eight wiring goroutines wait behind
+      `SetMaxOpenConns(1)`; batch them into one read and one write. Delay the
+      first state maintenance pass until readiness instead of running it at
+      t=0.
 - [ ] Dashboard request cost: memoize the per-watch `checkreadings` rendering
       by snapshot time so repeat polls do not rebuild every reading. The last
       event per service now reads `event_log_service_id_idx` per service
       instead of scanning 500 rows (the store, not the ring, is authoritative:
       sermoctl records events from its own process).
-- [ ] Allocation trims on the hot path: precompile `op: regex` assertions at
-      build time (`internal/checks/compare.go`), store the joined cmdline on
+- [ ] Allocation trim on the hot path: store the joined cmdline on
       `process.Identity` instead of joining it for every PID × selector
-      (`internal/process/discover.go`), stop the format-then-parse round trip
-      of the service runtime timestamp (`internal/app/serviceruntime.go`).
+      (`internal/process/discover.go`).
 - [ ] Add a repeatable measurement: a `make` target or `sermoctl` diagnostic
       that reports write bytes per cycle, CPU per cycle and seconds to ready,
       so every item above lands with a before/after number.
@@ -169,20 +156,10 @@ per cycle from `/proc/<pid>/io`, CPU per cycle, seconds to `/readyz`).
 
 - [ ] Distributed cluster mode
 - [ ] Remote agents
-- [x] Remote web API authentication (HTTP Basic admin/guest roles, CSRF on
-      mutations, loopback by default and TLS reverse proxy for remote access)
 - [ ] Multi-tenant RBAC
 - [ ] Plugin ABI
-- [x] Core notification integrations: email, Slack, Teams and notifier
-      templates.
 - [ ] Additional notification sinks such as file, syslog, Discord and generic
       webhook.
-- [x] Notification severity: five levels (debug, info, warning, error,
-      critical), per-notifier `min_severity`, graded `levels:` thresholds and
-      escalate-and-hold episodes.
-- [x] Notification presentation by severity: Slack attachment colour, Teams
-      lead-line colour, Telegram colour mark, ntfy/Gotify priority, and a
-      dashboard link (`web.public_url`) on every transport.
 - [ ] Telegram `silent` for levels below warning.
 - [ ] Dashboard severity filter for the event log and the watch list.
 - [ ] `levels:` for latency thresholds (tcp, http, connection protocols) and
@@ -198,71 +175,21 @@ per cycle from `/proc/<pid>/io`, CPU per cycle, seconds to `/readyz`).
 
 ## Integrations and catalog
 
-### D-Bus, storage and desktop
-
-- [x] Generic D-Bus bus and named-object health probe (`type: dbus`) with
-      constrained `peer`, `introspect` and scalar `property` modes, without
-      service auto-activation; available to host and service watches.
-- [x] Catalog coverage includes systemd managers, NetworkManager, firewalld,
-      TuneD, desktop/hardware services, systemd-logind, UDisks2, libvirt-dbus,
-      Polkit and UPower; UDisks2 preflight `config` remains pending.
-
 ### Observability
 
-- [x] Prometheus server catalog service (`promtool check config` preflight,
-      native `prometheus` API probe, SIGHUP reload)
-- [x] Prometheus exporters in catalog (`node_exporter`, `mysqld_exporter`,
-      `smartctl_exporter`)
 - [ ] OpenTelemetry: export traces/metrics/logs from the Sermo engine (OTLP
       sink and/or native checks against OTLP collectors — not the same as
       scraping Prometheus or monitoring Alloy/Loki)
-- [x] Grafana Alloy collector daemon (`alloy validate` preflight)
-- [x] Grafana Loki daemon (`-verify-config` preflight)
-- [x] InfluxDB daemon (`influxd config validate` preflight)
-- [x] Grafana server catalog service (HTTP `/api/health`; no config preflight yet)
-
-### Process managers and runtimes
-
-- [x] PM2 (Node.js process manager): catalog service + `pm2 ping` preflight/
-      health/postflight checks
-- [x] Supervisor (`supervisord`) catalog service (`supervisorctl status` health,
-      optional `supervisord check` preflight)
 
 ## Catalog — preflight `config` checks
 
-Batch already landed in the catalog (start/restart/reload gate):
-
-- [x] Core infra: `systemd`, `docker`, `firewalld`, `nginx`, `apache`, `ssh`,
-      `named`, `dhcpd`, `dnsmasq`, `syslog-ng`, `monit`, `fetchmail`
-- [x] Mail / security: `dovecot`, `exim`, `rspamd`, `spamassassin`, `fail2ban`,
-      `squid`, `proftpd`
-- [x] Databases / caches with offline `preflight.config`: `mysql`
-      and `mariadb` (`--defaults-file` + `--help --verbose`),
-      `postgres-%v` (`postgres -C config_file`), `mongod`
-      (`--outputConfig`)
 - [ ] `redis` / `keydb` catalog `preflight.config` (no reliable offline validator
       shipped yet; live checks and restart rules exist in catalog)
-- [x] Backup: `bacula-*`, `bareos-*`
-- [x] Observability / tunnels: `prometheus`, `alloy`, `loki`, `influxdb`,
-      `filebeat`, `cloudflared`, `nebula`, `nebula-%i`
-- [x] Other: `php-fpm`, `slapd`, `smbd`, `nmbd`, `cups`, `varnishd`,
-      `containerd`, `openvpn`
 
 Still missing `preflight.config` where no reliable offline check exists (see
 catalog audit / profile-author notes): most hardware helpers, JVM stacks without
-a configtest CLI, `mosquitto`, `supervisord`, `udisks2`, `pm2`, etc. (`redis` /
-`keydb` tracked above).
-
-## Logging and audit
-
-- [x] `access.log` (phase 1): `engine.access` append-only JSONL for mutating web
-      POST `/api/**` traffic and state-changing `sermoctl` commands. Rotation and
-      retention still TODO.
-- [x] `event.log` (phase 1): `engine.events` append-only JSONL mirroring daemon
-      events alongside the SQLite store. Rotation and retention still TODO.
-- [x] `diagnostics.log` (phase 1): `engine.diagnostics` scheduled snapshots
-      (`engine.diagnostics_interval`, default `1h`). Rotation and retention still
-      TODO.
+a configtest CLI, `systemd`, `openvpn`, `mosquitto`, `udisks2`, `grafana`, etc.
+(`redis` / `keydb` tracked above).
 
 ## Engine and config
 
@@ -339,9 +266,6 @@ allowing a dependency declaration to control another target implicitly.
       shell string).
 - [ ] Variable-to-variable references (`variables.x: "${y}"`), with cycle
   detection. Today a variable value containing `${...}` is a validation error.
-- [x] Service watches — web live view: embedded `watches:` publish the same
-      snapshot-derived `Meter`/`Readings` as host watches and remain controllable
-      (monitor/unmonitor) in the web UI.
 - [ ] Service watches — tree-scoped `process` watch: the stateful `process` watch
       (per-PID cpu/memory/io conditions and `kill`) is rejected inside a service
       because it matches host-wide by name/user and could kill processes outside

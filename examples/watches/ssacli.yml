@@ -1,6 +1,7 @@
 name: raid-ssacli
 display_name: HPE Smart Array hardware
 category: storage
+monitor: disabled
 interval: 10m
 check:
   type: ssacli

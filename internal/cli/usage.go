@@ -129,8 +129,9 @@ var commandUsages = []commandUsage{
 			"engine.state and read live by the daemon. WATCH is a host watch name or",
 			"a service watch \"<service>:<watch>\"; a watch's monitor state is",
 			"independent of its service's.",
-			"probe is a read-only short sample for diskio, hdparm, LVM, RAID and SMART",
-			"host watches.",
+			"probe runs one fresh sample of a diskio, hdparm, LVM, RAID, SMART, storcli or",
+			"ssacli host watch; all are read-only except SMART, which starts the device's",
+			"short self-test.",
 			"pause/resume control a RAID reconstruction only when raid_control.pause_resume",
 			"is configured. pause requires the configured md array again in --confirm.",
 		},
@@ -293,7 +294,7 @@ var commandUsages = []commandUsage{
 		},
 		Notes: []string{
 			"Panic mode keeps monitoring running but suspends hooks, alerts and automatic remediation across the daemon.",
-			"Manual operations (start, stop, restart, reload, resume) remain available.",
+			"Manual operations (start, stop, restart, reload, pause, resume, repair) remain available.",
 			"The flag is persisted, so it survives daemon restarts until turned off.",
 		},
 		Examples: []string{
@@ -342,8 +343,8 @@ var commandUsages = []commandUsage{
 			"db_queries watches; LONG marks a statement past the watch's min_duration.",
 			"kill looks the statement up in the inventory and sends its exact identity;",
 			"the daemon re-reads it and refuses if it changed or ended. The kill runs",
-			"through the service's operation engine: guards (blocks: kill_query), locks",
-			"and panic mode apply. A refusal exits 75.",
+			"through the service's operation engine: guards (blocks: kill_query) and locks",
+			"apply; panic mode holds back only the automatic kill. A refusal exits 75.",
 		},
 		Examples: []string{
 			"sermoctl sessions",

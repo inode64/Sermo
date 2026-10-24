@@ -14,9 +14,11 @@ at the end of each section to keep them in sync.
 A single daemon (`sermod`) loads the configuration and the catalog, builds a
 **fleet** of *Workers* (one per service) and *Watches* (one per host or app
 resource), and runs them in a loop. The CLI (`sermoctl`) and the Web UI talk to
-the daemon over HTTP and signals. Service actions always go through
-`operation.Engine`, which coordinates locks, preflight, guards and the init
-manager.
+the daemon over HTTP and signals; `sermoctl` also runs service operations in its
+own process and shares the state store with the daemon (panic flag, monitor
+state, audit events). Service actions always go through `operation.Engine`,
+which coordinates locks, preflight, guards and the control target's manager
+(init system, Docker or libvirt).
 
 ```mermaid
 flowchart TB
@@ -45,13 +47,15 @@ flowchart TB
   subgraph backends["Execution"]
     OP["operation.Engine"]
     LK["locks (oplock + scanner)"]
-    SM["servicemgr (systemd/openrc)"]
+    SM["servicemgr (systemd/openrc)<br/>dockerctl · virt (libvirt)"]
     ST[("state store<br/>SLA · events · metrics")]
-    NT["notifiers (email/slack/teams)"]
+    NT["notifiers (email/slack/teams/telegram/ntfy/gotify/tty/wall)"]
   end
 
   CLI -- "SIGHUP (daemon reload)" --> SIG
   CLI -- "HTTP /api" --> WEB
+  CLI -- "start/stop/… (own process)" --> OP
+  CLI -- "panic · monitor · audit" --> ST
   BROWSER --> WEB
   WEB -- "/reload → own SIGHUP" --> SIG
 
@@ -96,11 +100,11 @@ flowchart LR
     U["/etc/sermo/services/*.yml<br/>(uses: catalogservice)"]
   end
 
-  files --> LOAD["1 · Load<br/>registries: CatalogServices/Apps/Libraries/Services"]
-  LOAD --> OSC["2 · applyOSSelectors<br/>collapseOS(${os})<br/>SERMO_OS → /etc/os-release → linux"]
+  files --> LOAD["1 · Load<br/>registries: CatalogServices/Apps/Libraries/Patterns/Services"]
+  LOAD --> OSC["2 · applyOSSelectors<br/>collapseOS(${os})<br/>SERMO_OS → os-release → linux"]
   OSC --> MERGE["3 · Resolve → mergedService<br/>defaults + catalog + user override"]
   MERGE --> VARS["expansionVariables<br/>${name} ${port} ${user} ${config} ${X_binary}"]
-  VARS --> EXP["expandApps · expandRestartOnChange<br/>expandAnalyze · expandPidfile/Socket/Lockfile"]
+  VARS --> EXP["expandRestartOnChange · expandAppsChain<br/>expandPidfileSugar · expandAnalyze<br/>expandServiceArtifact (socket/lockfile) · expandServiceWatches"]
   EXP --> TREE[("Resolved.Tree")]
 
   TREE --> SC["ServiceCandidates(tree, backend)<br/>→ real init units"]
@@ -122,7 +126,7 @@ versions with `restart_on_change.libraries` / `restart_on_change.apps`;
 **OS selectors:** `collapseOS` resolves `os: { ubuntu: {...}, debian: {...},
 default: {...} }` at any depth. Example: on Ubuntu, the systemd unit for `dhcpd`
 is rewritten to `isc-dhcp-server`. The OS is detected from `SERMO_OS` → `ID=` in
-`/etc/os-release` → `linux`.
+`/etc/os-release` (then `/usr/lib/os-release`) → `linux`.
 
 > Anchors: `internal/config/loader.go`, `internal/config/osselect.go`
 > (`applyOSSelectors`/`collapseOS`), `internal/config/resolve.go`
@@ -133,28 +137,31 @@ is rewritten to `isc-dhcp-server`. The OS is detected from `SERMO_OS` → `ID=` 
 
 ## 3. The pipeline of an operation (preflight · guard · locks)
 
-Every action on a service (`start`/`stop`/`restart`/`reload`/`resume`) enters
-through `Engine.Do` and is orchestrated by `Engine.run`. The order is strict:
-the **operation lock** is acquired (serializes per service), the **named locks**
-are checked (external work in progress), **preflight** runs, the **guards** are
-evaluated and only then is the init manager invoked; at the end **postflight**
-runs. On any exit path the event is emitted.
+Every action on a service (`start`/`stop`/`restart`/`reload`/`resume`, plus the
+manual-only `pause` and `repair`) enters through `Engine.Do` and is orchestrated
+by `Engine.run`. The order is strict: the **operation lock** is acquired
+(serializes per service), the **named locks** are checked (external work in
+progress), **preflight** runs, the **guards** are evaluated and only then is the
+control target's manager invoked; at the end **postflight** runs. On any exit
+path the event is emitted.
 
 ```mermaid
 flowchart TD
-  REQ["Action: start / stop / restart / reload / resume<br/>(sermoctl or Web UI → prepared service runtime)"] --> DO["Engine.Do → Engine.run(plan)"]
+  REQ["Action: start / stop / restart / reload / resume / pause / repair<br/>(sermoctl, Web UI or worker remediation → prepared service runtime)"] --> DO["Engine.Do → Engine.run(plan)"]
   DO --> CE{"ConfigError?"}
   CE -- "yes" --> RF1["ResultFailed"]
   CE -- "no" --> L1["2 · AcquireLock (oplock, per service)"]
   L1 -- "held (active)" --> B1["ResultBlocked<br/>operation in progress"]
   L1 -- "ok (release on defer)" --> L2["3 · Named runtime locks (scanner)"]
   L2 -- "active lock present" --> B2["ResultBlocked<br/>blocked by active runtime lock"]
-  L2 -- "free" --> PF{"4 · Preflight<br/>(only start/restart/reload/resume)"}
+  L2 -- "free" --> PF{"4 · Preflight<br/>(only start/restart/reload/resume/repair)"}
   PF -- "required check fails" --> RPF["ResultPreflightFailed<br/>(does not touch the service)"]
   PF -- "ok" --> GD{"5 · Guard rules<br/>if: failed/active of a check → block"}
-  GD -- "blocks" --> B3["ResultBlocked: «message»"]
-  GD -- "passes" --> ACT["6-9 · Service Manager<br/>Stop/Start/Reload/Resume (systemd/openrc)"]
-  ACT -- "error" --> RF2["ResultFailed"]
+  GD -- "blocks" --> B3["ResultBlocked: «message»<br/>(guard = rule name)"]
+  GD -- "cannot evaluate" --> RF2["ResultFailed"]
+  GD -- "passes" --> ACT["6-9 · repair: stale pidfile · reconcile stale init state<br/>then Manager Stop/Start/Reload/Resume/Pause<br/>(systemd/openrc · Docker · libvirt)"]
+  ACT -- "error" --> RF2
+  ACT -- "residuals remain" --> ROR["ResultOrphanProcesses"]
   ACT -- "ok" --> POST{"10 · Postflight"}
   POST -- "fails" --> RPOST["ResultPostflightFailed"]
   POST -- "ok" --> OK["ResultOK"]
@@ -164,6 +171,7 @@ flowchart TD
   B3 --> EMIT
   RF1 --> EMIT
   RF2 --> EMIT
+  ROR --> EMIT
   RPF --> EMIT
   RPOST --> EMIT
   OK --> EMIT["defer Emit(result)<br/>action / suppressed / error<br/>→ event + log + notification"]
@@ -178,12 +186,17 @@ flowchart TD
   A failure aborts without running the action.
 - **Guard**: `type: guard` rules with `blocks: [restart, start]` and an
   `if: { failed: { check: X } }` condition. They are evaluated **at that moment**
-  (not over a window) against the check cache; the first one that fires blocks
-  with its `message`.
+  (not over a window): each check a guard references runs fresh, at most once
+  per evaluation, and a check that cannot be observed fails the operation
+  instead of letting it through. A guard on `stop` or `start` also covers the
+  actions that perform them (`restart`; `pause` for `stop`, `repair` for
+  `start`). Guards run in name order; the first one that fires blocks with its
+  `message`, and the result's `guard` field names it.
 
 > Anchors: `internal/operation/engine.go` (`Do`/`run`),
 > `internal/operation/build.go` (`sectionRunner`, `guardClosure`),
-> `internal/rules/eval.go` (`Guard`/`Evaluator.Eval`).
+> `internal/rules/eval.go` (`Guard`/`Evaluator.Eval`),
+> `internal/rules/model.go` (`guardedBy`).
 
 ---
 
@@ -224,7 +237,7 @@ to `/proc` to detect dead owners and PID reuse.
 ## 5. Signals and lifecycle
 
 Startup loads config, detects the init manager, opens the state store, builds
-the fleet, brings up the web server, writes the pidfile and enters the
+the fleet, writes the pidfile, brings up the web server and enters the
 `Scheduler` loop. **SIGHUP** (sent by `sermoctl daemon reload` or the `/reload`
 endpoint) triggers a reload without stopping the daemon: it reopens the
 `engine.access|events|diagnostics` export logs (following a logrotate rename),
@@ -240,13 +253,13 @@ flowchart TD
     A2 --> A3["Instance lock (anti-duplicate)"]
     A3 --> A4["Open state store"]
     A4 --> A5["Build notifiers"]
-    A5 --> A6["BuildWorkers / BuildWatches"]
-    A6 --> A7["web.Server (goroutine)"]
-    A7 --> A8["Write pidfile<br/>/run/sermo/sermod.pid"]
+    A5 --> A6["BuildWorkers / BuildWatches<br/>/ BuildArtifactWatches"]
+    A6 --> A7["Write pidfile<br/>/run/sermo/sermod.pid"]
+    A7 --> A8["web.Server (goroutine)"]
     A8 --> A9["Monitor.Run → Scheduler"]
   end
 
-  A9 --> LOOP["Scheduler: stagger + runCycler<br/>each Worker/Watch in its goroutine, every Interval"]
+  A9 --> LOOP["Scheduler: stagger + runCycler<br/>each Worker/Watch in its goroutine, at its own interval<br/>(default engine.interval)"]
 
   SH["SIGHUP<br/>(sermoctl daemon reload / web /reload)"] --> RELOAD["Monitor.Reload:<br/>validate new config → stop generation →<br/>capture state → rebuild → restore state → new generation"]
   RELOAD --> LOOP
@@ -255,7 +268,8 @@ flowchart TD
 ```
 
 > Anchors: `cmd/sermod/main.go` (startup, signal handlers),
-> `internal/app/monitor.go` (`Reload`), `internal/app/scheduler.go` (`Run`).
+> `internal/app/monitor.go` (`Reload`), `internal/app/scheduler.go` (`Run`,
+> `runCycler`).
 
 ---
 
@@ -265,25 +279,35 @@ Each Worker, on every interval tick, runs its checks, records SLA/health,
 publishes the state for the Web and evaluates the rules: **remediation** updates
 the windows of all rules and runs the first one that fires (subject to guard and
 the cooldown/backoff policy), and **alerts** notify. The first cycle after
-startup/reload is observation-only.
+startup, the first cycle of a service a reload added, and the first cycle after
+an operation are observation-only: they publish data but run no rules and record
+no SLA sample.
 
 ```mermaid
 flowchart LR
-  RC["Worker.RunCycle"] --> P{"paused?"}
+  RC["Worker.RunCycle"] --> P{"paused or<br/>operation running?"}
   P -- "yes" --> SKIP["skip"]
   P -- "no" --> SAMP["Sample metrics"]
   SAMP --> RUN["Run checks + applyGates"]
   RUN --> SLA["Record SLA / health"]
   SLA --> PUB["Publish to Web"]
-  PUB --> REM["runRemediation:<br/>update windows → Guard? → Policy.Allow? → Operate/Cascade"]
+  PUB --> OBS{"observation-only?"}
+  OBS -- "yes" --> DONE["mark observed"]
+  OBS -- "no" --> HC["check health-change events"]
+  HC --> REM["runRemediation:<br/>update windows → Guard? → Policy.Allow? → dry run / panic? → Operate/Cascade"]
   REM --> AL["runAlerts → notifications"]
-  AL --> PS["PersistState"]
+  AL --> PS["publish rule windows → PersistState"]
 ```
 
 The same guard mechanism (`rules.Guard`) that protects the operation pipeline
 applies here before remediating. The `checks` feed the health-checks, the
 preflight/postflight and the rule conditions all at once; the notifiers are
-pluggable (email/slack/teams).
+pluggable (email/slack/teams/telegram/ntfy/gotify/tty/wall). Every check — service
+checks, watches, inline rule probes and operation preflight/postflight — waits
+for a slot in the daemon's shared check limiter (`engine.max_parallel_checks`),
+and its timeout starts only once it has the slot; see
+[configuration](configuration.md#engine-settings).
 
-> Anchors: `internal/app/worker.go` (`RunCycle`, `runRemediation`, `runAlerts`),
-> `internal/rules/eval.go` (`Guard`).
+> Anchors: `internal/app/worker.go` (`RunCycle`, `prepareCycle`,
+> `runRemediation`, `runAlerts`), `internal/rules/eval.go` (`Guard`),
+> `internal/checks/limiter.go` (`Limiter`).

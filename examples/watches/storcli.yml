@@ -1,6 +1,7 @@
 name: raid-storcli
 display_name: MegaRAID hardware
 category: storage
+monitor: disabled
 interval: 10m
 check:
   type: storcli
