@@ -789,7 +789,7 @@ func (w *Worker) runFiringRemediation(ctx context.Context, ev *rules.Evaluator, 
 }
 
 func (w *Worker) remediationSuppression(ctx context.Context, ev *rules.Evaluator, firing firingRule, action string, now func() time.Time) (string, bool) {
-	blocked, reason, err := rules.Guard(ctx, w.Rules, action, ev)
+	guard, reason, err := rules.Guard(ctx, w.Rules, action, ev)
 	// A guard is consulted on every cycle its rule keeps firing, so an
 	// unevaluable guard repeats for as long as the underlying probe stays
 	// broken. Same emission policy as the rule's own condition error.
@@ -802,7 +802,7 @@ func (w *Worker) remediationSuppression(ctx context.Context, ev *rules.Evaluator
 		return "", true
 	}
 	w.clearEvalError(guardKey)
-	if blocked {
+	if guard != "" {
 		return "guard: " + reason, false
 	}
 	if ok, reason := w.Policy.Allow(w.State, now()); !ok {

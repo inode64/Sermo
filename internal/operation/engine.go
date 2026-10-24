@@ -75,7 +75,7 @@ type Engine struct {
 	AcquireLock func(ttl time.Duration) (release func() error, err error)
 	LockTTL     time.Duration
 	NamedLocks  func() ([]locks.Lock, error)
-	Guard       func(ctx context.Context, action string) (blocked bool, reason string, err error)
+	Guard       func(ctx context.Context, action string) (rule, reason string, err error)
 	Preflight   func(ctx context.Context) checks.Outcome
 	Postflight  func(ctx context.Context) checks.Outcome
 	// SessionVerifier re-discovers a manual SSH-session target immediately before
@@ -842,15 +842,16 @@ func (e Engine) runPreflight(ctx context.Context, p plan, result *Result) bool {
 
 func (e Engine) checkGuards(ctx context.Context, p plan, result *Result) bool {
 	if e.Guard != nil {
-		blocked, reason, err := e.Guard(ctx, p.action)
+		rule, reason, err := e.Guard(ctx, p.action)
 		if err != nil {
 			result.Status = ResultFailed
 			result.Message = "guard: " + err.Error()
 			return false
 		}
-		if blocked {
+		if rule != "" {
 			result.Status = ResultBlocked
 			result.Message = reason
+			result.Guard = rule
 			return false
 		}
 	}

@@ -519,12 +519,12 @@ func normalizeKey(m map[string]any) string {
 	return string(data)
 }
 
-// Guard reports whether any guard rule blocks action, returning the blocking
-// rule's message. A guard applies when its blocks list names the action or a
-// lifecycle action it performs (see guardedBy). Guards are evaluated in name order; the first
-// blocking guard wins. An evaluation error is returned so the caller can fail
-// safe rather than silently proceed.
-func Guard(ctx context.Context, ruleSet []Rule, action string, ev *Evaluator) (blocked bool, reason string, err error) {
+// Guard reports the guard rule that blocks action, by name (empty when none
+// does), with its message. A guard applies when its blocks list names the
+// action or a lifecycle action it performs (see guardedBy). Guards are
+// evaluated in name order; the first blocking guard wins. An evaluation error
+// is returned so the caller can fail safe rather than silently proceed.
+func Guard(ctx context.Context, ruleSet []Rule, action string, ev *Evaluator) (rule, reason string, err error) {
 	guardEvaluator := *ev
 	// A guard may create either cache when it is the first reader this cycle.
 	// Retain those maps, including unavailable results, without leaking the
@@ -541,11 +541,11 @@ func Guard(ctx context.Context, ruleSet []Rule, action string, ev *Evaluator) (b
 		}
 		ok, err := guardEvaluator.Eval(ctx, ruleSet[i].If)
 		if err != nil {
-			return false, "", fmt.Errorf("guard %s: %w", ruleSet[i].Name, err)
+			return "", "", fmt.Errorf("guard %s: %w", ruleSet[i].Name, err)
 		}
 		if ok {
-			return true, ruleSet[i].blockReason(), nil
+			return ruleSet[i].Name, ruleSet[i].blockReason(), nil
 		}
 	}
-	return false, "", nil
+	return "", "", nil
 }

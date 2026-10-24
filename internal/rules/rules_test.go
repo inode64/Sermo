@@ -114,7 +114,7 @@ func TestGuardFailsSafeOnUnavailableCheck(t *testing.T) {
 	ev := &Evaluator{Cache: map[string]checks.Result{
 		"clients": {Check: "clients", Unavailable: true, Message: "read /proc/net/tcp: permission denied"},
 	}}
-	blocked, _, err := Guard(context.Background(), []Rule{{
+	blocking, _, err := Guard(context.Background(), []Rule{{
 		Name:   "block-restart-with-clients",
 		Type:   RuleGuard,
 		Blocks: []string{string(ActionRestart)},
@@ -123,7 +123,7 @@ func TestGuardFailsSafeOnUnavailableCheck(t *testing.T) {
 	if err == nil {
 		t.Fatal("unavailable guard check must fail safe")
 	}
-	if blocked {
+	if blocking != "" {
 		t.Fatal("unavailable check is an evaluation error, not a matched guard")
 	}
 }
@@ -141,7 +141,7 @@ func TestGuardFailsSafeOnInlineUnavailableCheck(t *testing.T) {
 	if active, err := ev.Eval(context.Background(), condition); err != nil || active {
 		t.Fatalf("initial unavailable inline condition = active:%v err:%v, want false without error", active, err)
 	}
-	blocked, _, err := Guard(context.Background(), []Rule{{
+	blocking, _, err := Guard(context.Background(), []Rule{{
 		Name:   "block-restart-with-clients",
 		Type:   RuleGuard,
 		Blocks: []string{string(ActionRestart)},
@@ -150,7 +150,7 @@ func TestGuardFailsSafeOnInlineUnavailableCheck(t *testing.T) {
 	if err == nil {
 		t.Fatal("unavailable inline guard check must fail safe")
 	}
-	if blocked {
+	if blocking != "" {
 		t.Fatal("unavailable inline check is an evaluation error, not a matched guard")
 	}
 }
@@ -168,7 +168,7 @@ func TestGuardFailsSafeOnInlineSamplerFailure(t *testing.T) {
 	if active, err := ev.Eval(context.Background(), condition); err != nil || active {
 		t.Fatalf("normal unavailable condition = active:%v err:%v, want false without error", active, err)
 	}
-	blocked, _, err := Guard(context.Background(), []Rule{{
+	blocking, _, err := Guard(context.Background(), []Rule{{
 		Name:   "block-restart-on-memory-pressure",
 		Type:   RuleGuard,
 		Blocks: []string{string(ActionRestart)},
@@ -177,7 +177,7 @@ func TestGuardFailsSafeOnInlineSamplerFailure(t *testing.T) {
 	if err == nil {
 		t.Fatal("sampler failure in an inline guard must fail safe")
 	}
-	if blocked {
+	if blocking != "" {
 		t.Fatal("unavailable sampler is an evaluation error, not a matched guard")
 	}
 }
@@ -233,11 +233,11 @@ func TestGuardFailsSafeOnUnavailableLeaf(t *testing.T) {
 			if match, err := tt.ev.Eval(context.Background(), tt.leaf); err != nil || match {
 				t.Fatalf("remediation Eval() = %v, %v; want false without error", match, err)
 			}
-			blocked, _, err := Guard(context.Background(), restartGuard(tt.leaf), string(ActionRestart), tt.ev)
+			blocking, _, err := Guard(context.Background(), restartGuard(tt.leaf), string(ActionRestart), tt.ev)
 			if err == nil {
 				t.Fatal("unavailable guard leaf must fail safe")
 			}
-			if blocked {
+			if blocking != "" {
 				t.Fatal("unavailable leaf is an evaluation error, not a matched guard")
 			}
 		})
@@ -607,24 +607,24 @@ func TestGuardBlocksMatchingAction(t *testing.T) {
 	ruleSet, _ := ParseRules(tree)
 	ev := &Evaluator{Cache: cache(map[string]bool{"backup-flag": true})}
 
-	blocked, reason, err := Guard(context.Background(), ruleSet, "restart", ev)
+	blocking, reason, err := Guard(context.Background(), ruleSet, "restart", ev)
 	if err != nil {
 		t.Fatalf("Guard error = %v", err)
 	}
-	if !blocked || reason != "backup running" {
-		t.Fatalf("restart should be blocked: blocked=%v reason=%q", blocked, reason)
+	if blocking == "" || reason != "backup running" {
+		t.Fatalf("restart should be blocked: blocked=%v reason=%q", blocking, reason)
 	}
 
 	// start is not in blocks -> not blocked.
-	blocked, _, _ = Guard(context.Background(), ruleSet, "start", ev)
-	if blocked {
+	blocking, _, _ = Guard(context.Background(), ruleSet, "start", ev)
+	if blocking != "" {
 		t.Fatal("start is not in blocks; must not be blocked")
 	}
 
 	// When the backup is not active, restart is allowed.
 	ev = &Evaluator{Cache: cache(map[string]bool{"backup-flag": false})}
-	blocked, _, _ = Guard(context.Background(), ruleSet, "restart", ev)
-	if blocked {
+	blocking, _, _ = Guard(context.Background(), ruleSet, "restart", ev)
+	if blocking != "" {
 		t.Fatal("restart must be allowed when backup-flag is inactive")
 	}
 }
@@ -665,9 +665,9 @@ func TestGuardAppliesToActionsThatPerformTheBlockedStep(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			ev := &Evaluator{Cache: cache(map[string]bool{"flag": true})}
-			blocked, _, err := Guard(context.Background(), guard(tt.blocks...), string(tt.action), ev)
-			if err != nil || blocked != tt.want {
-				t.Fatalf("Guard(%v, %s) = %v, %v; want %v", tt.blocks, tt.action, blocked, err, tt.want)
+			blocking, _, err := Guard(context.Background(), guard(tt.blocks...), string(tt.action), ev)
+			if err != nil || (blocking != "") != tt.want {
+				t.Fatalf("Guard(%v, %s) = %v, %v; want %v", tt.blocks, tt.action, blocking, err, tt.want)
 			}
 		})
 	}
@@ -685,11 +685,11 @@ func TestGuardReasonUsesBlockMessage(t *testing.T) {
 		},
 	}}
 	ev := &Evaluator{Cache: cache(map[string]bool{"backup-flag": true})}
-	blocked, reason, err := Guard(context.Background(), ruleSet, string(ActionRestart), ev)
+	blocking, reason, err := Guard(context.Background(), ruleSet, string(ActionRestart), ev)
 	if err != nil {
 		t.Fatalf("Guard error = %v", err)
 	}
-	if !blocked {
+	if blocking == "" {
 		t.Fatal("restart should be blocked")
 	}
 	if reason != "backup running" {
@@ -710,11 +710,11 @@ func TestGuardIgnoresNonGuardRules(t *testing.T) {
 	ruleSet, _ := ParseRules(tree)
 	ev := &Evaluator{Cache: cache(map[string]bool{"http": false})}
 
-	blocked, _, err := Guard(context.Background(), ruleSet, "restart", ev)
+	blocking, _, err := Guard(context.Background(), ruleSet, "restart", ev)
 	if err != nil {
 		t.Fatalf("Guard error = %v", err)
 	}
-	if blocked {
+	if blocking != "" {
 		t.Fatal("a remediation rule must never block an action")
 	}
 }
@@ -898,9 +898,9 @@ func TestGuardSharesCycleProbeResults(t *testing.T) {
 			for cycle := 1; cycle <= 2; cycle++ {
 				ev := &Evaluator{Deps: checks.Deps{Runner: runner, DefaultTimeout: time.Second}}
 				for range 2 {
-					blocked, _, err := Guard(context.Background(), guard, "restart", ev)
-					if blocked != tc.wantBlocked || (err != nil) != tc.wantError {
-						t.Fatalf("Guard = %v, %v", blocked, err)
+					blocking, _, err := Guard(context.Background(), guard, "restart", ev)
+					if (blocking != "") != tc.wantBlocked || (err != nil) != tc.wantError {
+						t.Fatalf("Guard = %v, %v", blocking, err)
 					}
 				}
 				if ev.FailOnUnavailable {
@@ -925,8 +925,8 @@ func TestGuardRetainsInitiallyAbsentNamedCache(t *testing.T) {
 	}}
 	condition := map[string]any{"active": map[string]any{"check": "probe"}}
 	guard := []Rule{{Name: "guard", Type: RuleGuard, If: condition, Blocks: []string{"restart"}}}
-	if blocked, _, err := Guard(context.Background(), guard, "restart", ev); err != nil || !blocked {
-		t.Fatalf("Guard = %v, %v", blocked, err)
+	if blocking, _, err := Guard(context.Background(), guard, "restart", ev); err != nil || blocking == "" {
+		t.Fatalf("Guard = %v, %v", blocking, err)
 	}
 	if !evalNode(t, ev, condition) || calls != 1 {
 		t.Fatalf("named probe was not reused: calls = %d", calls)

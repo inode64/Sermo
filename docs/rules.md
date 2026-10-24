@@ -4009,7 +4009,10 @@ tools by exact resolved executable path (`exe_any`) and database backup user
 when your backup runs under another user or from non-standard paths. If a
 logged-in terminal user runs `sermoctl restart` while this backup guard blocks
 the action, Sermo also sends that user a best-effort native TTY notice; cron and
-other non-interactive runs are not notified.
+other non-interactive runs are not notified. The notice follows the guard by
+name (`block-restart-during-backup`, or pgBackRest's
+`block-restart-during-backup-or-restore`), so an override that rewords its
+message keeps it, and no other block raises it.
 
 The examples
 [`examples/services/mariadb-backup-guard.yml`](../examples/services/mariadb-backup-guard.yml)

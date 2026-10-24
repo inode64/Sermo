@@ -237,7 +237,7 @@ func TestRestartBlockedExit75(t *testing.T) {
 
 func TestRestartBlockedByBackupNotifiesInteractiveUser(t *testing.T) {
 	global := writeActionConfig(t)
-	app := actionApp(t, operation.Result{Service: "db", Action: "restart", Status: operation.ResultBlocked, Message: "database backup is running"}, nil, nil, nil)
+	app := actionApp(t, operation.Result{Service: "db", Action: "restart", Status: operation.ResultBlocked, Message: "database backup is running", Guard: guardBlockRestartDuringBackup}, nil, nil, nil)
 	app.InteractiveUser = func() (string, bool) { return "fran", true }
 	var notified operation.Result
 	var notifiedUser string
@@ -256,13 +256,32 @@ func TestRestartBlockedByBackupNotifiesInteractiveUser(t *testing.T) {
 	}
 }
 
-// assertBlockedDoesNotNotify runs a restart that the engine blocks with reason
-// msg under the given interactive context and fails if the CLI notifies a
-// terminal user.
-func assertBlockedDoesNotNotify(t *testing.T, msg string, interactive func() (string, bool)) {
+// An operator override may reword the backup guard's message; the notice
+// follows the guard, not its wording.
+func TestRestartBlockedByBackupGuardNotifiesWhateverItsMessage(t *testing.T) {
+	global := writeActionConfig(t)
+	app := actionApp(t, operation.Result{Service: "db", Action: "restart", Status: operation.ResultBlocked, Message: "copia de seguridad en curso", Guard: guardBlockRestartDuringBackupOrRestore}, nil, nil, nil)
+	app.InteractiveUser = func() (string, bool) { return "fran", true }
+	notified := false
+	app.NotifyBlockedAction = func(context.Context, operation.Result, string) error {
+		notified = true
+		return nil
+	}
+	if code := app.Run(context.Background(), []string{"--config", global, "restart", "web"}); code != exitBlocked {
+		t.Fatalf("Run() exit = %d, want %d", code, exitBlocked)
+	}
+	if !notified {
+		t.Fatal("a restart the backup guard blocked must notify the terminal user")
+	}
+}
+
+// assertBlockedDoesNotNotify runs a restart that the engine blocks, by guard
+// (empty for a non-guard block) with reason msg, under the given interactive
+// context and fails if the CLI notifies a terminal user.
+func assertBlockedDoesNotNotify(t *testing.T, guard, msg string, interactive func() (string, bool)) {
 	t.Helper()
 	global := writeActionConfig(t)
-	app := actionApp(t, operation.Result{Service: "db", Action: "restart", Status: operation.ResultBlocked, Message: msg}, nil, nil, nil)
+	app := actionApp(t, operation.Result{Service: "db", Action: "restart", Status: operation.ResultBlocked, Message: msg, Guard: guard}, nil, nil, nil)
 	app.InteractiveUser = interactive
 	app.NotifyBlockedAction = func(context.Context, operation.Result, string) error {
 		t.Fatal("blocked action must not notify a terminal user")
@@ -276,11 +295,16 @@ func assertBlockedDoesNotNotify(t *testing.T, msg string, interactive func() (st
 }
 
 func TestRestartBlockedByBackupDoesNotNotifyCron(t *testing.T) {
-	assertBlockedDoesNotNotify(t, "database backup is running", func() (string, bool) { return "", false })
+	assertBlockedDoesNotNotify(t, guardBlockRestartDuringBackup, "database backup is running", func() (string, bool) { return "", false })
 }
 
 func TestRestartBlockedForNonBackupDoesNotNotify(t *testing.T) {
-	assertBlockedDoesNotNotify(t, "configuration invalid", func() (string, bool) { return "fran", true })
+	interactive := func() (string, bool) { return "fran", true }
+	assertBlockedDoesNotNotify(t, "", "configuration invalid", interactive)
+	// The notice belongs to the backup guard, not to any block whose message
+	// happens to mention a backup.
+	assertBlockedDoesNotNotify(t, "", "blocked by active runtime lock: nightly backup window", interactive)
+	assertBlockedDoesNotNotify(t, "block-restart-with-clients", "clients connected during backup verification", interactive)
 }
 
 func TestPreflightFailedExit1(t *testing.T) {
@@ -563,7 +587,7 @@ func TestCascadeBackupBlockNotifiesInteractiveUser(t *testing.T) {
 	}
 	app.Operate = func(_ context.Context, _ options, _ *config.Config, _ config.Resolved, service, action string) (operation.Result, error) {
 		if service == "db" {
-			return operation.Result{Service: service, Action: action, Status: operation.ResultBlocked, Message: "database backup is running"}, nil
+			return operation.Result{Service: service, Action: action, Status: operation.ResultBlocked, Message: "database backup is running", Guard: guardBlockRestartDuringBackup}, nil
 		}
 		return operation.Result{Service: service, Action: action, Status: operation.ResultOK}, nil
 	}

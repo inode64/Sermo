@@ -119,7 +119,7 @@ type harness struct {
 	lockErr       error
 	released      int
 	named         []locks.Lock
-	guardBlocked  bool
+	guardRule     string
 	guardReason   string
 	guardErr      error
 	preflight     checks.Outcome
@@ -171,7 +171,7 @@ func (h *harness) engine() Engine {
 		},
 		LockTTL:          time.Minute,
 		NamedLocks:       func() ([]locks.Lock, error) { return h.named, nil },
-		Guard:            func(context.Context, string) (bool, string, error) { return h.guardBlocked, h.guardReason, h.guardErr },
+		Guard:            func(context.Context, string) (string, string, error) { return h.guardRule, h.guardReason, h.guardErr },
 		Preflight:        func(context.Context) checks.Outcome { return h.preflight },
 		Postflight:       func(context.Context) checks.Outcome { return h.postflight },
 		ReloadFunc:       func(ctx context.Context) error { return h.mgr.Reload(ctx, "mysqld") },
@@ -710,11 +710,11 @@ func TestRestartPreflightFailed(t *testing.T) {
 
 func TestRestartGuardBlocks(t *testing.T) {
 	h := defaultHarness()
-	h.guardBlocked = true
+	h.guardRule = "block-restart-during-backup"
 	h.guardReason = "backup running"
 	res := h.restart(t)
-	if res.Status != ResultBlocked || res.Message != "backup running" {
-		t.Fatalf("res = %+v, want blocked/backup running", res)
+	if res.Status != ResultBlocked || res.Message != "backup running" || res.Guard != "block-restart-during-backup" {
+		t.Fatalf("res = %+v, want blocked/backup running by the named guard", res)
 	}
 	if h.mgr.did("stop mysqld") {
 		t.Error("must not stop when a guard blocks")
@@ -725,7 +725,7 @@ func TestGuardBlocksStartStopReloadAndResume(t *testing.T) {
 	for _, action := range []string{"start", "stop", "reload", "resume", ActionPause} {
 		t.Run(action, func(t *testing.T) {
 			h := defaultHarness()
-			h.guardBlocked = true
+			h.guardRule = "block-restart-during-backup"
 			h.guardReason = "backup running"
 
 			res := h.action(t, action)
@@ -794,9 +794,9 @@ func TestGuardClosureFailsSafeOnUnavailableSQLCheck(t *testing.T) {
 		},
 	}
 	engine, _ := newInvalidTreeEngine(t, "db", "postgresql", tree)
-	blocked, _, err := engine.Guard(context.Background(), "restart")
-	if err == nil || blocked {
-		t.Fatalf("unavailable SQL guard = blocked:%v err:%v, want evaluation error", blocked, err)
+	guard, _, err := engine.Guard(context.Background(), "restart")
+	if err == nil || guard != "" {
+		t.Fatalf("unavailable SQL guard = blocked by %q, err:%v, want evaluation error", guard, err)
 	}
 }
 
@@ -823,9 +823,9 @@ func TestGuardClosureFailsSafeOnUnavailableSSHIdleCheck(t *testing.T) {
 		},
 	}
 	engine, _ := newInvalidTreeEngineWithCheckDeps(t, "db", "postgresql", tree, deps)
-	blocked, _, err := engine.Guard(context.Background(), "restart")
-	if err == nil || blocked {
-		t.Fatalf("unavailable SSH idle guard = blocked:%v err:%v, want evaluation error", blocked, err)
+	guard, _, err := engine.Guard(context.Background(), "restart")
+	if err == nil || guard != "" {
+		t.Fatalf("unavailable SSH idle guard = blocked by %q, err:%v, want evaluation error", guard, err)
 	}
 }
 
@@ -2308,8 +2308,11 @@ func TestKillDBQueryFailsClosed(t *testing.T) {
 			e := h.engine()
 			e.DBQueryKiller = tt.killer
 			if tt.guard {
-				e.Guard = func(_ context.Context, action string) (bool, string, error) {
-					return action == actionKillQuery, "blocked: backup running", nil
+				e.Guard = func(_ context.Context, action string) (string, string, error) {
+					if action != actionKillQuery {
+						return "", "", nil
+					}
+					return "block-kill-during-backup", "blocked: backup running", nil
 				}
 			}
 			res := e.KillDBQuery(context.Background(), target)

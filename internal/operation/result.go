@@ -33,10 +33,12 @@ const (
 
 // Result is the single outcome emitted per operation.
 type Result struct {
-	Service   string                  `json:"service"`
-	Action    string                  `json:"action"`
-	Status    ResultStatus            `json:"status"`
-	Message   string                  `json:"message,omitempty"`
+	Service string       `json:"service"`
+	Action  string       `json:"action"`
+	Status  ResultStatus `json:"status"`
+	Message string       `json:"message,omitempty"`
+	// Guard names the guard rule that blocked the action, when one did.
+	Guard     string                  `json:"guard,omitempty"`
 	Backend   string                  `json:"backend,omitempty"`
 	Warnings  []string                `json:"warnings,omitempty"`
 	Checks    []checks.Result         `json:"checks,omitempty"`
