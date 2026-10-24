@@ -19,7 +19,7 @@ class YAMLFormattingTest(unittest.TestCase):
             ".github/workflows/new.yaml", ".semgrep/rules/new.yml", "catalog/services/new.yaml",
             "examples/new.yml", "templates/new.yaml", "docs/new.yaml",
         )
-        excluded = ("graphify-out/graph.yaml", "node_modules/pkg/ci.yml", ".agents/local.yaml")
+        excluded = ("build/cache.yaml", "node_modules/pkg/ci.yml", ".agents/local.yaml")
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             for filename in (*included, *excluded):

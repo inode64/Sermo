@@ -50,7 +50,3 @@ go.work.sum
 .codex
 # Per-user Claude Code overrides (machine-local permissions)
 .claude/settings.local.json
-# Graphify's knowledge graph is a regenerable local cache. Keeping the complete
-# directory out of Git prevents hook/update churn from entering functional
-# commits while preserving graphify query/path/explain in each working copy.
-/graphify-out/
