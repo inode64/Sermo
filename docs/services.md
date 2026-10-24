@@ -388,7 +388,10 @@ reload:
   any unit with no MainPID — to the PID in the service's `pidfile:`. The pidfile
   fallback is only used when that PID also matches a `processes:` selector with
   exact `exe` and `user`; a stale pidfile must not signal an unrelated process.
-  A signal reload with neither target available fails. Services without pidfile
+  `MainPID` is held to the same selector when the service declares one, and
+  otherwise must sit in the unit's own control group, so a PID recycled after
+  the daemon died is never signalled. A signal reload with neither target
+  available fails. Services without pidfile
   metadata reload by signal only on systemd; on OpenRC they rely on the init
   script's own `reload` (`when: auto`).
 
