@@ -502,10 +502,13 @@ func validateMetric(entry map[string]any, path string, allowSystem bool, add add
 	} else {
 		descriptor = found
 	}
-	if op := cfgval.String(entry[rules.FieldOp]); op != "" {
-		if !cfgval.IsCompareOp(op) {
-			add("%s op %q is not one of %s", path, op, cfgval.CompareOpSummary)
-		}
+	// The check builder refuses a metric without op and the evaluator cannot
+	// compare without one, so a missing op is an error here too.
+	switch op := cfgval.String(entry[rules.FieldOp]); {
+	case op == "":
+		add("%s requires an op (%s)", path, cfgval.CompareOpSummary)
+	case !cfgval.IsCompareOp(op):
+		add("%s op %q is not one of %s", path, op, cfgval.CompareOpSummary)
 	}
 	value := cfgval.String(entry[rules.FieldValue])
 	if !parseMetricValue(value) {

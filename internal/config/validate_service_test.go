@@ -397,6 +397,23 @@ rules:
 				"value \"abc\" must be a number",
 			},
 		},
+		{
+			// The builder refuses a metric check without op and the evaluator
+			// cannot compare without one: validation must say so first.
+			name: "metric without op",
+			service: `
+name: svc
+service: x
+checks:
+  mem: { type: metric, name: memory, value: 80% }
+rules:
+  r:
+    type: alert
+    if: { metric: { scope: service, name: memory, value: 80% } }
+    then: { action: alert, message: "m" }
+`,
+			want: []string{"checks.mem requires an op", "metric requires an op"},
+		},
 	})
 }
 
