@@ -4,8 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sermo/internal/hostfs"
-	"strconv"
-	"strings"
+	"sermo/internal/metrics"
 	"time"
 
 	"sermo/internal/cfgval"
@@ -162,32 +161,10 @@ func defaultSwapUsageSampler() (SwapSample, error) {
 }
 
 func parseSwapVMStat(vm string) (pagesIn, pagesOut uint64, err error) {
-	var haveIn, haveOut bool
-	for line := range strings.SplitSeq(vm, checkLineSeparator) {
-		if v, ok := strings.CutPrefix(line, swapVMStatPagesInPrefix); ok {
-			pagesIn, err = parseSwapPageCounter(swapVMStatPagesIn, v)
-			haveIn = true
-			if err != nil {
-				return 0, 0, err
-			}
-		} else if v, ok := strings.CutPrefix(line, swapVMStatPagesOutPrefix); ok {
-			pagesOut, err = parseSwapPageCounter(swapVMStatPagesOut, v)
-			haveOut = true
-			if err != nil {
-				return 0, 0, err
-			}
-		}
-	}
-	if !haveIn || !haveOut {
-		return 0, 0, fmt.Errorf("%s: missing %s or %s counter", procVMStatPath, swapVMStatPagesIn, swapVMStatPagesOut)
+	pagesIn, okIn := metrics.ScanUintField(vm, swapVMStatPagesInPrefix)
+	pagesOut, okOut := metrics.ScanUintField(vm, swapVMStatPagesOutPrefix)
+	if !okIn || !okOut {
+		return 0, 0, fmt.Errorf("%s: missing or malformed %s or %s counter", procVMStatPath, swapVMStatPagesIn, swapVMStatPagesOut)
 	}
 	return pagesIn, pagesOut, nil
-}
-
-func parseSwapPageCounter(name, value string) (uint64, error) {
-	n, err := strconv.ParseUint(strings.TrimSpace(value), numericBaseDecimal, numericBits64)
-	if err != nil {
-		return 0, fmt.Errorf("%s: %w", name, err)
-	}
-	return n, nil
 }
