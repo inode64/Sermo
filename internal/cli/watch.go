@@ -210,19 +210,19 @@ func knownWatchName(cfg *config.Config, name string) bool {
 			return true
 		}
 	}
+	// Only a service the name starts with can own it, so only those resolve.
 	for _, svc := range cfg.SortedServiceNames() {
+		wn, ok := strings.CutPrefix(name, svc+":")
+		if !ok {
+			continue
+		}
 		resolved, errs := cfg.Resolve(svc)
 		if len(errs) > 0 || resolved.Tree == nil {
 			continue
 		}
-		watches, ok := resolved.Tree[config.SectionWatches].(map[string]any)
-		if !ok {
-			continue
-		}
-		for wn := range watches {
-			if svc+":"+wn == name {
-				return true
-			}
+		watches, _ := resolved.Tree[config.SectionWatches].(map[string]any)
+		if _, ok := watches[wn]; ok {
+			return true
 		}
 	}
 	return false
