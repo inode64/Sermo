@@ -83,6 +83,12 @@ const (
 	NetworkUnix = "unix"
 )
 
+// IsLocalhostName reports whether host is localhost or a name under it, the
+// names RFC 6761 reserves for loopback.
+func IsLocalhostName(host string) bool {
+	return host == Localhost || strings.HasSuffix(host, "."+Localhost)
+}
+
 // URL scheme constants shared by packages that must not depend on each other.
 const (
 	URLSchemeHTTP      = "http"

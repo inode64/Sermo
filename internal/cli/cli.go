@@ -67,9 +67,6 @@ const (
 	daemonProcessName   = "sermod"
 	daemonWebSchemeHTTP = checks.URLSchemeHTTP
 	daemonWebAuthUser   = "admin"
-	// daemonWebLocalhostName is the hostname that always resolves to loopback
-	// (RFC 6761), so a web.address spelled that way names a local daemon.
-	daemonWebLocalhostName = "localhost"
 	// beforeFlagLabel names the --before flag in cutoff parse errors.
 	beforeFlagLabel         = "--" + web.APIQueryBefore
 	cliUnknownServiceFormat = "unknown service %q"

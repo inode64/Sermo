@@ -9,6 +9,23 @@ import (
 
 // TimeoutFromContext returns the context's remaining time, the fallback with no
 // deadline, or 1ns when already past. Pin all three branches.
+// IsLocalhostName accepts localhost and names under it, never a name that
+// merely ends in the same letters.
+func TestIsLocalhostName(t *testing.T) {
+	for host, want := range map[string]bool{
+		"localhost":         true,
+		"web.localhost":     true,
+		"a.b.localhost":     true,
+		"notlocalhost":      false,
+		"localhost.example": false,
+		"":                  false,
+	} {
+		if got := IsLocalhostName(host); got != want {
+			t.Errorf("IsLocalhostName(%q) = %v, want %v", host, got, want)
+		}
+	}
+}
+
 func TestTimeoutFromContext(t *testing.T) {
 	if got := TimeoutFromContext(context.Background(), 10*time.Second); got != 10*time.Second {
 		t.Errorf("no deadline = %v, want the 10s fallback", got)

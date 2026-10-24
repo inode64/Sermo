@@ -10,12 +10,9 @@ import (
 	"time"
 
 	"sermo/internal/httpx"
+	"sermo/internal/netutil"
 	"sermo/internal/webcred"
 )
-
-// hostLocalname is the hostname (and suffix, `*.localhost`) that always
-// resolves to loopback per RFC 6761.
-const hostLocalname = "localhost"
 
 // Auth controls access to the dashboard with two roles:
 //
@@ -93,7 +90,7 @@ func (s *Server) hostAllowed(hostport string) bool {
 	if host == "" {
 		return false
 	}
-	if host == hostLocalname || strings.HasSuffix(host, "."+hostLocalname) {
+	if netutil.IsLocalhostName(host) {
 		return true
 	}
 	// Any IP-literal Host is direct addressing, not rebinding: a rebound
