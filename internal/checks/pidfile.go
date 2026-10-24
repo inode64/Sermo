@@ -9,6 +9,7 @@ import (
 	"syscall"
 	"time"
 
+	"sermo/internal/hostfs"
 	"sermo/internal/process"
 )
 
@@ -38,7 +39,7 @@ func (c pidfileCheck) Run(_ context.Context) Result {
 		alive = pidAlive
 	}
 	match := firstPathMatch(c.paths, func(path string) pathMatch {
-		pid, err := process.ReadPidfile(path)
+		pid, err := hostfs.ReadPidfile(path)
 		if err != nil {
 			if errors.Is(err, os.ErrNotExist) {
 				return pathMatch{missing: true}

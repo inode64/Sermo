@@ -41,6 +41,29 @@ func TestOpenRCCgroupPrincipalAndResiduals(t *testing.T) {
 
 // A FIFO at the init-declared pidfile path must not block the query, which
 // runs under the cached backend PID lock every discoverer of the unit shares.
+// The pidfile is read the way discovery reads it: PostgreSQL's postmaster.pid
+// keeps the PID on line one and cluster metadata below, and a process-group
+// pidfile names its leader as a negative number. Either must seed the cgroup.
+func TestOpenRCCgroupReadsPidfileLikeDiscovery(t *testing.T) {
+	for name, content := range map[string]string{
+		"postmaster.pid": "90\n/var/lib/postgresql/16/main\n1729000000\n5432\n",
+		"process group":  "-90\n",
+	} {
+		t.Run(name, func(t *testing.T) {
+			pidfile := filepath.Join(t.TempDir(), "postgresql.pid")
+			writePidfile(t, pidfile, content)
+			files := map[string]string{
+				"/etc/init.d/postgresql":                        "command=/usr/bin/postgres\npidfile=" + pidfile + "\n",
+				"/sys/fs/cgroup/openrc.postgresql/cgroup.procs": "90\n91\n",
+			}
+			pids := openRCPIDs(t, BackendPIDsFuncWithRunner(context.Background(), BackendOpenRC, "postgresql", nil, cgroupFiles(files)))
+			if got := pids(); !reflect.DeepEqual(got, []int{90, 91}) {
+				t.Fatalf("pids = %v, want the principal and its cgroup", got)
+			}
+		})
+	}
+}
+
 func TestOpenRCCgroupIgnoresFIFOPidfile(t *testing.T) {
 	pidfile := filepath.Join(t.TempDir(), "sshd.pid")
 	if err := syscall.Mkfifo(pidfile, 0o600); err != nil {
