@@ -210,12 +210,13 @@ func ServiceBackendPIDs(ctx context.Context, backend servicemgr.Backend, unit st
 }
 
 // serviceBackendPIDs is a service's backend PID query in the forms its
-// consumers take: discovery reads cached and fresh, and the judgments that read
-// an empty answer as "no process" (pidfile fallback and claim, no resident
-// process) read checked, which keeps the query error.
+// consumers take: monitoring discovery reads cached; operations observe through
+// fresh, and the judgments that read an empty answer as "no process" (pidfile
+// fallback and claim, no resident process) read checked, both keeping the
+// query error.
 type serviceBackendPIDs struct {
-	cached, fresh func() []int
-	checked       func() ([]int, error)
+	cached         func() []int
+	fresh, checked func() ([]int, error)
 }
 
 // serviceRuntimeBackendPIDs returns the service's backend PID query. An init
@@ -227,7 +228,7 @@ type serviceBackendPIDs struct {
 func serviceRuntimeBackendPIDs(ctx context.Context, deps Deps, unit string) serviceBackendPIDs {
 	if deps.Targets == nil || deps.BackendPIDs != nil || !deps.Backend.HasUnitCgroups() {
 		query := ServiceBackendPIDs(ctx, deps.Backend, unit, deps.BackendPIDs, deps.ExecxRunner)
-		return serviceBackendPIDs{cached: process.DiscoveryPIDs(query), checked: query}
+		return serviceBackendPIDs{cached: process.DiscoveryPIDs(query), fresh: query, checked: query}
 	}
 	shared := deps.Targets.BackendPIDs(deps.Backend, unit, deps.SystemFreshness, func() func() ([]int, error) {
 		return ServiceBackendPIDs(ctx, deps.Backend, unit, nil, deps.ExecxRunner)

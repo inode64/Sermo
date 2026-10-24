@@ -44,7 +44,7 @@ func (a App) discoverProcesses(ctx context.Context, opts options, cfg *config.Co
 		return observedProcesses(discoverer, selectors)
 	}
 	if query := app.ServiceBackendPIDs(ctx, target.Backend, target.Unit, target.BackendPIDs, a.Runner); query != nil {
-		discoverer.BackendPIDs = process.DiscoveryPIDs(query)
+		discoverer.BackendPIDs, discoverer.FreshBackendPIDs = process.DiscoveryPIDs(query), query
 	}
 	discoverer.ProcessOwnership = operation.UnitProcessOwnership(target.Unit)
 	return observedProcesses(discoverer, selectors)

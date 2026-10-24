@@ -30,15 +30,15 @@ type Discoverer struct {
 	// failure mode is safe: a backend that names no principal makes the first
 	// live cgroup member look like one, which only ever leaves a stray unlabelled.
 	//
-	// It carries no query error (see DiscoveryPIDs): discovery judges absence
-	// from strict selectors over the whole snapshot, never from an empty
-	// backend answer.
+	// Monitoring reads it without the query error (see DiscoveryPIDs).
 	BackendPIDs func() []int
-	// FreshBackendPIDs reports the same PIDs as BackendPIDs, read live. When
-	// BackendPIDs serves a shared cached answer (CachedPIDs), Observe and
-	// ObserveTracked use this instead, so the evidence an operation acts on
-	// never comes from a cached backend answer. Optional.
-	FreshBackendPIDs func() []int
+	// FreshBackendPIDs reports the same PIDs as BackendPIDs, read live, with
+	// the query's error. Observe and ObserveTracked use it instead, so the
+	// evidence an operation acts on never comes from a cached backend answer,
+	// and a query that did not answer leaves absence unproven: a unit member no
+	// selector describes (a KillMode=process remnant running another
+	// executable) is visible only in the backend's set. Optional.
+	FreshBackendPIDs func() ([]int, error)
 	// ProcessOwnership classifies kernel cgroup evidence. foreign excludes a
 	// process owned by another unit; unknown ownership forbids signaling an
 	// unlinked executable found outside the attributed tree.

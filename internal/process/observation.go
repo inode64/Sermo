@@ -210,11 +210,14 @@ func (d Discoverer) ObserveTracked(selectors []Selector, previous []Process) (Ob
 
 func (d Discoverer) observe(selectors []Selector, requireSnapshot, fresh bool) (Observation, error) {
 	backendPIDs := d.BackendPIDs
+	var backendErr error
 	if fresh && d.FreshBackendPIDs != nil {
-		backendPIDs = d.FreshBackendPIDs
+		var pids []int
+		pids, backendErr = d.FreshBackendPIDs()
+		backendPIDs = func() []int { return pids }
 	}
 	backend := backendPIDSeeds(backendPIDs)
-	if len(selectors) == 0 && len(backend) == 0 && !requireSnapshot {
+	if len(selectors) == 0 && len(backend) == 0 && !requireSnapshot && backendErr == nil {
 		return Observation{}, nil
 	}
 	reader := d.reader()
@@ -230,6 +233,9 @@ func (d Discoverer) observe(selectors []Selector, requireSnapshot, fresh bool) (
 	frozen.BackendPIDs, frozen.FreshBackendPIDs = func() []int { return backend }, nil
 	frozen.Reader = observationReader{idx: buildSnapshotIndex(snapshot)}
 	procs, warnings := frozen.Discover(selectors)
+	if backendErr != nil {
+		warnings = append(warnings, fmt.Sprintf("backend PID query: %v", backendErr))
+	}
 	out := Observation{snapshot: snapshot, Processes: procs}
 	// ReplacedExecutable is diagnostic evidence for a backend stop, not signal
 	// authority. The added candidates need independent verification for cleanup.

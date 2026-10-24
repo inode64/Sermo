@@ -176,12 +176,12 @@ func (c *CachedPIDs) Checked() ([]int, error) {
 	return c.refreshLocked()
 }
 
-// Fresh queries the backend now and refreshes the cached answer.
-func (c *CachedPIDs) Fresh() []int {
+// Fresh queries the backend now, refreshes the cached answer and returns it
+// with the query's error.
+func (c *CachedPIDs) Fresh() ([]int, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	pids, _ := c.refreshLocked()
-	return pids
+	return c.refreshLocked()
 }
 
 func (c *CachedPIDs) refreshLocked() ([]int, error) {
