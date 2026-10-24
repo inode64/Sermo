@@ -43,30 +43,24 @@ func withExpandWatch(ctx context.Context, watch string) context.Context {
 }
 
 func (e lockedVolumeExpander) ExpandPath(ctx context.Context, path string, by int64) (volume.Result, error) {
-	timeout := e.timeout
-	if timeout <= 0 {
-		timeout = DefaultEngineOperationTimeout
-	}
-	// The lock TTL equals the deadline, so the lock cannot expire while the
-	// expansion it protects is still running.
-	opCtx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
 	var reclaimed func(reason string)
 	if e.emit != nil {
 		watch, _ := ctx.Value(expandWatchKey{}).(string)
 		reclaimed = func(reason string) { e.emit(ExpansionLockReclaim(watch, path, reason).event()) }
 	}
-	handle, err := configureOperationLocker(e.runtimeDir, reclaimReason(reclaimed)).Acquire(expandLockName(path), timeout)
+	var res volume.Result
+	var expandErr error
+	err := withOperationLock(ctx, e.runtimeDir, expandLockName(path), e.timeout, reclaimed, func(opCtx context.Context) {
+		res, expandErr = e.inner.ExpandPath(opCtx, path, by)
+	})
+	if _, held := errors.AsType[*locks.HeldError](err); held {
+		return volume.Result{}, fmt.Errorf("storage path %q: %w", path, errExpandInProgress)
+	}
 	if err != nil {
-		if _, held := errors.AsType[*locks.HeldError](err); held {
-			return volume.Result{}, fmt.Errorf("storage path %q: %w", path, errExpandInProgress)
-		}
 		return volume.Result{}, fmt.Errorf("lock expansion of storage path %q: %w", path, err)
 	}
-	defer func() { _ = handle.Release() }()
-	res, err := e.inner.ExpandPath(opCtx, path, by)
-	if err != nil {
-		return res, fmt.Errorf("expand storage path %q: %w", path, err)
+	if expandErr != nil {
+		return res, fmt.Errorf("expand storage path %q: %w", path, expandErr)
 	}
 	return res, nil
 }

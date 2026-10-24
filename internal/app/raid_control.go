@@ -24,27 +24,20 @@ type RAIDControlResult struct {
 	Message string
 }
 
-// runLockedControl is the shared ritual of every manual control action: bound
-// it by timeout, serialize it under a named operation lock (reporting a held
-// lock as "already has an operation in progress"), and run the action inside
-// both. subject names the thing being controlled in the two lock messages;
-// onReclaim, when non-nil, audits a reclaimed stale lock.
+// runLockedControl runs a manual control action under withOperationLock and
+// reports a held lock as "already has an operation in progress". subject names
+// the thing being controlled in the two lock messages.
 func runLockedControl(ctx context.Context, runtimeDir, lockName, subject string, timeout time.Duration, onReclaim func(reason string), run func(context.Context) (bool, string)) (ok bool, message string) {
-	if timeout <= 0 {
-		timeout = DefaultEngineOperationTimeout
+	err := withOperationLock(ctx, runtimeDir, lockName, timeout, onReclaim, func(opCtx context.Context) {
+		ok, message = run(opCtx)
+	})
+	if _, held := errors.AsType[*locks.HeldError](err); held {
+		return false, subject + " already has an operation in progress"
 	}
-	opCtx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
-	locker := configureOperationLocker(runtimeDir, reclaimReason(onReclaim))
-	handle, err := locker.Acquire(lockName, timeout)
 	if err != nil {
-		if _, held := errors.AsType[*locks.HeldError](err); held {
-			return false, subject + " already has an operation in progress"
-		}
 		return false, fmt.Sprintf("lock %s: %v", subject, err)
 	}
-	defer func() { _ = handle.Release() }()
-	return run(opCtx)
+	return ok, message
 }
 
 // ControlRAID serializes a pause/resume request for one md array, bounds it by

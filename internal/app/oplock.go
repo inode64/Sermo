@@ -1,7 +1,9 @@
 package app
 
 import (
+	"context"
 	"fmt"
+	"time"
 
 	"sermo/internal/locks"
 	"sermo/internal/mountctl"
@@ -21,10 +23,29 @@ const (
 // stale-lock reclaims logged through onReclaim (AGENTS.md).
 func configureOperationLocker(runtimeDir string, onReclaim func(service, reason string)) locks.OperationLocker {
 	locker := locks.NewOperationLocker(locks.RuntimeOpsDir(runtimeDir))
-	if onReclaim != nil {
-		locker.OnReclaim = onReclaim
-	}
+	locker.OnReclaim = onReclaim
 	return locker
+}
+
+// withOperationLock runs run under the named operation lock, bounded by timeout
+// (DefaultEngineOperationTimeout when non-positive). The lock TTL equals the
+// deadline, so the lock cannot expire while run is still working. It returns
+// only the acquire error, a *locks.HeldError while another operation holds the
+// lock; run reports its own outcome. onReclaim, when non-nil, audits a
+// reclaimed stale lock.
+func withOperationLock(ctx context.Context, runtimeDir, lockName string, timeout time.Duration, onReclaim func(reason string), run func(context.Context)) error {
+	if timeout <= 0 {
+		timeout = DefaultEngineOperationTimeout
+	}
+	opCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	handle, err := configureOperationLocker(runtimeDir, reclaimReason(onReclaim)).Acquire(lockName, timeout)
+	if err != nil {
+		return fmt.Errorf("acquire %s: %w", lockName, err)
+	}
+	defer func() { _ = handle.Release() }()
+	run(opCtx)
+	return nil
 }
 
 // LockReclaim is one stale lock a daemon, web or sermoctl path reclaimed: the
