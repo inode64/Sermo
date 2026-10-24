@@ -11,17 +11,19 @@ import (
 	"time"
 )
 
-// Signaler delivers a signal to a process. It is an interface so escalation can
-// be tested without touching real processes.
+// Signaler delivers a signal to the authorized process generation it was
+// handed, never to a bare PID. It is an interface so escalation can be tested
+// without touching real processes.
 type Signaler interface {
-	Signal(pid int, sig syscall.Signal) error
+	SignalProcess(ctx context.Context, target Process, sig syscall.Signal) error
 }
 
 // OSSignaler sends real signals through Linux pidfds.
 type OSSignaler struct{}
 
-// Signal delivers sig to pid, refusing non-positive PIDs (which have special
-// process-group semantics and must never be signalled here).
+// Signal delivers sig to the process pid names now, for a caller that owns the
+// PID itself (sermod's self-HUP). It refuses a PID whose identity cannot be
+// read, so non-positive PIDs and their process-group semantics never apply.
 func (OSSignaler) Signal(pid int, sig syscall.Signal) error {
 	id, ok := OSReader{}.Identity(pid)
 	if !ok {
@@ -204,9 +206,10 @@ func signalRound(ctx context.Context, set []Process, allowed func(Process) bool,
 				break
 			}
 			attempt := SignalAttempt{PID: set[i].PID, Signal: SignalName(sig)}
-			if err := SignalProcess(ctx, signaler, set[i], sig); err == nil {
+			if err := signaler.SignalProcess(ctx, set[i], sig); err == nil {
 				signalled[set[i].PID] = true
 			} else {
+				err = fmt.Errorf("deliver signal: %w", err)
 				failed = append(failed, SignalFailure{PID: set[i].PID, Err: err})
 				attempt.Error = err.Error()
 			}

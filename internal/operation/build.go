@@ -335,7 +335,10 @@ func nativeSignalReloadFunc(signal syscall.Signal, runner execx.Runner, backend,
 		if err := ctx.Err(); err != nil {
 			return reloadContextError(err)
 		}
-		return process.SignalProcess(ctx, signaler, target, signal)
+		if err := signaler.SignalProcess(ctx, target, signal); err != nil {
+			return fmt.Errorf("deliver signal: %w", err)
+		}
+		return nil
 	}
 }
 

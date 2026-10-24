@@ -76,8 +76,8 @@ type recSignaler struct {
 	calls []sigCall
 }
 
-func (r *recSignaler) Signal(pid int, sig syscall.Signal) error {
-	r.calls = append(r.calls, sigCall{pid, sig})
+func (r *recSignaler) SignalProcess(_ context.Context, target Process, sig syscall.Signal) error {
+	r.calls = append(r.calls, sigCall{target.PID, sig})
 	return nil
 }
 

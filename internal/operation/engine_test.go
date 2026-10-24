@@ -2069,14 +2069,14 @@ func TestCloseEmptyTerminalSessionFailsClosedWhenUnavailableOrRejected(t *testin
 
 type noopSignaler struct{}
 
-func (noopSignaler) Signal(int, syscall.Signal) error { return nil }
+func (noopSignaler) SignalProcess(context.Context, process.Process, syscall.Signal) error { return nil }
 
 type recordingSignaler struct {
 	calls []string
 }
 
-func (s *recordingSignaler) Signal(pid int, sig syscall.Signal) error {
-	s.calls = append(s.calls, fmt.Sprintf("%d %s", pid, sig))
+func (s *recordingSignaler) SignalProcess(_ context.Context, target process.Process, sig syscall.Signal) error {
+	s.calls = append(s.calls, fmt.Sprintf("%d %s", target.PID, sig))
 	return nil
 }
 

@@ -112,7 +112,7 @@ func (h SelfStrayHygiene) reap(pid int, unit string, identity func(int) (process
 		return false
 	}
 	target := process.Process{PID: id.PID, StartTicks: id.StartTicks, UID: id.UID, User: id.User, Exe: id.Exe, ExeOK: id.ExeOK, ExePrev: id.ExePrev}
-	if err := process.SignalProcess(context.Background(), signaler, target, syscall.SIGTERM); err != nil {
+	if err := signaler.SignalProcess(context.Background(), target, syscall.SIGTERM); err != nil {
 		h.emitReapFailure(pid, unit, id, true, err)
 		return false
 	}

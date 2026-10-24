@@ -1,6 +1,7 @@
 package operation
 
 import (
+	"context"
 	"strings"
 	"syscall"
 	"testing"
@@ -21,10 +22,10 @@ type pidSignal struct {
 	sig syscall.Signal
 }
 
-func (s *pidSignaler) Signal(pid int, sig syscall.Signal) error {
-	s.calls = append(s.calls, pidSignal{pid: pid, sig: sig})
+func (s *pidSignaler) SignalProcess(_ context.Context, target process.Process, sig syscall.Signal) error {
+	s.calls = append(s.calls, pidSignal{pid: target.PID, sig: sig})
 	if s.err == nil && s.onSignal != nil {
-		s.onSignal(pid, sig)
+		s.onSignal(target.PID, sig)
 	}
 	return s.err
 }

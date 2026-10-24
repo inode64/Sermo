@@ -96,11 +96,6 @@ type sessionIdentitySignaler struct {
 	got process.Process
 }
 
-func (s *sessionIdentitySignaler) Signal(int, syscall.Signal) error {
-	s.t.Fatal("numeric signal bypassed session identity")
-	return nil
-}
-
 func (s *sessionIdentitySignaler) SignalProcess(_ context.Context, proc process.Process, sig syscall.Signal) error {
 	if sig != syscall.SIGTERM {
 		s.t.Fatalf("unexpected signal %v", sig)
