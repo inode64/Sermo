@@ -681,7 +681,10 @@ shares one `/proc` snapshot and one backend PID answer per unit for half an
 `engine.interval`. Every
 observation an operation acts on (stop, residual cleanup, reaper rounds, start
 verification) and every kill re-check reads both live, and the pidfd
-revalidates the process at delivery.
+revalidates the process at delivery. A live backend PID query that does not
+answer leaves process absence unproven, because a unit member no selector
+describes is visible only there: the operation fails rather than reconcile or
+start on top of it.
 Native init services exclude selector matches owned by a different init unit.
 Libvirt domains, libvirt networks and Docker targets do not use their target
 names as init unit names; their backend evidence and configured process

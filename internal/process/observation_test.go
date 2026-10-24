@@ -2,6 +2,7 @@ package process
 
 import (
 	"errors"
+	"strings"
 	"testing"
 	"time"
 )
@@ -169,6 +170,31 @@ func TestObservationVerifiesExitedGenerations(t *testing.T) {
 	}
 }
 
+// A backend query that did not answer leaves absence unproven: a unit member
+// no selector describes is visible only in the backend's set.
+func TestObserveTreatsAFailedBackendQueryAsIncomplete(t *testing.T) {
+	t.Parallel()
+	inner := fakeReader{ids: map[int]Identity{4242: {PID: 4242, PPID: 1, UID: 0, Exe: "/usr/bin/leftover", ExeOK: true}}}
+	queryErr := errors.New("systemctl show MainPID: timeout")
+	strict := []Selector{{Name: "main", Type: SelectorCommandMatch, Exe: "/usr/sbin/acpid", User: "root"}}
+	for _, selectors := range [][]Selector{nil, strict} {
+		d := Discoverer{
+			Reader:           inner,
+			ResolveUser:      fakeUsers(map[string]uint32{"root": 0}),
+			FreshBackendPIDs: func() ([]int, error) { return nil, queryErr },
+		}
+		for name, observe := range map[string]func() (Observation, error){
+			"Observe":        func() (Observation, error) { return d.Observe(selectors) },
+			"ObserveTracked": func() (Observation, error) { return d.ObserveTracked(selectors, nil) },
+		} {
+			observation, err := observe()
+			if err == nil || observation.AbsenceKnown || !strings.Contains(err.Error(), "backend PID query") {
+				t.Fatalf("%s with %d selectors = %+v, %v; want an incomplete-discovery error", name, len(selectors), observation, err)
+			}
+		}
+	}
+}
+
 // Monitoring discovery reads the shared backend answer; the observations an
 // operation acts on read the backend live.
 func TestObserveReadsBackendPIDsLive(t *testing.T) {
@@ -179,7 +205,7 @@ func TestObserveReadsBackendPIDsLive(t *testing.T) {
 		Reader:           inner,
 		ResolveUser:      fakeUsers(map[string]uint32{"root": 0}),
 		BackendPIDs:      func() []int { cached++; return []int{100} },
-		FreshBackendPIDs: func() []int { live++; return []int{100} },
+		FreshBackendPIDs: func() ([]int, error) { live++; return []int{100}, nil },
 	}
 	if procs, _ := d.Discover(nil); len(procs) != 1 {
 		t.Fatalf("Discover = %+v, want the backend process", procs)

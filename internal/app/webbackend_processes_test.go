@@ -556,6 +556,33 @@ func TestServiceRuntimeDoesNotReadAFailedBackendPIDQueryAsNoProcess(t *testing.T
 	})
 }
 
+// An operation's observation is the evidence a stop or start acts on. When the
+// backend does not answer, a leftover that only the unit's cgroup could name (a
+// KillMode=process remnant running another executable) is invisible to the
+// selectors, so absence is not proven and the observation must say so.
+func TestOperationObservationReportsAFailedBackendPIDQuery(t *testing.T) {
+	deps := Deps{
+		Backend:          servicemgr.BackendSystemd,
+		Manager:          fakeManager{},
+		Runtime:          t.TempDir(),
+		DefaultTimeout:   time.Second,
+		OperationTimeout: time.Second,
+		ExecxRunner:      stalledPIDRunner{},
+		ProcReader:       serviceOwnershipReader{4242: {PID: 4242, PPID: 1, Exe: "/usr/bin/leftover", ExeOK: true}},
+		Emit:             func(Event) {},
+	}
+	tree := map[string]any{"processes": map[string]any{"main": map[string]any{"exe": "/usr/sbin/acpid", "user": "root"}}}
+	for _, targets := range []*control.TargetCache{nil, control.NewTargetCache()} {
+		deps := deps
+		deps.Targets = targets
+		runtime := BuildServiceRuntime(t.Context(), ServiceRuntimeConfig{Service: "acpid", Unit: "acpid.service", Tree: tree, Deps: deps})
+		observation, err := runtime.Discoverer.Observe(runtime.Selectors)
+		if err == nil && observation.AbsenceKnown {
+			t.Fatalf("target cache %v: observation = %+v, nil error; want absence unproven while the backend does not answer", targets != nil, observation)
+		}
+	}
+}
+
 // stalledPIDRunner answers systemd's static unit properties but fails the
 // runtime PID queries, the way systemctl does while PID 1 is busy.
 type stalledPIDRunner struct{}
