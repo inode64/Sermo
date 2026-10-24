@@ -40,7 +40,7 @@ func (a App) runWatch(ctx context.Context, opts options) int {
 		return a.runWatchMonitor(ctx, opts, true)
 	case "probe":
 		return a.runWatchProbe(ctx, opts)
-	case "pause", commandResume:
+	case app.RaidControlPause, app.RaidControlResume:
 		return a.runWatchRAIDControl(ctx, opts, opts.args[0])
 	default:
 		return a.commandUsageError(commandWatch, fmt.Sprintf("unknown watch subcommand %q", opts.args[0]))
@@ -132,7 +132,7 @@ func (a App) runWatchRAIDControl(ctx context.Context, opts options, action strin
 		return a.fail(opts, fmt.Sprintf("watch %q has no raid_control.pause_resume configured", opts.args[1]))
 	}
 	array := fmt.Sprint(checkEntry[checks.CheckKeyArray])
-	if action == "pause" && opts.confirm != array {
+	if action == app.RaidControlPause && opts.confirm != array {
 		return a.commandUsageError(commandWatch, "watch pause requires --confirm "+array)
 	}
 	timeout := manualOperationTimeout(cfg, opts)

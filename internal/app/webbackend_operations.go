@@ -257,13 +257,9 @@ func (b *WebBackend) ControlRAID(ctx context.Context, name, action, confirmation
 	}
 	if action == RaidControlPause && confirmation != array {
 		msg := fmt.Sprintf("confirm RAID array %q before pausing reconstruction", array)
-		b.emitWatchMonitorEvent(name, eventActionRAIDPause, eventKindSuppressed, eventStatusBlocked, msg)
+		b.emitWatchMonitorEvent(name, RaidControlPause, eventKindSuppressed, eventStatusBlocked, msg)
 		return web.ActionResult{Message: msg}
 	}
 	result := ControlRAID(ctx, b.cfg.Global.RuntimeDir(), array, action, b.operationTimeout, watchLockReclaimEvent(b.emit, name))
-	eventAction := eventActionRAIDPause
-	if action == RaidControlResume {
-		eventAction = eventActionRAIDResume
-	}
-	return b.finishWatchControl(name, eventAction, result.OK, result.Message)
+	return b.finishWatchControl(name, action, result.OK, result.Message)
 }
