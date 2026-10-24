@@ -16,8 +16,11 @@ const keyOSDefault = SelectionKeywordDefault
 const (
 	osReleaseEtcPath = "/etc/os-release"
 	osReleaseUsrPath = "/usr/lib/os-release"
-	osReleaseIDKey   = "ID="
 	osReleaseTrimSet = `"'`
+	// OSReleaseKeyID is the os-release distribution id `os:` selectors match.
+	OSReleaseKeyID = "ID"
+	// OSReleaseKeyPrettyName is the os-release label the dashboard shows.
+	OSReleaseKeyPrettyName = "PRETTY_NAME"
 )
 
 // detectedOS holds the OS id used for ${os} and `os:` selectors. Resolved once at
@@ -28,8 +31,8 @@ func detectOS() string {
 	if v := envOverride(envOSOverride); v != "" {
 		return strings.ToLower(v)
 	}
-	if id := osReleaseID(); id != "" {
-		return id
+	if id := OSReleaseValue(OSReleaseKeyID); id != "" {
+		return strings.ToLower(id)
 	}
 	return "linux"
 }
@@ -39,16 +42,27 @@ func OSReleasePaths() []string {
 	return []string{osReleaseEtcPath, osReleaseUsrPath}
 }
 
-// osReleaseID returns the lowercased ID= field of os-release, or "".
-func osReleaseID() string {
+// OSReleaseValue returns the unquoted value of key from the first os-release
+// file in OSReleasePaths that sets it non-empty, or "".
+func OSReleaseValue(key string) string {
 	for _, path := range OSReleasePaths() {
-		data, err := hostfs.ReadFile(path)
-		if err != nil {
-			continue
+		if data, err := hostfs.ReadFile(path); err == nil {
+			if v := ParseOSReleaseValue(data, key); v != "" {
+				return v
+			}
 		}
-		for line := range strings.SplitSeq(string(data), configLineSeparator) {
-			if v, ok := strings.CutPrefix(strings.TrimSpace(line), osReleaseIDKey); ok {
-				return strings.ToLower(strings.Trim(v, osReleaseTrimSet))
+	}
+	return ""
+}
+
+// ParseOSReleaseValue extracts the unquoted value of key from os-release
+// content, or "" when it is absent or empty.
+func ParseOSReleaseValue(data []byte, key string) string {
+	prefix := key + "="
+	for line := range strings.SplitSeq(string(data), configLineSeparator) {
+		if v, ok := strings.CutPrefix(strings.TrimSpace(line), prefix); ok {
+			if v = strings.Trim(v, osReleaseTrimSet); v != "" {
+				return v
 			}
 		}
 	}
