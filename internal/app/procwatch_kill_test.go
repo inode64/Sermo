@@ -36,19 +36,21 @@ type fixedSampler struct {
 
 func (f fixedSampler) Sample(ProcMatch) ([]ProcInfo, bool) { return f.infos, f.ok }
 
+// Keep fake executable identities off host binary paths: their symlinks would
+// be resolved by the kill selector but not by the fake process sampler.
 func killProcInfo() ProcInfo {
-	return ProcInfo{PID: 42, User: "root", UID: 0, Exe: "/usr/bin/sudo", ExeOK: true}
+	return ProcInfo{PID: 42, User: "root", UID: 0, Exe: "/opt/sermo-test/sudo", ExeOK: true}
 }
 
 // killWatcher builds a process watch whose only action is a native kill. The PID
 // is pre-seeded as first-seen an hour ago so a minAge condition fires on the very
 // first cycle, keeping the kill assertions independent of age bookkeeping.
 func killWatcher(h *procHarness, ks *killSpec, sig *fakeSignaler, sampler ProcSampler, onGone, dryRun bool) *procWatcher {
-	ks.selector = process.NewKillSelector([]string{"root"}, []string{"/usr/bin/sudo"})
+	ks.selector = process.NewKillSelector([]string{"root"}, []string{"/opt/sermo-test/sudo"})
 	emit := func(e Event) { h.events = append(h.events, e) }
 	w := &procWatcher{
 		name:  "pw",
-		match: ProcMatch{Name: "/usr/bin/sudo", User: "root"},
+		match: ProcMatch{Name: "/opt/sermo-test/sudo", User: "root"},
 		cond:  procCond{minAge: time.Second, onGone: onGone},
 		kill:  ks,
 		killer: pidKiller{

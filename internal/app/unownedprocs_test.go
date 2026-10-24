@@ -55,7 +55,8 @@ const (
 
 var testUnownedClock = time.Unix(testUnownedNow, 0)
 
-// unownedProc is a sampled process old enough to be listed.
+// unownedProc is a sampled process old enough to be listed. Signal tests use
+// /opt/sermo-test executables so host binary symlinks cannot rewrite selectors.
 func unownedProc(pid int, exe, cgroup string) ProcInfo {
 	return ProcInfo{
 		PID: pid, PPID: 1, UID: 0, User: "root",
@@ -174,7 +175,7 @@ func rowsOf(result checks.Result) []checks.UnownedProcess {
 
 func TestUnownedWatcherListsProcessesOutsideEveryUnit(t *testing.T) {
 	h := &unownedHarness{}
-	stray := unownedProc(42, "/usr/bin/sleep", "0::/")
+	stray := unownedProc(42, "/opt/sermo-test/sleep", "0::/")
 	owned := unownedProc(43, "/usr/sbin/nginx", "0::/system.slice/nginx.service")
 	w := h.watcher(t, fixedSampler{infos: []ProcInfo{owned, stray}, ok: true}, map[string]any{}, systemdFixture().runtime())
 
@@ -191,7 +192,7 @@ func TestUnownedWatcherListsProcessesOutsideEveryUnit(t *testing.T) {
 	if h.snapshot.Message != "unowned processes: 2 scanned, 1 unowned" {
 		t.Fatalf("message = %q", h.snapshot.Message)
 	}
-	if findings := h.snapshot.Data[checks.DataKeyViolations]; findings != "pid 42: outside every init unit (/usr/bin/sleep)" {
+	if findings := h.snapshot.Data[checks.DataKeyViolations]; findings != "pid 42: outside every init unit (/opt/sermo-test/sleep)" {
 		t.Fatalf("findings = %q", findings)
 	}
 	if kinds := h.kinds(); len(kinds) != 1 || kinds[0] != eventKindFiring || strings.Contains(h.events[0].Message, "never-publish") {
@@ -204,8 +205,8 @@ func TestUnownedWatcherSessionAndPackageCriteria(t *testing.T) {
 	fixture := systemdFixture()
 	fixture.namespaces = map[int]string{46: testOtherMountNS}
 	live := unownedProc(44, "/bin/bash", "0::/user.slice/user-0.slice/session-3.scope")
-	closed := unownedProc(45, "/usr/bin/sleep", "0::/user.slice/user-0.slice/session-9.scope")
-	closing := unownedProc(47, "/usr/bin/sleep", "0::/user.slice/user-0.slice/session-7.scope")
+	closed := unownedProc(45, "/opt/sermo-test/sleep", "0::/user.slice/user-0.slice/session-9.scope")
+	closing := unownedProc(47, "/opt/sermo-test/sleep", "0::/user.slice/user-0.slice/session-7.scope")
 	container := unownedProc(46, "/opt/acme/bin/agent", "0::/system.slice/docker-abc.scope")
 	// A service's own process is owned whatever its binary: a daemon installed
 	// outside the package manager, a plugin helper, sermod itself.
@@ -257,8 +258,8 @@ func TestUnownedClassifierSharesSessionStateOnlyWithinASample(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			samples := []ProcInfo{
-				unownedProc(42, "/usr/bin/sleep", "0::/user.slice/user-0.slice/session-3.scope"),
-				unownedProc(43, "/usr/bin/sleep", "0::/user.slice/user-0.slice/session-3.scope"),
+				unownedProc(42, "/opt/sermo-test/sleep", "0::/user.slice/user-0.slice/session-3.scope"),
+				unownedProc(43, "/opt/sermo-test/sleep", "0::/user.slice/user-0.slice/session-3.scope"),
 			}
 			rt := systemdFixture().runtime()
 			rt.sampler = fixedSampler{infos: samples, ok: true}
@@ -304,7 +305,7 @@ func TestUnownedWatcherNeverJudgesOtherMountNamespaces(t *testing.T) {
 	dockerWorker.UID, dockerWorker.User = 33, "www-data"
 	kubePod := unownedProc(71, "/opt/acme/bin/agent", "0::/kubepods/burstable/pod1/ctr1")
 	hostInSameShape := unownedProc(72, "/opt/acme/bin/agent", "0::/lxc/payload") // host namespace: a real stray
-	closedSessionInNS := unownedProc(73, "/usr/bin/sleep", "0::/user.slice/user-0.slice/session-9.scope")
+	closedSessionInNS := unownedProc(73, "/opt/sermo-test/sleep", "0::/user.slice/user-0.slice/session-9.scope")
 	w := h.watcher(t, fixedSampler{infos: []ProcInfo{dockerWorker, kubePod, hostInSameShape, closedSessionInNS}, ok: true}, map[string]any{}, fixture.runtime())
 	w.kill = unownedKillSpec([]string{"www-data", "root"}, []string{"/usr/bin/php", "/opt/acme/bin/agent"}, false)
 
@@ -347,7 +348,7 @@ func TestUnownedWatcherUnreadableInitNamespaceJudgesNothing(t *testing.T) {
 		}
 		return inner(path)
 	}
-	closedSession := unownedProc(76, "/usr/bin/sleep", "0::/user.slice/user-0.slice/session-9.scope")
+	closedSession := unownedProc(76, "/opt/sermo-test/sleep", "0::/user.slice/user-0.slice/session-9.scope")
 	w := h.watcher(t, fixedSampler{infos: []ProcInfo{unownedProc(74, "/opt/acme/bin/agent", "0::/"), closedSession}, ok: true}, map[string]any{}, rt)
 
 	w.runCycle(context.Background())
@@ -422,11 +423,11 @@ func TestUnownedWatcherReportsUnresolvedUsers(t *testing.T) {
 
 func TestUnownedWatcherExclusions(t *testing.T) {
 	h := &unownedHarness{}
-	young := unownedProc(50, "/usr/bin/sleep", "0::/")
+	young := unownedProc(50, "/opt/sermo-test/sleep", "0::/")
 	young.StartTime = testUnownedClock.Add(-time.Minute)
-	noStart := unownedProc(51, "/usr/bin/sleep", "0::/")
+	noStart := unownedProc(51, "/opt/sermo-test/sleep", "0::/")
 	noStart.StartTime = time.Time{}
-	zombie := unownedProc(52, "/usr/bin/sleep", "0::/")
+	zombie := unownedProc(52, "/opt/sermo-test/sleep", "0::/")
 	zombie.State = process.ProcStateZombie
 	kthread := unownedProc(2, "", "0::/")
 	kthread.ExeOK, kthread.Cmdline = false, nil
@@ -435,9 +436,9 @@ func TestUnownedWatcherExclusions(t *testing.T) {
 	ignoredByCmd.Cmdline = []string{"/opt/acme/bin/agent", "--daemon"}
 	notIgnoredByCmd := unownedProc(55, "/opt/acme/bin/agent", "0::/")
 	notIgnoredByCmd.Cmdline = []string{"/opt/acme/bin/agent", "--other"}
-	otherUser := unownedProc(56, "/usr/bin/sleep", "0::/")
+	otherUser := unownedProc(56, "/opt/sermo-test/sleep", "0::/")
 	otherUser.UID, otherUser.User = 1000, "guest"
-	listed := unownedProc(57, "/usr/bin/sleep", "0::/")
+	listed := unownedProc(57, "/opt/sermo-test/sleep", "0::/")
 	unreadable := unownedProc(58, "", "0::/")
 	unreadable.ExeOK = false
 	replaced := unownedProc(59, "", "0::/")
@@ -501,7 +502,7 @@ func TestUnownedWatcherReportsUnavailableAttribution(t *testing.T) {
 
 func TestUnownedWatcherFiresOncePerIncarnationAndRecovers(t *testing.T) {
 	h := &unownedHarness{}
-	stray := unownedProc(42, "/usr/bin/sleep", "0::/")
+	stray := unownedProc(42, "/opt/sermo-test/sleep", "0::/")
 	recycled := stray
 	recycled.StartTicks = 999
 	sampler := &fakeProcSampler{cycles: [][]ProcInfo{{stray}, {stray}, {recycled}, {}}}
@@ -527,7 +528,7 @@ func TestUnownedWatcherFiresOncePerIncarnationAndRecovers(t *testing.T) {
 
 func TestUnownedWatcherReportsCPUFromSecondCycle(t *testing.T) {
 	h := &unownedHarness{}
-	first := unownedProc(42, "/usr/bin/sleep", "0::/")
+	first := unownedProc(42, "/opt/sermo-test/sleep", "0::/")
 	second := first
 	second.CPUTicks = first.CPUTicks + 50
 	clock := testUnownedClock
@@ -560,10 +561,10 @@ func unownedKillSpec(users, exes []string, escalate bool) *killSpec {
 
 func TestUnownedWatcherKillsOnlyAuthorizedFindings(t *testing.T) {
 	h := &unownedHarness{}
-	authorized := unownedProc(42, "/usr/bin/sleep", "0::/")
+	authorized := unownedProc(42, "/opt/sermo-test/sleep", "0::/")
 	other := unownedProc(43, "/usr/bin/python3", "0::/")
 	w := h.watcher(t, fixedSampler{infos: []ProcInfo{authorized, other}, ok: true}, map[string]any{}, systemdFixture().runtime())
-	w.kill = unownedKillSpec([]string{"root"}, []string{"/usr/bin/sleep"}, false)
+	w.kill = unownedKillSpec([]string{"root"}, []string{"/opt/sermo-test/sleep"}, false)
 
 	w.runCycle(context.Background())
 
@@ -584,11 +585,11 @@ func TestUnownedWatcherKillsOnlyAuthorizedFindings(t *testing.T) {
 func TestUnownedWatcherNeverSignalsReplacedOrUnresolvedExecutable(t *testing.T) {
 	h := &unownedHarness{}
 	replaced := unownedProc(42, "", "0::/")
-	replaced.ExeOK, replaced.ExePrev = false, "/usr/bin/sleep"
+	replaced.ExeOK, replaced.ExePrev = false, "/opt/sermo-test/sleep"
 	unresolved := unownedProc(43, "", "0::/")
 	unresolved.ExeOK = false
 	w := h.watcher(t, fixedSampler{infos: []ProcInfo{replaced, unresolved}, ok: true}, map[string]any{}, systemdFixture().runtime())
-	w.kill = unownedKillSpec([]string{"root"}, []string{"/usr/bin/sleep"}, true)
+	w.kill = unownedKillSpec([]string{"root"}, []string{"/opt/sermo-test/sleep"}, true)
 
 	w.runCycle(context.Background())
 
@@ -607,12 +608,12 @@ func TestUnownedWatcherNeverSignalsReplacedOrUnresolvedExecutable(t *testing.T) 
 
 func TestUnownedWatcherKillEscalatesWhileStillUnowned(t *testing.T) {
 	h := &unownedHarness{}
-	stray := unownedProc(42, "/usr/bin/sleep", "0::/")
+	stray := unownedProc(42, "/opt/sermo-test/sleep", "0::/")
 	adopted := stray
 	adopted.Cgroup = "0::/system.slice/sleep.service"
 	// Cycle sample, post-TERM re-sample (still unowned), post-KILL re-sample (gone).
 	w := h.watcher(t, &fakeProcSampler{cycles: [][]ProcInfo{{stray}, {stray}, {}}}, map[string]any{}, systemdFixture().runtime())
-	w.kill = unownedKillSpec([]string{"root"}, []string{"/usr/bin/sleep"}, true)
+	w.kill = unownedKillSpec([]string{"root"}, []string{"/opt/sermo-test/sleep"}, true)
 	w.runCycle(context.Background())
 	if len(h.signaler.sent) != 2 || h.signaler.sent[1] != (sigCall{42, syscall.SIGKILL}) {
 		t.Fatalf("signals = %v, want TERM then KILL", h.signaler.sent)
@@ -621,7 +622,7 @@ func TestUnownedWatcherKillEscalatesWhileStillUnowned(t *testing.T) {
 	// A process that became owned during the grace period is never escalated on.
 	h2 := &unownedHarness{}
 	w2 := h2.watcher(t, &fakeProcSampler{cycles: [][]ProcInfo{{stray}, {adopted}}}, map[string]any{}, systemdFixture().runtime())
-	w2.kill = unownedKillSpec([]string{"root"}, []string{"/usr/bin/sleep"}, true)
+	w2.kill = unownedKillSpec([]string{"root"}, []string{"/opt/sermo-test/sleep"}, true)
 	w2.runCycle(context.Background())
 	if len(h2.signaler.sent) != 1 || h2.signaler.sent[0].sig != syscall.SIGTERM {
 		t.Fatalf("signals = %v, want only SIGTERM", h2.signaler.sent)
@@ -633,11 +634,11 @@ func TestUnownedWatcherKillEscalatesWhileStillUnowned(t *testing.T) {
 // the whole batch, not one pair per finding.
 func TestUnownedWatcherEscalatesACycleTogether(t *testing.T) {
 	h := &unownedHarness{}
-	a := unownedProc(42, "/usr/bin/sleep", "0::/")
-	b := unownedProc(43, "/usr/bin/sleep", "0::/")
+	a := unownedProc(42, "/opt/sermo-test/sleep", "0::/")
+	b := unownedProc(43, "/opt/sermo-test/sleep", "0::/")
 	// Cycle sample, two post-TERM re-samples (both still unowned), two post-KILL re-samples (gone).
 	w := h.watcher(t, &fakeProcSampler{cycles: [][]ProcInfo{{a, b}, {a, b}, {a, b}, {}, {}}}, map[string]any{}, systemdFixture().runtime())
-	w.kill = unownedKillSpec([]string{"root"}, []string{"/usr/bin/sleep"}, true)
+	w.kill = unownedKillSpec([]string{"root"}, []string{"/opt/sermo-test/sleep"}, true)
 	var waits []time.Duration
 	w.killer.sleep = func(d time.Duration) { waits = append(waits, d) }
 
@@ -708,7 +709,7 @@ func TestUnownedWatcherUnreadableSessionDirectoryClosesNothing(t *testing.T) {
 	h := &unownedHarness{}
 	rt := systemdFixture().runtime()
 	rt.readDir = func(string) ([]os.DirEntry, error) { return nil, fs.ErrNotExist }
-	closedSession := unownedProc(79, "/usr/bin/sleep", "0::/user.slice/user-0.slice/session-9.scope")
+	closedSession := unownedProc(79, "/opt/sermo-test/sleep", "0::/user.slice/user-0.slice/session-9.scope")
 	stray := unownedProc(80, "/opt/acme/bin/agent", "0::/")
 	w := h.watcher(t, fixedSampler{infos: []ProcInfo{closedSession, stray}, ok: true}, map[string]any{}, rt)
 
@@ -726,8 +727,8 @@ func TestUnownedWatcherUnreadableSessionDirectoryClosesNothing(t *testing.T) {
 func TestUnownedWatcherDryRunSuppressesKillAndNotify(t *testing.T) {
 	h := &unownedHarness{}
 	n := &fakeNotifier{name: "ops"}
-	w := h.watcher(t, fixedSampler{infos: []ProcInfo{unownedProc(42, "/usr/bin/sleep", "0::/")}, ok: true}, map[string]any{}, systemdFixture().runtime())
-	w.kill = unownedKillSpec([]string{"root"}, []string{"/usr/bin/sleep"}, false)
+	w := h.watcher(t, fixedSampler{infos: []ProcInfo{unownedProc(42, "/opt/sermo-test/sleep", "0::/")}, ok: true}, map[string]any{}, systemdFixture().runtime())
+	w.kill = unownedKillSpec([]string{"root"}, []string{"/opt/sermo-test/sleep"}, false)
 	w.notifiers = []notify.Notifier{n}
 	w.dryRun = true
 
@@ -773,7 +774,7 @@ func TestBuildUnownedProcessesWatchRefusals(t *testing.T) {
 			}
 		})
 	}
-	valid := base(map[string]any{"notify": []any{"none"}, "kill": map[string]any{"escalate": true, "kill_only_if": map[string]any{"users": []any{"root"}, "exe_any": []any{"/usr/bin/sleep"}}}})
+	valid := base(map[string]any{"notify": []any{"none"}, "kill": map[string]any{"escalate": true, "kill_only_if": map[string]any{"users": []any{"root"}, "exe_any": []any{"/opt/sermo-test/sleep"}}}})
 	watches, warnings := BuildWatches(cfgWithWatches(map[string]any{"unowned": valid}), Deps{PackageIndex: &fakePackages{}}, time.Minute)
 	if len(watches) != 1 || len(warnings) != 0 || watches[0].CheckType != checks.CheckTypeUnownedProcesses || watches[0].Severity != severity.Warning {
 		t.Fatalf("BuildWatches() = %d watches severity=%q warnings:%v, want one advisory watch", len(watches), watches[0].Severity, warnings)
