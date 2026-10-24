@@ -753,7 +753,7 @@ func (w *Worker) runRemediation(ctx context.Context, ev *rules.Evaluator, now fu
 func (w *Worker) runFiringRemediation(ctx context.Context, ev *rules.Evaluator, now func() time.Time, firing firingRule) bool {
 	op, hasOperation := firing.Rule.Operation()
 	if !hasOperation {
-		w.emitRemediationAlerts(ctx, ev, firing)
+		w.emitAlerts(ctx, ev, firing.Rule, firing.announce(), firing.change, firing.severity)
 		return false
 	}
 	action := string(op.Type)
@@ -788,14 +788,6 @@ func (w *Worker) runFiringRemediation(ctx context.Context, ev *rules.Evaluator, 
 	return true
 }
 
-func (w *Worker) emitRemediationAlerts(ctx context.Context, ev *rules.Evaluator, firing firingRule) {
-	if w.DryRun {
-		w.emitDryRunAlerts(ctx, ev, firing.Rule, firing.announce(), firing.change, firing.severity)
-		return
-	}
-	w.emitAlerts(ctx, ev, firing.Rule, firing.announce(), firing.change, firing.severity)
-}
-
 func (w *Worker) remediationSuppression(ctx context.Context, ev *rules.Evaluator, firing firingRule, action string, now func() time.Time) (string, bool) {
 	blocked, reason, err := rules.Guard(ctx, w.Rules, action, ev)
 	// A guard is consulted on every cycle its rule keeps firing, so an
@@ -828,7 +820,7 @@ func (w *Worker) emitDryRunRemediation(ctx context.Context, ev *rules.Evaluator,
 		w.emit(Event{Kind: eventKindDryRun, Severity: firing.severity, Rule: firing.Name, Action: action, Message: message})
 	}
 	if suppress == "" || firing.escalated {
-		w.emitDryRunAlerts(ctx, ev, firing.Rule, firing.announce(), firing.change, firing.severity)
+		w.emitAlerts(ctx, ev, firing.Rule, firing.announce(), firing.change, firing.severity)
 	}
 }
 
@@ -915,11 +907,7 @@ func (w *Worker) runAlerts(ctx context.Context, ev *rules.Evaluator, at time.Tim
 		}
 		fireState := w.fires(ctx, ev, *rule, at, evals)
 		if fireState.firing {
-			if w.DryRun {
-				w.emitDryRunAlerts(ctx, ev, *rule, fireState.announce(), fireState.change, fireState.severity)
-			} else {
-				w.emitAlerts(ctx, ev, *rule, fireState.announce(), fireState.change, fireState.severity)
-			}
+			w.emitAlerts(ctx, ev, *rule, fireState.announce(), fireState.change, fireState.severity)
 		} else if fireState.recovered {
 			w.emitRuleRecovered(ctx, ev, *rule, fireState)
 		}
@@ -930,16 +918,10 @@ func (w *Worker) runAlerts(ctx context.Context, ev *rules.Evaluator, at time.Tim
 // the rule resolves to one or more notifiers (its own `notify`, or the global
 // default it inherits, unless suppressed with `none`), delivers each message to
 // them best-effort. announce marks a cycle that opened or escalated the
-// episode; level is the episode's held severity.
+// episode; level is the episode's held severity. A dry-run worker's alerts
+// reach only the console notifiers.
 func (w *Worker) emitAlerts(ctx context.Context, ev *rules.Evaluator, r rules.Rule, announce bool, change rules.ChangeContext, level severity.Level) {
-	w.emitAlertsFiltered(ctx, ev, r, nil, announce, change, level)
-}
-
-func (w *Worker) emitDryRunAlerts(ctx context.Context, ev *rules.Evaluator, r rules.Rule, announce bool, change rules.ChangeContext, level severity.Level) {
-	w.emitAlertsFiltered(ctx, ev, r, dryRunConsoleNotifier, announce, change, level)
-}
-
-func (w *Worker) emitAlertsFiltered(ctx context.Context, ev *rules.Evaluator, r rules.Rule, allow func(notify.Notifier) bool, announce bool, change rules.ChangeContext, level severity.Level) {
+	allow := dryRunFilter(w.DryRun)
 	panicking := w.InPanic != nil && w.InPanic()
 	failOutput := w.cycleFailOutput
 	emitEvent := w.shouldEmitRuleEvent(r, announce)
