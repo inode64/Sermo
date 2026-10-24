@@ -61,7 +61,7 @@ func TestManualKillSelectorBindsNumericUID(t *testing.T) {
 }
 
 func TestKillWatchProcessRefusals(t *testing.T) {
-	stray := unownedProc(42, "/usr/bin/sleep", "0::/")
+	stray := unownedProc(42, "/opt/sermo-test/sleep", "0::/")
 	b, signaler, events := unownedKillBackend(t, fixedSampler{infos: []ProcInfo{stray}, ok: true}, false)
 	for _, tc := range []struct {
 		name  string
@@ -97,7 +97,7 @@ func TestKillWatchProcessRefusals(t *testing.T) {
 	}
 
 	replaced := unownedProc(43, "", "0::/")
-	replaced.ExeOK, replaced.ExePrev = false, "/usr/bin/sleep"
+	replaced.ExeOK, replaced.ExePrev = false, "/opt/sermo-test/sleep"
 	b2, signaler2, _ := unownedKillBackend(t, fixedSampler{infos: []ProcInfo{replaced}, ok: true}, false)
 	res := b2.KillWatchProcess(context.Background(), "unowned", web.WatchProcessKillRequest{PID: 43, StartTicks: 430})
 	if res.OK || !strings.Contains(res.Message, unownedKillReasonReplacedExe) || len(signaler2.sent) != 0 {
@@ -106,7 +106,7 @@ func TestKillWatchProcessRefusals(t *testing.T) {
 }
 
 func TestKillWatchProcessSendsSIGTERMToVerifiedIdentity(t *testing.T) {
-	stray := unownedProc(42, "/usr/bin/sleep", "0::/")
+	stray := unownedProc(42, "/opt/sermo-test/sleep", "0::/")
 	b, signaler, events := unownedKillBackend(t, fixedSampler{infos: []ProcInfo{stray}, ok: true}, false)
 
 	res := b.KillWatchProcess(context.Background(), "unowned", web.WatchProcessKillRequest{PID: 42, StartTicks: 420})
@@ -120,7 +120,7 @@ func TestKillWatchProcessSendsSIGTERMToVerifiedIdentity(t *testing.T) {
 }
 
 func TestKillWatchProcessEscalatesOnRequest(t *testing.T) {
-	stray := unownedProc(42, "/usr/bin/sleep", "0::/")
+	stray := unownedProc(42, "/opt/sermo-test/sleep", "0::/")
 	// Verification sample, post-TERM re-sample (still there), post-KILL (gone).
 	b, signaler, _ := unownedKillBackend(t, &fakeProcSampler{cycles: [][]ProcInfo{{stray}, {stray}, {}}}, false)
 	res := b.KillWatchProcess(context.Background(), "unowned", web.WatchProcessKillRequest{PID: 42, StartTicks: 420, Escalate: true})
@@ -141,7 +141,7 @@ func TestKillWatchProcessReportsFailureOnce(t *testing.T) {
 		{name: "survived SIGKILL", escalate: true, message: "survived SIGKILL", kinds: []string{eventKindKill, eventKindKill, eventKindKillFailed}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			stray := unownedProc(42, "/usr/bin/sleep", "0::/")
+			stray := unownedProc(42, "/opt/sermo-test/sleep", "0::/")
 			b, signaler, events := unownedKillBackend(t, fixedSampler{infos: []ProcInfo{stray}, ok: true}, false)
 			signaler.err = tc.err
 			res := b.KillWatchProcess(t.Context(), "unowned", web.WatchProcessKillRequest{PID: 42, StartTicks: 420, Escalate: tc.escalate})
@@ -160,7 +160,7 @@ func TestKillWatchProcessReportsFailureOnce(t *testing.T) {
 }
 
 func TestKillWatchProcessAuditsLockFailure(t *testing.T) {
-	stray := unownedProc(42, "/usr/bin/sleep", "0::/")
+	stray := unownedProc(42, "/opt/sermo-test/sleep", "0::/")
 	b, signaler, events := unownedKillBackend(t, fixedSampler{infos: []ProcInfo{stray}, ok: true}, false)
 	// A file at the runtime path prevents creating the operation lock.
 	runtime := filepath.Join(t.TempDir(), "runtime")
@@ -178,7 +178,7 @@ func TestKillWatchProcessAuditsLockFailure(t *testing.T) {
 }
 
 func TestKillWatchProcessDryRunSignalsNothing(t *testing.T) {
-	stray := unownedProc(42, "/usr/bin/sleep", "0::/")
+	stray := unownedProc(42, "/opt/sermo-test/sleep", "0::/")
 	b, signaler, events := unownedKillBackend(t, fixedSampler{infos: []ProcInfo{stray}, ok: true}, true)
 	res := b.KillWatchProcess(context.Background(), "unowned", web.WatchProcessKillRequest{PID: 42, StartTicks: 420})
 	if !res.OK || !strings.Contains(res.Message, "would send SIGTERM to pid 42") || len(signaler.sent) != 0 {
@@ -192,7 +192,7 @@ func TestKillWatchProcessDryRunSignalsNothing(t *testing.T) {
 func TestWatchViewListsUnownedProcessRows(t *testing.T) {
 	snapshots := NewWatchSnapshots()
 	snapshots.now = func() time.Time { return testUnownedClock }
-	rows := []checks.UnownedProcess{{PID: 42, StartTicks: 420, User: "root", Exe: "/usr/bin/sleep", ExeResolved: true, RSS: 4096, CPU: 1.5, HasCPU: true, Reason: unownedReasonNoUnit, CanKill: true}}
+	rows := []checks.UnownedProcess{{PID: 42, StartTicks: 420, User: "root", Exe: "/opt/sermo-test/sleep", ExeResolved: true, RSS: 4096, CPU: 1.5, HasCPU: true, Reason: unownedReasonNoUnit, CanKill: true}}
 	w := &webWatch{name: "unowned", checkType: checks.CheckTypeUnownedProcesses, check: map[string]any{}, interval: time.Minute, configID: "cfg"}
 	snapshots.publishConfigured("unowned", checks.CheckTypeUnownedProcesses, checks.Result{Check: "unowned", Data: map[string]any{checks.DataKeyProcesses: rows}}, "cfg")
 	b := &WebBackend{watchSnapshots: snapshots, now: func() time.Time { return testUnownedClock }, watches: map[string]*webWatch{"unowned": w}, watchOrder: []string{"unowned"}, cfg: &config.Config{}}
