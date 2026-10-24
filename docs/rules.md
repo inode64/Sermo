@@ -2721,7 +2721,9 @@ it is not exactly one, the `max` it is over (or under) and the growth over the
 window. Result data carries `current_bytes`, `files`, `max_bytes` when `max`
 is set and, when a window is set, `baseline_bytes`, `growth_bytes` and the
 `window`; `value` is the growth when a window is configured, otherwise the
-current total. A directory walk skips hidden descendants by default; set
+current total. A selected path that is a symlink is measured through its target,
+including a directory target; symlinks encountered inside that directory are
+not followed. A directory walk skips hidden descendants by default; set
 `include_hidden: true` to include them. A hidden path named directly is
 always sampled. Point it at a bounded path.
 

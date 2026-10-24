@@ -159,6 +159,37 @@ func TestDirOrFileSizeMissingPathAddsStatContext(t *testing.T) {
 	}
 }
 
+func TestPathSizeFollowsSelectedDirectorySymlink(t *testing.T) {
+	root := t.TempDir()
+	target := filepath.Join(root, "target")
+	writeSizedTree(t, target, map[string]int{"visible.txt": 3, ".hidden.txt": 5, "sub/nested.txt": 7})
+	link := filepath.Join(root, "selected")
+	if err := os.Symlink(target, link); err != nil {
+		t.Fatal(err)
+	}
+	// Following descendants would count files twice or loop back to the root.
+	if err := os.Symlink(target, filepath.Join(target, "loop")); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		name          string
+		path          string
+		includeHidden bool
+		want          SizeMeasure
+	}{
+		{name: "literal", path: link, want: SizeMeasure{Bytes: 10, Files: 2}},
+		{name: "glob", path: filepath.Join(root, "select*"), want: SizeMeasure{Bytes: 10, Files: 2}},
+		{name: "hidden descendants", path: link, includeHidden: true, want: SizeMeasure{Bytes: 15, Files: 3}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := pathSize(t.Context(), tc.path, tc.includeHidden)
+			if err != nil || got != tc.want {
+				t.Fatalf("pathSize = %+v, %v; want %+v", got, err, tc.want)
+			}
+		})
+	}
+}
+
 func TestSizeCheckHonorsCanceledContext(t *testing.T) {
 	root := t.TempDir()
 	if err := os.WriteFile(filepath.Join(root, "f.bin"), make([]byte, 1024), 0o600); err != nil {

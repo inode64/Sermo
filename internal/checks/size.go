@@ -155,8 +155,14 @@ func dirOrFileSize(ctx context.Context, path string, includeHidden bool) (SizeMe
 	if !info.IsDir() {
 		return SizeMeasure{Bytes: info.Size(), Files: 1}, nil
 	}
+	// WalkDir uses lstat for its root. Resolve the selected directory first so
+	// a symlink measures its tree instead of silently reporting zero bytes.
+	root, err := filepath.EvalSymlinks(path)
+	if err != nil {
+		return SizeMeasure{}, fmt.Errorf("resolve size path %q: %w", path, err)
+	}
 	var total SizeMeasure
-	err = filepath.WalkDir(path, sizeWalkFunc(ctx, path, includeHidden, &total))
+	err = filepath.WalkDir(root, sizeWalkFunc(ctx, root, includeHidden, &total))
 	if err != nil {
 		return total, fmt.Errorf("walk size path %q: %w", path, err)
 	}
