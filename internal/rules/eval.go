@@ -227,6 +227,7 @@ func (e *Evaluator) evalList(ctx context.Context, v any, and bool) (bool, error)
 		return false, errors.New("and/or requires a non-empty list")
 	}
 	var unknown error
+	falsified := false
 	for _, item := range items {
 		node, ok := item.(map[string]any)
 		if !ok {
@@ -234,24 +235,34 @@ func (e *Evaluator) evalList(ctx context.Context, v any, and bool) (bool, error)
 		}
 		r, err := e.eval(ctx, node)
 		if err != nil {
-			// An OR holds as soon as one operand holds, whatever its unknown
-			// siblings say, so the outcome cannot depend on operand order. An
-			// AND, and any other error, stops at the first uncertainty.
-			if !and && errors.Is(err, errUnavailable) {
+			// An unknown operand cannot decide the list alone: an OR still holds
+			// on a later true operand and an AND still fails on a later false
+			// one, so the outcome cannot depend on operand order. Any other
+			// error stops evaluation.
+			if errors.Is(err, errUnavailable) {
 				unknown = err
 				continue
 			}
 			return false, err
 		}
 		if and && !r {
-			return false, nil // short-circuit AND
+			// A guard keeps reading: an unobservable operand denies the action
+			// in either order, whatever its siblings say.
+			if !e.FailOnUnavailable {
+				return false, nil // short-circuit AND
+			}
+			falsified = true
+			continue
 		}
 		if !and && r {
 			return true, nil // short-circuit OR
 		}
 	}
 	if unknown != nil {
-		return false, unknown // OR: nothing held, something was unknown
+		return false, unknown // nothing decided the list, something was unknown
+	}
+	if falsified {
+		return false, nil
 	}
 	return and, nil // AND: all true; OR: none true
 }
