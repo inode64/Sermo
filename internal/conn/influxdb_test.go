@@ -57,3 +57,22 @@ func TestInfluxdbProbePingFallback(t *testing.T) {
 func TestInfluxdbProbeDown(t *testing.T) {
 	assertProbeRefused(t, influxdbProtocol{}, deadPort(t))
 }
+
+// /ping answers by status alone, so a redirect must not borrow the status of
+// the page it leads to.
+func TestInfluxdbProbeDoesNotFollowRedirects(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/login":
+			_, _ = io.WriteString(w, "<html>Sign in</html>")
+		default:
+			http.Redirect(w, r, "/login", http.StatusFound)
+		}
+	}))
+	defer srv.Close()
+
+	host, port := serverHostPort(t, srv)
+	if _, err := (influxdbProtocol{}).Probe(context.Background(), Config{Host: host, Port: port}); err == nil {
+		t.Fatal("a redirect to a 200 login page must not read as a live InfluxDB")
+	}
+}

@@ -26,6 +26,7 @@ const (
 
 func (prometheusProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	client, base := httpProbeBase(cfg, defaultPortPrometheus)
+	client = withoutRedirects(client)
 	decorate := func(req *http.Request) {
 		if cfg.User != "" {
 			req.SetBasicAuth(cfg.User, cfg.Password)
