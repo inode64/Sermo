@@ -106,9 +106,9 @@ func TestServiceBackendPIDsUsesOnlyResolvedProviders(t *testing.T) {
 				t.Fatal("ServiceBackendPIDs() is nil")
 			}
 			if tc.wantPID > 0 {
-				pids := got()
-				if len(pids) != 1 || pids[0] != tc.wantPID {
-					t.Fatalf("ServiceBackendPIDs() = %v, want [%d]", pids, tc.wantPID)
+				pids, err := got()
+				if err != nil || len(pids) != 1 || pids[0] != tc.wantPID {
+					t.Fatalf("ServiceBackendPIDs() = %v, %v, want [%d]", pids, err, tc.wantPID)
 				}
 			}
 		})
@@ -183,7 +183,7 @@ func TestPidfileClaimUsesSelectorsThenBackendPIDs(t *testing.T) {
 		ResolveUser: func(string) (uint32, bool) { return 0, true },
 	}
 	selectors := []process.Selector{{Name: "main", Type: process.SelectorCommandMatch, Exe: exe, User: "root"}}
-	claim := pidfileClaim(discoverer, selectors, func() []int { return []int{10, 11} })
+	claim := pidfileClaim(discoverer, selectors, func() ([]int, error) { return []int{10, 11}, nil })
 	for pid, want := range map[int]bool{10: true, 11: true, 12: false} {
 		if claimed, known := claim(pid); !known || claimed != want {
 			t.Errorf("claim(%d) = %v/%v, want %v/true", pid, claimed, known, want)

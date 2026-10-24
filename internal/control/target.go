@@ -170,7 +170,7 @@ func NewTargetCache() *TargetCache {
 // building its query with build only on the first request; nil when build
 // returns none. The worker, web and metric-watch discoverers of one unit share
 // it, so their discoveries within freshness query the init system once.
-func (c *TargetCache) BackendPIDs(backend servicemgr.Backend, unit string, freshness time.Duration, build func() func() []int) *process.CachedPIDs {
+func (c *TargetCache) BackendPIDs(backend servicemgr.Backend, unit string, freshness time.Duration, build func() func() ([]int, error)) *process.CachedPIDs {
 	key := unitKey{backend: backend, unit: unit}
 	c.mu.Lock()
 	cached, ok := c.backendPIDs[key]

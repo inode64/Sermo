@@ -29,6 +29,10 @@ type Discoverer struct {
 	// reports its init PID). Stray classification relies on that order, and its
 	// failure mode is safe: a backend that names no principal makes the first
 	// live cgroup member look like one, which only ever leaves a stray unlabelled.
+	//
+	// It carries no query error (see DiscoveryPIDs): discovery judges absence
+	// from strict selectors over the whole snapshot, never from an empty
+	// backend answer.
 	BackendPIDs func() []int
 	// FreshBackendPIDs reports the same PIDs as BackendPIDs, read live. When
 	// BackendPIDs serves a shared cached answer (CachedPIDs), Observe and
@@ -465,6 +469,18 @@ func hasExeSelector(selectors []Selector) bool {
 		}
 	}
 	return false
+}
+
+// DiscoveryPIDs adapts a backend PID query that reports its error, such as
+// servicemgr.BackendPIDsFuncWithRunner, to Discoverer.BackendPIDs.
+func DiscoveryPIDs(query func() ([]int, error)) func() []int {
+	if query == nil {
+		return nil
+	}
+	return func() []int {
+		pids, _ := query()
+		return pids
+	}
 }
 
 func backendPIDSeeds(fn func() []int) []int {

@@ -150,7 +150,7 @@ func (r *errorAwareSnapshotReader) SnapshotWithError() (map[int]Identity, error)
 func TestCachedPIDsSharesOneQueryWithinFreshness(t *testing.T) {
 	queries := 0
 	now := time.Unix(0, 0)
-	c := NewCachedPIDs(func() []int { queries++; return []int{10, 11} }, 5*time.Second)
+	c := NewCachedPIDs(func() ([]int, error) { queries++; return []int{10, 11}, nil }, 5*time.Second)
 	c.now = func() time.Time { return now }
 
 	first := c.PIDs()
@@ -173,9 +173,23 @@ func TestCachedPIDsSharesOneQueryWithinFreshness(t *testing.T) {
 	}
 }
 
+// Checked keeps the cached query's error for the callers that read an empty
+// answer as "no process"; PIDs serves discovery, which does not need it.
+func TestCachedPIDsCheckedKeepsTheQueryError(t *testing.T) {
+	queryErr := errors.New("systemctl show MainPID: timeout")
+	queries := 0
+	c := NewCachedPIDs(func() ([]int, error) { queries++; return []int{10}, queryErr }, time.Minute)
+	if pids := c.PIDs(); len(pids) != 1 || pids[0] != 10 {
+		t.Fatalf("PIDs = %v, want the partial answer", pids)
+	}
+	if pids, err := c.Checked(); !errors.Is(err, queryErr) || len(pids) != 1 || queries != 1 {
+		t.Fatalf("Checked = %v, %v after %d queries, want the cached answer and error", pids, err, queries)
+	}
+}
+
 func TestCachedPIDsZeroFreshnessAlwaysQueries(t *testing.T) {
 	queries := 0
-	c := NewCachedPIDs(func() []int { queries++; return nil }, 0)
+	c := NewCachedPIDs(func() ([]int, error) { queries++; return nil, nil }, 0)
 	c.PIDs()
 	c.PIDs()
 	if queries != 2 {

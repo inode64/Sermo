@@ -2,7 +2,9 @@ package servicemgr
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io/fs"
 	"regexp"
 	"strconv"
 	"strings"
@@ -124,33 +126,35 @@ func newManager(backend Backend, runner execx.Runner, opts Options) (Manager, er
 	}
 }
 
-// MainPIDContext returns the backend's main process ID for a unit.
-// systemd exposes it via `systemctl show -p MainPID`; OpenRC has no uniform
-// equivalent, so it returns false there (pidfile or process selectors
-// cover OpenRC).
-func MainPIDContext(ctx context.Context, runner execx.Runner, backend Backend, unit string) (int, bool) {
+// MainPIDContext returns the backend's main process ID for a unit, 0 when it
+// names none. systemd exposes it via `systemctl show -p MainPID`; OpenRC has no
+// uniform equivalent (pidfile or process selectors cover OpenRC). The error
+// reports a query that did not answer, which says nothing about the unit's
+// processes.
+func MainPIDContext(ctx context.Context, runner execx.Runner, backend Backend, unit string) (int, error) {
 	if backend != BackendSystemd {
-		return 0, false
+		return 0, nil
 	}
 	runner = execx.RunnerOrDefault(runner)
 	res, err := runSystemctlShow(ctx, runner, defaultDetectTimeout, systemctlPropertyMainPID, unit)
 	if err != nil {
-		return 0, false
+		return 0, err
 	}
-	pid, perr := strconv.Atoi(strings.TrimSpace(res.Stdout))
-	if perr != nil || pid <= 0 {
-		return 0, false
+	// An answer that is no PID names no main process, as MainPID=0 does.
+	if pid, perr := strconv.Atoi(strings.TrimSpace(res.Stdout)); perr == nil && pid > 0 {
+		return pid, nil
 	}
-	return pid, true
+	return 0, nil
 }
 
-// CgroupPIDsContext returns every PID in a unit's control group.
-// systemd exposes the cgroup path via `systemctl show -p ControlGroup`, and all
-// processes in it belong to the service — more complete than MainPID alone.
-// readFile defaults to hostfs.ReadFile.
-func CgroupPIDsContext(ctx context.Context, runner execx.Runner, readFile func(string) ([]byte, error), backend Backend, unit string) ([]int, bool) {
+// CgroupPIDsContext returns every PID in a unit's control group, none for a unit
+// without one (stopped, OpenRC). systemd exposes the cgroup path via `systemctl
+// show -p ControlGroup`, and all processes in it belong to the service — more
+// complete than MainPID alone. The error reports a query or cgroup.procs read
+// that failed. readFile defaults to hostfs.ReadFile.
+func CgroupPIDsContext(ctx context.Context, runner execx.Runner, readFile func(string) ([]byte, error), backend Backend, unit string) ([]int, error) {
 	if backend != BackendSystemd {
-		return nil, false
+		return nil, nil
 	}
 	runner = execx.RunnerOrDefault(runner)
 	if readFile == nil {
@@ -158,19 +162,22 @@ func CgroupPIDsContext(ctx context.Context, runner execx.Runner, readFile func(s
 	}
 	res, err := runSystemctlShow(ctx, runner, defaultDetectTimeout, systemctlPropertyCGroup, unit)
 	if err != nil {
-		return nil, false
+		return nil, err
 	}
 	path, ok := cgroupProcsPath(strings.TrimSpace(res.Stdout))
 	if !ok {
-		return nil, false
+		return nil, nil
 	}
 
 	data, err := readFile(path)
-	if err != nil {
-		return nil, false
+	if errors.Is(err, fs.ErrNotExist) {
+		// The unit stopped after the query and systemd removed its cgroup.
+		return nil, nil
 	}
-	pids := parseCgroupProcs(data)
-	return pids, len(pids) > 0
+	if err != nil {
+		return nil, fmt.Errorf("read %s cgroup processes: %w", unit, err)
+	}
+	return parseCgroupProcs(data), nil
 }
 
 func parseCgroupProcs(data []byte) []int {
@@ -183,18 +190,21 @@ func parseCgroupProcs(data []byte) []int {
 	return pids
 }
 
-// BackendPIDsFuncWithRunner returns a process.Discoverer.BackendPIDs closure for
-// a unit: it reports the MainPID first, then the complete cgroup process set,
-// deduplicated. Keeping MainPID first preserves systemd's authoritative
-// principal process for read-only lifecycle observations while the remaining
-// cgroup members still provide complete service metrics. The command and file
-// readers are injectable for tests and for callers that already carry an execx
-// runner.
-func BackendPIDsFuncWithRunner(ctx context.Context, backend Backend, unit string, runner execx.Runner, readFile func(string) ([]byte, error)) func() []int {
+// BackendPIDsFuncWithRunner returns a unit's backend PID query, the source of
+// process.Discoverer.BackendPIDs: the MainPID first, then the complete cgroup
+// process set, deduplicated. Keeping MainPID first preserves systemd's
+// authoritative principal process for read-only lifecycle observations while
+// the remaining cgroup members still provide complete service metrics. The
+// error reports a systemd query that did not answer, PID 1 being busy after a
+// daemon-reload for example: the PIDs are then incomplete, and a caller that
+// reads an empty answer as "no process" must not. The command and file readers
+// are injectable for tests and for callers that already carry an execx runner.
+func BackendPIDsFuncWithRunner(ctx context.Context, backend Backend, unit string, runner execx.Runner, readFile func(string) ([]byte, error)) func() ([]int, error) {
 	if backend == BackendOpenRC {
-		return openRCBackendPIDs(unit, readFile)
+		pids := openRCBackendPIDs(unit, readFile)
+		return func() ([]int, error) { return pids(), nil }
 	}
-	return func() []int {
+	return func() ([]int, error) {
 		seen := map[int]bool{}
 		var pids []int
 		add := func(pid int) {
@@ -203,15 +213,18 @@ func BackendPIDsFuncWithRunner(ctx context.Context, backend Backend, unit string
 				pids = append(pids, pid)
 			}
 		}
-		if pid, ok := MainPIDContext(ctx, runner, backend, unit); ok {
+		mainPID, mainErr := MainPIDContext(ctx, runner, backend, unit)
+		add(mainPID)
+		cgroup, cgroupErr := CgroupPIDsContext(ctx, runner, readFile, backend, unit)
+		for _, pid := range cgroup {
 			add(pid)
 		}
-		if cg, ok := CgroupPIDsContext(ctx, runner, readFile, backend, unit); ok {
-			for _, pid := range cg {
-				add(pid)
-			}
+		// One error is enough to explain an incomplete answer; both queries
+		// usually fail the same way.
+		if mainErr != nil {
+			return pids, mainErr
 		}
-		return pids
+		return pids, cgroupErr
 	}
 }
 

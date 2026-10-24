@@ -96,13 +96,13 @@ func BuildServiceRuntime(ctx context.Context, cfg ServiceRuntimeConfig) ServiceR
 		discoverer.Reader = deps.ProcReader
 	}
 	discoverer.KeepChildren = process.KeepChildren(cfg.Tree)
-	backendPIDs, freshBackendPIDs := serviceRuntimeBackendPIDs(ctx, deps, cfg.Unit)
-	if backendPIDs != nil {
-		discoverer.BackendPIDs, discoverer.FreshBackendPIDs = backendPIDs, freshBackendPIDs
+	backend := serviceRuntimeBackendPIDs(ctx, deps, cfg.Unit)
+	if backend.checked != nil {
+		discoverer.BackendPIDs, discoverer.FreshBackendPIDs = backend.cached, backend.fresh
 	}
-	needPidfileFallback := deps.Backend == servicemgr.BackendSystemd && backendPIDs != nil
+	needPidfileFallback := deps.Backend == servicemgr.BackendSystemd && backend.checked != nil
 	selectors, processWarnings, procInfo := serviceProcessSelectors(ctx, cfg.Tree, deps, cfg.Unit, needPidfileFallback)
-	noResident := serviceNoResidentProcess(cfg.Tree, selectors, backendPIDs, deps.Backend)
+	noResident := serviceNoResidentProcess(cfg.Tree, selectors, backend.checked, deps.Backend)
 	metricSample := metricSampleForOperation(cfg.Service, cfg.Tree, deps.Collector, discoverer, selectors, noResident)
 	checkDeps := checks.Deps{
 		Limiter:        deps.CheckLimiter,
@@ -124,8 +124,8 @@ func BuildServiceRuntime(ctx context.Context, cfg ServiceRuntimeConfig) ServiceR
 		// jobs" for a crashed fcron — which latched its own block action and made
 		// the service unrepairable through Sermo.
 		ProcessCount:        func(user, exe, exeDir string) int { return discoverer.CountInTree(selectors, user, exe, exeDir) },
-		PidfileFallbackPIDs: pidfileFallbackPIDs(needPidfileFallback, backendPIDs, procInfo),
-		PidfileClaim:        pidfileClaim(discoverer, selectors, backendPIDs),
+		PidfileFallbackPIDs: pidfileFallbackPIDs(needPidfileFallback, backend.checked, procInfo),
+		PidfileClaim:        pidfileClaim(discoverer, selectors, backend.checked),
 		StaleBinaries:       func() []process.StaleBinary { return discoverer.StaleBinaries(selectors) },
 		StaleLibraries:      serviceStaleLibraries(discoverer, selectors),
 		Strays: func() []process.Process {
@@ -167,7 +167,7 @@ func BuildServiceRuntime(ctx context.Context, cfg ServiceRuntimeConfig) ServiceR
 	}
 }
 
-func pidfileFallbackPIDs(needed bool, backendPIDs func() []int, info servicemgr.ProcInfo) func() []int {
+func pidfileFallbackPIDs(needed bool, backendPIDs func() ([]int, error), info servicemgr.ProcInfo) func() ([]int, error) {
 	if !needed {
 		return nil
 	}
@@ -180,23 +180,28 @@ func pidfileFallbackPIDs(needed bool, backendPIDs func() []int, info servicemgr.
 // pidfileClaim lets a pidfile check reject a PID an unrelated process recycled
 // after the daemon died unnoticed. A PID counts as the service's when one of
 // its exact-executable selectors names it or, failing that, when the init
-// backend reports it for the unit (a wrapper the selectors do not describe).
-func pidfileClaim(discoverer process.Discoverer, selectors []process.Selector, backendPIDs func() []int) func(int) (bool, bool) {
+// backend reports it for the unit (a wrapper the selectors do not describe). A
+// backend query that failed cannot judge it.
+func pidfileClaim(discoverer process.Discoverer, selectors []process.Selector, backendPIDs func() ([]int, error)) func(int) (bool, bool) {
 	return func(pid int) (bool, bool) {
 		claimed, known := discoverer.ClaimsPID(pid, selectors)
 		if !known || claimed || backendPIDs == nil {
 			return claimed, known
 		}
-		return slices.Contains(backendPIDs(), pid), true
+		pids, err := backendPIDs()
+		if err != nil {
+			return false, false
+		}
+		return slices.Contains(pids, pid), true
 	}
 }
 
-// ServiceBackendPIDs returns the backend-owned process roots for one resolved
-// service. A control target's explicit provider wins; only init backends derive
-// their process set from the unit.
-func ServiceBackendPIDs(ctx context.Context, backend servicemgr.Backend, unit string, configured func() []int, runner execx.Runner) func() []int {
+// ServiceBackendPIDs returns the query for the backend-owned process roots of
+// one resolved service. A control target's explicit provider wins and reports
+// no error; only init backends derive their process set from the unit.
+func ServiceBackendPIDs(ctx context.Context, backend servicemgr.Backend, unit string, configured func() []int, runner execx.Runner) func() ([]int, error) {
 	if configured != nil {
-		return configured
+		return func() ([]int, error) { return configured(), nil }
 	}
 	if !backend.HasUnitCgroups() {
 		return nil
@@ -204,23 +209,33 @@ func ServiceBackendPIDs(ctx context.Context, backend servicemgr.Backend, unit st
 	return servicemgr.BackendPIDsFuncWithRunner(ctx, backend, unit, runner, nil)
 }
 
-// serviceRuntimeBackendPIDs returns the service's backend PID source and its
-// live form. An init unit's source is shared through the generation's target
-// cache, so the worker, web and metric-watch discoverers of one unit query the
-// init system once per SystemFreshness window; operations observe through the
-// live form (process.Discoverer.FreshBackendPIDs). Without a target cache, or
-// for an explicit provider, every call queries.
-func serviceRuntimeBackendPIDs(ctx context.Context, deps Deps, unit string) (cached, fresh func() []int) {
+// serviceBackendPIDs is a service's backend PID query in the forms its
+// consumers take: discovery reads cached and fresh, and the judgments that read
+// an empty answer as "no process" (pidfile fallback and claim, no resident
+// process) read checked, which keeps the query error.
+type serviceBackendPIDs struct {
+	cached, fresh func() []int
+	checked       func() ([]int, error)
+}
+
+// serviceRuntimeBackendPIDs returns the service's backend PID query. An init
+// unit's query is shared through the generation's target cache, so the worker,
+// web and metric-watch discoverers of one unit query the init system once per
+// SystemFreshness window; operations observe through the live form
+// (process.Discoverer.FreshBackendPIDs). Without a target cache, or for an
+// explicit provider, every call queries.
+func serviceRuntimeBackendPIDs(ctx context.Context, deps Deps, unit string) serviceBackendPIDs {
 	if deps.Targets == nil || deps.BackendPIDs != nil || !deps.Backend.HasUnitCgroups() {
-		return ServiceBackendPIDs(ctx, deps.Backend, unit, deps.BackendPIDs, deps.ExecxRunner), nil
+		query := ServiceBackendPIDs(ctx, deps.Backend, unit, deps.BackendPIDs, deps.ExecxRunner)
+		return serviceBackendPIDs{cached: process.DiscoveryPIDs(query), checked: query}
 	}
-	shared := deps.Targets.BackendPIDs(deps.Backend, unit, deps.SystemFreshness, func() func() []int {
+	shared := deps.Targets.BackendPIDs(deps.Backend, unit, deps.SystemFreshness, func() func() ([]int, error) {
 		return ServiceBackendPIDs(ctx, deps.Backend, unit, nil, deps.ExecxRunner)
 	})
 	if shared == nil {
-		return nil, nil
+		return serviceBackendPIDs{}
 	}
-	return shared.PIDs, shared.Fresh
+	return serviceBackendPIDs{cached: shared.PIDs, fresh: shared.Fresh, checked: shared.Checked}
 }
 
 // serviceProcessSelectors returns the process selectors a service should use
@@ -251,7 +266,7 @@ func noResidentProcess(tree map[string]any) bool {
 	return config.ResolveServiceLifecycle(tree, "").ProcessMode == config.ServiceProcessNone
 }
 
-func serviceNoResidentProcess(tree map[string]any, selectors []process.Selector, backendPIDs func() []int, backend servicemgr.Backend) bool {
+func serviceNoResidentProcess(tree map[string]any, selectors []process.Selector, backendPIDs func() ([]int, error), backend servicemgr.Backend) bool {
 	if noResidentProcess(tree) {
 		return true
 	}
@@ -269,8 +284,15 @@ func serviceNoResidentProcess(tree map[string]any, selectors []process.Selector,
 	return !hasBackendPIDs(backendPIDs)
 }
 
-func hasBackendPIDs(backendPIDs func() []int) bool {
-	return backendPIDs != nil && slices.ContainsFunc(backendPIDs(), func(pid int) bool { return pid > 0 })
+// hasBackendPIDs counts a query that failed as a yes: it does not show that the
+// service has no resident process, and judging so would stop observing the
+// service's processes for the whole generation.
+func hasBackendPIDs(backendPIDs func() ([]int, error)) bool {
+	if backendPIDs == nil {
+		return false
+	}
+	pids, err := backendPIDs()
+	return err != nil || slices.ContainsFunc(pids, func(pid int) bool { return pid > 0 })
 }
 
 func initDerivedProcessSelectors(info servicemgr.ProcInfo) []process.Selector {

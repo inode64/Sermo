@@ -21,8 +21,8 @@ func TestCgroupReadersRejectUnsafePathsBeforeRead(t *testing.T) {
 				return []byte("42\n"), nil
 			}
 			runner := execxtest.Fixed(execx.Result{Stdout: group}, nil)
-			if pids, ok := CgroupPIDsContext(context.Background(), runner, read, BackendSystemd, "x.service"); ok || len(pids) != 0 {
-				t.Fatalf("unsafe cgroup returned PIDs: %v, %v", pids, ok)
+			if pids, err := CgroupPIDsContext(context.Background(), runner, read, BackendSystemd, "x.service"); err != nil || len(pids) != 0 {
+				t.Fatalf("unsafe cgroup returned PIDs: %v, %v", pids, err)
 			}
 			selfRead := func(path string) ([]byte, error) {
 				if path == selfCgroupPath {

@@ -225,6 +225,18 @@ func TestReloadClosureSignalUsesPidfileWhenNoMainPID(t *testing.T) {
 	}
 }
 
+// A MainPID query that did not answer is not "no MainPID": without a pidfile
+// the reload names the failed query instead of blaming the configuration.
+func TestReloadClosureSignalReportsAFailedMainPIDQuery(t *testing.T) {
+	runner := execxtest.Fixed(execx.Result{ExitCode: -1}, context.DeadlineExceeded)
+	signaler := &pidSignaler{}
+	reload := nativeSignalReloadFunc(syscall.SIGHUP, runner, "systemd", "myd", "", reloadDiscoverer(nil), nil, signaler)
+	err := reload(context.Background())
+	if err == nil || !strings.Contains(err.Error(), "MainPID") || strings.Contains(err.Error(), "OpenRC") || len(signaler.calls) != 0 {
+		t.Fatalf("reload err = %v, signals %v; want the MainPID query error and no signal", err, signaler.calls)
+	}
+}
+
 func TestReloadClosureSignalNeverReachesDelegatedProcess(t *testing.T) {
 	pid := 4242
 	pidfile := t.TempDir() + "/svc.pid"
