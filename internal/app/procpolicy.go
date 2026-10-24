@@ -72,6 +72,9 @@ func buildProcessPolicyWatch(name string, entry, checkEntry map[string]any, deps
 		allows:          allows,
 		resolve:         resolve,
 	}
+	// Alert-only, so it reads the daemon's shared per-cycle snapshot like the
+	// process watch instead of walking /proc again.
+	pw.sampler = procCycleSamplerFromDeps(deps, interval)
 	return newStatefulWatch(name, checks.CheckTypeProcessPolicy, entry, deps, interval, pw.runCycle), ""
 }
 
