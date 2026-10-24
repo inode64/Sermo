@@ -71,7 +71,9 @@ func ScanLibraries(ctx context.Context, procs []Process) (LibraryReport, error) 
 	// Numeric ownership is sufficient here; avoid NSS/network user lookups in
 	// a process inventory whose authority is the kernel's real UID.
 	numeric := func(id uint32) string { return strconv.FormatUint(uint64(id), numericIDBase) }
-	r := libraryReader{reader: OSReader{LookupUserName: numeric, LookupGroupName: numeric}, readFile: hostfs.ReadFile, readlink: hostfs.Readlink, stat: statLibraryFile}
+	// Processes share most of their libraries, and every one compares its
+	// root with "/", so this scan stats each path once.
+	r := libraryReader{reader: OSReader{LookupUserName: numeric, LookupGroupName: numeric}, readFile: hostfs.ReadFile, readlink: hostfs.Readlink, stat: memoizedLibraryStat(statLibraryFile)}
 	return r.scan(ctx, procs)
 }
 
@@ -150,6 +152,24 @@ func (r libraryReader) verifyProcess(proc Process) (bool, error) {
 		return false, errors.New("process identity changed or cannot be verified")
 	}
 	return true, nil
+}
+
+// memoizedLibraryStat returns stat with each path's result kept for the
+// lifetime of the returned function, which serves one sequential scan.
+func memoizedLibraryStat(stat func(string) (libraryFile, error)) func(string) (libraryFile, error) {
+	type result struct {
+		file libraryFile
+		err  error
+	}
+	seen := map[string]result{}
+	return func(path string) (libraryFile, error) {
+		if r, ok := seen[path]; ok {
+			return r.file, r.err
+		}
+		file, err := stat(path)
+		seen[path] = result{file: file, err: err}
+		return file, err
+	}
 }
 
 func (r libraryReader) sameRoot(pid int) bool {
