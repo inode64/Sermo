@@ -75,7 +75,7 @@ func removeStalePIDFile(ctx context.Context, path string, reader process.Reader,
 	if !present {
 		return false, nil
 	}
-	pid, err := process.ReadPidfile(path)
+	pid, err := hostfs.ReadPidfile(path)
 	if err != nil {
 		return false, fmt.Errorf("refusing to remove pidfile %q: %w", path, err)
 	}

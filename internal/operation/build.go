@@ -14,6 +14,7 @@ import (
 	"sermo/internal/checks"
 	"sermo/internal/config"
 	"sermo/internal/execx"
+	"sermo/internal/hostfs"
 	"sermo/internal/locks"
 	"sermo/internal/process"
 	"sermo/internal/rules"
@@ -411,7 +412,7 @@ func reloadPID(ctx context.Context, runner execx.Runner, backend, unit, pidfile 
 		return 0, "", reloadContextError(err)
 	}
 	if pidfile != "" {
-		pid, err := process.ReadPidfile(pidfile)
+		pid, err := hostfs.ReadPidfile(pidfile)
 		if err != nil {
 			return 0, "", fmt.Errorf("read pidfile %s: %w", pidfile, err)
 		}

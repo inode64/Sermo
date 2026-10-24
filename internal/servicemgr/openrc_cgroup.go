@@ -3,8 +3,6 @@ package servicemgr
 import (
 	"path/filepath"
 	"slices"
-	"strconv"
-	"strings"
 
 	"sermo/internal/hostfs"
 )
@@ -26,13 +24,11 @@ func openRCBackendPIDs(unit string, readFile func(string) ([]byte, error)) func(
 		if info.Pidfile == "" {
 			return nil
 		}
-		// Read like discovery reads a pidfile: without blocking, so a FIFO at
-		// its path cannot stall every discoverer of this unit.
-		pidData, err := hostfs.ReadRegularFile(info.Pidfile, hostfs.MaxPidfileBytes)
-		if err != nil {
-			return nil
-		}
-		principal, err := strconv.Atoi(strings.TrimSpace(string(pidData)))
+		// Read exactly as discovery reads a pidfile: the first line (PostgreSQL
+		// keeps cluster metadata below it), a process group naming its leader,
+		// and without blocking, so a FIFO at its path cannot stall every
+		// discoverer of this unit.
+		principal, err := hostfs.ReadPidfile(info.Pidfile)
 		if err != nil || principal <= 1 {
 			return nil
 		}
