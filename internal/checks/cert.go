@@ -508,12 +508,13 @@ func certSampleFromCert(leaf *x509.Certificate) CertSample {
 // candidate intermediates, and checks it covers serverName. It returns the
 // verification error string, or "" when the certificate is valid.
 func verifyCertChain(leaf *x509.Certificate, peers []*x509.Certificate, serverName string) string {
-	roots, _ := x509.SystemCertPool()
 	inter := x509.NewCertPool()
 	for _, c := range peers {
 		inter.AddCert(c)
 	}
-	if _, err := leaf.Verify(x509.VerifyOptions{DNSName: serverName, Roots: roots, Intermediates: inter}); err != nil {
+	// Nil Roots is the system pool, loaded once; SystemCertPool would copy it
+	// on every verification.
+	if _, err := leaf.Verify(x509.VerifyOptions{DNSName: serverName, Intermediates: inter}); err != nil {
 		return err.Error()
 	}
 	return ""
