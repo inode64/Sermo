@@ -302,6 +302,19 @@ func TestExpandAnalyzeUnknownSetAndBadSilence(t *testing.T) {
 	if errs := mk("        use: [common]\n        silence: [ghost]\n"); !hasSub(errs, "not present in the inherited sets") {
 		t.Errorf("bad silence id should error, got %v", errs)
 	}
+	// With local rules present a malformed use/silence used to vanish: the
+	// check ran on its local rules alone and nothing reported it.
+	local := "        rules:\n          - { id: own, match: y, severity: warning }\n"
+	for field, block := range map[string]string{
+		"use":     "        use: { common: true }\n" + local,
+		"use ":    "        use: [common, 7]\n" + local,
+		"silence": "        use: [common]\n        silence: { dep: true }\n" + local,
+	} {
+		want := "analyze." + strings.TrimSpace(field) + " must be a string or list of strings"
+		if errs := mk(block); !hasSub(errs, want) {
+			t.Errorf("malformed %s = %v, want %q", field, errs, want)
+		}
+	}
 }
 
 func TestExpandPidfileDesugars(t *testing.T) {

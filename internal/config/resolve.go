@@ -501,10 +501,14 @@ func (c *Config) expandAnalyzeEntry(scope string, entry map[string]any) []string
 
 // resolveAnalyze builds the flat, ordered rule list for one check's analyze block.
 func (c *Config) resolveAnalyze(scope string, analyze map[string]any) ([]any, []string) {
-	var errs []string
-
+	// Read strictly: a lenient reader turns a mapping into nothing and skips
+	// non-string entries, so with local rules present the block would load
+	// while the inherited sets or silences it names silently vanished.
+	silenced, errs := stringListField(scope+"."+keyAnalyzeSilence, analyze[keyAnalyzeSilence])
+	use, useErrs := stringListField(scope+"."+keyAnalyzeUse, analyze[keyAnalyzeUse])
+	errs = append(errs, useErrs...)
 	silence := map[string]bool{}
-	for _, id := range cfgval.StringList(analyze[keyAnalyzeSilence]) {
+	for _, id := range silenced {
 		silence[id] = true
 	}
 	seenSilence := map[string]bool{}
@@ -536,7 +540,7 @@ func (c *Config) resolveAnalyze(scope string, analyze map[string]any) ([]any, []
 	}
 
 	// Inherited rules from each `use` set, in order, minus silenced ids.
-	for _, setName := range cfgval.StringList(analyze[keyAnalyzeUse]) {
+	for _, setName := range use {
 		doc, ok := c.Patterns[setName]
 		if !ok {
 			errs = append(errs, fmt.Sprintf("%s.use references %q, which is not a patterns set", scope, setName))
@@ -555,7 +559,7 @@ func (c *Config) resolveAnalyze(scope string, analyze map[string]any) ([]any, []
 	}
 
 	// A silence id that matched no inherited rule is a typo worth catching.
-	for _, id := range cfgval.StringList(analyze[keyAnalyzeSilence]) {
+	for _, id := range silenced {
 		if !seenSilence[id] {
 			errs = append(errs, fmt.Sprintf("%s.silence references id %q not present in the inherited sets", scope, id))
 		}
@@ -594,7 +598,7 @@ func expandReloadOnChange(tree map[string]any) []string {
 	// gate is set — it suppresses the generated rules, not the checking of what
 	// would have generated them, so a block that is off today still fails loudly
 	// instead of hiding a typo until someone turns it on.
-	paths, pathErrs := restartOnChangeStringList(reloadOnChangePathPaths, roc[keyPaths])
+	paths, pathErrs := stringListField(reloadOnChangePathPaths, roc[keyPaths])
 	errs = append(errs, pathErrs...)
 	if !restartOnChangeAllowed(roc, keyRestartConfig) {
 		return errs
@@ -1103,12 +1107,12 @@ func (c *Config) expandRestartOnChange(tree map[string]any) []string {
 	if rulesMap == nil {
 		rulesMap = map[string]any{}
 	}
-	paths, pathErrs := restartOnChangeStringList(keyRestartPaths, roc[keyPaths])
+	paths, pathErrs := stringListField(keyRestartPaths, roc[keyPaths])
 	errs = append(errs, pathErrs...)
 	if configAllowed {
 		errs = append(errs, addRestartOnChangePathRules(rulesMap, paths, messages.pathMessage(displayName))...)
 	}
-	libraries, libraryErrs := restartOnChangeStringList(keyRestartOnChange+"."+keyLibraries, roc[keyLibraries])
+	libraries, libraryErrs := stringListField(keyRestartOnChange+"."+keyLibraries, roc[keyLibraries])
 	errs = append(errs, libraryErrs...)
 	if versionAllowed {
 		errs = append(errs, c.addRestartOnChangeLibraryRules(tree, rulesMap, libraries, messages.libraryMessage(displayName))...)
@@ -1369,7 +1373,9 @@ func (m restartOnChangeMessages) libraryMessage(displayName string) string {
 	return displayName + " will restart after library change: ${change.library} (${change.path})"
 }
 
-func restartOnChangeStringList(path string, raw any) ([]string, []string) {
+// stringListField reads a string-or-list field strictly, reporting a mapping or
+// a non-string entry at path instead of dropping it.
+func stringListField(path string, raw any) ([]string, []string) {
 	names, err := cfgval.StrictStringList(raw)
 	if err != nil {
 		return nil, []string{fmt.Sprintf(validationStringListFormat, path)}
