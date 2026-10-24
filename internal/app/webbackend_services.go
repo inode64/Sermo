@@ -456,7 +456,7 @@ func (o serviceObservation) serviceCheckHealth(e *webEntry, monitored bool) stri
 	return checkHealthSummary(o.snapshots, e.checkNames, e.checkSeverities, monitored)
 }
 
-// serviceCheckSnapshotCurrent accepts only a result produced by the configured
+// serviceCheckSnapshotCurrentAt accepts only a result produced by the configured
 // check type, the current check configuration, and no older than two effective
 // check intervals. A reload may keep a check name while changing its type,
 // cadence or target.

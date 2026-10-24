@@ -103,9 +103,9 @@ var validGlobalKeys = set(
 // validServiceDocumentKeys are the top-level keys of a configured or catalog
 // service document. A typo such as `dryrun: true` would otherwise leave the
 // service performing real remediation. perServiceDefaults are included because
-// a service may set every key the global defaults can give it. `emission`,
-// `remediation` and `enable_if` are listed only because validateResolved and
-// walkEnableIf reject them with a more specific hint.
+// a service may set every key the global defaults can give it. `emission` and
+// `enable_if` are listed only because validateResolved and walkEnableIf reject
+// them with a more specific hint.
 var validServiceDocumentKeys = set(append(slices.Clone(perServiceDefaults),
 	keyKind, keyName, ServiceKeyUses, keyClone, keyAliases,
 	keyDisplayName, keyDescription, keyCategory, keyType,

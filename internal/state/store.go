@@ -251,7 +251,6 @@ func (c *statementCache) close() {
 	c.stmts = nil
 }
 
-// reads returns the connection SELECT-only paths should use.
 // sqlCtx is the context passed to database/sql *Context methods.
 func (s *Store) sqlCtx() context.Context {
 	return s.ctx
