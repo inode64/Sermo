@@ -1065,8 +1065,10 @@ watches:
       arrays: { op: "<", value: 1 }
       bands:  # adjust the default state bands: severity, an ok predicate, or false to drop one
         recovering: false
-  edac:
-    check: { type: edac, ue: { op: ">", value: 0 }, ce: { op: ">", value: 100 } }
+  edac:  # predicates AND together: ue and ce each get their own watch
+    check: { type: edac, ue: { op: ">", value: 0 } }
+  edac-correctable:
+    check: { type: edac, ce: { op: ">", value: 100 }, severity: warning }
   config-watch:
     check:
       type: config

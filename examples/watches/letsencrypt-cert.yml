@@ -1,0 +1,18 @@
+name: letsencrypt-cert
+category: security
+# A Let's Encrypt certificate read from its file. A cert check that probes
+# host:port sees only the certificate the server presents without a server name,
+# the default vhost's; every other name needs a watch on its file. Certbot renews
+# 30 days ahead, so inside 21 days renewal has failed for over a week: a warning,
+# an error at 7 days and critical once expired.
+monitor: disabled
+interval: 6h
+check:
+  type: cert
+  path: /etc/letsencrypt/live/example.com/cert.pem  # EXAMPLE — one watch per live name
+  expires_in_days: 21
+  levels:
+    error: { expires_in_days: 7 }
+then:
+  hook:
+    command: [/usr/local/bin/sermo-cert-alert.sh]

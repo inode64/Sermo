@@ -3518,15 +3518,20 @@ time and graphed** in the service detail so gradual degradation is visible.
 
 - **`edac`** — **ECC memory errors** from the kernel EDAC subsystem (native,
   `/sys/devices/system/edac`). `ce` is the cumulative correctable count and `ue`
-  the uncorrectable count; with no predicate it alerts on `ue > 0`. The check is
-  unavailable when the platform exposes no EDAC controllers (so you notice ECC
-  isn't reported).
+  the uncorrectable count; with no predicate it alerts on `ue > 0`. Predicates
+  replace that default and AND together, so `ue` and `ce` belong in separate
+  checks: in one, an uncorrectable error stays silent until correctable errors
+  cross their threshold too. The check is unavailable when the platform exposes
+  no EDAC controllers (so you notice ECC isn't reported).
 
   ```yaml
   checks:
     ecc:
+      type: edac                           # alerts on any uncorrectable error
+    ecc-correctable:
       type: edac
-      ce: { op: ">", value: 100 }          # also alert on many correctable errors
+      ce: { op: ">", value: 100 }          # many correctable errors: a failing DIMM
+      severity: warning
   ```
 
 ### Count

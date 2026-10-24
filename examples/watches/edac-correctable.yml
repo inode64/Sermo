@@ -1,0 +1,14 @@
+name: edac-correctable
+category: hardware
+# Correctable ECC errors above a noise floor: the memory still works, but a
+# rising count is how a failing DIMM shows first. `ce` counts since boot, so past
+# the floor the watch keeps firing until a reboot resets the counters.
+monitor: disabled
+interval: 1h
+check:
+  type: edac
+  ce: { op: ">", value: 100 }
+  severity: warning
+then:
+  hook:
+    command: [/usr/local/bin/sermo-edac-alert.sh]
