@@ -15,6 +15,13 @@ import (
 	"sermo/internal/rules"
 )
 
+// StaticBackend serves one fixed Backend without generation tracking.
+type StaticBackend struct {
+	Backend Backend
+}
+
+func (b StaticBackend) BeginBackendRead() (Backend, uint64) { return b.Backend, 0 }
+
 // testSeriesCheck is the only check name fakeBackend serves an SLA series for,
 // so an unknown one still resolves to a 404.
 const testSeriesCheck = "http"

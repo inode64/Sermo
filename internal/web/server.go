@@ -377,21 +377,10 @@ type sessionInventorySource interface {
 
 // BackendSource hands the server the Backend a request runs against and the
 // configuration generation it belongs to; 0 means generations are not tracked.
-// The daemon's reloadable holder swaps generations atomically; a fixed backend
-// wraps itself in StaticBackend.
+// The daemon's reloadable holder swaps generations atomically.
 type BackendSource interface {
 	BeginBackendRead() (Backend, uint64)
 }
-
-// StaticBackend serves one fixed Backend without generation tracking.
-type StaticBackend struct {
-	Backend Backend
-}
-
-// BeginBackendRead implements BackendSource.
-//
-//nolint:ireturn // StaticBackend exists to hand out the Backend it was given.
-func (b StaticBackend) BeginBackendRead() (Backend, uint64) { return b.Backend, 0 }
 
 // Handler returns the router behind the auth middleware: the dashboard at /, the
 // service list at /api/services, and POST /api/services/{name}/{action} for
