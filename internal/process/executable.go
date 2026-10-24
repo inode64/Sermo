@@ -28,8 +28,8 @@ func (r executableReader) openDeleted(pid int, previous string) (*os.File, Execu
 	if !filepath.IsAbs(previous) || filepath.Clean(previous) != previous {
 		return nil, ExecutableFile{}, fmt.Errorf("invalid previous executable path for pid %d", pid)
 	}
-	namespace, nsErr := r.readlink(PIDPath(pid, "ns/mnt"))
-	self, selfErr := r.readlink(SelfPath("ns/mnt"))
+	namespace, nsErr := r.readlink(PIDPath(pid, ProcFileMountNamespace))
+	self, selfErr := r.readlink(SelfPath(ProcFileMountNamespace))
 	if nsErr != nil || selfErr != nil || namespace == "" || namespace != self {
 		return nil, ExecutableFile{}, fmt.Errorf("cannot verify executable mount namespace for pid %d", pid)
 	}

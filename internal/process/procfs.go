@@ -35,6 +35,8 @@ const (
 	ProcFileStatus = "status"
 	// ProcFileTask is the /proc/<pid>/task directory name.
 	ProcFileTask = "task"
+	// ProcFileMountNamespace is the /proc/<pid>/ns/mnt namespace link name.
+	ProcFileMountNamespace = "ns/mnt"
 
 	procStatusStatePrefix = "State:"
 	procStatusPPIDPrefix  = "PPid:"
