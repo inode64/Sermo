@@ -151,8 +151,8 @@ func (p Policy) Allow(state *RemediationState, now time.Time) (bool, string) {
 }
 
 // Record updates the state after an executed automatic remediation: stamps the
-// time, trims the rate-limit window, and grows the backoff if enabled
-// . Blocked and preflight-failed operations must not call Record.
+// time, trims the rate-limit window, and grows the backoff if enabled.
+// Blocked and preflight-failed operations must not call Record.
 func (s *RemediationState) Record(now time.Time, p Policy) {
 	s.LastActionAt = now
 	s.RecentActions = append(s.RecentActions, now)
@@ -187,8 +187,7 @@ func (s *RemediationState) growBackoff(b *Backoff) {
 	}
 }
 
-// Recover resets the backoff after a healthy cycle with no firing rule
-// .
+// Recover resets the backoff after a healthy cycle with no firing rule.
 func (s *RemediationState) Recover() {
 	s.CurrentBackoff = 0
 }

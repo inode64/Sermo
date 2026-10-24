@@ -81,11 +81,11 @@ var dhcpMagicCookie = []byte{99, 130, 83, 99}
 // broadcasts the DISCOVER out that link (discovering any dhcpd without knowing
 // its address); without one it unicasts to the configured host (a known server
 // or relay). Either way it must bind the privileged client port 68 to receive
-// the reply, so it needs CAP_NET_BIND_SERVICE (and CAP_NET_RAW for the
-// per-interface bind), or root — the same elevated-privilege model as the icmp
-// check. The chaddr is an anonymous, randomly generated locally-administered MAC
-// by default; set the optional `mac` param to use a fixed address (e.g. for a
-// server that only answers reserved clients).
+// the reply, so it needs CAP_NET_BIND_SERVICE or root — the same
+// elevated-privilege model as the icmp check. The chaddr is an anonymous,
+// randomly generated locally-administered MAC by default; set the optional
+// `mac` param to use a fixed address (e.g. for a server that only answers
+// reserved clients).
 type dhcpProtocol struct{}
 
 func (dhcpProtocol) Name() string       { return ProtocolNameDHCP }

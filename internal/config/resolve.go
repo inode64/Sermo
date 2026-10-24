@@ -430,9 +430,9 @@ func serviceArtifactPathValue(paths []string) any {
 }
 
 // expandAnalyze resolves each check's `analyze` block into the flat rule list the
-// checks package consumes: it concatenates the `rules` of every `use:` pattern
-// set (in order), drops any rule whose id is in `silence:`, then appends the
-// check's local `rules:`, and replaces the block with `{rules: [...]}`. An
+// checks package consumes: the check's local `rules:` first, then the `rules`
+// of every `use:` pattern set (in order) minus any id in `silence:`, and
+// replaces the block with `{rules: [...]}`. An
 // unknown set name, a `silence` id absent from the inherited sets, or a duplicate
 // id in the resolved list is an error. Checks without `analyze` are untouched.
 // Check-only service watches are processed before they desugar into `checks:`.
@@ -749,8 +749,6 @@ type serviceWatchRuleTarget struct {
 
 var serviceWatchCheckEntryFields = [...]string{keyEnabled, keyVerify, keyRequires, keyOptional, keyInterval}
 
-// promoteServiceWatchCheck promotes an embedded watch check to checks.<watch-name>,
-// returning the generated rule target.
 // serviceWatchAction is a service watch's then.action as the desugarer read
 // it; sound is the grammar validator's verdict.
 type serviceWatchAction struct {
@@ -777,6 +775,8 @@ func promoteServiceWatchRule(checksMap, rulesMap map[string]any, name string, en
 	return true
 }
 
+// promoteServiceWatchCheck promotes an embedded watch check to checks.<watch-name>,
+// returning the generated rule target.
 func promoteServiceWatchCheck(checksMap map[string]any, name string, entry, check map[string]any, add addFunc) (serviceWatchRuleTarget, bool) {
 	if _, exists := checksMap[name]; exists {
 		add("%s would overwrite existing check %q; rename the watch", watchPath(name), name)
@@ -853,6 +853,11 @@ func serviceWatchRuleCondition(target serviceWatchRuleTarget) map[string]any {
 	return map[string]any{rules.ConditionActive: operand}
 }
 
+const (
+	builtinPidfileDir = "/run"
+	pidfileExt        = ".pid"
+)
+
 // injectBuiltinVariables makes the document's identity available for ${...}
 // expansion: ${name} (the resolved service name), ${display_name} (the
 // display_name field, falling back to name), ${service} (the primary unit),
@@ -865,11 +870,6 @@ func serviceWatchRuleCondition(target serviceWatchRuleTarget) map[string]any {
 // Injected after validateVariableValues so a display_name carrying its own
 // ${...} is not mistaken for a nested variable; an explicit `variables` entry of
 // the same name takes precedence and is left untouched.
-const (
-	builtinPidfileDir = "/run"
-	pidfileExt        = ".pid"
-)
-
 func injectBuiltinVariables(vars map[string]string, name string, merged map[string]any, backend string) {
 	if _, ok := vars[keyName]; !ok {
 		vars[keyName] = name
@@ -1687,7 +1687,8 @@ func (c *Config) applyWatchDefaults(raw map[string]any) {
 }
 
 // stripMeta returns a copy of a document body without the resolution-control
-// keys (kind/name/uses/clone), which are not part of the merged service.
+// keys (metaKeys: aliases/name/uses/clone), which are not part of the merged
+// service.
 func stripMeta(body map[string]any) map[string]any {
 	out := make(map[string]any, len(body))
 	for k, v := range body {

@@ -44,7 +44,8 @@ type Manager interface {
 	// `reload`). A unit/script with no reload support surfaces as an action error.
 	Reload(ctx context.Context, service string) error
 	// SupportsReload reports whether the init backend can reload the unit in
-	// place. Query errors report false so a configured native reload can run.
+	// place. A failed query is returned as an error (systemd); OpenRC reports an
+	// unreadable script as unsupported.
 	SupportsReload(ctx context.Context, service string) (bool, error)
 	// ResetState reconciles the init system's recorded state with reality,
 	// clearing a lingering failed/stuck marker so it no longer disagrees with the

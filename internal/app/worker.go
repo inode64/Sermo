@@ -1002,7 +1002,7 @@ func (f firingRule) announce() bool { return f.rising || f.escalated }
 // fires evaluates a rule's condition this cycle and advances its window state.
 // An evaluation error counts as a false cycle.
 func (w *Worker) fires(ctx context.Context, ev *rules.Evaluator, r rules.Rule, at time.Time, evals map[string]ruleEvalResult) ruleFiringState {
-	// Defense-in-depth for safety invariant 13: a system-scoped metric must
+	// Defense-in-depth for docs/safety.md "System metrics": a system-scoped metric must
 	// never trigger anything but an alert. ParseRules already drops such
 	// rules; this catches one that bypassed parsing entirely.
 	if r.Type != rules.RuleAlert && rules.ConditionUsesSystemMetric(r.If, w.MetricChecks) {
@@ -1127,12 +1127,6 @@ func (w *Worker) acknowledgeChanges() {
 	w.libBaseline.Acknowledge(w.artifactSamples)
 }
 
-// changedAppVersion reports whether the named app's version differs from the
-// acknowledged baseline, reduced to version_short truncated at level (1=major,
-// 2=minor, 3=patch). The first observation adopts the current version (so a
-// daemon start never triggers a restart); thereafter it stays true until
-// acknowledged. When the output carries no parseable version it compares the
-// first non-empty line, so a change is never silently missed.
 // appProbeError is an evaluation failure whose app probe captured command
 // output. The probe's status is the message; the output travels alongside it so
 // the emitted event can carry the reason instead of only the probe's first
@@ -1144,6 +1138,12 @@ type appProbeError struct {
 
 func (e *appProbeError) Error() string { return e.status }
 
+// changedAppVersion reports whether the named app's version differs from the
+// acknowledged baseline, reduced to version_short truncated at level (1=major,
+// 2=minor, 3=patch). The first observation adopts the current version (so a
+// daemon start never triggers a restart); thereafter it stays true until
+// acknowledged. When the output carries no parseable version it compares the
+// first non-empty line, so a change is never silently missed.
 func (w *Worker) changedAppVersion(_ context.Context, app string, level int) (bool, error) {
 	if w.artifactSamples == nil {
 		return false, fmt.Errorf("changed condition app %q: artifact samples unavailable", app)

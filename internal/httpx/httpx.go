@@ -1,4 +1,6 @@
-// Package httpx names shared HTTP headers and media types.
+// Package httpx owns Sermo's HTTP clients (NewClient, NewProbeClient), the
+// request helpers Do, ErrorBody and SuccessStatus, and the shared header and
+// media-type names.
 package httpx
 
 import (
@@ -90,7 +92,7 @@ func cloneDefaultTransport() *http.Transport {
 	return &http.Transport{}
 }
 
-// DialFunc dials one connection for an HTTP transport; conn.BindDialer
+// DialFunc dials one connection for an HTTP transport; conn.BindDialContext
 // provides the interface-bound form.
 type DialFunc func(ctx context.Context, network, addr string) (net.Conn, error)
 

@@ -133,8 +133,8 @@ func New(c Config) Engine {
 	// It must read live /proc, never a shared monitoring snapshot — acting on a
 	// stale process table would escalate SIGKILL against PIDs that already exited
 	// (and may have been reused), defeating the reaper's per-round identity
-	// re-check (safety invariants 1, 4, 12). So invalidate the cache first when
-	// the reader is a CachingReader.
+	// re-check (docs/safety.md "Stop and signal escalation"). So invalidate the
+	// cache first when the reader is a CachingReader.
 	observeTracked := func(previous []process.Process) (process.Observation, error) {
 		observation, err := c.Discoverer.ObserveTracked(selectors, previous)
 		if err != nil {

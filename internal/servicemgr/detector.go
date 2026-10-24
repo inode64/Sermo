@@ -1,5 +1,6 @@
 // Package servicemgr detects and controls the host service backend (systemd,
-// OpenRC, ...) used to query status and start/stop/restart/reload services.
+// OpenRC, ...) used to query status and start/stop/reload services; a restart
+// is always Sermo's own verified stop and start, never a backend restart.
 package servicemgr
 
 import (

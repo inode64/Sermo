@@ -14,7 +14,7 @@ import (
 	"sermo/internal/hostfs"
 )
 
-// varRef matches a single ${name} reference. There is no escape syntax in the
+// varRef matches a single ${name} reference. There is no escape syntax:
 // `${` always begins a reference.
 var varRef = regexp.MustCompile(`\$\{([^}]*)\}`)
 

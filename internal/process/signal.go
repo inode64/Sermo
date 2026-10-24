@@ -71,7 +71,8 @@ type Reaper struct {
 //
 //   - no residuals -> ok.
 //   - SIGTERM every residual TermAllowed permits, wait up to term_timeout and
-//     rediscover; SIGKILL the survivors KillAllowed permits (force_kill only),
+//     rediscover; SIGKILL the survivors KillAllowed permits (force_kill true,
+//     or auto for a unit-cgroup member),
 //     wait up to kill_timeout and rediscover. Whatever remains is an orphan.
 //
 // A residual is signalled only when it matches kill_only_if under force_kill or

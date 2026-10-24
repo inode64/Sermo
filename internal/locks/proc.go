@@ -20,9 +20,7 @@ func (OSProcessProber) Alive(pid int) bool {
 	return err == nil || errors.Is(err, syscall.EPERM)
 }
 
-// StartTicks reads field 22 (starttime) of /proc/<pid>/stat. The comm field
-// (field 2) may contain spaces and parentheses, so parsing resumes after the
-// final ')'.
+// StartTicks reads the process start time through process.StartTicks.
 func (OSProcessProber) StartTicks(pid int) (uint64, bool) {
 	return process.StartTicks(pid)
 }

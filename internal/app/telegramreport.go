@@ -26,10 +26,9 @@ type telegramReporter struct {
 	now func() time.Time
 }
 
-// NewTelegramReporter builds a telegrambot.Reporter over the reload-safe web
-// backend holder and an SLA source (the state store). now defaults to time.Now.
-// NewTelegramReporter adapts the daemon's web backend to the bot's read-only
-// port. It returns the interface on purpose: the concrete adapter is an
+// NewTelegramReporter adapts the daemon's reload-safe web backend and an SLA
+// source (the state store) to the bot's read-only port; now defaults to
+// time.Now. It returns the interface on purpose: the concrete adapter is an
 // implementation detail, and exporting it would let a caller reach past the
 // read-only surface the bot is deliberately confined to.
 //

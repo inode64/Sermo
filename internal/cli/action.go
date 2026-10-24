@@ -12,8 +12,8 @@ import (
 	"sermo/internal/state"
 )
 
-// runAction performs a start/stop/restart/reload/resume/repair through the safe operation engine
-// : the resolved service is run under the internal operation lock,
+// runAction performs a start/stop/restart/reload/resume/repair through the safe
+// operation engine: the resolved service is run under the internal operation lock,
 // active named runtime locks, required preflight, guards, residual-process
 // handling and postflight. Manual sermoctl actions are not rate limited, but are
 // fully guarded.

@@ -1101,7 +1101,7 @@ func unversionedVersionPath(discoverPath string, tok tmplToken) (string, bool) {
 
 // templateBody returns the template's body folded onto its `uses` base (if any),
 // with the resolution-control keys stripped. The `${...}` references are left
-// intact for instantiateVersion to bind.
+// intact for instantiateMulti to bind.
 func (c *Config) templateBody(tmpl *Document, kind string) map[string]any {
 	body := withoutMeta(tmpl.Body)
 	if base := cfgval.String(tmpl.Body[ServiceKeyUses]); base != "" {

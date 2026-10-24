@@ -53,12 +53,9 @@ type Result struct {
 // Runner executes external commands. Callers must pass a context with a timeout
 // (or use the package Run helper below).
 //
-// This runner exists only for the few justified cases where Go has no native
-// API (see AGENTS.md "Native by default"): the service-manager backends
-// (systemctl/rc-service), user-configured `command` checks and watch hooks,
-// `firewall_rules` (iptables-save), and the `libraries` check's `ldd`. It
-// always invokes an argv directly — never a shell — so check/hook commands cannot
-// be subject to shell injection.
+// It serves only the cases where Go has no native API (AGENTS.md
+// "Execution"). It always invokes an argv directly — never a shell — so
+// check/hook commands cannot be subject to shell injection.
 type Runner interface {
 	Run(ctx context.Context, name string, args ...string) (Result, error)
 }

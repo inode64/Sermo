@@ -9,8 +9,6 @@ import (
 	"sermo/internal/units"
 )
 
-// Register amqp under its canonical name plus a "rabbitmq" alias, since RabbitMQ
-// is the broker this probe is overwhelmingly used against.
 // amqpProtocol probes an AMQP 0-9-1 broker (RabbitMQ, …) natively — no external
 // driver. It writes the AMQP protocol header and reads the broker's unprompted
 // Connection.Start method, which the server sends before any authentication. A

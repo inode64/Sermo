@@ -390,9 +390,6 @@ func NewWebBackend(ctx context.Context, cfg *config.Config, deps Deps) (*WebBack
 	return wb, warnings
 }
 
-// registerService resolves one configured service and adds its entry (and any
-// service-scoped watches) to the backend. Disabled services are still listed,
-// but only enabled ones get a runtime engine.
 // preparedService is one service's web entry before registration: the
 // resolved tree's facts the registration needs, plus the warnings preparing
 // it raised, kept per index so NewWebBackend registers in name order.

@@ -466,8 +466,6 @@ func engineDefaultTimeout(cfg *config.Config) time.Duration {
 	return config.EngineDuration(cfg, config.EngineKeyDefaultTimeout, app.DefaultEngineCheckTimeout)
 }
 
-// runProcesses discovers and reports the processes belonging to a service
-// , reading the service's `processes` selectors from resolved config.
 // requireSingleServiceName runs the shared usage guard for commands that take
 // exactly one service name: a missing name and extra arguments are usage
 // errors. noun names the command in the usage messages.

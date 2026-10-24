@@ -55,7 +55,8 @@ const (
 	postflightRetryInterval = time.Second
 )
 
-// Engine performs the section-18 flow for one service over injected capability
+// Engine performs the operation flow (docs/safety.md "The operation engine")
+// for one service over injected capability
 // closures. A nil closure means that capability is absent (e.g. no preflight
 // section), which is treated as a pass.
 type Engine struct {

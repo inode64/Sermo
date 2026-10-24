@@ -449,7 +449,7 @@ func (a App) writeWizardServices(p *assist.Prompt, opts options, globalPath stri
 		return code
 	}
 
-	// Step-9 cleanup: offer to delete managed service files whose catalog service
+	// Cleanup: offer to delete managed service files whose catalog service
 	// is no longer detected on this host.
 	targetDir := filepath.Join(filepath.Dir(filepath.Clean(globalPath)), servicesIncludeDir)
 	deletes, err := planStaleDeletes(p, targetDir, wizardNounService, "services", detectedTargetKeys(env, wizardAssistantService), serviceStaleFile)
