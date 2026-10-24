@@ -20,7 +20,8 @@
   },
   "overrides": {
     "markdownlint-cli": {
-      "js-yaml": "5.4.2"
+      "js-yaml": "5.4.2",
+      "smol-toml": "1.9.1"
     }
   }
 }
