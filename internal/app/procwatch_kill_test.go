@@ -44,7 +44,7 @@ func killProcInfo() ProcInfo {
 // is pre-seeded as first-seen an hour ago so a minAge condition fires on the very
 // first cycle, keeping the kill assertions independent of age bookkeeping.
 func killWatcher(h *procHarness, ks *killSpec, sig *fakeSignaler, sampler ProcSampler, onGone, dryRun bool) *procWatcher {
-	ks.selector = process.KillSelector{Users: []string{"root"}, ExeAny: []string{"/usr/bin/sudo"}}
+	ks.selector = process.NewKillSelector([]string{"root"}, []string{"/usr/bin/sudo"})
 	emit := func(e Event) { h.events = append(h.events, e) }
 	w := &procWatcher{
 		name:  "pw",

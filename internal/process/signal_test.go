@@ -115,7 +115,7 @@ func killableProc(pid int) Process {
 
 var killPolicy = KillPolicy{
 	ForceKill:  true,
-	KillOnlyIf: KillSelector{Users: []string{"mysql"}, ExeAny: []string{testExe}},
+	KillOnlyIf: NewKillSelector([]string{"mysql"}, []string{testExe}),
 }
 
 func newReaper(sig Signaler, steps [][]Process) Reaper {

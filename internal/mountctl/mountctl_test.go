@@ -574,7 +574,7 @@ func TestReleaseSignalsOnlyWithKillPolicy(t *testing.T) {
 		return []process.Process{{PID: 123, Exe: "/usr/bin/rsync", ExeOK: true, UID: 1000}}, nil
 	}
 	spec := EphemeralSpec("/mnt/backup")
-	spec.KillOnlyIf = process.KillSelector{Users: []string{"backup"}, ExeAny: []string{"/usr/bin/rsync"}}
+	spec.KillOnlyIf = process.NewKillSelector([]string{"backup"}, []string{"/usr/bin/rsync"})
 
 	res, err := c.ReleaseWithOptions(context.Background(), spec, ReleaseOptions{KillBlockers: true})
 	if err != nil {
@@ -616,7 +616,7 @@ func TestReleaseReportsSignalFailures(t *testing.T) {
 		return []process.Process{{PID: 123, StartTicks: 7, Exe: "/usr/bin/rsync", ExeOK: true, UID: 1000}}, nil
 	}
 	spec := EphemeralSpec("/mnt/backup")
-	spec.KillOnlyIf = process.KillSelector{Users: []string{"backup"}, ExeAny: []string{"/usr/bin/rsync"}}
+	spec.KillOnlyIf = process.NewKillSelector([]string{"backup"}, []string{"/usr/bin/rsync"})
 
 	res, err := c.ReleaseWithOptions(context.Background(), spec, ReleaseOptions{KillBlockers: true})
 	if err == nil || !mounted || sig.calls == 0 {

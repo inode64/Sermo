@@ -50,7 +50,7 @@ func TestRediscoveryErrorPreventsKillEscalation(t *testing.T) {
 	h.discoverErrs = []error{nil, errors.New("incomplete process table")}
 	signaler := &recordingSignaler{}
 	h.reaper = process.Reaper{Signaler: signaler, ResolveUser: func(string) (uint32, bool) { return 1001, true }}
-	h.killPolicy = process.KillPolicy{ForceKill: true, KillOnlyIf: process.KillSelector{Users: []string{"mysql"}, ExeAny: []string{"/opt/mysqld"}}}
+	h.killPolicy = process.KillPolicy{ForceKill: true, KillOnlyIf: process.NewKillSelector([]string{"mysql"}, []string{"/opt/mysqld"})}
 	res := h.restart(t)
 	if res.Status != ResultFailed || h.mgr.did("start mysqld") {
 		t.Fatalf("result=%+v calls=%v", res, h.mgr.calls)

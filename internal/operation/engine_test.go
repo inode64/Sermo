@@ -866,11 +866,8 @@ func TestRestartAcceptsSystemdBackendReactivation(t *testing.T) {
 	}}}
 	signaler := &recordingSignaler{}
 	h.killPolicy = process.KillPolicy{
-		ForceKill: true,
-		KillOnlyIf: process.KillSelector{
-			Users:  []string{"mysql"},
-			ExeAny: []string{"/opt/mysqld"},
-		},
+		ForceKill:  true,
+		KillOnlyIf: process.NewKillSelector([]string{"mysql"}, []string{"/opt/mysqld"}),
 	}
 	h.reaper = process.Reaper{
 		Signaler:    signaler,
@@ -984,7 +981,7 @@ func TestRestartResidualsClearedThenStarts(t *testing.T) {
 	h.discoverSteps = [][]process.Process{{killable}, {}}
 	h.killPolicy = process.KillPolicy{
 		ForceKill:   true,
-		KillOnlyIf:  process.KillSelector{Users: []string{"mysql"}, ExeAny: []string{"/opt/x"}},
+		KillOnlyIf:  process.NewKillSelector([]string{"mysql"}, []string{"/opt/x"}),
 		TermTimeout: time.Second,
 	}
 	h.reaper = process.Reaper{
@@ -1008,7 +1005,7 @@ func TestRestartRediscoveryErrorDoesNotStart(t *testing.T) {
 	h.discoverErrs = []error{nil, errors.New("runtime discovery: pidfile missing")}
 	h.killPolicy = process.KillPolicy{
 		ForceKill:   true,
-		KillOnlyIf:  process.KillSelector{Users: []string{"mysql"}, ExeAny: []string{"/opt/x"}},
+		KillOnlyIf:  process.NewKillSelector([]string{"mysql"}, []string{"/opt/x"}),
 		TermTimeout: time.Second,
 	}
 	h.reaper = process.Reaper{

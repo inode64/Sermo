@@ -14,7 +14,8 @@ import (
 
 // KillSelector is a stop_policy.kill_only_if selector. A process is killable
 // only if its real UID matches one of Users AND its resolved exe exactly matches
-// one of ExeAny.
+// one of ExeAny. NewKillSelector resolves those executables; a literal selector
+// carries no resolved executable and so authorizes nothing.
 type KillSelector struct {
 	Users    []string
 	ExeAny   []string
@@ -240,15 +241,7 @@ func protectedKernelProcess(pid, ppid int, exeOK bool, cmdline []string) bool {
 }
 
 func (s KillSelector) exeMatches(exe string) bool {
-	if s.exePaths != nil {
-		return slices.Contains(s.exePaths, exe)
-	}
-	for _, candidate := range s.ExeAny {
-		if canonicalizePath(candidate) == exe {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(s.exePaths, exe)
 }
 
 func (s KillSelector) userMatches(uid uint32, resolve UserResolver) bool {
