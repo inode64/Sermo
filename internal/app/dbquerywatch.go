@@ -174,7 +174,7 @@ func buildDBQueriesWatch(name string, entry, checkEntry map[string]any, deps Dep
 	snapshots := deps.WatchSnapshots
 	w := &dbQueryWatcher{
 		name:       name,
-		severity:   watchSeverity(entry, checkEntry),
+		severity:   watchSeverityFor(checks.CheckTypeDBQueries, entry, checkEntry),
 		cfg:        cfg,
 		check:      checkEntry,
 		hook:       actions.hook,
