@@ -112,7 +112,8 @@ func (s *Store) summary(m metricSeries, span time.Duration, now time.Time) (Meas
 	from := now.Add(-span)
 	stored := s.retention.archiveFor(from, now)
 	return summaryFromRow(s.reader.QueryRowContext(s.sqlCtx(), metricSummaryStmt,
-		stored.Res, m.scope, m.service, m.check, m.metric, alignBucket(from, stored.Res)))
+		stored.Res, m.scope, m.service, m.check, m.metric,
+		alignBucket(from, stored.Res), alignBucket(now, stored.Res)+stored.Res))
 }
 
 // series returns the series' points in [from, to), oldest first, at the

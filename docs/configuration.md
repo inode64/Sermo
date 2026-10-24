@@ -661,6 +661,11 @@ average weighted, never an average of averages) and carry the minimum and maximu
 through. A ratio, average or extreme read from the daily archive equals the one
 computed from its minute buckets.
 
+Rolling summaries and series include the bucket containing the requested end
+time and exclude later buckets. If the host clock moves backwards, samples in
+those later buckets stay stored but do not affect the current report. Samples
+within one bucket cannot be split by their original timestamps.
+
 What consolidation does give up is *when*: past `retention_1m` an incident is
 located to its bucket, not to its minute. The count survives — each bucket records
 how many one-minute buckets inside it saw a failure — so a window reports "3
