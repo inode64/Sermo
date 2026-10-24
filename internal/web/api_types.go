@@ -684,7 +684,7 @@ type SeriesPoint struct {
 
 // MetricPoint is one time bucket of a check's latency series (milliseconds).
 type MetricPoint struct {
-	Start string  `json:"start"` // RFC3339, minute-aligned
+	Start string  `json:"start"` // RFC3339, aligned to the bucket span
 	N     int64   `json:"n"`
 	Avg   float64 `json:"avg"`
 	Min   float64 `json:"min"`
@@ -864,15 +864,15 @@ type Backend interface {
 	WatchMetrics(ctx context.Context, name, metric string, since time.Duration) (MetricSeries, bool)
 	// Detail returns one service's checks and SLA; ok is false for unknown names.
 	Detail(ctx context.Context, name string) (Detail, bool)
-	// Series returns a service's per-minute availability history over since, or
+	// Series returns a service's availability history over since, or
 	// one of its checks' when check is non-empty; ok is false for unknown names
 	// and for a check the service does not define.
 	Series(ctx context.Context, name, check, metric string, since time.Duration) ([]SeriesPoint, bool)
-	// WatchSeries returns a host watch's per-minute availability history over
+	// WatchSeries returns a host watch's availability history over
 	// since; ok is false for an unknown watch and for one whose check asserts no
 	// availability, which therefore has no uptime to serve.
 	WatchSeries(ctx context.Context, name, metric string, since time.Duration) ([]SeriesPoint, bool)
-	// Metrics returns a check's latency summary and per-minute history over since;
+	// Metrics returns a check's latency summary and history over since;
 	// ok is false for unknown service names.
 	Metrics(ctx context.Context, name, check, metric string, since time.Duration) (MetricSeries, bool)
 	// ServiceRuntime returns process-tree CPU, memory and IO history for one

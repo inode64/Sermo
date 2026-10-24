@@ -874,11 +874,11 @@ cycle: a multi-minute restart on one service cannot block monitoring of
 another. Within a service the cycle is synchronous — checks, rule evaluation,
 then at most one operation.
 
-- **Tick overlap**: if a worker's cycle is still running when its next tick
-  fires, that tick is **skipped, not queued** — an overrunning operation causes
-  skips, never a backlog of catch-up cycles. Skips are per service and logged.
-- **Jitter**: workers start with a small per-service offset so ticks spread
-  across the interval.
+- **No tick overlap**: each worker waits one interval from the end of its
+  previous cycle, so an overrunning operation delays that service's next cycle
+  and never queues catch-up cycles.
+- **Stagger**: the first cycles are spread evenly across the interval, so
+  workers do not all start at once.
 - **Bounded concurrency**: each service runs at most one operation at a time
   (the cross-process operation lock), and automatic remediation is rate-limited
   by the mandatory per-service `policy` block (cooldown, `max_actions`,

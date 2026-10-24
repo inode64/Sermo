@@ -606,13 +606,13 @@ var commandUsages = []commandUsage{
 	},
 	{
 		Name:    commandSLA,
-		Summary: "Report observed SLA for a service or availability watch, or a per-minute series.",
+		Summary: "Report observed SLA for a service or availability watch, or its stored series.",
 		Usage: []string{
 			"sermoctl sla [TARGET]",
 			"sermoctl sla --series TARGET [--since DURATION]",
 		},
 		Flags: []string{
-			"--series           print observed per-minute series for one target",
+			"--series           print the stored availability series for one target",
 			"--since DURATION   series lookback; default is 24h",
 		},
 		Examples: []string{
