@@ -67,13 +67,13 @@ func TestValidateEngineDirectories(t *testing.T) {
 }
 
 func TestEngineDuration(t *testing.T) {
-	fallback := 45 * time.Second
+	fallback := DefaultEngineInterval
 	readers := []struct {
 		name string
 		key  string
 		read func(*Config, time.Duration) time.Duration
 	}{
-		{name: "interval", key: keyInterval, read: EngineInterval},
+		{name: "interval", key: keyInterval, read: func(cfg *Config, _ time.Duration) time.Duration { return EngineInterval(cfg) }},
 		{name: "diagnostics interval", key: EngineKeyDiagnosticsInterval, read: func(cfg *Config, fallback time.Duration) time.Duration {
 			return EngineDuration(cfg, EngineKeyDiagnosticsInterval, fallback)
 		}},

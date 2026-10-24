@@ -481,7 +481,6 @@ func validateDocuments(cfg *Config) []Issue {
 	aliasOwners := map[string]map[string]string{}
 	for _, key := range registryKeys {
 		counts[key] = map[string]int{}
-		aliasOwners[key] = map[string]string{}
 	}
 
 	for _, doc := range cfg.docs {
@@ -580,10 +579,9 @@ func validateDocumentAliases(doc *Document, counts map[string]map[string]int, al
 	if err != nil {
 		return []Issue{{Scope: scope, Msg: "aliases must be a list of simple names"}}
 	}
+	// Each registry's alias owners are created on its first aliased document.
 	owners := aliasOwners[doc.registryKey()]
 	if owners == nil {
-		// validateDocumentAliases also supports direct unit-level callers whose
-		// alias owner registry was not built by validateDocuments.
 		owners = map[string]string{}
 		aliasOwners[doc.registryKey()] = owners
 	}

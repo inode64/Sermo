@@ -94,9 +94,10 @@ func EngineByteSize(cfg *Config, key string, fallback int64) int64 {
 	return int64(v)
 }
 
-// EngineInterval returns engine.interval, or fallback when unset/invalid.
-func EngineInterval(cfg *Config, fallback time.Duration) time.Duration {
-	return EngineDuration(cfg, keyInterval, fallback)
+// EngineInterval returns engine.interval, or DefaultEngineInterval when
+// unset/invalid.
+func EngineInterval(cfg *Config) time.Duration {
+	return EngineDuration(cfg, keyInterval, DefaultEngineInterval)
 }
 
 // EngineDuration returns the engine.<key> duration, or fallback when the field

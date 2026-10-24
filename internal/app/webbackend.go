@@ -421,7 +421,7 @@ func prepareWebService(ctx context.Context, cfg *config.Config, name string, res
 	}
 	interval := cfgval.Duration(resolved.Tree[config.EntryKeyInterval])
 	if interval <= 0 {
-		interval = config.EngineInterval(cfg, config.DefaultEngineInterval)
+		interval = config.EngineInterval(cfg)
 	}
 	p.entry = &webEntry{
 		displayName:      config.DisplayName(resolved.Tree, name),
@@ -540,7 +540,7 @@ func (b *WebBackend) registerHostWatches(cfg *config.Config, deps Deps) []string
 	}
 	// The daemon runs host watches without their own interval at
 	// engine.interval; the listing and its snapshot freshness follow suit.
-	defaultInterval := config.EngineInterval(cfg, config.DefaultEngineInterval)
+	defaultInterval := config.EngineInterval(cfg)
 	var warnings []string
 	for _, name := range slices.Sorted(maps.Keys(raw)) {
 		entry, _ := raw[name].(map[string]any)

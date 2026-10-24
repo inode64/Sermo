@@ -81,7 +81,7 @@ func EngineUserLookup(cfg *config.Config, runner execx.Runner) *process.UserLook
 // created once and resized afterwards, so builders keep sharing it.
 func ApplyEngineConfig(deps *Deps, cfg *config.Config, wrap func(process.OSReader) process.Reader) {
 	deps.Runtime = cfg.Global.RuntimeDir()
-	deps.Interval = config.EngineInterval(cfg, config.DefaultEngineInterval)
+	deps.Interval = config.EngineInterval(cfg)
 	deps.DefaultTimeout = config.EngineDuration(cfg, config.EngineKeyDefaultTimeout, DefaultEngineCheckTimeout)
 	deps.OperationTimeout = config.EngineDuration(cfg, config.EngineKeyOperationTimeout, DefaultEngineOperationTimeout)
 	deps.MaxParallel = config.EngineInt(cfg, config.EngineKeyMaxParallelChecks, DefaultEngineMaxParallelChecks)
