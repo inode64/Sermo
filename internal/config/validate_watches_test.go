@@ -1773,3 +1773,17 @@ func TestValidateWatchRemountAction(t *testing.T) {
 		}
 	}
 }
+
+// A net watch reads one interface name: a list must fail validation instead of
+// passing it and being dropped when the watch is built.
+func TestValidateNetWatchRequiresOneInterface(t *testing.T) {
+	issues := watchIssues(validateRawGlobal(t, watchConfig("uplink", map[string]any{
+		"type": "net", "interface": []any{"ppp0", "eth0"},
+	})))
+	for _, issue := range issues {
+		if strings.Contains(issue.Msg, "single interface name for a net check") {
+			return
+		}
+	}
+	t.Fatalf("issues = %v, want the single-interface error", issues)
+}

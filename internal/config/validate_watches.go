@@ -714,9 +714,7 @@ func validateInvalidWatchEntryFields(name, typ string, entry map[string]any, key
 // metrics map, each metric with a valid condition and its own hook.
 func validateNetCheck(name string, check, entry map[string]any, defaultNotify []string, add addFunc) {
 	validateMetricWatchEntry(name, entry, add)
-	if cfgval.String(check[checks.CheckKeyInterface]) == "" {
-		add("%s is required for a net check", watchCheckFieldPath(name, checks.CheckKeyInterface))
-	}
+	validateNetInterface(watchCheckFieldPath(name, checks.CheckKeyInterface), check[checks.CheckKeyInterface], add)
 	validateMetricWatchEntries(name, "net", entry, defaultNotify, validateNetMetricCondition, add)
 }
 
