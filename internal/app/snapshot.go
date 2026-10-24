@@ -121,8 +121,8 @@ func (s *Snapshots) Flush() {
 }
 
 // Get returns a service's last check snapshot (check name -> result), or nil if it
-// has not been observed yet. The returned map is immutable (Publish swaps whole
-// maps), so the caller may read it without copying.
+// has not been observed yet. The returned map is immutable (publishConfigured
+// swaps whole maps), so the caller may read it without copying.
 func (s *Snapshots) Get(service string) map[string]CheckSnapshot {
 	if s == nil {
 		return nil
