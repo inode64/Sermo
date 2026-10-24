@@ -46,7 +46,7 @@ func BindQUICDialer(iface string) func(
 }
 
 func resolveQUICAddress(ctx context.Context, address string) (*net.UDPAddr, string, string, error) {
-	remote, err := resolveUDPAddr(ctx, networkIP, address)
+	remote, err := resolveUDPAddr(ctx, networkUDP, address)
 	if err != nil {
 		return nil, "", "", fmt.Errorf("resolve QUIC address: %w", err)
 	}

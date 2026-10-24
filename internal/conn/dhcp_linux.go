@@ -54,7 +54,7 @@ func dhcpExchange(ctx context.Context, iface, serverHost string, serverPort int,
 			return nil
 		},
 	}
-	pc, err := lc.ListenPacket(ctx, "udp4", ":"+strconv.Itoa(dhcpClientPort))
+	pc, err := lc.ListenPacket(ctx, networkUDP4, ":"+strconv.Itoa(dhcpClientPort))
 	if err != nil {
 		return nil, probeErr(ProtocolNameDHCP, stepListen, err)
 	}
@@ -127,7 +127,7 @@ func dhcpDestination(ctx context.Context, iface, serverHost string, serverPort i
 	if iface != "" {
 		return &net.UDPAddr{IP: net.IPv4bcast, Port: dhcpServerPort}, nil
 	}
-	addr, err := resolveUDPAddr(ctx, networkIP4, net.JoinHostPort(serverHost, strconv.Itoa(serverPort)))
+	addr, err := resolveUDPAddr(ctx, networkUDP4, net.JoinHostPort(serverHost, strconv.Itoa(serverPort)))
 	if err != nil {
 		return nil, probeErr(ProtocolNameDHCP, stepResolveServer, err)
 	}

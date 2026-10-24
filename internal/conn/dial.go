@@ -8,6 +8,8 @@ import (
 	"io"
 	"net"
 	"net/textproto"
+	"slices"
+	"strings"
 	"time"
 
 	"sermo/internal/netutil"
@@ -111,14 +113,10 @@ func (t probeTarget) openUDP(ctx context.Context) (net.Conn, error) {
 	return t.openNetwork(ctx, networkUDP)
 }
 
-// probeBanner dials cfg (port defaulting to defaultPort), runs handshake on the
-// connection and closes it. It folds the dial / defer-close prologue that every
-// banner protocol's Probe repeats; the protocol supplies only its default port
-// and handshake.
-// resolveUDPAddr resolves a host:port UDP address within ctx, so a name the
-// resolver is slow to answer cannot outlive the probe's timeout as a plain
-// net.ResolveUDPAddr would. ipNetwork is "ip", "ip4" or "ip6".
-func resolveUDPAddr(ctx context.Context, ipNetwork, address string) (*net.UDPAddr, error) {
+// resolveUDPAddr is net.ResolveUDPAddr bounded by ctx, so a name the resolver
+// is slow to answer cannot outlive the probe's timeout. network is "udp" or
+// "udp4".
+func resolveUDPAddr(ctx context.Context, network, address string) (*net.UDPAddr, error) {
 	host, service, err := net.SplitHostPort(address)
 	if err != nil {
 		return nil, fmt.Errorf("parse address %q: %w", address, err)
@@ -127,16 +125,36 @@ func resolveUDPAddr(ctx context.Context, ipNetwork, address string) (*net.UDPAdd
 	if err != nil {
 		return nil, fmt.Errorf("resolve port %q: %w", service, err)
 	}
-	ips, err := net.DefaultResolver.LookupNetIP(ctx, ipNetwork, host)
+	// LookupIPAddr, unlike LookupNetIP, keeps a link-local literal's zone.
+	ips, err := net.DefaultResolver.LookupIPAddr(ctx, host)
 	if err != nil {
 		return nil, fmt.Errorf("resolve host %q: %w", host, err)
 	}
-	if len(ips) == 0 {
-		return nil, fmt.Errorf("resolve host %q: no addresses", host)
+	ip, ok := pickUDPAddr(network, host, ips)
+	if !ok {
+		return nil, fmt.Errorf("resolve host %q: no %s address", host, network)
 	}
-	return &net.UDPAddr{IP: ips[0].AsSlice(), Port: port, Zone: ips[0].Zone()}, nil
+	return &net.UDPAddr{IP: ip.IP, Port: port, Zone: ip.Zone}, nil
 }
 
+// pickUDPAddr chooses among a host's addresses as net.ResolveUDPAddr does:
+// "udp4" takes only IPv4; "udp" prefers IPv4 unless host is an IPv6 literal,
+// and falls back to the first address of either family.
+func pickUDPAddr(network, host string, ips []net.IPAddr) (net.IPAddr, bool) {
+	want4 := network == networkUDP4 || !strings.Contains(host, ":")
+	if i := slices.IndexFunc(ips, func(ip net.IPAddr) bool { return (ip.IP.To4() != nil) == want4 }); i >= 0 {
+		return ips[i], true
+	}
+	if network == networkUDP4 || len(ips) == 0 {
+		return net.IPAddr{}, false
+	}
+	return ips[0], true
+}
+
+// probeBanner dials cfg (port defaulting to defaultPort), runs handshake on the
+// connection and closes it. It folds the dial / defer-close prologue that every
+// banner protocol's Probe repeats; the protocol supplies only its default port
+// and handshake.
 func probeBanner(ctx context.Context, cfg Config, defaultPort int, handshake func(io.ReadWriter, Config) (Result, error)) (Result, error) {
 	c, err := newProbeTarget(cfg, defaultPort).openStream(ctx)
 	if err != nil {
