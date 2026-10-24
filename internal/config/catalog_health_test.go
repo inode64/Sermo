@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -137,5 +138,34 @@ func TestCatalogBackupAndTemplateHealth(t *testing.T) {
 		if got := nested(t, watch, "check", "expect")["aof_last_write_status"]; got != "ok" {
 			t.Fatalf("%s AOF expectation = %v", name, got)
 		}
+	}
+}
+
+// nmcli is a separate NetworkManager build option, so most hosts that run the
+// daemon have no client (20 of the fleet's 21 on 2026-10-24). The profile must
+// sense it rather than exec it blindly: a state sensor gates the status probe,
+// the probe is advisory, nothing restarts on it, and reload prefers the init's
+// own (busctl) path so nmcli is only a fallback.
+func TestCatalogNetworkManagerNeverRequiresNmcli(t *testing.T) {
+	body := catalogDocByName(t, repoRoot(t), "services", "networkmanager")
+	sensor := catalogWatchCheck(t, body, "nmcli")
+	if sensor["type"] != checks.CheckTypeBinary || sensor["reports"] != checks.ReportsState || sensor["optional"] != true {
+		t.Fatalf("nmcli sensor = %v, want an optional binary check reporting state", sensor)
+	}
+	status := catalogWatchCheck(t, body, "status")
+	if !slices.Contains(cfgval.StringList(status["requires"]), "nmcli") || status["optional"] != true {
+		t.Fatalf("status probe = %v, want optional and gated by requires: [nmcli]", status)
+	}
+	if then, _ := nested(t, body, "watches", "status")["then"].(map[string]any); then != nil {
+		t.Fatalf("status probe must not act: then = %v", then)
+	}
+	ruleMap, _ := body["rules"].(map[string]any)
+	for name, raw := range ruleMap {
+		if rule, _ := raw.(map[string]any); strings.Contains(fmt.Sprint(rule["if"]), "status") || strings.Contains(fmt.Sprint(rule["if"]), "nmcli") {
+			t.Fatalf("rule %s acts on the nmcli probe: %v", name, rule["if"])
+		}
+	}
+	if when := nested(t, body, "reload")["when"]; when != nil && when != "auto" {
+		t.Fatalf("reload when = %v, want the init reload preferred (auto)", when)
 	}
 }
