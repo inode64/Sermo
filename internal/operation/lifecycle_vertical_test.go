@@ -39,7 +39,7 @@ func TestResolvedLifecycleDrivesInitBackendMatrix(t *testing.T) {
 				t.Fatalf("auxiliary units = %v, want [%s]", engine.Lifecycle.AuxiliaryUnits, tt.auxiliary)
 			}
 
-			result := engine.Start(context.Background())
+			result := engine.Do(context.Background(), actionStart)
 			if !result.OK() {
 				t.Fatalf("start result = %+v, want ok", result)
 			}

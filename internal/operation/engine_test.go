@@ -416,7 +416,7 @@ func TestSectionRunnerOptionalBuildIssueDoesNotBlock(t *testing.T) {
 
 func TestResumeOK(t *testing.T) {
 	h := defaultHarness()
-	res := h.engine().Resume(context.Background())
+	res := h.engine().Do(context.Background(), actionResume)
 	if !res.OK() {
 		t.Fatalf("status = %q, want ok (%s)", res.Status, res.Message)
 	}
@@ -465,7 +465,7 @@ func TestPauseUnsupported(t *testing.T) {
 	h := defaultHarness()
 	engine := h.engine()
 	engine.PauseFunc = nil
-	res := engine.Pause(context.Background())
+	res := engine.Do(context.Background(), ActionPause)
 	if res.Status != ResultFailed || !strings.Contains(res.Message, "unsupported") {
 		t.Fatalf("res = %s %q, want failed/unsupported", res.Status, res.Message)
 	}
@@ -478,7 +478,7 @@ func TestResumeUnsupported(t *testing.T) {
 	h := defaultHarness()
 	engine := h.engine()
 	engine.ResumeFunc = nil
-	res := engine.Resume(context.Background())
+	res := engine.Do(context.Background(), actionResume)
 	if res.Status != ResultFailed {
 		t.Fatalf("status = %q, want failed", res.Status)
 	}
@@ -495,8 +495,8 @@ func TestServiceFailedAfterVerb(t *testing.T) {
 		verb string
 		call func(Engine, context.Context) Result
 	}{
-		{"resume", func(e Engine, ctx context.Context) Result { return e.Resume(ctx) }},
-		{"reload", func(e Engine, ctx context.Context) Result { return e.Reload(ctx) }},
+		{"resume", func(e Engine, ctx context.Context) Result { return e.Do(ctx, actionResume) }},
+		{"reload", func(e Engine, ctx context.Context) Result { return e.Do(ctx, actionReload) }},
 	}
 	for _, c := range cases {
 		t.Run(c.verb, func(t *testing.T) {
@@ -513,7 +513,7 @@ func TestServiceFailedAfterVerb(t *testing.T) {
 
 func TestStopReconcilesInitState(t *testing.T) {
 	h := defaultHarness()
-	res := h.engine().Stop(context.Background())
+	res := h.engine().Do(context.Background(), actionStop)
 	if !res.OK() {
 		t.Fatalf("stop status = %q (%s)", res.Status, res.Message)
 	}
@@ -541,7 +541,7 @@ func TestStopWithResidualsSkipsReset(t *testing.T) {
 	// ForceKill is false, so a discovered residual is reported as an orphan and
 	// the stop does not complete cleanly.
 	h.discoverSteps = [][]process.Process{{{PID: 4242}}}
-	res := h.engine().Stop(context.Background())
+	res := h.engine().Do(context.Background(), actionStop)
 	if res.Status != ResultOrphanProcesses {
 		t.Fatalf("status = %q, want orphan_processes", res.Status)
 	}
@@ -606,7 +606,7 @@ func TestRestartIgnoresStaleNamedLock(t *testing.T) {
 
 func TestReloadRunsPreflightThenReload(t *testing.T) {
 	h := defaultHarness()
-	res := h.engine().Reload(context.Background())
+	res := h.engine().Do(context.Background(), actionReload)
 	if res.Status != ResultOK {
 		t.Fatalf("status = %q, want ok", res.Status)
 	}
@@ -623,7 +623,7 @@ func TestReloadWithoutConfiguredFunctionFailsClosed(t *testing.T) {
 	engine := h.engine()
 	engine.ReloadFunc = nil
 
-	res := engine.Reload(context.Background())
+	res := engine.Do(context.Background(), actionReload)
 	if res.Status != ResultFailed || !strings.Contains(res.Message, "unsupported") {
 		t.Fatalf("reload result = %+v, want unsupported failure", res)
 	}
@@ -687,7 +687,7 @@ func TestPreflightBlocksReloadAndResume(t *testing.T) {
 func TestReloadFailureSurfaces(t *testing.T) {
 	h := defaultHarness()
 	h.mgr.reloadErr = errors.New("no ExecReload")
-	res := h.engine().Reload(context.Background())
+	res := h.engine().Do(context.Background(), actionReload)
 	if res.Status != ResultFailed {
 		t.Fatalf("status = %q, want failed", res.Status)
 	}
@@ -765,7 +765,7 @@ func TestRepairBlockedByStartGuard(t *testing.T) {
 	}
 	engine, mgr := newInvalidTreeEngine(t, "app", "app", tree)
 	mgr.status = servicemgr.StatusFailed
-	res := engine.Repair(context.Background())
+	res := engine.Do(context.Background(), ActionRepair)
 	if res.Status != ResultBlocked || res.Message != "volume migration" {
 		t.Fatalf("Repair = %s %q, want blocked by the start guard", res.Status, res.Message)
 	}
@@ -896,7 +896,7 @@ func TestRestartAcceptsSystemdBackendReactivation(t *testing.T) {
 		}
 		return d.Observe([]process.Selector{{Name: process.RoleMain, Type: process.SelectorCommandMatch, Exe: "/opt/mysqld", User: "mysql"}})
 	}
-	res := engine.Restart(context.Background())
+	res := engine.Do(context.Background(), actionRestart)
 	if !res.OK() {
 		t.Fatalf("status = %q, want ok (%s)", res.Status, res.Message)
 	}
@@ -1043,7 +1043,7 @@ func TestNewInvalidReloadBlocksRestart(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			engine, mgr := newInvalidTreeEngine(t, "web", "nginx", map[string]any{"reload": tc.reload})
-			res := engine.Restart(context.Background())
+			res := engine.Do(context.Background(), actionRestart)
 			if res.Status != ResultFailed {
 				t.Fatalf("status = %q, want failed", res.Status)
 			}
@@ -1061,7 +1061,7 @@ func TestNewInvalidProcessSelectorBlocksRestart(t *testing.T) {
 	engine, mgr := newInvalidTreeEngine(t, "mysql-main", "mysqld",
 		map[string]any{"processes": map[string]any{"main": map[string]any{"user": "mysql"}}})
 
-	res := engine.Restart(context.Background())
+	res := engine.Do(context.Background(), actionRestart)
 	if res.Status != ResultFailed {
 		t.Fatalf("status = %q, want failed", res.Status)
 	}
@@ -1083,7 +1083,7 @@ func TestNewNonBooleanDelegatedSelectorBlocksRestart(t *testing.T) {
 			},
 		}})
 
-	res := engine.Restart(context.Background())
+	res := engine.Do(context.Background(), actionRestart)
 	if res.Status != ResultFailed {
 		t.Fatalf("status = %q, want failed", res.Status)
 	}
@@ -1246,7 +1246,7 @@ func TestNewAutomaticResidualReapingClearsBeforeRestart(t *testing.T) {
 	signaler := &recordingSignaler{}
 	engine.Reaper.Signaler = signaler
 
-	res := engine.Restart(context.Background())
+	res := engine.Do(context.Background(), actionRestart)
 	if res.Status != ResultOK {
 		t.Fatalf("status = %q (%s), want ok", res.Status, res.Message)
 	}
@@ -1276,7 +1276,7 @@ func TestStartSettlesThroughTransientInactive(t *testing.T) {
 		Scanner: locks.NewScanner(locks.RuntimeLocksDir(dir)),
 		Sleep:   func(time.Duration) {},
 	})
-	res := engine.Start(context.Background())
+	res := engine.Do(context.Background(), actionStart)
 	if res.Status != ResultOK {
 		t.Fatalf("status = %q (%s), want ok after the backend settles active", res.Status, res.Message)
 	}
@@ -1289,7 +1289,7 @@ func TestStartSettlesThroughTransientInactive(t *testing.T) {
 		Scanner: locks.NewScanner(locks.RuntimeLocksDir(dir)),
 		Sleep:   func(time.Duration) {},
 	})
-	res2 := engine2.Start(context.Background())
+	res2 := engine2.Do(context.Background(), actionStart)
 	if res2.Status != ResultFailed || !strings.Contains(res2.Message, "not active after start") {
 		t.Fatalf("never-settling start = %q (%s), want the settled failure", res2.Status, res2.Message)
 	}
@@ -1317,7 +1317,7 @@ func TestRuntimeDiscoveryAbsentPidfileDoesNotBlockRestart(t *testing.T) {
 		Sleep:      func(time.Duration) {},
 	})
 
-	res := engine.Restart(context.Background())
+	res := engine.Do(context.Background(), actionRestart)
 	if res.Status != ResultOK {
 		t.Fatalf("status = %q (%s), want ok: a proven-absent pidfile must not block repair", res.Status, res.Message)
 	}
@@ -1351,7 +1351,7 @@ func TestRuntimeDiscoveryUncertaintyBlocksRestart(t *testing.T) {
 		Sleep:      func(time.Duration) {},
 	})
 
-	res := engine.Restart(context.Background())
+	res := engine.Do(context.Background(), actionRestart)
 	if res.Status != ResultFailed {
 		t.Fatalf("status = %q, want failed", res.Status)
 	}
@@ -1393,7 +1393,7 @@ func TestNewActiveServiceWithoutExactProcessMatchBlocksRestart(t *testing.T) {
 		Sleep: func(time.Duration) {},
 	})
 
-	res := engine.Restart(context.Background())
+	res := engine.Do(context.Background(), actionRestart)
 	if res.Status != ResultBlocked {
 		t.Fatalf("status = %q (%s), want blocked", res.Status, res.Message)
 	}
@@ -1446,7 +1446,7 @@ func TestNewActiveServiceWithStaleBinaryCanRestart(t *testing.T) {
 		Sleep: func(time.Duration) {},
 	})
 
-	res := engine.Restart(context.Background())
+	res := engine.Do(context.Background(), actionRestart)
 	if res.Status != ResultOK {
 		t.Fatalf("status = %q (%s), want ok", res.Status, res.Message)
 	}
@@ -1503,7 +1503,7 @@ func TestNewActiveServiceWithCommandOnlyProcessCanRestart(t *testing.T) {
 		t.Fatalf("discovered processes = %+v, want Python-wrapped salt-minion", procs)
 	}
 
-	res := engine.Restart(context.Background())
+	res := engine.Do(context.Background(), actionRestart)
 	if res.Status != ResultOK {
 		t.Fatalf("status = %q (%s), want ok", res.Status, res.Message)
 	}
@@ -1582,7 +1582,7 @@ func TestNewAutomaticResidualReapingSignalsOnlySaltSupervisor(t *testing.T) {
 		t.Fatalf("observation = %+v, %v; want trusted", observation, err)
 	}
 
-	res := engine.Restart(context.Background())
+	res := engine.Do(context.Background(), actionRestart)
 	if res.Status != ResultOK {
 		t.Fatalf("status = %q (%s), want ok", res.Status, res.Message)
 	}
@@ -1624,7 +1624,7 @@ func TestNewFailedServiceWithoutExactProcessMatchCanRestart(t *testing.T) {
 		Sleep: func(time.Duration) {},
 	})
 
-	res := engine.Restart(context.Background())
+	res := engine.Do(context.Background(), actionRestart)
 	if res.Status != ResultFailed || res.Message != "service failed after start" {
 		t.Fatalf("status = %q message=%q, want restart to reach backend and fail on post-start failed status", res.Status, res.Message)
 	}
@@ -1666,7 +1666,7 @@ func TestNewRuntimeDiscoveryWarningWithCommandMatchDoesNotBlockRestart(t *testin
 		Sleep: func(time.Duration) {},
 	})
 
-	res := engine.Restart(context.Background())
+	res := engine.Do(context.Background(), actionRestart)
 	if res.Status != ResultOK {
 		t.Fatalf("status = %q (%s), want ok", res.Status, res.Message)
 	}
@@ -1681,7 +1681,7 @@ func TestNewInvalidStopPolicyDurationBlocksBeforeServiceAction(t *testing.T) {
 			engine, mgr := newInvalidTreeEngine(t, "mysql-main", "mysqld",
 				map[string]any{"stop_policy": map[string]any{"term_timeout": value}})
 
-			res := engine.Restart(context.Background())
+			res := engine.Do(context.Background(), actionRestart)
 			if res.Status != ResultFailed {
 				t.Fatalf("status = %q, want failed", res.Status)
 			}
@@ -1732,7 +1732,7 @@ func TestNewWiresDefaultRuntimeDeps(t *testing.T) {
 	if engine.LockTTL != 5*time.Minute {
 		t.Fatalf("LockTTL = %v, want default 5m", engine.LockTTL)
 	}
-	res := engine.Start(context.Background())
+	res := engine.Do(context.Background(), actionStart)
 	if res.Status != ResultOK {
 		t.Fatalf("status = %q (%s), checks=%+v", res.Status, res.Message, res.Checks)
 	}
@@ -1831,7 +1831,7 @@ func TestRestartPostflightRetriesUntilServiceIsReady(t *testing.T) {
 		}
 	}
 
-	res := engine.Restart(context.Background())
+	res := engine.Do(context.Background(), actionRestart)
 	if res.Status != ResultOK {
 		t.Fatalf("status = %q (%s), want ok", res.Status, res.Message)
 	}
@@ -1846,7 +1846,7 @@ func TestRestartPostflightRetriesUntilServiceIsReady(t *testing.T) {
 func TestStopRunsNoPreflightOrStart(t *testing.T) {
 	h := defaultHarness()
 	h.preflight = checks.Outcome{OK: false} // would block restart, must be ignored by stop
-	res := h.engine().Stop(context.Background())
+	res := h.engine().Do(context.Background(), actionStop)
 	if !res.OK() {
 		t.Fatalf("stop status = %q, want ok (%s)", res.Status, res.Message)
 	}
@@ -1860,7 +1860,7 @@ func TestStopRunsNoPreflightOrStart(t *testing.T) {
 
 func TestStartRunsNoStop(t *testing.T) {
 	h := defaultHarness()
-	res := h.engine().Start(context.Background())
+	res := h.engine().Do(context.Background(), actionStart)
 	if !res.OK() {
 		t.Fatalf("start status = %q, want ok", res.Status)
 	}
@@ -2088,7 +2088,7 @@ func assertAlsoServiceWrapOrder(t *testing.T, alsoUnits, want []string) {
 	h := defaultHarness()
 	e := h.engine()
 	e.Lifecycle.AuxiliaryUnits = alsoUnits
-	if res := e.Restart(context.Background()); res.Status != ResultOK {
+	if res := e.Do(context.Background(), actionRestart); res.Status != ResultOK {
 		t.Fatalf("status = %q (%s)", res.Status, res.Message)
 	}
 	wantSet := make(map[string]bool, len(want))
@@ -2131,7 +2131,7 @@ func TestAlsoServiceStartStrictAborts(t *testing.T) {
 	h.mgr.errOn = map[string]error{"start docker.socket": errors.New("socket down")}
 	e := h.engine()
 	e.Lifecycle.AuxiliaryUnits = []string{"docker.socket"}
-	res := e.Restart(context.Background())
+	res := e.Do(context.Background(), actionRestart)
 	if res.Status != ResultFailed {
 		t.Fatalf("a failing also_service start must fail the op, got %q", res.Status)
 	}
@@ -2145,7 +2145,7 @@ func TestAlsoServiceStopBestEffort(t *testing.T) {
 	h.mgr.errOn = map[string]error{"stop docker.socket": errors.New("socket stuck")}
 	e := h.engine()
 	e.Lifecycle.AuxiliaryUnits = []string{"docker.socket"}
-	res := e.Restart(context.Background())
+	res := e.Do(context.Background(), actionRestart)
 	if res.Status != ResultOK {
 		t.Fatalf("a failing also_service stop must not fail the op, got %q (%s)", res.Status, res.Message)
 	}
@@ -2170,7 +2170,7 @@ func TestVerifyStoppedWarnsAndRemoves(t *testing.T) {
 	h := defaultHarness()
 	e := h.engine()
 	e.StopArtifacts = config.StopArtifacts{PidfilePaths: []string{pidf}, Files: []string{filepath.Join(dir, "*.sock")}}
-	res := e.Stop(context.Background())
+	res := e.Do(context.Background(), actionStop)
 	if res.Status != ResultOK || !strings.Contains(res.Message, "stale") {
 		t.Fatalf("report-only stale artifact must warn (OK + 'stale'), got %q (%s)", res.Status, res.Message)
 	}
@@ -2181,7 +2181,7 @@ func TestVerifyStoppedWarnsAndRemoves(t *testing.T) {
 	h2 := defaultHarness()
 	e2 := h2.engine()
 	e2.StopArtifacts = config.StopArtifacts{PidfilePaths: []string{pidf}, Files: []string{filepath.Join(dir, "*.sock")}, CleanEnabled: true}
-	res2 := e2.Stop(context.Background())
+	res2 := e2.Do(context.Background(), actionStop)
 	if res2.Status != ResultOK {
 		t.Fatalf("remove stop status = %q (%s)", res2.Status, res2.Message)
 	}
@@ -2214,7 +2214,7 @@ func TestCleanOnStopDeletesFilesAndDirs(t *testing.T) {
 	h0 := defaultHarness()
 	e0 := h0.engine()
 	e0.StopArtifacts = config.StopArtifacts{Clean: clean}
-	if res := e0.Stop(context.Background()); res.Status != ResultOK {
+	if res := e0.Do(context.Background(), actionStop); res.Status != ResultOK {
 		t.Fatalf("clean_on_stop (disabled) status = %q (%s)", res.Status, res.Message)
 	}
 	if _, err := os.Stat(file); err != nil {
@@ -2228,7 +2228,7 @@ func TestCleanOnStopDeletesFilesAndDirs(t *testing.T) {
 	h := defaultHarness()
 	e := h.engine()
 	e.StopArtifacts = config.StopArtifacts{CleanEnabled: true, Clean: clean}
-	res := e.Stop(context.Background())
+	res := e.Do(context.Background(), actionStop)
 	if res.Status != ResultOK {
 		t.Fatalf("clean_on_stop status = %q (%s)", res.Status, res.Message)
 	}

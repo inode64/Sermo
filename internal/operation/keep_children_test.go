@@ -148,7 +148,7 @@ func TestRestartClearsTrackedStrayStillInTheUnitCgroup(t *testing.T) {
 			e.ObserveTracked = func([]process.Process) (process.Observation, error) { return observe() }
 			e.DiscoverTracked = func([]process.Process) ([]process.Process, error) { return survivors(), nil }
 
-			res := e.Restart(t.Context())
+			res := e.Do(t.Context(), actionRestart)
 			if res.Status != tc.want || len(signaler.calls) != tc.wantSignals {
 				t.Fatalf("status = %q (%s) signals = %v, want %q with %d signal(s)", res.Status, res.Message, signaler.calls, tc.want, tc.wantSignals)
 			}
@@ -248,7 +248,7 @@ func TestNewKeepChildrenReachesDiscovery(t *testing.T) {
 			}}
 			engine.Reaper.Signaler = signaler
 
-			res := engine.Restart(context.Background())
+			res := engine.Do(context.Background(), actionRestart)
 			if res.Status != ResultOK {
 				t.Fatalf("status = %q (%s), want ok", res.Status, res.Message)
 			}

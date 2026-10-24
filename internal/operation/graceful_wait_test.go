@@ -47,7 +47,7 @@ func TestStopGracefulWait(t *testing.T) {
 				procs, err := e.Discover()
 				return process.Observation{Processes: procs, Trusted: len(procs) > 0, IdentityRequired: true, AbsenceKnown: !tc.uncertain}, err
 			}
-			result := e.Stop(t.Context())
+			result := e.Do(t.Context(), actionStop)
 			if result.Status != tc.wantStatus || slept != tc.wantWait {
 				t.Fatalf("result=%+v waited=%v, want status=%s waited=%v", result, slept, tc.wantStatus, tc.wantWait)
 			}
@@ -72,7 +72,7 @@ func TestRestartCleanStopDoesNotConsumeDatabaseGrace(t *testing.T) {
 	}
 	var slept time.Duration
 	e.Sleep = func(d time.Duration) { slept += d }
-	result := e.Restart(t.Context())
+	result := e.Do(t.Context(), actionRestart)
 	if result.Status != ResultOK || !h.mgr.did("start mysqld") {
 		t.Fatalf("result=%+v calls=%v", result, h.mgr.calls)
 	}
@@ -94,7 +94,7 @@ func TestProcessFreeStopWaitsForInit(t *testing.T) {
 		sleeps++
 		h.mgr.stopped = true
 	}
-	result := e.Stop(t.Context())
+	result := e.Do(t.Context(), actionStop)
 	if result.Status != ResultOK || sleeps != 1 {
 		t.Fatalf("result=%+v sleeps=%d, want one wait for init to stop", result, sleeps)
 	}
@@ -110,7 +110,7 @@ func TestRestartCancelledWhileObservingGrace(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 	e.Sleep = func(time.Duration) { cancel() }
-	result := e.Restart(ctx)
+	result := e.Do(ctx, actionRestart)
 	if result.Status != ResultFailed || result.Message != "operation cancelled during graceful stop wait" {
 		t.Fatalf("result=%+v", result)
 	}
@@ -148,7 +148,7 @@ func TestStopOfIdleServiceSkipsGrace(t *testing.T) {
 				}
 				return out, nil
 			}
-			result := e.Stop(t.Context())
+			result := e.Do(t.Context(), actionStop)
 			if slept != tc.wantWait {
 				t.Fatalf("result=%+v waited=%v, want %v", result, slept, tc.wantWait)
 			}

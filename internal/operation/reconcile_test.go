@@ -74,7 +74,7 @@ func TestRestartReconcilesStaleInitState(t *testing.T) {
 	t.Parallel()
 
 	h, signaler := divergentHarness()
-	res := h.engine().Restart(context.Background())
+	res := h.engine().Do(context.Background(), actionRestart)
 
 	if !res.OK() {
 		t.Fatalf("status = %q, want ok (%s)", res.Status, res.Message)
@@ -110,7 +110,7 @@ func TestRestartKeepsStopStartAfterReconciliation(t *testing.T) {
 	t.Parallel()
 
 	h, _ := divergentHarness()
-	res := h.engine().Restart(context.Background())
+	res := h.engine().Do(context.Background(), actionRestart)
 
 	if !res.OK() {
 		t.Fatalf("status = %q, want ok (%s)", res.Status, res.Message)
@@ -130,7 +130,7 @@ func TestRestartSkipsReconciliationWhenUnitIsActive(t *testing.T) {
 	h, _ := divergentHarness()
 	h.mgr.statusSteps = nil // active from the first probe
 
-	res := h.engine().Restart(context.Background())
+	res := h.engine().Do(context.Background(), actionRestart)
 
 	if !res.OK() {
 		t.Fatalf("status = %q, want ok (%s)", res.Status, res.Message)
@@ -156,7 +156,7 @@ func TestRestartSkipsReconciliationWhenUnitStatusIsUnknown(t *testing.T) {
 	h.mgr.statusSteps = []servicemgr.Status{servicemgr.StatusUnknown}
 	h.mgr.status = servicemgr.StatusActive
 
-	res := h.engine().Restart(context.Background())
+	res := h.engine().Do(context.Background(), actionRestart)
 
 	if !res.OK() {
 		t.Fatalf("status = %q, want ok (%s)", res.Status, res.Message)
@@ -186,7 +186,7 @@ func TestRestartBlocksWhenReconciliationLeavesResidual(t *testing.T) {
 			h.killPolicy = process.KillPolicy{}
 
 			h.backend = string(backend)
-			res := h.engine().Restart(context.Background())
+			res := h.engine().Do(context.Background(), actionRestart)
 
 			if res.Status != ResultOrphanProcesses {
 				t.Fatalf("status = %q (%s), want %q", res.Status, res.Message, ResultOrphanProcesses)
@@ -253,7 +253,7 @@ func TestRestartBlocksWhenReconciliationFails(t *testing.T) {
 				tt.setup(h)
 
 				h.backend = string(backend)
-				res := h.engine().Restart(context.Background())
+				res := h.engine().Do(context.Background(), actionRestart)
 
 				if res.Status != ResultFailed || res.Message != tt.message {
 					t.Fatalf("result = %+v, want failed with %q", res, tt.message)
@@ -279,7 +279,7 @@ func TestRestartSkipsReconciliationWithoutSurvivingProcesses(t *testing.T) {
 	h, signaler := divergentHarness()
 	h.discoverSteps = [][]process.Process{nil}
 
-	res := h.engine().Restart(context.Background())
+	res := h.engine().Do(context.Background(), actionRestart)
 
 	if !res.OK() {
 		t.Fatalf("status = %q, want ok (%s)", res.Status, res.Message)
@@ -303,7 +303,7 @@ func TestRestartSkipsReconciliationWhenOnlySurvivorsAreDelegated(t *testing.T) {
 	h, signaler := divergentHarness()
 	h.discoverSteps = [][]process.Process{{delegatedWorkload()}}
 
-	res := h.engine().Restart(context.Background())
+	res := h.engine().Do(context.Background(), actionRestart)
 
 	if !res.OK() {
 		t.Fatalf("status = %q, want ok (%s)", res.Status, res.Message)

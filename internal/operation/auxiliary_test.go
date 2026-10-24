@@ -62,9 +62,9 @@ func TestLifecycleDisablesSocketBeforePrimary(t *testing.T) {
 			e.Lifecycle.AuxiliaryUnits = []string{"mysqld.socket"}
 			var result Result
 			if action == actionStop {
-				result = e.Stop(t.Context())
+				result = e.Do(t.Context(), actionStop)
 			} else {
-				result = e.Restart(t.Context())
+				result = e.Do(t.Context(), actionRestart)
 			}
 			wantActive := action == actionRestart
 			if !result.OK() || mgr.active != wantActive || mgr.listening != wantActive {
@@ -85,7 +85,7 @@ func TestAuxiliaryStopCancellationPreventsPrimaryStop(t *testing.T) {
 	e := h.engine()
 	e.Manager = mgr
 	e.Lifecycle.AuxiliaryUnits = []string{"mysqld.socket"}
-	result := e.Restart(ctx)
+	result := e.Do(ctx, actionRestart)
 	if result.OK() || h.mgr.did("stop mysqld") || h.mgr.did("start mysqld") || !mgr.active {
 		t.Fatalf("result=%+v active=%v calls=%v", result, mgr.active, mgr.calls)
 	}
@@ -99,7 +99,7 @@ func TestOpenRCAuxiliaryRetainsWrapOrder(t *testing.T) {
 	h.backend = string(servicemgr.BackendOpenRC)
 	e := h.engine()
 	e.Lifecycle.AuxiliaryUnits = []string{"helper.socket"}
-	result := e.Stop(t.Context())
+	result := e.Do(t.Context(), actionStop)
 	if !result.OK() || len(h.mgr.calls) < 2 || h.mgr.calls[0] != "stop mysqld" || h.mgr.calls[1] != "stop helper.socket" {
 		t.Fatalf("result=%+v calls=%v", result, h.mgr.calls)
 	}
