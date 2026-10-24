@@ -4,7 +4,6 @@ import (
 	"cmp"
 	"context"
 	"errors"
-	"fmt"
 	"os"
 	"slices"
 	"strings"
@@ -46,7 +45,6 @@ const (
 	unownedCaveatSeparator     = "; "
 
 	defaultUnownedMinAge = 5 * time.Minute
-	procNSMountFormat    = "/proc/%d/ns/mnt"
 	initPID              = 1
 )
 
@@ -423,7 +421,7 @@ func (c *unownedClassifier) packageOwnership(ctx context.Context, candidates []P
 }
 
 func (c *unownedClassifier) mountNamespace(pid int) (string, bool) {
-	ns, err := c.rt.readLink(fmt.Sprintf(procNSMountFormat, pid))
+	ns, err := c.rt.readLink(process.PIDPath(pid, process.ProcFileMountNamespace))
 	if err != nil || ns == "" {
 		return "", false
 	}

@@ -19,7 +19,6 @@ import (
 
 const (
 	procFileMaps          = "maps"
-	procMountNamespace    = "ns/mnt"
 	libraryMapFields      = 5
 	libraryMapPermissions = 1
 	libraryMapDevice      = 3
@@ -154,8 +153,8 @@ func (r libraryReader) verifyProcess(proc Process) (bool, error) {
 }
 
 func (r libraryReader) sameRoot(pid int) bool {
-	ns, err := r.readlink(PIDPath(pid, procMountNamespace))
-	self, selfErr := r.readlink(SelfPath(procMountNamespace))
+	ns, err := r.readlink(PIDPath(pid, ProcFileMountNamespace))
+	self, selfErr := r.readlink(SelfPath(ProcFileMountNamespace))
 	root, rootErr := r.stat(PIDPath(pid, ProcFileRoot))
 	ours, oursErr := r.stat("/")
 	return err == nil && selfErr == nil && ns != "" && ns == self && rootErr == nil && oursErr == nil && root.identity == ours.identity
