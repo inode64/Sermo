@@ -536,7 +536,7 @@ func (w *Watch) dispatchLVMTransition(ctx context.Context, res checks.Result) {
 	level := w.transitionSeverity(changed)
 	msg := watchMessage(w.Name, changed.Message, transitionEnv(w.Name, w.CheckType, changed, level))
 	if w.DryRun {
-		dispatchDryRunNotify(ctx, w.Notifiers, msg, w.Name, w.emit)
+		dispatchNotifyFiltered(ctx, w.Notifiers, msg, w.Name, w.emit, dryRunConsoleNotifier)
 		return
 	}
 	if w.InPanic != nil && w.InPanic() {
@@ -572,7 +572,7 @@ func (w *Watch) dispatchRaidTransition(ctx context.Context, res checks.Result, t
 	level := w.transitionSeverity(transitionResult)
 	env := transitionEnv(w.Name, w.CheckType, transitionResult, level)
 	if w.DryRun {
-		dispatchDryRunNotify(ctx, w.Notifiers, watchMessage(w.Name, transitionResult.Message, env), w.Name, w.emit)
+		dispatchNotifyFiltered(ctx, w.Notifiers, watchMessage(w.Name, transitionResult.Message, env), w.Name, w.emit, dryRunConsoleNotifier)
 		return
 	}
 	if w.InPanic != nil && w.InPanic() {
@@ -919,10 +919,6 @@ func dispatchNotify(ctx context.Context, notifiers []notify.Notifier, msg notify
 	dispatchNotifyFiltered(ctx, notifiers, msg, watch, emit, nil)
 }
 
-func dispatchDryRunNotify(ctx context.Context, notifiers []notify.Notifier, msg notify.Message, watch string, emit func(Event)) {
-	dispatchNotifyFiltered(ctx, notifiers, msg, watch, emit, dryRunConsoleNotifier)
-}
-
 func dispatchNotifyFiltered(ctx context.Context, notifiers []notify.Notifier, msg notify.Message, watch string, emit func(Event), allow func(notify.Notifier) bool) {
 	deliverNotification(ctx, notifiers, msg, allow, deliveryReport(emit, Event{Watch: watch}))
 }
@@ -973,7 +969,7 @@ func dispatchWatchFire(ctx context.Context, spec watchFireSpec, msg string, env 
 	env[sermoEnvSeverity] = spec.severity.Resolved().String()
 	if spec.dryRun {
 		spec.emit(Event{Watch: spec.name, Kind: eventKindDryRun, Message: spec.dryRunLabel + ": " + msg})
-		dispatchDryRunNotify(ctx, spec.notifiers, watchMessage(spec.name, msg, env), spec.name, spec.emit)
+		dispatchNotifyFiltered(ctx, spec.notifiers, watchMessage(spec.name, msg, env), spec.name, spec.emit, dryRunConsoleNotifier)
 		return false
 	}
 	if spec.inPanic != nil && spec.inPanic() {
