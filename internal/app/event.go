@@ -125,8 +125,6 @@ const (
 	eventActionUnmonitor         = "unmonitor"
 	eventActionExpand            = config.WatchThenKeyExpand
 	eventActionProbe             = "probe"
-	eventActionRAIDPause         = "pause"
-	eventActionRAIDResume        = "resume"
 	eventActionReplicationStart  = "replication-start"
 	eventActionReleaseLock       = "release-lock"
 	eventActionOperationSettling = "operation-settling"
