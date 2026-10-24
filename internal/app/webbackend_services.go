@@ -460,10 +460,6 @@ func (o serviceObservation) serviceCheckHealth(e *webEntry, monitored bool) stri
 // check type, the current check configuration, and no older than two effective
 // check intervals. A reload may keep a check name while changing its type,
 // cadence or target.
-func (b *WebBackend) serviceCheckSnapshotCurrent(e *webEntry, name string, snap CheckSnapshot) bool {
-	return serviceCheckSnapshotCurrentAt(e, name, snap, b.webNow())
-}
-
 func serviceCheckSnapshotCurrentAt(e *webEntry, name string, snap CheckSnapshot, at time.Time) bool {
 	if e == nil || snap.At.IsZero() || snap.CheckType != e.checkTypes[name] || !snapshotConfigMatches(e.configID, snap.ConfigID) {
 		return false

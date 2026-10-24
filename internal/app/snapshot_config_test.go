@@ -156,11 +156,11 @@ func TestServiceSnapshotRejectsChangedConfiguration(t *testing.T) {
 	b := &WebBackend{now: func() time.Time { return now }}
 	entry := &webEntry{checkTypes: types, configID: oldID, interval: time.Minute}
 	snapshot := samples.Get("web")["http"]
-	if !b.serviceCheckSnapshotCurrent(entry, "http", snapshot) {
+	if !serviceCheckSnapshotCurrentAt(entry, "http", snapshot, b.webNow()) {
 		t.Fatal("current service configuration rejected its own sample")
 	}
 	entry.configID = newID
-	if b.serviceCheckSnapshotCurrent(entry, "http", snapshot) {
+	if serviceCheckSnapshotCurrentAt(entry, "http", snapshot, b.webNow()) {
 		t.Fatal("changed service configuration accepted the previous endpoint's sample")
 	}
 	if got := checkEpisodesFromSnapshots(samples, "web", types, newID); got != nil {

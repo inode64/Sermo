@@ -7,13 +7,6 @@ import (
 	"sermo/internal/config"
 )
 
-func storeAppSample(samples *ArtifactSamples, name string, report appinspect.Report) {
-	if samples == nil {
-		return
-	}
-	samples.StoreAppReport(name, report)
-}
-
 // buildAppWatches builds one app-watch per installed catalog application and
 // returns the app names they sample. Each reuses the whole Watch cycle: every
 // engine.artifact_interval it inspects its app, and because FireOnFail is set it
@@ -36,7 +29,7 @@ func buildAppWatches(ctx context.Context, cfg *config.Config, deps Deps, appUser
 			samples.RegisterApp(report.Name)
 			return report.Name
 		},
-		store:       storeAppSample,
+		store:       (*ArtifactSamples).StoreAppReport,
 		inspect:     appinspect.InspectOne,
 		activeUsers: activeUsers,
 	})

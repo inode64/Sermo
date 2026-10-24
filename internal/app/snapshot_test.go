@@ -328,8 +328,8 @@ func TestSnapshotPersistencePreservesAllFields(t *testing.T) {
 			OK: true, Condition: true, Optional: true, Skipped: true, Unavailable: true,
 			Message: "read failed", Data: data, Ran: true, At: time.Unix(123, 0), Severity: string(severity.Warning),
 		}
-		snapshot := snapshotFromRecord(record)
-		persisted := snapshotRecord(snapshot)
+		snapshot := CheckSnapshot(record)
+		persisted := state.CheckSnapshotRecord(snapshot)
 		if !reflect.DeepEqual(record, persisted) {
 			t.Fatalf("snapshot round trip = %+v, want %+v", persisted, record)
 		}

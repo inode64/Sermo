@@ -277,7 +277,7 @@ func (b *WebBackend) appendTerminalSessions(result *web.SessionInventory, servic
 		if b.terminalSourceClosedSince(service, configured.check, snapshot.At) {
 			continue
 		}
-		if !ok || !b.serviceCheckSnapshotCurrent(entry, configured.check, snapshot) {
+		if !ok || !serviceCheckSnapshotCurrentAt(entry, configured.check, snapshot, b.webNow()) {
 			result.Sources = append(result.Sources, source)
 			continue
 		}
