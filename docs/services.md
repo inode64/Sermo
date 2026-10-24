@@ -1454,8 +1454,11 @@ custom check can still spell it out. Public `processes:` entries stay limited to
 "${pidfile}"`) and accepts a scalar path, a candidate list, or `{path: ...,
 optional: true}`. Candidate lists are tried in order and pass on the first live
 pidfile; if none exists, the backend PID fallback can still satisfy the gated
-health check. `optional: true` keeps a missing pidfile as a warning instead of
-making the service unhealthy.
+health check. When that backend query does not answer (systemd can stall for
+seconds right after a `daemon-reload`), the check is unavailable instead of
+failed, and a live PID the selectors do not name is not judged as recycled.
+`optional: true` keeps a missing pidfile as a warning instead of making the
+service unhealthy.
 
 When a single service owns several independent resident processes, use
 `pidfiles:` as a map keyed by process role. Each role must also exist under

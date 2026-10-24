@@ -28,7 +28,7 @@ type pidfileCheck struct {
 	paths        []string
 	alive        func(int) bool
 	claim        func(pid int) (claimed, known bool)
-	fallbackPIDs func() []int
+	fallbackPIDs func() ([]int, error)
 }
 
 func (c pidfileCheck) Run(_ context.Context) Result {
@@ -66,37 +66,49 @@ func (c pidfileCheck) Run(_ context.Context) Result {
 		result.Data = match.data
 		return result
 	}
+	fallback, queryErr := c.liveFallbackPIDs(alive)
 	if len(c.paths) == 1 {
 		path := c.paths[0]
-		if pids := c.liveFallbackPIDs(alive); len(pids) > 0 {
-			r := c.result(true, fmt.Sprintf("%s absent; backend reports %d running pid(s)", path, len(pids)), start)
-			r.Data = map[string]any{DataKeyPIDs: pids, DataKeySource: DataSourceBackend}
+		if len(fallback) > 0 {
+			r := c.result(true, fmt.Sprintf("%s absent; backend reports %d running pid(s)", path, len(fallback)), start)
+			r.Data = map[string]any{DataKeyPIDs: fallback, DataKeySource: DataSourceBackend}
 			return r
 		}
-		return c.result(false, path+" does not exist (service active but no pidfile)", start)
+		return c.absentResult(path+" does not exist", queryErr, start)
 	}
-	if pids := c.liveFallbackPIDs(alive); len(pids) > 0 {
-		r := c.result(true, fmt.Sprintf("no pidfile candidate exists (%s); backend reports %d running pid(s)", strings.Join(c.paths, ", "), len(pids)), start)
-		r.Data = map[string]any{DataKeyPIDs: pids, DataKeySource: DataSourceBackend, DataKeyPaths: c.paths}
+	if len(fallback) > 0 {
+		r := c.result(true, fmt.Sprintf("no pidfile candidate exists (%s); backend reports %d running pid(s)", strings.Join(c.paths, ", "), len(fallback)), start)
+		r.Data = map[string]any{DataKeyPIDs: fallback, DataKeySource: DataSourceBackend, DataKeyPaths: c.paths}
 		return r
 	}
-	return c.result(false, fmt.Sprintf("none of pidfile candidates exist (%s) (service active but no pidfile)", strings.Join(c.paths, ", ")), start)
+	return c.absentResult(fmt.Sprintf("none of pidfile candidates exist (%s)", strings.Join(c.paths, ", ")), queryErr, start)
 }
 
-func (c pidfileCheck) liveFallbackPIDs(alive func(int) bool) []int {
-	if c.fallbackPIDs == nil {
-		return nil
+// absentResult fails an active service whose pidfile is absent, unless the
+// backend PID query that could have found its process did not answer: that
+// cannot show the daemon is gone, so the observation is unavailable.
+func (c pidfileCheck) absentResult(absent string, queryErr error, start time.Time) Result {
+	if queryErr != nil {
+		return c.unavailableResult(fmt.Sprintf("%s and the backend PID query failed: %v", absent, queryErr), start)
 	}
+	return c.result(false, absent+" (service active but no pidfile)", start)
+}
+
+func (c pidfileCheck) liveFallbackPIDs(alive func(int) bool) ([]int, error) {
+	if c.fallbackPIDs == nil {
+		return nil, nil
+	}
+	pids, err := c.fallbackPIDs()
 	seen := map[int]bool{}
 	var out []int
-	for _, pid := range c.fallbackPIDs() {
+	for _, pid := range pids {
 		if pid <= 0 || seen[pid] || !alive(pid) {
 			continue
 		}
 		seen[pid] = true
 		out = append(out, pid)
 	}
-	return out
+	return out, err
 }
 
 // pidAlive reports whether a process with the given PID exists and has not

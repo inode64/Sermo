@@ -264,7 +264,7 @@ func TestServiceNoResidentProcessKeepsBackendPIDServiceResident(t *testing.T) {
 }
 
 func TestServiceNoResidentProcessKeepsStoppedContainerResident(t *testing.T) {
-	if serviceNoResidentProcess(map[string]any{}, nil, func() []int { return nil }, servicemgr.BackendDocker) {
+	if serviceNoResidentProcess(map[string]any{}, nil, func() ([]int, error) { return nil, nil }, servicemgr.BackendDocker) {
 		t.Fatal("a container without a PID during reload must retain process observation after recovery")
 	}
 	if !serviceNoResidentProcess(map[string]any{process.SectionProcesses: map[string]any{}}, nil, nil, servicemgr.BackendDocker) {
@@ -498,6 +498,74 @@ func TestServiceRuntimePidfileCheckUsesBackendFallbackWhenSystemdHasNoPIDFile(t 
 	if len(results) != 1 || !results[0].OK {
 		t.Fatalf("pidfile result = %+v, want OK via backend fallback", results)
 	}
+}
+
+// After a daemon-reload PID 1 can leave systemctl unanswered for seconds. A
+// backend PID query that did not answer is not evidence of "no process": the
+// pidfile check, its identity claim and the no-resident judgment must not read
+// it as one.
+func TestServiceRuntimeDoesNotReadAFailedBackendPIDQueryAsNoProcess(t *testing.T) {
+	deps := Deps{
+		Backend:          servicemgr.BackendSystemd,
+		Manager:          fakeManager{},
+		Runtime:          t.TempDir(),
+		DefaultTimeout:   time.Second,
+		OperationTimeout: time.Second,
+		ExecxRunner:      stalledPIDRunner{},
+		Emit:             func(Event) {},
+	}
+	pidfileResult := func(t *testing.T, tree map[string]any, path string) checks.Result {
+		t.Helper()
+		runtime := BuildServiceRuntime(t.Context(), ServiceRuntimeConfig{Service: "acpid", Unit: "acpid.service", Tree: tree, Deps: deps})
+		built, warnings := checks.Build(map[string]any{"pidfile": map[string]any{"type": "pidfile", "path": path}}, runtime.CheckDeps)
+		if len(warnings) != 0 {
+			t.Fatalf("Build warnings = %v", warnings)
+		}
+		results := checks.Run(t.Context(), built, 1)
+		if len(results) != 1 {
+			t.Fatalf("results = %+v, want one", results)
+		}
+		return results[0]
+	}
+
+	t.Run("absent pidfile", func(t *testing.T) {
+		res := pidfileResult(t, map[string]any{}, filepath.Join(t.TempDir(), "acpid.pid"))
+		if res.OK || !res.Unavailable || !strings.Contains(res.Message, "MainPID") {
+			t.Fatalf("pidfile result = %+v, want unavailable naming the failed query", res)
+		}
+	})
+	t.Run("pid the selectors do not claim", func(t *testing.T) {
+		pid := os.Getpid()
+		pidfile := filepath.Join(t.TempDir(), "acpid.pid")
+		if err := os.WriteFile(pidfile, []byte(strconv.Itoa(pid)+"\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		deps := deps
+		deps.ProcReader = serviceOwnershipReader{pid: {PID: pid, PPID: 1, Exe: "/usr/bin/wrapper", ExeOK: true}}
+		tree := map[string]any{"processes": map[string]any{"main": map[string]any{"exe": "/usr/sbin/acpid", "user": "root"}}}
+		runtime := BuildServiceRuntime(t.Context(), ServiceRuntimeConfig{Service: "acpid", Unit: "acpid.service", Tree: tree, Deps: deps})
+		if claimed, known := runtime.CheckDeps.PidfileClaim(pid); known {
+			t.Fatalf("claim = %v/%v, want unknown while the backend does not answer", claimed, known)
+		}
+	})
+	t.Run("no-resident judgment", func(t *testing.T) {
+		runtime := BuildServiceRuntime(t.Context(), ServiceRuntimeConfig{Service: "acpid", Unit: "acpid.service", Tree: map[string]any{}, Deps: deps})
+		if runtime.NoResidentProcess {
+			t.Fatal("a service must not lose process observation because its PID query failed")
+		}
+	})
+}
+
+// stalledPIDRunner answers systemd's static unit properties but fails the
+// runtime PID queries, the way systemctl does while PID 1 is busy.
+type stalledPIDRunner struct{}
+
+func (stalledPIDRunner) Run(_ context.Context, name string, args ...string) (execx.Result, error) {
+	joined := strings.Join(args, " ")
+	if name == "systemctl" && (strings.Contains(joined, "-p MainPID") || strings.Contains(joined, "-p ControlGroup")) {
+		return execx.Result{ExitCode: -1}, context.DeadlineExceeded
+	}
+	return execx.Result{Stdout: "\n"}, nil
 }
 
 func TestWebBackendDetailIncludesProcessSelectorWarnings(t *testing.T) {

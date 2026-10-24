@@ -119,12 +119,14 @@ type Deps struct {
 	// PidfileFallbackPIDs reports backend-native service PIDs when the active
 	// init system does not publish a PIDFile. It lets catalog pidfile checks
 	// accept systemd's MainPID/cgroup process set instead of failing on an
-	// intentionally absent pidfile.
-	PidfileFallbackPIDs func() []int
+	// intentionally absent pidfile. Its error reports a query that did not
+	// answer, which makes the check unavailable rather than failed.
+	PidfileFallbackPIDs func() ([]int, error)
 	// PidfileClaim reports whether a pidfile's live PID belongs to this service
 	// (its exact-executable selectors or backend process set), so a pidfile
 	// check rejects a PID recycled by an unrelated process. known is false when
-	// the service declares no executable selector. Nil checks liveness only.
+	// the service declares no executable selector or the backend query failed.
+	// Nil checks liveness only.
 	PidfileClaim func(pid int) (claimed, known bool)
 	// StaleBinaries reports this service's processes whose binary was replaced
 	// or removed on disk, for `stale_binary` checks. It is read-only: such a

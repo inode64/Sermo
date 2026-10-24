@@ -143,27 +143,35 @@ func Snapshot(reader Reader) (map[int]Identity, error) {
 // operation acts on. A freshness of 0 disables caching. Safe for concurrent
 // use; the query runs under the lock, so concurrent callers share one run.
 type CachedPIDs struct {
-	query     func() []int
+	query     func() ([]int, error)
 	freshness time.Duration
 	now       func() time.Time
 
 	mu     sync.Mutex
 	pids   []int
+	err    error
 	at     time.Time
 	primed bool
 }
 
 // NewCachedPIDs returns a CachedPIDs over query.
-func NewCachedPIDs(query func() []int, freshness time.Duration) *CachedPIDs {
+func NewCachedPIDs(query func() ([]int, error), freshness time.Duration) *CachedPIDs {
 	return &CachedPIDs{query: query, freshness: freshness, now: time.Now}
 }
 
 // PIDs returns the cached answer, querying again once it is freshness old.
 func (c *CachedPIDs) PIDs() []int {
+	pids, _ := c.Checked()
+	return pids
+}
+
+// Checked is PIDs with the query's error, for a caller that would read an
+// empty answer as "no process".
+func (c *CachedPIDs) Checked() ([]int, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.primed && c.freshness > 0 && c.now().Sub(c.at) < c.freshness {
-		return slices.Clone(c.pids)
+		return slices.Clone(c.pids), c.err
 	}
 	return c.refreshLocked()
 }
@@ -172,12 +180,13 @@ func (c *CachedPIDs) PIDs() []int {
 func (c *CachedPIDs) Fresh() []int {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	return c.refreshLocked()
+	pids, _ := c.refreshLocked()
+	return pids
 }
 
-func (c *CachedPIDs) refreshLocked() []int {
+func (c *CachedPIDs) refreshLocked() ([]int, error) {
 	c.at = c.now()
-	c.pids = c.query()
+	c.pids, c.err = c.query()
 	c.primed = true
-	return slices.Clone(c.pids)
+	return slices.Clone(c.pids), c.err
 }

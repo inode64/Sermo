@@ -2,6 +2,7 @@ package checks
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -57,7 +58,7 @@ func TestPidfileCheckMissingPassesWithBackendFallback(t *testing.T) {
 		name: "pid", timeout: time.Second,
 		paths:        []string{filepath.Join(t.TempDir(), "absent.pid")},
 		alive:        func(pid int) bool { return pid == 4321 },
-		fallbackPIDs: func() []int { return []int{0, 4321, 4321, 9999} },
+		fallbackPIDs: func() ([]int, error) { return []int{0, 4321, 4321, 9999}, nil },
 	}
 	res := c.Run(context.Background())
 	if !res.OK {
@@ -66,6 +67,32 @@ func TestPidfileCheckMissingPassesWithBackendFallback(t *testing.T) {
 	pids, ok := res.Data["pids"].([]int)
 	if !ok || len(pids) != 1 || pids[0] != 4321 {
 		t.Fatalf("fallback pids = %#v, want [4321]", res.Data["pids"])
+	}
+}
+
+// A backend PID query that did not answer cannot show the daemon is gone.
+func TestPidfileCheckMissingWithFailedBackendQueryIsUnavailable(t *testing.T) {
+	queryErr := errors.New("systemctl show MainPID for acpid.service: context deadline exceeded")
+	absent := filepath.Join(t.TempDir(), "absent.pid")
+	for _, paths := range [][]string{{absent}, {absent, absent + ".2"}} {
+		c := pidfileCheck{
+			name: "pid", timeout: time.Second, paths: paths,
+			alive:        func(int) bool { return true },
+			fallbackPIDs: func() ([]int, error) { return nil, queryErr },
+		}
+		res := c.Run(context.Background())
+		if res.OK || !res.Unavailable || !strings.Contains(res.Message, queryErr.Error()) {
+			t.Fatalf("paths %v: result = %+v, want unavailable with the query error", paths, res)
+		}
+	}
+	// PIDs read before the failure still prove the service runs.
+	c := pidfileCheck{
+		name: "pid", timeout: time.Second, paths: []string{absent},
+		alive:        func(pid int) bool { return pid == 4321 },
+		fallbackPIDs: func() ([]int, error) { return []int{4321}, queryErr },
+	}
+	if res := c.Run(context.Background()); !res.OK {
+		t.Fatalf("live backend PID with a partial answer = %+v, want pass", res)
 	}
 }
 
@@ -114,11 +141,11 @@ func TestBuildPidfileCheckNeedsPath(t *testing.T) {
 }
 
 func TestPidfileLiveFallbackPIDsFiltersNonPositiveAndDupes(t *testing.T) {
-	c := pidfileCheck{fallbackPIDs: func() []int { return []int{0, -3, 5, 5, 7} }}
-	got := c.liveFallbackPIDs(func(int) bool { return true })
+	c := pidfileCheck{fallbackPIDs: func() ([]int, error) { return []int{0, -3, 5, 5, 7}, nil }}
+	got, err := c.liveFallbackPIDs(func(int) bool { return true })
 	// pid <= 0 are dropped, duplicates collapsed: [5, 7].
-	if len(got) != 2 || got[0] != 5 || got[1] != 7 {
-		t.Fatalf("liveFallbackPIDs = %v, want [5 7]", got)
+	if err != nil || len(got) != 2 || got[0] != 5 || got[1] != 7 {
+		t.Fatalf("liveFallbackPIDs = %v, %v, want [5 7]", got, err)
 	}
 }
 

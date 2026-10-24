@@ -18,7 +18,7 @@ func TestOpenRCCgroupPrincipalAndResiduals(t *testing.T) {
 		"/sys/fs/cgroup/openrc.sshd/cgroup.procs": "301\n302\n90\n90\n1\ninvalid\n",
 	}
 	read := cgroupFiles(files)
-	pids := BackendPIDsFuncWithRunner(context.Background(), BackendOpenRC, "sshd", nil, read)
+	pids := openRCPIDs(t, BackendPIDsFuncWithRunner(context.Background(), BackendOpenRC, "sshd", nil, read))
 	if got := pids(); !reflect.DeepEqual(got, []int{90, 301, 302}) {
 		t.Fatalf("pids=%v", got)
 	}
@@ -50,7 +50,7 @@ func TestOpenRCCgroupIgnoresFIFOPidfile(t *testing.T) {
 		"/etc/init.d/sshd":                        "command=/usr/bin/sshd\npidfile=" + pidfile + "\n",
 		"/sys/fs/cgroup/openrc.sshd/cgroup.procs": "90\n",
 	}
-	pids := BackendPIDsFuncWithRunner(context.Background(), BackendOpenRC, "sshd", nil, cgroupFiles(files))
+	pids := openRCPIDs(t, BackendPIDsFuncWithRunner(context.Background(), BackendOpenRC, "sshd", nil, cgroupFiles(files)))
 	done := make(chan []int, 1)
 	go func() { done <- pids() }()
 	select {
@@ -76,5 +76,17 @@ func TestOpenRCCgroupRejectsUnsafeUnit(t *testing.T) {
 		if got := pids(); len(got) != 0 {
 			t.Fatalf("pids=%v", got)
 		}
+	}
+}
+
+// openRCPIDs reads an OpenRC query, which has no query of its own to fail.
+func openRCPIDs(t *testing.T, query func() ([]int, error)) func() []int {
+	t.Helper()
+	return func() []int {
+		pids, err := query()
+		if err != nil {
+			t.Errorf("OpenRC backend PIDs error = %v", err)
+		}
+		return pids
 	}
 }

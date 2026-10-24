@@ -403,7 +403,8 @@ func reloadPID(ctx context.Context, runner execx.Runner, backend, unit, pidfile 
 	if err := ctx.Err(); err != nil {
 		return 0, "", reloadContextError(err)
 	}
-	if pid, ok := servicemgr.MainPIDContext(ctx, runner, servicemgr.Backend(backend), unit); ok {
+	pid, mainErr := servicemgr.MainPIDContext(ctx, runner, servicemgr.Backend(backend), unit)
+	if mainErr == nil && pid > 0 {
 		return pid, reloadPIDMain, nil
 	}
 	if err := ctx.Err(); err != nil {
@@ -415,6 +416,9 @@ func reloadPID(ctx context.Context, runner execx.Runner, backend, unit, pidfile 
 			return 0, "", fmt.Errorf("read pidfile %s: %w", pidfile, err)
 		}
 		return pid, reloadPIDPidfile, nil
+	}
+	if mainErr != nil {
+		return 0, "", fmt.Errorf("reload: cannot resolve a pid to signal: %w", mainErr)
 	}
 	return 0, "", fmt.Errorf("reload: cannot resolve a pid to signal: backend exposes no MainPID (OpenRC) and the service declares no %s; add %s: so the signal target can be found", process.ServiceKeyPidfile, process.ServiceKeyPidfile)
 }

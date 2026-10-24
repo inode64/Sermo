@@ -2,6 +2,7 @@ package servicemgr
 
 import (
 	"context"
+	"errors"
 	"os"
 	"strings"
 	"testing"
@@ -104,14 +105,14 @@ func TestResolvePrefersActiveKnownUnit(t *testing.T) {
 }
 
 func TestMainPID(t *testing.T) {
-	if pid, ok := MainPIDContext(context.Background(), execxtest.Fixed(execx.Result{Stdout: "4242\n"}, nil), BackendSystemd, "nginx.service"); !ok || pid != 4242 {
-		t.Fatalf("MainPID = %d/%v, want 4242/true", pid, ok)
+	if pid, err := MainPIDContext(context.Background(), execxtest.Fixed(execx.Result{Stdout: "4242\n"}, nil), BackendSystemd, "nginx.service"); err != nil || pid != 4242 {
+		t.Fatalf("MainPID = %d/%v, want 4242", pid, err)
 	}
-	if _, ok := MainPIDContext(context.Background(), execxtest.Fixed(execx.Result{Stdout: "0\n"}, nil), BackendSystemd, "nginx.service"); ok {
-		t.Error("MainPID 0 should report not found")
+	if pid, err := MainPIDContext(context.Background(), execxtest.Fixed(execx.Result{Stdout: "0\n"}, nil), BackendSystemd, "nginx.service"); err != nil || pid != 0 {
+		t.Errorf("MainPID 0 = %d/%v, want none", pid, err)
 	}
-	if _, ok := MainPIDContext(context.Background(), execxtest.Fixed(execx.Result{Stdout: "4242\n"}, nil), BackendOpenRC, "nginx"); ok {
-		t.Error("OpenRC must report no MainPID")
+	if pid, err := MainPIDContext(context.Background(), execxtest.Fixed(execx.Result{Stdout: "4242\n"}, nil), BackendOpenRC, "nginx"); err != nil || pid != 0 {
+		t.Errorf("OpenRC MainPID = %d/%v, want none", pid, err)
 	}
 }
 
@@ -127,9 +128,9 @@ func TestCgroupPIDs(t *testing.T) {
 		return nil, os.ErrNotExist
 	}
 
-	pids, ok := CgroupPIDsContext(context.Background(), runner, readFile, BackendSystemd, "nginx.service")
-	if !ok {
-		t.Fatal("CgroupPIDs ok = false, want true")
+	pids, err := CgroupPIDsContext(context.Background(), runner, readFile, BackendSystemd, "nginx.service")
+	if err != nil {
+		t.Fatal(err)
 	}
 	want := []int{1508, 1600, 1602}
 	if len(pids) != len(want) {
@@ -142,12 +143,12 @@ func TestCgroupPIDs(t *testing.T) {
 	}
 
 	// Empty control group -> not found.
-	if _, ok := CgroupPIDsContext(context.Background(), execxtest.Fixed(execx.Result{Stdout: "/\n"}, nil), readFile, BackendSystemd, "x"); ok {
-		t.Error("root/empty control group should report no cgroup PIDs")
+	if pids, err := CgroupPIDsContext(context.Background(), execxtest.Fixed(execx.Result{Stdout: "/\n"}, nil), readFile, BackendSystemd, "x"); err != nil || len(pids) != 0 {
+		t.Errorf("root/empty control group = %v/%v, want no cgroup PIDs", pids, err)
 	}
 	// OpenRC has no cgroup query.
-	if _, ok := CgroupPIDsContext(context.Background(), runner, readFile, BackendOpenRC, "nginx"); ok {
-		t.Error("OpenRC must report no cgroup PIDs")
+	if pids, err := CgroupPIDsContext(context.Background(), runner, readFile, BackendOpenRC, "nginx"); err != nil || len(pids) != 0 {
+		t.Errorf("OpenRC = %v/%v, want no cgroup PIDs", pids, err)
 	}
 }
 
@@ -172,7 +173,10 @@ func TestBackendPIDsKeepsMainPIDFirst(t *testing.T) {
 		}
 		return []byte("1508\n1600\n1602\n"), nil
 	}
-	pids := BackendPIDsFuncWithRunner(context.Background(), BackendSystemd, "nginx.service", propertyRunner{}, readFile)()
+	pids, err := BackendPIDsFuncWithRunner(context.Background(), BackendSystemd, "nginx.service", propertyRunner{}, readFile)()
+	if err != nil {
+		t.Fatal(err)
+	}
 	want := []int{1600, 1508, 1602}
 	if len(pids) != len(want) {
 		t.Fatalf("pids = %v, want %v", pids, want)
@@ -181,6 +185,26 @@ func TestBackendPIDsKeepsMainPIDFirst(t *testing.T) {
 		if pids[i] != want[i] {
 			t.Fatalf("pids = %v, want %v", pids, want)
 		}
+	}
+}
+
+// A systemd query that does not answer (PID 1 busy after a daemon-reload)
+// must not read as a unit without processes.
+func TestBackendPIDsReportsAFailedQuery(t *testing.T) {
+	stalled := execxtest.Fixed(execx.Result{ExitCode: -1}, context.DeadlineExceeded)
+	pids, err := BackendPIDsFuncWithRunner(context.Background(), BackendSystemd, "acpid.service", stalled, nil)()
+	if err == nil || !strings.Contains(err.Error(), systemctlPropertyMainPID) || len(pids) != 0 {
+		t.Fatalf("pids = %v, err = %v, want the MainPID query error", pids, err)
+	}
+
+	runner := execxtest.Fixed(execx.Result{Stdout: "/system.slice/acpid.service\n"}, nil)
+	gone := func(string) ([]byte, error) { return nil, os.ErrNotExist }
+	if pids, err := CgroupPIDsContext(context.Background(), runner, gone, BackendSystemd, "acpid.service"); err != nil || len(pids) != 0 {
+		t.Fatalf("removed cgroup = %v/%v, want no PIDs: the unit stopped", pids, err)
+	}
+	denied := func(string) ([]byte, error) { return nil, os.ErrPermission }
+	if _, err := CgroupPIDsContext(context.Background(), runner, denied, BackendSystemd, "acpid.service"); !errors.Is(err, os.ErrPermission) {
+		t.Fatalf("unreadable cgroup err = %v, want the read error", err)
 	}
 }
 
@@ -226,13 +250,13 @@ func TestCgroupPIDsFiltersZeroAndEmpty(t *testing.T) {
 		}
 	}
 	// PID 0 is not a real process and must be excluded.
-	pids, ok := CgroupPIDsContext(context.Background(), runner, rf("0\n42\n"), BackendSystemd, "x.service")
-	if !ok || len(pids) != 1 || pids[0] != 42 {
-		t.Fatalf("pids = %v ok=%v, want [42]", pids, ok)
+	pids, err := CgroupPIDsContext(context.Background(), runner, rf("0\n42\n"), BackendSystemd, "x.service")
+	if err != nil || len(pids) != 1 || pids[0] != 42 {
+		t.Fatalf("pids = %v err=%v, want [42]", pids, err)
 	}
-	// A cgroup with no valid PIDs reports not-found.
-	if _, ok := CgroupPIDsContext(context.Background(), runner, rf("0\n\n"), BackendSystemd, "x.service"); ok {
-		t.Fatal("a cgroup with only invalid PIDs must report not-found")
+	// A cgroup with no valid PIDs reports none.
+	if pids, err := CgroupPIDsContext(context.Background(), runner, rf("0\n\n"), BackendSystemd, "x.service"); err != nil || len(pids) != 0 {
+		t.Fatalf("a cgroup with only invalid PIDs = %v/%v, want none", pids, err)
 	}
 }
 
