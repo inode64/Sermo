@@ -112,7 +112,7 @@ func daemonIsLocal(cfg *config.Config) bool {
 		return false
 	}
 	addr := bind.Host
-	if addr == daemonWebLocalhostName || strings.HasSuffix(addr, "."+daemonWebLocalhostName) {
+	if netutil.IsLocalhostName(addr) {
 		return true
 	}
 	ip := net.ParseIP(addr)
