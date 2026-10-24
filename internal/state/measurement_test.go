@@ -95,6 +95,56 @@ func TestMeasurementSummaryNoData(t *testing.T) {
 	}
 }
 
+func TestMetricSummariesExcludeFutureBuckets(t *testing.T) {
+	now := time.Date(2026, 6, 7, 12, 0, 30, 0, time.UTC)
+	for _, tc := range []struct {
+		name    string
+		record  func(*Store, float64, time.Time) error
+		summary func(*Store, time.Duration, time.Time) (MeasurementStat, error)
+	}{
+		{name: "latency", record: func(s *Store, v float64, at time.Time) error { return s.RecordMeasurement("web", "http", v, at) },
+			summary: func(s *Store, span time.Duration, at time.Time) (MeasurementStat, error) {
+				return s.MeasurementSummary("web", "http", span, at)
+			}},
+		{name: "check", record: func(s *Store, v float64, at time.Time) error { return s.RecordMetric("web", "http", "value", v, at) },
+			summary: func(s *Store, span time.Duration, at time.Time) (MeasurementStat, error) {
+				return s.MetricSummary("web", "http", "value", span, at)
+			}},
+		{name: "service", record: func(s *Store, v float64, at time.Time) error { return s.RecordServiceMetric("web", "cpu", v, at) },
+			summary: func(s *Store, span time.Duration, at time.Time) (MeasurementStat, error) {
+				return s.ServiceMetricSummary("web", "cpu", span, at)
+			}},
+		{name: "daemon", record: func(s *Store, v float64, at time.Time) error { return s.RecordDaemonMetric("cpu", v, at) },
+			summary: func(s *Store, span time.Duration, at time.Time) (MeasurementStat, error) {
+				return s.DaemonMetricSummary("cpu", span, at)
+			}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := openTemp(t)
+			for _, sample := range []struct {
+				at    time.Time
+				value float64
+			}{
+				{at: now.Add(-time.Minute), value: 10},
+				{at: now, value: 20},
+				{at: now.Add(48 * time.Hour), value: 1000},
+			} {
+				if err := tc.record(s, sample.value, sample.at); err != nil {
+					t.Fatal(err)
+				}
+			}
+			mustRollup(t, s, now.Add(48*time.Hour))
+			for _, window := range SLAWindows {
+				got, err := tc.summary(s, window.Span, now)
+				want := MeasurementStat{Count: 2, Avg: 15, Min: 10, Max: 20}
+				if err != nil || got != want {
+					t.Errorf("%s summary = %+v, %v; want %+v", window.Name, got, err, want)
+				}
+			}
+		})
+	}
+}
+
 // TestRecordMetricDropsNonFiniteValues pins that NaN and ±Inf never reach the
 // archive. NaN broke the NOT NULL aggregates and rolled back the whole cycle's
 // batch; +Inf and -Inf in one 5-minute bucket summed to NaN and froze every

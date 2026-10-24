@@ -79,6 +79,26 @@ func TestSLAReportRatioAndNoData(t *testing.T) {
 	}
 }
 
+func TestSLAReportExcludesFutureBuckets(t *testing.T) {
+	s := openTemp(t)
+	now := time.Date(2026, 6, 7, 12, 0, 30, 0, time.UTC)
+	mustRecord(t, s, true, now.Add(-time.Minute))
+	mustRecord(t, s, false, now)
+	future := now.Add(48 * time.Hour)
+	mustRecord(t, s, true, future)
+	mustRollup(t, s, future)
+
+	report, err := s.SLAReport(slaTestService, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, value := range report {
+		if value.Up != 1 || value.Total != 2 || value.DownBuckets != 1 {
+			t.Errorf("%s summary = %+v, want only the two samples through the current bucket", value.Window, value.SLACounts)
+		}
+	}
+}
+
 func TestSLAPercentText(t *testing.T) {
 	tests := []struct {
 		name  string

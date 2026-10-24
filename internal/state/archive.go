@@ -216,7 +216,8 @@ const (
 	slaSumStmt = `SELECT COALESCE(SUM(up_count), 0), COALESCE(SUM(total_count), 0),
 			     COALESCE(SUM(down_buckets), 0)
 		  FROM sla_archive
-		 WHERE res = ? AND service = ? AND check_name = ? AND bucket >= ?;`
+		 WHERE res = ? AND service = ? AND check_name = ?
+		   AND bucket >= ? AND bucket < ?;`
 
 	slaSeriesStmt = `SELECT bucket, up_count, total_count, down_buckets
 		   FROM sla_archive
@@ -240,7 +241,7 @@ const (
 	metricSummaryStmt = `SELECT COALESCE(SUM(n), 0), SUM(sum_v), MIN(min_v), MAX(max_v)
 		  FROM metric_archive
 		 WHERE res = ? AND scope = ? AND service = ? AND check_name = ? AND metric = ?
-		   AND bucket >= ?;`
+		   AND bucket >= ? AND bucket < ?;`
 
 	metricSeriesStmt = `SELECT bucket, n, sum_v, min_v, max_v
 		   FROM metric_archive

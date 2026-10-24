@@ -146,6 +146,7 @@ func (s *Store) sumSLA(service string, span time.Duration, now time.Time) (SLAVa
 	var value SLAValue
 	if err := s.reader.QueryRowContext(s.sqlCtx(), slaSumStmt,
 		stored.Res, service, "", alignBucket(from, stored.Res),
+		alignBucket(now, stored.Res)+stored.Res,
 	).Scan(&value.Up, &value.Total, &value.DownBuckets); err != nil {
 		return SLAValue{}, fmt.Errorf("sum %s for %s: %w", slaKind(""), slaTarget(service, ""), err)
 	}
