@@ -167,6 +167,31 @@ checks:
 		"checks.bad-bool.cert_verify must be a boolean")
 }
 
+// An https http check inspects its certificate with the same options under
+// cert_* names. They were never validated: a 0, negative or text window loaded
+// and silently turned the expiry warning off, and a non-boolean switch read as
+// false.
+func TestValidateHTTPCertOptions(t *testing.T) {
+	assertServiceValidation(t, `
+name: svc
+service: x
+policy: { cooldown: 5m }
+checks:
+  api: { type: http, url: "https://api.example.com/health", cert_expires_in_days: 14, cert_on_change: true, cert_verify: true }
+`, "checks.api", `
+name: svc
+service: x
+policy: { cooldown: 5m }
+checks:
+  zero-days: { type: http, url: "https://x.example/", cert_expires_in_days: 0 }
+  text-days: { type: http, url: "https://x.example/", cert_expires_in_days: soon }
+  text-change: { type: http, url: "https://x.example/", cert_on_change: "yes" }
+`,
+		"checks.zero-days.cert_expires_in_days must be a positive integer",
+		"checks.text-days.cert_expires_in_days must be a positive integer",
+		"checks.text-change.cert_on_change must be a boolean")
+}
+
 func TestValidateVerifyFlag(t *testing.T) {
 	// verify: true on a health check (http) is valid.
 	assertServiceValidation(t, `

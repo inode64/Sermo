@@ -149,6 +149,8 @@ func validateHTTPFields(prefix string, fields map[string]any, add addFunc) {
 	validateHTTPTransport(prefix, fields, add)
 	validateHTTPRequest(prefix, fields, add)
 	validateHTTPExpectations(prefix, fields, add)
+	validateCertOptions(prefix, fields, checks.CheckKeyCertExpiresInDays,
+		[]string{checks.CheckKeyCertOnAlgorithmChange, checks.CheckKeyCertOnIssuerChange, checks.CheckKeyCertOnChange, checks.CheckKeyCertVerify}, add)
 }
 
 func validateHTTPTransport(prefix string, fields map[string]any, add addFunc) {
@@ -1752,12 +1754,22 @@ func validateCertFields(prefix string, fields map[string]any, add addFunc) {
 			}
 		}
 	}
-	if v, present := fields[checks.CheckKeyExpiresInDays]; present {
+	validateCertOptions(prefix, fields, checks.CheckKeyExpiresInDays,
+		[]string{checks.CheckKeyOnAlgorithmChange, checks.CheckKeyOnIssuerChange, checks.CheckKeyOnChange, checks.CheckKeyCertVerify}, add)
+}
+
+// validateCertOptions validates the expiry window and the boolean switches of a
+// certificate inspection. The cert check and an https http check name them
+// differently but read them the same way: a window that is not a positive
+// integer reads as 0 and turns the expiry warning off, and a switch that is not
+// a boolean reads as false.
+func validateCertOptions(prefix string, fields map[string]any, expiresKey string, boolKeys []string, add addFunc) {
+	if v, present := fields[expiresKey]; present {
 		if n, ok := cfgval.Int(v); !ok || n < 1 {
-			add("%s.expires_in_days must be a positive integer", prefix)
+			add("%s.%s must be a positive integer", prefix, expiresKey)
 		}
 	}
-	for _, key := range []string{checks.CheckKeyOnAlgorithmChange, checks.CheckKeyOnIssuerChange, checks.CheckKeyOnChange, checks.CheckKeyCertVerify} {
+	for _, key := range boolKeys {
 		if v, present := fields[key]; present {
 			if _, ok := v.(bool); !ok {
 				add(validationBooleanFormat, prefix+"."+key)
