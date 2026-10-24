@@ -1,6 +1,7 @@
 package rules
 
 import (
+	"math"
 	"testing"
 	"time"
 )
@@ -100,6 +101,35 @@ func TestBackoffExtendsEffectiveCooldown(t *testing.T) {
 	// 11 minutes later: past the backoff.
 	if ok, _ := p.Allow(st, t0.Add(11*time.Minute)); !ok {
 		t.Fatal("after backoff window: should allow")
+	}
+}
+
+func TestBackoffCapsBeforeDurationOverflow(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		initial time.Duration
+		factor  float64
+		limit   time.Duration
+		want    time.Duration
+	}{
+		{name: "large factor", initial: time.Minute, factor: 1e20, limit: time.Hour, want: time.Hour},
+		{name: "maximum duration", initial: time.Duration(math.MaxInt64 / 2), factor: 2, limit: time.Duration(math.MaxInt64), want: time.Duration(math.MaxInt64)},
+		{name: "unbounded policy", initial: time.Minute, factor: 1e20, want: time.Duration(math.MaxInt64)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			policy := Policy{Cooldown: time.Minute, Backoff: &Backoff{Initial: tc.initial, Factor: tc.factor, Max: tc.limit}}
+			st := &RemediationState{}
+			st.Record(t0, policy)
+			for range 2 {
+				st.Record(t0, policy)
+				if st.CurrentBackoff != tc.want {
+					t.Fatalf("backoff = %s, want %s", st.CurrentBackoff, tc.want)
+				}
+				if allowed, _ := policy.Allow(st, t0.Add(2*time.Minute)); allowed {
+					t.Fatal("overflow must not permit remediation before the capped backoff expires")
+				}
+			}
+		})
 	}
 }
 

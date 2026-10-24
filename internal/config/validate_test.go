@@ -353,6 +353,37 @@ policy:
 	mustNotHave(t, ok, "backoff")
 }
 
+func TestValidateBackoffFactor(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		factor  string
+		wantErr bool
+	}{
+		{name: "nan", factor: ".nan", wantErr: true},
+		{name: "positive infinity", factor: ".inf", wantErr: true},
+		{name: "negative infinity", factor: "-.inf", wantErr: true},
+		{name: "text", factor: "invalid", wantErr: true},
+		{name: "boolean", factor: "true", wantErr: true},
+		{name: "large finite", factor: "1e20"},
+		{name: "quoted", factor: "\"2.5\""},
+		{name: "zero default", factor: "0"},
+		{name: "negative default", factor: "-2"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			policy := "{cooldown: 1m, backoff: {initial: 1m, max: 1h, factor: " + tc.factor + "}}"
+			service := validateService(t, "name: svc\nservice: svc\npolicy: "+policy)
+			watch := validateGlobalDoc(t, "watches:\n  sample:\n    check: {type: oom}\n    policy: "+policy)
+			for _, issues := range [][]Issue{service, watch} {
+				if tc.wantErr {
+					mustHave(t, issues, "policy.backoff.factor must be a finite number")
+				} else {
+					mustNotHave(t, issues, "policy.backoff.factor")
+				}
+			}
+		})
+	}
+}
+
 func TestValidateEngineOperationTimeoutAcceptsPositive(t *testing.T) {
 	mustNotHave(t, validateGlobalDoc(t, `
 engine:

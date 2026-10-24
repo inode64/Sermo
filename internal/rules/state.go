@@ -1,6 +1,7 @@
 package rules
 
 import (
+	"math"
 	"slices"
 	"time"
 
@@ -180,7 +181,18 @@ func (s *RemediationState) growBackoff(b *Backoff) {
 	if s.CurrentBackoff <= 0 {
 		s.CurrentBackoff = b.Initial
 	} else {
-		s.CurrentBackoff = time.Duration(float64(s.CurrentBackoff) * b.Factor)
+		limit := b.Max
+		if limit <= 0 {
+			limit = time.Duration(math.MaxInt64)
+		}
+		// Cap before converting: an overflowing float-to-duration conversion
+		// can turn the backoff negative and bypass the extended cooldown.
+		next := float64(s.CurrentBackoff) * b.Factor
+		if next >= float64(limit) {
+			s.CurrentBackoff = limit
+		} else {
+			s.CurrentBackoff = time.Duration(next)
+		}
 	}
 	if b.Max > 0 {
 		s.CurrentBackoff = min(s.CurrentBackoff, b.Max)
