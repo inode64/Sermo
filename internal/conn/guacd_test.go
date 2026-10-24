@@ -30,6 +30,10 @@ func TestParseGuacInstruction(t *testing.T) {
 	if _, err := parseGuacInstruction("9.args;"); err == nil {
 		t.Fatal("a length longer than the data must error")
 	}
+	// A hostile length overflows start+n; it must be refused, not panic.
+	if _, err := parseGuacInstruction("9223372036854775807.args;"); err == nil {
+		t.Fatal("an overflowing length must error")
+	}
 }
 
 func TestGuacdProbeAgainstFakeServer(t *testing.T) {
