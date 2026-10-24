@@ -76,10 +76,10 @@ func TestBuildSQLiteCheck(t *testing.T) {
 	}
 
 	built, warns := Build(map[string]any{
-		"db": map[string]any{"type": "sqlite3", "path": "/var/lib/app/app.db", "quick": true},
+		"db": map[string]any{"type": "sqlite", "path": "/var/lib/app/app.db", "quick": true},
 	}, Deps{DefaultTimeout: time.Second})
 	if len(warns) != 0 || len(built) != 1 {
-		t.Fatalf("sqlite3 with path should build: warns=%v", warns)
+		t.Fatalf("sqlite with path should build: warns=%v", warns)
 	}
 	sc, ok := built[0].Check.(sqliteCheck)
 	if !ok || sc.path != "/var/lib/app/app.db" || !sc.quick {

@@ -316,8 +316,8 @@ func ParseDBQueryConfig(entry map[string]any) (DBQueryConfig, error) {
 	engine := cfgval.AsString(entry[CheckKeyEngine])
 	driver, ok := sqlEngineDriver(engine)
 	if !ok || driver == SQLEngineSQLite {
-		return DBQueryConfig{}, fmt.Errorf("db_queries check requires an engine (%s, %s, %s or %s)",
-			SQLEngineMySQL, SQLEngineMariaDB, SQLEnginePostgres, SQLEnginePostgreSQL)
+		return DBQueryConfig{}, fmt.Errorf("db_queries check requires an engine (%s, %s or %s)",
+			SQLEngineMySQL, SQLEngineMariaDB, SQLEnginePostgres)
 	}
 	minDuration := cfgval.Duration(entry[CheckKeyMinDuration])
 	if _, present := entry[CheckKeyMinDuration]; present && minDuration <= 0 {

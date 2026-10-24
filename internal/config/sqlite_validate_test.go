@@ -12,7 +12,7 @@ checks:
 name: db
 service: x
 checks:
-  missing: { type: sqlite3 }
+  missing: { type: sqlite }
   quick: { type: sqlite, path: /var/lib/app/app.db, quick: "yes" }
 `,
 		"checks.missing.path is required for a sqlite check",

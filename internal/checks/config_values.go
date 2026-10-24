@@ -2,19 +2,15 @@ package checks
 
 // SQL engine tokens accepted by the sql check's engine field.
 const (
-	SQLEngineMariaDB    = "mariadb"
-	SQLEngineMySQL      = "mysql"
-	SQLEnginePostgres   = "postgres"
-	SQLEnginePostgreSQL = "postgresql"
-	SQLEngineSQLite     = "sqlite"
-	SQLEngineSQLite3    = "sqlite3"
+	SQLEngineMariaDB  = "mariadb"
+	SQLEngineMySQL    = "mysql"
+	SQLEnginePostgres = "postgres"
+	SQLEngineSQLite   = "sqlite"
 	// SQLEngineSummary is the user-facing list of accepted sql engine values.
 	SQLEngineSummary = SQLEngineMySQL + ", " +
 		SQLEngineMariaDB + ", " +
 		SQLEnginePostgres + ", " +
-		SQLEnginePostgreSQL + ", " +
-		SQLEngineSQLite + ", " +
-		SQLEngineSQLite3
+		SQLEngineSQLite
 )
 
 // Influx language tokens accepted by the influxdb-query check's language field.
