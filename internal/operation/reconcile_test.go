@@ -60,7 +60,7 @@ func divergentHarness() (*harness, *recordingSignaler) {
 	signaler := &recordingSignaler{}
 	h.killPolicy = process.KillPolicy{
 		ForceKill:  true,
-		KillOnlyIf: process.KillSelector{Users: []string{"mysql"}, ExeAny: []string{reconcileExe}},
+		KillOnlyIf: process.NewKillSelector([]string{"mysql"}, []string{reconcileExe}),
 	}
 	h.reaper = process.Reaper{
 		Signaler:    signaler,

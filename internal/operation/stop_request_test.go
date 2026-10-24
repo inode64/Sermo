@@ -55,7 +55,7 @@ func TestDockerStopRequestLeavesResidualBudget(t *testing.T) {
 			e.OperationTimeout = time.Second
 			e.KillPolicy = process.KillPolicy{GracefulTimeout: 5 * time.Millisecond, ForceKill: tc.force}
 			if tc.selector {
-				e.KillPolicy.KillOnlyIf = process.KillSelector{ExeAny: []string{"/opt/test/daemon"}, Users: []string{"root"}}
+				e.KillPolicy.KillOnlyIf = process.NewKillSelector([]string{"root"}, []string{"/opt/test/daemon"})
 			}
 			if tc.globalTimeout {
 				e.KillPolicy.GracefulTimeout = time.Hour

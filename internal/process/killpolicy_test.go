@@ -13,7 +13,7 @@ const testExe = "/opt/sermo-test/mysqld"
 
 func TestKillSelectorKillable(t *testing.T) {
 	resolve := fakeUsers(map[string]uint32{"mysql": 110, "www-data": 33})
-	sel := KillSelector{Users: []string{"mysql"}, ExeAny: []string{testExe}}
+	sel := NewKillSelector([]string{"mysql"}, []string{testExe})
 
 	cases := []struct {
 		name string
@@ -38,10 +38,7 @@ func TestKillSelectorKillable(t *testing.T) {
 	// Multi-entry lists act as OR within users and within exe_any (AND across
 	// the two categories). Also exercises canonicalize fallback to Clean when
 	// EvalSymlinks cannot run in test (nonexistent path).
-	multi := KillSelector{
-		Users:  []string{"nope", "mysql"},
-		ExeAny: []string{"/no", "/opt//sermo-test/./mysqld"},
-	}
+	multi := NewKillSelector([]string{"nope", "mysql"}, []string{"/no", "/opt//sermo-test/./mysqld"})
 	if !multi.Killable(Process{PID: 100, UID: 110, Exe: testExe, ExeOK: true}, resolve) {
 		t.Error("multi selector should match on second user+exe (canonicalized)")
 	}
@@ -50,14 +47,24 @@ func TestKillSelectorKillable(t *testing.T) {
 	}
 }
 
+// Only NewKillSelector resolves executables, so a selector built as a literal
+// authorizes nothing even when its users and exe_any would match.
+func TestKillSelectorLiteralAuthorizesNothing(t *testing.T) {
+	resolve := fakeUsers(map[string]uint32{"mysql": 110})
+	p := Process{PID: 100, UID: 110, Exe: testExe, ExeOK: true}
+	if (KillSelector{Users: []string{"mysql"}, ExeAny: []string{testExe}}).Killable(p, resolve) {
+		t.Error("a literal selector must not be killable")
+	}
+}
+
 func TestKillSelectorEmptyMatchesNothing(t *testing.T) {
 	resolve := fakeUsers(map[string]uint32{"mysql": 110})
 	p := Process{PID: 100, UID: 110, Exe: testExe, ExeOK: true}
 
-	if (KillSelector{ExeAny: []string{testExe}}).Killable(p, resolve) {
+	if NewKillSelector(nil, []string{testExe}).Killable(p, resolve) {
 		t.Error("selector with no users must not be killable")
 	}
-	if (KillSelector{Users: []string{"mysql"}}).Killable(p, resolve) {
+	if NewKillSelector([]string{"mysql"}, nil).Killable(p, resolve) {
 		t.Error("selector with no exe_any must not be killable")
 	}
 	if (KillSelector{}).Killable(p, resolve) {
@@ -218,7 +225,7 @@ func TestEnableAutomaticReapingNarrowsPairsByCmd(t *testing.T) {
 // is never signalled — not even when it matches an explicit kill_only_if.
 func TestKillSelectorNeverSignalsDelegated(t *testing.T) {
 	resolve := fakeUsers(map[string]uint32{"mysql": 110})
-	sel := KillSelector{Users: []string{"mysql"}, ExeAny: []string{testExe}}
+	sel := NewKillSelector([]string{"mysql"}, []string{testExe})
 	proc := Process{PID: 100, UID: 110, Exe: testExe, ExeOK: true}
 
 	if !sel.Killable(proc, resolve) {

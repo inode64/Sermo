@@ -669,7 +669,7 @@ func processWatchKillSelector(match ProcMatch) (process.KillSelector, error) {
 	if match.User == "" {
 		return process.KillSelector{}, errors.New("then.kill requires check.user")
 	}
-	return process.KillSelector{Users: []string{match.User}, ExeAny: []string{match.Name}}, nil
+	return process.NewKillSelector([]string{match.User}, []string{match.Name}), nil
 }
 
 // parseProcCond reads the for/cpu/memory/io conditions from a process check

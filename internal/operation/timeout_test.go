@@ -131,7 +131,7 @@ func TestStopTimesOutDuringReaperWait(t *testing.T) {
 	h.discoverSteps = [][]process.Process{{{PID: 100, UID: 110, Exe: "/opt/x", ExeOK: true}}, {{PID: 100, UID: 110, Exe: "/opt/x", ExeOK: true}}}
 	h.killPolicy = process.KillPolicy{
 		ForceKill:   true,
-		KillOnlyIf:  process.KillSelector{Users: []string{"mysql"}, ExeAny: []string{"/opt/x"}},
+		KillOnlyIf:  process.NewKillSelector([]string{"mysql"}, []string{"/opt/x"}),
 		TermTimeout: time.Hour,
 	}
 	h.reaper = process.Reaper{
