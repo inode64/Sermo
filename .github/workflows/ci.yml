@@ -133,21 +133,13 @@ jobs:
             exit 1
           fi
 
-  # TEMPORARY probe: the race job has been externally canceled sixty to ninety
-  # seconds in on eleven straight runs — no OOM (the dmesg watcher stayed
-  # silent), no test failure, and the same tree race-tests green in 75s on a
-  # cold cache pinned to four cores locally. This job runs the identical
-  # command on a VM that starts after the fuzz job completes, when the other
-  # jobs are dead or done: if it survives in isolation the killer is
-  # environmental, if it dies the same way the workload itself is being
-  # targeted. Remove once the answer is in.
-  # Runs on every event, not just the weekly cron. The seven targets parse
-  # operator-supplied YAML and the process selectors that decide what may be
-  # signalled, so a crash here is a crash on a malformed config file — worth
+  # Runs on every event, not just the weekly cron. The targets (`make fuzz`)
+  # parse operator-supplied YAML and the process selectors that decide what may
+  # be signalled, so a crash here is a crash on a malformed config file — worth
   # catching in the pull request that introduces it rather than up to a week
-  # later. Wall-clock cost is zero: jobs run in parallel and 7x20s plus build
-  # lands near four minutes, well inside the build & check job it runs beside.
-  # The cron and manual runs keep the deeper 60s budget.
+  # later. Wall-clock cost is zero: jobs run in parallel and 20s per target plus
+  # the build stays well inside the build & check job it runs beside. The cron
+  # and manual runs keep the deeper 60s budget.
   fuzz:
     name: configuration and safety-parser fuzzing
     runs-on: ubuntu-latest
