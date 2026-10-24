@@ -31,7 +31,7 @@ func TestWatchRowUsesOnePublishedObservation(t *testing.T) {
 		publishWatchFor(snapshots, w, result)
 		return at
 	}}
-	view := backend.watchView(w, nil, watchActivity{})
+	view := backend.watchView(w, nil, watchActivity{}, nil)
 	if clocks != 1 || view.Summary != "original" || view.LastCheckedAt != at.Add(-time.Second).Format(time.RFC3339) {
 		t.Fatalf("row mixed publications or clocks: clocks=%d view=%+v", clocks, view)
 	}

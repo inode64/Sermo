@@ -13,6 +13,7 @@ import (
 	"sermo/internal/metrics"
 	"sermo/internal/servicemgr"
 	"sermo/internal/severity"
+	"sermo/internal/state"
 	"sermo/internal/units"
 	"sermo/internal/web"
 )
@@ -26,20 +27,25 @@ func (b *WebBackend) Watches(_ context.Context) []web.Watch {
 	out := make([]web.Watch, 0, len(b.watchOrder))
 	lastActivities := b.lastWatchActivities()
 	system := b.watchSystemSnapshot()
+	// One read of every monitor state serves the whole list, as for services.
+	monitors := b.monitorRecords()
 	for _, name := range b.watchOrder {
 		w := b.watches[name]
 		if w == nil {
 			continue
 		}
-		out = append(out, b.watchView(w, system, lastActivities[name]))
+		out = append(out, b.watchView(w, system, lastActivities[name], monitors))
 	}
 	return out
 }
 
-func (b *WebBackend) watchView(w *webWatch, system metrics.Snapshot, activity watchActivity) web.Watch {
+// watchView renders one watch; monitors is the batch of monitor states, or nil
+// to read this watch's own.
+func (b *WebBackend) watchView(w *webWatch, system metrics.Snapshot, activity watchActivity, monitors map[string]state.MonitorRecord) web.Watch {
 	observation := watchObservation{
 		snapshots: b.watchSnapshots.Get(w.name, w.checkType),
 		at:        b.webNow(), available: b.watchSnapshots != nil,
+		monitors: monitors,
 	}
 	storage, swap, meter, readings, summary := observation.watchPresentation(w, system)
 	monitorMode := w.monitorMode
@@ -90,7 +96,7 @@ func (b *WebBackend) applyWatchRuntimeView(view *web.Watch, w *webWatch, activit
 	}
 	var changedAt time.Time
 	if !w.disabled {
-		if monitoredState, ok := b.monitorView(WatchMonitorKey(w.name)); ok {
+		if monitoredState, ok := b.monitorViewFrom(observation.monitors, WatchMonitorKey(w.name)); ok {
 			changedAt = monitoredState.changedAt
 			view.Monitored, view.MonitorSource, view.MonitorChangedAt = monitoredState.active, monitoredState.source, monitoredState.changedAtText()
 		}
