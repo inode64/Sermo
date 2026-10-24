@@ -10,6 +10,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"golang.org/x/net/dns/dnsmessage"
 )
 
 func TestBuildDNSQueryHeader(t *testing.T) {
@@ -89,11 +91,11 @@ func TestParseDNSReplyHeaderFlags(t *testing.T) {
 }
 
 func TestBuildDNSQueryQType(t *testing.T) {
-	q, err := buildDNSQuery(1, "example.com", dnsQTypeSOA)
+	q, err := buildDNSQuery(1, "example.com", dnsmessage.TypeSOA)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if binary.BigEndian.Uint16(q[len(q)-4:]) != dnsQTypeSOA {
+	if binary.BigEndian.Uint16(q[len(q)-4:]) != uint16(dnsmessage.TypeSOA) {
 		t.Fatalf("qtype = %d, want SOA", binary.BigEndian.Uint16(q[len(q)-4:]))
 	}
 }
@@ -101,13 +103,13 @@ func TestBuildDNSQueryQType(t *testing.T) {
 func TestParseDNSQType(t *testing.T) {
 	for _, tc := range []struct {
 		in   string
-		want uint16
+		want dnsmessage.Type
 		name string
 	}{
-		{in: "", want: dnsQTypeA, name: "A"},
-		{in: "a", want: dnsQTypeA, name: "A"},
+		{in: "", want: dnsmessage.TypeA, name: "A"},
+		{in: "a", want: dnsmessage.TypeA, name: "A"},
 		{in: "AAAA", want: 28, name: "AAAA"},
-		{in: "soa", want: dnsQTypeSOA, name: "SOA"},
+		{in: "soa", want: dnsmessage.TypeSOA, name: "SOA"},
 		{in: "PTR", want: 12, name: "PTR"},
 		{in: "mx", want: 15, name: "MX"},
 		{in: "TXT", want: 16, name: "TXT"},
@@ -355,7 +357,7 @@ func TestDNSProbeQTypeAndHeaderFlags(t *testing.T) {
 	}
 	select {
 	case gotQType := <-queryTypes:
-		if gotQType != dnsQTypeSOA {
+		if gotQType != uint16(dnsmessage.TypeSOA) {
 			t.Fatalf("server saw qtype %d, want SOA", gotQType)
 		}
 	case <-ctx.Done():

@@ -56,26 +56,14 @@ const (
 	resolvConfMinFields  = resolvConfValueIndex + 1
 )
 
-const (
-	dnsQTypeA     uint16 = 1
-	dnsQTypeNS    uint16 = 2
-	dnsQTypeCNAME uint16 = 5
-	dnsQTypeSOA   uint16 = 6
-	dnsQTypePTR   uint16 = 12
-	dnsQTypeMX    uint16 = 15
-	dnsQTypeTXT   uint16 = 16
-	dnsQTypeAAAA  uint16 = 28
-	dnsQTypeSRV   uint16 = 33
-)
-
 // dnsQTypeNames maps the supported `qtype` spellings to their wire values, in
 // the order DNSQTypeSummary lists them.
 var dnsQTypeNames = []struct {
 	name  string
-	qtype uint16
+	qtype dnsmessage.Type
 }{
-	{"A", dnsQTypeA}, {"AAAA", dnsQTypeAAAA}, {"CNAME", dnsQTypeCNAME}, {"MX", dnsQTypeMX},
-	{"NS", dnsQTypeNS}, {"PTR", dnsQTypePTR}, {"SOA", dnsQTypeSOA}, {"SRV", dnsQTypeSRV}, {"TXT", dnsQTypeTXT},
+	{"A", dnsmessage.TypeA}, {"AAAA", dnsmessage.TypeAAAA}, {"CNAME", dnsmessage.TypeCNAME}, {"MX", dnsmessage.TypeMX},
+	{"NS", dnsmessage.TypeNS}, {"PTR", dnsmessage.TypePTR}, {"SOA", dnsmessage.TypeSOA}, {"SRV", dnsmessage.TypeSRV}, {"TXT", dnsmessage.TypeTXT},
 }
 
 // DNSQTypeSummary lists the record types a dns check's `qtype` accepts, for
@@ -90,9 +78,9 @@ var DNSQTypeSummary = func() string {
 
 // ParseDNSQType resolves a `qtype` value (case-insensitive; empty means A) to
 // its wire type and canonical upper-case name.
-func ParseDNSQType(value string) (uint16, string, error) {
+func ParseDNSQType(value string) (dnsmessage.Type, string, error) {
 	if value == "" {
-		return dnsQTypeA, dnsQTypeNames[0].name, nil
+		return dnsmessage.TypeA, dnsQTypeNames[0].name, nil
 	}
 	upper := strings.ToUpper(strings.TrimSpace(value))
 	for _, q := range dnsQTypeNames {
@@ -102,15 +90,6 @@ func ParseDNSQType(value string) (uint16, string, error) {
 	}
 	return 0, "", fmt.Errorf("dns qtype must be one of %s, got %q", DNSQTypeSummary, value)
 }
-
-const (
-	dnsRCodeNoError  = 0
-	dnsRCodeFormErr  = 1
-	dnsRCodeServFail = 2
-	dnsRCodeNXDomain = 3
-	dnsRCodeNotImp   = 4
-	dnsRCodeRefused  = 5
-)
 
 const (
 	dnsRCodeNameFormErr  = "FORMERR"
@@ -261,26 +240,26 @@ func dnsNameserverRoutesToSelf(ip net.IP) bool {
 
 // dnsResponseOK reports whether an rcode means the server answered healthily: a
 // successful lookup (NOERROR) or an authoritative "no such name" (NXDOMAIN).
-func dnsResponseOK(rcode int) bool {
-	return rcode == dnsRCodeNoError || rcode == dnsRCodeNXDomain
+func dnsResponseOK(rcode dnsmessage.RCode) bool {
+	return rcode == dnsmessage.RCodeSuccess || rcode == dnsmessage.RCodeNameError
 }
 
-func rcodeName(rcode int) string {
+func rcodeName(rcode dnsmessage.RCode) string {
 	switch rcode {
-	case dnsRCodeNoError:
+	case dnsmessage.RCodeSuccess:
 		return DNSRCodeNoErrorName
-	case dnsRCodeFormErr:
+	case dnsmessage.RCodeFormatError:
 		return dnsRCodeNameFormErr
-	case dnsRCodeServFail:
+	case dnsmessage.RCodeServerFailure:
 		return dnsRCodeNameServFail
-	case dnsRCodeNXDomain:
+	case dnsmessage.RCodeNameError:
 		return dnsRCodeNameNXDomain
-	case dnsRCodeNotImp:
+	case dnsmessage.RCodeNotImplemented:
 		return dnsRCodeNameNotImp
-	case dnsRCodeRefused:
+	case dnsmessage.RCodeRefused:
 		return dnsRCodeNameRefused
 	default:
-		return dnsRCodeNameUnknown + strconv.Itoa(rcode)
+		return dnsRCodeNameUnknown + strconv.Itoa(int(rcode))
 	}
 }
 
@@ -294,7 +273,7 @@ func dnsID() uint16 {
 // for name and qtype, packed with dnsmessage. The AD bit is set so a validating
 // resolver reports whether it authenticated the answer (RFC 6840 §5.7); a
 // resolver that does not validate ignores it.
-func buildDNSQuery(id uint16, name string, qtype uint16) ([]byte, error) {
+func buildDNSQuery(id uint16, name string, qtype dnsmessage.Type) ([]byte, error) {
 	qname, err := dnsmessage.NewName(dnsFQDN(name))
 	if err != nil {
 		return nil, probeErr(ProtocolNameDNS, stepDNSBuildQuery, err)
@@ -303,7 +282,7 @@ func buildDNSQuery(id uint16, name string, qtype uint16) ([]byte, error) {
 		ID: id, RecursionDesired: true, AuthenticData: true,
 		Questions: []dnsmessage.Question{{
 			Name:  qname,
-			Type:  dnsmessage.Type(qtype),
+			Type:  qtype,
 			Class: dnsmessage.ClassINET,
 		}},
 	}
@@ -327,7 +306,7 @@ func dnsFQDN(name string) string {
 // check can assert on and the A/AAAA addresses of the answer section.
 type dnsReply struct {
 	id            uint16
-	rcode         int
+	rcode         dnsmessage.RCode
 	answers       int
 	addrs         []string
 	authoritative bool // AA: the answer came from the zone's own data
@@ -352,7 +331,7 @@ func parseDNSReply(b []byte) (dnsReply, error) {
 	}
 	reply := dnsReply{
 		id:            hdr.ID,
-		rcode:         int(hdr.RCode),
+		rcode:         hdr.RCode,
 		authoritative: hdr.Authoritative,
 		authenticated: hdr.AuthenticData,
 		truncated:     hdr.Truncated,
