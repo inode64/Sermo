@@ -240,6 +240,3 @@ into a change that does not touch them.
   `all` / `none` / `default` notifier vocabulary
 - Instanced catalog services: `${hostname}`, `%n` / `${n}`; templates
   materialize, the operator enables; [docs/services.md](docs/services.md)
-
-`graphify-out/` is local and gitignored. Never stage it. Query it only when it
-exists and is useful; verify in the owning files.
