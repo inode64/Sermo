@@ -110,7 +110,7 @@ Use the current checkout as the source of truth. If remote findings require code
 - Use the repository-root `hosts` file as the authoritative host list for remote test runs.
 - Treat the first column of each non-empty, non-comment line in `hosts` as one SSH target. The other columns hold customer data: never print, log or report them.
 - The target is a bare `[user@]host` (alphanumerics, `@`, `.`, `_`, `-`); one without a user logs in as `root`. Record and skip an entry carrying a port, option or any other character, and never pass the other columns to `ssh`.
-- The inventory includes this workstation (sarin2): its `/tmp`, `bin/` and running `sermod` are local ones, and a local run directory must not reuse a remote work-dir name.
+- The fleet can be deployed from any inventory host (sarin2 and linuxomen so far), so the inventory includes the deploy host itself. Identify it with `hostname` at the start of each run instead of assuming one: its `/tmp`, `bin/` and running `sermod` are local ones, and a local run directory must not reuse a remote work-dir name.
 - Do not invent, scan, or prompt for additional hosts while `hosts` exists; if it is missing or has no usable hosts, stop and report that there are no remote targets to test.
 - When the user asks for the first `N` servers/hosts, use exactly the first `N`
   usable non-comment entries from `hosts`.
