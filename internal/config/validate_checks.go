@@ -1447,10 +1447,25 @@ func validateConfigCheck(path string, entry map[string]any, _ string, add addFun
 }
 
 func validateNetSingleShotCheck(path string, entry map[string]any, _ string, add addFunc) {
-	if cfgval.String(entry[checks.CheckKeyInterface]) == "" {
-		add("%s.interface is required for a net check", path)
-	}
+	validateNetInterface(path+"."+checks.CheckKeyInterface, entry[checks.CheckKeyInterface], add)
 	validateNetMetricCondition(path, cfgval.String(entry[checks.CheckKeyMetric]), entry, add)
+}
+
+// validateNetInterface requires one interface name for a net check. A list
+// would pass a non-empty test, and the builder, which reads a single string,
+// would then drop the check with a warning.
+func validateNetInterface(path string, value any, add addFunc) {
+	switch v := value.(type) {
+	case nil:
+	case string:
+		if v != "" {
+			return
+		}
+	default:
+		add("%s must be a single interface name for a net check", path)
+		return
+	}
+	add("%s is required for a net check", path)
 }
 
 func validateICMPSingleShotCheck(path string, entry map[string]any, _ string, add addFunc) {

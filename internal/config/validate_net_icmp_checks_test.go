@@ -36,6 +36,7 @@ func TestValidateSingleShotNetICMPSwapErrors(t *testing.T) {
 		want string
 	}{
 		"net missing interface":        {`c: { type: net, metric: state, expect: up }`, "interface is required"},
+		"net list interface":           {`c: { type: net, interface: [ppp0, eth0], metric: state, expect: up }`, "single interface name for a net check"},
 		"net bad metric":               {`c: { type: net, interface: ppp0, metric: nope }`, "not a supported net metric"},
 		"net state missing condition":  {`c: { type: net, interface: ppp0, metric: state }`, "requires expect: up|down or on: change"},
 		"net errors missing delta":     {`c: { type: net, interface: eth0, metric: errors }`, "delta {op, value} is required"},
