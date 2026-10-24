@@ -340,11 +340,12 @@ func validateReload(tree map[string]any, backend string, add addFunc) {
 	if !spec.HasSignal || !reloadSignalNeedsPidfileIdentity(tree, backend) {
 		return
 	}
-	pidfile, identity := reloadSignalPidfileIdentity(tree)
-	if !pidfile {
+	if len(cfgval.StringList(tree[process.ServiceKeyPidfile])) == 0 {
 		add("%s requires top-level pidfile: when the service runs on OpenRC (no MainPID)", reloadPathSignal)
 	}
-	if !identity {
+	// Only a strict principal (not delegated, exact exe and user) can verify
+	// the pidfile PID; a delegated selector is never signalled.
+	if !hasStrictPrincipal(tree) {
 		add("%s requires a processes selector with both exe and user so the pidfile PID can be verified before signaling", reloadPathSignal)
 	}
 }
@@ -364,29 +365,6 @@ func reloadSignalNeedsPidfileIdentity(tree map[string]any, backend string) bool 
 		return hasOpenrc || !hasSystemd
 	}
 	return hasOpenrc && !hasSystemd
-}
-
-func reloadSignalPidfileIdentity(tree map[string]any) (pidfile, identity bool) {
-	pidfile = len(cfgval.StringList(tree[process.ServiceKeyPidfile])) > 0
-	procs, ok := tree[process.SectionProcesses].(map[string]any)
-	if !ok {
-		return pidfile, false
-	}
-	for _, raw := range procs {
-		entry, ok := raw.(map[string]any)
-		if !ok {
-			continue
-		}
-		// A delegated selector is never signalled, so it supplies no identity a
-		// reload signal could use.
-		if cfgval.Bool(entry[process.SelectorKeyDelegated]) {
-			continue
-		}
-		if cfgval.String(entry[process.SelectorKeyExe]) != "" && cfgval.String(entry[process.SelectorKeyUser]) != "" {
-			identity = true
-		}
-	}
-	return pidfile, identity
 }
 
 // validateCommands checks the optional `commands` section: each entry uses array
