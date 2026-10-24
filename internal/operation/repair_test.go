@@ -129,7 +129,7 @@ func TestRepairRemovesProvenStaleRuntimePIDFileThenStarts(t *testing.T) {
 		Name: process.SelectorPidfile, Type: process.SelectorPidfile, Paths: []string{pidfile},
 	}}, repairReader{}, runtimeDir)
 
-	result := e.Repair(context.Background())
+	result := e.Do(context.Background(), ActionRepair)
 
 	if !result.OK() || result.Action != ActionRepair {
 		t.Fatalf("repair result = %+v", result)
@@ -152,7 +152,7 @@ func TestRepairReconcilesSurvivorsBeforeResetAndStart(t *testing.T) {
 	e := h.engine()
 	e.RepairStalePIDFiles = repairStalePIDFiles(h.mgr, e.Unit, nil, repairReader{}, t.TempDir())
 
-	result := e.Repair(context.Background())
+	result := e.Do(context.Background(), ActionRepair)
 
 	if result.Status != ResultOrphanProcesses || !strings.Contains(result.Message, "before repair") {
 		t.Fatalf("repair result = %s %q, want orphan_processes before repair", result.Status, result.Message)
@@ -173,7 +173,7 @@ func TestRepairRevalidatesAbsenceBeforeReset(t *testing.T) {
 		return process.Observation{Processes: []process.Process{{PID: 4242, Exe: "/usr/sbin/mysqld", ExeOK: true}}}, nil
 	}
 
-	result := e.Repair(context.Background())
+	result := e.Do(context.Background(), ActionRepair)
 
 	if result.OK() || !strings.Contains(result.Message, "processes appeared before init state reconciliation") {
 		t.Fatalf("repair result = %s %q, want refusal to reset with a live process", result.Status, result.Message)
@@ -213,7 +213,7 @@ func TestRepairRefusesLivePIDFile(t *testing.T) {
 		Name: process.SelectorPidfile, Type: process.SelectorPidfile, Paths: []string{pidfile},
 	}}, repairReader{5023: true}, runtimeDir)
 
-	result := e.Repair(context.Background())
+	result := e.Do(context.Background(), ActionRepair)
 
 	if result.OK() || !strings.Contains(result.Message, "pid 5023 is running") {
 		t.Fatalf("repair result = %+v, want live-pid refusal", result)
@@ -260,7 +260,7 @@ func TestRepairRequiresActiveThroughPostflight(t *testing.T) {
 				h.mgr.status = status
 				return checks.Outcome{OK: true}
 			}
-			result := e.Repair(t.Context())
+			result := e.Do(t.Context(), ActionRepair)
 			if result.OK() != (status == servicemgr.StatusActive) {
 				t.Fatalf("result=%+v, final backend=%s", result, status)
 			}

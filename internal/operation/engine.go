@@ -190,7 +190,12 @@ type DBQueryTarget struct {
 
 // lifecyclePlans is the one list of service lifecycle actions and their
 // phases, in the guard vocabulary's order. Do dispatches through it, and
-// ServiceActions, IsServiceAction and ForecastActive derive from it.
+// ServiceActions, IsServiceAction and ForecastActive derive from it. Every
+// action honors the operation lock, named locks and guards; stop and pause run
+// no preflight or postflight. Restart is a verified stop and start under one
+// lock and deadline, reload asks the init system to reload in place, and
+// repair clears a proven-stale runtime pidfile before its start; repair is
+// manual-only, rules cannot dispatch it.
 var lifecyclePlans = []plan{
 	{action: actionRestart, preflight: true, reconcile: true, stop: true, start: true, postflight: true},
 	{action: actionStart, preflight: true, reconcile: true, start: true, postflight: true},
@@ -207,41 +212,6 @@ func lifecyclePlan(action string) (plan, bool) {
 		return plan{}, false
 	}
 	return lifecyclePlans[i], true
-}
-
-// Restart composes verified stop and start under one operation lock and timeout.
-func (e Engine) Restart(ctx context.Context) Result {
-	return e.Do(ctx, actionRestart)
-}
-
-// Start runs preflight, starts the service and verifies health.
-func (e Engine) Start(ctx context.Context) Result {
-	return e.Do(ctx, actionStart)
-}
-
-// Stop stops the service and clears residuals. Stop runs no preflight or
-// postflight but still honors locks and guards.
-func (e Engine) Stop(ctx context.Context) Result {
-	return e.Do(ctx, actionStop)
-}
-
-// Reload runs preflight (the config check), asks the init system to reload the
-// service's configuration in place (no stop/start), and verifies health. It is
-// the non-disruptive remediation for daemons that reload rather than restart.
-func (e Engine) Reload(ctx context.Context) Result {
-	return e.Do(ctx, actionReload)
-}
-
-// Resume runs preflight, resumes a paused service and verifies health.
-func (e Engine) Resume(ctx context.Context) Result {
-	return e.Do(ctx, actionResume)
-}
-
-// Pause freezes the service in place and verifies the backend reports it
-// paused. Like stop it runs no preflight or postflight, but still honors locks
-// and guards; a guard that blocks stop also blocks pause.
-func (e Engine) Pause(ctx context.Context) Result {
-	return e.Do(ctx, ActionPause)
 }
 
 // CloseSession gracefully terminates one operator-selected SSH session. It
@@ -272,13 +242,6 @@ func (e Engine) CloseEmptyTerminalSession(ctx context.Context, target TerminalSe
 // re-verifies the statement immediately before acting.
 func (e Engine) KillDBQuery(ctx context.Context, target DBQueryTarget) Result {
 	return e.run(ctx, plan{action: actionKillQuery, killQuery: &target})
-}
-
-// Repair clears a proven-stale runtime pidfile, then starts a failed or inactive
-// service through the same preflight, locks, guards and postflight as Start.
-// It is deliberately manual-only; rules cannot dispatch this recovery action.
-func (e Engine) Repair(ctx context.Context) Result {
-	return e.Do(ctx, ActionRepair)
 }
 
 func (e Engine) userResolver() process.UserResolver {

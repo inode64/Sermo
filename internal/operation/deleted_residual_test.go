@@ -124,7 +124,7 @@ func TestDeletedResidualLifecycle(t *testing.T) {
 						t.Fatal("reported success with helper alive")
 					}
 					if tc.action == actionStop {
-						if started := e.Start(t.Context()); !started.OK() {
+						if started := e.Do(t.Context(), actionStart); !started.OK() {
 							t.Fatalf("separate start: %+v", started)
 						}
 					}

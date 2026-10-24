@@ -14,7 +14,7 @@ func TestRestartTimesOutDuringGracefulWait(t *testing.T) {
 	eng := h.engine()
 	eng.Sleep = time.Sleep
 	eng.OperationTimeout = 30 * time.Millisecond
-	res := eng.Restart(context.Background())
+	res := eng.Do(context.Background(), actionRestart)
 	if res.Status != ResultFailed {
 		t.Fatalf("status = %q, want failed", res.Status)
 	}
@@ -60,7 +60,7 @@ func TestCancelledOperationIsNotReportedAsATimeout(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
 			eng.Sleep = func(time.Duration) { cancel() }
 
-			res := eng.Restart(ctx)
+			res := eng.Do(ctx, actionRestart)
 
 			if res.Status != ResultFailed {
 				t.Fatalf("status = %q, want failed", res.Status)
@@ -142,7 +142,7 @@ func TestStopTimesOutDuringReaperWait(t *testing.T) {
 	eng := h.engine()
 	eng.Sleep = time.Sleep
 	eng.OperationTimeout = 30 * time.Millisecond
-	res := eng.Stop(context.Background())
+	res := eng.Do(context.Background(), actionStop)
 	if res.Status != ResultFailed {
 		t.Fatalf("status = %q, want failed (%s)", res.Status, res.Message)
 	}

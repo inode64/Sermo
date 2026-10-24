@@ -83,7 +83,7 @@ func TestStopWarningsSurviveLaterFailure(t *testing.T) {
 				}
 				e.Sleep = func(time.Duration) { cancel() }
 			}
-			res := e.Restart(ctx)
+			res := e.Do(ctx, actionRestart)
 			if res.Status != ResultFailed || len(h.emitted) != 1 {
 				t.Fatalf("result=%+v events=%d", res, len(h.emitted))
 			}
@@ -106,7 +106,7 @@ func TestStoppedArtifactWarningSurvivesStartFailure(t *testing.T) {
 		t.Fatal(err)
 	}
 	e.StopArtifacts.PidfilePaths = []string{artifact}
-	res := e.Restart(t.Context())
+	res := e.Do(t.Context(), actionRestart)
 	if res.Status != ResultFailed || len(h.emitted) != 1 || !strings.Contains(h.emitted[0].Message, "stale "+artifact) {
 		t.Fatalf("result=%+v events=%+v", res, h.emitted)
 	}
@@ -219,7 +219,7 @@ func TestCancellationDuringStoppedObservationPreventsResetAndStart(t *testing.T)
 		}
 		return process.Observation{AbsenceKnown: true}, nil
 	}
-	res := engine.Restart(ctx)
+	res := engine.Do(ctx, actionRestart)
 	if res.Status != ResultFailed || h.mgr.did("reset mysqld") || h.mgr.did("start mysqld") {
 		t.Fatalf("result=%+v calls=%v", res, h.mgr.calls)
 	}
@@ -237,7 +237,7 @@ func TestCancellationDuringStartObservationCannotSucceed(t *testing.T) {
 		cancel()
 		return process.Observation{Trusted: true, Processes: []process.Process{{PID: 100}}}, nil
 	}
-	res := engine.Start(ctx)
+	res := engine.Do(ctx, actionStart)
 	if res.Status != ResultFailed || !h.mgr.did("start mysqld") || len(h.emitted) != 1 {
 		t.Fatalf("result=%+v calls=%v events=%v", res, h.mgr.calls, h.emitted)
 	}
@@ -252,7 +252,7 @@ func TestStopDoesNotRecoverUnknownOrFailedObservation(t *testing.T) {
 			h.mgr.stopErr = errors.New("stop failed")
 			e := h.engine()
 			e.ObserveProcesses = func() (process.Observation, error) { return process.Observation{}, discoveryErr }
-			res := e.Stop(context.Background())
+			res := e.Do(context.Background(), actionStop)
 			if res.Status != ResultFailed || h.mgr.did("reset mysqld") {
 				t.Fatalf("result=%+v calls=%v", res, h.mgr.calls)
 			}
@@ -282,7 +282,7 @@ func TestReconciliationRevalidatesBeforeReset(t *testing.T) {
 		}
 		return out, nil
 	}
-	res := e.Restart(context.Background())
+	res := e.Do(context.Background(), actionRestart)
 	if res.Status != ResultFailed || !strings.Contains(res.Message, "appeared") || len(h.mgr.calls) != 0 {
 		t.Fatalf("result=%+v calls=%v", res, h.mgr.calls)
 	}
