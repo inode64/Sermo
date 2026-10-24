@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"time"
 
-	"sermo/internal/ctxutil"
 	"sermo/internal/operation"
+	"sermo/internal/process"
 	"sermo/internal/rules"
 )
 
@@ -43,8 +43,8 @@ type CascadeConfig struct {
 // serial walk never self-deadlocks even when a target repeats).
 type cascader struct {
 	config CascadeConfig
-	// sleep, when non-nil, replaces the production ctxutil.Sleep backoff (tests
-	// inject a no-op). Production call sites leave it nil.
+	// sleep is the backoff's process.Wait sleeper: tests inject a no-op;
+	// production leaves it nil for the cancellable timer.
 	sleep func(time.Duration)
 }
 
@@ -138,19 +138,11 @@ func (c cascader) operate(ctx context.Context, svc, action string) (operation.Re
 	return res, err
 }
 
-// backoff waits cascadeBlockedRetryDelay before a single blocked-lock retry.
-// Tests inject sleep as a no-op; production leaves it nil and uses ctxutil.Sleep so
-// the wait is cancellable and never touches bare time.Sleep (forbidigo).
+// backoff waits cascadeBlockedRetryDelay before a single blocked-lock retry,
+// returning early when ctx ends.
 func (c cascader) backoff(ctx context.Context) error {
-	if c.sleep != nil {
-		c.sleep(cascadeBlockedRetryDelay)
-		if err := ctx.Err(); err != nil {
-			return fmt.Errorf("cascade retry wait: %w", err)
-		}
-		return nil
-	}
-	if !ctxutil.Sleep(ctx, cascadeBlockedRetryDelay) {
-		return fmt.Errorf("cascade retry wait: %w", ctx.Err())
+	if err := process.Wait(ctx, c.sleep, cascadeBlockedRetryDelay); err != nil {
+		return fmt.Errorf("cascade retry wait: %w", err)
 	}
 	return nil
 }
