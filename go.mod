@@ -12,7 +12,7 @@ require (
 	github.com/goccy/go-yaml v1.19.2
 	github.com/godbus/dbus/v5 v5.2.4
 	github.com/google/nftables v0.3.0
-	github.com/gosnmp/gosnmp v1.46.0
+	github.com/gosnmp/gosnmp v1.47.0
 	github.com/jackc/pgx/v5 v5.11.0
 	github.com/quic-go/quic-go v0.64.1
 	github.com/spf13/pflag v1.0.10
