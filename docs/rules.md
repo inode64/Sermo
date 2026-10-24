@@ -3981,10 +3981,11 @@ This fail-closed rule applies to every check and to `metric:`, `process:` and
 `changed:` condition leaves: a timeout, unreadable source, malformed sample,
 missing source or not-ready metric is an unavailable observation, not a valid
 false condition. Value and state predicates do not match when an evaluated
-leaf is unavailable or skipped, including beneath `not` or `and`; an `or`
-holds as soon as one of its operands holds, and is unknown only when none
-does and one could not be observed, so its outcome never depends on the order
-of its operands. In particular,
+leaf is unavailable or skipped, including beneath `not`. An `and` fails as
+soon as one of its operands fails and an `or` holds as soon as one holds; each
+is unknown only when no operand decides it and one could not be observed, so
+neither depends on the order of its operands. A guard still denies when any
+operand of its `and` could not be observed. In particular,
 `file: { exists: false }` requires observed absence, and `active` never treats
 a skipped check as a successful observation. Guards deny the operation on
 these gaps. The explicit `failed` operator retains its check-failure contract: an

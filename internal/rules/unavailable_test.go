@@ -200,3 +200,38 @@ func TestOrHoldsDespiteUnknownSibling(t *testing.T) {
 		t.Fatalf("a guard whose or holds must block: blocked=%v err=%v", blocking, err)
 	}
 }
+
+// An AND with an unobservable operand and a false one is false for an ordinary
+// rule in either order, so an alert does not stay open (or recover) depending
+// on how its operands were written, and its negation agrees. A guard denies in
+// either order: an operand it could not observe always fails it closed.
+func TestAndDoesNotDependOnOperandOrder(t *testing.T) {
+	unknown := map[string]any{ConditionActive: map[string]any{FieldCheck: "unobserved"}}
+	falseLeaf := map[string]any{ConditionActive: map[string]any{FieldCheck: "idle"}}
+	cache := map[string]checks.Result{
+		"unobserved": {Check: "unobserved", Unavailable: true, Message: "timeout"},
+		"idle":       {Check: "idle", OK: false},
+	}
+	for _, order := range [][]any{{unknown, falseLeaf}, {falseLeaf, unknown}} {
+		and := map[string]any{ConditionAnd: order}
+		ev := &Evaluator{Cache: cache}
+		if got, err := ev.Eval(t.Context(), and); got || err != nil || ev.Unknown {
+			t.Fatalf("rule and %v = %v, %v, unknown=%v; want a definite false", order, got, err, ev.Unknown)
+		}
+		ev = &Evaluator{Cache: cache}
+		if got, err := ev.Eval(t.Context(), map[string]any{ConditionNot: and}); !got || err != nil || ev.Unknown {
+			t.Fatalf("rule not(and %v) = %v, %v, unknown=%v; want a definite true", order, got, err, ev.Unknown)
+		}
+		guard := []Rule{{Name: "g", Type: RuleGuard, Blocks: []string{string(ActionRestart)}, If: and}}
+		if rule, _, err := Guard(t.Context(), guard, string(ActionRestart), &Evaluator{Cache: cache}); rule != "" || err == nil {
+			t.Fatalf("guard and %v = %q, %v; want denied on the unobservable operand", order, rule, err)
+		}
+	}
+	// With no false operand the conjunction stays unknown.
+	ev := &Evaluator{Cache: cache}
+	trueLeaf := map[string]any{ConditionActive: map[string]any{FieldCheck: "busy"}}
+	ev.Cache["busy"] = checks.Result{Check: "busy", OK: true}
+	if got, err := ev.Eval(t.Context(), map[string]any{ConditionAnd: []any{trueLeaf, unknown}}); got || err != nil || !ev.Unknown {
+		t.Fatalf("and[true, unknown] = %v, %v, unknown=%v; want unknown", got, err, ev.Unknown)
+	}
+}
