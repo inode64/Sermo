@@ -56,7 +56,8 @@ const (
 	smb2HashAlgorithmSHA512           = 0x0001
 	smb2MaxNegotiateResponseBytes     = 1 << 16
 	smb2MinNegotiateResponseBytes     = 70
-	smb2NegotiateCommand              = 1
+	smb2NegotiateCreditRequest        = 1
+	smb2ClientGUIDBytes               = 16
 	smb2NegotiateContextCount         = 1
 	smb2NegotiateDialectCount         = 5
 	smb2NegotiateContextCountOffset   = 32
@@ -210,7 +211,7 @@ func parseSMBNegotiate(resp []byte) (uint16, bool, error) {
 // dialects 2.0.2..3.1.1 (with the mandatory pre-auth integrity context for
 // 3.1.1).
 func buildSMBNegotiate() []byte {
-	var guid [smbProtocolIDBytes * 4]byte
+	var guid [smb2ClientGUIDBytes]byte
 	_, _ = rand.Read(guid[:])
 	var salt [smb2PreauthSaltBytes]byte
 	_, _ = rand.Read(salt[:])
@@ -221,7 +222,7 @@ func buildSMBNegotiate() []byte {
 	hdr := make([]byte, smb2HeaderBytes)
 	copy(hdr[:smbProtocolIDBytes], smbProtocolID)
 	binary.LittleEndian.PutUint16(hdr[smbProtocolIDBytes:], smb2HeaderBytes)
-	binary.LittleEndian.PutUint16(hdr[smb2CreditRequestOffset:], smb2NegotiateCommand)
+	binary.LittleEndian.PutUint16(hdr[smb2CreditRequestOffset:], smb2NegotiateCreditRequest)
 	b.Write(hdr)
 
 	// NEGOTIATE request body (36 fixed bytes).

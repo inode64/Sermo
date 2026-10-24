@@ -3,10 +3,12 @@ package conn
 import (
 	"strings"
 	"testing"
+
+	"golang.org/x/net/dns/dnsmessage"
 )
 
 func TestRcodeName(t *testing.T) {
-	runMapCases(t, "rcodeName", rcodeName, map[int]string{
+	runMapCases(t, "rcodeName", rcodeName, map[dnsmessage.RCode]string{
 		0: "NOERROR", 1: "FORMERR", 2: "SERVFAIL",
 		3: "NXDOMAIN", 4: "NOTIMP", 5: "REFUSED",
 		9: "RCODE9",
