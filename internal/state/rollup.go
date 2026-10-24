@@ -214,7 +214,10 @@ func (s *Store) rollup(ctx context.Context, now time.Time) (int64, error) {
 				return rolled, err
 			}
 		}
-		if err := s.setRollupWatermark(ctx, targetRes, alignBucket(now, targetRes)); err != nil {
+		// Never backwards: a wall clock that steps back would otherwise make the
+		// next pass re-consolidate buckets whose fine rows the prune has already
+		// dropped, overwriting complete coarse buckets with partial sums.
+		if err := s.setRollupWatermark(ctx, targetRes, max(watermark, alignBucket(now, targetRes))); err != nil {
 			return rolled, err
 		}
 	}

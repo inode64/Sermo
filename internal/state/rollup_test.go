@@ -500,3 +500,29 @@ func TestShortRetentionDoesNotLoseConsolidatedHistory(t *testing.T) {
 		})
 	}
 }
+
+// A wall clock that steps back must not rewind the consolidation watermark: the
+// prune already dropped fine rows below the old watermark, so re-consolidating
+// from an earlier one would overwrite complete coarse buckets with the sum of
+// what is left.
+func TestRollupWatermarkNeverMovesBack(t *testing.T) {
+	s := openTemp(t)
+	ctx := context.Background()
+	at := time.Date(2026, 6, 7, 12, 0, 0, 0, time.UTC)
+	mustRecord(t, s, true, at)
+	mustRecord(t, s, false, at.Add(time.Minute))
+	now := at.Add(time.Hour)
+	mustRollup(t, s, now)
+
+	// Retention drops the first per-minute row, which the consolidation already
+	// carried up the ladder.
+	if _, err := s.pruneArchive(ctx, archiveTables[0], resMinute, at.Add(time.Minute).Unix()); err != nil {
+		t.Fatalf("prune per-minute archive: %v", err)
+	}
+	mustRollup(t, s, at.Add(-24*time.Hour)) // the clock stepped back a day
+	mustRollup(t, s, now)                   // and came back
+
+	if up, total, down, found := archiveRow(t, s, resDay, alignBucket(at, resDay)); !found || up != 1 || total != 2 || down != 1 {
+		t.Fatalf("day bucket up/total/down = %d/%d/%d (found %v), want the complete 1/2/1", up, total, down, found)
+	}
+}
