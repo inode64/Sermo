@@ -63,7 +63,7 @@ func libraryFixture() (libraryReader, Process) {
 }
 
 func TestScanLibrariesIdentityAndFilesystem(t *testing.T) {
-	for _, name := range []string{"replaced", "unchanged", "missing", "permission", "foreign namespace", "chroot", "PID reused", "UID changed", "exe changed", "timeout", "literal deleted suffix", "not regular"} {
+	for _, name := range []string{"replaced", "unchanged", "missing", "permission", "foreign namespace", "chroot", "chroot during scan", "PID reused", "UID changed", "exe changed", "timeout", "literal deleted suffix", "not regular"} {
 		t.Run(name, func(t *testing.T) {
 			r, p := libraryFixture()
 			ctx := t.Context()
@@ -103,6 +103,20 @@ func TestScanLibrariesIdentityAndFilesystem(t *testing.T) {
 				r.stat = func(path string) (libraryFile, error) {
 					f, err := old(path)
 					if path == "/" {
+						f.identity.Inode = 2
+					}
+					return f, err
+				}
+				wantErr = true
+			case "chroot during scan":
+				// The root is compared again after the maps are read: a chroot
+				// in between must fail the process, not pass on the first look.
+				mapped := false
+				oldRead, oldStat := r.readFile, r.stat
+				r.readFile = func(path string) ([]byte, error) { mapped = true; return oldRead(path) }
+				r.stat = func(path string) (libraryFile, error) {
+					f, err := oldStat(path)
+					if mapped && path == PIDPath(42, ProcFileRoot) {
 						f.identity.Inode = 2
 					}
 					return f, err
