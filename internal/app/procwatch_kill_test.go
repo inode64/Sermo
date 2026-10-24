@@ -22,8 +22,8 @@ type sigCall struct {
 	sig syscall.Signal
 }
 
-func (f *fakeSignaler) Signal(pid int, sig syscall.Signal) error {
-	f.sent = append(f.sent, sigCall{pid, sig})
+func (f *fakeSignaler) SignalProcess(_ context.Context, target process.Process, sig syscall.Signal) error {
+	f.sent = append(f.sent, sigCall{target.PID, sig})
 	return f.err
 }
 

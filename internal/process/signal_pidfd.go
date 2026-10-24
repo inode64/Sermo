@@ -24,24 +24,6 @@ func (OSSignaler) SignalProcess(ctx context.Context, target Process, sig syscall
 	return sender.signal(ctx, target, sig)
 }
 
-// SignalProcess delivers a signal using the previously authorized identity.
-// Production OSSignaler verifies that identity through a pidfd; injected
-// primitive signalers can model delivery without accessing host processes.
-func SignalProcess(ctx context.Context, signaler Signaler, target Process, sig syscall.Signal) error {
-	if verified, ok := signaler.(interface {
-		SignalProcess(ctx context.Context, target Process, sig syscall.Signal) error
-	}); ok {
-		if err := verified.SignalProcess(ctx, target, sig); err != nil {
-			return fmt.Errorf("deliver verified signal: %w", err)
-		}
-		return nil
-	}
-	if err := signaler.Signal(target.PID, sig); err != nil {
-		return fmt.Errorf("deliver signal: %w", err)
-	}
-	return nil
-}
-
 type pidfdSignaler struct {
 	open       func(int, int) (int, error)
 	close      func(int) error

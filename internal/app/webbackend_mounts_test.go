@@ -49,7 +49,7 @@ type webMountSignaler struct {
 	signalled *int
 }
 
-func (s webMountSignaler) Signal(int, syscall.Signal) error {
+func (s webMountSignaler) SignalProcess(context.Context, process.Process, syscall.Signal) error {
 	(*s.signalled)++
 	return nil
 }

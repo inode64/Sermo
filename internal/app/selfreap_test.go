@@ -22,8 +22,8 @@ type selfReapSignaler struct {
 	err   error
 }
 
-func (s *selfReapSignaler) Signal(pid int, sig syscall.Signal) error {
-	s.calls = append(s.calls, selfReapSignal{pid: pid, sig: sig})
+func (s *selfReapSignaler) SignalProcess(_ context.Context, target process.Process, sig syscall.Signal) error {
+	s.calls = append(s.calls, selfReapSignal{pid: target.PID, sig: sig})
 	return s.err
 }
 
@@ -31,10 +31,6 @@ func (s *selfReapSignaler) Signal(pid int, sig syscall.Signal) error {
 // the process generation the hygiene authorized.
 type verifiedSelfReapSignaler struct {
 	targets []process.Process
-}
-
-func (s *verifiedSelfReapSignaler) Signal(int, syscall.Signal) error {
-	return errors.New("unverified numeric-PID delivery used")
 }
 
 func (s *verifiedSelfReapSignaler) SignalProcess(_ context.Context, target process.Process, _ syscall.Signal) error {

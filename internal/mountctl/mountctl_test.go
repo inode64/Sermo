@@ -56,7 +56,7 @@ func (r *fakeRunner) Run(_ context.Context, name string, args ...string) (execx.
 
 type fakeSignaler struct{ calls int }
 
-func (s *fakeSignaler) Signal(int, syscall.Signal) error {
+func (s *fakeSignaler) SignalProcess(context.Context, process.Process, syscall.Signal) error {
 	s.calls++
 	return nil
 }
@@ -600,7 +600,7 @@ func TestMountUserProcessCarriesStartTicks(t *testing.T) {
 
 type failingSignaler struct{ calls int }
 
-func (s *failingSignaler) Signal(int, syscall.Signal) error {
+func (s *failingSignaler) SignalProcess(context.Context, process.Process, syscall.Signal) error {
 	s.calls++
 	return errors.New("signal identity changed or unavailable")
 }

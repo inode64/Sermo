@@ -16,7 +16,7 @@ import (
 // drift between them.
 type pidKiller struct {
 	watch    string
-	signaler process.Signaler     // nil -> process.OSSignaler{} (real kill(2))
+	signaler process.Signaler     // nil -> process.OSSignaler{} (pidfd delivery)
 	resolve  process.UserResolver // nil -> process.DefaultUserLookup().ResolveUser
 	sleep    func(time.Duration)  // nil -> process.Wait's cancellable timer
 	emit     func(Event)
