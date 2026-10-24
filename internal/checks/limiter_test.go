@@ -77,9 +77,11 @@ func TestLimiterQueueCancellationAndResize(t *testing.T) {
 	limiter.SetLimit(1)
 	limiter.release()
 	check := withLimiter(fakeCheck{res: Result{Check: "probe", OK: true}}, limiter, time.Millisecond)
-	res := Execute(t.Context(), check)
+	waitCtx, cancelWait := context.WithTimeout(t.Context(), time.Millisecond)
+	res := Execute(waitCtx, check)
+	cancelWait()
 	if !res.Unavailable || res.OK {
-		t.Fatalf("queued timeout = %+v", res)
+		t.Fatalf("queued past the caller's deadline = %+v", res)
 	}
 	limiter.release()
 	if res := Execute(t.Context(), check); !res.OK {
@@ -98,6 +100,24 @@ func TestLimiterQueueCancellationAndResize(t *testing.T) {
 	}
 	limiter.release()
 	limiter.release()
+}
+
+// A check's timeout bounds its probe, not its wait for a slot: queued behind a
+// burst longer than its own timeout (daemon start, a run of hdparm benchmarks,
+// a stalled init system), it runs once a slot frees instead of failing unrun.
+func TestLimiterQueueWaitDoesNotConsumeCheckTimeout(t *testing.T) {
+	limiter := NewLimiter(1)
+	if err := limiter.acquire(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	check := withLimiter(fakeCheck{res: Result{Check: "probe", OK: true}}, limiter, 10*time.Millisecond)
+	done := make(chan Result, 1)
+	go func() { done <- Execute(t.Context(), check) }()
+	time.Sleep(50 * time.Millisecond) // hold the slot past the check's own timeout
+	limiter.release()
+	if res := <-done; !res.OK || res.Unavailable {
+		t.Fatalf("queued check = %+v, want it run once the slot freed", res)
+	}
 }
 
 func TestLimiterReleasesAfterPanic(t *testing.T) {

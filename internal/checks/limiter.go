@@ -78,16 +78,19 @@ func withLimiter(check Check, limiter *Limiter, timeout time.Duration) Check {
 
 func (c limitedCheck) resultMetadata() Result { return checkResultMetadata(c.Check) }
 
+// Run waits for a slot within the caller's context and only then starts the
+// check's timeout: a probe queued behind a burst runs late rather than failing
+// unrun, which would read as the target being unavailable.
 func (c limitedCheck) Run(ctx context.Context) Result {
+	if err := c.limiter.acquire(ctx); err != nil {
+		return checkNotStartedResult(Built{Check: c.Check}, err)
+	}
+	defer c.limiter.release()
 	if c.timeout > 0 {
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(ctx, c.timeout)
 		defer cancel()
 	}
-	if err := c.limiter.acquire(ctx); err != nil {
-		return checkNotStartedResult(Built{Check: c.Check}, err)
-	}
-	defer c.limiter.release()
 	if err := ctx.Err(); err != nil {
 		return checkNotStartedResult(Built{Check: c.Check}, err)
 	}
