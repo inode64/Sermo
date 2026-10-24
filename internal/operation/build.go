@@ -329,7 +329,7 @@ func nativeSignalReloadFunc(signal syscall.Signal, runner execx.Runner, backend,
 		if err != nil {
 			return err
 		}
-		target, err := verifyReloadPID(pid, source, pidfile, discoverer, selectors)
+		target, err := verifyReloadPID(pid, source, pidfile, unit, discoverer, selectors)
 		if err != nil {
 			return err
 		}
@@ -343,7 +343,7 @@ func nativeSignalReloadFunc(signal syscall.Signal, runner execx.Runner, backend,
 	}
 }
 
-func verifyReloadPID(pid int, source reloadPIDSource, pidfile string, discoverer process.Discoverer, selectors []process.Selector) (process.Process, error) {
+func verifyReloadPID(pid int, source reloadPIDSource, pidfile, unit string, discoverer process.Discoverer, selectors []process.Selector) (process.Process, error) {
 	if source == reloadPIDPidfile || (source == reloadPIDMain && hasCommandMatchSelector(selectors)) {
 		target, ok := discoverer.StrictMatchPID(pid, selectors)
 		if !ok {
@@ -358,6 +358,12 @@ func verifyReloadPID(pid int, source reloadPIDSource, pidfile string, discoverer
 	id, ok := reader.Identity(pid)
 	if !ok {
 		return process.Process{}, fmt.Errorf("reload: cannot verify pid %d", pid)
+	}
+	// Without an exact selector the kernel is the only witness that MainPID
+	// still names the unit's daemon: a PID recycled between the systemctl
+	// query and this read sits outside the unit's control group.
+	if !servicemgr.CgroupOwnedBy(id.Cgroup, unit) {
+		return process.Process{}, fmt.Errorf("reload: pid %d from %s is not in %s's control group (pid reused?)", pid, source, unit)
 	}
 	return process.Process{PID: pid, StartTicks: id.StartTicks, Exe: id.Exe, ExeOK: id.ExeOK, UID: id.UID}, nil
 }

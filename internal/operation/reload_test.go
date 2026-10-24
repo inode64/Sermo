@@ -174,7 +174,7 @@ func TestReloadClosureSignalSentToMainPID(t *testing.T) {
 	pid := 4242
 	runner := &execxtest.Runner{ByName: map[string]execx.Result{"systemctl": {Stdout: strconv.Itoa(pid) + "\n"}}}
 	signaler := &pidSignaler{}
-	discoverer := reloadDiscoverer(map[int]process.Identity{pid: {PID: pid, StartTicks: 42, StartTicksOK: true, UID: 1001, Exe: "/usr/sbin/svc", ExeOK: true}})
+	discoverer := reloadDiscoverer(map[int]process.Identity{pid: {PID: pid, StartTicks: 42, StartTicksOK: true, UID: 1001, Exe: "/usr/sbin/svc", ExeOK: true, Cgroup: "0::/system.slice/myd.service"}})
 	reload := nativeSignalReloadFunc(syscall.SIGUSR1, runner, "systemd", "myd", "", discoverer, nil, signaler)
 	if err := reload(context.Background()); err != nil {
 		t.Fatal(err)
@@ -222,6 +222,28 @@ func TestReloadClosureSignalUsesPidfileWhenNoMainPID(t *testing.T) {
 	}
 	if len(signaler.calls) != 1 || signaler.calls[0].pid != pid || signaler.calls[0].sig != syscall.SIGUSR2 {
 		t.Fatalf("signals: %v", signaler.calls)
+	}
+}
+
+// Without an exact selector, the kernel is the only witness that MainPID still
+// names the unit's daemon: a PID recycled between the systemctl query and the
+// identity read sits outside the unit's control group and is never signalled.
+func TestReloadClosureSignalMainPIDMustBelongToTheUnit(t *testing.T) {
+	pid := 4242
+	runner := &execxtest.Runner{ByName: map[string]execx.Result{"systemctl": {Stdout: strconv.Itoa(pid) + "\n"}}}
+	for name, cgroup := range map[string]string{
+		"another unit": "0::/system.slice/cron.service",
+		"a session":    "0::/user.slice/user-1000.slice/session-3.scope",
+		"unreadable":   "",
+	} {
+		t.Run(name, func(t *testing.T) {
+			signaler := &pidSignaler{}
+			discoverer := reloadDiscoverer(map[int]process.Identity{pid: {PID: pid, StartTicks: 42, StartTicksOK: true, UID: 0, Exe: "/usr/bin/other", ExeOK: true, Cgroup: cgroup}})
+			reload := nativeSignalReloadFunc(syscall.SIGHUP, runner, "systemd", "myd", "", discoverer, nil, signaler)
+			if err := reload(context.Background()); err == nil || !strings.Contains(err.Error(), "control group") || len(signaler.calls) != 0 {
+				t.Fatalf("reload err = %v, signals %v; want a refusal and no signal", err, signaler.calls)
+			}
+		})
 	}
 }
 
