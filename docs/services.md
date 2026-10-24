@@ -158,9 +158,10 @@ Set a top-level `interval` on an app or library profile to override the global
 For processes that still map an older library after an update, use the opt-in
 [`stale_libraries` check](configuration.md#stale_libraries--processes-using-replaced-shared-libraries).
 It inspects running mappings and also detects updates made before Sermo started.
-When a service subscribes through `restart_on_change.libraries`, Sermo also
-adds that library file as a required preflight check for start, restart, reload
-and resume; a missing, non-regular or empty library file blocks the operation.
+When a service subscribes through `restart_on_change.libraries` (and its
+`version` gate is not `false`), Sermo also adds that library file as a required
+preflight check for start, restart, reload and resume; a missing, non-regular
+or empty library file blocks the operation.
 
 A configured service (or catalog service definition) opts in with
 `restart_on_change`. Packaged catalog services that link versioned apps declare
@@ -290,7 +291,7 @@ The restart runs through the normal safe engine (guards, cooldown, max_actions),
 and the change is acknowledged once the restart succeeds, so it fires once per
 upgrade rather than every cycle. Referenced library names must be `library`
 services. Referenced app names must also appear in the service's `apps:` list,
-and the app must provide a `version` or `version_short` command. App levels are
+and the app must provide a `version` preflight command. App levels are
 `major`, `minor` and `patch` (default for the short form `apps: [containerd]`).
 If the app binary or version command is broken, Sermo treats the version sample
 as invalid, does not update the version baseline, and does not restart the
@@ -466,7 +467,6 @@ When a service links several required apps, each one's checks stay distinct:
 ```yaml
 preflight:
   java-binary:  { type: binary, path: /usr/bin/java }
-  java-health:  { type: command, command: ["/usr/bin/java", "-help"] }
   java-version: { type: command, command: ["/usr/bin/java", "-version"] }
 ```
 
@@ -543,9 +543,10 @@ preflight:
   binary: { type: binary, path: "${binary}" }
 ```
 
-An explicit `variables` entry of the same name always takes precedence over a
-built-in. `${arch}`/`${os}` are baked **on load** (everywhere — variable values
-and app discovery paths included); the rest resolve per service, and
+An explicit `variables` entry of the same name takes precedence over a
+built-in resolved per service. `${arch}`/`${os}` are baked **on load**
+(everywhere — variable values and app discovery paths included), so a variable
+cannot override them; the rest resolve per service, and
 the runtime ones (`${date}`/`${event}`/`${action}`) only in rule `message:`
 strings. The `SERMO_ARCH` / `SERMO_OS` / `SERMO_HOST` / `SERMO_HOSTNAME` /
 `SERMO_INIT` / `SERMO_USER` environment variables override the matching built-in
@@ -582,7 +583,7 @@ bind address like `127.0.0.1`); an explicit `host` always wins.
 detected hostname / bind-address fallback). Use it for systemd instance units
 keyed by host identity, e.g. `service: "ceph-mon@${hostname}"` → `ceph-mon@node1`.
 For numeric multi-instance services (e.g. one OSD per device) use a `%n` service
-template whose `service:` carries `${n}`. Sermo materializes `ceph-osd0…N` from
+template whose `service:` carries `${n}`. Sermo materializes `ceph-osd-0…N` from
 active units such as `ceph-osd@0.service`, then links the generic `ceph-osd` app
 for binary validation. An explicit `hostname` variable (or `SERMO_HOSTNAME`)
 wins.
@@ -909,7 +910,9 @@ is paused.
 For process metrics and residual-process reporting, Sermo reads the container's
 `State.Pid` from Docker inspect and discovers that process tree. You normally do
 not need a `processes:` selector for a controlled container. Residual signaling
-is still authorized only by `stop_policy.kill_only_if`.
+is still authorized only by `stop_policy`: `kill_only_if`, or the exact
+selector identities `force_kill: auto` derives. A container has no init unit
+control group, so membership authorizes nothing.
 After a timed-out stop request, a container without selectors is considered
 stopped only when a fresh process snapshot proves the previous process
 generations exited and Docker confirms the container is inactive. An empty PID
@@ -1132,7 +1135,8 @@ stop catch and kill more leftovers (an unkillable residual stays
 `orphan_processes`). The `process` *check* still matches by `exe`/`user` only.
 
 Set `stop_policy.force_kill: auto` to make every named selector that has both
-an exact `exe` and `user` authorize cleanup of that same residual identity.
+an exact `exe` and `user` authorize cleanup of that same residual identity. An
+explicit `kill_only_if` under `auto` replaces these derived pairs.
 Sermo keeps each executable/user pair together — plus that selector's `cmd`, when
 it declares one — sends TERM, rediscovers, then sends KILL only to the same
 verified survivor. A selector with only `cmd`, an unresolved executable, a
@@ -1516,7 +1520,7 @@ On resolution this creates a `lockfile` health check gated by
 accepts a scalar path, a candidate list, or `{path: ..., optional: true}`. It is
 only evidence that the service left its own runtime lock artifact; it does not
 block start/stop/restart/reload/resume and must not point under
-`<engine.runtime>/locks`, which is reserved for Sermo operation locks.
+`<engine.runtime>/locks`, which is reserved for Sermo named runtime locks.
 
 ### D-Bus service health
 
@@ -1530,7 +1534,7 @@ active unit with a lost D-Bus registration fails instead of passing as merely
 activatable. These probes disable D-Bus auto-activation and do not permit
 arbitrary method calls. Adding a check-only watch does not add remediation;
 attach a `then:` action only when that action has been reviewed independently.
-See [the D-Bus check reference](rules.md#database-protocols).
+See [the D-Bus check reference](rules.md#database-connection-mysql--mariadb).
 
 ### Proxmox VE and supporting host daemons
 
@@ -1553,8 +1557,8 @@ These profiles add monitoring and normal init-backed operator controls only.
 They do not ship automatic restart rules or enable `SIGKILL`. Boot setup units,
 systemd infrastructure, filesystem mount helpers and hardware state belong to
 their existing host watches rather than duplicate catalog services. Debian's
-`dm-event` and `smartmontools` unit names are aliases of the existing `dmeventd`
-and `smartd` profiles.
+`dm-event` and `smartmontools` unit names are service candidates of the
+existing `dmeventd` and `smartd` profiles, not catalog `aliases:`.
 
 ## Versioned services
 
@@ -1590,11 +1594,14 @@ On load, Sermo discovers app versions by globbing the linked app's
 `/usr/lib64/postgresql-*/bin/postgres`) and extracting what filled it. Service
 templates in `catalog/services` prefer the active init service as source of
 truth: token-bearing `service:` candidates are matched against active
-systemd/OpenRC units, and only matching services materialize. Each match becomes a
+systemd/OpenRC units, and when any unit matches only the matching services
+materialize. With no matching active unit, a service template falls back to its
+own `versions.from`, then to the linked app's `versions.from` or
+`variables.binary` glob. Each match becomes a
 concrete app or service with `%v` and `${version}` substituted everywhere (name,
 display_name, service, app links, ...) — `postgres-14`, `postgres-16`, ... — and
-the templates themselves are dropped. If nothing is installed or no matching
-service is active, the template yields nothing. The YAML filename does not have
+the templates themselves are dropped. If none of these sources finds anything,
+the template yields nothing. The YAML filename does not have
 to match `name:`; keep one descriptive file for the template and treat `name:`
 as the catalog identifier. `%v` may sit anywhere in the name (`db%vsql` →
 `db4.8sql`). Note: `%v` is substituted only in the name; inside the body always
@@ -1705,8 +1712,8 @@ becomes `Python` for the active slot. Composite templates (`%i` plus `%v`, a
 separator token, etc.) do not infer that entry from `versions.from`; declare
 `versions.current_from` when they have a concrete active-slot executable such as
 `/usr/bin/java`. That path materializes the unversioned base name before the
-first token (`java-%i-%v` -> `java`) and becomes its `${binary}` when the
-template does not declare one. `current_from` may also be a list of direct paths:
+first token (`java-%i-%v` -> `java`) and becomes its `${binary}`, replacing a
+declared one. `current_from` may also be a list of direct paths:
 
 ```yaml
 versions:
@@ -1752,7 +1759,7 @@ marker-less path or declared with `versions.current_from` (for example
 otherwise it becomes empty before metadata is trimmed. This lets
 `display_name: "PHP ${version} ${current}"` render as `PHP 8.2 current` for the
 active version and `PHP 8.3` for the others without running version commands
-during config load. Symlinks are resolved before comparison. App/service
+during config load. Symlinks are resolved before comparison. App
 inventory commands may still add the `current` label at inspection time when an
 active-slot wrapper reports the same `version_short` as one materialized
 version, which keeps wrappers such as Gentoo Java generic without `from_file`
@@ -1810,26 +1817,22 @@ service:
     - "php-fpm-php${version}${sep}${instance}"
     - "php${version}${sep}${instance}-fpm"
     - "php-fpm${version}"
+    - "php${version}-fpm"
   openrc:
     - "php-fpm-php${version}${sep}${instance}"
     - "php${version}${sep}${instance}"
     - "php-fpm${version}${sep}${instance}"
+    - "php-fpm"
     - "php-fpm${version}"
+    - "php${version}"
 apps: ["php-fpm${version}"]
-pidfile:
-  - "/run/php-fpm/php-fpm-${version}${sep}${instance}.pid"
-  - "/run/php-fpm/php-fpm-php${version}${sep}${instance}.pid"
-  - "/run/php-fpm-php${version}${sep}${instance}.pid"
-watches:
-  pidfile:
-    check:
-      type: pidfile
-      optional: true
-      path:
-        - "/run/php-fpm/php-fpm-${version}${sep}${instance}.pid"
-        - "/run/php-fpm/php-fpm-php${version}${sep}${instance}.pid"
-        - "/run/php-fpm-php${version}${sep}${instance}.pid"
-      requires: [service]
+pidfile:                      # also generates the gated, optional pidfile check
+  optional: true
+  path:
+    - "/run/php-fpm-${version}${sep}${instance}.pid"
+    - "/run/php-fpm/php-fpm-${version}${sep}${instance}.pid"
+    - "/run/php-fpm/php-fpm-php${version}${sep}${instance}.pid"
+    - "/run/php-fpm-php${version}${sep}${instance}.pid"
 ```
 
 Put the exact systemd instance first in `service.systemd`, e.g.
@@ -1907,8 +1910,8 @@ processes:
 
 The config reader accepts `key=value` assignments, YAML `key: value` block
 mappings and bare `key` feature flags.
-Use `equals: ""` to match a bare flag. The packaged `dnsmasq` profile uses this
-to add its DHCP check only when `/etc/dnsmasq.conf` has `dhcp-range=...`, and its
+Use `equals: ""` to match a bare flag. The packaged `dnsmasq` profile uses
+`matches:` to add its DHCP check only when `/etc/dnsmasq.conf` has `dhcp-range=...`, and its
 TFTP check only when that file has `enable-tftp`. If those directives live in a
 file under `/etc/dnsmasq.d`, override the corresponding
 `watches.dhcp.enable_if.file` or `watches.tftp.enable_if.file` in the configured
@@ -2009,8 +2012,11 @@ does not appear as MySQL.
 `version` is the raw first line the version command prints (e.g. `nginx version:
 nginx/1.30.2`); `version_short` reduces it to just the numeric version and at
 most the patchlevel (`1.30.2`), taking the first `major.minor[.patch]` token and
-dropping any further build components and suffixes (so `2.8.4.1-0+g…` becomes
-`2.8.4` and `4.2.8p18` becomes `4.2.8`). If there is no dotted token, a guarded
+dropping any further build components and suffixes (so `12.4.3+security-02`
+becomes `12.4.3` and `1.3.9a` becomes `1.3.9`). A few families keep their native
+form: OpenSSH (`9.9p2`), ntpd (`4.2.8p18`), ISC DHCP `-P` releases and the
+four-component NET-SNMP, Network UPS Tools and xinetd versions (`2.8.4.1`). If
+there is no dotted token, a guarded
 integer-only `version N` token is accepted for projects such as polkit and
 date-coded numad releases. It is empty when the version line carries no
 recognizable number.
@@ -2074,9 +2080,10 @@ init systems:
 service: apache2
 ```
 
-When the unit name differs across init systems, list per-init candidates; Sermo
-resolves the first one the active backend actually knows (systemd via
-`systemctl cat`, OpenRC via the init script):
+When the unit name differs across init systems, list per-init candidates; among
+those the active backend actually knows (systemd via `systemctl cat`, OpenRC via
+the init script), Sermo resolves the first one that is active, else the first
+known one:
 
 ```yaml
 service:
@@ -2109,12 +2116,14 @@ name: redis-cache
 clone: redis-main
 variables:
   port: 6380
-  pidfile: /run/redis-cache/redis.pid
+pidfile: /run/redis-cache/redis.pid
 ```
 
 Clone copies the source **before** variable expansion, so overriding the `port`
 variable alone is enough — every check that references `${port}` resolves to the
-new value. Clone chains resolve transitively; cycles are rejected.
+new value. The redis catalog service lists its pidfiles directly rather than
+through a variable, so the clone overrides `pidfile` itself. Clone chains
+resolve transitively; cycles are rejected.
 
 ## Multiple instances of one application
 
@@ -2636,9 +2645,9 @@ backends — the aggregate then collapses to `0` and the lag watches never fire,
 silently. `pg_replication_slots` is readable by any role, so the slot watches
 are unaffected.
 
-These watches only make sense where replication actually happens. Enable only
-the watches that match the PostgreSQL role and replication features on that
-host.
+These watches only make sense where replication actually happens. They ship
+enabled; disable the ones that do not match the PostgreSQL role and replication
+features on that host.
 
 ## Exim hints database maintenance
 
@@ -2649,11 +2658,11 @@ the same bounded cleanup command when the configured limit is exceeded.
 
 Exim 4.99 and newer name the SQLite record table `tblblob`; older supported
 releases use `tbl`. The catalog defaults `callout_db_table` and
-`retry_db_table` to `tblblob`. Fleet installation discovers each database's
-schema read-only and overrides either variable with `tbl` when required. A
-non-SQLite database, absent file or unsupported schema disables only the
-affected record watch; `exim_tidydb` buttons remain available because that
-utility supports Exim's native hints backend independently of the graph query.
+`retry_db_table` to `tblblob`; set either to `tbl` on an older release. Where
+a hints database is not SQLite, disable only its record watch
+(`tidy-callout-db-if-large` or `tidy-retry-db-if-large`); the `exim_tidydb`
+buttons remain available because that utility supports Exim's native hints
+backend independently of the graph query.
 
 ## Exim mail-volume alerts
 

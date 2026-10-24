@@ -1,6 +1,7 @@
 name: incoming-files-fresh
 category: files
 # Alert once per path when a file has not been modified within the expected age.
+monitor: disabled
 interval: 5m
 check:
   type: file

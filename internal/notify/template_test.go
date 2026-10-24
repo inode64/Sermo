@@ -51,6 +51,27 @@ body: |
 	}
 }
 
+// The packaged template is installed as /etc/sermo/templates/default-alert.yml
+// and promises Sermo's own subject and body: a formatter once turned its {{ }}
+// into "{ { } }", and every notifier using it sent that text literally.
+func TestPackagedDefaultAlertTemplateKeepsSubjectAndBody(t *testing.T) {
+	dir, err := filepath.Abs(filepath.Join("..", "..", "templates"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	tmpl, err := LoadTemplate(dir, "default-alert")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := tmpl.Render(Message{Subject: "disk full", Body: "/ is 95% used"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Subject != "disk full" || strings.TrimSpace(got.Body) != "/ is 95% used" {
+		t.Fatalf("rendered subject %q body %q, want the message's own", got.Subject, got.Body)
+	}
+}
+
 func TestTemplatedNotifierRendersBeforeSend(t *testing.T) {
 	tmpl, err := parseTemplate("custom", []byte(`
 subject: "{{ .Subject }} / rendered"

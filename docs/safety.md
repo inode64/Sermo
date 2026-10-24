@@ -17,8 +17,9 @@ any `security:` toggle that tries to disable them.
 3. **Active named runtime locks always block service actions.** The operation
    engine checks `<runtime>/locks` automatically — no rule needed.
 4. **Never signal an unverified residual.** `force_kill: auto` derives authority
-   only from named `processes:` selectors with both an exact executable and real
-   user; a selector marked `delegated: true` is observe-only: never signalled,
+   only from its explicit `kill_only_if`, which then replaces the derived pairs,
+   or else from named `processes:` selectors with both an exact executable and
+   real user; a selector marked `delegated: true` is observe-only: never signalled,
    never a residual and contributes no authority at all; `force_kill: false`
    disables escalation to `SIGKILL`.
    The only other authority is kernel attribution: a residual the kernel places
@@ -45,9 +46,11 @@ any `security:` toggle that tries to disable them.
    not configurable; protected residuals are reported instead.
 7. **`force_kill: true` requires `kill_only_if`** with both a `users` selector
    and an `exe_any` selector, each non-empty. **`force_kill: auto`** requires
-   no broad fallback: it authorizes only strict `processes:` identities and
-   leaves services without one as `orphan_processes` unless their residuals are
-   proven members of the unit's control group.
+   no broad fallback: it authorizes only its explicit `kill_only_if` (held to
+   the same two non-empty selectors), which then replaces the derived pairs, or
+   else strict `processes:` identities, and leaves services without either as
+   `orphan_processes` unless their residuals are proven members of the unit's
+   control group.
 8. **Restart always verifies stop and start under the common gates.** Locks,
    preflight, guards, process identity, timeout and postflight wrap the complete
    operation. An init command error is recoverable only after verifying the
@@ -73,7 +76,7 @@ any `security:` toggle that tries to disable them.
     immediately before — SIGTERM, with SIGKILL only on explicit request. Both
     honour the watch's `dry_run`. When attribution is impossible (no per-unit
     control groups, no package database, an unreadable executable) the watch
-    reports that and lists nothing.
+    reports that and lists nothing on that criterion.
 11. **A libvirt virtual network with live guest interfaces is never
     destroyed.** `control: libvirt-network` stop/restart verifies every
     non-shut-off domain (paused and crashed included — their taps stay
@@ -98,7 +101,9 @@ that engine too, but are never eligible for automatic remediation. `pause`
 (libvirt suspend, Docker pause) runs no preflight, like `stop`, but honors locks
 and guards — a guard that blocks `stop` also blocks `pause` — and succeeds only
 once the backend reports the target `paused`. A successful manual pause pauses
-monitoring, as a manual stop does, until `resume` restores it:
+monitoring, as a manual stop does, until a successful manual `resume` (or
+`start`, `restart` or `repair`) restores it; see
+[Pausing monitoring](#pausing-monitoring).
 
 The daemon worker, Web UI and CLI build that engine from the same resolved
 service runtime: control target, backend process roots, process selectors, check
@@ -232,7 +237,8 @@ available; visibility never substitutes for backend verification.
 
 For direct and residual closes, Sermo waits for the selected process generation
 to exit before reporting success. A surviving or unreadable process yields an
-error at the operation timeout rather than a successful signal-delivery report.
+error, no later than the operation timeout, rather than a successful
+signal-delivery report.
 
 The `terminal_sessions` check is observation-only. It runs a bounded,
 argv-only `tmux` or `screen` listing as the explicitly configured account;
@@ -279,8 +285,11 @@ server to cancel a statement or close a connection.
 with `sermoctl sessions kill SERVICE WATCH ID [--connection]`
 (`POST /api/services/{name}/db-queries/{watch}/kill`), and a service watch's own
 opt-in `then.kill_query`. It is never a rule action, and a host watch cannot
-kill a statement: the operation needs a service's engine. (The one host watch
-that signals OS processes, [`unowned_processes`](configuration.md#unowned_processes--processes-no-unit-or-package-accounts-for),
+kill a statement: the operation needs a service's engine. (The host watches
+that signal OS processes do so only through the shared kill gate: a
+`type: process` watch's [`then.kill`](configuration.md#thenkill--terminate-the-matched-process)
+is bound to the exact executable and user its check matches, and
+[`unowned_processes`](configuration.md#unowned_processes--processes-no-unit-or-package-accounts-for)
 is bound by invariant 10 above.)
 
 **The request carries only an identity.** The client sends the statement id and
@@ -357,11 +366,13 @@ the single operator state `started` or `stopped` while monitoring is paused
 affects Sermo's monitoring; it does not stop the service itself, and manual
 `sermoctl` actions still work.
 
-A successful manual `stop` from `sermoctl` or the web UI also pauses monitoring
-when the service was monitored. The state row records that the pause came from a
-manual stop, so a later successful manual `start` restores monitoring only in
-that case. If the service was already unmonitored before the stop, the later
-start preserves that operator choice.
+A successful manual `stop` or `pause` from `sermoctl` or the web UI also pauses
+monitoring when the service was monitored. The state row records that the pause
+came from that manual action, so a later successful manual `start`, `restart`,
+`resume` or `repair` — or one of them whose postflight failed while the service
+stayed active — restores monitoring only in that case. If the service was
+already unmonitored before the stop, the later start preserves that operator
+choice.
 
 ## System metrics
 
@@ -447,7 +458,9 @@ Because the daemon runs as root:
   **authentication** with a read-only guest role (a password-only login form
   that issues an `HttpOnly` session cookie and throttles repeated failures, or
   HTTP Basic for API clients), requires the **`X-Sermo-Csrf`
-  header** on every state-changing request (blocking cross-site forgery from a
+  header** on every state-changing request except the login form's POST, which
+  a plain HTML form cannot send it from and which is rejected unless it comes
+  from the dashboard's own origin (blocking cross-site forgery from a
   browser), and sets HTTP timeouts. It speaks plain HTTP, so to reach it from off
   the host you **must** put it behind a TLS-terminating reverse proxy
   (nginx/Apache) — see
@@ -464,8 +477,9 @@ process and again after user resolution; an expired operation cannot begin a
 new TERM or KILL delivery.
 
 Process discovery records the kernel start time. Residual cleanup, mount blocker
-signalling, process-watch signals, SSH session closes and native signal reloads
-bind delivery to a Linux pidfd and
+signalling, process-watch and `unowned_processes` kills (watch and dashboard),
+SSH session closes, native signal reloads, sermod's startup hygiene and
+`sermoctl daemon reload` bind delivery to a Linux pidfd and
 revalidate that generation, resolved executable and real UID before sending.
 An unreadable identity, changed generation or unavailable pidfd support blocks
 delivery; there is no fallback to a numeric-PID signal. Operators using these
@@ -516,7 +530,8 @@ is not proof that maintenance has finished; lock listings retain the diagnostic
 warning. A malformed lock for a different service does not block this service.
 
 The **internal operation lock** (`<engine.runtime>/ops/<service>.lock`)
-serializes start/stop/restart/reload/resume/repair for one service. It is deliberately outside the
+serializes start/stop/restart/reload/resume/pause/repair, the manual session
+and terminal-source closes and `kill_query` for one service. It is deliberately outside the
 named-lock namespace so it cannot collide with a user lock named `op`, is never
 listed as a named lock, and cannot be released by `sermoctl lock release`. A
 live holder makes a second operation fail fast with exit `75` ("operation in
@@ -526,6 +541,7 @@ Lock files are JSON:
 
 ```json
 {
+  "acquisition_id": "QJ4XW2ZK7MN5RTB3DLYHVE6GFA",
   "service": "mysql",
   "name": "backup",
   "reason": "backup mysql",
@@ -659,7 +675,8 @@ Discovery order: backend information (systemd MainPID/cgroup; OpenRC status)
 → configured pidfiles → `processes:` selectors → child process tree from
 `/proc`, deduplicated by PID.
 Monitoring (worker cycles, the dashboard, service metric watches, the `zombies`
-check, and host `type: process` watches that run no faster than that window)
+check, and host `type: process` and `process_policy` watches that run no faster
+than that window)
 shares one `/proc` snapshot and one backend PID answer per unit for half an
 `engine.interval`. Every
 observation an operation acts on (stop, residual cleanup, reaper rounds, start
@@ -682,15 +699,17 @@ a name-only authority.
 ## Stop and signal escalation
 
 `stop_policy` fields omitted by a catalog service or service inherit from
-`defaults.stop_policy`. The stop phase of an explicit stop or a `staged`
-restart:
+`defaults.stop_policy`. The stop phase of an explicit stop or a restart:
 
 1. Backend `Stop`, observe processes until confirmed absent or `graceful_timeout`
    expires, then discover residuals. Process-free services use inactive init state
    instead of process absence. A service without a strict `exe` + `user`
-   selector can never prove absence, so its wait ends early only when init
-   reports the unit inactive and every process generation observed before the
-   stop is gone from the complete process table; a stop request against a unit
+   selector can never prove absence, so its wait ends early only when every
+   process generation observed before the stop is gone from the complete
+   process table and init then reports the unit inactive or failed (systemd
+   records a daemon that died of the stop signal as failed). Ending the wait
+   early proves nothing more: residual discovery and init reconciliation still
+   need positive evidence before a start. A stop request against a unit
    that was already inactive with no observed process does not wait at all.
    A process that was already a stray before the stop is never waited for: the
    init's stop does not address it, so it would not exit on its own, and the
@@ -715,8 +734,9 @@ restart:
    `force_kill: false`. With `force_kill: false` nothing else is signalled and a
    survivor is `orphan_processes` (and a restart does **not** start).
 4. Residuals with `force_kill: true` or `auto` → classify each one: KILLABLE
-   only when every explicit `kill_only_if` field matches, when it matches a
-   single paired strict `processes:` identity (exact resolved exe **and** real
+   only when every explicit `kill_only_if` field matches, when — under `auto`
+   without an explicit `kill_only_if` — it matches a single paired strict
+   `processes:` identity (exact resolved exe **and** real
    UID; deleted executables require the additional file and ownership proof
    above, and protected PIDs are never killable), or when it is a proven member
    of the unit's control group. SIGTERM the
@@ -806,8 +826,8 @@ the unit's `KillMode` and on `stop_policy.keep_children`:
   group with it, so no stray survives to be a residual.
 - `KillMode=process` / `none`, or OpenRC: survivors remain.
   - With `keep_children: true` (the catalog's sshd, NetworkManager, libvirt,
-    container and cron profiles) every non-principal process is kept, so there
-    is no stray at all: no residual, no signal, no blocked start.
+    GlusterFS, container and cron profiles) every non-principal process is
+    kept, so there is no stray at all: no residual, no signal, no blocked start.
   - Otherwise a residual the kernel places in the service's own control group
     (systemd `<unit>.service`, OpenRC `openrc.<unit>`) receives `SIGTERM`, even
     with `force_kill: false`, and `SIGKILL` only with `force_kill: true` or
@@ -884,7 +904,9 @@ then at most one operation.
   by the mandatory per-service `policy` block (cooldown, `max_actions`,
   backoff). Check execution shares a global pool
   (`engine.max_parallel_checks`). A check that cannot get a slot waits — it is
-  not skipped.
+  not skipped — and its timeout starts only once it gets the slot.
+  Cancellation while it waits (shutdown, reload, an operation's deadline)
+  reports it unavailable without starting the probe.
 - **Configuration health**: a service's `preflight.config` is copied into the
   `configuration` check — warning-grade unless the entry declares its own
   severity, and never counted against SLA — and runs through that same bounded pool,

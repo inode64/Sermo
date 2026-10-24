@@ -82,7 +82,7 @@ Connection-protocol checks (MySQL, PostgreSQL, Redis, Docker, libvirt, etc.) are
 | `process_count` | condition | the number of processes (host-wide, or filtered by `user`/`exe`/`exe_dir`) satisfies `count {op, value}`|
 | `hdparm`      | condition | a disk's `hdparm` read throughput crosses a threshold (`read`/`cached` MB/s) (see Disk throughput)|
 | `sensors`     | condition | hwmon hardware sensors cross a threshold (`temp` °C / `fan` RPM / `voltage` V) (see Hardware sensors)|
-| `smart`       | condition | a drive's SMART health/attributes and identity (failed verdict, `reallocated`, `pending_sectors`, `crc_errors`, `media_errors`, `wear`, `temperature`) (see Hardware sensors)|
+| `smart`       | condition | a drive's SMART health/attributes and identity (failed verdict, `reallocated`, `pending_sectors`, `crc_errors`, `media_errors`, `wear`, `temperature`, `power_on_hours`) (see Hardware sensors)|
 | `storcli`     | health | MegaRAID controller, enclosure, virtual/physical drive, cache protection, SMART/error and temperature health from StorCLI (see Hardware sensors)|
 | `ssacli`      | health | HPE Smart Array controller, logical/physical drive, cache, battery/capacitor, SMART/media-error and temperature health from SSA CLI (see Hardware sensors)|
 | `raid`        | condition | a Linux md software-RAID array is degraded/recovering (`degraded`/`recovering`/`arrays`) (see Hardware sensors)|
@@ -196,7 +196,7 @@ checks:
     command: [/usr/local/bin/queue-depth]
     expect_exit: 0
     expect_stdout: { op: "<", value: 100 }   # fewer than 100 items queued
-    expect_stderr: ""                         # nothing written to stderr
+    expect_stderr: { op: "==", value: "" }   # nothing written to stderr
 ```
 
 `user` runs the command as that OS user (Linux only). Sermo still executes the
@@ -266,7 +266,7 @@ checks:
     type: command
     command: ["/usr/bin/named-checkconf"]
     analyze:
-      use: [common, named]     # inherit catalog/patterns sets, in order
+      use: [common]            # inherit catalog/patterns sets, in order
       silence: [deprecated]     # drop inherited rules by id
       rules:                    # service-local rules, evaluated FIRST (precedence)
         - { id: zone-ok, match: "(?i)loaded serial", severity: ok }
@@ -602,7 +602,7 @@ series.
 ```yaml
 watches:
   watch-clock-drift:
-    check: { type: clock, max_offset: 100ms, sla: true }
+    check: { type: clock, servers: [pool.ntp.org], max_offset: 100ms, sla: true }
   storage-mnt-backup:
     check: { type: storage, path: /mnt/backup, used_pct: { op: ">=", value: "90%" }, sla: true }
 ```
@@ -807,9 +807,8 @@ for: { cycles: 3 }
 - Each key of `levels:` is a severity; its value restates the type's own
   threshold keys with a stricter value, in the same grammar. A level repeats
   only the keys it tightens. A `count` or `log` threshold is restated in its
-  nested form, `{ count: { op, value } }`, even when the base uses a
-  top-level `op`/`value`. An equality (`==`, `!=`) cannot tighten a shared key
-  and is ignored.
+  nested form, `{ count: { op, value } }`. An equality (`==`, `!=`) cannot
+  tighten a shared key and is ignored.
 - When a level's thresholds breach too, the failure is raised to that level:
   the highest breaching level wins. Levels read the sample the check already
   took — nothing probes twice — and never grade an unavailable, skipped or
@@ -1252,6 +1251,7 @@ checks:
 
 rules:
   alert-api-cert:
+    type: alert
     if:
       failed: { check: api-cert }
     then:
@@ -1277,9 +1277,10 @@ external tools): PEM **certificate**, **certificate request** (CSR), PKCS#1 / EC
 PKCS#8 **private keys**, PKIX **public key**, **OpenSSH** private key, and **OpenSSH**
 public key (`authorized_keys` line). Certificates are checked for expiry/validity as
 above; material that does not expire (keys, CSRs) fails only on
-`on_change`/`on_algorithm_change`. A **missing, unreadable or unparseable file makes
-the check fail** (a local configuration problem, unlike a transient network
-error). `cert_verify`, `port` and `server_name` do not apply to files.
+`on_change`/`on_algorithm_change`. A **missing file makes the check fail** (a
+local configuration problem, unlike a transient network error); a file that
+cannot be read or parsed is an unavailable observation. `cert_verify`, `port`
+and `server_name` do not apply to files.
 
 For a PEM bundle, the check inspects the **first certificate**, even when a
 private key or CSR appears before it. Keep the leaf certificate before its
@@ -1936,11 +1937,10 @@ Protocols, in the order of the table above:
 
   Most interesting conditions: `containers.running` (expected services up),
   `containers.stopped` (crashed/exited containers), per-`container` `status`/`health`
-  and `restartcount`. The Docker check is read-only. To let Sermo start, stop,
-  restart or resume that same container through the safe operation engine, add a
-  service-level `control: { type: docker, container: ... }` block.
   and `restartcount` (restart loops), `warnings`, and `on_version_change` for engine
-  upgrades.
+  upgrades. The Docker check is read-only. To let Sermo start, stop, restart,
+  pause or resume that same container through the safe operation engine, add a
+  service-level `control: { type: docker, container: ... }` block.
 - `smb` (aliases `samba`, `cifs`) — default port 445 (TCP). `user` is **optional**.
   It first runs an SMB2 `NEGOTIATE` (proving the server is up) and reports the
   negotiated **dialect** as the `version` (`2.0.2`/`2.1`/`3.0`/`3.0.2`/`3.1.1` —
@@ -2273,8 +2273,8 @@ checks:
 
 - **Operators:** `>`, `>=`, `<`, `<=` compare numerically (result and `value`
   must parse as numbers); `==` / `!=` compare numerically when both are numbers,
-  otherwise as strings (equal/different); `=~` matches the result against `value`
-  as a Go (RE2) regular expression.
+  otherwise as strings (equal/different); `contains` is a substring match; `=~`
+  matches the result against `value` as a Go (RE2) regular expression.
 - **Engines:** `mysql`/`mariadb` and `postgres` use the same connection fields
   as their protocol checks (`host`/`port`/`user`/`password`/`database`/`tls`)
   and **require a `user`**; `sqlite` takes a `path` and opens it **read-only**. A `mysql`/`mariadb` engine also accepts `socket`
@@ -2307,7 +2307,8 @@ checks:
 
 - Result data carries `engine`, `query`, `op`, `threshold`, the raw `result`
   string and, when numeric, a `value` for hooks/rules. A query error, a missing
-  database or a `NULL` result fails the check. A server that refuses the
+  database or a `NULL` result makes the check unavailable, not a threshold
+  verdict. A server that refuses the
   connection or the query as saturated or not ready is
   [busy](#busy-servers), with `busy_reason` and `error_code`. The check only
   reads — point it at a read-only user.
@@ -2639,7 +2640,7 @@ checks:
   aggregate value, since `time` is first). *Flux* returns annotated CSV; by
   default the result is the **`_value`** column of the first data row. Set
   **`column`** to read a named column in either mode. A query that matches nothing
-  fails the check ("no value").
+  makes the check unavailable ("no value").
 - **Operators** behave exactly as the `sql` check's (`>` `>=` `<` `<=` numeric;
   `==`/`!=` numeric-or-string; `contains` substring; `=~` RE2 regexp).
 - **Auth.** *InfluxQL:* a `user`/`password` is sent as HTTP Basic auth; an
@@ -2648,7 +2649,7 @@ checks:
   point it at a read-only user/token.
 - Result data carries `language`, `query`, `op`, `threshold`, the `database`/`org`
   in use, the raw `result` and, when numeric, a `value` for hooks/rules. A query
-  error (e.g. unknown database, bad token) fails the check.
+  error (e.g. unknown database, bad token) makes the check unavailable.
 
 ### Size growth (`size`)
 
@@ -3341,8 +3342,9 @@ samples.
 ### Hardware sensors
 
 Physical-health checks are **condition-style**: predicates are alerting
-conditions. Numeric values are **recorded over time and graphed** in the service
-detail so gradual degradation is visible.
+conditions. `storcli`, `ssacli` and `lvm` are the exception: they are health
+checks, `ok` when the hardware is healthy. Numeric values are **recorded over
+time and graphed** in the service detail so gradual degradation is visible.
 
 - **`sensors`** — lm-sensors-style **hwmon** inputs (no external tool; reads
   `/sys/class/hwmon`). Aggregates: `temp` (the hottest matching temperature, °C),
@@ -3514,8 +3516,9 @@ detail so gradual degradation is visible.
 
 - **`edac`** — **ECC memory errors** from the kernel EDAC subsystem (native,
   `/sys/devices/system/edac`). `ce` is the cumulative correctable count and `ue`
-  the uncorrectable count; with no predicate it alerts on `ue > 0`. The check fails
-  when the platform exposes no EDAC controllers (so you notice ECC isn't reported).
+  the uncorrectable count; with no predicate it alerts on `ue > 0`. The check is
+  unavailable when the platform exposes no EDAC controllers (so you notice ECC
+  isn't reported).
 
   ```yaml
   checks:
@@ -3565,7 +3568,7 @@ checks:
   counted); unreadable subdirectories are skipped. Hidden descendants (names starting
   with `.`) and their subtrees are skipped by default; set `include_hidden: true` to
   count them. Default counts only the immediate entries.
-- A missing or unreadable `path` makes the check fail. The observed total is
+- A missing or unreadable `path` makes the check unavailable. The observed total is
   exposed in the check's result data as `count`.
 - The threshold is the `count: {op, value}` predicate, the `{op, value}` form
   the other checks use; a top-level `op`/`value` is rejected.
@@ -3578,7 +3581,7 @@ checks:
   baselines (no alert), and only
   increases can trip the check; steady or shrinking directories pass. Result data
   carries `count`, `baseline_count`, `growth_count`, `window` and `value` (the
-  growth). Use either `count`/`op`/`value` or `delta`/`within`, not both.
+  growth). Use either `count` or `delta`/`within`, not both.
 
 ### Log matches (`log`)
 
@@ -3645,11 +3648,12 @@ scope: system    total_memory, total_swap, total_cpu, load1, load5, load15
 ```
 
 **A `scope: system` metric may only drive `alert` rules, never remediation.** It
-describes the whole machine, not one service, so a `restart`/`start`/`stop` rule
+describes the whole machine, not one service, so a remediation or guard rule
 that reads a system metric — directly, or through a `failed`/`active` reference
-to a `type: metric, scope: system` check — is dropped at config load with a
-warning. This is a safety invariant: a system-wide signal must never act on an
-individual service (see [docs/safety.md](safety.md)).
+to a `type: metric, scope: system` check — is a configuration validation error,
+and one that reaches the rule engine anyway is dropped with a warning. This is
+a safety invariant: a system-wide signal must never act on an individual
+service (see [docs/safety.md](safety.md)).
 
 **Service metrics sum across the whole discovered process tree** — the matched
 processes *and* their child/descendant processes — so a service's `cpu`,
@@ -3843,8 +3847,9 @@ named success/failure polarity.
 `changed` is true when the file at `path` differs (size/mtime) from the baseline
 tracked across artifact samples, or when `app` names a linked app whose version
 changed at the selected `level` (`major`, `minor` or `patch`; default `patch`).
-The first cycle adopts the current value (a daemon start never fires), and a
-successful `restart`/`start` re-baselines it. A failed app version command is an
+`library` in place of `path` names a catalog library (`catalog/libs/`) and
+watches its file. The first cycle adopts the current value (a daemon start
+never fires), and a successful `restart`/`start` re-baselines it. A failed app version command is an
 invalid sample: it does not fire and does not update the baseline. An app that
 is not installed (including a failed `version_match`) is an unavailable sample:
 it is false without a rule-evaluation error and does not set a baseline. When it
@@ -3919,7 +3924,7 @@ they do not support `for:` or `within:` windows; declaring either on a guard is
 a validation error.
 
 `blocks:` accepts `restart`, `start`, `stop`, `reload`, `resume` and the
-manual-only operations `repair`,
+manual-only operations `pause` (freezing a VM or container in place), `repair`,
 `close_session` (closing an SSH or terminal session),
 `close_terminal_source` (closing an empty tmux server) and `kill_query`
 (cancelling a database statement listed by a [`db_queries`](#running-database-statements-db_queries)
@@ -3930,7 +3935,7 @@ the action it names **and** to every action that performs that step:
 | `blocks:` entry | also denies |
 |---|---|
 | `start` | `restart`, `repair` |
-| `stop` | `restart` |
+| `stop` | `restart`, `pause` |
 
 Session closes signal one session process and do not start or stop the service,
 so only `close_session` / `close_terminal_source` deny them. Likewise only
@@ -4122,10 +4127,10 @@ watches:
         WAL for a replication slot (limit ${check.threshold} MiB)
 ```
 
-Because a `sql` check reports "not ok" when the connection itself fails, a
-database that is down never raises the threshold alert — cover that case with a
-separate connection check (`type: postgres`, `type: mysql`, …) rather than by
-relaxing the query.
+Because a `sql` check reports a failed connection as unavailable rather than as
+a threshold verdict, a database that is down never raises the threshold alert —
+cover that case with a separate connection check (`type: postgres`,
+`type: mysql`, …) rather than by relaxing the query.
 
 #### Unavailable and busy observations
 

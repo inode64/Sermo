@@ -130,8 +130,8 @@ func (a App) runSessionsKill(ctx context.Context, opts options) int {
 	case result.OK:
 		return exitSuccess
 	case status == http.StatusConflict:
-		// The daemon refused: a guard, panic mode, a lock, or the statement is
-		// gone. Same exit as other operations blocked by the safety engine.
+		// The daemon refused: a guard, a lock, or the statement is gone. Same
+		// exit as other operations blocked by the safety engine.
 		return exitBlocked
 	default:
 		return exitRuntimeError

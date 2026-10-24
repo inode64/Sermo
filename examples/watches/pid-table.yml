@@ -1,7 +1,7 @@
 name: pid-table
 category: host
-# Watch the kernel PID table (threads vs kernel.pid_max). A full table makes
-# every fork()/clone() fail host-wide.
+# Watch the kernel PID table (threads vs the lower of kernel.pid_max and
+# kernel.threads-max). A full table makes every fork()/clone() fail host-wide.
 monitor: disabled
 interval: 30s
 check:

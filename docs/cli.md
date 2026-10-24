@@ -25,8 +25,10 @@ Without `--timeout`, live service queries (`status` and `is-active`) use the
 Web UI, which a service's `stop_policy` may raise. `sessions` uses the same
 90-second default (a statement kill runs through the daemon's operation engine),
 while each request to the daemon keeps its 10-second web client bound. `notifier test` uses
-`engine.default_timeout` (default `10s`), like the Web UI's test button. Other
-short probe commands keep their 2-second CLI budget.
+`engine.default_timeout` (default `10s`), like the Web UI's test button.
+`services` gives its configured-service listing (and a `--notify` send) 30
+seconds each, and `state compact` 90 seconds. Other short probe commands keep
+their 2-second CLI budget.
 `--timeout` must be a positive duration; `0` or a negative value is a usage
 error (exit `64`).
 For service operations, an explicit `--timeout` bounds backend preparation and
@@ -48,7 +50,7 @@ Manual runs support these flags:
 ```text
 sermod run [--config PATH] [--verbose|-v]
 sermod version
-sermod --version
+sermod --version | -V
 ```
 
 - `--config PATH` loads the global config file. The default is
@@ -85,6 +87,7 @@ sermoctl restart SERVICE [--no-cascade]
 sermoctl pause SERVICE                  # libvirt VM (suspend) or Docker container only
 sermoctl resume SERVICE
 sermoctl reload SERVICE
+sermoctl repair SERVICE                 # manual-only: clear a proven-stale pidfile, then a guarded start
 
 sermoctl mount TARGET                 # TARGET is a configured mount name or absolute path
 sermoctl umount TARGET
@@ -148,7 +151,9 @@ availability — `tcp`, `ports`, `http`, `route`, the `state` metric of `net` an
 is genuinely something not answering; a `cert` check reading a file on disk is a
 certificate nearing expiry, which is a condition, not a host being unreachable. A condition watch keeps no series: a filesystem crossing 90% used
 is a threshold being met, not an outage, and reporting it as availability would
-give a percentage that reads like uptime while meaning something else. The same
+give a percentage that reads like uptime while meaning something else. A check's
+[`sla:`](rules.md#opting-a-watch-into-availability-sla) boolean overrides this
+default in either direction. The same
 exclusions the services already apply carry over — a verdictless watch
 (`reports: state`) is a sensor and an advisory (`severity: warning`) is a thing
 to look at, so neither is downtime. A name is resolved as a service first, so an
@@ -171,7 +176,7 @@ Panic mode is a daemon-wide emergency switch for maintenance windows, attacks,
 denial-of-service, system malfunction or overload. While it is on, the daemon
 keeps running its checks (so status stays visible) but **suspends all hooks,
 alert notifications and automatic remediation**. Manual operations (`start`,
-`stop`, `restart`, `reload`, `pause`, `resume`) stay available, so you can drive services
+`stop`, `restart`, `reload`, `pause`, `resume`, `repair`) stay available, so you can drive services
 by hand without the daemon fighting you.
 
 ```bash
@@ -202,7 +207,10 @@ is running with `web` enabled, `sermoctl status` prefers the daemon's computed
 state (including `starting` during startup settling); if the web API is
 unreachable it falls back to the init backend plus local monitor metadata, as
 before. Service states are: `disabled`, `stopped`, `started` (backend active but
-not monitored), `starting` (startup/operation settling), `collecting` (active
+not monitored), `paused` (an unmonitored VM or container the backend reports
+frozen, as a manual `pause` leaves it), `starting` (startup/operation settling),
+`active` (active and monitored with a trusted service process confirmed, while
+the remaining indicators are still being collected), `collecting` (active
 and monitored, but graphs/indicators are not complete yet), `warning` (active
 with an advisory problem such as an invalid application configuration, an
 unattributed process tree, or an init unit failed while an exact process and its
@@ -331,9 +339,9 @@ listed with state `error` and a warning on stderr.
 
 `--json` prints `{"services": [{"name", "display_name", "backend", "unit",
 "state", "monitored", "enabled", "error"}]}`. `--notify` sends a configured
-services health report: a monitored service in a failed, warning, stale,
-restart-required, stopped or `error` state counts as an issue, and disabled or
-unmonitored services are counted apart.
+services health report: a monitored service in a failed, warning, stale or
+restart-required state, and any service in the `error` state, counts as an
+issue, and disabled or unmonitored services are counted apart.
 
 `sermoctl patterns` lists only the output-analysis pattern sets that configured
 services name in `analyze.use`, with their rule count and the services using
@@ -447,6 +455,17 @@ unexpected panic recovered at the top level.
 `is-active` maps directly: `0` active, `1` not active (including a
 backend-`paused` container or VM), `2` error. Pausing daemon monitoring with
 `unmonitor` does not change the answer.
+
+Service operations (`start`, `stop`, `restart`, `reload`, `pause`, `resume`,
+`repair`) exit `0` on `ok`, `75` when `blocked` (operation in progress, an
+active named lock or a guard), `1` on `preflight_failed`, `postflight_failed`
+or `orphan_processes`, and `2` on `failed`. With `--json` they print the
+operation result: `service`, `action`, `status` and, when set, `message`,
+`guard` (the guard rule that blocked the action), `backend`, `warnings`,
+`checks`, `locks`, `processes` and `signals`, plus a `cascade` array with one
+`{service, action, status, message, error}` entry per `also_apply` target that
+`start`, `stop` or `restart` reached. `repair` is manual-only; see
+[safety](safety.md#the-operation-engine) for what it may remove.
 
 `status` and `is-active` still answer for a raw init unit when there is no
 config. When the config file exists but does not load (for example a YAML

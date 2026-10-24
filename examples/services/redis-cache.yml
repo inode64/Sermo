@@ -9,4 +9,7 @@ service: redis-cache
 # new value after expansion.
 variables:
   port: 6380
-  pidfile: /run/redis-cache/redis.pid
+
+# The redis catalog service lists its pidfiles directly, not through a variable,
+# so the second instance overrides the key itself.
+pidfile: /run/redis-cache/redis.pid

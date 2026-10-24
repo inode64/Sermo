@@ -4,15 +4,17 @@ uses: postfix
 # EXAMPLE — adapt the paths/thresholds to your host, then keep it or delete it.
 #
 # This shows a service that carries its own `watches:` section. Its checks run
-# scoped to the service: `process_count` counts only the service's PID tree
-# (parent + children) and `metric` reads that tree from a dedicated collector.
+# scoped to the service: `process_count` counts only what discovery attributes
+# to it (its PID tree and the init unit's control group) and `metric` reads
+# that set from a dedicated collector.
 # Each watch is reported as "mail-queue:<name>". Use a service watch for a
 # hook/notification tied to a service-local signal that is NOT a remediation
 # (remediations belong in `rules:`).
 #
-# The types NOT available here are the host-scoped `net`/`icmp`/`swap` watches
-# and the `process` watch (it matches host-wide and can kill) — declare those
-# under a global `watches:` document. For service-scoped process monitoring use
+# The types NOT available here are the host-scoped `net`/`icmp`/`swap`,
+# `process_policy` and `unowned_processes` watches and the `process` watch (it
+# matches host-wide and can kill) — declare those under a global `watches:`
+# document. For service-scoped process monitoring use
 # `process_count` and `metric`, as below.
 
 watches:
@@ -36,10 +38,11 @@ watches:
         command: [/usr/local/bin/sermo-mail-drain.sh]
         timeout: 30s
 
-  # Runaway worker count. Inside a service, process_count is scoped to this
-  # service's PID tree (its processes plus their descendants), so a fork storm in
-  # postfix trips it while unrelated host processes are never counted — no user/
-  # exe filter needed. Add user:/exe: only to narrow further WITHIN the tree.
+  # Runaway worker count. Inside a service, process_count is scoped to what
+  # discovery attributes to this service (its processes, their descendants and
+  # its unit's control group), so a fork storm in postfix trips it while
+  # unrelated host processes are never counted — no user/exe filter needed. Add
+  # user:/exe: only to narrow further WITHIN that set.
   worker-runaway:
     check:
       type: process_count

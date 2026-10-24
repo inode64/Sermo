@@ -19,16 +19,18 @@ during a backup, kills a process that happens to share a binary name, or acts on
 a service whose config is broken and makes the outage worse. Sermo is built
 around the opposite principle — **prove it is safe, then act**:
 
-- **Guarded, never blind.** Every start/stop/restart/reload/resume, plus the
-  manual stale-pidfile repair path, runs through
-  one operation engine that checks preflight, guards and runtime locks first. A
-  blocked action does not run.
+- **Guarded, never blind.** Every start/stop/restart/reload/resume/pause, plus
+  the manual stale-pidfile repair path, runs through one operation engine that
+  checks preflight, guards and runtime locks first. A blocked action does not
+  run.
 - **Knows the real processes.** It discovers a service's actual PIDs from
   `/proc`, so health, residual detection and (rare, opt-in) kills are based on
   the resolved executable and UID — never on a process name.
 - **Validates before it touches anything.** Broken config, a failing required
   preflight, or an active named lock blocks remediation instead of amplifying an
   outage.
+- **Busy is not down.** A server that answers "too many connections" or
+  "loading" is reported with its own reason, never restarted for it.
 - **Portable.** The same configuration and behaviour run over systemd *and*
   OpenRC; the init backend is auto-detected.
 - **Honest availability.** SLA counts only cycles it actually observed — time
@@ -40,17 +42,26 @@ around the opposite principle — **prove it is safe, then act**:
 - A **fleet of independent workers** — one per service — each running its own
   checks, evaluating rules and driving remediation on its own schedule; a panic
   in one worker never takes down the daemon.
-- A broad **check catalog**: service state/version/config, TCP ports, HTTP(S)
-  and WebSocket endpoints, TLS certificate expiry, database connectivity and
-  queries (MySQL/MariaDB, MongoDB, InfluxDB, SQLite integrity, arbitrary SQL),
-  egress interface, default route, firewall rules, clock drift, file/dir size
-  growth, disk throughput (`hdparm`), hardware sensors, and process/count
-  metrics.
+- A broad **check catalog** ([full list](docs/rules.md#checks)): service
+  state/version/config, TCP ports, HTTP(S) and WebSocket endpoints, TLS
+  certificate expiry, native protocol probes (PostgreSQL, MySQL/MariaDB, Redis,
+  MongoDB, SMTP/IMAP, DNS, LDAP, SNMP, AMQP, …), SQL queries, replication and
+  long-running statements, SQLite integrity, storage health (SMART, RAID, LVM,
+  `hdparm` throughput), hardware sensors, egress interface, default route,
+  firewall rules, clock drift, file/dir size growth, and process/count metrics.
+- **Replaced code detection** — services still running a binary or shared
+  library replaced on disk by an update, and `restart_on_change` to restart a
+  service when one of its apps or configuration files changes.
 - **Check interdependencies** (`requires` / `skip_when_changed`) so a probe is
   only run when its prerequisites hold.
 - **Host watches** — monitor resources that aren't services (mounts, RAID
   arrays, network uplinks, certificates, …), firing hook commands and/or
-  notifications.
+  notifications, and repairing storage when asked (`then.expand` grows a
+  volume, `then.remount` recovers a hung mount).
+- **Security watches** — `process_policy` alerts when a user runs a program its
+  policy does not allow, and `unowned_processes` lists processes no init unit or
+  installed package accounts for. Being listed authorizes nothing: only the
+  watch's own `kill_only_if` or an administrator's verified choice signals one.
 
 **Safe remediation**
 - A single **operation engine** shared by the CLI and the daemon: operation
@@ -64,15 +75,17 @@ around the opposite principle — **prove it is safe, then act**:
 - **Hard safety invariants** that YAML cannot disable (see below).
 
 **Availability & history**
-- Per-service **SLA over rolling windows** (hour → year), stored as one archive per
-  graph window so a year of history stays bounded without losing an incident.
+- **SLA over rolling windows** (hour → year) for every service and availability
+  watch, stored as one archive per graph window so a year of history stays
+  bounded without losing an incident.
 - An **event/activity log** with retention and compaction of the state store.
 
 **Operate**
 - A focused operator **CLI** (`sermoctl`) for status, safe lifecycle actions,
   config validation, locks, processes, preflight, inventory, SLA and events.
-- **Notifications** to email, Slack, Teams and webhook sinks (ntfy/Telegram/
-  Gotify) with a templated default message, graded on five severity levels
+- **Notifications** to email, Slack, Teams, Telegram, ntfy, Gotify and the
+  logged-in terminals (`tty`, `wall`) with a templated default message, graded
+  on five severity levels
   (debug → critical): each notifier sets the lowest level it receives, a
   threshold can escalate from warning to error to critical, and an incident is
   announced once per level instead of once per watch.
@@ -87,9 +100,13 @@ around the opposite principle — **prove it is safe, then act**:
 - A live, self-contained dashboard: per-service checks, SLA history, latency
   graphs, an event feed, and the full inventory (services / apps / libraries)
   and host watches.
+- A **Sessions** panel: interactive SSH, tmux and screen sessions, and the
+  statements running on MySQL, MariaDB and PostgreSQL; an administrator can
+  close a verified session or cancel a re-verified statement.
 - **Push-driven** via server-sent events with a polling fallback, and built to
   **WCAG 2.2 AA** accessibility.
-- Loopback HTTP with optional auth — expose it only behind a TLS reverse proxy.
+- Loopback HTTP by default, with admin and read-only guest logins from hashed
+  credential files — expose it only behind a TLS reverse proxy.
 
 ## How it works
 
@@ -106,7 +123,7 @@ clients ── sermoctl (CLI) ─┐                    ┌── operation.Engi
            browser (Web UI) ┤                    ├── named locks (oplock + scanner)
                             │   sermod (daemon)  │
       signals ── SIGHUP ────┼── Monitor ─ Scheduler ─ Fleet ┤── state store (SLA · events · metrics)
-                SIGTERM ────┘        │   (Worker per service │── notifiers (email/slack/teams/webhook)
+                SIGTERM ────┘        │   (Worker per service │── notifiers (email/slack/teams/telegram/…)
                                      │    Watch per resource)│
       config + packaged catalog ────┘                       └── web.Server (dashboard + /api)
 ```
@@ -117,12 +134,14 @@ code-anchored diagrams (operation pipeline, lock states, monitoring cycle).
 ## The two binaries
 
 - **`sermoctl`** — the operator CLI: status, safe start/stop/restart/reload/
-  resume/repair, config validate, locks, processes, preflight, per-service
-  availability/SLA, inventory and events. Read-only commands do not need root.
+  resume/repair (and pause for libvirt VMs and Docker containers), config
+  validate, locks, processes, preflight, availability/SLA, inventory and events.
+  Read-only commands do not need root.
 - **`sermod`** — the daemon: one independent worker per service runs checks,
   evaluates rules and drives remediation through the same safe operation engine
   `sermoctl` uses. It also runs **host watches** that fire hook commands and/or
-  **notifications** (email, Slack, Teams, webhooks), and can serve the **web
+  **notifications** (email, Slack, Teams, Telegram, ntfy, Gotify, terminals),
+  and can serve the **web
   dashboard** (set `web.port`, recommended `9797`) — loopback HTTP with optional
   auth; expose it only behind a TLS reverse proxy
   ([how](docs/configuration.md#behind-a-reverse-proxy-required-to-expose-it)).
@@ -133,22 +152,35 @@ These cannot be turned off in YAML — validation rejects any `security:` toggle
 that tries. In full in [docs/safety.md](docs/safety.md):
 
 1. **No action on a failed required preflight** — blocked with `preflight_failed`.
-2. **No action a guard blocks** — guards are evaluated before remediation.
+2. **No action a guard blocks** — guards are evaluated before remediation, and
+   what an action performs decides which guards apply (a guard on `start` also
+   blocks `restart` and `repair`).
 3. **Active named runtime locks always block service actions** — checked
    automatically, no rule needed.
-4. **SIGKILL only where `force_kill` allows it** — the engine default is `false`;
-   the shipped `sermo.yml` sets `auto`, which escalates only for strict
-   `processes:` identities and for processes the kernel places in the service's
-   own control group. `false` rules SIGKILL out for a service.
+4. **Never signal an unverified residual** — a residual is signalled only when
+   an explicit `kill_only_if` selector or a strict `processes:` identity names
+   it, or the kernel places it in the service's own control group. SIGKILL also
+   needs `force_kill`: the engine default is `false`; the shipped `sermo.yml`
+   sets `auto`.
 5. **Never kill by process name** — a kill requires an exact match on the
-   resolved `/proc/<pid>/exe` path **and** the real UID against an explicit
-   `kill_only_if` selector or a strict `processes:` identity, or kernel proof
-   that the process sits in the service's own control group; anything it cannot
-   positively identify is *reported, not killed*.
+   resolved `/proc/<pid>/exe` path **and** the real UID; a command line only
+   narrows a match, and anything Sermo cannot positively identify is *reported,
+   not killed*.
 6. **Never send terminating signals to PID 1 or kernel threads** — blocked
    centrally, not configurable.
 7. **`force_kill: true` requires `kill_only_if`** with non-empty `users` and
    `exe_any` selectors.
+8. **Restart always verifies stop and start** under the same locks, preflight,
+   guards and deadline; surviving processes block the new start.
+9. **A stray process is a diagnostic, never a target** — a control-group member
+   no selector claims is reported, and nothing signals it for being a stray.
+10. **`process_policy` only alerts, and `unowned_processes` authorizes
+    nothing** — being listed never makes a process a signal target.
+11. **A libvirt network with live guest interfaces is never destroyed.**
+12. **A database statement is cancelled only after it is re-verified** — a
+    changed or finished statement is never killed.
+13. **A busy server is never restarted for being busy** — "too many
+    connections", "loading" or "starting up" means it is alive.
 
 ## Build
 
@@ -172,8 +204,8 @@ Read-only `sermoctl` commands (status, config, etc.) do not need root.
 
 `make install` honors the standard GNU directory variables and `DESTDIR`
 staging, and installs the binaries, the full catalog (keeping the
-`services/apps/libs/patterns` layout), a sample `sermo.yml`, the default
-notification template, the tmpfiles.d config, and both the systemd unit and the
+`services/apps/libs/patterns` layout), the examples, a sample `sermo.yml`, the
+default notification template, the tmpfiles.d config, and both the systemd unit and the
 OpenRC init script (with their binary/config paths rewritten to match):
 
 ```sh
@@ -184,8 +216,9 @@ make install DESTDIR=/tmp/stage PREFIX=/usr    # stage for packaging
 Key variables (override on the command line): `DESTDIR`, `PREFIX`/`prefix`,
 `bindir`, `sbindir`, `datadir`, `sysconfdir`, `TMPFILESDIR`,
 `SYSTEMD_UNITDIR`, `OPENRC_INITDIR`. Granular targets are available too:
-`install-bin`, `install-catalog`, `install-config`, `install-templates`,
-`install-tmpfiles`, `install-systemd`, `install-openrc` (and `uninstall`). An
+`install-bin`, `install-catalog`, `install-examples`, `install-config`,
+`install-templates`, `install-tmpfiles`, `install-systemd`, `install-openrc`
+(and `uninstall`). An
 existing `sermo.yml` is never overwritten. `make install` does not create
 `/var/lib/sermo`; the installed tmpfiles.d config owns that directory creation.
 
@@ -229,6 +262,7 @@ sermoctl config validate
 
 # Operate a configured service through the safe engine
 sermoctl restart apache-main
+sermoctl pause vm-web            # suspend a libvirt VM or pause a Docker container
 
 # Pause / resume monitoring of a service (e.g. for maintenance)
 sermoctl unmonitor apache-main   # daemon stops checking it
@@ -238,10 +272,10 @@ sermoctl daemon reload           # ask sermod to re-read its config
 # Fence a maintenance window with a named runtime lock
 sermoctl lock apache-main --reason backup --ttl 1h -- /usr/local/bin/backup.sh
 
-# Availability (SLA) per service over rolling windows (hour..year)
-sermoctl sla                     # all services
+# Availability (SLA) over rolling windows (hour..year)
+sermoctl sla                     # every service and availability watch
 sermoctl sla apache-main         # one service
-sermoctl sla --series apache-main --since 168h  # per-minute series (graph data)
+sermoctl sla --series apache-main --since 168h  # stored series; buckets follow the window
 
 # Run the daemon
 sermod run --config /etc/sermo/sermo.yml

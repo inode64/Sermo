@@ -1,8 +1,10 @@
 # Sermo minimal installed configuration.
 #
 # Engine-wide settings are not merged into individual targets. Only the
-# target-safe parts of `defaults` are: dry_run for services and watches;
-# stop_policy, policy, rule_window and restart_on_change flags for services.
+# target-safe parts of `defaults` are: dry_run and clear_window for services
+# and watches; allow_dependencies, stop_policy, policy, rule_window, the
+# restart_on_change/reload_on_change flags, restart_on_stale_binary, fds_limit
+# and restart_on_fds_high for services.
 # For source-tree development and local validation, build with SERMO_DATADIR=$PWD
 # and use examples/sermo-dev.yml; this file intentionally points at installed
 # /etc/sermo and /usr/share/sermo locations.

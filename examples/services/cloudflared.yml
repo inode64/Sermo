@@ -2,12 +2,16 @@ name: cloudflared
 uses: cloudflared
 
 # The packaged catalog service assumes the unit is named "cloudflared", the binary is
-# /usr/bin/cloudflared, the process runs as user "cloudflared", and the local
-# metrics endpoint answers on 127.0.0.1:60123. Override these when your
-# distribution or tunnel config differs, for example:
+# the first cloudflared in /usr/bin, /usr/sbin, /usr/local/bin or /usr/local/sbin,
+# the process runs as user "cloudflared", and the local metrics endpoint answers
+# on 127.0.0.1:60123. Override these when your distribution or tunnel config
+# differs, for example:
 #
 # variables:
-#   binary: /usr/local/bin/cloudflared
 #   user: root
 #   host: 127.0.0.1
 #   port: 60123
+#
+# The binary comes from the cloudflared app, not this service: for one installed
+# elsewhere set `variables: { binary: /opt/cloudflared/bin/cloudflared }` in
+# /etc/sermo/apps.local/cloudflared.yml.
