@@ -36,7 +36,7 @@ func newSnapshotPersistence(records map[string]map[string]state.CheckSnapshotRec
 	for group, rows := range records {
 		stored := make(map[string]storedSnapshot, len(rows))
 		for name, rec := range rows {
-			stored[name] = newStoredSnapshot(snapshotFromRecord(rec))
+			stored[name] = newStoredSnapshot(CheckSnapshot(rec))
 		}
 		p.stored[group] = stored
 	}
@@ -133,7 +133,7 @@ func (p *snapshotPersistence) deltaLocked(group string, snaps map[string]CheckSn
 		if delta.Upsert == nil {
 			delta.Upsert = map[string]state.CheckSnapshotRecord{}
 		}
-		delta.Upsert[name] = snapshotRecord(snap)
+		delta.Upsert[name] = state.CheckSnapshotRecord(snap)
 		rows[name] = row
 	}
 	if p.dropMissing {

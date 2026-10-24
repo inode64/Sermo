@@ -2,23 +2,16 @@ package app
 
 import "sync"
 
-// startupParallelism bounds how many services are wired at once while the
-// daemon builds its workers and its web backend. Each service costs a handful
-// of init-backend queries (systemctl show, cgroup listings) and /proc scans;
-// wired one after another, 49 services took a loaded VM host ten minutes to
-// reach the web listener, and the fleet updater rolled the release back. The
-// engine's check parallelism already says how many external probes the host
-// should carry at once, so startup borrows it.
-func startupParallelism(maxParallel int) int {
-	return max(maxParallel, 1)
-}
-
 // ForEachParallel runs fn for every index below n with at most limit calls in
-// flight and returns once all of them finished. Callers keep results per index
-// so the assembled order stays the sorted, deterministic one. sermoctl uses it
-// for the same per-service backend queries when sermod does not answer.
+// flight (at least one) and returns once all of them finished. Callers keep
+// results per index so the assembled order stays the sorted, deterministic one.
+// The daemon wires its services through it at startup: each costs a handful of
+// init-backend queries and /proc scans, and wired one after another 49 services
+// once took a loaded VM host ten minutes to reach the web listener, so it
+// borrows the engine's check parallelism. sermoctl uses it for the same
+// per-service queries when sermod does not answer.
 func ForEachParallel(n, limit int, fn func(i int)) {
-	sem := make(chan struct{}, startupParallelism(limit))
+	sem := make(chan struct{}, max(limit, 1))
 	var wg sync.WaitGroup
 	for i := range n {
 		wg.Add(1)

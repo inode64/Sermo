@@ -287,9 +287,10 @@ func run(args []string) int {
 	defer func() { _ = instanceLock.Close() }()
 
 	phases.mark("load config and detect backend")
-	store, exitCode := openDaemonStore(cfg, logger)
-	if exitCode != 0 {
-		return exitCode
+	store, err := app.OpenStateStore(context.Background(), cfg)
+	if err != nil {
+		logger.Error("open state store", logFieldError, err)
+		return exitFailure
 	}
 	phases.mark("open state store")
 	defer func() { _ = store.Close() }()
@@ -572,15 +573,6 @@ func run(args []string) int {
 		logger.Info("sermod stopped")
 	}
 	return 0
-}
-
-func openDaemonStore(cfg *config.Config, logger *slog.Logger) (*state.Store, int) {
-	store, err := app.OpenStateStore(context.Background(), cfg)
-	if err != nil {
-		logger.Error("open state store", logFieldError, err)
-		return nil, exitFailure
-	}
-	return store, 0
 }
 
 func acquireDaemonRuntimeLock(cfg *config.Config, logger *slog.Logger) (string, io.Closer, int) {

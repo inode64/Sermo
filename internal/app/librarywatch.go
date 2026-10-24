@@ -382,7 +382,7 @@ func buildArtifactAppWatches(cfg *config.Config, deps Deps, samples *ArtifactSam
 		watch.Cycle = func(ctx context.Context) {
 			report := appinspect.InspectOne(ctx, runner, cfg, appName,
 				appinspect.WithUserLookup(deps.UserLookup))
-			storeAppSample(samples, appName, report)
+			samples.StoreAppReport(appName, report)
 		}
 		out = append(out, watch)
 	}

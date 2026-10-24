@@ -58,21 +58,26 @@ type serviceSnapshotStore interface {
 // the readings future publishes change back to it.
 func NewPersistentSnapshots(store serviceSnapshotStore, reportError func(error)) (*Snapshots, error) {
 	s := NewSnapshots()
-	s.reportError = reportError
-	if store == nil {
-		return s, nil
+	byService, persistence, err := hydrateSnapshots(store.ServiceCheckSnapshots, true, store.UpdateServiceCheckSnapshots, "service")
+	s.byService, s.persistence, s.reportError = byService, persistence, reportError
+	return s, err
+}
+
+// hydrateSnapshots loads one registry's persisted snapshots by group and the
+// persistence that writes their changes back. A partial load still hydrates
+// the decodable rows; the error names the ones it skipped.
+func hydrateSnapshots(load func() (map[string]map[string]state.CheckSnapshotRecord, error), dropMissing bool,
+	write func(map[string]state.CheckSnapshotDelta) error, what string,
+) (map[string]map[string]CheckSnapshot, *snapshotPersistence, error) {
+	records, err := load()
+	byGroup := make(map[string]map[string]CheckSnapshot, len(records))
+	for group, rows := range records {
+		byGroup[group] = snapshotsFromRecords(rows)
 	}
-	// A partial load still hydrates the decodable snapshots; the error names
-	// the rows it skipped.
-	records, err := store.ServiceCheckSnapshots()
-	for service, checkRecords := range records {
-		s.byService[service] = serviceSnapshotsFromRecords(checkRecords)
-	}
-	s.persistence = newSnapshotPersistence(records, true, store.UpdateServiceCheckSnapshots)
 	if err != nil {
-		return s, fmt.Errorf("load service check snapshots: %w", err)
+		err = fmt.Errorf("load %s check snapshots: %w", what, err)
 	}
-	return s, nil
+	return byGroup, newSnapshotPersistence(records, dropMissing, write), err
 }
 
 func (s *Snapshots) publishConfigured(service string, cache map[string]checks.Result, ran map[string]bool, checkTypes map[string]string, configID string) {
@@ -151,24 +156,9 @@ type watchSnapshotStore interface {
 // and persists the readings future publishes change back to it.
 func NewPersistentWatchSnapshots(store watchSnapshotStore, reportError func(error)) (*WatchSnapshots, error) {
 	s := NewWatchSnapshots()
-	s.reportError = reportError
-	if store == nil {
-		return s, nil
-	}
-	records, err := store.WatchCheckSnapshots()
-	for watch, slots := range records {
-		if s.byWatch[watch] == nil {
-			s.byWatch[watch] = map[string]CheckSnapshot{}
-		}
-		for slot, rec := range slots {
-			s.byWatch[watch][slot] = snapshotFromRecord(rec)
-		}
-	}
-	s.persistence = newSnapshotPersistence(records, false, store.UpdateWatchCheckSnapshots)
-	if err != nil {
-		return s, fmt.Errorf("load watch check snapshots: %w", err)
-	}
-	return s, nil
+	byWatch, persistence, err := hydrateSnapshots(store.WatchCheckSnapshots, false, store.UpdateWatchCheckSnapshots, "watch")
+	s.byWatch, s.persistence, s.reportError = byWatch, persistence, reportError
+	return s, err
 }
 
 func (s *WatchSnapshots) publishConfigured(watch, checkType string, r checks.Result, configID string) {
@@ -246,16 +236,12 @@ func watchResultSlot(r checks.Result) string {
 	return checks.DataKeyResult
 }
 
-func serviceSnapshotsFromRecords(records map[string]state.CheckSnapshotRecord) map[string]CheckSnapshot {
+func snapshotsFromRecords(records map[string]state.CheckSnapshotRecord) map[string]CheckSnapshot {
 	out := make(map[string]CheckSnapshot, len(records))
 	for name, rec := range records {
-		out[name] = snapshotFromRecord(rec)
+		out[name] = CheckSnapshot(rec)
 	}
 	return out
-}
-
-func snapshotFromRecord(rec state.CheckSnapshotRecord) CheckSnapshot {
-	return CheckSnapshot(rec)
 }
 
 func checkSnapshotFromResult(result checks.Result) CheckSnapshot {
@@ -264,10 +250,6 @@ func checkSnapshotFromResult(result checks.Result) CheckSnapshot {
 		OK:          result.OK, Condition: result.Condition, Optional: result.Optional, Skipped: result.Skipped,
 		Unavailable: result.Unavailable, Message: result.Message, Data: maps.Clone(result.Data), Severity: result.Severity.String(),
 	}
-}
-
-func snapshotRecord(snap CheckSnapshot) state.CheckSnapshotRecord {
-	return state.CheckSnapshotRecord(snap)
 }
 
 func (s *Snapshots) reportStoreError(err error) { reportCallbackError(s.reportError, err) }

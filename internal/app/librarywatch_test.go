@@ -95,7 +95,7 @@ func TestArtifactCheckStoresSamples(t *testing.T) {
 	appCheck := artifactCheck{
 		name:    "demo",
 		samples: appSamples,
-		store:   storeAppSample,
+		store:   (*ArtifactSamples).StoreAppReport,
 		inspect: func(context.Context) appinspect.Report {
 			return appinspect.Report{Version: "1.2.3", Status: appinspect.StatusOK}
 		},
