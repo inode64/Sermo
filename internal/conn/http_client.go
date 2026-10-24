@@ -27,6 +27,14 @@ func httpProbeClient(iface string, tlsConfig *tls.Config) *http.Client {
 	})
 }
 
+// withoutRedirects makes client stop at the first response. A liveness
+// endpoint judged by its status alone must not borrow the status of wherever a
+// redirect leads: an auth proxy's login page answers 200 too.
+func withoutRedirects(client *http.Client) *http.Client {
+	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	return client
+}
+
 // httpProbeBase builds the shared client and base URL for HTTP connection
 // probes. Its client always preserves cfg.Interface through httpProbeClient;
 // TLS follows the normal probe policy (plaintext by default, or HTTPS with an

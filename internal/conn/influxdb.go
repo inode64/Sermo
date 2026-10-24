@@ -27,6 +27,7 @@ const (
 
 func (influxdbProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	client, base := InfluxClient(cfg)
+	client = withoutRedirects(client)
 
 	// /health (v2 / v1.8+) carries a status and version; when the endpoint is
 	// absent (older v1) the request is not "handled" and we fall back to /ping.

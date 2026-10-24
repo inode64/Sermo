@@ -63,3 +63,22 @@ func TestPrometheusProbeBasicAuth(t *testing.T) {
 func TestPrometheusProbeDown(t *testing.T) {
 	assertProbeRefused(t, prometheusProtocol{}, deadPort(t))
 }
+
+// /-/healthy answers by status alone, so a redirect (an auth proxy sending the
+// probe to its login page) must not borrow the status of wherever it leads.
+func TestPrometheusProbeDoesNotFollowRedirects(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/login":
+			_, _ = io.WriteString(w, "<html>Sign in</html>")
+		default:
+			http.Redirect(w, r, "/login", http.StatusFound)
+		}
+	}))
+	defer srv.Close()
+
+	host, port := serverHostPort(t, srv)
+	if _, err := (prometheusProtocol{}).Probe(context.Background(), Config{Host: host, Port: port}); err == nil {
+		t.Fatal("a redirect to a 200 login page must not read as a healthy Prometheus")
+	}
+}
