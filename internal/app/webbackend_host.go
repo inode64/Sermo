@@ -1,6 +1,7 @@
 package app
 
 import (
+	"cmp"
 	"context"
 	"runtime"
 	"strconv"
@@ -14,11 +15,9 @@ import (
 )
 
 const (
-	procUptimePath         = "/proc/uptime"
-	procUptimeValueIndex   = 0
-	procUptimeFloatBits    = 64
-	osReleasePrettyNameKey = "PRETTY_NAME="
-	osReleaseValueTrimSet  = `"'`
+	procUptimePath       = "/proc/uptime"
+	procUptimeValueIndex = 0
+	procUptimeFloatBits  = 64
 )
 
 // hostUptime returns how long the host/server has been running since boot,
@@ -51,28 +50,7 @@ func parseProcUptime(data []byte) (time.Duration, bool) {
 // osPrettyName returns a human-friendly OS label (PRETTY_NAME from os-release on
 // Linux, e.g. "Debian GNU/Linux 12 (bookworm)"), falling back to runtime.GOOS.
 func osPrettyName() string {
-	for _, path := range config.OSReleasePaths() {
-		if data, err := hostfs.ReadFile(path); err == nil {
-			if name := parseOSReleasePrettyName(data); name != "" {
-				return name
-			}
-		}
-	}
-	return runtime.GOOS
-}
-
-// parseOSReleasePrettyName extracts the (unquoted) PRETTY_NAME value from
-// os-release content, or "" when absent. Pure, so it is testable without the
-// host files.
-func parseOSReleasePrettyName(data []byte) string {
-	for line := range strings.SplitSeq(string(data), appLineSeparator) {
-		if v, ok := strings.CutPrefix(strings.TrimSpace(line), osReleasePrettyNameKey); ok {
-			if name := strings.Trim(v, osReleaseValueTrimSet); name != "" {
-				return name
-			}
-		}
-	}
-	return ""
+	return cmp.Or(config.OSReleaseValue(config.OSReleaseKeyPrettyName), runtime.GOOS)
 }
 
 // HostMetrics returns the current host-level readings from the collector.
