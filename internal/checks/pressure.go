@@ -94,7 +94,7 @@ func pressureResultData(resource string, s PressureSample) map[string]any {
 
 // defaultPressureSampler reads and parses /proc/pressure/<resource>.
 func defaultPressureSampler(resource string) (PressureSample, error) {
-	path := filepath.Join(procPressureRootPath, resource)
+	path := filepath.Join(ProcPressureRootPath, resource)
 	data, err := hostfs.ReadFile(path)
 	if err != nil {
 		return PressureSample{}, fmt.Errorf("read %s: %w", path, err)

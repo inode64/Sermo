@@ -114,10 +114,10 @@ var graphMetrics = map[string][]GraphMetric{
 		{Key: PressureFieldFullAvg10, Unit: metrics.MetricUnitPercent, Label: "Fully stalled", Decimals: hundredthsDecimals},
 	},
 	CheckTypeDiskIO: {
-		{Key: DiskIOFieldUtilPct, Unit: metrics.MetricUnitPercent, Label: "Utilisation", Decimals: tenthsDecimals},
-		{Key: DiskIOFieldReadBytes, Unit: metrics.MetricUnitBytesPerSecond, Label: "Read"},
-		{Key: DiskIOFieldWriteBytes, Unit: metrics.MetricUnitBytesPerSecond, Label: "Write"},
-		{Key: DiskIOFieldAwaitMs, Unit: metrics.MetricUnitMilliseconds, Label: "Await", Decimals: hundredthsDecimals},
+		{Key: fieldUtilPct, Unit: metrics.MetricUnitPercent, Label: "Utilisation", Decimals: tenthsDecimals},
+		{Key: fieldReadBytes, Unit: metrics.MetricUnitBytesPerSecond, Label: "Read"},
+		{Key: fieldWriteBytes, Unit: metrics.MetricUnitBytesPerSecond, Label: "Write"},
+		{Key: fieldAwaitMs, Unit: metrics.MetricUnitMilliseconds, Label: "Await", Decimals: hundredthsDecimals},
 	},
 	CheckTypeFDS: {
 		{Key: DataKeyAllocated, Unit: metrics.MetricUnitNone, Label: "Allocated"},

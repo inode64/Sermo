@@ -137,13 +137,13 @@ func diskIORatesIdle(rates DiskIORates) bool {
 // can see what it has moved since boot.
 func DiskIOResultData(device string, rates DiskIORates, total DiskIOSample) map[string]any {
 	return map[string]any{
-		DataKeyDevice:        device,
-		fieldUtilPct:         rates.UtilPct,
-		fieldReadBytes:       rates.ReadBytes,
-		fieldWriteBytes:      rates.WriteBytes,
-		fieldAwaitMs:         rates.AwaitMs,
-		fieldReadTotalBytes:  float64(total.SectorsRead) * blockSectorBytes,
-		fieldWriteTotalBytes: float64(total.SectorsWritten) * blockSectorBytes,
+		DataKeyDevice:              device,
+		fieldUtilPct:               rates.UtilPct,
+		fieldReadBytes:             rates.ReadBytes,
+		fieldWriteBytes:            rates.WriteBytes,
+		fieldAwaitMs:               rates.AwaitMs,
+		DiskIOFieldReadTotalBytes:  float64(total.SectorsRead) * blockSectorBytes,
+		DiskIOFieldWriteTotalBytes: float64(total.SectorsWritten) * blockSectorBytes,
 	}
 }
 
