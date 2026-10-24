@@ -121,11 +121,11 @@ func TestBuildSQLCheckWiring(t *testing.T) {
 	// postgres engine resolves to the pgx database/sql driver.
 	built, _ = Build(map[string]any{
 		"q": map[string]any{
-			"type": "sql", "engine": "postgresql", "user": "u",
+			"type": "sql", "engine": "postgres", "user": "u",
 			"query": "SELECT 1", "op": ">", "value": "0",
 		},
 	}, Deps{DefaultTimeout: time.Second})
-	if cc := built[0].Check.(sqlCheck); cc.engine != "postgresql" || cc.open == nil {
+	if cc := built[0].Check.(sqlCheck); cc.engine != "postgres" || cc.open == nil {
 		t.Fatalf("engine = %q opener=%v, want PostgreSQL with a bound opener", cc.engine, cc.open != nil)
 	}
 

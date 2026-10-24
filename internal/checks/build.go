@@ -332,7 +332,6 @@ var builtinCheckSpecs = []checkSpec{
 	{info: conditionTypeInfo(CheckTypeOOM), predicateFields: OOMPredFields, build: func(in checkBuildInput) (Check, string) { return buildOomCheck(in.base, in.entry, in.deps) }},
 	{info: healthTypeInfo(CheckTypeCert), build: func(in checkBuildInput) (Check, string) { return buildCertCheck(in.base, in.entry, in.deps) }},
 	{info: healthTypeInfo(CheckTypeSQLite), build: func(in checkBuildInput) (Check, string) { return buildSqliteCheck(in.base, in.entry) }},
-	{info: healthTypeInfo(CheckTypeSQLite3), build: func(in checkBuildInput) (Check, string) { return buildSqliteCheck(in.base, in.entry) }},
 	{info: conditionTypeInfo(CheckTypeSQL), build: func(in checkBuildInput) (Check, string) { return buildSQLCheck(in.base, in.entry) }},
 	{info: healthTypeInfo(CheckTypeReplication), build: func(in checkBuildInput) (Check, string) { return buildReplicationCheck(in.base, in.entry) }},
 	{info: conditionTypeInfo(CheckTypeMongoDBQuery), build: func(in checkBuildInput) (Check, string) { return buildMongoCheck(in.base, in.entry) }},

@@ -994,8 +994,6 @@ watches:
       on_issuer_change: true
   sqlite:
     check: { type: sqlite, path: /var/lib/demo/demo.db, quick: true }
-  sqlite3:
-    check: { type: sqlite3, path: /var/lib/demo/demo.db }
   sql-sqlite:
     check:
       type: sql
@@ -1007,7 +1005,7 @@ watches:
   sql-mysql:
     check:
       type: sql
-      engine: mysql  # mysql|mariadb|postgres|postgresql|sqlite|sqlite3
+      engine: mysql  # mysql|mariadb|postgres|sqlite
       host: 127.0.0.1
       port: 3306
       user: monitor

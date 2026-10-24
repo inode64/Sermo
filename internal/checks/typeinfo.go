@@ -118,7 +118,6 @@ const (
 	CheckTypeOOM              = "oom"
 	CheckTypeCert             = "cert"
 	CheckTypeSQLite           = "sqlite"
-	CheckTypeSQLite3          = "sqlite3"
 	CheckTypeSQL              = "sql"
 	CheckTypeReplication      = "replication"
 	CheckTypeMongoDBQuery     = "mongodb-query"

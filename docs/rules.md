@@ -15,7 +15,7 @@
   - [HTTP](#http)
   - [Cert](#cert)
   - [Database connection (mysql / mariadb)](#database-connection-mysql--mariadb)
-  - [SQLite integrity (sqlite / sqlite3)](#sqlite-integrity-sqlite--sqlite3)
+  - [SQLite integrity (sqlite)](#sqlite-integrity-sqlite)
   - [Replication (replication)](#replication-replication)
   - [SQL query (sql)](#sql-query-sql)
   - [Running database statements (db_queries)](#running-database-statements-db_queries)
@@ -167,7 +167,7 @@ Connection-protocol checks (MySQL, PostgreSQL, Redis, Docker, libvirt, etc.) are
 | `glusterfs` / `glusterd` / `gluster` | health | a GlusterFS node accepts TCP connections to glusterd on 24007 (see Database) |
 | `gluster_cluster` | health | the local Gluster CLI verifies peer membership, volume/bricks/self-heal state and optional heal limits (see Gluster cluster) |
 | `openvswitch` / `ovs` / `ovsdb` / `ovsdb-server` | health | ovsdb-server serves a readable `Open_vSwitch` database over OVSDB JSON-RPC (see Database) |
-| `sqlite` / `sqlite3` | health | a SQLite database file passes `PRAGMA integrity_check` (see SQLite) |
+| `sqlite` | health | a SQLite database file passes `PRAGMA integrity_check` (see SQLite) |
 | `replication` | health | MySQL/MariaDB replication is healthy: both replica threads run, lag optionally bounded (see Replication) |
 | `sql`         | condition | a SQL query's scalar result compares (`== != > >= < <= contains =~`) against a value (see SQL query) |
 | `mongodb-query` | condition | a MongoDB document count / aggregation / command result compares against a value (see MongoDB query) |
@@ -2099,7 +2099,7 @@ Protocols, in the order of the table above:
   to check self-consistency and cross-consistency; Sermo does not infer or collect
   those remote files.
 
-### SQLite integrity (`sqlite` / `sqlite3`)
+### SQLite integrity (`sqlite`)
 
 A `sqlite` check verifies a local SQLite database file is healthy by running
 SQLite's integrity check. It is a **local file** check (not a network protocol).
@@ -2254,7 +2254,7 @@ and opens SQLite databases read-only.
 checks:
   jobs-backlog:
     type: sql
-    engine: postgres            # mysql | mariadb | postgres | postgresql | sqlite | sqlite3
+    engine: postgres            # mysql | mariadb | postgres | sqlite
     host: 127.0.0.1             # mysql/postgres: host/port/user/password/database/tls
     user: monitor
     password: "${env:PGPASS}"
@@ -2275,10 +2275,9 @@ checks:
   must parse as numbers); `==` / `!=` compare numerically when both are numbers,
   otherwise as strings (equal/different); `=~` matches the result against `value`
   as a Go (RE2) regular expression.
-- **Engines:** `mysql`/`mariadb` and `postgres`/`postgresql` use the same
-  connection fields as their protocol checks (`host`/`port`/`user`/`password`/
-  `database`/`tls`) and **require a `user`**; `sqlite`/`sqlite3` take a `path`
-  and open it **read-only**. A `mysql`/`mariadb` engine also accepts `socket`
+- **Engines:** `mysql`/`mariadb` and `postgres` use the same connection fields
+  as their protocol checks (`host`/`port`/`user`/`password`/`database`/`tls`)
+  and **require a `user`**; `sqlite` takes a `path` and opens it **read-only**. A `mysql`/`mariadb` engine also accepts `socket`
   (a Unix socket path, e.g. `/run/mysqld/mysqld.sock`) in place of
   `host`/`port`; the `replication` check honours it the same way.
 - **`defaults_file`** (`mysql`/`mariadb` only, an absolute path) reads a MySQL
@@ -2334,7 +2333,7 @@ watches:
     interval: 30s
     check:
       type: db_queries
-      engine: mariadb            # mysql | mariadb | postgres | postgresql
+      engine: mariadb            # mysql | mariadb | postgres
       socket: /run/mysqld/mysqld.sock   # mysql/mariadb only; or host/port
       defaults_file: /root/.my.cnf      # mysql/mariadb only
       min_duration: 5m           # duration-only alert
@@ -2344,7 +2343,7 @@ watches:
 ```
 
 - **`engine`** (required): `mysql`/`mariadb` read
-  `information_schema.PROCESSLIST`, `postgres`/`postgresql` read
+  `information_schema.PROCESSLIST`, `postgres` reads
   `pg_stat_activity`. A MySQL/MariaDB server's flavour and whether it answers
   the thread columns (MariaDB `TID`, MySQL `performance_schema.threads`) are
   detected once, so a sample is one query; a failed sample detects them again.

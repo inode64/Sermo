@@ -105,9 +105,9 @@ func sqlEngineDriver(engine string) (string, bool) {
 	switch engine {
 	case SQLEngineMySQL, SQLEngineMariaDB:
 		return SQLEngineMySQL, true
-	case SQLEnginePostgres, SQLEnginePostgreSQL:
+	case SQLEnginePostgres:
 		return conn.PostgresDriverName, true
-	case SQLEngineSQLite, SQLEngineSQLite3:
+	case SQLEngineSQLite:
 		return SQLEngineSQLite, true
 	default:
 		return "", false

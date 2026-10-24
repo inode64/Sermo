@@ -573,9 +573,7 @@ var sqlEngines = set(
 	checks.SQLEngineMySQL,
 	checks.SQLEngineMariaDB,
 	checks.SQLEnginePostgres,
-	checks.SQLEnginePostgreSQL,
 	checks.SQLEngineSQLite,
-	checks.SQLEngineSQLite3,
 )
 
 // validateCheckSection validates a checks/preflight section: known types,
@@ -927,7 +925,6 @@ var singleShotCheckValidators = map[string]singleShotCheckValidator{
 	checks.CheckTypeOOM:              singleShotNoLock(validateOomFields),
 	checks.CheckTypeCert:             singleShotNoLock(validateCertFields),
 	checks.CheckTypeSQLite:           validateSQLiteCheck,
-	checks.CheckTypeSQLite3:          validateSQLiteCheck,
 	checks.CheckTypeSQL:              singleShotNoLock(validateSQLFields),
 	checks.CheckTypeReplication:      singleShotNoLock(validateReplicationFields),
 	checks.CheckTypeMongoDBQuery:     singleShotNoLock(validateMongoFields),
@@ -1654,12 +1651,12 @@ func validateSQLFields(prefix string, fields map[string]any, add addFunc) {
 	validateAssertionFields(prefix, fields, add)
 	defaultsFile := cfgval.String(fields[checks.CheckKeyDefaultsFile])
 	switch engine {
-	case checks.SQLEngineSQLite, checks.SQLEngineSQLite3:
+	case checks.SQLEngineSQLite:
 		requireCheckField(prefix, checks.CheckKeyPath, "a sqlite sql check", fields, add)
 	case checks.SQLEngineMySQL, checks.SQLEngineMariaDB:
 		validateMySQLAccount(prefix, "a "+engine+" sql check", fields, add)
 		validateConnTLS(prefix, engine, fields, add)
-	case checks.SQLEnginePostgres, checks.SQLEnginePostgreSQL:
+	case checks.SQLEnginePostgres:
 		requireCheckField(prefix, checks.CheckKeyUser, "a "+engine+" sql check", fields, add)
 		validateConnTLS(prefix, engine, fields, add)
 	}
