@@ -1,0 +1,29 @@
+name: kernel-errors
+category: hardware
+# Disk, filesystem and hardware faults the kernel logs. A disk can keep a PASSED
+# SMART status while it throws I/O errors; a bad sector reads "critical medium
+# error, dev sde". The first cycle baselines the end of the file, so only new
+# lines count, and a rotation is followed. Anchoring on " kernel: " keeps another
+# program quoting the same text from matching, and naming real disks keeps a VM's
+# absent floppy (fd0) or empty CD drive (sr0) out.
+#
+# Where only the journal holds kernel messages, run journalctl instead; --grep
+# exits 1 when nothing matched, so 1 is the healthy exit (a journalctl built
+# without PCRE2 also exits 1: check `journalctl --version` lists +PCRE2):
+#   check:
+#     type: command
+#     command: [/usr/bin/journalctl, -k, --since=-1h, -q, --no-pager, --grep, "((I/O|critical medium) error, dev (sd|vd|nvme|md|dm-)|EXT4-fs error)"]
+#     expect_exit: 1
+#     severity: error
+monitor: disabled
+interval: 1m
+check:
+  type: log
+  path: /var/log/kern.log
+  regex: ' kernel: .*((I/O|critical medium|critical target|timeout) error, dev (sd|vd|nvme|md|dm-)|EXT4-fs error|XFS \(.*\): Corruption|Hardware Error|blocked for more than [0-9]+ seconds|soft lockup)'
+  count: { op: ">", value: 0 }
+  within: 1h
+  severity: error
+then:
+  hook:
+    command: [/usr/local/bin/sermo-kernel-alert.sh]

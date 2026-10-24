@@ -1,14 +1,15 @@
 name: edac
 category: hardware
 # ECC memory error counters via the kernel EDAC subsystem (no device, no root).
-# Portable: enable as-is on hosts with ECC RAM. Uncorrectable errors (ue) are
-# always serious; correctable errors (ce) are tolerated up to a threshold.
+# Portable: enable as-is on hosts with ECC RAM. A single uncorrectable error (ue)
+# is a fault. Predicates replace the default `ue > 0` and AND together, so watch
+# correctable errors in a watch of their own (edac-correctable.yml): `ce` beside
+# `ue` would keep an uncorrectable error silent until both crossed.
 monitor: disabled
 interval: 1h
 check:
   type: edac
   ue: { op: ">", value: 0 }  # any uncorrectable ECC error
-  ce: { op: ">", value: 100 }  # correctable errors above a noise floor
 then:
   hook:
     command: [/usr/local/bin/sermo-edac-alert.sh]

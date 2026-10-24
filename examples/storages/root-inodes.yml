@@ -1,0 +1,21 @@
+name: storage-root-inodes
+display_name: Root filesystem inodes
+category: storage
+monitor: disabled
+interval: 1m
+# Inode exhaustion fails every write while space is left: many small files (a
+# mail queue, a session or cache directory) use up the inode table first. A watch
+# of its own: storage predicates AND together, so beside used_pct an inode
+# threshold fires only on a disk short of both. btrfs and zfs report no inodes,
+# and the predicate never holds there.
+check:
+  type: storage
+  path: /
+  inodes_free_pct: { op: "<", value: "10%" }
+  severity: warning
+  levels:
+    error: { inodes_free_pct: { op: "<", value: "2%" } }
+for: { cycles: 3 }
+then:
+  hook:
+    command: [/usr/local/bin/sermo-storage-alert.sh, /]
