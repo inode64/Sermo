@@ -37,7 +37,7 @@ func (b *WebBackend) DaemonInfo(_ context.Context) web.DaemonInfo {
 		info.StateDir = g.StateDir()
 
 		// Engine block (effective values with documented fallbacks)
-		info.Interval = units.HumanizeDuration(config.EngineInterval(b.cfg, config.DefaultEngineInterval))
+		info.Interval = units.HumanizeDuration(config.EngineInterval(b.cfg))
 		info.MaxParallelChecks = config.EngineInt(b.cfg, config.EngineKeyMaxParallelChecks, DefaultEngineMaxParallelChecks)
 		info.DefaultTimeout = units.HumanizeDuration(config.EngineDuration(b.cfg, config.EngineKeyDefaultTimeout, DefaultEngineCheckTimeout))
 		info.OperationTimeout = units.HumanizeDuration(config.EngineDuration(b.cfg, config.EngineKeyOperationTimeout, DefaultEngineOperationTimeout))
