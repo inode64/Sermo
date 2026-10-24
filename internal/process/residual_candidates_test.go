@@ -102,3 +102,23 @@ func TestExternalDeletedCandidateRemainsDelegated(t *testing.T) {
 		t.Fatal("delegated candidate authorized for cleanup")
 	}
 }
+
+// The global selector fallback never attributes a process another unit owns,
+// even when its exe and user match the service's selector exactly: a stopped
+// mysql must not claim a mysqld that runs in a different unit.
+func TestDiscoverFallbackSkipsForeignUnitProcess(t *testing.T) {
+	t.Parallel()
+	ids := map[int]Identity{
+		100: {PID: 100, PPID: 1, StartTicks: 1, UID: 110, Exe: testExe, ExeOK: true, Cgroup: "0::/system.slice/mysql.service"},
+		200: {PID: 200, PPID: 1, StartTicks: 2, UID: 110, Exe: testExe, ExeOK: true, Cgroup: "0::/system.slice/mysql-replica.service"},
+	}
+	d := Discoverer{
+		Reader:           fakeReader{ids},
+		ResolveUser:      fakeUsers(map[string]uint32{"mysql": 110}),
+		ProcessOwnership: func(id Identity) (bool, bool) { return servicemgr.CgroupOwnership(id.Cgroup, "mysql") },
+	}
+	found, _ := d.Discover([]Selector{{Name: "main", Type: SelectorCommandMatch, Exe: testExe, User: "mysql"}})
+	if len(found) != 1 || found[0].PID != 100 {
+		t.Fatalf("found = %+v, want only the mysql unit's pid 100", found)
+	}
+}

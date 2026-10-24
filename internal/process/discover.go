@@ -138,12 +138,14 @@ func (d Discoverer) Discover(selectors []Selector) ([]Process, []string) {
 	}
 	for _, pid := range candidates {
 		id := snapshot[pid]
-		if !childrenComputed && d.foreignProcess(id) {
-			continue
-		}
 		for i := range selectors {
 			if selectors[i].Type == SelectorCommandMatch && d.matches(&selectors[i], id, resolve) {
-				add(id, selectors[i].Name, SelectorCommandMatch)
+				// Outside an attributed tree a process another unit owns is
+				// never this service's. The ownership verdict does not depend
+				// on the selector, so it is read only for a match.
+				if childrenComputed || !d.foreignProcess(id) {
+					add(id, selectors[i].Name, SelectorCommandMatch)
+				}
 				break
 			}
 		}
