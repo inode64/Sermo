@@ -658,7 +658,8 @@ func (w *Worker) gateReason(gate CheckGate, cache map[string]checks.Result) stri
 		if !ok {
 			continue
 		}
-		if !d.OK {
+		// Health, not OK: a condition check is OK when its predicate fires.
+		if !d.Healthy() {
 			return "requires check " + dep
 		}
 	}

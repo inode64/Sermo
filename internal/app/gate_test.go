@@ -71,6 +71,30 @@ func TestApplyGatesRequires(t *testing.T) {
 	}
 }
 
+// A condition check reports OK when its predicate holds, which means it is
+// failing: a disk at 50% under `used_pct >= 90` is OK=false and healthy. The
+// gate must read health, not OK, or it skips the dependent while the condition
+// is fine and lets it run once the condition fires.
+func TestApplyGatesRequiresReadsConditionHealth(t *testing.T) {
+	w := &Worker{Gates: map[string]CheckGate{"cleanup": {Requires: []string{"disk"}}}, cycleRan: ranChecks("disk", "cleanup")}
+	healthy := map[string]checks.Result{
+		"disk":    {Check: "disk", Condition: true, OK: false},
+		"cleanup": {Check: "cleanup", OK: false, Message: "boom"},
+	}
+	w.applyGates(healthy)
+	if healthy["cleanup"].Skipped {
+		t.Fatalf("cleanup skipped while its condition dependency is healthy: %+v", healthy["cleanup"])
+	}
+	firing := map[string]checks.Result{
+		"disk":    {Check: "disk", Condition: true, OK: true},
+		"cleanup": {Check: "cleanup", OK: false, Message: "boom"},
+	}
+	w.applyGates(firing)
+	if !firing["cleanup"].Skipped {
+		t.Fatalf("cleanup ran while its condition dependency is failing: %+v", firing["cleanup"])
+	}
+}
+
 // TestApplyGatesRequiresChainIsDeterministic: with port down, query (requires
 // port) and deep (requires query) both failing, deep must be skipped on every
 // cycle. Judging it against query's already rewritten Skipped/OK result made
