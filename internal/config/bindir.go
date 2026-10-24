@@ -15,10 +15,6 @@ const bindirMarker = "${bindir}"
 // normally lives in exactly one, so the resolved path is independent of order.
 var binDirSearch = []string{"/usr/bin", "/usr/sbin", "/usr/local/bin", "/usr/local/sbin"}
 
-// expandBindir rewrites ${bindir}-prefixed values in every document's variables
-// section (and the global defaults.variables) into the explicit candidate list
-// across binDirSearch. It runs at load time, after bakeBuiltins and before
-// version-template materialization and validation, so downstream code only ever
 // expandBindirDocument expands ${bindir} across one document. It is shared by the
 // load-time pass over c.docs and by the local-override pass, whose documents are
 // not in c.docs and so must be expanded explicitly.
@@ -27,6 +23,10 @@ func expandBindirDocument(doc *Document) {
 	expandBindirVersionPaths(doc.Body)
 }
 
+// expandBindir rewrites ${bindir}-prefixed values in every document's variables
+// section (and the global defaults.variables) into the explicit candidate list
+// across binDirSearch. It runs at load time, after bakeBuiltins and before
+// version-template materialization and validation, so downstream code only ever
 // sees concrete absolute paths.
 func (c *Config) expandBindir() {
 	for _, doc := range c.docs {

@@ -55,10 +55,6 @@ func goarchToUname(goarch string) string {
 	}
 }
 
-// bakeBuiltins substitutes ${arch} and ${os} with their detected values across
-// every loaded document in a single tree walk. Doing it once at load — before
-// version-template discovery and before the variable pipeline — keeps the
-// tokens out of variable values (so they never trip the no-nested-variables
 // builtinReplacer returns the ${arch}/${os} substituter. It is shared by the
 // load-time bake over c.docs and by the local-override pass, whose documents are
 // not in c.docs and so must be baked explicitly.
@@ -66,6 +62,10 @@ func builtinReplacer() *strings.Replacer {
 	return strings.NewReplacer(archMarker, detectedArch, osMarker, detectedOS)
 }
 
+// bakeBuiltins substitutes ${arch} and ${os} with their detected values across
+// every loaded document in a single tree walk. Doing it once at load — before
+// version-template discovery and before the variable pipeline — keeps the
+// tokens out of variable values (so they never trip the no-nested-variables
 // rule) and lets the version glob and library paths see concrete values.
 func (c *Config) bakeBuiltins() {
 	repl := builtinReplacer()

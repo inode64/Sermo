@@ -69,9 +69,6 @@ func ParseOSReleaseValue(data []byte, key string) string {
 	return ""
 }
 
-// applyOSSelectors collapses every `os:` selector block in every loaded document.
-// An `os:` key holding a map of os-id -> block selects the branch for the detected
-// OS (or a `default` branch), merges it into the surrounding map, and discards the
 // collapseDocumentOS collapses every `os:` selector in one document's body. It
 // is shared by the load-time pass over c.docs and by the local-override pass,
 // whose documents are deliberately not in c.docs but must be prepared the same
@@ -89,6 +86,9 @@ func collapseDocumentOS(doc *Document) error {
 	return nil
 }
 
+// applyOSSelectors collapses every `os:` selector block in every loaded document.
+// An `os:` key holding a map of os-id -> block selects the branch for the detected
+// OS (or a `default` branch), merges it into the surrounding map, and discards the
 // rest. It works at any depth — service, checks, processes, policy, ... — and runs
 // at load, before resolution.
 func (c *Config) applyOSSelectors() error {
