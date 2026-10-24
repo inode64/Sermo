@@ -25,8 +25,8 @@ const cliUnknownSLATargetFormat = "unknown service or availability watch %q"
 // configured service; `sla SERVICE` reports a single one. A window with no
 // observed cycles reads "n/a" rather than 0%.
 //
-// With --series it instead emits SERVICE's stored per-minute availability series
-// over --since (default 24h) — the raw time series a graph is built from. Neither
+// With --series it instead emits SERVICE's stored availability series over
+// --since (default 24h) at the resolution the window's archive keeps. Neither
 // form turns daemon downtime or missing data into observed downtime.
 func (a App) runSLA(ctx context.Context, opts options) int {
 	if len(opts.args) > 1 {
@@ -108,8 +108,8 @@ func (a App) slaTargets(opts options, cfg *config.Config) ([]slaTarget, int) {
 	return targets, exitSuccess
 }
 
-// runSLASeries emits one service's stored per-minute availability series, the
-// data a future graph plots.
+// runSLASeries emits one service's stored availability series at the
+// resolution the window's archive keeps.
 func (a App) runSLASeries(ctx context.Context, opts options, cfg *config.Config) int {
 	if opts.service() == "" {
 		return a.commandUsageError(commandSLA, "sla --series requires a service or watch name")

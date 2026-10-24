@@ -116,7 +116,7 @@ sermoctl libs [all] [--long]
 sermoctl patterns [catalog]                                           # pattern sets in use (catalog: all)
 
 sermoctl sla [TARGET]                   # availability windows for every service and availability watch, or one
-sermoctl sla --series TARGET [--since DURATION]   # per-minute series; --since default 24h
+sermoctl sla --series TARGET [--since DURATION]   # stored series; --since default 24h
 
 sermoctl events [SERVICE] [--limit N]   # list recent events (global or for SERVICE); SEVERITY shows a graded event's level
 sermoctl events clear [--before TIME]   # omit TIME to clear all; TIME may be non-future RFC3339 or positive duration
@@ -139,8 +139,8 @@ sermoctl wizard service|docker|vm|mount|volume|net|uplink
 `sermoctl sla` is observed check availability: it only counts monitored daemon
 cycles. A window with no observed cycles reads `n/a`, not downtime — daemon
 downtime or missing data never becomes observed downtime. `sermoctl sla --series
-TARGET` emits that target's stored per-minute availability series (the raw data
-a graph is built from).
+TARGET` emits that target's stored availability series; the bucket span
+follows the archive the window resolves to, so long windows print coarser rows.
 
 A target is a configured service **or** a host watch whose check asserts
 availability — `tcp`, `ports`, `http`, `route`, the `state` metric of `net` and

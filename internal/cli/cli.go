@@ -249,7 +249,7 @@ type options struct {
 	ttl         time.Duration
 	commandArgs []string // tokens after `--`
 	// sla command flags
-	series bool          // emit the per-minute availability series instead of a summary
+	series bool          // emit the stored availability series instead of a summary
 	since  time.Duration // series lookback window (0 means the command's default)
 	// apps/libs/services flags
 	long        bool     // show the full raw version string instead of the short one

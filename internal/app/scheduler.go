@@ -12,8 +12,9 @@ import (
 )
 
 // Scheduler runs each worker on its own goroutine with an independent interval
-// timer measured from cycle completion (so overruns skip ticks, never queue
-// them) and spreads worker starts with jitter. Operation concurrency is bounded
+// timer measured from cycle completion (so an overrun delays the next cycle,
+// never queues one) and staggers the workers' first cycles evenly across the
+// interval. Operation concurrency is bounded
 // per service by the operation lock and by mandatory remediation policy, not by
 // a global cap.
 type Scheduler struct {
@@ -115,7 +116,7 @@ func staggerOffset(idx, total int, interval time.Duration) time.Duration {
 	return time.Duration(int64(interval) * int64(idx) / int64(total))
 }
 
-// runCycler ticks a cycler from cycle completion: jitter, then cycle, then wait
+// runCycler ticks a cycler from cycle completion: stagger offset, then cycle, then wait
 // one interval, repeat. A cancelled context stops between cycles (never start a
 // new operation during shutdown).
 func runCycler(ctx context.Context, c cycler, interval, offset time.Duration) {

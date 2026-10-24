@@ -42,7 +42,7 @@ func (b *WebBackend) Series(_ context.Context, name, check, metric string, since
 	return b.availabilitySeries(name, check, since), true
 }
 
-// WatchSeries returns a host watch's per-minute availability history over
+// WatchSeries returns a host watch's availability history over
 // since, or one of its state bands' when metric names a declared band, in the
 // same shape the service series uses so the dashboard renders both through one
 // path. ok is false for an unknown watch, for an availability request on a

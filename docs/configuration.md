@@ -171,7 +171,7 @@ Unknown keys under `paths` are rejected so typos do not silently disable a
 configured source.
 
 `engine.runtime` (default `/run/sermo`) is the root for named runtime locks (`<runtime>/locks`, one file
-per lock named `<service>[.<name>].lock`) and internal operation locks
+per lock named `<service>[\<name>].lock`, with a literal backslash) and internal operation locks
 (`<runtime>/ops/<service>.lock`). It lives on tmpfs and is wiped on reboot.
 `paths.locks` is **not** supported. See [Locks](safety.md#locks) for the TTL and
 stale-reclaim semantics.
