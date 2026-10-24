@@ -89,7 +89,9 @@ func parseGuacInstruction(s string) (string, error) {
 		return "", errors.New("invalid Guacamole element length")
 	}
 	start := dot + guacdLengthSepWidth
-	if start+n > len(s) {
+	// Compared without adding: a hostile length near MaxInt would wrap
+	// start+n negative, pass the check and panic the slice below.
+	if n > len(s)-start {
 		return "", errors.New("truncated Guacamole instruction")
 	}
 	return s[start : start+n], nil
