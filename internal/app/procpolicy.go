@@ -67,7 +67,7 @@ func buildProcessPolicyWatch(name string, entry, checkEntry map[string]any, deps
 		resolve = deps.UserLookup.ResolveUser
 	}
 	pw := &processPolicyWatcher{
-		setProcessWatch: newSetProcessWatch(name, checks.CheckTypeProcessPolicy, processPolicyStateSlot, entry, checkEntry, actions, deps, watchSeverity(entry, checkEntry)),
+		setProcessWatch: newSetProcessWatch(name, checks.CheckTypeProcessPolicy, processPolicyStateSlot, entry, checkEntry, actions, deps, watchSeverityFor(checks.CheckTypeProcessPolicy, entry, checkEntry)),
 		user:            user,
 		allows:          allows,
 		resolve:         resolve,

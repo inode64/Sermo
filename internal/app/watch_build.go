@@ -292,7 +292,7 @@ func unsupportedServiceWatchType(entry map[string]any) string {
 // Health checks fire the hook on failure; condition checks on OK (threshold met).
 func buildSingleWatch(name string, entry, checkEntry map[string]any, deps Deps, interval time.Duration) (*Watch, string) {
 	typ := cfgval.AsString(checkEntry[checks.CheckKeyType])
-	level := watchSeverity(entry, checkEntry)
+	level := watchSeverityFor(typ, entry, checkEntry)
 	check, err := checks.BuildInline(name, withSeverity(checkEntry, checks.DeclaredSeverity(entry, checkEntry)), watchInlineDeps(deps))
 	if err != nil {
 		return nil, watchSubjectPrefix + name + ": " + err.Error()
@@ -402,7 +402,7 @@ func buildMetricWatches(name string, entry, checkEntry map[string]any, deps Deps
 		ce := config.MetricCheckEntry(checkEntry, key, mEntry)
 		// Severity is the one key the base check must not win: the point of
 		// declaring it per metric is to overrule the watch for this metric alone.
-		level := watchSeverity(entry, checkEntry, mEntry)
+		level := watchSeverityFor(cfgval.AsString(checkEntry[checks.CheckKeyType]), entry, checkEntry, mEntry)
 		ce = withSeverity(ce, checks.DeclaredSeverity(entry, checkEntry, mEntry))
 
 		check, err := checks.BuildInline(name, ce, watchInlineDeps(deps))
@@ -438,15 +438,6 @@ func buildMetricWatches(name string, entry, checkEntry map[string]any, deps Deps
 	return out, warns
 }
 
-// watchSeverity resolves how grave this watch's failures are. Trees are given
-// broadest first — watch entry, check block, metric block — and the narrowest
-// declaration wins, so a `net` watch can call its error counter an advisory while
-// its link state stays an outage. A chain that declares nothing is an error, which
-// leaves every existing watch exactly as it is.
-func watchSeverity(trees ...map[string]any) severity.Level {
-	return checks.DeclaredSeverity(trees...).Resolved()
-}
-
 // defaultWatchSeverity is the grade a watch type carries when its entry
 // declares none. Every type is an error — the historical default — except an
 // unowned_processes listing, which is an audit finding rather than an outage.
@@ -457,8 +448,11 @@ func defaultWatchSeverity(ctype string) severity.Level {
 	return severity.Error
 }
 
-// watchSeverityFor resolves a watch's grade from its declarations and its
-// type's default, the one chain the daemon builder and the dashboard share.
+// watchSeverityFor resolves how grave a watch's failures are, the one chain
+// the daemon builder and the dashboard share. Trees are given broadest first —
+// watch entry, check block, metric block — and the narrowest declaration wins,
+// so a `net` watch can call its error counter an advisory while its link state
+// stays an outage; a chain that declares nothing takes the type's default.
 func watchSeverityFor(ctype string, trees ...map[string]any) severity.Level {
 	return severity.Resolve(checks.DeclaredSeverity(trees...), defaultWatchSeverity(ctype))
 }
@@ -593,7 +587,7 @@ func buildFileWatch(name string, entry, checkEntry map[string]any, deps Deps, in
 		publish:       publishWatchSnapshots(deps.WatchSnapshots, deps.watchConfigID),
 		recordBand:    fileBandRecorder(deps, name, checkEntry),
 		now:           deps.Now,
-		severity:      watchSeverity(entry, checkEntry),
+		severity:      watchSeverityFor(checks.CheckTypeFile, entry, checkEntry),
 	}
 	watch := newStatefulWatch(name, checks.CheckTypeFile, entry, deps, interval, fw.runCycle)
 	watch.FireOnFail = true
@@ -652,7 +646,7 @@ func buildProcWatch(name string, entry, checkEntry map[string]any, deps Deps, in
 		sampler:   procCycleSamplerFromDeps(deps, interval),
 		resampler: procSamplerFromDeps(deps),
 		publish:   publishWatchSnapshots(deps.WatchSnapshots, deps.watchConfigID),
-		severity:  watchSeverity(entry, checkEntry),
+		severity:  watchSeverityFor(checks.CheckTypeProcess, entry, checkEntry),
 	}
 	return newStatefulWatch(name, checks.CheckTypeProcess, entry, deps, interval, pw.runCycle), ""
 }
@@ -663,7 +657,7 @@ func newStatefulWatch(name, checkType string, entry map[string]any, deps Deps, i
 	watch := newWatchRuntime(name, checkType, deps, interval)
 	watch.IsPaused = monitorPaused(deps.Monitor, WatchMonitorKey(name))
 	watch.DryRun = config.DryRun(entry)
-	watch.Severity = watchSeverity(entry, checkMap(entry))
+	watch.Severity = watchSeverityFor(checkType, entry, checkMap(entry))
 	watch.Cycle = cycle
 	return watch
 }
