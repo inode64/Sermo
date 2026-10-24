@@ -5,7 +5,7 @@
 // signal escalation, and postflight.
 //
 // The engine itself is pure orchestration over injected capability closures, so
-// the section-18 flow can be tested without real services; New wires the real
+// the operation flow can be tested without real services; New wires the real
 // components from a resolved service.
 package operation
 

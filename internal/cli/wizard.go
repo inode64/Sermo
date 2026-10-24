@@ -500,7 +500,7 @@ func watchTypeDirName(checkType string) string {
 }
 
 // staleFile is a managed config file whose target is no longer detected on the
-// host, offered for deletion by the step-9 cleanup. label is the path plus a
+// host, offered for deletion by the wizard's cleanup step. label is the path plus a
 // human hint (the watch names, or the catalog service a service uses).
 type staleFile struct {
 	path  string

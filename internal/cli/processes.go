@@ -13,6 +13,8 @@ import (
 	"sermo/internal/process"
 )
 
+// runProcesses discovers and reports the processes belonging to a service,
+// reading the service's `processes` selectors from resolved config.
 func (a App) runProcesses(ctx context.Context, opts options) int {
 	cfg, service, resolved, code := a.resolveServiceCommand(opts, commandProcesses)
 	if code != exitSuccess {

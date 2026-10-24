@@ -287,7 +287,7 @@ func ParseActions(then map[string]any) []Action {
 // ConditionUsesSystemMetric walks a condition tree and reports whether any
 // leaf reads a `scope: system` metric — directly, or (when checks is non-nil)
 // through a failed/active reference to a `type: metric, scope: system` check.
-// Runtime defense-in-depth for safety invariant 13: a system-wide metric may
+// Runtime defense-in-depth for docs/safety.md "System metrics": a system-wide metric may
 // only drive alert rules, never remediation, even if a rule slips past static
 // validation (catalog bug, partial reload, hand-built Rule).
 func ConditionUsesSystemMetric(node, refChecks map[string]any) bool {

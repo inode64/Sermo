@@ -68,7 +68,8 @@ func (a App) printWarnings(warnings []config.Issue) {
 	}
 }
 
-// printIssues writes validation findings in the section-30 ERROR format.
+// printIssues writes validation findings, as JSON with --json and otherwise to
+// stderr as an "ERROR <scope>:" line followed by the indented message.
 func (a App) printIssues(opts options, issues []config.Issue) {
 	if opts.json {
 		writeJSON(a.Stdout, map[string]any{cliJSONKeyValid: false, cliJSONKeyErrors: issuesJSON(issues)})

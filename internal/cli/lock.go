@@ -16,7 +16,7 @@ import (
 	"sermo/internal/operation"
 )
 
-// runLock dispatches the named-lock commands ():
+// runLock dispatches the named-lock commands:
 //
 //	lock SERVICE [--name N] --reason R --ttl D -- COMMAND...   (hold for COMMAND)
 //	lock acquire SERVICE [--name N] --reason R --ttl D         (persistent)

@@ -21,7 +21,7 @@ func (b *WebBackend) DaemonInfo(_ context.Context) web.DaemonInfo {
 		info.Sessions = &web.SessionSummary{Console: sample.Console, SSH: len(sample.SSH)}
 	}
 
-	// Short host identity — same source as ${hostname} and the Basic auth realm.
+	// Short host identity — same source as ${hostname} and the login page.
 	info.Hostname = config.ShortHostname()
 	info.OS = osPrettyName()
 	info.HostType = b.hostType

@@ -9,7 +9,7 @@ import (
 )
 
 // monitorStateView is the persisted monitor state rendered by services and
-// watches. ok is false when there is no store or no record.
+// watches.
 type monitorStateView struct {
 	active    bool
 	source    string

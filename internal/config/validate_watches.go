@@ -316,10 +316,6 @@ func isRuleClassAction(action string) bool {
 	return rules.ActionType(action).Valid()
 }
 
-// validateWatchThenAction validates a unified service watch whose then declares a
-// rule-class action. It desugars to a generated check + rule, so its then accepts
-// action/message/blocks/notify but not fire-and-forget hook/expand/kill side
-// effects or watch-only notification cadence.
 // validateWatchThenAction validates the grammar of a service watch's
 // then.action and reports whether it is sound: the desugarer only emits a
 // rule for a sound action, so the rule validator never repeats these issues
@@ -959,7 +955,8 @@ func validateProcessWatch(name string, check, entry map[string]any, defaultNotif
 		add("%s requires at least one of %s", watchCheckPath(name), ProcessWatchConditionSummary)
 	}
 
-	// A process watch is the one type that may carry a native `then.kill` action.
+	// A process watch may carry a native `then.kill` action (as may
+	// unowned_processes).
 	validateHookBlock(watchPath(name), entry, watchNativeActions{kill: true}, defaultNotify, add)
 	validateProcessWatchKillSelector(name, check, entry, add)
 }

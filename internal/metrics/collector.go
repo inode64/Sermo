@@ -446,8 +446,8 @@ func (c *Collector) SampleSystem() Snapshot {
 		snap[MetricLoad15] = Reading{Absolute: l15, HasAbsolute: true, Total: float64(ncpu), HasTotal: ncpu > 0, Ready: true}
 	}
 
-	// Swap is optional: only readers that implement TotalSwap contribute it, and
-	// only when a swap device exists (total > 0). Percent is always computed so a
+	// Swap is optional: only memory totals that read it (SwapOK) contribute it,
+	// and only when a swap device exists (total > 0). Percent is always computed so a
 	// 0%-used swap still reports a value.
 	if totals.SwapOK && totals.SwapTotal > 0 {
 		snap[MetricTotalSwap] = Reading{

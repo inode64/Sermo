@@ -531,14 +531,15 @@ type Result struct {
 // by Lookup or Prepare always route Probe through the common executor.
 //
 // Every implementation must honor cfg.Interface (egress binding via
-// SO_BINDTODEVICE) by constructing a probeTarget;
-// packet listeners use bindListenConfig. When simplifying a probe with a Go
+// SO_BINDTODEVICE): stream probes construct a probeTarget or dial through
+// BindDialer, packet listeners use bindListenConfig, and dhcp pins its link with
+// IP_PKTINFO. When simplifying a probe with a Go
 // module, preserve interface binding: a codec-only library is ideal (keep the
 // existing dial, e.g. DNS with x/net/dnsmessage); a library that does its own
 // I/O is only acceptable if it takes a custom dialer routed through BindDialer
 // (e.g. NTP via beevik/ntp's Dialer callback). A library that dials internally
 // with no such hook must not be adopted — keep the hand-rolled probe (e.g.
-// DHCP). See AGENTS.md "Protocol probes: interface binding is mandatory".
+// DHCP). See the AGENTS.md "Domain pointers" bullet on protocol probes.
 type Protocol interface {
 	Name() string     // canonical type token, e.g. "mysql"
 	DefaultPort() int // used when the config omits a port

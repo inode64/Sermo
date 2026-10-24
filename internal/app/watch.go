@@ -819,9 +819,10 @@ func (w *Watch) runRemount(ctx context.Context, res checks.Result, emitSkipped b
 }
 
 // runMakeStep asks the local time daemon to step the clock on a firing cycle.
-// Unlike expand the cooldown is mandatory (safety invariant 8): a clock step is
-// a discontinuity, so it runs at most once per cooldown window and an attempt —
-// successful or not — records the time, so a failing daemon is not hammered.
+// Unlike expand the cooldown is mandatory (docs/safety.md "Rate limiting"): a
+// clock step is a discontinuity, so it runs at most once per cooldown window
+// and an attempt — successful or not — records the time, so a failing daemon
+// is not hammered.
 func (w *Watch) runMakeStep(ctx context.Context, res checks.Result, emitSkipped bool) {
 	// A clock watch fails for several reasons and only an offset breach is one a
 	// step can fix. Stepping because the source is unsynchronized would jump the
@@ -927,7 +928,6 @@ func dryRunConsoleNotifier(n notify.Notifier) bool {
 	return n != nil && n.Type() == notify.TypeWall
 }
 
-// watchMessage builds a notification from a fired watch's message and hook env.
 // watchFireSpec carries the shared wiring a watcher needs to dispatch one
 // fire: the dry-run/panic gates, the hook, an optional extra action, and the
 // notify fan-out.
@@ -984,6 +984,7 @@ func dispatchWatchFire(ctx context.Context, spec watchFireSpec, msg string, env 
 	return true
 }
 
+// watchMessage builds a notification from a fired watch's message and hook env.
 func watchMessage(name, message string, env map[string]string) notify.Message {
 	var body strings.Builder
 	body.WriteString(message)
