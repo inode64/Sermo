@@ -8,6 +8,7 @@ import (
 	"sermo/internal/checks"
 	"sermo/internal/metrics"
 	"sermo/internal/severity"
+	"sermo/internal/state"
 	"sermo/internal/web"
 )
 
@@ -21,6 +22,7 @@ type watchObservation struct {
 	snapshots []CheckSnapshot
 	at        time.Time
 	available bool
+	monitors  map[string]state.MonitorRecord // nil reads each watch's own
 }
 
 // watchSnapshotView returns the latest result published by the daemon watch

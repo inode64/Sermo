@@ -197,13 +197,13 @@ func TestWatchViewListsUnownedProcessRows(t *testing.T) {
 	snapshots.publishConfigured("unowned", checks.CheckTypeUnownedProcesses, checks.Result{Check: "unowned", Data: map[string]any{checks.DataKeyProcesses: rows}}, "cfg")
 	b := &WebBackend{watchSnapshots: snapshots, now: func() time.Time { return testUnownedClock }, watches: map[string]*webWatch{"unowned": w}, watchOrder: []string{"unowned"}, cfg: &config.Config{}}
 
-	view := b.watchView(w, b.watchSystemSnapshot(), watchActivity{})
+	view := b.watchView(w, b.watchSystemSnapshot(), watchActivity{}, nil)
 	if len(view.Processes) != 1 || view.Processes[0].PID != 42 || view.Processes[0].StartTicks != 420 || !view.Processes[0].CanKill || view.Processes[0].RSS != 4096 || !view.Processes[0].HasCPU {
 		t.Fatalf("view.Processes = %+v", view.Processes)
 	}
 	// Another config generation's rows are never shown.
 	w.configID = "other"
-	if view := b.watchView(w, b.watchSystemSnapshot(), watchActivity{}); len(view.Processes) != 0 {
+	if view := b.watchView(w, b.watchSystemSnapshot(), watchActivity{}, nil); len(view.Processes) != 0 {
 		t.Fatalf("stale generation rows shown: %+v", view.Processes)
 	}
 }
