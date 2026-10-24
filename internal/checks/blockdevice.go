@@ -77,7 +77,7 @@ func defaultBlockDeviceBus(device string) string {
 	if name == "" {
 		return ""
 	}
-	target, err := hostfs.Readlink(filepath.Join(sysBlockPath, name))
+	target, err := hostfs.Readlink(filepath.Join(SysBlockPath, name))
 	if err != nil {
 		return ""
 	}
@@ -150,7 +150,7 @@ func defaultBlockDeviceSize(device string) (uint64, error) {
 	if name == "" {
 		return 0, fmt.Errorf("block device %q: not a kernel device name", device)
 	}
-	path := filepath.Join(sysBlockPath, name, sysBlockSizeFile)
+	path := filepath.Join(SysBlockPath, name, sysBlockSizeFile)
 	// Wrapped, not replaced: blockDeviceMissing tells an absent device from
 	// an unreadable one through errors.Is(err, fs.ErrNotExist).
 	return readProcUint(path)
@@ -278,13 +278,13 @@ func defaultBlockDeviceIdentity(device string) BlockDeviceIdentity {
 	if name == "" {
 		return BlockDeviceIdentity{}
 	}
-	dir := filepath.Join(sysBlockPath, name, sysDeviceDir)
+	dir := filepath.Join(SysBlockPath, name, sysDeviceDir)
 	identity := BlockDeviceIdentity{
 		Model:    sysDeviceModel(sysDeviceAttr(dir, sysDeviceVendorFile), sysDeviceAttr(dir, sysDeviceModelFile)),
 		Serial:   sysDeviceAttr(dir, sysDeviceSerialFile),
 		Firmware: cmp.Or(sysDeviceAttr(dir, sysDeviceFirmwareRev), sysDeviceAttr(dir, sysDeviceRevFile)),
 		WWN:      sysDeviceAttr(dir, sysDeviceWWIDFile),
-		Rotation: sysDeviceRotation(filepath.Join(sysBlockPath, name, sysQueueDir)),
+		Rotation: sysDeviceRotation(filepath.Join(SysBlockPath, name, sysQueueDir)),
 	}
 	if sectors, err := defaultBlockDeviceSize(device); err == nil {
 		identity.CapacityBytes = sectors * blockSectorBytes

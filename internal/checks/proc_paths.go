@@ -1,20 +1,18 @@
 package checks
 
 const (
-	procDiskstatsPath    = "/proc/diskstats"
-	procFileNRPath       = "/proc/sys/fs/file-nr"
-	procLoadavgPath      = "/proc/loadavg"
-	procMDStatPath       = "/proc/mdstat"
-	procMeminfoPath      = "/proc/meminfo"
-	procMountsPath       = "/proc/mounts"
-	procPidMaxPath       = "/proc/sys/kernel/pid_max"
-	procPressureRootPath = "/proc/pressure"
-	procRootPath         = "/proc"
-	procThreadsMaxPath   = "/proc/sys/kernel/threads-max"
-	procVMStatPath       = "/proc/vmstat"
-	sysBlockPath         = "/sys/class/block"
-	sysEDACPath          = "/sys/devices/system/edac"
-	sysHwmonPath         = "/sys/class/hwmon"
+	procDiskstatsPath  = "/proc/diskstats"
+	procFileNRPath     = "/proc/sys/fs/file-nr"
+	procLoadavgPath    = "/proc/loadavg"
+	procMDStatPath     = "/proc/mdstat"
+	procMeminfoPath    = "/proc/meminfo"
+	procMountsPath     = "/proc/mounts"
+	procPidMaxPath     = "/proc/sys/kernel/pid_max"
+	procRootPath       = "/proc"
+	procThreadsMaxPath = "/proc/sys/kernel/threads-max"
+	procVMStatPath     = "/proc/vmstat"
+	sysEDACPath        = "/sys/devices/system/edac"
+	sysHwmonPath       = "/sys/class/hwmon"
 )
 
 // malformedFileFormat reports a procfs/sysfs file whose contents did not parse,
@@ -22,7 +20,7 @@ const (
 const malformedFileFormat = "malformed %s"
 
 // ProcPressureRootPath is the Linux PSI pressure root directory.
-const ProcPressureRootPath = procPressureRootPath
+const ProcPressureRootPath = "/proc/pressure"
 
 // SysBlockPath is Linux's sysfs block-device root directory.
-const SysBlockPath = sysBlockPath
+const SysBlockPath = "/sys/class/block"

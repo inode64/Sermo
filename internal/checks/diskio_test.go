@@ -277,7 +277,7 @@ func TestDiskIOCheckPublishesCumulativeTotals(t *testing.T) {
 	c.Run(context.Background())
 	res := c.Run(context.Background())
 
-	if got := res.Data[DiskIOFieldReadBytes]; got != 0.0 {
+	if got := res.Data[fieldReadBytes]; got != 0.0 {
 		t.Fatalf("read rate = %v, want an empty window", got)
 	}
 	if got, want := res.Data[DiskIOFieldReadTotalBytes], float64(sectorsRead*blockSectorBytes); got != want {
