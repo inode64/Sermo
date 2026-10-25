@@ -7,6 +7,7 @@ package appinspect
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"slices"
@@ -73,6 +74,9 @@ type Report struct {
 	// Output is the bounded stdout/stderr of the failing version/health probe,
 	// set only on error so the app's monitoring event can explain WHY it failed.
 	Output string `json:"output,omitempty"`
+	// TimedOut marks a failure whose probe ran past its timeout: what a loaded
+	// host says, not evidence about the binary or its version.
+	TimedOut bool `json:"-"`
 }
 
 type options struct {
@@ -324,10 +328,11 @@ func inspectResolved(
 
 	if len(health.argv) > 0 {
 		var healthOut string
-		r.OK, r.Status, healthOut = runExitProbe(ctx, runner, health)
+		r.OK, r.Status, healthOut, r.TimedOut = runExitProbe(ctx, runner, health)
 		if !r.OK && health.optional {
 			r.OK = true
 			r.Status = StatusOK
+			r.TimedOut = false
 		} else if !r.OK {
 			r.Output = healthOut
 		}
@@ -339,7 +344,7 @@ func inspectResolved(
 			if !vres.ok && version.identityRequired() {
 				// The identity is unconfirmed: an invalid sample, not a
 				// healthy app of unknown version.
-				r.OK, r.Status, r.Output = false, vres.status, vres.output
+				r.OK, r.Status, r.Output, r.TimedOut = false, vres.status, vres.output, vres.timedOut
 				return r
 			}
 			if vres.ok {
@@ -368,6 +373,7 @@ func inspectResolved(
 	r.OK = vres.ok
 	r.Status = vres.status
 	r.Output = vres.output
+	r.TimedOut = vres.timedOut
 	r.Version = vres.raw
 	r.VersionShort = vres.short
 	return r
@@ -393,6 +399,7 @@ func presenceReport(ctx context.Context, runner execx.Runner, tree map[string]an
 			r.OK = false
 			r.Status = vres.status
 			r.Output = vres.output
+			r.TimedOut = vres.timedOut
 			return r
 		}
 	}
@@ -450,12 +457,18 @@ func inspectOptions(opts []Option) options {
 	return o
 }
 
-func runExitProbe(ctx context.Context, runner execx.Runner, cmd probeCommand) (bool, string, string) {
+func runExitProbe(ctx context.Context, runner execx.Runner, cmd probeCommand) (ok bool, status, out string, timedOut bool) {
 	res, err := runProbeCommand(ctx, runner, cmd)
 	if status := probeFailure(res, err, cmd, output.FailureCause(res.Stdout, res.Stderr)); status != "" {
-		return false, status, output.Bounded(res.Stdout, res.Stderr)
+		return false, status, output.Bounded(res.Stdout, res.Stderr), probeTimedOut(res, err)
 	}
-	return true, StatusOK, ""
+	return true, StatusOK, "", false
+}
+
+// probeTimedOut reports whether a probe failed by running past its deadline
+// rather than by what the command did.
+func probeTimedOut(res execx.Result, err error) bool {
+	return res.ExitCode == execx.ExitCodeRunFailure && errors.Is(err, context.DeadlineExceeded)
 }
 
 func probeFailure(res execx.Result, err error, cmd probeCommand, exitDetail string) string {
@@ -478,6 +491,7 @@ func probeFailure(res execx.Result, err error, cmd probeCommand, exitDetail stri
 type versionProbeResult struct {
 	ok               bool
 	identityMismatch bool
+	timedOut         bool
 	status           string
 	output           string // bounded stdout/stderr, set on failure
 	raw              string
@@ -490,7 +504,9 @@ func runVersionProbe(ctx context.Context, runner execx.Runner, tree map[string]a
 		return versionProbeResult{status: status, output: output.Bounded(res.Stdout, res.Stderr)}
 	}
 	if status := probeFailure(res, err, cmd, output.FailureCause(res.Stdout, res.Stderr)); status != "" {
-		return fail(status)
+		failed := fail(status)
+		failed.timedOut = probeTimedOut(res, err)
+		return failed
 	}
 	if ok, detail := cmd.stdout.Match(res.Stdout); !ok {
 		return fail(statusErrorPrefix + "stdout " + detail)

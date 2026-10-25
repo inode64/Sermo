@@ -909,7 +909,10 @@ then at most one operation.
   (`engine.max_parallel_checks`). A check that cannot get a slot waits — it is
   not skipped — and its timeout starts only once it gets the slot.
   Cancellation while it waits (shutdown, reload, an operation's deadline)
-  reports it unavailable without starting the probe.
+  reports it unavailable without starting the probe. A check whose cycle
+  deadline passes while a host stall holds every slot keeps its previous
+  result for that one cycle; a second starved cycle in a row reports it
+  unavailable, so a lasting stall stays visible.
 - **Configuration health**: a service's `preflight.config` is copied into the
   `configuration` check — warning-grade unless the entry declares its own
   severity, and never counted against SLA — and runs through that same bounded pool,

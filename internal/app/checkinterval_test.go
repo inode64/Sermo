@@ -8,6 +8,7 @@ import (
 	"sermo/internal/checks"
 	"sermo/internal/execx/execxtest"
 	"sermo/internal/metrics"
+	"sermo/internal/severity"
 )
 
 func TestCheckCatalogCycles(t *testing.T) {
@@ -230,5 +231,54 @@ func TestWorkerCheckSetUsesCurrentCycleMetrics(t *testing.T) {
 	setMetrics(nil)
 	if res := built[0].Check.Run(context.Background()); res.OK {
 		t.Fatalf("nil cycle metrics should not fire: %+v", res)
+	}
+}
+
+// A check starved by a host stall keeps its previous result for one cycle, as
+// a reused rather than fresh observation; a second starved cycle in a row is
+// reported, and a check that runs again clears the grace.
+func TestWorkerCheckRunnerGracesOneStarvedCycle(t *testing.T) {
+	starved := checks.Result{Check: "scripted", Unavailable: true, NotStarted: true, Message: "check not started: wait for check slot: context deadline exceeded"}
+	healthy := checks.Result{Check: "scripted", OK: true, Message: "ok"}
+	check := &scriptedCheck{results: []checks.Result{healthy, starved, starved, healthy, starved}}
+	worker := &Worker{}
+	run := workerCheckRunner(worker, []checks.Built{{Check: check}}, nil, 1, nil, func(checks.MetricReader) {})
+	cycle := func() checks.Result {
+		t.Helper()
+		worker.cycle++
+		return run(t.Context(), checks.Deps{})["scripted"]
+	}
+
+	cycle()
+	if got := cycle(); !got.OK || worker.cycleRan["scripted"] {
+		t.Fatalf("first starved cycle = %+v, ran = %v; want the previous result reused", got, worker.cycleRan)
+	}
+	if got := cycle(); !got.NotStarted || !worker.cycleRan["scripted"] {
+		t.Fatalf("second starved cycle = %+v, ran = %v; want it reported", got, worker.cycleRan)
+	}
+	cycle()
+	if got := cycle(); !got.OK || worker.cycleRan["scripted"] {
+		t.Fatalf("starved cycle after a recovery = %+v, ran = %v; want a fresh grace", got, worker.cycleRan)
+	}
+}
+
+// One host stall starves many checks within seconds: the daemon announces the
+// episode once, and again only after a quiet period with no starved check.
+func TestCheckStarvationNoticeOncePerEpisode(t *testing.T) {
+	var events []Event
+	now := time.Date(2026, 10, 20, 15, 7, 0, 0, time.UTC)
+	notice := checkStarvationNotice(func(e Event) { events = append(events, e) }, 8, func() time.Time { return now })
+
+	for range 200 {
+		notice()
+		now = now.Add(time.Second)
+	}
+	if len(events) != 1 || events[0].Severity != severity.Warning || !events[0].Notice {
+		t.Fatalf("events = %+v, want one warning notice for the stall", events)
+	}
+	now = now.Add(checkStarvationQuiet)
+	notice()
+	if len(events) != 2 {
+		t.Fatalf("events = %d, want a new notice after a quiet period", len(events))
 	}
 }

@@ -155,8 +155,9 @@ func (t *pidIncidents) cycle(now time.Time, keys []pidIncidentKey, fire func(i i
 // narrowed by a command-line pattern: process_policy's allow entries and
 // unowned_processes' ignore entries are both lists of these.
 type processIdentityRule struct {
-	filter process.IdentityFilter
-	cmd    *regexp.Regexp
+	filter      process.IdentityFilter
+	cmd         *regexp.Regexp
+	descendants bool
 }
 
 // newProcessIdentityRules prepares parsed rules into matchers. user narrows
@@ -168,7 +169,7 @@ func newProcessIdentityRules(declared []config.ProcessIdentityRule, user, what s
 		if err != nil {
 			return nil, fmt.Errorf("prepare %s %q: %w", what, rule.Name, err)
 		}
-		out = append(out, processIdentityRule{filter: filter, cmd: rule.Cmd})
+		out = append(out, processIdentityRule{filter: filter, cmd: rule.Cmd, descendants: rule.Descendants})
 	}
 	return out, nil
 }

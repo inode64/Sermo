@@ -89,3 +89,25 @@ func TestParseProcessPolicyAllows(t *testing.T) {
 		})
 	}
 }
+
+func TestParseProcessPolicyAllowDescendants(t *testing.T) {
+	allows, issues := ParseProcessPolicyAllows(map[string]any{
+		"backup": map[string]any{"exe": "/usr/bin/bash", "cmd": "^/bin/bash /opt/backup\\.sh$", "descendants": true},
+		"server": map[string]any{"exe": "/usr/bin/server"},
+	})
+	if len(issues) != 0 || len(allows) != 2 || !allows[0].Descendants || allows[1].Descendants {
+		t.Fatalf("allows = %+v, issues = %v; want descendants only on backup", allows, issues)
+	}
+
+	_, issues = ParseProcessPolicyAllows(map[string]any{"backup": map[string]any{"exe": "/usr/bin/bash", "descendants": "yes"}})
+	if len(issues) != 1 || issues[0].Error() != "process_policy check.allow.backup.descendants must be a boolean" {
+		t.Fatalf("issues = %v, want a boolean descendants", issues)
+	}
+
+	// Ignoring an unowned process says nothing about what it launches.
+	ignores, issues := ParseProcessIdentityRules(map[string]any{"agent": map[string]any{"exe": "/usr/bin/agent", "descendants": true}},
+		"unowned_processes", "ignore", false)
+	if len(issues) != 1 || issues[0].Error() != "unowned_processes check.ignore.agent.descendants is not supported" || len(ignores) != 0 {
+		t.Fatalf("ignores = %+v, issues = %v; want descendants rejected outside process_policy allow", ignores, issues)
+	}
+}

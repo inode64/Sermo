@@ -190,6 +190,9 @@ type Watch struct {
 	// everAvailable records that the check produced a reading at least once,
 	// so a later unavailability is a change worth confirming.
 	everAvailable bool
+	// starved records that the previous cycle was skipped because the shared
+	// check budget kept the check from starting.
+	starved bool
 	// legacyNotified marks a restored episode whose record predates the
 	// notified level but shows a notification: the first graded cycle adopts
 	// it at the episode's grade.
@@ -216,8 +219,28 @@ func (w *Watch) RunCycle(ctx context.Context) {
 		return
 	}
 	w.loadRuntimeState()
-	res := w.confirmedResult(ctx, checks.Execute(ctx, w.Check))
-	w.observeResult(ctx, res, observeOnly)
+	res := checks.Execute(ctx, w.Check)
+	if w.skipStarvedCycle(res) {
+		return
+	}
+	w.observeResult(ctx, w.confirmedResult(ctx, res), observeOnly)
+}
+
+// skipStarvedCycle reports whether this cycle is skipped because the shared
+// check budget, not the target, kept the check from starting (a host stall
+// holding every slot). It skips once, and only for a watch with a reading to
+// stand on; a second starved cycle in a row is observed as unavailable, without
+// the retry a starved budget could not serve either.
+func (w *Watch) skipStarvedCycle(res checks.Result) bool {
+	if !res.NotStarted {
+		w.starved = false
+		return false
+	}
+	if w.starved || !w.everAvailable {
+		return false
+	}
+	w.starved = true
+	return true
 }
 
 // observeResult feeds a sampled result through the shared incident lifecycle.
@@ -297,7 +320,7 @@ func (w *Watch) confirmedResult(ctx context.Context, res checks.Result) checks.R
 		w.everAvailable = true
 		return res
 	}
-	if w.unavailable || !w.everAvailable {
+	if w.unavailable || !w.everAvailable || res.NotStarted {
 		return res
 	}
 	if process.Wait(ctx, w.Sleep, watchUnavailableRetryDelay) != nil {

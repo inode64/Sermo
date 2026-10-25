@@ -48,6 +48,7 @@ const (
 	CheckKeySourceDefaultsFile    = "source_defaults_file"
 	CheckKeyDefault               = "default"
 	CheckKeyDelta                 = "delta"
+	CheckKeyDescendants           = "descendants"
 	CheckKeyDevice                = "device"
 	CheckKeyDomain                = "domain"
 	CheckKeyEngine                = "engine"

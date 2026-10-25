@@ -42,17 +42,19 @@ watches:
         op: <
         value: 500
       timeout: 5s
+  # Any running restic counts, not only backup/restore: a restart kills the
+  # child mid-operation, which leaves a prune or check holding a stale
+  # repository lock just like an interrupted backup. Matching the resolved exe
+  # reads the daemon's process snapshot instead of scanning every command line,
+  # a scan that ran past its timeout on hosts busy with the backup itself.
   backup-or-restore:
     check:
-      type: command
-      command:
-        - /usr/bin/pgrep
-        - -f
-        - '(^|.*/)restic( .*)? (backup|restore)( |$)'
-      expect_exit: [0]
-      timeout: 5s
-      optional: true
+      type: process
       reports: state
+      optional: true
+      exe_any:
+        - /usr/bin/restic
+        - /usr/local/bin/restic
   alert-if-memory-high:
     check:
       type: metric
@@ -79,4 +81,4 @@ rules:
         check: backup-or-restore
     then:
       action: block
-      message: "${display_name} backup or restore is running"
+      message: "${display_name} restic operation is running"

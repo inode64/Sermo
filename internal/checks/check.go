@@ -121,10 +121,14 @@ type Result struct {
 	// alive but cannot serve now (conn.Busy): saturated, loading or starting
 	// up. Health and alerts see it as a failure; no lifecycle action ever fires
 	// on it (rules.Evaluator.EvalRule). Persisted through DataKeyBusyReason.
-	Busy    bool           `json:"-"`
-	Message string         `json:"message,omitempty"`
-	Latency time.Duration  `json:"latency_ns,omitempty"`
-	Data    map[string]any `json:"data,omitempty"`
+	Busy bool `json:"-"`
+	// NotStarted marks a check that never ran this cycle: its deadline passed
+	// while it waited for a slot in the shared budget or for its turn in the
+	// cycle. It is unavailable, yet says nothing about the probed target.
+	NotStarted bool           `json:"-"`
+	Message    string         `json:"message,omitempty"`
+	Latency    time.Duration  `json:"latency_ns,omitempty"`
+	Data       map[string]any `json:"data,omitempty"`
 }
 
 // ObservationState is the canonical interpretation of one check result. Raw OK
@@ -370,6 +374,7 @@ func checkNotStartedResult(built Built, err error) Result {
 	result := checkResultMetadata(built.Check)
 	result.Optional = built.Optional
 	result.Unavailable = true
+	result.NotStarted = true
 	result.Message = fmt.Sprintf("check not started: %v", err)
 	return result
 }

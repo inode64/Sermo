@@ -695,10 +695,24 @@ func checkEpisodesFromSnapshots(snapshots *Snapshots, service string, checkTypes
 // runs the checks due (per-check intervals skip cycles; skipped checks reuse
 // the cached result so the cache stays complete), then any gate-triggered
 // extras, recording measurements as results land.
+//
+// A check the shared budget starved (a host stall holding every slot) keeps
+// its previous result for that one cycle, as a reused result rather than a
+// fresh observation: the stall says nothing about this service. A second
+// starved cycle in a row reports it unavailable, so a lasting stall is still
+// seen.
 func workerCheckRunner(worker *Worker, built []checks.Built, every map[string]int, maxParallel int, recordMeasurement func(checks.Result), setCycleMetrics func(checks.MetricReader)) func(context.Context, checks.Deps) map[string]checks.Result {
 	cache := map[string]checks.Result{}
-	runAndCache := func(ctx context.Context, due []checks.Built) {
+	graced := map[string]bool{}
+	runAndCache := func(ctx context.Context, due []checks.Built, ran map[string]bool) {
 		for _, r := range checks.Run(ctx, due, maxParallel) {
+			if !r.NotStarted {
+				delete(graced, r.Check)
+			} else if _, prior := cache[r.Check]; prior && !graced[r.Check] {
+				graced[r.Check] = true
+				delete(ran, r.Check)
+				continue
+			}
 			cache[r.Check] = r
 			if recordMeasurement != nil {
 				recordMeasurement(r)
@@ -713,12 +727,12 @@ func workerCheckRunner(worker *Worker, built []checks.Built, every map[string]in
 			ran[b.Check.Name()] = true
 		}
 		worker.cycleRan = ran
-		runAndCache(ctx, due)
+		runAndCache(ctx, due, ran)
 		extra := worker.gatedChecksDue(built, cache)
 		for _, b := range extra {
 			ran[b.Check.Name()] = true
 		}
-		runAndCache(ctx, extra)
+		runAndCache(ctx, extra, ran)
 		return cache
 	}
 }

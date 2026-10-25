@@ -2,6 +2,7 @@ package checks
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -10,10 +11,11 @@ import (
 // Limiter bounds executing probes across independently built services, watches
 // and operation checks. One daemon shares one instance, including across reloads.
 type Limiter struct {
-	mu      sync.Mutex
-	limit   int
-	running int
-	changed chan struct{}
+	mu        sync.Mutex
+	limit     int
+	running   int
+	changed   chan struct{}
+	onStarved func()
 }
 
 // NewLimiter creates a shared check budget. A non-positive limit is unbounded.
@@ -28,6 +30,27 @@ func (l *Limiter) SetLimit(limit int) {
 	defer l.mu.Unlock()
 	l.limit = limit
 	l.wake()
+}
+
+// OnStarved sets the callback run when a check's deadline passes while it
+// waits for a slot: the shared budget, not the probed target, kept it from
+// running. A cancelled wait (reload, shutdown) is not starvation.
+func (l *Limiter) OnStarved(callback func()) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.onStarved = callback
+}
+
+func (l *Limiter) starved(err error) {
+	if !errors.Is(err, context.DeadlineExceeded) {
+		return
+	}
+	l.mu.Lock()
+	callback := l.onStarved
+	l.mu.Unlock()
+	if callback != nil {
+		callback()
+	}
 }
 
 func (l *Limiter) wake() {
@@ -50,6 +73,7 @@ func (l *Limiter) acquire(ctx context.Context) error {
 		l.mu.Unlock()
 		select {
 		case <-ctx.Done():
+			l.starved(ctx.Err())
 			return fmt.Errorf("wait for check slot: %w", ctx.Err())
 		case <-changed:
 		}

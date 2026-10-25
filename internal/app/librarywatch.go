@@ -113,17 +113,6 @@ func (s *ArtifactSamples) StoreAppReport(name string, report appinspect.Report) 
 	s.mu.Unlock()
 }
 
-// AppProbeOutput returns the bounded stdout/stderr captured by the app's last
-// probe, so a rule that cannot evaluate because of it can show the operator why.
-func (s *ArtifactSamples) AppProbeOutput(name string) string {
-	if s == nil {
-		return ""
-	}
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.appVersions[name].report.Output
-}
-
 // AppVersion returns the latest sampled app version and its probe outcome.
 func (s *ArtifactSamples) AppVersion(name string) (string, string, bool) {
 	if s == nil {

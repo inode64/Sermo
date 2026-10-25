@@ -38,6 +38,10 @@ type processPolicyWatcher struct {
 	user    string
 	allows  []processIdentityRule
 	resolve process.UserResolver
+	// exited reports whether a sampled process generation has since exited
+	// (vanished, recycled or zombie); nil keeps every unresolved process a
+	// violation.
+	exited func(pid int, ticks uint64) (bool, error)
 }
 
 // buildProcessPolicyWatch builds an alert-only host watch. Validation enforces
@@ -71,6 +75,7 @@ func buildProcessPolicyWatch(name string, entry, checkEntry map[string]any, deps
 		user:            user,
 		allows:          allows,
 		resolve:         resolve,
+		exited:          process.GenerationExited,
 	}
 	// Alert-only, so it reads the daemon's shared per-cycle snapshot like the
 	// process watch instead of walking /proc again.
@@ -93,12 +98,16 @@ func (w *processPolicyWatcher) runCycle(ctx context.Context) {
 		return
 	}
 	slices.SortFunc(samples, func(a, b ProcInfo) int { return cmp.Compare(a.PID, b.PID) })
+	byPID := make(map[int]ProcInfo, len(samples))
+	for i := range samples {
+		byPID[samples[i].PID] = samples[i]
+	}
 	violations := make([]processPolicyViolation, 0)
 	for i := range samples {
 		if ctx.Err() != nil {
 			return
 		}
-		if reason := w.violationReason(samples[i]); reason != "" {
+		if reason := w.violationReason(samples[i], byPID); reason != "" {
 			violations = append(violations, processPolicyViolation{info: samples[i], reason: reason})
 		}
 	}
@@ -114,7 +123,7 @@ func (w *processPolicyWatcher) runCycle(ctx context.Context) {
 		func(i int) { w.remind(ctx, violations[i]) })
 }
 
-func (w *processPolicyWatcher) violationReason(info ProcInfo) string {
+func (w *processPolicyWatcher) violationReason(info ProcInfo, byPID map[int]ProcInfo) string {
 	hasExecutableMatch := false
 	for _, allow := range w.allows {
 		identity, allowed := allow.match(info, w.resolve)
@@ -130,12 +139,65 @@ func (w *processPolicyWatcher) violationReason(info ProcInfo) string {
 		if info.ExePrev != "" {
 			return processPolicyReasonReplacedExe
 		}
+		if w.exitedSinceSample(info) {
+			return ""
+		}
 		return processPolicyReasonUnresolvedExe
+	}
+	if w.launchedByEntryPoint(info, byPID) {
+		return ""
 	}
 	if hasExecutableMatch {
 		return processPolicyReasonCommand
 	}
 	return processPolicyReasonExecutable
+}
+
+// processPolicyMaxAncestors bounds the parent walk; a process tree this deep
+// under one account is not a job a reviewed entry point launched.
+const processPolicyMaxAncestors = 64
+
+// launchedByEntryPoint reports whether an allow entry with `descendants`
+// matches one of info's ancestors. The walk follows PPIDs through this
+// account's own processes only, so it stops at the first ancestor another
+// user runs (init, a root daemon such as cron): a shell a database backend
+// spawns has the server, not an entry point, above it, and a process
+// reparented to init is judged on its own identity.
+func (w *processPolicyWatcher) launchedByEntryPoint(info ProcInfo, byPID map[int]ProcInfo) bool {
+	ppid := info.PPID
+	for range processPolicyMaxAncestors {
+		parent, sampled := byPID[ppid]
+		if ppid <= 1 || !sampled {
+			return false
+		}
+		for _, allow := range w.allows {
+			if !allow.descendants {
+				continue
+			}
+			if identity, allowed := allow.match(parent, w.resolve); identity && allowed {
+				return true
+			}
+		}
+		ppid = parent.PPID
+	}
+	return false
+}
+
+// exitedSinceSample reports whether a process whose executable could not be
+// resolved was exiting rather than hiding it: the kernel drops the exe link
+// when a process exits, so a short-lived child (a parallel worker, an
+// archive_command shell) sampled as it ends, or a zombie awaiting its parent,
+// reads as unresolved while executing nothing. A generation that cannot be
+// verified stays a violation.
+func (w *processPolicyWatcher) exitedSinceSample(info ProcInfo) bool {
+	if info.State == process.ProcStateZombie {
+		return true
+	}
+	if w.exited == nil || !info.StartTicksOK {
+		return false
+	}
+	exited, err := w.exited(info.PID, info.StartTicks)
+	return err == nil && exited
 }
 
 func (w *processPolicyWatcher) publishSnapshot(samples []ProcInfo, violations []processPolicyViolation, ok bool) {

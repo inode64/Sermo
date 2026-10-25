@@ -2,7 +2,9 @@ package app
 
 import (
 	"context"
+	"fmt"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"sermo/internal/checks"
@@ -12,6 +14,7 @@ import (
 	"sermo/internal/operation"
 	"sermo/internal/process"
 	"sermo/internal/rules"
+	"sermo/internal/severity"
 	"sermo/internal/state"
 )
 
@@ -90,6 +93,9 @@ func ApplyEngineConfig(deps *Deps, cfg *config.Config, wrap func(process.OSReade
 	} else {
 		deps.CheckLimiter.SetLimit(deps.MaxParallel)
 	}
+	if deps.Emit != nil {
+		deps.CheckLimiter.OnStarved(checkStarvationNotice(deps.Emit, deps.MaxParallel, time.Now))
+	}
 	deps.UserLookup = EngineUserLookup(cfg, deps.ExecxRunner)
 	deps.SystemFreshness = deps.Interval / SystemFreshnessIntervalDivisor
 	cached := func(os process.OSReader) *process.CachingReader {
@@ -116,6 +122,35 @@ func ApplyEngineConfig(deps *Deps, cfg *config.Config, wrap func(process.OSReade
 	deps.GlobalNotify = config.NotifyDefault(cfg.Global.Raw)
 	deps.GlobalEmission = emission.Merge(cfg.Global.Raw[emission.Section], emission.Default())
 	deps.GlobalClear = rules.ClearWindowOrDefault(cfg.Global.Defaults()[rules.SectionClearWindow])
+}
+
+// checkStarvationQuiet separates check-budget starvation episodes: one host
+// stall starves many checks within seconds, and it deserves one notice, not
+// one per check.
+const checkStarvationQuiet = 15 * time.Minute
+
+// checkStarvationNotice returns the check limiter's starvation callback: one
+// warning notice when an episode begins, an episode ending once
+// checkStarvationQuiet passes with no starved check.
+func checkStarvationNotice(emit func(Event), limit int, now func() time.Time) func() {
+	var mu sync.Mutex
+	var last time.Time
+	return func() {
+		mu.Lock()
+		at := now()
+		begins := last.IsZero() || at.Sub(last) >= checkStarvationQuiet
+		last = at
+		mu.Unlock()
+		if begins {
+			emit(Event{
+				Kind:     eventKindAlert,
+				Severity: severity.Warning,
+				Notice:   true,
+				Message: fmt.Sprintf("check budget exhausted: checks waited past their deadline for one of %d slots "+
+					"(engine.%s); each keeps its last result for one cycle", limit, config.EngineKeyMaxParallelChecks),
+			})
+		}
+	}
 }
 
 // withCheckLimiter supplies a budget for standalone builders. The daemon passes
