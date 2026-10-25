@@ -461,4 +461,20 @@ func TestInspectProbeTimeoutFailureReportsUnderlyingError(t *testing.T) {
 	if !strings.Contains(report.Status, "timeout after 1ms") {
 		t.Fatalf("status = %q, want timeout after duration instead of exit -1", report.Status)
 	}
+	if !report.TimedOut {
+		t.Fatalf("report = %+v, want a timed-out probe marked TimedOut", report)
+	}
+}
+
+func TestInspectProbeExitFailureIsNotTimedOut(t *testing.T) {
+	root := t.TempDir()
+	binary := filepath.Join(root, "broken-tool")
+	if err := os.WriteFile(binary, []byte("x"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	runner := testRunner{binary: {ExitCode: 1, Stderr: "Traceback (most recent call last):"}}
+	report := inspectResolved(context.Background(), runner, "broken-tool", preflightResolved(binary, "1s"), config.CategoryApp)
+	if report.OK || report.TimedOut {
+		t.Fatalf("inspectResolved() = %+v, want a failed probe that did not time out", report)
+	}
 }

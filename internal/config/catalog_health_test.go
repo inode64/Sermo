@@ -125,6 +125,12 @@ func TestCatalogBackupAndTemplateHealth(t *testing.T) {
 	if !slices.Contains(blocks, "stop") || !slices.Contains(blocks, "restart") {
 		t.Fatalf("backrest backup blocks = %v", blocks)
 	}
+	// A command scan of every process line timed out during the backups the
+	// guard exists for; the native check reads the daemon's process snapshot.
+	if check := catalogWatchCheck(t, backrest, "backup-or-restore"); check["type"] != "process" ||
+		!slices.Contains(cfgval.StringList(check["exe_any"]), "/usr/bin/restic") {
+		t.Fatalf("backrest backup guard check = %v, want a native restic process check", check)
+	}
 	fpm := catalogDocByName(t, root, "services", "php-fpm%v%s%i")
 	if got := nested(t, catalogWatchCheck(t, fpm, "fpm"), "expect", "listen_queue")["value"]; got != "${listen_queue_max}" {
 		t.Fatalf("FPM queue threshold = %v", got)

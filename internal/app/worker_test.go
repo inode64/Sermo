@@ -957,6 +957,35 @@ func TestCycleEvaluationErrorCarriesAppProbeOutput(t *testing.T) {
 	}
 }
 
+// A version probe that timed out on a loaded host (salt-minion and Tomcat at
+// the nightly backup window) is not evidence about the app: the rule stays
+// quiet and still sees the upgrade at the next successful sample.
+func TestCycleTimedOutAppProbeKeepsChangedRuleQuiet(t *testing.T) {
+	runner := execxtest.Outputs("containerd v9.9.9")
+	h := &workerHarness{opResult: operation.Result{Status: operation.ResultOK}}
+	w := appVersionWorker(h, runner, "patch")
+	samples := NewArtifactSamples()
+	samples.RegisterApp("containerd")
+	w.artifactSamples = samples
+
+	samples.StoreAppReport("containerd", appinspect.Report{Version: "containerd v1.7.0", Status: appinspect.StatusOK})
+	w.RunCycle(context.Background())
+	samples.StoreAppReport("containerd", appinspect.Report{Status: "error: timeout after 10s", TimedOut: true})
+	w.RunCycle(context.Background())
+	if _, ok := h.eventOf(eventKindError); ok {
+		t.Fatalf("a timed-out app probe must not emit a rule evaluation error, events=%+v", h.events)
+	}
+	if len(h.ops) != 0 {
+		t.Fatalf("a timed-out app probe must not restart, ops=%v", h.ops)
+	}
+
+	samples.StoreAppReport("containerd", appinspect.Report{Version: "containerd v1.7.1", Status: appinspect.StatusOK})
+	w.RunCycle(context.Background())
+	if len(h.ops) != 1 || h.ops[0] != string(rules.ActionRestart) {
+		t.Fatalf("version change after a timed-out sample must restart once, ops=%v", h.ops)
+	}
+}
+
 func TestCycleMissingArtifactAppSkipsChangedRule(t *testing.T) {
 	runner := execxtest.Outputs("containerd v9.9.9")
 	h := &workerHarness{opResult: operation.Result{Status: operation.ResultOK}}

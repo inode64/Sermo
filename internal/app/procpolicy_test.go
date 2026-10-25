@@ -2,6 +2,9 @@ package app
 
 import (
 	"context"
+	"errors"
+	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -196,6 +199,56 @@ func TestProcessPolicyWatcherReportsDeletedExecutable(t *testing.T) {
 	}
 }
 
+func TestProcessPolicyWatcherSkipsOnlyExitedUnresolvedProcesses(t *testing.T) {
+	errUnverifiable := errors.New("cannot verify exit")
+	unresolved := ProcInfo{PID: 11, UID: 70, StartTicks: 40, StartTicksOK: true}
+	zombie := unresolved
+	zombie.State = process.ProcStateZombie
+	unknownGeneration := unresolved
+	unknownGeneration.StartTicksOK = false
+	replaced := unresolved
+	replaced.ExePrev = "/usr/lib64/postgresql-18/bin/postgres"
+	tests := []struct {
+		name       string
+		info       ProcInfo
+		exited     bool
+		exitErr    error
+		wantReason string
+	}{
+		{name: "zombie", info: zombie},
+		{name: "exited after the sample", info: unresolved, exited: true},
+		{name: "still running", info: unresolved, wantReason: processPolicyReasonUnresolvedExe},
+		{name: "exit unverifiable", info: unresolved, exited: true, exitErr: errUnverifiable, wantReason: processPolicyReasonUnresolvedExe},
+		{name: "unknown generation", info: unknownGeneration, exited: true, wantReason: processPolicyReasonUnresolvedExe},
+		{name: "replaced executable", info: replaced, exited: true, wantReason: processPolicyReasonReplacedExe},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			watcher, events, snapshot := testProcessPolicyWatcher(t,
+				&fakeProcSampler{cycles: [][]ProcInfo{{tt.info}}},
+				map[string]any{"postgres": map[string]any{checks.CheckKeyExe: "/usr/lib64/postgresql-18/bin/postgres"}},
+			)
+			watcher.exited = func(pid int, ticks uint64) (bool, error) {
+				if pid != tt.info.PID || ticks != tt.info.StartTicks {
+					t.Fatalf("exited(%d, %d), want the sampled generation", pid, ticks)
+				}
+				return tt.exited, tt.exitErr
+			}
+
+			watcher.runCycle(context.Background())
+			if tt.wantReason == "" {
+				if !snapshot.OK || len(*events) != 0 {
+					t.Fatalf("exited process snapshot/events = %+v/%+v, want no violation", *snapshot, *events)
+				}
+				return
+			}
+			if snapshot.OK || len(*events) != 1 || !strings.Contains((*events)[0].Message, tt.wantReason) {
+				t.Fatalf("snapshot/events = %+v/%+v, want one %q violation", *snapshot, *events, tt.wantReason)
+			}
+		})
+	}
+}
+
 func TestProcessPolicyWatcherBoundsPublishedViolationDetails(t *testing.T) {
 	invalid := make([]ProcInfo, processPIDListLimit+1)
 	for i := range invalid {
@@ -266,5 +319,52 @@ func TestProcessPolicyWatchIsHostScoped(t *testing.T) {
 	entry := map[string]any{"check": map[string]any{"type": checks.CheckTypeProcessPolicy}}
 	if got := unsupportedServiceWatchType(entry); got == "" {
 		t.Fatal("process_policy must stay host-scoped")
+	}
+}
+
+func TestProcessPolicyWatcherAllowsDescendantsOfEntryPointsOnly(t *testing.T) {
+	const bash, server = "/usr/bin/bash", "/usr/lib64/postgresql-18/bin/postgres"
+	proc := func(pid, ppid int, exe string, cmdline ...string) ProcInfo {
+		return ProcInfo{PID: pid, PPID: ppid, UID: 70, Exe: exe, ExeOK: true, StartTicks: uint64(pid), Cmdline: cmdline}
+	}
+	replaced := proc(13, 10, "")
+	replaced.ExeOK, replaced.ExePrev = false, "/usr/bin/pg_dump"
+	samples := []ProcInfo{
+		proc(10, 1, bash, "/bin/bash", "/opt/backup.sh"), // reviewed entry point
+		proc(11, 10, "/usr/bin/df", "df", "-Pm"),         // its child
+		proc(12, 11, "/usr/bin/gawk", "awk", "{print}"),  // and grandchild
+		replaced, // a replaced binary is still reported
+		proc(20, 1, server, "postgres", "-D", "/srv/pg"),
+		proc(21, 20, bash, "sh", "-c", "id"),           // a shell the server spawned
+		proc(30, 1, "/usr/bin/df", "df"),               // reparented to init
+		proc(40, 1, bash, "/bin/bash", "/tmp/evil.sh"), // bash outside the entry pattern
+		proc(41, 40, "/usr/bin/df", "df"),              // and its child
+	}
+	allow := map[string]any{
+		"server": map[string]any{checks.CheckKeyExe: server},
+		"backup": map[string]any{checks.CheckKeyExe: bash, process.SelectorKeyCmd: `^/bin/bash /opt/backup\.sh$`, checks.CheckKeyDescendants: true},
+	}
+	reported := func(allow map[string]any) []int {
+		t.Helper()
+		watcher, events, _ := testProcessPolicyWatcher(t, &fakeProcSampler{cycles: [][]ProcInfo{samples}}, allow)
+		watcher.runCycle(context.Background())
+		var pids []int
+		for _, e := range *events {
+			for _, info := range samples {
+				if strings.Contains(e.Message, "pid "+strconv.Itoa(info.PID)+":") {
+					pids = append(pids, info.PID)
+				}
+			}
+		}
+		slices.Sort(pids)
+		return pids
+	}
+
+	if got, want := reported(allow), []int{13, 21, 30, 40, 41}; !slices.Equal(got, want) {
+		t.Fatalf("violations = %v, want %v", got, want)
+	}
+	allow["backup"] = map[string]any{checks.CheckKeyExe: bash, process.SelectorKeyCmd: `^/bin/bash /opt/backup\.sh$`}
+	if got, want := reported(allow), []int{11, 12, 13, 21, 30, 40, 41}; !slices.Equal(got, want) {
+		t.Fatalf("without descendants violations = %v, want %v", got, want)
 	}
 }

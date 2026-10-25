@@ -1160,14 +1160,20 @@ func (w *Worker) changedAppVersion(_ context.Context, app string, level int) (bo
 	if w.artifactSamples == nil {
 		return false, fmt.Errorf("changed condition app %q: artifact samples unavailable", app)
 	}
-	raw, status, sampled := w.artifactSamples.AppVersion(app)
-	if !sampled || appinspect.IsNotInstalledStatus(status) {
+	report, sampled := w.artifactSamples.AppReport(app)
+	if !sampled || appinspect.IsNotInstalledStatus(report.Status) {
 		return false, nil
 	}
-	if status != appinspect.StatusOK {
-		return false, &appProbeError{status: status, output: w.artifactSamples.AppProbeOutput(app)}
+	if report.Status != appinspect.StatusOK {
+		// A probe that timed out on a loaded host leaves the version unknown,
+		// not broken: the app's own watch reports it, and the baseline is
+		// compared again at the next successful sample.
+		if report.TimedOut {
+			return false, nil
+		}
+		return false, &appProbeError{status: report.Status, output: report.Output}
 	}
-	return w.compareAppVersion(app, level, raw)
+	return w.compareAppVersion(app, level, report.Version)
 }
 
 func (w *Worker) compareAppVersion(app string, level int, raw string) (bool, error) {

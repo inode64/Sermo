@@ -3857,7 +3857,10 @@ changed at the selected `level` (`major`, `minor` or `patch`; default `patch`).
 `library` in place of `path` names a catalog library (`catalog/libs/`) and
 watches its file. The first cycle adopts the current value (a daemon start
 never fires), and a successful `restart`/`start` re-baselines it. A failed app version command is an
-invalid sample: it does not fire and does not update the baseline. An app that
+invalid sample: it does not fire and does not update the baseline. One that
+only ran past its timeout (a loaded host) is also false without a
+rule-evaluation error; the app's own watch reports the slow probe, and the next
+successful sample is compared with the baseline. An app that
 is not installed (including a failed `version_match`) is an unavailable sample:
 it is false without a rule-evaluation error and does not set a baseline. When it
 is later installed, its first version establishes that baseline. This does not
@@ -4023,8 +4026,9 @@ when your backup runs under another user or from non-standard paths. If a
 logged-in terminal user runs `sermoctl restart` while this backup guard blocks
 the action, Sermo also sends that user a best-effort native TTY notice; cron and
 other non-interactive runs are not notified. The notice follows the guard by
-name (`block-restart-during-backup`, or pgBackRest's
-`block-restart-during-backup-or-restore`), so an override that rewords its
+name (`block-restart-during-backup`, or Backrest's
+`block-restart-during-backup-or-restore`, which blocks while any restic
+process runs), so an override that rewords its
 message keeps it, and no other block raises it.
 
 The examples

@@ -129,3 +129,30 @@ func TestLimiterReleasesAfterPanic(t *testing.T) {
 		t.Fatalf("panic leaked slot: %+v", res)
 	}
 }
+
+// A host stall that holds every slot starves the checks queued behind it; the
+// daemon reports that once, while a reload or shutdown cancelling the wait is
+// not starvation.
+func TestLimiterReportsStarvationOnlyForAnExpiredWait(t *testing.T) {
+	limiter := NewLimiter(1)
+	var starved atomic.Int32
+	limiter.OnStarved(func() { starved.Add(1) })
+	if err := limiter.acquire(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	defer limiter.release()
+	check := withLimiter(fakeCheck{res: Result{Check: "probe", OK: true}}, limiter, time.Second)
+
+	waitCtx, cancelWait := context.WithTimeout(t.Context(), time.Millisecond)
+	res := Execute(waitCtx, check)
+	cancelWait()
+	if !res.NotStarted || !res.Unavailable || res.OK || starved.Load() != 1 {
+		t.Fatalf("expired wait = %+v, starved = %d; want one starved, not-started result", res, starved.Load())
+	}
+
+	cancelled, cancel := context.WithCancel(t.Context())
+	go func() { time.Sleep(time.Millisecond); cancel() }()
+	if res := Execute(cancelled, check); !res.NotStarted || starved.Load() != 1 {
+		t.Fatalf("cancelled wait = %+v, starved = %d; want not started without starvation", res, starved.Load())
+	}
+}

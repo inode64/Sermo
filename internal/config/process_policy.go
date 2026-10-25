@@ -21,6 +21,9 @@ type ProcessIdentityRule struct {
 	Name string
 	Exe  string
 	Cmd  *regexp.Regexp
+	// Descendants, valid only on a process_policy allow entry, also allows
+	// every process of the same account the matching process launched.
+	Descendants bool
 }
 
 // ProcessIdentityRuleError identifies one invalid field below a rule mapping.
@@ -65,10 +68,11 @@ func ParseProcessIdentityRules(raw any, checkType, key string, required bool) ([
 		return nil, []ProcessIdentityRuleError{issue("", "must be a non-empty mapping")}
 	}
 
+	descendantsAllowed := checkType == checks.CheckTypeProcessPolicy && key == checks.CheckKeyAllow
 	rules := make([]ProcessIdentityRule, 0, len(rawRules))
 	var issues []ProcessIdentityRuleError
 	for _, name := range slices.Sorted(maps.Keys(rawRules)) {
-		rule, ruleIssues := parseProcessIdentityRule(name, rawRules[name])
+		rule, ruleIssues := parseProcessIdentityRule(name, rawRules[name], descendantsAllowed)
 		for i := range ruleIssues {
 			ruleIssues[i].CheckType, ruleIssues[i].Key = checkType, key
 		}
@@ -80,26 +84,34 @@ func ParseProcessIdentityRules(raw any, checkType, key string, required bool) ([
 	return rules, issues
 }
 
-func parseProcessIdentityRule(name string, raw any) (ProcessIdentityRule, []ProcessIdentityRuleError) {
+func parseProcessIdentityRule(name string, raw any, descendantsAllowed bool) (ProcessIdentityRule, []ProcessIdentityRuleError) {
 	suffix := "." + name
 	rawAllow, ok := raw.(map[string]any)
 	if !ok {
 		return ProcessIdentityRule{}, []ProcessIdentityRuleError{{PathSuffix: suffix, Problem: "must be a mapping"}}
 	}
 
-	issues := unsupportedProcessIdentityFields(rawAllow, suffix)
+	keys := processIdentityKeys
+	if descendantsAllowed {
+		keys = processPolicyAllowKeys
+	}
+	issues := unsupportedProcessIdentityFields(rawAllow, suffix, keys)
 	exe, exeIssue := processIdentityExecutable(rawAllow, suffix)
 	if exeIssue != nil {
 		issues = append(issues, *exeIssue)
 	}
 	cmd, commandIssues := processIdentityCommand(rawAllow, suffix)
 	issues = append(issues, commandIssues...)
-	return ProcessIdentityRule{Name: name, Exe: exe, Cmd: cmd}, issues
+	descendants, ok := rawAllow[checks.CheckKeyDescendants].(bool)
+	if _, present := rawAllow[checks.CheckKeyDescendants]; present && !ok && descendantsAllowed {
+		issues = append(issues, ProcessIdentityRuleError{PathSuffix: suffix + "." + checks.CheckKeyDescendants, Problem: "must be a boolean"})
+	}
+	return ProcessIdentityRule{Name: name, Exe: exe, Cmd: cmd, Descendants: descendants && descendantsAllowed}, issues
 }
 
-func unsupportedProcessIdentityFields(rawAllow map[string]any, suffix string) []ProcessIdentityRuleError {
+func unsupportedProcessIdentityFields(rawAllow map[string]any, suffix string, keys map[string]struct{}) []ProcessIdentityRuleError {
 	var issues []ProcessIdentityRuleError
-	for key := range unknownBlockKeys(rawAllow, processIdentityKeys) {
+	for key := range unknownBlockKeys(rawAllow, keys) {
 		issues = append(issues, ProcessIdentityRuleError{PathSuffix: suffix + "." + key, Problem: "is not supported"})
 	}
 	return issues
@@ -144,4 +156,7 @@ func processIdentityCommand(rawAllow map[string]any, suffix string) (*regexp.Reg
 	return compiled, issues
 }
 
-var processIdentityKeys = set(checks.CheckKeyExe, process.SelectorKeyCmd)
+var (
+	processIdentityKeys    = set(checks.CheckKeyExe, process.SelectorKeyCmd)
+	processPolicyAllowKeys = set(checks.CheckKeyExe, process.SelectorKeyCmd, checks.CheckKeyDescendants)
+)

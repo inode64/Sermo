@@ -425,7 +425,12 @@ A check's timeout starts when it gets a slot, so a check queued behind a burst
 (the daemon's first cycles, several `hdparm` benchmarks, an init system that
 stalls after a reload) runs late instead of reporting unavailable. Cancellation
 while queued (shutdown, reload, an operation's deadline) returns an unavailable
-observation without starting the probe. Reload preserves running
+observation without starting the probe. When a host stall holds every slot
+until a queued check's cycle deadline passes, the budget, not the target, kept
+it from running: a service check keeps its previous result for that cycle and a
+watch skips it, and only a second starved cycle in a row reports the check
+unavailable. The daemon records one `alert` notice (`warning`) when such an
+episode begins, not one per check. Reload preserves running
 checks in the same budget. A standalone `sermoctl` command has its own budget;
 separate processes do not share this in-memory limit.
 
@@ -4120,7 +4125,11 @@ one configured user**. It is for service accounts that must execute a small,
 reviewed set of binaries: a process must match one `allow` entry with an exact,
 absolute `exe` path and, when configured, an anchored RE2 `cmd` expression.
 An unresolved executable or a `/proc/<pid>/exe` target marked `(deleted)` is
-always a violation, even when its previous path appears in the allowlist.
+always a violation, even when its previous path appears in the allowlist. The
+one exception is a process that was exiting when sampled: the kernel drops its
+executable link as it exits, so an unresolved process that is a zombie, or
+whose PID has since vanished or been reused, executes nothing and is skipped.
+When that exit cannot be verified, the process stays a violation.
 
 ```yaml
 name: security-user-postgres
@@ -4137,19 +4146,34 @@ check:
     postgres-17:
       exe: /usr/lib/postgresql/17/bin/postgres
       cmd: '^/usr/lib/postgresql/17/bin/postgres(?: .*)?$'
+    nightly-backup:            # the job and everything it runs (df, awk, pg_dump…)
+      exe: /usr/bin/bash
+      cmd: '^/bin/bash /usr/local/sbin/pg-backup\.sh$'
+      descendants: true
 then:                         # optional; omit for dashboard/event-only alerting
   notify: [security]
   notify_interval: 15m
 ```
 
-`allow` is non-empty. Each named entry accepts only `exe` and optional `cmd`:
-`exe` must be a clean absolute path, and `cmd` must compile and start with `^`
-and end with `$`. The expression always matches the whole command line (the
+`allow` is non-empty. Each named entry accepts only `exe`, optional `cmd` and
+optional `descendants`: `exe` must be a clean absolute path, and `cmd` must
+compile and start with `^` and end with `$`. The expression always matches the whole command line (the
 space-joined argv): a top-level alternation such as `^foo --a|--b$` means
 `^(?:foo --a|--b)$`, not "starts with `foo --a` or ends with `--b`". A
 basename, glob or partial command is rejected. The command
 line is used only to make an allow entry narrower; it is never copied into the
 WebUI, events, notification environment or generated inventory.
+
+`descendants: true` makes an entry a reviewed entry point: every process of the
+same account it launched, directly or through intermediate processes of that
+account, is allowed too. A backup script runs whatever utilities it needs
+without listing each one, while a shell the database server spawns is still a
+violation, because the server, not the entry point, is above it. The parent
+walk stops at the first ancestor of another user (init, a root cron daemon), so
+a process reparented to init is judged on its own identity. A descendant whose
+executable is unresolved or replaced is still reported. Anything that can start
+an entry point can run arbitrary programs under it, so pair `descendants` with
+a narrow `cmd`, and prefer scripts the watched account cannot modify.
 
 This is intentionally an **alert-only** check. Its `then:` block may contain
 only `notify` and `notify_interval`; `hook`, `kill`, `expand`, `remount`, `makestep` and a

@@ -970,3 +970,38 @@ func TestWatchRemountsAHungMountWithinItsCooldown(t *testing.T) {
 		t.Fatalf("a space alert remounted %v", spaceOnly.specs)
 	}
 }
+
+// A host stall that holds every check slot says nothing about this watch's
+// target: one starved cycle is skipped, a second in a row is observed as
+// unavailable without the confirming retry a starved budget could not serve.
+func TestWatchSkipsOneStarvedCycleOnly(t *testing.T) {
+	starved := checks.Result{Check: "http", Unavailable: true, NotStarted: true, Message: "check not started: wait for check slot: context deadline exceeded"}
+	check := &scriptedCheck{results: []checks.Result{
+		{Check: "http", OK: true, Message: "status 200"},
+		starved,
+		{Check: "http", OK: true, Message: "status 200"},
+		starved,
+		starved,
+	}}
+	var published []checks.Result
+	var events []Event
+	w := &Watch{
+		Name: "http", CheckType: checks.CheckTypeHTTP, Check: check, FireOnFail: true,
+		Publish: func(_, _ string, result checks.Result) { published = append(published, result) },
+		Emit:    func(event Event) { events = append(events, event) },
+	}
+
+	for range 4 {
+		w.RunCycle(context.Background())
+	}
+	if len(published) != 2 || len(events) != 0 {
+		t.Fatalf("published %d results and %d events through single starved cycles, want 2 and none", len(published), len(events))
+	}
+	w.RunCycle(context.Background())
+	if check.calls != 5 {
+		t.Fatalf("check ran %d times, want no confirming retry of a starved check", check.calls)
+	}
+	if last := published[len(published)-1]; len(published) != 3 || !last.NotStarted {
+		t.Fatalf("published = %+v, want the second starved cycle in a row observed", published)
+	}
+}
