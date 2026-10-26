@@ -3858,9 +3858,10 @@ changed at the selected `level` (`major`, `minor` or `patch`; default `patch`).
 watches its file. The first cycle adopts the current value (a daemon start
 never fires), and a successful `restart`/`start` re-baselines it. A failed app version command is an
 invalid sample: it does not fire and does not update the baseline. One that
-only ran past its timeout (a loaded host) is also false without a
-rule-evaluation error; the app's own watch reports the slow probe, and the next
-successful sample is compared with the baseline. An app that
+only ran past its timeout (a loaded host) remains unknown through `and`/`or`/`not`:
+ordinary rules do not fire or report an evaluation error, and guards fail closed.
+The app's own watch reports the slow probe, and the next successful sample is
+compared with the baseline. An app that
 is not installed (including a failed `version_match`) is an unavailable sample:
 it is false without a rule-evaluation error and does not set a baseline. When it
 is later installed, its first version establishes that baseline. This does not
