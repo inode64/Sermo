@@ -533,10 +533,12 @@ func (c *Config) resolveAnalyze(scope string, analyze map[string]any) ([]any, []
 	// Local rules come FIRST so the service takes precedence: a local rule (e.g.
 	// an `ok` whitelist for a known-benign line) wins over an inherited rule that
 	// would otherwise match the same line, since evaluation is first-match-wins.
-	if local, ok := analyze[rules.SectionRules].([]any); ok {
-		for _, r := range local {
-			addRule(r)
-		}
+	local, ok := analyze[rules.SectionRules].([]any)
+	if _, present := analyze[rules.SectionRules]; present && !ok {
+		errs = append(errs, scope+".rules must be a list")
+	}
+	for _, r := range local {
+		addRule(r)
 	}
 
 	// Inherited rules from each `use` set, in order, minus silenced ids.

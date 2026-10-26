@@ -290,6 +290,9 @@ rules:
   `use` sets in order (minus `silence`d ids). Per output line the first matching
   rule wins (an `ok` match whitelists that line); the check's severity is the
   maximum over all lines.
+- **Validation:** local `rules` must be a list, even when `use` supplies inherited
+  patterns. Omit it or use `rules: []` when there are no local rules; a mapping,
+  scalar or `null` is rejected rather than silently dropped.
 - **Result:** `error` or `critical` → the check fails as required; `warning`,
   `info` or `debug` → the check fails as *optional* (does not block
   start/restart/reload/resume or drive remediation by itself); no match → the
