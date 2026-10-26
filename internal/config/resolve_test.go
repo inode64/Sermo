@@ -317,6 +317,56 @@ func TestExpandAnalyzeUnknownSetAndBadSilence(t *testing.T) {
 	}
 }
 
+func TestExpandAnalyzeRejectsMalformedLocalRules(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		rules   string
+		wantErr bool
+	}{
+		{name: "absent"},
+		{name: "empty list", rules: "[]"},
+		{name: "valid list", rules: "[{ id: own, match: y, severity: warning }]"},
+		{name: "null", rules: "null", wantErr: true},
+		{name: "mapping", rules: "{ id: own, match: y, severity: warning }", wantErr: true},
+		{name: "string", rules: "warning", wantErr: true},
+		{name: "number", rules: "42", wantErr: true},
+	} {
+		for _, inherited := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/inherited=%t", tc.name, inherited), func(t *testing.T) {
+				block := ""
+				if inherited {
+					block += "        use: [common]\n"
+				}
+				if tc.rules != "" {
+					block += "        rules: " + tc.rules + "\n"
+				}
+				analyze := "      analyze: {}\n"
+				if block != "" {
+					analyze = "      analyze:\n" + block
+				}
+				global := writeConfig(t, map[string]string{
+					"sermo.yml":                   baseGlobal,
+					"catalog/patterns/common.yml": "name: common\nrules:\n  - { id: dep, match: x, severity: warning }\n",
+					"catalog/services/svc.yml":    "name: svc\nwatches:\n  config-files:\n    check:\n      type: command\n      command: [/test/tool]\n" + analyze,
+					"services/svc-main.yml":       "name: svc-main\nuses: svc\n",
+				})
+				cfg, err := loadConfig(t, global)
+				if err != nil {
+					t.Fatalf("Load() error = %v", err)
+				}
+				_, errs := cfg.Resolve("svc-main")
+				if tc.wantErr {
+					if !hasSub(errs, "watches.config-files.check.analyze.rules must be a list") {
+						t.Fatalf("Resolve() errors = %v, want malformed rules rejected", errs)
+					}
+				} else if len(errs) != 0 {
+					t.Fatalf("Resolve() errors = %v, want valid local rules accepted", errs)
+				}
+			})
+		}
+	}
+}
+
 func TestExpandPidfileDesugars(t *testing.T) {
 	global := writeConfig(t, map[string]string{
 		"sermo.yml": baseGlobal,
