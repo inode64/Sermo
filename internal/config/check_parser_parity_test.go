@@ -59,6 +59,16 @@ func TestCheckFieldParsersAgreeWithBuilders(t *testing.T) {
 		{"command empty analysis rules", map[string]any{"type": "command", "command": []any{"/test/tool"}, "analyze": map[string]any{"rules": []any{}}}, false},
 		{"command null analysis rules", map[string]any{"type": "command", "command": []any{"/test/tool"}, "analyze": map[string]any{"rules": nil}}, true},
 		{"command invalid analysis rules", map[string]any{"type": "command", "command": []any{"/test/tool"}, "analyze": map[string]any{"rules": "error"}}, true},
+		{"command empty export", map[string]any{"type": "command", "command": []any{"/test/tool"}, "export": map[string]any{}}, false},
+		{"command null export", map[string]any{"type": "command", "command": []any{"/test/tool"}, "export": nil}, true},
+		{"command invalid export", map[string]any{"type": "command", "command": []any{"/test/tool"}, "export": "stdout"}, true},
+		{"command export defaults", map[string]any{"type": "command", "command": []any{"/test/tool"}, "export": map[string]any{"api-version_2": map[string]any{}}}, false},
+		{"command invalid export name", map[string]any{"type": "command", "command": []any{"/test/tool"}, "export": map[string]any{"bad.name": map[string]any{}}}, true},
+		{"command empty export name", map[string]any{"type": "command", "command": []any{"/test/tool"}, "export": map[string]any{"": map[string]any{}}}, true},
+		{"command null export rule", map[string]any{"type": "command", "command": []any{"/test/tool"}, "export": map[string]any{"api": nil}}, true},
+		{"command invalid export stream", map[string]any{"type": "command", "command": []any{"/test/tool"}, "export": map[string]any{"api": map[string]any{"from": "both"}}}, true},
+		{"command invalid export trim", map[string]any{"type": "command", "command": []any{"/test/tool"}, "export": map[string]any{"api": map[string]any{"trim": "yes"}}}, true},
+		{"command invalid export regex", map[string]any{"type": "command", "command": []any{"/test/tool"}, "export": map[string]any{"api": map[string]any{"regex": "["}}}, true},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			typ := tt.entry["type"].(string)
@@ -85,14 +95,14 @@ func TestCheckFieldParsersAgreeWithBuilders(t *testing.T) {
 }
 
 func TestSharedAnalyzerReportsAllInvalidFields(t *testing.T) {
-	entry := map[string]any{"analyze": map[string]any{"rules": []any{
+	entry := map[string]any{"command": []any{"/test/tool"}, "analyze": map[string]any{"rules": []any{
 		map[string]any{"id": "bad", "severity": "fatal", "stream": "syslog", "match": "("},
 		map[string]any{"id": "bad", "severity": "warning"},
 		map[string]any{"severity": "warning", "match": "error"},
 		"invalid",
 	}}}
 	var diagnostics []string
-	validateAnalyze("checks.probe", entry, func(format string, args ...any) {
+	validateCommandFields("checks.probe", entry, true, func(format string, args ...any) {
 		diagnostics = append(diagnostics, fmt.Sprintf(format, args...))
 	})
 	joined := strings.Join(diagnostics, "\n")

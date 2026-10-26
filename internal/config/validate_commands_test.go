@@ -92,6 +92,7 @@ func TestValidateCommandsExport(t *testing.T) {
 			"command": []any{"/bin/tool", "--version"},
 			"export": map[string]any{
 				"bad.name": map[string]any{},
+				"combined": map[string]any{"from": "both", "trim": "yes", "regex": "["},
 				"stderr":   map[string]any{"from": "log"},
 				"trim":     map[string]any{"trim": "yes"},
 				"regex":    map[string]any{"regex": "["},
@@ -106,6 +107,9 @@ func TestValidateCommandsExport(t *testing.T) {
 	joined := strings.Join(issues, "\n")
 	for _, want := range []string{
 		`commands.version.export variable "bad.name" must be a simple variable name`,
+		"commands.version.export.combined.from must be stdout or stderr",
+		"commands.version.export.combined.trim must be a boolean",
+		"commands.version.export.combined.regex is invalid",
 		"commands.version.export.stderr.from must be stdout or stderr",
 		"commands.version.export.trim.trim must be a boolean",
 		"commands.version.export.regex.regex is invalid",

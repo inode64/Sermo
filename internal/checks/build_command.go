@@ -1,6 +1,8 @@
 package checks
 
 import (
+	"errors"
+	"fmt"
 	"maps"
 	"regexp"
 	"slices"
@@ -36,7 +38,7 @@ func buildCommandCheck(b base, entry map[string]any, runner execx.Runner) (Check
 	if warn != "" {
 		return nil, "command check " + warn
 	}
-	exports, warn := parseCommandExports(b.name, entry[CheckKeyExport])
+	exports, warn := parseCommandExports(b.name, entry)
 	if warn != "" {
 		return nil, "command check " + warn
 	}
@@ -58,7 +60,17 @@ type commandExport struct {
 	shortVersion bool
 }
 
-func parseCommandExports(checkName string, raw any) ([]commandExport, string) {
+// ValidateCommandExports uses the builder's parser without running a command or
+// adding the implicit exports of reserved command names.
+func ValidateCommandExports(entry map[string]any) error {
+	_, warning := parseCommandExports("", entry)
+	if warning != "" {
+		return errors.New(warning)
+	}
+	return nil
+}
+
+func parseCommandExports(checkName string, entry map[string]any) ([]commandExport, string) {
 	exports := map[string]commandExport{}
 	switch checkName {
 	case DataKeyVersion:
@@ -69,17 +81,22 @@ func parseCommandExports(checkName string, raw any) ([]commandExport, string) {
 	case DataKeyVersionShort:
 		exports[checkName] = defaultCommandExport(checkName)
 	}
-	if raw == nil {
+	specs, present, ok := cfgval.MapAt(entry, CheckKeyExport)
+	if !present {
 		return sortedCommandExports(exports), ""
 	}
-	specs, ok := raw.(map[string]any)
 	if !ok {
 		return nil, CheckKeyExport + " must be a mapping of variable name -> export rule"
 	}
+	var errs []string
 	for _, name := range slices.Sorted(maps.Keys(specs)) {
+		if !validCommandExportName(name) {
+			errs = append(errs, fmt.Sprintf("export variable %q must be a simple variable name", name))
+		}
 		spec, ok := specs[name].(map[string]any)
 		if !ok {
-			return nil, commandExportPath(name) + mustBeMappingSuffix
+			errs = append(errs, commandExportPath(name)+mustBeMappingSuffix)
+			continue
 		}
 		e := defaultCommandExport(name)
 		if from := cfgval.String(spec[CheckKeyFrom]); from != "" {
@@ -88,12 +105,12 @@ func parseCommandExports(checkName string, raw any) ([]commandExport, string) {
 		switch e.from {
 		case AnalyzeStreamStdout, AnalyzeStreamStderr:
 		default:
-			return nil, commandExportPath(name, CheckKeyFrom) + " must be " + AnalyzeExportStreamSummary
+			errs = append(errs, commandExportPath(name, CheckKeyFrom)+" must be "+AnalyzeExportStreamSummary)
 		}
 		if rawTrim, present := spec[CheckKeyTrim]; present {
 			v, ok := rawTrim.(bool)
 			if !ok {
-				return nil, commandExportPath(name, CheckKeyTrim) + " must be a boolean"
+				errs = append(errs, commandExportPath(name, CheckKeyTrim)+" must be a boolean")
 			}
 			e.trim = v
 		}
@@ -103,17 +120,35 @@ func parseCommandExports(checkName string, raw any) ([]commandExport, string) {
 		if rawRegex, present := spec[CheckKeyRegex]; present {
 			pattern := cfgval.String(rawRegex)
 			if pattern == "" {
-				return nil, commandExportPath(name, CheckKeyRegex) + " must be non-empty"
+				errs = append(errs, commandExportPath(name, CheckKeyRegex)+" must be non-empty")
+				continue
 			}
 			re, err := regexp.Compile(pattern)
 			if err != nil {
-				return nil, commandExportPath(name, CheckKeyRegex) + " is invalid: " + err.Error()
+				errs = append(errs, commandExportPath(name, CheckKeyRegex)+" is invalid: "+err.Error())
+				continue
 			}
 			e.regex = re
 		}
 		exports[name] = e
 	}
+	if len(errs) > 0 {
+		return nil, strings.Join(errs, "\n")
+	}
 	return sortedCommandExports(exports), ""
+}
+
+func validCommandExportName(name string) bool {
+	if name == "" || strings.Contains(name, ".") {
+		return false
+	}
+	for _, r := range name {
+		if r == '_' || r == '-' || r >= '0' && r <= '9' || r >= 'A' && r <= 'Z' || r >= 'a' && r <= 'z' {
+			continue
+		}
+		return false
+	}
+	return true
 }
 
 func commandExportPath(name string, fields ...string) string {

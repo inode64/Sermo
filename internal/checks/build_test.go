@@ -489,7 +489,7 @@ func TestCommandExportValueWholeMatchNoGroup(t *testing.T) {
 
 func TestParseCommandExportsRejectsEmptyRegex(t *testing.T) {
 	_, warn := parseCommandExports("api", map[string]any{
-		"version": map[string]any{"regex": ""},
+		"export": map[string]any{"version": map[string]any{"regex": ""}},
 	})
 	if !strings.Contains(warn, "regex must be non-empty") {
 		t.Fatalf("warn = %q, want empty regex rejection", warn)
