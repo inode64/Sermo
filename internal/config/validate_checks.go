@@ -5,7 +5,6 @@ import (
 	"maps"
 	"net/url"
 	"path/filepath"
-	"regexp"
 	"slices"
 	"strings"
 
@@ -274,9 +273,9 @@ func validateCommandFields(path string, entry map[string]any, validateAnalyzeFie
 	}
 	validateVersionMatcherField(path, entry[checks.CheckKeyVersionMatch], add)
 	if validateAnalyzeFields {
-		validateAnalyze(path, entry, add)
+		validateParsedCommandFields(path, checks.ValidateAnalyzer(entry), add)
 	}
-	validateCommandExport(path, entry, add)
+	validateParsedCommandFields(path, checks.ValidateCommandExports(entry), add)
 }
 
 func validateCommandExpectations(path string, entry map[string]any, add addFunc) {
@@ -754,64 +753,15 @@ func validateCheckSummary(path string, entry map[string]any, add addFunc) {
 	}
 }
 
-// validateAnalyze validates the resolved rules after use/silence expansion.
-func validateAnalyze(path string, entry map[string]any, add addFunc) {
-	if err := checks.ValidateAnalyzer(entry); err != nil {
-		for detail := range strings.SplitSeq(err.Error(), "\n") {
-			add("%s.%s", path, detail)
-		}
-	}
-}
-
-func validateCommandExport(path string, entry map[string]any, add addFunc) {
-	raw, present := entry[checks.CheckKeyExport]
-	if !present {
+// validateParsedCommandFields keeps every parser diagnostic attached to the
+// command's dotted configuration path.
+func validateParsedCommandFields(path string, err error, add addFunc) {
+	if err == nil {
 		return
 	}
-	exports, ok := raw.(map[string]any)
-	if !ok {
-		add("%s.export must be a mapping of variable name -> export rule", path)
-		return
+	for detail := range strings.SplitSeq(err.Error(), "\n") {
+		add("%s.%s", path, detail)
 	}
-	for _, name := range slices.Sorted(maps.Keys(exports)) {
-		if !validVariableName(name) {
-			add("%s.export variable %q must be a simple variable name", path, name)
-		}
-		switch spec := exports[name].(type) {
-		case map[string]any:
-			if from := cfgval.String(spec[checks.CheckKeyFrom]); from != "" && from != checks.AnalyzeStreamStdout && from != checks.AnalyzeStreamStderr {
-				add("%s.export.%s.from must be %s", path, name, checks.AnalyzeExportStreamSummary)
-			}
-			if v, present := spec[checks.CheckKeyTrim]; present {
-				if _, ok := v.(bool); !ok {
-					add(validationBooleanFormat, path+"."+checks.CheckKeyExport+"."+name+"."+checks.CheckKeyTrim)
-				}
-			}
-			if rawRegex, present := spec[checks.CheckKeyRegex]; present {
-				pattern := cfgval.String(rawRegex)
-				if pattern == "" {
-					add("%s.export.%s.regex must be non-empty", path, name)
-				} else if _, err := regexp.Compile(pattern); err != nil {
-					add("%s.export.%s.regex is invalid: %v", path, name, err)
-				}
-			}
-		default:
-			add("%s.export.%s must be a mapping", path, name)
-		}
-	}
-}
-
-func validVariableName(name string) bool {
-	if name == "" || strings.Contains(name, ".") {
-		return false
-	}
-	for _, r := range name {
-		if r == '_' || r == '-' || r >= '0' && r <= '9' || r >= 'A' && r <= 'Z' || r >= 'a' && r <= 'z' {
-			continue
-		}
-		return false
-	}
-	return true
 }
 
 type singleShotCheckValidator func(path string, entry map[string]any, locksDir string, add addFunc)
