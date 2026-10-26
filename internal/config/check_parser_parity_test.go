@@ -52,6 +52,13 @@ func TestCheckFieldParsersAgreeWithBuilders(t *testing.T) {
 		{"icmp invalid change", map[string]any{"type": "icmp", "host": "192.0.2.1", "metric": "latency", "change": "10"}, true},
 		{"icmp infinite delta", map[string]any{"type": "icmp", "host": "192.0.2.1", "metric": "latency", "change": map[string]any{"delta": "+Inf"}}, true},
 		{"oom invalid delta", map[string]any{"type": "oom", "delta": predicate(">", "NaN")}, true},
+		{"command without analyze", map[string]any{"type": "command", "command": []any{"/test/tool"}}, false},
+		{"command empty analyze", map[string]any{"type": "command", "command": []any{"/test/tool"}, "analyze": map[string]any{}}, false},
+		{"command null analyze", map[string]any{"type": "command", "command": []any{"/test/tool"}, "analyze": nil}, true},
+		{"command invalid analyze", map[string]any{"type": "command", "command": []any{"/test/tool"}, "analyze": "rules"}, true},
+		{"command empty analysis rules", map[string]any{"type": "command", "command": []any{"/test/tool"}, "analyze": map[string]any{"rules": []any{}}}, false},
+		{"command null analysis rules", map[string]any{"type": "command", "command": []any{"/test/tool"}, "analyze": map[string]any{"rules": nil}}, true},
+		{"command invalid analysis rules", map[string]any{"type": "command", "command": []any{"/test/tool"}, "analyze": map[string]any{"rules": "error"}}, true},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			typ := tt.entry["type"].(string)
@@ -74,6 +81,30 @@ func TestCheckFieldParsersAgreeWithBuilders(t *testing.T) {
 				t.Fatalf("BuildWithIssues = %d checks, %v; wantErr %v", len(built), issues, tt.wantErr)
 			}
 		})
+	}
+}
+
+func TestSharedAnalyzerReportsAllInvalidFields(t *testing.T) {
+	entry := map[string]any{"analyze": map[string]any{"rules": []any{
+		map[string]any{"id": "bad", "severity": "fatal", "stream": "syslog", "match": "("},
+		map[string]any{"id": "bad", "severity": "warning"},
+		map[string]any{"severity": "warning", "match": "error"},
+		"invalid",
+	}}}
+	var diagnostics []string
+	validateAnalyze("checks.probe", entry, func(format string, args ...any) {
+		diagnostics = append(diagnostics, fmt.Sprintf(format, args...))
+	})
+	joined := strings.Join(diagnostics, "\n")
+	for _, want := range []string{"severity must be", "stream must be", "invalid regex", "duplicate rule id", "missing a match", "missing an id", "must be a mapping"} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("missing %q in %s", want, joined)
+		}
+	}
+	for _, diagnostic := range diagnostics {
+		if !strings.HasPrefix(diagnostic, "checks.probe.analyze ") {
+			t.Errorf("missing configuration path: %s", diagnostic)
+		}
 	}
 }
 

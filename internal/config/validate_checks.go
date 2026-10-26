@@ -754,56 +754,11 @@ func validateCheckSummary(path string, entry map[string]any, add addFunc) {
 	}
 }
 
-// validateAnalyze statically validates a command check's resolved `analyze`
-// block. It runs after expandAnalyze, so `use`/`silence` are gone and only the
-// flat `rules` list remains (unknown-set/silence errors are raised during
-// resolution). It checks each rule's id (present, unique), severity
-// (ok or a severity level), stream (stdout|stderr|both or empty), and that `match`
-// is a non-empty regular expression.
+// validateAnalyze validates the resolved rules after use/silence expansion.
 func validateAnalyze(path string, entry map[string]any, add addFunc) {
-	analyze, ok := entry[checks.CheckKeyAnalyze].(map[string]any)
-	if !ok {
-		if _, present := entry[checks.CheckKeyAnalyze]; present {
-			add(validationAnalyzeMappingFormat, path)
-		}
-		return
-	}
-	rules, ok := analyze[checks.CheckKeyRules].([]any)
-	if !ok {
-		if _, present := analyze[checks.CheckKeyRules]; present {
-			add("%s.analyze.rules must be a list", path)
-		}
-		return
-	}
-	seen := map[string]bool{}
-	for i, item := range rules {
-		rm, ok := item.(map[string]any)
-		if !ok {
-			add("%s.analyze rule %d must be a mapping", path, i)
-			continue
-		}
-		id := cfgval.AsString(rm[checks.CheckKeyID])
-		if id == "" {
-			add("%s.analyze rule %d is missing an id", path, i)
-		} else if seen[id] {
-			add("%s.analyze has a duplicate rule id %q", path, id)
-		}
-		seen[id] = true
-		if !checks.IsAnalyzeSeverity(cfgval.AsString(rm[checks.CheckKeySeverity])) {
-			add("%s.analyze rule %q severity must be %s", path, id, checks.AnalyzeSeveritySummary)
-		}
-		switch cfgval.AsString(rm[checks.CheckKeyStream]) {
-		case "", checks.AnalyzeStreamBoth, checks.AnalyzeStreamStdout, checks.AnalyzeStreamStderr:
-		default:
-			add("%s.analyze rule %q stream must be %s", path, id, checks.AnalyzeStreamSummary)
-		}
-		match := cfgval.AsString(rm[checks.CheckKeyMatch])
-		if match == "" {
-			add("%s.analyze rule %q is missing a match", path, id)
-			continue
-		}
-		if _, err := regexp.Compile(match); err != nil {
-			add("%s.analyze rule %q has an invalid regex: %v", path, id, err)
+	if err := checks.ValidateAnalyzer(entry); err != nil {
+		for detail := range strings.SplitSeq(err.Error(), "\n") {
+			add("%s.%s", path, detail)
 		}
 	}
 }

@@ -16,15 +16,6 @@ const AnalyzeSeverityOK = "ok"
 // text.
 const AnalyzeSeveritySummary = AnalyzeSeverityOK + ", " + severity.Summary
 
-// IsAnalyzeSeverity reports whether s is a grade an analyze rule may assign.
-func IsAnalyzeSeverity(s string) bool {
-	if s == AnalyzeSeverityOK {
-		return true
-	}
-	_, ok := severity.Parse(s)
-	return ok
-}
-
 // DeclaredSeverity is the narrowest valid `severity:` the trees declare, or
 // unset when none does. Trees are given broadest first — watch entry, check
 // block, metric block — so a `net` watch can call its error counter an

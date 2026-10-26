@@ -1,6 +1,7 @@
 package checks
 
 import (
+	"errors"
 	"fmt"
 	"regexp"
 	"strings"
@@ -74,57 +75,78 @@ func (a *outputAnalyzer) Analyze(stdout, stderr string) (grade severity.Level, i
 	return grade, id, line
 }
 
-// parseAnalyzer reads a resolved `analyze` mapping (its `rules` list — `use` and
-// `silence` are already consumed by expandAnalyze) into a compiled analyzer. It
-// returns the analyzer (nil when absent or ruleless) and a warning string ("" when
-// valid) describing the first invalid rule.
-func parseAnalyzer(v any) (*outputAnalyzer, string) {
-	if v == nil {
+// ValidateAnalyzer validates resolved rules without running the command. The
+// builder uses the same parser so malformed rules cannot become an inert check.
+func ValidateAnalyzer(entry map[string]any) error {
+	_, warning := parseAnalyzer(entry)
+	if warning != "" {
+		return errors.New(warning)
+	}
+	return nil
+}
+
+// parseAnalyzer consumes the resolved rules after config expands use/silence.
+// It collects every diagnostic for config validation and never returns a partial
+// analyzer: dropping an invalid rule could change which match wins.
+func parseAnalyzer(entry map[string]any) (*outputAnalyzer, string) {
+	m, present, ok := cfgval.MapAt(entry, CheckKeyAnalyze)
+	if !present {
 		return nil, ""
 	}
-	m, ok := v.(map[string]any)
 	if !ok {
 		return nil, CheckKeyAnalyze + mustBeMappingSuffix
 	}
 	raw, ok := m[CheckKeyRules].([]any)
-	if !ok || len(raw) == 0 {
-		return nil, "" // inert: no rules
+	if !ok {
+		if _, present := m[CheckKeyRules]; present {
+			return nil, "analyze.rules must be a list"
+		}
+		return nil, ""
+	}
+	if len(raw) == 0 {
+		return nil, ""
 	}
 	a := &outputAnalyzer{}
 	seen := map[string]bool{}
+	var errs []string
 	for i, item := range raw {
 		rm, ok := item.(map[string]any)
 		if !ok {
-			return nil, analyzeRuleIndex(i) + mustBeMappingSuffix
+			errs = append(errs, analyzeRuleIndex(i)+mustBeMappingSuffix)
+			continue
 		}
 		id := cfgval.AsString(rm[CheckKeyID])
 		if id == "" {
-			return nil, analyzeRuleIndex(i) + " is missing an id"
-		}
-		if seen[id] {
-			return nil, fmt.Sprintf("%s has a duplicate rule id %q", CheckKeyAnalyze, id)
+			errs = append(errs, analyzeRuleIndex(i)+" is missing an id")
+		} else if seen[id] {
+			errs = append(errs, fmt.Sprintf("%s has a duplicate rule id %q", CheckKeyAnalyze, id))
 		}
 		seen[id] = true
 		grade, ok := parseAnalyzeGrade(cfgval.AsString(rm[CheckKeySeverity]))
 		if !ok {
-			return nil, fmt.Sprintf("%s severity must be %s", analyzeRuleID(id), AnalyzeSeveritySummary)
+			errs = append(errs, fmt.Sprintf("%s severity must be %s", analyzeRuleID(id), AnalyzeSeveritySummary))
 		}
 		stream := cfgval.AsString(rm[CheckKeyStream])
 		if stream == "" {
 			stream = AnalyzeStreamBoth
 		}
 		if stream != AnalyzeStreamBoth && stream != AnalyzeStreamStdout && stream != AnalyzeStreamStderr {
-			return nil, fmt.Sprintf("%s stream must be %s", analyzeRuleID(id), AnalyzeStreamSummary)
+			errs = append(errs, fmt.Sprintf("%s stream must be %s", analyzeRuleID(id), AnalyzeStreamSummary))
 		}
 		match := cfgval.AsString(rm[CheckKeyMatch])
 		if match == "" {
-			return nil, analyzeRuleID(id) + " is missing a match"
+			errs = append(errs, analyzeRuleID(id)+" is missing a match")
+			continue
 		}
 		re, err := regexp.Compile(match)
 		if err != nil {
-			return nil, fmt.Sprintf("%s has an invalid regex: %v", analyzeRuleID(id), err)
+			errs = append(errs, fmt.Sprintf("%s has an invalid regex: %v", analyzeRuleID(id), err))
+			continue
 		}
 		a.rules = append(a.rules, analyzeRule{id: id, re: re, grade: grade, stream: stream})
+	}
+	if len(errs) > 0 {
+		return nil, strings.Join(errs, "\n")
 	}
 	return a, ""
 }
