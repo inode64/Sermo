@@ -9,12 +9,14 @@ import (
 
 func TestAnalyzeSeverityVocabulary(t *testing.T) {
 	for _, grade := range []string{AnalyzeSeverityOK, "debug", "info", "warning", "error", "critical"} {
-		if !IsAnalyzeSeverity(grade) {
-			t.Errorf("IsAnalyzeSeverity(%q) = false, want true", grade)
+		if _, ok := parseAnalyzeGrade(grade); !ok {
+			t.Errorf("parseAnalyzeGrade(%q) ok = false, want true", grade)
 		}
 	}
-	if IsAnalyzeSeverity("") || IsAnalyzeSeverity("urgent") {
-		t.Error("IsAnalyzeSeverity accepted an empty or unknown grade")
+	for _, grade := range []string{"", "urgent"} {
+		if _, ok := parseAnalyzeGrade(grade); ok {
+			t.Errorf("parseAnalyzeGrade(%q) accepted an empty or unknown grade", grade)
+		}
 	}
 	// ok grades an analyze match; it is never a check's own severity.
 	if _, ok := severity.Parse(AnalyzeSeverityOK); ok {

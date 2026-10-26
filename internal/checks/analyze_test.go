@@ -1,6 +1,7 @@
 package checks
 
 import (
+	"strings"
 	"testing"
 
 	"sermo/internal/severity"
@@ -8,7 +9,7 @@ import (
 
 func mustAnalyzer(t *testing.T, rules []any) *outputAnalyzer {
 	t.Helper()
-	a, warn := parseAnalyzer(map[string]any{"rules": rules})
+	a, warn := parseAnalyzer(map[string]any{"analyze": map[string]any{"rules": rules}})
 	if warn != "" {
 		t.Fatalf("parseAnalyzer: %s", warn)
 	}
@@ -96,7 +97,7 @@ func TestParseAnalyzerErrors(t *testing.T) {
 		{"missing-id", []any{map[string]any{"match": "y", "severity": "warning"}}, "id"},
 		{"missing-match", []any{map[string]any{"id": "x", "severity": "warning"}}, "match"},
 	} {
-		if _, warn := parseAnalyzer(map[string]any{"rules": tc.rules}); warn == "" {
+		if a, warn := parseAnalyzer(map[string]any{"analyze": map[string]any{"rules": tc.rules}}); a != nil || warn == "" || !strings.Contains(warn, tc.want) {
 			t.Errorf("%s: expected a warning containing %q", tc.name, tc.want)
 		}
 	}
@@ -115,9 +116,9 @@ func TestAnalyzerActiveRequiresRules(t *testing.T) {
 
 func TestParseAnalyzerInertWhenAbsent(t *testing.T) {
 	if a, warn := parseAnalyzer(nil); a != nil || warn != "" {
-		t.Fatalf("nil analyze must be inert, got a=%v warn=%q", a, warn)
+		t.Fatalf("absent analyze must be inert, got a=%v warn=%q", a, warn)
 	}
-	a, warn := parseAnalyzer(map[string]any{})
+	a, warn := parseAnalyzer(map[string]any{"analyze": map[string]any{}})
 	if warn != "" || a.Active() {
 		t.Fatalf("ruleless analyze must be inert, got a=%v warn=%q", a, warn)
 	}

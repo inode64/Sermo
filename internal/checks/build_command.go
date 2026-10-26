@@ -32,7 +32,7 @@ func buildCommandCheck(b base, entry map[string]any, runner execx.Runner) (Check
 	if warn != "" {
 		return nil, "command check version_match " + warn
 	}
-	analyzer, warn := parseAnalyzer(entry[CheckKeyAnalyze])
+	analyzer, warn := parseAnalyzer(entry)
 	if warn != "" {
 		return nil, "command check " + warn
 	}
