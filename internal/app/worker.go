@@ -1169,7 +1169,7 @@ func (w *Worker) changedAppVersion(_ context.Context, app string, level int) (bo
 		// not broken: the app's own watch reports it, and the baseline is
 		// compared again at the next successful sample.
 		if report.TimedOut {
-			return false, nil
+			return false, fmt.Errorf("%w: app %q version probe timed out", rules.ErrUnavailable, app)
 		}
 		return false, &appProbeError{status: report.Status, output: report.Output}
 	}

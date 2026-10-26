@@ -45,7 +45,7 @@ type Evaluator struct {
 	// ChangedVersion reports whether the named app's version (its version command
 	// output reduced to version_short and truncated to level: 1=major, 2=minor,
 	// 3=patch) differs from a baseline tracked across cycles. Injected by the
-	// worker; nil makes every `changed: {app}` condition false.
+	// worker; nil or an ErrUnavailable result leaves the condition unknown.
 	ChangedVersion func(ctx context.Context, app string, level int) (bool, error)
 	// Change is populated when a changed: leaf evaluates true, so callers can
 	// expand rule messages with the concrete changed path/app/library.
@@ -128,14 +128,16 @@ func (e *Evaluator) EvalRule(ctx context.Context, r Rule) (bool, error) {
 // caller (guard/remediation) can treat it conservatively.
 func (e *Evaluator) Eval(ctx context.Context, node map[string]any) (bool, error) {
 	match, err := e.eval(ctx, node)
-	e.Unknown = errors.Is(err, errUnavailable)
+	e.Unknown = errors.Is(err, ErrUnavailable)
 	if !e.FailOnUnavailable && e.Unknown {
 		return false, nil
 	}
 	return match, err
 }
 
-var errUnavailable = errors.New("condition observation unavailable")
+// ErrUnavailable lets condition sources retain uncertainty through boolean
+// operators: ordinary rules do not match and guards fail closed.
+var ErrUnavailable = errors.New("condition observation unavailable")
 
 // eval keeps unavailable observations distinct from false throughout the tree.
 // Only Eval converts them to a non-match for ordinary rules.
@@ -192,7 +194,7 @@ func (e *Evaluator) eval(ctx context.Context, node map[string]any) (bool, error)
 func (e *Evaluator) evalFailed(ctx context.Context, operand any) (bool, error) {
 	res, err := e.probe(ctx, operand)
 	if err != nil {
-		if !e.FailOnUnavailable && !res.Skipped && errors.Is(err, errUnavailable) && e.unobservedFails(res) {
+		if !e.FailOnUnavailable && !res.Skipped && errors.Is(err, ErrUnavailable) && e.unobservedFails(res) {
 			return true, nil
 		}
 		return false, err
@@ -239,7 +241,7 @@ func (e *Evaluator) evalList(ctx context.Context, v any, and bool) (bool, error)
 			// on a later true operand and an AND still fails on a later false
 			// one, so the outcome cannot depend on operand order. Any other
 			// error stops evaluation.
-			if errors.Is(err, errUnavailable) {
+			if errors.Is(err, ErrUnavailable) {
 				unknown = err
 				continue
 			}
@@ -496,13 +498,13 @@ func (e *Evaluator) unavailableCheckError(name string, res checks.Result) error 
 	if !res.Unavailable && !res.Skipped && !busyUnknown {
 		return nil
 	}
-	return fmt.Errorf("%w: check %q is unavailable, advisory, busy or skipped: %s", errUnavailable, name, res.Message)
+	return fmt.Errorf("%w: check %q is unavailable, advisory, busy or skipped: %s", ErrUnavailable, name, res.Message)
 }
 
 // unavailableSignal propagates uncertainty through boolean operators. Guards
 // retain the error; ordinary rules become non-matches at the Eval boundary.
 func unavailableSignal(err error) (bool, error) {
-	return false, fmt.Errorf("%w: %w", errUnavailable, err)
+	return false, fmt.Errorf("%w: %w", ErrUnavailable, err)
 }
 
 // inlineEntry converts an inline {<type>: params} operand into a check entry.

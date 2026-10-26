@@ -986,6 +986,48 @@ func TestCycleTimedOutAppProbeKeepsChangedRuleQuiet(t *testing.T) {
 	}
 }
 
+func TestCycleTimedOutAppProbeDoesNotMatchNegatedChange(t *testing.T) {
+	runner := execxtest.Outputs("containerd v9.9.9")
+	h := &workerHarness{opResult: operation.Result{Status: operation.ResultOK}}
+	w := appVersionWorker(h, runner, "patch")
+	w.artifactSamples.StoreAppReport("containerd", appinspect.Report{Version: "containerd v1.7.0", Status: appinspect.StatusOK})
+	w.RunCycle(t.Context())
+	w.Rules[0].If = map[string]any{rules.ConditionNot: w.Rules[0].If}
+	w.artifactSamples.StoreAppReport("containerd", appinspect.Report{Status: "error: timeout after 10s", TimedOut: true})
+	w.RunCycle(t.Context())
+	if len(h.ops) != 0 {
+		t.Fatalf("a negated unknown version must not restart, ops=%v", h.ops)
+	}
+	if _, ok := h.eventOf(eventKindError); ok {
+		t.Fatalf("a timed-out app probe must stay quiet, events=%+v", h.events)
+	}
+}
+
+func TestTimedOutAppVersionRemainsUnknownInConditionsAndGuards(t *testing.T) {
+	samples := NewArtifactSamples()
+	samples.RegisterApp("containerd")
+	samples.StoreAppReport("containerd", appinspect.Report{Status: "error: timeout after 10s", TimedOut: true})
+	w := &Worker{artifactSamples: samples}
+	changed := map[string]any{rules.ConditionChanged: map[string]any{rules.FieldApp: "containerd"}}
+	for name, node := range map[string]map[string]any{
+		"changed": changed,
+		"not":     {rules.ConditionNot: changed},
+		"and":     {rules.ConditionAnd: []any{changed, changed}},
+		"or":      {rules.ConditionOr: []any{changed, changed}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			ev := &rules.Evaluator{ChangedVersion: w.changedAppVersion}
+			if match, err := ev.Eval(t.Context(), node); match || err != nil || !ev.Unknown {
+				t.Fatalf("condition = %v, %v, unknown=%v; want a quiet unknown", match, err, ev.Unknown)
+			}
+			guards := []rules.Rule{{Name: "version", Type: rules.RuleGuard, Blocks: []string{string(rules.ActionRestart)}, If: node}}
+			if _, _, err := rules.Guard(t.Context(), guards, string(rules.ActionRestart), ev); err == nil {
+				t.Fatal("a guard with an unknown version must fail closed")
+			}
+		})
+	}
+}
+
 func TestCycleMissingArtifactAppSkipsChangedRule(t *testing.T) {
 	runner := execxtest.Outputs("containerd v9.9.9")
 	h := &workerHarness{opResult: operation.Result{Status: operation.ResultOK}}
