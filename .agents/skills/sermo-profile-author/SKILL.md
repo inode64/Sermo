@@ -134,7 +134,10 @@ not have is skipped, with no rule and no blocking preflight. A library whose
 soname changes with each version (ICU, ImageMagick) stays out of the list.
 Add the advisory `alert-if-libraries-replaced` watch (`stale_libraries`) for
 everything else the processes map. A database only gets the advisory watch:
-its restart is the operator's decision.
+its restart is the operator's decision. A daemon whose sessions survive a
+restart (`keep_children`, OpenSSH) lists only what its main process maps and
+gets no advisory watch: `stale_libraries` scans the kept sessions too, so the
+alert would hold until they close.
 
 ## Init and reload
 
