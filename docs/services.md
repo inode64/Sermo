@@ -1604,9 +1604,11 @@ On load, Sermo discovers app versions by globbing the linked app's
 `variables.binary` path with `${version}` wildcarded (here
 `/usr/lib64/postgresql-*/bin/postgres`) and extracting what filled it. Service
 templates in `catalog/services` prefer the active init service as source of
-truth: token-bearing `service:` candidates are matched against active
-systemd/OpenRC units, and when any unit matches only the matching services
-materialize. With no matching active unit, a service template falls back to its
+truth: token-bearing `service:` candidates are matched against the active
+systemd service units or the services OpenRC holds started (read from
+`/run/openrc/started`, so an instance whose daemon crashed still
+materializes), and when any unit matches only the matching services
+materialize. With no matching unit, a service template falls back to its
 own `versions.from`, then to the linked app's `versions.from` or
 `variables.binary` glob. Each match becomes a
 concrete app or service with `%v` and `${version}` substituted everywhere (name,

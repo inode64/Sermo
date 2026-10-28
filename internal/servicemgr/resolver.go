@@ -90,8 +90,10 @@ func (r UnitResolver) knows(ctx context.Context, backend Backend, unit, path str
 	}
 }
 
+// activeKnownUnit breaks a tie between known candidates. A lone known unit is
+// the answer whatever its state, so querying the backend for it is skipped.
 func (r UnitResolver) activeKnownUnit(ctx context.Context, units []string) string {
-	if r.Manager == nil {
+	if r.Manager == nil || len(units) < 2 {
 		return ""
 	}
 	for _, unit := range units {

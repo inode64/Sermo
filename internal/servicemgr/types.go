@@ -116,6 +116,7 @@ const (
 	openRCInitDir    = "/etc/init.d"
 	openRCConfDir    = "/etc/conf.d"
 	openRCDaemonsDir = openRCRuntimeDir + "/daemons"
+	openRCStartedDir = openRCRuntimeDir + "/started"
 	pid1CommPath     = "/proc/1/comm"
 )
 
@@ -141,6 +142,7 @@ const (
 const (
 	openRCFlagAll      = "--all"
 	openRCFlagAllShort = "-a"
+	openRCFlagRunlevel = "--runlevel"
 	// openRCFlagNoDeps is rc-service's `-D, --nodeps`: run the command against
 	// this service alone, without starting what it needs or stopping what needs
 	// it. rc-service takes its options before the service name.

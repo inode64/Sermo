@@ -1,6 +1,10 @@
 package servicemgr
 
 import (
+	"errors"
+	"io/fs"
+	"os"
+	"path/filepath"
 	"slices"
 	"testing"
 )
@@ -52,5 +56,24 @@ func TestParseOpenRCFailedUnits(t *testing.T) {
 	}
 	if got := ParseOpenRCActiveUnits(stdout); !slices.Equal(got, []string{"sshd", "crashed-reporter"}) {
 		t.Fatalf("ParseOpenRCActiveUnits() = %v, want [sshd crashed-reporter]", got)
+	}
+}
+
+// OpenRC records each started service as an entry of its started directory,
+// a symlink to the init script; the listing is the entry names, crashed
+// daemons included, and a missing directory is an error rather than no units.
+func TestListOpenRCStartedUnits(t *testing.T) {
+	dir := t.TempDir()
+	for _, name := range []string{"php-fpm8.4", "sshd", "symfony-messenger_default_async.1"} {
+		if err := os.Symlink(filepath.Join("/etc/init.d", name), filepath.Join(dir, name)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	want := []string{"php-fpm8.4", "sshd", "symfony-messenger_default_async.1"}
+	if got, err := listOpenRCStartedUnits(dir); err != nil || !slices.Equal(got, want) {
+		t.Fatalf("listOpenRCStartedUnits() = %v, %v; want %v", got, err, want)
+	}
+	if _, err := listOpenRCStartedUnits(filepath.Join(dir, "missing")); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("missing started dir err = %v, want not exist", err)
 	}
 }

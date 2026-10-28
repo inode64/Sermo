@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"sermo/internal/execx"
+	"sermo/internal/hostfs"
 	"sermo/internal/strutil"
 )
 
@@ -60,6 +61,31 @@ var (
 // ListActiveUnits returns active service units for the selected init backend.
 func ListActiveUnits(ctx context.Context, backend Backend, runner execx.Runner, timeout time.Duration) ([]string, error) {
 	return listUnits(ctx, backend, runner, timeout, activeUnitListing)
+}
+
+// ListStartedUnits returns the service units the init backend holds started,
+// for discovery that needs unit names rather than health. On OpenRC it reads
+// the started state directory instead of `rc-status --all`, whose daemon check
+// for every service scans /proc and grows with the host's services; a started
+// service whose daemon died is therefore listed too. systemd lists its active
+// service units.
+func ListStartedUnits(ctx context.Context, backend Backend, runner execx.Runner, timeout time.Duration) ([]string, error) {
+	if backend != BackendOpenRC {
+		return ListActiveUnits(ctx, backend, runner, timeout)
+	}
+	return listOpenRCStartedUnits(openRCStartedDir)
+}
+
+func listOpenRCStartedUnits(dir string) ([]string, error) {
+	entries, err := hostfs.ReadDir(dir)
+	if err != nil {
+		return nil, fmt.Errorf("list started openrc units: %w", err)
+	}
+	units := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		units = append(units, entry.Name())
+	}
+	return units, nil
 }
 
 // ListFailedUnits returns the units the selected init backend reports as failed.

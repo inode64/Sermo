@@ -104,6 +104,21 @@ func TestResolvePrefersActiveKnownUnit(t *testing.T) {
 	}
 }
 
+// Status only breaks a tie between known units: a lone known unit is the
+// answer whatever its state, so the backend is not queried for it.
+func TestResolveLoneKnownUnitSkipsStatus(t *testing.T) {
+	r := resolver(nil, map[string]bool{"/etc/init.d/php-fpm8.4": true})
+	manager := &countingResolverManager{}
+	r.Manager = manager
+	unit, err := r.Resolve(context.Background(), BackendOpenRC, []string{"php-fpm8.4", "php8.4-fpm"}, false)
+	if err != nil || unit != "php-fpm8.4" {
+		t.Fatalf("Resolve() = %q, %v; want php-fpm8.4", unit, err)
+	}
+	if manager.calls != 0 {
+		t.Fatalf("status queried %d times for a lone known unit, want 0", manager.calls)
+	}
+}
+
 func TestMainPID(t *testing.T) {
 	if pid, err := MainPIDContext(context.Background(), execxtest.Fixed(execx.Result{Stdout: "4242\n"}, nil), BackendSystemd, "nginx.service"); err != nil || pid != 4242 {
 		t.Fatalf("MainPID = %d/%v, want 4242", pid, err)
@@ -237,6 +252,16 @@ func (m resolverManager) Restart(context.Context, string) error                {
 func (m resolverManager) Reload(context.Context, string) error                 { return nil }
 func (m resolverManager) SupportsReload(context.Context, string) (bool, error) { return false, nil }
 func (m resolverManager) ResetState(context.Context, string) error             { return nil }
+
+type countingResolverManager struct {
+	resolverManager
+	calls int
+}
+
+func (m *countingResolverManager) Status(ctx context.Context, service string) (ServiceStatus, error) {
+	m.calls++
+	return m.resolverManager.Status(ctx, service)
+}
 
 func TestCgroupPIDsFiltersZeroAndEmpty(t *testing.T) {
 	runner := execxtest.Fixed(execx.Result{Stdout: "/system.slice/x.service\n"}, nil)

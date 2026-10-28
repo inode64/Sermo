@@ -109,7 +109,7 @@ func tokensFor(name string) []tmplToken {
 // application can be installed at once, so a single `name: foo%v` (or `foo%n`)
 // yields `foo1.2`, `foo3.4`, ... with the token's `${...}` wildcarded. Apps and
 // libraries discover from their own `versions.from`/`binary`; catalog services first
-// discover from token-bearing `service:` candidates matched against active init
+// discover from token-bearing `service:` candidates matched against started init
 // units, then from explicit `versions.from` or a linked app template
 // (`apps: ["php-fpm${version}"]`). `%v` and `%n` may also register an empty
 // active-slot value when the marker-less app binary exists (e.g. `php%v` ->
@@ -243,7 +243,7 @@ func requireSatisfied(require []string, vals map[string]string, toks []tmplToken
 	return false
 }
 
-// templateDiscoverySource returns the active-unit matches or globs (carrying
+// templateDiscoverySource returns the started-unit matches or globs (carrying
 // all markers) that enumerate a template's instances. Catalog services prefer
 // token-bearing service candidates; apps and libraries can discover from
 // versions.from or their own variables.binary candidates.
@@ -309,7 +309,7 @@ func (c *Config) serviceTemplateMatches(ctx context.Context, body map[string]any
 	if backend == "" || backend == string(servicemgr.BackendAuto) {
 		return nil
 	}
-	units := c.activeServiceUnits(ctx, backend)
+	units := c.startedServiceUnits(ctx, backend)
 	if len(units) == 0 {
 		return nil
 	}

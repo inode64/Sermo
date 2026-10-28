@@ -22,7 +22,7 @@ func cloneServiceUnits(in map[string][]string) map[string][]string {
 	return out
 }
 
-func (c *Config) activeServiceUnits(ctx context.Context, backend string) []string {
+func (c *Config) startedServiceUnits(ctx context.Context, backend string) []string {
 	if c == nil || backend == "" || backend == string(servicemgr.BackendAuto) {
 		return nil
 	}
@@ -32,7 +32,7 @@ func (c *Config) activeServiceUnits(ctx context.Context, backend string) []strin
 	if units, ok := c.serviceUnits[backend]; ok {
 		return units
 	}
-	units, err := servicemgr.ListActiveUnits(ctx, servicemgr.Backend(backend), nil, serviceUnitDiscoveryTimeout)
+	units, err := servicemgr.ListStartedUnits(ctx, servicemgr.Backend(backend), nil, serviceUnitDiscoveryTimeout)
 	if err != nil {
 		c.serviceUnits[backend] = nil
 		return nil

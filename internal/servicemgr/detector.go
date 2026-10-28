@@ -155,7 +155,9 @@ func (d Detector) probeOpenRC(ctx context.Context) BackendProbe {
 	hasRunDir := d.Probe.PathExists(openRCRuntimeDir)
 	rcStatusWorks := false
 	if d.Probe.CommandExists(cmdRcStatus) {
-		_, err := d.run(ctx, cmdRcStatus)
+		// Only the runlevel name: a bare rc-status checks the daemon of every
+		// service in the runlevel, which grows with the host's services.
+		_, err := d.run(ctx, cmdRcStatus, openRCFlagRunlevel)
 		rcStatusWorks = err == nil
 	}
 
