@@ -110,12 +110,6 @@ per cycle from `/proc/<pid>/io`, CPU per cycle, seconds to `/readyz`).
       counts the shared snapshot while it is fresh. Left: the
       `unowned_processes` watch, which has a kill path, still walks `/proc` per
       cycle through `procSamplerFromDeps`.
-- [ ] One `systemctl` status query per cycle instead of one fork per service:
-      the `service` check forks `systemctl is-active` (plus `show -p LoadState`
-      when inactive) for every service every cycle
-      (`internal/checks/servicecheck.go`, `internal/servicemgr/manager.go`).
-      The web backend already caches this fleet-wide; give the daemon path the
-      same single `list-units` refresh per cycle.
 - [ ] Trim the live sampler. Done: one `metrics.ProcessObservation` per
       worker cycle shares each PID's `statm`, `io`, `fd/` and `task/` readings
       between `liveSampler` and the engine sampler. Left: `processEntryCount`

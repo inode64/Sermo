@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"sermo/internal/execx"
@@ -61,6 +62,55 @@ var (
 // ListActiveUnits returns active service units for the selected init backend.
 func ListActiveUnits(ctx context.Context, backend Backend, runner execx.Runner, timeout time.Duration) ([]string, error) {
 	return listUnits(ctx, backend, runner, timeout, activeUnitListing)
+}
+
+// ActiveUnitSnapshot answers whether a unit is active from one listing of the
+// backend's active units, taken at most once per TTL and shared by every
+// caller. A host with many services then pays one init query per refresh
+// instead of one per service and cycle; on OpenRC each `rc-service status`
+// spawns the init script and its helpers, and some scripts run a costly
+// status() of their own. A unit absent from the listing — stopped, crashed,
+// transitional, an alias, or a failed listing — is not answered: the caller
+// queries it live, so a stale listing can delay a failure verdict by at most
+// one TTL but never invent one.
+type ActiveUnitSnapshot struct {
+	backend Backend
+	runner  execx.Runner
+	ttl     time.Duration
+	timeout time.Duration
+	now     func() time.Time
+
+	mu    sync.Mutex
+	at    time.Time
+	units map[string]struct{}
+}
+
+// NewActiveUnitSnapshot returns a snapshot of backend's active units refreshed
+// at most once per ttl, each listing bounded by timeout.
+func NewActiveUnitSnapshot(backend Backend, runner execx.Runner, ttl, timeout time.Duration) *ActiveUnitSnapshot {
+	return &ActiveUnitSnapshot{backend: backend, runner: runner, ttl: ttl, timeout: timeout, now: time.Now}
+}
+
+// Active reports whether the current listing names unit as active. Concurrent
+// callers wait for a single refresh rather than each listing the units.
+func (s *ActiveUnitSnapshot) Active(ctx context.Context, unit string) bool {
+	if s == nil {
+		return false
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if now := s.now(); s.at.IsZero() || now.Sub(s.at) >= s.ttl {
+		units, err := ListActiveUnits(ctx, s.backend, s.runner, s.timeout)
+		s.at = now
+		s.units = make(map[string]struct{}, len(units))
+		if err == nil {
+			for _, name := range units {
+				s.units[name] = struct{}{}
+			}
+		}
+	}
+	_, ok := s.units[NormalizeUnit(s.backend, unit)]
+	return ok
 }
 
 // ListStartedUnits returns the service units the init backend holds started,

@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -87,5 +88,53 @@ func TestInspectCategoryProviderCycleDoesNotDeadlock(t *testing.T) {
 		}
 	case <-time.After(time.Second):
 		t.Fatal("cyclic version providers blocked inspection")
+	}
+}
+
+// overlapRunner records how many version probes run at once, holding each one
+// briefly so a sequential caller can never show an overlap.
+type overlapRunner struct {
+	inFlight, max atomic.Int32
+}
+
+func (r *overlapRunner) Run(context.Context, string, ...string) (execx.Result, error) {
+	n := r.inFlight.Add(1)
+	defer r.inFlight.Add(-1)
+	for {
+		m := r.max.Load()
+		if n <= m || r.max.CompareAndSwap(m, n) {
+			break
+		}
+	}
+	time.Sleep(20 * time.Millisecond)
+	return execx.Result{Stdout: "App 1.0"}, nil
+}
+
+// A listing runs its version probes side by side, never more than
+// ProbeParallelism at once, and still returns the entries in name order.
+func TestListProbesInParallelInNameOrder(t *testing.T) {
+	binary := filepath.Join(t.TempDir(), "app")
+	if err := os.WriteFile(binary, []byte("executable"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cfg := &config.Config{Apps: map[string]*config.Document{}}
+	names := []string{"a", "b", "c", "d", "e", "f", "g", "h"}
+	for _, name := range names {
+		cfg.Apps[name] = &config.Document{Name: name, Body: preflightResolved(binary, "").Tree}
+		cfg.AppNames = append(cfg.AppNames, name)
+	}
+	runner := &overlapRunner{}
+	lookup := WithUserLookup(process.NewUserLookup(process.UserLookupConfig{Mode: process.UserLookupNumeric}))
+	reports := List(t.Context(), runner, cfg, config.CategoryApp, false, lookup)
+	if len(reports) != len(names) {
+		t.Fatalf("reports = %+v, want one per app", reports)
+	}
+	for i, report := range reports {
+		if report.Name != names[i] || report.Version != "App 1.0" {
+			t.Fatalf("report[%d] = %+v, want %s in name order", i, report, names[i])
+		}
+	}
+	if got := runner.max.Load(); got < 2 || got > ProbeParallelism {
+		t.Fatalf("probes in flight = %d, want 2..%d", got, ProbeParallelism)
 	}
 }

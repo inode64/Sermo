@@ -68,7 +68,7 @@ func (b *WebBackend) loadCatalogItems(ctx context.Context, category string, expo
 		probeNames = append(probeNames, name)
 		probeIndices = append(probeIndices, i)
 	}
-	for i, report := range appinspect.InspectCategory(ctx, runner, b.cfg, category, probeNames, catalogInspectionParallelism, opts) {
+	for i, report := range appinspect.InspectCategory(ctx, runner, b.cfg, category, probeNames, appinspect.ProbeParallelism, opts) {
 		if report.Installed {
 			results[probeIndices[i]] = catalogResult{item: catalogItemFromReport(report), ok: true}
 		}

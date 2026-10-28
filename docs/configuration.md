@@ -576,6 +576,18 @@ auto-detection.
 For OpenRC oneshot services whose `status` command cannot report cleanly, Sermo
 falls back to `rc-status -a` and trusts the init state.
 
+The daemon's `service` checks read the active units from one shared listing
+(`systemctl list-units --type=service --state=active`, or `rc-status --all`),
+taken at most every half `engine.interval`, instead of querying each unit on
+every cycle. A unit the listing names active passes without its own query; any
+other reading — stopped, crashed, transitional, or a unit the listing omits
+(an OpenRC boot-runlevel service, a systemd alias) — is confirmed with the live
+`systemctl is-active` or `rc-service SERVICE status`. A stale listing can delay
+a failure verdict by up to half an interval but never report one. Preflight,
+operation verification, the gate that decides whether to observe a service
+right after an operation, `sermoctl` and a service whose own `interval` is
+shorter than `engine.interval` always query live.
+
 Safe service actions (`start`, `stop`, `restart`, `reload`, `resume`) run
 without a global concurrency cap. Each service is still serialized by its own
 cross-process operation lock (`<engine.runtime>/ops/<service>.lock`), automatic

@@ -405,6 +405,7 @@ func run(args []string) int {
 	// also share each service's `changed:` baseline.
 	deps.Targets = control.NewTargetCache()
 	deps.ArtifactBaselines = app.NewArtifactBaselines()
+	deps.ActiveUnits = app.NewActiveUnitSnapshot(deps)
 
 	workers, svcWatches, warnings := app.BuildWorkers(ctx, cfg, deps, collector)
 	app.LogBuildNotices(logger, "build workers", warnings)

@@ -113,6 +113,11 @@ func WithoutProbes() Option {
 	return func(o *options) { o.withoutProbes = true }
 }
 
+// ProbeParallelism bounds the version and health commands one listing runs at
+// once: a slow probe (rabbitmqctl boots an Erlang VM) no longer delays every
+// entry after it, and a listing still never spawns one command per entry.
+const ProbeParallelism = 4
+
 // List inspects every catalog entry in category. When includeMissing is false,
 // only installed entries are returned. The order follows
 // config.CatalogNamesInCategory, which sorts by name.
@@ -121,10 +126,9 @@ func List(ctx context.Context, runner execx.Runner, cfg *config.Config, category
 		return nil
 	}
 	var reports []Report
-	cache := &inspectionCache{entries: map[string]*inspectionEntry{}}
-	for _, name := range cfg.CatalogNamesInCategory(category) {
-		r := inspectCatalog(ctx, runner, cfg, category, name, cache, map[string]bool{}, opts...)
-		if !r.Installed && !includeMissing {
+	for _, r := range InspectCategory(ctx, runner, cfg, category, cfg.CatalogNamesInCategory(category), ProbeParallelism, opts...) {
+		// A cancelled context leaves the entries it never reached unnamed.
+		if r.Name == "" || (!r.Installed && !includeMissing) {
 			continue
 		}
 		reports = append(reports, r)
