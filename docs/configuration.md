@@ -584,15 +584,23 @@ remediation is rate-limited by the mandatory per-service `policy` block
 
 `engine.operation_timeout` is the outer deadline for a safe
 start/stop/restart/reload/resume/repair. The engine may raise it per service when the resolved
-`stop_policy` needs longer (graceful stop plus signal escalation). The same
+`stop_policy` needs longer (graceful stop plus signal escalation). A `stop` or
+`restart` of a systemd unit also covers the unit's `TimeoutStopSec=`:
+`systemctl stop` can wait that long before systemd's final SIGKILL, so the
+deadline is at least that timeout plus the `stop_policy` budget and 30 seconds
+for the start and its checks. With both at the default 90 seconds, a restart
+whose stop ran into systemd's timeout used the whole deadline and left the
+service stopped. A unit with `TimeoutStopSec=infinity`, or one a day or longer,
+keeps the configured deadline, and a hanging `ExecStop=` (which systemd waits
+out once more before signalling) is not covered. The same
 limit applies to automatic remediation, `sermoctl` actions and web-initiated
 operations. When the web UI is enabled, `sermod` also sets the HTTP server's
 initial write timeout from the longest resolved deadline — including a watch
 probe's check `timeout:`, a `buttons.<name>.timeout`, and an `also_apply`
 cascade, which the web runs member by member (each under its own deadline,
 with one retry when a member is blocked) — and extends each long action response from the
-active configuration after a reload, so an operation or a manual probe is not
-cut off mid-request. The default is `90s`.
+active configuration after a reload and again when the action returns, so an
+operation or a manual probe is not cut off mid-request. The default is `90s`.
 
 `engine.startup_delay` is a non-negative duration that holds the daemon before
 it starts its first check cycle, giving the host time to finish booting so

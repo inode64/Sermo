@@ -60,6 +60,40 @@ func TestSystemdManagerStatus(t *testing.T) {
 	}
 }
 
+// systemctl prints TimeoutStopUSec as a systemd timespan; infinity and 0 put no
+// bound on the stop job, and a failed query reports none either.
+func TestSystemdManagerStopTimeout(t *testing.T) {
+	const show = "systemctl show -p TimeoutStopUSec --value -- apache2.service"
+	cases := []struct {
+		stdout string
+		err    error
+		want   time.Duration
+		ok     bool
+	}{
+		{stdout: "1min 30s\n", want: 90 * time.Second, ok: true},
+		{stdout: "15min\n", want: 15 * time.Minute, ok: true},
+		{stdout: "1h 2min 3s 500ms\n", want: time.Hour + 2*time.Minute + 3500*time.Millisecond, ok: true},
+		{stdout: "2.5s\n", want: 2500 * time.Millisecond, ok: true},
+		{stdout: "infinity\n"},
+		{stdout: "0\n"},
+		{stdout: "1min soon\n"},
+		{stdout: "\n"},
+		{stdout: "1min 30s\n", err: errors.New("systemctl timed out")},
+	}
+	for _, tc := range cases {
+		t.Run(strings.TrimSpace(tc.stdout), func(t *testing.T) {
+			m := systemdManager{runner: &execxtest.Runner{
+				ByLine: map[string]execx.Result{show: {Stdout: tc.stdout}},
+				Errs:   map[string]error{show: tc.err},
+			}}
+			got, ok := m.StopTimeout(t.Context(), "apache2")
+			if got != tc.want || ok != tc.ok {
+				t.Fatalf("StopTimeout() = %v, %v; want %v, %v", got, ok, tc.want, tc.ok)
+			}
+		})
+	}
+}
+
 // `systemctl is-active` prints "inactive" for a unit systemd cannot find, so a
 // misspelled or absent unit is otherwise reported as a permanent failure that
 // looks exactly like a real outage. LoadState is what separates the two.

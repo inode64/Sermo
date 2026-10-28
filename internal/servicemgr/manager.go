@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"sermo/internal/execx"
 	"sermo/internal/hostfs"
@@ -54,6 +55,15 @@ type Manager interface {
 	// actual processes (systemd `reset-failed`, OpenRC `zap`). It is idempotent
 	// and a no-op when there is nothing to clear.
 	ResetState(ctx context.Context, service string) error
+}
+
+// StopTimeoutReporter is a Manager whose stop request blocks while the init
+// system runs its own stop timeout. The operation engine sizes the deadline of
+// an action that stops the service from it.
+type StopTimeoutReporter interface {
+	// StopTimeout reports the longest the init's stop job may take before its
+	// final SIGKILL. ok is false for an unbounded stop or a failed query.
+	StopTimeout(ctx context.Context, service string) (time.Duration, bool)
 }
 
 // ExternalLifecycle provides the Manager surface shared by live external
@@ -299,6 +309,16 @@ func (m systemdManager) ResetState(ctx context.Context, service string) error {
 		return nil
 	}
 	return m.action(ctx, actionResetFailed, service)
+}
+
+// StopTimeout reads the unit's TimeoutStopUSec, which a synchronous
+// `systemctl stop` can wait out before systemd's final SIGKILL.
+func (m systemdManager) StopTimeout(ctx context.Context, service string) (time.Duration, bool) {
+	result, err := runSystemctlShow(ctx, m.runner, defaultDetectTimeout, systemctlPropertyTimeoutStop, systemdUnit(service))
+	if err != nil || result.ExitCode != 0 {
+		return 0, false
+	}
+	return parseSystemdTimespan(result.Stdout)
 }
 
 // SupportsReload queries systemd's CanReload property, which is true exactly when

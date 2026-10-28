@@ -72,6 +72,38 @@ func TestAccessLogPreservesActionWriteDeadline(t *testing.T) {
 	}
 }
 
+// afterActionDeadlineRecorder notes whether a write deadline was set after the
+// backend action ran.
+type afterActionDeadlineRecorder struct {
+	*httptest.ResponseRecorder
+	actionRan          func() bool
+	renewedAfterAction bool
+}
+
+func (r *afterActionDeadlineRecorder) SetWriteDeadline(time.Time) error {
+	r.renewedAfterAction = r.actionRan()
+	return nil
+}
+
+// The engine can extend a stop's deadline at run time from the unit's own stop
+// timeout, past the estimate the first write deadline used, so the response
+// deadline is renewed once the action returns.
+func TestOperateRenewsWriteDeadlineAfterTheAction(t *testing.T) {
+	backend := &fakeBackend{}
+	s := &Server{Backend: StaticBackend{Backend: backend}, OperationTimeout: time.Minute}
+	rec := &afterActionDeadlineRecorder{
+		ResponseRecorder: httptest.NewRecorder(),
+		actionRan:        func() bool { return len(backend.operated) > 0 },
+	}
+	s.Handler().ServeHTTP(rec, postReq(testServicePath("web", apiActionRestart)))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("operate status = %d", rec.Code)
+	}
+	if !rec.renewedAfterAction {
+		t.Fatal("the response write deadline was not renewed after the action returned")
+	}
+}
+
 func TestPanicOperationExtendsActionWriteDeadline(t *testing.T) {
 	s := &Server{
 		Backend:          StaticBackend{Backend: &fakeBackend{}},
