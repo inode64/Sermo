@@ -194,6 +194,46 @@ func TestPidfileClaimUsesSelectorsThenBackendPIDs(t *testing.T) {
 	}
 }
 
+// A pidfile check accepts systemd's live PIDs unless the unit is Type=forking:
+// only then does systemd need the PIDFile= to find the main PID, so its absence
+// while active is a fault. Loki's Type=simple unit names a file nothing writes.
+func TestBuildServiceRuntimePidfileFallbackFollowsUnitType(t *testing.T) {
+	tree := map[string]any{
+		"processes": map[string]any{"main": map[string]any{"exe": "/usr/bin/loki", "user": "loki"}},
+	}
+	for _, tc := range []struct {
+		unitType     string
+		wantFallback bool
+	}{
+		{unitType: "simple", wantFallback: true},
+		{unitType: "forking", wantFallback: false},
+	} {
+		t.Run(tc.unitType, func(t *testing.T) {
+			runner := &execxtest.Runner{ByLine: map[string]execx.Result{
+				"systemctl show -p PIDFile --value -- loki.service": {Stdout: "/run/loki.pid\n"},
+				"systemctl show -p Type --value -- loki.service":    {Stdout: tc.unitType + "\n"},
+			}}
+			rt := BuildServiceRuntime(t.Context(), ServiceRuntimeConfig{
+				Service: "loki", Unit: "loki.service", Tree: tree,
+				Deps: Deps{
+					Backend: servicemgr.BackendSystemd, Manager: fakeManager{}, Runtime: t.TempDir(),
+					ExecxRunner: runner, BackendPIDs: func() []int { return []int{4242} },
+				},
+			})
+			fallback := rt.CheckDeps.PidfileFallbackPIDs
+			if (fallback != nil) != tc.wantFallback {
+				t.Fatalf("pidfile fallback present = %v, want %v", fallback != nil, tc.wantFallback)
+			}
+			if fallback == nil {
+				return
+			}
+			if pids, err := fallback(); err != nil || len(pids) != 1 || pids[0] != 4242 {
+				t.Fatalf("fallback() = %v, %v; want [4242]", pids, err)
+			}
+		})
+	}
+}
+
 // The worker and web runtimes of one unit share its backend PID query within
 // SystemFreshness; an operation's observation still queries the backend live.
 func TestBuildServiceRuntimeSharesBackendPIDsPerUnit(t *testing.T) {

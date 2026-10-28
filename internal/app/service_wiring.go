@@ -171,7 +171,7 @@ func pidfileFallbackPIDs(needed bool, backendPIDs func() ([]int, error), info se
 	if !needed {
 		return nil
 	}
-	if info.Pidfile != "" {
+	if info.Pidfile != "" && !info.PidfileUnused {
 		return nil
 	}
 	return backendPIDs
