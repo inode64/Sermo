@@ -12,20 +12,30 @@ import (
 type recorder struct {
 	ctx  func() context.Context
 	exec statementExecutor
+	// pending, when set, accumulates the samples of the minute still open; a
+	// sample for an ended minute is written through exec at once.
+	pending *pendingMinutes
+	now     func() time.Time
+}
+
+// open reports whether bucket is the per-minute bucket still filling, which is
+// accumulated in memory instead of written.
+func (r recorder) open(bucket int64) bool {
+	return r.pending != nil && r.now != nil && bucket >= alignBucket(r.now(), resMinute)
 }
 
 // RecordSLA accumulates one observed monitoring cycle into a service's current
 // UTC-minute bucket: total_count +1, and up_count +1 when up. Paused or
 // unobserved cycles are simply never recorded, so they do not count as downtime.
 func (r recorder) RecordSLA(service string, up bool, at time.Time) error {
-	return recordSLABucket(r.ctx(), r.exec, service, "", up, at)
+	return r.recordSLABucket(service, "", up, at)
 }
 
 // RecordCheckSLA accumulates one observed check execution into its current
 // UTC-minute bucket. Interval-deferred checks are not recorded by callers, so
 // the per-check SLA reflects only real check runs.
 func (r recorder) RecordCheckSLA(service, check string, up bool, at time.Time) error {
-	return recordSLABucket(r.ctx(), r.exec, service, check, up, at)
+	return r.recordSLABucket(service, check, up, at)
 }
 
 // RecordMeasurement accumulates one numeric observation (milliseconds) for a
@@ -56,5 +66,5 @@ func (r recorder) RecordServiceMetric(service, metric string, value float64, at 
 // record accumulates one observation into the series' current per-minute bucket:
 // n+1, sum+value and the running min/max.
 func (r recorder) record(m metricSeries, value float64, at time.Time) error {
-	return recordMetric(r.ctx(), r.exec, m, value, at)
+	return r.recordMetric(m, value, at)
 }

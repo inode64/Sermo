@@ -3,6 +3,7 @@ package state
 import (
 	"context"
 	"fmt"
+	"slices"
 	"time"
 
 	"sermo/internal/metrics"
@@ -81,13 +82,24 @@ type SLAValue struct {
 	SLACounts
 }
 
-// recordSLABucket writes one observed cycle into the per-minute archive. An empty
-// check is the service-level series. down_buckets is recomputed rather than
-// accumulated: at this resolution the bucket is the unit it counts, so it is 1 as
-// soon as any cycle in the minute failed.
-func recordSLABucket(ctx context.Context, exec statementExecutor, service, check string, up bool, at time.Time) error {
+// recordSLABucket records one observed cycle into the per-minute archive. An
+// empty check is the service-level series.
+func (r recorder) recordSLABucket(service, check string, up bool, at time.Time) error {
+	bucket := alignBucket(at, resMinute)
+	if r.open(bucket) {
+		r.pending.addSLA(service, check, bucket, up)
+		return nil
+	}
+	return writeSLABucket(r.ctx(), r.exec, service, check, bucket, slaAggregate{up: boolInt64(up), total: 1})
+}
+
+// writeSLABucket adds an aggregate to the series' stored per-minute bucket.
+// down_buckets is recomputed rather than accumulated: at this resolution the
+// bucket is the unit it counts, so it is 1 as soon as any cycle in the minute
+// failed.
+func writeSLABucket(ctx context.Context, exec statementExecutor, service, check string, bucket int64, agg slaAggregate) error {
 	if _, err := exec(ctx, slaRecordStmt,
-		resMinute, service, check, alignBucket(at, resMinute), boolInt(up), boolInt(!up),
+		resMinute, service, check, bucket, agg.up, agg.total, agg.down(),
 	); err != nil {
 		return fmt.Errorf("record %s for %s: %w", slaKind(check), slaTarget(service, check), err)
 	}
@@ -143,12 +155,21 @@ func (s *Store) CheckSLASeries(service, check string, from, to time.Time) ([]SLA
 func (s *Store) sumSLA(service string, span time.Duration, now time.Time) (SLAValue, error) {
 	from := now.Add(-span)
 	stored := s.retention.archiveFor(from, now)
+	lo, hi := alignBucket(from, stored.Res), alignBucket(now, stored.Res)+stored.Res
 	var value SLAValue
 	if err := s.reader.QueryRowContext(s.sqlCtx(), slaSumStmt,
-		stored.Res, service, "", alignBucket(from, stored.Res),
-		alignBucket(now, stored.Res)+stored.Res,
+		stored.Res, service, "", lo, hi,
 	).Scan(&value.Up, &value.Total, &value.DownBuckets); err != nil {
 		return SLAValue{}, fmt.Errorf("sum %s for %s: %w", slaKind(""), slaTarget(service, ""), err)
+	}
+	if stored.Res == resMinute {
+		// A pending bucket is normally not stored yet; one a previous process
+		// wrote at its stop may count its failed minute twice until it ends.
+		for _, agg := range s.pending.slaBuckets(service, "", lo, hi) {
+			value.Up += agg.up
+			value.Total += agg.total
+			value.DownBuckets += agg.down()
+		}
 	}
 	return value, nil
 }
@@ -184,7 +205,30 @@ func (s *Store) loadSLASeries(service, check string, from, to time.Time) ([]SLAP
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("iterate %s series for %s: %w", slaKind(check), slaTarget(service, check), err)
 	}
+	if stored.Res == resMinute {
+		out = withPendingSLAPoints(out, s.pending.slaBuckets(service, check, alignBucket(from, stored.Res), alignBucket(to, stored.Res)+stored.Res))
+	}
 	return out, nil
+}
+
+// withPendingSLAPoints adds the pending minute buckets to a stored series,
+// merging a bucket both hold, and keeps it oldest first.
+func withPendingSLAPoints(points []SLAPoint, pending map[int64]slaAggregate) []SLAPoint {
+	if len(pending) == 0 {
+		return points
+	}
+	for i, p := range points {
+		if agg, ok := pending[p.Start.Unix()]; ok {
+			merged := slaAggregate{up: p.Up + agg.up, total: p.Total + agg.total}
+			points[i].Up, points[i].Total, points[i].DownBuckets = merged.up, merged.total, merged.down()
+			delete(pending, p.Start.Unix())
+		}
+	}
+	for bucket, agg := range pending {
+		points = append(points, SLAPoint{Start: time.Unix(bucket, 0).UTC(), Up: agg.up, Total: agg.total, DownBuckets: agg.down()})
+	}
+	slices.SortFunc(points, func(a, b SLAPoint) int { return a.Start.Compare(b.Start) })
+	return points
 }
 
 // SeriesResolution is the bucket span a series request for [from, to) resolves to.

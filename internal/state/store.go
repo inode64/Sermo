@@ -18,6 +18,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"sync"
@@ -35,6 +36,17 @@ const (
 	stateDirMode        = 0o700
 	sqliteBusyTimeoutMS = 5000
 	sqliteDriverName    = "sqlite"
+)
+
+// walAutocheckpointPages and walSizeLimitBytes set when the WAL is copied into
+// the database. Every cycle rewrites the page holding each series' newest
+// bucket, and a checkpoint copies each dirty page once: at SQLite's default
+// 1000 pages that was nearly once per cycle, while a ~32 MiB WAL lets one copy
+// cover several cycles. The size limit truncates a WAL that a large transaction
+// (a VACUUM, a long consolidation catch-up) grew past that, once checkpointed.
+const (
+	walAutocheckpointPages = 8000
+	walSizeLimitBytes      = 32 * units.BytesPerMiB
 )
 
 // Sources record who last changed a monitoring state row, for inspection.
@@ -95,6 +107,14 @@ type Store struct {
 	pruneMu sync.Mutex
 	pruned  map[pruneKey]int64
 
+	// rollupMu guards rolledFrom, each coarser archive's newest source bucket
+	// start seen by a consolidation pass of this process; see rollup.
+	rollupMu   sync.Mutex
+	rolledFrom map[int64]int64
+
+	// pending holds the per-minute buckets still filling; see pendingMinutes.
+	pending pendingMinutes
+
 	statements statementCache
 }
 
@@ -127,6 +147,12 @@ func (b *batch) exec(ctx context.Context, query string, args ...any) (sql.Result
 // rolls back every sample in the batch; a later cycle can continue recording.
 // Callers must pass a non-nil ctx (typically the cycle or request context).
 func (s *Store) WithBatch(ctx context.Context, record func(Batch) error) error {
+	// The first batch after a minute boundary writes every series' ended minute.
+	return s.withBatch(ctx, alignBucket(s.now(), resMinute), record)
+}
+
+// withBatch is WithBatch writing the pending buckets that start before cutoff.
+func (s *Store) withBatch(ctx context.Context, cutoff int64, record func(Batch) error) error {
 	if record == nil {
 		return errors.New("record state batch: callback is nil")
 	}
@@ -139,14 +165,39 @@ func (s *Store) WithBatch(ctx context.Context, record func(Batch) error) error {
 	}
 	defer func() { _ = tx.Rollback() }()
 
+	// The batch's open-minute samples join the store's only once it commits, so
+	// a failed batch still records none of its samples.
+	staged := &pendingMinutes{}
 	txBatch := &batch{tx: tx}
-	txBatch.recorder = recorder{ctx: func() context.Context { return ctx }, exec: txBatch.exec}
+	txBatch.recorder = recorder{ctx: func() context.Context { return ctx }, exec: txBatch.exec, pending: staged, now: s.clock}
 	defer txBatch.statements.close()
 	if err := record(txBatch); err != nil {
 		return fmt.Errorf("record state batch: %w", err)
 	}
+	metrics, sla := s.pending.take(cutoff)
+	if err := writePending(ctx, txBatch.exec, metrics, sla); err != nil {
+		s.pending.merge(metrics, sla)
+		return fmt.Errorf("record state batch: %w", err)
+	}
 	if err := tx.Commit(); err != nil {
+		s.pending.merge(metrics, sla)
 		return fmt.Errorf("commit state batch: %w", err)
+	}
+	s.pending.merge(staged.metrics, staged.sla)
+	return nil
+}
+
+// clock is the store's time source, read through the field so a test can move it.
+func (s *Store) clock() time.Time { return s.now() }
+
+// flushPending writes, in one transaction, every pending bucket that starts
+// before cutoff. A failed write keeps them pending.
+func (s *Store) flushPending(ctx context.Context, cutoff int64) error {
+	if s.pending.empty() {
+		return nil
+	}
+	if err := s.withBatch(ctx, cutoff, func(Batch) error { return nil }); err != nil {
+		return fmt.Errorf("write pending minute buckets: %w", err)
 	}
 	return nil
 }
@@ -308,8 +359,9 @@ func OpenContextWith(ctx context.Context, path string, opts Options) (*Store, er
 	// commit — the per-cycle SLA/measurement writes would otherwise each force a
 	// disk sync.
 	dsn := fmt.Sprintf(
-		"file:%s?_pragma=busy_timeout(%d)&_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)&_pragma=foreign_keys(on)&_pragma=cache_size(-%d)",
-		path, sqliteBusyTimeoutMS, cacheKiB,
+		"file:%s?_pragma=busy_timeout(%d)&_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)&_pragma=foreign_keys(on)&_pragma=cache_size(-%d)"+
+			"&_pragma=wal_autocheckpoint(%d)&_pragma=journal_size_limit(%d)",
+		path, sqliteBusyTimeoutMS, cacheKiB, walAutocheckpointPages, walSizeLimitBytes,
 	)
 	db, err := sql.Open(sqliteDriverName, dsn)
 	if err != nil {
@@ -320,7 +372,7 @@ func OpenContextWith(ctx context.Context, path string, opts Options) (*Store, er
 	db.SetMaxOpenConns(1)
 
 	s := &Store{db: db, now: time.Now, ctx: ctx, retention: opts.Retention.normalized()}
-	s.recorder = recorder{ctx: s.sqlCtx, exec: s.exec}
+	s.recorder = recorder{ctx: s.sqlCtx, exec: s.exec, pending: &s.pending, now: s.clock}
 	if err := s.initializeSchema(ctx); err != nil {
 		_ = db.Close()
 		return nil, fmt.Errorf("initialize state db %s: %w", path, err)
@@ -338,7 +390,16 @@ func OpenContextWith(ctx context.Context, path string, opts Options) (*Store, er
 	return s, nil
 }
 
-// Close releases the database handles.
+// FlushPending writes every pending minute bucket, the one still filling
+// included. sermod calls it at shutdown, before Close, so a clean stop keeps
+// that minute.
+func (s *Store) FlushPending(ctx context.Context) error {
+	return s.flushPending(ctx, math.MaxInt64)
+}
+
+// Close releases the database handles. It does not write the minute buckets
+// still filling: a writer calls FlushPending first, where its shutdown can
+// afford the write.
 func (s *Store) Close() error {
 	s.statements.close()
 	var readerErr error
@@ -453,6 +514,52 @@ type statementExecutor func(context.Context, string, ...any) (sql.Result, error)
 //
 // The leading checkpoint still earns its place: it bounds the WAL before VACUUM
 // rewrites the whole database through it.
+// reclaimMinFreeShare and reclaimMinFreeBytes decide when ReclaimFreeSpace
+// rewrites the database: at least a quarter of its pages free, adding up to at
+// least 16 MiB. Below that SQLite reuses the free pages as the archives grow,
+// and the rewrite would cost more than it returns.
+const (
+	reclaimMinFreeShare = 4
+	reclaimMinFreeBytes = 16 * units.BytesPerMiB
+)
+
+// ReclaimFreeSpace compacts the database when most of its file is free pages —
+// what dropping retired schema objects leaves behind — and returns the file
+// size before and after in bytes. compacted is false when the free space is
+// below the thresholds and nothing was rewritten. It rewrites the whole file,
+// so sermod calls it once at startup, before anything else writes.
+func (s *Store) ReclaimFreeSpace(ctx context.Context) (before, after int64, compacted bool, err error) {
+	pages, free, pageSize, err := s.pageUsage(ctx)
+	if err != nil {
+		return 0, 0, false, err
+	}
+	before = pages * pageSize
+	if free*reclaimMinFreeShare < pages || free*pageSize < reclaimMinFreeBytes {
+		return before, before, false, nil
+	}
+	if err := s.compact(ctx); err != nil {
+		return before, before, false, err
+	}
+	pages, _, pageSize, err = s.pageUsage(ctx)
+	if err != nil {
+		return before, before, true, err
+	}
+	return before, pages * pageSize, true, nil
+}
+
+// pageUsage reads the database's page count, free pages and page size.
+func (s *Store) pageUsage(ctx context.Context) (pages, free, pageSize int64, err error) {
+	for _, q := range []struct {
+		pragma string
+		dst    *int64
+	}{{"page_count", &pages}, {"freelist_count", &free}, {"page_size", &pageSize}} {
+		if err := s.db.QueryRowContext(ctx, "PRAGMA "+q.pragma).Scan(q.dst); err != nil {
+			return 0, 0, 0, fmt.Errorf("read state db %s: %w", q.pragma, err)
+		}
+	}
+	return pages, free, pageSize, nil
+}
+
 func (s *Store) compact(ctx context.Context) error {
 	if _, err := s.exec(ctx, `PRAGMA wal_checkpoint(TRUNCATE);`); err != nil {
 		return fmt.Errorf("checkpoint state db WAL: %w", err)

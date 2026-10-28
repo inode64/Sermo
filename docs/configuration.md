@@ -680,6 +680,12 @@ retained just past that window:
 | 6 hours | `retention_6h` | `912h` (38 days) | the `30d` graphs |
 | 1 day | `retention_1d` | `8784h` (366 days) | the `1y` graphs and the rolling-year SLA |
 
+Samples for the minute still open are kept in memory and written once that minute
+has ended — by the next cycle, by the consolidation pass, or when `sermod` stops —
+so each series is written once a minute instead of on every cycle. The daemon's own
+graphs and SLA figures include that minute; `sermoctl`, which reads the database,
+sees it once written. A `sermod` crash loses at most that minute.
+
 Each archive is consolidated from the one below it, not from the live samples, so a
 long daemon outage cannot lose a resolution. **Consolidation is exact**:
 availability sums its counters, metrics sum the sample count and total (keeping the
@@ -705,9 +711,14 @@ prunes. Keep it well under `retention_1m`: the per-minute archive is the source
 every coarser one reads, and its prune is floored at the consolidation watermark
 (less the two trailing buckets each pass re-consolidates), so a slower cadence or a
 retention shorter than the next archive's two buckets delays reclaiming space
-rather than losing history. A window
-served by a consolidated archive is therefore at most one interval behind the live
-samples; the `1h` window reads per-minute buckets and is immediate.
+rather than losing history. A pass consolidates an archive only once the archive
+below it has started a new bucket: the 5-minute and hourly archives follow every
+pass, the 6-hour archive follows the hourly one and the daily archive the 6-hour
+one, so those two stop rewriting every series every few minutes. The `24h` and
+`7d` windows are therefore at most one interval behind the live samples, the
+`30d` window up to an hour and the `1y` window up to six hours; the `1h` window
+reads per-minute buckets and is immediate. A `sermod` restart consolidates every
+archive on its first pass.
 
 Raising a retention costs proportionally more disk at that resolution; lowering one
 takes effect on the next maintenance pass. Reclaiming the freed pages needs a
@@ -718,6 +729,20 @@ secondary `(res, bucket)` indexes. With the default three-hour finest retention 
 scan is bounded, while removing the two index copies reduces write amplification and
 disk use. Budget the archive rows plus normal SQLite/WAL headroom; do not double the
 archive estimate for those removed indexes.
+
+Opening the database drops the tables and indexes earlier releases created and
+the current layout no longer uses (the per-sample history tables and those two
+`(res, bucket)` indexes), which some long-lived hosts still carried as most of
+their file. At startup `sermod` then rewrites the database once with `VACUUM` when
+at least a quarter of its pages are free and they add up to at least 16 MiB,
+logging `compacted state database` with the size before and after. Below that,
+SQLite reuses the free pages as history grows.
+
+The write-ahead log (`sermo.db-wal`) is copied into the database every 8000
+pages, about 32 MiB, instead of SQLite's default 1000: each cycle rewrites the
+page holding every series' newest bucket, and a larger log lets one copy cover
+several cycles. Budget up to 32 MiB for that file; it is truncated back to that
+size after a larger transaction.
 
 When `sermoctl daemon reload` asks the running daemon to reload, `sermod` reads
 the configuration from the path passed to `sermod run --config` (the same file

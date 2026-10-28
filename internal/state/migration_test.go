@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"sermo/internal/rules"
+	"strings"
 	"testing"
 	"time"
 )
@@ -301,5 +302,128 @@ func TestSeverityStateRoundTrips(t *testing.T) {
 	due, err := s.DueEventNotifyStates("ops", time.Now())
 	if err != nil || len(due) != 1 || due[0].Severity != "warning" {
 		t.Fatalf("due reminders = %+v (err %v)", due, err)
+	}
+}
+
+// schemaObjects lists the tables and indexes a database file holds.
+func schemaObjects(t *testing.T, path string) []string {
+	t.Helper()
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	rows, err := db.Query(`SELECT type || ' ' || name FROM sqlite_schema WHERE type IN ('table', 'index') ORDER BY 1`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var obj string
+		if err := rows.Scan(&obj); err != nil {
+			t.Fatal(err)
+		}
+		out = append(out, obj)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	return out
+}
+
+// TestRetiredSchemaObjectsAreDroppedAndReclaimed pins the cleanup of a database
+// created by an earlier release: every retired table and index is gone after
+// opening, leaving exactly a fresh database's objects, and the space they held
+// is returned to the filesystem once — not on every open.
+func TestRetiredSchemaObjectsAreDroppedAndReclaimed(t *testing.T) {
+	dir := t.TempDir()
+	fresh := filepath.Join(dir, "fresh.db")
+	s, err := OpenContextWith(context.Background(), fresh, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Close(); err != nil {
+		t.Fatal(err)
+	}
+	want := schemaObjects(t, fresh)
+
+	old := filepath.Join(dir, "old.db")
+	s, err = OpenContextWith(context.Background(), old, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Close(); err != nil {
+		t.Fatal(err)
+	}
+	db, err := sql.Open("sqlite", old)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, obj := range retiredSchemaObjects {
+		stmt := "CREATE TABLE " + obj.name + " (k INTEGER PRIMARY KEY, v BLOB)"
+		if obj.kind == schemaObjectIndex {
+			table := "metric_archive"
+			if obj.name == "sla_archive_res_bucket_idx" {
+				table = "sla_archive"
+			}
+			stmt = "CREATE INDEX " + obj.name + " ON " + table + " (res, bucket)"
+		}
+		if _, err := db.Exec(stmt); err != nil {
+			t.Fatalf("%s: %v", stmt, err)
+		}
+	}
+	// Enough retired rows to cross the reclaim thresholds once dropped.
+	if _, err := db.Exec(`WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < 600)
+		INSERT INTO sla_sample (k, v) SELECT i, randomblob(65536) FROM n`); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	s, err = OpenContextWith(context.Background(), old, Options{})
+	if err != nil {
+		t.Fatalf("open database with retired objects: %v", err)
+	}
+	t.Cleanup(func() { s.Close() })
+	if got := schemaObjects(t, old); !reflect.DeepEqual(got, want) {
+		t.Fatalf("objects after open = %v, want a fresh database's %v", got, want)
+	}
+
+	before, after, compacted, err := s.ReclaimFreeSpace(context.Background())
+	if err != nil || !compacted || after*4 > before {
+		t.Fatalf("ReclaimFreeSpace = %d -> %d, compacted %v, %v; want the dropped rows returned", before, after, compacted, err)
+	}
+	if _, again, compacted, err := s.ReclaimFreeSpace(context.Background()); err != nil || compacted || again != after {
+		t.Fatalf("second ReclaimFreeSpace = %d, compacted %v, %v; want nothing left to reclaim", again, compacted, err)
+	}
+}
+
+// Every retired name is gone from the live schema: retiring an object that is
+// still created would drop it on every open.
+func TestRetiredSchemaObjectsAreNotDeclared(t *testing.T) {
+	for _, obj := range retiredSchemaObjects {
+		for _, stmt := range storageSchema {
+			if strings.Contains(stmt, " "+obj.name+" ") || strings.Contains(stmt, " "+obj.name+"\n") || strings.Contains(stmt, " "+obj.name+"(") {
+				t.Fatalf("retired %s %s is still declared: %s", obj.kind, obj.name, stmt)
+			}
+		}
+	}
+}
+
+// The write connection checkpoints its WAL every walAutocheckpointPages and
+// truncates it back to walSizeLimitBytes, instead of SQLite's 1000-page default.
+func TestWriterUsesTheWALCheckpointSettings(t *testing.T) {
+	s, err := OpenContextWith(context.Background(), filepath.Join(t.TempDir(), Filename), Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { s.Close() })
+	for pragma, want := range map[string]int64{"wal_autocheckpoint": walAutocheckpointPages, "journal_size_limit": walSizeLimitBytes} {
+		var got int64
+		if err := s.db.QueryRowContext(context.Background(), "PRAGMA "+pragma).Scan(&got); err != nil || got != want {
+			t.Fatalf("PRAGMA %s = %d, %v; want %d", pragma, got, err, want)
+		}
 	}
 }

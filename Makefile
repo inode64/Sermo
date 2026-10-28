@@ -49,6 +49,7 @@ SERMO_STATEDIR ?= $(localstatedir)/lib/sermo
 SYSTEMD_UNITDIR ?= /usr/lib/systemd/system
 TMPFILESDIR ?= /usr/lib/tmpfiles.d
 OPENRC_INITDIR ?= $(sysconfdir)/init.d
+LOGROTATEDIR ?= $(sysconfdir)/logrotate.d
 
 INSTALL ?= install
 install_dirs = @set -e; for d in $(1); do \
@@ -484,14 +485,16 @@ install-systemd:
 	$(unit_subst) packaging/systemd/sermod.service > $(DESTDIR)$(SYSTEMD_UNITDIR)/sermod.service
 	chmod 644 $(DESTDIR)$(SYSTEMD_UNITDIR)/sermod.service
 
+# The OpenRC service logs to /var/log/sermod.log; its logrotate rule ships with it.
 install-openrc:
-	$(call install_dirs,$(DESTDIR)$(OPENRC_INITDIR))
+	$(call install_dirs,$(DESTDIR)$(OPENRC_INITDIR) $(DESTDIR)$(LOGROTATEDIR))
 	$(unit_subst) packaging/openrc/sermod > $(DESTDIR)$(OPENRC_INITDIR)/sermod
 	chmod 755 $(DESTDIR)$(OPENRC_INITDIR)/sermod
+	$(INSTALL) -m644 packaging/logrotate/sermod $(DESTDIR)$(LOGROTATEDIR)/sermod
 
 uninstall:
 	rm -f $(DESTDIR)$(bindir)/sermoctl $(DESTDIR)$(sbindir)/sermod
-	rm -f $(DESTDIR)$(SYSTEMD_UNITDIR)/sermod.service $(DESTDIR)$(OPENRC_INITDIR)/sermod
+	rm -f $(DESTDIR)$(SYSTEMD_UNITDIR)/sermod.service $(DESTDIR)$(OPENRC_INITDIR)/sermod $(DESTDIR)$(LOGROTATEDIR)/sermod
 	rm -f $(DESTDIR)$(TMPFILESDIR)/sermo.conf
 	rm -rf $(DESTDIR)$(SERMO_DATADIR)/catalog
 	rm -rf $(DESTDIR)$(SERMO_EXAMPLEDIR)
