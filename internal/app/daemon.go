@@ -144,6 +144,11 @@ type Deps struct {
 	// worker and its web runtime. Optional: nil gives each its own. Create a
 	// fresh registry per config load/reload, next to Targets.
 	ArtifactBaselines *ArtifactBaselines
+	// ActiveUnits is the generation's shared listing of active init units that
+	// the cycle `service` checks consult before a live status query. Optional:
+	// nil queries every unit live. Create one per config load/reload with
+	// NewActiveUnitSnapshot, next to Targets.
+	ActiveUnits *servicemgr.ActiveUnitSnapshot
 	// BackendPIDs reports backend-owned process roots for the resolved service
 	// (systemd cgroup PIDs, Docker container init PID, etc.). Optional: nil lets
 	// the runtime derive init-backend PIDs when that is supported.
@@ -427,6 +432,10 @@ func buildServiceWorker(ctx context.Context, resolution config.ServiceResolution
 	serviceDeps.Backend = target.Backend
 	serviceDeps.Manager = target.Manager
 	serviceDeps.BackendPIDs = target.BackendPIDs
+	if target.Backend != deps.Backend {
+		// A Docker or libvirt target is not an init unit the listing can name.
+		serviceDeps.ActiveUnits = nil
+	}
 	w, svcWatches, warns := buildWorker(ctx, name, target.Unit, resolved.Tree, serviceDeps, collector)
 	for _, x := range warns {
 		b.warnings = append(b.warnings, serviceSubjectPrefix+name+": "+x)
@@ -598,8 +607,17 @@ func buildWorker(ctx context.Context, name, unit string, tree map[string]any, de
 		recordMeasurement = cycleWriter.RecordMeasurement
 		recordCycle = cycleWriter.RecordCycle
 	}
+	// The cycle's `service` check asks the shared active-unit listing first.
+	// Preflight and the worker's observe-only gate keep the live query: they
+	// judge an operation that may have just changed the unit. A service faster
+	// than the engine interval would read one listing on consecutive cycles, so
+	// it stays live too.
+	cycleDeps := checkDeps
+	if resolution >= deps.Interval {
+		cycleDeps.Status = activeUnitStatus(deps.ActiveUnits, unit, checkDeps.Status)
+	}
 	section, _ := tree[config.SectionChecks].(map[string]any)
-	built, checkWarnings, setCycleMetrics := buildWorkerCheckSet(section, checkDeps, sampleMetrics != nil)
+	built, checkWarnings, setCycleMetrics := buildWorkerCheckSet(section, cycleDeps, sampleMetrics != nil)
 	warnings = append(warnings, checkWarnings...)
 	preflightSection, _ := tree[config.SectionPreflight].(map[string]any)
 	preflightBuilt, preflightWarnings := checks.Build(preflightSection, checkDeps)
@@ -660,6 +678,35 @@ func buildWorker(ctx context.Context, name, unit string, tree map[string]any, de
 	watches, watchWarnings := serviceWatches(name, tree, watchDeps, newMetricSource, watchBuildDeps, resolution)
 	warnings = append(warnings, watchWarnings...)
 	return worker, watches, warnings
+}
+
+// activeUnitRefreshesPerInterval refreshes the shared active-unit listing twice
+// per engine interval: a service cycle reads a listing at most half its
+// interval old, and two consecutive cycles never share one.
+const activeUnitRefreshesPerInterval = 2
+
+// NewActiveUnitSnapshot returns a generation's shared active-unit listing for
+// the init backend. It is nil when the backend has no unit listing.
+func NewActiveUnitSnapshot(deps Deps) *servicemgr.ActiveUnitSnapshot {
+	if !deps.Backend.HasUnitCgroups() || deps.Interval <= 0 {
+		return nil
+	}
+	return servicemgr.NewActiveUnitSnapshot(deps.Backend, deps.ExecxRunner, deps.Interval/activeUnitRefreshesPerInterval, serviceInitQueryTimeout)
+}
+
+// activeUnitStatus answers active from the shared listing and queries every
+// other verdict live, so a stale listing can only delay a failure, never
+// report one.
+func activeUnitStatus(snapshot *servicemgr.ActiveUnitSnapshot, unit string, live func(context.Context) (servicemgr.Status, error)) func(context.Context) (servicemgr.Status, error) {
+	if snapshot == nil || live == nil {
+		return live
+	}
+	return func(ctx context.Context) (servicemgr.Status, error) {
+		if snapshot.Active(ctx, unit) {
+			return servicemgr.StatusActive, nil
+		}
+		return live(ctx)
+	}
 }
 
 // checkEpisodesFromSnapshots restores the last check-health edge after a daemon

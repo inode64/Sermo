@@ -6,7 +6,12 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"sync"
 	"testing"
+	"time"
+
+	"sermo/internal/execx"
+	"sermo/internal/execx/execxtest"
 )
 
 // A failed-unit listing is not restricted to .service: a failed mount or timer
@@ -75,5 +80,61 @@ func TestListOpenRCStartedUnits(t *testing.T) {
 	}
 	if _, err := listOpenRCStartedUnits(filepath.Join(dir, "missing")); !errors.Is(err, fs.ErrNotExist) {
 		t.Fatalf("missing started dir err = %v, want not exist", err)
+	}
+}
+
+// The snapshot lists the active units once per TTL however many units are
+// asked about, answers only units the listing names as active, and a failed
+// listing answers nothing until the next refresh.
+func TestActiveUnitSnapshotRefreshesOncePerTTL(t *testing.T) {
+	runner := &execxtest.Runner{ByLine: map[string]execx.Result{
+		"rc-status --all": {Stdout: "Runlevel: default\n sshd [  started  ]\n backup [  crashed  ]\n nfs [  stopped  ]\n"},
+	}}
+	now := time.Unix(1000, 0)
+	s := NewActiveUnitSnapshot(BackendOpenRC, runner, 15*time.Second, time.Second)
+	s.now = func() time.Time { return now }
+
+	for unit, want := range map[string]bool{"sshd": true, "backup": false, "nfs": false, "ghost": false} {
+		if got := s.Active(t.Context(), unit); got != want {
+			t.Fatalf("Active(%s) = %v, want %v", unit, got, want)
+		}
+	}
+	if n := runner.Count("rc-status", "--all"); n != 1 {
+		t.Fatalf("listings within one TTL = %d, want 1", n)
+	}
+
+	now = now.Add(15 * time.Second)
+	runner.ByLine["rc-status --all"] = execx.Result{ExitCode: 1}
+	runner.Errs = map[string]error{"rc-status": errors.New("rc-status failed")}
+	if s.Active(t.Context(), "sshd") {
+		t.Fatal("a failed listing must not answer active")
+	}
+	if s.Active(t.Context(), "sshd") || runner.Count("rc-status", "--all") != 2 {
+		t.Fatalf("listings after a failure = %d, want 2 (no retry before the TTL)", runner.Count("rc-status", "--all"))
+	}
+}
+
+// systemd names are normalized before the lookup, and concurrent callers share
+// one listing.
+func TestActiveUnitSnapshotNormalizesAndSharesOneListing(t *testing.T) {
+	runner := &execxtest.Runner{ByName: map[string]execx.Result{
+		"systemctl": {Stdout: "nginx.service loaded active running nginx\n"},
+	}}
+	s := NewActiveUnitSnapshot(BackendSystemd, runner, time.Minute, time.Second)
+	var wg sync.WaitGroup
+	for range 8 {
+		wg.Go(func() {
+			if !s.Active(t.Context(), "nginx") {
+				t.Error("Active(nginx) = false, want the listed nginx.service")
+			}
+		})
+	}
+	wg.Wait()
+	if n := len(runner.Calls()); n != 1 {
+		t.Fatalf("listings = %d, want 1 shared by concurrent callers", n)
+	}
+	var nilSnapshot *ActiveUnitSnapshot
+	if nilSnapshot.Active(t.Context(), "nginx") {
+		t.Fatal("a nil snapshot must answer nothing")
 	}
 }

@@ -179,6 +179,7 @@ func (m *Monitor) buildGenerationLocked(ctx context.Context, newCfg *config.Conf
 	// before the web backend reloads).
 	m.deps.Targets = control.NewTargetCache()
 	m.deps.ArtifactBaselines = NewArtifactBaselines()
+	m.deps.ActiveUnits = NewActiveUnitSnapshot(m.deps)
 
 	reloadDeps := m.deps
 	workers, svcWatches, warnings := BuildWorkers(ctx, newCfg, reloadDeps, m.collector)

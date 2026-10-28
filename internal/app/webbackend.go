@@ -25,9 +25,6 @@ import (
 )
 
 const (
-	// catalogInspectionParallelism bounds concurrent version/health probes so a
-	// cold dashboard load is faster without spawning one command per entry.
-	catalogInspectionParallelism = 4
 	// serviceStatusCacheTTL bounds how often the web list re-queries systemd/OpenRC.
 	// The dashboard refreshes every 30s by default, so keep status warm across
 	// ordinary refreshes instead of running one init status probe per service.
