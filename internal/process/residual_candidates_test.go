@@ -1,6 +1,7 @@
 package process
 
 import (
+	"slices"
 	"testing"
 
 	"sermo/internal/servicemgr"
@@ -120,5 +121,77 @@ func TestDiscoverFallbackSkipsForeignUnitProcess(t *testing.T) {
 	found, _ := d.Discover([]Selector{{Name: "main", Type: SelectorCommandMatch, Exe: testExe, User: "mysql"}})
 	if len(found) != 1 || found[0].PID != 100 {
 		t.Fatalf("found = %+v, want only the mysql unit's pid 100", found)
+	}
+}
+
+// A delegated selector names a process another manager owns, so its usual home
+// is another unit's group: libvirt keeps a NAT network's dnsmasq pair in its
+// daemon's service and a guest's emulator in a machine scope. Those matches are
+// observe-only and must still be attributed; a signallable selector stays
+// scoped to the service's own unit.
+func TestDiscoverDelegatedSelectorAttributesProcessOwnedElsewhere(t *testing.T) {
+	t.Parallel()
+	const (
+		dnsmasq   = "/usr/bin/dnsmasq"
+		qemu      = "/usr/bin/qemu-system-x86_64"
+		dnsmasqRe = `--conf-file=/var/lib/libvirt/dnsmasq/default\.conf([[:space:]]|$)`
+	)
+	dnsmasqPair := map[int]Identity{
+		100: {PID: 100, PPID: 1, UID: 65534, Exe: dnsmasq, ExeOK: true, Cgroup: "0::/system.slice/libvirtd.service",
+			Cmdline: []string{dnsmasq, "--conf-file=/var/lib/libvirt/dnsmasq/default.conf"}},
+		101: {PID: 101, PPID: 1, UID: 0, Exe: dnsmasq, ExeOK: true, Cgroup: "0::/system.slice/libvirtd.service",
+			Cmdline: []string{dnsmasq, "--conf-file=/var/lib/libvirt/dnsmasq/default.conf"}},
+	}
+	for _, tc := range []struct {
+		name      string
+		unit      string
+		ids       map[int]Identity
+		selectors []Selector
+		want      []int
+	}{
+		{
+			name: "network dnsmasq in the daemon's group",
+			unit: "default",
+			ids:  dnsmasqPair,
+			selectors: []Selector{
+				{Name: "dnsmasq-root", Type: SelectorCommandMatch, Exe: dnsmasq, User: "root", Cmd: dnsmasqRe, Delegated: true},
+				{Name: "dnsmasq-nobody", Type: SelectorCommandMatch, Exe: dnsmasq, User: "nobody", Cmd: dnsmasqRe, Delegated: true},
+			},
+			want: []int{100, 101},
+		},
+		{
+			name: "guest emulator in its machine scope",
+			unit: "web01",
+			ids: map[int]Identity{
+				200: {PID: 200, PPID: 1, UID: 77, Exe: qemu, ExeOK: true, Cgroup: `0::/machine.slice/machine-qemu\x2d1\x2dweb01.scope/libvirt/emulator`,
+					Cmdline: []string{qemu, "-name", "guest=web01,debug-threads=on"}},
+			},
+			selectors: []Selector{{Name: "main", Type: SelectorCommandMatch, Cmd: `^\S*qemu-system\S* -name guest=web01,.*$`, Delegated: true}},
+			want:      []int{200},
+		},
+		{
+			name:      "non-delegated selector stays scoped",
+			unit:      "default",
+			ids:       dnsmasqPair,
+			selectors: []Selector{{Name: "dnsmasq-nobody", Type: SelectorCommandMatch, Exe: dnsmasq, User: "nobody", Cmd: dnsmasqRe}},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			d := Discoverer{
+				Reader:           fakeReader{tc.ids},
+				ResolveUser:      fakeUsers(map[string]uint32{"root": 0, "nobody": 65534}),
+				ProcessOwnership: func(id Identity) (bool, bool) { return servicemgr.CgroupOwnership(id.Cgroup, tc.unit) },
+			}
+			found, _ := d.Discover(tc.selectors)
+			if got := pidsOf(found); !slices.Equal(got, tc.want) {
+				t.Fatalf("pids = %v, want %v", got, tc.want)
+			}
+			for _, proc := range found {
+				if !proc.Delegated {
+					t.Fatalf("pid %d must stay observe-only: %+v", proc.PID, proc)
+				}
+			}
+		})
 	}
 }
