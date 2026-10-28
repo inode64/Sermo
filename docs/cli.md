@@ -22,7 +22,8 @@ are shown by `sermoctl help COMMAND`.
 Without `--timeout`, live service queries (`status` and `is-active`) use the
 10-second engine check budget; service operations (and `watch pause|resume`) use
 `engine.operation_timeout` (default `90s`), the same budget as the daemon and the
-Web UI, which a service's `stop_policy` may raise. `sessions` uses the same
+Web UI, which a service's `stop_policy` or, for a `stop` or `restart`, its
+systemd unit's `TimeoutStopSec=` may raise. `sessions` uses the same
 90-second default (a statement kill runs through the daemon's operation engine),
 while each request to the daemon keeps its 10-second web client bound. `notifier test` uses
 `engine.default_timeout` (default `10s`), like the Web UI's test button.

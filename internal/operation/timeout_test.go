@@ -2,6 +2,7 @@ package operation
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -148,5 +149,80 @@ func TestStopTimesOutDuringReaperWait(t *testing.T) {
 	}
 	if res.Message != "operation timed out during residual process handling" {
 		t.Fatalf("message = %q", res.Message)
+	}
+}
+
+// initStopManager reports a native init stop timeout, as systemd's
+// TimeoutStopUSec, and records the deadline each lifecycle request runs under.
+type initStopManager struct {
+	*fakeManager
+	stopTimeout time.Duration
+	bounded     bool
+	budgets     map[string]time.Duration
+}
+
+func (m *initStopManager) StopTimeout(context.Context, string) (time.Duration, bool) {
+	return m.stopTimeout, m.bounded
+}
+
+func (m *initStopManager) Stop(ctx context.Context, s string) error {
+	m.recordBudget(ctx, actionStop)
+	return m.fakeManager.Stop(ctx, s)
+}
+
+func (m *initStopManager) Start(ctx context.Context, s string) error {
+	m.recordBudget(ctx, actionStart)
+	return m.fakeManager.Start(ctx, s)
+}
+
+func (m *initStopManager) recordBudget(ctx context.Context, action string) {
+	if deadline, ok := ctx.Deadline(); ok {
+		m.budgets[action] = time.Until(deadline)
+	}
+}
+
+// systemd can hold a stop request for the unit's whole TimeoutStopUSec before
+// its final SIGKILL. With a deadline no longer than that, a restart spent all
+// of it stopping and never reached the start: apache2 on k2keu3, where both
+// were 90s, stayed down after a manual restart.
+func TestOperationDeadlineCoversInitStopTimeout(t *testing.T) {
+	policy := process.KillPolicy{TermTimeout: 10 * time.Second}
+	extended := DefaultOperationTimeout + minimumTimeout(policy)
+	for _, tc := range []struct {
+		action  string
+		bounded bool
+		want    time.Duration
+	}{
+		{action: actionRestart, bounded: true, want: extended},
+		{action: actionStop, bounded: true, want: extended},
+		{action: actionStart, bounded: true, want: DefaultOperationTimeout},
+		{action: actionRestart, bounded: false, want: DefaultOperationTimeout},
+	} {
+		t.Run(fmt.Sprintf("%s bounded=%v", tc.action, tc.bounded), func(t *testing.T) {
+			h := defaultHarness()
+			h.killPolicy = policy
+			mgr := &initStopManager{fakeManager: h.mgr, stopTimeout: DefaultOperationTimeout, bounded: tc.bounded, budgets: map[string]time.Duration{}}
+			eng := h.engine()
+			eng.Manager = mgr
+			var ttl time.Duration
+			eng.AcquireLock = func(d time.Duration) (func() error, error) {
+				ttl = d
+				return func() error { return nil }, nil
+			}
+			res := eng.Do(t.Context(), tc.action)
+			if res.Status != ResultOK {
+				t.Fatalf("status = %q (%s), want ok", res.Status, res.Message)
+			}
+			first := actionStop
+			if tc.action == actionStart {
+				first = actionStart
+			}
+			if budget := mgr.budgets[first]; budget > tc.want || budget < tc.want-time.Second {
+				t.Fatalf("%s ran with %v left, want about %v", first, budget, tc.want)
+			}
+			if ttl < tc.want+lockTTLMargin {
+				t.Fatalf("lock TTL = %v, want at least %v so the lock outlives the operation", ttl, tc.want+lockTTLMargin)
+			}
+		})
 	}
 }

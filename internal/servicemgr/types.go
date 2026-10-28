@@ -67,6 +67,9 @@ const (
 	systemctlPropertyMainPID     = "MainPID"
 	systemctlPropertyPIDFile     = "PIDFile"
 	systemctlPropertyType        = "Type"
+	// systemctlPropertyTimeoutStop is how long systemd may spend on a stop job
+	// before its final SIGKILL.
+	systemctlPropertyTimeoutStop = "TimeoutStopUSec"
 )
 
 // systemd tokens consumed from command output or used to normalize unit names.

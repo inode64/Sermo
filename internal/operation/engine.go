@@ -269,12 +269,13 @@ func (e Engine) run(ctx context.Context, p plan) (result Result) {
 
 	var repairedPIDFiles []string
 
-	ctx, cancel := context.WithTimeout(ctx, e.OperationTimeout)
-	defer cancel()
-
 	// Step 2: exactly one event per operation, on every exit path including a
 	// failed lock acquisition and a panic. Registered first.
 	defer func() { e.emitFinal(&result, recover()) }()
+
+	timeout := e.operationTimeout(ctx, p)
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
 
 	if e.ConfigError != nil {
 		result.Status = ResultFailed
@@ -283,7 +284,7 @@ func (e Engine) run(ctx context.Context, p plan) (result Result) {
 	}
 
 	// Step 3: acquire the internal operation lock; fail fast if held.
-	release, err := e.AcquireLock(e.LockTTL)
+	release, err := e.AcquireLock(max(e.LockTTL, timeout+lockTTLMargin))
 	if err != nil {
 		applyLockError(&result, err)
 		return result
