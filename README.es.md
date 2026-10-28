@@ -225,7 +225,9 @@ Los comandos de `sermoctl` de solo lectura (status, config, etc.) no necesitan r
 `DESTDIR`, e instala los binarios, el catálogo completo (manteniendo el
 layout `services/apps/libs/patterns`), los ejemplos, un `sermo.yml` de ejemplo, la plantilla de
 notificación por defecto, la config de tmpfiles.d, y tanto la unidad de systemd como el
-script de init de OpenRC (con sus rutas de binario/config reescritas para coincidir):
+script de init de OpenRC (con sus rutas de binario/config reescritas para coincidir).
+El script de OpenRC escribe su log en `/var/log/sermod.log`, e `install-openrc`
+añade la regla de logrotate que lo rota en el sitio (`copytruncate`):
 
 ```sh
 sudo make install PREFIX=/usr                 # /usr/bin, /usr/sbin or merged-/usr /usr/bin, /etc/sermo, ...
@@ -234,7 +236,7 @@ make install DESTDIR=/tmp/stage PREFIX=/usr    # stage for packaging
 
 Variables clave (anula en la línea de comandos): `DESTDIR`, `PREFIX`/`prefix`,
 `bindir`, `sbindir`, `datadir`, `sysconfdir`, `TMPFILESDIR`,
-`SYSTEMD_UNITDIR`, `OPENRC_INITDIR`. También hay targets granulares disponibles:
+`SYSTEMD_UNITDIR`, `OPENRC_INITDIR`, `LOGROTATEDIR`. También hay targets granulares disponibles:
 `install-bin`, `install-catalog`, `install-examples`, `install-config`,
 `install-templates`, `install-tmpfiles`, `install-systemd`, `install-openrc`
 (y `uninstall`). Un

@@ -139,6 +139,10 @@ func seedSLA(t *testing.T, stateDir, service string, samples ...slaSample) {
 			t.Fatal(err)
 		}
 	}
+	// As sermod does at a clean stop: the open minute is still in memory.
+	if err := store.FlushPending(context.Background()); err != nil {
+		t.Fatal(err)
+	}
 	store.Close()
 }
 

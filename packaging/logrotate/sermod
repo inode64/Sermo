@@ -1,0 +1,13 @@
+# Rotates the log OpenRC writes for sermod (output_log and error_log in
+# /etc/init.d/sermod). start-stop-daemon holds that file open in append mode
+# and sermod cannot reopen its standard output, so the file is copied and
+# truncated in place.
+/var/log/sermod.log {
+	size 20M
+	rotate 4
+	compress
+	delaycompress
+	missingok
+	notifempty
+	copytruncate
+}

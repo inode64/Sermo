@@ -206,7 +206,9 @@ Read-only `sermoctl` commands (status, config, etc.) do not need root.
 staging, and installs the binaries, the full catalog (keeping the
 `services/apps/libs/patterns` layout), the examples, a sample `sermo.yml`, the
 default notification template, the tmpfiles.d config, and both the systemd unit and the
-OpenRC init script (with their binary/config paths rewritten to match):
+OpenRC init script (with their binary/config paths rewritten to match). The
+OpenRC script logs to `/var/log/sermod.log`, and `install-openrc` adds the
+logrotate rule that rotates it in place (`copytruncate`):
 
 ```sh
 sudo make install PREFIX=/usr                 # /usr/bin, /usr/sbin or merged-/usr /usr/bin, /etc/sermo, ...
@@ -215,7 +217,7 @@ make install DESTDIR=/tmp/stage PREFIX=/usr    # stage for packaging
 
 Key variables (override on the command line): `DESTDIR`, `PREFIX`/`prefix`,
 `bindir`, `sbindir`, `datadir`, `sysconfdir`, `TMPFILESDIR`,
-`SYSTEMD_UNITDIR`, `OPENRC_INITDIR`. Granular targets are available too:
+`SYSTEMD_UNITDIR`, `OPENRC_INITDIR`, `LOGROTATEDIR`. Granular targets are available too:
 `install-bin`, `install-catalog`, `install-examples`, `install-config`,
 `install-templates`, `install-tmpfiles`, `install-systemd`, `install-openrc`
 (and `uninstall`). An

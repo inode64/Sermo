@@ -475,12 +475,13 @@ func TestShortRetentionDoesNotLoseConsolidatedHistory(t *testing.T) {
 			t.Cleanup(func() { s.Close() })
 
 			// One healthy cycle per minute for an hour, with the daemon's maintenance
-			// pass every five minutes at an unaligned offset, then three more hours of
-			// passes so every refresh window that covers the hour has closed.
+			// pass every five minutes at an unaligned offset, then passes past the
+			// next 6-hour boundary, the first one at which the daily archive reads
+			// the hour again, so every refresh window that covers it has closed.
 			start := time.Date(2026, 6, 7, 12, 0, 0, 0, time.UTC)
 			const minutes = 60
 			const passEvery = 5
-			const tail = 3 * 60
+			const tail = 6*60 + 2*passEvery
 			for i := range minutes + tail {
 				if i < minutes {
 					mustRecord(t, s, true, start.Add(time.Duration(i)*time.Minute+10*time.Second))
@@ -524,5 +525,60 @@ func TestRollupWatermarkNeverMovesBack(t *testing.T) {
 
 	if up, total, down, found := archiveRow(t, s, resDay, alignBucket(at, resDay)); !found || up != 1 || total != 2 || down != 1 {
 		t.Fatalf("day bucket up/total/down = %d/%d/%d (found %v), want the complete 1/2/1", up, total, down, found)
+	}
+}
+
+// TestRollupFollowsItsSourceBuckets pins the consolidation cadence: an archive is
+// rewritten only once its source has started a new bucket, so the 6-hour and
+// daily archives stop rewriting every series on every pass, and a new process
+// consolidates every archive once.
+func TestRollupFollowsItsSourceBuckets(t *testing.T) {
+	path := filepath.Join(t.TempDir(), Filename)
+	s, err := OpenContextWith(context.Background(), path, Options{})
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	start := time.Date(2026, 6, 7, 12, 0, 10, 0, time.UTC)
+	day := alignBucket(start, resDay)
+	dayTotal := func(s *Store) int64 {
+		_, total, _, _ := archiveRow(t, s, resDay, day)
+		return total
+	}
+
+	mustRecord(t, s, true, start)
+	mustRollup(t, s, start.Add(5*time.Minute))
+	if got := dayTotal(s); got != 1 {
+		t.Fatalf("first pass day total = %d, want 1", got)
+	}
+
+	mustRecord(t, s, true, start.Add(6*time.Minute))
+	mustRollup(t, s, start.Add(10*time.Minute))
+	if _, total, _, _ := archiveRow(t, s, resHour, alignBucket(start, resHour)); total != 2 {
+		t.Fatalf("hour total = %d, want 2: its 5-minute source started a bucket", total)
+	}
+	if got := dayTotal(s); got != 1 {
+		t.Fatalf("day total = %d, want 1 until a 6-hour bucket starts", got)
+	}
+	mustRollup(t, s, start.Add(time.Hour))
+	if _, total, _, _ := archiveRow(t, s, res6Hours, alignBucket(start, res6Hours)); total != 2 {
+		t.Fatalf("6-hour total = %d, want 2 once an hour bucket started", total)
+	}
+	mustRollup(t, s, start.Add(6*time.Hour))
+	if got := dayTotal(s); got != 2 {
+		t.Fatalf("day total = %d, want 2 once a 6-hour bucket started", got)
+	}
+
+	mustRecord(t, s, true, start.Add(6*time.Hour+time.Minute))
+	if err := s.Close(); err != nil {
+		t.Fatal(err)
+	}
+	s, err = OpenContextWith(context.Background(), path, Options{})
+	if err != nil {
+		t.Fatalf("reopen: %v", err)
+	}
+	t.Cleanup(func() { s.Close() })
+	mustRollup(t, s, start.Add(6*time.Hour+2*time.Minute))
+	if got := dayTotal(s); got != 3 {
+		t.Fatalf("day total after a restart = %d, want 3: a new process consolidates every archive", got)
 	}
 }

@@ -198,11 +198,26 @@ func (s *Store) CompactHistory(ctx context.Context, now, before time.Time) (Main
 // between them would make the second table skip everything below the first
 // table's new watermark. An error leaves it untouched, so the next pass redoes the
 // whole step.
+//
+// An archive is consolidated only when its source has started a bucket since
+// the archive's previous pass: until then the source holds nothing it has not
+// already read, and re-reading it rewrote every series' newest coarse row for
+// nothing. The 5-minute and hourly archives therefore follow every pass, the
+// 6-hour archive the hourly one and the daily archive the 6-hour one, so their
+// newest bucket can trail the live samples by up to an hour or six hours.
+// A process restart consolidates every archive once.
 func (s *Store) rollup(ctx context.Context, now time.Time) (int64, error) {
+	// The ended minutes still held in memory are part of the source.
+	if err := s.flushPending(ctx, alignBucket(now, resMinute)); err != nil {
+		return 0, err
+	}
 	ladder := s.retention.archives()
 	var rolled int64
 	for i := 1; i < archiveCount; i++ {
 		sourceRes, targetRes := ladder[i-1].Res, ladder[i].Res
+		if !s.sourceAdvanced(targetRes, alignBucket(now, sourceRes)) {
+			continue
+		}
 		watermark, err := s.rollupWatermark(ctx, targetRes)
 		if err != nil {
 			return rolled, err
@@ -220,8 +235,29 @@ func (s *Store) rollup(ctx context.Context, now time.Time) (int64, error) {
 		if err := s.setRollupWatermark(ctx, targetRes, max(watermark, alignBucket(now, targetRes))); err != nil {
 			return rolled, err
 		}
+		s.markRolledFrom(targetRes, alignBucket(now, sourceRes))
 	}
 	return rolled, nil
+}
+
+// sourceAdvanced reports whether the source of the targetRes archive has started
+// a bucket after the one its previous consolidation pass saw.
+func (s *Store) sourceAdvanced(targetRes, sourceBucket int64) bool {
+	s.rollupMu.Lock()
+	defer s.rollupMu.Unlock()
+	seen, ok := s.rolledFrom[targetRes]
+	return !ok || sourceBucket > seen
+}
+
+// markRolledFrom records the source bucket a completed pass consolidated through.
+// It is recorded only after the pass succeeded, so a failed one is retried.
+func (s *Store) markRolledFrom(targetRes, sourceBucket int64) {
+	s.rollupMu.Lock()
+	defer s.rollupMu.Unlock()
+	if s.rolledFrom == nil {
+		s.rolledFrom = map[int64]int64{}
+	}
+	s.rolledFrom[targetRes] = sourceBucket
 }
 
 // rollupTable consolidates one table from sourceRes into targetRes, starting from

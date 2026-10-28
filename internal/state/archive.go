@@ -203,7 +203,7 @@ const (
 const (
 	slaRecordStmt = `INSERT INTO sla_archive
 			(res, service, check_name, bucket, up_count, total_count, down_buckets)
-		 VALUES (?, ?, ?, ?, ?, 1, ?)
+		 VALUES (?, ?, ?, ?, ?, ?, ?)
 		 ON CONFLICT(res, service, check_name, bucket) DO UPDATE SET
 		   up_count     = up_count + excluded.up_count,
 		   total_count  = total_count + excluded.total_count,
@@ -231,9 +231,9 @@ const (
 const (
 	metricRecordStmt = `INSERT INTO metric_archive
 			(res, scope, service, check_name, metric, bucket, n, sum_v, min_v, max_v)
-		 VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		 ON CONFLICT(res, scope, service, check_name, metric, bucket) DO UPDATE SET
-		   n     = n + 1,
+		   n     = n + excluded.n,
 		   sum_v = sum_v + excluded.sum_v,
 		   min_v = min(min_v, excluded.min_v),
 		   max_v = max(max_v, excluded.max_v);`

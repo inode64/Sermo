@@ -671,3 +671,71 @@ func TestWriteWebToken(t *testing.T) {
 		t.Errorf("token mode after a stale staging file = %v, want %v", perm, os.FileMode(daemonWebTokenFileMode))
 	}
 }
+
+type fakeReclaimer struct {
+	before, after int64
+	compacted     bool
+	err           error
+}
+
+func (f fakeReclaimer) ReclaimFreeSpace(context.Context) (int64, int64, bool, error) {
+	return f.before, f.after, f.compacted, f.err
+}
+
+// The startup compaction is reported only when it rewrote the file, and a
+// failure is a warning that does not stop the daemon.
+func TestReclaimStateSpaceLogsOnlyAnActualCompaction(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		store fakeReclaimer
+		want  string
+	}{
+		{name: "compacted", store: fakeReclaimer{before: 550 << 20, after: 21 << 20, compacted: true}, want: "level=INFO msg=\"compacted state database\" before_mib=550 after_mib=21"},
+		{name: "nothing to reclaim", store: fakeReclaimer{before: 20 << 20, after: 20 << 20}},
+		{name: "failure", store: fakeReclaimer{err: fmt.Errorf("disk full")}, want: "level=WARN msg=\"compact state database\" error=\"disk full\""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var out strings.Builder
+			reclaimStateSpace(slog.New(slog.NewTextHandler(&out, nil)), tc.store)
+			if tc.want == "" {
+				if out.Len() != 0 {
+					t.Fatalf("log = %q, want nothing", out.String())
+				}
+				return
+			}
+			if !strings.Contains(out.String(), tc.want) {
+				t.Fatalf("log = %q, want %q", out.String(), tc.want)
+			}
+		})
+	}
+}
+
+type fakeFlusher struct {
+	ctxErr error
+	err    error
+}
+
+func (f *fakeFlusher) FlushPending(ctx context.Context) error {
+	f.ctxErr = ctx.Err()
+	return f.err
+}
+
+// The open minute is written at shutdown although the daemon's context is
+// already cancelled, and a failure is only a warning.
+func TestFlushPendingSamplesOutlivesTheCancelledDaemonContext(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	var out strings.Builder
+	logger := slog.New(slog.NewTextHandler(&out, nil))
+
+	store := &fakeFlusher{}
+	flushPendingSamples(ctx, logger, store)
+	if store.ctxErr != nil || out.Len() != 0 {
+		t.Fatalf("flush ctx err = %v, log = %q; want a live context and no log", store.ctxErr, out.String())
+	}
+
+	flushPendingSamples(ctx, logger, &fakeFlusher{err: fmt.Errorf("disk full")})
+	if !strings.Contains(out.String(), "level=WARN msg=\"write open minute samples\" error=\"disk full\"") {
+		t.Fatalf("log = %q, want the failure as a warning", out.String())
+	}
+}

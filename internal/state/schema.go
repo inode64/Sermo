@@ -223,6 +223,30 @@ var storageSchema = []string{
 	) WITHOUT ROWID;`,
 }
 
+// retiredSchemaObjects are the tables and indexes earlier releases created and
+// the current layout no longer reads. CREATE … IF NOT EXISTS never removes
+// anything, so a database created before their retirement kept them: the old
+// sample tables held most of some hosts' files, and the two archive indexes
+// were still rewritten on every insert. Dropping a table drops its indexes.
+// Removing an object from storageSchema means adding it here.
+var retiredSchemaObjects = []struct{ kind, name string }{
+	{schemaObjectIndex, "metric_archive_res_bucket_idx"},
+	{schemaObjectIndex, "sla_archive_res_bucket_idx"},
+	{schemaObjectTable, "check_sla_sample"},
+	{schemaObjectTable, "daemon_metric"},
+	{schemaObjectTable, "measurement"},
+	{schemaObjectTable, "measurement_metric"},
+	{schemaObjectTable, "migration"},
+	{schemaObjectTable, "process_uptime_span"},
+	{schemaObjectTable, "service_metric"},
+	{schemaObjectTable, "sla_sample"},
+}
+
+const (
+	schemaObjectTable = "TABLE"
+	schemaObjectIndex = "INDEX"
+)
+
 func (s *Store) initializeSchema(ctx context.Context) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -232,6 +256,12 @@ func (s *Store) initializeSchema(ctx context.Context) error {
 		if _, err := tx.ExecContext(ctx, stmt); err != nil {
 			_ = tx.Rollback()
 			return fmt.Errorf("create state schema: %w", err)
+		}
+	}
+	for _, obj := range retiredSchemaObjects {
+		if _, err := tx.ExecContext(ctx, "DROP "+obj.kind+" IF EXISTS "+obj.name); err != nil {
+			_ = tx.Rollback()
+			return fmt.Errorf("drop retired %s %s: %w", obj.kind, obj.name, err)
 		}
 	}
 	if err := ensureStateColumns(ctx, tx); err != nil {

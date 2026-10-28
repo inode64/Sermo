@@ -32,6 +32,7 @@ import (
 	"sermo/internal/servicemgr"
 	"sermo/internal/state"
 	"sermo/internal/telegrambot"
+	"sermo/internal/units"
 	"sermo/internal/web"
 	"sermo/internal/webcred"
 )
@@ -72,6 +73,8 @@ const (
 	// timeouts (systemd defaults to 90s) so a long DELETE or consolidation cannot
 	// force SIGKILL.
 	shutdownPruneDrainTimeout = 5 * time.Second
+	// shutdownSampleFlushTimeout bounds writing the open minute's samples at stop.
+	shutdownSampleFlushTimeout = 5 * time.Second
 )
 
 // drainOrTimeout waits for done or the timeout, reporting whether done arrived.
@@ -114,7 +117,9 @@ func goTracked(fn func()) <-chan struct{} {
 
 const (
 	logFieldAddress               = "address"
+	logFieldAfterMiB              = "after_mib"
 	logFieldAffected              = "affected"
+	logFieldBeforeMiB             = "before_mib"
 	logFieldAuth                  = "auth"
 	logFieldBackend               = "backend"
 	logFieldConfig                = "config"
@@ -292,8 +297,9 @@ func run(args []string) int {
 		logger.Error("open state store", logFieldError, err)
 		return exitFailure
 	}
-	phases.mark("open state store")
 	defer func() { _ = store.Close() }()
+	reclaimStateSpace(logger, store)
+	phases.mark("open state store")
 
 	notifiers, notifyWarnings := app.BuildNotifiers(cfg)
 	app.LogBuildNotices(logger, "build notifiers", notifyWarnings)
@@ -565,7 +571,8 @@ func run(args []string) int {
 		<-botDone
 	}
 	<-eventNotifyDone
-	finishStateWrites(logger, maintenanceDone, shutdownPruneDrainTimeout, snapshots.Flush, watchSnapshots.Flush)
+	finishStateWrites(logger, maintenanceDone, shutdownPruneDrainTimeout, snapshots.Flush, watchSnapshots.Flush,
+		func() { flushPendingSamples(ctx, logger, store) })
 	// Since Go 1.26 NotifyContext records the received signal as the
 	// cancellation cause; name it so operators can tell SIGTERM from SIGINT.
 	if cause := context.Cause(ctx); cause != nil && !errors.Is(cause, context.Canceled) {
@@ -783,6 +790,43 @@ func reopenEngineLogs(logger *slog.Logger, logs []*logfile.Writer) {
 // prunes each resolution to its retention.
 type stateMaintainer interface {
 	Maintain(ctx context.Context, now time.Time) (state.MaintainResult, error)
+}
+
+type pendingFlusher interface {
+	FlushPending(ctx context.Context) error
+}
+
+// flushPendingSamples writes the samples of the minute still open, so a clean
+// stop keeps them; a crash loses them. ctx is the daemon's, already cancelled
+// at shutdown, so only its values are kept, under a deadline of its own.
+func flushPendingSamples(ctx context.Context, logger *slog.Logger, store pendingFlusher) {
+	flushCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), shutdownSampleFlushTimeout)
+	defer cancel()
+	if err := store.FlushPending(flushCtx); err != nil {
+		logger.Warn("write open minute samples", logFieldError, err)
+	}
+}
+
+type stateReclaimer interface {
+	ReclaimFreeSpace(ctx context.Context) (before, after int64, compacted bool, err error)
+}
+
+// reclaimStateSpace returns to the filesystem the free pages a database is left
+// with after dropping retired schema objects, once and before the daemon writes
+// anything. A failure leaves the file as it was and is only logged: the daemon
+// works the same on a larger file.
+func reclaimStateSpace(logger *slog.Logger, store stateReclaimer) {
+	started := time.Now()
+	before, after, compacted, err := store.ReclaimFreeSpace(context.Background())
+	if err != nil {
+		logger.Warn("compact state database", logFieldError, err)
+		return
+	}
+	if compacted {
+		logger.Info("compacted state database",
+			logFieldBeforeMiB, before/units.BytesPerMiB, logFieldAfterMiB, after/units.BytesPerMiB,
+			logFieldTook, time.Since(started).Round(time.Millisecond))
+	}
 }
 
 // startStateMaintenance keeps the resolution ladder current for the daemon's
