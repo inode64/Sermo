@@ -1130,8 +1130,12 @@ within those attributed process trees (including all backend cgroup members).
 Selectors label processes inside that scope instead of adding other instances
 that happen to share an executable and user. This keeps per-instance memory,
 CPU and replaced-binary notices separate. With no live backend or pidfile root,
-selectors still discover processes across the host; shared executables need a
-restrictive instance-specific `cmd` for that fallback.
+selectors still discover processes across the host, except those in another
+unit's control group or scope; shared executables need a restrictive
+instance-specific `cmd` for that fallback. A `delegated: true` selector keeps
+matching there too: libvirt runs a network's `dnsmasq` pair in its daemon's own
+service and a guest's emulator in a machine scope, and an observe-only match
+grants no signal authority.
 
 These feed monitoring **and** residual cleanup, so a richer selector lets a
 stop catch and kill more leftovers (an unkillable residual stays

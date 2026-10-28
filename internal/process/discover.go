@@ -144,8 +144,12 @@ func (d Discoverer) Discover(selectors []Selector) ([]Process, []string) {
 			if selectors[i].Type == SelectorCommandMatch && d.matches(&selectors[i], id, resolve) {
 				// Outside an attributed tree a process another unit owns is
 				// never this service's. The ownership verdict does not depend
-				// on the selector, so it is read only for a match.
-				if childrenComputed || !d.foreignProcess(id) {
+				// on the selector, so it is read only for a match. A delegated
+				// selector is the exception: it names a process another manager
+				// owns (libvirt keeps a network's dnsmasq in its daemon's group
+				// and a guest's emulator in a machine scope), and the match is
+				// observe-only, so attributing it grants no signal authority.
+				if childrenComputed || selectors[i].Delegated || !d.foreignProcess(id) {
 					add(id, selectors[i].Name, SelectorCommandMatch)
 				}
 				break
