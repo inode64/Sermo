@@ -3,6 +3,8 @@ package config
 import (
 	"fmt"
 	"maps"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -93,13 +95,17 @@ func TestAddChangedRemediationRule(t *testing.T) {
 }
 
 func TestRestartOnChangeDesugarsToChangedRule(t *testing.T) {
+	libc := filepath.Join(t.TempDir(), "libc.so.6")
+	if err := os.WriteFile(libc, []byte("lib"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	resolved := resolveInstance(t, map[string]string{
 		"sermo.yml": baseGlobal,
 		"catalog/libs/glibc.yml": `
 name: glibc
 display_name: "GNU C Library"
 variables:
-  binary: "/lib64/libc.so.6"
+  binary: ["/nonexistent/lib64/libc.so.6", "` + libc + `"]
 `,
 		"services/web.yml": `
 name: web
@@ -114,16 +120,44 @@ restart_on_change:
 	then := nested(t, resolved.Tree, "rules", "restart-on-change-glibc", "then")
 	mustHaveRestartOnChangeActions(t, then, "web will restart after library change: ${change.library} (${change.path})")
 	changed := nested(t, resolved.Tree, "rules", "restart-on-change-glibc", "if", "changed")
-	if cfgval.String(changed["path"]) != "/lib64/libc.so.6" {
-		t.Errorf("changed.path = %v, want /lib64/libc.so.6", changed["path"])
+	if cfgval.String(changed["path"]) != libc {
+		t.Errorf("changed.path = %v, want the installed candidate %s", changed["path"], libc)
 	}
 	// A library replaced under the running service is a warning, not an outage.
 	if got := cfgval.String(nested(t, resolved.Tree, "rules", "restart-on-change-glibc")["severity"]); got != string(severity.Warning) {
 		t.Errorf("library change rule severity = %q, want warning", got)
 	}
 	preflight := nested(t, resolved.Tree, "preflight", "library-glibc-file")
-	if cfgval.String(preflight["type"]) != checks.CheckTypeFile || cfgval.String(preflight["path"]) != "/lib64/libc.so.6" || !cfgval.Bool(preflight[checks.CheckKeyNonEmpty]) {
-		t.Errorf("library preflight = %v, want file /lib64/libc.so.6", preflight)
+	if cfgval.String(preflight["type"]) != checks.CheckTypeFile || cfgval.String(preflight["path"]) != libc || !cfgval.Bool(preflight[checks.CheckKeyNonEmpty]) {
+		t.Errorf("library preflight = %v, want file %s", preflight, libc)
+	}
+}
+
+// A library the host does not have is skipped like an app that is not
+// installed: no rule to watch it and no preflight that would block every
+// operation of the service.
+func TestRestartOnChangeSkipsLibraryNotInstalled(t *testing.T) {
+	resolved := resolveInstance(t, map[string]string{
+		"sermo.yml": baseGlobal,
+		"catalog/libs/maxminddb.yml": `
+name: maxminddb
+variables:
+  binary: ["/nonexistent/lib64/libmaxminddb.so.0", "/nonexistent/lib/*-linux-gnu*/libmaxminddb.so.0"]
+`,
+		"services/web.yml": `
+name: web
+service: web
+restart_on_change:
+  libraries: [maxminddb]
+`,
+	}, "web")
+	ruleMap, _ := resolved.Tree["rules"].(map[string]any)
+	if rule, ok := ruleMap["restart-on-change-maxminddb"]; ok {
+		t.Errorf("rule for an absent library = %v, want none", rule)
+	}
+	preflight, _ := resolved.Tree["preflight"].(map[string]any)
+	if pre, ok := preflight["library-maxminddb-file"]; ok {
+		t.Errorf("preflight for an absent library = %v, want none", pre)
 	}
 }
 

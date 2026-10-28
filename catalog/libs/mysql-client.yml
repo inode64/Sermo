@@ -1,0 +1,25 @@
+name: mysql-client
+display_name: "MySQL/MariaDB client library"
+description: "MySQL or MariaDB client library (libmysqlclient, libmariadb); a change triggers a restart of dependent services"
+variables:
+  binary:
+    - "/usr/lib64/libmysqlclient.so.21"
+    - "/lib64/libmysqlclient.so.21"
+    - "/usr/lib/*-linux-gnu*/libmysqlclient.so.21"
+    - "/lib/*-linux-gnu*/libmysqlclient.so.21"
+    - "/usr/lib/libmysqlclient.so.21"
+    - "/lib/libmysqlclient.so.21"
+    - "/usr/lib64/libmysqlclient.so.24"
+    - "/lib64/libmysqlclient.so.24"
+    - "/usr/lib/*-linux-gnu*/libmysqlclient.so.24"
+    - "/lib/*-linux-gnu*/libmysqlclient.so.24"
+    - "/usr/lib/libmysqlclient.so.24"
+    - "/lib/libmysqlclient.so.24"
+    - "/usr/lib64/libmariadb.so.3"
+    - "/lib64/libmariadb.so.3"
+    - "/usr/lib/*-linux-gnu*/libmariadb.so.3"
+    - "/lib/*-linux-gnu*/libmariadb.so.3"
+    - "/usr/lib/libmariadb.so.3"
+    - "/lib/libmariadb.so.3"
+preflight:
+  file: { type: file, path: "${binary}" }

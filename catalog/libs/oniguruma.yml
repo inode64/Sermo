@@ -1,0 +1,13 @@
+name: oniguruma
+display_name: "Oniguruma"
+description: "Oniguruma regular expression library (libonig); a change triggers a restart of dependent services"
+variables:
+  binary:
+    - "/usr/lib64/libonig.so.5"
+    - "/lib64/libonig.so.5"
+    - "/usr/lib/*-linux-gnu*/libonig.so.5"
+    - "/lib/*-linux-gnu*/libonig.so.5"
+    - "/usr/lib/libonig.so.5"
+    - "/lib/libonig.so.5"
+preflight:
+  file: { type: file, path: "${binary}" }

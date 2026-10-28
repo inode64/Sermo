@@ -1,0 +1,19 @@
+name: libxml2
+display_name: "libxml2"
+description: "XML parsing library; a change triggers a restart of dependent services"
+variables:
+  binary:
+    - "/usr/lib64/libxml2.so.16"
+    - "/lib64/libxml2.so.16"
+    - "/usr/lib/*-linux-gnu*/libxml2.so.16"
+    - "/lib/*-linux-gnu*/libxml2.so.16"
+    - "/usr/lib/libxml2.so.16"
+    - "/lib/libxml2.so.16"
+    - "/usr/lib64/libxml2.so.2"
+    - "/lib64/libxml2.so.2"
+    - "/usr/lib/*-linux-gnu*/libxml2.so.2"
+    - "/lib/*-linux-gnu*/libxml2.so.2"
+    - "/usr/lib/libxml2.so.2"
+    - "/lib/libxml2.so.2"
+preflight:
+  file: { type: file, path: "${binary}" }

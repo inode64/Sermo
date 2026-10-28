@@ -22,7 +22,6 @@ import (
 	"sermo/internal/cfgval"
 	"sermo/internal/cliutil"
 	"sermo/internal/config"
-	"sermo/internal/control"
 	"sermo/internal/execx"
 	"sermo/internal/hostfs"
 	"sermo/internal/logfile"
@@ -409,9 +408,7 @@ func run(args []string) int {
 	// One resolution cache per startup generation: the workers build and the web
 	// backend build probe each service unit once and log its warning once. They
 	// also share each service's `changed:` baseline.
-	deps.Targets = control.NewTargetCache()
-	deps.ArtifactBaselines = app.NewArtifactBaselines()
-	deps.ActiveUnits = app.NewActiveUnitSnapshot(deps)
+	deps = deps.WithGenerationCaches()
 
 	workers, svcWatches, warnings := app.BuildWorkers(ctx, cfg, deps, collector)
 	app.LogBuildNotices(logger, "build workers", warnings)

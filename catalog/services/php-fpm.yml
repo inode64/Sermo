@@ -20,11 +20,40 @@ service:
 apps:
   - php-fpm${version}
 restart_on_change:
+  libraries:
+    - glibc
+    - openssl
+    - zlib
+    - bzip2
+    - zstd
+    - pcre2
+    - libxml2
+    - libxslt
+    - curl
+    - nghttp2
+    - c-ares
+    - brotli
+    - expat
+    - sqlite3
+    - libidn2
+    - libxcrypt
+    - libpng
+    - libjpeg
+    - libwebp
+    - freetype
+    - libgd
+    - libsodium
+    - argon2
+    - oniguruma
+    - libzip
+    - gmp
   apps:
     - php-fpm${version}
   messages:
     app: >-
       ${display_name} will restart after version change of ${change.app}: ${change.old_version} -> ${change.new_version}
+    library: >-
+      ${display_name} will restart after library change: ${change.library} (${change.path})
 variables:
   user: www-data
   host: 127.0.0.1
@@ -65,6 +94,18 @@ processes:
 reload:
   signal: USR2
 watches:
+  # Libraries the processes still map from before an update, including those
+  # restart_on_change does not list (ICU, ImageMagick and other sonames that
+  # change with each version). Advisory: restart_on_change drives restarts.
+  alert-if-libraries-replaced:
+    check:
+      type: stale_libraries
+      interval: 5m
+      severity: warning
+    then:
+      action: alert
+      message: >-
+        ${display_name} still uses libraries replaced on disk; restart it to load the updated versions
   # The top-level `pidfile:` above already generates a service-gated (optional)
   # pidfile health check; a separate watches.pidfile would collide with it.
   service:

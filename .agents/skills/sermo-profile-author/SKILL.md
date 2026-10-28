@@ -125,6 +125,17 @@ postgresql: linked postgres app (versioned binaries); native postgres check for 
 
 If a config validation command differs by distribution, make it override-friendly through variables.
 
+## Library updates
+
+A daemon that terminates TLS or parses external data (web, PHP, mail) lists
+the catalog libraries it may load under `restart_on_change.libraries`, so a
+security update restarts it. List them generously: a library the host does
+not have is skipped, with no rule and no blocking preflight. A library whose
+soname changes with each version (ICU, ImageMagick) stays out of the list.
+Add the advisory `alert-if-libraries-replaced` watch (`stale_libraries`) for
+everything else the processes map. A database only gets the advisory watch:
+its restart is the operator's decision.
+
 ## Init and reload
 
 Verify every declared systemd/OpenRC backend and every fallback. An OpenRC

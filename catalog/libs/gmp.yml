@@ -1,0 +1,13 @@
+name: gmp
+display_name: "GMP"
+description: "GNU multiple precision arithmetic library; a change triggers a restart of dependent services"
+variables:
+  binary:
+    - "/usr/lib64/libgmp.so.10"
+    - "/lib64/libgmp.so.10"
+    - "/usr/lib/*-linux-gnu*/libgmp.so.10"
+    - "/lib/*-linux-gnu*/libgmp.so.10"
+    - "/usr/lib/libgmp.so.10"
+    - "/lib/libgmp.so.10"
+preflight:
+  file: { type: file, path: "${binary}" }

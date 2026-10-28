@@ -1,0 +1,13 @@
+name: libpng
+display_name: "libpng"
+description: "PNG image library; a change triggers a restart of dependent services"
+variables:
+  binary:
+    - "/usr/lib64/libpng16.so.16"
+    - "/lib64/libpng16.so.16"
+    - "/usr/lib/*-linux-gnu*/libpng16.so.16"
+    - "/lib/*-linux-gnu*/libpng16.so.16"
+    - "/usr/lib/libpng16.so.16"
+    - "/lib/libpng16.so.16"
+preflight:
+  file: { type: file, path: "${binary}" }

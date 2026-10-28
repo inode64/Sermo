@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"sermo/internal/config"
-	"sermo/internal/control"
 	"sermo/internal/metrics"
 	"sermo/internal/process"
 	"sermo/internal/telegrambot"
@@ -177,9 +176,7 @@ func (m *Monitor) buildGenerationLocked(ctx context.Context, newCfg *config.Conf
 	// resolve each service unit once against the new config, and share each
 	// service's `changed:` baseline (Reload restores it from the old worker
 	// before the web backend reloads).
-	m.deps.Targets = control.NewTargetCache()
-	m.deps.ArtifactBaselines = NewArtifactBaselines()
-	m.deps.ActiveUnits = NewActiveUnitSnapshot(m.deps)
+	m.deps = m.deps.WithGenerationCaches()
 
 	reloadDeps := m.deps
 	workers, svcWatches, warnings := BuildWorkers(ctx, newCfg, reloadDeps, m.collector)

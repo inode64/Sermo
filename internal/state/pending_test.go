@@ -74,6 +74,35 @@ func TestOpenMinuteIsWrittenOnceItEnds(t *testing.T) {
 	}
 }
 
+// Merging a committed batch into a minute with nothing pending yet keeps the
+// samples' own extremes, in the overlay and in the row written when it ends.
+func TestOpenMinuteKeepsSampleExtremes(t *testing.T) {
+	s := openTemp(t)
+	start := time.Date(2026, 6, 7, 12, 0, 10, 0, time.UTC)
+	clock := start
+	s.now = func() time.Time { return clock }
+	record := func(value float64, at time.Time) {
+		t.Helper()
+		clock = at
+		if err := s.WithBatch(context.Background(), func(b Batch) error {
+			return b.RecordMeasurement(slaTestService, "http", value, at)
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	record(10, start)
+	record(30, start.Add(30*time.Second))
+	want := MeasurementPoint{Start: time.Unix(alignBucket(start, resMinute), 0).UTC(), N: 2, Avg: 20, Min: 10, Max: 30}
+	if points, err := s.MeasurementSeries(slaTestService, "http", start.Add(-time.Minute), clock); err != nil || len(points) != 1 || points[0] != want {
+		t.Fatalf("open minute series = %+v, %v; want %+v", points, err, want)
+	}
+	record(50, start.Add(time.Minute))
+	if points, err := s.MeasurementSeries(slaTestService, "http", start.Add(-time.Minute), clock); err != nil || len(points) != 2 || points[0] != want {
+		t.Fatalf("stored minute series = %+v, %v; want %+v first", points, err, want)
+	}
+}
+
 // A sample for a minute that has already ended cannot accumulate further and is
 // written at once.
 func TestEndedMinuteSampleIsWrittenAtOnce(t *testing.T) {

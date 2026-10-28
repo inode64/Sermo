@@ -3397,6 +3397,7 @@ func TestCatalogNeverShipsAnAutomaticQueryKill(t *testing.T) {
 var warningAlertExemptions = map[string]string{
 	"alert-if-replication-slot-inactive": "a count of idle slots; the WAL they retain is graded by alert-if-replication-slot-backlog",
 	"alert-if-query-long-running":        "db_queries has no ordered threshold for levels: to grade",
+	"alert-if-libraries-replaced":        "stale_libraries has no ordered threshold for levels: to grade; a replaced library is a pending restart, never an outage",
 }
 
 // A catalog alert that warns must also say when the same reading becomes an

@@ -115,6 +115,53 @@ watches:
 	if got := cfgval.String(active["check"]); got != "restart-if-cpu-hot" {
 		t.Fatalf("if.active.check = %q, want restart-if-cpu-hot", got)
 	}
+
+	// stale_libraries reports state and its OK means nothing is stale: its
+	// alert fires on failure, as the host watch for the same check does.
+	tree, errs = resolveWatchService(t, `
+watches:
+  alert-if-libraries-replaced:
+    check: { type: stale_libraries, interval: 5m, severity: warning }
+    then: { action: alert, message: "old libraries" }
+`)
+	if len(errs) != 0 {
+		t.Fatalf("resolve errors = %v", errs)
+	}
+	failed := nested(t, tree, "rules", "alert-if-libraries-replaced", "if", "failed")
+	if got := cfgval.String(failed["check"]); got != "alert-if-libraries-replaced" {
+		t.Fatalf("stale_libraries alert if = %v, want failed polarity", nested(t, tree, "rules", "alert-if-libraries-replaced", "if"))
+	}
+}
+
+// A verdictless check never grades the rule that tests it, so the generated
+// rule carries the severity the check declares; a check with a verdict keeps
+// grading its rule through its result, levels included.
+func TestExpandServiceWatchesGradeVerdictlessAlerts(t *testing.T) {
+	tree, errs := resolveWatchService(t, `
+watches:
+  alert-if-libraries-replaced:
+    check: { type: stale_libraries, severity: warning }
+    then: { action: alert, message: "old libraries" }
+  alert-if-memory-high:
+    check:
+      type: metric
+      scope: service
+      name: memory
+      op: ">"
+      value: 30%
+      severity: warning
+      levels: { error: { op: ">", value: 50% } }
+    then: { action: alert, message: "memory" }
+`)
+	if len(errs) != 0 {
+		t.Fatalf("resolve errors = %v", errs)
+	}
+	if got := cfgval.String(nested(t, tree, "rules", "alert-if-libraries-replaced")["severity"]); got != "warning" {
+		t.Fatalf("verdictless alert severity = %q, want warning", got)
+	}
+	if got, ok := nested(t, tree, "rules", "alert-if-memory-high")["severity"]; ok {
+		t.Fatalf("graded alert severity = %v, want none: its check result grades it", got)
+	}
 }
 
 func TestExpandServiceWatchesGuard(t *testing.T) {

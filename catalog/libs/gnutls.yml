@@ -1,0 +1,13 @@
+name: gnutls
+display_name: "GnuTLS"
+description: "GnuTLS TLS library; a change triggers a restart of dependent services"
+variables:
+  binary:
+    - "/usr/lib64/libgnutls.so.30"
+    - "/lib64/libgnutls.so.30"
+    - "/usr/lib/*-linux-gnu*/libgnutls.so.30"
+    - "/lib/*-linux-gnu*/libgnutls.so.30"
+    - "/usr/lib/libgnutls.so.30"
+    - "/lib/libgnutls.so.30"
+preflight:
+  file: { type: file, path: "${binary}" }

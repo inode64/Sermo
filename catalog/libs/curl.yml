@@ -1,0 +1,13 @@
+name: curl
+display_name: "libcurl"
+description: "URL transfer library (HTTP, TLS); a change triggers a restart of dependent services"
+variables:
+  binary:
+    - "/usr/lib64/libcurl.so.4"
+    - "/lib64/libcurl.so.4"
+    - "/usr/lib/*-linux-gnu*/libcurl.so.4"
+    - "/lib/*-linux-gnu*/libcurl.so.4"
+    - "/usr/lib/libcurl.so.4"
+    - "/lib/libcurl.so.4"
+preflight:
+  file: { type: file, path: "${binary}" }

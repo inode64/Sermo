@@ -1,0 +1,13 @@
+name: libxslt
+display_name: "libxslt"
+description: "XSLT transformation library; a change triggers a restart of dependent services"
+variables:
+  binary:
+    - "/usr/lib64/libxslt.so.1"
+    - "/lib64/libxslt.so.1"
+    - "/usr/lib/*-linux-gnu*/libxslt.so.1"
+    - "/lib/*-linux-gnu*/libxslt.so.1"
+    - "/usr/lib/libxslt.so.1"
+    - "/lib/libxslt.so.1"
+preflight:
+  file: { type: file, path: "${binary}" }

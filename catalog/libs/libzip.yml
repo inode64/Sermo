@@ -1,0 +1,13 @@
+name: libzip
+display_name: "libzip"
+description: "ZIP archive library; a change triggers a restart of dependent services"
+variables:
+  binary:
+    - "/usr/lib64/libzip.so.5"
+    - "/lib64/libzip.so.5"
+    - "/usr/lib/*-linux-gnu*/libzip.so.5"
+    - "/lib/*-linux-gnu*/libzip.so.5"
+    - "/usr/lib/libzip.so.5"
+    - "/lib/libzip.so.5"
+preflight:
+  file: { type: file, path: "${binary}" }

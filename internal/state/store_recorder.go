@@ -12,8 +12,8 @@ import (
 type recorder struct {
 	ctx  func() context.Context
 	exec statementExecutor
-	// pending, when set, accumulates the samples of the minute still open; a
-	// sample for an ended minute is written through exec at once.
+	// pending accumulates the samples of the minute still open; a sample for an
+	// ended minute is written through exec at once.
 	pending *pendingMinutes
 	now     func() time.Time
 }
@@ -21,7 +21,7 @@ type recorder struct {
 // open reports whether bucket is the per-minute bucket still filling, which is
 // accumulated in memory instead of written.
 func (r recorder) open(bucket int64) bool {
-	return r.pending != nil && r.now != nil && bucket >= alignBucket(r.now(), resMinute)
+	return bucket >= alignBucket(r.now(), resMinute)
 }
 
 // RecordSLA accumulates one observed monitoring cycle into a service's current

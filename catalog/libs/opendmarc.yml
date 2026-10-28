@@ -1,0 +1,13 @@
+name: opendmarc
+display_name: "OpenDMARC"
+description: "DMARC library (libopendmarc); a change triggers a restart of dependent services"
+variables:
+  binary:
+    - "/usr/lib64/libopendmarc.so.2"
+    - "/lib64/libopendmarc.so.2"
+    - "/usr/lib/*-linux-gnu*/libopendmarc.so.2"
+    - "/lib/*-linux-gnu*/libopendmarc.so.2"
+    - "/usr/lib/libopendmarc.so.2"
+    - "/lib/libopendmarc.so.2"
+preflight:
+  file: { type: file, path: "${binary}" }

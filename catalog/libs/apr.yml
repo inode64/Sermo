@@ -1,0 +1,13 @@
+name: apr
+display_name: "APR"
+description: "Apache Portable Runtime library; a change triggers a restart of dependent services"
+variables:
+  binary:
+    - "/usr/lib64/libapr-1.so.0"
+    - "/lib64/libapr-1.so.0"
+    - "/usr/lib/*-linux-gnu*/libapr-1.so.0"
+    - "/lib/*-linux-gnu*/libapr-1.so.0"
+    - "/usr/lib/libapr-1.so.0"
+    - "/lib/libapr-1.so.0"
+preflight:
+  file: { type: file, path: "${binary}" }
