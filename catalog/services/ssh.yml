@@ -10,11 +10,23 @@ service:
 apps:
   - ssh
 restart_on_change:
+  # A restart replaces only the listener: stop_policy keeps every session. Each
+  # connection already runs a freshly executed process (sshd-session, or sshd's
+  # own re-exec before OpenSSH 9.8) that loads the updated libraries, so the
+  # list is what the listener itself maps. There is no stale_libraries alert:
+  # the kept sessions would hold it until they close.
+  libraries:
+    - glibc
+    - openssl
+    - zlib
+    - zstd
   apps:
     - ssh
   messages:
     app: >-
       ${display_name} will restart after version change of ${change.app}: ${change.old_version} -> ${change.new_version}
+    library: >-
+      ${display_name} will restart after library change: ${change.library} (${change.path})
 variables:
   user: root
   port: 22

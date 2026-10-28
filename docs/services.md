@@ -165,8 +165,10 @@ or empty library file blocks the operation. A subscribed library with no
 installed candidate on the host is skipped, like an app that is not installed:
 no restart rule and no preflight. A catalog profile can therefore list every
 security-relevant library its daemon may load (the php-fpm, nginx, Apache,
-Exim and Dovecot profiles do), and a library installed later is picked up at
-the next configuration load.
+Exim, Dovecot and ProFTPD profiles do), and a library installed later is picked
+up at the next configuration load. The OpenSSH profile lists only what its
+listener maps: a restart keeps every session, and each new connection already
+runs a freshly executed process that loads the updated libraries.
 
 A configured service (or catalog service definition) opts in with
 `restart_on_change`. Packaged catalog services that link versioned apps declare
