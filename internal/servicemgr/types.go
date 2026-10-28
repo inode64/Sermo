@@ -66,6 +66,7 @@ const (
 	systemctlPropertyLoadState   = "LoadState"
 	systemctlPropertyMainPID     = "MainPID"
 	systemctlPropertyPIDFile     = "PIDFile"
+	systemctlPropertyType        = "Type"
 )
 
 // systemd tokens consumed from command output or used to normalize unit names.
@@ -92,6 +93,7 @@ const (
 	// one.
 	systemdLoadStateNotFound = "not-found"
 	systemdValueYes          = "yes"
+	systemdTypeForking       = "forking"
 )
 
 // The failed-unit listing (ListFailedUnits). `--plain` drops the status bullet

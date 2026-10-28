@@ -110,9 +110,14 @@ var (
 // starting point. It is best-effort and only carries literal, resolved values.
 type ProcInfo struct {
 	Pidfile string
-	Exe     string
-	Cmd     string
-	User    string
+	// PidfileUnused marks a systemd unit whose Type= is not forking: systemd
+	// knows the main PID it started, so the declared PIDFile= may name a file
+	// nothing writes (Gentoo's loki.service). An unreadable Type leaves it
+	// false, keeping the declaration binding.
+	PidfileUnused bool
+	Exe           string
+	Cmd           string
+	User          string
 }
 
 type openRCBranch struct {
@@ -152,6 +157,12 @@ func detectSystemdProc(ctx context.Context, runner execx.Runner, unit string) Pr
 	if res, err := runSystemctlShow(ctx, runner, defaultDetectTimeout, systemctlPropertyPIDFile, unit); err == nil {
 		if v := strings.TrimSpace(res.Stdout); v != "" {
 			info.Pidfile = cleanProcPath(v)
+		}
+	}
+	if info.Pidfile != "" {
+		if res, err := runSystemctlShow(ctx, runner, defaultDetectTimeout, systemctlPropertyType, unit); err == nil {
+			unitType := strings.TrimSpace(res.Stdout)
+			info.PidfileUnused = unitType != "" && unitType != systemdTypeForking
 		}
 	}
 	if res, err := runSystemctlShow(ctx, runner, defaultDetectTimeout, systemctlPropertyExecStart, unit); err == nil {

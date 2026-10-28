@@ -2,6 +2,8 @@ package servicemgr
 
 import (
 	"context"
+	"errors"
+	"strings"
 	"testing"
 
 	"sermo/internal/execx"
@@ -250,6 +252,45 @@ func TestDetectProcOpenRCSkipsVariablePidfile(t *testing.T) {
 	}
 	if exe != "/usr/bin/bar" {
 		t.Fatalf("exe = %q, want /usr/bin/bar", exe)
+	}
+}
+
+// Gentoo's loki.service declares PIDFile= with Type=simple and nothing writes
+// the file. Only an unreadable Type keeps the declaration binding.
+func TestDetectProcSystemdMarksNonForkingPidfileUnused(t *testing.T) {
+	const pidfileLine = "systemctl show -p PIDFile --value -- loki.service"
+	const typeLine = "systemctl show -p Type --value -- loki.service"
+	for _, tc := range []struct {
+		name    string
+		unitTyp execx.Result
+		typErr  error
+		want    bool
+	}{
+		{name: "simple", unitTyp: execx.Result{Stdout: "simple\n"}, want: true},
+		{name: "notify", unitTyp: execx.Result{Stdout: "notify\n"}, want: true},
+		{name: "forking", unitTyp: execx.Result{Stdout: "forking\n"}},
+		{name: "type query failed", typErr: errors.New("systemctl timed out")},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			runner := &execxtest.Runner{
+				ByLine: map[string]execx.Result{pidfileLine: {Stdout: "/run/loki.pid\n"}, typeLine: tc.unitTyp},
+				Errs:   map[string]error{typeLine: tc.typErr},
+			}
+			info := DetectProcInfo(t.Context(), runner, nil, BackendSystemd, "loki.service")
+			if info.Pidfile != "/run/loki.pid" || info.PidfileUnused != tc.want {
+				t.Fatalf("info = %+v, want pidfile /run/loki.pid with PidfileUnused %v", info, tc.want)
+			}
+		})
+	}
+}
+
+func TestDetectProcSystemdSkipsTypeWithoutPidfile(t *testing.T) {
+	runner := &execxtest.Runner{}
+	DetectProcInfo(t.Context(), runner, nil, BackendSystemd, "sshd.service")
+	for _, line := range runner.Lines() {
+		if strings.Contains(line, "-p Type") {
+			t.Fatalf("queried %q for a unit without PIDFile=", line)
+		}
 	}
 }
 

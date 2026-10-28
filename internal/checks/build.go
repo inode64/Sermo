@@ -116,8 +116,9 @@ type Deps struct {
 	// ProcessCount counts processes matching an optional user/exe/exe_dir filter,
 	// for `process_count` checks. Nil makes the check do a self-contained scan.
 	ProcessCount ProcessCountFunc
-	// PidfileFallbackPIDs reports backend-native service PIDs when the active
-	// init system does not publish a PIDFile. It lets catalog pidfile checks
+	// PidfileFallbackPIDs reports backend-native service PIDs unless the
+	// active init system needs a PIDFile to find the main PID (a systemd
+	// Type=forking unit that declares one). It lets catalog pidfile checks
 	// accept systemd's MainPID/cgroup process set instead of failing on an
 	// intentionally absent pidfile. Its error reports a query that did not
 	// answer, which makes the check unavailable rather than failed.
