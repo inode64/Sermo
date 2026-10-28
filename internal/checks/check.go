@@ -302,6 +302,13 @@ func IsHealthType(typ string) bool {
 	return ok
 }
 
+// FiresOnFailure reports whether a watch on typ fires when its check fails
+// rather than while it is active: every health type, and stale_libraries, a
+// verdictless inventory whose OK means nothing is stale.
+func FiresOnFailure(typ string) bool {
+	return IsHealthType(typ) || typ == CheckTypeStaleLibraries
+}
+
 // Built pairs a check with whether its failure is optional (a warning) or
 // required (blocks the action), per policy.
 type Built struct {

@@ -1,0 +1,13 @@
+name: apr-util
+display_name: "APR-util"
+description: "Apache Portable Runtime utility library; a change triggers a restart of dependent services"
+variables:
+  binary:
+    - "/usr/lib64/libaprutil-1.so.0"
+    - "/lib64/libaprutil-1.so.0"
+    - "/usr/lib/*-linux-gnu*/libaprutil-1.so.0"
+    - "/lib/*-linux-gnu*/libaprutil-1.so.0"
+    - "/usr/lib/libaprutil-1.so.0"
+    - "/lib/libaprutil-1.so.0"
+preflight:
+  file: { type: file, path: "${binary}" }

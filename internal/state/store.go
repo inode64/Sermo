@@ -501,19 +501,6 @@ func scanOne(scan func() error) (found bool, err error) {
 
 type statementExecutor func(context.Context, string, ...any) (sql.Result, error)
 
-// compact checkpoints the WAL and vacuums the SQLite state database so space
-// freed by pruning can be returned to the filesystem.
-//
-// The order is load-bearing, and the trailing checkpoint is the step that actually
-// shrinks the file. Under WAL, VACUUM rebuilds the database into the write-ahead log
-// rather than the main file: it correctly drops the freelist to zero, but the main
-// file keeps every page it had until a checkpoint writes back and truncates it. With
-// only the leading checkpoint, `sermoctl state compact` reported success and returned
-// no space at all — a fleet of hosts sat at 99% free pages, one of them holding 1.4 GB
-// of file for 11 MB of data.
-//
-// The leading checkpoint still earns its place: it bounds the WAL before VACUUM
-// rewrites the whole database through it.
 // reclaimMinFreeShare and reclaimMinFreeBytes decide when ReclaimFreeSpace
 // rewrites the database: at least a quarter of its pages free, adding up to at
 // least 16 MiB. Below that SQLite reuses the free pages as the archives grow,
@@ -560,6 +547,19 @@ func (s *Store) pageUsage(ctx context.Context) (pages, free, pageSize int64, err
 	return pages, free, pageSize, nil
 }
 
+// compact checkpoints the WAL and vacuums the SQLite state database so space
+// freed by pruning can be returned to the filesystem.
+//
+// The order is load-bearing, and the trailing checkpoint is the step that actually
+// shrinks the file. Under WAL, VACUUM rebuilds the database into the write-ahead log
+// rather than the main file: it correctly drops the freelist to zero, but the main
+// file keeps every page it had until a checkpoint writes back and truncates it. With
+// only the leading checkpoint, `sermoctl state compact` reported success and returned
+// no space at all — a fleet of hosts sat at 99% free pages, one of them holding 1.4 GB
+// of file for 11 MB of data.
+//
+// The leading checkpoint still earns its place: it bounds the WAL before VACUUM
+// rewrites the whole database through it.
 func (s *Store) compact(ctx context.Context) error {
 	if _, err := s.exec(ctx, `PRAGMA wal_checkpoint(TRUNCATE);`); err != nil {
 		return fmt.Errorf("checkpoint state db WAL: %w", err)

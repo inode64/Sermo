@@ -85,12 +85,12 @@ type SLAValue struct {
 // recordSLABucket records one observed cycle into the per-minute archive. An
 // empty check is the service-level series.
 func (r recorder) recordSLABucket(service, check string, up bool, at time.Time) error {
-	bucket := alignBucket(at, resMinute)
+	bucket, agg := alignBucket(at, resMinute), slaCycle(up)
 	if r.open(bucket) {
-		r.pending.addSLA(service, check, bucket, up)
+		r.pending.addSLA(service, check, bucket, agg)
 		return nil
 	}
-	return writeSLABucket(r.ctx(), r.exec, service, check, bucket, slaAggregate{up: boolInt64(up), total: 1})
+	return writeSLABucket(r.ctx(), r.exec, service, check, bucket, agg)
 }
 
 // writeSLABucket adds an aggregate to the series' stored per-minute bucket.
@@ -184,14 +184,17 @@ func (s *Store) loadSLASeries(service, check string, from, to time.Time) ([]SLAP
 	// its start, so the newest (still filling) bucket is not dropped from the
 	// series. A bucket start is never in the future, so nothing beyond `to` can
 	// appear.
-	rows, err := s.reader.QueryContext(s.sqlCtx(), slaSeriesStmt,
-		stored.Res, service, check,
-		alignBucket(from, stored.Res), alignBucket(to, stored.Res)+stored.Res)
+	lo, hi := alignBucket(from, stored.Res), alignBucket(to, stored.Res)+stored.Res
+	rows, err := s.reader.QueryContext(s.sqlCtx(), slaSeriesStmt, stored.Res, service, check, lo, hi)
 	if err != nil {
 		return nil, fmt.Errorf("load %s series for %s: %w", slaKind(check), slaTarget(service, check), err)
 	}
 	defer func() { _ = rows.Close() }()
 
+	var pending map[int64]slaAggregate
+	if stored.Res == resMinute {
+		pending = s.pending.slaBuckets(service, check, lo, hi)
+	}
 	var out []SLAPoint
 	for rows.Next() {
 		var bucket int64
@@ -200,35 +203,28 @@ func (s *Store) loadSLASeries(service, check string, from, to time.Time) ([]SLAP
 			return nil, fmt.Errorf("scan %s series row for %s: %w", slaKind(check), slaTarget(service, check), err)
 		}
 		point.Start = time.Unix(bucket, 0).UTC()
+		if extra, ok := pending[bucket]; ok {
+			point = slaPoint(bucket, slaAggregate{up: point.Up, total: point.Total}.plus(extra))
+			delete(pending, bucket)
+		}
 		out = append(out, point)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("iterate %s series for %s: %w", slaKind(check), slaTarget(service, check), err)
 	}
-	if stored.Res == resMinute {
-		out = withPendingSLAPoints(out, s.pending.slaBuckets(service, check, alignBucket(from, stored.Res), alignBucket(to, stored.Res)+stored.Res))
+	if len(pending) == 0 {
+		return out, nil
 	}
+	for bucket, agg := range pending {
+		out = append(out, slaPoint(bucket, agg))
+	}
+	slices.SortFunc(out, func(a, b SLAPoint) int { return a.Start.Compare(b.Start) })
 	return out, nil
 }
 
-// withPendingSLAPoints adds the pending minute buckets to a stored series,
-// merging a bucket both hold, and keeps it oldest first.
-func withPendingSLAPoints(points []SLAPoint, pending map[int64]slaAggregate) []SLAPoint {
-	if len(pending) == 0 {
-		return points
-	}
-	for i, p := range points {
-		if agg, ok := pending[p.Start.Unix()]; ok {
-			merged := slaAggregate{up: p.Up + agg.up, total: p.Total + agg.total}
-			points[i].Up, points[i].Total, points[i].DownBuckets = merged.up, merged.total, merged.down()
-			delete(pending, p.Start.Unix())
-		}
-	}
-	for bucket, agg := range pending {
-		points = append(points, SLAPoint{Start: time.Unix(bucket, 0).UTC(), Up: agg.up, Total: agg.total, DownBuckets: agg.down()})
-	}
-	slices.SortFunc(points, func(a, b SLAPoint) int { return a.Start.Compare(b.Start) })
-	return points
+// slaPoint is a per-minute bucket as a series point.
+func slaPoint(bucket int64, agg slaAggregate) SLAPoint {
+	return SLAPoint{Start: time.Unix(bucket, 0).UTC(), Up: agg.up, Total: agg.total, DownBuckets: agg.down()}
 }
 
 // SeriesResolution is the bucket span a series request for [from, to) resolves to.

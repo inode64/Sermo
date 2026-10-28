@@ -37,9 +37,19 @@ type metricAggregate struct {
 	sum, min, max float64
 }
 
+// metricSample is the aggregate of one observed value.
+func metricSample(value float64) metricAggregate {
+	return metricAggregate{n: 1, sum: value, min: value, max: value}
+}
+
+// plus combines two aggregates; an empty one (a missing map entry) has no
+// extremes to compare.
 func (a metricAggregate) plus(b metricAggregate) metricAggregate {
-	if a.n == 0 {
+	switch {
+	case a.n == 0:
 		return b
+	case b.n == 0:
+		return a
 	}
 	return metricAggregate{n: a.n + b.n, sum: a.sum + b.sum, min: math.Min(a.min, b.min), max: math.Max(a.max, b.max)}
 }
@@ -47,6 +57,15 @@ func (a metricAggregate) plus(b metricAggregate) metricAggregate {
 // slaAggregate is a bucket's up and observed cycle counts.
 type slaAggregate struct {
 	up, total int64
+}
+
+// slaCycle is the aggregate of one observed cycle.
+func slaCycle(up bool) slaAggregate {
+	return slaAggregate{up: int64(boolInt(up)), total: 1}
+}
+
+func (a slaAggregate) plus(b slaAggregate) slaAggregate {
+	return slaAggregate{up: a.up + b.up, total: a.total + b.total}
 }
 
 // down reports whether any cycle in the minute failed: at per-minute resolution
@@ -58,27 +77,24 @@ func (a slaAggregate) down() int64 {
 	return 0
 }
 
-func (p *pendingMinutes) addMetric(m metricSeries, bucket int64, value float64) {
+func (p *pendingMinutes) addMetric(m metricSeries, bucket int64, agg metricAggregate) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if p.metrics == nil {
 		p.metrics = map[pendingMetricKey]metricAggregate{}
 	}
 	key := pendingMetricKey{series: m, bucket: bucket}
-	p.metrics[key] = p.metrics[key].plus(metricAggregate{n: 1, sum: value, min: value, max: value})
+	p.metrics[key] = p.metrics[key].plus(agg)
 }
 
-func (p *pendingMinutes) addSLA(service, check string, bucket int64, up bool) {
+func (p *pendingMinutes) addSLA(service, check string, bucket int64, agg slaAggregate) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if p.sla == nil {
 		p.sla = map[pendingSLAKey]slaAggregate{}
 	}
 	key := pendingSLAKey{service: service, check: check, bucket: bucket}
-	agg := p.sla[key]
-	agg.total++
-	agg.up += boolInt64(up)
-	p.sla[key] = agg
+	p.sla[key] = p.sla[key].plus(agg)
 }
 
 // empty reports whether nothing is pending, so a reader-only process never
@@ -128,8 +144,7 @@ func (p *pendingMinutes) merge(metrics map[pendingMetricKey]metricAggregate, sla
 		p.sla = map[pendingSLAKey]slaAggregate{}
 	}
 	for key, agg := range sla {
-		cur := p.sla[key]
-		p.sla[key] = slaAggregate{up: agg.up + cur.up, total: agg.total + cur.total}
+		p.sla[key] = agg.plus(p.sla[key])
 	}
 }
 
@@ -179,11 +194,4 @@ func writePending(ctx context.Context, exec statementExecutor, metrics map[pendi
 		}
 	}
 	return nil
-}
-
-func boolInt64(v bool) int64 {
-	if v {
-		return 1
-	}
-	return 0
 }

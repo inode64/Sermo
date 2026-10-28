@@ -1,0 +1,13 @@
+name: freetype
+display_name: "FreeType"
+description: "FreeType font rendering library; a change triggers a restart of dependent services"
+variables:
+  binary:
+    - "/usr/lib64/libfreetype.so.6"
+    - "/lib64/libfreetype.so.6"
+    - "/usr/lib/*-linux-gnu*/libfreetype.so.6"
+    - "/lib/*-linux-gnu*/libfreetype.so.6"
+    - "/usr/lib/libfreetype.so.6"
+    - "/lib/libfreetype.so.6"
+preflight:
+  file: { type: file, path: "${binary}" }

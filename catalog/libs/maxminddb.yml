@@ -1,0 +1,13 @@
+name: maxminddb
+display_name: "libmaxminddb"
+description: "MaxMind GeoIP2 database library; a change triggers a restart of dependent services"
+variables:
+  binary:
+    - "/usr/lib64/libmaxminddb.so.0"
+    - "/lib64/libmaxminddb.so.0"
+    - "/usr/lib/*-linux-gnu*/libmaxminddb.so.0"
+    - "/lib/*-linux-gnu*/libmaxminddb.so.0"
+    - "/usr/lib/libmaxminddb.so.0"
+    - "/lib/libmaxminddb.so.0"
+preflight:
+  file: { type: file, path: "${binary}" }

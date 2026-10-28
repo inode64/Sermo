@@ -1,0 +1,19 @@
+name: libjpeg
+display_name: "libjpeg"
+description: "JPEG image library (libjpeg-turbo); a change triggers a restart of dependent services"
+variables:
+  binary:
+    - "/usr/lib64/libjpeg.so.62"
+    - "/lib64/libjpeg.so.62"
+    - "/usr/lib/*-linux-gnu*/libjpeg.so.62"
+    - "/lib/*-linux-gnu*/libjpeg.so.62"
+    - "/usr/lib/libjpeg.so.62"
+    - "/lib/libjpeg.so.62"
+    - "/usr/lib64/libjpeg.so.8"
+    - "/lib64/libjpeg.so.8"
+    - "/usr/lib/*-linux-gnu*/libjpeg.so.8"
+    - "/lib/*-linux-gnu*/libjpeg.so.8"
+    - "/usr/lib/libjpeg.so.8"
+    - "/lib/libjpeg.so.8"
+preflight:
+  file: { type: file, path: "${binary}" }

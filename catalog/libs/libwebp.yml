@@ -1,0 +1,13 @@
+name: libwebp
+display_name: "libwebp"
+description: "WebP image library; a change triggers a restart of dependent services"
+variables:
+  binary:
+    - "/usr/lib64/libwebp.so.7"
+    - "/lib64/libwebp.so.7"
+    - "/usr/lib/*-linux-gnu*/libwebp.so.7"
+    - "/lib/*-linux-gnu*/libwebp.so.7"
+    - "/usr/lib/libwebp.so.7"
+    - "/lib/libwebp.so.7"
+preflight:
+  file: { type: file, path: "${binary}" }

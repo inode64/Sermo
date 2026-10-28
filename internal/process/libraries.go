@@ -59,19 +59,20 @@ type libraryFile struct {
 type libraryReader struct {
 	reader   Reader
 	readFile func(string) ([]byte, error)
-	readlink func(string) (string, error)
 	stat     func(string) (libraryFile, error)
 }
 
 // ScanLibraries reads executable .so mappings, including dlopen/PAM modules.
 // A nil process list requests a host inventory; a non-nil empty list is empty
-// service scope. Foreign mount namespaces and chroots remain unknown rather
-// than comparing their paths against unrelated host files.
+// service scope. Each mapping is compared with the file the process itself
+// would open now, through /proc/PID/root, so a service in its own mount
+// namespace (a systemd unit with PrivateTmp or ProtectSystem) is inspected
+// too. A different filesystem root (a chroot or container) remains unknown.
 func ScanLibraries(ctx context.Context, procs []Process) (LibraryReport, error) {
 	// Numeric ownership is sufficient here; avoid NSS/network user lookups in
 	// a process inventory whose authority is the kernel's real UID.
 	numeric := func(id uint32) string { return strconv.FormatUint(uint64(id), numericIDBase) }
-	r := libraryReader{reader: OSReader{LookupUserName: numeric, LookupGroupName: numeric}, readFile: hostfs.ReadFile, readlink: hostfs.Readlink, stat: statLibraryFile}
+	r := libraryReader{reader: OSReader{LookupUserName: numeric, LookupGroupName: numeric}, readFile: hostfs.ReadFile, stat: statLibraryFile}
 	return r.scan(ctx, procs)
 }
 
@@ -152,12 +153,13 @@ func (r libraryReader) verifyProcess(proc Process) (bool, error) {
 	return true, nil
 }
 
+// sameRoot reports whether the process's filesystem root is Sermo's. Its mount
+// namespace may differ: paths are resolved through /proc/PID/root, as the
+// process sees them.
 func (r libraryReader) sameRoot(pid int) bool {
-	ns, err := r.readlink(PIDPath(pid, ProcFileMountNamespace))
-	self, selfErr := r.readlink(SelfPath(ProcFileMountNamespace))
 	root, rootErr := r.stat(PIDPath(pid, ProcFileRoot))
 	ours, oursErr := r.stat("/")
-	return err == nil && selfErr == nil && ns != "" && ns == self && rootErr == nil && oursErr == nil && root.identity == ours.identity
+	return rootErr == nil && oursErr == nil && root.identity == ours.identity
 }
 
 func (r libraryReader) processLibraries(ctx context.Context, proc Process) ([]StaleLibrary, error) {
@@ -165,7 +167,7 @@ func (r libraryReader) processLibraries(ctx context.Context, proc Process) ([]St
 		return nil, err
 	}
 	if !r.sameRoot(proc.PID) {
-		return nil, errors.New("filesystem root or mount namespace differs or is unreadable")
+		return nil, errors.New("filesystem root differs or is unreadable")
 	}
 	data, err := r.readFile(PIDPath(proc.PID, procFileMaps))
 	if err != nil {
@@ -192,7 +194,7 @@ func (r libraryReader) processLibraries(ctx context.Context, proc Process) ([]St
 		return nil, err
 	}
 	if !r.sameRoot(proc.PID) {
-		return nil, errors.New("filesystem root or mount namespace changed during scan")
+		return nil, errors.New("filesystem root changed during scan")
 	}
 	return libraries, nil
 }
@@ -259,7 +261,10 @@ func parseLibraryMaps(data string) ([]libraryMapping, error) {
 
 func (r libraryReader) compareLibrary(proc Process, mapping libraryMapping) (StaleLibrary, bool, error) {
 	path := mapping.path
-	installed, err := r.stat(path)
+	// The installed file as the process would open it now, in its own mount
+	// namespace; sameRoot has pinned that namespace's root to Sermo's.
+	root := PIDPath(proc.PID, ProcFileRoot)
+	installed, err := r.stat(root + path)
 	// A real filename may end in " (deleted)". Never strip that suffix when
 	// the unmodified path still identifies the kernel's mapped inode.
 	if err == nil && installed.identity == mapping.identity {
@@ -267,7 +272,7 @@ func (r libraryReader) compareLibrary(proc Process, mapping libraryMapping) (Sta
 	}
 	if strings.HasSuffix(path, procDeletedSuffix) {
 		path = TrimDeletedSuffix(path)
-		installed, err = r.stat(path)
+		installed, err = r.stat(root + path)
 	}
 	missing := errors.Is(err, os.ErrNotExist)
 	if err != nil && !missing {

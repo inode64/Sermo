@@ -48,7 +48,6 @@ func libraryFixture() (libraryReader, Process) {
 		readFile: func(string) ([]byte, error) {
 			return []byte("1000-2000 r-xp 0000 08:01 42 /lib/libpam.so.0 (deleted)\n"), nil
 		},
-		readlink: func(string) (string, error) { return "mnt:[1]", nil },
 		stat: func(path string) (libraryFile, error) {
 			if path == "/" || path == PIDPath(42, ProcFileRoot) {
 				return libraryFile{identity: ExecutableFile{Device: 1, Inode: 1}}, nil
@@ -63,7 +62,7 @@ func libraryFixture() (libraryReader, Process) {
 }
 
 func TestScanLibrariesIdentityAndFilesystem(t *testing.T) {
-	for _, name := range []string{"replaced", "unchanged", "missing", "permission", "foreign namespace", "chroot", "chroot during scan", "PID reused", "UID changed", "exe changed", "timeout", "literal deleted suffix", "not regular"} {
+	for _, name := range []string{"replaced", "unchanged", "missing", "permission", "own mount namespace", "chroot", "chroot during scan", "PID reused", "UID changed", "exe changed", "timeout", "literal deleted suffix", "not regular"} {
 		t.Run(name, func(t *testing.T) {
 			r, p := libraryFixture()
 			ctx := t.Context()
@@ -95,9 +94,21 @@ func TestScanLibrariesIdentityAndFilesystem(t *testing.T) {
 					return libraryFile{}, nil
 				}
 				wantErr = name != "missing"
-			case "foreign namespace":
-				r.readlink = func(path string) (string, error) { return path, nil }
-				wantErr = true
+			case "own mount namespace":
+				// A sandboxed unit sees files Sermo's namespace may not: the
+				// installed library is looked up through /proc/PID/root, so the
+				// file only the process can see is the one compared.
+				old := r.stat
+				r.stat = func(path string) (libraryFile, error) {
+					if strings.HasPrefix(path, "/lib/") {
+						return libraryFile{}, os.ErrNotExist
+					}
+					if path == PIDPath(42, ProcFileRoot)+"/lib/libpam.so.0" {
+						return libraryFile{identity: ExecutableFile{Device: 2049, Inode: 42}, regular: true}, nil
+					}
+					return old(path)
+				}
+				wantCount = 0
 			case "chroot":
 				old := r.stat
 				r.stat = func(path string) (libraryFile, error) {

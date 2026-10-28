@@ -717,8 +717,10 @@ service watch declares it on the entry or its `check:` block; when the watch
 desugars into a check plus a rule, the entry's severity grades that check. An
 alert or remediation rule may declare its own `severity:` too; without one, the
 rule takes the gravest grade among the failing checks its `failed:`/`active:`
-conditions read (outside `not:`), and `error` when none carries one. A guard
-reports no incident and accepts no severity.
+conditions read (outside `not:`), and `error` when none carries one. A check
+that passes no verdict (`reports: state` or `value`) never grades the rule that
+tests it, so a service watch over one gives its generated rule the severity the
+check declares. A guard reports no incident and accepts no severity.
 
 `optional: true` remains the older, narrower spelling: it also keeps a failure
 out of the service's availability, and it emits no warn-level log, but only

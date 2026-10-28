@@ -137,17 +137,17 @@ type Deps struct {
 	Manager servicemgr.Manager
 	// Targets memoizes service unit resolution for one build generation, so the
 	// workers build and the web backend build probe each unit once and log each
-	// resolution warning once. Optional: nil resolves directly. Create a fresh
-	// cache per config load/reload.
+	// resolution warning once. Optional: nil resolves directly. Fresh per
+	// config load/reload: see WithGenerationCaches.
 	Targets *control.TargetCache
 	// ArtifactBaselines shares each service's `changed:` baseline between its
-	// worker and its web runtime. Optional: nil gives each its own. Create a
-	// fresh registry per config load/reload, next to Targets.
+	// worker and its web runtime. Optional: nil gives each its own. Fresh per
+	// config load/reload, next to Targets.
 	ArtifactBaselines *ArtifactBaselines
 	// ActiveUnits is the generation's shared listing of active init units that
 	// the cycle `service` checks consult before a live status query. Optional:
-	// nil queries every unit live. Create one per config load/reload with
-	// NewActiveUnitSnapshot, next to Targets.
+	// nil queries every unit live. Fresh per config load/reload, next to
+	// Targets.
 	ActiveUnits *servicemgr.ActiveUnitSnapshot
 	// BackendPIDs reports backend-owned process roots for the resolved service
 	// (systemd cgroup PIDs, Docker container init PID, etc.). Optional: nil lets
@@ -684,6 +684,16 @@ func buildWorker(ctx context.Context, name, unit string, tree map[string]any, de
 // per engine interval: a service cycle reads a listing at most half its
 // interval old, and two consecutive cycles never share one.
 const activeUnitRefreshesPerInterval = 2
+
+// WithGenerationCaches returns deps with the caches one configuration
+// generation shares, all fresh: the startup build and every reload create them
+// together, so neither carries one over from an older configuration.
+func (d Deps) WithGenerationCaches() Deps {
+	d.Targets = control.NewTargetCache()
+	d.ArtifactBaselines = NewArtifactBaselines()
+	d.ActiveUnits = NewActiveUnitSnapshot(d)
+	return d
+}
 
 // NewActiveUnitSnapshot returns a generation's shared active-unit listing for
 // the init backend. It is nil when the backend has no unit listing.

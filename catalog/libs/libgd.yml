@@ -1,0 +1,13 @@
+name: libgd
+display_name: "GD"
+description: "GD graphics library; a change triggers a restart of dependent services"
+variables:
+  binary:
+    - "/usr/lib64/libgd.so.3"
+    - "/lib64/libgd.so.3"
+    - "/usr/lib/*-linux-gnu*/libgd.so.3"
+    - "/lib/*-linux-gnu*/libgd.so.3"
+    - "/usr/lib/libgd.so.3"
+    - "/lib/libgd.so.3"
+preflight:
+  file: { type: file, path: "${binary}" }

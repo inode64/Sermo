@@ -1,0 +1,19 @@
+name: libxcrypt
+display_name: "libxcrypt"
+description: "Password hashing library (libcrypt); a change triggers a restart of dependent services"
+variables:
+  binary:
+    - "/usr/lib64/libcrypt.so.2"
+    - "/lib64/libcrypt.so.2"
+    - "/usr/lib/*-linux-gnu*/libcrypt.so.2"
+    - "/lib/*-linux-gnu*/libcrypt.so.2"
+    - "/usr/lib/libcrypt.so.2"
+    - "/lib/libcrypt.so.2"
+    - "/usr/lib64/libcrypt.so.1"
+    - "/lib64/libcrypt.so.1"
+    - "/usr/lib/*-linux-gnu*/libcrypt.so.1"
+    - "/lib/*-linux-gnu*/libcrypt.so.1"
+    - "/usr/lib/libcrypt.so.1"
+    - "/lib/libcrypt.so.1"
+preflight:
+  file: { type: file, path: "${binary}" }

@@ -116,6 +116,13 @@ func firstExistingPath(candidates []any) string {
 }
 
 func firstExistingStringPath(candidates []string) string {
+	path, _ := resolveCandidatePath(candidates)
+	return path
+}
+
+// resolveCandidatePath is firstExistingStringPath that also reports whether
+// the returned path exists, or is only the fallback when no candidate does.
+func resolveCandidatePath(candidates []string) (path string, found bool) {
 	var firstLiteral, firstAny string
 	for _, p := range candidates {
 		p = expandEnvString(p)
@@ -127,7 +134,7 @@ func firstExistingStringPath(candidates []string) string {
 		}
 		if cfgval.IsGlobPattern(p) {
 			if matches, err := filepath.Glob(p); err == nil && len(matches) > 0 {
-				return matches[0]
+				return matches[0], true
 			}
 			continue
 		}
@@ -135,10 +142,10 @@ func firstExistingStringPath(candidates []string) string {
 			firstLiteral = p
 		}
 		if _, err := hostfs.StatTarget(p); err == nil {
-			return p
+			return p, true
 		}
 	}
-	return cmp.Or(firstLiteral, firstAny)
+	return cmp.Or(firstLiteral, firstAny), false
 }
 
 // DocumentBinary returns the document's configured binary variable. It is used

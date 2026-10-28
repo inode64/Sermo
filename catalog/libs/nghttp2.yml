@@ -1,0 +1,13 @@
+name: nghttp2
+display_name: "nghttp2"
+description: "HTTP/2 protocol library; a change triggers a restart of dependent services"
+variables:
+  binary:
+    - "/usr/lib64/libnghttp2.so.14"
+    - "/lib64/libnghttp2.so.14"
+    - "/usr/lib/*-linux-gnu*/libnghttp2.so.14"
+    - "/lib/*-linux-gnu*/libnghttp2.so.14"
+    - "/usr/lib/libnghttp2.so.14"
+    - "/lib/libnghttp2.so.14"
+preflight:
+  file: { type: file, path: "${binary}" }

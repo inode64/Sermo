@@ -1,0 +1,13 @@
+name: pcre2
+display_name: "PCRE2"
+description: "Perl-compatible regular expression library (libpcre2-8); a change triggers a restart of dependent services"
+variables:
+  binary:
+    - "/usr/lib64/libpcre2-8.so.0"
+    - "/lib64/libpcre2-8.so.0"
+    - "/usr/lib/*-linux-gnu*/libpcre2-8.so.0"
+    - "/lib/*-linux-gnu*/libpcre2-8.so.0"
+    - "/usr/lib/libpcre2-8.so.0"
+    - "/lib/libpcre2-8.so.0"
+preflight:
+  file: { type: file, path: "${binary}" }

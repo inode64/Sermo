@@ -1,0 +1,19 @@
+name: libaio
+display_name: "libaio"
+description: "Linux asynchronous I/O library; a change triggers a restart of dependent services"
+variables:
+  binary:
+    - "/usr/lib64/libaio.so.1"
+    - "/lib64/libaio.so.1"
+    - "/usr/lib/*-linux-gnu*/libaio.so.1"
+    - "/lib/*-linux-gnu*/libaio.so.1"
+    - "/usr/lib/libaio.so.1"
+    - "/lib/libaio.so.1"
+    - "/usr/lib64/libaio.so.1t64"
+    - "/lib64/libaio.so.1t64"
+    - "/usr/lib/*-linux-gnu*/libaio.so.1t64"
+    - "/lib/*-linux-gnu*/libaio.so.1t64"
+    - "/usr/lib/libaio.so.1t64"
+    - "/lib/libaio.so.1t64"
+preflight:
+  file: { type: file, path: "${binary}" }

@@ -3784,8 +3784,10 @@ reports the condition; it does not relax that rule.
 Opt-in on services and host watches. Reads `/proc/PID/maps` in native Go,
 including executable `.so`/`.so.*` mappings loaded dynamically (PAM modules,
 OpenSSL, NSS and other plugins). Compares the mapped device/inode with the
-current regular file. It detects replacements that happened before Sermo
-started. Unlike `libraries`, this examines running processes; unlike
+current regular file as the process itself would open it, through
+`/proc/PID/root`, so a service in its own mount namespace (a systemd unit with
+`PrivateTmp` or `ProtectSystem`) is inspected as well. It detects replacements
+that happened before Sermo started. Unlike `libraries`, this examines running processes; unlike
 `restart_on_change.libraries`, it does not need a previous installed-file
 baseline. Anonymous mappings, memfd/JIT mappings and the main executable are
 excluded. Libraries without `.so` names and in-place writes to an unchanged
@@ -3793,7 +3795,11 @@ inode are outside this check's coverage.
 
 Default reporting is `state`, severity `warning`: an old library does not by
 itself mean the service is down. `OK` means no stale libraries; use `failed:`,
-not `active:`, to alert. No check or restart rule is injected automatically.
+not `active:`, to alert. A service `watches:` entry with `then: {action: alert}`
+already fires on failure, as the host watch does, at the severity its check
+declares. The catalog profiles of php-fpm, nginx, Apache, Exim, Dovecot,
+MariaDB and PostgreSQL ship that advisory alert
+(`alert-if-libraries-replaced`); no restart rule is injected automatically.
 
 ```yaml
 # Merge into an existing service file.
@@ -3855,7 +3861,8 @@ the operation; the next library scan confirms that the new mappings are clean.
 
 Automatic action additionally requires a unique main process matching the
 service's exact executable and real-user selector, complete reads, a stable
-replacement file and the same mount namespace and filesystem root as Sermo.
+replacement file and the same filesystem root as Sermo (the mount namespace
+may differ).
 Missing replacements, foreign containers/chroots, PID/identity changes,
 unreadable maps, ambiguous masters and child-only findings set
 `action_blocked: true`. These observations can alert but cannot drive an

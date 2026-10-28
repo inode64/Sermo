@@ -1,0 +1,13 @@
+name: argon2
+display_name: "Argon2"
+description: "Argon2 password hashing library; a change triggers a restart of dependent services"
+variables:
+  binary:
+    - "/usr/lib64/libargon2.so.1"
+    - "/lib64/libargon2.so.1"
+    - "/usr/lib/*-linux-gnu*/libargon2.so.1"
+    - "/lib/*-linux-gnu*/libargon2.so.1"
+    - "/usr/lib/libargon2.so.1"
+    - "/lib/libargon2.so.1"
+preflight:
+  file: { type: file, path: "${binary}" }

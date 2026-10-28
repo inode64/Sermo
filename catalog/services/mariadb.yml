@@ -109,6 +109,17 @@ rules:
       action: block
       message: ${display_name} backup is running; stop and restart denied
 watches:
+  # Advisory only: a database restarts when the operator decides, so a
+  # replaced library it still maps is reported, never acted on.
+  alert-if-libraries-replaced:
+    check:
+      type: stale_libraries
+      interval: 5m
+      severity: warning
+    then:
+      action: alert
+      message: >-
+        ${display_name} still uses libraries replaced on disk; restart it to load the updated versions
   # One warning per statement that outlives long_query_duration, with its
   # text; the Sessions panel lists the running statements and can cancel one.
   alert-if-query-long-running:

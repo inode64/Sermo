@@ -751,6 +751,10 @@ func inheritDryRun(v any, watches map[string]any) {
 type serviceWatchRuleTarget struct {
 	checkName string
 	checkType string
+	// severity grades the generated rule when the check passes no verdict
+	// (reports state or value): such a result never grades the rule that
+	// tests it, which would otherwise alert at the error default.
+	severity string
 }
 
 var serviceWatchCheckEntryFields = [...]string{keyEnabled, keyVerify, keyRequires, keyOptional, keyInterval}
@@ -808,7 +812,15 @@ func promoteServiceWatchCheck(checksMap map[string]any, name string, entry, chec
 		}
 	}
 	checksMap[name] = genCheck
-	return serviceWatchRuleTarget{checkName: name, checkType: checkType}, true
+	target := serviceWatchRuleTarget{checkName: name, checkType: checkType}
+	reports := cfgval.String(genCheck[checks.CheckKeyReports])
+	if info, ok := checks.TypeInfoFor(checkType); ok && reports == "" {
+		reports = info.DefaultReports
+	}
+	if checks.VerdictlessMode(reports) {
+		target.severity = checks.DeclaredSeverity(genCheck).String()
+	}
+	return target, true
 }
 
 func buildServiceWatchRule(entry, then map[string]any, action string, target serviceWatchRuleTarget) map[string]any {
@@ -826,6 +838,9 @@ func buildServiceWatchRule(entry, then map[string]any, action string, target ser
 	thenOut := map[string]any{rules.RuleFieldAction: action}
 	if msg := cfgval.String(then[rules.RuleFieldMessage]); msg != "" {
 		thenOut[rules.RuleFieldMessage] = msg
+	}
+	if target.severity != "" && action != string(rules.ActionBlock) {
+		rule[rules.RuleFieldSeverity] = target.severity
 	}
 	switch rules.ActionType(action) {
 	case rules.ActionBlock:
@@ -850,10 +865,11 @@ func buildServiceWatchRule(entry, then map[string]any, action string, target ser
 }
 
 // serviceWatchRuleCondition preserves watch polarity: health checks fire on
-// failure, while condition checks fire when their threshold is active.
+// failure, while condition checks fire when their threshold is active. The
+// polarity is the one host watches use for the same check type.
 func serviceWatchRuleCondition(target serviceWatchRuleTarget) map[string]any {
 	operand := map[string]any{rules.FieldCheck: target.checkName}
-	if checks.IsHealthType(target.checkType) {
+	if checks.FiresOnFailure(target.checkType) {
 		return map[string]any{rules.ConditionFailed: operand}
 	}
 	return map[string]any{rules.ConditionActive: operand}
@@ -1150,13 +1166,19 @@ func (c *Config) addRestartOnChangeLibraryRules(tree, rulesMap map[string]any, l
 	}
 	var errs []string
 	for _, library := range libraries {
-		path, known := c.libraryPath(library)
+		path, installed, known := c.libraryFile(library)
 		switch {
 		case !known:
 			errs = append(errs, fmt.Sprintf("restart_on_change references %q, which is not a library", library))
 			continue
 		case path == "":
 			errs = append(errs, fmt.Sprintf("library %q has no binary to watch", library))
+			continue
+		case !installed:
+			// Absent from this host, like an app that is not installed: there is
+			// nothing to watch, and requiring the file would block every
+			// operation of a service a catalog profile subscribed to a library
+			// some hosts never install.
 			continue
 		}
 		preflightKey := "library-" + library + "-file"
@@ -1429,16 +1451,18 @@ func restartOnChangeApps(raw any) ([]restartOnChangeApp, []string) {
 	}
 }
 
-// libraryPath resolves a library name to the file its library watches
-// (the `binary` variable). known is false when no library has that name; an
-// empty path with known=true means the library declares no binary. Shared by
-// expandRestartOnChange and the `changed: {library: X}` condition rewrite.
-func (c *Config) libraryPath(lib string) (path string, known bool) {
+// libraryFile resolves a library name to the file its library watches (the
+// `binary` variable) and reports whether that file is installed on this host.
+// known is false when no library has that name; an empty path with known=true
+// means the library declares no binary. Shared by expandRestartOnChange and the
+// `changed: {library: X}` condition rewrite.
+func (c *Config) libraryFile(lib string) (path string, installed, known bool) {
 	doc, ok := c.Libraries[lib]
 	if !ok {
-		return "", false
+		return "", false, false
 	}
-	return DocumentBinary(doc.Body), true
+	path, installed = resolveCandidatePath(documentBinaryCandidates(doc.Body))
+	return path, installed, true
 }
 
 // resolveChangedLibraries fills the `path` of a hand-written
@@ -1480,7 +1504,7 @@ func (c *Config) fillChangedLibraryPaths(node map[string]any, scope string) []st
 		if lib == "" || cfgval.String(changed[rules.FieldPath]) != "" {
 			return false
 		}
-		path, known := c.libraryPath(lib)
+		path, _, known := c.libraryFile(lib)
 		switch {
 		case !known:
 			errs = append(errs, fmt.Sprintf("%s: changed references %q, which is not a library", scope, lib))

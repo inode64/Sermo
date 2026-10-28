@@ -97,12 +97,12 @@ func (r recorder) recordMetric(m metricSeries, value float64, at time.Time) erro
 	if math.IsNaN(value) || math.IsInf(value, 0) {
 		return nil
 	}
-	bucket := alignBucket(at, resMinute)
+	bucket, agg := alignBucket(at, resMinute), metricSample(value)
 	if r.open(bucket) {
-		r.pending.addMetric(m, bucket, value)
+		r.pending.addMetric(m, bucket, agg)
 		return nil
 	}
-	return writeMetricBucket(r.ctx(), r.exec, m, bucket, metricAggregate{n: 1, sum: value, min: value, max: value})
+	return writeMetricBucket(r.ctx(), r.exec, m, bucket, agg)
 }
 
 // writeMetricBucket adds an aggregate to the series' stored per-minute bucket.
@@ -147,57 +147,50 @@ func (s *Store) series(m metricSeries, from, to time.Time) ([]MeasurementPoint, 
 	stored := s.retention.archiveFor(from, to)
 	// As in loadSLASeries the upper bound covers the bucket holding `to`, so the
 	// newest still-filling bucket stays in the series.
+	lo, hi := alignBucket(from, stored.Res), alignBucket(to, stored.Res)+stored.Res
 	rows, err := s.reader.QueryContext(s.sqlCtx(), metricSeriesStmt,
-		stored.Res, m.scope, m.service, m.check, m.metric,
-		alignBucket(from, stored.Res), alignBucket(to, stored.Res)+stored.Res)
+		stored.Res, m.scope, m.service, m.check, m.metric, lo, hi)
 	if err != nil {
 		return nil, fmt.Errorf("load %s series for %s: %w", m.kind(), m.target(), err)
 	}
 	defer func() { _ = rows.Close() }()
 
+	var pending map[int64]metricAggregate
+	if stored.Res == resMinute {
+		pending = s.pending.metricBuckets(m, lo, hi)
+	}
 	var out []MeasurementPoint
 	for rows.Next() {
-		var bucket, n int64
-		var sum, minValue, maxValue float64
-		if err := rows.Scan(&bucket, &n, &sum, &minValue, &maxValue); err != nil {
+		var bucket int64
+		var agg metricAggregate
+		if err := rows.Scan(&bucket, &agg.n, &agg.sum, &agg.min, &agg.max); err != nil {
 			return nil, fmt.Errorf("scan %s series row for %s: %w", m.kind(), m.target(), err)
 		}
-		avg := 0.0
-		if n > 0 {
-			avg = sum / float64(n)
+		if extra, ok := pending[bucket]; ok {
+			agg = agg.plus(extra)
+			delete(pending, bucket)
 		}
-		out = append(out, MeasurementPoint{Start: time.Unix(bucket, 0).UTC(), N: n, Avg: avg, Min: minValue, Max: maxValue})
+		out = append(out, metricPoint(bucket, agg))
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("iterate %s series for %s: %w", m.kind(), m.target(), err)
 	}
-	if stored.Res == resMinute {
-		out = withPendingMetricPoints(out, s.pending.metricBuckets(m, alignBucket(from, stored.Res), alignBucket(to, stored.Res)+stored.Res))
+	if len(pending) == 0 {
+		return out, nil
 	}
+	for bucket, agg := range pending {
+		out = append(out, metricPoint(bucket, agg))
+	}
+	slices.SortFunc(out, func(a, b MeasurementPoint) int { return a.Start.Compare(b.Start) })
 	return out, nil
 }
 
-// withPendingMetricPoints adds the pending minute buckets to a stored series,
-// merging a bucket both hold, and keeps it oldest first.
-func withPendingMetricPoints(points []MeasurementPoint, pending map[int64]metricAggregate) []MeasurementPoint {
-	if len(pending) == 0 {
-		return points
-	}
-	for i, p := range points {
-		if agg, ok := pending[p.Start.Unix()]; ok {
-			points[i] = metricPoint(p.Start.Unix(), metricAggregate{n: p.N, sum: p.Avg * float64(p.N), min: p.Min, max: p.Max}.plus(agg))
-			delete(pending, p.Start.Unix())
-		}
-	}
-	for bucket, agg := range pending {
-		points = append(points, metricPoint(bucket, agg))
-	}
-	slices.SortFunc(points, func(a, b MeasurementPoint) int { return a.Start.Compare(b.Start) })
-	return points
-}
-
 func metricPoint(bucket int64, agg metricAggregate) MeasurementPoint {
-	return MeasurementPoint{Start: time.Unix(bucket, 0).UTC(), N: agg.n, Avg: agg.sum / float64(agg.n), Min: agg.min, Max: agg.max}
+	point := MeasurementPoint{Start: time.Unix(bucket, 0).UTC(), N: agg.n, Min: agg.min, Max: agg.max}
+	if agg.n > 0 {
+		point.Avg = agg.sum / float64(agg.n)
+	}
+	return point
 }
 
 // MeasurementSummary returns the average/min/max and sample count for a check over

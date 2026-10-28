@@ -1,0 +1,19 @@
+name: libsodium
+display_name: "libsodium"
+description: "libsodium cryptography library; a change triggers a restart of dependent services"
+variables:
+  binary:
+    - "/usr/lib64/libsodium.so.26"
+    - "/lib64/libsodium.so.26"
+    - "/usr/lib/*-linux-gnu*/libsodium.so.26"
+    - "/lib/*-linux-gnu*/libsodium.so.26"
+    - "/usr/lib/libsodium.so.26"
+    - "/lib/libsodium.so.26"
+    - "/usr/lib64/libsodium.so.23"
+    - "/lib64/libsodium.so.23"
+    - "/usr/lib/*-linux-gnu*/libsodium.so.23"
+    - "/lib/*-linux-gnu*/libsodium.so.23"
+    - "/usr/lib/libsodium.so.23"
+    - "/lib/libsodium.so.23"
+preflight:
+  file: { type: file, path: "${binary}" }

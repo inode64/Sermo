@@ -161,7 +161,12 @@ It inspects running mappings and also detects updates made before Sermo started.
 When a service subscribes through `restart_on_change.libraries` (and its
 `version` gate is not `false`), Sermo also adds that library file as a required
 preflight check for start, restart, reload and resume; a missing, non-regular
-or empty library file blocks the operation.
+or empty library file blocks the operation. A subscribed library with no
+installed candidate on the host is skipped, like an app that is not installed:
+no restart rule and no preflight. A catalog profile can therefore list every
+security-relevant library its daemon may load (the php-fpm, nginx, Apache,
+Exim and Dovecot profiles do), and a library installed later is picked up at
+the next configuration load.
 
 A configured service (or catalog service definition) opts in with
 `restart_on_change`. Packaged catalog services that link versioned apps declare

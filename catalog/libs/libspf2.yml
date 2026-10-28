@@ -1,0 +1,13 @@
+name: libspf2
+display_name: "libspf2"
+description: "SPF (Sender Policy Framework) library; a change triggers a restart of dependent services"
+variables:
+  binary:
+    - "/usr/lib64/libspf2.so.2"
+    - "/lib64/libspf2.so.2"
+    - "/usr/lib/*-linux-gnu*/libspf2.so.2"
+    - "/lib/*-linux-gnu*/libspf2.so.2"
+    - "/usr/lib/libspf2.so.2"
+    - "/lib/libspf2.so.2"
+preflight:
+  file: { type: file, path: "${binary}" }
