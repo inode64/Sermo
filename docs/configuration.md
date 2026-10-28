@@ -567,11 +567,12 @@ libraries: libicuuc.so.74 (used by active service php-fpm8.4)`.
 `engine.backend: auto` detects the init system: probe systemd (`systemctl`
 exists, `/run/systemd/system` exists, `is-system-running` usable — `degraded`
 counts as usable) and OpenRC (`rc-service` exists, `/run/openrc` exists or
-`rc-status` works). With exactly one available it is used; with both, the
-**active init system wins** (PID 1 / systemd state, else a working OpenRC) —
-never mere command presence; with neither, or an unresolvable tie, startup
-fails asking for `--backend`, `SERMO_BACKEND` or `engine.backend`. That is
-also the override order: CLI flag > environment > config > auto-detection.
+`rc-status --runlevel` works). With exactly one available it is used; with
+both, the **active init system wins** (PID 1 / systemd state, else a working
+OpenRC) — never mere command presence; with neither, or an unresolvable tie,
+startup fails asking for `--backend`, `SERMO_BACKEND` or `engine.backend`.
+That is also the override order: CLI flag > environment > config >
+auto-detection.
 For OpenRC oneshot services whose `status` command cannot report cleanly, Sermo
 falls back to `rc-status -a` and trusts the init state.
 

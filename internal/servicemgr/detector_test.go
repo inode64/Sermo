@@ -3,6 +3,7 @@ package servicemgr
 import (
 	"context"
 	"errors"
+	"slices"
 	"testing"
 
 	"sermo/internal/execx"
@@ -41,11 +42,13 @@ func TestDetectSystemdDegradedIsUsable(t *testing.T) {
 	}
 }
 
+// The probe asks only for the runlevel name: a bare rc-status checks the
+// daemon of every service in the runlevel.
 func TestDetectOpenRC(t *testing.T) {
 	detector := fakeDetector(
 		map[string]bool{"rc-service": true, "rc-status": true},
 		map[string]bool{"/run/openrc": true},
-		map[string]execx.Result{"rc-status": {Stdout: "Runlevel: default\n"}},
+		map[string]execx.Result{"rc-status --runlevel": {Stdout: "default\n"}},
 	)
 
 	detection, err := detector.Detect(context.Background(), BackendAuto)
@@ -55,6 +58,10 @@ func TestDetectOpenRC(t *testing.T) {
 	if detection != BackendOpenRC {
 		t.Fatalf("Detect() backend = %q, want %q", detection, BackendOpenRC)
 	}
+	runner, _ := detector.Runner.(*execxtest.Runner)
+	if calls := runner.Lines(); !slices.Equal(calls, []string{"rc-status --runlevel"}) {
+		t.Fatalf("OpenRC probe ran %v, want only rc-status --runlevel", calls)
+	}
 }
 
 func TestDetectBothPresentPrefersActiveOpenRC(t *testing.T) {
@@ -63,7 +70,7 @@ func TestDetectBothPresentPrefersActiveOpenRC(t *testing.T) {
 		map[string]bool{"/run/systemd/system": true, "/run/openrc": true},
 		map[string]execx.Result{
 			"systemctl is-system-running": {Stdout: "starting\n"},
-			"rc-status":                   {Stdout: "Runlevel: default\n"},
+			"rc-status --runlevel":        {Stdout: "default\n"},
 		},
 	)
 
@@ -83,7 +90,7 @@ func TestDetectBothPresentAmbiguous(t *testing.T) {
 		map[string]bool{"/run/systemd/system": true, "/run/openrc": true},
 		map[string]execx.Result{
 			"systemctl is-system-running": {Stdout: "starting\n"},
-			"rc-status":                   {ExitCode: 1},
+			"rc-status --runlevel":        {ExitCode: 1},
 		},
 		runnerErrors,
 		nil,
