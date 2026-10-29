@@ -31,6 +31,10 @@ func (a App) runLibs(ctx context.Context, opts options) int {
 // are installed, the version their version command reports, and whether they
 // resolve without error.
 func (a App) runServices(ctx context.Context, opts options) int {
+	if len(opts.args) > 0 && opts.args[0] == commandArgLibraries {
+		opts.args = opts.args[1:]
+		return a.runServiceLibraries(ctx, opts)
+	}
 	if len(opts.args) == 0 || opts.args[0] != commandArgCatalog {
 		return a.runConfiguredServices(ctx, opts)
 	}

@@ -585,12 +585,12 @@ func catalogPath(tree map[string]any, category string) string {
 			}
 		}
 	}
-	return binaryPath(tree)
+	return BinaryPath(tree)
 }
 
-// binaryPath returns the resolved binary path of a daemon: its preflight
+// BinaryPath returns the resolved binary path of a daemon: its preflight
 // `binary` check path when present, otherwise the `binary` variable.
-func binaryPath(tree map[string]any) string {
+func BinaryPath(tree map[string]any) string {
 	if pf, ok := tree[config.SectionPreflight].(map[string]any); ok {
 		if p := preflightCheckPath(pf, checks.CheckTypeBinary); p != "" {
 			return p

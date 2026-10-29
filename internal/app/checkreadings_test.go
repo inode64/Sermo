@@ -9,6 +9,21 @@ import (
 	"sermo/internal/conn"
 )
 
+func TestLibraryReadingsSurviveSnapshotJSON(t *testing.T) {
+	data := map[string]any{checks.DataKeyDependencies: []string{"/lib/one.so", "/lib/plugin.so"}}
+	encoded, err := json.Marshal(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(encoded, &data); err != nil {
+		t.Fatal(err)
+	}
+	readings := checkReadings(checks.CheckTypeStaleLibraries, data)
+	if len(readings) != 1 || readings[0].Field != checks.DataKeyDependencies || readings[0].Value != "/lib/one.so, /lib/plugin.so" {
+		t.Fatalf("loaded libraries missing from panel: %+v", readings)
+	}
+}
+
 // TestCheckReadingsForAllTypes consolidates the former per-group checkReadings
 // tests: for each check type it builds the readings and asserts the formatted
 // field values (and, for cert, a minimum reading count).
