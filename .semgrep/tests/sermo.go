@@ -117,7 +117,7 @@ func bypassDockerCreatedStart(m dockerctl.Manager, ctx context.Context) error {
 
 func dockerComposeValidationIsReadOnly(m dockerctl.Manager, ctx context.Context) error {
 	// ok: service-lifecycle-must-use-operation
-	return m.ValidateCompose(ctx)
+	return m.ValidateCompose(ctx, nil)
 }
 
 func bypassDomainPause(m virt.Manager, ctx context.Context) error {

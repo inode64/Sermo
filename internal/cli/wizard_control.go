@@ -66,14 +66,14 @@ func listWizardDockerContainers(ctx context.Context, timeout time.Duration, runn
 			Status:    container.State,
 			Socket:    dockerctl.DefaultSocket,
 		}
-		candidate.Compose, candidate.RecoveryWarning = wizardDockerCompose(ctx, container, name, runner)
+		candidate.Compose, candidate.RecoveryWarning = wizardDockerCompose(ctx, container, name, containers, runner)
 		out = append(out, candidate)
 	}
 	slices.SortFunc(out, func(a, b assist.DockerCandidate) int { return cmp.Compare(a.Name, b.Name) })
 	return out, nil
 }
 
-func wizardDockerCompose(ctx context.Context, c dockerctl.ContainerSummary, name string, runner execx.Runner) (map[string]any, string) {
+func wizardDockerCompose(ctx context.Context, c dockerctl.ContainerSummary, name string, containers []dockerctl.ContainerSummary, runner execx.Runner) (map[string]any, string) {
 	spec, present, err := dockerctl.ComposeFromLabels(c.Labels, c.ImageID)
 	if err != nil {
 		return nil, err.Error()
@@ -83,7 +83,7 @@ func wizardDockerCompose(ctx context.Context, c dockerctl.ContainerSummary, name
 	}
 	manager := dockerctl.NewManager(dockerctl.Spec{Container: name, Socket: dockerctl.DefaultSocket, Compose: &spec})
 	manager.Runner = runner
-	if err := manager.ValidateCompose(ctx); err != nil {
+	if err := manager.ValidateCompose(ctx, containers); err != nil {
 		return nil, err.Error()
 	}
 	return spec.Tree(), ""

@@ -44,7 +44,7 @@ func (c *Client) Resource(ctx context.Context, kind, name string) error {
 	return c.get(ctx, "/"+kind+"/"+url.PathEscape(name), dockerResponseBodyLimit, &resource)
 }
 
-func (m Manager) isolateCompose(ctx context.Context, client composeClient, model map[string]any) error {
+func (m Manager) isolateCompose(ctx context.Context, client composeClient, model map[string]any, containers []ContainerSummary) error {
 	spec := m.Spec.Compose
 	services, _ := model[composeKeyServices].(map[string]any)
 	service, ok := services[spec.Service].(map[string]any)
@@ -54,7 +54,7 @@ func (m Manager) isolateCompose(ctx context.Context, client composeClient, model
 	if err := m.checkComposeService(service); err != nil {
 		return err
 	}
-	if err := m.checkComposeReplicas(ctx, client); err != nil {
+	if err := m.checkComposeReplicas(ctx, client, containers); err != nil {
 		return err
 	}
 	image, err := client.Image(ctx, spec.Image)
@@ -127,10 +127,13 @@ func (m Manager) checkComposeService(service map[string]any) error {
 	return nil
 }
 
-func (m Manager) checkComposeReplicas(ctx context.Context, client composeClient) error {
-	containers, err := client.ListContainers(ctx, true)
-	if err != nil {
-		return fmt.Errorf("check Compose service ownership: %w", err)
+func (m Manager) checkComposeReplicas(ctx context.Context, client composeClient, containers []ContainerSummary) error {
+	if containers == nil {
+		var err error
+		containers, err = client.ListContainers(ctx, true)
+		if err != nil {
+			return fmt.Errorf("check Compose service ownership: %w", err)
+		}
 	}
 	for _, c := range containers {
 		if c.Labels[composeProjectLabel] != m.Spec.Compose.Project || c.Labels[composeServiceLabel] != m.Spec.Compose.Service {
