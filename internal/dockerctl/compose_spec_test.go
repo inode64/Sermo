@@ -41,3 +41,23 @@ func TestComposeSpecValidation(t *testing.T) {
 		t.Fatal("remote daemon accepted local path validation")
 	}
 }
+
+func TestComposePathsHaveOneValidationContract(t *testing.T) {
+	for _, key := range []string{ComposeKeyFiles, ComposeKeyEnvFiles} {
+		for _, path := range []string{"relative.yml", "/srv/../compose.yml", "", "/srv/file\n.yml", "/srv/file\x00.yml"} {
+			t.Run(key+"/"+path, func(t *testing.T) {
+				spec := ComposeSpec{Project: "project", Directory: "/srv/project", Service: "app", Image: "sha256:" + strings.Repeat("a", 64), Files: []string{"/srv/project/compose.yml"}}
+				if key == ComposeKeyFiles {
+					spec.Files = []string{path}
+				} else {
+					spec.EnvFiles = []string{path}
+				}
+				validationErr := spec.Validate()
+				_, _, parseErr := SpecFromTree(dockerControl(map[string]any{ControlKeyContainer: "web", ControlKeyCompose: spec.Tree()}))
+				if validationErr == nil || parseErr == nil || validationErr.Error() != parseErr.Error() || !strings.Contains(parseErr.Error(), composePath+"."+key) {
+					t.Fatalf("validation=%v parse=%v; want the same field-specific error", validationErr, parseErr)
+				}
+			})
+		}
+	}
+}
