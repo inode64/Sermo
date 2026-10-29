@@ -3867,6 +3867,8 @@ Automatic action additionally requires a unique main process matching the
 service's exact executable and real-user selector, complete reads, a stable
 replacement file and the same filesystem root as Sermo (the mount namespace
 may differ).
+Sandboxed units are inspected through `/proc/PID/root`, using the files visible
+to that process.
 Missing replacements, foreign containers/chroots, PID/identity changes,
 unreadable maps, ambiguous masters and child-only findings set
 `action_blocked: true`. These observations can alert but cannot drive an
