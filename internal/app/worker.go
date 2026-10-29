@@ -117,6 +117,9 @@ type Worker struct {
 	// operation_timeout raised by stop_policy). An operation-settling marker is
 	// trusted at least this long before it is treated as abandoned.
 	OperationTimeout time.Duration
+	// OperationActive checks the engine's lock before expiring an old running
+	// marker: a native init stop timeout can extend the action's actual deadline.
+	OperationActive func() bool
 	// RestartNotice is the optional global principal-process external-restart
 	// notice policy. It is intentionally observed during startup and
 	// operation-settling cycles, before ordinary rule side effects are considered.
@@ -521,6 +524,9 @@ func (w *Worker) operationSettlingState(now time.Time) (observeOnly, running boo
 		return false, false
 	}
 	if !rec.UpdatedAt.IsZero() && now.Sub(rec.UpdatedAt) > operationSettlingMaxAge(w.OperationTimeout) {
+		if rec.Phase == state.OperationSettlingRunning && w.OperationActive != nil && w.OperationActive() {
+			return false, true
+		}
 		w.clearOperationSettling()
 		return false, false
 	}

@@ -2,13 +2,53 @@ package app
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
+	"sermo/internal/execx/execxtest"
+	"sermo/internal/locks"
 	"sermo/internal/operation"
 	"sermo/internal/rules"
+	"sermo/internal/servicemgr"
 	"sermo/internal/state"
 )
+
+func TestOperationSettlingOutlivesConfiguredTimeoutWhileLockHeld(t *testing.T) {
+	useFakeLockProber(t)
+	now := time.Now()
+	store := newFakeStore()
+	store.now = func() time.Time { return now.Add(-20 * time.Minute) }
+	if err := BeginOperationSettling(store, "db", string(rules.ActionStop)); err != nil {
+		t.Fatal(err)
+	}
+	runtime := t.TempDir()
+	writeWebLockFixture(t, locks.RuntimeOpsDir(runtime), "db.lock", map[string]any{
+		"service": "db", "owner_pid": os.Getpid(), "owner_start_ticks": fakeOwnerTicks,
+		"expires_at": now.Add(10 * time.Minute).Format(time.RFC3339),
+	})
+	w, _, warnings := buildWorker(t.Context(), "db", "db.service", map[string]any{}, Deps{
+		Backend: servicemgr.BackendSystemd, Manager: fakeManager{}, Runtime: runtime,
+		OperationTimeout: operation.DefaultOperationTimeout, OperationSettling: store,
+		ExecxRunner: &execxtest.Runner{}, ProcReader: serviceOwnershipReader{},
+	}, nil)
+	if len(warnings) != 0 {
+		t.Fatalf("buildWorker warnings: %v", warnings)
+	}
+	if _, running := w.operationSettlingState(now); !running {
+		t.Fatal("extended systemd operation lost its running marker while its lock is held")
+	}
+	if err := os.Remove(filepath.Join(locks.RuntimeOpsDir(runtime), "db.lock")); err != nil {
+		t.Fatal(err)
+	}
+	if _, running := w.operationSettlingState(now); running {
+		t.Fatal("abandoned marker stayed running after its lock disappeared")
+	}
+	if _, found, err := store.OperationSettling("db"); err != nil || found {
+		t.Fatalf("abandoned marker: found=%v err=%v", found, err)
+	}
+}
 
 func TestOperationSettlingLifecycle(t *testing.T) {
 	store := newFakeStore()

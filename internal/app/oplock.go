@@ -19,6 +19,11 @@ const (
 	lockLabelNamed     = "lock"
 )
 
+func operationLockActive(runtimeDir, service string) bool {
+	report, err := lockScannerFor(locks.RuntimeOpsDir(runtimeDir)).Scan(service)
+	return err == nil && reportHasActiveLock(report)
+}
+
 // configureOperationLocker returns the per-service internal operation locker with
 // stale-lock reclaims logged through onReclaim (AGENTS.md).
 func configureOperationLocker(runtimeDir string, onReclaim func(service, reason string)) locks.OperationLocker {

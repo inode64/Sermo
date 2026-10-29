@@ -607,7 +607,9 @@ service stopped. A unit with `TimeoutStopSec=infinity`, or one a day or longer,
 keeps the configured deadline, and a hanging `ExecStop=` (which systemd waits
 out once more before signalling) is not covered. The same
 limit applies to automatic remediation, `sermoctl` actions and web-initiated
-operations. When the web UI is enabled, `sermod` also sets the HTTP server's
+operations. An extended operation keeps monitoring alerts and remediation
+suppressed while its operation lock is active, even past the usual expiry of
+the running marker. When the web UI is enabled, `sermod` also sets the HTTP server's
 initial write timeout from the longest resolved deadline — including a watch
 probe's check `timeout:`, a `buttons.<name>.timeout`, and an `also_apply`
 cascade, which the web runs member by member (each under its own deadline,

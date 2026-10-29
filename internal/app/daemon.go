@@ -653,6 +653,7 @@ func buildWorker(ctx context.Context, name, unit string, tree map[string]any, de
 		Settling:             deps.Settling,
 		OperationSettling:    deps.OperationSettling,
 		OperationTimeout:     engine.OperationTimeout,
+		OperationActive:      func() bool { return operationLockActive(deps.Runtime, name) },
 		ServiceRestartNotice: deps.ServiceRestartNotice,
 		RestartNotice:        deps.RestartNotice,
 		PrimaryProcess:       primaryProcess,
