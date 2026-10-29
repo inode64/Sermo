@@ -3798,8 +3798,8 @@ inode are outside this check's coverage.
 Default reporting is `state`, severity `warning`: an old library does not by
 itself mean the service is down. `OK` means no stale libraries; use `failed:`,
 not `active:`, to alert. A service `watches:` entry with `then: {action: alert}`
-already fires on failure, as the host watch does, at the severity its check
-declares. The catalog profiles of php-fpm, nginx, Apache, Exim, Dovecot,
+generates that `failed:` condition automatically, as the host watch does, at
+the severity its check declares. The catalog profiles of php-fpm, nginx, Apache, Exim, Dovecot,
 ProFTPD, MariaDB and PostgreSQL ship that advisory alert
 (`alert-if-libraries-replaced`); no restart rule is injected automatically.
 OpenSSH does not: its sessions survive a restart and would keep the alert
