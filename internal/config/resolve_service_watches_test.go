@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"sermo/internal/cfgval"
+	"sermo/internal/checks"
 	"sermo/internal/rules"
 )
 
@@ -161,6 +162,37 @@ watches:
 	}
 	if got, ok := nested(t, tree, "rules", "alert-if-memory-high")["severity"]; ok {
 		t.Fatalf("graded alert severity = %v, want none: its check result grades it", got)
+	}
+}
+
+func TestExpandServiceWatchesStaleLibrariesPolarity(t *testing.T) {
+	rule := resolveWatchRule(t, `
+watches:
+  libraries:
+    check: { type: stale_libraries }
+    then: { action: alert, message: "loaded libraries were replaced" }
+`, "libraries", "alert")
+	condition := nested(t, rule, rules.RuleFieldIf)
+	for _, tc := range []struct {
+		name   string
+		result checks.Result
+		want   bool
+	}{
+		{name: "current libraries", result: checks.Result{OK: true}},
+		{name: "replaced libraries", result: checks.Result{}, want: true},
+		{name: "advisory libraries", result: checks.Result{ActionBlocked: true}, want: true},
+		{name: "skipped inventory", result: checks.Result{OK: true, Skipped: true}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			tc.result.Reports = checks.ReportsState
+			eval := rules.Evaluator{Cache: map[string]checks.Result{"libraries": tc.result}}
+			got, err := eval.EvalRule(t.Context(), rules.Rule{
+				Type: rules.RuleAlert, If: condition, Actions: []rules.Action{{Type: rules.ActionAlert}},
+			})
+			if err != nil || got != tc.want {
+				t.Fatalf("library alert = %v, %v; want %v", got, err, tc.want)
+			}
+		})
 	}
 }
 
