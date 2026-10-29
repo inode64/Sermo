@@ -48,11 +48,13 @@ type ServiceCandidate struct {
 // DockerCandidate is a Docker container detected on the host that can be written
 // as a controlled Sermo service.
 type DockerCandidate struct {
-	Name      string // service name to write
-	Title     string // display label
-	Container string // Docker container name or id for control.container
-	Status    string // Docker state label: running, exited, paused, ...
-	Socket    string // Docker API socket used by control and checks
+	Name            string         `json:"name"`
+	Title           string         `json:"title"`
+	Container       string         `json:"container"`
+	Status          string         `json:"status"`
+	Socket          string         `json:"socket"`
+	Compose         map[string]any `json:"compose,omitempty"`
+	RecoveryWarning string         `json:"recovery_warning,omitempty"`
 }
 
 // VMCandidate is a libvirt/QEMU domain detected on the host that can be written

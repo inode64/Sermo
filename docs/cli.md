@@ -136,6 +136,7 @@ sermoctl lock release SERVICE [--name NAME]
 
 sermoctl wizard
 sermoctl wizard service|docker|vm|mount|volume|net|uplink
+sermoctl wizard docker --json          # read-only discovery and validated Compose recovery references
 ```
 
 ## Availability

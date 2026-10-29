@@ -11,6 +11,7 @@ import (
 	"sermo/internal/cfgval"
 	"sermo/internal/config"
 	"sermo/internal/dockerctl"
+	"sermo/internal/execx"
 	"sermo/internal/process"
 	"sermo/internal/servicemgr"
 	"sermo/internal/virt"
@@ -38,7 +39,7 @@ func Resolve(ctx context.Context, name string, tree map[string]any, backend serv
 		return Target{}, err
 	}
 	if controlled {
-		return resolveControlledTarget(ctx, typ, tree)
+		return resolveControlledTarget(ctx, typ, tree, resolver.Runner)
 	}
 	candidates, trust := config.ServiceCandidates(tree, string(backend), name)
 	unit, err := resolver.Resolve(ctx, backend, candidates, trust)
@@ -61,7 +62,7 @@ func applyDependencyOptions(target *Target, tree map[string]any) {
 	target.Manager = servicemgr.WithOptions(target.Manager, servicemgr.Options{AllowDependencies: true})
 }
 
-func resolveControlledTarget(ctx context.Context, typ string, tree map[string]any) (Target, error) {
+func resolveControlledTarget(ctx context.Context, typ string, tree map[string]any, runner execx.Runner) (Target, error) {
 	switch typ {
 	case virt.ControlType:
 		spec, _, err := virt.SpecFromTree(tree)
@@ -89,6 +90,7 @@ func resolveControlledTarget(ctx context.Context, typ string, tree map[string]an
 			return Target{}, fmt.Errorf("resolve docker control: %w", err)
 		}
 		manager := dockerctl.NewManager(spec)
+		manager.Runner = runner
 		return Target{
 			Unit:        spec.Container,
 			Backend:     servicemgr.BackendDocker,

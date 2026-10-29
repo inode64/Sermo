@@ -141,6 +141,9 @@ func buildDockerService(c DockerCandidate) map[string]any {
 		dockerctl.ControlKeyType:      dockerctl.ControlType,
 		dockerctl.ControlKeyContainer: c.Container,
 	}
+	if c.Compose != nil {
+		control[dockerctl.ControlKeyCompose] = c.Compose
+	}
 	expect := runningExpect(conn.ExtraKeyContainerStatus, conn.DockerContainerStatusRunning)
 	// Running does not imply healthy. Allow containers without a health check
 	// and Docker's startup grace period, but retain a failure while unhealthy.
@@ -196,7 +199,14 @@ func controlledService(control map[string]any, checkName string, check map[strin
 }
 
 func dockerLabel(c DockerCandidate) string {
-	return detailLabel(c.Title, labelField(labelFieldContainer, c.Container), labelField(labelFieldStatus, c.Status))
+	label := detailLabel(c.Title, labelField(labelFieldContainer, c.Container), labelField(labelFieldStatus, c.Status))
+	if c.RecoveryWarning != "" {
+		return label + " (recreation unavailable: " + c.RecoveryWarning + ")"
+	}
+	if c.Compose != nil {
+		return label + " (Compose recreation available)"
+	}
+	return label
 }
 
 func vmLabel(c VMCandidate) string {

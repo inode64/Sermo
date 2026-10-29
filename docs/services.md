@@ -905,7 +905,9 @@ Docker Engine API operations:
   deadline expires, Sermo records the request error, discovers residuals and
   applies its stop policy. The overall operation timeout still bounds every
   phase; expiring or cancelling it prevents further escalation and start.
-- `restart` is still Sermo's safe stop+start flow.
+- `restart` uses Sermo's safe stop+start flow for a running container. If Docker
+  confirms `created` or `exited`, it only starts the container and records
+  `action=start` with the original restart request in the audit message.
 - `pause` freezes every process of a running container (`POST /pause`).
 - `resume` unpauses a paused container.
 - `reload` is unsupported for Docker containers unless a future
@@ -946,12 +948,85 @@ Containers without a Docker health check and those still in the health check's
 startup grace period are not rejected by the health predicate. Configure
 `container.health == healthy` explicitly when readiness must also be required.
 
+#### Recreating a missing Docker container
+
+A Docker container name is not a creation definition. To let an authorized
+`start` or `restart` recreate a missing container, register its Compose source:
+
+```yaml
+control:
+  type: docker
+  container: web
+  socket: /run/docker.sock
+  compose:
+    project: application
+    directory: /srv/application
+    files: [/srv/application/compose.yml]
+    env_files: [/srv/application/.env]
+    service: web
+    image: sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+```
+
+`image` is the full image ID observed on this Docker daemon, obtainable with
+`docker inspect --format '{{.Image}}' web`. It pins recovery to that local
+image even if a tag has moved. `files` and `env_files` are ordered lists of
+absolute clean paths; `env_files` is optional. Only explicitly listed environment
+files are used: Sermo does not inherit shell interpolation variables or implicitly
+load `.env`. The Compose files remain the source of runtime settings and secrets.
+Refresh the registration when intentionally changing the deployed image.
+
+The Docker wizard discovers these references from Compose labels and validates
+the source against the existing container's Compose configuration hash. Missing
+files, shell-only overrides, changed sources or unsupported resources leave the
+container manageable but mark recreation unavailable. For read-only automation,
+`sermoctl wizard docker --json` returns candidates, validated `compose` references
+and `recovery_warning` messages without prompts or configuration writes. Save the
+reference before removing the container; its labels disappear with it. Containers
+created with `docker run` need an operator-supplied equivalent Compose definition.
+Recreated containers retain the source reference in Sermo labels, so subsequent
+discovery can validate and register it again.
+
+Recreation requires the Docker CLI with its Compose plugin, a local Unix Docker
+socket, and a single-container Compose service. After the usual locks, preflight
+and guards, only an inspect HTTP 404 authorizes creation. Permission, transport
+and server errors fail without creating anything. Paused, transitional and failed
+Docker states are not treated as stopped containers. Use `resume` for a pause.
+
+Sermo resolves Compose once, retains only the target service, pins its image,
+and verifies its existing bind sources, named volumes, networks and secret/config
+files. It passes that resolved definition on stdin with a controlled environment;
+credentials are not written to temporary files or recorded in command diagnostics.
+Compose creates the target stopped, with no build, pull, dependency startup or
+replacement of an existing container. Sermo then verifies its ownership and starts
+the exact new ID through the operation engine, followed by normal postflight.
+If the configured name appears concurrently, Sermo refuses to claim or start it;
+verification also rejects a changed generation. The operation lock coordinates
+Sermo actions; schedule external Compose deployments outside a recovery operation.
+The single audit event includes the created ID when observed, including when
+creation succeeds but start fails.
+
+Existing named volumes and networks are made external for this operation; missing
+resources block recovery. An implicit or anonymous image volume is rejected unless
+the service explicitly maps it to an existing source. Sermo cannot recover deleted
+data, and it will not substitute a new empty volume. Use a mount preflight when a
+bind source must reside on a particular mounted filesystem. Scaled services, jobs,
+Compose lifecycle hooks, providers, model services, and references that share
+another container's namespace are not eligible for automatic recreation.
+
+Adding `control.compose` grants creation capability to existing start/restart
+requests; it does not add a remediation rule or enable monitoring. Existing
+Docker failure rules can retain `then: { action: restart }`: the operation engine
+starts stopped containers and recreates missing ones with a registered source.
+
 ### Verified restart
 
-`sermoctl restart SERVICE` always composes stop and start inside one operation:
+`sermoctl restart SERVICE` composes stop and start inside one operation:
 one lock, one timeout, required preflight, guards, process identity verification,
 postflight and one auditable result. Sermo does not invoke the init backend's
 `restart` command.
+Docker targets already confirmed stopped use only the start phase; missing Docker
+targets require the registered creation definition described above. Guards still
+evaluate the original restart request, including its implied stop/start blocks.
 
 Before start or restart, Sermo compares the init state with a fresh process
 observation. An active resident service with no processes can be reconciled only

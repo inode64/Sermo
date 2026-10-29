@@ -18,6 +18,7 @@ import (
 	"sermo/internal/cfgval"
 	"sermo/internal/httpx"
 	"sermo/internal/netutil"
+	"sermo/internal/servicemgr"
 	"sermo/internal/units"
 )
 
@@ -104,6 +105,7 @@ const (
 	ControlKeyTLS       = "tls"
 	ControlKeyContainer = "container"
 	ControlKeyInterface = "interface"
+	ControlKeyCompose   = "compose"
 )
 
 const (
@@ -122,6 +124,7 @@ type Spec struct {
 	Port      int
 	TLS       string
 	Container string
+	Compose   *ComposeSpec
 	// DialContext overrides TCP dialing. The Docker connection check injects
 	// conn.BindDialer here so SO_BINDTODEVICE stays owned by internal/conn.
 	DialContext func(context.Context, string, string) (net.Conn, error)
@@ -175,6 +178,9 @@ func SpecFromTree(tree map[string]any) (Spec, bool, error) {
 	}
 	if spec.Container == "" {
 		return Spec{}, true, fmt.Errorf("%s is required for docker", controlPathContainer)
+	}
+	if err := spec.parseCompose(m); err != nil {
+		return Spec{}, true, err
 	}
 	return spec, true, nil
 }
@@ -252,19 +258,36 @@ type ContainerState struct {
 
 // Container is the subset of Docker inspect data Sermo needs.
 type Container struct {
-	ID           string         `json:"Id"`
-	Name         string         `json:"Name"`
-	RestartCount int            `json:"RestartCount"`
-	State        ContainerState `json:"State"`
+	ID           string          `json:"Id"`
+	Name         string          `json:"Name"`
+	RestartCount int             `json:"RestartCount"`
+	State        ContainerState  `json:"State"`
+	Image        string          `json:"Image"`
+	Config       ContainerConfig `json:"Config"`
+}
+
+// ContainerConfig carries the ownership labels needed for Compose recovery.
+type ContainerConfig struct {
+	Labels map[string]string `json:"Labels"`
+}
+
+// Image is the identity and implicit volume set of an installed Docker image.
+type Image struct {
+	ID     string `json:"Id"`
+	Config struct {
+		Volumes map[string]any `json:"Volumes"`
+	} `json:"Config"`
 }
 
 // ContainerSummary is the subset of Docker's container list Sermo needs for the
 // wizard.
 type ContainerSummary struct {
-	ID     string   `json:"Id"`
-	Names  []string `json:"Names"`
-	State  string   `json:"State"`
-	Status string   `json:"Status"`
+	ID      string            `json:"Id"`
+	Names   []string          `json:"Names"`
+	State   string            `json:"State"`
+	Status  string            `json:"Status"`
+	ImageID string            `json:"ImageID"`
+	Labels  map[string]string `json:"Labels"`
 }
 
 // HealthStatus returns the stable health label for a container.
@@ -293,6 +316,10 @@ func (c *Client) Info(ctx context.Context) (Info, error) {
 func (c *Client) Inspect(ctx context.Context, container string) (Container, error) {
 	var out Container
 	if err := c.get(ctx, containerPath(container, dockerEndpointInspect), dockerResponseBodyLimit, &out); err != nil {
+		var status *statusError
+		if errors.As(err, &status) && status.code == http.StatusNotFound {
+			return Container{}, fmt.Errorf("%w: %w", servicemgr.ErrNotFound, err)
+		}
 		return Container{}, err
 	}
 	return out, nil
@@ -384,7 +411,16 @@ func (c *Client) post(ctx context.Context, path string, ok ...int) error {
 }
 
 func dockerStatusError(resp *http.Response) error {
-	return fmt.Errorf("docker: HTTP %d: %s", resp.StatusCode, httpx.ErrorBody(resp, dockerErrorBodyLimit))
+	return &statusError{code: resp.StatusCode, message: httpx.ErrorBody(resp, dockerErrorBodyLimit)}
+}
+
+type statusError struct {
+	code    int
+	message string
+}
+
+func (e *statusError) Error() string {
+	return fmt.Sprintf("docker: HTTP %d: %s", e.code, e.message)
 }
 
 func containerPath(container, suffix string) string {

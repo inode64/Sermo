@@ -301,6 +301,11 @@ func (e Engine) run(ctx context.Context, p plan) (result Result) {
 	if e.runCloseAction(ctx, p, &result) {
 		return result
 	}
+	var prepared bool
+	p, prepared = e.prepareDockerStart(ctx, p, &result)
+	if !prepared {
+		return result
+	}
 	if p.repair {
 		var repaired bool
 		repairedPIDFiles, repaired = e.runRepair(ctx, &result)
@@ -338,7 +343,7 @@ func (e Engine) run(ctx context.Context, p plan) (result Result) {
 	if p.reload && !e.reloadService(ctx, &result) {
 		return result
 	}
-	if !e.runPostflight(ctx, p, &result) {
+	if !e.runPostflight(ctx, p, &result) || !e.verifyCreatedContainer(ctx, &result) {
 		return result
 	}
 
@@ -804,6 +809,13 @@ func (e Engine) startService(ctx context.Context, result *Result, primaryActive 
 		return true
 	}
 	return e.runBackendAction(ctx, result, actionStart, func(ctx context.Context) error {
+		if result.CreatedContainer != "" {
+			creator, ok := e.Manager.(containerCreator)
+			if !ok {
+				return errors.New("docker creation capability disappeared")
+			}
+			return creator.StartCreated(ctx, result.CreatedContainer)
+		}
 		return e.Manager.Start(ctx, e.Unit)
 	})
 }

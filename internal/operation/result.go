@@ -37,6 +37,10 @@ type Result struct {
 	Action  string       `json:"action"`
 	Status  ResultStatus `json:"status"`
 	Message string       `json:"message,omitempty"`
+	// RequestedAction preserves the operator/rule intent when an already stopped
+	// Docker target only needs a start. Guards still use the requested action.
+	RequestedAction  string `json:"requested_action,omitempty"`
+	CreatedContainer string `json:"created_container,omitempty"`
 	// Guard names the guard rule that blocked the action, when one did.
 	Guard     string                  `json:"guard,omitempty"`
 	Backend   string                  `json:"backend,omitempty"`
@@ -52,6 +56,12 @@ type Result struct {
 func (r Result) AuditMessage() string {
 	parts := make([]string, 0, 1+len(r.Processes)+len(r.Signals))
 	parts = append(parts, r.Message)
+	if r.RequestedAction != "" {
+		parts = append(parts, "requested "+r.RequestedAction)
+	}
+	if r.CreatedContainer != "" {
+		parts = append(parts, "created container "+r.CreatedContainer)
+	}
 	for _, proc := range r.Processes {
 		exe := proc.Exe
 		if proc.ExePrev != "" {

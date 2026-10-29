@@ -3,12 +3,33 @@ package dockerctl
 import (
 	"context"
 	"crypto/tls"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
+
+	"sermo/internal/servicemgr"
 )
+
+func TestOnlyInspect404MeansMissingContainer(t *testing.T) {
+	for _, code := range []int{http.StatusNotFound, http.StatusForbidden, http.StatusInternalServerError} {
+		t.Run(http.StatusText(code), func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(code) }))
+			defer srv.Close()
+			client := &Client{HTTP: srv.Client(), Base: srv.URL}
+			_, err := client.Inspect(t.Context(), "web")
+			if errors.Is(err, servicemgr.ErrNotFound) != (code == http.StatusNotFound) {
+				t.Fatalf("Inspect = %v", err)
+			}
+			_, err = client.Info(t.Context())
+			if errors.Is(err, servicemgr.ErrNotFound) {
+				t.Fatal("a missing API endpoint must not authorize recreation")
+			}
+		})
+	}
+}
 
 func TestEnsureDeadline(t *testing.T) {
 	// A context with a deadline is returned unchanged.

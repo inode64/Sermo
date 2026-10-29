@@ -36,8 +36,12 @@ touches them.
 7. One slow service never blocks monitoring of another; shared check
    concurrency stays bounded.
 
-8. Restart is always stop/verify/reconcile/start/verify under the same lock and
-   deadline. There is no backend restart mode. Fresh process observations must
+8. Restart is stop/verify/reconcile/start/verify under the same lock and
+   deadline. A Docker target positively confirmed inactive only starts; an
+   inspect 404 may create a stopped target from a registered Compose source,
+   then start its verified new ID. Original restart guards still apply, and
+   the audit retains both requested and effective actions and any created ID.
+   There is no backend restart mode. Fresh process observations must
    distinguish confirmed absence from incomplete discovery. Process-free services
    cannot be judged by missing PIDs.
 9. A failed stop command may have stopped the process: retain the error, verify

@@ -51,7 +51,7 @@ any `security:` toggle that tries to disable them.
    else strict `processes:` identities, and leaves services without either as
    `orphan_processes` unless their residuals are proven members of the unit's
    control group.
-8. **Restart always verifies stop and start under the common gates.** Locks,
+8. **Restart verifies stop and start under the common gates.** Locks,
    preflight, guards, process identity, timeout and postflight wrap the complete
    operation. An init command error is recoverable only after verifying the
    requested state; surviving processes or uncertain evidence block a new start.
@@ -135,7 +135,13 @@ decision.
      prove a divergence. OpenRC `inactive` (started, readiness still pending,
      as with `mark_service_inactive`) is transitional, not a stable stop, and
      reports `unknown`. Process-free services retain their own lifecycle.
-6. Restart always composes stop and start, never a backend restart command.
+6. Restart composes stop and start, never a backend restart command. Docker
+   targets positively confirmed stopped only start; an inspect 404 may recreate
+   one from its registered Compose source. The original action's guards still
+   apply. Creation leaves the container stopped, and start binds to its new ID.
+   Missing persistent data, an unavailable image, ambiguous ownership or an
+   error other than container-not-found prevents creation. See
+   [Docker recovery](services.md#recreating-a-missing-docker-container).
    Stop waits up to `graceful_timeout`, discovers residuals and applies the configured
    signal escalation. Incomplete rediscovery stops escalation, including
    SIGKILL. Before starting, Sermo revalidates process absence,

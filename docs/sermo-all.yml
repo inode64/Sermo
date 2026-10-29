@@ -1653,6 +1653,13 @@ control:
   container: demo
   socket: /run/docker.sock
   tls: false  # true | false | required | skip-verify
+  compose:  # optional: permits recreating this container when it is missing
+    project: demo
+    directory: /srv/demo
+    files: [/srv/demo/compose.yml]
+    env_files: [/srv/demo/.env]
+    service: app
+    image: sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 
 ---
 # ---------------------------------------------------------------------------
