@@ -3826,7 +3826,29 @@ The result contains PID, process start ticks, library path, old/new device and
 inode, replacement timestamps, missing-file status and restart eligibility in
 `data.libraries`. The check details show paths and PIDs. A stable, actionable
 service finding shows `restart_required` with `state_reason: stale_libraries`.
-An incomplete scan retains available findings and reports unavailable.
+An incomplete scan retains available findings and reports unavailable. The
+result also includes `data.dependencies`, the unique paths of all loaded shared
+objects (including current modules), and `data.complete`. This inventory is
+refreshed on each actual scan; a module loaded later appears on the next scan.
+A stopped service has an incomplete inventory, never a successful empty one.
+
+For deployment discovery, run `sermoctl services libraries [SERVICE...] --json`.
+Without names it inspects configured services; explicit names may also select
+catalog services before enabling them. Configured overrides take precedence.
+The command performs fresh read-only inspection with the candidate binary,
+without contacting the daemon or running service actions. Each `services` row
+contains `complete`, `mapped` (loaded dependencies and stale findings), and
+`elf` (the executable's on-disk transitive dependencies and missing SONAMEs).
+`check_enabled` identifies a configured library scanner; `errors` and
+`skipped` explain incomplete or unsupported inspection. Empty process
+inventories include the backend `state`, distinguishing stopped services from
+active services with failed process attribution. Scripts carry
+`elf_skipped`; their interpreter and modules remain observable in mappings. Exit zero
+means the report was produced, not that every row is complete. Automation must
+inspect those fields before changing configuration. ELF resolution uses the
+same search rules and limitations as the `libraries` preflight; mappings add
+runtime modules that ELF metadata alone cannot enumerate. No restart policy
+is inferred from discovery, and PID/inode evidence belongs in reports, not YAML.
 
 Scanning has an internal minimum interval of one minute; `interval` can make
 it less frequent. `stable_for` defaults to five minutes and must be positive.

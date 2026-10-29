@@ -25,6 +25,7 @@ const (
 	watchReadingDefaultMetricDecimals = 2
 	watchReadingProgressDecimals      = 1
 
+	watchReadingLabelLoadedLibraries          = "Loaded libraries"
 	watchReadingLabelAddresses                = "Addresses"
 	watchReadingLabelAddressCount             = "Address count"
 	watchReadingLabelAge                      = "Age"
@@ -915,6 +916,7 @@ func staleBinaryCheckReadings(data map[string]any) []web.WatchReading {
 	return readingsFrom(data).
 		addString(checks.DataKeyPath, watchReadingLabelPath).
 		addString(checks.DataKeyPIDs, watchReadingLabelPIDs).
+		add(checks.DataKeyDependencies, watchReadingLabelLoadedLibraries, strings.Join(cfgval.StringList(data[checks.DataKeyDependencies]), displayListSeparator)).
 		readings()
 }
 

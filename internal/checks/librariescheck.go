@@ -3,6 +3,8 @@ package checks
 import (
 	"context"
 	"debug/elf"
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -23,6 +25,7 @@ const (
 	ldCommentSemi     = ";"
 	elfOriginToken    = "$ORIGIN"
 	elfOriginBraced   = "${ORIGIN}"
+	elfScriptPrefix   = "#!"
 	libDirAArch64     = "/lib/aarch64-linux-gnu"
 	libDirARMHF       = "/lib/arm-linux-gnueabihf"
 	libDirI386        = "/lib/i386-linux-gnu"
@@ -46,38 +49,85 @@ type librariesCheck struct {
 	binary string
 }
 
+// ErrLibraryScript identifies a script whose interpreter dependencies are
+// observable in process mappings, rather than ELF metadata on the script.
+var ErrLibraryScript = errors.New("script has no ELF dependency metadata")
+
+// LibraryDependencies is the on-disk ELF dependency tree, separate from the
+// process mappings that prove which dynamic modules are actually loaded.
+type LibraryDependencies struct {
+	Binary  string   `json:"binary"`
+	Paths   []string `json:"paths"`
+	Missing []string `json:"missing"`
+}
+
 func (c librariesCheck) Run(ctx context.Context) Result {
 	ctx, run := c.begin(ctx)
 	defer run.close()
-	start := run.start
-
-	ef, err := elf.Open(c.binary)
+	report, err := InspectLibraries(ctx, c.binary)
+	if ctx.Err() != nil {
+		return c.unavailableResult(c.binary+": "+execx.ContextFailure(ctx.Err(), c.timeout), run.start)
+	}
 	if err != nil {
 		if os.IsNotExist(err) {
-			return c.result(false, c.binary+": "+err.Error(), start)
+			return c.result(false, err.Error(), run.start)
 		}
-		return c.unavailableResult(c.binary+": "+err.Error(), start)
+		return c.unavailableResult(err.Error(), run.start)
+	}
+	message := c.binary + ": all shared libraries resolve"
+	if len(report.Paths) == 0 && len(report.Missing) == 0 {
+		message = c.binary + ": static binary, no shared libraries"
+	}
+	if len(report.Missing) > 0 {
+		message = c.binary + ": missing shared libraries: " + strings.Join(report.Missing, ", ")
+	}
+	result := c.result(len(report.Missing) == 0, message, run.start)
+	result.Data = map[string]any{DataKeyDependencies: report}
+	return result
+}
+
+// InspectLibraries uses the same resolver as the libraries preflight. It never
+// executes the binary or a dynamic loader; callers supply a bounded context.
+func InspectLibraries(ctx context.Context, binary string) (LibraryDependencies, error) {
+	return inspectLibraries(ctx, binary, collectLibrarySearchDirs)
+}
+
+func inspectLibraries(ctx context.Context, binary string, searchDirs func(string, *elf.File) []string) (LibraryDependencies, error) {
+	report := LibraryDependencies{Binary: binary}
+	if err := ctx.Err(); err != nil {
+		return report, fmt.Errorf("inspect libraries: %w", err)
+	}
+	resolved, err := filepath.EvalSymlinks(binary)
+	if err != nil {
+		return report, fmt.Errorf("resolve library binary %s: %w", binary, err)
+	}
+	binary, report.Binary = resolved, resolved
+	ef, err := elf.Open(binary)
+	if err != nil {
+		if prefix, readErr := hostfs.ReadRegularFile(binary, int64(len(elfScriptPrefix))); readErr == nil && string(prefix) == elfScriptPrefix {
+			return report, fmt.Errorf("inspect %s: %w", binary, ErrLibraryScript)
+		}
+		return report, fmt.Errorf("inspect %s: %w", binary, err)
 	}
 	defer func() { _ = ef.Close() }()
-
 	needed, err := ef.DynString(elf.DT_NEEDED)
-	if err != nil || len(needed) == 0 {
-		return c.result(true, c.binary+": static binary, no shared libraries", start)
+	if err != nil {
+		return report, fmt.Errorf("read dependencies of %s: %w", binary, err)
 	}
-
+	if len(needed) == 0 {
+		return report, nil
+	}
 	resolver := libraryResolver{
 		target: elfTarget{class: ef.Class, machine: ef.Machine},
-		dirs:   collectLibrarySearchDirs(c.binary, ef),
+		dirs:   searchDirs(binary, ef),
 		seen:   make(map[string]bool),
 	}
-	missing := resolver.resolve(ctx, needed, nil)
+	report.Missing = resolver.resolve(ctx, needed, nil)
+	report.Paths = strutil.SortedUnique(resolver.paths)
 	if err := ctx.Err(); err != nil {
-		return c.unavailableResult(c.binary+": "+execx.ContextFailure(err, c.timeout), start)
+		return report, fmt.Errorf("inspect %s: %w", binary, err)
 	}
-	if len(missing) > 0 {
-		return c.result(false, c.binary+": missing shared libraries: "+strings.Join(missing, ", "), start)
-	}
-	return c.result(true, c.binary+": all shared libraries resolve", start)
+	return report, resolver.err
 }
 
 // elfTarget is the ELF class and machine every library of a binary must share.
@@ -97,6 +147,8 @@ type libraryResolver struct {
 	target elfTarget
 	dirs   []string
 	seen   map[string]bool
+	paths  []string
+	err    error
 }
 
 // resolve recursively resolves DT_NEEDED entries (including transitive
@@ -119,12 +171,17 @@ func (r *libraryResolver) resolve(ctx context.Context, needed, own []string) []s
 			reason := soname
 			if openFailed {
 				reason = soname + " (open failed)"
+				r.err = fmt.Errorf("read library %s: no readable ELF candidate", soname)
 			}
 			missing = append(missing, reason)
 			continue
 		}
+		r.paths = append(r.paths, path)
 		// Collect the library's own DT_NEEDED (transitive) and search path.
-		subNeeded, _ := lib.DynString(elf.DT_NEEDED)
+		subNeeded, err := lib.DynString(elf.DT_NEEDED)
+		if err != nil {
+			r.err = fmt.Errorf("read dependencies of %s: %w", path, err)
+		}
 		subOwn := expandLibraryPath(dynamicLibraryPath(lib), path)
 		_ = lib.Close()
 

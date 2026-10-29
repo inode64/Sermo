@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -191,6 +192,28 @@ func TestScanLibrariesScopeAndPartialFailure(t *testing.T) {
 	r.readFile = func(string) ([]byte, error) { return nil, os.ErrPermission }
 	if _, err := r.scan(t.Context(), []Process{p}); !errors.Is(err, os.ErrPermission) {
 		t.Fatal(err)
+	}
+}
+
+func TestLibraryInventoryIncludesCurrentAndLateModules(t *testing.T) {
+	r, p := libraryFixture()
+	for _, paths := range [][]string{{"/lib/libone.so"}, {"/lib/libone.so", "/lib/plugin.so"}} {
+		r.readFile = func(string) ([]byte, error) {
+			var maps strings.Builder
+			for _, path := range paths {
+				maps.WriteString("1000-2000 r-xp 0000 08:01 43 " + path + "\n")
+			}
+			return []byte(maps.String()), nil
+		}
+		report, err := r.scan(t.Context(), []Process{p})
+		if err != nil || len(report.Libraries) != 0 || !slices.Equal(report.Dependencies, paths) {
+			t.Fatalf("current modules: %+v %v", report, err)
+		}
+	}
+	// A later process cannot inherit the previous service's dependency list.
+	r.readFile = func(string) ([]byte, error) { return nil, os.ErrPermission }
+	if report, err := r.scan(t.Context(), []Process{p}); err == nil || report.Processes != 0 || len(report.Dependencies) != 0 {
+		t.Fatalf("unreadable process reported complete: %+v %v", report, err)
 	}
 }
 

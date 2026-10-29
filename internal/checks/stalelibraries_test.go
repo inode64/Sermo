@@ -49,6 +49,26 @@ func TestStaleLibrariesStableWindowAndCache(t *testing.T) {
 	}
 }
 
+func TestStaleLibrariesRefreshesDependenciesAndReportsStopped(t *testing.T) {
+	now := time.Unix(1000, 0)
+	report := process.LibraryReport{Processes: 1, Dependencies: []string{"/lib/one.so"}}
+	c := &staleLibrariesCheck{clock: func() time.Time { return now }, sample: func(context.Context) (process.LibraryReport, error) { return report, nil }}
+	first := c.Run(t.Context())
+	if first.Data[DataKeyComplete] != true {
+		t.Fatal(first)
+	}
+	report.Dependencies = []string{"/lib/one.so", "/lib/plugin.so"}
+	now = now.Add(time.Minute)
+	if result := c.Run(t.Context()); len(result.Data[DataKeyDependencies].([]string)) != 2 {
+		t.Fatal("late module missing from refreshed inventory")
+	}
+	report = process.LibraryReport{}
+	now = now.Add(time.Minute)
+	if result := c.Run(t.Context()); !result.Unavailable || !result.ActionBlocked || result.Data[DataKeyComplete] != false {
+		t.Fatalf("stopped service reported empty success: %+v", result)
+	}
+}
+
 func TestStaleLibrariesAdvisoryCases(t *testing.T) {
 	for _, name := range []string{"host", "child", "missing", "cancelled", "concurrent"} {
 		t.Run(name, func(t *testing.T) {

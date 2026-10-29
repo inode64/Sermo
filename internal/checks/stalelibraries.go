@@ -2,6 +2,7 @@ package checks
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -106,6 +107,9 @@ func (c *staleLibrariesCheck) Run(ctx context.Context) Result {
 }
 
 func (c *staleLibrariesCheck) libraryResult(report process.LibraryReport, err error, now, start time.Time) Result {
+	if c.sample != nil && report.Processes == 0 && err == nil {
+		err = errors.New("no running service processes available for library inspection")
+	}
 	message := fmt.Sprintf("no stale libraries in %d process(es)", report.Processes)
 	paths := make([]string, 0, len(report.Libraries))
 	eligible := false
@@ -148,6 +152,7 @@ func (c *staleLibrariesCheck) libraryResult(report process.LibraryReport, err er
 	}
 	res.Data = map[string]any{DataKeyType: CheckTypeStaleLibraries, DataKeyValue: float64(len(report.Libraries)),
 		DataKeyPath: strings.Join(paths, ","), DataKeyPIDs: joinedPIDs(report.Libraries, func(lib process.StaleLibrary) int { return lib.PID }),
-		DataKeyLibraries: report.Libraries, DataKeyActionBlocked: res.ActionBlocked}
+		DataKeyLibraries: report.Libraries, DataKeyActionBlocked: res.ActionBlocked,
+		DataKeyDependencies: report.Dependencies, DataKeyComplete: err == nil && report.Processes > 0}
 	return res
 }

@@ -62,7 +62,7 @@ func TestBinaryPath(t *testing.T) {
 		},
 	}
 	for _, c := range cases {
-		if got := binaryPath(c.tree); got != c.want {
+		if got := BinaryPath(c.tree); got != c.want {
 			t.Errorf("%s: binaryPath = %q, want %q", c.name, got, c.want)
 		}
 	}

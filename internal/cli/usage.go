@@ -496,6 +496,7 @@ var commandUsages = []commandUsage{
 		Summary: "List configured services (or catalog entries with `catalog`).",
 		Usage: []string{
 			"sermoctl services [--notify NAME[,NAME]|all]",
+			"sermoctl services libraries [SERVICE...] [--json]",
 			"sermoctl services catalog [all] [--long] [--notify NAME[,NAME]|all]",
 		},
 		Flags: []string{
@@ -511,6 +512,8 @@ var commandUsages = []commandUsage{
 			"as disabled. When sermod is running with web enabled the state is the",
 			"daemon's computed one; otherwise each service is probed locally as",
 			"status does.",
+			"`services libraries` inspects loaded modules and on-disk ELF dependencies.",
+			"It is read-only. Incomplete scans remain explicit in each service row.",
 			"`services catalog` lists catalog service profiles under catalog/services",
 			"with their installation status and version.",
 		},

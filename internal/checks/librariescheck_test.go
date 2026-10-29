@@ -5,6 +5,7 @@ import (
 	"context"
 	"debug/elf"
 	"encoding/binary"
+	"errors"
 	"os"
 	"path/filepath"
 	"slices"
@@ -17,6 +18,45 @@ type testELF struct {
 	machine elf.Machine
 	needed  []string
 	runpath string
+}
+
+func TestInspectLibrariesReportsTransitiveDependencies(t *testing.T) {
+	dir := t.TempDir()
+	binary := filepath.Join(dir, "daemon")
+	first := filepath.Join(dir, "libsermofirst.so")
+	second := filepath.Join(dir, "libsermosecond.so")
+	writeTestELF(t, binary, testELF{class: elf.ELFCLASS64, machine: elf.EM_X86_64, needed: []string{first}})
+	writeTestELF(t, first, testELF{class: elf.ELFCLASS64, machine: elf.EM_X86_64, needed: []string{second}})
+	writeTestELF(t, second, testELF{class: elf.ELFCLASS64, machine: elf.EM_X86_64})
+	link := filepath.Join(dir, "daemon-link")
+	if err := os.Symlink(binary, link); err != nil {
+		t.Fatal(err)
+	}
+	searchDirs := func(string, *elf.File) []string { return nil }
+	report, err := inspectLibraries(t.Context(), link, searchDirs)
+	if err != nil || report.Binary != binary || !slices.Equal(report.Paths, []string{first, second}) || len(report.Missing) != 0 {
+		t.Fatalf("report=%+v err=%v", report, err)
+	}
+	if err := os.Remove(second); err != nil {
+		t.Fatal(err)
+	}
+	report, err = inspectLibraries(t.Context(), binary, searchDirs)
+	if err != nil || !slices.Equal(report.Missing, []string{second}) {
+		t.Fatalf("missing dependency: %+v %v", report, err)
+	}
+}
+
+func TestInspectLibrariesDistinguishesScriptFromCorruptBinary(t *testing.T) {
+	for _, content := range []string{"#!/usr/bin/python3\n", "broken ELF"} {
+		path := filepath.Join(t.TempDir(), "daemon")
+		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		_, err := InspectLibraries(t.Context(), path)
+		if err == nil || errors.Is(err, ErrLibraryScript) != (content[0] == '#') {
+			t.Fatalf("content=%q error=%v", content, err)
+		}
+	}
 }
 
 // writeTestELF writes a minimal little-endian ELF with only the sections the

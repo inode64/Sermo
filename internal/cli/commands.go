@@ -56,6 +56,7 @@ const (
 	commandArgAll       = config.SelectionKeywordAll
 	commandArgClear     = "clear"
 	commandArgCatalog   = "catalog"
+	commandArgLibraries = "libraries"
 )
 
 const (

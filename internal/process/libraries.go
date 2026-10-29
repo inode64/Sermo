@@ -15,6 +15,7 @@ import (
 	"golang.org/x/sys/unix"
 
 	"sermo/internal/hostfs"
+	"sermo/internal/strutil"
 )
 
 const (
@@ -45,8 +46,9 @@ type StaleLibrary struct {
 // LibraryReport retains findings even when part of a process inventory failed.
 // Callers must block automatic actions whenever ScanLibraries returns an error.
 type LibraryReport struct {
-	Libraries []StaleLibrary `json:"libraries"`
-	Processes int            `json:"processes"`
+	Libraries    []StaleLibrary `json:"libraries"`
+	Processes    int            `json:"processes"`
+	Dependencies []string       `json:"dependencies"`
 }
 
 type libraryFile struct {
@@ -125,9 +127,11 @@ func (r libraryReader) scan(ctx context.Context, procs []Process) (LibraryReport
 			failures = append(failures, fmt.Errorf("pid %d: %w", proc.PID, err))
 			continue
 		}
-		out.Processes++
-		out.Libraries = append(out.Libraries, libraries...)
+		out.Processes += libraries.Processes
+		out.Libraries = append(out.Libraries, libraries.Libraries...)
+		out.Dependencies = append(out.Dependencies, libraries.Dependencies...)
 	}
+	out.Dependencies = strutil.SortedUnique(out.Dependencies)
 	return out, errors.Join(failures...)
 }
 
@@ -162,41 +166,44 @@ func (r libraryReader) sameRoot(pid int) bool {
 	return rootErr == nil && oursErr == nil && root.identity == ours.identity
 }
 
-func (r libraryReader) processLibraries(ctx context.Context, proc Process) ([]StaleLibrary, error) {
+func (r libraryReader) processLibraries(ctx context.Context, proc Process) (LibraryReport, error) {
 	if alive, err := r.verifyProcess(proc); err != nil || !alive {
-		return nil, err
+		return LibraryReport{}, err
 	}
 	if !r.sameRoot(proc.PID) {
-		return nil, errors.New("filesystem root differs or is unreadable")
+		return LibraryReport{}, errors.New("filesystem root differs or is unreadable")
 	}
 	data, err := r.readFile(PIDPath(proc.PID, procFileMaps))
 	if err != nil {
-		return nil, fmt.Errorf("read memory maps: %w", err)
+		return LibraryReport{}, fmt.Errorf("read memory maps: %w", err)
 	}
 	mappings, err := parseLibraryMaps(string(data))
 	if err != nil {
-		return nil, err
+		return LibraryReport{}, err
 	}
-	libraries := make([]StaleLibrary, 0, len(mappings))
+	report := LibraryReport{Processes: 1}
 	for _, mapping := range mappings {
 		if err := ctx.Err(); err != nil {
-			return nil, fmt.Errorf("read mapped libraries: %w", err)
+			return LibraryReport{}, fmt.Errorf("read mapped libraries: %w", err)
 		}
 		finding, stale, err := r.compareLibrary(proc, mapping)
 		if err != nil {
-			return nil, err
+			return LibraryReport{}, err
 		}
 		if stale {
-			libraries = append(libraries, finding)
+			report.Libraries = append(report.Libraries, finding)
+		}
+		if path := finding.Path; path != "" && path != proc.Exe && path != proc.ExePrev {
+			report.Dependencies = append(report.Dependencies, path)
 		}
 	}
 	if alive, err := r.verifyProcess(proc); err != nil || !alive {
-		return nil, err
+		return LibraryReport{}, err
 	}
 	if !r.sameRoot(proc.PID) {
-		return nil, errors.New("filesystem root changed during scan")
+		return LibraryReport{}, errors.New("filesystem root changed during scan")
 	}
-	return libraries, nil
+	return report, nil
 }
 
 type libraryMapping struct {
@@ -268,7 +275,7 @@ func (r libraryReader) compareLibrary(proc Process, mapping libraryMapping) (Sta
 	// A real filename may end in " (deleted)". Never strip that suffix when
 	// the unmodified path still identifies the kernel's mapped inode.
 	if err == nil && installed.identity == mapping.identity {
-		return StaleLibrary{}, false, nil
+		return StaleLibrary{Path: path}, false, nil
 	}
 	if strings.HasSuffix(path, procDeletedSuffix) {
 		path = TrimDeletedSuffix(path)
@@ -282,10 +289,10 @@ func (r libraryReader) compareLibrary(proc Process, mapping libraryMapping) (Sta
 		return StaleLibrary{}, false, fmt.Errorf("library %s is not a regular file", path)
 	}
 	if !missing && installed.identity == mapping.identity {
-		return StaleLibrary{}, false, nil
+		return StaleLibrary{Path: path}, false, nil
 	}
 	if path == proc.Exe || path == proc.ExePrev {
-		return StaleLibrary{}, false, nil
+		return StaleLibrary{Path: path}, false, nil
 	}
 	return StaleLibrary{PID: proc.PID, Exe: proc.Exe, UID: proc.UID, StartTicks: proc.StartTicks, Path: path, Mapped: mapping.identity,
 		Installed: installed.identity, Modified: installed.modified, Changed: installed.changed, Missing: missing}, true, nil
