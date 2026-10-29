@@ -82,11 +82,7 @@ func operationActive(cfg *config.Config, service string) bool {
 	if cfg == nil {
 		return false
 	}
-	report, err := operationLocksScanner(cfg).Scan(service)
-	if err != nil {
-		return false
-	}
-	return reportHasActiveLock(report)
+	return operationLockActive(cfg.Global.RuntimeDir(), service)
 }
 
 // operationActiveByService is operationActive for the whole fleet, reading the
