@@ -183,8 +183,8 @@ func (m *initStopManager) recordBudget(ctx context.Context, action string) {
 
 // systemd can hold a stop request for the unit's whole TimeoutStopUSec before
 // its final SIGKILL. With a deadline no longer than that, a restart spent all
-// of it stopping and never reached the start: apache2 on k2keu3, where both
-// were 90s, stayed down after a manual restart.
+// of it stopping and never reached the start. Equal 90s deadlines must still
+// leave time to start the service after a slow stop.
 func TestOperationDeadlineCoversInitStopTimeout(t *testing.T) {
 	policy := process.KillPolicy{TermTimeout: 10 * time.Second}
 	extended := DefaultOperationTimeout + minimumTimeout(policy)
