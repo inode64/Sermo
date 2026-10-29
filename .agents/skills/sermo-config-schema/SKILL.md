@@ -47,6 +47,11 @@ here. This skill records the design decisions a change must respect.
   `SERMO_DATADIR=$PWD make build` and `examples/sermo-dev.yml`.
 - Dangerous behavior needs explicit configuration, and no option may disable a
   hard safety invariant (AGENTS.md → Safety; `sermo-safety-review`).
+- `control.compose` is a Docker creation capability, not an automatic recovery
+  rule. It identifies a local Compose project/service, ordered source/env files
+  and a pinned image ID. Parsing belongs to `dockerctl`; Compose resolves its
+  own model. Discovery must validate source hashes and persistent resources
+  before emitting a recipe; a missing target never implies an empty volume.
 - Validation errors name the target (and the file for load/document errors or a
   `.local` override), the field path and the reason.
 - There is no resolved-config rendering subcommand; do not document one.

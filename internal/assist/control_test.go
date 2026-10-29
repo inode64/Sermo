@@ -60,6 +60,21 @@ func TestDockerAssistant(t *testing.T) {
 	}
 }
 
+func TestDockerAssistantKeepsValidatedRecoveryRecipe(t *testing.T) {
+	recipe := map[string]any{"project": "project", "service": "app", "directory": "/srv/project", "files": []string{"/srv/project/compose.yml"}, "image": "sha256:" + strings.Repeat("a", 64)}
+	svc := buildDockerService(DockerCandidate{Container: "web", Compose: recipe})
+	control := svc[config.SectionControl].(map[string]any)
+	if _, ok := control[dockerctl.ControlKeyCompose]; !ok {
+		t.Fatal("validated recipe was not emitted")
+	}
+	if _, _, err := dockerctl.SpecFromTree(svc); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(dockerLabel(DockerCandidate{Title: "web", RecoveryWarning: "source changed"}), "source changed") {
+		t.Fatal("discovery warning hidden")
+	}
+}
+
 func TestDockerAssistantSkipsConfiguredTargetsBeforeSettings(t *testing.T) {
 	env := Env{
 		ServiceNames: map[string]struct{}{"docker-web": {}},

@@ -132,6 +132,8 @@ rules:
                   - pattern: $M.Reload($CTX, $SVC)
                   - pattern: $M.Resume($CTX, $SVC)
                   - pattern: $M.Pause($CTX, $SVC)
+                  - pattern: $M.Create($CTX)
+                  - pattern: $M.StartCreated($CTX, $ID)
                   - pattern: $M.ResetState($CTX, $SVC)
               - metavariable-type:
                   metavariable: $M

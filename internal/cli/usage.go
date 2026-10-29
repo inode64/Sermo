@@ -573,7 +573,9 @@ var commandUsages = []commandUsage{
 		Usage: []string{
 			"sermoctl wizard",
 			"sermoctl wizard service|docker|vm|mount|volume|net|uplink",
+			"sermoctl wizard docker --json",
 		},
+		Notes: []string{"With docker --json, list containers and validated Compose recovery references without prompts or writes."},
 		Examples: []string{
 			"sermoctl wizard service",
 			"sermoctl wizard volume",

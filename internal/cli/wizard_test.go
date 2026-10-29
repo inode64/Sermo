@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"net"
 	"os"
 	"path/filepath"
@@ -15,6 +16,25 @@ import (
 	"sermo/internal/config"
 	"sermo/internal/rules"
 )
+
+func TestDockerWizardJSONIsReadOnly(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	app := hermeticApp(t, App{
+		Stdin: strings.NewReader(""), Stdout: &stdout, Stderr: &stderr,
+		LoadConfig: func(string, ...config.Option) (*config.Config, error) {
+			t.Fatal("JSON discovery must not load or write config")
+			return nil, nil
+		},
+		wizardEnvFunc: dockerWizardEnv,
+	})
+	if code := app.Run(t.Context(), []string{"wizard", "docker", "--json"}); code != exitSuccess {
+		t.Fatalf("exit=%d stderr=%s", code, stderr.String())
+	}
+	var candidates []assist.DockerCandidate
+	if err := json.Unmarshal(stdout.Bytes(), &candidates); err != nil || len(candidates) != 1 || candidates[0].Container != "web" {
+		t.Fatalf("JSON discovery=%s error=%v", stdout.String(), err)
+	}
+}
 
 func fakeWizardEnv(*config.Config) assist.Env {
 	return assist.Env{

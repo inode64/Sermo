@@ -14,6 +14,10 @@ import (
 	"sermo/internal/hostfs"
 )
 
+// ErrNotFound means the backend positively identified an absent target. A
+// transport, permission or server error must never authorize creating one.
+var ErrNotFound = errors.New("service target does not exist")
+
 // cgroupRoot is the unified cgroup v2 mount point.
 const (
 	cgroupRoot               = "/sys/fs/cgroup"

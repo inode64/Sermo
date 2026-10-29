@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"sermo/internal/execx"
 	"sermo/internal/servicemgr"
 )
 
@@ -28,6 +29,7 @@ type Manager struct {
 
 	Spec      Spec
 	NewClient func(Spec) (DockerClient, error)
+	Runner    execx.Runner
 }
 
 var _ servicemgr.Manager = Manager{}

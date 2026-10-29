@@ -71,6 +71,12 @@ func (a App) runWizard(ctx context.Context, opts options) int {
 	if len(opts.args) > 1 {
 		return a.commandUsageError(commandWizard, "wizard accepts at most one assistant name")
 	}
+	if opts.json {
+		if len(opts.args) != 1 || opts.args[0] != serviceFamilyDocker {
+			return a.commandUsageError(commandWizard, "wizard --json requires the docker assistant")
+		}
+		return a.runDockerDiscovery(ctx, opts)
+	}
 	code, err := a.runWizardSession(ctx, opts)
 	if err != nil {
 		// Piped/truncated stdin: a prompt was still waiting when input ended.
@@ -239,7 +245,7 @@ func (a App) wizardEnv(ctx context.Context, opts options, cfg *config.Config) as
 			return listInstalledCatalogServices(ctx, cfg, servicemgr.Backend(backend), a.Runner, opts.timeout)
 		},
 		DockerContainers: func() ([]assist.DockerCandidate, error) {
-			return listWizardDockerContainers(ctx, opts.timeout)
+			return listWizardDockerContainers(ctx, opts.timeout, a.Runner)
 		},
 		VMs: func() ([]assist.VMCandidate, error) {
 			return listWizardVMs(ctx, opts.timeout)

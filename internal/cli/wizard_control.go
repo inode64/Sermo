@@ -3,6 +3,7 @@ package cli
 import (
 	"cmp"
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"slices"
@@ -11,13 +12,33 @@ import (
 
 	"sermo/internal/assist"
 	"sermo/internal/dockerctl"
+	"sermo/internal/execx"
 	"sermo/internal/hostfs"
 	"sermo/internal/virt"
 )
 
 const dockerContainerIDShortLength = 12
 
-func listWizardDockerContainers(ctx context.Context, timeout time.Duration) ([]assist.DockerCandidate, error) {
+func (a App) runDockerDiscovery(ctx context.Context, opts options) int {
+	var candidates []assist.DockerCandidate
+	var err error
+	if a.wizardEnvFunc != nil {
+		candidates, err = a.wizardEnvFunc(nil).DockerContainers()
+	} else {
+		candidates, err = listWizardDockerContainers(ctx, opts.timeout, a.Runner)
+	}
+	if err != nil {
+		a.reportError(opts, "Docker discovery: "+err.Error())
+		return exitRuntimeError
+	}
+	if err := json.NewEncoder(a.Stdout).Encode(candidates); err != nil {
+		a.reportError(opts, "encode Docker discovery: "+err.Error())
+		return exitRuntimeError
+	}
+	return exitSuccess
+}
+
+func listWizardDockerContainers(ctx context.Context, timeout time.Duration, runner execx.Runner) ([]assist.DockerCandidate, error) {
 	if _, err := hostfs.Stat(dockerctl.DefaultSocket); err != nil {
 		if os.IsNotExist(err) {
 			return nil, nil
@@ -38,16 +59,34 @@ func listWizardDockerContainers(ctx context.Context, timeout time.Duration) ([]a
 		if name == "" {
 			continue
 		}
-		out = append(out, assist.DockerCandidate{
+		candidate := assist.DockerCandidate{
 			Name:      wizardManagedServiceName(dockerctl.ControlType, name),
 			Title:     name,
 			Container: name,
 			Status:    container.State,
 			Socket:    dockerctl.DefaultSocket,
-		})
+		}
+		candidate.Compose, candidate.RecoveryWarning = wizardDockerCompose(ctx, container, name, runner)
+		out = append(out, candidate)
 	}
 	slices.SortFunc(out, func(a, b assist.DockerCandidate) int { return cmp.Compare(a.Name, b.Name) })
 	return out, nil
+}
+
+func wizardDockerCompose(ctx context.Context, c dockerctl.ContainerSummary, name string, runner execx.Runner) (map[string]any, string) {
+	spec, present, err := dockerctl.ComposeFromLabels(c.Labels, c.ImageID)
+	if err != nil {
+		return nil, err.Error()
+	}
+	if !present {
+		return nil, "no Compose source metadata"
+	}
+	manager := dockerctl.NewManager(dockerctl.Spec{Container: name, Socket: dockerctl.DefaultSocket, Compose: &spec})
+	manager.Runner = runner
+	if err := manager.ValidateCompose(ctx); err != nil {
+		return nil, err.Error()
+	}
+	return spec.Tree(), ""
 }
 
 func dockerWizardContainerName(container dockerctl.ContainerSummary) string {

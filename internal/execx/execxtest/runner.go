@@ -23,6 +23,8 @@ type Call struct {
 	Env []string
 	// User is the account passed to RunUser; empty otherwise.
 	User string
+	// Input is stdin supplied to RunInputEnv.
+	Input string
 }
 
 // Line returns the call's command line in the form ByLine and Count use.
@@ -103,6 +105,11 @@ func (r *Runner) Run(ctx context.Context, name string, args ...string) (execx.Re
 // RunEnv implements execx.EnvRunner.
 func (r *Runner) RunEnv(ctx context.Context, env []string, name string, args ...string) (execx.Result, error) {
 	return r.answer(ctx, Call{Name: name, Args: args, Env: env})
+}
+
+// RunInputEnv implements execx.InputEnvRunner.
+func (r *Runner) RunInputEnv(ctx context.Context, input string, env []string, name string, args ...string) (execx.Result, error) {
+	return r.answer(ctx, Call{Name: name, Args: args, Env: env, Input: input})
 }
 
 // RunUser implements execx.UserRunner.

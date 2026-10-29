@@ -82,21 +82,24 @@ type CommandRunner struct{}
 
 // Run executes name with args and captures stdout/stderr.
 func (r CommandRunner) Run(ctx context.Context, name string, args ...string) (Result, error) {
-	return r.run(ctx, "", name, args, nil, false)
+	return r.run(ctx, "", name, args, nil, "", false)
 }
 
 // RunUser executes name with args as user and captures stdout/stderr.
 func (r CommandRunner) RunUser(ctx context.Context, user, name string, args ...string) (Result, error) {
-	return r.run(ctx, user, name, args, nil, false)
+	return r.run(ctx, user, name, args, nil, "", false)
 }
 
 // run is the one body behind Run/RunUser and their probe twins: an empty user
 // keeps the daemon's own identity, and reapGroup collects whatever the command
 // leaves running (see reapProcessGroup).
-func (CommandRunner) run(ctx context.Context, user, name string, args, env []string, reapGroup bool) (Result, error) {
+func (CommandRunner) run(ctx context.Context, user, name string, args, env []string, input string, reapGroup bool) (Result, error) {
 	start := time.Now()
 	//nolint:gosec // G204: argv comes from operator-configured checks/hooks via execx; no shell
 	cmd := exec.CommandContext(ctx, name, args...)
+	if input != "" {
+		cmd.Stdin = strings.NewReader(input)
+	}
 	if len(env) > 0 {
 		cmd.Env = env
 	}
@@ -113,19 +116,30 @@ func (CommandRunner) run(ctx context.Context, user, name string, args, env []str
 // (instead of inheriting the current process environment). If env is nil or
 // empty, it behaves like Run (inherits os.Environ).
 func (CommandRunner) RunEnv(ctx context.Context, env []string, name string, args ...string) (Result, error) {
-	return CommandRunner{}.run(ctx, "", name, args, env, false)
+	return CommandRunner{}.run(ctx, "", name, args, env, "", false)
+}
+
+// RunInputEnv keeps sensitive resolved configuration off argv and disk.
+func (r CommandRunner) RunInputEnv(ctx context.Context, input string, env []string, name string, args ...string) (Result, error) {
+	return r.run(ctx, "", name, args, env, input, false)
+}
+
+// InputEnvRunner can supply both a resolved document and a controlled environment.
+type InputEnvRunner interface {
+	Runner
+	RunInputEnv(ctx context.Context, input string, env []string, name string, args ...string) (Result, error)
 }
 
 // RunProbe is Run for a read-only observation: after the command exits, the rest
 // of its process group is collected. See reapProcessGroup for why a probe must
 // not be allowed to leave a daemon behind.
 func (r CommandRunner) RunProbe(ctx context.Context, name string, args ...string) (Result, error) {
-	return r.run(ctx, "", name, args, nil, true)
+	return r.run(ctx, "", name, args, nil, "", true)
 }
 
 // RunProbeUser is RunProbe for a probe that must run as a specific OS user.
 func (r CommandRunner) RunProbeUser(ctx context.Context, user, name string, args ...string) (Result, error) {
-	return r.run(ctx, user, name, args, nil, true)
+	return r.run(ctx, user, name, args, nil, "", true)
 }
 
 func prepareCommandRuntime(cmd *exec.Cmd) {

@@ -23,7 +23,7 @@ const (
 		dockerctl.ControlKeyHost + ", " +
 		dockerctl.ControlKeyPort + ", " +
 		dockerctl.ControlKeyTLS + ", " +
-		dockerctl.ControlKeyContainer
+		dockerctl.ControlKeyContainer + ", " + dockerctl.ControlKeyCompose
 	libvirtControlKeySummary = virt.ControlKeyType + ", " +
 		virt.ControlKeyURI + ", " +
 		virt.ControlKeyDomain + ", " +
@@ -529,7 +529,7 @@ func validateButtons(tree map[string]any, add addFunc) {
 
 var libvirtControlKeys = set(virt.ControlKeyType, virt.ControlKeyURI, virt.ControlKeyDomain, virt.ControlKeyUUID, virt.ControlKeySocket, virt.ControlKeyHost, virt.ControlKeyPort)
 var libvirtNetworkControlKeys = set(virt.ControlKeyType, virt.ControlKeyURI, virt.ControlKeyNetwork, virt.ControlKeySocket, virt.ControlKeyGuardSocket, virt.ControlKeyGuardURI, virt.ControlKeyHost, virt.ControlKeyPort)
-var dockerControlKeys = set(dockerctl.ControlKeyType, dockerctl.ControlKeySocket, dockerctl.ControlKeyHost, dockerctl.ControlKeyPort, dockerctl.ControlKeyTLS, dockerctl.ControlKeyContainer)
+var dockerControlKeys = set(dockerctl.ControlKeyType, dockerctl.ControlKeySocket, dockerctl.ControlKeyHost, dockerctl.ControlKeyPort, dockerctl.ControlKeyTLS, dockerctl.ControlKeyContainer, dockerctl.ControlKeyCompose)
 var buttonKeys = set(ButtonKeyLabel, ButtonKeyCommand, ButtonKeyTimeout)
 
 func hasStrictPrincipal(tree map[string]any) bool {

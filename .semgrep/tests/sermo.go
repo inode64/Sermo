@@ -105,6 +105,21 @@ func bypassDockerPause(m dockerctl.Manager, ctx context.Context) error {
 	return m.Pause(ctx, "web")
 }
 
+func bypassDockerCreate(m dockerctl.Manager, ctx context.Context) (string, error) {
+	// ruleid: service-lifecycle-must-use-operation
+	return m.Create(ctx)
+}
+
+func bypassDockerCreatedStart(m dockerctl.Manager, ctx context.Context) error {
+	// ruleid: service-lifecycle-must-use-operation
+	return m.StartCreated(ctx, "container-id")
+}
+
+func dockerComposeValidationIsReadOnly(m dockerctl.Manager, ctx context.Context) error {
+	// ok: service-lifecycle-must-use-operation
+	return m.ValidateCompose(ctx)
+}
+
 func bypassDomainPause(m virt.Manager, ctx context.Context) error {
 	// ruleid: service-lifecycle-must-use-operation
 	return m.Pause(ctx, "vm")
