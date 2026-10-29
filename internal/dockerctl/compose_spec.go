@@ -75,10 +75,10 @@ func (s *Spec) parseCompose(control map[string]any) error {
 		*target = value
 	}
 	var err error
-	if spec.Files, err = composePaths(m[ComposeKeyFiles], ComposeKeyFiles, true); err != nil {
+	if spec.Files, err = composePaths(m[ComposeKeyFiles], ComposeKeyFiles); err != nil {
 		return err
 	}
-	if spec.EnvFiles, err = composePaths(m[ComposeKeyEnvFiles], ComposeKeyEnvFiles, false); err != nil {
+	if spec.EnvFiles, err = composePaths(m[ComposeKeyEnvFiles], ComposeKeyEnvFiles); err != nil {
 		return err
 	}
 	if err := spec.Validate(); err != nil {
@@ -94,18 +94,13 @@ func (s *Spec) parseCompose(control map[string]any) error {
 	return nil
 }
 
-func composePaths(raw any, key string, required bool) ([]string, error) {
-	if raw == nil && !required {
+func composePaths(raw any, key string) ([]string, error) {
+	if raw == nil {
 		return nil, nil
 	}
 	paths, err := cfgval.StrictStringArray(raw)
-	if err != nil || required && len(paths) == 0 {
+	if err != nil {
 		return nil, fmt.Errorf("%s.%s requires a list of absolute paths", composePath, key)
-	}
-	for _, path := range paths {
-		if !cleanAbsolute(path) {
-			return nil, fmt.Errorf("%s.%s: %q must be an absolute clean path", composePath, key, path)
-		}
 	}
 	return paths, nil
 }
@@ -128,9 +123,14 @@ func (s ComposeSpec) Validate() error {
 	if len(s.Files) == 0 {
 		return errors.New(composePath + ".files requires at least one Compose file")
 	}
-	for _, path := range append(slices.Clone(s.Files), s.EnvFiles...) {
-		if !cleanAbsolute(path) {
-			return fmt.Errorf("%s: %q must be an absolute clean path", composePath, path)
+	for _, group := range []struct {
+		key   string
+		paths []string
+	}{{ComposeKeyFiles, s.Files}, {ComposeKeyEnvFiles, s.EnvFiles}} {
+		for _, path := range group.paths {
+			if !cleanAbsolute(path) {
+				return fmt.Errorf("%s.%s: %q must be an absolute clean path", composePath, group.key, path)
+			}
 		}
 	}
 	if !composeImageID.MatchString(s.Image) {
