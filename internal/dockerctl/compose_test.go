@@ -312,6 +312,51 @@ func TestComposeRegistrationRequiresMatchingSource(t *testing.T) {
 	}
 }
 
+func TestComposeIdentityRequiredAtEveryPhase(t *testing.T) {
+	for _, field := range []string{composeProjectLabel, composeServiceLabel, ComposeKeyImage, "missing labels"} {
+		for _, phase := range []string{"discovery", "registration", "start"} {
+			t.Run(field+"/"+phase, func(t *testing.T) {
+				m, c, _ := recoveryFixture(t)
+				source, err := json.Marshal(m.Spec.Compose)
+				if err != nil {
+					t.Fatal(err)
+				}
+				labels := map[string]string{
+					composeProjectLabel: "project", composeServiceLabel: "app",
+					composeSourceLabel: string(source), composeRecoveryLabel: "token",
+				}
+				c.container = Container{ID: "created-id", Name: "/web", Image: c.image.ID, Config: ContainerConfig{Labels: labels}, State: ContainerState{Status: ContainerStatusCreated}}
+				switch field {
+				case ComposeKeyImage:
+					c.container.Image = "different-image"
+				case "missing labels":
+					c.container.Config.Labels = nil
+				default:
+					labels[field] = "different"
+				}
+				switch phase {
+				case "discovery":
+					_, present, discoveryErr := ComposeFromLabels(c.container.Config.Labels, c.container.Image)
+					if discoveryErr == nil && present {
+						t.Fatal("discovery accepted a mismatched identity")
+					}
+				case "registration":
+					if err := m.ValidateCompose(t.Context()); err == nil {
+						t.Fatal("registration accepted a mismatched identity")
+					}
+				case "start":
+					if err := m.StartCreated(t.Context(), c.container.ID); err == nil {
+						t.Fatal("start accepted a mismatched identity")
+					}
+				}
+				if c.started != "" || len(c.runner.Calls()) != 0 {
+					t.Fatal("an identity mismatch must stop before commands or start")
+				}
+			})
+		}
+	}
+}
+
 func TestComposeBindSecretsAndDiscovery(t *testing.T) {
 	m, c, model := recoveryFixture(t)
 	service := model["services"].(map[string]any)["app"].(map[string]any)

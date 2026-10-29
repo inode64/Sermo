@@ -102,9 +102,7 @@ func (m Manager) composeInput(model map[string]any, token string) (string, error
 }
 
 func (m Manager) verifyCreated(c Container) error {
-	if c.ID == "" || c.ContainerName() != m.Spec.Container || c.Image != m.Spec.Compose.Image ||
-		c.Config.Labels[composeProjectLabel] != m.Spec.Compose.Project ||
-		c.Config.Labels[composeServiceLabel] != m.Spec.Compose.Service {
+	if c.ID == "" || c.ContainerName() != m.Spec.Container || !m.Spec.Compose.matchesIdentity(c.Image, c.Config.Labels) {
 		return errors.New("created container does not match the configured name, image, project and service")
 	}
 	if c.State.Status != ContainerStatusCreated || c.State.Running || c.State.Pid != 0 {
@@ -161,8 +159,7 @@ func (m Manager) ValidateCompose(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("inspect container before registering recovery: %w", err)
 	}
-	if container.Image != m.Spec.Compose.Image || container.Config.Labels[composeProjectLabel] != m.Spec.Compose.Project ||
-		container.Config.Labels[composeServiceLabel] != m.Spec.Compose.Service {
+	if !m.Spec.Compose.matchesIdentity(container.Image, container.Config.Labels) {
 		return errors.New("container does not match the discovered Compose project, service and image")
 	}
 	labels := container.Config.Labels
@@ -316,7 +313,7 @@ func ComposeFromLabels(labels map[string]string, image string) (ComposeSpec, boo
 		if err := spec.Validate(); err != nil {
 			return ComposeSpec{}, true, err
 		}
-		if spec.Project != labels[composeProjectLabel] || spec.Service != labels[composeServiceLabel] || spec.Image != image || labels[composeRecoveryLabel] == "" {
+		if !spec.matchesIdentity(image, labels) || labels[composeRecoveryLabel] == "" {
 			return ComposeSpec{}, true, errors.New("retained Compose source does not match the container")
 		}
 		return spec, true, nil
