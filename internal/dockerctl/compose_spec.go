@@ -139,6 +139,12 @@ func (s ComposeSpec) Validate() error {
 	return nil
 }
 
+// matchesIdentity compares the source identity; each lifecycle phase still
+// verifies the container's runtime name, ID, state or recovery token as needed.
+func (s ComposeSpec) matchesIdentity(image string, labels map[string]string) bool {
+	return s.Image == image && s.Project == labels[composeProjectLabel] && s.Service == labels[composeServiceLabel]
+}
+
 // Tree is the single YAML shape shared by the wizard and its validations.
 func (s ComposeSpec) Tree() map[string]any {
 	tree := map[string]any{
