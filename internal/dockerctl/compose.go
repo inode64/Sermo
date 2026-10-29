@@ -50,7 +50,7 @@ func (m Manager) Create(ctx context.Context) (string, error) {
 		}
 		return "", err
 	}
-	model, err := m.recoveryModel(ctx, client)
+	model, err := m.recoveryModel(ctx, client, nil)
 	if err != nil {
 		return "", err
 	}
@@ -144,7 +144,9 @@ func (m Manager) VerifyCreated(ctx context.Context, id string) error {
 // ValidateCompose verifies a discovered recipe without creating or starting it.
 // Registration and recreation share this validation; labels alone are not proof
 // that the source files and persistent data are still available.
-func (m Manager) ValidateCompose(ctx context.Context) error {
+// A non-nil containers snapshot must come from a successful same-daemon listing
+// during this discovery. Nil refreshes the inventory; creation always refreshes.
+func (m Manager) ValidateCompose(ctx context.Context, containers []ContainerSummary) error {
 	ctx, cancel := ensureDeadline(ctx)
 	defer cancel()
 	client, err := m.client()
@@ -164,7 +166,7 @@ func (m Manager) ValidateCompose(ctx context.Context) error {
 	}
 	labels := container.Config.Labels
 	if labels[composeSourceLabel] != "" {
-		model, err := m.recoveryModel(ctx, client)
+		model, err := m.recoveryModel(ctx, client, containers)
 		if err != nil {
 			return err
 		}
@@ -177,7 +179,7 @@ func (m Manager) ValidateCompose(ctx context.Context) error {
 	if err := m.verifyComposeSource(ctx, "", labels[composeConfigHashLabel]); err != nil {
 		return err
 	}
-	_, err = m.recoveryModel(ctx, client)
+	_, err = m.recoveryModel(ctx, client, containers)
 	return err
 }
 
@@ -196,7 +198,7 @@ func (m Manager) verifyComposeSource(ctx context.Context, input, expected string
 	return nil
 }
 
-func (m Manager) recoveryModel(ctx context.Context, client DockerClient) (map[string]any, error) {
+func (m Manager) recoveryModel(ctx context.Context, client DockerClient, containers []ContainerSummary) (map[string]any, error) {
 	if m.Spec.Compose == nil {
 		return nil, errors.New("container does not exist; configure control.compose to permit recreation")
 	}
@@ -227,7 +229,7 @@ func (m Manager) recoveryModel(ctx context.Context, client DockerClient) (map[st
 	if !ok {
 		return nil, errors.New("docker client cannot verify recovery resources")
 	}
-	if err := m.isolateCompose(ctx, resources, model); err != nil {
+	if err := m.isolateCompose(ctx, resources, model, containers); err != nil {
 		return nil, err
 	}
 	return model, nil

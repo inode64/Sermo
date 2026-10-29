@@ -23,6 +23,7 @@ type recoveryClient struct {
 	resourcesErr error
 	containers   []ContainerSummary
 	listErr      error
+	listCalls    int
 	inspectErr   error
 	concurrent   bool
 	wrongImage   bool
@@ -67,6 +68,7 @@ func (c *recoveryClient) Inspect(_ context.Context, _ string) (Container, error)
 }
 
 func (c *recoveryClient) ListContainers(context.Context, bool) ([]ContainerSummary, error) {
+	c.listCalls++
 	return c.containers, c.listErr
 }
 
@@ -242,7 +244,7 @@ func TestComposeRecreatedContainerRetainsValidatedSource(t *testing.T) {
 	m.Runner = client.runner
 	setComposeOutput(t, client.runner, model)
 	client.runner.Queue[1].Stdout = "app created-hash\n"
-	if err := m.ValidateCompose(t.Context()); err != nil {
+	if err := m.ValidateCompose(t.Context(), nil); err != nil {
 		t.Fatal(err)
 	}
 	calls := client.runner.Calls()
@@ -299,7 +301,7 @@ func TestComposeRegistrationRequiresMatchingSource(t *testing.T) {
 				t.Fatal(err)
 			}
 			c.runner.Queue = []execx.Result{{Stdout: "app matching\n"}, {Stdout: strings.ReplaceAll(string(body), "$", "$$")}}
-			err = m.ValidateCompose(t.Context())
+			err = m.ValidateCompose(t.Context(), nil)
 			if (err == nil) != (hash == "matching") {
 				t.Fatalf("ValidateCompose = %v", err)
 			}
@@ -341,7 +343,7 @@ func TestComposeIdentityRequiredAtEveryPhase(t *testing.T) {
 						t.Fatal("discovery accepted a mismatched identity")
 					}
 				case "registration":
-					if err := m.ValidateCompose(t.Context()); err == nil {
+					if err := m.ValidateCompose(t.Context(), nil); err == nil {
 						t.Fatal("registration accepted a mismatched identity")
 					}
 				case "start":
