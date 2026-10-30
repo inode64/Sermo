@@ -23,6 +23,9 @@ type processCheck struct {
 	// stale reports the service's processes whose binary was replaced on disk.
 	// It exists to explain an "absent" reading rather than to change it.
 	stale StaleBinariesFunc
+	// replacedAny does the same for a process the service does not attribute,
+	// which a watch can name without owning.
+	replacedAny func(exes []string, user string) []string
 }
 
 func (c processCheck) Run(_ context.Context) Result {
@@ -68,14 +71,16 @@ func (c processCheck) Run(_ context.Context) Result {
 // replacedBinaries names this service's replaced executables that one of this
 // check's selectors would have matched, or "" when none apply.
 func (c processCheck) replacedBinaries() string {
-	if c.stale == nil {
-		return ""
-	}
 	var matched []string
-	for _, s := range c.stale() {
-		if slices.Contains(c.exes, s.Path) {
-			matched = append(matched, s.Path)
+	if c.stale != nil {
+		for _, s := range c.stale() {
+			if slices.Contains(c.exes, s.Path) {
+				matched = append(matched, s.Path)
+			}
 		}
+	}
+	if len(matched) == 0 && c.replacedAny != nil {
+		matched = c.replacedAny(c.exes, c.user)
 	}
 	if len(matched) == 0 {
 		return ""

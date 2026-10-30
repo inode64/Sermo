@@ -47,6 +47,21 @@ func TestProcessCheckExplainsAReplacedBinaryInsteadOfBareAbsent(t *testing.T) {
 // Catalog backup guards (`active: {check: backup}`) run this check with
 // expect absent. An unproven absence must be unavailable so the guard denies,
 // never a passing "absent".
+// A watch may name a daemon its service does not attribute: Samba's nmbd under a
+// replaced binary is alive, not gone, even though the service's own list omits it.
+func TestProcessCheckExplainsAReplacedBinaryTheServiceDoesNotAttribute(t *testing.T) {
+	c := processCheck{
+		name: "nmbd", exes: []string{"/usr/bin/nmbd"}, user: "root", expect: process.StateRunning,
+		observeAny:  func([]string, string) string { return process.StateAbsent },
+		stale:       func() []process.StaleBinary { return nil },
+		replacedAny: func([]string, string) []string { return []string{"/usr/bin/nmbd"} },
+	}
+	res := c.Run(t.Context())
+	if res.Reports != ReportsState || res.Severity.Valid() || !strings.Contains(res.Message, "/usr/bin/nmbd was replaced on disk") {
+		t.Fatalf("result = %+v, want the verdictless replaced-binary reading", res)
+	}
+}
+
 func TestProcessCheckUnknownStateIsUnavailable(t *testing.T) {
 	for _, expect := range []string{process.StateAbsent, process.StateRunning} {
 		c := processCheck{

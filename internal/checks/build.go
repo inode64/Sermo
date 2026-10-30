@@ -113,6 +113,9 @@ type Deps struct {
 	// ProcessesAny reports the observed state of processes matching any exact
 	// resolved executable in exes with the same user. Nil makes process checks unavailable.
 	ProcessesAny func(exes []string, user string) string
+	// ProcessesReplaced names the executables in exes a live process of user runs
+	// after they were replaced on disk, so an absent reading can say why.
+	ProcessesReplaced func(exes []string, user string) []string
 	// ProcessCount counts processes matching an optional user/exe/exe_dir filter,
 	// for `process_count` checks. Nil makes the check do a self-contained scan.
 	ProcessCount ProcessCountFunc

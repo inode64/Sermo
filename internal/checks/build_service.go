@@ -65,7 +65,7 @@ func buildProcessCheck(b base, entry map[string]any, deps Deps) (Check, string) 
 	}
 	return processCheck{
 		base: b, exes: exes, user: user, expect: expect,
-		observeAny: deps.ProcessesAny, stale: deps.StaleBinaries,
+		observeAny: deps.ProcessesAny, stale: deps.StaleBinaries, replacedAny: deps.ProcessesReplaced,
 	}, ""
 }
 

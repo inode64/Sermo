@@ -1,6 +1,9 @@
 package process
 
-import "testing"
+import (
+	"slices"
+	"testing"
+)
 
 // staleSelector is the shape a catalog service declares: processes.<name>.exe
 // plus a user, the combination that stops matching when a package upgrade
@@ -28,6 +31,33 @@ func TestDeletedExeNeverMatches(t *testing.T) {
 	}
 	if d.matches(&sel, fakeReaderIdentity(d, 10), d.resolveUser()) {
 		t.Fatal("matches() must stay false for a deleted exe")
+	}
+}
+
+// A watch can name a process the service does not attribute. ReplacedAny explains
+// its absent reading; it must stay exact on path and user and skip the dead.
+func TestReplacedAnyNamesOnlyLiveMatchingProcesses(t *testing.T) {
+	d := Discoverer{
+		Reader: fakeReader{ids: map[int]Identity{
+			10: {PID: 10, UID: 0, ExePrev: "/usr/bin/nmbd"},
+			11: {PID: 11, UID: 0, ExePrev: "/usr/bin/smbd"},
+			12: {PID: 12, UID: 33, ExePrev: "/usr/bin/rpc.mountd"},
+			13: {PID: 13, UID: 0, ExePrev: "/usr/bin/winbindd", State: ProcStateZombie},
+		}},
+		ResolveUser: fakeUsers(map[string]uint32{"root": 0, "www": 33}),
+	}
+	if got := d.ReplacedAny([]string{"/usr/bin/nmbd"}, "root"); !slices.Equal(got, []string{"/usr/bin/nmbd"}) {
+		t.Fatalf("replaced = %v, want nmbd", got)
+	}
+	for _, tc := range []struct{ exe, user string }{
+		{"/usr/bin/absent", "root"},
+		{"/usr/bin/rpc.mountd", "root"},
+		{"/usr/bin/winbindd", "root"},
+		{"", "root"},
+	} {
+		if got := d.ReplacedAny([]string{tc.exe}, tc.user); len(got) != 0 {
+			t.Fatalf("%s as %s: replaced = %v, want none", tc.exe, tc.user, got)
+		}
 	}
 }
 
