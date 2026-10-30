@@ -3780,6 +3780,12 @@ after a real failure, are unaffected. It inherits from `defaults:` like
 `dry_run`, so a whole host can opt out at once, and the host's per-service file
 beats both the default and the catalog.
 
+A service with a `delegated` selector, such as a generated VM or libvirt network,
+only alerts, whatever the flag says: its processes belong to another manager,
+and restarting a VM to renew its QEMU would reboot the guest. Kept children
+(`stop_policy.keep_children`) are not reported at all, because their daemon's
+restart would not renew them.
+
 A process whose executable was replaced still resolves no exe, so it matches no
 `exe` selector and is never signalled — see [safety.md](safety.md). This check
 reports the condition; it does not relax that rule.

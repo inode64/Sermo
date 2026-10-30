@@ -425,7 +425,7 @@ func (d Discoverer) StaleBinariesIn(attributed []Process, selectors []Selector) 
 		return true
 	}
 	for _, p := range attributed {
-		if !p.Stray && !p.Delegated && p.ExePrev != "" && mark(p.PID) {
+		if !p.Stray && !p.Kept && p.ExePrev != "" && mark(p.PID) {
 			out = append(out, StaleBinary{PID: p.PID, Path: p.ExePrev})
 		}
 	}
