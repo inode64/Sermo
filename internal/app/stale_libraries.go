@@ -28,13 +28,20 @@ func serviceStaleLibraries(discoverer process.Discoverer, selectors []process.Se
 		report, err := process.ScanLibraries(ctx, procs)
 		principal := libraryRestartPrincipal(discoverer, selectors, procs)
 		for i := range report.Libraries {
-			report.Libraries[i].RestartEligible = principal != 0 && report.Libraries[i].PID == principal
+			report.Libraries[i].RestartEligible = libraryRestartEligible(report.Libraries[i], principal)
 		}
 		if err != nil {
 			return report, fmt.Errorf("scan service libraries: %w", err)
 		}
 		return report, nil
 	}
+}
+
+// libraryRestartEligible needs the unique main process and the same filesystem
+// root as Sermo: a chrooted finding is read through Sermo's view of the path, not
+// the process's, which is enough to alert but not to act on.
+func libraryRestartEligible(lib process.StaleLibrary, principal int) bool {
+	return principal != 0 && lib.PID == principal && !lib.ChrootedProcess
 }
 
 // A unique strict main identity can justify restarting its service. Backend

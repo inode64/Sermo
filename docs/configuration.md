@@ -3890,7 +3890,11 @@ service's exact executable and real-user selector, complete reads, a stable
 replacement file and the same filesystem root as Sermo (the mount namespace
 may differ).
 Sandboxed units are inspected through `/proc/PID/root`, using the files visible
-to that process.
+to that process. A chrooted process, such as Dovecot's `imap-login`, is compared
+through the real root of its mount namespace, which is Sermo's or that of the
+unit's own daemon when the unit is sandboxed: the inventory stays complete and a
+finding alerts, but it never drives an action. A process with neither (a
+container) leaves the inventory incomplete.
 Missing replacements, foreign containers/chroots, PID/identity changes,
 unreadable maps, ambiguous masters and child-only findings set
 `action_blocked: true`. These observations can alert but cannot drive an

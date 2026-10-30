@@ -19,28 +19,32 @@ import (
 )
 
 const (
-	procFileMaps          = "maps"
-	libraryMapFields      = 5
-	libraryMapPermissions = 1
-	libraryMapDevice      = 3
-	libraryMapInode       = 4
-	libraryMapLineLimit   = 1024 * 1024
+	procFileMaps           = "maps"
+	procSelfMountNamespace = "/proc/self/" + ProcFileMountNamespace
+	libraryMapFields       = 5
+	libraryMapPermissions  = 1
+	libraryMapDevice       = 3
+	libraryMapInode        = 4
+	libraryMapLineLimit    = 1024 * 1024
 )
 
 // StaleLibrary identifies a mapped shared object whose installed inode differs.
 // It is diagnostic evidence, never permission to signal its PID.
 type StaleLibrary struct {
-	PID             int            `json:"pid"`
-	Exe             string         `json:"exe"`
-	UID             uint32         `json:"uid"`
-	StartTicks      uint64         `json:"start_ticks"`
-	Path            string         `json:"path"`
-	Mapped          ExecutableFile `json:"mapped"`
-	Installed       ExecutableFile `json:"installed"`
-	Modified        int64          `json:"modified"`
-	Changed         int64          `json:"changed"`
-	Missing         bool           `json:"missing"`
-	RestartEligible bool           `json:"restart_eligible"`
+	PID        int            `json:"pid"`
+	Exe        string         `json:"exe"`
+	UID        uint32         `json:"uid"`
+	StartTicks uint64         `json:"start_ticks"`
+	Path       string         `json:"path"`
+	Mapped     ExecutableFile `json:"mapped"`
+	Installed  ExecutableFile `json:"installed"`
+	Modified   int64          `json:"modified"`
+	Changed    int64          `json:"changed"`
+	Missing    bool           `json:"missing"`
+	// ChrootedProcess marks a finding read through another root than the
+	// process's own: it can alert, never drive an action.
+	ChrootedProcess bool `json:"chrooted_process,omitempty"`
+	RestartEligible bool `json:"restart_eligible"`
 }
 
 // LibraryReport retains findings even when part of a process inventory failed.
@@ -69,7 +73,9 @@ type libraryReader struct {
 // service scope. Each mapping is compared with the file the process itself
 // would open now, through /proc/PID/root, so a service in its own mount
 // namespace (a systemd unit with PrivateTmp or ProtectSystem) is inspected
-// too. A different filesystem root (a chroot or container) remains unknown.
+// too. A chrooted process is compared through the real root of its mount
+// namespace: Sermo's own, or that of a scanned peer in the same namespace. With
+// neither (a container), it remains unknown.
 func ScanLibraries(ctx context.Context, procs []Process) (LibraryReport, error) {
 	// Numeric ownership is sufficient here; avoid NSS/network user lookups in
 	// a process inventory whose authority is the kernel's real UID.
@@ -117,12 +123,13 @@ func (r libraryReader) scan(ctx context.Context, procs []Process) (LibraryReport
 	slices.SortFunc(procs, func(a, b Process) int { return a.PID - b.PID })
 	var out LibraryReport
 	var failures []error
+	roots := &libraryRoots{reader: r, procs: procs}
 	for _, proc := range procs {
 		if err := ctx.Err(); err != nil {
 			failures = append(failures, err)
 			break
 		}
-		libraries, err := r.processLibraries(ctx, proc)
+		libraries, err := r.processLibraries(ctx, proc, roots)
 		if err != nil {
 			failures = append(failures, fmt.Errorf("pid %d: %w", proc.PID, err))
 			continue
@@ -157,20 +164,67 @@ func (r libraryReader) verifyProcess(proc Process) (bool, error) {
 	return true, nil
 }
 
-// sameRoot reports whether the process's filesystem root is Sermo's. Its mount
-// namespace may differ: paths are resolved through /proc/PID/root, as the
-// process sees them.
-func (r libraryReader) sameRoot(pid int) bool {
-	root, rootErr := r.stat(PIDPath(pid, ProcFileRoot))
-	ours, oursErr := r.stat("/")
-	return rootErr == nil && oursErr == nil && root.identity == ours.identity
+// libraryRoots finds, for one scan, the prefix that resolves each process's
+// mapped paths.
+//
+// With Sermo's filesystem root the mount namespace may differ, so paths are
+// resolved through /proc/PID/root, as the process sees them. A chroot is the
+// opposite case: a dropped-privilege worker (dovecot's imap-login) maps libraries
+// it loaded before entering an empty directory, so its own root finds none of
+// them. They are read through the real root of its mount namespace instead:
+// Sermo's when it shares Sermo's namespace, or through a peer that shares it and
+// kept the real root, the unit's own daemon under a sandboxed unit.
+type libraryRoots struct {
+	reader libraryReader
+	procs  []Process
+	// byNamespace maps a mount namespace to its real root. It costs a stat of
+	// every process, so it is built only when a scan meets a chroot.
+	byNamespace map[ExecutableFile]string
 }
 
-func (r libraryReader) processLibraries(ctx context.Context, proc Process) (LibraryReport, error) {
+func (s *libraryRoots) of(pid int) (string, bool) {
+	root, rootErr := s.reader.stat(PIDPath(pid, ProcFileRoot))
+	ours, oursErr := s.reader.stat("/")
+	if rootErr != nil || oursErr != nil {
+		return "", false
+	}
+	if root.identity == ours.identity {
+		return PIDPath(pid, ProcFileRoot), true
+	}
+	namespace, err := s.reader.stat(PIDPath(pid, ProcFileMountNamespace))
+	if err != nil {
+		return "", false
+	}
+	if s.byNamespace == nil {
+		s.index(ours.identity)
+	}
+	prefix, known := s.byNamespace[namespace.identity]
+	return prefix, known
+}
+
+func (s *libraryRoots) index(realRoot ExecutableFile) {
+	s.byNamespace = map[ExecutableFile]string{}
+	if own, err := s.reader.stat(procSelfMountNamespace); err == nil {
+		s.byNamespace[own.identity] = ""
+	}
+	for _, proc := range s.procs {
+		root, rootErr := s.reader.stat(PIDPath(proc.PID, ProcFileRoot))
+		namespace, namespaceErr := s.reader.stat(PIDPath(proc.PID, ProcFileMountNamespace))
+		if rootErr != nil || namespaceErr != nil || root.identity != realRoot {
+			continue
+		}
+		if _, known := s.byNamespace[namespace.identity]; !known {
+			s.byNamespace[namespace.identity] = PIDPath(proc.PID, ProcFileRoot)
+		}
+	}
+}
+
+func (r libraryReader) processLibraries(ctx context.Context, proc Process, roots *libraryRoots) (LibraryReport, error) {
 	if alive, err := r.verifyProcess(proc); err != nil || !alive {
 		return LibraryReport{}, err
 	}
-	if !r.sameRoot(proc.PID) {
+	root, visible := roots.of(proc.PID)
+	if !visible {
 		return LibraryReport{}, errors.New("filesystem root differs or is unreadable")
 	}
 	data, err := r.readFile(PIDPath(proc.PID, procFileMaps))
@@ -181,16 +235,18 @@ func (r libraryReader) processLibraries(ctx context.Context, proc Process) (Libr
 	if err != nil {
 		return LibraryReport{}, err
 	}
+	chrooted := root != PIDPath(proc.PID, ProcFileRoot)
 	report := LibraryReport{Processes: 1}
 	for _, mapping := range mappings {
 		if err := ctx.Err(); err != nil {
 			return LibraryReport{}, fmt.Errorf("read mapped libraries: %w", err)
 		}
-		finding, stale, err := r.compareLibrary(proc, mapping)
+		finding, stale, err := r.compareLibrary(proc, root, mapping)
 		if err != nil {
 			return LibraryReport{}, err
 		}
 		if stale {
+			finding.ChrootedProcess = chrooted
 			report.Libraries = append(report.Libraries, finding)
 		}
 		if path := finding.Path; path != "" && path != proc.Exe && path != proc.ExePrev {
@@ -200,8 +256,15 @@ func (r libraryReader) processLibraries(ctx context.Context, proc Process) (Libr
 	if alive, err := r.verifyProcess(proc); err != nil || !alive {
 		return LibraryReport{}, err
 	}
-	if !r.sameRoot(proc.PID) {
+	if after, visible := roots.of(proc.PID); !visible || after != root {
 		return LibraryReport{}, errors.New("filesystem root changed during scan")
+	}
+	// A peer that exited took its root with it: every path read through it would
+	// have looked like a missing library.
+	if chrooted && root != "" {
+		if _, err := r.stat(root); err != nil {
+			return LibraryReport{}, errors.New("filesystem root changed during scan")
+		}
 	}
 	return report, nil
 }
@@ -266,11 +329,9 @@ func parseLibraryMaps(data string) ([]libraryMapping, error) {
 	return mappings, nil
 }
 
-func (r libraryReader) compareLibrary(proc Process, mapping libraryMapping) (StaleLibrary, bool, error) {
+func (r libraryReader) compareLibrary(proc Process, root string, mapping libraryMapping) (StaleLibrary, bool, error) {
 	path := mapping.path
-	// The installed file as the process would open it now, in its own mount
-	// namespace; sameRoot has pinned that namespace's root to Sermo's.
-	root := PIDPath(proc.PID, ProcFileRoot)
+	// The installed file under the root libraryRoots chose for this process.
 	installed, err := r.stat(root + path)
 	// A real filename may end in " (deleted)". Never strip that suffix when
 	// the unmodified path still identifies the kernel's mapped inode.
