@@ -32,31 +32,36 @@ type procMetricReader interface {
 // aggregateProcesses builds the per-process rows and the service total. Because
 // procs is the whole discovered tree (matched processes plus their children),
 // the total reflects the service's workers and helpers, not just its main
-// process. The total is nil when there are no processes.
+// process. Kept children get a row but stay out of the total, which has to agree
+// with the metrics the service's rules read. The total is nil when there are no
+// processes.
 func aggregateProcesses(procs []process.Process, r procMetricReader) ([]web.Process, *web.ProcessTotals) {
 	if len(procs) == 0 {
 		return nil, nil
 	}
 	out := make([]web.Process, 0, len(procs))
-	totals := web.ProcessTotals{Count: len(procs)}
+	var totals web.ProcessTotals
 	for i := range procs {
 		wp := processToWeb(procs[i])
 		if rss, ok := r.ProcessRSS(procs[i].PID); ok {
 			wp.RSS = uintToInt64(rss)
-			totals.RSS += uintToInt64(rss)
 		}
 		if rd, wr, ok := r.ProcessIO(procs[i].PID); ok {
 			wp.IORead, wp.IOWrite = uintToInt64(rd), uintToInt64(wr)
-			totals.IORead += uintToInt64(rd)
-			totals.IOWrite += uintToInt64(wr)
 		}
 		if n, ok := r.ProcessFDs(procs[i].PID); ok {
 			wp.FDs = uintToInt64(n)
-			totals.FDs += uintToInt64(n)
 		}
 		if n, ok := r.ProcessThreads(procs[i].PID); ok {
 			wp.Threads = uintToInt64(n)
-			totals.Threads += uintToInt64(n)
+		}
+		if !procs[i].Kept {
+			totals.Count++
+			totals.RSS += wp.RSS
+			totals.IORead += wp.IORead
+			totals.IOWrite += wp.IOWrite
+			totals.FDs += wp.FDs
+			totals.Threads += wp.Threads
 		}
 		out = append(out, wp)
 	}

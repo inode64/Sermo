@@ -128,8 +128,8 @@ func fdsSettings(tree map[string]any) (limit string, allowRestart bool, errs []s
 
 // fdsApplies mirrors staleBinaryApplies — discovery must be able to attribute
 // a process — and additionally leaves out a service that delegates part of its
-// tree or keeps its children, because the peak would then be measured over
-// workload the daemon does not own.
+// tree or keeps its children: the peak would either be measured over workload
+// the daemon does not own or, for kept children, say nothing about that workload.
 func fdsApplies(tree map[string]any) bool {
 	if !staleBinaryApplies(tree) || process.KeepChildren(tree) {
 		return false

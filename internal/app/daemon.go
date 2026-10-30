@@ -1258,10 +1258,15 @@ func discoverPIDs(discoverer process.Discoverer, selectors []process.Selector) [
 	return processPIDs(procs)
 }
 
+// processPIDs lists the processes a service's metrics measure. Kept children are
+// the daemon's workload, not the daemon: their thread and memory use must not
+// drive the daemon's own rules, which may restart it.
 func processPIDs(procs []process.Process) []int {
 	pids := make([]int, 0, len(procs))
-	for _, p := range procs {
-		pids = append(pids, p.PID)
+	for i := range procs {
+		if !procs[i].Kept {
+			pids = append(pids, procs[i].PID)
+		}
 	}
 	return pids
 }

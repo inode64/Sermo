@@ -41,6 +41,13 @@ type Process struct {
 	// selector gets the chance to name one of them.
 	Delegated bool `json:"delegated,omitempty"`
 
+	// Kept marks a Delegated process that only stop_policy.keep_children
+	// delegated: the daemon's workload rather than the daemon. Service metrics
+	// leave it out, so a busy container never reads as a busy containerd. A
+	// selector's delegated process stays measured: observing it is the point of
+	// the service that names it.
+	Kept bool `json:"kept,omitempty"`
+
 	// Stray marks a process the init backend attributes to the unit's control
 	// group that no configured selector claims and that no longer hangs off the
 	// unit's principal process — the signature of a leftover reparented to PID 1
