@@ -92,3 +92,22 @@ func TestAdvisoryWatchWithholdsFiringAndRecoveryHooks(t *testing.T) {
 		t.Fatalf("advisory inventory executed %d hooks", hooks)
 	}
 }
+
+func TestLibraryRestartEligibleNeedsTheMainProcessOnSermosRoot(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		lib  process.StaleLibrary
+		want bool
+	}{
+		{"main process", process.StaleLibrary{PID: 10}, true},
+		{"worker", process.StaleLibrary{PID: 11}, false},
+		{"chrooted main process", process.StaleLibrary{PID: 10, ChrootedProcess: true}, false},
+	} {
+		if got := libraryRestartEligible(tc.lib, 10); got != tc.want {
+			t.Errorf("%s: eligible = %v, want %v", tc.name, got, tc.want)
+		}
+	}
+	if libraryRestartEligible(process.StaleLibrary{}, 0) {
+		t.Error("no unique main process must never be eligible")
+	}
+}

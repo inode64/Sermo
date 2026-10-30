@@ -53,6 +53,9 @@ func libraryFixture() (libraryReader, Process) {
 			if path == "/" || path == PIDPath(42, ProcFileRoot) {
 				return libraryFile{identity: ExecutableFile{Device: 1, Inode: 1}}, nil
 			}
+			if path == procSelfMountNamespace || path == PIDPath(42, ProcFileMountNamespace) {
+				return libraryFile{identity: ExecutableFile{Device: 4, Inode: 4026531841}}, nil
+			}
 			if strings.HasSuffix(path, procDeletedSuffix) {
 				return libraryFile{}, os.ErrNotExist
 			}
@@ -63,7 +66,7 @@ func libraryFixture() (libraryReader, Process) {
 }
 
 func TestScanLibrariesIdentityAndFilesystem(t *testing.T) {
-	for _, name := range []string{"replaced", "unchanged", "missing", "permission", "own mount namespace", "chroot", "chroot during scan", "PID reused", "UID changed", "exe changed", "timeout", "literal deleted suffix", "not regular"} {
+	for _, name := range []string{"replaced", "unchanged", "missing", "permission", "own mount namespace", "chroot", "container", "chroot during scan", "PID reused", "UID changed", "exe changed", "timeout", "literal deleted suffix", "not regular"} {
 		t.Run(name, func(t *testing.T) {
 			r, p := libraryFixture()
 			ctx := t.Context()
@@ -111,10 +114,24 @@ func TestScanLibrariesIdentityAndFilesystem(t *testing.T) {
 				}
 				wantCount = 0
 			case "chroot":
+				// dovecot's imap-login: an empty root holds none of the libraries
+				// it mapped before chrooting, so they are looked up from Sermo's.
+				old := r.stat
+				r.stat = func(path string) (libraryFile, error) {
+					if strings.HasPrefix(path, PIDPath(42, ProcFileRoot)+"/") {
+						return libraryFile{}, os.ErrNotExist
+					}
+					f, err := old(path)
+					if path == "/" {
+						f.identity.Inode = 2
+					}
+					return f, err
+				}
+			case "container":
 				old := r.stat
 				r.stat = func(path string) (libraryFile, error) {
 					f, err := old(path)
-					if path == "/" {
+					if path == "/" || path == PIDPath(42, ProcFileMountNamespace) {
 						f.identity.Inode = 2
 					}
 					return f, err
@@ -167,7 +184,75 @@ func TestScanLibrariesIdentityAndFilesystem(t *testing.T) {
 			if name == "missing" && !report.Libraries[0].Missing {
 				t.Fatal("missing replacement must stay advisory")
 			}
+			if name == "chroot" && (report.Libraries[0].Missing || !report.Libraries[0].ChrootedProcess) {
+				t.Fatalf("a chrooted process's library must be compared with the installed file and marked: %+v", report.Libraries[0])
+			}
+			if name == "replaced" && report.Libraries[0].ChrootedProcess {
+				t.Fatal("a process on Sermo's own root is not chrooted")
+			}
 		})
+	}
+}
+
+// A sandboxed unit's chrooted worker shares neither Sermo's root nor its mount
+// namespace: only the unit's own daemon can see the libraries it maps.
+func TestScanLibrariesReadsSandboxedChrootThroughItsNamespacePeer(t *testing.T) {
+	const master, worker, unrelated = 41, 42, 43
+	sandbox := ExecutableFile{Device: 4, Inode: 7}
+	identity := func(pid int) Identity {
+		return Identity{PID: pid, UID: 0, Exe: "/usr/sbin/dovecot", ExeOK: true, StartTicks: 100, StartTicksOK: true}
+	}
+	realRoot := libraryFile{identity: ExecutableFile{Device: 1, Inode: 1}}
+	emptyRoot := libraryFile{identity: ExecutableFile{Device: 1, Inode: 9}}
+	installed := libraryFile{identity: ExecutableFile{Device: 2049, Inode: 43}, regular: true}
+	stats := map[string]libraryFile{
+		"/":                                     realRoot,
+		procSelfMountNamespace:                  {identity: ExecutableFile{Device: 4, Inode: 1}},
+		PIDPath(master, ProcFileRoot):           realRoot,
+		PIDPath(master, ProcFileMountNamespace): {identity: sandbox},
+		PIDPath(master, ProcFileRoot) + "/lib/libz.so": installed,
+		PIDPath(worker, ProcFileRoot):                  emptyRoot,
+		PIDPath(worker, ProcFileMountNamespace):        {identity: sandbox},
+		PIDPath(unrelated, ProcFileRoot):               emptyRoot,
+		PIDPath(unrelated, ProcFileMountNamespace):     {identity: ExecutableFile{Device: 4, Inode: 8}},
+	}
+	statCalls := 0
+	r := libraryReader{
+		reader: fakeReader{ids: map[int]Identity{master: identity(master), worker: identity(worker), unrelated: identity(unrelated)}},
+		readFile: func(path string) ([]byte, error) {
+			if path == PIDPath(master, procFileMaps) {
+				return nil, nil
+			}
+			return []byte("1000-2000 r-xp 0000 08:01 42 /lib/libz.so\n"), nil
+		},
+		stat: func(path string) (libraryFile, error) {
+			statCalls++
+			if f, ok := stats[path]; ok {
+				return f, nil
+			}
+			return libraryFile{}, os.ErrNotExist
+		},
+	}
+
+	report, err := r.scan(t.Context(), []Process{toProcess(identity(master), RoleMain, SourceBackend), toProcess(identity(worker), RoleChild, SourceChild)})
+	if err != nil {
+		t.Fatalf("scan: %v", err)
+	}
+	if len(report.Libraries) != 1 || report.Libraries[0].Missing || !report.Libraries[0].ChrootedProcess {
+		t.Fatalf("libraries = %+v, want the worker's replaced library, marked chrooted", report.Libraries)
+	}
+
+	if _, err := r.scan(t.Context(), []Process{toProcess(identity(master), RoleMain, SourceBackend), toProcess(identity(unrelated), RoleChild, SourceChild)}); err == nil {
+		t.Fatal("a chroot in a namespace no peer can read must leave the inventory incomplete")
+	}
+
+	// The namespace index must not tax the common scan that meets no chroot.
+	statCalls = 0
+	if _, err := r.scan(t.Context(), []Process{toProcess(identity(master), RoleMain, SourceBackend)}); err != nil {
+		t.Fatalf("scan: %v", err)
+	}
+	if statCalls > 6 {
+		t.Fatalf("stat calls = %d, a scan without a chroot must not build the namespace index", statCalls)
 	}
 }
 
