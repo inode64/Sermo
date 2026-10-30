@@ -1187,7 +1187,9 @@ processes:
   matched processes, and everything they spawn, to the service for monitoring —
   uptime, CPU, memory, FDs, IO, graphs, stale-binary reporting — but never
   signals them, never counts them as residuals of a stop, takes no kill
-  authority from them and never reports them as strays. Use it for a target
+  authority from them and never reports them as strays. A delegated selector
+  keeps its processes after a package upgrade replaces their binary, which no
+  other selector does. Use it for a target
   whose lifecycle another backend owns: the generated libvirt VM services
   ([`control: libvirt`](#control-libvirt--qemulibvirt-virtual-machines)) and
   libvirt network services (the network's `dnsmasq` pair), where libvirt, not

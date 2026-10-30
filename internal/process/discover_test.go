@@ -809,6 +809,40 @@ func TestDiscoverDelegatesProcessWithReplacedBinary(t *testing.T) {
 	}
 }
 
+// libvirt's dnsmasq pair has no unit of its own, so its selector is all that
+// finds it: after a package upgrade the network must keep its processes, stay
+// delegated, and no non-delegated selector may match on the replaced path.
+func TestDiscoverAttributesReplacedBinaryOnlyToDelegatedSelector(t *testing.T) {
+	const exe = "/opt/sermo-test/dnsmasq"
+	reader := fakeReader{ids: map[int]Identity{
+		21: {PID: 21, PPID: 1, UID: 0, User: "root", ExeOK: false, ExePrev: exe,
+			Cmdline: []string{exe, "--conf-file=/var/lib/libvirt/dnsmasq/default.conf"}},
+	}}
+	d := Discoverer{Reader: reader, ResolveUser: fakeUsers(map[string]uint32{"root": 0})}
+	selector := Selector{Name: "dnsmasq", Type: SelectorCommandMatch, Exe: exe, Cmd: "/var/lib/libvirt/dnsmasq/default", User: "root"}
+
+	if procs, _ := d.Discover([]Selector{selector}); len(procs) != 0 {
+		t.Fatalf("a non-delegated selector must not match a replaced binary: %+v", procs)
+	}
+
+	selector.Delegated = true
+	procs, warns := d.Discover([]Selector{selector})
+	if len(warns) != 0 {
+		t.Fatalf("warnings = %v", warns)
+	}
+	if len(procs) != 1 || procs[0].PID != 21 || !procs[0].Delegated || procs[0].ExePrev != exe {
+		t.Fatalf("procs = %+v, want pid 21 delegated with its previous path", procs)
+	}
+	if procs[0].signalExecutable() != "" {
+		t.Fatal("a replaced binary without kernel-file proof must not be signallable")
+	}
+
+	selector.Cmd = "/var/lib/libvirt/dnsmasq/other"
+	if procs, _ := d.Discover([]Selector{selector}); len(procs) != 0 {
+		t.Fatalf("the rest of the selector must still narrow: %+v", procs)
+	}
+}
+
 // Discovery warnings split into proven absences (safe to operate on) and
 // genuine uncertainty (must block operations); the producer suffixes and the
 // classifier must agree.

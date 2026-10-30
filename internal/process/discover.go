@@ -141,7 +141,7 @@ func (d Discoverer) Discover(selectors []Selector) ([]Process, []string) {
 	for _, pid := range candidates {
 		id := snapshot[pid]
 		for i := range selectors {
-			if selectors[i].Type == SelectorCommandMatch && d.matches(&selectors[i], id, resolve) {
+			if selectors[i].Type == SelectorCommandMatch && d.selects(&selectors[i], id, resolve) {
 				// Outside an attributed tree a process another unit owns is
 				// never this service's. The ownership verdict does not depend
 				// on the selector, so it is read only for a match. A delegated
@@ -183,6 +183,15 @@ func (d Discoverer) Discover(selectors []Selector) ([]Process, []string) {
 		result = append(result, found[pid])
 	}
 	return result, warnings
+}
+
+// selects reports whether discovery attributes id to a command selector. A
+// delegated selector also keeps a process whose binary was replaced: the package
+// upgrade that replaced dnsmasq must not make a libvirt network read as having no
+// processes, and attributing to a delegated selector only observes. markDelegated
+// keeps it delegated through the same deleted-executable match.
+func (d Discoverer) selects(sel *Selector, id Identity, resolve UserResolver) bool {
+	return d.matches(sel, id, resolve) || (sel.Delegated && d.matchesDeletedExe(sel, id, resolve))
 }
 
 // addPidfileSelectors resolves the pidfile selectors. Candidate paths (e.g.
