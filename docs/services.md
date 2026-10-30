@@ -37,6 +37,12 @@ cannot answer that probe, so it keeps just the init-service check; add an
 authenticated site-specific SNMP check when protocol availability itself is
 required there.
 
+The `postgres_exporter` profile monitors the PostgreSQL exporter's init unit,
+exact executable and user, and HTTP `/metrics` endpoint. Override `host`, `port`
+and `user` when they differ from `127.0.0.1`, `9187` and `postgres_exporter`.
+HTTP availability proves the exporter responds; PostgreSQL health belongs to
+the database service's checks.
+
 ## Contents
 
 - [Categories](#categories)
