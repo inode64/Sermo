@@ -65,6 +65,27 @@ func TestStaleBinaryDefaultAllowsRestart(t *testing.T) {
 	}
 }
 
+// A guest's qemu is reported, but restarting the service would reboot the guest,
+// so no flag can turn this rule into a restart.
+func TestStaleBinaryDelegatedSelectorOnlyEverAlerts(t *testing.T) {
+	for _, flag := range []any{nil, true} {
+		extra := map[string]any{
+			SectionControl: map[string]any{"type": "libvirt", "domain": "a"},
+			"processes":    map[string]any{"main": map[string]any{"cmd": "^qemu -name guest=a,", "delegated": true}},
+		}
+		if flag != nil {
+			extra[keyRestartOnStaleBinary] = flag
+		}
+		rule := staleBinaryGeneratedRule(t, staleBinaryTree(extra))
+		if got := ruleActionTypes(t, rule); len(got) != 1 || got[0] != "alert" {
+			t.Fatalf("flag %v: actions = %v, want the alert alone", flag, got)
+		}
+		if got := rule[rules.RuleFieldType]; got == string(rules.RuleRemediation) {
+			t.Fatalf("flag %v: a delegated service must not get a remediation rule", flag)
+		}
+	}
+}
+
 // This is the OVS case. The alert and its notification survive; only the
 // restart action is dropped, which also downgrades the rule to `alert` because
 // a remediation rule must carry an operation action.

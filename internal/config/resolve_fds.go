@@ -134,6 +134,10 @@ func fdsApplies(tree map[string]any) bool {
 	if !staleBinaryApplies(tree) || process.KeepChildren(tree) {
 		return false
 	}
+	return !hasDelegatedSelector(tree)
+}
+
+func hasDelegatedSelector(tree map[string]any) bool {
 	selectors, _ := process.ParseSelectors(tree)
-	return !slices.ContainsFunc(selectors, func(s process.Selector) bool { return s.Delegated })
+	return slices.ContainsFunc(selectors, func(s process.Selector) bool { return s.Delegated })
 }

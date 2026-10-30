@@ -33,6 +33,10 @@ const (
 // remediation to alert (a remediation rule must carry an operation action).
 // The flag governs this trigger alone: a manual restart, and remediation for a
 // real failure, are unaffected.
+//
+// A service with a delegated selector only ever alerts, whatever the flag says:
+// its processes belong to another manager, and restarting the service to renew a
+// guest's qemu would reboot that guest. The operator chooses when.
 func expandStaleBinary(tree map[string]any) []string {
 	allowRestart, flagErrs := staleBinaryRestartAllowed(tree)
 	if len(flagErrs) > 0 {
@@ -42,6 +46,7 @@ func expandStaleBinary(tree map[string]any) []string {
 	if !staleBinaryApplies(tree) {
 		return nil
 	}
+	allowRestart = allowRestart && !hasDelegatedSelector(tree)
 
 	// A replaced executable needs operator attention (and may trigger the
 	// generated alert/restart rule), but it does not make the running service

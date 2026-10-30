@@ -854,7 +854,8 @@ and that pair deliberately survives daemon restarts (the packaged
 `virtnetworkd` profile keeps it with `stop_policy.keep_children`). After a
 dnsmasq package upgrade those processes keep running the replaced binary and only a
 **network** restart renews them — so the generated network service is the one
-target whose `stale-binary` finding a restart genuinely fixes. Attribute the
+target whose `stale-binary` finding a restart genuinely fixes. Sermo alerts and
+leaves that restart to the operator. Attribute the
 pair with observe-only `delegated: true` selectors like the example above:
 Sermo observes it and never signals it, libvirt owns its lifecycle.
 
