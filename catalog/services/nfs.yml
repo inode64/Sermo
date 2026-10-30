@@ -32,6 +32,18 @@ watches:
     check:
       type: service
       expect: active
+  # Not a selector, for the reason above, yet OpenRC runs it inside this service
+  # with no unit of its own: without this a dead mountd would go unnoticed while
+  # the kernel keeps answering the nfs probe below.
+  mountd:
+    check:
+      type: process
+      exe: ${rpc_mountd_binary}
+      user: root
+      state: running
+      optional: true
+      requires:
+        - service
   nfs:
     check:
       type: nfs

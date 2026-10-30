@@ -575,6 +575,29 @@ func (d Discoverer) ObserveAnyState(exes []string, user string) string {
 	return StateAbsent
 }
 
+// ReplacedAny names the executables in exes that a live process of user still
+// runs after they were replaced on disk. ObserveAnyState reads such a process as
+// absent, deliberately: a replaced binary cannot prove a healthy start. This only
+// explains that reading, for a process the service does not attribute (a Samba
+// nmbd or NFS rpc.mountd a watch names without owning it), and authorizes nothing.
+func (d Discoverer) ReplacedAny(exes []string, user string) []string {
+	resolve := d.resolveUser()
+	var replaced []string
+	snapshot, _ := Snapshot(d.reader())
+	for _, id := range snapshot {
+		if id.State == ProcStateZombie {
+			continue
+		}
+		for _, exe := range exes {
+			selector := Selector{Type: SelectorCommandMatch, Exe: exe, User: user, exePath: canonicalizePath(exe)}
+			if exe != "" && d.matchesDeletedExe(&selector, id, resolve) {
+				replaced = append(replaced, exe)
+			}
+		}
+	}
+	return replaced
+}
+
 // CountMatching counts processes matching the given filter. Each non-empty
 // field narrows the count (ANDed); an all-empty filter counts every process on
 // the host. user is the real-UID owner, exe is the exact resolved

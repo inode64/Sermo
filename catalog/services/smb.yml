@@ -23,6 +23,7 @@ variables:
   netbios_port: 139
   user: root
   winbindd_binary: ${bindir}/winbindd
+  nmbd_binary: ${bindir}/nmbd
 pidfiles:
   smbd: /run/samba/smbd.pid
 preflight:
@@ -49,7 +50,7 @@ processes:
     enable_if:
       file: /etc/conf.d/samba
       key: daemon_list
-      contains: winbindd
+      contains: winbind
 policy:
   cooldown: 15m
   max_actions: 2
@@ -76,11 +77,26 @@ watches:
       type: tcp
       port: ${netbios_port}
       optional: true
+  # Gentoo's daemon_list runs nmbd from this service with no unit of its own. It
+  # stays a watch, not a selector: smb must not own a daemon that may outlive it.
+  nmbd:
+    enable_if:
+      file: /etc/conf.d/samba
+      key: daemon_list
+      contains: nmbd
+    check:
+      type: process
+      exe: ${nmbd_binary}
+      user: ${user}
+      state: running
+      optional: true
+      requires:
+        - service
   winbindd:
     enable_if:
       file: /etc/conf.d/samba
       key: daemon_list
-      contains: winbindd
+      contains: winbind
     check:
       type: process
       exe: ${winbindd_binary}

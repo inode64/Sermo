@@ -118,7 +118,8 @@ func BuildServiceRuntime(ctx context.Context, cfg ServiceRuntimeConfig) ServiceR
 			}
 			return st.Status, nil
 		},
-		ProcessesAny: discoverer.ObserveAnyState,
+		ProcessesAny:      discoverer.ObserveAnyState,
+		ProcessesReplaced: discoverer.ReplacedAny,
 		// Service scope, not host scope: a process_count check inside a service
 		// counts what discovery attributes to that service (docs promise exactly
 		// this). The host-wide CountMatching here made a filterless catalog check
