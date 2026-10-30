@@ -4,7 +4,27 @@ category: messaging
 variables:
   binary: ${bindir}/rabbitmq-server
   ctl: ${bindir}/rabbitmqctl
+  # rabbitmqctl cannot be used to read the version: every invocation, `version`
+  # included, starts an `epmd -daemon` that outlives the probe and stays in
+  # sermod's own control group, verified on a real host with a separate
+  # ERL_EPMD_PORT (`-start_epmd false` does not stop it). A bare `erl` starts no
+  # distribution, so no epmd, and rabbit.app names the installed version.
+  erl: ${bindir}/erl
 preflight:
   binary: { type: binary, path: "${binary}" }
   ctl: { type: binary, path: "${ctl}" }
-  version: { type: command, command: ["${ctl}", "version"], timeout: 10s }
+  # The try keeps a missing or unreadable rabbit.app from crashing the runtime,
+  # which would write erl_crash.dump into sermod's working directory.
+  version:
+    type: command
+    command:
+      - ${erl}
+      - -noshell
+      - -eval
+      - >-
+        try [P|_]=filelib:wildcard("/usr/lib*/erlang/lib/rabbitmq_server-*/ebin/rabbit.app")
+        ++filelib:wildcard("/usr/lib*/rabbitmq/lib/rabbitmq_server-*/ebin/rabbit.app"),
+        {ok,[{application,_,L}]}=file:consult(P),
+        io:format("~s~n",[proplists:get_value(vsn,L)]),
+        halt(0) catch _:_->halt(1) end.
+    timeout: 10s
