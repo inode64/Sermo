@@ -43,6 +43,10 @@ and `user` when they differ from `127.0.0.1`, `9187` and `postgres_exporter`.
 HTTP availability proves the exporter responds; PostgreSQL health belongs to
 the database service's checks.
 
+The `dcc` profile accepts either `dcc` or `dccifd` as the systemd unit name;
+on OpenRC it uses `dcc`. Its Unix socket remains the primary liveness check
+alongside the init unit because the daemon's pidfile varies across packages.
+
 ## Contents
 
 - [Categories](#categories)
