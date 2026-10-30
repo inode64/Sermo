@@ -102,7 +102,9 @@ func BuildServiceRuntime(ctx context.Context, cfg ServiceRuntimeConfig) ServiceR
 	}
 	needPidfileFallback := deps.Backend == servicemgr.BackendSystemd && backend.checked != nil
 	selectors, processWarnings, procInfo := serviceProcessSelectors(ctx, cfg.Tree, deps, cfg.Unit, needPidfileFallback)
-	noResident := serviceNoResidentProcess(cfg.Tree, selectors, backend.checked, deps.Backend)
+	noResident := serviceNoResidentProcess(cfg.Tree, selectors, backend.checked, deps.Backend, func() bool {
+		return servicemgr.UnitKeepsProcess(ctx, deps.ExecxRunner, deps.Backend, cfg.Unit)
+	})
 	metricSample := metricSampleForOperation(cfg.Service, cfg.Tree, deps.Collector, discoverer, selectors, noResident)
 	checkDeps := checks.Deps{
 		Limiter:        deps.CheckLimiter,
@@ -267,7 +269,11 @@ func noResidentProcess(tree map[string]any) bool {
 	return config.ResolveServiceLifecycle(tree, "").ProcessMode == config.ServiceProcessNone
 }
 
-func serviceNoResidentProcess(tree map[string]any, selectors []process.Selector, backendPIDs func() ([]int, error), backend servicemgr.Backend) bool {
+// serviceNoResidentProcess decides once per daemon generation, so it cannot rest
+// on what the unit happens to run right now: a daemon sermod starts ahead of at
+// boot would stay unobserved until the next reload. Having no PID only counts
+// once the unit's definition (unitKeepsProcess) promises none.
+func serviceNoResidentProcess(tree map[string]any, selectors []process.Selector, backendPIDs func() ([]int, error), backend servicemgr.Backend, unitKeepsProcess func() bool) bool {
 	if noResidentProcess(tree) {
 		return true
 	}
@@ -282,7 +288,7 @@ func serviceNoResidentProcess(tree map[string]any, selectors []process.Selector,
 	if len(selectors) > 0 || len(cfgval.StringList(tree[process.ServiceKeyPidfile])) > 0 {
 		return false
 	}
-	return !hasBackendPIDs(backendPIDs)
+	return !hasBackendPIDs(backendPIDs) && !unitKeepsProcess()
 }
 
 // hasBackendPIDs counts a query that failed as a yes: it does not show that the

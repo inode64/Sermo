@@ -234,7 +234,7 @@ func TestServiceProcessSelectorsExplicitEmptySkipsInitDerivation(t *testing.T) {
 func TestServiceNoResidentProcessInfersInitServiceWithoutPIDs(t *testing.T) {
 	deps := Deps{
 		Backend:     servicemgr.BackendSystemd,
-		ExecxRunner: procInfoRunner{},
+		ExecxRunner: procInfoRunner{unitType: "oneshot"},
 	}
 	tree := map[string]any{}
 
@@ -245,9 +245,26 @@ func TestServiceNoResidentProcessInfersInitServiceWithoutPIDs(t *testing.T) {
 	if len(selectors) != 0 {
 		t.Fatalf("selectors = %+v, want none", selectors)
 	}
+	unitKeepsProcess := func() bool {
+		return servicemgr.UnitKeepsProcess(t.Context(), deps.ExecxRunner, deps.Backend, "wait-online.service")
+	}
 	if !serviceNoResidentProcess(tree, selectors,
-		ServiceBackendPIDs(t.Context(), deps.Backend, "wait-online.service", deps.BackendPIDs, deps.ExecxRunner), deps.Backend) {
-		t.Fatal("service without selectors or backend PIDs must be treated as no resident process")
+		ServiceBackendPIDs(t.Context(), deps.Backend, "wait-online.service", deps.BackendPIDs, deps.ExecxRunner), deps.Backend, unitKeepsProcess) {
+		t.Fatal("a oneshot service without selectors or backend PIDs must be treated as no resident process")
+	}
+}
+
+// sermod reaches this judgment during boot, ahead of the units ordered after it:
+// a long-running service with no PID yet must stay observed for the generation.
+func TestServiceNoResidentProcessKeepsDaemonThatHasNotStartedYet(t *testing.T) {
+	deps := Deps{Backend: servicemgr.BackendSystemd, ExecxRunner: procInfoRunner{unitType: "notify"}}
+
+	if serviceNoResidentProcess(map[string]any{}, nil,
+		ServiceBackendPIDs(t.Context(), deps.Backend, "openvpn-client@tun1.service", deps.BackendPIDs, deps.ExecxRunner), deps.Backend,
+		func() bool {
+			return servicemgr.UnitKeepsProcess(t.Context(), deps.ExecxRunner, deps.Backend, "openvpn-client@tun1.service")
+		}) {
+		t.Fatal("a daemon that has not started yet must not be judged processless")
 	}
 }
 
@@ -258,16 +275,16 @@ func TestServiceNoResidentProcessKeepsBackendPIDServiceResident(t *testing.T) {
 	}
 
 	if serviceNoResidentProcess(map[string]any{}, nil,
-		ServiceBackendPIDs(t.Context(), deps.Backend, "web.service", deps.BackendPIDs, deps.ExecxRunner), deps.Backend) {
+		ServiceBackendPIDs(t.Context(), deps.Backend, "web.service", deps.BackendPIDs, deps.ExecxRunner), deps.Backend, func() bool { return false }) {
 		t.Fatal("service with backend PIDs must not be treated as no resident process")
 	}
 }
 
 func TestServiceNoResidentProcessKeepsStoppedContainerResident(t *testing.T) {
-	if serviceNoResidentProcess(map[string]any{}, nil, func() ([]int, error) { return nil, nil }, servicemgr.BackendDocker) {
+	if serviceNoResidentProcess(map[string]any{}, nil, func() ([]int, error) { return nil, nil }, servicemgr.BackendDocker, func() bool { return false }) {
 		t.Fatal("a container without a PID during reload must retain process observation after recovery")
 	}
-	if !serviceNoResidentProcess(map[string]any{process.SectionProcesses: map[string]any{}}, nil, nil, servicemgr.BackendDocker) {
+	if !serviceNoResidentProcess(map[string]any{process.SectionProcesses: map[string]any{}}, nil, nil, servicemgr.BackendDocker, func() bool { return true }) {
 		t.Fatal("explicit empty processes must retain its configured meaning")
 	}
 }
@@ -339,7 +356,7 @@ checks:
 	wb, warnings := NewWebBackend(t.Context(), cfg, Deps{
 		Backend:       servicemgr.BackendSystemd,
 		Manager:       fakeManager{},
-		ExecxRunner:   procInfoRunner{},
+		ExecxRunner:   procInfoRunner{unitType: "oneshot"},
 		Snapshots:     snaps,
 		Observability: observability,
 	})
@@ -616,7 +633,8 @@ processes:
 }
 
 type procInfoRunner struct {
-	pidfile string
+	pidfile  string
+	unitType string
 }
 
 func (r procInfoRunner) Run(_ context.Context, name string, args ...string) (execx.Result, error) {
@@ -627,6 +645,8 @@ func (r procInfoRunner) Run(_ context.Context, name string, args ...string) (exe
 	switch {
 	case strings.Contains(joined, "-p PIDFile"):
 		return execx.Result{Stdout: r.pidfile + "\n"}, nil
+	case strings.Contains(joined, "-p Type"):
+		return execx.Result{Stdout: r.unitType + "\n"}, nil
 	case strings.Contains(joined, "-p MainPID"):
 		return execx.Result{Stdout: "0\n"}, nil
 	default:

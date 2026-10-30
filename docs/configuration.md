@@ -1684,7 +1684,10 @@ CPU and IO rates need two cycles before the first rate point exists, while
 memory can render from the first process sample. Runtime metric buckets follow the
 same archive ladder as every other stored series. Services that declare an
 empty `processes: { }` map have no resident process tree; the dashboard omits
-their process table and latency/CPU/memory/IO charts.
+their process table and latency/CPU/memory/IO charts. So do undeclared services
+whose unit runs nothing while active (`Type=oneshot`, `RemainAfterExit=yes`, or
+a timer, socket or mount): a long-running unit stays observed even when sermod
+starts ahead of it.
 
 Web-triggered monitor changes are recorded with source `web` in the state store.
 A repeated web or CLI request for the already-effective monitor state is a

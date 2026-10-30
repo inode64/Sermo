@@ -173,6 +173,33 @@ func detectSystemdProc(ctx context.Context, runner execx.Runner, unit string) Pr
 	return info
 }
 
+// UnitKeepsProcess reports whether a unit's own definition promises a resident
+// process while it runs, whatever it is doing at this moment: unlike a look at
+// its PIDs, the answer does not change with the time of asking. A long-running
+// systemd service does; a oneshot or RemainAfterExit service stays active with
+// nothing left running, and a timer, socket or mount runs nothing of its own. A
+// definition that cannot be read counts as yes, so a query that did not answer
+// keeps the service observed. OpenRC has no such declaration.
+func UnitKeepsProcess(ctx context.Context, runner execx.Runner, backend Backend, unit string) bool {
+	if backend != BackendSystemd {
+		return false
+	}
+	unit = systemdUnit(unit)
+	if !strings.HasSuffix(unit, systemdServiceSuffix) {
+		return false
+	}
+	runner = execx.RunnerOrDefault(runner)
+	unitType, err := runSystemctlShow(ctx, runner, defaultDetectTimeout, systemctlPropertyType, unit)
+	if err != nil {
+		return true
+	}
+	if strings.TrimSpace(unitType.Stdout) == systemdTypeOneshot {
+		return false
+	}
+	remain, err := runSystemctlShow(ctx, runner, defaultDetectTimeout, systemctlPropertyRemainAfter, unit)
+	return err != nil || strings.TrimSpace(remain.Stdout) != systemdPropertyYes
+}
+
 func detectOpenRCProc(readFile func(string) ([]byte, error), unit string) ProcInfo {
 	var blob strings.Builder
 	for _, dir := range []string{openRCInitDir, openRCConfDir} {
