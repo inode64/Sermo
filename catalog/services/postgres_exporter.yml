@@ -1,0 +1,34 @@
+name: postgres_exporter
+display_name: Prometheus PostgreSQL Exporter
+category: observability
+description: 'Prometheus postgres_exporter: PostgreSQL metrics over HTTP /metrics.'
+service:
+  systemd:
+    - postgres_exporter
+  openrc:
+    - postgres_exporter
+apps:
+  - postgres_exporter
+restart_on_change:
+  apps:
+    - postgres_exporter
+variables:
+  host: 127.0.0.1
+  port: 9187
+  user: postgres_exporter
+processes:
+  main:
+    exe: ${postgres_exporter_binary}
+    user: ${user}
+watches:
+  service:
+    check:
+      type: service
+      expect: active
+  metrics:
+    check:
+      type: http
+      url: http://${host}:${port}/metrics
+      expect_status: 200
+      timeout: 5s
+      verify: true
