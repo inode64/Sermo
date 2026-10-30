@@ -3172,6 +3172,9 @@ whose server is gone) fails the mount condition as `hung`, exactly like a
 missing mount, so the watch's `for` window grades it and
 [`then.remount`](#thenremount--repair-a-hung-or-missing-mount-storage-watch)
 can repair it. The failure is reported as `mount_failure` (`missing` or `hung`).
+Concurrent probes of the same path share the pending `statfs` result. Once a
+probe times out, later probes fail immediately until that call returns; they
+never stack additional blocked calls on the path.
 Without `mounted: true` a hung mount makes the check unavailable instead. The mount is checked first from `/proc/mounts`: if
 it is missing when `mounted: true` (or present when `mounted: false`), the check
 alerts on that and the space predicates are skipped (their numbers would be
