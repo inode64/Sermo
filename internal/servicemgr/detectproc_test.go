@@ -470,3 +470,30 @@ func TestUnitKeepsProcess(t *testing.T) {
 		})
 	}
 }
+
+func TestUnitWaitsForTrigger(t *testing.T) {
+	const triggers = "systemctl show -p TriggeredBy --value -- virtlogd.service"
+	const states = "systemctl is-active -- virtlogd.socket virtlogd-admin.socket"
+	for _, tc := range []struct {
+		name    string
+		backend Backend
+		results map[string]execx.Result
+		errs    map[string]error
+		want    bool
+	}{
+		{name: "one trigger active", backend: BackendSystemd, results: map[string]execx.Result{
+			triggers: {Stdout: "virtlogd.socket virtlogd-admin.socket\n"}, states: {Stdout: "active\ninactive\n", ExitCode: 3}}, want: true},
+		{name: "triggers stopped", backend: BackendSystemd, results: map[string]execx.Result{
+			triggers: {Stdout: "virtlogd.socket virtlogd-admin.socket\n"}, states: {Stdout: "inactive\ninactive\n", ExitCode: 3}}},
+		{name: "no trigger", backend: BackendSystemd, results: map[string]execx.Result{triggers: {Stdout: "\n"}}},
+		{name: "unreadable trigger", backend: BackendSystemd, errs: map[string]error{triggers: errors.New("timeout")}},
+		{name: "openrc", backend: BackendOpenRC},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			runner := &execxtest.Runner{ByLine: tc.results, Errs: tc.errs}
+			if got := UnitWaitsForTrigger(t.Context(), runner, tc.backend, "virtlogd"); got != tc.want {
+				t.Fatalf("UnitWaitsForTrigger = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}

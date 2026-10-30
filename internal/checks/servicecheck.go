@@ -29,8 +29,13 @@ func (c serviceCheck) Run(ctx context.Context) Result {
 	if err != nil {
 		return c.unavailableResult(fmt.Sprintf("status: %v", err), start)
 	}
-	ok := string(status) == c.expect
+	// A service waiting on its activation unit is doing what `active` asks of it.
+	idle := status == servicemgr.StatusIdle && c.expect == string(servicemgr.StatusActive)
+	ok := string(status) == c.expect || idle
 	result := c.result(ok, fmt.Sprintf("status %s (want %s)", status, c.expect), start)
+	if idle {
+		result.Message = fmt.Sprintf("status %s: started on demand by its activation unit", status)
+	}
 	if !ok && c.expect == string(servicemgr.StatusActive) && status != servicemgr.StatusUnknown && !c.severity.Valid() {
 		// A service proven not to be running is down: the gravest thing a
 		// monitor reports, graded so unless the check declares otherwise. An

@@ -53,8 +53,12 @@ func (c metricCheck) Run(_ context.Context) Result {
 		return c.unavailableResult(fmt.Sprintf("metric %s/%s unavailable", c.scope, c.metric), start)
 	}
 	// FD counts remain meaningful for an empty process tree or a process whose
-	// limit cannot be read. Its percentage does not: there is no denominator.
+	// limit cannot be read. Its percentage does not: there is no denominator. With
+	// nothing open, as in an idle or stopped service, nothing can run out either.
 	if _, percent, err := metrics.ParseThreshold(c.value); err == nil && percent && c.metric == metrics.MetricFds && !reading.HasPercent {
+		if reading.Absolute == 0 {
+			return c.result(false, fmt.Sprintf("%s/%s: no open descriptors", c.scope, c.metric), start)
+		}
 		return c.unavailableResult("file descriptor percentage unavailable: no process with a usable open-file limit", start)
 	}
 	met, err := metrics.Compare(reading, c.op, c.value)

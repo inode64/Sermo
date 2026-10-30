@@ -362,6 +362,10 @@ config:
   checks:
     state: { type: service, expect: active }
   ```
+  A systemd service that is inactive while an active socket, timer or path unit
+  would start it on demand reads `idle`: it passes `expect: active` and shows no
+  missing processes. `virtlogd` on a host with no running guest is the usual case.
+  Operations are unaffected: `sermoctl stop` and `start` still see it inactive.
 
 `on_change.notify` follows the usual notify precedence (omit to inherit the global
 `notify` default, or `none` to suppress). A service-level `dry_run: true`

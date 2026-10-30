@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -726,4 +727,34 @@ func (*liveCPUReader) ProcessSwap(int) (uint64, bool)    { return 0, false }
 func (*liveCPUReader) ProcessFDLimit(int) (uint64, bool) { return 0, false }
 func (*liveCPUReader) MemoryTotals(_ time.Duration) metrics.MemoryTotals {
 	return metrics.MemoryTotals{}
+}
+
+func TestIdleUnitStatusOnlyRewritesAnInactiveUnitWithLiveTrigger(t *testing.T) {
+	const triggers = "systemctl show -p TriggeredBy --value -- virtlogd.service"
+	deps := Deps{Backend: servicemgr.BackendSystemd, ExecxRunner: &execxtest.Runner{ByLine: map[string]execx.Result{
+		triggers:                                 {Stdout: "virtlogd.socket\n"},
+		"systemctl is-active -- virtlogd.socket": {Stdout: "active\n"},
+	}}}
+	for _, tc := range []struct {
+		live servicemgr.Status
+		want servicemgr.Status
+	}{
+		{servicemgr.StatusInactive, servicemgr.StatusIdle},
+		{servicemgr.StatusActive, servicemgr.StatusActive},
+		{servicemgr.StatusFailed, servicemgr.StatusFailed},
+	} {
+		status := idleUnitStatus(deps, "virtlogd", func(context.Context) (servicemgr.Status, error) { return tc.live, nil })
+		if got, err := status(t.Context()); err != nil || got != tc.want {
+			t.Errorf("live %s: status = %s, %v, want %s", tc.live, got, err, tc.want)
+		}
+	}
+	failed := idleUnitStatus(deps, "virtlogd", func(context.Context) (servicemgr.Status, error) {
+		return servicemgr.StatusInactive, errors.New("timeout")
+	})
+	if _, err := failed(t.Context()); err == nil {
+		t.Error("a failed query must stay an error")
+	}
+	if idleUnitStatus(deps, "virtlogd", nil) != nil {
+		t.Error("a nil status must stay nil")
+	}
 }

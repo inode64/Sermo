@@ -643,6 +643,19 @@ func TestServiceCheck(t *testing.T) {
 	}
 }
 
+func TestServiceCheckIdlePassesOnlyAnActiveExpectation(t *testing.T) {
+	status := func(context.Context) (servicemgr.Status, error) { return servicemgr.StatusIdle, nil }
+	idle := serviceCheck{name: "s", timeout: time.Second, expect: "active", status: status}
+	res := idle.Run(context.Background())
+	if !res.OK || res.Data[DataKeyStatus] != string(servicemgr.StatusIdle) {
+		t.Fatalf("idle should satisfy expect active and stay visible as idle: %+v", res)
+	}
+	stopped := serviceCheck{name: "s", timeout: time.Second, expect: "inactive", status: status}
+	if res := stopped.Run(context.Background()); res.OK {
+		t.Fatal("idle must not pass for an expectation it was not written for")
+	}
+}
+
 // A service proven to be down is critical unless the check declares otherwise;
 // a status nobody could establish proves nothing.
 func TestServiceCheckGradesADownServiceCritical(t *testing.T) {
