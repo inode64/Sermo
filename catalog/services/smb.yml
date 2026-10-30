@@ -48,6 +48,7 @@ processes:
     exe: ${winbindd_binary}
     user: ${user}
     enable_if:
+      init: openrc
       file: /etc/conf.d/samba
       key: daemon_list
       contains: winbind
@@ -77,10 +78,12 @@ watches:
       type: tcp
       port: ${netbios_port}
       optional: true
-  # Gentoo's daemon_list runs nmbd from this service with no unit of its own. It
+  # OpenRC's daemon_list runs nmbd from this service with no unit of its own. It
   # stays a watch, not a selector: smb must not own a daemon that may outlive it.
+  # The file also exists on a Gentoo systemd host, where nmb.service decides.
   nmbd:
     enable_if:
+      init: openrc
       file: /etc/conf.d/samba
       key: daemon_list
       contains: nmbd
@@ -94,6 +97,7 @@ watches:
         - service
   winbindd:
     enable_if:
+      init: openrc
       file: /etc/conf.d/samba
       key: daemon_list
       contains: winbind

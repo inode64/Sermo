@@ -1994,8 +1994,10 @@ other safety-affecting sections.
 
 Instead of a config-file predicate, `enable_if` may name the init backend the
 entry belongs to: `enable_if: { init: openrc }` (or `systemd`) keeps the entry
-only when that backend is active, and excludes the `file`/`key` predicate form.
-Use it for components that exist under one init system only. The packaged
+only when that backend is active. Beside a `file`/`key` predicate both must hold,
+for a config file that exists under an init system that never reads it: Gentoo
+ships `/etc/conf.d/samba` on systemd hosts too. Use it for components that exist
+under one init system only. The packaged
 `salt-minion` profile gates its Gentoo `supervise-daemon` selector this way:
 under OpenRC the supervisor is the one strict identity Sermo may signal, while
 on Gentoo running systemd no supervisor exists, and an exact selector that can

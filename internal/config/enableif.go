@@ -119,11 +119,13 @@ func validateEnableIfSpec(path string, spec any, add addFunc) {
 		return
 	}
 	for key := range unknownBlockKeys(m, enableIfKeys) {
-		add("%s.%s is not supported; enable_if accepts init, or file, key and one of %s", path, key, enableIfPredicateSummary)
+		add("%s.%s is not supported; enable_if accepts init, file, key and one of %s", path, key, enableIfPredicateSummary)
 	}
 	if _, has := m[keyEnableIfInit]; has {
 		validateEnableIfInit(path, m, add)
-		return
+		if len(m) == 1 {
+			return
+		}
 	}
 	file := cfgval.String(m[keyEnableIfFile])
 	if file == "" {
@@ -140,14 +142,10 @@ func validateEnableIfSpec(path string, spec any, add addFunc) {
 }
 
 // validateEnableIfInit checks the init-backend form: `enable_if: {init: openrc}`
-// keeps the entry only on that init system. The form is exclusive — mixing it
-// with the config-file predicate would leave the intended condition ambiguous.
+// keeps the entry only on that init system. Beside a file predicate both must
+// hold: a distro config file can exist under an init that never reads it, as
+// Gentoo's /etc/conf.d/samba does on a systemd host.
 func validateEnableIfInit(path string, m map[string]any, add addFunc) {
-	for key := range m {
-		if key != keyEnableIfInit {
-			add("%s.init excludes %s; enable_if is either {init: ...} or a file predicate", path, key)
-		}
-	}
 	switch cfgval.String(m[keyEnableIfInit]) {
 	case backendSystemd, backendOpenRC:
 	default:
@@ -182,7 +180,8 @@ func validateEnableIfPredicates(path string, m map[string]any, add addFunc) int 
 // or the active init backend. It is fail-safe: a malformed spec, an unreadable
 // file, or an absent key all yield false, so an optional component stays
 // disabled unless explicitly turned on. Predicates: `contains` (substring),
-// `equals` (exact), `matches` (regex), or `init` (active backend).
+// `equals` (exact), `matches` (regex), and `init` (active backend), which may
+// stand alone or further narrow one of the others.
 func enableIfHolds(spec any, backend string) bool {
 	m, ok := spec.(map[string]any)
 	if !ok {
@@ -196,7 +195,12 @@ func enableIfHolds(spec any, backend string) bool {
 		return false
 	}
 	if want, has := m[keyEnableIfInit]; has {
-		return cfgval.String(want) == backend
+		if cfgval.String(want) != backend {
+			return false
+		}
+		if len(m) == 1 {
+			return true
+		}
 	}
 	file, key := cfgval.String(m[keyEnableIfFile]), cfgval.String(m[keyEnableIfKey])
 	val, ok := configKeyValue(file, key)
