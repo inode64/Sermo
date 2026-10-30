@@ -7,4 +7,5 @@ variables:
     - ${bindir}/mariadbbackup
 preflight:
   binary: { type: binary, path: "${binary}" }
-  version: { type: command, command: ["${binary}", "--version"], timeout: 10s }
+  # --no-defaults: a my.cnf option it adjusts prints a warning ahead of the version.
+  version: { type: command, command: ["${binary}", "--no-defaults", "--version"], timeout: 10s }
