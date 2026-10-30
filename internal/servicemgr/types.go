@@ -67,6 +67,7 @@ const (
 	systemctlPropertyMainPID     = "MainPID"
 	systemctlPropertyPIDFile     = "PIDFile"
 	systemctlPropertyType        = "Type"
+	systemctlPropertyRemainAfter = "RemainAfterExit"
 	// systemctlPropertyTimeoutStop is how long systemd may spend on a stop job
 	// before its final SIGKILL.
 	systemctlPropertyTimeoutStop = "TimeoutStopUSec"
@@ -97,6 +98,8 @@ const (
 	systemdLoadStateNotFound = "not-found"
 	systemdValueYes          = "yes"
 	systemdTypeForking       = "forking"
+	systemdTypeOneshot       = "oneshot"
+	systemdPropertyYes       = "yes"
 )
 
 // The failed-unit listing (ListFailedUnits). `--plain` drops the status bullet

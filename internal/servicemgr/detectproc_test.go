@@ -441,3 +441,32 @@ AFTER=ok
 		t.Fatalf("inactive branch assigned WRONG=%q", got)
 	}
 }
+
+func TestUnitKeepsProcess(t *testing.T) {
+	const typeQuery = "systemctl show -p Type --value -- worker.service"
+	const remainQuery = "systemctl show -p RemainAfterExit --value -- worker.service"
+	for _, tc := range []struct {
+		name    string
+		backend Backend
+		unit    string
+		results map[string]execx.Result
+		errs    map[string]error
+		want    bool
+	}{
+		{name: "notify daemon", backend: BackendSystemd, unit: "worker.service", results: map[string]execx.Result{typeQuery: {Stdout: "notify\n"}, remainQuery: {Stdout: "no\n"}}, want: true},
+		{name: "bare name", backend: BackendSystemd, unit: "worker", results: map[string]execx.Result{typeQuery: {Stdout: "simple\n"}, remainQuery: {Stdout: "no\n"}}, want: true},
+		{name: "oneshot", backend: BackendSystemd, unit: "worker.service", results: map[string]execx.Result{typeQuery: {Stdout: "oneshot\n"}}},
+		{name: "remains after exit", backend: BackendSystemd, unit: "worker.service", results: map[string]execx.Result{typeQuery: {Stdout: "simple\n"}, remainQuery: {Stdout: "yes\n"}}},
+		{name: "unreadable type stays observed", backend: BackendSystemd, unit: "worker.service", errs: map[string]error{typeQuery: errors.New("timeout")}, want: true},
+		{name: "unreadable remain stays observed", backend: BackendSystemd, unit: "worker.service", results: map[string]execx.Result{typeQuery: {Stdout: "simple\n"}}, errs: map[string]error{remainQuery: errors.New("timeout")}, want: true},
+		{name: "timer", backend: BackendSystemd, unit: "worker.timer"},
+		{name: "openrc", backend: BackendOpenRC, unit: "worker"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			runner := &execxtest.Runner{ByLine: tc.results, Errs: tc.errs}
+			if got := UnitKeepsProcess(t.Context(), runner, tc.backend, tc.unit); got != tc.want {
+				t.Fatalf("UnitKeepsProcess = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
