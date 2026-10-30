@@ -20,6 +20,7 @@ const (
 	openRCRunlevelNeededWanted  = "needed/wanted"
 	openRCRunlevelManual        = "manual"
 	openRCRunlevelHotplugged    = "hotplugged"
+	openRCStatusLinePrefix      = "* status:"
 	openRCStateStarted          = "started"
 	openRCStateNotStarted       = "not started"
 	openRCStateStopped          = "stopped"

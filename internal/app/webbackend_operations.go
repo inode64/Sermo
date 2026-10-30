@@ -132,7 +132,7 @@ func (b *WebBackend) activeAfterPostflightFailure(ctx context.Context, name, act
 	if e == nil {
 		return false
 	}
-	return ServiceActiveAfterPostflightFailure(ctx, action, result, nil, e.status)
+	return ServiceActiveAfterPostflightFailure(ctx, action, result, nil, e.liveStatus)
 }
 
 func (e *webEntry) cachedReloadSupported(ctx context.Context, now time.Time) bool {

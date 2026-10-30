@@ -77,6 +77,7 @@ type webEntry struct {
 	policyCooldown    time.Duration
 	engine            operation.Engine
 	status            func(context.Context) (servicemgr.Status, error)
+	liveStatus        func(context.Context) (servicemgr.Status, error)
 	checkNames        []string          // sorted
 	checkTypes        map[string]string // check name -> type
 	configID          string
@@ -461,7 +462,14 @@ func attachServiceRuntime(ctx context.Context, entry *webEntry, name string, tre
 	selectors, processWarnings := runtime.Selectors, runtime.ProcessWarnings
 	catalog := checkCatalog(tree, entry.interval)
 	entry.noResidentProcess = runtime.NoResidentProcess
-	entry.status = idleUnitStatus(deps, target.Unit, checkDeps.Status)
+	// The list answers from the shared unit listing, as the worker's check does:
+	// on OpenRC one query per service spawns every init script, in series, each
+	// time the status cache expires. Judging an operation stays a live query.
+	entry.status = idleUnitStatus(serviceDeps, target.Unit, checkDeps.Status)
+	if deps.Backend == target.Backend {
+		entry.status = activeUnitStatus(deps.ActiveUnits, target.Unit, entry.status)
+	}
+	entry.liveStatus = checkDeps.Status
 	entry.checkNames = catalog.names
 	entry.checkTypes = catalog.types
 	entry.configID = serviceSnapshotConfigID(tree)
