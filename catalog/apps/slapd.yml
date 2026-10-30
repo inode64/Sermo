@@ -5,6 +5,7 @@ variables:
   binary:
     - /usr/sbin/slapd
     - /usr/bin/openldap/slapd
+    - /usr/lib64/openldap/slapd
   slaptest:
     - /usr/sbin/slaptest
     - /usr/bin/slaptest

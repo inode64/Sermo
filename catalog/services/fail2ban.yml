@@ -26,6 +26,16 @@ preflight:
       - -t
     timeout: 30s
 pidfile: /run/fail2ban/fail2ban.pid
+# Gentoo's OpenRC script runs the server under supervise-daemon, which shares
+# the service cgroup and otherwise reads as a stray. Init-scoped because a
+# selector that can never match would block operations on a systemd unit.
+processes:
+  supervisor:
+    exe: /usr/bin/supervise-daemon
+    cmd: ^supervise-daemon fail2ban --start([[:space:]]|$)
+    user: root
+    enable_if:
+      init: openrc
 reload:
   command:
     - ${fail2ban_client}
