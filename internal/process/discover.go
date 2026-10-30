@@ -320,7 +320,7 @@ func (d Discoverer) markKeptChildren(selectors []Selector, found map[int]Process
 				continue
 			}
 		}
-		proc.Delegated = true
+		proc.Delegated, proc.Kept = true, true
 		found[pid] = proc
 	}
 }

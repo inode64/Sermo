@@ -79,6 +79,45 @@ func TestKeepChildrenDelegatesEverythingButTheTopmostPrincipals(t *testing.T) {
 	}
 }
 
+// Kept is what takes a process out of the service's metrics, so it must follow
+// keep_children and never a delegated selector, whose target is what the service
+// exists to measure.
+func TestKeepChildrenMarksOnlyItsOwnDelegationsKept(t *testing.T) {
+	ids := map[int]Identity{
+		10: {PID: 10, PPID: 1, UID: 0, User: "root", Exe: keepTestDaemon, ExeOK: true},
+		11: {PID: 11, PPID: 10, UID: 0, User: "root", Exe: keepTestSession, ExeOK: true},
+	}
+	backend := []int{10, 11}
+	principal := Selector{Name: RoleMain, Type: SelectorCommandMatch, Exe: keepTestDaemon, User: "root"}
+	guest := Selector{Name: "guest", Type: SelectorCommandMatch, Exe: keepTestSession, User: "root", Delegated: true}
+	discoverer := Discoverer{
+		Reader:       fakeReader{ids: ids},
+		ResolveUser:  fakeUsers(map[string]uint32{"root": 0}),
+		BackendPIDs:  func() []int { return backend },
+		KeepChildren: true,
+	}
+
+	procs, _ := discoverer.Discover([]Selector{principal, guest})
+
+	got := map[int]Process{}
+	for _, p := range procs {
+		got[p.PID] = p
+	}
+	if got[10].Kept {
+		t.Error("the principal must stay measured")
+	}
+	if !got[11].Delegated || got[11].Kept {
+		t.Errorf("selector-delegated process = %+v, want delegated and measured", got[11])
+	}
+
+	procs, _ = discoverer.Discover([]Selector{principal})
+	for _, p := range procs {
+		if want := p.PID == 11; p.Kept != want {
+			t.Errorf("pid %d kept = %v, want %v", p.PID, p.Kept, want)
+		}
+	}
+}
+
 // A pidfile names the daemon explicitly, so its PID is a principal even under a
 // supervisor; the backend's first PID — here that supervisor — is not trusted on
 // its own.

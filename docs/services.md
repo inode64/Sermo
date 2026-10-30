@@ -1381,7 +1381,10 @@ processes:
   the daemon forked is kept even when it runs the same binary (a cron job runner),
   but an earlier daemon instance reparented to PID 1 is still a principal, so a
   second daemon is never started beside it. Validation requires a non-delegated
-  selector with an exact `exe` and `user`.
+  selector with an exact `exe` and `user`. Kept processes stay in the process
+  list but out of the service's metrics, totals and graphs: containerd's memory
+  and `cpu_thread` describe containerd, not the containers it runs, so a busy
+  container can never trigger a containerd rule.
 - **`false`** (default) — every residual must go before the start. A residual the
   kernel places in the unit's own control group receives `SIGTERM`, and `SIGKILL`
   with `force_kill: true` or `auto`; a survivor, or a residual with no
@@ -1396,6 +1399,7 @@ from treating it as a residual, but they answer different questions:
 | Purpose | observe processes another backend owns | keep the daemon's own workload alive across a restart |
 | Names | the processes to observe, by exe and/or cmdline | the **principal** that must exit |
 | Any other non-principal process | is a residual | is kept |
+| Service metrics and totals | counted | left out; each keeps its process row |
 | Breaks when | the observed process's cmdline or path changes | the principal selector is wrong |
 
 Use `keep_children` for a unit whose workload outlives the daemon by design
