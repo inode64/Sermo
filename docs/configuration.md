@@ -4362,7 +4362,11 @@ daemon cannot read is never called closed, and when the session directory itself
 cannot be listed the message says `logind session records unreadable` and no
 session is called closed.
 Everything under `init.scope`, a service, a non-session scope (`docker-*`,
-`machine-*`) or a `user@N.service` user manager counts as owned. When attribution
+`machine-*`), a mount, swap or socket unit, a libvirt domain group
+(`/machine/qemu-*.libvirt-qemu`) or a `user@N.service` user manager counts as
+owned. So does a usermode helper the kernel spawned (child of `kthreadd`) and a
+child of PID 1 whose exact command line is a `respawn` entry of `/etc/inittab`,
+such as the consoles of a sysvinit host. When attribution
 is impossible — no per-unit control groups, no package database, an executable
 the daemon cannot read — the watch says so in its message and lists nothing on
 that criterion: absence of evidence is never a finding.

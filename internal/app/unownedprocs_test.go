@@ -788,3 +788,50 @@ func TestBuildUnownedProcessesWatchRefusals(t *testing.T) {
 		t.Fatal("unowned_processes must stay host-scoped")
 	}
 }
+
+func TestUnownedWatcherLeavesInitAndKernelChildrenAlone(t *testing.T) {
+	console := unownedProc(60, "/usr/bin/agetty", "0::/")
+	console.PPID, console.Cmdline = initPID, []string{"/sbin/agetty", "--noclear", "38400", "tty1", "linux"}
+	// Same binary and parent, but no inittab line runs it with these arguments.
+	otherArgs := unownedProc(61, "/usr/bin/agetty", "0::/")
+	otherArgs.PPID, otherArgs.Cmdline = initPID, []string{"/sbin/agetty", "38400", "tty9", "linux"}
+	// The exact command line under another parent is not init's console.
+	otherParent := unownedProc(62, "/usr/bin/agetty", "0::/")
+	otherParent.PPID, otherParent.Cmdline = 500, console.Cmdline
+	// A disabled entry and a one-shot one never name a running console.
+	commented := unownedProc(63, "/sbin/agetty", "0::/")
+	commented.PPID, commented.Cmdline = initPID, []string{"/sbin/agetty", "38400", "tty8", "linux"}
+	once := unownedProc(64, "/sbin/setup", "0::/")
+	once.PPID, once.Cmdline = initPID, []string{"/sbin/setup"}
+	umh := unownedProc(65, "/bpfilter_umh", "0::/")
+	umh.PPID, umh.Cmdline = kthreaddPID, []string{"bpfilter_umh"}
+	mountClient := unownedProc(66, "/usr/bin/glusterfsd", "0::/system.slice/var-lib-libvirt-images.mount")
+	guest := unownedProc(67, "/usr/bin/qemu-system-x86_64", "0::/machine/qemu-3-vm.libvirt-qemu/emulator")
+
+	fixture := systemdFixture()
+	fixture.backend, fixture.openrcDirs = servicemgr.BackendOpenRC, []string{"openrc.sshd"}
+	rt := fixture.runtime()
+	reads := 0
+	rt.readFile = func(path string) ([]byte, error) {
+		if path != inittabPath {
+			return nil, os.ErrNotExist
+		}
+		reads++
+		return []byte("# comment\n#c8:2345:respawn:/sbin/agetty 38400 tty8 linux\nsi::sysinit:/sbin/openrc sysinit\nsu:S:once:/sbin/setup\nc1:12345:respawn:/sbin/agetty --noclear 38400 tty1 linux\ns0:2:respawn:+/sbin/agetty -L 9600 ttyS0 vt100\n"), nil
+	}
+
+	h := &unownedHarness{}
+	w := h.watcher(t, fixedSampler{infos: []ProcInfo{console, otherArgs, otherParent, commented, once, umh, mountClient, guest}, ok: true}, nil, rt)
+	w.runCycle(context.Background())
+
+	var pids []int
+	for _, row := range rowsOf(h.snapshot) {
+		pids = append(pids, row.PID)
+	}
+	if !slices.Equal(pids, []int{61, 62, 63, 64}) {
+		t.Fatalf("listed pids = %v, want [61 62 63 64]", pids)
+	}
+	if reads != 1 {
+		t.Fatalf("inittab reads = %d, want one per scan", reads)
+	}
+}

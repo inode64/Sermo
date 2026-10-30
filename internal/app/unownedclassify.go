@@ -46,6 +46,16 @@ const (
 
 	defaultUnownedMinAge = 5 * time.Minute
 	initPID              = 1
+	kthreaddPID          = 2
+
+	inittabPath         = "/etc/inittab"
+	inittabFields       = 4
+	inittabFieldAction  = 2
+	inittabFieldProcess = 3
+	inittabRespawn      = "respawn"
+	inittabCommentByte  = '#'
+	inittabCommandFlag  = "+"
+	inittabFieldSep     = ":"
 )
 
 // PackageOwner answers whether an executable belongs to an installed package.
@@ -235,6 +245,9 @@ func (c *unownedClassifier) classify(ctx context.Context, samples []ProcInfo, no
 	// Share each session verdict within this sample only. A later scan or kill
 	// revalidation must read logind's current record again.
 	closedSessions := map[string]bool{}
+	// A sysvinit console has no unit to live in: PID 1 runs it from inittab. Read
+	// at most once per scan, only when a child of init needs the answer.
+	var inittab map[string]bool
 	// candidates are the processes no init unit accounts for: the only ones the
 	// package criterion judges. A unit's member is owned whatever its binary —
 	// a service's own plugin helpers, or a daemon installed outside the package
@@ -253,6 +266,14 @@ func (c *unownedClassifier) classify(ctx context.Context, samples []ProcInfo, no
 		owner := servicemgr.ClassifyCgroup(samples[i].Cgroup)
 		if unitOwned(owner.Class) {
 			continue
+		}
+		if samples[i].PPID == initPID && c.rt.backend != servicemgr.BackendSystemd {
+			if inittab == nil {
+				inittab = c.inittabCommands()
+			}
+			if inittab[strings.Join(samples[i].Cmdline, " ")] {
+				continue
+			}
 		}
 		// A process in another mount namespace than PID 1 is not the host's: a
 		// container under a cgroupfs driver sits in /docker/<id>, /kubepods/… or
@@ -318,11 +339,37 @@ func (c *unownedClassifier) resolveUsers() (map[uint32]bool, []string) {
 	return uids, unresolved
 }
 
-// excluded applies the exclusions that keep a process out of the scan: init
-// and kernel threads, zombies, processes younger than min_age (or whose age
-// cannot be read), accounts outside users, and ignore rules.
+// inittabCommands returns the commands PID 1 keeps respawning from inittab,
+// keyed by their exact command line. Matching needs that whole line and init as
+// the parent, so a process only named like a console is still judged. A host
+// without an inittab has none; the map is never nil, so the scan reads it once.
+func (c *unownedClassifier) inittabCommands() map[string]bool {
+	commands := map[string]bool{}
+	data, err := c.rt.readFile(inittabPath)
+	if err != nil {
+		return commands
+	}
+	for line := range strings.SplitSeq(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || line[0] == inittabCommentByte {
+			continue
+		}
+		fields := strings.SplitN(line, inittabFieldSep, inittabFields)
+		if len(fields) == inittabFields && fields[inittabFieldAction] == inittabRespawn {
+			command := strings.TrimPrefix(fields[inittabFieldProcess], inittabCommandFlag)
+			commands[strings.Join(strings.Fields(command), " ")] = true
+		}
+	}
+	return commands
+}
+
+// excluded applies the exclusions that keep a process out of the scan: init,
+// kernel threads and the usermode helpers the kernel spawns itself (bpfilter_umh
+// has an executable, but its parent is kthreadd, which adopts nothing), zombies,
+// processes younger than min_age (or whose age cannot be read), accounts outside
+// users, and ignore rules.
 func (c *unownedClassifier) excluded(info ProcInfo, now time.Time, uids map[uint32]bool) bool {
-	if process.ProtectedIdentity(info.Identity) || info.State == process.ProcStateZombie {
+	if process.ProtectedIdentity(info.Identity) || info.PPID == kthreaddPID || info.State == process.ProcStateZombie {
 		return true
 	}
 	if info.StartTime.IsZero() || now.Sub(info.StartTime) < c.minAge {

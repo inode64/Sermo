@@ -3,6 +3,7 @@ package servicemgr
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"sermo/internal/hostfs"
@@ -24,7 +25,9 @@ const (
 	// Owner is the unit name without its suffix.
 	CgroupClassService CgroupClass = "service"
 	// CgroupClassScope is a transient non-session scope (a container, a VM, a
-	// systemd-run unit); Owner is the scope name without its suffix.
+	// systemd-run unit), or another group a manager owns: a mount, swap or socket
+	// unit, or libvirt's own domain group. Owner is the group's name, without its
+	// suffix for a scope.
 	CgroupClassScope CgroupClass = "scope"
 	// CgroupClassUserManager is a user@N.service manager and everything it runs;
 	// Owner is the numeric user id.
@@ -49,7 +52,15 @@ const (
 	openRCCgroupPrefix      = "openrc."
 	cgroupRecordPrefix      = "0"
 	cgroupNamedSystemd      = "name=systemd"
+	// libvirt's cgroupfs driver, used where no systemd machine scope exists,
+	// groups each domain as /machine/qemu-<id>-<name>.libvirt-qemu.
+	cgroupLibvirtQemuSuffix = ".libvirt-qemu"
+	cgroupLibvirtLXCSuffix  = ".libvirt-lxc"
 )
+
+// cgroupManagedSuffixes name groups outside .service and .scope that still have
+// an owner: a FUSE client belongs to its .mount unit, a qemu to libvirt's domain.
+var cgroupManagedSuffixes = []string{systemdMountSuffix, systemdSwapSuffix, systemdSocketSuffix, cgroupLibvirtQemuSuffix, cgroupLibvirtLXCSuffix}
 
 // ProcfsCgroupPath extracts the init hierarchy path from /proc/<pid>/cgroup
 // content: the cgroup v2 record ("0::/path") or, on a v1 host, the named
@@ -109,9 +120,15 @@ func ClassifyCgroup(content string) CgroupOwner {
 				return CgroupOwner{Class: CgroupClassSession, Owner: session}
 			}
 			return CgroupOwner{Class: CgroupClassScope, Owner: name}
+		case hasCgroupManagedSuffix(part):
+			return CgroupOwner{Class: CgroupClassScope, Owner: part}
 		}
 	}
 	return CgroupOwner{Class: CgroupClassSlice}
+}
+
+func hasCgroupManagedSuffix(part string) bool {
+	return slices.ContainsFunc(cgroupManagedSuffixes, func(suffix string) bool { return strings.HasSuffix(part, suffix) })
 }
 
 func classifyUserSlice(parts []string) CgroupOwner {
