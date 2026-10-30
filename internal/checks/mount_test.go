@@ -6,6 +6,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"sermo/internal/severity"
@@ -225,6 +226,65 @@ func TestStorageMountFailureIsNeverAdvisoryBesideSpaceThresholds(t *testing.T) {
 			if !res.OK || res.Severity.Resolved() != tt.want {
 				t.Fatalf("result = ok %v severity %q, want failing at %q", res.OK, res.Severity, tt.want)
 			}
+		})
+	}
+}
+
+func TestStorageConcurrentStatfsSharesPendingSample(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		err  error
+	}{
+		{name: "healthy"},
+		{name: "unavailable", err: errors.New("filesystem unavailable")},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
+				release := make(chan struct{})
+				defer close(release)
+				var calls atomic.Int32
+				c := storageCheck{
+					name: "fs", condition: true, timeout: time.Second,
+					path:  "/concurrent-" + t.Name(),
+					preds: []levelPred{{"free_pct", "<", 20}},
+					usage: func(string) (StorageStats, error) {
+						calls.Add(1)
+						<-release
+						return StorageStats{FreePct: 50, UsedPct: 50}, tc.err
+					},
+					mountSampler: fakeMounts(),
+				}
+				first := make(chan Result, 1)
+				second := make(chan Result, 1)
+				go func() { first <- c.Run(context.Background()) }()
+				synctest.Wait()
+				go func() { second <- c.Run(context.Background()) }()
+				synctest.Wait()
+				select {
+				case res := <-second:
+					t.Fatalf("concurrent sample returned before statfs completed: %+v", res)
+				default:
+				}
+				release <- struct{}{}
+				synctest.Wait()
+				for _, result := range []<-chan Result{first, second} {
+					select {
+					case res := <-result:
+						if tc.err == nil {
+							if res.Observation() != ObservationHealthy {
+								t.Fatalf("shared sample = %+v, want healthy", res)
+							}
+						} else if res.Observation() != ObservationUnavailable || !strings.Contains(res.Message, tc.err.Error()) {
+							t.Fatalf("shared sample = %+v, want unavailable with %v", res, tc.err)
+						}
+					default:
+						t.Fatal("shared statfs sample did not complete")
+					}
+				}
+				if calls.Load() != 1 {
+					t.Fatalf("statfs calls = %d, want one", calls.Load())
+				}
+			})
 		})
 	}
 }
