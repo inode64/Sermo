@@ -3,6 +3,7 @@ package checks
 import (
 	"context"
 	"errors"
+	"maps"
 	"slices"
 	"strings"
 	"testing"
@@ -226,6 +227,34 @@ func TestGlusterClusterCheckCommandFailureIsUnavailable(t *testing.T) {
 	result := (glusterClusterCheck{name: "cluster", timeout: time.Second, runner: runner, peers: []string{"zeus"}}).Run(context.Background())
 	if result.OK || !result.Unavailable || !strings.Contains(result.Message, "gluster binary not found") {
 		t.Fatalf("command failure = %+v", result)
+	}
+}
+
+// One run is several commands in series, so the engine default that bounds a
+// single probe is too short; an explicit timeout stays the operator's.
+func TestBuildGlusterClusterCheckTimeoutCoversTheWholeSequence(t *testing.T) {
+	entry := func(extra map[string]any) map[string]any {
+		out := map[string]any{CheckKeyPeers: []any{"peer"}}
+		maps.Copy(out, extra)
+		return out
+	}
+	for _, tc := range []struct {
+		name     string
+		inherit  time.Duration
+		entry    map[string]any
+		expected time.Duration
+	}{
+		{"default raised", 10 * time.Second, entry(nil), glusterClusterTimeout},
+		{"longer engine default kept", time.Minute, entry(nil), time.Minute},
+		{"declared timeout kept", 5 * time.Second, entry(map[string]any{CheckKeyTimeout: "5s"}), 5 * time.Second},
+	} {
+		check, warning := buildGlusterClusterCheck(base{name: "cluster", timeout: tc.inherit}, tc.entry, &execxtest.Runner{})
+		if warning != "" {
+			t.Fatalf("%s: warning = %q", tc.name, warning)
+		}
+		if got := check.(glusterClusterCheck).timeout; got != tc.expected {
+			t.Fatalf("%s: timeout = %v, want %v", tc.name, got, tc.expected)
+		}
 	}
 }
 

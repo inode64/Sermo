@@ -2133,7 +2133,9 @@ A `gluster_cluster` check is a **local, read-only** view of the node's own
 cluster state — not a network protocol, so it is documented here rather than in
 the protocol list. It runs the installed `gluster --mode=script --xml` client
 under the check timeout, using the host's existing Gluster management
-credentials and trust configuration, and never changes cluster state. Use
+credentials and trust configuration, and never changes cluster state. One run is
+several commands in series, so without a `timeout` it gets at least 30 seconds
+rather than `engine.default_timeout`. Use
 `glusterfs` for a plain node-liveness probe of the management port.
 
 Supply one or both of `peers` and `volumes`: every configured peer must be

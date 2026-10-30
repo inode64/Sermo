@@ -2,6 +2,7 @@ package checks
 
 import (
 	"path/filepath"
+	"time"
 
 	"sermo/internal/cfgval"
 	"sermo/internal/execx"
@@ -178,11 +179,19 @@ func buildHardwareRAIDCheck(b base, entry map[string]any, runner execx.Runner, t
 	}, ""
 }
 
+// glusterClusterTimeout is the budget of a check that declares none. One run is
+// several gluster commands in series, and each heal query walks every brick: a
+// node a WAN away from its bricks spends 8 s of them on a healthy cluster.
+const glusterClusterTimeout = 30 * time.Second
+
 // buildGlusterClusterCheck builds a local GlusterFS cluster-health check.
 func buildGlusterClusterCheck(b base, entry map[string]any, runner execx.Runner) (Check, string) {
 	peers, volumes, err := parseGlusterClusterConfig(entry)
 	if err != nil {
 		return nil, "gluster_cluster check: " + err.Error()
+	}
+	if _, declared := entry[CheckKeyTimeout]; !declared {
+		b.timeout = max(b.timeout, glusterClusterTimeout)
 	}
 	return glusterClusterCheck{base: b, runner: runner, peers: peers, volumes: volumes}, ""
 }
