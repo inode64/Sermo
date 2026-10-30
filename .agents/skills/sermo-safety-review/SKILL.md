@@ -100,12 +100,17 @@ touches them.
   unreadable exe outside any matched tree. Never trust the backend's first PID on
   its own (after a systemd stop it is a kept workload process), and never let a
   surviving daemon instance (reparented to PID 1) become a kept child;
-  validation requires a strict principal selector.
+  validation requires a strict principal selector. A kept process stays listed
+  but out of the service's metrics, so its workload cannot drive the daemon's
+  rules.
 - `processes.<name>.delegated: true` is observe-only: its matches and their
   descendants are attributed for metrics but never signalled, never residuals,
   never strays and contribute no kill authority. It is meant for targets
   another backend owns (generated libvirt VM and network services); the catalog
-  ships none, and a daemon's own workload uses `keep_children`.
+  ships none, and a daemon's own workload uses `keep_children`. A delegated
+  selector alone keeps a process whose binary was replaced, since attributing it
+  authorizes nothing; a service with one only ever alerts on a replaced binary,
+  because restarting a VM to renew qemu would reboot the guest.
 - A stray (unit-cgroup member no selector claims, outside the principal tree)
   is diagnostic only. No command, button or rule action signals a process for
   being a stray; a stop handles it as any other residual. The only exception is
@@ -173,7 +178,7 @@ required preflight failure blocks; optional preflight warns
 lock blocks every action; paths.locks rejected; lock dirs derive from engine.runtime
 force_kill false never sends SIGKILL; force_kill true requires kill_only_if
 exe matched by resolved /proc/<pid>/exe; substring/basename/name-only rejected
-unresolvable or (deleted) exe never matches
+unresolvable or (deleted) exe never matches a non-delegated selector
 residual not matching kill_only_if nor the unit cgroup is never signalled and yields orphan_processes
 unit-cgroup residual: SIGTERM without force_kill, SIGKILL with force_kill true or auto, never false; cgroup revalidated at delivery
 keep_children keeps non-principals; a reparented daemon instance stays principal; the backend's first PID alone is not a principal
