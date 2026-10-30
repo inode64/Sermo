@@ -5,7 +5,7 @@ go 1.27.3
 require (
 	github.com/OpenPrinting/goipp v1.2.0
 	github.com/beevik/ntp v1.6.0
-	github.com/cloudsoda/go-smb2 v0.0.0-20260918041005-0c5d69b69701
+	github.com/cloudsoda/go-smb2 v0.0.0-20261029174947-95daac2ef783
 	github.com/digitalocean/go-libvirt v0.0.0-20261013170128-efbbdf578ac8
 	github.com/go-ldap/ldap/v3 v3.4.15
 	github.com/go-sql-driver/mysql v1.10.1
