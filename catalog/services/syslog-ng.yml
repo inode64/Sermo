@@ -1,6 +1,11 @@
 name: syslog-ng
 category: observability
-service: syslog-ng
+service:
+  systemd:
+    - syslog-ng
+    - syslog-ng@default
+  openrc:
+    - syslog-ng
 apps:
   - syslog-ng
 restart_on_change:
