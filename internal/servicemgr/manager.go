@@ -372,8 +372,10 @@ type openrcManager struct {
 func (m openrcManager) Status(ctx context.Context, service string) (ServiceStatus, error) {
 	// `rc-service SERVICE status` exits non-zero when stopped/crashed but reports
 	// the state on stdout, so a non-zero exit is not a failure to query.
+	// A negative exit is a run that never finished: whatever it printed proves
+	// nothing, and a status() that dumps a firewall can be cut off mid-output.
 	result, err := m.runner.Run(ctx, cmdRcService, service, actionStatus)
-	if result.ExitCode < 0 && strings.TrimSpace(result.Stdout) == "" {
+	if result.ExitCode < 0 {
 		return ServiceStatus{}, fmt.Errorf("query openrc status for %s: %s", service, execx.OperatorFailure(err, result, execx.NoTimeout))
 	}
 	status := openrcStatus(result)
@@ -545,7 +547,7 @@ func systemdStatus(state string) Status {
 }
 
 func openrcStatus(result execx.Result) Status {
-	if status := openrcStateTextStatus(result.Stdout); status != StatusUnknown {
+	if status := openrcStateTextStatus(openRCStatusReport(result.Stdout)); status != StatusUnknown {
 		return status
 	}
 	switch result.ExitCode {
@@ -556,6 +558,20 @@ func openrcStatus(result execx.Result) Status {
 	default:
 		return StatusUnknown
 	}
+}
+
+// openRCStatusReport keeps OpenRC's own ` * status: ...` lines. An init script may
+// override status() with a report of its own, and a word such as "stopped" in a
+// firewall rule or a log line says nothing about the service.
+func openRCStatusReport(out string) string {
+	var report strings.Builder
+	for line := range strings.SplitSeq(out, serviceOutputLineSeparator) {
+		if rest, ok := strings.CutPrefix(strings.TrimSpace(line), openRCStatusLinePrefix); ok {
+			report.WriteString(rest)
+			report.WriteString(serviceOutputLineSeparator)
+		}
+	}
+	return report.String()
 }
 
 func openrcStatusLine(out, service string) (Status, bool) {

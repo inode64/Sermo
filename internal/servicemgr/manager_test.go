@@ -158,6 +158,8 @@ func TestOpenRCManagerStatus(t *testing.T) {
 		{name: "not started stdout", result: execx.Result{Stdout: " * status: not started\n", ExitCode: 3}, want: StatusInactive},
 		{name: "crashed stdout", result: execx.Result{Stdout: " * status: crashed\n", ExitCode: 1}, want: StatusFailed},
 		{name: "exit code fallback active", result: execx.Result{ExitCode: 0}, want: StatusActive},
+		{name: "own report of a stopped thing", result: execx.Result{Stdout: "Chain INPUT: 12 rules\nstopped-hosts all -- 0.0.0.0/0\n"}, want: StatusActive},
+		{name: "own report beside the verdict", result: execx.Result{Stdout: "last job crashed\n * status: started\n"}, want: StatusActive},
 		{name: "exit code fallback inactive", result: execx.Result{ExitCode: 3}, want: StatusInactive},
 	}
 	for _, tc := range cases {
@@ -174,6 +176,15 @@ func TestOpenRCManagerStatus(t *testing.T) {
 				t.Errorf("Unit = %q, want nginx", got.Unit)
 			}
 		})
+	}
+}
+
+// A status() cut off by its deadline has printed something, but proved nothing:
+// it must read as a failed query, never as a verdict about the service.
+func TestOpenRCManagerStatusTimeoutWithPartialOutputIsAnError(t *testing.T) {
+	m := openrcManager{runner: &execxtest.Runner{Default: execx.Result{Stdout: " * Showing FireHOL status ...\nChain INPUT\n", ExitCode: execx.ExitCodeRunFailure}}}
+	if got, err := m.Status(context.Background(), "firehol"); err == nil {
+		t.Fatalf("Status = %+v, want a query error", got)
 	}
 }
 

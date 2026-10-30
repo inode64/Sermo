@@ -758,3 +758,24 @@ func TestIdleUnitStatusOnlyRewritesAnInactiveUnitWithLiveTrigger(t *testing.T) {
 		t.Error("a nil status must stay nil")
 	}
 }
+
+// The dashboard asks about every service whenever its status cache expires, so
+// on OpenRC a live query per service spawned every init script in series.
+func TestWebBackendEntryStatusUsesTheSharedListing(t *testing.T) {
+	calls := 0
+	live := func(context.Context) (servicemgr.Status, error) {
+		calls++
+		return servicemgr.StatusInactive, nil
+	}
+	runner := &execxtest.Runner{Default: execx.Result{Stdout: " Dynamic Runlevel: manual\n firehol [  started  ]\n"}}
+	snapshot := servicemgr.NewActiveUnitSnapshot(servicemgr.BackendOpenRC, runner, time.Minute, time.Second)
+
+	status := activeUnitStatus(snapshot, "firehol", idleUnitStatus(Deps{Backend: servicemgr.BackendOpenRC}, "firehol", live))
+	if got, err := status(t.Context()); err != nil || got != servicemgr.StatusActive || calls != 0 {
+		t.Fatalf("listed unit: status = %s, %v, live calls = %d", got, err, calls)
+	}
+	status = activeUnitStatus(snapshot, "stopped", idleUnitStatus(Deps{Backend: servicemgr.BackendOpenRC}, "stopped", live))
+	if got, err := status(t.Context()); err != nil || got != servicemgr.StatusInactive || calls != 1 {
+		t.Fatalf("unlisted unit must query live: status = %s, %v, live calls = %d", got, err, calls)
+	}
+}
