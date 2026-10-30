@@ -424,7 +424,8 @@ func TestEnableIfInitValidation(t *testing.T) {
 		wantSub string
 	}{
 		{name: "unknown backend", spec: `{ init: launchd }`, wantSub: "init must be systemd or openrc"},
-		{name: "mixed with file", spec: `{ init: openrc, file: /etc/conf.d/x, key: k, equals: "" }`, wantSub: "init excludes"},
+		{name: "file predicate stays complete beside init", spec: `{ init: openrc, file: /etc/conf.d/x, equals: "" }`, wantSub: "key is required"},
+		{name: "bad backend beside a file predicate", spec: `{ init: launchd, file: /etc/conf.d/x, key: k, equals: "" }`, wantSub: "init must be systemd or openrc"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			global := writeConfig(t, map[string]string{
@@ -447,6 +448,33 @@ processes:
 				t.Fatalf("Validate() missing issue containing %q; got %v", tc.wantSub, Validate(cfg))
 			}
 		})
+	}
+}
+
+// Gentoo ships /etc/conf.d/samba on a systemd host too, where nothing reads it:
+// beside a file predicate, init must hold as well.
+func TestEnableIfInitNarrowsAFilePredicate(t *testing.T) {
+	file := filepath.Join(t.TempDir(), "samba")
+	if err := os.WriteFile(file, []byte("daemon_list=\"smbd nmbd\"\n"), 0o600); err != nil {
+		t.Fatalf("write conf.d file: %v", err)
+	}
+	spec := func(init, contains string) map[string]any {
+		return map[string]any{keyEnableIfInit: init, keyEnableIfFile: file, keyEnableIfKey: "daemon_list", keyEnableIfContains: contains}
+	}
+	for _, tc := range []struct {
+		name    string
+		spec    map[string]any
+		backend string
+		want    bool
+	}{
+		{"both hold", spec(backendOpenRC, "nmbd"), backendOpenRC, true},
+		{"other init", spec(backendOpenRC, "nmbd"), backendSystemd, false},
+		{"file predicate fails", spec(backendOpenRC, "winbind"), backendOpenRC, false},
+		{"neither holds", spec(backendOpenRC, "winbind"), backendSystemd, false},
+	} {
+		if got := enableIfHolds(tc.spec, tc.backend); got != tc.want {
+			t.Errorf("%s: enableIfHolds = %v, want %v", tc.name, got, tc.want)
+		}
 	}
 }
 
