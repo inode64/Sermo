@@ -200,6 +200,29 @@ func UnitKeepsProcess(ctx context.Context, runner execx.Runner, backend Backend,
 	return err != nil || strings.TrimSpace(remain.Stdout) != systemdPropertyYes
 }
 
+// UnitWaitsForTrigger reports whether a systemd service that is not running only
+// waits for demand: a socket, timer or path unit that activates it is active. It
+// answers false for anything it cannot prove, so a query that fails leaves the
+// inactive reading standing.
+func UnitWaitsForTrigger(ctx context.Context, runner execx.Runner, backend Backend, unit string) bool {
+	if backend != BackendSystemd {
+		return false
+	}
+	runner = execx.RunnerOrDefault(runner)
+	res, err := runSystemctlShow(ctx, runner, defaultDetectTimeout, systemctlPropertyTriggeredBy, systemdUnit(unit))
+	if err != nil {
+		return false
+	}
+	triggers := strings.Fields(res.Stdout)
+	if len(triggers) == 0 {
+		return false
+	}
+	// `is-active` prints one state per unit and exits non-zero unless all are
+	// active, so its exit status says nothing about any one trigger.
+	states, _ := execx.Run(ctx, runner, defaultDetectTimeout, cmdSystemctl, append([]string{systemctlCmdIsActive, commandArgTerminator}, triggers...)...)
+	return slices.Contains(strings.Fields(states.Stdout), string(StatusActive))
+}
+
 func detectOpenRCProc(readFile func(string) ([]byte, error), unit string) ProcInfo {
 	var blob strings.Builder
 	for _, dir := range []string{openRCInitDir, openRCConfDir} {

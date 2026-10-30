@@ -68,6 +68,7 @@ const (
 	systemctlPropertyPIDFile     = "PIDFile"
 	systemctlPropertyType        = "Type"
 	systemctlPropertyRemainAfter = "RemainAfterExit"
+	systemctlPropertyTriggeredBy = "TriggeredBy"
 	// systemctlPropertyTimeoutStop is how long systemd may spend on a stop job
 	// before its final SIGKILL.
 	systemctlPropertyTimeoutStop = "TimeoutStopUSec"
@@ -176,6 +177,10 @@ const (
 	StatusPaused   Status = "paused"
 	StatusFailed   Status = "failed"
 	StatusUnknown  Status = "unknown"
+	// StatusIdle is an inactive service an active socket, timer or path unit will
+	// start on demand. Only monitoring reports it: Manager.Status keeps answering
+	// inactive, so no operation mistakes a stopped unit for a running one.
+	StatusIdle Status = "idle"
 	// StatusSummary is the user-facing list of normalized service statuses.
 	StatusSummary = string(StatusActive) + ", " +
 		string(StatusInactive) + ", " +

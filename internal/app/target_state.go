@@ -43,6 +43,12 @@ func ServiceStateNeedsAttention(state string) bool {
 	}
 }
 
+// backendUp reports a status that needs no attention: active, or idle, where the
+// service's activation unit answers for it.
+func backendUp(status string) bool {
+	return strings.EqualFold(status, string(servicemgr.StatusActive)) || strings.EqualFold(status, string(servicemgr.StatusIdle))
+}
+
 // ServiceState folds config, backend status and monitoring health into the
 // operator-facing activity state shown by sermoctl and the web dashboard. The
 // state is intentionally a single service-axis value: "active" means a trusted
@@ -72,7 +78,7 @@ func ServiceState(enabled, monitored bool, backendStatus, checkHealth string, ob
 		}
 		return TargetStateStarting
 	}
-	active := strings.EqualFold(backendStatus, string(servicemgr.StatusActive))
+	active := backendUp(backendStatus)
 	failed := strings.EqualFold(backendStatus, string(servicemgr.StatusFailed))
 	if failed {
 		// The init manager's failure remains visible through Status, but a live

@@ -31,6 +31,8 @@ func TestServiceState(t *testing.T) {
 		{name: "active trusted process without observability", enabled: true, monitored: true, backendStatus: string(servicemgr.StatusActive), checkHealth: TargetStateOK, observed: true, processActive: true, want: TargetStateActive},
 		{name: "active trusted process before observed cycle", enabled: true, monitored: true, backendStatus: string(servicemgr.StatusActive), processActive: true, want: TargetStateActive},
 		{name: "monitored active healthy", enabled: true, monitored: true, backendStatus: string(servicemgr.StatusActive), checkHealth: TargetStateOK, observed: true, ready: true, want: TargetStateMonitored},
+		{name: "idle on its activation unit", enabled: true, monitored: true, backendStatus: string(servicemgr.StatusIdle), checkHealth: TargetStateOK, observed: true, ready: true, want: TargetStateMonitored},
+		{name: "inactive stays down", enabled: true, monitored: true, backendStatus: string(servicemgr.StatusInactive), checkHealth: TargetStateOK, observed: true, ready: true, want: TargetStateFailed},
 		{name: "paused monitored froze by itself", enabled: true, monitored: true, backendStatus: string(servicemgr.StatusPaused), checkHealth: TargetStateOK, observed: true, want: TargetStateFailed},
 		{name: "paused but disabled", enabled: false, monitored: true, backendStatus: string(servicemgr.StatusPaused), observed: true, want: TargetStateDisabled},
 		{name: "collecting active unknown checks", enabled: true, monitored: true, backendStatus: string(servicemgr.StatusActive), checkHealth: checkHealthUnknown, observed: true, ready: true, want: TargetStateCollecting},

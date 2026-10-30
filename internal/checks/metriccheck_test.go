@@ -15,7 +15,12 @@ func TestMetricCheckFDsWithoutDenominator(t *testing.T) {
 				return metrics.Reading{Absolute: count, HasAbsolute: true, Ready: true}, true
 			}}
 		res := c.Run(t.Context())
-		if res.Observation() != ObservationUnavailable || !strings.Contains(res.Message, "no process with a usable open-file limit") {
+		if count == 0 {
+			// An idle or stopped service: nothing is open, so nothing can run out.
+			if res.Unavailable || res.OK {
+				t.Fatalf("no open descriptors must be a clean reading: %+v", res)
+			}
+		} else if res.Observation() != ObservationUnavailable || !strings.Contains(res.Message, "no process with a usable open-file limit") {
 			t.Fatalf("count=%v: %+v", count, res)
 		}
 		c.value = "5"

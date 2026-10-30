@@ -207,7 +207,7 @@ func (o serviceObservation) freshServiceCheckStatus(e *webEntry, status string, 
 
 func normalizedServiceStatus(status servicemgr.Status) bool {
 	switch status {
-	case servicemgr.StatusActive, servicemgr.StatusInactive, servicemgr.StatusPaused, servicemgr.StatusFailed, servicemgr.StatusUnknown:
+	case servicemgr.StatusActive, servicemgr.StatusInactive, servicemgr.StatusPaused, servicemgr.StatusFailed, servicemgr.StatusUnknown, servicemgr.StatusIdle:
 		return true
 	default:
 		return false
@@ -218,8 +218,8 @@ func (b *WebBackend) serviceObservability(name string, e *webEntry, observation 
 	if e == nil {
 		return false, nil
 	}
-	active := strings.EqualFold(status, string(servicemgr.StatusActive))
-	if !active || !monitored || !observed {
+	idle := strings.EqualFold(status, string(servicemgr.StatusIdle))
+	if !backendUp(status) || !monitored || !observed {
 		if b.observability != nil {
 			b.observability.Clear(name)
 		}
@@ -244,7 +244,8 @@ func (b *WebBackend) serviceObservability(name string, e *webEntry, observation 
 		if _, ready := b.observability.Ready(name); !ready {
 			addMissing(observabilityMissingHistory)
 		}
-		if !e.noResidentProcess {
+		// An idle service has nothing running to observe until it is activated.
+		if !e.noResidentProcess && !idle {
 			switch observation.runtimeObservability() {
 			case runtimeObservabilityEmpty:
 				addMissing(observabilityMissingProcesses)

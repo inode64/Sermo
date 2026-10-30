@@ -613,8 +613,9 @@ func buildWorker(ctx context.Context, name, unit string, tree map[string]any, de
 	// than the engine interval would read one listing on consecutive cycles, so
 	// it stays live too.
 	cycleDeps := checkDeps
+	cycleDeps.Status = idleUnitStatus(deps, unit, checkDeps.Status)
 	if resolution >= deps.Interval {
-		cycleDeps.Status = activeUnitStatus(deps.ActiveUnits, unit, checkDeps.Status)
+		cycleDeps.Status = activeUnitStatus(deps.ActiveUnits, unit, cycleDeps.Status)
 	}
 	section, _ := tree[config.SectionChecks].(map[string]any)
 	built, checkWarnings, setCycleMetrics := buildWorkerCheckSet(section, cycleDeps, sampleMetrics != nil)
@@ -717,6 +718,22 @@ func activeUnitStatus(snapshot *servicemgr.ActiveUnitSnapshot, unit string, live
 			return servicemgr.StatusActive, nil
 		}
 		return live(ctx)
+	}
+}
+
+// idleUnitStatus is the status monitoring reads: an inactive unit that only waits
+// for its socket, timer or path unit is idle rather than down. Operations keep
+// the plain status, and only an inactive reading pays for the extra query.
+func idleUnitStatus(deps Deps, unit string, live func(context.Context) (servicemgr.Status, error)) func(context.Context) (servicemgr.Status, error) {
+	if live == nil {
+		return nil
+	}
+	return func(ctx context.Context) (servicemgr.Status, error) {
+		status, err := live(ctx)
+		if err == nil && status == servicemgr.StatusInactive && servicemgr.UnitWaitsForTrigger(ctx, deps.ExecxRunner, deps.Backend, unit) {
+			return servicemgr.StatusIdle, nil
+		}
+		return status, err
 	}
 }
 

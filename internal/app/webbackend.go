@@ -461,7 +461,7 @@ func attachServiceRuntime(ctx context.Context, entry *webEntry, name string, tre
 	selectors, processWarnings := runtime.Selectors, runtime.ProcessWarnings
 	catalog := checkCatalog(tree, entry.interval)
 	entry.noResidentProcess = runtime.NoResidentProcess
-	entry.status = checkDeps.Status
+	entry.status = idleUnitStatus(deps, target.Unit, checkDeps.Status)
 	entry.checkNames = catalog.names
 	entry.checkTypes = catalog.types
 	entry.configID = serviceSnapshotConfigID(tree)
