@@ -1926,6 +1926,12 @@ Protocols, in the order of the table above:
   `container.health` (`healthy`/`unhealthy`/`starting`/`none`), `container.running`,
   `container.restartcount` and `container.exitcode`; `on_change` then alerts on its
   state/health transitions. An unknown container fails the check.
+  On every probe that tracks an identity (`docker`, `libvirt`, `nut`, `ssh`,
+  `snmp`, `dbus`), `on_change` reports a transition as a failed cycle, but a move
+  into a state the check accepts never drives a `start`/`restart` rule: a
+  container that has just turned healthy is already repaired. To restart on a
+  persistent bad state, assert it with `expect`, as
+  `container.health: { op: "!=", value: unhealthy }`.
 
   ```yaml
   checks:

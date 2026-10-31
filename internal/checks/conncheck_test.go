@@ -261,6 +261,67 @@ func TestConnCheckOnChangeFingerprint(t *testing.T) {
 	}
 }
 
+// A transition into a state the check accepts reports the change but must not
+// drive an operation: a container that just turned healthy was already repaired,
+// and restarting it for that is the fault. A transition into a state the check
+// rejects stays actionable.
+func TestConnCheckChangeBlocksActionsOnlyWhenTheNewStateIsAccepted(t *testing.T) {
+	cases := []struct {
+		name    string
+		failure string
+		blocked bool
+	}{
+		{name: "accepted state", blocked: true},
+		{name: "rejected state", failure: "container unhealthy"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			fp, failure := "running/starting", ""
+			c := connCheck{
+				name: "docker", timeout: time.Second,
+				proto: fakeProto{},
+				cfg:   conn.Config{Host: "h", Port: 1},
+				probe: func(context.Context, conn.Config) (conn.Result, error) {
+					return conn.Result{Failure: failure, Extra: map[string]string{"fingerprint": fp}}, nil
+				},
+				onChange: true,
+				state:    &connState{},
+			}
+			c.Run(context.Background())
+			fp, failure = "running/healthy", tc.failure
+			res := c.Run(context.Background())
+			if res.OK {
+				t.Fatal("the transition must still be reported as a failure")
+			}
+			if res.ActionBlocked != tc.blocked {
+				t.Fatalf("ActionBlocked = %v, want %v: %q", res.ActionBlocked, tc.blocked, res.Message)
+			}
+		})
+	}
+}
+
+// A version change keeps driving the rules written for it, whatever else the
+// probe reports: only an identity transition is advisory.
+func TestConnCheckVersionChangeStaysActionable(t *testing.T) {
+	version := "1.0"
+	c := connCheck{
+		name: "app", timeout: time.Second,
+		proto: fakeProto{},
+		cfg:   conn.Config{Host: "h", Port: 1},
+		probe: func(context.Context, conn.Config) (conn.Result, error) {
+			return conn.Result{Version: version}, nil
+		},
+		onVersionChange: true,
+		state:           &connState{},
+	}
+	c.Run(context.Background())
+	version = "2.0"
+	res := c.Run(context.Background())
+	if res.OK || res.ActionBlocked {
+		t.Fatalf("version change must fail and stay actionable: %+v", res)
+	}
+}
+
 func TestConnCheckChangeRetainsProbeData(t *testing.T) {
 	fingerprint := "SHA256:old"
 	version := "v1"

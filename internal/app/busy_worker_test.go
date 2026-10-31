@@ -24,6 +24,21 @@ func busyPingCache() map[string]checks.Result {
 		Data:    map[string]any{checks.DataKeyBusyReason: "Too many connections", conn.ExtraKeyErrorCode: "1040"}}}
 }
 
+// The on_change report of a container that just turned healthy fails its check
+// on two consecutive cycles when a start is followed by the health transition.
+// Neither is a fault, so a restart rule with a two-cycle window must not fire.
+func TestAdvisoryChangeNeverRestarts(t *testing.T) {
+	advisory := map[string]checks.Result{"http": {Check: "http", ActionBlocked: true, Message: "fingerprint changed (running/starting -> running/healthy)"}}
+	h := &workerHarness{cache: advisory, opResult: operation.Result{Status: operation.ResultOK}}
+	w := h.worker(remediationTreeFor("restart-if-http-failed", "cycles", 2), rules.Policy{Cooldown: time.Minute}, nil)
+	for range 3 {
+		w.RunCycle(context.Background())
+	}
+	if len(h.ops) != 0 {
+		t.Fatalf("an advisory change must never restart, ops = %v", h.ops)
+	}
+}
+
 func withheldEvents(events []Event) int {
 	n := 0
 	for _, e := range events {
