@@ -102,6 +102,19 @@ class AnalyzerPinContractTest(unittest.TestCase):
             checker.validate_pins(workflow, CUSTOM_GCL),
         )
 
+    def test_accepts_actions_pinned_to_a_commit_and_local_actions(self):
+        workflow = (
+            "      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1\n"
+            "      - uses: ./.github/actions/local\n"
+        )
+        self.assertEqual(checker.action_pin_problems("ci.yml", workflow), [])
+
+    def test_rejects_action_tags_branches_and_short_shas(self):
+        for reference in ("actions/checkout@v7", "actions/checkout@main", "actions/checkout@3d3c42e", "actions/checkout"):
+            with self.subTest(reference=reference):
+                problems = checker.action_pin_problems("ci.yml", f"      - uses: {reference}\n")
+                self.assertEqual(problems, [f"ci.yml uses {reference} instead of a full commit SHA"])
+
     def test_rejects_mutable_go_and_python_pins(self):
         workflow = WORKFLOW.replace("staticcheck@v0.8.1", "staticcheck@latest")
         workflow = workflow.replace("'ruff==0.16.6'", "'ruff>=0.16.6'")

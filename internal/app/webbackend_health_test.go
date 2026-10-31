@@ -149,7 +149,7 @@ func TestWebBackendGlusterClusterReadings(t *testing.T) {
 				checks.DataKeyGlusterPeersExpected:  2,
 				checks.DataKeyGlusterBricksOnline:   5,
 				checks.DataKeyGlusterBricksExpected: 6,
-				checks.DataKeyGlusterIssues:         []string{"peer host53 is disconnected"},
+				checks.DataKeyGlusterIssues:         []string{"peer node3 is disconnected"},
 			},
 		},
 	}, map[string]bool{"cluster": true}, map[string]string{"cluster": checks.CheckTypeGlusterCluster})
@@ -173,7 +173,7 @@ func TestWebBackendGlusterClusterReadings(t *testing.T) {
 	readings := detail.Checks[0].Readings
 	if readingByField(readings, checks.DataKeyGlusterPeersConnected).Value != "1" ||
 		readingByField(readings, checks.DataKeyGlusterBricksOnline).Value != "5" ||
-		readingByField(readings, checks.DataKeyGlusterIssues).Value != "peer host53 is disconnected" {
+		readingByField(readings, checks.DataKeyGlusterIssues).Value != "peer node3 is disconnected" {
 		t.Fatalf("gluster readings = %#v", readings)
 	}
 }

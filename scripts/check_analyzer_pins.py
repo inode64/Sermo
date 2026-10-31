@@ -11,6 +11,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 WORKFLOW_PATH = ROOT / ".github/workflows/ci.yml"
 CUSTOM_GCL_PATH = ROOT / ".custom-gcl.yml"
+WORKFLOW_DIR = ROOT / ".github/workflows"
 
 GOLANGCI_MODULE = "github.com/golangci/golangci-lint/v2/cmd/golangci-lint"
 GOIMPORTS_MODULE = "golang.org/x/tools/cmd/goimports"
@@ -27,6 +28,8 @@ EXACT_GO_VERSION = re.compile(
 EXACT_PYTHON_REQUIREMENT = re.compile(
     r"^[A-Za-z0-9_.-]+(?:\[[A-Za-z0-9_,.-]+\])?==[0-9][A-Za-z0-9.!+_-]*$"
 )
+ACTION_REFERENCE = re.compile(r"^\s*(?:-\s+)?uses:\s*([^\s#]+)", re.MULTILINE)
+FULL_COMMIT_SHA = re.compile(r"[0-9a-f]{40}")
 TOP_LEVEL_VERSION = re.compile(r"^version:\s*([^\s#]+)", re.MULTILINE)
 NILAWAY_PLUGIN = re.compile(
     r"^\s*-\s+module:\s*go\.uber\.org/nilaway\s*$"
@@ -97,6 +100,18 @@ def custom_gcl_versions(custom_gcl: str) -> tuple[str, str]:
     )
 
 
+def action_pin_problems(name: str, workflow: str) -> list[str]:
+    """Return the third-party actions a tag or branch move could replace."""
+    problems: list[str] = []
+    for reference in ACTION_REFERENCE.findall(workflow):
+        if reference.startswith("./"):
+            continue
+        _, _, ref = reference.partition("@")
+        if not FULL_COMMIT_SHA.fullmatch(ref):
+            problems.append(f"{name} uses {reference} instead of a full commit SHA")
+    return problems
+
+
 def validate_pins(workflow: str, custom_gcl: str) -> list[str]:
     """Return reproducibility and shared-owner errors for analyzer pins."""
     installs, problems = go_installs(workflow)
@@ -138,6 +153,8 @@ def main() -> int:
         WORKFLOW_PATH.read_text(encoding="utf-8"),
         CUSTOM_GCL_PATH.read_text(encoding="utf-8"),
     )
+    for path in sorted(WORKFLOW_DIR.glob("*.yml")):
+        problems.extend(action_pin_problems(path.name, path.read_text(encoding="utf-8")))
     if not problems:
         print("analyzer pins: ok")
         return 0

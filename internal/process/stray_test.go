@@ -9,7 +9,7 @@ import (
 
 // strayCgroup models a systemd unit whose control group holds the daemon (100),
 // a worker it spawned (200) and two processes reparented to PID 1 that no
-// selector claims (300, 400) — the shape of the leak that exhausted host58.
+// selector claims (300, 400) — the shape of the leak that exhausted a production host.
 func strayCgroup() fakeReader {
 	return fakeReader{ids: map[int]Identity{
 		1:   {PID: 1, PPID: 0, Exe: "/sbin/init", ExeOK: true},

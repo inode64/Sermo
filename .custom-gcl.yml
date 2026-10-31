@@ -6,7 +6,7 @@
 #
 # Build with `make custom-gcl` (or `golangci-lint custom`); the result lands in
 # bin/, which is git-ignored.
-version: v2.14.0
+version: v2.15.0
 name: custom-gcl
 destination: bin
 plugins:

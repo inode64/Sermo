@@ -31,6 +31,9 @@ CITED_PATH = re.compile(
     r"((?:\.semgrep|internal|cmd|scripts|packaging|catalog|templates|examples|tests|docs)"
     r"/[A-Za-z0-9_./-]+\.(?:go|json|jsonl|js|yml|yaml|md|css|html|sh|py|toml))\b"
 )
+MARKDOWN_LINK = re.compile(r"\[[^\]]*\]\(([^)\s]+)\)")
+MARKDOWN_HEADING = re.compile(r"#{1,6}\s+(.*?)\s*#*$")
+URL_SCHEME = re.compile(r"[a-z][a-z0-9+.-]*:")
 # A backticked CamelCase identifier, the form skills use for Go symbols.
 CITED_IDENT = re.compile(r"`([A-Z][A-Za-z0-9]{4,})`")
 # A number with an optional unit, compared position by position across languages.
@@ -66,6 +69,53 @@ def tracked(pattern: str) -> list[str]:
     # committed. The validation gate runs before commits, so only inspect source
     # files that still exist in the checkout being validated.
     return [path for path in out.stdout.split() if (ROOT / path).is_file()]
+
+
+def heading_anchors(text: str) -> set[str]:
+    """Return the anchors GitHub generates for a Markdown document's headings."""
+    anchors: set[str] = set()
+    seen: dict[str, int] = {}
+    fenced = False
+    for line in text.splitlines():
+        if line.startswith("```"):
+            fenced = not fenced
+        heading = MARKDOWN_HEADING.match(line)
+        if fenced or heading is None:
+            continue
+        slug = re.sub(r"[^\w\s-]", "", heading.group(1).replace("`", "").strip().lower()).replace(" ", "-")
+        count = seen.get(slug, 0)
+        seen[slug] = count + 1
+        anchors.add(slug if count == 0 else f"{slug}-{count}")
+    return anchors
+
+
+def link_problem(source: Path, target: str) -> str:
+    """Return why a relative Markdown link is broken, or an empty string."""
+    path, _, fragment = target.partition("#")
+    destination = (source.parent / path).resolve() if path else source
+    if not destination.exists():
+        return f"{source.relative_to(ROOT)}: broken link {target}"
+    if fragment and destination.suffix == ".md" and fragment not in heading_anchors(read(destination)):
+        return f"{source.relative_to(ROOT)}: broken anchor {target}"
+    return ""
+
+
+def check_relative_links() -> list[str]:
+    """markdownlint only resolves anchors inside one file; this crosses files."""
+    problems: list[str] = []
+    for path in docs():
+        fenced = False
+        for line in read(path).splitlines():
+            if line.startswith("```"):
+                fenced = not fenced
+            if fenced:
+                continue
+            problems.extend(
+                problem
+                for target in MARKDOWN_LINK.findall(line)
+                if not URL_SCHEME.match(target) and (problem := link_problem(path, target))
+            )
+    return problems
 
 
 def check_cited_paths() -> list[str]:
@@ -168,6 +218,7 @@ def check_language_parity() -> list[str]:
 
 CHECKS = (
     ("cited paths exist", check_cited_paths),
+    ("relative links and anchors resolve", check_relative_links),
     ("skill identifiers exist", check_skill_identifiers),
     ("agent quality sources are linked", check_agent_quality_sources),
     ("configuration keys are documented", check_config_keys),

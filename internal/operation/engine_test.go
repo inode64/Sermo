@@ -1294,7 +1294,7 @@ func TestStartSettlesThroughTransientInactive(t *testing.T) {
 
 // A missing pidfile is a proven absence — after a stop it is the expected
 // state — so it must not abort the restart; that abort used to strand the
-// very service the operator asked to repair stopped (openvpn on host51).
+// very service the operator asked to repair stopped (openvpn on a production host).
 func TestRuntimeDiscoveryAbsentPidfileDoesNotBlockRestart(t *testing.T) {
 	dir := t.TempDir()
 	locker := locks.NewOperationLocker(locks.RuntimeOpsDir(dir))

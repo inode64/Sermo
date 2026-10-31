@@ -61,7 +61,7 @@ func TestTopHoldersIsDeterministic(t *testing.T) {
 }
 
 func TestInotifyCheckRun(t *testing.T) {
-	// The measured host58 incident: uid 0 at the instance ceiling while the watch
+	// The measured production incident: uid 0 at the instance ceiling while the watch
 	// limit is almost untouched.
 	exhausted := InotifySample{
 		MaxInstances: 1024,

@@ -2172,9 +2172,9 @@ function shortHostName(name) {
 }
 
 // setDocumentTitle names the tab for multi-host operators:
-//   Sermo - host13
-//   (3) Sermo - host13
-//   Sermo - host13 · starting
+//   Sermo - web01
+//   (3) Sermo - web01
+//   Sermo - web01 · starting
 // Until healthIconReady, leave the bootstrap <title> alone.
 function setDocumentTitle({ attentionCount = 0, starting = false } = {}) {
   if (!healthIconReady) return;

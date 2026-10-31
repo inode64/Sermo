@@ -350,15 +350,15 @@ func TestCheckReadingsForAllTypes(t *testing.T) {
 				checks.DataKeyGlusterSelfHealTotal:     6,
 				checks.DataKeyGlusterHealEntries:       0,
 				checks.DataKeyGlusterSplitBrainEntries: 0,
-				checks.DataKeyGlusterPeersDisconnected: []string{"host53"},
-				checks.DataKeyGlusterIssues:            []string{"peer host53 is disconnected"},
+				checks.DataKeyGlusterPeersDisconnected: []string{"node3"},
+				checks.DataKeyGlusterIssues:            []string{"peer node3 is disconnected"},
 			},
 			want: map[string]string{
 				checks.DataKeyGlusterPeersConnected:    "2",
 				checks.DataKeyGlusterBricksOnline:      "6",
 				checks.DataKeyGlusterHealEntries:       "0",
-				checks.DataKeyGlusterPeersDisconnected: "host53",
-				checks.DataKeyGlusterIssues:            "peer host53 is disconnected",
+				checks.DataKeyGlusterPeersDisconnected: "node3",
+				checks.DataKeyGlusterIssues:            "peer node3 is disconnected",
 			},
 		},
 		{
@@ -541,7 +541,7 @@ func TestCheckReadingsForAllTypes(t *testing.T) {
 // readings carry none.
 func TestReadingsCarryTheirNumberForSorting(t *testing.T) {
 	readings := checkReadings(checks.CheckTypeReplication, map[string]any{
-		checks.DataKeySourceHost:      "host60.vrack",
+		checks.DataKeySourceHost:      "db01.example",
 		checks.DataKeyIOStopped:       0.0,
 		checks.DataKeyBehindSeconds:   12.0,
 		checks.DataKeyPendingBytes:    int64(1288490188),

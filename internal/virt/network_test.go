@@ -157,13 +157,13 @@ func TestNetworkManagerStopRefusesAttachedGuests(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			client := &fakeNetworkClient{
 				netXML:  testNetXML,
-				domains: []libvirt.Domain{{Name: "host46"}},
-				states:  map[string]libvirt.DomainState{"host46": tc.state},
-				domXML:  map[string]string{"host46": tc.xml},
+				domains: []libvirt.Domain{{Name: "guest1"}},
+				states:  map[string]libvirt.DomainState{"guest1": tc.state},
+				domXML:  map[string]string{"guest1": tc.xml},
 			}
 			err := networkManagerWith(client).Stop(context.Background(), "libvirt-net-default")
-			if err == nil || !strings.Contains(err.Error(), "host46") {
-				t.Fatalf("Stop() error = %v, want refusal naming host46", err)
+			if err == nil || !strings.Contains(err.Error(), "guest1") {
+				t.Fatalf("Stop() error = %v, want refusal naming guest1", err)
 			}
 			if slicesContains(client.calls, "net-destroy") {
 				t.Fatalf("calls = %v: destroy ran despite attached guest", client.calls)
@@ -191,14 +191,14 @@ func TestNetworkManagerStopGuardsOverGuardSocket(t *testing.T) {
 func TestNetworkManagerStopDestroysIdleNetwork(t *testing.T) {
 	client := &fakeNetworkClient{
 		netXML:  testNetXML,
-		domains: []libvirt.Domain{{Name: "host46"}, {Name: "off"}},
+		domains: []libvirt.Domain{{Name: "guest1"}, {Name: "off"}},
 		states: map[string]libvirt.DomainState{
-			"host46": libvirt.DomainRunning,
-			"off":  libvirt.DomainShutoff,
+			"guest1": libvirt.DomainRunning,
+			"off":    libvirt.DomainShutoff,
 		},
 		domXML: map[string]string{
-			"host46": domElsewhereXML,
-			"off":  domOnNetworkXML, // shut off: holds no tap
+			"guest1": domElsewhereXML,
+			"off":    domOnNetworkXML, // shut off: holds no tap
 		},
 	}
 	if err := networkManagerWith(client).Stop(context.Background(), "libvirt-net-default"); err != nil {
@@ -225,9 +225,9 @@ func TestNetworkManagerStopFailsClosedOnUnverifiableGuests(t *testing.T) {
 			client := &fakeNetworkClient{
 				netXML:  tc.netXML,
 				xmlErr:  tc.xmlErr,
-				domains: []libvirt.Domain{{Name: "host46"}},
-				states:  map[string]libvirt.DomainState{"host46": libvirt.DomainRunning},
-				domXML:  map[string]string{"host46": domElsewhereXML},
+				domains: []libvirt.Domain{{Name: "guest1"}},
+				states:  map[string]libvirt.DomainState{"guest1": libvirt.DomainRunning},
+				domXML:  map[string]string{"guest1": domElsewhereXML},
 			}
 			err := networkManagerWith(client).Stop(context.Background(), "libvirt-net-default")
 			if err == nil {
@@ -243,12 +243,12 @@ func TestNetworkManagerStopFailsClosedOnUnverifiableGuests(t *testing.T) {
 func TestNetworkManagerUnparseableDomainCountsAsAttached(t *testing.T) {
 	client := &fakeNetworkClient{
 		netXML:  testNetXML,
-		domains: []libvirt.Domain{{Name: "host46"}},
-		states:  map[string]libvirt.DomainState{"host46": libvirt.DomainRunning},
-		domXML:  map[string]string{"host46": "<domain><devices><interface"},
+		domains: []libvirt.Domain{{Name: "guest1"}},
+		states:  map[string]libvirt.DomainState{"guest1": libvirt.DomainRunning},
+		domXML:  map[string]string{"guest1": "<domain><devices><interface"},
 	}
 	err := networkManagerWith(client).Stop(context.Background(), "libvirt-net-default")
-	if err == nil || !strings.Contains(err.Error(), "host46") {
+	if err == nil || !strings.Contains(err.Error(), "guest1") {
 		t.Fatalf("Stop() error = %v, want refusal naming the unparseable guest", err)
 	}
 }

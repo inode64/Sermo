@@ -134,10 +134,10 @@ func TestChronyFloatDecode(t *testing.T) {
 		want float64
 	}{
 		{"zero", 0x00000000, 0},
-		{"host58 root delay", 0xf6833797, 0.008008859120309353},
-		{"host58 frequency ppm", 0x06a3cfa0, 2.5595474243164062},
-		{"host58 skew ppm", 0xf8c1fce0, 0.023680150508880615},
-		{"host58 update interval", 0x1680f2bd, 515.7927856445312},
+		{"measured root delay", 0xf6833797, 0.008008859120309353},
+		{"measured frequency ppm", 0x06a3cfa0, 2.5595474243164062},
+		{"measured skew ppm", 0xf8c1fce0, 0.023680150508880615},
+		{"measured update interval", 0x1680f2bd, 515.7927856445312},
 		{"negative coefficient", 0xe0e2f5d1, 6.763941655663075e-06},
 		{"divergent band, positive", 0xacbc614e, 8.365756817754061e-14},
 		{"divergent band, negative", 0xad439eb2, -8.365756817754061e-14},

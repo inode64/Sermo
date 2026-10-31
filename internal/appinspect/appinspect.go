@@ -331,31 +331,7 @@ func inspectResolved(
 	}
 
 	if len(health.argv) > 0 {
-		var healthOut string
-		r.OK, r.Status, healthOut, r.TimedOut = runExitProbe(ctx, runner, health)
-		if !r.OK && health.optional {
-			r.OK = true
-			r.Status = StatusOK
-			r.TimedOut = false
-		} else if !r.OK {
-			r.Output = healthOut
-		}
-		if r.OK && len(version.argv) > 0 {
-			vres := runVersionProbe(ctx, runner, resolved.Tree, version)
-			if applyVersionIdentityFailure(&r, vres) {
-				return r
-			}
-			if !vres.ok && version.identityRequired() {
-				// The identity is unconfirmed: an invalid sample, not a
-				// healthy app of unknown version.
-				r.OK, r.Status, r.Output, r.TimedOut = false, vres.status, vres.output, vres.timedOut
-				return r
-			}
-			if vres.ok {
-				r.Version = vres.raw
-				r.VersionShort = vres.short
-			}
-		}
+		applyHealthProbe(ctx, runner, resolved.Tree, health, version, &r)
 		return r
 	}
 
@@ -381,6 +357,37 @@ func inspectResolved(
 	r.Version = vres.raw
 	r.VersionShort = vres.short
 	return r
+}
+
+// applyHealthProbe fills r from an app's health command and, once that passes,
+// from its version command.
+func applyHealthProbe(ctx context.Context, runner execx.Runner, tree map[string]any, health, version probeCommand, r *Report) {
+	var healthOut string
+	r.OK, r.Status, healthOut, r.TimedOut = runExitProbe(ctx, runner, health)
+	if !r.OK && health.optional {
+		r.OK = true
+		r.Status = StatusOK
+		r.TimedOut = false
+	} else if !r.OK {
+		r.Output = healthOut
+	}
+	if !r.OK || len(version.argv) == 0 {
+		return
+	}
+	vres := runVersionProbe(ctx, runner, tree, version)
+	if applyVersionIdentityFailure(r, vres) {
+		return
+	}
+	if !vres.ok && version.identityRequired() {
+		// The identity is unconfirmed: an invalid sample, not a healthy app of
+		// unknown version.
+		r.OK, r.Status, r.Output, r.TimedOut = false, vres.status, vres.output, vres.timedOut
+		return
+	}
+	if vres.ok {
+		r.Version = vres.raw
+		r.VersionShort = vres.short
+	}
 }
 
 // presenceReport completes a WithoutProbes report. Presence skips the probes,

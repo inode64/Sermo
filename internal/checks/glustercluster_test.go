@@ -20,25 +20,25 @@ func glusterXML(body string) execx.Result {
 func glusterClusterResults() map[string]execx.Result {
 	return map[string]execx.Result{
 		"gluster --mode=script --xml peer status": glusterXML(`
-<peerStatus><peer><hostname>host53</hostname><connected>1</connected><state>3</state><stateStr>Peer in Cluster</stateStr></peer></peerStatus>`),
+<peerStatus><peer><hostname>node3</hostname><connected>1</connected><state>3</state><stateStr>Peer in Cluster</stateStr></peer></peerStatus>`),
 		"gluster --mode=script --xml volume info": glusterXML(`
 <volInfo><volumes><volume><name>images</name><status>1</status><statusStr>Started</statusStr><brickCount>2</brickCount></volume></volumes></volInfo>`),
 		"gluster --mode=script --xml volume status": glusterXML(`
 <volStatus><volumes><volume><volName>images</volName>
-  <node><hostname>host40</hostname><path>/bricks/images0</path><status>1</status></node>
-  <node><hostname>host53</hostname><path>/bricks/images0</path><status>1</status></node>
-  <node><hostname>Self-heal Daemon</hostname><path>host40</path><status>1</status></node>
+  <node><hostname>node2</hostname><path>/bricks/images0</path><status>1</status></node>
+  <node><hostname>node3</hostname><path>/bricks/images0</path><status>1</status></node>
+  <node><hostname>Self-heal Daemon</hostname><path>node2</path><status>1</status></node>
 </volume></volumes></volStatus>`),
 		"gluster --mode=script --xml volume heal images info": glusterXML(`
-<healInfo><bricks><brick><name>host40:/bricks/images0</name><status>Connected</status><numberOfEntries>0</numberOfEntries></brick></bricks></healInfo>`),
+<healInfo><bricks><brick><name>node2:/bricks/images0</name><status>Connected</status><numberOfEntries>0</numberOfEntries></brick></bricks></healInfo>`),
 		"gluster --mode=script --xml volume heal images info split-brain": glusterXML(`
-<healInfo><bricks><brick><name>host40:/bricks/images0</name><status>Connected</status><numberOfEntries>0</numberOfEntries></brick></bricks></healInfo>`),
+<healInfo><bricks><brick><name>node2:/bricks/images0</name><status>Connected</status><numberOfEntries>0</numberOfEntries></brick></bricks></healInfo>`),
 	}
 }
 
 func glusterClusterExpectation() map[string]any {
 	return map[string]any{
-		CheckKeyPeers: []any{"host53"},
+		CheckKeyPeers: []any{"node3"},
 		CheckKeyVolumes: map[string]any{
 			"images": map[string]any{
 				CheckKeyBricks:               2,
@@ -99,12 +99,12 @@ func TestGlusterClusterCheckHealthy(t *testing.T) {
 func TestGlusterClusterCheckReportsTopologyFailures(t *testing.T) {
 	results := glusterClusterResults()
 	results["gluster --mode=script --xml peer status"] = glusterXML(`
-<peerStatus><peer><hostname>host53</hostname><connected>0</connected><state>2</state><stateStr>Peer Rejected</stateStr></peer></peerStatus>`)
+<peerStatus><peer><hostname>node3</hostname><connected>0</connected><state>2</state><stateStr>Peer Rejected</stateStr></peer></peerStatus>`)
 	results["gluster --mode=script --xml volume info"] = glusterXML(`
 <volInfo><volumes><volume><name>images</name><status>0</status><statusStr>Stopped</statusStr><brickCount>1</brickCount></volume></volumes></volInfo>`)
 	results["gluster --mode=script --xml volume status"] = glusterXML(`
 <volStatus><volumes><volume><volName>images</volName>
-  <node><hostname>host40</hostname><path>/bricks/images0</path><status>0</status></node>
+  <node><hostname>node2</hostname><path>/bricks/images0</path><status>0</status></node>
 </volume></volumes></volStatus>`)
 	runner := cliRunner(results, nil)
 	peers, volumes, err := parseGlusterClusterConfig(glusterClusterExpectation())
@@ -115,7 +115,7 @@ func TestGlusterClusterCheckReportsTopologyFailures(t *testing.T) {
 	if result.OK || result.Unavailable {
 		t.Fatalf("topology result = %+v, want healthy failure", result)
 	}
-	for _, want := range []string{"peer host53 is disconnected", "volume images is not started", "volume images has 1 bricks (want 2)", "brick host40:/bricks/images0 is offline", "has no self-heal daemon"} {
+	for _, want := range []string{"peer node3 is disconnected", "volume images is not started", "volume images has 1 bricks (want 2)", "brick node2:/bricks/images0 is offline", "has no self-heal daemon"} {
 		if !strings.Contains(result.Message, want) {
 			t.Errorf("message %q does not contain %q", result.Message, want)
 		}
@@ -140,10 +140,10 @@ func TestGlusterClusterCheckCountsOnlyBricks(t *testing.T) {
 		{
 			name: "feature daemons are not bricks",
 			nodes: `
-  <node><hostname>host40</hostname><path>/bricks/images0</path><status>1</status></node>
-  <node><hostname>host53</hostname><path>/bricks/images0</path><status>1</status></node>
-  <node><hostname>Self-heal Daemon</hostname><path>host40</path><status>1</status></node>
-  <node><hostname>Quota Daemon</hostname><path>host40</path><status>1</status></node>
+  <node><hostname>node2</hostname><path>/bricks/images0</path><status>1</status></node>
+  <node><hostname>node3</hostname><path>/bricks/images0</path><status>1</status></node>
+  <node><hostname>Self-heal Daemon</hostname><path>node2</path><status>1</status></node>
+  <node><hostname>Quota Daemon</hostname><path>node2</path><status>1</status></node>
   <node><hostname>Scrubber Daemon</hostname><path>localhost</path><status>0</status></node>
   <node><hostname>Bitrot Daemon</hostname><path>localhost</path><status>1</status></node>`,
 			wantOK:     true,
@@ -152,9 +152,9 @@ func TestGlusterClusterCheckCountsOnlyBricks(t *testing.T) {
 		{
 			name: "a brick missing from the report is an issue",
 			nodes: `
-  <node><hostname>host40</hostname><path>/bricks/images0</path><status>1</status></node>
-  <node><hostname>Self-heal Daemon</hostname><path>host40</path><status>1</status></node>
-  <node><hostname>Quota Daemon</hostname><path>host40</path><status>1</status></node>`,
+  <node><hostname>node2</hostname><path>/bricks/images0</path><status>1</status></node>
+  <node><hostname>Self-heal Daemon</hostname><path>node2</path><status>1</status></node>
+  <node><hostname>Quota Daemon</hostname><path>node2</path><status>1</status></node>`,
 			wantOnline: 1,
 			wantIssue:  "volume images status reports 1 of 2 bricks",
 		},
@@ -192,8 +192,8 @@ func TestGlusterClusterCheckReportsBrickWithoutHealCount(t *testing.T) {
 	results := glusterClusterResults()
 	results["gluster --mode=script --xml volume heal images info"] = glusterXML(`
 <healInfo><bricks>
-  <brick><name>host40:/bricks/images0</name><status>Connected</status><numberOfEntries>2</numberOfEntries></brick>
-  <brick><name>host53:/bricks/images0</name><status>Transport endpoint is not connected</status><numberOfEntries>-</numberOfEntries></brick>
+  <brick><name>node2:/bricks/images0</name><status>Connected</status><numberOfEntries>2</numberOfEntries></brick>
+  <brick><name>node3:/bricks/images0</name><status>Transport endpoint is not connected</status><numberOfEntries>-</numberOfEntries></brick>
 </bricks></healInfo>`)
 	peers, volumes, err := parseGlusterClusterConfig(glusterClusterExpectation())
 	if err != nil {
@@ -213,7 +213,7 @@ func TestGlusterClusterCheckReportsBrickWithoutHealCount(t *testing.T) {
 	if result.OK {
 		t.Fatalf("the brick that could not answer must be reported: %+v", result)
 	}
-	if !strings.Contains(result.Message, "host53:/bricks/images0") ||
+	if !strings.Contains(result.Message, "node3:/bricks/images0") ||
 		!strings.Contains(result.Message, "Transport endpoint is not connected") {
 		t.Fatalf("message must name the brick and why it could not answer: %q", result.Message)
 	}
@@ -224,7 +224,7 @@ func TestGlusterClusterCheckReportsBrickWithoutHealCount(t *testing.T) {
 
 func TestGlusterClusterCheckCommandFailureIsUnavailable(t *testing.T) {
 	runner := cliRunner(map[string]execx.Result{}, errors.New("gluster binary not found"))
-	result := (glusterClusterCheck{name: "cluster", timeout: time.Second, runner: runner, peers: []string{"host53"}}).Run(context.Background())
+	result := (glusterClusterCheck{name: "cluster", timeout: time.Second, runner: runner, peers: []string{"node3"}}).Run(context.Background())
 	if result.OK || !result.Unavailable || !strings.Contains(result.Message, "gluster binary not found") {
 		t.Fatalf("command failure = %+v", result)
 	}
@@ -320,8 +320,8 @@ func TestParseGlusterPeersNormalizesOnce(t *testing.T) {
 		want    []string
 		wantErr string
 	}{
-		{name: "sorts trimmed names", raw: []any{" host53", "host39 "}, want: []string{"host39", "host53"}},
-		{name: "duplicates after trimming", raw: []any{"host53", " host53 "}, wantErr: "duplicate"},
+		{name: "sorts trimmed names", raw: []any{" node3", "node1 "}, want: []string{"node1", "node3"}},
+		{name: "duplicates after trimming", raw: []any{"node3", " node3 "}, wantErr: "duplicate"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -343,14 +343,14 @@ func TestParseGlusterPeersNormalizesOnce(t *testing.T) {
 }
 
 func TestGlusterClusterDisconnectedPeerAliases(t *testing.T) {
-	for _, configured := range []string{"host53", "host53.internal", "missing"} {
+	for _, configured := range []string{"node3", "node3.internal", "missing"} {
 		t.Run(configured, func(t *testing.T) {
 			results := glusterClusterResults()
 			results["gluster --mode=script --xml peer status"] = glusterXML(`
-<peerStatus><peer><hostname>host53</hostname><hostnames><hostname>host53.internal</hostname></hostnames><connected>0</connected><state>3</state></peer></peerStatus>`)
+<peerStatus><peer><hostname>node3</hostname><hostnames><hostname>node3.internal</hostname></hostnames><connected>0</connected><state>3</state></peer></peerStatus>`)
 			check := glusterClusterCheck{name: "cluster", timeout: time.Second, runner: cliRunner(results, nil), peers: []string{configured}}
 			result := check.Run(t.Context())
-			want := []string{"peer host53 is disconnected"}
+			want := []string{"peer node3 is disconnected"}
 			if configured == "missing" {
 				want = append([]string{"peer missing is absent"}, want...)
 			}

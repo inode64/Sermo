@@ -22,7 +22,7 @@ const daemonSystemdUnit = daemonName + servicemgr.SystemdServiceSuffix
 // spawned anything, so "in my cgroup and not me" can only be a survivor of an
 // earlier generation. A unit configured KillMode=process or KillMode=none leaves
 // exactly those behind on every restart — the leaked session buses that exhausted
-// host58's inotify instances were 1920 of them.
+// One production host's inotify instances were 1920 of them.
 //
 // It is deliberately narrow: only the daemon's own cgroup, only SIGTERM (a
 // leftover that ignores it is reported and left alone), one event per process

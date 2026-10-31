@@ -146,16 +146,14 @@ func (c *portsCheck) scan(ctx context.Context) map[int]bool {
 		if err := ctx.Err(); err != nil {
 			break
 		}
-		wg.Add(1)
 		sem <- struct{}{}
-		go func(port int) {
-			defer wg.Done()
+		wg.Go(func() {
 			defer func() { <-sem }()
-			open := c.probe(ctx, port)
+			open := c.probe(ctx, p)
 			mu.Lock()
-			out[port] = open
+			out[p] = open
 			mu.Unlock()
-		}(p)
+		})
 	}
 	wg.Wait()
 	return out

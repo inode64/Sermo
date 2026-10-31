@@ -126,7 +126,7 @@ func TestCommandRunnerTimeoutKillsProcessGroup(t *testing.T) {
 	}
 }
 
-// A probe that leaves a daemon behind is the host58 incident in miniature:
+// A probe that leaves a daemon behind is the production incident in miniature:
 // `influxd version` autolaunched a D-Bus session daemon that survived every
 // probe, one leaked inotify instance per sampling round until uid 0 hit
 // fs.inotify.max_user_instances and the host could not start a user manager.

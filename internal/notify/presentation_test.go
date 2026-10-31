@@ -10,7 +10,7 @@ import (
 )
 
 func TestPanelLinkOpensTheMessagesTarget(t *testing.T) {
-	const base = "http://host63.intranet:9797"
+	const base = "http://web01.example:9797"
 	tests := []struct {
 		fields map[string]string
 		want   string
@@ -51,7 +51,7 @@ func TestPanelLinkNotifierSetsLinkAndField(t *testing.T) {
 func TestBuildWithPanelURLLinksEveryNotifier(t *testing.T) {
 	built, warnings := Build(map[string]any{
 		"chat": map[string]any{"type": "slack", "webhook": "https://hooks.slack.com/services/T/B/x", "min_severity": "error"},
-	}, WithPanelURL("http://host46.vpn:9797/"))
+	}, WithPanelURL("http://web01.example:9797/"))
 	if len(warnings) != 0 {
 		t.Fatalf("warnings = %v", warnings)
 	}
@@ -59,7 +59,7 @@ func TestBuildWithPanelURLLinksEveryNotifier(t *testing.T) {
 	if !ok {
 		t.Fatalf("notifier = %T, want the severity floor outermost", built["chat"])
 	}
-	if link, ok := floor.Notifier.(panelLinkNotifier); !ok || link.base != "http://host46.vpn:9797" {
+	if link, ok := floor.Notifier.(panelLinkNotifier); !ok || link.base != "http://web01.example:9797" {
 		t.Fatalf("inner = %#v, want the panel link wrapper with a trimmed base", floor.Notifier)
 	}
 }
@@ -111,11 +111,11 @@ func TestTeamsColoursTheLeadLineAndLinksThePanel(t *testing.T) {
 }
 
 func TestTelegramMarksSeverityAndEscapesTheLink(t *testing.T) {
-	msg := Message{Subject: "[sermo] disk", Severity: severity.Warning, Link: "http://host46.vpn:9797/#wat:disk-root"}
-	if got := telegramText(msg, ""); got != "🟡 [sermo] disk\nhttp://host46.vpn:9797/#wat:disk-root" {
+	msg := Message{Subject: "[sermo] disk", Severity: severity.Warning, Link: "http://web01.example:9797/#wat:disk-root"}
+	if got := telegramText(msg, ""); got != "🟡 [sermo] disk\nhttp://web01.example:9797/#wat:disk-root" {
 		t.Fatalf("plain text = %q", got)
 	}
-	if got := telegramText(msg, "MarkdownV2"); !strings.HasSuffix(got, `http://host46\.vpn:9797/\#wat:disk\-root`) {
+	if got := telegramText(msg, "MarkdownV2"); !strings.HasSuffix(got, `http://web01\.example:9797/\#wat:disk\-root`) {
 		t.Fatalf("MarkdownV2 link must be escaped: %q", got)
 	}
 }

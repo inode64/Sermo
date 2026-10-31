@@ -67,8 +67,8 @@ def main(argv: list[str] | None = None) -> int:
     if not errors:
         return 0
     print("commit message check failed:", file=sys.stderr)
-    for error in errors:
-        print(f"- {error}", file=sys.stderr)
+    for problem in errors:
+        print(f"- {problem}", file=sys.stderr)
     return 1
 
 

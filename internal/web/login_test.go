@@ -31,7 +31,7 @@ func newLoginHarness(auth Auth, configure ...func(*Server)) *loginHarness {
 	server := &Server{
 		Backend:  StaticBackend{Backend: &fakeBackend{services: []Service{{Name: "web"}}}},
 		Auth:     auth,
-		Hostname: "host25",
+		Hostname: "web01",
 		now:      func() time.Time { return lh.clock },
 	}
 	for _, c := range configure {
@@ -78,7 +78,7 @@ func TestLoginPageIsAPasswordOnlyForm(t *testing.T) {
 	body := rec.Body.String()
 	for _, want := range []string{
 		`type="password"`, `autocomplete="current-password"`, `method="post"`, `action="login"`,
-		"host25",
+		"web01",
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("login page missing %q", want)
@@ -116,8 +116,8 @@ func TestLoginStartsAnAdminSession(t *testing.T) {
 	if c == nil {
 		t.Fatal("login set no session cookie")
 	}
-	if !c.HttpOnly || c.SameSite != http.SameSiteLaxMode || c.MaxAge != 3600 || c.Path != routePathRoot || c.Secure || c.Name != sessionCookiePrefix+"_k2keu3" {
-		t.Fatalf("cookie = %+v, want %s_k2keu3, HttpOnly, Lax, Max-Age 3600, Path /, not Secure over plain HTTP", c, sessionCookiePrefix)
+	if !c.HttpOnly || c.SameSite != http.SameSiteLaxMode || c.MaxAge != 3600 || c.Path != routePathRoot || c.Secure || c.Name != sessionCookiePrefix+"_web01" {
+		t.Fatalf("cookie = %+v, want %s_web01, HttpOnly, Lax, Max-Age 3600, Path /, not Secure over plain HTTP", c, sessionCookiePrefix)
 	}
 
 	who := lh.do(withSession(httptest.NewRequest(http.MethodGet, apiPathWhoami, nil), c))
@@ -387,8 +387,8 @@ func TestSessionCookieSecureFollowsTheRequest(t *testing.T) {
 // host name must keep separate logins.
 func TestSessionCookieNameCarriesTheHost(t *testing.T) {
 	for host, want := range map[string]string{
-		"host25":    sessionCookiePrefix + "_k2keu3",
-		"host63.lan":   sessionCookiePrefix + "_fr5.lan",
+		"web01":     sessionCookiePrefix + "_web01",
+		"web02.lan": sessionCookiePrefix + "_web02.lan",
 		`bad;"name`: sessionCookiePrefix + "_badname",
 		"":          sessionCookiePrefix,
 	} {

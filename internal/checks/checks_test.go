@@ -458,7 +458,7 @@ func TestCheckTimeoutMessage(t *testing.T) {
 			check: glusterClusterCheck{
 				base:   base{name: "cluster", timeout: time.Millisecond},
 				runner: slowRunner{},
-				peers:  []string{"host53"},
+				peers:  []string{"node3"},
 			},
 		},
 		{

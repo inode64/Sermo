@@ -32,7 +32,7 @@ func TestRestartTimesOutDuringGracefulWait(t *testing.T) {
 
 // A config reload (SIGHUP) or shutdown cancels the operation context, and every
 // `--with-config` deployment reloads the daemon. Reporting that as a timeout sent
-// the operator looking for a slow service that did not exist: observed on host27,
+// the operator looking for a slow service that did not exist: observed on a production host,
 // where a reload landed 2s after a successful automatic restart and the event log
 // read "operation timed out during postflight" for a service that was up.
 func TestCancelledOperationIsNotReportedAsATimeout(t *testing.T) {

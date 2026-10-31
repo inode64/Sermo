@@ -87,7 +87,7 @@ defaults: { policy: { cooldown: 5m } }
 // web.public_url is the dashboard address notifications link to: an absolute
 // http(s) URL, optionally under a proxy path, with no query or fragment.
 func TestWebPublicURL(t *testing.T) {
-	for _, bad := range []string{`"host63.intranet:9797"`, `"ftp://h/"`, `"http://h:9797/#wat:x"`, `"http://h/?a=1"`, `5`} {
+	for _, bad := range []string{`"web01.example:9797"`, `"ftp://h/"`, `"http://h:9797/#wat:x"`, `"http://h/?a=1"`, `5`} {
 		issues := validateGlobalDoc(t, `
 web: { port: 9797, public_url: `+bad+` }
 paths: { services: [ @ROOT@/services ] }
@@ -98,9 +98,9 @@ defaults: { policy: { cooldown: 5m } }
 		}
 	}
 	for raw, want := range map[string]string{
-		"http://host63.intranet:9797/":         "http://host63.intranet:9797",
-		"https://ops.example.com/sermo/host63": "https://ops.example.com/sermo/host63",
-		"":                                  "",
+		"http://web01.example:9797/":          "http://web01.example:9797",
+		"https://ops.example.com/sermo/web01": "https://ops.example.com/sermo/web01",
+		"":                                    "",
 	} {
 		g := Global{Raw: map[string]any{SectionWeb: map[string]any{WebKeyPublicURL: raw}}}
 		if got := g.WebPublicURL(); got != want {

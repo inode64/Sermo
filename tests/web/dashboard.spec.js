@@ -138,10 +138,10 @@ const watches = [{
 }, {
   name: "db-replication-eu", display_name: "DB replication EU", category: "database",
   enabled: true, monitored: true, state: "ok", check_type: "replication",
-  summary: "replication ok: io and sql running, 0s behind, 900 B pending (source host60.vrack)",
+  summary: "replication ok: io and sql running, 0s behind, 900 B pending (source db01.example)",
   interval: "1m",
   readings: [
-    { field: "source_host", label: "Source", value: "host60.vrack" },
+    { field: "source_host", label: "Source", value: "db01.example" },
     { field: "io_stopped", label: "IO thread", value: "running", good: true },
     { field: "sql_stopped", label: "SQL thread", value: "running", good: true },
     { field: "behind_seconds", label: "Behind", value: "0 s", number: 0 },

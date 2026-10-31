@@ -1294,7 +1294,7 @@ optionally under a proxy path, without a query or fragment.
 ```yaml
 web:
   port: 9797
-  public_url: "http://host63.intranet:9797"   # notifications open the failing row here
+  public_url: "http://web01.example.com:9797"   # notifications open the failing row here
 ```
 
 ### Behind a reverse proxy (required to expose it)

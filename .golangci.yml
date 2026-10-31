@@ -442,6 +442,12 @@ linters:
         - name: marshal-receiver
         - name: package-directory-mismatch
         - name: use-slices-sort
+        # wg.Go cannot leave an Add without its Done. time-date catches arguments
+        # that time.Date silently normalizes; redundant-build-tag catches a
+        # legacy +build line left beside its go:build.
+        - name: use-waitgroup-go
+        - name: time-date
+        - name: redundant-build-tag
     prealloc:
       # Off by default; simple and range-loops are already on. Classic
       # index-loop appends get the same capacity hint as range appends.

@@ -105,17 +105,20 @@ MARKDOWNLINT ?= ./node_modules/.bin/markdownlint
 PLAYWRIGHT ?= ./node_modules/.bin/playwright
 SHELLCHECK ?= shellcheck
 RUFF ?= ruff
+MYPY ?= mypy
 SEMGREP ?= semgrep
 SEMGREP_TARGETS = cmd internal tools
 DEADCODE_PRODUCTION_ALLOWLIST := tools/deadcode-production.allow
 CAPSLOCK_MODULE := github.com/google/capslock/cmd/capslock
-CAPSLOCK_VERSION := v0.3.3
+CAPSLOCK_VERSION := v0.3.4
 ACTIONLINT ?= actionlint
 FUZZ_TIME ?= 15s
 # gocognit, gocyclo, dupl and perfsprint are blocking linters. Keep a focused
 # cyclomatic-complexity report available for direct inspection.
 QUALITY_REPORT_LINTERS = gocyclo
-SCRIPT_SH = scripts/*.sh
+SCRIPT_SH = scripts/*.sh .githooks/commit-msg
+# OpenRC's interpreter is unknown to shellcheck; the script body is POSIX sh.
+OPENRC_SCRIPT = packaging/openrc/sermod
 SCRIPT_PY = scripts/*.py
 PRIVATE_SCRIPT_PATHS = scripts/remote-deploy scripts/open_sermo_dashboards.py scripts/test_open_sermo_dashboards.py
 
@@ -178,8 +181,11 @@ npm-audit:
 scripts-lint:
 	@echo "shellcheck $(SCRIPT_SH)"
 	@$(LINT_PATH) $(SHELLCHECK) $(SCRIPT_SH)
+	@$(LINT_PATH) $(SHELLCHECK) --shell=sh $(OPENRC_SCRIPT)
 	@echo "ruff check $(SCRIPT_PY)"
 	@$(LINT_PATH) $(RUFF) check $(SCRIPT_PY)
+	@echo "mypy $(SCRIPT_PY)"
+	@$(LINT_PATH) $(MYPY) --ignore-missing-imports --cache-dir "$(LINT_CACHE_DIR)/mypy" $(SCRIPT_PY)
 
 scripts-test:
 	@echo "script unit tests"
@@ -197,6 +203,7 @@ privacy-check:
 		echo "$$tracked"; \
 		exit 1; \
 	fi
+	@python3 scripts/privacy_check.py
 
 # Documentation that describes the code must keep describing the code: cited
 # source paths, identifiers named by skills, the linter roll-call, operator

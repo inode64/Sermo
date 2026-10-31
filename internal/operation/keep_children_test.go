@@ -93,7 +93,7 @@ func TestRestartIgnoresKeptChildren(t *testing.T) {
 	}
 }
 
-// The OpenRC case from host62: the daemon takes its pidfile along, the backend
+// The OpenRC case: the daemon takes its pidfile along, the backend
 // stops listing the unit's control group, and a pre-stop stray survives only as
 // a tracked process. Kernel membership of the unit's own group still proves
 // ownership, so the stray is signalled without spending the grace period on it;

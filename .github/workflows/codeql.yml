@@ -22,13 +22,13 @@ jobs:
         # build, so these project tools receive the same analysis as Go and JS.
         language: [go, javascript-typescript, python]
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-go@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e  # v7.0.0
         if: matrix.language == 'go'
         with:
           go-version-file: go.mod
           cache: true
-      - uses: github/codeql-action/init@v4
+      - uses: github/codeql-action/init@9b3254085494b55a0f7c4c2b3d2d52cc712ce370  # v4.39.1
         with:
           languages: ${{ matrix.language }}
           # Keeps the generated web bundle out of scope; see the config file.
@@ -37,8 +37,8 @@ jobs:
           # lower-precision security queries. High-severity results fail the
           # job via scripts/codeql_fail_on_findings.py after upload.
           queries: security-extended
-      - uses: github/codeql-action/autobuild@v4
-      - uses: github/codeql-action/analyze@v4
+      - uses: github/codeql-action/autobuild@9b3254085494b55a0f7c4c2b3d2d52cc712ce370  # v4.39.1
+      - uses: github/codeql-action/analyze@9b3254085494b55a0f7c4c2b3d2d52cc712ce370  # v4.39.1
         with:
           category: "/language:${{ matrix.language }}"
           output: results

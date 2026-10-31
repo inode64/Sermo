@@ -294,7 +294,7 @@ func TestBinlogDistance(t *testing.T) {
 func TestReplicationPendingMeasuresSourceBacklog(t *testing.T) {
 	calls := 0
 	c := replicationCheckWith([]replicationRow{
-		positionedRow("host60.vrack", "mariadb-bin.000011", 200, "mariadb-bin.000010", 950),
+		positionedRow("db01.example", "mariadb-bin.000011", 200, "mariadb-bin.000010", 950),
 	}, nil)
 	c.binlogs = sourceLogs(&calls, testSourceLogs, nil)
 	res := c.Run(t.Context())
@@ -315,7 +315,7 @@ func TestReplicationPendingMeasuresSourceBacklog(t *testing.T) {
 func TestReplicationPendingBound(t *testing.T) {
 	calls := 0
 	c := replicationCheckWith([]replicationRow{
-		positionedRow("host60.vrack", "mariadb-bin.000010", 0, "mariadb-bin.000010", 0),
+		positionedRow("db01.example", "mariadb-bin.000010", 0, "mariadb-bin.000010", 0),
 	}, nil)
 	c.binlogs = sourceLogs(&calls, testSourceLogs, nil)
 	c.pendingBound = &levelPred{field: CheckKeyPendingBytes, op: "<", value: 1024}
@@ -334,11 +334,11 @@ func TestReplicationPendingBound(t *testing.T) {
 func TestReplicationPendingUnknown(t *testing.T) {
 	calls := 0
 	c := replicationCheckWith([]replicationRow{
-		positionedRow("host60.vrack", "mariadb-bin.000011", 0, "mariadb-bin.000011", 0),
+		positionedRow("db01.example", "mariadb-bin.000011", 0, "mariadb-bin.000011", 0),
 	}, nil)
 	c.binlogs = sourceLogs(&calls, nil, errors.New("access denied"))
 	res := c.Run(t.Context())
-	if !res.OK || !strings.Contains(res.Message, "pending unknown: source host60.vrack: access denied") {
+	if !res.OK || !strings.Contains(res.Message, "pending unknown: source db01.example: access denied") {
 		t.Fatalf("without a bound the check passes and says why: ok=%v %q", res.OK, res.Message)
 	}
 	if _, ok := res.Data[DataKeyPendingBytes]; ok || res.Data[DataKeyPendingError] == nil {
@@ -351,9 +351,9 @@ func TestReplicationPendingUnknown(t *testing.T) {
 
 	c.binlogs = sourceLogs(&calls, testSourceLogs, nil)
 	c.sample = func(context.Context) ([]replicationRow, error) {
-		return []replicationRow{positionedRow("host60.vrack", "mariadb-bin.000009", 4, "mariadb-bin.000009", 4)}, nil
+		return []replicationRow{positionedRow("db01.example", "mariadb-bin.000009", 4, "mariadb-bin.000009", 4)}, nil
 	}
-	if res := c.Run(t.Context()); res.OK || !strings.Contains(res.Message, "source host60.vrack: no longer lists mariadb-bin.000009") {
+	if res := c.Run(t.Context()); res.OK || !strings.Contains(res.Message, "source db01.example: no longer lists mariadb-bin.000009") {
 		t.Fatalf("a purged read position must fail the bound naming the file: %q", res.Message)
 	}
 }
@@ -361,7 +361,7 @@ func TestReplicationPendingUnknown(t *testing.T) {
 // A stopped IO thread still reports how much the replica has to catch up.
 func TestReplicationStoppedReportsPending(t *testing.T) {
 	calls := 0
-	row := positionedRow("host60.vrack", "mariadb-bin.000011", 500, "mariadb-bin.000011", 500)
+	row := positionedRow("db01.example", "mariadb-bin.000011", 500, "mariadb-bin.000011", 500)
 	row["Slave_IO_Running"] = "No"
 	c := replicationCheckWith([]replicationRow{row}, nil)
 	c.binlogs = sourceLogs(&calls, testSourceLogs, nil)

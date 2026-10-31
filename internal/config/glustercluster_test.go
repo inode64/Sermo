@@ -9,7 +9,7 @@ watches:
   cluster:
     check:
       type: gluster_cluster
-      peers: [host53, host39]
+      peers: [node3, node1]
       volumes:
         images:
           bricks: 3
@@ -25,7 +25,7 @@ watches:
   cluster:
     check:
       type: gluster_cluster
-      peers: host53
+      peers: node3
       volumes:
         bad/name:
           bricks: 0

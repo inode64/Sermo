@@ -335,12 +335,10 @@ func Run(ctx context.Context, built []Built, maxParallel int) []Result {
 
 func runUnbounded(ctx context.Context, built []Built, results []Result) {
 	var wg sync.WaitGroup
-	wg.Add(len(built))
 	for i := range built {
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			results[i] = executeBuilt(ctx, built[i])
-		}()
+		})
 	}
 	wg.Wait()
 }
@@ -348,10 +346,8 @@ func runUnbounded(ctx context.Context, built []Built, results []Result) {
 func runBounded(ctx context.Context, built []Built, results []Result, workers int) {
 	jobs := make(chan int)
 	var wg sync.WaitGroup
-	wg.Add(workers)
 	for range workers {
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			for i := range jobs {
 				if err := ctx.Err(); err != nil {
 					results[i] = checkNotStartedResult(built[i], err)
@@ -359,7 +355,7 @@ func runBounded(ctx context.Context, built []Built, results []Result, workers in
 				}
 				results[i] = executeBuilt(ctx, built[i])
 			}
-		}()
+		})
 	}
 	for i := range built {
 		select {

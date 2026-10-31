@@ -14,13 +14,11 @@ func ForEachParallel(n, limit int, fn func(i int)) {
 	sem := make(chan struct{}, max(limit, 1))
 	var wg sync.WaitGroup
 	for i := range n {
-		wg.Add(1)
 		sem <- struct{}{}
-		go func(i int) {
-			defer wg.Done()
+		wg.Go(func() {
 			defer func() { <-sem }()
 			fn(i)
-		}(i)
+		})
 	}
 	wg.Wait()
 }

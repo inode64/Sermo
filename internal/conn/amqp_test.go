@@ -60,7 +60,7 @@ func TestAMQPProbeStart(t *testing.T) {
 	frame := buildAMQPStart(map[string]string{
 		"product":      "RabbitMQ",
 		"version":      "3.13.7",
-		"cluster_name": "rabbit@host60",
+		"cluster_name": "rabbit@node1",
 		"platform":     "Erlang/OTP 26",
 	})
 	res, err := amqpProtocol{}.Probe(context.Background(), Config{Host: "127.0.0.1", Port: serveAMQP(t, frame)})
@@ -73,7 +73,7 @@ func TestAMQPProbeStart(t *testing.T) {
 	if res.Extra["product"] != "RabbitMQ" {
 		t.Fatalf("product = %q, want RabbitMQ", res.Extra["product"])
 	}
-	if res.Extra["cluster_name"] != "rabbit@host60" {
+	if res.Extra["cluster_name"] != "rabbit@node1" {
 		t.Fatalf("cluster_name = %q", res.Extra["cluster_name"])
 	}
 }

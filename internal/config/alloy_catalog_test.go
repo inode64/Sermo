@@ -105,7 +105,7 @@ func assertAlloyOTLPAlerts(t *testing.T, tree map[string]any) {
 
 // TestAlloyCatalogRestartsOnSaturation pins the remediation shape adopted after
 // the 23-sep-2026 recurrence: an Alloy that leaked its descriptors alerted for
-// hours on host60 and host65 while the profile only knew how to alert, and the
+// hours on two production hosts while the profile only knew how to alert, and the
 // operator's own restart left the previous incarnation alive because no
 // selector could name it. Failed readiness now restarts, while FD saturation
 // only alerts by default. The restart can clear its residuals, and the policy

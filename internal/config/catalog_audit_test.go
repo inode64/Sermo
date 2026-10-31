@@ -425,7 +425,7 @@ func TestApacheCatalogRestartsOnHotWorkerThread(t *testing.T) {
 func TestGlusterdCatalogKeepsItsWorkload(t *testing.T) {
 	const (
 		daemonCmdline = "/usr/sbin/glusterd -p /run/glusterd.pid --log-level INFO"
-		brickCmdline  = "/usr/sbin/glusterfsd -s host40 --volfile-id images.host40.srv-cluster-images " +
+		brickCmdline  = "/usr/sbin/glusterfsd -s node2 --volfile-id images.node2.srv-cluster-images " +
 			"--xlator-option *-posix.glusterd-uuid=70d985fe-711c-49d3-a1dd-dcfec248e3dc " +
 			"--process-name brick --brick-port 60759"
 		selfHealCmdline = "/usr/sbin/glusterfs -s localhost --volfile-id shd/images " +
