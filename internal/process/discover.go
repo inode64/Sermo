@@ -772,7 +772,13 @@ func (d Discoverer) ClaimsPID(pid int, selectors []Selector) (claimed, known boo
 	if !known || pid <= 0 {
 		return false, known
 	}
-	id, ok := d.reader().Identity(pid)
+	reader := d.reader()
+	// The pidfile was read live. Its PID may have appeared or been recycled
+	// since the shared snapshot; read only that identity, without a host scan.
+	if cached, ok := reader.(*CachingReader); ok {
+		reader = cached.inner
+	}
+	id, ok := reader.Identity(pid)
 	if !ok {
 		return false, true
 	}

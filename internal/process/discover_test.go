@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strings"
 	"testing"
+	"time"
 )
 
 type fakeReader struct {
@@ -541,6 +542,32 @@ func TestClaimsPIDNamesOnlySelectorProcesses(t *testing.T) {
 	}
 	if _, known := d.ClaimsPID(100, selectors[:1]); known {
 		t.Error("a pidfile-only selector set cannot judge identity")
+	}
+}
+
+func TestClaimsPIDReadsLiveIdentityAfterPidfileChanges(t *testing.T) {
+	inner := fakeReader{ids: map[int]Identity{
+		100: {PID: 100, UID: 110, Exe: testExe, ExeOK: true},
+	}}
+	cached := NewCachingReader(inner, time.Minute)
+	cached.Snapshot()
+	inner.ids[101] = Identity{PID: 101, UID: 110, Exe: testExe, ExeOK: true}
+	inner.ids[100] = Identity{PID: 100, UID: 999, Exe: testExe, ExeOK: true}
+	d := Discoverer{Reader: cached, ResolveUser: fakeUsers(map[string]uint32{"mysql": 110})}
+	selectors := []Selector{{Type: SelectorCommandMatch, Exe: testExe, User: "mysql"}}
+	for _, tt := range []struct {
+		name string
+		pid  int
+		want bool
+	}{
+		{name: "new daemon after snapshot", pid: 101, want: true},
+		{name: "recycled pid with different owner", pid: 100},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			if claimed, known := d.ClaimsPID(tt.pid, selectors); !known || claimed != tt.want {
+				t.Fatalf("ClaimsPID(%d) = %v/%v, want %v/true", tt.pid, claimed, known, tt.want)
+			}
+		})
 	}
 }
 

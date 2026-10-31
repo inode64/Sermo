@@ -66,7 +66,7 @@ Connection-protocol checks (MySQL, PostgreSQL, Redis, Docker, libvirt, etc.) are
 | `file`        | health | a path exists and is a regular file                                |
 | `lockfile`    | health | one service-created regular lockfile candidate exists — gate with `requires: [service]`; it does not block operations |
 | `binary`      | health | a path exists and is executable                                    |
-| `pidfile`     | health | a pidfile exists and references a running, non-zombie process that the service's `exe` selectors or init backend claim — gate with `requires: [service]` so a missing/stale pidfile is an error only while the service is active |
+| `pidfile`     | health | a pidfile exists and references a running, non-zombie process that the service's `exe` selectors or init backend claim; executable identity is read live so a new daemon is not judged against an older process snapshot — gate with `requires: [service]` so a missing/stale pidfile is an error only while the service is active |
 | `socket`      | health | one Unix socket candidate exists — gate with `requires: [service]` for sockets created by the service |
 | `libraries`   | health | all DT_NEEDED shared libraries of the binary can be resolved with the binary's ELF class and machine, each library's own RUNPATH/`$ORIGIN` searched first (native debug/elf, no ldd) |
 | `process`     | health | a process matching `exe`/`user` is in `state` (running/zombie/absent); an `absent` reading that a replaced binary explains names it and becomes a verdictless state (the service reads `restart_required`, not failed) |
@@ -1536,9 +1536,10 @@ Protocols, in the order of the table above:
   performs `USER`/`PASS` (a password with no user logs in as `anonymous`). A
   `421` or `120` greeting is [busy](#busy-servers). RFC 959.
 - `ssh` — default port 22 (no `tls`: SSH has its own transport crypto). `user` is
-  **optional**: anonymous completes the key exchange to capture the server's host
-  key (authentication then fails, which is expected); with a user/password login
-  must succeed. Result data: `fingerprint` (SHA256 of the host key),
+  **optional**: without a password, the probe verifies the key-exchange signature
+  and captures the server's host key, then disconnects before attempting login.
+  This avoids invalid-user authentication failures from monitoring. With a
+  user/password, login must succeed. Result data: `fingerprint` (SHA256 of the host key),
   `host_key_algo`, `server_version`, `protocol`. Set **`on_change: true`** to
   alert when the host-key fingerprint changes — a possible re-key or
   man-in-the-middle. Uses `golang.org/x/crypto/ssh`.

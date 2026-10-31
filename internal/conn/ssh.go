@@ -14,15 +14,16 @@ import (
 )
 
 // sshProtocol probes an SSH server using golang.org/x/crypto/ssh. With no
-// credentials it is an anonymous check: it completes the key exchange to capture
-// the server's host key (fingerprint + algorithm) and identification banner —
-// authentication then fails, which is expected and ignored. With a
-// user/password it requires authentication to succeed. The host-key fingerprint
+// credentials it verifies the key exchange's signature and captures the server's
+// host key and identification banner, then disconnects before authentication.
+// With a user/password it requires authentication to succeed. The host-key fingerprint
 // is exposed so a watch with `on_change: true` alerts when it changes.
 //
 // SSH carries its own transport encryption, so the generic `tls` field is not
 // used.
 type sshProtocol struct{}
+
+var errSSHHostKeyCaptured = errors.New("ssh host key captured")
 
 func (sshProtocol) Name() string       { return ProtocolNameSSH }
 func (sshProtocol) DefaultPort() int   { return defaultPortSSH }
@@ -73,7 +74,12 @@ func (sshProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 		User: user,
 		Auth: auth,
 		HostKeyCallback: func(_ string, _ net.Addr, key ssh.PublicKey) error {
-			hostKey = key // captured during kex, before authentication
+			hostKey = key
+			// x/crypto has verified the exchange signature before this callback.
+			// Stop here so monitoring cannot create invalid-user login attempts.
+			if cfg.Password == "" {
+				return errSSHHostKeyCaptured
+			}
 			return nil
 		},
 	}
