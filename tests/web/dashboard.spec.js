@@ -871,6 +871,18 @@ test("invalid application configuration stays a visible warning", async ({ page 
   await expect(row.locator("td").nth(0).locator(".svc-state-note")).toHaveText("configuration invalid");
 });
 
+test("a configuration test warning is not called invalid", async ({ page }) => {
+  const body = JSON.parse(JSON.stringify(dashboard));
+  const service = body.services.find((item) => item.name === "db");
+  service.state = "warning";
+  service.state_reason = "configuration_warning";
+  service.check_health = "warning";
+  await page.route("**/api/dashboard**", (route) => route.fulfill({ json: body }));
+  await page.locator("#refresh-now").click();
+
+  await expect(page.locator("#svc-row-db td").nth(0).locator(".svc-state-note")).toHaveText("configuration warning");
+});
+
 test("service warning reason sits below the service instead of widening State", async ({ page }) => {
   await page.route("**/api/dashboard**", async (route) => {
     const body = JSON.parse(JSON.stringify(dashboard));

@@ -266,6 +266,11 @@ func (b *WebBackend) serviceObservability(name string, e *webEntry, observation 
 // web request must never run a config command or scan /proc.
 func (o serviceObservation) serviceStateReason(e *webEntry) string {
 	if cs, ok := o.snapshots[config.ConfigurationCheckName]; ok && !cs.healthy() {
+		// An analyzer warning means the command passed and printed something
+		// worth reading (a deprecated option): the configuration still loads.
+		if cfgval.String(cs.Data[checks.DataKeyPatternSeverity]) == string(severity.Warning) {
+			return stateReasonConfigurationWarning
+		}
 		return stateReasonConfigurationInvalid
 	}
 	// Any failing one is the warning: a service may declare its own stale_binary
