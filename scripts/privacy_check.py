@@ -47,7 +47,8 @@ def address_prefixes(rows: list[dict[str, str]]) -> set[str]:
     """Return the /16 prefix of every private address in an address inventory."""
     prefixes: set[str] = set()
     for row in rows:
-        octets = (row.get(ADDRESS_COLUMN) or "").strip().split(".")
+        # Spreadsheet exports prefix the address with an apostrophe to keep it text.
+        octets = (row.get(ADDRESS_COLUMN) or "").strip().strip("'\"").split(".")
         if len(octets) == 4 and all(octet.isdigit() for octet in octets):
             prefixes.add(f"{octets[0]}.{octets[1]}.")
     return prefixes

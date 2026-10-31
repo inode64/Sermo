@@ -116,7 +116,7 @@ FUZZ_TIME ?= 15s
 # gocognit, gocyclo, dupl and perfsprint are blocking linters. Keep a focused
 # cyclomatic-complexity report available for direct inspection.
 QUALITY_REPORT_LINTERS = gocyclo
-SCRIPT_SH = scripts/*.sh .githooks/commit-msg
+SCRIPT_SH = .githooks/commit-msg
 # OpenRC's interpreter is unknown to shellcheck; the script body is POSIX sh.
 OPENRC_SCRIPT = packaging/openrc/sermod
 SCRIPT_PY = scripts/*.py
@@ -177,7 +177,7 @@ npm-audit:
 	@echo "npm audit"
 	@npm audit --audit-level=high
 
-# Shell and Python helper scripts (deploy, mutation, YAML normalization).
+# Shell and Python helper scripts (git hooks, gates, YAML normalization).
 scripts-lint:
 	@echo "shellcheck $(SCRIPT_SH)"
 	@$(LINT_PATH) $(SHELLCHECK) $(SCRIPT_SH)

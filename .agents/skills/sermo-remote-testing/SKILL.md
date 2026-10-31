@@ -92,10 +92,9 @@ and the daemon is started again the same way at cleanup.
    ```
 
    This overwrites `bin/sermod` and `bin/sermoctl` with binaries whose catalog
-   path is the temporary directory. `update_fleet.sh --skip-build` and
-   `deploy_binaries_only_fleet.sh` ship `bin/` as it is, so rebuild with
-   `SERMO_DATADIR=/usr/share/sermo` (or let `update_fleet.sh` build) before any
-   fleet deploy.
+   path is the temporary directory. `update_fleet.sh --skip-build` ships `bin/`
+   as it is, so rebuild with `SERMO_DATADIR=/usr/share/sermo` (or let
+   `update_fleet.sh` build) before any fleet deploy.
 
 3. Package the current catalog if the remote test needs catalog discovery:
 
@@ -408,7 +407,7 @@ echo $! > /tmp/sermo-remote-test-XXX/sermod.pid
 - Clean only directories matching the exact remote prefix created for the run, e.g. `/tmp/sermo-remote-test-*`.
 - Before removing a directory, verify it starts with `/tmp/sermo-remote-test-`.
 - If cleanup fails due to DNS/SSH, report the host and remote directory path.
-- For persistent updates using `remote_update_payload.sh`, a successful run removes
+- For persistent updates using `remote_deploy.sh --update`, a successful run removes
   its exact `/tmp/sermo-update-<run-id>` work directory and uploaded
   `/tmp/sermo-*/<payload>.tgz` by default. A failed update keeps both for
   diagnosis. Use `SERMO_KEEP_REMOTE_ARTIFACTS=1` only when the successful-run

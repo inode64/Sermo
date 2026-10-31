@@ -47,6 +47,9 @@ class InventoryTermsTest(unittest.TestCase):
         rows = [{"ip_vpn": "198.18.4.7"}, {"ip_vpn": ""}, {"ip_vpn": "not-an-address"}, {}]
         self.assertEqual(checker.address_prefixes(rows), {"198.18."})
 
+    def test_address_prefixes_accept_spreadsheet_quoting(self):
+        self.assertEqual(checker.address_prefixes([{"ip_vpn": "'198.18.4.7"}]), {"198.18."})
+
 
 class FindingsTest(unittest.TestCase):
     """A finding names the term and its location, and nothing else."""
