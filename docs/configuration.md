@@ -1696,7 +1696,9 @@ manual stops from the web UI or CLI use `web-manual-stop` / `cli-manual-stop`
 until a later successful start restores the previous monitored state. A
 successful storage `umount` pauses that storage watch with `web-mount-umount` or
 `cli-mount-umount`; a later successful `mount` restores it only when that umount
-created the pause.
+created the pause. That pause survives a daemon restart or reload even under
+`monitor: enabled`, because the mount is released on purpose and reporting it as
+down would be false; `sermoctl watch monitor` resumes the watch without a mount.
 
 The dashboard and `GET /api/services` / `GET /api/watches` expose `state`,
 `monitored`, `monitor_source` and `monitor_changed_at` separately. A service can
@@ -2560,7 +2562,8 @@ dashboard/log signal, omit `then` entirely or use `notify: [none]`; those are
 monitor-only configurations, not action rehearsals.
 
 A watch supports the same top-level `monitor` flag as a service/daemon:
-`enabled` (the default) forces monitoring on at daemon start/reload, `disabled`
+`enabled` (the default) forces monitoring on at daemon start/reload, except for
+the pause of a storage `umount`, `disabled`
 builds the watch but starts it paused, and `previous` restores the last persisted
 runtime state. This is distinct from `enabled: false`, which disables the watch
 entry structurally and no runtime watch is built. Use `monitor: disabled` when
