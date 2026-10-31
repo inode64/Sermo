@@ -27,6 +27,7 @@ const (
 // sentence. The observability_missing list stays a set of indicator names.
 const (
 	stateReasonConfigurationInvalid  = "configuration_invalid"
+	stateReasonConfigurationWarning  = "configuration_warning"
 	stateReasonStaleBinary           = "stale_binary"
 	stateReasonStaleLibraries        = "stale_libraries"
 	stateReasonFailedUnitLiveProcess = "failed_unit_live_process"

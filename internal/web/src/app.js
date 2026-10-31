@@ -123,6 +123,7 @@ const targetStateRestartRequired = "restart_required";
 const targetStateStale = "stale";
 // Mirrors stateReason* in internal/app/metric_constants.go.
 const stateReasonConfigurationInvalid = "configuration_invalid";
+const stateReasonConfigurationWarning = "configuration_warning";
 const stateReasonStaleBinary = "stale_binary";
 const stateReasonStaleLibraries = "stale_libraries";
 const stateReasonFailedUnitLiveProcess = "failed_unit_live_process";
@@ -1743,6 +1744,7 @@ function serviceStateParts(s) {
   const staleBinary = st === targetStateRestartRequired && s && s.state_reason === stateReasonStaleBinary;
   const staleLibraries = st === targetStateRestartRequired && s && s.state_reason === stateReasonStaleLibraries;
   const configurationInvalid = st === targetStateWarning && s && s.state_reason === stateReasonConfigurationInvalid;
+  const configurationWarning = st === targetStateWarning && s && s.state_reason === stateReasonConfigurationWarning;
   const failedUnitLiveProcess = st === targetStateWarning && s && s.state_reason === stateReasonFailedUnitLiveProcess;
   const blind = (st === targetStateWarning && indicators && !staleBinary && !failedUnitLiveProcess)
     ? `The unit is active and its checks pass, but the daemon attributes no process to it, so ${indicators} stay unavailable`
@@ -1752,7 +1754,7 @@ function serviceStateParts(s) {
     : "";
   const invalidConfiguration = configurationInvalid
     ? "The service is active, but its configuration preflight currently fails"
-    : "";
+    : configurationWarning ? "The configuration loads, but its test printed a warning worth reading" : "";
   const restartRequired = staleBinary
     ? "The running binary was replaced on disk; restart the service to run the installed version"
     : staleLibraries ? "The main process still maps replaced libraries; restart the service to load the installed versions" : "";
@@ -1783,6 +1785,9 @@ function serviceStateBadge(s) {
 function serviceStateReason(s) {
   if (s && s.state_reason === stateReasonConfigurationInvalid) {
     return "configuration invalid";
+  }
+  if (s && s.state_reason === stateReasonConfigurationWarning) {
+    return "configuration warning";
   }
   if (s && s.state_reason === stateReasonStaleBinary) {
     return "binary replaced on disk";

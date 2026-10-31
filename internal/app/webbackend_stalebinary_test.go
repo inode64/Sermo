@@ -181,6 +181,38 @@ func TestWebBackendConfigurationWarningOutranksRestartRequired(t *testing.T) {
 	}
 }
 
+// testparm exits 0 and only prints a deprecation: the configuration loaded, so
+// calling it invalid sends the operator after a fault that does not exist.
+func TestServiceStateReasonSeparatesConfigurationWarningFromInvalid(t *testing.T) {
+	cases := []struct {
+		name string
+		data map[string]any
+		want string
+	}{
+		{name: "exit failure", want: stateReasonConfigurationInvalid},
+		{
+			name: "warning pattern",
+			data: map[string]any{checks.DataKeyPatternID: "deprecated", checks.DataKeyPatternSeverity: string(severity.Warning)},
+			want: stateReasonConfigurationWarning,
+		},
+		{
+			name: "error pattern",
+			data: map[string]any{checks.DataKeyPatternID: "fatal", checks.DataKeyPatternSeverity: string(severity.Error)},
+			want: stateReasonConfigurationInvalid,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			observation := serviceObservation{snapshots: map[string]CheckSnapshot{
+				config.ConfigurationCheckName: {Data: tc.data},
+			}}
+			if got := observation.serviceStateReason(&webEntry{}); got != tc.want {
+				t.Fatalf("reason = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
 // The readings renderer must surface what the check computed; without the
 // dispatch entry the paths and PIDs are silently dropped.
 func TestStaleBinaryCheckReadingsSurfacePathAndPIDs(t *testing.T) {
