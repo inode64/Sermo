@@ -1180,7 +1180,15 @@ func applyMonitorModeFor(store MonitorStore, label, key, mode string) string {
 			err = store.SetActive(key, true, state.SourceConfig)
 		}
 	default: // MonitorEnabled
-		err = store.SetActive(key, true, state.SourceConfig)
+		// A storage umount's pause is no operator preference for this mode to
+		// override: the mount is released on purpose and the next mount restores
+		// the watch, so forcing it on would report a released mount as down.
+		record, found, e := store.MonitorState(key)
+		if e != nil {
+			err = e
+		} else if !found || record.Active || !state.IsMountUmountSource(record.Source) {
+			err = store.SetActive(key, true, state.SourceConfig)
+		}
 	}
 	if err != nil {
 		return label + ": persist monitor state: " + err.Error()
