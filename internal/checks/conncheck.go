@@ -135,6 +135,13 @@ func (c connCheck) Run(ctx context.Context) Result {
 		r := c.result(false, fmt.Sprintf("%s %s: %s", c.proto.Name(), addr, strings.Join(problems, "; ")), start)
 		r.Data = c.resultData(elapsed, perIface, res)
 		maps.Copy(r.Data, extra)
+		// A move into a state the check accepts is news, not a fault: restarting
+		// a container that just turned healthy undoes the recovery it reports.
+		// A version change is excluded because rules are written to act on it.
+		_, versionChanged := extra[DataKeyVersionOld]
+		if accepted, _, _ := c.evaluateResponse(res, elapsed, addr); accepted && !versionChanged {
+			r.ActionBlocked = true
+		}
 		return r
 	}
 	ok, msg, unavailable := c.evaluateResponse(res, elapsed, addr)
