@@ -22,6 +22,7 @@
     "markdownlint-cli": {
       "js-yaml": "5.4.2",
       "katex": "0.19.1",
+      "re2js": "2.8.7",
       "smol-toml": "1.9.1"
     }
   }
