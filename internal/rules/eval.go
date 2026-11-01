@@ -204,12 +204,14 @@ func (e *Evaluator) evalFailed(ctx context.Context, operand any) (bool, error) {
 
 // unobservedFails reports whether an unavailable or busy result satisfies
 // failed: for an ordinary rule: an unavailable probe failed, a busy one only
-// when this rule may read busy as a failure (busyFails).
+// when this rule may read busy as a failure (busyFails). An unavailable result
+// that keeps OK states no failure (a cert endpoint out of reach says nothing
+// about the certificate), so it stays unknown.
 func (e *Evaluator) unobservedFails(res checks.Result) bool {
 	if res.Busy || res.ActionBlocked {
 		return e.busyFails
 	}
-	return res.Unavailable
+	return res.Unavailable && !res.OK
 }
 
 // condMap asserts a condition operand is a mapping, returning a "<label> must be

@@ -305,6 +305,43 @@ func TestSectionRunnerBuildIssueBlocksRequiredPreflight(t *testing.T) {
 	}
 }
 
+// A cert endpoint that cannot be reached keeps OK so failed: stays quiet, but
+// nothing was observed: a gate must not take that as a pass.
+func TestSectionRunnersRefuseAnUnreachedCertEndpoint(t *testing.T) {
+	deps := checks.Deps{Service: "web", DefaultTimeout: time.Second, CertSampler: func(context.Context, string, string, string, bool) (checks.CertSample, error) {
+		return checks.CertSample{}, errors.New("connection refused")
+	}}
+	entry := func(optional bool) map[string]any {
+		return map[string]any{"type": checks.CheckTypeCert, "host": "host-a", "verify": true, "optional": optional}
+	}
+	for _, tc := range []struct {
+		name string
+		run  func(optional bool) checks.Outcome
+	}{
+		{"preflight", func(optional bool) checks.Outcome {
+			tree := map[string]any{"preflight": map[string]any{"cert": entry(optional)}}
+			return sectionRunner(tree, deps, nil)(context.Background())
+		}},
+		{"verify", func(optional bool) checks.Outcome {
+			tree := map[string]any{"checks": map[string]any{"cert": entry(optional)}}
+			return verifyRunner(tree, deps, nil)(context.Background())
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			out := tc.run(false)
+			if out.OK {
+				t.Fatalf("outcome OK with the endpoint unreachable: %+v", out)
+			}
+			if len(out.Results) != 1 || out.Results[0].OK {
+				t.Fatalf("results = %+v, want the row that blocked to read as not passed", out.Results)
+			}
+			if !tc.run(true).OK {
+				t.Fatal("an optional check warns, it does not block")
+			}
+		})
+	}
+}
+
 func TestVerifyRunnerSourcesOnlyVerifyChecks(t *testing.T) {
 	deps := checks.Deps{Service: "web", DefaultTimeout: time.Second}
 	missing := "/nonexistent-verify-probe-xyz"

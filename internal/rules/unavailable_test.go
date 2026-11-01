@@ -70,6 +70,31 @@ func TestFailedReportsObservationErrorsButNotSkippedChecks(t *testing.T) {
 	}
 }
 
+// A cert endpoint the probe could not reach keeps OK beside Unavailable: it
+// says nothing about the certificate, so failed: holds for no rule and stays
+// unknown instead, and a guard reading it still denies the action.
+func TestFailedStaysQuietOnAnUnobservedPassingCheck(t *testing.T) {
+	cache := map[string]checks.Result{"cert": {OK: true, Unavailable: true, Message: "cert host-a:443: connection refused"}}
+	failed := map[string]any{ConditionFailed: map[string]any{FieldCheck: "cert"}}
+	for _, rule := range []Rule{
+		{Name: "restart-if-cert-failed", Type: RuleRemediation, If: failed, Actions: []Action{{Type: ActionRestart}}},
+		{Name: "alert-if-cert-failed", Type: RuleAlert, If: failed, Actions: []Action{{Type: ActionAlert, Message: "bad certificate"}}},
+	} {
+		ev := &Evaluator{Cache: cache}
+		got, err := ev.EvalRule(t.Context(), rule)
+		if got || err != nil {
+			t.Fatalf("%s = %v, %v; want no match", rule.Name, got, err)
+		}
+		if !ev.Unknown {
+			t.Fatalf("%s: want the condition left unknown, so an open alert is not cleared", rule.Name)
+		}
+	}
+	guard := []Rule{{Type: RuleGuard, Name: "guard", Blocks: []string{string(ActionRestart)}, If: failed}}
+	if blocking, _, err := Guard(t.Context(), guard, string(ActionRestart), &Evaluator{Cache: cache}); blocking != "" || err == nil {
+		t.Fatalf("guard accepted an unobserved certificate: blocked=%v error=%v", blocking, err)
+	}
+}
+
 // busyCache holds one probe in each reporting mode: a health probe reads busy
 // as failing, a condition probe as unavailable (it never got its reading).
 func busyCache() map[string]checks.Result {

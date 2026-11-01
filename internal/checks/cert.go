@@ -268,8 +268,8 @@ func (c *certCheck) Run(ctx context.Context) Result {
 			// Cannot retrieve the certificate (network/TLS error): OK keeps a
 			// failed: rule quiet, since reachability belongs to a tcp/http check,
 			// but the cycle is still unavailable. Health, SLA and watch events
-			// treat it like any probe that could not look, and a guard cannot
-			// authorize an operation from it.
+			// treat it like any probe that could not look, and neither a guard
+			// nor a required preflight or verify can authorize an operation from it.
 			res := c.result(true, fmt.Sprintf("cert %s:%s: %v", c.host, c.port, err), start)
 			res.Unavailable = true
 			return res

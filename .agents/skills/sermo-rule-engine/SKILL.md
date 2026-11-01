@@ -44,7 +44,8 @@ the types are `RuleType`, `ActionType` and `Action` in
   alert episode on such a cycle (only an observed false clears it), never an
   operation rule's.
   The explicit `failed` operator retains its probe-failure semantics for
-  unavailable checks in ordinary rules; skipped checks never count as failures.
+  unavailable checks in ordinary rules; skipped checks never count as failures,
+  nor does an unavailable result that keeps OK (a `cert` endpoint out of reach).
 - A busy check (`checks.Result.Busy`: the server answered it cannot serve now)
   is a failure for alerts and unknown for any rule with an operation; guards
   fail closed on it. The worker evaluates every rule with `EvalRule`, which

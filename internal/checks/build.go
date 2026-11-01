@@ -519,11 +519,16 @@ type Outcome struct {
 }
 
 // Evaluate computes the outcome: a required (non-optional) failure makes it not
-// OK; optional failures are warnings only.
+// OK; optional failures are warnings only. A check that could not observe passed
+// nothing, so its row reads as failed here even when its raw OK holds: a cert
+// endpoint out of reach keeps OK only to stay quiet under a failed: rule.
 func Evaluate(results []Result) Outcome {
 	ok := true
-	for _, r := range results {
-		if !r.OK && !r.Optional {
+	for i := range results {
+		if results[i].Unavailable {
+			results[i].OK = false
+		}
+		if !results[i].OK && !results[i].Optional {
 			ok = false
 		}
 	}

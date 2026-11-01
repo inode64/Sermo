@@ -1282,9 +1282,10 @@ A network/TLS error fetching the cert is **not** a certificate verdict: a
 as a reachability alert (use a `tcp`/`http` check for that). The cycle is still an
 **unavailable** observation, like any probe that could not look: it counts
 against the service's health and SLA, a watch reports it through its `error`
-("check unavailable") event, and a guard reading it denies the action. Grade the
-check `severity: warning` (see [Severity](#severity-severity)) to keep an
-unreachable endpoint amber instead of red.
+("check unavailable") event, a guard reading it denies the action, and a required
+`preflight:` or `verify: true` check fails. Grade the check `severity: warning`
+(see [Severity](#severity-severity)) to keep an unreachable endpoint amber instead
+of red.
 
 **File source (`path`).** Reads and parses a local file, recognising natively (no
 external tools): PEM **certificate**, **certificate request** (CSR), PKCS#1 / EC /
@@ -4186,9 +4187,11 @@ observe (unavailable) or whose server answered it is [busy](#busy-servers):
 | a rule whose `then` restarts, starts, stops, reloads or resumes | true | unknown: no match, and the `for:` window resets | unknown: no match |
 | an alert rule, or a remediation with no operation | true | true | unknown, except a busy health check, which is a plain failing value |
 
-A skipped check is unknown everywhere. No option makes a busy check trigger an
-operation: the cause of a busy server is outside the daemon, and a restart
-would only drop the clients it still serves.
+A skipped check is unknown everywhere, and so is a host `cert` check that could
+not reach its endpoint: that says nothing about the certificate, so `failed:`
+holds for no rule. No option makes a busy check trigger an operation: the cause
+of a busy server is outside the daemon, and a restart would only drop the clients
+it still serves.
 
 ## Remediation policy
 
