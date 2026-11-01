@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"syscall"
 	"testing"
 	"time"
 
@@ -105,7 +106,7 @@ func TestFileWatcherRecordsBandSamples(t *testing.T) {
 				cond:       fileCond{sizeOp: ">", sizeValue: 0},
 				recordBand: func(ok bool, _ time.Time) { got = append(got, ok) },
 			}
-			w.recordBandSample(tc.current, time.Now())
+			w.recordBandSample(tc.current, nil, time.Now())
 			if len(got) != 1 || got[0] != tc.want {
 				t.Fatalf("samples = %v, want one %v", got, tc.want)
 			}
@@ -114,9 +115,12 @@ func TestFileWatcherRecordsBandSamples(t *testing.T) {
 
 	// No size predicate: nothing to band; nil recorder: nothing to do.
 	silent := &fileWatcher{recordBand: func(bool, time.Time) { t.Fatal("no predicate, no sample") }}
-	silent.recordBandSample(map[string]fileState{}, time.Now())
+	silent.recordBandSample(map[string]fileState{}, nil, time.Now())
 	none := &fileWatcher{cond: fileCond{sizeOp: ">"}}
-	none.recordBandSample(map[string]fileState{}, time.Now())
+	none.recordBandSample(map[string]fileState{}, nil, time.Now())
+	// A scan that could not read the path saw no level to record.
+	blind := &fileWatcher{absentOK: true, cond: fileCond{sizeOp: ">"}, recordBand: func(bool, time.Time) { t.Fatal("blind scan, no sample") }}
+	blind.recordBandSample(map[string]fileState{}, syscall.ESTALE, time.Now())
 }
 
 // TestCycleWriterRecordsServiceCheckBands pins the service-side key: a banded

@@ -3706,6 +3706,10 @@ The conditions (declare at least one):
 - **`owner`** — `on: change`; fires when the owning uid or gid changes.
 - **`existence`** — `on: delete`; fires when a path that existed stops existing
   (re-creation is then adopted silently). Deletion is the only transition reported.
+  Only a path the kernel reports as absent counts. Any other read failure (a stale
+  NFS handle, an I/O error, a denied permission) keeps the path's baseline and
+  reports the check unavailable, as does an unreadable directory that hides entries
+  a recursive watch tracks.
 - **`older_than`** — a positive duration such as `24h`; fires when the elapsed
   time since a path's modification time (`mtime`) becomes greater than that
   duration. A path already stale on the first cycle fires immediately; it re-arms

@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io/fs"
 	"maps"
@@ -110,11 +111,12 @@ func (w *fileWatcher) runCycle(ctx context.Context) {
 		w.baseline = map[string]fileState{}
 	}
 	now := w.clock()
-	current := w.scan(now)
+	current, failures := w.scan(now)
 	paths := slices.Sorted(maps.Keys(current)) // shared deterministic order for events and health
 	w.numberFiles = fileWatchNumberFiles(current)
+	blind := w.blindSpot(current, failures)
 	defer func() {
-		result := w.snapshot(current, paths)
+		result := w.snapshot(current, paths, failures, blind)
 		if w.observe != nil {
 			w.observe(ctx, result, observeOnlyCycle(ctx))
 		} else if w.publish != nil {
@@ -124,7 +126,7 @@ func (w *fileWatcher) runCycle(ctx context.Context) {
 	// The sample reads the fresh scan, never the baseline: observe-only cycles
 	// rewrite the baseline's breached flag to preserve edge detection, and a
 	// state series must report the level the scan actually saw.
-	w.recordBandSample(current, now)
+	w.recordBandSample(current, blind, now)
 
 	var stale []staleFile
 	observeOnly := observeOnlyCycle(ctx)
@@ -168,7 +170,7 @@ func (w *fileWatcher) runCycle(ctx context.Context) {
 
 	// Deletions: paths we tracked that are absent now.
 	for _, p := range slices.Sorted(maps.Keys(w.baseline)) {
-		if _, ok := current[p]; ok {
+		if _, ok := current[p]; ok || failures.covering(p) != nil {
 			continue
 		}
 		if ctx.Err() != nil {
@@ -187,9 +189,9 @@ func (w *fileWatcher) runCycle(ctx context.Context) {
 // predicate there is no band; with no watched path the state is what absentOK
 // declares absence to mean — an explicit sample either way, never a gap, so a
 // dead-letter file that stays absent draws an unbroken OK band rather than
-// unmonitored hatching.
-func (w *fileWatcher) recordBandSample(current map[string]fileState, at time.Time) {
-	if w.recordBand == nil || w.cond.sizeOp == "" {
+// unmonitored hatching. A scan with a blind spot saw no such level.
+func (w *fileWatcher) recordBandSample(current map[string]fileState, blind error, at time.Time) {
+	if w.recordBand == nil || w.cond.sizeOp == "" || blind != nil {
 		return
 	}
 	ok := w.absentOK
@@ -205,9 +207,9 @@ func (w *fileWatcher) recordBandSample(current map[string]fileState, at time.Tim
 	w.recordBand(ok, at)
 }
 
-func (w *fileWatcher) snapshot(current map[string]fileState, paths []string) checks.Result {
+func (w *fileWatcher) snapshot(current map[string]fileState, paths []string, failures readFailures, blind error) checks.Result {
 	path, sample, roots := firstFileWatchRoot(w.paths, current)
-	failedPath, trigger, message := w.failure(current, paths)
+	failedPath, trigger, message := w.failure(current, paths, failures)
 	if failedPath != "" {
 		path, sample = failedPath, current[failedPath]
 	}
@@ -216,6 +218,12 @@ func (w *fileWatcher) snapshot(current map[string]fileState, paths []string) che
 	}
 	data := map[string]any{checks.DataKeyPaths: w.paths, checks.DataKeyPath: path}
 	result := checks.Result{Check: w.name, OK: failedPath == "", Message: message, Data: data}
+	// A breach the scan did see stays a verdict; without one the cycle has no
+	// answer for what it could not read.
+	if failedPath == "" && blind != nil {
+		result.OK, result.Unavailable, result.Message = false, true, blind.Error()
+		return result
+	}
 	if _, present := current[path]; !present {
 		if result.OK {
 			result.Message = path + ": absent (ok)"
@@ -257,10 +265,10 @@ func (w *fileWatcher) snapshot(current map[string]fileState, paths []string) che
 // or oversized file remains unhealthy until repaired, while a permission or
 // ownership change alone does not create a permanent failure. Its path selects
 // the same measurement for the message, structured data and summary template.
-func (w *fileWatcher) failure(current map[string]fileState, paths []string) (path, trigger, message string) {
+func (w *fileWatcher) failure(current map[string]fileState, paths []string, failures readFailures) (path, trigger, message string) {
 	if !w.absentOK {
 		for _, path := range w.paths {
-			if _, exists := current[path]; !exists {
+			if _, exists := current[path]; !exists && failures[path] == nil {
 				return path, "", path + ": not found"
 			}
 		}
@@ -287,24 +295,74 @@ func fileWatchNumberFiles(current map[string]fileState) int {
 	return count
 }
 
+// readFailures are the paths a scan could not read for a reason other than their
+// absence: a stale handle, an I/O error, a permission. What they hide is unknown,
+// not gone, so none of it may read as a deletion.
+type readFailures map[string]error
+
+// note records err unless it says path does not exist, which the comparison
+// against the baseline handles as a deletion.
+func (f readFailures) note(path string, err error) {
+	if !errors.Is(err, fs.ErrNotExist) {
+		f[path] = err
+	}
+}
+
+// covering returns the failure that keeps path out of sight, its own or that of
+// a directory above it.
+func (f readFailures) covering(path string) error {
+	for failed, err := range f {
+		if path == failed || strings.HasPrefix(path, failed+string(filepath.Separator)) {
+			return err
+		}
+	}
+	return nil
+}
+
+// blindSpot returns the failure that keeps a configured root or a tracked entry
+// out of sight. A subdirectory that never yielded an entry tracks nothing, so it
+// stays a skip instead of turning the watch unavailable for good.
+func (w *fileWatcher) blindSpot(current map[string]fileState, failures readFailures) error {
+	if len(failures) == 0 {
+		return nil
+	}
+	for _, root := range w.paths {
+		if err := failures[root]; err != nil {
+			return err
+		}
+	}
+	for _, path := range slices.Sorted(maps.Keys(w.baseline)) {
+		if _, seen := current[path]; !seen {
+			if err := failures.covering(path); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
 // scan returns the current attributes of the watched path and, when recursive
-// and the path is a directory, every entry in its subtree. Symlinks are stat'd
-// as links (never followed), so a link is watched as itself, not its target.
-func (w *fileWatcher) scan(now time.Time) map[string]fileState {
+// and the path is a directory, every entry in its subtree, plus the paths it
+// could not read. Symlinks are stat'd as links (never followed), so a link is
+// watched as itself, not its target.
+func (w *fileWatcher) scan(now time.Time) (map[string]fileState, readFailures) {
 	out := map[string]fileState{}
+	failures := readFailures{}
 	for _, root := range w.paths {
 		info, err := hostfs.LstatTarget(root)
 		if err != nil {
-			continue // missing roots are handled as deletions against the baseline
+			failures.note(root, err)
+			continue
 		}
 		out[root] = w.stateOf(info, now)
 		if w.recursive && info.IsDir() {
 			_ = filepath.WalkDir(root, func(p string, d fs.DirEntry, walkErr error) error {
+				if walkErr != nil {
+					failures.note(p, walkErr)
+					return nil // the rest of the tree is still scanned
+				}
 				if p == root {
 					return nil // skip the root; it was already added above
-				}
-				if walkErr != nil {
-					return nil //nolint:nilerr // unreadable entries are skipped during best-effort recursive scans
 				}
 				if !w.includeHidden && checks.IsHiddenDescendant(root, p, d) {
 					if d.IsDir() {
@@ -314,14 +372,15 @@ func (w *fileWatcher) scan(now time.Time) map[string]fileState {
 				}
 				fi, infoErr := d.Info()
 				if infoErr != nil {
-					return nil //nolint:nilerr // entries that disappear during the scan are skipped
+					failures.note(p, infoErr)
+					return nil // the rest of the tree is still scanned
 				}
 				out[p] = w.stateOf(fi, now)
 				return nil
 			})
 		}
 	}
-	return out
+	return out, failures
 }
 
 func (w *fileWatcher) stateOf(info fs.FileInfo, now time.Time) fileState {

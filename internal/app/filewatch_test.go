@@ -34,6 +34,11 @@ func (h *fileWatchHarness) watcher(path string, recursive bool, cond fileCond) *
 	}
 }
 
+func scannedFiles(w *fileWatcher) int {
+	current, _ := w.scan(time.Now())
+	return fileWatchNumberFiles(current)
+}
+
 func writeSize(t *testing.T, path string, n int) {
 	t.Helper()
 	if err := os.WriteFile(path, make([]byte, n), 0o644); err != nil {
@@ -296,11 +301,11 @@ func TestFileWatchRecursiveSkipsHiddenEntriesByDefault(t *testing.T) {
 	}
 
 	w := (&fileWatchHarness{}).watcher(root, true, fileCond{sizeChange: true})
-	if got := fileWatchNumberFiles(w.scan(time.Now())); got != 1 {
+	if got := scannedFiles(w); got != 1 {
 		t.Fatalf("default recursive files = %d, want 1", got)
 	}
 	w.includeHidden = true
-	if got := fileWatchNumberFiles(w.scan(time.Now())); got != 3 {
+	if got := scannedFiles(w); got != 3 {
 		t.Fatalf("include_hidden recursive files = %d, want 3", got)
 	}
 
@@ -311,7 +316,7 @@ func TestFileWatchRecursiveSkipsHiddenEntriesByDefault(t *testing.T) {
 	writeSize(t, filepath.Join(hiddenRoot, "visible.txt"), 1)
 	w.paths = []string{hiddenRoot}
 	w.includeHidden = false
-	if got := fileWatchNumberFiles(w.scan(time.Now())); got != 1 {
+	if got := scannedFiles(w); got != 1 {
 		t.Fatalf("explicit hidden root files = %d, want 1", got)
 	}
 }
@@ -492,6 +497,105 @@ func TestFileWatchDeletion(t *testing.T) {
 	w.runCycle(context.Background())
 	if len(h.fired) != 1 {
 		t.Fatalf("re-created path should adopt silently, fired=%v", h.fired)
+	}
+}
+
+// Only a path that is gone is a deletion. Any other read failure says nothing
+// about the file, so it must not run the delete hook, and the unchanged file is
+// not news once it can be read again. A symlink loop in the parent directory
+// fails the read with ELOOP whichever user runs the test.
+func TestFileWatchUnreadablePathIsNotADeletion(t *testing.T) {
+	parent := filepath.Join(t.TempDir(), "export")
+	if err := os.Mkdir(parent, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	f := filepath.Join(parent, "data")
+	writeSize(t, f, 1)
+	h := &fileWatchHarness{}
+	w := h.watcher(f, false, fileCond{onDelete: true, sizeChange: true})
+	var latest checks.Result
+	w.publish = func(_, _ string, res checks.Result) { latest = res }
+
+	w.runCycle(context.Background())
+	aside := parent + ".aside"
+	if err := os.Rename(parent, aside); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(parent, parent); err != nil {
+		t.Fatal(err)
+	}
+
+	w.runCycle(context.Background())
+	if len(h.fired) != 0 {
+		t.Fatalf("an unreadable path fired %v", h.fired)
+	}
+	if latest.Observation() != checks.ObservationUnavailable || strings.Contains(latest.Message, "not found") {
+		t.Fatalf("snapshot = %+v, want the read failure reported as unavailable", latest)
+	}
+
+	if err := os.Remove(parent); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(aside, parent); err != nil {
+		t.Fatal(err)
+	}
+	w.runCycle(context.Background())
+	if len(h.fired) != 0 || latest.Observation() != checks.ObservationHealthy {
+		t.Fatalf("readable again: fired %v, snapshot %+v", h.fired, latest)
+	}
+
+	if err := os.Remove(f); err != nil {
+		t.Fatal(err)
+	}
+	w.runCycle(context.Background())
+	if len(h.fired) != 1 || h.fired[0]["SERMO_CHANGE"] != fileChangeDeleted {
+		t.Fatalf("a real deletion fired %v", h.fired)
+	}
+}
+
+// An unreadable directory hides its entries; it does not delete them. A subtree
+// that was never readable tracks nothing, so it stays the best-effort skip it
+// always was and does not turn the watch unavailable.
+func TestFileWatchUnreadableSubtreeKeepsItsEntries(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root reads a directory whatever its mode")
+	}
+	root := t.TempDir()
+	sub := filepath.Join(root, "sub")
+	if err := os.Mkdir(sub, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(sub, 0o755) })
+	inner := filepath.Join(sub, "inner")
+	writeSize(t, inner, 1)
+	gone := filepath.Join(root, "gone")
+	writeSize(t, gone, 1)
+	h := &fileWatchHarness{}
+	w := h.watcher(root, true, fileCond{onDelete: true})
+	var latest checks.Result
+	w.publish = func(_, _ string, res checks.Result) { latest = res }
+
+	w.runCycle(context.Background())
+	if err := os.Chmod(sub, 0); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(gone); err != nil {
+		t.Fatal(err)
+	}
+	w.runCycle(context.Background())
+	if len(h.fired) != 1 || h.fired[0]["SERMO_PATH"] != gone {
+		t.Fatalf("fired %v, want only the entry really deleted", h.fired)
+	}
+	if latest.Observation() != checks.ObservationUnavailable {
+		t.Fatalf("snapshot = %+v, want unavailable while a tracked entry is out of sight", latest)
+	}
+
+	blind := h.watcher(root, true, fileCond{onDelete: true})
+	var fresh checks.Result
+	blind.publish = func(_, _ string, res checks.Result) { fresh = res }
+	blind.runCycle(context.Background())
+	if fresh.Observation() != checks.ObservationHealthy {
+		t.Fatalf("snapshot of a subtree never read = %+v, want the skip it always was", fresh)
 	}
 }
 
