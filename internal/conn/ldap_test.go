@@ -6,6 +6,7 @@ import (
 	"io"
 	"net"
 	"sermo/internal/netutil"
+	"strings"
 	"testing"
 	"time"
 )
@@ -23,6 +24,7 @@ func TestBuildLDAPURL(t *testing.T) {
 		{name: "TLS", host: "dir.example", port: 636, tlsMode: "true", wantURL: "ldaps://dir.example:636", wantTLS: true},
 		{name: "skip verify", host: "d", port: 636, tlsMode: "skip-verify", wantURL: "ldaps://d:636", wantTLS: true},
 		{name: "IPv6", host: "2001:db8::1", port: 636, tlsMode: "true", wantURL: "ldaps://[2001:db8::1]:636", wantTLS: true},
+		{name: "zoned IPv6", host: "fe80::1%eth0", port: 389, wantURL: "ldap://[fe80::1%25eth0]:389"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -31,6 +33,17 @@ func TestBuildLDAPURL(t *testing.T) {
 				t.Fatalf("buildLDAPURL() = %q, %v; want %q, %v", gotURL, gotTLS, test.wantURL, test.wantTLS)
 			}
 		})
+	}
+}
+
+// A zone left unescaped ends the probe in go-ldap's URL parser, before any dial.
+func TestLDAPProbeDialsAZonedHost(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	_, err := ldapProbe(ctx, Config{Host: "fe80::1%sermo-no-such-link", Port: defaultPortLDAP})
+	if err == nil || strings.Contains(err.Error(), "invalid URL escape") {
+		t.Fatalf("ldapProbe() error = %v, want a dial failure", err)
 	}
 }
 

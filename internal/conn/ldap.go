@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/url"
 	"time"
 
 	ldap "github.com/go-ldap/ldap/v3"
@@ -40,13 +41,13 @@ func ldapProbe(ctx context.Context, cfg Config) (Result, error) {
 	host, port := target.hostPort()
 	timeout := netutil.TimeoutFromContext(ctx, defaultLDAPProbeTimeout)
 
-	url, useTLS := buildLDAPURL(host, port, cfg.TLS)
+	dialURL, useTLS := buildLDAPURL(host, port, cfg.TLS)
 	opts := []ldap.DialOpt{ldap.DialWithDialer(target.dialerWithTimeout(timeout))}
 	if useTLS {
 		opts = append(opts, ldap.DialWithTLSConfig(netutil.TLSClientConfigForMode(host, cfg.TLS)))
 	}
 
-	l, err := ldap.DialURL(url, opts...)
+	l, err := ldap.DialURL(dialURL, opts...)
 	if err != nil {
 		return Result{}, probeErr(ProtocolNameLDAP, stepDial, err)
 	}
@@ -86,13 +87,16 @@ func ldapProbe(ctx context.Context, cfg Config) (Result, error) {
 }
 
 // buildLDAPURL builds the dial URL and reports whether TLS (LDAPS) is used.
-func buildLDAPURL(host string, port int, tlsMode string) (url string, useTLS bool) {
+func buildLDAPURL(host string, port int, tlsMode string) (dialURL string, useTLS bool) {
 	useTLS = netutil.NormalizeTLS(tlsMode) != ""
 	scheme := "ldap"
 	if useTLS {
 		scheme = "ldaps"
 	}
-	return scheme + urlSchemeSeparator + netutil.JoinHostPort(host, port), useTLS
+	// Built as a URL, not concatenated: an IPv6 zone's % must be escaped for
+	// go-ldap to parse it.
+	target := url.URL{Scheme: scheme, Host: netutil.JoinHostPort(host, port)}
+	return target.String(), useTLS
 }
 
 // ldapSucceeds decides the outcome: an anonymous check passes if the server
