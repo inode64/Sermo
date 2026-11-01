@@ -119,7 +119,7 @@ func selectPrimaryProcess(procs []process.Process) (process.Process, bool) {
 		}
 	}
 	for _, p := range procs {
-		if p.Source == process.SelectorPidfile && (p.Role == process.RoleMain || p.Role == process.SelectorPidfile) {
+		if p.MainPidfile {
 			return p, true
 		}
 	}

@@ -228,7 +228,7 @@ func TestSelectPrimaryProcess(t *testing.T) {
 			},
 			want: 2, ok: true,
 		},
-		{name: "pidfile", procs: []process.Process{{PID: 3, Role: process.SelectorPidfile, Source: process.SelectorPidfile}}, want: 3, ok: true},
+		{name: "pidfile", procs: []process.Process{{PID: 3, Role: process.SelectorPidfile, Source: process.SelectorPidfile, MainPidfile: true}}, want: 3, ok: true},
 		{name: "explicit main", procs: []process.Process{{PID: 4, Role: process.RoleMain, Source: process.SelectorCommandMatch}}, want: 4, ok: true},
 		{name: "non-main pidfile is skipped", procs: []process.Process{{PID: 5, Role: "worker", Source: process.SelectorPidfile}}, ok: false},
 		{name: "ambiguous roots are skipped", procs: []process.Process{{PID: 5, Source: process.SelectorCommandMatch}}, ok: false},
