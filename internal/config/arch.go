@@ -72,8 +72,8 @@ func (c *Config) bakeBuiltins() {
 	for _, doc := range c.docs {
 		doc.Body = bindTokensMap(doc.Body, repl)
 	}
-	// The global document (defaults.variables, watches, …) lives in Global.Raw,
-	// not c.docs. Bake there too so ${arch}/${os} work consistently everywhere
+	// Watch documents and notifier fragments were folded into Global.Raw after
+	// loadGlobal baked sermo.yml. Bake them too so ${arch}/${os} work everywhere
 	// instead of surviving as literal tokens that later trip variable validation.
 	if c.Global.Raw != nil {
 		c.Global.Raw = bindTokensMap(c.Global.Raw, repl)

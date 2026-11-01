@@ -180,3 +180,56 @@ func TestDetectOSFromEnv(t *testing.T) {
 		t.Errorf("detectOS() = %q, want gentoo", got)
 	}
 }
+
+// TestGlobalDerivedFieldsFollowOSSelectors pins that the fields Load derives
+// from sermo.yml read the same tree validation reads. They were derived before
+// `os:` and ${os}/${arch} were applied, so the host ran on defaults and loaded
+// no services while validation saw the selected values.
+func TestGlobalDerivedFieldsFollowOSSelectors(t *testing.T) {
+	old := detectedOS
+	detectedOS = "gentoo"
+	t.Cleanup(func() { detectedOS = old })
+	service := "name: svc\nservice: svc\nprocesses: {}\n"
+	defaults := "\ndefaults: { policy: { cooldown: 5m } }\n"
+
+	t.Run("engine directories and templates", func(t *testing.T) {
+		cfg, err := loadConfig(t, writeConfig(t, map[string]string{"sermo.yml": `
+engine:
+  os:
+    gentoo: { state: /var/lib/sermo-gentoo, runtime: /run/sermo-gentoo }
+paths:
+  templates: /etc/sermo/templates-${os}
+` + defaults}))
+		if err != nil {
+			t.Fatalf("Load() error = %v", err)
+		}
+		if got := cfg.Global.StateDir(); got != "/var/lib/sermo-gentoo" {
+			t.Errorf("StateDir() = %q", got)
+		}
+		if got := cfg.Global.RuntimeDir(); got != "/run/sermo-gentoo" {
+			t.Errorf("RuntimeDir() = %q", got)
+		}
+		if got := cfg.Global.TemplateDir(); got != "/etc/sermo/templates-gentoo" {
+			t.Errorf("TemplateDir() = %q", got)
+		}
+	})
+
+	for name, paths := range map[string]string{
+		"builtin in a path": `paths: { services: [ "@ROOT@/svc-${os}" ] }`,
+		"selector":          `paths: { os: { gentoo: { services: [ @ROOT@/svc-gentoo ] } } }`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			cfg, err := loadConfig(t, writeConfig(t, map[string]string{
+				"sermo.yml":         paths + defaults,
+				"svc-gentoo/a.yml":  service,
+				"services/skip.yml": "name: skip\nservice: skip\nprocesses: {}\n",
+			}))
+			if err != nil {
+				t.Fatalf("Load() error = %v", err)
+			}
+			if !reflect.DeepEqual(cfg.ServiceNames, []string{"svc"}) {
+				t.Fatalf("ServiceNames = %v, want [svc]", cfg.ServiceNames)
+			}
+		})
+	}
+}

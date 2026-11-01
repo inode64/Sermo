@@ -1131,6 +1131,11 @@ web:
   standard configuration-error code) and logs the reason. It never falls back to
   an open dashboard. `sermoctl` still runs, and `config validate` reports the
   same message.
+- The credential keys may sit under an [`os:`](services.md#os-specific-blocks-os)
+  selector. A listening `web` block whose selector names them for other systems
+  and has no branch for this host is a configuration error rather than an open
+  dashboard: add a `default` branch, or an empty branch for this system if the
+  dashboard is meant to be open here.
 - Keep the file readable by the daemon user only (`chmod 0600`). Hashes remain
   sensitive authentication data and should be treated as such. `sermod`
   logs a warning at startup when the file is readable beyond its owner.

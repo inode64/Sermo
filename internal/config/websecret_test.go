@@ -380,3 +380,69 @@ web:
 		t.Errorf("WebCredentialFiles() without file fields = %v, want none", got)
 	}
 }
+
+// An empty credential list means an open dashboard, so a password_file an `os:`
+// selector or ${os} names must reach the credentials, and one that cannot be
+// resolved on this host must fail validation, which sermod refuses to run on.
+func TestWebCredentialsFollowOSSelectors(t *testing.T) {
+	old := detectedOS
+	detectedOS = "gentoo"
+	t.Cleanup(func() { detectedOS = old })
+	secret := map[string]string{"web-gentoo.pass": mustHashLines(t, "s3cret") + "\n"}
+
+	t.Run("selected by os", func(t *testing.T) {
+		cfg := loadWebGlobal(t, `
+web:
+  port: 9797
+  os:
+    gentoo: { password_file: web-gentoo.pass }
+`, secret)
+		assertAccepts(t, cfg.Global.WebCredentials(), "WebCredentials()", "s3cret")
+		mustNotHave(t, Validate(cfg), "web.")
+	})
+	t.Run("named with a builtin", func(t *testing.T) {
+		cfg := loadWebGlobal(t, `
+web:
+  port: 9797
+  password_file: web-${os}.pass
+`, secret)
+		assertAccepts(t, cfg.Global.WebCredentials(), "WebCredentials()", "s3cret")
+	})
+	t.Run("selected file missing fails closed", func(t *testing.T) {
+		cfg := loadWebGlobal(t, `
+web:
+  port: 9797
+  os:
+    gentoo: { password_file: absent.pass }
+`, nil)
+		assertAccepts(t, cfg.Global.WebCredentials(), "WebCredentials()")
+		mustHave(t, Validate(cfg), "web.password_file cannot be read")
+	})
+	t.Run("no branch for this host fails closed", func(t *testing.T) {
+		cfg := loadWebGlobal(t, `
+web:
+  port: 9797
+  os:
+    debian: { password_file: web-gentoo.pass }
+`, secret)
+		mustHave(t, Validate(cfg), "web.os has no branch for gentoo")
+	})
+	t.Run("explicit empty branch stays open", func(t *testing.T) {
+		cfg := loadWebGlobal(t, `
+web:
+  port: 9797
+  os:
+    debian: { password_file: web-gentoo.pass }
+    gentoo: {}
+`, secret)
+		mustNotHave(t, Validate(cfg), "web.")
+	})
+	t.Run("disabled dashboard needs no branch", func(t *testing.T) {
+		cfg := loadWebGlobal(t, `
+web:
+  os:
+    debian: { port: 9797, password_file: web-gentoo.pass }
+`, secret)
+		mustNotHave(t, Validate(cfg), "web.")
+	})
+}

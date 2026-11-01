@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"slices"
 
 	"sermo/internal/cfgval"
 	"sermo/internal/hostfs"
@@ -40,6 +41,37 @@ func resolveWebCredentials(g *Global) []Issue {
 		*targets[i] = list
 	}
 	return issues
+}
+
+// unselectedWebCredentialIssues reports a listening web block whose `os:`
+// selector names credentials for other hosts and has no branch for this one.
+// Collapsing it would leave no trace of them, and no credentials is an open
+// dashboard, so this host must fail validation instead. An explicit empty branch
+// still declares an open dashboard on purpose. raw is the tree before `os:`
+// selectors collapse.
+func unselectedWebCredentialIssues(raw map[string]any) []Issue {
+	web, _ := raw[SectionWeb].(map[string]any)
+	selector, isSelector := web[keyOS].(map[string]any)
+	_, listens := web[WebKeyPort]
+	if !listens || !isSelector || selectOSBranch(selector, detectedOS) != nil ||
+		namesWebCredentials(web) || cfgval.Bool(web[WebKeyGuest]) {
+		return nil
+	}
+	for _, branch := range selector {
+		if block, ok := branch.(map[string]any); ok && namesWebCredentials(block) {
+			return []Issue{{Scope: globalScope, Msg: fmt.Sprintf(
+				"%s.%s has no branch for %s, so this host would serve an open dashboard; add a %s branch with %s",
+				SectionWeb, keyOS, detectedOS, keyOSDefault, WebKeyPasswordFile)}}
+		}
+	}
+	return nil
+}
+
+func namesWebCredentials(block map[string]any) bool {
+	return slices.ContainsFunc(webCredentialFileKeys[:], func(key string) bool {
+		_, named := block[key]
+		return named
+	})
 }
 
 // loadWebCredentials reads one role's hashed credentials from its file key.

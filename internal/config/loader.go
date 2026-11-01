@@ -173,6 +173,15 @@ func loadGlobal(path string) (Global, []Issue, error) {
 	// Resolve ${env:...} across the global config so secrets (notifier DSNs/
 	// webhooks, web passwords, …) come from the environment, never the file.
 	expandEnvTree(raw)
+	issues := unselectedWebCredentialIssues(raw)
+	// Before anything is derived: the fields below and the dashboard credentials
+	// must read the tree validation reads, or a selected value is validated and
+	// never applied.
+	doc := &Document{Path: path, Body: raw}
+	if err := collapseDocumentOS(doc); err != nil {
+		return Global{}, nil, err
+	}
+	raw = bindTokensMap(doc.Body, builtinReplacer())
 
 	g := Global{Path: path, Raw: raw}
 	if paths, ok := raw[sectionPaths].(map[string]any); ok {
@@ -195,7 +204,7 @@ func loadGlobal(path string) (Global, []Issue, error) {
 		g.State = cfgval.String(engine[EngineKeyState])
 	}
 	resolveConfigPaths(path, &g)
-	issues := resolveWebCredentials(&g)
+	issues = append(issues, resolveWebCredentials(&g)...)
 	return g, issues, nil
 }
 

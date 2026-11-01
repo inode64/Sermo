@@ -97,8 +97,8 @@ func (c *Config) applyOSSelectors() error {
 			return err
 		}
 	}
-	// The global document (defaults, watches, …) lives in Global.Raw, not c.docs,
-	// so collapse os: selectors there too.
+	// Watch documents and notifier fragments were folded into Global.Raw after
+	// loadGlobal collapsed sermo.yml, and they are not in c.docs.
 	if c.Global.Raw != nil {
 		raw, err := collapseOS(c.Global.Raw, detectedOS)
 		if err != nil {
