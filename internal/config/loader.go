@@ -1,6 +1,7 @@
 package config
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -10,6 +11,8 @@ import (
 	"strings"
 
 	"github.com/goccy/go-yaml"
+	"github.com/goccy/go-yaml/lexer"
+	"github.com/goccy/go-yaml/token"
 
 	"sermo/internal/cfgval"
 	"sermo/internal/hostfs"
@@ -167,6 +170,9 @@ func loadGlobal(path string) (Global, []Issue, error) {
 	if err := yaml.Unmarshal(data, &raw); err != nil {
 		return Global{}, nil, parseGlobalConfigError(path, err)
 	}
+	if err := singleDocument(data); err != nil {
+		return Global{}, nil, parseGlobalConfigError(path, err)
+	}
 	if raw == nil {
 		raw = map[string]any{}
 	}
@@ -206,6 +212,42 @@ func loadGlobal(path string) (Global, []Issue, error) {
 	resolveConfigPaths(path, &g)
 	issues = append(issues, resolveWebCredentials(&g)...)
 	return g, issues, nil
+}
+
+// singleDocument rejects a second YAML document. A kind comes from the file's
+// location, so a file cannot carry several, and yaml.Unmarshal stops at the first
+// and would let the rest vanish without a word. It reads the tokens because the
+// parser itself loses what follows two adjacent markers.
+func singleDocument(data []byte) error {
+	if !hasDocumentMarker(data) {
+		return nil
+	}
+	content, ended, directiveLine := false, false, 0
+	for _, tok := range lexer.Tokenize(string(data)) {
+		switch {
+		case tok.Type == token.DirectiveType:
+			directiveLine = tok.Position.Line
+		case tok.Type == token.CommentType || tok.Position.Line == directiveLine:
+		case tok.Type == token.DocumentHeaderType || tok.Type == token.DocumentEndType:
+			ended = content
+		case ended:
+			return fmt.Errorf("line %d: a second YAML document; each file holds one document", tok.Position.Line)
+		default:
+			content = true
+		}
+	}
+	return nil
+}
+
+// hasDocumentMarker spares singleDocument the token scan on nearly every file:
+// tokenizing the whole catalog again costs each sermoctl a third more load time.
+func hasDocumentMarker(data []byte) bool {
+	for _, marker := range []string{"---", "..."} {
+		if bytes.HasPrefix(data, []byte(marker)) || bytes.Contains(data, []byte("\n"+marker)) {
+			return true
+		}
+	}
+	return false
 }
 
 func parseGlobalConfigError(path string, err error) error {
@@ -630,6 +672,9 @@ func loadDocument(path string) (*Document, error) {
 	}
 	var body map[string]any
 	if err := yaml.Unmarshal(data, &body); err != nil {
+		return nil, fmt.Errorf("parse %s: %w", path, err)
+	}
+	if err := singleDocument(data); err != nil {
 		return nil, fmt.Errorf("parse %s: %w", path, err)
 	}
 	if body == nil {

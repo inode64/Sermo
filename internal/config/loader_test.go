@@ -968,3 +968,49 @@ func TestCatalogRootFilesRejected(t *testing.T) {
 		t.Fatalf("Load() error = %v, want catalog root rejection", err)
 	}
 }
+
+// TestLoadRefusesASecondYAMLDocument pins that no document of a file vanishes.
+// yaml.Unmarshal stops at the first one, so a service after a `---`, or the rest
+// of the docs/sermo-all.yml bundle copied over sermo.yml, went unmonitored with
+// no diagnostic at all.
+func TestLoadRefusesASecondYAMLDocument(t *testing.T) {
+	service := "name: a\nservice: a\nprocesses: {}\n"
+	cases := []struct {
+		name, global, doc, wantErr string
+		wantServices               []string
+	}{
+		{name: "two services", doc: service + "---\nname: b\nservice: b\nprocesses: {}\n", wantErr: "services/a.yml: line 5: a second YAML document"},
+		{name: "second document in sermo.yml", global: "---\nname: stray\n", wantErr: "sermo.yml: line 15: a second YAML document"},
+		{name: "second document after an empty one", doc: service + "---\n---\nname: b\n", wantErr: "a second YAML document"},
+		{name: "leading marker", doc: "---\n" + service, wantServices: []string{"a"}},
+		{name: "trailing marker", doc: service + "---\n", wantServices: []string{"a"}},
+		{name: "trailing end marker", doc: service + "...\n", wantServices: []string{"a"}},
+		{name: "comment after a marker", doc: service + "---\n# retired: name: b\n", wantServices: []string{"a"}},
+		{name: "directive", doc: "%YAML 1.2\n---\n" + service, wantServices: []string{"a"}},
+		{name: "marker inside a block scalar", doc: service + "description: |\n  ---\n  more\n", wantServices: []string{"a"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			doc := tc.doc
+			if doc == "" {
+				doc = service
+			}
+			cfg, err := loadConfig(t, writeConfig(t, map[string]string{
+				"sermo.yml":      baseGlobal + tc.global,
+				"services/a.yml": doc,
+			}))
+			if tc.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+					t.Fatalf("Load() error = %v, want %q", err, tc.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("Load() error = %v", err)
+			}
+			if !slices.Equal(cfg.ServiceNames, tc.wantServices) {
+				t.Fatalf("ServiceNames = %v, want %v", cfg.ServiceNames, tc.wantServices)
+			}
+		})
+	}
+}

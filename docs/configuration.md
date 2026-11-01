@@ -12,7 +12,9 @@ documents with `name:`; notifier files remain global fragments with a top-level
 New configuration must use one YAML file per target. That means one catalog app,
 daemon, lib or pattern per file; one service per file; one notifier per file;
 and one host watch per file (`storage`, `network`, `uplink`, `load`, mount
-watches and other watch documents). Notifier fragment files still have the
+watches and other watch documents). A file holding a second YAML document after
+`---` or `...`, `sermo.yml` included, is a load error, so the bundled
+[`docs/sermo-all.yml`](sermo-all.yml) has to be split before use. Notifier fragment files still have the
 top-level `notifiers:` map, but that map must contain exactly one named entry.
 This keeps generated configuration easy to diff, replace and clean up per
 target.
