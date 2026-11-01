@@ -1,6 +1,7 @@
 package hostfs
 
 import (
+	"context"
 	"errors"
 	"strings"
 	"sync"
@@ -126,6 +127,72 @@ func TestInFlightGraceOutlastsTheTimeoutItReports(t *testing.T) {
 	_, err = short.Do("/hung", time.Millisecond, func() (int, error) { <-release; return 0, nil })
 	if err == nil || !strings.Contains(err.Error(), "no answer within 1ms") {
 		t.Fatalf("error = %v, want the configured timeout, not timeout plus grace", err)
+	}
+}
+
+// Steps prove a run alive: only silence is a hang, however long the whole takes.
+func TestInFlightStepsExtendTheWait(t *testing.T) {
+	const timeout = 150 * time.Millisecond
+	g := NewInFlight[int]("scan", errTestHung, 0)
+	got, err := g.DoSteps(t.Context(), "/tree", timeout, func(step func()) (int, error) {
+		for range 6 {
+			time.Sleep(timeout / 4)
+			step()
+		}
+		return 5, nil
+	})
+	if got != 5 || err != nil {
+		t.Fatalf("DoSteps = %d, %v; want the run's answer past its timeout", got, err)
+	}
+}
+
+func TestInFlightGivesUpOnSilenceAfterSteps(t *testing.T) {
+	g := NewInFlight[int]("scan", errTestHung, 0)
+	release := make(chan struct{})
+	t.Cleanup(func() {
+		close(release)
+		waitIdle(t, g, "/tree")
+	})
+	_, err := g.DoSteps(t.Context(), "/tree", 10*time.Millisecond, func(step func()) (int, error) {
+		step()
+		<-release
+		return 0, nil
+	})
+	if !errors.Is(err, errTestHung) {
+		t.Fatalf("error = %v, want a run gone silent called hung", err)
+	}
+}
+
+// A caller that is cancelled leaves a run that is only slow: it is not blocked,
+// so the next caller waits on it instead of being refused or starting another.
+func TestInFlightCancelledCallerLeavesTheRunToTheNext(t *testing.T) {
+	g := NewInFlight[int]("scan", errTestHung, 0)
+	entered, release := make(chan struct{}), make(chan struct{})
+	t.Cleanup(func() {
+		close(release)
+		waitIdle(t, g, "/tree")
+	})
+	ctx, cancel := context.WithCancel(t.Context())
+	left := make(chan error, 1)
+	go func() {
+		_, err := g.DoSteps(ctx, "/tree", time.Hour, func(func()) (int, error) {
+			close(entered)
+			<-release
+			return 0, nil
+		})
+		left <- err
+	}()
+	<-entered
+	cancel()
+	if err := <-left; !errors.Is(err, context.Canceled) {
+		t.Fatalf("cancelled caller = %v", err)
+	}
+	_, err := g.Do("/tree", time.Millisecond, func() (int, error) {
+		t.Error("the next caller started its own run")
+		return 0, nil
+	})
+	if err == nil || !strings.Contains(err.Error(), "no answer within") {
+		t.Fatalf("next caller = %v, want it to have waited on the running call", err)
 	}
 }
 

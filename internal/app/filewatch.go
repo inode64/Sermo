@@ -104,7 +104,8 @@ type fileWatcher struct {
 
 	// lstat reads a watched root; nil reads the host.
 	lstat func(string) (fs.FileInfo, error)
-	// scanTimeout bounds one scan; a watcher without one scans inline.
+	// scanTimeout bounds the silence between the entries of a scan; a watcher
+	// without one scans inline.
 	scanTimeout time.Duration
 }
 
@@ -116,7 +117,7 @@ func (w *fileWatcher) runCycle(ctx context.Context) {
 		w.baseline = map[string]fileState{}
 	}
 	now := w.clock()
-	current, failures := w.boundedScan(now)
+	current, failures := w.boundedScan(ctx, now)
 	paths := slices.Sorted(maps.Keys(current)) // shared deterministic order for events and health
 	w.numberFiles = fileWatchNumberFiles(current)
 	blind := w.blindSpot(current, failures)
@@ -357,17 +358,19 @@ type fileScan struct {
 // network mount whose server is gone blocks in the kernel where no context
 // reaches it, and a cycle stuck there holds every reload and shutdown behind the
 // generation's join. It outlives a reload, which rebuilds the watcher but must
-// not stack another blocked scan on the same mount.
+// not stack another scan on the same tree.
 var fileScans = hostfs.NewInFlight[fileScan]("scan", hostfs.ErrHung, 0)
 
-// boundedScan runs scan under fileScans. The scan keeps to its own results, so
-// abandoning it leaves nothing behind but the goroutine. A scan that gave no
-// answer says nothing about any path: every root counts as a read failure, the
-// path that keeps the baselines and reports the cycle unavailable.
-func (w *fileWatcher) boundedScan(now time.Time) (map[string]fileState, readFailures) {
+// boundedScan runs scan under fileScans. Only silence gives a scan up: a large
+// tree keeps answering, and a limit on the whole walk would fail it the same way
+// on every cycle. ctx ends the wait, so a slow scan holds no reload. The scan keeps
+// to its own results, so abandoning it leaves nothing behind but the goroutine. A
+// scan that gave no answer says nothing about any path: every root counts as a
+// read failure, the path that keeps the baselines and reports the cycle unavailable.
+func (w *fileWatcher) boundedScan(ctx context.Context, now time.Time) (map[string]fileState, readFailures) {
 	key := fmt.Sprintf("%s\x00%v\x00%v", w.name, w.paths, w.check)
-	scan, err := fileScans.Do(key, w.scanTimeout, func() (fileScan, error) {
-		current, failures := w.scan(now)
+	scan, err := fileScans.DoSteps(ctx, key, w.scanTimeout, func(step func()) (fileScan, error) {
+		current, failures := w.scan(now, step)
 		return fileScan{current: current, failures: failures}, nil
 	})
 	if err == nil {
@@ -383,8 +386,8 @@ func (w *fileWatcher) boundedScan(now time.Time) (map[string]fileState, readFail
 // scan returns the current attributes of the watched path and, when recursive
 // and the path is a directory, every entry in its subtree, plus the paths it
 // could not read. Symlinks are stat'd as links (never followed), so a link is
-// watched as itself, not its target.
-func (w *fileWatcher) scan(now time.Time) (map[string]fileState, readFailures) {
+// watched as itself, not its target. step is called for every entry read.
+func (w *fileWatcher) scan(now time.Time, step func()) (map[string]fileState, readFailures) {
 	out := map[string]fileState{}
 	failures := readFailures{}
 	lstat := w.lstat
@@ -393,6 +396,7 @@ func (w *fileWatcher) scan(now time.Time) (map[string]fileState, readFailures) {
 	}
 	for _, root := range w.paths {
 		info, err := lstat(root)
+		step()
 		if err != nil {
 			failures.note(root, err)
 			continue
@@ -400,6 +404,7 @@ func (w *fileWatcher) scan(now time.Time) (map[string]fileState, readFailures) {
 		out[root] = w.stateOf(info, now)
 		if w.recursive && info.IsDir() {
 			_ = filepath.WalkDir(root, func(p string, d fs.DirEntry, walkErr error) error {
+				step()
 				if walkErr != nil {
 					failures.note(p, walkErr)
 					return nil // the rest of the tree is still scanned

@@ -5,6 +5,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -36,7 +37,7 @@ func (h *fileWatchHarness) watcher(path string, recursive bool, cond fileCond) *
 }
 
 func scannedFiles(w *fileWatcher) int {
-	current, _ := w.scan(time.Now())
+	current, _ := w.scan(time.Now(), func() {})
 	return fileWatchNumberFiles(current)
 }
 
@@ -677,6 +678,77 @@ func TestFileWatchHungScanReadsAsUnavailable(t *testing.T) {
 	}
 	if _, kept := w.baseline[path]; !kept {
 		t.Fatal("a hung scan dropped the path's baseline")
+	}
+}
+
+// A tree too large to read within the timeout still answers entry by entry. Each
+// attempt at it would time out the same way, so reading it as hung would leave a
+// healthy watch unavailable for good.
+func TestFileWatchSlowScanIsNotHung(t *testing.T) {
+	const (
+		entries = 6
+		timeout = 150 * time.Millisecond
+	)
+	dir := t.TempDir()
+	paths := make([]string, 0, entries)
+	for i := range entries {
+		path := filepath.Join(dir, strconv.Itoa(i))
+		writeSize(t, path, 1)
+		paths = append(paths, path)
+	}
+	h := &fileWatchHarness{}
+	w := h.watcher(paths[0], false, fileCond{onDelete: true})
+	w.paths, w.scanTimeout = paths, timeout
+	w.lstat = func(path string) (fs.FileInfo, error) {
+		time.Sleep(timeout / 4)
+		return os.Lstat(path)
+	}
+	var latest checks.Result
+	w.publish = func(_, _ string, res checks.Result) { latest = res }
+
+	w.runCycle(context.Background())
+
+	if latest.Observation() != checks.ObservationHealthy || len(w.baseline) != entries {
+		t.Fatalf("snapshot = %+v baseline = %d, want every entry read", latest, len(w.baseline))
+	}
+}
+
+// The limit reads these steps, so a recursive walk has to report each entry.
+func TestFileWatchScanStepsThroughATree(t *testing.T) {
+	root := t.TempDir()
+	const entries = 3
+	for i := range entries {
+		writeSize(t, filepath.Join(root, strconv.Itoa(i)), 1)
+	}
+	w := (&fileWatchHarness{}).watcher(root, true, fileCond{onDelete: true})
+	steps := 0
+	w.scan(time.Now(), func() { steps++ })
+	if steps <= entries {
+		t.Fatalf("steps = %d, want one for the root and each of %d entries", steps, entries)
+	}
+}
+
+// A scan that keeps going is no reason to hold a reload: the generation's join
+// waits on this cycle, whatever the scan's own limit.
+func TestFileWatchCancelledCycleStopsWaitingForItsScan(t *testing.T) {
+	hung := newHungRead(t)
+	h := &fileWatchHarness{}
+	path := filepath.Join(t.TempDir(), "report")
+	w := hungScanWatcher(h, hung, path, path)
+	w.scanTimeout = time.Hour
+	ctx, cancel := context.WithCancel(t.Context())
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		w.runCycle(ctx)
+	}()
+	cancel()
+	awaitWithin(t, done, "a cancelled cycle over a running scan")
+	if len(h.fired) != 0 {
+		t.Fatalf("a cancelled cycle fired %v", h.fired)
+	}
+	if _, kept := w.baseline[path]; !kept {
+		t.Fatal("a cancelled cycle dropped the path's baseline")
 	}
 }
 

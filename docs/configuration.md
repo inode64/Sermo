@@ -3744,11 +3744,15 @@ The conditions (declare at least one):
   duration. A path already stale on the first cycle fires immediately; it re-arms
   once the path is modified or removed.
 
-A scan must answer within `check.timeout` (`engine.default_timeout` when unset;
-raise it for a recursive watch over a large tree). One that does not, because a
-dead network mount blocks the read or the tree is too slow, reports the check
-unavailable and keeps every baseline, and later cycles do not start another until
-it returns, so a hung mount costs one blocked read instead of stopping a reload.
+A scan must keep answering: `check.timeout` (`engine.default_timeout` when unset)
+bounds the silence between one entry and the next, not the whole walk, so a large
+tree only delays its own watch. A scan that goes silent, because a dead network
+mount blocks the read, reports the check unavailable and keeps every baseline, and
+later cycles do not start another until it returns, so a hung mount costs one
+blocked read instead of stopping a reload. A reload or shutdown does not wait for a
+scan either; a slow one runs on for the next cycle of the same configuration to
+share. Raise the timeout only for a single directory so large that listing it takes
+longer than that.
 
 The watch's state remains failed while any path breaches a `size` threshold or
 `older_than`, or while a configured root is missing. These conditions open one
