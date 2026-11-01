@@ -30,6 +30,10 @@ type ProcMatch struct {
 	User string
 	All  bool
 	PID  int // > 0: only this process, whatever its name or user; for re-verifying one PID
+	// Replaced also matches Name against the previous path of a binary replaced
+	// on disk. It is for observing: a process matched this way has no resolved
+	// exe, so a kill re-check leaves it off.
+	Replaced bool
 }
 
 // ProcInfo is one matched process's current resource counters. CPU and IO are
@@ -191,7 +195,11 @@ func (w *procWatcher) runCycle(ctx context.Context) {
 	}
 	now := clockOrNow(w.now)
 
-	samples, ok := w.sampler.Sample(w.match)
+	// An upgrade replaces a running binary without ending the process, so the
+	// cycle keeps it in sight; w.match stays strict for the kill re-check.
+	observed := w.match
+	observed.Replaced = true
+	samples, ok := w.sampler.Sample(observed)
 	if !ok {
 		// Could not read the process list this cycle (transient /proc failure).
 		// Treating the empty result as "all matching PIDs vanished" would fire a
@@ -678,9 +686,10 @@ func sharedIdentityCurrent(mr procCounterReader, id process.Identity, ticks uint
 }
 
 // procMatchesWithLookup reports whether a process matches the selector: its name
-// against the resolved exe (full path or basename) and, if set, the owning user.
-// All matches every process, PID exactly one; without either an empty selector
-// matches none.
+// against the resolved exe (full path or basename), or the previous path of a
+// replaced binary when the selector observes those, and, if set, the owning
+// user. All matches every process, PID exactly one; without either an empty
+// selector matches none.
 func procMatchesWithLookup(m ProcMatch, id process.Identity, lookup *process.UserLookup) bool {
 	if m.PID > 0 {
 		return id.PID == m.PID
@@ -688,10 +697,8 @@ func procMatchesWithLookup(m ProcMatch, id process.Identity, lookup *process.Use
 	if m.All {
 		return true
 	}
-	if m.Name != "" {
-		if !id.ExeOK || (m.Name != id.Exe && m.Name != filepath.Base(id.Exe)) {
-			return false
-		}
+	if m.Name != "" && !procNameMatches(m, id) {
+		return false
 	}
 	if m.User != "" && m.User != id.User {
 		if lookup == nil {
@@ -703,4 +710,15 @@ func procMatchesWithLookup(m ProcMatch, id process.Identity, lookup *process.Use
 		}
 	}
 	return m.Name != "" || m.User != ""
+}
+
+func procNameMatches(m ProcMatch, id process.Identity) bool {
+	exe := id.Exe
+	if !id.ExeOK {
+		if !m.Replaced {
+			return false
+		}
+		exe = id.ExePrev
+	}
+	return exe != "" && (m.Name == exe || m.Name == filepath.Base(exe))
 }

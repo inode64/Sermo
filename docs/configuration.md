@@ -4210,6 +4210,11 @@ PID. A PID the kernel recycled between two cycles counts as a disappearance too:
 the number is still in the sample, but the start time proves another process is
 behind it, so the one that ended is reported gone.
 
+A process whose binary was replaced on disk, as a package upgrade does, keeps
+matching under its previous path: it is still measured, and it reports `gone`
+only when it exits. This is observation only: `then.kill` needs the exact
+resolved `exe`, so it refuses that process and records `kill-failed`.
+
 Hook extras: `SERMO_PID` (the matching pid), `SERMO_PROCESS` (the configured
 name), `SERMO_CHANGE` (`threshold` for a presence fire, `gone` for a
 disappearance), `SERMO_USER` (if set), `SERMO_AGE_SECONDS`, `SERMO_MEMORY` (RSS

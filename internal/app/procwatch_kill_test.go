@@ -241,6 +241,47 @@ func TestProcWatchKillFailedEmitsEvent(t *testing.T) {
 	}
 }
 
+// Keeping a replaced binary in the watch's sight grants nothing: then.kill still
+// needs the exact resolved exe, so it reports the refusal and signals nothing.
+func TestProcWatchKillRefusesAReplacedBinary(t *testing.T) {
+	h := &procHarness{clock: time.Unix(1_000_000, 0)}
+	sig := &fakeSignaler{}
+	table := serviceOwnershipReader{42: {PID: 42, StartTicks: 100, StartTicksOK: true, User: "root", ExePrev: "/opt/sermo-test/sudo"}}
+	sampler := osProcSampler{userLookup: process.DefaultUserLookup(), host: table, counters: fakeProcCounters{starts: map[int]uint64{42: 100}}}
+	w := killWatcher(h, &killSpec{signal: syscall.SIGTERM, escalate: true}, sig, sampler, false, false)
+
+	w.runCycle(context.Background())
+
+	if len(sig.sent) != 0 {
+		t.Fatalf("replaced binary was signalled: %v", sig.sent)
+	}
+	if ev := killEvents(h.events); len(ev) != 1 || ev[0].Kind != eventKindKillFailed {
+		t.Fatalf("want one kill-failed event, got %v", h.events)
+	}
+}
+
+// A binary replaced during the grace period leaves the escalation with no exact
+// identity to act on, however the cycle's own sample would still see the process.
+func TestProcWatchKillEscalationStopsAtAReplacedBinary(t *testing.T) {
+	h := &procHarness{clock: time.Unix(1_000_000, 0)}
+	sig := &fakeSignaler{}
+	running := process.Identity{PID: 42, StartTicks: 100, StartTicksOK: true, User: "root", Exe: "/opt/sermo-test/sudo", ExeOK: true}
+	table := serviceOwnershipReader{42: running}
+	sampler := osProcSampler{userLookup: process.DefaultUserLookup(), host: table, counters: fakeProcCounters{starts: map[int]uint64{42: 100}}}
+	w := killWatcher(h, &killSpec{signal: syscall.SIGTERM, escalate: true, termTimeout: time.Second}, sig, sampler, false, false)
+	w.killer.sleep = func(time.Duration) {
+		replaced := running
+		replaced.Exe, replaced.ExeOK, replaced.ExePrev = "", false, running.Exe
+		table[42] = replaced
+	}
+
+	w.runCycle(context.Background())
+
+	if len(sig.sent) != 1 || sig.sent[0] != (sigCall{42, syscall.SIGTERM}) {
+		t.Fatalf("want only the first SIGTERM, got %v", sig.sent)
+	}
+}
+
 func TestProcWatchKillSelectorMismatchDoesNotSignal(t *testing.T) {
 	h := &procHarness{clock: time.Unix(1_000_000, 0)}
 	sig := &fakeSignaler{}

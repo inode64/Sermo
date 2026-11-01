@@ -489,6 +489,42 @@ func TestProcWatchGoneFires(t *testing.T) {
 	}
 }
 
+// An upgrade replaces a running process's binary without ending the process:
+// its exe stops resolving, which read as the process being gone and took it out
+// of the watch's thresholds while it ran on.
+func TestProcWatchKeepsTrackingAReplacedBinary(t *testing.T) {
+	running := process.Identity{PID: 7, PPID: 1, StartTicks: 100, StartTicksOK: true, Exe: "/usr/sbin/worker", ExeOK: true}
+	replaced := running
+	replaced.Exe, replaced.ExeOK, replaced.ExePrev = "", false, "/usr/sbin/worker"
+	counters := fakeProcCounters{starts: map[int]uint64{7: 100}}
+
+	t.Run("not gone until it exits", func(t *testing.T) {
+		h := &procHarness{clock: time.Unix(1_000_000, 0)}
+		table := serviceOwnershipReader{7: running}
+		w := h.watcher(procCond{onGone: true}, osProcSampler{userLookup: process.DefaultUserLookup(), host: table, counters: counters})
+		h.tick(w, time.Minute)
+		table[7] = replaced
+		h.tick(w, time.Minute)
+		if len(h.fired) != 0 {
+			t.Fatalf("replacing the binary fired %v", h.fired)
+		}
+		delete(table, 7)
+		h.tick(w, time.Minute)
+		if len(h.fired) != 1 || h.fired[0][sermoEnvChange] != procChangeGone {
+			t.Fatalf("exit fired %v, want one gone", h.fired)
+		}
+	})
+	t.Run("still measured", func(t *testing.T) {
+		h := &procHarness{clock: time.Unix(1_000_000, 0)}
+		table := serviceOwnershipReader{7: replaced}
+		w := h.watcher(procCond{memOp: ">", memValue: 0}, osProcSampler{userLookup: process.DefaultUserLookup(), host: table, counters: counters})
+		h.tick(w, time.Minute)
+		if len(h.fired) != 1 {
+			t.Fatalf("threshold on a replaced binary fired %d times, want 1", len(h.fired))
+		}
+	})
+}
+
 func TestProcWatchGoneOnlyDoesNotFireOnPresence(t *testing.T) {
 	h := &procHarness{clock: time.Unix(1_000_000, 0)}
 	s := &fakeProcSampler{cycles: [][]ProcInfo{
