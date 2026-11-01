@@ -246,6 +246,7 @@ func buildOne(name string, entry map[string]any, deps Deps, runner execx.Runner,
 		var check Check
 		check, failure = buildCheck(typ, b, entry, runner, client, deps)
 		if failure == nil {
+			check = guardPathReads(check, typ, name, deps.Service, entry, b.timeout)
 			return Built{Check: withLimiter(withSummary(check, entry), deps.Limiter, b.timeout), Optional: cfgval.Bool(entry[CheckKeyOptional])}, nil
 		}
 	}
@@ -280,12 +281,12 @@ var builtinCheckSpecs = []checkSpec{
 	{info: healthTypeInfo(CheckTypeCommand), build: func(in checkBuildInput) (Check, string) { return buildCommandCheck(in.base, in.entry, in.runner) }},
 	{info: healthTypeInfo(CheckTypeClock), build: func(in checkBuildInput) (Check, string) { return buildClockCheck(in.base, in.entry) }},
 	{info: latencyTypeInfo(serviceHealthTypeInfo(CheckTypeService)), build: func(in checkBuildInput) (Check, string) { return buildServiceCheck(in.base, in.entry, in.deps) }},
-	{info: healthTypeInfo(CheckTypeFileExists), build: func(in checkBuildInput) (Check, string) { return buildFileExistsCheck(in.base, in.entry) }},
-	{info: resourcePathTypeInfo(healthTypeInfo(CheckTypeFile)), build: func(in checkBuildInput) (Check, string) { return buildFileCheck(in.base, in.entry) }},
-	{info: resourcePathTypeInfo(healthTypeInfo(CheckTypeLockfile)), build: func(in checkBuildInput) (Check, string) { return buildLockfileCheck(in.base, in.entry) }},
-	{info: resourcePathTypeInfo(healthTypeInfo(CheckTypeBinary)), build: func(in checkBuildInput) (Check, string) { return buildBinaryCheck(in.base, in.entry) }},
-	{info: resourcePathTypeInfo(healthTypeInfo(CheckTypePidfile)), build: func(in checkBuildInput) (Check, string) { return buildPidfileCheck(in.base, in.entry, in.deps) }},
-	{info: resourcePathTypeInfo(healthTypeInfo(CheckTypeSocket)), build: func(in checkBuildInput) (Check, string) { return buildSocketCheck(in.base, in.entry) }},
+	{info: healthTypeInfo(CheckTypeFileExists), readsPaths: true, build: func(in checkBuildInput) (Check, string) { return buildFileExistsCheck(in.base, in.entry) }},
+	{info: resourcePathTypeInfo(healthTypeInfo(CheckTypeFile)), readsPaths: true, build: func(in checkBuildInput) (Check, string) { return buildFileCheck(in.base, in.entry) }},
+	{info: resourcePathTypeInfo(healthTypeInfo(CheckTypeLockfile)), readsPaths: true, build: func(in checkBuildInput) (Check, string) { return buildLockfileCheck(in.base, in.entry) }},
+	{info: resourcePathTypeInfo(healthTypeInfo(CheckTypeBinary)), readsPaths: true, build: func(in checkBuildInput) (Check, string) { return buildBinaryCheck(in.base, in.entry) }},
+	{info: resourcePathTypeInfo(healthTypeInfo(CheckTypePidfile)), readsPaths: true, build: func(in checkBuildInput) (Check, string) { return buildPidfileCheck(in.base, in.entry, in.deps) }},
+	{info: resourcePathTypeInfo(healthTypeInfo(CheckTypeSocket)), readsPaths: true, build: func(in checkBuildInput) (Check, string) { return buildSocketCheck(in.base, in.entry) }},
 	{info: serviceHealthTypeInfo(CheckTypeProcess), build: func(in checkBuildInput) (Check, string) { return buildProcessCheck(in.base, in.entry, in.deps) }},
 	// Condition, not health: OK means "nothing is stale", so a rule fires it
 	// with `active:` the same way it would an alert-style predicate.
@@ -296,8 +297,8 @@ var builtinCheckSpecs = []checkSpec{
 	{info: serviceConditionTypeInfo(CheckTypeStrays), build: func(in checkBuildInput) (Check, string) { return buildStraysCheck(in.base, in.entry, in.deps) }},
 	{info: serviceConditionTypeInfo(CheckTypeMetric), build: func(in checkBuildInput) (Check, string) { return buildMetricCheck(in.base, in.entry, in.deps) }},
 	{info: healthTypeInfo(CheckTypeLibraries), build: func(in checkBuildInput) (Check, string) { return buildLibrariesCheck(in.base, in.entry) }},
-	{info: conditionTypeInfo(CheckTypeCount), build: func(in checkBuildInput) (Check, string) { return buildCountCheck(in.base, in.entry) }},
-	{info: conditionTypeInfo(CheckTypeLog), build: func(in checkBuildInput) (Check, string) { return buildLogCheck(in.base, in.entry) }},
+	{info: conditionTypeInfo(CheckTypeCount), readsPaths: true, build: func(in checkBuildInput) (Check, string) { return buildCountCheck(in.base, in.entry) }},
+	{info: conditionTypeInfo(CheckTypeLog), readsPaths: true, build: func(in checkBuildInput) (Check, string) { return buildLogCheck(in.base, in.entry) }},
 	{info: conditionTypeInfo(CheckTypeStorage), predicateFields: StoragePredFields, build: func(in checkBuildInput) (Check, string) { return buildStorageCheck(in.base, in.entry, in.deps) }},
 	{info: conditionTypeInfo(CheckTypeLoad), predicateFields: LoadPredFields, build: func(in checkBuildInput) (Check, string) { return buildLoadCheck(in.base, in.entry, in.deps) }},
 	{info: conditionTypeInfo(CheckTypeUsers), predicateFields: UsersPredFields, build: func(in checkBuildInput) (Check, string) { return buildUsersCheck(in.base, in.entry, in.deps) }},
@@ -325,7 +326,7 @@ var builtinCheckSpecs = []checkSpec{
 	}},
 	{info: healthTypeInfo(CheckTypeLVM), predicateFields: LVMPredFields, build: func(in checkBuildInput) (Check, string) { return buildLVMCheck(in.base, in.entry, in.runner) }},
 	{info: conditionTypeInfo(CheckTypeEDAC), predicateFields: EdacPredFields, build: func(in checkBuildInput) (Check, string) { return buildEdacCheck(in.base, in.entry, in.deps) }},
-	{info: healthTypeInfo(CheckTypeConfig), build: func(in checkBuildInput) (Check, string) { return buildConfigCheck(in.base, in.entry, in.runner) }},
+	{info: healthTypeInfo(CheckTypeConfig), readsPaths: true, build: func(in checkBuildInput) (Check, string) { return buildConfigCheck(in.base, in.entry, in.runner) }},
 	{info: meteredTypeInfo(conditionTypeInfo(CheckTypeFDS), DataKeyAllocated), predicateFields: FdsPredFields, build: func(in checkBuildInput) (Check, string) { return buildFdsCheck(in.base, in.entry, in.deps) }},
 	{info: conditionTypeInfo(CheckTypeMemory), predicateFields: MemoryPredFields, build: func(in checkBuildInput) (Check, string) { return buildMemoryCheck(in.base, in.entry, in.deps) }},
 	{info: conditionTypeInfo(CheckTypePressure), predicateFields: PressurePredFields, build: func(in checkBuildInput) (Check, string) { return buildPressureCheck(in.base, in.entry, in.deps) }},
@@ -334,7 +335,7 @@ var builtinCheckSpecs = []checkSpec{
 	{info: meteredTypeInfo(conditionTypeInfo(CheckTypeConntrack), DataKeyCount), predicateFields: ConntrackPredFields, build: func(in checkBuildInput) (Check, string) { return buildConntrackCheck(in.base, in.entry, in.deps) }},
 	{info: conditionTypeInfo(CheckTypeZombies), predicateFields: ZombiePredFields, build: func(in checkBuildInput) (Check, string) { return buildZombieCheck(in.base, in.entry, in.deps) }},
 	{info: conditionTypeInfo(CheckTypeOOM), predicateFields: OOMPredFields, build: func(in checkBuildInput) (Check, string) { return buildOomCheck(in.base, in.entry, in.deps) }},
-	{info: healthTypeInfo(CheckTypeCert), build: func(in checkBuildInput) (Check, string) { return buildCertCheck(in.base, in.entry, in.deps) }},
+	{info: healthTypeInfo(CheckTypeCert), readsPaths: true, build: func(in checkBuildInput) (Check, string) { return buildCertCheck(in.base, in.entry, in.deps) }},
 	{info: healthTypeInfo(CheckTypeSQLite), build: func(in checkBuildInput) (Check, string) { return buildSqliteCheck(in.base, in.entry) }},
 	{info: conditionTypeInfo(CheckTypeSQL), build: func(in checkBuildInput) (Check, string) { return buildSQLCheck(in.base, in.entry) }},
 	{info: healthTypeInfo(CheckTypeReplication), build: func(in checkBuildInput) (Check, string) { return buildReplicationCheck(in.base, in.entry) }},

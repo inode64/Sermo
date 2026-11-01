@@ -70,6 +70,9 @@ type checkSpec struct {
 	// It is resolved with the base, not in the builder, because the shared check
 	// budget applies the base's timeout around the check as well.
 	minTimeout time.Duration
+	// readsPaths marks a type that stats, opens or walks the paths its entry
+	// names, so a run of it goes under the hung-path guard.
+	readsPaths bool
 	build      checkBuilder
 }
 

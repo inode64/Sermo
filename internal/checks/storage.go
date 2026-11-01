@@ -5,10 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"sync"
 	"syscall"
 	"time"
 
+	"sermo/internal/hostfs"
 	"sermo/internal/severity"
 )
 
@@ -201,24 +201,14 @@ func storageMountData(data map[string]any, mounted bool, info *Mount) {
 	data[DataKeyOptions] = strings.Join(info.Options, ",")
 }
 
+// errStatfsHung marks a statfs that did not answer: the mount is hung.
+var errStatfsHung = errors.New("hung mount")
+
 // statfsInFlight holds the paths whose statfs has not returned yet. On a hard
 // network mount whose server is gone, statfs blocks in the kernel and cannot be
 // interrupted; the check reports it unavailable after its timeout, and later
 // cycles fail fast instead of stacking another blocked call on the same mount.
-var statfsInFlight = struct {
-	sync.Mutex
-	calls map[string]*storageUsageCall
-}{calls: make(map[string]*storageUsageCall)}
-
-type storageUsageCall struct {
-	done     chan struct{}
-	stats    StorageStats
-	err      error
-	timedOut bool // protected by statfsInFlight
-}
-
-// errStatfsHung marks a statfs that did not answer: the mount is hung.
-var errStatfsHung = errors.New("hung mount")
+var statfsInFlight = hostfs.NewInFlight[StorageStats]("statfs", errStatfsHung, 0)
 
 // StatfsAnswers reports whether path answers statfs within timeout: nil when it
 // does, an error wrapping the hung-mount cause when it does not. It shares the
@@ -231,38 +221,7 @@ func StatfsAnswers(path string, timeout time.Duration) error {
 // boundedUsage runs usage for path within timeout (unbounded when timeout is
 // not positive).
 func boundedUsage(usage StorageUsageFunc, path string, timeout time.Duration) (StorageStats, error) {
-	if timeout <= 0 {
-		return usage(path)
-	}
-	statfsInFlight.Lock()
-	call := statfsInFlight.calls[path]
-	if call == nil {
-		call = &storageUsageCall{done: make(chan struct{})}
-		statfsInFlight.calls[path] = call
-		go func() {
-			call.stats, call.err = usage(path)
-			statfsInFlight.Lock()
-			delete(statfsInFlight.calls, path)
-			close(call.done)
-			statfsInFlight.Unlock()
-		}()
-	}
-	timedOut := call.timedOut
-	statfsInFlight.Unlock()
-	if timedOut {
-		return StorageStats{}, fmt.Errorf("%w: an earlier statfs is still blocked", errStatfsHung)
-	}
-	timer := time.NewTimer(timeout)
-	defer timer.Stop()
-	select {
-	case <-call.done:
-		return call.stats, call.err
-	case <-timer.C:
-		statfsInFlight.Lock()
-		call.timedOut = true
-		statfsInFlight.Unlock()
-		return StorageStats{}, fmt.Errorf("%w: no answer within %s", errStatfsHung, timeout)
-	}
+	return statfsInFlight.Do(path, timeout, func() (StorageStats, error) { return usage(path) }) //nolint:wrapcheck // usage's own error or errStatfsHung, which both already name the statfs
 }
 
 // statfsUsage is the default StorageUsageFunc backed by statfs(2).

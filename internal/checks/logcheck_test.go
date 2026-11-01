@@ -224,7 +224,7 @@ func TestBuildLogCheck(t *testing.T) {
 	if len(warns) > 0 || len(built) != 1 {
 		t.Fatalf("build = %d checks, warns %v", len(built), warns)
 	}
-	lc, ok := built[0].Check.(logCheck)
+	lc, ok := unguarded(built[0].Check).(logCheck)
 	if !ok {
 		t.Fatalf("built %T, want logCheck", built[0].Check)
 	}

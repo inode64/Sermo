@@ -99,7 +99,7 @@ func TestBuildTimeoutPerCheck(t *testing.T) {
 	built, _ := Build(section, Deps{DefaultTimeout: 7 * time.Second})
 	got := map[string]time.Duration{}
 	for _, b := range built {
-		got[b.Check.Name()] = b.Check.(binaryCheck).timeout
+		got[b.Check.Name()] = unguarded(b.Check).(binaryCheck).timeout
 	}
 	if got["slow"] != 30*time.Second {
 		t.Errorf("slow timeout = %v, want 30s", got["slow"])
