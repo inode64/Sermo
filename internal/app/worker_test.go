@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -791,6 +792,60 @@ func TestCycleGuardCanReferencePreflightCheck(t *testing.T) {
 	}
 	if e, ok := h.eventOf(eventKindError); ok {
 		t.Fatalf("preflight reference must not emit an error event: %+v", e)
+	}
+}
+
+// A preflight entry a rule reads runs once per cycle. The check cache outlives
+// the cycle, so a lazy result left in it would read as current for the rest of
+// the worker's life: a guard that denied once would keep denying a configuration
+// already fixed, and the failing entry would count as a failed required check.
+func TestCycleRereadsPreflightReferenceEveryCycle(t *testing.T) {
+	h := &workerHarness{opResult: operation.Result{Status: operation.ResultOK}}
+	tree := map[string]any{"rules": map[string]any{
+		"block-restart-if-config-invalid": map[string]any{
+			"type":   "guard",
+			"blocks": []any{"restart"},
+			"if":     map[string]any{"failed": map[string]any{"check": "config"}},
+			"then":   map[string]any{"action": "block", "message": "config invalid"},
+		},
+		"restart-if-down": map[string]any{
+			"type": "remediation",
+			"if":   map[string]any{"failed": map[string]any{"check": "http"}},
+			"then": map[string]any{"action": "restart"},
+		},
+	}}
+	w := h.worker(tree, rules.Policy{Cooldown: time.Minute}, nil)
+	http := checks.Built{Check: stubCheck{name: "http"}, Optional: true}
+	w.Checks = workerCheckRunner(w, []checks.Built{http}, nil, 1, nil, func(checks.MetricReader) {})
+	configValid, reads := false, 0
+	w.ResolveRefs = func() rules.RefResolver {
+		return func(_ context.Context, name string) (checks.Result, bool, error) {
+			if name != "config" {
+				return checks.Result{}, false, nil
+			}
+			reads++
+			return checks.Result{Check: name, OK: configValid}, true, nil
+		}
+	}
+	var available []bool
+	w.RecordCycle = func(_ context.Context, cycle cycleRecord) { available = append(available, cycle.up) }
+
+	w.RunCycle(context.Background())
+	if len(h.ops) != 0 {
+		t.Fatalf("an invalid configuration must block the restart, ops=%v", h.ops)
+	}
+
+	configValid = true
+	w.RunCycle(context.Background())
+
+	if reads != 2 {
+		t.Fatalf("preflight read %d times in two cycles, want one per cycle", reads)
+	}
+	if len(h.ops) != 1 || h.ops[0] != string(rules.ActionRestart) {
+		t.Fatalf("the fixed configuration must release the restart, ops=%v", h.ops)
+	}
+	if !slices.Equal(available, []bool{true, true}) {
+		t.Fatalf("availability = %v: a referenced preflight is not one of the service's checks", available)
 	}
 }
 

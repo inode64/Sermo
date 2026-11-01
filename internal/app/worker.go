@@ -241,7 +241,9 @@ func (w *Worker) RunCycle(ctx context.Context) {
 	if w.ResolveRefs != nil {
 		resolveRef = w.ResolveRefs()
 	}
-	ev := &rules.Evaluator{Cache: cache, ResolveRef: resolveRef, Deps: deps, Changed: w.changed, ChangedVersion: w.changedAppVersion}
+	// The evaluator adds to its cache the preflight entries rules read, and those
+	// hold for one cycle; cache outlives it to serve per-check intervals.
+	ev := &rules.Evaluator{Cache: maps.Clone(cache), ResolveRef: resolveRef, Deps: deps, Changed: w.changed, ChangedVersion: w.changedAppVersion}
 	evals := w.ruleEvalCache()
 
 	w.runRemediation(ctx, ev, now, at, evals)

@@ -30,7 +30,7 @@ type ChangeContext struct {
 type Evaluator struct {
 	// Cache holds the results of the service's named checks for this cycle,
 	// keyed by check name (for failed/active references). ResolveRef may add
-	// lazy preflight results to this map.
+	// lazy preflight results to this map, so it must not outlive the cycle.
 	Cache map[string]checks.Result
 	// ResolveRef resolves additional named checks (for example preflight entries)
 	// when a failed/active reference is not present in Cache. The bool reports
