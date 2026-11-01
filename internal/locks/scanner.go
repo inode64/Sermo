@@ -72,6 +72,9 @@ func (s Scanner) ScanServices(services []string) (map[string]Report, error) {
 		}
 		path := filepath.Join(s.Dir, fileName)
 		lf, readErr := readLockFile(path)
+		if lockVanished(path, readErr) {
+			continue
+		}
 		if readErr != nil {
 			for _, match := range matches {
 				report := reports[match.service]
@@ -110,7 +113,7 @@ func (s Scanner) ScanDir() ([]string, error) {
 	var warnings []string
 	for _, fileName := range names {
 		path := filepath.Join(s.Dir, fileName)
-		if _, err := readLockFile(path); err != nil {
+		if _, err := readLockFile(path); err != nil && !lockVanished(path, err) {
 			warnings = append(warnings, err.Error())
 		}
 	}
@@ -178,6 +181,17 @@ func readLockFile(path string) (lockFile, error) {
 		return lockFile{}, fmt.Errorf("parse %s: %w", path, err)
 	}
 	return lf, nil
+}
+
+// lockVanished reports a lock released after the directory listing named it. A
+// dangling symlink also reads as missing but stays at the path, and that lock
+// cannot be verified, so it keeps refusing operations.
+func lockVanished(path string, readErr error) bool {
+	if !isMissingLock(readErr) {
+		return false
+	}
+	_, err := hostfs.Lstat(path)
+	return isMissingLock(err)
 }
 
 // isMissingLock reports a lock file that is not present. Use errors.Is rather

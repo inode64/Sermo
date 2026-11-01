@@ -234,6 +234,55 @@ func TestScanServicesMalformedFileWarnsMatchingService(t *testing.T) {
 	}
 }
 
+// The listing and the reads are not one snapshot. A lock released between them
+// is gone, not unverifiable, and must not refuse an operation. The clock runs
+// after each read, which places the release exactly there.
+func TestScanSkipsLockReleasedAfterListing(t *testing.T) {
+	dir := t.TempDir()
+	writeLock(t, dir, "mysql.lock", lockFile{ExpiresAt: fixedNow.Add(time.Hour)})
+	writeLock(t, dir, "mysql\\backup.lock", lockFile{ExpiresAt: fixedNow.Add(time.Hour)})
+	scanner := scannerFor(dir, fakeProc{})
+	scanner.Now = func() time.Time {
+		if err := os.Remove(filepath.Join(dir, "mysql\\backup.lock")); err != nil && !errors.Is(err, fs.ErrNotExist) {
+			t.Error(err)
+		}
+		return fixedNow
+	}
+
+	report, err := scanner.Scan("mysql")
+	if err != nil {
+		t.Fatalf("Scan() error = %v", err)
+	}
+	if len(report.Warnings) != 0 || len(report.Locks) != 1 || report.Locks[0].Name != "" {
+		t.Fatalf("report = %+v, want only the bare lock and no warning", report)
+	}
+}
+
+// A dangling symlink reads as missing too, yet it stays at the path: that is a
+// lock Sermo cannot verify, not one that went away.
+func TestScanWarnsOnDanglingLock(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.Symlink(filepath.Join(dir, "absent"), filepath.Join(dir, "mysql.lock")); err != nil {
+		t.Fatal(err)
+	}
+	scanner := scannerFor(dir, fakeProc{})
+
+	report, err := scanner.Scan("mysql")
+	if err != nil {
+		t.Fatalf("Scan() error = %v", err)
+	}
+	if len(report.Warnings) != 1 {
+		t.Fatalf("Scan() warnings = %v, want one", report.Warnings)
+	}
+	warnings, err := scanner.ScanDir()
+	if err != nil {
+		t.Fatalf("ScanDir() error = %v", err)
+	}
+	if len(warnings) != 1 {
+		t.Fatalf("ScanDir() warnings = %v, want one", warnings)
+	}
+}
+
 func TestIsMissingLock(t *testing.T) {
 	missing := fmt.Errorf("read /x: %w", fs.ErrNotExist)
 	if !isMissingLock(missing) {
