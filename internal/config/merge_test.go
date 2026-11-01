@@ -1,7 +1,11 @@
 package config
 
 import (
+	"maps"
+	"slices"
 	"testing"
+
+	"sermo/internal/process"
 )
 
 func TestMergeMaps(t *testing.T) {
@@ -103,5 +107,52 @@ func TestMergeMapsRetypedCheckDropsInheritedLevels(t *testing.T) {
 	same := mergeMaps(catalog, map[string]any{"type": "metric", "levels": map[string]any{"critical": map[string]any{"value": "90%"}}})
 	if levels := same["levels"].(map[string]any); levels["error"] == nil || levels["critical"] == nil {
 		t.Fatalf("same-type levels = %v, want the override merged into the inherited tiers", levels)
+	}
+}
+
+// TestDisabledProcessSelectorIsDropped pins the merge rule for `processes`:
+// validation refused `enabled` there although the section is mergeable and the
+// flag documented for it. A selector has no disabled state, so the entry goes, and
+// with the last one gone the service falls back on the init backend's identity.
+func TestDisabledProcessSelectorIsDropped(t *testing.T) {
+	catalog := `
+name: base
+service: base
+processes:
+  main: { exe: /usr/bin/base, user: root }
+  worker: { exe: /usr/bin/worker, user: root }
+`
+	cases := []struct {
+		name, override string
+		want           []string
+		wantMode       ServiceProcessMode
+	}{
+		{"one disabled", "processes:\n  worker: { enabled: false }\n", []string{"main"}, ServiceProcessResident},
+		{"all disabled", "processes:\n  main: { enabled: false }\n  worker: { enabled: false }\n", nil, ServiceProcessInit},
+		{"enabled stays", "processes:\n  worker: { enabled: true }\n", []string{"main", "worker"}, ServiceProcessResident},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg, err := loadConfig(t, writeConfig(t, map[string]string{
+				"sermo.yml":                 baseGlobal,
+				"catalog/services/base.yml": catalog,
+				"services/svc.yml":          "name: svc\nuses: base\n" + tc.override,
+			}))
+			if err != nil {
+				t.Fatalf("Load() error = %v", err)
+			}
+			mustNotHave(t, Validate(cfg), "processes.")
+			resolved, errs := cfg.Resolve("svc")
+			if len(errs) != 0 {
+				t.Fatalf("Resolve() errors = %v", errs)
+			}
+			got := slices.Sorted(maps.Keys(SectionMap(resolved.Tree, process.SectionProcesses)))
+			if !slices.Equal(got, tc.want) {
+				t.Fatalf("processes = %v, want %v", got, tc.want)
+			}
+			if mode := ResolveServiceLifecycle(resolved.Tree, backendSystemd).ProcessMode; mode != tc.wantMode {
+				t.Fatalf("ProcessMode = %q, want %q", mode, tc.wantMode)
+			}
+		})
 	}
 }

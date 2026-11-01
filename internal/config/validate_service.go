@@ -43,7 +43,7 @@ const (
 		process.SelectorKeyCmd + ", " +
 		process.SelectorKeyUser + ", " +
 		process.SelectorKeyGroup + ", " +
-		process.SelectorKeyDelegated + " and " + keyEnableIf
+		process.SelectorKeyDelegated + ", " + keyEnabled + " and " + keyEnableIf
 )
 
 var validMonitorModes = set(MonitorEnabled, MonitorDisabled, MonitorPrevious)
@@ -55,6 +55,7 @@ var validProcessSelectorKeys = set(
 	process.SelectorKeyGroup,
 	process.SelectorKeyDelegated,
 	keyDelete,
+	keyEnabled,
 	keyEnableIf,
 )
 
