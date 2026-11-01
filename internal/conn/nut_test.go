@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+
+	"sermo/internal/units"
 )
 
 func TestNUTVersion(t *testing.T) {
@@ -26,6 +28,16 @@ func TestParseNUTVarLine(t *testing.T) {
 	}
 	if _, _, ok := parseNUTVarLine("END LIST VAR myups"); ok {
 		t.Error("a non-VAR line must not parse")
+	}
+}
+
+func TestNUTHandshakeBoundsAnEndlessList(t *testing.T) {
+	peer := &floodReadWriter{chunk: []byte("BEGIN LIST VAR\n"), flood: 8 * units.BytesPerMiB}
+	if _, err := nutHandshake(peer, Config{Query: "ups1"}); err == nil {
+		t.Fatal("a list with no END must fail the probe")
+	}
+	if peer.read > maxTextExchangeBytes {
+		t.Fatalf("read %d bytes of the peer's reply, want at most %d", peer.read, maxTextExchangeBytes)
 	}
 }
 

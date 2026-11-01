@@ -63,7 +63,8 @@ func memcachedStats(rw io.ReadWriter) (Result, error) {
 	if _, err := io.WriteString(rw, memcachedCommandStats); err != nil {
 		return Result{}, probeErr(ProtocolNameMemcached, stepStats, err)
 	}
-	br := bufio.NewReader(rw)
+	// Each line is bounded; this bounds how many a peer can keep sending.
+	br := bufio.NewReader(io.LimitReader(rw, maxTextExchangeBytes))
 	fields := map[string]string{}
 	for {
 		line, err := readCRLFLine(br)

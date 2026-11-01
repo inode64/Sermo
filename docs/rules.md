@@ -1355,9 +1355,9 @@ keep the per-protocol entries short:
 - **`query`** is the per-protocol lookup target (e.g. the DNS name for `dns`).
 - Shared text-protocol banner and line readers accept at most 64 KiB per line,
   including its terminator. Oversized lines fail the exchange.
-- The replies of one `ftp`, `nntp` or `smtp` exchange are limited to 1 MiB in
-  total. `smtp_acceptance` reads through Go's `net/smtp`, so only that total
-  applies to it, counted on the wire including any TLS handshake.
+- The replies of one `ftp`, `memcached`, `nntp`, `nut` or `smtp` exchange are
+  limited to 1 MiB in total. `smtp_acceptance` reads through Go's `net/smtp`, so
+  only that total applies to it, counted on the wire including any TLS handshake.
 
 HTTP-based protocol exchanges reject response-body read errors, including
 timeouts and premature disconnects; a matching partial response is not accepted.

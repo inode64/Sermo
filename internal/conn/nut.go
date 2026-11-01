@@ -94,7 +94,8 @@ func (nutProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 // single auto-detected device), optional USERNAME/PASSWORD/LOGIN, and the device
 // variables for the selected UPS.
 func nutHandshake(rw io.ReadWriter, cfg Config) (Result, error) {
-	br := bufio.NewReader(rw)
+	// Each line is bounded; this bounds how many a peer can keep sending.
+	br := bufio.NewReader(io.LimitReader(rw, maxTextExchangeBytes))
 
 	if err := writeNUT(rw, nutCmdVER); err != nil {
 		return Result{}, err

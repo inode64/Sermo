@@ -5,6 +5,8 @@ import (
 	"net"
 	"strings"
 	"testing"
+
+	"sermo/internal/units"
 )
 
 // fakeMemcached serves one connection that replies to `stats` with reply, then
@@ -58,6 +60,16 @@ func TestMemcachedProbeAgainstFakeServer(t *testing.T) {
 	// `pid` is not in the curated set, so it must not be published.
 	if _, ok := res.Extra["pid"]; ok {
 		t.Errorf("pid should not be published, got %q", res.Extra["pid"])
+	}
+}
+
+func TestMemcachedStatsBoundsAnEndlessReply(t *testing.T) {
+	peer := &floodReadWriter{chunk: []byte("STAT filler 1\r\n"), flood: 8 * units.BytesPerMiB}
+	if _, err := memcachedStats(peer); err == nil {
+		t.Fatal("a reply with no END must fail the probe")
+	}
+	if peer.read > maxTextExchangeBytes {
+		t.Fatalf("read %d bytes of the peer's reply, want at most %d", peer.read, maxTextExchangeBytes)
 	}
 }
 
