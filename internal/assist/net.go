@@ -44,7 +44,16 @@ func (netAssistant) Run(p *Prompt, env Env) (res Result, err error) {
 	watches := map[string]any{}
 	forEachWithSettings(selected, shared,
 		func(c Iface) netSettings { return askNetSettings(p, env, c.Name) },
-		func(c Iface, s netSettings) { watches[netWatchPrefix+c.Name] = buildNetWatch(c, s) })
+		func(c Iface, s netSettings) {
+			entry := buildNetWatch(c, s)
+			// buildNetWatch omits an unmeetable condition, and a net watch with no
+			// metric left would make the next reload refuse the configuration.
+			if metrics, _ := entry[config.SectionMetrics].(map[string]any); len(metrics) == 0 {
+				p.printf("  %s: nothing to watch with these settings; skipping.\n", c.Name)
+				return
+			}
+			watches[netWatchPrefix+c.Name] = entry
+		})
 	return Result{Watches: watches, Summary: fmt.Sprintf("%d net watch(es)", len(watches))}, nil
 }
 

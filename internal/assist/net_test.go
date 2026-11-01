@@ -197,3 +197,33 @@ func TestBuildNetWatchSkipsAbsentAddressMetricWhenAlreadyAddressless(t *testing.
 		t.Fatalf("address metric = %v, want expect:absent", with[config.SectionMetrics])
 	}
 }
+
+// A lone "no address" condition has nothing to watch on an interface that has no
+// address, and a net watch with no metric fails config validation: writing one
+// would make the next daemon reload refuse the whole configuration.
+func TestNetAssistantSkipsInterfaceWithNothingToWatch(t *testing.T) {
+	env := Env{Ifaces: func() ([]Iface, error) {
+		return []Iface{{Name: "eth0", Up: true, HasAddress: true}, {Name: "eth1", Up: true}}, nil
+	}}
+	res, out := runAssistant(t, netAssistant{}, env,
+		"all",  // both interfaces
+		"y",    // same settings
+		"1",    // monitor state: enabled
+		"",     // interval
+		"4",    // metrics: IP address
+		"2",    // the interface has no address
+		"none", // notify nobody
+	)
+	if _, ok := res.Watches[netWatchPrefix+"eth0"]; !ok {
+		t.Fatalf("watches = %v, want net-eth0", res.Watches)
+	}
+	if _, ok := res.Watches[netWatchPrefix+"eth1"]; ok {
+		t.Fatalf("watches = %v, want no watch for the addressless eth1", res.Watches)
+	}
+	if !strings.Contains(out, "eth1") || !strings.Contains(out, "nothing to watch") {
+		t.Fatalf("output does not explain the skipped interface:\n%s", out)
+	}
+	if !strings.Contains(res.Summary, "1 net watch") {
+		t.Fatalf("summary = %q, want one watch", res.Summary)
+	}
+}
