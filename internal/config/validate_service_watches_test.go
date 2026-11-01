@@ -275,3 +275,26 @@ func TestServiceWatchNotifyDefaultIsGlobal(t *testing.T) {
 		})
 	}
 }
+
+// TestServiceWatchNotifyOnIsValidated pins that a service watch gets the checks a
+// host watch gets: notify_on passed validation, then an unsupported check type
+// failed the watch build and an unknown event never matched.
+func TestServiceWatchNotifyOnIsValidated(t *testing.T) {
+	cases := []struct{ name, check, events, want string }{
+		{"raid event", "{ type: raid }", "[on_degraded]", ""},
+		{"lvm event", "{ type: lvm }", "[on_change]", ""},
+		{"unknown raid event", "{ type: raid }", "[bogus]", `watches.w.then.notify_on "bogus" is not supported`},
+		{"other check type", "{ type: tcp, host: 127.0.0.1, port: 80 }", "[on_degraded]", "watches.w.then.notify_on is only valid on a raid or lvm watch"},
+		{"empty list", "{ type: raid }", "[]", "watches.w.then.notify_on must be a non-empty event list"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			issues := validateService(t, "name: svc\nservice: svc\nwatches:\n  w:\n    check: "+tc.check+"\n    then: { notify: [wall], notify_on: "+tc.events+" }\n")
+			if tc.want == "" {
+				mustNotHave(t, issues, "notify_on")
+				return
+			}
+			mustHave(t, issues, tc.want)
+		})
+	}
+}

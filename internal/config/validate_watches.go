@@ -212,6 +212,7 @@ func validateServiceWatch(name string, entry map[string]any, locksDir string, no
 		add(validationRequiredFormat, watchCheckFieldPath(name, checks.CheckKeyType))
 		return
 	}
+	validateRaidNotifyOn(name, typ, entry, notifiers, defaultNotify, add)
 	if typ == checks.CheckTypeDBQueries {
 		validateDBQueriesWatch(name, check, entry, true, defaultNotify, add)
 		return
