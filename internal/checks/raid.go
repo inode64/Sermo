@@ -290,6 +290,9 @@ var (
 	mdStatusRe    = regexp.MustCompile(`\[([U_]+)\]`)
 	mdProgressRe  = regexp.MustCompile(`\b(recovery|resync|reshape|check)\s*=\s*([0-9]+(?:\.[0-9]+)?)%`)
 	mdArrayNameRe = regexp.MustCompile(`^md[[:alnum:]_]+$`)
+	// mdContainerRe matches the metadata of an external container. A volume
+	// inside one names its container instead ("super external:/md127/0").
+	mdContainerRe = regexp.MustCompile(`\bsuper external:[^/\s]+`)
 )
 
 const (
@@ -358,25 +361,35 @@ func parseMdstat(s string) RaidStatus {
 			flush()
 			continue
 		}
-		if m := mdRatioRe.FindStringSubmatch(line); m != nil {
-			total, _ := strconv.Atoi(m[mdRatioTotalGroup])
-			active, _ := strconv.Atoi(m[mdRatioActiveGroup])
-			if active < total {
-				cur.Degraded = true
-			}
-		}
-		if m := mdStatusRe.FindStringSubmatch(line); len(m) > mdStatusMapGroup && strings.Contains(m[mdStatusMapGroup], "_") {
-			cur.Degraded = true
-		}
-		if m := mdProgressRe.FindStringSubmatch(line); m != nil {
-			cur.Operation = m[mdOperationGroup]
-			cur.Recovering = isRaidRebuild(cur.Operation)
-			cur.ProgressPct, _ = strconv.ParseFloat(m[mdProgressValueGroup], 64)
-			cur.HasProgress = true
-		}
+		cur.readMdstatLine(line)
 	}
 	flush()
 	return st
+}
+
+// readMdstatLine applies one of an array's lines after its header.
+func (a *RaidArrayStatus) readMdstatLine(line string) {
+	// An IMSM or DDF container stays inactive for life: it only groups the
+	// member disks, and the volumes inside it report their own health.
+	if a.Inactive && mdContainerRe.MatchString(line) {
+		a.Degraded = false
+	}
+	if m := mdRatioRe.FindStringSubmatch(line); m != nil {
+		total, _ := strconv.Atoi(m[mdRatioTotalGroup])
+		active, _ := strconv.Atoi(m[mdRatioActiveGroup])
+		if active < total {
+			a.Degraded = true
+		}
+	}
+	if m := mdStatusRe.FindStringSubmatch(line); len(m) > mdStatusMapGroup && strings.Contains(m[mdStatusMapGroup], "_") {
+		a.Degraded = true
+	}
+	if m := mdProgressRe.FindStringSubmatch(line); m != nil {
+		a.Operation = m[mdOperationGroup]
+		a.Recovering = isRaidRebuild(a.Operation)
+		a.ProgressPct, _ = strconv.ParseFloat(m[mdProgressValueGroup], 64)
+		a.HasProgress = true
+	}
 }
 
 func enrichRaidSysfs(st *RaidStatus, root string) {

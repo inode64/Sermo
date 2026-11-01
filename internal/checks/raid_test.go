@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -69,6 +70,70 @@ unused devices: <none>
 	res := (&raidCheck{name: "r", timeout: time.Second, array: "md127", sampler: func() (RaidStatus, error) { return st, nil }}).Run(t.Context())
 	if !res.OK || res.Message != "raid md127: inactive" {
 		t.Fatalf("result = %v %q, want alert for the inactive array", res.OK, res.Message)
+	}
+}
+
+// An IMSM or DDF container is always listed as inactive: it only groups the
+// member disks, and the volume inside it is the array that carries data. A
+// volume that did not start is still an array whose data is unavailable.
+func TestParseMdstatExternalMetadataContainer(t *testing.T) {
+	tests := []struct {
+		name         string
+		mdstat       string
+		wantDegraded []string
+	}{
+		{
+			name: "healthy imsm volume in its container",
+			mdstat: `Personalities : [raid1]
+md126 : active raid1 sda[1] sdb[0]
+      976759808 blocks super external:/md127/0 [2/2] [UU]
+
+md127 : inactive sda[1](S) sdb[0](S)
+      5288 blocks super external:imsm
+
+unused devices: <none>
+`,
+		},
+		{
+			name: "ddf container",
+			mdstat: `Personalities : [raid1]
+md127 : inactive sda[1](S) sdb[0](S)
+      5288 blocks super external:ddf
+
+unused devices: <none>
+`,
+		},
+		{
+			name: "degraded volume in its container",
+			mdstat: `Personalities : [raid1]
+md126 : active raid1 sdb[0]
+      976759808 blocks super external:/md127/0 [2/1] [U_]
+
+md127 : inactive sdb[0](S)
+      5288 blocks super external:imsm
+
+unused devices: <none>
+`,
+			wantDegraded: []string{"md126"},
+		},
+		{
+			name: "inactive volume",
+			mdstat: `Personalities : [raid1]
+md126 : inactive sda[1] sdb[0]
+      976759808 blocks super external:/md127/0
+
+unused devices: <none>
+`,
+			wantDegraded: []string{"md126"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			st := parseMdstat(tt.mdstat)
+			if st.Degraded != len(tt.wantDegraded) || !slices.Equal(st.DegradedNames, tt.wantDegraded) {
+				t.Fatalf("status = %+v, want degraded %v", st, tt.wantDegraded)
+			}
+		})
 	}
 }
 

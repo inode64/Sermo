@@ -3500,7 +3500,9 @@ time and graphed** in the service detail so gradual degradation is visible.
 - **`raid`** — Linux **md software-RAID** from `/proc/mdstat` and read-only
   `/sys/block/md*/md` data (native). With no predicate it alerts when any
   array is **degraded**; an `inactive` array (listed but not started, so its
-  data is unavailable) counts as degraded and reads `inactive`. Predicates add
+  data is unavailable) counts as degraded and reads `inactive`, except an IMSM
+  or DDF container, which is always inactive and leaves its health to the
+  volumes inside it. Predicates add
   `degraded`, `recovering` and `arrays` counts. `array: md0` scopes the check to one array. With `sysfs_changes: true`,
   Sermo tracks `mismatch_cnt` and each member's `state`, `errors` and
   `bad_blocks` between cycles. A host with no md arrays never alerts.
