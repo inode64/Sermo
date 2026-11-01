@@ -70,6 +70,54 @@ func TestRecordTrimsWindow(t *testing.T) {
 	}
 }
 
+// A policy with no rate limit has no window to trim its history by: it stops at
+// maxUnwindowedActions instead of growing for the life of the service, and the
+// cooldown it depends on does not read that history.
+func TestRecordBoundsHistoryWithoutRateLimit(t *testing.T) {
+	p := Policy{Cooldown: time.Hour}
+	st := &RemediationState{}
+	at := t0
+	for range maxUnwindowedActions + 10 {
+		at = at.Add(2 * time.Hour)
+		st.Record(at, p)
+	}
+	if len(st.RecentActions) != maxUnwindowedActions {
+		t.Fatalf("RecentActions = %d, want the newest %d", len(st.RecentActions), maxUnwindowedActions)
+	}
+	if !st.RecentActions[maxUnwindowedActions-1].Equal(at) || !st.LastActionAt.Equal(at) {
+		t.Fatalf("newest action = %v, last action = %v, want %v", st.RecentActions[maxUnwindowedActions-1], st.LastActionAt, at)
+	}
+	if ok, reason := p.Allow(st, at.Add(time.Minute)); ok || reason != "cooldown" {
+		t.Fatalf("Allow within the cooldown = %v, %q; want it to stay in force", ok, reason)
+	}
+}
+
+// The bound applies only where nothing counts the history: a rate limit keeps
+// every action it reads, however large it is.
+func TestRecordKeepsEveryActionARateLimitCounts(t *testing.T) {
+	maxActions := maxUnwindowedActions + 10
+	for name, p := range map[string]Policy{
+		"windowed":    {MaxActions: maxActions, MaxActionsWindow: 100 * 24 * time.Hour},
+		"no window":   {MaxActions: maxActions},
+		"window only": {MaxActionsWindow: 100 * 24 * time.Hour},
+	} {
+		t.Run(name, func(t *testing.T) {
+			st := &RemediationState{}
+			at := t0
+			for range maxActions {
+				at = at.Add(time.Minute)
+				st.Record(at, p)
+			}
+			if len(st.RecentActions) != maxActions {
+				t.Fatalf("RecentActions = %d, want all %d", len(st.RecentActions), maxActions)
+			}
+			if ok, reason := p.Allow(st, at.Add(time.Minute)); p.MaxActions > 0 && (ok || reason != "rate limit") {
+				t.Fatalf("Allow at the limit = %v, %q; want the rate limit in force", ok, reason)
+			}
+		})
+	}
+}
+
 func TestBackoffGrowsAndCaps(t *testing.T) {
 	p := Policy{Cooldown: time.Minute, Backoff: &Backoff{Initial: time.Minute, Factor: 2, Max: 5 * time.Minute}}
 	st := &RemediationState{}
@@ -316,7 +364,7 @@ func TestParsePolicyBackoffFactorDefault(t *testing.T) {
 }
 
 func TestRecordNoTrimWithoutWindow(t *testing.T) {
-	// With no max_actions_window, Record must not trim the action history.
+	// With no max_actions_window, Record has no age to trim the action history by.
 	st := &RemediationState{}
 	st.Record(t0, Policy{})
 	st.Record(t0.Add(time.Hour), Policy{})

@@ -10,6 +10,13 @@ import (
 
 const defaultBackoffFactor = 2
 
+// maxUnwindowedActions bounds RecentActions for a policy with neither
+// max_actions nor max_actions_window, where nothing would ever trim it. No gate
+// reads that history: the cooldown stands on LastActionAt and CurrentBackoff, and
+// a policy with max_actions never reaches this bound. The oldest entries lose only
+// their share of the count `recent_actions` reports, which stops at this value.
+const maxUnwindowedActions = 256
+
 // Backoff grows the effective cooldown after consecutive remediations.
 type Backoff struct {
 	Initial time.Duration
@@ -152,13 +159,17 @@ func (p Policy) Allow(state *RemediationState, now time.Time) (bool, string) {
 }
 
 // Record updates the state after an executed automatic remediation: stamps the
-// time, trims the rate-limit window, and grows the backoff if enabled.
+// time, trims the rate-limit window or bounds a history no window trims, and
+// grows the backoff if enabled.
 // Blocked and preflight-failed operations must not call Record.
 func (s *RemediationState) Record(now time.Time, p Policy) {
 	s.LastActionAt = now
 	s.RecentActions = append(s.RecentActions, now)
-	if p.MaxActionsWindow > 0 {
+	switch {
+	case p.MaxActionsWindow > 0:
 		s.trimRecentActions(now.Add(-p.MaxActionsWindow))
+	case p.MaxActions <= 0:
+		s.RecentActions = s.RecentActions[max(len(s.RecentActions)-maxUnwindowedActions, 0):]
 	}
 	if p.Backoff != nil {
 		s.growBackoff(p.Backoff)
