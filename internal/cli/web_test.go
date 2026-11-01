@@ -2,12 +2,18 @@ package cli
 
 import (
 	"bytes"
+	"net"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"sermo/internal/config"
+	"sermo/internal/httpx"
+	"sermo/internal/web"
 	"sermo/internal/webcred"
 )
 
@@ -209,6 +215,8 @@ func TestWebAPIBase(t *testing.T) {
 		{name: "port missing", web: map[string]any{}, wantErr: "web.port is not set in config"},
 		{name: "default address", web: map[string]any{config.WebKeyPort: 9797}, want: "http://127.0.0.1:9797"},
 		{name: "IPv6 loopback", web: map[string]any{config.WebKeyAddress: "::1", config.WebKeyPort: 9797}, want: "http://[::1]:9797"},
+		{name: "IPv4 wildcard dials loopback", web: map[string]any{config.WebKeyAddress: "0.0.0.0", config.WebKeyPort: 9797}, want: "http://127.0.0.1:9797"},
+		{name: "IPv6 wildcard dials loopback", web: map[string]any{config.WebKeyAddress: "::", config.WebKeyPort: 9797}, want: "http://[::1]:9797"},
 		{name: "quoted port accepted", web: map[string]any{config.WebKeyPort: "8080"}, want: "http://127.0.0.1:8080"},
 		{name: "port zero", web: map[string]any{config.WebKeyPort: 0}, wantErr: "web.port must be in 1..65535 (got 0)"},
 		{name: "port above range", web: map[string]any{config.WebKeyPort: 65536}, wantErr: "web.port must be in 1..65535 (got 65536)"},
@@ -236,6 +244,59 @@ func TestWebAPIBase(t *testing.T) {
 				t.Errorf("webAPIBase() = %q, want %q", got, tc.want)
 			}
 		})
+	}
+}
+
+// The runtime token is an admin credential for this host's daemon alone, so an
+// ambient proxy must not carry a request that holds it. net/http keeps its
+// environment proxy for the process lifetime, so the proxy is set on the default
+// transport the client would inherit.
+func TestDaemonWebRequestBypassesProxy(t *testing.T) {
+	proxied := make(chan string, 1)
+	proxy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		proxied <- r.Header.Get(httpx.HeaderAuthorization)
+		w.WriteHeader(http.StatusBadGateway)
+	}))
+	defer proxy.Close()
+	proxyURL, err := url.Parse(proxy.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	daemon := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer daemon.Close()
+	host, port, err := net.SplitHostPort(daemon.Listener.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	original := http.DefaultTransport
+	t.Cleanup(func() { http.DefaultTransport = original })
+	http.DefaultTransport = &http.Transport{Proxy: http.ProxyURL(proxyURL)}
+
+	runtimeDir := t.TempDir()
+	mustWrite(t, filepath.Join(runtimeDir, config.DaemonWebTokenFilename), "runtime-token\n")
+	cfg := &config.Config{Global: config.Global{
+		Runtime: runtimeDir,
+		Raw: map[string]any{config.SectionWeb: map[string]any{
+			config.WebKeyAddress: host,
+			config.WebKeyPort:    port,
+		}},
+	}}
+	app := hermeticApp(t, App{Env: func(string) string { return "" }})
+	resp, err := app.daemonWebDo(t.Context(), cfg, http.MethodGet, "test", false, func(base string) string { return base + web.APIPathServices })
+	if err != nil {
+		t.Fatalf("daemonWebDo() error = %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusNoContent {
+		t.Fatalf("status = %d, want the daemon's %d", resp.StatusCode, http.StatusNoContent)
+	}
+	select {
+	case authorization := <-proxied:
+		t.Fatalf("proxy received the request with Authorization %q", authorization)
+	default:
 	}
 }
 

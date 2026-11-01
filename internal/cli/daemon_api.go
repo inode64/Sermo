@@ -44,7 +44,9 @@ func (a App) daemonWebDo(ctx context.Context, cfg *config.Config, method, what s
 	// If the config declares an admin password, send Basic auth (any user + pw).
 	a.applyDaemonWebAuth(req, cfg)
 
-	client := httpx.NewClient(httpx.ClientOptions{Timeout: daemonWebClientTimeout})
+	// The request carries the daemon's runtime token, so it never takes the
+	// HTTP(S)_PROXY environment: a proxy would receive that admin credential.
+	client := httpx.NewProbeClient(httpx.ClientOptions{Timeout: daemonWebClientTimeout})
 	resp, err := httpx.Do(client, req)
 	if err != nil {
 		return nil, fmt.Errorf("talking to daemon web UI: %w (is sermod running with web.port set?)", err)
@@ -246,5 +248,20 @@ func webAPIBase(cfg *config.Config) (string, error) {
 			return "", fmt.Errorf("%w", err) // nosemgrep: error-wrap-must-add-context
 		}
 	}
-	return daemonWebSchemeHTTP + netutil.URLSchemeSeparator + bind.HostPort(), nil
+	return daemonWebSchemeHTTP + netutil.URLSchemeSeparator + netutil.JoinHostPort(daemonDialHost(bind.Host), bind.Port), nil
+}
+
+// daemonDialHost is the host sermoctl dials for a listener bound to host. A
+// wildcard names no peer, and this host's loopback is always among the addresses
+// it serves.
+func daemonDialHost(host string) string {
+	ip := net.ParseIP(host)
+	switch {
+	case ip == nil || !ip.IsUnspecified():
+		return host
+	case ip.To4() != nil:
+		return netutil.LoopbackIPv4
+	default:
+		return net.IPv6loopback.String()
+	}
 }

@@ -1271,6 +1271,9 @@ socket. `sermoctl` resolves its credential in this order:
    that cannot read the token.
 2. `<engine.runtime>/web.token`.
 
+These requests never use `HTTP_PROXY`: a credential goes straight to the daemon,
+and a wildcard `web.address` is dialed over loopback.
+
 The **password**, not the username, selects the role — on the `/login` form, or
 as the HTTP Basic password with any username; passwords are compared in constant
 time. With `guest: true` the dashboard loads read-only without logging in, and a
