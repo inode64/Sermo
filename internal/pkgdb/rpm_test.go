@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -13,6 +14,9 @@ import (
 )
 
 const rpmQueryLine = "rpm -qf -- "
+
+// errRPMExitOne is what execx returns with a non-zero exit.
+var errRPMExitOne = errors.New("run rpm: exit code 1")
 
 func rpmIndex(t *testing.T, runner execx.Runner, now func() time.Time) *Index {
 	t.Helper()
@@ -37,7 +41,8 @@ func TestRPMOwnedAllRunsOneCommandAndCaches(t *testing.T) {
 				ExitCode: 1,
 			},
 		},
-		Err: errors.New("unexpected command line"),
+		Errs: map[string]error{rpmQueryLine + "/usr/bin/bash /opt/rogue /usr/bin/python3": errRPMExitOne},
+		Err:  errors.New("unexpected command line"),
 	}
 	x := rpmIndex(t, runner, nil)
 	got := x.OwnedAll(t.Context(), []string{"/usr/bin/bash", "/opt/rogue", "/usr/bin/python3"})
@@ -87,6 +92,40 @@ func TestRPMCommandErrorIsUnknownAndNotCached(t *testing.T) {
 	}
 }
 
+// rpm's exit status counts the arguments it could not answer for, and the
+// answers it did give are on its output: a non-zero exit is not a failed run.
+func TestRPMNonZeroExitStillAnswers(t *testing.T) {
+	runner := execxtest.Fixed(execx.Result{
+		Stdout:   "bash-5.2.26-3.fc40.x86_64\nfile /opt/rogue is not owned by any package\n",
+		ExitCode: 1,
+	}, errRPMExitOne)
+	x := rpmIndex(t, runner, nil)
+	got := x.OwnedAll(t.Context(), []string{"/usr/bin/bash", "/opt/rogue"})
+	if got["/usr/bin/bash"] != Owned || got["/opt/rogue"] != NotOwned {
+		t.Fatalf("OwnedAll = %v, want bash Owned and rogue NotOwned", got)
+	}
+}
+
+// Only the C locale keeps rpm's messages parseable: a translated "not owned"
+// line would otherwise read as an unknown line and lose the answer.
+func TestRPMRunsInTheCLocale(t *testing.T) {
+	runner := execxtest.Outputs("bash-5.2.26-3.fc40.x86_64\n")
+	x := rpmIndex(t, runner, nil)
+	x.Owned(t.Context(), "/usr/bin/bash")
+	calls := runner.Calls()
+	if len(calls) != 1 || !slices.Contains(calls[0].Env, rpmLocaleEnv) {
+		t.Fatalf("calls = %+v, want one rpm with %s", calls, rpmLocaleEnv)
+	}
+}
+
+func TestRPMRunnerWithoutEnvironmentIsUnknown(t *testing.T) {
+	inner := execxtest.Outputs("bash-5.2.26-3.fc40.x86_64\n")
+	x := rpmIndex(t, execxtest.RunOnly{Runner: inner}, nil)
+	if got := x.Owned(t.Context(), "/usr/bin/bash"); got != Unknown {
+		t.Fatalf("Owned = %v, want Unknown from a runner that cannot pin the locale", got)
+	}
+}
+
 func TestRPMContextTimeoutIsUnknown(t *testing.T) {
 	runner := &execxtest.Runner{RespectContext: true, Default: execx.Result{Stdout: "bash-5.2.26-3.fc40.x86_64\n"}}
 	x := rpmIndex(t, runner, nil)
@@ -114,7 +153,7 @@ func TestRPMDatabaseErrorIsUnknown(t *testing.T) {
 	runner := execxtest.Fixed(execx.Result{
 		Stderr:   "error: cannot open Packages database in /var/lib/rpm\n",
 		ExitCode: 1,
-	}, nil)
+	}, errRPMExitOne)
 	x := rpmIndex(t, runner, nil)
 	for range 2 {
 		if got := x.Owned(t.Context(), "/usr/bin/bash"); got != Unknown {
@@ -131,7 +170,7 @@ func TestRPMMissingFileStaysUnknownOthersAnswered(t *testing.T) {
 		Stdout:   "bash-5.2.26-3.fc40.x86_64\n",
 		Stderr:   "error: file /usr/bin/gone: No such file or directory\n",
 		ExitCode: 1,
-	}, nil)
+	}, errRPMExitOne)
 	x := rpmIndex(t, runner, nil)
 	got := x.OwnedAll(t.Context(), []string{"/usr/bin/bash", "/usr/bin/gone"})
 	if got["/usr/bin/bash"] != Owned || got["/usr/bin/gone"] != Unknown {
@@ -247,6 +286,16 @@ func TestParseRPMQuery(t *testing.T) {
 			name:   "not-owned line naming an unqueried path counts as noise",
 			output: "pa-1\npb-1\npc-1\nfile /zzz is not owned by any package\n",
 			want:   map[string]Ownership{"/a": Owned, "/b": Owned, "/c": Owned},
+		},
+		{
+			name:   "not-owned line naming an unqueried path is no owner",
+			output: "pa-1\npb-1\nfile /zzz is not owned by any package\n",
+			want:   map[string]Ownership{"/a": Unknown, "/b": Unknown, "/c": Unknown},
+		},
+		{
+			name:   "unparsed line is no owner and leaves the run undetermined",
+			output: "pa-1\npb-1\nDatei /c gehört zu keinem Paket\n",
+			want:   map[string]Ownership{"/a": Unknown, "/b": Unknown, "/c": Unknown},
 		},
 	}
 	for _, tc := range tests {

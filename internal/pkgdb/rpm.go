@@ -2,6 +2,7 @@ package pkgdb
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -22,6 +23,8 @@ const (
 	rpmNotOwnedSuffix = " is not owned by any package"
 	rpmErrorPrefix    = "error: "
 	rpmWarningPrefix  = "warning: "
+	rpmLocaleEnv      = "LC_ALL=C"
+	rpmWhitespace     = " \t"
 )
 
 // rpmEntry is one cached `rpm -qf` answer.
@@ -83,8 +86,13 @@ func (x *Index) ownedRPM(ctx context.Context, exes []string, out map[string]Owne
 
 func (x *Index) queryRPM(ctx context.Context, paths []string) (map[string]Ownership, bool) {
 	args := append([]string{rpmQueryFileFlag, rpmArgsEnd}, paths...)
-	res, err := execx.RunProbe(ctx, x.runner, x.timeout, rpmCommand, args...)
-	if err != nil {
+	// The parser reads rpm's English messages, and a host's LANG reaches a
+	// service. A runner that cannot pin the locale fails closed.
+	env := append(os.Environ(), rpmLocaleEnv)
+	res, err := execx.RunEnv(ctx, x.runner, env, x.timeout, rpmCommand, args...)
+	// rpm exits non-zero as soon as one path is unowned or missing, so only a
+	// run that produced no exit status has no answers to read.
+	if err != nil && res.ExitCode <= execx.ExitCodeSuccess {
 		return nil, false
 	}
 	return parseRPMQuery(paths, res.Stdout+"\n"+res.Stderr), true
@@ -96,8 +104,9 @@ func (x *Index) queryRPM(ctx context.Context, paths []string) (map[string]Owners
 // not stat, and one package name per owner otherwise (a file may have several
 // owners). The named lines are mapped by their path; every other queried path
 // then received at least one owner line, provided the owner lines are at
-// least as many as those paths. Any other error line means the whole run is
-// undetermined.
+// least as many as those paths. Any other error line, or a line that cannot be
+// a package name, means the whole run is undetermined: it must not pass for an
+// owner.
 func parseRPMQuery(paths []string, output string) map[string]Ownership {
 	out := make(map[string]Ownership, len(paths))
 	for _, p := range paths {
@@ -113,8 +122,8 @@ func parseRPMQuery(paths []string, output string) map[string]Ownership {
 		if name, ok := rpmNotOwnedPath(line); ok {
 			if _, known := out[name]; known {
 				out[name] = NotOwned
-				continue
 			}
+			continue
 		}
 		if rest, ok := strings.CutPrefix(line, rpmErrorPrefix); ok {
 			name, found := rpmErrorPath(rest)
@@ -126,6 +135,9 @@ func parseRPMQuery(paths []string, output string) map[string]Ownership {
 		}
 		if strings.HasPrefix(line, rpmWarningPrefix) {
 			continue
+		}
+		if strings.ContainsAny(line, rpmWhitespace) {
+			return out
 		}
 		owners++
 	}
