@@ -36,6 +36,12 @@ func BeginOperationSettling(store OperationSettlingStore, service, action string
 	if rec, found, readErr := store.OperationSettling(service); readErr == nil && found {
 		prior = rec.Phase
 	}
+	// A running marker keeps its time: this attempt may yet be refused, and one
+	// its caller died with has to reach the age limit. The operation lock covers
+	// an attempt that does run past that age.
+	if prior == state.OperationSettlingRunning {
+		return prior, nil
+	}
 	if err := store.SetOperationSettling(service, state.OperationSettlingRunning); err != nil {
 		return prior, fmt.Errorf("mark operation settling for %s: %w", service, err)
 	}
@@ -48,16 +54,18 @@ func finishOperationSettling(store OperationSettlingStore, service, action strin
 	if store == nil || !operation.IsServiceAction(action) {
 		return nil
 	}
+	blocked := result.Status == operation.ResultBlocked
 	// A blocked attempt never ran, and the marker it found is the operation in
 	// its way: clearing that would resume monitoring in the middle of it.
-	if prior == state.OperationSettlingRunning && result.Status == operation.ResultBlocked {
+	if blocked && prior == state.OperationSettlingRunning {
 		return nil
 	}
 	// A relaunch the worker has not read yet happened, whatever this attempt did,
-	// a stop included. Dropping it would make the worker repeat the restart.
-	if prior == state.OperationSettlingRelaunched {
-		if err := store.SetOperationSettling(service, state.OperationSettlingRelaunched); err != nil {
-			return fmt.Errorf("keep pending relaunch for %s: %w", service, err)
+	// a stop included. Dropping it would make the worker repeat the restart. An
+	// attempt that never ran leaves the last operation's observation due as well.
+	if prior == state.OperationSettlingRelaunched || (blocked && prior == state.OperationSettlingSettling) {
+		if err := store.SetOperationSettling(service, prior); err != nil {
+			return fmt.Errorf("keep pending %s marker for %s: %w", prior, service, err)
 		}
 		return nil
 	}

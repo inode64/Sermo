@@ -232,6 +232,61 @@ func TestBlockedAttemptRemovesItsOwnMarker(t *testing.T) {
 	}
 }
 
+// A marker's caller may have died with it. If each refused attempt renewed its
+// time, attempts coming faster than the age limit would keep the service's
+// monitoring suspended for good.
+func TestBlockedAttemptDoesNotRenewAnAbandonedMarker(t *testing.T) {
+	now := time.Now()
+	store := newFakeStore()
+	store.now = func() time.Time { return now.Add(-20 * time.Minute) }
+	if err := store.SetOperationSettling("web", state.OperationSettlingRunning); err != nil {
+		t.Fatal(err)
+	}
+	store.now = func() time.Time { return now }
+	w := &Worker{Service: "web", OperationSettling: store, Operate: func(_ context.Context, action string) operation.Result {
+		return operation.Result{Action: action, Status: operation.ResultBlocked}
+	}}
+
+	w.operateForRemediation(t.Context(), string(rules.ActionRestart))
+
+	if _, running := w.operationSettlingState(now); running {
+		t.Fatal("a refused attempt kept an abandoned marker alive")
+	}
+}
+
+// An attempt that never ran owes nothing to the operation before it, whose
+// observation cycle is still due: a live cycle would read checks from before it.
+// One that ran and failed ends that operation's story.
+func TestLaterAttemptOverAPendingObservation(t *testing.T) {
+	for name, tc := range map[string]struct {
+		status operation.ResultStatus
+		kept   bool
+	}{
+		"blocked": {status: operation.ResultBlocked, kept: true},
+		"failed":  {status: operation.ResultFailed},
+	} {
+		t.Run(name, func(t *testing.T) {
+			store := newFakeStore()
+			if err := store.SetOperationSettling("web", state.OperationSettlingSettling); err != nil {
+				t.Fatal(err)
+			}
+			action := string(rules.ActionReload)
+			prior, err := BeginOperationSettling(store, "web", action)
+			if err != nil {
+				t.Fatal(err)
+			}
+			result := operation.Result{Service: "web", Action: action, Status: tc.status}
+			if _, err := CompleteManualOperation(store, store, "web", action, result, nil, ManualOperationSources{}, false, prior); err != nil {
+				t.Fatal(err)
+			}
+			rec, found, err := store.OperationSettling("web")
+			if err != nil || found != tc.kept || (tc.kept && rec.Phase != state.OperationSettlingSettling) {
+				t.Fatalf("marker = %+v found=%v err=%v, want kept=%t", rec, found, err, tc.kept)
+			}
+		})
+	}
+}
+
 // An operator can start an operation while the worker observes the previous one:
 // finishing that observation must not take the new operation's marker with it.
 func TestObservationKeepsTheMarkerOfAnOperationStartedMeanwhile(t *testing.T) {
