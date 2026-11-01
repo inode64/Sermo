@@ -66,3 +66,25 @@ func TestWriteNilWriter(t *testing.T) {
 		t.Fatalf("nil Write: %v", err)
 	}
 }
+
+// Validation only requires an absolute path, so a doubled separator must reach
+// the file and not silently leave the daemon without its audit log.
+func TestOpenAcceptsAnUncleanAbsolutePath(t *testing.T) {
+	dir := t.TempDir()
+	w, err := Open(dir + "/nested//./event.log")
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	if err := w.Write(map[string]string{"kind": "action"}); err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+	if err := w.Reopen(); err != nil {
+		t.Fatalf("Reopen: %v", err)
+	}
+	if err := w.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "nested", "event.log")); err != nil {
+		t.Fatalf("log file: %v", err)
+	}
+}

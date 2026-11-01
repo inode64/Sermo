@@ -33,6 +33,9 @@ func Open(path string) (*Writer, error) {
 	if !filepath.IsAbs(path) {
 		return nil, fmt.Errorf("log path %q must be absolute", path)
 	}
+	// Configuration only requires an absolute path, and hostfs refuses an unclean
+	// one: a doubled separator would leave the daemon without this log.
+	path = filepath.Clean(path)
 	f, err := openAppend(path)
 	if err != nil {
 		return nil, err
