@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"regexp"
+	"slices"
 	"strconv"
 	"time"
 
@@ -113,13 +114,18 @@ func scopedReplicationState(rows []replicationRow, connection string) *replicati
 }
 
 // replicationStartStatements lists the start statements to try, newest
-// vocabulary first. A named MariaDB connection has exactly one form. Without
-// a connection the check covers every row, but MariaDB's plain START SLAVE
-// only starts @@default_master_connection, so a server with named
-// connections needs START ALL SLAVES; MySQL's START REPLICA already starts
-// every channel.
+// vocabulary first. A named MariaDB connection has exactly one form, and the
+// status rows say whether the name is a MySQL channel instead, whatever engine
+// the check declares. Without a connection the check covers every row, but
+// MariaDB's plain START SLAVE only starts @@default_master_connection, so a
+// server with named connections needs START ALL SLAVES; MySQL's START REPLICA
+// already starts every channel.
 func replicationStartStatements(connection string, rows []replicationRow) []string {
 	if connection != "" {
+		if slices.ContainsFunc(rows, func(row replicationRow) bool { return row[mysqlChannelColumn] == connection }) {
+			channel := " FOR CHANNEL '" + connection + "'"
+			return []string{"START REPLICA" + channel, "START SLAVE" + channel}
+		}
 		return []string{"START SLAVE '" + connection + "'"}
 	}
 	for _, row := range rows {

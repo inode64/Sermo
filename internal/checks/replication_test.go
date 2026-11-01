@@ -222,6 +222,7 @@ func TestReplicationStartStatements(t *testing.T) {
 		{name: "mariadb default connection", rows: mariaDefault, want: []string{"START REPLICA", "START SLAVE"}},
 		{name: "mysql channels", rows: mysqlChannels, want: []string{"START REPLICA", "START SLAVE"}},
 		{name: "scoped connection", connection: "east", rows: mariaNamed, want: []string{"START SLAVE 'east'"}},
+		{name: "scoped mysql channel", connection: "east", rows: mysqlChannels, want: []string{"START REPLICA FOR CHANNEL 'east'", "START SLAVE FOR CHANNEL 'east'"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

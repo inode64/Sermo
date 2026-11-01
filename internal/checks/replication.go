@@ -52,9 +52,10 @@ const (
 	binaryLogsNameColumn       = "Log_name"
 	binaryLogsSizeColumn       = "File_size"
 
-	// mariadbConnectionColumn names a MariaDB multi-source connection; MySQL
-	// calls its channels Channel_Name.
+	// mariadbConnectionColumn names a MariaDB multi-source connection and
+	// mysqlChannelColumn a MySQL replication channel.
 	mariadbConnectionColumn = "Connection_name"
+	mysqlChannelColumn      = "Channel_Name"
 
 	// replicationStartVerifyAttempts bounds how many times StartReplication
 	// re-reads status while the IO thread hands off from Connecting to Yes.
@@ -102,7 +103,7 @@ type binlogColumns struct {
 // The status columns read in more than one place, MariaDB/older spelling
 // first and MySQL 8 second.
 var (
-	replicationConnectionColumns = []string{mariadbConnectionColumn, "Channel_Name"}
+	replicationConnectionColumns = []string{mariadbConnectionColumn, mysqlChannelColumn}
 	replicationSourceHostColumns = []string{"Master_Host", "Source_Host"}
 	replicationSourcePortColumns = []string{"Master_Port", "Source_Port"}
 )
