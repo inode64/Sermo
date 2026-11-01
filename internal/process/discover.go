@@ -125,7 +125,7 @@ func (d Discoverer) Discover(selectors []Selector) ([]Process, []string) {
 	}
 
 	// 1. pidfiles.
-	pidfileClaimed, warnings := addPidfileSelectors(selectors, snapshot, add, hasBackendProcess)
+	pidfileClaimed, warnings := addPidfileSelectors(selectors, snapshot, found, add, hasBackendProcess)
 
 	// 2. An attributed process tree is stronger evidence than a shared exe/user.
 	// Scanning outside it would charge every PHP-FPM pool (or other instance)
@@ -203,7 +203,7 @@ func (d Discoverer) selects(sel *Selector, id Identity, resolve UserResolver) bo
 // The returned set records the live PIDs a pidfile named, whether or not add kept
 // the label: a backend seed wins the first write, so a daemon named by its own
 // pidfile would otherwise look unclaimed to stray classification.
-func addPidfileSelectors(selectors []Selector, snapshot map[int]Identity, add func(Identity, string, string), hasBackendProcess bool) (map[int]bool, []string) {
+func addPidfileSelectors(selectors []Selector, snapshot map[int]Identity, found map[int]Process, add func(Identity, string, string), hasBackendProcess bool) (map[int]bool, []string) {
 	claimed := map[int]bool{}
 	var warnings []string
 	for i := range selectors {
@@ -233,6 +233,12 @@ func addPidfileSelectors(selectors []Selector, snapshot map[int]Identity, add fu
 			}
 			add(id, sel.Name, SelectorPidfile)
 			claimed[pid] = true
+			// A pidfile assigned to any other role names that role, not the daemon.
+			if sel.Name == RoleMain || sel.Name == SelectorPidfile {
+				proc := found[pid]
+				proc.MainPidfile = true
+				found[pid] = proc
+			}
 			matched = true
 			break
 		}

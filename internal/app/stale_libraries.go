@@ -48,6 +48,10 @@ func libraryRestartEligible(lib process.StaleLibrary, principal int) bool {
 // attribution alone, inherited children, delegated workloads and ambiguous
 // multiple masters remain diagnostic. This also prevents an old SSH session
 // from repeatedly restarting a newly upgraded listener.
+//
+// A main pidfile settles which of several processes of that identity is the
+// daemon: a mail server detaches short-lived deliveries that run its executable
+// as its user, and they would read as further masters for as long as they live.
 func libraryRestartPrincipal(discoverer process.Discoverer, selectors []process.Selector, procs []process.Process) int {
 	var main []process.Selector
 	for _, selector := range selectors {
@@ -55,18 +59,22 @@ func libraryRestartPrincipal(discoverer process.Discoverer, selectors []process.
 			main = append(main, selector)
 		}
 	}
-	principal := 0
+	principal, matches := 0, 0
 	for _, proc := range procs {
-		if proc.Role != process.RoleMain || proc.Source == process.SourceChild || proc.Delegated || proc.Stray || proc.External || !proc.ExeOK {
+		if (proc.Role != process.RoleMain && !proc.MainPidfile) || proc.Source == process.SourceChild || proc.Delegated || proc.Stray || proc.External || !proc.ExeOK {
 			continue
 		}
 		if _, ok := discoverer.StrictMatchPID(proc.PID, main); !ok {
 			continue
 		}
-		if principal != 0 {
-			return 0
+		if proc.MainPidfile {
+			return proc.PID
 		}
 		principal = proc.PID
+		matches++
+	}
+	if matches != 1 {
+		return 0
 	}
 	return principal
 }

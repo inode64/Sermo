@@ -329,6 +329,44 @@ func TestDiscoverPidfile(t *testing.T) {
 	}
 }
 
+// A backend seed wins the role and source labels, so the pidfile's evidence has
+// to survive apart from them; a pidfile assigned to another role names no daemon.
+func TestDiscoverMarksMainPidfile(t *testing.T) {
+	pidfile := filepath.Join(t.TempDir(), "daemon.pid")
+	if err := os.WriteFile(pidfile, []byte("100\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	const exe = "/opt/sermo-test/daemon"
+	reader := fakeReader{ids: map[int]Identity{
+		100: {PID: 100, PPID: 1, UID: 8, Exe: exe, ExeOK: true},
+		200: {PID: 200, PPID: 1, UID: 8, Exe: exe, ExeOK: true},
+	}}
+	for name, tc := range map[string]struct {
+		role   string
+		seeded bool
+		want   bool
+	}{
+		"top-level pidfile":                     {role: SelectorPidfile, want: true},
+		"pidfiles.main":                         {role: RoleMain, want: true},
+		"top-level pidfile under backend seeds": {role: SelectorPidfile, seeded: true, want: true},
+		"another role":                          {role: "workers"},
+		"another role under backend seeds":      {role: "workers", seeded: true},
+	} {
+		t.Run(name, func(t *testing.T) {
+			d := Discoverer{Reader: reader}
+			if tc.seeded {
+				d.BackendPIDs = func() []int { return []int{200, 100} }
+			}
+			procs, _ := d.Discover([]Selector{{Name: tc.role, Type: SelectorPidfile, Paths: []string{pidfile}}})
+			for _, proc := range procs {
+				if want := tc.want && proc.PID == 100; proc.MainPidfile != want {
+					t.Errorf("pid %d MainPidfile = %t, want %t", proc.PID, proc.MainPidfile, want)
+				}
+			}
+		})
+	}
+}
+
 func TestDiscoverPidfileProcessGroupMatchesLeader(t *testing.T) {
 	dir := t.TempDir()
 	pidfile := filepath.Join(dir, "dccifd.pid")

@@ -958,7 +958,9 @@ cannot be read after the action, even when no postflight checks are configured.
 
 The opt-in `stale_libraries` check is read-only. Only complete, stable findings
 on a unique main process with an exact executable and real-user selector may
-drive an explicitly configured service restart rule. Host inventories,
+drive an explicitly configured service restart rule. When several processes
+match that selector, a top-level `pidfile` or `pidfiles.main` names the main one;
+without it they stay ambiguous and advisory. Host inventories,
 child-only findings, missing replacements and uncertain identities remain
 advisory (`action_blocked`), including under negated conditions. The operation
 engine retains every normal lock, guard and preflight. Package transactions

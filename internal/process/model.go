@@ -33,6 +33,11 @@ type Process struct {
 	Role       string   `json:"role,omitempty"`    // selector name, "main" for backend seeds, or "child" for tree members
 	Source     string   `json:"source"`            // backend | pidfile | command_match | child
 
+	// MainPidfile marks the process a top-level pidfile or pidfiles.main names.
+	// Source cannot carry it: a backend seed wins that label, so under a control
+	// group the daemon reads "backend" like every other process of its unit.
+	MainPidfile bool `json:"-"`
+
 	// Delegated marks a process the service owns for observability but that
 	// Sermo must never signal: a workload descendant the init unit deliberately
 	// keeps alive across a daemon restart (GlusterFS bricks, container shims).

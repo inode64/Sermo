@@ -54,6 +54,52 @@ func TestLibraryRestartPrincipal(t *testing.T) {
 	}
 }
 
+// A mail server detaches short-lived deliveries that run its own executable as
+// its own user, and a backend seed labels them main: only the pidfile tells the
+// daemon apart for as long as they live.
+func TestLibraryRestartPrincipalFollowsTheMainPidfile(t *testing.T) {
+	const exe = "/opt/sermo-fixture/exim"
+	ids := pidfileClaimReader{
+		10: {PID: 10, UID: 8, Exe: exe, ExeOK: true},
+		20: {PID: 20, UID: 8, Exe: exe, ExeOK: true},
+		30: {PID: 30, UID: 8, Exe: "/opt/sermo-fixture/other", ExeOK: true},
+		40: {PID: 40, UID: 0, Exe: exe, ExeOK: true},
+	}
+	sels := []process.Selector{{Name: process.RoleMain, Type: process.SelectorCommandMatch, Exe: exe, User: "mail"}}
+	d := process.Discoverer{Reader: ids, ResolveUser: func(string) (uint32, bool) { return 8, true }}
+	seed := func(pid int) process.Process {
+		id := ids[pid]
+		return process.Process{PID: pid, UID: id.UID, Exe: id.Exe, ExeOK: true, Role: process.RoleMain, Source: process.SourceBackend}
+	}
+	named := func(pid int) process.Process {
+		proc := seed(pid)
+		proc.MainPidfile = true
+		return proc
+	}
+	unseeded := named(10)
+	unseeded.Role, unseeded.Source = process.SelectorPidfile, process.SelectorPidfile
+	external := named(10)
+	external.External = true
+
+	for name, tc := range map[string]struct {
+		procs []process.Process
+		want  int
+	}{
+		"daemon beside a detached delivery":    {procs: []process.Process{named(10), seed(20)}, want: 10},
+		"daemon without backend seeds":         {procs: []process.Process{unseeded, seed(20)}, want: 10},
+		"no pidfile stays ambiguous":           {procs: []process.Process{seed(10), seed(20)}},
+		"pidfile recycled by another exe":      {procs: []process.Process{named(30), seed(10), seed(20)}},
+		"pidfile recycled by another user":     {procs: []process.Process{named(40), seed(10), seed(20)}},
+		"pidfile naming an external candidate": {procs: []process.Process{external, seed(20)}, want: 20},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if got := libraryRestartPrincipal(d, sels, tc.procs); got != tc.want {
+				t.Fatalf("got %d want %d", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestStaleLibrariesRestartState(t *testing.T) {
 	for _, blocked := range []bool{false, true} {
 		b, e := staleBinaryBackend(t, true)
