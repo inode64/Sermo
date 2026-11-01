@@ -215,6 +215,7 @@ func TestPathReadingChecksRunUnderTheGuard(t *testing.T) {
 		{"binary", map[string]any{CheckKeyType: CheckTypeBinary, CheckKeyPath: "/srv/a"}, true},
 		{"count", map[string]any{CheckKeyType: CheckTypeCount, CheckKeyPath: "/srv/a", CheckKeyCount: limit}, true},
 		{"log", map[string]any{CheckKeyType: CheckTypeLog, CheckKeyPath: "/srv/a", CheckKeyRegex: "x", CheckKeyCount: limit, CheckKeyWithin: "1m"}, true},
+		{"size", map[string]any{CheckKeyType: CheckTypeSize, CheckKeyPath: "/srv/a", CheckKeyMax: "1G"}, true},
 		{"cert file", map[string]any{CheckKeyType: CheckTypeCert, CheckKeyPath: "/srv/a"}, true},
 		{"config paths", map[string]any{CheckKeyType: CheckTypeConfig, CheckKeyPath: "/srv/a", CheckKeyOnChange: true}, true},
 		{"cert endpoint", map[string]any{CheckKeyType: CheckTypeCert, CheckKeyHost: "host-a"}, false},

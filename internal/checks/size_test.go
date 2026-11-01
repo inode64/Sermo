@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -121,7 +123,7 @@ func TestBuildAndRunSizeCheckRealFile(t *testing.T) {
 	if len(warns) != 0 || len(built) != 1 {
 		t.Fatalf("size check should build: warns=%v", warns)
 	}
-	sc, ok := built[0].Check.(*sizeCheck)
+	sc, ok := unguarded(built[0].Check).(*sizeCheck)
 	if !ok || sc.growBy != 1<<30 || sc.window != time.Hour || !sc.includeHidden {
 		t.Fatalf("built = %T %+v", built[0].Check, built[0].Check)
 	}
@@ -398,6 +400,57 @@ func TestBuildSizeCheckMaxOnlyGlob(t *testing.T) {
 	}
 }
 
+// A walk that blocks midway costs the check its timeout, not its cycle, and
+// frees its slot. Later cycles do not start a second walk over the growth window
+// the blocked one still owns; once it returns its late result is dropped, and
+// the measurement it took stands as the baseline of the next cycle.
+func TestSizeWalkBlockedMidwayIsBounded(t *testing.T) {
+	release := make(chan struct{})
+	var once sync.Once
+	unblock := func() { once.Do(func() { close(release) }) }
+	entry := map[string]any{CheckKeyType: CheckTypeSize, CheckKeyPath: "/mnt/hung", CheckKeyGrowBy: "1K", CheckKeyWithin: "1h", CheckKeyTimeout: "20ms"}
+	key := pathRunKey(t.Name(), "hung", entry)
+	t.Cleanup(func() {
+		unblock()
+		waitPathRunDone(t, key)
+	})
+	var walks atomic.Int32
+	limiter := NewLimiter(1)
+	built, issues := BuildWithIssues(map[string]any{"hung": entry}, Deps{Service: t.Name(), Limiter: limiter,
+		SizeSampler: func(context.Context, string, bool) (SizeMeasure, error) {
+			if walks.Add(1) > 1 {
+				return SizeMeasure{Bytes: 5 << 10, Files: 2}, nil
+			}
+			<-release
+			return SizeMeasure{Bytes: 1 << 10, Files: 1}, nil
+		}})
+	if len(issues) != 0 {
+		t.Fatalf("issues = %v", issues)
+	}
+
+	first := runWithin(t, built)
+	if first.Observation() != ObservationUnavailable || !strings.Contains(first.Message, "no answer within 20ms") {
+		t.Fatalf("first result = %+v, want unavailable at the timeout", first)
+	}
+	slot, cancel := context.WithTimeout(context.Background(), pathGuardBudget)
+	defer cancel()
+	if err := limiter.acquire(slot); err != nil {
+		t.Fatalf("the slot of a hung walk stayed taken: %v", err)
+	}
+	limiter.release()
+	second := runWithin(t, built)
+	if !strings.Contains(second.Message, "still blocked") || walks.Load() != 1 {
+		t.Fatalf("second result = %+v after %d walks, want a fast failure without a new walk", second, walks.Load())
+	}
+
+	unblock()
+	waitPathRunDone(t, key)
+	next := runWithin(t, built)
+	if !next.OK || next.Data[DataKeyGrowthBytes] != int64(4<<10) || walks.Load() != 2 {
+		t.Fatalf("next result = %+v after %d walks, want growth over the late walk's sample", next, walks.Load())
+	}
+}
+
 // An empty limit counts as absent: a catalog variable set to "" switches that
 // half of the check off instead of failing the load.
 func TestBuildSizeCheckEmptyHalvesAreAbsent(t *testing.T) {
@@ -409,7 +462,7 @@ func TestBuildSizeCheckEmptyHalvesAreAbsent(t *testing.T) {
 		t.Fatalf("both checks should build: warns=%v", warns)
 	}
 	for _, b := range built {
-		c := b.Check.(*sizeCheck)
+		c := unguarded(b.Check).(*sizeCheck)
 		switch c.name {
 		case "max-only":
 			if c.max != 20*gib || c.window != 0 || c.growBy != 0 {

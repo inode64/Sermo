@@ -1334,12 +1334,12 @@ optional `interval` to run it less often than the worker cycle — every
 [per-check interval](configuration.md#per-check-interval)).
 
 A check that reads the path it names (`file_exists`, `file`, `lockfile`, `socket`,
-`pidfile`, `binary`, `count`, `log`, and `cert` or `config` with a `path`) keeps
-that timeout even when the read blocks in the kernel, as it does on a hard network
-mount whose server is gone. It reports the path unavailable a moment after the
-timeout and frees its slot in `engine.max_parallel_checks`, and later cycles fail
-at once until the blocked read returns, so one hung path costs no other check its
-turn. A run that is merely slow still reports its own timeout.
+`pidfile`, `binary`, `count`, `size`, `log`, and `cert` or `config` with a `path`)
+keeps that timeout even when the read blocks in the kernel, as it does on a hard
+network mount whose server is gone. It reports the path unavailable a moment after
+the timeout and frees its slot in `engine.max_parallel_checks`, and later cycles
+fail at once until the blocked read returns, so one hung path costs no other check
+its turn. A run that is merely slow still reports its own timeout.
 
 A health check (`tcp`/`http`/`service`/`command`/`cert`/…) may also set
 `verify: true` to double as the **post-operation start verification**: after a

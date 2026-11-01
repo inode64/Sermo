@@ -341,7 +341,7 @@ var builtinCheckSpecs = []checkSpec{
 	{info: healthTypeInfo(CheckTypeReplication), build: func(in checkBuildInput) (Check, string) { return buildReplicationCheck(in.base, in.entry) }},
 	{info: conditionTypeInfo(CheckTypeMongoDBQuery), build: func(in checkBuildInput) (Check, string) { return buildMongoCheck(in.base, in.entry) }},
 	{info: conditionTypeInfo(CheckTypeInfluxDBQuery), build: func(in checkBuildInput) (Check, string) { return buildInfluxCheck(in.base, in.entry) }},
-	{info: conditionTypeInfo(CheckTypeSize), build: func(in checkBuildInput) (Check, string) { return buildSizeCheck(in.base, in.entry, in.deps) }},
+	{info: conditionTypeInfo(CheckTypeSize), readsPaths: true, build: func(in checkBuildInput) (Check, string) { return buildSizeCheck(in.base, in.entry, in.deps) }},
 	{info: healthTypeInfo(CheckTypeWebsocket), build: func(in checkBuildInput) (Check, string) { return buildWebsocketCheck(in.base, in.entry) }},
 	{info: multiMetricTypeInfo(conditionTypeInfo(CheckTypeNet)), build: func(in checkBuildInput) (Check, string) { return buildNetCheck(in.base, in.entry, in.deps) }},
 	{info: multiMetricTypeInfo(conditionTypeInfo(CheckTypeICMP)), build: func(in checkBuildInput) (Check, string) { return buildICMPCheck(in.base, in.entry, in.deps) }},
