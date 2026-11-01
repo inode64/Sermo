@@ -65,6 +65,7 @@ const (
 	devPathPrefix         = "/dev/"
 	lvmLVPathFormat       = devPathPrefix + "%s/%s"
 	lvExtendSizeArgFormat = "-L+%db"
+	lvmSectorBytes        = 512
 )
 
 // Target is a resolved expansion target: the containing mounted filesystem and
@@ -183,6 +184,12 @@ func (e Expander) Expand(ctx context.Context, t Target, by int64) (Result, error
 	grow := min(by,
 		// use all that is available, as the operator script does
 		free)
+	// lvextend rejects a byte size that is not a whole number of sectors, and a
+	// thin pool's free space or a fractional `by` rarely is one.
+	grow -= grow % lvmSectorBytes
+	if grow <= 0 {
+		return Result{}, fmt.Errorf("expand size of %d bytes for %s is below one %d-byte sector", min(by, free), t.Mountpoint, lvmSectorBytes)
+	}
 
 	lv := fmt.Sprintf(lvmLVPathFormat, t.VG, t.LV)
 	to := e.timeout()

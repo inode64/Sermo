@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sermo/internal/checks"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -266,6 +267,54 @@ func TestExpandThinLVCapsToPoolFreeSpace(t *testing.T) {
 	for _, call := range r.Lines() {
 		if strings.HasPrefix(call, "vgs") {
 			t.Fatalf("calls = %v; a thin LV must not be capped by vg_free", r.Lines())
+		}
+	}
+}
+
+// lvextend refuses a byte size that is not a whole number of sectors, so a size
+// derived from a pool's percentage or a fractional `by` is rounded down first.
+func TestExpandRoundsDownToWholeSectors(t *testing.T) {
+	thinPool := map[string]execx.Result{
+		"lvs --noheadings -o lv_layout,pool_lv --separator | vg0/data":                          {Stdout: "  thin,sparse|pool0\n"},
+		"lvs --noheadings -o lv_size,data_percent --separator | --units b --nosuffix vg0/pool0": {Stdout: "  1073741824|12.34\n"},
+	}
+	tests := []struct {
+		name string
+		r    *execxtest.Runner
+		by   int64
+		want int64
+	}{
+		{name: "thin pool free space", r: &execxtest.Runner{ByLine: thinPool}, by: 5 << 30, want: 941241856},
+		{name: "fractional by", r: &execxtest.Runner{ByName: map[string]execx.Result{"vgs": {Stdout: "107374182400"}}}, by: 1181116006, want: 1181115904},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			e := Expander{Runner: tc.r, FSSize: steadyFSSize}
+			tgt := Target{Mountpoint: "/mnt/backup", FSType: "xfs", VG: "vg0", LV: "data"}
+			res, err := e.Expand(context.Background(), tgt, tc.by)
+			if err != nil {
+				t.Fatalf("Expand: %v", err)
+			}
+			if res.GrewBytes != tc.want {
+				t.Fatalf("GrewBytes = %d, want %d", res.GrewBytes, tc.want)
+			}
+			if want := fmt.Sprintf("lvextend -L+%db /dev/vg0/data", tc.want); !slices.Contains(tc.r.Lines(), want) {
+				t.Fatalf("calls = %v, want %q", tc.r.Lines(), want)
+			}
+		})
+	}
+}
+
+func TestExpandBelowOneSectorErrors(t *testing.T) {
+	r := &execxtest.Runner{ByName: map[string]execx.Result{"vgs": {Stdout: "2147483648\n"}}}
+	e := Expander{Runner: r, FSSize: steadyFSSize}
+	tgt := Target{Mountpoint: "/mnt/backup", FSType: "xfs", VG: "vg0", LV: "data"}
+	if _, err := e.Expand(context.Background(), tgt, lvmSectorBytes-1); err == nil {
+		t.Fatal("Expand below one sector succeeded")
+	}
+	for _, call := range r.Lines() {
+		if strings.HasPrefix(call, "lvextend") {
+			t.Fatalf("calls = %v; lvextend must not run without a whole sector", r.Lines())
 		}
 	}
 }
