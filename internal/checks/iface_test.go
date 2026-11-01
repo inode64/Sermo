@@ -1,6 +1,7 @@
 package checks
 
 import (
+	"context"
 	"errors"
 	"testing"
 	"time"
@@ -17,15 +18,54 @@ func TestParseInterfaceMatch(t *testing.T) {
 	}
 }
 
+func TestTryInterfacesSharesTheDeadline(t *testing.T) {
+	const budget = time.Hour
+	ctx, cancel := context.WithTimeout(context.Background(), budget)
+	defer cancel()
+	for _, matchAll := range []bool{false, true} {
+		var shares []time.Duration
+		_, _, _ = tryInterfaces(ctx, []string{"a", "b", "c"}, matchAll, func(attempt context.Context, _ string) error {
+			deadline, ok := attempt.Deadline()
+			if !ok {
+				t.Fatal("an attempt lost the deadline")
+			}
+			shares = append(shares, time.Until(deadline))
+			if !matchAll {
+				return errors.New("failed fast")
+			}
+			return nil
+		})
+		// Finishing fast leaves the time to the next attempt, and the last one
+		// gets all that is left.
+		want := []time.Duration{budget / 3, budget / 2, budget}
+		if len(shares) != len(want) {
+			t.Fatalf("matchAll=%v: shares = %v, want %d attempts", matchAll, shares, len(want))
+		}
+		for i, share := range shares {
+			if share < want[i]-time.Minute || share > want[i] {
+				t.Fatalf("matchAll=%v: shares = %v, want about %v", matchAll, shares, want)
+			}
+		}
+	}
+
+	// No deadline, nothing to share.
+	_, _, _ = tryInterfaces(context.Background(), []string{"a"}, false, func(attempt context.Context, _ string) error {
+		if _, ok := attempt.Deadline(); ok {
+			t.Fatal("an attempt invented a deadline")
+		}
+		return nil
+	})
+}
+
 func TestTryInterfaces(t *testing.T) {
 	// No interfaces: op runs once with "".
 	ran := ""
-	if c, per, err := tryInterfaces(nil, false, func(i string) error { ran = "x" + i; return nil }); err != nil || c != "" || per != nil || ran != "x" {
+	if c, per, err := tryInterfaces(context.Background(), nil, false, func(_ context.Context, i string) error { ran = "x" + i; return nil }); err != nil || c != "" || per != nil || ran != "x" {
 		t.Fatalf("none: %q/%v/%v ran=%q", c, err, per, ran)
 	}
 
-	fail := func(bad string) func(string) error {
-		return func(i string) error {
+	fail := func(bad string) func(context.Context, string) error {
+		return func(_ context.Context, i string) error {
 			if i == bad {
 				return errors.New("fail " + i)
 			}
@@ -34,19 +74,19 @@ func TestTryInterfaces(t *testing.T) {
 	}
 
 	// any: first success wins; per-interface recorded.
-	if c, per, err := tryInterfaces([]string{"a", "b"}, false, fail("a")); err != nil || c != "b" || per["a"] != "fail a" || per["b"] != "ok" {
+	if c, per, err := tryInterfaces(context.Background(), []string{"a", "b"}, false, fail("a")); err != nil || c != "b" || per["a"] != "fail a" || per["b"] != "ok" {
 		t.Fatalf("any: %q/%v/%v", c, err, per)
 	}
 	// any: none reachable -> error.
-	if c, per, err := tryInterfaces([]string{"a", "b"}, false, func(i string) error { return errors.New("fail " + i) }); err == nil || c != "" || per["a"] != "fail a" || per["b"] != "fail b" {
+	if c, per, err := tryInterfaces(context.Background(), []string{"a", "b"}, false, func(_ context.Context, i string) error { return errors.New("fail " + i) }); err == nil || c != "" || per["a"] != "fail a" || per["b"] != "fail b" {
 		t.Fatalf("any all-failing: %q/%v/%v", c, err, per)
 	}
 	// all: every interface must succeed.
-	if c, per, err := tryInterfaces([]string{"a", "b"}, true, func(string) error { return nil }); err != nil || c != "b" || per["a"] != "ok" || per["b"] != "ok" {
+	if c, per, err := tryInterfaces(context.Background(), []string{"a", "b"}, true, func(context.Context, string) error { return nil }); err != nil || c != "b" || per["a"] != "ok" || per["b"] != "ok" {
 		t.Fatalf("all-ok: %q/%v/%v", c, err, per)
 	}
 	// all: first failure loses.
-	if c, _, err := tryInterfaces([]string{"a", "b"}, true, fail("a")); err == nil || c != "a" {
+	if c, _, err := tryInterfaces(context.Background(), []string{"a", "b"}, true, fail("a")); err == nil || c != "a" {
 		t.Fatalf("all with a failing: %q/%v", c, err)
 	}
 }

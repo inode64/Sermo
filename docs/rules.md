@@ -422,7 +422,10 @@ checks:
   check passes if the probe succeeds through **at least one** interface (failover/
   redundant-link monitoring); **`all`** — it passes only if the probe succeeds
   through **every** listed interface (verify each path independently). The
-  per-interface outcome is in the result data under `interfaces`.
+  per-interface outcome is in the result data under `interfaces`. Interfaces are
+  tried in order, each with an equal share of the time left in `timeout`
+  (`connect_timeout` for a `ports` check), so a silent link cannot use up the
+  next one's time. Size it for the slowest path you expect.
 - **Mechanism.** For TCP/UDP — including HTTP/3's QUIC socket — it binds the
   socket with `SO_BINDTODEVICE`, forcing egress through that interface
   regardless of the routing table; for `icmp` it binds the probe to the

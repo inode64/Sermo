@@ -24,7 +24,7 @@ func (c tcpCheck) Run(ctx context.Context) Result {
 	start := run.start
 
 	addr := netutil.JoinHostPort(c.host, c.port)
-	chosen, perIface, err := tryInterfaces(c.ifaces, c.ifaceAll, func(iface string) error {
+	chosen, perIface, err := tryInterfaces(ctx, c.ifaces, c.ifaceAll, func(ctx context.Context, iface string) error {
 		nc, e := conn.BindDialer(iface).DialContext(ctx, conn.TransportTCP, addr)
 		if e == nil {
 			_ = nc.Close()

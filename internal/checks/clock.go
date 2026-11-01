@@ -236,7 +236,7 @@ func (c clockCheck) probeServer(ctx context.Context, server string) (clockSample
 	cfg := conn.Config{Host: server, Port: c.port, Socket: c.socket}
 	var res conn.Result
 	var latency time.Duration
-	probe := func(iface string) error {
+	probe := func(ctx context.Context, iface string) error {
 		cfg.Interface = iface
 		start := time.Now()
 		r, e := c.probe(ctx, cfg)
@@ -250,12 +250,12 @@ func (c clockCheck) probeServer(ctx context.Context, server string) (clockSample
 	// the list here would stamp Data with an interface the dial never bound,
 	// and with interface_match: all would report every one of them as ok.
 	if c.socket != "" {
-		if err := probe(""); err != nil {
+		if err := probe(ctx, ""); err != nil {
 			return clockSample{}, err
 		}
 		return c.parseClockSample(server, "", nil, latency, res)
 	}
-	chosen, perIface, err := tryInterfaces(c.ifaces, c.ifaceAll, probe)
+	chosen, perIface, err := tryInterfaces(ctx, c.ifaces, c.ifaceAll, probe)
 	if err != nil {
 		return clockSample{}, err
 	}

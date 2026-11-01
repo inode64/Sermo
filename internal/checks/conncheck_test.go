@@ -200,6 +200,28 @@ func TestConnCheckAllMatchReportsWorstPath(t *testing.T) {
 	}
 }
 
+func TestConnCheckSilentInterfaceLeavesTimeForTheNext(t *testing.T) {
+	c := connCheck{
+		name: "db", timeout: 200 * time.Millisecond,
+		proto: fakeProto{},
+		cfg:   conn.Config{Host: "192.0.2.1", Port: 3306, User: "monitor"},
+		probe: func(ctx context.Context, cfg conn.Config) (conn.Result, error) {
+			if cfg.Interface == "wan1" {
+				<-ctx.Done()
+				return conn.Result{}, ctx.Err()
+			}
+			if err := ctx.Err(); err != nil {
+				return conn.Result{}, err
+			}
+			return conn.Result{Version: "wan2"}, nil
+		},
+		ifaces: []string{"wan1", "wan2"},
+	}
+	if res := c.Run(context.Background()); !res.OK {
+		t.Fatalf("result = %+v, want the probe through wan2 to answer", res)
+	}
+}
+
 func TestConnCheckTrimsCapturedText(t *testing.T) {
 	c := connCheck{
 		name: "db", timeout: time.Second,

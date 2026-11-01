@@ -175,8 +175,8 @@ func (c *portsCheck) probe(ctx context.Context, port int) bool {
 	}
 	// With an interface set, a port is "open" if it connects on any (or, with
 	// ifaceAll, every) configured interface.
-	_, _, err := tryInterfaces(c.ifaces, c.ifaceAll, func(iface string) error {
-		nc, e := dial(pctx, iface, netutil.JoinHostPort(c.host, port))
+	_, _, err := tryInterfaces(pctx, c.ifaces, c.ifaceAll, func(ctx context.Context, iface string) error {
+		nc, e := dial(ctx, iface, netutil.JoinHostPort(c.host, port))
 		if e == nil {
 			_ = nc.Close()
 		}

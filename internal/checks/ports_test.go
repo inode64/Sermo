@@ -158,6 +158,28 @@ func TestBuildPortsCheck(t *testing.T) {
 	}
 }
 
+// interface_match: any exists for failover, and the link that fails that way
+// drops the SYN: a silent first interface must leave the next one time to dial.
+func TestPortsSilentInterfaceLeavesTimeForTheNext(t *testing.T) {
+	c := portsCheckFor([]int{443}, PortStateOpen, PortMatchAll)
+	c.host, c.ifaces, c.connectTimeout = "192.0.2.1", []string{"wan1", "wan2"}, 100*time.Millisecond
+	c.dialFunc = func(ctx context.Context, iface, _ string) (net.Conn, error) {
+		if iface == "wan1" {
+			<-ctx.Done()
+			return nil, ctx.Err()
+		}
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		client, server := net.Pipe()
+		_ = server.Close()
+		return client, nil
+	}
+	if res := c.Run(context.Background()); !res.OK {
+		t.Fatalf("result = %+v, want the port open through wan2", res)
+	}
+}
+
 func TestPortsOpenClosedCounts(t *testing.T) {
 	openPort, ln := listenTCP(t)
 	defer ln.Close()

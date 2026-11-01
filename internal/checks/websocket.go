@@ -71,7 +71,7 @@ func (c *websocketCheck) Run(ctx context.Context) Result {
 	start := run.start
 
 	var chosenRes Result
-	chosen, perIface, perr := tryInterfaces(c.ifaces, c.ifaceAll, func(iface string) error {
+	chosen, perIface, perr := tryInterfaces(ctx, c.ifaces, c.ifaceAll, func(ctx context.Context, iface string) error {
 		r := c.handshake(ctx, iface, start)
 		chosenRes = r
 		if !r.OK {

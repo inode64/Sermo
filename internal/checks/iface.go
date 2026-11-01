@@ -1,8 +1,10 @@
 package checks
 
 import (
+	"context"
 	"fmt"
 	"sermo/internal/cfgval"
+	"sermo/internal/conn"
 )
 
 const interfaceResultOK = "ok"
@@ -25,15 +27,19 @@ func parseInterfaceMatch(entry map[string]any) (all bool, warn string) {
 // with matchAll=true (all) it fails on the first op error. With no interfaces it
 // runs op once with "" (default routing). It returns the deciding interface, the
 // resulting error (nil on success) and a per-interface outcome map for the
-// result data.
-func tryInterfaces(ifaces []string, matchAll bool, op func(iface string) error) (chosen string, perIface map[string]any, err error) {
+// result data. Each interface gets a share of the time left in ctx: a dead link
+// that stays silent would otherwise spend it all, which is the failover case any
+// exists for, and each path of all would depend on the speed of the one before.
+func tryInterfaces(ctx context.Context, ifaces []string, matchAll bool, op func(ctx context.Context, iface string) error) (chosen string, perIface map[string]any, err error) {
 	if len(ifaces) == 0 {
-		return "", nil, op("")
+		return "", nil, op(ctx, "")
 	}
 	perIface = make(map[string]any, len(ifaces))
 	var lastErr error
-	for _, ifc := range ifaces {
-		e := op(ifc)
+	for i, ifc := range ifaces {
+		attemptCtx, cancel := conn.AttemptContext(ctx, len(ifaces)-i)
+		e := op(attemptCtx, ifc)
+		cancel()
 		if e == nil {
 			perIface[ifc] = interfaceResultOK
 			chosen = ifc

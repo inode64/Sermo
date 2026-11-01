@@ -253,7 +253,7 @@ func (c connCheck) probeResult(ctx context.Context) (conn.Result, time.Duration,
 	var res conn.Result
 	var elapsed time.Duration
 	var hasProtocolFailure bool
-	_, perIface, err := tryInterfaces(c.ifaces, c.ifaceAll, func(iface string) error {
+	_, perIface, err := tryInterfaces(ctx, c.ifaces, c.ifaceAll, func(ctx context.Context, iface string) error {
 		cfg := c.cfg
 		cfg.Interface = iface
 		t0 := time.Now()

@@ -176,6 +176,18 @@ func ApplyDeadline(ctx context.Context, c interface {
 	}
 }
 
+// AttemptContext gives one of several alternative targets its share of the time
+// left in ctx, so a target that stays silent cannot leave the ones after it an
+// expired deadline. attemptsLeft counts this attempt, and a target that fails
+// fast leaves its time to the next. A ctx without a deadline has nothing to share.
+func AttemptContext(ctx context.Context, attemptsLeft int) (context.Context, context.CancelFunc) {
+	deadline, ok := ctx.Deadline()
+	if !ok {
+		return context.WithCancel(ctx)
+	}
+	return context.WithTimeout(ctx, time.Until(deadline)/time.Duration(attemptsLeft))
+}
+
 // dialUnix dials a Unix-domain socket. It is the one-liner the socket-only
 // probes (acpid, fail2ban, docker, …) and probeTarget share, so the
 // net.Dialer incantation lives in one place.
