@@ -275,6 +275,30 @@ func TestRaidCheckIndividualArrayAndTransitions(t *testing.T) {
 	}
 }
 
+// Pausing hides the pass from mdstat, so on a clean array a frozen resync looks
+// finished. The repair is not complete until the resumed pass ends.
+func TestRaidPausedRebuildIsNotGood(t *testing.T) {
+	resyncing := RaidArrayStatus{Name: "md0", Operation: raidSyncActionResync, SyncAction: raidSyncActionResync}
+	paused := RaidArrayStatus{Name: "md0", SyncAction: raidSyncActionFrozen}
+	idle := RaidArrayStatus{Name: "md0", SyncAction: raidSyncActionIdle}
+	tests := []struct {
+		name              string
+		previous, current RaidArrayStatus
+		want              []string
+	}{
+		{name: "pause", previous: resyncing, current: paused},
+		{name: "resume", previous: paused, current: resyncing, want: []string{RaidNotifyOnRecovering}},
+		{name: "finish", previous: resyncing, current: idle, want: []string{RaidNotifyOnGood}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := raidStateTransitions(tt.previous, tt.current); !slices.Equal(got, tt.want) {
+				t.Fatalf("transitions = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestRaidCheckSysfsTransitionsAndMissingArray(t *testing.T) {
 	old := RaidArrayStatus{Name: "md0", MismatchCount: "0", Members: []RaidMemberStatus{{Name: "sda1", State: "in_sync", Errors: "0", BadBlocks: "none"}}}
 	current := RaidArrayStatus{Name: "md0", MismatchCount: "1", Members: []RaidMemberStatus{{Name: "sda1", State: "faulty", Errors: "2", BadBlocks: "8"}}}

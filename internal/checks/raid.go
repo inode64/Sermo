@@ -538,7 +538,8 @@ func raidStateTransitions(previous, current RaidArrayStatus) []string {
 	if !isRaidRebuild(previous.Operation) && isRaidRebuild(current.Operation) {
 		out = append(out, RaidNotifyOnRecovering)
 	}
-	if (previous.Degraded || isRaidRebuild(previous.Operation)) && !current.Degraded && !isRaidRebuild(current.Operation) {
+	// A paused pass leaves mdstat, so only sync_action tells it from a finished one.
+	if (previous.Degraded || isRaidRebuild(previous.Operation)) && !current.Degraded && !isRaidRebuild(current.Operation) && current.SyncAction != raidSyncActionFrozen {
 		out = append(out, RaidNotifyOnGood)
 	}
 	return out
