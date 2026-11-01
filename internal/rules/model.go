@@ -199,9 +199,11 @@ func (t ActionType) IsOperation() bool {
 	}
 }
 
-// Relaunches reports whether a successful action leaves the service running the
-// artifacts on disk now. A reload or resume keeps the code it was running.
-func (t ActionType) Relaunches() bool {
+// MayRelaunch reports whether a successful action can leave the service running
+// the artifacts on disk now: a restart does, and a start if the service was down.
+// A reload or resume keeps the code it was running. operation.Result.Relaunched
+// says whether one did.
+func (t ActionType) MayRelaunch() bool {
 	return t == ActionStart || t == ActionRestart
 }
 

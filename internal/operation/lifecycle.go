@@ -51,6 +51,9 @@ func (e Engine) reconcileInitState(ctx context.Context, result *Result) (bool, [
 	if err != nil {
 		return false, nil, fmt.Errorf("query init state before %s: %w", result.Action, err)
 	}
+	// The start that follows launches the service only if it is down: on one
+	// running it succeeds and changes nothing, and no other status proves either.
+	result.Relaunched = status.Status == servicemgr.StatusInactive || status.Status == servicemgr.StatusFailed
 	if status.Status == servicemgr.StatusActive {
 		return e.reconcileActive(ctx, result)
 	}

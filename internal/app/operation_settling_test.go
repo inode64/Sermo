@@ -278,14 +278,17 @@ func manualRestartFixture(t *testing.T) (w *Worker, h *workerHarness, store *fak
 	return w, h, store, path
 }
 
-func completeManual(t *testing.T, store *fakeStore, action string, status operation.ResultStatus) {
+func completeManual(t *testing.T, store *fakeStore, action string, result operation.Result) {
 	t.Helper()
-	result := operation.Result{Service: "web", Action: action, Status: status}
+	result.Service, result.Action = "web", action
 	sources := ManualOperationSources{Stop: state.SourceCLIManualStop, Restore: state.SourceCLI}
 	if _, err := CompleteManualOperation(store, store, "web", action, result, nil, sources, false, false); err != nil {
 		t.Fatal(err)
 	}
 }
+
+// relaunched is what the engine reports for an action that launched the service.
+var relaunched = operation.Result{Status: operation.ResultOK, Relaunched: true}
 
 // An operator's restart takes in what changed on disk, so the worker must adopt
 // it: otherwise the changed: rule restarts the service a second time and a
@@ -299,7 +302,7 @@ func TestManualRestartAcknowledgesTheChangedBaseline(t *testing.T) {
 				w, h, store, path := manualRestartFixture(t)
 				w.DryRun = dryRun
 
-				completeManual(t, store, action, operation.ResultOK)
+				completeManual(t, store, action, relaunched)
 				w.RunCycle(t.Context()) // the observation cycle
 
 				if changed, err := w.changed(path); err != nil || changed {
@@ -331,7 +334,7 @@ func TestManualOperationThatDidNotRelaunchKeepsTheChangePending(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			w, _, store, path := manualRestartFixture(t)
 
-			completeManual(t, store, tt.action, tt.status)
+			completeManual(t, store, tt.action, operation.Result{Status: tt.status})
 			w.Rules = nil // only the baseline is under test here
 			w.RunCycle(t.Context())
 
@@ -339,6 +342,23 @@ func TestManualOperationThatDidNotRelaunchKeepsTheChangePending(t *testing.T) {
 				t.Fatalf("changed = %t, %v, want the change pending", changed, err)
 			}
 		})
+	}
+}
+
+// A start on a service already running changes nothing, so an operator's start
+// must not adopt a change only a restart brings in: the rule stays pending.
+func TestManualStartOnARunningServiceKeepsTheChangePending(t *testing.T) {
+	w, h, store, path := manualRestartFixture(t)
+
+	completeManual(t, store, string(rules.ActionStart), operation.Result{Status: operation.ResultOK})
+	w.RunCycle(t.Context()) // the observation cycle
+
+	if changed, err := w.changed(path); err != nil || !changed {
+		t.Fatalf("changed = %t, %v, want the change pending after a start that relaunched nothing", changed, err)
+	}
+	w.RunCycle(t.Context())
+	if !eq(h.ops, []string{"restart"}) {
+		t.Fatalf("ops = %v, want the restart the change is waiting for", h.ops)
 	}
 }
 
@@ -350,7 +370,7 @@ func TestManualRestartIsAcknowledgedDuringAPause(t *testing.T) {
 	w.IsPaused = func() bool { return paused }
 	store.now = func() time.Time { return t0.Add(-time.Hour) }
 
-	completeManual(t, store, string(rules.ActionRestart), operation.ResultOK)
+	completeManual(t, store, string(rules.ActionRestart), relaunched)
 	w.RunCycle(t.Context())
 	paused = false
 	w.RunCycle(t.Context())
@@ -366,7 +386,7 @@ func TestManualRestartAcknowledgedPastTheAgeLimit(t *testing.T) {
 	w, h, store, _ := manualRestartFixture(t)
 	store.now = func() time.Time { return t0.Add(-24 * time.Hour) }
 
-	completeManual(t, store, string(rules.ActionRestart), operation.ResultOK)
+	completeManual(t, store, string(rules.ActionRestart), relaunched)
 	w.RunCycle(t.Context())
 	w.RunCycle(t.Context())
 

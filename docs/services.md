@@ -1158,7 +1158,7 @@ also_apply: [nginx, varnish]
 - **Each target keeps its own guards/locks/preflight** (it runs its real
   operation). A target's remediation cooldown and paused/`unmonitor` state are
   *not* consulted — `also_apply` is an explicit relationship. When a remediation
-  cascade starts or restarts a target successfully, the target also
+  cascade restarts a target, or starts one that was down, the target also
   acknowledges its pending `changed:` baseline, as its own restart would, so
   its own `restart_on_change` rule does not restart it a second time.
 - **A target in `dry_run` stays simulated**: a remediation cascade that reaches

@@ -508,15 +508,18 @@ func wireCascade(workers []*Worker, cascadeMap map[string][]string, deps Deps) {
 		if len(cascadeMap[w.Service]) == 0 {
 			continue
 		}
-		base := CascadeConfig{Operate: op, Lookup: lookup, Emit: deps.Emit, Simulated: simulated}
+		cfg := CascadeConfig{
+			Operate: op, Lookup: lookup, Emit: deps.Emit, Simulated: simulated,
+			Target: acknowledgeCascadeTarget(byName),
+			// The worker sees the failed cascade, but this service may have relaunched.
+			Downgraded: func(primary operation.Result) {
+				if primary.Relaunched {
+					w.acknowledgeChanges()
+				}
+			},
+		}
 		service := w.Service
 		w.Cascade = func(ctx context.Context, action string) operation.Result {
-			cfg := base
-			cfg.Target = acknowledgeCascadeTarget(byName, action)
-			if rules.ActionType(action).Relaunches() {
-				// The worker sees the failed cascade, but this service did relaunch.
-				cfg.Downgraded = func(operation.Result) { w.acknowledgeChanges() }
-			}
 			result, _ := RunCascade(ctx, service, action, cfg)
 			return result
 		}
@@ -527,14 +530,13 @@ func wireCascade(workers []*Worker, cascadeMap map[string][]string, deps Deps) {
 // baseline after the cascade (re)launched it successfully, as the target's
 // own remediation would: it now runs the upgraded artifact, and an
 // unacknowledged baseline would let the target's own `changed:` rule restart
-// it a second time. The root is acknowledged by its worker as usual, or through
-// Downgraded when a failed target turned its own success into a failed result.
-func acknowledgeCascadeTarget(byName map[string]*Worker, action string) func(string, operation.Result, error) {
-	if !rules.ActionType(action).SettlesAfter() {
-		return nil
-	}
+// it a second time. A start that found the target running took nothing in, so
+// its change stays pending. The root is acknowledged by its worker as usual, or
+// through Downgraded when a failed target turned its own success into a failed
+// result.
+func acknowledgeCascadeTarget(byName map[string]*Worker) func(string, operation.Result, error) {
 	return func(service string, result operation.Result, err error) {
-		if tw := byName[service]; tw != nil && err == nil && result.OK() {
+		if tw := byName[service]; tw != nil && err == nil && result.OK() && result.Relaunched {
 			tw.acknowledgeChanges()
 		}
 	}

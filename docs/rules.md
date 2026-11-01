@@ -3914,9 +3914,11 @@ tracked across artifact samples, or when `app` names a linked app whose version
 changed at the selected `level` (`major`, `minor` or `patch`; default `patch`).
 `library` in place of `path` names a catalog library (`catalog/libs/`) and
 watches its file. The first cycle adopts the current value (a daemon start
-never fires), and a successful `restart`/`start` re-baselines it, from a rule, the
-Web UI or `sermoctl`: `sermod` adopts an operator's on its next cycle of that
-service, also under `dry_run`. A rule's successful
+never fires), and a successful `restart`, or a `start` that found the service
+down, re-baselines it, from a rule, the Web UI or `sermoctl`: `sermod` adopts an
+operator's on its next cycle of that service, also under `dry_run`. A `start` on a
+service already running changes nothing and leaves the change pending, except
+that a rule answering `changed:` with `start` consumes its own trigger. A rule's successful
 `reload` or `resume` re-baselines everything except what a `restart` or `start`
 rule reads: that keeps the running code, so the change stays pending and its rule
 acts once the cooldown ends. A target the acting rule reads too is consumed with

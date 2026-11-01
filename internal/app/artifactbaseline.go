@@ -158,22 +158,42 @@ func (b *ArtifactBaseline) AcknowledgeExcept(kept map[string]bool, samples *Arti
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	for path := range b.fingerprints {
-		if kept[path] {
-			continue
-		}
-		if samples != nil {
-			if _, tracked, _ := samples.FileFingerprint(path); tracked {
-				samples.StoreFile(path)
-			}
-		}
-		if fingerprint, observed, _ := currentArtifactFingerprint(path, samples, fileFingerprint); observed {
-			b.fingerprints[path] = fingerprint
+		if !kept[path] {
+			b.adoptFingerprintLocked(path, samples)
 		}
 	}
 	for key, version := range b.versionsLast {
 		if !kept[key] {
 			b.versions[key] = version
 		}
+	}
+}
+
+// AcknowledgeOnly is Acknowledge limited to what leaves read.
+func (b *ArtifactBaseline) AcknowledgeOnly(leaves []rules.ChangeContext, samples *ArtifactSamples) {
+	if b == nil {
+		return
+	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	for _, leaf := range leaves {
+		key := baselineKey(leaf)
+		if version, sampled := b.versionsLast[key]; sampled {
+			b.versions[key] = version
+		} else if _, tracked := b.fingerprints[key]; tracked {
+			b.adoptFingerprintLocked(key, samples)
+		}
+	}
+}
+
+func (b *ArtifactBaseline) adoptFingerprintLocked(path string, samples *ArtifactSamples) {
+	if samples != nil {
+		if _, tracked, _ := samples.FileFingerprint(path); tracked {
+			samples.StoreFile(path)
+		}
+	}
+	if fingerprint, observed, _ := currentArtifactFingerprint(path, samples, fileFingerprint); observed {
+		b.fingerprints[path] = fingerprint
 	}
 }
 

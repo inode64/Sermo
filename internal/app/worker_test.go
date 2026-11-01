@@ -726,6 +726,7 @@ func (h *workerHarness) worker(tree map[string]any, policy rules.Policy, remedia
 			h.ops = append(h.ops, action)
 			res := h.opResult
 			res.Action = action
+			res.Relaunched = res.Relaunched || action == string(rules.ActionRestart)
 			return res
 		},
 		Now:  func() time.Time { return t0 },
@@ -930,6 +931,65 @@ func TestReloadConsumesATargetItReadsItself(t *testing.T) {
 
 	if !eq(h.ops, []string{"reload"}) {
 		t.Fatalf("ops = %v, want one reload", h.ops)
+	}
+}
+
+// A start rule that found the service running relaunched nothing, so it adopts
+// nothing another rule is waiting for: not the restart's library, nor the
+// reload's config file, which nobody re-read.
+func TestStartOnARunningServiceLeavesOtherRulesPending(t *testing.T) {
+	dir := t.TempDir()
+	conf, lib := filepath.Join(dir, "site.conf"), filepath.Join(dir, "libssl.so")
+	writeFile(t, conf, "a")
+	writeFile(t, lib, "a")
+	h := &workerHarness{cache: map[string]checks.Result{"http": {Check: "http", OK: true}}, opResult: operation.Result{Status: operation.ResultOK}}
+	w := h.worker(map[string]any{"rules": map[string]any{
+		"a-start-if-down":         map[string]any{"type": "remediation", "if": map[string]any{"failed": map[string]any{"check": "http"}}, "then": map[string]any{"action": "start"}},
+		"reload-on-change-1":      changedRule(conf, "reload"),
+		"restart-on-change-lib-1": changedRule(lib, "restart"),
+	}}, rules.Policy{Cooldown: time.Minute}, nil)
+	at := t0
+	w.Now = func() time.Time { return at }
+	cycle := func() {
+		w.RunCycle(context.Background())
+		at = at.Add(2 * time.Minute)
+	}
+	cycle() // adopts the baselines
+
+	writeFile(t, conf, "bb")
+	writeFile(t, lib, "ccc")
+	h.cache = failedCache("http")
+	cycle()
+	h.cache = map[string]checks.Result{"http": {Check: "http", OK: true}}
+	for range 4 {
+		cycle()
+	}
+
+	if !eq(h.ops, []string{"start", "reload", "restart"}) {
+		t.Fatalf("ops = %v, want each pending change to reach its own rule", h.ops)
+	}
+}
+
+// With nothing relaunched the change is still there, but a start rule answering it
+// consumes its own trigger: left pending, it would run a start that does nothing
+// on every cooldown for as long as the service stays up.
+func TestStartRuleOnARunningServiceConsumesItsOwnTrigger(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "unit.conf")
+	writeFile(t, path, "a")
+	h := &workerHarness{cache: map[string]checks.Result{}, opResult: operation.Result{Status: operation.ResultOK}}
+	w := h.worker(map[string]any{"rules": map[string]any{"start-on-change": changedRule(path, "start")}}, rules.Policy{Cooldown: time.Minute}, nil)
+	at := t0
+	w.Now = func() time.Time { return at }
+	w.RunCycle(context.Background())
+
+	writeFile(t, path, "bb")
+	for range 4 {
+		at = at.Add(2 * time.Minute)
+		w.RunCycle(context.Background())
+	}
+
+	if !eq(h.ops, []string{"start"}) {
+		t.Fatalf("ops = %v, want one start", h.ops)
 	}
 }
 

@@ -328,6 +328,7 @@ func (e Engine) run(ctx context.Context, p plan) (result Result) {
 		if !stopped {
 			return result
 		}
+		result.Relaunched = p.start
 	}
 
 	if p.start && !e.startService(ctx, &result, systemdReactivated) {
@@ -501,6 +502,7 @@ func (e Engine) runReconciliation(ctx context.Context, p plan, result *Result) (
 		result.Processes = remaining
 		return false, false
 	}
+	result.Relaunched = result.Relaunched || reconciled
 	return reconciled, true
 }
 

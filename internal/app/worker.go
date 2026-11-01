@@ -902,7 +902,7 @@ func (w *Worker) executeRemediation(ctx context.Context, now func() time.Time, f
 		w.State.Record(now(), w.Policy)
 	}
 	if result.OK() {
-		w.acknowledgeOperation(firing.Rule, rules.ActionType(action))
+		w.acknowledgeOperation(firing.Rule, rules.ActionType(action), result.Relaunched)
 	}
 	kind := eventKindForResult(result)
 	w.emit(Event{Kind: kind, Severity: remediationSeverity(kind, firing.severity), Rule: firing.Name, Action: action, Status: string(result.Status), Message: result.Message})
@@ -1217,11 +1217,15 @@ func (w *Worker) acknowledgeChanges() {
 // acknowledgeOperation adopts what a successful action reconciled. A relaunch
 // takes in everything on disk. A reload or resume keeps the running code, so a
 // change only a relaunch brings in stays pending: its rule keeps firing, under
-// the cooldown this action started, until a start or restart succeeds.
-func (w *Worker) acknowledgeOperation(fired rules.Rule, action rules.ActionType) {
+// the cooldown this action started, until a relaunch succeeds. A start that found
+// the service running did nothing at all, so it adopts nothing but its own rule's
+// trigger, which would otherwise repeat that start on every cooldown.
+func (w *Worker) acknowledgeOperation(fired rules.Rule, action rules.ActionType, relaunched bool) {
 	switch {
-	case action.Relaunches():
+	case relaunched:
 		w.acknowledgeChanges()
+	case action == rules.ActionStart:
+		w.libBaseline.AcknowledgeOnly(rules.ChangedLeaves(fired.If), w.artifactSamples)
 	case action.SettlesAfter():
 		w.libBaseline.AcknowledgeExcept(w.awaitingRelaunch(fired), w.artifactSamples)
 	}
@@ -1234,7 +1238,7 @@ func (w *Worker) awaitingRelaunch(fired rules.Rule) map[string]bool {
 	pending := map[string]bool{}
 	for i := range w.Rules {
 		rule := &w.Rules[i]
-		if op, ok := rule.Operation(); !ok || rule.Type != rules.RuleRemediation || !op.Type.Relaunches() {
+		if op, ok := rule.Operation(); !ok || rule.Type != rules.RuleRemediation || !op.Type.MayRelaunch() {
 			continue
 		}
 		for _, leaf := range rules.ChangedLeaves(rule.If) {

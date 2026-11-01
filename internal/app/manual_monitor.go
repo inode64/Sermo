@@ -60,7 +60,7 @@ func CompleteManualOperation(monitor MonitorStore, settling OperationSettlingSto
 	if opErr == nil {
 		change, monitorErr = SyncManualActionMonitoring(monitor, service, action, result, sources.Stop, sources.Restore, activeAfterPostflightFailure)
 	}
-	settlingErr := finishOperationSettling(settling, service, action, result, opErr, activeAfterPostflightFailure, inFlight, manualSettledPhase(action, result))
+	settlingErr := finishOperationSettling(settling, service, action, result, opErr, activeAfterPostflightFailure, inFlight, manualSettledPhase(result))
 	return change, errors.Join(monitorErr, settlingErr)
 }
 

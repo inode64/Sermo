@@ -69,8 +69,8 @@ func finishOperationSettling(store OperationSettlingStore, service, action strin
 // manualSettledPhase is the phase an operator's operation leaves its marker in.
 // The worker acknowledges its own remediation at once; an operator's relaunch can
 // come from another process, and the marker is how it reaches the worker.
-func manualSettledPhase(action string, result operation.Result) string {
-	if result.OK() && operation.Relaunches(action) {
+func manualSettledPhase(result operation.Result) string {
+	if result.OK() && result.Relaunched {
 		return state.OperationSettlingRelaunched
 	}
 	return state.OperationSettlingSettling

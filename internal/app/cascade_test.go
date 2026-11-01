@@ -25,9 +25,12 @@ func TestWireCascadeAcknowledgesTargetChanges(t *testing.T) {
 		name        string
 		action      string
 		status      operation.ResultStatus
+		relaunched  bool
 		wantChanged bool
 	}{
-		{name: "successful restart acknowledges", action: "restart", status: operation.ResultOK, wantChanged: false},
+		{name: "successful restart acknowledges", action: "restart", status: operation.ResultOK, relaunched: true, wantChanged: false},
+		{name: "start of a stopped target acknowledges", action: "start", status: operation.ResultOK, relaunched: true, wantChanged: false},
+		{name: "start on a running target keeps the change", action: "start", status: operation.ResultOK, wantChanged: true},
 		{name: "failed restart keeps the change", action: "restart", status: operation.ResultFailed, wantChanged: true},
 		{name: "stop does not acknowledge", action: "stop", status: operation.ResultOK, wantChanged: true},
 	}
@@ -36,7 +39,7 @@ func TestWireCascadeAcknowledgesTargetChanges(t *testing.T) {
 			a := &Worker{Service: "a", Operate: operate, libBaseline: NewArtifactBaseline()}
 			b := &Worker{Service: "b", libBaseline: testArtifactBaseline(map[string]string{lib: "before-upgrade"}),
 				Operate: func(_ context.Context, action string) operation.Result {
-					return operation.Result{Action: action, Status: tt.status}
+					return operation.Result{Action: action, Status: tt.status, Relaunched: tt.relaunched}
 				}}
 			wireCascade([]*Worker{a, b}, map[string][]string{"a": {"b"}}, Deps{})
 
@@ -79,6 +82,28 @@ func TestDegradedCascadeAcknowledgesARestartedRoot(t *testing.T) {
 	}
 	if h.countEvents(eventKindError) != 1 {
 		t.Fatalf("the cascade must still report its failure, events = %+v", h.events)
+	}
+}
+
+// The root of a degraded cascade answers for itself: a start that found it running
+// relaunched nothing, whatever the failed target did.
+func TestDegradedCascadeKeepsARootThatDidNotRelaunch(t *testing.T) {
+	lib := filepath.Join(t.TempDir(), "libshared.so")
+	writeFile(t, lib, "upgraded")
+	root := &Worker{Service: "root", libBaseline: testArtifactBaseline(map[string]string{lib: "before-upgrade"}),
+		Operate: func(_ context.Context, action string) operation.Result {
+			return operation.Result{Action: action, Status: operation.ResultOK}
+		}}
+	target := &Worker{Service: "target", libBaseline: NewArtifactBaseline(),
+		Operate: func(_ context.Context, action string) operation.Result {
+			return operation.Result{Action: action, Status: operation.ResultFailed}
+		}}
+	wireCascade([]*Worker{root, target}, map[string][]string{"root": {"target"}}, Deps{})
+
+	root.Cascade(t.Context(), "start")
+
+	if changed, err := root.changed(lib); err != nil || !changed {
+		t.Fatalf("root changed = %t, %v, want the change pending", changed, err)
 	}
 }
 

@@ -1892,6 +1892,67 @@ func TestStopRunsNoPreflightOrStart(t *testing.T) {
 	}
 }
 
+// Only the engine can tell a start that launched the service from one that found
+// it running, and the difference decides whether a changed artifact is taken in:
+// the status it reads before acting is the whole evidence, and anything but a
+// service proven down is no relaunch.
+func TestResultReportsWhetherTheActionRelaunched(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name   string
+		action string
+		status servicemgr.Status
+		want   bool
+	}{
+		{name: "start on a running service", action: actionStart, status: servicemgr.StatusActive},
+		{name: "start of a stopped service", action: actionStart, status: servicemgr.StatusInactive, want: true},
+		{name: "start of a failed service", action: actionStart, status: servicemgr.StatusFailed, want: true},
+		{name: "start on an unknown status", action: actionStart, status: servicemgr.StatusUnknown},
+		{name: "restart of a running service", action: actionRestart, status: servicemgr.StatusActive, want: true},
+		{name: "restart on an unknown status", action: actionRestart, status: servicemgr.StatusUnknown, want: true},
+		{name: "reload", action: actionReload, status: servicemgr.StatusActive},
+		{name: "resume", action: actionResume, status: servicemgr.StatusActive},
+		{name: "stop", action: actionStop, status: servicemgr.StatusActive},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			h := defaultHarness()
+			h.mgr.statusSteps = []servicemgr.Status{tc.status}
+
+			res := h.engine().Do(context.Background(), tc.action)
+
+			if !res.OK() {
+				t.Fatalf("status = %q, want ok (%s)", res.Status, res.Message)
+			}
+			if res.Relaunched != tc.want {
+				t.Fatalf("Relaunched = %t, want %t", res.Relaunched, tc.want)
+			}
+		})
+	}
+}
+
+// An active unit with no process left is stale init state: the engine clears it
+// and the start that follows launches the service for real.
+func TestStartOverStaleActiveStateRelaunches(t *testing.T) {
+	t.Parallel()
+	h := defaultHarness()
+	h.backend = string(servicemgr.BackendOpenRC)
+	e := h.engine()
+	e.Lifecycle.ProcessMode = config.ServiceProcessResident
+	e.ObserveProcesses = func() (process.Observation, error) {
+		if h.mgr.did("start mysqld") {
+			return process.Observation{Trusted: true, Processes: []process.Process{{PID: 100}}}, nil
+		}
+		return process.Observation{AbsenceKnown: true}, nil
+	}
+
+	res := e.Do(context.Background(), actionStart)
+
+	if !res.OK() || !res.Relaunched || !h.mgr.did("reset mysqld") {
+		t.Fatalf("result = %+v calls = %v, want a reconciled start", res, h.mgr.calls)
+	}
+}
+
 func TestStartRunsNoStop(t *testing.T) {
 	h := defaultHarness()
 	res := h.engine().Do(context.Background(), actionStart)

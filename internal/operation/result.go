@@ -49,6 +49,11 @@ type Result struct {
 	Locks     []locks.Lock            `json:"locks,omitempty"`
 	Processes []process.Process       `json:"processes,omitempty"`
 	Signals   []process.SignalAttempt `json:"signals,omitempty"`
+	// Relaunched reports that a successful action left a new generation of the
+	// service running, which is what takes in a changed artifact. A restart always
+	// does; a start only when it found the service down, because on one already
+	// running it succeeds without touching it. An unknown status is no relaunch.
+	Relaunched bool `json:"-"`
 }
 
 // AuditMessage preserves process identities, policy refusals and each attempted

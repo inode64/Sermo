@@ -108,9 +108,10 @@ func actionApp(t *testing.T, result operation.Result, opErr error, stdout, stder
 	})
 }
 
-// okOperate is an App.Operate stub that echoes the request as a successful result.
+// okOperate is an App.Operate stub that echoes the request as a successful result
+// on a service that was down, so a start launches it.
 func okOperate(_ context.Context, _ options, _ *config.Config, _ config.Resolved, service, action string) (operation.Result, error) {
-	return operation.Result{Service: service, Action: action, Status: operation.ResultOK}, nil
+	return operation.Result{Service: service, Action: action, Status: operation.ResultOK, Relaunched: action != "stop"}, nil
 }
 
 // openTestStateStore loads the config at global and opens its state store. The
@@ -165,7 +166,7 @@ func writeMonitorRecord(t *testing.T, global, service string, active bool, sourc
 func TestRestartOKThroughEngine(t *testing.T) {
 	global := writeActionConfig(t)
 	var stdout bytes.Buffer
-	app := actionApp(t, operation.Result{Service: "web", Action: "restart", Status: operation.ResultOK}, nil, &stdout, nil)
+	app := actionApp(t, operation.Result{Service: "web", Action: "restart", Status: operation.ResultOK, Relaunched: true}, nil, &stdout, nil)
 
 	code := app.Run(context.Background(), []string{"--config", global, "restart", "web"})
 	if code != exitSuccess {
