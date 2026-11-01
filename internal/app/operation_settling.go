@@ -27,30 +27,38 @@ func operationSettlingMaxAge(operationTimeout time.Duration) time.Duration {
 }
 
 // BeginOperationSettling marks a service operation as running for its caller.
-// inFlight reports a running marker it found there: another operation's, unless
-// that one's caller died, which finishOperationSettling must leave alone if this
-// attempt turns out to be blocked.
-func BeginOperationSettling(store OperationSettlingStore, service, action string) (inFlight bool, err error) {
+// prior is the phase of the marker it replaced, "" for none, which this attempt
+// hands to finishOperationSettling: what it replaced may not be its to drop.
+func BeginOperationSettling(store OperationSettlingStore, service, action string) (prior string, err error) {
 	if store == nil || !operation.IsServiceAction(action) {
-		return false, nil
+		return "", nil
 	}
-	rec, found, readErr := store.OperationSettling(service)
-	inFlight = readErr == nil && found && rec.Phase == state.OperationSettlingRunning
+	if rec, found, readErr := store.OperationSettling(service); readErr == nil && found {
+		prior = rec.Phase
+	}
 	if err := store.SetOperationSettling(service, state.OperationSettlingRunning); err != nil {
-		return inFlight, fmt.Errorf("mark operation settling for %s: %w", service, err)
+		return prior, fmt.Errorf("mark operation settling for %s: %w", service, err)
 	}
-	return inFlight, nil
+	return prior, nil
 }
 
 // finishOperationSettling closes the marker of one attempt. settled is the phase
 // an operation that needs an observation cycle leaves it in.
-func finishOperationSettling(store OperationSettlingStore, service, action string, result operation.Result, opErr error, activeAfterPostflightFailure, inFlight bool, settled string) error {
+func finishOperationSettling(store OperationSettlingStore, service, action string, result operation.Result, opErr error, activeAfterPostflightFailure bool, prior, settled string) error {
 	if store == nil || !operation.IsServiceAction(action) {
 		return nil
 	}
 	// A blocked attempt never ran, and the marker it found is the operation in
 	// its way: clearing that would resume monitoring in the middle of it.
-	if inFlight && result.Status == operation.ResultBlocked {
+	if prior == state.OperationSettlingRunning && result.Status == operation.ResultBlocked {
+		return nil
+	}
+	// A relaunch the worker has not read yet happened, whatever this attempt did,
+	// a stop included. Dropping it would make the worker repeat the restart.
+	if prior == state.OperationSettlingRelaunched {
+		if err := store.SetOperationSettling(service, state.OperationSettlingRelaunched); err != nil {
+			return fmt.Errorf("keep pending relaunch for %s: %w", service, err)
+		}
 		return nil
 	}
 	settleAfter := result.OK() || activeAfterPostflightFailure

@@ -68,7 +68,7 @@ func TestOperationSettlingLifecycle(t *testing.T) {
 	}
 
 	result := operation.Result{Service: "web", Action: string(rules.ActionRestart), Status: operation.ResultOK}
-	if err := finishOperationSettling(store, "web", string(rules.ActionRestart), result, nil, false, false, state.OperationSettlingSettling); err != nil {
+	if err := finishOperationSettling(store, "web", string(rules.ActionRestart), result, nil, false, "", state.OperationSettlingSettling); err != nil {
 		t.Fatalf("finish restart: %v", err)
 	}
 	rec, found, err = store.OperationSettling("web")
@@ -83,7 +83,7 @@ func TestOperationSettlingLifecycle(t *testing.T) {
 		t.Fatalf("begin stop: %v", err)
 	}
 	result = operation.Result{Service: "web", Action: string(rules.ActionStop), Status: operation.ResultOK}
-	if err := finishOperationSettling(store, "web", string(rules.ActionStop), result, nil, false, false, state.OperationSettlingSettling); err != nil {
+	if err := finishOperationSettling(store, "web", string(rules.ActionStop), result, nil, false, "", state.OperationSettlingSettling); err != nil {
 		t.Fatalf("finish stop: %v", err)
 	}
 	if _, found, _ = store.OperationSettling("web"); found {
@@ -94,7 +94,7 @@ func TestOperationSettlingLifecycle(t *testing.T) {
 		t.Fatalf("begin failed start: %v", err)
 	}
 	result = operation.Result{Service: "web", Action: string(rules.ActionStart), Status: operation.ResultFailed}
-	if err := finishOperationSettling(store, "web", string(rules.ActionStart), result, errors.New("failed"), false, false, state.OperationSettlingSettling); err != nil {
+	if err := finishOperationSettling(store, "web", string(rules.ActionStart), result, errors.New("failed"), false, "", state.OperationSettlingSettling); err != nil {
 		t.Fatalf("finish failed start: %v", err)
 	}
 	if _, found, _ = store.OperationSettling("web"); found {
@@ -105,7 +105,7 @@ func TestOperationSettlingLifecycle(t *testing.T) {
 		t.Fatalf("begin active postflight restart: %v", err)
 	}
 	result = operation.Result{Service: "web", Action: string(rules.ActionRestart), Status: operation.ResultPostflightFailed}
-	if err := finishOperationSettling(store, "web", string(rules.ActionRestart), result, nil, true, false, state.OperationSettlingSettling); err != nil {
+	if err := finishOperationSettling(store, "web", string(rules.ActionRestart), result, nil, true, "", state.OperationSettlingSettling); err != nil {
 		t.Fatalf("finish active postflight restart: %v", err)
 	}
 	rec, found, err = store.OperationSettling("web")
@@ -116,7 +116,7 @@ func TestOperationSettlingLifecycle(t *testing.T) {
 		t.Fatalf("active postflight restart record = %+v", rec)
 	}
 
-	if err := finishOperationSettling(store, "web", string(rules.ActionRestart), result, nil, false, false, state.OperationSettlingSettling); err != nil {
+	if err := finishOperationSettling(store, "web", string(rules.ActionRestart), result, nil, false, "", state.OperationSettlingSettling); err != nil {
 		t.Fatalf("finish inactive postflight restart: %v", err)
 	}
 	if _, found, _ = store.OperationSettling("web"); found {
@@ -167,7 +167,7 @@ func TestRepairOperationSettlesLikeStart(t *testing.T) {
 	if err != nil || !found || rec.Phase != state.OperationSettlingRunning {
 		t.Fatalf("running repair settling = %+v found=%v err=%v", rec, found, err)
 	}
-	if err := finishOperationSettling(store, "web", operation.ActionRepair, result, nil, false, false, state.OperationSettlingSettling); err != nil {
+	if err := finishOperationSettling(store, "web", operation.ActionRepair, result, nil, false, "", state.OperationSettlingSettling); err != nil {
 		t.Fatalf("finish repair: %v", err)
 	}
 	rec, found, err = store.OperationSettling("web")
@@ -201,13 +201,13 @@ func TestManualBlockedAttemptKeepsTheRunningOperationsMarker(t *testing.T) {
 	if _, err := BeginOperationSettling(store, "web", string(rules.ActionRestart)); err != nil {
 		t.Fatal(err)
 	}
-	inFlight, err := BeginOperationSettling(store, "web", string(rules.ActionRestart))
-	if err != nil || !inFlight {
-		t.Fatalf("second attempt: inFlight=%v err=%v", inFlight, err)
+	prior, err := BeginOperationSettling(store, "web", string(rules.ActionRestart))
+	if err != nil || prior != state.OperationSettlingRunning {
+		t.Fatalf("second attempt: prior=%q err=%v", prior, err)
 	}
 	blocked := operation.Result{Service: "web", Action: string(rules.ActionRestart), Status: operation.ResultBlocked}
 
-	if _, err := CompleteManualOperation(store, store, "web", string(rules.ActionRestart), blocked, nil, ManualOperationSources{}, false, inFlight); err != nil {
+	if _, err := CompleteManualOperation(store, store, "web", string(rules.ActionRestart), blocked, nil, ManualOperationSources{}, false, prior); err != nil {
 		t.Fatal(err)
 	}
 
@@ -282,7 +282,7 @@ func completeManual(t *testing.T, store *fakeStore, action string, result operat
 	t.Helper()
 	result.Service, result.Action = "web", action
 	sources := ManualOperationSources{Stop: state.SourceCLIManualStop, Restore: state.SourceCLI}
-	if _, err := CompleteManualOperation(store, store, "web", action, result, nil, sources, false, false); err != nil {
+	if _, err := CompleteManualOperation(store, store, "web", action, result, nil, sources, false, ""); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -359,6 +359,75 @@ func TestManualStartOnARunningServiceKeepsTheChangePending(t *testing.T) {
 	w.RunCycle(t.Context())
 	if !eq(h.ops, []string{"restart"}) {
 		t.Fatalf("ops = %v, want the restart the change is waiting for", h.ops)
+	}
+}
+
+// An operator's restart stays owed to the worker until it observes it, whatever
+// the operator does next inside one interval: forgetting it would restart the
+// service again for a change it already took in.
+func TestLaterAttemptKeepsAnUnobservedRelaunch(t *testing.T) {
+	blockedByGuard := operation.Result{Status: operation.ResultBlocked}
+	failed := operation.Result{Status: operation.ResultFailed}
+	ok := operation.Result{Status: operation.ResultOK}
+	tests := []struct {
+		name   string
+		action string
+		result operation.Result
+	}{
+		{name: "reload", action: string(rules.ActionReload), result: ok},
+		{name: "start on the running service", action: string(rules.ActionStart), result: ok},
+		{name: "failed reload", action: string(rules.ActionReload), result: failed},
+		{name: "blocked reload", action: string(rules.ActionReload), result: blockedByGuard},
+		{name: "stop", action: string(rules.ActionStop), result: ok},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			w, h, store, path := manualRestartFixture(t)
+			completeManual(t, store, string(rules.ActionRestart), relaunched)
+
+			prior, err := BeginOperationSettling(store, "web", tt.action)
+			if err != nil {
+				t.Fatal(err)
+			}
+			tt.result.Service, tt.result.Action = "web", tt.action
+			if _, err := CompleteManualOperation(store, store, "web", tt.action, tt.result, nil, ManualOperationSources{}, false, prior); err != nil {
+				t.Fatal(err)
+			}
+			w.RunCycle(t.Context()) // the observation cycle
+			w.RunCycle(t.Context())
+
+			if changed, err := w.changed(path); err != nil || changed || len(h.ops) != 0 {
+				t.Fatalf("changed = %t, %v ops = %v, want the operator's restart to count", changed, err, h.ops)
+			}
+		})
+	}
+}
+
+// The first relaunch still counts when a second one is the operation running.
+func TestBlockedAttemptLeavesARunningOperationOverARelaunch(t *testing.T) {
+	store := newFakeStore()
+	completeManual(t, store, string(rules.ActionRestart), relaunched)
+	first, err := BeginOperationSettling(store, "web", string(rules.ActionRestart))
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := BeginOperationSettling(store, "web", string(rules.ActionReload))
+	if err != nil {
+		t.Fatal(err)
+	}
+	blocked := operation.Result{Service: "web", Action: string(rules.ActionReload), Status: operation.ResultBlocked}
+	if _, err := CompleteManualOperation(store, store, "web", string(rules.ActionReload), blocked, nil, ManualOperationSources{}, false, second); err != nil {
+		t.Fatal(err)
+	}
+	if rec, found, err := store.OperationSettling("web"); err != nil || !found || rec.Phase != state.OperationSettlingRunning {
+		t.Fatalf("marker = %+v found=%v err=%v, want the running operation's", rec, found, err)
+	}
+	failed := operation.Result{Service: "web", Action: string(rules.ActionRestart), Status: operation.ResultFailed}
+	if _, err := CompleteManualOperation(store, store, "web", string(rules.ActionRestart), failed, nil, ManualOperationSources{}, false, first); err != nil {
+		t.Fatal(err)
+	}
+	if rec, found, err := store.OperationSettling("web"); err != nil || !found || rec.Phase != state.OperationSettlingRelaunched {
+		t.Fatalf("marker = %+v found=%v err=%v, want the first relaunch still owed", rec, found, err)
 	}
 }
 

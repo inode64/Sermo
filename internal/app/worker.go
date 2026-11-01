@@ -963,13 +963,13 @@ func (w *Worker) ruleDryRun(r rules.Rule) bool {
 }
 
 func (w *Worker) operateForRemediation(ctx context.Context, action string) operation.Result {
-	inFlight, err := BeginOperationSettling(w.OperationSettling, w.Service, action)
+	prior, err := BeginOperationSettling(w.OperationSettling, w.Service, action)
 	if err != nil {
 		w.emit(Event{Kind: eventKindError, Action: action, Message: err.Error()})
 	}
 	result := w.Operate(ctx, action)
 	activeAfterPostflightFailure := ServiceActiveAfterPostflightFailure(ctx, action, result, nil, w.CheckDeps.Status)
-	if err := finishOperationSettling(w.OperationSettling, w.Service, action, result, nil, activeAfterPostflightFailure, inFlight, state.OperationSettlingSettling); err != nil {
+	if err := finishOperationSettling(w.OperationSettling, w.Service, action, result, nil, activeAfterPostflightFailure, prior, state.OperationSettlingSettling); err != nil {
 		w.emit(Event{Kind: eventKindError, Action: action, Message: err.Error()})
 	}
 	return result

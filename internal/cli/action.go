@@ -206,10 +206,10 @@ func (c *cascadeOutcomes) record(svc, action string, out operation.Result, err e
 // every action, including manual-only repair, has identical post-operation
 // state handling.
 func (a App) operateWithManualState(ctx context.Context, cfg *config.Config, resolved config.Resolved, service, action string, actionStore *state.Store, runner manualOperationRunner) (operation.Result, error) {
-	inFlight := a.beginManualOperationSettling(cfg, actionStore, service, action)
+	prior := a.beginManualOperationSettling(cfg, actionStore, service, action)
 	result, err := runner.operate(ctx, resolved, service, action)
 	activeAfterPostflightFailure := runner.activeAfter(ctx, resolved, service, action, result, err)
-	a.finishManualOperationSettling(cfg, actionStore, service, action, result, err, activeAfterPostflightFailure, inFlight)
+	a.finishManualOperationSettling(cfg, actionStore, service, action, result, err, activeAfterPostflightFailure, prior)
 	return result, err
 }
 
@@ -225,25 +225,25 @@ func withStateStore(ctx context.Context, cfg *config.Config, onOpenErr func(erro
 	return fn(store)
 }
 
-func (a App) beginManualOperationSettling(cfg *config.Config, store *state.Store, service, action string) bool {
+func (a App) beginManualOperationSettling(cfg *config.Config, store *state.Store, service, action string) string {
 	if store == nil {
-		return false
+		return ""
 	}
-	inFlight, err := app.BeginOperationSettling(store, service, action)
+	prior, err := app.BeginOperationSettling(store, service, action)
 	if err != nil {
 		msg := err.Error()
 		fmt.Fprintf(a.Stderr, cliWarningFormat, msg)
 		a.recordAccess(cfg, action+"-settling", service, accessStatusError, msg)
 	}
-	return inFlight
+	return prior
 }
 
-func (a App) finishManualOperationSettling(cfg *config.Config, store *state.Store, service, action string, result operation.Result, opErr error, activeAfterPostflightFailure, inFlight bool) {
+func (a App) finishManualOperationSettling(cfg *config.Config, store *state.Store, service, action string, result operation.Result, opErr error, activeAfterPostflightFailure bool, prior string) {
 	if store == nil {
 		return
 	}
 	change, err := app.CompleteManualOperation(store, store, service, action, result, opErr,
-		app.ManualOperationSources{Stop: state.SourceCLIManualStop, Restore: state.SourceCLI}, activeAfterPostflightFailure, inFlight)
+		app.ManualOperationSources{Stop: state.SourceCLIManualStop, Restore: state.SourceCLI}, activeAfterPostflightFailure, prior)
 	if err != nil {
 		msg := err.Error()
 		fmt.Fprintf(a.Stderr, cliWarningFormat, msg)

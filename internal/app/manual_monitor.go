@@ -54,13 +54,13 @@ func SyncManualActionMonitoring(store MonitorStore, service, action string, resu
 // CompleteManualOperation applies the common post-operation state transition.
 // It always finalizes observation settling even when monitoring state storage
 // fails, so a storage error cannot leave alerts suppressed indefinitely.
-func CompleteManualOperation(monitor MonitorStore, settling OperationSettlingStore, service, action string, result operation.Result, opErr error, sources ManualOperationSources, activeAfterPostflightFailure, inFlight bool) (ManualMonitorChange, error) {
+func CompleteManualOperation(monitor MonitorStore, settling OperationSettlingStore, service, action string, result operation.Result, opErr error, sources ManualOperationSources, activeAfterPostflightFailure bool, prior string) (ManualMonitorChange, error) {
 	var change ManualMonitorChange
 	var monitorErr error
 	if opErr == nil {
 		change, monitorErr = SyncManualActionMonitoring(monitor, service, action, result, sources.Stop, sources.Restore, activeAfterPostflightFailure)
 	}
-	settlingErr := finishOperationSettling(settling, service, action, result, opErr, activeAfterPostflightFailure, inFlight, manualSettledPhase(result))
+	settlingErr := finishOperationSettling(settling, service, action, result, opErr, activeAfterPostflightFailure, prior, manualSettledPhase(result))
 	return change, errors.Join(monitorErr, settlingErr)
 }
 
