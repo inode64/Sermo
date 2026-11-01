@@ -1175,9 +1175,13 @@ web:
 - **log out** in the top bar ends a form session. It is offered only for one:
   the server cannot make a browser forget a cached Basic credential.
 - Every password attempt counts against its client — on the form and as HTTP
-  Basic auth alike — and only a success clears the count. After **5 attempts
-  that did not succeed in 15 minutes** the client is refused (the form answers
-  `429` with `Retry-After`) until that window ends. The client is the peer
+  Basic auth alike — from the moment it starts, and only a success clears the
+  count. After **5 attempts that did not succeed in 15 minutes** the client is
+  refused (the form answers `429` with `Retry-After`) until that window ends, and
+  more than five simultaneous attempts are refused even with the right password,
+  so a burst of guesses cannot slip in under the limit. The runtime token
+  `sermoctl` sends as Basic auth is outside the limit: it spends no attempt, and
+  a lockout does not refuse it. The client is the peer
   address, or, when the peer is a reverse proxy on this host, the address it
   appended to `X-Forwarded-For`, so one guesser cannot lock out everyone behind
   the proxy. Only a valid IP address from the last forwarded hop is accepted;

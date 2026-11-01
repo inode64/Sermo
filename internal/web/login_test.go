@@ -533,6 +533,33 @@ func TestLoginAuditOnlyRecordsValidatedClient(t *testing.T) {
 }
 
 // Basic auth on the API shares the form's limit, so it is not a way around it.
+// The runtime token is how sermoctl reaches its own daemon, and wrong passwords
+// from any local client share its bucket: a lockout must not cut it off. It must
+// not lift that lockout either, or using the CLI would reset a guesser's count.
+func TestRuntimeTokenBypassesLockoutWithoutClearingIt(t *testing.T) {
+	lh := newLoginHarness(Auth{AdminCredentials: testCredentials(t, "secret"), RuntimeToken: "run-token"})
+	basic := func(pass string) int {
+		r := httptest.NewRequest(http.MethodGet, apiPathWhoami, nil)
+		r.RemoteAddr = "127.0.0.1:41000"
+		r.SetBasicAuth("admin", pass)
+		return lh.do(r).Code
+	}
+	for range loginMaxFailures {
+		if code := basic("wrong"); code != http.StatusUnauthorized {
+			t.Fatalf("wrong password = %d, want 401", code)
+		}
+	}
+	if code := basic("run-token"); code != http.StatusOK {
+		t.Fatalf("runtime token during a lockout = %d, want 200", code)
+	}
+	if code := basic("secret"); code != http.StatusUnauthorized {
+		t.Fatalf("password after the token = %d, want the lockout to hold", code)
+	}
+	if code := basic("run-token-wrong"); code != http.StatusUnauthorized {
+		t.Fatalf("wrong token = %d, want 401", code)
+	}
+}
+
 func TestBasicAuthGuessesAreThrottled(t *testing.T) {
 	lh := newLoginHarness(Auth{AdminCredentials: testCredentials(t, "secret")})
 	for range loginMaxFailures {

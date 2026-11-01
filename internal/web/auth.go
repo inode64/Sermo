@@ -143,11 +143,17 @@ func (s *Server) role(r *http.Request) (role string, session bool) {
 // basicRole checks an HTTP Basic password under the same per-client limit as
 // the login form, so the API is not a way around it. A client that has used up
 // its attempts gets no password check at all until its window ends; a session
-// cookie it also carries still works.
+// cookie it also carries still works. The runtime token sits outside the limit:
+// it is a generated secret nobody guesses, and wrong passwords from any local
+// client must not cut sermoctl off from its daemon. It neither spends an attempt
+// nor clears the count a guesser built up.
 func (s *Server) basicRole(r *http.Request) string {
 	_, pass, ok := r.BasicAuth()
 	if !ok {
 		return ""
+	}
+	if s.Auth.isRuntimeToken(pass) {
+		return roleAdmin
 	}
 	client := clientAddress(r)
 	if _, allowed := s.loginLimiter.reserve(client, s.now()); !allowed {
@@ -177,11 +183,14 @@ func (s *Server) initLoginState() {
 	s.cookieName = sessionCookieName(s.Hostname)
 }
 
+// isRuntimeToken reports whether pass is the daemon's runtime token.
+func (a Auth) isRuntimeToken(pass string) bool {
+	return a.RuntimeToken != "" && webcred.SecureEqual(pass, a.RuntimeToken)
+}
+
 // passwordRole maps a presented password to the role it grants, or "".
 func (a Auth) passwordRole(ctx context.Context, pass string) string {
-	// The token is checked first: it is the cheap comparison, and it is what
-	// sermoctl sends on every call.
-	if a.RuntimeToken != "" && webcred.SecureEqual(pass, a.RuntimeToken) {
+	if a.isRuntimeToken(pass) {
 		return roleAdmin
 	}
 	if a.AdminCredentials.Verify(ctx, pass) {
