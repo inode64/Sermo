@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"slices"
+	"maps"
 	"strings"
 	"sync"
 	"time"
@@ -36,7 +36,7 @@ type staleLibrariesCheck struct {
 	mu        sync.Mutex
 	last      time.Time
 	since     time.Time
-	previous  []process.StaleLibrary
+	previous  map[process.StaleLibrary]struct{}
 	cached    Result
 }
 
@@ -106,6 +106,23 @@ func (c *staleLibrariesCheck) Run(ctx context.Context) Result {
 	return res
 }
 
+// libraryEvidence reduces findings to what stable_for must see unchanged: the
+// replaced files, and the generation of the main process whose finding can
+// authorize a restart. A forked worker inherits its parent's mappings and comes
+// and goes with load, so neither its PID nor its presence says anything about an
+// update; only a file no other process reports changes the evidence.
+func libraryEvidence(libraries []process.StaleLibrary) map[process.StaleLibrary]struct{} {
+	evidence := map[process.StaleLibrary]struct{}{}
+	for _, lib := range libraries {
+		evidence[process.StaleLibrary{Path: lib.Path, Mapped: lib.Mapped, Installed: lib.Installed,
+			Modified: lib.Modified, Changed: lib.Changed, Missing: lib.Missing}] = struct{}{}
+		if lib.RestartEligible {
+			evidence[lib] = struct{}{}
+		}
+	}
+	return evidence
+}
+
 func (c *staleLibrariesCheck) libraryResult(report process.LibraryReport, err error, now, start time.Time) Result {
 	if c.sample != nil && report.Processes == 0 && err == nil {
 		err = errors.New("no running service processes available for library inspection")
@@ -123,9 +140,10 @@ func (c *staleLibrariesCheck) libraryResult(report process.LibraryReport, err er
 	if len(paths) > 0 {
 		message = fmt.Sprintf("%d stale library mapping(s): %s", len(report.Libraries), strings.Join(paths, ", "))
 	}
-	if err != nil || !slices.Equal(report.Libraries, c.previous) || c.since.IsZero() {
+	evidence := libraryEvidence(report.Libraries)
+	if err != nil || !maps.Equal(evidence, c.previous) || c.since.IsZero() {
 		c.since = now
-		c.previous = slices.Clone(report.Libraries)
+		c.previous = evidence
 	}
 	res := c.result(len(report.Libraries) == 0, message, start)
 	res.ActionBlocked = c.sample == nil

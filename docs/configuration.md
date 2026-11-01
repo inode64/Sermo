@@ -3921,10 +3921,12 @@ is inferred from discovery, and PID/inode evidence belongs in reports, not YAML.
 
 Scanning has an internal minimum interval of one minute; `interval` can make
 it less frequent. `stable_for` defaults to five minutes and must be positive.
-The complete finding set must remain unchanged across samples for that long;
-changed files, process generations or read errors reset the window. Restarting
-Sermo also resets it. This is an observation window, **not proof that a package
-transaction finished**.
+The replaced files and the main process that maps them must remain unchanged
+across samples for that long: a changed file, a new main process or a read error
+resets the window. Forked workers do not, because they inherit the main process's
+mappings and come and go with load; a worker mapping a file no other process
+reports counts as a changed file. Restarting Sermo also resets the window. This
+is an observation window, **not proof that a package transaction finished**.
 
 To authorize automatic restart, add a separate service remediation rule:
 
