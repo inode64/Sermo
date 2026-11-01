@@ -2194,8 +2194,10 @@ watch as recovered.
 A delivery that fails for a reason that may pass — a connection or DNS
 failure, an HTTP 429 or 5xx answer — is retried twice, after 2 and 5 seconds,
 before it is logged as `event notification failed`; a rejected message (a wrong
-URL or token) is not retried. Retries run on the notification queue and never
-delay a monitoring cycle.
+URL or token) is not retried at once. Either way the message then waits in the
+summary queue described below, which tries again at most once a minute, so a
+recovery that could not be sent still closes its incident once it gets through.
+Retries run on the notification queue and never delay a monitoring cycle.
 Delivery state survives daemon restarts and config reloads when it can be
 persisted. If SQLite cannot write (for example, a full root filesystem),
 confirmed deliveries remain in a bounded memory overlay. That overlay also
@@ -2257,7 +2259,9 @@ individual audit events.
 
 This route is independent of per-site `notify` selections and of `dry_run`:
 it delivers health events while automatic remediation and hooks stay simulated.
-Panic mode suppresses delivery. A target with an ordinary notification action
+Panic mode suppresses delivery. A recovery during panic mode sends nothing but
+still closes its incident, so it is not reminded afterwards and the next failure
+is announced as a new incident. A target with an ordinary notification action
 can still produce a second message from that separate route. Delivery is best
 effort through a bounded queue so a slow notifier cannot stop monitoring;
 overflow and delivery errors are logged. Use `targets: none` to disable the

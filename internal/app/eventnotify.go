@@ -304,7 +304,8 @@ func (n *EventNotifier) deliveryConfig() ([]notify.Notifier, time.Duration) {
 func (n *EventNotifier) deliver(ctx context.Context, e Event) {
 	n.deliveryMu.Lock()
 	defer n.deliveryMu.Unlock()
-	if n.inPanic != nil && n.inPanic() {
+	panicking := n.inPanic != nil && n.inPanic()
+	if panicking && e.Kind != eventKindRecovered {
 		return
 	}
 	targets, interval := n.deliveryConfig()
@@ -333,6 +334,10 @@ func (n *EventNotifier) deliver(ctx context.Context, e Event) {
 			continue
 		}
 		n.reconcilePending(target.Name(), key, e, rec, found)
+		if panicking {
+			n.closeUnannounced(target.Name(), rec, found)
+			continue
+		}
 		sent, ok := n.deliverTo(ctx, target, e, deliveryEdge{active: active, phase: phase, level: level, rec: rec, found: found, now: now, interval: interval})
 		if !ok {
 			continue
@@ -341,6 +346,20 @@ func (n *EventNotifier) deliver(ctx context.Context, e Event) {
 		rec.LastSentAt = now
 		n.save(rec)
 	}
+}
+
+// closeUnannounced ends a delivered incident on a recovery panic mode withholds.
+// Panic suppresses the message, not the edge: an incident left open would be
+// reminded while healthy and hide its next failure as the same incident.
+func (n *EventNotifier) closeUnannounced(target string, rec state.EventNotifyRecord, found bool) {
+	if !found || !rec.Active {
+		return
+	}
+	if b := n.bursts[target]; b != nil {
+		delete(b.pending, rec.IncidentKey)
+	}
+	rec.Active, rec.Phase = false, eventNotifyPhaseRecovered
+	n.save(rec)
 }
 
 // deliveryEdge is one event's incident edge at one notifier.

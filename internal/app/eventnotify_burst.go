@@ -89,13 +89,13 @@ func (n *EventNotifier) dispatchPending(ctx context.Context, target notify.Notif
 		b.priority++
 		allowed = true
 	}
-	if allowed {
-		if !n.send(ctx, target, pending.message) {
-			return false
-		}
-		delete(b.pending, pending.record.IncidentKey)
+	if allowed && n.send(ctx, target, pending.message) {
+		delete(b.pending, key)
 		return true
 	}
+	// A failed delivery waits like one over budget: the summary retries it at
+	// most once a minute, and a recovery that never left would strand its
+	// incident open.
 	if !found && len(b.pending) >= eventNotifyPendingLimit {
 		b.overflow++
 		return false

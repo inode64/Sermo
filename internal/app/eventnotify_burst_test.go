@@ -194,3 +194,84 @@ func TestEventNotifierQueuedEscalationSurvivesBudgetReset(t *testing.T) {
 		t.Fatalf("message=%+v; want queued critical summary", msg)
 	}
 }
+
+// Panic mode withholds the recovery's message, not its edge: an incident left
+// open would be reminded while healthy and hide the next failure as the same one.
+func TestEventNotifierRecoveryDuringPanicClosesItsIncident(t *testing.T) {
+	router, target, now := outageRouter(t, nil, time.Hour)
+	panicking := false
+	router.inPanic = func() bool { return panicking }
+	healed := Event{Watch: "root", Kind: eventKindFiring, Severity: severity.Warning}
+	still := Event{Watch: "data", Kind: eventKindFiring}
+	router.deliver(t.Context(), healed)
+	router.deliver(t.Context(), still)
+	// An escalation still queued for the summary must not outlive its incident.
+	router.burst("ops").ordinary = eventNotifyBurstLimit
+	router.burst("ops").priority = eventNotifyPriorityLimit
+	router.deliver(t.Context(), Event{Watch: "root", Kind: eventKindFiring, Severity: severity.Error})
+	drainEventNotify(target)
+
+	panicking = true
+	router.deliver(t.Context(), Event{Watch: "root", Kind: eventKindRecovered})
+	panicking = false
+	if len(target.messages) != 0 {
+		t.Fatal("panic mode delivered a recovery")
+	}
+
+	*now = now.Add(time.Hour)
+	router.remind(t.Context())
+	got := drainEventNotify(target)
+	if len(got) != 1 || !strings.Contains(got[0].Subject, "data") {
+		t.Fatalf("reminders after the panic = %v, want only the incident still open", got)
+	}
+
+	router.deliver(t.Context(), healed)
+	if got := drainEventNotify(target); len(got) != 1 {
+		t.Fatalf("next failure delivered %d messages, want a new incident", len(got))
+	}
+}
+
+// A recovery that could not be sent still has to reach whoever heard the
+// incident, through the summary's own bounded cadence, and only then close it.
+func TestEventNotifierFailedRecoveryIsRetriedBySummary(t *testing.T) {
+	router, recorder, now := outageRouter(t, nil, time.Hour)
+	firing := Event{Watch: "root", Kind: eventKindFiring}
+	recovered := Event{Watch: "root", Kind: eventKindRecovered}
+	router.deliver(t.Context(), firing)
+	drainEventNotify(recorder)
+	key, _, _ := eventNotifyIdentity(recovered)
+
+	down := &flakyNotifier{errs: []error{errors.New("rejected"), errors.New("rejected")}}
+	router.Update(config.EventNotification{Targets: []string{"ops"}, RepeatInterval: time.Hour}, map[string]notify.Notifier{"ops": down})
+	router.deliver(t.Context(), recovered)
+	if pending := router.bursts["ops"].pending[key]; pending.record.Phase != eventNotifyPhaseRecovered {
+		t.Fatal("failed recovery was not kept for retry")
+	}
+
+	router.remind(t.Context())
+	router.remind(t.Context())
+	if down.calls != 2 {
+		t.Fatalf("attempts within a minute = %d, want the send and one summary", down.calls)
+	}
+
+	*now = now.Add(time.Minute)
+	router.remind(t.Context())
+	rec, found, err := router.load(key, "ops")
+	if err != nil || !found || rec.Active {
+		t.Fatalf("incident after the retried recovery: %+v found=%v err=%v", rec, found, err)
+	}
+	*now = now.Add(2 * time.Hour)
+	down.calls = 0
+	router.remind(t.Context())
+	if down.calls != 0 {
+		t.Fatal("closed incident was reminded")
+	}
+}
+
+func drainEventNotify(target *eventNotifyRecorder) []notify.Message {
+	var out []notify.Message
+	for len(target.messages) > 0 {
+		out = append(out, <-target.messages)
+	}
+	return out
+}
