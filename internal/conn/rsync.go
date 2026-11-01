@@ -28,10 +28,12 @@ func (rsyncProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 }
 
 // rsyncGreetingVersion extracts the protocol version from an rsync daemon
-// greeting ("@RSYNCD: <version>").
+// greeting ("@RSYNCD: <version>", which rsync 3.2 and later follow with the
+// digests they accept).
 func rsyncGreetingVersion(line string) (string, bool) {
 	if !strings.HasPrefix(line, rsyncGreetingPrefix) {
 		return "", false
 	}
-	return strings.TrimSpace(strings.TrimPrefix(line, rsyncGreetingPrefix)), true
+	version, _, _ := strings.Cut(strings.TrimSpace(strings.TrimPrefix(line, rsyncGreetingPrefix)), " ")
+	return version, true
 }

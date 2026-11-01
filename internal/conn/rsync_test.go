@@ -10,9 +10,14 @@ import (
 )
 
 func TestRsyncGreetingVersion(t *testing.T) {
-	v, ok := rsyncGreetingVersion("@RSYNCD: 31.0")
-	if !ok || v != "31.0" {
-		t.Fatalf("got %q/%v, want 31.0/true", v, ok)
+	for _, greeting := range []string{
+		"@RSYNCD: 31.0",
+		"@RSYNCD: 31.0 sha512 sha256 sha1 md5 md4", // rsync 3.2 and later list their digests
+	} {
+		v, ok := rsyncGreetingVersion(greeting)
+		if !ok || v != "31.0" {
+			t.Fatalf("%q: got %q/%v, want 31.0/true", greeting, v, ok)
+		}
 	}
 	if _, ok := rsyncGreetingVersion("HTTP/1.1 200 OK"); ok {
 		t.Fatal("a non-rsync greeting must be rejected")
@@ -27,6 +32,18 @@ func TestRsyncProbeAgainstFakeServer(t *testing.T) {
 	}
 	if res.Version != "31.0" {
 		t.Fatalf("version = %q, want 31.0", res.Version)
+	}
+}
+
+func TestRsyncProbeKeepsTheWholeGreeting(t *testing.T) {
+	const greeting = "@RSYNCD: 33.0 sha512 sha256 sha1 md5 md4"
+	port := serveBanner(t, greeting+"\n", nil)
+	res, err := rsyncProtocol{}.Probe(context.Background(), Config{Host: "127.0.0.1", Port: port})
+	if err != nil {
+		t.Fatalf("probe: %v", err)
+	}
+	if res.Version != "33.0" || res.Extra[extraProtocol] != "33.0" || res.Extra[extraGreeting] != greeting {
+		t.Fatalf("probe = %+v", res)
 	}
 }
 
