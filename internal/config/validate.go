@@ -109,7 +109,7 @@ var validGlobalKeys = set(
 var validServiceDocumentKeys = set(append(slices.Clone(perServiceDefaults),
 	keyKind, keyName, ServiceKeyUses, keyClone, keyAliases,
 	keyDisplayName, keyDescription, keyCategory, keyType,
-	keyVersions, keyInterval, keyMonitor, keyEnabled, sectionNotify,
+	keyVersions, keyInterval, keyMonitor, keyEnabled,
 	sectionVariables, VariableKeyPort, keyApps,
 	ServiceKeyService, ServiceKeyAlsoService, ServiceKeyAlsoApply,
 	ServiceKeyConfigFiles,
@@ -883,6 +883,7 @@ func validDocumentName(name string) bool {
 func validateServices(cfg *Config) []Issue {
 	var issues []Issue
 	defined := notifierNames(cfg.Notifiers())
+	defaultNotify := NotifyDefault(cfg.Global.Raw)
 	inputs := cfg.newResolutionInputs()
 	services := map[string]struct{}{}
 	for _, n := range cfg.ServiceNames {
@@ -910,7 +911,7 @@ func validateServices(cfg *Config) []Issue {
 			if resolved.Tree == nil {
 				continue
 			}
-			for _, issue := range validateResolved(name, resolved.Tree, cfg.Global.RuntimeDir(), defined, services, inputs.backend) {
+			for _, issue := range validateResolved(name, resolved.Tree, cfg.Global.RuntimeDir(), defined, defaultNotify, services, inputs.backend) {
 				addIssue(issue)
 			}
 			if !gated {
@@ -981,7 +982,7 @@ func effectiveBackend(cfg *Config) string {
 	return detectedInit
 }
 
-func validateResolved(name string, tree map[string]any, runtime string, notifiers, services map[string]struct{}, backend string) []Issue {
+func validateResolved(name string, tree map[string]any, runtime string, notifiers map[string]struct{}, defaultNotify []string, services map[string]struct{}, backend string) []Issue {
 	var issues []Issue
 	add := func(format string, args ...any) {
 		issues = append(issues, Issue{Scope: name, Msg: fmt.Sprintf(format, args...)})
@@ -1051,7 +1052,7 @@ func validateResolved(name string, tree map[string]any, runtime string, notifier
 	validateRuleWindow(tree, add)
 	validateClearWindowSection(tree, add)
 	validateServiceMonitors(tree, notifiers, add)
-	validateServiceWatches(tree, locksDir, notifiers, NotifyDefault(tree), add)
+	validateServiceWatches(tree, locksDir, notifiers, defaultNotify, add)
 	validateRules(tree, notifiers, add)
 
 	return issues

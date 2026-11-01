@@ -218,3 +218,60 @@ func TestValidateServiceFileWatchGrammar(t *testing.T) {
 		})
 	}
 }
+
+// TestServiceWatchNotifyDefaultIsGlobal pins that a service watch is validated
+// against the default it inherits at runtime, the global `notify`. It was read
+// from the service document instead, so an inherited selection was refused and a
+// service-level `notify` nothing consumes was taken for a target.
+func TestServiceWatchNotifyDefaultIsGlobal(t *testing.T) {
+	storage := "check: { type: storage, path: /, free_pct: { op: \"<\", value: 10 } }"
+	service := func(lines ...string) string {
+		return "name: svc\nservice: svc\n" + strings.Join(lines, "\n") + "\n"
+	}
+	cases := []struct {
+		name, global, service, want string
+	}{
+		{
+			name:    "interval inherits the global default",
+			global:  "notify: [wall]\n",
+			service: service("watches:", "  disk:", "    "+storage, "    then: { notify_interval: 1h }"),
+		},
+		{
+			name:    "empty then inherits the global default",
+			global:  "notify: [wall]\n",
+			service: service("watches:", "  disk:", "    "+storage, "    then: {}"),
+		},
+		{
+			name:    "interval without any default",
+			service: service("watches:", "  disk:", "    "+storage, "    then: { notify_interval: 1h }"),
+			want:    "watches.disk.then.notify_interval has no effect without notify targets",
+		},
+		{
+			name:    "service notify is no target",
+			service: service("notify: [wall]", "watches:", "  disk:", "    "+storage, "    then: { notify_interval: 1h }"),
+			want:    "watches.disk.then.notify_interval has no effect without notify targets",
+		},
+		{
+			name:    "service notify is refused",
+			service: service("notify: [typo]"),
+			want:    "notify is not supported",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg, err := loadConfig(t, writeConfig(t, map[string]string{
+				"sermo.yml":        baseGlobal + tc.global,
+				"services/svc.yml": tc.service,
+			}))
+			if err != nil {
+				t.Fatalf("Load() error = %v", err)
+			}
+			issues := Validate(cfg)
+			if tc.want == "" {
+				mustNotHave(t, issues, "watches.disk")
+				return
+			}
+			mustHave(t, issues, tc.want)
+		})
+	}
+}

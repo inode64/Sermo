@@ -93,7 +93,7 @@ func TestValidateResolvedRejectsServiceEmission(t *testing.T) {
 		emission.Section: map[string]any{
 			emission.KeyEvents: emission.ModeEveryCycle,
 		},
-	}, "/run/sermo", nil, map[string]struct{}{"web": {}}, backendSystemd)
+	}, "/run/sermo", nil, nil, map[string]struct{}{"web": {}}, backendSystemd)
 	if !hasIssue(issues, "emission is not supported on services") {
 		t.Fatalf("validateResolved issues = %v, want service emission rejection", issues)
 	}
