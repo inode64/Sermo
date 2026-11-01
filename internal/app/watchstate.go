@@ -4,7 +4,6 @@ import (
 	"cmp"
 	"context"
 	"fmt"
-	"time"
 
 	"sermo/internal/checks"
 	"sermo/internal/rules"
@@ -98,11 +97,8 @@ func (w *Watch) reconcileRestoredEpisode(ctx context.Context, res checks.Result)
 	level := cmp.Or(w.state.Severity(), w.resultSeverity(res))
 	w.adoptLegacyNotification(level)
 	announced := w.state.Notified()
-	w.firing = false
 	w.state.EndEpisode()
-	w.lastNotifyAt = time.Time{}
-	w.emit(Event{Watch: w.Name, Kind: eventKindRecovered, Severity: level, Message: res.Message})
-	w.notifyRecovery(ctx, res, announced)
+	w.recover(ctx, res, level, announced)
 }
 
 func (w *Watch) runtimeStateName() string {

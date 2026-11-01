@@ -831,6 +831,35 @@ func TestWatchRecoverHookFiresOnceOnRecovery(t *testing.T) {
 	}
 }
 
+// sermod restarting during an incident must not lose the recovery edge: the first
+// observation closes the restored episode, and the hook runs there or never.
+func TestWatchRecoverHookRunsWhenARestoredEpisodeCloses(t *testing.T) {
+	store := openRuleStateStore(t)
+	first := &Watch{
+		Name: "health", Check: stubCheck{name: "tcp", ok: false}, FireOnFail: true, StateStore: store,
+		Hook: HookSpec{Command: []string{"/bin/true"}}, Runner: HookRunnerFunc(func(context.Context, []string, map[string]string, time.Duration) error { return nil }),
+	}
+	first.RunCycle(context.Background())
+
+	var recovered []string
+	settling := NewSettling(nil)
+	settling.Reset([]string{SettlingWatchKey("health")})
+	second := &Watch{
+		Name: "health", Check: stubCheck{name: "tcp", ok: true}, FireOnFail: true, StateStore: store, Settling: settling,
+		RecoverHook: HookSpec{Command: []string{"/bin/recover"}},
+		Runner: HookRunnerFunc(func(_ context.Context, _ []string, env map[string]string, _ time.Duration) error {
+			recovered = append(recovered, env["SERMO_EVENT"])
+			return nil
+		}),
+	}
+	second.RunCycle(context.Background())
+	second.RunCycle(context.Background())
+
+	if len(recovered) != 1 || recovered[0] != "recovered" {
+		t.Fatalf("recover hook runs = %v, want one with SERMO_EVENT=recovered", recovered)
+	}
+}
+
 // Dry-run reports the recover hook instead of executing it.
 func TestWatchRecoverHookDryRun(t *testing.T) {
 	var ran int32
