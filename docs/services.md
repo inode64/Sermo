@@ -2067,7 +2067,8 @@ therefore gated on `ingress` being present in the file.
 A variable may take its value from a config file instead of a literal, useful when
 a port or path is defined in the service's own config. `directive:` reads the token
 after a `key value` line (OpenVPN/sshd style); `pattern:` reads capture group 1 of
-a regex; `default:` applies when the file or key is absent:
+a regex; `default:` applies when the file or key is absent. The expanded path is
+read as written and must be absolute; a relative one is a configuration error:
 
 ```yaml
 variables:

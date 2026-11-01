@@ -686,3 +686,57 @@ variables:
 		t.Fatalf("Resolve(loop) errors = %v, want a from_file cycle", errs)
 	}
 }
+
+// TestFromFileReadsThePathAsWritten pins that a path the operator composes is
+// read, not refused for its form: `${dir}/x.conf` with a trailing slash in dir
+// holds a double slash, and hostfs.ReadFile's clean-path rule made that look like
+// a missing file, so the default took over with no diagnostic. A relative path has
+// no base a daemon and a sermoctl share, so it is a configuration error instead.
+func TestFromFileReadsThePathAsWritten(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "sub"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "vpn.conf"), []byte("port 1234\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cases := []struct{ name, confdir, wantPort, wantErr string }{
+		{name: "clean", confdir: root, wantPort: "1234"},
+		{name: "trailing slash", confdir: root + "/", wantPort: "1234"},
+		{name: "traversal", confdir: root + "/sub/..", wantPort: "1234"},
+		{name: "missing file keeps the default", confdir: root + "/absent", wantPort: "99"},
+		{name: "relative path", confdir: "etc", wantErr: `variables.port.from_file "etc/vpn.conf" must be an absolute path`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg, err := loadConfig(t, writeConfig(t, map[string]string{
+				"sermo.yml": baseGlobal,
+				"services/svc.yml": fmt.Sprintf(`
+name: svc
+service: svc
+variables:
+  confdir: "%s"
+  port: { from_file: "${confdir}/vpn.conf", directive: port, default: 99 }
+checks:
+  tcp: { type: tcp, host: 127.0.0.1, port: "${port}", timeout: 2s }
+`, tc.confdir),
+			}))
+			if err != nil {
+				t.Fatalf("Load() error = %v", err)
+			}
+			resolved, errs := cfg.Resolve("svc")
+			if tc.wantErr != "" {
+				if !slices.Contains(errs, tc.wantErr) {
+					t.Fatalf("Resolve() errors = %v, want %q", errs, tc.wantErr)
+				}
+				return
+			}
+			if len(errs) != 0 {
+				t.Fatalf("Resolve() errors = %v", errs)
+			}
+			if got := nested(t, resolved.Tree, "checks", "tcp")["port"]; got != tc.wantPort {
+				t.Fatalf("port = %v, want %s", got, tc.wantPort)
+			}
+		})
+	}
+}

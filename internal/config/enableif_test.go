@@ -544,3 +544,22 @@ rules:
 `, filepath.Join(t.TempDir(), "missing.conf")))
 	mustHave(t, issues, `references unknown check "opt"`)
 }
+
+// TestEnableIfReadsThePathAsWritten pins that a gate file is read as the operator
+// wrote it: a double slash or a `..` passes the absolute-path validation and was
+// then refused by hostfs.ReadFile, which pruned the entry on every host.
+func TestEnableIfReadsThePathAsWritten(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "sub"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "feature.conf"), []byte("feature=on\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for _, file := range []string{root + "//feature.conf", root + "/sub/../feature.conf"} {
+		spec := map[string]any{keyEnableIfFile: file, keyEnableIfKey: "feature", keyEnableIfEquals: "on"}
+		if !enableIfHolds(spec, backendSystemd) {
+			t.Errorf("enableIfHolds(%q) = false, want true", file)
+		}
+	}
+}

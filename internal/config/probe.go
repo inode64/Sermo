@@ -63,7 +63,7 @@ func extractFileValue(path string, spec map[string]any) (string, bool, error) {
 }
 
 func readOptionalFile(path string) ([]byte, bool) {
-	data, err := hostfs.ReadFile(path)
+	data, err := hostfs.ReadFileTarget(path)
 	return data, err == nil
 }
 
@@ -95,8 +95,8 @@ var configAssignSeps = []string{confdAssignSep, yamlAssignSep}
 // trailing comment is not, so prefer `matches:` over `equals:` on a file that
 // writes them. ok=false when the file is unreadable or the key is absent.
 func configKeyValue(path, key string) (string, bool) {
-	data, err := hostfs.ReadFile(path)
-	if err != nil {
+	data, ok := readOptionalFile(path)
+	if !ok {
 		return "", false
 	}
 	for line := range strings.SplitSeq(string(data), configLineSeparator) {

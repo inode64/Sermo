@@ -200,9 +200,15 @@ func resolveFileVar(name string, spec map[string]any, vars map[string]string) []
 	if len(specErrs) > 0 {
 		return specErrs
 	}
-	path, pathErrs := substituteVars(cfgval.String(spec[varKeyFromFile]), vars, variableFieldPath(name, varKeyFromFile))
+	field := variableFieldPath(name, varKeyFromFile)
+	path, pathErrs := substituteVars(cfgval.String(spec[varKeyFromFile]), vars, field)
 	if len(pathErrs) > 0 {
 		return pathErrs
+	}
+	// A relative path has no base a daemon and a sermoctl share. An empty one is
+	// an unset ${env:...}, which falls back to the default like a missing file.
+	if path != "" && !filepath.IsAbs(path) {
+		return []string{fmt.Sprintf("%s %q must be an absolute path", field, path)}
 	}
 	resolvedSpec, specErrs := resolveFromFileSpecVars(name, spec, vars)
 	if len(specErrs) > 0 {
