@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"sermo/internal/process"
 	"sermo/internal/state"
 	"sermo/internal/web"
 )
@@ -52,6 +53,44 @@ func TestMetricFallbackKeepsObservationBoundary(t *testing.T) {
 		got := sampler.Series("web", current, time.Hour, at)
 		if got.Memory.Summary.Count != 1 || got.Memory.Summary.Avg != 100 || got.Current.At != current.At {
 			t.Fatalf("fallback crossed observation boundary: %+v", got)
+		}
+	})
+}
+
+// History lives in the store, so memory holds only what the current reading and
+// the shortest chart need when the store cannot be read. A year of per-cycle
+// samples grew a long-running daemon by megabytes a day, per service.
+func TestMetricSamplersBoundWhatTheyHoldInMemory(t *testing.T) {
+	const cycle = 30 * time.Second
+	start := time.Date(2026, 9, 12, 12, 0, 0, 0, time.UTC)
+	const cycles = 3 * 120 // three hours
+	limit := int(time.Hour/cycle) + 1
+	last := start.Add((cycles - 1) * cycle)
+
+	t.Run("daemon", func(t *testing.T) {
+		now := start
+		sampler := &DaemonMetricSampler{reader: &fakeDaemonMetricReader{rss: 1024, memTotal: 4096, numCPU: 1, clockTick: 100}, now: func() time.Time { return now }, pid: 42}
+		for range cycles {
+			sampler.sample()
+			now = now.Add(cycle)
+		}
+		if got := len(sampler.samples); got > limit {
+			t.Fatalf("daemon samples in memory = %d, want at most %d", got, limit)
+		}
+		if newest := sampler.samples[len(sampler.samples)-1]; !newest.at.Equal(last) {
+			t.Fatalf("newest sample at %v, want %v", newest.at, last)
+		}
+	})
+	t.Run("service", func(t *testing.T) {
+		sampler := NewServiceMetricSampler(nil)
+		for i := range cycles {
+			sampler.record(t.Context(), "web", web.ServiceRuntime{Count: 1}, process.PrincipalIdentity{}, start.Add(time.Duration(i)*cycle))
+		}
+		if got := len(sampler.samples["web"]); got > limit {
+			t.Fatalf("service samples in memory = %d, want at most %d", got, limit)
+		}
+		if newest, _, ok := sampler.latest("web"); !ok || !newest.at.Equal(last) {
+			t.Fatalf("latest sample = %+v (%v), want one at %v", newest, ok, last)
 		}
 	})
 }

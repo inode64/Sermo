@@ -99,7 +99,7 @@ func (s *ServiceMetricSampler) recordLocked(name string, cur web.ServiceRuntime,
 	s.prev[name] = serviceMetricCounters{at: at, ioRead: cur.IORead, ioWrite: cur.IOWrite, ok: cur.Count > 0}
 	s.samples[name] = append(s.samples[name], serviceMetricSample{at: at, current: cur})
 	s.principals[name] = principal
-	s.trimLocked(name, at.Add(-daemonMetricRetention))
+	s.trimLocked(name, at.Add(-metricFallbackRetention))
 	return cur
 }
 

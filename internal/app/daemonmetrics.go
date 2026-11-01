@@ -15,8 +15,12 @@ import (
 )
 
 const (
-	daemonMetricMaxInt64              = uint64(math.MaxInt64)
-	daemonMetricRetention             = state.DefaultRetention1d
+	daemonMetricMaxInt64 = uint64(math.MaxInt64)
+	// metricFallbackRetention is how much of the daemon and service metric
+	// samples stays in memory: the charts read their history from the state
+	// store, so this backs only the current reading and, while the store cannot
+	// be read, the dashboard's shortest window.
+	metricFallbackRetention           = time.Hour
 	metricSeriesBucket                = time.Minute
 	defaultDaemonMetricSampleInterval = 30 * time.Second
 )
@@ -139,7 +143,7 @@ func (s *DaemonMetricSampler) sampleWithContext(ctx context.Context) {
 	s.mu.Lock()
 	sample := s.sampleLocked()
 	s.samples = append(s.samples, sample)
-	s.trimLocked(sample.at.Add(-daemonMetricRetention))
+	s.trimLocked(sample.at.Add(-metricFallbackRetention))
 	s.mu.Unlock()
 	s.recordPersistent(ctx, sample)
 }
