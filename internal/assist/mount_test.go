@@ -78,3 +78,17 @@ func TestMountAssistantBatchSettings(t *testing.T) {
 		}
 	}
 }
+
+func TestMountAssistantKeepsTargetsWhoseNamesCollide(t *testing.T) {
+	env := Env{Mounts: func() ([]MountCandidate, error) {
+		return []MountCandidate{{Path: "/mnt/a-b"}, {Path: "/mnt/a_b"}}, nil
+	}}
+	p := NewPrompt(strings.NewReader("all\ny\ny\n"), &strings.Builder{})
+	res, err := (mountAssistant{}).Run(p, env)
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if len(res.Mounts) != 2 {
+		t.Fatalf("mounts = %v, want one for each path", res.Mounts)
+	}
+}

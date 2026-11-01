@@ -57,7 +57,7 @@ func (volumeAssistant) Run(p *Prompt, env Env) (res Result, err error) {
 	forEachWithSettings(selected, shared,
 		func(v Volume) volSettings { return askVolSettings(p, env, v.Mountpoint) },
 		func(v Volume, s volSettings) {
-			watches[watchName(config.WatchCategoryStorage, v.Mountpoint)] = buildVolWatch(v, s)
+			watches[uniqueEntryName(watches, watchName(config.WatchCategoryStorage, v.Mountpoint))] = buildVolWatch(v, s)
 		})
 	return Result{Watches: watches, Summary: fmt.Sprintf("%d storage watch(es)", len(watches))}, nil
 }

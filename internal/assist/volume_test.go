@@ -294,3 +294,29 @@ func TestVolumeAssistantLevelEdges(t *testing.T) {
 		t.Fatal("closed input produced a result, want an input-closed error")
 	}
 }
+
+// watchName folds every path separator and punctuation mark to `-` and maps "/"
+// to "root", so distinct mount points can share a name. Each selected target
+// keeps its own watch: the later one used to replace the earlier in silence.
+func TestVolumeAssistantKeepsTargetsWhoseNamesCollide(t *testing.T) {
+	env := Env{Volumes: func() ([]Volume, error) {
+		return []Volume{{Mountpoint: "/"}, {Mountpoint: "/root"}, {Mountpoint: "/mnt/a-b"}, {Mountpoint: "/mnt/a_b"}}, nil
+	}}
+	res, _ := runAssistant(t, volumeAssistant{}, env,
+		"all", "y", // every volume, same settings
+		"1", "", // monitor state, interval
+		"3", "10G", "", // free space below a size, default cycles
+		"none", "n", // notify nobody, no auto-expand
+	)
+	paths := map[string]string{}
+	for name, raw := range res.Watches {
+		check, _ := raw.(map[string]any)[config.WatchKeyCheck].(map[string]any)
+		paths[cfgval.String(check[checks.CheckKeyPath])] = name
+	}
+	if len(paths) != 4 {
+		t.Fatalf("watches = %v, want one for each of the four volumes", paths)
+	}
+	if paths["/"] != "storage-root" || paths["/mnt/a-b"] != "storage-mnt-a-b" {
+		t.Fatalf("watches = %v, want the first of each pair under its plain name", paths)
+	}
+}

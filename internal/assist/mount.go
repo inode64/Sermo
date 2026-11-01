@@ -45,7 +45,9 @@ func (mountAssistant) Run(p *Prompt, env Env) (res Result, err error) {
 	mounts := map[string]any{}
 	forEachWithSettings(selected, shared,
 		func(c MountCandidate) mountSettings { return askMountSettings(p, c.Path) },
-		func(c MountCandidate, s mountSettings) { mounts[mountUnitName(c.Path)] = buildMountUnit(c, s) })
+		func(c MountCandidate, s mountSettings) {
+			mounts[uniqueEntryName(mounts, mountUnitName(c.Path))] = buildMountUnit(c, s)
+		})
 	return mountResult(mounts), nil
 }
 

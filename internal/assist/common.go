@@ -29,6 +29,9 @@ const (
 	monitorStateChoicePrevious = 2
 )
 
+// firstRepeatSuffix numbers the second entry that wants one name.
+const firstRepeatSuffix = 2
+
 // Monitoring is the shared monitor-state + interval answer every wizard asks
 // once the targets are chosen. It is injected verbatim into each generated
 // entry (a watch entry or a service body) by the assistants, so the question
@@ -134,6 +137,19 @@ func watchThen(notifiers []string) map[string]any {
 		then[rules.RuleFieldNotify] = notifiers
 	}
 	return then
+}
+
+// uniqueEntryName returns name, or name with the lowest free numeric suffix: a
+// name derived from a target's path is not unique to it, and a repeat would
+// replace the earlier entry and leave its target unmonitored.
+func uniqueEntryName(entries map[string]any, name string) string {
+	unique := name
+	for n := firstRepeatSuffix; ; n++ {
+		if _, taken := entries[unique]; !taken {
+			return unique
+		}
+		unique = fmt.Sprintf("%s-%d", name, n)
+	}
 }
 
 func resultSummary(noun string, entries map[string]any) string {
