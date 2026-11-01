@@ -3935,6 +3935,8 @@ Library services); the `app` form is the primitive behind
 `restart_on_change.apps` for service-owned binaries such as `containerd`.
 For service paths, linked apps and catalog libraries, the samples run at
 `engine.artifact_interval` (or their local `interval`), not on every service cycle.
+A stat that does not answer, as on a dead network mount, is no reading: the last
+sample stands, so a hung path never reads as a change or as the end of one.
 
 ### Windows
 

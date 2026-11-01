@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"maps"
 	"slices"
 	"strings"
@@ -1183,17 +1184,22 @@ func ArtifactChangedFunc(baseline *ArtifactBaseline, artifactSamples *ArtifactSa
 // currentArtifactFingerprint returns the cache sample when the path is an
 // artifact watch target. An unsampled target deliberately has no current value:
 // callers must wait for the artifact cadence instead of bypassing it with a
-// direct filesystem read.
-func currentArtifactFingerprint(path string, samples *ArtifactSamples, directFingerprint func(string) string) (string, bool) {
+// direct filesystem read. A direct read with no answer has none either, and says
+// so as an unavailable condition: a false would end a pending change.
+func currentArtifactFingerprint(path string, samples *ArtifactSamples, directFingerprint func(string) (string, bool)) (string, bool, error) {
 	if samples != nil {
 		if sample, tracked, sampled := samples.FileFingerprint(path); tracked {
 			if !sampled {
-				return "", false
+				return "", false, nil
 			}
-			return sample, true
+			return sample, true, nil
 		}
 	}
-	return directFingerprint(path), true
+	fingerprint, answered := directFingerprint(path)
+	if !answered {
+		return "", false, fmt.Errorf("%w: %s did not answer", rules.ErrUnavailable, path)
+	}
+	return fingerprint, true, nil
 }
 
 // changed reports whether the file at path differs from the acknowledged
@@ -1286,15 +1292,32 @@ func (w *Worker) compareAppVersion(app string, level int, raw string) (bool, err
 	return w.libBaseline.versionChanged(versionKey(app, level), key), nil
 }
 
+// fingerprintReadTimeout bounds one stat behind a file fingerprint.
+const fingerprintReadTimeout = 5 * time.Second
+
+// fingerprintReads holds the stats behind file fingerprints that have not
+// returned. On a hard network mount whose server is gone a stat blocks in the
+// kernel, and a worker stuck there holds its cycle and every reload behind it. It
+// outlives a reload so a rebuilt worker does not stack another stat on that path.
+var fingerprintReads = hostfs.NewInFlight[string]("stat", hostfs.ErrHung, 0)
+
 // fileFingerprint summarizes a file's identity for change detection: its size and
 // modification time. A missing or unreadable file yields "", distinct from any
-// real file, so install/removal counts as a change.
-func fileFingerprint(path string) string {
-	info, err := hostfs.StatTarget(path)
-	if err != nil {
-		return ""
-	}
-	return fmt.Sprintf("%d:%d", info.Size(), info.ModTime().UnixNano())
+// real file, so install/removal counts as a change. The bool is false when the
+// stat gave no answer, which is no reading at all.
+func fileFingerprint(path string) (string, bool) {
+	return boundedFingerprint(path, fingerprintReadTimeout, hostfs.StatTarget)
+}
+
+func boundedFingerprint(path string, timeout time.Duration, stat func(string) (fs.FileInfo, error)) (string, bool) {
+	fingerprint, err := fingerprintReads.Do(path, timeout, func() (string, error) {
+		info, err := stat(path)
+		if err != nil {
+			return "", nil //nolint:nilerr // a missing or unreadable file has the empty fingerprint
+		}
+		return fmt.Sprintf("%d:%d", info.Size(), info.ModTime().UnixNano()), nil
+	})
+	return fingerprint, err == nil
 }
 
 // evalErrKeySep separates the rule name from the blocked action in an evalErrs

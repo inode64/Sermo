@@ -2,6 +2,8 @@ package app
 
 import (
 	"context"
+	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"sermo/internal/execx"
@@ -198,6 +200,86 @@ func TestArtifactSamplesDeferChangeUntilSampled(t *testing.T) {
 	}
 }
 
+// hungSamples is an artifact cache whose file reads block like a hard mount gone
+// dead, through the guard the host reads go through.
+func hungSamples(hung *hungRead) *ArtifactSamples {
+	samples := NewArtifactSamples()
+	samples.read = func(path string) (string, bool) {
+		return boundedFingerprint(path, 20*time.Millisecond, func(string) (fs.FileInfo, error) {
+			hung.block()
+			return nil, fs.ErrNotExist
+		})
+	}
+	return samples
+}
+
+func TestArtifactHungStatLeavesTheMonitorRunning(t *testing.T) {
+	hung := newHungRead(t)
+	samples := hungSamples(hung)
+	path := filepath.Join(t.TempDir(), "hung")
+	stuck := &Watch{Name: artifactWatchNamePrefix + path, Cycle: func(context.Context) { samples.StoreFile(path) }}
+	assertMonitorSurvives(t, hung, stuck)
+}
+
+// The samples are one lock every worker's changed: conditions read under, so a
+// stat held inside it stopped services that have nothing to do with that path.
+func TestArtifactHungStatDoesNotStopOtherServices(t *testing.T) {
+	hung := newHungRead(t)
+	samples := hungSamples(hung)
+	go samples.StoreFile(filepath.Join(t.TempDir(), "hung"))
+	awaitWithin(t, hung.entered, "the blocked read")
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		samples.FileFingerprint("/etc/demo.conf")
+	}()
+	awaitWithin(t, done, "another service's sample read")
+}
+
+// A stat with no answer is no reading. Storing the "" of a missing file would
+// announce a change, and clearing a pending one would announce a recovery.
+func TestArtifactHungStatKeepsThePreviousSample(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "hung")
+	hung := newHungRead(t)
+	samples := hungSamples(hung)
+	samples.files[path] = artifactFileSample{fingerprint: "1:1", sampled: true}
+	idle := testArtifactBaseline(map[string]string{path: "1:1"})
+	pending := testArtifactBaseline(map[string]string{path: "0:0"})
+
+	for range 3 {
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+			samples.StoreFile(path)
+		}()
+		awaitWithin(t, done, "a sample of a hung path")
+		if changed, err := idle.Changed(path, samples); err != nil || changed {
+			t.Fatalf("unchanged path = changed:%t err:%v, want false nil", changed, err)
+		}
+		if changed, err := pending.Changed(path, samples); err != nil || !changed {
+			t.Fatalf("pending change = changed:%t err:%v, want true nil", changed, err)
+		}
+	}
+	if got := hung.calls.Load(); got != 1 {
+		t.Fatalf("blocked reads = %d, want the first one only", got)
+	}
+}
+
+// A path no artifact watch samples is read directly, so a stat with no answer
+// leaves the verdict unknown instead of a false one that adopts nothing.
+func TestArtifactHungDirectReadIsUnknown(t *testing.T) {
+	const path = "/mnt/data/hung-direct"
+	baseline := testArtifactBaseline(map[string]string{path: "1:1"})
+	changed, err := baseline.changedWithFingerprint(path, nil, func(string) (string, bool) { return "", false })
+	if changed || !errors.Is(err, rules.ErrUnavailable) {
+		t.Fatalf("hung direct read = changed:%t err:%v, want an unavailable condition", changed, err)
+	}
+	if got := baselineFingerprints(baseline)[path]; got != "1:1" {
+		t.Fatalf("baseline = %q, want it kept", got)
+	}
+}
+
 func TestArtifactPathChangedUsesCachedSampleWithoutFingerprinting(t *testing.T) {
 	const path = "/etc/demo.conf"
 	samples := NewArtifactSamples()
@@ -206,9 +288,9 @@ func TestArtifactPathChangedUsesCachedSampleWithoutFingerprinting(t *testing.T) 
 	fingerprint, _, _ := samples.FileFingerprint(path)
 	baseline := testArtifactBaseline(map[string]string{path: fingerprint})
 
-	if changed, err := baseline.changedWithFingerprint(path, samples, func(string) string {
+	if changed, err := baseline.changedWithFingerprint(path, samples, func(string) (string, bool) {
 		t.Fatal("cached artifact must not call the direct fingerprinter")
-		return ""
+		return "", false
 	}); err != nil || changed {
 		t.Fatalf("cached artifact = changed:%t err:%v, want false nil", changed, err)
 	}
@@ -225,7 +307,7 @@ func TestAcknowledgeChangesRefreshesArtifactSample(t *testing.T) {
 	if err := os.WriteFile(path, []byte("changed after sample"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	want := fileFingerprint(path)
+	want, _ := fileFingerprint(path)
 
 	w := &Worker{artifactSamples: samples, libBaseline: testArtifactBaseline(map[string]string{path: "previous"})}
 	w.acknowledgeChanges()

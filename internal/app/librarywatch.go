@@ -30,6 +30,8 @@ type ArtifactSamples struct {
 	mu          sync.RWMutex
 	files       map[string]artifactFileSample
 	appVersions map[string]artifactAppSample
+	// read fingerprints one file; nil reads the host.
+	read func(string) (string, bool)
 }
 
 type artifactFileSample struct {
@@ -66,13 +68,23 @@ func (s *ArtifactSamples) RegisterFile(path string) {
 	}
 }
 
-// StoreFile records the latest filesystem fingerprint for path.
+// StoreFile records the latest filesystem fingerprint for path. The read stays
+// outside the lock, which every worker's changed: conditions take. A read with no
+// answer keeps the previous sample: the "" of a missing file would read as a change.
 func (s *ArtifactSamples) StoreFile(path string) {
 	if s == nil || path == "" {
 		return
 	}
+	read := s.read
+	if read == nil {
+		read = fileFingerprint
+	}
+	fingerprint, answered := read(path)
+	if !answered {
+		return
+	}
 	s.mu.Lock()
-	s.files[path] = artifactFileSample{fingerprint: fileFingerprint(path), sampled: true}
+	s.files[path] = artifactFileSample{fingerprint: fingerprint, sampled: true}
 	s.mu.Unlock()
 }
 

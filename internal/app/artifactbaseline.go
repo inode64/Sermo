@@ -80,13 +80,13 @@ func (b *ArtifactBaseline) Changed(path string, samples *ArtifactSamples) (bool,
 	return b.changedWithFingerprint(path, samples, fileFingerprint)
 }
 
-func (b *ArtifactBaseline) changedWithFingerprint(path string, samples *ArtifactSamples, directFingerprint func(string) string) (bool, error) {
+func (b *ArtifactBaseline) changedWithFingerprint(path string, samples *ArtifactSamples, directFingerprint func(string) (string, bool)) (bool, error) {
 	if b == nil {
 		return false, nil
 	}
-	cur, observed := currentArtifactFingerprint(path, samples, directFingerprint)
+	cur, observed, err := currentArtifactFingerprint(path, samples, directFingerprint)
 	if !observed {
-		return false, nil
+		return false, err
 	}
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -166,7 +166,7 @@ func (b *ArtifactBaseline) AcknowledgeExcept(kept map[string]bool, samples *Arti
 				samples.StoreFile(path)
 			}
 		}
-		if fingerprint, observed := currentArtifactFingerprint(path, samples, fileFingerprint); observed {
+		if fingerprint, observed, _ := currentArtifactFingerprint(path, samples, fileFingerprint); observed {
 			b.fingerprints[path] = fingerprint
 		}
 	}
