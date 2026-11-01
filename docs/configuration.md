@@ -4625,7 +4625,9 @@ variable and have every `${var}` reference resolve to the new value.
   `no`, `yes` and quoted `"false"` as strings, and validation rejects them.
   Disabled checks do not run or appear as pending checks in service monitoring.
   A disabled `processes` selector stops identifying the service; when none is
-  left, the service takes its process identity from the init backend.
+  left, the service takes its process identity from the init backend. A clone
+  can re-enable it with `enabled: true`, retaining the inherited selector fields
+  through the whole clone chain.
 
 ## Per-host overrides (`<dir>.local`)
 

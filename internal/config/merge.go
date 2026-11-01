@@ -52,8 +52,7 @@ func mergeableMaps(dst, src any) (map[string]any, map[string]any, bool) {
 }
 
 // applyDeletes drops entries marked `delete: true` from named sections after a
-// merge. `enabled: false` entries are kept (disabled, not removed), except under
-// `processes`: see dropDisabledSelectors.
+// merge. `enabled: false` entries are kept so a later clone can re-enable them.
 func applyDeletes(tree map[string]any) {
 	for _, section := range namedSections {
 		entries, ok := tree[section].(map[string]any)
@@ -70,13 +69,14 @@ func applyDeletes(tree map[string]any) {
 			}
 		}
 	}
-	dropDisabledSelectors(tree)
 }
 
 // dropDisabledSelectors removes `enabled: false` process selectors: a selector
 // has no disabled state, and every reader of the section would otherwise have to
-// learn one. A section left empty goes too, because only an explicit
-// `processes: {}` declares a service with no resident process.
+// learn one. Run only after the full clone chain has merged, so re-enabling an
+// inherited selector retains its identity. A section left empty goes too,
+// because only an explicit `processes: {}` declares a service with no resident
+// process.
 func dropDisabledSelectors(tree map[string]any) {
 	selectors := SectionMap(tree, process.SectionProcesses)
 	dropped := false

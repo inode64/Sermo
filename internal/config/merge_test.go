@@ -156,3 +156,57 @@ processes:
 		})
 	}
 }
+
+func TestCloneReenablesDisabledProcessSelector(t *testing.T) {
+	for _, tc := range []struct{ name, source, clone string }{
+		{"local", "services/base.yml", "base"},
+		{"catalog", "catalog/services/base.yml", "base"},
+		{"local chain", "services/base.yml", "middle"},
+		{"catalog chain", "catalog/services/base.yml", "middle"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			files := map[string]string{
+				"sermo.yml":           baseGlobal,
+				"services/base.yml":   "name: base\nuses: base\n",
+				"services/middle.yml": "name: middle\nclone: base\nservice: middle\n",
+				"services/child.yml":  "name: child\nclone: " + tc.clone + "\nservice: child\nprocesses:\n  main: { enabled: true }\n",
+			}
+			files[tc.source] = `
+name: base
+service: base
+processes:
+  main: { exe: /usr/bin/base, user: root, cmd: "base --serve", enabled: false }
+  worker: { exe: /usr/bin/worker, user: nobody, delegated: true, enabled: false }
+`
+			cfg, err := loadConfig(t, writeConfig(t, files))
+			if err != nil {
+				t.Fatalf("Load() error = %v", err)
+			}
+			mustNotHave(t, Validate(cfg), "processes.")
+			child, errs := cfg.Resolve("child")
+			if len(errs) != 0 {
+				t.Fatalf("Resolve(child) errors = %v", errs)
+			}
+			selectors := SectionMap(child.Tree, process.SectionProcesses)
+			main := SectionMap(selectors, "main")
+			if len(selectors) != 1 || main[process.SelectorKeyExe] != "/usr/bin/base" || main[process.SelectorKeyUser] != "root" || main[process.SelectorKeyCmd] != "base --serve" {
+				t.Fatalf("reactivated selector lost its inherited identity: %v", selectors)
+			}
+			for _, name := range []string{"base", "middle"} {
+				resolved, resolveErrs := cfg.Resolve(name)
+				if len(resolveErrs) != 0 {
+					t.Fatalf("Resolve(%s) errors = %v", name, resolveErrs)
+				}
+				if mode := ResolveServiceLifecycle(resolved.Tree, backendSystemd).ProcessMode; mode != ServiceProcessInit {
+					t.Fatalf("%s retained disabled selectors: %v", name, resolved.Tree)
+				}
+			}
+			if tc.source == "catalog/services/base.yml" {
+				catalog, catalogErrs := cfg.ResolveCatalog(CategoryService, "base")
+				if len(catalogErrs) != 0 || ResolveServiceLifecycle(catalog.Tree, backendSystemd).ProcessMode != ServiceProcessInit {
+					t.Fatalf("catalog retained disabled selectors: %v, errors = %v", catalog.Tree, catalogErrs)
+				}
+			}
+		})
+	}
+}

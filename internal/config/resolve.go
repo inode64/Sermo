@@ -98,6 +98,7 @@ func (c *Config) resolveServiceWithInputs(name string, pruneOptional bool, input
 	if err != nil {
 		return Resolved{Name: name}, []string{err.Error()}
 	}
+	dropDisabledSelectors(merged)
 	if pruneOptional {
 		merged = pruneServiceEnableIf(merged, inputs.backend)
 	}
@@ -1679,6 +1680,7 @@ func (c *Config) resolveDocBody(doc *Document, name string, appChain []string, i
 	// the app's only merge point, as mergedService is for services.
 	errs := namedEntryFlagErrors(body)
 	applyDeletes(body)
+	dropDisabledSelectors(body)
 	body = pruneEnableIfMap(body, nil, inputs.backend)
 	prepareExpansionInputs(body)
 	vars, varErrs := c.expansionVariables(body, name, inputs)
