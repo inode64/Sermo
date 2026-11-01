@@ -45,16 +45,25 @@ func (b Busy) String() string {
 // answered before it says why.
 const busyFailurePrefix = "server busy: "
 
-// OpenSSH sends this pre-identification refusal when connection admission
-// limits reject a client. Only a complete reply followed by EOF establishes
-// that verdict; a timeout or arbitrary banner remains a transport error.
-const sshAdmissionRefused = "Not allowed at this time"
+// OpenSSH sends one of these pre-identification refusals when connection
+// admission limits reject a client: the MaxStartups text up to 9.7, the other
+// from 9.8. Only a complete reply followed by EOF establishes that verdict; a
+// timeout or arbitrary banner remains a transport error.
+const (
+	sshAdmissionRefused   = "Not allowed at this time"
+	sshMaxStartupsRefused = "Exceeded MaxStartups"
+)
 
 func sshBannerBusy(raw []byte, err error) (Busy, bool) {
-	if errors.Is(err, io.EOF) && strings.TrimRight(string(raw), protocolTrimCRLF) == sshAdmissionRefused {
-		return Busy{Reason: sshAdmissionRefused}, true
+	if !errors.Is(err, io.EOF) {
+		return Busy{}, false
 	}
-	return Busy{}, false
+	switch refusal := strings.TrimRight(string(raw), protocolTrimCRLF); refusal {
+	case sshAdmissionRefused, sshMaxStartupsRefused:
+		return Busy{Reason: refusal}, true
+	default:
+		return Busy{}, false
+	}
 }
 
 // Message is the verdict as every consumer reports it: Result.Failure, a sql

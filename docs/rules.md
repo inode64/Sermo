@@ -1409,7 +1409,7 @@ socket — is not busy, and a restart rule still fires for it.
 
 | Protocol | Busy answers |
 |---|---|
-| `ssh` | Exact pre-identification `Not allowed at this time` refusal followed by EOF (OpenSSH connection admission limits) |
+| `ssh` | Exact pre-identification `Not allowed at this time` (OpenSSH 9.8 and later) or `Exceeded MaxStartups` (earlier releases) refusal followed by EOF (OpenSSH connection admission limits) |
 | `mysql` / `mariadb` | errors 1040 too many connections, 1041 out of resources, 1129 host blocked, 1135 cannot create thread, 1203 `max_user_connections`, 1226 user resource limit |
 | `postgres` | SQLSTATE class `53` (too many clients, disk full, out of memory, configuration limit) and `57P03` (starting up, in recovery, shutting down) |
 | `redis` (Valkey, KeyDB) | `LOADING`, `BUSY`, `MASTERDOWN`, `MISCONF`, `ERR max number of clients reached` |

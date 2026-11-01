@@ -194,12 +194,16 @@ func TestReadSSHBannerReportsServerRejection(t *testing.T) {
 }
 
 func TestSSHAdmissionRefusalIsBusy(t *testing.T) {
-	port := serveBanner(t, "Not allowed at this time\r\n", nil)
-	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
-	defer cancel()
-	res, err := (sshProtocol{}).Probe(ctx, Config{Host: "127.0.0.1", Port: port})
-	if err != nil || !res.Busy || res.Failure == "" || res.Extra[ExtraKeyBusyReason] != sshAdmissionRefused {
-		t.Fatalf("probe = %+v, %v; want an explicit busy refusal", res, err)
+	for _, refusal := range []string{sshAdmissionRefused, sshMaxStartupsRefused} {
+		t.Run(refusal, func(t *testing.T) {
+			port := serveBanner(t, refusal+"\r\n", nil)
+			ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+			defer cancel()
+			res, err := (sshProtocol{}).Probe(ctx, Config{Host: "127.0.0.1", Port: port})
+			if err != nil || !res.Busy || res.Failure == "" || res.Extra[ExtraKeyBusyReason] != refusal {
+				t.Fatalf("probe = %+v, %v; want an explicit busy refusal", res, err)
+			}
+		})
 	}
 }
 
@@ -211,6 +215,9 @@ func TestSSHBannerBusyRequiresExactCompletedRefusal(t *testing.T) {
 		want bool
 	}{
 		{name: "refusal", raw: "Not allowed at this time\r\n", err: io.EOF, want: true},
+		{name: "MaxStartups refusal", raw: "Exceeded MaxStartups\r\n", err: io.EOF, want: true},
+		{name: "MaxStartups timeout", raw: "Exceeded MaxStartups\r\n", err: context.DeadlineExceeded},
+		{name: "MaxStartups before a banner", raw: "Exceeded MaxStartups\r\nSSH-2.0-test\r\n", err: io.EOF},
 		{name: "timeout", raw: "Not allowed at this time\r\n", err: context.DeadlineExceeded},
 		{name: "cancelled", raw: "Not allowed at this time\r\n", err: context.Canceled},
 		{name: "no error", raw: "Not allowed at this time\r\n"},
