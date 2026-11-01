@@ -1,6 +1,7 @@
 package app
 
 import (
+	"cmp"
 	"context"
 	"maps"
 	"slices"
@@ -13,6 +14,7 @@ import (
 	"sermo/internal/checks"
 	"sermo/internal/config"
 	"sermo/internal/execx"
+	"sermo/internal/hostfs"
 	"sermo/internal/rules"
 	"sermo/internal/severity"
 )
@@ -169,6 +171,11 @@ func (c artifactCheck) Name() string { return c.name }
 
 func (c artifactCheck) Run(ctx context.Context) checks.Result {
 	report := c.inspect(ctx)
+	if report.Hung {
+		// No answer is no sample: the last one stands, and the watch reads
+		// unavailable instead of broken or recovered.
+		return checks.Result{Check: c.name, Unavailable: true, Message: report.Status}
+	}
 	if c.store != nil {
 		c.store(c.samples, c.name, report)
 	}
@@ -250,14 +257,21 @@ type catalogArtifactWatchSpec struct {
 // already owned while the previous generation's were cancelled.
 type artifactOwned map[string]bool
 
+// artifactStat bounds the daemon's stat of a catalog binary by the engine's
+// default timeout.
+func artifactStat(deps Deps) appinspect.Option {
+	return appinspect.WithStat(hostfs.StatTarget, cmp.Or(deps.DefaultTimeout, DefaultEngineCheckTimeout))
+}
+
 func buildCatalogArtifactWatches(ctx context.Context, cfg *config.Config, deps Deps, spec catalogArtifactWatchSpec) ([]*Watch, artifactOwned) {
 	samples := deps.ArtifactSamples
 	runner := deps.ExecxRunner
 	lookup := appinspect.WithUserLookup(deps.UserLookup)
+	stat := artifactStat(deps)
 	// Presence decides which entries get a watch; the version and health
 	// probes belong to the watch cycles. Running them here held a loaded host's
 	// start for minutes on one slow version command.
-	reports := appinspect.List(ctx, runner, cfg, spec.category, false, lookup, appinspect.WithoutProbes())
+	reports := appinspect.List(ctx, runner, cfg, spec.category, false, lookup, stat, appinspect.WithoutProbes())
 	owned := artifactOwned{}
 	if len(reports) == 0 {
 		return nil, owned
@@ -274,7 +288,7 @@ func buildCatalogArtifactWatches(ctx context.Context, cfg *config.Config, deps D
 		check := artifactCheck{
 			name: name, samples: samples, store: spec.store,
 			inspect: func(ctx context.Context) appinspect.Report {
-				return spec.inspect(ctx, runner, cfg, name, lookup)
+				return spec.inspect(ctx, runner, cfg, name, lookup, stat)
 			},
 		}
 		if usersOf != nil {
@@ -382,8 +396,10 @@ func buildArtifactAppWatches(cfg *config.Config, deps Deps, samples *ArtifactSam
 			artifactWatchInterval(cfg, config.CategoryApp, appName))
 		watch.Cycle = func(ctx context.Context) {
 			report := appinspect.InspectOne(ctx, runner, cfg, appName,
-				appinspect.WithUserLookup(deps.UserLookup))
-			samples.StoreAppReport(appName, report)
+				appinspect.WithUserLookup(deps.UserLookup), artifactStat(deps))
+			if !report.Hung {
+				samples.StoreAppReport(appName, report)
+			}
 		}
 		out = append(out, watch)
 	}

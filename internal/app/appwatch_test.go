@@ -2,11 +2,15 @@ package app
 
 import (
 	"context"
+	"io/fs"
+	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"sermo/internal/appinspect"
 	"sermo/internal/checks"
+	"sermo/internal/config"
 	"sermo/internal/notify"
 )
 
@@ -26,6 +30,78 @@ func TestArtifactCheckMapsStatus(t *testing.T) {
 	}}
 	if r := okc.Run(context.Background()); !r.OK {
 		t.Fatal("ok status must map to OK")
+	}
+}
+
+// hungLibraryConfig is a catalog with one library on path.
+func hungLibraryConfig(name, path string) *config.Config {
+	return &config.Config{
+		LibraryNames: []string{name},
+		Libraries: map[string]*config.Document{
+			name: {Name: name, Body: map[string]any{
+				"name":      name,
+				"preflight": map[string]any{"file": map[string]any{"type": "file", "path": path}},
+			}},
+		},
+	}
+}
+
+// The stat of a library on a dead mount takes no context, so the inspection has
+// to stop waiting for it or the watch's stuck cycle wedges a reload and a shutdown.
+func TestLibraryHungStatLeavesTheMonitorRunning(t *testing.T) {
+	hung := newHungRead(t)
+	path := filepath.Join(t.TempDir(), "libhung.so")
+	cfg := hungLibraryConfig("libhung", path)
+	stat := func(string) (fs.FileInfo, error) {
+		hung.block()
+		return nil, fs.ErrNotExist
+	}
+	stuck := &Watch{Name: libraryWatchNamePrefix + "libhung", FireOnFail: true, Check: artifactCheck{
+		name: "libhung",
+		inspect: func(ctx context.Context) appinspect.Report {
+			return appinspect.InspectCategoryOne(ctx, nil, cfg, config.CategoryLibrary, "libhung", appinspect.WithStat(stat, 20*time.Millisecond))
+		},
+	}}
+	assertMonitorSurvives(t, hung, stuck)
+}
+
+// A hung binary is no sample: it keeps what the last one said, and a firing watch
+// neither recovers nor gets a second opening until a real reading arrives.
+func TestArtifactCheckReadsAHungBinaryAsUnavailable(t *testing.T) {
+	samples := NewArtifactSamples()
+	reports := []appinspect.Report{
+		{Name: "demo", Status: "error: exit 1"},
+		{Name: "demo", Installed: true, Hung: true, Status: "error: /mnt/data/demo: hung path: no answer within 5s"},
+		{Name: "demo", Installed: true, Hung: true, Status: "error: /mnt/data/demo: hung path: an earlier stat is still blocked"},
+	}
+	check := artifactCheck{
+		name: "demo", samples: samples, store: (*ArtifactSamples).StoreAppReport,
+		inspect: func(context.Context) appinspect.Report {
+			report := reports[0]
+			reports = reports[1:]
+			return report
+		},
+		activeUsers: func() []string { t.Fatal("a hung binary has no grade to look up"); return nil },
+	}
+	broken := check
+	broken.activeUsers = nil
+	var kinds []string
+	w := &Watch{Name: "demo", App: "demo", FireOnFail: true, Sleep: func(time.Duration) {}, Emit: func(e Event) { kinds = append(kinds, e.Kind) }}
+
+	w.Check = broken
+	w.RunCycle(context.Background())
+	if len(kinds) != 1 || kinds[0] != eventKindFiring {
+		t.Fatalf("first cycle events = %v, want one firing", kinds)
+	}
+	sampled, _ := samples.AppReport("demo")
+
+	w.Check = check
+	w.RunCycle(context.Background())
+	if len(kinds) != 2 || kinds[1] != eventKindError || !w.firing {
+		t.Fatalf("hung cycle events = %v firing = %v, want the check unavailable and the episode open", kinds, w.firing)
+	}
+	if got, _ := samples.AppReport("demo"); got.Status != sampled.Status {
+		t.Fatalf("hung cycle replaced the sample: %+v", got)
 	}
 }
 

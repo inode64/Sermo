@@ -4,13 +4,16 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"maps"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"syscall"
 	"testing"
+	"time"
 
 	"sermo/internal/config"
 	"sermo/internal/execx"
@@ -661,4 +664,61 @@ func (r refusingRunner) Run(_ context.Context, name string, args ...string) (exe
 	r.t.Helper()
 	r.t.Fatalf("command run without probes: %s %v", name, args)
 	return execx.Result{}, nil
+}
+
+// hungStat blocks like a stat on a hard mount gone dead, until the test ends.
+func hungStat(t *testing.T) (stat func(string) (os.FileInfo, error), calls *atomic.Int32) {
+	t.Helper()
+	release := make(chan struct{})
+	t.Cleanup(func() { close(release) })
+	calls = &atomic.Int32{}
+	return func(string) (os.FileInfo, error) {
+		calls.Add(1)
+		<-release
+		return nil, fs.ErrNotExist
+	}, calls
+}
+
+func libraryConfig(name, path string) *config.Config {
+	return &config.Config{
+		LibraryNames: []string{name},
+		Libraries: map[string]*config.Document{
+			name: {Name: name, Body: map[string]any{
+				"name":      name,
+				"preflight": map[string]any{"file": map[string]any{"type": "file", "path": path}},
+			}},
+		},
+	}
+}
+
+// A stat with no answer proves nothing about the binary, so it is not "not
+// installed", and an inspection or listing that waits for it would hold a watch's
+// cycle or a reload's build for as long as the mount stays dead.
+func TestInspectGivesUpOnAHungBinary(t *testing.T) {
+	const budget = 5 * time.Second
+	path := filepath.Join(t.TempDir(), "libhung.so")
+	stat, calls := hungStat(t)
+	cfg := libraryConfig("libhung", path)
+
+	reports := make(chan Report, 1)
+	go func() {
+		reports <- InspectCategoryOne(context.Background(), testRunner{}, cfg, config.CategoryLibrary, "libhung", WithStat(stat, 10*time.Millisecond))
+	}()
+	var report Report
+	select {
+	case report = <-reports:
+	case <-time.After(budget):
+		t.Fatalf("inspection did not finish within %s", budget)
+	}
+	if !report.Hung || !report.Installed || report.OK || IsNotInstalledStatus(report.Status) || !strings.Contains(report.Status, path) {
+		t.Fatalf("report = %+v, want a hung binary that is not read as absent", report)
+	}
+
+	listed := List(context.Background(), testRunner{}, cfg, config.CategoryLibrary, false, WithStat(stat, 10*time.Millisecond), WithoutProbes())
+	if len(listed) != 1 || !listed[0].Hung {
+		t.Fatalf("listing = %+v, want the entry kept so its watch survives a reload", listed)
+	}
+	if got := calls.Load(); got != 1 {
+		t.Fatalf("blocked stats = %d, want the first one only", got)
+	}
 }

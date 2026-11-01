@@ -77,12 +77,16 @@ type Report struct {
 	// TimedOut marks a failure whose probe ran past its timeout: what a loaded
 	// host says, not evidence about the binary or its version.
 	TimedOut bool `json:"-"`
+	// Hung marks a binary whose stat did not answer: no evidence about the entry
+	// at all, so a caller keeps whatever it last knew instead of this report.
+	Hung bool `json:"-"`
 }
 
 type options struct {
 	userLookup      *process.UserLookup
 	versionOptional bool
 	withoutProbes   bool
+	stat            func(string) (os.FileInfo, error)
 }
 
 // Option customizes application inspection.
@@ -91,6 +95,14 @@ type Option func(*options)
 // WithUserLookup sets the user/group resolver used for owner display.
 func WithUserLookup(lookup *process.UserLookup) Option {
 	return func(o *options) { o.userLookup = lookup }
+}
+
+// WithStat reads binaries through stat, bounded by timeout, instead of the host
+// stat bounded by the probe timeout.
+func WithStat(stat func(string) (os.FileInfo, error), timeout time.Duration) Option {
+	return func(o *options) {
+		o.stat = func(path string) (os.FileInfo, error) { return boundedStat(path, timeout, stat) }
+	}
 }
 
 // WithOptionalVersion treats a failed version command as an unknown version,
@@ -302,9 +314,19 @@ func inspectResolved(
 		r.Status = StatusNoBinaryConfigured
 		return r
 	}
-	info, err := hostfs.StatTarget(r.Binary)
+	stat := options.stat
+	if stat == nil {
+		stat = statBinary
+	}
+	info, err := stat(r.Binary)
 	if err != nil {
 		r.Status = StatusNotInstalled
+		if errors.Is(err, hostfs.ErrHung) {
+			// Presence is what registers a watch, and an entry that only read as
+			// absent here would lose its watch and open incidents on a reload.
+			r.Installed, r.Hung = true, true
+			r.Status = statusErrorPrefix + r.Binary + ": " + err.Error()
+		}
 		return r
 	}
 	r.Permissions = modeString(info)
@@ -439,6 +461,20 @@ func versionIdentityStatus(status string) string {
 		return status
 	}
 	return statusNotInstalledVersionPrefix + strings.TrimPrefix(status, statusErrorPrefix)
+}
+
+// binaryStats holds the stats of catalog binaries that have not returned. On a
+// hard network mount whose server is gone a stat blocks in the kernel, which would
+// hold a watch's cycle, and the build of a reload's new generation, for as long as
+// the mount stays dead. It outlives a reload, which must not stack another stat.
+var binaryStats = hostfs.NewInFlight[os.FileInfo]("stat", hostfs.ErrHung, 0)
+
+func statBinary(path string) (os.FileInfo, error) {
+	return boundedStat(path, probeTimeout, hostfs.StatTarget)
+}
+
+func boundedStat(path string, timeout time.Duration, stat func(string) (os.FileInfo, error)) (os.FileInfo, error) {
+	return binaryStats.Do(path, timeout, func() (os.FileInfo, error) { return stat(path) }) //nolint:wrapcheck // stat's own error or the guard's, which both name what failed
 }
 
 func setReportOwner(r *Report, info os.FileInfo, lookup *process.UserLookup) {
