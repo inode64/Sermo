@@ -353,7 +353,8 @@ never kills.
 
 **Redaction.** Statement text is redacted (`IDENTIFIED BY`, `PASSWORD()`,
 `SET PASSWORD`, `MASTER_PASSWORD`/`SOURCE_PASSWORD`, PostgreSQL
-`PASSWORD '…'`) before it reaches the inventory, events, notifiers or hooks.
+`PASSWORD '…'`, a connection string's password inside a literal) before it
+reaches the inventory, events, notifiers or hooks.
 
 ## Rate limiting
 

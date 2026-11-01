@@ -671,11 +671,30 @@ var sqlSecretPatterns = []*regexp.Regexp{
 	regexp.MustCompile(`(?is)(\bPASSWORD\s+)` + sqlSecretLiteral),
 }
 
+// sqlConninfoSecrets find the password of a connection string, which has no SQL
+// syntax to match: it is the content of a literal (CREATE SUBSCRIPTION,
+// dblink_connect, a FEDERATED table). Its keyword form quotes a value with
+// spaces, and the literal around it doubles those quotes.
+var sqlConninfoSecrets = []*regexp.Regexp{
+	regexp.MustCompile(`(?is)(\b\w*password\s*=\s*)(?:''.*?(?:''|$)|[^\s'"]+)`),
+	regexp.MustCompile(`(://[^\s:/@'"]*:)[^\s/@'"]*(@)`),
+}
+
+var sqlStringLiteral = regexp.MustCompile(`(?s)` + sqlSecretLiteral)
+
 const sqlRedacted = "'***'"
 
 // redactSQL masks password literals in a statement: running statements are
-// shown to read-only web users and sent to notifiers.
+// shown to read-only web users and sent to notifiers. Connection strings go
+// first, because a doubled quote inside one reads as an empty literal to the
+// patterns below, which would leave the rest of its value in the text.
 func redactSQL(text string) string {
+	text = sqlStringLiteral.ReplaceAllStringFunc(text, func(literal string) string {
+		for _, pattern := range sqlConninfoSecrets {
+			literal = pattern.ReplaceAllString(literal, "${1}"+sqlRedacted+"${2}")
+		}
+		return literal
+	})
 	for _, pattern := range sqlSecretPatterns {
 		text = pattern.ReplaceAllString(text, "${1}"+sqlRedacted)
 	}

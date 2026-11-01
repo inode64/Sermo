@@ -93,14 +93,30 @@ func TestRedactSQL(t *testing.T) {
 		{"START SLAVE USER = 'r' PASSWORD = 'hunter2'", "hunter2"},
 		{"ALTER USER u IDENTIFIED BY 'n3w' REPLACE 'hunter2'", "hunter2"},
 		{"ALTER ROLE app PASSWORD 'ab''hunter2'", "hunter2"},
+		{"CREATE SUBSCRIPTION s CONNECTION 'host=db user=rep password=hunter2 dbname=app' PUBLICATION p", "hunter2"},
+		{"SELECT dblink_connect('host=db password=hunter2')", "hunter2"},
+		{"SELECT dblink_connect('host=db password=''hun ter2'' user=rep')", "ter2"},
+		{"SELECT dblink_connect('host=db sslpassword=hunter2", "hunter2"}, // truncated mid-literal
+		{"SELECT dblink_connect('postgresql://rep:hunter2@db.example/app')", "hunter2"},
+		{"CREATE TABLE t (a INT) ENGINE=FEDERATED CONNECTION='mysql://fed:hunter2@db.example:3306/app/t'", "hunter2"},
 	} {
 		got := redactSQL(tt.in)
 		if strings.Contains(got, tt.secret) || !strings.Contains(got, sqlRedacted) {
 			t.Errorf("redactSQL(%q) = %q", tt.in, got)
 		}
 	}
-	if got := redactSQL("SELECT password FROM users WHERE id = 1"); got != "SELECT password FROM users WHERE id = 1" {
-		t.Errorf("a column named password must survive: %q", got)
+	for _, intact := range []string{
+		"SELECT password FROM users WHERE id = 1",
+		"SELECT id FROM users WHERE password = $1",
+		"SELECT fetch('https://db.example:8443/path/a@b')",
+	} {
+		if got := redactSQL(intact); got != intact {
+			t.Errorf("redactSQL(%q) = %q, want it intact", intact, got)
+		}
+	}
+	got := redactSQL("SELECT dblink_connect('host=db password=hunter2 user=rep')")
+	if !strings.Contains(got, "host=db") || !strings.Contains(got, "user=rep") {
+		t.Errorf("the rest of a connection string must survive: %q", got)
 	}
 }
 

@@ -2526,8 +2526,9 @@ alert, `threshold` for a resource alert, `cleared` when resource usage recovers,
 **Redaction.** Statement text is redacted before it is stored, shown, logged or
 handed to a hook: the secret after `IDENTIFIED BY`, `PASSWORD(...)`,
 `SET PASSWORD`, `MASTER_PASSWORD`/`SOURCE_PASSWORD` and PostgreSQL's
-`PASSWORD '...'` becomes `'***'`. Whitespace is collapsed to single spaces, then
-the text is cut to `max_query_length`.
+`PASSWORD '...'`, and the password of a connection string inside a literal
+(`password=...`, `scheme://user:...@host`), becomes `'***'`. Whitespace is
+collapsed to single spaces, then the text is cut to `max_query_length`.
 
 **Killing a statement.** The dashboard's Sessions panel and
 `sermoctl sessions kill` cancel one listed statement of a *service* watch
