@@ -179,6 +179,31 @@ func TestLVMVolumeGroupWatchEvaluatesEveryVolume(t *testing.T) {
 	}
 }
 
+// lvs fills data_percent for thin volumes and snapshots too, where it says how
+// full that LV is. A group watch judges pools, so a full thin volume in a pool
+// with room must not read as a full pool; a watch naming the LV still reads it.
+func TestLVMThinPredicateJudgesOnlyPoolsInAGroupWatch(t *testing.T) {
+	data := `{"report":[{"lv":[
+		{"vg_name":"vg0","lv_name":"thin1","lv_attr":"Vwi-aotz--","vg_free":"100","vg_size":"1000","data_percent":"85.0"},
+		{"vg_name":"vg0","lv_name":"snap1","lv_attr":"swi-a-s---","vg_free":"100","vg_size":"1000","data_percent":"90.0"},
+		{"vg_name":"vg0","lv_name":"pool","lv_attr":"twi-aotz--","vg_free":"100","vg_size":"1000","data_percent":"40.0","metadata_percent":"10"}
+	]}]}`
+	preds := []levelPred{{field: DataKeyLVMThinDataPct, op: ">=", value: 80}}
+	group := &lvmCheck{name: "lvm", timeout: time.Second, runner: execxtest.Outputs(data), volumeGroup: "vg0", preds: preds}
+	result := group.Run(t.Context())
+	if !result.OK || result.Data[DataKeyHealth] != LVMHealthOK {
+		t.Fatalf("result = %+v, want a healthy pool to keep the group healthy", result)
+	}
+	if got := result.Data[DataKeyLVMThinDataPct]; got != 40.0 {
+		t.Fatalf("thin data pct = %v, want the pool's 40", got)
+	}
+
+	named := &lvmCheck{name: "lvm", timeout: time.Second, runner: execxtest.Outputs(data), volumeGroup: "vg0", logicalVolume: "thin1", preds: preds}
+	if result := named.Run(t.Context()); result.OK || result.Data[DataKeyLVMThinDataPct] != 85.0 {
+		t.Fatalf("named thin volume = %+v, want its own 85 judged", result)
+	}
+}
+
 // TestLVMThinPredicateEvaluatesEveryPool pins that thin-pool thresholds reach
 // the pool row even when it is not the first LV of the VG.
 func TestLVMThinPredicateEvaluatesEveryPool(t *testing.T) {

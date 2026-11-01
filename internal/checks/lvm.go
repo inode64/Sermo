@@ -26,6 +26,7 @@ const (
 	lvmLVAttrTypeIndex      = 0
 	lvmLVAttrSuspendedIndex = 4
 	lvmLVAttrHealthIndex    = 8
+	lvmLVAttrThinPool       = 't'
 )
 
 // LVMTransition carries the effective health-state change for a LVM watch.
@@ -133,11 +134,11 @@ type lvmScan struct {
 }
 
 func (c *lvmCheck) scanRows(rows []lvmRow) lvmScan {
-	scan := lvmScan{values: lvmValues(rows[0]), target: rows[0]}
+	scan := lvmScan{values: c.scopedValues(rows[0]), target: rows[0]}
 	named := len(rows) > 1
 	targeted := false
 	for _, row := range rows {
-		values := lvmValues(row)
+		values := c.scopedValues(row)
 		faults := lvmReasons(row)
 		scan.reasons = append(scan.reasons, lvmNamedReasons(row, faults, named)...)
 		breach := len(c.preds) > 0 && levelPredsHold(c.preds, values)
@@ -237,6 +238,18 @@ func (c *lvmCheck) resultTarget(row lvmRow) (string, string) {
 		lv = row.LVName
 	}
 	return vg, lv
+}
+
+// scopedValues is what this watch may judge of a row. lvs also fills
+// data_percent for thin volumes, snapshots and cache volumes, where it says how
+// full that LV is rather than its pool; only a watch naming the LV reads those.
+func (c *lvmCheck) scopedValues(row lvmRow) map[string]float64 {
+	values := lvmValues(row)
+	if c.logicalVolume == "" && lvmAttributeAt(row.LVAttr, lvmLVAttrTypeIndex) != lvmLVAttrThinPool {
+		delete(values, DataKeyLVMThinDataPct)
+		delete(values, DataKeyLVMThinMetadataPct)
+	}
+	return values
 }
 
 func lvmValues(row lvmRow) map[string]float64 {
