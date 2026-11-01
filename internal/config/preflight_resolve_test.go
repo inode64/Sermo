@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"sermo/internal/cfgval"
@@ -158,5 +159,44 @@ pidfile: run/app.pid
 	issues := Validate(cfg)
 	if !hasIssue(issues, `pidfile path "run/app.pid" must be absolute`) {
 		t.Fatalf("Validate issues = %v, want relative pidfile issue", issues)
+	}
+}
+
+// TestCommandExportKeepsExplicitVariable pins that a command export only declares
+// a variable nobody set. Its empty default used to replace the operator's value,
+// so /opt/app-${version}/bin silently resolved to /opt/app-/bin.
+func TestCommandExportKeepsExplicitVariable(t *testing.T) {
+	cfg, err := loadConfig(t, writeConfig(t, map[string]string{
+		"sermo.yml": baseGlobal,
+		"services/svc.yml": `
+name: svc
+service: svc
+variables: { version: "15", api: v2 }
+commands:
+  version:
+    command: [/bin/true]
+    export: { version_short: { default: "1" } }
+preflight:
+  probe:
+    type: command
+    command: [/bin/true, "${api}", "${undeclared}", "${version_short}"]
+    export: { api: {}, undeclared: { default: fallback } }
+checks:
+  bin: { type: file_exists, path: "/opt/app-${version}/bin" }
+`,
+	}))
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	resolved, errs := cfg.Resolve("svc")
+	if len(errs) != 0 {
+		t.Fatalf("Resolve() errors = %v", errs)
+	}
+	if got := nested(t, resolved.Tree, "checks", "bin")["path"]; got != "/opt/app-15/bin" {
+		t.Fatalf("path = %v, want the explicit version", got)
+	}
+	got := cfgval.StringArray(nested(t, resolved.Tree, "preflight", "probe")["command"])
+	if want := []string{"/bin/true", "v2", "fallback", "1"}; !slices.Equal(got, want) {
+		t.Fatalf("command = %v, want %v", got, want)
 	}
 }

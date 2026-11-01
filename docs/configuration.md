@@ -4784,7 +4784,8 @@ preflight:
 ```
 
 Command checks can declare variables too. `from: stdout` and `trim: true` are the
-defaults; `default` is optional and otherwise empty. When the command succeeds,
+defaults; `default` is optional and otherwise empty, and a variable set under
+`variables:` keeps its value in `${...}` references. When the command succeeds,
 those values are also attached to the result `data`. The built-in `version` and
 `version_short` command names already export `version` and `version_short`; a
 `version` command also derives `version_short` from stdout, so only special

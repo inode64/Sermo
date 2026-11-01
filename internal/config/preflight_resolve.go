@@ -144,17 +144,30 @@ func resourceCandidateMatches(typ, path string) bool {
 	}
 }
 
+// applyCommandExportDefaults declares what commands export. Expansion never sees
+// a command's runtime value, which only reaches the check result, so a variable
+// the operator set keeps its value; among exports the later one wins.
 func applyCommandExportDefaults(tree map[string]any) {
+	exports := map[string]string{}
 	for _, sectionName := range []string{sectionCommands, sectionPreflight} {
 		section, ok := tree[sectionName].(map[string]any)
 		if !ok {
 			continue
 		}
-		applyCommandExportDefaultsFromSection(tree, section)
+		collectCommandExports(exports, section)
+	}
+	if len(exports) == 0 {
+		return
+	}
+	vars := ensureVariables(tree)
+	for name, value := range exports {
+		if _, declared := vars[name]; !declared {
+			vars[name] = value
+		}
 	}
 }
 
-func applyCommandExportDefaultsFromSection(tree, section map[string]any) {
+func collectCommandExports(exports map[string]string, section map[string]any) {
 	for _, name := range slices.Sorted(maps.Keys(section)) {
 		entry, ok := section[name].(map[string]any)
 		if !ok || len(cfgval.StringArray(entry[checks.CheckKeyCommand])) == 0 {
@@ -162,17 +175,19 @@ func applyCommandExportDefaultsFromSection(tree, section map[string]any) {
 		}
 		switch name {
 		case checks.DataKeyVersion:
-			setExportDefault(tree, checks.DataKeyVersion, "")
-			setExportDefault(tree, checks.DataKeyVersionShort, "")
+			exports[checks.DataKeyVersion] = ""
+			exports[checks.DataKeyVersionShort] = ""
 		case checks.DataKeyVersionShort:
-			setExportDefault(tree, checks.DataKeyVersionShort, "")
+			exports[checks.DataKeyVersionShort] = ""
 		}
-		exports, ok := entry[checks.CheckKeyExport].(map[string]any)
+		declared, ok := entry[checks.CheckKeyExport].(map[string]any)
 		if !ok {
 			continue
 		}
-		for _, varName := range slices.Sorted(maps.Keys(exports)) {
-			setExportDefault(tree, varName, exportDefault(exports[varName]))
+		for _, varName := range slices.Sorted(maps.Keys(declared)) {
+			if varName != "" {
+				exports[varName] = exportDefault(declared[varName])
+			}
 		}
 	}
 }
@@ -186,11 +201,4 @@ func exportDefault(raw any) string {
 		return cfgval.String(v)
 	}
 	return ""
-}
-
-func setExportDefault(tree map[string]any, name, value string) {
-	if name == "" {
-		return
-	}
-	ensureVariables(tree)[name] = value
 }
