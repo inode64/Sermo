@@ -579,14 +579,14 @@ func (s *mysqlServerInfo) sample(ctx context.Context, db *sql.DB, maxLength int,
 	}
 	mariadb := s.mariadb
 	rows, err := db.QueryContext(ctx, mysqlProcesslistQuery(mariadb, s.threadSource), maxLength+1, id, id)
-	if err != nil && s.threadSource {
+	if s.threadSource && conn.MySQLStatementRefused(err) {
 		// An older MariaDB without TID, or a MySQL that refuses
 		// performance_schema: list the statements without threads, and keep
-		// doing so rather than paying the failing query every cycle.
+		// doing so rather than paying the failing query every cycle. Only the
+		// server's own refusal is that lasting: one lost connection must not
+		// cost the thread readings until some later sample fails.
+		s.threadSource = false
 		rows, err = db.QueryContext(ctx, mysqlProcesslistQuery(mariadb, false), maxLength+1, id, id)
-		if err == nil {
-			s.threadSource = false
-		}
 	}
 	if err != nil {
 		return nil, fmt.Errorf("db_queries: processlist: %w", err)

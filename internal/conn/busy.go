@@ -114,6 +114,18 @@ func AsBusy(err error) (Busy, bool) {
 	return Busy{}, false
 }
 
+// MySQLStatementRefused reports that a live MySQL or MariaDB server read a
+// statement and rejected it (an unknown column, a table this account may not
+// read). Repeating it changes nothing, while a transport error or a busy answer
+// says nothing about the statement.
+func MySQLStatementRefused(err error) bool {
+	if _, answered := errors.AsType[*mysql.MySQLError](err); !answered {
+		return false
+	}
+	_, busy := AsBusy(err)
+	return !busy
+}
+
 // MySQL and MariaDB error numbers a live server answers when it cannot take
 // one more client. 1129 (host blocked) belongs here too: the server is alive
 // and the fix is FLUSH HOSTS, not a restart. 1045 (access denied) and 1130

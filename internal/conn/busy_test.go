@@ -13,6 +13,26 @@ import (
 	"github.com/jackc/pgx/v5/pgproto3"
 )
 
+func TestMySQLStatementRefused(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		err     error
+		refused bool
+	}{
+		{"unknown column", &mysql.MySQLError{Number: 1054, Message: "Unknown column 'TID' in 'field list'"}, true},
+		{"table denied, wrapped", fmt.Errorf("processlist: %w", &mysql.MySQLError{Number: 1142, Message: "SELECT command denied"}), true},
+		{"busy server", &mysql.MySQLError{Number: 1040, Message: "Too many connections"}, false},
+		{"transport error", errors.New("invalid connection"), false},
+		{"nil", nil, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := MySQLStatementRefused(tc.err); got != tc.refused {
+				t.Fatalf("MySQLStatementRefused(%v) = %v, want %v", tc.err, got, tc.refused)
+			}
+		})
+	}
+}
+
 // AsBusy classifies the driver errors the sql and db_queries checks see, through
 // any wrapping; authentication, permission and missing-object errors are not busy.
 func TestAsBusy(t *testing.T) {

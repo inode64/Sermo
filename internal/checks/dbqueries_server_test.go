@@ -12,6 +12,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/go-sql-driver/mysql"
 )
 
 // fakeMySQLServer answers the db_queries sampler's statements and records
@@ -39,6 +41,9 @@ func (s *fakeMySQLServer) count(prefix string) int {
 // fakeTIDColumn is how the MariaDB thread column appears in the select list
 // (a bare "TID" also matches 'Binlog Dump GTID').
 const fakeTIDColumn = "TID, MEMORY_USED"
+
+// errFakeNoTID is the server's own answer on a MariaDB without the column.
+var errFakeNoTID = &mysql.MySQLError{Number: 1054, Message: "Unknown column 'TID' in 'field list'"}
 
 var fakeMySQLServers sync.Map
 
@@ -78,7 +83,7 @@ func (c fakeMySQLConn) QueryContext(ctx context.Context, query string, args []dr
 		return &fakeRows{columns: []string{"VERSION()"}, rows: [][]driver.Value{{"11.8.5-MariaDB-log"}}}, nil
 	}
 	if s.noTID && strings.Contains(query, fakeTIDColumn) {
-		return nil, errors.New("Unknown column 'TID'")
+		return nil, errFakeNoTID
 	}
 	return &fakeRows{columns: make([]string, 14)}, nil
 }
@@ -152,6 +157,35 @@ func TestMySQLSamplerRemembersWhatTheServerSupports(t *testing.T) {
 	}
 }
 
+// Only the server rejecting the thread columns is a lasting answer. A sample
+// that fails for any other reason reports its error and keeps them, or one
+// dropped connection would cost the watch its CPU, I/O and memory readings for
+// as long as no later sample happened to fail.
+func TestMySQLSamplerKeepsThreadColumnsAcrossATransientFailure(t *testing.T) {
+	server := &fakeMySQLServer{}
+	db := openFakeMySQL(t, server)
+	info := &mysqlServerInfo{}
+	sample := func() error {
+		_, err := sampleMySQLQueries(context.Background(), db, 100, info, 0)
+		return err
+	}
+	if err := sample(); err != nil {
+		t.Fatalf("sample: %v", err)
+	}
+	server.mu.Lock()
+	server.failNext = true
+	server.mu.Unlock()
+	if err := sample(); err == nil {
+		t.Fatal("want the failed sample's error, not a list without threads")
+	}
+	if err := sample(); err != nil {
+		t.Fatalf("sample after the error: %v", err)
+	}
+	if last := server.queries[len(server.queries)-1]; !strings.Contains(last, fakeTIDColumn) {
+		t.Fatalf("query after a transient failure lost the thread columns: %s", last)
+	}
+}
+
 func TestDBQuerySampleRestrictsTheTargetBeforeTheLimit(t *testing.T) {
 	for _, tt := range []struct {
 		name, engine   string
@@ -196,7 +230,7 @@ func TestDBQuerySampleRestrictsTheTargetBeforeTheLimit(t *testing.T) {
 						t.Errorf("target must be filtered before ordering and LIMIT: %s", query)
 					}
 					if tt.noTID && strings.Contains(query, fakeTIDColumn) {
-						return nil, errors.New("Unknown column 'TID'")
+						return nil, errFakeNoTID
 					}
 					return &fakeRows{columns: make([]string, len(tt.row)), rows: [][]driver.Value{tt.row}}, nil
 				}}
