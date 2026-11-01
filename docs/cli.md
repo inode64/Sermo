@@ -518,6 +518,8 @@ filesystem.
 fails, `--lazy` permits `umount -l` as the last fallback, and
 `--kill-blockers` signals only blockers that match
 `mount.stop_policy.kill_only_if`.
+`sermoctl mount list` names any mount it cannot read on stderr, lists the others
+and exits `2`, or `78` when a watch does not resolve.
 
 `sermoctl wizard mount` lists mount points declared in `/etc/fstab` and writes
 safe storage watch files under `mounts/`, adding that directory to

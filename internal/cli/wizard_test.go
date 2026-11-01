@@ -353,8 +353,9 @@ func TestRunWizardMountWritesStorageMountUnit(t *testing.T) {
 	if _, ok := watches["mount-mnt-backup"]; !ok {
 		t.Fatalf("loaded config did not include mount-mnt-backup: %v", watches)
 	}
-	if !slices.Contains(loaded.StorageMountNames(), "mount-mnt-backup") {
-		t.Fatalf("loaded config did not include mount-capable watch: %v", loaded.StorageMountNames())
+	mounts, _ := loaded.StorageMounts()
+	if !slices.ContainsFunc(mounts, func(mount config.Resolved) bool { return mount.Name == "mount-mnt-backup" }) {
+		t.Fatalf("loaded config did not include mount-capable watch: %v", mounts)
 	}
 }
 

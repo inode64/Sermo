@@ -655,8 +655,8 @@ func TestRepoDevConfigLoadsExampleTree(t *testing.T) {
 			t.Fatalf("dev config did not load watch %q from example dirs: %v", name, watches)
 		}
 	}
-	if !slices.Contains(cfg.StorageMountNames(), "mount-backup") {
-		t.Fatalf("dev config did not load mount-capable storage watch: %v", cfg.StorageMountNames())
+	if !slices.Contains(storageMountNames(cfg), "mount-backup") {
+		t.Fatalf("dev config did not load mount-capable storage watch: %v", storageMountNames(cfg))
 	}
 }
 

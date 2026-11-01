@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
-	"slices"
 
 	"sermo/internal/app"
 	"sermo/internal/cfgval"
@@ -116,32 +115,35 @@ func (a App) runMountList(opts options) int {
 		return code
 	}
 	controller := a.mountController(cfg, opts)
-	names := cfg.StorageMountNames()
-	slices.Sort(names)
+	// A mount that cannot be listed is reported and sets the exit code; it never
+	// reads as absent, and the others still list.
+	mounts, errs := cfg.StorageMounts()
+	for _, msg := range errs {
+		fmt.Fprintln(a.Stderr, msg)
+		code = exitConfigInvalid
+	}
 	// Non-nil so `mount list --json` prints [] rather than null with no mounts.
-	statuses := make([]mountctl.Status, 0, len(names))
-	for _, name := range names {
-		resolved, errs := cfg.ResolveStorage(name)
-		if len(errs) > 0 {
+	statuses := make([]mountctl.Status, 0, len(mounts))
+	for _, resolved := range mounts {
+		status, err := controller.ReadStatus(mountctl.SpecFromStorageTree(resolved.Name, resolved.Tree))
+		if err != nil {
+			fmt.Fprintf(a.Stderr, "mount %s: %v\n", resolved.Name, err)
+			code = max(code, exitRuntimeError)
 			continue
 		}
-		status, err := controller.ReadStatus(mountctl.SpecFromStorageTree(name, resolved.Tree))
-		if err == nil {
-			statuses = append(statuses, status)
-		}
+		statuses = append(statuses, status)
 	}
 	if opts.json {
 		writeJSON(a.Stdout, statuses)
-		return exitSuccess
+		return code
 	}
-	if len(statuses) == 0 {
+	if len(statuses) == 0 && code == exitSuccess {
 		fmt.Fprintln(a.Stdout, "no configured mounts")
-		return exitSuccess
 	}
 	for _, st := range statuses {
 		fmt.Fprintf(a.Stdout, "%s path=%s mounted=%t refcount=%d state=%s\n", st.Name, st.Path, st.Mounted, st.Refcount, st.State)
 	}
-	return exitSuccess
+	return code
 }
 
 func (a App) mountSpec(opts options, cfg *config.Config, target string) (mountctl.Spec, int) {

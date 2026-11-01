@@ -371,11 +371,11 @@ mount: {}
 		}
 	}
 	for _, name := range []string{"direct-mount", "recursive-mount"} {
-		if !slices.Contains(cfg.StorageMountNames(), name) {
+		if !slices.Contains(storageMountNames(cfg), name) {
 			t.Fatalf("mount-capable storage %q was not loaded", name)
 		}
 	}
-	if slices.Contains(cfg.StorageMountNames(), "skipped-mount") {
+	if slices.Contains(storageMountNames(cfg), "skipped-mount") {
 		t.Fatalf("non-recursive watch path loaded nested mount-capable storage")
 	}
 	if issues := Validate(cfg); len(issues) != 0 {
@@ -872,8 +872,8 @@ then: { notify: [ops] }
 	if got := cfgval.String(watches["ping-gw"].(map[string]any)["category"]); got != "network" {
 		t.Fatalf("included watch category = %q, want network", got)
 	}
-	if !slices.Contains(cfg.StorageMountNames(), "backup") {
-		t.Fatalf("mount-capable storage directory was not loaded: %v", cfg.StorageMountNames())
+	if !slices.Contains(storageMountNames(cfg), "backup") {
+		t.Fatalf("mount-capable storage directory was not loaded: %v", storageMountNames(cfg))
 	}
 	if issues := Validate(cfg); len(issues) != 0 {
 		t.Fatalf("explicit target directory config should validate, got %v", issues)

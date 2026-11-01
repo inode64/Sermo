@@ -3,6 +3,9 @@ package cli
 import (
 	"bytes"
 	"context"
+	"encoding/json"
+	"errors"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -92,6 +95,111 @@ func TestMountListJSONEmpty(t *testing.T) {
 	}
 	if got := strings.TrimSpace(out.String()); got != "[]" {
 		t.Fatalf("mount list --json = %q, want []", got)
+	}
+}
+
+// mountListConfig declares two mounts, and a third whose path does not resolve
+// when broken is set.
+func mountListConfig(t *testing.T, broken bool) string {
+	t.Helper()
+	files := map[string]string{
+		"mounts/a.yml": "name: mount-a\ncheck:\n  type: storage\n  path: /mnt/a\n  mounted: true\nmount: {}\n",
+		"mounts/b.yml": "name: mount-b\ncheck:\n  type: storage\n  path: /mnt/b\n  mounted: true\nmount: {}\n",
+	}
+	if broken {
+		files["mounts/c.yml"] = "name: mount-c\ncheck:\n  type: storage\n  path: ${missing}\n  mounted: true\nmount: {}\n"
+	}
+	return writeServiceConfig(t, `
+engine:
+  runtime: @ROOT@/run
+  state: @ROOT@/state
+paths:
+  services: [ @ROOT@/services ]
+  watches: [ @ROOT@/mounts ]
+
+defaults:
+  policy:
+    cooldown: 5m
+`, files)
+}
+
+// A mount whose state cannot be read must not read as an absent one, and must not
+// take the others with it, in text or in --json.
+func TestMountListReportsAnUnreadableMount(t *testing.T) {
+	global := mountListConfig(t, false)
+	stateDir := filepath.Join(filepath.Dir(global), "run", "mounts", "state")
+	if err := os.MkdirAll(stateDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	mustWrite(t, filepath.Join(stateDir, "mount-a.json"), "{not json")
+
+	var stdout, stderr bytes.Buffer
+	mounted := false
+	app := mountApp(t, &mounted, &stdout)
+	app.Stderr = &stderr
+	if code := app.Run(context.Background(), []string{"--config", global, "mount", "list"}); code != exitRuntimeError {
+		t.Fatalf("exit = %d, want %d", code, exitRuntimeError)
+	}
+	if !strings.Contains(stdout.String(), "mount-b path=/mnt/b") || strings.Contains(stdout.String(), "mount-a") {
+		t.Fatalf("stdout = %q, want only the readable mount", stdout.String())
+	}
+	if !strings.Contains(stderr.String(), "mount mount-a: ") {
+		t.Fatalf("stderr = %q, want the unreadable mount named", stderr.String())
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	if code := app.Run(context.Background(), []string{"--config", global, "--json", "mount", "list"}); code != exitRuntimeError {
+		t.Fatalf("--json exit = %d, want %d", code, exitRuntimeError)
+	}
+	var listed []mountctl.Status
+	if err := json.Unmarshal(stdout.Bytes(), &listed); err != nil {
+		t.Fatalf("--json stdout %q: %v", stdout.String(), err)
+	}
+	if len(listed) != 1 || listed[0].Name != "mount-b" || !strings.Contains(stderr.String(), "mount mount-a: ") {
+		t.Fatalf("--json listed %+v, stderr = %q", listed, stderr.String())
+	}
+}
+
+func TestMountListNeverClaimsNoMountsAfterAFailure(t *testing.T) {
+	global := mountListConfig(t, false)
+	var stdout, stderr bytes.Buffer
+	app := hermeticApp(t, App{
+		LoadConfig: testConfigLoader(t), Env: func(string) string { return "" }, Stdout: &stdout, Stderr: &stderr,
+		MountController: func(*config.Config) mountctl.Controller {
+			return mountctl.Controller{
+				Runtime: t.TempDir(),
+				Mounts:  func() ([]checks.Mount, error) { return nil, errors.New("mount table unreadable") },
+			}
+		},
+	})
+	if code := app.Run(context.Background(), []string{"--config", global, "mount", "list"}); code != exitRuntimeError {
+		t.Fatalf("exit = %d, want %d", code, exitRuntimeError)
+	}
+	if strings.Contains(stdout.String(), "no configured mounts") {
+		t.Fatalf("stdout = %q, want no claim that nothing is configured", stdout.String())
+	}
+	if !strings.Contains(stderr.String(), "mount table unreadable") {
+		t.Fatalf("stderr = %q, want the failure", stderr.String())
+	}
+}
+
+// A watch that does not resolve is a configuration fault, and the mounts that do
+// resolve still list.
+func TestMountListReportsAWatchThatDoesNotResolve(t *testing.T) {
+	global := mountListConfig(t, true)
+	var stdout, stderr bytes.Buffer
+	mounted := false
+	app := mountApp(t, &mounted, &stdout)
+	app.Stderr = &stderr
+	if code := app.Run(context.Background(), []string{"--config", global, "mount", "list"}); code != exitConfigInvalid {
+		t.Fatalf("exit = %d, stdout = %q, stderr = %q, want %d", code, stdout.String(), stderr.String(), exitConfigInvalid)
+	}
+	if !strings.Contains(stdout.String(), "mount-a path=/mnt/a") || !strings.Contains(stdout.String(), "mount-b path=/mnt/b") {
+		t.Fatalf("stdout = %q, want the mounts that resolve", stdout.String())
+	}
+	if !strings.Contains(stderr.String(), "missing") {
+		t.Fatalf("stderr = %q, want the resolution error", stderr.String())
 	}
 }
 

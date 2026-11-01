@@ -36,7 +36,7 @@ mount:
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	if got := cfg.StorageMountNames(); len(got) != 1 || got[0] != "mount-backup" {
+	if got := storageMountNames(cfg); len(got) != 1 || got[0] != "mount-backup" {
 		t.Fatalf("mount-backup not loaded: %v", got)
 	}
 	if got := cfg.StorageNameByPath("/mnt/backup"); got != "mount-backup" {
@@ -150,4 +150,13 @@ mount: {}
 	if issues := Validate(cfg); !hasIssue(issues, "watches.web.mount is only valid on a storage watch") {
 		t.Fatalf("Validate issues = %v, want mount/storage-watch error", issues)
 	}
+}
+
+func storageMountNames(cfg *Config) []string {
+	mounts, _ := cfg.StorageMounts()
+	names := make([]string, 0, len(mounts))
+	for _, mount := range mounts {
+		names = append(names, mount.Name)
+	}
+	return names
 }

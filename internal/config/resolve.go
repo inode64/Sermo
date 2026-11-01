@@ -222,19 +222,17 @@ func (c *Config) StorageNameByPath(path string) string {
 	return ""
 }
 
-// StorageMountNames returns the storage watches that expose mount operations.
-func (c *Config) StorageMountNames() []string {
+// StorageMounts returns the storage watches that expose mount operations, plus
+// the errors of the watches that did not resolve.
+func (c *Config) StorageMounts() ([]Resolved, []string) {
 	storages, errs := c.ResolveStorages()
-	if len(errs) > 0 {
-		return nil
-	}
-	out := make([]string, 0, len(storages))
+	out := make([]Resolved, 0, len(storages))
 	for _, resolved := range storages {
 		if _, ok := resolved.Tree[keyMount].(map[string]any); ok {
-			out = append(out, resolved.Name)
+			out = append(out, resolved)
 		}
 	}
-	return out
+	return out, errs
 }
 
 // AvailabilityWatchNames returns configured host watches whose check asserts
