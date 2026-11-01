@@ -44,7 +44,7 @@ func (c *hdparmCheck) Run(ctx context.Context) Result {
 	// Run only the timings the predicates need (-T cached, -t buffered): a
 	// cached-only check must not pay the slow, I/O-heavy buffered read.
 	want := map[string]bool{}
-	for _, p := range c.preds {
+	for _, p := range c.measuredPreds(c.preds) {
 		want[p.field] = true
 	}
 	prefix := CheckTypeHdparm + " " + c.device

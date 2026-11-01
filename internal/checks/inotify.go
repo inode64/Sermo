@@ -118,7 +118,7 @@ func (c inotifyCheck) Run(ctx context.Context) Result {
 // a check that only asks about instances never pays for it — the same
 // only-measure-what-a-predicate-needs rule the hdparm check follows.
 func (c inotifyCheck) needsWatches() bool {
-	for _, pred := range c.preds {
+	for _, pred := range c.measuredPreds(c.preds) {
 		switch pred.field {
 		case fieldWatches, fieldWatchesUsedPct, fieldWatchesFree, fieldUsedPct:
 			return true

@@ -9,6 +9,7 @@ import (
 
 	"sermo/internal/execx"
 	"sermo/internal/execx/execxtest"
+	"sermo/internal/severity"
 )
 
 const hdparmSample = "/dev/sda:\n" +
@@ -82,6 +83,28 @@ func TestHdparmRunsOnlyNeededTimings(t *testing.T) {
 				t.Errorf("device missing in %v", args)
 			}
 		})
+	}
+}
+
+// A level may grade a timing the base threshold does not use. Left out of the
+// run, its reading is absent and the tier could never hold.
+func TestHdparmLevelTierMeasuresItsTiming(t *testing.T) {
+	runner := &execxtest.Runner{ByLine: map[string]execx.Result{
+		"hdparm -t /dev/sda":    {Stdout: "/dev/sda:\n Timing buffered disk reads: 500 MB in  3.00 seconds = 166.67 MB/sec\n"},
+		"hdparm -T -t /dev/sda": {Stdout: hdparmSample},
+	}}
+	built, issues := BuildWithIssues(map[string]any{"disk": map[string]any{
+		CheckKeyType:   CheckTypeHdparm,
+		CheckKeyDevice: "/dev/sda",
+		fieldRead:      map[string]any{CheckKeyOp: "<", CheckKeyValue: 200},
+		CheckKeyLevels: map[string]any{"critical": map[string]any{fieldCached: map[string]any{CheckKeyOp: "<", CheckKeyValue: 10000}}},
+	}}, Deps{DefaultTimeout: time.Second, Runner: runner})
+	if len(issues) != 0 {
+		t.Fatalf("issues = %v", issues)
+	}
+	res := Run(context.Background(), built, 0)[0]
+	if !res.OK || res.Severity != severity.Critical {
+		t.Fatalf("result = %+v, want the failure raised to critical", res)
 	}
 }
 

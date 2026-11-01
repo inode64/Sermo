@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"sermo/internal/severity"
 )
 
 func TestIsInotifyFDTarget(t *testing.T) {
@@ -223,6 +225,30 @@ func TestInotifyWatchCountingIsPredicateGated(t *testing.T) {
 				t.Fatalf("countWatches = %v, want %v", got, tc.want)
 			}
 		})
+	}
+}
+
+// A level may grade the watch limit while the base threshold only asks about
+// instances, so its reading has to be taken too.
+func TestInotifyLevelTierCountsWatches(t *testing.T) {
+	predicate := func(value int) map[string]any { return map[string]any{CheckKeyOp: ">=", CheckKeyValue: value} }
+	built, issues := BuildWithIssues(map[string]any{"limits": map[string]any{
+		CheckKeyType:          CheckTypeInotify,
+		fieldInstancesUsedPct: predicate(50),
+		CheckKeyLevels:        map[string]any{"critical": map[string]any{fieldWatchesUsedPct: predicate(90)}},
+	}}, Deps{DefaultTimeout: time.Second, InotifySampler: func(_ context.Context, countWatches bool) (InotifySample, error) {
+		user := InotifyUserUsage{Instances: 60}
+		if countWatches {
+			user.Watches = 95
+		}
+		return InotifySample{MaxInstances: 100, MaxWatches: 100, Users: []InotifyUserUsage{user}, WatchesRead: countWatches}, nil
+	}})
+	if len(issues) != 0 {
+		t.Fatalf("issues = %v", issues)
+	}
+	res := Run(context.Background(), built, 0)[0]
+	if !res.OK || res.Severity != severity.Critical {
+		t.Fatalf("result = %+v, want the failure raised to critical", res)
 	}
 }
 

@@ -826,7 +826,9 @@ for: { cycles: 3 }
 - When a level's thresholds breach too, the failure is raised to that level:
   the highest breaching level wins. Levels read the sample the check already
   took — nothing probes twice — and never grade an unavailable, skipped or
-  verdictless result.
+  verdictless result. A check that measures only what it is asked about
+  (`hdparm` timings, `inotify` watches) takes a reading a level names in that
+  same sample.
 - What "breach" means follows the check's style. For a condition check
   (`storage`, `memory`, `load`, `log`, `count`, `metric`, …) every predicate of
   the level holds. For `command` `expect_stdout`, whose assertion states the
@@ -3242,9 +3244,10 @@ desktop user holds every watch. An aggregate would report `120%` while nobody is
 anywhere near being denied an `inotify_init`.
 
 Counting instances costs one `readlink` per open descriptor. Counting watches is
-gated on a `watches`/`used_pct` predicate being present, and then costs one
-streamed `fdinfo` read per descriptor already known to be an inotify one — so it
-is proportional to inotify descriptors, not to all descriptors. Data keys are
+gated on a `watches`/`used_pct` predicate being present, in the check or in one of
+its `levels:`, and then costs one streamed `fdinfo` read per descriptor already
+known to be an inotify one — so it is proportional to inotify descriptors, not to
+all descriptors. Data keys are
 `instances`, `instances_max`, `instances_uid`, `watches`, `watches_max`,
 `watches_uid`, `dimension` (which limit is binding), `users`, `holders` (the
 process names holding the instances, which is usually the whole diagnosis) and

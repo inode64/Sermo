@@ -609,6 +609,17 @@ func (b base) grade(res Result, values map[string]float64) Result {
 	}))
 }
 
+// measuredPreds is preds plus those of the kept tiers. A check that measures only
+// what it is asked about has to take a tier's reading too: an absent reading
+// never holds, so the tier would grade nothing.
+func (b base) measuredPreds(preds []levelPred) []levelPred {
+	out := slices.Clone(preds)
+	for _, tier := range b.grades {
+		out = append(out, tier.threshold...)
+	}
+	return out
+}
+
 // gradeValue is grade for a single-threshold check whose reading is one value.
 func (b base) gradeValue(res Result, key string, value float64) Result {
 	if len(b.grades) == 0 {
