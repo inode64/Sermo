@@ -487,6 +487,37 @@ func TestCycleAlertClearWindowHoldsEpisode(t *testing.T) {
 	}
 }
 
+// A cycle the alert could not decide holds its episode without advancing the
+// clear window: one observed false before the gap and one after it are not five
+// minutes of the condition staying false, however long the gap was.
+func TestCycleAlertClearDurationIgnoresUndecidedCycles(t *testing.T) {
+	h := &workerHarness{cache: failedCache("http")}
+	tree := alertRuleTree(nil)
+	rule := tree["rules"].(map[string]any)["warn-down"].(map[string]any)
+	rule["clear"] = map[string]any{"duration": "5m"}
+	w := h.worker(tree, rules.Policy{}, nil)
+	now := t0
+	w.Now = func() time.Time { return now }
+	healthy := map[string]checks.Result{"http": {Check: "http", OK: true}}
+	cycle := func(after time.Duration, cache map[string]checks.Result) {
+		now = t0.Add(after)
+		h.cache = cache
+		w.RunCycle(context.Background())
+	}
+
+	cycle(0, failedCache("http")) // fires
+	cycle(time.Minute, healthy)   // the clear window starts
+	cycle(2*time.Minute, map[string]checks.Result{"http": {Check: "http", OK: true, Skipped: true}})
+	cycle(20*time.Minute, healthy) // the second observed false
+	if got := h.countEvents(eventKindRecovered); got != 0 {
+		t.Fatalf("an undecided gap must not clear the episode, got %d recovered: %+v", got, h.events)
+	}
+	cycle(25*time.Minute, healthy) // five observed minutes
+	if got := h.countEvents(eventKindRecovered); got != 1 {
+		t.Fatalf("a whole observed clear window must end the episode, got %d recovered: %+v", got, h.events)
+	}
+}
+
 func TestCycleAlertEmissionEveryCycleRepeats(t *testing.T) {
 	tree := alertRuleTree(nil)
 	rule := tree["rules"].(map[string]any)["warn-down"].(map[string]any)

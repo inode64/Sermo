@@ -368,6 +368,45 @@ func TestWatchClearWindowHoldsEpisode(t *testing.T) {
 	}
 }
 
+// An unavailable result keeps the episode without counting toward its clear
+// window, as an undecided cycle does for an alert rule.
+func TestWatchClearDurationIgnoresUnavailableCycles(t *testing.T) {
+	ok := checks.Result{Check: "dns", OK: true, Message: "dns ok"}
+	check := &scriptedCheck{results: []checks.Result{
+		{Check: "dns", OK: false, Message: "dns timeout"}, // fires
+		ok, // the clear window starts
+		{Check: "dns", Unavailable: true, Message: "resolver unreachable"}, // retried once
+		{Check: "dns", Unavailable: true, Message: "resolver unreachable"},
+		ok, // the second observed false
+		ok, // five observed minutes
+	}}
+	now := t0
+	var events []Event
+	w := &Watch{
+		Name:       "uplink-dns",
+		CheckType:  "dns",
+		Check:      check,
+		FireOnFail: true,
+		Window:     rules.Rule{Clear: &rules.ForWindow{Duration: 5 * time.Minute}},
+		Emit:       func(e Event) { events = append(events, e) },
+		Now:        func() time.Time { return now },
+		Sleep:      func(time.Duration) {},
+	}
+
+	for _, after := range []time.Duration{0, time.Minute, 2 * time.Minute, 20 * time.Minute} {
+		now = t0.Add(after)
+		w.RunCycle(context.Background())
+	}
+	if !w.state.Firing() {
+		t.Fatalf("an unavailable gap must not clear the episode, events = %v", eventKinds(events))
+	}
+	now = t0.Add(25 * time.Minute)
+	w.RunCycle(context.Background())
+	if w.state.Firing() {
+		t.Fatalf("a whole observed clear window must end the episode, events = %v", eventKinds(events))
+	}
+}
+
 // fakeExpander records expansion calls and returns a canned result.
 type fakeExpander struct {
 	calls []string

@@ -203,6 +203,14 @@ func (s *WindowState) resetClear() {
 	s.clearSince = time.Time{}
 }
 
+// InterruptClear marks a cycle whose condition could not be observed, which the
+// caller holds out of FiresAt. A clear window counting cycles simply does not
+// advance. One counting duration would: its clock kept running through the gap,
+// so it starts again at the next observed false.
+func (s *WindowState) InterruptClear() {
+	s.clearSince = time.Time{}
+}
+
 // Firing reports whether the rule is currently in a firing episode, as of the
 // last FiresAt call (read-only, nil-safe). Callers observing the rising or
 // falling edge must read it before calling FiresAt for the cycle.

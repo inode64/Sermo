@@ -280,6 +280,7 @@ func (w *Watch) runCustomCycle(ctx context.Context, observeOnly bool) {
 
 func (w *Watch) runCheckCycle(ctx context.Context, res checks.Result, observeOnly bool) {
 	if w.updateAvailability(res) {
+		w.state.InterruptClear()
 		if observeOnly {
 			w.markSettled()
 		}

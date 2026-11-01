@@ -1062,6 +1062,7 @@ func (w *Worker) fires(ctx context.Context, ev *rules.Evaluator, r rules.Rule, a
 		// unavailable or skipped): only a real observation may recover it, so a
 		// saturated server that also refuses the monitor never reads as healed.
 		// An operation rule is not held: its unknown cycle ends the episode.
+		window.InterruptClear()
 		return ruleFiringState{firing: true, notified: notified, severity: window.Severity(), change: ev.Change}
 	}
 	step := window.FiresGradedAt(r, cond, ev.RuleSeverity(r), at)

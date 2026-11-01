@@ -3954,7 +3954,10 @@ false cycle ends the episode.
 Only an observed false counts toward clearing. While an alert rule is firing,
 a cycle in which its condition cannot be decided — its check unavailable,
 [busy](#busy-servers) or skipped — holds the episode as it is: it neither
-recovers it nor advances its clear window. A connection-usage alert therefore
+recovers it nor advances its clear window. A `clear: {duration}` window starts
+again at the next observed false, since the condition was not seen false for
+all of it; a watch holds its episode the same way on an unavailable or skipped
+result. A connection-usage alert therefore
 stays open while the saturated server also refuses the monitor's own
 connection. A rule with an operation is not held: an unknown cycle ends its
 window, so it never acts on what it could not observe.

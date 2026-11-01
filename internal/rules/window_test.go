@@ -198,6 +198,39 @@ func TestClearWindowDuration(t *testing.T) {
 	}
 }
 
+// A cycle that could not be observed does not advance a clear window. The clock
+// does not stop for it, so a duration window measures again from the next
+// observed false: the gap is not time the condition stayed false.
+func TestInterruptClear(t *testing.T) {
+	at := time.Date(2026, 6, 22, 10, 0, 0, 0, time.UTC)
+	t.Run("duration", func(t *testing.T) {
+		r := Rule{Clear: &ForWindow{Duration: 5 * time.Minute}}
+		s := &WindowState{}
+		s.FiresAt(r, true, at)
+		s.FiresAt(r, false, at.Add(time.Minute))
+		s.InterruptClear()
+		if !s.FiresAt(r, false, at.Add(20*time.Minute)) {
+			t.Fatal("the unobserved gap must not count toward the clear window")
+		}
+		if !s.FiresAt(r, false, at.Add(24*time.Minute)) {
+			t.Fatal("the window must measure from the first false after the gap")
+		}
+		if s.FiresAt(r, false, at.Add(25*time.Minute)) {
+			t.Fatal("the episode must end after a whole observed window")
+		}
+	})
+	t.Run("cycles", func(t *testing.T) {
+		r := Rule{Clear: &ForWindow{Cycles: 2}}
+		s := &WindowState{}
+		s.FiresAt(r, true, at)
+		s.FiresAt(r, false, at.Add(time.Minute))
+		s.InterruptClear()
+		if s.FiresAt(r, false, at.Add(20*time.Minute)) {
+			t.Fatal("a held cycle keeps the observed false cycles: 2/2 must end the episode")
+		}
+	})
+}
+
 func TestClearWindowNeverTruncatesEntryWindow(t *testing.T) {
 	// A within window may keep matching after the condition drops; a clear window
 	// only extends an episode, it never cuts one short.
