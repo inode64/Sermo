@@ -1269,7 +1269,8 @@ socket. `sermoctl` resolves its credential in this order:
 
 1. `$SERMO_WEB_PASSWORD` — needed for a remote daemon, or when running as a user
    that cannot read the token.
-2. `<engine.runtime>/web.token`.
+2. `<engine.runtime>/web.token`, when `web.address` is this host: loopback, a
+   wildcard or an address of one of its interfaces.
 
 These requests never use `HTTP_PROXY`: a credential goes straight to the daemon,
 and a wildcard `web.address` is dialed over loopback.

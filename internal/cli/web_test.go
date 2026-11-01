@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"errors"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -301,10 +302,18 @@ func TestDaemonWebRequestBypassesProxy(t *testing.T) {
 }
 
 func TestDaemonIsLocal(t *testing.T) {
+	hostAddrs := func() ([]net.Addr, error) {
+		return []net.Addr{
+			&net.IPNet{IP: net.IPv4(127, 0, 0, 1), Mask: net.CIDRMask(8, 32)},
+			&net.IPNet{IP: net.IPv4(192, 0, 2, 10), Mask: net.CIDRMask(24, 32)},
+			&net.IPNet{IP: net.ParseIP("2001:db8::10"), Mask: net.CIDRMask(64, 128)},
+		}, nil
+	}
 	tests := []struct {
-		name string
-		web  any
-		want bool
+		name  string
+		web   any
+		addrs func() ([]net.Addr, error)
+		want  bool
 	}{
 		{name: "no web section", want: false},
 		{name: "missing port", web: map[string]any{}, want: false},
@@ -315,8 +324,14 @@ func TestDaemonIsLocal(t *testing.T) {
 		{name: "IPv6 loopback", web: map[string]any{config.WebKeyAddress: "::1", config.WebKeyPort: 9797}, want: true},
 		{name: "IPv4 wildcard", web: map[string]any{config.WebKeyAddress: "0.0.0.0", config.WebKeyPort: 9797}, want: true},
 		{name: "IPv6 wildcard", web: map[string]any{config.WebKeyAddress: "::", config.WebKeyPort: 9797}, want: true},
-		{name: "remote IP", web: map[string]any{config.WebKeyAddress: "10.0.0.9", config.WebKeyPort: 9797}, want: false},
-		{name: "remote hostname", web: map[string]any{config.WebKeyAddress: "sermo.example", config.WebKeyPort: 9797}, want: false},
+		{name: "remote IP", web: map[string]any{config.WebKeyAddress: "198.51.100.9", config.WebKeyPort: 9797}, addrs: hostAddrs, want: false},
+		{name: "remote hostname", web: map[string]any{config.WebKeyAddress: "sermo.example", config.WebKeyPort: 9797}, addrs: hostAddrs, want: false},
+		{name: "IPv4 of this host", web: map[string]any{config.WebKeyAddress: "192.0.2.10", config.WebKeyPort: 9797}, addrs: hostAddrs, want: true},
+		{name: "IPv6 of this host", web: map[string]any{config.WebKeyAddress: "2001:db8::10", config.WebKeyPort: 9797}, addrs: hostAddrs, want: true},
+		{
+			name: "an unreadable address list proves nothing", web: map[string]any{config.WebKeyAddress: "192.0.2.10", config.WebKeyPort: 9797},
+			addrs: func() ([]net.Addr, error) { return nil, errors.New("netlink refused") }, want: false,
+		},
 	}
 
 	for _, tc := range tests {
@@ -325,7 +340,8 @@ func TestDaemonIsLocal(t *testing.T) {
 			if tc.web != nil {
 				raw[config.SectionWeb] = tc.web
 			}
-			if got := daemonIsLocal(&config.Config{Global: config.Global{Raw: raw}}); got != tc.want {
+			app := hermeticApp(t, App{interfaceAddrs: tc.addrs})
+			if got := app.daemonIsLocal(&config.Config{Global: config.Global{Raw: raw}}); got != tc.want {
 				t.Errorf("daemonIsLocal() = %v, want %v", got, tc.want)
 			}
 		})

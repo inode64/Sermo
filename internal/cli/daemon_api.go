@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"path/filepath"
 	"sermo/internal/hostfs"
+	"slices"
 	"strings"
 
 	"sermo/internal/config"
@@ -86,8 +87,8 @@ func (a App) applyDaemonWebAuth(req *http.Request, cfg *config.Config) {
 //  1. $SERMO_WEB_PASSWORD — an explicit operator choice, and the only option
 //     when the daemon is not on this host.
 //  2. <engine.runtime>/web.token — the daemon's own runtime token, but only for a
-//     daemon on this host: the token of a local sermod means nothing to a remote
-//     one. It is what makes hashed credentials usable, since a hash cannot be
+//     daemon on this host (see daemonIsLocal): the token of a local sermod means
+//     nothing to a remote one. It is what makes hashed credentials usable, since a hash cannot be
 //     turned back into the password the API expects.
 //
 // An empty result means no credential was found. The request is still sent: the
@@ -97,7 +98,7 @@ func (a App) daemonWebPassword(cfg *config.Config) string {
 	if pw := strings.TrimSpace(a.Env(config.EnvWebPassword)); pw != "" {
 		return pw
 	}
-	if daemonIsLocal(cfg) {
+	if a.daemonIsLocal(cfg) {
 		if token := readDaemonWebToken(cfg.Global.RuntimeDir()); token != "" {
 			return token
 		}
@@ -108,7 +109,7 @@ func (a App) daemonWebPassword(cfg *config.Config) string {
 // daemonIsLocal reports whether web.address names this host. A runtime token is
 // only a credential for the daemon that wrote it, so sending it to a remote
 // sermod would replace a working password with a guaranteed 401.
-func daemonIsLocal(cfg *config.Config) bool {
+func (a App) daemonIsLocal(cfg *config.Config) bool {
 	bind, err := cfg.Global.WebBind()
 	if err != nil {
 		return false
@@ -118,8 +119,30 @@ func daemonIsLocal(cfg *config.Config) bool {
 		return true
 	}
 	ip := net.ParseIP(addr)
+	if ip == nil {
+		return false
+	}
 	// A wildcard bind (0.0.0.0, ::) is reached over loopback from this host.
-	return ip != nil && (ip.IsLoopback() || ip.IsUnspecified())
+	return ip.IsLoopback() || ip.IsUnspecified() || a.hostHasAddress(ip)
+}
+
+// hostHasAddress reports whether ip is assigned to an interface of this host,
+// where a daemon bound to it listens. web.address is a bind address, but a config
+// copied from another machine can name that machine; an address list that cannot
+// be read proves nothing, so the token stays home.
+func (a App) hostHasAddress(ip net.IP) bool {
+	list := a.interfaceAddrs
+	if list == nil {
+		list = net.InterfaceAddrs
+	}
+	addrs, err := list()
+	if err != nil {
+		return false
+	}
+	return slices.ContainsFunc(addrs, func(addr net.Addr) bool {
+		assigned, ok := addr.(*net.IPNet)
+		return ok && assigned.IP.Equal(ip)
+	})
 }
 
 // daemonWebAuthHint tells the operator how to supply a credential when the

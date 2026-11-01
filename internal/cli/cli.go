@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"slices"
 	"syscall"
@@ -183,6 +184,9 @@ type App struct {
 	// the production defaults; tests set it (often empty) to keep pidfile
 	// discovery hermetic instead of reading the host's /run/sermo/sermod.pid.
 	pidfileFallbacks []string
+	// interfaceAddrs lists this host's addresses, used to tell a web.address of
+	// this host from a remote daemon's. nil uses net.InterfaceAddrs.
+	interfaceAddrs func() ([]net.Addr, error)
 	// daemonIdentity reads the identity `daemon reload` uses to prove a PID is
 	// sermod before signalling it. nil reads /proc.
 	daemonIdentity func(pid int) (process.Identity, bool)

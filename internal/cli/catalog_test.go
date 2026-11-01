@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"errors"
+	"net"
 	"path/filepath"
 	"syscall"
 	"testing"
@@ -55,6 +56,9 @@ func hermeticApp(t *testing.T, a App) App {
 	}
 	if a.Runner == nil {
 		a.Runner = &execxtest.Runner{}
+	}
+	if a.interfaceAddrs == nil {
+		a.interfaceAddrs = func() ([]net.Addr, error) { return nil, nil }
 	}
 	if a.pidfileFallbacks == nil {
 		a.pidfileFallbacks = []string{}
