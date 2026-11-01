@@ -1837,3 +1837,36 @@ func TestDedupeSameBinaryMatchesKeepsDistinctVersionsOfSharedWrapper(t *testing.
 		t.Fatalf("matches = %+v, want python2 and python3 kept", got)
 	}
 }
+
+// TestCurrentFromPicksTheInstalledCandidate pins that a current_from list names
+// candidates: `${bindir}/tool` expands to four paths and the docs promise the
+// installed one. The first was taken unread, so the active slot's ${binary} could
+// name a file that does not exist and fail its own preflight.
+func TestCurrentFromPicksTheInstalledCandidate(t *testing.T) {
+	dir := t.TempDir()
+	installed := filepath.Join(dir, "sbin-tool")
+	if err := os.WriteFile(installed, []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	absent := filepath.Join(dir, "bin-tool")
+	cfg, err := loadConfig(t, writeConfig(t, map[string]string{
+		"sermo.yml": baseGlobal,
+		"catalog/apps/tool.yml": fmt.Sprintf(`
+name: tool-%%i-%%v
+versions:
+  current_from: ["%s", "%s"]
+preflight:
+  binary: { type: binary, path: "${binary}" }
+`, absent, installed),
+	}))
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	doc, ok := cfg.Apps["tool"]
+	if !ok {
+		t.Fatalf("current_from did not materialize the active app: %v", cfg.AppNames)
+	}
+	if got := DocumentBinary(doc.Body); got != installed {
+		t.Fatalf("binary = %q, want the installed %q", got, installed)
+	}
+}

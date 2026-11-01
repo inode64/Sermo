@@ -671,7 +671,7 @@ func currentFromTemplateMatches(body map[string]any, toks []tmplToken) []templat
 	for _, tok := range toks {
 		values[tok.variable] = ""
 	}
-	path := paths[0]
+	path := firstExistingStringPath(paths)
 	if path == "" {
 		return nil
 	}
