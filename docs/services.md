@@ -800,8 +800,12 @@ handle that stays stable across guest restarts (the systemd scope name embeds a
 changing domain id); keep it single-quoted, because a double-quoted YAML scalar
 treats `\S` as an escape. `delegated: true` keeps the guest out of every kill
 decision: Sermo observes QEMU and never signals it, the stop never counts it as
-a residual, and it authorizes nothing. Lifecycle stays with libvirt. The fleet
-installer generates VM services with exactly this selector.
+a residual, and it authorizes nothing. Lifecycle stays with libvirt. With every
+selector delegated, the observed process is still the proof behind the verdict:
+a start, restart or resume fails when the domain is active and the selector finds
+no process, and a stop ends its wait when the processes it saw are gone and
+libvirt reports the domain shut off. The fleet installer generates VM services
+with exactly this selector.
 
 `sermoctl wizard vm` can generate this service shape from domains
 detected through the local libvirt socket. It probes both

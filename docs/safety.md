@@ -718,9 +718,10 @@ a name-only authority.
    selector can never prove absence, so its wait ends early only when every
    process generation observed before the stop is gone from the complete
    process table and init then reports the unit inactive or failed (systemd
-   records a daemon that died of the stop signal as failed). Ending the wait
-   early proves nothing more: residual discovery and init reconciliation still
-   need positive evidence before a start. A stop request against a unit
+   records a daemon that died of the stop signal as failed). When every selector
+   is `delegated: true`, the generations observed are the delegated ones.
+   Ending the wait early proves nothing more: residual discovery and init
+   reconciliation still need positive evidence before a start. A stop request against a unit
    that was already inactive with no observed process does not wait at all.
    A process that was already a stray before the stop is never waited for: the
    init's stop does not address it, so it would not exit on its own, and the

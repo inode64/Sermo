@@ -21,6 +21,10 @@ type Observation struct {
 	ReplacedExecutable bool
 	AbsenceKnown       bool
 	IdentityRequired   bool
+	// ObserveOnly reports that every selector is delegated: the service names no
+	// process of its own, so what it observes is the only evidence of its
+	// workload. That evidence shows a process exists and authorizes nothing.
+	ObserveOnly bool
 	// snapshot retains host-wide generation evidence independently of the
 	// current unit's attributed tree. It is immutable and excludes zombies.
 	snapshot map[int]Identity
@@ -31,7 +35,8 @@ type Observation struct {
 // the operation's fresh observation and the monitor's cycle; on the monitor it
 // is only a forecast and authorizes nothing.
 type PrincipalIdentity struct {
-	// Attributed reports at least one non-delegated process.
+	// Attributed reports at least one non-delegated process or, when every
+	// selector is delegated, any process.
 	Attributed bool
 	// Required reports a strict principal selector to judge them by.
 	Required bool
@@ -52,7 +57,7 @@ func (p PrincipalIdentity) Unverified() bool {
 // Principal returns the observation's identity evidence.
 func (o Observation) Principal() PrincipalIdentity {
 	return PrincipalIdentity{
-		Attributed:         hasNonDelegated(o.Processes),
+		Attributed:         hasNonDelegated(o.Processes) || o.ObserveOnly && len(o.Processes) > 0,
 		Required:           o.IdentityRequired,
 		Trusted:            o.Trusted,
 		ReplacedExecutable: o.ReplacedExecutable,
@@ -120,6 +125,10 @@ func (d Discoverer) principalIdentity(procs []Process, selectors []Selector) Pri
 
 func hasNonDelegated(procs []Process) bool {
 	return slices.ContainsFunc(procs, func(p Process) bool { return !p.Delegated })
+}
+
+func observeOnly(selectors []Selector) bool {
+	return len(selectors) > 0 && !slices.ContainsFunc(selectors, func(s Selector) bool { return !s.Delegated })
 }
 
 // ReasonTrackedOutsideDiscovery refuses a signal to a survivor that discovery no
@@ -247,7 +256,7 @@ func (d Discoverer) observe(selectors []Selector, requireSnapshot, fresh bool) (
 	if backendErr != nil {
 		warnings = append(warnings, fmt.Sprintf("backend PID query: %v", backendErr))
 	}
-	out := Observation{snapshot: snapshot, Processes: procs}
+	out := Observation{snapshot: snapshot, Processes: procs, ObserveOnly: observeOnly(selectors)}
 	// ReplacedExecutable is diagnostic evidence for a backend stop, not signal
 	// authority. The added candidates need independent verification for cleanup.
 	out.Processes = frozen.addDeletedCandidates(out.Processes, selectors)

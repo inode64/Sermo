@@ -2,6 +2,7 @@ package process
 
 import (
 	"errors"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -281,6 +282,41 @@ func TestPrincipalIdentityUnverified(t *testing.T) {
 			discovered, _ := d.Discover(tt.selectors)
 			if got := d.PrincipalIdentityIn(discovered, tt.selectors).Unverified(); got != tt.unverified {
 				t.Fatalf("monitor forecast unverified=%v, want %v", got, tt.unverified)
+			}
+		})
+	}
+}
+
+// A delegated process stands for the service only when no selector names one of
+// its own. It never counts for a service with a principal to judge, even a
+// pidfile, and absence stays absence.
+func TestObservationAttributesDelegatedProcessOnlyWhenObserveOnly(t *testing.T) {
+	t.Parallel()
+	guest := Selector{Name: RoleMain, Type: SelectorCommandMatch, Cmd: "qemu", Delegated: true}
+	daemon := Selector{Name: "daemon", Type: SelectorCommandMatch, Exe: "/opt/sermo-test/daemon", User: "root"}
+	pidfile := Selector{Name: SelectorPidfile, Type: SelectorPidfile, Paths: []string{filepath.Join(t.TempDir(), "absent.pid")}}
+	emulator := map[int]Identity{100: {PID: 100, UID: 77, PPID: 1, Exe: "/opt/sermo-test/qemu", ExeOK: true, Cmdline: []string{"qemu"}}}
+	for _, tc := range []struct {
+		name       string
+		selectors  []Selector
+		ids        map[int]Identity
+		attributed bool
+	}{
+		{name: "every selector delegated", selectors: []Selector{guest}, ids: emulator, attributed: true},
+		{name: "every selector delegated, nothing running", selectors: []Selector{guest}},
+		{name: "a principal selector declared", selectors: []Selector{guest, daemon}, ids: emulator},
+		{name: "a pidfile declared", selectors: []Selector{guest, pidfile}, ids: emulator},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			d := Discoverer{Reader: fakeReader{ids: tc.ids}, ResolveUser: fakeUsers(map[string]uint32{"root": 0})}
+			out, err := d.Observe(tc.selectors)
+			if err != nil {
+				t.Fatal(err)
+			}
+			principal := out.Principal()
+			if principal.Attributed != tc.attributed || principal.Unverified() {
+				t.Fatalf("principal = %+v, want attributed %v and never unverified", principal, tc.attributed)
 			}
 		})
 	}

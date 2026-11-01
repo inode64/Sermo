@@ -113,7 +113,10 @@ touches them.
   ships none, and a daemon's own workload uses `keep_children`. A delegated
   selector alone keeps a process whose binary was replaced, since attributing it
   authorizes nothing; a service with one only ever alerts on a replaced binary,
-  because restarting a VM to renew qemu would reboot the guest.
+  because restarting a VM to renew qemu would reboot the guest. When every
+  selector is delegated (`Observation.ObserveOnly`) those processes are the only
+  health and exit evidence: they satisfy the resident-process check and end the
+  stop wait, and still never prove a failed start or authorize a signal.
 - A stray (unit-cgroup member no selector claims, outside the principal tree)
   is diagnostic only. No command, button or rule action signals a process for
   being a stray; a stop handles it as any other residual. The only exception is

@@ -218,10 +218,13 @@ var errNoIdentityEvidence = errors.New("no complete process identity evidence")
 // observedExited reports that every process generation seen before the stop
 // is gone from the complete process table. It is the only exit evidence a
 // service without a strict selector can offer: such a service can never report
-// AbsenceKnown, so nothing else could end its grace period early. An empty
-// earlier observation proves nothing.
+// AbsenceKnown, so nothing else could end its grace period early. An observe-only
+// service has only delegated generations to offer. An empty earlier observation
+// proves nothing.
 func observedExited(observation process.Observation, previous []process.Process) bool {
-	previous = nonDelegatedResiduals(previous)
+	if !observation.ObserveOnly {
+		previous = nonDelegatedResiduals(previous)
+	}
 	if observation.IdentityRequired || len(previous) == 0 {
 		return false
 	}
