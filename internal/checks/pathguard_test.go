@@ -220,6 +220,7 @@ func TestPathReadingChecksRunUnderTheGuard(t *testing.T) {
 		{"log", map[string]any{CheckKeyType: CheckTypeLog, CheckKeyPath: "/srv/a", CheckKeyRegex: "x", CheckKeyCount: limit, CheckKeyWithin: "1m"}, true},
 		{"size", map[string]any{CheckKeyType: CheckTypeSize, CheckKeyPath: "/srv/a", CheckKeyMax: "1G"}, true},
 		{"sqlite", map[string]any{CheckKeyType: CheckTypeSQLite, CheckKeyPath: "/srv/a"}, true},
+		{"libraries", map[string]any{CheckKeyType: CheckTypeLibraries, CheckKeyBinary: "/srv/a"}, true},
 		{"cert file", map[string]any{CheckKeyType: CheckTypeCert, CheckKeyPath: "/srv/a"}, true},
 		{"config paths", map[string]any{CheckKeyType: CheckTypeConfig, CheckKeyPath: "/srv/a", CheckKeyOnChange: true}, true},
 		{"cert endpoint", map[string]any{CheckKeyType: CheckTypeCert, CheckKeyHost: "host-a"}, false},
@@ -238,6 +239,23 @@ func TestPathReadingChecksRunUnderTheGuard(t *testing.T) {
 	}
 }
 
+// A binary that is gone is a verdict the run itself reaches, so the guard around
+// it must hand that failure on, and leave "unavailable" to a run that hung.
+func TestPathGuardKeepsAMissingLibraryBinaryFailed(t *testing.T) {
+	entry := map[string]any{CheckKeyType: CheckTypeLibraries, CheckKeyBinary: filepath.Join(t.TempDir(), "absent")}
+	built, issues := BuildWithIssues(map[string]any{"libs": entry}, Deps{Service: t.Name(), DefaultTimeout: pathGuardBudget})
+	if len(issues) != 0 {
+		t.Fatalf("issues = %v", issues)
+	}
+	if _, guarded := built[0].Check.(pathGuardCheck); !guarded {
+		t.Fatalf("built %T, want the check under the guard", built[0].Check)
+	}
+	res := runWithin(t, built)
+	if res.OK || res.Unavailable || res.Observation() != ObservationFailing {
+		t.Fatalf("result = %+v, want a failing verdict", res)
+	}
+}
+
 // A real read the kernel blocks, through the check as the daemon builds it.
 func TestChecksAnswerAtTheirTimeoutOnAReadTheKernelBlocks(t *testing.T) {
 	for _, tc := range []struct {
@@ -245,6 +263,7 @@ func TestChecksAnswerAtTheirTimeoutOnAReadTheKernelBlocks(t *testing.T) {
 	}{
 		{CheckTypeCert, CheckKeyPath},
 		{CheckTypeSQLite, CheckKeyPath},
+		{CheckTypeLibraries, CheckKeyBinary},
 	} {
 		t.Run(tc.typ, func(t *testing.T) {
 			path, release := hungFIFO(t)

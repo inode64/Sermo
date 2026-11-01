@@ -296,7 +296,7 @@ var builtinCheckSpecs = []checkSpec{
 	// holds nothing Sermo cannot account for.
 	{info: serviceConditionTypeInfo(CheckTypeStrays), build: func(in checkBuildInput) (Check, string) { return buildStraysCheck(in.base, in.entry, in.deps) }},
 	{info: serviceConditionTypeInfo(CheckTypeMetric), build: func(in checkBuildInput) (Check, string) { return buildMetricCheck(in.base, in.entry, in.deps) }},
-	{info: healthTypeInfo(CheckTypeLibraries), build: func(in checkBuildInput) (Check, string) { return buildLibrariesCheck(in.base, in.entry) }},
+	{info: healthTypeInfo(CheckTypeLibraries), readsPaths: true, build: func(in checkBuildInput) (Check, string) { return buildLibrariesCheck(in.base, in.entry) }},
 	{info: conditionTypeInfo(CheckTypeCount), readsPaths: true, build: func(in checkBuildInput) (Check, string) { return buildCountCheck(in.base, in.entry) }},
 	{info: conditionTypeInfo(CheckTypeLog), readsPaths: true, build: func(in checkBuildInput) (Check, string) { return buildLogCheck(in.base, in.entry) }},
 	{info: conditionTypeInfo(CheckTypeStorage), predicateFields: StoragePredFields, build: func(in checkBuildInput) (Check, string) { return buildStorageCheck(in.base, in.entry, in.deps) }},

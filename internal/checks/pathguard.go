@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"maps"
+	"slices"
 	"strings"
 	"time"
 
@@ -43,7 +44,7 @@ func withPathGuard(check Check, key, target string, timeout time.Duration) Check
 // guardPathReads wraps a check of a type that reads the paths its entry names.
 // Without a timeout there is nothing to bound it by.
 func guardPathReads(check Check, typ, name, service string, entry map[string]any, timeout time.Duration) Check {
-	paths := cfgval.StringList(entry[CheckKeyPath])
+	paths := slices.Concat(cfgval.StringList(entry[CheckKeyPath]), cfgval.StringList(entry[CheckKeyBinary]))
 	if !checkSpecByName[typ].readsPaths || len(paths) == 0 || timeout <= 0 {
 		return check
 	}
