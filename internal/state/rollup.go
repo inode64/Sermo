@@ -36,7 +36,9 @@ const (
 // Consolidation statements. `bucket / ? * ?` re-keys a source bucket to the start
 // of the target bucket containing it; the GROUP BY divides by the same span. The
 // WHERE clause is also what disambiguates ON CONFLICT in an INSERT…SELECT for
-// SQLite's parser.
+// SQLite's parser. The update applies only when the source holds at least the
+// stored count: a bucket only ever gains samples, so a smaller sum means its fine
+// rows were pruned and what is left would replace the complete total.
 const (
 	slaRollupStmt = `INSERT INTO sla_archive
 			(res, service, check_name, bucket, up_count, total_count, down_buckets)
@@ -48,7 +50,8 @@ const (
 		ON CONFLICT(res, service, check_name, bucket) DO UPDATE SET
 		  up_count     = excluded.up_count,
 		  total_count  = excluded.total_count,
-		  down_buckets = excluded.down_buckets;`
+		  down_buckets = excluded.down_buckets
+		WHERE excluded.total_count >= sla_archive.total_count;`
 
 	metricRollupStmt = `INSERT INTO metric_archive
 			(res, scope, service, check_name, metric, bucket, n, sum_v, min_v, max_v)
@@ -61,7 +64,8 @@ const (
 		  n     = excluded.n,
 		  sum_v = excluded.sum_v,
 		  min_v = excluded.min_v,
-		  max_v = excluded.max_v;`
+		  max_v = excluded.max_v
+		WHERE excluded.n >= metric_archive.n;`
 )
 
 // Per-archive prune and oldest-bucket statements.
@@ -229,9 +233,9 @@ func (s *Store) rollup(ctx context.Context, now time.Time) (int64, error) {
 				return rolled, err
 			}
 		}
-		// Never backwards: a wall clock that steps back would otherwise make the
-		// next pass re-consolidate buckets whose fine rows the prune has already
-		// dropped, overwriting complete coarse buckets with partial sums.
+		// Never backwards: a wall clock that steps back does not undo what the
+		// archive already holds, and the prune floor and the catch-up once that
+		// clock returns both start from this mark.
 		if err := s.setRollupWatermark(ctx, targetRes, max(watermark, alignBucket(now, targetRes))); err != nil {
 			return rolled, err
 		}
@@ -240,13 +244,14 @@ func (s *Store) rollup(ctx context.Context, now time.Time) (int64, error) {
 	return rolled, nil
 }
 
-// sourceAdvanced reports whether the source of the targetRes archive has started
-// a bucket after the one its previous consolidation pass saw.
+// sourceAdvanced reports whether the source of the targetRes archive is in a
+// bucket other than the one its previous consolidation pass saw. A bucket behind
+// that one counts: after a clock correction the source keeps filling below it.
 func (s *Store) sourceAdvanced(targetRes, sourceBucket int64) bool {
 	s.rollupMu.Lock()
 	defer s.rollupMu.Unlock()
 	seen, ok := s.rolledFrom[targetRes]
-	return !ok || sourceBucket > seen
+	return !ok || sourceBucket != seen
 }
 
 // markRolledFrom records the source bucket a completed pass consolidated through.
@@ -266,7 +271,10 @@ func (s *Store) rollupTable(ctx context.Context, table archiveTable, sourceRes, 
 	// max(…, 0) keeps a small-but-non-zero watermark from walking the chunk loop
 	// back towards the epoch; only a hand-edited rollup_state can produce one, but
 	// the oldest-bucket probe used to bound this and no longer runs here.
-	from := max(watermark-rollupRefreshBuckets*targetRes, 0)
+	// A watermark ahead of the clock (a pass under a clock since corrected) must
+	// not stop the pass: the samples arriving now are below it. The refresh then
+	// follows the clock, without moving the watermark.
+	from := max(min(watermark, alignBucket(now, targetRes))-rollupRefreshBuckets*targetRes, 0)
 	if watermark == 0 {
 		// Never consolidated: without a watermark to start from, the chunk loop
 		// would walk from the epoch. The oldest stored bucket bounds it to the data

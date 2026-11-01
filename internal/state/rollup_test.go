@@ -528,6 +528,75 @@ func TestRollupWatermarkNeverMovesBack(t *testing.T) {
 	}
 }
 
+// A pass under a clock running ahead (a boot before time sync) leaves the
+// watermark in the future. Once the clock is corrected the samples below that
+// mark must still reach the coarser archives: they exist nowhere else after the
+// per-minute retention, and a lower watermark is not an option (see
+// TestRollupWatermarkNeverMovesBack).
+func TestRollupKeepsConsolidatingBelowAWatermarkAhead(t *testing.T) {
+	s := openTemp(t)
+	start := time.Date(2026, 6, 7, 12, 0, 0, 0, time.UTC)
+	mustRecord(t, s, true, start)
+	mustRollup(t, s, start.Add(time.Minute))
+	mustRollup(t, s, start.Add(2*time.Hour)) // the clock ran two hours ahead
+
+	var want int64
+	for minute := 5; minute <= 90; minute += 5 {
+		at := start.Add(time.Duration(minute) * time.Minute)
+		mustRecord(t, s, true, at)
+		want++
+		mustRollup(t, s, at.Add(5*time.Minute))
+	}
+	if watermark, err := s.rollupWatermark(t.Context(), res5Minutes); err != nil || watermark != alignBucket(start.Add(2*time.Hour), res5Minutes) {
+		t.Fatalf("5-minute watermark = %d, %v; want it held, not moved back", watermark, err)
+	}
+	mustRollup(t, s, start.Add(7*time.Hour)) // the 6-hour source starts a bucket
+	for minute := 5; minute <= 85; minute += 5 {
+		bucket := alignBucket(start.Add(time.Duration(minute)*time.Minute), res5Minutes)
+		if _, total, _, found := archiveRow(t, s, res5Minutes, bucket); !found || total != 1 {
+			t.Fatalf("5-minute bucket %d past the start: total %d (found %v), want the sample", minute, total, found)
+		}
+	}
+	if _, total, _, found := archiveRow(t, s, resDay, alignBucket(start, resDay)); !found || total != want+1 {
+		t.Fatalf("day bucket total %d (found %v), want every one of the %d samples", total, found, want+1)
+	}
+}
+
+// The refresh following a clock behind the watermark can reach a coarse bucket
+// whose fine rows the prune already dropped. What is left of them never replaces
+// the complete total, in either table.
+func TestRollupNeverShrinksAConsolidatedBucket(t *testing.T) {
+	s := openTemp(t)
+	ctx := context.Background()
+	at := time.Date(2026, 6, 7, 12, 0, 0, 0, time.UTC)
+	for minute := range 3 {
+		sample := at.Add(time.Duration(minute) * time.Minute)
+		mustRecord(t, s, true, sample)
+		if err := s.RecordServiceMetric(slaTestService, "cpu", 42, sample); err != nil {
+			t.Fatalf("RecordServiceMetric: %v", err)
+		}
+	}
+	mustRollup(t, s, at.Add(time.Hour))
+
+	for _, table := range archiveTables {
+		if _, err := s.pruneArchive(ctx, table, resMinute, at.Add(2*time.Minute).Unix()); err != nil {
+			t.Fatalf("prune per-minute %s: %v", table.name, err)
+		}
+	}
+	mustRollup(t, s, at.Add(3*time.Minute)) // the clock stepped back
+
+	if _, total, _, found := archiveRow(t, s, res5Minutes, alignBucket(at, res5Minutes)); !found || total != 3 {
+		t.Fatalf("5-minute SLA bucket total %d (found %v), want the complete 3", total, found)
+	}
+	points, err := s.series(serviceRuntimeSeries(slaTestService, "cpu"), at.Add(-24*time.Hour), at.Add(time.Minute))
+	if err != nil {
+		t.Fatalf("series: %v", err)
+	}
+	if len(points) != 1 || points[0].N != 3 {
+		t.Fatalf("5-minute metric points = %+v, want the one complete bucket of 3 samples", points)
+	}
+}
+
 // TestRollupFollowsItsSourceBuckets pins the consolidation cadence: an archive is
 // rewritten only once its source has started a new bucket, so the 6-hour and
 // daily archives stop rewriting every series on every pass, and a new process
