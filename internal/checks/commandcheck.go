@@ -2,6 +2,7 @@ package checks
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"strconv"
@@ -100,6 +101,7 @@ func (c commandCheck) Run(ctx context.Context) Result {
 		msg := execx.OperatorFailureOr(err, res, c.timeout, execx.CommandDidNotStart)
 		r := fail(msg)
 		r.Unavailable = true
+		r.Died = errors.Is(err, execx.ErrKilledBySignal) && !c.condition && !VerdictlessMode(c.reports)
 		return r
 	}
 	if !ExitCodeExpected(res.ExitCode, c.expectExit) {

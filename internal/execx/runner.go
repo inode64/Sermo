@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 )
 
@@ -20,7 +21,8 @@ const CommandDidNotStart = "command did not start"
 const (
 	// ExitCodeSuccess is the conventional successful process exit code.
 	ExitCodeSuccess = 0
-	// ExitCodeRunFailure is the synthetic exit code for start, timeout and runner failures.
+	// ExitCodeRunFailure is the synthetic exit code of a run that produced no exit
+	// status: a start, timeout or runner failure, or a signal death.
 	ExitCodeRunFailure = -1
 	// NoTimeout disables execx's additional per-command deadline.
 	NoTimeout time.Duration = 0
@@ -31,6 +33,7 @@ const (
 	commandRunErrorSeparator     = ": "
 	commandRunErrorFormat        = commandRunErrorPrefix + "%s" + commandRunErrorSeparator + "%w"
 	commandRunExitCodeFormat     = commandRunErrorPrefix + "%s" + commandRunErrorSeparator + "exit code %d"
+	commandRunSignalFormat       = commandRunErrorPrefix + "%s" + commandRunErrorSeparator + "%w %d (%s)"
 	commandRunTimeoutAfterFormat = commandRunErrorPrefix + "%s" + commandRunErrorSeparator + "timeout after %s: %w"
 	commandRunTimeoutFormat      = commandRunErrorPrefix + "%s" + commandRunErrorSeparator + "timeout: %w"
 	commandWaitDelay             = 2 * time.Second
@@ -41,6 +44,12 @@ const (
 	sessionBusAddressPrefix   = "DBUS_SESSION_BUS_ADDRESS="
 	sessionBusAddressDisabled = "disabled:"
 )
+
+// ErrKilledBySignal marks a command that started and died from a signal. Its
+// exit code stays ExitCodeRunFailure: there is no exit status, and what it
+// printed may stop anywhere. A caller for which the command is the verdict
+// tests this error to tell a crash from a command that never ran.
+var ErrKilledBySignal = errors.New("killed by signal")
 
 // Result contains the observable result of an external command.
 type Result struct {
@@ -218,6 +227,10 @@ func runPrepared(ctx context.Context, cmd *exec.Cmd, start time.Time, displayNam
 	}
 
 	if exitErr, ok := errors.AsType[*exec.ExitError](err); ok {
+		if status, ok := exitErr.Sys().(syscall.WaitStatus); ok && status.Signaled() {
+			result.ExitCode = ExitCodeRunFailure
+			return result, fmt.Errorf(commandRunSignalFormat, displayName, ErrKilledBySignal, int(status.Signal()), status.Signal())
+		}
 		result.ExitCode = exitErr.ExitCode()
 		return result, fmt.Errorf(commandRunExitCodeFormat, displayName, result.ExitCode)
 	}

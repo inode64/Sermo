@@ -114,6 +114,10 @@ type Result struct {
 	// Unavailable marks a failed observation that a guard must treat as unsafe
 	// rather than as a false condition.
 	Unavailable bool `json:"-"`
+	// Died marks a health command a signal killed: it ran and did not exit with
+	// expect_exit, so Observation reads it as failing. Unavailable stays set for
+	// rules and guards, whose comparison got no answer from it.
+	Died bool `json:"-"`
 	// ActionBlocked retains advisory evidence for alerts while preventing it
 	// from driving operations or watch hooks, including through negation.
 	ActionBlocked bool `json:"action_blocked,omitempty"`
@@ -180,7 +184,7 @@ func (s ObservationState) AffectsHealth() bool {
 // polarity, and verdictless checks deliberately carry no health verdict.
 func (r Result) Observation() ObservationState {
 	switch {
-	case r.Unavailable:
+	case r.Unavailable && !r.Died:
 		return ObservationUnavailable
 	case r.Skipped:
 		return ObservationSkipped

@@ -1,6 +1,8 @@
 package checks
 
 import (
+	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -85,5 +87,44 @@ func TestCommandCheckDeclaredSeverityNeverRaisesAnAdvisoryPattern(t *testing.T) 
 	c.runner = execxtest.Fixed(execx.Result{ExitCode: 0, Stderr: "[warn] directive X is deprecated\n"}, nil)
 	if res := c.Run(t.Context()); res.Severity != severity.Info {
 		t.Fatalf("a declared info must still lower a warning pattern, got %q", res.Severity)
+	}
+}
+
+// A health command a signal killed ran and did not exit with expect_exit, so it
+// reads as failing. Unavailable stays set whatever the polarity: rules and
+// guards must never read the crash as a false condition.
+func TestCommandCheckKilledBySignal(t *testing.T) {
+	killed := fmt.Errorf("run /usr/local/bin/app-health: %w 11 (segmentation fault)", execx.ErrKilledBySignal)
+	tests := []struct {
+		name            string
+		condition       bool
+		reports         string
+		err             error
+		wantObservation ObservationState
+		wantMessage     string
+	}{
+		{name: "health reads failing", err: killed, wantObservation: ObservationFailing, wantMessage: "killed by signal 11 (segmentation fault)"},
+		{name: "condition has no reading", condition: true, reports: ReportsCondition, err: killed, wantObservation: ObservationUnavailable, wantMessage: "killed by signal 11 (segmentation fault)"},
+		{name: "verdictless has no reading", reports: ReportsValue, err: killed, wantObservation: ObservationUnavailable, wantMessage: "killed by signal 11 (segmentation fault)"},
+		{name: "a command that never ran has no reading", err: errors.New("run /usr/local/bin/app-health: executable file not found"), wantObservation: ObservationUnavailable, wantMessage: "executable file not found"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			check := commandCheck{
+				name: "app", condition: tc.condition, reports: tc.reports,
+				runner: execxtest.Fixed(execx.Result{ExitCode: execx.ExitCodeRunFailure}, tc.err),
+				argv:   []string{"/usr/local/bin/app-health"},
+			}
+			res := check.Run(t.Context())
+			if res.OK || !res.Unavailable {
+				t.Fatalf("OK=%t Unavailable=%t, want a failed result still marked unavailable", res.OK, res.Unavailable)
+			}
+			if got := res.Observation(); got != tc.wantObservation {
+				t.Fatalf("observation = %q, want %q", got, tc.wantObservation)
+			}
+			if !strings.HasSuffix(res.Message, tc.wantMessage) {
+				t.Fatalf("message = %q, want suffix %q", res.Message, tc.wantMessage)
+			}
+		})
 	}
 }

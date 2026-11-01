@@ -186,7 +186,10 @@ matches no process. Numeric UID/GID values avoid host identity-service ambiguity
 The `command` check asserts the command's outcome: `expect_exit` (default 0,
 or a list such as `[0, 1]`) and optional `expect_stdout` / `expect_stderr`
 matchers — a plain string requires that substring, or an `{op, value}` mapping
-compares the trimmed output (`== != > >= < <= contains =~`):
+compares the trimmed output (`== != > >= < <= contains =~`). A command killed by
+a signal has no exit code to compare: it fails a health check whatever
+`expect_exit` lists, and a guard or a condition reads it as unavailable, never
+as a false condition.
 
 ```yaml
 checks:

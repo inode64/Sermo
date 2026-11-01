@@ -3,6 +3,7 @@ package rules
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net"
 	"os"
 	"path/filepath"
@@ -152,6 +153,28 @@ func TestGuardFailsSafeOnInlineUnavailableCheck(t *testing.T) {
 	}
 	if blocking != "" {
 		t.Fatal("unavailable inline check is an evaluation error, not a matched guard")
+	}
+}
+
+// A guard's command a signal killed answers nothing, so a negated guard must
+// not read the crash as the condition being false.
+func TestGuardFailsSafeOnCommandKilledBySignal(t *testing.T) {
+	killed := fmt.Errorf("run /usr/local/bin/can-restart: %w 9 (killed)", execx.ErrKilledBySignal)
+	ev := &Evaluator{Deps: checks.Deps{
+		DefaultTimeout: time.Second,
+		Runner:         execxtest.Fixed(execx.Result{ExitCode: execx.ExitCodeRunFailure}, killed),
+	}}
+	blocking, _, err := Guard(context.Background(), []Rule{{
+		Name:   "only-with-a-replica",
+		Type:   RuleGuard,
+		Blocks: []string{string(ActionRestart)},
+		If:     map[string]any{"not": map[string]any{"command": map[string]any{"command": []any{"/usr/local/bin/can-restart"}}}},
+	}}, string(ActionRestart), ev)
+	if err == nil {
+		t.Fatal("a killed guard command must fail safe")
+	}
+	if blocking != "" {
+		t.Fatal("a killed guard command is an evaluation error, not a matched guard")
 	}
 }
 

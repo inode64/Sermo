@@ -411,3 +411,19 @@ type basicRunner struct{}
 func (basicRunner) Run(ctx context.Context, name string, args ...string) (Result, error) {
 	return Result{}, nil
 }
+
+// A signal leaves a command with no exit status, so the run stays a run failure
+// for every caller that must not trust its output, and the error names what
+// happened instead of a synthetic exit code.
+func TestCommandRunnerReportsSignalDeath(t *testing.T) {
+	res, err := CommandRunner{}.Run(context.Background(), "sh", "-c", "kill -KILL $$")
+	if !errors.Is(err, ErrKilledBySignal) {
+		t.Fatalf("error = %v, want ErrKilledBySignal", err)
+	}
+	if res.ExitCode != ExitCodeRunFailure {
+		t.Fatalf("exit code = %d, want the run failure marker", res.ExitCode)
+	}
+	if got, want := OperatorFailure(err, res, 0), "killed by signal 9 (killed)"; got != want {
+		t.Fatalf("operator failure = %q, want %q", got, want)
+	}
+}

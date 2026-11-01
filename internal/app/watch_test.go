@@ -176,6 +176,36 @@ func TestWatchUnavailableEmitsOneErrorAndNeverRunsActions(t *testing.T) {
 	}
 }
 
+// A health command a signal killed is a failing check, not a missing reading:
+// the watch runs its actions, and no availability edge hides the incident.
+func TestWatchRunsActionsForACommandKilledBySignal(t *testing.T) {
+	check := &scriptedCheck{results: []checks.Result{
+		{Check: "app", Unavailable: true, Died: true, Message: "killed by signal 11 (segmentation fault)"},
+	}}
+	var events []Event
+	var hooks int
+	w := &Watch{
+		Name: "app", CheckType: checks.CheckTypeCommand, Check: check, FireOnFail: true,
+		Hook: HookSpec{Command: []string{"/bin/true"}},
+		Runner: HookRunnerFunc(func(context.Context, []string, map[string]string, time.Duration) error {
+			hooks++
+			return nil
+		}),
+		Emit: func(event Event) { events = append(events, event) },
+	}
+
+	w.RunCycle(context.Background())
+
+	if hooks != 1 {
+		t.Fatalf("watch ran %d hooks, want 1", hooks)
+	}
+	for _, event := range events {
+		if event.Check == watchAvailabilityCheck {
+			t.Fatalf("event %+v reads the crash as an unavailable probe", event)
+		}
+	}
+}
+
 func TestWatchFiresHookWhenConditionTrue(t *testing.T) {
 	var calls int
 	var env map[string]string
