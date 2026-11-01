@@ -74,7 +74,6 @@ func TestCountMatching(t *testing.T) {
 	}{
 		{"total host", "", "", "", 5},
 		{"by user", "www-data", "", "", 3},
-		{"unknown user", "ghost", "", "", 0},
 		{"by exact exe", "", "/srv/app/bin/nginx", "", 2},
 		{"by exe + user", "www-data", "/srv/app/bin/nginx", "", 1},
 		{"by exe_dir prefix", "", "", "/srv/app", 3},
@@ -83,8 +82,41 @@ func TestCountMatching(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := d.CountMatching(tc.user, tc.exe, tc.exeDir); got != tc.want {
-				t.Fatalf("CountMatching(%q,%q,%q) = %d, want %d", tc.user, tc.exe, tc.exeDir, got, tc.want)
+			if got, known := d.CountMatching(tc.user, tc.exe, tc.exeDir); got != tc.want || !known {
+				t.Fatalf("CountMatching(%q,%q,%q) = %d, known = %v, want %d", tc.user, tc.exe, tc.exeDir, got, known, tc.want)
+			}
+		})
+	}
+}
+
+// A count from an unresolved user or a partial process table proves nothing
+// about what runs: read as a number it would let a guard authorize an action.
+func TestCountsAreUnknownWhenUnproven(t *testing.T) {
+	const exe = "/srv/app/bin/nginx"
+	selectors := []Selector{{Type: SelectorCommandMatch, Exe: exe, exePath: exe}}
+	readErr := errors.New("read process identity: permission denied")
+	partial := map[int]Identity{1: {PID: 1, Exe: exe, ExeOK: true}}
+	cases := []struct {
+		name   string
+		reader Reader
+		user   string
+		known  bool
+	}{
+		{name: "complete table", reader: fakeReader{ids: partial}, known: true},
+		{name: "unresolved user", reader: fakeReader{ids: partial}, user: "ghost"},
+		{name: "partial table", reader: snapshotErrReader{ids: partial, err: readErr}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			d := Discoverer{Reader: tc.reader, ResolveUser: fakeUsers(nil)}
+			if _, known := d.CountMatching(tc.user, "", ""); known != tc.known {
+				t.Errorf("CountMatching known = %v, want %v", known, tc.known)
+			}
+			if _, known := d.CountInTree(selectors, tc.user, "", ""); known != tc.known {
+				t.Errorf("CountInTree known = %v, want %v", known, tc.known)
+			}
+			if _, known := d.CountIn(nil, tc.user, "", ""); known != tc.known {
+				t.Errorf("CountIn known = %v, want %v", known, tc.known)
 			}
 		})
 	}
@@ -125,24 +157,20 @@ func TestCountInTree(t *testing.T) {
 	d := Discoverer{Reader: reader, ResolveUser: fakeUsers(map[string]uint32{"svc": 500})}
 	sel := []Selector{{Name: "main", Type: SelectorCommandMatch, Exe: "/opt/app/svc", User: "svc"}}
 
-	if got := d.CountInTree(sel, "", "", ""); got != 3 {
+	if got, _ := d.CountInTree(sel, "", "", ""); got != 3 {
 		t.Errorf("CountInTree whole tree = %d, want 3 (100,101,102)", got)
 	}
-	if got := d.CountInTree(sel, "", "/opt/app/worker", ""); got != 2 {
+	if got, _ := d.CountInTree(sel, "", "/opt/app/worker", ""); got != 2 {
 		t.Errorf("CountInTree workers = %d, want 2 (101,102; excludes unrelated 200)", got)
 	}
 	// Host-wide count sees the stray worker too — the distinction the scoping fixes.
-	if got := d.CountMatching("", "/opt/app/worker", ""); got != 3 {
+	if got, _ := d.CountMatching("", "/opt/app/worker", ""); got != 3 {
 		t.Errorf("CountMatching workers = %d, want 3 (host-wide includes 200)", got)
-	}
-	// Unknown user still yields zero.
-	if got := d.CountInTree(sel, "ghost", "", ""); got != 0 {
-		t.Errorf("CountInTree unknown user = %d, want 0", got)
 	}
 }
 
 func TestCountInFiltersDiscoveredProcesses(t *testing.T) {
-	d := Discoverer{ResolveUser: fakeUsers(map[string]uint32{"svc": 500})}
+	d := Discoverer{Reader: fakeReader{}, ResolveUser: fakeUsers(map[string]uint32{"svc": 500})}
 	procs := []Process{
 		{PID: 100, UID: 500, Exe: "/opt/app/main", ExeOK: true},
 		{PID: 101, UID: 500, Exe: "/opt/app/worker", ExeOK: true},
@@ -156,14 +184,13 @@ func TestCountInFiltersDiscoveredProcesses(t *testing.T) {
 	}{
 		{name: "all", want: 5},
 		{name: "user", user: "svc", want: 4},
-		{name: "unknown user", user: "ghost"},
 		{name: "exact executable", exe: "/opt/app/worker", want: 2},
 		{name: "combined", user: "svc", exe: "/opt/app/worker", want: 1},
 		{name: "directory boundary", dir: "/opt/app", want: 3},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := d.CountIn(procs, tc.user, tc.exe, tc.dir); got != tc.want {
-				t.Fatalf("CountIn = %d, want %d", got, tc.want)
+			if got, known := d.CountIn(procs, tc.user, tc.exe, tc.dir); got != tc.want || !known {
+				t.Fatalf("CountIn = %d, known = %v, want %d", got, known, tc.want)
 			}
 		})
 	}

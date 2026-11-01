@@ -79,7 +79,7 @@ Connection-protocol checks (MySQL, PostgreSQL, Redis, Docker, libvirt, etc.) are
 | `storage`     | condition | a filesystem's space/inode predicates hold (`*_pct` accepts `%`; `*_bytes` requires K/M/G/T) |
 | `load`        | condition | a load-average threshold holds (load1/load5/load15, optional per_cpu)|
 | `users`       | condition | the count of logged-in users (from utmp) satisfies `count {op, value}`|
-| `process_count` | condition | the number of processes (host-wide, or filtered by `user`/`exe`/`exe_dir`) satisfies `count {op, value}`|
+| `process_count` | condition | the number of processes (host-wide, or filtered by `user`/`exe`/`exe_dir`) satisfies `count {op, value}`; unavailable when the process table is incomplete or `user` does not resolve, so a guard denies |
 | `hdparm`      | condition | a disk's `hdparm` read throughput crosses a threshold (`read`/`cached` MB/s) (see Disk throughput)|
 | `sensors`     | condition | hwmon hardware sensors cross a threshold (`temp` °C / `fan` RPM / `voltage` V) (see Hardware sensors)|
 | `smart`       | condition | a drive's SMART health/attributes and identity (failed verdict, `reallocated`, `pending_sectors`, `crc_errors`, `media_errors`, `wear`, `temperature`, `power_on_hours`) (see Hardware sensors)|

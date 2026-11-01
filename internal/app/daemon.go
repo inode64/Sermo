@@ -574,7 +574,7 @@ func buildWorker(ctx context.Context, name, unit string, tree map[string]any, de
 	// Strays come from the same memoized discovery: classification already ran
 	// inside Discover, so the check costs one slice filter per cycle.
 	checkDeps.Strays = func() []process.Process { return process.Strays(processesForCycle()) }
-	checkDeps.ProcessCount = func(user, exe, exeDir string) int {
+	checkDeps.ProcessCount = func(user, exe, exeDir string) (int, bool) {
 		return discoverer.CountIn(processesForCycle(), user, exe, exeDir)
 	}
 	sampleMetrics := metricSampler(name, tree, collector, observe)

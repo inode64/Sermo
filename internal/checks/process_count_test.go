@@ -7,7 +7,7 @@ import (
 )
 
 func TestProcessCountThreshold(t *testing.T) {
-	counter := func(user, exe, exeDir string) int { return 5 }
+	counter := func(user, exe, exeDir string) (int, bool) { return 5, true }
 	over := processCountCheck{name: "p", preds: []levelPred{{"count", ">", 2}}, count: counter}
 	res := over.Run(context.Background())
 	if !res.OK {
@@ -25,9 +25,9 @@ func TestProcessCountThreshold(t *testing.T) {
 
 func TestProcessCountPassesFilterAndScopeMessage(t *testing.T) {
 	var gotUser, gotExe, gotDir string
-	counter := func(user, exe, exeDir string) int {
+	counter := func(user, exe, exeDir string) (int, bool) {
 		gotUser, gotExe, gotDir = user, exe, exeDir
-		return 1
+		return 1, true
 	}
 	c := processCountCheck{
 		name:   "p",
@@ -45,9 +45,26 @@ func TestProcessCountPassesFilterAndScopeMessage(t *testing.T) {
 	}
 }
 
+// A count that proves nothing must reach a guard as unavailable: read as zero it
+// would let a block rule on active jobs authorize the stop it exists to deny.
+func TestProcessCountUnknownIsUnavailable(t *testing.T) {
+	c := processCountCheck{
+		name:  "p",
+		preds: []levelPred{{"count", ">", 1}},
+		count: func(string, string, string) (int, bool) { return 0, false },
+	}
+	res := c.Run(context.Background())
+	if !res.Unavailable || res.OK {
+		t.Fatalf("result = %+v, want unavailable", res)
+	}
+	if !strings.Contains(res.Message, "unknown") {
+		t.Fatalf("message = %q, want it to say the count is unknown", res.Message)
+	}
+}
+
 func TestBuildProcessCountCheck(t *testing.T) {
 	// 200 processes satisfies > 100; a threshold-less process_count check warns.
 	assertBuildThresholdFires(t, "process_count",
 		map[string]any{"user": "www-data", "count": map[string]any{"op": ">", "value": 100.0}},
-		Deps{ProcessCount: func(string, string, string) int { return 200 }})
+		Deps{ProcessCount: func(string, string, string) (int, bool) { return 200, true }})
 }

@@ -604,19 +604,24 @@ func (d Discoverer) ReplacedAny(exes []string, user string) []string {
 // the host. user is the real-UID owner, exe is the exact resolved
 // /proc/<pid>/exe, and exeDir matches any process whose resolved executable is
 // under that directory. Reuses the Discoverer's process snapshot (shared cache
-// in the daemon).
-func (d Discoverer) CountMatching(user, exe, exeDir string) int {
+// in the daemon). known is false when the count proves nothing, because the
+// process table is incomplete or user did not resolve.
+func (d Discoverer) CountMatching(user, exe, exeDir string) (int, bool) {
 	f, ok := d.buildProcessFilter(user, exe, exeDir)
 	if !ok {
-		return 0 // unknown user: nothing can match
+		return 0, false
+	}
+	snapshot, err := Snapshot(d.reader())
+	if err != nil {
+		return 0, false
 	}
 	n := 0
-	for _, id := range snapshotIdentities(d.reader()) {
+	for _, id := range snapshot {
 		if f.matchesIdentity(id) {
 			n++
 		}
 	}
-	return n
+	return n, true
 }
 
 // CountInTree counts the service's OWN processes — its selector matches plus
@@ -624,23 +629,26 @@ func (d Discoverer) CountMatching(user, exe, exeDir string) int {
 // optional user/exe/exe_dir filter. An all-empty filter counts the whole tree.
 // This scopes a process_count check to the service's PID set instead of the
 // whole host, so it is safe against unrelated same-user/same-exe processes.
-func (d Discoverer) CountInTree(selectors []Selector, user, exe, exeDir string) int {
-	f, ok := d.buildProcessFilter(user, exe, exeDir)
-	if !ok {
-		return 0
-	}
+// known reads as in CountMatching.
+func (d Discoverer) CountInTree(selectors []Selector, user, exe, exeDir string) (int, bool) {
 	procs, _ := d.Discover(selectors)
-	return f.count(procs)
+	return d.CountIn(procs, user, exe, exeDir)
 }
 
 // CountIn counts a discovered process set using the same optional identity
-// filters as CountInTree, without performing another discovery.
-func (d Discoverer) CountIn(procs []Process, user, exe, exeDir string) int {
+// filters as CountInTree, without performing another discovery. known reads as
+// in CountMatching.
+func (d Discoverer) CountIn(procs []Process, user, exe, exeDir string) (int, bool) {
 	f, ok := d.buildProcessFilter(user, exe, exeDir)
 	if !ok {
-		return 0
+		return 0, false
 	}
-	return f.count(procs)
+	// Discover cannot report a partial table, and procs may come from a reader
+	// that shares its walk, whose failure it retains.
+	if _, err := Snapshot(d.reader()); err != nil {
+		return 0, false
+	}
+	return f.count(procs), true
 }
 
 // processFilter is the resolved user/exe/exe_dir predicate shared by the

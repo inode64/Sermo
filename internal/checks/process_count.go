@@ -10,9 +10,10 @@ import (
 )
 
 // ProcessCountFunc counts the processes matching a filter (empty fields are
-// wildcards). Injected so the daemon can share its cached /proc snapshot; nil
-// falls back to a self-contained scan.
-type ProcessCountFunc func(user, exe, exeDir string) int
+// wildcards). known is false when the count proves nothing: the process table
+// was incomplete or the user did not resolve. Injected so the daemon can share
+// its cached /proc snapshot; nil falls back to a self-contained scan.
+type ProcessCountFunc func(user, exe, exeDir string) (count int, known bool)
 
 // processCountCheck compares the number of running processes against a threshold.
 // Like users/zombies it is a level check: OK==true means the `count` predicate
@@ -34,7 +35,12 @@ func (c processCountCheck) Run(_ context.Context) Result {
 	if counter == nil {
 		counter = defaultProcessCount
 	}
-	n := counter(c.user, c.exe, c.exeDir)
+	n, known := counter(c.user, c.exe, c.exeDir)
+	if !known {
+		// Neither presence nor absence is proven; a guard on this check must
+		// deny rather than read the gap as nothing running.
+		return c.unavailableResult(fmt.Sprintf("process count%s unknown: process table incomplete or user unresolved", c.scope()), start)
+	}
 	values := map[string]float64{DataKeyCount: float64(n)}
 	ok := levelPredsHold(c.preds, values)
 	res := c.grade(c.result(ok, fmt.Sprintf("%d process(es)%s", n, c.scope()), start), values)
@@ -62,6 +68,6 @@ func (c processCountCheck) scope() string {
 
 // defaultProcessCount counts via a self-contained process discovery (used when
 // no shared counter is injected, e.g. host watches and the CLI).
-func defaultProcessCount(user, exe, exeDir string) int {
+func defaultProcessCount(user, exe, exeDir string) (int, bool) {
 	return process.NewDiscovererWithUserLookup(nil).CountMatching(user, exe, exeDir)
 }

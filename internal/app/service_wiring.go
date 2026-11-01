@@ -126,7 +126,9 @@ func BuildServiceRuntime(ctx context.Context, cfg ServiceRuntimeConfig) ServiceR
 		// count every process on the host once the service died — 362 "active
 		// jobs" for a crashed fcron — which latched its own block action and made
 		// the service unrepairable through Sermo.
-		ProcessCount:        func(user, exe, exeDir string) int { return discoverer.CountInTree(selectors, user, exe, exeDir) },
+		ProcessCount: func(user, exe, exeDir string) (int, bool) {
+			return discoverer.CountInTree(selectors, user, exe, exeDir)
+		},
 		PidfileFallbackPIDs: pidfileFallbackPIDs(needPidfileFallback, backend.checked, procInfo),
 		PidfileClaim:        pidfileClaim(discoverer, selectors, backend.checked),
 		StaleBinaries:       func() []process.StaleBinary { return discoverer.StaleBinaries(selectors) },

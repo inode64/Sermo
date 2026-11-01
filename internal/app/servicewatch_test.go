@@ -89,9 +89,9 @@ func TestServiceWatchesProcessScoped(t *testing.T) {
 	var gotUser string
 	checkDeps := checks.Deps{
 		DefaultTimeout: time.Second,
-		ProcessCount: func(user, _, _ string) int {
+		ProcessCount: func(user, _, _ string) (int, bool) {
 			gotUser = user
-			return 7
+			return 7, true
 		},
 	}
 	tree := map[string]any{

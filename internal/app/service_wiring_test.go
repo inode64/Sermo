@@ -39,11 +39,11 @@ func TestServiceScopedProcessCountNeverCountsTheHost(t *testing.T) {
 		},
 	})
 	scoped := runtime.CheckDeps.ProcessCount
-	if got := scoped("", "", ""); got != 0 {
-		t.Fatalf("scoped filterless count = %d, want 0 (selectors match nothing)", got)
+	if got, known := scoped("", "", ""); got != 0 || !known {
+		t.Fatalf("scoped filterless count = %d, known = %v, want a known 0 (selectors match nothing)", got, known)
 	}
 	// The host-wide count the old wiring used is emphatically not zero.
-	if got := (process.Discoverer{Reader: host}).CountMatching("", "", ""); got != len(host) {
+	if got, _ := (process.Discoverer{Reader: host}).CountMatching("", "", ""); got != len(host) {
 		t.Fatalf("sanity: host-wide count = %d, want %d", got, len(host))
 	}
 }

@@ -120,8 +120,8 @@ func TestWorkerProcessCountsReuseConcurrentCycleDiscovery(t *testing.T) {
 		var wg sync.WaitGroup
 		for range 10 {
 			wg.Go(func() {
-				if got := w.CheckDeps.ProcessCount("", "", ""); got != 0 {
-					t.Errorf("count = %d", got)
+				if got, known := w.CheckDeps.ProcessCount("", "", ""); got != 0 || !known {
+					t.Errorf("count = %d, known = %v", got, known)
 				}
 				w.CheckDeps.Strays()
 				w.CheckDeps.StaleBinaries()
