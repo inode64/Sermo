@@ -2548,7 +2548,9 @@ handed to a hook: the secret after `IDENTIFIED BY`, `PASSWORD(...)`,
 `SET PASSWORD`, `MASTER_PASSWORD`/`SOURCE_PASSWORD` and PostgreSQL's
 `PASSWORD '...'`, and the password of a connection string inside a literal
 (`password=...`, `scheme://user:...@host`), becomes `'***'`. Whitespace is
-collapsed to single spaces, then the text is cut to `max_query_length`.
+collapsed to single spaces, then the text is cut to `max_query_length`. A SQL
+password literal is masked in full even when it contains connection-string
+syntax or escaped quotes.
 
 **Killing a statement.** The dashboard's Sessions panel and
 `sermoctl sessions kill` cancel one listed statement of a *service* watch

@@ -130,6 +130,29 @@ func TestDBQueryTextRedactsBeforeTruncating(t *testing.T) {
 	}
 }
 
+func TestRedactSQLPasswordContainingConnectionSyntax(t *testing.T) {
+	for _, tt := range []struct{ name, in, want string }{
+		{"keyword", "ALTER USER alice PASSWORD 'prefix password=decoy sensitive-tail'", "ALTER USER alice PASSWORD '***'"},
+		{"URL", "CREATE USER alice IDENTIFIED BY 'mysql://user:decoy@host sensitive-tail'", "CREATE USER alice IDENTIFIED BY '***'"},
+		{"assignment", "SET PASSWORD = 'prefix password=decoy sensitive-tail'", "SET PASSWORD = '***'"},
+		{"escaped quote", `ALTER USER alice PASSWORD 'prefix password=decoy\' sensitive-tail'`, "ALTER USER alice PASSWORD '***'"},
+		{"doubled quotes", "ALTER USER alice PASSWORD 'prefix password=''decoy value'' sensitive-tail'", "ALTER USER alice PASSWORD '***'"},
+		{"double quoted", `ALTER USER alice PASSWORD "prefix password=decoy sensitive-tail"`, "ALTER USER alice PASSWORD '***'"},
+		{"truncated", "ALTER USER alice PASSWORD 'prefix password=decoy sensitive-tail", "ALTER USER alice PASSWORD '***'"},
+		{"replacement", "ALTER USER alice IDENTIFIED BY 'new' REPLACE 'prefix password=decoy sensitive-tail'", "ALTER USER alice IDENTIFIED BY '***' REPLACE '***'"},
+		{"following literal", "SELECT PASSWORD('prefix password=decoy sensitive-tail'), 'visible'", "SELECT PASSWORD('***'), 'visible'"},
+		{"embedded SQL", `SELECT 'ALTER USER alice PASSWORD "hunter2"'`, "SELECT 'ALTER USER alice PASSWORD '***''"},
+		{"quoted connection password", "SELECT dblink_connect('host=db password=''hun ter2'' user=rep')", "SELECT dblink_connect('host=db password='***' user=rep')"},
+		{"URL connection password", "SELECT dblink_connect('postgresql://rep:hunter2@db.example/app')", "SELECT dblink_connect('postgresql://rep:'***'@db.example/app')"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := redactSQL(tt.in); got != tt.want {
+				t.Fatalf("redactSQL(%q) = %q, want %q", tt.in, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestMySQLProcessRowIdentity(t *testing.T) {
 	row := mysqlProcessRow{id: 36762377, elapsedMS: 240831466, startedMS: 1_700_000_000_000,
 		queryID: sql.NullInt64{Int64: 279932773, Valid: true}, length: sql.NullInt64{Int64: 1500, Valid: true},

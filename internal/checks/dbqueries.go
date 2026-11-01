@@ -685,20 +685,47 @@ var sqlStringLiteral = regexp.MustCompile(`(?s)` + sqlSecretLiteral)
 const sqlRedacted = "'***'"
 
 // redactSQL masks password literals in a statement: running statements are
-// shown to read-only web users and sent to notifiers. Connection strings go
-// first, because a doubled quote inside one reads as an empty literal to the
-// patterns below, which would leave the rest of its value in the text.
+// shown to read-only web users and sent to notifiers. Locate every secret
+// in the original text: redacting a connection password first can change its
+// quotes and expose a suffix of an enclosing SQL password literal.
 func redactSQL(text string) string {
-	text = sqlStringLiteral.ReplaceAllStringFunc(text, func(literal string) string {
-		for _, pattern := range sqlConninfoSecrets {
-			literal = pattern.ReplaceAllString(literal, "${1}"+sqlRedacted+"${2}")
+	const suffixStart = 4
+	type span struct{ start, end int }
+	var secrets []span
+	collect := func(source string, patterns []*regexp.Regexp, offset int) {
+		for _, pattern := range patterns {
+			for _, match := range pattern.FindAllStringSubmatchIndex(source, -1) {
+				// Patterns capture the prefix and, for a URL, the trailing @.
+				end := match[1]
+				if len(match) > suffixStart {
+					end = match[suffixStart]
+				}
+				secrets = append(secrets, span{offset + match[3], offset + end})
+			}
 		}
-		return literal
-	})
-	for _, pattern := range sqlSecretPatterns {
-		text = pattern.ReplaceAllString(text, "${1}"+sqlRedacted)
 	}
-	return text
+	collect(text, sqlSecretPatterns, 0)
+	for _, bounds := range sqlStringLiteral.FindAllStringIndex(text, -1) {
+		collect(text[bounds[0]:bounds[1]], sqlConninfoSecrets, bounds[0])
+	}
+	if len(secrets) == 0 {
+		return text
+	}
+	slices.SortFunc(secrets, func(a, b span) int { return cmp.Compare(a.start, b.start) })
+	var redacted strings.Builder
+	redacted.Grow(len(text))
+	end := 0
+	for i, secret := range secrets {
+		if i > 0 && secret.start <= end {
+			end = max(end, secret.end)
+			continue
+		}
+		redacted.WriteString(text[end:secret.start])
+		redacted.WriteString(sqlRedacted)
+		end = secret.end
+	}
+	redacted.WriteString(text[end:])
+	return redacted.String()
 }
 
 // mysqlConnWithDefaults fills the connection fields the check left unset from
