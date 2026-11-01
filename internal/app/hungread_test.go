@@ -123,3 +123,52 @@ func assertMonitorSurvives(t *testing.T, hung *hungRead, stuck *Watch) {
 	cancel()
 	awaitWithin(t, runDone, "a shutdown")
 }
+
+// Whatever a cycle is stuck on, and any read without a guard can still be, a
+// stopping daemon leaves it behind: the join held the exit until the init system
+// killed it, and a reload stuck the same way held it through the monitor's lock.
+func TestMonitorShutdownDoesNotOutwaitWhatIsStuck(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		wedge func(*Monitor, *hungRead) []*Watch
+	}{
+		{"a cycle no context reaches", func(_ *Monitor, hung *hungRead) []*Watch {
+			return []*Watch{{Name: "stuck", Cycle: func(context.Context) { hung.block() }}}
+		}},
+		{"a reload holding the lock", func(mon *Monitor, hung *hungRead) []*Watch {
+			return []*Watch{{Name: "reload", Cycle: func(context.Context) {
+				mon.mu.Lock()
+				defer mon.mu.Unlock()
+				hung.block()
+			}}}
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			hung := newHungRead(t)
+			ready := NewReadiness(string(servicemgr.BackendSystemd), 0, 1)
+			mon := NewMonitor(nil, Deps{}, Scheduler{Interval: time.Millisecond}, ready, nil, nil, nil, nil)
+			mon.watches = tc.wedge(mon, hung)
+			mon.Logger = slog.New(slog.DiscardHandler)
+			mon.drainTimeout = 20 * time.Millisecond
+
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			done := make(chan struct{})
+			go func() {
+				defer close(done)
+				mon.Run(ctx)
+			}()
+			t.Cleanup(func() {
+				hung.unblock()
+				cancel()
+				<-done
+			})
+			awaitWithin(t, hung.entered, "the blocked read")
+			cancel()
+			awaitWithin(t, done, "a shutdown")
+			if rep := ready.Report(context.Background()); rep.Status != readinessShuttingDown {
+				t.Fatalf("readiness = %+v, want shutting down", rep)
+			}
+		})
+	}
+}

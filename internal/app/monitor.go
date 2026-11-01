@@ -1,6 +1,7 @@
 package app
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"reflect"
@@ -46,6 +47,8 @@ type Monitor struct {
 	// newProcReader wraps the /proc readers a reload rebuilds; nil reads the
 	// host's /proc. Tests return a fake process table.
 	newProcReader func(process.OSReader) process.Reader
+	// drainTimeout overrides generationDrainTimeout for tests.
+	drainTimeout time.Duration
 }
 
 const (
@@ -55,6 +58,12 @@ const (
 	monitorLogFieldWatches      = "watches"
 	validationIssuePreviewLimit = 5
 )
+
+// generationDrainTimeout bounds how long a shutdown waits for the last generation.
+// Every cycle observes cancellation and a guarded read gives up at its own timeout,
+// so only what no context reaches outlasts it. It leaves the web server's and the
+// state store's drains inside the 30 seconds OpenRC allows before SIGKILL.
+const generationDrainTimeout = 15 * time.Second
 
 // SystemFreshnessIntervalDivisor derives the shared system-sample freshness
 // from an engine interval.
@@ -69,17 +78,30 @@ func NewMonitor(cfg *config.Config, deps Deps, scheduler Scheduler, readiness *R
 }
 
 // Run starts the first generation and blocks until ctx is cancelled, then stops
-// workers and marks readiness shutting down.
+// workers and marks readiness shutting down. A cycle or a reload stuck where no
+// context reaches is left behind after generationDrainTimeout: the process exit
+// ends it, which beats waiting for the init system to kill the daemon.
 func (m *Monitor) Run(ctx context.Context) {
 	m.mu.Lock()
 	m.running = true
 	m.startGenerationLocked(ctx, true)
 	m.mu.Unlock()
 	<-ctx.Done()
-	m.mu.Lock()
-	m.stopGenerationLocked(true)
-	m.running = false
-	m.mu.Unlock()
+	stopped := make(chan struct{})
+	go func() {
+		defer close(stopped)
+		m.mu.Lock()
+		defer m.mu.Unlock()
+		m.stopGenerationLocked(true)
+		m.running = false
+	}()
+	drain := cmp.Or(m.drainTimeout, generationDrainTimeout)
+	select {
+	case <-stopped:
+	case <-time.After(drain):
+		m.readiness.MarkShuttingDown()
+		m.Logger.Warn("stopping with a monitoring cycle still blocked", monitorLogFieldError, fmt.Sprintf("no answer within %s", drain))
+	}
 }
 
 // Reload loads config from disk, validates it, and swaps in a new worker

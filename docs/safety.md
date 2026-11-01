@@ -946,7 +946,9 @@ then at most one operation.
 - **Shutdown** (SIGTERM/SIGINT): stop starting cycles, cancel worker contexts;
   an in-flight operation observes cancellation, its deferred cleanup releases
   the lock and emits the event, and a partially stopped service is left as-is —
-  never force-killed because of shutdown.
+  never force-killed because of shutdown. A cycle still blocked after 15 seconds,
+  on something no cancellation reaches, is left behind and the daemon exits
+  without it.
 - **Daemon reload** validates the new config, swaps workers/watches while
   preserving per-service runtime state, and keeps the running generation when
   the new config is invalid.
