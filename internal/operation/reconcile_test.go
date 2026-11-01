@@ -3,6 +3,7 @@ package operation
 import (
 	"context"
 	"errors"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -313,5 +314,89 @@ func TestRestartSkipsReconciliationWhenOnlySurvivorsAreDelegated(t *testing.T) {
 	}
 	if len(signaler.calls) != 0 {
 		t.Fatalf("a delegated process must never be signalled, calls=%v", signaler.calls)
+	}
+}
+
+// openRCCrashed answers as OpenRC does for a crashed service: the state is still
+// a started one, so `rc-service start` exits 0 and changes nothing until a zap
+// clears the marker.
+type openRCCrashed struct {
+	*fakeManager
+	zapped bool
+}
+
+func (m *openRCCrashed) Status(ctx context.Context, s string) (servicemgr.ServiceStatus, error) {
+	if !m.zapped {
+		return servicemgr.ServiceStatus{Status: servicemgr.StatusFailed}, nil
+	}
+	return m.fakeManager.Status(ctx, s)
+}
+
+func (m *openRCCrashed) Start(ctx context.Context, s string) error {
+	if !m.zapped {
+		m.calls = append(m.calls, "start ignored "+s)
+		return nil
+	}
+	return m.fakeManager.Start(ctx, s)
+}
+
+func (m *openRCCrashed) ResetState(ctx context.Context, s string) error {
+	err := m.fakeManager.ResetState(ctx, s)
+	m.zapped = err == nil
+	return err
+}
+
+func TestStartClearsOpenRCCrashedMarkerOnlyWithoutSurvivors(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name      string
+		survivor  bool
+		uncertain bool
+		resetErr  error
+		want      ResultStatus
+		wantCalls []string
+	}{
+		{name: "no survivor", want: ResultOK, wantCalls: []string{"reset mysqld", "start mysqld"}},
+		{name: "survivor blocks the reset", survivor: true, want: ResultOrphanProcesses},
+		{name: "unproven absence blocks the reset", uncertain: true, want: ResultFailed},
+		{name: "failed reset blocks the start", resetErr: errors.New("zap fixture failed"), want: ResultFailed, wantCalls: []string{"reset mysqld"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			h := defaultHarness()
+			h.backend = string(servicemgr.BackendOpenRC)
+			h.mgr.resetErr = tc.resetErr
+			if tc.survivor {
+				h.discoverSteps = [][]process.Process{{orphanedDaemon()}}
+			}
+			mgr := &openRCCrashed{fakeManager: h.mgr}
+			e := h.engine()
+			e.Manager = mgr
+			e.ObserveProcesses = func() (process.Observation, error) {
+				return process.Observation{IdentityRequired: true, AbsenceKnown: !tc.uncertain}, nil
+			}
+
+			res := e.Do(context.Background(), actionStart)
+
+			if res.Status != tc.want {
+				t.Fatalf("status = %q (%s), want %q; calls = %v", res.Status, res.Message, tc.want, mgr.calls)
+			}
+			if !slices.Equal(mgr.calls, tc.wantCalls) {
+				t.Fatalf("calls = %v, want %v", mgr.calls, tc.wantCalls)
+			}
+		})
+	}
+}
+
+// systemd starts a failed unit on its own, so its bookkeeping stays untouched.
+func TestStartLeavesSystemdFailedStateToTheStart(t *testing.T) {
+	t.Parallel()
+	h := defaultHarness()
+	h.mgr.statusSteps = []servicemgr.Status{servicemgr.StatusFailed}
+
+	res := h.engine().Do(context.Background(), actionStart)
+
+	if !res.OK() || !slices.Equal(h.mgr.calls, []string{"start mysqld"}) {
+		t.Fatalf("status = %q (%s), calls = %v", res.Status, res.Message, h.mgr.calls)
 	}
 }

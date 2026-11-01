@@ -128,6 +128,9 @@ decision.
    - Stable `inactive`/`failed` with surviving processes that are neither
      delegated nor kept triggers cleanup under `stop_policy`. Unmatched
      survivors block start.
+   - OpenRC `crashed` with no survivor is cleared with `zap` first: OpenRC still
+     counts the service as started, so `rc-service start` would exit 0 and do
+     nothing. systemd starts a `failed` unit on its own.
    - `active` with a proven-absent resident daemon triggers reconciliation.
      OpenRC uses `zap`; systemd uses stop and clears a failed marker with
      `reset-failed`. An already inactive systemd unit needs no reset: systemd

@@ -65,11 +65,14 @@ func (e Engine) reconcileInitState(ctx context.Context, result *Result) (bool, [
 	if err != nil {
 		return false, outcome.remaining, fmt.Errorf("process discovery: %w", err)
 	}
-	if !outcome.found {
-		return false, nil, nil
-	}
 	if len(outcome.remaining) > 0 {
 		return false, outcome.remaining, nil
+	}
+	// OpenRC holds a crashed service as started: `rc-service start` exits 0 and
+	// changes nothing until the marker is gone.
+	crashed := status.Status == servicemgr.StatusFailed && e.Backend == string(servicemgr.BackendOpenRC)
+	if !outcome.found && !crashed {
+		return false, nil, nil
 	}
 	if err := e.resetStopped(ctx, false); err != nil {
 		return false, nil, err

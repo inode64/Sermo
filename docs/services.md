@@ -1063,6 +1063,10 @@ dead process tree; monitoring can still report them independently.
   `stop_policy` as a stop, excluding delegated and kept processes. Any
   surviving orphan or discovery error blocks a following start. A successful cleanup reconciles init
   before proceeding.
+- **OpenRC `crashed`, daemon absent:** OpenRC still counts the service as started
+  and `rc-service SERVICE start` would exit 0 without doing anything, so Sermo
+  first runs `rc-service SERVICE zap`, after verifying process absence as above.
+  systemd starts a `failed` unit on its own.
 
 The stop phase runs the backend stop, waits up to `graceful_timeout` for fresh
 process observations to confirm exit, handles residuals, reconciles init and
