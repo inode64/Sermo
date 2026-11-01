@@ -1,6 +1,7 @@
 package rules
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -10,6 +11,12 @@ import (
 	"sermo/internal/metrics"
 	"sermo/internal/process"
 )
+
+// stoppedFDs is the fds reading of a service with no processes: ready, with a
+// count and no percentage, because no process offers a limit to measure against.
+func stoppedFDs(string, string) (metrics.Reading, bool) {
+	return metrics.Reading{HasAbsolute: true, Ready: true}, true
+}
 
 func TestUnavailableConditionsNeverMatch(t *testing.T) {
 	loop := filepath.Join(t.TempDir(), "loop")
@@ -23,6 +30,7 @@ func TestUnavailableConditionsNeverMatch(t *testing.T) {
 	}{
 		{"missing metric", Evaluator{}, map[string]any{ConditionMetric: map[string]any{FieldName: "cpu", FieldOp: ">", FieldValue: "90%"}}},
 		{"unready metric", Evaluator{Deps: checks.Deps{Metrics: func(string, string) (metrics.Reading, bool) { return metrics.Reading{}, true }}}, map[string]any{ConditionMetric: map[string]any{FieldName: "cpu", FieldOp: ">", FieldValue: "90%"}}},
+		{"metric without the threshold's form", Evaluator{Deps: checks.Deps{Metrics: stoppedFDs}}, map[string]any{ConditionMetric: map[string]any{FieldName: "fds", FieldOp: ">", FieldValue: "80%"}}},
 		{"unknown process", Evaluator{Deps: checks.Deps{ProcessesAny: func([]string, string) string { return process.StateUnknown }}}, map[string]any{ConditionProcess: map[string]any{FieldExe: "/usr/bin/demo", FieldUser: "demo"}}},
 		{"missing change source", Evaluator{}, map[string]any{ConditionChanged: map[string]any{FieldPath: "/etc/demo"}}},
 		{"missing version source", Evaluator{}, map[string]any{ConditionChanged: map[string]any{FieldApp: "demo"}}},
@@ -223,6 +231,31 @@ func TestOrHoldsDespiteUnknownSibling(t *testing.T) {
 		"skipped": {OK: true, Skipped: true}, "smtp_587": {OK: false},
 	}}); blocking == "" || err != nil {
 		t.Fatalf("a guard whose or holds must block: blocked=%v err=%v", blocking, err)
+	}
+}
+
+// A metric that cannot be read in the threshold's form is an unknown operand: a
+// service down enough to have no processes must still fire on the sibling that
+// says so, in either order, and an undecided list stays unknown so a guard denies.
+func TestOrDecidesOverAMetricWithoutTheThresholdForm(t *testing.T) {
+	cache := map[string]checks.Result{"http": {Check: "http", OK: false}, "idle": {Check: "idle", OK: true}}
+	metric := map[string]any{ConditionMetric: map[string]any{FieldName: "fds", FieldOp: ">", FieldValue: "80%"}}
+	down := map[string]any{ConditionFailed: map[string]any{FieldCheck: "http"}}
+	for _, order := range [][]any{{metric, down}, {down, metric}} {
+		ev := &Evaluator{Cache: cache, Deps: checks.Deps{Metrics: stoppedFDs}}
+		if got, err := ev.Eval(t.Context(), map[string]any{ConditionOr: order}); !got || err != nil || ev.Unknown {
+			t.Fatalf("or %v = %v, %v (unknown %v); want it to hold in either order", order, got, err, ev.Unknown)
+		}
+	}
+	healthy := map[string]any{ConditionFailed: map[string]any{FieldCheck: "idle"}}
+	undecided := map[string]any{ConditionOr: []any{metric, healthy}}
+	ev := &Evaluator{Cache: cache, Deps: checks.Deps{Metrics: stoppedFDs}}
+	if got, err := ev.Eval(t.Context(), undecided); got || err != nil || !ev.Unknown {
+		t.Fatalf("undecided or = %v, %v (unknown %v); want an unknown no-match", got, err, ev.Unknown)
+	}
+	guard := []Rule{{Type: RuleGuard, Name: "guard", Blocks: []string{string(ActionStart)}, If: undecided}}
+	if blocking, _, err := Guard(t.Context(), guard, string(ActionStart), ev); blocking != "" || !errors.Is(err, ErrUnavailable) {
+		t.Fatalf("guard over an undecided or: blocked by %q, err %v; want it to deny as unavailable", blocking, err)
 	}
 }
 

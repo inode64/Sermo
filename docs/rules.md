@@ -4039,8 +4039,9 @@ treating an observation failure as an empty connection set.
 
 This fail-closed rule applies to every check and to `metric:`, `process:` and
 `changed:` condition leaves: a timeout, unreadable source, malformed sample,
-missing source or not-ready metric is an unavailable observation, not a valid
-false condition. Value and state predicates do not match when an evaluated
+missing source, not-ready metric or a metric the sample does not carry in the
+threshold's form (a `%` on a host with no swap) is an unavailable observation,
+not a valid false condition. Value and state predicates do not match when an evaluated
 leaf is unavailable or skipped, including beneath `not`. An `and` fails as
 soon as one of its operands fails and an `or` holds as soon as one holds; each
 is unknown only when no operand decides it and one could not be observed, so

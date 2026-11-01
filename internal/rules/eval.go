@@ -373,9 +373,11 @@ func (e *Evaluator) evalProcess(v any) (bool, error) {
 }
 
 // evalMetric reads a sampled metric and compares it to the threshold.
-// With no metric source, a missing reading or a not-ready rate metric it is
-// false for remediation and an error for guards, so an automatic action never
-// fires on an unobserved value and a guard never treats that gap as false.
+// With no metric source, a missing reading, a not-ready rate metric or a reading
+// without the threshold's form (no swap device, no process to take a limit from)
+// it is false for remediation and an error for guards, so an automatic action
+// never fires on an unobserved value and a guard never treats that gap as false.
+// Validation has already settled the operator and the threshold's spelling.
 func (e *Evaluator) evalMetric(v any) (bool, error) {
 	m, err := condMap(v, "metric condition")
 	if err != nil {
@@ -395,7 +397,7 @@ func (e *Evaluator) evalMetric(v any) (bool, error) {
 	}
 	match, err := metrics.Compare(reading, cfgval.AsString(m[FieldOp]), cfgval.String(m[FieldValue]))
 	if err != nil {
-		return false, fmt.Errorf("compare metric %s: %w", name, err)
+		return unavailableSignal(fmt.Errorf("compare metric %s: %w", name, err))
 	}
 	return match, nil
 }
