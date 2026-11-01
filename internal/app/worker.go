@@ -828,7 +828,7 @@ func (w *Worker) runFiringRemediation(ctx context.Context, ev *rules.Evaluator, 
 	if skip {
 		return false
 	}
-	if w.DryRun {
+	if w.ruleDryRun(firing.Rule) {
 		w.emitDryRunRemediation(ctx, ev, firing, action, suppress)
 		return false
 	}
@@ -952,7 +952,13 @@ func (w *Worker) emitRuleRecovered(ctx context.Context, ev *rules.Evaluator, rul
 	// heard the incident accept it.
 	msg := alertMessage(w.Service, rule.Name, recoveredMessagePrefix+message, "", evaluation.notified)
 	msg.Fields[sermoEnvEvent] = eventKindRecovered
-	w.deliverRuleMessage(ctx, rule, msg, dryRunFilter(w.DryRun))
+	w.deliverRuleMessage(ctx, rule, msg, dryRunFilter(w.ruleDryRun(rule)))
+}
+
+// ruleDryRun reports whether r only rehearses: a rule may do so alone, but it
+// can never act on a service that is in dry-run mode as a whole.
+func (w *Worker) ruleDryRun(r rules.Rule) bool {
+	return w.DryRun || r.DryRun
 }
 
 func (w *Worker) operateForRemediation(ctx context.Context, action string) operation.Result {
@@ -990,7 +996,8 @@ func (w *Worker) runAlerts(ctx context.Context, ev *rules.Evaluator, at time.Tim
 // episode; level is the episode's held severity. A dry-run worker's alerts
 // reach only the console notifiers.
 func (w *Worker) emitAlerts(ctx context.Context, ev *rules.Evaluator, r rules.Rule, announce bool, change rules.ChangeContext, level severity.Level) {
-	allow := dryRunFilter(w.DryRun)
+	dryRun := w.ruleDryRun(r)
+	allow := dryRunFilter(dryRun)
 	panicking := w.InPanic != nil && w.InPanic()
 	failOutput := w.cycleFailOutput
 	emitEvent := w.shouldEmitRuleEvent(r, announce)
@@ -1011,7 +1018,7 @@ func (w *Worker) emitAlerts(ctx context.Context, ev *rules.Evaluator, r rules.Ru
 		if !emitNotify {
 			continue
 		}
-		if !w.DryRun {
+		if !dryRun {
 			// Only a live delivery defines who the recovery must reach.
 			w.windowState(r.Name).MarkNotified(level)
 		}

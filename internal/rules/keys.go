@@ -28,6 +28,9 @@ const (
 	// RuleFieldSeverity grades an alert or remediation rule's episode. Absent,
 	// the rule takes the gravest grade of the failing checks its condition reads.
 	RuleFieldSeverity = "severity"
+	// RuleFieldDryRun rehearses one alert or remediation rule on a service that
+	// otherwise acts for real.
+	RuleFieldDryRun = "dry_run"
 )
 
 // Condition constants are the recognized condition-tree operators.

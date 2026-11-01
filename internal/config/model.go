@@ -218,7 +218,7 @@ const (
 )
 
 // keyDryRun is the per-target flag that simulates automatic actions.
-const keyDryRun = "dry_run"
+const keyDryRun = rules.RuleFieldDryRun
 
 // EntryKeyDryRun is the shared per-target `dry_run` key.
 const EntryKeyDryRun = keyDryRun

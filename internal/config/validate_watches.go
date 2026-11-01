@@ -365,6 +365,33 @@ func validateWatchThenAction(prefix, action string, then map[string]any, report 
 	return ok
 }
 
+// unpromotedWatchKeys configure the watch runtime. A check-only or then.action
+// entry leaves no watch behind to read them, and neither a check nor a rule can
+// carry them, so they are refused: `monitor: disabled` or a stricter `policy`
+// dropped here would leave the generated remediation acting as if never written.
+var unpromotedWatchKeys = [...]string{
+	keyMonitor, sectionPolicy, sectionMetrics, keyMount, WatchKeyRAIDControl, WatchKeyReplicationControl,
+}
+
+// validatePromotedWatch reports what a check-only or then.action entry declares
+// that promotion cannot honor. action is "" for a check-only entry.
+func validatePromotedWatch(name, action string, entry map[string]any, add addFunc) {
+	for _, key := range unpromotedWatchKeys {
+		if _, present := entry[key]; present {
+			add("%s is not supported on a watch that becomes a check or rule (one with no then, or with then.action)", watchFieldPath(name, key))
+		}
+	}
+	raw, present := entry[keyDryRun]
+	if !present || action == "" {
+		return
+	}
+	if _, ok := raw.(bool); !ok {
+		add(validationBooleanFormat, watchFieldPath(name, keyDryRun))
+	} else if action == string(rules.ActionBlock) {
+		add("%s is not supported with action: block; a guard refuses operations in dry-run mode too", watchFieldPath(name, keyDryRun))
+	}
+}
+
 func validateWatchMetadata(name string, entry map[string]any, add addFunc) {
 	for _, key := range []string{keyDisplayName, keyDescription, keyCategory} {
 		if v, present := entry[key]; present {

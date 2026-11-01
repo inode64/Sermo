@@ -192,8 +192,24 @@ func validateRule(path string, entry map[string]any, notifiers, checkNames, syst
 	} else {
 		validateSeverityField(path, entry, add)
 	}
+	validateRuleDryRun(path, entry, ruleType, add)
 	if hasIf {
 		validateCondition(ifNode, path+".if", checkNames, systemMetricChecks, ruleType == string(rules.RuleAlert), add)
+	}
+}
+
+// validateRuleDryRun refuses dry_run on a guard: simulating one would mean not
+// refusing the operation, which a rehearsal must never change.
+func validateRuleDryRun(path string, entry map[string]any, ruleType string, add addFunc) {
+	raw, present := entry[rules.RuleFieldDryRun]
+	if !present {
+		return
+	}
+	field := path + "." + rules.RuleFieldDryRun
+	if _, ok := raw.(bool); !ok {
+		add(validationBooleanFormat, field)
+	} else if ruleType == string(rules.RuleGuard) {
+		add("%s is not supported on a guard rule: a guard refuses operations in dry-run mode too", field)
 	}
 }
 

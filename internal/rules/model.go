@@ -182,6 +182,9 @@ type Rule struct {
 	// Severity is the declared grade of the rule's episode; unset lets
 	// Evaluator.RuleSeverity grade it from the checks its condition reads.
 	Severity severity.Level
+	// DryRun simulates this rule's actions. It adds to the service's own dry-run
+	// mode and cannot lift it; guards ignore it, since they only refuse.
+	DryRun bool
 }
 
 // IsOperation reports whether the action type is a service operation that
@@ -448,6 +451,7 @@ func ParseRules(tree map[string]any) ([]Rule, []string) {
 			Blocks:   cfgval.StringList(entry[RuleFieldBlocks]),
 			Notify:   cfgval.StringList(entry[RuleFieldNotify]),
 			Emission: emission.Merge(entry[emission.Section], emission.Policy{}),
+			DryRun:   cfgval.Bool(entry[RuleFieldDryRun]),
 		})
 	}
 	return rules, warnings

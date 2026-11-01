@@ -2280,6 +2280,48 @@ func TestWorkerDryRunEvaluatesButDoesNotAct(t *testing.T) {
 	}
 }
 
+// TestWorkerRuleDryRunSimulatesItsRule verifies a rule can rehearse on a service
+// that acts for real: its operation only reports what it would do, and the
+// remediation state stays untouched.
+func TestWorkerRuleDryRunSimulatesItsRule(t *testing.T) {
+	h := &workerHarness{cache: failedCache("http")}
+	tree := remediationTree("restart-if-down", "http", "restart")
+	tree["rules"].(map[string]any)["restart-if-down"].(map[string]any)[rules.RuleFieldDryRun] = true
+	w := h.worker(tree, rules.Policy{Cooldown: time.Minute}, nil)
+
+	w.RunCycle(context.Background())
+
+	if len(h.ops) != 0 {
+		t.Fatalf("rule dry_run executed ops=%v; must not call Operate", h.ops)
+	}
+	if ev, ok := h.eventOf(eventKindDryRun); !ok || ev.Action != string(rules.ActionRestart) {
+		t.Fatalf("dry-run event = %+v (found %v), events=%+v", ev, ok, h.events)
+	}
+	if !w.State.LastActionAt.IsZero() || len(w.State.RecentActions) != 0 {
+		t.Error("rule dry_run must not record remediation state")
+	}
+}
+
+func TestWorkerRuleDryRunSendsOnlyWallAlerts(t *testing.T) {
+	h := &workerHarness{cache: failedCache("http")}
+	tree := alertRuleTree(nil)
+	tree["rules"].(map[string]any)["warn-down"].(map[string]any)[rules.RuleFieldDryRun] = true
+	w := h.worker(tree, rules.Policy{}, nil)
+	email := &fakeNotifier{name: "ops-email", typ: "email"}
+	wall := &fakeNotifier{name: "wall", typ: "wall"}
+	w.Notifiers = map[string]notify.Notifier{"ops-email": email, "wall": wall}
+	w.GlobalNotify = []string{"ops-email", "wall"}
+
+	w.RunCycle(context.Background())
+
+	if len(email.msgs) != 0 {
+		t.Fatalf("rule dry_run must suppress non-console notifications, got %d", len(email.msgs))
+	}
+	if len(wall.msgs) != 1 {
+		t.Fatalf("rule dry_run must still send wall notification, got %d", len(wall.msgs))
+	}
+}
+
 // TestWorkerDryRunReportsSuppression verifies that when a firing rule would be
 // blocked (here by the cooldown policy), dry-run mode still emits a dry-run
 // event whose message records why the action would have been suppressed, and

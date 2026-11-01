@@ -4262,4 +4262,6 @@ start/stop/restart/reload/resume operation. It emits `dry-run` events and does
 not advance live remediation cooldown state. Dry-run also suppresses automatic
 rule notifications except `wall`; manual operator actions are unaffected. See
 [configuration](configuration.md#host-watches) for examples covering watches and
-global defaults.
+global defaults. `dry_run: true` on one alert or remediation rule rehearses that
+rule alone; its `false` cannot lift a service's dry run, and a guard refuses the
+key, because it refuses operations in dry-run mode too.

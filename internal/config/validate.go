@@ -143,7 +143,7 @@ var validRuleKeys = set(
 	rules.RuleFieldType, rules.RuleFieldIf, rules.RuleFieldThen,
 	rules.RuleFieldFor, rules.RuleFieldWithin, rules.RuleFieldClear,
 	rules.RuleFieldBlocks, rules.RuleFieldNotify, rules.RuleFieldSeverity,
-	emission.Section, keyEnabled, keyDelete,
+	rules.RuleFieldDryRun, emission.Section, keyEnabled, keyDelete,
 )
 
 var validEngineKeys = set(

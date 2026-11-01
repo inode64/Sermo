@@ -11,6 +11,7 @@ import (
 
 	"sermo/internal/cfgval"
 	"sermo/internal/checks"
+	"sermo/internal/emission"
 	"sermo/internal/mounts"
 	"sermo/internal/process"
 	"sermo/internal/rules"
@@ -686,6 +687,7 @@ func expandServiceWatches(tree map[string]any) []string {
 			}
 			// This entry is removed before the resolved-tree validators run.
 			validateServiceWatchGrading(name, entry, add)
+			validatePromotedWatch(name, "", entry, add)
 			if _, ok := promoteServiceWatchCheck(checksMap, name, entry, check, add); !ok {
 				continue
 			}
@@ -701,6 +703,7 @@ func expandServiceWatches(tree map[string]any) []string {
 		// only repeat the same issues under rules.<name>.
 		actionOK := validateWatchThenAction(watchPath(name), action, then, add)
 		validateServiceWatchGrading(name, entry, add)
+		validatePromotedWatch(name, action, entry, add)
 		check, ok := entry[WatchKeyCheck].(map[string]any)
 		if !ok {
 			add(validationRequiredFormat, watchCheckPath(name))
@@ -854,10 +857,17 @@ func buildServiceWatchRule(entry, then map[string]any, action string, target ser
 		rule[rules.RuleFieldType] = string(rules.RuleRemediation)
 	}
 	// A rule's notify is an entry-level field (ParseRules reads entry[rules.RuleFieldNotify]),
-	// not part of then; a guard never notifies.
+	// not part of then; a guard never notifies. Nor does it rehearse: dry_run has
+	// to reach the rule, or a watch declared as a rehearsal acts for real.
 	if action != string(rules.ActionBlock) {
 		if n, has := then[rules.RuleFieldNotify]; has {
 			rule[rules.RuleFieldNotify] = n
+		}
+		if cfgval.Bool(entry[keyDryRun]) {
+			rule[rules.RuleFieldDryRun] = true
+		}
+		if e, has := entry[emission.Section]; has {
+			rule[emission.Section] = e
 		}
 	}
 	rule[rules.RuleFieldThen] = thenOut

@@ -7,6 +7,7 @@ import (
 
 	"sermo/internal/cfgval"
 	"sermo/internal/checks"
+	"sermo/internal/emission"
 	"sermo/internal/rules"
 )
 
@@ -424,6 +425,35 @@ func TestValidateUnifiedWatchActions(t *testing.T) {
     check: {}
     then: { action: restart }
 `, "check.type is required"},
+		{"non-boolean dry_run", `watches:
+  w:
+    dry_run: "yes"
+    check: { type: tcp, host: 127.0.0.1, port: 80 }
+    then: { action: restart }
+`, "watches.w.dry_run must be a boolean"},
+		{"dry_run on a guard", `watches:
+  w:
+    dry_run: true
+    check: { type: tcp, host: 127.0.0.1, port: 80 }
+    then: { action: block, blocks: [restart], message: busy }
+`, "watches.w.dry_run is not supported with action: block"},
+		{"policy on an action", `watches:
+  w:
+    policy: { cooldown: 7h }
+    check: { type: tcp, host: 127.0.0.1, port: 80 }
+    then: { action: restart }
+`, "watches.w.policy is not supported on a watch that becomes a check or rule"},
+		{"monitor on an action", `watches:
+  w:
+    monitor: disabled
+    check: { type: tcp, host: 127.0.0.1, port: 80 }
+    then: { action: restart }
+`, "watches.w.monitor is not supported on a watch that becomes a check or rule"},
+		{"monitor on a check-only watch", `watches:
+  w:
+    monitor: disabled
+    check: { type: tcp, host: 127.0.0.1, port: 80 }
+`, "watches.w.monitor is not supported on a watch that becomes a check or rule"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -436,6 +466,73 @@ func TestValidateUnifiedWatchActions(t *testing.T) {
 					t.Fatalf("unsound watch action re-reported as a rule issue: %q", issue.Msg)
 				}
 			}
+		})
+	}
+}
+
+// TestPromotedWatchKeepsDryRunAndEmission pins what a watch hands to the rule
+// it becomes. dry_run used to be dropped there, so a watch declared as a
+// rehearsal restarted the service for real.
+func TestPromotedWatchKeepsDryRunAndEmission(t *testing.T) {
+	for _, tc := range []struct{ name, then, wantType string }{
+		{"remediation", "{ action: restart }", "remediation"},
+		{"alert", "{ action: alert, message: down }", "alert"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			tree, errs := resolveWatchService(t, `watches:
+  w:
+    dry_run: true
+    emission: { events: every_cycle }
+    check: { type: tcp, host: 127.0.0.1, port: 80 }
+    then: `+tc.then+"\n")
+			if len(errs) != 0 {
+				t.Fatalf("resolve errors = %v", errs)
+			}
+			parsed, warnings := rules.ParseRules(tree)
+			if len(warnings) != 0 || len(parsed) != 1 {
+				t.Fatalf("ParseRules = %v, warnings %v", parsed, warnings)
+			}
+			rule := parsed[0]
+			if string(rule.Type) != tc.wantType || !rule.DryRun {
+				t.Fatalf("rule type %q DryRun %v, want %s simulated", rule.Type, rule.DryRun, tc.wantType)
+			}
+			if rule.Emission.Events != emission.ModeEveryCycle {
+				t.Fatalf("emission = %+v, want the watch's every_cycle", rule.Emission)
+			}
+		})
+	}
+	t.Run("absent stays real", func(t *testing.T) {
+		rule := resolveWatchRule(t, `watches:
+  w:
+    check: { type: tcp, host: 127.0.0.1, port: 80 }
+    then: { action: restart }
+`, "w", "remediation")
+		if _, present := rule[rules.RuleFieldDryRun]; present {
+			t.Fatalf("rule = %v, want no dry_run", rule)
+		}
+	})
+}
+
+func TestValidateRuleDryRun(t *testing.T) {
+	base := `name: svc
+service: x
+policy: { cooldown: 5m }
+checks:
+  web: { type: tcp, host: 127.0.0.1, port: 80 }
+`
+	cases := []struct{ name, rule, want string }{
+		{"boolean", "{ type: remediation, dry_run: true, if: { failed: { check: web } }, then: { action: restart } }", ""},
+		{"not a boolean", `{ type: remediation, dry_run: "no", if: { failed: { check: web } }, then: { action: restart } }`, "rules.r.dry_run must be a boolean"},
+		{"guard", "{ type: guard, dry_run: true, blocks: [restart], if: { failed: { check: web } }, then: { action: block, message: busy } }", "rules.r.dry_run is not supported on a guard rule"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			issues := validateService(t, base+"rules:\n  r: "+tc.rule+"\n")
+			if tc.want == "" {
+				mustNotHave(t, issues, "rules.r")
+				return
+			}
+			mustHave(t, issues, tc.want)
 		})
 	}
 }

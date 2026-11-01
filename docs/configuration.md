@@ -2514,8 +2514,10 @@ then:
 
 Use `dry_run: true` when you want automatic actions wired for a trial run, but
 you do not want non-console side effects yet. It is available in `defaults`, in
-each service, and in each watch entry. A target-level
-setting overrides `defaults.dry_run`.
+each service, in each watch entry and in each alert or remediation rule. A
+target-level setting overrides `defaults.dry_run`. A rule, or a service watch
+with `then.action`, can only add a rehearsal: its `dry_run: false` does not make
+a dry-run service act.
 
 Dry-run applies only to automatic actions driven by monitoring/rules:
 
@@ -3057,6 +3059,14 @@ The condition polarity follows the check: a **health** check (tcp/http/service/
 command/cert/…) fires on **failure**; a **condition** check (metric/storage/load/…)
 fires when its **threshold** is met (mark an embedded condition check
 `optional: true` so it does not affect the service's availability/SLA).
+
+The generated rule takes the entry's `dry_run` and `emission`, so a watch can
+rehearse its action on a service that otherwise acts for real. `dry_run` is
+refused with `action: block`, because a guard refuses operations in dry-run mode
+too. `monitor`, `policy`, `metrics`, `mount`, `raid_control` and
+`replication_control` belong to the watch runtime and are refused on an entry
+that becomes a check or rule, because no watch is left to read them; use
+`enabled: false` to turn such an entry off, and the service's `policy` to pace it.
 
 A [`severity:`](rules.md#severity-severity) on the watch entry grades the
 generated check, exactly as on a host watch; one on the `check:` block is
