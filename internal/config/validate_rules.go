@@ -350,6 +350,8 @@ func validateCondition(node map[string]any, path string, checkNames, systemMetri
 	case rules.ConditionMetric:
 		if m, ok := node[rules.ConditionMetric].(map[string]any); ok {
 			validateMetric(m, path+".metric", allowSystemMetric, add)
+		} else {
+			add(validationMappingFormat, path+".metric")
 		}
 	case rules.ConditionChanged:
 		validateChanged(node[rules.ConditionChanged], path+".changed", treeAppVersionChecks(checkNames), add)

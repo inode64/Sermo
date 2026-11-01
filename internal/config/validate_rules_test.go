@@ -190,3 +190,20 @@ func TestValidateRuleTypeActionCoupling(t *testing.T) {
 		t.Fatalf("a resume remediation must be valid, got %v", issues)
 	}
 }
+
+// TestValidateMetricConditionMustBeAMapping pins that a condition the evaluator
+// can only fail on is refused: a scalar metric passed validation, then errored on
+// every cycle, so its remediation never fired.
+func TestValidateMetricConditionMustBeAMapping(t *testing.T) {
+	cases := []struct{ name, condition string }{
+		{"scalar", `{ metric: "cpu > 90" }`},
+		{"empty", `{ metric: null }`},
+		{"nested", `{ not: { metric: "cpu > 90" } }`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			issues := validateService(t, "name: svc\nservice: svc\nrules:\n  r:\n    type: remediation\n    if: "+tc.condition+"\n    then: { action: restart }\n")
+			mustHave(t, issues, "metric must be a mapping")
+		})
+	}
+}
