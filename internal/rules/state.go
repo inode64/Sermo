@@ -215,6 +215,16 @@ func (s *RemediationState) Recover() {
 	s.CurrentBackoff = 0
 }
 
+// RecoverAfterCooldown is Recover for an owner with no healthy cycle to reset on
+// at once: a watch whose episodes end and return. It waits for the cooldown the
+// backoff set to run out, so the cooldown in force is never cut short and a
+// target that flaps keeps paying for it.
+func (p Policy) RecoverAfterCooldown(state *RemediationState, now time.Time) {
+	if _, until := p.cooldownStatus(state, now); until.IsZero() {
+		state.Recover()
+	}
+}
+
 func (s *RemediationState) countWithin(now time.Time, window time.Duration) int {
 	if window <= 0 {
 		return len(s.RecentActions)

@@ -372,3 +372,28 @@ func TestRecordNoTrimWithoutWindow(t *testing.T) {
 		t.Fatalf("RecentActions = %d, want 2 (no window -> no trim)", len(st.RecentActions))
 	}
 }
+
+// A backoff outlives a brief recovery: it ends only once the cooldown it set has
+// run out, so a target that flaps keeps paying for it, and the configured
+// cooldown still stands afterwards.
+func TestRecoverAfterCooldownNeverShortensTheCooldownInForce(t *testing.T) {
+	p := Policy{Cooldown: time.Minute, Backoff: &Backoff{Initial: time.Hour, Factor: 2}}
+	st := &RemediationState{}
+	st.Record(t0, p)
+
+	p.RecoverAfterCooldown(st, t0.Add(59*time.Minute))
+	if st.CurrentBackoff != time.Hour {
+		t.Fatalf("backoff = %s inside its own cooldown, want it kept", st.CurrentBackoff)
+	}
+	if ok, _ := p.Allow(st, t0.Add(59*time.Minute)); ok {
+		t.Fatal("the cooldown in force must keep holding")
+	}
+
+	p.RecoverAfterCooldown(st, t0.Add(time.Hour))
+	if st.CurrentBackoff != 0 {
+		t.Fatalf("backoff = %s after its cooldown ran out, want 0", st.CurrentBackoff)
+	}
+	if got := p.Report(st, t0.Add(time.Hour)).EffectiveCooldown; got != time.Minute {
+		t.Fatalf("effective cooldown = %s, want the configured one", got)
+	}
+}

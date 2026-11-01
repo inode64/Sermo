@@ -460,6 +460,65 @@ func TestWatchExpandFiresOnceThenCooldown(t *testing.T) {
 	}
 }
 
+// A backoff grows over consecutive actions, so separate incidents must not
+// compound it. One that follows inside the cooldown is the same trouble: it stays
+// refused, and only a healthy cycle after that cooldown ran out ends the backoff.
+func TestWatchBackoffDecaysAfterItsCooldownRunsOut(t *testing.T) {
+	now := t0
+	exp := &fakeExpander{}
+	lowSpace := stubCheck{name: "disk-root", ok: true, data: map[string]any{"path": "/srv"}}
+	healthy := stubCheck{name: "disk-root", ok: false, data: map[string]any{"path": "/srv"}}
+	w := &Watch{
+		Name: "disk-root", CheckType: "storage", Check: lowSpace,
+		Expand: &ExpandSpec{By: 1}, Expander: exp,
+		Policy: rules.Policy{Cooldown: time.Minute, Backoff: &rules.Backoff{Initial: time.Hour, Factor: 2}},
+		Now:    func() time.Time { return now },
+		Emit:   func(Event) {},
+	}
+	incident := func() {
+		w.Check = lowSpace
+		w.RunCycle(context.Background())
+		w.Check = healthy
+		w.RunCycle(context.Background())
+	}
+
+	incident()
+	now = now.Add(30 * time.Minute)
+	incident()
+	if len(exp.calls) != 1 || w.policyState.CurrentBackoff != time.Hour {
+		t.Fatalf("expansions = %d backoff = %s, want the second one refused and the backoff kept", len(exp.calls), w.policyState.CurrentBackoff)
+	}
+
+	for range 3 {
+		now = now.Add(30 * 24 * time.Hour)
+		w.RunCycle(context.Background()) // a healthy month ends the backoff
+		incident()
+		if w.policyState.CurrentBackoff != time.Hour {
+			t.Fatalf("backoff = %s after an unrelated incident, want the initial value", w.policyState.CurrentBackoff)
+		}
+	}
+	if len(exp.calls) != 4 {
+		t.Fatalf("expansions = %d, want one per incident", len(exp.calls))
+	}
+}
+
+// A dry run leaves the policy state alone, as the worker's does.
+func TestWatchDryRunLeavesTheBackoff(t *testing.T) {
+	now := t0
+	w := &Watch{
+		Name: "disk-root", CheckType: checks.CheckTypeStorage, DryRun: true,
+		Check:  stubCheck{name: "disk-root", ok: false},
+		Policy: rules.Policy{Cooldown: time.Minute, Backoff: &rules.Backoff{Initial: time.Hour, Factor: 2}},
+		Now:    func() time.Time { return now.Add(time.Hour) },
+		Emit:   func(Event) {},
+	}
+	w.policyState = rules.RemediationState{LastActionAt: t0, CurrentBackoff: time.Minute}
+	w.RunCycle(context.Background())
+	if w.policyState.CurrentBackoff != time.Minute {
+		t.Fatalf("dry-run cycle changed the backoff to %s", w.policyState.CurrentBackoff)
+	}
+}
+
 func TestWatchExpandFailureEmitsEvent(t *testing.T) {
 	exp := &fakeExpander{err: errExpandTest}
 	var events []Event

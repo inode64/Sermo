@@ -603,6 +603,35 @@ func TestDBQueryWatchFailedKillSpendsNoPolicy(t *testing.T) {
 	}
 }
 
+// The kill budget's backoff ends like a watch's: once no statement is open and
+// the cooldown it set has run out.
+func TestDBQueryWatchKillBackoffDecays(t *testing.T) {
+	f := newDBQueryFixture(t)
+	f.w.kill = &checks.DBQueryKillSpec{After: time.Minute, Mode: checks.DBQueryKillModeQuery, Selector: checks.DBQuerySelector{Users: []string{"report"}}}
+	f.w.policy = rules.Policy{Cooldown: time.Minute, Backoff: &rules.Backoff{Initial: time.Hour, Factor: 2}}
+	f.w.killer = func(context.Context, operation.DBQueryTarget) operation.Result {
+		return operation.Result{Status: operation.ResultOK}
+	}
+	f.queries = []checks.DBQuery{mariaQuery(2, 20, 3600, "report")}
+	f.cycle()
+	if f.w.policyState.CurrentBackoff != time.Hour {
+		t.Fatalf("backoff = %s after the kill", f.w.policyState.CurrentBackoff)
+	}
+
+	f.queries = nil
+	f.now = f.now.Add(30 * time.Minute)
+	f.cycle()
+	if f.w.policyState.CurrentBackoff != time.Hour {
+		t.Fatalf("backoff = %s inside its own cooldown, want it kept", f.w.policyState.CurrentBackoff)
+	}
+
+	f.now = f.now.Add(30 * time.Minute)
+	f.cycle()
+	if f.w.policyState.CurrentBackoff != 0 {
+		t.Fatalf("backoff = %s after its cooldown ran out, want 0", f.w.policyState.CurrentBackoff)
+	}
+}
+
 // A thread that does not belong to the database server (a container's ids on
 // the host) is never measured.
 func TestDBQueryWatchMeasuresOnlyServerThreads(t *testing.T) {

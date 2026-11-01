@@ -401,6 +401,9 @@ func (w *Watch) evaluateFiring(ctx context.Context, res checks.Result) (watchSte
 	episode := w.state.FiresGradedAt(w.Window, fired, w.resultSeverity(res), w.clock())
 	if !episode.Firing {
 		w.recover(ctx, res, cmp.Or(episode.Severity, legacy), announced)
+		if !w.DryRun {
+			w.Policy.RecoverAfterCooldown(&w.policyState, w.clock())
+		}
 		return watchStep{}, false
 	}
 	step := watchStep{wasFiring: w.firing, level: episode.Severity}

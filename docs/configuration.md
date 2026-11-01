@@ -2695,7 +2695,10 @@ action should always carry a watch-level **`policy`** block (same fields as
 service remediation: `cooldown`, `backoff`, `max_actions`/`max_actions_window`)
 so the volume is not extended on every tick while it stays low. The action runs
 at most once per cooldown window; each attempt — success or failure — starts the
-cooldown, so a failing expansion is not retried every cycle. Outcomes are
+cooldown, so a failing expansion is not retried every cycle. A `backoff` ends on
+the first cycle the watch is not firing after the cooldown it set has run out, so
+the next incident starts again from `initial`, and a watch that flaps inside
+that cooldown keeps paying for it. Outcomes are
 recorded as `expand` / `expand-skipped` / `expand-failed` events; cooldown skips
 follow the watch's event emission policy (`on_change` by default,
 `every_cycle` when configured).

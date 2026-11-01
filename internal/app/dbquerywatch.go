@@ -287,6 +287,7 @@ func (w *dbQueryWatcher) runCycle(ctx context.Context) {
 			}
 		}
 		w.autoKill(ctx, now, seen)
+		w.decayKillBackoff(now)
 	}
 	w.publishQueries(sample, unknownCount)
 }
@@ -741,6 +742,22 @@ func (w *dbQueryWatcher) autoKill(ctx context.Context, now time.Time, seen map[s
 		return
 	}
 	w.emitEvent(Event{Watch: w.name, Kind: eventKindKillFailed, Check: check, Message: label + ": " + result.Message})
+}
+
+// decayKillBackoff ends the kill budget's backoff, as a watch's, on a cycle with
+// no statement open.
+func (w *dbQueryWatcher) decayKillBackoff(now time.Time) {
+	if w.kill == nil || w.dryRun {
+		return
+	}
+	w.loadPolicyState()
+	if w.policyState.CurrentBackoff == 0 || len(w.openIncidents()) > 0 {
+		return
+	}
+	w.policy.RecoverAfterCooldown(&w.policyState, now)
+	if w.policyState.CurrentBackoff == 0 {
+		w.persistPolicyState()
+	}
 }
 
 func (w *dbQueryWatcher) loadPolicyState() {
