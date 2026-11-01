@@ -918,7 +918,8 @@ func (w *Worker) operateForRemediation(ctx context.Context, action string) opera
 		w.emit(Event{Kind: eventKindError, Action: action, Message: err.Error()})
 	}
 	result := w.Operate(ctx, action)
-	if err := finishOperationSettling(w.OperationSettling, w.Service, action, result, nil, false); err != nil {
+	activeAfterPostflightFailure := ServiceActiveAfterPostflightFailure(ctx, action, result, nil, w.CheckDeps.Status)
+	if err := finishOperationSettling(w.OperationSettling, w.Service, action, result, nil, activeAfterPostflightFailure); err != nil {
 		w.emit(Event{Kind: eventKindError, Action: action, Message: err.Error()})
 	}
 	return result

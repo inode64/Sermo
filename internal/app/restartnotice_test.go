@@ -9,6 +9,7 @@ import (
 	"sermo/internal/checks"
 	"sermo/internal/config"
 	"sermo/internal/notify"
+	"sermo/internal/operation"
 	"sermo/internal/process"
 	"sermo/internal/rules"
 	"sermo/internal/state"
@@ -108,6 +109,39 @@ func TestWorkerServiceRestartNoticeSuppressesSermoOperation(t *testing.T) {
 	}
 	if got := h.countEvents(eventKindAlert); got != 0 {
 		t.Fatalf("Sermo operation produced alert events: %+v", h.events)
+	}
+}
+
+// A restart whose postflight failed on a service that came back up is still
+// Sermo's own restart: its new process must not read as an external one.
+func TestWorkerServiceRestartNoticeSuppressesFailedPostflight(t *testing.T) {
+	store := newFakeStore()
+	store.now = func() time.Time { return t0 }
+	n := &fakeNotifier{name: "ops"}
+	h := &workerHarness{cache: failedCache("http"), opResult: operation.Result{Status: operation.ResultPostflightFailed}}
+	w := h.worker(remediationTree("restart-if-down", "http", "restart"), rules.Policy{Cooldown: time.Minute}, nil)
+	w.RestartNotice = restartNoticeConfig()
+	w.ServiceRestartNotice = store
+	w.OperationSettling = store
+	restarted := false
+	w.PrimaryProcess = func() (servicePrimaryProcess, bool) {
+		if !restarted {
+			return servicePrimaryProcess{}, false
+		}
+		return recentPrimaryProcess()
+	}
+	operate := w.Operate
+	w.Operate = func(ctx context.Context, action string) operation.Result {
+		restarted = true
+		return operate(ctx, action)
+	}
+	w.Notifiers = map[string]notify.Notifier{"ops": n}
+
+	w.RunCycle(context.Background())
+	w.RunCycle(context.Background())
+
+	if got := len(n.msgs); got != 0 {
+		t.Fatalf("Sermo's own restart produced %d external-restart notifications", got)
 	}
 }
 
