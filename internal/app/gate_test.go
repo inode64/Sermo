@@ -165,6 +165,23 @@ func TestArtifactChangedFuncSharesWorkerBaseline(t *testing.T) {
 	}
 }
 
+func TestArtifactBaselineAcknowledgeExceptKeepsVersionsPending(t *testing.T) {
+	baseline := NewArtifactBaseline()
+	baseline.versionChanged(versionKey("nginx", 3), "1.0.0")
+	baseline.versionChanged(versionKey("redis", 3), "7.0.0")
+	baseline.versionChanged(versionKey("nginx", 3), "1.0.1")
+	baseline.versionChanged(versionKey("redis", 3), "7.0.1")
+
+	baseline.AcknowledgeExcept(map[string]bool{versionKey("nginx", 3): true}, nil)
+
+	if !baseline.versionChanged(versionKey("nginx", 3), "1.0.1") {
+		t.Fatal("the kept version must stay pending")
+	}
+	if baseline.versionChanged(versionKey("redis", 3), "7.0.1") {
+		t.Fatal("the other version must be acknowledged")
+	}
+}
+
 // TestArtifactBaselineConcurrentCascade covers an also_apply cascade: the
 // cascading service's goroutine runs the target's engine, whose `changed:`
 // guards adopt first observations, while the target's own worker evaluates

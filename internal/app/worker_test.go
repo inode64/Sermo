@@ -770,6 +770,106 @@ func TestWithinRuleDryRunReportsOnlyACycleItsConditionHolds(t *testing.T) {
 	}
 }
 
+func changedRule(path, action string) map[string]any {
+	return map[string]any{
+		"type": "remediation",
+		"if":   map[string]any{"changed": map[string]any{"path": path}},
+		"then": map[string]any{"action": action},
+	}
+}
+
+// A reload re-reads configuration and leaves the running code alone, so it must
+// not consume a library change only a restart can bring in. The restart stays
+// pending, under the cooldown the reload started, until a restart succeeds.
+func TestReloadKeepsARestartPending(t *testing.T) {
+	dir := t.TempDir()
+	conf, lib := filepath.Join(dir, "site.conf"), filepath.Join(dir, "libssl.so")
+	writeFile(t, conf, "a")
+	writeFile(t, lib, "a")
+	h := &workerHarness{cache: map[string]checks.Result{}, opResult: operation.Result{Status: operation.ResultOK}}
+	w := h.worker(map[string]any{"rules": map[string]any{
+		"reload-on-change-1":      changedRule(conf, "reload"),
+		"restart-on-change-lib-1": changedRule(lib, "restart"),
+	}}, rules.Policy{Cooldown: time.Minute}, nil)
+	at := t0
+	w.Now = func() time.Time { return at }
+	cycle := func() {
+		w.RunCycle(context.Background())
+		at = at.Add(2 * time.Minute)
+	}
+	cycle() // adopts the baselines
+
+	writeFile(t, conf, "bb")
+	writeFile(t, lib, "ccc")
+	for range 6 {
+		cycle()
+	}
+
+	if !eq(h.ops, []string{"reload", "restart"}) {
+		t.Fatalf("ops = %v, want the reload and then the restart the library change needs, once each", h.ops)
+	}
+}
+
+// A target the reload rule reads itself is consumed with the reload, or the rule
+// would fire again on every cooldown and starve the restart rule named after it.
+func TestReloadConsumesATargetItReadsItself(t *testing.T) {
+	conf := filepath.Join(t.TempDir(), "site.conf")
+	writeFile(t, conf, "a")
+	h := &workerHarness{cache: map[string]checks.Result{}, opResult: operation.Result{Status: operation.ResultOK}}
+	w := h.worker(map[string]any{"rules": map[string]any{
+		"reload-on-change-1":         changedRule(conf, "reload"),
+		"restart-on-change-config-1": changedRule(conf, "restart"),
+	}}, rules.Policy{Cooldown: time.Minute}, nil)
+	at := t0
+	w.Now = func() time.Time { return at }
+	w.RunCycle(context.Background())
+
+	writeFile(t, conf, "bb")
+	for range 4 {
+		at = at.Add(2 * time.Minute)
+		w.RunCycle(context.Background())
+	}
+
+	if !eq(h.ops, []string{"reload"}) {
+		t.Fatalf("ops = %v, want one reload", h.ops)
+	}
+}
+
+// One reload re-reads all of it, so a second watched file does not take a second
+// reload, and a reload still clears what a check gates on.
+func TestReloadCoversEveryPathThatNoRestartRuleReads(t *testing.T) {
+	dir := t.TempDir()
+	first, second, gated := filepath.Join(dir, "a.conf"), filepath.Join(dir, "b.conf"), filepath.Join(dir, "gated.conf")
+	writeFile(t, first, "a")
+	writeFile(t, second, "a")
+	writeFile(t, gated, "a")
+	h := &workerHarness{cache: map[string]checks.Result{}, opResult: operation.Result{Status: operation.ResultOK}}
+	w := h.worker(map[string]any{"rules": map[string]any{
+		"reload-on-change-1": changedRule(first, "reload"),
+		"reload-on-change-2": changedRule(second, "reload"),
+	}}, rules.Policy{Cooldown: time.Minute}, nil)
+	at := t0
+	w.Now = func() time.Time { return at }
+	w.Gates = map[string]CheckGate{"probe": {SkipWhenChanged: []string{gated}}}
+	h.cache = map[string]checks.Result{"probe": {Check: "probe", OK: true}}
+	w.RunCycle(context.Background())
+
+	writeFile(t, first, "bb")
+	writeFile(t, second, "bb")
+	writeFile(t, gated, "bb")
+	for range 4 {
+		at = at.Add(2 * time.Minute)
+		w.RunCycle(context.Background())
+	}
+
+	if !eq(h.ops, []string{"reload"}) {
+		t.Fatalf("ops = %v, want one reload", h.ops)
+	}
+	if changed, err := w.changed(gated); err != nil || changed {
+		t.Fatalf("gated path still pending after the reload: changed = %t, %v", changed, err)
+	}
+}
+
 func TestCyclePanicSuppressesRemediation(t *testing.T) {
 	h := &workerHarness{cache: failedCache("http"), opResult: operation.Result{Status: operation.ResultOK}}
 	w := h.worker(remediationTree("restart-if-down", "http", "restart"), rules.Policy{Cooldown: time.Minute}, nil)

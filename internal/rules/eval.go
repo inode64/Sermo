@@ -413,15 +413,9 @@ func (e *Evaluator) evalChanged(ctx context.Context, v any) (bool, error) {
 		return false, err
 	}
 	if app := cfgval.AsString(m[FieldApp]); app != "" {
-		level := 3 // patch: any a.b.c change fires
-		levelName := checks.VersionLevelPatch
-		if name := cfgval.AsString(m[FieldLevel]); name != "" {
-			lvl, ok := checks.VersionLevel(name)
-			if !ok {
-				return false, fmt.Errorf("changed condition level %q is not one of %s", name, checks.VersionLevelSummary)
-			}
-			level = lvl
-			levelName = name
+		levelName, level, err := changedLevel(m)
+		if err != nil {
+			return false, err
 		}
 		if e.ChangedVersion == nil {
 			return unavailableSignal(fmt.Errorf("changed condition for app %q has no version source", app))
@@ -450,6 +444,20 @@ func (e *Evaluator) evalChanged(ctx context.Context, v any) (bool, error) {
 		e.Change = ChangeContext{Path: path, Library: cfgval.AsString(m[FieldLibrary])}
 	}
 	return changed, nil
+}
+
+// changedLevel reads the version level a changed app leaf compares at: patch,
+// where any a.b.c change fires, unless it names another.
+func changedLevel(m map[string]any) (name string, level int, err error) {
+	name = cfgval.AsString(m[FieldLevel])
+	if name == "" {
+		return checks.VersionLevelPatch, checks.VersionLevelPatchComponents, nil
+	}
+	level, ok := checks.VersionLevel(name)
+	if !ok {
+		return "", 0, fmt.Errorf("changed condition level %q is not one of %s", name, checks.VersionLevelSummary)
+	}
+	return name, level, nil
 }
 
 // evalInline builds and runs a leaf check whose truth is the check's OK.

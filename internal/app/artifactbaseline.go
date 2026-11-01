@@ -2,7 +2,10 @@ package app
 
 import (
 	"maps"
+	"strconv"
 	"sync"
+
+	"sermo/internal/rules"
 )
 
 // ArtifactBaseline holds the acknowledged state behind a service's `changed:`
@@ -121,6 +124,20 @@ func (b *ArtifactBaseline) versionChange(key string) (acknowledged, latest strin
 	return b.versions[key], b.versionsLast[key]
 }
 
+// versionKey names an app at one version level in a baseline.
+func versionKey(app string, level int) string {
+	return app + ":" + strconv.Itoa(level)
+}
+
+// baselineKey names what a changed: leaf tracks in a baseline. Paths are absolute,
+// so they never read as a version key.
+func baselineKey(leaf rules.ChangeContext) string {
+	if leaf.App != "" {
+		return versionKey(leaf.App, leaf.LevelValue)
+	}
+	return leaf.Path
+}
+
 // Acknowledge refreshes every watched fingerprint and cache entry after a
 // successful (re)launch. This one-off refresh keeps the acknowledged baseline
 // aligned with the cache when an artifact changes during the operation,
@@ -129,12 +146,21 @@ func (b *ArtifactBaseline) versionChange(key string) (acknowledged, latest strin
 // service runs the upgraded app, so the last-seen version is the one to
 // acknowledge, without re-running the version command.
 func (b *ArtifactBaseline) Acknowledge(samples *ArtifactSamples) {
+	b.AcknowledgeExcept(nil, samples)
+}
+
+// AcknowledgeExcept is Acknowledge leaving out the baselineKey targets in kept,
+// whose change stays pending.
+func (b *ArtifactBaseline) AcknowledgeExcept(kept map[string]bool, samples *ArtifactSamples) {
 	if b == nil {
 		return
 	}
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	for path := range b.fingerprints {
+		if kept[path] {
+			continue
+		}
 		if samples != nil {
 			if _, tracked, _ := samples.FileFingerprint(path); tracked {
 				samples.StoreFile(path)
@@ -144,7 +170,11 @@ func (b *ArtifactBaseline) Acknowledge(samples *ArtifactSamples) {
 			b.fingerprints[path] = fingerprint
 		}
 	}
-	maps.Copy(b.versions, b.versionsLast)
+	for key, version := range b.versionsLast {
+		if !kept[key] {
+			b.versions[key] = version
+		}
+	}
 }
 
 // restore replaces the acknowledged state in place: the operation engine

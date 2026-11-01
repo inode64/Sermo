@@ -196,6 +196,12 @@ func (t ActionType) IsOperation() bool {
 	}
 }
 
+// Relaunches reports whether a successful action leaves the service running the
+// artifacts on disk now. A reload or resume keeps the code it was running.
+func (t ActionType) Relaunches() bool {
+	return t == ActionStart || t == ActionRestart
+}
+
 // Valid reports whether t is a supported rule action.
 func (t ActionType) Valid() bool {
 	return t.IsOperation() || t == ActionAlert || t == ActionBlock

@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"maps"
 	"slices"
-	"strconv"
 	"strings"
 	"time"
 
@@ -859,8 +858,8 @@ func (w *Worker) executeRemediation(ctx context.Context, now func() time.Time, f
 	if result.RecordsRemediation() {
 		w.State.Record(now(), w.Policy)
 	}
-	if result.OK() && rules.ActionType(action).SettlesAfter() {
-		w.acknowledgeChanges()
+	if result.OK() {
+		w.acknowledgeOperation(firing.Rule, rules.ActionType(action))
 	}
 	kind := eventKindForResult(result)
 	w.emit(Event{Kind: kind, Severity: remediationSeverity(kind, firing.severity), Rule: firing.Name, Action: action, Status: string(result.Status), Message: result.Message})
@@ -1158,6 +1157,39 @@ func (w *Worker) acknowledgeChanges() {
 	w.libBaseline.Acknowledge(w.artifactSamples)
 }
 
+// acknowledgeOperation adopts what a successful action reconciled. A relaunch
+// takes in everything on disk. A reload or resume keeps the running code, so a
+// change only a relaunch brings in stays pending: its rule keeps firing, under
+// the cooldown this action started, until a start or restart succeeds.
+func (w *Worker) acknowledgeOperation(fired rules.Rule, action rules.ActionType) {
+	switch {
+	case action.Relaunches():
+		w.acknowledgeChanges()
+	case action.SettlesAfter():
+		w.libBaseline.AcknowledgeExcept(w.awaitingRelaunch(fired), w.artifactSamples)
+	}
+}
+
+// awaitingRelaunch lists the baseline targets a start or restart rule reads,
+// less the ones the rule that fired reads too: left pending, those would fire it
+// again on every cooldown and starve the relaunch rule behind it.
+func (w *Worker) awaitingRelaunch(fired rules.Rule) map[string]bool {
+	pending := map[string]bool{}
+	for i := range w.Rules {
+		rule := &w.Rules[i]
+		if op, ok := rule.Operation(); !ok || rule.Type != rules.RuleRemediation || !op.Type.Relaunches() {
+			continue
+		}
+		for _, leaf := range rules.ChangedLeaves(rule.If) {
+			pending[baselineKey(leaf)] = true
+		}
+	}
+	for _, leaf := range rules.ChangedLeaves(fired.If) {
+		delete(pending, baselineKey(leaf))
+	}
+	return pending
+}
+
 // appProbeError is an evaluation failure whose app probe captured command
 // output. The probe's status is the message; the output travels alongside it so
 // the emitted event can carry the reason instead of only the probe's first
@@ -1200,7 +1232,7 @@ func (w *Worker) compareAppVersion(app string, level int, raw string) (bool, err
 	if key == "" {
 		key = output.FirstNonEmptyLine(raw)
 	}
-	return w.libBaseline.versionChanged(app+":"+strconv.Itoa(level), key), nil
+	return w.libBaseline.versionChanged(versionKey(app, level), key), nil
 }
 
 // fileFingerprint summarizes a file's identity for change detection: its size and
@@ -1459,7 +1491,7 @@ func (rc *ruleRuntimeContext) applyChange(change rules.ChangeContext, baseline *
 	if change.App == "" || change.LevelValue == 0 {
 		return
 	}
-	rc.changeOld, rc.changeNew = baseline.versionChange(change.App + ":" + strconv.Itoa(change.LevelValue))
+	rc.changeOld, rc.changeNew = baseline.versionChange(versionKey(change.App, change.LevelValue))
 }
 
 func (rc *ruleRuntimeContext) applyCheckEntry(entry map[string]any) {

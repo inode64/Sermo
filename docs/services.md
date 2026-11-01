@@ -347,6 +347,11 @@ reload; if you want to be told, add your own alert rule on the same `changed:`
 condition. Set `reload_on_change: { config: false }` to suppress the generated
 rules entirely, per service or per host.
 
+A reload keeps the running code, so it does not consume a pending
+`restart_on_change` target. When a package upgrade changes both a reloaded config
+file and a library, the reload runs and the restart follows once the cooldown
+ends.
+
 The **`reload`** action runs through the same safe engine as restart but in
 place: it runs **preflight first** (so an invalid config — caught by the
 service's `config` check — blocks the reload), reloads, then verifies health.

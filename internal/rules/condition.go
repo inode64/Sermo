@@ -1,6 +1,10 @@
 package rules
 
-import "errors"
+import (
+	"errors"
+
+	"sermo/internal/cfgval"
+)
 
 // conditionOperator decodes the single operator and operand that form one
 // condition node. Callers retain their own policy for recognized operators and
@@ -52,4 +56,26 @@ func WalkConditionLeaves(node any, visit func(operator string, operand any) bool
 		}
 	}
 	return false
+}
+
+// ChangedLeaves lists the targets of a condition's changed: leaves, each as
+// evalChanged reports it. A leaf with no target or an invalid level never
+// evaluates, so it tracks nothing and is left out.
+func ChangedLeaves(node map[string]any) []ChangeContext {
+	var leaves []ChangeContext
+	WalkConditionLeaves(node, func(operator string, operand any) bool {
+		m, ok := operand.(map[string]any)
+		if operator != ConditionChanged || !ok {
+			return false
+		}
+		if app := cfgval.AsString(m[FieldApp]); app != "" {
+			if name, level, err := changedLevel(m); err == nil {
+				leaves = append(leaves, ChangeContext{App: app, Level: name, LevelValue: level})
+			}
+		} else if path := cfgval.AsString(m[FieldPath]); path != "" {
+			leaves = append(leaves, ChangeContext{Path: path, Library: cfgval.AsString(m[FieldLibrary])})
+		}
+		return false
+	})
+	return leaves
 }

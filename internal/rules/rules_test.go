@@ -1000,3 +1000,27 @@ func TestCheckResolverFactoryKeepsResultsWithinEachPass(t *testing.T) {
 		t.Fatal("empty check set must have no resolver")
 	}
 }
+
+func TestChangedLeavesListsEveryTargetOfACondition(t *testing.T) {
+	node := map[string]any{"or": []any{
+		map[string]any{"changed": map[string]any{"path": "/etc/a.conf"}},
+		map[string]any{"and": []any{
+			map[string]any{"changed": map[string]any{"library": "openssl", "path": "/usr/lib/libssl.so"}},
+			map[string]any{"not": map[string]any{"changed": map[string]any{"app": "nginx"}}},
+			map[string]any{"changed": map[string]any{"app": "redis", "level": "minor"}},
+			map[string]any{"failed": map[string]any{"check": "http"}},
+		}},
+	}}
+
+	got := ChangedLeaves(node)
+
+	want := []ChangeContext{
+		{Path: "/etc/a.conf"},
+		{Path: "/usr/lib/libssl.so", Library: "openssl"},
+		{App: "nginx", Level: checks.VersionLevelPatch, LevelValue: checks.VersionLevelPatchComponents},
+		{App: "redis", Level: "minor", LevelValue: 2},
+	}
+	if !slices.Equal(got, want) {
+		t.Fatalf("ChangedLeaves() = %+v, want %+v", got, want)
+	}
+}
