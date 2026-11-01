@@ -1,6 +1,9 @@
 package conn
 
 import (
+	"net"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -58,6 +61,31 @@ lease {
 
 	if _, ok, err := parseDHClientLeases(strings.NewReader(leases), "eth2", now); err != nil || ok {
 		t.Fatalf("eth2 should have no active lease, ok=%v err=%v", ok, err)
+	}
+}
+
+// `interface` names a link by name, IP or MAC, and a lease only by name.
+func TestReadDHClientLeaseResolvesTheInterface(t *testing.T) {
+	if _, err := net.InterfaceByName("lo"); err != nil {
+		t.Skip("no loopback interface")
+	}
+	path := filepath.Join(t.TempDir(), "dhclient.leases")
+	const leases = "lease {\n  interface \"lo\";\n  fixed-address 192.0.2.10;\n  expire 4 2026/06/12 10:00:00;\n}\n"
+	if err := os.WriteFile(path, []byte(leases), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Date(2026, 6, 11, 10, 0, 0, 0, time.UTC)
+	for _, iface := range []string{"lo", "127.0.0.1"} {
+		lease, err := readDHClientLease(path, iface, now)
+		if err != nil {
+			t.Fatalf("interface %q: %v", iface, err)
+		}
+		if lease.fixedAddress != "192.0.2.10" {
+			t.Fatalf("interface %q: lease = %+v", iface, lease)
+		}
+	}
+	if _, err := readDHClientLease(path, "192.0.2.254", now); err == nil {
+		t.Fatal("an address on no interface must fail")
 	}
 }
 

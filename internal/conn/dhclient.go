@@ -136,6 +136,14 @@ type dhclientLease struct {
 }
 
 func readDHClientLease(path, iface string, now time.Time) (dhclientLease, error) {
+	// A lease names its link; `interface` may name it by IP or MAC as well.
+	if iface != "" {
+		name, err := resolveInterfaceName(iface)
+		if err != nil {
+			return dhclientLease{}, fmt.Errorf("dhclient: %w", err)
+		}
+		iface = name
+	}
 	f, err := hostfs.Open(path)
 	if err != nil {
 		return dhclientLease{}, fmt.Errorf("dhclient: read lease file %s: %w", path, err)
