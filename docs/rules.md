@@ -3605,7 +3605,8 @@ checks:
 - **`recursive: true`** descends the whole subtree (the directory itself is never
   counted); unreadable subdirectories are skipped. Hidden descendants (names starting
   with `.`) and their subtrees are skipped by default; set `include_hidden: true` to
-  count them. Default counts only the immediate entries.
+  count them. Default counts only the immediate entries. A `path` that is a symlink
+  is read through its target in both modes; symlinks found inside are not followed.
 - A missing or unreadable `path` makes the check unavailable. The observed total is
   exposed in the check's result data as `count`.
 - The threshold is the `count: {op, value}` predicate, the `{op, value}` form

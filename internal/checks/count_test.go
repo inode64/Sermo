@@ -132,6 +132,29 @@ func writeSizedTree(t *testing.T, root string, files map[string]int) {
 	}
 }
 
+// WalkDir lstats its root, so a selected directory symlink read as an empty
+// tree while a flat count of the same path saw its entries.
+func TestCountRecursiveReadsASelectedSymlinkThroughItsTarget(t *testing.T) {
+	root := countTree(t)
+	link := filepath.Join(t.TempDir(), "link")
+	if err := os.Symlink(root, link); err != nil {
+		t.Skipf("symlinks unsupported: %v", err)
+	}
+	for _, tc := range []struct {
+		kind string
+		want int
+	}{
+		{CountKindFile, 3},    // a.txt, b.txt, sub/c.txt
+		{CountKindDir, 2},     // sub, sub/nested
+		{CountKindSymlink, 1}, // the link inside the tree, still not followed
+	} {
+		n, err := countOf(link, tc.kind, true, ">", 0).tally(context.Background())
+		if err != nil || n != tc.want {
+			t.Fatalf("%s count through the symlink = %d, %v; want %d, nil", tc.kind, n, err, tc.want)
+		}
+	}
+}
+
 func TestCountRecursiveSkipsHiddenEntriesByDefault(t *testing.T) {
 	root := t.TempDir()
 	// Content size is irrelevant to counting — only visibility matters.

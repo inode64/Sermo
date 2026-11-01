@@ -107,23 +107,29 @@ func (c countCheck) tally(ctx context.Context) (int, error) {
 }
 
 func (c countCheck) tallyRecursive(ctx context.Context) (int, error) {
+	// WalkDir lstats its root. Resolve the selected directory first so a symlink
+	// counts its tree instead of silently reporting no entries.
+	root, err := filepath.EvalSymlinks(c.path)
+	if err != nil {
+		return 0, fmt.Errorf("walk entries in %q: %w", c.path, err)
+	}
 	n := 0
-	err := filepath.WalkDir(c.path, func(path string, d fs.DirEntry, err error) error {
+	err = filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 		if ctxErr := ctx.Err(); ctxErr != nil {
 			return fmt.Errorf("count entries in %q: %w", path, ctxErr)
 		}
 		if err != nil {
 			// A failure to open the root is fatal; an unreadable subdirectory is
 			// skipped so the count covers everything that could be read.
-			if path == c.path {
+			if path == root {
 				return fmt.Errorf("walk entries in %q: %w", path, err)
 			}
 			return nil
 		}
-		if path == c.path {
+		if path == root {
 			return nil // never count the root directory itself
 		}
-		if !c.includeHidden && IsHiddenDescendant(c.path, path, d) {
+		if !c.includeHidden && IsHiddenDescendant(root, path, d) {
 			if d.IsDir() {
 				return filepath.SkipDir
 			}
