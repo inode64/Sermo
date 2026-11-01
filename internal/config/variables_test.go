@@ -740,3 +740,53 @@ checks:
 		})
 	}
 }
+
+// TestBuiltinsFromFieldsResolveTheirReferences pins that a built-in read from a
+// service field carries the field's resolved value. It was copied raw and
+// expansion runs once, so ${service} on a `foo@${hostname}` unit came out literal.
+func TestBuiltinsFromFieldsResolveTheirReferences(t *testing.T) {
+	old := detectedHostname
+	detectedHostname = "host-a"
+	t.Cleanup(func() { detectedHostname = old })
+	cases := []struct {
+		name, body, arg, want string
+	}{
+		{"service", "service: \"foo@${hostname}\"\n", "${service} ${pidfile}", "foo@host-a /run/foo@host-a.pid"},
+		{"per-init service", "service: { systemd: [\"foo@${hostname}\"] }\n", "${service} ${pidfile}", "foo@host-a /run/foo@host-a.pid"},
+		{"port", "service: foo\nport: \"${listen}\"\nvariables: { listen: 8080 }\n", "${port}", "8080"},
+		{"display name", "service: foo\ndisplay_name: \"${hostname} cache\"\n", "${display_name}", "host-a cache"},
+		{"explicit variable stays", "service: \"foo@${hostname}\"\nvariables: { service: bar }\n", "${service} ${pidfile}", "bar /run/bar.pid"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg, err := loadConfig(t, writeConfig(t, map[string]string{
+				"sermo.yml":        baseGlobal,
+				"services/svc.yml": "name: svc\n" + tc.body + "processes: {}\ncommands:\n  show: { command: [\"/bin/echo\", \"" + tc.arg + "\"] }\n",
+			}))
+			if err != nil {
+				t.Fatalf("Load() error = %v", err)
+			}
+			resolved, errs := cfg.Resolve("svc")
+			if len(errs) != 0 {
+				t.Fatalf("Resolve() errors = %v", errs)
+			}
+			got := cfgval.StringArray(nested(t, resolved.Tree, "commands", "show")["command"])
+			if len(got) != 2 || got[1] != tc.want {
+				t.Fatalf("command = %q, want %q", got, tc.want)
+			}
+		})
+	}
+	t.Run("a broken field reports once", func(t *testing.T) {
+		cfg, err := loadConfig(t, writeConfig(t, map[string]string{
+			"sermo.yml":        baseGlobal,
+			"services/svc.yml": "name: svc\nservice: \"foo@${missing}\"\nprocesses: {}\n",
+		}))
+		if err != nil {
+			t.Fatalf("Load() error = %v", err)
+		}
+		_, errs := cfg.Resolve("svc")
+		if want := []string{"variable ${missing} used in service but not defined"}; !slices.Equal(errs, want) {
+			t.Fatalf("Resolve() errors = %v, want %v", errs, want)
+		}
+	})
+}

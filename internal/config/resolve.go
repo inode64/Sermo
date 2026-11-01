@@ -941,6 +941,10 @@ func injectBuiltinVariables(vars map[string]string, name string, merged map[stri
 	}
 }
 
+// fieldBuiltins are the built-ins injectBuiltinVariables copies from unexpanded
+// service fields, in the order that lets each read the ones before it.
+var fieldBuiltins = []string{VariableKeyPort, VariableKeyService, VariableKeyPidfile, keyDisplayName}
+
 // injectHostBuiltins fills the service-independent (host-level) builtins —
 // host/hostname/init/user — when absent. Shared by injectBuiltinVariables and
 // the watch expansion (watches have no service-specific builtins).
@@ -973,8 +977,21 @@ func (c *Config) expansionVariables(tree map[string]any, name string, inputs res
 	maps.Copy(vars, appVars)
 	maps.Copy(vars, collectVariables(tree)) // service/doc variables override app and global custom ones
 	errs = append(errs, validateVariableValues(vars)...)
+	copied := slices.DeleteFunc(slices.Clone(fieldBuiltins), func(key string) bool {
+		_, set := vars[key]
+		return set
+	})
 	injectBuiltinVariables(vars, name, tree, inputs.backend)
 	errs = append(errs, resolveFileVars(vars, tree)...)
+	// Expansion is one pass, so a raw copy would leave ${service} on a
+	// `foo@${hostname}` unit literal. A reference that fails here is reported
+	// where the field itself expands.
+	for _, key := range copied {
+		if value, ok := vars[key]; ok {
+			var reported []string
+			vars[key] = expandString(value, vars, key, &reported)
+		}
+	}
 	return vars, errs
 }
 
