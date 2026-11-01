@@ -225,7 +225,9 @@ func UnitWaitsForTrigger(ctx context.Context, runner execx.Runner, backend Backe
 
 func detectOpenRCProc(readFile func(string) ([]byte, error), unit string) ProcInfo {
 	var blob strings.Builder
-	for _, dir := range []string{openRCInitDir, openRCConfDir} {
+	// In the order openrc-run sources them: the script's ${VAR:-default} and its
+	// own assignments read what conf.d set before it.
+	for _, dir := range []string{openRCConfDir, openRCInitDir} {
 		path, ok := openRCUnitPath(dir, unit)
 		if !ok {
 			return ProcInfo{}

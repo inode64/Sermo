@@ -77,6 +77,45 @@ func TestDetectProcOpenRCScripts(t *testing.T) {
 		want    ProcInfo
 	}{
 		{
+			name:    "conf.d feeds the script's defaults",
+			service: "foo",
+			files: map[string]string{
+				"/etc/init.d/foo": `pidfile="${PIDFILE:-/run/foo.pid}"
+command="${FOO_BIN:-/usr/sbin/foo}"
+`,
+				"/etc/conf.d/foo": `PIDFILE=/run/foo/foo.pid
+FOO_BIN=/opt/foo/bin/foo
+`,
+			},
+			want: ProcInfo{
+				Pidfile: "/run/foo/foo.pid",
+				Exe:     "/opt/foo/bin/foo",
+				Cmd:     `(^|[[:space:]])/opt/foo/bin/foo($|[[:space:]])`,
+			},
+		},
+		{
+			name:    "conf.d defines what the script builds on",
+			service: "foo",
+			files: map[string]string{
+				"/etc/init.d/foo": `pidfile="/run/foo-${INSTANCE}.pid"
+`,
+				"/etc/conf.d/foo": `INSTANCE=main
+`,
+			},
+			want: ProcInfo{Pidfile: "/run/foo-main.pid"},
+		},
+		{
+			name:    "the script's own assignment runs last",
+			service: "foo",
+			files: map[string]string{
+				"/etc/init.d/foo": `pidfile="/run/foo.pid"
+`,
+				"/etc/conf.d/foo": `pidfile="/run/ignored.pid"
+`,
+			},
+			want: ProcInfo{Pidfile: "/run/foo.pid"},
+		},
+		{
 			name:    "cleans absolute paths",
 			service: "dhcpd",
 			files: map[string]string{
