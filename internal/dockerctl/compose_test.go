@@ -406,3 +406,11 @@ func TestComposeCreationErrorsAndCancellation(t *testing.T) {
 		t.Fatal("cancelled creation started a container")
 	}
 }
+
+// The model's size check reads captured stdout, so it only sees an oversized
+// model while the capture keeps more than the limit.
+func TestComposeModelLimitFitsTheOutputCapture(t *testing.T) {
+	if composeModelLimit >= execx.MaxCommandOutput {
+		t.Fatalf("composeModelLimit %d must stay below execx.MaxCommandOutput %d", composeModelLimit, execx.MaxCommandOutput)
+	}
+}

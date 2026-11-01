@@ -1,6 +1,7 @@
 package execx
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"os"
@@ -425,5 +426,32 @@ func TestCommandRunnerReportsSignalDeath(t *testing.T) {
 	}
 	if got, want := OperatorFailure(err, res, 0), "killed by signal 9 (killed)"; got != want {
 		t.Fatalf("operator failure = %q, want %q", got, want)
+	}
+}
+
+// The cap protects the daemon, not the command: every byte past it is accepted
+// and dropped, so the pipe keeps draining and the command ends on its own.
+func TestLockedBufferKeepsTheFirstBytesAndDrainsTheRest(t *testing.T) {
+	var buffer lockedBuffer
+	chunk := bytes.Repeat([]byte{'x'}, 1<<20)
+	for range MaxCommandOutput>>20 + 2 {
+		if n, err := buffer.Write(chunk); n != len(chunk) || err != nil {
+			t.Fatalf("Write = %d, %v, want the whole chunk accepted", n, err)
+		}
+	}
+	if got := len(buffer.String()); got != MaxCommandOutput {
+		t.Fatalf("kept %d bytes, want %d", got, MaxCommandOutput)
+	}
+}
+
+func TestCommandRunnerFinishesPastTheOutputCap(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	res, err := CommandRunner{}.Run(ctx, "head", "-c", strconv.Itoa(MaxCommandOutput+1<<20), "/dev/zero")
+	if err != nil || res.ExitCode != ExitCodeSuccess {
+		t.Fatalf("Run = exit %d, %v, want a clean exit", res.ExitCode, err)
+	}
+	if got := len(res.Stdout); got != MaxCommandOutput {
+		t.Fatalf("kept %d bytes, want %d", got, MaxCommandOutput)
 	}
 }

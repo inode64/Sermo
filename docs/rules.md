@@ -189,7 +189,9 @@ matchers — a plain string requires that substring, or an `{op, value}` mapping
 compares the trimmed output (`== != > >= < <= contains =~`). A command killed by
 a signal has no exit code to compare: it fails a health check whatever
 `expect_exit` lists, and a guard or a condition reads it as unavailable, never
-as a false condition.
+as a false condition. Sermo keeps the first 16 MiB of each of stdout and stderr
+and discards the rest while the command runs on, so a matcher or an `analyze:`
+pattern never sees what comes after.
 
 ```yaml
 checks:

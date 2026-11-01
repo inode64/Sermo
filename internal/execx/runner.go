@@ -45,6 +45,10 @@ const (
 	sessionBusAddressDisabled = "disabled:"
 )
 
+// MaxCommandOutput bounds what one stream of one command keeps in memory: a
+// verbose tool could otherwise grow the daemon by gigabytes within its timeout.
+const MaxCommandOutput = 16 << 20
+
 // ErrKilledBySignal marks a command that started and died from a signal. Its
 // exit code stays ExitCodeRunFailure: there is no exit status, and what it
 // printed may stop anywhere. A caller for which the command is the verdict
@@ -284,10 +288,15 @@ type lockedBuffer struct {
 	buf bytes.Buffer
 }
 
+// Write keeps the first MaxCommandOutput bytes and reports every byte accepted:
+// the rest is read and dropped so the pipe drains and the command ends by
+// itself, instead of blocking on a full pipe or dying of a broken one.
 func (b *lockedBuffer) Write(p []byte) (int, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	_, _ = b.buf.Write(p) // bytes.Buffer writes all bytes and never returns an error.
+	if room := MaxCommandOutput - b.buf.Len(); room > 0 {
+		_, _ = b.buf.Write(p[:min(len(p), room)]) // bytes.Buffer writes all bytes and never returns an error.
+	}
 	return len(p), nil
 }
 
