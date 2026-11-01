@@ -31,10 +31,10 @@ func (smtpProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	return probeBanner(ctx, cfg, defaultPortSMTP, smtpHandshake)
 }
 
-// smtpHandshake reads the 220 greeting (a 421 greeting is a busy verdict),
-// greets with EHLO (falling back to HELO), authenticates with AUTH PLAIN when a
-// user is supplied, and quits. The multi-line RFC 959 reply format is parsed by
-// net/textproto.
+// smtpHandshake reads the 220 greeting, greets with EHLO (falling back to HELO),
+// authenticates with AUTH PLAIN when a user is supplied, and quits. A 421
+// greeting or reply to EHLO/HELO is a busy verdict. The multi-line RFC 959 reply
+// format is parsed by net/textproto.
 func smtpHandshake(rw io.ReadWriter, cfg Config) (Result, error) {
 	tp, code, greeting, err := readTextGreeting(rw)
 	if err != nil {
@@ -48,19 +48,22 @@ func smtpHandshake(rw io.ReadWriter, cfg Config) (Result, error) {
 		return Result{}, unexpectedGreeting(code, greeting)
 	}
 
-	code, _, err = sendTextCommand(rw, tp, smtpCommandEHLO)
+	code, text, err := sendTextCommand(rw, tp, smtpCommandEHLO)
 	if err != nil {
 		return Result{}, err
 	}
-	if code != smtpStatusRequestedActionOK {
-		// Older servers may not support EHLO; try HELO.
-		var text string
+	// Older servers may not support EHLO. A 421 is not that: the server closes
+	// after it, so a HELO would read EOF and lose the verdict.
+	if code != smtpStatusRequestedActionOK && code != replyCodeServiceNotAvailable {
 		if code, text, err = sendTextCommand(rw, tp, smtpCommandHELO); err != nil {
 			return Result{}, err
 		}
-		if code != smtpStatusRequestedActionOK {
-			return Result{}, fmt.Errorf("EHLO/HELO refused: %d %s", code, text)
-		}
+	}
+	if busy, ok := greetingBusy(code, text, replyCodeServiceNotAvailable); ok {
+		return busyResult(res, busy), nil
+	}
+	if code != smtpStatusRequestedActionOK {
+		return Result{}, fmt.Errorf("EHLO/HELO refused: %d %s", code, text)
 	}
 
 	if cfg.User != "" {

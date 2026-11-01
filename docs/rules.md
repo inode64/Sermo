@@ -1412,7 +1412,8 @@ socket — is not busy, and a restart rule still fires for it.
 | `redis` (Valkey, KeyDB) | `LOADING`, `BUSY`, `MASTERDOWN`, `MISCONF`, `ERR max number of clients reached` |
 | `memcached` | `ERROR Too many open connections` |
 | `mqtt` | CONNACK return code 3, server unavailable |
-| `smtp`, `smtp_acceptance` | reply 421 |
+| `smtp` | reply 421 to the greeting, `EHLO` or `HELO` |
+| `smtp_acceptance` | reply 421 at any stage |
 | `ftp` | greeting 421 or 120 |
 | `imap`, `sieve` | a `BYE` (sieve also `NO`) instead of the greeting, when it says the refusal is temporary |
 | `pop` | a `-ERR` greeting, when it says the refusal is temporary |
@@ -1510,8 +1511,9 @@ Protocols, in the order of the table above:
   [busy](#busy-servers). RFC 1939.
 - `smtp` — default port 25; `tls` supported (SMTPS — use port 465; submission
   587). `user` is **optional**: anonymous checks the `220` greeting + `EHLO`; with
-  a user/password it performs `AUTH PLAIN`. A `421` greeting (too many
-  concurrent connections, shutting down) is [busy](#busy-servers). RFC 5321.
+  a user/password it performs `AUTH PLAIN`. A `421` greeting or reply to
+  `EHLO`/`HELO` (too many concurrent connections, shutting down) is
+  [busy](#busy-servers). RFC 5321.
 - `smtp_acceptance` — default port 25. Resolves the MX records of `recipient`,
   connects through the selected `interface`, sends `EHLO`, upgrades with
   STARTTLS, then tests `MAIL FROM` and `RCPT TO`. On acceptance it sends `RSET`

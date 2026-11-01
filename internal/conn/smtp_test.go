@@ -63,6 +63,19 @@ func TestSMTPHandshakeBusyGreeting(t *testing.T) {
 	assertHandshakeBusy(t, smtpHandshake, "421 mx.example.com Too many concurrent SMTP connections; please try again later\r\n", Config{}, "421")
 }
 
+// A 421 to EHLO or HELO is the refusal a 421 greeting is: the server closes after
+// it, so asking again would only read EOF and lose the verdict.
+func TestSMTPHandshakeBusyHello(t *testing.T) {
+	for name, replies := range map[string]string{
+		"EHLO": "220 ready\r\n421 4.3.2 Service shutting down\r\n",
+		"HELO": "220 ready\r\n502 command not implemented\r\n421 4.3.2 Service shutting down\r\n",
+	} {
+		t.Run(name, func(t *testing.T) {
+			assertHandshakeBusy(t, smtpHandshake, replies, Config{}, "421")
+		})
+	}
+}
+
 func TestSMTPHandshakeHELOFallback(t *testing.T) {
 	// EHLO not implemented (502) -> fall back to HELO.
 	replies := "220 ready\r\n502 command not implemented\r\n250 mail\r\n"

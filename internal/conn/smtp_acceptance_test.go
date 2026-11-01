@@ -155,6 +155,52 @@ func TestSMTPAcceptanceDoesNotMaskRemoteRejectionWithLaterMX(t *testing.T) {
 	_ = waitSMTPAcceptanceCommands(t, commands, done)
 }
 
+// TestSMTPAcceptanceKeepsA421ToEHLO: the primary MX refuses EHLO with 421 and
+// closes, as a provider does when throttling, and a later MX would accept. The
+// primary's refusal is the verdict.
+func TestSMTPAcceptanceKeepsA421ToEHLO(t *testing.T) {
+	port := serveOnce(t, func(conn net.Conn) {
+		writeSMTPTestReply(conn, "220 mx test ready")
+		_, _ = bufio.NewReader(conn).ReadString('\n')
+		_, _ = fmt.Fprint(conn, "421-4.7.0 Try again later\r\n421 4.7.0 closing connection (EHLO)\r\n")
+	})
+	secondary, err := net.Listen("tcp", net.JoinHostPort("127.0.0.2", strconv.Itoa(port)))
+	if err != nil {
+		t.Skipf("second loopback address unavailable: %v", err)
+	}
+	t.Cleanup(func() { _ = secondary.Close() })
+	contacted := make(chan struct{}, 1)
+	go func() {
+		conn, err := secondary.Accept()
+		if err != nil {
+			return
+		}
+		contacted <- struct{}{}
+		_ = conn.Close()
+	}()
+	proto := smtpAcceptanceProtocol{lookupMX: func(context.Context, string, string) ([]*net.MX, error) {
+		return []*net.MX{{Host: "127.0.0.1.", Pref: 10}, {Host: "127.0.0.2.", Pref: 20}}, nil
+	}}
+	cfg := smtpAcceptanceTestConfig(port)
+	cfg.Params[ParamKeySMTPStartTLS] = SMTPStartTLSOpportunistic
+
+	res, err := proto.Probe(context.Background(), cfg)
+	if err != nil {
+		t.Fatalf("Probe returned a transport error for a 421: %v", err)
+	}
+	if !res.Busy ||
+		res.Extra[ExtraKeySMTPMXHost] != "127.0.0.1" ||
+		res.Extra[ExtraKeySMTPStage] != smtpAcceptanceStageEHLO ||
+		res.Extra[ExtraKeySMTPStatusCode] != "421" {
+		t.Fatalf("result = %+v, want the primary's busy verdict at EHLO", res)
+	}
+	select {
+	case <-contacted:
+		t.Fatal("a lower-priority MX was tried after the primary's 421")
+	default:
+	}
+}
+
 func TestSMTPAcceptanceReportsNullMXAsPolicyFailure(t *testing.T) {
 	proto := smtpAcceptanceProtocol{lookupMX: func(context.Context, string, string) ([]*net.MX, error) {
 		return []*net.MX{{Host: ".", Pref: 0}}, nil

@@ -163,6 +163,9 @@ func probeSMTPAcceptanceMX(
 	}
 	defer func() { _ = client.Close() }()
 
+	if err := smtpEHLORefusal(client.Text, envelope.Helo); err != nil {
+		return smtpAcceptanceStepResult(res, smtpAcceptanceStageEHLO, err)
+	}
 	if err := client.Hello(envelope.Helo); err != nil {
 		return smtpAcceptanceStepResult(res, smtpAcceptanceStageEHLO, err)
 	}
@@ -196,6 +199,28 @@ func probeSMTPAcceptanceMX(
 	_ = client.Reset()
 	_ = client.Quit()
 	return res, nil
+}
+
+// smtpEHLORefusal sends EHLO ahead of net/smtp and returns what must end the
+// exchange. net/smtp answers any EHLO error with HELO, so a 421 and the close
+// that follows it would surface as a bare EOF: a transport failure, which walks
+// on to a lower-priority MX that can mask the refusal. Any other rejection is
+// left to net/smtp, whose HELO fallback serves a server without EHLO.
+func smtpEHLORefusal(text *textproto.Conn, helo string) error {
+	id, err := text.Cmd("EHLO %s", helo)
+	if err != nil {
+		return fmt.Errorf("send EHLO: %w", err)
+	}
+	text.StartResponse(id)
+	defer text.EndResponse(id)
+	_, _, err = text.ReadResponse(smtpStatusRequestedActionOK)
+	if err == nil {
+		return nil
+	}
+	if refused, ok := errors.AsType[*textproto.Error](err); ok && refused.Code != replyCodeServiceNotAvailable {
+		return nil
+	}
+	return fmt.Errorf("read EHLO reply: %w", err)
 }
 
 func newSMTPAcceptanceResult(mxHost, recipientDomain string) Result {
