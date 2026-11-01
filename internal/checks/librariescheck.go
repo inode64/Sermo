@@ -5,6 +5,7 @@ import (
 	"debug/elf"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
@@ -69,7 +70,7 @@ func (c librariesCheck) Run(ctx context.Context) Result {
 		return c.unavailableResult(c.binary+": "+execx.ContextFailure(ctx.Err(), c.timeout), run.start)
 	}
 	if err != nil {
-		if os.IsNotExist(err) {
+		if errors.Is(err, fs.ErrNotExist) {
 			return c.result(false, err.Error(), run.start)
 		}
 		return c.unavailableResult(err.Error(), run.start)

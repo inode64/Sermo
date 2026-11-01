@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"slices"
 	"testing"
+	"time"
 )
 
 // testELF describes the dynamic section of a fixture shared object.
@@ -43,6 +44,35 @@ func TestInspectLibrariesReportsTransitiveDependencies(t *testing.T) {
 	report, err = inspectLibraries(t.Context(), binary, searchDirs)
 	if err != nil || !slices.Equal(report.Missing, []string{second}) {
 		t.Fatalf("missing dependency: %+v %v", report, err)
+	}
+}
+
+// A binary that is gone is a verdict about the service, not a look that failed.
+func TestLibrariesCheckFailsOnAMissingBinary(t *testing.T) {
+	dir := t.TempDir()
+	dangling := filepath.Join(dir, "dangling")
+	if err := os.Symlink(filepath.Join(dir, "gone"), dangling); err != nil {
+		t.Fatal(err)
+	}
+	corrupt := filepath.Join(dir, "corrupt")
+	if err := os.WriteFile(corrupt, []byte("not an executable"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		name            string
+		binary          string
+		wantUnavailable bool
+	}{
+		{name: "absent", binary: filepath.Join(dir, "absent")},
+		{name: "dangling symlink", binary: dangling},
+		{name: "present but unreadable as ELF", binary: corrupt, wantUnavailable: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			res := librariesCheck{name: "libs", timeout: time.Second, binary: tc.binary}.Run(t.Context())
+			if res.OK || res.Unavailable != tc.wantUnavailable {
+				t.Fatalf("result = %+v, want OK=false Unavailable=%v", res, tc.wantUnavailable)
+			}
+		})
 	}
 }
 
