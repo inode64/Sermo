@@ -840,6 +840,10 @@ func usersWithLookup(ctx context.Context, mountPath string, lookup *process.User
 // /proc once for all paths and uses the same cwd/root/fd path-prefix semantics
 // as the single-mount blocker scan.
 func ProcessesByMount(ctx context.Context, mountPaths []string, lookup *process.UserLookup) (map[string][]process.Process, error) {
+	return processesByMount(ctx, mountPaths, lookup, hostMountNamespaces())
+}
+
+func processesByMount(ctx context.Context, mountPaths []string, lookup *process.UserLookup, namespaces mountNamespaces) (map[string][]process.Process, error) {
 	if lookup == nil {
 		lookup = process.DefaultUserLookup()
 	}
@@ -864,8 +868,13 @@ func ProcessesByMount(ctx context.Context, mountPaths []string, lookup *process.
 		if len(matches) == 0 {
 			continue
 		}
+		matches, signalBlock := namespaces.confirm(pid, matches)
+		if len(matches) == 0 {
+			continue
+		}
 		if id, ok := reader.Identity(pid); ok {
 			proc := mountUserProcess(id)
+			proc.SignalBlockReason = signalBlock
 			for _, mountPath := range matches {
 				out[mountPath] = append(out[mountPath], proc)
 			}

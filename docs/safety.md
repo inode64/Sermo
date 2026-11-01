@@ -623,6 +623,12 @@ daemon-cycle remediation. They still use the same safety posture:
   start time, exact executable and real UID; a blocker whose identity cannot be
   verified is reported, not signalled, and each refused delivery is named in
   the result.
+- A path means nothing across mount namespaces, so a process in another
+  namespace counts as a blocker only when its own mount table shows the same
+  filesystem at that path. A container's unrelated directory with the same name
+  is not a blocker; a hardened unit's private copy of the mount is, because it
+  keeps `umount` busy. When a namespace or mount table cannot be read, the
+  process is reported and never signalled.
 - Forced and lazy unmount are per-action choices: `--force` / Web `force`
   permits `umount -f`, and `--lazy` / Web `lazy` permits `umount -l` as the last
   fallback.
