@@ -2,9 +2,12 @@ package checks
 
 import (
 	"context"
+	"errors"
 	"net"
+	"os"
 	"reflect"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -177,6 +180,105 @@ func TestPortsSilentInterfaceLeavesTimeForTheNext(t *testing.T) {
 	}
 	if res := c.Run(context.Background()); !res.OK {
 		t.Fatalf("result = %+v, want the port open through wan2", res)
+	}
+}
+
+// A dial that never reached the target says nothing about the port: read as
+// closed it would pass `expect: closed` on a host nobody probed and report every
+// port of a watched host as changed on one failed lookup.
+func TestPortsVerdictNeedsAnAnswerFromTheTarget(t *testing.T) {
+	refused := &net.OpError{Op: "dial", Net: "tcp", Err: os.NewSyscallError("connect", syscall.ECONNREFUSED)}
+	tests := []struct {
+		name            string
+		dialErr         error
+		wantUnavailable bool
+	}{
+		{name: "refused", dialErr: refused},
+		{name: "no answer in time", dialErr: context.DeadlineExceeded},
+		{name: "rejected by a firewall", dialErr: &net.OpError{Op: "dial", Net: "tcp", Err: os.NewSyscallError("connect", syscall.EHOSTUNREACH)}},
+		{name: "unresolved name", dialErr: &net.DNSError{Err: "no such host", Name: "host-a.example", IsNotFound: true}, wantUnavailable: true},
+		{name: "lookup timeout", dialErr: &net.DNSError{Err: "i/o timeout", Name: "host-a.example", IsTimeout: true}, wantUnavailable: true},
+		{name: "no route", dialErr: &net.OpError{Op: "dial", Net: "tcp", Err: os.NewSyscallError("connect", syscall.ENETUNREACH)}, wantUnavailable: true},
+		{name: "no descriptor", dialErr: &net.OpError{Op: "dial", Net: "tcp", Err: os.NewSyscallError("socket", syscall.EMFILE)}, wantUnavailable: true},
+		{name: "interface not bound", dialErr: errors.New("bind interface: no such device"), wantUnavailable: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := portsCheckFor([]int{22}, PortStateClosed, PortMatchAll)
+			c.dialFunc = func(context.Context, string, string) (net.Conn, error) { return nil, tt.dialErr }
+			res := c.Run(context.Background())
+			if res.Unavailable != tt.wantUnavailable || res.OK == tt.wantUnavailable {
+				t.Fatalf("result = %+v, want unavailable=%v", res, tt.wantUnavailable)
+			}
+		})
+	}
+}
+
+func TestPortsUnobservedCycleKeepsTheChangeBaseline(t *testing.T) {
+	var dialErr error
+	c := portsCheckFor([]int{443}, PortExpectAny, PortMatchAll)
+	c.onChange = true
+	c.dialFunc = func(context.Context, string, string) (net.Conn, error) {
+		if dialErr != nil {
+			return nil, dialErr
+		}
+		client, server := net.Pipe()
+		_ = server.Close()
+		return client, nil
+	}
+	if res := c.Run(context.Background()); !res.OK {
+		t.Fatalf("baseline = %+v", res)
+	}
+	dialErr = &net.DNSError{Err: "no such host", Name: "host-a.example", IsNotFound: true}
+	if res := c.Run(context.Background()); !res.Unavailable {
+		t.Fatalf("failed lookup = %+v, want unavailable", res)
+	}
+	dialErr = nil
+	if res := c.Run(context.Background()); !res.OK {
+		t.Fatalf("after the failed lookup = %+v, want no change", res)
+	}
+}
+
+// One interface that could not be tried cannot prove a port closed, and cannot
+// hide that another interface reached it.
+func TestPortsVerdictAcrossInterfaces(t *testing.T) {
+	refused := &net.OpError{Op: "dial", Net: "tcp", Err: os.NewSyscallError("connect", syscall.ECONNREFUSED)}
+	unresolved := &net.DNSError{Err: "no such host", Name: "host-a.example", IsNotFound: true}
+	tests := []struct {
+		name            string
+		first, second   error
+		wantUnavailable bool
+		wantOpen        int
+	}{
+		{name: "refused on both", first: refused, second: refused},
+		{name: "refused then unobserved", first: refused, second: unresolved, wantUnavailable: true},
+		{name: "unobserved then refused", first: unresolved, second: refused, wantUnavailable: true},
+		{name: "unobserved then open", first: unresolved, wantOpen: 1},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := portsCheckFor([]int{443}, PortExpectAny, PortMatchAll)
+			c.ifaces = []string{"wan1", "wan2"}
+			c.dialFunc = func(_ context.Context, iface, _ string) (net.Conn, error) {
+				err := tt.first
+				if iface == "wan2" {
+					err = tt.second
+				}
+				if err != nil {
+					return nil, err
+				}
+				client, server := net.Pipe()
+				_ = server.Close()
+				return client, nil
+			}
+			res := c.Run(context.Background())
+			if res.Unavailable != tt.wantUnavailable {
+				t.Fatalf("result = %+v, want unavailable=%v", res, tt.wantUnavailable)
+			}
+			if !tt.wantUnavailable && res.Data[PortStateOpen] != tt.wantOpen {
+				t.Fatalf("data = %+v, want %d open", res.Data, tt.wantOpen)
+			}
+		})
 	}
 }
 

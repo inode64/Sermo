@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"sermo/internal/cfgval"
@@ -60,9 +61,14 @@ func (c *portsCheck) Run(ctx context.Context) Result {
 	defer run.close()
 	start := run.start
 
-	states := c.scan(ctx)
+	states, unobserved := c.scan(ctx)
 	if err := ctx.Err(); err != nil {
 		return c.unavailableResult(fmt.Sprintf("%s: %s", c.host, execx.ContextFailure(err, c.timeout)), start)
+	}
+	// Neither a verdict nor a change: the on_change baseline stays put, so a
+	// failed lookup cannot fake every port closing and opening again.
+	if unobserved != nil {
+		return c.unavailableResult(fmt.Sprintf("%s: %v", c.host, unobserved), start)
 	}
 	matchHolds := c.evaluateMatch(states)
 
@@ -133,11 +139,13 @@ func (c *portsCheck) evaluateMatch(states map[int]bool) bool {
 	}
 }
 
-// scan probes every port concurrently and returns port -> open. Unprobed ports
-// are false (closed). When the check timeout fires, scan stops launching new
-// probes; in-flight dials cancel promptly via the shared context.
-func (c *portsCheck) scan(ctx context.Context) map[int]bool {
+// scan probes every port concurrently and returns port -> open, plus the first
+// probe that observed nothing. Unprobed ports are false (closed). When the check
+// timeout fires, scan stops launching new probes; in-flight dials cancel promptly
+// via the shared context.
+func (c *portsCheck) scan(ctx context.Context) (map[int]bool, error) {
 	out := make(map[int]bool, len(c.ports))
+	var unobserved error
 	var mu sync.Mutex
 	var wg sync.WaitGroup
 	sem := make(chan struct{}, portsScanConcurrency)
@@ -149,18 +157,22 @@ func (c *portsCheck) scan(ctx context.Context) map[int]bool {
 		sem <- struct{}{}
 		wg.Go(func() {
 			defer func() { <-sem }()
-			open := c.probe(ctx, p)
+			open, err := c.probe(ctx, p)
 			mu.Lock()
+			defer mu.Unlock()
 			out[p] = open
-			mu.Unlock()
+			if err != nil && unobserved == nil {
+				unobserved = fmt.Errorf("port %d not observed: %w", p, err)
+			}
 		})
 	}
 	wg.Wait()
-	return out
+	return out, unobserved
 }
 
-// probe reports whether a single TCP port accepts a connection.
-func (c *portsCheck) probe(ctx context.Context, port int) bool {
+// probe reports whether a single TCP port accepts a connection, or the error
+// that kept it from finding out.
+func (c *portsCheck) probe(ctx context.Context, port int) (bool, error) {
 	timeout := c.connectTimeout
 	if timeout <= 0 {
 		timeout = defaultPortConnectTimeout
@@ -174,15 +186,36 @@ func (c *portsCheck) probe(ctx context.Context, port int) bool {
 		}
 	}
 	// With an interface set, a port is "open" if it connects on any (or, with
-	// ifaceAll, every) configured interface.
+	// ifaceAll, every) configured interface, and closed only if every interface
+	// tried says so.
+	var unobserved error
 	_, _, err := tryInterfaces(pctx, c.ifaces, c.ifaceAll, func(ctx context.Context, iface string) error {
 		nc, e := dial(ctx, iface, netutil.JoinHostPort(c.host, port))
 		if e == nil {
 			_ = nc.Close()
+			return nil
+		}
+		if !portClosedBy(e) {
+			unobserved = e
 		}
 		return e
 	})
-	return err == nil
+	if err == nil {
+		return true, nil
+	}
+	return false, unobserved
+}
+
+// portClosedBy reports whether a failed dial is an answer about the port: the
+// target or the network refused it, or nothing answered in time (a filtered
+// port). Any other failure never got that far: an unresolved name, no route, an
+// interface that could not be bound, a socket the host could not open.
+func portClosedBy(err error) bool {
+	if _, lookup := errors.AsType[*net.DNSError](err); lookup {
+		return false
+	}
+	timeout, ok := errors.AsType[net.Error](err)
+	return errors.Is(err, syscall.ECONNREFUSED) || errors.Is(err, syscall.EHOSTUNREACH) || (ok && timeout.Timeout())
 }
 
 func portState(open bool) string {

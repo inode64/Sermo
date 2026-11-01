@@ -1078,7 +1078,11 @@ checks:
 that state: **`all`** = every port (AND), **`any`** = at least one (OR), **`none`**
 = no port (NOT). So `expect: open, match: all` passes when **every** port is open;
 `expect: closed, match: any` passes when **at least one** is closed. A port is
-*open* when it accepts a TCP connection within `connect_timeout`, else *closed*.
+*open* when it accepts a TCP connection within `connect_timeout`, and *closed*
+when it refuses, the network rejects it, or nothing answers in time. A dial that
+learns neither (an unresolved host, no route, an interface that cannot be bound,
+a socket the host cannot open) makes the whole check unavailable and leaves the
+`on_change` baseline alone.
 
 `expect: any` skips the state expectation entirely — combine it with
 `on_change: true` to alert purely on **state transitions** (a port that was open
