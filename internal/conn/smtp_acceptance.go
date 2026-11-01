@@ -13,6 +13,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"sermo/internal/netutil"
 )
@@ -118,13 +119,15 @@ func (p smtpAcceptanceProtocol) Probe(ctx context.Context, cfg Config) (Result, 
 
 	limit := min(len(mxs), smtpAcceptanceMaxMXAttempts)
 	dialErrors := make([]error, 0, limit)
-	for _, mx := range mxs[:limit] {
+	for i, mx := range mxs[:limit] {
 		host := strings.TrimSuffix(mx.Host, ".")
 		if host == "" {
 			dialErrors = append(dialErrors, errors.New("MX target is empty"))
 			continue
 		}
-		res, attemptErr := probeSMTPAcceptanceMX(ctx, cfg, host, envelope, tlsConfig)
+		attemptCtx, cancel := smtpAttemptContext(ctx, limit-i)
+		res, attemptErr := probeSMTPAcceptanceMX(attemptCtx, cfg, host, envelope, tlsConfig)
+		cancel()
 		if attemptErr == nil {
 			// An SMTP reply is an authoritative verdict from the preferred MX.
 			// Only transport failures fall through to a lower-priority MX, so a
@@ -134,6 +137,17 @@ func (p smtpAcceptanceProtocol) Probe(ctx context.Context, cfg Config) (Result, 
 		dialErrors = append(dialErrors, fmt.Errorf("%s: %w", host, attemptErr))
 	}
 	return Result{}, probeErr(ProtocolNameSMTPAcceptance, stepDial, errors.Join(dialErrors...))
+}
+
+// smtpAttemptContext gives one MX its share of the time left. Silence is the most
+// common transport failure, and an MX that spent the whole budget on it would
+// leave the targets after it an expired deadline.
+func smtpAttemptContext(ctx context.Context, attemptsLeft int) (context.Context, context.CancelFunc) {
+	deadline, ok := ctx.Deadline()
+	if !ok {
+		return context.WithCancel(ctx)
+	}
+	return context.WithTimeout(ctx, time.Until(deadline)/time.Duration(attemptsLeft))
 }
 
 func probeSMTPAcceptanceMX(

@@ -1528,8 +1528,9 @@ Protocols, in the order of the table above:
   `smtp_stage`, and `smtp_status` (`accepted`, `temporary`, `permanent`,
   `policy`, or `protocol`); an SMTP rejection also includes `smtp_code`, the
   bounded `smtp_reply`, and the enhanced status when supplied. A `421` at any
-  stage is also [busy](#busy-servers). MX targets are
-  tried in preference order, up to three: a transport failure advances to the
+  stage is also [busy](#busy-servers). MX targets are tried in preference order,
+  up to three, each with an equal share of the time left in `timeout`, so size
+  it for the slowest greeting you expect: a transport failure advances to the
   next target, while the first SMTP or local-policy verdict is retained so a
   lower-priority MX cannot mask it. A STARTTLS certificate that fails
   verification counts as such a verdict (`policy` at the `starttls` stage),

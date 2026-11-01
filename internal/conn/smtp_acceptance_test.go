@@ -136,6 +136,47 @@ func TestSMTPAcceptanceFallsBackToNextMXAfterDialError(t *testing.T) {
 	_ = waitSMTPAcceptanceCommands(t, commands, done)
 }
 
+// TestSMTPAcceptanceSilentMXLeavesTimeForTheNext: a target that takes the
+// connection and never greets is a transport failure, and the most common one, so
+// it must not spend the budget of the MX after it.
+func TestSMTPAcceptanceSilentMXLeavesTimeForTheNext(t *testing.T) {
+	port, commands, done := serveSMTPAcceptance(t, nil, "250 recipient ok")
+	silent := func(host string) {
+		ln, err := net.Listen("tcp", net.JoinHostPort(host, strconv.Itoa(port)))
+		if err != nil {
+			t.Skipf("second loopback address unavailable: %v", err)
+		}
+		release := make(chan struct{})
+		t.Cleanup(func() { close(release); _ = ln.Close() })
+		go func() {
+			conn, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			<-release
+			_ = conn.Close()
+		}()
+	}
+	silent("127.0.0.2")
+	silent("127.0.0.3")
+	proto := smtpAcceptanceProtocol{lookupMX: func(context.Context, string, string) ([]*net.MX, error) {
+		return []*net.MX{{Host: "127.0.0.2.", Pref: 10}, {Host: "127.0.0.3.", Pref: 20}, {Host: "127.0.0.1.", Pref: 30}}, nil
+	}}
+	cfg := smtpAcceptanceTestConfig(port)
+	cfg.Params[ParamKeySMTPStartTLS] = SMTPStartTLSOpportunistic
+
+	ctx, cancel := context.WithTimeout(context.Background(), smtpAcceptanceTestTimeout)
+	defer cancel()
+	res, err := proto.Probe(ctx, cfg)
+	if err != nil {
+		t.Fatalf("Probe: %v", err)
+	}
+	if res.Extra[ExtraKeySMTPMXHost] != "127.0.0.1" || res.Extra[ExtraKeySMTPAccepted] != "true" {
+		t.Fatalf("result = %+v", res)
+	}
+	_ = waitSMTPAcceptanceCommands(t, commands, done)
+}
+
 func TestSMTPAcceptanceDoesNotMaskRemoteRejectionWithLaterMX(t *testing.T) {
 	port, commands, done := serveSMTPAcceptance(t, nil, "451 4.7.0 reputation throttled")
 	proto := smtpAcceptanceProtocol{lookupMX: func(context.Context, string, string) ([]*net.MX, error) {
