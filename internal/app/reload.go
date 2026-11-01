@@ -11,6 +11,15 @@ import (
 	"sermo/internal/state"
 )
 
+// perPIDEdges is what a stateful process watcher has already reported, per PID.
+// A reload rebuilds the watcher, and without this memory every PID it reported
+// would run its hook, notification or kill again.
+type perPIDEdges interface {
+	// edgeMemory returns what the watcher replacing this one adopts.
+	edgeMemory() any
+	adoptEdgeMemory(memory any)
+}
+
 // watchSnapshot preserves per-watch window and policy pacing state across reload.
 type watchSnapshot struct {
 	state           rules.WindowState
@@ -24,6 +33,8 @@ type watchSnapshot struct {
 	stateLoaded     bool
 	stateRestored   bool
 	persistedState  state.WatchRuntimeRecord
+	edges           any
+	edgesConfigID   string
 }
 
 type watchStateKey struct {
@@ -49,6 +60,9 @@ func captureWatchState(watches []*Watch) map[watchStateKey]watchSnapshot {
 		if cloned := w.state.Clone(); cloned != nil {
 			snap.state = *cloned
 		}
+		if w.edges != nil {
+			snap.edges, snap.edgesConfigID = w.edges.edgeMemory(), w.configID
+		}
 		out[watchStateKey{name: w.runtimeStateName(), slot: w.runtimeStateSlot()}] = snap
 	}
 	return out
@@ -72,6 +86,10 @@ func applyWatchState(watches []*Watch, saved map[watchStateKey]watchSnapshot) {
 		w.stateRestored = snap.stateRestored
 		w.persistedState = snap.persistedState
 		w.policyState = snap.policyState
+		// Edges a changed check established describe other processes.
+		if w.edges != nil && snapshotConfigMatches(w.configID, snap.edgesConfigID) {
+			w.edges.adoptEdgeMemory(snap.edges)
+		}
 	}
 }
 

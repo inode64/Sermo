@@ -75,7 +75,9 @@ func buildUnownedProcessesWatch(name string, entry, checkEntry map[string]any, d
 	// The classifier samples through the watch's own sampler so a test fake
 	// serves both the cycle and the kill's re-verification.
 	w.classifier.rt.sampler = w.sampler
-	return newStatefulWatch(name, checks.CheckTypeUnownedProcesses, entry, deps, interval, w.runCycle), ""
+	watch := newStatefulWatch(name, checks.CheckTypeUnownedProcesses, entry, deps, interval, w.runCycle)
+	watch.edges = w
+	return watch, ""
 }
 
 func (w *unownedWatcher) runCycle(ctx context.Context) {

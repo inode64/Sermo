@@ -754,7 +754,10 @@ Per-service runtime state is preserved across reload: monitoring cycle counters
 and the watched-file and app-version baselines for `changed:` conditions stay in
 memory, while
 remediation cooldown/backoff and rule `for`/`within` windows are also persisted
-in `engine.state` and survive a full `sermod` process restart. Invalid config, or
+in `engine.state` and survive a full `sermod` process restart. A `process`,
+`process_policy` or `unowned_processes` watch keeps in memory what it already
+reported for each PID, so a reload does not report those PIDs again unless its
+`check` changed; a `sermod` restart starts over. Invalid config, or
 a config with no included services or watches, is rejected and the current
 generation keeps running; a `reload` or `error` event is recorded. Reload does
 not repeat `startup_delay` and does not mark `/readyz` as shutting down. A reload

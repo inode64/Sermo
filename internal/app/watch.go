@@ -148,6 +148,10 @@ type Watch struct {
 	// Stateful multi-target watches (e.g. the file watch) use it to fire one hook
 	// per detected change within a cycle, which the one-Result model cannot express.
 	Cycle func(ctx context.Context)
+	// edges, on a stateful process watcher, is what a reload carries to the
+	// watcher that replaces it, as long as configID still names the same check.
+	edges    perPIDEdges
+	configID string
 	// RecoverHook runs once on the failed-to-ok edge — when a firing watch stops
 	// firing — with the same env contract as Hook plus SERMO_EVENT=recovered.
 	// It shares the DryRun and panic gates: a dry-run watch reports it, a

@@ -646,7 +646,9 @@ func buildProcWatch(name string, entry, checkEntry map[string]any, deps Deps, in
 		publish:   publishWatchSnapshots(deps.WatchSnapshots, deps.watchConfigID),
 		severity:  watchSeverityFor(checks.CheckTypeProcess, entry, checkEntry),
 	}
-	return newStatefulWatch(name, checks.CheckTypeProcess, entry, deps, interval, pw.runCycle), ""
+	watch := newStatefulWatch(name, checks.CheckTypeProcess, entry, deps, interval, pw.runCycle)
+	watch.edges = pw
+	return watch, ""
 }
 
 // newStatefulWatch wires a stateful watcher's cycle into the shared Watch
@@ -657,6 +659,7 @@ func newStatefulWatch(name, checkType string, entry map[string]any, deps Deps, i
 	watch.DryRun = config.DryRun(entry)
 	watch.Severity = watchSeverityFor(checkType, entry, checkMap(entry))
 	watch.Cycle = cycle
+	watch.configID = deps.watchConfigID
 	return watch
 }
 

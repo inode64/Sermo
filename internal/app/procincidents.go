@@ -62,6 +62,13 @@ func newPIDIncidents(watch, slot string, notifyInterval time.Duration, level sev
 	return &pidIncidents{watch: watch, slot: slot, notifyInterval: notifyInterval, severity: level, stateStore: store, emit: emit}
 }
 
+// adopt takes over what the tracker of the previous generation knows, keeping
+// this one's own configuration.
+func (t *pidIncidents) adopt(previous *pidIncidents) {
+	t.activeLoaded, t.active, t.activeDirty = previous.activeLoaded, previous.active, previous.activeDirty
+	t.announced, t.state = previous.announced, previous.state
+}
+
 // loadActive hydrates the aggregate incident from the persisted record once.
 func (t *pidIncidents) loadActive() {
 	if t.activeLoaded || t.stateStore == nil {
@@ -224,6 +231,14 @@ func newSetProcessWatch(name, checkType, slot string, entry, checkEntry map[stri
 		publish:   publishWatchSnapshots(deps.WatchSnapshots, deps.watchConfigID),
 		severity:  level,
 		incidents: newPIDIncidents(name, slot, actions.notifyInterval, level, deps.WatchState, deps.Emit),
+	}
+}
+
+func (s *setProcessWatch) edgeMemory() any { return s.incidents }
+
+func (s *setProcessWatch) adoptEdgeMemory(memory any) {
+	if previous, ok := memory.(*pidIncidents); ok {
+		s.incidents.adopt(previous)
 	}
 }
 

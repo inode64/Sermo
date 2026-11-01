@@ -189,6 +189,14 @@ type procWatcher struct {
 	state map[int]*procState
 }
 
+func (w *procWatcher) edgeMemory() any { return w.state }
+
+func (w *procWatcher) adoptEdgeMemory(memory any) {
+	if state, ok := memory.(map[int]*procState); ok {
+		w.state = state
+	}
+}
+
 func (w *procWatcher) runCycle(ctx context.Context) {
 	if w.state == nil {
 		w.state = map[int]*procState{}
