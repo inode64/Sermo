@@ -11,6 +11,7 @@ import (
 
 	"sermo/internal/config"
 	"sermo/internal/locks"
+	"sermo/internal/state"
 )
 
 func writeWebLockFixture(t *testing.T, dir, fileName string, payload map[string]any) {
@@ -450,6 +451,46 @@ type countingLockProber struct {
 func (p *countingLockProber) Alive(int) bool {
 	p.reads++
 	return true
+}
+
+// A stop extended by the init's own timeout outlives the marker's age limit. The
+// dashboard must not expire the marker while the operation lock is still held:
+// the worker would resume monitoring a deliberate stop on its next cycle.
+func TestWebBackendKeepsTheMarkerOfAnOperationStillRunning(t *testing.T) {
+	useFakeLockProber(t)
+	runtime := t.TempDir()
+	writeWebLockFixture(t, locks.RuntimeOpsDir(runtime), "db.lock", map[string]any{
+		"service": "db", "owner_pid": os.Getpid(), "owner_start_ticks": fakeOwnerTicks,
+		"expires_at": time.Now().Add(time.Hour).UTC().Format(time.RFC3339),
+	})
+	store := newFakeStore()
+	store.now = func() time.Time { return time.Now().Add(-time.Hour) }
+	if err := store.SetOperationSettling("db", state.OperationSettlingRunning); err != nil {
+		t.Fatal(err)
+	}
+	b := &WebBackend{
+		cfg:               &config.Config{Global: config.Global{Runtime: runtime}},
+		order:             []string{"db"},
+		entries:           map[string]*webEntry{"db": {noResidentProcess: true}},
+		operationSettling: store,
+	}
+
+	services := b.Services(context.Background())
+
+	if _, found, err := store.OperationSettling("db"); err != nil || !found {
+		t.Fatalf("marker of the running operation: found=%v err=%v", found, err)
+	}
+	if len(services) != 1 || services[0].State != TargetStateStarting {
+		t.Fatalf("services = %+v, want the service still settling", services)
+	}
+
+	if err := os.Remove(filepath.Join(locks.RuntimeOpsDir(runtime), "db.lock")); err != nil {
+		t.Fatal(err)
+	}
+	b.Services(context.Background())
+	if _, found, err := store.OperationSettling("db"); err != nil || found {
+		t.Fatalf("abandoned marker: found=%v err=%v", found, err)
+	}
 }
 
 func TestWebBackendSharesLockReportsWithinRead(t *testing.T) {
