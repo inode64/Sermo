@@ -230,11 +230,23 @@ func TestGlusterClusterCheckCommandFailureIsUnavailable(t *testing.T) {
 	}
 }
 
+// budgetRunner records how long the context gives a command to finish.
+type budgetRunner struct{ budget time.Duration }
+
+func (r *budgetRunner) Run(ctx context.Context, _ string, _ ...string) (execx.Result, error) {
+	if deadline, ok := ctx.Deadline(); ok {
+		r.budget = time.Until(deadline)
+	}
+	return execx.Result{ExitCode: glusterCLIExitSuccess + 1}, nil
+}
+
 // One run is several commands in series, so the engine default that bounds a
-// single probe is too short; an explicit timeout stays the operator's.
-func TestBuildGlusterClusterCheckTimeoutCoversTheWholeSequence(t *testing.T) {
+// single probe is too short; an explicit timeout stays the operator's. The
+// shared budget wraps every daemon check, so the raised deadline has to reach
+// the command through it.
+func TestGlusterClusterTimeoutCoversTheWholeSequence(t *testing.T) {
 	entry := func(extra map[string]any) map[string]any {
-		out := map[string]any{CheckKeyPeers: []any{"peer"}}
+		out := map[string]any{CheckKeyType: CheckTypeGlusterCluster, CheckKeyPeers: []any{"peer"}}
 		maps.Copy(out, extra)
 		return out
 	}
@@ -248,13 +260,18 @@ func TestBuildGlusterClusterCheckTimeoutCoversTheWholeSequence(t *testing.T) {
 		{"longer engine default kept", time.Minute, entry(nil), time.Minute},
 		{"declared timeout kept", 5 * time.Second, entry(map[string]any{CheckKeyTimeout: "5s"}), 5 * time.Second},
 	} {
-		check, warning := buildGlusterClusterCheck(base{name: "cluster", timeout: tc.inherit}, tc.entry, &execxtest.Runner{})
-		if warning != "" {
-			t.Fatalf("%s: warning = %q", tc.name, warning)
-		}
-		if got := check.(glusterClusterCheck).timeout; got != tc.expected {
-			t.Fatalf("%s: timeout = %v, want %v", tc.name, got, tc.expected)
-		}
+		t.Run(tc.name, func(t *testing.T) {
+			runner := &budgetRunner{}
+			built, issues := BuildWithIssues(map[string]any{"cluster": tc.entry},
+				Deps{Limiter: NewLimiter(1), DefaultTimeout: tc.inherit, Runner: runner})
+			if len(issues) != 0 {
+				t.Fatalf("issues = %v", issues)
+			}
+			Run(context.Background(), built, 0)
+			if runner.budget > tc.expected || runner.budget < tc.expected-time.Second {
+				t.Fatalf("command budget = %v, want %v", runner.budget, tc.expected)
+			}
+		})
 	}
 }
 

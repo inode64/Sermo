@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"maps"
 	"slices"
+	"time"
 )
 
 // TypeInfo describes static capabilities of a built-in check type.
@@ -65,7 +66,11 @@ func resourcePathTypeInfo(info TypeInfo) TypeInfo {
 type checkSpec struct {
 	info            TypeInfo
 	predicateFields []string
-	build           checkBuilder
+	// minTimeout raises the engine default for a check that declares no timeout.
+	// It is resolved with the base, not in the builder, because the shared check
+	// budget applies the base's timeout around the check as well.
+	minTimeout time.Duration
+	build      checkBuilder
 }
 
 // Built-in check type names (the `type:` selector of a check). This is the

@@ -320,7 +320,7 @@ var builtinCheckSpecs = []checkSpec{
 	{info: healthTypeInfo(CheckTypeSSACLI), predicateFields: HardwareRAIDPredFields, build: func(in checkBuildInput) (Check, string) {
 		return buildHardwareRAIDCheck(in.base, in.entry, in.runner, CheckTypeSSACLI)
 	}},
-	{info: healthTypeInfo(CheckTypeGlusterCluster), build: func(in checkBuildInput) (Check, string) {
+	{info: healthTypeInfo(CheckTypeGlusterCluster), minTimeout: glusterClusterTimeout, build: func(in checkBuildInput) (Check, string) {
 		return buildGlusterClusterCheck(in.base, in.entry, in.runner)
 	}},
 	{info: healthTypeInfo(CheckTypeLVM), predicateFields: LVMPredFields, build: func(in checkBuildInput) (Check, string) { return buildLVMCheck(in.base, in.entry, in.runner) }},
@@ -459,7 +459,7 @@ func checkBuildMessage(name, detail string) string {
 // buildCheckBase prepares the fields shared by regular and inline checks.
 func buildCheckBase(name string, entry map[string]any, deps Deps) (string, base, *buildFailure) {
 	typ := cfgval.AsString(entry[CheckKeyType])
-	timeout := deps.DefaultTimeout
+	timeout := max(deps.DefaultTimeout, checkSpecByName[typ].minTimeout)
 	if raw, present := entry[CheckKeyTimeout]; present {
 		timeout = cfgval.Duration(raw)
 		if timeout <= 0 {

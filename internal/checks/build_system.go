@@ -190,9 +190,6 @@ func buildGlusterClusterCheck(b base, entry map[string]any, runner execx.Runner)
 	if err != nil {
 		return nil, "gluster_cluster check: " + err.Error()
 	}
-	if _, declared := entry[CheckKeyTimeout]; !declared {
-		b.timeout = max(b.timeout, glusterClusterTimeout)
-	}
 	return glusterClusterCheck{base: b, runner: runner, peers: peers, volumes: volumes}, ""
 }
 
