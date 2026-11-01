@@ -26,15 +26,16 @@ const (
 	CgroupClassService CgroupClass = "service"
 	// CgroupClassScope is a transient non-session scope (a container, a VM, a
 	// systemd-run unit), or another group a manager owns: a mount, swap or socket
-	// unit, or libvirt's own domain group. Owner is the group's name, without its
-	// suffix for a scope.
+	// unit, libvirt's own domain group, or a unit inside a container. Owner is the
+	// group's name, without its suffix for a scope.
 	CgroupClassScope CgroupClass = "scope"
 	// CgroupClassUserManager is a user@N.service manager and everything it runs;
 	// Owner is the numeric user id.
 	CgroupClassUserManager CgroupClass = "user-manager"
 	// CgroupClassSession is a logind session-N.scope; Owner is the session id.
 	CgroupClassSession CgroupClass = "session"
-	// CgroupClassSlice is a path made only of slices: no unit owns it.
+	// CgroupClassSlice is a path that names no unit: only slices, or a group
+	// outside them that a container runtime or an administrator made.
 	CgroupClassSlice CgroupClass = "slice"
 )
 
@@ -106,14 +107,14 @@ func ClassifyCgroup(content string) CgroupOwner {
 	if parts[0] == cgroupUserSlice {
 		return classifyUserSlice(parts[1:])
 	}
-	for _, part := range parts {
+	for i, part := range parts {
 		switch {
 		case part == cgroupInitScope:
 			return CgroupOwner{Class: CgroupClassInit}
 		case strings.HasSuffix(part, systemdServiceSuffix):
-			return CgroupOwner{Class: CgroupClassService, Owner: strings.TrimSuffix(part, systemdServiceSuffix)}
+			return unitGroup(parts[:i], strings.TrimSuffix(part, systemdServiceSuffix))
 		case strings.HasPrefix(part, openRCCgroupPrefix):
-			return CgroupOwner{Class: CgroupClassService, Owner: strings.TrimPrefix(part, openRCCgroupPrefix)}
+			return unitGroup(parts[:i], strings.TrimPrefix(part, openRCCgroupPrefix))
 		case strings.HasSuffix(part, systemdScopeSuffix):
 			name := strings.TrimSuffix(part, systemdScopeSuffix)
 			if session, found := strings.CutPrefix(name, cgroupSessionPrefix); found {
@@ -125,6 +126,21 @@ func ClassifyCgroup(content string) CgroupOwner {
 		}
 	}
 	return CgroupOwner{Class: CgroupClassSlice}
+}
+
+// unitGroup classifies a group named like a service unit. Only slices lead to a
+// host unit: below anything else the name comes from the init inside a container,
+// so the guest's nginx.service belongs to that container, never to the host's
+// nginx. Signal authority rests on this distinction.
+func unitGroup(parents []string, owner string) CgroupOwner {
+	if i := slices.IndexFunc(parents, notSlice); i >= 0 {
+		return CgroupOwner{Class: CgroupClassScope, Owner: parents[i]}
+	}
+	return CgroupOwner{Class: CgroupClassService, Owner: owner}
+}
+
+func notSlice(part string) bool {
+	return !strings.HasSuffix(part, systemdSliceSuffix)
 }
 
 func hasCgroupManagedSuffix(part string) bool {

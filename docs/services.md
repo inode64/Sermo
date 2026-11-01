@@ -1226,9 +1226,12 @@ Selectors label processes inside that scope instead of adding other instances
 that happen to share an executable and user. This keeps per-instance memory,
 CPU and replaced-binary notices separate. With no live backend or pidfile root,
 selectors still discover processes across the host, except those in another
-unit's control group or scope; shared executables need a restrictive
-instance-specific `cmd` for that fallback. A `delegated: true` selector keeps
-matching there too: libvirt runs a network's `dnsmasq` pair in its daemon's own
+unit's control group or scope, or in a container: a group outside every slice
+(`/docker/<id>`, `/kubepods/…`, `/lxc.payload.<name>`), where a process can show
+the same path and UID as the host's daemon, and a unit inside such a group, which
+is the guest's even when it shares the service's name. Shared executables need a
+restrictive instance-specific `cmd` for that fallback. A `delegated: true`
+selector keeps matching there too: libvirt runs a network's `dnsmasq` pair in its daemon's own
 service and a guest's emulator in a machine scope, and an observe-only match
 grants no signal authority.
 

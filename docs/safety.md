@@ -25,8 +25,10 @@ any `security:` toggle that tries to disable them.
    The only other authority is kernel attribution: a residual the kernel places
    in the service's own control group (systemd `<unit>.service`, OpenRC
    `openrc.<unit>`) may receive `SIGTERM`, and `SIGKILL` only with `force_kill`
-   (`true` or `auto`). A process `stop_policy.keep_children` keeps is delegated
-   and never reaches this authority.
+   (`true` or `auto`). A group of that name inside a container
+   (`/lxc.payload.web/system.slice/nginx.service`) is the guest's and proves
+   nothing. A process `stop_policy.keep_children` keeps is delegated and never
+   reaches this authority.
 5. **Never kill by process name.** A kill requires an exact match on the
    resolved `/proc/<pid>/exe` path **and** the real UID against an explicit
    `kill_only_if` selector or one paired strict `processes:` identity, or
