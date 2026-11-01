@@ -170,6 +170,9 @@ type keepChildrenTable struct {
 	mgr                          *fakeManager
 	daemon, session, replacement process.Identity
 	sessionGone                  bool
+	// earlier is an optional surviving daemon instance the stop must clear.
+	earlier     process.Identity
+	earlierGone bool
 }
 
 func (r *keepChildrenTable) current() map[int]process.Identity {
@@ -187,6 +190,9 @@ func (r *keepChildrenTable) current() map[int]process.Identity {
 			session.PPID = 1
 		}
 		ids[session.PID] = session
+	}
+	if r.earlier.PID != 0 && !r.earlierGone {
+		ids[r.earlier.PID] = r.earlier
 	}
 	return ids
 }
@@ -257,6 +263,80 @@ func TestNewKeepChildrenReachesDiscovery(t *testing.T) {
 			}
 			if table.sessionGone == tc.keep {
 				t.Fatalf("session gone = %v with keep_children %v", table.sessionGone, tc.keep)
+			}
+		})
+	}
+}
+
+// A job runner or a pre-9.8 OpenSSH session runs the daemon's own binary as the
+// daemon's user. The stop that saw it under the daemon keeps it after the daemon
+// exits, through every signalling round, while a real surviving instance beside
+// it is still cleared before the start.
+func TestRestartKeepsSameBinaryChildThatOutlivesItsDaemon(t *testing.T) {
+	const (
+		cgroup = "0::/system.slice/crond.service"
+		exe    = "/opt/sermo-test/crond"
+	)
+	identity := func(pid, ppid int, ticks uint64) process.Identity {
+		return process.Identity{PID: pid, PPID: ppid, UID: 0, StartTicks: ticks, StartTicksOK: true, Exe: exe, ExeOK: true, Cgroup: cgroup, State: "S"}
+	}
+	for _, tc := range []struct {
+		name        string
+		earlier     process.Identity
+		wantSignals []pidSignal
+	}{
+		{name: "alone"},
+		{name: "beside a surviving instance", earlier: identity(150, 1, 15), wantSignals: []pidSignal{{pid: 150, sig: syscall.SIGTERM}}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			locker := locks.NewOperationLocker(locks.RuntimeOpsDir(dir))
+			mgr := &fakeManager{status: servicemgr.StatusActive}
+			table := &keepChildrenTable{mgr: mgr, daemon: identity(100, 1, 10), session: identity(200, 100, 20), replacement: identity(300, 1, 30), earlier: tc.earlier}
+			engine := New(Config{
+				Service: "cron",
+				Unit:    "crond",
+				Backend: string(servicemgr.BackendSystemd),
+				Tree: map[string]any{
+					process.SectionStopPolicy: map[string]any{
+						process.StopPolicyKeyKeepChildren: true,
+						process.StopPolicyKeyForceKill:    process.StopPolicyForceKillAuto,
+						process.StopPolicyKeyTermTimeout:  "1s",
+						process.StopPolicyKeyKillTimeout:  "1s",
+					},
+					process.SectionProcesses: map[string]any{
+						"main": map[string]any{process.SelectorKeyExe: exe, process.SelectorKeyUser: "root"},
+					},
+				},
+				Manager: mgr,
+				Locker:  &locker,
+				Scanner: locks.NewScanner(locks.RuntimeLocksDir(dir)),
+				Discoverer: process.Discoverer{
+					Reader:      table,
+					ResolveUser: rootOnlyResolveUser,
+					BackendPIDs: func() []int { return slices.Sorted(maps.Keys(table.current())) },
+				},
+				Sleep: func(time.Duration) {},
+			})
+			signaler := &pidSignaler{onSignal: func(pid int, _ syscall.Signal) {
+				switch pid {
+				case tc.earlier.PID:
+					table.earlierGone = true
+				default:
+					table.sessionGone = true
+				}
+			}}
+			engine.Reaper.Signaler = signaler
+
+			res := engine.Do(context.Background(), actionRestart)
+			if res.Status != ResultOK {
+				t.Fatalf("status = %q (%s), want ok; signals = %v", res.Status, res.Message, signaler.calls)
+			}
+			if !slices.Equal(signaler.calls, tc.wantSignals) || table.sessionGone {
+				t.Fatalf("signals = %v, want %v; kept child gone = %v", signaler.calls, tc.wantSignals, table.sessionGone)
+			}
+			if !mgr.did("start crond") {
+				t.Fatalf("calls = %v, want a start", mgr.calls)
 			}
 		})
 	}

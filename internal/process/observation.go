@@ -130,11 +130,22 @@ const ReasonTrackedOutsideDiscovery = "tracked process remains outside service d
 // RetainSurvivors follows old generations across selector/cgroup changes.
 // Losing attribution is not evidence of exit. Changed identities stay visible
 // but lose signal authority, so neither escalation nor start can hide them.
+//
+// A generation discovery kept stays kept. Once its daemon exits it is reparented
+// to PID 1 and a fresh look cannot tell a same-binary child from a surviving
+// daemon instance; the earlier observation that saw it under the daemon can.
+// Keeping it only removes signal authority.
 func (o Observation) RetainSurvivors(previous []Process) []Process {
 	procs := slices.Clone(o.Processes)
 	for _, old := range previous {
 		id, alive := o.snapshot[old.PID]
-		if !alive || old.Delegated {
+		if !alive {
+			continue
+		}
+		if old.Delegated {
+			if i := slices.IndexFunc(procs, old.SameGeneration); old.Kept && i >= 0 {
+				procs[i].Delegated, procs[i].Kept = true, true
+			}
 			continue
 		}
 		if old.StartTicks != 0 && id.StartTicksOK && id.StartTicks != old.StartTicks {

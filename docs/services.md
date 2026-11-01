@@ -1393,7 +1393,10 @@ processes:
   is kept: never a residual, never signalled, never blocking the start. A process
   the daemon forked is kept even when it runs the same binary (a cron job runner),
   but an earlier daemon instance reparented to PID 1 is still a principal, so a
-  second daemon is never started beside it. Validation requires a non-delegated
+  second daemon is never started beside it. That same-binary child is kept by the
+  stop or restart that sees it under its daemon; a later operation reads it as a
+  principal once it hangs off PID 1, unless a `cmd` on the principal selector
+  names only the daemon. Validation requires a non-delegated
   selector with an exact `exe` and `user`. Kept processes stay in the process
   list but out of the service's metrics, totals and graphs: containerd's memory
   and `cpu_thread` describe containerd, not the containers it runs, so a busy

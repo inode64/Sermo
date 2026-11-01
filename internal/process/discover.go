@@ -301,10 +301,11 @@ func (d Discoverer) markDelegated(selectors []Selector, found map[int]Process, i
 // read and that descends from no matched process at all. What the daemon forked
 // is kept even when it re-executes the same binary as the same user (a cronie
 // job runner); a surviving earlier daemon instance is reparented to PID 1, so it
-// is still a principal and still blocks the start. A supervisor declared by its
-// own selector does not hide the daemon below it. The backend's first PID is
-// not trusted on its own: once a systemd unit's daemon exits, the first PID it
-// lists is just a kept workload process.
+// is still a principal and still blocks the start. This pass reads one snapshot:
+// RetainSurvivors carries a kept verdict past the daemon's own exit. A supervisor
+// declared by its own selector does not hide the daemon below it. The backend's
+// first PID is not trusted on its own: once a systemd unit's daemon exits, the
+// first PID it lists is just a kept workload process.
 func (d Discoverer) markKeptChildren(selectors []Selector, found map[int]Process, idx *snapshotIndex, resolve UserResolver, pidfileClaimed map[int]bool) {
 	principalSelectors := slices.DeleteFunc(slices.Clone(selectors), func(s Selector) bool { return s.Delegated })
 	claims := map[int][]int{}

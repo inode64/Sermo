@@ -79,6 +79,61 @@ func TestKeepChildrenDelegatesEverythingButTheTopmostPrincipals(t *testing.T) {
 	}
 }
 
+// A same-binary child kept while its daemon ran is reparented to PID 1 when the
+// daemon exits, and a fresh look alone cannot tell it from a surviving daemon
+// instance. The observation that saw the tree can: only that generation stays
+// kept, so a recycled PID and an instance that was already a principal do not.
+func TestObserveTrackedKeepsTheGenerationItKept(t *testing.T) {
+	selectors := []Selector{{Name: RoleMain, Type: SelectorCommandMatch, Exe: keepTestDaemon, User: "root"}}
+	identity := func(pid, ppid int, ticks uint64) Identity {
+		return Identity{PID: pid, PPID: ppid, UID: 0, User: "root", Exe: keepTestDaemon, ExeOK: true, StartTicks: ticks, StartTicksOK: true}
+	}
+	ids := map[int]Identity{
+		10: identity(10, 1, 100),
+		11: identity(11, 10, 110), // the daemon's job runner
+		20: identity(20, 1, 200),  // an earlier daemon instance
+	}
+	d := Discoverer{
+		Reader:       fakeReader{ids: ids},
+		ResolveUser:  fakeUsers(map[string]uint32{"root": 0}),
+		BackendPIDs:  func() []int { return []int{10} },
+		KeepChildren: true,
+	}
+	before, err := d.Observe(selectors)
+	if err != nil {
+		t.Fatal(err)
+	}
+	d.BackendPIDs = nil
+	for _, tc := range []struct {
+		name     string
+		child    Identity
+		wantKept bool
+	}{
+		{name: "same generation stays kept", child: identity(11, 1, 110), wantKept: true},
+		{name: "recycled PID loses the keep", child: identity(11, 1, 999)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ids := map[int]Identity{tc.child.PID: tc.child, 20: ids[20]}
+			d := d
+			d.Reader = fakeReader{ids: ids}
+			after, err := d.ObserveTracked(selectors, before.Processes)
+			if err != nil {
+				t.Fatal(err)
+			}
+			got := map[int]Process{}
+			for _, proc := range after.Processes {
+				got[proc.PID] = proc
+			}
+			if child := got[tc.child.PID]; child.Delegated != tc.wantKept || child.Kept != tc.wantKept {
+				t.Errorf("child = %+v, want kept %v", child, tc.wantKept)
+			}
+			if earlier := got[20]; earlier.Delegated || earlier.Kept {
+				t.Errorf("earlier instance = %+v, want a principal", earlier)
+			}
+		})
+	}
+}
+
 // Kept is what takes a process out of the service's metrics, so it must follow
 // keep_children and never a delegated selector, whose target is what the service
 // exists to measure.

@@ -1017,8 +1017,10 @@ func (e Engine) clearResiduals(ctx context.Context, tracked []process.Process, a
 			discoverErr = err
 			return nil
 		}
-		tracked = nonDelegatedResiduals(e.reattributeUnitMembers(procs))
-		return tracked
+		// Delegated processes stay tracked: a kept child is told from a surviving
+		// daemon only by the generation carried from one round to the next.
+		tracked = e.reattributeUnitMembers(procs)
+		return nonDelegatedResiduals(tracked)
 	}
 	residuals := discover()
 	outcome := residualOutcome{remaining: residuals, found: len(residuals) > 0}

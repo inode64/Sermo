@@ -100,9 +100,12 @@ touches them.
   unreadable exe outside any matched tree. Never trust the backend's first PID on
   its own (after a systemd stop it is a kept workload process), and never let a
   surviving daemon instance (reparented to PID 1) become a kept child;
-  validation requires a strict principal selector. A kept process stays listed
-  but out of the service's metrics, so its workload cannot drive the daemon's
-  rules.
+  validation requires a strict principal selector. The exact generation kept
+  before a stop stays kept through that operation (`RetainSurvivors`), the only
+  evidence that tells a same-binary child from a surviving instance once its
+  daemon is gone; a later operation has none, and it reads as a principal. A kept
+  process stays listed but out of the service's metrics, so its workload cannot
+  drive the daemon's rules.
 - `processes.<name>.delegated: true` is observe-only: its matches and their
   descendants are attributed for metrics but never signalled, never residuals,
   never strays and contribute no kill authority. It is meant for targets

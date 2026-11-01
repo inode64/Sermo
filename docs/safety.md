@@ -782,7 +782,13 @@ Every other discovered process is kept. What the daemon forked is kept even when
 it re-executes the same binary as the same user (a cronie job runner, an OpenSSH
 < 9.8 session), while a surviving earlier daemon instance — reparented to PID 1 —
 is still a principal and still blocks the start, so a second daemon is never
-started beside it. A supervisor declared by its own selector stays a principal
+started beside it. The stop or restart that observes such a child under its
+daemon keeps that exact process generation after the daemon exits. A later
+operation never saw that tree: a same-binary process already reparented to PID 1
+reads as a principal, so a `start` after a `stop`, or a second restart while it
+still runs, treats it as a residual. Where that matters, add a `cmd` to the
+principal selector, as the `glusterd` profile does, so it names only the daemon.
+A supervisor declared by its own selector stays a principal
 without hiding the daemon below it. The backend's first PID is deliberately not
 trusted on its own: once a systemd unit's daemon has exited, the first PID it
 lists is just a kept workload process (a shim, a job). An explicit
