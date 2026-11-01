@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 
 	"sermo/internal/httpx"
 	"sermo/internal/netutil"
@@ -56,7 +57,10 @@ func httpProbeBaseWithTLSMode(cfg Config, defaultPort int, tlsMode string) (*htt
 		scheme = schemeHTTPS
 		tlsConfig = netutil.TLSClientConfigForMode(host, tlsMode)
 	}
-	return httpProbeClient(target.cfg.Interface, tlsConfig), scheme + urlSchemeSeparator + target.address()
+	// Built as a URL, not concatenated: an IPv6 zone's % must be escaped for the
+	// request to parse.
+	base := url.URL{Scheme: scheme, Host: target.address()}
+	return httpProbeClient(target.cfg.Interface, tlsConfig), base.String()
 }
 
 // httpProbeResponse is one bounded HTTP probe exchange: the status code, the
@@ -85,8 +89,8 @@ func doHTTPProbe(client *http.Client, req *http.Request, limit int64) (httpProbe
 }
 
 // getHTTPProbe builds a GET, optionally decorates its headers, and performs doHTTPProbe.
-func getHTTPProbe(ctx context.Context, client *http.Client, url string, limit int64, decorate func(*http.Request)) (httpProbeResponse, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody)
+func getHTTPProbe(ctx context.Context, client *http.Client, rawURL string, limit int64, decorate func(*http.Request)) (httpProbeResponse, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, http.NoBody)
 	if err != nil {
 		//nolint:wrapcheck // see doHTTPProbe: the caller's probeErr supplies the protocol context.
 		return httpProbeResponse{}, err
@@ -105,8 +109,8 @@ func decodedJSON(data []byte, out any) bool {
 
 // getJSONProbe performs a bounded GET for probes that require HTTP 200 and JSON.
 // Probes with fallback endpoints use getHTTPProbe and decodedJSON instead.
-func getJSONProbe(ctx context.Context, client *http.Client, url string, decorate func(*http.Request), out any) error {
-	resp, err := getHTTPProbe(ctx, client, url, maxHTTPProbeBody, decorate)
+func getJSONProbe(ctx context.Context, client *http.Client, rawURL string, decorate func(*http.Request), out any) error {
+	resp, err := getHTTPProbe(ctx, client, rawURL, maxHTTPProbeBody, decorate)
 	if err != nil {
 		return err
 	}
