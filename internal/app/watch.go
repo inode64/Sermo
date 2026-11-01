@@ -939,6 +939,7 @@ func (w *Watch) emit(e Event) {
 		e.App = w.App
 		e.Watch = ""
 	}
+	e.slot = w.StateSlot
 	emitSafe(w.Emit, e)
 }
 

@@ -28,6 +28,9 @@ type Event struct {
 	Kind    string // eventKind* value describing the visible event type
 	Rule    string
 	Check   string // stable check identity for notification grouping
+	// slot names the metric of a multi-metric watch, whose metrics are separate
+	// event_notify incidents under one watch name.
+	slot    string
 	Action  string
 	Status  string
 	Message string

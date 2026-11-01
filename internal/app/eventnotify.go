@@ -206,7 +206,10 @@ func (n *EventNotifier) Retain(scope eventNotifyScope) {
 type eventNotifyScope struct {
 	services map[string]eventNotifyServiceScope
 	watches  map[string]bool
-	apps     map[string]bool
+	// metricChecks lists, per multi-metric watch, the incident checks its
+	// metrics can close.
+	metricChecks map[string]map[string]bool
+	apps         map[string]bool
 }
 
 type eventNotifyServiceScope struct {
@@ -216,9 +219,10 @@ type eventNotifyServiceScope struct {
 
 func eventNotifyScopeOf(workers []*Worker, watches []*Watch) eventNotifyScope {
 	scope := eventNotifyScope{
-		services: make(map[string]eventNotifyServiceScope, len(workers)),
-		watches:  make(map[string]bool, len(watches)),
-		apps:     map[string]bool{},
+		services:     make(map[string]eventNotifyServiceScope, len(workers)),
+		watches:      make(map[string]bool, len(watches)),
+		metricChecks: map[string]map[string]bool{},
+		apps:         map[string]bool{},
 	}
 	for _, w := range workers {
 		if w == nil {
@@ -238,9 +242,21 @@ func eventNotifyScopeOf(workers []*Worker, watches []*Watch) eventNotifyScope {
 			scope.apps[w.App] = true
 		default:
 			scope.watches[w.Name] = true
+			scope.addMetricChecks(w)
 		}
 	}
 	return scope
+}
+
+func (s eventNotifyScope) addMetricChecks(w *Watch) {
+	if w.StateSlot == "" {
+		return
+	}
+	if s.metricChecks[w.Name] == nil {
+		s.metricChecks[w.Name] = map[string]bool{}
+	}
+	s.metricChecks[w.Name][eventNotifyCheck(Event{slot: w.StateSlot})] = true
+	s.metricChecks[w.Name][eventNotifyCheck(Event{slot: w.StateSlot, Check: watchAvailabilityCheck})] = true
 }
 
 // live reports whether an open incident still belongs to a running target. A
@@ -258,7 +274,10 @@ func (s eventNotifyScope) live(key string) bool {
 		svc, ok := s.services[name]
 		return ok && ((rule != "" && svc.rules[rule]) || (check != "" && svc.checks[check]))
 	case eventNotifyDimensionWatch:
-		return s.watches[name]
+		// A removed metric, or a key from before each metric had its own
+		// incident, names nothing that could send the recovery.
+		metrics := s.metricChecks[name]
+		return s.watches[name] && (metrics == nil || metrics[check])
 	case eventNotifyDimensionApp:
 		return s.apps[name]
 	default:
@@ -521,7 +540,20 @@ func eventNotifyIdentity(e Event) (key string, active bool, phase string) {
 		}
 	}
 	active = category == eventNotifyCategoryHealth && phase != eventNotifyPhaseRecovered
-	return formatEventNotifyKey(dimension, name, e.Rule, e.Check, category), active, phase
+	return formatEventNotifyKey(dimension, name, e.Rule, eventNotifyCheck(e), category), active, phase
+}
+
+// eventNotifyCheck is the check field of an event's incident key: the metric of
+// a multi-metric watch scopes its check, so one metric's recovery cannot close
+// another's episode.
+func eventNotifyCheck(e Event) string {
+	if e.slot == "" {
+		return e.Check
+	}
+	if e.Check == "" {
+		return e.slot
+	}
+	return e.slot + string(eventNotifyKeySeparator) + e.Check
 }
 
 // shouldDeliverEvent decides whether a non-recovery event opens, escalates or

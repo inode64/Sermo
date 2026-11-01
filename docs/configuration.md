@@ -2180,7 +2180,8 @@ watch-action events, and automatic service remediation outcomes (including
 `dry-run` and `suppressed`). It includes the host and target in the message and
 does not send routine manual successful actions. The first failure or warning
 for each service check, rule, watch or app is sent immediately within the
-burst budget described below; unchanged
+burst budget described below, and each metric of a `net`, `icmp` or `swap` watch
+counts as its own incident; unchanged
 incidents are suppressed even when their event text or PID changes. An
 escalation to a graver severity, a recovery, or a new episode is eligible
 for immediate delivery; a lower severity inside an open incident is held (see
@@ -2207,8 +2208,8 @@ an outage, even without reminders configured; recovery flushes receipts without
 resending them. A restart before the receipts become durable can repeat an
 initial alert. At 4096 pending receipts, new deliveries are skipped and a bounded
 error is logged; existing receipts are never evicted to make room. An open incident
-whose service, check, rule, watch or app is no longer configured (or no longer
-enabled) after a restart or reload is forgotten, since nothing can send its
+whose service, check, rule, watch, metric or app is no longer configured (or no
+longer enabled) after a restart or reload is forgotten, since nothing can send its
 recovery any more; it is not reminded again. If `repeat_interval` is set, an open incident is reminded at that interval, even
 when the underlying check emits no new event. Without it, open incidents are
 announced only on state changes. A remediation rule's episode closes with the

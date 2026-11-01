@@ -301,6 +301,77 @@ func TestEventNotifierAvailabilityEpisodesCloseAtEveryGrade(t *testing.T) {
 	}
 }
 
+// The metrics of a net, icmp or swap watch fire and clear independently. Sharing
+// one incident let one metric's recovery close the episode of another that was
+// still firing, and held the second metric's own opening.
+func TestEventNotifierKeepsTheMetricsOfAWatchApart(t *testing.T) {
+	router, target, now := outageRouter(t, nil, time.Hour)
+	emit := func(e Event) { router.deliver(t.Context(), e) }
+	breach := checks.Result{Check: "gw", OK: true, Message: "breach"}
+	clear := checks.Result{Check: "gw", OK: false, Message: "clear"}
+	loss := &Watch{Name: "gw", StateSlot: "metric:loss", Emit: emit, Check: &scriptedCheck{results: []checks.Result{breach, breach, clear}}}
+	latency := &Watch{Name: "gw", StateSlot: "metric:latency", Emit: emit, Check: &scriptedCheck{results: []checks.Result{breach, clear, clear}}}
+	kinds := func() []string {
+		var out []string
+		for _, msg := range drainEventNotify(target) {
+			out = append(out, msg.Fields[sermoEnvEvent])
+		}
+		return out
+	}
+	cycle := func() {
+		loss.RunCycle(context.Background())
+		latency.RunCycle(context.Background())
+	}
+
+	cycle()
+	if got := kinds(); !slices.Equal(got, []string{eventKindFiring, eventKindFiring}) {
+		t.Fatalf("both metrics firing delivered %v, want one opening each", got)
+	}
+	cycle()
+	if got := kinds(); !slices.Equal(got, []string{eventKindRecovered}) {
+		t.Fatalf("one metric clearing delivered %v, want its recovery", got)
+	}
+	*now = now.Add(time.Hour)
+	router.remind(t.Context())
+	if got := drainEventNotify(target); len(got) != 1 {
+		t.Fatalf("reminders = %d, want the metric still firing", len(got))
+	}
+	cycle()
+	if got := kinds(); !slices.Equal(got, []string{eventKindRecovered}) {
+		t.Fatalf("last metric clearing delivered %v, want its recovery", got)
+	}
+}
+
+// A metric's incident is closed only by that metric's watch, so an open one under
+// a removed metric, or under the key shared before metrics were kept apart, has
+// nothing left to close it.
+func TestEventNotifierRetainMetricIncidents(t *testing.T) {
+	router, target, now := outageRouter(t, nil, time.Hour)
+	for _, e := range []Event{
+		{Watch: "gw", slot: "metric:loss", Kind: eventKindFiring, Message: "kept metric"},
+		{Watch: "gw", slot: "metric:loss", Check: watchAvailabilityCheck, Kind: eventKindError, Severity: severity.Warning, Message: "kept availability"},
+		{Watch: "gw", slot: "metric:latency", Kind: eventKindFiring},
+		{Watch: "gw", Kind: eventKindFiring},
+		{Watch: "gw", Check: watchAvailabilityCheck, Kind: eventKindError, Severity: severity.Warning},
+	} {
+		router.deliver(t.Context(), e)
+	}
+	drainEventNotify(target)
+
+	router.Retain(eventNotifyScopeOf(nil, []*Watch{{Name: "gw", StateSlot: "metric:loss"}}))
+	*now = now.Add(time.Hour)
+	router.remind(t.Context())
+
+	var got []string
+	for _, msg := range drainEventNotify(target) {
+		got = append(got, msg.Body)
+	}
+	slices.Sort(got)
+	if !slices.Equal(got, []string{"check: availability\nmessage: kept availability", "message: kept metric"}) {
+		t.Fatalf("reminders = %q, want only the configured metric's incidents", got)
+	}
+}
+
 // A reload that removes or renames the entity behind an open incident leaves
 // nothing that can ever emit its recovery, so the incident must not be
 // reminded forever.
