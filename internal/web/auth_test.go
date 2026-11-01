@@ -366,6 +366,73 @@ func TestOpenModeAllowsConfiguredHosts(t *testing.T) {
 	}
 }
 
+// guest: true answers without a credential, so nothing but the Host check stands
+// between a DNS-rebound page and everything a guest reads.
+func TestGuestListenerRejectsForeignHosts(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		auth Auth
+	}{
+		{name: "guest only", auth: Auth{AnonymousGuest: true}},
+		{name: "password and guest", auth: Auth{AdminCredentials: testCredentials(t, "secret"), AnonymousGuest: true}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			auth := tc.auth
+			auth.PublicURL = "https://ops.example.com:8443/sermo"
+			h := (&Server{
+				Backend:      StaticBackend{Backend: &fakeBackend{services: []Service{{Name: "web"}}}},
+				Auth:         auth,
+				Addr:         "192.0.2.10:9797",
+				AllowedHosts: []string{"sermo.internal"},
+			}).Handler()
+			serve := func(r *http.Request, host string) int {
+				r.Host = host
+				rec := httptest.NewRecorder()
+				h.ServeHTTP(rec, r)
+				return rec.Code
+			}
+			for _, r := range []*http.Request{
+				req(http.MethodGet, APIPathServices, "", ""),
+				req(http.MethodGet, routePathLogin, "", ""),
+				req(http.MethodPost, routePathLogin, "", ""),
+				req(http.MethodGet, routePathLivez+"?"+apiQueryVerbose, "", ""),
+			} {
+				if code := serve(r, "evil.example.com:9797"); code != http.StatusMisdirectedRequest {
+					t.Fatalf("%s %s with a foreign Host = %d, want 421", r.Method, r.URL, code)
+				}
+			}
+			for _, host := range []string{"localhost:9797", "198.51.100.7", "192.0.2.10:9797", "sermo.internal", "ops.example.com", "OPS.example.com:8443"} {
+				if code := serve(req(http.MethodGet, APIPathServices, "", ""), host); code != http.StatusOK {
+					t.Fatalf("Host %q = %d, want 200", host, code)
+				}
+				if code := serve(req(http.MethodGet, routePathLogin, "", ""), host); code != http.StatusOK {
+					t.Fatalf("login form with Host %q = %d, want 200", host, code)
+				}
+			}
+			for _, path := range []string{routePathLivez, routePathReadyz} {
+				if code := serve(req(http.MethodGet, path, "", ""), "evil.example.com"); code != http.StatusOK {
+					t.Fatalf("plain probe %s with a foreign Host = %d, want 200", path, code)
+				}
+			}
+		})
+	}
+}
+
+func TestOpenModeAcceptsPublicURLHost(t *testing.T) {
+	h := (&Server{
+		Backend: StaticBackend{Backend: &fakeBackend{services: []Service{{Name: "web"}}}},
+		Addr:    "127.0.0.1:9797",
+		Auth:    Auth{PublicURL: "https://ops.example.com/sermo"},
+	}).Handler()
+	r := req(http.MethodGet, APIPathServices, "", "")
+	r.Host = "ops.example.com"
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, r)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("public_url host = %d, want 200", rec.Code)
+	}
+}
+
 func TestAuthedModeServesAnyHost(t *testing.T) {
 	// With Basic auth on, a rebound origin cannot attach credentials, so the
 	// Host check is not applied and reverse proxies keep working.

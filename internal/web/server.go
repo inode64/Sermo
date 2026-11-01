@@ -323,13 +323,14 @@ type Server struct {
 	// the host name on the /login page. Empty shows none.
 	LoginMessage string
 
-	// AllowedHosts lists extra hostnames accepted in the Host header when auth
-	// is disabled (open mode), e.g. the public name of a fronting proxy.
-	// localhost, IP-literal Hosts and the bind host are always accepted; other
-	// names are refused (DNS-rebinding protection). The check needs Addr set
-	// (Run always has it) and does not apply with auth enabled: a DNS-rebound
-	// origin cannot attach credentials (Basic or the host-scoped session
-	// cookie), and proxies keep their Host.
+	// AllowedHosts lists extra hostnames accepted in the Host header when a
+	// request needs no credential (open mode or guest: true), e.g. the name of a
+	// fronting proxy. localhost, IP-literal Hosts, the bind host and
+	// web.public_url's host are always accepted; other names are refused
+	// (DNS-rebinding protection). The check needs Addr set (Run always has it)
+	// and does not apply when every request needs a credential: a DNS-rebound
+	// origin cannot attach one (Basic or the host-scoped session cookie), and
+	// proxies keep their Host.
 	AllowedHosts []string
 
 	// MaxSeriesWindow caps the history one series request may ask for. Zero uses

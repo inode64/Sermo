@@ -61,6 +61,12 @@ func (a Auth) Enabled() bool {
 	return !a.AdminCredentials.Empty() || !a.GuestCredentials.Empty() || a.AnonymousGuest
 }
 
+// answersWithoutCredential reports whether a request with no credential is
+// served: an open dashboard, or the anonymous guest.
+func (a Auth) answersWithoutCredential() bool {
+	return !a.Enabled() || a.AnonymousGuest
+}
+
 // Role values returned by role() and surfaced in the whoami response. The empty
 // string means unauthenticated.
 const (
@@ -83,8 +89,9 @@ const (
 )
 
 // hostAllowed reports whether the request Host names this server: a loopback
-// name/address, the configured bind host, or an explicit AllowedHosts entry.
-// Ports are ignored — rebinding controls the name, not the port.
+// name/address, the configured bind host, web.public_url's host, or an explicit
+// AllowedHosts entry. Ports are ignored — rebinding controls the name, not the
+// port.
 func (s *Server) hostAllowed(hostport string) bool {
 	host := canonicalHost(hostport)
 	if host == "" {
@@ -98,11 +105,8 @@ func (s *Server) hostAllowed(hostport string) bool {
 	if ip := net.ParseIP(host); ip != nil {
 		return true
 	}
-	if bind := canonicalHost(s.Addr); bind != "" && host == bind {
-		return true
-	}
-	return slices.ContainsFunc(s.AllowedHosts, func(allowed string) bool {
-		return canonicalHost(allowed) == host
+	return slices.ContainsFunc(append([]string{s.Addr, s.site.host}, s.AllowedHosts...), func(name string) bool {
+		return canonicalHost(name) == host
 	})
 }
 
@@ -259,12 +263,12 @@ func (s *Server) withAuth(next http.Handler) http.Handler {
 		role, session := s.role(r)
 		publishAccessActor(r.Context(), role)
 
-		// Open mode has no credential boundary, so a DNS-rebound page could
-		// drive the API from a hostile origin; only Hosts that name this server
-		// are served. With auth enabled the credential check covers it (a
-		// rebound origin cannot attach Basic credentials or the host-scoped
-		// session cookie) and proxies keep their Host.
-		if !s.Auth.Enabled() && s.Addr != "" && !s.hostAllowed(r.Host) {
+		// A listener that answers without a credential gives a DNS-rebound page
+		// the API from a hostile origin, so only Hosts that name this server are
+		// served. Otherwise the credential check covers it (a rebound origin
+		// cannot attach Basic credentials or the host-scoped session cookie) and
+		// proxies keep their Host.
+		if s.Auth.answersWithoutCredential() && s.Addr != "" && !s.hostAllowed(r.Host) {
 			writeJSON(w, http.StatusMisdirectedRequest, ActionResult{OK: false, Message: authMessageForeignHost})
 			return
 		}

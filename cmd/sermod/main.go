@@ -748,8 +748,9 @@ func warnWorldReadableSecret(logger *slog.Logger, cfg *config.Config) {
 	}
 }
 
-// webAllowedHosts reads web.allowed_hosts: extra Host header names the open
-// (auth-less) UI accepts besides localhost, IP literals and the bind host.
+// webAllowedHosts reads web.allowed_hosts: extra Host header names a UI that
+// answers without a credential (open or guest: true) accepts besides localhost,
+// IP literals, the bind host and web.public_url's host.
 func webAllowedHosts(cfg *config.Config) []string {
 	m := cfg.Global.WebSection()
 	if m == nil {
