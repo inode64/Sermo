@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"sermo/internal/severity"
 )
 
 // parseRulesByName parses tree's rules and returns them indexed by rule name.
@@ -727,4 +729,63 @@ func TestEdgeConditionWithoutClearWindowFlashesForOneCycle(t *testing.T) {
 	if s.FiresAt(r, false, at.Add(30*time.Second)) {
 		t.Fatal("without a clear window the episode ends immediately")
 	}
+}
+
+func TestUnobservedRestartsPendingProgress(t *testing.T) {
+	forCycles := Rule{For: &ForWindow{Cycles: 3}}
+	s := &WindowState{}
+	s.FiresAt(forCycles, true, t0)
+	s.FiresAt(forCycles, true, t0.Add(time.Minute))
+	s.Unobserved()
+	if s.FiresAt(forCycles, true, t0.Add(2*time.Minute)) {
+		t.Fatal("three matches across a gap are not three consecutive matches")
+	}
+
+	forDuration := Rule{For: &ForWindow{Duration: 10 * time.Minute}}
+	s = &WindowState{}
+	s.FiresGradedAt(forDuration, true, severity.Critical, t0)
+	s.Unobserved()
+	if step := s.FiresGradedAt(forDuration, true, severity.Critical, t0.Add(time.Hour)); step.Firing {
+		t.Fatalf("an unobserved hour counted toward the window: %+v", step)
+	}
+	if step := s.FiresGradedAt(forDuration, true, severity.Critical, t0.Add(70*time.Minute)); !step.Firing || step.Severity != severity.Critical {
+		t.Fatalf("the window that really elapsed must open at its grade: %+v", step)
+	}
+}
+
+func TestUnobservedLeavesARollingWindowAndAnOpenEpisode(t *testing.T) {
+	within := Rule{Within: &WithinWindow{Cycles: 5, MinMatches: 2}}
+	s := &WindowState{}
+	s.FiresAt(within, true, t0)
+	s.Unobserved()
+	if !s.FiresAt(within, true, t0.Add(time.Minute)) {
+		t.Fatal("a rolling window counts observed cycles, so a gap costs it nothing")
+	}
+
+	open := Rule{For: &ForWindow{Duration: 10 * time.Minute}}
+	s = &WindowState{}
+	s.FiresAt(open, true, t0)
+	if !s.FiresAt(open, true, t0.Add(10*time.Minute)) {
+		t.Fatal("the episode must open")
+	}
+	s.Unobserved()
+	if !s.FiresAt(open, true, t0.Add(time.Hour)) {
+		t.Fatal("a gap must not close an open episode")
+	}
+}
+
+func TestUnobservedStopsAClearDuration(t *testing.T) {
+	r := Rule{Clear: &ForWindow{Duration: 5 * time.Minute}}
+	s := &WindowState{}
+	s.FiresAt(r, true, t0)
+	s.FiresAt(r, false, t0.Add(time.Minute))
+	s.Unobserved()
+	if !s.FiresAt(r, false, t0.Add(time.Hour)) {
+		t.Fatal("an unobserved hour counted toward the clear window")
+	}
+}
+
+func TestUnobservedIsNilSafe(t *testing.T) {
+	var s *WindowState
+	s.Unobserved()
 }

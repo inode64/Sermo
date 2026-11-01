@@ -211,6 +211,31 @@ func (s *WindowState) InterruptClear() {
 	s.clearSince = time.Time{}
 }
 
+// Unobserved marks a stretch nobody observed, a paused target: a window counting
+// consecutive matches or a duration of them has no continuity across it, so its
+// progress starts over. An open episode stays open, since only an observation
+// may close it, which keeps its entry window too. A rolling window counts
+// observed cycles and loses nothing.
+func (s *WindowState) Unobserved() {
+	if s == nil {
+		return
+	}
+	s.InterruptClear()
+	if !s.firing {
+		s.interrupt()
+	}
+	if s.rungs != nil {
+		for i := range s.rungs {
+			s.rungs[i].interrupt()
+		}
+	}
+}
+
+func (s *entryWindow) interrupt() {
+	s.consecutive = 0
+	s.trueSince = time.Time{}
+}
+
 // Firing reports whether the rule is currently in a firing episode, as of the
 // last FiresAt call (read-only, nil-safe). Callers observing the rising or
 // falling edge must read it before calling FiresAt for the cycle.

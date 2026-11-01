@@ -870,6 +870,66 @@ func TestReloadCoversEveryPathThatNoRestartRuleReads(t *testing.T) {
 	}
 }
 
+// A paused service was not observed, so `for: 10m` cannot count the pause as ten
+// minutes of failure: the first failing cycle after an unmonitor or a manual stop
+// would restart a service that is still warming up.
+func TestPauseRestartsAPendingForWindow(t *testing.T) {
+	h := &workerHarness{cache: failedCache("http"), opResult: operation.Result{Status: operation.ResultOK}}
+	w := h.worker(remediationTreeFor("restart-if-down", "duration", "10m"), rules.Policy{Cooldown: time.Minute}, nil)
+	at := t0
+	w.Now = func() time.Time { return at }
+	paused := false
+	w.IsPaused = func() bool { return paused }
+
+	w.RunCycle(context.Background())
+	paused = true
+	for range 60 {
+		at = at.Add(time.Minute)
+		w.RunCycle(context.Background())
+	}
+	paused = false
+	at = at.Add(time.Minute)
+	w.RunCycle(context.Background())
+	if len(h.ops) != 0 {
+		t.Fatalf("ops = %v after one observation, want the window to start over", h.ops)
+	}
+
+	at = at.Add(10 * time.Minute)
+	w.RunCycle(context.Background())
+	if len(h.ops) != 1 {
+		t.Fatalf("ops = %v, want the restart once the window really elapsed", h.ops)
+	}
+}
+
+// A pause does not close an open episode: it stays firing, as it does across any
+// gap, until an observation says otherwise.
+func TestPauseKeepsAnOpenEpisode(t *testing.T) {
+	h := &workerHarness{cache: failedCache("http"), opResult: operation.Result{Status: operation.ResultOK}}
+	tree := remediationTreeFor("restart-if-down", "duration", "10m")
+	w := h.worker(tree, rules.Policy{Cooldown: time.Minute}, nil)
+	at := t0
+	w.Now = func() time.Time { return at }
+	paused := false
+	w.IsPaused = func() bool { return paused }
+	w.RunCycle(context.Background())
+	at = at.Add(10 * time.Minute)
+	w.RunCycle(context.Background())
+	if len(h.ops) != 1 {
+		t.Fatalf("ops = %v, want the restart that opened the episode", h.ops)
+	}
+
+	paused = true
+	at = at.Add(time.Hour)
+	w.RunCycle(context.Background())
+	paused = false
+	at = at.Add(time.Minute)
+	w.RunCycle(context.Background())
+
+	if len(h.ops) != 2 || h.countEvents(eventKindRecovered) != 0 {
+		t.Fatalf("ops = %v events = %+v, want the same episode to continue", h.ops, h.events)
+	}
+}
+
 func TestCyclePanicSuppressesRemediation(t *testing.T) {
 	h := &workerHarness{cache: failedCache("http"), opResult: operation.Result{Status: operation.ResultOK}}
 	w := h.worker(remediationTree("restart-if-down", "http", "restart"), rules.Policy{Cooldown: time.Minute}, nil)

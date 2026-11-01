@@ -502,6 +502,38 @@ func TestWatchBackoffDecaysAfterItsCooldownRunsOut(t *testing.T) {
 	}
 }
 
+// A paused watch was not observed, so a pending window starts over when it
+// resumes, also when the pause outlived the daemon's first cycle and the window
+// only exists in the persisted record.
+func TestWatchPauseRestartsAPendingForWindow(t *testing.T) {
+	store := openRuleStateStore(t)
+	now := t0
+	var events []Event
+	build := func(paused *bool) *Watch {
+		return &Watch{
+			Name: "uplink", Check: stubCheck{name: "uplink", ok: false}, FireOnFail: true, StateStore: store,
+			Window:   rules.Rule{For: &rules.ForWindow{Duration: 10 * time.Minute}},
+			Now:      func() time.Time { return now },
+			Emit:     func(e Event) { events = append(events, e) },
+			IsPaused: func() bool { return *paused },
+		}
+	}
+	running := false
+	build(&running).RunCycle(context.Background())
+
+	paused := true
+	restarted := build(&paused)
+	now = now.Add(time.Hour)
+	restarted.RunCycle(context.Background())
+	paused = false
+	now = now.Add(time.Minute)
+	restarted.RunCycle(context.Background())
+
+	if hasEventKind(events, eventKindFiring) {
+		t.Fatalf("one observation after a pause fired a 10m window: %+v", events)
+	}
+}
+
 // A dry run leaves the policy state alone, as the worker's does.
 func TestWatchDryRunLeavesTheBackoff(t *testing.T) {
 	now := t0

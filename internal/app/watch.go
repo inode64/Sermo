@@ -266,6 +266,8 @@ func (w *Watch) prepareCycle() (observeOnly, skip bool) {
 		if pending {
 			w.markSettled()
 		}
+		w.loadRuntimeState()
+		w.state.Unobserved()
 		return false, true
 	}
 	return pending, false

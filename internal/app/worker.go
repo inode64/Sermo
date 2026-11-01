@@ -255,6 +255,9 @@ func (w *Worker) prepareCycle(ctx context.Context, settleKey string, now func() 
 	if w.IsPaused != nil && w.IsPaused() {
 		w.clearObservability()
 		w.Settling.MarkObserved(settleKey)
+		for _, window := range w.windows {
+			window.Unobserved()
+		}
 		return workerCycleMode{}, true // monitoring paused for this service
 	}
 

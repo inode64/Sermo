@@ -3979,6 +3979,11 @@ windows persist their timestamps too, so a restart does not restart a pending
 same way, so a restart neither re-alerts an open episode nor drops a pending
 clear window.
 
+A pause is different: a target that is unmonitored, or stopped by hand, is not
+observed, so a pending `for` window starts over when monitoring resumes instead
+of counting the pause as time the condition held. An open episode stays open,
+and a `within` window keeps its matches.
+
 ### Guards
 
 Guard rules block unsafe actions and use `action: block` with a `message`:
