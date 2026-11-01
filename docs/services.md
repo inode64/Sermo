@@ -2046,6 +2046,10 @@ processes:
     enable_if: { init: openrc }
 ```
 
+When the gates remove every entry under `processes`, the service takes its
+process identity from the init backend, as if it declared no selector. Only an
+explicit `processes: {}` declares a service with no resident process.
+
 The config reader accepts `key=value` assignments, YAML `key: value` block
 mappings and bare `key` feature flags.
 Use `equals: ""` to match a bare flag. The packaged `dnsmasq` profile uses

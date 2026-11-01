@@ -563,3 +563,41 @@ func TestEnableIfReadsThePathAsWritten(t *testing.T) {
 		}
 	}
 }
+
+// TestEnableIfPruningEverySelectorKeepsInitMode pins that a gate cannot declare a
+// service process-free. Gates that left `processes` empty read as the explicit
+// `processes: {}`, so on the other init system the service lost its process
+// observation and the stale-binary, fds and strays sensors.
+func TestEnableIfPruningEverySelectorKeepsInitMode(t *testing.T) {
+	gated := "  supervisor:\n    exe: /usr/bin/supervise-daemon\n    user: root\n    enable_if: { init: %s }\n"
+	cases := []struct {
+		name, processes string
+		want            ServiceProcessMode
+	}{
+		{"every selector gated off", "processes:\n" + fmt.Sprintf(gated, backendOpenRC), ServiceProcessInit},
+		{"selector kept", "processes:\n" + fmt.Sprintf(gated, backendSystemd), ServiceProcessResident},
+		{"explicitly none", "processes: {}\n", ServiceProcessNone},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg, err := loadConfig(t, writeConfig(t, map[string]string{
+				"sermo.yml":        baseGlobal,
+				"services/svc.yml": "name: svc\nservice: svc\n" + tc.processes,
+			}))
+			if err != nil {
+				t.Fatalf("Load() error = %v", err)
+			}
+			resolved, errs := cfg.Resolve("svc")
+			if len(errs) != 0 {
+				t.Fatalf("Resolve() errors = %v", errs)
+			}
+			if got := ResolveServiceLifecycle(resolved.Tree, backendSystemd).ProcessMode; got != tc.want {
+				t.Fatalf("ProcessMode = %q, want %q", got, tc.want)
+			}
+			_, sensed := SectionMap(resolved.Tree, sectionChecks)[staleBinaryCheckName]
+			if want := tc.want != ServiceProcessNone; sensed != want {
+				t.Fatalf("stale-binary check present = %v, want %v", sensed, want)
+			}
+		})
+	}
+}

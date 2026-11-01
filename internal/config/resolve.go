@@ -99,10 +99,23 @@ func (c *Config) resolveServiceWithInputs(name string, pruneOptional bool, input
 		return Resolved{Name: name}, []string{err.Error()}
 	}
 	if pruneOptional {
-		merged = pruneEnableIfMap(merged, nil, inputs.backend)
+		merged = pruneServiceEnableIf(merged, inputs.backend)
 	}
 
 	return c.resolveExpandedService(merged, canonicalName, inputs)
+}
+
+// pruneServiceEnableIf drops a merged service's gated-off entries. A `processes`
+// section the gates emptied goes with them: what remains is a service with no
+// selector on this host, whose identity comes from the init backend, and not the
+// explicit `processes: {}` that declares it has no resident process.
+func pruneServiceEnableIf(merged map[string]any, backend string) map[string]any {
+	declared := len(SectionMap(merged, process.SectionProcesses))
+	pruned := pruneEnableIfMap(merged, nil, backend)
+	if declared > 0 && len(SectionMap(pruned, process.SectionProcesses)) == 0 {
+		delete(pruned, process.SectionProcesses)
+	}
+	return pruned
 }
 
 // resolveExpandedService applies the one canonical resolution pipeline after a
