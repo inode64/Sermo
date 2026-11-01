@@ -235,11 +235,9 @@ func (w *dbQueryWatcher) runCycle(ctx context.Context) {
 		w.persistPolicyState()
 	}
 	w.loadState()
-	if w.status != nil {
-		if st, err := w.status(ctx); err == nil && st != servicemgr.StatusActive {
-			w.publishSkipped(string(st))
-			return
-		}
+	if st, stopped := w.serviceStopped(ctx); stopped {
+		w.publishSkipped(string(st))
+		return
 	}
 	// One defaults_file read per cycle serves both the sample and Local.
 	cfg, err := w.cfg.Resolved()
@@ -290,6 +288,18 @@ func (w *dbQueryWatcher) runCycle(ctx context.Context) {
 		w.decayKillBackoff(now)
 	}
 	w.publishQueries(sample, unknownCount)
+}
+
+// serviceStopped reports a service the backend says is not running. A query
+// that fails or times out says nothing, and the cycle's sample then decides.
+func (w *dbQueryWatcher) serviceStopped(ctx context.Context) (servicemgr.Status, bool) {
+	if w.status == nil {
+		return "", false
+	}
+	ctx, cancel := context.WithTimeout(ctx, cmp.Or(w.cfg.Timeout, DefaultEngineCheckTimeout))
+	defer cancel()
+	st, err := w.status(ctx)
+	return st, err == nil && st != servicemgr.StatusActive
 }
 
 // updateStatement owns a sampled statement's incident transitions. Observation

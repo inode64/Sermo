@@ -1,6 +1,7 @@
 package app
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -276,7 +277,7 @@ func (w *Worker) prepareCycle(ctx context.Context, settleKey string, now func() 
 		return workerCycleMode{}, true
 	}
 	mode.observeOnly = mode.startup || mode.operation
-	if !mode.observeOnly || w.backendActive(ctx) {
+	if !mode.observeOnly || !w.backendInactive(ctx) {
 		return mode, false
 	}
 
@@ -603,12 +604,16 @@ func (w *Worker) markObservabilityReady(at time.Time) {
 	}
 }
 
-func (w *Worker) backendActive(ctx context.Context) bool {
+// backendInactive reports an init backend that answered the service is not
+// running. A query that failed, timed out or brought no verdict is unknown, not
+// that answer: settling on it would end an operation's observation unseen, and
+// waiting for a verdict would leave the service unwatched while init is stuck,
+// so the observe-only cycle runs and its checks report what they can.
+func (w *Worker) backendInactive(ctx context.Context) bool {
+	ctx, cancel := context.WithTimeout(ctx, cmp.Or(w.CheckDeps.DefaultTimeout, DefaultEngineCheckTimeout))
+	defer cancel()
 	st, err := w.CheckDeps.Status(ctx)
-	if err != nil {
-		return false
-	}
-	return st == servicemgr.StatusActive
+	return err == nil && st != servicemgr.StatusActive && st != servicemgr.StatusUnknown
 }
 
 // CheckGate is one check's interdependencies: it is skipped this cycle when any

@@ -113,7 +113,7 @@ func TestCycleServiceCheckReadsSharedActiveUnits(t *testing.T) {
 
 	slow := byName["slow"]
 	before := manager.count(slow.Unit)
-	if !slow.backendActive(t.Context()) || manager.count(slow.Unit) != before+1 {
+	if slow.backendInactive(t.Context()) || manager.count(slow.Unit) != before+1 {
 		t.Fatal("observe-only gate must query the backend live")
 	}
 }

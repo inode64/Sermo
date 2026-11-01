@@ -152,6 +152,32 @@ func TestDBQueryWatchSkipsAStoppedService(t *testing.T) {
 	}
 }
 
+// The status gate only skips a service the backend says is stopped: a query
+// that hangs is bounded, and with no answer the sample decides.
+func TestDBQueryWatchSamplesWhenTheServiceStatusIsUnknown(t *testing.T) {
+	f := newDBQueryFixture(t)
+	f.w.cfg.Timeout = time.Millisecond
+	var deadline bool
+	f.w.status = func(ctx context.Context) (servicemgr.Status, error) {
+		_, deadline = ctx.Deadline()
+		select {
+		case <-ctx.Done():
+		case <-time.After(10 * time.Second):
+		}
+		return "", ctx.Err()
+	}
+	sampled := false
+	sample := f.w.sample
+	f.w.sample = func(ctx context.Context, cfg checks.DBQueryConfig) (checks.DBQuerySample, error) {
+		sampled = true
+		return sample(ctx, cfg)
+	}
+	f.cycle()
+	if !deadline || !sampled {
+		t.Fatalf("status deadline = %v, sampled = %v, want both", deadline, sampled)
+	}
+}
+
 func TestDBQueryWatchAutoKill(t *testing.T) {
 	f := newDBQueryFixture(t)
 	var targets []operation.DBQueryTarget

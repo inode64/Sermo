@@ -95,6 +95,102 @@ func TestWorkerStartupSkipsChecksUntilBackendActive(t *testing.T) {
 	}
 }
 
+// An observe-only cycle waits for the init backend only that long, and a query
+// with no verdict says nothing about the service: settling on it as stopped
+// skipped the observation, and waiting for one left the service unwatched.
+func TestWorkerObserveOnlyCycleReadsAnUnansweredBackendAsUnknown(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		status func(context.Context) (servicemgr.Status, error)
+	}{
+		{"deadline passes", func(ctx context.Context) (servicemgr.Status, error) {
+			<-ctx.Done()
+			return "", ctx.Err()
+		}},
+		{"query fails", func(context.Context) (servicemgr.Status, error) {
+			return "", errors.New("query systemd status: connection refused")
+		}},
+		{"no verdict", func(context.Context) (servicemgr.Status, error) {
+			return servicemgr.StatusUnknown, nil
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			store := newFakeStore()
+			store.now = func() time.Time { return t0 }
+			if err := store.SetOperationSettling("web", state.OperationSettlingSettling); err != nil {
+				t.Fatalf("SetOperationSettling: %v", err)
+			}
+			h := &workerHarness{cache: failedCache("http")}
+			w := h.worker(alertRuleTree(nil), rules.Policy{}, nil)
+			w.OperationSettling = store
+			settling := NewSettling(nil)
+			settling.Reset([]string{SettlingServiceKey("web")})
+			w.Settling = settling
+			var deadline bool
+			w.CheckDeps.DefaultTimeout = time.Millisecond
+			w.CheckDeps.Status = func(ctx context.Context) (servicemgr.Status, error) {
+				_, deadline = ctx.Deadline()
+				return tc.status(ctx)
+			}
+			var published int
+			w.Publish = func(map[string]checks.Result, map[string]bool) { published++ }
+
+			ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+			defer cancel()
+			w.RunCycle(ctx)
+
+			if ctx.Err() != nil {
+				t.Fatal("the backend query outlived its deadline")
+			}
+			if !deadline {
+				t.Fatal("the backend query ran without a deadline")
+			}
+			if published != 1 {
+				t.Fatalf("published %d cycles, want the observation to run", published)
+			}
+			if _, ok := h.eventOf(eventKindAlert); ok {
+				t.Fatal("an observe-only cycle fired an alert")
+			}
+			if !settling.Observed(SettlingServiceKey("web")) {
+				t.Fatal("the observation must complete startup so the daemon gets ready")
+			}
+			if _, found, _ := store.OperationSettling("web"); found {
+				t.Fatal("the observation must complete the operation's settling")
+			}
+		})
+	}
+}
+
+// A reload cancels the query; that is no verdict either, and the next generation
+// still owes the service its observation.
+func TestWorkerCancelledBackendQueryKeepsTheObservationPending(t *testing.T) {
+	store := newFakeStore()
+	store.now = func() time.Time { return t0 }
+	if err := store.SetOperationSettling("web", state.OperationSettlingSettling); err != nil {
+		t.Fatalf("SetOperationSettling: %v", err)
+	}
+	h := &workerHarness{cache: failedCache("http")}
+	w := h.worker(alertRuleTree(nil), rules.Policy{}, nil)
+	w.OperationSettling = store
+	settling := NewSettling(nil)
+	settling.Reset([]string{SettlingServiceKey("web")})
+	w.Settling = settling
+	ctx, cancel := context.WithCancel(t.Context())
+	w.CheckDeps.Status = func(context.Context) (servicemgr.Status, error) {
+		cancel()
+		return "", context.Canceled
+	}
+
+	w.RunCycle(ctx)
+
+	if settling.Observed(SettlingServiceKey("web")) {
+		t.Fatal("a cancelled query completed the startup observation")
+	}
+	if _, found, _ := store.OperationSettling("web"); !found {
+		t.Fatal("a cancelled query consumed the operation's settling")
+	}
+}
+
 func TestWorkerCancelledCyclePublishesNothing(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	var published, recorded int
