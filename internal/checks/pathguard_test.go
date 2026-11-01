@@ -21,7 +21,8 @@ const pathGuardBudget = 3 * time.Second
 
 // hungFIFO returns a FIFO and a release function. Opening a FIFO blocks in the
 // kernel until a writer appears, the shape of a read on a hung mount without
-// needing one; the writer that release opens lets every blocked reader return.
+// needing one. The writer that release opens lets every blocked reader return,
+// and removing the path first keeps a reader that retries from blocking again.
 func hungFIFO(t *testing.T) (string, func()) {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "hung")
@@ -31,7 +32,9 @@ func hungFIFO(t *testing.T) (string, func()) {
 	var once sync.Once
 	release := func() {
 		once.Do(func() {
-			if fh, err := os.OpenFile(path, os.O_WRONLY|syscall.O_NONBLOCK, 0); err == nil {
+			fh, err := os.OpenFile(path, os.O_WRONLY|syscall.O_NONBLOCK, 0)
+			_ = os.Remove(path)
+			if err == nil {
 				_ = fh.Close()
 			}
 		})
@@ -216,6 +219,7 @@ func TestPathReadingChecksRunUnderTheGuard(t *testing.T) {
 		{"count", map[string]any{CheckKeyType: CheckTypeCount, CheckKeyPath: "/srv/a", CheckKeyCount: limit}, true},
 		{"log", map[string]any{CheckKeyType: CheckTypeLog, CheckKeyPath: "/srv/a", CheckKeyRegex: "x", CheckKeyCount: limit, CheckKeyWithin: "1m"}, true},
 		{"size", map[string]any{CheckKeyType: CheckTypeSize, CheckKeyPath: "/srv/a", CheckKeyMax: "1G"}, true},
+		{"sqlite", map[string]any{CheckKeyType: CheckTypeSQLite, CheckKeyPath: "/srv/a"}, true},
 		{"cert file", map[string]any{CheckKeyType: CheckTypeCert, CheckKeyPath: "/srv/a"}, true},
 		{"config paths", map[string]any{CheckKeyType: CheckTypeConfig, CheckKeyPath: "/srv/a", CheckKeyOnChange: true}, true},
 		{"cert endpoint", map[string]any{CheckKeyType: CheckTypeCert, CheckKeyHost: "host-a"}, false},
@@ -235,17 +239,26 @@ func TestPathReadingChecksRunUnderTheGuard(t *testing.T) {
 }
 
 // A real read the kernel blocks, through the check as the daemon builds it.
-func TestCertFileAnswersAtItsTimeoutOnAHungRead(t *testing.T) {
-	path, release := hungFIFO(t)
-	entry := map[string]any{CheckKeyType: CheckTypeCert, CheckKeyPath: path, CheckKeyTimeout: "20ms"}
-	built, issues := BuildWithIssues(map[string]any{"hung": entry}, Deps{Service: t.Name(), Limiter: NewLimiter(1)})
-	if len(issues) != 0 {
-		t.Fatalf("issues = %v", issues)
+func TestChecksAnswerAtTheirTimeoutOnAReadTheKernelBlocks(t *testing.T) {
+	for _, tc := range []struct {
+		typ, key string
+	}{
+		{CheckTypeCert, CheckKeyPath},
+		{CheckTypeSQLite, CheckKeyPath},
+	} {
+		t.Run(tc.typ, func(t *testing.T) {
+			path, release := hungFIFO(t)
+			entry := map[string]any{CheckKeyType: tc.typ, tc.key: path, CheckKeyTimeout: "20ms"}
+			built, issues := BuildWithIssues(map[string]any{"hung": entry}, Deps{Service: t.Name(), Limiter: NewLimiter(1)})
+			if len(issues) != 0 {
+				t.Fatalf("issues = %v", issues)
+			}
+			res := runWithin(t, built)
+			if res.OK || res.Observation() != ObservationUnavailable || !strings.Contains(res.Message, "no answer within 20ms") || !strings.Contains(res.Message, path) {
+				t.Fatalf("result = %+v, want unavailable naming the path and the timeout", res)
+			}
+			release()
+			waitPathRunDone(t, pathRunKey(t.Name(), "hung", entry))
+		})
 	}
-	res := runWithin(t, built)
-	if res.Observation() != ObservationUnavailable || !strings.Contains(res.Message, "no answer within 20ms") || !strings.Contains(res.Message, path) {
-		t.Fatalf("result = %+v, want unavailable naming the path and the timeout", res)
-	}
-	release()
-	waitPathRunDone(t, pathRunKey(t.Name(), "hung", entry))
 }

@@ -81,7 +81,7 @@ func TestBuildSQLiteCheck(t *testing.T) {
 	if len(warns) != 0 || len(built) != 1 {
 		t.Fatalf("sqlite with path should build: warns=%v", warns)
 	}
-	sc, ok := built[0].Check.(sqliteCheck)
+	sc, ok := unguarded(built[0].Check).(sqliteCheck)
 	if !ok || sc.path != "/var/lib/app/app.db" || !sc.quick {
 		t.Fatalf("built = %#v", built[0].Check)
 	}
