@@ -1572,7 +1572,9 @@ adding a public `processes:` entry — and (b) a `pidfile` health check gated by
 `requires: [service]`. Because of the gate, a missing or stale pidfile is
 reported as an **error only while the service is active** (it means the service
 died or lost its pidfile without the service manager noticing); a legitimately
-stopped service is skipped, not alarmed.
+stopped service is skipped, not alarmed. A service with no `service` check, because
+it declares none or an override disabled or deleted it, gets the check ungated, so
+a stopped service then reports it.
 
 A zombie PID counts as stale. When the service declares a `processes:` selector
 with an exact `exe`, the check also fails if the live PID is neither named by

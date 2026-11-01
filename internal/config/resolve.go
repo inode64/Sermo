@@ -424,9 +424,11 @@ func ensureServiceArtifactCheck(tree map[string]any, name, checkType string, pat
 	}
 	if _, exists := checksMap[name]; !exists {
 		entry := map[string]any{
-			keyType:     checkType,
-			keyPath:     pathValue,
-			keyRequires: []any{ServiceKeyService},
+			keyType: checkType,
+			keyPath: pathValue,
+		}
+		if declaresServiceCheck(tree) {
+			entry[keyRequires] = []any{ServiceKeyService}
 		}
 		if optional {
 			entry[keyOptional] = true
@@ -434,6 +436,18 @@ func ensureServiceArtifactCheck(tree map[string]any, name, checkType string, pat
 		checksMap[name] = entry
 	}
 	tree[sectionChecks] = checksMap
+}
+
+// declaresServiceCheck reports whether the `service` check the generated artifact
+// checks gate on will exist. An override may disable or delete that watch, and a
+// requirement nobody wrote must not then fail validation. It may be a watch still
+// to be promoted.
+func declaresServiceCheck(tree map[string]any) bool {
+	if _, declared := SectionMap(tree, sectionChecks)[ServiceKeyService]; declared {
+		return true
+	}
+	watch, declared := SectionMap(tree, sectionWatches)[ServiceKeyService].(map[string]any)
+	return declared && !cfgval.Disabled(watch)
 }
 
 func serviceArtifactPathValue(paths []string) any {

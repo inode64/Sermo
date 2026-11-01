@@ -639,3 +639,52 @@ watches:
 		}
 	}
 }
+
+// TestArtifactCheckGatesOnlyOnAServiceCheck pins that the generated pidfile, socket
+// and lockfile checks are gated only on a `service` check the service has.
+// Disabling or deleting the inherited watch, which the merge rules allow, failed
+// validation on a requirement the operator never wrote.
+func TestArtifactCheckGatesOnlyOnAServiceCheck(t *testing.T) {
+	catalog := `
+name: base
+service: base
+pidfile: /run/base.pid
+socket: /run/base.sock
+lockfile: /run/base.lock
+watches:
+  service:
+    check: { type: service, expect: active }
+`
+	cases := []struct {
+		name, override string
+		gated          bool
+	}{
+		{"inherited watch", "", true},
+		{"disabled watch", "watches:\n  service: { enabled: false }\n", false},
+		{"deleted watch", "watches:\n  service: { delete: true }\n", false},
+		{"disabled check keeps its entry", "watches:\n  service: { delete: true }\nchecks:\n  service: { type: service, expect: active, enabled: false }\n", true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg, err := loadConfig(t, writeConfig(t, map[string]string{
+				"sermo.yml":                 baseGlobal,
+				"catalog/services/base.yml": catalog,
+				"services/svc.yml":          "name: svc\nuses: base\n" + tc.override,
+			}))
+			if err != nil {
+				t.Fatalf("Load() error = %v", err)
+			}
+			mustNotHave(t, Validate(cfg), "requires")
+			resolved, errs := cfg.Resolve("svc")
+			if len(errs) != 0 {
+				t.Fatalf("Resolve() errors = %v", errs)
+			}
+			for _, name := range []string{artifactPidfile, artifactSocket, artifactLockfile} {
+				_, gated := nested(t, resolved.Tree, "checks", name)[keyRequires]
+				if gated != tc.gated {
+					t.Fatalf("%s gated = %v, want %v", name, gated, tc.gated)
+				}
+			}
+		})
+	}
+}
