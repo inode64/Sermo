@@ -2507,7 +2507,8 @@ setting overrides `defaults.dry_run`.
 Dry-run applies only to automatic actions driven by monitoring/rules:
 
 - service remediation operations (`start`, `stop`, `restart`, `reload`,
-  `resume`) are evaluated but not executed;
+  `resume`) are evaluated but not executed, including when another service's
+  remediation cascades to the service through `also_apply`;
 - service-owned `version.on_change` / `config.on_change` monitors inherit the
   service's `dry_run` flag, so their non-console notifications are suppressed;
 - watch actions (`hook`, `recover_hook`, `expand`, `remount`, `kill`,

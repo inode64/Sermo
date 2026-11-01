@@ -223,3 +223,49 @@ func eq(a, b []string) bool {
 	}
 	return true
 }
+
+// TestWireCascadeHonoursTargetDryRun: a target in dry_run gets from a cascade
+// what its own rule would give it. Nothing runs, including what it would
+// cascade to itself, it reports what it would have done, and it neither
+// acknowledges a change it did not act on nor fails the cascade.
+func TestWireCascadeHonoursTargetDryRun(t *testing.T) {
+	lib := filepath.Join(t.TempDir(), "libshared.so")
+	writeFile(t, lib, "upgraded")
+	var ops []string
+	operate := func(service string) func(context.Context, string) operation.Result {
+		return func(_ context.Context, action string) operation.Result {
+			ops = append(ops, service+":"+action)
+			return operation.Result{Service: service, Action: action, Status: operation.ResultOK}
+		}
+	}
+	var events []Event
+	emit := func(e Event) { events = append(events, e) }
+	root := &Worker{Service: "root", Operate: operate("root"), libBaseline: NewArtifactBaseline(), Emit: emit}
+	rehearsing := &Worker{Service: "rehearsing", DryRun: true, Operate: operate("rehearsing"), Emit: emit,
+		libBaseline: testArtifactBaseline(map[string]string{lib: "before-upgrade"})}
+	behind := &Worker{Service: "behind", Operate: operate("behind"), libBaseline: NewArtifactBaseline(), Emit: emit}
+	live := &Worker{Service: "live", Operate: operate("live"), libBaseline: NewArtifactBaseline(), Emit: emit}
+	wireCascade([]*Worker{root, rehearsing, behind, live},
+		map[string][]string{"root": {"rehearsing", "live"}, "rehearsing": {"behind"}}, Deps{Emit: emit})
+
+	result := root.Cascade(t.Context(), "restart")
+
+	if !eq(ops, []string{"root:restart", "live:restart"}) {
+		t.Fatalf("operations = %v, want only the targets that are not in dry_run", ops)
+	}
+	if !result.OK() {
+		t.Fatalf("a simulated target must not fail the cascade, got %+v", result)
+	}
+	if changed, err := rehearsing.changed(lib); err != nil || !changed {
+		t.Fatalf("a simulated restart must keep the change pending, changed = %t, %v", changed, err)
+	}
+	var simulated []Event
+	for _, e := range events {
+		if e.Service == "rehearsing" {
+			simulated = append(simulated, e)
+		}
+	}
+	if len(simulated) != 1 || simulated[0].Kind != eventKindDryRun || simulated[0].Action != "restart" {
+		t.Fatalf("the target must report one dry-run event and nothing else, got %+v", simulated)
+	}
+}

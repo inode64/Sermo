@@ -34,6 +34,11 @@ type CascadeConfig struct {
 	Target     func(service string, result operation.Result, err error)
 	Emit       func(Event)
 	Downgraded func(primary operation.Result)
+	// Simulated reports whether an additional target must not be operated
+	// because its automatic actions only rehearse. It records that outcome
+	// itself: the target took no part, so it neither is reported as a target of
+	// the cascade nor can fail it.
+	Simulated func(root, service, action string) bool
 }
 
 // cascader orchestrates an action across a service and the services it lists in
@@ -67,6 +72,9 @@ func (c cascader) run(ctx context.Context, root, action string) (operation.Resul
 	var primaryErr error
 	var cascadeFailed bool
 	for _, svc := range seq {
+		if svc != root && c.config.Simulated != nil && c.config.Simulated(root, svc, action) {
+			continue
+		}
 		res, err := c.operate(ctx, svc, action)
 		res = cascadeResult(svc, action, res, err)
 		if svc == root {

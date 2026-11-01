@@ -487,12 +487,27 @@ func wireCascade(workers []*Worker, cascadeMap map[string][]string, deps Deps) {
 		}
 		return operation.Result{Service: svc, Action: action, Status: operation.ResultFailed, Message: "cascade target not configured"}, nil
 	}
-	lookup := func(svc string) []string { return cascadeMap[svc] }
+	// A service in dry_run never runs an automatic action, whoever's rule asked
+	// for it, and what it would cascade to is its own automatic action too.
+	lookup := func(svc string) []string {
+		if tw := byName[svc]; tw != nil && tw.DryRun {
+			return nil
+		}
+		return cascadeMap[svc]
+	}
+	simulated := func(root, svc, action string) bool {
+		tw := byName[svc]
+		if tw == nil || !tw.DryRun {
+			return false
+		}
+		tw.emit(Event{Kind: eventKindDryRun, Action: action, Message: "would " + action + " (cascade from " + root + ")"})
+		return true
+	}
 	for _, w := range workers {
 		if len(cascadeMap[w.Service]) == 0 {
 			continue
 		}
-		base := CascadeConfig{Operate: op, Lookup: lookup, Emit: deps.Emit}
+		base := CascadeConfig{Operate: op, Lookup: lookup, Emit: deps.Emit, Simulated: simulated}
 		service := w.Service
 		w.Cascade = func(ctx context.Context, action string) operation.Result {
 			cfg := base
