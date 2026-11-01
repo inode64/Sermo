@@ -77,6 +77,74 @@ func TestConnVersionChangeFromGreeting(t *testing.T) {
 	}
 }
 
+// A banner can carry the time of the connection (Exim, Sendmail) or a per-session
+// APOP timestamp. Neither says anything about the software that answered.
+func TestConnVersionChangeIgnoresPerConnectionGreetingText(t *testing.T) {
+	tests := []struct {
+		name     string
+		first    string
+		second   string
+		upgraded string
+	}{
+		{
+			name:     "exim",
+			first:    "mx.example.com ESMTP Exim 4.98 Sun, 01 Nov 2026 12:00:00 +0100",
+			second:   "mx.example.com ESMTP Exim 4.98 Sun, 01 Nov 2026 12:00:30 +0100",
+			upgraded: "mx.example.com ESMTP Exim 4.99 Sun, 01 Nov 2026 12:01:00 +0100",
+		},
+		{
+			name:     "sendmail",
+			first:    "mx.example.com ESMTP Sendmail 8.18.1/8.18.1; Sun, 1 Nov 2026 12:00:00 +0100",
+			second:   "mx.example.com ESMTP Sendmail 8.18.1/8.18.1; Mon, 2 Nov 2026 00:00:30 +0100",
+			upgraded: "mx.example.com ESMTP Sendmail 8.18.2/8.18.2; Mon, 2 Nov 2026 00:01:00 +0100",
+		},
+		{
+			name:     "date with a zone comment",
+			first:    "mx.example.com IMAP4rev1 2007f.404 at Sun, 1 Nov 2026 12:00:00 +0100 (CET)",
+			second:   "mx.example.com IMAP4rev1 2007f.404 at Sun, 1 Nov 2026 12:00:30 +0100 (CET)",
+			upgraded: "mx.example.com IMAP4rev1 2007g.404 at Sun, 1 Nov 2026 12:01:00 +0100 (CET)",
+		},
+		{
+			name:     "postfix",
+			first:    "mx.example.com ESMTP Postfix (Debian/GNU)",
+			second:   "mx.example.com ESMTP Postfix (Debian/GNU)",
+			upgraded: "mx.example.com ESMTP Postfix 3.8",
+		},
+		{
+			name:     "apop",
+			first:    "Dovecot ready. <1896.697170952@mx.example.com>",
+			second:   "Dovecot ready. <1897.697170982@mx.example.com>",
+			upgraded: "Courier-POP3 ready. <1898.697171012@mx.example.com>",
+		},
+	}
+	greet := func(b string) conn.Result { return conn.Result{Extra: map[string]string{conn.ExtraKeyGreeting: b}} }
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			c := connCheck{
+				name: "mail", timeout: time.Second,
+				proto:           fakeProto{},
+				cfg:             conn.Config{Host: "h", Port: 25},
+				onVersionChange: true,
+				state:           &connState{},
+				probe:           probeSeq(greet(test.first), greet(test.second), greet(test.upgraded)),
+			}
+			if r := c.Run(context.Background()); !r.OK {
+				t.Fatalf("first cycle must prime: %s", r.Message)
+			}
+			r := c.Run(context.Background())
+			if !r.OK {
+				t.Fatalf("the same software must stay ok: %s", r.Message)
+			}
+			if r.Data[conn.ExtraKeyGreeting] != test.second {
+				t.Fatalf("greeting data = %v, want it as the server sent it", r.Data[conn.ExtraKeyGreeting])
+			}
+			if r := c.Run(context.Background()); r.OK {
+				t.Fatal("a changed version must still alert")
+			}
+		})
+	}
+}
+
 func TestConnChangeAndVersionTogether(t *testing.T) {
 	// on_change (fingerprint) and on_version_change can both be active.
 	c := connCheck{

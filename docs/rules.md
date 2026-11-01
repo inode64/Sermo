@@ -2879,7 +2879,8 @@ between cycles — e.g. after a package upgrade. The tracked identity is the
 protocol's reported `version` — for connection-protocol checks such as `mysql`,
 `postgres`, `redis`, `ssh`, `snmp`, `rspamd`, `libvirt` or `syncthing` — or, for
 protocols that only return a greeting banner (such as `smtp`, `imap`, `pop`,
-`ftp`), that banner. Any registered connection protocol that reports a version or
+`ftp`), that banner, compared without any date or APOP timestamp it carries (the
+`greeting` result stays as the server sent it). Any registered connection protocol that reports a version or
 banner participates; these names are examples, not the full set. The first cycle baselines silently;
 a later change **fails** the check and the result data carries
 `version`/`version_old`. The baseline lives in the check instance, so it persists

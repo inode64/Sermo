@@ -7,6 +7,7 @@ import (
 	"maps"
 	"math"
 	"net"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -86,6 +87,16 @@ type connState struct {
 	lastVersion     string
 }
 
+// A banner can carry text that changes with the connection and not with the
+// software: an RFC 5322 date (Exim and Sendmail by default) or an RFC 1939 APOP
+// timestamp. Left in, on_version_change would fail every cycle.
+var (
+	bannerDateRE = regexp.MustCompile(`(?:(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun), +)?\d{1,2} +` +
+		`(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) +\d{4} +\d{2}:\d{2}(?::\d{2})?` +
+		`(?: +(?:[+-]\d{4}|[A-Z]{2,4}))?(?: +\([A-Za-z ]+\))?`)
+	bannerAPOPTimestampRE = regexp.MustCompile(`<[^<>\s]+@[^<>\s]+>`)
+)
+
 // versionIdentity is the string tracked for on_version_change: the protocol's
 // reported version, or the connection greeting banner when it has none (so
 // smtp/imap/pop/ftp, which expose only a greeting, still detect version changes).
@@ -93,7 +104,8 @@ func versionIdentity(res conn.Result) string {
 	if res.Version != "" {
 		return res.Version
 	}
-	return res.Extra[conn.ExtraKeyGreeting]
+	banner := bannerDateRE.ReplaceAllString(res.Extra[conn.ExtraKeyGreeting], "")
+	return strings.TrimSpace(bannerAPOPTimestampRE.ReplaceAllString(banner, ""))
 }
 
 func trimConnResult(res conn.Result) conn.Result {
