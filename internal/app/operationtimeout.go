@@ -78,13 +78,19 @@ func maxWatchProbeTimeout(maxTO time.Duration, watches map[string]any, defaultTi
 		if !ManualProbeCheckType(cfgval.String(check[checks.CheckKeyType])) {
 			continue
 		}
-		timeout := checkProbeTimeout(check, defaultTimeout, operationTimeout)
-		if cfgval.String(check[checks.CheckKeyType]) == checks.CheckTypeDiskIO {
-			timeout = diskIOProbeBudget(timeout)
-		}
-		maxTO = max(maxTO, timeout)
+		maxTO = max(maxTO, WatchProbeBudget(check, defaultTimeout, operationTimeout))
 	}
 	return maxTO
+}
+
+// WatchProbeBudget is the longest one manual probe of a watch with this check
+// runs. The daemon sizes its HTTP write deadline from it, and sermoctl its wait.
+func WatchProbeBudget(check map[string]any, defaultTimeout, operationTimeout time.Duration) time.Duration {
+	timeout := checkProbeTimeout(check, defaultTimeout, operationTimeout)
+	if cfgval.String(check[checks.CheckKeyType]) == checks.CheckTypeDiskIO {
+		return diskIOProbeBudget(timeout)
+	}
+	return timeout
 }
 
 // checkProbeTimeout is the budget of one manual watch probe: the check's own

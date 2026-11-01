@@ -110,7 +110,9 @@ func (a App) runSessionsKill(ctx context.Context, opts options) int {
 	if opts.connection {
 		mode = checks.DBQueryKillModeConnection
 	}
-	result, status, err := a.killDaemonDBQuery(ctx, cfg, row, mode)
+	killCtx, cancel := context.WithTimeout(ctx, daemonActionTimeout(opts, manualOperationTimeout(cfg, opts)))
+	defer cancel()
+	result, status, err := a.killDaemonDBQuery(killCtx, cfg, row, mode)
 	if err != nil {
 		return a.fail(opts, "sessions kill: "+err.Error())
 	}

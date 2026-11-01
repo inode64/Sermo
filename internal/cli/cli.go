@@ -60,8 +60,11 @@ const (
 	defaultProbeCommandTimeout = 2 * time.Second
 	defaultListCommandTimeout  = 30 * time.Second
 	daemonWebClientTimeout     = 10 * time.Second
-	defaultEventsListLimit     = 50
-	tabwriterPadding           = 2
+	// daemonActionAnswerMargin is what the daemon gets to answer once the work
+	// a request waits for ends, the margin on its own HTTP write deadline.
+	daemonActionAnswerMargin = 5 * time.Second
+	defaultEventsListLimit   = 50
+	tabwriterPadding         = 2
 )
 
 const (
@@ -529,9 +532,7 @@ func (a App) fail(opts options, msg string) int {
 // not given. Backend actions can legitimately take much longer than a probe.
 func defaultTimeout(command string) time.Duration {
 	switch command {
-	// A sessions kill runs through the service's operation engine, which
-	// re-samples the database before cancelling the statement.
-	case commandStart, commandStop, commandRestart, commandReload, commandResume, commandPause, commandRepair, commandMount, commandUmount, commandState, commandSessions:
+	case commandStart, commandStop, commandRestart, commandReload, commandResume, commandPause, commandRepair, commandMount, commandUmount, commandState:
 		return app.DefaultEngineOperationTimeout
 	case commandStatus, commandIsActive:
 		// Config loading and control-target resolution are part of a live service

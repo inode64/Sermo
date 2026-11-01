@@ -270,6 +270,19 @@ paths:
 	}
 }
 
+// A request that waits for daemon work runs under its caller's deadline, however
+// long that is; only a request with none falls back to the web client bound.
+func TestDaemonWebClientFollowsTheRequestDeadline(t *testing.T) {
+	if got := daemonWebClient(t.Context()).Timeout; got != daemonWebClientTimeout {
+		t.Fatalf("client timeout without a deadline = %s, want %s", got, daemonWebClientTimeout)
+	}
+	ctx, cancel := context.WithTimeout(t.Context(), time.Hour)
+	defer cancel()
+	if got := daemonWebClient(ctx).Timeout; got <= daemonWebClientTimeout || got > time.Hour {
+		t.Fatalf("client timeout under a one-hour deadline = %s, want the time left", got)
+	}
+}
+
 // The daemon rejects a mutation that does not name the generation it was aimed
 // at, so every CLI probe answered 428 and no manual probe ever ran. The client
 // must read the generation before it writes.

@@ -4,12 +4,15 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"sermo/internal/app"
 	"sermo/internal/config"
 	"sermo/internal/severity"
 	"sermo/internal/web"
@@ -196,6 +199,88 @@ func TestWatchProbeUsesDaemonAndSupportsHdparm(t *testing.T) {
 	}
 	if !called || !strings.Contains(stdout.String(), "Read: 167 MB/s") {
 		t.Fatalf("daemon probe called=%v stdout=%q", called, stdout.String())
+	}
+}
+
+// A probe runs under the check's own budget in the daemon, which can far exceed
+// the web client bound, so sermoctl waits that long; --timeout replaces the wait.
+func TestWatchProbeWaitsForTheCheckBudget(t *testing.T) {
+	const hdparm = "name: disk-speed\ncheck:\n  type: hdparm\n  device: /dev/sda\n  timeout: 30s\n  read: { op: \">\", value: 100 }\n"
+	const hdparmDefault = "name: disk-speed\ncheck:\n  type: hdparm\n  device: /dev/sda\n  read: { op: \">\", value: 100 }\n"
+	const diskio = "name: disk-speed\ncheck:\n  type: diskio\n  device: sda\n  timeout: 30s\n"
+	for _, tc := range []struct {
+		name  string
+		watch string
+		args  []string
+		want  time.Duration
+	}{
+		{name: "the check's timeout", watch: hdparm, want: 30*time.Second + daemonActionAnswerMargin},
+		{name: "the engine default", watch: hdparmDefault, want: app.DefaultEngineCheckTimeout + daemonActionAnswerMargin},
+		{name: "both disk I/O samples and their pause", watch: diskio, want: 62*time.Second + daemonActionAnswerMargin},
+		{name: "an explicit --timeout", watch: hdparm, args: []string{"--timeout", "3s"}, want: 3 * time.Second},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			root := t.TempDir()
+			watches := filepath.Join(root, "watches")
+			if err := os.Mkdir(watches, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			global := filepath.Join(root, "sermo.yml")
+			mustWrite(t, global, "paths:\n  watches: ["+watches+"]\ndefaults:\n  policy: { cooldown: 5m }\n")
+			mustWrite(t, filepath.Join(watches, "disk-speed.yml"), tc.watch)
+
+			var left time.Duration
+			application := hermeticApp(t, App{Env: func(string) string { return "" }, Stdout: &bytes.Buffer{}, Stderr: &bytes.Buffer{},
+				ProbeDaemonWatch: func(ctx context.Context, _ *config.Config, _ string) (web.ActionResult, error) {
+					if deadline, ok := ctx.Deadline(); ok {
+						left = time.Until(deadline)
+					}
+					return web.ActionResult{OK: true}, nil
+				}})
+			args := append([]string{"--config", global, "watch", "probe", "disk-speed"}, tc.args...)
+			if code := application.Run(context.Background(), args); code != exitSuccess {
+				t.Fatalf("watch probe exit = %d", code)
+			}
+			if left <= max(tc.want-10*time.Second, 0) || left > tc.want {
+				t.Fatalf("probe deadline in %s, want %s", left, tc.want)
+			}
+		})
+	}
+}
+
+// --timeout must really bound the wait on a daemon that does not answer.
+func TestWatchProbeTimeoutBoundsTheRequest(t *testing.T) {
+	release := make(chan struct{})
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			<-release
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer srv.Close()
+	defer close(release)
+	root, global, _ := daemonAPITestConfig(t, srv.URL, `
+web:
+  address: HOST
+  port: PORT
+paths:
+  watches: [WATCHES]
+`)
+	watches := filepath.Join(root, "watches")
+	if err := os.MkdirAll(watches, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	mustWrite(t, filepath.Join(watches, "disk-speed.yml"), "name: disk-speed\ncheck:\n  type: hdparm\n  device: /dev/sda\n  read: { op: \">\", value: 100 }\n")
+
+	var stderr bytes.Buffer
+	application := hermeticApp(t, App{Env: func(string) string { return "" }, LoadConfig: testConfigLoader(t), Stdout: &bytes.Buffer{}, Stderr: &stderr})
+	started := time.Now()
+	code := application.Run(context.Background(), []string{"--config", global, "--timeout", "50ms", "watch", "probe", "disk-speed"})
+	if code != exitRuntimeError || !strings.Contains(stderr.String(), "deadline exceeded") {
+		t.Fatalf("exit = %d, stderr = %q, want a deadline failure", code, stderr.String())
+	}
+	if took := time.Since(started); took >= daemonWebClientTimeout {
+		t.Fatalf("watch probe took %s under --timeout 50ms", took)
 	}
 }
 

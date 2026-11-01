@@ -23,9 +23,11 @@ Without `--timeout`, live service queries (`status` and `is-active`) use the
 10-second engine check budget; service operations (and `watch pause|resume`) use
 `engine.operation_timeout` (default `90s`), the same budget as the daemon and the
 Web UI, which a service's `stop_policy` or, for a `stop` or `restart`, its
-systemd unit's `TimeoutStopSec=` may raise. `sessions` uses the same
-90-second default (a statement kill runs through the daemon's operation engine),
-while each request to the daemon keeps its 10-second web client bound. `notifier test` uses
+systemd unit's `TimeoutStopSec=` may raise. `sessions kill` waits for the same
+budget (a statement kill runs through the daemon's operation engine), and
+`watch probe` for the check's own `timeout`, else `engine.default_timeout`; an
+explicit `--timeout` replaces either wait. Any other request to the daemon keeps
+a 10-second web client bound unless its command has a deadline. `notifier test` uses
 `engine.default_timeout` (default `10s`), like the Web UI's test button.
 `services` gives its configured-service listing (and a `--notify` send) 30
 seconds each, and `state compact` 90 seconds. Other short probe commands keep

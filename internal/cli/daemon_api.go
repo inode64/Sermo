@@ -45,14 +45,20 @@ func (a App) daemonWebDo(ctx context.Context, cfg *config.Config, method, what s
 	// If the config declares an admin password, send Basic auth (any user + pw).
 	a.applyDaemonWebAuth(req, cfg)
 
-	// The request carries the daemon's runtime token, so it never takes the
-	// HTTP(S)_PROXY environment: a proxy would receive that admin credential.
-	client := httpx.NewProbeClient(httpx.ClientOptions{Timeout: daemonWebClientTimeout})
-	resp, err := httpx.Do(client, req)
+	resp, err := httpx.Do(daemonWebClient(ctx), req)
 	if err != nil {
 		return nil, fmt.Errorf("talking to daemon web UI: %w (is sermod running with web.port set?)", err)
 	}
 	return resp, nil
+}
+
+// daemonWebClient builds the client of one request to the daemon. The caller's
+// deadline governs a request that waits for daemon work, however long; the web
+// client bound only covers a request without one. The request carries the
+// daemon's runtime token, so it never takes the HTTP(S)_PROXY environment: a
+// proxy would receive that admin credential.
+func daemonWebClient(ctx context.Context) *http.Client {
+	return httpx.NewProbeClient(httpx.ClientOptions{Timeout: netutil.TimeoutFromContext(ctx, daemonWebClientTimeout)})
 }
 
 // daemonWebGeneration reads the daemon's current backend generation, which every

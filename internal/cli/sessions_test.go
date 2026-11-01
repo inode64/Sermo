@@ -11,6 +11,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"sermo/internal/checks"
 	"sermo/internal/web"
@@ -43,6 +44,8 @@ type sessionsTestDaemon struct {
 	kills      []string
 	killStatus int
 	killResult web.ActionResult
+	// killHold, when set, holds a kill request open until it closes.
+	killHold chan struct{}
 }
 
 func (d *sessionsTestDaemon) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -59,6 +62,9 @@ func (d *sessionsTestDaemon) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		d.mu.Lock()
 		d.kills = append(d.kills, r.URL.RawQuery)
 		d.mu.Unlock()
+		if d.killHold != nil {
+			<-d.killHold
+		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(d.killStatus)
 		_ = json.NewEncoder(w).Encode(d.killResult)
@@ -136,6 +142,22 @@ func TestSessionsListRejectsUnknownService(t *testing.T) {
 	}
 	if !strings.Contains(stderr.String(), `unknown service "nope"`) {
 		t.Errorf("stderr = %q", stderr.String())
+	}
+}
+
+// A kill runs through the service's operation engine, so sermoctl's wait follows
+// the operation budget, and --timeout bounds it, not the web client bound.
+func TestSessionsKillTimeoutBoundsTheRequest(t *testing.T) {
+	daemon := &sessionsTestDaemon{killStatus: http.StatusOK, killHold: make(chan struct{})}
+	defer close(daemon.killHold)
+	app, _, stderr, global := sessionsTestApp(t, daemon)
+	started := time.Now()
+	code := app.Run(context.Background(), []string{"--config", global, "--timeout", "50ms", "sessions", "kill", "mysql", "long-queries", "4242"})
+	if code != exitRuntimeError || !strings.Contains(stderr.String(), "deadline exceeded") {
+		t.Fatalf("exit = %d, stderr = %q, want a deadline failure", code, stderr.String())
+	}
+	if took := time.Since(started); took >= daemonWebClientTimeout {
+		t.Fatalf("sessions kill took %s under --timeout 50ms", took)
 	}
 }
 

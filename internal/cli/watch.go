@@ -64,7 +64,10 @@ func (a App) runWatchProbe(ctx context.Context, opts options) int {
 	if !app.ManualProbeCheckType(typ) {
 		return a.fail(opts, fmt.Sprintf("watch %q (%s) does not support manual probing", opts.args[1], typ))
 	}
-	result, err := a.ProbeDaemonWatch(ctx, cfg, opts.args[1])
+	budget := app.WatchProbeBudget(checkEntry, engineDefaultTimeout(cfg), manualOperationTimeout(cfg, opts))
+	probeCtx, cancel := context.WithTimeout(ctx, daemonActionTimeout(opts, budget))
+	defer cancel()
+	result, err := a.ProbeDaemonWatch(probeCtx, cfg, opts.args[1])
 	// A failing sample comes back as a 409 carrying its graded result: print
 	// it at its grade. Only a probe that produced no result is a failure of
 	// the command itself.
@@ -160,6 +163,16 @@ func manualOperationTimeout(cfg *config.Config, opts options) time.Duration {
 		return opts.timeout
 	}
 	return config.EngineDuration(cfg, config.EngineKeyOperationTimeout, app.DefaultEngineOperationTimeout)
+}
+
+// daemonActionTimeout bounds a request that waits for work the daemon runs under
+// budget: the operator's --timeout, or that budget plus the time the daemon needs
+// to answer once the work ends.
+func daemonActionTimeout(opts options, budget time.Duration) time.Duration {
+	if opts.timeoutSet {
+		return opts.timeout
+	}
+	return budget + daemonActionAnswerMargin
 }
 
 func configuredHostWatch(cfg *config.Config, name string) (map[string]any, bool) {
