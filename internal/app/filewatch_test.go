@@ -501,6 +501,35 @@ func TestFileWatchDeletion(t *testing.T) {
 	}
 }
 
+// ENOTDIR is the kernel saying the path cannot exist: a parent directory that
+// became a file took the watched path away as surely as removing it.
+func TestFileWatchParentReplacedByAFileIsADeletion(t *testing.T) {
+	parent := filepath.Join(t.TempDir(), "current")
+	if err := os.Mkdir(parent, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	f := filepath.Join(parent, "config.yml")
+	writeSize(t, f, 1)
+	h := &fileWatchHarness{}
+	w := h.watcher(f, false, fileCond{onDelete: true})
+	var latest checks.Result
+	w.publish = func(_, _ string, res checks.Result) { latest = res }
+
+	w.runCycle(context.Background())
+	if err := os.RemoveAll(parent); err != nil {
+		t.Fatal(err)
+	}
+	writeSize(t, parent, 1)
+
+	w.runCycle(context.Background())
+	if len(h.fired) != 1 || h.fired[0]["SERMO_CHANGE"] != "deleted" {
+		t.Fatalf("fired = %v, want the deletion", h.fired)
+	}
+	if latest.Observation() == checks.ObservationUnavailable || !strings.Contains(latest.Message, "not found") {
+		t.Fatalf("snapshot = %+v, want the path reported absent", latest)
+	}
+}
+
 // Only a path that is gone is a deletion. Any other read failure says nothing
 // about the file, so it must not run the delete hook, and the unchanged file is
 // not news once it can be read again. A symlink loop in the parent directory

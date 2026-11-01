@@ -306,9 +306,10 @@ func fileWatchNumberFiles(current map[string]fileState) int {
 type readFailures map[string]error
 
 // note records err unless it says path does not exist, which the comparison
-// against the baseline handles as a deletion.
+// against the baseline handles as a deletion. ENOTDIR says so too: a parent that
+// is no longer a directory leaves nothing at that path.
 func (f readFailures) note(path string, err error) {
-	if !errors.Is(err, fs.ErrNotExist) {
+	if !errors.Is(err, fs.ErrNotExist) && !errors.Is(err, syscall.ENOTDIR) {
 		f[path] = err
 	}
 }
