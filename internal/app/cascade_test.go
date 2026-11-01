@@ -7,7 +7,9 @@ import (
 	"testing"
 	"time"
 
+	"sermo/internal/checks"
 	"sermo/internal/operation"
+	"sermo/internal/rules"
 )
 
 // TestWireCascadeAcknowledgesTargetChanges: when A cascades a restart to B,
@@ -44,6 +46,39 @@ func TestWireCascadeAcknowledgesTargetChanges(t *testing.T) {
 				t.Fatalf("b changed(%s) = %t, %v; want %t", lib, changed, err, tt.wantChanged)
 			}
 		})
+	}
+}
+
+// A failed target marks the cascade failed, but the root did restart and runs
+// the upgraded library. Its own changed: rule must not restart it again on every
+// cooldown for as long as the target keeps failing.
+func TestDegradedCascadeAcknowledgesARestartedRoot(t *testing.T) {
+	lib := filepath.Join(t.TempDir(), "libshared.so")
+	writeFile(t, lib, "a")
+	h := &workerHarness{cache: map[string]checks.Result{}, opResult: operation.Result{Status: operation.ResultOK}}
+	root := h.worker(map[string]any{"rules": map[string]any{
+		"restart-on-change-lib-1": changedRule(lib, "restart"),
+	}}, rules.Policy{Cooldown: time.Minute}, nil)
+	target := &Worker{Service: "target", libBaseline: NewArtifactBaseline(),
+		Operate: func(_ context.Context, action string) operation.Result {
+			return operation.Result{Action: action, Status: operation.ResultFailed}
+		}}
+	wireCascade([]*Worker{root, target}, map[string][]string{root.Service: {"target"}}, Deps{})
+	at := t0
+	root.Now = func() time.Time { return at }
+	root.RunCycle(t.Context())
+
+	writeFile(t, lib, "upgraded")
+	for range 4 {
+		at = at.Add(2 * time.Minute)
+		root.RunCycle(t.Context())
+	}
+
+	if !eq(h.ops, []string{"restart"}) {
+		t.Fatalf("root ops = %v, want one restart", h.ops)
+	}
+	if h.countEvents(eventKindError) != 1 {
+		t.Fatalf("the cascade must still report its failure, events = %+v", h.events)
 	}
 }
 
