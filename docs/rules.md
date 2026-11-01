@@ -3933,6 +3933,11 @@ inside the last 30 minutes. `min_matches` is optional and defaults to `1`
 (true at least once within the window). A rule cannot use both `for` and
 `within`; a single window must choose either `cycles` or `duration`, not both.
 
+A `within` window stays satisfied after its condition clears, until its matches
+age out, and the rule's episode stays open that long. A rule with an operation
+acts only on a cycle whose condition holds, so the restart that cured a service
+does not repeat on every cooldown while old matches remain in the window.
+
 `clear` is the recovery-side window (anti-flapping hysteresis): once the rule is
 in a firing episode, `clear: {cycles: N}` or `clear: {duration: 4m}` keeps the
 episode open until the condition has stayed false for the whole window, so a
@@ -3959,8 +3964,8 @@ again at the next observed false, since the condition was not seen false for
 all of it; a watch holds its episode the same way on an unavailable or skipped
 result. A connection-usage alert therefore
 stays open while the saturated server also refuses the monitor's own
-connection. A rule with an operation is not held: an unknown cycle ends its
-window, so it never acts on what it could not observe.
+connection. A rule with an operation is not held: an unknown cycle reads as
+false, so it never acts on what it could not observe.
 
 Service rule-window progress is persisted in `engine.state`. If `sermod`
 restarts while a `for` window is at 2/3 consecutive matches, the next observed

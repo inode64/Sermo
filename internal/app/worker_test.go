@@ -716,6 +716,60 @@ func TestCycleFiresRemediation(t *testing.T) {
 	}
 }
 
+// A `within` window stays satisfied after its condition clears, until its
+// matches age out. That keeps the episode open; it is no reason to act: the
+// restart that cured the service must not repeat on every cooldown, and a cycle
+// that could not observe the service is never one to restart it on.
+func TestWithinRuleActsOnlyOnACycleItsConditionHolds(t *testing.T) {
+	cured := map[string]map[string]checks.Result{
+		"healthy": {"http": {Check: "http", OK: true}},
+		"busy":    {"http": {Check: "http", OK: false, Busy: true}},
+	}
+	for name, after := range cured {
+		t.Run(name, func(t *testing.T) {
+			h := &workerHarness{cache: failedCache("http"), opResult: operation.Result{Status: operation.ResultOK}}
+			tree := remediationTree("restart-if-down", "http", "restart")
+			tree["rules"].(map[string]any)["restart-if-down"].(map[string]any)["within"] = map[string]any{"duration": "30m", "min_matches": 3}
+			w := h.worker(tree, rules.Policy{Cooldown: 5 * time.Minute}, nil)
+			at := t0
+			w.Now = func() time.Time { return at }
+
+			for range 80 {
+				w.RunCycle(context.Background())
+				if len(h.ops) > 0 {
+					h.cache = after
+				}
+				at = at.Add(30 * time.Second)
+			}
+
+			if len(h.ops) != 1 {
+				t.Fatalf("ops = %v, want the one restart while the condition held", h.ops)
+			}
+		})
+	}
+}
+
+// A dry run reports what a live run would do, so it stays quiet on the same
+// cycles.
+func TestWithinRuleDryRunReportsOnlyACycleItsConditionHolds(t *testing.T) {
+	h := &workerHarness{cache: failedCache("http"), opResult: operation.Result{Status: operation.ResultOK}}
+	tree := remediationTree("restart-if-down", "http", "restart")
+	tree["rules"].(map[string]any)["restart-if-down"].(map[string]any)["within"] = map[string]any{"cycles": 15, "min_matches": 2}
+	tree["rules"].(map[string]any)["restart-if-down"].(map[string]any)["emission"] = map[string]any{"events": "every_cycle"}
+	w := h.worker(tree, rules.Policy{Cooldown: time.Minute}, nil)
+	w.DryRun = true
+
+	w.RunCycle(context.Background())
+	w.RunCycle(context.Background())
+	reported := h.countEvents(eventKindDryRun)
+	h.cache = map[string]checks.Result{"http": {Check: "http", OK: true}}
+	w.RunCycle(context.Background())
+
+	if reported == 0 || h.countEvents(eventKindDryRun) != reported {
+		t.Fatalf("dry-run events = %d before the cure and %d after: %+v", reported, h.countEvents(eventKindDryRun), h.events)
+	}
+}
+
 func TestCyclePanicSuppressesRemediation(t *testing.T) {
 	h := &workerHarness{cache: failedCache("http"), opResult: operation.Result{Status: operation.ResultOK}}
 	w := h.worker(remediationTree("restart-if-down", "http", "restart"), rules.Policy{Cooldown: time.Minute}, nil)

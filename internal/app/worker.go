@@ -776,6 +776,12 @@ func (w *Worker) runFiringRemediation(ctx context.Context, ev *rules.Evaluator, 
 		w.emitAlerts(ctx, ev, firing.Rule, firing.announce(), firing.change, firing.severity)
 		return false
 	}
+	// A within window outlives its condition until the matches age out. That
+	// holds the episode open, but only a cycle that observed the condition may
+	// act, or the cure of an incident would repeat on every cooldown.
+	if !firing.holds {
+		return false
+	}
 	action := string(op.Type)
 	suppress, skip := w.remediationSuppression(ctx, ev, firing, action, now)
 	if skip {
@@ -880,7 +886,7 @@ func (w *Worker) firingRemediationRules(ctx context.Context, ev *rules.Evaluator
 		}
 		evaluation := w.fires(ctx, ev, *rule, at, evals)
 		if evaluation.firing {
-			firing = append(firing, firingRule{Rule: *rule, rising: evaluation.rising, escalated: evaluation.escalated, severity: evaluation.severity, change: evaluation.change})
+			firing = append(firing, firingRule{Rule: *rule, holds: evaluation.holds, rising: evaluation.rising, escalated: evaluation.escalated, severity: evaluation.severity, change: evaluation.change})
 		} else if evaluation.recovered {
 			// The rule outcome is the alarm for the checks it claims, so its
 			// episode needs the same recovery edge an alert rule has: without
@@ -993,7 +999,9 @@ func alertMessage(service, rule, msg, failOutput string, level severity.Level) n
 }
 
 type ruleFiringState struct {
-	firing    bool
+	firing bool
+	// holds reports that the condition itself was observed true this cycle.
+	holds     bool
 	rising    bool
 	escalated bool
 	recovered bool
@@ -1010,6 +1018,7 @@ func (s ruleFiringState) announce() bool { return s.rising || s.escalated }
 
 type firingRule struct {
 	rules.Rule
+	holds     bool
 	rising    bool
 	escalated bool
 	severity  severity.Level
@@ -1061,13 +1070,14 @@ func (w *Worker) fires(ctx context.Context, ev *rules.Evaluator, r rules.Rule, a
 		// An open alert cannot be observed this cycle (its check is busy,
 		// unavailable or skipped): only a real observation may recover it, so a
 		// saturated server that also refuses the monitor never reads as healed.
-		// An operation rule is not held: its unknown cycle ends the episode.
+		// An operation rule is not held: its unknown cycle reads as false.
 		window.InterruptClear()
 		return ruleFiringState{firing: true, notified: notified, severity: window.Severity(), change: ev.Change}
 	}
 	step := window.FiresGradedAt(r, cond, ev.RuleSeverity(r), at)
 	return ruleFiringState{
 		firing:    step.Firing,
+		holds:     cond,
 		rising:    !wasFiring && step.Firing,
 		escalated: wasFiring && step.Firing && step.Raised,
 		recovered: wasFiring && !step.Firing,
