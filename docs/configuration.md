@@ -2189,8 +2189,8 @@ applies: a target below the incident's level is skipped and keeps no record of
 it, and a recovery goes to exactly the targets that heard the incident, at the
 gravest level each one heard.
 A watch whose check becomes unavailable and later available again tracks that
-as its own incident, so the check coming back never announces a still-firing
-watch as recovered.
+as its own incident at every severity: the check coming back closes that
+incident with a recovery and never announces a still-firing watch as recovered.
 A delivery that fails for a reason that may pass — a connection or DNS
 failure, an HTTP 429 or 5xx answer — is retried twice, after 2 and 5 seconds,
 before it is logged as `event notification failed`; a rejected message (a wrong

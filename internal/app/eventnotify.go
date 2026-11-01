@@ -509,9 +509,10 @@ func eventNotifyIdentity(e Event) (key string, active bool, phase string) {
 	case eventKindDryRun, eventKindSuppressed, eventKindAction:
 		phase = eventKindFiring
 	case eventKindError, eventKindHookFail, eventKindExpandFailed, eventKindKillFailed, eventKindMakeStepFailed, eventKindRemountFailed:
-		// An advisory incident's error stays a health incident, so the
-		// recovery that follows it closes it.
-		if e.advisoryError() {
+		// An error with a recovery edge of its own stays a health incident, so
+		// the recovery that follows closes it: an advisory incident's error, and
+		// an unavailable check's at every grade.
+		if e.advisoryError() || e.Check == watchAvailabilityCheck {
 			break
 		}
 		category = e.Kind

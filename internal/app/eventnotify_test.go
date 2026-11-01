@@ -257,7 +257,8 @@ func TestEventNotifierAvailabilityRecoveryKeepsFiringIncidentOpen(t *testing.T) 
 		router.deliver(t.Context(), e)
 	}
 	for len(recorder.messages) > 0 {
-		if msg := <-recorder.messages; strings.Contains(msg.Subject, eventKindRecovered) {
+		msg := <-recorder.messages
+		if strings.Contains(msg.Subject, eventKindRecovered) && !strings.Contains(msg.Body, "check: "+watchAvailabilityCheck) {
 			t.Fatalf("availability recovery announced the open firing incident as recovered: %q (events %+v)", msg.Subject, events)
 		}
 	}
@@ -265,6 +266,38 @@ func TestEventNotifierAvailabilityRecoveryKeepsFiringIncidentOpen(t *testing.T) 
 	router.remind(t.Context())
 	if got := len(recorder.messages); got != 1 {
 		t.Fatalf("open firing incident reminders = %d, want 1 (events %+v)", got, events)
+	}
+}
+
+// An unavailable check has a recovery edge at every grade. Keying its error as
+// a paced operational error dropped the recovery of an error-grade watch and
+// silenced its next episode, while an advisory watch reported both.
+func TestEventNotifierAvailabilityEpisodesCloseAtEveryGrade(t *testing.T) {
+	for _, level := range []severity.Level{severity.Warning, severity.Error, severity.Critical} {
+		t.Run(level.String(), func(t *testing.T) {
+			router, target, now := outageRouter(t, nil, 0)
+			good := checks.Result{Check: "scripted", OK: true, Message: "up"}
+			gone := checks.Result{Check: "scripted", Unavailable: true, Message: "lookup timeout"}
+			w := &Watch{
+				Name: "api", Severity: level, FireOnFail: true, Sleep: func(time.Duration) {},
+				Check: &scriptedCheck{results: []checks.Result{good, gone, gone, good, gone, gone, good}},
+				Emit: func(e Event) {
+					router.deliver(t.Context(), e)
+					*now = now.Add(time.Minute)
+				},
+			}
+			for range 5 {
+				w.RunCycle(context.Background())
+			}
+			var kinds []string
+			for _, msg := range drainEventNotify(target) {
+				kinds = append(kinds, msg.Fields[sermoEnvEvent])
+			}
+			want := []string{eventKindError, eventKindRecovered, eventKindError, eventKindRecovered}
+			if !slices.Equal(kinds, want) {
+				t.Fatalf("delivered %v, want %v", kinds, want)
+			}
+		})
 	}
 }
 
