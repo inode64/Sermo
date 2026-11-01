@@ -133,6 +133,20 @@ func (f *fakeStore) ClearOperationSettlingPhase(service, phase string) error {
 	return nil
 }
 
+func (f *fakeStore) ReplaceOperationSettlingPhase(service, from, to string) error {
+	if f == nil {
+		return nil
+	}
+	if f.failSet {
+		return errors.New("replace operation settling failed")
+	}
+	if rec, found := f.settling[service]; found && rec.Phase == from {
+		rec.Phase = to
+		f.settling[service] = rec
+	}
+	return nil
+}
+
 func (f *fakeStore) ServiceRestartNotice(service string) (state.ServiceRestartNoticeRecord, bool, error) {
 	if f == nil {
 		return state.ServiceRestartNoticeRecord{}, false, nil

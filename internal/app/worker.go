@@ -557,7 +557,7 @@ func (w *Worker) operationSettlingState(now time.Time) (phase string, running bo
 
 func (w *Worker) clearOperationSettling() {
 	if w.OperationSettling != nil {
-		w.noteSettlingClear(w.OperationSettling.ClearOperationSettling(w.Service))
+		w.noteSettlingWrite(w.OperationSettling.ClearOperationSettling(w.Service))
 	}
 }
 
@@ -570,22 +570,25 @@ func (w *Worker) clearObservedSettling(phase string) {
 	if phase == state.OperationSettlingRelaunched {
 		w.acknowledgeChanges()
 	}
-	w.noteSettlingClear(w.OperationSettling.ClearOperationSettlingPhase(w.Service, phase))
+	w.noteSettlingWrite(w.OperationSettling.ClearOperationSettlingPhase(w.Service, phase))
 }
 
 // acknowledgePausedRelaunch takes an operator's relaunch on a service whose
 // monitoring stays paused. No cycle will observe it, and without this the change
-// it brought in would read as pending the moment monitoring resumes.
+// it brought in would read as pending the moment monitoring resumes. The marker
+// stays as settling, bounded by its age, because it also tells the first live
+// cycle that the new process is Sermo's own and no external restart.
 func (w *Worker) acknowledgePausedRelaunch() {
 	if w.OperationSettling == nil {
 		return
 	}
 	if rec, found, err := w.OperationSettling.OperationSettling(w.Service); err == nil && found && rec.Phase == state.OperationSettlingRelaunched {
-		w.clearObservedSettling(rec.Phase)
+		w.acknowledgeChanges()
+		w.noteSettlingWrite(w.OperationSettling.ReplaceOperationSettlingPhase(w.Service, rec.Phase, state.OperationSettlingSettling))
 	}
 }
 
-func (w *Worker) noteSettlingClear(err error) {
+func (w *Worker) noteSettlingWrite(err error) {
 	if err != nil {
 		w.emitStoreError(operationSettlingClearErrKey, "operation settling: "+err.Error())
 		return

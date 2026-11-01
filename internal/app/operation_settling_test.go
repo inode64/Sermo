@@ -12,6 +12,7 @@ import (
 	"sermo/internal/checks"
 	"sermo/internal/execx/execxtest"
 	"sermo/internal/locks"
+	"sermo/internal/notify"
 	"sermo/internal/operation"
 	"sermo/internal/rules"
 	"sermo/internal/servicemgr"
@@ -432,20 +433,49 @@ func TestBlockedAttemptLeavesARunningOperationOverARelaunch(t *testing.T) {
 }
 
 // Maintenance under an explicit unmonitor: the restart happened, and a pause must
-// not keep the worker from learning it, however long the pause lasts.
+// not keep the worker from learning it, however long the pause lasts. The marker
+// also says the new process is Sermo's own, so the first live cycle after a short
+// pause must still not announce it as an external restart.
 func TestManualRestartIsAcknowledgedDuringAPause(t *testing.T) {
-	w, h, store, _ := manualRestartFixture(t)
-	paused := true
-	w.IsPaused = func() bool { return paused }
-	store.now = func() time.Time { return t0.Add(-time.Hour) }
+	for name, age := range map[string]time.Duration{"short pause": 0, "long pause": time.Hour} {
+		t.Run(name, func(t *testing.T) {
+			w, h, store, _ := manualRestartFixture(t)
+			paused := true
+			w.IsPaused = func() bool { return paused }
+			store.now = func() time.Time { return t0.Add(-age) }
+			n := &fakeNotifier{name: "ops"}
+			w.RestartNotice, w.ServiceRestartNotice, w.PrimaryProcess = restartNoticeConfig(), store, recentPrimaryProcess
+			w.Notifiers = map[string]notify.Notifier{"ops": n}
 
-	completeManual(t, store, string(rules.ActionRestart), relaunched)
-	w.RunCycle(t.Context())
-	paused = false
-	w.RunCycle(t.Context())
+			completeManual(t, store, string(rules.ActionRestart), relaunched)
+			w.RunCycle(t.Context())
+			if rec, found, err := store.OperationSettling("web"); age == 0 && (err != nil || !found || rec.Phase != state.OperationSettlingSettling) {
+				t.Fatalf("marker = %+v found=%v err=%v, want it kept as settling", rec, found, err)
+			}
+			paused = false
+			w.RunCycle(t.Context())
 
-	if len(h.ops) != 0 {
-		t.Fatalf("ops = %v, want the operator's restart to count", h.ops)
+			if len(h.ops) != 0 {
+				t.Fatalf("ops = %v, want the operator's restart to count", h.ops)
+			}
+			if age == 0 && len(n.msgs) != 0 {
+				t.Fatalf("Sermo's own restart produced %d external-restart notifications", len(n.msgs))
+			}
+		})
+	}
+}
+
+// The worker must not rewrite a marker a new operation replaced after it read it.
+func TestPausedRelaunchLeavesAMarkerThatMovedOn(t *testing.T) {
+	store := newFakeStore()
+	if err := store.SetOperationSettling("web", state.OperationSettlingRunning); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.ReplaceOperationSettlingPhase("web", state.OperationSettlingRelaunched, state.OperationSettlingSettling); err != nil {
+		t.Fatal(err)
+	}
+	if rec, found, err := store.OperationSettling("web"); err != nil || !found || rec.Phase != state.OperationSettlingRunning {
+		t.Fatalf("marker = %+v found=%v err=%v, want the running operation's", rec, found, err)
 	}
 }
 

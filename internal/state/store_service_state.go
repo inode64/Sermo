@@ -203,6 +203,17 @@ func (s *Store) ClearOperationSettlingPhase(service, phase string) error {
 	return nil
 }
 
+// ReplaceOperationSettlingPhase moves a service's operation-settling row from one
+// phase to another only while it is still in the first, and keeps its time, so an
+// age limit still counts from the operation that wrote it.
+func (s *Store) ReplaceOperationSettlingPhase(service, from, to string) error {
+	_, err := s.exec(s.sqlCtx(), `UPDATE operation_settling SET phase = ? WHERE service = ? AND phase = ?;`, to, service, from)
+	if err != nil {
+		return fmt.Errorf("replace operation settling for %s: %w", service, err)
+	}
+	return nil
+}
+
 // ServiceRestartNotice returns the principal process identity already handled
 // by the external-restart notice monitor. found is false when the service has
 // not been observed below its configured uptime threshold yet.

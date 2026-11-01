@@ -858,3 +858,28 @@ func TestClearOperationSettlingPhaseLeavesAnotherPhase(t *testing.T) {
 		t.Fatalf("marker in the named phase: found=%v err=%v, want it cleared", found, err)
 	}
 }
+
+func TestReplaceOperationSettlingPhaseMovesOnlyTheNamedPhase(t *testing.T) {
+	s := openTemp(t)
+	written := time.Date(2026, 6, 7, 9, 0, 0, 0, time.UTC)
+	s.now = func() time.Time { return written }
+	if err := s.SetOperationSettling("web", OperationSettlingRelaunched); err != nil {
+		t.Fatalf("SetOperationSettling: %v", err)
+	}
+	s.now = func() time.Time { return written.Add(time.Hour) }
+
+	if err := s.ReplaceOperationSettlingPhase("web", OperationSettlingRunning, OperationSettlingSettling); err != nil {
+		t.Fatalf("ReplaceOperationSettlingPhase: %v", err)
+	}
+	if rec, found, err := s.OperationSettling("web"); err != nil || !found || rec.Phase != OperationSettlingRelaunched {
+		t.Fatalf("marker in another phase = %+v found=%v err=%v, want it kept", rec, found, err)
+	}
+
+	if err := s.ReplaceOperationSettlingPhase("web", OperationSettlingRelaunched, OperationSettlingSettling); err != nil {
+		t.Fatalf("ReplaceOperationSettlingPhase: %v", err)
+	}
+	rec, found, err := s.OperationSettling("web")
+	if err != nil || !found || rec.Phase != OperationSettlingSettling || !rec.UpdatedAt.Equal(written) {
+		t.Fatalf("moved marker = %+v found=%v err=%v, want settling at the original time", rec, found, err)
+	}
+}

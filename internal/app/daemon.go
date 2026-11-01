@@ -53,6 +53,7 @@ type OperationSettlingStore interface {
 	OperationSettling(service string) (state.OperationSettlingRecord, bool, error)
 	ClearOperationSettling(service string) error
 	ClearOperationSettlingPhase(service, phase string) error
+	ReplaceOperationSettlingPhase(service, from, to string) error
 }
 
 // ServiceRestartNoticeStore persists the principal process identity already
