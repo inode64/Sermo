@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -399,9 +400,19 @@ func sshIdleTerminalIsSSH(session utmp.Session, processes []process.Identity, sn
 }
 
 // remoteTerminal reports a login utmp records with a remote origin, on a line
-// other than a local console.
+// other than a local console. A terminal emulator records the X display it runs
+// on, which names this machine.
 func remoteTerminal(session utmp.Session) bool {
-	return session.Host != "" && !strings.HasPrefix(session.Line, "tty")
+	return session.Host != "" && !xDisplay(session.Host) && !strings.HasPrefix(session.Line, "tty")
+}
+
+// xDisplay reports a local X display name such as ":0" or ":1.0". The number
+// matters: an sshd peer such as "::1" starts with a colon too.
+func xDisplay(host string) bool {
+	display, local := strings.CutPrefix(host, ":")
+	number, _, _ := strings.Cut(display, ".")
+	_, err := strconv.ParseUint(number, 10, 32)
+	return local && err == nil
 }
 
 func sampleSSHSessions(sessions []utmp.Session, snapshot map[int]process.Identity, terminal func(string) (utmp.Terminal, error), now time.Time, sshdFilters []process.IdentityFilter, resolveUser process.UserResolver, sudoBoundary func(utmp.Session, []process.Identity) (sshSudoProcesses, bool)) SSHSessionSample {

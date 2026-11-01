@@ -405,6 +405,28 @@ func TestSampleSSHIdleFailsClosedOnAnUnattributedRemoteTerminal(t *testing.T) {
 	}
 }
 
+// A terminal emulator records the X display it runs on as its utmp host, so ":0"
+// on a pts line is a local terminal with no sshd behind it. An IPv6 peer can start
+// with a colon too, and that one stays a remote login.
+func TestSSHTerminalsReadAnXDisplayHostAsLocal(t *testing.T) {
+	now := time.Date(2026, time.August, 5, 12, 0, 0, 0, time.UTC)
+	snapshot := map[int]process.Identity{
+		sshShellPID: {PID: sshShellPID, PPID: 1, UID: testUserID, Exe: "/bin/bash", ExeOK: true, TTY: testTTY, TTYOK: true},
+	}
+	for host, remote := range map[string]bool{":0": false, ":1.0": false, "::1": true, "::ffff:192.0.2.10": true} {
+		t.Run(host, func(t *testing.T) {
+			sessions := []utmp.Session{{User: "deploy", Line: "pts/0", Host: host}}
+			if _, err := sampleSSHIdle(sessions, snapshot, testSSHLookup(), testSSHTerminal(now), now, testSSHConfig(t), mustSSHDFilters(t)); (err != nil) != remote {
+				t.Fatalf("sampleSSHIdle error = %v, want one only for a remote login", err)
+			}
+			sample := sampleSSHSessions(sessions, snapshot, testSSHTerminal(now), now, mustSSHDFilters(t), testSSHLookup().ResolveUser, nil)
+			if (len(sample.Issues) != 0) != remote || (sample.Console != 0) == remote {
+				t.Fatalf("sample = %+v, remote = %t", sample, remote)
+			}
+		})
+	}
+}
+
 func mustSSHDFilters(t *testing.T) []process.IdentityFilter {
 	t.Helper()
 	filters, err := sshdFilters([]string{"/opt/sermo-test/sshd"})
