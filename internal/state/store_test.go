@@ -838,3 +838,23 @@ func TestStatementCacheNeverHoldsItsLockWhilePreparing(t *testing.T) {
 		t.Fatalf("waiting write: %v", err)
 	}
 }
+
+// A caller that observed one operation must not clear the marker of the next.
+func TestClearOperationSettlingPhaseLeavesAnotherPhase(t *testing.T) {
+	s := openTemp(t)
+	if err := s.SetOperationSettling("web", OperationSettlingRunning); err != nil {
+		t.Fatalf("SetOperationSettling: %v", err)
+	}
+	if err := s.ClearOperationSettlingPhase("web", OperationSettlingSettling); err != nil {
+		t.Fatalf("ClearOperationSettlingPhase: %v", err)
+	}
+	if _, found, err := s.OperationSettling("web"); err != nil || !found {
+		t.Fatalf("running marker: found=%v err=%v, want it kept", found, err)
+	}
+	if err := s.ClearOperationSettlingPhase("web", OperationSettlingRunning); err != nil {
+		t.Fatalf("ClearOperationSettlingPhase: %v", err)
+	}
+	if _, found, err := s.OperationSettling("web"); err != nil || found {
+		t.Fatalf("marker in the named phase: found=%v err=%v, want it cleared", found, err)
+	}
+}

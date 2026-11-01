@@ -188,6 +188,17 @@ func (s *Store) ClearOperationSettling(service string) error {
 	return nil
 }
 
+// ClearOperationSettlingPhase removes a service's operation-settling row only
+// while it is still in phase, so a caller that observed one operation cannot
+// clear the marker of the next.
+func (s *Store) ClearOperationSettlingPhase(service, phase string) error {
+	_, err := s.exec(s.sqlCtx(), `DELETE FROM operation_settling WHERE service = ? AND phase = ?;`, service, phase)
+	if err != nil {
+		return fmt.Errorf("clear operation settling for %s: %w", service, err)
+	}
+	return nil
+}
+
 // ServiceRestartNotice returns the principal process identity already handled
 // by the external-restart notice monitor. found is false when the service has
 // not been observed below its configured uptime threshold yet.

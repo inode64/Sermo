@@ -27,18 +27,28 @@ func operationSettlingMaxAge(operationTimeout time.Duration) time.Duration {
 }
 
 // BeginOperationSettling marks a service operation as running for its caller.
-func BeginOperationSettling(store OperationSettlingStore, service, action string) error {
+// inFlight reports a running marker it found there: another operation's, unless
+// that one's caller died, which finishOperationSettling must leave alone if this
+// attempt turns out to be blocked.
+func BeginOperationSettling(store OperationSettlingStore, service, action string) (inFlight bool, err error) {
+	if store == nil || !operation.IsServiceAction(action) {
+		return false, nil
+	}
+	rec, found, readErr := store.OperationSettling(service)
+	inFlight = readErr == nil && found && rec.Phase == state.OperationSettlingRunning
+	if err := store.SetOperationSettling(service, state.OperationSettlingRunning); err != nil {
+		return inFlight, fmt.Errorf("mark operation settling for %s: %w", service, err)
+	}
+	return inFlight, nil
+}
+
+func finishOperationSettling(store OperationSettlingStore, service, action string, result operation.Result, opErr error, activeAfterPostflightFailure, inFlight bool) error {
 	if store == nil || !operation.IsServiceAction(action) {
 		return nil
 	}
-	if err := store.SetOperationSettling(service, state.OperationSettlingRunning); err != nil {
-		return fmt.Errorf("mark operation settling for %s: %w", service, err)
-	}
-	return nil
-}
-
-func finishOperationSettling(store OperationSettlingStore, service, action string, result operation.Result, opErr error, activeAfterPostflightFailure bool) error {
-	if store == nil || !operation.IsServiceAction(action) {
+	// A blocked attempt never ran, and the marker it found is the operation in
+	// its way: clearing that would resume monitoring in the middle of it.
+	if inFlight && result.Status == operation.ResultBlocked {
 		return nil
 	}
 	settleAfter := result.OK() || activeAfterPostflightFailure

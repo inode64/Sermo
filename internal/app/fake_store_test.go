@@ -120,6 +120,19 @@ func (f *fakeStore) ClearOperationSettling(service string) error {
 	return nil
 }
 
+func (f *fakeStore) ClearOperationSettlingPhase(service, phase string) error {
+	if f == nil {
+		return nil
+	}
+	if f.failSet {
+		return errors.New("clear operation settling failed")
+	}
+	if f.settling[service].Phase == phase {
+		delete(f.settling, service)
+	}
+	return nil
+}
+
 func (f *fakeStore) ServiceRestartNotice(service string) (state.ServiceRestartNoticeRecord, bool, error) {
 	if f == nil {
 		return state.ServiceRestartNoticeRecord{}, false, nil

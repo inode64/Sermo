@@ -193,6 +193,8 @@ type workerCycleMode struct {
 	observeOnly bool
 	startup     bool
 	operation   bool
+	// settlingPhase is the operation marker's phase this cycle observes.
+	settlingPhase string
 }
 
 // cycleRecord is the completed check result passed to persistence. Availability
@@ -263,7 +265,8 @@ func (w *Worker) prepareCycle(ctx context.Context, settleKey string, now func() 
 
 	mode := workerCycleMode{startup: w.Settling != nil && !w.Settling.Observed(settleKey)}
 	var running bool
-	mode.operation, running = w.operationSettlingState(now())
+	mode.settlingPhase, running = w.operationSettlingState(now())
+	mode.operation = mode.settlingPhase != ""
 	if running {
 		w.clearObservability()
 		if mode.startup {
@@ -284,7 +287,7 @@ func (w *Worker) prepareCycle(ctx context.Context, settleKey string, now func() 
 		w.Settling.MarkObserved(settleKey)
 	}
 	if mode.operation {
-		w.clearOperationSettling()
+		w.clearObservedSettling(mode.settlingPhase)
 	}
 	w.clearObservability()
 	return workerCycleMode{}, true
@@ -509,48 +512,61 @@ func (w *Worker) completeObserveCycle(settleKey string, mode workerCycleMode) {
 		w.Settling.MarkObserved(settleKey)
 	}
 	if mode.operation {
-		w.clearOperationSettling()
+		w.clearObservedSettling(mode.settlingPhase)
 	}
 	w.clearObservability()
 }
 
-func (w *Worker) operationSettlingState(now time.Time) (observeOnly, running bool) {
+// operationSettlingState reports the marker's phase when this cycle observes an
+// operation that finished, and running while one is in progress.
+func (w *Worker) operationSettlingState(now time.Time) (phase string, running bool) {
 	if w.OperationSettling == nil {
-		return false, false
+		return "", false
 	}
 	rec, found, err := w.OperationSettling.OperationSettling(w.Service)
 	if err != nil {
 		w.emitStoreError(operationSettlingReadErrKey, "operation settling: "+err.Error())
-		return false, false
+		return "", false
 	}
 	w.clearEvalError(operationSettlingReadErrKey)
 	if !found {
-		return false, false
+		return "", false
 	}
 	if !rec.UpdatedAt.IsZero() && now.Sub(rec.UpdatedAt) > operationSettlingMaxAge(w.OperationTimeout) {
 		if rec.Phase == state.OperationSettlingRunning && w.OperationActive != nil && w.OperationActive() {
-			return false, true
+			return "", true
 		}
 		w.clearOperationSettling()
-		return false, false
+		return "", false
 	}
 	switch rec.Phase {
 	case state.OperationSettlingRunning:
-		return false, true
+		return "", true
 	case state.OperationSettlingSettling:
-		return true, false
+		return rec.Phase, false
 	default:
 		w.emit(Event{Kind: eventKindError, Message: fmt.Sprintf("operation settling: unknown phase %q", rec.Phase)})
 		w.clearOperationSettling()
-		return false, false
+		return "", false
 	}
 }
 
 func (w *Worker) clearOperationSettling() {
-	if w.OperationSettling == nil {
-		return
+	if w.OperationSettling != nil {
+		w.noteSettlingClear(w.OperationSettling.ClearOperationSettling(w.Service))
 	}
-	if err := w.OperationSettling.ClearOperationSettling(w.Service); err != nil {
+}
+
+// clearObservedSettling ends the observation of phase. An operator may have
+// started another operation meanwhile, whose marker is not this cycle's to clear.
+func (w *Worker) clearObservedSettling(phase string) {
+	if w.OperationSettling != nil {
+		w.noteSettlingClear(w.OperationSettling.ClearOperationSettlingPhase(w.Service, phase))
+	}
+}
+
+func (w *Worker) noteSettlingClear(err error) {
+	if err != nil {
 		w.emitStoreError(operationSettlingClearErrKey, "operation settling: "+err.Error())
 		return
 	}
@@ -917,12 +933,13 @@ func (w *Worker) emitRuleRecovered(ctx context.Context, ev *rules.Evaluator, rul
 }
 
 func (w *Worker) operateForRemediation(ctx context.Context, action string) operation.Result {
-	if err := BeginOperationSettling(w.OperationSettling, w.Service, action); err != nil {
+	inFlight, err := BeginOperationSettling(w.OperationSettling, w.Service, action)
+	if err != nil {
 		w.emit(Event{Kind: eventKindError, Action: action, Message: err.Error()})
 	}
 	result := w.Operate(ctx, action)
 	activeAfterPostflightFailure := ServiceActiveAfterPostflightFailure(ctx, action, result, nil, w.CheckDeps.Status)
-	if err := finishOperationSettling(w.OperationSettling, w.Service, action, result, nil, activeAfterPostflightFailure); err != nil {
+	if err := finishOperationSettling(w.OperationSettling, w.Service, action, result, nil, activeAfterPostflightFailure, inFlight); err != nil {
 		w.emit(Event{Kind: eventKindError, Action: action, Message: err.Error()})
 	}
 	return result

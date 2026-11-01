@@ -113,12 +113,13 @@ func webActionResultFrom(r operation.Result) web.ActionResult {
 }
 
 func (b *WebBackend) operationResultWithMonitor(ctx context.Context, name, action string) operation.Result {
-	if err := BeginOperationSettling(b.operationSettling, name, action); err != nil {
+	inFlight, err := BeginOperationSettling(b.operationSettling, name, action)
+	if err != nil {
 		b.emitMonitorEvent(name, action, eventKindError, "", err.Error())
 	}
 	r := b.operationResult(ctx, name, action)
 	activeAfterPostflightFailure := b.activeAfterPostflightFailure(ctx, name, action, r)
-	change, err := CompleteManualOperation(b.store, b.operationSettling, name, action, r, nil, ManualOperationSources{Stop: state.SourceWebManualStop, Restore: state.SourceWeb}, activeAfterPostflightFailure)
+	change, err := CompleteManualOperation(b.store, b.operationSettling, name, action, r, nil, ManualOperationSources{Stop: state.SourceWebManualStop, Restore: state.SourceWeb}, activeAfterPostflightFailure, inFlight)
 	if err != nil {
 		b.emitMonitorEvent(name, action, eventKindError, "", err.Error())
 	} else if change.Changed {

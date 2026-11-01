@@ -177,6 +177,8 @@ func (s failingSettlingStore) OperationSettling(string) (state.OperationSettling
 
 func (s failingSettlingStore) ClearOperationSettling(string) error { return s.err }
 
+func (s failingSettlingStore) ClearOperationSettlingPhase(_, _ string) error { return s.err }
+
 // TestWorkerOperationSettlingStoreErrorEmitsOnChange keeps a store-level failure
 // from repeating every cycle. A full disk breaks every access, so the
 // unconditional emission turned one host problem into an endless event stream.
