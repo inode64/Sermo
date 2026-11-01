@@ -203,7 +203,7 @@ func probeUnixSocket(ctx context.Context, cfg Config) (Result, error) {
 // the handshake prologue ftp, smtp and nntp share. The returned reader carries
 // the buffered stream, so the caller must keep using it for later responses.
 func readTextGreeting(rw io.ReadWriter) (*textproto.Reader, int, string, error) {
-	tp := textproto.NewReader(bufio.NewReader(rw))
+	tp := textproto.NewReader(bufio.NewReader(&textLineReader{lines: bufio.NewReader(rw)}))
 	code, greeting, err := tp.ReadResponse(0)
 	if err != nil {
 		return tp, code, greeting, fmt.Errorf("read text greeting: %w", err)

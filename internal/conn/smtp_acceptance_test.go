@@ -201,6 +201,22 @@ func TestSMTPAcceptanceKeepsA421ToEHLO(t *testing.T) {
 	}
 }
 
+// TestSMTPAcceptanceBoundsAnEndlessReply: the MX is whatever the recipient's
+// domain publishes, so its replies are bounded by size, not by the deadline.
+func TestSMTPAcceptanceBoundsAnEndlessReply(t *testing.T) {
+	port := serveEndless(t, "220 ")
+	ctx, cancel := context.WithTimeout(context.Background(), smtpAcceptanceTestTimeout)
+	defer cancel()
+	start := time.Now()
+	_, err := smtpAcceptanceTestProtocol(nil).Probe(ctx, smtpAcceptanceTestConfig(port))
+	if err == nil || !strings.Contains(err.Error(), errTextExchangeTooLong.Error()) {
+		t.Fatalf("Probe error = %v, want the exchange bound", err)
+	}
+	if elapsed := time.Since(start); elapsed > smtpAcceptanceTestTimeout/2 {
+		t.Fatalf("probe read an endless reply for %v; want it bounded by size", elapsed)
+	}
+}
+
 func TestSMTPAcceptanceReportsNullMXAsPolicyFailure(t *testing.T) {
 	proto := smtpAcceptanceProtocol{lookupMX: func(context.Context, string, string) ([]*net.MX, error) {
 		return []*net.MX{{Host: ".", Pref: 0}}, nil

@@ -1,11 +1,14 @@
 package conn
 
 import (
+	"bytes"
 	"errors"
 	"io"
 	"net"
 	"strings"
 	"testing"
+
+	"sermo/internal/units"
 )
 
 type failingReadWriter struct {
@@ -27,6 +30,75 @@ func TestReadTextGreetingWrapsReadError(t *testing.T) {
 }
 
 var _ io.ReadWriter = failingReadWriter{}
+
+// floodReadWriter repeats chunk for reads, up to flood bytes, then reports EOF.
+// It records how much a reader consumed, so a bound shows as bytes, not time.
+type floodReadWriter struct {
+	chunk []byte
+	flood int
+	read  int
+}
+
+func (f *floodReadWriter) Read(p []byte) (int, error) {
+	if f.read >= f.flood {
+		return 0, io.EOF
+	}
+	n := copy(p, f.chunk[f.read%len(f.chunk):])
+	f.read += n
+	return n, nil
+}
+
+func (f *floodReadWriter) Write(p []byte) (int, error) { return len(p), nil }
+
+func TestReadTextGreetingBoundsTheReply(t *testing.T) {
+	const (
+		flood     = 8 * units.BytesPerMiB
+		readAhead = 4 * units.BytesPerKiB // bufio's default buffer
+	)
+	tests := []struct {
+		name    string
+		chunk   string
+		maxRead int
+		wantErr string
+	}{
+		{
+			name:    "line without an end",
+			chunk:   "a",
+			maxRead: maxProtocolLineBytes + readAhead,
+			wantErr: "protocol line exceeds",
+		},
+		{
+			name:    "reply that never ends",
+			chunk:   "220-" + strings.Repeat("a", 1024) + "\r\n",
+			maxRead: maxTextExchangeBytes + readAhead,
+			wantErr: "text exchange exceeds",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			peer := &floodReadWriter{chunk: []byte(test.chunk), flood: flood}
+			_, _, _, err := readTextGreeting(peer)
+			if err == nil || !strings.Contains(err.Error(), test.wantErr) {
+				t.Fatalf("readTextGreeting() error = %v, want %q", err, test.wantErr)
+			}
+			if peer.read > test.maxRead {
+				t.Fatalf("read %d bytes of the peer's reply, want at most %d", peer.read, test.maxRead)
+			}
+		})
+	}
+}
+
+func TestReadTextGreetingLineBoundCountsItsTerminator(t *testing.T) {
+	const prefix, crlf = "220 ", "\r\n"
+	fits := prefix + strings.Repeat("a", maxProtocolLineBytes-len(prefix)-len(crlf)) + crlf
+	if _, code, _, err := readTextGreeting(rw{in: strings.NewReader(fits), out: &bytes.Buffer{}}); err != nil || code != 220 {
+		t.Fatalf("a line of exactly the limit: code %d, error %v", code, err)
+	}
+	over := prefix + strings.Repeat("a", maxProtocolLineBytes-len(prefix)-len(crlf)+1) + crlf
+	if _, _, _, err := readTextGreeting(rw{in: strings.NewReader(over), out: &bytes.Buffer{}}); err == nil {
+		t.Fatal("a line one byte over the limit was accepted")
+	}
+}
 
 // resolveUDPAddr replaces net.ResolveUDPAddr in the UDP probes so a name lookup
 // is bounded by the probe's context; literal addresses resolve as before,

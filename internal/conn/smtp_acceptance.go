@@ -157,7 +157,7 @@ func probeSMTPAcceptanceMX(
 	}
 	defer func() { _ = conn.Close() }()
 
-	client, err := netsmtp.NewClient(conn, mxHost)
+	client, err := netsmtp.NewClient(&smtpBoundedConn{Conn: conn, left: maxTextExchangeBytes}, mxHost)
 	if err != nil {
 		return smtpAcceptanceStepResult(res, smtpAcceptanceStageGreeting, err)
 	}
@@ -199,6 +199,27 @@ func probeSMTPAcceptanceMX(
 	_ = client.Reset()
 	_ = client.Quit()
 	return res, nil
+}
+
+// smtpBoundedConn limits what net/smtp reads: it has no limit of its own, and an
+// MX is whatever the recipient's domain publishes. The limit is on the whole
+// exchange because net/smtp runs TLS over this conn, where a textLineReader would
+// wait for line breaks in ciphertext.
+type smtpBoundedConn struct {
+	net.Conn
+	left int
+}
+
+// Read implements io.Reader, so its errors must reach the caller untouched.
+//
+//nolint:wrapcheck // io.Reader contract: io.EOF must not be wrapped.
+func (c *smtpBoundedConn) Read(p []byte) (int, error) {
+	if c.left <= 0 {
+		return 0, errTextExchangeTooLong
+	}
+	n, err := c.Conn.Read(p[:min(len(p), c.left)])
+	c.left -= n
+	return n, err
 }
 
 // smtpEHLORefusal sends EHLO ahead of net/smtp and returns what must end the

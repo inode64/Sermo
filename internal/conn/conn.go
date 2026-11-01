@@ -328,6 +328,7 @@ const (
 
 	// Response limits keep service probes bounded against unexpected peers.
 	maxProtocolLineBytes  = 64 * units.BytesPerKiB
+	maxTextExchangeBytes  = units.BytesPerMiB
 	maxHTTPProbeBody      = 64 * units.BytesPerKiB
 	maxHTTPProbeLargeBody = units.BytesPerMiB
 	maxHTTPProbeShortBody = 4 * units.BytesPerKiB
@@ -583,6 +584,8 @@ func isPostgresProtocol(name string) bool {
 	return ok && protocol != nil && protocol.Name() == ProtocolNamePostgres
 }
 
+var errTextExchangeTooLong = fmt.Errorf("text exchange exceeds %d bytes", maxTextExchangeBytes)
+
 // readCRLFLine reads one CRLF/LF-terminated line, trimmed — the line shape
 // every text protocol probe (redis RESP, imap, nut, …) reads.
 func readCRLFLine(br *bufio.Reader) (string, error) {
@@ -615,6 +618,32 @@ func readProtocolLine(br *bufio.Reader) (string, error) {
 		}
 		return string(line), err
 	}
+}
+
+// textLineReader hands a net/textproto reader one bounded line at a time, because
+// textproto has no limit of its own, on one line or across the continuation lines
+// of a reply. A line past the limit never reaches it: bufio's ReadLine would drop
+// a read error that follows a partial line and return that line as complete.
+type textLineReader struct {
+	lines   *bufio.Reader
+	pending string
+	total   int
+}
+
+func (r *textLineReader) Read(p []byte) (int, error) {
+	if r.pending == "" {
+		line, err := readProtocolLine(r.lines)
+		if line == "" {
+			return 0, err
+		}
+		if r.total += len(line); r.total > maxTextExchangeBytes {
+			return 0, errTextExchangeTooLong
+		}
+		r.pending = line
+	}
+	n := copy(p, r.pending)
+	r.pending = r.pending[n:]
+	return n, nil
 }
 
 // readGreetingLine reads one CR/LF-terminated greeting line from a fresh reader
