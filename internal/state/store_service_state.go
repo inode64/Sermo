@@ -16,6 +16,10 @@ type MonitorRecord struct {
 const (
 	OperationSettlingRunning  = "running"
 	OperationSettlingSettling = "settling"
+	// OperationSettlingRelaunched is settling after an operator's successful start,
+	// restart or repair: the worker observes the service as usual and then adopts
+	// what changed on disk, which only it can do, from another process included.
+	OperationSettlingRelaunched = "relaunched"
 )
 
 // OperationSettlingRecord is one persisted service-operation settling row.

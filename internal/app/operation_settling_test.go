@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -67,7 +68,7 @@ func TestOperationSettlingLifecycle(t *testing.T) {
 	}
 
 	result := operation.Result{Service: "web", Action: string(rules.ActionRestart), Status: operation.ResultOK}
-	if err := finishOperationSettling(store, "web", string(rules.ActionRestart), result, nil, false, false); err != nil {
+	if err := finishOperationSettling(store, "web", string(rules.ActionRestart), result, nil, false, false, state.OperationSettlingSettling); err != nil {
 		t.Fatalf("finish restart: %v", err)
 	}
 	rec, found, err = store.OperationSettling("web")
@@ -82,7 +83,7 @@ func TestOperationSettlingLifecycle(t *testing.T) {
 		t.Fatalf("begin stop: %v", err)
 	}
 	result = operation.Result{Service: "web", Action: string(rules.ActionStop), Status: operation.ResultOK}
-	if err := finishOperationSettling(store, "web", string(rules.ActionStop), result, nil, false, false); err != nil {
+	if err := finishOperationSettling(store, "web", string(rules.ActionStop), result, nil, false, false, state.OperationSettlingSettling); err != nil {
 		t.Fatalf("finish stop: %v", err)
 	}
 	if _, found, _ = store.OperationSettling("web"); found {
@@ -93,7 +94,7 @@ func TestOperationSettlingLifecycle(t *testing.T) {
 		t.Fatalf("begin failed start: %v", err)
 	}
 	result = operation.Result{Service: "web", Action: string(rules.ActionStart), Status: operation.ResultFailed}
-	if err := finishOperationSettling(store, "web", string(rules.ActionStart), result, errors.New("failed"), false, false); err != nil {
+	if err := finishOperationSettling(store, "web", string(rules.ActionStart), result, errors.New("failed"), false, false, state.OperationSettlingSettling); err != nil {
 		t.Fatalf("finish failed start: %v", err)
 	}
 	if _, found, _ = store.OperationSettling("web"); found {
@@ -104,7 +105,7 @@ func TestOperationSettlingLifecycle(t *testing.T) {
 		t.Fatalf("begin active postflight restart: %v", err)
 	}
 	result = operation.Result{Service: "web", Action: string(rules.ActionRestart), Status: operation.ResultPostflightFailed}
-	if err := finishOperationSettling(store, "web", string(rules.ActionRestart), result, nil, true, false); err != nil {
+	if err := finishOperationSettling(store, "web", string(rules.ActionRestart), result, nil, true, false, state.OperationSettlingSettling); err != nil {
 		t.Fatalf("finish active postflight restart: %v", err)
 	}
 	rec, found, err = store.OperationSettling("web")
@@ -115,7 +116,7 @@ func TestOperationSettlingLifecycle(t *testing.T) {
 		t.Fatalf("active postflight restart record = %+v", rec)
 	}
 
-	if err := finishOperationSettling(store, "web", string(rules.ActionRestart), result, nil, false, false); err != nil {
+	if err := finishOperationSettling(store, "web", string(rules.ActionRestart), result, nil, false, false, state.OperationSettlingSettling); err != nil {
 		t.Fatalf("finish inactive postflight restart: %v", err)
 	}
 	if _, found, _ = store.OperationSettling("web"); found {
@@ -166,7 +167,7 @@ func TestRepairOperationSettlesLikeStart(t *testing.T) {
 	if err != nil || !found || rec.Phase != state.OperationSettlingRunning {
 		t.Fatalf("running repair settling = %+v found=%v err=%v", rec, found, err)
 	}
-	if err := finishOperationSettling(store, "web", operation.ActionRepair, result, nil, false, false); err != nil {
+	if err := finishOperationSettling(store, "web", operation.ActionRepair, result, nil, false, false, state.OperationSettlingSettling); err != nil {
 		t.Fatalf("finish repair: %v", err)
 	}
 	rec, found, err = store.OperationSettling("web")
@@ -258,5 +259,118 @@ func TestObservationKeepsTheMarkerOfAnOperationStartedMeanwhile(t *testing.T) {
 				t.Fatalf("marker = %+v found=%v err=%v, want the new operation's", rec, found, err)
 			}
 		})
+	}
+}
+
+// manualRestartFixture is a service with a skip_when_changed check and a
+// changed: restart rule, whose file changed before an operator acts on it.
+func manualRestartFixture(t *testing.T) (w *Worker, h *workerHarness, store *fakeStore, path string) {
+	t.Helper()
+	path = filepath.Join(t.TempDir(), "app.conf")
+	writeFile(t, path, "a")
+	store = newFakeStore()
+	h = &workerHarness{cache: map[string]checks.Result{"probe": {Check: "probe", OK: false}}, opResult: operation.Result{Status: operation.ResultOK}}
+	w = h.worker(map[string]any{"rules": map[string]any{"restart-on-change-config-1": changedRule(path, "restart")}}, rules.Policy{Cooldown: time.Minute}, nil)
+	w.OperationSettling = store
+	w.Gates = map[string]CheckGate{"probe": {SkipWhenChanged: []string{path}}}
+	w.RunCycle(t.Context()) // adopts the baseline
+	writeFile(t, path, "changed")
+	return w, h, store, path
+}
+
+func completeManual(t *testing.T, store *fakeStore, action string, status operation.ResultStatus) {
+	t.Helper()
+	result := operation.Result{Service: "web", Action: action, Status: status}
+	sources := ManualOperationSources{Stop: state.SourceCLIManualStop, Restore: state.SourceCLI}
+	if _, err := CompleteManualOperation(store, store, "web", action, result, nil, sources, false, false); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// An operator's restart takes in what changed on disk, so the worker must adopt
+// it: otherwise the changed: rule restarts the service a second time and a
+// skip_when_changed check stays skipped for as long as sermod runs. It is an
+// operator action, so a dry_run worker adopts it too, and it reaches sermod from
+// another process through the marker alone.
+func TestManualRestartAcknowledgesTheChangedBaseline(t *testing.T) {
+	for _, dryRun := range []bool{false, true} {
+		for _, action := range []string{string(rules.ActionRestart), string(rules.ActionStart), operation.ActionRepair} {
+			t.Run(fmt.Sprintf("%s dry_run=%t", action, dryRun), func(t *testing.T) {
+				w, h, store, path := manualRestartFixture(t)
+				w.DryRun = dryRun
+
+				completeManual(t, store, action, operation.ResultOK)
+				w.RunCycle(t.Context()) // the observation cycle
+
+				if changed, err := w.changed(path); err != nil || changed {
+					t.Fatalf("changed = %t, %v after the operator's %s", changed, err, action)
+				}
+				w.RunCycle(t.Context())
+				if reason := w.gateReason(w.Gates["probe"], nil); len(h.ops) != 0 || reason != "" {
+					t.Fatalf("ops = %v gate = %q, want no second restart and the check resumed", h.ops, reason)
+				}
+				if _, found, _ := store.OperationSettling("web"); found {
+					t.Fatal("the marker must be consumed")
+				}
+			})
+		}
+	}
+}
+
+func TestManualOperationThatDidNotRelaunchKeepsTheChangePending(t *testing.T) {
+	tests := []struct {
+		name   string
+		action string
+		status operation.ResultStatus
+	}{
+		{name: "reload", action: string(rules.ActionReload), status: operation.ResultOK},
+		{name: "resume", action: string(rules.ActionResume), status: operation.ResultOK},
+		{name: "failed restart", action: string(rules.ActionRestart), status: operation.ResultFailed},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			w, _, store, path := manualRestartFixture(t)
+
+			completeManual(t, store, tt.action, tt.status)
+			w.Rules = nil // only the baseline is under test here
+			w.RunCycle(t.Context())
+
+			if changed, err := w.changed(path); err != nil || !changed {
+				t.Fatalf("changed = %t, %v, want the change pending", changed, err)
+			}
+		})
+	}
+}
+
+// Maintenance under an explicit unmonitor: the restart happened, and a pause must
+// not keep the worker from learning it, however long the pause lasts.
+func TestManualRestartIsAcknowledgedDuringAPause(t *testing.T) {
+	w, h, store, _ := manualRestartFixture(t)
+	paused := true
+	w.IsPaused = func() bool { return paused }
+	store.now = func() time.Time { return t0.Add(-time.Hour) }
+
+	completeManual(t, store, string(rules.ActionRestart), operation.ResultOK)
+	w.RunCycle(t.Context())
+	paused = false
+	w.RunCycle(t.Context())
+
+	if len(h.ops) != 0 {
+		t.Fatalf("ops = %v, want the operator's restart to count", h.ops)
+	}
+}
+
+// A worker on a long interval may first see the marker past the age limit. A
+// finished relaunch is no abandoned operation: it still counts.
+func TestManualRestartAcknowledgedPastTheAgeLimit(t *testing.T) {
+	w, h, store, _ := manualRestartFixture(t)
+	store.now = func() time.Time { return t0.Add(-24 * time.Hour) }
+
+	completeManual(t, store, string(rules.ActionRestart), operation.ResultOK)
+	w.RunCycle(t.Context())
+	w.RunCycle(t.Context())
+
+	if len(h.ops) != 0 {
+		t.Fatalf("ops = %v, want the operator's restart to count", h.ops)
 	}
 }

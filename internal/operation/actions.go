@@ -39,6 +39,12 @@ func SettlesAfter(action string) bool {
 	return rules.ActionType(action).SettlesAfter() || action == ActionRepair
 }
 
+// Relaunches reports whether a successful action leaves the service running the
+// artifacts on disk now.
+func Relaunches(action string) bool {
+	return rules.ActionType(action).Relaunches() || action == ActionRepair
+}
+
 // CanRemainActiveAfterPostflightFailure reports whether a failed postflight can
 // still leave the service running and needing observation.
 func CanRemainActiveAfterPostflightFailure(action string) bool {

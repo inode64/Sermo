@@ -470,8 +470,8 @@ checks:
   `query` failed.
 - **`skip_when_changed: [path, …]`** — skip this check while any listed file
   differs from its acknowledged baseline (e.g. a config file or library was just
-  updated). The baseline is re-acknowledged after a successful (re)start, so the
-  check resumes once the service is reconciled.
+  updated). The baseline is re-acknowledged after a successful (re)start, by a
+  rule or by an operator, so the check resumes once the service is reconciled.
 
 Both accept a single value or a list. Gates are evaluated **after** the cycle's
 checks run, so the probe still executes but its result is suppressed; use a check's
@@ -3905,7 +3905,9 @@ tracked across artifact samples, or when `app` names a linked app whose version
 changed at the selected `level` (`major`, `minor` or `patch`; default `patch`).
 `library` in place of `path` names a catalog library (`catalog/libs/`) and
 watches its file. The first cycle adopts the current value (a daemon start
-never fires), and a successful `restart`/`start` re-baselines it. A rule's successful
+never fires), and a successful `restart`/`start` re-baselines it, from a rule, the
+Web UI or `sermoctl`: `sermod` adopts an operator's on its next cycle of that
+service, also under `dry_run`. A rule's successful
 `reload` or `resume` re-baselines everything except what a `restart` or `start`
 rule reads: that keeps the running code, so the change stays pending and its rule
 acts once the cooldown ends. A target the acting rule reads too is consumed with

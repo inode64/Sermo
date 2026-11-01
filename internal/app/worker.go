@@ -260,6 +260,7 @@ func (w *Worker) prepareCycle(ctx context.Context, settleKey string, now func() 
 		for _, window := range w.windows {
 			window.Unobserved()
 		}
+		w.acknowledgePausedRelaunch()
 		return workerCycleMode{}, true // monitoring paused for this service
 	}
 
@@ -532,7 +533,8 @@ func (w *Worker) operationSettlingState(now time.Time) (phase string, running bo
 	if !found {
 		return "", false
 	}
-	if !rec.UpdatedAt.IsZero() && now.Sub(rec.UpdatedAt) > operationSettlingMaxAge(w.OperationTimeout) {
+	// A finished relaunch is no abandoned operation, however late it is read.
+	if rec.Phase != state.OperationSettlingRelaunched && !rec.UpdatedAt.IsZero() && now.Sub(rec.UpdatedAt) > operationSettlingMaxAge(w.OperationTimeout) {
 		if rec.Phase == state.OperationSettlingRunning && w.OperationActive != nil && w.OperationActive() {
 			return "", true
 		}
@@ -542,7 +544,7 @@ func (w *Worker) operationSettlingState(now time.Time) (phase string, running bo
 	switch rec.Phase {
 	case state.OperationSettlingRunning:
 		return "", true
-	case state.OperationSettlingSettling:
+	case state.OperationSettlingSettling, state.OperationSettlingRelaunched:
 		return rec.Phase, false
 	default:
 		w.emit(Event{Kind: eventKindError, Message: fmt.Sprintf("operation settling: unknown phase %q", rec.Phase)})
@@ -560,8 +562,24 @@ func (w *Worker) clearOperationSettling() {
 // clearObservedSettling ends the observation of phase. An operator may have
 // started another operation meanwhile, whose marker is not this cycle's to clear.
 func (w *Worker) clearObservedSettling(phase string) {
-	if w.OperationSettling != nil {
-		w.noteSettlingClear(w.OperationSettling.ClearOperationSettlingPhase(w.Service, phase))
+	if w.OperationSettling == nil {
+		return
+	}
+	if phase == state.OperationSettlingRelaunched {
+		w.acknowledgeChanges()
+	}
+	w.noteSettlingClear(w.OperationSettling.ClearOperationSettlingPhase(w.Service, phase))
+}
+
+// acknowledgePausedRelaunch takes an operator's relaunch on a service whose
+// monitoring stays paused. No cycle will observe it, and without this the change
+// it brought in would read as pending the moment monitoring resumes.
+func (w *Worker) acknowledgePausedRelaunch() {
+	if w.OperationSettling == nil {
+		return
+	}
+	if rec, found, err := w.OperationSettling.OperationSettling(w.Service); err == nil && found && rec.Phase == state.OperationSettlingRelaunched {
+		w.clearObservedSettling(rec.Phase)
 	}
 }
 
@@ -939,7 +957,7 @@ func (w *Worker) operateForRemediation(ctx context.Context, action string) opera
 	}
 	result := w.Operate(ctx, action)
 	activeAfterPostflightFailure := ServiceActiveAfterPostflightFailure(ctx, action, result, nil, w.CheckDeps.Status)
-	if err := finishOperationSettling(w.OperationSettling, w.Service, action, result, nil, activeAfterPostflightFailure, inFlight); err != nil {
+	if err := finishOperationSettling(w.OperationSettling, w.Service, action, result, nil, activeAfterPostflightFailure, inFlight, state.OperationSettlingSettling); err != nil {
 		w.emit(Event{Kind: eventKindError, Action: action, Message: err.Error()})
 	}
 	return result

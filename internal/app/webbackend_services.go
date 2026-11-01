@@ -552,7 +552,8 @@ func (b *WebBackend) operationSettlingPending(name string, records map[string]st
 	if !found {
 		return false
 	}
-	if !rec.UpdatedAt.IsZero() && b.webNow().Sub(rec.UpdatedAt) > operationSettlingMaxAge(operationTimeout) {
+	// A finished relaunch is the worker's to take, however late it reads it.
+	if rec.Phase != state.OperationSettlingRelaunched && !rec.UpdatedAt.IsZero() && b.webNow().Sub(rec.UpdatedAt) > operationSettlingMaxAge(operationTimeout) {
 		// A native stop timeout can run past the age limit, as the worker knows.
 		if rec.Phase == state.OperationSettlingRunning && operationActive {
 			return true
@@ -562,7 +563,7 @@ func (b *WebBackend) operationSettlingPending(name string, records map[string]st
 		}
 		return false
 	}
-	return rec.Phase == state.OperationSettlingRunning || rec.Phase == state.OperationSettlingSettling
+	return rec.Phase == state.OperationSettlingRunning || rec.Phase == state.OperationSettlingSettling || rec.Phase == state.OperationSettlingRelaunched
 }
 
 // checkHealthSummary reports required-check health for the service list.

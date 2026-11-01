@@ -42,7 +42,9 @@ func BeginOperationSettling(store OperationSettlingStore, service, action string
 	return inFlight, nil
 }
 
-func finishOperationSettling(store OperationSettlingStore, service, action string, result operation.Result, opErr error, activeAfterPostflightFailure, inFlight bool) error {
+// finishOperationSettling closes the marker of one attempt. settled is the phase
+// an operation that needs an observation cycle leaves it in.
+func finishOperationSettling(store OperationSettlingStore, service, action string, result operation.Result, opErr error, activeAfterPostflightFailure, inFlight bool, settled string) error {
 	if store == nil || !operation.IsServiceAction(action) {
 		return nil
 	}
@@ -53,7 +55,7 @@ func finishOperationSettling(store OperationSettlingStore, service, action strin
 	}
 	settleAfter := result.OK() || activeAfterPostflightFailure
 	if opErr == nil && settleAfter && operation.SettlesAfter(action) {
-		if err := store.SetOperationSettling(service, state.OperationSettlingSettling); err != nil {
+		if err := store.SetOperationSettling(service, settled); err != nil {
 			return fmt.Errorf("mark post-operation settling for %s: %w", service, err)
 		}
 		return nil
@@ -62,4 +64,14 @@ func finishOperationSettling(store OperationSettlingStore, service, action strin
 		return fmt.Errorf("clear operation settling for %s: %w", service, err)
 	}
 	return nil
+}
+
+// manualSettledPhase is the phase an operator's operation leaves its marker in.
+// The worker acknowledges its own remediation at once; an operator's relaunch can
+// come from another process, and the marker is how it reaches the worker.
+func manualSettledPhase(action string, result operation.Result) string {
+	if result.OK() && operation.Relaunches(action) {
+		return state.OperationSettlingRelaunched
+	}
+	return state.OperationSettlingSettling
 }
