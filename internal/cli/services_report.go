@@ -61,34 +61,82 @@ func buildConfiguredNotifiers(cfg *config.Config) (map[string]notify.Notifier, [
 	return notify.Build(cfg.Notifiers(), notify.WithTemplateDir(cfg.Global.TemplateDir()))
 }
 
-// sendServicesReport delivers one services report through the notifiers named
-// by --notify, returning their effective names.
-func (a App) sendServicesReport(ctx context.Context, opts options, cfg *config.Config, msg notify.Message) ([]string, int) {
+// servicesReportFailure is one notifier that did not deliver a services report.
+type servicesReportFailure struct {
+	Notifier string `json:"notifier"`
+	Error    string `json:"error"`
+}
+
+// servicesReportDelivery is what each notifier --notify selected did with a
+// report. Its zero value is a command run without --notify.
+type servicesReportDelivery struct {
+	sent   []string
+	failed []servicesReportFailure
+}
+
+// addTo records the outcome in the command's JSON document.
+func (d servicesReportDelivery) addTo(out map[string]any) map[string]any {
+	if d.sent != nil {
+		out[cliJSONKeyNotified] = d.sent
+	}
+	if len(d.failed) > 0 {
+		out[cliJSONKeyNotifyFailed] = d.failed
+	}
+	return out
+}
+
+func (d servicesReportDelivery) exitCode() int {
+	if len(d.failed) > 0 {
+		return exitRuntimeError
+	}
+	return exitSuccess
+}
+
+// printServicesDelivery reports the outcome after the listing and returns the
+// command's exit code.
+func (a App) printServicesDelivery(opts options, d servicesReportDelivery) int {
+	if len(d.sent) > 0 && !opts.quiet {
+		fmt.Fprintf(a.Stdout, "sent services report to %s\n", strings.Join(d.sent, ", "))
+	}
+	for _, failure := range d.failed {
+		fmt.Fprintf(a.Stderr, "send services report to %s: %s\n", failure.Notifier, failure.Error)
+	}
+	return d.exitCode()
+}
+
+// sendServicesReport delivers one services report through every notifier named
+// by --notify. One that fails does not stop the others: the listing and every
+// notifier's outcome still reach the operator. The exit code it returns is only
+// for a selection that sent nothing.
+func (a App) sendServicesReport(ctx context.Context, opts options, cfg *config.Config, msg notify.Message) (servicesReportDelivery, int) {
 	registry, warnings := a.BuildReportNotifiers(cfg)
 	for _, warning := range warnings {
 		fmt.Fprintf(a.Stderr, cliWarningFormat, warning)
 	}
-	selected, names, err := selectServicesReportNotifiers(opts.notifyNames, registry)
+	selected, err := selectServicesReportNotifiers(opts.notifyNames, registry)
 	if err != nil {
-		return nil, a.commandUsageError(commandServices, err.Error())
+		return servicesReportDelivery{}, a.commandUsageError(commandServices, err.Error())
 	}
 	if len(selected) == 0 {
-		return nil, a.fail(opts, "services --notify selected no enabled notifiers")
+		return servicesReportDelivery{}, a.fail(opts, "services --notify selected no enabled notifiers")
 	}
 
 	sendCtx, cancel := context.WithTimeout(ctx, opts.timeout)
 	defer cancel()
+	delivery := servicesReportDelivery{sent: []string{}}
 	for _, n := range selected {
 		if err := n.Send(sendCtx, msg); err != nil {
-			return nil, a.fail(opts, fmt.Sprintf("send services report to %s: %v", n.Name(), err))
+			delivery.failed = append(delivery.failed, servicesReportFailure{Notifier: n.Name(), Error: err.Error()})
+			continue
 		}
+		delivery.sent = append(delivery.sent, n.Name())
 	}
-	return names, exitSuccess
+	return delivery, exitSuccess
 }
 
-func selectServicesReportNotifiers(selection []string, registry map[string]notify.Notifier) ([]notify.Notifier, []string, error) {
+func selectServicesReportNotifiers(selection []string, registry map[string]notify.Notifier) ([]notify.Notifier, error) {
 	if len(selection) == 0 {
-		return nil, nil, nil
+		return nil, nil
 	}
 	names := servicesReportNotifierNames(selection, registry)
 	seen := map[string]struct{}{}
@@ -102,17 +150,12 @@ func selectServicesReportNotifiers(selection []string, registry map[string]notif
 		}
 		n, ok := registry[name]
 		if !ok {
-			return nil, nil, fmt.Errorf("services --notify references unknown or disabled notifier %q", name)
+			return nil, fmt.Errorf("services --notify references unknown or disabled notifier %q", name)
 		}
 		seen[name] = struct{}{}
 		selected = append(selected, n)
 	}
-	selected = notify.PreferWall(selected)
-	outNames := make([]string, 0, len(selected))
-	for _, notifier := range selected {
-		outNames = append(outNames, notifier.Name())
-	}
-	return selected, outNames, nil
+	return notify.PreferWall(selected), nil
 }
 
 func servicesReportNotifierNames(selection []string, registry map[string]notify.Notifier) []string {

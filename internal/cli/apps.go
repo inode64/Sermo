@@ -4,7 +4,6 @@ package cli
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	"sermo/internal/app"
@@ -81,27 +80,19 @@ func (a App) listCategory(ctx context.Context, opts options, l catalogListing) i
 		}
 	}
 
-	var notified []string
+	var delivery servicesReportDelivery
 	if category == config.CategoryService && len(opts.notifyNames) > 0 {
-		var code int
-		notified, code = a.sendServicesReport(ctx, opts, cfg, servicesReportMessage(reports, includeMissing, time.Now()))
+		delivery, code = a.sendServicesReport(ctx, opts, cfg, servicesReportMessage(reports, includeMissing, time.Now()))
 		if code != exitSuccess {
 			return code
 		}
 	}
 	if opts.json {
-		out := map[string]any{jsonKey: reports}
-		if notified != nil {
-			out[cliJSONKeyNotified] = notified
-		}
-		writeJSON(a.Stdout, out)
-		return exitSuccess
+		writeJSON(a.Stdout, delivery.addTo(map[string]any{jsonKey: reports}))
+		return delivery.exitCode()
 	}
 	a.printApps(reports, l.empty, opts.long, l.heading)
-	if notified != nil && !opts.quiet {
-		fmt.Fprintf(a.Stdout, "sent services report to %s\n", strings.Join(notified, ", "))
-	}
-	return exitSuccess
+	return a.printServicesDelivery(opts, delivery)
 }
 
 // printApps renders the report table. The VERSION column shows the short version

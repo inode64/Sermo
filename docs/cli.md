@@ -345,7 +345,10 @@ listed with state `error` and a warning on stderr.
 "state", "monitored", "enabled", "error"}]}`. `--notify` sends a configured
 services health report: a monitored service in a failed, warning, stale or
 restart-required state, and any service in the `error` state, counts as an
-issue, and disabled or unmonitored services are counted apart.
+issue, and disabled or unmonitored services are counted apart. Every selected
+notifier is tried: one that fails is named on stderr (`notify_failed`, a list of
+`{notifier, error}`, with `--json`), the others and the listing still go out, and
+the command exits `2`.
 
 `sermoctl patterns` lists only the output-analysis pattern sets that configured
 services name in `analyze.use`, with their rule count and the services using

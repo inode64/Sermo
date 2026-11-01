@@ -5,7 +5,6 @@ import (
 	"cmp"
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	"sermo/internal/app"
@@ -68,26 +67,19 @@ func (a App) runConfiguredServices(ctx context.Context, opts options) int {
 		return code
 	}
 
-	var notified []string
+	var delivery servicesReportDelivery
 	if len(opts.notifyNames) > 0 {
-		notified, code = a.sendServicesReport(ctx, opts, cfg, configuredServicesReportMessage(services, time.Now()))
+		delivery, code = a.sendServicesReport(ctx, opts, cfg, configuredServicesReportMessage(services, time.Now()))
 		if code != exitSuccess {
 			return code
 		}
 	}
 	if opts.json {
-		out := map[string]any{commandServices: services}
-		if notified != nil {
-			out[cliJSONKeyNotified] = notified
-		}
-		writeJSON(a.Stdout, out)
-		return exitSuccess
+		writeJSON(a.Stdout, delivery.addTo(map[string]any{commandServices: services}))
+		return delivery.exitCode()
 	}
 	a.printConfiguredServices(services)
-	if notified != nil && !opts.quiet {
-		fmt.Fprintf(a.Stdout, "sent services report to %s\n", strings.Join(notified, ", "))
-	}
-	return exitSuccess
+	return a.printServicesDelivery(opts, delivery)
 }
 
 // configuredServices builds one row per configured service, in config order.

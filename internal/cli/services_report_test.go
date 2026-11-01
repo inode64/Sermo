@@ -3,8 +3,11 @@ package cli
 import (
 	"bytes"
 	"context"
+	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -18,6 +21,7 @@ type fakeReportNotifier struct {
 	name string
 	typ  string
 	msg  notify.Message
+	err  error
 }
 
 func (f *fakeReportNotifier) Name() string { return f.name }
@@ -31,7 +35,15 @@ func (f *fakeReportNotifier) Type() string {
 
 func (f *fakeReportNotifier) Send(_ context.Context, msg notify.Message) error {
 	f.msg = msg
-	return nil
+	return f.err
+}
+
+func reportNotifierNames(notifiers []notify.Notifier) string {
+	names := make([]string, 0, len(notifiers))
+	for _, n := range notifiers {
+		names = append(names, n.Name())
+	}
+	return strings.Join(names, ",")
 }
 
 func TestServicesReportMessageHTML(t *testing.T) {
@@ -110,18 +122,87 @@ defaults: { policy: { cooldown: 5m } }
 	}
 }
 
+// One notifier that cannot deliver (a wall with nobody logged in) must not cost
+// the others their report, nor the operator the listing, and the exit status
+// must still say something failed.
+func TestServicesNotifyTriesEveryNotifier(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		args []string
+		want string
+	}{
+		{name: "configured services", args: []string{"services"}, want: "no configured services"},
+		{name: "catalog", args: []string{"services", "catalog"}, want: "no installed services"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			root := t.TempDir()
+			global := filepath.Join(root, "sermo.yml")
+			mustWrite(t, global, "defaults: { policy: { cooldown: 5m } }\n")
+			var failing, working *fakeReportNotifier
+			run := func(extra ...string) (int, string, string) {
+				failing = &fakeReportNotifier{name: "a-wall", typ: notify.TypeWall, err: errors.New("no active terminal sessions")}
+				working = &fakeReportNotifier{name: "b-ops"}
+				var stdout, stderr bytes.Buffer
+				app := hermeticApp(t, App{
+					Env: func(string) string { return "" }, Stdout: &stdout, Stderr: &stderr,
+					BuildReportNotifiers: func(*config.Config) (map[string]notify.Notifier, []string) {
+						return map[string]notify.Notifier{failing.name: failing, working.name: working}, nil
+					},
+				})
+				args := append([]string{"--config", global, "--notify", "all"}, tc.args...)
+				code := app.Run(context.Background(), append(args, extra...))
+				return code, stdout.String(), stderr.String()
+			}
+
+			code, stdout, stderr := run()
+			if code != exitRuntimeError {
+				t.Fatalf("exit = %d, want %d", code, exitRuntimeError)
+			}
+			if working.msg.Subject == "" {
+				t.Fatal("the notifier after the failed one received nothing")
+			}
+			if !strings.Contains(stdout, tc.want) || !strings.Contains(stdout, "sent services report to b-ops") {
+				t.Fatalf("stdout = %q, want the listing and the delivery", stdout)
+			}
+			if !strings.Contains(stderr, "a-wall") || !strings.Contains(stderr, "no active terminal sessions") {
+				t.Fatalf("stderr = %q, want the failed notifier and its reason", stderr)
+			}
+
+			code, stdout, stderr = run("--json")
+			if code != exitRuntimeError {
+				t.Fatalf("--json exit = %d, want %d", code, exitRuntimeError)
+			}
+			var got struct {
+				Services []any                   `json:"services"`
+				Notified []string                `json:"notified"`
+				Failed   []servicesReportFailure `json:"notify_failed"`
+			}
+			if err := json.Unmarshal([]byte(stdout), &got); err != nil {
+				t.Fatalf("--json stdout %q: %v", stdout, err)
+			}
+			if !slices.Equal(got.Notified, []string{"b-ops"}) || len(got.Failed) != 1 ||
+				got.Failed[0].Notifier != "a-wall" || !strings.Contains(got.Failed[0].Error, "no active terminal sessions") {
+				t.Fatalf("--json outcome = %+v", got)
+			}
+			if stderr != "" {
+				t.Fatalf("--json stderr = %q, want every outcome in the document", stderr)
+			}
+		})
+	}
+}
+
 func TestSelectServicesReportNotifiers(t *testing.T) {
 	ops := &fakeReportNotifier{name: "ops"}
 	pager := &fakeReportNotifier{name: "pager"}
 	registry := map[string]notify.Notifier{"pager": pager, "ops": ops}
-	selected, names, err := selectServicesReportNotifiers([]string{"all"}, registry)
+	selected, err := selectServicesReportNotifiers([]string{"all"}, registry)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(selected) != 2 || strings.Join(names, ",") != "ops,pager" {
-		t.Fatalf("all selected names=%v selected=%d", names, len(selected))
+	if names := reportNotifierNames(selected); names != "ops,pager" {
+		t.Fatalf("all selected = %s", names)
 	}
-	if _, _, err := selectServicesReportNotifiers([]string{"ghost"}, registry); err == nil {
+	if _, err := selectServicesReportNotifiers([]string{"ghost"}, registry); err == nil {
 		t.Fatal("unknown notifier must fail")
 	}
 }
@@ -131,11 +212,11 @@ func TestSelectServicesReportNotifiersWallSuppressesTTY(t *testing.T) {
 		"tty":  &fakeReportNotifier{name: "tty", typ: "tty"},
 		"wall": &fakeReportNotifier{name: "wall", typ: "wall"},
 	}
-	selected, names, err := selectServicesReportNotifiers([]string{"tty", "wall"}, registry)
+	selected, err := selectServicesReportNotifiers([]string{"tty", "wall"}, registry)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(selected) != 1 || strings.Join(names, ",") != "wall" {
-		t.Fatalf("selected names=%v selected=%d, want wall only", names, len(selected))
+	if names := reportNotifierNames(selected); names != "wall" {
+		t.Fatalf("selected = %s, want wall only", names)
 	}
 }

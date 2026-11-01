@@ -18,6 +18,7 @@ const (
 	cliJSONKeyMonitorSource  = "monitor_source"
 	cliJSONKeyMonitoring     = "monitoring"
 	cliJSONKeyNotified       = "notified"
+	cliJSONKeyNotifyFailed   = "notify_failed"
 	cliJSONKeyOK             = "ok"
 	cliJSONKeyPanic          = "panic"
 	cliJSONKeyPanicChanged   = "panic_changed_at"
