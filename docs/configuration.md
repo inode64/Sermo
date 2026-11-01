@@ -3741,6 +3741,12 @@ The conditions (declare at least one):
   duration. A path already stale on the first cycle fires immediately; it re-arms
   once the path is modified or removed.
 
+A scan must answer within `check.timeout` (`engine.default_timeout` when unset;
+raise it for a recursive watch over a large tree). One that does not, because a
+dead network mount blocks the read or the tree is too slow, reports the check
+unavailable and keeps every baseline, and later cycles do not start another until
+it returns, so a hung mount costs one blocked read instead of stopping a reload.
+
 The watch's state remains failed while any path breaches a `size` threshold or
 `older_than`, or while a configured root is missing. These conditions open one
 global `event_notify` incident per watch, including in `dry_run`, and recover

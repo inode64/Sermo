@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -596,6 +597,81 @@ func TestFileWatchUnreadableSubtreeKeepsItsEntries(t *testing.T) {
 	blind.runCycle(context.Background())
 	if fresh.Observation() != checks.ObservationHealthy {
 		t.Fatalf("snapshot of a subtree never read = %+v, want the skip it always was", fresh)
+	}
+}
+
+// hungScanWatcher is a file watch whose scan blocks like a hard mount gone dead.
+func hungScanWatcher(h *fileWatchHarness, hung *hungRead, path string, baseline ...string) *fileWatcher {
+	w := h.watcher(path, false, fileCond{onDelete: true, sizeChange: true})
+	w.scanTimeout = 20 * time.Millisecond
+	w.lstat = func(string) (fs.FileInfo, error) {
+		hung.block()
+		return nil, fs.ErrNotExist
+	}
+	w.baseline = map[string]fileState{}
+	for _, path := range baseline {
+		w.baseline[path] = fileState{size: 1}
+	}
+	return w
+}
+
+// A scan blocked in the kernel takes no context, so the cycle has to stop waiting
+// for it: a stuck cycle held every reload and shutdown behind the generation's join.
+func TestFileWatchHungScanLeavesTheMonitorRunning(t *testing.T) {
+	hung := newHungRead(t)
+	w := hungScanWatcher(&fileWatchHarness{}, hung, filepath.Join(t.TempDir(), "report"))
+	assertMonitorSurvives(t, hung, &Watch{Name: w.name, Cycle: w.runCycle})
+}
+
+// A scan that gave no answer reported nothing about the paths: it is neither a
+// deletion nor a recovery, and it must read as unavailable until one comes.
+func TestFileWatchHungScanReadsAsUnavailable(t *testing.T) {
+	hung := newHungRead(t)
+	h := &fileWatchHarness{}
+	path := filepath.Join(t.TempDir(), "report")
+	w := hungScanWatcher(h, hung, path, path)
+	var latest checks.Result
+	w.publish = func(_, _ string, res checks.Result) { latest = res }
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		w.runCycle(context.Background())
+	}()
+	awaitWithin(t, done, "a cycle over a hung scan")
+
+	if len(h.fired) != 0 {
+		t.Fatalf("a hung scan fired %v", h.fired)
+	}
+	if latest.Observation() != checks.ObservationUnavailable || !strings.Contains(latest.Message, path) {
+		t.Fatalf("snapshot = %+v, want the hung path reported unavailable", latest)
+	}
+	if _, kept := w.baseline[path]; !kept {
+		t.Fatal("a hung scan dropped the path's baseline")
+	}
+}
+
+// A reload rebuilds the watch while the old scan is still blocked. The new
+// watcher must wait for that one, not start a second on the same dead mount.
+func TestFileWatchRebuiltDuringAHungScanDoesNotStackAnother(t *testing.T) {
+	hung := newHungRead(t)
+	h := &fileWatchHarness{}
+	path := filepath.Join(t.TempDir(), "report")
+	first := hungScanWatcher(h, hung, path, path)
+	second := hungScanWatcher(h, hung, path, path)
+	for _, w := range []*fileWatcher{first, second} {
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+			w.runCycle(context.Background())
+		}()
+		awaitWithin(t, done, "a cycle over a hung scan")
+	}
+	if got := hung.calls.Load(); got != 1 {
+		t.Fatalf("blocked reads = %d, want the first one only", got)
+	}
+	if len(h.fired) != 0 {
+		t.Fatalf("a hung scan fired %v", h.fired)
 	}
 }
 

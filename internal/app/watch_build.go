@@ -586,6 +586,7 @@ func buildFileWatch(name string, entry, checkEntry map[string]any, deps Deps, in
 		recordBand:    fileBandRecorder(deps, name, checkEntry),
 		now:           deps.Now,
 		severity:      watchSeverityFor(checks.CheckTypeFile, entry, checkEntry),
+		scanTimeout:   checkProbeTimeout(checkEntry, deps.DefaultTimeout, deps.OperationTimeout),
 	}
 	watch := newStatefulWatch(name, checks.CheckTypeFile, entry, deps, interval, fw.runCycle)
 	watch.FireOnFail = true
