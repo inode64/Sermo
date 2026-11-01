@@ -31,9 +31,9 @@ func (a App) runEvents(ctx context.Context, opts options) int {
 		return a.commandUsageError(commandEvents, "events accepts at most one service name")
 	}
 
-	cfg, err := a.LoadConfig(opts.globalPath())
-	if err != nil {
-		return a.fail(opts, fmt.Sprintf("load config failed: %v", err))
+	cfg, code := a.loadConfig(opts)
+	if cfg == nil {
+		return code
 	}
 	service, limit := eventListTarget(opts, cfg)
 	evs, err := a.FetchEvents(ctx, cfg, service, limit)

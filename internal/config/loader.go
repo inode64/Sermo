@@ -161,6 +161,17 @@ func Load(globalPath string, opts ...Option) (*Config, error) {
 	return cfg, nil
 }
 
+// IsInvalid reports whether a Load error is a fault in the configuration, which
+// the operator fixes by editing it: Load read a file and rejected it. A file or
+// directory it could not read is an I/O failure instead.
+func IsInvalid(err error) bool {
+	if err == nil {
+		return false
+	}
+	_, unreadable := errors.AsType[*fs.PathError](err)
+	return !unreadable
+}
+
 func loadGlobal(path string) (Global, []Issue, error) {
 	data, err := hostfs.ReadFile(path)
 	if err != nil {

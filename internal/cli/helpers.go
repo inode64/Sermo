@@ -57,9 +57,17 @@ func (a App) loadConfig(opts options) (*config.Config, int) {
 	cfg, err := a.LoadConfig(globalPath)
 	if err != nil {
 		a.reportError(opts, fmt.Sprintf("load config failed: %v", err))
-		return nil, exitRuntimeError
+		return nil, configLoadExit(err)
 	}
 	return cfg, exitSuccess
+}
+
+// configLoadExit is the exit code of a failed config load.
+func configLoadExit(err error) int {
+	if config.IsInvalid(err) {
+		return exitConfigInvalid
+	}
+	return exitRuntimeError
 }
 
 // renderServiceList prints the shared tail of the per-service list commands

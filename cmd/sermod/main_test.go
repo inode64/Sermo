@@ -53,6 +53,25 @@ defaults:
 	}
 }
 
+// A config file the daemon read and rejected is a configuration error, the same
+// as one that fails validation; a file it could not read is not.
+func TestRunExitCodeForConfigLoadFailures(t *testing.T) {
+	dir := t.TempDir()
+	global := filepath.Join(dir, "sermo.yml")
+	daemonLoadOptions = []config.Option{config.WithCatalogDirs(t.TempDir())}
+	t.Cleanup(func() { daemonLoadOptions = nil })
+
+	if code := run([]string{"run", "--config", global}); code != exitFailure {
+		t.Fatalf("run() on a missing file = %d, want %d", code, exitFailure)
+	}
+	if err := os.WriteFile(global, []byte("engine:\n  interval: [unterminated\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if code := run([]string{"run", "--config", global}); code != exitConfigInvalid {
+		t.Fatalf("run() on a YAML syntax error = %d, want %d", code, exitConfigInvalid)
+	}
+}
+
 // TestRepoDevConfigHasMonitorTargets guards the source-tree development config.
 // It loads the example target directories directly, without rewriting paths, so
 // developers can validate the same tree with examples/sermo-dev.yml once the

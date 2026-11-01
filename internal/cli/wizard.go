@@ -92,10 +92,9 @@ func (a App) runWizard(ctx context.Context, opts options) int {
 func (a App) runWizardSession(ctx context.Context, opts options) (code int, err error) {
 	defer assist.Recover(&err)
 	globalPath := opts.globalPath()
-	cfg, err := a.LoadConfig(globalPath)
-	if err != nil {
-		a.reportError(opts, fmt.Sprintf("load config failed: %v", err))
-		return exitRuntimeError, nil
+	cfg, code := a.loadConfig(opts)
+	if cfg == nil {
+		return code, nil
 	}
 
 	p := assist.NewPrompt(a.stdinReader(), a.Stdout)
@@ -154,7 +153,7 @@ func (a App) runWizardSession(ctx context.Context, opts options) (code int, err 
 		cfg, err = a.LoadConfig(globalPath)
 		if err != nil {
 			a.reportError(opts, fmt.Sprintf("reload config after deleting old %s files failed: %v", noun, err))
-			return exitRuntimeError, nil
+			return configLoadExit(err), nil
 		}
 	}
 	if err := ensureNoWatchCollisions(cfg, res.Watches); err != nil {

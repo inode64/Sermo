@@ -108,3 +108,42 @@ checks:
 		t.Fatalf("stderr = %q, want ERROR bad", stderr.String())
 	}
 }
+
+// A file Sermo read and rejected is the operator's configuration to fix, whatever
+// command met it and whichever file it was; only a file it could not read is an
+// I/O failure.
+func TestConfigLoadFailureExitCodes(t *testing.T) {
+	const paths = "paths:\n  services: [services]\n  watches: [watches]\n"
+	for _, tc := range []struct {
+		name  string
+		files map[string]string
+		want  int
+	}{
+		{name: "YAML syntax", files: map[string]string{"sermo.yml": "engine:\n  interval: [unterminated\n"}, want: exitConfigInvalid},
+		{name: "second document", files: map[string]string{"sermo.yml": "engine: {}\n---\nweb: {}\n"}, want: exitConfigInvalid},
+		{name: "paths of the wrong shape", files: map[string]string{"sermo.yml": "paths:\n  services: 7\n"}, want: exitConfigInvalid},
+		{name: "service file syntax", files: map[string]string{"sermo.yml": paths, "services/bad.yml": "name: [unterminated\n"}, want: exitConfigInvalid},
+		{name: "watch without a name", files: map[string]string{"sermo.yml": paths, "watches/bad.yml": "check: { type: load }\n"}, want: exitConfigInvalid},
+		{name: "missing global file", want: exitRuntimeError},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			root := t.TempDir()
+			for name, body := range tc.files {
+				path := filepath.Join(root, name)
+				if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+					t.Fatal(err)
+				}
+				mustWrite(t, path, body)
+			}
+			global := filepath.Join(root, "sermo.yml")
+			for _, args := range [][]string{{"config", "validate"}, {"events"}, {"panic", "status"}, {"wizard"}, {"sessions"}} {
+				var stderr bytes.Buffer
+				app := hermeticApp(t, App{Env: func(string) string { return "" }, Stdout: &bytes.Buffer{}, Stderr: &stderr})
+				code := app.Run(context.Background(), append([]string{"--config", global}, args...))
+				if code != tc.want || !strings.Contains(stderr.String(), "load config failed") {
+					t.Errorf("%v exit = %d, stderr = %q, want %d", args, code, stderr.String(), tc.want)
+				}
+			}
+		})
+	}
+}

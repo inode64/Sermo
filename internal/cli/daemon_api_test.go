@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
+	"io/fs"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -107,7 +107,7 @@ func TestEventsConfigFailureIsReportedOnce(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	app := hermeticApp(t, App{
 		LoadConfig: func(string, ...config.Option) (*config.Config, error) {
-			return nil, errors.New("unreadable config")
+			return nil, &fs.PathError{Op: "open", Path: "/etc/sermo/sermo.yml", Err: fs.ErrPermission}
 		},
 		Stdout: &stdout, Stderr: &stderr,
 	})

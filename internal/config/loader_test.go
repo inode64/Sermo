@@ -1014,3 +1014,22 @@ func TestLoadRefusesASecondYAMLDocument(t *testing.T) {
 		})
 	}
 }
+
+func TestIsInvalidSeparatesRejectedFromUnreadable(t *testing.T) {
+	dir := t.TempDir()
+	global := filepath.Join(dir, "sermo.yml")
+	if IsInvalid(nil) {
+		t.Fatal("IsInvalid(nil) = true")
+	}
+	_, err := Load(global, WithCatalogDirs(t.TempDir()))
+	if err == nil || IsInvalid(err) {
+		t.Fatalf("missing file: err = %v, IsInvalid = %v, want an I/O failure", err, IsInvalid(err))
+	}
+	if err := os.WriteFile(global, []byte("engine: [unterminated\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	_, err = Load(global, WithCatalogDirs(t.TempDir()))
+	if err == nil || !IsInvalid(err) {
+		t.Fatalf("YAML syntax: err = %v, IsInvalid = %v, want a configuration fault", err, IsInvalid(err))
+	}
+}

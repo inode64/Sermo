@@ -217,6 +217,9 @@ func loadDaemonConfig(logger *slog.Logger, globalPath string) (*config.Config, i
 	cfg, err := config.Load(globalPath, daemonLoadOptions...)
 	if err != nil {
 		logger.Error("load config", logFieldError, err)
+		if config.IsInvalid(err) {
+			return nil, exitConfigInvalid
+		}
 		return nil, exitFailure
 	}
 	if issues := config.Validate(cfg); len(issues) > 0 {
