@@ -2883,7 +2883,7 @@ protocols that only return a greeting banner (such as `smtp`, `imap`, `pop`,
 `greeting` result stays as the server sent it). Any registered connection protocol that reports a version or
 banner participates; these names are examples, not the full set. The first cycle baselines silently;
 a later change **fails** the check and the result data carries
-`version`/`version_old`. The baseline lives in the check instance, so it persists
+`version`/`version_old`. A cycle that reports no version keeps the baseline. The baseline lives in the check instance, so it persists
 while the service worker or watch is alive and resets when that worker/watch is
 rebuilt, for example after a config reload. It composes with `on_change` (the
 SSH/SNMP fingerprint identity) — both can be enabled at once.

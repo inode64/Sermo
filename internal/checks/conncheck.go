@@ -297,28 +297,28 @@ func (c connCheck) changed(res conn.Result) (problems []string, extra map[string
 	const connChangeExtraInitialCapacity = 2
 
 	extra = make(map[string]any, connChangeExtraInitialCapacity)
-	if c.onChange {
-		// An observation that carries no identity cannot be compared as one, and
-		// must not overwrite the identity already on record. A D-Bus name that is
-		// activatable but not currently activated answers without an owner, so
-		// treating "" as an identity would report a change every time such a
-		// service started or stopped on demand — and again on the first real
-		// reading, against a baseline that was never observed.
-		if fingerprint := res.Extra[conn.ExtraKeyFingerprint]; fingerprint != "" {
-			if c.state.primed && c.state.lastFingerprint != "" && fingerprint != c.state.lastFingerprint {
-				problems = append(problems, fmt.Sprintf("fingerprint changed (%s -> %s)", c.state.lastFingerprint, fingerprint))
-				extra[DataKeyFingerprintOld] = c.state.lastFingerprint
-			}
-			c.state.lastFingerprint, extra[DataKeyFingerprint] = fingerprint, fingerprint
+	// An observation that carries no identity cannot be compared as one, and must
+	// not overwrite the identity already on record. A D-Bus name that is
+	// activatable but not currently activated answers without an owner, and several
+	// probes read their version best effort, so treating "" as an identity would
+	// report a change every time such a service started or stopped on demand or an
+	// INFO failed — and again on the first real reading, against a baseline that was
+	// never observed.
+	track := func(identity string, last *string, key, oldKey string) {
+		if identity == "" {
+			return
 		}
+		if c.state.primed && *last != "" && identity != *last {
+			problems = append(problems, fmt.Sprintf("%s changed (%s -> %s)", key, *last, identity))
+			extra[oldKey] = *last
+		}
+		*last, extra[key] = identity, identity
+	}
+	if c.onChange {
+		track(res.Extra[conn.ExtraKeyFingerprint], &c.state.lastFingerprint, DataKeyFingerprint, DataKeyFingerprintOld)
 	}
 	if c.onVersionChange {
-		version := versionIdentity(res)
-		if c.state.primed && version != c.state.lastVersion {
-			problems = append(problems, fmt.Sprintf("version changed (%s -> %s)", c.state.lastVersion, version))
-			extra[DataKeyVersionOld] = c.state.lastVersion
-		}
-		c.state.lastVersion, extra[DataKeyVersion] = version, version
+		track(versionIdentity(res), &c.state.lastVersion, DataKeyVersion, DataKeyVersionOld)
 	}
 	primed := c.state.primed
 	c.state.primed = true

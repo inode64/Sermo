@@ -145,6 +145,42 @@ func TestConnVersionChangeIgnoresPerConnectionGreetingText(t *testing.T) {
 	}
 }
 
+// A version read best effort can be missing from a cycle that proved the server
+// alive: a failed INFO or buildInfo says nothing about what is installed.
+func TestConnVersionChangeSkipsACycleWithoutAVersion(t *testing.T) {
+	tests := []struct {
+		name    string
+		results []conn.Result
+	}{
+		{name: "gap after a baseline", results: []conn.Result{{Version: "7.2.4"}, {}, {Version: "7.2.4"}}},
+		{name: "gap before the first version", results: []conn.Result{{}, {Version: "7.2.4"}, {Version: "7.2.4"}}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			c := connCheck{
+				name: "cache", timeout: time.Second,
+				proto:           fakeProto{},
+				cfg:             conn.Config{Host: "h", Port: 6379},
+				onVersionChange: true,
+				state:           &connState{},
+				probe:           probeSeq(append(test.results, conn.Result{Version: "7.4.0"})...),
+			}
+			for cycle := range test.results {
+				if r := c.Run(context.Background()); !r.OK {
+					t.Fatalf("cycle %d: %s", cycle, r.Message)
+				}
+			}
+			r := c.Run(context.Background())
+			if r.OK {
+				t.Fatal("a real upgrade after the gap must alert")
+			}
+			if r.Data[DataKeyVersionOld] != "7.2.4" {
+				t.Fatalf("version_old = %v, want the last version seen", r.Data[DataKeyVersionOld])
+			}
+		})
+	}
+}
+
 func TestConnChangeAndVersionTogether(t *testing.T) {
 	// on_change (fingerprint) and on_version_change can both be active.
 	c := connCheck{
