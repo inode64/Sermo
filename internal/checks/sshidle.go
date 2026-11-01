@@ -353,7 +353,7 @@ func sampleSSHIdle(sessions []utmp.Session, snapshot map[int]process.Identity, l
 		// keeps denying while it runs, including in a detached session.
 		window := terminalMultiplexed(processes, snapshot)
 		if !window {
-			ssh, err := sshIdleTerminalIsSSH(session.Line, processes, snapshot, sshdFilters)
+			ssh, err := sshIdleTerminalIsSSH(session, processes, snapshot, sshdFilters)
 			if err != nil {
 				return SSHIdleSample{}, err
 			}
@@ -385,15 +385,23 @@ func sampleSSHIdle(sessions []utmp.Session, snapshot map[int]process.Identity, l
 
 // sshIdleTerminalIsSSH attributes a terminal to a configured sshd. An
 // unattributable terminal is an error: ssh_idle feeds guards and fails closed.
-func sshIdleTerminalIsSSH(line string, processes []process.Identity, snapshot map[int]process.Identity, sshdFilters []process.IdentityFilter) (bool, error) {
+// That covers a remote login no sshd accounts for: a session that outlived its
+// listener ends its ancestry at PID 1, which proves nothing about what runs in it.
+func sshIdleTerminalIsSSH(session utmp.Session, processes []process.Identity, snapshot map[int]process.Identity, sshdFilters []process.IdentityFilter) (bool, error) {
 	ssh, _, unknown, err := terminalSSH(processes, snapshot, sshdFilters, nil)
 	if err != nil {
-		return false, fmt.Errorf("attribute terminal %s to sshd: %w", line, err)
+		return false, fmt.Errorf("attribute terminal %s to sshd: %w", session.Line, err)
 	}
-	if unknown {
-		return false, fmt.Errorf("cannot attribute terminal %s to sshd", line)
+	if unknown || (!ssh && remoteTerminal(session)) {
+		return false, fmt.Errorf("cannot attribute terminal %s to sshd", session.Line)
 	}
 	return ssh, nil
+}
+
+// remoteTerminal reports a login utmp records with a remote origin, on a line
+// other than a local console.
+func remoteTerminal(session utmp.Session) bool {
+	return session.Host != "" && !strings.HasPrefix(session.Line, "tty")
 }
 
 func sampleSSHSessions(sessions []utmp.Session, snapshot map[int]process.Identity, terminal func(string) (utmp.Terminal, error), now time.Time, sshdFilters []process.IdentityFilter, resolveUser process.UserResolver, sudoBoundary func(utmp.Session, []process.Identity) (sshSudoProcesses, bool)) SSHSessionSample {
@@ -444,7 +452,7 @@ func sampleSSHSessions(sessions []utmp.Session, snapshot map[int]process.Identit
 			continue
 		}
 		if !ssh {
-			if session.Host != "" && !strings.HasPrefix(session.Line, "tty") {
+			if remoteTerminal(session) {
 				addSSHSessionIssue(&sample, session, snapshot, "no configured sshd identity in the live process ancestry")
 				continue
 			}

@@ -989,7 +989,10 @@ outside this check; use `tcp_connections` for transport connections. Terminal
 atime depends on the host's atime policy. If utmp, a terminal, process ancestry,
 an executable needed by a protection filter, or owner resolution cannot be read,
 the check is unavailable; a guard therefore denies the operation rather than
-assuming that no session is protected.
+assuming that no session is protected. A remote login whose terminal no
+configured `sshd` accounts for reads the same way: a split OpenSSH session that
+outlived a listener restart, or a residual `sudo` terminal, keeps the check
+unavailable until it ends.
 
 This fail-closed check behavior is independent from the dashboard inventory.
 The dashboard may show a source as `partial`, retaining exactly verified SSH

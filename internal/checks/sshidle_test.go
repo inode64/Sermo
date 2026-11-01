@@ -378,6 +378,33 @@ func TestSampleSSHSessionsDoesNotCountPreservedRemoteTerminalAsConsole(t *testin
 	}
 }
 
+// A split OpenSSH session reparents to PID 1 when its listener restarts, so its
+// ancestry no longer reaches the configured sshd. It is still a remote login,
+// and a protected job may be running in it: ssh_idle feeds guards, so it must
+// report that it cannot tell rather than read the terminal as a local one.
+func TestSampleSSHIdleFailsClosedOnAnUnattributedRemoteTerminal(t *testing.T) {
+	now := time.Date(2026, time.August, 5, 12, 0, 0, 0, time.UTC)
+	const jobPID = sshShellPID + 1
+	snapshot := sshSnapshot(
+		process.Identity{PID: sshPrivPID, PPID: 1, Exe: "/usr/lib/sshd-session", ExeOK: true},
+		process.Identity{PID: sshPeerPID, PPID: sshPrivPID, UID: testUserID, Exe: "/usr/lib/sshd-session", ExeOK: true},
+		process.Identity{PID: jobPID, PPID: sshShellPID, UID: testUserID, Exe: "/opt/sermo-test/mysqldump", ExeOK: true, TTY: testTTY, TTYOK: true},
+	)
+	shell := snapshot[sshShellPID]
+	shell.PPID = sshPeerPID
+	snapshot[sshShellPID] = shell
+	filter, err := process.NewIdentityFilter("/opt/sermo-test/mysqldump", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	config := testSSHConfig(t, SSHProtectedProcess{Name: "backup", Filter: filter})
+
+	sessions := []utmp.Session{{User: "deploy", Line: "pts/0", PID: sshPeerPID, Host: "192.0.2.10"}}
+	if got, err := sampleSSHIdle(sessions, snapshot, testSSHLookup(), testSSHTerminal(now), now, config, mustSSHDFilters(t)); err == nil {
+		t.Fatalf("sampleSSHIdle = %+v, want an error for a remote terminal no sshd accounts for", got)
+	}
+}
+
 func mustSSHDFilters(t *testing.T) []process.IdentityFilter {
 	t.Helper()
 	filters, err := sshdFilters([]string{"/opt/sermo-test/sshd"})
