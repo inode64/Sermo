@@ -2,6 +2,7 @@ package mountctl
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -663,6 +664,50 @@ func TestControllerRunTimeoutMessage(t *testing.T) {
 	if strings.Contains(err.Error(), "context deadline exceeded") {
 		t.Fatalf("error = %q, want operator-facing timeout without raw context error", err.Error())
 	}
+}
+
+// A blocker that ignores TERM holds an unmount for its whole term_timeout. The
+// lock must outlive that wait: expired, another action would reclaim it from a
+// live owner and overwrite the refcount.
+func TestMountLockOutlivesTheOperationBudget(t *testing.T) {
+	mounted := true
+	c := testController(t, &mounted, &fakeRunner{mounted: &mounted})
+	spec := EphemeralSpec("/mnt/backup")
+	spec.Umount.TermTimeout = 30 * time.Minute
+
+	var ttl time.Duration
+	sample := c.Mounts
+	c.Mounts = func() ([]checks.Mount, error) {
+		ttl = heldLockTTL(t, c.Runtime)
+		return sample()
+	}
+	if _, err := c.ReleaseWithOptions(context.Background(), spec, ReleaseOptions{}); err != nil {
+		t.Fatalf("Release: %v", err)
+	}
+	if budget := c.OperationBudget(spec); ttl <= budget {
+		t.Fatalf("lock TTL = %s, want more than the operation budget %s", ttl, budget)
+	}
+}
+
+// heldLockTTL reads the lifetime of the one mount operation lock held now.
+func heldLockTTL(t *testing.T, runtime string) time.Duration {
+	t.Helper()
+	paths, err := filepath.Glob(filepath.Join(mountOpsDir(runtime), "*.lock"))
+	if err != nil || len(paths) != 1 {
+		t.Fatalf("lock files = %v, %v, want one", paths, err)
+	}
+	data, err := os.ReadFile(paths[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	var lock struct {
+		CreatedAt time.Time `json:"created_at"`
+		ExpiresAt time.Time `json:"expires_at"`
+	}
+	if err := json.Unmarshal(data, &lock); err != nil {
+		t.Fatal(err)
+	}
+	return lock.ExpiresAt.Sub(lock.CreatedAt)
 }
 
 // A stale mount operation lock the controller reclaims reaches OnLockReclaimed,

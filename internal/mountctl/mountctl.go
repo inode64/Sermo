@@ -34,6 +34,8 @@ const (
 	DefaultCommandTimeout = 30 * time.Second
 	// defaultLockTTL bounds the per-mount operation lock.
 	defaultLockTTL = 5 * time.Minute
+	// lockTTLMargin keeps the lock alive past the operation budget it covers.
+	lockTTLMargin = time.Minute
 	// releaseCommandSlots counts the command-bounded steps of the longest
 	// unmount: plain, forced, post-signal and lazy umount plus one blocker scan.
 	releaseCommandSlots = 5
@@ -447,7 +449,10 @@ func (c Controller) Blockers(ctx context.Context, spec Spec) ([]process.Process,
 func (c Controller) withLock(spec Spec, fn func() (Result, error)) (Result, error) {
 	ttl := c.LockTTL
 	if ttl <= 0 {
-		ttl = defaultLockTTL
+		// The lock must outlive the operation it guards: an expired lock is
+		// reclaimed from a live owner, and a mount acquired meanwhile would lose
+		// its refcount to the unmount still running.
+		ttl = max(c.OperationBudget(spec)+lockTTLMargin, defaultLockTTL)
 	}
 	locker := locks.NewOperationLocker(mountOpsDir(c.runtime()))
 	if c.OnLockReclaimed != nil {
