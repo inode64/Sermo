@@ -280,11 +280,15 @@ func sampleEmptyTmuxServer(ctx context.Context, runner execx.Runner, config Term
 	return TerminalSessionSample{Present: true}, nil
 }
 
+// tmuxSessionArgs forces UTF-8 mode: outside a UTF-8 locale, which a daemon may
+// well inherit, the client replaces control characters with underscores, the
+// field separators of tmuxSessionFormat among them.
 func tmuxSessionArgs(config TerminalSessionConfig) []string {
-	if config.Socket == "" {
-		return []string{"list-panes", "-a", "-F", tmuxSessionFormat}
+	args := []string{"-u"}
+	if config.Socket != "" {
+		args = append(args, "-S", config.Socket)
 	}
-	return []string{"-S", config.Socket, "list-panes", "-a", "-F", tmuxSessionFormat}
+	return append(args, "list-panes", "-a", "-F", tmuxSessionFormat)
 }
 
 func screenSessionArgs(TerminalSessionConfig) []string {

@@ -46,6 +46,34 @@ func (waitingTerminalSessionRunner) RunUser(ctx context.Context, _ string, _ str
 	return execx.Result{ExitCode: execx.ExitCodeRunFailure}, ctx.Err()
 }
 
+// asciiLocaleTmuxRunner stands in for a tmux client outside a UTF-8 locale: it
+// replaces control characters with underscores, the tabs of the listing format
+// included, unless -u forces UTF-8 mode.
+type asciiLocaleTmuxRunner struct{ waitingTerminalSessionRunner }
+
+func (asciiLocaleTmuxRunner) RunUser(_ context.Context, _, _ string, args ...string) (execx.Result, error) {
+	line := "ops\t0\t1\t200\t$2\t180\t202\t/dev/pts/2\n"
+	if args[0] != "-u" {
+		line = strings.ReplaceAll(line, "\t", "_")
+	}
+	return execx.Result{ExitCode: execx.ExitCodeSuccess, Stdout: line}, nil
+}
+
+// A daemon inherits whatever locale its init system set, often none, so the
+// listing must not depend on it.
+func TestTmuxListingSurvivesAClientOutsideAUTF8Locale(t *testing.T) {
+	for _, socket := range []string{"", "/tmp/tmux-1000/default"} {
+		config := TerminalSessionConfig{Multiplexer: TerminalMultiplexerTmux, Binary: "/usr/bin/tmux", User: "deploy", Socket: socket}
+		sample, err := sampleTerminalSessions(context.Background(), asciiLocaleTmuxRunner{}, config)
+		if err != nil {
+			t.Fatalf("socket %q: sampleTerminalSessions: %v", socket, err)
+		}
+		if len(sample.Sessions) != 1 || sample.Sessions[0].Name != "ops" {
+			t.Fatalf("socket %q: sessions = %+v, want ops", socket, sample.Sessions)
+		}
+	}
+}
+
 func TestTerminalMultiplexerAdapterParsesSessions(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -118,7 +146,7 @@ func TestTerminalSessionsCheckRunsReadOnlyClientAsConfiguredUser(t *testing.T) {
 		t.Fatalf("result = %+v, want available firing condition", result)
 	}
 	calls := runner.Calls()
-	if len(calls) != 1 || calls[0].User != "deploy" || calls[0].Name != "/usr/bin/tmux" || !reflect.DeepEqual(calls[0].Args, []string{"list-panes", "-a", "-F", tmuxSessionFormat}) || !runner.SawDeadline() {
+	if len(calls) != 1 || calls[0].User != "deploy" || calls[0].Name != "/usr/bin/tmux" || !reflect.DeepEqual(calls[0].Args, []string{"-u", "list-panes", "-a", "-F", tmuxSessionFormat}) || !runner.SawDeadline() {
 		t.Fatalf("RunUser calls = %+v (deadline=%v), want configured tmux query", calls, runner.SawDeadline())
 	}
 	if result.Data[DataKeyCount] != 2 || result.Data[DataKeyAttached] != 1 || result.Data[DataKeyDetached] != 1 || result.Data[DataKeyPresent] != true {
@@ -235,9 +263,9 @@ func TestCloseEmptyTmuxServer(t *testing.T) {
 			name:    "closes only an empty live server",
 			results: []execx.Result{{ExitCode: execx.ExitCodeSuccess}, {ExitCode: execx.ExitCodeSuccess}, {ExitCode: 1, Stderr: "no server running on /tmp/tmux-1000/default"}},
 			wantCalls: [][]string{
-				{"deploy", "/usr/bin/tmux", "-S", "/tmp/tmux-1000/default", "list-panes", "-a", "-F", tmuxSessionFormat},
+				{"deploy", "/usr/bin/tmux", "-u", "-S", "/tmp/tmux-1000/default", "list-panes", "-a", "-F", tmuxSessionFormat},
 				{"deploy", "/usr/bin/tmux", "-S", "/tmp/tmux-1000/default", "kill-server"},
-				{"deploy", "/usr/bin/tmux", "-S", "/tmp/tmux-1000/default", "list-panes", "-a", "-F", tmuxSessionFormat},
+				{"deploy", "/usr/bin/tmux", "-u", "-S", "/tmp/tmux-1000/default", "list-panes", "-a", "-F", tmuxSessionFormat},
 			},
 		},
 		{
@@ -245,7 +273,7 @@ func TestCloseEmptyTmuxServer(t *testing.T) {
 			results: []execx.Result{{ExitCode: 1, Stderr: "no server running on /tmp/tmux-1000/default"}},
 			wantErr: "no longer active",
 			wantCalls: [][]string{
-				{"deploy", "/usr/bin/tmux", "-S", "/tmp/tmux-1000/default", "list-panes", "-a", "-F", tmuxSessionFormat},
+				{"deploy", "/usr/bin/tmux", "-u", "-S", "/tmp/tmux-1000/default", "list-panes", "-a", "-F", tmuxSessionFormat},
 			},
 		},
 		{
@@ -253,7 +281,7 @@ func TestCloseEmptyTmuxServer(t *testing.T) {
 			results: []execx.Result{{ExitCode: execx.ExitCodeSuccess, Stdout: "ops\t0\t1\t100\t$1\t90\t201\t/dev/pts/1\n"}},
 			wantErr: "has active sessions",
 			wantCalls: [][]string{
-				{"deploy", "/usr/bin/tmux", "-S", "/tmp/tmux-1000/default", "list-panes", "-a", "-F", tmuxSessionFormat},
+				{"deploy", "/usr/bin/tmux", "-u", "-S", "/tmp/tmux-1000/default", "list-panes", "-a", "-F", tmuxSessionFormat},
 			},
 		},
 		{
@@ -261,9 +289,9 @@ func TestCloseEmptyTmuxServer(t *testing.T) {
 			results: []execx.Result{{ExitCode: execx.ExitCodeSuccess}, {ExitCode: execx.ExitCodeSuccess}, {ExitCode: execx.ExitCodeSuccess}},
 			wantErr: "remains active",
 			wantCalls: [][]string{
-				{"deploy", "/usr/bin/tmux", "-S", "/tmp/tmux-1000/default", "list-panes", "-a", "-F", tmuxSessionFormat},
+				{"deploy", "/usr/bin/tmux", "-u", "-S", "/tmp/tmux-1000/default", "list-panes", "-a", "-F", tmuxSessionFormat},
 				{"deploy", "/usr/bin/tmux", "-S", "/tmp/tmux-1000/default", "kill-server"},
-				{"deploy", "/usr/bin/tmux", "-S", "/tmp/tmux-1000/default", "list-panes", "-a", "-F", tmuxSessionFormat},
+				{"deploy", "/usr/bin/tmux", "-u", "-S", "/tmp/tmux-1000/default", "list-panes", "-a", "-F", tmuxSessionFormat},
 			},
 		},
 	}
