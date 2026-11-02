@@ -10,6 +10,11 @@ apps:
   - proxmox-ve
 variables:
   user: root
+# The tree under lxc-start is the container's own workload: a process in it
+# near its open-files limit (a PostgreSQL backend caching files up to
+# max_files_per_process, 989 of a 1024 limit) says nothing about the container
+# service, which is what the fds sensor reports on.
+fds_limit: false
 processes:
   main:
     exe: ${lxc_binary}
