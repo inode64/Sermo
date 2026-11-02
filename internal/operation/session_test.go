@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"sermo/internal/checks"
 	"sermo/internal/process"
 )
 
@@ -94,6 +95,7 @@ func TestConnectedSessionSurvivalIsNotSuccess(t *testing.T) {
 type sessionIdentitySignaler struct {
 	t   *testing.T
 	got process.Process
+	err error
 }
 
 func (s *sessionIdentitySignaler) SignalProcess(_ context.Context, proc process.Process, sig syscall.Signal) error {
@@ -101,7 +103,7 @@ func (s *sessionIdentitySignaler) SignalProcess(_ context.Context, proc process.
 		s.t.Fatalf("unexpected signal %v", sig)
 	}
 	s.got = proc
-	return nil
+	return s.err
 }
 
 func TestConnectedSessionCarriesExactSignalIdentity(t *testing.T) {
@@ -141,5 +143,59 @@ func TestDeletedSessionCarriesPinnedFileEvidence(t *testing.T) {
 	res := e.CloseSession(t.Context(), SessionTarget{PID: 96, StartTicks: 1234, Terminal: "pts/1"})
 	if !res.OK() || signaler.got.ExeOK || signaler.got.ExePrev != boundary.ExePrev || signaler.got.ExeFile != boundary.ExeFile || signaler.got.Cgroup != boundary.Cgroup {
 		t.Fatalf("result=%+v identity=%+v", res, signaler.got)
+	}
+}
+
+func TestResidualScreenCloseSignalsOnlyTheVerifiedGeneration(t *testing.T) {
+	for _, name := range []string{"exited", "verification unavailable", "verification refused", "cancelled during verification", "signal refused", "still alive", "exit unreadable"} {
+		t.Run(name, func(t *testing.T) {
+			h := defaultHarness()
+			e := h.engine()
+			signaler := &sessionIdentitySignaler{t: t}
+			e.SessionSignaler = signaler
+			e.OperationTimeout = 5 * time.Millisecond
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			proc := process.Process{PID: 120, UID: 1000, StartTicks: 1200, ExePrev: "/usr/bin/screen-4.9.1", ExeFile: process.ExecutableFile{Device: 1, Inode: 99}}
+			e.TerminalSessionVerifier = func(context.Context, TerminalSessionTarget) (process.Process, error) {
+				if name == "verification refused" {
+					return process.Process{}, errors.New("session changed")
+				}
+				if name == "cancelled during verification" {
+					cancel()
+				}
+				return proc, nil
+			}
+			if name == "verification unavailable" {
+				e.TerminalSessionVerifier = nil
+			}
+			if name == "signal refused" {
+				signaler.err = errors.New("pidfd identity changed")
+			}
+			e.TerminalSessionCloser = func(context.Context, TerminalSessionTarget) error {
+				t.Fatal("a missing client must never be executed for residual close")
+				return nil
+			}
+			e.SessionExited = func(pid int, ticks uint64) (bool, error) {
+				if pid != proc.PID || ticks != proc.StartTicks {
+					t.Fatalf("exit probe %d:%d", pid, ticks)
+				}
+				if name == "exit unreadable" {
+					return false, errors.New("unreadable process")
+				}
+				return name != "still alive", nil
+			}
+			result := e.CloseTerminalSession(ctx, TerminalSessionTarget{
+				Check: "screen", Multiplexer: checks.TerminalMultiplexerScreen, Name: "120.residual", User: "1000",
+				Identity: checks.TerminalSessionResidualPrefix + "120:1200:1000:1:99",
+			})
+			if result.OK() != (name == "exited") || len(h.emitted) != 1 || len(h.mgr.calls) != 0 {
+				t.Fatalf("result=%+v events=%+v manager=%v", result, h.emitted, h.mgr.calls)
+			}
+			wantSignal := name == "exited" || name == "still alive" || name == "exit unreadable" || name == "signal refused"
+			if (signaler.got.PID != 0) != wantSignal || wantSignal && (signaler.got.PID != proc.PID || signaler.got.StartTicks != proc.StartTicks || signaler.got.ExePrev != proc.ExePrev || signaler.got.ExeFile != proc.ExeFile || signaler.got.UID != proc.UID) {
+				t.Fatalf("signal target=%+v, want signal=%v for %+v", signaler.got, wantSignal, proc)
+			}
+		})
 	}
 }

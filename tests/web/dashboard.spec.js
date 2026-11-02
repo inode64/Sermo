@@ -2375,6 +2375,30 @@ test("empty tmux sources use a red state and close the server through the API", 
   await expect.poll(() => emptyCloseRequest && emptyCloseRequest.pathname).toBe("/api/services/web/terminal-sessions/tmux-empty/close-empty");
 });
 
+test("a screen session with a removed executable offers its verified close", async ({ page }) => {
+  const identity = "residual:120:1200:1000:1:99";
+  const body = JSON.parse(JSON.stringify(dashboard));
+  body.sessions.terminal = [{
+    service: "web", check: "screen-root", multiplexer: "screen", user: "root",
+    name: "120.residual", state: "residual", identity, can_close: true, pids: [120],
+  }];
+  let closeRequest = null;
+  await page.route("**/api/dashboard**", (route) => route.fulfill({ json: body }));
+  await page.route("**/api/services/web/terminal-sessions/screen-root/close**", async (route) => {
+    closeRequest = new URL(route.request().url());
+    await route.fulfill({ json: { ok: true, message: "screen session closed" } });
+  });
+  await page.locator("#refresh-now").click();
+  const row = page.locator("#session-rows tr", { hasText: "120.residual" });
+  await expect(row).toContainText("Executable removed; session server is still running");
+  const close = row.getByRole("button", { name: "Close screen session 120.residual of root" });
+  await expect(close).toBeEnabled();
+  await close.click();
+  await expect(page.locator("#simple-confirm-message")).toContainText("all its windows, panes and running programs");
+  await page.locator("#simple-confirm-ok").click();
+  await expect.poll(() => closeRequest && closeRequest.searchParams.get("identity")).toBe(identity);
+});
+
 test("an unknown terminal session state is not shown as active", async ({ page }) => {
   const body = JSON.parse(JSON.stringify(dashboard));
   body.sessions.terminal.push({

@@ -119,6 +119,7 @@ func ApplyEngineConfig(deps *Deps, cfg *config.Config, wrap func(process.OSReade
 	deps.SSHIdleSampler = checks.NewSSHIdleSampler(terminalReader, deps.UserLookup)
 	deps.SSHSessionSampler = checks.NewSSHSessionSampler(terminalReader, deps.UserLookup)
 	deps.TerminalProcessReader = terminalReader
+	deps.TerminalResidualProcesses = checks.NewTerminalResidualSampler(terminalReader, deps.UserLookup)
 	deps.GlobalNotify = config.NotifyDefault(cfg.Global.Raw)
 	deps.GlobalEmission = emission.Merge(cfg.Global.Raw[emission.Section], emission.Default())
 	deps.GlobalClear = rules.ClearWindowOrDefault(cfg.Global.Defaults()[rules.SectionClearWindow])

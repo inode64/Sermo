@@ -256,6 +256,16 @@ signal-delivery report.
 The `terminal_sessions` check is observation-only. It runs a bounded,
 argv-only `tmux` or `screen` listing as the explicitly configured account;
 it never attaches, detaches, kills or otherwise controls a terminal session.
+When the configured screen client cannot start because it is missing, the check
+can report surviving screen servers from procfs. A residual row requires the
+exact configured previous executable path, real UID, known process generation,
+verified unlinked executable file, parent PID 1 and no controlling terminal.
+Manual close re-derives that evidence under the operation locks and guards,
+pins the executable and revalidates its identity through a pidfd, sends only
+SIGTERM and verifies exit before reporting success. No basename, command title,
+stale PID or missing-client error alone permits a signal. This fallback does
+not apply to tmux, whose server may hold several independent sessions.
+
 The separate manual close of an empty terminal source is available only for a
 tmux source with an explicit configured socket. It shares the operation and
 named locks, guards, timeout and one-event path; it re-lists the exact source,

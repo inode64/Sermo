@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
-	"syscall"
 	"time"
 
 	"sermo/internal/checks"
@@ -89,6 +88,8 @@ type Engine struct {
 	// TerminalSessionCloser revalidates and closes one tmux/screen session
 	// through its configured client. It remains a manual-only operation.
 	TerminalSessionCloser func(ctx context.Context, target TerminalSessionTarget) error
+	// TerminalSessionVerifier revalidates a screen server whose client was removed.
+	TerminalSessionVerifier func(ctx context.Context, target TerminalSessionTarget) (process.Process, error)
 	// EmptyTerminalSessionCloser revalidates and closes one configured empty
 	// tmux server through its own client. It remains a manual-only operation.
 	EmptyTerminalSessionCloser func(ctx context.Context, target TerminalSessionSourceTarget) error
@@ -551,18 +552,14 @@ func (e Engine) closeSession(ctx context.Context, target SessionTarget, result *
 	if boundary.Residual {
 		return e.closeResidualSession(ctx, target, boundary, result)
 	}
-	signaler := e.SessionSignaler
-	if signaler == nil {
-		signaler = process.OSSignaler{}
-	}
 	proc := process.Process{PID: target.PID, StartTicks: target.StartTicks, Exe: boundary.Exe, ExeOK: boundary.ExePrev == "", ExePrev: boundary.ExePrev, ExeFile: boundary.ExeFile, Cgroup: boundary.Cgroup, UID: boundary.UID}
-	if err := signaler.SignalProcess(ctx, proc, syscall.SIGTERM); err != nil {
-		return failSession(result, prefix, err)
-	}
-	return e.waitSessionExit(ctx, target, result)
+	return e.terminateSessionProcess(ctx, proc, result, prefix)
 }
 
 func (e Engine) closeTerminalSession(ctx context.Context, target TerminalSessionTarget, result *Result) bool {
+	if strings.HasPrefix(target.Identity, checks.TerminalSessionResidualPrefix) {
+		return e.closeResidualTerminalSession(ctx, target, result)
+	}
 	var closer func(context.Context) error
 	if e.TerminalSessionCloser != nil {
 		closer = func(ctx context.Context) error { return e.TerminalSessionCloser(ctx, target) }

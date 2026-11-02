@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"syscall"
 	"time"
 
 	"sermo/internal/checks"
@@ -11,6 +12,18 @@ import (
 )
 
 const sessionExitPollInterval = 100 * time.Millisecond
+
+func (e Engine) closeResidualTerminalSession(ctx context.Context, target TerminalSessionTarget, result *Result) bool {
+	const prefix = "close residual screen session: "
+	if e.TerminalSessionVerifier == nil {
+		return failSession(result, prefix, errors.New("residual session verification is unavailable"))
+	}
+	proc, err := e.TerminalSessionVerifier(ctx, target)
+	if err != nil {
+		return failSession(result, prefix, err)
+	}
+	return e.terminateSessionProcess(ctx, proc, result, prefix)
+}
 
 func (e Engine) closeResidualSession(ctx context.Context, target SessionTarget, boundary SessionBoundary, result *Result) bool {
 	const prefix = "close residual SSH session: "
@@ -93,17 +106,28 @@ func (e Engine) sessionExited(pid int, ticks uint64) (bool, error) {
 	return exited(pid, ticks)
 }
 
-func (e Engine) waitSessionExit(ctx context.Context, target SessionTarget, result *Result) bool {
+func (e Engine) terminateSessionProcess(ctx context.Context, proc process.Process, result *Result, prefix string) bool {
+	// A verifier may ignore cancellation; never deliver a signal afterwards.
+	if err := ctx.Err(); err != nil {
+		return failSession(result, prefix, err)
+	}
+	signaler := e.SessionSignaler
+	if signaler == nil {
+		signaler = process.OSSignaler{}
+	}
+	if err := signaler.SignalProcess(ctx, proc, syscall.SIGTERM); err != nil {
+		return failSession(result, prefix, err)
+	}
 	for {
-		gone, err := e.sessionExited(target.PID, target.StartTicks)
+		gone, err := e.sessionExited(proc.PID, proc.StartTicks)
 		if err != nil {
-			return failSession(result, "close SSH session: ", err)
+			return failSession(result, prefix, err)
 		}
 		if gone {
 			return true
 		}
 		if err := process.Wait(ctx, e.Sleep, sessionExitPollInterval); err != nil {
-			return failSession(result, "close SSH session: ", fmt.Errorf("pid %d did not exit: %w", target.PID, err))
+			return failSession(result, prefix, fmt.Errorf("pid %d did not exit: %w", proc.PID, err))
 		}
 	}
 }

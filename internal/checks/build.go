@@ -88,6 +88,9 @@ type Samplers struct {
 	ZombieSampler        ZombieSamplerFunc
 	UsersSampler         UsersSamplerFunc
 	SSHIdleSampler       SSHIdleSamplerFunc
+
+	// TerminalResidualProcesses observes screen servers when their client is gone.
+	TerminalResidualProcesses TerminalResidualSamplerFunc
 	// CertSampler fetches a TLS endpoint's certificate for `cert` checks. Nil
 	// dials the host.
 	CertSampler CertSamplerFunc
@@ -304,7 +307,7 @@ var builtinCheckSpecs = []checkSpec{
 	{info: conditionTypeInfo(CheckTypeUsers), predicateFields: UsersPredFields, build: func(in checkBuildInput) (Check, string) { return buildUsersCheck(in.base, in.entry, in.deps) }},
 	{info: conditionTypeInfo(CheckTypeSSHIdle), predicateFields: SSHIdlePredFields, build: func(in checkBuildInput) (Check, string) { return buildSSHIdleCheck(in.base, in.entry, in.deps) }},
 	{info: conditionTypeInfo(CheckTypeTerminalSessions), predicateFields: TerminalSessionPredFields, build: func(in checkBuildInput) (Check, string) {
-		return buildTerminalSessionsCheck(in.base, in.entry, in.runner)
+		return buildTerminalSessionsCheck(in.base, in.entry, in.deps)
 	}},
 	{info: conditionTypeInfo(CheckTypeProcessCount), predicateFields: ProcessCountPredFields, build: func(in checkBuildInput) (Check, string) { return buildProcessCountCheck(in.base, in.entry, in.deps) }},
 	{info: conditionTypeInfo(CheckTypeHdparm), predicateFields: HdparmPredFields, build: func(in checkBuildInput) (Check, string) {

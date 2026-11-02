@@ -31,6 +31,10 @@ const (
 	TerminalSessionStateDetached = "detached"
 	// TerminalSessionStateUnknown reports a client state that could not be normalized.
 	TerminalSessionStateUnknown = "unknown"
+	// TerminalSessionStateResidual reports a screen server whose client is gone.
+	TerminalSessionStateResidual = "residual"
+	// TerminalSessionResidualPrefix selects a verified process close, not a client command.
+	TerminalSessionResidualPrefix = "residual:"
 
 	tmuxSessionFormat               = "#{session_name}\t#{session_attached}\t#{session_windows}\t#{session_activity}\t#{session_id}\t#{session_created}\t#{pane_pid}\t#{pane_tty}"
 	screenSessionStateMultiAttached = "multi, " + TerminalSessionStateAttached
@@ -101,7 +105,8 @@ type TerminalSessionConfig struct {
 	Socket      string
 	// StartTicks is injectable for deterministic screen identity tests. Nil
 	// reads the kernel process generation from /proc.
-	StartTicks func(int) (uint64, bool)
+	StartTicks        func(int) (uint64, bool)
+	ResidualProcesses TerminalResidualSamplerFunc
 }
 
 type terminalMultiplexerAdapter struct {
@@ -190,7 +195,7 @@ func TerminalSessionsFromData(data map[string]any) []TerminalSession {
 }
 
 func isTerminalSessionState(state string) bool {
-	return state == TerminalSessionStateAttached || state == TerminalSessionStateDetached || state == TerminalSessionStateUnknown
+	return state == TerminalSessionStateAttached || state == TerminalSessionStateDetached || state == TerminalSessionStateUnknown || state == TerminalSessionStateResidual
 }
 
 // terminalSessionsCheck compares a configured session count. It does not
@@ -243,6 +248,19 @@ func sampleTerminalSessions(ctx context.Context, runner execx.Runner, config Ter
 	}
 	runner = execx.RunnerOrDefault(runner)
 	result, err := execx.RunUser(ctx, runner, execx.NoTimeout, config.User, config.Binary, adapter.args(config)...)
+	if config.Multiplexer == TerminalMultiplexerScreen && result.ExitCode == execx.ExitCodeRunFailure && errors.Is(err, fs.ErrNotExist) {
+		processes, sampleErr := config.residualProcesses(ctx)
+		if sampleErr != nil {
+			return TerminalSessionSample{}, sampleErr
+		}
+		if len(processes) > 0 {
+			sessions := make([]TerminalSession, 0, len(processes))
+			for _, proc := range processes {
+				sessions = append(sessions, residualScreenSession(config, proc))
+			}
+			return TerminalSessionSample{Sessions: sortedTerminalSessions(sessions), Present: true}, nil
+		}
+	}
 	output := strings.TrimSpace(result.Stdout + "\n" + result.Stderr)
 	if config.Multiplexer == TerminalMultiplexerTmux && result.ExitCode == 1 && output == "no current target" {
 		return sampleEmptyTmuxServer(ctx, runner, config)

@@ -316,14 +316,34 @@ func terminalSessionSourcesByCheck(sources []terminalSessionSource) map[string]t
 func freshTerminalSessionCloser(runner execx.Runner, sources []terminalSessionSource) func(context.Context, operation.TerminalSessionTarget) error {
 	byCheck := terminalSessionSourcesByCheck(sources)
 	return func(ctx context.Context, target operation.TerminalSessionTarget) error {
-		source, ok := byCheck[target.Check]
-		if !ok || source.multiplexer != target.Multiplexer || source.user != target.User {
-			return errors.New("terminal session source changed; refresh and try again")
+		cfg, session, err := resolveTerminalSessionTarget(byCheck, target)
+		if err != nil {
+			return err
 		}
-		return checks.CloseTerminalSession(ctx, runner, source.config(), checks.TerminalSession{
-			Multiplexer: target.Multiplexer, Name: target.Name, User: target.User, Identity: target.Identity,
-		})
+		return checks.CloseTerminalSession(ctx, runner, cfg, session)
 	}
+}
+
+func freshTerminalSessionVerifier(sampler checks.TerminalResidualSamplerFunc, sources []terminalSessionSource) func(context.Context, operation.TerminalSessionTarget) (process.Process, error) {
+	byCheck := terminalSessionSourcesByCheck(sources)
+	return func(ctx context.Context, target operation.TerminalSessionTarget) (process.Process, error) {
+		cfg, session, err := resolveTerminalSessionTarget(byCheck, target)
+		if err != nil {
+			return process.Process{}, err
+		}
+		cfg.ResidualProcesses = sampler
+		return checks.VerifyResidualTerminalSession(ctx, cfg, session)
+	}
+}
+
+func resolveTerminalSessionTarget(byCheck map[string]terminalSessionSource, target operation.TerminalSessionTarget) (checks.TerminalSessionConfig, checks.TerminalSession, error) {
+	source, ok := byCheck[target.Check]
+	if !ok || source.multiplexer != target.Multiplexer || source.user != target.User {
+		return checks.TerminalSessionConfig{}, checks.TerminalSession{}, errors.New("terminal session source changed; refresh and try again")
+	}
+	return source.config(), checks.TerminalSession{
+		Multiplexer: target.Multiplexer, Name: target.Name, User: target.User, Identity: target.Identity,
+	}, nil
 }
 
 func freshEmptyTerminalSessionCloser(runner execx.Runner, sources []terminalSessionSource) func(context.Context, operation.TerminalSessionSourceTarget) error {
@@ -338,7 +358,7 @@ func freshEmptyTerminalSessionCloser(runner execx.Runner, sources []terminalSess
 }
 
 // CloseTerminalSession closes one freshly revalidated tmux or screen session
-// through the service operation engine and the configured multiplexer client.
+// through the service operation engine using its client or residual process evidence.
 func (b *WebBackend) CloseTerminalSession(ctx context.Context, name string, session web.TerminalSession) web.ActionResult {
 	e := b.entries[name]
 	if e == nil {

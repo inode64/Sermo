@@ -1014,6 +1014,11 @@ active/inactive sensor. The result exposes total `count`, `attached` and
 Sessions panel, together with SSH sessions. An administrator may close a session row;
 the action re-lists that configured namespace and requires the same session
 generation before invoking the multiplexer client's exact close command.
+If the screen client was removed, a verified surviving server is listed as
+`residual` with its PID. It contributes to `count`, but not `attached` or
+`detached`; those states cannot be queried. Its manual close uses the verified
+process identity instead of the missing client; see
+[session safety](safety.md#the-operation-engine).
 Closing a session terminates all its windows, panes and programs and disconnects
 attached clients. Associated process rows retain their own selected-process
 action and authorization; they never redirect to whole-session close.

@@ -316,9 +316,9 @@ type Deps struct {
 	// MountSignaler sends TERM/KILL during policy-gated web umount escalation.
 	// Optional: nil uses process.OSSignaler.
 	MountSignaler process.Signaler
-	// SSHSessionSignaler sends the single SIGTERM used to close a freshly
-	// revalidated interactive SSH session. Optional: nil uses process.OSSignaler.
-	SSHSessionSignaler process.Signaler
+	// SessionSignaler closes freshly revalidated SSH sessions and residual
+	// screen servers. Optional: nil uses process.OSSignaler.
+	SessionSignaler process.Signaler
 	// ProcessSignaler delivers an unowned_processes watch's kill action and the
 	// dashboard's per-process kill. Optional: nil uses process.OSSignaler.
 	ProcessSignaler process.Signaler

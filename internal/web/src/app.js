@@ -4550,7 +4550,8 @@ function sessionRows(inventory) {
     state: session.state || sessionStateUnknown,
     // Only tmux reports a window count; a screen session says nothing under
     // its name rather than a placeholder dash.
-    detail: Number.isInteger(session.windows) ? `${fmtNum(session.windows, 0)} window${session.windows === 1 ? "" : "s"}` : "",
+    detail: session.state === sessionStateResidual ? "Executable removed; session server is still running"
+      : Number.isInteger(session.windows) ? `${fmtNum(session.windows, 0)} window${session.windows === 1 ? "" : "s"}` : "",
     ...sessionUsageRow(session, session.has_idle),
     action: terminalSessionCloseButton(session),
   }));

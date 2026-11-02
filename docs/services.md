@@ -1525,10 +1525,19 @@ Sermo sends `SIGTERM`, then
 A missing utmp database still makes the SSH source unavailable; it does not
 prevent independent tmux or screen sources from working.
 
-If a terminal client was uninstalled, disable its obsolete `terminal_sessions`
-watch in `services.local` after reviewing the remaining processes. If upgraded,
-update its `binary` to the installed, resolved executable. Do not execute the
-unlinked executable through `/proc/PID/exe` as a replacement client.
+If the configured screen client was removed but its server is still running,
+Sessions shows a `PID.residual` row with a close button. Sermo requires the exact
+configured executable's previous path, the configured user's real UID, a
+verified kernel-held executable and a daemonized server with no controlling
+terminal. Close revalidates that identity, sends SIGTERM through a pidfd and
+waits for exit; it does not execute `/proc/PID/exe`. The original session name
+and attached/detached state are unavailable without the client.
+
+If no verified server remains, the missing-client source stays unavailable;
+disable its obsolete `terminal_sessions` watch in `services.local` after
+reviewing the remaining processes. If upgraded, update its `binary` to the
+installed, resolved executable. A tmux namespace still requires its client:
+one tmux server may own multiple sessions, so its PID cannot identify one session.
 
 ### `pidfile:` and `pidfiles:` shorthand (selectors + health checks)
 

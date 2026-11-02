@@ -72,21 +72,22 @@ func buildSSHIdleCheck(b base, entry map[string]any, deps Deps) (Check, string) 
 }
 
 // buildTerminalSessionsCheck builds a read-only tmux or screen session check.
-func buildTerminalSessionsCheck(b base, entry map[string]any, runner execx.Runner) (Check, string) {
+func buildTerminalSessionsCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 	preds, errs := requireLevelPreds(entry, TerminalSessionPredFields, "terminal_sessions check")
 	if errs != "" {
 		return nil, errs
 	}
 	config := TerminalSessionConfig{
-		Multiplexer: cfgval.AsString(entry[CheckKeyMultiplexer]),
-		Binary:      cfgval.AsString(entry[CheckKeyBinary]),
-		User:        cfgval.AsString(entry[CheckKeyUser]),
-		Socket:      cfgval.AsString(entry[CheckKeySocket]),
+		Multiplexer:       cfgval.AsString(entry[CheckKeyMultiplexer]),
+		Binary:            cfgval.AsString(entry[CheckKeyBinary]),
+		User:              cfgval.AsString(entry[CheckKeyUser]),
+		Socket:            cfgval.AsString(entry[CheckKeySocket]),
+		ResidualProcesses: deps.TerminalResidualProcesses,
 	}
 	if err := config.Validate(); err != nil {
 		return nil, "terminal_sessions check: " + err.Error()
 	}
-	return terminalSessionsCheck{base: b, preds: preds, config: config, runner: runner}, ""
+	return terminalSessionsCheck{base: b, preds: preds, config: config, runner: deps.Runner}, ""
 }
 
 // buildProcessCountCheck builds a check on the number of processes matching an

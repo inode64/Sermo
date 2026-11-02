@@ -155,6 +155,11 @@ Missing evidence fails closed.
 
 Whole-session tmux/screen close belongs only on the session row, with its
 effects on windows, programs and attached clients explicit in confirmation.
+When the screen client is missing, a residual session may use the configured
+exact previous executable path and real UID, known generation, verified
+kernel-held file, parent PID 1 and no controlling terminal. Revalidate through
+the operation engine and pidfd, send SIGTERM only and verify exit. A tmux server
+can hold multiple sessions, so this process fallback does not apply to tmux.
 
 ## Red flags
 
