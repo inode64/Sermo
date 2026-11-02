@@ -637,7 +637,12 @@ func TestUnownedWatcherNeverSignalsReplacedOrUnresolvedExecutable(t *testing.T) 
 	replaced.ExeOK, replaced.ExePrev = false, "/opt/sermo-test/sleep"
 	unresolved := unownedProc(43, "", "0::/")
 	unresolved.ExeOK = false
-	w := h.watcher(t, fixedSampler{infos: []ProcInfo{replaced, unresolved}, ok: true}, map[string]any{}, systemdFixture().runtime())
+	// The kernel-held file identified: an administrator may still pick it from
+	// the dashboard, but the watch's own kill carries no such authority.
+	pinned := unownedProc(44, "", "0::/")
+	pinned.ExeOK, pinned.ExePrev = false, "/opt/sermo-test/sleep"
+	pinned.ExeFile = process.ExecutableFile{Device: 65026, Inode: 268157}
+	w := h.watcher(t, fixedSampler{infos: []ProcInfo{replaced, unresolved, pinned}, ok: true}, map[string]any{}, systemdFixture().runtime())
 	w.kill = unownedKillSpec([]string{"root"}, []string{"/opt/sermo-test/sleep"}, true)
 
 	w.runCycle(context.Background())
@@ -645,8 +650,8 @@ func TestUnownedWatcherNeverSignalsReplacedOrUnresolvedExecutable(t *testing.T) 
 	if len(h.signaler.sent) != 0 {
 		t.Fatalf("signalled a process without an exact executable: %v", h.signaler.sent)
 	}
-	if rows := rowsOf(h.snapshot); len(rows) != 2 || rows[0].CanKill || rows[1].CanKill {
-		t.Fatalf("rows = %+v, want both listed and neither killable", rows)
+	if rows := rowsOf(h.snapshot); len(rows) != 3 || rows[0].CanKill || rows[1].CanKill || !rows[2].CanKill {
+		t.Fatalf("rows = %+v, want all listed and only the pinned file manually killable", rows)
 	}
 	for _, kind := range h.kinds() {
 		if kind != eventKindFiring {

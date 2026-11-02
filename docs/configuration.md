@@ -4561,9 +4561,13 @@ carries a command line.
   the whole cycle rather than once per finding.
 - The dashboard's per-row kill (`POST /api/watches/{name}/processes/{pid}/kill?start_ticks=…&escalate=…`,
   administrators only) re-reads the process immediately before acting: same
-  PID and start time as displayed, an exact resolved executable (a replaced or
-  unreadable one is refused, which the row shows as `kill_reason`) and still
-  classified unowned by the watch's own rules. It sends SIGTERM through a
+  PID and start time as displayed, an exact resolved executable and still
+  classified unowned by the watch's own rules. A binary replaced or uninstalled
+  since the process started qualifies by its previous path while the kernel
+  still holds the file the sample identified; delivery through the pidfd then
+  requires that same file, device and inode. An unreadable executable, or a
+  replaced one whose file cannot be identified, is refused, which the row shows
+  as `kill_reason`. `then.kill` never signals a replaced executable. It sends SIGTERM through a
   selector bound to that verified identity, and SIGKILL after the TERM grace
   only when the operator ticked the escalation. One kill runs at a time per
   watch.

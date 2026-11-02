@@ -29,7 +29,7 @@ const (
 	unownedReasonSeparator     = "; "
 
 	unownedKillReasonUnresolvedExe = "executable is unresolved"
-	unownedKillReasonReplacedExe   = "executable was replaced or removed on disk"
+	unownedKillReasonReplacedExe   = "executable was replaced or removed on disk and its running file cannot be verified"
 	unownedKillReasonNoStartTime   = "process start time is unreadable"
 	unownedKillReasonProtected     = "init or kernel process"
 
@@ -532,15 +532,18 @@ func (c *unownedClassifier) inMountNamespace(pid int, ns string, nsOK bool) (inN
 }
 
 // manualKillable reports whether the dashboard may signal this finding: it
-// needs the exact identity the kill gate requires. The reason is shown next to
-// a disabled button.
+// needs the exact identity the kill gate requires. A binary replaced or
+// uninstalled since the process started still qualifies by its previous path
+// while the kernel-held file is identified: delivery through the pidfd then
+// requires that same file, so nothing else that later appears at the path can
+// be signalled. The reason is shown next to a disabled button.
 func manualKillable(info ProcInfo) (bool, string) {
 	switch {
 	case process.ProtectedIdentity(info.Identity):
 		return false, unownedKillReasonProtected
-	case !info.ExeOK && info.ExePrev != "":
+	case !info.ExeOK && info.ExePrev != "" && info.ExeFile.Inode == 0:
 		return false, unownedKillReasonReplacedExe
-	case !info.ExeOK:
+	case !info.ExeOK && info.ExePrev == "":
 		return false, unownedKillReasonUnresolvedExe
 	case info.StartTicks == 0:
 		return false, unownedKillReasonNoStartTime

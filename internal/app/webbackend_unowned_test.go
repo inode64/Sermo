@@ -13,6 +13,7 @@ import (
 
 	"sermo/internal/checks"
 	"sermo/internal/config"
+	"sermo/internal/process"
 	"sermo/internal/web"
 )
 
@@ -116,6 +117,28 @@ func TestKillWatchProcessSendsSIGTERMToVerifiedIdentity(t *testing.T) {
 	}
 	if len(*events) != 1 || (*events)[0].Kind != eventKindKill || (*events)[0].Watch != "unowned" {
 		t.Fatalf("events = %+v", *events)
+	}
+}
+
+// A binary uninstalled since the process started (a detached screen whose
+// package was removed) is signalled through its previous path while the
+// kernel still holds the file the sample identified.
+func TestKillWatchProcessSignalsAReplacedExecutableByItsHeldFile(t *testing.T) {
+	removed := unownedProc(43, "", "0::/")
+	removed.ExeOK, removed.ExePrev = false, "/usr/bin/screen-4.9.1"
+	removed.ExeFile = process.ExecutableFile{Device: 65026, Inode: 268157}
+	b, signaler, events := unownedKillBackend(t, fixedSampler{infos: []ProcInfo{removed}, ok: true}, false)
+
+	res := b.KillWatchProcess(context.Background(), "unowned", web.WatchProcessKillRequest{PID: 43, StartTicks: 430})
+
+	if !res.OK || len(signaler.sent) != 1 || signaler.sent[0] != (sigCall{43, syscall.SIGTERM}) {
+		t.Fatalf("result = %+v signals = %v", res, signaler.sent)
+	}
+	if len(*events) != 1 || (*events)[0].Kind != eventKindKill {
+		t.Fatalf("events = %+v", *events)
+	}
+	if got := manualKillSelector(removed).ExeAny; !slices.Equal(got, []string{"/usr/bin/screen-4.9.1"}) {
+		t.Fatalf("selector exe = %v, want the previous path", got)
 	}
 }
 

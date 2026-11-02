@@ -74,8 +74,10 @@ any `security:` toggle that tries to disable them.
     `then.kill` signals only what its own `kill_only_if` (users **and**
     `exe_any`) authorizes, through the same gate as every other kill, and a
     dashboard kill signals only a process an administrator picked whose
-    identity (PID, start time, exact executable, real user) was re-read
-    immediately before — SIGTERM, with SIGKILL only on explicit request. Both
+    identity (PID, start time, exact executable — or, for one replaced or
+    removed on disk, its previous path and the kernel-held file — real user)
+    was re-read immediately before and is revalidated through the pidfd at
+    delivery — SIGTERM, with SIGKILL only on explicit request. Both
     honour the watch's `dry_run`. When attribution is impossible (no per-unit
     control groups, no package database, an unreadable executable) the watch
     reports that and lists nothing on that criterion.

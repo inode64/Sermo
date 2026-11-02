@@ -80,13 +80,13 @@ func (b *WebBackend) killUnownedProcess(ctx context.Context, w *webWatch, classi
 	}
 	spec := manualKillSpec(req.Escalate)
 	if w.dryRun {
-		message := fmt.Sprintf("%s: would send %s to pid %d (%s)", watchDryRunMessagePrefix+unownedKillAction, signalLabel(spec), req.PID, info.Exe)
+		message := fmt.Sprintf("%s: would send %s to pid %d (%s)", watchDryRunMessagePrefix+unownedKillAction, signalLabel(spec), req.PID, manualKillExecutable(info))
 		emitSafe(b.emit, Event{Watch: w.name, Kind: eventKindDryRun, Action: unownedKillAction, Message: message})
 		return web.ActionResult{OK: true, Message: message}
 	}
 	spec.selector = manualKillSelector(info)
 	outcome := b.unownedKiller.forWatch(w.name).kill(ctx, killTarget{
-		info: info, spec: spec, msg: unownedManualKillMessage,
+		info: info, spec: spec, msg: unownedManualKillMessage, pinnedFile: true,
 		resample: func(pid int) (ProcInfo, bool) { return classifier.current(ctx, b.webNow(), pid) },
 	})
 	return web.ActionResult{OK: outcome.signalled && !outcome.survived, Message: outcome.message}
@@ -110,7 +110,17 @@ func manualKillSpec(escalate bool) killSpec {
 // so the kill gate compares the number the sampler read, and no name lookup —
 // which may use another resolver than the sampler's — can disagree with it.
 func manualKillSelector(info ProcInfo) process.KillSelector {
-	return process.NewKillSelector([]string{strconv.FormatUint(uint64(info.UID), 10)}, []string{info.Exe})
+	return process.NewKillSelector([]string{strconv.FormatUint(uint64(info.UID), 10)}, []string{manualKillExecutable(info)})
+}
+
+// manualKillExecutable is the path the selector names: the resolved executable,
+// or the previous path of one replaced or removed on disk, which manualKillable
+// admits only with its kernel-held file identified.
+func manualKillExecutable(info ProcInfo) string {
+	if info.ExeOK {
+		return info.Exe
+	}
+	return info.ExePrev
 }
 
 func signalLabel(spec killSpec) string {

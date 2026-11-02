@@ -31,6 +31,21 @@ type killTarget struct {
 	spec     killSpec
 	resample func(pid int) (ProcInfo, bool)
 	msg      string
+	// pinnedFile marks an incarnation an administrator picked: its kernel-held
+	// file may stand for an executable replaced or removed on disk. A host
+	// watch's own kill never sets it, so its selector cannot match such a process.
+	pinnedFile bool
+}
+
+// signalProcess is the process the reaper is asked to signal. With pinnedFile
+// it carries the kernel-held file of a replaced executable, which pidfd delivery
+// then requires unchanged; anything else at that path is a different file.
+func (t killTarget) signalProcess(info ProcInfo) process.Process {
+	p := info.asProcess()
+	if t.pinnedFile {
+		p.ExeFile = info.ExeFile
+	}
+	return p
 }
 
 // killOutcome summarises what a kill did, for callers that answer an operator.
@@ -78,7 +93,7 @@ func (k pidKiller) kill(ctx context.Context, t killTarget) killOutcome {
 // is owed: the signal reached the process, escalate was declared, the signal
 // was short of SIGKILL and the target can be re-verified.
 func (k pidKiller) signal(ctx context.Context, t killTarget) (pendingKill, bool) {
-	first := k.reaper().Signal(ctx, []process.Process{t.info.asProcess()}, t.spec.selector, t.spec.signal)
+	first := k.reaper().Signal(ctx, []process.Process{t.signalProcess(t.info)}, t.spec.selector, t.spec.signal)
 	message, ok := k.emitSignalResult(t.msg, t.spec, t.spec.signal, first)
 	pending := pendingKill{target: t, outcome: killOutcome{signalled: ok, message: message}}
 	return pending, ok && t.spec.escalate && t.spec.signal != syscall.SIGKILL && t.resample != nil
@@ -108,7 +123,7 @@ func (k pidKiller) escalate(ctx context.Context, pending []*pendingKill) {
 			// apart, and escalating on a namesake would SIGKILL an innocent process.
 			continue
 		}
-		kill := k.reaper().Signal(ctx, []process.Process{current.asProcess()}, t.spec.selector, syscall.SIGKILL)
+		kill := k.reaper().Signal(ctx, []process.Process{t.signalProcess(current)}, t.spec.selector, syscall.SIGKILL)
 		message, ok := k.emitSignalResult(t.msg, t.spec, syscall.SIGKILL, kill)
 		p.outcome.message = message
 		if ok {
