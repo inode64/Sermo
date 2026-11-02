@@ -29,3 +29,15 @@ func TestAdvisoryCannotTriggerOperations(t *testing.T) {
 		}
 	}
 }
+
+// A result that keeps OK states no failure even when it is unavailable and
+// blocks actions: an incomplete library inventory that found nothing must
+// leave an alert on failed: unknown, not fire it.
+func TestUnavailableOKResultDoesNotFireAnAlert(t *testing.T) {
+	failed := map[string]any{ConditionFailed: map[string]any{FieldCheck: "libraries"}}
+	e := &Evaluator{Cache: map[string]checks.Result{"libraries": {OK: true, Unavailable: true, ActionBlocked: true}}}
+	match, err := e.EvalRule(t.Context(), Rule{Type: RuleAlert, If: failed, Actions: []Action{{Type: ActionAlert}}})
+	if match || err != nil || !e.Unknown {
+		t.Fatalf("alert = %v, %v, unknown %v; want unknown", match, err, e.Unknown)
+	}
+}

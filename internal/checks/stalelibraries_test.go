@@ -165,7 +165,9 @@ func TestStaleLibrariesAdvisoryCases(t *testing.T) {
 			default:
 				r = c.Run(t.Context())
 			}
-			if !r.ActionBlocked || r.OK {
+			// Unsafe is a result that could drive an action: one not blocked,
+			// or one claiming a complete clean inventory.
+			if !r.ActionBlocked || (r.OK && !r.Unavailable) {
 				t.Fatalf("unsafe result: %+v", r)
 			}
 		})
@@ -200,5 +202,31 @@ func TestStaleLibrariesExecutionFailureStaysAdvisory(t *testing.T) {
 	limited := withLimiter(c, NewLimiter(1), time.Second)
 	if r := Execute(ctx, limited); !r.Unavailable || !r.ActionBlocked {
 		t.Fatalf("cancelled queue authorized an action: %+v", r)
+	}
+}
+
+// An inventory that a recycled worker left incomplete proves only what it
+// found: no stale mapping states no failure (an alert must not read it as
+// replaced libraries), a stale one stays evidence; neither may drive an action.
+func TestStaleLibrariesIncompleteInventoryStatesOnlyItsFindings(t *testing.T) {
+	now := time.Unix(1000, 0)
+	errChurn := errors.New("scan service libraries: pid 42: process identity changed or cannot be verified")
+	for _, tc := range []struct {
+		name   string
+		libs   []process.StaleLibrary
+		wantOK bool
+	}{
+		{"nothing found", nil, true},
+		{"stale found", []process.StaleLibrary{{PID: 7, Path: "/lib/libssl.so.3", RestartEligible: true}}, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			c := &staleLibrariesCheck{stableFor: time.Minute, clock: func() time.Time { return now }, sample: func(context.Context) (process.LibraryReport, error) {
+				return process.LibraryReport{Processes: 12, Libraries: tc.libs}, errChurn
+			}}
+			r := c.Run(t.Context())
+			if r.OK != tc.wantOK || !r.Unavailable || !r.ActionBlocked || r.Data[DataKeyComplete] != false {
+				t.Fatalf("result = %+v, want OK=%t, unavailable and blocked", r, tc.wantOK)
+			}
+		})
 	}
 }

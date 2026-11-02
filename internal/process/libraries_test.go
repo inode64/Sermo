@@ -66,7 +66,7 @@ func libraryFixture() (libraryReader, Process) {
 }
 
 func TestScanLibrariesIdentityAndFilesystem(t *testing.T) {
-	for _, name := range []string{"replaced", "unchanged", "missing", "permission", "own mount namespace", "chroot", "container", "chroot during scan", "PID reused", "UID changed", "exe changed", "timeout", "literal deleted suffix", "not regular"} {
+	for _, name := range []string{"replaced", "unchanged", "missing", "permission", "own mount namespace", "chroot", "container", "chroot during scan", "PID reused", "zombie", "UID changed", "exe changed", "timeout", "literal deleted suffix", "not regular"} {
 		t.Run(name, func(t *testing.T) {
 			r, p := libraryFixture()
 			ctx := t.Context()
@@ -151,7 +151,7 @@ func TestScanLibrariesIdentityAndFilesystem(t *testing.T) {
 					return f, err
 				}
 				wantErr = true
-			case "PID reused", "UID changed", "exe changed":
+			case "PID reused", "zombie", "UID changed", "exe changed":
 				old := r.readFile
 				r.readFile = func(path string) ([]byte, error) {
 					ids := r.reader.(fakeReader).ids
@@ -159,6 +159,8 @@ func TestScanLibrariesIdentityAndFilesystem(t *testing.T) {
 					switch name {
 					case "PID reused":
 						id.StartTicks++
+					case "zombie":
+						id.State, id.Exe, id.ExeOK = ProcStateZombie, "", false
 					case "UID changed":
 						id.UID++
 					case "exe changed":
@@ -167,7 +169,12 @@ func TestScanLibrariesIdentityAndFilesystem(t *testing.T) {
 					ids[42] = id
 					return old(path)
 				}
-				wantErr = true
+				// A worker that exited mid-scan (its PID now another process's,
+				// or a zombie awaiting its parent) is churn: its maps are
+				// dropped and the inventory stays complete. A live process whose
+				// identity changed cannot be verified.
+				wantErr = name == "UID changed" || name == "exe changed"
+				wantCount = 0
 			case "timeout":
 				var cancel context.CancelFunc
 				ctx, cancel = context.WithCancel(ctx)

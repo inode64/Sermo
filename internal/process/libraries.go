@@ -157,6 +157,12 @@ func (r libraryReader) verifyProcess(proc Process) (bool, error) {
 	} else {
 		id, ok = r.reader.Identity(proc.PID)
 	}
+	// A zombie, or a PID that now started at another time, is the scanned
+	// process gone: a web server recycles workers between two reads of one
+	// scan, which is inventory churn, not an identity that cannot be verified.
+	if ok && (id.State == ProcStateZombie || (id.StartTicksOK && proc.StartTicks != 0 && id.StartTicks != proc.StartTicks)) {
+		return false, nil
+	}
 	if !ok || !id.StartTicksOK || proc.StartTicks == 0 || id.StartTicks != proc.StartTicks ||
 		id.UID != proc.UID || id.Exe != proc.Exe || id.ExePrev != proc.ExePrev || id.Cgroup != proc.Cgroup {
 		return false, errors.New("process identity changed or cannot be verified")

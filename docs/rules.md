@@ -4096,7 +4096,9 @@ operand of its `and` could not be observed. In particular,
 a skipped check as a successful observation. Guards deny the operation on
 these gaps. The explicit `failed` operator retains its check-failure contract: an
 unavailable probe counts as a failure for ordinary rules (for example, an HTTP
-probe timeout), but a skipped probe does not. Guards still reject unavailable
+probe timeout), but a skipped probe does not, nor an unavailable one that still
+states no failure (a library inventory left incomplete that found no stale
+mapping): that one stays unknown. Guards still reject unavailable
 probes even under `failed`. A valid sample that simply does not satisfy its
 predicate remains an ordinary false result. For `process:` leaves and `type: process`
 checks, an incomplete process table or a `user` that does not resolve (for

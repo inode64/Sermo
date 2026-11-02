@@ -3922,7 +3922,11 @@ The result contains PID, process start ticks, library path, old/new device and
 inode, replacement timestamps, missing-file status and restart eligibility in
 `data.libraries`. The check details show paths and PIDs. A stable, actionable
 service finding shows `restart_required` with `state_reason: stale_libraries`.
-An incomplete scan retains available findings and reports unavailable. The
+An incomplete scan retains available findings and reports unavailable; one that
+found no stale mapping states no failure, so an alert on it stays quiet. A
+process that exits while it is scanned — a worker a web server recycles, now a
+zombie or its PID another process's — is dropped and does not make the scan
+incomplete. The
 result also includes `data.dependencies`, the unique paths of all loaded shared
 objects (including current modules), and `data.complete`. This inventory is
 refreshed on each actual scan; a module loaded later appears on the next scan.

@@ -165,7 +165,11 @@ func (c *staleLibrariesCheck) libraryResult(report process.LibraryReport, err er
 		res.Message += "; " + reason
 	}
 	if err != nil {
-		res.OK, res.Unavailable, res.ActionBlocked = false, true, true
+		// An incomplete inventory is evidence only of what it found. One that
+		// found no stale mapping states no failure, so an alert stays unknown
+		// instead of reading a worker that exited mid-scan as replaced
+		// libraries; the result still blocks every action.
+		res.Unavailable, res.ActionBlocked = true, true
 		res.Message += "; incomplete inventory: " + err.Error()
 	}
 	res.Data = map[string]any{DataKeyType: CheckTypeStaleLibraries, DataKeyValue: float64(len(report.Libraries)),
