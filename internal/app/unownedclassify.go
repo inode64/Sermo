@@ -268,7 +268,7 @@ func (c *unownedClassifier) classify(ctx context.Context, samples []ProcInfo, no
 		}
 		scan.scanned++
 		owner := servicemgr.ClassifyCgroup(samples[i].Cgroup)
-		if unitOwned(owner.Class) {
+		if unitOwned(owner.Class) && !c.openrcLoginSession(owner) {
 			continue
 		}
 		if samples[i].PPID == initPID && c.rt.backend != servicemgr.BackendSystemd {
@@ -428,6 +428,18 @@ func (c *unownedClassifier) excluded(info ProcInfo, now time.Time, uids map[uint
 		}
 	}
 	return false
+}
+
+// openrcLoginSessionService is the OpenRC service whose group holds login
+// sessions. Without logind nothing moves a remote login out of it: the shells,
+// a detached screen and whatever they start stay in sshd's own group. Those
+// are the session's processes, not sshd's, so only the package criterion
+// judges them, as it does a systemd session scope's members; sshd and its
+// helpers belong to its package and are never listed by it.
+const openrcLoginSessionService = "sshd"
+
+func (c *unownedClassifier) openrcLoginSession(owner servicemgr.CgroupOwner) bool {
+	return c.rt.backend == servicemgr.BackendOpenRC && owner.Class == servicemgr.CgroupClassService && owner.Owner == openrcLoginSessionService
 }
 
 // unitOwned reports whether a control group class means an init unit

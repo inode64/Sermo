@@ -4465,7 +4465,7 @@ A process no unit owns is listed for one or both of these reasons:
 | --- | --- |
 | `outside every init unit` | its control group is the root group (or a bare slice) on a host whose init places every process in a unit: systemd always, OpenRC only with per-service cgroups (`rc_cgroup_mode=unified`) |
 | `outlived its closed login session` | its control group is a host logind `session-N.scope` whose session logind no longer records, or records as `closing` — the `nohup … &` that survived a logout. A screen or tmux server and everything it runs are exempt: a detached terminal session outlives its login by design and the Sessions panel lists it; a multiplexer binary no installed package owns does not vouch for its children |
-| `executable belongs to no installed package` | it runs in a login session or the root group and its resolved `/proc/<pid>/exe` (or, for a replaced binary, the previous path) is in no package of the host's database: Gentoo (`/var/db/pkg`), dpkg, pacman and apk are read natively; rpm is asked with one `rpm -qf` per cycle |
+| `executable belongs to no installed package` | it runs in a login session or the root group and its resolved `/proc/<pid>/exe` (or, for a replaced binary, the previous path) is in no package of the host's database — on OpenRC, which has no session scopes, a member of sshd's own group counts as a login session for this criterion, since every remote login and what it starts stays there: Gentoo (`/var/db/pkg`), dpkg, pacman and apk are read natively; rpm is asked with one `rpm -qf` per cycle |
 
 Processes in another mount namespace than PID 1 (containers) are never judged by
 either criterion: a container under a cgroupfs driver sits in `/docker/<id>`,

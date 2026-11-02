@@ -889,3 +889,37 @@ func TestUnownedWatcherLeavesInitAndKernelChildrenAlone(t *testing.T) {
 		t.Fatalf("inittab reads = %d, want one per scan", reads)
 	}
 }
+
+// OpenRC keeps every remote login in sshd's own group. The package criterion
+// judges those members as session processes: a detached screen whose package
+// was removed is listed, and killable by its kernel-held file, while sshd and
+// a packaged shell are not; another service's group stays the service's, and a
+// systemd host is unchanged.
+func TestUnownedWatcherJudgesOpenRCLoginSessionsByPackage(t *testing.T) {
+	const sshdGroup = "0::/openrc.sshd"
+	listener := unownedProc(70, "/usr/sbin/sshd", sshdGroup)
+	shell := unownedProc(71, "/bin/bash", sshdGroup)
+	screen := unownedProc(72, "", sshdGroup)
+	screen.ExeOK, screen.ExePrev = false, "/usr/bin/screen-4.9.1"
+	screen.ExeFile = process.ExecutableFile{Device: 65026, Inode: 268157}
+	serviceAgent := unownedProc(73, "/opt/acme/bin/agent", "0::/openrc.acme")
+	samples := []ProcInfo{listener, shell, screen, serviceAgent}
+
+	fixture := systemdFixture()
+	fixture.backend, fixture.openrcDirs = servicemgr.BackendOpenRC, []string{"openrc.sshd", "openrc.acme"}
+	fixture.packages.notOwned["/usr/bin/screen-4.9.1"] = true
+	h := &unownedHarness{}
+	h.watcher(t, fixedSampler{infos: samples, ok: true}, map[string]any{}, fixture.runtime()).runCycle(context.Background())
+	rows := rowsOf(h.snapshot)
+	if len(rows) != 1 || rows[0].PID != 72 || rows[0].Reason != unownedReasonUnpackaged || !rows[0].CanKill {
+		t.Fatalf("rows = %+v, want only the uninstalled screen, unpackaged and killable", rows)
+	}
+
+	systemd := systemdFixture()
+	systemd.packages.notOwned["/usr/bin/screen-4.9.1"] = true
+	h = &unownedHarness{}
+	h.watcher(t, fixedSampler{infos: samples, ok: true}, map[string]any{}, systemd.runtime()).runCycle(context.Background())
+	if rows := rowsOf(h.snapshot); len(rows) != 0 {
+		t.Fatalf("systemd rows = %+v, want none: an openrc.* group is no systemd session", rows)
+	}
+}
