@@ -85,6 +85,7 @@ const (
 	cliFlagConfirm    = "confirm"
 	cliFlagConnection = checks.DBQueryKillModeConnection
 	cliFlagCost       = "cost"
+	cliFlagEscalate   = web.APIQueryEscalate
 	cliFlagForce      = "force"
 	cliFlagGenerate   = "generate"
 	cliFlagHash       = "hash"
@@ -245,6 +246,7 @@ type options struct {
 	lazy       bool // --lazy: allow umount -l during `sermoctl umount`
 	kill       bool // --kill-blockers: allow policy-gated signalling during `sermoctl umount`
 	connection bool // --connection: `sermoctl sessions kill` closes the connection instead of cancelling the statement
+	escalate   bool // --escalate: `sermoctl watch kill` follows SIGTERM with SIGKILL after the grace
 	help       bool
 	version    bool // --version / -V
 	timeout    time.Duration
@@ -458,6 +460,9 @@ func (a App) prepareOptions(args []string) (options, int, bool) {
 	if opts.command != commandSessions && opts.connection {
 		return options{}, a.commandUsageError(opts.command, "--connection is only supported by "+commandSessions+" kill"), true
 	}
+	if opts.command != commandWatch && opts.escalate {
+		return options{}, a.commandUsageError(opts.command, "--escalate is only supported by "+commandWatch+" "+commandWatchKill), true
+	}
 	return opts, exitSuccess, false
 }
 
@@ -571,6 +576,7 @@ func parseArgs(args []string) (options, error) {
 	fs.BoolVar(&opts.lazy, cliFlagLazy, false, "")
 	fs.BoolVar(&opts.kill, cliFlagKill, false, "")
 	fs.BoolVar(&opts.connection, cliFlagConnection, false, "")
+	fs.BoolVar(&opts.escalate, cliFlagEscalate, false, "")
 	fs.BoolVar(&opts.series, cliFlagSeries, false, "")
 	fs.BoolVar(&opts.long, cliFlagLong, false, "")
 	fs.StringArrayVar(&notifyValues, cliFlagNotify, nil, "")

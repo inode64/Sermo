@@ -28,7 +28,7 @@ const (
 // runWatch dispatches host-watch queries against the running daemon.
 func (a App) runWatch(ctx context.Context, opts options) int {
 	if len(opts.args) == 0 {
-		return a.commandUsageError(commandWatch, "watch requires subcommand status, monitor, unmonitor, probe, refresh, pause or resume")
+		return a.commandUsageError(commandWatch, "watch requires subcommand status, monitor, unmonitor, probe, refresh, kill, pause or resume")
 	}
 	switch opts.args[0] {
 	case commandStatus:
@@ -42,6 +42,8 @@ func (a App) runWatch(ctx context.Context, opts options) int {
 	case commandArgRefresh:
 		// Every enabled watch, or the named ones; the daemon resolves the names.
 		return a.runDaemonRefresh(ctx, opts, commandWatch+" "+commandArgRefresh, web.RefreshPath(web.APIPathWatches, opts.args[1:]...))
+	case commandWatchKill:
+		return a.runWatchKill(ctx, opts)
 	case app.RaidControlPause, app.RaidControlResume:
 		return a.runWatchRAIDControl(ctx, opts, opts.args[0])
 	default:

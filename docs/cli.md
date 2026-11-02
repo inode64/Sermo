@@ -85,6 +85,7 @@ sermoctl watch monitor WATCH
 sermoctl watch unmonitor WATCH
 sermoctl watch probe WATCH
 sermoctl watch refresh [WATCH...]      # run an extra cycle of every enabled watch, or of the named ones, now
+sermoctl watch kill UNOWNED_WATCH PID [--escalate]
 sermoctl watch pause RAID_WATCH --confirm MD_ARRAY
 sermoctl watch resume RAID_WATCH
 sermoctl start SERVICE [--no-cascade]
@@ -285,6 +286,22 @@ watch name or a service-embedded watch `"<service>:<watch>"`; a watch's monitor
 state is independent of its service's, so `unmonitor` on a service never pauses
 its watches. Repeating either command after that state is already effective is
 a successful no-op and preserves the original monitor source and change time.
+
+`sermoctl watch kill UNOWNED_WATCH PID` is the dashboard's per-row kill of an
+[`unowned_processes`](configuration.md#unowned_processes--processes-no-unit-or-package-accounts-for)
+watch from the command line. It looks the PID up in the daemon's listing and
+sends only that displayed incarnation (PID and start time) to the daemon, which
+re-reads the process, requires it to be still listed with a verified identity
+(an exact executable, or one replaced or removed on disk by its kernel-held
+file) and sends SIGTERM through the same kill gate; `--escalate` adds SIGKILL
+after the grace period. A row the daemon marks not killable is refused with its
+`kill_reason`, a refusal by the daemon exits `75`, and a dry-run watch reports
+the signal it would send.
+
+```sh
+sermoctl watch kill watch-unowned-processes 6593
+sermoctl --json watch kill watch-unowned-processes 6593 --escalate
+```
 
 `sermoctl watch probe WATCH` asks the running daemon to run one fresh sample for
 a host `diskio`, `hdparm`, `lvm`, `raid`, `smart`, `storcli` or `ssacli` watch

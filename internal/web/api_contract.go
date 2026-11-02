@@ -2,6 +2,7 @@ package web
 
 import (
 	"net/url"
+	"strconv"
 )
 
 // Shared daemon HTTP contract used by the dashboard and sermoctl. Keep these
@@ -57,6 +58,12 @@ func RefreshPath(collection string, names ...string) string {
 		return path
 	}
 	return path + "?" + url.Values{APIQueryName: names}.Encode()
+}
+
+// WatchProcessKillPath is the kill route of one process an unowned_processes
+// watch lists, without its query string.
+func WatchProcessKillPath(watch string, pid int) string {
+	return APIPathWatches + "/" + url.PathEscape(watch) + "/" + APISegmentProcesses + "/" + strconv.Itoa(pid) + "/" + APIActionKill
 }
 
 // DBQueryKillPath is the kill route of one service's db_queries watch, without
