@@ -1296,6 +1296,13 @@ func (w *Worker) compareAppVersion(app string, level int, raw string, sampledAt 
 	if key == "" {
 		key = output.FirstNonEmptyLine(raw)
 	}
+	if key == "" {
+		// A probe that exited cleanly but printed nothing names no version: on
+		// a saturated host the command's output can be lost after it exits.
+		// Compared with the baseline it read as "4.98.2 -> " and restarted the
+		// service; like a timed-out probe it is unknown and leaves the baseline.
+		return false, fmt.Errorf("%w: app %q version probe printed no version", rules.ErrUnavailable, app)
+	}
 	return w.libBaseline.versionChanged(versionKey(app, level), key, sampledAt), nil
 }
 

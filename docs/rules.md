@@ -3936,7 +3936,8 @@ rule reads: that keeps the running code, so the change stays pending and its rul
 acts once the cooldown ends. A target the acting rule reads too is consumed with
 it. A failed app version command is an
 invalid sample: it does not fire and does not update the baseline. One that
-only ran past its timeout (a loaded host) remains unknown through `and`/`or`/`not`:
+only ran past its timeout (a loaded host), or exited cleanly but printed no
+version, remains unknown through `and`/`or`/`not`:
 ordinary rules do not fire or report an evaluation error, and guards fail closed.
 The app's own watch reports the slow probe, and the next successful sample is
 compared with the baseline. An app that

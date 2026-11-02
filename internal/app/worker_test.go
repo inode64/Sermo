@@ -1446,6 +1446,56 @@ func TestCycleTimedOutAppProbeKeepsChangedRuleQuiet(t *testing.T) {
 	}
 }
 
+// A probe that exited cleanly with no output (a saturated host during a large
+// package build) read as "exim: 4.98.2 -> " and asked for a restart. It names no
+// version: the rule stays quiet, the baseline stays, and the next real version
+// is compared with it.
+func TestCycleEmptyAppVersionKeepsChangedRuleQuiet(t *testing.T) {
+	runner := execxtest.Outputs("containerd v9.9.9")
+	h := &workerHarness{opResult: operation.Result{Status: operation.ResultOK}}
+	w := appVersionWorker(h, runner, "patch")
+	samples := w.artifactSamples
+
+	samples.StoreAppReport("containerd", appinspect.Report{Version: "containerd v1.7.0", Status: appinspect.StatusOK})
+	w.RunCycle(t.Context())
+	samples.StoreAppReport("containerd", appinspect.Report{Status: appinspect.StatusOK})
+	w.RunCycle(t.Context())
+	if len(h.ops) != 0 {
+		t.Fatalf("an empty version must not restart, ops=%v", h.ops)
+	}
+	if _, ok := h.eventOf(eventKindError); ok {
+		t.Fatalf("an empty version must stay quiet, events=%+v", h.events)
+	}
+
+	samples.StoreAppReport("containerd", appinspect.Report{Version: "containerd v1.7.0", Status: appinspect.StatusOK})
+	w.RunCycle(t.Context())
+	if len(h.ops) != 0 {
+		t.Fatalf("the unchanged version after an empty sample must not restart, ops=%v", h.ops)
+	}
+	samples.StoreAppReport("containerd", appinspect.Report{Version: "containerd v1.7.1", Status: appinspect.StatusOK})
+	w.RunCycle(t.Context())
+	if len(h.ops) != 1 || h.ops[0] != string(rules.ActionRestart) {
+		t.Fatalf("a real upgrade after an empty sample must restart once, ops=%v", h.ops)
+	}
+}
+
+// An empty first sample sets no baseline: the first real version does, and
+// starting from it fires nothing.
+func TestCycleEmptyFirstAppVersionSetsNoBaseline(t *testing.T) {
+	runner := execxtest.Outputs("containerd v9.9.9")
+	h := &workerHarness{opResult: operation.Result{Status: operation.ResultOK}}
+	w := appVersionWorker(h, runner, "patch")
+	samples := w.artifactSamples
+
+	samples.StoreAppReport("containerd", appinspect.Report{Status: appinspect.StatusOK})
+	w.RunCycle(t.Context())
+	samples.StoreAppReport("containerd", appinspect.Report{Version: "containerd v1.7.0", Status: appinspect.StatusOK})
+	w.RunCycle(t.Context())
+	if len(h.ops) != 0 {
+		t.Fatalf("the first real version must become the baseline, ops=%v", h.ops)
+	}
+}
+
 func TestCycleTimedOutAppProbeDoesNotMatchNegatedChange(t *testing.T) {
 	runner := execxtest.Outputs("containerd v9.9.9")
 	h := &workerHarness{opResult: operation.Result{Status: operation.ResultOK}}
