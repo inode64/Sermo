@@ -17,6 +17,50 @@ type processMetricReader interface {
 	ProcessThreads(pid int) (uint64, bool)
 }
 
+// MemoryReader reads a process's resident memory together with the part of it
+// that is shared, in one read. Readers without it report no shared part.
+type MemoryReader interface {
+	ProcessMemory(pid int) (resident, shared uint64, ok bool)
+}
+
+// ProcessMemoryOf reads a process's resident and shared memory through r,
+// falling back to its resident size with nothing shared when r cannot tell.
+func ProcessMemoryOf(r interface {
+	ProcessRSS(pid int) (uint64, bool)
+}, pid int,
+) (resident, shared uint64, ok bool) {
+	if mr, isMemory := r.(MemoryReader); isMemory {
+		return mr.ProcessMemory(pid)
+	}
+	resident, ok = r.ProcessRSS(pid)
+	return resident, 0, ok
+}
+
+// ResidentMemory totals the resident memory of a process set, counting memory
+// the processes share only once. Each process's RSS includes every shared page
+// it maps (shared libraries, a shared-memory cache, the forked parent's pages),
+// so summing RSS across 120 php-fpm workers counted their opcache 120 times and
+// read 107% of RAM where the workers held 32% (their PSS). The kernel's exact
+// figure (PSS, /proc/<pid>/smaps_rollup) costs hundreds of times a statm read
+// on a large process, too much for every cycle; the private parts add up and
+// the largest shared part stands for all of them. A single process totals its
+// RSS unchanged.
+type ResidentMemory struct {
+	private, maxShared uint64
+}
+
+// Add counts one process's resident and shared bytes.
+func (m *ResidentMemory) Add(resident, shared uint64) {
+	shared = min(shared, resident)
+	m.private += resident - shared
+	m.maxShared = max(m.maxShared, shared)
+}
+
+// Bytes is the set's resident memory.
+func (m *ResidentMemory) Bytes() uint64 {
+	return m.private + m.maxShared
+}
+
 // ProcessObservation lazily retains raw process readings for one monitoring
 // cycle. Failed reads are retained too; a new observation retries them. Rate
 // baselines belong to the collectors and are never shared through this cache.
@@ -56,7 +100,7 @@ func (o *ProcessObservation) read(pid int, metric string) processReading {
 	case MetricCPU:
 		value.value, value.ok = o.reader.ProcessCPU(pid)
 	case MetricMemory:
-		value.value, value.ok = o.reader.ProcessRSS(pid)
+		value.value, value.write, value.ok = ProcessMemoryOf(o.reader, pid)
 	case MetricFds:
 		value.value, value.ok = o.reader.ProcessFDs(pid)
 	case MetricThreads:
@@ -82,6 +126,12 @@ func (o *ProcessObservation) ProcessCPU(pid int) (uint64, bool) {
 func (o *ProcessObservation) ProcessRSS(pid int) (uint64, bool) {
 	r := o.read(pid, MetricMemory)
 	return r.value, r.ok
+}
+
+// ProcessMemory returns the cycle's cached resident and shared memory.
+func (o *ProcessObservation) ProcessMemory(pid int) (resident, shared uint64, ok bool) {
+	r := o.read(pid, MetricMemory)
+	return r.value, r.write, r.ok
 }
 
 // ProcessFDs returns the cycle's cached descriptor count, including availability.

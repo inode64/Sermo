@@ -1029,3 +1029,52 @@ func (readerNoSwap) MemoryTotals(_ time.Duration) MemoryTotals { return MemoryTo
 func (r fakeReader) MemoryTotals(_ time.Duration) MemoryTotals {
 	return MemoryTotals{MemoryTotal: r.memTotal, MemoryUsed: r.memUsed, MemoryOK: r.memTotal > 0}
 }
+
+// sharedMemoryReader adds per-process shared memory to fakeReader.
+type sharedMemoryReader struct {
+	fakeReader
+	shared map[int]uint64
+}
+
+func (r sharedMemoryReader) ProcessMemory(pid int) (uint64, uint64, bool) {
+	v, ok := r.rss[pid]
+	return v, r.shared[pid], ok
+}
+
+func TestResidentMemoryCountsSharedPagesOnce(t *testing.T) {
+	var single ResidentMemory
+	single.Add(1000, 400)
+	if got := single.Bytes(); got != 1000 {
+		t.Fatalf("one process = %d, want its RSS 1000", got)
+	}
+	var workers ResidentMemory
+	for range 100 {
+		workers.Add(150, 100) // 50 private each, a 100-byte cache they all map
+	}
+	if got := workers.Bytes(); got != 100*50+100 {
+		t.Fatalf("100 workers = %d, want their private parts plus one shared part (%d)", got, 100*50+100)
+	}
+	var odd ResidentMemory
+	odd.Add(10, 20)
+	if got := odd.Bytes(); got != 10 {
+		t.Fatalf("shared above resident = %d, want it clamped to the RSS 10", got)
+	}
+}
+
+// Summing each worker's RSS counted a shared cache once per worker: on one
+// host, 120 php-fpm workers read 107% of RAM while their PSS was 32%, and an
+// alert-if-memory-high above 30% fired on hosts whose workers held 6-9%.
+func TestSampleServiceCountsSharedMemoryOnce(t *testing.T) {
+	r := sharedMemoryReader{
+		rss: map[int]uint64{1: 400, 2: 300, 3: 300}, memTotal: 10000, hz: 100, ncpu: 1,
+		shared: map[int]uint64{1: 200, 2: 250, 3: 250},
+	}
+	snap := New(r).SampleService("php-fpm", []int{1, 2, 3})
+	mem := snap[MetricMemory]
+	if want := float64(200 + 50 + 50 + 250); mem.Absolute != want || !mem.Ready {
+		t.Fatalf("memory = %+v, want %v bytes", mem, want)
+	}
+	if mem.Percent != 5.5 {
+		t.Fatalf("memory percent = %v, want 5.5", mem.Percent)
+	}
+}

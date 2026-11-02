@@ -90,6 +90,9 @@ func TestOSReaderProcfs(t *testing.T) {
 	if rss, ok := r.ProcessRSS(pid); !ok || rss == 0 {
 		t.Errorf("ProcessRSS(self) = (%d, %v); want ok with rss > 0", rss, ok)
 	}
+	if resident, shared, ok := r.ProcessMemory(pid); !ok || resident == 0 || shared == 0 || shared > resident {
+		t.Errorf("ProcessMemory(self) = (%d, %d, %v); want ok with 0 < shared <= resident", resident, shared, ok)
+	}
 	// VmSwap is usually 0 for the test process, but the read must succeed.
 	if _, ok := r.ProcessSwap(pid); !ok {
 		t.Error("ProcessSwap(self) not ok")

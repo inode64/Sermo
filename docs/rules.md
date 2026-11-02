@@ -3741,8 +3741,14 @@ lifetime totals from the rest of the tree, and a process that missed one sample
 does not come back as a spike. The work a process did in the interval in which
 it started or exited is not counted.
 
-`memory` is the summed **RSS** (resident memory) of the process tree, as bytes
-and as a percentage of total RAM. `swap` is the summed **swapped-out** memory
+`memory` is the **resident memory** of the process tree, as bytes and as a
+percentage of total RAM, with memory the processes share counted once: each
+process's private resident pages add up, and the largest shared part (file
+mappings and shared memory, `statm`'s third field) stands for all of them. A
+plain RSS sum counted a shared cache once per worker — 120 php-fpm workers read
+107% of RAM while they held 32% — and the kernel's exact PSS is too costly to
+read on every cycle. A single-process service reads its RSS unchanged, and the
+detail view's process total uses the same figure. `swap` is the summed **swapped-out** memory
 (`VmSwap`) of the tree, as bytes and — when a swap device exists — as a
 percentage of total swap; it is reported only on hosts where swap accounting is
 readable.

@@ -141,8 +141,9 @@ func (c *Collector) ForgetService(service string) {
 
 // SampleService computes the service-scope metrics over its discovered process
 // set — which includes the matched processes AND their descendants, so every
-// metric below sums across the whole tree (parent + children): memory (RSS sum,
-// bytes and % of RAM), swap, cpu (whole-machine rate %), process_count,
+// metric below sums across the whole tree (parent + children): memory (resident
+// memory with shared pages counted once, see ResidentMemory; bytes and % of
+// RAM), swap, cpu (whole-machine rate %), process_count,
 // io/io_read/io_write (rate, bytes/s), fds and threads. Two readings are not
 // sums: cpu_thread is the busiest single thread's rate against one CPU thread,
 // and the fds percentage is the worst single process against its own soft
@@ -166,7 +167,8 @@ func (c *Collector) sampleService(service string, pids []int, reader processMetr
 
 	var peak fdPeak
 
-	var rss, fds, threads, swap uint64
+	var resident ResidentMemory
+	var fds, threads, swap uint64
 	// Track how many processes actually contributed a successful read per metric,
 	// so a gauge that summed nothing (every /proc read failed because the tree
 	// exited or is unreadable) is reported as not-ready rather than a measured 0.
@@ -177,8 +179,8 @@ func (c *Collector) sampleService(service string, pids []int, reader processMetr
 	curThreads := make(map[int]uint64, len(pids)) // per-process thread count, for the cpu_thread floor
 	curIO := procIOSample{counters: make(map[int]ioCounters, len(pids)), at: now}
 	for _, pid := range pids {
-		if v, ok := reader.ProcessRSS(pid); ok {
-			rss += v
+		if v, shared, ok := ProcessMemoryOf(reader, pid); ok {
+			resident.Add(v, shared)
 			present++
 		}
 		if v, ok := reader.ProcessCPU(pid); ok {
@@ -208,6 +210,7 @@ func (c *Collector) sampleService(service string, pids []int, reader processMetr
 	// when PIDs were requested but none could be read (measurement failure).
 	measured := func(ok bool) bool { return len(pids) == 0 || ok }
 
+	rss := resident.Bytes()
 	mem := Reading{Absolute: float64(rss), Unit: MetricUnitBytes, HasAbsolute: true, Ready: measured(present > 0)}
 	totals := c.Reader.MemoryTotals(c.SystemFreshness)
 	if totals.MemoryOK {

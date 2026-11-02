@@ -105,3 +105,31 @@ func TestAggregateProcessesEmpty(t *testing.T) {
 		t.Fatalf("empty set should give nil rows and totals, got %v/%v", rows, totals)
 	}
 }
+
+// sharedProcMetrics adds per-process shared memory to fakeProcMetrics.
+type sharedProcMetrics struct {
+	fakeProcMetrics
+	shared map[int]uint64
+}
+
+func (f sharedProcMetrics) ProcessMemory(pid int) (uint64, uint64, bool) {
+	v, ok := f.rss[pid]
+	return v, f.shared[pid], ok
+}
+
+// The detail's total agrees with the memory metric rules read: shared pages
+// count once, while every row keeps its own RSS.
+func TestAggregateProcessesCountsSharedMemoryOnce(t *testing.T) {
+	procs := []process.Process{{PID: 1}, {PID: 2, PPID: 1, Source: "child"}, {PID: 3, PPID: 1, Source: "child"}}
+	r := sharedProcMetrics{
+		rss:    map[int]uint64{1: 400, 2: 300, 3: 300},
+		shared: map[int]uint64{1: 200, 2: 250, 3: 250},
+	}
+	rows, totals := aggregateProcesses(procs, r)
+	if totals.RSS != 200+50+50+250 {
+		t.Fatalf("total RSS = %d, want %d", totals.RSS, 200+50+50+250)
+	}
+	if rows[1].RSS != 300 {
+		t.Fatalf("row RSS = %d, want the process's own 300", rows[1].RSS)
+	}
+}

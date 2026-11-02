@@ -1,6 +1,7 @@
 package app
 
 import (
+	"sermo/internal/metrics"
 	"sermo/internal/process"
 	"sermo/internal/web"
 )
@@ -41,9 +42,11 @@ func aggregateProcesses(procs []process.Process, r procMetricReader) ([]web.Proc
 	}
 	out := make([]web.Process, 0, len(procs))
 	var totals web.ProcessTotals
+	var resident metrics.ResidentMemory
 	for i := range procs {
 		wp := processToWeb(procs[i])
-		if rss, ok := r.ProcessRSS(procs[i].PID); ok {
+		rss, shared, rssOK := metrics.ProcessMemoryOf(r, procs[i].PID)
+		if rssOK {
 			wp.RSS = uintToInt64(rss)
 		}
 		if rd, wr, ok := r.ProcessIO(procs[i].PID); ok {
@@ -57,7 +60,9 @@ func aggregateProcesses(procs []process.Process, r procMetricReader) ([]web.Proc
 		}
 		if !procs[i].Kept {
 			totals.Count++
-			totals.RSS += wp.RSS
+			if rssOK {
+				resident.Add(rss, shared)
+			}
 			totals.IORead += wp.IORead
 			totals.IOWrite += wp.IOWrite
 			totals.FDs += wp.FDs
@@ -65,6 +70,7 @@ func aggregateProcesses(procs []process.Process, r procMetricReader) ([]web.Proc
 		}
 		out = append(out, wp)
 	}
+	totals.RSS = uintToInt64(resident.Bytes())
 	return out, &totals
 }
 

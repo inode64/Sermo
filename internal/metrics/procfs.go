@@ -39,6 +39,7 @@ const (
 	procStatUTimeIndex            = 11
 	procStatSTimeIndex            = 12
 	procStatmResidentPagesIndex   = 1
+	procStatmSharedPagesIndex     = 2
 	procStatCPULabelIndex         = 0
 	procStatCPUValuesStartIndex   = procStatCPULabelIndex + 1
 	procStatAggregateMinFields    = 5
@@ -213,20 +214,32 @@ func ScanUintField(data, prefix string) (uint64, bool) {
 }
 
 // ProcessRSS reads resident pages (field 2 of /proc/<pid>/statm) as bytes.
-func (OSReader) ProcessRSS(pid int) (uint64, bool) {
+func (r OSReader) ProcessRSS(pid int) (uint64, bool) {
+	resident, _, ok := r.ProcessMemory(pid)
+	return resident, ok
+}
+
+// ProcessMemory reads resident and shared pages (fields 2 and 3 of
+// /proc/<pid>/statm) as bytes in one read. Shared counts the file-backed and
+// shared-memory pages the process maps, which other processes may map too.
+func (OSReader) ProcessMemory(pid int) (resident, shared uint64, ok bool) {
 	data, err := hostfs.ReadFile(process.PIDPath(pid, process.ProcFileStatm))
 	if err != nil {
-		return 0, false
+		return 0, 0, false
 	}
 	fields := strings.Fields(string(data))
-	if len(fields) <= procStatmResidentPagesIndex {
-		return 0, false
+	if len(fields) <= procStatmSharedPagesIndex {
+		return 0, 0, false
 	}
-	pages, err := strconv.ParseUint(fields[procStatmResidentPagesIndex], procDecimalBase, procUintBits)
+	residentPages, err := strconv.ParseUint(fields[procStatmResidentPagesIndex], procDecimalBase, procUintBits)
 	if err != nil {
-		return 0, false
+		return 0, 0, false
 	}
-	return pages * pageSize, true
+	sharedPages, err := strconv.ParseUint(fields[procStatmSharedPagesIndex], procDecimalBase, procUintBits)
+	if err != nil {
+		return 0, 0, false
+	}
+	return residentPages * pageSize, sharedPages * pageSize, true
 }
 
 // ProcessSwap reads VmSwap (swapped-out anonymous memory) from
