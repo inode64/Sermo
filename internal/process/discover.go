@@ -406,6 +406,9 @@ func (d Discoverer) markStrays(selectors []Selector, found map[int]Process, idx 
 type StaleBinary struct {
 	PID  int    // the running process
 	Path string // the path the deleted binary occupied
+	// Removed marks a path that holds no file any more: the package was
+	// uninstalled, not upgraded, so a restart has nothing to start.
+	Removed bool
 }
 
 // StaleBinariesIn lists the processes of a service whose binary was replaced on

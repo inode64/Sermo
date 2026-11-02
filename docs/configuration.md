@@ -3849,6 +3849,13 @@ its generated rule continues to alert and, where allowed, restart safely. That
 rule is graded **`warning`**, not `error`: the service still serves (the old
 version), so a notifier with `min_severity: error` does not page for it.
 
+A path that holds no file any more means the package was **uninstalled**, not
+upgraded: a restart would stop the daemon and find nothing to start. The check
+then says `N process(es) run a binary no longer installed (PATH); reinstall the
+package or stop the service`, and its reading blocks every operation, so
+`restart-on-stale-binary` only alerts. The `process` check of such a service
+names the removal the same way and blocks restart rules keyed on it.
+
 Restarting is the default. Set `restart_on_stale_binary: false` on a service
 to keep the alert and the notification but drop the restart, and `true` to
 turn the restart back on for a service whose catalog profile vetoes it:

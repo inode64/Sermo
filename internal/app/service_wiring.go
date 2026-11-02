@@ -2,7 +2,9 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io/fs"
 	"slices"
 	"time"
 
@@ -10,6 +12,7 @@ import (
 	"sermo/internal/checks"
 	"sermo/internal/config"
 	"sermo/internal/execx"
+	"sermo/internal/hostfs"
 	"sermo/internal/locks"
 	"sermo/internal/metrics"
 	"sermo/internal/operation"
@@ -131,8 +134,10 @@ func BuildServiceRuntime(ctx context.Context, cfg ServiceRuntimeConfig) ServiceR
 		},
 		PidfileFallbackPIDs: pidfileFallbackPIDs(needPidfileFallback, backend.checked, procInfo),
 		PidfileClaim:        pidfileClaim(discoverer, selectors, backend.checked),
-		StaleBinaries:       func() []process.StaleBinary { return discoverer.StaleBinaries(selectors) },
-		StaleLibraries:      serviceStaleLibraries(discoverer, selectors),
+		StaleBinaries: func() []process.StaleBinary {
+			return markRemovedBinaries(discoverer.StaleBinaries(selectors), hostfs.StatTarget)
+		},
+		StaleLibraries: serviceStaleLibraries(discoverer, selectors),
 		Strays: func() []process.Process {
 			procs, _ := discoverer.Discover(selectors)
 			return process.Strays(procs)
@@ -180,6 +185,25 @@ func pidfileFallbackPIDs(needed bool, backendPIDs func() ([]int, error), info se
 		return nil
 	}
 	return backendPIDs
+}
+
+// markRemovedBinaries flags the stale binaries whose path holds no file any
+// more. An upgrade leaves the new version at the path; an uninstall leaves
+// nothing, and then a restart would stop a serving daemon it cannot start
+// again. A path whose stat fails otherwise keeps its replaced reading. Each
+// path is read once per call, however many processes run it.
+func markRemovedBinaries(stale []process.StaleBinary, stat func(string) (fs.FileInfo, error)) []process.StaleBinary {
+	removed := map[string]bool{}
+	for i := range stale {
+		gone, seen := removed[stale[i].Path]
+		if !seen {
+			_, err := stat(stale[i].Path)
+			gone = errors.Is(err, fs.ErrNotExist)
+			removed[stale[i].Path] = gone
+		}
+		stale[i].Removed = gone
+	}
+	return stale
 }
 
 // pidfileClaim lets a pidfile check reject a PID an unrelated process recycled

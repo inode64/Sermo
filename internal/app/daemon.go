@@ -13,6 +13,7 @@ import (
 	"sermo/internal/control"
 	"sermo/internal/emission"
 	"sermo/internal/execx"
+	"sermo/internal/hostfs"
 	"sermo/internal/metrics"
 	"sermo/internal/notify"
 	"sermo/internal/operation"
@@ -597,7 +598,7 @@ func buildWorker(ctx context.Context, name, unit string, tree map[string]any, de
 	// (and, on systemd, the backend PID lookup's subprocesses) for a set that is
 	// normally empty.
 	checkDeps.StaleBinaries = func() []process.StaleBinary {
-		return discoverer.StaleBinariesIn(processesForCycle(), selectors)
+		return markRemovedBinaries(discoverer.StaleBinariesIn(processesForCycle(), selectors), hostfs.StatTarget)
 	}
 	// Strays come from the same memoized discovery: classification already ran
 	// inside Discover, so the check costs one slice filter per cycle.

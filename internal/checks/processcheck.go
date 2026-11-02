@@ -51,12 +51,20 @@ func (c processCheck) Run(_ context.Context) Result {
 	// for a service that is serving. A bare failure read as a dead daemon and
 	// sent the operator after a process that was there all along.
 	if !ok && state == process.StateAbsent {
-		if replaced := c.replacedBinaries(); replaced != "" {
-			message += fmt.Sprintf("; %s was replaced on disk, so no process matches this executable; %s",
-				replaced, StaleBinaryRestartHint)
+		if replaced, removed := c.replacedBinaries(); replaced != "" {
+			if removed {
+				message += fmt.Sprintf("; %s is no longer installed, so no process matches this executable; %s",
+					replaced, StaleBinaryRemovedHint)
+			} else {
+				message += fmt.Sprintf("; %s was replaced on disk, so no process matches this executable; %s",
+					replaced, StaleBinaryRestartHint)
+			}
 			res := c.result(ok, message, start)
 			res.Reports = ReportsState
 			res.Data = map[string]any{DataKeyReplacedBinaries: replaced}
+			// Nothing installed to start: a rule keyed on this reading still
+			// alerts, but no restart may act on it.
+			res.ActionBlocked = removed
 			return res
 		}
 	}
@@ -69,21 +77,25 @@ func (c processCheck) Run(_ context.Context) Result {
 }
 
 // replacedBinaries names this service's replaced executables that one of this
-// check's selectors would have matched, or "" when none apply.
-func (c processCheck) replacedBinaries() string {
+// check's selectors would have matched, or "" when none apply. removed reports
+// that every one of them was uninstalled rather than upgraded.
+func (c processCheck) replacedBinaries() (paths string, removed bool) {
 	var matched []string
+	removed = true
 	if c.stale != nil {
 		for _, s := range c.stale() {
 			if slices.Contains(c.exes, s.Path) {
 				matched = append(matched, s.Path)
+				removed = removed && s.Removed
 			}
 		}
 	}
 	if len(matched) == 0 && c.replacedAny != nil {
 		matched = c.replacedAny(c.exes, c.user)
+		removed = false
 	}
 	if len(matched) == 0 {
-		return ""
+		return "", false
 	}
-	return strings.Join(strutil.Unique(matched), ", ")
+	return strings.Join(strutil.Unique(matched), ", "), removed
 }

@@ -78,3 +78,39 @@ func TestStaleBinaryCheckNeedsDiscovery(t *testing.T) {
 		t.Fatal("want a warning when process discovery is unavailable")
 	}
 }
+
+// An uninstalled package leaves no file at the path: the message must not send
+// the operator to a restart that cannot start anything, and the reading still
+// fails (it alerts) but blocks every operation, the stale-binary restart among
+// them. A replaced binary in the same service keeps its restart remedy.
+func TestStaleBinaryCheckReportsAnUninstalledBinaryWithoutARestart(t *testing.T) {
+	c, _ := buildStaleBinaryCheck(base{name: "stale"}, staleBinaryDeps(
+		process.StaleBinary{PID: 721825, Path: "/usr/bin/apache2", Removed: true},
+		process.StaleBinary{PID: 2016594, Path: "/usr/bin/apache2", Removed: true},
+	))
+	res := c.Run(context.Background())
+	if res.OK || !res.ActionBlocked {
+		t.Fatalf("want a failing, action-blocked reading, got %+v", res)
+	}
+	if !strings.Contains(res.Message, "2 process(es) run a binary no longer installed (/usr/bin/apache2); "+StaleBinaryRemovedHint) {
+		t.Fatalf("message = %q", res.Message)
+	}
+	if strings.Contains(res.Message, StaleBinaryRestartHint) {
+		t.Fatalf("an uninstalled binary must not suggest a restart: %q", res.Message)
+	}
+
+	mixed, _ := buildStaleBinaryCheck(base{name: "stale"}, staleBinaryDeps(
+		process.StaleBinary{PID: 1, Path: "/usr/sbin/old", Removed: true},
+		process.StaleBinary{PID: 2, Path: "/usr/sbin/upgraded"},
+	))
+	res = mixed.Run(context.Background())
+	if !res.ActionBlocked || !strings.Contains(res.Message, "/usr/sbin/old); "+StaleBinaryRemovedHint) ||
+		!strings.Contains(res.Message, "1 process(es) run a replaced binary (/usr/sbin/upgraded); "+StaleBinaryRestartHint) {
+		t.Fatalf("mixed result = %+v", res)
+	}
+
+	replaced, _ := buildStaleBinaryCheck(base{name: "stale"}, staleBinaryDeps(process.StaleBinary{PID: 3, Path: "/usr/sbin/upgraded"}))
+	if res := replaced.Run(context.Background()); res.ActionBlocked {
+		t.Fatalf("a replaced binary must keep its restart remedy: %+v", res)
+	}
+}

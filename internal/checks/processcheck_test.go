@@ -44,6 +44,29 @@ func TestProcessCheckExplainsAReplacedBinaryInsteadOfBareAbsent(t *testing.T) {
 	}
 }
 
+// An uninstalled daemon still runs from its deleted file. The reading names the
+// removal and blocks operations: a restart-on-failure rule must not stop it for
+// a start that has nothing to start.
+func TestProcessCheckExplainsAnUninstalledBinaryAndBlocksActions(t *testing.T) {
+	c := processCheck{
+		name:       "process",
+		exes:       []string{"/usr/bin/apache2"},
+		user:       "root",
+		expect:     process.StateRunning,
+		observeAny: func([]string, string) string { return process.StateAbsent },
+		stale: func() []process.StaleBinary {
+			return []process.StaleBinary{{PID: 721825, Path: "/usr/bin/apache2", Removed: true}}
+		},
+	}
+	res := c.Run(context.Background())
+	if res.OK || !res.ActionBlocked || res.Reports != ReportsState {
+		t.Fatalf("want a failing, action-blocked state reading, got %+v", res)
+	}
+	if !strings.Contains(res.Message, "/usr/bin/apache2 is no longer installed") || !strings.Contains(res.Message, StaleBinaryRemovedHint) {
+		t.Fatalf("message = %q", res.Message)
+	}
+}
+
 // Catalog backup guards (`active: {check: backup}`) run this check with
 // expect absent. An unproven absence must be unavailable so the guard denies,
 // never a passing "absent".
