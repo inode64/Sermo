@@ -199,6 +199,42 @@ func TestProcessPolicyWatcherReportsDeletedExecutable(t *testing.T) {
 	}
 }
 
+// A package upgrade without a restart leaves every process of an allowlisted
+// daemon running its replaced binary: judged by the path it was started from,
+// with the kernel still holding that file, it is allowed (stale-binary reports
+// the upgrade). A replaced binary from a path the policy does not list is
+// still a breach.
+func TestProcessPolicyWatcherJudgesAReplacedBinaryByItsPath(t *testing.T) {
+	held := process.ExecutableFile{Device: 2049, Inode: 4242}
+	tests := []struct {
+		name       string
+		info       ProcInfo
+		wantReason string
+	}{
+		{name: "allowlisted daemon after an upgrade", info: ProcInfo{Identity: process.Identity{PID: 9, UID: 70, ExePrev: "/usr/lib64/postgresql-18/bin/postgres", ExeFile: held, StartTicks: 30}}},
+		{name: "unlisted replaced binary", info: ProcInfo{Identity: process.Identity{PID: 10, UID: 70, ExePrev: "/tmp/evil", ExeFile: held, StartTicks: 31}}, wantReason: processPolicyReasonExecutable},
+		{name: "kernel file not identified", info: ProcInfo{Identity: process.Identity{PID: 11, UID: 70, ExePrev: "/usr/lib64/postgresql-18/bin/postgres", StartTicks: 32}}, wantReason: processPolicyReasonReplacedExe},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			watcher, events, snapshot := testProcessPolicyWatcher(t,
+				&fakeProcSampler{cycles: [][]ProcInfo{{tt.info}}},
+				map[string]any{"postgres": map[string]any{checks.CheckKeyExe: "/usr/lib64/postgresql-18/bin/postgres"}},
+			)
+			watcher.runCycle(context.Background())
+			if tt.wantReason == "" {
+				if !snapshot.OK || len(*events) != 0 {
+					t.Fatalf("snapshot/events = %+v/%+v, want no violation", *snapshot, *events)
+				}
+				return
+			}
+			if snapshot.OK || len(*events) != 1 || !strings.Contains((*events)[0].Message, tt.wantReason) {
+				t.Fatalf("snapshot/events = %+v/%+v, want a %q violation", *snapshot, *events, tt.wantReason)
+			}
+		})
+	}
+}
+
 func TestProcessPolicyWatcherSkipsOnlyExitedUnresolvedProcesses(t *testing.T) {
 	errUnverifiable := errors.New("cannot verify exit")
 	unresolved := ProcInfo{PID: 11, UID: 70, StartTicks: 40, StartTicksOK: true}

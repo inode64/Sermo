@@ -127,8 +127,9 @@ func (w *processPolicyWatcher) runCycle(ctx context.Context) {
 
 func (w *processPolicyWatcher) violationReason(info ProcInfo, byPID map[int]ProcInfo) string {
 	hasExecutableMatch := false
+	judged := policyIdentity(info)
 	for _, allow := range w.allows {
-		identity, allowed := allow.match(info, w.resolve)
+		identity, allowed := allow.match(judged, w.resolve)
 		if !identity {
 			continue
 		}
@@ -137,7 +138,7 @@ func (w *processPolicyWatcher) violationReason(info ProcInfo, byPID map[int]Proc
 			return ""
 		}
 	}
-	if !info.ExeOK {
+	if !judged.ExeOK {
 		if info.ExePrev != "" {
 			return processPolicyReasonReplacedExe
 		}
@@ -153,6 +154,22 @@ func (w *processPolicyWatcher) violationReason(info ProcInfo, byPID map[int]Proc
 		return processPolicyReasonCommand
 	}
 	return processPolicyReasonExecutable
+}
+
+// policyIdentity is the identity a process is judged by. A process whose binary
+// was replaced on disk after it started — a package upgrade without a restart,
+// which stale-binary reports — is judged by the path it was started from, as
+// long as the kernel still holds that file: only what stood at that path then
+// could have been started from it. Judged as unresolved instead, every process
+// an allowlisted daemon forks read as a breach (283 firing and recovered
+// events in a day on one host, from postgres backends). The policy authorizes no
+// signal, so this never reaches a kill path, which keeps its own rule.
+func policyIdentity(info ProcInfo) ProcInfo {
+	if info.ExeOK || info.ExePrev == "" || info.ExeFile.Inode == 0 {
+		return info
+	}
+	info.Exe, info.ExeOK = info.ExePrev, true
+	return info
 }
 
 // processPolicyMaxAncestors bounds the parent walk; a process tree this deep
@@ -176,7 +193,7 @@ func (w *processPolicyWatcher) launchedByEntryPoint(info ProcInfo, byPID map[int
 			if !allow.descendants {
 				continue
 			}
-			if identity, allowed := allow.match(parent, w.resolve); identity && allowed {
+			if identity, allowed := allow.match(policyIdentity(parent), w.resolve); identity && allowed {
 				return true
 			}
 		}

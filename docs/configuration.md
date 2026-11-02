@@ -4312,12 +4312,19 @@ A `process_policy` host watch audits **every process whose real UID belongs to
 one configured user**. It is for service accounts that must execute a small,
 reviewed set of binaries: a process must match one `allow` entry with an exact,
 absolute `exe` path and, when configured, an anchored RE2 `cmd` expression.
-An unresolved executable or a `/proc/<pid>/exe` target marked `(deleted)` is
-always a violation, even when its previous path appears in the allowlist. The
-one exception is a process that was exiting when sampled: the kernel drops its
-executable link as it exits, so an unresolved process that is a zombie, or
-whose PID has since vanished or been reused, executes nothing and is skipped.
-When that exit cannot be verified, the process stays a violation.
+A process whose `/proc/<pid>/exe` target is marked `(deleted)` — its binary was
+replaced on disk after it started, typically by a package upgrade without a
+restart — is judged by the path it was started from, provided the kernel still
+holds that file: only what stood at that path then could have been started from
+it, and `stale_binary` already reports the upgrade. Judging it as unresolved made
+every process an allowlisted daemon forks (a PostgreSQL backend per connection)
+read as a breach. A replaced binary whose kernel file cannot be identified, and
+any other unresolved executable, is a violation. The one exception is a process
+that was exiting when sampled: the kernel drops its executable link as it exits,
+so an unresolved process that is a zombie, or whose PID has since vanished or
+been reused, executes nothing and is skipped. When that exit cannot be verified,
+the process stays a violation. The policy authorizes no signal, so this never
+widens what Sermo may kill.
 
 ```yaml
 name: security-user-postgres
@@ -4359,7 +4366,7 @@ without listing each one, while a shell the database server spawns is still a
 violation, because the server, not the entry point, is above it. The parent
 walk stops at the first ancestor of another user (init, a root cron daemon), so
 a process reparented to init is judged on its own identity. A descendant whose
-executable is unresolved or replaced is still reported. Anything that can start
+executable is unresolved is still reported. Anything that can start
 an entry point can run arbitrary programs under it, so pair `descendants` with
 a narrow `cmd`, and prefer scripts the watched account cannot modify.
 
