@@ -52,6 +52,34 @@ func (a App) daemonWebDo(ctx context.Context, cfg *config.Config, method, what s
 	return resp, nil
 }
 
+// postDaemonAction sends one admin action to the daemon and decodes its
+// outcome with the HTTP status. sermod answers 200 for a completed action and
+// 409 for a refused or incomplete one, both carrying an ActionResult, so both
+// return it without an error; any other status (auth, stale generation, a
+// proxy) is an error that names it, decoded body or not.
+func (a App) postDaemonAction(ctx context.Context, cfg *config.Config, what, path string) (web.ActionResult, int, error) {
+	resp, err := a.daemonWebDo(ctx, cfg, http.MethodPost, what, true, func(base string) string {
+		return base + path
+	})
+	if err != nil {
+		return web.ActionResult{}, 0, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	var result web.ActionResult
+	decodeErr := json.NewDecoder(resp.Body).Decode(&result)
+	if resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusConflict {
+		if decodeErr != nil {
+			return web.ActionResult{}, resp.StatusCode, fmt.Errorf("decode %s response: %w", what, decodeErr)
+		}
+		return result, resp.StatusCode, nil
+	}
+	message := strings.TrimSpace(result.Message)
+	if message == "" {
+		message = resp.Status
+	}
+	return result, resp.StatusCode, fmt.Errorf("%s failed (%d): %s%s", what, resp.StatusCode, message, daemonWebStatusHint(resp.StatusCode))
+}
+
 // daemonWebClient builds the client of one request to the daemon. The caller's
 // deadline governs a request that waits for daemon work, however long; the web
 // client bound only covers a request without one. The request carries the

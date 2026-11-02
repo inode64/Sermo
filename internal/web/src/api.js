@@ -61,6 +61,7 @@ const apiSuffixEvents = "/events";
 const apiSuffixMetrics = "/metrics";
 const apiSuffixPreflight = "/preflight";
 const apiSuffixProcesses = "/processes";
+const apiSuffixRefresh = "/refresh";
 const apiSuffixRelease = "/release";
 const apiSuffixRuntime = "/runtime";
 const apiSuffixSessions = "/sessions";
@@ -105,6 +106,9 @@ export function mountAPI(name, suffix = "") { return apiEntityPath(apiMountsPath
 export function mountBlockersAPI(name) { return mountAPI(name, apiSuffixBlockers); }
 export function notifierTestAPI(name) { return apiEntityPath(apiNotifiersPath, name, apiSuffixTest); }
 export function panicAPI(enable) { return `${apiPanicPath}/${enable ? "on" : "off"}`; }
+// refreshAPI runs the checks behind one panel now: base is the applications,
+// libraries or watches collection.
+export function refreshAPI(base) { return `${base}${apiSuffixRefresh}`; }
 export function serviceAPI(name, suffix = "") { return apiEntityPath(apiServicesPath, name, suffix); }
 export function serviceEventsAPI(name, limit) { return serviceAPI(name, apiLimitSuffix(apiSuffixEvents, limit)); }
 export function serviceMetricsAPI(name, check, since, metric = "") {

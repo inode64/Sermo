@@ -1,6 +1,7 @@
 package app
 
 import (
+	"cmp"
 	"context"
 	"log/slog"
 	"runtime/debug"
@@ -25,7 +26,21 @@ type Scheduler struct {
 	// giving the host time to finish booting so services that are still coming
 	// up are not flagged or remediated prematurely. <=0 disables the wait.
 	StartupDelay time.Duration
+	// Schedule, when set, tracks every watch this run schedules: when its next
+	// cycle is due, and an operator's request for an extra cycle now (see
+	// WatchSchedule). nil keeps every watch untracked on its own interval.
+	// Service workers are never tracked.
+	Schedule *WatchSchedule
+	// refreshGap overrides refreshedCycleGap; zero uses it. Tests shorten it.
+	refreshGap time.Duration
 }
+
+// refreshedCycleGap is the least time a refreshed cycle starts after the
+// previous cycle of the same watch ended. Rate checks (process CPU and I/O,
+// net, disk I/O) divide by the time between two samples: back-to-back cycles a
+// few milliseconds apart would read one clock tick as tens of percent and fire
+// an action on noise. It is the window a manual disk I/O probe opens.
+const refreshedCycleGap = defaultDiskIOProbeWindow
 
 // cycler is anything the scheduler ticks once per interval. cycleTarget names
 // it for the panic-recovery log so one target's crash is attributable.
@@ -78,24 +93,29 @@ func (s Scheduler) Run(ctx context.Context, workers []*Worker, watches []*Watch,
 	staggerTotal := len(workers) + len(watches)
 	var wg sync.WaitGroup
 	idx := 0
+	gap := cmp.Or(s.refreshGap, refreshedCycleGap)
+	endGeneration := s.Schedule.beginGeneration()
+	defer endGeneration()
 	// launch takes the target's own interval; a target that configures none
 	// falls back to the engine cadence. Workers are launched before watches so
 	// the stagger slots stay in the documented order.
-	launch := func(c cycler, own time.Duration) {
+	launch := func(c cycler, own time.Duration, entry *scheduledWatch, release func()) {
 		if own <= 0 {
 			own = interval
 		}
 		offset := staggerOffset(idx, staggerTotal, interval)
 		idx++
 		wg.Go(func() {
-			runCycler(ctx, c, own, offset)
+			defer release()
+			runCycler(ctx, c, own, offset, entry, min(gap, own))
 		})
 	}
 	for _, w := range workers {
-		launch(w, w.Interval)
+		launch(w, w.Interval, nil, func() {})
 	}
 	for _, wt := range watches {
-		launch(wt, wt.Interval)
+		entry, release := s.Schedule.track(wt)
+		launch(wt, wt.Interval, entry, release)
 	}
 	wg.Wait()
 }
@@ -117,21 +137,77 @@ func staggerOffset(idx, total int, interval time.Duration) time.Duration {
 }
 
 // runCycler ticks a cycler from cycle completion: stagger offset, then cycle, then wait
-// one interval, repeat. A cancelled context stops between cycles (never start a
-// new operation during shutdown).
-func runCycler(ctx context.Context, c cycler, interval, offset time.Duration) {
-	if offset > 0 {
-		if !ctxutil.Sleep(ctx, offset) {
-			return
-		}
-	}
+// one interval, repeat. A refresh request on the entry runs an extra cycle,
+// never sooner than gap after the previous one ended, and leaves the schedule
+// where it was: a check due in two hours still runs in two hours. Each request
+// is released once the cycle answering it completes, and the entry records
+// when the next scheduled cycle starts. A cancelled context stops between
+// cycles (never start a new operation during shutdown).
+func runCycler(ctx context.Context, c cycler, interval, offset time.Duration, entry *scheduledWatch, gap time.Duration) {
+	due := time.Now().Add(offset)
+	var ended time.Time
 	for {
-		if ctx.Err() != nil {
+		earliest := ended.Add(gap)
+		// A scheduled cycle that comes due within the gap after a refreshed one
+		// waits for it too: its rate window would be as short.
+		next := due
+		if earliest.After(next) {
+			next = earliest
+		}
+		entry.setDue(next)
+		answered, ok := awaitCycle(ctx, next, entry.requests(), earliest)
+		if !ok || ctx.Err() != nil {
 			return
 		}
 		runCycleGuarded(ctx, c)
-		if !ctxutil.Sleep(ctx, interval) {
-			return
+		ended = time.Now()
+		for _, done := range answered {
+			close(done)
+		}
+		if answered == nil {
+			due = ended.Add(interval)
+		}
+	}
+}
+
+// awaitCycle waits until the next cycle may start: the scheduled one at due, or
+// a refresh request once earliest has passed. It returns the requests the
+// cycle answers (none for a scheduled cycle), and false when ctx ends first.
+func awaitCycle(ctx context.Context, due time.Time, wake <-chan chan struct{}, earliest time.Time) ([]chan struct{}, bool) {
+	timer := time.NewTimer(time.Until(due))
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return nil, false
+	case <-timer.C:
+		return nil, true
+	case done := <-wake:
+		return gatherRefreshes(ctx, wake, done, earliest)
+	}
+}
+
+// gatherRefreshes holds a refreshed cycle until earliest and lets every
+// request that arrives meanwhile, or is already waiting, join it, so
+// concurrent refreshes share one cycle instead of queueing one each.
+func gatherRefreshes(ctx context.Context, wake <-chan chan struct{}, first chan struct{}, earliest time.Time) ([]chan struct{}, bool) {
+	answered := []chan struct{}{first}
+	hold := time.NewTimer(max(time.Until(earliest), 0))
+	defer hold.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return nil, false
+		case more := <-wake:
+			answered = append(answered, more)
+		case <-hold.C:
+			for {
+				select {
+				case more := <-wake:
+					answered = append(answered, more)
+				default:
+					return answered, true
+				}
+			}
 		}
 	}
 }

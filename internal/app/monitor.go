@@ -71,6 +71,8 @@ const SystemFreshnessIntervalDivisor = 2
 
 // NewMonitor wires a monitor from the initial validated config and shared deps.
 func NewMonitor(cfg *config.Config, deps Deps, scheduler Scheduler, readiness *Readiness, collector *metrics.Collector, web *WebBackendHolder, workers []*Worker, watches []*Watch) *Monitor {
+	// The registry outlives every generation, so the scheduler carries it once.
+	scheduler.Schedule = deps.WatchSchedule
 	return &Monitor{
 		cfg: cfg, deps: deps, scheduler: scheduler, readiness: readiness,
 		collector: collector, web: web, workers: workers, watches: watches,

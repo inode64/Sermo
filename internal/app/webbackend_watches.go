@@ -27,14 +27,19 @@ func (b *WebBackend) Watches(_ context.Context) []web.Watch {
 	out := make([]web.Watch, 0, len(b.watchOrder))
 	lastActivities := b.lastWatchActivities()
 	system := b.watchSystemSnapshot()
-	// One read of every monitor state serves the whole list, as for services.
+	// One read of every monitor state and every due time serves the whole list.
 	monitors := b.monitorRecords()
+	nextChecks := b.watchSchedule.nextChecks()
 	for _, name := range b.watchOrder {
 		w := b.watches[name]
 		if w == nil {
 			continue
 		}
-		out = append(out, b.watchView(w, system, lastActivities[name], monitors))
+		view := b.watchView(w, system, lastActivities[name], monitors)
+		if next, ok := nextChecks[scheduleKey{name: w.name, checkType: w.checkType}]; ok && view.Enabled && view.Monitored {
+			view.NextCheckAt = next.UTC().Format(time.RFC3339)
+		}
+		out = append(out, view)
 	}
 	return out
 }

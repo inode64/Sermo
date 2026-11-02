@@ -938,6 +938,26 @@ then at most one operation.
   deadline passes while a host stall holds every slot keeps its previous
   result for that one cycle; a second starved cycle in a row reports it
   unavailable, so a lasting stall stays visible.
+- **Manual refresh**: the Web UI's refresh buttons and `sermoctl apps|libs|watch
+  refresh` run an extra cycle of a watch now. The cycle runs on the watch's own
+  goroutine, so it never overlaps a scheduled one, and the schedule stays where
+  it was: a check due in two hours still runs in two hours. A refreshed cycle
+  starts no sooner than 2 seconds after the watch's previous cycle ended, and a
+  scheduled cycle that comes due within those 2 seconds waits for them, so a
+  rate check (process CPU and I/O, net, disk I/O) measures a real window
+  instead of reading one clock tick as tens of percent. It is a real cycle: it
+  counts toward a cycle-based `for`/`within` window and can run the watch's
+  hook and `then` actions earlier than the schedule would have — repeated
+  refreshes shorten such a window, a duration window (`for: 5m`) is
+  unaffected; the dashboard asks for confirmation before refreshing the
+  Watches panel. `dry_run`, panic
+  mode and the `policy` cooldown of `expand`, `remount` and `makestep` still
+  apply; a hook runs on every firing cycle, so refreshing a watch that is
+  already firing runs its hook once more. Service workers are never
+  refreshed, paused watches are skipped, at most four watches cycle at once
+  across all concurrent refreshes, and each refresh records one `refresh`
+  event. It needs admin rights, CSRF and the current configuration generation
+  like any other action.
 - **Configuration health**: a service's `preflight.config` is copied into the
   `configuration` check — warning-grade unless the entry declares its own
   severity, and never counted against SLA — and runs through that same bounded pool,

@@ -9,6 +9,7 @@ import (
 	"sermo/internal/app"
 	"sermo/internal/appinspect"
 	"sermo/internal/config"
+	"sermo/internal/web"
 )
 
 // runApps lists catalog apps (catalog/apps): which are
@@ -16,13 +17,19 @@ import (
 // command reports, and whether they resolve without error. Only installed apps
 // are shown unless `apps all` is given.
 func (a App) runApps(ctx context.Context, opts options) int {
-	return a.listCategory(ctx, opts, catalogListing{category: config.CategoryApp, jsonKey: commandApps, usage: commandApps, empty: "installed applications", heading: "APPLICATION"})
+	return a.listCategory(ctx, opts, catalogListing{
+		category: config.CategoryApp, jsonKey: commandApps, usage: commandApps, empty: "installed applications", heading: "APPLICATION",
+		refreshPath: web.APIPathApplications,
+	})
 }
 
 // runLibs lists catalog libraries (catalog/libs) services can watch for
 // changes, with the version each reports and whether it is present.
 func (a App) runLibs(ctx context.Context, opts options) int {
-	return a.listCategory(ctx, opts, catalogListing{category: config.CategoryLibrary, jsonKey: commandLibs, usage: commandLibs, empty: "libraries", heading: "LIBRARY"})
+	return a.listCategory(ctx, opts, catalogListing{
+		category: config.CategoryLibrary, jsonKey: commandLibs, usage: commandLibs, empty: "libraries", heading: "LIBRARY",
+		refreshPath: web.APIPathLibraries,
+	})
 }
 
 // runServices lists the services this host is configured to supervise. With
@@ -45,13 +52,19 @@ func (a App) runServices(ctx context.Context, opts options) int {
 }
 
 // catalogListing names one catalog category lister: its JSON key, the command
-// words usage errors quote, and the table's empty text and first heading.
+// words usage errors quote, the table's empty text and first heading, and the
+// daemon collection a `refresh` argument re-checks (none for a listing the
+// daemon does not watch).
 type catalogListing struct {
 	category, jsonKey, usage, empty, heading string
+	refreshPath                              string
 }
 
 func (a App) listCategory(ctx context.Context, opts options, l catalogListing) int {
 	category, jsonKey := l.category, l.jsonKey
+	if l.refreshPath != "" && len(opts.args) > 0 && opts.args[0] == commandArgRefresh {
+		return a.runListingRefresh(ctx, opts, l)
+	}
 	if len(opts.args) > 1 || (len(opts.args) == 1 && opts.args[0] != commandArgAll) {
 		return a.commandUsageError(jsonKey, l.usage+" accepts only optional `all`")
 	}
@@ -93,6 +106,17 @@ func (a App) listCategory(ctx context.Context, opts options, l catalogListing) i
 	}
 	a.printApps(reports, l.empty, opts.long, l.heading)
 	return a.printServicesDelivery(opts, delivery)
+}
+
+// runListingRefresh asks the daemon to re-run the watches behind the apps or
+// libs listing now. The listing itself already inspects the host live; the
+// refresh brings the daemon's state, events and dashboard up to date.
+func (a App) runListingRefresh(ctx context.Context, opts options, l catalogListing) int {
+	label := l.usage + " " + commandArgRefresh
+	if len(opts.args) > 1 || len(opts.notifyNames) > 0 || opts.long {
+		return a.commandUsageError(l.jsonKey, label+" takes no arguments, --notify or --long")
+	}
+	return a.runDaemonRefresh(ctx, opts, label, web.RefreshPath(l.refreshPath))
 }
 
 // printApps renders the report table. The VERSION column shows the short version

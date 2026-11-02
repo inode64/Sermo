@@ -181,7 +181,7 @@ func unownedScanData(scan unownedScan, rows []checks.UnownedProcess) map[string]
 		checks.DataKeyScanned:         scan.scanned,
 		checks.DataKeyViolationCount:  len(scan.findings),
 		checks.DataKeyViolations:      unownedFindingList(scan.findings),
-		checks.DataKeyPIDs:            limitedDisplayList(scan.findings, func(f unownedFinding) string { return strconv.Itoa(f.info.PID) }),
+		checks.DataKeyPIDs:            limitedDisplayList(scan.findings, processPIDListLimit, func(f unownedFinding) string { return strconv.Itoa(f.info.PID) }),
 		checks.DataKeyUnitAttribution: scan.attribution(),
 		checks.DataKeyPackageDB:       string(scan.packageDB),
 		checks.DataKeyProcesses:       rows,
@@ -189,7 +189,7 @@ func unownedScanData(scan unownedScan, rows []checks.UnownedProcess) map[string]
 }
 
 func unownedFindingList(findings []unownedFinding) string {
-	return limitedDisplayList(findings, unownedFindingText)
+	return limitedDisplayList(findings, processPIDListLimit, unownedFindingText)
 }
 
 func unownedFindingText(f unownedFinding) string {

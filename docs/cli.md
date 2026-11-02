@@ -25,9 +25,11 @@ Without `--timeout`, live service queries (`status` and `is-active`) use the
 Web UI, which a service's `stop_policy` or, for a `stop` or `restart`, its
 systemd unit's `TimeoutStopSec=` may raise. `sessions kill` waits for the same
 budget (a statement kill runs through the daemon's operation engine), and
-`watch probe` for the check's own `timeout`, else `engine.default_timeout`; an
-explicit `--timeout` replaces either wait. Any other request to the daemon keeps
-a 10-second web client bound unless its command has a deadline. `notifier test` uses
+`watch probe` for the check's own `timeout`, else `engine.default_timeout`;
+`apps refresh`, `libs refresh` and `watch refresh` wait for
+`engine.operation_timeout`, the budget the daemon gives the refreshed cycles.
+An explicit `--timeout` replaces any of these waits. Any other request to the
+daemon keeps a 10-second web client bound unless its command has a deadline. `notifier test` uses
 `engine.default_timeout` (default `10s`), like the Web UI's test button.
 `services` gives its configured-service listing (and a `--notify` send) 30
 seconds each, and `state compact` 90 seconds. Other short probe commands keep
@@ -82,6 +84,7 @@ sermoctl watch status WATCH
 sermoctl watch monitor WATCH
 sermoctl watch unmonitor WATCH
 sermoctl watch probe WATCH
+sermoctl watch refresh [WATCH...]      # run an extra cycle of every enabled watch, or of the named ones, now
 sermoctl watch pause RAID_WATCH --confirm MD_ARRAY
 sermoctl watch resume RAID_WATCH
 sermoctl start SERVICE [--no-cascade]
@@ -118,7 +121,9 @@ sermoctl notifier test NAME            # send an explicit test message through o
 sermoctl services [--notify NAME[,NAME]|all]                         # configured services (init, docker, VMs)
 sermoctl services catalog [all] [--long] [--notify NAME[,NAME]|all]   # catalog inventory
 sermoctl apps [all] [--long]                                          # catalog apps (see Catalog inventory)
+sermoctl apps refresh                                                 # make sermod re-inspect every installed app now
 sermoctl libs [all] [--long]
+sermoctl libs refresh
 sermoctl patterns [catalog]                                           # pattern sets in use (catalog: all)
 
 sermoctl sla [TARGET]                   # availability windows for every service and availability watch, or one
@@ -267,8 +272,9 @@ its web API does not answer (web disabled, token rejected), the command prints
 monitoring script never reads an unobserved watch as healthy.
 
 When the daemon has current watch readings, `sermoctl watch status WATCH` also
-prints them (including RAID operation and rebuild percentage) and the separate
-last-check timestamp; `--json` exposes the same readings in a `readings` array.
+prints them (including RAID operation and rebuild percentage) and the
+last-check and next-check timestamps; `--json` exposes the same readings in a
+`readings` array, and the timestamps as `last_checked_at` and `next_check_at`.
 A numeric reading there also carries `number`, its value in the reading's own
 unit (bytes, seconds, percent, a count), beside the formatted `value`; scripts
 compare that instead of parsing `1.2 GiB`.
@@ -310,6 +316,29 @@ percentage where available; those states describe work, not health. Only one
 manual sample for a watch may run at once; `sermoctl watch probe` waits for that
 same daemon task and reports an already-running sample instead of starting a
 second disk, LVM, RAID or SMART command.
+
+`sermoctl watch refresh [WATCH...]` asks the running daemon to run an extra
+cycle of every enabled watch now, or only of the named ones (a host watch or
+`"<service>:<watch>"`), and waits for those cycles; each watch keeps its
+schedule, so a check due in two hours still runs in two hours. Unlike `probe`
+it is not a separate sample: it is the watch's own cycle, so it updates the
+watch's state, fires or recovers it and runs its notifications, hook and
+`then` actions as a scheduled cycle would — see [safety](safety.md#scheduler-and-concurrency) for what that means
+for windows and actions. A watch whose monitoring is paused is skipped, and a
+named watch is reported as not scheduled while it has no running cycle: during
+`engine.startup_delay`, or when it belongs to a service whose unit the daemon
+could not resolve.
+
+`sermoctl apps refresh` and `sermoctl libs refresh` do the same for the watches
+behind those listings: every installed application or library is inspected now,
+besides its `engine.artifact_interval` schedule, and the next Web UI listing is
+rebuilt from those cycles. The `apps` and `libs` listings already inspect the host
+themselves; the refresh brings the daemon's state, events, `changed:` samples
+and dashboard up to date, for example right after a package upgrade. Each
+refresh prints `OK` and the daemon's outcome; when a watch was not refreshed by
+`engine.operation_timeout`, no watch is scheduled yet, or a named watch has no
+running cycle, it prints `FAIL` with that outcome and exits `1`.
+
 Sermo reads the service's `service:` candidates, picks the first unit known by
 the active backend, and normalizes systemd names with `.service` when needed.
 

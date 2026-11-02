@@ -259,6 +259,10 @@ type Deps struct {
 	// for the web watch list. The daemon and web backend share this registry so
 	// HTTP reads never run watches themselves.
 	WatchSnapshots *WatchSnapshots
+	// WatchSchedule lets the web backend run an extra cycle of a scheduled watch
+	// now; the monitor's scheduler tracks the watches it runs. Optional: nil
+	// keeps every watch on its interval and a refresh finds nothing to run.
+	WatchSchedule *WatchSchedule
 	// watchConfigID is the identity of the watch entry currently being built.
 	// Mutated only on a by-value Deps copy inside buildWatchEntry.
 	watchConfigID string

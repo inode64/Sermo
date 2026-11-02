@@ -35,13 +35,8 @@ func (s *Server) handleNotifiers(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleNotifierTest(w http.ResponseWriter, r *http.Request) {
-	backend, ok := s.mutationBackend(w, r)
-	if !ok {
-		return
-	}
-	s.operate(w, backend, func(ctx context.Context, backend Backend) (bool, any) {
-		res := backend.TestNotifier(ctx, r.PathValue(apiParamName))
-		return res.OK, res
+	s.mutateAction(w, r, func(ctx context.Context, backend Backend) ActionResult {
+		return backend.TestNotifier(ctx, r.PathValue(apiParamName))
 	})
 }
 
@@ -62,7 +57,7 @@ func (s *Server) handleLockRelease(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	res := backend.ReleaseLock(r.Context(), r.PathValue(apiParamService), r.URL.Query().Get(apiParamName))
+	res := backend.ReleaseLock(r.Context(), r.PathValue(apiParamService), r.URL.Query().Get(APIQueryName))
 	writeActionResult(w, res.OK, res)
 }
 

@@ -102,7 +102,6 @@ const (
 	apiSegmentDaemon           = "daemon"
 	apiSegmentEvents           = "events"
 	apiSegmentHost             = "host"
-	apiSegmentLibraries        = "libraries"
 	apiSegmentLocks            = "locks"
 	apiSegmentMetrics          = "metrics"
 	apiSegmentMonitoring       = "monitoring"
@@ -212,7 +211,6 @@ const (
 	apiPathDashboard  = apiPathPrefix + apiSegmentDashboard
 	apiPathDaemon     = apiPathPrefix + apiSegmentDaemon
 	apiPathHost       = apiPathPrefix + apiSegmentHost
-	apiPathLibraries  = apiPathPrefix + apiSegmentLibraries
 	apiPathLocks      = apiPathPrefix + apiSegmentLocks
 	apiPathMonitoring = apiPathPrefix + apiSegmentMonitoring
 	apiPathMounts     = apiPathPrefix + apiSegmentMounts
@@ -235,6 +233,7 @@ const (
 	routeAPIServices                  = routeMethodGet + APIPathServices
 	routeAPISessions                  = routeMethodGet + APIPathSessions
 	routeAPIWatches                   = routeMethodGet + APIPathWatches
+	routeAPIWatchesRefresh            = routeMethodPost + APIPathWatches + "/" + APISegmentRefresh
 	routeAPIWatchAction               = routeMethodPost + APIPathWatches + "/" + routeVarName + "/" + routeVarAction
 	routeAPIWatchProcessKill          = routeMethodPost + APIPathWatches + "/" + routeVarName + "/" + APISegmentProcesses + "/{" + apiParamPID + "}/" + APIActionKill
 	routeAPIWatchSeries               = routeMethodGet + APIPathWatches + "/" + routeVarName + "/" + apiSegmentSLA
@@ -242,7 +241,9 @@ const (
 	routeAPINotifiers                 = routeMethodGet + apiPathNotifiers
 	routeAPINotifierTest              = routeMethodPost + apiPathNotifiers + "/" + routeVarName + "/" + apiActionTest
 	routeAPIApplications              = routeMethodGet + APIPathApplications
-	routeAPILibraries                 = routeMethodGet + apiPathLibraries
+	routeAPIApplicationsRefresh       = routeMethodPost + APIPathApplications + "/" + APISegmentRefresh
+	routeAPILibraries                 = routeMethodGet + APIPathLibraries
+	routeAPILibrariesRefresh          = routeMethodPost + APIPathLibraries + "/" + APISegmentRefresh
 	routeAPIDashboard                 = routeMethodGet + apiPathDashboard
 	routeAPIMounts                    = routeMethodGet + apiPathMounts
 	routeAPIMountAction               = routeMethodPost + apiPathMounts + "/" + routeVarName + "/" + routeVarAction
@@ -407,6 +408,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc(routeAPISessions, s.handleSessions)
 	mux.HandleFunc(routeAPIServices, s.handleServices)
 	mux.HandleFunc(routeAPIWatches, s.handleWatches)
+	mux.HandleFunc(routeAPIWatchesRefresh, s.handleWatchesRefresh)
 	mux.HandleFunc(routeAPIWatchAction, s.handleWatchAction)
 	mux.HandleFunc(routeAPIWatchProcessKill, s.handleWatchProcessKill)
 	mux.HandleFunc(routeAPIWatchSeries, s.handleWatchSeries)
@@ -414,7 +416,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc(routeAPINotifiers, s.handleNotifiers)
 	mux.HandleFunc(routeAPINotifierTest, s.handleNotifierTest)
 	mux.HandleFunc(routeAPIApplications, s.handleApplications)
+	mux.HandleFunc(routeAPIApplicationsRefresh, s.handleApplicationsRefresh)
 	mux.HandleFunc(routeAPILibraries, s.handleLibraries)
+	mux.HandleFunc(routeAPILibrariesRefresh, s.handleLibrariesRefresh)
 	mux.HandleFunc(routeAPIMounts, s.handleMounts)
 	mux.HandleFunc(routeAPIMountAction, s.handleMountAction)
 	mux.HandleFunc(routeAPIMountBlockers, s.handleMountBlockers)

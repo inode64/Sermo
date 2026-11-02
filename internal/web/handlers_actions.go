@@ -60,13 +60,8 @@ func (s *Server) handleAction(w http.ResponseWriter, r *http.Request) {
 // explicit admin commands, so the route shares the mutation gates (admin,
 // CSRF, generation) with every other action.
 func (s *Server) handleServiceButton(w http.ResponseWriter, r *http.Request) {
-	backend, ok := s.mutationBackend(w, r)
-	if !ok {
-		return
-	}
-	s.operate(w, backend, func(ctx context.Context, backend Backend) (bool, any) {
-		res := backend.ServiceButton(ctx, r.PathValue(apiParamName), r.PathValue(apiParamButton))
-		return res.OK, res
+	s.mutateAction(w, r, func(ctx context.Context, backend Backend) ActionResult {
+		return backend.ServiceButton(ctx, r.PathValue(apiParamName), r.PathValue(apiParamButton))
 	})
 }
 
@@ -99,6 +94,34 @@ func (s *Server) handleWatchAction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeMonitorAction(w, backend.SetWatchMonitored(r.Context(), name, action == apiActionMonitor))
+}
+
+// A refreshed watch cycle can run that watch's actions, so a refresh shares
+// the mutation gates.
+func (s *Server) handleApplicationsRefresh(w http.ResponseWriter, r *http.Request) {
+	s.mutateAction(w, r, func(ctx context.Context, backend Backend) ActionResult { return backend.RefreshApplications(ctx) })
+}
+
+func (s *Server) handleLibrariesRefresh(w http.ResponseWriter, r *http.Request) {
+	s.mutateAction(w, r, func(ctx context.Context, backend Backend) ActionResult { return backend.RefreshLibraries(ctx) })
+}
+
+func (s *Server) handleWatchesRefresh(w http.ResponseWriter, r *http.Request) {
+	names := r.URL.Query()[APIQueryName]
+	s.mutateAction(w, r, func(ctx context.Context, backend Backend) ActionResult { return backend.RefreshWatches(ctx, names) })
+}
+
+// mutateAction runs one backend action whose outcome is an ActionResult behind
+// the mutation gates (admin, CSRF, generation) and writes it.
+func (s *Server) mutateAction(w http.ResponseWriter, r *http.Request, run func(context.Context, Backend) ActionResult) {
+	backend, ok := s.mutationBackend(w, r)
+	if !ok {
+		return
+	}
+	s.operate(w, backend, func(ctx context.Context, backend Backend) (bool, any) {
+		res := run(ctx, backend)
+		return res.OK, res
+	})
 }
 
 func writeMonitorAction(w http.ResponseWriter, err error) {

@@ -179,6 +179,7 @@ type WebBackend struct {
 	operationSettling      OperationSettlingStore
 	snapshots              *Snapshots
 	watchSnapshots         *WatchSnapshots
+	watchSchedule          *WatchSchedule
 	settling               *Settling
 	observability          *ObservabilityRegistry
 	sla                    SLAReader
@@ -311,6 +312,7 @@ func NewWebBackend(ctx context.Context, cfg *config.Config, deps Deps) (*WebBack
 		operationSettling:     operationSettling,
 		snapshots:             deps.Snapshots,
 		watchSnapshots:        deps.WatchSnapshots,
+		watchSchedule:         deps.WatchSchedule,
 		settling:              deps.Settling,
 		observability:         deps.Observability,
 		events:                deps.Events,

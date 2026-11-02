@@ -57,6 +57,8 @@ const (
 	commandArgClear     = "clear"
 	commandArgCatalog   = "catalog"
 	commandArgLibraries = "libraries"
+	// commandArgRefresh asks the daemon to re-check a listing now.
+	commandArgRefresh = "refresh"
 )
 
 const (

@@ -12,12 +12,12 @@ import {
   csrfPostOptions, dashboardAPI, daemonMetricsAPI, eventsAPI, eventsClearAPI,
   dbQueryKillAPI, emptyTerminalSessionCloseAPI,
   liveVerbosePath, lockReleaseAPI, mountAPI, mountBlockersAPI, panicAPI,
-  readyVerbosePath, serviceAPI, serviceButtonAPI, serviceEventsAPI, serviceMetricsAPI,
+  readyVerbosePath, refreshAPI, serviceAPI, serviceButtonAPI, serviceEventsAPI, serviceMetricsAPI,
   servicePreflightAPI, serviceRuntimeAPI, serviceSLAAPI, sshSessionCloseAPI, terminalSessionCloseAPI, stateCompactAPI, watchAPI,
   watchMetricsAPI, watchProcessKillAPI, watchSLAAPI,
 } from "./api.js";
 import {
-  fmtAge, fmtBytes, fmtBytesPerSecond, fmtDuration, fmtMetricValue, fmtNum, fmtPct, fmtRemain,
+  fmtAge, fmtBytes, fmtBytesPerSecond, fmtCountdown, fmtDuration, fmtMetricValue, fmtNum, fmtPct, fmtRemain,
   fmtSince, fmtTime, fmtUntilShort, millisecondsPerDay,
   millisecondsPerHour, millisecondsPerMinute, millisecondsPerSecond,
   metricUnitBytes, metricUnitBytesPerSecond, metricUnitMilliseconds,
@@ -39,6 +39,7 @@ const eventLogLimit = "500";
 const httpStatusServiceUnavailable = 503;
 const httpStatusUnauthorized = 401;
 const httpStatusPreconditionFailed = 412;
+const httpStatusConflict = 409;
 // Relative, like the API paths, so the dashboard keeps working under a reverse
 // proxy path.
 const loginPath = "login";
@@ -480,9 +481,8 @@ async function loadMe() {
   if (!me.auth) { $("#me").innerHTML = ""; }
   else if (me.role === "admin") { $("#me").innerHTML = `(admin)${logoutLink}`; }
   else { $("#me").innerHTML = `read-only &middot; <a href="login">log in</a>${logoutLink}`; }
-  // Show admin-only controls (reload config, clear event log).
-  const reloadBtn = $("#reload-btn");
-  if (reloadBtn) reloadBtn.classList.toggle("admin-hidden", !me.can_act);
+  // Show admin-only controls (reload config, panel refresh, clear event log).
+  toggleAdminControls("#reload-btn", "[data-refresh-panel]");
   updateEventAdminControls();
   updateStateCompactControls();
   updatePanicControls();
@@ -816,6 +816,51 @@ async function reloadConfig() {
   }
 }
 
+// refreshPanelPaths maps a refresh button's data-refresh-panel, which also
+// names the panel in the status line, to the collection whose checks it runs.
+const refreshPanelWatches = "watches";
+const refreshPanelPaths = {
+  applications: apiApplicationsPath,
+  libraries: apiLibrariesPath,
+  [refreshPanelWatches]: apiWatchesPath,
+};
+
+// refreshPanel asks the daemon to run an extra check of everything behind one
+// panel now, waits for it, then reloads the dashboard; each watch keeps its
+// schedule. A watch's extra cycle runs its alerts and actions and counts toward
+// its cycle windows, so the Watches panel asks first: repeated clicks must not
+// reach a `for: N cycles` window in seconds. Applications and libraries carry
+// no actions. A 409 carries an outcome that did not complete (a check not
+// refreshed by the deadline), which reads amber rather than as a failed request.
+async function refreshPanel(btn) {
+  const panel = btn.dataset.refreshPanel || "";
+  const path = refreshPanelPaths[panel];
+  if (!path || btn.disabled) return;
+  const generation = dashboardGeneration;
+  if (panel === refreshPanelWatches && !(await promptConfirm({
+    title: "Check every watch now?",
+    message: "Each enabled watch runs an extra check now; its schedule does not change.",
+    detail: "It is a real check: alerts, hooks and actions run as on a scheduled one, "
+      + "and it counts toward cycle-based for/within windows.",
+    okLabel: "Check now",
+  }))) return;
+  btn.disabled = true;
+  btn.setAttribute("aria-busy", domBoolTrue);
+  setStatus(`refreshing ${panel}…`, feedbackStatusOK);
+  try {
+    const res = await fetch(refreshAPI(path), targetPostOptions({}, generation));
+    const { body, failed, status } = await actionResult(res);
+    if (failed && !(status === httpStatusConflict && body.message)) throw actionError(body, status);
+    setStatus(body.message || `${panel} refreshed`, failed ? feedbackStatusWarn : feedbackStatusOK);
+  } catch (e) {
+    setStatus(`refresh ${panel} failed: ${e.message}`, feedbackStatusErr);
+  } finally {
+    btn.disabled = false;
+    btn.removeAttribute("aria-busy");
+    load();
+  }
+}
+
 let eventNextBeforeID = 0;
 let eventHasMore = false;
 
@@ -898,12 +943,11 @@ function clearEventFilters() {
   loadEvents();
 }
 
-// toggleAdminControls is the one owner of the admin-hidden rule: the listed
-// controls exist only for operators who can act.
+// toggleAdminControls is the one owner of the admin-hidden rule: the controls
+// the selectors match exist only for operators who can act.
 function toggleAdminControls(...selectors) {
   selectors.forEach((selector) => {
-    const el = $(selector);
-    if (el) el.classList.toggle("admin-hidden", !me.can_act);
+    document.querySelectorAll(selector).forEach((el) => el.classList.toggle("admin-hidden", !me.can_act));
   });
 }
 
@@ -5900,6 +5944,22 @@ function watchLastCheckedCell(w) {
   return tpl`${checked}<span class="watch-sample-note" title="The latest completed watch sample is older than its freshness limit.">${stateBadgeLabel(targetStateStale, targetStateStale)}</span>`;
 }
 
+// watchLastCheckedDetail adds to the last check's date how long ago it ran,
+// a clock updateWatchClocks advances each second.
+function watchLastCheckedDetail(w) {
+  if (!w.last_checked_at) return watchLastCheckedCell(w);
+  return tpl`${watchLastCheckedCell(w)}<span class="watch-clock muted" data-clock-since="${w.last_checked_at}"></span>`;
+}
+
+// watchNextCheckCell shows when the daemon starts the watch's next scheduled
+// check, as a date and as a countdown updateWatchClocks advances each second.
+// A manual refresh is an extra check and does not move it.
+function watchNextCheckCell(w) {
+  const next = w.next_check_at;
+  if (!next) return tpl`<span class="muted">${!w.enabled ? "disabled" : (!w.monitored ? "paused" : "—")}</span>`;
+  return tpl`${activityDateCell({ time: next })}<span class="watch-clock muted" data-clock-until="${next}"></span>`;
+}
+
 // watchNameCell renders the shared expandable name cell (chevron + toggle).
 function watchNameCell(w, key, open) {
   const chev = tpl`<span class="exp" aria-hidden="true">${open ? '▾' : '▸'}</span>`;
@@ -6503,9 +6563,7 @@ function renderWatchPanel(panelKey, watches) {
     ? renderWatchGroups(panel, list)
     : tpl`<tr><td colspan="${panel.cols || 9}" class="muted">${filtered ? panel.emptyFiltered : panel.empty}</td></tr>`;
   litRender(content, tbody);
-  // The elapsed probe timer owns this plain span's text. Keeping it outside a
-  // lit binding prevents the timer from deleting lit-html's part markers.
-  updateWatchProbeElapsed();
+  updateWatchClocks();
 }
 
 // ---- Installed applications ----------------------------------------------
@@ -6911,7 +6969,8 @@ function renderWatchExpansion(w, events) {
     <div><span class="muted">State</span><br>${watchStateCell(w)}</div>
     <div><span class="muted">Monitoring</span><br>${watchMonitoringCell(w)}</div>
     <div><span class="muted">Configured monitor</span><br><code>${mode}</code></div>
-    <div><span class="muted">Last checked</span><br>${watchLastCheckedCell(w)}</div>
+    <div><span class="muted">Last checked</span><br>${watchLastCheckedDetail(w)}</div>
+    <div><span class="muted">Next check</span><br>${watchNextCheckCell(w)}</div>
     <div><span class="muted">Hook</span><br>${hook}</div>
     <div><span class="muted">Notifies</span><br>${notifiers}</div>
     <div><span class="muted">Dry run</span><br><b>${w.dry_run ? "yes" : "no"}</b></div>
@@ -9446,6 +9505,7 @@ function initDelegatedHandlers() {
     ["[data-watch-action][data-watch]", (el) => actWatch(el.dataset.watch || "", el.dataset.watchAction || "")],
     ["[data-mount-action][data-mount]", (el) => actMount(el.dataset.mount || "", el.dataset.mountAction || "")],
     ["[data-notifier-test]", (el) => testNotifier(el.dataset.notifierTest || "")],
+    ["[data-refresh-panel]", (el) => refreshPanel(el)],
     ["[data-service-pin]", (el) => toggleServicePin(el.dataset.servicePin || "")],
     ["[data-service-expand]", (el) => toggleServiceExpansion(el.dataset.serviceExpand || "")],
     ["[data-service-open]", (el) => openServiceExpansion(el.dataset.serviceOpen || "", true)],
@@ -9522,7 +9582,7 @@ function showPartialRefresh(failures) {
 }
 function tickRefreshAge() {
   if (!connOK) { showDisconnected(); return; } // keep the banner's age fresh
-  updateWatchProbeElapsed();
+  updateWatchClocks();
   const el = $("#last-refresh");
   if (!el) return;
   const text = lastRefresh ? `fully updated ${fmtSince(Date.now() - lastRefresh)} ago` : "";
@@ -9530,11 +9590,38 @@ function tickRefreshAge() {
   el.textContent = text;
 }
 
-function updateWatchProbeElapsed() {
-  document.querySelectorAll("[data-probe-started-at]").forEach((el) => {
-    const text = "· " + watchProbeElapsed(el.dataset.probeStartedAt || "");
-    if (el.textContent !== text) el.textContent = text;
-  });
+// updateWatchClocks advances every live watch clock: a running probe's elapsed
+// time, how long ago the last check ran and the countdown to the next one. The
+// clocks own their plain spans' text, outside any lit binding, so the timer
+// never deletes lit-html's part markers.
+function updateWatchClocks() {
+  const now = Date.now();
+  const clocks = [
+    ["[data-probe-started-at]", (el) => "· " + watchProbeElapsed(el.dataset.probeStartedAt || "")],
+    ["[data-clock-since]", (el) => checkClockSince(el.dataset.clockSince || "", now)],
+    ["[data-clock-until]", (el) => checkClockUntil(el.dataset.clockUntil || "", now)],
+  ];
+  for (const [selector, text] of clocks) {
+    document.querySelectorAll(selector).forEach((el) => {
+      const value = text(el);
+      if (el.textContent !== value) el.textContent = value;
+    });
+  }
+}
+
+function checkClockSince(time, now) {
+  const at = Date.parse(time);
+  if (Number.isNaN(at)) return "";
+  return `${fmtCountdown((now - at) / millisecondsPerSecond)} ago`;
+}
+
+// checkClockUntil counts down to the next check; once it is due the daemon is
+// running it, and the next refresh brings the following time.
+function checkClockUntil(time, now) {
+  const at = Date.parse(time);
+  if (Number.isNaN(at)) return "";
+  const remaining = (at - now) / millisecondsPerSecond;
+  return remaining >= 1 ? `in ${fmtCountdown(remaining)}` : "due now";
 }
 setInterval(tickRefreshAge, refreshAgeTickMs);
 

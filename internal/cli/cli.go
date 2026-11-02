@@ -211,6 +211,9 @@ type App struct {
 	// ProbeDaemonWatch asks the active daemon to run and record one safe manual
 	// host-watch sample through the authenticated Web API.
 	ProbeDaemonWatch func(ctx context.Context, cfg *config.Config, watch string) (web.ActionResult, error)
+	// RefreshDaemon asks the active daemon to run the watches behind one
+	// listing now, through the authenticated Web API route path.
+	RefreshDaemon func(ctx context.Context, cfg *config.Config, path string) (web.ActionResult, error)
 	// PruneEvents is injectable for `sermoctl events clear` and
 	// `sermoctl activity clear`. Defaults to pruning the daemon's persisted event
 	// feed over HTTP using the config's web address/port (and password for auth if
@@ -332,6 +335,9 @@ func (a App) withDefaults() App {
 	}
 	if a.ProbeDaemonWatch == nil {
 		a.ProbeDaemonWatch = a.probeDaemonWatch
+	}
+	if a.RefreshDaemon == nil {
+		a.RefreshDaemon = a.refreshDaemon
 	}
 	if a.PruneEvents == nil {
 		a.PruneEvents = a.pruneDaemonEvents

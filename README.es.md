@@ -277,6 +277,7 @@ sermoctl services catalog all  # incluir perfiles no instalados en este host
 sermoctl apps          # tools/runtimes (only installed)
 sermoctl apps all      # include not-installed
 sermoctl libs          # shared libraries (restart triggers)
+sermoctl apps refresh  # que sermod vuelva a comprobar ya las apps (también libs refresh, watch refresh)
 
 # Validate configuration
 sermoctl config validate

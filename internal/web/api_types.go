@@ -232,10 +232,14 @@ type Watch struct {
 	LastActivity          string `json:"last_activity,omitempty"` // RFC3339 of last watch activity, if any
 	LastActivityKind      string `json:"last_activity_kind,omitempty"`
 	// LastActivitySeverity grades the last activity (a firing's episode level).
-	LastActivitySeverity string      `json:"last_activity_severity,omitempty"`
-	LastCheckedAt        string      `json:"last_checked_at,omitempty"` // RFC3339 of latest completed check sample
-	SampleState          string      `json:"sample_state,omitempty"`    // collecting | fresh | stale
-	Probe                *WatchProbe `json:"probe,omitempty"`           // current manual probe, if one is running
+	LastActivitySeverity string `json:"last_activity_severity,omitempty"`
+	LastCheckedAt        string `json:"last_checked_at,omitempty"` // RFC3339 of latest completed check sample
+	// NextCheckAt is when the daemon starts this watch's next scheduled check
+	// (RFC3339); absent for a disabled or paused watch and before the scheduler
+	// has started it. A manual refresh does not move it.
+	NextCheckAt string      `json:"next_check_at,omitempty"`
+	SampleState string      `json:"sample_state,omitempty"` // collecting | fresh | stale
+	Probe       *WatchProbe `json:"probe,omitempty"`        // current manual probe, if one is running
 	// KeepsSLA marks a watch whose check asserts availability, so the dashboard
 	// draws it the same SLA section a service gets. A condition watch keeps none:
 	// its threshold being met is not downtime.
@@ -913,6 +917,16 @@ type Backend interface {
 	ExpandWatch(ctx context.Context, name string) ActionResult
 	// ProbeWatch runs a fresh, isolated read-only sample of a supported host watch.
 	ProbeWatch(ctx context.Context, name string) ActionResult
+	// RefreshApplications runs every installed application's watch cycle now
+	// and rebuilds the application list from the new samples.
+	RefreshApplications(ctx context.Context) ActionResult
+	// RefreshLibraries runs every installed library's watch cycle now and
+	// rebuilds the library list.
+	RefreshLibraries(ctx context.Context) ActionResult
+	// RefreshWatches runs an extra cycle of the named watches now, or
+	// of every enabled watch when names is empty. Unlike ProbeWatch it is the
+	// watch's own cycle: rules, notifications and actions apply.
+	RefreshWatches(ctx context.Context, names []string) ActionResult
 	// ControlRAID pauses or resumes a configured RAID reconstruction.
 	ControlRAID(ctx context.Context, name, action, confirmation string) ActionResult
 	// ControlReplication starts a stopped replica for a replication watch.

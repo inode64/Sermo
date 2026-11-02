@@ -114,6 +114,7 @@ var commandUsages = []commandUsage{
 			"sermoctl watch monitor WATCH",
 			"sermoctl watch unmonitor WATCH",
 			"sermoctl watch probe WATCH",
+			"sermoctl watch refresh [WATCH...]",
 			"sermoctl watch pause RAID_WATCH --confirm MD_ARRAY",
 			"sermoctl watch resume RAID_WATCH",
 		},
@@ -132,6 +133,10 @@ var commandUsages = []commandUsage{
 			"probe runs one fresh sample of a diskio, hdparm, LVM, RAID, SMART, storcli or",
 			"ssacli host watch; all are read-only except SMART, which starts the device's",
 			"short self-test.",
+			"refresh runs an extra cycle of every enabled watch, or of the named ones,",
+			"now and waits for it within engine.operation_timeout; each watch keeps its",
+			"schedule. It is the watch's own cycle: it counts toward cycle-based",
+			"for/within windows and runs its notifications and actions like any other.",
 			"pause/resume control a RAID reconstruction only when raid_control.pause_resume",
 			"is configured. pause requires the configured md array again in --confirm.",
 		},
@@ -530,6 +535,7 @@ var commandUsages = []commandUsage{
 		Summary: "List packaged application/runtime catalog entries.",
 		Usage: []string{
 			"sermoctl apps [all] [--long]",
+			"sermoctl apps refresh",
 		},
 		Flags: []string{
 			"all     include entries whose binary is not installed",
@@ -538,6 +544,9 @@ var commandUsages = []commandUsage{
 		Notes: []string{
 			"When sermod is running with web enabled, the STATUS column prefers the",
 			"daemon's computed state (including starting during startup settling).",
+			"refresh asks sermod to inspect every installed application now, besides",
+			"its engine.artifact_interval schedule, so its state, events and Web UI",
+			"list catch up; the listing itself always inspects the host live.",
 		},
 	},
 	{
@@ -545,10 +554,16 @@ var commandUsages = []commandUsage{
 		Summary: "List packaged library catalog entries used by restart-on-change.",
 		Usage: []string{
 			"sermoctl libs [all] [--long]",
+			"sermoctl libs refresh",
 		},
 		Flags: []string{
 			"all     include entries whose file is not present",
 			"--long  show full version command output",
+		},
+		Notes: []string{
+			"refresh asks sermod to inspect every installed library now, so its",
+			"state, events and Web UI list catch up; the listing itself always",
+			"inspects the host live.",
 		},
 	},
 	{

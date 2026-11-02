@@ -84,6 +84,22 @@ export function fmtDuration(value) {
   return parts.join(" ");
 }
 
+// fmtCountdown spells a duration exactly in days, hours, minutes and seconds
+// and leaves out every unit that is zero ("1d 5s"), for a clock that ticks
+// each second; fmtDuration rounds the small units away instead.
+export function fmtCountdown(value) {
+  let rest = Math.max(0, Math.floor(Number(value)));
+  if (!Number.isFinite(rest)) return "";
+  const parts = [];
+  for (const [size, suffix] of [[secondsPerDay, "d"], [secondsPerHour, "h"], [secondsPerMinute, "m"], [1, "s"]]) {
+    if (rest >= size) {
+      parts.push(Math.floor(rest / size) + suffix);
+      rest %= size;
+    }
+  }
+  return parts.length ? parts.join(" ") : "0s";
+}
+
 // Sizes are IEC binary (KiB, base 1024); byte rates are SI decimal (KB/s,
 // base 1000). The daemon's formatSummaryBytes/formatSummaryBytesPerSecond
 // mirror this split exactly — keep both sides in step.

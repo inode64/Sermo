@@ -3,7 +3,6 @@ package cli
 import (
 	"cmp"
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -29,7 +28,7 @@ const (
 // runWatch dispatches host-watch queries against the running daemon.
 func (a App) runWatch(ctx context.Context, opts options) int {
 	if len(opts.args) == 0 {
-		return a.commandUsageError(commandWatch, "watch requires subcommand status, monitor, unmonitor, probe, pause or resume")
+		return a.commandUsageError(commandWatch, "watch requires subcommand status, monitor, unmonitor, probe, refresh, pause or resume")
 	}
 	switch opts.args[0] {
 	case commandStatus:
@@ -40,6 +39,9 @@ func (a App) runWatch(ctx context.Context, opts options) int {
 		return a.runWatchMonitor(ctx, opts, true)
 	case "probe":
 		return a.runWatchProbe(ctx, opts)
+	case commandArgRefresh:
+		// Every enabled watch, or the named ones; the daemon resolves the names.
+		return a.runDaemonRefresh(ctx, opts, commandWatch+" "+commandArgRefresh, web.RefreshPath(web.APIPathWatches, opts.args[1:]...))
 	case app.RaidControlPause, app.RaidControlResume:
 		return a.runWatchRAIDControl(ctx, opts, opts.args[0])
 	default:
@@ -92,26 +94,14 @@ func (a App) runWatchProbe(ctx context.Context, opts options) int {
 	return exitNotActive
 }
 
+// probeDaemonWatch reports a 409, a sample that failed, as an error carrying
+// the graded result, which runWatchProbe prints at its grade.
 func (a App) probeDaemonWatch(ctx context.Context, cfg *config.Config, watch string) (web.ActionResult, error) {
-	path := web.APIPathWatches + "/" + url.PathEscape(watch) + "/probe"
-	resp, err := a.daemonWebDo(ctx, cfg, http.MethodPost, "probe", true, func(base string) string {
-		return base + path
-	})
-	if err != nil {
-		return web.ActionResult{}, err
+	result, status, err := a.postDaemonAction(ctx, cfg, "probe", web.APIPathWatches+"/"+url.PathEscape(watch)+"/probe")
+	if err == nil && status == http.StatusConflict {
+		err = fmt.Errorf("probe failed (%d): %s", status, strings.TrimSpace(result.Message))
 	}
-	defer func() { _ = resp.Body.Close() }()
-	var result web.ActionResult
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return web.ActionResult{}, fmt.Errorf("decode probe response: %w", err)
-	}
-	if resp.StatusCode != http.StatusOK {
-		if result.Message == "" {
-			result.Message = resp.Status
-		}
-		return result, fmt.Errorf("probe failed (%d): %s%s", resp.StatusCode, strings.TrimSpace(result.Message), daemonWebStatusHint(resp.StatusCode))
-	}
-	return result, nil
+	return result, err
 }
 
 func (a App) runWatchRAIDControl(ctx context.Context, opts options, action string) int {
@@ -268,6 +258,9 @@ func (a App) runWatchStatus(ctx context.Context, opts options) int {
 		if detail.LastCheckedAt != "" {
 			out["last_checked_at"] = detail.LastCheckedAt
 		}
+		if detail.NextCheckAt != "" {
+			out["next_check_at"] = detail.NextCheckAt
+		}
 		if len(detail.Readings) > 0 {
 			out["readings"] = detail.Readings
 		}
@@ -277,6 +270,9 @@ func (a App) runWatchStatus(ctx context.Context, opts options) int {
 	fmt.Fprintf(a.Stdout, "%s state=%s\n", name, watchState)
 	if detail.LastCheckedAt != "" {
 		fmt.Fprintf(a.Stdout, "  Last checked: %s\n", detail.LastCheckedAt)
+	}
+	if detail.NextCheckAt != "" {
+		fmt.Fprintf(a.Stdout, "  Next check: %s\n", detail.NextCheckAt)
 	}
 	for _, reading := range detail.Readings {
 		printWatchReading(a.Stdout, reading)

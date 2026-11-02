@@ -59,6 +59,7 @@ type fakeBackend struct {
 	panic                       bool
 	watchExpanded               []string
 	watchProbed                 []string
+	refreshed                   []string
 	raidControlled              []string
 	replicationStarted          []string
 	buttonsPressed              []string
@@ -377,6 +378,18 @@ func (f *fakeBackend) ExpandWatch(_ context.Context, name string) ActionResult {
 func (f *fakeBackend) ProbeWatch(_ context.Context, name string) ActionResult {
 	f.watchProbed = append(f.watchProbed, name)
 	return ActionResult{OK: true, Message: "probed"}
+}
+func (f *fakeBackend) RefreshApplications(context.Context) ActionResult {
+	f.refreshed = append(f.refreshed, "applications")
+	return ActionResult{OK: true, Message: "refreshed applications"}
+}
+func (f *fakeBackend) RefreshLibraries(context.Context) ActionResult {
+	f.refreshed = append(f.refreshed, "libraries")
+	return ActionResult{OK: true, Message: "refreshed libraries"}
+}
+func (f *fakeBackend) RefreshWatches(_ context.Context, names []string) ActionResult {
+	f.refreshed = append(f.refreshed, "watches:"+strings.Join(names, ","))
+	return ActionResult{OK: true, Message: "refreshed watches"}
 }
 func (f *fakeBackend) ControlRAID(_ context.Context, name, action, confirmation string) ActionResult {
 	f.raidControlled = append(f.raidControlled, name+"/"+action+"/"+confirmation)
@@ -749,7 +762,7 @@ func TestListLibraries(t *testing.T) {
 		Name: "openssl", DisplayName: "OpenSSL", Category: "crypto", Binary: "/usr/lib64/libssl.so",
 		Permissions: "-rwxr-xr-x (0755)", User: "root", Group: "root",
 		Version: "OpenSSL 3.5.1", VersionShort: "3.5.1", Status: apiStatusOK}}}
-	got := getJSON[[]CatalogItem](t, b, apiPathLibraries)
+	got := getJSON[[]CatalogItem](t, b, APIPathLibraries)
 	if len(got) != 1 || got[0].Name != "openssl" || got[0].VersionShort != "3.5.1" ||
 		got[0].Binary != "/usr/lib64/libssl.so" || got[0].Category != "crypto" {
 		t.Fatalf("unexpected libraries: %+v", got)

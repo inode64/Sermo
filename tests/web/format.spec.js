@@ -28,6 +28,17 @@ test("duration helpers route through fmtDuration", async () => {
   expect(fmt.fmtAge(new Date(Date.now() - 2 * 86400 * 1000).toISOString())).toMatch(/ UTC$/);
 });
 
+test("fmtCountdown spells every non-zero unit down to seconds", async () => {
+  const fmt = await import(formatURL);
+  for (const [seconds, want] of [
+    [0, "0s"], [-3, "0s"], [59, "59s"], [60, "1m"], [3605, "1h 5s"],
+    [86400 + 30, "1d 30s"], [2 * 86400 + 3 * 3600 + 4 * 60 + 5, "2d 3h 4m 5s"], [7199.9, "1h 59m 59s"],
+  ]) {
+    expect(fmt.fmtCountdown(seconds), `fmtCountdown(${seconds})`).toBe(want);
+  }
+  expect(fmt.fmtCountdown(NaN)).toBe("");
+});
+
 test("severity helpers rank the daemon's scale", async () => {
   const fmt = await import(formatURL);
   expect(fmt.severityLevels).toEqual(["debug", "info", "warning", "error", "critical"]);

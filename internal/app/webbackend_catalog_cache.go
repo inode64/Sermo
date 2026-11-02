@@ -20,6 +20,22 @@ type catalogInventoryCache struct {
 	at      time.Time
 	items   []web.CatalogItem
 	refresh chan struct{} // non-nil while a scan is rebuilding the cache; closed when it finishes
+	// epoch counts invalidations; a scan stores its result only if none
+	// happened while it ran.
+	epoch uint64
+}
+
+// invalidate expires the inventory and every scan already running, so the next
+// read rebuilds it from samples taken after a manual refresh. The expired
+// inventory stays complete: other viewers keep it while that read rebuilds,
+// and a cancelled rebuild still falls back to it.
+func (c *catalogInventoryCache) invalidate() {
+	c.mu.Lock()
+	if !c.at.IsZero() {
+		c.at = c.at.Add(-catalogInventoryCacheTTL)
+	}
+	c.epoch++
+	c.mu.Unlock()
 }
 
 func (b *WebBackend) catalogItems(
@@ -61,6 +77,7 @@ func (b *WebBackend) catalogItems(
 	}
 	done := make(chan struct{})
 	inventory.refresh = done
+	epoch := inventory.epoch
 	inventory.mu.Unlock()
 	// Clear the in-flight marker in a defer so even a panicking scan cannot
 	// leave cold-start viewers waiting on the channel forever. The deferred
@@ -86,11 +103,12 @@ func (b *WebBackend) catalogItems(
 		inventory.mu.Unlock()
 		return items
 	}
-	if slices.ContainsFunc(items, isSettlingPlaceholder) {
-		// Startup placeholders turn into real rows within one cycle; caching
-		// them would show "starting" for the whole TTL. Unsettled rows run no
-		// probe and settled ones reuse their watch sample, so rebuilding on
-		// the next poll during that window stays cheap.
+	if inventory.epoch != epoch || slices.ContainsFunc(items, isSettlingPlaceholder) {
+		// A refresh invalidated the inventory while this scan read samples
+		// from before it, or the scan holds startup placeholders, which turn
+		// into real rows within one cycle and would show "starting" for the
+		// whole TTL. Unsettled rows run no probe and settled ones reuse their
+		// watch sample, so rebuilding on the next poll stays cheap.
 		inventory.mu.Unlock()
 		return items
 	}

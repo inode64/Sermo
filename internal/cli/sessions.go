@@ -13,7 +13,6 @@ import (
 
 	"sermo/internal/checks"
 	"sermo/internal/config"
-	"sermo/internal/rules"
 	"sermo/internal/units"
 	"sermo/internal/web"
 )
@@ -165,27 +164,7 @@ func (a App) killDaemonDBQuery(ctx context.Context, cfg *config.Config, row web.
 	query.Set(web.APIQueryID, strconv.FormatInt(row.ID, 10))
 	query.Set(web.APIQueryIdentity, row.Identity)
 	query.Set(web.APIQueryMode, mode)
-	path := web.DBQueryKillPath(row.Service, row.Watch) + "?" + query.Encode()
-	resp, err := a.daemonWebDo(ctx, cfg, http.MethodPost, string(rules.ActionKillQuery), true, func(base string) string {
-		return base + path
-	})
-	if err != nil {
-		return web.ActionResult{}, 0, err
-	}
-	defer func() { _ = resp.Body.Close() }()
-	var result web.ActionResult
-	decodeErr := json.NewDecoder(resp.Body).Decode(&result)
-	if resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusConflict {
-		if decodeErr != nil {
-			return web.ActionResult{}, resp.StatusCode, fmt.Errorf("decode kill response: %w", decodeErr)
-		}
-		return result, resp.StatusCode, nil
-	}
-	message := strings.TrimSpace(result.Message)
-	if message == "" {
-		message = resp.Status
-	}
-	return web.ActionResult{}, resp.StatusCode, fmt.Errorf("kill failed (%d): %s%s", resp.StatusCode, message, daemonWebStatusHint(resp.StatusCode))
+	return a.postDaemonAction(ctx, cfg, commandSessionsKill, web.DBQueryKillPath(row.Service, row.Watch)+"?"+query.Encode())
 }
 
 func findDBQuerySession(inventory web.SessionInventory, service, watch string, id int64) (web.DBQuerySession, bool) {

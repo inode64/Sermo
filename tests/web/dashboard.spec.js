@@ -941,6 +941,27 @@ test("service warning reason sits below the service instead of widening State", 
   expect(wordsIntact).toEqual({ note: true, badge: true });
 });
 
+// The watch detail shows the last and the next check as dates and as live
+// clocks: how long ago the last ran and a countdown to the next, each spelling
+// only its non-zero units.
+test("a watch shows its last and next check as dates and live clocks", async ({ page }) => {
+  const now = Date.now();
+  const timed = watches.map((w) => (w.name === "process-queue"
+    ? { ...w, last_checked_at: new Date(now - 7200 * 1000).toISOString(), next_check_at: new Date(now + (86400 + 30) * 1000).toISOString() }
+    : w));
+  await page.route("**/api/watches", (route) => route.fulfill({ json: timed }));
+  await page.reload();
+  await page.locator("#wat-row-process-queue .row-toggle").click();
+  const detail = page.locator('[id="exp-wat:process-queue"]');
+  await expect(detail).toContainText("Next check");
+  await expect(detail).toContainText(new Date(now + (86400 + 30) * 1000).toISOString().slice(0, 10));
+  const countdown = detail.locator("[data-clock-until]");
+  await expect(countdown).toHaveText(/^in 1d ([1-9]|[12]\d|30)s$/);
+  await expect(detail.locator("[data-clock-since]")).toHaveText(/^2h( \d+s)? ago$/);
+  const shown = await countdown.textContent();
+  await expect(countdown).not.toHaveText(shown || "");
+});
+
 test("paused monitoring is distinct from disabled configuration", async ({ page }) => {
   const paused = page.locator("#wat-row-firewall-paused");
   await expect(paused.locator(".target-state")).toHaveText("monitoring paused");
@@ -2517,6 +2538,67 @@ test("notifier test asks for confirmation and posts one named notifier", async (
   await expect(page.locator("#simple-confirm")).toBeVisible();
   await page.locator('[data-simple-result="true"]').click();
   expect((await request).headers()["x-sermo-generation"]).toBe("7");
+});
+
+// A refresh runs an extra check of everything behind one panel now; the daemon
+// waits for it, so the button holds its busy state until the answer and the
+// outcome lands in the status line. A 409 carries an outcome that did not
+// complete: amber. Only the Watches panel, whose checks run actions, asks first.
+for (const scenario of [
+  { panel: "applications", path: "/api/applications/refresh", status: 200, body: { ok: true, message: "applications refreshed: 2" }, statusClass: "status-ok" },
+  { panel: "libraries", path: "/api/libraries/refresh", status: 200, body: { ok: true, message: "libraries refreshed: 3" }, statusClass: "status-ok" },
+  { panel: "watches", path: "/api/watches/refresh", status: 409, body: { ok: false, message: "watches refreshed: 4; not refreshed by the deadline: 1 (hdparm-sda)" }, statusClass: "status-warn", confirm: true },
+]) {
+  test(`the ${scenario.panel} refresh button runs that panel's checks now`, async ({ page }) => {
+    let release;
+    const answered = new Promise((resolve) => { release = resolve; });
+    await page.route(`**${scenario.path}`, async (route) => {
+      await answered;
+      await route.fulfill({ status: scenario.status, json: scenario.body });
+    });
+    const button = page.locator(`[data-refresh-panel="${scenario.panel}"]`);
+    await expect(button).toBeVisible();
+    await expect(button).toHaveAccessibleName(/now$/);
+    const request = page.waitForRequest((req) => req.method() === "POST" && new URL(req.url()).pathname === scenario.path);
+    await button.click();
+    if (scenario.confirm) {
+      await expect(page.locator("#simple-confirm")).toBeVisible();
+      await page.locator('[data-simple-result="true"]').click();
+    }
+    const sent = await request;
+    expect(sent.headers()["x-sermo-generation"]).toBe("7");
+    expect(sent.headers()["x-sermo-csrf"]).toBe("1");
+    await expect(button).toBeDisabled();
+    await expect(button).toHaveAttribute("aria-busy", "true");
+    release();
+    await expect(page.locator("#err")).toHaveText(scenario.body.message);
+    await expect(page.locator("#err")).toHaveClass(new RegExp(scenario.statusClass));
+    await expect(button).toBeEnabled();
+    await expect(button).not.toHaveAttribute("aria-busy", "true");
+  });
+}
+
+test("cancelling the Watches refresh confirmation sends nothing", async ({ page }) => {
+  let posted = false;
+  await page.route("**/api/watches/refresh", async (route) => {
+    posted = true;
+    await route.fulfill({ json: { ok: true, message: "watches refreshed: 1" } });
+  });
+  await page.locator('[data-refresh-panel="watches"]').click();
+  await expect(page.locator("#simple-confirm")).toBeVisible();
+  await page.locator('[data-simple-result="false"]').click();
+  await expect(page.locator("#simple-confirm")).toBeHidden();
+  await expect(page.locator('[data-refresh-panel="watches"]')).toBeEnabled();
+  expect(posted).toBe(false);
+});
+
+test("a guest gets no refresh buttons", async ({ page }) => {
+  await page.route("**/api/whoami", (route) => route.fulfill({ json: { can_act: false, role: "viewer", auth: true } }));
+  await page.reload();
+  await expect(page.locator("#app-row-postgres")).toBeVisible();
+  const buttons = page.locator("[data-refresh-panel]");
+  await expect(buttons).toHaveCount(3);
+  for (const button of await buttons.all()) await expect(button).toBeHidden();
 });
 
 test("a service's stray count is diagnostic only", async ({ page }) => {

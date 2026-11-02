@@ -374,6 +374,7 @@ func run(args []string) int {
 		PersistenceEvents:    persistenceEvents,
 		Snapshots:            snapshots,
 		WatchSnapshots:       watchSnapshots,
+		WatchSchedule:        app.NewWatchSchedule(),
 		Live:                 app.NewLiveMetrics(),
 		ServiceMetrics:       app.NewServiceMetricSampler(store),
 		Observability:        app.NewObservabilityRegistry(),

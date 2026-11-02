@@ -68,6 +68,20 @@ watches:
 			want: `{"state":"failed","watch":"load"}`,
 		},
 		{
+			name:     "check times",
+			detail:   web.Watch{State: "ok", LastCheckedAt: "2026-11-02T10:00:00Z", NextCheckAt: "2026-11-02T12:00:00Z"},
+			detailOK: true,
+			args:     []string{"watch", "status", "load"},
+			want:     "load state=ok\n  Last checked: 2026-11-02T10:00:00Z\n  Next check: 2026-11-02T12:00:00Z",
+		},
+		{
+			name:     "check times json",
+			detail:   web.Watch{State: "ok", LastCheckedAt: "2026-11-02T10:00:00Z", NextCheckAt: "2026-11-02T12:00:00Z"},
+			detailOK: true,
+			args:     []string{"--json", "watch", "status", "load"},
+			want:     `{"last_checked_at":"2026-11-02T10:00:00Z","next_check_at":"2026-11-02T12:00:00Z","state":"ok","watch":"load"}`,
+		},
+		{
 			// Only the daemon observes watches: without it the answer is
 			// unknown and non-zero, never a false ok.
 			name:     "daemon unavailable",
@@ -145,13 +159,7 @@ func TestWatchStatusRejectsMissingConfig(t *testing.T) {
 // answers 409 — the condition did fire — but announcing that as "FAIL" would
 // contradict the amber the same result gets in the dashboard.
 func TestWatchProbeRendersAnAdvisoryAsAWarning(t *testing.T) {
-	root := t.TempDir()
-	watches := filepath.Join(root, "watches")
-	if err := os.Mkdir(watches, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	global := filepath.Join(root, "sermo.yml")
-	mustWrite(t, global, "paths:\n  watches: ["+watches+"]\ndefaults:\n  policy: { cooldown: 5m }\n")
+	global, watches := watchTestConfig(t)
 	mustWrite(t, filepath.Join(watches, "hdparm-sdd.yml"),
 		"name: hdparm-sdd\nseverity: warning\ncheck:\n  type: hdparm\n  device: /dev/sdd\n  read: { op: \"<\", value: 20 }\n")
 
@@ -178,13 +186,7 @@ func TestWatchProbeRendersAnAdvisoryAsAWarning(t *testing.T) {
 }
 
 func TestWatchProbeUsesDaemonAndSupportsHdparm(t *testing.T) {
-	root := t.TempDir()
-	watches := filepath.Join(root, "watches")
-	if err := os.Mkdir(watches, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	global := filepath.Join(root, "sermo.yml")
-	mustWrite(t, global, "paths:\n  watches: ["+watches+"]\ndefaults:\n  policy: { cooldown: 5m }\n")
+	global, watches := watchTestConfig(t)
 	mustWrite(t, filepath.Join(watches, "disk-speed.yml"), "name: disk-speed\ncheck:\n  type: hdparm\n  device: /dev/sda\n  read: { op: \">\", value: 100 }\n")
 
 	var stdout bytes.Buffer
@@ -220,13 +222,7 @@ func TestWatchProbeWaitsForTheCheckBudget(t *testing.T) {
 		{name: "an explicit --timeout", watch: hdparm, args: []string{"--timeout", "3s"}, want: 3 * time.Second},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			root := t.TempDir()
-			watches := filepath.Join(root, "watches")
-			if err := os.Mkdir(watches, 0o755); err != nil {
-				t.Fatal(err)
-			}
-			global := filepath.Join(root, "sermo.yml")
-			mustWrite(t, global, "paths:\n  watches: ["+watches+"]\ndefaults:\n  policy: { cooldown: 5m }\n")
+			global, watches := watchTestConfig(t)
 			mustWrite(t, filepath.Join(watches, "disk-speed.yml"), tc.watch)
 
 			var left time.Duration
@@ -288,13 +284,7 @@ paths:
 // critical one — with its readings, and exits 1; only a probe that returned no
 // result is reported as a command failure.
 func TestWatchProbeRendersTheGradeOfAFailingSample(t *testing.T) {
-	root := t.TempDir()
-	watches := filepath.Join(root, "watches")
-	if err := os.Mkdir(watches, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	global := filepath.Join(root, "sermo.yml")
-	mustWrite(t, global, "paths:\n  watches: ["+watches+"]\ndefaults:\n  policy: { cooldown: 5m }\n")
+	global, watches := watchTestConfig(t)
 	mustWrite(t, filepath.Join(watches, "hdparm-sdd.yml"),
 		"name: hdparm-sdd\ncheck:\n  type: hdparm\n  device: /dev/sdd\n  read: { op: \"<\", value: 20 }\n")
 	for level, label := range map[severity.Level]string{severity.Error: cliTextFail, severity.Critical: cliTextCrit} {
@@ -317,4 +307,18 @@ func TestWatchProbeRendersTheGradeOfAFailingSample(t *testing.T) {
 	if code := app.Run(context.Background(), []string{"--config", global, "watch", "probe", "hdparm-sdd"}); code == exitSuccess || !strings.Contains(stderr.String(), "connection refused") {
 		t.Fatalf("transport failure exit=%d stderr=%q, want a command failure", code, stderr.String())
 	}
+}
+
+// watchTestConfig writes a minimal global config whose watches directory the
+// test fills, and returns both paths.
+func watchTestConfig(t *testing.T) (global, watches string) {
+	t.Helper()
+	root := t.TempDir()
+	watches = filepath.Join(root, "watches")
+	if err := os.Mkdir(watches, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	global = filepath.Join(root, "sermo.yml")
+	mustWrite(t, global, "paths:\n  watches: ["+watches+"]\ndefaults:\n  policy: { cooldown: 5m }\n")
+	return global, watches
 }

@@ -225,11 +225,11 @@ func processPolicyData(user string, samples []ProcInfo, violations []processPoli
 }
 
 func processPolicyViolationList(violations []processPolicyViolation) string {
-	return limitedDisplayList(violations, processPolicyViolationText)
+	return limitedDisplayList(violations, processPIDListLimit, processPolicyViolationText)
 }
 
 func processPolicyViolationPIDs(violations []processPolicyViolation) string {
-	return limitedDisplayList(violations, func(violation processPolicyViolation) string {
+	return limitedDisplayList(violations, processPIDListLimit, func(violation processPolicyViolation) string {
 		return strconv.Itoa(violation.info.PID)
 	})
 }

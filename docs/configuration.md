@@ -1449,7 +1449,12 @@ Read-only endpoints:
 - `GET /api/services/{name}/events?limit=N` — events for one service.
 - `GET /api/watches` — host-level and service-scoped watches, their `scope`,
   monitor state, conditions, notifications, live readings when available and
-  recent activity. Service-scoped names use `service:watch`.
+  recent activity. Service-scoped names use `service:watch`. `last_checked_at`
+  is the latest completed check and `next_check_at` when the daemon starts the
+  next scheduled one (both RFC3339); `next_check_at` is absent for a disabled or
+  paused watch and before the scheduler has started it, and a manual refresh
+  does not move it. The dashboard shows both in each watch's detail, with how
+  long ago the last check ran and a countdown to the next.
 - `GET /api/notifiers` — configured notifier targets.
 - `POST /api/notifiers/{name}/test` — sends an explicit test message through one enabled notifier.
 - `GET /api/applications` — installed catalog applications.
@@ -1518,6 +1523,21 @@ accepted operation cannot switch targets during a concurrent reload.
   [kill_query]`), timeout and event path. Answers `200` when cancelled and
   `409` when refused (changed or finished statement, guard, lock). Equivalent
   to `sermoctl sessions kill`. See [safety](safety.md#database-statement-kills).
+- `POST /api/applications/refresh`, `POST /api/libraries/refresh` and
+  `POST /api/watches/refresh?name=WATCH` — run an extra cycle of every
+  installed application's or library's watch, or of every enabled watch
+  (repeat `name` to pick some), now, leaving each watch's schedule unchanged,
+  and wait for those cycles within
+  `engine.operation_timeout`; the next application or library listing is
+  rebuilt from them. It is
+  each watch's own cycle, with its rules, notifications and actions (see
+  [safety](safety.md#scheduler-and-concurrency)). The response is
+  `{"ok": …, "message": …}`: `200` when every cycle completed, `409` with the
+  outcome when a watch was not refreshed by the deadline, no watch is scheduled
+  yet (during `engine.startup_delay` or a reload), a named watch has no running
+  cycle (also the watches of a service whose unit the daemon could not
+  resolve), or a name is unknown or disabled. Equivalent to
+  `sermoctl apps refresh`, `libs refresh` and `watch refresh`.
 - `POST /api/watches/{name}/{action}` — watch action. `action` is
   `monitor`, `unmonitor`, `expand`, `probe`, `pause`, `resume` or
   `replication-start`. `probe` takes one explicit sample of a host diskio,
@@ -2986,6 +3006,9 @@ LVM watches likewise surface device work as `testing`, `recovering`,
 where available. These are device-operation states, not health verdicts. The
 daemon records the probe and event for the shared Web/CLI view, but does not
 evaluate its watch window or run a rule, notifier, hook or remediation action.
+To run a watch's real next cycle now instead — its window, notifications and
+actions included — use the Watches panel's refresh button or
+`sermoctl watch refresh` (see [CLI](cli.md)).
 
 ### Service watches (scoped to a service)
 

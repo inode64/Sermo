@@ -26,6 +26,8 @@ func TestParseAPIAccessTarget(t *testing.T) {
 		{testTargetPath(apiSegmentNotifiers, "ops", apiActionTest), "ops", apiActionTest},
 		{testLockPath(apiActionRelease), "mysql", apiActionRelease},
 		{apiPathReload, "", apiActionReload},
+		{RefreshPath(APIPathWatches), "", APISegmentRefresh},
+		{RefreshPath(APIPathApplications), "", APISegmentRefresh},
 		// Three-part paths: the target is present even without a trailing action.
 		{testServicePath("web"), "web", ""},
 		{testMountPath("backup"), "backup", ""},

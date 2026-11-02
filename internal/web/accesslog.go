@@ -116,6 +116,11 @@ func parseAPIAccessTarget(path string) (target, action string) {
 	}
 	switch parts[apiAccessResourceSegment] {
 	case apiSegmentServices, apiSegmentWatches, apiSegmentMounts, apiSegmentNotifiers:
+		if len(parts) == apiAccessTargetSegments && parts[apiAccessTargetSegment] == APISegmentRefresh {
+			// A collection action (/watches/refresh) names no target.
+			action = APISegmentRefresh
+			break
+		}
 		if len(parts) >= apiAccessTargetSegments {
 			target = parts[apiAccessTargetSegment]
 		}
