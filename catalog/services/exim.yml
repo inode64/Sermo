@@ -44,7 +44,11 @@ variables:
   # releases use tbl: set callout_db_table/retry_db_table to tbl there.
   callout_db_table: tblblob
   retry_db_table: tblblob
-  db_cleanup_record_limit: "100"
+  # A busy server keeps hundreds of hints younger than db_cleanup_age (453 in
+  # one fleet callout DB after removing the older ones), so a limit below that
+  # kept the tidy watch failed for good and re-ran the tidy every interval.
+  # The limit marks a database that grew, not one in daily use.
+  db_cleanup_record_limit: "5000"
   db_cleanup_age: 10d
   db_cleanup_interval: 6h
   db_cleanup_timeout: 5m
