@@ -244,6 +244,52 @@ func TestUnownedWatcherSessionAndPackageCriteria(t *testing.T) {
 	}
 }
 
+// A screen or tmux session detached before logout outlives its login by
+// design, and the Sessions panel lists it: the server and everything it runs
+// are not the nohup job the closed-session criterion is for. A multiplexer no
+// package owns vouches for nothing, and the package criterion still applies.
+func TestUnownedWatcherLeavesDetachedTerminalSessionsAlone(t *testing.T) {
+	h := &unownedHarness{}
+	fixture := systemdFixture()
+	fixture.packages.notOwned["/tmp/tmux"] = true
+	const closedScope = "0::/user.slice/user-0.slice/session-9.scope"
+	child := func(pid, ppid int, exe string) ProcInfo {
+		p := unownedProc(pid, exe, closedScope)
+		p.PPID = ppid
+		return p
+	}
+	screen := unownedProc(60, "/usr/bin/screen-4.9.1", closedScope)
+	tmux := unownedProc(70, "/usr/bin/tmux", closedScope)
+	fake := unownedProc(80, "/tmp/tmux", closedScope)
+	nohup := unownedProc(90, "/opt/sermo-test/sleep", closedScope)
+	w := h.watcher(t, fixedSampler{infos: []ProcInfo{
+		screen, child(61, 60, "/bin/bash"), child(62, 61, "/usr/bin/mc"),
+		tmux, child(71, 70, "/bin/bash"),
+		fake, child(81, 80, "/bin/bash"),
+		nohup,
+	}, ok: true}, map[string]any{}, fixture.runtime())
+
+	w.runCycle(context.Background())
+
+	got := map[int]string{}
+	for _, row := range rowsOf(h.snapshot) {
+		got[row.PID] = row.Reason
+	}
+	want := map[int]string{
+		80: unownedReasonClosedSession + unownedReasonSeparator + unownedReasonUnpackaged,
+		81: unownedReasonClosedSession,
+		90: unownedReasonClosedSession,
+	}
+	if len(got) != len(want) {
+		t.Fatalf("rows = %+v, want %+v", got, want)
+	}
+	for pid, reason := range want {
+		if got[pid] != reason {
+			t.Fatalf("pid %d reason = %q, want %q (rows %+v)", pid, got[pid], reason, got)
+		}
+	}
+}
+
 func TestUnownedClassifierSharesSessionStateOnlyWithinASample(t *testing.T) {
 	for _, tc := range []struct {
 		name   string

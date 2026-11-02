@@ -513,7 +513,7 @@ func terminalMultiplexed(processes []process.Identity, snapshot map[int]process.
 			if !ok {
 				break
 			}
-			if multiplexerServer(parent) {
+			if MultiplexerServer(parent) {
 				return true
 			}
 			ppid = parent.PPID
@@ -522,7 +522,10 @@ func terminalMultiplexed(processes []process.Identity, snapshot map[int]process.
 	return false
 }
 
-func multiplexerServer(id process.Identity) bool {
+// MultiplexerServer reports whether id runs a screen or tmux server binary, by
+// its executable's basename (a replaced binary through ExePrev). It names, it
+// authorizes nothing: callers use it to read a process tree, never to signal.
+func MultiplexerServer(id process.Identity) bool {
 	base := filepath.Base(cmp.Or(id.Exe, id.ExePrev))
 	for _, prefix := range multiplexerExePrefixes {
 		if strings.HasPrefix(base, prefix) {

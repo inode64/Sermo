@@ -172,9 +172,10 @@ func policyIdentity(info ProcInfo) ProcInfo {
 	return info
 }
 
-// processPolicyMaxAncestors bounds the parent walk; a process tree this deep
-// under one account is not a job a reviewed entry point launched.
-const processPolicyMaxAncestors = 64
+// processMaxAncestors bounds a walk up a process's parents: a tree this deep
+// under one account is not a job a reviewed entry point launched, nor a shell
+// a terminal multiplexer runs.
+const processMaxAncestors = 64
 
 // launchedByEntryPoint reports whether an allow entry with `descendants`
 // matches one of info's ancestors. The walk follows PPIDs through this
@@ -184,7 +185,7 @@ const processPolicyMaxAncestors = 64
 // reparented to init is judged on its own identity.
 func (w *processPolicyWatcher) launchedByEntryPoint(info ProcInfo, byPID map[int]ProcInfo) bool {
 	ppid := info.PPID
-	for range processPolicyMaxAncestors {
+	for range processMaxAncestors {
 		parent, sampled := byPID[ppid]
 		if ppid <= 1 || !sampled {
 			return false

@@ -255,6 +255,10 @@ func (c *unownedClassifier) classify(ctx context.Context, samples []ProcInfo, no
 	candidates := make([]ProcInfo, 0, len(samples))
 	unitReasons := make([]string, 0, len(samples))
 	onHost := make([]bool, 0, len(samples))
+	byPID := make(map[int]ProcInfo, len(samples))
+	for i := range samples {
+		byPID[samples[i].PID] = samples[i]
+	}
 	for i := range samples {
 		if ctx.Err() != nil {
 			return scan
@@ -289,20 +293,60 @@ func (c *unownedClassifier) classify(ctx context.Context, samples []ProcInfo, no
 		unitReasons = append(unitReasons, c.unitReason(owner, scan, host, closedSessions))
 	}
 	packaged, judged := c.packageOwnership(ctx, candidates, onHost)
+	unpackaged := make(map[int]bool, len(candidates))
+	for i := range candidates {
+		if judged[i] && packaged[ownershipExecutable(candidates[i])] == pkgdb.NotOwned {
+			unpackaged[candidates[i].PID] = true
+		}
+	}
+	scan.findings = unownedFindings(candidates, unitReasons, unpackaged, byPID)
+	return scan
+}
+
+// unownedFindings joins each candidate's unit and package verdicts into its
+// finding, sorted by PID; a candidate with neither is no finding.
+func unownedFindings(candidates []ProcInfo, unitReasons []string, unpackaged map[int]bool, byPID map[int]ProcInfo) []unownedFinding {
+	var findings []unownedFinding
 	for i := range candidates {
 		finding := unownedFinding{info: candidates[i]}
-		if unitReasons[i] != "" {
-			finding.reasons = append(finding.reasons, unitReasons[i])
+		reason := unitReasons[i]
+		if reason == unownedReasonClosedSession && detachedTerminal(candidates[i], byPID, unpackaged) {
+			reason = ""
 		}
-		if judged[i] && packaged[ownershipExecutable(candidates[i])] == pkgdb.NotOwned {
+		if reason != "" {
+			finding.reasons = append(finding.reasons, reason)
+		}
+		if unpackaged[candidates[i].PID] {
 			finding.reasons = append(finding.reasons, unownedReasonUnpackaged)
 		}
 		if len(finding.reasons) > 0 {
-			scan.findings = append(scan.findings, finding)
+			findings = append(findings, finding)
 		}
 	}
-	slices.SortFunc(scan.findings, func(a, b unownedFinding) int { return cmp.Compare(a.info.PID, b.info.PID) })
-	return scan
+	slices.SortFunc(findings, func(a, b unownedFinding) int { return cmp.Compare(a.info.PID, b.info.PID) })
+	return findings
+}
+
+// detachedTerminal reports whether a process belongs to a terminal
+// multiplexer's session: the screen or tmux server itself, or anything it runs.
+// A detached session outlives the login it was started from by design, and the
+// Sessions panel lists it as a session; it is not the nohup job the closed-
+// session criterion is for (one host listed 34 shells and 9 mc inside screen). A
+// multiplexer whose executable no installed package owns vouches for nothing,
+// so a binary merely named like one cannot hide what it runs.
+func detachedTerminal(info ProcInfo, byPID map[int]ProcInfo, unpackaged map[int]bool) bool {
+	current := info
+	for range processMaxAncestors {
+		if checks.MultiplexerServer(current.Identity) {
+			return !unpackaged[current.PID]
+		}
+		parent, sampled := byPID[current.PPID]
+		if current.PPID <= initPID || !sampled {
+			return false
+		}
+		current = parent
+	}
+	return false
 }
 
 // unitAttributionAvailable reports whether root-group membership means
