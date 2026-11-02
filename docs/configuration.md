@@ -4453,7 +4453,7 @@ A process no unit owns is listed for one or both of these reasons:
 | Reason | Evidence |
 | --- | --- |
 | `outside every init unit` | its control group is the root group (or a bare slice) on a host whose init places every process in a unit: systemd always, OpenRC only with per-service cgroups (`rc_cgroup_mode=unified`) |
-| `outlived its closed login session` | its control group is a logind `session-N.scope` whose session logind no longer records, or records as `closing` — the `nohup … &` that survived a logout. A screen or tmux server and everything it runs are exempt: a detached terminal session outlives its login by design and the Sessions panel lists it; a multiplexer binary no installed package owns does not vouch for its children |
+| `outlived its closed login session` | its control group is a host logind `session-N.scope` whose session logind no longer records, or records as `closing` — the `nohup … &` that survived a logout. A screen or tmux server and everything it runs are exempt: a detached terminal session outlives its login by design and the Sessions panel lists it; a multiplexer binary no installed package owns does not vouch for its children |
 | `executable belongs to no installed package` | it runs in a login session or the root group and its resolved `/proc/<pid>/exe` (or, for a replaced binary, the previous path) is in no package of the host's database: Gentoo (`/var/db/pkg`), dpkg, pacman and apk are read natively; rpm is asked with one `rpm -qf` per cycle |
 
 Processes in another mount namespace than PID 1 (containers) are never judged by
@@ -4470,8 +4470,9 @@ cannot be listed the message says `logind session records unreadable` and no
 session is called closed.
 Everything under `init.scope`, a service, a non-session scope (`docker-*`,
 `machine-*`), a mount, swap or socket unit, a libvirt domain group
-(`/machine/qemu-*.libvirt-qemu`) or a `user@N.service` user manager counts as
-owned. So does a usermode helper the kernel spawned (child of `kthreadd`) and a
+(`/machine/qemu-*.libvirt-qemu`), a `user@N.service` user manager or a login
+session a container's own logind opened (a `session-N.scope` below the
+container's group, such as `/lxc/<id>/ns/user.slice/…`) counts as owned. So does a usermode helper the kernel spawned (child of `kthreadd`) and a
 child of PID 1 whose exact command line is a `respawn` entry of `/etc/inittab`,
 such as the consoles of a sysvinit host. When attribution
 is impossible — no per-unit control groups, no package database, an executable

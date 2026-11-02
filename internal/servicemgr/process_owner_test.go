@@ -25,6 +25,7 @@ func TestCgroupOwnership(t *testing.T) {
 		{"lxc container", "0::/lxc.payload.web", true, true},
 		{"v1 cgroupfs container", "2:cpu:/docker/0123abcd\n1:name=systemd:/docker/0123abcd", true, true},
 		{"container guest's unit of the same name", "0::/lxc.payload.web/system.slice/squid.service", true, true},
+		{"container guest's login session", "0::/lxc/100/ns/user.slice/user-0.slice/session-23.scope", true, true},
 		{"malformed", "0::/system.slice/../squid.service", false, false},
 		{"relative", "0::squid.service", false, false},
 		{"unknown", "", false, false},

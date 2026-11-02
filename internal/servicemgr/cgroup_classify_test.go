@@ -36,6 +36,8 @@ func TestClassifyCgroup(t *testing.T) {
 		{"systemd container guest", "0::/lxc.payload.web/system.slice/nginx.service", CgroupOwner{Class: CgroupClassScope, Owner: "lxc.payload.web"}},
 		{"cgroupfs container guest", "0::/docker/0123abcd/system.slice/nginx.service", CgroupOwner{Class: CgroupClassScope, Owner: "docker"}},
 		{"openrc container guest", "0::/lxc.payload.web/openrc.nginx", CgroupOwner{Class: CgroupClassScope, Owner: "lxc.payload.web"}},
+		{"container guest session", "0::/lxc/100/ns/user.slice/user-0.slice/session-84952.scope", CgroupOwner{Class: CgroupClassScope, Owner: "lxc"}},
+		{"systemd container guest session", "0::/lxc.payload.web/user.slice/user-0.slice/session-3.scope", CgroupOwner{Class: CgroupClassScope, Owner: "lxc.payload.web"}},
 		{"root", "0::/", CgroupOwner{Class: CgroupClassRoot}},
 		{"v1 named", "3:cpu:/\n1:name=systemd:/system.slice/cron.service", CgroupOwner{Class: CgroupClassService, Owner: "cron"}},
 		{"v1 root", "1:name=systemd:/", CgroupOwner{Class: CgroupClassRoot}},

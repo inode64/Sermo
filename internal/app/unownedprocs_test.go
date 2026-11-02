@@ -346,13 +346,16 @@ func TestUnownedClassifierSharesSessionStateOnlyWithinASample(t *testing.T) {
 func TestUnownedWatcherNeverJudgesOtherMountNamespaces(t *testing.T) {
 	h := &unownedHarness{}
 	fixture := systemdFixture()
-	fixture.namespaces = map[int]string{70: testOtherMountNS, 71: testOtherMountNS, 73: testOtherMountNS}
+	fixture.namespaces = map[int]string{70: testOtherMountNS, 71: testOtherMountNS, 73: testOtherMountNS, 74: testOtherMountNS}
 	dockerWorker := unownedProc(70, "/usr/bin/php", "0::/docker/0123abcd")
 	dockerWorker.UID, dockerWorker.User = 33, "www-data"
 	kubePod := unownedProc(71, "/opt/acme/bin/agent", "0::/kubepods/burstable/pod1/ctr1")
 	hostInSameShape := unownedProc(72, "/opt/acme/bin/agent", "0::/lxc/payload") // host namespace: a real stray
 	closedSessionInNS := unownedProc(73, "/opt/sermo-test/sleep", "0::/user.slice/user-0.slice/session-9.scope")
-	w := h.watcher(t, fixedSampler{infos: []ProcInfo{dockerWorker, kubePod, hostInSameShape, closedSessionInNS}, ok: true}, map[string]any{}, fixture.runtime())
+	// The container's own logind numbers its sessions; the host's session 9 is
+	// another login, so its closed record says nothing about this one.
+	guestSession := unownedProc(74, "/usr/bin/python3.12", "0::/lxc/100/ns/user.slice/user-0.slice/session-9.scope")
+	w := h.watcher(t, fixedSampler{infos: []ProcInfo{dockerWorker, kubePod, hostInSameShape, closedSessionInNS, guestSession}, ok: true}, map[string]any{}, fixture.runtime())
 	w.kill = unownedKillSpec([]string{"www-data", "root"}, []string{"/usr/bin/php", "/opt/acme/bin/agent"}, false)
 
 	w.runCycle(context.Background())

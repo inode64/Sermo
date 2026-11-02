@@ -26,8 +26,8 @@ const (
 	CgroupClassService CgroupClass = "service"
 	// CgroupClassScope is a transient non-session scope (a container, a VM, a
 	// systemd-run unit), or another group a manager owns: a mount, swap or socket
-	// unit, libvirt's own domain group, or a unit inside a container. Owner is the
-	// group's name, without its suffix for a scope.
+	// unit, libvirt's own domain group, or a unit or login session inside a
+	// container. Owner is the group's name, without its suffix for a scope.
 	CgroupClassScope CgroupClass = "scope"
 	// CgroupClassUserManager is a user@N.service manager and everything it runs;
 	// Owner is the numeric user id.
@@ -118,6 +118,12 @@ func ClassifyCgroup(content string) CgroupOwner {
 		case strings.HasSuffix(part, systemdScopeSuffix):
 			name := strings.TrimSuffix(part, systemdScopeSuffix)
 			if session, found := strings.CutPrefix(name, cgroupSessionPrefix); found {
+				// Below a group that is not a slice, the session is one the
+				// container's own logind opened (/lxc/<id>/ns/user.slice/…): the
+				// host's logind has no record of it, so it is the container's.
+				if j := slices.IndexFunc(parts[:i], notSlice); j >= 0 {
+					return CgroupOwner{Class: CgroupClassScope, Owner: parts[j]}
+				}
 				return CgroupOwner{Class: CgroupClassSession, Owner: session}
 			}
 			return CgroupOwner{Class: CgroupClassScope, Owner: name}
