@@ -1346,6 +1346,16 @@ func TestCatalogMailAppsUseOwnedVersionCommands(t *testing.T) {
 	}
 }
 
+// slapd -VVV exits 1 on OpenLDAP 2.4 and 0 on 2.6; accepting only one release
+// line marks the other's healthy binary as failed.
+func TestCatalogSlapdVersionAcceptsBothReleaseExits(t *testing.T) {
+	doc := catalogDocByName(t, repoRoot(t), "apps", "slapd")
+	got, ok := cfgval.IntList(nested(t, doc, "preflight", "version")["expect_exit"])
+	if !ok || !slices.Equal(got, []int{0, 1}) {
+		t.Fatalf("slapd version expect_exit = %v, want [0 1]", got)
+	}
+}
+
 func TestCatalogCupsUsesSingleCupsdApp(t *testing.T) {
 	cfg := loadRepoCatalog(t)
 

@@ -13,4 +13,5 @@ variables:
 preflight:
   binary: { type: binary, path: "${binary}" }
   slaptest: { type: binary, path: "${slaptest}" }
-  version: { type: command, command: ["${binary}", "-VVV"], expect_exit: 1, timeout: 10s }
+  # slapd -VVV prints its version and exits 1 up to OpenLDAP 2.4 and 0 from 2.6.
+  version: { type: command, command: ["${binary}", "-VVV"], expect_exit: [0, 1], timeout: 10s }
