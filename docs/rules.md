@@ -3918,7 +3918,11 @@ changed at the selected `level` (`major`, `minor` or `patch`; default `patch`).
 watches its file. The first cycle adopts the current value (a daemon start
 never fires), and a successful `restart`, or a `start` that found the service
 down, re-baselines it, from a rule, the Web UI or `sermoctl`: `sermod` adopts an
-operator's on its next cycle of that service, also under `dry_run`. A `start` on a
+operator's on its next cycle of that service, also under `dry_run`. App versions
+are sampled every artifact interval, so the version in hand at that relaunch can
+predate the upgrade that caused it (a `restart-on-stale-binary` that ran first);
+the first app sample taken after the relaunch is therefore adopted as the
+version the relaunched service loaded, instead of restarting it a second time. A `start` on a
 service already running changes nothing and leaves the change pending, except
 that a rule answering `changed:` with `start` consumes its own trigger. A rule's successful
 `reload` or `resume` re-baselines everything except what a `restart` or `start`

@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"sync"
 	"testing"
+	"time"
 
 	"sermo/internal/checks"
 )
@@ -167,17 +168,17 @@ func TestArtifactChangedFuncSharesWorkerBaseline(t *testing.T) {
 
 func TestArtifactBaselineAcknowledgeExceptKeepsVersionsPending(t *testing.T) {
 	baseline := NewArtifactBaseline()
-	baseline.versionChanged(versionKey("nginx", 3), "1.0.0")
-	baseline.versionChanged(versionKey("redis", 3), "7.0.0")
-	baseline.versionChanged(versionKey("nginx", 3), "1.0.1")
-	baseline.versionChanged(versionKey("redis", 3), "7.0.1")
+	baseline.versionChanged(versionKey("nginx", 3), "1.0.0", time.Time{})
+	baseline.versionChanged(versionKey("redis", 3), "7.0.0", time.Time{})
+	baseline.versionChanged(versionKey("nginx", 3), "1.0.1", time.Time{})
+	baseline.versionChanged(versionKey("redis", 3), "7.0.1", time.Time{})
 
 	baseline.AcknowledgeExcept(map[string]bool{versionKey("nginx", 3): true}, nil)
 
-	if !baseline.versionChanged(versionKey("nginx", 3), "1.0.1") {
+	if !baseline.versionChanged(versionKey("nginx", 3), "1.0.1", time.Time{}) {
 		t.Fatal("the kept version must stay pending")
 	}
-	if baseline.versionChanged(versionKey("redis", 3), "7.0.1") {
+	if baseline.versionChanged(versionKey("redis", 3), "7.0.1", time.Time{}) {
 		t.Fatal("the other version must be acknowledged")
 	}
 }
@@ -298,5 +299,62 @@ func TestParseCheckGates(t *testing.T) {
 	}
 	if parseCheckGates(map[string]any{"checks": map[string]any{"a": map[string]any{"type": "tcp"}}}) != nil {
 		t.Fatal("a service with no gated checks should yield nil")
+	}
+}
+
+// A relaunch adopts the sample in hand, which app watches take only every
+// artifact interval: when that sample predates the upgrade that made the
+// service relaunch, the next sample shows the version the relaunched process
+// already loaded. It must be adopted, not read as a change that restarts the
+// service a second time (seen in production: restart-on-stale-binary, then
+// restart-on-change-exim-version five minutes later).
+func TestArtifactBaselineAdoptsTheFirstSampleAfterARelaunch(t *testing.T) {
+	relaunch := time.Date(2026, 11, 2, 10, 14, 45, 0, time.UTC)
+	key := versionKey("exim", 3)
+	baseline := NewArtifactBaseline()
+	baseline.now = func() time.Time { return relaunch }
+	baseline.versionChanged(key, "4.98", relaunch.Add(-10*time.Minute))
+	// The upgrade lands; the stale-binary rule relaunches before the next sample.
+	baseline.Acknowledge(nil)
+
+	if baseline.versionChanged(key, "4.98", relaunch.Add(-time.Minute)) {
+		t.Fatal("the sample from before the relaunch is the acknowledged one")
+	}
+	if baseline.versionChanged(key, "4.99", relaunch.Add(5*time.Minute)) {
+		t.Fatal("the first sample after the relaunch is what the relaunched service runs")
+	}
+	if !baseline.versionChanged(key, "5.00", relaunch.Add(10*time.Minute)) {
+		t.Fatal("a later upgrade is a change again")
+	}
+}
+
+// The pending adoption survives a config reload between the relaunch and the
+// next sample, or the reload would bring the second restart back.
+func TestArtifactBaselineRelaunchAdoptionSurvivesAReload(t *testing.T) {
+	relaunch := time.Date(2026, 11, 2, 10, 14, 45, 0, time.UTC)
+	key := versionKey("cloudflared", 3)
+	old := NewArtifactBaseline()
+	old.now = func() time.Time { return relaunch }
+	old.versionChanged(key, "2025.10.0", relaunch.Add(-time.Hour))
+	old.Acknowledge(nil)
+
+	fresh := NewArtifactBaseline()
+	fresh.restore(*old.snapshot())
+	if fresh.versionChanged(key, "2025.11.0", relaunch.Add(5*time.Minute)) {
+		t.Fatal("a reload lost the relaunch the next sample belongs to")
+	}
+}
+
+// A reload or resume keeps the running code, so its acknowledgement does not
+// adopt the next sample: a later version is still a change a relaunch must
+// bring in.
+func TestArtifactBaselineReloadDoesNotAdoptTheNextSample(t *testing.T) {
+	at := time.Date(2026, 11, 2, 10, 0, 0, 0, time.UTC)
+	key := versionKey("nginx", 3)
+	baseline := NewArtifactBaseline()
+	baseline.versionChanged(key, "1.26.0", at)
+	baseline.AcknowledgeExcept(nil, nil)
+	if !baseline.versionChanged(key, "1.27.0", at.Add(5*time.Minute)) {
+		t.Fatal("a version sampled after a reload is still pending")
 	}
 }

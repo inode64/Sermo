@@ -34,6 +34,8 @@ type ArtifactSamples struct {
 	appVersions map[string]artifactAppSample
 	// read fingerprints one file; nil reads the host.
 	read func(string) (string, bool)
+	// now stamps stored app samples; nil reads the wall clock.
+	now func() time.Time
 }
 
 type artifactFileSample struct {
@@ -44,6 +46,9 @@ type artifactFileSample struct {
 type artifactAppSample struct {
 	report  appinspect.Report
 	sampled bool
+	// at is when the sample was stored, which tells a sample taken after a
+	// relaunch from the one already in hand when the service relaunched.
+	at time.Time
 }
 
 // NewArtifactSamples creates an empty artifact sample cache.
@@ -122,8 +127,9 @@ func (s *ArtifactSamples) StoreAppReport(name string, report appinspect.Report) 
 	if s == nil || name == "" {
 		return
 	}
+	at := clockOrNow(s.now)()
 	s.mu.Lock()
-	s.appVersions[name] = artifactAppSample{report: report, sampled: true}
+	s.appVersions[name] = artifactAppSample{report: report, sampled: true, at: at}
 	s.mu.Unlock()
 }
 
@@ -144,16 +150,22 @@ func (s *ArtifactSamples) AppVersion(name string) (string, string, bool) {
 // AppReport returns the app watch's latest full inspection, so a listing can
 // show it without re-running the app's version probe.
 func (s *ArtifactSamples) AppReport(name string) (appinspect.Report, bool) {
+	report, _, ok := s.AppSample(name)
+	return report, ok
+}
+
+// AppSample is AppReport with the time the sample was stored.
+func (s *ArtifactSamples) AppSample(name string) (appinspect.Report, time.Time, bool) {
 	if s == nil {
-		return appinspect.Report{}, false
+		return appinspect.Report{}, time.Time{}, false
 	}
 	s.mu.RLock()
 	entry, tracked := s.appVersions[name]
 	s.mu.RUnlock()
 	if !tracked || !entry.sampled {
-		return appinspect.Report{}, false
+		return appinspect.Report{}, time.Time{}, false
 	}
-	return entry.report, true
+	return entry.report, entry.at, true
 }
 
 type artifactCheck struct {

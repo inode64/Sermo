@@ -4,6 +4,7 @@ import (
 	"maps"
 	"strconv"
 	"sync"
+	"time"
 
 	"sermo/internal/rules"
 )
@@ -23,6 +24,14 @@ type ArtifactBaseline struct {
 	// post-restart version without re-running the version command.
 	versions     map[string]string
 	versionsLast map[string]string
+	// relaunchedAt holds, per version key, when a relaunch acknowledged it. The
+	// sample in hand then is often older than the upgrade that caused the
+	// relaunch (app samples run every artifact interval), so the first sample
+	// stored after it is adopted as what the relaunched service loaded instead
+	// of reading as a change that restarts it a second time.
+	relaunchedAt map[string]time.Time
+	// now stamps acknowledgements; nil reads the wall clock.
+	now func() time.Time
 }
 
 // artifactBaselineState is a copy of an ArtifactBaseline carried across a
@@ -31,6 +40,7 @@ type artifactBaselineState struct {
 	fingerprints map[string]string
 	versions     map[string]string
 	versionsLast map[string]string
+	relaunchedAt map[string]time.Time
 }
 
 // ArtifactBaselines hands a service's worker and its web runtime the same
@@ -69,6 +79,7 @@ func NewArtifactBaseline() *ArtifactBaseline {
 		fingerprints: map[string]string{},
 		versions:     map[string]string{},
 		versionsLast: map[string]string{},
+		relaunchedAt: map[string]time.Time{},
 	}
 }
 
@@ -98,16 +109,24 @@ func (b *ArtifactBaseline) changedWithFingerprint(path string, samples *Artifact
 	return cur != base, nil
 }
 
-// versionChanged records version as the latest sample for key ("app:level")
-// and reports whether it differs from the acknowledged version. The first
-// observation adopts it, like Changed.
-func (b *ArtifactBaseline) versionChanged(key, version string) bool {
+// versionChanged records version, sampled at sampledAt, as the latest sample
+// for key ("app:level") and reports whether it differs from the acknowledged
+// version. The first observation adopts it, like Changed, and so does the
+// first sample stored after an acknowledged relaunch: the relaunched process
+// loaded what was installed then. Should the package change again before that
+// sample, the running binary reads as replaced, which stale-binary reports.
+func (b *ArtifactBaseline) versionChanged(key, version string, sampledAt time.Time) bool {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.versionsLast[key] = version
 	base, seen := b.versions[key]
 	if !seen {
 		b.versions[key] = version
+		return false
+	}
+	if relaunched, pending := b.relaunchedAt[key]; pending && sampledAt.After(relaunched) {
+		b.versions[key] = version
+		delete(b.relaunchedAt, key)
 		return false
 	}
 	return version != base
@@ -146,7 +165,16 @@ func baselineKey(leaf rules.ChangeContext) string {
 // service runs the upgraded app, so the last-seen version is the one to
 // acknowledge, without re-running the version command.
 func (b *ArtifactBaseline) Acknowledge(samples *ArtifactSamples) {
+	if b == nil {
+		return
+	}
 	b.AcknowledgeExcept(nil, samples)
+	at := clockOrNow(b.now)()
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	for key := range b.versionsLast {
+		b.relaunchedAt[key] = at
+	}
 }
 
 // AcknowledgeExcept is Acknowledge leaving out the baselineKey targets in kept,
@@ -207,6 +235,10 @@ func (b *ArtifactBaseline) restore(state artifactBaselineState) {
 	b.fingerprints = cloneOrEmpty(state.fingerprints)
 	b.versions = cloneOrEmpty(state.versions)
 	b.versionsLast = cloneOrEmpty(state.versionsLast)
+	b.relaunchedAt = maps.Clone(state.relaunchedAt)
+	if b.relaunchedAt == nil {
+		b.relaunchedAt = map[string]time.Time{}
+	}
 }
 
 // snapshot returns a copy of the acknowledged state, or nil when nothing has
@@ -224,6 +256,7 @@ func (b *ArtifactBaseline) snapshot() *artifactBaselineState {
 		fingerprints: maps.Clone(b.fingerprints),
 		versions:     maps.Clone(b.versions),
 		versionsLast: maps.Clone(b.versionsLast),
+		relaunchedAt: maps.Clone(b.relaunchedAt),
 	}
 }
 

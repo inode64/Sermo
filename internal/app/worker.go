@@ -1275,7 +1275,7 @@ func (w *Worker) changedAppVersion(_ context.Context, app string, level int) (bo
 	if w.artifactSamples == nil {
 		return false, fmt.Errorf("changed condition app %q: artifact samples unavailable", app)
 	}
-	report, sampled := w.artifactSamples.AppReport(app)
+	report, sampledAt, sampled := w.artifactSamples.AppSample(app)
 	if !sampled || appinspect.IsNotInstalledStatus(report.Status) {
 		return false, nil
 	}
@@ -1288,15 +1288,15 @@ func (w *Worker) changedAppVersion(_ context.Context, app string, level int) (bo
 		}
 		return false, &appProbeError{status: report.Status, output: report.Output}
 	}
-	return w.compareAppVersion(app, level, report.Version)
+	return w.compareAppVersion(app, level, report.Version, sampledAt)
 }
 
-func (w *Worker) compareAppVersion(app string, level int, raw string) (bool, error) {
+func (w *Worker) compareAppVersion(app string, level int, raw string, sampledAt time.Time) (bool, error) {
 	key := checks.TruncateVersion(checks.ShortVersion(raw), level)
 	if key == "" {
 		key = output.FirstNonEmptyLine(raw)
 	}
-	return w.libBaseline.versionChanged(versionKey(app, level), key), nil
+	return w.libBaseline.versionChanged(versionKey(app, level), key, sampledAt), nil
 }
 
 // fingerprintReadTimeout bounds one stat behind a file fingerprint.

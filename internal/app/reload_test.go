@@ -83,14 +83,14 @@ func TestApplyWorkerStateKeepsEngineBaselineShared(t *testing.T) {
 // seeing the upgrade, like `changed: {path}` does.
 func TestApplyWorkerStateKeepsAppVersionBaseline(t *testing.T) {
 	old := &Worker{Service: "web", libBaseline: NewArtifactBaseline()}
-	if changed, err := old.compareAppVersion("redis", 1, "redis 7.2.4"); err != nil || changed {
+	if changed, err := old.compareAppVersion("redis", 1, "redis 7.2.4", time.Time{}); err != nil || changed {
 		t.Fatalf("first observation = %t, %v; want adopted", changed, err)
 	}
 	saved := captureWorkerState([]*Worker{old})
 
 	fresh := &Worker{Service: "web", libBaseline: NewArtifactBaseline()}
 	applyWorkerState([]*Worker{fresh}, saved)
-	if changed, err := fresh.compareAppVersion("redis", 1, "redis 8.0.1"); err != nil || !changed {
+	if changed, err := fresh.compareAppVersion("redis", 1, "redis 8.0.1", time.Time{}); err != nil || !changed {
 		t.Fatalf("upgrade after reload = %t, %v; want the change against the preserved baseline", changed, err)
 	}
 }
