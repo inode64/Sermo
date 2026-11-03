@@ -5,7 +5,7 @@ go 1.27.3
 require (
 	github.com/OpenPrinting/goipp v1.2.0
 	github.com/beevik/ntp v1.6.0
-	github.com/cloudsoda/go-smb2 v0.0.0-20261029174947-95daac2ef783
+	github.com/cloudsoda/go-smb2 v0.0.0-20261103071945-eb7a6cfa5657
 	github.com/digitalocean/go-libvirt v0.0.0-20261013170128-efbbdf578ac8
 	github.com/go-ldap/ldap/v3 v3.4.15
 	github.com/go-sql-driver/mysql v1.10.1
@@ -54,7 +54,7 @@ require (
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/vishvananda/netns v0.0.5 // indirect
 	github.com/xdg-go/pbkdf2 v1.0.0 // indirect
-	github.com/xdg-go/scram v1.2.0 // indirect
+	github.com/xdg-go/scram v1.3.0 // indirect
 	github.com/xdg-go/stringprep v1.0.4 // indirect
 	github.com/youmark/pkcs8 v0.0.0-20240726163527-a2c0da244d78 // indirect
 	golang.org/x/mod v0.42.0 // indirect

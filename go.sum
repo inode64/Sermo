@@ -8,8 +8,8 @@ github.com/alexbrainman/sspi v0.0.0-20250919150558-7d374ff0d59e h1:4dAU9FXIyQktp
 github.com/alexbrainman/sspi v0.0.0-20250919150558-7d374ff0d59e/go.mod h1:cEWa1LVoE5KvSD9ONXsZrj0z6KqySlCCNKHlLzbqAt4=
 github.com/beevik/ntp v1.6.0 h1:bW359Vvw6bicGhKsVi+ZDLMsMYzb2ohUpLaF/Juv0k8=
 github.com/beevik/ntp v1.6.0/go.mod h1:VTAbDFySkuc8cQiAYHhXslAHjJdenICebskhYqBWC4k=
-github.com/cloudsoda/go-smb2 v0.0.0-20261029174947-95daac2ef783 h1:nMiJfdX9TxRrf1RJpyTTvfR56jsuRMm0P2smJcuIqBQ=
-github.com/cloudsoda/go-smb2 v0.0.0-20261029174947-95daac2ef783/go.mod h1:1pQXB0vAlzRlqcY7LYKOOZMw0wKfJPFxTLsJRF2Gswo=
+github.com/cloudsoda/go-smb2 v0.0.0-20261103071945-eb7a6cfa5657 h1:+rl/J5fKkDoeZIQoK7WLa+MpobIVaR4e8D2XYbWiZa0=
+github.com/cloudsoda/go-smb2 v0.0.0-20261103071945-eb7a6cfa5657/go.mod h1:1pQXB0vAlzRlqcY7LYKOOZMw0wKfJPFxTLsJRF2Gswo=
 github.com/cloudsoda/sddl v0.0.0-20250224235906-926454e91efc h1:0xCWmFKBmarCqqqLeM7jFBSw/Or81UEElFqO8MY+GDs=
 github.com/cloudsoda/sddl v0.0.0-20250224235906-926454e91efc/go.mod h1:uvR42Hb/t52HQd7x5/ZLzZEK8oihrFpgnodIJ1vte2E=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
@@ -111,8 +111,8 @@ github.com/wneessen/go-mail v0.8.1 h1:tVcncj02/QySVFw3zr/kXOzZcuFQqBNT6K+Rbgm/pc
 github.com/wneessen/go-mail v0.8.1/go.mod h1:dWZ61zadzCIyvB4y1/YzC5O7MrbbzBfPkARmbosdf8w=
 github.com/xdg-go/pbkdf2 v1.0.0 h1:Su7DPu48wXMwC3bs7MCNG+z4FhcyEuz5dlvchbq0B0c=
 github.com/xdg-go/pbkdf2 v1.0.0/go.mod h1:jrpuAogTd400dnrH08LKmI/xc1MbPOebTwRqcT5RDeI=
-github.com/xdg-go/scram v1.2.0 h1:bYKF2AEwG5rqd1BumT4gAnvwU/M9nBp2pTSxeZw7Wvs=
-github.com/xdg-go/scram v1.2.0/go.mod h1:3dlrS0iBaWKYVt2ZfA4cj48umJZ+cAEbR6/SjLA88I8=
+github.com/xdg-go/scram v1.3.0 h1:m59aY8yYblkxblq1bosA/GbNfVg/WZCKPBVnyOhbQMc=
+github.com/xdg-go/scram v1.3.0/go.mod h1:3dlrS0iBaWKYVt2ZfA4cj48umJZ+cAEbR6/SjLA88I8=
 github.com/xdg-go/stringprep v1.0.4 h1:XLI/Ng3O1Atzq0oBs3TWm+5ZVgkq2aqdlvP9JtoZ6c8=
 github.com/xdg-go/stringprep v1.0.4/go.mod h1:mPGuuIYwz7CmR2bT9j4GbQqutWS1zV24gijq1dTyGkM=
 github.com/youmark/pkcs8 v0.0.0-20240726163527-a2c0da244d78 h1:ilQV1hzziu+LLM3zUTJ0trRztfwgjqKnBWNtSRkbmwM=
