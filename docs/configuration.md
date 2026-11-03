@@ -3898,6 +3898,14 @@ baseline. Anonymous mappings, memfd/JIT mappings and the main executable are
 excluded. Libraries without `.so` names and in-place writes to an unchanged
 inode are outside this check's coverage.
 
+When an update removes a versioned library filename, the scanner reads the old
+ELF's SONAME through its kernel-held `map_files` entry. It accepts the SONAME
+alias in the same directory only when the installed ELF has that same SONAME,
+class and architecture and both file identities can be verified. The finding
+retains the original `path` and records the alias as `replacement_path`.
+If the old ELF cannot be read, the alias is absent or the evidence differs,
+the replacement remains missing and cannot trigger an automatic restart.
+
 Default reporting is `state`, severity `warning`: an old library does not by
 itself mean the service is down. `OK` means no stale libraries; use `failed:`,
 not `active:`, to alert. A service `watches:` entry with `then: {action: alert}`

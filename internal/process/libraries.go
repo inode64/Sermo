@@ -26,6 +26,7 @@ const (
 	libraryMapDevice       = 3
 	libraryMapInode        = 4
 	libraryMapLineLimit    = 1024 * 1024
+	procFileMapFiles       = "map_files"
 )
 
 // StaleLibrary identifies a mapped shared object whose installed inode differs.
@@ -41,6 +42,9 @@ type StaleLibrary struct {
 	Modified   int64          `json:"modified"`
 	Changed    int64          `json:"changed"`
 	Missing    bool           `json:"missing"`
+	// ReplacementPath is a verified SONAME alias when the mapped versioned
+	// filename was removed by an update.
+	ReplacementPath string `json:"replacement_path,omitempty"`
 	// ChrootedProcess marks a finding read through another root than the
 	// process's own: it can alert, never drive an action.
 	ChrootedProcess bool `json:"chrooted_process,omitempty"`
@@ -66,6 +70,7 @@ type libraryReader struct {
 	reader   Reader
 	readFile func(string) ([]byte, error)
 	stat     func(string) (libraryFile, error)
+	elf      func(string, ExecutableFile) (libraryELF, error)
 }
 
 // ScanLibraries reads executable .so mappings, including dlopen/PAM modules.
@@ -80,7 +85,7 @@ func ScanLibraries(ctx context.Context, procs []Process) (LibraryReport, error) 
 	// Numeric ownership is sufficient here; avoid NSS/network user lookups in
 	// a process inventory whose authority is the kernel's real UID.
 	numeric := func(id uint32) string { return strconv.FormatUint(uint64(id), numericIDBase) }
-	r := libraryReader{reader: OSReader{LookupUserName: numeric, LookupGroupName: numeric}, readFile: hostfs.ReadFile, stat: statLibraryFile}
+	r := libraryReader{reader: OSReader{LookupUserName: numeric, LookupGroupName: numeric}, readFile: hostfs.ReadFile, stat: statLibraryFile, elf: readLibraryELF}
 	return r.scan(ctx, procs)
 }
 
@@ -95,6 +100,10 @@ func statLibraryFile(path string) (libraryFile, error) {
 	if err != nil {
 		return libraryFile{}, fmt.Errorf("stat library identity: %w", err)
 	}
+	return libraryFileInfo(info)
+}
+
+func libraryFileInfo(info os.FileInfo) (libraryFile, error) {
 	st, ok := info.Sys().(*syscall.Stat_t)
 	if !ok {
 		return libraryFile{}, errors.New("file identity unavailable")
@@ -278,6 +287,7 @@ func (r libraryReader) processLibraries(ctx context.Context, proc Process, roots
 type libraryMapping struct {
 	path     string
 	identity ExecutableFile
+	span     string
 }
 
 func parseLibraryMaps(data string) ([]libraryMapping, error) {
@@ -323,10 +333,16 @@ func parseLibraryMaps(data string) ([]libraryMapping, error) {
 		if errMajor != nil || errMinor != nil || errInode != nil || inode == 0 {
 			return nil, errors.New("invalid mapped library identity")
 		}
-		mapping := libraryMapping{path: path, identity: ExecutableFile{Device: unix.Mkdev(uint32(major), uint32(minor)), Inode: inode}}
-		if !seen[mapping] {
+		span := fields[0]
+		if start, end, ok := strings.Cut(span, "-"); !ok || !validMapAddress(start) || !validMapAddress(end) {
+			return nil, errors.New("invalid mapped address range")
+		}
+		mapping := libraryMapping{path: path, identity: ExecutableFile{Device: unix.Mkdev(uint32(major), uint32(minor)), Inode: inode}, span: span}
+		key := mapping
+		key.span = ""
+		if !seen[key] {
 			mappings = append(mappings, mapping)
-			seen[mapping] = true
+			seen[key] = true
 		}
 	}
 	if err := scanner.Err(); err != nil {
@@ -361,6 +377,20 @@ func (r libraryReader) compareLibrary(proc Process, root string, mapping library
 	if path == proc.Exe || path == proc.ExePrev {
 		return StaleLibrary{Path: path}, false, nil
 	}
+	replacement := ""
+	if missing {
+		if alias, file, ok := r.libraryReplacement(proc.PID, root, path, mapping); ok {
+			replacement, installed, missing = alias, file, false
+		}
+	}
 	return StaleLibrary{PID: proc.PID, Exe: proc.Exe, UID: proc.UID, StartTicks: proc.StartTicks, Path: path, Mapped: mapping.identity,
-		Installed: installed.identity, Modified: installed.modified, Changed: installed.changed, Missing: missing}, true, nil
+		Installed: installed.identity, Modified: installed.modified, Changed: installed.changed, Missing: missing, ReplacementPath: replacement}, true, nil
+}
+
+func validMapAddress(value string) bool {
+	if value == "" || strings.ContainsAny(value, "+-xX") {
+		return false
+	}
+	_, err := strconv.ParseUint(value, 16, 64)
+	return err == nil
 }

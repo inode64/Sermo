@@ -29,6 +29,8 @@ func TestParseLibraryMaps(t *testing.T) {
 		{"traversal", "1000-2000 r-xp 0000 08:01 42 /lib/../libx.so\n", 0, true},
 		{"newline ambiguity", "1000-2000 r-xp 0000 08:01 42 /lib/lib\\012x.so\n", 0, true},
 		{"deduplicate", strings.Repeat("1000-2000 r-xp 0000 08:01 42 /lib/libx.so\n", 2), 1, false},
+		{"two code segments", "1000-2000 r-xp 0000 08:01 42 /lib/libx.so\n3000-4000 r-xp 2000 08:01 42 /lib/libx.so\n", 1, false},
+		{"invalid address", "../oops r-xp 0000 08:01 42 /lib/libx.so\n", 0, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			got, err := parseLibraryMaps(tc.input)

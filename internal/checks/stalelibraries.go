@@ -115,7 +115,7 @@ func libraryEvidence(libraries []process.StaleLibrary) map[process.StaleLibrary]
 	evidence := map[process.StaleLibrary]struct{}{}
 	for _, lib := range libraries {
 		evidence[process.StaleLibrary{Path: lib.Path, Mapped: lib.Mapped, Installed: lib.Installed,
-			Modified: lib.Modified, Changed: lib.Changed, Missing: lib.Missing}] = struct{}{}
+			Modified: lib.Modified, Changed: lib.Changed, Missing: lib.Missing, ReplacementPath: lib.ReplacementPath}] = struct{}{}
 		if lib.RestartEligible {
 			evidence[lib] = struct{}{}
 		}
