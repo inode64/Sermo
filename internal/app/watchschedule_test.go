@@ -300,10 +300,13 @@ func TestWatchRefreshReportsNoRunningGeneration(t *testing.T) {
 
 // timedWatch records when each of its first cycles started.
 func timedWatch(name string, interval time.Duration, runs *atomic.Int32, starts []atomic.Int64) *Watch {
+	var started atomic.Int32
 	return &Watch{Name: name, Interval: interval, Check: checkFunc(func(context.Context) checks.Result {
-		if n := int(runs.Add(1)); n <= len(starts) {
+		if n := int(started.Add(1)); n <= len(starts) {
 			starts[n-1].Store(time.Now().UnixNano())
 		}
+		// Publish completion only after the timestamp used by assertions exists.
+		runs.Add(1)
 		return checks.Result{OK: true}
 	})}
 }
