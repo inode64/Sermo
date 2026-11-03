@@ -6,6 +6,10 @@ service: rngd
 pidfile:
   path: /run/rngd.pid
   optional: true
+processes:
+  main:
+    exe: ${rngd_binary}
+    user: root
 watches:
   service:
     check:

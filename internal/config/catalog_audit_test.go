@@ -2272,6 +2272,17 @@ func TestCatalogForegroundPidfilesAreOptional(t *testing.T) {
 		if !cfgval.Bool(pidfile["optional"]) {
 			t.Fatalf("%s pidfile check optional = %v, want true", service, pidfile["optional"])
 		}
+		selectors, errs := process.ParseSelectors(resolved.Tree)
+		if len(errs) > 0 {
+			t.Fatalf("%s process selectors: %v", service, errs)
+		}
+		// Foreground daemons may omit the pidfile: library remediation still
+		// needs an explicit main identity rather than backend attribution alone.
+		if !slices.ContainsFunc(selectors, func(selector process.Selector) bool {
+			return selector.Name == process.RoleMain && selector.IsStrictPrincipal()
+		}) {
+			t.Fatalf("%s has no strict main identity without its optional pidfile", service)
+		}
 	}
 }
 
