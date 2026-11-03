@@ -12,7 +12,7 @@ import (
 )
 
 func TestLibraryReplacementRequiresVerifiedSONAME(t *testing.T) {
-	for _, name := range []string{"replacement", "old unreadable", "different old name", "path traversal", "alias missing", "not regular", "same inode", "new unreadable", "different SONAME", "different class", "different machine", "changed file"} {
+	for _, name := range []string{"replacement", "independent numbering", "independent SONAME mismatch", "private plugin release", "empty release component", "unversioned object", "old unreadable", "different old name", "path traversal", "alias missing", "not regular", "same inode", "new unreadable", "different SONAME", "different class", "different machine", "changed file"} {
 		t.Run(name, func(t *testing.T) {
 			oldID := ExecutableFile{Device: 1, Inode: 10}
 			installed := libraryFile{identity: ExecutableFile{Device: 1, Inode: 20}, regular: true, modified: 30, changed: 40}
@@ -58,7 +58,7 @@ func TestLibraryReplacementRequiresVerifiedSONAME(t *testing.T) {
 				old.soname = "libother.so.1"
 			case "path traversal":
 				old.soname = "../libfixture.so.1"
-			case "different SONAME":
+			case "different SONAME", "independent SONAME mismatch":
 				current.soname = "libfixture.so.2"
 			case "different class":
 				current.class = elf.ELFCLASS32
@@ -67,8 +67,19 @@ func TestLibraryReplacementRequiresVerifiedSONAME(t *testing.T) {
 			case "changed file":
 				current.file.changed++
 			}
-			path, file, ok := r.libraryReplacement(42, "/proc/42/root", "/lib/libfixture.so.1.2.0", libraryMapping{identity: oldID, span: "1000-2000"})
-			if ok != (name == "replacement") || (ok && (path != "/lib/libfixture.so.1" || file != installed)) {
+			mappedPath := "/lib/libfixture.so.1.2.0"
+			switch name {
+			case "independent numbering", "independent SONAME mismatch":
+				mappedPath = "/lib/libfixture.so.3.53.1"
+			case "private plugin release":
+				mappedPath = "/lib/libfixture.so.plugin"
+			case "empty release component":
+				mappedPath = "/lib/libfixture.so.3..1"
+			case "unversioned object":
+				mappedPath = "/lib/libfixture.so"
+			}
+			path, file, ok := r.libraryReplacement(42, "/proc/42/root", mappedPath, libraryMapping{identity: oldID, span: "1000-2000"})
+			if ok != (name == "replacement" || name == "independent numbering") || (ok && (path != "/lib/libfixture.so.1" || file != installed)) {
 				t.Fatalf("replacement = %q %+v %v", path, file, ok)
 			}
 		})
@@ -118,34 +129,41 @@ func TestReadLibraryELF(t *testing.T) {
 }
 
 func TestScanLibrariesResolvesRemovedVersion(t *testing.T) {
-	r, proc := libraryFixture()
-	r.readFile = func(string) ([]byte, error) {
-		return []byte("1000-2000 r-xp 0000 08:01 42 /lib/libpam.so.0.1.0 (deleted)\n"), nil
-	}
-	stat := r.stat
-	r.stat = func(path string) (libraryFile, error) {
-		if strings.Contains(path, "libpam.so.0.1.0") {
-			return libraryFile{}, os.ErrNotExist
-		}
-		return stat(path)
-	}
-	r.elf = func(path string, expected ExecutableFile) (libraryELF, error) {
-		if strings.Contains(path, "/map_files/") {
-			return libraryELF{soname: "libpam.so.0", class: elf.ELFCLASS64, machine: elf.EM_X86_64}, nil
-		}
-		file, err := r.stat(path)
-		if err != nil || file.identity != expected {
-			return libraryELF{}, errors.New("unexpected replacement identity")
-		}
-		return libraryELF{file: file, soname: "libpam.so.0", class: elf.ELFCLASS64, machine: elf.EM_X86_64}, nil
-	}
-	report, err := r.scan(t.Context(), []Process{proc})
-	if err != nil || len(report.Libraries) != 1 {
-		t.Fatalf("scan = %+v, %v", report, err)
-	}
-	got := report.Libraries[0]
-	if got.Missing || got.Path != "/lib/libpam.so.0.1.0" || got.ReplacementPath != "/lib/libpam.so.0" || got.Installed.Inode != 43 {
-		t.Fatalf("finding = %+v", got)
+	for _, tc := range []struct{ path, soname string }{
+		{"/lib/libpam.so.0.1.0", "libpam.so.0"},
+		{"/lib/libsqlite3.so.3.53.1", "libsqlite3.so.0"},
+	} {
+		t.Run(tc.soname, func(t *testing.T) {
+			r, proc := libraryFixture()
+			r.readFile = func(string) ([]byte, error) {
+				return []byte("1000-2000 r-xp 0000 08:01 42 " + tc.path + " (deleted)\n"), nil
+			}
+			stat := r.stat
+			r.stat = func(path string) (libraryFile, error) {
+				if strings.HasSuffix(path, tc.path) {
+					return libraryFile{}, os.ErrNotExist
+				}
+				return stat(path)
+			}
+			r.elf = func(path string, expected ExecutableFile) (libraryELF, error) {
+				if strings.Contains(path, "/map_files/") {
+					return libraryELF{soname: tc.soname, class: elf.ELFCLASS64, machine: elf.EM_X86_64}, nil
+				}
+				file, err := r.stat(path)
+				if err != nil || file.identity != expected {
+					return libraryELF{}, errors.New("unexpected replacement identity")
+				}
+				return libraryELF{file: file, soname: tc.soname, class: elf.ELFCLASS64, machine: elf.EM_X86_64}, nil
+			}
+			report, err := r.scan(t.Context(), []Process{proc})
+			if err != nil || len(report.Libraries) != 1 {
+				t.Fatalf("scan = %+v, %v", report, err)
+			}
+			got := report.Libraries[0]
+			if got.Missing || got.Path != tc.path || got.ReplacementPath != "/lib/"+tc.soname || got.Installed.Inode != 43 {
+				t.Fatalf("finding = %+v", got)
+			}
+		})
 	}
 }
 

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"golang.org/x/sys/unix"
@@ -66,7 +67,7 @@ func (r libraryReader) libraryReplacement(pid int, root, path string, mapping li
 	}
 	old, err := r.elf(PIDPath(pid, procFileMapFiles)+"/"+mapping.span, mapping.identity)
 	if err != nil || old.soname == "" || filepath.Base(old.soname) != old.soname ||
-		!strings.HasPrefix(filepath.Base(path), old.soname+".") {
+		!versionedLibraryName(filepath.Base(path), old.soname) {
 		return "", libraryFile{}, false
 	}
 	alias := filepath.Join(filepath.Dir(path), old.soname)
@@ -80,4 +81,30 @@ func (r libraryReader) libraryReplacement(pid int, root, path string, mapping li
 		return "", libraryFile{}, false
 	}
 	return alias, installed, true
+}
+
+// SQLite's physical release number differs from its ABI major. The verified
+// SONAME still identifies its replacement; keep numeric release names within
+// the same library family so unrelated private plugins remain advisory.
+func versionedLibraryName(name, soname string) bool {
+	if strings.HasPrefix(name, soname+".") {
+		return true
+	}
+	family, abi, ok := strings.Cut(soname, ".so.")
+	if !ok {
+		return false
+	}
+	if _, err := strconv.ParseUint(abi, 10, 64); err != nil {
+		return false
+	}
+	version, ok := strings.CutPrefix(name, family+".so.")
+	if !ok {
+		return false
+	}
+	for component := range strings.SplitSeq(version, ".") {
+		if _, err := strconv.ParseUint(component, 10, 64); err != nil {
+			return false
+		}
+	}
+	return true
 }
