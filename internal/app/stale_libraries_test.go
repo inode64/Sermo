@@ -100,6 +100,46 @@ func TestLibraryRestartPrincipalFollowsTheMainPidfile(t *testing.T) {
 	}
 }
 
+func TestLibraryRestartPrincipalWithNamedCatalogSelector(t *testing.T) {
+	const exe = "/opt/sermo-fixture/postgres"
+	ids := pidfileClaimReader{
+		10: {PID: 10, UID: 70, Exe: exe, ExeOK: true},
+		20: {PID: 20, UID: 70, Exe: exe, ExeOK: true},
+	}
+	d := process.Discoverer{Reader: ids, ResolveUser: func(string) (uint32, bool) { return 70, true }}
+	selector := process.Selector{Name: "postgres", Type: process.SelectorCommandMatch, Exe: exe, User: "postgres"}
+	main := process.Process{PID: 10, UID: 70, Exe: exe, ExeOK: true, Role: process.RoleMain, Source: process.SourceBackend}
+	worker := main
+	worker.PID, worker.Role = 20, "postgres"
+	pidfile := main
+	pidfile.Role, pidfile.Source, pidfile.MainPidfile = process.SelectorPidfile, process.SelectorPidfile, true
+	otherMain := worker
+	otherMain.Role = process.RoleMain
+	explicitMain := selector
+	explicitMain.Name, explicitMain.Exe = process.RoleMain, "/opt/sermo-fixture/master"
+	delegated := selector
+	delegated.Delegated = true
+
+	for name, tc := range map[string]struct {
+		selectors []process.Selector
+		procs     []process.Process
+		want      int
+	}{
+		"unique backend main":  {selectors: []process.Selector{selector}, procs: []process.Process{main}, want: 10},
+		"pidfile with workers": {selectors: []process.Selector{selector}, procs: []process.Process{pidfile, worker}, want: 10},
+		"worker alone":         {selectors: []process.Selector{selector}, procs: []process.Process{worker}},
+		"ambiguous masters":    {selectors: []process.Selector{selector}, procs: []process.Process{main, otherMain}},
+		"explicit main absent": {selectors: []process.Selector{selector, explicitMain}, procs: []process.Process{main}},
+		"delegated identity":   {selectors: []process.Selector{delegated}, procs: []process.Process{main}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if got := libraryRestartPrincipal(d, tc.selectors, tc.procs); got != tc.want {
+				t.Fatalf("got %d want %d", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestStaleLibrariesRestartState(t *testing.T) {
 	for _, blocked := range []bool{false, true} {
 		b, e := staleBinaryBackend(t, true)
