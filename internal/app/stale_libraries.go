@@ -61,9 +61,10 @@ func libraryRestartPrincipal(discoverer process.Discoverer, selectors []process.
 	}
 	// Catalog profiles may name their only principal after the daemon (for
 	// example postgres). An explicit main selector still takes precedence over
-	// workers; otherwise the main pidfile or a unique backend main must settle
-	// which strictly identified process owns the service.
-	if len(main) == 0 {
+	// workers. Without one, require the main pidfile: a backend may label every
+	// member of the unit main, including a strictly identified child database.
+	needsPidfile := len(main) == 0
+	if needsPidfile {
 		for _, selector := range selectors {
 			if selector.IsStrictPrincipal() {
 				main = append(main, selector)
@@ -72,6 +73,9 @@ func libraryRestartPrincipal(discoverer process.Discoverer, selectors []process.
 	}
 	principal, matches := 0, 0
 	for _, proc := range procs {
+		if needsPidfile && !proc.MainPidfile {
+			continue
+		}
 		if (proc.Role != process.RoleMain && !proc.MainPidfile) || proc.Source == process.SourceChild || proc.Delegated || proc.Stray || proc.External || !proc.ExeOK {
 			continue
 		}

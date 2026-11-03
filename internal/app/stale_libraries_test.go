@@ -115,6 +115,11 @@ func TestLibraryRestartPrincipalWithNamedCatalogSelector(t *testing.T) {
 	pidfile.Role, pidfile.Source, pidfile.MainPidfile = process.SelectorPidfile, process.SelectorPidfile, true
 	otherMain := worker
 	otherMain.Role = process.RoleMain
+	controller := pidfile
+	controller.PID, controller.Exe = 30, "/opt/sermo-fixture/java"
+	ids[30] = process.Identity{PID: 30, UID: 70, Exe: controller.Exe, ExeOK: true}
+	childDatabase := main
+	childDatabase.PPID = controller.PID
 	explicitMain := selector
 	explicitMain.Name, explicitMain.Exe = process.RoleMain, "/opt/sermo-fixture/master"
 	delegated := selector
@@ -125,12 +130,13 @@ func TestLibraryRestartPrincipalWithNamedCatalogSelector(t *testing.T) {
 		procs     []process.Process
 		want      int
 	}{
-		"unique backend main":  {selectors: []process.Selector{selector}, procs: []process.Process{main}, want: 10},
-		"pidfile with workers": {selectors: []process.Selector{selector}, procs: []process.Process{pidfile, worker}, want: 10},
-		"worker alone":         {selectors: []process.Selector{selector}, procs: []process.Process{worker}},
-		"ambiguous masters":    {selectors: []process.Selector{selector}, procs: []process.Process{main, otherMain}},
-		"explicit main absent": {selectors: []process.Selector{selector, explicitMain}, procs: []process.Process{main}},
-		"delegated identity":   {selectors: []process.Selector{delegated}, procs: []process.Process{main}},
+		"backend attribution alone": {selectors: []process.Selector{selector}, procs: []process.Process{main}},
+		"backend child database":    {selectors: []process.Selector{selector}, procs: []process.Process{controller, childDatabase}},
+		"pidfile with workers":      {selectors: []process.Selector{selector}, procs: []process.Process{pidfile, worker}, want: 10},
+		"worker alone":              {selectors: []process.Selector{selector}, procs: []process.Process{worker}},
+		"ambiguous masters":         {selectors: []process.Selector{selector}, procs: []process.Process{main, otherMain}},
+		"explicit main absent":      {selectors: []process.Selector{selector, explicitMain}, procs: []process.Process{main}},
+		"delegated identity":        {selectors: []process.Selector{delegated}, procs: []process.Process{main}},
 	} {
 		t.Run(name, func(t *testing.T) {
 			if got := libraryRestartPrincipal(d, tc.selectors, tc.procs); got != tc.want {
