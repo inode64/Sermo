@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"net/url"
 	"os"
 	"strings"
 
@@ -13,15 +14,21 @@ import (
 )
 
 const (
-	sqliteBusyTimeoutMS      = 2000
-	sqliteIntegrityOK        = "ok"
-	sqliteIntegrityPragma    = "PRAGMA integrity_check;"
-	sqliteQuickPragma        = "PRAGMA quick_check;"
-	sqliteReadOnlyDSNPattern = "file:%s?mode=ro&_pragma=busy_timeout(%d)"
+	sqliteBusyTimeoutMS        = 2000
+	sqliteIntegrityOK          = "ok"
+	sqliteIntegrityPragma      = "PRAGMA integrity_check;"
+	sqliteQuickPragma          = "PRAGMA quick_check;"
+	sqliteURIScheme            = "file"
+	sqliteReadOnlyQueryPattern = "mode=ro&_pragma=busy_timeout(%d)"
 )
 
+// sqliteReadOnlyDSN builds the URI SQLite opens read-only. The path is escaped
+// as a URI path: interpolated raw, a '?' or '#' in it would end the path there,
+// so SQLite would open that prefix read-write (the driver's default flags,
+// creating it if missing) and read the path's tail as parameters.
 func sqliteReadOnlyDSN(path string) string {
-	return fmt.Sprintf(sqliteReadOnlyDSNPattern, path, sqliteBusyTimeoutMS)
+	uri := url.URL{Scheme: sqliteURIScheme, Path: path, RawQuery: fmt.Sprintf(sqliteReadOnlyQueryPattern, sqliteBusyTimeoutMS)}
+	return uri.String()
 }
 
 // sqliteCheck verifies a SQLite database file is healthy by running SQLite's
