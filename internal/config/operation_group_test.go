@@ -29,3 +29,16 @@ func TestValidateServiceRejectsUnsafeOperationGroup(t *testing.T) {
 	mustHave(t, validateService(t, "name: s\noperation_group: ../rpc\n"), ServiceKeyOperationGroup)
 	mustHave(t, validateService(t, "name: s\noperation_group: false\n"), ServiceKeyOperationGroup)
 }
+
+func TestOperationGroupAcceptedInServiceOverride(t *testing.T) {
+	files := localOverrideFiles()
+	files["services.local/demo.yml"] = "name: demo\noperation_group: rpc\n"
+	cfg := loadCatalog(t, files)
+	if issues := Validate(cfg); len(issues) != 0 {
+		t.Fatalf("valid operation group rejected: %v", issues)
+	}
+	resolved, errs := cfg.Resolve("demo")
+	if len(errs) != 0 || resolved.Tree[ServiceKeyOperationGroup] != "rpc" {
+		t.Fatalf("operation group lost during override resolution: %v, %v", resolved.Tree, errs)
+	}
+}
