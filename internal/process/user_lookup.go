@@ -33,6 +33,10 @@ const (
 const (
 	getentDatabaseGroup  = "group"
 	getentDatabasePasswd = "passwd"
+	// getentArgsEnd keeps a configured name such as "-A" or "--service=files"
+	// from being parsed as a getent option, which enumerates the database and
+	// would hand back root's record as the first line.
+	getentArgsEnd = "--"
 )
 
 type lookupCacheResult[T any] struct {
@@ -242,24 +246,27 @@ func (l *UserLookup) negativeExpired(ok bool, at time.Time) bool {
 	return l.clock().Sub(at) >= l.negTTL
 }
 
+// The getent wrappers accept a record only when it is the one asked for: the
+// resolved IDs authorize signals, so a record for another name or ID is a miss.
+
 func (l *UserLookup) getentUserID(name string) (uint32, bool) {
-	_, uid, ok := l.getentRecord(getentDatabasePasswd, name)
-	return uid, ok
+	got, uid, ok := l.getentRecord(getentDatabasePasswd, name)
+	return uid, ok && got == name
 }
 
 func (l *UserLookup) getentGroupID(name string) (uint32, bool) {
-	_, gid, ok := l.getentRecord(getentDatabaseGroup, name)
-	return gid, ok
+	got, gid, ok := l.getentRecord(getentDatabaseGroup, name)
+	return gid, ok && got == name
 }
 
 func (l *UserLookup) getentUserName(uid uint32) (string, bool) {
-	name, _, ok := l.getentRecord(getentDatabasePasswd, strconv.FormatUint(uint64(uid), numericIDBase))
-	return name, ok
+	name, got, ok := l.getentRecord(getentDatabasePasswd, strconv.FormatUint(uint64(uid), numericIDBase))
+	return name, ok && got == uid
 }
 
 func (l *UserLookup) getentGroupName(gid uint32) (string, bool) {
-	name, _, ok := l.getentRecord(getentDatabaseGroup, strconv.FormatUint(uint64(gid), numericIDBase))
-	return name, ok
+	name, got, ok := l.getentRecord(getentDatabaseGroup, strconv.FormatUint(uint64(gid), numericIDBase))
+	return name, ok && got == gid
 }
 
 func (l *UserLookup) getentRecord(database, query string) (string, uint32, bool) {
@@ -271,7 +278,7 @@ func (l *UserLookup) getentRecord(database, query string) (string, uint32, bool)
 }
 
 func (l *UserLookup) getent(database, query string) (string, bool) {
-	res, err := execx.Run(context.Background(), l.runner, l.timeout, UserLookupGetent, database, query)
+	res, err := execx.Run(context.Background(), l.runner, l.timeout, UserLookupGetent, database, getentArgsEnd, query)
 	if err != nil || res.ExitCode != execx.ExitCodeSuccess {
 		return "", false
 	}

@@ -664,7 +664,9 @@ values for runtime process identity:
 misses, are cached in the running process so normal monitoring does not spawn a
 command for every process every cycle. If a name cannot be resolved, Sermo does
 not guess: process selectors and `kill_only_if.users` using that name do not
-match. For critical stop policies, numeric UIDs/GIDs are the most deterministic
+match. Sermo ends getent's options with `--` and accepts a record only when its
+name (or UID/GID, for a numeric lookup) is the one asked for, so a name such as
+`-A` resolves to nothing rather than to the first record of the database. For critical stop policies, numeric UIDs/GIDs are the most deterministic
 form.
 
 `engine.state_cache_size` (default `64M`) sets the SQLite page cache for the

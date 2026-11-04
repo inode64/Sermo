@@ -11,11 +11,11 @@ import (
 
 func TestUserLookupGetentResolvesAndCaches(t *testing.T) {
 	runner := getentRunner(map[string]string{
-		"getent passwd ldap-user":  "ldap-user:x:4242:4243:LDAP User:/home/ldap-user:/bin/bash\n",
-		"getent passwd 4242":       "ldap-user:x:4242:4243:LDAP User:/home/ldap-user:/bin/bash\n",
-		"getent group ldap-group":  "ldap-group:x:4243:ldap-user\n",
-		"getent group 4243":        "ldap-group:x:4243:ldap-user\n",
-		"getent passwd bad-format": "bad-format:x:not-a-number\n",
+		"getent passwd -- ldap-user":  "ldap-user:x:4242:4243:LDAP User:/home/ldap-user:/bin/bash\n",
+		"getent passwd -- 4242":       "ldap-user:x:4242:4243:LDAP User:/home/ldap-user:/bin/bash\n",
+		"getent group -- ldap-group":  "ldap-group:x:4243:ldap-user\n",
+		"getent group -- 4243":        "ldap-group:x:4243:ldap-user\n",
+		"getent passwd -- bad-format": "bad-format:x:not-a-number\n",
 	})
 	lookup := NewUserLookup(UserLookupConfig{Mode: UserLookupGetent, Timeout: time.Second, Runner: runner})
 
@@ -27,7 +27,7 @@ func TestUserLookupGetentResolvesAndCaches(t *testing.T) {
 	if !ok || uid != 4242 {
 		t.Fatalf("cached ResolveUser = %d/%v, want 4242/true", uid, ok)
 	}
-	if got := runner.Count("getent", "passwd", "ldap-user"); got != 1 {
+	if got := runner.Count("getent", "passwd", "--", "ldap-user"); got != 1 {
 		t.Fatalf("getent passwd ldap-user calls = %d, want 1", got)
 	}
 
@@ -43,6 +43,36 @@ func TestUserLookupGetentResolvesAndCaches(t *testing.T) {
 	}
 	if _, ok := lookup.ResolveUser("bad-format"); ok {
 		t.Fatal("bad getent passwd line must not resolve")
+	}
+}
+
+// A key getent would read as an option enumerates the database and answers
+// with root's record first; that or any record for another key is a miss.
+func TestUserLookupGetentRejectsRecordForAnotherKey(t *testing.T) {
+	rootUser := "root:x:0:0:root:/root:/bin/bash\n"
+	rootGroup := "root:x:0:\n"
+	runner := getentRunner(map[string]string{
+		"getent passwd -- -A":              rootUser,
+		"getent passwd -- --service=files": rootUser,
+		"getent group -- -A":               rootGroup,
+		"getent passwd -- 4242":            rootUser,
+		"getent group -- 4243":             rootGroup,
+	})
+	lookup := NewUserLookup(UserLookupConfig{Mode: UserLookupGetent, Timeout: time.Second, Runner: runner})
+
+	for _, name := range []string{"-A", "--service=files"} {
+		if uid, ok := lookup.ResolveUser(name); ok {
+			t.Fatalf("ResolveUser(%q) = %d/true, want a miss", name, uid)
+		}
+	}
+	if gid, ok := lookup.ResolveGroup("-A"); ok {
+		t.Fatalf("ResolveGroup(-A) = %d/true, want a miss", gid)
+	}
+	if got, ok := lookup.getentUserName(4242); ok {
+		t.Fatalf("getentUserName(4242) = %q/true, want a miss", got)
+	}
+	if got, ok := lookup.getentGroupName(4243); ok {
+		t.Fatalf("getentGroupName(4243) = %q/true, want a miss", got)
 	}
 }
 
