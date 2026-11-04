@@ -1253,9 +1253,17 @@ in status, metrics and alerts:
 
 ```yaml
 processes:
-  unifi: { cmd: "java .*unifi", user: unifi, group: unifi }
+  main: { exe: "${java_binary}", cmd: "java .*unifi", user: unifi, group: unifi }
   mongo: { exe: "${mongod_binary}", user: unifi }
 ```
+
+The UniFi catalog names its JVM `main` with an exact executable and user so
+an interrupted restart can identify its own replaced MongoDB child before
+starting another controller. On Gentoo, the JVM executable is
+`/etc/java-config-2/current-system-vm/bin/java`; `/usr/bin/java` is a launcher.
+If UniFi uses a separate `JAVA_HOME`, override `processes.main.exe` with that
+runtime's `bin/java`. Its stop policy gives the embedded database 120 seconds
+to stop gracefully and another 60 seconds after SIGTERM before escalation.
 
 - `exe` — exact resolved `/proc/<pid>/exe` (fail-safe; never cmdline).
 - `cmd` — a Go RE2 regex matched against the process **cmdline** (argv joined).

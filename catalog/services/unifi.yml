@@ -22,12 +22,23 @@ variables:
   port: 8443
 pidfile: /run/unifi.pid
 processes:
-  controller:
+  main:
+    exe: ${java_binary}
     cmd: java .*unifi
     user: unifi
   mongo:
     exe: ${mongod_binary}
     user: unifi
+os:
+  gentoo:
+    processes:
+      main:
+        # Gentoo's /usr/bin/java is a launcher, not the JVM executable.
+        exe: /etc/java-config-2/current-system-vm/bin/java
+stop_policy:
+  # The controller's MongoDB child must flush before residual cleanup escalates.
+  graceful_timeout: 120s
+  term_timeout: 60s
 watches:
   service:
     check:
