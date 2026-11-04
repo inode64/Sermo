@@ -1037,6 +1037,16 @@ profile names its strict selector differently, its main pidfile must identify
 the affected process: backend attribution may include child daemons and is not
 enough to choose one for a library restart.
 
+A chrooted main process additionally needs its own mount namespace and a
+kernel-held ancestor of its root pinned for the whole library scan. That
+ancestor must be the kernel parent fixed point in both file and mount identity
+and match Sermo's root device/inode. The process root, its mount and namespace
+must be revalidated. Roots inferred from another process or Sermo's view remain
+advisory; foreign or unreadable roots leave the inventory incomplete. This
+proof also retains the original process-root descriptor to prevent mount ID
+reuse, and a strict main cannot borrow a sibling's root pin. It changes neither
+process signal authority nor the operation checks.
+
 ### Surviving interactive sessions
 
 A manual SSH session close may identify a split OpenSSH session server whose

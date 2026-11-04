@@ -96,7 +96,7 @@ func (c *staleLibrariesCheck) Run(ctx context.Context) Result {
 	if c.sample != nil {
 		report, err = c.sample(ctx)
 	} else {
-		report, err = process.ScanLibraries(ctx, nil)
+		report, err = process.ScanLibraries(ctx, nil, 0)
 	}
 	if ctx.Err() != nil {
 		err = ctx.Err()

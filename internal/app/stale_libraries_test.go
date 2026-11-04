@@ -185,7 +185,7 @@ func TestAdvisoryWatchWithholdsFiringAndRecoveryHooks(t *testing.T) {
 	}
 }
 
-func TestLibraryRestartEligibleNeedsTheMainProcessOnSermosRoot(t *testing.T) {
+func TestLibraryRestartEligibleNeedsMainProcessAndVerifiedRoot(t *testing.T) {
 	for _, tc := range []struct {
 		name string
 		lib  process.StaleLibrary
@@ -194,6 +194,8 @@ func TestLibraryRestartEligibleNeedsTheMainProcessOnSermosRoot(t *testing.T) {
 		{"main process", process.StaleLibrary{PID: 10}, true},
 		{"worker", process.StaleLibrary{PID: 11}, false},
 		{"chrooted main process", process.StaleLibrary{PID: 10, ChrootedProcess: true}, false},
+		{"pinned namespace main process", process.StaleLibrary{PID: 10, ChrootedProcess: true, NamespaceRootVerified: true}, true},
+		{"pinned namespace worker", process.StaleLibrary{PID: 11, ChrootedProcess: true, NamespaceRootVerified: true}, false},
 	} {
 		if got := libraryRestartEligible(tc.lib, 10); got != tc.want {
 			t.Errorf("%s: eligible = %v, want %v", tc.name, got, tc.want)

@@ -25,8 +25,8 @@ func serviceStaleLibraries(discoverer process.Discoverer, selectors []process.Se
 		if procs == nil {
 			procs = []process.Process{}
 		}
-		report, err := process.ScanLibraries(ctx, procs)
 		principal := libraryRestartPrincipal(discoverer, selectors, procs)
+		report, err := process.ScanLibraries(ctx, procs, principal)
 		for i := range report.Libraries {
 			report.Libraries[i].RestartEligible = libraryRestartEligible(report.Libraries[i], principal)
 		}
@@ -37,11 +37,11 @@ func serviceStaleLibraries(discoverer process.Discoverer, selectors []process.Se
 	}
 }
 
-// libraryRestartEligible needs the unique main process and the same filesystem
-// root as Sermo: a chrooted finding is read through Sermo's view of the path, not
-// the process's, which is enough to alert but not to act on.
+// A chroot contributes to a restart verdict only when the kernel-held root of
+// its own mount namespace was pinned and verified, rather than inferred from a
+// peer or from Sermo's view of the mapped pathname.
 func libraryRestartEligible(lib process.StaleLibrary, principal int) bool {
-	return principal != 0 && lib.PID == principal && !lib.ChrootedProcess
+	return principal != 0 && lib.PID == principal && (!lib.ChrootedProcess || lib.NamespaceRootVerified)
 }
 
 // A unique strict main identity can justify restarting its service. Backend

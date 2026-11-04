@@ -9,7 +9,7 @@ import "testing"
 func BenchmarkScanLibrariesHost(b *testing.B) {
 	var processes int
 	for b.Loop() {
-		report, _ := ScanLibraries(b.Context(), nil)
+		report, _ := ScanLibraries(b.Context(), nil, 0)
 		processes = report.Processes
 	}
 	b.ReportMetric(float64(processes), "procs")

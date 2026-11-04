@@ -45,10 +45,11 @@ type StaleLibrary struct {
 	// ReplacementPath is a verified SONAME alias when the mapped versioned
 	// filename was removed by an update.
 	ReplacementPath string `json:"replacement_path,omitempty"`
-	// ChrootedProcess marks a finding read through another root than the
-	// process's own: it can alert, never drive an action.
-	ChrootedProcess bool `json:"chrooted_process,omitempty"`
-	RestartEligible bool `json:"restart_eligible"`
+	// A chroot needs an independently pinned root in its own mount namespace
+	// before its library paths can contribute to a restart verdict.
+	ChrootedProcess       bool `json:"chrooted_process,omitempty"`
+	NamespaceRootVerified bool `json:"namespace_root_verified,omitempty"`
+	RestartEligible       bool `json:"restart_eligible"`
 }
 
 // LibraryReport retains findings even when part of a process inventory failed.
@@ -67,10 +68,13 @@ type libraryFile struct {
 }
 
 type libraryReader struct {
-	reader   Reader
-	readFile func(string) ([]byte, error)
-	stat     func(string) (libraryFile, error)
-	elf      func(string, ExecutableFile) (libraryELF, error)
+	reader        Reader
+	readFile      func(string) ([]byte, error)
+	stat          func(string) (libraryFile, error)
+	elf           func(string, ExecutableFile) (libraryELF, error)
+	namespaceRoot func(context.Context, int, libraryRootIdentity) (string, func(), error)
+	mountID       func(string) (uint64, error)
+	principal     int
 }
 
 // ScanLibraries reads executable .so mappings, including dlopen/PAM modules.
@@ -79,13 +83,17 @@ type libraryReader struct {
 // would open now, through /proc/PID/root, so a service in its own mount
 // namespace (a systemd unit with PrivateTmp or ProtectSystem) is inspected
 // too. A chrooted process is compared through the real root of its mount
-// namespace: Sermo's own, or that of a scanned peer in the same namespace. With
-// neither (a container), it remains unknown.
-func ScanLibraries(ctx context.Context, procs []Process) (LibraryReport, error) {
+// namespace: a pinned kernel ancestor with Sermo's root identity, Sermo's own
+// view, or that of a scanned peer in the same namespace. A foreign namespace
+// root that cannot be verified remains unknown.
+// principal is the caller's independently verified service main, or zero for
+// an advisory inventory. It needs its own root pin even after a sibling warmed
+// the namespace cache; this parameter grants no process signal authority.
+func ScanLibraries(ctx context.Context, procs []Process, principal int) (LibraryReport, error) {
 	// Numeric ownership is sufficient here; avoid NSS/network user lookups in
 	// a process inventory whose authority is the kernel's real UID.
 	numeric := func(id uint32) string { return strconv.FormatUint(uint64(id), numericIDBase) }
-	r := libraryReader{reader: OSReader{LookupUserName: numeric, LookupGroupName: numeric}, readFile: hostfs.ReadFile, stat: statLibraryFile, elf: readLibraryELF}
+	r := libraryReader{reader: OSReader{LookupUserName: numeric, LookupGroupName: numeric}, readFile: hostfs.ReadFile, stat: statLibraryFile, elf: readLibraryELF, namespaceRoot: pinnedNamespaceRoot, mountID: libraryDirectoryMountID, principal: principal}
 	return r.scan(ctx, procs)
 }
 
@@ -133,6 +141,7 @@ func (r libraryReader) scan(ctx context.Context, procs []Process) (LibraryReport
 	var out LibraryReport
 	var failures []error
 	roots := &libraryRoots{reader: r, procs: procs}
+	defer roots.close()
 	for _, proc := range procs {
 		if err := ctx.Err(); err != nil {
 			failures = append(failures, err)
@@ -188,33 +197,83 @@ func (r libraryReader) verifyProcess(proc Process) (bool, error) {
 // it loaded before entering an empty directory, so its own root finds none of
 // them. They are read through the real root of its mount namespace instead:
 // Sermo's when it shares Sermo's namespace, or through a peer that shares it and
-// kept the real root, the unit's own daemon under a sandboxed unit.
+// kept the real root. A pinned ancestor of the process root can independently
+// prove that namespace's real root, including when no such peer survives.
 type libraryRoots struct {
 	reader libraryReader
 	procs  []Process
 	// byNamespace maps a mount namespace to its real root. It costs a stat of
 	// every process, so it is built only when a scan meets a chroot.
 	byNamespace map[ExecutableFile]string
+	verified    map[ExecutableFile]bool
+	pinnedBy    map[ExecutableFile]int
+	closers     []func()
 }
 
-func (s *libraryRoots) of(pid int) (string, bool) {
+type libraryRoot struct {
+	prefix                string
+	processRoot           ExecutableFile
+	processMount          uint64
+	namespace             ExecutableFile
+	namespaceRootVerified bool
+}
+
+func (s *libraryRoots) close() {
+	for _, closeRoot := range s.closers {
+		closeRoot()
+	}
+}
+
+func (s *libraryRoots) of(ctx context.Context, pid int) (libraryRoot, bool) {
 	root, rootErr := s.reader.stat(PIDPath(pid, ProcFileRoot))
 	ours, oursErr := s.reader.stat("/")
 	if rootErr != nil || oursErr != nil {
-		return "", false
+		return libraryRoot{}, false
 	}
 	if root.identity == ours.identity {
-		return PIDPath(pid, ProcFileRoot), true
+		return libraryRoot{prefix: PIDPath(pid, ProcFileRoot), processRoot: root.identity}, true
 	}
 	namespace, err := s.reader.stat(PIDPath(pid, ProcFileMountNamespace))
 	if err != nil {
-		return "", false
+		return libraryRoot{}, false
 	}
 	if s.byNamespace == nil {
 		s.index(ours.identity)
 	}
 	prefix, known := s.byNamespace[namespace.identity]
-	return prefix, known
+	fallback := libraryRoot{prefix: prefix, processRoot: root.identity, namespace: namespace.identity}
+	if s.reader.namespaceRoot == nil {
+		return fallback, known
+	}
+	processMount, mountErr := s.reader.mountID(PIDPath(pid, ProcFileRoot))
+	if mountErr != nil {
+		return fallback, known
+	}
+	if known && s.verified[namespace.identity] {
+		fallback.processMount = processMount
+		if s.pinnedBy[namespace.identity] == pid {
+			fallback.namespaceRootVerified = true
+			return fallback, true
+		}
+		if pid != s.reader.principal {
+			return fallback, true
+		}
+	}
+	pinnedPrefix, closeRoot, err := s.reader.namespaceRoot(ctx, pid, libraryRootIdentity{
+		process: root.identity, processMount: processMount, namespace: namespace.identity, host: ours.identity,
+	})
+	if err != nil {
+		return fallback, known
+	}
+	if s.verified == nil {
+		s.verified = map[ExecutableFile]bool{}
+		s.pinnedBy = map[ExecutableFile]int{}
+	}
+	s.byNamespace[namespace.identity] = pinnedPrefix
+	s.verified[namespace.identity] = true
+	s.pinnedBy[namespace.identity] = pid
+	s.closers = append(s.closers, closeRoot)
+	return libraryRoot{prefix: pinnedPrefix, processRoot: root.identity, processMount: processMount, namespace: namespace.identity, namespaceRootVerified: true}, true
 }
 
 func (s *libraryRoots) index(realRoot ExecutableFile) {
@@ -238,10 +297,11 @@ func (r libraryReader) processLibraries(ctx context.Context, proc Process, roots
 	if alive, err := r.verifyProcess(proc); err != nil || !alive {
 		return LibraryReport{}, err
 	}
-	root, visible := roots.of(proc.PID)
+	source, visible := roots.of(ctx, proc.PID)
 	if !visible {
 		return LibraryReport{}, errors.New("filesystem root differs or is unreadable")
 	}
+	root := source.prefix
 	data, err := r.readFile(PIDPath(proc.PID, procFileMaps))
 	if err != nil {
 		return LibraryReport{}, fmt.Errorf("read memory maps: %w", err)
@@ -262,6 +322,7 @@ func (r libraryReader) processLibraries(ctx context.Context, proc Process, roots
 		}
 		if stale {
 			finding.ChrootedProcess = chrooted
+			finding.NamespaceRootVerified = source.namespaceRootVerified
 			report.Libraries = append(report.Libraries, finding)
 		}
 		if path := finding.Path; path != "" && path != proc.Exe && path != proc.ExePrev {
@@ -271,7 +332,7 @@ func (r libraryReader) processLibraries(ctx context.Context, proc Process, roots
 	if alive, err := r.verifyProcess(proc); err != nil || !alive {
 		return LibraryReport{}, err
 	}
-	if after, visible := roots.of(proc.PID); !visible || after != root {
+	if after, visible := roots.of(ctx, proc.PID); !visible || after != source {
 		return LibraryReport{}, errors.New("filesystem root changed during scan")
 	}
 	// A peer that exited took its root with it: every path read through it would

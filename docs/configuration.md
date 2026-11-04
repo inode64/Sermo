@@ -4073,10 +4073,22 @@ replacement file and the same filesystem root as Sermo (the mount namespace
 may differ).
 Sandboxed units are inspected through `/proc/PID/root`, using the files visible
 to that process. A chrooted process, such as Dovecot's `imap-login`, is compared
-through the real root of its mount namespace, which is Sermo's or that of the
-unit's own daemon when the unit is sandboxed: the inventory stays complete and a
-finding alerts, but it never drives an action. A process with neither (a
-container) leaves the inventory incomplete.
+through the real root of its mount namespace. Sermo first tries to pin that root
+by walking kernel-held parent directory descriptors to a fixed point with the
+same device, inode and mount identity. That root must match Sermo's root
+device/inode. It pins the mount namespace too and verifies that the process
+root, its mount and namespace remain unchanged. This preserves private mounts
+without depending on another process keeping its root open. Such a finding
+sets `namespace_root_verified: true`; only the service's unique strict main
+process can then contribute to an automatic restart. The original process-root
+descriptor also stays open, preventing mount ID reuse during the scan. A
+namespace cache warmed by a sibling never substitutes for the main process's
+own pinned root.
+If only Sermo's view or a namespace peer can supply the root, the finding remains
+advisory. Child processes never authorize a restart. A foreign namespace root
+that cannot be verified, an unreadable parent or the bounded ancestor traversal
+being exhausted leaves the inventory incomplete. Kernels that cannot report
+mount identities cannot supply this additional restart proof.
 Missing replacements, foreign containers/chroots, PID/identity changes,
 unreadable maps, ambiguous masters and child-only findings set
 `action_blocked: true`. These observations can alert but cannot drive an
