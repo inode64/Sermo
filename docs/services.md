@@ -1694,7 +1694,9 @@ custom check can still spell it out. Public `processes:` entries stay limited to
 `exe`/`cmd` selectors with optional `user`/`group`; do not put `pidfile` under
 `processes:`. The shorthand path can reference variables (e.g. `pidfile:
 "${pidfile}"`) and accepts a scalar path, a candidate list, or `{path: ...,
-optional: true}`. Candidate lists are tried in order and pass on the first live
+optional: true}`. Each path must be absolute and clean (no `..`, `.`, repeated
+or trailing `/`): the kernel resolves `..` after a symlink, so a lexically
+cleaned form could name another file. Candidate lists are tried in order and pass on the first live
 pidfile; if none exists, the backend PID fallback can still satisfy the gated
 health check. On systemd that fallback applies unless the unit declares
 `PIDFile=` with `Type=forking`: systemd needs that file to find the main PID, so

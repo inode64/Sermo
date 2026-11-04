@@ -56,6 +56,9 @@ func TestReadPidfileRefusesRelativePath(t *testing.T) {
 	if _, err := ReadPidfile("run/daemon.pid"); !errors.Is(err, ErrPath) {
 		t.Fatalf("ReadPidfile(relative) error = %v, want ErrPath", err)
 	}
+	if _, err := ReadPidfile("/run/svc/link/../daemon.pid"); !errors.Is(err, ErrPath) {
+		t.Fatalf("ReadPidfile(not clean) error = %v, want ErrPath", err)
+	}
 }
 
 // Only the first line names the PID; a huge file must not be read whole.

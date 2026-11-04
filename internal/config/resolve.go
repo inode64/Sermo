@@ -317,6 +317,7 @@ func expandPidfile(tree map[string]any) []string {
 	if len(decl.paths) == 0 {
 		return errs
 	}
+	errs = append(errs, validatePidfilePathsClean(artifactPidfile, decl.paths)...)
 	pathValue := serviceArtifactPathValue(decl.paths)
 	tree[process.ServiceKeyPidfile] = pathValue
 
@@ -356,6 +357,7 @@ func expandPidfiles(tree map[string]any) []string {
 			continue
 		}
 		errs = append(errs, validateArtifactAbsolutePaths(path, paths)...)
+		errs = append(errs, validatePidfilePathsClean(path, paths)...)
 		pathValue := serviceArtifactPathValue(paths)
 		normalized[role] = pathValue
 		ensureServiceArtifactCheck(tree, artifactPidfile+"-"+role, artifactPidfile, pathValue, false)
@@ -407,6 +409,19 @@ func validateArtifactAbsolutePaths(kind string, paths []string) []string {
 	for _, path := range paths {
 		if !filepath.IsAbs(path) {
 			errs = append(errs, fmt.Sprintf(validationPathAbsoluteFormat, kind, path))
+		}
+	}
+	return errs
+}
+
+// validatePidfilePathsClean rejects an absolute pidfile path that is not clean.
+// Discovery, reload and repair read it as written, and the kernel resolves ".."
+// after a symlink, so a lexically cleaned form could name another file.
+func validatePidfilePathsClean(kind string, paths []string) []string {
+	var errs []string
+	for _, path := range paths {
+		if filepath.IsAbs(path) && filepath.Clean(path) != path {
+			errs = append(errs, fmt.Sprintf("%s path %q must be clean (no \"..\", \".\", repeated or trailing \"/\")", kind, path))
 		}
 	}
 	return errs

@@ -2,7 +2,6 @@ package hostfs
 
 import (
 	"fmt"
-	"path/filepath"
 	"strconv"
 	"strings"
 )
@@ -20,8 +19,11 @@ const pidfileLineSeparator = "\n"
 // pidfile pid — it still has to be a live process to match, and the tree walk
 // then picks up the rest of the group as children. `-1` and `-0` are refused:
 // in kill semantics -1 means every process, so it identifies no service.
+//
+// Like every hostfs reader it refuses a path that is not clean: cleaning it here
+// would read another file than the kernel resolves after a symlink and "..".
 func ReadPidfile(path string) (int, error) {
-	data, err := ReadRegularFile(filepath.Clean(path), MaxPidfileBytes)
+	data, err := ReadRegularFile(path, MaxPidfileBytes)
 	if err != nil {
 		return 0, fmt.Errorf("read pidfile %s: %w", path, err)
 	}

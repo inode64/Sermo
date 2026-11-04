@@ -16,12 +16,16 @@ pidfiles:
   relative: run/relative.pid
   no-exe: /run/no-exe.pid
   no-user: /run/no-user.pid
+  unclean: /run/svc/link/../unclean.pid
 processes:
   no-exe:
     user: svc
     cmd: svc --no-exe
   no-user:
     exe: /usr/sbin/no-user
+  unclean:
+    exe: /usr/sbin/unclean
+    user: svc
 checks:
   service: { type: service, expect: active }
 `,
@@ -38,6 +42,7 @@ checks:
 		"pidfiles.no-exe requires processes.no-exe.exe",
 		"pidfiles.no-user requires processes.no-user.user",
 		`pidfiles.relative path "run/relative.pid" must be absolute`,
+		`pidfiles.unclean path "/run/svc/link/../unclean.pid" must be clean`,
 	} {
 		if !hasIssue(issues, want) {
 			t.Errorf("missing issue containing %q in %v", want, issues)

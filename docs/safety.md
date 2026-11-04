@@ -192,7 +192,10 @@ operation, before acquiring the next member's locks.
 requires the init backend to report the service failed or inactive. It can then
 remove only a regular pidfile below `/run` whose exact PID is absent from
 `/proc`; a live PID, a PID or process table that cannot be read completely, a
-malformed file, symlink or non-runtime path fails closed.
+malformed file, symlink, non-runtime or non-clean path fails closed. The file
+removed is the one inspected and read: its directory is resolved once and the
+unlink goes through pinned ancestors that must not be symlinks, so a `..`
+after a symlink or a directory swapped mid-repair cannot redirect it.
 It then applies the same survivor reconciliation as start (step 5): surviving
 processes that are neither delegated nor kept are cleaned up under
 `stop_policy` or block the repair with `orphan_processes`. Only then, for a failed unit, does it clear the init

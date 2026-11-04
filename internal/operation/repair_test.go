@@ -223,6 +223,77 @@ func TestRepairRefusesLivePIDFile(t *testing.T) {
 	}
 }
 
+// The kernel applies ".." after following a symlink, so the lexically cleaned
+// path that would be inspected names another file than the one unlinked.
+func TestRepairRefusesPIDFilePathThatIsNotClean(t *testing.T) {
+	root := t.TempDir()
+	runtimeDir := filepath.Join(root, "run")
+	svcDir := filepath.Join(runtimeDir, "svc")
+	elsewhere := filepath.Join(root, "other", "etc")
+	for _, dir := range []string{svcDir, elsewhere} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.Symlink(elsewhere, filepath.Join(svcDir, "link")); err != nil {
+		t.Fatal(err)
+	}
+	inspected := filepath.Join(svcDir, "app.pid")
+	unlinked := filepath.Join(root, "other", "app.pid")
+	for _, file := range []string{inspected, unlinked} {
+		if err := os.WriteFile(file, []byte("5023\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	mgr := &fakeManager{status: servicemgr.StatusFailed}
+	prepare := repairStalePIDFiles(mgr, "app", []process.Selector{{
+		Name: process.SelectorPidfile, Type: process.SelectorPidfile, Paths: []string{svcDir + "/link/../app.pid"},
+	}}, repairReader{}, runtimeDir)
+
+	_, err := prepare(context.Background())
+
+	if err == nil || !strings.Contains(err.Error(), "path is not clean") {
+		t.Fatalf("repair error = %v, want non-clean path refusal", err)
+	}
+	for _, file := range []string{inspected, unlinked} {
+		if _, err := os.Lstat(file); err != nil {
+			t.Fatalf("%s must remain: %v", file, err)
+		}
+	}
+}
+
+// A symlinked alias of the runtime directory (/var/run -> /run) still repairs:
+// the file removed is the resolved one that was inspected and read.
+func TestRepairRemovesPIDFileThroughRuntimeDirectoryAlias(t *testing.T) {
+	root := t.TempDir()
+	runtimeDir := filepath.Join(root, "run")
+	if err := os.Mkdir(runtimeDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	alias := filepath.Join(root, "var-run")
+	if err := os.Symlink(runtimeDir, alias); err != nil {
+		t.Fatal(err)
+	}
+	pidfile := filepath.Join(runtimeDir, "rabbitmq.pid")
+	if err := os.WriteFile(pidfile, []byte("5023\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	mgr := &fakeManager{status: servicemgr.StatusFailed}
+	configured := filepath.Join(alias, "rabbitmq.pid")
+	prepare := repairStalePIDFiles(mgr, "rabbitmq", []process.Selector{{
+		Name: process.SelectorPidfile, Type: process.SelectorPidfile, Paths: []string{configured},
+	}}, repairReader{}, runtimeDir)
+
+	removed, err := prepare(context.Background())
+
+	if err != nil || !slices.Equal(removed, []string{configured}) {
+		t.Fatalf("repair = %v, %v; want %s removed", removed, err, configured)
+	}
+	if _, err := os.Lstat(pidfile); !os.IsNotExist(err) {
+		t.Fatalf("pidfile should be removed, err=%v", err)
+	}
+}
+
 func TestRepairRefusesPIDFileOutsideRuntimeDirectory(t *testing.T) {
 	root := t.TempDir()
 	runtimeDir := filepath.Join(root, "run")

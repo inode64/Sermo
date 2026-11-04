@@ -68,14 +68,14 @@ func removeStalePIDFile(ctx context.Context, path string, reader process.Reader,
 	if err := ctx.Err(); err != nil {
 		return false, fmt.Errorf("repair preparation context: %w", err)
 	}
-	present, err := repairableRuntimePIDFile(path, runtimeDir)
+	resolved, present, err := repairableRuntimePIDFile(path, runtimeDir)
 	if err != nil {
 		return false, err
 	}
 	if !present {
 		return false, nil
 	}
-	pid, err := hostfs.ReadPidfile(path)
+	pid, err := hostfs.ReadPidfile(resolved)
 	if err != nil {
 		return false, fmt.Errorf("refusing to remove pidfile %q: %w", path, err)
 	}
@@ -86,7 +86,10 @@ func removeStalePIDFile(ctx context.Context, path string, reader process.Reader,
 	if alive {
 		return false, fmt.Errorf("refusing to remove pidfile %q: pid %d is running", path, pid)
 	}
-	if err := os.Remove(path); err != nil {
+	// Unlink the file that was inspected and read, through pinned ancestors: a
+	// directory swapped for a symlink since the check fails the removal instead
+	// of redirecting it.
+	if err := hostfs.RemoveNoSymlinkAncestors(resolved, false); err != nil {
 		return false, fmt.Errorf("remove stale pidfile %q: %w", path, err)
 	}
 	return true, nil
@@ -126,29 +129,39 @@ func repairPIDFilePaths(selectors []process.Selector) []string {
 	return strutil.Unique(paths)
 }
 
-func repairableRuntimePIDFile(path, runtimeDir string) (bool, error) {
-	cleanPath := filepath.Clean(path)
-	info, err := hostfs.Lstat(cleanPath)
-	if errors.Is(err, os.ErrNotExist) {
-		return false, nil
-	}
-	if err != nil {
-		return false, fmt.Errorf("inspect pidfile %q: %w", cleanPath, err)
-	}
-	if !info.Mode().IsRegular() {
-		return false, fmt.Errorf("refusing non-regular pidfile %q", cleanPath)
+// repairableRuntimePIDFile returns the symlink-free path of a pidfile below the
+// runtime directory, and whether it exists. A path that is not clean is refused:
+// the kernel resolves ".." after a symlink, so the lexical path and the file it
+// names can differ.
+func repairableRuntimePIDFile(path, runtimeDir string) (string, bool, error) {
+	if filepath.Clean(path) != path {
+		return "", false, fmt.Errorf("refusing pidfile %q: path is not clean", path)
 	}
 	runtimeRoot, err := filepath.EvalSymlinks(runtimeDir)
 	if err != nil {
-		return false, fmt.Errorf("resolve runtime directory %q: %w", runtimeDir, err)
+		return "", false, fmt.Errorf("resolve runtime directory %q: %w", runtimeDir, err)
 	}
-	parent, err := filepath.EvalSymlinks(filepath.Dir(cleanPath))
+	parent, err := filepath.EvalSymlinks(filepath.Dir(path))
+	if errors.Is(err, os.ErrNotExist) {
+		return "", false, nil
+	}
 	if err != nil {
-		return false, fmt.Errorf("resolve pidfile directory %q: %w", cleanPath, err)
+		return "", false, fmt.Errorf("resolve pidfile directory %q: %w", path, err)
 	}
 	relative, err := filepath.Rel(runtimeRoot, parent)
 	if err != nil || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
-		return false, fmt.Errorf("refusing pidfile %q outside runtime directory %q", cleanPath, runtimeRoot)
+		return "", false, fmt.Errorf("refusing pidfile %q outside runtime directory %q", path, runtimeRoot)
 	}
-	return true, nil
+	resolved := filepath.Join(parent, filepath.Base(path))
+	info, err := hostfs.Lstat(resolved)
+	if errors.Is(err, os.ErrNotExist) {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, fmt.Errorf("inspect pidfile %q: %w", path, err)
+	}
+	if !info.Mode().IsRegular() {
+		return "", false, fmt.Errorf("refusing non-regular pidfile %q", path)
+	}
+	return resolved, true, nil
 }
