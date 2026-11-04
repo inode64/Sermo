@@ -1192,7 +1192,8 @@ Other auxiliary units stop **after** the primary. Each stop group runs in
 reverse declaration order; stop failures remain best-effort warnings in the
 operation result. Cancellation stops the sequence. `reload` touches the primary only. The primary's
 guards, locks and preflight wrap the whole operation. Listing the primary unit in
-`also_service` is rejected.
+`also_service` is rejected, and so is an `openrc` entry that is not a single
+init script name.
 
 ### `also_apply` — cascade to other services
 
@@ -2343,7 +2344,10 @@ service:
 
 Candidates are bare names — systemd appends `.service` automatically. They are
 tried in order and deduplicated, and the resolved name is used for all later
-operations. A **scalar** `service` is trusted even when the probe cannot surface
+operations. An OpenRC name (an `openrc` entry, or a scalar, which applies to
+every init) must be a single init script name: an absolute path, `..` or a `/`
+is rejected, because `rc-service` would run that script from outside
+`/etc/init.d`. A **scalar** `service` is trusted even when the probe cannot surface
 it (e.g. sysv-generated units). A **per-init list** first requires a backend
 match; if the probe cannot surface one, Sermo logs or prints a warning and falls
 back to the configured seed unit so `sermod`, the web UI and `sermoctl` behave

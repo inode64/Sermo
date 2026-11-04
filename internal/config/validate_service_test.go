@@ -63,6 +63,24 @@ name: s
 service: { systemd: [docker] }
 also_service: { systemd: [docker.socket, 7] }
 `), "also_service.systemd must be a non-empty list")
+
+	mustHave(t, validateService(t, `
+name: s
+service: { openrc: [docker] }
+also_service: { openrc: [../../tmp/evil] }
+`), `also_service.openrc unit "../../tmp/evil" must be a single init script name`)
+}
+
+func TestValidateServiceRejectsPathLikeOpenRCUnits(t *testing.T) {
+	mustHave(t, validateService(t, `
+name: s
+service: /tmp/evil
+`), `service unit "/tmp/evil" must be a single init script name`)
+
+	mustHave(t, validateService(t, `
+name: s
+service: { systemd: [s.service], openrc: [s, ../../tmp/evil] }
+`), `service.openrc unit "../../tmp/evil" must be a single init script name`)
 }
 
 // Service-document validation — rules, conditions, windows, inline probes and metrics.

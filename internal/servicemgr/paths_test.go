@@ -2,6 +2,7 @@ package servicemgr
 
 import (
 	"context"
+	"errors"
 	"path/filepath"
 	"testing"
 
@@ -50,9 +51,24 @@ func TestOpenRCReadersRejectUnsafeUnitsBeforeRead(t *testing.T) {
 			if got := detectOpenRCRuntimeProc(read, unit); got != (ProcInfo{}) {
 				t.Fatalf("unsafe unit produced runtime selectors: %+v", got)
 			}
-			manager := openrcManager{readFile: read}
+			runner := &execxtest.Runner{}
+			manager := openrcManager{runner: runner, readFile: read}
 			if supported, err := manager.SupportsReload(context.Background(), unit); supported || err == nil {
 				t.Fatalf("unsafe reload query = %v, %v; want false and error", supported, err)
+			}
+			if _, err := manager.Status(context.Background(), unit); !errors.Is(err, ErrInvalidOpenRCUnit) {
+				t.Fatalf("unsafe status error = %v, want ErrInvalidOpenRCUnit", err)
+			}
+			for _, act := range []func(context.Context, string) error{manager.Start, manager.Stop, manager.Reload, manager.ResetState} {
+				if err := act(context.Background(), unit); !errors.Is(err, ErrInvalidOpenRCUnit) {
+					t.Fatalf("unsafe action error = %v, want ErrInvalidOpenRCUnit", err)
+				}
+			}
+			if calls := runner.Lines(); len(calls) != 0 {
+				t.Fatalf("unsafe unit ran commands: %v", calls)
+			}
+			if ValidOpenRCUnit(unit) {
+				t.Fatal("ValidOpenRCUnit accepted an unsafe unit")
 			}
 			r := resolver(nil, map[string]bool{filepath.Join(openRCInitDir, unit): true})
 			for _, trust := range []bool{false, true} {

@@ -47,7 +47,7 @@ func (r UnitResolver) Resolve(ctx context.Context, backend Backend, candidates [
 		if backend == BackendOpenRC {
 			var ok bool
 			if path, ok = openRCUnitPath(openRCInitDir, candidate); !ok {
-				return "", fmt.Errorf("invalid OpenRC unit %q", candidate)
+				return "", invalidOpenRCUnit(candidate)
 			}
 		}
 		unit := NormalizeUnit(backend, candidate)

@@ -13,6 +13,7 @@ import (
 	"sermo/internal/dockerctl"
 	"sermo/internal/process"
 	"sermo/internal/rules"
+	"sermo/internal/servicemgr"
 	"sermo/internal/virt"
 )
 
@@ -407,6 +408,9 @@ func validateServiceField(tree map[string]any, add addFunc) {
 	case string:
 		if strings.TrimSpace(v) == "" {
 			add("service must not be empty")
+		} else {
+			// A scalar names the unit on every init, OpenRC included.
+			validateOpenRCUnitName(ServiceKeyService, v, add)
 		}
 	case map[string]any:
 		if len(v) == 0 {
@@ -418,12 +422,25 @@ func validateServiceField(tree map[string]any, add addFunc) {
 				if !cfgval.IsNonEmptyStringArray(v[k]) {
 					add("%s must be a non-empty list", serviceBackendPath(k))
 				}
+				if k == backendOpenRC {
+					for _, unit := range cfgval.StringList(v[k]) {
+						validateOpenRCUnitName(serviceBackendPath(k), unit, add)
+					}
+				}
 			default:
 				add("service key %q is not one of %s", k, initBackendSummary)
 			}
 		}
 	default:
 		add("service must be a unit name or a per-init map (systemd/openrc)")
+	}
+}
+
+// validateOpenRCUnitName rejects a unit rc-service would resolve outside
+// /etc/init.d: an absolute path, a traversal or more than one component.
+func validateOpenRCUnitName(path, unit string, add addFunc) {
+	if !servicemgr.ValidOpenRCUnit(unit) {
+		add("%s unit %q must be a single init script name, without path separators or traversal", path, unit)
 	}
 }
 
@@ -460,6 +477,8 @@ func validateAlsoService(tree map[string]any, add addFunc) {
 		for _, u := range units {
 			if strings.TrimSpace(u) == "" {
 				add("%s contains an empty unit", alsoServiceBackendPath(k))
+			} else if k == backendOpenRC {
+				validateOpenRCUnitName(alsoServiceBackendPath(k), u, add)
 			}
 			if primary[u] {
 				add("%s lists %q, which is the primary service unit", alsoServiceBackendPath(k), u)

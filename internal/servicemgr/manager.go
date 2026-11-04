@@ -374,6 +374,9 @@ func (m openrcManager) Status(ctx context.Context, service string) (ServiceStatu
 	// the state on stdout, so a non-zero exit is not a failure to query.
 	// A negative exit is a run that never finished: whatever it printed proves
 	// nothing, and a status() that dumps a firewall can be cut off mid-output.
+	if !ValidOpenRCUnit(service) {
+		return ServiceStatus{}, invalidOpenRCUnit(service)
+	}
 	result, err := m.runner.Run(ctx, cmdRcService, service, actionStatus)
 	if result.ExitCode < 0 {
 		return ServiceStatus{}, fmt.Errorf("query openrc status for %s: %s", service, execx.OperatorFailure(err, result, execx.NoTimeout))
@@ -435,7 +438,7 @@ var openrcReloadDef = regexp.MustCompile(`(?m)` +
 func (m openrcManager) SupportsReload(_ context.Context, service string) (bool, error) {
 	path, ok := openRCUnitPath(openRCInitDir, service)
 	if !ok {
-		return false, fmt.Errorf("invalid OpenRC unit %q", service)
+		return false, invalidOpenRCUnit(service)
 	}
 	read := m.readFile
 	if read == nil {
@@ -449,6 +452,11 @@ func (m openrcManager) SupportsReload(_ context.Context, service string) (bool, 
 }
 
 func (m openrcManager) action(ctx context.Context, verb, service string) error {
+	// Every caller passes through here, also_service units included, which
+	// reach the manager without the resolver.
+	if !ValidOpenRCUnit(service) {
+		return invalidOpenRCUnit(service)
+	}
 	// rc-service takes its options before the service name.
 	var args []string
 	if m.opts.isolate(verb) {

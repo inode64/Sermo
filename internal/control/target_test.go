@@ -3,6 +3,7 @@ package control
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -72,6 +73,20 @@ func TestResolveWithFallbackUsesActiveBackendCandidate(t *testing.T) {
 	}
 	if warning == "" {
 		t.Fatal("ResolveWithFallback() warning is empty, want failed resolution warning")
+	}
+}
+
+func TestResolveWithFallbackDoesNotFallbackToInvalidOpenRCUnit(t *testing.T) {
+	for _, service := range []any{"/tmp/evil", "../../tmp/evil", map[string]any{string(servicemgr.BackendOpenRC): []any{"../../tmp/evil"}}} {
+		target, warning := ResolveWithFallback(context.Background(), "svc", map[string]any{
+			config.ServiceKeyService: service,
+		}, servicemgr.BackendOpenRC, nil, servicemgr.UnitResolver{Probe: noKnownUnitsProbe{}})
+		if target.Unit != "" {
+			t.Fatalf("ResolveWithFallback(%v) target = %+v, want empty target", service, target)
+		}
+		if !strings.Contains(warning, servicemgr.ErrInvalidOpenRCUnit.Error()) {
+			t.Fatalf("ResolveWithFallback(%v) warning = %q, want invalid unit", service, warning)
+		}
 	}
 }
 

@@ -111,6 +111,11 @@ func ResolveWithFallback(ctx context.Context, name string, tree map[string]any, 
 	if err == nil {
 		return target, ""
 	}
+	// An invalid unit name is a refusal, not a failed probe: falling back would
+	// hand the rejected name to the backend.
+	if errors.Is(err, servicemgr.ErrInvalidOpenRCUnit) {
+		return Target{}, err.Error()
+	}
 	if _, controlled, specErr := controlType(tree); controlled || specErr != nil {
 		return Target{}, err.Error()
 	}
