@@ -127,6 +127,94 @@ func TestCommandRunnerTimeoutKillsProcessGroup(t *testing.T) {
 	}
 }
 
+const (
+	envHelperJoinPGID = "SERMO_EXECX_HELPER_JOIN_PGID"
+	envHelperReady    = "SERMO_EXECX_HELPER_READY"
+)
+
+// TestHelperProcessJoinsGroup is not a test on its own: run as a command by
+// TestCommandRunnerTimeoutKillsOnlyTheStartedGroup, it moves itself into the
+// process group the parent names, reports its pid and waits to be killed.
+func TestHelperProcessJoinsGroup(t *testing.T) {
+	pgid, err := strconv.Atoi(os.Getenv(envHelperJoinPGID))
+	if err != nil {
+		return
+	}
+	if err := syscall.Setpgid(0, pgid); err != nil {
+		os.Exit(2)
+	}
+	if err := os.WriteFile(os.Getenv(envHelperReady), []byte(strconv.Itoa(os.Getpid())), 0o600); err != nil {
+		os.Exit(3)
+	}
+	time.Sleep(30 * time.Second)
+	os.Exit(0)
+}
+
+// A command still shares its parent's session, so it may move into another
+// group of that session — the daemon's own among them — before its deadline.
+// The timeout must kill the group it was started in and the command itself,
+// never the group it moved to. A decoy group stands in for the daemon's.
+func TestCommandRunnerTimeoutKillsOnlyTheStartedGroup(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("process-group cancellation is linux-specific")
+	}
+	decoy := exec.Command("sleep", "30")
+	decoy.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	if err := decoy.Start(); err != nil {
+		t.Fatalf("start decoy: %v", err)
+	}
+	decoyExited := make(chan struct{})
+	go func() {
+		_ = decoy.Wait()
+		close(decoyExited)
+	}()
+	defer func() {
+		_ = decoy.Process.Kill()
+		<-decoyExited
+	}()
+
+	ready := filepath.Join(t.TempDir(), "ready")
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	// Cancel only once the command has left its group, so the kill is the one
+	// under test rather than a race with the move.
+	go func() {
+		for ctx.Err() == nil {
+			if _, err := os.Stat(ready); err == nil {
+				cancel()
+				return
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+	}()
+	env := []string{
+		envHelperJoinPGID + "=" + strconv.Itoa(decoy.Process.Pid),
+		envHelperReady + "=" + ready,
+	}
+	_, err := CommandRunner{}.RunEnv(ctx, env, os.Args[0], "-test.run=^TestHelperProcessJoinsGroup$")
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("error = %v, want the cancellation", err)
+	}
+
+	select {
+	case <-decoyExited:
+		t.Fatal("cancellation killed the group the command moved into")
+	case <-time.After(200 * time.Millisecond):
+	}
+	data, err := os.ReadFile(ready)
+	if err != nil {
+		t.Fatalf("read helper pid: %v", err)
+	}
+	pid, err := strconv.Atoi(string(data))
+	if err != nil {
+		t.Fatalf("parse helper pid %q: %v", data, err)
+	}
+	if processStillExists(pid) {
+		_ = syscall.Kill(pid, syscall.SIGKILL)
+		t.Fatalf("command %d survived its cancellation", pid)
+	}
+}
+
 // A probe that leaves a daemon behind is the production incident in miniature:
 // `influxd version` autolaunched a D-Bus session daemon that survived every
 // probe, one leaked inotify instance per sampling round until uid 0 hit

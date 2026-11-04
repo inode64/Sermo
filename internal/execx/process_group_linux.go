@@ -27,8 +27,7 @@ func prepareCommandProcessGroup(cmd *exec.Cmd) {
 //
 // pgid is the pid of the command, which Setpgid made its group leader. The pid
 // is already reaped here, so the theoretical race is a wrapped-around pid that
-// has become an unrelated group leader in the microseconds since Wait returned;
-// cancelCommandProcessGroup carries the same exposure.
+// has become an unrelated group leader in the microseconds since Wait returned.
 func reapProcessGroup(pgid int) {
 	if pgid <= 0 {
 		return
@@ -36,25 +35,29 @@ func reapProcessGroup(pgid int) {
 	_ = syscall.Kill(-pgid, syscall.SIGKILL)
 }
 
+// cancelCommandProcessGroup kills the group the command was started in and the
+// command itself. It never asks the kernel for the command's current group: a
+// command shares the daemon's session, so it may have moved into the daemon's
+// own group, and killing that would kill the daemon. The command is killed
+// through its own process handle in case it left its group.
 func cancelCommandProcessGroup(cmd *exec.Cmd) error {
 	if cmd.Process == nil {
 		return os.ErrProcessDone
 	}
-	pgid, err := syscall.Getpgid(cmd.Process.Pid)
-	if err != nil {
-		if errors.Is(err, syscall.ESRCH) {
-			return os.ErrProcessDone
-		}
-		if err := cmd.Process.Kill(); err != nil {
-			return fmt.Errorf("kill command process after process-group lookup: %w", err)
-		}
-		return nil
+	// Setpgid made the command its group's leader, so its pid is the group id.
+	groupErr := syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+	if errors.Is(groupErr, syscall.ESRCH) {
+		groupErr = nil
 	}
-	if err := syscall.Kill(-pgid, syscall.SIGKILL); err != nil {
-		if errors.Is(err, syscall.ESRCH) {
-			return os.ErrProcessDone
-		}
-		return fmt.Errorf("kill command process group %d: %w", pgid, err)
+	processErr := cmd.Process.Kill()
+	if errors.Is(processErr, os.ErrProcessDone) {
+		processErr = nil
+	}
+	if groupErr != nil {
+		return fmt.Errorf("kill command process group %d: %w", cmd.Process.Pid, groupErr)
+	}
+	if processErr != nil {
+		return fmt.Errorf("kill command process: %w", processErr)
 	}
 	return nil
 }
