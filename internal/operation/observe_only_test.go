@@ -13,24 +13,34 @@ import (
 const observeOnlyEmulatorCmd = `^\S*qemu-system\S* -name guest=web01,.*$`
 
 // guestTable is the process table of a libvirt domain: its emulator runs while
-// the domain does and exits exitAfter into the stop.
+// the domain does and exits exitAfter into the stop. An optional vhost-user
+// backend sharing the guest's memory exits backendExitAfter into the stop.
 type guestTable struct {
-	mgr       *fakeManager
-	emulator  process.Identity
-	missing   bool
-	exitAfter time.Duration
-	slept     time.Duration
+	mgr              *fakeManager
+	emulator         process.Identity
+	backend          *process.Identity
+	missing          bool
+	exitAfter        time.Duration
+	backendExitAfter time.Duration
+	slept            time.Duration
 }
 
 func (r *guestTable) current() map[int]process.Identity {
-	if r.missing || (r.mgr.stopped && r.slept >= r.exitAfter) {
+	if r.missing {
 		return nil
 	}
-	return map[int]process.Identity{r.emulator.PID: r.emulator}
+	table := map[int]process.Identity{}
+	if !r.mgr.stopped || r.slept < r.exitAfter {
+		table[r.emulator.PID] = r.emulator
+	}
+	if r.backend != nil && (!r.mgr.stopped || r.slept < r.backendExitAfter) {
+		table[r.backend.PID] = *r.backend
+	}
+	return table
 }
 
 func (r *guestTable) PIDs() ([]int, error) {
-	pids := make([]int, 0, 1)
+	pids := make([]int, 0, 2)
 	for pid := range r.current() {
 		pids = append(pids, pid)
 	}
@@ -136,6 +146,51 @@ func TestStopOfObserveOnlyServiceEndsWithItsGeneration(t *testing.T) {
 			}
 			if table.slept < tc.exitAfter || table.slept >= grace {
 				t.Fatalf("waited %v, want the %v the emulator took", table.slept, tc.exitAfter)
+			}
+		})
+	}
+}
+
+// A guest's vhost-user backends (virtiofsd) map its memory and can outlive
+// QEMU by a moment after a stop. Attributed with their own delegated selector
+// they are generations the stop waits for, so a restart cannot start the next
+// guest while one still holds the old RAM; unattributed, the wait ends with
+// QEMU.
+func TestStopOfObserveOnlyServiceWaitsForItsBackends(t *testing.T) {
+	const (
+		grace       = 30 * time.Second
+		backendExit = 2 * time.Second
+		backendCmd  = `(^|\s)--shared-dir[= ](/srv/virtiofs/web01/data)(\s|$)`
+	)
+	withBackend := observeOnlySelector()
+	withBackend["virtiofsd"] = map[string]any{
+		process.SelectorKeyExe: "/opt/sermo-test/virtiofsd", process.SelectorKeyUser: "root",
+		process.SelectorKeyCmd: backendCmd, process.SelectorKeyDelegated: true,
+	}
+	for _, tc := range []struct {
+		name      string
+		processes map[string]any
+		waited    func(time.Duration) bool
+	}{
+		{name: "attributed backend", processes: withBackend, waited: func(d time.Duration) bool { return d >= backendExit && d < grace }},
+		{name: "unattributed backend", processes: observeOnlySelector(), waited: func(d time.Duration) bool { return d < backendExit }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			table := &guestTable{mgr: &fakeManager{status: servicemgr.StatusActive}, backendExitAfter: backendExit}
+			engine := newObserveOnlyEngine(t, table, tc.processes, map[string]any{process.StopPolicyKeyGracefulTimeout: grace.String()})
+			table.backend = &process.Identity{
+				PID: 901, PPID: 1, UID: 0, StartTicks: 11, StartTicksOK: true, Exe: "/opt/sermo-test/virtiofsd", ExeOK: true, State: "S",
+				Cmdline: []string{"/opt/sermo-test/virtiofsd", "--fd=3", "--shared-dir=/srv/virtiofs/web01/data"},
+				Cgroup:  `0::/system.slice/system-virtiofsd.slice/virtiofsd@web01_data.service`,
+			}
+
+			res := engine.Do(context.Background(), actionStop)
+
+			if res.Status != ResultOK {
+				t.Fatalf("status = %q (%s)", res.Status, res.Message)
+			}
+			if !tc.waited(table.slept) {
+				t.Fatalf("waited %v; backend exits %v into the stop", table.slept, backendExit)
 			}
 		})
 	}

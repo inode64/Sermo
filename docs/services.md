@@ -784,7 +784,12 @@ libvirt operations:
 - `start` creates/boots the defined domain (`DomainCreate`).
 - `stop` requests a graceful guest shutdown (`DomainShutdown`). A domain that
   is already shut off needs no request, so stopping or restarting it does not
-  fail. A paused or crashed guest cannot act on that request, so `stop` resumes it first
+  fail. The guest runs its whole shutdown sequence (databases, containers), so
+  give the VM a `stop_policy.graceful_timeout` that covers it — libvirt-guests
+  waits 300 seconds by default. With a shorter wait, a restart fails while the
+  guest is still shutting down, and the guest then stays off; the wait ends as
+  soon as QEMU exits, so a long limit costs time only when the guest ignores
+  the request. A paused or crashed guest cannot act on that request, so `stop` resumes it first
   (`DomainResume`) and then asks for the shutdown. When QEMU refuses to resume
   with `Resetting the Virtual Machine is required` (the guest hit an internal
   error, panicked or shut itself down, and can never run again), there is no
@@ -821,6 +826,36 @@ a start, restart or resume fails when the domain is active and the selector find
 no process, and a stop ends its wait when the processes it saw are gone and
 libvirt reports the domain shut off. The fleet installer generates VM services
 with exactly this selector.
+
+A guest whose RAM is shared with vhost-user backends launched outside libvirt —
+typically socket-activated `virtiofsd` units behind a filesystem's
+`<source socket=…>` — needs those backends attributed too. They map the guest's
+memory and can outlive QEMU by a moment after a stop. With hugepage-backed RAM,
+a restart that starts the guest before they exit fails with `unable to map
+backing store for guest RAM: Cannot allocate memory`. Add a delegated selector
+that matches the directories they serve; the stop then waits for those
+generations as well, and a replaced `virtiofsd` binary reports on the VM, the
+one target whose restart renews it:
+
+```yaml
+processes:
+  main:
+    cmd: '^\S*qemu-system\S* -name guest=web01,.*$'
+    delegated: true
+  virtiofsd:                            # observe-only: the guest's shares
+    exe: /usr/libexec/virtiofsd
+    user: root
+    cmd: '(^|\s)--shared-dir[= ](/srv/virtiofs/web01/data|/srv/virtiofs/web01/db)(\s|$)'
+    delegated: true
+```
+
+Match the shared directory, not the socket: a socket-activated `virtiofsd` gets
+only `--fd=N` on its command line. A directory served to two domains cannot tell
+their backends apart, so leave it out of both. A `virtiofsd` that libvirt spawns
+itself (a `<binary>` with no `socket`) is stopped by libvirt with the domain and
+needs no selector. The fleet installer adds this selector for the backends it
+finds connected to a running domain's virtiofs sockets; `sermoctl wizard vm`
+does not detect them.
 
 `sermoctl wizard vm` can generate this service shape from domains
 detected through the local libvirt socket. It probes both
