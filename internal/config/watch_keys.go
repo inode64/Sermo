@@ -45,6 +45,7 @@ const (
 	WatchThenKeyKillQuery      = "kill_query"
 	WatchThenKeyMakeStep       = "makestep"
 	WatchThenKeyRemount        = "remount"
+	WatchThenKeyDrainOutput    = "drain_output"
 	WatchThenKeyNotifyInterval = "notify_interval"
 	WatchThenKeyNotifyOn       = "notify_on"
 )
@@ -95,6 +96,9 @@ func (a SetWatchActions) EmptyThenMessage() string {
 // WatchMakeStepKeySocket addresses chronyd's command socket for a clock watch's
 // then.makestep action. It aliases the check key so `socket` has one spelling.
 const WatchMakeStepKeySocket = checks.CheckKeySocket
+
+// WatchDrainOutputKeyLogFile selects the private, size-bounded recovery log.
+const WatchDrainOutputKeyLogFile = "log_file"
 
 // Watch hook keys mirror command-check command/expectation fields.
 const (

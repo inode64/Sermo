@@ -88,6 +88,7 @@ configuration omits it.
   - [Check summaries](#check-summaries)
   - [file — file/directory attributes and freshness](#file--filedirectory-attributes-and-freshness)
   - [stale_binary — service running a replaced binary](#stale_binary--service-running-a-replaced-binary)
+  - [terminal_output — blocked terminal output](#terminal_output--blocked-terminal-output)
   - [stale_libraries — processes using replaced shared libraries](#stale_libraries--processes-using-replaced-shared-libraries)
   - [fds — descriptors against the process limit (fds_limit)](#fds--descriptors-against-the-process-limit-fds_limit)
   - [strays — processes the service cannot account for](#strays--processes-the-service-cannot-account-for)
@@ -3883,6 +3884,65 @@ restart would not renew them.
 A process whose executable was replaced still resolves no exe, so it matches no
 `exe` selector and is never signalled — see [safety.md](safety.md). This check
 reports the condition; it does not relax that rule.
+
+### `terminal_output` — blocked terminal output
+
+An opt-in, read-only check for a specific PTY wait cycle: a single-threaded
+parent owns the only master descriptor and waits for a child whose descendant
+is blocked writing stdout or stderr to that terminal. The check verifies the
+actual terminal device, process generations and unchanged I/O counters. A long
+runtime, a process name or an idle terminal alone does not satisfy it.
+
+Use explicit `processes` selectors with an exact `exe` and `user`; `cmd` may
+narrow that identity. Delegated selectors are rejected. Service checks also
+require the owner to remain one of that service's strict principals. The scan
+runs at most once per minute, with a default timeout of 30 seconds.
+`stable_for` defaults to five minutes and must be positive. Unreadable evidence
+reports unavailable, resets the stability window and blocks automatic actions.
+
+```yaml
+watches:
+  recover-build-output:
+    dry_run: false
+    check:
+      type: terminal_output
+      processes:
+        main:
+          exe: /usr/bin/python3.13
+          user: root
+          cmd: '^/usr/bin/python3[.]13 /usr/lib/python-exec/python3[.]13/emerge '
+      interval: 1m
+      timeout: 30s
+      stable_for: 5m
+    policy:
+      cooldown: 30m
+    then:
+      drain_output:
+        log_file: /var/log/sermo/terminal-output.log
+      notify: [none]
+```
+
+`then.drain_output` is a native watch action available only for this check and
+requires a positive `policy.cooldown`. It revalidates the evidence, pins both
+processes with pidfds and verifies the borrowed master against the writer's
+actual PTY peer before reading. It neither signals processes nor writes terminal
+input. Blocking masters and packet mode are unsupported; Sermo never changes
+shared descriptor flags. Kernel or permission limitations fail closed.
+
+Each attempt handles one target, for at most 30 seconds. It appends recovered
+bytes to a private regular file owned by the daemon, reserves space before
+reading and caps the entire file at 8 MiB. The parent directory must be owned
+by the daemon and must not be writable by group or others. Symlinks, hard links,
+public files and concurrent capture to the same file are rejected. Rotate the
+capture file before its limit is reached; the bytes may contain sensitive job
+output and are never included in dashboard events.
+
+The check exposes stable targets in `data.terminal_output`. Native outcomes
+`drain_output`, `drain_output-failed` and `drain_output-skipped` audit preserved
+and read byte counts, log offset and whether the attempt reached a limit.
+A successful capture means output was preserved; it does not assert that the
+job finished. Dry-run and panic mode prevent recovery, and cooldown also
+applies after a failed or skipped attempt.
 
 ### `stale_libraries` — processes using replaced shared libraries
 

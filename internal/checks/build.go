@@ -141,6 +141,8 @@ type Deps struct {
 	StaleBinaries StaleBinariesFunc
 	// StaleLibraries inspects only this service's attributed processes.
 	StaleLibraries StaleLibrariesFunc
+	// TerminalOutput is constrained to this service's strict principals.
+	TerminalOutput TerminalOutputFunc
 	// Strays reports this service's control-group members that no selector
 	// claims, for `strays` checks. Read-only: reporting a stray authorizes
 	// nothing; only a stop of the service signals one, as a residual.
@@ -298,6 +300,7 @@ var builtinCheckSpecs = []checkSpec{
 	// Condition too, and for the same reason: OK means the service's control group
 	// holds nothing Sermo cannot account for.
 	{info: serviceConditionTypeInfo(CheckTypeStrays), build: func(in checkBuildInput) (Check, string) { return buildStraysCheck(in.base, in.entry, in.deps) }},
+	{info: healthTypeInfo(CheckTypeTerminalOutput), build: func(in checkBuildInput) (Check, string) { return buildTerminalOutputCheck(in.base, in.entry, in.deps) }},
 	{info: serviceConditionTypeInfo(CheckTypeMetric), build: func(in checkBuildInput) (Check, string) { return buildMetricCheck(in.base, in.entry, in.deps) }},
 	{info: healthTypeInfo(CheckTypeLibraries), readsPaths: true, build: func(in checkBuildInput) (Check, string) { return buildLibrariesCheck(in.base, in.entry) }},
 	{info: conditionTypeInfo(CheckTypeCount), readsPaths: true, build: func(in checkBuildInput) (Check, string) { return buildCountCheck(in.base, in.entry) }},

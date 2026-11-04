@@ -213,6 +213,9 @@ const eventKindMakeStepSkipped = "makestep-skipped";
 const eventKindRemount = "remount";
 const eventKindRemountFailed = "remount-failed";
 const eventKindRemountSkipped = "remount-skipped";
+const eventKindOutputDrain = "drain_output";
+const eventKindOutputDrainFailed = "drain_output-failed";
+const eventKindOutputDrainSkipped = "drain_output-skipped";
 const eventKindNotify = "notify";
 const eventKindNotifyFailed = "notify-failed";
 const eventKindNotifySuppressed = "notify-suppressed";
@@ -253,9 +256,9 @@ const operationOutcomeStyles = {
 // carry it.
 const outcomePulseClass = "outcome-pulse";
 const outcomePulseMs = 2400;
-const activityCriticalKinds = [mountStateError, eventKindHookFailed, eventKindNotifyFailed, eventKindExpandFailed, eventKindKillFailed, eventKindMakeStepFailed, eventKindRemountFailed];
-const activityWarningKinds = [actionAlert, eventKindFiring, eventKindSuppressed, eventKindPanicSuppressed, eventKindNotifySuppressed, eventKindExpandSkipped, eventKindMakeStepSkipped, eventKindRemountSkipped];
-const activityOKKinds = [eventKindAction, eventKindCascade, eventKindHook, eventKindNotify, eventKindRecovered, actionExpand, eventKindKill, eventKindMakeStep, eventKindRemount];
+const activityCriticalKinds = [mountStateError, eventKindHookFailed, eventKindNotifyFailed, eventKindExpandFailed, eventKindKillFailed, eventKindMakeStepFailed, eventKindRemountFailed, eventKindOutputDrainFailed];
+const activityWarningKinds = [actionAlert, eventKindFiring, eventKindSuppressed, eventKindPanicSuppressed, eventKindNotifySuppressed, eventKindExpandSkipped, eventKindMakeStepSkipped, eventKindRemountSkipped, eventKindOutputDrainSkipped];
+const activityOKKinds = [eventKindAction, eventKindCascade, eventKindHook, eventKindNotify, eventKindRecovered, actionExpand, eventKindKill, eventKindMakeStep, eventKindRemount, eventKindOutputDrain];
 const activityInfoKinds = [eventKindDryRun, eventKindReload];
 const serviceStatusFilterStates = [
   targetStateDisabled,

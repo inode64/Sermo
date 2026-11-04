@@ -105,6 +105,7 @@ const (
 	CheckTypeUsers            = "users"
 	CheckTypeSSHIdle          = "ssh_idle"
 	CheckTypeTerminalSessions = "terminal_sessions"
+	CheckTypeTerminalOutput   = "terminal_output"
 	CheckTypeProcessCount     = "process_count"
 	CheckTypeHdparm           = "hdparm"
 	CheckTypeSensors          = "sensors"

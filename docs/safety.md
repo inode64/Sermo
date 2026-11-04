@@ -266,6 +266,21 @@ SIGTERM and verifies exit before reporting success. No basename, command title,
 stale PID or missing-client error alone permits a signal. This fallback does
 not apply to tmux, whose server may hold several independent sessions.
 
+The separate opt-in [`terminal_output`](configuration.md#terminal_output--blocked-terminal-output)
+check observes a verified PTY output wait cycle. Its native `then.drain_output`
+watch action requires strict executable/user selectors, stable unchanged
+evidence and a positive cooldown. Service-scoped observations additionally
+require a freshly verified service principal. The action pins process
+generations with pidfds and compares the actual PTY peer against the writer's
+stdout/stderr. Serialized dashboard evidence carries no recovery authority.
+It reads only a nonblocking master, never changes shared flags, never sends a
+signal and never writes terminal input. Shared masters, packet mode, changed
+identities or uncertain evidence block recovery. Private capture files have
+reserved space, exclusive locking, an 8 MiB total limit and a 30-second attempt
+budget. The audit reports captured bytes rather than claiming job completion.
+Dry-run and panic mode apply. This action grants no terminal-session close
+authority; `terminal_sessions` remains observation-only.
+
 The separate manual close of an empty terminal source is available only for a
 tmux source with an explicit configured socket. It shares the operation and
 named locks, guards, timeout and one-event path; it re-lists the exact source,

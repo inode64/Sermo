@@ -527,7 +527,7 @@ func eventNotifyIdentity(e Event) (key string, active bool, phase string) {
 		phase = eventNotifyPhaseRecovered
 	case eventKindDryRun, eventKindSuppressed, eventKindAction:
 		phase = eventKindFiring
-	case eventKindError, eventKindHookFail, eventKindExpandFailed, eventKindKillFailed, eventKindMakeStepFailed, eventKindRemountFailed:
+	case eventKindError, eventKindHookFail, eventKindExpandFailed, eventKindKillFailed, eventKindMakeStepFailed, eventKindRemountFailed, eventKindOutputDrainFailed:
 		// An error with a recovery edge of its own stays a health incident, so
 		// the recovery that follows closes it: an advisory incident's error, and
 		// an unavailable check's at every grade.
@@ -616,7 +616,7 @@ func eventNeedsNotification(e Event) bool {
 	switch e.Kind {
 	case eventKindFiring, eventKindRecovered, eventKindAlert,
 		eventKindError, eventKindHookFail, eventKindExpandFailed,
-		eventKindKillFailed, eventKindMakeStepFailed, eventKindRemountFailed:
+		eventKindKillFailed, eventKindMakeStepFailed, eventKindRemountFailed, eventKindOutputDrainFailed:
 		return true
 	case eventKindDryRun, eventKindSuppressed, eventKindAction:
 		// A service check claimed by a remediation rule has no standalone firing

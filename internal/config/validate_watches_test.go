@@ -860,7 +860,7 @@ func TestValidateNotifyReferences(t *testing.T) {
 			},
 		},
 	})
-	if !hasIssue(noDefault, "watches.no-action.then requires a hook, notify, kill, expand, remount and/or makestep") {
+	if !hasIssue(noDefault, "watches.no-action.then requires a hook, notify, kill, expand, remount, drain_output and/or makestep") {
 		t.Fatalf("expected empty then without global notify to fail, got %v", noDefault)
 	}
 	if hasIssue(noDefault, "watches.dry-run-only") {

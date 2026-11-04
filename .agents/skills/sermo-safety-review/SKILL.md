@@ -62,6 +62,19 @@ touches them.
     auxiliary-stop and artifact warnings in the one audit result even if a
     subsequent phase fails or times out.
 
+## Terminal output recovery
+
+- `terminal_output` observation never consumes terminal bytes. Native
+  `drain_output` requires unchanged stable evidence, strict selectors and a
+  positive cooldown; service scope also revalidates its principal ownership.
+- Keep recovery authority private to typed in-memory observations. JSON
+  round-trips must lose it. Pin generations with pidfds and compare the actual
+  master peer against the writer descriptor before reading.
+- Never change shared file flags, write terminal input or signal a job from
+  this path. Reject blocking or packet-mode masters, shared ownership and
+  uncertain evidence. Reserve private capture space before consuming bytes,
+  enforce byte/time limits and audit preserved bytes separately from job exit.
+
 ## Process identity and signaling
 
 - Signal authority requires the exact resolved `/proc/<pid>/exe` path and the

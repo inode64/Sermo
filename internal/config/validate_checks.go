@@ -778,10 +778,15 @@ var singleShotCheckValidators = map[string]singleShotCheckValidator{
 	checks.CheckTypeProcess:        validateProcessCheck,
 	checks.CheckTypeStaleBinary:    singleShotNoLock(validateStaleBinaryCheck),
 	checks.CheckTypeStaleLibraries: singleShotNoLock(validateStaleLibrariesCheck),
-	checks.CheckTypeStrays:         singleShotNoLock(validateStraysCheck),
-	checks.CheckTypeFileExists:     validateFileExistsCheck,
-	checks.CheckTypeFile:           validateSingleShotFileCheck,
-	checks.CheckTypeLockfile:       validateLockfileCheck,
+	checks.CheckTypeTerminalOutput: singleShotNoLock(func(path string, entry map[string]any, add addFunc) {
+		if _, _, err := checks.TerminalOutputConfig(entry); err != nil {
+			add("%s: %v", path, err)
+		}
+	}),
+	checks.CheckTypeStrays:     singleShotNoLock(validateStraysCheck),
+	checks.CheckTypeFileExists: validateFileExistsCheck,
+	checks.CheckTypeFile:       validateSingleShotFileCheck,
+	checks.CheckTypeLockfile:   validateLockfileCheck,
 	checks.CheckTypeBinary: func(path string, entry map[string]any, _ string, add addFunc) {
 		validateRequiredStringField(path, entry, checks.CheckKeyPath, checks.CheckTypeBinary, add)
 	},

@@ -89,6 +89,7 @@ Connection-protocol checks (MySQL, PostgreSQL, Redis, Docker, libvirt, etc.) are
 | `lvm`         | health | every LVM volume group and logical volume reports healthy (see Hardware sensors) |
 | `stale_binary` | condition | no attributed process runs a binary replaced on disk since it started (service-injected; also available explicitly) |
 | `stale_libraries` | state | no executable shared-library mapping differs from the installed inode; `failed:` alerts, explicit service rules can restart after stable, complete main-process evidence; host inventories are advisory |
+| `terminal_output` | health | no verified parent/child PTY output wait cycle persists; exact process selectors and unchanged evidence gate optional native output recovery (see [configuration](configuration.md#terminal_output--blocked-terminal-output)) |
 | `strays`      | condition | the init unit's control group holds no process outside the configured selectors (service-injected; also available explicitly) |
 | `edac`        | condition | ECC memory errors from EDAC (`ce` correctable / `ue` uncorrectable) (see Hardware sensors)|
 | `memory`      | condition | system RAM vs the kernel's MemAvailable (used_pct/available_pct/available_bytes) |

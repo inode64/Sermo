@@ -312,7 +312,8 @@ func isWatchActivityKind(kind string) bool {
 	switch kind {
 	case eventKindFiring, eventKindRecovered, eventKindDryRun, eventKindHook, eventKindNotify, eventKindHookFail, eventKindNotifyFail, eventKindExpand, eventKindExpandSkipped, eventKindExpandFailed, eventKindKill, eventKindKillFailed,
 		eventKindMakeStep, eventKindMakeStepSkipped, eventKindMakeStepFailed,
-		eventKindRemount, eventKindRemountSkipped, eventKindRemountFailed:
+		eventKindRemount, eventKindRemountSkipped, eventKindRemountFailed,
+		eventKindOutputDrain, eventKindOutputDrainSkipped, eventKindOutputDrainFailed:
 		return true
 	default:
 		return false

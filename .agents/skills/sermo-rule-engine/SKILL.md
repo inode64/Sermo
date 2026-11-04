@@ -51,7 +51,7 @@ the types are `RuleType`, `ActionType` and `Action` in
   fail closed on it. The worker evaluates every rule with `EvalRule`, which
   decides that per rule; a plain `Eval` keeps busy unknown. A check only
   operation rules read gets its busy episode from the worker's health reporter.
-  A watch withholds its actions (hook, expand, makestep, remount) on a busy
+  A watch withholds its actions (hook, expand, makestep, remount, drain_output) on a busy
   result. No option makes busy trigger an operation.
 
 ## Severity

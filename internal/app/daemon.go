@@ -340,6 +340,8 @@ type Deps struct {
 	// Optional: nil uses conn.MakeStep. Tests inject a fake so no real chronyd is
 	// ever commanded.
 	ClockStepper ClockStepper
+	// OutputDrainer repairs only a freshly revalidated terminal wait cycle.
+	OutputDrainer OutputDrainer
 	// MountRemounter repairs a hung or missing mount for a storage watch's
 	// `then.remount`. Optional: nil uses mountctl.Controller. Tests inject a
 	// fake so no real filesystem is ever unmounted.

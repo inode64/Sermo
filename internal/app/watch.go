@@ -173,8 +173,10 @@ type Watch struct {
 	// MakeStep, when set, asks the local time daemon to step the clock on a
 	// firing cycle. It shares Policy with Expand: a watch cannot be both a
 	// storage and a clock watch, so there is at most one native action.
-	MakeStep *MakeStepSpec
-	Stepper  ClockStepper
+	MakeStep      *MakeStepSpec
+	Stepper       ClockStepper
+	DrainOutput   *DrainOutputSpec
+	OutputDrainer OutputDrainer
 	// Remounter, when set, repairs the storage watch's mount on a firing cycle
 	// whose check reports it hung or missing (`then.remount`). It shares Policy
 	// with Expand, which a cooldown makes mandatory for it.
@@ -338,7 +340,7 @@ func (w *Watch) confirmedResult(ctx context.Context, res checks.Result) checks.R
 
 // busyActionsWithheld explains why a firing watch whose server answered it is
 // busy ran none of its actions.
-const busyActionsWithheld = "server busy: hook/expand/makestep/remount withheld; the server answered and is not restarted"
+const busyActionsWithheld = "server busy: hook/expand/makestep/remount/drain_output withheld; the server answered and is not restarted"
 
 // watchAvailabilityCheck is the notification identity of a watch's
 // availability edges. It keeps them a separate incident from the watch's
@@ -488,7 +490,7 @@ func (w *Watch) dispatchFiringActions(ctx context.Context, res checks.Result, st
 	if step.announce {
 		w.emit(Event{Watch: w.Name, Kind: eventKindFiring, Severity: step.level, Message: res.Message, Output: resultOutput(res)})
 	}
-	if len(w.Hook.Command) == 0 && len(w.Notifiers) == 0 && w.Expand == nil && w.MakeStep == nil && w.Remounter == nil {
+	if len(w.Hook.Command) == 0 && len(w.Notifiers) == 0 && w.Expand == nil && w.MakeStep == nil && w.Remounter == nil && w.DrainOutput == nil {
 		return
 	}
 	env := hookEnv(w.Name, w.CheckType, res, step.level)
@@ -501,7 +503,7 @@ func (w *Watch) dispatchFiringActions(ctx context.Context, res checks.Result, st
 	}
 	if w.InPanic != nil && w.InPanic() {
 		if step.announce {
-			w.emit(Event{Watch: w.Name, Kind: eventKindPanicSuppressed, Message: "panic mode: hook/notify/expand/makestep/remount suppressed"})
+			w.emit(Event{Watch: w.Name, Kind: eventKindPanicSuppressed, Message: "panic mode: hook/notify/expand/makestep/remount/drain_output suppressed"})
 		}
 		return
 	}
@@ -511,7 +513,7 @@ func (w *Watch) dispatchFiringActions(ctx context.Context, res checks.Result, st
 		if step.announce {
 			message := busyActionsWithheld
 			if res.ActionBlocked {
-				message = "advisory observation: hook/expand/makestep/remount withheld"
+				message = "advisory observation: hook/expand/makestep/remount/drain_output withheld"
 			}
 			w.emit(Event{Watch: w.Name, Kind: eventKindSuppressed, Message: message})
 		}
@@ -527,6 +529,9 @@ func (w *Watch) dispatchFiringActions(ctx context.Context, res checks.Result, st
 	}
 	if w.MakeStep != nil && w.Stepper != nil {
 		w.runMakeStep(ctx, res, step.announce)
+	}
+	if w.DrainOutput != nil && w.OutputDrainer != nil {
+		w.runDrainOutput(ctx, res, step.announce)
 	}
 	runWatchHook(ctx, w.Hook, w.Runner, w.emit, w.Name, res.Message, env)
 	w.notifyFiring(ctx, step, watchMessage(w.Name, res.Message, env))
@@ -923,6 +928,9 @@ func (w *Watch) dryRunMessage() string {
 	}
 	if w.Remounter != nil {
 		native = append(native, config.WatchThenKeyRemount)
+	}
+	if w.DrainOutput != nil {
+		native = append(native, config.WatchThenKeyDrainOutput)
 	}
 	msg := watchDryRunMessage(w.Hook, w.Notifiers, native...)
 	if len(native) == 0 {

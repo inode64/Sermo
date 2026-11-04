@@ -302,7 +302,7 @@ func buildSingleWatch(name string, entry, checkEntry map[string]any, deps Deps, 
 		parseExpand:      true,
 		parseMakeStep:    true,
 		parseRecoverHook: true,
-		emptyMessage:     "then requires a hook, notify, expand, remount and/or makestep",
+		emptyMessage:     "then requires a hook, notify, expand, remount, drain_output and/or makestep",
 	})
 	if err != nil {
 		return nil, watchSubjectPrefix + name + ": " + err.Error()
@@ -322,8 +322,18 @@ func buildSingleWatch(name string, entry, checkEntry map[string]any, deps Deps, 
 		severity:  level,
 		interval:  interval,
 	}, deps)
-	if actions.expand != nil || actions.makeStep != nil || actions.remount {
+	if actions.expand != nil || actions.makeStep != nil || actions.remount || actions.drainOutput != nil {
 		w.Policy = rules.ParsePolicy(entry)
+	}
+	if actions.drainOutput != nil {
+		if w.Policy.Cooldown <= 0 {
+			return nil, watchSubjectPrefix + name + ": then.drain_output requires a positive policy.cooldown"
+		}
+		w.DrainOutput = actions.drainOutput
+		w.OutputDrainer = deps.OutputDrainer
+		if w.OutputDrainer == nil {
+			w.OutputDrainer = process.DrainTerminalOutput
+		}
 	}
 	if actions.expand != nil {
 		w.Expand = actions.expand
@@ -853,6 +863,7 @@ type watchActions struct {
 	kill             *killSpec
 	makeStep         *MakeStepSpec
 	remount          bool
+	drainOutput      *DrainOutputSpec
 	notifyInterval   time.Duration
 }
 
@@ -917,6 +928,14 @@ func resolveWatchActions(entry map[string]any, deps Deps, opts watchActionOption
 	if err != nil {
 		return watchActions{}, err
 	}
+	drainLog, err := parseDrainOutput(thenBlock, opts.checkType)
+	if err != nil {
+		return watchActions{}, err
+	}
+	var drainOutput *DrainOutputSpec
+	if drainLog != "" {
+		drainOutput = &DrainOutputSpec{LogFile: drainLog}
+	}
 	var makeStep *MakeStepSpec
 	if opts.parseMakeStep {
 		makeStep, err = parseMakeStep(thenBlock, opts.checkType)
@@ -926,20 +945,15 @@ func resolveWatchActions(entry map[string]any, deps Deps, opts watchActionOption
 	}
 	_, killQuery := thenBlock[config.WatchThenKeyKillQuery]
 	hasKillQuery := killQuery && opts.checkType == checks.CheckTypeDBQueries
-	if len(hook.Command) == 0 && !config.HasNotifyAction(effectiveNames) && expand == nil && !config.NotifyOptedOut(names) && kill == nil && makeStep == nil && !remount && len(recoverHook.Command) == 0 && !hasKillQuery {
+	actions := watchActions{hook: hook, recoverHook: recoverHook, effectiveNames: effectiveNames, raidNotifyEvents: raidNotifyEvents, expand: expand, kill: kill, makeStep: makeStep, remount: remount, drainOutput: drainOutput, notifyInterval: cfgval.Duration(thenBlock[config.WatchThenKeyNotifyInterval])}
+	if len(hook.Command) == 0 && !config.HasNotifyAction(effectiveNames) && !config.NotifyOptedOut(names) && !actions.hasNativeAction() && len(recoverHook.Command) == 0 && !hasKillQuery {
 		return watchActions{}, errors.New(opts.emptyMessage)
 	}
-	return watchActions{
-		hook:             hook,
-		recoverHook:      recoverHook,
-		effectiveNames:   effectiveNames,
-		raidNotifyEvents: raidNotifyEvents,
-		expand:           expand,
-		kill:             kill,
-		makeStep:         makeStep,
-		remount:          remount,
-		notifyInterval:   cfgval.Duration(thenBlock[config.WatchThenKeyNotifyInterval]),
-	}, nil
+	return actions, nil
+}
+
+func (a watchActions) hasNativeAction() bool {
+	return a.expand != nil || a.kill != nil || a.makeStep != nil || a.remount || a.drainOutput != nil
 }
 
 func parseRaidNotifyEvents(then map[string]any) (map[string]bool, error) {
