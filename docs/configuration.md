@@ -2048,6 +2048,12 @@ notify: [wall]     # broadcast to every logged-in terminal session
 The supported notifier types today are `email`, `ntfy`, `gotify`, `telegram`,
 `slack`, `teams`, `tty` and `wall`.
 
+The HTTP notifiers (`gotify`, `ntfy`, `slack`, `teams`, `telegram`) and the
+Telegram bot never follow a redirect: a `3xx` answer is a failed delivery
+(`notify-failed`). Following it would replay the POST as a bodyless GET, and
+send the old URL (with a Telegram token) as `Referer` and the Gotify key to the
+new host. Configure the final `https://` URL.
+
 Set **`enabled: false`** on any notifier to keep it defined but skip delivery.
 Disabled notifiers may still be referenced by `notify` selections.
 

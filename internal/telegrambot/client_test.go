@@ -105,6 +105,29 @@ func TestSendMessageOmitsThreadWhenZero(t *testing.T) {
 	}
 }
 
+// The bot URL carries the token, so a redirect must stop at the first answer:
+// following it would send the token as Referer to the new location.
+func TestCallDoesNotFollowRedirects(t *testing.T) {
+	followed := false
+	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		followed = true
+		_, _ = io.WriteString(w, `{"ok":true}`)
+	}))
+	defer target.Close()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, target.URL, http.StatusFound)
+	}))
+	defer srv.Close()
+
+	err := testClient(srv.URL, "123:SECRET").sendMessage(context.Background(), 42, 0, "hi")
+	if err == nil || !strings.Contains(err.Error(), "302") {
+		t.Fatalf("err = %v, want the redirect reported as a failure", err)
+	}
+	if followed {
+		t.Fatal("the redirect was followed")
+	}
+}
+
 func TestCallReportsAPIError(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)

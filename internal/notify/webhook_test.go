@@ -6,6 +6,7 @@ import (
 	"maps"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -67,6 +68,31 @@ func TestPostWebhookNon2xxCarriesLabelAndSnippet(t *testing.T) {
 	err := postWebhook(context.Background(), "teams", srv.URL, nil, []byte(`{}`))
 	if err == nil || !strings.Contains(err.Error(), "teams webhook returned") || !strings.Contains(err.Error(), "kaboom") {
 		t.Fatalf("err = %v, want teams label and body snippet", err)
+	}
+}
+
+// A redirect is not a delivery: Go would replay the POST as a bodyless GET,
+// carry the URL (a Telegram token) as Referer and a Gotify key header to the
+// new host, and a 2xx there would count as sent.
+func TestPostWebhookDoesNotFollowRedirects(t *testing.T) {
+	followed := false
+	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		followed = true
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer target.Close()
+	for _, code := range []int{http.StatusMovedPermanently, http.StatusFound, http.StatusSeeOther, http.StatusTemporaryRedirect, http.StatusPermanentRedirect} {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			http.Redirect(w, r, target.URL, code)
+		}))
+		err := postWebhook(context.Background(), TypeGotify, srv.URL, map[string]string{"X-Gotify-Key": "secret"}, []byte(`{}`))
+		srv.Close()
+		if err == nil || !strings.Contains(err.Error(), strconv.Itoa(code)) {
+			t.Fatalf("redirect %d: err = %v, want a failed delivery naming the status", code, err)
+		}
+	}
+	if followed {
+		t.Fatal("a redirect was followed")
 	}
 }
 

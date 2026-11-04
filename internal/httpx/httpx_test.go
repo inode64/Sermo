@@ -7,6 +7,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"strings"
 	"testing"
@@ -92,6 +93,32 @@ func TestNewClientSharesDefaultTransportUnlessAsked(t *testing.T) {
 	}
 	if def, isDefault := http.DefaultTransport.(*http.Transport); isDefault && def.DisableKeepAlives {
 		t.Fatal("NewClient must not mutate the shared default transport")
+	}
+}
+
+func TestNewClientNoRedirectsReturnsTheRedirect(t *testing.T) {
+	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer target.Close()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, target.URL, http.StatusFound)
+	}))
+	defer srv.Close()
+
+	for _, tc := range []struct {
+		noRedirects bool
+		want        int
+	}{{noRedirects: false, want: http.StatusOK}, {noRedirects: true, want: http.StatusFound}} {
+		client := NewClient(ClientOptions{NoRedirects: tc.noRedirects})
+		resp, err := client.Get(srv.URL)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_ = resp.Body.Close()
+		if resp.StatusCode != tc.want {
+			t.Fatalf("NoRedirects=%v status = %d, want %d", tc.noRedirects, resp.StatusCode, tc.want)
+		}
 	}
 }
 

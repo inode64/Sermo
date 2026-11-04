@@ -111,6 +111,11 @@ type ClientOptions struct {
 	// DisableKeepAlives closes each connection after its exchange, for probes
 	// that must not leave sockets open on the target.
 	DisableKeepAlives bool
+	// NoRedirects returns a redirect as the response instead of following it.
+	// A delivery client needs it: Go replays a 301/302/303 POST as a bodyless
+	// GET and sends the old URL as Referer and custom headers to the new host,
+	// so a 2xx there would report a message that was never posted.
+	NoRedirects bool
 }
 
 // NewClient is the single constructor for Sermo's HTTP clients. Options that
@@ -118,6 +123,9 @@ type ClientOptions struct {
 // that only sets a timeout shares the default transport and its pool.
 func NewClient(opts ClientOptions) *http.Client {
 	client := &http.Client{Timeout: opts.Timeout}
+	if opts.NoRedirects {
+		client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	}
 	if opts.DialContext == nil && opts.TLS == nil && opts.Proxy == nil && !opts.DisableKeepAlives {
 		return client
 	}
