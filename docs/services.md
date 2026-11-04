@@ -782,8 +782,17 @@ operation timeouts and remediation policy still apply. The primitive actions are
 libvirt operations:
 
 - `start` creates/boots the defined domain (`DomainCreate`).
-- `stop` requests a graceful guest shutdown (`DomainShutdown`); it does not
-  destroy the VM.
+- `stop` requests a graceful guest shutdown (`DomainShutdown`). A domain that
+  is already shut off needs no request, so stopping or restarting it does not
+  fail. A paused or crashed guest cannot act on that request, so `stop` resumes it first
+  (`DomainResume`) and then asks for the shutdown. When QEMU refuses to resume
+  with `Resetting the Virtual Machine is required` (the guest hit an internal
+  error, panicked or shut itself down, and can never run again), there is no
+  guest left to shut down: `stop` powers the domain off with a SIGTERM-only
+  destroy (`DomainDestroyFlags` with `VIR_DOMAIN_DESTROY_GRACEFUL`), which
+  never escalates to `SIGKILL`. Any other refusal — a migration, save or
+  snapshot job holding the pause, for example — fails the stop and destroys
+  nothing.
 - `restart` is still Sermo's safe stop+start flow.
 - `pause` suspends a running domain in place (`DomainSuspend`, like
   `virsh suspend`): its vCPUs stop and its memory stays resident.

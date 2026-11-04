@@ -92,6 +92,7 @@ func TestActionsOnObserveOnlyService(t *testing.T) {
 	}{
 		{name: "start", action: actionStart, processes: observeOnlySelector(), stopped: true, want: ResultOK},
 		{name: "restart", action: actionRestart, processes: observeOnlySelector(), want: ResultOK},
+		{name: "restart of a shut off guest", action: actionRestart, processes: observeOnlySelector(), stopped: true, want: ResultOK},
 		{name: "resume", action: actionResume, processes: observeOnlySelector(), want: ResultOK},
 		{name: "start with no emulator", action: actionStart, processes: observeOnlySelector(), stopped: true, missing: true, want: ResultFailed},
 		{name: "a declared principal stays required", action: actionStart, processes: mixed, stopped: true, want: ResultFailed},
@@ -116,13 +117,16 @@ func TestStopOfObserveOnlyServiceEndsWithItsGeneration(t *testing.T) {
 	const grace = 30 * time.Second
 	for _, tc := range []struct {
 		name      string
+		status    servicemgr.Status
 		exitAfter time.Duration
 	}{
-		{name: "gone with the stop"},
-		{name: "gone during the wait", exitAfter: 5 * time.Second},
+		{name: "gone with the stop", status: servicemgr.StatusActive},
+		{name: "gone during the wait", status: servicemgr.StatusActive, exitAfter: 5 * time.Second},
+		// The backend powers off a paused guest QEMU can no longer run.
+		{name: "paused guest gone with the stop", status: servicemgr.StatusPaused},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			table := &guestTable{mgr: &fakeManager{status: servicemgr.StatusActive}, exitAfter: tc.exitAfter}
+			table := &guestTable{mgr: &fakeManager{status: tc.status}, exitAfter: tc.exitAfter}
 			engine := newObserveOnlyEngine(t, table, observeOnlySelector(), map[string]any{process.StopPolicyKeyGracefulTimeout: grace.String()})
 
 			res := engine.Do(context.Background(), actionStop)

@@ -171,8 +171,7 @@ func NewManager(spec Spec) Manager {
 
 // Client is the small libvirt surface Manager needs. Tests inject a fake.
 type Client interface {
-	ConnectToURI(uri libvirt.ConnectURI) error
-	Disconnect() error
+	rpcSession
 	ConnectListAllDomains(needResults int32, flags libvirt.ConnectListAllDomainsFlags) ([]libvirt.Domain, uint32, error)
 	DomainLookupByName(name string) (libvirt.Domain, error)
 	DomainLookupByUUID(uuid libvirt.UUID) (libvirt.Domain, error)
@@ -181,7 +180,13 @@ type Client interface {
 	DomainShutdown(dom libvirt.Domain) error
 	DomainResume(dom libvirt.Domain) error
 	DomainSuspend(dom libvirt.Domain) error
+	DomainDestroyFlags(dom libvirt.Domain, flags libvirt.DomainDestroyFlagsValues) error
 }
+
+// qemuResetRequired is QEMU's answer to `cont` once the guest stopped for good
+// (internal error, guest panic, guest-initiated shutdown): only a reset could
+// run it again. libvirt passes it untranslated inside its localized message.
+const qemuResetRequired = "Resetting the Virtual Machine is required"
 
 // Status returns the normalized state of the managed domain.
 func (m Manager) Status(ctx context.Context, service string) (servicemgr.ServiceStatus, error) {
@@ -239,11 +244,43 @@ func (m Manager) Start(ctx context.Context, _ string) error {
 	})
 }
 
-// Stop requests a graceful ACPI shutdown for the libvirt domain.
+// Stop requests a graceful ACPI shutdown for the libvirt domain; a domain that
+// is already shut off needs none, as a stopped init unit needs no stop. A paused
+// or crashed guest cannot act on the request (libvirt rejects it as not
+// running), so it is resumed first. When QEMU refuses because the guest can
+// never run again, there is no guest left to shut down: the domain is powered
+// off with a SIGTERM-only destroy, which never escalates to SIGKILL. Any other
+// refusal, such as a libvirt job holding the pause, is returned untouched.
 func (m Manager) Stop(ctx context.Context, _ string) error {
 	return m.withDomainAction(ctx, domainActionStop, func(c Client, dom libvirt.Domain) error {
-		return c.DomainShutdown(dom)
+		state, _, err := c.DomainGetState(dom, 0)
+		if err != nil {
+			return fmt.Errorf("state: %w", err)
+		}
+		switch s := libvirt.DomainState(state); {
+		case s == libvirt.DomainShutoff:
+			return nil
+		case s != libvirt.DomainPaused && s != libvirt.DomainCrashed:
+			return c.DomainShutdown(dom)
+		}
+		switch err := c.DomainResume(dom); {
+		case err == nil:
+			return c.DomainShutdown(dom)
+		case resetRequired(err):
+			if err := c.DomainDestroyFlags(dom, libvirt.DomainDestroyGraceful); err != nil {
+				return fmt.Errorf("power off guest that requires a reset: %w", err)
+			}
+			return nil
+		default:
+			return fmt.Errorf("resume before shutdown: %w", err)
+		}
 	})
+}
+
+func resetRequired(err error) bool {
+	var libvirtErr libvirt.Error
+	return errors.As(err, &libvirtErr) && libvirtErr.Code == uint32(libvirt.ErrInternalError) &&
+		strings.Contains(libvirtErr.Message, qemuResetRequired)
 }
 
 // Reload is not meaningful for a VM domain. SupportsReload and

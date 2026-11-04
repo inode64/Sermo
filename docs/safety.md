@@ -787,6 +787,10 @@ a name-only authority.
    For Docker containers without selectors, reconciliation after a request error
    requires a complete snapshot proving the old process generations exited and
    an inactive container state. Disappearing backend PIDs alone are insufficient.
+   A libvirt domain's `Stop` destroys a guest only when it is paused or crashed
+   and QEMU refuses to resume it because it requires a reset, and then with
+   libvirt's SIGTERM-only destroy; see
+   [services.md](services.md#control-libvirt--qemulibvirt-virtual-machines).
 2. No residuals → clean stop.
 3. With `stop_policy.keep_children: true`, discovery has already kept every
    process that is not a principal (see

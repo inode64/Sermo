@@ -17,13 +17,15 @@ import (
 )
 
 type fakeClient struct {
-	state   libvirt.DomainState
-	states  map[string]libvirt.DomainState
-	domains []libvirt.Domain
-	dom     libvirt.Domain
-	calls   []string
-	uri     libvirt.ConnectURI
-	disc    chan struct{} // closed by Disconnect when non-nil
+	state      libvirt.DomainState
+	states     map[string]libvirt.DomainState
+	domains    []libvirt.Domain
+	dom        libvirt.Domain
+	calls      []string
+	uri        libvirt.ConnectURI
+	disc       chan struct{} // closed by Disconnect when non-nil
+	resumeErr  error
+	destroyErr error
 }
 
 func (c *fakeClient) ConnectToURI(uri libvirt.ConnectURI) error {
@@ -82,7 +84,15 @@ func (c *fakeClient) DomainShutdown(libvirt.Domain) error {
 
 func (c *fakeClient) DomainResume(libvirt.Domain) error {
 	c.calls = append(c.calls, "resume")
-	return nil
+	return c.resumeErr
+}
+
+func (c *fakeClient) DomainDestroyFlags(_ libvirt.Domain, flags libvirt.DomainDestroyFlagsValues) error {
+	if flags != libvirt.DomainDestroyGraceful {
+		return errors.New("destroy must not escalate to SIGKILL")
+	}
+	c.calls = append(c.calls, "destroy-graceful")
+	return c.destroyErr
 }
 
 func (c *fakeClient) DomainSuspend(libvirt.Domain) error {
@@ -139,16 +149,108 @@ func TestManagerActions(t *testing.T) {
 		want []string
 	}{
 		{name: "start", run: func(m Manager) error { return m.Start(context.Background(), "svc") }, want: []string{"connect", "lookup-name vm01", "create", "disconnect"}},
-		{name: "stop", run: func(m Manager) error { return m.Stop(context.Background(), "svc") }, want: []string{"connect", "lookup-name vm01", "shutdown", "disconnect"}},
+		{name: "stop", run: func(m Manager) error { return m.Stop(context.Background(), "svc") }, want: []string{"connect", "lookup-name vm01", "state", "shutdown", "disconnect"}},
 		{name: "resume", run: func(m Manager) error { return m.Resume(context.Background(), "svc") }, want: []string{"connect", "lookup-name vm01", "resume", "disconnect"}},
 		{name: "pause", run: func(m Manager) error { return m.Pause(context.Background(), "svc") }, want: []string{"connect", "lookup-name vm01", "suspend", "disconnect"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			client := &fakeClient{}
+			client := &fakeClient{state: libvirt.DomainRunning}
 			mgr := managerFor(client, Spec{URI: "qemu:///system", Domain: "vm01"})
 			if err := tt.run(mgr); err != nil {
 				t.Fatalf("action error = %v", err)
+			}
+			if !reflect.DeepEqual(client.calls, tt.want) {
+				t.Fatalf("calls = %v, want %v", client.calls, tt.want)
+			}
+		})
+	}
+}
+
+// A guest whose vCPUs are stopped cannot act on an ACPI request: libvirt
+// rejects DomainShutdown with "domain is not running".
+func TestStopDomainThatIsNotRunning(t *testing.T) {
+	// The QEMU text arrives untranslated inside libvirt's localized message.
+	resetRequired := libvirt.Error{
+		Code:    uint32(libvirt.ErrInternalError),
+		Message: "error interno: no es posible ejecutar el comando QEMU 'cont': Resetting the Virtual Machine is required",
+	}
+	stateLock := libvirt.Error{
+		Code:    uint32(libvirt.ErrOperationTimeout),
+		Message: "Timed out during operation: cannot acquire state change lock (held by monitor=remoteDispatchDomainMigratePerform3Params)",
+	}
+	migrating := libvirt.Error{
+		Code:    uint32(libvirt.ErrInternalError),
+		Message: "internal error: unable to execute QEMU command 'cont': Migration is not finalized yet",
+	}
+	destroyFailed := libvirt.Error{
+		Code:    uint32(libvirt.ErrSystemError),
+		Message: "Failed to terminate process 4242 with SIGTERM: Device or resource busy",
+	}
+	tests := []struct {
+		name       string
+		state      libvirt.DomainState
+		resumeErr  error
+		destroyErr error
+		wantErr    error
+		want       []string
+	}{
+		{
+			// systemd and Docker accept a stop of a stopped target; so must a
+			// restart of a domain that is already shut off.
+			name:  "shut off domain needs no shutdown",
+			state: libvirt.DomainShutoff,
+			want:  []string{"connect", "lookup-name vm01", "state", "disconnect"},
+		},
+		{
+			name:  "paused guest resumes and shuts down gracefully",
+			state: libvirt.DomainPaused,
+			want:  []string{"connect", "lookup-name vm01", "state", "resume", "shutdown", "disconnect"},
+		},
+		{
+			name:      "paused guest that requires a reset is powered off",
+			state:     libvirt.DomainPaused,
+			resumeErr: resetRequired,
+			want:      []string{"connect", "lookup-name vm01", "state", "resume", "destroy-graceful", "disconnect"},
+		},
+		{
+			name:      "crashed guest that requires a reset is powered off",
+			state:     libvirt.DomainCrashed,
+			resumeErr: resetRequired,
+			want:      []string{"connect", "lookup-name vm01", "state", "resume", "destroy-graceful", "disconnect"},
+		},
+		{
+			name:      "pause held by a libvirt job is never destroyed",
+			state:     libvirt.DomainPaused,
+			resumeErr: stateLock,
+			wantErr:   stateLock,
+			want:      []string{"connect", "lookup-name vm01", "state", "resume", "disconnect"},
+		},
+		{
+			name:      "other QEMU refusal is never destroyed",
+			state:     libvirt.DomainPaused,
+			resumeErr: migrating,
+			wantErr:   migrating,
+			want:      []string{"connect", "lookup-name vm01", "state", "resume", "disconnect"},
+		},
+		{
+			name:       "failed power off is reported",
+			state:      libvirt.DomainPaused,
+			resumeErr:  resetRequired,
+			destroyErr: destroyFailed,
+			wantErr:    destroyFailed,
+			want:       []string{"connect", "lookup-name vm01", "state", "resume", "destroy-graceful", "disconnect"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client := &fakeClient{state: tt.state, resumeErr: tt.resumeErr, destroyErr: tt.destroyErr}
+			err := managerFor(client, Spec{URI: DefaultURI, Domain: "vm01"}).Stop(context.Background(), "svc")
+			if tt.wantErr == nil && err != nil {
+				t.Fatalf("Stop() error = %v", err)
+			}
+			if tt.wantErr != nil && !errors.Is(err, tt.wantErr) {
+				t.Fatalf("Stop() error = %v, want %v", err, tt.wantErr)
 			}
 			if !reflect.DeepEqual(client.calls, tt.want) {
 				t.Fatalf("calls = %v, want %v", client.calls, tt.want)
