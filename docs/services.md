@@ -62,6 +62,7 @@ alongside the init unit because the daemon's pidfile varies across packages.
   - [Verified restart](#verified-restart)
   - [also_service — auxiliary init units](#also_service--auxiliary-init-units)
   - [also_apply — cascade to other services](#also_apply--cascade-to-other-services)
+  - [Serializing related operations (operation_group)](#serializing-related-operations-operation_group)
   - [processes: by executable or cmdline](#processes-by-executable-or-cmdline)
   - [Stopped-state invariants (stop_policy)](#stopped-state-invariants-stop_policy)
   - [Stray processes](#stray-processes)
@@ -1272,6 +1273,41 @@ failure and the restart never starts a second daemon.
 `force_kill: true` still requires the explicit `kill_only_if` selector and is
 the appropriate override when the configured process identities are not the
 desired kill set; `force_kill: false` rules out `SIGKILL` altogether.
+
+### Serializing related operations (`operation_group`)
+
+Services that depend on one another may fail when their automatic restarts
+overlap. For example, `rpc.statd` cannot register while `rpcbind` is stopped.
+Give both services the same optional `operation_group` to serialize their safe
+operations across the daemon, CLI and web:
+
+```yaml
+# services/rpcbind.yml
+name: rpcbind
+uses: rpcbind
+operation_group: rpc
+also_apply: [rpc-statd]
+```
+
+```yaml
+# services/rpc-statd.yml
+name: rpc-statd
+uses: rpc-statd
+operation_group: rpc
+```
+
+The group adds a lock to each member's existing operation lock, guards and
+preflight. A busy group returns a blocked outcome immediately; an automatic
+action can retry on a later cycle without consuming its cooldown. Checks and
+unrelated operations continue normally. Group leases use the operation's
+timeout/TTL and audit stale-lock reclamation. Group names must be simple names
+without path separators or NUL bytes; an absent or empty group keeps independent
+operations.
+
+A group provides mutual exclusion, not ordering or implicit actions on other
+services. The example also declares `also_apply` so restarting the portmapper
+then restarts its status monitor, renewing its RPC registration. Each cascade
+step releases its operation/group locks before the next step takes its own.
 
 ### Dependency isolation (`allow_dependencies`)
 

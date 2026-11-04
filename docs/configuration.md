@@ -601,6 +601,11 @@ remediation is rate-limited by the mandatory per-service `policy` block
 (cooldown, `max_actions`, backoff), and every action is bounded by
 `engine.operation_timeout`.
 
+An optional per-service [`operation_group`](services.md#serializing-related-operations-operation_group)
+adds a shared lock under `<engine.runtime>/ops/groups/` for explicitly related
+services. Group contention blocks the action before preflight or backend work;
+it does not block checks or unrelated services.
+
 `engine.operation_timeout` is the outer deadline for a safe
 start/stop/restart/reload/resume/repair. The engine may raise it per service when the resolved
 `stop_policy` needs longer (graceful stop plus signal escalation). A `stop` or

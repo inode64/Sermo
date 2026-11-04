@@ -35,6 +35,10 @@ touches them.
 6. Every executed or blocked action records exactly one auditable event.
 7. One slow service never blocks monitoring of another; shared check
    concurrency stays bounded.
+   An explicit `operation_group` serializes related lifecycle actions only:
+   acquire its separate group lease and the service lease before any backend
+   work, release both on every path and keep contention nonblocking. A cascade
+   releases those leases between members, so it cannot deadlock itself.
 
 8. Restart is stop/verify/reconcile/start/verify under the same lock and
    deadline. A Docker target positively confirmed inactive only starts; an

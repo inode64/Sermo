@@ -123,10 +123,13 @@ func New(c Config) Engine {
 	if servicemgr.Backend(c.Backend).HasUnitCgroups() {
 		killPolicy.Member = UnitCgroupMember(c.Unit)
 	}
+	group := cfgval.String(c.Tree[config.ServiceKeyOperationGroup])
+	groupErr := config.ValidateOperationGroup(c.Tree)
 	configErr := cmp.Or(
 		warningError(process.SectionStopPolicy, stopPolicyWarnings),
 		warningError(selectorWarningPrefix, selectorWarnings),
 		reloadErr,
+		groupErr,
 	)
 
 	// This closure is the Engine's residual discovery and the reaper's
@@ -179,11 +182,11 @@ func New(c Config) Engine {
 		ConfigError:   configErr,
 		Manager:       c.Manager,
 		AcquireLock: func(t time.Duration) (func() error, error) {
-			h, err := c.Locker.Acquire(c.Service, t)
+			release, err := c.Locker.AcquireWithGroup(c.Service, group, t)
 			if err != nil {
 				return nil, fmt.Errorf("acquire operation lock for %s: %w", c.Service, err)
 			}
-			return h.Release, nil
+			return release, nil
 		},
 		LockTTL: ttl,
 		NamedLocks: func() ([]locks.Lock, error) {

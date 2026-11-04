@@ -175,6 +175,15 @@ decision.
    start/restart/reload/resume/repair. Reload/resume command errors remain errors:
    a running process alone cannot prove those effects.
 
+An explicit service `operation_group` adds a shared, TTL-bounded operation lock
+under `<engine.runtime>/ops/groups/`, alongside each member's own operation
+lock. Both must be acquired before preflight, guards or backend calls; failed
+acquisition releases any partial lease. Busy groups fail fast and never block
+unrelated monitoring. Group leases use the same ownership checks and audited
+reclamation as service operation locks. They cannot collide with service names
+or operator-owned named locks. Cascades release both locks after each guarded
+operation, before acquiring the next member's locks.
+
 `repair` is intentionally narrower than a general cleanup command. It first
 requires the init backend to report the service failed or inactive. It can then
 remove only a regular pidfile below `/run` whose exact PID is absent from

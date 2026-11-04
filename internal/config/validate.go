@@ -1041,6 +1041,9 @@ func validateResolved(name string, tree map[string]any, runtime string, notifier
 	validatePidfiles(tree, add)
 	validateStopPolicy(tree, add)
 	validateAllowDependencies(tree, add)
+	if err := ValidateOperationGroup(tree); err != nil {
+		add("%s", err)
+	}
 	validatePolicyExtras(tree, add)
 	validateControl(tree, add)
 	validateServiceField(tree, add)
