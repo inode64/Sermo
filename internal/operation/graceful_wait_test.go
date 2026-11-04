@@ -48,8 +48,12 @@ func TestStopGracefulWait(t *testing.T) {
 				return process.Observation{Processes: procs, Trusted: len(procs) > 0, IdentityRequired: true, AbsenceKnown: !tc.uncertain}, err
 			}
 			result := e.Do(t.Context(), actionStop)
-			if result.Status != tc.wantStatus || slept != tc.wantWait {
-				t.Fatalf("result=%+v waited=%v, want status=%s waited=%v", result, slept, tc.wantStatus, tc.wantWait)
+			wantWait := tc.wantWait
+			if tc.uncertain {
+				wantWait += time.Duration(postflightMaxAttempts-1) * postflightRetryInterval
+			}
+			if result.Status != tc.wantStatus || slept != wantWait {
+				t.Fatalf("result=%+v waited=%v, want status=%s waited=%v", result, slept, tc.wantStatus, wantWait)
 			}
 			if len(h.emitted) != 1 || h.released != 1 || h.mgr.did("start mysqld") {
 				t.Fatalf("events=%d releases=%d calls=%v", len(h.emitted), h.released, h.mgr.calls)
@@ -149,8 +153,12 @@ func TestStopOfIdleServiceSkipsGrace(t *testing.T) {
 				return out, nil
 			}
 			result := e.Do(t.Context(), actionStop)
-			if slept != tc.wantWait {
-				t.Fatalf("result=%+v waited=%v, want %v", result, slept, tc.wantWait)
+			wantWait := tc.wantWait
+			if tc.strict {
+				wantWait += time.Duration(postflightMaxAttempts-1) * postflightRetryInterval
+			}
+			if slept != wantWait {
+				t.Fatalf("result=%+v waited=%v, want %v", result, slept, wantWait)
 			}
 			if !h.mgr.did("stop mysqld") || len(h.emitted) != 1 || h.released != 1 {
 				t.Fatalf("calls=%v events=%d releases=%d", h.mgr.calls, len(h.emitted), h.released)

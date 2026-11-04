@@ -156,6 +156,10 @@ decision.
    or an inconsistent state blocks the next phase. Previously observed process
    generations remain tracked if they leave the cgroup or stop matching a
    selector; disappearance from discovery is not proof of exit.
+   When strict process identity leaves absence temporarily unproven, Sermo
+   retries fresh observations up to five times, one second apart, within the
+   same operation deadline. A surviving process, a read error or uncertainty
+   after those attempts still prevents reconciliation and the following start.
 7. A stop command error is retained while Sermo checks the actual outcome. Only
    confirmed process absence and successful init reconciliation permit recovery.
    A start command error requires a trusted live process and active init state;

@@ -65,6 +65,10 @@ touches them.
 12. Incomplete rediscovery stops signal escalation. Keep stop-command,
     auxiliary-stop and artifact warnings in the one audit result even if a
     subsequent phase fails or times out.
+    Before init reconciliation, transient strict-identity absence uncertainty
+    may retry fresh observations within the existing operation deadline and a
+    bounded attempt count. Never reset or start while uncertainty remains;
+    newly observed residuals, snapshot errors and cancellation still refuse it.
 
 ## Terminal output recovery
 

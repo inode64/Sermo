@@ -173,6 +173,17 @@ func (e Engine) resetStopped(ctx context.Context, requireAbsence bool, previous 
 		return fmt.Errorf("reconcile stopped state: %w", err)
 	}
 	observation, err := e.observeProcesses(ctx, previous...)
+	// Concurrent process exits can briefly leave an unreadable executable in
+	// the snapshot. Only a fresh, complete absence proof permits reconciliation.
+	for attempt := 1; attempt < postflightMaxAttempts; attempt++ {
+		if err != nil || !observation.IdentityRequired || observation.AbsenceKnown || len(nonDelegatedResiduals(observation.Processes)) > 0 {
+			break
+		}
+		if waitErr := process.Wait(ctx, e.Sleep, postflightRetryInterval); waitErr != nil {
+			return fmt.Errorf("wait for process absence before init state reconciliation: %w", waitErr)
+		}
+		observation, err = e.observeProcesses(ctx, previous...)
+	}
 	if err != nil {
 		return err
 	}
