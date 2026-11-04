@@ -337,6 +337,36 @@ func TestHTTPCheckExpectJSONOperators(t *testing.T) {
 	}
 }
 
+// A key that contains dots is written as a quoted bracket segment; the plain
+// dotted form would walk into nested objects that do not exist.
+func TestHTTPCheckExpectJSONQuotedKey(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"counters":{"MAIN.backend_fail":{"value":0}}}`))
+	}))
+	defer srv.Close()
+
+	quoted, warn := buildHTTP(t, srv, map[string]any{
+		"type": "http", "url": srv.URL,
+		"expect_json": map[string]any{`counters["MAIN.backend_fail"].value`: 0},
+	})
+	if warn != "" {
+		t.Fatalf("build warn: %s", warn)
+	}
+	if res := quoted.Run(context.Background()); !res.OK {
+		t.Fatalf("quoted key should match: %s", res.Message)
+	}
+	dotted, _ := buildHTTP(t, srv, map[string]any{
+		"type": "http", "url": srv.URL,
+		"expect_json": map[string]any{"counters.MAIN.backend_fail.value": 0},
+	})
+	if res := dotted.Run(context.Background()); res.OK || !strings.Contains(res.Message, "missing") {
+		t.Fatalf("dotted path must not reach a dotted key: %+v", res)
+	}
+	if _, warn := buildHTTP(t, srv, map[string]any{"type": "http", "url": srv.URL, "expect_json": map[string]any{"a[0]": 1}}); !strings.Contains(warn, "double-quoted key") {
+		t.Fatalf("an array index should be rejected at build, got %q", warn)
+	}
+}
+
 func TestHTTPCheckNonJSONResponse(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte("not json"))

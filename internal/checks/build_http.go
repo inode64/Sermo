@@ -45,7 +45,7 @@ func buildHTTPCheck(b base, entry map[string]any, client *http.Client) (Check, s
 	if warn != "" {
 		return nil, warn
 	}
-	expectJSON, warn := parseAssertionMap(entry[CheckKeyExpectJSON], CheckKeyExpectJSON)
+	expectJSON, warn := parseJSONAssertions(entry[CheckKeyExpectJSON])
 	if warn != "" {
 		return nil, "http check: " + warn
 	}

@@ -1,0 +1,9 @@
+name: varnish_exporter
+display_name: Prometheus Varnish Exporter
+category: observability
+variables:
+  binary: ${bindir}/varnish_exporter
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  # prometheus_varnish_exporter v1.8.3 (gentoo)
+  version: { type: command, command: ["${binary}", "-version"], timeout: 10s }

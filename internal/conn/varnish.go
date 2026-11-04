@@ -18,12 +18,15 @@ const (
 	varnishStatusFieldIndex = 0
 	varnishLengthFieldIndex = 1
 	varnishVersionDelims    = " \t\r\n"
-	varnishVersionPrefix    = "varnish-"
 	extraAuthRequired       = "auth_required"
 )
 
-// varnishProtocol probes Varnish Cache via its management CLI (varnishadm, the
-// `-T` admin port). On connect varnishd sends a CLI response: a "<status>
+// varnishVersionPrefixes are the banner's version tags: Varnish Cache, and Vinyl
+// Cache, its renamed successor (vinyld), which keeps the same CLI protocol.
+var varnishVersionPrefixes = []string{"varnish-", "vinyl-cache-"}
+
+// varnishProtocol probes Varnish Cache, or Vinyl Cache, via its management CLI
+// (varnishadm or vinyladm, the `-T` admin port). On connect varnishd sends a CLI response: a "<status>
 // <length>" line followed by a body of that length. Status 200 carries the
 // banner (with the version); status 107 is an authentication challenge (a secret
 // is configured). Either proves the management CLI is up and speaking the
@@ -87,15 +90,16 @@ func parseVarnishStatus(line string) (status, length int, err error) {
 }
 
 // varnishVersion extracts the version from a CLI banner ("varnish-7.4.1
-// revision …" -> "7.4.1"). Empty when absent (e.g. an auth challenge).
+// revision …" or "vinyl-cache-9.1.0 revision …" -> the number). Empty when
+// absent (e.g. an auth challenge).
 func varnishVersion(body string) string {
-	_, after, ok := strings.Cut(body, varnishVersionPrefix)
-	if !ok {
-		return ""
+	for _, prefix := range varnishVersionPrefixes {
+		if _, after, ok := strings.Cut(body, prefix); ok {
+			if j := strings.IndexAny(after, varnishVersionDelims); j >= 0 {
+				return after[:j]
+			}
+			return after
+		}
 	}
-	v := after
-	if j := strings.IndexAny(v, varnishVersionDelims); j >= 0 {
-		v = v[:j]
-	}
-	return v
+	return ""
 }

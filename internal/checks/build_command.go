@@ -42,8 +42,16 @@ func buildCommandCheck(b base, entry map[string]any, runner execx.Runner) (Check
 	if warn != "" {
 		return nil, "command check " + warn
 	}
+	expectJSON, warn := parseJSONAssertions(entry[CheckKeyExpectJSON])
+	if warn != "" {
+		return nil, "command check " + warn
+	}
+	increases, window, warn := parseFieldIncreases(entry, ParseJSONPath)
+	if warn != "" {
+		return nil, "command check " + warn
+	}
 	c := commandCheck{base: b, runner: runner, argv: argv, user: cfgval.String(entry[CheckKeyUser]), expectExit: expect, stdout: stdout, stdoutGrades: outputGrades(b.levels), stderr: stderr, version: version, exports: exports, analyzer: analyzer,
-		numeric: cfgval.AsString(entry[CheckKeyUnit]) != ""}
+		numeric: cfgval.AsString(entry[CheckKeyUnit]) != "", expectJSON: expectJSON, increases: increases, window: window}
 	if c.onChange = cfgval.Bool(entry[CheckKeyOnChange]); c.onChange {
 		c.changeLevel, _ = cfgval.Int(entry[CheckKeyChangeLevel])
 		c.state = &cmdState{}

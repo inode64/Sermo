@@ -19,7 +19,7 @@ import (
 
 // httpCheck issues an HTTP request and asserts the response: the status code
 // (expect), optionally the body via an operator comparison and JSON response
-// matches at dotted paths (expectJSON). The request may carry custom headers and
+// matches at JSON paths (expectJSON). The request may carry custom headers and
 // a raw or JSON body.
 type httpCheck struct {
 	base
@@ -44,13 +44,6 @@ type httpCheck struct {
 	// certVerification consumes the observe-only verdict produced by the TLS
 	// callback, avoiding a second chain build for the same handshake.
 	certVerification *certVerification
-}
-
-// jsonAssertion is one response-JSON check: the value at a dotted path compared to
-// value with op (== by default; also != > >= < <= contains).
-type jsonAssertion struct {
-	path string
-	valueMatcher
 }
 
 // maxHTTPBody bounds how much of the response is read for body/JSON assertions.
@@ -149,18 +142,8 @@ func (c *httpCheck) payloadFailure(status int, data []byte) string {
 	if err := json.Unmarshal(data, &doc); err != nil {
 		return fmt.Sprintf("status %d; response is not JSON", status)
 	}
-	for _, a := range c.expectJSON {
-		got, ok := jsonPath(doc, a.path)
-		if !ok {
-			return fmt.Sprintf("status %d; json %q missing", status, a.path)
-		}
-		ok, err := a.compare(jsonValueString(got))
-		if err != nil {
-			return fmt.Sprintf("status %d; json %q: %v", status, a.path, err)
-		}
-		if !ok {
-			return fmt.Sprintf("status %d; json %q %s %q (got %q)", status, a.path, a.op, a.value, jsonValueString(got))
-		}
+	if detail := jsonAssertionFailure(doc, c.expectJSON); detail != "" {
+		return fmt.Sprintf("status %d; %s", status, detail)
 	}
 	return ""
 }
@@ -207,40 +190,6 @@ func (c *httpCheck) success(resp *http.Response, elapsed time.Duration, verifyEr
 	data[DataKeyStatus], data[DataKeyLatencyMS], data[DataKeyProtocol] = resp.StatusCode, elapsed.Milliseconds(), resp.Proto
 	res.Data = data
 	return res
-}
-
-// jsonPath looks up a dotted path (e.g. "data.status") in a decoded JSON document
-// of nested objects.
-func jsonPath(doc any, path string) (any, bool) {
-	cur := doc
-	for key := range strings.SplitSeq(path, ".") {
-		m, ok := cur.(map[string]any)
-		if !ok {
-			return nil, false
-		}
-		cur, ok = m[key]
-		if !ok {
-			return nil, false
-		}
-	}
-	return cur, true
-}
-
-// jsonValueString renders a decoded JSON scalar for comparison with the expected
-// (string) value from config.
-func jsonValueString(v any) string {
-	switch t := v.(type) {
-	case string:
-		return t
-	case float64:
-		return strconv.FormatFloat(t, floatFormatFixed, floatPrecisionAuto, numericBits64)
-	case bool:
-		return strconv.FormatBool(t)
-	case nil:
-		return "null"
-	default:
-		return fmt.Sprintf("%v", t)
-	}
 }
 
 // statusMatcher matches an HTTP status against exact codes and/or classes (the

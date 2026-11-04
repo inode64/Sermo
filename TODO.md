@@ -258,6 +258,12 @@ allowing a dependency declaration to control another target implicitly.
       model constant, validation, docs and safe execution through `execx` —
       `then: {action: exec, command: [...], timeout: ...}` (array form, never a
       shell string).
+- [ ] `command` checks — graph a JSON value with `unit:`: a command with a
+      `unit:` publishes only the first numeric token of its stdout as the
+      `value` series, so `vinylstat -1 -j` or `varnishstat -1 -j` cannot be
+      graphed. Let a JSON path (`docs/rules.md`, JSON paths) select the value,
+      so one counter such as `counters["MAIN.cache_hit"].value` becomes a
+      series without a wrapper script.
 - [ ] Variable-to-variable references (`variables.x: "${y}"`), with cycle
   detection. Today a variable value containing `${...}` is a validation error.
 - [ ] Service watches — tree-scoped `process` watch: the stateful `process` watch

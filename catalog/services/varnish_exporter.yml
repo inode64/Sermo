@@ -1,0 +1,45 @@
+name: varnish_exporter
+display_name: Prometheus Varnish Exporter
+category: observability
+description: 'Prometheus varnish_exporter: Varnish or Vinyl Cache counters (varnishstat or vinylstat) over HTTP /metrics.'
+service:
+  systemd:
+    - varnish_exporter
+  openrc:
+    - varnish_exporter
+apps:
+  - varnish_exporter
+restart_on_change:
+  apps:
+    - varnish_exporter
+variables:
+  host: 127.0.0.1
+  port: 9131
+  user: varnish_exporter
+processes:
+  main:
+    exe: ${varnish_exporter_binary}
+    user: ${user}
+watches:
+  service:
+    check:
+      type: service
+      expect: active
+  metrics:
+    check:
+      type: http
+      url: http://${host}:${port}/metrics
+      expect_status: 200
+      timeout: 5s
+      verify: true
+  # The exporter still answers 200 when it cannot read the stats tool (the
+  # cache is stopped, or its user lost the cache's group): varnish_up says
+  # whether the last scrape read the counters.
+  stats-readable:
+    check:
+      type: http
+      url: http://${host}:${port}/metrics
+      expect_status: 200
+      expect_body: { op: "=~", value: "(?m)^varnish_up 1$" }
+      timeout: 5s
+      optional: true

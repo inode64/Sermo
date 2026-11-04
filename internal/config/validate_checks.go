@@ -213,11 +213,13 @@ func validateHTTPExpectations(prefix string, fields map[string]any, add addFunc)
 		validateOpValue(prefix, checks.CheckKeyExpectStatus, m, add)
 	}
 	validateExpectLatency(prefix, fields, add)
-	value, present := fields[checks.CheckKeyExpectJSON]
-	validateHTTPJSONExpectations(prefix, value, present, add)
+	validateJSONExpectations(prefix, fields, add)
 }
 
-func validateHTTPJSONExpectations(prefix string, value any, present bool, add addFunc) {
+// validateJSONExpectations validates expect_json (JSON path -> value or {op,
+// value}), shared by the http and command checks.
+func validateJSONExpectations(prefix string, fields map[string]any, add addFunc) {
+	value, present := fields[checks.CheckKeyExpectJSON]
 	if !present {
 		return
 	}
@@ -227,6 +229,10 @@ func validateHTTPJSONExpectations(prefix string, value any, present bool, add ad
 		return
 	}
 	for _, path := range slices.Sorted(maps.Keys(m)) {
+		if _, err := checks.ParseJSONPath(path); err != nil {
+			add("%s.%s: %v", prefix, checks.CheckKeyExpectJSON, err)
+			continue
+		}
 		cond, ok := m[path].(map[string]any)
 		if !ok {
 			continue
@@ -272,6 +278,8 @@ func validateCommandFields(path string, entry map[string]any, validateAnalyzeFie
 		}
 	}
 	validateVersionMatcherField(path, entry[checks.CheckKeyVersionMatch], add)
+	validateJSONExpectations(path, entry, add)
+	validateMaxIncrease(path, entry, checks.ParseJSONPath, add)
 	if validateAnalyzeFields {
 		validateParsedCommandFields(path, checks.ValidateAnalyzer(entry), add)
 	}
@@ -516,13 +524,14 @@ func validateConnExpectations(prefix string, fields map[string]any, add addFunc)
 		}
 	}
 	validateExpectLatency(prefix, fields, add)
-	validateConnMaxIncrease(prefix, fields, add)
+	validateMaxIncrease(prefix, fields, nil, add)
 }
 
-// validateConnMaxIncrease validates max_increase (field -> non-negative integer) and
-// its within span on a connection check: growth is measured over wall-clock
-// time, so each requires the other.
-func validateConnMaxIncrease(prefix string, fields map[string]any, add addFunc) {
+// validateMaxIncrease validates max_increase (field -> non-negative integer) and
+// its within span, shared by the connection and command checks: growth is
+// measured over wall-clock time, so each requires the other. compile, when set,
+// validates each field as the check's lookup path (a command's JSON path).
+func validateMaxIncrease(prefix string, fields map[string]any, compile func(string) ([]string, error), add addFunc) {
 	raw, hasIncrease := fields[checks.CheckKeyMaxIncrease]
 	_, hasWindow := fields[checks.CheckKeyWithin]
 	if !hasIncrease {
@@ -536,6 +545,11 @@ func validateConnMaxIncrease(prefix string, fields map[string]any, add addFunc) 
 		add("%s.%s must be a mapping of field -> non-negative integer", prefix, checks.CheckKeyMaxIncrease)
 	} else {
 		for _, field := range slices.Sorted(maps.Keys(m)) {
+			if compile != nil {
+				if _, err := compile(field); err != nil {
+					add("%s.%s: %v", prefix, checks.CheckKeyMaxIncrease, err)
+				}
+			}
 			if n, ok := cfgval.Int(m[field]); !ok || n < 0 {
 				add("%s.%s.%s must be a non-negative integer", prefix, checks.CheckKeyMaxIncrease, field)
 			}

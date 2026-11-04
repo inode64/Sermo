@@ -266,7 +266,7 @@ func TestConnMaxIncrease(t *testing.T) {
 		proto:     fakeProto{},
 		cfg:       conn.Config{Host: "h", Port: 1},
 		probe:     probeSeq(keysResult("1000"), keysResult("1400"), keysResult("1700"), keysResult("900"), keysResult("950")),
-		increases: []connIncrease{{field: "keys", limit: 500, state: &counterWindow{}}},
+		increases: []fieldIncrease{{field: "keys", limit: 500, state: &counterWindow{}}},
 		window:    10 * time.Minute,
 		clock:     func() time.Time { return now },
 	}
@@ -303,7 +303,7 @@ func TestConnMaxIncreaseZeroFailsOnAnyRise(t *testing.T) {
 	now := time.Unix(1_700_000_000, 0)
 	c := connCheckWithExpect(nil, conn.Result{})
 	c.probe = probeSeq(evictedResult("4"), evictedResult("4"), evictedResult("5"), evictedResult("5"))
-	c.increases = []connIncrease{{field: "evicted_keys", limit: 0, state: &counterWindow{}}}
+	c.increases = []fieldIncrease{{field: "evicted_keys", limit: 0, state: &counterWindow{}}}
 	c.window, c.clock = 2*time.Minute, func() time.Time { return now }
 
 	// A counter already above zero is history, not an event: it only baselines.
@@ -336,8 +336,8 @@ func TestBuildConnCheckZeroMaxIncrease(t *testing.T) {
 }
 
 func TestConnMaxIncreaseMissingFieldAndExpectPrecedence(t *testing.T) {
-	inc := func() []connIncrease {
-		return []connIncrease{{field: "keys", limit: 5, state: &counterWindow{}}}
+	inc := func() []fieldIncrease {
+		return []fieldIncrease{{field: "keys", limit: 5, state: &counterWindow{}}}
 	}
 	c := connCheckWithExpect(nil, conn.Result{Extra: map[string]string{"keys": "n/a"}})
 	c.increases, c.window = inc(), time.Minute

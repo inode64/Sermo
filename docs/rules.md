@@ -163,7 +163,7 @@ Connection-protocol checks (MySQL, PostgreSQL, Redis, Docker, libvirt, etc.) are
 | `mqtt`        | health | an MQTT broker accepts a CONNECT (CONNACK return code 0) (see Database) |
 | `amqp` / `rabbitmq` | health | an AMQP 0-9-1 broker sends a valid Connection.Start greeting (see Database) |
 | `kafka`       | health | a Kafka broker/controller answers an unauthenticated `ApiVersions` request; exposes the listener `role` (broker/controller) and `produce_api`/`vote_api` flags for `expect` (see Database) |
-| `varnish` / `varnishadm` | health | the Varnish management CLI answers with its banner/auth challenge (see Database) |
+| `varnish` / `varnishadm` | health | the Varnish or Vinyl Cache management CLI answers with its banner/auth challenge (see Database) |
 | `ceph` / `ceph-mon` | health | a Ceph monitor sends its messenger `ceph v…` banner (see Database) |
 | `glusterfs` / `glusterd` / `gluster` | health | a GlusterFS node accepts TCP connections to glusterd on 24007 (see Database) |
 | `gluster_cluster` | health | the local Gluster CLI verifies peer membership, volume/bricks/self-heal state and optional heal limits (see Gluster cluster) |
@@ -218,6 +218,42 @@ graph with two lines of YAML. Output with no leading number — including `nan`
 and `inf`, which are not readings — simply records no sample (a gap), never a
 failure; the exit code and matchers stay the verdict. The same holds for the
 `value` of a `sql`, `mongodb-query` or `influxdb-query` result.
+
+**JSON output.** A command that prints JSON (`vinylstat -1 -j`,
+`varnishstat -1 -j`, a tool's `--format json`) can be asserted the way an `http`
+check asserts its response. `expect_json` maps a [JSON path](#json-paths) to a
+scalar (equality) or an `{op, value}` comparison, with the `http` semantics.
+`max_increase` + `within` bound how far a numeric value may rise inside a
+sliding window, exactly like the protocol checks' growth bound (see **Growth
+bound** under the connection-protocol checks): a bound of `0` turns a
+since-start error counter into an event.
+
+```yaml
+watches:
+  alert-if-child-crashed:
+    check:
+      type: command
+      # Quote "-1": an argv is a list of strings, and YAML reads -1 as a number.
+      command: [/usr/bin/vinylstat, "-1", -j, -I, MGT.child_panic, -I, MGT.child_died]
+      timeout: 10s
+      severity: error
+      max_increase:                               # any new panic or child death…
+        'counters["MGT.child_panic"].value': 0
+        'counters["MGT.child_died"].value': 0
+      within: 15m                                 # …inside the last 15 minutes
+    then:
+      action: alert
+      message: Vinyl Cache child process crashed
+```
+
+Stdout is decoded once per cycle. Once the exit code,
+`expect_stdout`/`expect_stderr` and `version_match` pass, `expect_json` is
+evaluated, then `max_increase`, then `analyze:` and `on_change`. Stdout that is
+not JSON fails the check, and so does a missing `expect_json` path; a
+`max_increase` value that is missing or not a number makes the check
+unavailable. Every cycle whose output decodes advances the
+windows, even when an earlier assertion fails; a run failure or a timeout
+(unavailable) and an unexpected exit (failing) advance none.
 
 The same `expect_exit` / `expect_stdout` / `expect_stderr` fields are available
 on a watch hook (`then.hook`) to validate the hook command's result, but
@@ -893,7 +929,9 @@ Types that accept `levels:`, and the threshold keys a level restates:
 Latency probes (`tcp`, `http` latency, a connection protocol's
 `expect_latency`), composite health verdicts (`lvm`, `storcli`, `ssacli`), the host `process`, `process_policy`
 and `db_queries` watches, and state, speed, address and change metrics have no single ordered
-threshold and reject `levels:`.
+threshold and reject `levels:`. A `max_increase` growth bound (on a connection
+protocol or a `command` check) has no level form either: `levels:` never grades
+it, so declare the grade it fails at with `severity:`.
 
 #### Escalate and hold
 
@@ -1150,7 +1188,7 @@ it via `headers`). `headers: {Host: app.example.com}` selects an HTTP virtual
 host while the URL still determines the connection address and TLS hostname.
 `body:` sends a raw string. The response is only read when
 `expect_body`/`expect_json` is set (capped at 1 MiB). `expect_json` looks up
-**dotted paths** into nested objects. A scalar value is equality (`==`); a
+[JSON paths](#json-paths) into nested objects. A scalar value is equality (`==`); a
 `{op, value}` mapping uses an operator. Both use the same comparison as
 `expect_body`: numeric when both sides parse as numbers (`>`, `<`, `==`, `!=`,
 …), otherwise string equality, `contains` substring matching, or a regex with
@@ -1253,6 +1291,25 @@ at config validation). It can be combined with `interface`; the standalone
 `http` check uses the first listed interface for both the request and certificate
 inspection, and fails rather than falling back to the default route if the UDP
 socket cannot be bound. Uses `github.com/quic-go/quic-go` (pure Go).
+
+#### JSON paths
+
+`expect_json` (on `http` and `command`) and a `command` check's `max_increase`
+name a value inside a JSON document by the object keys that lead to it:
+
+- Keys are separated by dots: `data.replicas` reads 3 from
+  `{"data": {"replicas": 3}}`.
+- A key that itself contains a dot is a double-quoted string in brackets:
+  `counters["MAIN.backend_fail"].value` reads 0 from
+  `{"counters": {"MAIN.backend_fail": {"value": 0}}}`, where the dotted form
+  would look for nested `MAIN` and `backend_fail` objects. The quoted key takes
+  JSON string escapes (`\"`, `\\`). Quote the whole path as a YAML key:
+  `'counters["MAIN.backend_fail"].value': 0`.
+- Array indexes are not supported: a path names object keys only.
+
+A malformed path is a configuration error: an empty path or key (`a..b`, `.a`,
+`a.`), a bracket without a quoted key (`a[x]`, `a[0]`), an unterminated one
+(`a["x"`), or text right after a bracket (`a["x"]b`).
 
 ### Cert
 
@@ -2116,13 +2173,17 @@ Protocols, in the order of the table above:
   `vote_api` (`yes`/`no`) flags, plus `api_count` and `error_code` — all assertable
   via `expect`. Used by the `kafka-broker` (9092, `expect role=broker`) and
   `kafka-controller` (9093, `expect role=controller`) catalog services.
-- `varnish` (alias `varnishadm`) — default port 6082 (TCP, the Varnish `-T`
-  management CLI). No auth. On connect varnishd sends a CLI response (a `<status>
-  <length>` line and a body); status **200** carries the banner (with the version)
-  and **107** is an authentication challenge (a CLI secret is set) — either proves
-  the management CLI is up. Any other status, or a body shorter than its declared
-  length, fails the check. Result data: the `cli_status` and, for a banner, the
-  Varnish `version`. The CLI secret authentication is not performed (liveness only).
+- `varnish` (alias `varnishadm`) — default port 6082 (TCP, the `-T` management
+  CLI of Varnish Cache and of Vinyl Cache, its renamed successor, whose `vinyld`
+  keeps the same protocol). No auth. On connect the daemon sends a CLI response
+  (a `<status> <length>` line and a body); status **200** carries the banner
+  (with the version) and **107** is an authentication challenge (a CLI secret is
+  set) — either proves the management CLI is up. Any other status, or a body
+  shorter than its declared length, fails the check. Result data: the
+  `cli_status` and, for a banner, the `version` (`varnish-7.4.1` or
+  `vinyl-cache-9.1.0` → the number). The CLI secret authentication is not
+  performed (liveness only). Without `-T` the daemon binds the CLI to a random
+  localhost port, so pin it (`-T 127.0.0.1:6082`) before probing it.
 - `ceph` (alias `ceph-mon`) — default port 3300 (TCP, the Ceph monitor's messenger
   v2; use port 6789 for the legacy v1). No auth. On connect a Ceph daemon sends a
   messenger banner (`ceph v2\n` for v2, `ceph v027` for v1); reading a `ceph v`
@@ -2875,8 +2936,10 @@ checks:
     expect_latency: { op: "<", value: 50 }   # alert when Redis answers slowly
 ```
 
-**Growth bound (`max_increase` + `within`).** Any protocol check can also bound
-how fast a numeric field rises. `max_increase` maps a result field to the largest
+**Growth bound (`max_increase` + `within`).** Any protocol check, and a
+`command` check that prints JSON, can also bound how fast a numeric field rises.
+`max_increase` maps a result field (for a `command`, a [JSON path](#json-paths)
+into its stdout; see **JSON output** under Checks) to the largest
 rise allowed inside the sliding `within` window; the check fails while the rise
 since the oldest sample in the window exceeds it. A bound of `0` fails on any
 rise, which turns a since-start counter into an event: the check fails for one
@@ -2904,7 +2967,18 @@ is missing or not a number makes the check unavailable. When no earlier sample
 is left inside the window (a `within` no longer than the check's interval), the
 previous sample is the baseline. The samples live in the check instance, so a
 config reload or daemon restart re-baselines. Result data carries
-`<field>_increase` and `window`.
+`<field>_increase` (the path as written for a `command`, e.g.
+`counters["MGT.child_panic"].value_increase`) and `window`. A growth bound
+fails at the check's `severity:`; [`levels:`](#graded-levels-levels) does not
+grade it.
+
+A counter that resets is a blind spot. When the server restarts, its
+since-start counters start again from zero, but the higher sample taken before
+the restart stays the baseline until it slides out of the window: growth reads
+0 meanwhile (until the new count passes the old one), so a rise during the
+first `within` after a restart can go unseen. Watch the restart itself (the
+service check, a crash counter such as Vinyl Cache's `MGT.child_died`) to
+cover that gap.
 
 **Version-change detection (`on_version_change`).** Set `on_version_change: true`
 on a service check or host watch to alert when the server's version changes

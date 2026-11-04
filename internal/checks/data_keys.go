@@ -83,8 +83,9 @@ const (
 	DataKeyGlusterVolumesExpected   = "gluster_volumes_expected"
 	DataKeyGlusterVolumesStarted    = "gluster_volumes_started"
 	DataKeyGrowthBytes              = "growth_bytes"
-	// DataKeyIncreaseSuffix follows a probe field name in a connection check's
-	// result data: the field's rise within its max_increase window.
+	// DataKeyIncreaseSuffix follows a max_increase field in result data (a
+	// connection check's probe field, or a command check's JSON path as
+	// written): the field's rise within its window.
 	DataKeyIncreaseSuffix     = "_increase"
 	DataKeyGrowthCount        = "growth_count"
 	DataKeyHealth             = "health"

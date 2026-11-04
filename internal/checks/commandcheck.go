@@ -2,6 +2,7 @@ package checks
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"slices"
@@ -24,10 +25,10 @@ type cmdState struct {
 }
 
 // commandCheck runs a command and compares its exit code, and optionally its
-// stdout/stderr, to expectations. With on_change it also alerts when
-// the command's stdout changes between cycles (e.g. a `version` command whose
-// output changed). The command is always an argv array, never a shell string
-// .
+// stdout/stderr or the JSON it prints, to expectations. With on_change it also
+// alerts when the command's stdout changes between cycles (e.g. a `version`
+// command whose output changed). The command is always an argv array, never a
+// shell string.
 type commandCheck struct {
 	base
 	runner     execx.Runner
@@ -54,6 +55,15 @@ type commandCheck struct {
 	// carries no leading number simply publishes no sample (a graph gap), never
 	// a failure — the command's exit code and matchers stay the verdict.
 	numeric bool
+	// expectJSON asserts values at JSON paths of the decoded stdout, with the
+	// http check's expect_json semantics.
+	expectJSON []jsonAssertion
+	// increases bounds how far a numeric JSON value of stdout may rise within
+	// window (max_increase + within) — a since-start error counter, sampled with
+	// the protocol checks' growth layer. clock is injectable for tests.
+	increases []fieldIncrease
+	window    time.Duration
+	clock     func() time.Time
 }
 
 // analyzedResult grades the output against the check's analyze patterns; ok is
@@ -88,18 +98,9 @@ func (c commandCheck) Run(ctx context.Context) Result {
 	start := run.start
 
 	res, err := runCheckCommand(ctx, c.runner, c.user, c.argv)
-	// fail builds a failing result and attaches the bounded command output so the
-	// emitted event can show WHY the command failed.
-	fail := func(msg string) Result {
-		r := c.result(false, msg, start)
-		if out := output.Bounded(res.Stdout, res.Stderr); out != "" {
-			r.Data = map[string]any{DataKeyOutput: out}
-		}
-		return r
-	}
 	if res.ExitCode == execx.ExitCodeRunFailure {
 		msg := execx.OperatorFailureOr(err, res, c.timeout, execx.CommandDidNotStart)
-		r := fail(msg)
+		r := c.outputFailure(res, msg, start)
 		r.Unavailable = true
 		r.Died = errors.Is(err, execx.ErrKilledBySignal) && !c.condition && !VerdictlessMode(c.reports)
 		return r
@@ -111,8 +112,39 @@ func (c commandCheck) Run(ctx context.Context) Result {
 		} else if err != nil {
 			msg += ": " + err.Error()
 		}
-		return fail(msg)
+		return c.outputFailure(res, msg, start)
 	}
+	// Sample every cycle the command answered, whatever the assertions below
+	// decide: a window that skipped the cycles where another assertion failed
+	// would measure growth across a gap. A run failure or an unexpected exit
+	// returned above, so a tool that could not report leaves the windows alone.
+	doc, decoded := c.stdoutJSON(res.Stdout)
+	var growths []fieldGrowth
+	if decoded {
+		growths = sampleFieldIncreases(c.increases, c.window, c.clock, func(inc fieldIncrease) (any, bool) {
+			return jsonLookup(doc, inc.path)
+		})
+	}
+	r := c.outputResult(res, doc, decoded, growths, start)
+	r.Data = increaseData(r.Data, growths, c.window)
+	return r
+}
+
+// outputFailure builds a failing result and attaches the bounded command output
+// so the emitted event can show WHY the command failed.
+func (c commandCheck) outputFailure(res execx.Result, msg string, start time.Time) Result {
+	r := c.result(false, msg, start)
+	if out := output.Bounded(res.Stdout, res.Stderr); out != "" {
+		r.Data = map[string]any{DataKeyOutput: out}
+	}
+	return r
+}
+
+// outputResult evaluates the output of a command that exited as expected, in
+// order: expect_stdout/expect_stderr, version_match, expect_json, max_increase,
+// analyze and on_change.
+func (c commandCheck) outputResult(res execx.Result, doc any, decoded bool, growths []fieldGrowth, start time.Time) Result {
+	fail := func(msg string) Result { return c.outputFailure(res, msg, start) }
 	if ok, detail := c.stdout.Match(res.Stdout); !ok {
 		return gradeStdout(fail(fmt.Sprintf("exit %d; stdout %s", res.ExitCode, detail)), c.stdoutGrades, res.Stdout)
 	}
@@ -121,6 +153,11 @@ func (c commandCheck) Run(ctx context.Context) Result {
 	}
 	if ok, detail := c.version.Match(VersionOutput(res.Stdout, res.Stderr)); !ok {
 		return fail(fmt.Sprintf("exit %d; version %s", res.ExitCode, detail))
+	}
+	if detail, unavailable := c.jsonFailure(doc, decoded, growths); detail != "" {
+		r := fail(fmt.Sprintf("exit %d; %s", res.ExitCode, detail))
+		r.Unavailable = unavailable
+		return r
 	}
 	if r, matched := c.analyzedResult(res, start); matched {
 		return r
@@ -153,6 +190,36 @@ func (c commandCheck) Run(ctx context.Context) Result {
 		r.Data = data
 	}
 	return r
+}
+
+// stdoutJSON decodes stdout once for expect_json and max_increase; decoded is
+// false when it is not JSON or the check uses neither.
+func (c commandCheck) stdoutJSON(stdout string) (doc any, decoded bool) {
+	if len(c.expectJSON) == 0 && len(c.increases) == 0 {
+		return nil, false
+	}
+	if err := json.Unmarshal([]byte(stdout), &doc); err != nil {
+		return nil, false
+	}
+	return doc, true
+}
+
+// jsonFailure evaluates expect_json and then max_increase against the decoded
+// stdout and describes the first that does not hold ("" when both do). A
+// missing expect_json path fails, as in the http check; a max_increase value
+// that is missing or not a number leaves the result unavailable, as in a
+// protocol check.
+func (c commandCheck) jsonFailure(doc any, decoded bool, growths []fieldGrowth) (string, bool) {
+	if len(c.expectJSON) == 0 && len(c.increases) == 0 {
+		return "", false
+	}
+	if !decoded {
+		return "stdout is not JSON", false
+	}
+	if detail := jsonAssertionFailure(doc, c.expectJSON); detail != "" {
+		return detail, false
+	}
+	return increaseFailure(growths)
 }
 
 // firstNumericToken parses the first whitespace-separated token of a command's

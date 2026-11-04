@@ -71,7 +71,7 @@ func TestConnCheckBusyLeavesChangeAndGrowthStateAlone(t *testing.T) {
 		probe:           probeSeq(ok, busyConnResult(), ok),
 		onVersionChange: true,
 		state:           &connState{},
-		increases:       []connIncrease{{field: "keys", limit: 0, state: &counterWindow{}}},
+		increases:       []fieldIncrease{{field: "keys", limit: 0, state: &counterWindow{}}},
 		window:          time.Hour,
 		clock:           func() time.Time { return now },
 	}

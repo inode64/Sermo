@@ -449,3 +449,54 @@ checks:
 		mustHave(t, validateService(t, "\nname: cache\nservice: x\nchecks:\n  growth:\n    type: redis\n    "+body+"\n"), want)
 	}
 }
+
+func TestValidateCommandJSONOptions(t *testing.T) {
+	if issues := validateService(t, `
+name: cache
+service: x
+checks:
+  crashes:
+    type: command
+    command: [/usr/bin/vinylstat, "-1", -j]
+    expect_json:
+      version: 1
+      'counters["MAIN.sess_dropped"].value': { op: "<=", value: 0 }
+    max_increase:
+      'counters["MGT.child_panic"].value': 0
+      counters.plain: 5
+    within: 15m
+watches:
+  alert-if-child-crashed:
+    check:
+      type: command
+      command: [/usr/bin/vinylstat, "-1", -j]
+      max_increase: { 'counters["MGT.child_died"].value': 0 }
+      within: 15m
+    then:
+      action: alert
+      message: crashed
+`); len(issues) != 0 {
+		t.Fatalf("valid command JSON options rejected: %v", issues)
+	}
+
+	for body, want := range map[string]string{
+		"expect_json: nope":                            "checks.c.expect_json must be a mapping",
+		"expect_json: { a..b: 1 }":                     `checks.c.expect_json: JSON path "a..b" has an empty key`,
+		"expect_json: { .a: 1 }":                       "has an empty key",
+		"expect_json: { 'a.': 1 }":                     "has an empty key",
+		"expect_json: { 'a[': 1 }":                     "double-quoted key",
+		`expect_json: { 'a["x"': 1 }`:                  "closed by ]",
+		"expect_json: { 'a[x]': 1 }":                   "double-quoted key",
+		`expect_json: { 'a["x"]b': 1 }`:                "followed by . or [",
+		`expect_json: { a: { op: "=>", value: 1 } }`:   `checks.c.expect_json.a op "=>" is not one of`,
+		"max_increase: 5\n    within: 10m":             "max_increase must be a mapping of field -> non-negative integer",
+		"max_increase: { a: -1 }\n    within: 10m":     "max_increase.a must be a non-negative integer",
+		"max_increase: { a: lots }\n    within: 10m":   "max_increase.a must be a non-negative integer",
+		"max_increase: { 'a[0]': 1 }\n    within: 10m": "checks.c.max_increase: JSON path",
+		"max_increase: { a: 1 }":                       "max_increase requires within",
+		"max_increase: { a: 1 }\n    within: 0s":       "within must be a valid positive duration",
+		"within: 10m":                                  "within is only accepted with max_increase",
+	} {
+		mustHave(t, validateService(t, "\nname: cache\nservice: x\nchecks:\n  c:\n    type: command\n    command: [/usr/bin/vinylstat]\n    "+body+"\n"), want)
+	}
+}

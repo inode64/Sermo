@@ -112,14 +112,21 @@ func buildWatchEntry(name string, entry map[string]any, deps Deps, defaultInterv
 	}
 }
 
-// sustainableCycles reports how many consecutive cycles a delta-only check's condition
-// can stay true, or 0 for checks that are not delta-only and so never run out.
+// sustainableCycles reports how many consecutive cycles a delta-only check's condition,
+// or a growth bound's, can stay true after one event, or 0 for checks whose condition
+// never runs out.
 //
 // This is the distinction that matters for windows, and it is not "is it a delta":
 // swap io and net errors are deltas too, but they are *rates* that stay true while the
 // pressure lasts, so a window is legitimate hysteresis for them. Those also live in
 // per-metric sub-entries (buildMetricWatches), not in the entry-level check this reads.
 func sustainableCycles(checkEntry map[string]any, interval time.Duration) int {
+	if _, bounded := checkEntry[checks.CheckKeyMaxIncrease]; bounded {
+		// A growth bound (a protocol or command check's max_increase) fails while
+		// the rise since the oldest sample inside its own `within` exceeds it, so
+		// one increment holds the condition for that span and no longer.
+		return cyclesWithin(checkEntry, interval)
+	}
 	switch cfgval.AsString(checkEntry[checks.CheckKeyType]) {
 	case checks.CheckTypeOOM:
 		// The kernel's oom_kill counter is cumulative and the check consumes the

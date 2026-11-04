@@ -51,7 +51,7 @@ func TestSaturationCatalogWatchesAlertOnly(t *testing.T) {
 	if got := alertAction(t, tree, "alert-if-connections-rejected"); got != "alert" {
 		t.Fatalf("memcached rejected connections must alert, not %q", got)
 	}
-	for _, profile := range []string{"redis", "keydb", "memcached"} {
+	for _, profile := range []string{"redis", "keydb", "memcached", "vinyld"} {
 		tree := resolveCatalogService(t, profile, "openrc").Tree
 		if _, ok := nested(t, tree, "rules")["restart-if-worker-thread-hot"]; ok {
 			t.Fatalf("%s must not restart a busy worker thread", profile)

@@ -955,6 +955,19 @@ watches:
         silence: [degraded]
         rules:
           - { id: benign, match: '(?i)known benign warning', severity: ok, stream: both }
+  # JSON a command prints: expect_json assertions and a growth bound on a
+  # counter whose name contains dots (a quoted bracket key).
+  command-json:
+    check:
+      type: command
+      command: ["${binary}", "stats", "--json"]
+      timeout: 10s
+      severity: error
+      expect_json:
+        version: 1
+      max_increase:
+        'counters["MAIN.backend_fail"].value': 0
+      within: 10m
   file-present:
     check: { type: file_exists, path: /etc/demo/demo.conf }
   binary:

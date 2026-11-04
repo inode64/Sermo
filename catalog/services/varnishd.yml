@@ -13,6 +13,9 @@ restart_on_change:
       ${display_name} will restart after version change of ${change.app}: ${change.old_version} -> ${change.new_version}
 variables:
   port: 6082
+  # Reads the daemon's counters from shared memory; the growth alerts below ask
+  # it for only the counters they bound (-I).
+  stat_binary: ${bindir}/varnishstat
 preflight:
   config:
     type: command
@@ -50,3 +53,109 @@ watches:
       duration: 6m
     then:
       action: restart
+  # The counters below only ever grow while the child runs, so each alert fires
+  # on new events inside its window, never on history. A restarted child zeroes
+  # its MAIN and SMA counters: until the higher pre-restart sample leaves the
+  # window, growth reads 0 there, and alert-if-child-crashed reports the
+  # restart itself.
+  alert-if-child-crashed:
+    check:
+      type: command
+      command:
+        - ${stat_binary}
+        - '-1'
+        - -j
+        - -I
+        - MGT.child_panic
+        - -I
+        - MGT.child_died
+      timeout: 10s
+      optional: true
+      severity: error
+      max_increase:
+        'counters["MGT.child_panic"].value': 0
+        'counters["MGT.child_died"].value': 0
+      within: 15m
+    then:
+      action: alert
+      message: >-
+        ${display_name} child process panicked or died and the manager restarted it with an empty cache; panic.show on the management CLI prints the last panic
+  alert-if-backend-failing:
+    check:
+      type: command
+      command:
+        - ${stat_binary}
+        - '-1'
+        - -j
+        - -I
+        - MAIN.backend_fail
+        - -I
+        - MAIN.backend_unhealthy
+        - -I
+        - MAIN.fetch_failed
+      timeout: 10s
+      optional: true
+      severity: error
+      max_increase:
+        'counters["MAIN.backend_fail"].value': 0
+        'counters["MAIN.backend_unhealthy"].value': 0
+        # fetch_failed counts every cause of a failed fetch, so it tolerates a
+        # few; a burst means the backends are failing.
+        'counters["MAIN.fetch_failed"].value': 20
+      within: 10m
+    then:
+      action: alert
+      message: >-
+        ${display_name} cannot fetch from its backends: connections fail, a health probe marked a backend sick, or fetches fail
+  alert-if-sessions-dropped:
+    check:
+      type: command
+      command:
+        - ${stat_binary}
+        - '-1'
+        - -j
+        - -I
+        - MAIN.sess_dropped
+        - -I
+        - MAIN.sess_fail_emfile
+        - -I
+        - MAIN.sess_fail_enomem
+        - -I
+        - MAIN.threads_failed
+      timeout: 10s
+      optional: true
+      severity: error
+      max_increase:
+        'counters["MAIN.sess_dropped"].value': 0
+        'counters["MAIN.sess_fail_emfile"].value': 0
+        'counters["MAIN.sess_fail_enomem"].value': 0
+        'counters["MAIN.threads_failed"].value': 0
+      within: 10m
+    then:
+      action: alert
+      message: >-
+        ${display_name} dropped or refused client sessions: worker threads, open files or memory ran out (raise thread_pool_max or the open-files limit)
+  # SMA.s0 is the default malloc storage (-s malloc); a host with another
+  # storage overrides the counter.
+  alert-if-cache-too-small:
+    check:
+      type: command
+      command:
+        - ${stat_binary}
+        - '-1'
+        - -j
+        - -I
+        - SMA.s0.c_fail
+        - -I
+        - MAIN.n_lru_limited
+      timeout: 10s
+      optional: true
+      severity: warning
+      max_increase:
+        'counters["SMA.s0.c_fail"].value': 0
+        'counters["MAIN.n_lru_limited"].value': 0
+      within: 15m
+    then:
+      action: alert
+      message: >-
+        ${display_name} storage is too small for its objects: allocations failed or eviction hit nuke_limit (raise the -s storage size)

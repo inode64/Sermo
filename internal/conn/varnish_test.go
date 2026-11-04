@@ -27,6 +27,15 @@ func TestVarnishVersion(t *testing.T) {
 	}
 }
 
+// Vinyl Cache, the renamed Varnish Cache, keeps the management CLI protocol
+// and announces itself under its new name (vinyld 9.1.0 banner).
+func TestVarnishProbeVinylCacheBanner(t *testing.T) {
+	port := serveVarnish(t, 200, "-----------------------------\nVinyl Cache CLI 1.0\n-----------------------------\n"+
+		"Linux,6.18.26-gentoo,x86_64,-junix,-sdefault,-sdefault,-ssynth,-hcritbit\n"+
+		"vinyl-cache-9.1.0 revision 7c558af697ded4f5461ff97d83b2febc8d647d50\n\nType 'help' for command list.")
+	assertProbeVersion(t, varnishProtocol{}, port, "9.1.0", "cli_status", "200")
+}
+
 // serveVarnish writes a single CLI response (status + body) and closes.
 func serveVarnish(t *testing.T, status int, body string) int {
 	t.Helper()

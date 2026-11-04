@@ -2004,13 +2004,60 @@ func TestCatalogTomcatVersionDiscoveryUsesServiceCandidates(t *testing.T) {
 	}
 }
 
+// Without -T the management CLI listens on a random port, so its probes can
+// never decide the health of Varnish or of Vinyl Cache, its renamed successor.
 func TestCatalogVarnishAdminChecksAreOptional(t *testing.T) {
 	root := repoRoot(t)
-	body := catalogDocByName(t, root, "services", "varnishd")
-	for _, name := range []string{"port", "varnish"} {
-		check := catalogWatchCheck(t, body, name)
-		if !cfgval.Bool(check["optional"]) {
-			t.Fatalf("varnishd check %q optional = %v, want true", name, check["optional"])
+	for service, names := range map[string][]string{"varnishd": {"port", "varnish"}, "vinyld": {"port", "vinyl"}} {
+		body := catalogDocByName(t, root, "services", service)
+		for _, name := range names {
+			check := catalogWatchCheck(t, body, name)
+			if !cfgval.Bool(check["optional"]) {
+				t.Fatalf("%s check %q optional = %v, want true", service, name, check["optional"])
+			}
+		}
+	}
+}
+
+// Each counter alert asks varnishstat/vinylstat (-I) for exactly the counters
+// it bounds: a bounded counter the command does not print reads as missing
+// every cycle, which leaves the alert unavailable instead of watching.
+func TestCatalogVarnishCounterAlertsRequestTheirCounters(t *testing.T) {
+	for profile, tool := range map[string]string{"varnishd": "/varnishstat", "vinyld": "/vinylstat"} {
+		tree := resolveCatalogService(t, profile, "openrc").Tree
+		for _, name := range []string{"alert-if-child-crashed", "alert-if-backend-failing", "alert-if-sessions-dropped", "alert-if-cache-too-small"} {
+			entry := nested(t, tree, sectionChecks, name)
+			argv := cfgval.StringArray(entry[checks.CheckKeyCommand])
+			if len(argv) == 0 || !strings.HasSuffix(argv[0], tool) {
+				t.Errorf("%s %s runs %q, want %s", profile, name, argv, tool)
+				continue
+			}
+			var requested, bounded []string
+			for i, arg := range argv {
+				if arg == "-I" && i+1 < len(argv) {
+					requested = append(requested, argv[i+1])
+				}
+			}
+			bounds, _ := entry[checks.CheckKeyMaxIncrease].(map[string]any)
+			for path := range bounds {
+				keys, err := checks.ParseJSONPath(path)
+				if err != nil || len(keys) != 3 || keys[0] != "counters" || keys[2] != "value" {
+					t.Errorf("%s %s bounds %q, want counters[\"<name>\"].value (%v)", profile, name, path, err)
+					continue
+				}
+				bounded = append(bounded, keys[1])
+			}
+			slices.Sort(requested)
+			slices.Sort(bounded)
+			if len(bounded) == 0 || !slices.Equal(requested, bounded) {
+				t.Errorf("%s %s requests %q but bounds %q", profile, name, requested, bounded)
+			}
+			if _, warns := checks.Build(map[string]any{name: entry}, checks.Deps{DefaultTimeout: time.Second}); len(warns) != 0 {
+				t.Errorf("%s %s does not build: %v", profile, name, warns)
+			}
+			if got := alertAction(t, tree, name); got != "alert" {
+				t.Errorf("%s %s must alert, not %q", profile, name, got)
+			}
 		}
 	}
 }
@@ -3419,6 +3466,7 @@ var warningAlertExemptions = map[string]string{
 	"alert-if-replication-slot-inactive": "a count of idle slots; the WAL they retain is graded by alert-if-replication-slot-backlog",
 	"alert-if-query-long-running":        "db_queries has no ordered threshold for levels: to grade",
 	"alert-if-libraries-replaced":        "stale_libraries has no ordered threshold for levels: to grade; a replaced library is a pending restart, never an outage",
+	"alert-if-cache-too-small":           "levels: cannot grade a max_increase growth bound; an undersized cache evicts early, it does not fail",
 }
 
 // A catalog alert that warns must also say when the same reading becomes an

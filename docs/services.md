@@ -43,6 +43,14 @@ and `user` when they differ from `127.0.0.1`, `9187` and `postgres_exporter`.
 HTTP availability proves the exporter responds; PostgreSQL health belongs to
 the database service's checks.
 
+The `varnish_exporter` profile does the same for the Prometheus Varnish
+exporter (`127.0.0.1`, `9131`, `varnish_exporter`), which serves Varnish Cache
+through `varnishstat` and Vinyl Cache through `vinylstat`
+(`-varnishstat-path`). The exporter keeps answering 200 when it cannot read the
+stats tool, so the optional `stats-readable` check also requires
+`varnish_up 1` in the body; its user must belong to the cache's group
+(`varnish` or `vinyl`) to read the shared memory.
+
 The `dcc` profile accepts either `dcc` or `dccifd` as the systemd unit name;
 on OpenRC it uses `dcc`. Its Unix socket remains the primary liveness check
 alongside the init unit because the daemon's pidfile varies across packages.
@@ -2728,8 +2736,8 @@ keeps the server's one reserved connection, so it still answers while ordinary
 clients already get error 1040. Find who holds the connections with
 `sermoctl sessions mariadb` and the Sessions panel.
 
-A cache that is merely busy is not broken either: `redis`, `keydb` and
-`memcached` alert on a hot worker thread (`alert-if-cpu-thread-high`, a
+A cache that is merely busy is not broken either: `redis`, `keydb`,
+`memcached` and `vinyld` (Vinyl Cache) alert on a hot worker thread (`alert-if-cpu-thread-high`, a
 `warning` above 90 % of one core for 5 minutes, an `error` above 98 %) instead
 of restarting it, which would drop every client and empty or reload the
 dataset.

@@ -1044,6 +1044,25 @@ func TestBuildWatchesWarnsCountDeltaBeyondItsOwnWindow(t *testing.T) {
 			window:   map[string]any{"cycles": 3},
 			wantWarn: false,
 		},
+		{
+			// A growth bound fails only while the rise stays inside its own within.
+			name:     "protocol growth bound outlasted by the window",
+			check:    map[string]any{"type": "redis", "max_increase": map[string]any{"evicted_keys": 0}, "within": "2m"},
+			window:   map[string]any{"cycles": 10},
+			wantWarn: true,
+		},
+		{
+			name:     "command growth bound outlasted by the window",
+			check:    map[string]any{"type": "command", "command": []any{"/usr/bin/vinylstat", "-1", "-j"}, "max_increase": map[string]any{`counters["MGT.child_panic"].value`: 0}, "within": "2m"},
+			window:   map[string]any{"cycles": 10},
+			wantWarn: true,
+		},
+		{
+			name:     "command growth bound fits inside its span",
+			check:    map[string]any{"type": "command", "command": []any{"/usr/bin/vinylstat", "-1", "-j"}, "max_increase": map[string]any{`counters["MGT.child_panic"].value`: 0}, "within": "2m"},
+			window:   map[string]any{"cycles": 3},
+			wantWarn: false,
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			_, warns := BuildWatches(cfgWithWatches(map[string]any{

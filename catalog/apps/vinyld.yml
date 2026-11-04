@@ -1,0 +1,9 @@
+name: vinyld
+display_name: "Vinyl Cache"
+category: web
+variables:
+  binary: ${bindir}/vinyld
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  # vinyld (vinyl-cache-9.1.0 revision …)
+  version: { type: command, command: ["${binary}", "-V"], timeout: 10s }
