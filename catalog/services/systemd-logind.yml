@@ -5,6 +5,31 @@ description: System login and seat manager.
 service:
   systemd:
     - systemd-logind
+variables:
+  busctl_binary: /usr/bin/busctl
+rules:
+  block-stop-during-login-sessions:
+    type: guard
+    blocks: [stop, restart]
+    if:
+      not:
+        command:
+          command:
+            - ${busctl_binary}
+            - --system
+            - --auto-start=no
+            - --allow-interactive-authorization=no
+            - call
+            - org.freedesktop.login1
+            - /org/freedesktop/login1
+            - org.freedesktop.login1.Manager
+            - ListSessions
+          expect_exit: 0
+          expect_stdout: { op: '==', value: 'a(susso) 0' }
+          timeout: 5s
+    then:
+      action: block
+      message: Login sessions are active or cannot be inspected; stop and restart denied
 watches:
   service:
     check:

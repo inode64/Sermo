@@ -2661,6 +2661,23 @@ native `connected_clients` metric; FTP uses `tcp_connections`, which counts
 control-channel TCP sockets rather than authenticated users. See
 [connection guards](rules.md#connection-guards) for the safety behavior.
 
+## Login sessions and registered machines
+
+The `systemd-logind` profile blocks `stop` and `restart` while its D-Bus
+`ListSessions` method reports login sessions. The `systemd-machined` profile
+applies the same protection to registered virtual machines and containers with
+`ListMachines`. Both guards use `busctl` with service activation and interactive
+authorization disabled, so inspection cannot start a stopped manager or prompt
+for authorization. They also block on an unsuccessful query, an unrecognized
+response or a five-second timeout. Starting an inactive manager remains available.
+
+These guards apply to manual operations and automatic update restarts. Workload
+enumeration is a snapshot at guard evaluation; new logins or machine
+registrations can arrive before the operation starts. Use a maintenance window
+when starting new workloads must also be prevented.
+The `busctl_binary` variable selects the native inspection command when its
+installation path differs.
+
 ## Long-running database statements
 
 The `mysql`, `mariadb` and `postgres` catalog services ship the
