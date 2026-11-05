@@ -26,6 +26,12 @@ func operationSettlingMaxAge(operationTimeout time.Duration) time.Duration {
 	return max(operationSettlingMinAge, operationTimeout+operationSettlingAgeMargin)
 }
 
+// operationSettlingUnread is the prior of an attempt that could not read the
+// marker it would replace; no stored phase has this value. Such an attempt
+// cannot tell no operation from one in progress or a relaunch the worker has
+// yet to read, so it neither writes nor clears the marker.
+const operationSettlingUnread = "unread"
+
 // BeginOperationSettling marks a service operation as running for its caller.
 // prior is the phase of the marker it replaced, "" for none, which this attempt
 // hands to finishOperationSettling: what it replaced may not be its to drop.
@@ -33,7 +39,11 @@ func BeginOperationSettling(store OperationSettlingStore, service, action string
 	if store == nil || !operation.IsServiceAction(action) {
 		return "", nil
 	}
-	if rec, found, readErr := store.OperationSettling(service); readErr == nil && found {
+	rec, found, readErr := store.OperationSettling(service)
+	if readErr != nil {
+		return operationSettlingUnread, fmt.Errorf("read operation settling for %s: %w", service, readErr)
+	}
+	if found {
 		prior = rec.Phase
 	}
 	// A running marker keeps its time: this attempt may yet be refused, and one
@@ -51,7 +61,7 @@ func BeginOperationSettling(store OperationSettlingStore, service, action string
 // finishOperationSettling closes the marker of one attempt. settled is the phase
 // an operation that needs an observation cycle leaves it in.
 func finishOperationSettling(store OperationSettlingStore, service, action string, result operation.Result, opErr error, activeAfterPostflightFailure bool, prior, settled string) error {
-	if store == nil || !operation.IsServiceAction(action) {
+	if store == nil || !operation.IsServiceAction(action) || prior == operationSettlingUnread {
 		return nil
 	}
 	blocked := result.Status == operation.ResultBlocked

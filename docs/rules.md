@@ -4353,7 +4353,11 @@ Policy gates *automatic* remediation (only `sermod`, never manual `sermoctl`
 actions): an action is suppressed within `cooldown` (extended by `backoff`
 after consecutive remediations) or once `max_actions` is reached in the window.
 `for`/`within` decide *when* a rule fires; policy decides whether it may act
-*now*.
+*now*. A cycle that cannot read the service's operation marker from
+`engine.state` (disk full, database locked) holds remediation with a
+`suppressed` event until a read succeeds, because an operation may still be in
+progress; checks and alerts keep running. A manual action in that state warns
+and leaves the marker as it found it.
 
 `backoff` grows the effective cooldown after each consecutive remediation:
 `initial` the first time, then multiplied by `factor` each subsequent time,

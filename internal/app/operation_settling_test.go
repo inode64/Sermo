@@ -54,6 +54,51 @@ func TestOperationSettlingOutlivesConfiguredTimeoutWhileLockHeld(t *testing.T) {
 	}
 }
 
+// unreadableSettlingStore fails every read of the marker while writes still
+// land, so a test can see what an attempt writes over a marker it never read.
+type unreadableSettlingStore struct {
+	*fakeStore
+}
+
+func (s unreadableSettlingStore) OperationSettling(string) (state.OperationSettlingRecord, bool, error) {
+	return state.OperationSettlingRecord{}, false, errors.New("database is locked")
+}
+
+// An attempt that cannot read the marker cannot tell no operation from one in
+// progress or a relaunch the worker has yet to read: it leaves the marker as
+// it found it, whatever the attempt did.
+func TestOperationSettlingLeavesAnUnreadMarkerAlone(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		action rules.ActionType
+		result operation.Result
+	}{
+		{name: "blocked", action: rules.ActionRestart, result: operation.Result{Status: operation.ResultBlocked}},
+		{name: "succeeded", action: rules.ActionRestart, result: operation.Result{Status: operation.ResultOK, Relaunched: true}},
+		{name: "failed", action: rules.ActionStart, result: operation.Result{Status: operation.ResultFailed}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			backing := newFakeStore()
+			if err := backing.SetOperationSettling("web", state.OperationSettlingRelaunched); err != nil {
+				t.Fatal(err)
+			}
+			store := unreadableSettlingStore{backing}
+
+			prior, err := BeginOperationSettling(store, "web", string(tc.action))
+			if err == nil {
+				t.Fatal("an unreadable marker must be reported")
+			}
+			if err := finishOperationSettling(store, "web", string(tc.action), tc.result, nil, false, prior, state.OperationSettlingSettling); err != nil {
+				t.Fatalf("finish: %v", err)
+			}
+			rec, found := backing.settling["web"]
+			if !found || rec.Phase != state.OperationSettlingRelaunched {
+				t.Fatalf("marker = %+v found=%v, want the unread relaunched marker kept", rec, found)
+			}
+		})
+	}
+}
+
 func TestOperationSettlingLifecycle(t *testing.T) {
 	store := newFakeStore()
 

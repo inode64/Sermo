@@ -51,6 +51,11 @@ type Worker struct {
 	// long `unmonitor` does not desynchronize per-check `interval` scheduling.
 	cycle int
 
+	// settlingUnread is set for a cycle whose operation marker could not be
+	// read: an operation may be in progress, or a relaunch whose lock is already
+	// released may be unread, so the cycle must not remediate.
+	settlingUnread bool
+
 	// cycleRan lists the check names that actually ran this cycle (not reused from
 	// the cache because of a per-check interval). Requires gates consult only deps
 	// present here so a stale cached failure cannot skip a dependent check.
@@ -523,12 +528,14 @@ func (w *Worker) completeObserveCycle(settleKey string, mode workerCycleMode) {
 // operationSettlingState reports the marker's phase when this cycle observes an
 // operation that finished, and running while one is in progress.
 func (w *Worker) operationSettlingState(now time.Time) (phase string, running bool) {
+	w.settlingUnread = false
 	if w.OperationSettling == nil {
 		return "", false
 	}
 	rec, found, err := w.OperationSettling.OperationSettling(w.Service)
 	if err != nil {
 		w.emitStoreError(operationSettlingReadErrKey, "operation settling: "+err.Error())
+		w.settlingUnread = true
 		return "", false
 	}
 	w.clearEvalError(operationSettlingReadErrKey)
@@ -860,6 +867,9 @@ func (w *Worker) runFiringRemediation(ctx context.Context, ev *rules.Evaluator, 
 }
 
 func (w *Worker) remediationSuppression(ctx context.Context, ev *rules.Evaluator, firing firingRule, action string, now func() time.Time) (string, bool) {
+	if w.settlingUnread {
+		return "operation marker unreadable: remediation waits for a good read", false
+	}
 	guard, reason, err := rules.Guard(ctx, w.Rules, action, ev)
 	// A guard is consulted on every cycle its rule keeps firing, so an
 	// unevaluable guard repeats for as long as the underlying probe stays

@@ -298,6 +298,37 @@ func TestWorkerOperationSettlingStoreErrorEmitsOnChange(t *testing.T) {
 	}
 }
 
+// An unreadable marker may hide an operation in progress or a relaunch whose
+// lock is already released, so the worker holds remediation until a read
+// succeeds, and says so, while checks and alerts keep running.
+func TestWorkerUnreadableSettlingHoldsRemediation(t *testing.T) {
+	h := &workerHarness{cache: failedCache("http"), opResult: operation.Result{Status: operation.ResultOK}}
+	tree := map[string]any{"rules": map[string]any{
+		"restart-if-down": map[string]any{
+			"type": "remediation",
+			"if":   map[string]any{"failed": map[string]any{"check": "http"}},
+			"then": map[string]any{"action": "restart"},
+		},
+	}}
+	w := h.worker(tree, rules.Policy{Cooldown: time.Minute}, nil)
+	w.OperationSettling = failingSettlingStore{err: errors.New("database is locked")}
+
+	w.RunCycle(context.Background())
+
+	if len(h.ops) != 0 {
+		t.Fatalf("remediation ran with an unreadable operation marker: ops=%v", h.ops)
+	}
+	if event, ok := h.eventOf(eventKindSuppressed); !ok || !strings.Contains(event.Message, "operation marker") {
+		t.Fatalf("held remediation must be reported, events=%+v", h.events)
+	}
+
+	w.OperationSettling = newFakeStore()
+	w.RunCycle(context.Background())
+	if len(h.ops) != 1 {
+		t.Fatalf("remediation must resume after a good read, ops=%v", h.ops)
+	}
+}
+
 // TestWorkerRuleEvalErrorMessageIsNotDoublyPrefixed pins the one line an
 // operator reads when a rule condition cannot be evaluated. evalRule already
 // labels the failure, so a second prefix at the emit site made every such event
