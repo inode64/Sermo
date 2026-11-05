@@ -9,35 +9,46 @@ import (
 	"sermo/internal/servicemgr"
 )
 
+const webContainerID = "4f1c0de5a9b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c"
+
 type fakeDockerClient struct {
 	container Container
 	actions   []string
+	targets   []string
 }
 
 func (f *fakeDockerClient) CloseIdleConnections() {}
 
+// Inspect answers like the engine for a configured "web": the container named
+// web, unless a test sets another one (a unique ID prefix match).
 func (f *fakeDockerClient) Inspect(context.Context, string) (Container, error) {
-	return f.container, nil
+	c := f.container
+	if c.Name == "" && c.ID == "" {
+		c.Name, c.ID = "/web", webContainerID
+	}
+	return c, nil
 }
 
-func (f *fakeDockerClient) Start(context.Context, string) error {
-	f.actions = append(f.actions, "start")
+func (f *fakeDockerClient) act(verb, target string) error {
+	f.actions = append(f.actions, verb)
+	f.targets = append(f.targets, target)
 	return nil
 }
 
-func (f *fakeDockerClient) Stop(context.Context, string) error {
-	f.actions = append(f.actions, "stop")
-	return nil
+func (f *fakeDockerClient) Start(_ context.Context, target string) error {
+	return f.act("start", target)
 }
 
-func (f *fakeDockerClient) Unpause(context.Context, string) error {
-	f.actions = append(f.actions, "unpause")
-	return nil
+func (f *fakeDockerClient) Stop(_ context.Context, target string) error {
+	return f.act("stop", target)
 }
 
-func (f *fakeDockerClient) Pause(context.Context, string) error {
-	f.actions = append(f.actions, "pause")
-	return nil
+func (f *fakeDockerClient) Unpause(_ context.Context, target string) error {
+	return f.act("unpause", target)
+}
+
+func (f *fakeDockerClient) Pause(_ context.Context, target string) error {
+	return f.act("pause", target)
 }
 
 func TestManagerStatusFromContainer(t *testing.T) {
@@ -95,8 +106,50 @@ func TestManagerActions(t *testing.T) {
 	if !slices.Equal(fake.actions, []string{"start", "stop", "pause", "unpause"}) {
 		t.Fatalf("actions = %v", fake.actions)
 	}
+	for _, target := range fake.targets {
+		if target != webContainerID {
+			t.Fatalf("action targeted %q, want the inspected full ID", target)
+		}
+	}
 	if err := manager.Reload(context.Background(), "svc"); err == nil {
 		t.Fatal("Reload() must be unsupported")
+	}
+}
+
+// Docker resolves a reference by exact name, full ID or unique ID prefix. A
+// configured value that is no live name may be another container's ID prefix:
+// nothing may act on, or seed discovery from, a container that is neither the
+// configured name nor the configured full ID.
+func TestManagerRefusesContainerResolvedByAnotherReference(t *testing.T) {
+	other := Container{ID: "4f1c" + webContainerID[4:], Name: "/db", State: ContainerState{Status: "running", Running: true, Pid: 99}}
+	fake := &fakeDockerClient{container: other}
+	manager := Manager{
+		Spec:      Spec{Container: "4f1c"},
+		NewClient: func(Spec) (DockerClient, error) { return fake, nil },
+	}
+	for name, act := range map[string]func(context.Context, string) error{
+		"start": manager.Start, "stop": manager.Stop, "pause": manager.Pause, "resume": manager.Resume,
+	} {
+		if err := act(context.Background(), "svc"); err == nil {
+			t.Fatalf("%s acted on %s through the prefix %q", name, other.ContainerName(), manager.Spec.Container)
+		}
+	}
+	if len(fake.actions) != 0 {
+		t.Fatalf("actions = %v, want none", fake.actions)
+	}
+	if _, err := manager.Status(context.Background(), "svc"); err == nil {
+		t.Fatal("Status reported another container")
+	}
+	if pids, err := manager.PIDs(context.Background()); err == nil || len(pids) != 0 {
+		t.Fatalf("PIDs = %v, %v; want no seed from another container", pids, err)
+	}
+
+	byID := Manager{
+		Spec:      Spec{Container: webContainerID},
+		NewClient: func(Spec) (DockerClient, error) { return &fakeDockerClient{}, nil },
+	}
+	if err := byID.Stop(context.Background(), "svc"); err != nil {
+		t.Fatalf("a configured full ID must still resolve: %v", err)
 	}
 }
 

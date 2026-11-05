@@ -55,9 +55,15 @@ func (m Manager) Status(ctx context.Context, service string) (servicemgr.Service
 
 // withContainerAction runs act against the configured container and wraps any
 // error with the action verb; the Docker counterpart of virt's withDomainAction.
+// It acts on the full ID of the container just verified, so the action cannot
+// land on another container through a prefix or a name reused in between.
 func (m Manager) withContainerAction(ctx context.Context, verb string, act func(DockerClient, context.Context, string) error) error {
 	return m.withClient(func(c DockerClient) error {
-		if err := act(c, ctx, m.Spec.Container); err != nil {
+		container, err := m.inspectWith(ctx, c)
+		if err != nil {
+			return fmt.Errorf("%s %w", verb, err)
+		}
+		if err := act(c, ctx, container.ID); err != nil {
 			return fmt.Errorf("%s container %q: %w", verb, m.Spec.Container, err)
 		}
 		return nil
@@ -119,14 +125,25 @@ func (m Manager) BackendPIDs(ctx context.Context) func() []int {
 func (m Manager) inspect(ctx context.Context) (Container, error) {
 	var out Container
 	err := m.withClient(func(c DockerClient) error {
-		container, err := c.Inspect(ctx, m.Spec.Container)
-		if err != nil {
-			return fmt.Errorf("container %q: %w", m.Spec.Container, err)
-		}
+		container, err := m.inspectWith(ctx, c)
 		out = container
-		return nil
+		return err
 	})
 	return out, err
+}
+
+// inspectWith returns the configured container only when Docker resolved the
+// exact name or full ID configured. Docker also resolves a unique ID prefix,
+// so a value that is no live name can name another container.
+func (m Manager) inspectWith(ctx context.Context, c DockerClient) (Container, error) {
+	container, err := c.Inspect(ctx, m.Spec.Container)
+	if err != nil {
+		return Container{}, fmt.Errorf("container %q: %w", m.Spec.Container, err)
+	}
+	if container.ID == "" || (container.ContainerName() != m.Spec.Container && container.ID != m.Spec.Container) {
+		return Container{}, fmt.Errorf("container %q resolved to %q (%s), which is neither that name nor that full ID", m.Spec.Container, container.ContainerName(), container.ID)
+	}
+	return container, nil
 }
 
 func (m Manager) withClient(fn func(DockerClient) error) error {

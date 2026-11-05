@@ -961,7 +961,11 @@ watches:
         container.health: { op: "==", value: healthy }
 ```
 
-`control.container` is the Docker container name or id Sermo operates. With no
+`control.container` is the Docker container name or full 64-character id Sermo
+operates. Before every action, status read or PID lookup Sermo inspects it and
+refuses a container whose name and full id both differ from the configured
+value: Docker also resolves a unique id prefix, which could name another
+container. The action then targets the verified full id. With no
 `socket` or `host`, control uses `/run/docker.sock`; set `socket` for another
 local socket, or set `host` and optional `port`/`tls` for a TCP Docker API
 endpoint. `control.interface` is not supported for control; interface-bound
