@@ -324,6 +324,11 @@ type Server struct {
 	// the host name on the /login page. Empty shows none.
 	LoginMessage string
 
+	// TrustedProxy is web.trusted_proxy: a loopback peer is the reverse proxy,
+	// so the login limit counts the client its X-Forwarded-For names. Without
+	// it a local client or an SSH tunnel, also loopback, could pick its key.
+	TrustedProxy bool
+
 	// AllowedHosts lists extra hostnames accepted in the Host header when a
 	// request needs no credential (open mode or guest: true), e.g. the name of a
 	// fronting proxy. localhost, IP-literal Hosts, the bind host and

@@ -155,7 +155,7 @@ func (s *Server) basicRole(r *http.Request) string {
 	if s.Auth.isRuntimeToken(pass) {
 		return roleAdmin
 	}
-	client := clientAddress(r)
+	client := s.clientAddress(r)
 	if _, allowed := s.loginLimiter.reserve(client, s.now()); !allowed {
 		return ""
 	}

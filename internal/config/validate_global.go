@@ -18,7 +18,7 @@ import (
 var validWebKeys = set(
 	WebKeyAddress, WebKeyAllowedHosts, WebKeyGuest, WebKeyGuestPasswordFile,
 	WebKeyLoginMessage, WebKeyPasswordFile, WebKeyPort, WebKeyPublicURL,
-	WebKeySessionTTL,
+	WebKeySessionTTL, WebKeyTrustedProxy,
 )
 
 // validateWeb checks the global `web` block. The UI is enabled only when `port`
@@ -59,6 +59,11 @@ func validateWeb(webCfg map[string]any, add addFunc) {
 	if v, present := webCfg[WebKeyGuest]; present {
 		if _, isBool := v.(bool); !isBool {
 			add("%s must be a boolean (allow anonymous read-only access)", webPathGuest)
+		}
+	}
+	if v, present := webCfg[WebKeyTrustedProxy]; present {
+		if _, isBool := v.(bool); !isBool {
+			add("%s must be a boolean (a reverse proxy on this host sets X-Forwarded-For)", webPathTrustedProxy)
 		}
 	}
 	if v, present := webCfg[WebKeyAllowedHosts]; present {

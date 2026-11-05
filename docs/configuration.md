@@ -1193,10 +1193,13 @@ web:
   so a burst of guesses cannot slip in under the limit. The runtime token
   `sermoctl` sends as Basic auth is outside the limit: it spends no attempt, and
   a lockout does not refuse it. The client is the peer
-  address, or, when the peer is a reverse proxy on this host, the address it
-  appended to `X-Forwarded-For`, so one guesser cannot lock out everyone behind
-  the proxy. Only a valid IP address from the last forwarded hop is accepted;
-  malformed values fall back to the peer. Addresses are normalized, including
+  address, or, with `web.trusted_proxy: true` and a loopback peer (the reverse
+  proxy on this host), the address the proxy appended to `X-Forwarded-For`, so
+  one guesser cannot lock out everyone behind the proxy. Without that option the
+  header is ignored: a direct local client or an SSH tunnel is a loopback peer
+  too, and could otherwise pick a fresh key for every guess or spend another
+  operator's attempts. Only a valid IP address from the last forwarded hop is
+  accepted; malformed values fall back to the peer. Addresses are normalized, including
   IPv4-mapped IPv6, so alternate spellings share the same attempt counter.
 - The form only accepts a POST the browser marks as same-origin
   (`Sec-Fetch-Site`), or, from a browser that does not send that, one whose
@@ -1339,6 +1342,7 @@ web:
   address: 127.0.0.1   # leave on loopback
   port: 9797
   password_file: /etc/sermo/credentials.env
+  trusted_proxy: true  # the proxy below sets X-Forwarded-For
 ```
 
 **nginx** (TLS in front, proxy to loopback):
@@ -1380,8 +1384,11 @@ Notes:
   Sermo's own admin/guest auth keep working through it — the browser forwards the
   session cookie and any `Authorization` header. Have the proxy send
   `X-Forwarded-Proto` (or set `web.public_url` to its `https://` address) so the
-  session cookie is `Secure`, and `X-Forwarded-For` so failed logins are counted
-  per browser. You can rely on Sermo's roles, add the proxy's own auth
+  session cookie is `Secure`, and `X-Forwarded-For` with `web.trusted_proxy:
+  true` so failed logins are counted per browser: Sermo reads the last hop,
+  the one the proxy itself added (Apache's `mod_proxy_http` appends it by
+  default). Without `trusted_proxy`, every client the proxy forwards shares one
+  login counter. You can rely on Sermo's roles, add the proxy's own auth
   (basic/OIDC/mTLS) on top, or both.
 - Redirect HTTP→HTTPS at the proxy and let it handle certificates (Sermo has no
   native TLS). Restrict access there too (allow-lists, SSO) if needed.

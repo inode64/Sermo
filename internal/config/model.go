@@ -195,6 +195,9 @@ const (
 	// WebKeyLoginMessage is web.login_message: a short plain-text note shown
 	// under the host name on the login page.
 	WebKeyLoginMessage = "login_message"
+	// WebKeyTrustedProxy is web.trusted_proxy: a reverse proxy on this host
+	// sets X-Forwarded-For for every request that reaches the loopback listener.
+	WebKeyTrustedProxy = "trusted_proxy"
 )
 
 // SectionTelegramBot is the top-level interactive Telegram report-bot block. It

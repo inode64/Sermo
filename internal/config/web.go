@@ -81,6 +81,13 @@ func (g Global) WebSessionTTL() time.Duration {
 	return 0
 }
 
+// WebTrustedProxy reports web.trusted_proxy: whether a loopback peer is the
+// reverse proxy, whose X-Forwarded-For then names the client.
+func (g Global) WebTrustedProxy() bool {
+	trusted, _ := g.WebSection()[WebKeyTrustedProxy].(bool)
+	return trusted
+}
+
 // maxLoginMessageRunes bounds web.login_message: one short line under the host
 // name on the login page, not a banner.
 const maxLoginMessageRunes = 200

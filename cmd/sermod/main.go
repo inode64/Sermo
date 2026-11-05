@@ -493,6 +493,7 @@ func run(args []string) int {
 			Auth:                   auth,
 			Hostname:               config.ShortHostname(),
 			LoginMessage:           cfg.Global.WebLoginMessage(),
+			TrustedProxy:           cfg.Global.WebTrustedProxy(),
 			AllowedHosts:           webAllowedHosts(cfg),
 			Logger:                 logger,
 			AccessLog:              accessLog,

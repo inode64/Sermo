@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -421,15 +422,40 @@ func TestLoginLimiterCountsAttemptsUpFront(t *testing.T) {
 // address; the limit must follow the client the proxy names instead, while a
 // remote peer cannot pick its own key.
 func TestClientAddressBehindLocalProxy(t *testing.T) {
+	s := &Server{TrustedProxy: true}
 	r := httptest.NewRequest(http.MethodPost, routePathLogin, nil)
 	r.RemoteAddr = "127.0.0.1:41000"
 	r.Header.Set(headerXForwardedFor, "10.9.9.9, 203.0.113.5")
-	if got := clientAddress(r); got != "203.0.113.5" {
+	if got := s.clientAddress(r); got != "203.0.113.5" {
 		t.Fatalf("behind local proxy = %q, want the proxy-appended client", got)
 	}
 	r.RemoteAddr = "198.51.100.7:5555"
-	if got := clientAddress(r); got != "198.51.100.7" {
+	if got := s.clientAddress(r); got != "198.51.100.7" {
 		t.Fatalf("remote peer = %q, want its own address (X-Forwarded-For ignored)", got)
+	}
+}
+
+// Without web.trusted_proxy a loopback peer is a local client or an SSH
+// tunnel, whose X-Forwarded-For is its own to choose: a fresh value per guess
+// must not buy a fresh bucket, nor spend another client's.
+func TestLoginLimitIgnoresForwardedForWithoutTrustedProxy(t *testing.T) {
+	lh := newLoginHarness(Auth{AdminCredentials: testCredentials(t, "secret")})
+	for i := range loginMaxFailures {
+		r := loginPost("wrong-guess")
+		r.RemoteAddr = "127.0.0.1:41000"
+		r.Header.Set(headerXForwardedFor, "203.0.113."+strconv.Itoa(i+1))
+		if rec := lh.do(r); rec.Code != http.StatusUnauthorized {
+			t.Fatalf("attempt %d status = %d, want 401", i, rec.Code)
+		}
+	}
+	r := loginPost("secret")
+	r.RemoteAddr = "127.0.0.1:41000"
+	r.Header.Set(headerXForwardedFor, "198.51.100.200")
+	if rec := lh.do(r); rec.Code != http.StatusTooManyRequests {
+		t.Fatalf("rotated X-Forwarded-For status = %d, want 429 from the shared loopback bucket", rec.Code)
+	}
+	if got := (&Server{}).clientAddress(r); got != "127.0.0.1" {
+		t.Fatalf("clientAddress = %q, want the loopback peer", got)
 	}
 }
 
@@ -468,7 +494,7 @@ func TestClientAddressValidatesIP(t *testing.T) {
 			for _, value := range tc.forwarded {
 				r.Header.Add(headerXForwardedFor, value)
 			}
-			if got := clientAddress(r); got != tc.want {
+			if got := (&Server{TrustedProxy: true}).clientAddress(r); got != tc.want {
 				t.Fatalf("clientAddress = %q, want %q", got, tc.want)
 			}
 		})

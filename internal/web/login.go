@@ -113,7 +113,7 @@ func (s *Server) handleLoginSubmit(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusForbidden, ActionResult{OK: false, Message: loginMessageOrigin})
 		return
 	}
-	client := clientAddress(r)
+	client := s.clientAddress(r)
 	if wait, ok := s.loginLimiter.reserve(client, s.now()); !ok {
 		s.logLogin(r.Context(), client, "", loginResultLimited)
 		w.Header().Set(headerRetryAfter, retryAfterSeconds(wait))
@@ -150,20 +150,23 @@ func retryAfterSeconds(wait time.Duration) string {
 }
 
 // clientAddress is the key the login limiter counts attempts against: the
-// peer's address, or — when the peer is a reverse proxy on this host, the only
-// supported way to expose the dashboard — the client address that proxy
-// appended to X-Forwarded-For. Without that, every browser behind the proxy
-// would share one bucket, and five bad guesses from anyone would lock every
-// operator out. A remote peer's X-Forwarded-For is ignored: anyone can send it.
+// peer's address, or — when web.trusted_proxy declares the loopback peer a
+// reverse proxy on this host, the only supported way to expose the dashboard —
+// the client address that proxy appended to X-Forwarded-For. Without that,
+// every browser behind the proxy would share one bucket, and five bad guesses
+// from anyone would lock every operator out. Otherwise the header is ignored:
+// a direct local client or an SSH tunnel is loopback too, and rotating the
+// header would give it a fresh bucket per guess. A remote peer's header is
+// always ignored: anyone can send it.
 // Only parsed IP addresses become limiter keys or log fields. Invalid forwarded
 // values fall back to the peer; arbitrary header text must never reach the log.
-func clientAddress(r *http.Request) string {
+func (s *Server) clientAddress(r *http.Request) string {
 	peer, err := netip.ParseAddr(canonicalHost(r.RemoteAddr))
 	if err != nil {
 		return loginClientUnknown
 	}
 	peer = peer.WithZone("").Unmap()
-	if !peer.IsLoopback() {
+	if !s.TrustedProxy || !peer.IsLoopback() {
 		return peer.String()
 	}
 	forwarded := r.Header[headerXForwardedFor]

@@ -29,6 +29,7 @@ const (
 	webPathPublicURL         = SectionWeb + "." + WebKeyPublicURL
 	webPathSessionTTL        = SectionWeb + "." + WebKeySessionTTL
 	webPathLoginMessage      = SectionWeb + "." + WebKeyLoginMessage
+	webPathTrustedProxy      = SectionWeb + "." + WebKeyTrustedProxy
 
 	policyPathBackoff          = sectionPolicy + "." + rules.PolicyKeyBackoff
 	policyPathBackoffFactor    = policyPathBackoff + "." + rules.BackoffKeyFactor

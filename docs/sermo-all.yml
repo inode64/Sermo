@@ -133,6 +133,9 @@ web:
   session_ttl: 12h
   # One short plain-text line under the host name on the login page.
   login_message: "Production · sysadmins only"
+  # A reverse proxy on this host sets X-Forwarded-For: the login limit then
+  # counts the client it names instead of the loopback peer (default false).
+  trusted_proxy: false
   # Extra Host header names the dashboard accepts when it answers without
   # auth (open, or guest: true), besides localhost, IP literals, `address`
   # and the public_url host (DNS-rebinding protection).

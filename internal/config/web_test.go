@@ -171,3 +171,28 @@ defaults: { policy: { cooldown: 5m } }
 		t.Errorf("WebLoginMessage without a web block = %q", got)
 	}
 }
+
+// web.trusted_proxy is an explicit boolean: only it lets a loopback peer's
+// X-Forwarded-For pick the login limiter's key.
+func TestWebTrustedProxy(t *testing.T) {
+	if issues := validateGlobalDoc(t, `
+web: { port: 9797, trusted_proxy: "yes" }
+paths: { services: [ @ROOT@/services ] }
+defaults: { policy: { cooldown: 5m } }
+`); !hasIssue(issues, "web.trusted_proxy must be a boolean") {
+		t.Errorf("string trusted_proxy: no issue in %v", issues)
+	}
+	if issues := validateGlobalDoc(t, `
+web: { port: 9797, trusted_proxy: true }
+paths: { services: [ @ROOT@/services ] }
+defaults: { policy: { cooldown: 5m } }
+`); hasIssue(issues, "web.trusted_proxy") {
+		t.Errorf("valid trusted_proxy: unexpected issue in %v", issues)
+	}
+	if !(Global{Raw: map[string]any{SectionWeb: map[string]any{WebKeyTrustedProxy: true}}}).WebTrustedProxy() {
+		t.Error("WebTrustedProxy = false, want true")
+	}
+	if (Global{}).WebTrustedProxy() {
+		t.Error("WebTrustedProxy without a web block = true, want false")
+	}
+}
