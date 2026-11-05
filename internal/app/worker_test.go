@@ -329,6 +329,46 @@ func TestWorkerUnreadableSettlingHoldsRemediation(t *testing.T) {
 	}
 }
 
+// The worker's engine has no Emit of its own, so a panic inside a remediation
+// must still leave the audited failure, the cooldown and a cleared marker
+// before the cycle's recovery sees it: otherwise the action repeats without
+// cooldown once the running marker ages out.
+func TestWorkerRemediationPanicRecordsFailureAndCooldown(t *testing.T) {
+	h := &workerHarness{cache: failedCache("http")}
+	tree := map[string]any{"rules": map[string]any{
+		"restart-if-down": map[string]any{
+			"type": "remediation",
+			"if":   map[string]any{"failed": map[string]any{"check": "http"}},
+			"then": map[string]any{"action": "restart"},
+		},
+	}}
+	policy := rules.Policy{Cooldown: time.Hour}
+	w := h.worker(tree, policy, nil)
+	store := newFakeStore()
+	w.OperationSettling = store
+	w.Operate = func(context.Context, string) operation.Result { panic("boom") }
+
+	func() {
+		defer func() {
+			if recover() == nil {
+				t.Fatal("the panic must still reach the cycle's recovery")
+			}
+		}()
+		w.RunCycle(context.Background())
+	}()
+
+	event, ok := h.eventOf(eventKindError)
+	if !ok || event.Rule != "restart-if-down" || event.Status != string(operation.ResultFailed) || !strings.Contains(event.Message, "panic during restart") {
+		t.Fatalf("panicked remediation must be audited as failed, events=%+v", h.events)
+	}
+	if allowed, _ := policy.Allow(w.State, t0); allowed {
+		t.Fatal("a panicked remediation must start its cooldown")
+	}
+	if _, found := store.settling["web"]; found {
+		t.Fatalf("running marker left behind: %+v", store.settling["web"])
+	}
+}
+
 // TestWorkerRuleEvalErrorMessageIsNotDoublyPrefixed pins the one line an
 // operator reads when a rule condition cannot be evaluated. evalRule already
 // labels the failure, so a second prefix at the emit site made every such event

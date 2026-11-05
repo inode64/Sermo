@@ -317,7 +317,10 @@ exit path), and release the operation lock (registered only after a successful
 acquire). Every later step may return early; cleanup never repeats per return,
 and a blocked, failed or panicking operation cannot leak the lock or skip its
 event. A panic is audited as `failed`, never as the `ok` the result starts
-with, and still propagates to the caller. Result statuses: `ok`, `blocked`, `preflight_failed`,
+with, and still propagates to the caller. In `sermod` the worker audits its
+own remediation (to name the rule), so it recovers that panic, records the
+failure with the rule and the cooldown, closes the operation marker and only
+then lets it propagate. Result statuses: `ok`, `blocked`, `preflight_failed`,
 `postflight_failed`, `failed`, `orphan_processes`. A reload (SIGHUP) or shutdown
 cancels an in-flight operation, so the engine's bounded waits report
 `operation cancelled during <phase>` instead of a timeout: an interrupted action

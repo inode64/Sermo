@@ -910,7 +910,7 @@ func (w *Worker) executeRemediation(ctx context.Context, now func() time.Time, f
 	if w.Cascade != nil && operation.CascadesAlsoApply(action) {
 		operate = w.Cascade
 	}
-	result := operate(ctx, action)
+	result, recovered := operateRecovering(ctx, operate, w.Service, action)
 	if result.RecordsRemediation() {
 		w.State.Record(now(), w.Policy)
 	}
@@ -919,6 +919,22 @@ func (w *Worker) executeRemediation(ctx context.Context, now func() time.Time, f
 	}
 	kind := eventKindForResult(result)
 	w.emit(Event{Kind: kind, Severity: remediationSeverity(kind, firing.severity), Rule: firing.Name, Action: action, Status: string(result.Status), Message: result.Message})
+	if recovered != nil {
+		panic(recovered)
+	}
+}
+
+// operateRecovering runs one remediation and turns a panic into the failed
+// result the engine audits for it (see operation.Engine.emitFinal). The
+// worker's engine has no Emit, so the panic is all that reaches the worker; it
+// is handed back to be raised again once the cooldown and the event are kept.
+func operateRecovering(ctx context.Context, operate func(context.Context, string) operation.Result, service, action string) (result operation.Result, recovered any) {
+	defer func() {
+		if recovered = recover(); recovered != nil {
+			result = operation.Result{Service: service, Action: action, Status: operation.ResultFailed, Message: fmt.Sprintf("panic during %s: %v", action, recovered)}
+		}
+	}()
+	return operate(ctx, action), nil
 }
 
 // remediationSeverity grades a remediation outcome by the incident that
@@ -980,10 +996,15 @@ func (w *Worker) operateForRemediation(ctx context.Context, action string) opera
 	if err != nil {
 		w.emit(Event{Kind: eventKindError, Action: action, Message: err.Error()})
 	}
-	result := w.Operate(ctx, action)
-	activeAfterPostflightFailure := ServiceActiveAfterPostflightFailure(ctx, action, result, nil, w.CheckDeps.Status)
+	result, recovered := operateRecovering(ctx, w.Operate, w.Service, action)
+	activeAfterPostflightFailure := recovered == nil && ServiceActiveAfterPostflightFailure(ctx, action, result, nil, w.CheckDeps.Status)
+	// A panicked operation released its lock; a running marker left behind
+	// would hide the service until the marker ages out.
 	if err := finishOperationSettling(w.OperationSettling, w.Service, action, result, nil, activeAfterPostflightFailure, prior, state.OperationSettlingSettling); err != nil {
 		w.emit(Event{Kind: eventKindError, Action: action, Message: err.Error()})
+	}
+	if recovered != nil {
+		panic(recovered)
 	}
 	return result
 }
