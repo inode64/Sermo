@@ -10,9 +10,7 @@ service:
 apps:
   - monit
 variables:
-  host: 127.0.0.1
   config: /etc/monitrc
-  port: 2812
 preflight:
   config:
     type: command
@@ -61,12 +59,17 @@ watches:
       expect: active
   port:
     check:
-      # Monit's HTTP interface (2812) is opt-in; many hosts run monit without it,
-      # so a closed port must not flip an otherwise-active service to failed.
-      type: tcp
-      host: ${host}
-      port: ${port}
-      timeout: 2s
+      # The native client follows monitrc's HTTP, TLS, socket and authentication
+      # settings; a connect-and-close TCP probe creates errors on TLS listeners.
+      type: command
+      command:
+        - ${monit_binary}
+        - -B
+        - -c
+        - ${config}
+        - summary
+      expect_exit: 0
+      timeout: 5s
       optional: true
   alert-if-memory-high:
     check:

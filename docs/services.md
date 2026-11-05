@@ -37,6 +37,15 @@ cannot answer that probe, so it keeps just the init-service check; add an
 authenticated site-specific SNMP check when protocol availability itself is
 required there.
 
+The `monit` profile checks its control interface with
+`monit -B -c ${config} summary`. The native client reads the listener, TLS and authentication settings
+from Monit's control file; override `config` when it differs from
+`/etc/monitrc`. This avoids incomplete TLS connections from a plain TCP probe.
+The check remains optional for installations without the HTTP interface and
+keeps the watch name `port`. It checks that Monit answers, independently of the
+health of the services Monit supervises. It does not change Monit's monitoring
+modes or its service controls.
+
 The `postgres_exporter` profile monitors the PostgreSQL exporter's init unit,
 exact executable and user, and HTTP `/metrics` endpoint. Override `host`, `port`
 and `user` when they differ from `127.0.0.1`, `9187` and `postgres_exporter`.
