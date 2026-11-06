@@ -172,7 +172,10 @@ decision.
    generations and no old non-delegated generation remains anywhere in the
    process snapshot, including outside the unit's current cgroup. PID alone or an
    unchanged active daemon is insufficient evidence. Auxiliary units are still
-   started again; only the primary start is skipped.
+   started again; only the primary start is skipped. The same proof is required
+   if reactivation occurs after residual discovery, immediately before init
+   reconciliation; Sermo leaves the new generation running without resetting
+   its init state.
 9. Verify backend and resident-process state before sampling required postflight
    checks. A settling attempt never runs or caches a successful probe; losing
    readiness invalidates earlier postflight success. Verify required postflight for

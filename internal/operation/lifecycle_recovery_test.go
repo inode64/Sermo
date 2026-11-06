@@ -42,6 +42,92 @@ func TestSystemdReactivationDoesNotHideOldProcessOutsideUnit(t *testing.T) {
 	}
 }
 
+func TestRestartReactivationBeforeReconciliation(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name       string
+		backend    string
+		action     string
+		oldAlive   bool
+		untrusted  bool
+		inactive   bool
+		readError  bool
+		cancel     bool
+		postflight bool
+		want       ResultStatus
+	}{
+		{name: "verified replacement", want: ResultOK},
+		{name: "old process outside unit", oldAlive: true, want: ResultFailed},
+		{name: "wrong replacement user", untrusted: true, want: ResultFailed},
+		{name: "inactive unit", inactive: true, want: ResultFailed},
+		{name: "OpenRC", backend: string(servicemgr.BackendOpenRC), want: ResultFailed},
+		{name: "stop must stay stopped", action: actionStop, want: ResultFailed},
+		{name: "snapshot error", readError: true, want: ResultFailed},
+		{name: "cancellation", cancel: true, want: ResultFailed},
+		{name: "required postflight", postflight: true, want: ResultPostflightFailed},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			h := defaultHarness()
+			if tc.backend != "" {
+				h.backend = tc.backend
+			}
+			h.mgr.stopLeavesActive = !tc.inactive
+			h.postflight.OK = !tc.postflight
+			signaler := &recordingSignaler{}
+			h.reaper.Signaler = signaler
+			e := h.engine()
+			e.Lifecycle.ProcessMode = config.ServiceProcessResident
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			old := process.Identity{PID: 100, PPID: 1, UID: 1001, Exe: "/opt/mysqld", ExeOK: true, StartTicks: 10, StartTicksOK: true}
+			newProcess := old
+			newProcess.PID, newProcess.StartTicks = 101, 20
+			if tc.untrusted {
+				newProcess.UID = 1002
+			}
+			afterReads := 0
+			e.ObserveProcesses = func() (process.Observation, error) {
+				ids, pids := map[int]process.Identity{100: old}, []int{100}
+				// Residual discovery first proves absence. The replacement appears
+				// only at resetStopped's subsequent observation.
+				if h.discoverCalls > 0 {
+					afterReads++
+					if afterReads > 1 && tc.readError {
+						return process.Observation{}, errors.New("snapshot unavailable")
+					}
+					if afterReads > 1 && tc.cancel {
+						cancel()
+					}
+					ids, pids = map[int]process.Identity{101: newProcess}, []int{101}
+					if tc.oldAlive {
+						ids[100] = old
+					}
+				}
+				d := process.Discoverer{
+					Reader: &countingPIDReader{ids: ids}, BackendPIDs: func() []int { return pids },
+					ResolveUser: func(string) (uint32, bool) { return 1001, true },
+				}
+				return d.Observe([]process.Selector{{Name: process.RoleMain, Type: process.SelectorCommandMatch, Exe: "/opt/mysqld", User: "mysql"}})
+			}
+			action := tc.action
+			if action == "" {
+				action = actionRestart
+			}
+			res := e.Do(ctx, action)
+			if res.Status != tc.want {
+				t.Fatalf("result=%+v calls=%v, want %s", res, h.mgr.calls, tc.want)
+			}
+			if h.mgr.did("start mysqld") || h.mgr.did("reset mysqld") || len(signaler.calls) > 0 {
+				t.Fatalf("replacement must not be reset, started or signalled: calls=%v signals=%v", h.mgr.calls, signaler.calls)
+			}
+			if h.released != 1 || len(h.emitted) != 1 {
+				t.Fatalf("releases=%d events=%d", h.released, len(h.emitted))
+			}
+		})
+	}
+}
+
 func TestRediscoveryErrorPreventsKillEscalation(t *testing.T) {
 	t.Parallel()
 	h := defaultHarness()

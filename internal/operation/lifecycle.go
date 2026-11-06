@@ -13,9 +13,10 @@ import (
 )
 
 var (
-	errProcessIdentity = errors.New("active service has no process matching configured exact exe/user selectors")
-	errProcessAbsent   = errors.New("init reports active but service process is absent")
-	errReplacedBinary  = errors.New("service process runs a binary replaced on disk; restart it to verify the new one")
+	errProcessIdentity   = errors.New("active service has no process matching configured exact exe/user selectors")
+	errProcessAbsent     = errors.New("init reports active but service process is absent")
+	errReplacedBinary    = errors.New("service process runs a binary replaced on disk; restart it to verify the new one")
+	errProcessesAppeared = errors.New("processes appeared before init state reconciliation")
 )
 
 // observeProcesses is deliberately separate from best-effort monitoring. Missing
@@ -188,7 +189,7 @@ func (e Engine) resetStopped(ctx context.Context, requireAbsence bool, previous 
 		return err
 	}
 	if len(nonDelegatedResiduals(observation.Processes)) > 0 {
-		return errors.New("processes appeared before init state reconciliation")
+		return errProcessesAppeared
 	}
 	if (observation.IdentityRequired || requireAbsence) && !observation.AbsenceKnown {
 		if err := e.verifyContainerExit(observation, previous); err != nil {
@@ -334,6 +335,20 @@ func (e Engine) stopService(ctx context.Context, result *Result) (stopped, react
 		return false, false
 	}
 	if err := e.resetStopped(ctx, stopErr != nil, before.Processes...); err != nil {
+		// D-Bus can reactivate the unit after residual discovery proved absence.
+		// Reuse the generation proof before skipping reconciliation and start.
+		if errors.Is(err, errProcessesAppeared) {
+			after, observeErr := e.observeProcesses(ctx, before.Processes...)
+			if observeErr != nil {
+				err = errors.Join(err, observeErr)
+			} else {
+				accepted, activationErr := e.systemdReactivated(ctx, result.Action, before, nonDelegatedResiduals(after.Processes))
+				if activationErr == nil && accepted {
+					return true, true
+				}
+				err = errors.Join(err, activationErr)
+			}
+		}
 		result.Status, result.Message = ResultFailed, err.Error()
 		return false, false
 	}
