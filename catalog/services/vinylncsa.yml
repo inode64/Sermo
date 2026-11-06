@@ -1,0 +1,50 @@
+name: vinylncsa
+display_name: "Vinyl Cache NCSA logger"
+category: observability
+description: >-
+  Vinyl Cache request logger (vinylncsa), which writes the cache's shared-memory
+  log to a file, one line per request in NCSA or a custom format.
+service: vinylncsa
+apps:
+  - vinylncsa
+restart_on_change:
+  apps:
+    - vinylncsa
+  messages:
+    app: >-
+      ${display_name} will restart after version change of ${change.app}: ${change.old_version} -> ${change.new_version}
+variables:
+  # Gentoo's init script and units run it as root; Debian's package runs it as
+  # vinyllog with -P /run/vinyl-cache/vinylncsa.pid (override user and pidfile).
+  user: root
+# /run/<unit>.pid: the OpenRC script passes -P /run/${SVCNAME}.pid, so each
+# instance (vinylncsa.backend is a symlink to vinylncsa) writes its own.
+pidfile: ${pidfile}
+processes:
+  main:
+    exe: ${vinylncsa_binary}
+    # Every instance runs this binary as the same user. The pidfile it was
+    # started with tells them apart when neither a live pidfile nor the init's
+    # cgroup scopes discovery, so stopping one never takes the other's logger
+    # for a residual.
+    cmd: " -P ${pidfile}( |$)"
+    user: ${user}
+stop_policy:
+  kill_only_if:
+    users:
+      - ${user}
+    exe_any:
+      - ${vinylncsa_binary}
+watches:
+  # A logger that dies goes unnoticed: the cache keeps serving and only the
+  # request log stops. libvinylapi can abort it under a log overrun while
+  # vinyld restarts with load (seen with 9.1.0), and OpenRC does not respawn it.
+  restart-if-inactive:
+    check:
+      type: service
+      expect: active
+      verify: true
+    for:
+      cycles: 3
+    then:
+      action: restart

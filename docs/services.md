@@ -60,6 +60,26 @@ stats tool, so the optional `stats-readable` check also requires
 `varnish_up 1` in the body; its user must belong to the cache's group
 (`varnish` or `vinyl`) to read the shared memory.
 
+The `vinylncsa` profile restarts Vinyl Cache's request logger when its unit
+stays inactive for three cycles: the cache keeps serving while the logger is
+down, so only the request log would show it. Every instance runs the same
+binary as the same user and is told apart by the pidfile it was started with
+(`-P /run/<unit>.pid`, as the OpenRC script passes). A second instance, such
+as an OpenRC `vinylncsa.backend` symlink that logs only failed backend fetches,
+is a service document that `uses` it:
+
+```yaml
+# /etc/sermo/services.local/vinylncsa.backend.yml
+name: vinylncsa.backend
+display_name: Vinyl Cache backend error log
+uses: vinylncsa
+service: vinylncsa.backend
+```
+
+The profile assumes Gentoo, which runs the logger as `root`. On Debian set
+`user: vinyllog` and `pidfile: /run/vinyl-cache/vinylncsa.pid`. A unit that
+starts it without `-P` also needs its own `processes.main.cmd`.
+
 The `dcc` profile accepts either `dcc` or `dccifd` as the systemd unit name;
 on OpenRC it uses `dcc`. Its Unix socket remains the primary liveness check
 alongside the init unit because the daemon's pidfile varies across packages.

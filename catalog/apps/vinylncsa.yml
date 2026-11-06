@@ -1,0 +1,9 @@
+name: vinylncsa
+display_name: "Vinyl Cache NCSA logger"
+category: observability
+variables:
+  binary: ${bindir}/vinylncsa
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  # vinylncsa (vinyl-cache-9.1.0 revision …)
+  version: { type: command, command: ["${binary}", "-V"], timeout: 10s }
