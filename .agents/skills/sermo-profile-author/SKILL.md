@@ -167,8 +167,9 @@ foreign signal Sermo does not own, such as a backup process or a flag file
 created by another tool. The check a guard reads is a sensor: `reports: state`
 and `optional: true`, so neither a running backup nor a sensor that cannot
 connect reads the service as down (an unavailable sensor still blocks: guards
-fail closed). A top-level `rules:` block holds guards only; remediation lives in
-`watches.<name>.then`. Do not point a `file_exists` check at
+fail closed). A top-level `rules:` block accepts guards, remediation and alert
+rules; service watches can attach remediation through `watches.<name>.then`.
+Do not point a `file_exists` check at
 `<engine.runtime>/locks/` (default `/run/sermo/locks/`).
 
 Example:
