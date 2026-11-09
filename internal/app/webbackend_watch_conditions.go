@@ -220,7 +220,7 @@ func sizeWatchConditions(check map[string]any) []web.WatchCondition {
 
 func watchCommonConditions(check map[string]any) []web.WatchCondition {
 	out := appendFlag(nil, check, checks.CheckKeyMounted, checks.DataKeyMounted)
-	if cfgval.AsString(check[checks.CheckKeyType]) == checks.CheckTypeOOM {
+	if checkType := cfgval.AsString(check[checks.CheckKeyType]); checkType == checks.CheckTypeOOM || checkType == checks.CheckTypeCoredump {
 		if _, ok := check[checks.CheckKeyDelta].(map[string]any); !ok {
 			out = append(out, web.WatchCondition{Field: checks.CheckKeyDelta, Op: cfgval.CompareOpGreater, Value: watchConditionDefaultDelta})
 		}

@@ -1,18 +1,16 @@
 name: coredumps
 category: host
-# A process crashed: systemd-coredump keeps one file per dump here. Its unit may
-# restart it, and a healthy daemon replaces a dead worker silently, so the dump is
-# often the only trace. Fires for an hour after each new dump; `coredumpctl list`
-# names the program.
+# A process crashed. Its unit may restart it, and a healthy daemon replaces a
+# dead worker silently, so the dump is often the only trace. The check counts the
+# dumps systemd-coredump takes in, including one whose handler timed out and left
+# no file, and fires on the cycle a new one arrives; `clear` keeps the alert up
+# for an hour after the last one. `coredumpctl list` names the program.
 monitor: disabled
-interval: 5m
+interval: 30s
 check:
-  type: count
-  path: /var/lib/systemd/coredump
-  of: file
-  delta: { op: ">", value: 0 }
-  within: 1h
+  type: coredump
   severity: warning
+clear: { duration: 1h }
 then:
   hook:
     command: [/usr/local/bin/sermo-coredump-alert.sh]

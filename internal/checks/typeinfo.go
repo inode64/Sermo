@@ -125,6 +125,7 @@ const (
 	CheckTypeConntrack        = "conntrack"
 	CheckTypeZombies          = "zombies"
 	CheckTypeOOM              = "oom"
+	CheckTypeCoredump         = "coredump"
 	CheckTypeCert             = "cert"
 	CheckTypeSQLite           = "sqlite"
 	CheckTypeSQL              = "sql"

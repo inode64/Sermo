@@ -89,8 +89,9 @@ func validateThresholdPreds(prefix string, fieldsMap map[string]any, fields []st
 	}
 }
 
-// validateOomFields validates an oom check's optional delta {op, value} (the
-// default fires on any OOM kill, so a bare oom check is valid).
+// validateOomFields validates the optional delta {op, value} of an oom or
+// coredump check (the default fires on any kill or dump, so a bare check is
+// valid).
 func validateOomFields(prefix string, fields map[string]any, add addFunc) {
 	delta, present := fields[checks.CheckKeyDelta]
 	if !present {
@@ -849,6 +850,7 @@ var singleShotCheckValidators = map[string]singleShotCheckValidator{
 	checks.CheckTypeRoute:            validateRouteCheck,
 	checks.CheckTypeZombies:          singleShotThreshold(checks.ZombiePredFields),
 	checks.CheckTypeOOM:              singleShotNoLock(validateOomFields),
+	checks.CheckTypeCoredump:         singleShotNoLock(validateOomFields),
 	checks.CheckTypeCert:             singleShotNoLock(validateCertFields),
 	checks.CheckTypeSQLite:           validateSQLiteCheck,
 	checks.CheckTypeSQL:              singleShotNoLock(validateSQLFields),

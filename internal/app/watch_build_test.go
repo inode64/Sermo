@@ -962,6 +962,15 @@ func TestHasConfiguredTargets(t *testing.T) {
 // for: {cycles: 10}, but an oom check reports a one-cycle counter delta, so the window
 // could never be satisfied and the watch stayed green through the kill.
 func TestBuildWatchesWarnsOomBehindMultiCycleWindow(t *testing.T) {
+	for _, checkType := range []string{"oom", "coredump"} {
+		t.Run(checkType, func(t *testing.T) { assertEdgeSensorWindowWarning(t, checkType) })
+	}
+}
+
+// assertEdgeSensorWindowWarning checks one counter-delta edge sensor: a window
+// longer than its one true cycle is reported, and the watch still runs.
+func assertEdgeSensorWindowWarning(t *testing.T, checkType string) {
+	t.Helper()
 	for _, tc := range []struct {
 		name     string
 		window   map[string]any
@@ -976,14 +985,15 @@ func TestBuildWatchesWarnsOomBehindMultiCycleWindow(t *testing.T) {
 		{"one cycle", map[string]any{"cycles": 1}, "for", false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			entry := map[string]any{"check": map[string]any{"type": "oom"}}
+			entry := map[string]any{"check": map[string]any{"type": checkType}}
 			entry[tc.field] = tc.window
-			watches, warns := BuildWatches(cfgWithWatches(map[string]any{"watch-oom": entry}),
+			name := "watch-" + checkType
+			watches, warns := BuildWatches(cfgWithWatches(map[string]any{name: entry}),
 				Deps{DefaultTimeout: time.Second}, 30*time.Second)
 
 			warned := false
 			for _, w := range warns {
-				if strings.Contains(w, "watch-oom") && strings.Contains(w, "can never be satisfied") {
+				if strings.Contains(w, name) && strings.Contains(w, "can never be satisfied") {
 					warned = true
 				}
 			}

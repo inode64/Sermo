@@ -6353,6 +6353,10 @@ const watchTypeProfiles = {
     label: "OOM",
     columns: [numericReadingColumn("kills", "OOM kills")],
   },
+  coredump: {
+    label: "Core dumps",
+    columns: [numericReadingColumn("dumps", "Core dumps")],
+  },
   pids: { label: "PIDs", columns: meterUsageColumns },
   pressure: {
     label: "Pressure",

@@ -108,6 +108,7 @@ Connection-protocol checks (MySQL, PostgreSQL, Redis, Docker, libvirt, etc.) are
 | `swap`        | condition | one swap metric (`metric: usage\|io`) holds — single-metric form of the swap watch |
 | `zombies`     | condition | the count of zombie processes satisfies `count {op, value}`         |
 | `oom`         | condition | the kernel OOM-kill count rose by `delta {op, value}` since last cycle|
+| `coredump`    | condition | systemd-coredump took in more core dumps than `delta {op, value}` since last cycle (default `> 0`) |
 | `cert`        | health | a TLS certificate is expiring/invalid, or its algorithm/issuer changed (see Cert)|
 | `mysql` / `mariadb` | health | a MySQL/MariaDB server answers: with no credentials it reads the handshake greeting (liveness + version); with a user/password it authenticates and reads the version in one query (see Database) |
 | `mongodb` / `mongo` | health | a connection to a MongoDB server authenticates, pings and reports its version and replica-set `role` for `expect`/`on_change` (see Database) |
@@ -900,9 +901,10 @@ keeps loading: one that is not strictly stricter than the threshold below it
 (typical when an operator raises a catalog base threshold above a catalog
 level), one that compares in the opposite direction or in the other metric
 form (percentage versus absolute), or one that is not above the check's own
-severity (`levels.error` under `severity: error`). For `oom`, `failed_units`,
-`edac` and `raid` with no declared threshold, the one they fire on (any kill,
-failed unit, uncorrectable error or degraded array: `> 0`) is the threshold
+severity (`levels.error` under `severity: error`). For `oom`, `coredump`,
+`failed_units`, `edac` and `raid` with no declared threshold, the one they fire
+on (any kill, core dump, failed unit, uncorrectable error or degraded array:
+`> 0`) is the threshold
 below the first level. A whole block under a `reports:` other than the type's
 default is ignored too: the verdict it would grade is inverted or gone, which
 is what happens when an override turns a catalog check into a sensor.
@@ -920,7 +922,7 @@ Types that accept `levels:`, and the threshold keys a level restates:
 |---|---|---|
 | level predicates | `storage`, `memory`, `load`, `pressure`, `fds`, `pids`, `conntrack`, `inotify`, `diskio`, `sensors`, `hdparm`, `users`, `tcp_connections`, `ssh_idle`, `terminal_sessions`, `process_count`, `edac`, `raid`, `smart` | the type's predicate fields |
 | single count | `zombies`, `failed_units`, `log` | `count` |
-| counter delta | `oom` | `delta` |
+| counter delta | `oom`, `coredump` | `delta` |
 | count or growth | `count` | `count`, or `delta` in growth mode |
 | per metric | `swap` | `usage`: `used_pct` / `free_pct` / `free_bytes`; `io`: `delta` |
 | per metric | `net` | `errors`: `delta` |
@@ -3179,8 +3181,9 @@ health-style.
 ### Edge sensors: a `for:` window suppresses them
 
 A few checks report an **increment** rather than a state: `oom` reads the kernel's
-cumulative `oom_kill` counter and reports the per-cycle delta, so a kill makes the
-condition true for exactly **one** cycle and false again on the next.
+cumulative `oom_kill` counter and `coredump` the dumps systemd-coredump has taken
+in, and both report the per-cycle delta, so a kill or a crash makes the condition
+true for exactly **one** cycle and false again on the next.
 
 A `for:`/`within:` window asks the condition to hold for several consecutive cycles.
 On an edge condition that can never happen, so **the window silences the sensor
@@ -3304,6 +3307,12 @@ The check is condition-style and has **no remediation action**: restarting an
 arbitrary unit Sermo knows nothing about is not a safe action, so a failed unit
 is reported and left alone. Data keys are `backend`, `count` and `units` (the
 joined unit names), and the dashboard shows all three.
+
+A `systemd-coredump@…` instance is not counted. It is the handler of one crash,
+and when that dump times out or is killed it stays failed until
+`systemctl reset-failed`, which would turn one crash into an alert that never
+clears. The crash itself is what a
+[`coredump`](configuration.md#coredump--process-core-dumps) watch reports.
 
 ### An unreachable ceiling is not a ceiling
 

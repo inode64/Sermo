@@ -128,9 +128,10 @@ func sustainableCycles(checkEntry map[string]any, interval time.Duration) int {
 		return cyclesWithin(checkEntry, interval)
 	}
 	switch cfgval.AsString(checkEntry[checks.CheckKeyType]) {
-	case checks.CheckTypeOOM:
-		// The kernel's oom_kill counter is cumulative and the check consumes the
-		// delta each cycle, so a kill is true exactly once. There is no level form.
+	case checks.CheckTypeOOM, checks.CheckTypeCoredump:
+		// The kernel's oom_kill counter and systemd-coredump's accepted count are
+		// cumulative and the check consumes the delta each cycle, so a kill or a
+		// crash is true exactly once. There is no level form.
 		return 1
 	case checks.CheckTypeCount:
 		// A count check is delta-only or level-only; mixing is rejected at build. Its

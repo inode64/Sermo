@@ -103,6 +103,7 @@ const (
 	DataKeyKind               = "kind"
 	DataKeyCarrierChanges     = "carrier_changes"
 	DataKeyDriver             = "driver"
+	DataKeyDumps              = "dumps"
 	DataKeyDuplex             = "duplex"
 	DataKeyMAC                = "mac"
 	DataKeyMTU                = "mtu"

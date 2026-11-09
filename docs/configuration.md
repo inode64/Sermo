@@ -79,6 +79,7 @@ configuration omits it.
   - [memory — system RAM](#memory--system-ram)
   - [pressure — kernel PSI stall time](#pressure--kernel-psi-stall-time)
   - [oom — kernel OOM kills](#oom--kernel-oom-kills)
+  - [coredump — process core dumps](#coredump--process-core-dumps)
   - [fds — system file descriptors](#fds--system-file-descriptors)
   - [diskio — block-device I/O rates](#diskio--block-device-io-rates)
   - [pids — kernel PID table](#pids--kernel-pid-table)
@@ -3558,6 +3559,38 @@ watches:
 The common case is "alert on any OOM kill", so `delta` may be omitted (defaults to
 `> 0`); set a higher threshold to alert only on a burst. A host whose kernel does
 not expose `oom_kill` never fires. Hook extras: `SERMO_TOTAL` (cumulative kills).
+
+### `coredump` — process core dumps
+
+A `coredump` watch fires when processes have dumped core since the last cycle.
+A crashed daemon is often restarted by its unit, or a dead worker silently
+replaced, so the dump is the only trace of the crash. The check reads how many
+dumps `systemd-coredump.socket` has accepted (its `NAccepted` count, over the
+system D-Bus), which includes a dump whose handler then timed out or was killed
+and left neither a journal entry nor a core file.
+
+```yaml
+watches:
+  watch-coredump:
+    interval: 30s
+    check: { type: coredump }       # delta optional; default fires on any dump (> 0)
+    clear: { duration: 1h }         # how long the alert stays up after the last dump
+```
+
+Like `oom` it is an edge sensor: a crash is true for one cycle, so give it no
+`for:` window and keep it visible with `clear:` (see
+[edge sensors](rules.md#edge-sensors-a-for-window-suppresses-them)). The first
+cycle after a start or reload only records the total. The result says how many
+dumps arrived and the total since the socket started (`core dumps +2 (total
+11)`), and the dashboard graphs the per-cycle count; `coredumpctl list` names
+the programs. During a crash storm past the socket's `MaxConnections`, refused
+dumps are not counted, so the count is a lower bound.
+
+The check is unavailable, rather than silently green, when
+`kernel.core_pattern` does not pipe dumps to `systemd-coredump`, when the socket
+unit is not loaded, or when the system bus does not answer — an OpenRC host has
+no such socket even when `core_pattern` names the binary. Hook extras:
+`SERMO_TOTAL` (dumps since the socket started).
 
 ### `fds` — system file descriptors
 

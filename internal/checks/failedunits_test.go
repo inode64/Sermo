@@ -13,11 +13,12 @@ import (
 
 func TestFailedUnitsCheckRun(t *testing.T) {
 	tests := []struct {
-		name    string
-		sample  FailedUnitsSample
-		err     error
-		wantOK  bool
-		wantMsg string
+		name      string
+		sample    FailedUnitsSample
+		err       error
+		wantOK    bool
+		wantMsg   string
+		wantUnits []string
 	}{
 		{
 			name:    "no failed unit",
@@ -27,10 +28,26 @@ func TestFailedUnitsCheckRun(t *testing.T) {
 		},
 		{
 			// The condition is what fires, so OK == true is the alarm here.
-			name:    "failed units are named",
-			sample:  FailedUnitsSample{Backend: servicemgr.BackendSystemd, Units: []string{"backup_kvm.service", "cleanup.timer"}},
-			wantOK:  true,
-			wantMsg: "2 failed unit(s): backup_kvm.service, cleanup.timer",
+			name:      "failed units are named",
+			sample:    FailedUnitsSample{Backend: servicemgr.BackendSystemd, Units: []string{"backup_kvm.service", "cleanup.timer"}},
+			wantOK:    true,
+			wantMsg:   "2 failed unit(s): backup_kvm.service, cleanup.timer",
+			wantUnits: []string{"backup_kvm.service", "cleanup.timer"},
+		},
+		{
+			// A systemd-coredump@ instance is one crash's handler; it stays failed
+			// after a dump timed out, and the coredump check counts the crash.
+			name:    "coredump handler is not a failed unit",
+			sample:  FailedUnitsSample{Backend: servicemgr.BackendSystemd, Units: []string{"systemd-coredump@8-4223-3637432_45575102-0.service"}},
+			wantOK:  false,
+			wantMsg: "no failed units",
+		},
+		{
+			name:      "coredump handler beside a failed unit",
+			sample:    FailedUnitsSample{Backend: servicemgr.BackendSystemd, Units: []string{"backup_kvm.service", "systemd-coredump@3-1-2_3-0.service"}},
+			wantOK:    true,
+			wantMsg:   "1 failed unit(s): backup_kvm.service",
+			wantUnits: []string{"backup_kvm.service"},
 		},
 		{
 			name:    "sampler error",
@@ -60,17 +77,17 @@ func TestFailedUnitsCheckRun(t *testing.T) {
 			if tc.err != nil {
 				return
 			}
-			if got := res.Data[DataKeyCount]; got != uint64(len(tc.sample.Units)) {
-				t.Fatalf("data count = %v, want %d", got, len(tc.sample.Units))
+			if got := res.Data[DataKeyCount]; got != uint64(len(tc.wantUnits)) {
+				t.Fatalf("data count = %v, want %d", got, len(tc.wantUnits))
 			}
 			units, present := res.Data[DataKeyUnits]
-			if len(tc.sample.Units) == 0 {
+			if len(tc.wantUnits) == 0 {
 				if present {
 					t.Fatalf("data units = %v, want absent with no failed unit", units)
 				}
 				return
 			}
-			if units != strings.Join(tc.sample.Units, ", ") {
+			if units != strings.Join(tc.wantUnits, ", ") {
 				t.Fatalf("data units = %v, want the joined unit names", units)
 			}
 		})

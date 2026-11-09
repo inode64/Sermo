@@ -105,6 +105,7 @@ var gradeSupports = map[string]gradeSupport{
 	CheckTypeZombies:          {kind: gradePredicates},
 	CheckTypeFailedUnits:      {kind: gradePredicates, defaulted: true, implicit: anyCount(CheckKeyCount)},
 	CheckTypeOOM:              {kind: gradePredicates, defaulted: true, implicit: anyCount(CheckKeyDelta)},
+	CheckTypeCoredump:         {kind: gradePredicates, defaulted: true, implicit: anyCount(CheckKeyDelta)},
 	CheckTypeEDAC:             {kind: gradePredicates, defaulted: true, implicit: anyCount(fieldUE)},
 	CheckTypeRAID:             {kind: gradePredicates, defaulted: true, implicit: anyCount(fieldDegraded)},
 	CheckTypeSmart:            {kind: gradePredicates, defaulted: true, anyOf: true, floor: severity.Warning},

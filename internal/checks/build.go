@@ -62,6 +62,7 @@ type Samplers struct {
 	RouteSampler    RouteSamplerFunc
 	LoadSampler     LoadSamplerFunc
 	OomSampler      OomSamplerFunc
+	CoredumpSampler CoredumpSamplerFunc
 	FdsSampler      FdsSamplerFunc
 	MemorySampler   MemorySamplerFunc
 	PressureSampler PressureSamplerFunc
@@ -341,6 +342,7 @@ var builtinCheckSpecs = []checkSpec{
 	{info: meteredTypeInfo(conditionTypeInfo(CheckTypeConntrack), DataKeyCount), predicateFields: ConntrackPredFields, build: func(in checkBuildInput) (Check, string) { return buildConntrackCheck(in.base, in.entry, in.deps) }},
 	{info: conditionTypeInfo(CheckTypeZombies), predicateFields: ZombiePredFields, build: func(in checkBuildInput) (Check, string) { return buildZombieCheck(in.base, in.entry, in.deps) }},
 	{info: conditionTypeInfo(CheckTypeOOM), predicateFields: OOMPredFields, build: func(in checkBuildInput) (Check, string) { return buildOomCheck(in.base, in.entry, in.deps) }},
+	{info: conditionTypeInfo(CheckTypeCoredump), predicateFields: CoredumpPredFields, build: func(in checkBuildInput) (Check, string) { return buildCoredumpCheck(in.base, in.entry, in.deps) }},
 	{info: healthTypeInfo(CheckTypeCert), readsPaths: true, build: func(in checkBuildInput) (Check, string) { return buildCertCheck(in.base, in.entry, in.deps) }},
 	{info: healthTypeInfo(CheckTypeSQLite), readsPaths: true, build: func(in checkBuildInput) (Check, string) { return buildSqliteCheck(in.base, in.entry) }},
 	{info: conditionTypeInfo(CheckTypeSQL), build: func(in checkBuildInput) (Check, string) { return buildSQLCheck(in.base, in.entry) }},

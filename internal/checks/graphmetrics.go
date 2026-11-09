@@ -72,6 +72,8 @@ var graphMetrics = map[string][]GraphMetric{
 	// The OOM killer's per-cycle kill count: a spike names the moment memory ran
 	// out, which the level alert alone timestamps but cannot shape.
 	CheckTypeOOM: {{Key: DataKeyKills, Unit: metrics.MetricUnitNone, Label: "OOM kills"}},
+	// New core dumps per cycle: how often something crashed, not just that it did.
+	CheckTypeCoredump: {{Key: DataKeyDumps, Unit: metrics.MetricUnitNone, Label: "Core dumps"}},
 	// One round-trip sample per cycle of an icmp latency watch; the state form
 	// publishes no latency and is scoped out per entry below.
 	CheckTypeICMP: {{Key: DataKeyLatencyMS, Unit: metrics.MetricUnitMilliseconds, Label: "Latency", Decimals: hundredthsDecimals}},

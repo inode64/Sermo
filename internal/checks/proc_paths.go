@@ -1,18 +1,19 @@
 package checks
 
 const (
-	procDiskstatsPath  = "/proc/diskstats"
-	procFileNRPath     = "/proc/sys/fs/file-nr"
-	procLoadavgPath    = "/proc/loadavg"
-	procMDStatPath     = "/proc/mdstat"
-	procMeminfoPath    = "/proc/meminfo"
-	procMountsPath     = "/proc/mounts"
-	procPidMaxPath     = "/proc/sys/kernel/pid_max"
-	procRootPath       = "/proc"
-	procThreadsMaxPath = "/proc/sys/kernel/threads-max"
-	procVMStatPath     = "/proc/vmstat"
-	sysEDACPath        = "/sys/devices/system/edac"
-	sysHwmonPath       = "/sys/class/hwmon"
+	procCorePatternPath = "/proc/sys/kernel/core_pattern"
+	procDiskstatsPath   = "/proc/diskstats"
+	procFileNRPath      = "/proc/sys/fs/file-nr"
+	procLoadavgPath     = "/proc/loadavg"
+	procMDStatPath      = "/proc/mdstat"
+	procMeminfoPath     = "/proc/meminfo"
+	procMountsPath      = "/proc/mounts"
+	procPidMaxPath      = "/proc/sys/kernel/pid_max"
+	procRootPath        = "/proc"
+	procThreadsMaxPath  = "/proc/sys/kernel/threads-max"
+	procVMStatPath      = "/proc/vmstat"
+	sysEDACPath         = "/sys/devices/system/edac"
+	sysHwmonPath        = "/sys/class/hwmon"
 )
 
 // malformedFileFormat reports a procfs/sysfs file whose contents did not parse,

@@ -1073,23 +1073,28 @@ func TestValidateFdsWatch(t *testing.T) {
 		"watches.bad-op.check.used_pct value \"lots\" must be a percentage in 0..100")
 }
 
+// oom and coredump share the counter-delta shape: an optional delta {op, value}.
 func TestValidateOomWatch(t *testing.T) {
-	assertNoWatchIssues(t, map[string]any{
-		"watches": map[string]any{
-			"oom-bare": map[string]any{ // no delta: defaults to any kill
-				"check": map[string]any{"type": "oom"},
-				"then":  map[string]any{"hook": map[string]any{"command": []any{"/x"}}},
-			},
-			"oom-burst": map[string]any{
-				"check": map[string]any{"type": "oom", "delta": map[string]any{"op": ">", "value": 3}},
-				"then":  map[string]any{"hook": map[string]any{"command": []any{"/y"}}},
-			},
-		},
-	})
+	for _, checkType := range []string{"oom", "coredump"} {
+		t.Run(checkType, func(t *testing.T) {
+			assertNoWatchIssues(t, map[string]any{
+				"watches": map[string]any{
+					"bare": map[string]any{ // no delta: defaults to any kill or dump
+						"check": map[string]any{"type": checkType},
+						"then":  map[string]any{"hook": map[string]any{"command": []any{"/x"}}},
+					},
+					"burst": map[string]any{
+						"check": map[string]any{"type": checkType, "delta": map[string]any{"op": ">", "value": 3}},
+						"then":  map[string]any{"hook": map[string]any{"command": []any{"/y"}}},
+					},
+				},
+			})
 
-	assertWatchIssues(t, watchConfig("oom", map[string]any{"type": "oom", "delta": map[string]any{"op": "=>", "value": "many"}}),
-		"watches.oom.check.delta has an invalid op",
-		"watches.oom.check.delta value \"many\" must be numeric")
+			assertWatchIssues(t, watchConfig(checkType, map[string]any{"type": checkType, "delta": map[string]any{"op": "=>", "value": "many"}}),
+				"watches."+checkType+".check.delta has an invalid op",
+				"watches."+checkType+".check.delta value \"many\" must be numeric")
+		})
+	}
 }
 
 func TestValidateLoadWatch(t *testing.T) {

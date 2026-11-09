@@ -52,6 +52,8 @@ func TestCheckFieldParsersAgreeWithBuilders(t *testing.T) {
 		{"icmp invalid change", map[string]any{"type": "icmp", "host": "192.0.2.1", "metric": "latency", "change": "10"}, true},
 		{"icmp infinite delta", map[string]any{"type": "icmp", "host": "192.0.2.1", "metric": "latency", "change": map[string]any{"delta": "+Inf"}}, true},
 		{"oom invalid delta", map[string]any{"type": "oom", "delta": predicate(">", "NaN")}, true},
+		{"coredump bare", map[string]any{"type": "coredump"}, false},
+		{"coredump invalid delta", map[string]any{"type": "coredump", "delta": predicate(">", "NaN")}, true},
 		{"command without analyze", map[string]any{"type": "command", "command": []any{"/test/tool"}}, false},
 		{"command empty analyze", map[string]any{"type": "command", "command": []any{"/test/tool"}, "analyze": map[string]any{}}, false},
 		{"command null analyze", map[string]any{"type": "command", "command": []any{"/test/tool"}, "analyze": nil}, true},

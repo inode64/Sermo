@@ -3,6 +3,7 @@ package checks
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -52,11 +53,12 @@ func (c failedUnitsCheck) Run(ctx context.Context) Result {
 	if err != nil {
 		return c.unavailableResult(CheckTypeFailedUnits+": "+execx.FormatContextOrError(err, c.timeout), start)
 	}
-	count := uint64(len(sample.Units))
+	units := slices.DeleteFunc(slices.Clone(sample.Units), isCoredumpHandlerUnit)
+	count := uint64(len(units))
 	// Name them: which unit failed is what tells the operator what broke, and a
 	// count alone would send them back to the host to find out. The same list
 	// serves the message and the dashboard reading.
-	named := strings.Join(sample.Units, ", ")
+	named := strings.Join(units, ", ")
 	// Both branches key off the count, never off the joined text: a sampler that
 	// ever yields an unnamed unit must still report one failed unit rather than
 	// none.
@@ -74,6 +76,14 @@ func (c failedUnitsCheck) Run(ctx context.Context) Result {
 		res.Data[DataKeyUnits] = named
 	}
 	return res
+}
+
+// isCoredumpHandlerUnit reports a systemd-coredump@ instance: the handler of one
+// crash, not a service. It stays failed until reset-failed when the dump times
+// out or is killed, which turns one crash into a permanent alert; the crash
+// itself is what the coredump check counts.
+func isCoredumpHandlerUnit(unit string) bool {
+	return strings.HasPrefix(unit, coredumpCollector+"@")
 }
 
 func buildFailedUnitsCheck(b base, entry map[string]any, runner execx.Runner, deps Deps) (Check, string) {

@@ -612,6 +612,12 @@ watches:
     monitor: disabled
     check: { type: oom, delta: { op: ">", value: 0 } }
     then: { notify: [ops-email] }
+  coredump:
+    monitor: disabled
+    interval: 30s
+    check: { type: coredump }  # any new dump (delta > 0); fires for one cycle
+    clear: { duration: 1h }  # so the alert stays up an hour after the last one
+    then: { notify: [ops-email] }
   users:
     monitor: disabled
     check: { type: users, count: { op: ">", value: 5 } }  # distinct users logged in (utmp)
@@ -1112,6 +1118,9 @@ watches:
   oom:
     # An OOM kill is an error by default; a burst of them pages as critical.
     check: { type: oom, delta: { op: ">", value: 0 }, levels: { critical: { delta: { op: ">=", value: 5 } } } }
+  coredump:
+    # A crash is an error by default; a crash loop pages as critical.
+    check: { type: coredump, levels: { critical: { delta: { op: ">=", value: 10 } } } }
   # A cert check grades itself: expiring inside expires_in_days is a warning,
   # expired or not yet valid is critical, a broken chain is an error.
   cert-file:
