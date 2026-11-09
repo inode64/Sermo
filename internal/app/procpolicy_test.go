@@ -39,7 +39,7 @@ func testProcessPolicyWatcher(t *testing.T, sampler ProcSampler, allow map[strin
 	watcher := &processPolicyWatcher{
 		name:      "postgres-execution-policy",
 		checkType: checks.CheckTypeProcessPolicy,
-		incidents: &pidIncidents{watch: "postgres-execution-policy", slot: processPolicyStateSlot, emit: emit},
+		incidents: &pidIncidents{watch: "postgres-execution-policy", slot: processPolicyStateSlot, emit: emit, bootID: func() string { return "boot-a" }},
 		sampler:   sampler,
 		emit:      emit,
 		publish: func(watch, checkType string, result checks.Result) {
@@ -112,6 +112,44 @@ func TestProcessPolicyWatcherRecoversAfterRestart(t *testing.T) {
 	second.runCycle(t.Context())
 	if len(*secondEvents) != 1 || (*secondEvents)[0].Kind != eventKindRecovered {
 		t.Fatalf("recovery after restart = %+v", *secondEvents)
+	}
+}
+
+func TestProcessPolicyWatcherAnnouncesOnlyNewOffendersAfterRestart(t *testing.T) {
+	// Every sermod restart re-announced each known offender: 596 of one host's
+	// last 1000 events were security-user-postgres refirings in deploy bursts.
+	store := openRuleStateStore(t)
+	allow := map[string]any{"postgres": map[string]any{checks.CheckKeyExe: "/usr/bin/postgres"}}
+	known := ProcInfo{PID: 42, UID: 70, Exe: "/usr/bin/bash", ExeOK: true, StartTicks: 100}
+	fresh := ProcInfo{PID: 43, UID: 70, Exe: "/usr/bin/bash", ExeOK: true, StartTicks: 300}
+	run := func(boot string, samples ...ProcInfo) []Event {
+		t.Helper()
+		w, events, _ := testProcessPolicyWatcher(t, &fakeProcSampler{cycles: [][]ProcInfo{samples}}, allow)
+		w.incidents.stateStore = store
+		w.incidents.bootID = func() string { return boot }
+		w.runCycle(t.Context())
+		return *events
+	}
+	firings := func(events []Event) []string {
+		var out []string
+		for _, e := range events {
+			if e.Kind == eventKindFiring {
+				out = append(out, e.Message)
+			}
+		}
+		return out
+	}
+
+	if got := firings(run("boot-a", known)); len(got) != 1 {
+		t.Fatalf("first daemon firings = %q, want the known offender", got)
+	}
+	got := firings(run("boot-a", known, fresh))
+	if len(got) != 1 || !strings.Contains(got[0], "pid 43:") {
+		t.Fatalf("restarted daemon firings = %q, want only the new offender", got)
+	}
+	// Start ticks count from boot: after a host reboot the saved set is void.
+	if got := firings(run("boot-b", known)); len(got) != 1 || !strings.Contains(got[0], "pid 42:") {
+		t.Fatalf("after a reboot firings = %q, want the offender announced again", got)
 	}
 }
 

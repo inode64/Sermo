@@ -21,6 +21,45 @@ type WatchRuntimeRecord struct {
 	TransitionSeverity string
 	Window             WindowRecord
 	Policy             RemediationRecord
+	// Offenders are the processes a set-evaluating process watch already
+	// announced, so a daemon restart announces only new ones.
+	Offenders ProcessOffenders
+}
+
+// ProcessOffenders is the announced process set of one watch slot. A PID's
+// start ticks count from boot, so the set is only valid within Boot.
+type ProcessOffenders struct {
+	Boot      string               `json:"boot"`
+	Processes []ProcessIncarnation `json:"processes"`
+}
+
+// ProcessIncarnation is one announced process and when it was last notified.
+type ProcessIncarnation struct {
+	PID        int    `json:"pid"`
+	StartTicks uint64 `json:"start_ticks"`
+	LastNotify int64  `json:"last_notify,omitempty"` // Unix nanoseconds; 0: never
+}
+
+func encodeProcessOffenders(o ProcessOffenders) (string, error) {
+	if len(o.Processes) == 0 {
+		return "", nil
+	}
+	raw, err := json.Marshal(o)
+	if err != nil {
+		return "", fmt.Errorf("encode process offenders: %w", err)
+	}
+	return string(raw), nil
+}
+
+func decodeProcessOffenders(raw string) (ProcessOffenders, error) {
+	var o ProcessOffenders
+	if raw == "" {
+		return o, nil
+	}
+	if err := json.Unmarshal([]byte(raw), &o); err != nil {
+		return ProcessOffenders{}, fmt.Errorf("decode process offenders: %w", err)
+	}
+	return o, nil
 }
 
 // WatchRuntimeState returns one watch slot's persisted episode and pacing state.
@@ -42,20 +81,21 @@ func (s *Store) WatchRuntimeState(watch, slot string) (WatchRuntimeRecord, bool,
 		rawRungs           string
 		notified           string
 		transition         string
+		rawOffenders       string
 	)
 	found, err := scanOne(func() error {
 		return s.reader.QueryRowContext(s.sqlCtx(),
 			`SELECT firing, unavailable, last_notify_at, consecutive, history, true_since,
 		        timed_history, last_action_at, recent_actions, current_backoff_ns,
 		        clear_since, clear_consecutive, severity, severity_windows, notified_severity,
-		        transition_severity
+		        transition_severity, offenders
 		   FROM watch_runtime_state WHERE watch = ? AND slot = ?;`,
 			watch, slot,
 		).Scan(
 			&firing, &unavailable, &lastNotifyAt, &consecutive, &rawHistory, &trueSince,
 			&rawTimed, &lastActionAt, &rawRecentActions, &currentBackoffNano,
 			&clearSince, &clearConsecutive, &level, &rawRungs, &notified,
-			&transition,
+			&transition, &rawOffenders,
 		)
 	})
 	if err != nil {
@@ -81,6 +121,10 @@ func (s *Store) WatchRuntimeState(watch, slot string) (WatchRuntimeRecord, bool,
 	if err != nil {
 		return WatchRuntimeRecord{}, false, err
 	}
+	offenders, err := decodeProcessOffenders(rawOffenders)
+	if err != nil {
+		return WatchRuntimeRecord{}, false, fmt.Errorf("load watch runtime state for %s/%s: %w", watch, slot, err)
+	}
 	return WatchRuntimeRecord{
 		Firing:             firing != 0,
 		Unavailable:        unavailable != 0,
@@ -102,6 +146,7 @@ func (s *Store) WatchRuntimeState(watch, slot string) (WatchRuntimeRecord, bool,
 			RecentActions:  recent,
 			CurrentBackoff: time.Duration(currentBackoffNano),
 		},
+		Offenders: offenders,
 	}, true, nil
 }
 
@@ -131,14 +176,18 @@ func (s *Store) SetWatchRuntimeState(watch, slot string, rec WatchRuntimeRecord)
 	if err != nil {
 		return err
 	}
+	offenders, err := encodeProcessOffenders(rec.Offenders)
+	if err != nil {
+		return err
+	}
 	firing := boolInt(rec.Firing)
 	_, err = s.exec(s.sqlCtx(),
 		`INSERT INTO watch_runtime_state (
 		   watch, slot, firing, unavailable, last_notify_at, consecutive, history, true_since,
 		   timed_history, last_action_at, recent_actions, current_backoff_ns,
 		   clear_since, clear_consecutive, severity, severity_windows, notified_severity,
-		   transition_severity
-		 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		   transition_severity, offenders
+		 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		 ON CONFLICT(watch, slot) DO UPDATE SET
 		   firing             = excluded.firing,
 		   unavailable        = excluded.unavailable,
@@ -155,12 +204,13 @@ func (s *Store) SetWatchRuntimeState(watch, slot string, rec WatchRuntimeRecord)
 		   severity            = excluded.severity,
 		   severity_windows    = excluded.severity_windows,
 		   notified_severity   = excluded.notified_severity,
-		   transition_severity = excluded.transition_severity;`,
+		   transition_severity = excluded.transition_severity,
+		   offenders           = excluded.offenders;`,
 		watch, slot, firing, boolInt(rec.Unavailable), timeUnixNano(rec.LastNotifyAt), rec.Window.Consecutive,
 		string(history), timeUnixNano(rec.Window.TrueSince), timed,
 		timeUnixNano(rec.Policy.LastActionAt), recent, int64(rec.Policy.CurrentBackoff),
 		timeUnixNano(rec.Window.ClearSince), rec.Window.ClearConsecutive, rec.Severity, rungs, rec.NotifiedSeverity,
-		rec.TransitionSeverity,
+		rec.TransitionSeverity, offenders,
 	)
 	if err != nil {
 		return fmt.Errorf("set watch runtime state for %s/%s: %w", watch, slot, err)
@@ -175,5 +225,6 @@ func watchRuntimeRecordEmpty(rec WatchRuntimeRecord) bool {
 		rec.Window.ClearSince.IsZero() && rec.Window.ClearConsecutive == 0 &&
 		rec.Policy.LastActionAt.IsZero() && len(rec.Policy.RecentActions) == 0 &&
 		rec.Policy.CurrentBackoff == 0 && rec.Severity == "" && rec.NotifiedSeverity == "" &&
-		rec.TransitionSeverity == "" && severityWindowsIdle(rec.Window.Rungs)
+		rec.TransitionSeverity == "" && severityWindowsIdle(rec.Window.Rungs) &&
+		len(rec.Offenders.Processes) == 0
 }

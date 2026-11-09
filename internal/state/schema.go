@@ -174,6 +174,7 @@ var storageSchema = []string{
 		severity_windows   TEXT NOT NULL DEFAULT '',
 		notified_severity  TEXT NOT NULL DEFAULT '',
 		transition_severity TEXT NOT NULL DEFAULT '',
+		offenders          TEXT NOT NULL DEFAULT '',
 		PRIMARY KEY (watch, slot)
 	);`,
 	// sla_archive holds availability at every stored resolution: res is the
@@ -347,6 +348,7 @@ var stateColumnMigrations = []struct {
 	{tableWatchRuntimeState, "severity_windows", "severity_windows TEXT NOT NULL DEFAULT ''", ""},
 	{tableWatchRuntimeState, columnNotifiedSeverity, notifiedSeverityColumnDecl, ""},
 	{tableWatchRuntimeState, "transition_severity", "transition_severity TEXT NOT NULL DEFAULT ''", ""},
+	{tableWatchRuntimeState, "offenders", "offenders TEXT NOT NULL DEFAULT ''", ""},
 }
 
 // ensureStateColumns adds any missing cache/control-table columns to a database

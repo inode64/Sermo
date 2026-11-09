@@ -4492,7 +4492,10 @@ This is intentionally an **alert-only** check. Its `then:` block may contain
 only `notify` and `notify_interval`; `hook`, `kill`, `expand`, `remount`, `makestep` and a
 `policy:` block are invalid. It cannot restart, signal, repair or otherwise
 change the watched account. Violations fire once per PID incarnation (PID plus
-start time), re-arming for a new process that reuses the same PID. When the
+start time), re-arming for a new process that reuses the same PID. The
+announced incarnations are kept in the state database with the kernel boot ID,
+so a daemon restart announces only processes it has not reported yet; after a
+host reboot every violation is announced again. When the
 start time cannot be read, Sermo records a firing event for every current
 violating sample rather than risk suppressing a reused PID; `notify_interval`,
 when configured, still paces notifier delivery. The WebUI shows the account,
@@ -4639,7 +4642,9 @@ an optional `cmd` expression anchored with `^` and `$`.
 Findings are graded `warning` unless the entry declares a `severity:`; they
 fire **once per PID incarnation** (PID plus start time) and re-arm for a new
 process that reuses the PID; `notify_interval` paces reminders while a process
-stays listed. The watch emits one aggregate `recovered` event when
+stays listed. Like `process_policy`, a daemon restart within the same boot
+announces only processes not reported before. The watch emits one aggregate
+`recovered` event when
 nothing is left, and that transition survives a daemon restart. Its `then:`
 block accepts only `notify`, `notify_interval` and `kill`; `hook`, `expand`,
 `remount`, `makestep`, a `policy:` block and the entry-level `for`/`within`/

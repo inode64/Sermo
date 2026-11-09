@@ -1,6 +1,7 @@
 package app
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -13,6 +14,7 @@ import (
 	"sermo/internal/cfgval"
 	"sermo/internal/checks"
 	"sermo/internal/config"
+	"sermo/internal/hostfs"
 	"sermo/internal/notify"
 	"sermo/internal/process"
 	"sermo/internal/rules"
@@ -55,11 +57,33 @@ type pidIncidents struct {
 	// aggregate recovery goes out only for an incident its notifiers heard.
 	announced bool
 	state     map[pidIncidentKey]pidIncidentState
+	// bootID names the running kernel boot (nil or "": unknown). The announced
+	// offenders are persisted with it, because start ticks count from boot: a
+	// set saved under another boot is never restored.
+	bootID func() string
 }
 
 // newPIDIncidents returns the tracker for one watch's incident slot.
 func newPIDIncidents(watch, slot string, notifyInterval time.Duration, level severity.Level, store WatchStateStore, emit func(Event)) *pidIncidents {
-	return &pidIncidents{watch: watch, slot: slot, notifyInterval: notifyInterval, severity: level, stateStore: store, emit: emit}
+	return &pidIncidents{watch: watch, slot: slot, notifyInterval: notifyInterval, severity: level, stateStore: store, emit: emit, bootID: kernelBootID}
+}
+
+// kernelBootIDPath holds the random UUID the kernel draws at every boot.
+const kernelBootIDPath = "/proc/sys/kernel/random/boot_id"
+
+func kernelBootID() string {
+	raw, err := hostfs.ReadFile(kernelBootIDPath)
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(raw))
+}
+
+func (t *pidIncidents) boot() string {
+	if t.bootID == nil {
+		return ""
+	}
+	return t.bootID()
 }
 
 // adopt takes over what the tracker of the previous generation knows, keeping
@@ -83,14 +107,63 @@ func (t *pidIncidents) loadActive() {
 	if found {
 		t.active = rec.Firing
 		t.announced = rec.Firing && rec.NotifiedSeverity != ""
+		t.restoreOffenders(rec.Offenders)
 	}
+}
+
+// restoreOffenders adopts the processes a previous daemon already announced,
+// so a restart does not announce every known offender again. Only a set from
+// this boot qualifies, and only into a tracker that has seen no cycle yet.
+func (t *pidIncidents) restoreOffenders(saved persistedstate.ProcessOffenders) {
+	if t.state != nil || len(saved.Processes) == 0 || saved.Boot == "" || saved.Boot != t.boot() {
+		return
+	}
+	t.state = make(map[pidIncidentKey]pidIncidentState, len(saved.Processes))
+	for _, p := range saved.Processes {
+		key := pidIncidentKey{pid: p.PID, startTicks: p.StartTicks}
+		if key.startTicks == 0 {
+			continue
+		}
+		t.state[key] = pidIncidentState{lastNotify: unixNanoOrZero(p.LastNotify)}
+	}
+}
+
+func unixNanoOrZero(n int64) time.Time {
+	if n == 0 {
+		return time.Time{}
+	}
+	return time.Unix(0, n)
+}
+
+// offenders is the announced set to persist: identified incarnations only,
+// and none when the boot cannot be named.
+func (t *pidIncidents) offenders() persistedstate.ProcessOffenders {
+	boot := t.boot()
+	if boot == "" {
+		return persistedstate.ProcessOffenders{}
+	}
+	out := persistedstate.ProcessOffenders{Boot: boot}
+	for key, st := range t.state {
+		if key.startTicks == 0 {
+			continue
+		}
+		var last int64
+		if !st.lastNotify.IsZero() {
+			last = st.lastNotify.UnixNano()
+		}
+		out.Processes = append(out.Processes, persistedstate.ProcessIncarnation{PID: key.pid, StartTicks: key.startTicks, LastNotify: last})
+	}
+	slices.SortFunc(out.Processes, func(a, b persistedstate.ProcessIncarnation) int {
+		return cmp.Or(cmp.Compare(a.PID, b.PID), cmp.Compare(a.StartTicks, b.StartTicks))
+	})
+	return out
 }
 
 func (t *pidIncidents) persistActive() {
 	if t.stateStore == nil {
 		return
 	}
-	rec := persistedstate.WatchRuntimeRecord{Firing: t.active}
+	rec := persistedstate.WatchRuntimeRecord{Firing: t.active, Offenders: t.offenders()}
 	if t.announced {
 		rec.NotifiedSeverity = t.severity.Resolved().String()
 	}
@@ -155,7 +228,11 @@ func (t *pidIncidents) cycle(now time.Time, keys []pidIncidentKey, fire func(i i
 		}
 		next[key] = state
 	}
+	changed := !maps.Equal(t.state, next)
 	t.state = next
+	if changed && t.activeLoaded {
+		t.persistActive()
+	}
 }
 
 // processIdentityRule is one declared exact executable identity, optionally

@@ -248,6 +248,28 @@ func TestSeverityMigrationBackfillsEventsAndIncidents(t *testing.T) {
 	}
 }
 
+func TestWatchRuntimeOffendersRoundTrip(t *testing.T) {
+	s := openTemp(t)
+	want := ProcessOffenders{Boot: "boot-a", Processes: []ProcessIncarnation{
+		{PID: 42, StartTicks: 100, LastNotify: 1_700_000_000_000_000_000},
+		{PID: 43, StartTicks: 7},
+	}}
+	if err := s.SetWatchRuntimeState("unowned", "unowned-processes", WatchRuntimeRecord{Offenders: want}); err != nil {
+		t.Fatal(err)
+	}
+	got, found, err := s.WatchRuntimeState("unowned", "unowned-processes")
+	if err != nil || !found || !reflect.DeepEqual(got.Offenders, want) {
+		t.Fatalf("offenders = %+v (found %v, err %v), want %+v", got.Offenders, found, err, want)
+	}
+	// The announced set alone keeps the row; once it empties the row goes.
+	if err := s.SetWatchRuntimeState("unowned", "unowned-processes", WatchRuntimeRecord{Offenders: ProcessOffenders{Boot: "boot-a"}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, found, _ := s.WatchRuntimeState("unowned", "unowned-processes"); found {
+		t.Fatal("an empty offender set kept the row")
+	}
+}
+
 func TestSeverityStateRoundTrips(t *testing.T) {
 	s := openTemp(t)
 	rungs := []rules.EntryWindowSnapshot{
