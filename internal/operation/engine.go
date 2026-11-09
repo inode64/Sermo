@@ -70,6 +70,8 @@ type Engine struct {
 	StopArtifacts config.StopArtifacts
 
 	ConfigError error
+	// IfRunning limits stop, restart and reload to a freshly observed running target.
+	IfRunning   bool
 	Manager     servicemgr.Manager
 	AcquireLock func(ttl time.Duration) (release func() error, err error)
 	LockTTL     time.Duration
@@ -296,6 +298,9 @@ func (e Engine) run(ctx context.Context, p plan) (result Result) {
 	// operation's one audited result instead of being silently discarded.
 	defer releaseOperationLock(release, &result)
 
+	if e.IfRunning && !e.checkRunning(ctx, p.action, &result) {
+		return result
+	}
 	if !e.checkNamedLocks(&result) || !e.runPreflight(ctx, p, &result) || !e.checkGuards(ctx, p, &result) {
 		return result
 	}

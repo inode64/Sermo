@@ -90,6 +90,7 @@ const (
 	cliFlagGenerate   = "generate"
 	cliFlagHash       = "hash"
 	cliFlagHelp       = commandHelp
+	cliFlagIfRunning  = "if-running"
 	cliFlagJSON       = "json"
 	cliFlagKill       = "kill-blockers"
 	cliFlagLazy       = "lazy"
@@ -242,6 +243,7 @@ type options struct {
 	json       bool
 	quiet      bool
 	noCascade  bool // --no-cascade: act on exactly this service, skip also_apply
+	ifRunning  bool // --if-running: omit stop/restart/reload when the service is not running
 	force      bool // --force: allow umount -f during `sermoctl umount`
 	lazy       bool // --lazy: allow umount -l during `sermoctl umount`
 	kill       bool // --kill-blockers: allow policy-gated signalling during `sermoctl umount`
@@ -572,6 +574,7 @@ func parseArgs(args []string) (options, error) {
 	fs.BoolVar(&opts.json, cliFlagJSON, false, "")
 	fs.BoolVarP(&opts.quiet, cliFlagQuiet, "q", false, "")
 	fs.BoolVar(&opts.noCascade, cliFlagNoCascade, false, "")
+	fs.BoolVar(&opts.ifRunning, cliFlagIfRunning, false, "")
 	fs.BoolVar(&opts.force, cliFlagForce, false, "")
 	fs.BoolVar(&opts.lazy, cliFlagLazy, false, "")
 	fs.BoolVar(&opts.kill, cliFlagKill, false, "")
@@ -632,6 +635,9 @@ func parseArgs(args []string) (options, error) {
 	if len(rest) > 0 {
 		opts.command = rest[0]
 		opts.args = append(opts.args, rest[1:]...)
+	}
+	if opts.ifRunning && opts.command != commandStop && opts.command != commandRestart && opts.command != commandReload {
+		return opts, errors.New("--if-running is only available for stop, restart and reload")
 	}
 	return opts, nil
 }

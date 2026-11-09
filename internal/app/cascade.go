@@ -117,11 +117,11 @@ func cascadeResult(service, action string, result operation.Result, err error) o
 }
 
 func cascadeTargetFailed(res operation.Result) bool {
-	return res.Status != operation.ResultOK && res.Status != operation.ResultBlocked
+	return res.Status != operation.ResultOK && res.Status != operation.ResultBlocked && res.Status != operation.ResultSkipped
 }
 
 func downgradePrimaryOnCascadeFailure(primary operation.Result, cascadeFailed bool) operation.Result {
-	if !cascadeFailed || !primary.OK() {
+	if !cascadeFailed || (!primary.OK() && primary.Status != operation.ResultSkipped) {
 		return primary
 	}
 	primary.Status = operation.ResultFailed

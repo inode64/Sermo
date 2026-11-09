@@ -308,6 +308,7 @@ func TestLaterAttemptOverAPendingObservation(t *testing.T) {
 		kept   bool
 	}{
 		"blocked": {status: operation.ResultBlocked, kept: true},
+		"skipped": {status: operation.ResultSkipped, kept: true},
 		"failed":  {status: operation.ResultFailed},
 	} {
 		t.Run(name, func(t *testing.T) {

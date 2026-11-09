@@ -117,6 +117,13 @@ once and reuses it for reload capability, the action and the bounded status
 query after a failed postflight, so changing the caller cannot change a safety
 decision.
 
+For conditional CLI operations, `--if-running` checks a fresh backend status
+under that lock, and a resident service's process evidence, before the remaining
+phases. A confirmed non-running target returns `skipped` (exit `0`) without
+reconciliation, hooks, lifecycle commands or monitoring changes. Unknown state
+and discovery errors refuse the action; an active target still follows every
+protection below. See [CLI conditional operations](cli.md#exit-codes).
+
 1. Acquire the internal operation lock (`<runtime>/ops/<service>.lock`); a live
    holder fails fast with exit `75` ("operation in progress").
 2. Block on any active named runtime lock.

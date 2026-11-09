@@ -191,10 +191,11 @@ var commandUsages = []commandUsage{
 		Name:    commandStop,
 		Summary: "Stop a service through the safe operation engine.",
 		Usage: []string{
-			"sermoctl stop SERVICE [--no-cascade]",
+			"sermoctl stop SERVICE [--no-cascade] [--if-running]",
 		},
 		Flags: []string{
 			"--no-cascade  operate only the named service",
+			"--if-running  skip targets that are not running (exit 0)",
 		},
 		Notes: []string{
 			"Stop uses the resolved stop policy and does not send SIGKILL unless the service explicitly allows it.",
@@ -221,10 +222,11 @@ var commandUsages = []commandUsage{
 		Name:    commandRestart,
 		Summary: "Restart a service through the safe operation engine.",
 		Usage: []string{
-			"sermoctl restart SERVICE [--no-cascade]",
+			"sermoctl restart SERVICE [--no-cascade] [--if-running]",
 		},
 		Flags: []string{
 			"--no-cascade  operate only the named service",
+			"--if-running  skip targets that are not running (exit 0)",
 		},
 		Notes: []string{
 			"Manual restarts are not remediation-rate-limited, but still honor guards, preflight and locks.",
@@ -237,7 +239,10 @@ var commandUsages = []commandUsage{
 		Name:    commandReload,
 		Summary: "Reload one service in place.",
 		Usage: []string{
-			"sermoctl reload SERVICE",
+			"sermoctl reload SERVICE [--if-running]",
+		},
+		Flags: []string{
+			"--if-running  skip a target that is not running (exit 0)",
 		},
 		Notes: []string{
 			"Use `sermoctl daemon reload` to make sermod reload Sermo configuration.",

@@ -12,6 +12,7 @@ func TestRecordsRemediation(t *testing.T) {
 		{ResultPostflightFailed, true},
 		{ResultOrphanProcesses, true},
 		{ResultBlocked, false},
+		{ResultSkipped, false},
 		{ResultPreflightFailed, false},
 	}
 	for _, tc := range cases {

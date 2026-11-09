@@ -70,7 +70,7 @@ func (a App) prepareManualOperationRunner(ctx context.Context, opts options, cfg
 		closeRunner()
 		return manualOperationRunner{}, func() {}, err
 	}
-	if action == actionReload {
+	if action == actionReload && !opts.ifRunning {
 		if err := session.reloadSupported(ctx, service, resolved); err != nil {
 			closeRunner()
 			return manualOperationRunner{}, func() {}, err
@@ -164,7 +164,9 @@ func (s *operationSession) operate(ctx context.Context, resolved config.Resolved
 		eventErr = recordManualActionEvent(ctx, s.eventStore, app.OperationEventRecord(result))
 	}
 	defer func() { prepared.recordOperation = nil }()
-	result := prepared.runtime.Engine.Do(ctx, action)
+	engine := prepared.runtime.Engine
+	engine.IfRunning = s.opts.ifRunning
+	result := engine.Do(ctx, action)
 	if eventErr != nil {
 		return result, fmt.Errorf("%s applied with result %q, but its audit event could not be recorded: %w",
 			action, result.Status, eventErr)

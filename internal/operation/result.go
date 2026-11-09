@@ -24,6 +24,7 @@ type ResultStatus string
 // Operation result statuses.
 const (
 	ResultOK               ResultStatus = "ok"
+	ResultSkipped          ResultStatus = "skipped"
 	ResultBlocked          ResultStatus = "blocked"
 	ResultPreflightFailed  ResultStatus = "preflight_failed"
 	ResultPostflightFailed ResultStatus = "postflight_failed"

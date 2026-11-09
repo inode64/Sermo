@@ -65,7 +65,7 @@ func (a App) runAction(ctx context.Context, opts options, action string) int {
 	a.notifyInteractiveBlockedAction(ctx, result)
 
 	status := accessStatusOK
-	if result.Status != operation.ResultOK {
+	if result.Status != operation.ResultOK && result.Status != operation.ResultSkipped {
 		status = accessStatusError
 	}
 	a.recordAccess(cfg, action, service, status, result.Message)
@@ -347,7 +347,7 @@ func (a App) printOperation(r operation.Result) {
 // operationExit maps an operation result status to a process exit code.
 func operationExit(status operation.ResultStatus) int {
 	switch status {
-	case operation.ResultOK:
+	case operation.ResultOK, operation.ResultSkipped:
 		return exitSuccess
 	case operation.ResultBlocked:
 		return exitBlocked

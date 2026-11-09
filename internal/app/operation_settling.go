@@ -64,16 +64,16 @@ func finishOperationSettling(store OperationSettlingStore, service, action strin
 	if store == nil || !operation.IsServiceAction(action) || prior == operationSettlingUnread {
 		return nil
 	}
-	blocked := result.Status == operation.ResultBlocked
-	// A blocked attempt never ran, and the marker it found is the operation in
+	notRun := result.Status == operation.ResultBlocked || result.Status == operation.ResultSkipped
+	// An attempt that never ran must keep the marker of the operation in
 	// its way: clearing that would resume monitoring in the middle of it.
-	if blocked && prior == state.OperationSettlingRunning {
+	if notRun && prior == state.OperationSettlingRunning {
 		return nil
 	}
 	// A relaunch the worker has not read yet happened, whatever this attempt did,
 	// a stop included. Dropping it would make the worker repeat the restart. An
 	// attempt that never ran leaves the last operation's observation due as well.
-	if prior == state.OperationSettlingRelaunched || (blocked && prior == state.OperationSettlingSettling) {
+	if prior == state.OperationSettlingRelaunched || (notRun && prior == state.OperationSettlingSettling) {
 		if err := store.SetOperationSettling(service, prior); err != nil {
 			return fmt.Errorf("keep pending %s marker for %s: %w", prior, service, err)
 		}

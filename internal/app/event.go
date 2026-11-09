@@ -233,14 +233,14 @@ func cascadeEvent(root string, r operation.Result) Event {
 }
 
 // eventKindForResult maps an operation result to the event-log kind. Successful
-// operations are action; blocked ones are suppressed (guard/lock/cooldown); every
+// operations are action; blocked or skipped ones are suppressed; every
 // other outcome (preflight/postflight failure, backend error, orphan processes)
 // is error so the UI does not show a failed restart as green.
 func eventKindForResult(r operation.Result) string {
 	switch r.Status {
 	case operation.ResultOK:
 		return eventKindAction
-	case operation.ResultBlocked:
+	case operation.ResultBlocked, operation.ResultSkipped:
 		return eventKindSuppressed
 	default:
 		return eventKindError

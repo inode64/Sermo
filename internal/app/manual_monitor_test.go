@@ -1,6 +1,7 @@
 package app
 
 import (
+	"fmt"
 	"testing"
 
 	"sermo/internal/operation"
@@ -151,5 +152,22 @@ func TestSyncManualActionMonitoringRestoresPostflightFailedActiveStart(t *testin
 	}
 	if change.Changed || store.active["web"] || store.source["web"] != state.SourceCLIManualStop {
 		t.Fatalf("inactive postflight should not restore, change=%+v active=%v source=%q", change, store.active["web"], store.source["web"])
+	}
+}
+
+func TestSkippedManualOperationPreservesMonitoring(t *testing.T) {
+	for _, action := range []string{string(rules.ActionStop), string(rules.ActionRestart), string(rules.ActionReload)} {
+		for _, active := range []bool{false, true} {
+			t.Run(action+"/"+fmt.Sprint(active), func(t *testing.T) {
+				store := newFakeStore()
+				store.active["web"] = active
+				store.source["web"] = state.SourceCLIManualStop
+				result := operation.Result{Service: "web", Action: action, Status: operation.ResultSkipped}
+				change, err := SyncManualActionMonitoring(store, "web", action, result, state.SourceCLIManualStop, state.SourceCLI, false)
+				if err != nil || change.Changed || store.active["web"] != active || store.source["web"] != state.SourceCLIManualStop {
+					t.Fatalf("change=%+v err=%v active=%v source=%s", change, err, store.active["web"], store.source["web"])
+				}
+			})
+		}
 	}
 }

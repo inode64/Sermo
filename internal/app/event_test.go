@@ -43,6 +43,11 @@ func TestOperationEventEmitter(t *testing.T) {
 		}
 	}
 
+	emit(operation.Result{Service: "web", Action: string(rules.ActionRestart), Status: operation.ResultSkipped})
+	if got := events[len(events)-1]; got.Kind != eventKindSuppressed || got.Status != string(operation.ResultSkipped) {
+		t.Fatalf("skipped event = %+v", got)
+	}
+
 	if operationEventEmitter(nil) != nil {
 		t.Fatal("nil emit should yield nil adapter")
 	}

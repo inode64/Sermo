@@ -11,6 +11,7 @@ import (
 type parsedOptionsView struct {
 	command, config, service string
 	json, quiet, noCascade   bool
+	ifRunning                bool
 	force, lazy, kill, help  bool
 	since                    time.Duration
 	notify, commandArgs      []string
@@ -19,7 +20,7 @@ type parsedOptionsView struct {
 
 func optionsView(o options) parsedOptionsView {
 	return parsedOptionsView{
-		command: o.command, config: o.config, service: o.service(), json: o.json, quiet: o.quiet, noCascade: o.noCascade,
+		command: o.command, config: o.config, service: o.service(), json: o.json, quiet: o.quiet, noCascade: o.noCascade, ifRunning: o.ifRunning,
 		force: o.force, lazy: o.lazy, kill: o.kill, help: o.help, since: o.since,
 		notify: o.notifyNames, commandArgs: o.commandArgs, eventLimit: o.eventLimit,
 	}
@@ -58,6 +59,9 @@ func TestParseArgsSuccess(t *testing.T) {
 		{"--config= form", []string{"--config=/etc/s.yml", "status"}, parsedOptionsView{command: "status", config: "/etc/s.yml"}},
 		{"--config space form", []string{"--config", "/etc/s.yml", "status"}, parsedOptionsView{command: "status", config: "/etc/s.yml"}},
 		{"bool flags", []string{"--json", "--quiet", "--no-cascade", "status"}, parsedOptionsView{command: "status", json: true, quiet: true, noCascade: true}},
+		{"conditional restart", []string{"restart", "web", "--if-running"}, parsedOptionsView{command: "restart", service: "web", ifRunning: true}},
+		{"conditional stop", []string{"--if-running", "stop", "web"}, parsedOptionsView{command: "stop", service: "web", ifRunning: true}},
+		{"conditional reload", []string{"reload", "--if-running", "web"}, parsedOptionsView{command: "reload", service: "web", ifRunning: true}},
 		{"umount escalation flags", []string{"umount", "--force", "--lazy", "--kill-blockers", "mount-backup"}, parsedOptionsView{command: "umount", service: "mount-backup", force: true, lazy: true, kill: true}},
 		{"--since duration", []string{"sla", "--since", "24h"}, parsedOptionsView{command: "sla", since: 24 * time.Hour}},
 		{"--notify list", []string{"services", "--notify", "ops,pager", "--notify=team"}, parsedOptionsView{command: "services", notify: []string{"ops", "pager", "team"}}},
@@ -87,11 +91,14 @@ func TestParseArgsErrors(t *testing.T) {
 		{"--since", "nope"},   // bad duration
 		{"--timeout", "nope"}, // bad duration
 		{"--backend", "nope"}, // bad backend
-		{"--bogus"},           // unknown flag
-		{"--limit", "0"},      // explicit zero is not a valid count
-		{"--limit", "-3"},     // negative
-		{"--timeout", "0"},    // would silently become the command default
-		{"--timeout", "-5s"},  // negative
+		{"start", "web", "--if-running"},
+		{"status", "web", "--if-running"},
+		{"daemon", "reload", "--if-running"},
+		{"--bogus"},          // unknown flag
+		{"--limit", "0"},     // explicit zero is not a valid count
+		{"--limit", "-3"},    // negative
+		{"--timeout", "0"},   // would silently become the command default
+		{"--timeout", "-5s"}, // negative
 	}
 	for _, args := range cases {
 		if _, err := parseArgs(args); err == nil {

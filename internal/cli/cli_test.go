@@ -79,7 +79,7 @@ func TestHelpTopics(t *testing.T) {
 			wantExit: exitSuccess,
 			wantContains: []string{
 				"Command: sermoctl restart",
-				"sermoctl restart SERVICE [--no-cascade]",
+				"sermoctl restart SERVICE [--no-cascade] [--if-running]",
 				"--no-cascade",
 				"Manual restarts are not remediation-rate-limited",
 			},

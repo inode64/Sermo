@@ -194,6 +194,9 @@ func TestCascaderReportsADowngradedPrimaryOnce(t *testing.T) {
 		wantDowngrade bool
 	}{
 		{name: "target failed", primary: operation.ResultOK, dep: operation.ResultFailed, wantDowngrade: true},
+		{name: "target skipped", primary: operation.ResultOK, dep: operation.ResultSkipped},
+		{name: "skipped primary and failed target", primary: operation.ResultSkipped, dep: operation.ResultFailed, wantDowngrade: true},
+		{name: "skipped primary and successful target", primary: operation.ResultSkipped, dep: operation.ResultOK},
 		{name: "target ok", primary: operation.ResultOK, dep: operation.ResultOK},
 		{name: "target blocked", primary: operation.ResultOK, dep: operation.ResultBlocked},
 		{name: "primary failed on its own", primary: operation.ResultFailed, dep: operation.ResultFailed},

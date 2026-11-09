@@ -89,11 +89,11 @@ sermoctl watch kill UNOWNED_WATCH PID [--escalate]
 sermoctl watch pause RAID_WATCH --confirm MD_ARRAY
 sermoctl watch resume RAID_WATCH
 sermoctl start SERVICE [--no-cascade]
-sermoctl stop SERVICE [--no-cascade]
-sermoctl restart SERVICE [--no-cascade]
+sermoctl stop SERVICE [--no-cascade] [--if-running]
+sermoctl restart SERVICE [--no-cascade] [--if-running]
 sermoctl pause SERVICE                  # libvirt VM (suspend) or Docker container only
 sermoctl resume SERVICE
-sermoctl reload SERVICE
+sermoctl reload SERVICE [--if-running]
 sermoctl repair SERVICE                 # manual-only: clear a proven-stale pidfile, then a guarded start
 
 sermoctl mount TARGET                 # TARGET is a configured mount name or absolute path
@@ -510,7 +510,7 @@ backend-`paused` container or VM), `2` error. Pausing daemon monitoring with
 `unmonitor` does not change the answer.
 
 Service operations (`start`, `stop`, `restart`, `reload`, `pause`, `resume`,
-`repair`) exit `0` on `ok`, `75` when `blocked` (operation in progress, an
+`repair`) exit `0` on `ok` or `skipped`, `75` when `blocked` (operation in progress, an
 active named lock or a guard), `1` on `preflight_failed`, `postflight_failed`
 or `orphan_processes`, and `2` on `failed`. With `--json` they print the
 operation result: `service`, `action`, `status` and, when set, `message`,
@@ -519,6 +519,19 @@ operation result: `service`, `action`, `status` and, when set, `message`,
 `{service, action, status, message, error}` entry per `also_apply` target that
 `start`, `stop` or `restart` reached. `repair` is manual-only; see
 [safety](safety.md#the-operation-engine) for what it may remove.
+
+Use `--if-running` with `stop`, `restart` or `reload` to leave stopped services
+alone, for example `sermoctl restart nginx-main --if-running`. The operation
+checks the backend state under its operation lock before preflight, guards or
+reconciliation. Inactive, failed, paused and positively absent targets return
+`status: skipped` and exit `0`, without running hooks or changing monitoring.
+Unknown state, query errors and timeouts remain errors. A resident service also
+needs a fresh process observation: confirmed absence skips the action, while
+uncertain discovery or an unverifiable identity refuses it. Process-free services
+use the backend state. Active targets retain all normal locks, guards, required
+preflight and postflight checks. Each `also_apply` target is evaluated separately;
+use `--no-cascade` to limit the action to the named service. The flag does not
+apply to `sermoctl daemon reload`.
 
 `status` and `is-active` still answer for a raw init unit when there is no
 config. When the config file exists but does not load (for example a YAML
