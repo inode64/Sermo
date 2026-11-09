@@ -94,14 +94,26 @@ func TestRestoredIncidentCheckRecoversOnceAndNeverReannounces(t *testing.T) {
 		{name: "still failing", names: map[string]bool{"strays": true}, cycles: []checks.Result{failing, failing}},
 		{name: "check no longer configured", names: map[string]bool{"other": true}, cycles: []checks.Result{healthy}},
 		{
-			name:  "check a rule now reads",
+			name:  "check a rule now reads, healthy",
 			names: map[string]bool{"strays": true},
 			rules: []rules.Rule{{
 				Name: "warn-strays", Type: rules.RuleAlert,
 				If:      map[string]any{rules.ConditionFailed: map[string]any{rules.FieldCheck: "strays"}},
 				Actions: []rules.Action{{Type: rules.ActionAlert, Message: "strays"}},
 			}},
-			cycles: []checks.Result{healthy},
+			cycles:   []checks.Result{healthy},
+			wantKind: "recovered/critical",
+		},
+		{
+			// The rule announces the failure; the check's old incident stays quiet.
+			name:  "check a rule now reads, failing",
+			names: map[string]bool{"strays": true},
+			rules: []rules.Rule{{
+				Name: "warn-strays", Type: rules.RuleAlert,
+				If:      map[string]any{rules.ConditionFailed: map[string]any{rules.FieldCheck: "strays"}},
+				Actions: []rules.Action{{Type: rules.ActionAlert, Message: "strays"}},
+			}},
+			cycles: []checks.Result{failing, failing},
 		},
 	}
 	for _, tt := range tests {
@@ -262,5 +274,55 @@ func TestRestartClosesIncidentsTheEpisodeMemoryLost(t *testing.T) {
 	router.remind(t.Context())
 	if len(ops.msgs) != 4 {
 		t.Fatalf("closed incidents were reminded: %q", subjects(ops.msgs[4:]))
+	}
+}
+
+// A state sensor opens an episode only when it cannot run (a starved check
+// slot); its next verdictless sample is the recovery, also for an episode
+// restored from an open incident after a restart.
+func TestVerdictlessCheckRecoversWhenItRunsAgain(t *testing.T) {
+	starved := checks.Result{Check: "strays", Reports: checks.ReportsState, Unavailable: true,
+		Message: "check not started: wait for check slot: context deadline exceeded"}
+	sensed := checks.Result{Check: "strays", Reports: checks.ReportsState, OK: true, Message: "no stray processes"}
+	tests := []struct {
+		name     string
+		restored bool
+		cycles   []checks.Result
+		want     string
+	}{
+		{name: "starved then sensed", cycles: []checks.Result{starved, sensed, sensed}, want: "firing,recovered"},
+		{name: "restored incident", restored: true, cycles: []checks.Result{sensed, sensed}, want: "recovered"},
+		{name: "never starved", cycles: []checks.Result{sensed, sensed}, want: ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var events []Event
+			cycle := 0
+			w := &Worker{
+				Service:    "web",
+				checkNames: map[string]bool{"strays": true},
+				Checks: func(context.Context, checks.Deps) map[string]checks.Result {
+					result := tt.cycles[cycle]
+					cycle++
+					return map[string]checks.Result{"strays": result}
+				},
+				Emit: func(e Event) { events = append(events, e) },
+			}
+			if tt.restored {
+				w.restoreIncidents(serviceIncidents{checks: map[string]severity.Level{"strays": severity.Error}})
+			}
+			for range tt.cycles {
+				w.RunCycle(context.Background())
+			}
+			var got []string
+			for _, e := range events {
+				if e.Check == "strays" && (e.Kind == eventKindFiring || e.Kind == eventKindRecovered) {
+					got = append(got, e.Kind)
+				}
+			}
+			if strings.Join(got, ",") != tt.want {
+				t.Fatalf("health events = %v, want %q", got, tt.want)
+			}
+		})
 	}
 }

@@ -371,13 +371,26 @@ func (w *Worker) reportCheckHealthChanges(cache map[string]checks.Result) {
 	for _, name := range slices.Sorted(maps.Keys(cache)) {
 		result := cache[name]
 		if !w.freshObservation(name, result) {
+			// A verdictless check (reports: state or value) only opens an
+			// episode when it cannot run; the next sample it takes proves it
+			// runs again, so it is the recovery. Without it the incident of a
+			// starved state sensor stayed open and was reminded every day.
+			if episode, open := w.checkEpisodes[name]; open && !w.reportedChecks[name] &&
+				(w.cycleRan == nil || w.cycleRan[name]) && result.Observation() == checks.ObservationNeutral {
+				w.advanceEpisode(name, result, episode, open, false)
+			}
 			continue
 		}
 		switch {
 		case w.busyReportedChecks[name]:
 			w.reportBusyEpisode(name, result)
 		case w.reportedChecks[name]:
-			// A rule reads this check and owns its alarm.
+			// A rule reads this check and owns its alarm. An incident restored
+			// under the check's own name predates that rule: its healthy
+			// observation closes it, a failing one stays the rule's to announce.
+			if episode, open := w.checkEpisodes[name]; open && episode.restored && result.Observation().Healthy() {
+				w.advanceEpisode(name, result, episode, open, false)
+			}
 		default:
 			episode, open := w.checkEpisodes[name]
 			w.advanceEpisode(name, result, episode, open, false)
@@ -1277,9 +1290,10 @@ func (w *Worker) restoreIncidents(open serviceIncidents) {
 		w.reportedChecks, w.busyReportedChecks = ruledChecks(w.Rules)
 	}
 	for name, held := range open.checks {
-		// A check a rule reads raises no incident of its own; one under that
-		// name predates the rule and stays for Retain to judge.
-		if _, known := w.checkEpisodes[name]; known || !w.checkNames[name] || w.reportedChecks[name] || w.busyReportedChecks[name] {
+		// A check a rule reads raises no incident of its own, but one opened
+		// before the rule read it still waits for its recovery. A busy episode
+		// keeps its own path.
+		if _, known := w.checkEpisodes[name]; known || !w.checkNames[name] || w.busyReportedChecks[name] {
 			continue
 		}
 		if w.checkEpisodes == nil {
