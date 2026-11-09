@@ -835,6 +835,16 @@ func (w *Worker) runFiringRemediation(ctx context.Context, ev *rules.Evaluator, 
 		return false
 	}
 	action := string(op.Type)
+	if firing.advisory {
+		// The evidence keeps the rule's alert but may never drive its
+		// operation: deliver the alert, say why nothing ran, and act on none.
+		reason := advisoryReadings(firing.Rule, ev.Cache)
+		w.emitAlertsWithOutput(ctx, ev, firing.Rule, firing.announce(), firing.change, firing.severity, joinOutputs(w.cycleFailOutput, reason))
+		if w.shouldEmitRuleEvent(firing.Rule, firing.announce()) {
+			w.emit(Event{Kind: eventKindSuppressed, Severity: firing.severity, Rule: firing.Name, Action: action, Message: advisoryRemediationPrefix + reason})
+		}
+		return false
+	}
 	suppress, skip := w.remediationSuppression(ctx, ev, firing, action, now)
 	if skip {
 		return false
@@ -957,7 +967,7 @@ func (w *Worker) firingRemediationRules(ctx context.Context, ev *rules.Evaluator
 		}
 		evaluation := w.fires(ctx, ev, *rule, at, evals)
 		if evaluation.firing {
-			firing = append(firing, firingRule{Rule: *rule, holds: evaluation.holds, rising: evaluation.rising, escalated: evaluation.escalated, severity: evaluation.severity, change: evaluation.change})
+			firing = append(firing, firingRule{Rule: *rule, holds: evaluation.holds, advisory: evaluation.advisory, rising: evaluation.rising, escalated: evaluation.escalated, severity: evaluation.severity, change: evaluation.change})
 		} else if evaluation.recovered {
 			// The rule outcome is the alarm for the checks it claims, so its
 			// episode needs the same recovery edge an alert rule has: without
@@ -966,6 +976,50 @@ func (w *Worker) firingRemediationRules(ctx context.Context, ev *rules.Evaluator
 		}
 	}
 	return firing
+}
+
+// advisoryRemediationPrefix opens the suppressed event of a rule that holds
+// only on advisory evidence; the readings that withheld the action follow.
+const advisoryRemediationPrefix = "advisory evidence withholds the action: "
+
+// advisoryHolds reports whether an operation rule that also alerts holds once
+// advisory evidence is read as its alert would read it. EvalRule leaves such a
+// rule undecided, so without this the alert was lost together with the
+// operation the evidence must not drive (a binary removed from disk). A rule
+// with no alert has nothing to keep.
+func advisoryHolds(ctx context.Context, ev *rules.Evaluator, r rules.Rule) bool {
+	if _, ok := r.Operation(); !ok || len(r.AlertMessages()) == 0 {
+		return false
+	}
+	held, err := ev.EvalAdvisory(ctx, r)
+	return err == nil && held && !ev.Unknown
+}
+
+// advisoryReadings names the failing advisory checks a rule references, so
+// whoever reads the alert or the suppressed event learns why nothing ran.
+func advisoryReadings(r rules.Rule, cache map[string]checks.Result) string {
+	var readings []string
+	rules.WalkConditionLeaves(r.If, func(operator string, operand any) bool {
+		if operator != rules.ConditionFailed && operator != rules.ConditionActive {
+			return false
+		}
+		leaf, _ := operand.(map[string]any)
+		name := cfgval.AsString(leaf[rules.FieldCheck])
+		if res, ok := cache[name]; ok && res.ActionBlocked && !res.OK {
+			readings = append(readings, "check "+name+": "+res.Message)
+		}
+		return false
+	})
+	slices.Sort(readings)
+	return strings.Join(slices.Compact(readings), "; ")
+}
+
+// joinOutputs keeps both outputs an alert carries, either of which may be empty.
+func joinOutputs(first, second string) string {
+	if first == "" || second == "" {
+		return first + second
+	}
+	return first + "\n\n" + second
 }
 
 // emitRuleRecovered closes a rule's episode at the gravest severity it
@@ -1031,10 +1085,14 @@ func (w *Worker) runAlerts(ctx context.Context, ev *rules.Evaluator, at time.Tim
 // episode; level is the episode's held severity. A dry-run worker's alerts
 // reach only the console notifiers.
 func (w *Worker) emitAlerts(ctx context.Context, ev *rules.Evaluator, r rules.Rule, announce bool, change rules.ChangeContext, level severity.Level) {
+	w.emitAlertsWithOutput(ctx, ev, r, announce, change, level, w.cycleFailOutput)
+}
+
+// emitAlertsWithOutput is emitAlerts with the output the alert carries.
+func (w *Worker) emitAlertsWithOutput(ctx context.Context, ev *rules.Evaluator, r rules.Rule, announce bool, change rules.ChangeContext, level severity.Level, failOutput string) {
 	dryRun := w.ruleDryRun(r)
 	allow := dryRunFilter(dryRun)
 	panicking := w.InPanic != nil && w.InPanic()
-	failOutput := w.cycleFailOutput
 	emitEvent := w.shouldEmitRuleEvent(r, announce)
 	emitNotify := w.shouldNotifyRule(r, announce)
 	for _, msg := range r.AlertMessages() {
@@ -1086,7 +1144,10 @@ func alertMessage(service, rule, msg, failOutput string, level severity.Level) n
 type ruleFiringState struct {
 	firing bool
 	// holds reports that the condition itself was observed true this cycle.
-	holds     bool
+	holds bool
+	// advisory reports that it holds only on advisory evidence, which keeps
+	// the rule's alert but never runs its operation (rules.EvalAdvisory).
+	advisory  bool
 	rising    bool
 	escalated bool
 	recovered bool
@@ -1104,6 +1165,7 @@ func (s ruleFiringState) announce() bool { return s.rising || s.escalated }
 type firingRule struct {
 	rules.Rule
 	holds     bool
+	advisory  bool
 	rising    bool
 	escalated bool
 	severity  severity.Level
@@ -1145,6 +1207,10 @@ func (w *Worker) fires(ctx context.Context, ev *rules.Evaluator, r rules.Rule, a
 	} else {
 		w.clearEvalError(r.Name)
 	}
+	advisory := !cond && ev.Unknown && advisoryHolds(ctx, ev, r)
+	if advisory {
+		cond = true
+	}
 	window := w.windowState(r.Name)
 	// The previous cycle's episode state is the only reliable edge reference:
 	// recomputing the window status with this cycle's timestamp reads a for:{duration}
@@ -1163,6 +1229,7 @@ func (w *Worker) fires(ctx context.Context, ev *rules.Evaluator, r rules.Rule, a
 	return ruleFiringState{
 		firing:    step.Firing,
 		holds:     cond,
+		advisory:  advisory,
 		rising:    !wasFiring && step.Firing,
 		escalated: wasFiring && step.Firing && step.Raised,
 		recovered: wasFiring && !step.Firing,

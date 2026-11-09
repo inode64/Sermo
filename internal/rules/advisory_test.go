@@ -41,3 +41,40 @@ func TestUnavailableOKResultDoesNotFireAnAlert(t *testing.T) {
 		t.Fatalf("alert = %v, %v, unknown %v; want unknown", match, err, e.Unknown)
 	}
 }
+
+// EvalAdvisory reads advisory evidence the way the rule's alert would, so the
+// worker can deliver that alert, but keeps a busy check unknown as the rule's
+// operation does; EvalRule and guards are untouched by it.
+func TestEvalAdvisoryReadsOnlyAdvisoryEvidenceAsFailure(t *testing.T) {
+	failed := map[string]any{ConditionFailed: map[string]any{FieldCheck: "stale"}}
+	restart := Rule{Type: RuleRemediation, If: failed, Actions: []Action{{Type: ActionAlert, Message: "stale"}, {Type: ActionRestart}}}
+	for _, tc := range []struct {
+		name    string
+		res     checks.Result
+		holds   bool
+		unknown bool
+	}{
+		{"advisory failure", checks.Result{OK: false, ActionBlocked: true}, true, false},
+		{"advisory pass", checks.Result{OK: true, ActionBlocked: true}, false, false},
+		{"busy", checks.Result{OK: false, Busy: true}, false, true},
+		{"busy and advisory", checks.Result{OK: false, Busy: true, ActionBlocked: true}, false, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			e := &Evaluator{Cache: map[string]checks.Result{"stale": tc.res}}
+			if match, err := e.EvalRule(t.Context(), restart); match || err != nil {
+				t.Fatalf("EvalRule = %v, %v; advisory or busy evidence must not authorize the restart", match, err)
+			}
+			held, err := e.EvalAdvisory(t.Context(), restart)
+			if held != tc.holds || err != nil || e.Unknown != tc.unknown {
+				t.Fatalf("EvalAdvisory = %v, %v, unknown %v; want %v, unknown %v", held, err, e.Unknown, tc.holds, tc.unknown)
+			}
+			if match, _ := e.EvalRule(t.Context(), restart); match {
+				t.Fatal("EvalAdvisory leaked its reading into the next EvalRule")
+			}
+			guard := Rule{Name: "g", Type: RuleGuard, Blocks: []string{string(ActionRestart)}, If: failed}
+			if _, _, err := Guard(t.Context(), []Rule{guard}, string(ActionRestart), e); tc.res.ActionBlocked && err == nil {
+				t.Fatal("a guard must still fail closed on advisory evidence")
+			}
+		})
+	}
+}

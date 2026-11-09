@@ -67,6 +67,9 @@ type Evaluator struct {
 	// it. Its zero value — a plain Eval, and every guard — keeps busy unknown,
 	// so no new caller can act on it by accident.
 	busyFails bool
+	// advisoryFails reads advisory evidence (checks.Result.ActionBlocked) as a
+	// failure while a busy result stays unknown. Only EvalAdvisory sets it.
+	advisoryFails bool
 
 	memo map[string]checks.Result
 }
@@ -121,6 +124,26 @@ func (e *Evaluator) EvalRule(ctx context.Context, r Rule) (bool, error) {
 	e.busyFails = !hasOperation
 	defer func() { e.busyFails = previous }()
 	return e.Eval(ctx, r.If)
+}
+
+// EvalAdvisory answers, for a rule EvalRule left undecided, whether its alert
+// still holds: advisory evidence (a reading that alerts but must never drive an
+// operation, checks.Result.ActionBlocked) is read as its alert would read it,
+// while a busy check stays unknown as it does for the rule's operation. Nothing
+// may operate on this answer; the worker uses it to deliver the alert of a rule
+// whose operation the evidence withholds.
+func (e *Evaluator) EvalAdvisory(ctx context.Context, r Rule) (bool, error) {
+	previousBusy, previousAdvisory := e.busyFails, e.advisoryFails
+	_, hasOperation := r.Operation()
+	e.busyFails, e.advisoryFails = !hasOperation, true
+	defer func() { e.busyFails, e.advisoryFails = previousBusy, previousAdvisory }()
+	return e.Eval(ctx, r.If)
+}
+
+// readsAsFailure reports whether this evaluation reads a busy or advisory
+// result as a failure: an alert reads both, EvalAdvisory only the advisory one.
+func (e *Evaluator) readsAsFailure(res checks.Result) bool {
+	return e.busyFails || (e.advisoryFails && !res.Busy)
 }
 
 // Eval evaluates a condition node, returning its boolean value. An unresolvable
@@ -203,8 +226,8 @@ func (e *Evaluator) evalFailed(ctx context.Context, operand any) (bool, error) {
 }
 
 // unobservedFails reports whether an unavailable or busy result satisfies
-// failed: for an ordinary rule: an unavailable probe failed, a busy one only
-// when this rule may read busy as a failure (busyFails). An unavailable result
+// failed: for an ordinary rule: an unavailable probe failed, a busy or advisory
+// one only when this evaluation reads it as a failure. An unavailable result
 // that keeps OK states no failure (a cert endpoint out of reach says nothing
 // about the certificate, an incomplete library inventory that found nothing
 // says nothing about the libraries), so it stays unknown whatever else it
@@ -214,7 +237,7 @@ func (e *Evaluator) unobservedFails(res checks.Result) bool {
 		return false
 	}
 	if res.Busy || res.ActionBlocked {
-		return e.busyFails
+		return e.readsAsFailure(res)
 	}
 	return res.Unavailable
 }
@@ -507,11 +530,11 @@ func (e *Evaluator) runInline(ctx context.Context, name string, entry, keyParams
 }
 
 // unavailableCheckError preserves guard fail-closed behavior for both named
-// checks and inline probes, including skipped checks. A busy result is unknown
-// too unless this evaluation reads busy as a failure (see busyFails); a guard
-// never does.
+// checks and inline probes, including skipped checks. A busy or advisory result
+// is unknown too unless this evaluation reads it as a failure (see
+// readsAsFailure); a guard never does.
 func (e *Evaluator) unavailableCheckError(name string, res checks.Result) error {
-	busyUnknown := (res.Busy || res.ActionBlocked) && (e.FailOnUnavailable || !e.busyFails)
+	busyUnknown := (res.Busy || res.ActionBlocked) && (e.FailOnUnavailable || !e.readsAsFailure(res))
 	if !res.Unavailable && !res.Skipped && !busyUnknown {
 		return nil
 	}
@@ -563,7 +586,7 @@ func Guard(ctx context.Context, ruleSet []Rule, action string, ev *Evaluator) (r
 		ev.Cache, ev.memo = guardEvaluator.Cache, guardEvaluator.memo
 	}()
 	guardEvaluator.FailOnUnavailable = true
-	guardEvaluator.busyFails = false
+	guardEvaluator.busyFails, guardEvaluator.advisoryFails = false, false
 	classes := guardedBy(action)
 	for i := range ruleSet {
 		if ruleSet[i].Type != RuleGuard || !slices.ContainsFunc(ruleSet[i].Blocks, func(b string) bool { return slices.Contains(classes, b) }) {

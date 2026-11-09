@@ -1457,6 +1457,22 @@ fail closed. Host watches notify but withhold both firing and recovery hooks.
 See [running library checks](configuration.md#stale_libraries--processes-using-replaced-shared-libraries)
 for update locks, ownership requirements and the opt-in restart example.
 
+#### Advisory evidence in a rule that alerts and acts
+
+A reading that may alert but must never drive an operation is **advisory**
+(`action_blocked: true`): the library observations above, a
+[`stale_binary`](configuration.md#stale_binary--service-running-a-replaced-binary)
+reading whose binary is no longer installed, a `process` check whose
+executable was uninstalled, and an identity
+probe's move into a state it accepts. A remediation rule that also alerts
+(`then: { actions: [alert, restart] }`, the shape of the generated
+`restart-on-stale-binary`) still delivers its alert on such a reading, with the
+advisory readings as its output, records the withheld action as one
+`suppressed` event per episode naming those readings, and runs nothing. Its
+episode recovers like an alert's, and acts on its next cycle if the same
+reading becomes actionable. A remediation rule without an alert stays
+undecided on advisory evidence, and a busy reading stays unknown for both.
+
 #### Busy servers
 
 A server that answers "too many connections", "loading", "starting up" or

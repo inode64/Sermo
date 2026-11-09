@@ -53,6 +53,11 @@ the types are `RuleType`, `ActionType` and `Action` in
   operation rules read gets its busy episode from the worker's health reporter.
   A watch withholds its actions (hook, expand, makestep, remount, drain_output) on a busy
   result. No option makes busy trigger an operation.
+- Advisory evidence (`checks.Result.ActionBlocked`) is likewise unknown for a
+  rule with an operation. A remediation rule that also alerts re-reads it with
+  `EvalAdvisory` only to deliver that alert and record the withheld action as
+  `suppressed`; nothing operates on that answer, and a busy result stays
+  unknown there too.
 
 ## Severity
 
