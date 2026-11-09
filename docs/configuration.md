@@ -2277,7 +2277,11 @@ initial alert. At 4096 pending receipts, new deliveries are skipped and a bounde
 error is logged; existing receipts are never evicted to make room. An open incident
 whose service, check, rule, watch, metric or app is no longer configured (or no
 longer enabled) after a restart or reload is forgotten, since nothing can send its
-recovery any more; it is not reminded again. If `repeat_interval` is set, an open incident is reminded at that interval, even
+recovery any more; it is not reminded again. An open incident of a service
+check or rule that is still configured is handed to the new worker, even when
+the service's configuration changed: its first healthy observation sends the
+recovery and closes it, and a check or rule that is still failing continues the
+incident without announcing it again. If `repeat_interval` is set, an open incident is reminded at that interval, even
 when the underlying check emits no new event. Without it, open incidents are
 announced only on state changes. A remediation rule's episode closes with the
 `recovered` event emitted when its condition clears, so its next firing is a

@@ -49,3 +49,7 @@ watches:
     check:
       type: fail2ban
       timeout: 3s
+      # Under supervise-daemon the unit reads started while every respawned
+      # server exits (a socket left by a killed server makes each one refuse to
+      # start), so only the control socket proves a start or restart worked.
+      verify: true

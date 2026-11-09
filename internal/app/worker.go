@@ -88,6 +88,11 @@ type Worker struct {
 	// can emit, so event_notify can tell a renamed check's open incident apart.
 	checkNames map[string]bool
 
+	// restoredRules holds the rules whose event_notify incident is still open
+	// although their window did not survive into this generation, at the grade
+	// the incident holds. See restoreIncidents.
+	restoredRules map[string]severity.Level
+
 	// Checks produces this cycle's named-check cache.
 	Checks func(ctx context.Context, deps checks.Deps) map[string]checks.Result
 	// ResolveRefs returns a per-cycle resolver for named checks outside the main
@@ -1213,6 +1218,9 @@ func (w *Worker) fires(ctx context.Context, ev *rules.Evaluator, r rules.Rule, a
 	} else {
 		w.clearEvalError(r.Name)
 	}
+	// Only a real observation may recover a restored incident: a failed or
+	// unknown evaluation also reads as a false condition.
+	observedClear := err == nil && !cond && !ev.Unknown
 	advisory := !cond && ev.Unknown && advisoryHolds(ctx, ev, r)
 	if advisory {
 		cond = true
@@ -1232,16 +1240,65 @@ func (w *Worker) fires(ctx context.Context, ev *rules.Evaluator, r rules.Rule, a
 		return ruleFiringState{firing: true, notified: notified, severity: window.Severity(), change: ev.Change}
 	}
 	step := window.FiresGradedAt(r, cond, ev.RuleSeverity(r), at)
+	recovered, closing := wasFiring && !step.Firing, step.Severity
+	if held, restored := w.restoredRules[r.Name]; restored {
+		switch {
+		case step.Firing:
+			// The rule's own episode carries the incident from here.
+			delete(w.restoredRules, r.Name)
+		case observedClear:
+			delete(w.restoredRules, r.Name)
+			recovered, closing = true, held
+		}
+	}
 	return ruleFiringState{
 		firing:    step.Firing,
 		holds:     cond,
 		advisory:  advisory,
 		rising:    !wasFiring && step.Firing,
 		escalated: wasFiring && step.Firing && step.Raised,
-		recovered: wasFiring && !step.Firing,
+		recovered: recovered,
 		notified:  notified,
-		severity:  step.Severity,
+		severity:  closing,
 		change:    ev.Change,
+	}
+}
+
+// restoreIncidents adopts the open event_notify incidents this generation
+// would otherwise never close. A check snapshot or rule window from another
+// configuration is not restored, so the episode started closed and its first
+// healthy observation sent no recovery. A check gets the restored episode a
+// matching snapshot would have given it; a rule sends its recovery the first
+// time its condition is observed not to hold. Each one that is failing again
+// continues the incident without announcing it twice. It must run before the
+// worker's first cycle.
+func (w *Worker) restoreIncidents(open serviceIncidents) {
+	if w.reportedChecks == nil {
+		w.reportedChecks, w.busyReportedChecks = ruledChecks(w.Rules)
+	}
+	for name, held := range open.checks {
+		// A check a rule reads raises no incident of its own; one under that
+		// name predates the rule and stays for Retain to judge.
+		if _, known := w.checkEpisodes[name]; known || !w.checkNames[name] || w.reportedChecks[name] || w.busyReportedChecks[name] {
+			continue
+		}
+		if w.checkEpisodes == nil {
+			w.checkEpisodes = map[string]checkEpisode{}
+		}
+		w.checkEpisodes[name] = checkEpisode{held: held, restored: true}
+	}
+	for name, held := range open.rules {
+		if !slices.ContainsFunc(w.Rules, func(r rules.Rule) bool { return r.Name == name }) {
+			continue
+		}
+		if window := w.windows[name]; window != nil && window.Firing() {
+			// The restored window sends the recovery itself.
+			continue
+		}
+		if w.restoredRules == nil {
+			w.restoredRules = map[string]severity.Level{}
+		}
+		w.restoredRules[name] = held
 	}
 }
 

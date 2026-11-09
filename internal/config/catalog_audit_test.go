@@ -1003,6 +1003,18 @@ func TestCatalogUnifiUsesMongodAppBinary(t *testing.T) {
 	}
 }
 
+func TestFail2banCatalogVerifiesControlSocket(t *testing.T) {
+	cfg := loadRepoCatalog(t)
+	resolved, errs := cfg.ResolveCatalog(CategoryService, "fail2ban")
+	if len(errs) > 0 {
+		t.Fatalf("ResolveCatalog(fail2ban): %v", errs)
+	}
+	probe := nested(t, resolved.Tree, "checks", "fail2ban")
+	if !cfgval.Bool(probe["verify"]) {
+		t.Fatal("fail2ban control-socket check must verify start: the OpenRC unit reads started while its supervisor respawns a failing server")
+	}
+}
+
 func TestNebulaMeshCatalogProfiles(t *testing.T) {
 	root := repoRoot(t)
 	cfg := loadRepoCatalog(t)

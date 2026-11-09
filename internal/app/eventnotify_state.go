@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"sermo/internal/notify"
+	"sermo/internal/severity"
 	"sermo/internal/state"
 )
 
@@ -120,6 +121,96 @@ func (n *EventNotifier) due(target string, before time.Time) ([]state.EventNotif
 		}
 	}
 	return due, nil
+}
+
+// serviceIncidents is one service's open health incidents its worker can close:
+// those of its checks and of its rules, each at the gravest grade a configured
+// notifier holds it.
+type serviceIncidents struct {
+	checks map[string]severity.Level
+	rules  map[string]severity.Level
+}
+
+// openServiceIncidents lists, per service, the open check and rule incidents a
+// new generation's workers adopt before their first cycle (see
+// Worker.restoreIncidents). A check snapshot or rule window from another
+// configuration is not restored, so the worker started with the episode closed
+// and never sent the recovery: event_notify reminded the incident every
+// repeat_interval although the service was healthy.
+func (n *EventNotifier) openServiceIncidents() map[string]serviceIncidents {
+	if n == nil {
+		return nil
+	}
+	n.deliveryMu.Lock()
+	defer n.deliveryMu.Unlock()
+	keys := map[string]bool{}
+	if n.store != nil {
+		stored, err := n.store.ActiveEventNotifyIncidents()
+		if err != nil {
+			n.logger.Error("list open event notifications to restore", "error", err)
+		}
+		for _, key := range stored {
+			keys[key] = true
+		}
+	}
+	for _, rec := range n.memory {
+		if rec.Active {
+			keys[rec.IncidentKey] = true
+		}
+	}
+	targets, _ := n.deliveryConfig()
+	open := map[string]serviceIncidents{}
+	for key := range keys {
+		parts, ok := parseEventNotifyKey(key)
+		if !ok || parts[0] != eventNotifyDimensionService || parts[4] != eventNotifyCategoryHealth {
+			continue
+		}
+		service, rule, check := parts[1], parts[2], parts[3]
+		if (rule == "") == (check == "") {
+			continue
+		}
+		held, active := n.heldIncident(key, targets)
+		if !active {
+			continue
+		}
+		inc := open[service]
+		if rule != "" {
+			inc.rules = addHeld(inc.rules, rule, held)
+		} else {
+			inc.checks = addHeld(inc.checks, check, held)
+		}
+		open[service] = inc
+	}
+	return open
+}
+
+// heldIncident reports whether a configured notifier still holds key open, and
+// the gravest grade any of them heard. A notifier removed from the
+// configuration is not reminded, so its rows do not keep an incident open.
+// Callers hold deliveryMu.
+func (n *EventNotifier) heldIncident(key string, targets []notify.Notifier) (severity.Level, bool) {
+	var held severity.Level
+	active := false
+	for _, target := range targets {
+		rec, found, err := n.load(key, target.Name())
+		if err != nil {
+			n.logger.Error("load open event notification to restore", "notifier", target.Name(), "error", err)
+			continue
+		}
+		if found && rec.Active {
+			active = true
+			held = severity.Max(held, severity.Level(rec.Severity).Resolved())
+		}
+	}
+	return held, active
+}
+
+func addHeld(held map[string]severity.Level, name string, level severity.Level) map[string]severity.Level {
+	if held == nil {
+		held = map[string]severity.Level{}
+	}
+	held[name] = level
+	return held
 }
 
 // persistenceIncidentOpen reconciles the daemon-wide persistence episode on

@@ -267,6 +267,7 @@ func (m *Monitor) startGenerationLocked(ctx context.Context, firstBoot bool) {
 	scope := eventNotifyScopeOf(m.workers, m.watches)
 	m.deps.PersistenceEvents.retain(scope)
 	m.deps.EventNotify.Retain(scope)
+	restoreServiceIncidents(m.workers, m.deps.EventNotify.openServiceIncidents())
 
 	sched := m.scheduler
 	// startup_delay applies once per process: the first boot fixes its deadline
@@ -310,6 +311,19 @@ func (m *Monitor) startGenerationLocked(ctx context.Context, firstBoot bool) {
 		m.genWG.Go(func() {
 			sampler.Run(genCtx, interval)
 		})
+	}
+}
+
+// restoreServiceIncidents hands each worker of a generation that has not
+// started yet the open incidents of its service.
+func restoreServiceIncidents(workers []*Worker, open map[string]serviceIncidents) {
+	for _, w := range workers {
+		if w == nil {
+			continue
+		}
+		if incidents, ok := open[w.Service]; ok {
+			w.restoreIncidents(incidents)
+		}
 	}
 }
 
