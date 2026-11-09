@@ -306,6 +306,7 @@ linters:
         - module: github.com/google/nftables
         - module: github.com/gosnmp/gosnmp
         - module: github.com/jackc/pgx/v5
+        - module: github.com/mdlayher/netlink
         - module: github.com/quic-go/quic-go
         - module: github.com/spf13/pflag
         - module: github.com/vishvananda/netlink

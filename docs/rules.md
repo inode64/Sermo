@@ -3258,7 +3258,10 @@ number of matching default routes.
 The `firewall_rules` check verifies that nftables or iptables rules are loaded.
 It is health-style: a service or watch fails when the rule count is below
 `min_rules` (default `1`). `backend: auto` tries nftables first (read via
-netlink, no `nft` binary required) and falls back to iptables/ip6tables.
+netlink, no `nft` binary required) and falls back to iptables/ip6tables. The
+nftables walk honors the check's timeout and cancellation: it closes pending
+netlink I/O and stops before returning, without leaving a background recount
+running into later cycles. A cancelled walk never publishes a partial count.
 
 ```yaml
 checks:
