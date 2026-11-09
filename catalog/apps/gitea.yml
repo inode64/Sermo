@@ -1,0 +1,8 @@
+name: gitea
+display_name: "Gitea"
+category: web
+variables:
+  binary: ${bindir}/gitea
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["${binary}", "--version"], timeout: 10s }

@@ -2505,6 +2505,14 @@ also checks `/-/ready` with HTTP 200, so a live process still loading its TSDB
 does not count as ready. Both checks verify startup and alert after three
 failed cycles; neither adds automatic restarts.
 
+Gitea's health check reads `/api/healthz` and requires HTTP 200 and JSON
+`status: pass`, so an unreachable database or cache fails it; it verifies
+startup and alerts after three failed cycles. Its process selector names the
+`gitea web` subcommand: OpenSSH runs `gitea serv` from the same binary and user
+for each Git operation over SSH, and those session processes are not the
+service. A host that changes Gitea's `HTTP_PORT` sets `variables.port` in its
+`services.local` file.
+
 Redis and KeyDB provide an opt-in AOF write check. Enable it only on instances
 with `appendonly yes`: servers without AOF may omit `aof_last_write_status`.
 The monitoring user must be allowed to run `PING` and `INFO`. Missing fields,

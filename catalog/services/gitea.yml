@@ -1,0 +1,104 @@
+name: gitea
+display_name: Gitea
+category: web
+description: Gitea self-hosted Git forge (web UI, API and Git over HTTP).
+service:
+  systemd:
+    - gitea
+  openrc:
+    - gitea
+apps:
+  - gitea
+restart_on_change:
+  libraries:
+    - glibc
+    - pam
+  apps:
+    - gitea
+  messages:
+    app: >-
+      ${display_name} will restart after version change of ${change.app}: ${change.old_version} -> ${change.new_version}
+variables:
+  host: 127.0.0.1
+  port: 3000
+  user: git
+pidfile: { path: /run/gitea.pid, optional: true }
+# OpenSSH runs `gitea serv` from the same binary and as the same user for every
+# Git operation over SSH. Those processes belong to the SSH session, not to the
+# service, so the selector names the `web` subcommand: an exe and user match
+# alone would treat an in-flight push as part of the daemon.
+processes:
+  main:
+    exe: ${gitea_binary}
+    cmd: '^(\S*/)?gitea\s(.*\s)?web(\s|$)'
+    user: ${user}
+watches:
+  # Libraries the processes still map from before an update, including those
+  # restart_on_change does not list. Advisory: restart_on_change drives restarts.
+  alert-if-libraries-replaced:
+    check:
+      type: stale_libraries
+      interval: 5m
+      severity: warning
+    then:
+      action: alert
+      message: >-
+        ${display_name} still uses libraries replaced on disk; restart it to load the updated versions
+  service:
+    check:
+      type: service
+      expect: active
+  port:
+    check:
+      type: tcp
+      host: ${host}
+      port: ${port}
+      timeout: 2s
+  health:
+    check:
+      type: http
+      url: http://${host}:${port}/api/healthz
+      expect_status: 200
+      expect_json:
+        status: pass
+      verify: true
+      timeout: 5s
+    for:
+      cycles: 3
+    then:
+      action: alert
+      message: ${display_name} health endpoint, database or cache is unhealthy
+  alert-if-memory-high:
+    check:
+      type: metric
+      scope: service
+      name: memory
+      op: '>'
+      value: 30%
+      optional: true
+      severity: warning
+      levels:
+        error: { op: '>', value: 50% }
+    for:
+      duration: 4m
+    then:
+      action: alert
+      message: >-
+        During ${rule.duration}, ${display_name} memory usage stayed above ${check.threshold} (current ${check.value})
+  alert-if-cpu-thread-high:
+    check:
+      type: metric
+      scope: service
+      name: cpu_thread
+      op: '>'
+      value: 90%
+      optional: true
+      severity: warning
+      levels:
+        error: { op: '>', value: 98% }
+    for:
+      duration: 5m
+    then:
+      action: alert
+      message: >-
+        During ${rule.duration}, ${display_name} single-thread CPU usage stayed above ${check.threshold} (current ${check.value})
