@@ -870,7 +870,9 @@ func maintainStateOnce(ctx context.Context, logger *slog.Logger, store stateMain
 		logger.Warn("consolidate stored history", logFieldError, err)
 	}
 	if result.Rolled > 0 || result.Pruned() > 0 {
-		logger.Info("consolidated stored history",
+		// Every pass on a monitoring host rolls something up: at info level this
+		// line was four in five of a daemon's log lines. Failures stay a warning.
+		logger.Debug("consolidated stored history",
 			"rolled", result.Rolled, logFieldRows, result.Pruned())
 	}
 }
