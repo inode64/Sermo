@@ -1,7 +1,9 @@
 package checks
 
 import (
+	"bytes"
 	"context"
+	"crypto/rand"
 	"fmt"
 	"math"
 	"net"
@@ -21,7 +23,6 @@ const (
 	icmpEchoCode                = 0
 	icmpIDMask                  = 0xffff
 	icmpListenAnyIPv4           = "0.0.0.0"
-	icmpPayload                 = "sermo"
 	icmpReplyBufferSize         = 1500
 	icmpV4ProtocolNumber        = 1
 	microsecondsPerMillisecond  = 1000.0
@@ -200,17 +201,22 @@ func defaultPingSampler(host, iface string, count int, timeout time.Duration) (P
 	}
 	defer func() { _ = icmpConn.Close() }()
 
+	return pingPackets(icmpConn, addr, count, timeout)
+}
+
+func pingPackets(icmpConn net.PacketConn, addr *net.IPAddr, count int, timeout time.Duration) (PingSample, error) {
 	perPacket := timeout / time.Duration(count)
 	if perPacket <= 0 {
 		perPacket = defaultPingPerPacketTimeout
 	}
 	id := os.Getpid() & icmpIDMask
+	payload := []byte(rand.Text())
 	reply := make([]byte, icmpReplyBufferSize)
 	var rtts []float64
 	for seq := range count {
 		msg := icmp.Message{
 			Type: ipv4.ICMPTypeEcho, Code: icmpEchoCode,
-			Body: &icmp.Echo{ID: id, Seq: seq, Data: []byte(icmpPayload)},
+			Body: &icmp.Echo{ID: id, Seq: seq, Data: payload},
 		}
 		b, err := msg.Marshal(nil)
 		if err != nil {
@@ -221,12 +227,9 @@ func defaultPingSampler(host, iface string, count int, timeout time.Duration) (P
 		if _, err := icmpConn.WriteTo(b, addr); err != nil {
 			continue
 		}
-		// A raw ip4:icmp socket receives a copy of every echo reply on the host,
-		// so a reply for another concurrent ping (which shares this PID-derived
-		// id) can arrive first. Read until we see the echo reply that matches
-		// THIS request — our id and seq, from the target address — or the
-		// per-packet deadline passes; skip everything else instead of mistaking
-		// a stray reply for ours.
+		// Raw sockets receive every echo reply on the host. ID and sequence
+		// can coincide across samples, so only our random payload proves the
+		// reply belongs to this sample (including delayed replies from a cycle).
 		deadline := time.Now().Add(perPacket)
 		_ = icmpConn.SetReadDeadline(deadline)
 		for {
@@ -242,7 +245,7 @@ func defaultPingSampler(host, iface string, count int, timeout time.Duration) (P
 				continue
 			}
 			echo, ok := rm.Body.(*icmp.Echo)
-			if rm.Type != ipv4.ICMPTypeEchoReply || !ok || echo.ID != id || echo.Seq != seq {
+			if rm.Type != ipv4.ICMPTypeEchoReply || !ok || echo.ID != id || echo.Seq != seq || !bytes.Equal(echo.Data, payload) {
 				continue
 			}
 			rtts = append(rtts, float64(time.Since(sent).Microseconds())/microsecondsPerMillisecond)
