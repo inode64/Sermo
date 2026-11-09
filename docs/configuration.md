@@ -3786,7 +3786,12 @@ The conditions (declare at least one):
 - **`older_than`** — a positive duration such as `24h`; fires when the elapsed
   time since a path's modification time (`mtime`) becomes greater than that
   duration. A path already stale on the first cycle fires immediately; it re-arms
-  once the path is modified or removed.
+  once the path is modified or removed. With `recursive: true` only regular
+  files are judged: a symlink's own `mtime` does not move when its target is
+  refreshed, and a directory's moves only when entries are added or removed, so
+  a compatibility link or a subdirectory never makes a data directory stale. The
+  age reading of a recursive directory is its oldest regular file. A path named
+  without `recursive` is judged as written, directory or link included.
 
 A scan must keep answering: `check.timeout` (`engine.default_timeout` when unset)
 bounds the silence between one entry and the next, not the whole walk, so a large

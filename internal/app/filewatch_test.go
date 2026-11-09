@@ -211,6 +211,66 @@ func TestFileWatchSummaryUsesObservedAgeAndFileCount(t *testing.T) {
 	}
 }
 
+func TestFileWatchRecursiveOlderThanDatesRegularFilesOnly(t *testing.T) {
+	// A GeoIP directory kept a 2019 compatibility link (GeoIPCity.dat ->
+	// GeoLiteCity.dat) next to databases refreshed weekly: the link's own mtime
+	// failed the freshness watch forever. Links and directories carry no data
+	// age; only regular files are judged, and the reading is the oldest file.
+	dir := t.TempDir()
+	now := time.Now().Add(3 * time.Hour) // the link, the subdirectory and dir are 3h old
+	db := filepath.Join(dir, "GeoLite2-City.mmdb")
+	writeSize(t, db, 1)
+	if err := os.Chtimes(db, now.Add(-10*time.Minute), now.Add(-10*time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink("GeoLiteCity.dat", filepath.Join(dir, "GeoIPCity.dat")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(filepath.Join(dir, "empty"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	h := &fileWatchHarness{}
+	w := h.watcher(dir, true, fileCond{olderThan: time.Hour})
+	w.summary = "GeoIP ${value} old in ${number_files} files"
+	w.check = map[string]any{checks.CheckKeyOlderThan: "1h"}
+	w.now = func() time.Time { return now }
+	var latest checks.Result
+	w.publish = func(_, _ string, res checks.Result) { latest = res }
+
+	w.runCycle(t.Context())
+
+	if len(h.fired) != 0 || !latest.OK {
+		t.Fatalf("only a fresh database is present: fired %v, result %+v", h.fired, latest)
+	}
+	if latest.Message != "GeoIP 10m old in 1 files" || latest.Data[checks.DataKeyAge] != "10m" {
+		t.Fatalf("the reading must be the oldest file's age, got %q / %v", latest.Message, latest.Data[checks.DataKeyAge])
+	}
+
+	if err := os.Chtimes(db, now.Add(-2*time.Hour), now.Add(-2*time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	w.runCycle(t.Context())
+	if len(h.fired) != 1 || h.fired[0][sermoEnvPath] != db || latest.OK {
+		t.Fatalf("a stale regular file must still fire: fired %v, result %+v", h.fired, latest)
+	}
+}
+
+func TestFileWatchNonRecursiveOlderThanKeepsTheNamedPath(t *testing.T) {
+	// A path named on its own keeps its mtime contract whatever its kind: an
+	// untouched spool directory is the condition such a watch reports.
+	dir := t.TempDir()
+	now := time.Now().Add(3 * time.Hour)
+	h := &fileWatchHarness{}
+	w := h.watcher(dir, false, fileCond{olderThan: time.Hour})
+	w.now = func() time.Time { return now }
+
+	w.runCycle(t.Context())
+
+	if len(h.fired) != 1 || h.fired[0][sermoEnvPath] != dir {
+		t.Fatalf("a stale named directory must fire, fired %v", h.fired)
+	}
+}
+
 func TestFileWatchOlderThanFiresAfterObserveOnlyCycle(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "old.txt")
 	writeSize(t, path, 1)

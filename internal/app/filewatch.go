@@ -45,6 +45,7 @@ type fileState struct {
 	uid, gid   uint32
 	breached   bool // previous size-threshold result, for edge detection
 	modifiedAt time.Time
+	dated      bool // older_than judges this entry's age (see scan)
 	age        time.Duration
 	older      bool
 	olderFired bool
@@ -243,8 +244,14 @@ func (w *fileWatcher) snapshot(current map[string]fileState, paths []string, fai
 	data[checks.DataKeyMode] = fmt.Sprintf(checks.FileModeFormat, sample.perm)
 	data[checks.CheckKeyOwner] = fmt.Sprintf(checks.FileOwnerFormat, sample.uid, sample.gid)
 	data[checks.DataKeyModifiedAt] = sample.modifiedAt.UTC().Format(time.RFC3339)
+	age := sample.age
+	if !sample.dated {
+		// A recursive root directory carries no age of its own; the freshness
+		// reading is the oldest file it holds.
+		age = fileWatchOldestAge(current)
+	}
 	if w.cond.olderThan > 0 {
-		data[checks.DataKeyAge] = units.HumanizeDuration(sample.age.Round(time.Second))
+		data[checks.DataKeyAge] = units.HumanizeDuration(age.Round(time.Second))
 	}
 	if w.recursive {
 		data[watchReadingFieldEntries] = max(len(current)-roots, 0)
@@ -257,7 +264,7 @@ func (w *fileWatcher) snapshot(current map[string]fileState, paths []string, fai
 		if trigger == fileChangeSizeThreshold || w.cond.olderThan == 0 {
 			data[checks.DataKeyValue] = sample.size
 		} else {
-			data[checks.DataKeyValue] = sample.age
+			data[checks.DataKeyValue] = age
 			if trigger == "" {
 				trigger = fileChangeOlderThan
 			}
@@ -289,6 +296,18 @@ func (w *fileWatcher) failure(current map[string]fileState, paths []string, fail
 		}
 	}
 	return "", "", ""
+}
+
+// fileWatchOldestAge is the age of the oldest entry older_than judges, or zero
+// when the scan dated none.
+func fileWatchOldestAge(current map[string]fileState) time.Duration {
+	var oldest time.Duration
+	for _, state := range current {
+		if state.dated {
+			oldest = max(oldest, state.age)
+		}
+	}
+	return oldest
 }
 
 func fileWatchNumberFiles(current map[string]fileState) int {
@@ -387,6 +406,12 @@ func (w *fileWatcher) boundedScan(ctx context.Context, now time.Time) (map[strin
 // and the path is a directory, every entry in its subtree, plus the paths it
 // could not read. Symlinks are stat'd as links (never followed), so a link is
 // watched as itself, not its target. step is called for every entry read.
+//
+// A recursive scan dates only regular files for older_than: a symlink's own
+// mtime never moves when its target is refreshed, and a directory's moves only
+// when entries are added or removed, so neither says how old the data is. A
+// compatibility link left in a database directory would otherwise keep a
+// freshness watch failing forever.
 func (w *fileWatcher) scan(now time.Time, step func()) (map[string]fileState, readFailures) {
 	out := map[string]fileState{}
 	failures := readFailures{}
@@ -401,7 +426,7 @@ func (w *fileWatcher) scan(now time.Time, step func()) (map[string]fileState, re
 			failures.note(root, err)
 			continue
 		}
-		out[root] = w.stateOf(info, now)
+		out[root] = w.stateOf(info, now, !w.recursive || info.Mode().IsRegular())
 		if w.recursive && info.IsDir() {
 			_ = filepath.WalkDir(root, func(p string, d fs.DirEntry, walkErr error) error {
 				step()
@@ -423,7 +448,7 @@ func (w *fileWatcher) scan(now time.Time, step func()) (map[string]fileState, re
 					failures.note(p, infoErr)
 					return nil // the rest of the tree is still scanned
 				}
-				out[p] = w.stateOf(fi, now)
+				out[p] = w.stateOf(fi, now, fi.Mode().IsRegular())
 				return nil
 			})
 		}
@@ -431,8 +456,10 @@ func (w *fileWatcher) scan(now time.Time, step func()) (map[string]fileState, re
 	return out, failures
 }
 
-func (w *fileWatcher) stateOf(info fs.FileInfo, now time.Time) fileState {
-	st := fileState{size: info.Size(), kind: checks.FileKind(info.Mode()), modifiedAt: info.ModTime()}
+// stateOf reads one entry's attributes; dated says whether older_than judges
+// its modification age (see scan).
+func (w *fileWatcher) stateOf(info fs.FileInfo, now time.Time, dated bool) fileState {
+	st := fileState{size: info.Size(), kind: checks.FileKind(info.Mode()), modifiedAt: info.ModTime(), dated: dated}
 	if sys, ok := info.Sys().(*syscall.Stat_t); ok {
 		// Mode is uint32 on every Linux GOARCH we target (see syscall.Stat_t).
 		st.perm = sys.Mode & fileStatePermMask
@@ -441,7 +468,7 @@ func (w *fileWatcher) stateOf(info fs.FileInfo, now time.Time) fileState {
 	if w.cond.sizeOp != "" {
 		st.breached = cfgval.CompareFloat(float64(st.size), w.cond.sizeOp, w.cond.sizeValue)
 	}
-	if w.cond.olderThan > 0 {
+	if w.cond.olderThan > 0 && dated {
 		st.age = now.Sub(st.modifiedAt)
 		st.older = st.age > w.cond.olderThan
 	}
