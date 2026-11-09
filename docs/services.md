@@ -1443,6 +1443,15 @@ NFS port remains healthy. The packaged `nfs` profile therefore sets
 service because its server runs in the kernel; the separate `rpc-mountd` profile
 owns process discovery and stale-binary reporting for the userspace daemon.
 
+`pmlogger` and `pmie` set it for the same reason. Each is `BindsTo=` its farm
+(`pmlogger_farm`, `pmie_farm`), which is `PartOf=` it. An isolated restart of
+the primary leaves the farm running the binary it started with, and systemd
+enforces `BindsTo=` whatever the job mode: an isolated restart of the farm
+stops the primary and nothing starts it again. Through the init graph, the
+primary's restart stops and starts the farm with it. The farms themselves set
+`restart_on_stale_binary: false`, so a package update renews the stack through
+the primary only.
+
 Set the flag only on a service that is useless without the units it requires,
 and where you would rather it pull them up than fail:
 
@@ -1451,8 +1460,8 @@ name: some-service
 allow_dependencies: true
 ```
 
-Only the packaged `nfs` service ships with it because the init graph is part of
-that coordinating service's lifecycle. For ordinary companion units,
+Only the packaged `nfs`, `pmlogger` and `pmie` services ship with it, because
+the init graph is part of their lifecycle. For ordinary companion units,
 `also_service:` is the explicit form and remains preferable to relying on the
 init system's graph.
 

@@ -153,6 +153,36 @@ func TestCatalogOVSAndDockerNeverAutoRestartOnStaleBinary(t *testing.T) {
 	}
 }
 
+// A PCP farm is PartOf= its primary, and the primary is BindsTo= the farm:
+// restarting the farm alone stops pmlogger or pmie, and nothing starts it again,
+// because systemd enforces BindsTo= whatever the job mode. The farm only
+// alerts. The primary keeps its restart and lets it reach the init graph, so
+// that restart takes the farm with it (PartOf=) and starts it again (BindsTo=);
+// an isolated one would leave the farm on the replaced binary.
+func TestCatalogPCPFarmsLeaveStaleBinaryRestartToTheirPrimary(t *testing.T) {
+	for farm, primary := range map[string]string{"pmlogger_farm": "pmlogger", "pmie_farm": "pmie"} {
+		t.Run(farm, func(t *testing.T) {
+			rule := staleBinaryRuleOf(t, resolveCatalogService(t, farm, backendSystemd))
+			if got := rule[rules.RuleFieldType]; got != string(rules.RuleAlert) {
+				t.Fatalf("want an alert rule, got %v", got)
+			}
+			for _, action := range ruleActionTypes(t, rule) {
+				if action == string(rules.ActionRestart) {
+					t.Fatalf("%s must not restart itself over a replaced binary: it would stop %s", farm, primary)
+				}
+			}
+			resolved := resolveCatalogService(t, primary, backendSystemd)
+			rule = staleBinaryRuleOf(t, resolved)
+			if got := rule[rules.RuleFieldType]; got != string(rules.RuleRemediation) {
+				t.Fatalf("%s must keep its stale-binary restart, got rule type %v", primary, got)
+			}
+			if !AllowDependencies(resolved.Tree) {
+				t.Fatalf("%s must allow init dependencies so its restart renews %s", primary, farm)
+			}
+		})
+	}
+}
+
 // ovsdb-client declares no process selectors, so its processes come from the
 // init backend; the veto it carries applies to those just the same.
 func TestCatalogOVSClientAlertsOnly(t *testing.T) {

@@ -3888,8 +3888,10 @@ restart_on_stale_binary: false   # restarting the dataplane cuts the host off
 ```
 
 The packaged profiles that veto the restart are `docker` (restarting the daemon
-stops every container without live-restore), `ovs-vswitchd`, `ovsdb-server`
-and `ovsdb-client`; every other profile restarts. The flag governs this trigger
+stops every container without live-restore), `ovs-vswitchd`, `ovsdb-server`,
+`ovsdb-client`, `pmlogger_farm` and `pmie_farm` (`pmlogger` and `pmie` are
+`BindsTo=` their farm, so restarting the farm alone stops them; their own
+restart renews the farm); every other profile restarts. The flag governs this trigger
 only. A manual `sermoctl restart`, and remediation that restarts the service
 after a real failure, are unaffected. It inherits from `defaults:` like
 `dry_run`, so a whole host can opt out at once, and the host's per-service file

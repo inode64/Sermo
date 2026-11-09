@@ -5,6 +5,11 @@ description: Performance Co-Pilot inference engine daemon.
 service:
   systemd:
     - pmie
+# pmie.service is BindsTo= pmie_farm, which is PartOf= it. An isolated
+# restart leaves the farm on the binary it started with, and an isolated
+# farm restart stops pmie for good: the stack is only renewed whole
+# through the init graph. Its start also pulls pmcd up (Wants=).
+allow_dependencies: true
 apps:
   - pmie
 variables:

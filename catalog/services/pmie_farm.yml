@@ -9,14 +9,20 @@ apps:
   - pmie_farm
 variables:
   user: pcp
+# A replaced binary is alerted, never restarted here: pmie.service is
+# BindsTo= this unit, and systemd stops it when the farm stops whatever the
+# job mode, so restarting the farm alone leaves pmie down. pmie
+# restarts over its own replaced binary through the init graph
+# (allow_dependencies), which renews the farm with it.
+restart_on_stale_binary: false
 # Deliberately alert-only, with no restart-if-inactive rule: the farm unit is
-# `disabled` and is driven by pmlogger.service through PartOf=/RequiredBy=, so
+# `disabled` and is driven by pmie.service through PartOf=/RequiredBy=, so
 # "not active" is as often the operator stopping that stack as a fault. Sermo
 # cannot tell the two apart — a rule's references are scoped to its own service,
 # so the condition cannot ask whether the primary is up — and restarting the farm
 # alone would resurrect it without its primary. A failed farm is reported by the
 # service check and by watch-failed-units; repairing it is a manual
-# `sermoctl restart`, which is what the safe operation path is for.
+# `sermoctl restart pmie`, which restarts the farm with it.
 watches:
   service:
     check:
