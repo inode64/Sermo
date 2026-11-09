@@ -205,6 +205,11 @@ func TestTerminalOutputCaptureSafety(t *testing.T) {
 	for _, name := range []string{"private", "symlink", "hard link", "public file", "public directory", "full", "locked"} {
 		t.Run(name, func(t *testing.T) {
 			dir := t.TempDir()
+			// t.TempDir creates it 0777 &^ umask: under a group-writable umask
+			// (002) the "private" case would start out public.
+			if err := os.Chmod(dir, 0o700); err != nil {
+				t.Fatal(err)
+			}
 			path := filepath.Join(dir, "output.log")
 			f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY, 0o600)
 			if err != nil {
