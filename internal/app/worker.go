@@ -470,10 +470,20 @@ func (w *Worker) advanceEpisode(name string, result checks.Result, episode check
 // is held silently; a check that was never busy is left to its rules.
 func (w *Worker) reportBusyEpisode(name string, result checks.Result) {
 	episode, open := w.checkEpisodes[name]
+	if open && episode.restored {
+		// An incident open before the restart, maybe from before an operation
+		// rule read this check: a healthy check closes it once, a busy one
+		// continues it unannounced, and a plain failure stays the rule's alarm
+		// until the check recovers. Dropping it left the incident reminded daily.
+		if result.Busy || result.Observation().Healthy() {
+			w.advanceEpisode(name, result, episode, true, result.Busy)
+		}
+		return
+	}
 	open = open && episode.busy
 	switch {
 	case !open && !result.Busy:
-		// A restored non-busy episode on a ruled check: its rule owns it.
+		// A check that was never busy is left to its rules.
 		delete(w.checkEpisodes, name)
 	case !open && w.settlingAfterOperation():
 		// Busy right after Sermo's own operation — a database still
@@ -1291,9 +1301,8 @@ func (w *Worker) restoreIncidents(open serviceIncidents) {
 	}
 	for name, held := range open.checks {
 		// A check a rule reads raises no incident of its own, but one opened
-		// before the rule read it still waits for its recovery. A busy episode
-		// keeps its own path.
-		if _, known := w.checkEpisodes[name]; known || !w.checkNames[name] || w.busyReportedChecks[name] {
+		// before the rule read it still waits for its recovery.
+		if _, known := w.checkEpisodes[name]; known || !w.checkNames[name] {
 			continue
 		}
 		if w.checkEpisodes == nil {

@@ -82,6 +82,14 @@ func TestOpenServiceIncidentsListsWhatConfiguredNotifiersHold(t *testing.T) {
 func TestRestoredIncidentCheckRecoversOnceAndNeverReannounces(t *testing.T) {
 	healthy := checks.Result{Check: "strays", OK: true, Message: "no stray processes"}
 	failing := checks.Result{Check: "strays", Message: "1 stray process"}
+	busy := checks.Result{Check: "strays", Busy: true, Message: "server busy: too many connections"}
+	// A long window keeps the restart from running in these few cycles.
+	restartReading := []rules.Rule{{
+		Name: "restart-strays", Type: rules.RuleRemediation,
+		If:      map[string]any{rules.ConditionFailed: map[string]any{rules.FieldCheck: "strays"}},
+		For:     &rules.ForWindow{Cycles: 10},
+		Actions: []rules.Action{{Type: rules.ActionRestart}},
+	}}
 	tests := []struct {
 		name     string
 		rules    []rules.Rule
@@ -115,6 +123,30 @@ func TestRestoredIncidentCheckRecoversOnceAndNeverReannounces(t *testing.T) {
 			}},
 			cycles: []checks.Result{failing, failing},
 		},
+		{
+			// Only a restart reads the check, which makes it a busy-reported
+			// check: its restored incident must still close.
+			name:     "check an operation rule now reads, healthy",
+			names:    map[string]bool{"strays": true},
+			rules:    restartReading,
+			cycles:   []checks.Result{healthy},
+			wantKind: "recovered/critical",
+		},
+		{
+			name:   "check an operation rule now reads, failing",
+			names:  map[string]bool{"strays": true},
+			rules:  restartReading,
+			cycles: []checks.Result{failing, failing},
+		},
+		{
+			// A busy server continues the open incident without a second
+			// announcement, and its recovery closes it once.
+			name:     "check an operation rule now reads, busy then healthy",
+			names:    map[string]bool{"strays": true},
+			rules:    restartReading,
+			cycles:   []checks.Result{busy, healthy},
+			wantKind: "recovered/critical",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -123,6 +155,7 @@ func TestRestoredIncidentCheckRecoversOnceAndNeverReannounces(t *testing.T) {
 			w := &Worker{
 				Service:    "web",
 				Rules:      tt.rules,
+				DryRun:     true,
 				checkNames: tt.names,
 				Checks: func(context.Context, checks.Deps) map[string]checks.Result {
 					result := tt.cycles[cycle]
