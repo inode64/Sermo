@@ -93,6 +93,27 @@ func writePidfile(t *testing.T, path, content string) {
 	}
 }
 
+// fail2ban's Gentoo script declares no pidfile: openrc-run keeps the supervisor's
+// under /run/openrc/daemons while the daemon runs. Built while it was stopped,
+// the query never attributed the cgroup after it started, so its pidfile check
+// failed ("not a process of this service") until sermod reloaded.
+func TestOpenRCCgroupReadsRuntimePidfileOfUnitStartedLater(t *testing.T) {
+	pidfile := filepath.Join(t.TempDir(), "supervise-fail2ban.pid")
+	writePidfile(t, pidfile, "90\n")
+	files := map[string]string{
+		"/etc/init.d/fail2ban":                        "command=/usr/bin/fail2ban-server\nsupervisor=supervise-daemon\n",
+		"/sys/fs/cgroup/openrc.fail2ban/cgroup.procs": "90\n91\n",
+	}
+	pids := openRCPIDs(t, BackendPIDsFuncWithRunner(context.Background(), BackendOpenRC, "fail2ban", nil, cgroupFiles(files)))
+	if got := pids(); len(got) != 0 {
+		t.Fatalf("stopped unit pids = %v, want none", got)
+	}
+	files["/run/openrc/daemons/fail2ban/001"] = "exec=/usr/bin/fail2ban-server\npidfile=" + pidfile + "\n"
+	if got := pids(); !reflect.DeepEqual(got, []int{90, 91}) {
+		t.Fatalf("started unit pids = %v, want the supervisor and its cgroup", got)
+	}
+}
+
 func TestOpenRCCgroupRejectsUnsafeUnit(t *testing.T) {
 	for _, unit := range []string{"", ".", "..", "../sshd", "/sshd", "a/b", "a\\b", "a\x00b"} {
 		pids := openRCBackendPIDs(unit, func(path string) ([]byte, error) { t.Fatalf("unsafe unit %q read %s", unit, path); return nil, nil })

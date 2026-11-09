@@ -21,14 +21,22 @@ func openRCBackendPIDs(unit string, readFile func(string) ([]byte, error)) func(
 	info := detectOpenRCProc(readFile, unit)
 	groupPath := filepath.Join(cgroupRoot, "openrc."+unit, "cgroup.procs")
 	return func() []int {
-		if info.Pidfile == "" {
+		pidfile := info.Pidfile
+		if pidfile == "" {
+			// A script that declares no pidfile leaves it to openrc-run, which
+			// records it under /run/openrc/daemons only while the daemon runs:
+			// read once, a unit stopped when this query was built (fail2ban
+			// before an operator started it) was never attributed again.
+			pidfile = detectOpenRCRuntimeProc(readFile, unit).Pidfile
+		}
+		if pidfile == "" {
 			return nil
 		}
 		// Read exactly as discovery reads a pidfile: the first line (PostgreSQL
 		// keeps cluster metadata below it), a process group naming its leader,
 		// and without blocking, so a FIFO at its path cannot stall every
 		// discoverer of this unit.
-		principal, err := hostfs.ReadPidfile(info.Pidfile)
+		principal, err := hostfs.ReadPidfile(pidfile)
 		if err != nil || principal <= 1 {
 			return nil
 		}
