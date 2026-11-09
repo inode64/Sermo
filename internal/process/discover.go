@@ -409,6 +409,11 @@ type StaleBinary struct {
 	// Removed marks a path that holds no file any more: the package was
 	// uninstalled, not upgraded, so a restart has nothing to start.
 	Removed bool
+	// Auxiliary marks a process beside the daemon a main pidfile names that
+	// does not run the daemon's executable: the shell and su an init script
+	// leaves above it, a helper it spawned. The daemon already runs the
+	// installed version, so a restart would renew only these.
+	Auxiliary bool
 }
 
 // StaleBinariesIn lists the processes of a service whose binary was replaced on
@@ -434,9 +439,10 @@ func (d Discoverer) StaleBinariesIn(attributed []Process, selectors []Selector) 
 		seen[pid] = true
 		return true
 	}
+	daemon := daemonExecutable(attributed)
 	for _, p := range attributed {
 		if !p.Stray && !p.Kept && p.ExePrev != "" && mark(p.PID) {
-			out = append(out, StaleBinary{PID: p.PID, Path: p.ExePrev})
+			out = append(out, StaleBinary{PID: p.PID, Path: p.ExePrev, Auxiliary: daemon != "" && p.ExePrev != daemon})
 		}
 	}
 	// A live backend or pidfile attribution is authoritative.
@@ -463,6 +469,26 @@ func (d Discoverer) StaleBinariesIn(attributed []Process, selectors []Selector) 
 		}
 	}
 	return out
+}
+
+// daemonExecutable is the executable of the daemon a main pidfile names — its
+// replaced path when the daemon itself is stale — or "" when no main pidfile
+// names a live process whose executable is known. Only that evidence says which
+// member of a backend-attributed unit is the daemon: an OpenRC cgroup labels
+// every process main, launcher shells included.
+func daemonExecutable(attributed []Process) string {
+	for _, p := range attributed {
+		if !p.MainPidfile {
+			continue
+		}
+		if p.ExePrev != "" {
+			return p.ExePrev
+		}
+		if p.ExeOK {
+			return p.Exe
+		}
+	}
+	return ""
 }
 
 func hasProcessAttribution(processes []Process) bool {

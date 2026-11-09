@@ -114,3 +114,33 @@ func TestStaleBinaryCheckReportsAnUninstalledBinaryWithoutARestart(t *testing.T)
 		t.Fatalf("a replaced binary must keep its restart remedy: %+v", res)
 	}
 }
+
+// Shells and su replaced beside an up-to-date daemon still fail the reading (it
+// alerts and reports the restart that would renew them) but block the
+// automatic restart: renewing a launcher would cost every client of the daemon
+// an outage. A replaced binary of the daemon itself keeps its restart remedy.
+func TestStaleBinaryCheckBesideTheDaemonAlertsWithoutARestart(t *testing.T) {
+	auxiliary, _ := buildStaleBinaryCheck(base{name: "stale"}, staleBinaryDeps(
+		process.StaleBinary{PID: 10, Path: "/usr/bin/bash", Auxiliary: true},
+		process.StaleBinary{PID: 13, Path: "/usr/bin/bash", Auxiliary: true},
+	))
+	res := auxiliary.Run(context.Background())
+	if res.OK || !res.ActionBlocked {
+		t.Fatalf("want a failing, action-blocked reading, got %+v", res)
+	}
+	if res.Message != "2 process(es) beside the daemon run a replaced binary (/usr/bin/bash); "+StaleBinaryAuxiliaryHint {
+		t.Fatalf("message = %q", res.Message)
+	}
+
+	mixed, _ := buildStaleBinaryCheck(base{name: "stale"}, staleBinaryDeps(
+		process.StaleBinary{PID: 10, Path: "/usr/bin/bash", Auxiliary: true},
+		process.StaleBinary{PID: 12, Path: "/usr/lib64/erlang/erts-14.2.1/bin/beam.smp"},
+	))
+	res = mixed.Run(context.Background())
+	if res.ActionBlocked || !strings.Contains(res.Message, "beam.smp); "+StaleBinaryRestartHint) {
+		t.Fatalf("a replaced daemon binary must keep its restart remedy: %+v", res)
+	}
+	if got := res.Data[DataKeyValue]; got != float64(2) {
+		t.Fatalf("the count names every stale process, got %v", got)
+	}
+}

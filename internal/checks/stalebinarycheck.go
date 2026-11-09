@@ -23,6 +23,10 @@ const StaleBinaryRestartHint = "restart to pick up the installed version"
 // restart would stop the daemon and find nothing to start.
 const StaleBinaryRemovedHint = "reinstall the package or stop the service; a restart cannot start it"
 
+// StaleBinaryAuxiliaryHint explains why a binary replaced only beside the
+// daemon (a launcher shell, su, a helper) does not restart the service.
+const StaleBinaryAuxiliaryHint = "the daemon runs the installed version, so this alone does not restart the service"
+
 // staleBinaryCheck reports processes of this service still running a binary
 // that was replaced or removed on disk — a package upgrade without a restart.
 // It is a condition check: OK means nothing is stale, so a rule fires on it
@@ -49,14 +53,19 @@ func (c staleBinaryCheck) Run(_ context.Context) Result {
 	// package to blame and what a restart would pick up.
 	paths := staleBinaryPaths(stale)
 	removed, replaced := splitRemovedBinaries(stale)
+	own, auxiliary := splitAuxiliaryBinaries(replaced)
 	var parts []string
 	if len(removed) > 0 {
 		parts = append(parts, fmt.Sprintf("%d process(es) run a binary no longer installed (%s); %s",
 			len(removed), strings.Join(staleBinaryPaths(removed), ", "), StaleBinaryRemovedHint))
 	}
-	if len(replaced) > 0 {
+	if len(own) > 0 {
 		parts = append(parts, fmt.Sprintf("%d process(es) run a replaced binary (%s); %s",
-			len(replaced), strings.Join(staleBinaryPaths(replaced), ", "), StaleBinaryRestartHint))
+			len(own), strings.Join(staleBinaryPaths(own), ", "), StaleBinaryRestartHint))
+	}
+	if len(auxiliary) > 0 {
+		parts = append(parts, fmt.Sprintf("%d process(es) beside the daemon run a replaced binary (%s); %s",
+			len(auxiliary), strings.Join(staleBinaryPaths(auxiliary), ", "), StaleBinaryAuxiliaryHint))
 	}
 	message := "no replaced binaries"
 	if len(parts) > 0 {
@@ -65,9 +74,11 @@ func (c staleBinaryCheck) Run(_ context.Context) Result {
 
 	res := c.result(len(stale) == 0, message, start)
 	// A restart is the remedy only while the new version is installed: with the
-	// package gone it would stop a serving daemon for good, so the reading
-	// still alerts but drives no operation.
-	res.ActionBlocked = len(removed) > 0
+	// package gone it would stop a serving daemon for good. Nor is it one when
+	// only launchers and helpers beside an up-to-date daemon are stale:
+	// renewing a shell would cost every client of the daemon an outage. Either
+	// way the reading still alerts but drives no operation.
+	res.ActionBlocked = len(removed) > 0 || (len(auxiliary) > 0 && len(own) == 0)
 	res.Data = map[string]any{
 		DataKeyType:  CheckTypeStaleBinary,
 		DataKeyValue: float64(len(stale)),
@@ -90,6 +101,17 @@ func splitRemovedBinaries(stale []process.StaleBinary) (removed, replaced []proc
 		}
 	}
 	return removed, replaced
+}
+
+func splitAuxiliaryBinaries(stale []process.StaleBinary) (own, auxiliary []process.StaleBinary) {
+	for _, s := range stale {
+		if s.Auxiliary {
+			auxiliary = append(auxiliary, s)
+		} else {
+			own = append(own, s)
+		}
+	}
+	return own, auxiliary
 }
 
 func staleBinaryPaths(stale []process.StaleBinary) []string {

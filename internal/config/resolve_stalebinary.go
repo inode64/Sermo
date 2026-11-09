@@ -15,10 +15,13 @@ const (
 	// staleBinaryRuleName is the rule it drives.
 	staleBinaryRuleName = "restart-on-stale-binary"
 	// staleBinaryMessageSuffix is deliberately explicit about the two facts an
-	// operator needs: the service is healthy, and it is not running the version
-	// that is installed. ${check.value} is filled by the worker at alert time.
+	// operator needs: the service is healthy, and some of its processes are not
+	// running the version that is installed. It claims no more, because those
+	// may be only a launcher shell beside an up-to-date daemon; the check's
+	// reading, which an advisory alert carries, says which. ${check.value} is
+	// filled by the worker at alert time.
 	staleBinaryMessageSuffix = " is running a binary that was replaced on disk " +
-		"(${check.value} process(es)); it keeps serving the previous version until it restarts"
+		"(${check.value} process(es)); they keep the previous version until the service restarts"
 )
 
 // expandStaleBinary injects the stale-binary check and its rule into every

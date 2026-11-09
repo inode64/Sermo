@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"sermo/internal/cfgval"
@@ -320,4 +321,27 @@ func TestStaleBinaryRuleFiresOnCheckFailureNotOnHealth(t *testing.T) {
 	if got := target[rules.FieldCheck]; got != staleBinaryCheckName {
 		t.Errorf("failed: check = %v, want %q", got, staleBinaryCheckName)
 	}
+}
+
+// RabbitMQ's main pidfile is the broker's own, which names the Erlang VM: the
+// init script's names the launcher shell above it, and judging the daemon by
+// that shell restarted the broker (and cut every consumer off) on a bash
+// upgrade. The launcher's stays the fallback while the broker boots.
+func TestCatalogRabbitMQNamesTheBrokerAsItsDaemon(t *testing.T) {
+	old := detectedHostname
+	detectedHostname = "node1"
+	t.Cleanup(func() { detectedHostname = old })
+	resolved := resolveCatalogService(t, "rabbitmq", "openrc")
+	selectors, _ := process.ParseSelectors(resolved.Tree)
+	for _, sel := range selectors {
+		if sel.Type != process.SelectorPidfile {
+			continue
+		}
+		want := []string{"/var/lib/rabbitmq/mnesia/rabbit@node1.pid", "/run/rabbitmq.pid"}
+		if !slices.Equal(sel.Paths, want) {
+			t.Fatalf("rabbitmq pidfile candidates = %v, want %v", sel.Paths, want)
+		}
+		return
+	}
+	t.Fatalf("rabbitmq declares no pidfile selector: %+v", selectors)
 }

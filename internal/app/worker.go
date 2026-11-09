@@ -985,8 +985,8 @@ const advisoryRemediationPrefix = "advisory evidence withholds the action: "
 // advisoryHolds reports whether an operation rule that also alerts holds once
 // advisory evidence is read as its alert would read it. EvalRule leaves such a
 // rule undecided, so without this the alert was lost together with the
-// operation the evidence must not drive (a binary removed from disk). A rule
-// with no alert has nothing to keep.
+// operation the evidence must not drive (a binary removed from disk, or
+// replaced only beside the daemon). A rule with no alert has nothing to keep.
 func advisoryHolds(ctx context.Context, ev *rules.Evaluator, r rules.Rule) bool {
 	if _, ok := r.Operation(); !ok || len(r.AlertMessages()) == 0 {
 		return false

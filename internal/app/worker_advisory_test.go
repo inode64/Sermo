@@ -25,13 +25,13 @@ func alertThenRestartTree(check string) map[string]any {
 	}}}
 }
 
-// Advisory evidence (a binary removed from disk) keeps the alert of a rule that
-// alerts and restarts, but never runs the
+// Advisory evidence (a binary removed from disk, or replaced only beside the
+// daemon) keeps the alert of a rule that alerts and restarts, but never runs the
 // restart: the notifier hears the alert with the reading that held the action
 // back, the event log records the withheld action, and the recovery reaches the
 // same notifier once the reading clears.
 func TestWorkerAdvisoryEvidenceAlertsWithoutOperating(t *testing.T) {
-	advisory := checks.Result{Check: "stale", OK: false, ActionBlocked: true, Message: "1 process(es) run a binary no longer installed (/usr/sbin/old)"}
+	advisory := checks.Result{Check: "stale", OK: false, ActionBlocked: true, Message: "1 process(es) beside the daemon run a replaced binary (/usr/bin/bash)"}
 	h := &workerHarness{cache: map[string]checks.Result{"stale": advisory}, opResult: operation.Result{Status: operation.ResultOK}}
 	w := h.worker(alertThenRestartTree("stale"), rules.Policy{Cooldown: time.Minute}, nil)
 	ops := &fakeNotifier{name: "ops", typ: "email"}

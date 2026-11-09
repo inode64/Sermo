@@ -1462,8 +1462,8 @@ for update locks, ownership requirements and the opt-in restart example.
 A reading that may alert but must never drive an operation is **advisory**
 (`action_blocked: true`): the library observations above, a
 [`stale_binary`](configuration.md#stale_binary--service-running-a-replaced-binary)
-reading whose binary is no longer installed, a `process` check whose
-executable was uninstalled, and an identity
+reading whose binary is no longer installed or was replaced only beside the
+daemon, a `process` check whose executable was uninstalled, and an identity
 probe's move into a state it accepts. A remediation rule that also alerts
 (`then: { actions: [alert, restart] }`, the shape of the generated
 `restart-on-stale-binary`) still delivers its alert on such a reading, with the

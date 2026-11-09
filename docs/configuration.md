@@ -3882,6 +3882,21 @@ package or stop the service`, and its reading blocks every operation, so
 `restart-on-stale-binary` only alerts. The `process` check of such a service
 names the removal the same way and blocks restart rules keyed on it.
 
+When a live main `pidfile:` names the daemon, a replaced binary drives the
+restart only if it is the daemon's own executable: the daemon itself, or a
+worker that runs the same executable. A launcher that an init script leaves
+above the daemon (`sh`, `su`), or a helper the daemon spawned, may run another
+binary that an upgrade replaced. The check then says `N process(es) beside the
+daemon run a replaced binary (PATH); the daemon runs the installed version, so
+this alone does not restart the service`. The service still shows
+`restart_required` and the rule still alerts, with that reading as its output,
+but no restart runs: renewing a shell would cut every client of the daemon off
+(see [advisory evidence](rules.md#advisory-evidence-in-a-rule-that-alerts-and-acts)).
+Without a live main pidfile Sermo cannot tell the daemon from its launcher, so
+every replaced binary keeps the restart. The RabbitMQ profile names the
+broker's own pidfile for this reason: the OpenRC script's pidfile names the
+launcher shell above the Erlang VM.
+
 Restarting is the default. Set `restart_on_stale_binary: false` on a service
 to keep the alert and the notification but drop the restart, and `true` to
 turn the restart back on for a service whose catalog profile vetoes it:

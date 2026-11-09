@@ -22,7 +22,13 @@ variables:
   user: rabbitmq
   host: 127.0.0.1
   port: 5672
-pidfile: /run/rabbitmq.pid
+# The broker writes its own pidfile, naming the Erlang VM. The init script's
+# /run/rabbitmq.pid names the launcher shell above it, which would make a shell
+# upgrade read as a replaced broker and restart it; it stays the fallback while
+# the broker boots or runs under another node name.
+pidfile:
+  - /var/lib/rabbitmq/mnesia/rabbit@${hostname}.pid
+  - /run/rabbitmq.pid
 stop_policy:
   graceful_timeout: 60s
   term_timeout: 30s
