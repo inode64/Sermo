@@ -60,6 +60,11 @@ type Worker struct {
 	// the cache because of a per-check interval). Requires gates consult only deps
 	// present here so a stale cached failure cannot skip a dependent check.
 	cycleRan map[string]bool
+	// refreshChecks runs every check this cycle, whatever its interval: the
+	// cycle that observes a finished operation must not leave the next rule
+	// cycle a reading taken before it. A stale_libraries result from just
+	// before a manual restart otherwise restarted the database a second time.
+	refreshChecks bool
 
 	// cycleFailOutput is this cycle's concatenated failing-check command output,
 	// attached to alert events so the operator sees why the rule fired.
@@ -231,6 +236,7 @@ func (w *Worker) RunCycle(ctx context.Context) {
 	if skip {
 		return
 	}
+	w.refreshChecks = mode.operation
 
 	w.observeServiceRestart(ctx, mode)
 	deps, cache := w.runChecks(ctx)

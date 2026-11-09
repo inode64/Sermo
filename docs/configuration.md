@@ -898,7 +898,11 @@ An individual check may run **less often** than the worker cycle with
 `round(interval / resolution)` cycles and **reuses its last result** between
 runs, keeping check caches and rule windows complete. On startup, reload or any
 config change that introduces a check, Sermo runs it once immediately when no
-cached result exists, then applies the configured cadence.
+cached result exists, then applies the configured cadence. The cycle that
+observes a finished operation (a remediation, or a manual start or restart from
+`sermoctl` or the dashboard) also runs every check, whatever its interval, so no
+rule acts on a reading taken before the operation: a library check from just
+before a manual restart would otherwise drive a second restart.
 
 ```yaml
 interval: 30s            # the service resolution (or engine.interval)

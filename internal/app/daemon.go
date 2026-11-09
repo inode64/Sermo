@@ -799,8 +799,9 @@ func checkEpisodesFromSnapshots(snapshots *Snapshots, service string, checkTypes
 
 // workerCheckRunner returns the worker's per-cycle check runner. Each cycle it
 // runs the checks due (per-check intervals skip cycles; skipped checks reuse
-// the cached result so the cache stays complete), then any gate-triggered
-// extras, recording measurements as results land.
+// the cached result so the cache stays complete), or every check when the
+// worker asks for a refresh, then any gate-triggered extras, recording
+// measurements as results land.
 //
 // A check the shared budget starved (a host stall holding every slot) keeps
 // its previous result for that one cycle, as a reused result rather than a
@@ -827,7 +828,10 @@ func workerCheckRunner(worker *Worker, built []checks.Built, every map[string]in
 	}
 	return func(ctx context.Context, d checks.Deps) map[string]checks.Result {
 		setCycleMetrics(d.Metrics)
-		due := dueChecks(worker.cycle, built, every, cache)
+		due := built
+		if !worker.refreshChecks {
+			due = dueChecks(worker.cycle, built, every, cache)
+		}
 		ran := make(map[string]bool, len(due))
 		for _, b := range due {
 			ran[b.Check.Name()] = true
