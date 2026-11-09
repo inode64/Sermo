@@ -246,6 +246,7 @@ func TestPortsVerdictAcrossInterfaces(t *testing.T) {
 	unresolved := &net.DNSError{Err: "no such host", Name: "host-a.example", IsNotFound: true}
 	tests := []struct {
 		name            string
+		ifaceAll        bool
 		first, second   error
 		wantUnavailable bool
 		wantOpen        int
@@ -254,11 +255,18 @@ func TestPortsVerdictAcrossInterfaces(t *testing.T) {
 		{name: "refused then unobserved", first: refused, second: unresolved, wantUnavailable: true},
 		{name: "unobserved then refused", first: unresolved, second: refused, wantUnavailable: true},
 		{name: "unobserved then open", first: unresolved, wantOpen: 1},
+		{name: "all open", ifaceAll: true, wantOpen: 1},
+		{name: "all refused", ifaceAll: true, first: refused, second: refused},
+		{name: "all refused then open", ifaceAll: true, first: refused, wantOpen: 1},
+		{name: "all open then refused", ifaceAll: true, second: refused, wantOpen: 1},
+		{name: "all refused then unobserved", ifaceAll: true, first: refused, second: unresolved, wantUnavailable: true},
+		{name: "all unobserved then refused", ifaceAll: true, first: unresolved, second: refused, wantUnavailable: true},
+		{name: "all unobserved then open", ifaceAll: true, first: unresolved, wantUnavailable: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			c := portsCheckFor([]int{443}, PortExpectAny, PortMatchAll)
-			c.ifaces = []string{"wan1", "wan2"}
+			c.ifaces, c.ifaceAll = []string{"wan1", "wan2"}, tt.ifaceAll
 			c.dialFunc = func(_ context.Context, iface, _ string) (net.Conn, error) {
 				err := tt.first
 				if iface == "wan2" {
@@ -291,5 +299,41 @@ func TestPortsOpenClosedCounts(t *testing.T) {
 	res := portsCheckFor([]int{openPort, closedPort}, "open", "any").Run(context.Background())
 	if res.Data["open"] != 1 || res.Data["closed"] != 1 {
 		t.Fatalf("open/closed = %v/%v, want 1/1", res.Data["open"], res.Data["closed"])
+	}
+}
+
+func TestPortsAllInterfacesRejectsPartialClosure(t *testing.T) {
+	for _, silent := range []bool{false, true} {
+		t.Run(map[bool]string{false: "refused", true: "silent"}[silent], func(t *testing.T) {
+			c := portsCheckFor([]int{443}, PortStateClosed, PortMatchAll)
+			c.ifaces, c.ifaceAll, c.onChange = []string{"wan1", "wan2"}, true, true
+			secondOpen := false
+			calls := 0
+			c.dialFunc = func(ctx context.Context, iface, _ string) (net.Conn, error) {
+				calls++
+				if iface == "wan2" && secondOpen {
+					client, server := net.Pipe()
+					_ = server.Close()
+					return client, nil
+				}
+				if silent && iface == "wan1" {
+					<-ctx.Done()
+					return nil, ctx.Err()
+				}
+				return nil, syscall.ECONNREFUSED
+			}
+			if res := c.Run(t.Context()); !res.OK || calls != 2 {
+				t.Fatalf("closed baseline = %+v, dials = %d, want 2", res, calls)
+			}
+			secondOpen = true
+			res := c.Run(t.Context())
+			if res.OK || res.Unavailable || res.Data[PortStateOpen] != 1 || res.Data[DataKeyChanged] != "443 closed->open" {
+				t.Fatalf("partly open = %+v, want failed closed expectation and opening event", res)
+			}
+			c.expect, c.onChange = PortStateOpen, false
+			if res := c.Run(t.Context()); res.OK || res.Unavailable {
+				t.Fatalf("partly open all/open = %+v, want failed expectation", res)
+			}
+		})
 	}
 }

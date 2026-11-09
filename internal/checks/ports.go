@@ -53,7 +53,7 @@ type portsCheck struct {
 	dialFunc func(ctx context.Context, iface, addr string) (net.Conn, error)
 
 	primed bool
-	last   map[int]bool // port -> open
+	last   map[int]portObservation
 }
 
 func (c *portsCheck) Run(ctx context.Context) Result {
@@ -76,8 +76,8 @@ func (c *portsCheck) Run(ctx context.Context) Result {
 	if c.onChange {
 		if c.primed {
 			for _, p := range c.ports {
-				if was, ok := c.last[p]; ok && was != states[p] {
-					changes = append(changes, fmt.Sprintf("%d %s->%s", p, portState(was), portState(states[p])))
+				if was, ok := c.last[p]; ok && was.open != states[p].open {
+					changes = append(changes, fmt.Sprintf("%d %s->%s", p, portState(was.open), portState(states[p].open)))
 				}
 			}
 		}
@@ -87,7 +87,7 @@ func (c *portsCheck) Run(ctx context.Context) Result {
 
 	open := 0
 	for _, p := range c.ports {
-		if states[p] {
+		if states[p].open {
 			open++
 		}
 	}
@@ -118,14 +118,13 @@ func (c *portsCheck) Run(ctx context.Context) Result {
 
 // evaluateMatch applies the quantifier `match` over the ports whose state equals
 // `expect`. expect=any always holds (only change detection matters then).
-func (c *portsCheck) evaluateMatch(states map[int]bool) bool {
+func (c *portsCheck) evaluateMatch(states map[int]portObservation) bool {
 	if c.expect == PortExpectAny {
 		return true
 	}
-	want := c.expect == PortStateOpen
 	matched := 0
 	for _, p := range c.ports {
-		if states[p] == want {
+		if states[p].matched {
 			matched++
 		}
 	}
@@ -139,12 +138,11 @@ func (c *portsCheck) evaluateMatch(states map[int]bool) bool {
 	}
 }
 
-// scan probes every port concurrently and returns port -> open, plus the first
-// probe that observed nothing. Unprobed ports are false (closed). When the check
-// timeout fires, scan stops launching new probes; in-flight dials cancel promptly
-// via the shared context.
-func (c *portsCheck) scan(ctx context.Context) (map[int]bool, error) {
-	out := make(map[int]bool, len(c.ports))
+// scan probes every port concurrently and returns its observation, plus the
+// first probe that observed nothing. When the check timeout fires, scan stops
+// launching new probes; in-flight dials cancel promptly via the shared context.
+func (c *portsCheck) scan(ctx context.Context) (map[int]portObservation, error) {
+	out := make(map[int]portObservation, len(c.ports))
 	var unobserved error
 	var mu sync.Mutex
 	var wg sync.WaitGroup
@@ -170,9 +168,15 @@ func (c *portsCheck) scan(ctx context.Context) (map[int]bool, error) {
 	return out, unobserved
 }
 
-// probe reports whether a single TCP port accepts a connection, or the error
-// that kept it from finding out.
-func (c *portsCheck) probe(ctx context.Context, port int) (bool, error) {
+// portObservation separates exposure from an expectation over every path: a
+// partially open port is exposed but satisfies neither all-open nor all-closed.
+type portObservation struct {
+	open    bool
+	matched bool
+}
+
+// probe observes a single TCP port across the configured interfaces.
+func (c *portsCheck) probe(ctx context.Context, port int) (portObservation, error) {
 	timeout := c.connectTimeout
 	if timeout <= 0 {
 		timeout = defaultPortConnectTimeout
@@ -185,25 +189,39 @@ func (c *portsCheck) probe(ctx context.Context, port int) (bool, error) {
 			return conn.BindDialer(iface).DialContext(ctx, conn.TransportTCP, addr)
 		}
 	}
-	// With an interface set, a port is "open" if it connects on any (or, with
-	// ifaceAll, every) configured interface, and closed only if every interface
-	// tried says so.
 	var unobserved error
+	opened, tried := 0, 0
 	_, _, err := tryInterfaces(pctx, c.ifaces, c.ifaceAll, func(ctx context.Context, iface string) error {
-		nc, e := dial(ctx, iface, netutil.JoinHostPort(c.host, port))
-		if e == nil {
+		tried++
+		nc, err := dial(ctx, iface, netutil.JoinHostPort(c.host, port))
+		if err == nil {
 			_ = nc.Close()
+			opened++
 			return nil
 		}
-		if !portClosedBy(e) {
-			unobserved = e
+		if !portClosedBy(err) {
+			unobserved = err
 		}
-		return e
+		// A refusal on one path cannot establish that the port is closed
+		// on every path. Keep all-match walks going after closed/unseen paths.
+		if c.ifaceAll {
+			return nil
+		}
+		return err
 	})
-	if err == nil {
-		return true, nil
+	observed := portObservation{open: opened > 0}
+	switch c.expect {
+	case PortStateOpen:
+		observed.matched = observed.open && (!c.ifaceAll || opened == tried)
+	case PortStateClosed:
+		observed.matched = !observed.open
+	default:
+		observed.matched = true
 	}
-	return false, unobserved
+	if !c.ifaceAll && err == nil {
+		return observed, nil
+	}
+	return observed, unobserved
 }
 
 // portClosedBy reports whether a failed dial is an answer about the port: the

@@ -1133,6 +1133,13 @@ learns neither (an unresolved host, no route, an interface that cannot be bound,
 a socket the host cannot open) makes the whole check unavailable and leaves the
 `on_change` baseline alone.
 
+With an interface list, `expect: closed` requires every listed interface to
+report the port closed. `expect: open` follows `interface_match`: one open path
+is enough for `any`, while `all` requires every path to open. A port open on
+only some paths therefore fails both `all`/`open` and `closed`. The `open` count
+and `on_change` track whether **any** path exposes the port, including partial
+openings under `interface_match: all`.
+
 `expect: any` skips the state expectation entirely — combine it with
 `on_change: true` to alert purely on **state transitions** (a port that was open
 becoming closed, or vice versa). Result data exposes `open`, `closed`, `total` and
