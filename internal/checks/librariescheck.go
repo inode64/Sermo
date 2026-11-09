@@ -13,6 +13,7 @@ import (
 
 	"sermo/internal/execx"
 	"sermo/internal/hostfs"
+	"sermo/internal/process"
 	"sermo/internal/strutil"
 )
 
@@ -131,6 +132,37 @@ func inspectLibraries(ctx context.Context, binary string, searchDirs func(string
 	return report, resolver.err
 }
 
+// ResolveExecutableDependencies is the libraries preflight's resolver applied
+// to a running process's executable: exe is the canonical path the process
+// reports, read through root (its /proc/PID/root view), with that root's own
+// ld.so.conf. Every path it returns is inside root, as the process sees it.
+func ResolveExecutableDependencies(ctx context.Context, root, exe string) (process.ExecutableDependencies, error) {
+	if err := ctx.Err(); err != nil {
+		return process.ExecutableDependencies{}, fmt.Errorf("resolve libraries: %w", err)
+	}
+	ef, err := elf.Open(root + exe)
+	if err != nil {
+		return process.ExecutableDependencies{}, fmt.Errorf("inspect %s: %w", exe, err)
+	}
+	defer func() { _ = ef.Close() }()
+	needed, err := ef.DynString(elf.DT_NEEDED)
+	if err != nil {
+		return process.ExecutableDependencies{}, fmt.Errorf("read dependencies of %s: %w", exe, err)
+	}
+	resolver := libraryResolver{
+		root:     root,
+		target:   elfTarget{class: ef.Class, machine: ef.Machine},
+		dirs:     librarySearchDirs(root, exe, ef),
+		seen:     make(map[string]bool),
+		resolved: make(map[string]string),
+	}
+	missing := resolver.resolve(ctx, needed, nil)
+	if err := ctx.Err(); err != nil {
+		return process.ExecutableDependencies{}, fmt.Errorf("resolve %s: %w", exe, err)
+	}
+	return process.ExecutableDependencies{Resolved: resolver.resolved, Missing: missing}, resolver.err
+}
+
 // elfTarget is the ELF class and machine every library of a binary must share.
 // The dynamic linker skips a candidate of another class or architecture — the
 // 32-bit copies multilib distributions keep in /lib and /usr/lib — and keeps
@@ -145,11 +177,16 @@ type elfTarget struct {
 // with $ORIGIN at that library, as the dynamic linker does for its
 // dependencies.
 type libraryResolver struct {
+	// root prefixes every file the resolver opens; paths it reports and
+	// expands $ORIGIN with stay inside root. Empty is the host root.
+	root   string
 	target elfTarget
 	dirs   []string
 	seen   map[string]bool
 	paths  []string
-	err    error
+	// resolved, when set, records each SONAME's path.
+	resolved map[string]string
+	err      error
 }
 
 // resolve recursively resolves DT_NEEDED entries (including transitive
@@ -167,7 +204,7 @@ func (r *libraryResolver) resolve(ctx context.Context, needed, own []string) []s
 		}
 		r.seen[soname] = true
 
-		lib, path, openFailed := openLibrary(soname, dirs, r.target)
+		lib, path, openFailed := openLibrary(r.root, soname, dirs, r.target)
 		if lib == nil {
 			reason := soname
 			if openFailed {
@@ -178,6 +215,9 @@ func (r *libraryResolver) resolve(ctx context.Context, needed, own []string) []s
 			continue
 		}
 		r.paths = append(r.paths, path)
+		if r.resolved != nil {
+			r.resolved[soname] = path
+		}
 		// Collect the library's own DT_NEEDED (transitive) and search path.
 		subNeeded, err := lib.DynString(elf.DT_NEEDED)
 		if err != nil {
@@ -196,6 +236,12 @@ func (r *libraryResolver) resolve(ctx context.Context, needed, own []string) []s
 // its directory, common multi-arch paths, and a best-effort parse of
 // /etc/ld.so.conf (and .d fragments).
 func collectLibrarySearchDirs(binary string, ef *elf.File) []string {
+	return librarySearchDirs("", binary, ef)
+}
+
+// librarySearchDirs is collectLibrarySearchDirs with ld.so.conf read under
+// root; binary and the returned directories are paths inside root.
+func librarySearchDirs(root, binary string, ef *elf.File) []string {
 	var dirs []string
 
 	// Prefer RUNPATH, fall back to RPATH (older binaries).
@@ -217,12 +263,12 @@ func collectLibrarySearchDirs(binary string, ef *elf.File) []string {
 	)
 
 	// Best-effort augmentation from ld.so.conf and fragments.
-	dirs = append(dirs, parseLdSoConf(ldSoConfFile)...)
+	dirs = append(dirs, parseLdSoConf(root+ldSoConfFile)...)
 	// Common drop-in directory even if main conf doesn't include it.
-	if entries, err := hostfs.ReadDir(ldSoConfDir); err == nil {
+	if entries, err := hostfs.ReadDir(root + ldSoConfDir); err == nil {
 		for _, e := range entries {
 			if strings.HasSuffix(e.Name(), ldSoConfSuffix) {
-				dirs = append(dirs, parseLdSoConf(filepath.Join(ldSoConfDir, e.Name()))...)
+				dirs = append(dirs, parseLdSoConf(root+filepath.Join(ldSoConfDir, e.Name()))...)
 			}
 		}
 	}
@@ -257,11 +303,12 @@ func expandOrigin(p, binary string) string {
 	return filepath.Clean(p)
 }
 
-// openLibrary opens the first candidate for soname in dirs that matches target.
+// openLibrary opens the first candidate for soname in dirs that matches target,
+// reading each under root and returning its path inside root.
 // openFailed reports that a candidate existed but could not be read as ELF, so
 // the caller can tell an unreadable library from an absent one. The caller
 // closes the returned file.
-func openLibrary(soname string, dirs []string, target elfTarget) (lib *elf.File, path string, openFailed bool) {
+func openLibrary(root, soname string, dirs []string, target elfTarget) (lib *elf.File, path string, openFailed bool) {
 	candidates := []string{soname}
 	if !filepath.IsAbs(soname) {
 		candidates = candidates[:0]
@@ -270,7 +317,7 @@ func openLibrary(soname string, dirs []string, target elfTarget) (lib *elf.File,
 		}
 	}
 	for _, cand := range candidates {
-		ef, err := elf.Open(cand)
+		ef, err := elf.Open(root + cand)
 		if err != nil {
 			if !os.IsNotExist(err) {
 				openFailed = true

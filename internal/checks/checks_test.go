@@ -860,7 +860,7 @@ func TestOpenLibrary(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			lib, path, openFailed := openLibrary(tc.soname, tc.dirs, target)
+			lib, path, openFailed := openLibrary("", tc.soname, tc.dirs, target)
 			if lib != nil {
 				_ = lib.Close()
 			}

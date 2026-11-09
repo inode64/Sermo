@@ -57,10 +57,10 @@ func readLibraryELF(path string, expected ExecutableFile) (libraryELF, error) {
 	return libraryELF{file: before, soname: names[0], class: ef.Class, machine: ef.Machine}, nil
 }
 
-// A removed versioned file is replaceable only through its own verified
-// SONAME in the same directory, with matching ELF architecture. Filename
-// similarity, an ldconfig entry or the daemon's DT_NEEDED tree cannot prove
-// that a dynamically loaded plugin still has a replacement.
+// A removed versioned file is replaceable through its own verified SONAME in
+// the same directory, with matching ELF architecture. Filename similarity or an
+// ldconfig entry cannot prove that a dynamically loaded plugin still has a
+// replacement; closureReplacement covers the one other provable case.
 func (r libraryReader) libraryReplacement(pid int, root, path string, mapping libraryMapping) (string, libraryFile, bool) {
 	if r.elf == nil || mapping.span == "" {
 		return "", libraryFile{}, false
@@ -107,4 +107,35 @@ func versionedLibraryName(name, soname string) bool {
 		}
 	}
 	return true
+}
+
+// closureReplacement replaces a removed library the executable links: a
+// toolchain slot change removes the old compiler's directory, and libstdc++ or
+// libgcc_s then live in the new one. The executable's own DT_NEEDED closure
+// still names the mapped SONAME, so the loader finds it by SONAME at start, and
+// the file it resolves to must be a verified ELF with that SONAME and the same
+// architecture. A dlopen plugin or PAM module is outside that closure and stays
+// missing: nothing proves where the program would load it from.
+func (r libraryReader) closureReplacement(pid int, root string, mapping libraryMapping, closure executableClosure) (string, libraryFile, bool) {
+	if !closure.known || closure.err != nil || r.elf == nil || mapping.span == "" {
+		return "", libraryFile{}, false
+	}
+	old, err := r.elf(PIDPath(pid, procFileMapFiles)+"/"+mapping.span, mapping.identity)
+	if err != nil || old.soname == "" {
+		return "", libraryFile{}, false
+	}
+	path, linked := closure.deps.Resolved[old.soname]
+	if !linked || !filepath.IsAbs(path) || filepath.Clean(path) != path {
+		return "", libraryFile{}, false
+	}
+	installed, err := r.stat(root + path)
+	if err != nil || !installed.regular || installed.identity == mapping.identity {
+		return "", libraryFile{}, false
+	}
+	current, err := r.elf(root+path, installed.identity)
+	if err != nil || current.file != installed || current.soname != old.soname ||
+		current.class != old.class || current.machine != old.machine {
+		return "", libraryFile{}, false
+	}
+	return path, installed, true
 }

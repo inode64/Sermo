@@ -233,3 +233,53 @@ func TestResolveNeededFollowsTheLoader(t *testing.T) {
 		})
 	}
 }
+
+// A running process's executable resolves inside its own root: its ld.so.conf
+// fragments, its RUNPATH with $ORIGIN at its in-root path, and in-root paths in
+// the result, the way the dynamic loader inside that root would find them.
+func TestResolveExecutableDependenciesUnderRoot(t *testing.T) {
+	root := t.TempDir()
+	x8664 := testELF{class: elf.ELFCLASS64, machine: elf.EM_X86_64}
+	app := x8664
+	app.needed = []string{"libstdc++.so.6", "libbaz.so.3", "libgone.so.1"}
+	app.runpath = "$ORIGIN/../lib/app"
+	writeTestELF(t, filepath.Join(root, "usr/bin/app"), app)
+	writeTestELF(t, filepath.Join(root, "usr/lib/gcc/x86_64-pc-linux-gnu/16/libstdc++.so.6"), x8664)
+	writeTestELF(t, filepath.Join(root, "usr/lib/app/libbaz.so.3"), x8664)
+	conf := filepath.Join(root, "etc/ld.so.conf.d/05gcc-x86_64-pc-linux-gnu.conf")
+	if err := os.MkdirAll(filepath.Dir(conf), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(conf, []byte("/usr/lib/gcc/x86_64-pc-linux-gnu/16\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	deps, err := ResolveExecutableDependencies(t.Context(), root, "/usr/bin/app")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]string{
+		"libstdc++.so.6": "/usr/lib/gcc/x86_64-pc-linux-gnu/16/libstdc++.so.6",
+		"libbaz.so.3":    "/usr/lib/app/libbaz.so.3",
+	}
+	if len(deps.Resolved) != len(want) {
+		t.Fatalf("resolved = %v, want %v", deps.Resolved, want)
+	}
+	for soname, path := range want {
+		if deps.Resolved[soname] != path {
+			t.Fatalf("resolved = %v, want %v", deps.Resolved, want)
+		}
+	}
+	if !slices.Equal(deps.Missing, []string{"libgone.so.1"}) {
+		t.Fatalf("missing = %v, want [libgone.so.1]", deps.Missing)
+	}
+
+	if _, err := ResolveExecutableDependencies(t.Context(), root, "/usr/bin/absent"); err == nil {
+		t.Fatal("an absent executable must be an error, not an empty closure")
+	}
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	if _, err := ResolveExecutableDependencies(ctx, root, "/usr/bin/app"); !errors.Is(err, context.Canceled) {
+		t.Fatalf("cancelled resolution error = %v, want context.Canceled", err)
+	}
+}

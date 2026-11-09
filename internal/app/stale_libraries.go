@@ -26,7 +26,7 @@ func serviceStaleLibraries(discoverer process.Discoverer, selectors []process.Se
 			procs = []process.Process{}
 		}
 		principal := libraryRestartPrincipal(discoverer, selectors, procs)
-		report, err := process.ScanLibraries(ctx, procs, principal)
+		report, err := process.ScanLibraries(ctx, procs, principal, checks.ResolveExecutableDependencies)
 		for i := range report.Libraries {
 			report.Libraries[i].RestartEligible = libraryRestartEligible(report.Libraries[i], principal)
 		}

@@ -1464,8 +1464,9 @@ timeouts and premature disconnects; a matching partial response is not accepted.
 #### Advisory library observations
 
 `stale_libraries` returns `action_blocked: true` while its inventory is
-incomplete, replacements are missing or unstable, only child processes are
-affected, or its scope is the host. Alerts can report the finding; rules with
+incomplete, replacements are missing or unstable, the installed main executable
+would not resolve its libraries, only child processes are affected, or its
+scope is the host. Alerts can report the finding; rules with
 operations treat that observation as unknown, including under `not`. Guards
 fail closed. Host watches notify but withhold both firing and recovery hooks.
 See [running library checks](configuration.md#stale_libraries--processes-using-replaced-shared-libraries)

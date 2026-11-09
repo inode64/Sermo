@@ -3,6 +3,7 @@ package checks
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -134,7 +135,7 @@ func TestStaleLibrariesRefreshesDependenciesAndReportsStopped(t *testing.T) {
 }
 
 func TestStaleLibrariesAdvisoryCases(t *testing.T) {
-	for _, name := range []string{"host", "child", "missing", "cancelled", "concurrent"} {
+	for _, name := range []string{"host", "child", "missing", "unstartable", "unverifiable", "cancelled", "concurrent"} {
 		t.Run(name, func(t *testing.T) {
 			now := time.Unix(1000, 0)
 			lib := process.StaleLibrary{PID: 42, Path: "/lib/libpam.so.0", RestartEligible: true}
@@ -147,7 +148,14 @@ func TestStaleLibrariesAdvisoryCases(t *testing.T) {
 			c := &staleLibrariesCheck{stableFor: time.Minute, clock: func() time.Time { return now }, since: now.Add(-time.Hour), previous: libraryEvidence([]process.StaleLibrary{lib})}
 			if name != "host" {
 				c.sample = func(context.Context) (process.LibraryReport, error) {
-					return process.LibraryReport{Libraries: []process.StaleLibrary{lib}}, nil
+					report := process.LibraryReport{Libraries: []process.StaleLibrary{lib}}
+					switch name {
+					case "unstartable":
+						report.ExecutableUnresolved = []string{"libgone.so.1"}
+					case "unverifiable":
+						report.ExecutableError = "resolve /usr/sbin/sshd dependencies: truncated"
+					}
+					return report, nil
 				}
 			}
 			var r Result
@@ -228,5 +236,30 @@ func TestStaleLibrariesIncompleteInventoryStatesOnlyItsFindings(t *testing.T) {
 				t.Fatalf("result = %+v, want OK=%t, unavailable and blocked", r, tc.wantOK)
 			}
 		})
+	}
+}
+
+// A restart runs the executable installed now: one that would not resolve its
+// libraries is named, and the restart withheld, ahead of every other reason.
+func TestStaleLibrariesNamesAnExecutableThatWouldNotStart(t *testing.T) {
+	now := time.Unix(1000, 0)
+	lib := process.StaleLibrary{PID: 42, Path: "/lib/libpam.so.0", RestartEligible: true, Missing: true}
+	for _, tc := range []struct {
+		report process.LibraryReport
+		want   string
+	}{
+		{process.LibraryReport{ExecutableUnresolved: []string{"libz.so.1", "libgone.so.1", "libz.so.1"}},
+			"the installed executable would not start: missing libgone.so.1, libz.so.1"},
+		{process.LibraryReport{ExecutableError: "resolve /usr/sbin/sshd dependencies: truncated"},
+			"cannot verify that the installed executable would start: resolve /usr/sbin/sshd dependencies: truncated"},
+	} {
+		c := &staleLibrariesCheck{stableFor: time.Minute, clock: func() time.Time { return now }, since: now.Add(-time.Hour), previous: libraryEvidence([]process.StaleLibrary{lib}),
+			sample: func(context.Context) (process.LibraryReport, error) { return process.LibraryReport{}, nil }}
+		tc.report.Libraries = []process.StaleLibrary{lib}
+		tc.report.Processes = 1
+		r := c.libraryResult(tc.report, nil, now, now)
+		if !r.ActionBlocked || !strings.HasSuffix(r.Message, "; "+tc.want) {
+			t.Fatalf("result = blocked %v %q, want blocked with %q", r.ActionBlocked, r.Message, tc.want)
+		}
 	}
 }

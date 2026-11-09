@@ -96,7 +96,7 @@ func (c *staleLibrariesCheck) Run(ctx context.Context) Result {
 	if c.sample != nil {
 		report, err = c.sample(ctx)
 	} else {
-		report, err = process.ScanLibraries(ctx, nil, 0)
+		report, err = process.ScanLibraries(ctx, nil, 0, ResolveExecutableDependencies)
 	}
 	if ctx.Err() != nil {
 		err = ctx.Err()
@@ -147,6 +147,9 @@ func (c *staleLibrariesCheck) libraryResult(report process.LibraryReport, err er
 	}
 	res := c.result(len(report.Libraries) == 0, message, start)
 	res.ActionBlocked = c.sample == nil
+	// The restart would start the executable installed now; withhold it when
+	// that one can no longer resolve its libraries.
+	unstartable := len(report.ExecutableUnresolved) > 0 || report.ExecutableError != ""
 	if len(report.Libraries) > 0 {
 		reason := "restart the service to load the installed libraries"
 		switch {
@@ -154,6 +157,10 @@ func (c *staleLibrariesCheck) libraryResult(report process.LibraryReport, err er
 			reason = "host inventory only; select the owning service"
 		case !eligible:
 			reason = "no uniquely identified main process affected; close affected sessions or review ownership"
+		case len(report.ExecutableUnresolved) > 0:
+			reason = "the installed executable would not start: missing " + strings.Join(strutil.SortedUnique(report.ExecutableUnresolved), ", ")
+		case report.ExecutableError != "":
+			reason = "cannot verify that the installed executable would start: " + report.ExecutableError
 		case missing:
 			reason = "installed library missing; review package update before restarting"
 		case now.Sub(c.since) < c.stableFor:
@@ -161,7 +168,7 @@ func (c *staleLibrariesCheck) libraryResult(report process.LibraryReport, err er
 		default:
 			res.ActionBlocked = false
 		}
-		res.ActionBlocked = res.ActionBlocked || !eligible || missing || now.Sub(c.since) < c.stableFor
+		res.ActionBlocked = res.ActionBlocked || !eligible || unstartable || missing || now.Sub(c.since) < c.stableFor
 		res.Message += "; " + reason
 	}
 	if err != nil {

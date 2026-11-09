@@ -58,7 +58,27 @@ type LibraryReport struct {
 	Libraries    []StaleLibrary `json:"libraries"`
 	Processes    int            `json:"processes"`
 	Dependencies []string       `json:"dependencies"`
+	// ExecutableUnresolved names the SONAMEs the principal's executable, as
+	// installed now, cannot resolve: a restart would fail to start it.
+	ExecutableUnresolved []string `json:"executable_unresolved,omitempty"`
+	// ExecutableError is why the principal executable's dependencies could not
+	// be resolved; like ExecutableUnresolved, it withholds a restart.
+	ExecutableError string `json:"executable_error,omitempty"`
 }
+
+// ExecutableDependencies is an installed executable's DT_NEEDED closure as the
+// dynamic loader would resolve it now: each SONAME's path inside the process
+// root, and the SONAMEs it cannot find.
+type ExecutableDependencies struct {
+	Resolved map[string]string
+	Missing  []string
+}
+
+// DependencyResolver resolves exe's DT_NEEDED closure inside root, the prefix
+// ScanLibraries reads a process's files through. The libraries preflight owns
+// the loader's search rules, so ScanLibraries takes them instead of keeping a
+// second copy; nil leaves removed libraries missing and skips the start check.
+type DependencyResolver func(ctx context.Context, root, exe string) (ExecutableDependencies, error)
 
 type libraryFile struct {
 	identity ExecutableFile
@@ -74,6 +94,7 @@ type libraryReader struct {
 	elf           func(string, ExecutableFile) (libraryELF, error)
 	namespaceRoot func(context.Context, int, libraryRootIdentity) (string, func(), error)
 	mountID       func(string) (uint64, error)
+	dependencies  DependencyResolver
 	principal     int
 }
 
@@ -89,11 +110,14 @@ type libraryReader struct {
 // principal is the caller's independently verified service main, or zero for
 // an advisory inventory. It needs its own root pin even after a sibling warmed
 // the namespace cache; this parameter grants no process signal authority.
-func ScanLibraries(ctx context.Context, procs []Process, principal int) (LibraryReport, error) {
+// dependencies resolves an executable's DT_NEEDED closure; see
+// DependencyResolver.
+func ScanLibraries(ctx context.Context, procs []Process, principal int, dependencies DependencyResolver) (LibraryReport, error) {
 	// Numeric ownership is sufficient here; avoid NSS/network user lookups in
 	// a process inventory whose authority is the kernel's real UID.
 	numeric := func(id uint32) string { return strconv.FormatUint(uint64(id), numericIDBase) }
-	r := libraryReader{reader: OSReader{LookupUserName: numeric, LookupGroupName: numeric}, readFile: hostfs.ReadFile, stat: statLibraryFile, elf: readLibraryELF, namespaceRoot: pinnedNamespaceRoot, mountID: libraryDirectoryMountID, principal: principal}
+	r := libraryReader{reader: OSReader{LookupUserName: numeric, LookupGroupName: numeric}, readFile: hostfs.ReadFile, stat: statLibraryFile, elf: readLibraryELF,
+		namespaceRoot: pinnedNamespaceRoot, mountID: libraryDirectoryMountID, dependencies: dependencies, principal: principal}
 	return r.scan(ctx, procs)
 }
 
@@ -155,6 +179,10 @@ func (r libraryReader) scan(ctx context.Context, procs []Process) (LibraryReport
 		out.Processes += libraries.Processes
 		out.Libraries = append(out.Libraries, libraries.Libraries...)
 		out.Dependencies = append(out.Dependencies, libraries.Dependencies...)
+		out.ExecutableUnresolved = append(out.ExecutableUnresolved, libraries.ExecutableUnresolved...)
+		if libraries.ExecutableError != "" {
+			out.ExecutableError = libraries.ExecutableError
+		}
 	}
 	out.Dependencies = strutil.SortedUnique(out.Dependencies)
 	return out, errors.Join(failures...)
@@ -208,6 +236,24 @@ type libraryRoots struct {
 	verified    map[ExecutableFile]bool
 	pinnedBy    map[ExecutableFile]int
 	closers     []func()
+	// closures caches each executable's dependency closure for the scan: the
+	// workers of one service share it, and resolving it parses every library.
+	closures map[libraryClosureKey]executableClosure
+}
+
+type libraryClosureKey struct {
+	processRoot ExecutableFile
+	namespace   ExecutableFile
+	prefix      string
+	exe         string
+}
+
+// executableClosure is one executable's resolved closure. known is false when
+// the scan has no resolver or the process has no readable executable.
+type executableClosure struct {
+	deps  ExecutableDependencies
+	err   error
+	known bool
 }
 
 type libraryRoot struct {
@@ -276,6 +322,33 @@ func (s *libraryRoots) of(ctx context.Context, pid int) (libraryRoot, bool) {
 	return libraryRoot{prefix: pinnedPrefix, processRoot: root.identity, processMount: processMount, namespace: namespace.identity, namespaceRootVerified: true}, true
 }
 
+// closure resolves exe's dependency closure under source once per scan. A
+// process that shares Sermo's root reads it through its own /proc/PID/root, so
+// the key leaves that per-PID prefix out and keeps a chroot's real prefix.
+func (s *libraryRoots) closure(ctx context.Context, source libraryRoot, pid int, exe string) executableClosure {
+	if s.reader.dependencies == nil || exe == "" {
+		return executableClosure{}
+	}
+	key := libraryClosureKey{processRoot: source.processRoot, namespace: source.namespace, exe: exe}
+	if source.prefix != PIDPath(pid, ProcFileRoot) {
+		key.prefix = source.prefix
+	}
+	if cached, ok := s.closures[key]; ok {
+		return cached
+	}
+	deps, err := s.reader.dependencies(ctx, source.prefix, exe)
+	result := executableClosure{deps: deps, err: err, known: true}
+	// A cancelled resolution says nothing about the executable; let the next
+	// scan try again instead of caching it.
+	if ctx.Err() == nil {
+		if s.closures == nil {
+			s.closures = map[libraryClosureKey]executableClosure{}
+		}
+		s.closures[key] = result
+	}
+	return result
+}
+
 func (s *libraryRoots) index(realRoot ExecutableFile) {
 	s.byNamespace = map[ExecutableFile]string{}
 	if own, err := s.reader.stat(procSelfMountNamespace); err == nil {
@@ -312,11 +385,12 @@ func (r libraryReader) processLibraries(ctx context.Context, proc Process, roots
 	}
 	chrooted := root != PIDPath(proc.PID, ProcFileRoot)
 	report := LibraryReport{Processes: 1}
+	closure := func() executableClosure { return roots.closure(ctx, source, proc.PID, proc.Exe) }
 	for _, mapping := range mappings {
 		if err := ctx.Err(); err != nil {
 			return LibraryReport{}, fmt.Errorf("read mapped libraries: %w", err)
 		}
-		finding, stale, err := r.compareLibrary(proc, root, mapping)
+		finding, stale, err := r.compareLibrary(proc, root, mapping, closure)
 		if err != nil {
 			return LibraryReport{}, err
 		}
@@ -327,6 +401,16 @@ func (r libraryReader) processLibraries(ctx context.Context, proc Process, roots
 		}
 		if path := finding.Path; path != "" && path != proc.Exe && path != proc.ExePrev {
 			report.Dependencies = append(report.Dependencies, path)
+		}
+	}
+	// Restarting the principal to load new libraries runs the executable that
+	// is installed now: one that can no longer resolve a SONAME would not start.
+	if r.principal != 0 && proc.PID == r.principal && len(report.Libraries) > 0 {
+		if c := closure(); c.known {
+			report.ExecutableUnresolved = c.deps.Missing
+			if c.err != nil {
+				report.ExecutableError = fmt.Sprintf("resolve %s dependencies: %v", proc.Exe, c.err)
+			}
 		}
 	}
 	if alive, err := r.verifyProcess(proc); err != nil || !alive {
@@ -412,7 +496,7 @@ func parseLibraryMaps(data string) ([]libraryMapping, error) {
 	return mappings, nil
 }
 
-func (r libraryReader) compareLibrary(proc Process, root string, mapping libraryMapping) (StaleLibrary, bool, error) {
+func (r libraryReader) compareLibrary(proc Process, root string, mapping libraryMapping, closure func() executableClosure) (StaleLibrary, bool, error) {
 	path := mapping.path
 	// The installed file under the root libraryRoots chose for this process.
 	installed, err := r.stat(root + path)
@@ -441,6 +525,8 @@ func (r libraryReader) compareLibrary(proc Process, root string, mapping library
 	replacement := ""
 	if missing {
 		if alias, file, ok := r.libraryReplacement(proc.PID, root, path, mapping); ok {
+			replacement, installed, missing = alias, file, false
+		} else if alias, file, ok := r.closureReplacement(proc.PID, root, mapping, closure()); ok {
 			replacement, installed, missing = alias, file, false
 		}
 	}

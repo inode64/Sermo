@@ -4046,8 +4046,25 @@ ELF's SONAME through its kernel-held `map_files` entry. It accepts the SONAME
 alias in the same directory only when the installed ELF has that same SONAME,
 class and architecture and both file identities can be verified. The finding
 retains the original `path` and records the alias as `replacement_path`.
-If the old ELF cannot be read, the alias is absent or the evidence differs,
-the replacement remains missing and cannot trigger an automatic restart.
+
+A removed library can also have moved to another directory: a compiler slot
+change removes the old compiler's runtime directory, and the processes keep
+`libstdc++.so.6` and `libgcc_s.so.1` from it while the new compiler provides
+them elsewhere. Such a library counts as replaced only when the SONAME belongs
+to the process executable's own `DT_NEEDED` closure, which the dynamic loader
+searches by SONAME at start, and that closure, resolved inside the process
+root with the same rules as the `libraries` preflight, finds an ELF with the
+same SONAME, class and architecture. `replacement_path` then names that file.
+A plugin or PAM module loaded by path is outside that closure and stays
+missing. If the old ELF cannot be read, no replacement is found or the
+evidence differs, the replacement remains missing and cannot trigger an
+automatic restart.
+
+A restart runs the executable installed now. When the main process has stale
+libraries, the check also resolves that executable's closure (for a script,
+its interpreter, which is what the process runs); a SONAME it can no longer
+find, or a closure it cannot read, withholds the restart (`action_blocked`)
+with the missing names in the message.
 
 Default reporting is `state`, severity `warning`: an old library does not by
 itself mean the service is down. `OK` means no stale libraries; use `failed:`,
