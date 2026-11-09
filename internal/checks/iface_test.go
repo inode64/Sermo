@@ -92,7 +92,7 @@ func TestTryInterfaces(t *testing.T) {
 }
 
 func TestICMPSampleAggregation(t *testing.T) {
-	sampler := func(_, iface string, _ int, _ time.Duration) (PingSample, error) {
+	sampler := func(_ context.Context, _, iface string, _ int, _ time.Duration) (PingSample, error) {
 		switch iface {
 		case "up":
 			return PingSample{Reachable: true, RTTKnown: true, RTTms: 5}, nil
@@ -105,17 +105,17 @@ func TestICMPSampleAggregation(t *testing.T) {
 
 	// any: reachable if at least one interface reaches.
 	c := &icmpCheck{host: "h", ifaces: []string{"down", "up"}}
-	if s, err := c.sample(sampler); err != nil || !s.Reachable {
+	if s, err := c.sample(t.Context(), sampler); err != nil || !s.Reachable {
 		t.Fatalf("any: reachable=%v err=%v, want reachable", s.Reachable, err)
 	}
 
 	// all: not reachable unless every interface reaches.
 	c.ifaceAll = true
-	if s, _ := c.sample(sampler); s.Reachable {
+	if s, _ := c.sample(t.Context(), sampler); s.Reachable {
 		t.Fatal("all: must be unreachable when one interface is down")
 	}
 	c.ifaces = []string{"up", "up"}
-	if s, err := c.sample(sampler); err != nil || !s.Reachable {
+	if s, err := c.sample(t.Context(), sampler); err != nil || !s.Reachable {
 		t.Fatalf("all-up: reachable=%v err=%v, want reachable", s.Reachable, err)
 	}
 }

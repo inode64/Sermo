@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	"errors"
 	"fmt"
 	"math"
 	"net"
@@ -43,7 +44,7 @@ type PingSample struct {
 // PingSamplerFunc probes a host with count echo requests bounded by timeout,
 // egressing through iface when non-empty. Injected for tests; the default uses
 // native ICMP via golang.org/x/net.
-type PingSamplerFunc func(host, iface string, count int, timeout time.Duration) (PingSample, error)
+type PingSamplerFunc func(ctx context.Context, host, iface string, count int, timeout time.Duration) (PingSample, error)
 
 // icmpCheck watches one metric (state|latency) of one external host. Stateful
 // across cycles (baseline for on:change / change), hence a pointer type; safe
@@ -67,13 +68,15 @@ type icmpCheck struct {
 	lastRTT   float64
 }
 
-func (c *icmpCheck) Run(_ context.Context) Result {
-	start := time.Now()
+func (c *icmpCheck) Run(ctx context.Context) Result {
+	ctx, run := c.begin(ctx)
+	defer run.close()
+	start := run.start
 	sampler := c.sampler
 	if sampler == nil {
 		sampler = defaultPingSampler
 	}
-	s, err := c.sample(sampler)
+	s, err := c.sample(ctx, sampler)
 	if err != nil {
 		return c.unavailableResult(fmt.Sprintf("icmp %s: %v", c.host, err), start)
 	}
@@ -136,16 +139,30 @@ func (c *icmpCheck) Run(_ context.Context) Result {
 // reachability per interface_match (any: reachable if one interface reaches; all:
 // reachable only if every one reaches, reporting the worst RTT). With no
 // interfaces it samples once with default routing.
-func (c *icmpCheck) sample(sampler PingSamplerFunc) (PingSample, error) {
+func (c *icmpCheck) sample(ctx context.Context, sampler PingSamplerFunc) (PingSample, error) {
+	timeout := c.timeout
+	if timeout <= 0 {
+		timeout = defaultPingTimeout
+	}
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
 	if len(c.ifaces) == 0 {
-		return sampler(c.host, "", c.count, c.timeout)
+		return sampler(ctx, c.host, "", c.count, timeout)
 	}
 	var combined PingSample
 	var lastErr error
 	anyValid := false
 	reachable := 0
-	for _, ifc := range c.ifaces {
-		s, err := sampler(c.host, ifc, c.count, c.timeout)
+	for i, ifc := range c.ifaces {
+		if err := ctx.Err(); err != nil {
+			return PingSample{}, fmt.Errorf("sample interfaces: %w", err)
+		}
+		attemptCtx, cancel := conn.AttemptContext(ctx, len(c.ifaces)-i)
+		s, err := sampler(attemptCtx, c.host, ifc, c.count, timeout)
+		cancel()
+		if ctx.Err() == context.Canceled {
+			return PingSample{}, fmt.Errorf("sample interfaces: %w", ctx.Err())
+		}
 		if err != nil {
 			lastErr = err
 			if c.ifaceAll {
@@ -179,11 +196,13 @@ func (c *icmpCheck) sample(sampler PingSamplerFunc) (PingSample, error) {
 // (needs CAP_NET_RAW) and reports reachability + mean RTT in ms. When iface is
 // set it binds the socket to that interface's IPv4 address (the `ping -I <addr>`
 // mechanism) so the echo requests leave through it on a multi-homed host.
-func defaultPingSampler(host, iface string, count int, timeout time.Duration) (PingSample, error) {
+func defaultPingSampler(ctx context.Context, host, iface string, count int, timeout time.Duration) (PingSample, error) {
 	if timeout <= 0 {
 		timeout = defaultPingTimeout
 	}
-	addr, err := net.ResolveIPAddr(networkIP4, host)
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	addr, err := resolvePingTarget(ctx, net.DefaultResolver, host)
 	if err != nil {
 		return PingSample{}, fmt.Errorf("resolve %s: %w", host, err)
 	}
@@ -201,10 +220,12 @@ func defaultPingSampler(host, iface string, count int, timeout time.Duration) (P
 	}
 	defer func() { _ = icmpConn.Close() }()
 
-	return pingPackets(icmpConn, addr, count, timeout)
+	return pingPackets(ctx, icmpConn, addr, count, timeout)
 }
 
-func pingPackets(icmpConn net.PacketConn, addr *net.IPAddr, count int, timeout time.Duration) (PingSample, error) {
+func pingPackets(ctx context.Context, icmpConn net.PacketConn, addr *net.IPAddr, count int, timeout time.Duration) (PingSample, error) {
+	stop := context.AfterFunc(ctx, func() { _ = icmpConn.Close() })
+	defer stop()
 	perPacket := timeout / time.Duration(count)
 	if perPacket <= 0 {
 		perPacket = defaultPingPerPacketTimeout
@@ -214,6 +235,9 @@ func pingPackets(icmpConn net.PacketConn, addr *net.IPAddr, count int, timeout t
 	reply := make([]byte, icmpReplyBufferSize)
 	var rtts []float64
 	for seq := range count {
+		if err := ctx.Err(); err != nil {
+			return PingSample{}, fmt.Errorf("send echo: %w", err)
+		}
 		msg := icmp.Message{
 			Type: ipv4.ICMPTypeEcho, Code: icmpEchoCode,
 			Body: &icmp.Echo{ID: id, Seq: seq, Data: payload},
@@ -223,14 +247,19 @@ func pingPackets(icmpConn net.PacketConn, addr *net.IPAddr, count int, timeout t
 			continue
 		}
 		sent := time.Now()
-		_ = icmpConn.SetWriteDeadline(time.Now().Add(perPacket))
+		deadline := sent.Add(perPacket)
+		if end, ok := ctx.Deadline(); ok {
+			// DNS and earlier interfaces consume this same budget. Leave
+			// each remaining echo a share, even when the target is silent.
+			deadline = sent.Add(min(perPacket, end.Sub(sent)/time.Duration(count-seq)))
+		}
+		_ = icmpConn.SetWriteDeadline(deadline)
 		if _, err := icmpConn.WriteTo(b, addr); err != nil {
 			continue
 		}
 		// Raw sockets receive every echo reply on the host. ID and sequence
 		// can coincide across samples, so only our random payload proves the
 		// reply belongs to this sample (including delayed replies from a cycle).
-		deadline := time.Now().Add(perPacket)
 		_ = icmpConn.SetReadDeadline(deadline)
 		for {
 			n, peer, err := icmpConn.ReadFrom(reply)
@@ -252,6 +281,11 @@ func pingPackets(icmpConn net.PacketConn, addr *net.IPAddr, count int, timeout t
 			break
 		}
 	}
+	// The final echo timing out completes a loss observation; cancellation
+	// must never publish a new reachability or RTT baseline.
+	if err := ctx.Err(); err != nil && !errors.Is(err, context.DeadlineExceeded) {
+		return PingSample{}, fmt.Errorf("receive echo: %w", err)
+	}
 	if len(rtts) == 0 {
 		return PingSample{}, nil
 	}
@@ -270,4 +304,16 @@ func sameIPv4(peer net.Addr, want net.IP) bool {
 		return ip.IP.Equal(want)
 	}
 	return false
+}
+
+// resolvePingTarget keeps DNS inside the same budget as the echo exchange.
+func resolvePingTarget(ctx context.Context, resolver *net.Resolver, host string) (*net.IPAddr, error) {
+	ips, err := resolver.LookupIP(ctx, networkIP4, host)
+	if err != nil {
+		return nil, fmt.Errorf("lookup IPv4: %w", err)
+	}
+	if len(ips) == 0 {
+		return nil, fmt.Errorf("no IPv4 address for %s", host)
+	}
+	return &net.IPAddr{IP: ips[0]}, nil
 }

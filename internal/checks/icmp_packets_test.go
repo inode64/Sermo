@@ -12,14 +12,21 @@ import (
 
 type pingPacketConn struct {
 	net.PacketConn
-	write func([]byte, net.Addr) (int, error)
-	read  func([]byte) (int, net.Addr, error)
+	write        func([]byte, net.Addr) (int, error)
+	read         func([]byte) (int, net.Addr, error)
+	readDeadline func(time.Time) error
 }
 
 func (c *pingPacketConn) WriteTo(b []byte, addr net.Addr) (int, error) { return c.write(b, addr) }
 func (c *pingPacketConn) ReadFrom(b []byte) (int, net.Addr, error)     { return c.read(b) }
+func (*pingPacketConn) Close() error                                   { return nil }
 func (*pingPacketConn) SetWriteDeadline(time.Time) error               { return nil }
-func (*pingPacketConn) SetReadDeadline(time.Time) error                { return nil }
+func (c *pingPacketConn) SetReadDeadline(deadline time.Time) error {
+	if c.readDeadline != nil {
+		return c.readDeadline(deadline)
+	}
+	return nil
+}
 
 func pingReply(t *testing.T, request []byte) []byte {
 	t.Helper()
@@ -45,7 +52,7 @@ func TestPingPacketsRejectsAnotherSample(t *testing.T) {
 		},
 		read: func([]byte) (int, net.Addr, error) { return 0, nil, os.ErrDeadlineExceeded },
 	}
-	if sample, err := pingPackets(first, addr, 1, time.Second); err != nil || sample.Reachable {
+	if sample, err := pingPackets(t.Context(), first, addr, 1, time.Second); err != nil || sample.Reachable {
 		t.Fatalf("lost sample = %+v, %v", sample, err)
 	}
 	for _, ownReply := range []bool{false, true} {
@@ -70,7 +77,7 @@ func TestPingPacketsRejectsAnotherSample(t *testing.T) {
 					return n, addr, nil
 				},
 			}
-			sample, err := pingPackets(second, addr, 1, time.Second)
+			sample, err := pingPackets(t.Context(), second, addr, 1, time.Second)
 			if err != nil || sample.Reachable != ownReply || sample.RTTKnown != ownReply || reads != 2 {
 				t.Fatalf("second sample = %+v, %v; reads=%d, want own reply=%v and 2 reads", sample, err, reads, ownReply)
 			}

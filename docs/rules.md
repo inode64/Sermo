@@ -481,6 +481,11 @@ checks:
   socket instead of a host (`chrony` with `socket:`, `docker`, `libvirt`, …) has
   no egress link, so an `interface` pin does not apply to it.
 
+`icmp` shares the check's `timeout` across DNS resolution and all interface
+attempts. Cancelling the cycle interrupts name resolution and pending echo I/O.
+A failed lookup or cancelled sample is unavailable and leaves change baselines
+unchanged.
+
 ### Check interdependencies (`requires` / `skip_when_changed`)
 
 Any check may declare interdependencies so it is **skipped** (not counted, no

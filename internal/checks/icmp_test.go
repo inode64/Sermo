@@ -31,7 +31,7 @@ func TestSameIPv4(t *testing.T) {
 
 func pinger(samples ...PingSample) PingSamplerFunc {
 	i := 0
-	return func(string, string, int, time.Duration) (PingSample, error) {
+	return func(context.Context, string, string, int, time.Duration) (PingSample, error) {
 		s := samples[i]
 		if i < len(samples)-1 {
 			i++
@@ -123,7 +123,9 @@ func TestICMPLatencyChangeUnreachableNoCorrupt(t *testing.T) {
 
 func TestICMPSamplerError(t *testing.T) {
 	c := &icmpCheck{name: "p", host: "h", metric: "state", expect: "up",
-		sampler: func(string, string, int, time.Duration) (PingSample, error) { return PingSample{}, errors.New("boom") }}
+		sampler: func(context.Context, string, string, int, time.Duration) (PingSample, error) {
+			return PingSample{}, errors.New("boom")
+		}}
 	if c.Run(context.Background()).OK {
 		t.Fatal("sampler error must not fire")
 	}
