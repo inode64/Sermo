@@ -7,6 +7,16 @@ description: systemd network configuration service.
 service:
   systemd:
     - systemd-networkd
+apps:
+  - systemd-networkd
+variables:
+  user: systemd-network
+# Socket or D-Bus activation can replace the daemon during stop. Its exact
+# identity lets the operation engine verify that new generation safely.
+processes:
+  main:
+    exe: ${systemd_networkd_binary}
+    user: ${user}
 watches:
   service:
     check:

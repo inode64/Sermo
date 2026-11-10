@@ -1196,6 +1196,11 @@ redundant primary start. Auxiliary units stopped by this operation are started
 again before health verification. Finding the unchanged daemon active is not
 proof of a restart.
 
+This requires an exact executable and user in the service's process selectors.
+The `systemd-networkd` catalog profile supplies that identity through its linked
+app's binary discovery and validation. A custom executable belongs in the app's
+`variables.binary` override; a custom account in the service's `variables.user`.
+
 Kept children (`stop_policy.keep_children`: container shims, Gluster bricks,
 SSH sessions) and processes matched by a `delegated` selector remain excluded
 from residual cleanup. Auxiliary units declared by `also_service`
