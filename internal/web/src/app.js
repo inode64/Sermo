@@ -3,7 +3,7 @@ import watchPanelDescriptors from "./watch-panels.json";
 import {
   apiActionSuffix, apiActivityPath, apiApplicationsPath, apiDaemonPath, apiHeaderGeneration,
   apiEventsRecentPath, apiHostPath, apiLibrariesPath, apiLocksPath,
-  apiHeaderConfirm, apiMonitoringPath, apiMountsPath, apiNotifiersPath,
+  apiHeaderConfirm, apiMountsPath, apiNotifiersPath,
   apiQueryBefore, apiQueryBeforeID,
   apiQueryForce, apiQueryKill, apiQueryKind, apiQueryLazy, apiQueryLimit, apiQueryName, apiQueryNoCascade,
   apiQueryOnlyErrors, apiQueryService, apiQuerySince, apiQueryStatus,
@@ -27,6 +27,10 @@ import {
 } from "./format.js";
 
 const $ = (s) => document.querySelector(s);
+// mutedDash stands for a reading there is nothing to show for, readOnlyNote
+// for the actions a viewer who cannot act does not get.
+const mutedDash = tpl`<span class="muted">—</span>`;
+const readOnlyNote = tpl`<span class="muted">read-only</span>`;
 
 const metricNameCPU = "cpu";
 const metricNameMemory = "memory";
@@ -64,6 +68,11 @@ const defaultCategoryWatch = "watch";
 const defaultCategoryStorage = "storage";
 const defaultCategoryApp = "app";
 const defaultCategoryLibrary = "library";
+const serviceSurfaceRegular = "service";
+const serviceSurfaceContainer = "container";
+const serviceSurfaceVM = "vm";
+const dockerServiceCategory = "docker";
+const vmServiceCategory = "virtual-machine";
 // Classes for a General data field in a service/container/VM expansion whose
 // reading is also a .services-table column: the field is hidden while that column
 // is on screen and revealed at the breakpoint that retires it, so the reading is
@@ -80,10 +89,6 @@ const defaultCategoryLibrary = "library";
 // IO R/W move at 1420px; Type, Database and ID move at 640px.
 const colDupWide = "col-dup col-dup-1420";
 const colDupPhone = "col-dup col-dup-640";
-// Key of the host watch panel in watch-panels.json. Distinct from
-// watchScopeHost, which is the daemon's `scope` value for a host-level watch:
-// same string, different vocabulary.
-const watchPanelKeyHost = "host";
 const eventDetailLimit = "50";
 // eventRangeAll is the events range selector's explicit "any time" value.
 const eventRangeAll = "all";
@@ -276,6 +281,7 @@ const serviceStatusFilterStates = [
 const watchStatusFilterStates = [targetStateDisabled, targetStateOK, targetStateStarting, targetStateWarning, targetStateStale, targetStateTesting, targetStateRecovering, targetStateRebuilding, targetStateRepairing, targetStateMoving, targetStateMerging, targetStateMissing, targetStateFailed];
 const appStatusFilterStates = [targetStateOK, targetStateStarting, targetStateWarning, targetStateFailed];
 const mountStatusFilterStates = [mountStateActive, mountStateInactive];
+const libraryStatusFilterStates = [targetStateOK, targetStateWarning, targetStateFailed];
 const sessionKindSSH = "ssh";
 const sessionKindTmux = "tmux";
 const sessionKindScreen = "screen";
@@ -326,7 +332,6 @@ const usageWarnPct = 75;
 const loadWarnPct = 80;
 const overviewSwapCriticalPct = 90;
 const overviewSwapWarnPct = 70;
-const overviewDaemonPanel = "daemon-section";
 const overviewLoadingValue = "…";
 const overviewLoadingText = "loading…";
 const eventMessagePreviewChars = 160;
@@ -434,12 +439,8 @@ function libraryExpansionKey(name) { return expansionKey(expansionPrefixLibrary,
 function serviceExpansionKey(name) { return expansionKey(expansionPrefixService, name); }
 function watchExpansionKey(name) { return expansionKey(expansionPrefixWatch, name); }
 function isAppExpansionKey(key) { return key.startsWith(expansionPrefixApp); }
-function isLibraryExpansionKey(key) { return key.startsWith(expansionPrefixLibrary); }
 function isServiceExpansionKey(key) { return key.startsWith(expansionPrefixService); }
 function isWatchExpansionKey(key) { return key.startsWith(expansionPrefixWatch); }
-function isShareableExpansionKey(key) {
-  return isServiceExpansionKey(key) || isWatchExpansionKey(key) || isAppExpansionKey(key) || isLibraryExpansionKey(key);
-}
 function isServiceConfirmAction(action) { return serviceConfirmActions.includes(action); }
 function isServicePreflightAction(action) { return servicePreflightActions.includes(action); }
 function isServiceCascadeAction(action) { return serviceCascadeActions.includes(action); }
@@ -478,17 +479,20 @@ async function loadMe() {
     const res = await fetch(apiWhoamiPath);
     if (res.ok) me = await res.json();
   } catch { /* keep defaults */ }
+  // Admin-only controls carry data-admin; the stylesheet shows them only to
+  // who can act.
+  document.body.classList.toggle("can-act", !!me.can_act);
+  const readOnly = me.auth && me.role !== "admin";
+  $("#me").innerHTML = readOnly ? '<a class="role-badge" href="login" title="Log in to operate services">read-only · log in</a>' : "";
   // Only a /login session can be ended (me.session): the server cannot make a
   // browser forget a cached Basic credential, so it offers no logout for one.
-  const logoutLink = me.session ? ' &middot; <button type="button" class="link-btn" data-logout>log out</button>' : "";
-  if (!me.auth) { $("#me").innerHTML = ""; }
-  else if (me.role === "admin") { $("#me").innerHTML = `(admin)${logoutLink}`; }
-  else { $("#me").innerHTML = `read-only &middot; <a href="login">log in</a>${logoutLink}`; }
-  // Show admin-only controls (reload config, panel refresh, clear event log).
-  toggleAdminControls("#reload-btn", "[data-refresh-panel]");
-  updateEventAdminControls();
-  updateStateCompactControls();
-  updatePanicControls();
+  const session = $("#menu-session");
+  if (session) {
+    session.hidden = !me.session;
+    session.innerHTML = me.session
+      ? `<button type="button" class="menu-item" data-logout>Log out <span class="muted">${esc(me.role || "")}</span></button>`
+      : "";
+  }
 }
 
 // Connection state: when a fetch fails the table is dimmed and a "disconnected,
@@ -541,7 +545,14 @@ function load() {
 async function runLoadQueue() {
   while (loadCompleted < loadRequested) {
     const target = loadRequested;
-    await performLoad();
+    try {
+      await performLoad();
+    } catch (err) {
+      // Nothing in a refresh is meant to throw. One that does leaves the page
+      // half drawn, so it says so instead of passing for a finished refresh.
+      console.error(err);
+      setStatus(`refresh failed: ${err.message}`, feedbackStatusErr, false);
+    }
     loadCompleted = target;
   }
 }
@@ -568,7 +579,6 @@ async function loadPrimaryDashboard() {
       activityResult: snapshotResult(snapshot, "activity", null),
       readyResult: snapshotResult(snapshot, "ready", {}),
       liveResult: snapshotResult(snapshot, "live", {}),
-      monResult: snapshotResult(snapshot, "monitoring", {}),
       hostMetricsResult: snapshotResult(snapshot, "host_metrics", []),
       generation,
       generationMismatch: !!(generation && aggregate.generation && generation !== aggregate.generation),
@@ -587,15 +597,13 @@ async function loadPrimaryDashboard() {
     getJSONResult(apiActivityPath, null),
     fetchReadyReportResult(),
     getJSONResult(liveVerbosePath, {}),
-    getJSONResult(apiMonitoringPath, {}),
     getJSONResult(apiHostPath, []),
   ]);
   const [servicesResult, sessionsResult, mountsResult, notifiersResult, daemonResult, daemonMetricsResult,
-    locksResult, activityResult, readyResult, liveResult, monResult,
-    hostMetricsResult] = results;
+    locksResult, activityResult, readyResult, liveResult, hostMetricsResult] = results;
   const { generation, mismatch: generationMismatch } = sharedBackendGeneration(results);
   return { servicesResult, sessionsResult, mountsResult, notifiersResult, daemonResult, daemonMetricsResult,
-    locksResult, activityResult, readyResult, liveResult, monResult,
+    locksResult, activityResult, readyResult, liveResult,
     hostMetricsResult, generation, generationMismatch,
     // Derived from the same collection the endpoints live in, so adding a new
     // endpoint to the Promise.all above keeps reachability in sync for free.
@@ -607,9 +615,22 @@ async function performLoad() {
   healthIconReady = false;
   let expandedServicesPromise = Promise.resolve(true);
   const sameLoad = () => seq === loadSeq;
+  // draw runs one renderer of this refresh on its own. The page shows one view
+  // at a time and the tiles are the way between them, so a renderer that throws
+  // on a host's data must cost its own panel — not the tiles and every panel
+  // drawn after it — and is named with the stale sections when the refresh ends.
+  const drawFailures = [];
+  const draw = (what, render) => {
+    try {
+      render();
+    } catch (err) {
+      console.error(err);
+      drawFailures.push(`${what} (display error: ${err.message})`);
+    }
+  };
   const { servicesResult, sessionsResult, mountsResult, notifiersResult, daemonResult,
     daemonMetricsResult, locksResult, activityResult, readyResult, liveResult,
-    monResult, hostMetricsResult, generation, generationMismatch,
+    hostMetricsResult, generation, generationMismatch,
     daemonReachable } = await loadPrimaryDashboard();
   if (!sameLoad()) return;
   if (generationMismatch) {
@@ -627,10 +648,9 @@ async function performLoad() {
   const activity = activityResult.data;
   const ready = readyResult.data;
   const live = liveResult.data;
-  const mon = monResult.data;
   const hostMetrics = hostMetricsResult.data;
   if (servicesResult.ok) {
-    render(services);
+    draw("services", () => render(services));
     connOK = true;
     refreshFailures = 0;
     lastLoadOk = Date.now();
@@ -654,30 +674,29 @@ async function performLoad() {
     refreshFailures++;
     showDisconnected();
   }
-  if (mounts) renderMounts(mounts);
-  if (sessionsResult.ok) renderSessions(sessions);
-  if (notifiers) renderNotifiers(notifiers);
-  if (daemon) renderDaemon(daemon);
-  if (daemonMetrics) renderDaemonMetrics(daemonMetrics);
-  if (locks) renderLocks(locks);
-  if (activity) renderActivity(activity);
+  if (mounts) draw("mounts", () => renderMounts(mounts));
+  if (sessionsResult.ok) draw("sessions", () => renderSessions(sessions));
+  if (notifiers) draw("notifiers", () => renderNotifiers(notifiers));
+  if (daemon) draw("daemon", () => renderDaemon(daemon));
+  if (daemonMetrics) draw("daemon metrics", () => renderDaemonMetrics(daemonMetrics));
+  if (locks) draw("locks", () => renderLocks(locks));
+  if (activity) draw("activity", () => renderActivity(activity));
 
   // Status/readyz updates every refresh even when api/services fails, so the
   // header lifecycle line does not stay stuck on a stale "starting".
   renderStatus({
     ready,
     live,
-    mon,
     locks: locks || latestLocks,
     daemon: daemon || {},
     // The failure fallback for host metrics is [] (truthy), so keeping the
     // last known readings needs the result's ok flag, not || on the data.
     hostMetrics: hostMetricsResult.ok ? hostMetrics : latestHostMetrics,
   });
-  applyHash();
+  draw("address target", applyHash);
   if (connOK) {
     healthIconReady = true;
-    renderAttention();
+    refreshChrome();
   } else {
     healthIconReady = true;
     setFavicon(healthStatusWarning);
@@ -695,15 +714,9 @@ async function performLoad() {
     load();
     return;
   }
-  if (watchesResult.ok) {
-    renderWatches(watchesResult.data);
-    if (connOK) renderAttention();
-  }
-  if (appsResult.ok) {
-    renderApps(appsResult.data);
-    if (connOK) renderAttention();
-  }
-  if (librariesResult.ok) renderLibraries(librariesResult.data);
+  if (watchesResult.ok) draw("watches", () => renderWatches(watchesResult.data));
+  if (appsResult.ok) draw("applications", () => renderApps(appsResult.data));
+  if (librariesResult.ok) draw("libraries", () => renderLibraries(librariesResult.data));
   if (!connOK) return;
 
   // First complete snapshot: watches and apps have now loaded, so render the
@@ -712,8 +725,9 @@ async function performLoad() {
   // one-time reveal runs only on the initial load.
   if (!firstSnapshotDone) {
     firstSnapshotDone = true;
-    renderOverview({ ready, live, mon, locks: locks || latestLocks, hostMetrics: hostMetricsResult.ok ? hostMetrics : latestHostMetrics });
-    renderAttention();
+    draw("overview", () => renderOverview({ ready, live, daemon: daemon || {}, locks: locks || latestLocks, hostMetrics: hostMetricsResult.ok ? hostMetrics : latestHostMetrics }));
+    openCollapsedView();
+    refreshChrome();
   }
 
   const [expandedWatchesOK, expandedApplicationsOK] = await Promise.all([
@@ -725,14 +739,14 @@ async function performLoad() {
   const refreshResults = [
     ["sessions", sessionsResult], ["mounts", mountsResult], ["notifiers", notifiersResult], ["daemon", daemonResult],
     ["daemon metrics", daemonMetricsResult], ["locks", locksResult], ["activity", activityResult],
-    ["readiness", readyResult], ["liveness", liveResult], ["monitoring", monResult],
+    ["readiness", readyResult], ["liveness", liveResult],
     ["host metrics", hostMetricsResult], ["watches", watchesResult],
     ["applications", appsResult], ["libraries", librariesResult], ["events", eventsResult],
     ["service details", { ok: expandedServicesOK }],
     ["watch details", { ok: expandedWatchesOK }],
     ["application details", { ok: expandedApplicationsOK }],
   ];
-  const failures = refreshResults.filter(([, result]) => !result.ok).map(([name]) => name);
+  const failures = [...refreshResults.filter(([, result]) => !result.ok).map(([name]) => name), ...drawFailures];
   if (failures.length) {
     showPartialRefresh(failures);
     return;
@@ -802,21 +816,45 @@ async function jsonOrThrow(res) {
   return body;
 }
 
-async function reloadConfig() {
+// runAction is the life of a dashboard action that is one POST: ask first when
+// it needs asking, clear the last result, hold its button, post, say what the
+// daemon answered and follow up. `ok` turns the reply into the message (or
+// [message, tone]); `fail` opens the error line; `then` is what follows a
+// success — a dashboard refresh unless the caller names something else, or
+// null. Returns true when it went through, false when it failed and null when
+// the operator declined.
+async function runAction({ confirm, button, request, ok, fail, then = load }) {
+  if (confirm && !(await confirm())) return null;
   setStatus("");
-  const btn = $("#reload-btn");
-  if (btn) btn.disabled = true;
+  if (button) button.disabled = true;
   try {
-    const res = await fetch(apiReloadPath, csrfPostOptions());
-    await jsonOrThrow(res);
-    setStatus("config reload requested", feedbackStatusOK);
-    // next auto-refresh (or manual load) will pick up any service changes
-    setTimeout(load, 800);
+    const body = await jsonOrThrow(await request());
+    const [message, tone = feedbackStatusOK] = [ok(body)].flat();
+    setStatus(message, tone);
+    if (then) await then(body);
+    return true;
   } catch (e) {
-    setStatus("reload failed: " + e.message, feedbackStatusErr);
+    setStatus(`${fail}: ${e.message}`, feedbackStatusErr);
+    return false;
   } finally {
-    if (btn) btn.disabled = false;
+    if (button) button.disabled = false;
   }
+}
+
+// beforeQuery is the optional cutoff the two pruning actions pass on.
+function beforeQuery(before) {
+  return before ? `?${apiQueryBefore}=${encodeURIComponent(before)}` : "";
+}
+
+function reloadConfig() {
+  return runAction({
+    button: $("#reload-btn"),
+    request: () => fetch(apiReloadPath, csrfPostOptions()),
+    ok: () => "config reload requested",
+    fail: "reload failed",
+    // The daemon reloads after it answers: give it a moment before reading back.
+    then: () => { setTimeout(load, 800); },
+  });
 }
 
 // refreshPanelPaths maps a refresh button's data-refresh-panel, which also
@@ -871,18 +909,31 @@ function eventPageEvents(page) {
   return Array.isArray(page.events) ? page.events : [];
 }
 
+// eventFilterFields are the Events panel's value controls: where each lives,
+// the key it is saved under and, for the ones the daemon filters by, their
+// query parameter. Reading, saving, restoring, resetting and wiring them all
+// go through this list.
+const eventFilterFields = [
+  { id: "#event-service", key: "service", param: apiQueryService },
+  { id: "#event-watch", key: "watch", param: apiQueryWatch },
+  { id: "#event-kind", key: "kind", param: apiQueryKind },
+  { id: "#event-status", key: "status", param: apiQueryStatus },
+  { id: "#event-range", key: "range" },
+  { id: "#event-from", key: "from" },
+  { id: "#event-to", key: "to" },
+];
+
+function eventFilterValue(field) {
+  return ($(field.id) || {}).value || "";
+}
+
 async function loadEvents(seq = 0, append = false, generation = dashboardGeneration) {
   try {
     const params = new URLSearchParams({ [apiQueryLimit]: eventLogLimit });
-    const add = (id, key) => {
-      const el = $("#" + id);
-      const v = el ? el.value.trim() : "";
-      if (v) params.set(key, v);
-    };
-    add("event-service", apiQueryService);
-    add("event-watch", apiQueryWatch);
-    add("event-kind", apiQueryKind);
-    add("event-status", apiQueryStatus);
+    for (const field of eventFilterFields) {
+      const value = field.param ? eventFilterValue(field).trim() : "";
+      if (value) params.set(field.param, value);
+    }
     // "all" is the explicit any-time choice and sends no window at all.
     const range = ($("#event-range") || {}).value || "";
     if (range && range !== eventRangeAll) params.set(apiQuerySince, range);
@@ -936,8 +987,8 @@ function eventFilterKey(e) {
 }
 
 function clearEventFilters() {
-  ["event-service", "event-watch", "event-kind", "event-status", "event-range", "event-from", "event-to"].forEach((id) => {
-    const el = $("#" + id);
+  eventFilterFields.forEach(({ id }) => {
+    const el = $(id);
     if (el) el.value = "";
   });
   const err = $("#event-errors");
@@ -946,30 +997,9 @@ function clearEventFilters() {
   loadEvents();
 }
 
-// toggleAdminControls is the one owner of the admin-hidden rule: the controls
-// the selectors match exist only for operators who can act.
-function toggleAdminControls(...selectors) {
-  selectors.forEach((selector) => {
-    document.querySelectorAll(selector).forEach((el) => el.classList.toggle("admin-hidden", !me.can_act));
-  });
-}
-
-function updateEventAdminControls() {
-  toggleAdminControls("#event-clear", "#event-before");
-}
-
-function updateStateCompactControls() {
-  toggleAdminControls("#state-compact-btn", "#state-before");
-}
-
 // ---- Panic mode ----
 let panicOn = false;
 let panicResolve = null;
-
-// updatePanicControls shows the footer button only to operators who can act.
-function updatePanicControls() {
-  toggleAdminControls("#panic-btn");
-}
 
 // updatePanicView reflects the current panic state in the button, banner and
 // internal flag. Called every refresh from renderStatus.
@@ -1032,70 +1062,60 @@ function closePanicConfirm(ok) {
 
 async function requestPanic(enable) {
   if (!me.can_act) return;
-  const ok = await panicConfirm(enable);
-  if (!ok) return;
-  setStatus("");
-  const btn = $("#panic-btn");
-  if (btn) btn.disabled = true;
-  try {
-    const res = await fetch(panicAPI(enable), csrfPostOptions());
-    const body = await jsonOrThrow(res);
-    updatePanicView(enable);
-    setStatus(body.message || (enable ? "panic mode enabled" : "panic mode disabled"), enable ? feedbackStatusErr : feedbackStatusOK);
-    await load();
-  } catch (e) {
-    setStatus(`panic mode: ${e.message}`, feedbackStatusErr);
-  } finally {
-    if (btn) btn.disabled = false;
-  }
+  await runAction({
+    confirm: () => panicConfirm(enable),
+    button: $("#panic-btn"),
+    request: () => fetch(panicAPI(enable), csrfPostOptions()),
+    ok: (body) => {
+      updatePanicView(enable);
+      return [body.message || (enable ? "panic mode enabled" : "panic mode disabled"), enable ? feedbackStatusErr : feedbackStatusOK];
+    },
+    fail: "panic mode",
+  });
 }
 
-async function clearEventLog(beforeValue) {
+async function clearEventLog() {
   if (!me.can_act) return;
-  const before = (beforeValue != null ? beforeValue : ($("#event-before")?.value || "")).trim();
-  const msg = before
-    ? `Clear persisted events older than ${before}? This cannot be undone.`
-    : "Clear all persisted events from the activity log? This cannot be undone.";
-  if (!(await promptConfirm({ title: "Clear event log?", message: msg, okLabel: "clear log", danger: true }))) return;
-  setStatus("");
-  const btn = $("#event-clear");
-  if (btn) btn.disabled = true;
-  try {
-    const q = before ? `?${apiQueryBefore}=${encodeURIComponent(before)}` : "";
-    const res = await fetch(eventsClearAPI(q), csrfPostOptions());
-    const body = await jsonOrThrow(res);
-    const n = Number(body.pruned) || 0;
-    setStatus(n ? `cleared ${n} event${n === 1 ? "" : "s"}` : "no events to clear", feedbackStatusOK);
-    await load();
-  } catch (e) {
-    setStatus(`events clear: ${e.message}`, feedbackStatusErr);
-  } finally {
-    if (btn) btn.disabled = false;
-  }
+  const before = ($("#event-before")?.value || "").trim();
+  await runAction({
+    confirm: () => promptConfirm({
+      title: "Clear event log?",
+      message: before
+        ? `Clear persisted events older than ${before}? This cannot be undone.`
+        : "Clear all persisted events from the activity log? This cannot be undone.",
+      okLabel: "clear log",
+      danger: true,
+    }),
+    button: $("#event-clear"),
+    request: () => fetch(eventsClearAPI(beforeQuery(before)), csrfPostOptions()),
+    ok: (body) => {
+      const n = Number(body.pruned) || 0;
+      return n ? `cleared ${n} event${n === 1 ? "" : "s"}` : "no events to clear";
+    },
+    fail: "events clear",
+  });
 }
 
 async function compactState() {
   if (!me.can_act) return;
   const before = ($("#state-before")?.value || "").trim();
-  const msg = before
-    ? `Compact state history older than ${before} and vacuum the database?`
-    : "Compact state history using the normal retention window and vacuum the database?";
-  if (!(await promptConfirm({ title: "Compact state?", message: msg, okLabel: "compact", danger: true }))) return;
-  setStatus("");
-  const btn = $("#state-compact-btn");
-  if (btn) btn.disabled = true;
-  try {
-    const q = before ? `?${apiQueryBefore}=${encodeURIComponent(before)}` : "";
-    const res = await fetch(stateCompactAPI(q), csrfPostOptions());
-    const body = await jsonOrThrow(res);
-    const n = Number(body.pruned) || 0;
-    setStatus(n ? `compacted state: pruned ${n} row${n === 1 ? "" : "s"}` : (body.message || "state compact completed"), feedbackStatusOK);
-    await load();
-  } catch (e) {
-    setStatus(`state compact: ${e.message}`, feedbackStatusErr);
-  } finally {
-    if (btn) btn.disabled = false;
-  }
+  await runAction({
+    confirm: () => promptConfirm({
+      title: "Compact state?",
+      message: before
+        ? `Compact state history older than ${before} and vacuum the database?`
+        : "Compact state history using the normal retention window and vacuum the database?",
+      okLabel: "compact",
+      danger: true,
+    }),
+    button: $("#state-compact-btn"),
+    request: () => fetch(stateCompactAPI(beforeQuery(before)), csrfPostOptions()),
+    ok: (body) => {
+      const n = Number(body.pruned) || 0;
+      return n ? `compacted state: pruned ${n} row${n === 1 ? "" : "s"}` : (body.message || "state compact completed");
+    },
+    fail: "state compact",
+  });
 }
 
 function eventKey(prefix, e, i) {
@@ -1153,7 +1173,7 @@ function groupedEvents(events) {
 
 // Column sort for the global events feed: empty key keeps the API order (newest
 // first); clicking a header sorts by it, clicking again flips direction. Mirrors
-// the services/watches/apps panels via the shared toggleSort/sortedBy helpers.
+// the list panels via the shared toggleSort/sortedBy helpers.
 let evSort = { key: "", dir: 1 };
 const evSortKeys = {
   time: (e) => e.time || "",
@@ -1161,10 +1181,6 @@ const evSortKeys = {
   kind: (e) => (e.kind || "").toLowerCase(),
   message: (e) => (e.message || "").toLowerCase(),
 };
-function setEvSort(key) { toggleSort(evSort, key, renderGlobalEvents); }
-function updateEvSortIndicators() {
-  updateSortIndicatorsFor("ei", evSort, ".events th.sortable[data-ev-sort]", "evSort");
-}
 function sortedEvents(events) {
   if (!evSort.key || !evSortKeys[evSort.key]) return events;
   return sortedBy(events.slice(), evSort, evSortKeys, "time");
@@ -1196,14 +1212,13 @@ function eventsWithinDateBounds(events) {
 function renderGlobalEvents() {
   const tbody = $("#events");
   if (!tbody) return;
-  updateEvSortIndicators();
+  updateSortHeaders("events");
   const events = sortedEvents(eventsWithinDateBounds(allEvents || []));
   const cnt = $("#event-count");
-  if (cnt) cnt.textContent = events.length ? `${events.length} shown` : "";
+  if (cnt) cnt.textContent = events.length ? String(events.length) : "";
   const more = $("#event-more");
   if (more) more.hidden = !eventHasMore;
   syncEventTargetFilters();
-  updateSectionNav();
   const grouped = $("#event-group") && $("#event-group").checked;
   if (!grouped) {
     // Loaded-but-filtered-out must not read as an empty log: the date bounds
@@ -1243,6 +1258,9 @@ function syncEventTargetFilter(id, allLabel, names) {
   const current = select.value;
   const values = [...new Set(names.filter(Boolean))].sort((a, b) => a.localeCompare(b));
   if (current && !values.includes(current)) values.push(current);
+  // Rebuilding the options of an open select closes it under the operator, so
+  // they are replaced only when the names changed.
+  if ([...select.options].slice(1).map((option) => option.value).join("\n") === values.join("\n")) return;
   select.replaceChildren(new Option(allLabel, ""), ...values.map((value) => new Option(value, value)));
   select.value = current;
 }
@@ -1331,7 +1349,7 @@ function fmtMonitorSource(src) {
 function unitCell(s) {
   // The init backend is system-wide (shown once in the daemon status), so the
   // per-row cell shows only the unit.
-  const unit = s.unit ? tpl`<span class="mono" title="${s.unit}">${s.unit}</span>` : tpl`<span class="muted">—</span>`;
+  const unit = s.unit ? tpl`<span class="mono" title="${s.unit}">${s.unit}</span>` : mutedDash;
   return tpl`<div class="unit-cell">${unit}</div>`;
 }
 
@@ -1352,7 +1370,7 @@ function policyCell(s) {
   // remediation_state is always sent (decorateRemediation covers every path).
   const state = s.remediation_state || backendStatusUnknown;
   // A paused service shows its state in the State column; don't repeat it here.
-  if (state === targetStatePaused) return tpl`<span class="muted">—</span>`;
+  if (state === targetStatePaused) return mutedDash;
   const cd = s.policy_cooldown ? tpl`<div class="muted mono">${s.policy_cooldown}</div>` : nothing;
   return tpl`<div class="policy-cell"><span class="${policyStateClass(state)}">${state}</span>${cd}</div>`;
 }
@@ -1416,7 +1434,7 @@ function operationMarkOutcome(status) {
 
 function activityDateCell(e) {
   const time = e && e.time;
-  if (!time) return tpl`<span class="muted">—</span>`;
+  if (!time) return mutedDash;
   const kind = e.kind || "";
   const detail = [kind, e.action, e.status].filter(Boolean).join(" ");
   const local = fmtLocalTime(time);
@@ -1434,169 +1452,473 @@ function nextRemediationCell(s) {
   }
   if (state === policyStateEligible) return tpl`<span class="ok">now</span>`;
   if (state === policyStatePending) return tpl`<span class="muted">${state}</span>`; // paused -> "—" (shown in State)
-  return tpl`<span class="muted">—</span>`;
+  return mutedDash;
 }
 
-// Service list state: latest fetched data plus the active search/status filter,
-// so typing or switching a filter re-renders from cache without a refetch.
+// Dashboard data: the latest fetched lists, so a filter or sort change
+// re-renders from cache without a refetch.
 let allServices = [];
 let latestSessionInventory = {};
-let sessionQuery = "";
-let sessionFilter = filterAll;
-let sessionSort = { key: "", dir: 1 };
 // The longest-running statement is the one an operator came to see.
 let dbQuerySort = { key: "running", dir: -1 };
 const expandedDBQueries = new Set();
-let svcQuery = "";
-let svcStatus = filterAll; // all | disabled | stopped | started | starting | collecting | monitored | failed
-let svcCategory = filterAll;
-let svcGrouped = false;
-let svcCollapsedGroups = new Set();
 // svcPinned lifts hand-picked services to the top of their panel (and group),
 // persisted with the rest of the UI state.
 let svcPinned = new Set();
-let svcSort = { key: "", dir: 1 };
-const splitServicePanels = {
-  container: {
-    query: "", status: filterAll, grouped: false, collapsedGroups: new Set(), sort: { key: "", dir: 1 },
-    surface: "container", section: "#containers-section", rows: "#container-rows", count: "#containers-count",
-    filterCount: "#container-count", filters: "#container-filters", search: "#container-search",
-    filterDataset: "cf", sortIndicator: "ci", sortAttr: "container-sort", sortDataset: "containerSort",
-    label: "containers", empty: "No containers.", emptyFiltered: "No containers match the filter.",
-  },
-  vm: {
-    query: "", status: filterAll, grouped: false, collapsedGroups: new Set(), sort: { key: "", dir: 1 },
-    surface: "vm", section: "#vms-section", rows: "#vm-rows", count: "#vms-count",
-    filterCount: "#vm-count", filters: "#vm-filters", search: "#vm-search",
-    filterDataset: "vf", sortIndicator: "vi", sortAttr: "vm-sort", sortDataset: "vmSort",
-    label: "virtual machines", empty: "No virtual machines.", emptyFiltered: "No virtual machines match the filter.",
-  },
-};
 let allMounts = [];
-let mountQuery = "";
-let mountStatus = filterAll;
-let mountCategory = filterAll;
-let mountGrouped = false;
-let mountCollapsedGroups = new Set();
-let mountSort = { key: "", dir: 1 };
 let expanded = new Set(); // open expansions, keyed "svc:<name>" / "wat:<name>" / "app:<name>"
 let allApps = [];
-let appQuery = "";
-let appCategory = filterAll;
-let appStatus = filterAll;
-let appGrouped = false;
-let appCollapsedGroups = new Set();
-let appSort = { key: "", dir: 1 };
 let allLibraries = [];
-let libraryQuery = "";
-let libraryCategory = filterAll;
-let libraryStatus = filterAll;
-let libraryGrouped = false;
-let libraryCollapsedGroups = new Set();
-let librarySort = { key: "", dir: 1 };
 const defaultMetricWindow = "24h";
 const serviceMetricStates = new Map();
 let daemonMetricWindow = defaultMetricWindow;
 let allWatches = [];
 let globalTargetsByValue = new Map();
 let globalTargetSyncPending = false;
-// watchPanelDescriptors is shared with the Go web builder: one descriptor owns
-// static shell IDs, columns and text. The Watches panel uses semantic
-// groups so a new check type does not need a parallel table or action layout.
-const watchPanels = Object.fromEntries(watchPanelDescriptors.map((descriptor) => [descriptor.key, {
-  ...descriptor,
-  query: "",
-  status: filterAll,
-  type: filterAll,
-  grouped: !!descriptor.grouped,
-  collapsedGroups: new Set(),
-  groupPrefix: descriptor.key,
-  groupPanel: "watch-" + descriptor.key,
-  groupLabel: descriptor.title.toLowerCase(),
-  sort: { key: "", dir: 1 },
-  typeSorts: {},
-  typeFilters: {},
-  section: "#" + descriptor.sectionId,
-  rows: "#" + descriptor.rowsId,
-  count: "#" + descriptor.countId,
-  filterCount: "#" + descriptor.filterCountId,
-  filters: "#" + descriptor.filtersId,
-  search: "#" + descriptor.searchId,
-  typeSelect: descriptor.typeId ? "#" + descriptor.typeId : undefined,
-  cols: descriptor.columns.length,
-}]));
+let globalTargetSignature = "";
+
+// ---- list panels ------------------------------------------------------------
+// A list panel is one filterable, sortable, groupable table. Its descriptor
+// names the columns (header and sort key), the status chips and the row
+// renderer; the search/status/group filters, the grouping and sort state, the
+// toolbar, the header and their persistence are shared (renderListPanel and
+// friends), so a new panel is a descriptor rather than a parallel set of
+// setters, bindings and saved fields.
+//
+//   key      the panel's data-panel attribute and its saved-state key
+//   id       prefix of the generated control ids (<id>-search, <id>-filters, …)
+//   label    plural noun used in the controls' accessible names
+//   columns  [{ key, label, title, sort }]; a column without sort is not sortable
+//   states   status chip values; stateOf(item) is the state a chip counts
+//   groupOf  the group (category) an item belongs to
+//   text     lowercase search haystack of an item
+//   items    the panel's source list; row(item) its lit rows; rowId its row id
+//   render   renders the panel (and the panels that share its data)
+function listPanel(def) {
+  return {
+    query: "", status: filterAll, category: filterAll, grouped: !!def.alwaysGrouped,
+    collapsedGroups: new Set(), sort: { key: "", dir: 1 },
+    groupBy: "category", allGroupsLabel: "all categories", dom: null,
+    ...def,
+  };
+}
+
+const categoryColumn = (fallback) => ({ key: "category", label: "Category", sort: (item) => categoryOf(item, fallback).toLowerCase() });
+const nameSort = (item) => displayName(item).toLowerCase();
+
+function servicePanel(key, id, surface, nameLabel, label) {
+  return listPanel({
+    key, id, label, surface,
+    columns: [
+      { key: "name", label: nameLabel, sort: nameSort },
+      categoryColumn(defaultCategoryService),
+      { key: "state", label: "State", sort: (s) => stateRank(serviceDisplayState(s)) },
+      { key: "uptime", label: "Uptime", sort: (s) => numericSortValue(s.uptime_seconds) },
+      { key: "cpu", label: "CPU total", sort: (s) => (s.cpu_ready ? numericSortValue(s.cpu) : 0) },
+      { key: "memory", label: "Memory", sort: (s) => numericSortValue(s.rss) },
+      { key: "fds", label: "FDs", sort: (s) => numericSortValue(s.fds) },
+      { key: "io", label: "IO R/W", sort: (s) => numericSortValue(s.io_read) + numericSortValue(s.io_write) },
+      { key: "last", label: "Last activity", sort: lastEventTime },
+      { key: "strays", label: "Strays", title: "Processes in the service's control group that no selector claims", sort: serviceStrayCount },
+      { key: "actions", label: "Actions" },
+    ],
+    states: serviceStatusFilterStates,
+    stateOf: serviceDisplayState,
+    groupOf: (s) => categoryOf(s, defaultCategoryService),
+    text: serviceSearchText,
+    items: () => (allServices || []).filter((s) => serviceSurfaceOf(s) === surface),
+    row: serviceRowHTML,
+    rowId: (s) => `svc-row-${s.name}`,
+    order: orderServices,
+    render: renderServices,
+  });
+}
+
+function artifactPanel(def) {
+  return listPanel({
+    stateOf: appStateText,
+    groupOf: (item) => categoryOf(item, def.surface),
+    text: (item) => artifactSearchText(item, def.surface),
+    row: (item) => renderArtifactRow(item, listPanels[def.key]),
+    rowId: (item) => `${def.id}-row-${item.name}`,
+    ...def,
+  });
+}
+
+const artifactColumns = (nameLabel, surface) => [
+  { key: "name", label: nameLabel, sort: nameSort },
+  categoryColumn(surface),
+  { key: "state", label: "Status", sort: appStateRank },
+  { key: "version", label: "Version", sort: (item) => (item.version_short || item.version || "").toLowerCase() },
+];
+
+const watchPanelDescriptor = watchPanelDescriptors[0];
+
+const listPanels = {
+  services: servicePanel("services", "svc", serviceSurfaceRegular, "Service", "services"),
+  containers: servicePanel("containers", "container", serviceSurfaceContainer, "Container", "containers"),
+  vms: servicePanel("vms", "vm", serviceSurfaceVM, "VM", "virtual machines"),
+  // Watches are always grouped (system, storage, network, security): each
+  // group holds one table per check type, with that type's own columns.
+  [watchPanelDescriptor.key]: listPanel({
+    key: watchPanelDescriptor.key, id: "watch", label: "watches",
+    alwaysGrouped: true, groupBy: "group", allGroupsLabel: "all watch groups",
+    typeSorts: {}, typeFilters: {},
+    states: [targetStateDisabled, targetStateOK, targetStateStarting, targetStateWarning, targetStateStale, targetStateFailed],
+    counts: watchFilterCounts,
+    statusMatches: watchMatchesStatus,
+    groupOf: watchGroupOf,
+    text: watchSearchText,
+    items: () => allWatches || [],
+    body: (list) => renderWatchGroups(list),
+    rowId: (w) => `wat-row-${w.name}`,
+    order: (list) => list.sort((a, b) => compareSortValues(nameSort(a), nameSort(b))),
+    refresh: "watches", refreshLabel: "Run an extra check of every enabled watch now",
+    render: renderWatches,
+  }),
+  // The sessions panel shares the toolbar and its state; its two tables
+  // (terminal sessions and database statements) are its own.
+  sessions: listPanel({
+    key: "sessions", id: "session", label: "sessions", statusLabel: "type",
+    states: sessionTypeFilterStates,
+    render: renderSessions,
+  }),
+  mounts: listPanel({
+    key: "mounts", id: "mount", label: "mount units", groupBy: "group", allGroupsLabel: "all groups",
+    columns: [
+      { key: "name", label: "Name", sort: nameSort },
+      { ...categoryColumn(defaultCategoryStorage), label: "Group" },
+      { key: "path", label: "Path", sort: (m) => (m.path || "").toLowerCase() },
+      { key: "mounted", label: "Mounted", sort: mountStateRank },
+      { key: "refcount", label: "Refcount", sort: (m) => numericSortValue(m.refcount) },
+      { key: "processes", label: "Processes", sort: (m) => mountBlockers(m).length },
+      { key: "users", label: "Users", sort: (m) => mountUserNames(m).length },
+      { key: "state", label: "State", sort: mountStateRank },
+      { key: "actions", label: "Actions", hideLabel: true },
+    ],
+    states: mountStatusFilterStates,
+    stateOf: mountStateText,
+    statusMatches: (m, status) => mountStateText(m) === status || mountBaseStateText(m) === status,
+    groupOf: (m) => categoryOf(m, defaultCategoryStorage),
+    text: mountSearchText,
+    items: () => allMounts || [],
+    row: mountRow,
+    rowId: mountRowId,
+    render: renderMounts,
+  }),
+  apps: artifactPanel({
+    key: "apps", id: "app", label: "applications", surface: defaultCategoryApp,
+    columns: [...artifactColumns("Application", defaultCategoryApp), { key: "last", label: "Last activity", sort: lastEventTime }],
+    states: appStatusFilterStates,
+    items: () => allApps || [],
+    detailLabel: "application details",
+    expansionKey: appExpansionKey,
+    renderExpansion: renderAppExpansion,
+    refresh: "applications", refreshLabel: "Re-check every application now",
+    render: renderApps,
+  }),
+  libraries: artifactPanel({
+    key: "libraries", id: "library", label: "libraries", surface: defaultCategoryLibrary,
+    columns: artifactColumns("Library", defaultCategoryLibrary),
+    states: libraryStatusFilterStates,
+    items: () => allLibraries || [],
+    detailLabel: "library details",
+    expansionKey: libraryExpansionKey,
+    renderExpansion: renderLibraryExpansion,
+    refresh: "libraries", refreshLabel: "Re-check every library now",
+    render: renderLibraries,
+  }),
+};
+const watchPanel = listPanels[watchPanelDescriptor.key];
+const sessionPanel = listPanels.sessions;
+const servicePanels = [listPanels.services, listPanels.containers, listPanels.vms];
+
+function servicePanelOf(s) {
+  const surface = serviceSurfaceOf(s);
+  return servicePanels.find((p) => p.surface === surface) || listPanels.services;
+}
+
+// targetKinds is what the dashboard can address by name: the global search
+// lists them, a #<prefix><name> fragment opens one, and each knows the panel
+// that shows it. A mount has no expansion, so no prefix.
+const targetKinds = [
+  { kind: globalTargetService, prefix: expansionPrefixService, items: () => allServices || [], panelOf: servicePanelOf, render: renderServices },
+  { kind: globalTargetWatch, prefix: expansionPrefixWatch, items: () => allWatches || [], panelOf: () => watchPanel, render: renderWatches },
+  { kind: globalTargetApplication, prefix: expansionPrefixApp, items: () => allApps || [], panelOf: () => listPanels.apps, render: renderApps },
+  { kind: globalTargetLibrary, prefix: expansionPrefixLibrary, items: () => allLibraries || [], panelOf: () => listPanels.libraries, render: renderLibraries },
+  { kind: globalTargetMount, prefix: "", items: () => allMounts || [], panelOf: () => listPanels.mounts, render: renderMounts },
+];
+
+function targetKindOfKey(key) {
+  return targetKinds.find((k) => k.prefix && key.startsWith(k.prefix)) || null;
+}
+
+function panelFilterActive(p) {
+  return !!p.query || p.status !== filterAll || p.category !== filterAll;
+}
+
+function panelMatches(p, item) {
+  if (p.category !== filterAll && p.groupOf(item) !== p.category) return false;
+  if (p.status !== filterAll && !(p.statusMatches ? p.statusMatches(item, p.status) : p.stateOf(item) === p.status)) return false;
+  return !p.query || p.text(item).includes(p.query);
+}
+
+// updatePanel is the one way a control changes a panel: apply, re-render, save.
+function updatePanel(p, patch) {
+  Object.assign(p, patch);
+  p.render();
+  saveUIState();
+}
+
+function resetPanelFilters(p) {
+  p.query = "";
+  p.status = filterAll;
+  p.category = filterAll;
+}
+
+function togglePanelGroup(p, group) {
+  if (!group) return;
+  if (p.collapsedGroups.has(group)) p.collapsedGroups.delete(group);
+  else p.collapsedGroups.add(group);
+  updatePanel(p, {});
+}
+
+// toggleAllPanelGroups collapses every group the current filter shows, or
+// expands them all when they already are collapsed.
+function toggleAllPanelGroups(p) {
+  const groups = sortedGroupValues(p.items().filter((item) => panelMatches(p, item)), p.groupOf);
+  const allCollapsed = groups.length > 0 && groups.every((group) => p.collapsedGroups.has(group));
+  groups.forEach((group) => (allCollapsed ? p.collapsedGroups.delete(group) : p.collapsedGroups.add(group)));
+  updatePanel(p, {});
+}
+
+function sortArrow(sort, key) {
+  if (sort.key !== key) return "";
+  return sort.dir > 0 ? " ▲" : " ▼";
+}
+
+function sortAriaValue(sort, key) {
+  if (!key || key !== sort.key) return "none";
+  return sort.dir > 0 ? "ascending" : "descending";
+}
+
+// sortScopes are the sortable tables: every list panel with columns, by its
+// key, and the hand-written tables that keep a sort of their own. A header
+// cell names its scope through the closest data-sort-scope.
+const sortScopes = {
+  "db-queries": { get sort() { return dbQuerySort; }, render: () => renderSessions() },
+  events: { get sort() { return evSort; }, render: () => renderGlobalEvents() },
+};
+
+function sortScope(scope) {
+  return listPanels[scope] || sortScopes[scope] || null;
+}
+
+// toggleSort flips the direction when the same column is re-selected, otherwise
+// selects the new column ascending, then re-renders.
+function toggleSort(scope, key) {
+  const owner = sortScope(scope);
+  if (!owner || !key) return;
+  const sort = owner.sort;
+  if (sort.key === key) sort.dir = -sort.dir;
+  else { sort.key = key; sort.dir = 1; }
+  owner.render();
+  saveUIState();
+}
+
+// updateSortHeaders refreshes the arrow and aria-sort of a hand-written
+// table's headers; a list panel's header is re-rendered with them instead.
+function updateSortHeaders(scope) {
+  const owner = sortScope(scope);
+  if (!owner) return;
+  document.querySelectorAll(`[data-sort-scope="${scope}"] > thead th.sortable[data-sort]`).forEach((th) => {
+    const key = th.dataset.sort || "";
+    th.tabIndex = 0;
+    th.setAttribute("aria-sort", sortAriaValue(owner.sort, key));
+    const ind = th.querySelector(".sort-ind");
+    if (ind) ind.textContent = sortArrow(owner.sort, key);
+  });
+}
+
+function renderPanelHead(p) {
+  if (!p.columns || !p.dom.head) return;
+  litRender(tpl`<tr>${p.columns.map((c) => (c.sort
+    ? tpl`<th scope="col" class="sortable" tabindex="0" data-col="${c.key}" data-sort="${c.key}" title="${c.title || nothing}" aria-sort="${sortAriaValue(p.sort, c.key)}">${c.label}<span class="sort-ind">${sortArrow(p.sort, c.key)}</span></th>`
+    : tpl`<th scope="col" class="${c.key}" data-col="${c.key}">${c.hideLabel ? tpl`<span class="visually-hidden">${c.label}</span>` : c.label}</th>`))}</tr>`, p.dom.head);
+}
+
+// filterChips renders a status filter: "all" plus one chip per state with its
+// count. A state nothing is in stays out of the row, unless it is the selected
+// one — an emptied selection must remain visible to be switched away from.
+function filterChips(states, counts, active) {
+  return [filterAll, ...states].map((state) => {
+    const pressed = state === active;
+    const n = counts[state] || 0;
+    return tpl`<button type="button" data-filter="${state}" class="${pressed ? "f-active" : ""}" aria-pressed="${pressed ? domBoolTrue : domBoolFalse}" ?hidden=${!n && state !== filterAll && !pressed}>${state.replace(/_/g, " ")} <span class="muted">${n}</span></button>`;
+  });
+}
+
+function panelGroupControls(p, view) {
+  const available = view.visibleGroups.length > 1;
+  const select = view.groups.size > 1
+    ? tpl`<select id="${p.id}-category" data-panel-category title="Filter by ${p.groupBy}" aria-label="Filter ${p.label} by ${p.groupBy}">
+        <option value="${filterAll}" .selected=${p.category === filterAll}>${p.allGroupsLabel}</option>
+        ${[...view.groups.keys()].map((group) => tpl`<option value="${group}" .selected=${p.category === group}>${group} (${view.groups.get(group)})</option>`)}
+      </select>`
+    : nothing;
+  if (!available) return select;
+  const allCollapsed = view.visibleGroups.every((group) => p.collapsedGroups.has(group));
+  const groupTitle = p.grouped ? `Ungroup ${p.label}` : `Group ${p.label} by ${p.groupBy}`;
+  const allTitle = allCollapsed ? `Expand all ${p.label} groups` : `Collapse all ${p.label} groups`;
+  return tpl`${select}
+    ${p.alwaysGrouped ? nothing : tpl`<button type="button" id="${p.id}-group-toggle" class="icon-btn" data-panel-group title="${groupTitle}" aria-label="${groupTitle}" aria-pressed="${p.grouped ? domBoolTrue : domBoolFalse}"><span aria-hidden="true">▦</span></button>`}
+    <button type="button" id="${p.id}-groups-toggle" class="icon-btn" data-panel-groups ?disabled=${!p.grouped} title="${allTitle}" aria-label="${allTitle}"><span aria-hidden="true">${allCollapsed ? "▾" : "▴"}</span></button>`;
+}
+
+// renderPanelToolbar draws a panel's controls from its state. The search box
+// carries no value binding: lit must not rewrite what is being typed, so the
+// box is only brought back in step when the state changed behind it (a restore,
+// a reset from the global search) and it is not the focused element.
+function renderPanelToolbar(p, view) {
+  const controls = p.dom.controls;
+  if (!controls) return;
+  const refresh = p.refresh && me.can_act
+    ? tpl`<button type="button" id="${p.id}-refresh" class="icon-btn" data-refresh-panel="${p.refresh}" title="${p.refreshLabel}" aria-label="${p.refreshLabel}"><span aria-hidden="true">↻</span></button>`
+    : nothing;
+  litRender(tpl`
+    <label for="${p.id}-search" class="visually-hidden">Filter ${p.label}</label>
+    <input id="${p.id}-search" type="search" data-panel-search placeholder="Filter ${p.label}…" aria-describedby="search-shortcut-hint">
+    <span id="${p.id}-filters" class="filters" role="group" aria-label="Filter ${p.label} by ${p.statusLabel || "state"}">${filterChips(p.states, view.counts, p.status)}</span>
+    <span class="panel-tools">
+      <span id="${p.id}-count" class="muted">${panelFilterActive(p) ? `showing ${view.shown} of ${view.total}` : ""}</span>
+      ${panelGroupControls(p, view)}${refresh}
+    </span>`, controls);
+  const search = controls.querySelector("[data-panel-search]");
+  if (search && search !== document.activeElement && search.value.trim().toLowerCase() !== p.query) search.value = p.query;
+}
+
+function groupCounts(items, groupOf) {
+  const counts = new Map();
+  items.forEach((item) => counts.set(groupOf(item), (counts.get(groupOf(item)) || 0) + 1));
+  return new Map([...counts.entries()].sort((a, b) => a[0].localeCompare(b[0], undefined, { numeric: true, sensitivity: "base" })));
+}
+
+// setPanelPresence shows a panel only while it has something to list, and
+// prints that total beside its title. Returns whether there is content.
+function setPanelPresence(p, total) {
+  setPanelVisible(p.dom.section, total > 0);
+  if (p.dom.count) p.dom.count.textContent = total ? String(total) : "";
+  return total > 0;
+}
+
+// renderListPanel is the whole life of a list panel's table: filter the source,
+// sort it, group it, draw the toolbar, the header and the rows.
+function renderListPanel(p) {
+  if (!p.dom) return;
+  const source = p.items();
+  if (!setPanelPresence(p, source.length)) {
+    litRender(nothing, p.dom.rows);
+    return;
+  }
+  const groups = groupCounts(source, p.groupOf);
+  // A single group cannot filter anything; drop a selection that would
+  // otherwise filter invisibly, as would one naming a group that is gone.
+  if (groups.size < 2 || !groups.has(p.category)) p.category = filterAll;
+  const list = source.filter((item) => panelMatches(p, item));
+  const column = p.columns && p.columns.find((c) => c.sort && c.key === p.sort.key);
+  if (column) sortedBy(list, p.sort, { [column.key]: column.sort, name: nameSort }, "name");
+  if (p.order) p.order(list, !!column);
+  const visibleGroups = sortedGroupValues(list, p.groupOf);
+  p.collapsedGroups.forEach((group) => { if (!visibleGroups.includes(group)) p.collapsedGroups.delete(group); });
+  if (visibleGroups.length < 2 && !p.alwaysGrouped) p.grouped = false;
+  const counts = p.counts ? p.counts(source) : stateCounts(source, p.stateOf, p.states);
+  renderPanelToolbar(p, { counts, groups, visibleGroups, shown: list.length, total: source.length });
+  renderPanelHead(p);
+  let content;
+  if (!list.length) content = tpl`<tr><td colspan="${panelColumnCount(p)}" class="muted">No ${p.label} match the filter.</td></tr>`;
+  else if (p.body) content = p.body(list);
+  else content = p.grouped ? renderGroupedRows(p, list) : list.flatMap(p.row);
+  litRender(content, p.dom.rows);
+}
+
+function panelColumnCount(p) {
+  return p.columns ? p.columns.length : 1;
+}
+
+// renderGroupedRows draws a panel's rows under one collapsible heading per
+// group; sorting by the category column also orders the groups.
+function renderGroupedRows(p, list) {
+  const groups = new Map();
+  list.forEach((item) => {
+    const group = p.groupOf(item);
+    if (!groups.has(group)) groups.set(group, []);
+    groups.get(group).push(item);
+  });
+  const dir = p.sort.key === "category" && p.sort.dir === -1 ? -1 : 1;
+  return [...groups.entries()].sort((a, b) =>
+    a[0].localeCompare(b[0], undefined, { numeric: true, sensitivity: "base" }) * dir
+  ).map(([group, items]) => [groupHeaderRow(p, group, items), p.collapsedGroups.has(group) ? nothing : items.map(p.row)]);
+}
+
+function groupHeaderRow(p, group, items) {
+  const collapsed = p.collapsedGroups.has(group);
+  return tpl`<tr class="group-row">
+    <td colspan="${panelColumnCount(p)}"><button type="button" class="row-toggle group-toggle" data-group-name="${group}" aria-expanded="${collapsed ? domBoolFalse : domBoolTrue}" aria-controls="${p.rowId(items[0])}" aria-label="${groupToggleAriaLabel(group, items.length, collapsed)}"><span class="exp" aria-hidden="true">${collapsed ? "▸" : "▾"}</span>${group} <span class="muted">${items.length}</span></button></td>
+  </tr>`;
+}
+
+function panelOfElement(el) {
+  const section = el && el.closest("[data-panel]");
+  return (section && listPanels[section.dataset.panel]) || null;
+}
+
+function initListPanels() {
+  for (const p of Object.values(listPanels)) {
+    const section = document.querySelector(`[data-panel="${p.key}"]`);
+    if (!section) continue;
+    const table = section.querySelector(":scope > table");
+    p.dom = {
+      section,
+      controls: section.querySelector(":scope > .panel-controls"),
+      head: table && table.querySelector(":scope > thead"),
+      rows: table && table.querySelector(":scope > tbody"),
+      count: section.querySelector(".summary-title .muted"),
+    };
+    if (table) table.dataset.sortScope = p.key;
+  }
+}
 
 const UI_STATE_KEY = "sermo-ui-state";
 const KEYBOARD_SHORTCUTS_KEY = "sermo-keyboard-shortcuts";
 const BROWSER_NOTIFY_KEY = "sermo-browser-notify";
+const VIEW_KEY = "sermo-view";
+
+function restoredSort(saved, fallback) {
+  return saved && typeof saved.key === "string" ? { key: saved.key, dir: saved.dir === -1 ? -1 : 1 } : fallback;
+}
+
+function restorePanelState(p, saved) {
+  if (!saved || typeof saved !== "object") return;
+  if (typeof saved.query === "string") p.query = saved.query.trim().toLowerCase();
+  if (p.states.includes(saved.status)) p.status = saved.status;
+  if (typeof saved.category === "string") p.category = saved.category;
+  if (typeof saved.grouped === "boolean" && !p.alwaysGrouped) p.grouped = saved.grouped;
+  if (Array.isArray(saved.collapsedGroups)) p.collapsedGroups = new Set(saved.collapsedGroups);
+  p.sort = restoredSort(saved.sort, p.sort);
+  if (p.typeSorts && saved.typeSorts && typeof saved.typeSorts === "object") p.typeSorts = saved.typeSorts;
+  if (p.typeFilters && saved.typeFilters && typeof saved.typeFilters === "object") p.typeFilters = saved.typeFilters;
+}
 
 function restoreUIState() {
   try {
     const raw = localStorage.getItem(UI_STATE_KEY);
     if (!raw) return;
     const s = JSON.parse(raw);
-    if (typeof s.svcQuery === "string") svcQuery = s.svcQuery;
-    if (typeof s.svcStatus === "string") svcStatus = normalizeServiceStatusFilter(s.svcStatus);
-    if (typeof s.svcCategory === "string") svcCategory = s.svcCategory;
-    if (typeof s.svcGrouped === "boolean") svcGrouped = s.svcGrouped;
-    if (s.svcSort && typeof s.svcSort.key === "string") {
-      svcSort = { key: s.svcSort.key, dir: s.svcSort.dir === -1 ? -1 : 1 };
-    }
-    if (s.sessionSort && typeof s.sessionSort.key === "string") {
-      sessionSort = { key: s.sessionSort.key, dir: s.sessionSort.dir === -1 ? -1 : 1 };
-    }
-    if (s.dbQuerySort && typeof s.dbQuerySort.key === "string") {
-      dbQuerySort = { key: s.dbQuerySort.key, dir: s.dbQuerySort.dir === -1 ? -1 : 1 };
-    }
-    if (s.splitServicePanels && typeof s.splitServicePanels === "object") {
-      for (const [key, saved] of Object.entries(s.splitServicePanels)) {
-        const panel = splitServicePanels[key];
-        if (!panel || !saved) continue;
-        if (typeof saved.query === "string") panel.query = saved.query;
-        if (typeof saved.status === "string") panel.status = normalizeServiceStatusFilter(saved.status);
-        if (saved.sort && typeof saved.sort.key === "string") {
-          panel.sort = { key: saved.sort.key, dir: saved.sort.dir === -1 ? -1 : 1 };
-        }
-        if (saved.typeSorts && typeof saved.typeSorts === "object") panel.typeSorts = saved.typeSorts;
-        if (saved.typeFilters && typeof saved.typeFilters === "object") panel.typeFilters = saved.typeFilters;
-        if (typeof saved.grouped === "boolean") panel.grouped = saved.grouped;
-        if (Array.isArray(saved.collapsedGroups)) panel.collapsedGroups = new Set(saved.collapsedGroups);
-      }
-    }
-    if (typeof s.mountQuery === "string") mountQuery = s.mountQuery;
-    if (typeof s.mountStatus === "string") mountStatus = normalizeMountStatusFilter(s.mountStatus);
-    if (typeof s.mountCategory === "string") mountCategory = s.mountCategory;
-    if (typeof s.mountGrouped === "boolean") mountGrouped = s.mountGrouped;
-    if (s.mountSort && typeof s.mountSort.key === "string") {
-      mountSort = { key: s.mountSort.key, dir: s.mountSort.dir === -1 ? -1 : 1 };
-    }
-    if (typeof s.appQuery === "string") appQuery = s.appQuery;
-    if (typeof s.appStatus === "string") appStatus = s.appStatus;
-    if (s.appSort && typeof s.appSort.key === "string") {
-      appSort = { key: s.appSort.key, dir: s.appSort.dir === -1 ? -1 : 1 };
-    }
-    if (typeof s.libraryQuery === "string") libraryQuery = s.libraryQuery;
-    if (typeof s.libraryStatus === "string") libraryStatus = s.libraryStatus;
-    if (s.librarySort && typeof s.librarySort.key === "string") {
-      librarySort = { key: s.librarySort.key, dir: s.librarySort.dir === -1 ? -1 : 1 };
-    }
-    if (s.watchPanels && typeof s.watchPanels === "object") {
-      for (const [key, saved] of Object.entries(s.watchPanels)) {
-        const panel = watchPanels[key];
-        if (!panel || !saved) continue;
-        if (typeof saved.query === "string") panel.query = saved.query;
-        if (typeof saved.status === "string") panel.status = normalizeWatchStatusFilter(saved.status);
-        if (typeof saved.type === "string") panel.type = saved.type;
-        if (saved.sort && typeof saved.sort.key === "string") {
-          panel.sort = { key: saved.sort.key, dir: saved.sort.dir === -1 ? -1 : 1 };
-        }
-        if (typeof saved.grouped === "boolean") panel.grouped = saved.grouped;
-        if (Array.isArray(saved.collapsedGroups)) panel.collapsedGroups = new Set(saved.collapsedGroups);
-      }
-    }
-    if (Array.isArray(s.expanded)) {
-      expanded = new Set(s.expanded.filter((k) => typeof k === "string"));
-    }
+    const panels = s.panels && typeof s.panels === "object" ? s.panels : {};
+    Object.values(listPanels).forEach((p) => restorePanelState(p, panels[p.key]));
+    dbQuerySort = restoredSort(s.dbQuerySort, dbQuerySort);
+    if (Array.isArray(s.svcPinned)) svcPinned = new Set(s.svcPinned);
+    if (Array.isArray(s.expanded)) expanded = new Set(s.expanded.filter((k) => typeof k === "string"));
     if (s.serviceMetricStates && typeof s.serviceMetricStates === "object") {
       for (const [name, state] of Object.entries(s.serviceMetricStates)) {
         if (!state || typeof state !== "object") continue;
@@ -1606,13 +1928,6 @@ function restoreUIState() {
       }
     }
     if (typeof s.daemonMetricWindow === "string") daemonMetricWindow = s.daemonMetricWindow;
-    if (typeof s.appGrouped === "boolean") appGrouped = s.appGrouped;
-    if (typeof s.libraryGrouped === "boolean") libraryGrouped = s.libraryGrouped;
-    if (Array.isArray(s.svcCollapsedGroups)) svcCollapsedGroups = new Set(s.svcCollapsedGroups);
-    if (Array.isArray(s.svcPinned)) svcPinned = new Set(s.svcPinned);
-    if (Array.isArray(s.appCollapsedGroups)) appCollapsedGroups = new Set(s.appCollapsedGroups);
-    if (Array.isArray(s.libraryCollapsedGroups)) libraryCollapsedGroups = new Set(s.libraryCollapsedGroups);
-    if (Array.isArray(s.mountCollapsedGroups)) mountCollapsedGroups = new Set(s.mountCollapsedGroups);
     if (s.eventFilters && typeof s.eventFilters === "object") restoreEventFilters(s.eventFilters);
   } catch (_) {}
 }
@@ -1630,13 +1945,12 @@ function restoreEventFilters(ef) {
     }
     el.value = v;
   };
-  setVal("#event-service", ef.service);
-  setVal("#event-watch", ef.watch);
-  setVal("#event-kind", ef.kind);
-  setVal("#event-status", ef.status);
-  if (ef.range) setVal("#event-range", ef.range);
-  setVal("#event-from", ef.from);
-  setVal("#event-to", ef.to);
+  for (const field of eventFilterFields) {
+    if (field.key !== "range" || ef.range) setVal(field.id, ef[field.key]);
+  }
+  // An exact date still filtering must not hide behind a closed disclosure.
+  const more = $("#event-more-controls");
+  if (more && (ef.from || ef.to)) more.open = true;
   const err = $("#event-errors");
   if (err && typeof ef.onlyErrors === "boolean") err.checked = ef.onlyErrors;
   const grp = $("#event-group");
@@ -1646,69 +1960,155 @@ function restoreEventFilters(ef) {
 function saveUIState() {
   try {
     localStorage.setItem(UI_STATE_KEY, JSON.stringify({
-      svcQuery, svcStatus, svcCategory, svcGrouped, svcSort, sessionSort, dbQuerySort,
-      mountQuery, mountStatus, mountCategory, mountGrouped, mountSort,
-      appQuery, appStatus, appSort, appGrouped,
-      libraryQuery, libraryStatus, librarySort, libraryGrouped,
+      panels: Object.fromEntries(Object.values(listPanels).map((p) => [p.key, {
+        query: p.query, status: p.status, category: p.category, grouped: p.grouped,
+        collapsedGroups: [...p.collapsedGroups], sort: p.sort, typeSorts: p.typeSorts, typeFilters: p.typeFilters,
+      }])),
+      dbQuerySort,
       serviceMetricStates: Object.fromEntries(serviceMetricStates), daemonMetricWindow,
       expanded: [...expanded],
-      svcCollapsedGroups: [...svcCollapsedGroups],
       svcPinned: [...svcPinned],
-      appCollapsedGroups: [...appCollapsedGroups],
-      libraryCollapsedGroups: [...libraryCollapsedGroups],
-      mountCollapsedGroups: [...mountCollapsedGroups],
       eventFilters: {
-        service: ($("#event-service") || {}).value || "",
-        watch: ($("#event-watch") || {}).value || "",
-        kind: ($("#event-kind") || {}).value || "",
-        status: ($("#event-status") || {}).value || "",
-        range: ($("#event-range") || {}).value || "",
-        from: ($("#event-from") || {}).value || "",
-        to: ($("#event-to") || {}).value || "",
+        ...Object.fromEntries(eventFilterFields.map((field) => [field.key, eventFilterValue(field)])),
         onlyErrors: !!($("#event-errors") && $("#event-errors").checked),
         group: !($("#event-group") && !$("#event-group").checked),
       },
-      watchPanels: Object.fromEntries(Object.entries(watchPanels).map(([k, p]) => [k, {
-        query: p.query, status: p.status, type: p.type, grouped: p.grouped,
-        collapsedGroups: [...p.collapsedGroups], sort: p.sort, typeSorts: p.typeSorts, typeFilters: p.typeFilters,
-      }])),
-      splitServicePanels: Object.fromEntries(Object.entries(splitServicePanels).map(([k, p]) => [k, {
-        query: p.query, status: p.status, grouped: p.grouped,
-        collapsedGroups: [...p.collapsedGroups], sort: p.sort,
-      }])),
     }));
   } catch (_) {}
 }
 
-function applyUIStateToControls() {
-  const svcSearch = $("#svc-search");
-  if (svcSearch) svcSearch.value = svcQuery;
-  syncFilterButtons("#svc-filters", "f", svcStatus);
-  const svcCategorySelect = $("#svc-category");
-  if (svcCategorySelect) svcCategorySelect.value = svcCategory;
-  for (const key of Object.keys(splitServicePanels)) syncSplitServicePanelControls(key);
-  const mountSearch = $("#mount-search");
-  if (mountSearch) mountSearch.value = mountQuery;
-  syncFilterButtons("#mount-filters", "mf", mountStatus);
-  const mountCategorySelect = $("#mount-category");
-  if (mountCategorySelect) mountCategorySelect.value = mountCategory;
-  const appSearch = $("#app-search");
-  if (appSearch) appSearch.value = appQuery;
-  syncFilterButtons("#app-filters", "af", appStatus);
-  const librarySearch = $("#library-search");
-  if (librarySearch) librarySearch.value = libraryQuery;
-  syncFilterButtons("#library-filters", "lf", libraryStatus);
-  for (const key of Object.keys(watchPanels)) {
-    const panel = watchPanels[key];
-    const search = $(panel.search);
-    if (search) search.value = panel.query;
-    syncWatchFilterActive(key);
-    const typeSelect = $(panel.typeSelect);
-    if (typeSelect && panel.type) typeSelect.value = panel.type;
-  }
+// ---- views ------------------------------------------------------------------
+// A view is the set of panels carrying its data-view; its tab shows it. "all"
+// stacks every panel, as one long page.
+const viewAll = "all";
+const viewServices = "services";
+const viewWatches = "watches";
+const viewMounts = "mounts";
+const viewSessions = "sessions";
+const viewSoftware = "software";
+const viewEvents = "events";
+const viewSystem = "system";
+const defaultView = viewServices;
+// viewOrder is the order views are tried in when the one on screen has nothing
+// to show: a host with no services opens on its watches, not on an empty page.
+// The events view is never empty, so the search always ends.
+const viewOrder = [viewServices, viewWatches, viewSessions, viewMounts, viewSoftware, viewEvents, viewSystem];
+let currentView = defaultView;
+
+function viewPanels(view) {
+  return [...document.querySelectorAll("[data-view]")].filter((el) => el.dataset.view === view);
 }
 
-restoreUIState();
+// viewHasContent reports whether any panel of a view has something to list.
+function viewHasContent(view) {
+  return viewPanels(view).some((el) => !el.classList.contains("panel-hidden"));
+}
+
+// setView shows one view. What marks it current is whatever carries its
+// data-view-tab: a tab in the bar or, for the views the overview tiles lead
+// to, the tile.
+function setView(view) {
+  currentView = view === viewAll || viewPanels(view).length ? view : defaultView;
+  document.querySelectorAll("[data-view]").forEach((el) => {
+    el.classList.toggle("view-hidden", currentView !== viewAll && el.dataset.view !== currentView);
+  });
+  document.querySelectorAll("[data-view-tab]").forEach((tab) => {
+    tab.setAttribute("aria-current", tab.dataset.viewTab === currentView ? domBoolTrue : domBoolFalse);
+  });
+  try { localStorage.setItem(VIEW_KEY, currentView); } catch (_) {}
+}
+
+// openCollapsedView opens the panels of the view on screen when every one with
+// something to list is collapsed. A panel left closed — on the "all" page, or
+// on the stacked page this one replaces, which saved under the same keys — would
+// otherwise make its view a title and nothing else.
+function openCollapsedView() {
+  if (currentView === viewAll) return;
+  const panels = viewPanels(currentView).filter((el) => !el.classList.contains("panel-hidden"));
+  if (!panels.some((el) => el.open)) panels.forEach((el) => { el.open = true; });
+}
+
+// openView is a view asked for by its tile or tab.
+function openView(view) {
+  setView(view);
+  openCollapsedView();
+}
+
+// revealPanel brings a panel on screen whatever view it is in: switches to its
+// view when another one is showing, opens it and, unless told not to, scrolls
+// to it.
+function revealPanel(section, scroll = true) {
+  if (!section) return;
+  const view = section.dataset.view;
+  if (view && currentView !== viewAll && view !== currentView) setView(view);
+  if (section.tagName === "DETAILS") section.open = true;
+  if (scroll) scrollToSection(section);
+}
+
+function sessionCount() {
+  const inventory = latestSessionInventory || {};
+  return (inventory.ssh || []).length + (inventory.terminal || []).length + (inventory.database || []).length;
+}
+
+// viewSummaries is what a tab says about its view: how many targets it holds
+// and the worst state among them, so a problem is one tab away. The views the
+// overview tiles lead to say the same on their tile.
+function viewSummaries() {
+  const level = (critical, warning) => (critical ? healthStatusCritical : (warning ? healthStatusWarning : ""));
+  const software = [...(allApps || []), ...(allLibraries || [])];
+  return {
+    software: {
+      count: software.length,
+      level: level(software.some((a) => appStateText(a) === targetStateFailed), software.some((a) => appStateText(a) === targetStateWarning)),
+    },
+  };
+}
+
+// refreshChrome asks for the attention row, the tab bar, the favicon and the
+// title to be brought up to date. They all derive from the same lists, and
+// every renderer that changes one of those lists asks: a dashboard poll renders
+// eight panels in a row, so the requests of one burst are answered once, in a
+// microtask (not a frame: a background tab still owes its favicon and title).
+let chromePending = false;
+function refreshChrome() {
+  if (chromePending) return;
+  chromePending = true;
+  queueMicrotask(() => {
+    chromePending = false;
+    renderAttention();
+    renderNav();
+  });
+}
+
+// renderNav refreshes the tabs. A tab whose panels all are empty is hidden
+// once the first complete snapshot says so — before it, an empty panel only
+// means its data has not arrived, and hiding its tab would flicker the bar and
+// throw a saved view back to the default.
+function renderNav() {
+  const summaries = viewSummaries();
+  const empty = (view) => firstSnapshotDone && !viewHasContent(view);
+  document.querySelectorAll("#section-nav [data-view-tab]").forEach((tab) => {
+    const view = tab.dataset.viewTab;
+    if (view === viewAll) return;
+    tab.hidden = empty(view);
+    const summary = summaries[view] || { count: 0, level: "" };
+    const count = tab.querySelector("[data-nav-count]");
+    if (count) count.textContent = summary.count ? String(summary.count) : "";
+    const dot = tab.querySelector("[data-nav-dot]");
+    if (dot) {
+      dot.hidden = !summary.level;
+      dot.dataset.level = summary.level;
+      dot.title = summary.level === healthStatusCritical ? "failing" : "needs attention";
+      dot.setAttribute("role", "img");
+      dot.setAttribute("aria-label", dot.title);
+    }
+  });
+  if (currentView !== viewAll && empty(currentView)) {
+    const next = viewOrder.find((view) => !empty(view));
+    if (next && next !== currentView) setView(next);
+  }
+  updateTopbarHeight();
+}
 
 let allEvents = [];
 // Maps, not objects: both are indexed by an expansion key that ultimately
@@ -1852,12 +2252,6 @@ function serviceStateCell(s) {
   return tpl`${serviceStateBadge(s)}`;
 }
 
-const serviceSurfaceRegular = "service";
-const serviceSurfaceContainer = "container";
-const serviceSurfaceVM = "vm";
-const dockerServiceCategory = "docker";
-const vmServiceCategory = "virtual-machine";
-
 function serviceSurfaceOf(s) {
   const category = categoryOf(s, defaultCategoryService).toLowerCase();
   if (category === dockerServiceCategory) return serviceSurfaceContainer;
@@ -1865,53 +2259,14 @@ function serviceSurfaceOf(s) {
   return serviceSurfaceRegular;
 }
 
-function servicesForSurface(surface) {
-  return (allServices || []).filter((s) => serviceSurfaceOf(s) === surface);
-}
-
-function defaultServicePanelTarget() {
-  if (servicesForSurface(serviceSurfaceRegular).length) return "services-section";
-  if (servicesForSurface(serviceSurfaceContainer).length) return "containers-section";
-  if (servicesForSurface(serviceSurfaceVM).length) return "vms-section";
-  return "services-section";
-}
-
-function splitServicePanelBySurface(surface) {
-  return Object.values(splitServicePanels).find((panel) => panel.surface === surface) || null;
-}
-
-function serviceSectionFor(s) {
-  const surface = serviceSurfaceOf(s);
-  if (surface === serviceSurfaceRegular) return "#services-section";
-  const panel = splitServicePanelBySurface(surface);
-  return panel ? panel.section : "#services-section";
-}
-
 function openSectionForService(name) {
   const service = (allServices || []).find((s) => s && s.name === name);
-  const sec = service ? $(serviceSectionFor(service)) : $("#services-section");
-  if (sec) {
-    setPanelVisible(sec, true);
-    sec.open = true;
-  }
-  return sec;
-}
-
-function serviceSurfaceWithStatus(status) {
-  for (const surface of [serviceSurfaceRegular, serviceSurfaceContainer, serviceSurfaceVM]) {
-    if (servicesForSurface(surface).some((s) => serviceDisplayState(s) === status)) return surface;
-  }
-  for (const surface of [serviceSurfaceRegular, serviceSurfaceContainer, serviceSurfaceVM]) {
-    if (servicesForSurface(surface).length) return surface;
-  }
-  return serviceSurfaceRegular;
+  const section = (service ? servicePanelOf(service) : listPanels.services).dom.section;
+  revealPanel(section, false);
+  return section;
 }
 
 function isFailing(s) { return serviceState(s) === targetStateFailed; }
-function isServiceAttention(s) {
-  const st = serviceState(s);
-  return st === targetStateFailed;
-}
 function isWatchAttention(w) {
   const st = watchStateText(w);
   return st === targetStateFailed || st === targetStateMissing;
@@ -1928,100 +2283,53 @@ function isWatchWarning(w) {
   return watchStateText(w) === targetStateWarning;
 }
 
-function openServiceStatusTarget(status) {
-  const normalized = normalizeServiceStatusFilter(status);
-  const surface = serviceSurfaceWithStatus(normalized);
-  const panel = surface === serviceSurfaceRegular ? null : splitServicePanelBySurface(surface);
-  if (panel) {
-    setSplitServiceStatus(surface, normalized);
-  } else {
-    setSvcStatus(normalized);
-  }
-  const sec = panel ? $(panel.section) : $("#services-section");
-  if (sec) {
-    setPanelVisible(sec, true);
-    sec.open = true;
-    scrollToSection(sec);
-  }
-}
-
 // scrollToSection is the one spelling of "bring this panel into view".
 function scrollToSection(el) {
   el && el.scrollIntoView({ block: scrollBlockStart, behavior: scrollBehaviorSmooth });
 }
 
-function openPanelTarget(target) {
-  if (target === "failed-services") {
-    openServiceStatusTarget(targetStateFailed);
-    return;
-  }
-  if (target === "starting-services") {
-    openServiceStatusTarget(targetStateStarting);
-    return;
-  }
-  if (target === "collecting-services") {
-    openServiceStatusTarget(targetStateCollecting);
-    return;
-  }
-  if (target === "warning-services") {
-    openServiceStatusTarget(targetStateWarning);
-    return;
-  }
-  if (target === "restart-required-services") {
-    openServiceStatusTarget(targetStateRestartRequired);
-    return;
-  }
-  if (target === "monitored-services") {
-    openServiceStatusTarget(targetStateMonitored);
-    return;
-  }
+// statusTargets are the jump targets that also filter: the panels that can
+// hold the state, and the state. Every other target is a section id.
+const statusTargets = {
+  "failed-services": [servicePanels, targetStateFailed],
+  "failed-apps": [[listPanels.apps], targetStateFailed],
+  "failed-watches": [[watchPanel], targetStateFailed],
+  "warning-watches": [[watchPanel], targetStateWarning],
+  "stale-watches": [[watchPanel], targetStateStale],
+};
 
-  if (target === "failed-apps") {
-    const sec = $("#apps-section");
-    if (sec) sec.open = true;
-    setAppStatus(targetStateFailed);
-    scrollToSection(sec);
-    return;
-  }
-  if (target === "starting-apps") {
-    const sec = $("#apps-section");
-    if (sec) sec.open = true;
-    setAppStatus(targetStateStarting);
-    scrollToSection(sec);
-    return;
-  }
-  if (target === "failed-watches") {
-    // Each watch panel is its own <details>; a firing watch could be in any of
-    // them, so open all and scroll to whichever actually holds one (in panel
-    // declaration order, Watches as the fallback).
-    openAllWatchPanels();
-    setAllWatchStatuses(targetStateFailed);
-    let dest = $(getWatchPanel(watchPanelKeyHost).section);
-    for (const [key, panel] of Object.entries(watchPanels)) {
-      const sec = $(panel.section);
-      if (sec && panelVisible(sec) && (allWatches || []).some((w) => watchPanelKeyFor(w) === key && isWatchAttention(w))) {
-        dest = sec;
-        break;
-      }
-    }
-    scrollToSection(dest);
-    return;
-  }
-  const watchStatusTargets = {
-    "starting-watches": targetStateStarting,
-    "warning-watches": targetStateWarning,
-    "stale-watches": targetStateStale,
+// statusTargetPanel picks, among a target's panels, the first that holds an
+// item in the state — a failed container must open Containers, not Services —
+// falling back to the first with anything to show.
+function statusTargetPanel(panels, status) {
+  const holds = (p) => {
+    const probe = { ...p, query: "", category: filterAll, status };
+    return p.items().some((item) => panelMatches(probe, item));
   };
-  if (watchStatusTargets[target]) {
-    openAllWatchPanels();
-    setAllWatchStatuses(watchStatusTargets[target]);
-    scrollToSection($(getWatchPanel(watchPanelKeyHost).section));
+  return panels.find(holds) || panels.find((p) => p.items().length) || panels[0];
+}
+
+function openPanelTarget(target) {
+  const statusTarget = statusTargets[target];
+  if (statusTarget) {
+    const [panels, status] = statusTarget;
+    const p = statusTargetPanel(panels, status);
+    updatePanel(p, { status });
+    revealPanel(p.dom.section);
     return;
   }
-  const el = $("#" + target);
-  if (!el) return;
-  if (el.tagName === "DETAILS") el.open = true;
-  scrollToSection(el);
+  revealPanel(document.getElementById(target));
+}
+
+function panelTargetLabel(target) {
+  const statusTarget = statusTargets[target];
+  if (statusTarget) {
+    const [panels, status] = statusTarget;
+    return `${statusTargetPanel(panels, status).label} panel, ${status.replace(/_/g, " ")} filter`;
+  }
+  const title = document.querySelector(`#${CSS.escape(target)} .summary-title`);
+  const name = title && title.firstChild ? title.firstChild.textContent.trim().toLowerCase() : "";
+  return `${name || "services"} panel`;
 }
 
 function globalTargetValue(kind, name) {
@@ -2029,28 +2337,11 @@ function globalTargetValue(kind, name) {
 }
 
 function globalTargetRecords() {
-  const records = [];
-  (allServices || []).forEach((item) => records.push({
-    kind: globalTargetService, name: item.name, label: displayName(item), item,
-    rowID: `svc-row-${item.name}`,
-  }));
-  (allWatches || []).forEach((item) => records.push({
-    kind: globalTargetWatch, name: item.name, label: displayName(item), item,
-    rowID: `wat-row-${item.name}`,
-  }));
-  (allApps || []).forEach((item) => records.push({
-    kind: globalTargetApplication, name: item.name, label: displayName(item), item,
-    rowID: `app-row-${item.name}`,
-  }));
-  (allLibraries || []).forEach((item) => records.push({
-    kind: globalTargetLibrary, name: item.name, label: displayName(item), item,
-    rowID: `library-row-${item.name}`,
-  }));
-  (allMounts || []).forEach((item) => records.push({
-    kind: globalTargetMount, name: item.name, label: displayName(item), item,
-    rowID: `mount-row-${detailDomKey(item.name || item.path || "mount")}`,
-  }));
-  records.forEach((record) => { record.value = globalTargetValue(record.kind, record.name); });
+  const records = targetKinds.flatMap((kind) => kind.items().map((item) => ({
+    kind, name: item.name, label: displayName(item), item,
+    rowID: kind.panelOf(item).rowId(item),
+    value: globalTargetValue(kind.kind, item.name),
+  })));
   return records.sort((a, b) => a.value.localeCompare(b.value));
 }
 
@@ -2059,10 +2350,15 @@ function syncGlobalTargetSearch() {
   const datalist = $("#target-search-options");
   if (!datalist) return;
   const records = globalTargetRecords();
+  // The records carry this poll's items, so the map is always renewed; the
+  // options are the same from one poll to the next unless a target came or went.
   globalTargetsByValue = new Map(records.map((record) => [record.value, record]));
+  const signature = records.map((record) => `${record.value}\n${record.label}`).join("\n");
+  if (signature === globalTargetSignature) return;
+  globalTargetSignature = signature;
   const options = records.map((record) => {
     const option = new Option("", record.value);
-    option.label = record.label === record.name ? record.kind : `${record.label} · ${record.kind}`;
+    option.label = record.label === record.name ? record.kind.kind : `${record.label} · ${record.kind.kind}`;
     return option;
   });
   datalist.replaceChildren(...options);
@@ -2072,59 +2368,6 @@ function scheduleGlobalTargetSync() {
   if (globalTargetSyncPending) return;
   globalTargetSyncPending = true;
   queueMicrotask(syncGlobalTargetSearch);
-}
-
-function clearGlobalTargetFilters(target) {
-  switch (target.kind) {
-    case globalTargetService: {
-      const surface = serviceSurfaceOf(target.item);
-      const panel = splitServicePanelBySurface(surface);
-      if (panel) {
-        panel.query = "";
-        panel.status = filterAll;
-        panel.collapsedGroups.delete(categoryOf(target.item, defaultCategoryService));
-      } else {
-        svcQuery = "";
-        svcStatus = filterAll;
-        svcCategory = filterAll;
-        svcCollapsedGroups.delete(categoryOf(target.item, defaultCategoryService));
-      }
-      renderServices();
-      break;
-    }
-    case globalTargetWatch: {
-      const panel = getWatchPanel(watchPanelKeyFor(target.item));
-      panel.query = "";
-      panel.status = filterAll;
-      panel.type = filterAll;
-      panel.collapsedGroups.delete(watchGroupOf(target.item));
-      renderWatches();
-      break;
-    }
-    case globalTargetApplication:
-      appQuery = "";
-      appStatus = filterAll;
-      appCategory = filterAll;
-      appCollapsedGroups.delete(categoryOf(target.item, defaultCategoryApp));
-      renderApps();
-      break;
-    case globalTargetLibrary:
-      libraryQuery = "";
-      libraryStatus = filterAll;
-      libraryCategory = filterAll;
-      libraryCollapsedGroups.delete(categoryOf(target.item, defaultCategoryLibrary));
-      renderLibraries();
-      break;
-    case globalTargetMount:
-      mountQuery = "";
-      mountStatus = filterAll;
-      mountCategory = filterAll;
-      mountCollapsedGroups.delete(categoryOf(target.item, defaultCategoryStorage));
-      renderMounts();
-      break;
-  }
-  applyUIStateToControls();
-  saveUIState();
 }
 
 function focusGlobalTargetRow(rowID) {
@@ -2137,33 +2380,23 @@ function focusGlobalTargetRow(rowID) {
   });
 }
 
+// openGlobalTarget shows one target whatever is filtered, collapsed or in
+// another view: its panel drops its filters and opens the target's group, and
+// the target's fragment (or, for a mount, its panel) does the rest.
 function openGlobalTarget(target) {
   if (!target) return;
-  clearGlobalTargetFilters(target);
-  hashScrolled = false;
-  switch (target.kind) {
-    case globalTargetService:
-      history.replaceState(null, "", "#" + serviceExpansionKey(target.name));
-      applyHash();
-      break;
-    case globalTargetWatch:
-      history.replaceState(null, "", "#" + watchExpansionKey(target.name));
-      applyHash();
-      break;
-    case globalTargetApplication:
-      history.replaceState(null, "", "#" + appExpansionKey(target.name));
-      applyHash();
-      break;
-    case globalTargetLibrary:
-      history.replaceState(null, "", "#" + libraryExpansionKey(target.name));
-      applyHash();
-      break;
-    case globalTargetMount: {
-      const section = $("#mounts-section");
-      if (section) section.open = true;
-      history.replaceState(null, "", "#mounts-section");
-      break;
-    }
+  const p = target.kind.panelOf(target.item);
+  resetPanelFilters(p);
+  p.collapsedGroups.delete(p.groupOf(target.item));
+  updatePanel(p, {});
+  if (target.kind.prefix) {
+    // applyHash does the rest for a fragment it has not applied yet.
+    hashApplied = false;
+    history.replaceState(null, "", "#" + target.kind.prefix + target.name);
+    applyHash();
+  } else {
+    setFragment(p.dom.section.id);
+    revealPanel(p.dom.section, false);
   }
   focusGlobalTargetRow(target.rowID);
 }
@@ -2295,6 +2528,52 @@ function maybeNotifyAttention(failingSvcs, firingWatches, failedApps) {
   } catch (_) { /* notification constructors can throw in some embeds */ }
 }
 
+// attentionNames lists the first few targets behind a signal.
+const attentionPreviewNames = 4;
+function attentionNames(list, nameOf) {
+  const more = list.length > attentionPreviewNames ? ` and ${list.length - attentionPreviewNames} more` : "";
+  return list.slice(0, attentionPreviewNames).map(nameOf).join(", ") + more;
+}
+
+// attentionSignals is everything that currently needs the operator: each
+// signal names what, how bad and the jump target that shows it.
+function attentionSignals() {
+  const items = [];
+  const signal = (level, list, title, nameOf, target) => {
+    if (list.length) items.push({ level, title: title(list.length), detail: attentionNames(list, nameOf), target });
+  };
+  const named = (item) => displayName(item) || item.name;
+  const lockLabel = (l) => [l.service, l.name].filter(Boolean).join(":");
+  const failing = (allServices || []).filter(isFailing);
+  const failingWatches = (allWatches || []).filter(isWatchAttention);
+  const failingApps = (allApps || []).filter((a) => appStateText(a) === targetStateFailed);
+  signal(healthStatusCritical, failing, (n) => (n === 1 ? "1 service needs attention" : `${n} services need attention`), (s) => s.name, "failed-services");
+  signal(healthStatusCritical, failingWatches, (n) => (n === 1 ? "1 watch firing" : `${n} watches firing`), named, "failed-watches");
+  signal(healthStatusWarning, (allWatches || []).filter(isWatchWarning), (n) => (n === 1 ? "1 watch warning" : `${n} watches warning`), named, "warning-watches");
+  signal(healthStatusWarning, (allWatches || []).filter(isWatchSampleStale), (n) => (n === 1 ? "1 watch sample is stale" : `${n} watch samples are stale`), named, "stale-watches");
+  signal(healthStatusCritical, failingApps, (n) => (n === 1 ? "1 application failed" : `${n} applications failed`), named, "failed-apps");
+  signal(healthStatusCritical, (latestLocks || []).filter((l) => l.state === lockStateActive), (n) => (n === 1 ? "1 active lock" : `${n} active locks`), lockLabel, "locks-section");
+  signal(healthStatusWarning, (latestLocks || []).filter((l) => l.state === lockStateStale), (n) => (n === 1 ? "1 stale lock" : `${n} stale locks`), lockLabel, "locks-section");
+  if (latestReady && latestReady.ready === false && latestReady.status === daemonStatusShuttingDown) {
+    items.push({ level: healthStatusWarning, title: "Daemon shutting down", detail: latestReady.message || latestReady.status || "", target: "daemon-section" });
+  }
+  // Recent errors are an advisory, not a critical signal. The daemon counts the
+  // errors still standing — one a later recovery or successful operation of the
+  // same target settled is history — and names their targets; even so, they
+  // come from the event log, not from current state, so they never drive the
+  // overall status red. A currently-failing target turns the favicon red
+  // through its own path (failed services/watches/apps).
+  if (latestActivity && (latestActivity.errors || 0) > 0) {
+    items.push({
+      level: healthStatusWarning,
+      title: latestActivity.errors === 1 ? "1 recent error" : `${latestActivity.errors} recent errors`,
+      detail: attentionNames(latestActivity.error_targets || [], (name) => name) || "see events",
+      target: "events-section",
+    });
+  }
+  return { items, failing, failingWatches, failingApps };
+}
+
 function renderAttention() {
   const box = $("#attention");
   if (!box) return;
@@ -2306,95 +2585,11 @@ function renderAttention() {
     setHTMLIfChanged(box, "");
     return;
   }
-  const items = [];
-  const failing = (allServices || []).filter(isServiceAttention);
-  if (failing.length) {
-    items.push({
-      level: healthStatusCritical,
-      title: failing.length === 1 ? "1 service needs attention" : `${failing.length} services need attention`,
-      detail: failing.slice(0, 4).map((s) => s.name).join(", ") + (failing.length > 4 ? ` and ${failing.length - 4} more` : ""),
-      target: "failed-services",
-    });
-  }
-  const failingWatches = (allWatches || []).filter(isWatchAttention);
-  if (failingWatches.length) {
-    items.push({
-      level: healthStatusCritical,
-      title: failingWatches.length === 1 ? "1 watch firing" : `${failingWatches.length} watches firing`,
-      detail: failingWatches.slice(0, 4).map((w) => displayName(w) || w.name).join(", ") + (failingWatches.length > 4 ? ` and ${failingWatches.length - 4} more` : ""),
-      target: "failed-watches",
-    });
-  }
-  const warningWatches = (allWatches || []).filter(isWatchWarning);
-  if (warningWatches.length) {
-    items.push({
-      level: healthStatusWarning,
-      title: warningWatches.length === 1 ? "1 watch warning" : `${warningWatches.length} watches warning`,
-      detail: warningWatches.slice(0, 4).map((w) => displayName(w) || w.name).join(", ") + (warningWatches.length > 4 ? ` and ${warningWatches.length - 4} more` : ""),
-      target: "warning-watches",
-    });
-  }
-  const staleWatches = (allWatches || []).filter(isWatchSampleStale);
-  if (staleWatches.length) {
-    items.push({
-      level: healthStatusWarning,
-      title: staleWatches.length === 1 ? "1 watch sample is stale" : `${staleWatches.length} watch samples are stale`,
-      detail: staleWatches.slice(0, 4).map((w) => displayName(w) || w.name).join(", ") + (staleWatches.length > 4 ? ` and ${staleWatches.length - 4} more` : ""),
-      target: "stale-watches",
-    });
-  }
-  const failingApps = (allApps || []).filter((a) => appStateText(a) === targetStateFailed);
-  if (failingApps.length) {
-    items.push({
-      level: healthStatusCritical,
-      title: failingApps.length === 1 ? "1 application failed" : `${failingApps.length} applications failed`,
-      detail: failingApps.slice(0, 4).map((a) => displayName(a) || a.name).join(", ") + (failingApps.length > 4 ? ` and ${failingApps.length - 4} more` : ""),
-      target: "failed-apps",
-    });
-  }
+  const { items, failing, failingWatches, failingApps } = attentionSignals();
   maybeNotifyAttention(failing, failingWatches, failingApps);
-  const activeLocks = (latestLocks || []).filter((l) => l.state === lockStateActive);
-  if (activeLocks.length) {
-    items.push({
-      level: healthStatusCritical,
-      title: activeLocks.length === 1 ? "1 active lock" : `${activeLocks.length} active locks`,
-      detail: activeLocks.slice(0, 4).map((l) => [l.service, l.name].filter(Boolean).join(":")).join(", "),
-      target: "locks-section",
-    });
-  }
-  const staleLocks = (latestLocks || []).filter((l) => l.state === lockStateStale);
-  if (staleLocks.length) {
-    items.push({
-      level: healthStatusWarning,
-      title: staleLocks.length === 1 ? "1 stale lock" : `${staleLocks.length} stale locks`,
-      detail: staleLocks.slice(0, 4).map((l) => [l.service, l.name].filter(Boolean).join(":")).join(", "),
-      target: "locks-section",
-    });
-  }
-  if (latestReady && latestReady.ready === false && latestReady.status === daemonStatusShuttingDown) {
-    items.push({
-      level: healthStatusWarning,
-      title: "Daemon shutting down",
-      detail: latestReady.message || latestReady.status || "",
-      target: "daemon-section",
-    });
-  }
-  // Recent errors are an advisory, not a critical signal: the rollup counts every
-  // error event in the rolling activity window — including stale reload/config
-  // failures and errors from now-unmonitored targets — so it must never drive the
-  // overall status red. A currently-failing target turns the favicon
-  // red through its own path (failed services/watches/apps, hook-failed/firing).
-  if (latestActivity && (latestActivity.errors || 0) > 0) {
-    items.push({
-      level: healthStatusWarning,
-      title: latestActivity.errors === 1 ? "1 recent error" : `${latestActivity.errors} recent errors`,
-      detail: latestActivity.last_event_kind ? `last: ${latestActivity.last_event_kind}` : "see events",
-      target: "events-section",
-    });
-  }
   // While the daemon is settling (starting), the tab favicon is neutral grey and
   // other health signals are premature, so it overrides the ok/warning/critical
-  // colour. Startup progress lives in the status bar (`status: starting`).
+  // colour. Startup progress lives in the status line (`daemon starting`).
   const startingNow = latestReady && latestReady.ready === false && latestReady.status === daemonStatusStarting;
   if (startingNow) {
     setFavicon(targetStateStarting);
@@ -2402,25 +2597,23 @@ function renderAttention() {
   } else if (!items.length) {
     setFavicon(healthStatusOK);
     setDocumentTitle({ attentionCount: 0 });
-    box.classList.add("live-hidden");
-    setHTMLIfChanged(box, "");
-    return;
   } else {
     setFavicon(items.some((it) => it.level === healthStatusCritical) ? healthStatusCritical : healthStatusWarning);
     setDocumentTitle({ attentionCount: items.length });
   }
-  box.classList.remove("live-hidden");
-  const html = `
-    <div class="attn-head">
-      <b>Attention required</b>
-      <span class="muted">${items.length} signal${items.length === 1 ? "" : "s"}</span>
-    </div>
-    <div class="attn-list">${items.map((it) => `
-      <button class="attn-item ${esc(it.level)}" data-panel-target="${esc(it.target)}" aria-label="${esc(attnAriaLabel(it))}">
-        <div class="attn-title ${it.level === healthStatusCritical ? "bad" : "inactive"}">${esc(it.title)}</div>
-        ${it.detail ? `<div class="attn-detail">${esc(it.detail)}</div>` : ""}
-      </button>
-    `).join("")}</div>`;
+  box.classList.toggle("live-hidden", !items.length);
+  // One line per signal — what, and who — with the failing ones first; the
+  // card's edge takes the colour of the worst.
+  const critical = items.filter((it) => it.level === healthStatusCritical);
+  const ordered = [...critical, ...items.filter((it) => it.level !== healthStatusCritical)];
+  box.classList.toggle("attn-warning", items.length > 0 && !critical.length);
+  const html = items.length ? `<span class="attn-head">Needs attention <span class="muted">${items.length}</span></span>
+    <span class="attn-list">${ordered.map((it) => `
+      <button type="button" class="attn-item ${esc(it.level)}" data-panel-target="${esc(it.target)}" aria-label="${esc(attnAriaLabel(it))}">
+        <span class="attn-dot" aria-hidden="true"></span>
+        <span class="attn-title">${esc(it.title)}</span>
+        <span class="attn-detail" title="${esc(it.detail || "")}">${esc(it.detail || "")}</span>
+      </button>`).join("")}</span>` : "";
   setHTMLIfChanged(box, html);
 }
 function isTrackedOperation(action) { return serviceTrackedActions.includes(action); }
@@ -2536,83 +2729,10 @@ function renderOperationLive() {
   setHTMLIfChanged(box, html);
 }
 
-function serviceStatusMatches(s, status) {
-  return serviceStatusFilterStates.includes(status) ? serviceDisplayState(s) === status : true;
-}
-
-function serviceQueryMatches(s, query, category) {
-  if (!query) return true;
-  const monitorText = s && s.monitored ? "monitoring enabled" : "monitoring paused";
-  const missing = Array.isArray(s && s.observability_missing) ? s.observability_missing.join(" ") : "";
-  const hay = `${displayName(s)} ${s.name || ""} ${s.display_name || ""} ${category} ${s.unit || ""} ${serviceDisplayState(s)} ${monitorText} ${missing}`.toLowerCase();
-  return hay.includes(query);
-}
-
-function serviceMatches(s) {
-  if (serviceSurfaceOf(s) !== serviceSurfaceRegular) return false;
-  const category = categoryOf(s, defaultCategoryService);
-  if (svcCategory !== filterAll && category !== svcCategory) return false;
-  return serviceQueryMatches(s, svcQuery, category) && serviceStatusMatches(s, svcStatus);
-}
-
-function setSvcQuery(v) { svcQuery = (v || "").trim().toLowerCase(); renderServices(); saveUIState(); }
-function setSvcCategory(v) { svcCategory = v || filterAll; renderServices(); saveUIState(); }
-
-function getSplitServicePanel(panelKey) {
-  return splitServicePanels[panelKey] || splitServicePanelBySurface(panelKey);
-}
-
-function splitServiceMatches(s, panel) {
-  const category = categoryOf(s, defaultCategoryService);
-  return serviceQueryMatches(s, panel.query, category) && serviceStatusMatches(s, panel.status);
-}
-
-function syncSplitServicePanelControls(panelKey) {
-  const panel = getSplitServicePanel(panelKey);
-  if (!panel) return;
-  const search = $(panel.search);
-  if (search) search.value = panel.query;
-  syncFilterButtons(panel.filters, panel.filterDataset, panel.status);
-}
-
-function setSplitServiceQuery(panelKey, value) {
-  const panel = getSplitServicePanel(panelKey);
-  if (!panel) return;
-  panel.query = (value || "").trim().toLowerCase();
-  renderServices();
-  saveUIState();
-}
-
-function setSplitServiceStatus(panelKey, value) {
-  const panel = getSplitServicePanel(panelKey);
-  if (!panel) return;
-  panel.status = normalizeServiceStatusFilter(value);
-  syncFilterButtons(panel.filters, panel.filterDataset, panel.status);
-  renderServices();
-  saveUIState();
-}
-
-function setSplitServiceSort(panelKey, key) {
-  const panel = getSplitServicePanel(panelKey);
-  if (!panel) return;
-  toggleSort(panel.sort, key, renderServices);
-}
-
-function setSplitServiceGrouped(panelKey, grouped) {
-  const panel = getSplitServicePanel(panelKey);
-  if (!panel) return;
-  panel.grouped = !!grouped;
-  renderServices();
-  saveUIState();
-}
-
-function toggleAllSplitServiceGroups(panelKey) {
-  const panel = getSplitServicePanel(panelKey);
-  if (!panel) return;
-  const groups = sortedCategories(servicesForSurface(panel.surface).filter((s) => splitServiceMatches(s, panel)), "service");
-  toggleAllGroups(groups, panel.collapsedGroups);
-  renderServices();
-  saveUIState();
+function serviceSearchText(s) {
+  const monitorText = s.monitored ? "monitoring enabled" : "monitoring paused";
+  const missing = Array.isArray(s.observability_missing) ? s.observability_missing.join(" ") : "";
+  return `${displayName(s)} ${s.name || ""} ${s.display_name || ""} ${categoryOf(s, defaultCategoryService)} ${s.unit || ""} ${serviceDisplayState(s)} ${monitorText} ${missing}`.toLowerCase();
 }
 
 function compareSortValues(a, b) {
@@ -2646,18 +2766,6 @@ function sortedBy(list, sort, sortKeys, fallbackKey) {
   return list;
 }
 
-function renderFilterButtonCounts(selector, counts) {
-  document.querySelectorAll(`${selector} button`).forEach((b) => {
-    const key = b.dataset.f || b.dataset.cf || b.dataset.vf || b.dataset.wf || b.dataset.af || b.dataset.mf || b.dataset.sf;
-    if (counts[key] === undefined) return;
-    b.innerHTML = `${key} <span class="muted">${counts[key]}</span>`;
-    // Keep the filter row compact by hiding states with no matches — except
-    // "all" and whichever filter is currently selected (so an emptied
-    // selection stays visible and can be switched away from).
-    b.hidden = counts[key] === 0 && key !== filterAll && !b.classList.contains("f-active");
-  });
-}
-
 function stateCounts(items, stateOf, states) {
   const list = items || [];
   const counts = { [filterAll]: list.length };
@@ -2667,111 +2775,6 @@ function stateCounts(items, stateOf, states) {
     if (counts[state] !== undefined) counts[state]++;
   });
   return counts;
-}
-
-function normalizeServiceStatusFilter(v) {
-  return v === targetStateRunning ? filterAll : (v || filterAll);
-}
-
-function normalizeWatchStatusFilter(v) {
-  return v || filterAll;
-}
-
-function normalizeMountStatusFilter(v) {
-  return mountStatusFilterStates.includes(v) ? v : filterAll;
-}
-
-function syncFilterButtons(selector, datasetKey, activeValue) {
-  document.querySelectorAll(`${selector} button`).forEach((b) => {
-    const pressed = b.dataset[datasetKey] === activeValue;
-    b.classList.toggle("f-active", pressed);
-    b.setAttribute("aria-pressed", pressed ? domBoolTrue : domBoolFalse);
-  });
-}
-
-// Column sort: null key keeps the default failing-first order; clicking a header
-// sorts by it (ascending), and clicking the same header again flips direction.
-const svcSortKeys = {
-  name: (s) => displayName(s).toLowerCase(),
-  category: (s) => categoryOf(s, defaultCategoryService).toLowerCase(),
-  state: (s) => stateRank(serviceDisplayState(s)),
-  uptime: (s) => numericSortValue(s && s.uptime_seconds),
-  cpu: (s) => (s && s.cpu_ready) ? numericSortValue(s.cpu) : 0,
-  memory: (s) => numericSortValue(s && s.rss),
-  fds: (s) => numericSortValue(s && s.fds),
-  io: (s) => numericSortValue(s && s.io_read) + numericSortValue(s && s.io_write),
-  last: lastEventTime,
-  strays: (s) => serviceStrayCount(s),
-};
-// toggleSort flips the direction when the same column is re-selected, otherwise
-// selects the new column ascending, then re-renders. Shared by every sortable
-// panel (sort is mutated in place; render is the panel's renderer).
-function toggleSort(sort, key, render) {
-  if (sort.key === key) sort.dir = -sort.dir;
-  else { sort.key = key; sort.dir = 1; }
-  render();
-  saveUIState();
-}
-
-function setSvcSort(key) { toggleSort(svcSort, key, renderServices); }
-// updateSortIndicatorsFor sets the ▲/▼ arrow on one panel's sortable headers:
-// attr is the data-* key each header carries its sort key in, sort is that
-// panel's {key, dir} state. Shared by the services/watches/apps panels.
-function sortAriaValue(sort, key) {
-  if (!key || key !== sort.key) return "none";
-  return sort.dir > 0 ? "ascending" : "descending";
-}
-
-// updateSortIndicatorsFor is the one owner of the sort arrow (▲/▼) and
-// aria-sort refresh. scope, when given, confines the indicator query to one
-// panel's section so per-panel sorts (the watch panels) cannot repaint each
-// other's arrows.
-function updateSortIndicatorsFor(attr, sort, headerSelector, headerKey, scope = "") {
-  document.querySelectorAll(`${scope} .sort-ind[data-${attr}]`.trim()).forEach((el) => {
-    el.textContent = el.dataset[attr] === sort.key ? (sort.dir > 0 ? " ▲" : " ▼") : "";
-  });
-  if (!headerSelector || !headerKey) return;
-  document.querySelectorAll(headerSelector).forEach((th) => {
-    th.setAttribute("aria-sort", sortAriaValue(sort, th.dataset[headerKey] || ""));
-  });
-}
-
-function updateSortIndicators() {
-  updateSortIndicatorsFor("si", svcSort, "#services-section .services-table th.sortable[data-sort]", "sort");
-  for (const panel of Object.values(splitServicePanels)) {
-    updateSortIndicatorsFor(panel.sortIndicator, panel.sort, `${panel.section} .services-table th.sortable[data-${panel.sortAttr}]`, panel.sortDataset);
-  }
-}
-
-function serviceStatusCounts(services) {
-  return stateCounts(services, serviceDisplayState, serviceStatusFilterStates);
-}
-
-// renderFilterCounts annotates each status-filter button with how many services
-// match it, for at-a-glance triage.
-function renderFilterCounts(services) {
-  renderFilterButtonCounts("#svc-filters", serviceStatusCounts(services));
-}
-
-function setSvcStatus(v) {
-  svcStatus = normalizeServiceStatusFilter(v);
-  syncFilterButtons("#svc-filters", "f", svcStatus);
-  renderServices();
-  saveUIState();
-}
-
-function setSvcGrouped(v) {
-  svcGrouped = !!v;
-  renderServices();
-  saveUIState();
-}
-
-function toggleAllSvcGroups() {
-  const list = (allServices || []).filter(serviceMatches);
-  const categories = sortedCategories(list, defaultCategoryService);
-  toggleAllGroups(categories, svcCollapsedGroups);
-  renderServices();
-  saveUIState();
 }
 
 // serviceLockNames returns the active named runtime locks the daemon reports for
@@ -3004,6 +3007,26 @@ function expandToggleAriaLabel(name, open, subject) {
   return `${open ? "Collapse" : "Expand"} ${subject} for ${name}`;
 }
 
+// expandToggle is a row's disclosure: the chevron and the button, named after
+// the row, that opens or closes its expansion. content is what the button
+// shows when it is more than the name; subject says what the expansion holds.
+function expandToggle(key, label, subject, content = label, cls = "row-toggle") {
+  const open = expanded.has(key);
+  return tpl`<span class="exp" aria-hidden="true">${open ? "▾" : "▸"}</span><button type="button" class="${cls}" data-exp-toggle="${key}" aria-expanded="${open}" aria-controls="${open ? "exp-" + key : nothing}" aria-label="${expandToggleAriaLabel(label, open, subject)}">${content}</button>`;
+}
+
+// expansionRow is the row an open expansion lives in, or null while it is
+// closed. An expansion a loader fills later (a service's or a watch's detail)
+// gets a cell with no binding of its own, so the table's render and the
+// loader's never write to the same place; one that is plain markup is passed
+// as content.
+function expansionRow(key, cols, content) {
+  if (!expanded.has(key)) return null;
+  return content === undefined
+    ? tpl`<tr class="exp-row" id="exp-${key}" data-exp="${key}"><td colspan="${cols}"><div class="exp-body"></div></td></tr>`
+    : tpl`<tr class="exp-row" id="exp-${key}" data-exp="${key}"><td colspan="${cols}"><div class="exp-body">${content}</div></td></tr>`;
+}
+
 function groupToggleAriaLabel(category, count, collapsed) {
   return `${collapsed ? "Expand" : "Collapse"} ${category} group (${count} items)`;
 }
@@ -3012,18 +3035,21 @@ function groupToggleAriaLabel(category, count, collapsed) {
 // surface, the accessible label. A surface without an entry falls back to
 // "<action> <surface> <name>", so a new action renders before it is named
 // here — it just reads generically until it is.
+// Action glyphs carry U+FE0E, the text presentation selector: without it a phone
+// draws ▶ and ⏸ as colour emoji, out of step with every other mark.
+const glyphPlay = "▶\uFE0E";
 const actionMeta = {
-  [actionStart]: { glyph: "▶", service: (n) => `Start service ${n}` },
-  [actionRepair]: { glyph: "⚒", service: (n) => `Repair residual service state ${n}` },
+  [actionStart]: { glyph: glyphPlay, service: (n) => `Start service ${n}` },
+  [actionRepair]: { glyph: "⚒\uFE0E", service: (n) => `Repair residual service state ${n}` },
   [actionStop]: { glyph: "■", service: (n) => `Stop service ${n}` },
   [actionRestart]: { glyph: "↻", service: (n) => `Restart service ${n}` },
-  [actionResume]: { glyph: "▶", service: (n) => `Resume service ${n}`, watch: (n) => `Resume RAID reconstruction for watch ${n}` },
+  [actionResume]: { glyph: glyphPlay, service: (n) => `Resume service ${n}`, watch: (n) => `Resume RAID reconstruction for watch ${n}` },
   [actionReload]: { glyph: "⟳", service: (n) => `Reload service ${n}` },
   [actionMonitor]: { glyph: "◉", service: (n) => `Monitor service ${n}`, watch: (n) => `Monitor watch ${n}` },
   [actionUnmonitor]: { glyph: "⊘", service: (n) => `Unmonitor service ${n}`, watch: (n) => `Unmonitor watch ${n}` },
   [actionExpand]: { watch: (n) => `Expand storage for watch ${n}` },
   [actionProbe]: { watch: (n) => `Probe watch ${n}` },
-  [actionPause]: { glyph: "⏸", service: (n) => `Pause service ${n}`, watch: (n) => `Pause RAID reconstruction for watch ${n}` },
+  [actionPause]: { glyph: "⏸\uFE0E", service: (n) => `Pause service ${n}`, watch: (n) => `Pause RAID reconstruction for watch ${n}` },
   [actionReplicationStart]: { watch: (n) => `Start replication for watch ${n}` },
 };
 
@@ -3055,20 +3081,19 @@ async function pressServiceButton(name, button) {
   const s = (allServices || []).find((item) => item && item.name === name) || {};
   const meta = (s.buttons || []).find((b) => b && b.name === button) || {};
   const label = meta.label || button;
-  if (!(await promptConfirm({
-    title: `${label}?`,
-    message: `Run the configured "${label}" command for ${displayName(s) || name} now?`,
-    okLabel: label,
-    danger: true,
-  }))) return;
-  setStatus("");
-  try {
-    const body = await jsonOrThrow(await fetch(serviceButtonAPI(name, button), targetPostOptions({}, generation)));
-    setStatus(body.message || `${label}: ok`, feedbackStatusOK);
-  } catch (err) {
-    setStatus(`${label}: ${err.message || err}`, feedbackStatusErr);
-  }
-  scheduleRefresh();
+  const done = await runAction({
+    confirm: () => promptConfirm({
+      title: `${label}?`,
+      message: `Run the configured "${label}" command for ${displayName(s) || name} now?`,
+      okLabel: label,
+      danger: true,
+    }),
+    request: () => fetch(serviceButtonAPI(name, button), targetPostOptions({}, generation)),
+    ok: (body) => body.message || `${label}: ok`,
+    fail: label,
+    then: null,
+  });
+  if (done !== null) scheduleRefresh();
 }
 
 // serviceActionButton renders one service action button. A toggle passes
@@ -3095,8 +3120,8 @@ function serviceActionButton(s, action, busy, compact = false, title = "", opts 
   return tpl`${actionHint(hintID, disabled, reason)}${outcomeHint}<button class="${classes}" ?disabled=${disabled} data-service="${s.name}" data-service-action="${action}" aria-pressed="${pressed}" title="${tip || nothing}" aria-label="${label}" aria-describedby="${actionDescribedBy(hintID, disabled, reason, outcomeID)}">${glyph ? tpl`<span aria-hidden="true">${glyph}</span>` : action}${badge}</button>`;
 }
 
-// serviceRowParts builds one service's main and optional expansion <tr> HTML.
-// Shared by the full tbody rebuild and the large-fleet in-place patch path.
+// serviceRowParts builds one service's main <tr> and its optional operator
+// commands and expansion rows.
 function serviceRowParts(s) {
   const state = serviceState(s);
   const category = categoryOf(s, defaultCategoryService);
@@ -3134,33 +3159,35 @@ function serviceRowParts(s) {
     ].filter(Boolean);
     const marks = serviceOperationMarks(s, buttons.map((b) => b.action), powerAction);
     actions = me.can_act
-      ? tpl`${buttons.map((b) => tpl`${serviceActionButton(s, b.action, busy, true, b.title, { ...b, mark: marks.get(b.action) })} `)}${serviceCustomButtons(s, busy)}`
-      : tpl`<span class="muted">read-only</span>`;
+      ? buttons.map((b) => tpl`${serviceActionButton(s, b.action, busy, true, b.title, { ...b, mark: marks.get(b.action) })} `)
+      : readOnlyNote;
   }
+  const hasCommands = s.enabled && me.can_act && (s.buttons || []).length > 0;
   const key = serviceExpansionKey(s.name);
-  const open = expanded.has(key);
-  const chev = tpl`<span class="exp" aria-hidden="true">${open ? '▾' : '▸'}</span>`;
-  const name = tpl`<button type="button" class="name row-toggle" data-service-expand="${s.name}" aria-expanded="${open}" aria-controls="${open ? "exp-" + key : nothing}" aria-label="${expandToggleAriaLabel(label, open, "service details")}">${label}</button>`;
   const pinned = svcPinned.has(s.name);
   const pin = tpl`<button type="button" class="icon-btn pin-btn${pinned ? " pinned" : ""}" data-service-pin="${s.name}" aria-pressed="${pinned ? domBoolTrue : domBoolFalse}" title="${pinned ? "Unpin from top" : "Pin to top"}" aria-label="${(pinned ? "Unpin " : "Pin ") + label + (pinned ? " from the top of the list" : " to the top of the list")}">${pinned ? "★" : "☆"}</button>`;
   const rowClass = serviceRowClass(state);
-  const main = tpl`<tr id="svc-row-${s.name}" class="clickable ${rowClass}" data-exp-key="${key}">
-    <td><div class="svc-main">${chev}${name}${pin}</div>${stateParts.hasReason ? tpl`<div class="svc-state-note">${stateParts.reason}</div>` : nothing}${busyText}</td>
-    <td>${categoryBadge(category)}</td>
-    <td>${stateParts.badge}</td>
-    <td>${serviceUptimeCell(s)}</td>
-    <td>${serviceCpuCell(s)}</td>
-    <td>${serviceMemCell(s)}</td>
-    <td>${serviceFDsCell(s)}</td>
-    <td>${serviceIoCell(s)}</td>
-    <td>${lastEventCell(s)}</td>
-    <td>${serviceStraysCell(s)}</td>
-    <td class="actions">${actions}</td>
+  const cols = panelColumnCount(listPanels.services);
+  const main = tpl`<tr id="svc-row-${s.name}" class="clickable ${rowClass} ${hasCommands ? "has-commands" : ""}" data-exp-key="${key}">
+    <td data-col="name"><div class="svc-main">${expandToggle(key, label, "service details", label, "name row-toggle")}${pin}</div>${stateParts.hasReason ? tpl`<div class="svc-state-note">${stateParts.reason}</div>` : nothing}${busyText}</td>
+    <td data-col="category">${categoryBadge(category)}</td>
+    <td data-col="state">${stateParts.badge}</td>
+    <td data-col="uptime">${serviceUptimeCell(s)}</td>
+    <td data-col="cpu">${serviceCpuCell(s)}</td>
+    <td data-col="memory">${serviceMemCell(s)}</td>
+    <td data-col="fds">${serviceFDsCell(s)}</td>
+    <td data-col="io">${serviceIoCell(s)}</td>
+    <td data-col="last">${lastEventCell(s)}</td>
+    <td data-col="strays">${serviceStraysCell(s)}</td>
+    <td data-col="actions" class="actions">${actions}</td>
   </tr>`;
-  const exp = open
-    ? tpl`<tr class="exp-row" id="exp-${key}" data-exp="${key}"><td colspan="11"><div class="exp-body"></div></td></tr>`
+  // The configured operator commands get a row of their own: three labelled
+  // buttons stacked in the actions column made the service four lines tall,
+  // and a full row lays them out on one.
+  const commands = hasCommands
+    ? tpl`<tr class="svc-commands-row ${rowClass}"><td colspan="${cols}"><div class="svc-commands">${serviceCustomButtons(s, busy)}</div></td></tr>`
     : null;
-  return { main, exp };
+  return { main, commands, exp: expansionRow(key, cols) };
 }
 
 function serviceRowClass(state) {
@@ -3171,12 +3198,7 @@ function serviceRowClass(state) {
 
 function serviceRowHTML(s) {
   const parts = serviceRowParts(s);
-  return parts.exp ? [parts.main, parts.exp] : [parts.main];
-}
-
-function finishSvcRender() {
-  renderAttention();
-  reassertExpansions();
+  return [parts.main, parts.commands, parts.exp].filter(Boolean);
 }
 
 // render receives fresh data on each refresh; cache it, then render through the
@@ -3184,6 +3206,7 @@ function finishSvcRender() {
 function render(services) {
   if (services) {
     allServices = services;
+    forgetGoneServiceExpansions();
     noteOperationOutcomes(services);
   }
   scheduleGlobalTargetSync();
@@ -3191,22 +3214,12 @@ function render(services) {
   applyHash();
 }
 
-function servicePanelFilterActive(query, status, category) {
-  return !!query || status !== filterAll || (category !== undefined && category !== filterAll);
-}
-
-function sortServiceList(list, sort) {
-  if (sort.key && svcSortKeys[sort.key]) {
-    sortedBy(list, sort, svcSortKeys, "name");
-  } else {
-    // Default: failing services first (stable sort keeps backend order in groups).
-    list.sort((a, b) => (isFailing(b) ? 1 : 0) - (isFailing(a) ? 1 : 0));
-  }
-  // Pinned services lead regardless of the chosen order (stable sort keeps
-  // the sorted order within the pinned and unpinned halves).
-  if (svcPinned.size) {
-    list.sort((a, b) => (svcPinned.has(b.name) ? 1 : 0) - (svcPinned.has(a.name) ? 1 : 0));
-  }
+// orderServices is the service panels' order hook: failing services lead when
+// no column is chosen (a stable sort keeps the backend order within each
+// half), and pinned services lead whatever the order.
+function orderServices(list, sorted) {
+  if (!sorted) list.sort((a, b) => (isFailing(b) ? 1 : 0) - (isFailing(a) ? 1 : 0));
+  if (svcPinned.size) list.sort((a, b) => (svcPinned.has(b.name) ? 1 : 0) - (svcPinned.has(a.name) ? 1 : 0));
 }
 
 function toggleServicePin(name) {
@@ -3217,85 +3230,19 @@ function toggleServicePin(name) {
   renderServices();
 }
 
-function renderPrimaryServices() {
-  const source = servicesForSurface(serviceSurfaceRegular);
-  const total = source.length;
-  const section = $("#services-section");
-  const rows = $("#rows");
-  const headCount = $("#services-count");
-  if (!panelShell({ section, tbody: rows, count: headCount, filterCount: $("#svc-count"), total })) return;
-  if (!rows) return;
-  svcCategory = syncCategorySelect("#svc-category", source, defaultCategoryService, svcCategory);
-  renderFilterCounts(source);
-  const list = source.filter(serviceMatches);
-  sortServiceList(list, svcSort);
-  updateSortIndicators();
-  const visibleCategories = sortedCategories(list, defaultCategoryService);
-  svcCollapsedGroups.forEach((category) => { if (!visibleCategories.includes(category)) svcCollapsedGroups.delete(category); });
-  if (visibleCategories.length < 2) svcGrouped = false;
-  updateGroupButtons("svc", svcGrouped, visibleCategories, svcCollapsedGroups, "services");
-  const cnt = $("#svc-count");
-  if (cnt) cnt.textContent = servicePanelFilterActive(svcQuery, svcStatus, svcCategory) ? `showing ${list.length} of ${total}` : "";
-  let content;
-  if (!list.length) {
-    content = source.length
-      ? tpl`<tr><td colspan="11" class="muted">No services match the filter.</td></tr>`
-      : tpl`<tr><td colspan="11" class="muted">No services.</td></tr>`;
-  } else {
-    content = svcGrouped
-      ? renderGroupedRows(list, svcCollapsedGroups, "svc", "svc", (s) => categoryOf(s, defaultCategoryService), 11, serviceRowHTML, svcSort.key === "category" ? svcSort.dir : 1)
-      : list.flatMap(serviceRowHTML);
-  }
-  litRender(content, rows);
-}
-
-function renderSplitServicePanel(panelKey) {
-  const panel = getSplitServicePanel(panelKey);
-  if (!panel) return;
-  const source = servicesForSurface(panel.surface);
-  const total = source.length;
-  const section = $(panel.section);
-  const rows = $(panel.rows);
-  const headCount = $(panel.count);
-  const cnt = $(panel.filterCount);
-  if (!panelShell({ section, tbody: rows, count: headCount, filterCount: cnt, total })) return;
-  if (!rows) return;
-  renderFilterButtonCounts(panel.filters, serviceStatusCounts(source));
-  syncSplitServicePanelControls(panelKey);
-  const list = source.filter((s) => splitServiceMatches(s, panel));
-  sortServiceList(list, panel.sort);
-  updateSortIndicatorsFor(panel.sortIndicator, panel.sort, `${panel.section} .services-table th.sortable[data-${panel.sortAttr}]`, panel.sortDataset);
-  const groups = sortedCategories(list, defaultCategoryService);
-  panel.collapsedGroups.forEach((group) => { if (!groups.includes(group)) panel.collapsedGroups.delete(group); });
-  if (groups.length < 2) panel.grouped = false;
-  updateGroupButtons(panelKey, panel.grouped, groups, panel.collapsedGroups, panel.label);
-  if (cnt) cnt.textContent = servicePanelFilterActive(panel.query, panel.status) ? `showing ${list.length} of ${total}` : "";
-  const filtered = servicePanelFilterActive(panel.query, panel.status);
-  const content = list.length
-    ? (panel.grouped
-      ? renderGroupedRows(list, panel.collapsedGroups, panelKey, "svc", (s) => categoryOf(s, defaultCategoryService), 11, serviceRowHTML, panel.sort.key === "category" ? panel.sort.dir : 1)
-      : list.flatMap(serviceRowHTML))
-    : tpl`<tr><td colspan="11" class="muted">${filtered ? panel.emptyFiltered : panel.empty}</td></tr>`;
-  litRender(content, rows);
-}
-
 function renderServices() {
   preserveExpansionCells(isServiceExpansionKey);
-  renderPrimaryServices();
-  renderSplitServicePanel("container");
-  renderSplitServicePanel("vm");
-  finishSvcRender();
-  updateSectionNav();
+  servicePanels.forEach(renderListPanel);
+  reassertExpansions();
+  refreshChrome();
 }
 
 // renderExpansionTarget updates only the panel that owns an expansion. Keeping
 // other lit-html roots untouched avoids invalidating a nested expansion while
 // its own panel is rendering.
 function renderExpansionTarget(key) {
-  if (isServiceExpansionKey(key)) renderServices();
-  else if (isWatchExpansionKey(key)) renderWatches();
-  else if (isAppExpansionKey(key)) renderApps();
-  else if (isLibraryExpansionKey(key)) renderLibraries();
+  const kind = targetKindOfKey(key);
+  if (kind) kind.render();
 }
 
 // scheduleHashExpansion defers the render until the current lit-html render
@@ -3311,18 +3258,42 @@ function scheduleHashExpansion(key) {
 
 // toggleExpand / loadExpansionFor drive inline expansion for services, host
 // watches, applications and libraries.
+// setFragment writes the address bar's fragment for a navigation the dashboard
+// has just carried out itself — an expansion opened or closed, a panel shown —
+// so that applyHash, which runs after every render, does not carry it out a
+// second time and pull the operator back from the view they move to next.
+function setFragment(fragment) {
+  history.replaceState(null, "", fragment ? "#" + fragment : location.pathname + location.search);
+  hashApplied = true;
+}
+
+// dropExpansion forgets an open expansion and what was drawn for it.
+function dropExpansion(key) {
+  expanded.delete(key);
+  expCache.delete(key);
+  expDetailCache.delete(key);
+  expCellCache.delete(key);
+}
+
+// forgetGoneServiceExpansions closes the expansions of services the daemon no
+// longer lists. A saved one outlives its service (renamed, removed from the
+// configuration) with no row left to close it, and its detail request would
+// fail on every refresh, leaving each one reported as partial.
+function forgetGoneServiceExpansions() {
+  const names = new Set(allServices.map((s) => s.name));
+  const gone = [...expanded].filter((key) => isServiceExpansionKey(key) && !names.has(expansionName(key, expansionPrefixService)));
+  if (!gone.length) return;
+  gone.forEach(dropExpansion);
+  saveUIState();
+}
+
 function toggleExpand(key) {
   if (expanded.has(key)) {
-    expanded.delete(key);
-    expCache.delete(key);
-    expDetailCache.delete(key);
-    expCellCache.delete(key);
-    if (location.hash === "#" + key) history.replaceState(null, "", location.pathname + location.search);
+    dropExpansion(key);
+    if (location.hash === "#" + key) setFragment("");
   } else {
     expanded.add(key);
-    if (isShareableExpansionKey(key)) {
-      history.replaceState(null, "", "#" + key); // shareable deep-link
-    }
+    if (targetKindOfKey(key)) setFragment(key); // shareable deep-link
   }
   renderExpansionTarget(key);
   saveUIState();
@@ -3332,18 +3303,13 @@ function openServiceExpansion(name, scroll) {
   if (!name) return;
   const key = serviceExpansionKey(name);
   if (!expanded.has(key)) expanded.add(key);
-  history.replaceState(null, "", "#" + key);
+  setFragment(key);
   openSectionForService(name);
   renderServices();
   if (scroll) {
     const el = document.getElementById("svc-row-" + name);
     if (el) el.scrollIntoView({ block: "center" });
   }
-}
-
-function toggleServiceExpansion(name) {
-  if (!name) return;
-  toggleExpand(serviceExpansionKey(name));
 }
 
 // preserveExpansionCells retains the live detail DOM (including SVG charts and
@@ -3422,79 +3388,38 @@ async function refreshExpandedWatches(generation = dashboardGeneration) {
   }
 }
 
-// applyHash opens/scrolls to the target named in a #svc:|#wat:|#app: URL fragment
-// or a section id such as #services-section.
-// Runs after each render and on hashchange.
-let hashScrolled = false;
-function watchSectionFor(w) {
-  return getWatchPanel(watchPanelKeyFor(w)).section;
-}
+// applyHash opens the target named in a #svc:|#wat:|#app:|#lib: URL fragment
+// or a section id such as #services-section. It runs after each render and on
+// hashchange, but a fragment navigates once (hashApplied): it brings its panel
+// and view forward and scrolls when it is first seen with its target present,
+// and later renders only keep the expansion open — otherwise a fragment left in
+// the address bar would drag the operator back from whatever view they moved to.
+let hashApplied = false;
 function applyHash() {
   const h = decodeURIComponent(location.hash.slice(1));
   if (!h) return;
   const section = document.getElementById(h);
-  if (section && (section.tagName === "DETAILS" || section.tagName === "SECTION")) {
-    if (section.classList.contains("panel-hidden")) return;
-    if (section.tagName === "DETAILS") section.open = true;
-    if (!hashScrolled) {
-      section.scrollIntoView({ block: scrollBlockStart });
-      hashScrolled = true;
-    }
+  if (section && section.classList.contains("panel")) {
+    if (hashApplied || section.classList.contains("panel-hidden")) return;
+    revealPanel(section);
+    hashApplied = true;
     return;
   }
-  if (isServiceExpansionKey(h)) {
-    const name = expansionName(h, expansionPrefixService);
-    if (!(allServices || []).some((s) => s.name === name)) return;
-    openSectionForService(name);
-    scheduleHashExpansion(h);
-    if (!hashScrolled) {
-      const el = document.getElementById("svc-row-" + name);
-      if (el) el.scrollIntoView({ block: "center" });
-      hashScrolled = true;
-    }
-    return;
-  }
-  if (isWatchExpansionKey(h)) {
-    const name = expansionName(h, expansionPrefixWatch);
-    const w = (allWatches || []).find((item) => item && item.name === name);
-    if (!w) return;
-    const sec = $(watchSectionFor(w));
-    if (sec) { setPanelVisible(sec, true); sec.open = true; }
-    scheduleHashExpansion(h);
-    if (!hashScrolled) {
-      const el = document.getElementById("wat-row-" + name);
-      if (el) el.scrollIntoView({ block: "center" });
-      hashScrolled = true;
-    }
-    return;
-  }
-  if (isAppExpansionKey(h)) {
-    const name = expansionName(h, expansionPrefixApp);
-    if (!(allApps || []).some((a) => a.name === name)) return;
-    const sec = $("#apps-section");
-    if (sec) { setPanelVisible(sec, true); sec.open = true; }
-    scheduleHashExpansion(h);
-    if (!hashScrolled) {
-      const el = document.getElementById("app-row-" + name);
-      if (el) el.scrollIntoView({ block: "center" });
-      hashScrolled = true;
-    }
-    return;
-  }
-  if (isLibraryExpansionKey(h)) {
-    const name = expansionName(h, expansionPrefixLibrary);
-    if (!(allLibraries || []).some((library) => library.name === name)) return;
-    const sec = $("#libraries-section");
-    if (sec) { setPanelVisible(sec, true); sec.open = true; }
-    scheduleHashExpansion(h);
-    if (!hashScrolled) {
-      const el = document.getElementById("library-row-" + name);
-      if (el) el.scrollIntoView({ block: "center" });
-      hashScrolled = true;
-    }
+  const kind = targetKindOfKey(h);
+  if (!kind) return;
+  const name = h.slice(kind.prefix.length);
+  const item = kind.items().find((candidate) => candidate && candidate.name === name);
+  if (!item) return;
+  const p = kind.panelOf(item);
+  if (!hashApplied) revealPanel(p.dom.section, false);
+  scheduleHashExpansion(h);
+  if (!hashApplied) {
+    const row = document.getElementById(p.rowId(item));
+    if (row) row.scrollIntoView({ block: "center" });
+    hashApplied = true;
   }
 }
-window.addEventListener(domEventHashChange, () => { hashScrolled = false; applyHash(); });
+window.addEventListener(domEventHashChange, () => { hashApplied = false; applyHash(); });
 
 // rowClick expands a row from a click anywhere on it, except on interactive
 // elements (action buttons and links) which keep their own behaviour.
@@ -3508,7 +3433,7 @@ function rowClick(event, key, toggle = toggleExpand) {
 // reassertExpansions): the row template leaves the <td> empty (no binding), so
 // the outer #rows/watch render and these loaders never fight over the same cell.
 function expansionCell(key) {
-  const tr = [...document.querySelectorAll("tr.exp-row")].find((r) => r.dataset.exp === key);
+  const tr = document.getElementById("exp-" + key);
   // The content lives in the cell's .exp-body wrapper, never in the <td>
   // itself: the wrapper is what keeps a wide expansion from widening the table.
   return tr ? tr.querySelector(":scope > td > .exp-body") : null;
@@ -3706,13 +3631,13 @@ function procTreeLabel(row) {
 
 function serviceUptimeCell(s) {
   const up = s ? fmtDuration(s.uptime_seconds) : "";
-  if (!up) return tpl`<span class="muted">—</span>`;
+  if (!up) return mutedDash;
   const title = s.started_at ? `started ${fmtTime(s.started_at)}` : nothing;
   return tpl`<span title="${title}">${up}</span>`;
 }
 
 function cpuInline(cpu, ready, numCPU, cpuThread) {
-  if (!ready) return numCPU ? tpl`<span class="muted">measuring…</span>` : tpl`<span class="muted">—</span>`;
+  if (!ready) return numCPU ? tpl`<span class="muted">measuring…</span>` : mutedDash;
   const v = Number(cpu) || 0;
   // Same shape as every other CPU bar (cpuBarMini): the percentage lives inside
   // the bar and the precise value in the tooltip — no separate label prefix. The
@@ -3734,38 +3659,38 @@ function serviceHasNoResidentProcess(s) {
 }
 
 function serviceCpuCell(s) {
-  if (serviceHasNoResidentProcess(s)) return tpl`<span class="muted">—</span>`;
+  if (serviceHasNoResidentProcess(s)) return mutedDash;
   return cpuInline(s && s.cpu, !!(s && s.cpu_ready), s && s.num_cpu, s && s.cpu_thread);
 }
 
 function memoryInline(rss) {
   rss = Number(rss) || 0;
-  if (!rss) return tpl`<span class="muted">—</span>`;
+  if (!rss) return mutedDash;
   const hostMem = hostMemTotalBytes();
   if (hostMem > 0) return usageBarMini(pctClamp(rss / hostMem * percentScale), fmtBytes(rss), `${fmtBytes(rss)} resident memory`);
   return tpl`<b>${fmtBytes(rss)}</b>`;
 }
 
 function serviceMemCell(s) {
-  if (serviceHasNoResidentProcess(s)) return tpl`<span class="muted">—</span>`;
+  if (serviceHasNoResidentProcess(s)) return mutedDash;
   return memoryInline(s && s.rss);
 }
 
 function serviceFDsCell(s) {
-  if (serviceHasNoResidentProcess(s)) return tpl`<span class="muted">—</span>`;
-  if (!(s && s.fds)) return tpl`<span class="muted">—</span>`;
+  if (serviceHasNoResidentProcess(s)) return mutedDash;
+  if (!(s && s.fds)) return mutedDash;
   return tpl`<span title="open file descriptors">${fmtNum(s.fds, 0)}</span>`;
 }
 
 function ioRWInline(read, write) {
   read = Number(read) || 0;
   write = Number(write) || 0;
-  if (!read && !write) return tpl`<span class="muted">—</span>`;
+  if (!read && !write) return mutedDash;
   return tpl`<span title="read / write">${fmtBytes(read)} / ${fmtBytes(write)}</span>`;
 }
 
 function serviceIoCell(s) {
-  if (serviceHasNoResidentProcess(s)) return tpl`<span class="muted">—</span>`;
+  if (serviceHasNoResidentProcess(s)) return mutedDash;
   return ioRWInline(s && s.io_read, s && s.io_write);
 }
 
@@ -3780,7 +3705,7 @@ const strayCountTitle = "processes in this service's control group that no confi
 // every other empty metric: the number is only interesting when it is not zero.
 function serviceStraysCell(s) {
   const n = serviceStrayCount(s);
-  if (!n) return tpl`<span class="muted">—</span>`;
+  if (!n) return mutedDash;
   return tpl`<span class="bad" title="${strayCountTitle}">${fmtNum(n, 0)}</span>`;
 }
 
@@ -4472,7 +4397,7 @@ function forgetFinishedSessionActions(inventory) {
 function sshSessionCloseButton(service, session) {
   const pending = pendingSessionBadge(sshSessionActionKey(service, session.pid, session.start_ticks));
   if (pending) return pending;
-  if (!me.can_act) return tpl`<span class="muted">read-only</span>`;
+  if (!me.can_act) return readOnlyNote;
   const label = `Close SSH session ${session.terminal || ""} of ${session.user || "unknown user"}`;
   if (!session.can_close) return tpl`<button class="icon-btn danger-btn" disabled aria-label="${label}" title="${session.message || "Session identity cannot be verified safely"}">${closeGlyph}</button>`;
   return rowActionFeedback(sshSessionActionKey(service, session.pid, session.start_ticks), tpl`<button class="icon-btn danger-btn" data-ssh-session-close="1" data-ssh-service="${service}" data-ssh-session-pid="${session.pid}" data-ssh-session-start-ticks="${session.start_ticks}" data-ssh-session-terminal="${session.terminal}" data-ssh-session-user="${session.user || ""}" data-ssh-session-managed="${!!session.managed_by_logind}" aria-label="${label}" title="${label}">${closeGlyph}</button>`);
@@ -4483,15 +4408,15 @@ function sshSessionCloseButton(service, session) {
 const closeGlyph = tpl`<span aria-hidden="true">✕</span>`;
 
 function terminalSessionCloseButton(session) {
-  const pending = pendingSessionBadge(terminalSessionActionKey(session.service, session.check, session.identity));
-  if (pending) return pending;
-  if (!me.can_act) return tpl`<span class="muted">read-only</span>`;
-  if (!session.can_close) return tpl`<span class="muted">unavailable</span>`;
   const label = `Close ${session.multiplexer || "terminal"} session ${session.name || ""} of ${session.user || "unknown user"}`;
-  return rowActionFeedback(terminalSessionActionKey(session.service, session.check, session.identity), tpl`<button class="icon-btn danger-btn" data-terminal-session-close="1"
+  return rowKillButton({
+    pendingKey: terminalSessionActionKey(session.service, session.check, session.identity),
+    canKill: session.can_close, unavailableTitle: nothing,
+    button: () => tpl`<button class="icon-btn danger-btn" data-terminal-session-close="1"
     data-terminal-service="${session.service || ""}" data-terminal-check="${session.check || ""}"
     data-terminal-multiplexer="${session.multiplexer || ""}" data-terminal-session="${session.name || ""}"
-    data-terminal-user="${session.user || ""}" data-terminal-identity="${session.identity || ""}" aria-label="${label}" title="${label}">${closeGlyph}</button>`);
+    data-terminal-user="${session.user || ""}" data-terminal-identity="${session.identity || ""}" aria-label="${label}" title="${label}">${closeGlyph}</button>`,
+  });
 }
 
 function sessionStateCell(state) {
@@ -4501,13 +4426,14 @@ function sessionStateCell(state) {
 
 function emptySessionCloseButton(source) {
   if (source.state !== sessionSourceAvailable || !source.can_close_empty) return nothing;
-  const pending = pendingSessionBadge(emptySourceActionKey(source.service, source.check));
-  if (pending) return pending;
-  if (!me.can_act) return tpl`<span class="muted">read-only</span>`;
   const label = `Close the empty ${source.kind || "terminal"} server of ${source.user || "unknown user"}`;
-  return rowActionFeedback(emptySourceActionKey(source.service, source.check), tpl`<button class="icon-btn danger-btn" data-empty-session-close="1"
+  return rowKillButton({
+    pendingKey: emptySourceActionKey(source.service, source.check),
+    canKill: true,
+    button: () => tpl`<button class="icon-btn danger-btn" data-empty-session-close="1"
     data-empty-session-service="${source.service || ""}"
-    data-empty-session-check="${source.check || ""}" aria-label="${label}" title="${label}">${closeGlyph}</button>`);
+    data-empty-session-check="${source.check || ""}" aria-label="${label}" title="${label}">${closeGlyph}</button>`,
+  });
 }
 
 function sourceHasSession(source, inventory) {
@@ -4584,17 +4510,18 @@ function sessionRows(inventory) {
   return [...ssh, ...terminal, ...issues, ...emptySources];
 }
 
-// rowKillButton is the action cell of one row the daemon may signal: the
+// rowKillButton is the action cell of one row the daemon may signal or close
+// (a statement, a process, a terminal session, an empty terminal server): the
 // pending badge while its action is in flight, "killing…" when the server is
 // already stopping it, "read-only" for a viewer, "unavailable" (titled with the
-// daemon's reason) when it cannot be signalled, else the caller's danger
-// button. The button is passed in because lit binds only static attribute
+// daemon's reason, when it gives one) when it cannot be acted on, else the
+// caller's danger button. The button is passed in because lit binds only static attribute
 // names and each row kind carries its own data-* identity.
 function rowKillButton({ pendingKey, stopping, stoppingHint, canKill, unavailableTitle, button }) {
   const pending = pendingSessionBadge(pendingKey);
   if (pending) return pending;
   if (stopping) return sessionActionBadge(sessionActionKilling, stoppingHint);
-  if (!me.can_act) return tpl`<span class="muted">read-only</span>`;
+  if (!me.can_act) return readOnlyNote;
   if (!canKill) return tpl`<span class="muted" title="${unavailableTitle}">unavailable</span>`;
   return rowActionFeedback(pendingKey, button());
 }
@@ -4712,8 +4639,6 @@ const dbQuerySortKeys = {
   io: (row) => row.ioReady ? row.ioRead + row.ioWrite : -1,
 };
 
-function setDBQuerySort(key) { toggleSort(dbQuerySort, key, renderSessions); }
-
 function sortDBQueryRows(rows) {
   const value = dbQuerySortKeys[dbQuerySort.key];
   if (!value) return rows;
@@ -4723,7 +4648,7 @@ function sortDBQueryRows(rows) {
 }
 
 function dbQueryRunningCell(row) {
-  if (row.running < 0) return tpl`<span class="muted">—</span>`;
+  if (row.running < 0) return mutedDash;
   if (!row.long) return fmtDuration(row.running);
   return tpl`<span class="lvl-warning" title="Running longer than the watch's min_duration">${fmtDuration(row.running)}</span>`;
 }
@@ -4755,7 +4680,7 @@ function renderDBQueries(rows) {
   const body = $("#db-query-rows");
   const hasSource = (latestSessionInventory.sources || []).some((source) => source.kind === sessionKindDatabase)
     || (latestSessionInventory.database || []).length > 0;
-  const show = hasSource && (sessionFilter === filterAll || sessionFilter === sessionKindDatabase);
+  const show = hasSource && (sessionPanel.status === filterAll || sessionPanel.status === sessionKindDatabase);
   if (block) block.hidden = !show;
   const count = $("#db-queries-count");
   if (count) count.textContent = String((latestSessionInventory.database || []).length);
@@ -4764,12 +4689,12 @@ function renderDBQueries(rows) {
     const content = rows.length ? rows.map(dbQueryRow) : tpl`<tr><td colspan="11" class="muted">No statements match the filter.</td></tr>`;
     litRender(content, body);
   }
-  updateSortIndicatorsFor("dqi", dbQuerySort, "#db-query-block th.sortable[data-db-query-sort]", "dbQuerySort");
+  updateSortHeaders("db-queries");
 }
 
 // sessionFieldsMatch is the Sessions search: every listed field, any case.
 function sessionFieldsMatch(fields) {
-  return !sessionQuery || fields.join(" ").toLowerCase().includes(sessionQuery);
+  return !sessionPanel.query || fields.join(" ").toLowerCase().includes(sessionPanel.query);
 }
 
 function dbQueryRowMatches(row) {
@@ -4805,21 +4730,20 @@ const sessionSortReadyKeys = {
   io: "ioReady",
 };
 
-function setSessionSort(key) { toggleSort(sessionSort, key, renderSessions); }
-
 function sessionSortMissing(row, key) {
   const readyKey = sessionSortReadyKeys[key];
   return !!readyKey && !row[readyKey];
 }
 
 function sortSessionRows(rows) {
-  const value = sessionSortKeys[sessionSort.key];
-  if (!sessionSort.key || !value) return rows;
+  const sort = sessionPanel.sort;
+  const value = sessionSortKeys[sort.key];
+  if (!sort.key || !value) return rows;
   rows.sort((a, b) => {
-    const aMissing = sessionSortMissing(a, sessionSort.key);
-    const bMissing = sessionSortMissing(b, sessionSort.key);
+    const aMissing = sessionSortMissing(a, sort.key);
+    const bMissing = sessionSortMissing(b, sort.key);
     if (aMissing !== bMissing) return aMissing ? 1 : -1;
-    const primary = compareSortValues(value(a), value(b)) * sessionSort.dir;
+    const primary = compareSortValues(value(a), value(b)) * sort.dir;
     if (primary !== 0) return primary;
     return compareSortValues(sessionSortKeys.session(a), sessionSortKeys.session(b));
   });
@@ -4827,7 +4751,7 @@ function sortSessionRows(rows) {
 }
 
 function sessionIdleCell(row) {
-  return row.idleReady ? fmtDuration(row.idle) : tpl`<span class="muted">—</span>`;
+  return row.idleReady ? fmtDuration(row.idle) : mutedDash;
 }
 
 function sessionMetricPlaceholder(row) {
@@ -4839,7 +4763,7 @@ function sessionCPUCell(row) {
 }
 
 function sessionMemoryCell(row) {
-  return row.memoryReady ? memoryInline(row.memory) : tpl`<span class="muted">—</span>`;
+  return row.memoryReady ? memoryInline(row.memory) : mutedDash;
 }
 
 function sessionIOCell(row) {
@@ -4858,21 +4782,26 @@ function renderSessions(inventory = latestSessionInventory) {
   forgetFinishedSessionActions(latestSessionInventory);
   const sources = latestSessionInventory.sources || [];
   const database = latestSessionInventory.database || [];
-  setPanelVisible($("#sessions-section"), sources.length > 0 || database.length > 0);
+  const filter = sessionPanel.status;
+  setPanelVisible(sessionPanel.dom.section, sources.length > 0 || database.length > 0);
   const rows = sessionRows(latestSessionInventory);
   const dbRows = dbQueryRows(latestSessionInventory);
-  renderFilterButtonCounts("#session-filters", sessionFilterCounts(latestSessionInventory, rows, dbRows));
   const filtered = rows.filter((row) => {
-    if (sessionFilter !== filterAll && row.kind !== sessionFilter) return false;
+    if (filter !== filterAll && row.kind !== filter) return false;
     return sessionFieldsMatch([row.kind, row.service, row.user, row.name, row.pid, row.state]);
   });
   const dbFiltered = dbRows.filter(dbQueryRowMatches);
-  const dbShown = sessionFilter === filterAll || sessionFilter === sessionKindDatabase ? dbFiltered : [];
+  const dbShown = filter === filterAll || filter === sessionKindDatabase ? dbFiltered : [];
+  renderPanelToolbar(sessionPanel, {
+    counts: sessionFilterCounts(latestSessionInventory, rows, dbRows),
+    groups: new Map(), visibleGroups: [],
+    shown: filtered.length + dbShown.length, total: rows.length + dbRows.length,
+  });
   sortSessionRows(filtered);
   // A host whose only session sources are db_queries watches, or the database
   // filter, has nothing for the terminal table to say.
   const table = $("#sessions-section .sessions-table");
-  if (table) table.hidden = sessionFilter === sessionKindDatabase || !sources.some((source) => source.kind !== sessionKindDatabase);
+  if (table) table.hidden = filter === sessionKindDatabase || !sources.some((source) => source.kind !== sessionKindDatabase);
   renderDBQueries(dbShown);
   const body = $("#session-rows");
   if (body) {
@@ -4885,28 +4814,10 @@ function renderSessions(inventory = latestSessionInventory) {
     </tr>`) : tpl`<tr><td colspan="10" class="muted">No sessions match the filter.</td></tr>`;
     litRender(content, body);
   }
-  const activeCount = (latestSessionInventory.ssh || []).length + (latestSessionInventory.terminal || []).length + database.length;
-  const count = $("#sessions-count");
-  if (count) count.textContent = String(activeCount);
-  const filterCount = $("#session-filter-count");
-  if (filterCount) filterCount.textContent = `${filtered.length + dbShown.length}/${rows.length + dbRows.length}`;
-  updateSortIndicatorsFor("ssi", sessionSort, "#sessions-section .sessions-table th.sortable[data-session-sort]", "sessionSort");
-  updateSectionNav();
-}
-
-function setSessionQuery(value) {
-  sessionQuery = (value || "").trim().toLowerCase();
-  renderSessions();
-}
-
-function setSessionFilter(value) {
-  sessionFilter = value || filterAll;
-  document.querySelectorAll("#session-filters button").forEach((button) => {
-    const active = button.dataset.sf === sessionFilter;
-    button.classList.toggle("f-active", active);
-    button.setAttribute("aria-pressed", active ? domBoolTrue : domBoolFalse);
-  });
-  renderSessions();
+  const count = sessionCount();
+  if (sessionPanel.dom.count) sessionPanel.dom.count.textContent = count ? String(count) : "";
+  updateSortHeaders("sessions");
+  refreshChrome();
 }
 
 // Connection context comes from structured readings, never from parsing messages.
@@ -5215,7 +5126,7 @@ function serviceGraphDetail(d) {
 // reason behind a button's mark, readable where its tooltip is not (touch).
 function lastOperationCell(d) {
   const op = d && d.last_operation;
-  if (!op || !op.time) return tpl`<span class="muted">—</span>`;
+  if (!op || !op.time) return mutedDash;
   return tpl`${activityDateCell(op)}<div>${op.action || "operation"} <span class="${operationOutcomeStyles[operationOutcome(op.status)].cls}">${op.status || backendStatusUnknown}</span>${op.message ? tpl` <span class="muted">${op.message}</span>` : nothing}</div>`;
 }
 
@@ -5237,7 +5148,7 @@ function serviceGeneralDetail(d, processGeneral) {
       <div><span class="muted">Unit</span><br>${unitCell(d)}</div>
       <div><span class="muted">Backend</span><br>${d.backend || "—"}</div>
       <div class="${colDupWide}"><span class="muted">Uptime</span><br>${serviceUptimeCell(d)}</div>
-      <div><span class="muted">Interval</span><br>${d.interval ? d.interval : tpl`<span class="muted">—</span>`}</div>
+      <div><span class="muted">Interval</span><br>${d.interval ? d.interval : mutedDash}</div>
       <div><span class="muted">Dry run</span><br><b>${d.dry_run ? "yes" : "no"}</b></div>
       <div><span class="muted">Policy</span><br>${policyCell(d)}</div>
       <div><span class="muted">Locks</span><br>${locksCell(d)}</div>
@@ -5550,25 +5461,6 @@ function watchSearchText(w) {
   ].filter(Boolean).join(" ").toLowerCase();
 }
 
-function getWatchPanel(panel) {
-  return watchPanels[panel] || watchPanels.host;
-}
-
-// watchTypeValue is the value a panel's type dropdown filters on. Most panels
-// filter by check_type; a panel can override with typeOf (e.g. Storage filters
-// by filesystem type since all its watches share one check_type).
-function watchTypeValue(panel, w) {
-  if (panel.key === watchPanelKeyHost) return watchGroupOf(w);
-  return (panel.typeOf ? panel.typeOf(w) : w.check_type) || "";
-}
-
-function watchMatches(w, panelKey) {
-  const panel = getWatchPanel(panelKey);
-  if (panel.query && !watchSearchText(w).includes(panel.query)) return false;
-  if (panel.type !== filterAll && watchTypeValue(panel, w) !== panel.type) return false;
-  return watchMatchesStatus(w, panel.status);
-}
-
 function watchMatchesStatus(w, status) {
   if (!watchStatusFilterStates.includes(status)) return true;
   if (status === targetStateFailed) return isWatchAttention(w);
@@ -5579,99 +5471,6 @@ function watchFilterCounts(watches) {
   const counts = stateCounts(watches, watchStateText, watchStatusFilterStates);
   counts[targetStateFailed] = (watches || []).filter(isWatchAttention).length;
   return counts;
-}
-
-function syncWatchFilterActive(panelKey) {
-  const panel = getWatchPanel(panelKey);
-  syncFilterButtons(panel.filters, "wf", panel.status);
-}
-
-function setWatchQuery(panelKey, v) {
-  const panel = getWatchPanel(panelKey);
-  panel.query = (v || "").trim().toLowerCase();
-  renderWatches();
-  saveUIState();
-}
-
-function setWatchStatus(panelKey, v) {
-  const panel = getWatchPanel(panelKey);
-  panel.status = normalizeWatchStatusFilter(v);
-  syncWatchFilterActive(panelKey);
-  renderWatches();
-  saveUIState();
-}
-
-function setAllWatchStatuses(v) {
-  Object.keys(watchPanels).forEach((key) => {
-    watchPanels[key].status = v || filterAll;
-    syncWatchFilterActive(key);
-  });
-  renderWatches();
-  saveUIState();
-}
-
-function openAllWatchPanels() {
-  Object.values(watchPanels).forEach((panel) => {
-    const sec = $(panel.section);
-    if (sec) sec.open = true;
-  });
-}
-
-function setWatchType(panelKey, v) {
-  const panel = getWatchPanel(panelKey);
-  panel.type = v || filterAll;
-  renderWatches();
-  saveUIState();
-}
-
-function setWatchGrouped(panelKey, grouped) {
-  const panel = getWatchPanel(panelKey);
-  panel.grouped = !!grouped;
-  renderWatches();
-  saveUIState();
-}
-
-function toggleAllWatchGroups(panelKey) {
-  const panel = getWatchPanel(panelKey);
-  const watches = (allWatches || []).filter((watch) => watchPanelKeyFor(watch) === panelKey && watchMatches(watch, panelKey));
-  const groups = sortedGroupValues(watches, watchGroupOf);
-  toggleAllGroups(groups, panel.collapsedGroups);
-  renderWatches();
-  saveUIState();
-}
-
-// syncWatchTypeSelect repopulates one watch panel's type dropdown from the
-// distinct check types currently present in that panel (with per-type counts).
-// A single type cannot filter anything, so it is hidden and the selection is
-// reset to all to prevent an invisible stale filter.
-function syncWatchTypeSelect(panelKey, watches) {
-  const panel = getWatchPanel(panelKey);
-  const select = $(panel.typeSelect);
-  if (!select) return filterAll;
-  const counts = new Map();
-  (watches || []).forEach((w) => {
-    const t = watchTypeValue(panel, w);
-    if (t) counts.set(t, (counts.get(t) || 0) + 1);
-  });
-  const types = [...counts.keys()].sort((a, b) =>
-    a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" }));
-  const visible = types.length > 1;
-  select.hidden = !visible;
-  select.disabled = !visible;
-  const next = visible && panel.type !== filterAll && counts.has(panel.type) ? panel.type : filterAll;
-  select.innerHTML = `<option value="${filterAll}">${esc(panel.allTypesLabel)}</option>` + types.map((t) =>
-    `<option value="${esc(t)}">${esc(t)} (${counts.get(t)})</option>`).join("");
-  select.value = next;
-  return next;
-}
-
-function renderWatchFilterCounts(panelKey, watches) {
-  const w = watches || allWatches || [];
-  renderFilterButtonCounts(getWatchPanel(panelKey).filters, watchFilterCounts(w));
-}
-
-function watchPanelFilterActive(panel) {
-  return !!(panel.query || panel.status !== filterAll || panel.type !== filterAll);
 }
 
 function parseDurationSeconds(raw) {
@@ -5698,39 +5497,6 @@ function parseDurationSeconds(raw) {
   if (matched) return total;
   const n = parseFloat(s);
   return Number.isFinite(n) ? n : 0;
-}
-
-const watchSortKeys = {
-  name: (w) => displayName(w).toLowerCase(),
-  group: (w) => watchGroupOf(w).toLowerCase(),
-  type: (w) => (w.check_type || "").toLowerCase(),
-  indicator: (w) => watchPrimaryMetricText(w).toLowerCase(),
-  summary: (w) => watchSummaryText(w).toLowerCase(),
-  interval: (w) => parseDurationSeconds(w.interval),
-  polarity: (w) => w.fire_on_fail ? "fail" : "threshold",
-  hook: (w) => w.has_hook ? 1 : 0,
-  notifiers: (w) => notifierNames(w).join(" ").toLowerCase() || Number(w.notifier_count || 0),
-  last: (w) => w.last_activity || "",
-  state: watchStateRank,
-};
-
-function setWatchSort(panelKey, key) { toggleSort(getWatchPanel(panelKey).sort, key, renderWatches); }
-
-function updateWatchSortIndicators(panelKey) {
-  const panel = getWatchPanel(panelKey);
-  updateSortIndicatorsFor("wi", panel.sort, `${panel.section} th.sortable[data-watch-sort]`, "watchSort", panel.section);
-}
-
-function watchPanelKeyFor(_watch) {
-  return watchPanelKeyHost;
-}
-
-// watchPanelKeyForElement reads the panel key straight from the enclosing
-// <details data-panel="..."> attribute, so panel markup names its own key.
-function watchPanelKeyForElement(el) {
-  const details = el && el.closest("details[data-panel]");
-  const key = details ? details.dataset.panel : "";
-  return watchPanels[key] ? key : watchPanelKeyHost;
 }
 
 function renderConditionRows(conditions) {
@@ -5773,7 +5539,7 @@ function renderStorageWatch(d) {
     <div><span class="muted">Filesystem</span><br><code>${fs}</code></div>
     <div><span class="muted">Device</span><br>${device}</div>
     <div><span class="muted">Total</span><br><b>${fmtBytes(d.total_bytes)}</b></div>
-    <div><span class="muted">Used</span><br>${usedPct == null ? tpl`<span class="muted">—</span>` : usageBar(usedPct)} <b>${fmtBytes(d.used_bytes)}</b></div>
+    <div><span class="muted">Used</span><br>${usedPct == null ? mutedDash : usageBar(usedPct)} <b>${fmtBytes(d.used_bytes)}</b></div>
     <div><span class="muted">Free</span><br><b>${fmtBytes(d.free_bytes)}</b> (${fmtPct(d.free_pct)})</div>
     <div><span class="muted">Inodes</span><br>${inodes}</div>
     <div><span class="muted">Options</span><br>${options}</div>
@@ -5964,12 +5730,6 @@ function watchNextCheckCell(w) {
   return tpl`${activityDateCell({ time: next })}<span class="watch-clock muted" data-clock-until="${next}"></span>`;
 }
 
-// watchNameCell renders the shared expandable name cell (chevron + toggle).
-function watchNameCell(w, key, open) {
-  const chev = tpl`<span class="exp" aria-hidden="true">${open ? '▾' : '▸'}</span>`;
-  return tpl`<td>${chev}<button type="button" class="row-toggle" data-exp-toggle="${key}" aria-expanded="${open}" aria-controls="${open ? "exp-" + key : nothing}" aria-label="${expandToggleAriaLabel(displayName(w), open, "watch details")}">${displayName(w)}${watchScopeSuffix(w)}</button></td>`;
-}
-
 // watchActionsCell renders the shared actions cell (expand / monitor / unmonitor).
 function watchActionsCell(w) {
   const probeBtn = (w.can_probe && me.can_act && w.enabled)
@@ -5990,7 +5750,7 @@ function watchActionsCell(w) {
       ? (w.monitored
         ? watchActionButton(w, actionUnmonitor, tpl`<span aria-hidden="true">⊘</span>`, true)
         : watchActionButton(w, actionMonitor, tpl`<span aria-hidden="true">◉</span>`, true))
-      : tpl`<span class="muted">read-only</span>`);
+      : readOnlyNote);
   const actions = !w.enabled
     ? tpl`<span class="muted">disabled in config</span>`
     : tpl`${probeBtn} ${raidButtons} ${replicationBtn} ${expandBtn} ${monitorBtn}`;
@@ -6006,40 +5766,30 @@ function watchRowClass(state) {
   return failing ? "row-failing" : (state === targetStateWarning || state === targetStateStale ? "row-warning" : "");
 }
 
-// watchExpansionRow returns the inline expansion row when open. Its colspan must
-// match the number of columns in the panel's table — 9 for most, but the
-// Certificate panel passes 10 for its extra Key type column.
-function watchExpansionRow(key, open, cols = 9) {
-  return open
-    ? tpl`<tr class="exp-row" id="exp-${key}" data-exp="${key}"><td colspan="${cols}"><div class="exp-body"></div></td></tr>`
-    : null;
-}
-
 // watchRowParts builds the shared watch row shell and its optional expansion.
 // Callers supply only the cells that vary between the generic and typed views.
 function watchRowParts(w, cells, colCount) {
   const state = watchStateText(w);
   const key = watchExpansionKey(w.name);
-  const open = expanded.has(key);
   const row = tpl`<tr id="wat-row-${w.name}" class="clickable ${watchRowClass(state)}" data-exp-key="${key}">
-    ${watchNameCell(w, key, open)}
+    <td>${expandToggle(key, displayName(w), "watch details", tpl`${displayName(w)}${watchScopeSuffix(w)}`)}</td>
     ${cells}
     <td>${watchLastCheckedCell(w)}</td>
     <td>${watchLastCell(w)}</td>
     <td>${watchStateCell(w)}</td>
     ${watchActionsCell(w)}
   </tr>`;
-  return { row, expRow: watchExpansionRow(key, open, colCount) };
+  return { row, expRow: expansionRow(key, colCount) };
 }
 
 // storageUsageCell renders the occupied-space progress bar (with used/total
 // byte breakdown) for a storage watch, or a clear error/placeholder.
 function storageUsageCell(w) {
   const d = w.storage;
-  if (!d) return tpl`<span class="muted">—</span>`;
+  if (!d) return mutedDash;
   if (d.sample_error) return tpl`<span class="bad">${d.sample_error}</span>`;
   const usedPct = storageUsedPct(d);
-  if (usedPct == null) return tpl`<span class="muted">—</span>`;
+  if (usedPct == null) return mutedDash;
   return tpl`${usageBar(usedPct)} <span class="muted">${fmtBytes(d.used_bytes)} / ${fmtBytes(d.total_bytes)}</span>`;
 }
 
@@ -6056,7 +5806,7 @@ const healthValueUnknown = "unknown";
 
 function watchHealthCell(w) {
   const health = readingRaw(w, "health");
-  if (!health) return tpl`<span class="muted">—</span>`;
+  if (!health) return mutedDash;
   const cls = healthCellClass(health.toLowerCase());
   return tpl`<span class="${cls}">${health}</span>`;
 }
@@ -6095,7 +5845,7 @@ function watchPrimaryMetric(w) {
   if (type === "storage") return storageUsageCell(w);
   if (type === "lvm") return watchHealthCell(w);
   const text = watchPrimaryMetricText(w);
-  return text ? tpl`${text}` : tpl`<span class="muted">—</span>`;
+  return text ? tpl`${text}` : mutedDash;
 }
 
 function watchConditionValue(w, field) {
@@ -6116,12 +5866,12 @@ function readingSortValue(w, field) {
 
 function storageFilesystemCell(w) {
   const filesystem = w.storage && w.storage.filesystem;
-  return filesystem ? tpl`<code>${filesystem}</code>` : tpl`<span class="muted">—</span>`;
+  return filesystem ? tpl`<code>${filesystem}</code>` : mutedDash;
 }
 
 function storageMountCell(w) {
   const mount = w.storage && w.storage.mount_point;
-  return mount ? tpl`<code>${mount}</code>` : tpl`<span class="muted">—</span>`;
+  return mount ? tpl`<code>${mount}</code>` : mutedDash;
 }
 
 function typedReadingCell(w, field) {
@@ -6133,7 +5883,7 @@ function meterColumn(key, label, format) {
     key, label,
     cell: (w) => {
       const value = w.meter && w.meter[key];
-      return value == null ? tpl`<span class="muted">—</span>` : tpl`${format(value)}`;
+      return value == null ? mutedDash : tpl`${format(value)}`;
     },
     sort: (w) => numericSortValue(w.meter && w.meter[key]),
   };
@@ -6152,7 +5902,7 @@ function swapColumn(key, label, format) {
     key, label,
     cell: (w) => {
       const value = w.swap && w.swap[key];
-      return value == null ? tpl`<span class="muted">—</span>` : tpl`${format(value)}`;
+      return value == null ? mutedDash : tpl`${format(value)}`;
     },
     sort: (w) => numericSortValue(w.swap && w.swap[key]),
   };
@@ -6433,32 +6183,29 @@ function watchTypeProfile(type) {
 
 function watchTypeLabel(type) { return watchTypeProfile(type).label; }
 
-function watchTypeSort(panel, type) {
-  const saved = panel.typeSorts[type];
+function watchTypeSort(type) {
+  const saved = watchPanel.typeSorts[type];
   return saved && typeof saved.key === "string" ? saved : { key: "name", dir: 1 };
 }
 
-function setWatchTypeSort(panelKey, type, key) {
-  const panel = getWatchPanel(panelKey);
-  const sort = watchTypeSort(panel, type);
+function setWatchTypeSort(type, key) {
+  const sort = watchTypeSort(type);
   if (sort.key === key) sort.dir = -sort.dir;
   else { sort.key = key; sort.dir = 1; }
-  panel.typeSorts[type] = sort;
-  renderWatches();
-  saveUIState();
+  watchPanel.typeSorts[type] = sort;
+  updatePanel(watchPanel, {});
 }
 
-function setWatchTypeFilter(panelKey, type, value) {
-  getWatchPanel(panelKey).typeFilters[type] = value || filterAll;
-  renderWatches();
-  saveUIState();
+function setWatchTypeFilter(type, value) {
+  watchPanel.typeFilters[type] = value || filterAll;
+  updatePanel(watchPanel, {});
 }
 
-function watchTypeRows(type, watches, panel, profile) {
+function watchTypeRows(type, watches, profile) {
   const filter = profile.filter;
-  const selected = panel.typeFilters[type] || filterAll;
+  const selected = watchPanel.typeFilters[type] || filterAll;
   const list = filter && selected !== filterAll ? watches.filter((w) => filter.value(w) === selected) : [...watches];
-  const sort = watchTypeSort(panel, type);
+  const sort = watchTypeSort(type);
   const column = profile.columns.find((item) => item.key === sort.key);
   const sharedSorts = {
     name: (w) => displayName(w).toLowerCase(),
@@ -6476,7 +6223,7 @@ function watchTypeRows(type, watches, panel, profile) {
   return list;
 }
 
-function watchTypeFilterControl(panel, type, watches, profile) {
+function watchTypeFilterControl(type, watches, profile) {
   if (!profile.filter) return nothing;
   const counts = new Map();
   watches.forEach((w) => {
@@ -6484,9 +6231,9 @@ function watchTypeFilterControl(panel, type, watches, profile) {
     counts.set(value, (counts.get(value) || 0) + 1);
   });
   if (counts.size < 2) return nothing;
-  const selected = counts.has(panel.typeFilters[type]) ? panel.typeFilters[type] : filterAll;
+  const selected = counts.has(watchPanel.typeFilters[type]) ? watchPanel.typeFilters[type] : filterAll;
   return tpl`<label class="watch-type-filter">${profile.filter.label}
-    <select data-watch-type-filter-panel="${panel.key}" data-watch-type-filter="${type}" aria-label="Filter ${watchTypeLabel(type)} by ${profile.filter.label}">
+    <select data-watch-type-filter="${type}" aria-label="Filter ${watchTypeLabel(type)} by ${profile.filter.label}">
       <option value="${filterAll}" ?selected=${selected === filterAll}>all</option>
       ${[...counts.keys()].sort().map((value) => tpl`<option value="${value}" ?selected=${selected === value}>${value} (${counts.get(value)})</option>`)}
     </select>
@@ -6499,31 +6246,31 @@ function typedWatchRowHTML(w, profile) {
   return parts.expRow ? [parts.row, parts.expRow] : [parts.row];
 }
 
-function renderWatchTypeTable(panel, type, watches) {
+function renderWatchTypeTable(type, watches) {
   const profile = watchTypeProfile(type);
-  const list = watchTypeRows(type, watches, panel, profile);
-  const sort = watchTypeSort(panel, type);
+  const list = watchTypeRows(type, watches, profile);
+  const sort = watchTypeSort(type);
   const columns = [{ key: "name", label: "Name" }, ...profile.columns, { key: "checked", label: "Last checked" }, { key: "last", label: "Last activity" }, { key: "state", label: "State" }, { label: "Actions" }];
   const rows = list.flatMap((watch) => typedWatchRowHTML(watch, profile));
   return tpl`<section class="watch-type-group">
-    <div class="watch-type-heading"><h3>${watchTypeLabel(type)} <span class="muted">(${watches.length})</span></h3>${watchTypeFilterControl(panel, type, watches, profile)}</div>
+    <div class="watch-type-heading"><h3>${watchTypeLabel(type)} <span class="muted">${watches.length}</span></h3>${watchTypeFilterControl(type, watches, profile)}</div>
     <table class="watch-table watch-type-table">
       <thead><tr>${columns.map((column) => column.key
-        ? tpl`<th scope="col" class="sortable" tabindex="0" data-watch-type-column="${column.key}" data-watch-type-sort-panel="${panel.key}" data-watch-type-sort-type="${type}" data-watch-type-sort="${column.key}" aria-sort="${sortAriaValue(sort, column.key)}">${column.label}<span class="sort-ind" data-watch-type-sort-ind="${type}:${column.key}">${sort.key === column.key ? (sort.dir > 0 ? " ▲" : " ▼") : ""}</span></th>`
+        ? tpl`<th scope="col" class="sortable" tabindex="0" data-watch-type-column="${column.key}" data-watch-type-sort-type="${type}" data-watch-type-sort="${column.key}" aria-sort="${sortAriaValue(sort, column.key)}">${column.label}<span class="sort-ind">${sortArrow(sort, column.key)}</span></th>`
         : tpl`<th scope="col">${column.label}</th>`)}</tr></thead>
       <tbody>${rows.length ? rows : tpl`<tr><td colspan="${columns.length}" class="muted">No ${watchTypeLabel(type).toLowerCase()} watches match this filter.</td></tr>`}</tbody>
     </table>
   </section>`;
 }
 
-function renderWatchGroups(panel, watches) {
-  const groups = sortedGroupValues(watches, watchGroupOf);
-  return groups.flatMap((group) => {
+// renderWatchGroups is the watch panel's body: one collapsible heading per
+// group and, under it, one table per check type.
+function renderWatchGroups(watches) {
+  return sortedGroupValues(watches, watchGroupOf).flatMap((group) => {
     const groupWatches = watches.filter((watch) => watchGroupOf(watch) === group);
-    const collapsed = panel.collapsedGroups.has(group);
     const types = sortedGroupValues(groupWatches, watchTypeKey);
-    return [tpl`<tr class="group-row"><td colspan="${panel.cols}"><button type="button" class="row-toggle group-toggle" data-group-panel="${panel.groupPanel}" data-group-name="${group}" aria-expanded="${collapsed ? domBoolFalse : domBoolTrue}"><span class="exp" aria-hidden="true">${collapsed ? "▸" : "▾"}</span>${group} <span class="muted">${groupWatches.length}</span></button></td></tr>`,
-      collapsed ? nothing : tpl`<tr><td colspan="${panel.cols}">${types.map((type) => renderWatchTypeTable(panel, type, groupWatches.filter((watch) => watchTypeKey(watch) === type)))}</td></tr>`];
+    return [groupHeaderRow(watchPanel, group, groupWatches),
+      watchPanel.collapsedGroups.has(group) ? nothing : tpl`<tr><td class="watch-group-cell">${types.map((type) => renderWatchTypeTable(type, groupWatches.filter((watch) => watchTypeKey(watch) === type)))}</td></tr>`];
   });
 }
 
@@ -6531,78 +6278,23 @@ function renderWatches(watches) {
   if (watches) allWatches = watches;
   scheduleGlobalTargetSync();
   preserveExpansionCells(isWatchExpansionKey);
-  renderWatchPanel(watchPanelKeyHost, allWatches || []);
+  renderListPanel(watchPanel);
+  updateWatchClocks();
   reassertExpansions();
   applyHash();
-  updateSectionNav();
+  refreshChrome();
 }
 
-// renderWatchPanel fills the watch table from its already-classified subset,
-// using the same search/type/status filters, visible count and column sorting.
-function renderWatchPanel(panelKey, watches) {
-  const panel = getWatchPanel(panelKey);
-  const section = $(panel.section);
-  const tbody = $(panel.rows);
-  const cnt = $(panel.count);
-  const filterCount = $(panel.filterCount);
-  if (!section || !tbody) return;
-  const outerHead = section.querySelector(".watch-table > thead");
-  if (outerHead) outerHead.hidden = true;
-  const total = (watches || []).length;
-  if (!panelShell({ section, tbody, count: cnt, filterCount, total })) return;
-  renderWatchFilterCounts(panelKey, watches);
-  panel.type = syncWatchTypeSelect(panelKey, watches);
-  syncWatchFilterActive(panelKey);
-  const list = (watches || []).filter((w) => watchMatches(w, panelKey));
-  if (panel.sort.key && watchSortKeys[panel.sort.key]) {
-    sortedBy(list, panel.sort, watchSortKeys, "name");
-  } else if (panel.defaultSortByName) {
-    sortedBy(list, { key: "name", dir: 1 }, watchSortKeys, "name");
-  }
-  updateWatchSortIndicators(panelKey);
-  const groupOf = watchGroupOf;
-  const groups = sortedGroupValues(list, groupOf);
-  panel.collapsedGroups.forEach((group) => { if (!groups.includes(group)) panel.collapsedGroups.delete(group); });
-  if (groups.length < 2) panel.grouped = false;
-  updateGroupButtons(panel.groupPrefix, panel.grouped, groups, panel.collapsedGroups, panel.groupLabel, "group");
-  const filtered = watchPanelFilterActive(panel);
-  if (filterCount) filterCount.textContent = filtered ? `showing ${list.length} of ${total}` : "";
-  const content = list.length
-    ? renderWatchGroups(panel, list)
-    : tpl`<tr><td colspan="${panel.cols || 9}" class="muted">${filtered ? panel.emptyFiltered : panel.empty}</td></tr>`;
-  litRender(content, tbody);
-  updateWatchClocks();
-}
-
-// ---- Installed applications ----------------------------------------------
-const appSortKeys = {
-  name: (a) => displayName(a).toLowerCase(),
-  category: (a) => categoryOf(a, defaultCategoryApp).toLowerCase(),
-  state: appStateRank,
-  version: (a) => (a.version_short || a.version || "").toLowerCase(),
-  last: lastEventTime,
-};
+// ---- Installed applications and libraries ---------------------------------
+// Both are artifact panels: what is installed, its version and whether its
+// check passes. An application adds its last activity, its recent events and,
+// when it maps to a monitored service, that service's availability.
 const appStateLabels = {
   [targetStateOK]: "Ok",
   [targetStateStarting]: "Starting",
   [targetStateWarning]: "Warning",
   [targetStateFailed]: "Failed",
 };
-function setAppSort(key) { toggleSort(appSort, key, renderApps); }
-function setAppQuery(q) { appQuery = q || ""; renderApps(); saveUIState(); }
-function setAppCategory(v) { appCategory = v || filterAll; renderApps(); saveUIState(); }
-function setAppStatus(v) {
-  appStatus = v || filterAll;
-  syncFilterButtons("#app-filters", "af", appStatus);
-  renderApps();
-  saveUIState();
-}
-function renderAppFilterCounts() {
-  renderFilterButtonCounts("#app-filters", stateCounts(allApps, appStateText, appStatusFilterStates));
-}
-function updateAppSortIndicators() {
-  updateSortIndicatorsFor("ai", appSort, ".apps-table th.sortable[data-app-sort]", "appSort");
-}
 function appStateText(a) {
   if (a && a.state === targetStateStarting) return targetStateStarting;
   const status = String((a && a.status) || "").trim().toLowerCase();
@@ -6625,101 +6317,69 @@ function appStatusLabel(a) {
 function appStatusCell(a) {
   const state = appStateText(a);
   const detail = (a && a.status && a.status !== targetStateOK) ? a.status : appStatusLabel(a);
-  return tpl`<td class="status-cell status-${state}" title="${detail}">${stateBadgeLabel(state, appStatusLabel(a))}</td>`;
+  return tpl`<td data-col="state" class="status-cell status-${state}" title="${detail}">${stateBadgeLabel(state, appStatusLabel(a))}</td>`;
 }
 
-function artifactMatches(item, surface, categoryFilter, statusFilter, statusFilterStates, query) {
-  const category = categoryOf(item, surface);
-  if (categoryFilter !== filterAll && category !== categoryFilter) return false;
-  if (statusFilterStates.includes(statusFilter) && appStateText(item) !== statusFilter) return false;
-  if (!query) return true;
-  const needle = query.toLowerCase();
-  return displayName(item).toLowerCase().includes(needle)
-    || (item.name || "").toLowerCase().includes(needle)
-    || (item.display_name || "").toLowerCase().includes(needle)
-    || category.toLowerCase().includes(needle)
-    || appStateText(item).includes(needle)
-    || (item.status || "").toLowerCase().includes(needle)
-    || (item.version || "").toLowerCase().includes(needle)
-    || (item.user || "").toLowerCase().includes(needle)
-    || (item.group || "").toLowerCase().includes(needle);
+function artifactSearchText(item, surface) {
+  return [
+    displayName(item), item.name, item.display_name, categoryOf(item, surface), appStateText(item),
+    item.status, item.version, item.user, item.group,
+  ].filter(Boolean).join(" ").toLowerCase();
 }
 
-function appMatches(a) {
-  return artifactMatches(a, "app", appCategory, appStatus, appStatusFilterStates, appQuery);
-}
-
-function setAppGrouped(v) {
-  appGrouped = !!v;
-  renderApps();
-  saveUIState();
-}
-
-function toggleAllAppGroups() {
-  toggleAllArtifactGroups(allApps, appMatches, "app", appCollapsedGroups);
-  renderApps();
-  saveUIState();
-}
-
-function toggleAllArtifactGroups(items, matches, surface, collapsedGroups) {
-  const categories = sortedCategories((items || []).filter(matches), surface);
-  const allCollapsed = categories.length > 0 && categories.every((category) => collapsedGroups.has(category));
-  if (allCollapsed) {
-    categories.forEach((category) => collapsedGroups.delete(category));
-  } else {
-    categories.forEach((category) => collapsedGroups.add(category));
-  }
-}
-
-function toggleGroup(panel, group) {
-  if (!group) return;
-  let collapsedGroups;
-  let rerender;
-  if (panel === "svc") {
-    collapsedGroups = svcCollapsedGroups;
-    rerender = renderServices;
-  } else if (panel === "app") {
-    collapsedGroups = appCollapsedGroups;
-    rerender = renderApps;
-  } else if (panel === "library") {
-    collapsedGroups = libraryCollapsedGroups;
-    rerender = renderLibraries;
-  } else if (panel === "mount") {
-    collapsedGroups = mountCollapsedGroups;
-    rerender = renderMounts;
-  } else if (splitServicePanels[panel]) {
-    collapsedGroups = splitServicePanels[panel].collapsedGroups;
-    rerender = renderServices;
-  } else if (panel.startsWith("watch-")) {
-    const key = panel.slice("watch-".length);
-    const watchPanel = watchPanels[key];
-    if (!watchPanel) return;
-    collapsedGroups = watchPanel.collapsedGroups;
-    rerender = renderWatches;
-  }
-  if (!collapsedGroups || !rerender) return;
-  if (collapsedGroups.has(group)) collapsedGroups.delete(group);
-  else collapsedGroups.add(group);
-  rerender();
-  saveUIState();
-}
-
-// renderApps lists the installed applications below the services table. The
-// version column shows the short version; expanding a row reveals the full
-// version string, binary location, permissions, user and group (all already in
-// hand, so no extra request is needed).
+// renderApps lists the installed applications. The version column shows the
+// short version; expanding a row reveals the full version string, binary
+// location, permissions, user and group (all already in hand, so no extra
+// request is needed).
 function renderApps(apps) {
-  renderArtifactPanel(appArtifactPanel, apps);
+  if (apps) allApps = apps;
+  renderArtifactPanel(listPanels.apps);
+  // An application expansion is part of the rows template, so every render
+  // repaints it and its events and availability are filled again.
+  (allApps || []).forEach((app) => {
+    if (!expanded.has(appExpansionKey(app.name))) return;
+    loadAppEvents(app.name);
+    if (app.keeps_sla) loadAppSLA(app.name);
+  });
+}
+
+function renderLibraries(libraries) {
+  if (libraries) allLibraries = libraries;
+  renderArtifactPanel(listPanels.libraries);
+}
+
+function renderArtifactPanel(p) {
+  scheduleGlobalTargetSync();
+  renderListPanel(p);
+  applyHash();
+  refreshChrome();
+}
+
+function renderArtifactRow(item, p) {
+  const state = appStateText(item);
+  const rowClass = state === targetStateFailed ? "row-failing" : (state === targetStateWarning ? "row-warning" : "");
+  const label = displayName(item);
+  const key = p.expansionKey(item.name);
+  const row = tpl`<tr id="${p.rowId(item)}" class="clickable ${rowClass}" data-exp-key="${key}">
+    <td data-col="name">${expandToggle(key, label, p.detailLabel)}</td>
+    <td data-col="category">${categoryBadge(p.groupOf(item))}</td>
+    ${appStatusCell(item)}
+    <td data-col="version">${item.version_short || item.version || "—"}</td>
+    ${p.columns.some((c) => c.key === "last") ? tpl`<td data-col="last">${lastEventCell(item)}</td>` : nothing}
+  </tr>`;
+  // An application's or a library's detail is plain markup, drawn with the row.
+  const expansion = expanded.has(key) ? expansionRow(key, p.columns.length, p.renderExpansion(item)) : null;
+  return expansion ? [row, expansion] : [row];
 }
 
 function renderArtifactExpansionDetails(artifact, surface) {
   const bin = artifact.binary ? tpl`<code>${artifact.binary}</code>` : tpl`<span class="muted">unknown</span>`;
-  const perm = artifact.permissions ? tpl`<code>${artifact.permissions}</code>` : tpl`<span class="muted">—</span>`;
-  const usr = artifact.user || tpl`<span class="muted">—</span>`;
-  const grp = artifact.group || tpl`<span class="muted">—</span>`;
+  const perm = artifact.permissions ? tpl`<code>${artifact.permissions}</code>` : mutedDash;
+  const usr = artifact.user || mutedDash;
+  const grp = artifact.group || mutedDash;
   const source = artifact.version_source
     ? tpl`<code>${artifact.version_source}</code>`
-    : (artifact.version ? tpl`<span class="muted">local</span>` : tpl`<span class="muted">—</span>`);
+    : (artifact.version ? tpl`<span class="muted">local</span>` : mutedDash);
   const state = appStateText(artifact);
   const statusClass = state === targetStateFailed ? "lvl-error" : (state === targetStateWarning ? "lvl-warning" : "");
   const status = artifact.status ? tpl`<span class="${statusClass}">${artifact.status}</span>` : "—";
@@ -6742,13 +6402,17 @@ function renderArtifactExpansionDetails(artifact, surface) {
 // restated in a second, smaller form.
 function renderAppExpansion(a) {
   const eventsId = detailDomId(a.name, "app-events");
-  return tpl`${renderArtifactExpansionDetails(a, "app")}
+  return tpl`${renderArtifactExpansionDetails(a, defaultCategoryApp)}
   ${a.keeps_sla ? renderSLASection(appSLAKey(a.name)) : nothing}
   <h3 class="expansion-heading">Recent events</h3>
   <table class="events">
     <caption class="visually-hidden">Recent application events</caption>
     <thead><tr><th scope="col">Time</th><th scope="col">Kind</th><th scope="col">Message</th></tr></thead>
     <tbody id="${eventsId}"></tbody></table>`;
+}
+
+function renderLibraryExpansion(library) {
+  return renderArtifactExpansionDetails(library, defaultCategoryLibrary);
 }
 
 // loadAppSLA fills an expanded application's availability panel, memoized per
@@ -6783,175 +6447,6 @@ async function refreshExpandedApplications(generation = dashboardGeneration) {
     return pending;
   }));
   return results.every(Boolean);
-}
-
-// ---- Installed libraries --------------------------------------------------
-const librarySortKeys = {
-  name: (library) => displayName(library).toLowerCase(),
-  category: (library) => categoryOf(library, defaultCategoryLibrary).toLowerCase(),
-  state: appStateRank,
-  version: (library) => (library.version_short || library.version || "").toLowerCase(),
-};
-const libraryStatusFilterStates = [targetStateOK, targetStateWarning, targetStateFailed];
-
-function setLibrarySort(key) { toggleSort(librarySort, key, renderLibraries); }
-function setLibraryQuery(q) { libraryQuery = q || ""; renderLibraries(); saveUIState(); }
-function setLibraryCategory(v) { libraryCategory = v || filterAll; renderLibraries(); saveUIState(); }
-function setLibraryStatus(v) {
-  libraryStatus = v || filterAll;
-  syncFilterButtons("#library-filters", "lf", libraryStatus);
-  renderLibraries();
-  saveUIState();
-}
-function renderLibraryFilterCounts() {
-  renderFilterButtonCounts("#library-filters", stateCounts(allLibraries, appStateText, libraryStatusFilterStates));
-}
-function updateLibrarySortIndicators() {
-  updateSortIndicatorsFor("li", librarySort, ".libraries-table th.sortable[data-library-sort]", "librarySort");
-}
-function libraryMatches(library) {
-  return artifactMatches(library, "library", libraryCategory, libraryStatus, libraryStatusFilterStates, libraryQuery);
-}
-function setLibraryGrouped(v) {
-  libraryGrouped = !!v;
-  renderLibraries();
-  saveUIState();
-}
-function toggleAllLibraryGroups() {
-  toggleAllArtifactGroups(allLibraries, libraryMatches, "library", libraryCollapsedGroups);
-  renderLibraries();
-  saveUIState();
-}
-
-function renderLibraries(libraries) {
-  renderArtifactPanel(libraryArtifactPanel, libraries);
-}
-
-function renderLibraryExpansion(library) {
-  return renderArtifactExpansionDetails(library, "library");
-}
-
-const appArtifactPanel = {
-  surface: "app",
-  section: "#apps-section",
-  rows: "#app-rows",
-  count: "#apps-count",
-  filterCount: "#app-count",
-  categorySelect: "#app-category",
-  groupLabel: "applications",
-  cols: 5,
-  empty: "No applications match the filter.",
-  detailLabel: "application details",
-  rowPrefix: "app-row-",
-  items: () => allApps || [],
-  setItems: (items) => { allApps = items; },
-  category: () => appCategory,
-  setCategory: (category) => { appCategory = category; },
-  renderFilterCounts: renderAppFilterCounts,
-  matches: appMatches,
-  sort: () => appSort,
-  sortKeys: appSortKeys,
-  updateSortIndicators: updateAppSortIndicators,
-  grouped: () => appGrouped,
-  setGrouped: (grouped) => { appGrouped = grouped; },
-  collapsedGroups: () => appCollapsedGroups,
-  filterActive: () => appQuery || appCategory !== filterAll || appStatus !== filterAll,
-  expansionKey: appExpansionKey,
-  renderExpansion: renderAppExpansion,
-  extraCell: lastEventCell,
-  loadExpanded: (items) => {
-    items.forEach((app) => {
-      if (!expanded.has(appExpansionKey(app.name))) return;
-      loadAppEvents(app.name);
-      if (app.keeps_sla) loadAppSLA(app.name);
-    });
-  },
-};
-
-const libraryArtifactPanel = {
-  surface: "library",
-  section: "#libraries-section",
-  rows: "#library-rows",
-  count: "#libraries-count",
-  filterCount: "#library-count",
-  categorySelect: "#library-category",
-  groupLabel: "libraries",
-  cols: 4,
-  empty: "No libraries match the filter.",
-  detailLabel: "library details",
-  rowPrefix: "library-row-",
-  items: () => allLibraries || [],
-  setItems: (items) => { allLibraries = items; },
-  category: () => libraryCategory,
-  setCategory: (category) => { libraryCategory = category; },
-  renderFilterCounts: renderLibraryFilterCounts,
-  matches: libraryMatches,
-  sort: () => librarySort,
-  sortKeys: librarySortKeys,
-  updateSortIndicators: updateLibrarySortIndicators,
-  grouped: () => libraryGrouped,
-  setGrouped: (grouped) => { libraryGrouped = grouped; },
-  collapsedGroups: () => libraryCollapsedGroups,
-  filterActive: () => libraryQuery || libraryCategory !== filterAll || libraryStatus !== filterAll,
-  expansionKey: libraryExpansionKey,
-  renderExpansion: renderLibraryExpansion,
-};
-
-function renderArtifactPanel(panel, items) {
-  if (items) panel.setItems(items);
-  scheduleGlobalTargetSync();
-  const section = $(panel.section);
-  const tbody = $(panel.rows);
-  const count = $(panel.count);
-  const filterCount = $(panel.filterCount);
-  if (!section || !tbody) return;
-  const inventory = panel.items();
-  const total = inventory.length;
-  if (!panelShell({ section, count, filterCount, total, onEmpty: updateSectionNav })) return;
-  panel.setCategory(syncCategorySelect(panel.categorySelect, inventory, panel.surface, panel.category()));
-  panel.renderFilterCounts();
-  const list = inventory.filter(panel.matches);
-  const sort = panel.sort();
-  if (sort.key && panel.sortKeys[sort.key]) sortedBy(list, sort, panel.sortKeys, "name");
-  panel.updateSortIndicators();
-  const visibleCategories = sortedCategories(list, panel.surface);
-  const collapsedGroups = panel.collapsedGroups();
-  collapsedGroups.forEach((category) => { if (!visibleCategories.includes(category)) collapsedGroups.delete(category); });
-  if (visibleCategories.length < 2) panel.setGrouped(false);
-  updateGroupButtons(panel.surface, panel.grouped(), visibleCategories, collapsedGroups, panel.groupLabel);
-  if (filterCount) filterCount.textContent = panel.filterActive() ? `showing ${list.length} of ${total}` : "";
-  const row = (item) => renderArtifactRow(item, panel);
-  const content = list.length
-    ? (panel.grouped()
-      ? renderGroupedRows(list, collapsedGroups, panel.surface, panel.surface, (item) => categoryOf(item, panel.surface), panel.cols, row, sort.key === "category" ? sort.dir : 1)
-      : list.flatMap(row))
-    : tpl`<tr><td colspan="${panel.cols}" class="muted">${panel.empty}</td></tr>`;
-  litRender(content, tbody);
-  if (panel.loadExpanded) panel.loadExpanded(inventory);
-  applyHash();
-  updateSectionNav();
-}
-
-function renderArtifactRow(item, panel) {
-  const category = categoryOf(item, panel.surface);
-  const state = appStateText(item);
-  const rowClass = state === targetStateFailed ? "row-failing" : (state === targetStateWarning ? "row-warning" : "");
-  const label = displayName(item);
-  const key = panel.expansionKey(item.name);
-  const open = expanded.has(key);
-  const chevron = tpl`<span class="exp" aria-hidden="true">${open ? "▾" : "▸"}</span>`;
-  const version = item.version_short || item.version || "—";
-  const row = tpl`<tr id="${panel.rowPrefix}${item.name}" class="clickable ${rowClass}" data-exp-key="${key}">
-    <td>${chevron}<button type="button" class="row-toggle" data-exp-toggle="${key}" aria-expanded="${open}" aria-controls="${open ? "exp-" + key : nothing}" aria-label="${expandToggleAriaLabel(label, open, panel.detailLabel)}">${label}</button></td>
-    <td>${categoryBadge(category)}</td>
-    ${appStatusCell(item)}
-    <td>${version}</td>
-    ${panel.extraCell ? tpl`<td>${panel.extraCell(item)}</td>` : nothing}
-  </tr>`;
-  const expansion = open
-    ? tpl`<tr class="exp-row" id="exp-${key}" data-exp="${key}"><td colspan="${panel.cols}"><div class="exp-body">${panel.renderExpansion(item)}</div></td></tr>`
-    : null;
-  return expansion ? [row, expansion] : [row];
 }
 
 // renderWatchExpansion shows a watch's config summary and its recent
@@ -7059,19 +6554,18 @@ function mountProcessLabel(p) {
 }
 
 function mountUsageCell(items, maxRows = 3) {
-  if (!items.length) return '<span class="muted">—</span>';
-  const shown = items.slice(0, maxRows).map((item) => `<span class="mount-usage-item">${esc(item)}</span>`).join("");
-  const extra = items.length > maxRows ? `<span class="muted mount-usage-extra">+${items.length - maxRows} more</span>` : "";
-  return `<span title="${esc(items.join("\n"))}">${shown}${extra}</span>`;
+  if (!items.length) return mutedDash;
+  const extra = items.length > maxRows ? tpl`<span class="muted mount-usage-extra">+${items.length - maxRows} more</span>` : nothing;
+  return tpl`<span title="${items.join("\n")}">${items.slice(0, maxRows).map((item) => tpl`<span class="mount-usage-item">${item}</span>`)}${extra}</span>`;
 }
 
 function mountProcessesCell(m) {
-  if (m.blocker_error) return `<span class="bad" title="${esc(m.blocker_error)}">error</span>`;
+  if (m.blocker_error) return tpl`<span class="bad" title="${m.blocker_error}">error</span>`;
   return mountUsageCell(mountBlockers(m).map(mountProcessLabel));
 }
 
 function mountUsersCell(m) {
-  if (m.blocker_error) return '<span class="muted">—</span>';
+  if (m.blocker_error) return mutedDash;
   return mountUsageCell(mountUserNames(m));
 }
 
@@ -7087,167 +6581,67 @@ function mountUserNames(m) {
   return users;
 }
 
-function mountCategoryCell(category) {
-  return `<span class="category-badge" title="${esc(category)}">${esc(category)}</span>`;
-}
-
 function mountOperationReason(op) {
   if (!op) return "";
   return op.message || `${op.state || mountOperationState(op.action)} in progress`;
 }
 
 function mountPathCell(m) {
-  const path = `<code>${esc(m.path || "")}</code>`;
   const op = mountOperation(m);
-  if (!op) return path;
-  const label = op.state || mountOperationState(op.action);
-  const title = mountOperationReason(op);
-  return `${path}<span class="mount-operation" title="${esc(title)}">${esc(label)}</span>`;
+  const note = op
+    ? tpl`<span class="mount-operation" title="${mountOperationReason(op)}">${op.state || mountOperationState(op.action)}</span>`
+    : nothing;
+  return tpl`<code>${m.path || ""}</code>${note}`;
 }
 
-const mountSortKeys = {
-  name: (m) => displayName(m).toLowerCase(),
-  category: (m) => categoryOf(m, defaultCategoryStorage).toLowerCase(),
-  path: (m) => (m.path || "").toLowerCase(),
-  mounted: (m) => mountStateRank(m),
-  refcount: (m) => numericSortValue(m && m.refcount),
-  processes: (m) => mountBlockers(m).length,
-  users: (m) => mountUserNames(m).length,
-  state: (m) => mountStateRank(m),
-};
-
-function setMountSort(key) { toggleSort(mountSort, key, renderMounts); }
-function setMountQuery(v) { mountQuery = (v || "").trim().toLowerCase(); renderMounts(); saveUIState(); }
-function setMountCategory(v) { mountCategory = v || filterAll; renderMounts(); saveUIState(); }
-function setMountGrouped(grouped) { mountGrouped = !!grouped; renderMounts(); saveUIState(); }
-function toggleAllMountGroups() {
-  toggleAllGroups(sortedCategories((allMounts || []).filter(mountMatches), defaultCategoryStorage), mountCollapsedGroups);
-  renderMounts();
-  saveUIState();
-}
-function setMountStatus(v) {
-  mountStatus = normalizeMountStatusFilter(v);
-  syncFilterButtons("#mount-filters", "mf", mountStatus);
-  renderMounts();
-  saveUIState();
-}
-
-function mountMatches(m) {
-  const category = categoryOf(m, defaultCategoryStorage);
-  if (mountCategory !== filterAll && category !== mountCategory) return false;
-  if (mountStatus !== filterAll && mountStateText(m) !== mountStatus && mountBaseStateText(m) !== mountStatus) return false;
-  if (!mountQuery) return true;
-  const hay = [
-    displayName(m), m.name || "", m.display_name || "", category, m.path || "",
+function mountSearchText(m) {
+  return [
+    displayName(m), m.name || "", m.display_name || "", categoryOf(m, defaultCategoryStorage), m.path || "",
     mountStateText(m), ...mountBlockers(m).map(mountProcessLabel), ...mountUserNames(m),
   ].join(" ").toLowerCase();
-  return hay.includes(mountQuery);
 }
 
-function renderMountFilterCounts() {
-  renderFilterButtonCounts("#mount-filters", stateCounts(allMounts, mountStateText, mountStatusFilterStates));
+function mountRowId(m) {
+  return `mount-row-${detailDomKey(m.name || m.path || "mount")}`;
 }
 
-function syncMountCategorySelect() {
-  return syncCategorySelect("#mount-category", allMounts || [], defaultCategoryStorage, mountCategory, "all groups");
-}
-
-function updateMountSortIndicators() {
-  updateSortIndicatorsFor("mi", mountSort, ".mount-table th.sortable[data-mount-sort]", "mountSort");
-}
-
-function mountRowHTML(m) {
-  const label = esc(m.display_name || m.name);
-  const category = categoryOf(m, defaultCategoryStorage);
+function mountRow(m) {
   const mounted = !!m.mounted;
   const state = mountStateText(m);
-  const detail = m.message ? ` title="${esc(m.message)}"` : "";
-  const refcount = m.refcounted === false ? '<span class="muted">off</span>' : String(Number(m.refcount || 0));
-  const name = esc(m.name || "");
-  const actions = mountActionButtons(m, mounted);
-  const operation = mountOperation(m);
-  const rowClass = operation ? ' class="mount-row-operating"' : "";
-  return `<tr id="mount-row-${detailDomKey(m.name || m.path || "mount")}" tabindex="-1"${detail}${rowClass}>
-    <td>${label}</td>
-    <td>${mountCategoryCell(category)}</td>
-    <td>${mountPathCell(m)}</td>
-    <td>${mounted ? '<span class="ok">yes</span>' : '<span class="muted">no</span>'}</td>
-    <td>${refcount}</td>
-    <td class="mount-processes">${mountProcessesCell(m)}</td>
-    <td class="mount-users">${mountUsersCell(m)}</td>
-    <td><span class="target-state ${mountStateClass(state, mounted)}">${esc(state)}</span></td>
-    <td class="actions" data-mount-row="${name}">${actions}</td>
+  return tpl`<tr id="${mountRowId(m)}" tabindex="-1" title="${m.message || nothing}" class="${mountOperation(m) ? "mount-row-operating" : ""}">
+    <td data-col="name">${m.display_name || m.name}</td>
+    <td data-col="category">${categoryBadge(categoryOf(m, defaultCategoryStorage))}</td>
+    <td data-col="path">${mountPathCell(m)}</td>
+    <td data-col="mounted">${mounted ? tpl`<span class="ok">yes</span>` : tpl`<span class="muted">no</span>`}</td>
+    <td data-col="refcount">${m.refcounted === false ? tpl`<span class="muted">off</span>` : Number(m.refcount || 0)}</td>
+    <td data-col="processes">${mountProcessesCell(m)}</td>
+    <td data-col="users">${mountUsersCell(m)}</td>
+    <td data-col="state"><span class="target-state ${mountStateClass(state, mounted)}">${state}</span></td>
+    <td data-col="actions" class="actions" data-mount-row="${m.name || ""}">${mountActionButtons(m, mounted)}</td>
   </tr>`;
-}
-
-function renderGroupedMountRows(list) {
-  const groups = new Map();
-  list.forEach((mount) => {
-    const group = categoryOf(mount, defaultCategoryStorage);
-    if (!groups.has(group)) groups.set(group, []);
-    groups.get(group).push(mount);
-  });
-  const direction = mountSort.key === "category" ? mountSort.dir : 1;
-  return Array.from(groups.entries()).sort((a, b) =>
-    a[0].localeCompare(b[0], undefined, { numeric: true, sensitivity: "base" }) * direction
-  ).map(([group, mounts]) => {
-    const collapsed = mountCollapsedGroups.has(group);
-    const first = mounts[0];
-    const controls = `mount-row-${detailDomKey(first.name || first.path || "mount")}`;
-    const header = `<tr class="group-row"><td colspan="9"><button type="button" class="row-toggle group-toggle" data-group-panel="mount" data-group-name="${esc(group)}" aria-expanded="${collapsed ? domBoolFalse : domBoolTrue}" aria-controls="${controls}" aria-label="${esc(groupToggleAriaLabel(group, mounts.length, collapsed))}"><span class="exp" aria-hidden="true">${collapsed ? "▸" : "▾"}</span>${esc(group)} <span class="muted">${mounts.length}</span></button></td></tr>`;
-    return header + (collapsed ? "" : mounts.map(mountRowHTML).join(""));
-  }).join("");
 }
 
 function renderMounts(mounts) {
   if (mounts) allMounts = mounts;
   scheduleGlobalTargetSync();
-  const section = $("#mounts-section");
-  const tbody = $("#mount-rows");
-  const cnt = $("#mounts-count");
-  const filterCount = $("#mount-filter-count");
-  if (!section || !tbody) return;
-  const total = (allMounts || []).length;
-  if (!panelShell({ section, count: cnt, filterCount, total, onEmpty: updateSectionNav })) return;
-  mountCategory = syncMountCategorySelect();
-  renderMountFilterCounts();
-  const list = (allMounts || []).filter(mountMatches);
-  if (mountSort.key && mountSortKeys[mountSort.key]) {
-    sortedBy(list, mountSort, mountSortKeys, "name");
-  }
-  updateMountSortIndicators();
-  const groups = sortedCategories(list, defaultCategoryStorage);
-  mountCollapsedGroups.forEach((group) => { if (!groups.includes(group)) mountCollapsedGroups.delete(group); });
-  if (groups.length < 2) mountGrouped = false;
-  updateGroupButtons("mount", mountGrouped, groups, mountCollapsedGroups, "mount units", "group");
-  if (filterCount) filterCount.textContent = (mountQuery || mountStatus !== filterAll || mountCategory !== filterAll) ? `showing ${list.length} of ${total}` : "";
-  const rows = mountGrouped ? renderGroupedMountRows(list) : list.map(mountRowHTML).join("");
-  // setHTMLIfChanged, not a bare write: an unchanged poll must not destroy and
-  // recreate every row, which would drop the focus of whoever is tabbing
-  // through the action buttons and clear any text selection.
-  setHTMLIfChanged(tbody, rows || `<tr><td colspan="9" class="muted">No mount units match the filter.</td></tr>`);
-  updateSectionNav();
+  renderListPanel(listPanels.mounts);
+  refreshChrome();
+}
+
+function mountActionButton(m, action, glyph, label, title, disabled, hintId) {
+  return tpl`<button class="icon-btn" data-mount="${m.name || ""}" data-mount-action="${action}" aria-label="${label}" title="${title}" ?disabled=${disabled} aria-describedby="${hintId || nothing}"><span aria-hidden="true">${glyph}</span></button>`;
 }
 
 function mountActionButtons(m, mounted) {
-  if (!me.can_act) return '<span class="muted">read-only</span>';
-  const name = esc(m.name || "");
-  const label = esc(m.display_name || m.name || m.path || "mount");
+  if (!me.can_act) return readOnlyNote;
+  const label = m.display_name || m.name || m.path || "mount";
   const operation = mountOperation(m);
-  const operationReason = mountOperationReason(operation);
-  const operationDisabled = operation ? " disabled" : "";
-  if (!mounted) {
-    return `<button class="icon-btn" data-mount="${name}" data-mount-action="${actionMount}" aria-label="Mount ${label}" title="${operation ? esc(operationReason) : `Mount ${label}`}"${operationDisabled}><span aria-hidden="true">▶</span></button>`;
-  }
-  const disabledReason = mountUmountDisabledReason(m);
-  const hintId = `mount-${detailDomKey(m.name || m.path || "mount")}-umount-hint`;
-  const hint = disabledReason ? `<span id="${hintId}" class="visually-hidden">${esc(disabledReason)}</span>` : "";
-  const disabledAttrs = disabledReason ? ` disabled aria-describedby="${hintId}"` : operationDisabled;
-  const primaryTitle = disabledReason ? esc(disabledReason) : (operation ? esc(operationReason) : `Unmount ${label}`);
-  const alertTitle = disabledReason ? esc(disabledReason) : (operation ? esc(operationReason) : `Alert users blocking ${label}`);
-  return hint +
-    `<button class="icon-btn" data-mount="${name}" data-mount-action="${actionUmount}" aria-label="Unmount ${label}" title="${primaryTitle}"${disabledAttrs}><span aria-hidden="true">⏏</span></button>` +
-    `<button class="icon-btn" data-mount="${name}" data-mount-action="${actionAlert}" aria-label="Alert users blocking ${label}" title="${alertTitle}"${disabledAttrs}><span aria-hidden="true">!</span></button>`;
+  const busy = mountOperationReason(operation);
+  if (!mounted) return mountActionButton(m, actionMount, glyphPlay, `Mount ${label}`, busy || `Mount ${label}`, !!operation);
+  const blocked = mountUmountDisabledReason(m);
+  const hintId = blocked ? `mount-${detailDomKey(m.name || m.path || "mount")}-umount-hint` : "";
+  const disabled = !!(blocked || operation);
+  return tpl`${blocked ? hiddenDescription(hintId, blocked) : nothing}${mountActionButton(m, actionUmount, "⏏\uFE0E", `Unmount ${label}`, blocked || busy || `Unmount ${label}`, disabled, hintId)}${mountActionButton(m, actionAlert, "!", `Alert users blocking ${label}`, blocked || busy || `Alert users blocking ${label}`, disabled, hintId)}`;
 }
 
 function mountUmountDisabledReason(m) {
@@ -7255,32 +6649,16 @@ function mountUmountDisabledReason(m) {
   return m.umount_disabled_reason || "root filesystem cannot be unmounted";
 }
 
-// panelShell applies the contract every list panel follows at its edges: an
-// empty panel hides its section and clears the counters (and the body, when
-// the caller owns one through lit); a populated one shows the section and
-// prints "(total)". Returns true when the caller should render content.
-// onEmpty carries the one legitimate per-panel extra (updateSectionNav for
-// panels the section nav lists).
-function panelShell({ section, tbody, count, filterCount, total, onEmpty }) {
-  if (!total) {
-    setPanelVisible(section, false);
-    if (count) count.textContent = "";
-    if (filterCount) filterCount.textContent = "";
-    if (tbody) litRender(nothing, tbody);
-    if (onEmpty) onEmpty();
-    return false;
-  }
-  setPanelVisible(section, true);
-  if (count) count.textContent = `(${total})`;
-  return true;
-}
-
 function renderNotifiers(notifiers) {
   const section = $("#notifiers-section");
   const tbody = $("#notifier-rows");
   const cnt = $("#notifiers-count");
   if (!section || !tbody) return;
-  if (!panelShell({ section, count: cnt, total: (notifiers || []).length, onEmpty: updateSectionNav })) return;
+  const total = (notifiers || []).length;
+  setPanelVisible(section, total > 0);
+  if (cnt) cnt.textContent = total ? String(total) : "";
+  refreshChrome();
+  if (!total) return;
   const rows = notifiers.map((n) => {
     const enabled = n.enabled !== false;
     const state = enabled ? "enabled" : "disabled";
@@ -7293,12 +6671,11 @@ function renderNotifiers(notifiers) {
       ? `<span class="sev sev-${esc(n.min_severity)}">≥ ${esc(n.min_severity)}</span>`
       : '<span class="muted">all</span>';
     const test = enabled && me.can_act
-      ? `<button class="icon-btn" data-notifier-test="${esc(n.name)}" aria-label="Send test notification to ${esc(n.name)}" title="Send test notification to ${esc(n.name)}"><span aria-hidden="true">▶</span></button>`
+      ? `<button class="icon-btn" data-notifier-test="${esc(n.name)}" aria-label="Send test notification to ${esc(n.name)}" title="Send test notification to ${esc(n.name)}"><span aria-hidden="true">${glyphPlay}</span></button>`
       : '<span class="muted">—</span>';
     return `<tr><td>${esc(n.name)}</td><td>${esc(n.type)}</td><td>${floor}</td><td class="muted">${dest}</td><td>${watches}</td><td class="${cls}">${state}</td><td class="actions">${test}</td></tr>`;
   });
-  setHTMLIfChanged(tbody, rows.join("") || `<tr><td colspan="7" class="muted">No notifiers.</td></tr>`);
-  updateSectionNav();
+  setHTMLIfChanged(tbody, rows.join(""));
 }
 
 // setTextOrDash fills one element's text, dashing absent values; shared by the
@@ -7313,6 +6690,8 @@ function renderDaemon(info) {
   rememberDashboardHostname(info.hostname);
   const set = setTextOrDash;
   const hostType = hostTypeDisplay(info.host_type);
+  set("#daemon-hostname", info.hostname);
+  set("#daemon-os", info.os);
   set("#daemon-backend", info.backend);
   set("#daemon-host-type", hostType.label);
   const hostTypeEl = $("#daemon-host-type");
@@ -7348,7 +6727,7 @@ function lockStateHTML(l) {
 }
 
 function lockTTL(l) {
-  if (!l.expires_at) return tpl`<span class="muted">—</span>`;
+  if (!l.expires_at) return mutedDash;
   if (l.ttl_remaining_seconds > 0) return tpl`<span title="${fmtTime(l.expires_at)}">${fmtDuration(l.ttl_remaining_seconds)}</span>`;
   return tpl`<span class="muted" title="${fmtTime(l.expires_at)}">expired</span>`;
 }
@@ -7363,7 +6742,7 @@ function lockOwner(l) {
 function lockCreated(l) {
   if (l.created_age_seconds > 0) return tpl`<span title="${fmtTime(l.created_at)}">${fmtDuration(l.created_age_seconds)} ago</span>`;
   if (l.created_at) return tpl`<span title="${fmtTime(l.created_at)}">${fmtAge(l.created_at)}</span>`;
-  return tpl`<span class="muted">—</span>`;
+  return mutedDash;
 }
 
 function lockBlocks(l) {
@@ -7383,54 +6762,34 @@ function lockReleaseLabel(l) {
   return svc ? `Release lock ${svc}:${name}` : `Release lock ${name}`;
 }
 
-function lockReleaseDisabled(l) {
-  if (!me.can_act || !l) return true;
-  return !l.releaseable;
-}
-
-function lockReleaseDisabledReason(l) {
-  if (!me.can_act) return "";
-  if (l.releaseable) return "";
-  if (l.state === lockStateActive) return "lock is still active";
-  return "lock cannot be released";
-}
-
 function lockReleaseButton(l) {
   if (!me.can_act) return nothing;
-  const disabled = lockReleaseDisabled(l);
-  const reason = lockReleaseDisabledReason(l);
-  const hint = disabled && reason
-    ? tpl`<span id="${lockReleaseHintId(l)}" class="visually-hidden">${reason}</span>`
-    : nothing;
-  const describedBy = disabled && reason ? lockReleaseHintId(l) : nothing;
-  return tpl`${hint}<button class="danger-btn" ?disabled=${disabled} data-lock-release="1" data-lock-service="${l.service || ""}" data-lock-name="${l.name || ""}" aria-label="${lockReleaseLabel(l)}" aria-describedby="${describedBy}">release</button>`;
+  const disabled = !l.releaseable;
+  const reason = l.state === lockStateActive ? "lock is still active" : "lock cannot be released";
+  const hintID = lockReleaseHintId(l);
+  return tpl`${actionHint(hintID, disabled, reason)}<button class="danger-btn" ?disabled=${disabled} data-lock-release="1" data-lock-service="${l.service || ""}" data-lock-name="${l.name || ""}" aria-label="${lockReleaseLabel(l)}" aria-describedby="${actionDescribedBy(hintID, disabled, reason)}">release</button>`;
 }
 
 function lockServiceLink(l) {
   const svc = l.service || "";
-  if (!svc) return tpl`<span class="muted">—</span>`;
+  if (!svc) return mutedDash;
   return tpl`<button type="button" class="name row-toggle" data-service-open="${svc}" aria-label="Open service ${svc}">${svc}</button>`;
 }
 
 async function releaseLock(service, name) {
   const generation = dashboardGeneration;
   const label = name ? `${service}.${name}` : service;
-  if (!(await promptConfirm({
-    title: `Release lock ${label}?`,
-    message: `Release inactive lock "${label}"?`,
-    okLabel: "release",
-    danger: true,
-  }))) return;
-  setStatus("");
-  const qs = name ? `?${apiQueryName}=${encodeURIComponent(name)}` : "";
-  try {
-    const res = await fetch(lockReleaseAPI(service, qs), targetPostOptions({}, generation));
-    await jsonOrThrow(res);
-    setStatus(`released lock ${label}`, feedbackStatusOK);
-    await load();
-  } catch (e) {
-    setStatus(`release ${label}: ${e.message}`, feedbackStatusErr);
-  }
+  await runAction({
+    confirm: () => promptConfirm({
+      title: `Release lock ${label}?`,
+      message: `Release inactive lock "${label}"?`,
+      okLabel: "release",
+      danger: true,
+    }),
+    request: () => fetch(lockReleaseAPI(service, name ? `?${apiQueryName}=${encodeURIComponent(name)}` : ""), targetPostOptions({}, generation)),
+    ok: () => `released lock ${label}`,
+    fail: `release ${label}`,
+  });
 }
 
 function renderLocks(locks) {
@@ -7442,12 +6801,11 @@ function renderLocks(locks) {
   if (!locks || locks.length === 0) {
     setPanelVisible(section, false);
     if (cnt) cnt.textContent = "";
-    renderAttention();
-    updateSectionNav();
+    refreshChrome();
     return;
   }
   setPanelVisible(section, true);
-  if (cnt) cnt.textContent = `(${locks.length})`;
+  if (cnt) cnt.textContent = String(locks.length);
   const rows = locks.map((l) => {
     return tpl`<tr>
       <td>${lockServiceLink(l)}</td>
@@ -7462,14 +6820,13 @@ function renderLocks(locks) {
     </tr>`;
   });
   litRender(rows, tbody);
-  renderAttention();
-  updateSectionNav();
+  refreshChrome();
 }
 
 function renderActivity(sum) {
   if (!sum) return;
   latestActivity = sum;
-  renderAttention();
+  refreshChrome();
 }
 
 function attnAriaLabel(it) {
@@ -7479,48 +6836,23 @@ function attnAriaLabel(it) {
   return parts.join(". ");
 }
 
-function panelTargetLabel(target) {
-  switch (target) {
-    case "failed-services": return "service targets panel, failed filter";
-    case "starting-services": return "service targets panel, starting filter";
-    case "collecting-services": return "service targets panel, collecting filter";
-    case "warning-services": return "service targets panel, warning filter";
-    case "restart-required-services": return "service targets panel, restart required filter";
-    case "monitored-services": return "service targets panel, monitored filter";
-    case "failed-watches": return "watches panel, failed filter";
-    case "starting-watches": return "watches panel, starting filter";
-    case "warning-watches": return "watches panel, warning filter";
-    case "stale-watches": return "watches panel, stale filter";
-    case "failed-apps": return "applications panel, failed filter";
-    case "starting-apps": return "applications panel, starting filter";
-    case "locks-section": return "runtime locks panel";
-    case "containers-section": return "containers panel";
-    case "vms-section": return "virtual machines panel";
-    case "daemon-section": return "daemon panel";
-    case "watches-section": return "watches panel";
-    case "services-section":
-    default: return "services panel";
-  }
-}
 
-function tileAriaLabel(label, valueText, sub, target) {
-  const parts = [`${label}: ${valueText}`];
-  if (sub) parts.push(sub);
-  parts.push(`Open ${panelTargetLabel(target)}`);
-  return parts.join(". ");
+// tileAriaLabel names a tile for assistive tech: what it reads — spelled out
+// where the visible value is shorthand ("17 of 21" for "17 / 21"), and "loading"
+// while it has no reading yet — and the view a press opens.
+function tileAriaLabel({ name, label, reading, sub, view }) {
+  if (reading === undefined) return `${name || label} loading`;
+  return [`${name || label}: ${reading}`, sub, `Open ${view} view`].filter(Boolean).join(". ");
 }
 
 function tileGaugeId(key) {
   return `tile-${key}-gauge`;
 }
 
-// renderOverview fills the at-a-glance tile band under the topbar: one tile per
-// vital sign, colored by health, each clickable to jump to its panel. load()
 // firstMatch returns the value paired with the first truthy condition, or the
-// fallback when none match. The overview picks a tile's class, subtitle and
-// click target from ordered priority lists; written as nested ternaries those
-// chains are the same logic but unreadable, and they dominate this function's
-// measured complexity.
+// fallback when none match. The overview picks a tile's class and subtitle from
+// ordered priority lists; written as nested ternaries those chains are the same
+// logic but unreadable.
 function firstMatch(pairs, fallback) {
   const hit = pairs.find(([when]) => when);
   return hit ? hit[1] : fallback;
@@ -7533,10 +6865,12 @@ function settlingSub(ownCount, others) {
   return others.filter(([when]) => when).map(([, label]) => label).join(" · ");
 }
 
-// overviewTile renders one clickable band tile. Module scope so renderOverview
-// stays within its size budget; the band's default target is passed in.
-const overviewTile = (opts, defaultTarget) => tpl`
-  <button class="tile ${opts.cls || ""}" data-panel-target="${opts.target || defaultTarget}" aria-label="${opts.ariaLabel || opts.label}" aria-describedby="${opts.describedBy || nothing}">
+// overviewTile renders one band tile. A tile is its view's way in — the tiles
+// are the navigation for Services, Watches, Mounts, Sessions and the host
+// (System), so those views have no tab — and it reads as current while its
+// view shows.
+const overviewTile = (opts) => tpl`
+  <button class="tile ${opts.cls || ""} ${opts.narrowOnly ? "tile-narrow" : ""}" data-view-tab="${opts.view}" aria-current="${opts.view === currentView ? domBoolTrue : domBoolFalse}" aria-label="${tileAriaLabel(opts)}" aria-describedby="${opts.describedBy || nothing}">
     <span class="t-label">${opts.label}</span>
     <div class="t-value">${opts.value}</div>
     <div class="t-sub">${opts.sub || ""}</div>
@@ -7550,8 +6884,7 @@ function overviewInventory(ctx) {
   const source = ctx || {};
   const ready = source.ready || {};
   const live = source.live || {};
-  const mon = source.mon || {};
-  const locks = source.locks || [];
+  const daemon = source.daemon || {};
   const hostMetrics = source.hostMetrics || [];
   const svcs = allServices || [];
   const enabled = svcs.filter((s) => s.enabled);
@@ -7563,7 +6896,6 @@ function overviewInventory(ctx) {
   const warningSvcs = svcs.filter((s) => serviceDisplayState(s) === targetStateWarning);
   const restartRequiredSvcs = svcs.filter((s) => serviceDisplayState(s) === targetStateRestartRequired);
   const activeSvcs = enabled.filter((s) => overviewActiveServiceStates.includes(serviceDisplayState(s)));
-  const monitoredSvcs = enabled.filter((s) => [targetStateMonitored, targetStateRestartRequired].includes(serviceDisplayState(s)));
   const watches = allWatches || [];
   const enabledWatches = watches.filter((w) => w && w.enabled);
   const failedWatches = watches.filter(isWatchAttention);
@@ -7572,22 +6904,36 @@ function overviewInventory(ctx) {
   const startingWatches = watches.filter((w) => watchStateText(w) === targetStateStarting);
   const startingApps = (allApps || []).filter((a) => appStateText(a) === targetStateStarting);
   const daemonStarting = ready && ready.status === daemonStatusStarting && ready.ready === false;
-  const activeLocks = (locks || []).filter((l) => l.state === lockStateActive);
-  const failedApps = (allApps || []).filter((a) => appStateText(a) === targetStateFailed);
   return {
-    ready, live, mon, hostMetrics, enabled, failedSvcs, startingSvcs, collectingSvcs,
-    warningSvcs, restartRequiredSvcs, activeSvcs, monitoredSvcs, watches, enabledWatches, failedWatches,
-    warningWatches, staleWatches, startingWatches, startingApps, daemonStarting, activeLocks, failedApps,
+    ready, live, daemon, hostMetrics, enabled, failedSvcs, startingSvcs, collectingSvcs,
+    warningSvcs, restartRequiredSvcs, activeSvcs, watches, enabledWatches, failedWatches,
+    warningWatches, staleWatches, startingWatches, startingApps, daemonStarting,
   };
 }
 
-function overviewServiceTileOptions(data, defaultServiceTarget) {
+// loginsText is the host's interactive logins as the daemon counts them
+// (console and SSH), the subtitle of the Sessions tile.
+function loginsText(daemon) {
+  if (daemon.sessions) return `logins: ${Number(daemon.sessions.console) || 0} console · ${Number(daemon.sessions.ssh) || 0} SSH`;
+  if (daemon.active_users != null) return `${daemon.active_users || 0} users`;
+  return "";
+}
+
+// sessionsListed reports whether the Sessions panel has anything to show, and
+// with it whether the band carries a Sessions tile.
+function sessionsListed() {
+  return !!(sessionPanel.dom && panelVisible(sessionPanel.dom.section));
+}
+
+// overviewViewTiles are the tiles that lead to a view of targets, in band
+// order: services, watches, mounts and sessions on every layout, software and
+// events only where the band also stands in for the tab bar (tablet and phone).
+function overviewViewTiles(data) {
   const {
-    mon, enabled, failedSvcs, startingSvcs, collectingSvcs, warningSvcs, restartRequiredSvcs, activeSvcs,
-    monitoredSvcs, watches, enabledWatches, failedWatches, warningWatches, staleWatches,
-    startingWatches, startingApps, daemonStarting, activeLocks, failedApps,
+    daemon, enabled, failedSvcs, startingSvcs, collectingSvcs, warningSvcs, restartRequiredSvcs, activeSvcs,
+    watches, enabledWatches, failedWatches, warningWatches, staleWatches,
+    startingWatches, startingApps, daemonStarting,
   } = data;
-  const alerts = failedSvcs.length + failedWatches.length + failedApps.length + activeLocks.length;
   const settling = daemonStarting || startingSvcs.length > 0 || startingWatches.length > 0 || startingApps.length > 0;
   const servicesSettlingText = settlingSub(startingSvcs.length, [
     [daemonStarting, "daemon starting"],
@@ -7599,23 +6945,6 @@ function overviewServiceTileOptions(data, defaultServiceTarget) {
     [startingSvcs.length, `${startingSvcs.length} svc starting`],
     [startingApps.length, `${startingApps.length} app starting`],
   ]);
-  const servicesTarget = firstMatch([
-    [failedSvcs.length, "failed-services"],
-    [startingSvcs.length || daemonStarting, "starting-services"],
-    [collectingSvcs.length, "collecting-services"],
-    [warningSvcs.length, "warning-services"],
-    [restartRequiredSvcs.length, "restart-required-services"],
-    [startingWatches.length, "starting-watches"],
-    [startingApps.length, "starting-apps"],
-  ], defaultServiceTarget);
-  const watchesTarget = firstMatch([
-    [failedWatches.length, "failed-watches"],
-    [warningWatches.length, "warning-watches"],
-    [staleWatches.length, "stale-watches"],
-    [startingWatches.length, "starting-watches"],
-    [startingApps.length && !startingSvcs.length && !daemonStarting, "starting-apps"],
-    [settling, "starting-services"],
-  ], "watches-section");
 
   const tiles = [];
   const servicesSub = firstMatch([
@@ -7626,19 +6955,23 @@ function overviewServiceTileOptions(data, defaultServiceTarget) {
     [restartRequiredSvcs.length, `${restartRequiredSvcs.length} restart required`],
     [enabled.length === 0, "none enabled"],
   ], "all active");
-  tiles.push({
-    label: "Services active",
-    value: tpl`${activeSvcs.length}<small> / ${enabled.length}</small>`,
-    cls: firstMatch([
-      [failedSvcs.length, "t-crit"],
-      [collectingSvcs.length || warningSvcs.length || restartRequiredSvcs.length, "t-warn"],
-      [settling, ""],
-      [enabled.length, "t-ok"],
-    ], ""),
-    sub: servicesSub,
-    target: servicesTarget,
-    ariaLabel: tileAriaLabel("Services active", `${activeSvcs.length} of ${enabled.length}`, servicesSub, servicesTarget),
-  });
+  // A host with no service, container, VM or lock has no Services view to open.
+  if (viewHasContent(viewServices)) {
+    tiles.push({
+      label: "Services",
+      value: tpl`${activeSvcs.length}<small> / ${enabled.length}</small>`,
+      cls: firstMatch([
+        [failedSvcs.length, "t-crit"],
+        [collectingSvcs.length || warningSvcs.length || restartRequiredSvcs.length, "t-warn"],
+        [settling, ""],
+        [enabled.length, "t-ok"],
+      ], ""),
+      sub: servicesSub,
+      view: viewServices,
+      name: "Services active",
+      reading: `${activeSvcs.length} of ${enabled.length}`,
+    });
+  }
   if (watches.length) {
     const watchesSub = firstMatch([
       [failedWatches.length, `${failedWatches.length} firing`],
@@ -7654,57 +6987,76 @@ function overviewServiceTileOptions(data, defaultServiceTarget) {
       value: tpl`${watchesUp}<small> / ${enabledWatches.length}</small>`,
       cls: failedWatches.length ? "t-crit" : ((warningWatches.length || staleWatches.length) ? "t-warn" : (settling ? "" : "t-ok")),
       sub: watchesSub,
-      target: watchesTarget,
-      ariaLabel: tileAriaLabel("Watches", `${watchesUp} of ${enabledWatches.length}`, watchesSub, watchesTarget),
+      view: viewWatches,
+      reading: `${watchesUp} of ${enabledWatches.length}`,
     });
   }
-  const alertsTarget = firstMatch([
-    [failedSvcs.length, "failed-services"],
-    [failedWatches.length, "failed-watches"],
-    [failedApps.length, "failed-apps"],
-    [activeLocks.length, "locks-section"],
-  ], defaultServiceTarget);
-  const alertsSub = alerts
-    ? [failedSvcs.length && `${failedSvcs.length} svc`, failedWatches.length && `${failedWatches.length} watch`, failedApps.length && `${failedApps.length} app`, activeLocks.length && `${activeLocks.length} lock`].filter(Boolean).join(" · ")
-    : "nothing on fire";
-  // Until the first complete snapshot (watches/apps still loading) the alert
-  // total is incomplete, so show a neutral loading dash rather than a wrong
-  // count that jumps a moment later.
-  tiles.push({
-    label: "Alerts",
-    value: firstSnapshotDone ? String(alerts) : overviewLoadingValue,
-    cls: !firstSnapshotDone ? "" : (alerts ? "t-crit" : "t-ok"),
-    sub: firstSnapshotDone ? alertsSub : overviewLoadingText,
-    target: alertsTarget,
-    ariaLabel: firstSnapshotDone ? tileAriaLabel("Alerts", String(alerts), alertsSub, alertsTarget) : "Alerts loading",
-  });
-  const monitoredTarget = firstMatch([
-    [collectingSvcs.length && !failedSvcs.length, "collecting-services"],
-    [settling && !failedSvcs.length, servicesTarget],
-    [warningSvcs.length && !failedSvcs.length, "warning-services"],
-    [restartRequiredSvcs.length && !failedSvcs.length, "restart-required-services"],
-    [monitoredSvcs.length, "monitored-services"],
-  ], defaultServiceTarget);
-  const monitoredSub = firstMatch([
-    [collectingSvcs.length, `${collectingSvcs.length} collecting`],
-    [settling && !failedSvcs.length, servicesSettlingText || "settling"],
-    [warningSvcs.length, `${warningSvcs.length} need attention`],
-    [restartRequiredSvcs.length, `${restartRequiredSvcs.length} restart required`],
-  ], "");
-  if (enabled.length || (mon && mon.total != null)) {
+  const mounts = allMounts || [];
+  if (mounts.length) {
+    const mounted = mounts.filter((m) => m.mounted).length;
+    const errors = mounts.filter((m) => mountBaseStateText(m) === mountStateError).length;
+    // A unit that is not mounted is not a fault by itself — many are mounted on
+    // demand — so only an error colours the tile.
+    const mountsSub = firstMatch([
+      [errors, `${errors} in error`],
+      [mounted < mounts.length, `${mounts.length - mounted} not mounted`],
+    ], "all mounted");
     tiles.push({
-      label: "Monitored",
-      value: tpl`${monitoredSvcs.length}<small> / ${enabled.length}</small>`,
-      cls: firstMatch([
-        [collectingSvcs.length || warningSvcs.length || restartRequiredSvcs.length, "t-warn"],
-        [settling && !failedSvcs.length, ""],
-        [enabled.length && monitoredSvcs.length === enabled.length, "t-ok"],
-      ], ""),
-      sub: monitoredSub,
-      target: monitoredTarget,
-      ariaLabel: tileAriaLabel("Monitored", `${monitoredSvcs.length} of ${enabled.length}`, monitoredSub, monitoredTarget),
+      label: "Mounts",
+      value: tpl`${mounted}<small> / ${mounts.length}</small>`,
+      cls: errors ? "t-crit" : "",
+      sub: mountsSub,
+      view: viewMounts,
+      reading: `${mounted} of ${mounts.length} mounted`,
     });
   }
+  if (sessionsListed()) {
+    const count = sessionCount();
+    const sessionsSub = loginsText(daemon);
+    tiles.push({
+      label: "Sessions",
+      value: String(count),
+      sub: sessionsSub,
+      view: viewSessions,
+      reading: String(count),
+    });
+  }
+  return [...tiles, ...overviewTabTiles()];
+}
+
+// overviewTabTiles stand in for the tabs where there is no tab bar: on a
+// tablet or a phone the band is two rows of five, and Software and Events are
+// tiles like the rest instead of a bar that would repeat them. narrowOnly keeps
+// them off the desktop layout, which does show their tab.
+function overviewTabTiles() {
+  const tiles = [];
+  const software = [...(allApps || []), ...(allLibraries || [])];
+  if (software.length) {
+    const failed = software.filter((item) => appStateText(item) === targetStateFailed).length;
+    const warning = software.filter((item) => appStateText(item) === targetStateWarning).length;
+    const softwareSub = firstMatch([[failed, `${failed} failed`], [warning, `${warning} warning`]], "all ok");
+    tiles.push({
+      label: "Software",
+      value: String(software.length),
+      cls: firstMatch([[failed, "t-crit"], [warning, "t-warn"]], "t-ok"),
+      sub: softwareSub,
+      view: viewSoftware,
+      narrowOnly: true,
+      reading: String(software.length),
+    });
+  }
+  const errors = (latestActivity && latestActivity.errors) || 0;
+  const lastKind = latestActivity && latestActivity.last_event_kind;
+  const eventsSub = lastKind ? `last: ${lastKind}` : "";
+  tiles.push({
+    label: "Events",
+    value: tpl`${errors}<small> ${errors === 1 ? "error" : "errors"}</small>`,
+    cls: errors ? "t-warn" : "",
+    sub: eventsSub,
+    view: viewEvents,
+    narrowOnly: true,
+    reading: `${errors} recent ${errors === 1 ? "error" : "errors"}`,
+  });
   return tiles;
 }
 
@@ -7723,9 +7075,9 @@ function overviewSwapLevel(pct) {
 }
 
 const overviewHostUsageDescriptors = [
-  { metric: hostMetricTotalCPU, gauge: metricNameCPU, label: "Host CPU" },
-  { metric: hostMetricTotalMemory, gauge: "mem", label: "Host memory", capacity: true },
-  { metric: hostMetricTotalSwap, gauge: "swap", label: "Host swap", capacity: true, requireTotal: true, level: overviewSwapLevel },
+  { metric: hostMetricTotalCPU, gauge: metricNameCPU, label: "CPU", name: "Host CPU" },
+  { metric: hostMetricTotalMemory, gauge: "mem", label: "Memory", name: "Host memory", capacity: true },
+  { metric: hostMetricTotalSwap, gauge: "swap", label: "Swap", name: "Host swap", capacity: true, requireTotal: true, level: overviewSwapLevel },
 ];
 
 function overviewHostUsageTile(metric, descriptor, loading) {
@@ -7739,10 +7091,9 @@ function overviewHostUsageTile(metric, descriptor, loading) {
     sub: loading ? overviewLoadingText : sub,
     cls,
     extra: loading ? nothing : usageBar(pct, fmtPct(pct), gaugeId),
-    target: overviewDaemonPanel,
-    ariaLabel: loading
-      ? `${descriptor.label} loading`
-      : tileAriaLabel(descriptor.label, fmtPct(pct), sub, overviewDaemonPanel),
+    view: viewSystem,
+    name: descriptor.name,
+    reading: loading ? undefined : fmtPct(pct),
     describedBy: loading ? nothing : gaugeId,
   };
 }
@@ -7775,8 +7126,8 @@ function overviewHostTileOptions(data) {
       sub: loading ? overviewLoadingText : loadSub,
       cls: loading ? "" : (hasCap ? (pct >= percentMax ? "t-crit" : (pct >= loadWarnPct ? "t-warn" : "")) : ""),
       extra: loading || !hasCap ? nothing : usageBar(pct, fmtPct(pct), gaugeId),
-      target: overviewDaemonPanel,
-      ariaLabel: loading ? "Load 1m loading" : tileAriaLabel("Load 1m", fmtNum(load.absolute, 2), loadSub, overviewDaemonPanel),
+      view: viewSystem,
+      reading: loading ? undefined : fmtNum(load.absolute, 2),
       describedBy: loading ? nothing : gaugeId,
     });
   }
@@ -7787,10 +7138,19 @@ function renderOverview(ctx) {
   const band = $("#overview");
   if (!band) return;
   const data = overviewInventory(ctx);
-  const defaultTarget = defaultServicePanelTarget();
-  const options = [...overviewServiceTileOptions(data, defaultTarget), ...overviewHostTileOptions(data)];
-  const tiles = options.map((opts) => overviewTile(opts, defaultTarget));
-  litRender(tiles, band);
+  const hostTiles = overviewHostTileOptions(data);
+  // The host tiles are the way into the System view; a daemon that reports no
+  // host reading still needs one.
+  if (!hostTiles.length) {
+    const status = data.ready.status === healthStatusOK ? "running" : (data.ready.status || "—");
+    hostTiles.push({ label: "System", value: status, reading: status, sub: "daemon and notifiers", view: viewSystem });
+  }
+  const tiles = [...overviewViewTiles(data), ...hostTiles];
+  // The stylesheet lays the band out as whole rows — one on a desktop, two on a
+  // tablet or a phone — and needs to know how many tiles each layout shows.
+  band.style.setProperty("--tiles-wide", String(tiles.filter((tile) => !tile.narrowOnly).length));
+  band.style.setProperty("--tiles-half", String(Math.ceil(tiles.length / 2)));
+  litRender(tiles.map(overviewTile), band);
 }
 
 // responseGeneration returns the daemon configuration generation attached to
@@ -7883,105 +7243,67 @@ function updateTopbarHeight() {
   document.documentElement.style.setProperty("--topbar-h", `${height}px`);
 }
 
-function sectionNavCountText(text) {
-  const trimmed = (text || "").trim();
-  if (!trimmed) return "";
-  const paren = trimmed.match(/^\(([^)]+)\)$/);
-  if (paren) return paren[1];
-  const leading = trimmed.match(/^(\d+)/);
-  if (leading) return leading[1];
-  return trimmed;
-}
+// daemonStateIcons are the marks of the daemon's lifecycle in the bar, as the
+// stroke paths of a 24x24 icon: a pulse while it runs, a clock while it starts,
+// a warning sign in panic mode and a power sign while it shuts down.
+const daemonStateIcons = {
+  running: '<path d="M22 12h-4l-3 9L9 3l-3 9H2"/>',
+  starting: '<circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15.5 14"/>',
+  panic: '<path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>',
+  stopping: '<path d="M18.36 6.64a9 9 0 1 1-12.73 0"/><line x1="12" y1="2" x2="12" y2="12"/>',
+};
 
-function updateSectionNav() {
-  const nav = $("#section-nav");
-  if (!nav) return;
-  let visible = 0;
-  nav.querySelectorAll("[data-panel-target]").forEach((btn) => {
-    const target = btn.getAttribute("data-panel-target") || "";
-    const panel = target ? document.getElementById(target) : null;
-    const hidden = !panel || panel.classList.contains("panel-hidden");
-    btn.classList.toggle("nav-hidden", hidden);
-    if (!hidden) visible++;
-
-    const countID = btn.getAttribute("data-count-source") || "";
-    const countSource = countID ? document.getElementById(countID) : null;
-    const count = countSource ? sectionNavCountText(countSource.textContent) : "";
-    const countEl = btn.querySelector("[data-nav-count]");
-    if (countEl) countEl.textContent = count;
-  });
-  nav.classList.toggle("nav-hidden", visible === 0);
-  updateTopbarHeight();
+// daemonStateView is how the daemon's own lifecycle reads in the bar — not the
+// health of what it monitors, which the brand dot and the tiles carry. Running
+// is the icon alone; every other state adds its word, so none rests on the
+// icon's colour. The label is the full sentence for a tooltip or a screen
+// reader, with the startup progress the daemon reports.
+function daemonStateView(ready) {
+  const status = ready.status || (ready.ready ? healthStatusOK : "");
+  if (ready.panic) return { icon: "panic", cls: "status-panic", text: "panic mode", label: "Daemon in panic mode: hooks, alerts and automatic remediation are suspended" };
+  if (status === daemonStatusStarting) return { icon: "starting", cls: "status-starting", text: "starting", label: ready.message ? `Daemon ${ready.message}` : "Daemon starting" };
+  if (status === daemonStatusShuttingDown) return { icon: "stopping", cls: "inactive", text: "stopping", label: "Daemon shutting down" };
+  if (status === healthStatusOK) return { icon: "running", cls: healthStatusOK, text: "", label: "Daemon running" };
+  return { icon: "starting", cls: healthStatusMuted, text: status || "—", label: `Daemon ${status || "state unknown"}` };
 }
 
 function renderStatus(ctx) {
   const bar = $("#statusbar");
   if (!bar) return;
   try {
-    const { ready, live, mon, locks, daemon, hostMetrics } = ctx || {};
+    const { ready, live, locks, daemon, hostMetrics } = ctx || {};
     latestReady = ready || {};
     latestLocks = locks || [];
     latestHostMetrics = hostMetrics || [];
     if (daemon && daemon.hostname) rememberDashboardHostname(daemon.hostname);
 
-    // System-status line (line 2): host identity + detected backend + OS + live readings.
-    const sys = $("#system-status");
-    if (sys) {
-      // Each reading carries a key so the compact (mobile) layout can drop the
-      // host identity only. The live cpu/mem/swap/load readings live in the
-      // overview tiles (Host CPU/Memory/Swap/Load) — repeating them here was
-      // redundant, so they are intentionally not added.
-      const sp = [];
-      if (daemon.hostname) sp.push(["host", `host: <b>${esc(daemon.hostname)}</b>`]);
-      const hostType = hostTypeDisplay(daemon.host_type);
-      if (hostType.label) {
-        const title = hostType.title ? ` title="${esc(hostType.title)}"` : "";
-        sp.push(["type", `type: <b${title}>${esc(hostType.label)}</b>`]);
-      }
-      if (ready.backend) sp.push(["backend", `backend: <b>${esc(ready.backend)}</b>`]);
-      if (daemon.os) sp.push(["os", `OS: <b>${esc(daemon.os)}</b>`]);
-      setHTMLIfChanged(sys, sp.map(([k, s]) => `<span class="stat stat-${k}">${s}</span>`).join(""));
+    // The bar's first line is the host: its name, how long it has been up and
+    // the daemon's state as an icon. What is fixed about the host (type,
+    // backend, OS) reads once beside the tabs and in full in the Daemon panel.
+    // Counts and vital signs live on the tiles, so they are not repeated.
+    const host = $("#host-name");
+    if (host) host.textContent = daemon.hostname || "";
+    const state = daemonStateView(ready);
+    const logins = sessionsListed() ? "" : loginsText(daemon);
+    setHTMLIfChanged($("#host-status"),
+      `<span class="stat stat-uptime" title="Host uptime">up <b>${esc(fmtDuration(daemon.host_uptime_seconds) || "—")}</b></span>`
+      + `<span class="daemon-state ${state.cls}" role="img" aria-label="${esc(state.label)}" title="${esc(state.label)}">`
+      + `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${daemonStateIcons[state.icon]}</svg>`
+      + `${state.text ? `<span>${esc(state.text)}</span>` : ""}</span>`
+      // The logins are the Sessions tile's subtitle; a host with nothing to
+      // list in that panel has no such tile, so they read here instead.
+      + (logins ? `<span class="stat stat-sessions">${esc(logins)}</span>` : ""));
+    const stats = [];
+    const hostType = hostTypeDisplay(daemon.host_type);
+    if (hostType.label) {
+      const title = hostType.title ? ` title="${esc(hostType.title)}"` : "";
+      stats.push(["type", `<span${title}>${esc(hostType.label)}</span>`]);
     }
-
-    // Services active and Monitored each have their own overview tile, so they
-    // are not repeated here. The header keeps only readings without a tile:
-    // watches, interactive sessions and locks.
-    const parts = [];
-    parts.push(["watches", `watches: <b>${ready.watches || 0}</b>`]);
-    if (daemon.sessions) {
-      const consoleSessions = Number(daemon.sessions.console) || 0;
-      const sshSessions = Number(daemon.sessions.ssh) || 0;
-      parts.push(["sessions", `sessions (console/SSH): <b>${consoleSessions}/${sshSessions}</b>`]);
-    } else if (daemon.active_users != null) {
-      parts.push(["users", `users: <b>${daemon.active_users || 0}</b>`]);
-    }
-    const activeLocks = (locks || []).filter(l => l.state === lockStateActive).length;
-    if (activeLocks > 0 || (locks || []).length > 0) {
-      let lockStr = `locks: <b>${activeLocks}</b>`;
-      if (activeLocks < (locks || []).length) lockStr += `/${(locks || []).length}`;
-      if (activeLocks > 0) lockStr += ` <span class="muted">(active)</span>`;
-      parts.push(["locks", lockStr]);
-    }
-    // Host uptime and daemon lifecycle status, as separate keyed readings. On
-    // phones the status text is dropped — the brand dot next to "SERMO" already
-    // shows overall health by color — leaving just host and uptime.
-    const hostUp = fmtDuration(daemon.host_uptime_seconds);
-    const statusText = ready.status || (ready.ready ? healthStatusOK : "");
-    const statusCls = ready.panic ? "status-panic" : (statusText === daemonStatusStarting ? "status-starting" : (ready.ready ? healthStatusOK : "inactive"));
-    // Label the healthy daemon state "running", not "ok": "ok" reads as "all
-    // services fine", but this line only reflects the daemon's own lifecycle
-    // (service health is shown by the brand dot and the Alerts tile).
-    const statusDisplay = statusText === healthStatusOK ? "running" : statusText;
-    const statusLabel = statusText === daemonStatusStarting && ready.message
-      ? `${esc(statusText)} <span class="muted">(${esc(ready.message)})</span>`
-      : esc(statusDisplay || "—");
-    const statItems = parts.map(([k, p]) => `<span class="stat stat-${k}">${p}</span>`);
-    statItems.push(`<span class="stat stat-uptime">uptime: <b>${esc(hostUp || "—")}</b></span>`);
-    statItems.push(`<span class="stat stat-status">status: <span class="${statusCls}">${statusLabel}</span></span>`);
-    setHTMLIfChanged(bar, statItems.join(""));
+    if (ready.backend) stats.push(["backend", esc(ready.backend)]);
+    if (daemon.os) stats.push(["os", esc(daemon.os)]);
+    setHTMLIfChanged(bar, stats.map(([key, text]) => `<span class="stat stat-${key}">${text}</span>`).join(""));
     updatePanicView(ready.panic);
-    renderOverview({ ready, live, mon, locks, hostMetrics });
-    updateSectionNav();
+    renderOverview({ ready, live, daemon, locks, hostMetrics });
 
     // Also populate the runtime part of the Daemon info panel
     const set = setTextOrDash;
@@ -7996,9 +7318,11 @@ function renderStatus(ctx) {
         el.className = cls;
       }
     }
-    renderAttention();
+    refreshChrome();
   } catch {
-    bar.textContent = "status unavailable";
+    // Beside the host, the one place of the bar every layout shows.
+    const status = $("#host-status");
+    if (status) status.textContent = "status unavailable";
   }
 }
 
@@ -8285,23 +7609,21 @@ function confirmWatchRAIDResume(name) {
 }
 
 async function testNotifier(name) {
-  const generation = dashboardGeneration;
   if (!name) return;
-  if (!(await promptConfirm({
-    title: `Test notifier ${name}?`,
-    message: `Send a clearly marked test notification through "${name}"?`,
-    okLabel: "Send test",
-    danger: false,
-  }))) return;
-  setStatus("");
-  try {
-    const res = await fetch(notifierTestAPI(name), targetPostOptions({}, generation));
-    const body = await jsonOrThrow(res);
-    setStatus(body.message || `test notification sent to ${name}`, feedbackStatusOK);
-  } catch (e) {
-    setStatus(`test notifier ${name}: ${e.message}`, feedbackStatusErr);
-  }
-  load();
+  const generation = dashboardGeneration;
+  const done = await runAction({
+    confirm: () => promptConfirm({
+      title: `Test notifier ${name}?`,
+      message: `Send a clearly marked test notification through "${name}"?`,
+      okLabel: "Send test",
+      danger: false,
+    }),
+    request: () => fetch(notifierTestAPI(name), targetPostOptions({}, generation)),
+    ok: (body) => body.message || `test notification sent to ${name}`,
+    fail: `test notifier ${name}`,
+    then: null,
+  });
+  if (done !== null) load();
 }
 
 async function fetchMountBlockers(name, generation) {
@@ -9070,7 +8392,7 @@ function renderRules(rules) {
     const cond = r.condition_true
       ? tpl`<span class="inactive">${r.condition || ""}</span>`
       : tpl`<span class="muted">${r.condition || ""}</span>`;
-    const action = r.action ? r.action : tpl`<span class="muted">—</span>`;
+    const action = r.action ? r.action : mutedDash;
     return tpl`<tr>
       <td>${r.name}</td><td class="muted">${r.type || ""}</td><td>${action}</td>
       <td>${cond}</td><td class="muted">${r.window || ""}</td>
@@ -9132,109 +8454,15 @@ function categoryBadge(category) {
   return tpl`<span class="category-badge" title="${category}">${category}</span>`;
 }
 
-function categoryCounts(items, fallback) {
-  const counts = new Map();
-  (items || []).forEach((item) => {
-    const category = categoryOf(item, fallback);
-    counts.set(category, (counts.get(category) || 0) + 1);
-  });
-  return counts;
-}
-
-function sortedCategories(items, fallback) {
-  return Array.from(categoryCounts(items, fallback).keys())
-    .sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" }));
-}
-
-function syncCategorySelect(id, items, fallback, selected, allLabel = "all categories") {
-  const select = $(id);
-  if (!select) return selected || filterAll;
-  const categories = sortedCategories(items, fallback);
-  const visible = categories.length > 1;
-  select.hidden = !visible;
-  select.disabled = !visible;
-  const next = visible && selected !== filterAll && categories.includes(selected) ? selected : filterAll;
-  const counts = categoryCounts(items, fallback);
-  select.innerHTML = `<option value="${filterAll}">${esc(allLabel)}</option>` + categories.map((category) =>
-    `<option value="${esc(category)}">${esc(category)} (${counts.get(category) || 0})</option>`
-  ).join("");
-  select.value = next;
-  return next;
-}
-
-function groupedPanelId(rowPrefix, items) {
-  const first = items && items[0];
-  if (!first || !first.name) return nothing;
-  return `${rowPrefix}-row-${first.name}`;
-}
-
 function sortedGroupValues(list, groupOf) {
   return [...new Set(list.map(groupOf))].sort((a, b) =>
     a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" }));
-}
-
-function toggleAllGroups(groups, collapsedGroups) {
-  const allCollapsed = groups.length > 0 && groups.every((group) => collapsedGroups.has(group));
-  if (allCollapsed) groups.forEach((group) => collapsedGroups.delete(group));
-  else groups.forEach((group) => collapsedGroups.add(group));
-}
-
-function renderGroupedRows(list, collapsedGroups, panel, rowPrefix, groupOf, colspan, renderRow, groupDir) {
-  const groups = new Map();
-  list.forEach((item) => {
-    const group = groupOf(item);
-    if (!groups.has(group)) groups.set(group, []);
-    groups.get(group).push(item);
-  });
-  const dir = groupDir === -1 ? -1 : 1;
-  return Array.from(groups.entries()).sort((a, b) =>
-    a[0].localeCompare(b[0], undefined, { numeric: true, sensitivity: "base" }) * dir
-  ).map(([group, items]) => {
-    const collapsed = collapsedGroups.has(group);
-    const panelId = groupedPanelId(rowPrefix, items);
-    const header = tpl`<tr class="group-row">
-      <td colspan="${colspan}"><button type="button" class="row-toggle group-toggle" data-group-panel="${panel}" data-group-name="${group}" aria-expanded="${collapsed ? domBoolFalse : domBoolTrue}" aria-controls="${panelId}" aria-label="${groupToggleAriaLabel(group, items.length, collapsed)}"><span class="exp" aria-hidden="true">${collapsed ? "▸" : "▾"}</span>${group} <span class="muted">${items.length}</span></button></td>
-    </tr>`;
-    return [header, collapsed ? nothing : items.map(renderRow)];
-  });
-}
-
-function updateGroupButtons(prefix, grouped, groups, collapsedGroups, label, groupBy = "category") {
-  const group = $("#" + prefix + "-group-toggle");
-  const available = groups.length > 1;
-  if (group) {
-    group.hidden = !available;
-    group.disabled = !available;
-    group.setAttribute("aria-pressed", grouped ? domBoolTrue : domBoolFalse);
-    group.title = grouped ? `Ungroup ${label}` : `Group ${label} by ${groupBy}`;
-    group.setAttribute("aria-label", group.title);
-  }
-  const all = $("#" + prefix + "-groups-toggle");
-  if (!all) return;
-  const allCollapsed = available && groups.every((groupName) => collapsedGroups.has(groupName));
-  all.hidden = !available;
-  all.disabled = !grouped || !available;
-  all.innerHTML = allCollapsed ? "▾" : "▴";
-  all.title = allCollapsed ? `Expand all ${label} groups` : `Collapse all ${label} groups`;
-  all.setAttribute("aria-label", all.title);
-  all.setAttribute("aria-pressed", grouped && available && !allCollapsed ? domBoolTrue : domBoolFalse);
 }
 
 function closestFrom(event, selector) {
   let target = event.target;
   if (target && target.nodeType !== 1) target = target.parentElement;
   return target && target.closest ? target.closest(selector) : null;
-}
-
-function bindSortHeader(th, action) {
-  th.tabIndex = 0;
-  th.setAttribute("aria-sort", "none");
-  th.addEventListener(domEventClick, action);
-  th.addEventListener(domEventKeydown, (e) => {
-    if (e.key !== keyEnter && e.key !== keySpace) return;
-    e.preventDefault();
-    action();
-  });
 }
 
 // bindConfirmDialog wires a result-button dialog: a click on a
@@ -9262,53 +8490,32 @@ function bindStopClick(el, fn) {
   });
 }
 
-// bindActionClick wires a click on el that suppresses default/propagation before
-// invoking fn — the group-toggle button idiom. A missing el is a no-op.
-function bindActionClick(el, fn) {
-  if (!el) return;
-  el.addEventListener(domEventClick, (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    fn();
-  });
+// closeMenu hides the settings popover after an action that opens no dialog
+// (a dialog closes it by itself).
+function closeMenu() {
+  const menu = $("#app-menu");
+  if (menu && typeof menu.hidePopover === "function" && menu.matches(":popover-open")) menu.hidePopover();
 }
 
-// bindSearchBox wires a panel search input: apply(value) on input, and clear on
-// Escape. A missing el is a no-op.
-function bindSearchBox(el, apply) {
-  if (!el) return;
-  el.addEventListener(domEventInput, () => apply(el.value));
-  el.addEventListener(domEventKeydown, (e) => {
-    if (e.key === keyEscape) {
-      el.value = "";
-      apply("");
-    }
-  });
+async function toggleBrowserNotify() {
+  if (!(notificationAPIName in window)) return;
+  if (browserNotifyEnabled()) {
+    setBrowserNotifyEnabled(false);
+    return;
+  }
+  let permission = Notification.permission;
+  if (permission === notifyPermissionDefault) permission = await Notification.requestPermission();
+  if (permission !== notifyPermissionGranted) {
+    setBrowserNotifyEnabled(false);
+    setStatus("browser notifications are blocked for this site", feedbackStatusWarn, false);
+    return;
+  }
+  setBrowserNotifyEnabled(true);
 }
 
-// bindFilterButtons wires a filter bar: a click on a button[data-<dataKey>] calls
-// apply with its dataset value (or filterAll). A missing el is a no-op.
-function bindFilterButtons(el, dataKey, apply) {
-  if (!el) return;
-  el.addEventListener(domEventClick, (e) => {
-    const btn = closestFrom(e, `button[data-${dataKey}]`);
-    if (btn) apply(btn.dataset[dataKey] || filterAll);
-  });
-}
-
-// bindSessionControls wires the sessions panel: one search and type filter
-// over both the terminal sessions and the database statements tables.
-function bindSessionControls() {
-  bindSearchBox($("#session-search"), setSessionQuery);
-  bindFilterButtons($("#session-filters"), "sf", setSessionFilter);
-  document.querySelectorAll("#sessions-section .sessions-table th.sortable[data-session-sort]").forEach((th) => {
-    bindSortHeader(th, () => setSessionSort(th.dataset.sessionSort || ""));
-  });
-  document.querySelectorAll("#db-query-block th.sortable[data-db-query-sort]").forEach((th) => {
-    bindSortHeader(th, () => setDBQuerySort(th.dataset.dbQuerySort || ""));
-  });
-}
-
+// initStaticHandlers wires the controls the shell declares once. Everything a
+// render produces (rows, toolbars, column headers) is handled by delegation in
+// initDelegatedHandlers.
 function initStaticHandlers() {
   const targetSearch = $("#target-search");
   if (targetSearch) {
@@ -9325,31 +8532,15 @@ function initStaticHandlers() {
 
   const refreshSelect = $("#refresh-select");
   if (refreshSelect) refreshSelect.addEventListener(domEventChange, () => setRefresh(refreshSelect.value));
-
-  const refreshButton = $("#refresh-now");
-  if (refreshButton) refreshButton.addEventListener(domEventClick, refreshNow);
-
-  const refreshPendingButton = $("#refresh-pending");
-  if (refreshPendingButton) refreshPendingButton.addEventListener(domEventClick, refreshNow);
+  for (const id of ["#refresh-now", "#refresh-pending"]) {
+    const button = $(id);
+    if (button) button.addEventListener(domEventClick, refreshNow);
+  }
 
   const notifyToggle = $("#notify-toggle");
   if (notifyToggle) {
     syncNotifyToggle();
-    notifyToggle.addEventListener(domEventClick, async () => {
-      if (!(notificationAPIName in window)) return;
-      if (browserNotifyEnabled()) {
-        setBrowserNotifyEnabled(false);
-        return;
-      }
-      let permission = Notification.permission;
-      if (permission === notifyPermissionDefault) permission = await Notification.requestPermission();
-      if (permission !== notifyPermissionGranted) {
-        setBrowserNotifyEnabled(false);
-        setStatus("browser notifications are blocked for this site", feedbackStatusWarn, false);
-        return;
-      }
-      setBrowserNotifyEnabled(true);
-    });
+    notifyToggle.addEventListener(domEventClick, toggleBrowserNotify);
   }
 
   const shortcutToggle = $("#shortcut-toggle");
@@ -9358,94 +8549,8 @@ function initStaticHandlers() {
     shortcutToggle.addEventListener(domEventChange, () => setKeyboardShortcutsEnabled(shortcutToggle.checked));
   }
 
-  bindSearchBox($("#svc-search"), setSvcQuery);
-  bindFilterButtons($("#svc-filters"), "f", setSvcStatus);
-  bindSessionControls();
-
-  const svcCategorySelect = $("#svc-category");
-  if (svcCategorySelect) svcCategorySelect.addEventListener(domEventChange, () => setSvcCategory(svcCategorySelect.value));
-
-  bindActionClick($("#svc-group-toggle"), () => setSvcGrouped(!svcGrouped));
-  bindActionClick($("#svc-groups-toggle"), toggleAllSvcGroups);
-
-  function bindSplitServicePanelControls(panelKey) {
-    const panel = getSplitServicePanel(panelKey);
-    if (!panel) return;
-    bindSearchBox($(panel.search), (v) => setSplitServiceQuery(panelKey, v));
-    bindFilterButtons($(panel.filters), panel.filterDataset, (v) => setSplitServiceStatus(panelKey, v));
-    bindActionClick($("#" + panelKey + "-group-toggle"), () => setSplitServiceGrouped(panelKey, !panel.grouped));
-    bindActionClick($("#" + panelKey + "-groups-toggle"), () => toggleAllSplitServiceGroups(panelKey));
-    document.querySelectorAll(`${panel.section} .services-table th.sortable[data-${panel.sortAttr}]`).forEach((th) => {
-      bindSortHeader(th, () => setSplitServiceSort(panelKey, th.dataset[panel.sortDataset] || ""));
-    });
-  }
-  Object.keys(splitServicePanels).forEach(bindSplitServicePanelControls);
-
-  document.querySelectorAll(".services-table th.sortable[data-sort]").forEach((th) => {
-    bindSortHeader(th, () => setSvcSort(th.dataset.sort || ""));
-  });
-
-  document.querySelectorAll(".events th.sortable[data-ev-sort]").forEach((th) => {
-    bindSortHeader(th, () => setEvSort(th.dataset.evSort || ""));
-  });
-
-  applyUIStateToControls();
-
-  function bindWatchPanelControls(panelKey) {
-    const panel = getWatchPanel(panelKey);
-    bindSearchBox($(panel.search), (v) => setWatchQuery(panelKey, v));
-
-    const typeSelect = $(panel.typeSelect);
-    if (typeSelect) typeSelect.addEventListener(domEventChange, () => setWatchType(panelKey, typeSelect.value));
-
-    bindActionClick($("#" + panelKey + "-group-toggle"), () => setWatchGrouped(panelKey, !panel.grouped));
-    bindActionClick($("#" + panelKey + "-groups-toggle"), () => toggleAllWatchGroups(panelKey));
-    bindFilterButtons($(panel.filters), "wf", (v) => setWatchStatus(panelKey, v));
-  }
-  [watchPanelKeyHost].forEach(bindWatchPanelControls);
-
-  document.querySelectorAll(".watch-table th.sortable[data-watch-sort]").forEach((th) => {
-    bindSortHeader(th, () => setWatchSort(watchPanelKeyForElement(th), th.dataset.watchSort || ""));
-  });
-
-  bindSearchBox($("#mount-search"), setMountQuery);
-
-  const mountCategorySelect = $("#mount-category");
-  if (mountCategorySelect) mountCategorySelect.addEventListener(domEventChange, () => setMountCategory(mountCategorySelect.value));
-  bindActionClick($("#mount-group-toggle"), () => setMountGrouped(!mountGrouped));
-  bindActionClick($("#mount-groups-toggle"), toggleAllMountGroups);
-
-  bindFilterButtons($("#mount-filters"), "mf", setMountStatus);
-
-  document.querySelectorAll(".mount-table th.sortable[data-mount-sort]").forEach((th) => {
-    bindSortHeader(th, () => setMountSort(th.dataset.mountSort || ""));
-  });
-
-  bindSearchBox($("#app-search"), setAppQuery);
-
-  const appCategorySelect = $("#app-category");
-  if (appCategorySelect) appCategorySelect.addEventListener(domEventChange, () => setAppCategory(appCategorySelect.value));
-  bindFilterButtons($("#app-filters"), "af", setAppStatus);
-
-  bindActionClick($("#app-group-toggle"), () => setAppGrouped(!appGrouped));
-  bindActionClick($("#app-groups-toggle"), toggleAllAppGroups);
-
-  document.querySelectorAll(".apps-table th.sortable[data-app-sort]").forEach((th) => {
-    bindSortHeader(th, () => setAppSort(th.dataset.appSort || ""));
-  });
-
-  bindSearchBox($("#library-search"), setLibraryQuery);
-  const libraryCategorySelect = $("#library-category");
-  if (libraryCategorySelect) libraryCategorySelect.addEventListener(domEventChange, () => setLibraryCategory(libraryCategorySelect.value));
-  bindFilterButtons($("#library-filters"), "lf", setLibraryStatus);
-  bindActionClick($("#library-group-toggle"), () => setLibraryGrouped(!libraryGrouped));
-  bindActionClick($("#library-groups-toggle"), toggleAllLibraryGroups);
-  document.querySelectorAll(".libraries-table th.sortable[data-library-sort]").forEach((th) => {
-    bindSortHeader(th, () => setLibrarySort(th.dataset.librarySort || ""));
-  });
-
-  ["event-service", "event-watch", "event-kind", "event-status", "event-range", "event-from", "event-to"].forEach((id) => {
-    const el = $("#" + id);
+  eventFilterFields.forEach(({ id }) => {
+    const el = $(id);
     if (!el) return;
     el.addEventListener(domEventChange, flushLoadEvents);
     el.addEventListener(domEventKeydown, eventFilterKey);
@@ -9466,7 +8571,7 @@ function initStaticHandlers() {
   const confirmPreflight = $("#confirm-preflight-btn");
   if (confirmPreflight) confirmPreflight.addEventListener(domEventClick, runConfirmPreflight);
 
-  bindStopClick($("#reload-btn"), reloadConfig);
+  bindStopClick($("#reload-btn"), () => { closeMenu(); reloadConfig(); });
   bindStopClick($("#state-compact-btn"), compactState);
   bindStopClick($("#panic-btn"), () => requestPanic(!panicOn));
   bindConfirmDialog($("#panic-confirm"), "[data-panic-result]", "panicResult", closePanicConfirm, () => panicResolve);
@@ -9478,69 +8583,79 @@ function initStaticHandlers() {
       if (mountUnmountConfirmInfo) updateMountUnmountBlockers(mountUnmountConfirmInfo);
     });
   }
+  // The hand-written sortable tables get their keyboard focus and aria-sort.
+  ["sessions", "db-queries", "events"].forEach(updateSortHeaders);
 }
+
+function sortHeaderClicked(th) {
+  const table = th.closest("[data-sort-scope]");
+  if (table) toggleSort(table.dataset.sortScope, th.dataset.sort || "");
+}
+
+// windowSetters are the time-window pickers, by the kind their buttons carry.
+const windowSetters = { setMetricWin, setSLAWin, setWatchMetricWin, setDaemonMetricWin };
+
+// Delegated click routes: the first selector matching an ancestor of the click
+// target wins. The plain-row fallthrough stays outside because rowClick also
+// needs the event.
+const clickRoutes = [
+  ["[data-logout]", () => logout()],
+  ["[data-view-tab]", (el) => openView(el.dataset.viewTab || "")],
+  ["[data-event-toggle]", (el) => toggleEventMsg(el.dataset.eventToggle || "")],
+  ["[data-panel-target]", (el) => openPanelTarget(el.dataset.panelTarget || "")],
+  ["[data-ssh-session-close]", (el) => closeSSHSession(
+    el.dataset.sshService || "", el.dataset.sshSessionPid || "", el.dataset.sshSessionStartTicks || "",
+    el.dataset.sshSessionTerminal || "", el.dataset.sshSessionUser || "",
+    el.dataset.sshSessionManaged === domBoolTrue)],
+  ["[data-terminal-session-close]", (el) => closeTerminalSession(
+    el.dataset.terminalService || "", el.dataset.terminalCheck || "", el.dataset.terminalMultiplexer || "",
+    el.dataset.terminalSession || "", el.dataset.terminalUser || "", el.dataset.terminalIdentity || "")],
+  ["[data-empty-session-close]", (el) => closeEmptySessionSource(
+    el.dataset.emptySessionService || "", el.dataset.emptySessionCheck || "")],
+  ["[data-db-query-kill]", (el) => killDBQuery(
+    el.dataset.dbQueryService || "", el.dataset.dbQueryWatch || "",
+    el.dataset.dbQueryId || "", el.dataset.dbQueryIdentity || "")],
+  ["[data-db-query-expand]", (el) => toggleDBQueryExpansion(el.dataset.dbQueryExpand || "")],
+  ["[data-watch-process-kill]", (el) => killWatchProcess(
+    el.dataset.watchProcessWatch || "", el.dataset.watchProcessPid || "", el.dataset.watchProcessStartTicks || "")],
+  ["[data-service-action][data-service]", (el) => act(el.dataset.service || "", el.dataset.serviceAction || "")],
+  ["[data-service-button][data-service]", (el) => pressServiceButton(el.dataset.service || "", el.dataset.serviceButton || "")],
+  ["[data-watch-action][data-watch]", (el) => actWatch(el.dataset.watch || "", el.dataset.watchAction || "")],
+  ["[data-mount-action][data-mount]", (el) => actMount(el.dataset.mount || "", el.dataset.mountAction || "")],
+  ["[data-notifier-test]", (el) => testNotifier(el.dataset.notifierTest || "")],
+  ["[data-refresh-panel]", (el) => refreshPanel(el)],
+  ["[data-service-pin]", (el) => toggleServicePin(el.dataset.servicePin || "")],
+  ["[data-service-open]", (el) => openServiceExpansion(el.dataset.serviceOpen || "", true)],
+  ["[data-lock-release]", (el) => releaseLock(el.dataset.lockService || "", el.dataset.lockName || "")],
+  ["[data-preflight-service]", (el) => runPreflight(el.dataset.preflightService || "")],
+  ["[data-window-kind][data-window-value]", (el) => {
+    const setWindow = windowSetters[el.dataset.windowKind];
+    if (setWindow) setWindow(el.dataset.windowValue || "", el.dataset.windowService || "");
+  }],
+  ["[data-watch-type-sort-type][data-watch-type-sort]",
+    (el) => setWatchTypeSort(el.dataset.watchTypeSortType || "", el.dataset.watchTypeSort || "name")],
+  ["th.sortable[data-sort]", sortHeaderClicked],
+  // A list panel's toolbar and group headings name their panel through the
+  // enclosing data-panel.
+  ["[data-panel] [data-filter]", (el) => updatePanel(panelOfElement(el), { status: el.dataset.filter || filterAll })],
+  ["[data-panel] [data-panel-group]", (el) => { const p = panelOfElement(el); updatePanel(p, { grouped: !p.grouped }); }],
+  ["[data-panel] [data-panel-groups]", (el) => toggleAllPanelGroups(panelOfElement(el))],
+  ["[data-panel] [data-group-name]", (el) => togglePanelGroup(panelOfElement(el), el.dataset.groupName || "")],
+  ["[data-exp-toggle]", (el) => toggleExpand(el.dataset.expToggle || "")],
+];
 
 function initDelegatedHandlers() {
   document.addEventListener(domEventChange, (e) => {
-    const typeFilter = closestFrom(e, "[data-watch-type-filter-panel][data-watch-type-filter]");
-    if (typeFilter) setWatchTypeFilter(typeFilter.dataset.watchTypeFilterPanel || watchPanelKeyHost, typeFilter.dataset.watchTypeFilter || "", typeFilter.value);
+    const typeFilter = closestFrom(e, "[data-watch-type-filter]");
+    if (typeFilter) setWatchTypeFilter(typeFilter.dataset.watchTypeFilter || "", typeFilter.value);
+    const category = closestFrom(e, "[data-panel] [data-panel-category]");
+    if (category) updatePanel(panelOfElement(category), { category: category.value || filterAll });
   });
 
-  // Delegated click routes: the first selector matching an ancestor of the
-  // click target wins, mirroring the previous if/return chain. The plain-row
-  // fallthrough stays outside because rowClick also needs the event.
-  const clickRoutes = [
-    ["[data-logout]", () => logout()],
-    ["[data-event-toggle]", (el) => toggleEventMsg(el.dataset.eventToggle || "")],
-    ["[data-panel-target]", (el) => openPanelTarget(el.dataset.panelTarget || "")],
-    ["[data-ssh-session-close]", (el) => closeSSHSession(
-      el.dataset.sshService || "", el.dataset.sshSessionPid || "", el.dataset.sshSessionStartTicks || "",
-      el.dataset.sshSessionTerminal || "", el.dataset.sshSessionUser || "",
-      el.dataset.sshSessionManaged === domBoolTrue)],
-    ["[data-terminal-session-close]", (el) => closeTerminalSession(
-      el.dataset.terminalService || "", el.dataset.terminalCheck || "", el.dataset.terminalMultiplexer || "",
-      el.dataset.terminalSession || "", el.dataset.terminalUser || "", el.dataset.terminalIdentity || "")],
-    ["[data-empty-session-close]", (el) => closeEmptySessionSource(
-      el.dataset.emptySessionService || "", el.dataset.emptySessionCheck || "")],
-    ["[data-db-query-kill]", (el) => killDBQuery(
-      el.dataset.dbQueryService || "", el.dataset.dbQueryWatch || "",
-      el.dataset.dbQueryId || "", el.dataset.dbQueryIdentity || "")],
-    ["[data-db-query-expand]", (el) => toggleDBQueryExpansion(el.dataset.dbQueryExpand || "")],
-    ["[data-watch-process-kill]", (el) => killWatchProcess(
-      el.dataset.watchProcessWatch || "", el.dataset.watchProcessPid || "", el.dataset.watchProcessStartTicks || "")],
-    ["[data-service-action][data-service]", (el) => act(el.dataset.service || "", el.dataset.serviceAction || "")],
-    ["[data-service-button][data-service]", (el) => pressServiceButton(el.dataset.service || "", el.dataset.serviceButton || "")],
-    ["[data-watch-action][data-watch]", (el) => actWatch(el.dataset.watch || "", el.dataset.watchAction || "")],
-    ["[data-mount-action][data-mount]", (el) => actMount(el.dataset.mount || "", el.dataset.mountAction || "")],
-    ["[data-notifier-test]", (el) => testNotifier(el.dataset.notifierTest || "")],
-    ["[data-refresh-panel]", (el) => refreshPanel(el)],
-    ["[data-service-pin]", (el) => toggleServicePin(el.dataset.servicePin || "")],
-    ["[data-service-expand]", (el) => toggleServiceExpansion(el.dataset.serviceExpand || "")],
-    ["[data-service-open]", (el) => openServiceExpansion(el.dataset.serviceOpen || "", true)],
-    ["[data-lock-release]", (el) => releaseLock(el.dataset.lockService || "", el.dataset.lockName || "")],
-    ["[data-preflight-service]", (el) => runPreflight(el.dataset.preflightService || "")],
-    ["[data-window-kind][data-window-value]", (el) => {
-      const val = el.dataset.windowValue || "";
-      switch (el.dataset.windowKind) {
-        case "setMetricWin":
-          setMetricWin(val, el.dataset.windowService || "");
-          break;
-        case "setSLAWin":
-          setSLAWin(val, el.dataset.windowService || "");
-          break;
-        case "setWatchMetricWin":
-          setWatchMetricWin(val, el.dataset.windowService || "");
-          break;
-        case "setDaemonMetricWin":
-          setDaemonMetricWin(val);
-          break;
-      }
-    }],
-    ["[data-watch-type-sort-panel][data-watch-type-sort-type][data-watch-type-sort]",
-      (el) => setWatchTypeSort(el.dataset.watchTypeSortPanel || watchPanelKeyHost, el.dataset.watchTypeSortType || "", el.dataset.watchTypeSort || "name")],
-    ["[data-group-panel][data-group-name]", (el) => toggleGroup(el.dataset.groupPanel || "", el.dataset.groupName || "")],
-    ["[data-exp-toggle]", (el) => toggleExpand(el.dataset.expToggle || "")],
-  ];
+  document.addEventListener(domEventInput, (e) => {
+    const search = closestFrom(e, "[data-panel] [data-panel-search]");
+    if (search) updatePanel(panelOfElement(search), { query: search.value.trim().toLowerCase() });
+  });
 
   document.addEventListener(domEventClick, (e) => {
     for (const [selector, handle] of clickRoutes) {
@@ -9565,14 +8680,31 @@ function initDelegatedHandlers() {
   });
 
   document.addEventListener(domEventKeydown, (e) => {
+    const search = e.key === keyEscape && closestFrom(e, "[data-panel] [data-panel-search]");
+    if (search) {
+      // Escape clears a panel's search.
+      search.value = "";
+      updatePanel(panelOfElement(search), { query: "" });
+      return;
+    }
     if (e.key !== keyEnter && e.key !== keySpace) return;
-    const typeSort = closestFrom(e, "[data-watch-type-sort-panel][data-watch-type-sort-type][data-watch-type-sort]");
-    if (!typeSort) return;
+    // A sortable column header is operated like a button.
+    const typeSort = closestFrom(e, "th[data-watch-type-sort-type][data-watch-type-sort]");
+    const sortHeader = typeSort ? null : closestFrom(e, "th.sortable[data-sort]");
+    if (!typeSort && !sortHeader) return;
     e.preventDefault();
-    setWatchTypeSort(typeSort.dataset.watchTypeSortPanel || watchPanelKeyHost, typeSort.dataset.watchTypeSortType || "", typeSort.dataset.watchTypeSort || "name");
+    if (typeSort) setWatchTypeSort(typeSort.dataset.watchTypeSortType || "", typeSort.dataset.watchTypeSort || "name");
+    else sortHeaderClicked(sortHeader);
   });
 }
 
+initListPanels();
+restoreUIState();
+(function initView() {
+  let saved = "";
+  try { saved = localStorage.getItem(VIEW_KEY) || ""; } catch (_) {}
+  setView(saved || defaultView);
+})();
 initStaticHandlers();
 initDelegatedHandlers();
 window.addEventListener(domEventResize, updateTopbarHeight);
@@ -9732,27 +8864,14 @@ function setKeyboardShortcutsEnabled(enabled) {
   try { localStorage.setItem(KEYBOARD_SHORTCUTS_KEY, enabled ? storageBoolTrue : storageBoolFalse); } catch (_) {}
 }
 
-// activeSearchBox returns the search input for the topmost open data panel.
-// Watch panels come straight from the watchPanels registry so a new panel's
-// search box joins the "/" shortcut without extending this list.
+// activeSearchBox returns the search input of the topmost open list panel of
+// the view on screen, or of its first panel when all are closed. Panels are
+// found by their data-panel shell, so a new one joins the "/" shortcut for free.
 function activeSearchBox() {
-  const panels = [
-    ["#sessions-section", "#session-search"],
-    ["#services-section", "#svc-search"],
-    ["#containers-section", "#container-search"],
-    ["#vms-section", "#vm-search"],
-    ...Object.values(watchPanels).map((p) => [p.section, p.search]),
-    ["#apps-section", "#app-search"],
-    ["#libraries-section", "#library-search"],
-  ];
-  for (const [sectionSel, searchSel] of panels) {
-    const section = $(sectionSel);
-    if (!section || !panelVisible(section) || !section.open) continue;
-    const box = $(searchSel);
-    if (box) return { section, box };
-  }
-  const fallback = $("#svc-search") || $("#container-search") || $("#vm-search");
-  return fallback ? { section: $("#" + defaultServicePanelTarget()), box: fallback } : null;
+  const sections = [...document.querySelectorAll("[data-panel]")].filter((section) =>
+    panelVisible(section) && !section.classList.contains("view-hidden") && section.querySelector("[data-panel-search]"));
+  const section = sections.find((el) => el.open) || sections[0];
+  return section ? { section, box: section.querySelector("[data-panel-search]") } : null;
 }
 
 // Ctrl/Cmd+K focuses global target search; "/" focuses the visible panel search.
@@ -9777,11 +8896,12 @@ document.addEventListener(domEventKeydown, (e) => {
 });
 
 
-// Remember which sections the operator left open/closed across reloads. Each
-// <details id="..."> restores its saved state on load and saves on every toggle;
-// sections with no saved state keep their HTML default.
+// Remember which panels the operator left open/closed across reloads. Each
+// panel restores its saved state on load and saves on every toggle; one with
+// no saved state keeps its HTML default. Other disclosures (the events
+// panel's "more") follow what they hold rather than a saved state.
 (function initCollapse() {
-  document.querySelectorAll("details[id]").forEach((el) => {
+  document.querySelectorAll("details.panel[id]").forEach((el) => {
     const key = "sermo-open-" + el.id;
     try {
       const saved = localStorage.getItem(key);

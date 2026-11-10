@@ -230,9 +230,11 @@ into a change that does not touch them.
   `bindListenConfig`
 - Web UI: sources in `internal/web/src/` (design tokens in `tokens.css`,
   shared by the dashboard and the login page); generated
-  `internal/web/index.html` and `internal/web/login.html`; repetitive
-  watch-panel metadata in
-  `watch-panels.json`. lit-html, delegated `data-*` clicks (not inline or
+  `internal/web/index.html` and `internal/web/login.html`. A list panel is a
+  descriptor in `app.js` (`listPanels`: columns, status chips, row renderer)
+  over one shared toolbar, sort, grouping and saved state, plus its shell in
+  `index.html` (`data-panel`, and `data-view` for its tab); the Watches shell
+  comes from `watch-panels.json`. lit-html, delegated `data-*` clicks (not inline or
   lit handlers), design tokens, no literal CSS colors, existing CSP.
   String-built SVG only in its container. Desktop/mobile and WCAG 2.2 AA
   checks.

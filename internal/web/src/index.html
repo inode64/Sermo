@@ -13,12 +13,41 @@
 <a href="#main-content" class="skip-link">Skip to main content</a>
 <div id="topbar" role="banner">
 <div class="topbar-row">
-  <h1><span class="brand-dot" id="brand-dot" aria-hidden="true"></span>SERMO<span class="brand-sub"> · Service Remediation Monitor</span><span id="me" class="muted"></span></h1>
-  <div class="topbar-tools">
+  <div class="topbar-id">
+    <h1><span class="brand-dot" id="brand-dot" aria-hidden="true"></span><span class="brand-name">SERMO</span><span id="host-name" class="host-name"></span></h1>
+    <span id="host-status" class="host-status" aria-live="off"></span>
+  </div>
+  <div class="topbar-search">
     <label for="target-search" class="visually-hidden">Find a monitored target</label>
-    <input id="target-search" type="search" list="target-search-options" placeholder="find service, watch, app or mount" autocomplete="off" aria-label="Find a monitored target">
+    <input id="target-search" type="search" list="target-search-options" placeholder="Find a service, watch, app or mount…" autocomplete="off" aria-describedby="shortcut-hint-desc">
     <datalist id="target-search-options"></datalist>
-    <label for="refresh-select">Auto-refresh
+  </div>
+  <div class="topbar-tools">
+    <span id="me"></span>
+    <span id="last-refresh" class="muted" aria-live="off"></span>
+    <button id="refresh-pending" type="button" hidden aria-label="New data available, refresh the dashboard">new data</button>
+    <button id="refresh-now" type="button" class="icon-btn" title="Refresh dashboard now" aria-label="Refresh dashboard now"><span aria-hidden="true">&#x27F3;</span></button>
+    <button id="menu-toggle" type="button" class="icon-btn" popovertarget="app-menu" title="Settings and admin actions" aria-label="Settings and admin actions"><span aria-hidden="true">&#x2630;</span></button>
+  </div>
+</div>
+<!-- A view shows the panels that carry its data-view. The overview tiles are
+     the way into Services, Watches, Mounts, Sessions and System; Software and
+     Events have a tab on a desktop and are tiles too on a tablet or a phone,
+     where this line is hidden. The same line carries what is fixed about the
+     host. -->
+<div class="topbar-sub">
+  <nav id="section-nav" aria-label="Dashboard sections">
+    <button type="button" class="view-tab" data-view-tab="software">Software<span class="nav-count" data-nav-count></span><span class="nav-dot" data-nav-dot hidden></span></button>
+    <button type="button" class="view-tab" data-view-tab="events">Events</button>
+    <button type="button" class="view-tab" data-view-tab="all">All</button>
+  </nav>
+  <div id="statusbar" aria-live="off"></div>
+</div>
+</div><!-- /topbar -->
+
+<div id="app-menu" popover aria-label="Settings and admin actions">
+  <div class="menu-group">
+    <label class="menu-row" for="refresh-select">Auto-refresh
       <select id="refresh-select" aria-label="Dashboard auto-refresh interval">
         <option value="5000">5s</option>
         <option value="10000">10s</option>
@@ -28,34 +57,21 @@
         <option value="0">stop</option>
       </select>
     </label>
-    <span id="last-refresh" class="muted" aria-live="off"></span>
-    <button id="refresh-pending" type="button" hidden aria-label="New data available, refresh the dashboard">new data</button>
-    <button id="refresh-now" title="Refresh dashboard now" aria-label="Refresh dashboard now">&#x27F3;</button>
-    <button id="notify-toggle" class="icon-btn" title="Notify in the browser when a new target fails" aria-label="Notify in the browser when a new target fails" aria-pressed="false">&#x1F514;</button>
+    <button id="notify-toggle" type="button" class="menu-item menu-check" title="Notify in the browser when a new target fails" aria-pressed="false">Browser notifications</button>
+    <label class="menu-row shortcut-toggle" aria-describedby="shortcut-hint-desc"><span>Keyboard shortcuts <span class="muted">/ · Ctrl K</span></span><input id="shortcut-toggle" type="checkbox" checked></label>
   </div>
+  <div class="menu-group" data-admin>
+    <button id="reload-btn" type="button" class="menu-item">Reload config</button>
+    <div class="menu-row">
+      <button id="state-compact-btn" type="button" class="danger-btn" title="Prune persisted state history and vacuum the database">Compact state</button>
+      <label for="state-before" class="visually-hidden">Compact state before cutoff</label>
+      <input id="state-before" type="text" class="admin-before-input" placeholder="before (e.g. 720h)" title="Optional state compact cutoff: positive duration or non-future RFC3339 timestamp" aria-describedby="state-before-hint">
+    </div>
+    <button id="panic-btn" type="button" class="panic-btn" title="Suspend hooks, alerts and automatic remediation" aria-label="Enter panic mode and suspend hooks, alerts and automatic remediation">panic mode</button>
+  </div>
+  <div class="menu-group" id="menu-session" hidden></div>
 </div>
-<div id="system-status" aria-live="off"></div>
-<div id="statusbar" aria-live="off"></div>
-<nav id="section-nav" aria-label="Dashboard sections">
-  <a class="section-jump" href="#services-section" data-panel-target="services-section" data-count-source="services-count">Services <span class="nav-count" data-nav-count></span></a>
-  <a class="section-jump" href="#sessions-section" data-panel-target="sessions-section" data-count-source="sessions-count">Sessions <span class="nav-count" data-nav-count></span></a>
-  <a class="section-jump" href="#containers-section" data-panel-target="containers-section" data-count-source="containers-count">Containers <span class="nav-count" data-nav-count></span></a>
-  <a class="section-jump" href="#vms-section" data-panel-target="vms-section" data-count-source="vms-count">VMs <span class="nav-count" data-nav-count></span></a>
-  <a class="section-jump" href="#storage-section" data-panel-target="storage-section" data-count-source="storage-count">Storage <span class="nav-count" data-nav-count></span></a>
-  <a class="section-jump" href="#lvm-section" data-panel-target="lvm-section" data-count-source="lvm-count">LVM <span class="nav-count" data-nav-count></span></a>
-  <a class="section-jump" href="#network-section" data-panel-target="network-section" data-count-source="network-count">Network <span class="nav-count" data-nav-count></span></a>
-  <a class="section-jump" href="#mounts-section" data-panel-target="mounts-section" data-count-source="mounts-count">Mount units <span class="nav-count" data-nav-count></span></a>
-  <a class="section-jump" href="#apps-section" data-panel-target="apps-section" data-count-source="apps-count">Apps <span class="nav-count" data-nav-count></span></a>
-  <a class="section-jump" href="#libraries-section" data-panel-target="libraries-section" data-count-source="libraries-count">Libraries <span class="nav-count" data-nav-count></span></a>
-  <a class="section-jump" href="#cert-section" data-panel-target="cert-section" data-count-source="cert-count">Certs <span class="nav-count" data-nav-count></span></a>
-  <a class="section-jump" href="#diskio-section" data-panel-target="diskio-section" data-count-source="diskio-count">Disk I/O <span class="nav-count" data-nav-count></span></a>
-  <a class="section-jump" href="#watches-section" data-panel-target="watches-section" data-count-source="watches-count">Watches <span class="nav-count" data-nav-count></span></a>
-  <a class="section-jump" href="#events-section" data-panel-target="events-section" data-count-source="event-count">Events <span class="nav-count" data-nav-count></span></a>
-  <a class="section-jump" href="#locks-section" data-panel-target="locks-section" data-count-source="locks-count">Locks <span class="nav-count" data-nav-count></span></a>
-  <a class="section-jump" href="#notifiers-section" data-panel-target="notifiers-section" data-count-source="notifiers-count">Notifiers <span class="nav-count" data-nav-count></span></a>
-  <a class="section-jump" href="#daemon-section" data-panel-target="daemon-section">Daemon</a>
-</nav>
-</div><!-- /topbar -->
+
 <main id="main-content" tabindex="-1">
 <div id="panic-banner" role="alert" aria-live="assertive" aria-atomic="true">
   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
@@ -63,57 +79,45 @@
 </div>
 <div id="overview" role="region" aria-label="Overview"></div>
 <div id="err" role="status" aria-live="polite" aria-atomic="true"></div>
-<div id="attention" role="alert" aria-live="assertive" aria-atomic="true"></div>
-<div id="op-live" role="status" aria-live="polite" aria-atomic="true"></div>
-<!--__SERMO_WATCH_PANEL:storage__-->
-<!--__SERMO_WATCH_PANEL:lvm__-->
+<div id="attention" class="live-hidden" role="alert" aria-live="assertive" aria-atomic="true"></div>
+<div id="op-live" class="live-hidden" role="status" aria-live="polite" aria-atomic="true"></div>
 
-<h2 class="visually-hidden">Sessions</h2>
-<details id="sessions-section" open class="panel panel-hidden">
-  <summary><span class="summary-title">Sessions <span id="sessions-count" class="muted"></span></span></summary>
-  <div id="session-controls" class="panel-controls">
-    <label for="session-search" class="visually-hidden">Filter sessions</label>
-    <input id="session-search" type="search" placeholder="filter sessions…  ( / )" aria-describedby="search-shortcut-hint">
-    <span id="session-filters" role="group" aria-label="Filter sessions by type">
-      <button data-sf="all" class="f-active" aria-pressed="true">all</button>
-      <button data-sf="ssh" aria-pressed="false">SSH</button>
-      <button data-sf="tmux" aria-pressed="false">tmux</button>
-      <button data-sf="screen" aria-pressed="false">screen</button>
-      <button data-sf="database" aria-pressed="false">database</button>
-    </span>
-    <span id="session-filter-count" class="muted"></span>
-  </div>
-  <table class="sessions-table">
+<!-- A list panel's toolbar and column headers are rendered by app.js from its
+     descriptor (listPanels), so each one only declares its shell here. -->
+<details id="sessions-section" open class="panel panel-hidden" data-view="sessions" data-panel="sessions">
+  <summary><h2 class="summary-title">Sessions <span id="sessions-count" class="muted"></span></h2></summary>
+  <div class="panel-controls"></div>
+  <table class="sessions-table" data-sort-scope="sessions">
     <caption class="visually-hidden">Current SSH, tmux and screen sessions</caption>
     <thead><tr>
-      <th scope="col" class="sortable" data-session-sort="type">Type<span class="sort-ind" data-ssi="type"></span></th>
-      <th scope="col" class="sortable" data-session-sort="user">User<span class="sort-ind" data-ssi="user"></span></th>
-      <th scope="col" class="sortable" data-session-sort="session">Session<span class="sort-ind" data-ssi="session"></span></th>
-      <th scope="col" class="sortable" data-session-sort="pid">PID<span class="sort-ind" data-ssi="pid"></span></th>
-      <th scope="col" class="sortable" data-session-sort="state">State<span class="sort-ind" data-ssi="state"></span></th>
-      <th scope="col" class="sortable" data-session-sort="idle">Idle<span class="sort-ind" data-ssi="idle"></span></th>
-      <th scope="col" class="sortable" data-session-sort="cpu">CPU<span class="sort-ind" data-ssi="cpu"></span></th>
-      <th scope="col" class="sortable" data-session-sort="memory">Memory<span class="sort-ind" data-ssi="memory"></span></th>
-      <th scope="col" class="sortable" data-session-sort="io">IO R/W<span class="sort-ind" data-ssi="io"></span></th>
+      <th scope="col" class="sortable" data-sort="type">Type<span class="sort-ind"></span></th>
+      <th scope="col" class="sortable" data-sort="user">User<span class="sort-ind"></span></th>
+      <th scope="col" class="sortable" data-sort="session">Session<span class="sort-ind"></span></th>
+      <th scope="col" class="sortable" data-sort="pid">PID<span class="sort-ind"></span></th>
+      <th scope="col" class="sortable" data-sort="state">State<span class="sort-ind"></span></th>
+      <th scope="col" class="sortable" data-sort="idle">Idle<span class="sort-ind"></span></th>
+      <th scope="col" class="sortable" data-sort="cpu">CPU<span class="sort-ind"></span></th>
+      <th scope="col" class="sortable" data-sort="memory">Memory<span class="sort-ind"></span></th>
+      <th scope="col" class="sortable" data-sort="io">IO R/W<span class="sort-ind"></span></th>
       <th scope="col"><span class="visually-hidden">Actions</span></th>
     </tr></thead>
     <tbody id="session-rows"></tbody>
   </table>
   <div id="db-query-block" hidden>
     <h3 class="panel-subhead">Database queries <span id="db-queries-count" class="muted"></span></h3>
-    <table class="db-queries-table">
+    <table class="db-queries-table" data-sort-scope="db-queries">
       <caption class="visually-hidden">Running database statements</caption>
       <thead><tr>
-        <th scope="col" class="sortable db-col-type" data-db-query-sort="type">Type<span class="sort-ind" data-dqi="type"></span></th>
-        <th scope="col" class="sortable" data-db-query-sort="user">User<span class="sort-ind" data-dqi="user"></span></th>
-        <th scope="col" class="sortable db-col-database" data-db-query-sort="database">DB<span class="sort-ind" data-dqi="database"></span></th>
-        <th scope="col" class="sortable db-col-id" data-db-query-sort="id">ID<span class="sort-ind" data-dqi="id"></span></th>
-        <th scope="col" class="sortable db-col-state" data-db-query-sort="state">State<span class="sort-ind" data-dqi="state"></span></th>
-        <th scope="col" class="sortable" data-db-query-sort="running">Running<span class="sort-ind" data-dqi="running"></span></th>
-        <th scope="col" class="sortable db-col-cpu-thread" data-db-query-sort="cpu_thread" title="Statement thread CPU: 100% = one logical CPU">CPU thread<span class="sort-ind" data-dqi="cpu_thread"></span></th>
-        <th scope="col" class="sortable db-col-cpu" data-db-query-sort="cpu" title="Statement CPU as a share of all host CPUs">CPU total<span class="sort-ind" data-dqi="cpu"></span></th>
-        <th scope="col" class="sortable db-col-memory" data-db-query-sort="memory">Memory<span class="sort-ind" data-dqi="memory"></span></th>
-        <th scope="col" class="sortable db-col-io" data-db-query-sort="io">IO R/W<span class="sort-ind" data-dqi="io"></span></th>
+        <th scope="col" class="sortable db-col-type" data-sort="type">Type<span class="sort-ind"></span></th>
+        <th scope="col" class="sortable" data-sort="user">User<span class="sort-ind"></span></th>
+        <th scope="col" class="sortable db-col-database" data-sort="database">DB<span class="sort-ind"></span></th>
+        <th scope="col" class="sortable db-col-id" data-sort="id">ID<span class="sort-ind"></span></th>
+        <th scope="col" class="sortable db-col-state" data-sort="state">State<span class="sort-ind"></span></th>
+        <th scope="col" class="sortable" data-sort="running">Running<span class="sort-ind"></span></th>
+        <th scope="col" class="sortable db-col-cpu-thread" data-sort="cpu_thread" title="Statement thread CPU: 100% = one logical CPU">CPU thread<span class="sort-ind"></span></th>
+        <th scope="col" class="sortable db-col-cpu" data-sort="cpu" title="Statement CPU as a share of all host CPUs">CPU total<span class="sort-ind"></span></th>
+        <th scope="col" class="sortable db-col-memory" data-sort="memory">Memory<span class="sort-ind"></span></th>
+        <th scope="col" class="sortable db-col-io" data-sort="io">IO R/W<span class="sort-ind"></span></th>
         <th scope="col"><span class="visually-hidden">Actions</span></th>
       </tr></thead>
       <tbody id="db-query-rows"></tbody>
@@ -121,229 +125,84 @@
   </div>
 </details>
 
-<h2 class="visually-hidden">Services</h2>
-<details id="services-section" open class="panel">
-  <summary>
-    <span class="summary-title">Services <span id="services-count" class="muted"></span></span>
-  </summary>
-  <div id="svc-controls" class="panel-controls">
-    <button id="svc-group-toggle" class="icon-btn" title="Group services by category" aria-label="Group services by category" aria-pressed="false">&#x25A6;</button>
-    <button id="svc-groups-toggle" class="icon-btn" title="Collapse service groups" aria-label="Collapse service groups">&#x25BE;</button>
-    <label for="svc-search" class="visually-hidden">Filter services</label>
-    <input id="svc-search" type="search" placeholder="filter services…  ( / )" aria-describedby="search-shortcut-hint">
-    <select id="svc-category" title="Filter by category" aria-label="Filter services by category">
-      <option value="all">all categories</option>
-    </select>
-      <span id="svc-filters" role="group" aria-label="Filter services by state">
-        <button data-f="all" class="f-active" aria-pressed="true">all</button>
-        <button data-f="disabled" aria-pressed="false">disabled</button>
-        <button data-f="stopped" aria-pressed="false">stopped</button>
-        <button data-f="started" aria-pressed="false">started</button>
-        <button data-f="active" aria-pressed="false">active</button>
-        <button data-f="starting" aria-pressed="false">starting</button>
-        <button data-f="collecting" aria-pressed="false">collecting</button>
-        <button data-f="monitored" aria-pressed="false">monitored</button>
-        <button data-f="restart_required" aria-pressed="false">restart required</button>
-        <button data-f="warning" aria-pressed="false">warning</button>
-        <button data-f="failed" aria-pressed="false">failed</button>
-      </span>
-    <span id="svc-count" class="muted"></span>
-  </div>
+<details id="services-section" open class="panel" data-view="services" data-panel="services">
+  <summary><h2 class="summary-title">Services <span id="services-count" class="muted"></span></h2></summary>
+  <div class="panel-controls"></div>
   <table class="services-table">
     <caption class="visually-hidden">Monitored services</caption>
-    <thead>
-      <tr>
-        <th scope="col" class="sortable" data-sort="name">Service<span class="sort-ind" data-si="name"></span></th>
-        <th scope="col" class="sortable" data-sort="category">Category<span class="sort-ind" data-si="category"></span></th>
-        <th scope="col" class="sortable" data-sort="state">State<span class="sort-ind" data-si="state"></span></th>
-        <th scope="col" class="sortable" data-sort="uptime">Uptime<span class="sort-ind" data-si="uptime"></span></th>
-        <th scope="col" class="sortable" data-sort="cpu">CPU total<span class="sort-ind" data-si="cpu"></span></th>
-        <th scope="col" class="sortable" data-sort="memory">Memory<span class="sort-ind" data-si="memory"></span></th>
-        <th scope="col" class="sortable" data-sort="fds">FDs<span class="sort-ind" data-si="fds"></span></th>
-        <th scope="col" class="sortable" data-sort="io">IO R/W<span class="sort-ind" data-si="io"></span></th>
-        <th scope="col" class="sortable" data-sort="last">Last activity<span class="sort-ind" data-si="last"></span></th>
-        <th scope="col" class="sortable" data-sort="strays" title="Processes in the service's control group that no selector claims">Strays<span class="sort-ind" data-si="strays"></span></th>
-        <th scope="col" class="actions">Actions</th>
-      </tr>
-    </thead>
+    <thead></thead>
     <tbody id="rows"></tbody>
   </table>
 </details>
 
-<h2 class="visually-hidden">Containers</h2>
-<details id="containers-section" open class="panel panel-hidden">
-  <summary><span class="summary-title">Containers <span id="containers-count" class="muted"></span></span></summary>
-  <div id="container-controls" class="panel-controls">
-    <button id="container-group-toggle" class="icon-btn" title="Group containers by category" aria-label="Group containers by category" aria-pressed="false">&#x25A6;</button>
-    <button id="container-groups-toggle" class="icon-btn" title="Collapse container groups" aria-label="Collapse container groups">&#x25BE;</button>
-    <label for="container-search" class="visually-hidden">Filter containers</label>
-    <input id="container-search" type="search" placeholder="filter containers…  ( / )" aria-describedby="search-shortcut-hint">
-    <span id="container-filters" role="group" aria-label="Filter containers by state">
-      <button data-cf="all" class="f-active" aria-pressed="true">all</button>
-      <button data-cf="disabled" aria-pressed="false">disabled</button>
-      <button data-cf="stopped" aria-pressed="false">stopped</button>
-      <button data-cf="paused" aria-pressed="false">paused</button>
-      <button data-cf="started" aria-pressed="false">started</button>
-      <button data-cf="active" aria-pressed="false">active</button>
-      <button data-cf="starting" aria-pressed="false">starting</button>
-      <button data-cf="collecting" aria-pressed="false">collecting</button>
-      <button data-cf="monitored" aria-pressed="false">monitored</button>
-      <button data-cf="restart_required" aria-pressed="false">restart required</button>
-      <button data-cf="warning" aria-pressed="false">warning</button>
-      <button data-cf="failed" aria-pressed="false">failed</button>
-    </span>
-    <span id="container-count" class="muted"></span>
-  </div>
+<details id="containers-section" open class="panel panel-hidden" data-view="services" data-panel="containers">
+  <summary><h2 class="summary-title">Containers <span id="containers-count" class="muted"></span></h2></summary>
+  <div class="panel-controls"></div>
   <table class="services-table">
     <caption class="visually-hidden">Monitored containers</caption>
-    <thead>
-      <tr>
-        <th scope="col" class="sortable" data-container-sort="name">Container<span class="sort-ind" data-ci="name"></span></th>
-        <th scope="col" class="sortable" data-container-sort="category">Category<span class="sort-ind" data-ci="category"></span></th>
-        <th scope="col" class="sortable" data-container-sort="state">State<span class="sort-ind" data-ci="state"></span></th>
-        <th scope="col" class="sortable" data-container-sort="uptime">Uptime<span class="sort-ind" data-ci="uptime"></span></th>
-        <th scope="col" class="sortable" data-container-sort="cpu">CPU total<span class="sort-ind" data-ci="cpu"></span></th>
-        <th scope="col" class="sortable" data-container-sort="memory">Memory<span class="sort-ind" data-ci="memory"></span></th>
-        <th scope="col" class="sortable" data-container-sort="fds">FDs<span class="sort-ind" data-ci="fds"></span></th>
-        <th scope="col" class="sortable" data-container-sort="io">IO R/W<span class="sort-ind" data-ci="io"></span></th>
-        <th scope="col" class="sortable" data-container-sort="last">Last activity<span class="sort-ind" data-ci="last"></span></th>
-        <th scope="col" class="sortable" data-container-sort="strays" title="Processes in the service's control group that no selector claims">Strays<span class="sort-ind" data-ci="strays"></span></th>
-        <th scope="col" class="actions">Actions</th>
-      </tr>
-    </thead>
+    <thead></thead>
     <tbody id="container-rows"></tbody>
   </table>
 </details>
 
-<h2 class="visually-hidden">Virtual machines</h2>
-<details id="vms-section" open class="panel panel-hidden">
-  <summary><span class="summary-title">Virtual machines <span id="vms-count" class="muted"></span></span></summary>
-  <div id="vm-controls" class="panel-controls">
-    <button id="vm-group-toggle" class="icon-btn" title="Group virtual machines by category" aria-label="Group virtual machines by category" aria-pressed="false">&#x25A6;</button>
-    <button id="vm-groups-toggle" class="icon-btn" title="Collapse virtual machine groups" aria-label="Collapse virtual machine groups">&#x25BE;</button>
-    <label for="vm-search" class="visually-hidden">Filter virtual machines</label>
-    <input id="vm-search" type="search" placeholder="filter virtual machines…  ( / )" aria-describedby="search-shortcut-hint">
-    <span id="vm-filters" role="group" aria-label="Filter virtual machines by state">
-      <button data-vf="all" class="f-active" aria-pressed="true">all</button>
-      <button data-vf="disabled" aria-pressed="false">disabled</button>
-      <button data-vf="stopped" aria-pressed="false">stopped</button>
-      <button data-vf="paused" aria-pressed="false">paused</button>
-      <button data-vf="started" aria-pressed="false">started</button>
-      <button data-vf="active" aria-pressed="false">active</button>
-      <button data-vf="starting" aria-pressed="false">starting</button>
-      <button data-vf="collecting" aria-pressed="false">collecting</button>
-      <button data-vf="monitored" aria-pressed="false">monitored</button>
-      <button data-vf="restart_required" aria-pressed="false">restart required</button>
-      <button data-vf="warning" aria-pressed="false">warning</button>
-      <button data-vf="failed" aria-pressed="false">failed</button>
-    </span>
-    <span id="vm-count" class="muted"></span>
-  </div>
+<details id="vms-section" open class="panel panel-hidden" data-view="services" data-panel="vms">
+  <summary><h2 class="summary-title">Virtual machines <span id="vms-count" class="muted"></span></h2></summary>
+  <div class="panel-controls"></div>
   <table class="services-table">
     <caption class="visually-hidden">Monitored virtual machines</caption>
-    <thead>
-      <tr>
-        <th scope="col" class="sortable" data-vm-sort="name">VM<span class="sort-ind" data-vi="name"></span></th>
-        <th scope="col" class="sortable" data-vm-sort="category">Category<span class="sort-ind" data-vi="category"></span></th>
-        <th scope="col" class="sortable" data-vm-sort="state">State<span class="sort-ind" data-vi="state"></span></th>
-        <th scope="col" class="sortable" data-vm-sort="uptime">Uptime<span class="sort-ind" data-vi="uptime"></span></th>
-        <th scope="col" class="sortable" data-vm-sort="cpu">CPU total<span class="sort-ind" data-vi="cpu"></span></th>
-        <th scope="col" class="sortable" data-vm-sort="memory">Memory<span class="sort-ind" data-vi="memory"></span></th>
-        <th scope="col" class="sortable" data-vm-sort="fds">FDs<span class="sort-ind" data-vi="fds"></span></th>
-        <th scope="col" class="sortable" data-vm-sort="io">IO R/W<span class="sort-ind" data-vi="io"></span></th>
-        <th scope="col" class="sortable" data-vm-sort="last">Last activity<span class="sort-ind" data-vi="last"></span></th>
-        <th scope="col" class="sortable" data-vm-sort="strays" title="Processes in the service's control group that no selector claims">Strays<span class="sort-ind" data-vi="strays"></span></th>
-        <th scope="col" class="actions">Actions</th>
-      </tr>
-    </thead>
+    <thead></thead>
     <tbody id="vm-rows"></tbody>
   </table>
 </details>
 
-<!--__SERMO_WATCH_PANEL:network__-->
+<details id="locks-section" open class="panel panel-hidden" data-view="services">
+  <summary><h2 class="summary-title">Runtime locks <span id="locks-count" class="muted"></span></h2></summary>
+  <table>
+    <caption class="visually-hidden">Runtime locks</caption>
+    <thead><tr><th scope="col">Service</th><th scope="col">Name</th><th scope="col">State</th><th scope="col">TTL</th><th scope="col">Owner</th><th scope="col">Created</th><th scope="col">Blocks</th><th scope="col">Reason</th><th scope="col"><span class="visually-hidden">Actions</span></th></tr></thead>
+    <tbody id="locks-rows"></tbody>
+  </table>
+  <p class="muted panel-footnote">Named runtime locks that can block start/stop/restart/reload/resume (manual or automatic). Stale/expired locks are shown for awareness.</p>
+</details>
 
-<h2 class="visually-hidden">Installed applications</h2>
-<details id="apps-section" open class="panel panel-hidden">
-  <summary>
-    <span class="summary-title">Installed applications <span id="apps-count" class="muted"></span></span>
-  </summary>
-  <div id="app-controls" class="panel-controls">
-    <button id="app-group-toggle" class="icon-btn" title="Group applications by category" aria-label="Group applications by category" aria-pressed="false">&#x25A6;</button>
-    <button id="app-groups-toggle" class="icon-btn" title="Collapse application groups" aria-label="Collapse application groups">&#x25BE;</button>
-    <button id="app-refresh" class="icon-btn admin-hidden" data-refresh-panel="applications" title="Re-check every application now" aria-label="Re-check every application now">&#x21BB;</button>
-    <label for="app-search" class="visually-hidden">Filter applications</label>
-    <input id="app-search" type="search" placeholder="filter applications…  ( / )" aria-describedby="search-shortcut-hint">
-    <select id="app-category" title="Filter by category" aria-label="Filter applications by category">
-      <option value="all">all categories</option>
-    </select>
-    <span id="app-filters" role="group" aria-label="Filter applications by state">
-      <button data-af="all" class="f-active" aria-pressed="true">all</button>
-      <button data-af="ok" aria-pressed="false">ok</button>
-      <button data-af="starting" aria-pressed="false">starting</button>
-      <button data-af="warning" aria-pressed="false">warning</button>
-      <button data-af="failed" aria-pressed="false">failed</button>
-    </span>
-    <span id="app-count" class="muted"></span>
-  </div>
+<!--__SERMO_WATCH_PANEL:host__-->
+
+<details id="mounts-section" open class="panel panel-hidden" data-view="mounts" data-panel="mounts">
+  <summary><h2 class="summary-title">Mount units <span id="mounts-count" class="muted"></span></h2></summary>
+  <div class="panel-controls"></div>
+  <table class="mount-table">
+    <caption class="visually-hidden">Mount units</caption>
+    <thead></thead>
+    <tbody id="mount-rows"></tbody>
+  </table>
+  <p class="muted panel-footnote">Configured fstab-backed mount units managed by Sermo refcounting (<code>sermoctl mount</code> / <code>umount</code>) and the same blocker safety policy.</p>
+</details>
+
+<details id="apps-section" open class="panel panel-hidden" data-view="software" data-panel="apps">
+  <summary><h2 class="summary-title">Installed applications <span id="apps-count" class="muted"></span></h2></summary>
+  <div class="panel-controls"></div>
   <table class="apps-table">
     <caption class="visually-hidden">Installed applications</caption>
-    <thead><tr>
-      <th scope="col" class="sortable" data-app-sort="name">Application<span class="sort-ind" data-ai="name"></span></th>
-      <th scope="col" class="sortable" data-app-sort="category">Category<span class="sort-ind" data-ai="category"></span></th>
-      <th scope="col" class="sortable" data-app-sort="state">Status<span class="sort-ind" data-ai="state"></span></th>
-      <th scope="col" class="sortable" data-app-sort="version">Version<span class="sort-ind" data-ai="version"></span></th>
-      <th scope="col" class="sortable" data-app-sort="last">Last activity<span class="sort-ind" data-ai="last"></span></th>
-    </tr></thead>
+    <thead></thead>
     <tbody id="app-rows"></tbody>
   </table>
   <p class="muted panel-footnote">Applications installed on the host (their binary is present). Click a row for the full version, file location, permissions, user and group.</p>
 </details>
 
-<h2 class="visually-hidden">Installed libraries</h2>
-<details id="libraries-section" open class="panel panel-hidden">
-  <summary>
-    <span class="summary-title">Installed libraries <span id="libraries-count" class="muted"></span></span>
-  </summary>
-  <div id="library-controls" class="panel-controls">
-    <button id="library-group-toggle" class="icon-btn" title="Group libraries by category" aria-label="Group libraries by category" aria-pressed="false">&#x25A6;</button>
-    <button id="library-groups-toggle" class="icon-btn" title="Collapse library groups" aria-label="Collapse library groups">&#x25BE;</button>
-    <button id="library-refresh" class="icon-btn admin-hidden" data-refresh-panel="libraries" title="Re-check every library now" aria-label="Re-check every library now">&#x21BB;</button>
-    <label for="library-search" class="visually-hidden">Filter libraries</label>
-    <input id="library-search" type="search" placeholder="filter libraries…  ( / )" aria-describedby="search-shortcut-hint">
-    <select id="library-category" title="Filter by category" aria-label="Filter libraries by category">
-      <option value="all">all categories</option>
-    </select>
-    <span id="library-filters" role="group" aria-label="Filter libraries by state">
-      <button data-lf="all" class="f-active" aria-pressed="true">all</button>
-      <button data-lf="ok" aria-pressed="false">ok</button>
-      <button data-lf="warning" aria-pressed="false">warning</button>
-      <button data-lf="failed" aria-pressed="false">failed</button>
-    </span>
-    <span id="library-count" class="muted"></span>
-  </div>
+<details id="libraries-section" open class="panel panel-hidden" data-view="software" data-panel="libraries">
+  <summary><h2 class="summary-title">Installed libraries <span id="libraries-count" class="muted"></span></h2></summary>
+  <div class="panel-controls"></div>
   <table class="apps-table libraries-table">
     <caption class="visually-hidden">Installed libraries</caption>
-    <thead><tr>
-      <th scope="col" class="sortable" data-library-sort="name">Library<span class="sort-ind" data-li="name"></span></th>
-      <th scope="col" class="sortable" data-library-sort="category">Category<span class="sort-ind" data-li="category"></span></th>
-      <th scope="col" class="sortable" data-library-sort="state">Status<span class="sort-ind" data-li="state"></span></th>
-      <th scope="col" class="sortable" data-library-sort="version">Version<span class="sort-ind" data-li="version"></span></th>
-    </tr></thead>
+    <thead></thead>
     <tbody id="library-rows"></tbody>
   </table>
   <p class="muted panel-footnote">Libraries installed on the host. Click a row for the full version, file location, permissions, user and group.</p>
 </details>
 
-<!--__SERMO_WATCH_PANEL:cert__-->
-
-<!--__SERMO_WATCH_PANEL:diskio__-->
-
-<!--__SERMO_WATCH_PANEL:host__-->
-
-<h2 class="visually-hidden">Events</h2>
-<details id="events-section" open class="panel">
-  <summary>Events <span class="muted">(dry-run events appear when automatic actions are simulated)</span></summary>
-  <div id="event-controls" role="group" aria-label="Filter events">
+<details id="events-section" open class="panel" data-view="events">
+  <summary><h2 class="summary-title">Events <span id="event-count" class="muted"></span></h2></summary>
+  <div id="event-controls" class="panel-controls" role="group" aria-label="Filter events">
     <label for="event-service" class="visually-hidden">Filter events by service</label>
     <select id="event-service" aria-label="Filter events by service">
       <option value="">all services</option>
@@ -403,71 +262,40 @@
       <option value="168h">last 7 days</option>
       <option value="720h">last 30 days</option>
     </select>
-    <label for="event-from" class="visually-hidden">Show events from date and time</label>
-    <input id="event-from" type="datetime-local" class="event-date" title="From (local time)" aria-label="Show events from date and time">
-    <label for="event-to" class="visually-hidden">Show events until date and time</label>
-    <input id="event-to" type="datetime-local" class="event-date" title="Until (local time)" aria-label="Show events until date and time">
-    <label class="muted"><input id="event-errors" type="checkbox"> only errors</label>
-    <label class="muted"><input id="event-group" type="checkbox"> group actions</label>
-    <button id="event-reset-filters" type="button" aria-label="Reset event filters">reset filters</button>
-    <label for="event-before" class="visually-hidden">Clear events before cutoff</label>
-    <input id="event-before" type="text" class="admin-hidden" placeholder="before (e.g. 720h)" title="Optional: clear only events older than this positive duration or non-future RFC3339 timestamp" aria-describedby="event-before-hint">
-    <span id="event-before-hint" class="visually-hidden">Optional positive duration (e.g. 720h) or non-future RFC3339 timestamp; leave empty to clear all events.</span>
-    <button id="event-clear" class="danger-btn admin-hidden" type="button" aria-label="Clear event log">clear log</button>
-    <span id="event-count" class="muted"></span>
+    <label class="check"><input id="event-errors" type="checkbox"> only errors</label>
+    <label class="check"><input id="event-group" type="checkbox"> group actions</label>
+    <button id="event-reset-filters" type="button" aria-label="Reset event filters">reset</button>
+    <!-- The exact dates and the destructive clear are the rare controls: kept
+         one click away so the everyday filters read as one short row. -->
+    <details id="event-more-controls" class="more-controls">
+      <summary>more</summary>
+      <div class="panel-controls">
+        <label for="event-from" class="visually-hidden">Show events from date and time</label>
+        <input id="event-from" type="datetime-local" class="event-date" title="From (local time)" aria-label="Show events from date and time">
+        <label for="event-to" class="visually-hidden">Show events until date and time</label>
+        <input id="event-to" type="datetime-local" class="event-date" title="Until (local time)" aria-label="Show events until date and time">
+        <label for="event-before" class="visually-hidden">Clear events before cutoff</label>
+        <input id="event-before" type="text" data-admin placeholder="before (e.g. 720h)" title="Optional: clear only events older than this positive duration or non-future RFC3339 timestamp" aria-describedby="event-before-hint">
+        <button id="event-clear" class="danger-btn" data-admin type="button" aria-label="Clear event log">clear log</button>
+      </div>
+    </details>
   </div>
-  <table class="events">
+  <table class="events" data-sort-scope="events">
     <caption class="visually-hidden">Event log</caption>
     <thead><tr>
-      <th scope="col" class="sortable" data-ev-sort="time">Time<span class="sort-ind" data-ei="time"></span></th>
-      <th scope="col" class="sortable" data-ev-sort="subject">Service / watch<span class="sort-ind" data-ei="subject"></span></th>
-      <th scope="col" class="sortable" data-ev-sort="kind">Kind<span class="sort-ind" data-ei="kind"></span></th>
-      <th scope="col" class="sortable" data-ev-sort="message">Message<span class="sort-ind" data-ei="message"></span></th>
+      <th scope="col" class="sortable" data-sort="time">Time<span class="sort-ind"></span></th>
+      <th scope="col" class="sortable" data-sort="subject">Service / watch<span class="sort-ind"></span></th>
+      <th scope="col" class="sortable" data-sort="kind">Kind<span class="sort-ind"></span></th>
+      <th scope="col" class="sortable" data-sort="message">Message<span class="sort-ind"></span></th>
     </tr></thead>
     <tbody id="events"></tbody>
   </table>
   <div class="panel-controls"><button id="event-more" type="button" hidden>load older</button></div>
+  <p class="muted panel-footnote">Dry-run events appear when automatic actions are simulated.</p>
 </details>
 
-<h2 class="visually-hidden">Mount units</h2>
-<details id="mounts-section" open class="panel panel-hidden">
-  <summary><span class="summary-title">Mount units <span id="mounts-count" class="muted"></span></span></summary>
-  <div id="mount-controls" class="panel-controls">
-    <button id="mount-group-toggle" class="icon-btn" title="Group mount units by group" aria-label="Group mount units by group" aria-pressed="false">&#x25A6;</button>
-    <button id="mount-groups-toggle" class="icon-btn" title="Collapse mount groups" aria-label="Collapse mount groups">&#x25BE;</button>
-    <label for="mount-search" class="visually-hidden">Filter mount units</label>
-    <input id="mount-search" type="search" placeholder="filter mount units…  ( / )" aria-describedby="search-shortcut-hint">
-    <select id="mount-category" title="Filter by group" aria-label="Filter mount units by group">
-      <option value="all">all groups</option>
-    </select>
-    <span id="mount-filters" role="group" aria-label="Filter mount units by state">
-      <button data-mf="all" class="f-active" aria-pressed="true">all</button>
-      <button data-mf="active" aria-pressed="false">active</button>
-      <button data-mf="inactive" aria-pressed="false">inactive</button>
-    </span>
-    <span id="mount-filter-count" class="muted"></span>
-  </div>
-  <table class="mount-table">
-    <caption class="visually-hidden">Mount units</caption>
-    <thead><tr>
-      <th scope="col" class="sortable" data-mount-sort="name">Name<span class="sort-ind" data-mi="name"></span></th>
-      <th scope="col" class="sortable" data-mount-sort="category">Group<span class="sort-ind" data-mi="category"></span></th>
-      <th scope="col" class="sortable" data-mount-sort="path">Path<span class="sort-ind" data-mi="path"></span></th>
-      <th scope="col" class="sortable" data-mount-sort="mounted">Mounted<span class="sort-ind" data-mi="mounted"></span></th>
-      <th scope="col" class="sortable" data-mount-sort="refcount">Refcount<span class="sort-ind" data-mi="refcount"></span></th>
-      <th scope="col" class="sortable" data-mount-sort="processes">Processes<span class="sort-ind" data-mi="processes"></span></th>
-      <th scope="col" class="sortable" data-mount-sort="users">Users<span class="sort-ind" data-mi="users"></span></th>
-      <th scope="col" class="sortable" data-mount-sort="state">State<span class="sort-ind" data-mi="state"></span></th>
-      <th scope="col"><span class="visually-hidden">Actions</span></th>
-    </tr></thead>
-    <tbody id="mount-rows"></tbody>
-  </table>
-  <p class="muted panel-footnote">Configured fstab-backed mount units managed by Sermo refcounting (<code>sermoctl mount</code> / <code>umount</code>) and the same blocker safety policy.</p>
-</details>
-
-<h2 class="visually-hidden">Notifiers</h2>
-<details id="notifiers-section" class="panel panel-hidden">
-  <summary>Notifiers <span id="notifiers-count" class="muted"></span></summary>
+<details id="notifiers-section" open class="panel panel-hidden" data-view="system">
+  <summary><h2 class="summary-title">Notifiers <span id="notifiers-count" class="muted"></span></h2></summary>
   <table>
     <caption class="visually-hidden">Notifiers</caption>
     <thead><tr><th scope="col">Name</th><th scope="col">Type</th><th scope="col">Min severity</th><th scope="col">Destination</th><th scope="col">Watches</th><th scope="col">State</th><th scope="col">Actions</th></tr></thead>
@@ -476,57 +304,57 @@
   <p class="muted panel-footnote">Named targets that watches can notify (email, slack, ...).</p>
 </details>
 
-<h2 class="visually-hidden">Daemon / Engine settings</h2>
-<details id="daemon-section" class="panel">
-  <summary>Daemon / Engine settings</summary>
+<details id="daemon-section" open class="panel" data-view="system">
+  <summary><h2 class="summary-title">Daemon</h2></summary>
   <div class="daemon-cols">
-    <div>
-      <div class="daemon-col-title">Daemon</div>
-      <div>Backend: <b id="daemon-backend"></b></div>
-      <div>Host type: <b id="daemon-host-type"></b></div>
-      <div>Config: <code id="daemon-config" class="daemon-path"></code></div>
-      <div>Runtime: <code id="daemon-runtime" class="daemon-path"></code></div>
-      <div>State: <code id="daemon-state" class="daemon-path"></code></div>
-    </div>
-    <div>
-      <div class="daemon-col-title">Engine</div>
-      <div>Interval: <b id="engine-interval"></b></div>
-      <div>Max parallel checks: <b id="engine-max-checks"></b></div>
-      <div>Default timeout: <b id="engine-default-timeout"></b></div>
-      <div>Operation timeout: <b id="engine-op-timeout"></b></div>
-      <div>Startup delay: <b id="engine-startup-delay"></b></div>
-    </div>
-    <div>
-      <div class="daemon-col-title">Runtime</div>
-      <div>Started: <b id="daemon-started"></b></div>
-      <div>Uptime: <b id="daemon-uptime"></b></div>
-      <div>Go: <span id="daemon-go" class="muted"></span></div>
-      <div>Ready: <span id="daemon-ready"></span></div>
-    </div>
-  </div>
-  <div class="daemon-cols daemon-cols-spaced">
-    <div>PID: <b id="daemon-pid"></b></div>
-    <div>CPU: <b id="daemon-cpu-live"></b></div>
-    <div>Memory: <b id="daemon-memory-live"></b></div>
-    <div>IO: <b id="daemon-io-live"></b></div>
-    <div>FDs: <b id="daemon-fds"></b></div>
-    <div>Threads: <b id="daemon-threads"></b></div>
+    <section>
+      <h3 class="kv-title">Host</h3>
+      <dl class="kv">
+        <div><dt>Hostname</dt><dd id="daemon-hostname"></dd></div>
+        <div><dt>Host type</dt><dd id="daemon-host-type"></dd></div>
+        <div><dt>OS</dt><dd id="daemon-os"></dd></div>
+        <div><dt>Backend</dt><dd id="daemon-backend"></dd></div>
+        <div><dt>Config</dt><dd><code id="daemon-config" class="daemon-path"></code></dd></div>
+        <div><dt>Runtime</dt><dd><code id="daemon-runtime" class="daemon-path"></code></dd></div>
+        <div><dt>State</dt><dd><code id="daemon-state" class="daemon-path"></code></dd></div>
+      </dl>
+    </section>
+    <section>
+      <h3 class="kv-title">Engine</h3>
+      <dl class="kv">
+        <div><dt>Interval</dt><dd id="engine-interval"></dd></div>
+        <div><dt>Max parallel checks</dt><dd id="engine-max-checks"></dd></div>
+        <div><dt>Default timeout</dt><dd id="engine-default-timeout"></dd></div>
+        <div><dt>Operation timeout</dt><dd id="engine-op-timeout"></dd></div>
+        <div><dt>Startup delay</dt><dd id="engine-startup-delay"></dd></div>
+      </dl>
+    </section>
+    <section>
+      <h3 class="kv-title">Process</h3>
+      <dl class="kv">
+        <div><dt>Ready</dt><dd><span id="daemon-ready"></span></dd></div>
+        <div><dt>Started</dt><dd id="daemon-started"></dd></div>
+        <div><dt>Uptime</dt><dd id="daemon-uptime"></dd></div>
+        <div><dt>Go</dt><dd id="daemon-go"></dd></div>
+        <div><dt>PID</dt><dd id="daemon-pid"></dd></div>
+        <div><dt>FDs</dt><dd id="daemon-fds"></dd></div>
+        <div><dt>Threads</dt><dd id="daemon-threads"></dd></div>
+      </dl>
+    </section>
+    <section>
+      <h3 class="kv-title">Now</h3>
+      <dl class="kv">
+        <div><dt>CPU</dt><dd id="daemon-cpu-live"></dd></div>
+        <div><dt>Memory</dt><dd id="daemon-memory-live"></dd></div>
+        <div><dt>IO</dt><dd id="daemon-io-live"></dd></div>
+      </dl>
+    </section>
   </div>
   <div class="daemon-metrics-section">
-    <div class="daemon-col-title">Process metrics <span id="daemon-metric-windows" class="muted"></span></div>
+    <h3 class="kv-title">Process metrics <span id="daemon-metric-windows" class="muted"></span></h3>
     <div class="metric-grid" id="daemon-metric-grid"></div>
   </div>
 </details>
-
-<section id="locks-section" class="panel panel-hidden">
-  <h2>Runtime Locks <span id="locks-count" class="muted"></span></h2>
-  <table>
-    <caption class="visually-hidden">Runtime locks</caption>
-    <thead><tr><th scope="col">Service</th><th scope="col">Name</th><th scope="col">State</th><th scope="col">TTL</th><th scope="col">Owner</th><th scope="col">Created</th><th scope="col">Blocks</th><th scope="col">Reason</th><th scope="col"><span class="visually-hidden">Actions</span></th></tr></thead>
-    <tbody id="locks-rows"></tbody>
-  </table>
-  <p class="muted panel-footnote">Named runtime locks that can block start/stop/restart/reload/resume (manual or automatic). Stale/expired locks are shown for awareness.</p>
-</section>
 </main>
 
 <dialog id="action-confirm" aria-labelledby="confirm-title" aria-describedby="confirm-subtitle confirm-body">
@@ -601,18 +429,11 @@
 </dialog>
 
 <footer id="app-footer" role="contentinfo">
-  <div class="footer-actions">
-    <button id="reload-btn" class="admin-hidden" aria-label="Reload configuration">reload config</button>
-    <button id="state-compact-btn" class="danger-btn admin-hidden" aria-label="Compact persisted state">compact state</button>
-    <button id="panic-btn" class="panic-btn admin-hidden" title="Suspend hooks, alerts and automatic remediation" aria-label="Enter panic mode and suspend hooks, alerts and automatic remediation">panic mode</button>
-    <label for="state-before" class="visually-hidden">Compact state before cutoff</label>
-    <input id="state-before" type="text" class="admin-before-input admin-hidden" placeholder="before (e.g. 720h)" title="Optional state compact cutoff: positive duration or non-future RFC3339 timestamp" aria-describedby="state-before-hint">
-    <span id="state-before-hint" class="visually-hidden">Optional positive duration (e.g. 720h) or non-future RFC3339 timestamp; leave empty for default retention.</span>
-    <label class="muted shortcut-toggle" aria-describedby="shortcut-hint-desc"><input id="shortcut-toggle" type="checkbox" checked> keyboard shortcuts</label>
-    <span id="shortcut-hint-desc" class="visually-hidden">When enabled, press slash to focus the search box in the open panel or Control K to focus global target search.</span>
-    <span id="search-shortcut-hint" class="visually-hidden">Press slash to focus this search when keyboard shortcuts are enabled.</span>
-  </div>
-  <div class="footer-version muted">sermo {{VERSION}}</div>
+  <span id="state-before-hint" class="visually-hidden">Optional positive duration (e.g. 720h) or non-future RFC3339 timestamp; leave empty for default retention.</span>
+  <span id="event-before-hint" class="visually-hidden">Optional positive duration (e.g. 720h) or non-future RFC3339 timestamp; leave empty to clear all events.</span>
+  <span id="shortcut-hint-desc" class="visually-hidden">When keyboard shortcuts are enabled, press slash to focus the search box in the open panel or Control K to focus global target search.</span>
+  <span id="search-shortcut-hint" class="visually-hidden">Press slash to focus this search when keyboard shortcuts are enabled.</span>
+  <div class="footer-version muted"><a href="https://github.com/inode64/Sermo" target="_blank" rel="noopener noreferrer">sermo</a> {{VERSION}}</div>
 </footer>
 
 <script nonce="{{CSP_NONCE}}">

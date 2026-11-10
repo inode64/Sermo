@@ -951,6 +951,34 @@ The daemon can serve a small web dashboard to view services and watches.
 Admins can monitor/unmonitor both, and can start/stop/restart/reload/resume/repair services
 over the same safe operation engine the CLI uses.
 
+The page keeps one sticky bar — the host name with its uptime and the daemon's
+state, a search that opens any service, watch, application, library or mount by
+name (`Ctrl K`), refresh and a menu (☰) — and shows one view at a time. The
+daemon's state is an icon: a pulse while it runs, and a clock, a warning sign or
+a power sign with the word **starting**, **panic mode** or **stopping** beside
+it otherwise; its tooltip carries the detail, such as the startup progress.
+
+| View | Opened from | Panels |
+|---|---|---|
+| **Sessions** | the Sessions tile | SSH, tmux and screen sessions, running database statements |
+| **Services** | the Services tile | services, containers, virtual machines, runtime locks |
+| **Watches** | the Watches tile | every watch, grouped by system, storage, network and security |
+| **Mounts** | the Mounts tile | mount units |
+| **System** | the CPU, Memory, Swap and Load tiles | notifiers, the daemon and its metrics |
+| **Software** | its tab (a tile on a tablet or a phone) | installed applications and libraries |
+| **Events** | its tab (a tile on a tablet or a phone) | the event log |
+| **All** | its tab | every panel on one page |
+
+The overview tiles are both the host's vital signs and the way into their
+views; the tile of the view on screen is outlined. A tablet or a phone lays
+them out as two rows of five, with Software and Events as tiles and no tab bar.
+Each line of **Needs attention** goes further than a tile: it opens the panel
+that holds the problem with the matching filter applied. A tab counts the
+targets in its view and carries a dot when one of them is failing (red) or
+needs attention (amber); a view with nothing to show has no tab or tile. The
+menu holds auto-refresh, browser notifications, keyboard shortcuts and, for
+administrators, **reload config**, **compact state** and **panic mode**.
+
 When an active service declares exact `processes:` identity (`exe` plus `user`),
 `restart` first verifies that at least one live process still matches that
 identity. If the init backend says the unit is active but Sermo cannot match the
@@ -994,7 +1022,7 @@ for QEMU/libvirt VMs or `control.type: docker` for Docker containers. Those
 targets still use the same locks, guards, preflight checks and operation
 timeouts; see [services](services.md#control-docker--docker-containers).
 
-Below the services table the dashboard lists **installed applications** (catalog
+The **Software** view lists **installed applications** (catalog
 app daemons whose binary is present) and **installed libraries** (catalog
 library files whose `preflight.file` is present). Both inventories show name and
 short version when available; an app `health` command, when configured, decides
@@ -1188,7 +1216,7 @@ web:
   `https://` `web.public_url`. Sermo serves no TLS itself, so opening
   `host:9797` directly still works. Redirects are relative, so the form works
   however the dashboard is reached, including under a reverse-proxy path.
-- **log out** in the top bar ends a form session. It is offered only for one:
+- **log out** in the top bar's menu ends a form session. It is offered only for one:
   the server cannot make a browser forget a cached Basic credential.
 - Every password attempt counts against its client — on the form and as HTTP
   Basic auth alike — from the moment it starts, and only a success clears the
@@ -1486,7 +1514,11 @@ Read-only endpoints:
 - `GET /api/host` — current host-level CPU, memory and load metrics.
 - `GET /api/locks` — named runtime locks with TTL, owner status, age, blocked
   actions and release eligibility.
-- `GET /api/activity` — recent activity summary used by the dashboard header.
+- `GET /api/activity` — recent activity summary used by the dashboard:
+  `errors` counts the recent errors still standing and `error_targets` names
+  what they are about. An error stops counting once a later event shows that
+  what failed works again: the same target recovered under the same rule, or
+  the same action later succeeded on it.
 - `GET /api/monitoring` — monitoring-enabled vs paused counts for non-disabled
   services.
 - `GET /api/events?limit=N` — global event feed as `{events, next_before_id,

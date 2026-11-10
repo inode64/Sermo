@@ -2,27 +2,10 @@
   {
     "key": "host",
     "sectionId": "watches-section",
-    "heading": "Watches",
     "title": "Watches",
     "countId": "watches-count",
-    "controlsId": "watch-controls",
-    "searchId": "watch-search",
-    "searchLabel": "Filter watches",
-    "searchPlaceholder": "filter watches…  ( / )",
-    "typeId": "watch-type",
-    "typeLabel": "Filter watches by group",
-    "allTypesLabel": "all watch groups",
-    "filtersId": "watch-filters",
-    "filterCountId": "watch-count",
     "rowsId": "watch-rows",
     "caption": "Watches",
-    "columns": [
-      {"key": "name", "label": "Watches"}
-    ],
-    "footnote": "Includes host-level and service-scoped watches; service watch names use service:watch. Watches are grouped by system, storage, network and security; expand a row for full type-specific readings and configured predicates.",
-    "empty": "No watches.",
-    "emptyFiltered": "No watches match the filter.",
-    "defaultSortByName": true,
-    "grouped": true
+    "footnote": "Includes host-level and service-scoped watches; service watch names use service:watch. Watches are grouped by system, storage, network and security; expand a row for full type-specific readings and configured predicates."
   }
 ]

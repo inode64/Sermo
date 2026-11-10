@@ -464,8 +464,14 @@ type ServiceRuntimeMetrics struct {
 // It helps operators get a quick sense of what's been happening (especially
 // useful when services=0 and you are mostly watching host resources).
 type ActivitySummary struct {
-	Errors        int    `json:"errors"`
-	LastEventKind string `json:"last_event_kind,omitempty"`
+	// Errors counts the recent errors still standing: those no later event
+	// settled, by the same target recovering under the same rule or by the
+	// same action succeeding on it.
+	Errors int `json:"errors"`
+	// ErrorTargets names every target those errors are about, newest first:
+	// services, watches and applications, or "daemon".
+	ErrorTargets  []string `json:"error_targets,omitempty"`
+	LastEventKind string   `json:"last_event_kind,omitempty"`
 }
 
 // MonitoringStatus summarizes how many services are currently being monitored

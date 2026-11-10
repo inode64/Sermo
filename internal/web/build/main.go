@@ -54,60 +54,23 @@ const (
 	webBuildReplaceOnce         = 1
 )
 
-type watchPanelColumn struct {
-	Key   string `json:"key"`
-	Label string `json:"label"`
-}
-
+// watchPanelDescriptor names one watch panel's shell. app.js imports the same
+// file and renders the panel's toolbar and rows, so the shell stays a skeleton.
 type watchPanelDescriptor struct {
-	Key               string             `json:"key"`
-	SectionID         string             `json:"sectionId"`
-	Heading           string             `json:"heading"`
-	Title             string             `json:"title"`
-	CountID           string             `json:"countId"`
-	ControlsID        string             `json:"controlsId"`
-	SearchID          string             `json:"searchId"`
-	SearchLabel       string             `json:"searchLabel"`
-	SearchPlaceholder string             `json:"searchPlaceholder"`
-	TypeID            string             `json:"typeId"`
-	TypeLabel         string             `json:"typeLabel"`
-	AllTypesLabel     string             `json:"allTypesLabel"`
-	FiltersID         string             `json:"filtersId"`
-	FilterCountID     string             `json:"filterCountId"`
-	RowsID            string             `json:"rowsId"`
-	Caption           string             `json:"caption"`
-	Columns           []watchPanelColumn `json:"columns"`
-	Footnote          string             `json:"footnote"`
+	Key       string `json:"key"`
+	SectionID string `json:"sectionId"`
+	Title     string `json:"title"`
+	CountID   string `json:"countId"`
+	RowsID    string `json:"rowsId"`
+	Caption   string `json:"caption"`
+	Footnote  string `json:"footnote"`
 }
 
-var watchPanelTemplate = template.Must(template.New("watch-panel").Parse(`<h2 class="visually-hidden">{{.Heading}}</h2>
-<details id="{{.SectionID}}" open class="panel panel-hidden" data-panel="{{.Key}}">
-  <summary><span class="summary-title">{{.Title}} <span id="{{.CountID}}" class="muted"></span></span></summary>
-  <div id="{{.ControlsID}}" class="panel-controls">
-    <button id="{{.Key}}-group-toggle" class="icon-btn" title="Group {{.Title}} by type" aria-label="Group {{.Title}} by type" aria-pressed="false">&#x25A6;</button>
-    <button id="{{.Key}}-groups-toggle" class="icon-btn" title="Collapse {{.Title}} groups" aria-label="Collapse {{.Title}} groups">&#x25BE;</button>
-    <button id="{{.Key}}-refresh" class="icon-btn admin-hidden" data-refresh-panel="watches" title="Run an extra check of every enabled watch now" aria-label="Run an extra check of every enabled watch now">&#x21BB;</button>
-    <label for="{{.SearchID}}" class="visually-hidden">{{.SearchLabel}}</label>
-    <input id="{{.SearchID}}" type="search" placeholder="{{.SearchPlaceholder}}" aria-describedby="search-shortcut-hint">
-{{if .TypeID}}    <select id="{{.TypeID}}" title="{{.TypeLabel}}" aria-label="{{.TypeLabel}}">
-      <option value="all">{{.AllTypesLabel}}</option>
-    </select>{{end}}
-    <span id="{{.FiltersID}}" role="group" aria-label="{{.SearchLabel}} by state">
-      <button data-wf="all" class="f-active" aria-pressed="true">all</button>
-      <button data-wf="disabled" aria-pressed="false">disabled</button>
-      <button data-wf="ok" aria-pressed="false">ok</button>
-      <button data-wf="starting" aria-pressed="false">starting</button>
-      <button data-wf="warning" aria-pressed="false">warning</button>
-      <button data-wf="stale" aria-pressed="false">stale</button>
-      <button data-wf="failed" aria-pressed="false">failed</button>
-    </span>
-    <span id="{{.FilterCountID}}" class="muted"></span>
-  </div>
+var watchPanelTemplate = template.Must(template.New("watch-panel").Parse(`<details id="{{.SectionID}}" open class="panel panel-hidden" data-view="watches" data-panel="{{.Key}}">
+  <summary><h2 class="summary-title">{{.Title}} <span id="{{.CountID}}" class="muted"></span></h2></summary>
+  <div class="panel-controls"></div>
   <table class="watch-table">
     <caption class="visually-hidden">{{.Caption}}</caption>
-    <thead><tr>{{range .Columns}}
-      {{if .Key}}<th scope="col" class="sortable" data-watch-sort="{{.Key}}">{{.Label}}<span class="sort-ind" data-wi="{{.Key}}"></span></th>{{else}}<th scope="col">{{.Label}}</th>{{end}}{{end}}
-    </tr></thead>
     <tbody id="{{.RowsID}}"></tbody>
   </table>
   <p class="muted panel-footnote">{{.Footnote}}</p>
@@ -254,8 +217,8 @@ func loadWatchPanels(path string) ([]watchPanelDescriptor, error) {
 	seen := make(map[string]bool, len(panels))
 	for i := range panels {
 		panel := &panels[i]
-		if panel.Key == "" || panel.SectionID == "" || panel.RowsID == "" || len(panel.Columns) == 0 {
-			return nil, errors.New("descriptor has missing key, section, rows or columns")
+		if panel.Key == "" || panel.SectionID == "" || panel.RowsID == "" {
+			return nil, errors.New("descriptor has missing key, section or rows")
 		}
 		if seen[panel.Key] {
 			return nil, fmt.Errorf("duplicate key %q", panel.Key)

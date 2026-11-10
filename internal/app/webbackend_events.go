@@ -15,6 +15,7 @@ const (
 	// activitySummaryEventScanLimit bounds the recent event scan used for the
 	// dashboard rollup; event list endpoints keep their own request limits.
 	activitySummaryEventScanLimit = 500
+	activityTargetSeparator       = ":"
 	webEventPageScanSize          = 500
 	webEventPageMaxScan           = 5000
 )
@@ -24,7 +25,21 @@ const (
 // the actions an active named lock blocks.
 var serviceLifecycleActions = operation.ServiceActions()
 
-// ActivitySummary returns a rollup of recent events for the dashboard.
+// ActivitySummary returns a rollup of recent events for the dashboard: the
+// errors still standing and what they are about. An error stops standing when
+// a later event shows that what failed works again:
+//
+//   - its target recovered under the same rule (or, for an error no rule
+//     raised, under none): a check that was unavailable is available again, a
+//     rule whose action failed no longer needs it;
+//   - or the same action later succeeded on that target: the restart that
+//     failed went through.
+//
+// Anything else leaves it standing — another rule's recovery, another action,
+// an operation still running or one that failed again. The log keeps neither
+// the check nor the metric an event belongs to, so this cannot be the
+// notifier's incident identity (eventNotifyIdentity); it is an advisory count of
+// what the log itself shows unresolved, never incident state.
 func (b *WebBackend) ActivitySummary(_ context.Context) web.ActivitySummary {
 	summary := web.ActivitySummary{}
 	if b.events == nil {
@@ -35,20 +50,82 @@ func (b *WebBackend) ActivitySummary(_ context.Context) web.ActivitySummary {
 	if len(events) > 0 {
 		summary.LastEventKind = events[0].Kind
 	}
+	// Newest first: by the time an error is reached, every later event of its
+	// target has been seen.
+	settled := make(map[activitySettlement]bool)
 	for i := range events {
+		e := &events[i].Event
+		target, name := activityTarget(e)
 		switch {
-		case events[i].Kind == eventKindCascade && rules.ActionType(events[i].Action).IsOperation():
-			// Cascade keeps one kind for every outcome (the primary encodes
-			// failures via eventKindForResult), so gate on status here: blocked
-			// stays uncounted like suppressed primaries, any failure is an error.
-			if events[i].Status != eventStatusOK && events[i].Status != eventStatusBlocked {
-				summary.Errors++
+		case activityError(e):
+			if settled[activitySettlement{target: target, rule: e.Rule}] ||
+				(e.Action != "" && settled[activitySettlement{target: target, action: e.Action}]) {
+				continue
 			}
-		case events[i].Kind == eventKindError && !events[i].advisoryError():
 			summary.Errors++
+			if !slices.Contains(summary.ErrorTargets, name) {
+				summary.ErrorTargets = append(summary.ErrorTargets, name)
+			}
+		case e.Kind == eventKindRecovered:
+			settled[activitySettlement{target: target, rule: e.Rule}] = true
+		default:
+			if action := activitySucceeded(e); action != "" {
+				settled[activitySettlement{target: target, action: action}] = true
+			}
 		}
 	}
 	return summary
+}
+
+// activitySettlement is what a later event settles: a target's errors under
+// one rule (a recovery; action is empty) or its errors of one action (that
+// action succeeding; rule is empty).
+type activitySettlement struct {
+	target string
+	rule   string
+	action string
+}
+
+// activityError reports an event the rollup counts as an error.
+func activityError(e *Event) bool {
+	if e.Kind == eventKindCascade && rules.ActionType(e.Action).IsOperation() {
+		// Cascade keeps one kind for every outcome (the primary encodes
+		// failures via eventKindForResult), so gate on status here: blocked
+		// stays uncounted like suppressed primaries, any failure is an error.
+		return e.Status != eventStatusOK && e.Status != eventStatusBlocked
+	}
+	return e.Kind == eventKindError && !e.advisoryError()
+}
+
+// activitySucceeded names the action an event shows succeeding, or "" for any
+// other event. The action kind also carries outcomes that are not a success (a
+// refresh that missed its deadline, a probe still running), so the status
+// decides. A completed config reload has a kind of its own and no action.
+func activitySucceeded(e *Event) string {
+	switch e.Kind {
+	case eventKindReload:
+		return eventActionReload
+	case eventKindAction, eventKindCascade:
+		if e.Status == eventStatusOK {
+			return e.Action
+		}
+	}
+	return ""
+}
+
+// activityTarget identifies what an event is about, as a key and as the name
+// the dashboard shows: its service, watch or application, or the daemon itself.
+func activityTarget(e *Event) (key, name string) {
+	switch {
+	case e.Service != "":
+		return eventNotifyDimensionService + activityTargetSeparator + e.Service, e.Service
+	case e.Watch != "":
+		return eventNotifyDimensionWatch + activityTargetSeparator + e.Watch, e.Watch
+	case e.App != "":
+		return eventNotifyDimensionApp + activityTargetSeparator + e.App, e.App
+	default:
+		return eventNotifyDimensionDaemon, eventNotifyDimensionDaemon
+	}
 }
 
 // Events returns the most recent events, newest first.
