@@ -14,10 +14,8 @@ permissions:
 jobs:
   check:
     name: build & check
-    # Pinned: ubuntu-latest moved to the Ubuntu 26 image, where apt cannot
-    # resolve its mirrors and the browser test runtime needs packages from
-    # them. The 24.04 image ships those packages. Move it on purpose, once a
-    # run on the newer image installs the runtime.
+    # Pinned so that the move of ubuntu-latest to the Ubuntu 26 image is a
+    # change made here on purpose, after a run on that image passes the gate.
     runs-on: ubuntu-24.04
     # About fifteen minutes when healthy. Without a limit a hung step holds
     # the runner for the six-hour default.
@@ -48,7 +46,9 @@ jobs:
           go install github.com/google/yamlfmt/cmd/yamlfmt@v0.21.0
           npm ci
           pip install 'yamllint==1.38.0' 'ruff==0.17.3' 'semgrep==1.183.0' 'mypy==2.4.1'
-          sudo apt-get update -qq && sudo apt-get install -y -qq shellcheck
+          # The runner images ship shellcheck; apt update alone costs minutes
+          # when the mirror is unreachable.
+          command -v shellcheck >/dev/null || { sudo apt-get update -qq && sudo apt-get install -y -qq shellcheck; }
       # NilAway ships as a golangci-lint module plugin, so the lint gate needs a
       # bespoke binary. Both versions are pinned in .custom-gcl.yml, which is
       # therefore a sound cache key: a rebuild happens only when that file moves.
@@ -64,29 +64,37 @@ jobs:
           # make rule would judge it stale and rebuild on every run.
           if [ -f bin/custom-gcl ]; then touch bin/custom-gcl; fi
           make custom-gcl
-      # The browser comes from a CDN and its libraries from the apt mirror, and
-      # this step has hung where it normally takes seconds. Each attempt is
-      # bounded and writes to a file, not a pipe: what the installer leaves
-      # behind (apt runs as root, out of reach of timeout's signal) would hold
-      # a pipe open and hang the step with it. The bound leaves room for an
-      # apt update that waits on an unreachable mirror and still succeeds. The
-      # tail and the processes left are annotations for the same reason as the
-      # gate's.
+      # The browser comes from a CDN, its libraries and fonts from the apt
+      # mirror. The mirror has been unreachable from the runners for hours at a
+      # time, on the 24.04 and the 26 image alike, and the packages it failed
+      # to fetch were fonts: when apt fails, the job goes on if the browser
+      # starts with what the image has, and says so. Each command is
+      # bounded and writes to a file, not a pipe: what it leaves behind (apt
+      # runs as root, out of reach of timeout's signal) would hold a pipe open
+      # and hang the step with it. A failure is an annotation for the same
+      # reason as the gate's.
       - name: Install browser test runtime
         run: |
           log=/tmp/playwright-install.log
-          echo "::notice title=runner::${ImageOS:-unknown} ${ImageVersion:-}"
-          for attempt in 1 2; do
-            if timeout --kill-after=15 480 npx playwright install --with-deps chromium >"$log" 2>&1; then
+          bounded() {
+            local what=$1 limit=$2
+            shift 2
+            if timeout --kill-after=15 "$limit" "$@" >"$log" 2>&1; then
               cat "$log"
-              exit 0
+              return 0
             fi
             cat "$log"
-            echo "::warning title=playwright install::attempt ${attempt} failed: $(tail -c 300 "$log" | tr '\n' ' ')"
-            echo "::warning title=playwright install (left running)::$(pgrep -af 'apt-get|dpkg|playwright' | cut -c1-120 | tr '\n' ';')"
-          done
-          echo "::error title=playwright install (tail)::$(tail -c 700 "$log" | tr '\n' ' ')"
-          exit 1
+            echo "::warning title=${what}::$(tail -c 400 "$log" | tr '\n' ' ')"
+            return 1
+          }
+          echo "::notice title=runner::${ImageOS:-unknown} ${ImageVersion:-}"
+          bounded "browser download" 300 npx playwright install chromium ||
+            bounded "browser download (retry)" 300 npx playwright install chromium
+          if ! bounded "browser packages from apt" 240 npx playwright install-deps chromium; then
+            bounded "browser start without the apt packages" 60 \
+              node -e "require('@playwright/test').chromium.launch().then(b => b.close())"
+            echo "::warning title=browser packages::apt failed; the tests run with the libraries and fonts of the image"
+          fi
       - run: make build
       # On failure, surface the tail of the gate's output as annotations: job
       # logs need repository auth to read, annotations do not, so the failure
