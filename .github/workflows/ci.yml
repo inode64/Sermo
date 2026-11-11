@@ -14,7 +14,11 @@ permissions:
 jobs:
   check:
     name: build & check
-    runs-on: ubuntu-latest
+    # Pinned: ubuntu-latest moved to the Ubuntu 26 image, where apt cannot
+    # resolve its mirrors and the browser test runtime needs packages from
+    # them. The 24.04 image ships those packages. Move it on purpose, once a
+    # run on the newer image installs the runtime.
+    runs-on: ubuntu-24.04
     # About fifteen minutes when healthy. Without a limit a hung step holds
     # the runner for the six-hour default.
     timeout-minutes: 45
@@ -64,14 +68,16 @@ jobs:
       # this step has hung where it normally takes seconds. Each attempt is
       # bounded and writes to a file, not a pipe: what the installer leaves
       # behind (apt runs as root, out of reach of timeout's signal) would hold
-      # a pipe open and hang the step with it. The tail and the processes left
-      # are annotations for the same reason as the gate's.
+      # a pipe open and hang the step with it. The bound leaves room for an
+      # apt update that waits on an unreachable mirror and still succeeds. The
+      # tail and the processes left are annotations for the same reason as the
+      # gate's.
       - name: Install browser test runtime
         run: |
           log=/tmp/playwright-install.log
           echo "::notice title=runner::${ImageOS:-unknown} ${ImageVersion:-}"
-          for attempt in 1 2 3; do
-            if timeout --kill-after=15 240 npx playwright install --with-deps chromium >"$log" 2>&1; then
+          for attempt in 1 2; do
+            if timeout --kill-after=15 480 npx playwright install --with-deps chromium >"$log" 2>&1; then
               cat "$log"
               exit 0
             fi
