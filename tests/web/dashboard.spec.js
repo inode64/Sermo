@@ -3141,6 +3141,27 @@ test("a graded event names its level in the event log", async ({ page }) => {
   await expect(page.locator("#events-section tr", { hasText: "started" }).locator(".sev")).toHaveCount(0);
 });
 
+test("event times show age and keep the full instant on hover", async ({ page }) => {
+  // The fixture events are months old, so the cell stays the canonical UTC
+  // time. The title still carries that instant and the viewer's local time.
+  const old = page.locator("#events tr", { hasText: "disk-root" }).locator("td.t span");
+  await expect(old).toContainText("UTC");
+  await expect(old).toHaveAttribute("title", /UTC · .+ local/);
+
+  const at = new Date(Date.now() - 4 * 60 * 1000).toISOString();
+  await page.route("**/api/events**", (route) => route.fulfill({
+    json: {
+      events: [{ id: 9, time: at, service: "web", kind: "action", status: "ok", message: "age-probe" }],
+      has_more: false,
+    },
+  }));
+  await page.locator("#refresh-now").click();
+  const recent = page.locator("#events tr", { hasText: "age-probe" }).locator("td.t span");
+  await expect(recent).toHaveText(/ago$/);
+  await expect(recent).not.toHaveText(/UTC/);
+  await expect(recent).toHaveAttribute("title", /UTC · .+ local/);
+});
+
 test("notifiers show the lowest severity they receive", async ({ page }) => {
   const ops = page.locator("#notifier-rows tr", { hasText: "ops" });
   await expect(ops.locator(".sev-warning")).toHaveText("≥ warning");

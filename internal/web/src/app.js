@@ -1276,18 +1276,23 @@ function syncEventTargetFilters() {
 }
 
 // fmtLocalTime renders a timestamp in the viewer's local zone, for hover
-// titles only — the visible value stays the daemon's canonical UTC.
+// titles only.
 function fmtLocalTime(value) {
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? "" : date.toLocaleString();
 }
 
-// fmtTimeTitled is the canonical UTC timestamp with the viewer's local time as
-// its hover title, so operators in other zones never convert mentally.
+// fmtTimeTitled shows how long ago an event happened. The hover keeps the
+// daemon's canonical UTC and the viewer's local time, so the short age never
+// hides the instant. An event a day old or older stays the full UTC time,
+// which is what fmtAge already does.
 function fmtTimeTitled(value) {
+  const utc = fmtTime(value);
+  if (!utc) return "";
   const local = fmtLocalTime(value);
-  if (!local) return fmtTime(value);
-  return tpl`<span title="${local + " local"}">${fmtTime(value)}</span>`;
+  const title = local ? `${utc} · ${local} local` : utc;
+  const age = fmtAge(value) || utc;
+  return tpl`<span title="${title}">${age}</span>`;
 }
 
 function eventRows(events, withService, opts = {}) {
