@@ -15,6 +15,9 @@ jobs:
   check:
     name: build & check
     runs-on: ubuntu-latest
+    # About fifteen minutes when healthy. Without a limit a hung step holds
+    # the runner for the six-hour default.
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e  # v7.0.0
@@ -57,20 +60,26 @@ jobs:
           # make rule would judge it stale and rebuild on every run.
           if [ -f bin/custom-gcl ]; then touch bin/custom-gcl; fi
           make custom-gcl
-      # The browser comes from a CDN and its libraries from the apt mirror. A
-      # stalled download held this step for ten minutes and failed the job
-      # before the gate ran, where it normally takes seconds: bound each attempt
-      # and retry. The tail is an annotation for the same reason as the gate's.
+      # The browser comes from a CDN and its libraries from the apt mirror, and
+      # this step has hung where it normally takes seconds. Each attempt is
+      # bounded and writes to a file, not a pipe: what the installer leaves
+      # behind (apt runs as root, out of reach of timeout's signal) would hold
+      # a pipe open and hang the step with it. The tail and the processes left
+      # are annotations for the same reason as the gate's.
       - name: Install browser test runtime
         run: |
-          set -o pipefail
+          log=/tmp/playwright-install.log
+          echo "::notice title=runner::${ImageOS:-unknown} ${ImageVersion:-}"
           for attempt in 1 2 3; do
-            if timeout --kill-after=15 240 npx playwright install --with-deps chromium 2>&1 | tee /tmp/playwright-install.log; then
+            if timeout --kill-after=15 240 npx playwright install --with-deps chromium >"$log" 2>&1; then
+              cat "$log"
               exit 0
             fi
-            echo "::warning title=playwright install::attempt ${attempt} failed: $(tail -c 300 /tmp/playwright-install.log | tr '\n' ' ')"
+            cat "$log"
+            echo "::warning title=playwright install::attempt ${attempt} failed: $(tail -c 300 "$log" | tr '\n' ' ')"
+            echo "::warning title=playwright install (left running)::$(pgrep -af 'apt-get|dpkg|playwright' | cut -c1-120 | tr '\n' ';')"
           done
-          echo "::error title=playwright install (tail)::$(tail -c 700 /tmp/playwright-install.log | tr '\n' ' ')"
+          echo "::error title=playwright install (tail)::$(tail -c 700 "$log" | tr '\n' ' ')"
           exit 1
       - run: make build
       # On failure, surface the tail of the gate's output as annotations: job
