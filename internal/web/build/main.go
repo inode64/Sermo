@@ -63,7 +63,6 @@ type watchPanelDescriptor struct {
 	CountID   string `json:"countId"`
 	RowsID    string `json:"rowsId"`
 	Caption   string `json:"caption"`
-	Footnote  string `json:"footnote"`
 }
 
 var watchPanelTemplate = template.Must(template.New("watch-panel").Parse(`<details id="{{.SectionID}}" open class="panel panel-hidden" data-view="watches" data-panel="{{.Key}}">
@@ -73,7 +72,6 @@ var watchPanelTemplate = template.Must(template.New("watch-panel").Parse(`<detai
     <caption class="visually-hidden">{{.Caption}}</caption>
     <tbody id="{{.RowsID}}"></tbody>
   </table>
-  <p class="muted panel-footnote">{{.Footnote}}</p>
 </details>`))
 
 func main() {

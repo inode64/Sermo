@@ -228,7 +228,6 @@
      sits, has this one look; each keeps only its own spacing. */
   .panel-subhead, .kv-title, .attn-head, .service-detail h2, .watch-type-heading h3 { font-size: .72rem; text-transform: uppercase; letter-spacing: .05em; color: var(--text-2); }
   .panel-subhead, .kv-title { margin: 1rem 0 .35rem; }
-  .panel-footnote { font-size: .78rem; margin: .5rem 0 0; }
   .filters { display: inline-flex; flex-wrap: wrap; gap: .1rem; }
   .filters button { padding: .14rem .6rem; border-color: transparent; border-radius: 999px; background: transparent; color: var(--text-2); }
   .filters button:hover { background: var(--panel-2); color: var(--text); }

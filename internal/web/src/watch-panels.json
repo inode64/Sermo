@@ -5,7 +5,6 @@
     "title": "Watches",
     "countId": "watches-count",
     "rowsId": "watch-rows",
-    "caption": "Watches",
-    "footnote": "Includes host-level and service-scoped watches; service watch names use service:watch. Watches are grouped by system, storage, network and security; expand a row for full type-specific readings and configured predicates."
+    "caption": "Watches"
   }
 ]

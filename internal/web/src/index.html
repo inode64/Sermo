@@ -152,7 +152,6 @@
     <thead><tr><th scope="col">Service</th><th scope="col">Name</th><th scope="col">State</th><th scope="col">TTL</th><th scope="col">Owner</th><th scope="col">Created</th><th scope="col">Blocks</th><th scope="col">Reason</th><th scope="col"><span class="visually-hidden">Actions</span></th></tr></thead>
     <tbody id="locks-rows"></tbody>
   </table>
-  <p class="muted panel-footnote">Named runtime locks that can block start/stop/restart/reload/resume (manual or automatic). Stale/expired locks are shown for awareness.</p>
 </details>
 
 <!--__SERMO_WATCH_PANEL:host__-->
@@ -165,7 +164,6 @@
     <thead></thead>
     <tbody id="mount-rows"></tbody>
   </table>
-  <p class="muted panel-footnote">Configured fstab-backed mount units managed by Sermo refcounting (<code>sermoctl mount</code> / <code>umount</code>) and the same blocker safety policy.</p>
 </details>
 
 <details id="apps-section" open class="panel panel-hidden" data-view="software" data-panel="apps">
@@ -176,7 +174,6 @@
     <thead></thead>
     <tbody id="app-rows"></tbody>
   </table>
-  <p class="muted panel-footnote">Applications installed on the host (their binary is present). Click a row for the full version, file location, permissions, user and group.</p>
 </details>
 
 <details id="libraries-section" open class="panel panel-hidden" data-view="software" data-panel="libraries">
@@ -187,7 +184,6 @@
     <thead></thead>
     <tbody id="library-rows"></tbody>
   </table>
-  <p class="muted panel-footnote">Libraries installed on the host. Click a row for the full version, file location, permissions, user and group.</p>
 </details>
 
 <details id="events-section" open class="panel" data-view="events">
@@ -281,7 +277,6 @@
     <tbody id="events"></tbody>
   </table>
   <div class="panel-controls"><button id="event-more" type="button" hidden>load older</button></div>
-  <p class="muted panel-footnote">Dry-run events appear when automatic actions are simulated.</p>
 </details>
 
 <details id="notifiers-section" open class="panel panel-hidden">
@@ -291,7 +286,6 @@
     <thead><tr><th scope="col">Name</th><th scope="col">Type</th><th scope="col">Min severity</th><th scope="col">Destination</th><th scope="col">Watches</th><th scope="col">State</th><th scope="col">Actions</th></tr></thead>
     <tbody id="notifier-rows"></tbody>
   </table>
-  <p class="muted panel-footnote">Named targets that watches can notify (email, slack, ...).</p>
 </details>
 
 <details id="daemon-section" open class="panel" data-view="daemon">
