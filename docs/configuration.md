@@ -953,7 +953,7 @@ over the same safe operation engine the CLI uses.
 
 The page keeps one sticky bar — the host name with its uptime and the daemon's
 state, a search that opens any service, watch, application, library or mount by
-name (`Ctrl K`), refresh and a menu (☰) — over one page that stacks every
+name (`Ctrl K`), refresh and a menu — over one page that stacks every
 section. The daemon's state is an icon: a pulse while it runs, and a clock, a warning sign or
 a power sign with the word **starting**, **panic mode** or **stopping** beside
 it otherwise; its tooltip carries the detail, such as the startup progress.

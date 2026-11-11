@@ -200,7 +200,7 @@ daemon restarts until you turn it off, and the CLI works without the web UI
 enabled. The running daemon picks up a change within ~1 second. While active,
 the daemon status reported by `/readyz` and the web header shows **`panic
 mode`**. In the web UI the same toggle is the red **panic mode** button in the
-top bar's menu (☰); it asks for confirmation in both directions so it is not
+top bar's menu; it asks for confirmation in both directions so it is not
 triggered by accident. The CLI applies the change immediately without a prompt.
 
 If the initial state read fails after daemon startup, automatic side effects
