@@ -500,8 +500,19 @@ test("browser tab title includes the short hostname", async ({ page }) => {
   await expect(page).toHaveTitle(/Sermo - fixture/);
 });
 
-test("header separates console and SSH sessions", async ({ page }) => {
-  await expect(page.locator("#statusbar")).toContainText("sessions (console/SSH): 0/3");
+test("console and SSH logins read apart on the Sessions tile, or beside the host without one", async ({ page }) => {
+  const logins = "logins: 0 console · 3 SSH";
+  const tile = page.locator('#overview .tile[data-open-view="sessions"]');
+  await expect(tile.locator(".t-sub")).toHaveText(logins);
+  // A phone hides a tile's subtitle; its accessible name still reads it.
+  await expect(tile).toHaveAccessibleName(new RegExp(logins));
+  await expect(page.locator("#host-status .stat-sessions")).toHaveCount(0);
+
+  // A host with nothing to list in Sessions has no such tile.
+  await page.route("**/api/dashboard**", (route) => route.fulfill({ json: { ...dashboard, sessions: {} } }));
+  await page.locator("#refresh-now").click();
+  await expect(tile).toHaveCount(0);
+  await expect(page.locator("#host-status .stat-sessions")).toHaveText(logins);
 });
 
 test("overview host tiles share percentage, capacity and severity rendering", async ({ page }) => {
@@ -515,9 +526,10 @@ test("overview host tiles share percentage, capacity and severity rendering", as
   await page.route("**/api/dashboard**", (route) => route.fulfill({ json: body }));
   await page.locator("#refresh-now").click();
 
-  const cpu = page.locator("#overview .tile", { hasText: "Host CPU" });
-  const memory = page.locator("#overview .tile", { hasText: "Host memory" });
-  const swap = page.locator("#overview .tile", { hasText: "Host swap" });
+  // A host tile shows a short label ("CPU") and names itself in full.
+  const cpu = page.locator('#overview .tile[aria-label^="Host CPU:"]');
+  const memory = page.locator('#overview .tile[aria-label^="Host memory:"]');
+  const swap = page.locator('#overview .tile[aria-label^="Host swap:"]');
   const load = page.locator("#overview .tile", { hasText: "Load 1m" });
   await expect(cpu).toContainText("12.5%");
   await expect(memory).toContainText("50%");
@@ -530,26 +542,83 @@ test("overview host tiles share percentage, capacity and severity rendering", as
   await expect(page.locator("#tile-cpu-gauge, #tile-mem-gauge, #tile-swap-gauge, #tile-load-gauge")).toHaveCount(4);
 });
 
-test("section navigation wraps instead of scrolling sideways on compact screens", async ({ page }) => {
-  const nav = page.locator("#section-nav");
-  const layout = await nav.evaluate((element) => {
-    const style = getComputedStyle(element);
+// The fixture daemon reports no host metric, so the band ends on one Daemon
+// tile: seven tiles, an odd count for the two-row layout.
+const overviewTileSections = [
+  ["Services", "services-section"],
+  ["Watches", "watches-section"],
+  ["Mounts", "mounts-section"],
+  ["Sessions", "sessions-section"],
+  ["Software", "apps-section"],
+  ["Events", "events-section"],
+  ["Daemon", "daemon-section"],
+];
+
+test("the tile band fills whole rows instead of scrolling sideways", async ({ page }) => {
+  const tiles = page.locator("#overview .tile");
+  await expect(tiles.locator(".t-label")).toHaveText(overviewTileSections.map(([label]) => label));
+  const band = await page.locator("#overview").evaluate((element) => {
+    const box = element.getBoundingClientRect();
+    const rows = new Map();
+    for (const tile of element.querySelectorAll(".tile")) {
+      const rect = tile.getBoundingClientRect();
+      const row = rows.get(Math.round(rect.top)) || [];
+      row.push({ left: rect.left, right: rect.right });
+      rows.set(Math.round(rect.top), row);
+    }
     return {
-      display: style.display,
-      flexWrap: style.flexWrap,
-      overflowX: style.overflowX,
+      left: box.left,
+      right: box.right,
+      rows: [...rows.values()],
       fits: element.scrollWidth <= element.clientWidth + 1,
     };
   });
 
-  expect(layout.display).toBe("flex");
-  if ((page.viewportSize() || {}).width <= 1024) {
-    // Every section pill wraps into view so no sideways swipe is needed.
-    expect(layout.flexWrap).toBe("wrap");
-    expect(layout.overflowX).toBe("visible");
-    expect(layout.fits).toBe(true);
-  } else {
-    expect(layout.overflowX).toBe("auto");
+  // One row on a wide screen; two on a tablet or a phone, where the odd last
+  // tile takes the two columns left so the band stays a rectangle.
+  const wide = (page.viewportSize() || {}).width > 1024;
+  expect(band.rows.map((row) => row.length)).toEqual(wide ? [7] : [4, 3]);
+  for (const row of band.rows) {
+    expect(Math.abs(row[0].left - band.left)).toBeLessThanOrEqual(1);
+    expect(Math.abs(row[row.length - 1].right - band.right)).toBeLessThanOrEqual(1);
+  }
+  expect(band.fits).toBe(true);
+  expect(await horizontalOverflow(page)).toBeLessThanOrEqual(1);
+});
+
+test("every section with content is on the page and a tile scrolls to its own", async ({ page }) => {
+  const shown = () => page.locator("main > details.panel").evaluateAll((panels) =>
+    panels.filter((panel) => panel.getClientRects().length > 0).map((panel) => panel.id));
+  const sections = [
+    "sessions-section", "services-section", "watches-section", "mounts-section", "apps-section",
+    "libraries-section", "events-section", "notifiers-section", "daemon-section",
+  ];
+  expect(await shown()).toEqual(sections);
+
+  // A tile also opens a panel the operator had collapsed.
+  await page.locator("#services-section > summary").click();
+  await expect(page.locator("#services-section")).not.toHaveAttribute("open");
+
+  for (const [label, id] of overviewTileSections) {
+    const section = page.locator(`#${id}`);
+    await page.locator("#overview .tile", { hasText: label }).click();
+    await expect(section).toHaveAttribute("open");
+    // The scroll is smooth: it rests with the section at its scroll margin, or
+    // with the page at its end when the section is too low to reach it.
+    await expect.poll(() => section.evaluate((element) => {
+      const doc = document.documentElement;
+      const top = element.getBoundingClientRect().top;
+      return Math.abs(top - parseFloat(getComputedStyle(element).scrollMarginTop)) <= 1
+        || doc.scrollTop + doc.clientHeight >= doc.scrollHeight - 1;
+    }), `${label} tile scrolls to #${id}`).toBe(true);
+    const place = await section.evaluate((element) => ({
+      top: element.getBoundingClientRect().top,
+      bar: document.querySelector("#topbar").getBoundingClientRect().bottom,
+      viewport: window.innerHeight,
+    }));
+    expect(place.top, `#${id} starts under the sticky bar`).toBeGreaterThanOrEqual(place.bar);
+    expect(place.top, `#${id} starts inside the viewport`).toBeLessThan(place.viewport);
+    expect(await shown(), `${label} tile hides no section`).toEqual(sections);
   }
 });
 
@@ -557,7 +626,7 @@ test("single-choice filters stay hidden", async ({ page }) => {
   await expect(page.locator("#svc-category")).toBeHidden();
   await expect(page.locator("#app-category")).toBeVisible();
   await expect(page.locator("#library-category")).toBeVisible();
-  await expect(page.locator("#watch-type")).toBeVisible();
+  await expect(page.locator("#watch-category")).toBeVisible();
 });
 
 test("inventory panels group by their meaningful type", async ({ page }) => {
@@ -593,7 +662,7 @@ test("an advisory watch reads amber and never red", async ({ page }) => {
   await expect(row).not.toHaveClass(/row-failing/);
   await expect(row.locator(".state-warning")).toHaveText("warning");
 
-  await page.locator('[data-wf="warning"]').click();
+  await page.locator('#watch-filters [data-filter="warning"]').click();
   await expect(row).toBeVisible();
   await expect(page.locator("#wat-row-hdparm-sda")).toBeHidden();
 });
@@ -616,7 +685,7 @@ test("stale watch samples are visible and filterable", async ({ page }) => {
   await expect(row).toHaveClass(/row-warning/);
   await expect(row.locator(".watch-sample-note")).toHaveText("stale");
 
-  await page.locator('[data-wf="stale"]').click();
+  await page.locator('#watch-filters [data-filter="stale"]').click();
   await expect(row).toBeVisible();
   await expect(page.locator("#wat-row-net-wan")).toBeHidden();
 });
@@ -980,7 +1049,7 @@ test("paused monitoring is distinct from disabled configuration", async ({ page 
   const disabled = page.locator("#wat-row-legacy-watch");
   await expect(disabled.locator(".target-state")).toHaveText("disabled in config");
 
-  await page.locator('[data-wf="disabled"]').click();
+  await page.locator('#watch-filters [data-filter="disabled"]').click();
   await expect(paused).toBeVisible();
   await expect(disabled).toBeVisible();
   await expect(page.locator("#wat-row-net-wan")).toBeHidden();
@@ -1036,15 +1105,15 @@ test("a device that stopped answering reads as missing, not as a blank health ce
 });
 
 test("failed watch filter includes missing devices", async ({ page }) => {
-  await page.locator('#watch-filters [data-wf="failed"]').click();
-  await expect(page.locator('#watch-filters [data-wf="failed"]')).toHaveClass(/f-active/);
+  await page.locator('#watch-filters [data-filter="failed"]').click();
+  await expect(page.locator('#watch-filters [data-filter="failed"]')).toHaveClass(/f-active/);
   await expect(page.locator("#wat-row-smart-sdz")).toBeVisible();
   await expect(page.locator("#wat-row-storage-data")).toBeHidden();
 });
 
 test("active service filter isolates the active state", async ({ page }) => {
-  await page.locator('#svc-filters [data-f="active"]').click();
-  await expect(page.locator('#svc-filters [data-f="active"]')).toHaveClass(/f-active/);
+  await page.locator('#svc-filters [data-filter="active"]').click();
+  await expect(page.locator('#svc-filters [data-filter="active"]')).toHaveClass(/f-active/);
   await expect(page.locator("#svc-row-web")).toBeVisible();
   await expect(page.locator("#svc-row-db")).toBeHidden();
   await expect(page.locator("#svc-row-stale")).toBeHidden();
@@ -1117,13 +1186,14 @@ test("VM pause is one toggle and a paused VM row reads in its own colour", async
   await expect(running).not.toHaveClass(/row-paused/);
   await expect(paused.locator(".state-paused")).toHaveText("paused");
 
-  // One button per row: the same pause glyph, latched while paused.
+  // One button per row: the same pause glyph, latched while paused. The glyph
+  // carries the text presentation selector so a phone does not draw an emoji.
   const pause = running.locator(".suspend-btn");
   const resume = paused.locator(".suspend-btn");
   await expect(pause).toHaveCount(1);
   await expect(resume).toHaveCount(1);
-  await expect(pause).toHaveText("⏸");
-  await expect(resume).toHaveText("⏸");
+  await expect(pause).toHaveText("⏸\uFE0E");
+  await expect(resume).toHaveText("⏸\uFE0E");
   await expect(pause).toHaveAttribute("aria-pressed", "false");
   await expect(pause).toHaveAttribute("data-service-action", "pause");
   await expect(pause).toHaveAttribute("aria-label", "Pause service VM vm-run");
@@ -1660,8 +1730,9 @@ test("a service operator button confirms and posts its route", async ({ page }) 
     buttonURL = new URL(route.request().url());
     await route.fulfill({ json: { ok: true, message: "Flush queue: ok" } });
   });
-  const row = page.locator("#svc-row-web");
-  await row.getByRole("button", { name: /Flush queue/ }).click();
+  // The operator commands sit in a row of their own under the service's.
+  const commands = page.locator("#svc-row-web + .svc-commands-row");
+  await commands.getByRole("button", { name: /Flush queue/ }).click();
   await expect(page.locator("#simple-confirm-message")).toContainText("Flush queue");
   await page.locator("#simple-confirm-ok").click();
   await expect.poll(() => buttonURL && buttonURL.pathname).toBe("/api/services/web/button/flush-queue");
@@ -1899,7 +1970,7 @@ test("sessions panel shows metrics, sorts columns and closes verified SSH and tm
   expect(managedCloseRequest.searchParams.get("terminal")).toBe("pts/0");
   expect(managedCloseRequest.searchParams.get("start_ticks")).toBe("1200");
 
-  await page.locator('[data-sf="tmux"]').click();
+  await page.locator('#session-filters [data-filter="tmux"]').click();
   await sessions.getByRole("columnheader", { name: /Idle/ }).click();
   await expect(sessions.locator("tbody tr").first()).toContainText("build");
   await sessions.locator('[data-terminal-session="ops"]').click();
@@ -1935,13 +2006,13 @@ test("database statements render in their own table, longest first", async ({ pa
   // A host watch's statement has no service to act through.
   await expect(rows.nth(1)).toContainText("unavailable");
   await expect(rows.nth(1).locator("[data-db-query-kill]")).toHaveCount(0);
-  await expect(page.locator('[data-sf="database"]')).toContainText("database 3");
+  await expect(page.locator('#session-filters [data-filter="database"]')).toContainText("database 3");
 });
 
 test("the database filter and search narrow the statements", async ({ page }) => {
   const sessions = page.getByRole("table", { name: "Current SSH, tmux and screen sessions" });
   const queries = page.getByRole("table", { name: "Running database statements" });
-  await page.locator('[data-sf="database"]').click();
+  await page.locator('#session-filters [data-filter="database"]').click();
   await expect(sessions).toBeHidden();
   await expect(queries.locator("tbody tr")).toHaveCount(3);
   await page.locator("#session-search").fill("analytics");
@@ -1951,7 +2022,7 @@ test("the database filter and search narrow the statements", async ({ page }) =>
   await expect(queries.locator("tbody tr")).toHaveCount(1);
   await expect(queries).toContainText("tac_prod");
   await page.locator("#session-search").fill("");
-  await page.locator('[data-sf="ssh"]').click();
+  await page.locator('#session-filters [data-filter="ssh"]').click();
   await expect(queries).toBeHidden();
   await expect(sessions).toBeVisible();
 });
@@ -2030,7 +2101,7 @@ test("database expansions follow exact statements through refresh, sorting and f
   const controlledID = await toggle.getAttribute("aria-controls");
   expect(await expansion.getAttribute("id")).toBe(controlledID);
 
-  await page.locator('[data-db-query-sort="id"]').click();
+  await table.locator('th[data-sort="id"]').click();
   await expect(toggle).toHaveAttribute("aria-expanded", "true");
   await page.locator("#session-search").fill("analytics");
   await expect(expansion).toHaveCount(0);
@@ -2236,8 +2307,8 @@ test("database thread CPU sorts independently and distinguishes idle from unknow
   const rows = table.locator(".db-query-row");
   await expect(rows.filter({ hasText: "812" }).locator(".db-col-cpu-thread")).toHaveText("0%");
   await expect(rows.filter({ hasText: "4711" }).locator(".db-col-cpu-thread")).toHaveText("—");
-  await table.locator('[data-db-query-sort="cpu_thread"]').click();
-  await table.locator('[data-db-query-sort="cpu_thread"]').click();
+  await table.locator('th[data-sort="cpu_thread"]').click();
+  await table.locator('th[data-sort="cpu_thread"]').click();
   await expect(rows.locator(".db-col-id")).toHaveText(["36762377", "812", "4711"]);
   await rows.first().locator("td").nth(5).click();
   await page.setViewportSize({ width: 390, height: 844 });
@@ -2354,10 +2425,10 @@ test("empty tmux sources use a red state and close the server through the API", 
     await route.fulfill({ json: { ok: true, message: "close empty terminal session source ok" } });
   });
 
-  await expect(page.locator('[data-sf="all"]')).toContainText("all 9");
-  await expect(page.locator('[data-sf="ssh"]')).toContainText("ssh 1");
-  await expect(page.locator('[data-sf="tmux"]')).toContainText("tmux 2");
-  await expect(page.locator('[data-sf="screen"]')).toContainText("screen 1");
+  await expect(page.locator('#session-filters [data-filter="all"]')).toContainText("all 9");
+  await expect(page.locator('#session-filters [data-filter="ssh"]')).toContainText("ssh 1");
+  await expect(page.locator('#session-filters [data-filter="tmux"]')).toContainText("tmux 2");
+  await expect(page.locator('#session-filters [data-filter="screen"]')).toContainText("screen 1");
   await expect(page.locator("#session-rows")).toContainText("No active sessions");
   const emptySource = page.locator("#session-rows tr", { hasText: "tmux-empty" });
   const emptySourceCells = emptySource.locator("td");
@@ -2554,7 +2625,6 @@ test("service table re-renders preserve hydrated detail without more requests", 
 });
 
 test("notifier test asks for confirmation and posts one named notifier", async ({ page }) => {
-  await page.locator("#notifiers-section > summary").click();
   const button = page.locator('[data-notifier-test="ops"]');
   await expect(button).toBeVisible();
   const request = page.waitForRequest((req) => req.method() === "POST" && new URL(req.url()).pathname === "/api/notifiers/ops/test");
@@ -2620,9 +2690,9 @@ test("a guest gets no refresh buttons", async ({ page }) => {
   await page.route("**/api/whoami", (route) => route.fulfill({ json: { can_act: false, role: "viewer", auth: true } }));
   await page.reload();
   await expect(page.locator("#app-row-postgres")).toBeVisible();
-  const buttons = page.locator("[data-refresh-panel]");
-  await expect(buttons).toHaveCount(3);
-  for (const button of await buttons.all()) await expect(button).toBeHidden();
+  // The toolbars that carry a refresh for an admin are drawn without one.
+  for (const search of ["#watch-search", "#app-search", "#library-search"]) await expect(page.locator(search)).toBeVisible();
+  await expect(page.locator("[data-refresh-panel]")).toHaveCount(0);
 });
 
 test("a service's stray count is diagnostic only", async ({ page }) => {
@@ -2759,34 +2829,34 @@ test("application and library inventories filter, group, sort, and expand", asyn
   await page.locator("#app-category").selectOption("all");
   await page.locator("#app-group-toggle").click();
   await expect(page.locator("#app-rows .group-row")).toHaveCount(2);
-  await page.locator('[data-group-panel="app"][data-group-name="data"]').click();
+  await page.locator('#app-rows [data-group-name="data"]').click();
   await expect(page.locator("#app-row-postgres")).toBeHidden();
   await page.locator("#app-groups-toggle").click();
   await expect(page.locator("#app-row-nginx")).toBeHidden();
   await page.locator("#app-groups-toggle").click();
   await expect(page.locator("#app-row-postgres")).toBeVisible();
-  await page.locator('[data-app-sort="version"]').click();
-  await expect(page.locator('[data-app-sort="version"]')).toHaveAttribute("aria-sort", "ascending");
+  await page.locator('#apps-section th[data-sort="version"]').click();
+  await expect(page.locator('#apps-section th[data-sort="version"]')).toHaveAttribute("aria-sort", "ascending");
   const postgresToggle = page.locator("#app-row-postgres .row-toggle");
   await postgresToggle.click();
   await expect(postgresToggle).toHaveAttribute("aria-expanded", "true");
   await expect(postgresToggle).toHaveAttribute("aria-controls", "exp-app:postgres");
   await expect(page.locator('[id="exp-app:postgres"]')).toContainText("16.3");
 
-  await page.locator('[data-lf="warning"]').click();
+  await page.locator('#library-filters [data-filter="warning"]').click();
   await expect(page.locator("#library-row-zlib")).toBeVisible();
   await expect(page.locator("#library-row-openssl")).toBeHidden();
-  await page.locator('[data-lf="all"]').click();
+  await page.locator('#library-filters [data-filter="all"]').click();
   await page.locator("#library-group-toggle").click();
   await expect(page.locator("#library-rows .group-row")).toHaveCount(2);
-  await page.locator('[data-group-panel="library"][data-group-name="compression"]').click();
+  await page.locator('#library-rows [data-group-name="compression"]').click();
   await expect(page.locator("#library-row-zlib")).toBeHidden();
   await page.locator("#library-groups-toggle").click();
   await expect(page.locator("#library-row-openssl")).toBeHidden();
   await page.locator("#library-groups-toggle").click();
   await expect(page.locator("#library-row-zlib")).toBeVisible();
-  await page.locator('[data-library-sort="version"]').click();
-  await expect(page.locator('[data-library-sort="version"]')).toHaveAttribute("aria-sort", "ascending");
+  await page.locator('#libraries-section th[data-sort="version"]').click();
+  await expect(page.locator('#libraries-section th[data-sort="version"]')).toHaveAttribute("aria-sort", "ascending");
 });
 
 test("application deep links expand after its inventory renders", async ({ page }) => {
@@ -2917,6 +2987,7 @@ test("a 401 from the API navigates to the login route", async ({ page }) => {
     });
   });
 
+  await page.locator("#menu-toggle").click();
   await page.locator("#reload-btn").click();
   await page.waitForURL(/\/login$/, { timeout: 15000 });
   expect(new URL(page.url()).pathname).toBe("/login");
@@ -2930,8 +3001,13 @@ test("a 401 from the API navigates to the login route", async ({ page }) => {
 test("an admin on a cached Basic credential is offered no log out", async ({ page }) => {
   await page.route("**/api/whoami", (route) => route.fulfill({ json: { can_act: true, role: "admin", auth: true, session: false } }));
   await page.reload();
-  await expect(page.locator("#me")).toHaveText("(admin)");
-  await expect(page.locator("#me [data-logout]")).toHaveCount(0);
+  await page.locator("#menu-toggle").click();
+  // The admin group shows once whoami has answered: an admin carries no
+  // read-only badge, and the menu no session block.
+  await expect(page.locator("#reload-btn")).toBeVisible();
+  await expect(page.locator("#me")).toBeEmpty();
+  await expect(page.locator("#menu-session")).toBeHidden();
+  await expect(page.locator("[data-logout]")).toHaveCount(0);
 });
 
 test("an admin logged in on the form can log out", async ({ page }) => {
@@ -2944,8 +3020,9 @@ test("an admin logged in on the form can log out", async ({ page }) => {
   await page.route("**/login", (route) => route.fulfill({ status: 200, contentType: "text/html", body: "<title>login reached</title>" }));
   await page.reload();
 
-  const logout = page.locator("#me [data-logout]");
-  await expect(logout).toHaveText("log out");
+  await page.locator("#menu-toggle").click();
+  const logout = page.locator("#menu-session [data-logout]");
+  await expect(logout).toHaveText("Log out admin");
   await logout.click();
   await page.waitForURL(/\/login$/, { timeout: 15000 });
   expect(logoutPosted).toBe(true);
@@ -2964,7 +3041,7 @@ test("expanding a service on a phone keeps its action buttons inside the table",
   body.host_metrics = [{ name: "total_memory", absolute: 536870912, total: 1073741824, percent: 50 }];
   await page.route("**/api/dashboard**", (route) => route.fulfill({ json: body }));
   await page.locator("#refresh-now").click();
-  await expect(page.locator("#overview .tile", { hasText: "Host memory" })).toContainText("50%");
+  await expect(page.locator('#overview .tile[aria-label^="Host memory:"]')).toContainText("50%");
   const row = page.locator("#svc-row-web");
   await row.locator(".row-toggle").click();
   const detail = page.locator('[data-service-detail="web"]');
@@ -3014,7 +3091,6 @@ test("a graded event names its level in the event log", async ({ page }) => {
 });
 
 test("notifiers show the lowest severity they receive", async ({ page }) => {
-  await page.locator("#notifiers-section > summary").click();
   const ops = page.locator("#notifier-rows tr", { hasText: "ops" });
   await expect(ops.locator(".sev-warning")).toHaveText("≥ warning");
   // debug filters nothing.
@@ -3034,7 +3110,7 @@ function connectionCheck(name, values = {}, extra = {}) {
 async function showConnectionChecks(page, checks) {
   const detail = { ...serviceDetail("web"), checks };
   await page.route("**/api/services/web", (route) => route.fulfill({ json: detail }));
-  await page.locator('[data-service-expand="web"]').click();
+  await page.locator("#svc-row-web .row-toggle").click();
   await expect(page.locator('[data-service-detail="web"]')).toBeVisible();
   return detail;
 }

@@ -16,6 +16,7 @@
   <div class="topbar-id">
     <h1><span class="brand-dot" id="brand-dot" aria-hidden="true"></span><span class="brand-name">SERMO</span><span id="host-name" class="host-name"></span></h1>
     <span id="host-status" class="host-status" aria-live="off"></span>
+    <span id="statusbar" class="host-status" aria-live="off"></span>
   </div>
   <div class="topbar-search">
     <label for="target-search" class="visually-hidden">Find a monitored target</label>
@@ -29,19 +30,6 @@
     <button id="refresh-now" type="button" class="icon-btn" title="Refresh dashboard now" aria-label="Refresh dashboard now"><span aria-hidden="true">&#x27F3;</span></button>
     <button id="menu-toggle" type="button" class="icon-btn" popovertarget="app-menu" title="Settings and admin actions" aria-label="Settings and admin actions"><span aria-hidden="true">&#x2630;</span></button>
   </div>
-</div>
-<!-- A view shows the panels that carry its data-view. The overview tiles are
-     the way into Services, Watches, Mounts, Sessions and System; Software and
-     Events have a tab on a desktop and are tiles too on a tablet or a phone,
-     where this line is hidden. The same line carries what is fixed about the
-     host. -->
-<div class="topbar-sub">
-  <nav id="section-nav" aria-label="Dashboard sections">
-    <button type="button" class="view-tab" data-view-tab="software">Software<span class="nav-count" data-nav-count></span><span class="nav-dot" data-nav-dot hidden></span></button>
-    <button type="button" class="view-tab" data-view-tab="events">Events</button>
-    <button type="button" class="view-tab" data-view-tab="all">All</button>
-  </nav>
-  <div id="statusbar" aria-live="off"></div>
 </div>
 </div><!-- /topbar -->
 
@@ -77,6 +65,8 @@
   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
   <span>PANIC MODE — hooks, alerts and automatic remediation are suspended.</span>
 </div>
+<!-- The page stacks every panel. An overview tile leads to the first listed
+     panel that carries its data-view. -->
 <div id="overview" role="region" aria-label="Overview"></div>
 <div id="err" role="status" aria-live="polite" aria-atomic="true"></div>
 <div id="attention" class="live-hidden" role="alert" aria-live="assertive" aria-atomic="true"></div>
@@ -294,7 +284,7 @@
   <p class="muted panel-footnote">Dry-run events appear when automatic actions are simulated.</p>
 </details>
 
-<details id="notifiers-section" open class="panel panel-hidden" data-view="system">
+<details id="notifiers-section" open class="panel panel-hidden">
   <summary><h2 class="summary-title">Notifiers <span id="notifiers-count" class="muted"></span></h2></summary>
   <table>
     <caption class="visually-hidden">Notifiers</caption>
@@ -304,7 +294,7 @@
   <p class="muted panel-footnote">Named targets that watches can notify (email, slack, ...).</p>
 </details>
 
-<details id="daemon-section" open class="panel" data-view="system">
+<details id="daemon-section" open class="panel" data-view="daemon">
   <summary><h2 class="summary-title">Daemon</h2></summary>
   <div class="daemon-cols">
     <section>

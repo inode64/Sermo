@@ -726,7 +726,6 @@ async function performLoad() {
   if (!firstSnapshotDone) {
     firstSnapshotDone = true;
     draw("overview", () => renderOverview({ ready, live, daemon: daemon || {}, locks: locks || latestLocks, hostMetrics: hostMetricsResult.ok ? hostMetrics : latestHostMetrics }));
-    openCollapsedView();
     refreshChrome();
   }
 
@@ -1891,7 +1890,6 @@ function initListPanels() {
 const UI_STATE_KEY = "sermo-ui-state";
 const KEYBOARD_SHORTCUTS_KEY = "sermo-keyboard-shortcuts";
 const BROWSER_NOTIFY_KEY = "sermo-browser-notify";
-const VIEW_KEY = "sermo-view";
 
 function restoredSort(saved, fallback) {
   return saved && typeof saved.key === "string" ? { key: saved.key, dir: saved.dir === -1 ? -1 : 1 } : fallback;
@@ -1978,69 +1976,30 @@ function saveUIState() {
 }
 
 // ---- views ------------------------------------------------------------------
-// A view is the set of panels carrying its data-view; its tab shows it. "all"
-// stacks every panel, as one long page.
-const viewAll = "all";
+// The page stacks every panel. A view is the group of panels carrying one
+// data-view: what an overview tile reads and leads to.
 const viewServices = "services";
 const viewWatches = "watches";
 const viewMounts = "mounts";
 const viewSessions = "sessions";
 const viewSoftware = "software";
 const viewEvents = "events";
-const viewSystem = "system";
-const defaultView = viewServices;
-// viewOrder is the order views are tried in when the one on screen has nothing
-// to show: a host with no services opens on its watches, not on an empty page.
-// The events view is never empty, so the search always ends.
-const viewOrder = [viewServices, viewWatches, viewSessions, viewMounts, viewSoftware, viewEvents, viewSystem];
-let currentView = defaultView;
+const viewDaemon = "daemon";
 
 function viewPanels(view) {
   return [...document.querySelectorAll("[data-view]")].filter((el) => el.dataset.view === view);
 }
 
-// viewHasContent reports whether any panel of a view has something to list.
-function viewHasContent(view) {
-  return viewPanels(view).some((el) => !el.classList.contains("panel-hidden"));
-}
-
-// setView shows one view. What marks it current is whatever carries its
-// data-view-tab: a tab in the bar or, for the views the overview tiles lead
-// to, the tile.
-function setView(view) {
-  currentView = view === viewAll || viewPanels(view).length ? view : defaultView;
-  document.querySelectorAll("[data-view]").forEach((el) => {
-    el.classList.toggle("view-hidden", currentView !== viewAll && el.dataset.view !== currentView);
-  });
-  document.querySelectorAll("[data-view-tab]").forEach((tab) => {
-    tab.setAttribute("aria-current", tab.dataset.viewTab === currentView ? domBoolTrue : domBoolFalse);
-  });
-  try { localStorage.setItem(VIEW_KEY, currentView); } catch (_) {}
-}
-
-// openCollapsedView opens the panels of the view on screen when every one with
-// something to list is collapsed. A panel left closed — on the "all" page, or
-// on the stacked page this one replaces, which saved under the same keys — would
-// otherwise make its view a title and nothing else.
-function openCollapsedView() {
-  if (currentView === viewAll) return;
-  const panels = viewPanels(currentView).filter((el) => !el.classList.contains("panel-hidden"));
-  if (!panels.some((el) => el.open)) panels.forEach((el) => { el.open = true; });
-}
-
-// openView is a view asked for by its tile or tab.
+// openView is what a tile does: it leads to the first panel of its view with
+// something to list.
 function openView(view) {
-  setView(view);
-  openCollapsedView();
+  revealPanel(viewPanels(view).find(panelVisible));
 }
 
-// revealPanel brings a panel on screen whatever view it is in: switches to its
-// view when another one is showing, opens it and, unless told not to, scrolls
-// to it.
+// revealPanel brings a panel on screen: opens it and, unless told not to,
+// scrolls to it.
 function revealPanel(section, scroll = true) {
   if (!section) return;
-  const view = section.dataset.view;
-  if (view && currentView !== viewAll && view !== currentView) setView(view);
   if (section.tagName === "DETAILS") section.open = true;
   if (scroll) scrollToSection(section);
 }
@@ -2050,25 +2009,11 @@ function sessionCount() {
   return (inventory.ssh || []).length + (inventory.terminal || []).length + (inventory.database || []).length;
 }
 
-// viewSummaries is what a tab says about its view: how many targets it holds
-// and the worst state among them, so a problem is one tab away. The views the
-// overview tiles lead to say the same on their tile.
-function viewSummaries() {
-  const level = (critical, warning) => (critical ? healthStatusCritical : (warning ? healthStatusWarning : ""));
-  const software = [...(allApps || []), ...(allLibraries || [])];
-  return {
-    software: {
-      count: software.length,
-      level: level(software.some((a) => appStateText(a) === targetStateFailed), software.some((a) => appStateText(a) === targetStateWarning)),
-    },
-  };
-}
-
-// refreshChrome asks for the attention row, the tab bar, the favicon and the
-// title to be brought up to date. They all derive from the same lists, and
-// every renderer that changes one of those lists asks: a dashboard poll renders
-// eight panels in a row, so the requests of one burst are answered once, in a
-// microtask (not a frame: a background tab still owes its favicon and title).
+// refreshChrome asks for the attention row, the favicon and the title to be
+// brought up to date. They all derive from the same lists, and every renderer
+// that changes one of those lists asks: a dashboard poll renders eight panels
+// in a row, so the requests of one burst are answered once, in a microtask
+// (not a frame: a background tab still owes its favicon and title).
 let chromePending = false;
 function refreshChrome() {
   if (chromePending) return;
@@ -2076,38 +2021,8 @@ function refreshChrome() {
   queueMicrotask(() => {
     chromePending = false;
     renderAttention();
-    renderNav();
+    updateTopbarHeight();
   });
-}
-
-// renderNav refreshes the tabs. A tab whose panels all are empty is hidden
-// once the first complete snapshot says so — before it, an empty panel only
-// means its data has not arrived, and hiding its tab would flicker the bar and
-// throw a saved view back to the default.
-function renderNav() {
-  const summaries = viewSummaries();
-  const empty = (view) => firstSnapshotDone && !viewHasContent(view);
-  document.querySelectorAll("#section-nav [data-view-tab]").forEach((tab) => {
-    const view = tab.dataset.viewTab;
-    if (view === viewAll) return;
-    tab.hidden = empty(view);
-    const summary = summaries[view] || { count: 0, level: "" };
-    const count = tab.querySelector("[data-nav-count]");
-    if (count) count.textContent = summary.count ? String(summary.count) : "";
-    const dot = tab.querySelector("[data-nav-dot]");
-    if (dot) {
-      dot.hidden = !summary.level;
-      dot.dataset.level = summary.level;
-      dot.title = summary.level === healthStatusCritical ? "failing" : "needs attention";
-      dot.setAttribute("role", "img");
-      dot.setAttribute("aria-label", dot.title);
-    }
-  });
-  if (currentView !== viewAll && empty(currentView)) {
-    const next = viewOrder.find((view) => !empty(view));
-    if (next && next !== currentView) setView(next);
-  }
-  updateTopbarHeight();
 }
 
 let allEvents = [];
@@ -3390,10 +3305,10 @@ async function refreshExpandedWatches(generation = dashboardGeneration) {
 
 // applyHash opens the target named in a #svc:|#wat:|#app:|#lib: URL fragment
 // or a section id such as #services-section. It runs after each render and on
-// hashchange, but a fragment navigates once (hashApplied): it brings its panel
-// and view forward and scrolls when it is first seen with its target present,
-// and later renders only keep the expansion open — otherwise a fragment left in
-// the address bar would drag the operator back from whatever view they moved to.
+// hashchange, but a fragment navigates once (hashApplied): it opens its panel
+// and scrolls when it is first seen with its target present, and later renders
+// only keep the expansion open — otherwise a fragment left in the address bar
+// would drag the operator back from wherever they scrolled to.
 let hashApplied = false;
 function applyHash() {
   const h = decodeURIComponent(location.hash.slice(1));
@@ -6839,10 +6754,10 @@ function attnAriaLabel(it) {
 
 // tileAriaLabel names a tile for assistive tech: what it reads — spelled out
 // where the visible value is shorthand ("17 of 21" for "17 / 21"), and "loading"
-// while it has no reading yet — and the view a press opens.
+// while it has no reading yet — and the section a press leads to.
 function tileAriaLabel({ name, label, reading, sub, view }) {
   if (reading === undefined) return `${name || label} loading`;
-  return [`${name || label}: ${reading}`, sub, `Open ${view} view`].filter(Boolean).join(". ");
+  return [`${name || label}: ${reading}`, sub, `Go to the ${view} section`].filter(Boolean).join(". ");
 }
 
 function tileGaugeId(key) {
@@ -6865,12 +6780,10 @@ function settlingSub(ownCount, others) {
   return others.filter(([when]) => when).map(([, label]) => label).join(" · ");
 }
 
-// overviewTile renders one band tile. A tile is its view's way in — the tiles
-// are the navigation for Services, Watches, Mounts, Sessions and the host
-// (System), so those views have no tab — and it reads as current while its
-// view shows.
+// overviewTile renders one band tile. A tile reads its view and leads to it:
+// a press scrolls to the view's first panel.
 const overviewTile = (opts) => tpl`
-  <button class="tile ${opts.cls || ""} ${opts.narrowOnly ? "tile-narrow" : ""}" data-view-tab="${opts.view}" aria-current="${opts.view === currentView ? domBoolTrue : domBoolFalse}" aria-label="${tileAriaLabel(opts)}" aria-describedby="${opts.describedBy || nothing}">
+  <button class="tile ${opts.cls || ""}" data-open-view="${opts.view}" aria-label="${tileAriaLabel(opts)}" aria-describedby="${opts.describedBy || nothing}">
     <span class="t-label">${opts.label}</span>
     <div class="t-value">${opts.value}</div>
     <div class="t-sub">${opts.sub || ""}</div>
@@ -6904,10 +6817,11 @@ function overviewInventory(ctx) {
   const startingWatches = watches.filter((w) => watchStateText(w) === targetStateStarting);
   const startingApps = (allApps || []).filter((a) => appStateText(a) === targetStateStarting);
   const daemonStarting = ready && ready.status === daemonStatusStarting && ready.ready === false;
+  const settling = daemonStarting || startingSvcs.length > 0 || startingWatches.length > 0 || startingApps.length > 0;
   return {
     ready, live, daemon, hostMetrics, enabled, failedSvcs, startingSvcs, collectingSvcs,
     warningSvcs, restartRequiredSvcs, activeSvcs, watches, enabledWatches, failedWatches,
-    warningWatches, staleWatches, startingWatches, startingApps, daemonStarting,
+    warningWatches, staleWatches, startingWatches, startingApps, daemonStarting, settling,
   };
 }
 
@@ -6925,139 +6839,139 @@ function sessionsListed() {
   return !!(sessionPanel.dom && panelVisible(sessionPanel.dom.section));
 }
 
-// overviewViewTiles are the tiles that lead to a view of targets, in band
-// order: services, watches, mounts and sessions on every layout, software and
-// events only where the band also stands in for the tab bar (tablet and phone).
-function overviewViewTiles(data) {
+// The view tiles, one builder each. A view with nothing to list has no tile,
+// and its builder returns null.
+
+function servicesTile(data) {
+  // A host with no service, container, VM or lock has no Services panel to go to.
+  if (!viewPanels(viewServices).some(panelVisible)) return null;
   const {
-    daemon, enabled, failedSvcs, startingSvcs, collectingSvcs, warningSvcs, restartRequiredSvcs, activeSvcs,
-    watches, enabledWatches, failedWatches, warningWatches, staleWatches,
-    startingWatches, startingApps, daemonStarting,
+    enabled, failedSvcs, startingSvcs, collectingSvcs, warningSvcs, restartRequiredSvcs, activeSvcs,
+    startingWatches, startingApps, daemonStarting, settling,
   } = data;
-  const settling = daemonStarting || startingSvcs.length > 0 || startingWatches.length > 0 || startingApps.length > 0;
-  const servicesSettlingText = settlingSub(startingSvcs.length, [
+  const settlingText = settlingSub(startingSvcs.length, [
     [daemonStarting, "daemon starting"],
     [startingWatches.length, `${startingWatches.length} watch starting`],
     [startingApps.length, `${startingApps.length} app starting`],
   ]);
-  const watchesSettlingText = settlingSub(startingWatches.length, [
+  return {
+    label: "Services",
+    value: tpl`${activeSvcs.length}<small> / ${enabled.length}</small>`,
+    cls: firstMatch([
+      [failedSvcs.length, "t-crit"],
+      [collectingSvcs.length || warningSvcs.length || restartRequiredSvcs.length, "t-warn"],
+      [settling, ""],
+      [enabled.length, "t-ok"],
+    ], ""),
+    sub: firstMatch([
+      [failedSvcs.length, `${failedSvcs.length} failed`],
+      [settlingText, settlingText],
+      [collectingSvcs.length, `${collectingSvcs.length} collecting`],
+      [warningSvcs.length, `${warningSvcs.length} need attention`],
+      [restartRequiredSvcs.length, `${restartRequiredSvcs.length} restart required`],
+      [enabled.length === 0, "none enabled"],
+    ], "all active"),
+    view: viewServices,
+    name: "Services active",
+    reading: `${activeSvcs.length} of ${enabled.length}`,
+  };
+}
+
+function watchesTile(data) {
+  const {
+    watches, enabledWatches, failedWatches, warningWatches, staleWatches,
+    startingSvcs, startingWatches, startingApps, daemonStarting, settling,
+  } = data;
+  if (!watches.length) return null;
+  const settlingText = settlingSub(startingWatches.length, [
     [daemonStarting, "daemon starting"],
     [startingSvcs.length, `${startingSvcs.length} svc starting`],
     [startingApps.length, `${startingApps.length} app starting`],
   ]);
-
-  const tiles = [];
-  const servicesSub = firstMatch([
-    [failedSvcs.length, `${failedSvcs.length} failed`],
-    [servicesSettlingText, servicesSettlingText],
-    [collectingSvcs.length, `${collectingSvcs.length} collecting`],
-    [warningSvcs.length, `${warningSvcs.length} need attention`],
-    [restartRequiredSvcs.length, `${restartRequiredSvcs.length} restart required`],
-    [enabled.length === 0, "none enabled"],
-  ], "all active");
-  // A host with no service, container, VM or lock has no Services view to open.
-  if (viewHasContent(viewServices)) {
-    tiles.push({
-      label: "Services",
-      value: tpl`${activeSvcs.length}<small> / ${enabled.length}</small>`,
-      cls: firstMatch([
-        [failedSvcs.length, "t-crit"],
-        [collectingSvcs.length || warningSvcs.length || restartRequiredSvcs.length, "t-warn"],
-        [settling, ""],
-        [enabled.length, "t-ok"],
-      ], ""),
-      sub: servicesSub,
-      view: viewServices,
-      name: "Services active",
-      reading: `${activeSvcs.length} of ${enabled.length}`,
-    });
-  }
-  if (watches.length) {
-    const watchesSub = firstMatch([
+  // A single predicate over the enabled set: subtracting the failed/warning/stale
+  // list lengths (which span all watches and can overlap) could go negative.
+  const watchesUp = enabledWatches.filter((w) => !isWatchAttention(w) && !isWatchWarning(w) && !isWatchSampleStale(w)).length;
+  return {
+    label: "Watches",
+    value: tpl`${watchesUp}<small> / ${enabledWatches.length}</small>`,
+    cls: firstMatch([
+      [failedWatches.length, "t-crit"],
+      [warningWatches.length || staleWatches.length, "t-warn"],
+      [settling, ""],
+    ], "t-ok"),
+    sub: firstMatch([
       [failedWatches.length, `${failedWatches.length} firing`],
       [warningWatches.length, `${warningWatches.length} warning`],
       [staleWatches.length, `${staleWatches.length} stale`],
-      [watchesSettlingText, watchesSettlingText],
-    ], "quiet");
-    // A single predicate over the enabled set: subtracting the failed/warning/stale
-    // list lengths (which span all watches and can overlap) could go negative.
-    const watchesUp = enabledWatches.filter((w) => !isWatchAttention(w) && !isWatchWarning(w) && !isWatchSampleStale(w)).length;
-    tiles.push({
-      label: "Watches",
-      value: tpl`${watchesUp}<small> / ${enabledWatches.length}</small>`,
-      cls: failedWatches.length ? "t-crit" : ((warningWatches.length || staleWatches.length) ? "t-warn" : (settling ? "" : "t-ok")),
-      sub: watchesSub,
-      view: viewWatches,
-      reading: `${watchesUp} of ${enabledWatches.length}`,
-    });
-  }
-  const mounts = allMounts || [];
-  if (mounts.length) {
-    const mounted = mounts.filter((m) => m.mounted).length;
-    const errors = mounts.filter((m) => mountBaseStateText(m) === mountStateError).length;
-    // A unit that is not mounted is not a fault by itself — many are mounted on
-    // demand — so only an error colours the tile.
-    const mountsSub = firstMatch([
-      [errors, `${errors} in error`],
-      [mounted < mounts.length, `${mounts.length - mounted} not mounted`],
-    ], "all mounted");
-    tiles.push({
-      label: "Mounts",
-      value: tpl`${mounted}<small> / ${mounts.length}</small>`,
-      cls: errors ? "t-crit" : "",
-      sub: mountsSub,
-      view: viewMounts,
-      reading: `${mounted} of ${mounts.length} mounted`,
-    });
-  }
-  if (sessionsListed()) {
-    const count = sessionCount();
-    const sessionsSub = loginsText(daemon);
-    tiles.push({
-      label: "Sessions",
-      value: String(count),
-      sub: sessionsSub,
-      view: viewSessions,
-      reading: String(count),
-    });
-  }
-  return [...tiles, ...overviewTabTiles()];
+      [settlingText, settlingText],
+    ], "quiet"),
+    view: viewWatches,
+    reading: `${watchesUp} of ${enabledWatches.length}`,
+  };
 }
 
-// overviewTabTiles stand in for the tabs where there is no tab bar: on a
-// tablet or a phone the band is two rows of five, and Software and Events are
-// tiles like the rest instead of a bar that would repeat them. narrowOnly keeps
-// them off the desktop layout, which does show their tab.
-function overviewTabTiles() {
-  const tiles = [];
+function mountsTile() {
+  const mounts = allMounts || [];
+  if (!mounts.length) return null;
+  const mounted = mounts.filter((m) => m.mounted).length;
+  const errors = mounts.filter((m) => mountBaseStateText(m) === mountStateError).length;
+  return {
+    label: "Mounts",
+    value: tpl`${mounted}<small> / ${mounts.length}</small>`,
+    // A unit that is not mounted is not a fault by itself — many are mounted on
+    // demand — so only an error colours the tile.
+    cls: errors ? "t-crit" : "",
+    sub: firstMatch([
+      [errors, `${errors} in error`],
+      [mounted < mounts.length, `${mounts.length - mounted} not mounted`],
+    ], "all mounted"),
+    view: viewMounts,
+    reading: `${mounted} of ${mounts.length} mounted`,
+  };
+}
+
+function sessionsTile(daemon) {
+  if (!sessionsListed()) return null;
+  const count = String(sessionCount());
+  return { label: "Sessions", value: count, sub: loginsText(daemon), view: viewSessions, reading: count };
+}
+
+function softwareTile() {
   const software = [...(allApps || []), ...(allLibraries || [])];
-  if (software.length) {
-    const failed = software.filter((item) => appStateText(item) === targetStateFailed).length;
-    const warning = software.filter((item) => appStateText(item) === targetStateWarning).length;
-    const softwareSub = firstMatch([[failed, `${failed} failed`], [warning, `${warning} warning`]], "all ok");
-    tiles.push({
-      label: "Software",
-      value: String(software.length),
-      cls: firstMatch([[failed, "t-crit"], [warning, "t-warn"]], "t-ok"),
-      sub: softwareSub,
-      view: viewSoftware,
-      narrowOnly: true,
-      reading: String(software.length),
-    });
-  }
+  if (!software.length) return null;
+  const failed = software.filter((item) => appStateText(item) === targetStateFailed).length;
+  const warning = software.filter((item) => appStateText(item) === targetStateWarning).length;
+  return {
+    label: "Software",
+    value: String(software.length),
+    cls: firstMatch([[failed, "t-crit"], [warning, "t-warn"]], "t-ok"),
+    sub: firstMatch([[failed, `${failed} failed`], [warning, `${warning} warning`]], "all ok"),
+    view: viewSoftware,
+    reading: String(software.length),
+  };
+}
+
+// Every host has an event log, so the band always carries its tile.
+function eventsTile() {
   const errors = (latestActivity && latestActivity.errors) || 0;
   const lastKind = latestActivity && latestActivity.last_event_kind;
-  const eventsSub = lastKind ? `last: ${lastKind}` : "";
-  tiles.push({
+  const unit = errors === 1 ? "error" : "errors";
+  return {
     label: "Events",
-    value: tpl`${errors}<small> ${errors === 1 ? "error" : "errors"}</small>`,
+    value: tpl`${errors}<small> ${unit}</small>`,
     cls: errors ? "t-warn" : "",
-    sub: eventsSub,
+    sub: lastKind ? `last: ${lastKind}` : "",
     view: viewEvents,
-    narrowOnly: true,
-    reading: `${errors} recent ${errors === 1 ? "error" : "errors"}`,
-  });
-  return tiles;
+    reading: `${errors} recent ${unit}`,
+  };
+}
+
+// overviewViewTiles are the tiles that lead to a view of targets, in band
+// order.
+function overviewViewTiles(data) {
+  return [
+    servicesTile(data), watchesTile(data), mountsTile(), sessionsTile(data.daemon), softwareTile(), eventsTile(),
+  ].filter(Boolean);
 }
 
 // overviewUsedFreeSub renders the volume-style "X used · Y free" line for a
@@ -7091,7 +7005,7 @@ function overviewHostUsageTile(metric, descriptor, loading) {
     sub: loading ? overviewLoadingText : sub,
     cls,
     extra: loading ? nothing : usageBar(pct, fmtPct(pct), gaugeId),
-    view: viewSystem,
+    view: viewDaemon,
     name: descriptor.name,
     reading: loading ? undefined : fmtPct(pct),
     describedBy: loading ? nothing : gaugeId,
@@ -7126,7 +7040,7 @@ function overviewHostTileOptions(data) {
       sub: loading ? overviewLoadingText : loadSub,
       cls: loading ? "" : (hasCap ? (pct >= percentMax ? "t-crit" : (pct >= loadWarnPct ? "t-warn" : "")) : ""),
       extra: loading || !hasCap ? nothing : usageBar(pct, fmtPct(pct), gaugeId),
-      view: viewSystem,
+      view: viewDaemon,
       reading: loading ? undefined : fmtNum(load.absolute, 2),
       describedBy: loading ? nothing : gaugeId,
     });
@@ -7139,16 +7053,16 @@ function renderOverview(ctx) {
   if (!band) return;
   const data = overviewInventory(ctx);
   const hostTiles = overviewHostTileOptions(data);
-  // The host tiles are the way into the System view; a daemon that reports no
-  // host reading still needs one.
+  // The host tiles lead to the Daemon panel; a daemon that reports no host
+  // reading still needs one.
   if (!hostTiles.length) {
     const status = data.ready.status === healthStatusOK ? "running" : (data.ready.status || "—");
-    hostTiles.push({ label: "System", value: status, reading: status, sub: "daemon and notifiers", view: viewSystem });
+    hostTiles.push({ label: "Daemon", value: status, reading: status, view: viewDaemon });
   }
   const tiles = [...overviewViewTiles(data), ...hostTiles];
-  // The stylesheet lays the band out as whole rows — one on a desktop, two on a
-  // tablet or a phone — and needs to know how many tiles each layout shows.
-  band.style.setProperty("--tiles-wide", String(tiles.filter((tile) => !tile.narrowOnly).length));
+  // The stylesheet lays the band out as whole rows — one on a wide screen, two
+  // on a narrower one — and needs the columns of each layout.
+  band.style.setProperty("--tiles-wide", String(tiles.length));
   band.style.setProperty("--tiles-half", String(Math.ceil(tiles.length / 2)));
   litRender(tiles.map(overviewTile), band);
 }
@@ -7279,7 +7193,7 @@ function renderStatus(ctx) {
 
     // The bar's first line is the host: its name, how long it has been up and
     // the daemon's state as an icon. What is fixed about the host (type,
-    // backend, OS) reads once beside the tabs and in full in the Daemon panel.
+    // backend, OS) reads once beside it and in full in the Daemon panel.
     // Counts and vital signs live on the tiles, so they are not repeated.
     const host = $("#host-name");
     if (host) host.textContent = daemon.hostname || "";
@@ -8600,7 +8514,7 @@ const windowSetters = { setMetricWin, setSLAWin, setWatchMetricWin, setDaemonMet
 // needs the event.
 const clickRoutes = [
   ["[data-logout]", () => logout()],
-  ["[data-view-tab]", (el) => openView(el.dataset.viewTab || "")],
+  ["[data-open-view]", (el) => openView(el.dataset.openView || "")],
   ["[data-event-toggle]", (el) => toggleEventMsg(el.dataset.eventToggle || "")],
   ["[data-panel-target]", (el) => openPanelTarget(el.dataset.panelTarget || "")],
   ["[data-ssh-session-close]", (el) => closeSSHSession(
@@ -8700,11 +8614,6 @@ function initDelegatedHandlers() {
 
 initListPanels();
 restoreUIState();
-(function initView() {
-  let saved = "";
-  try { saved = localStorage.getItem(VIEW_KEY) || ""; } catch (_) {}
-  setView(saved || defaultView);
-})();
 initStaticHandlers();
 initDelegatedHandlers();
 window.addEventListener(domEventResize, updateTopbarHeight);
@@ -8864,12 +8773,12 @@ function setKeyboardShortcutsEnabled(enabled) {
   try { localStorage.setItem(KEYBOARD_SHORTCUTS_KEY, enabled ? storageBoolTrue : storageBoolFalse); } catch (_) {}
 }
 
-// activeSearchBox returns the search input of the topmost open list panel of
-// the view on screen, or of its first panel when all are closed. Panels are
+// activeSearchBox returns the search input of the topmost open list panel, or
+// of the first one when all are closed. Panels are
 // found by their data-panel shell, so a new one joins the "/" shortcut for free.
 function activeSearchBox() {
   const sections = [...document.querySelectorAll("[data-panel]")].filter((section) =>
-    panelVisible(section) && !section.classList.contains("view-hidden") && section.querySelector("[data-panel-search]"));
+    panelVisible(section) && section.querySelector("[data-panel-search]"));
   const section = sections.find((el) => el.open) || sections[0];
   return section ? { section, box: section.querySelector("[data-panel-search]") } : null;
 }

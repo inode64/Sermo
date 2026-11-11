@@ -47,14 +47,14 @@
   .muted { color: var(--text-2); font-size: .85rem; }
 
   /* ---- top bar ---------------------------------------------------------------
-     One sticky row (identity · search · refresh · menu) and the view tabs under
-     it. Everything rarely touched lives in the menu, so the bar costs two lines
-     of every viewport and no more. */
+     One sticky row (identity · search · refresh · menu). Everything rarely
+     touched lives in the menu and the views open from the overview tiles, so
+     the bar costs one line of every viewport and no more. */
   #topbar {
     position: sticky; top: 0; z-index: 6;
     background: color-mix(in srgb, var(--bg) 88%, transparent);
     backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
-    padding: .55rem 1.4rem 0; margin: 0 -1.4rem;
+    padding: .55rem 1.4rem .5rem; margin: 0 -1.4rem;
     border-bottom: 1px solid var(--line);
   }
   .topbar-row { display: flex; align-items: center; gap: .6rem 1rem; }
@@ -73,6 +73,11 @@
      icon that only grows a word when the daemon is not simply running. */
   .host-status { display: inline-flex; align-items: baseline; gap: .55rem; flex: none; font-size: .8rem; color: var(--text-2); white-space: nowrap; }
   .host-status b { color: var(--text); font-weight: 600; }
+  /* What is fixed about the host (type, backend, OS) follows on the same line
+     and is the first thing to go when the bar runs short: a fact that does not
+     fit wraps to a second line, which the one-line height hides, so it is
+     dropped whole rather than cut mid-word. */
+  #statusbar { flex: 0 999 auto; flex-wrap: wrap; min-width: 0; line-height: 1.4; max-height: 1.4em; overflow: hidden; }
   .daemon-state { display: inline-flex; align-items: center; align-self: center; gap: .25rem; font-weight: 600; }
   .daemon-state svg { display: block; }
   .brand-dot { align-self: center; width: .8rem; height: .8rem; border-radius: 50%; background: var(--text-2); box-shadow: 0 0 0 3px color-mix(in srgb, var(--text-2) 22%, transparent); flex: none; }
@@ -96,25 +101,6 @@
     font-weight: 600; white-space: nowrap;
   }
   #refresh-pending:hover { background: color-mix(in srgb, var(--info) 22%, transparent); }
-
-  /* View tabs: a tab names a group of panels, counts what is in it and carries
-     a dot when something in it needs attention. */
-  .topbar-sub { display: flex; align-items: center; gap: 1rem; margin-top: .4rem; }
-  #section-nav { display: flex; align-items: stretch; gap: .1rem; overflow-x: auto; scrollbar-width: none; }
-  /* What is fixed about the host shares the tabs' line, at its far end. */
-  #statusbar { display: flex; gap: 1.1rem; align-items: center; margin-left: auto; font-size: .8rem; color: var(--text-2); white-space: nowrap; }
-  .view-tab {
-    /* A tab's name and its count differ in size and share a baseline. */
-    flex: none; display: inline-flex; align-items: baseline; gap: .4rem;
-    min-height: 2.1rem; padding: .3rem .7rem .4rem; white-space: nowrap;
-    border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: none;
-    color: var(--text-2); font-size: .88rem; font-weight: 550;
-  }
-  .view-tab:hover { background: none; color: var(--text); border-bottom-color: var(--line-2); }
-  .view-tab[aria-current="true"] { color: var(--text); border-bottom-color: var(--accent); }
-  .nav-count { font-size: .74rem; font-weight: 500; font-variant-numeric: tabular-nums; color: var(--text-2); }
-  .nav-dot { align-self: center; width: .5rem; height: .5rem; border-radius: 50%; background: var(--crit); flex: none; }
-  .nav-dot[data-level="warning"] { background: var(--warn); }
 
   /* The menu is a popover: light dismiss and the top layer come from the
      browser. Where popovers are unsupported it stays an ordinary block under
@@ -144,21 +130,16 @@
   body:not(.can-act) [data-admin] { display: none; }
 
   /* ---- overview, banners --------------------------------------------------------- */
-  /* The band is whole rows of equal tiles: app.js counts the tiles of each
-     layout into --tiles-wide (one row on a desktop) and --tiles-half (two rows
-     on a tablet or a phone), so a host with fewer tiles still fills its rows. */
-  #overview { display: grid; grid-template-columns: repeat(var(--tiles-wide, 8), minmax(0, 1fr)); gap: .5rem; margin: .55rem 0 0; }
+  /* The band is whole rows of equal tiles: app.js counts the columns of each
+     layout into --tiles-wide (one row on a wide screen) and --tiles-half (two
+     rows on a narrower one), so a host with fewer tiles still fills its rows. */
+  #overview { display: grid; grid-template-columns: repeat(var(--tiles-wide, 10), minmax(0, 1fr)); gap: .5rem; margin: .55rem 0 0; }
   .tile {
     display: flex; flex-direction: column; align-items: stretch; width: 100%; min-width: 0; min-height: 4.9rem;
     padding: .45rem .7rem .55rem; text-align: left; font: inherit; color: inherit;
     background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
   }
   button.tile:hover { border-color: var(--line-2); background: var(--panel); }
-  /* A tile is the way into its view, and says so while that view shows. */
-  .tile[aria-current="true"] { border-color: var(--accent); box-shadow: inset 0 -2px 0 var(--accent); }
-  /* Software and Events are tabs on a desktop and tiles on a tablet or a phone,
-     where there is no tab bar (below). */
-  .tile-narrow { display: none; }
   .tile .t-label { font-size: .66rem; text-transform: uppercase; letter-spacing: .07em; color: var(--text-2); }
   .tile .t-value { font-size: 1.3rem; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.25; }
   .tile .t-value small { font-size: .78rem; font-weight: 500; color: var(--text-2); }
@@ -186,7 +167,7 @@
   #panic-banner { display: none; }
   #panic-banner.active { display: flex; align-items: center; gap: .55rem; margin: .7rem 0 0; padding: .55rem .85rem; border-radius: var(--radius); background: color-mix(in srgb, var(--crit) 15%, transparent); border: 1px solid var(--crit); color: var(--crit); font-weight: 600; }
   #panic-banner svg { flex: none; }
-  .live-hidden, .panel-hidden, .view-hidden { display: none; }
+  .live-hidden, .panel-hidden { display: none; }
 
   /* What needs attention, as one card of jump links: a line per signal — a dot
      for how bad, what it is, who it affects — in aligned columns. Each opens
@@ -718,7 +699,10 @@
     /* The event timestamp is nowrap by default; let it wrap here so the events
        table can shrink to the viewport. */
     .events .t { white-space: normal; }
-    .panel .actions { min-width: 0; }
+    /* An action cell holds buttons and short notes ("disabled in config"): it
+       wraps between words, never inside one, which the cells' break-anywhere
+       would do to the narrowest column of a phone. */
+    .panel .actions { min-width: 0; overflow-wrap: normal; }
     /* services: keep the operator-critical identity/state/activity/action
        columns and move metrics to the expansion. */
     .services-table :is(th, td):is([data-col="category"], [data-col="uptime"], [data-col="cpu"], [data-col="memory"], [data-col="fds"], [data-col="io"]) { display: none; }
@@ -772,15 +756,13 @@
     .detail-compact-table th:nth-child(8), .detail-compact-table td:nth-child(8),
     .detail-compact-table th:nth-child(9), .detail-compact-table td:nth-child(9),
     .detail-compact-table th:nth-child(10), .detail-compact-table td:nth-child(10) { display: none; }
-    /* A tablet or a phone lays the band out as two rows of five: the two views
-       that keep a tab on a desktop become tiles, and the tabs' line, which
-       would only repeat them, goes — with the one-long-page view and the fixed
-       host facts it also held, which are desk reading (the Daemon panel keeps
-       the facts). The bar is then a single line. */
+    /* A tablet or a phone has no room for the band in one row and lays it out
+       as two. With an odd count the last tile takes the two columns left, so
+       the band stays a rectangle. The fixed host facts are desk reading (the
+       Daemon panel keeps them). */
     #overview { grid-template-columns: repeat(var(--tiles-half, 5), minmax(0, 1fr)); }
-    .tile-narrow { display: flex; }
-    .topbar-sub { display: none; }
-    #topbar { padding-bottom: .5rem; }
+    #overview > .tile:last-child:nth-child(odd) { grid-column: span 2; }
+    #statusbar { display: none; }
     #last-refresh { display: none; }
   }
   @media (max-width: 760px) { .metric-grid { grid-template-columns: 1fr; } }

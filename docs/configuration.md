@@ -953,29 +953,30 @@ over the same safe operation engine the CLI uses.
 
 The page keeps one sticky bar — the host name with its uptime and the daemon's
 state, a search that opens any service, watch, application, library or mount by
-name (`Ctrl K`), refresh and a menu (☰) — and shows one view at a time. The
-daemon's state is an icon: a pulse while it runs, and a clock, a warning sign or
+name (`Ctrl K`), refresh and a menu (☰) — over one page that stacks every
+section. The daemon's state is an icon: a pulse while it runs, and a clock, a warning sign or
 a power sign with the word **starting**, **panic mode** or **stopping** beside
 it otherwise; its tooltip carries the detail, such as the startup progress.
 
-| View | Opened from | Panels |
+| Section | Tile that leads to it | Panels |
 |---|---|---|
-| **Sessions** | the Sessions tile | SSH, tmux and screen sessions, running database statements |
-| **Services** | the Services tile | services, containers, virtual machines, runtime locks |
-| **Watches** | the Watches tile | every watch, grouped by system, storage, network and security |
-| **Mounts** | the Mounts tile | mount units |
-| **System** | the CPU, Memory, Swap and Load tiles | notifiers, the daemon and its metrics |
-| **Software** | its tab (a tile on a tablet or a phone) | installed applications and libraries |
-| **Events** | its tab (a tile on a tablet or a phone) | the event log |
-| **All** | its tab | every panel on one page |
+| **Sessions** | Sessions | SSH, tmux and screen sessions, running database statements |
+| **Services** | Services | services, containers, virtual machines, runtime locks |
+| **Watches** | Watches | every watch, grouped by system, storage, network and security |
+| **Mounts** | Mounts | mount units |
+| **Software** | Software | installed applications and libraries |
+| **Events** | Events | the event log |
+| **Notifiers** | — | the configured notifiers |
+| **Daemon** | CPU, Memory, Swap and Load | the daemon, its engine settings and its metrics |
 
-The overview tiles are both the host's vital signs and the way into their
-views; the tile of the view on screen is outlined. A tablet or a phone lays
-them out as two rows of five, with Software and Events as tiles and no tab bar.
-Each line of **Needs attention** goes further than a tile: it opens the panel
-that holds the problem with the matching filter applied. A tab counts the
-targets in its view and carries a dot when one of them is failing (red) or
-needs attention (amber); a view with nothing to show has no tab or tile. The
+The sections follow each other in that order and all of them are always on the
+page; a section with nothing to list is left out, together with its tile. The
+overview tiles are both the host's vital signs and the shortcuts: a tile scrolls
+to its section and opens it when it was collapsed. They always fill whole rows:
+one on a desktop, two on a tablet or a phone. A tile counts the targets in its
+section and takes the colour of the worst state among them. Each line of
+**Needs attention** goes further than a tile: it opens the panel that holds the
+problem with the matching filter applied. The
 menu holds auto-refresh, browser notifications, keyboard shortcuts and, for
 administrators, **reload config**, **compact state** and **panic mode**.
 
@@ -1022,7 +1023,7 @@ for QEMU/libvirt VMs or `control.type: docker` for Docker containers. Those
 targets still use the same locks, guards, preflight checks and operation
 timeouts; see [services](services.md#control-docker--docker-containers).
 
-The **Software** view lists **installed applications** (catalog
+The **Software** section lists **installed applications** (catalog
 app daemons whose binary is present) and **installed libraries** (catalog
 library files whose `preflight.file` is present). Both inventories show name and
 short version when available; an app `health` command, when configured, decides

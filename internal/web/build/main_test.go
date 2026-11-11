@@ -31,7 +31,9 @@ func TestWatchPanelDescriptorsMatchShellMarkers(t *testing.T) {
 			`id="` + panel.SectionID + `"`,
 			`data-panel="` + panel.Key + `"`,
 			`id="` + panel.RowsID + `"`,
-			`data-wf="stale"`,
+			// The status chips are rendered by app.js into the toolbar host.
+			`class="panel-controls"`,
+			`data-view="watches"`,
 		} {
 			if !strings.Contains(markup, expected) {
 				t.Errorf("panel %q markup missing %q", panel.Key, expected)

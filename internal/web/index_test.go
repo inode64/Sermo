@@ -118,31 +118,41 @@ func TestIndexCSPHygiene(t *testing.T) {
 // TestIndexShellAnchors checks the static shell still carries the element ids,
 // dialogs, and table headers that the JS and server reference. These survive
 // minification because they live in the src/index.html shell, not the bundle.
+// What a list panel generates from its descriptor (toolbar ids, column headers)
+// is pinned in the source instead.
 func TestIndexShellAnchors(t *testing.T) {
 	anchors := collectIndexShellAnchors(t)
 	assertIndexShellIDs(t, anchors.ids)
-	assertIndexShellSectionLinks(t, anchors.sectionLinks, anchors.sectionLinkLabels)
+	assertIndexShellPanels(t, anchors.panelControls, anchors.views)
 	assertIndexShellTable(t, anchors.headers, anchors.dialogs)
 }
 
 type indexShellAnchors struct {
-	ids               map[string]bool
-	headers           map[string]bool
-	sectionLinks      map[string]string
-	sectionLinkLabels map[string]string
-	dialogs           int
+	ids     map[string]bool
+	headers map[string]bool
+	// panelControls is whether each data-panel shell holds the .panel-controls
+	// its toolbar is rendered into; views counts the panels of each data-view.
+	panelControls map[string]bool
+	views         map[string]int
+	dialogs       int
 }
 
 func collectIndexShellAnchors(t *testing.T) indexShellAnchors {
 	t.Helper()
 	doc, _ := parsedIndex(t)
-	anchors := indexShellAnchors{ids: map[string]bool{}, headers: map[string]bool{}, sectionLinks: map[string]string{}, sectionLinkLabels: map[string]string{}}
+	anchors := indexShellAnchors{ids: map[string]bool{}, headers: map[string]bool{}, panelControls: map[string]bool{}, views: map[string]int{}}
 	walk(doc, func(node *html.Node) {
 		if node.Type != html.ElementNode {
 			return
 		}
 		if id, ok := attr(node, "id"); ok {
 			anchors.ids[id] = true
+		}
+		if panel, ok := attr(node, "data-panel"); ok {
+			anchors.panelControls[panel] = hasChildClass(node, "panel-controls")
+		}
+		if view, ok := attr(node, "data-view"); ok {
+			anchors.views[view]++
 		}
 		switch node.DataAtom {
 		case atom.Dialog:
@@ -151,59 +161,74 @@ func collectIndexShellAnchors(t *testing.T) indexShellAnchors {
 			if node.FirstChild != nil && node.FirstChild.Type == html.TextNode {
 				anchors.headers[strings.TrimSpace(node.FirstChild.Data)] = true
 			}
-		case atom.A:
-			collectIndexSectionLink(node, &anchors)
 		}
 	})
 	return anchors
 }
 
-func collectIndexSectionLink(node *html.Node, anchors *indexShellAnchors) {
-	className, hasClass := attr(node, "class")
-	if !hasClass || !strings.Contains(" "+className+" ", " section-jump ") {
-		return
-	}
-	target, hasTarget := attr(node, "data-panel-target")
-	href, hasHref := attr(node, "href")
-	if !hasTarget || !hasHref {
-		return
-	}
-	anchors.sectionLinks[target] = href
-	var label strings.Builder
-	walk(node, func(child *html.Node) {
-		if child.Type == html.TextNode {
-			label.WriteString(child.Data)
+func hasChildClass(node *html.Node, class string) bool {
+	for child := node.FirstChild; child != nil; child = child.NextSibling {
+		if className, ok := attr(child, "class"); ok && strings.Contains(" "+className+" ", " "+class+" ") {
+			return true
 		}
-	})
-	anchors.sectionLinkLabels[target] = strings.TrimSpace(label.String())
+	}
+	return false
 }
 
 func assertIndexShellIDs(t *testing.T, ids map[string]bool) {
 	t.Helper()
 	for _, id := range []string{
-		"topbar", "section-nav", "favicon", "attention", "events", "target-search", "target-search-options",
-		"services-section", "containers-section", "vms-section", "apps-section", "libraries-section", "watches-section", "events-section",
-		"watch-controls", "mount-controls", "container-controls", "vm-controls", "container-rows", "vm-rows",
+		"topbar", "statusbar", "app-menu", "overview", "favicon", "attention", "events", "target-search", "target-search-options",
+		"sessions-section", "services-section", "containers-section", "vms-section", "locks-section", "watches-section", "mounts-section",
+		"apps-section", "libraries-section", "events-section", "notifiers-section", "daemon-section",
+		"session-rows", "rows", "container-rows", "vm-rows", "watch-rows", "mount-rows", "app-rows", "library-rows", "locks-rows",
 		"event-clear", "event-before", "event-reset-filters", "event-group", "event-more", "event-service", "event-watch", "event-kind", "event-status", "event-range",
-		"state-compact-btn", "state-before", "app-rows", "library-rows", "locks-rows", "mount-search", "mount-category", "mount-filters", "mount-filter-count",
+		"state-compact-btn", "state-before",
 		"action-confirm", "confirm-no-cascade", "simple-confirm",
 	} {
 		if !ids[id] {
 			t.Errorf("shell missing element id %q", id)
 		}
 	}
+	if ids["section-nav"] {
+		t.Error("shell still carries #section-nav: the overview tiles are the only way to a section")
+	}
 }
 
-func assertIndexShellSectionLinks(t *testing.T, links, labels map[string]string) {
+// assertIndexShellPanels pins the two attributes app.js reads off a panel
+// shell: data-panel binds a list panel to its descriptor, whose toolbar needs
+// a .panel-controls child, and data-view names the tile that leads to it.
+func assertIndexShellPanels(t *testing.T, panelControls map[string]bool, views map[string]int) {
 	t.Helper()
-	for _, id := range []string{"services-section", "containers-section", "vms-section", "mounts-section", "apps-section", "libraries-section", "watches-section", "events-section", "locks-section", "notifiers-section", "daemon-section"} {
-		if links[id] != "#"+id {
-			t.Errorf("section nav link %q href = %q, want %q", id, links[id], "#"+id)
+	for _, panel := range []string{"sessions", "services", "containers", "vms", "host", "mounts", "apps", "libraries"} {
+		if !panelControls[panel] {
+			t.Errorf("shell missing list panel %q with its .panel-controls", panel)
 		}
 	}
-	if labels["mounts-section"] != "Mount units" {
-		t.Errorf("mount section nav label = %q, want Mount units", labels["mounts-section"])
+	tileViews := map[string]string{
+		"services": "viewServices", "watches": "viewWatches", "mounts": "viewMounts", "sessions": "viewSessions",
+		"software": "viewSoftware", "events": "viewEvents", "daemon": "viewDaemon",
 	}
+	for view, constant := range tileViews {
+		if views[view] == 0 {
+			t.Errorf("shell has no panel with data-view=%q", view)
+		}
+		appJSMustContain(t, "tile view", `const `+constant+` = "`+view+`";`, `view: `+constant)
+	}
+	for view := range views {
+		if tileViews[view] == "" {
+			t.Errorf("shell data-view=%q has no overview tile", view)
+		}
+	}
+	appJSMustContain(t, "tile navigation",
+		`data-open-view="${opts.view}"`,
+		`["[data-open-view]", (el) => openView(el.dataset.openView || "")]`,
+		`revealPanel(viewPanels(view).find(panelVisible))`,
+	)
+	appJSMustContain(t, "generated panel toolbar",
+		`id="${p.id}-search"`, `id="${p.id}-filters"`, `id="${p.id}-count"`, `id="${p.id}-category"`,
+		`data-refresh-panel="${p.refresh}"`,
+	)
 }
 
 func assertIndexShellTable(t *testing.T, headers map[string]bool, dialogs int) {
@@ -211,35 +236,45 @@ func assertIndexShellTable(t *testing.T, headers map[string]bool, dialogs int) {
 	if dialogs != 4 {
 		t.Errorf("want 4 <dialog> elements, got %d", dialogs)
 	}
-	for _, header := range []string{"Uptime", "CPU total", "Memory", "FDs", "IO R/W", "State", "Type", "Group", "Processes", "Users", "Actions"} {
+	for _, header := range []string{"CPU total", "Memory", "IO R/W", "State", "Type", "Group", "Actions"} {
 		if !headers[header] {
 			t.Errorf("shell missing static <th> %q", header)
 		}
 	}
+	appJSMustContain(t, "generated column header",
+		`label: "Uptime"`, `label: "FDs"`, `label: "Processes"`, `label: "Users"`,
+	)
 	if headers["Source"] {
 		t.Errorf("shell still exposes static <th> Source")
 	}
 }
 
-func TestIndexShellHasActiveServiceFilter(t *testing.T) {
-	_, raw := parsedIndex(t)
-	for _, marker := range []string{`data-f="active"`, `data-cf="active"`, `data-vf="active"`} {
-		if !strings.Contains(raw, marker) {
-			t.Errorf("shell missing active status filter %q", marker)
-		}
+// TestSourceHasActiveServiceFilter pins the status chips of the three service
+// panels: they are generated from one shared state list, which must keep the
+// active state.
+func TestSourceHasActiveServiceFilter(t *testing.T) {
+	appJSMustContain(t, "service status filter",
+		`data-filter="${state}"`,
+		`states: serviceStatusFilterStates,`,
+		`servicePanel("services", "svc",`,
+		`servicePanel("containers", "container",`,
+		`servicePanel("vms", "vm",`,
+	)
+	if states := appJSArray(t, "serviceStatusFilterStates"); !strings.Contains(states, "targetStateActive") {
+		t.Errorf("serviceStatusFilterStates = %q, want it to hold targetStateActive", states)
 	}
 }
 
 func TestSourceProvidesGlobalTargetSearch(t *testing.T) {
 	appJSMustContain(t, "global target search",
 		`function globalTargetRecords()`,
-		`function clearGlobalTargetFilters(target)`,
+		`resetPanelFilters(p);`,
 		`function openGlobalTarget(target)`,
 		`function submitGlobalTargetSearch()`,
-		`history.replaceState(null, "", "#" + serviceExpansionKey(target.name))`,
+		`history.replaceState(null, "", "#" + target.kind.prefix + target.name)`,
 		`record.value.toLowerCase().includes(query)`,
 		`e.key.toLowerCase() === "k"`,
-		`id="mount-row-${detailDomKey(m.name || m.path || "mount")}"`,
+		"`mount-row-${detailDomKey(m.name || m.path || \"mount\")}`",
 	)
 }
 
@@ -254,15 +289,7 @@ func TestEventFiltersUseGuidedSelects(t *testing.T) {
 }
 
 func TestSourceUsesStableEventCursorPagination(t *testing.T) {
-	src, err := os.ReadFile("src/app.js")
-	if err != nil {
-		t.Fatalf("read src/app.js: %v", err)
-	}
-	api, err := os.ReadFile("src/api.js")
-	if err != nil {
-		t.Fatalf("read src/api.js: %v", err)
-	}
-	apiText := string(api)
+	apiText := srcFile(t, "api.js")
 	for _, marker := range []string{
 		`const apiQueryBeforeID = "before_id"`,
 	} {
@@ -270,7 +297,7 @@ func TestSourceUsesStableEventCursorPagination(t *testing.T) {
 			t.Errorf("API module missing event pagination marker %q", marker)
 		}
 	}
-	text := string(src)
+	text := srcFile(t, "app.js")
 	for _, marker := range []string{
 		`params.set(apiQueryBeforeID, String(eventNextBeforeID))`,
 		`function loadOlderEvents()`,
@@ -286,11 +313,7 @@ func TestSourceUsesStableEventCursorPagination(t *testing.T) {
 // the Go API contract that sermoctl imports. The browser uses paths without a
 // leading slash so it can work below a reverse-proxy path prefix.
 func TestSourceAPIUsesSharedContractValues(t *testing.T) {
-	api, err := os.ReadFile("src/api.js")
-	if err != nil {
-		t.Fatalf("read src/api.js: %v", err)
-	}
-	text := string(api)
+	text := srcFile(t, "api.js")
 	for _, marker := range []string{
 		`const csrfHeader = "` + HeaderCSRF + `";`,
 		`const csrfHeaderValue = "` + CSRFHeaderValue + `";`,
@@ -316,50 +339,34 @@ func TestSourceAPIUsesSharedContractValues(t *testing.T) {
 }
 
 func TestSourceSeparatesAPIAndFormattingModules(t *testing.T) {
-	app, err := os.ReadFile("src/app.js")
-	if err != nil {
-		t.Fatalf("read src/app.js: %v", err)
-	}
-	api, err := os.ReadFile("src/api.js")
-	if err != nil {
-		t.Fatalf("read src/api.js: %v", err)
-	}
-	format, err := os.ReadFile("src/format.js")
-	if err != nil {
-		t.Fatalf("read src/format.js: %v", err)
-	}
-	appText := string(app)
+	app := srcFile(t, "app.js")
+	api := srcFile(t, "api.js")
+	format := srcFile(t, "format.js")
 	for _, marker := range []string{`from "./api.js"`, `from "./format.js"`} {
-		if !strings.Contains(appText, marker) {
+		if !strings.Contains(app, marker) {
 			t.Errorf("app source missing module import %q", marker)
 		}
 	}
-	for name, source := range map[string]string{"api": string(api), "format": string(format)} {
+	for name, source := range map[string]string{"api": api, "format": format} {
 		if !strings.Contains(source, "export function") {
 			t.Errorf("%s module exports no functions", name)
 		}
 	}
 	for _, retired := range []string{"function csrfPostOptions()", "function fmtNum("} {
-		if strings.Contains(appText, retired) {
+		if strings.Contains(app, retired) {
 			t.Errorf("app source still owns extracted helper %q", retired)
 		}
 	}
 }
 
 func TestSourceSharesWatchPanelDescriptorsWithBuilder(t *testing.T) {
-	app, err := os.ReadFile("src/app.js")
-	if err != nil {
-		t.Fatalf("read src/app.js: %v", err)
-	}
-	descriptors, err := os.ReadFile("src/watch-panels.json")
-	if err != nil {
-		t.Fatalf("read src/watch-panels.json: %v", err)
-	}
-	if !strings.Contains(string(app), `import watchPanelDescriptors from "./watch-panels.json"`) {
+	app := srcFile(t, "app.js")
+	descriptors := srcFile(t, "watch-panels.json")
+	if !strings.Contains(app, `import watchPanelDescriptors from "./watch-panels.json"`) {
 		t.Fatal("app does not import shared watch panel descriptors")
 	}
 	for _, key := range []string{`"host"`} {
-		if !strings.Contains(string(descriptors), `"key": `+key) {
+		if !strings.Contains(descriptors, `"key": `+key) {
 			t.Errorf("watch panel descriptors missing key %s", key)
 		}
 	}
@@ -406,17 +413,15 @@ func assertAttrContains(t *testing.T, doc *html.Node, id, name, want string) {
 	}
 }
 
-func hasDescendantAttr(root *html.Node, atomName atom.Atom, key, value string) bool {
-	found := false
-	walk(root, func(n *html.Node) {
-		if found || n.Type != html.ElementNode || n.DataAtom != atomName {
-			return
-		}
-		if got, ok := attr(n, key); ok && got == value {
-			found = true
+// nodeText returns the trimmed text content of a node.
+func nodeText(node *html.Node) string {
+	var text strings.Builder
+	walk(node, func(child *html.Node) {
+		if child.Type == html.TextNode {
+			text.WriteString(child.Data)
 		}
 	})
-	return found
+	return strings.TrimSpace(text.String())
 }
 
 // bundledNode returns the text of the last matching inline element (script or
@@ -446,15 +451,34 @@ func bundledCSS(t *testing.T) string {
 	return bundledNode(t, atom.Style, "style")
 }
 
+// srcFile returns one authored dashboard source file, as the tests that pin
+// markers esbuild would mangle read it.
+func srcFile(t *testing.T, name string) string {
+	t.Helper()
+	data, err := os.ReadFile("src/" + name)
+	if err != nil {
+		t.Fatalf("read src/%s: %v", name, err)
+	}
+	return string(data)
+}
+
+// appJSArray returns the body of a `const name = [ … ];` literal in src/app.js.
+func appJSArray(t *testing.T, name string) string {
+	t.Helper()
+	src := srcFile(t, "app.js")
+	_, rest, found := strings.Cut(src, "const "+name+" = [")
+	body, _, closed := strings.Cut(rest, "];")
+	if !found || !closed {
+		t.Fatalf("src/app.js has no array literal %s", name)
+	}
+	return body
+}
+
 // appJSMustContain reads src/app.js once and asserts every marker is present,
 // labelling failures with what.
 func appJSMustContain(t *testing.T, what string, markers ...string) {
 	t.Helper()
-	src, err := os.ReadFile("src/app.js")
-	if err != nil {
-		t.Fatalf("read src/app.js: %v", err)
-	}
-	text := string(src)
+	text := srcFile(t, "app.js")
 	for _, marker := range markers {
 		if !strings.Contains(text, marker) {
 			t.Errorf("source missing %s marker %q", what, marker)
@@ -475,11 +499,7 @@ func cssBundleMustContain(t *testing.T, what string, needles ...string) {
 }
 
 func TestSourceLoadDefersWatchesWithoutStaleFastPathReference(t *testing.T) {
-	src, err := os.ReadFile("src/app.js")
-	if err != nil {
-		t.Fatalf("read src/app.js: %v", err)
-	}
-	text := string(src)
+	text := srcFile(t, "app.js")
 	watchesFetch := strings.Index(text, `getJSONResult(apiWatchesPath, null, generation)`)
 	primaryRender := strings.Index(text, `renderStatus({`)
 	if watchesFetch < 0 || watchesFetch < primaryRender {
@@ -491,11 +511,7 @@ func TestSourceLoadDefersWatchesWithoutStaleFastPathReference(t *testing.T) {
 }
 
 func TestSourceLoadReportsPartialRefreshBeforeAdvancingFreshness(t *testing.T) {
-	src, err := os.ReadFile("src/app.js")
-	if err != nil {
-		t.Fatalf("read src/app.js: %v", err)
-	}
-	text := string(src)
+	text := srcFile(t, "app.js")
 	for _, needle := range []string{
 		`getJSONResult(apiServicesPath, null)`,
 		`getJSONResult(apiSessionsPath, null)`,
@@ -530,10 +546,7 @@ func TestSourceDrawsEveryAvailabilityPanelThroughOneRenderer(t *testing.T) {
 		"${a.keeps_sla ? renderSLASection(appSLAKey(a.name)) : nothing}",
 		`winButtons(metricWins, win, "setSLAWin", "Availability time window", key)`,
 	)
-	src, err := os.ReadFile("src/app.js")
-	if err != nil {
-		t.Fatalf("read src/app.js: %v", err)
-	}
+	src := srcFile(t, "app.js")
 	// A state band draws through the same owner: its panels render only via
 	// slaChartPanel and load only via loadSLAPanel, with a warning-severity band
 	// capping its failing colour at amber inside slaStrip itself.
@@ -545,17 +558,13 @@ func TestSourceDrawsEveryAvailabilityPanelThroughOneRenderer(t *testing.T) {
 	// Its definition plus loadSLAPanel's single call. A third occurrence means a
 	// surface started drawing its own availability chart again — the band panels
 	// included, which reach it only through loadSLAPanel.
-	if n := strings.Count(string(src), "drawSLAChart("); n != 2 {
+	if n := strings.Count(src, "drawSLAChart("); n != 2 {
 		t.Errorf("drawSLAChart appears %d times, want 2 (defined once, called once from loadSLAPanel)", n)
 	}
 }
 
 func TestSourceFullyRefreshesExpandedServicesEveryDashboardPoll(t *testing.T) {
-	src, err := os.ReadFile("src/app.js")
-	if err != nil {
-		t.Fatalf("read src/app.js: %v", err)
-	}
-	text := string(src)
+	text := srcFile(t, "app.js")
 	start := strings.Index(text, "function refreshExpandedServices(opts = {})")
 	if start < 0 {
 		t.Fatal("refreshExpandedServices source block not found")
@@ -589,11 +598,7 @@ func TestSourceFullyRefreshesExpandedServicesEveryDashboardPoll(t *testing.T) {
 }
 
 func TestSourceSerializesDashboardRefreshes(t *testing.T) {
-	src, err := os.ReadFile("src/app.js")
-	if err != nil {
-		t.Fatalf("read src/app.js: %v", err)
-	}
-	text := string(src)
+	text := srcFile(t, "app.js")
 	for _, marker := range []string{
 		"function load()",
 		"async function runLoadQueue()",
@@ -626,11 +631,7 @@ func TestSourceStartsReadOnlyUntilWhoamiSucceeds(t *testing.T) {
 }
 
 func TestSourceMetricChartRendersZeroValuedSeries(t *testing.T) {
-	src, err := os.ReadFile("src/app.js")
-	if err != nil {
-		t.Fatalf("read src/app.js: %v", err)
-	}
-	text := string(src)
+	text := srcFile(t, "app.js")
 	if strings.Contains(text, "if (maxV <= 0) return") {
 		t.Fatalf("metric chart still treats all-zero samples as no data")
 	}
@@ -654,11 +655,7 @@ func TestSourceMetricChartRendersZeroValuedSeries(t *testing.T) {
 // fmtNum and a literal unit, so the same number read "12.34 ms" in the summary
 // line and "12.34ms" in that same panel's chart axis and tooltips.
 func TestSourceFormatsEveryMetricSummaryThroughOneHelper(t *testing.T) {
-	src, err := os.ReadFile("src/app.js")
-	if err != nil {
-		t.Fatalf("read src/app.js: %v", err)
-	}
-	text := string(src)
+	text := srcFile(t, "app.js")
 	if strings.Contains(text, "fmtNum(s.avg, 2)") {
 		t.Error("a metric summary hand-formats its average again instead of using fmtMetricValue")
 	}
@@ -688,17 +685,14 @@ func TestSourceBuildsRuntimeMetricPanelsFromOneList(t *testing.T) {
 		"runtimeMetricPanels((key, suffix) => serviceRuntimeMetricDomID(d.name, key, suffix))",
 		"litRender(runtimeMetricPanels(daemonMetricDomID), grid)",
 	)
-	src, err := os.ReadFile("src/app.js")
-	if err != nil {
-		t.Fatalf("read src/app.js: %v", err)
-	}
+	src := srcFile(t, "app.js")
 	// metricPanelBody, the SLA panel's own heading and the "no latency checks"
 	// placeholder. A fourth means a panel was hand-written again.
-	if n := strings.Count(string(src), `class="metric-title"`); n != 3 {
+	if n := strings.Count(src, `class="metric-title"`); n != 3 {
 		t.Errorf("metric-title is emitted from %d places, want 3", n)
 	}
 	// metricSeriesSummary is the only producer of a metric average.
-	if n := strings.Count(string(src), "avg <b>"); n != 1 {
+	if n := strings.Count(src, "avg <b>"); n != 1 {
 		t.Errorf("a metric average is formatted in %d places, want 1", n)
 	}
 }
@@ -716,13 +710,10 @@ func TestSourceLoadsEveryGraphPanelThroughOneProtocol(t *testing.T) {
 		"function metricPanelContent(series, fallbackUnit, win, chartLabel) {",
 		"function failMetricPanel(summaryID, chartID, what, err) {",
 	)
-	src, err := os.ReadFile("src/app.js")
-	if err != nil {
-		t.Fatalf("read src/app.js: %v", err)
-	}
+	src := srcFile(t, "app.js")
 	// Its definition, loadMetricPanel, the runtime loader that fills three panels
 	// from one request, and the per-check SLA cell, which has no summary line.
-	if n := strings.Count(string(src), "loadServiceWindowGraph("); n != 4 {
+	if n := strings.Count(src, "loadServiceWindowGraph("); n != 4 {
 		t.Errorf("loadServiceWindowGraph has %d mentions, want its definition plus three callers", n)
 	}
 }
@@ -739,17 +730,14 @@ func TestSourceComposesServiceScopedWatchMetricsIntoServiceDetail(t *testing.T) 
 }
 
 func TestSourceKeepsMetricSelectionPerService(t *testing.T) {
-	src, err := os.ReadFile("src/app.js")
-	if err != nil {
-		t.Fatalf("read src/app.js: %v", err)
-	}
-	text := string(src)
+	text := srcFile(t, "app.js")
 	for _, marker := range []string{
 		`const serviceMetricStates = new Map()`,
 		`function serviceMetricState(name)`,
 		`serviceMetricStates: Object.fromEntries(serviceMetricStates)`,
 		`data-window-service="${service || nothing}"`,
-		`setMetricWin(val, el.dataset.windowService || "")`,
+		`const windowSetters = { setMetricWin,`,
+		`setWindow(el.dataset.windowValue || "", el.dataset.windowService || "")`,
 		`serviceMetricState(name).window !== win`,
 	} {
 		if !strings.Contains(text, marker) {
@@ -800,7 +788,7 @@ func TestIndexOperationOutcomeMarks(t *testing.T) {
 		".outcome-badge{",
 		".op-dot.blocked{animation:none}",
 		// The pressed suspend toggle shows the outcome border, not its paused one.
-		".icon-btn.outcome-blocked[aria-pressed=true],.icon-btn.outcome-failed[aria-pressed=true]{border-color:var(--outcome)}",
+		".paneltbody.icon-btn:is(.outcome-blocked,.outcome-failed):is(:hover,:focus-visible,[aria-pressed=true]){border-color:var(--outcome)}",
 		".sla-bar-seg,.outcome-badge{border:1pxsolidCanvasText}}",
 	)
 	appJSMustContain(t, "operation outcome marks",
@@ -838,24 +826,29 @@ func TestIndexWatchReadingLongValuesWrap(t *testing.T) {
 
 func TestIndexResponsiveTablesDoNotKeepDesktopMinWidth(t *testing.T) {
 	css := strings.ReplaceAll(bundledCSS(t), " ", "")
-	base := strings.Index(css, ".watch-table{min-width:72rem")
-	responsive := strings.LastIndex(css, "@media(max-width:1420px){.services-table,.watch-table,.apps-table,.mount-table{min-width:0;max-width:100%}")
-	if base < 0 {
-		t.Fatal("bundled CSS missing watch-table desktop min-width")
-	}
-	if responsive < 0 {
-		t.Fatal("bundled CSS missing responsive table min-width override")
-	}
-	if responsive < base {
-		t.Fatal("responsive table override appears before desktop min-width and can be overridden")
+	// No list table carries a width floor of its own, so there is none for a
+	// narrow viewport to undo: a floor would bring back the page-wide scroll.
+	for _, table := range []string{"services-table", "watch-table", "apps-table", "mount-table", "sessions-table"} {
+		rule := "." + table + "{"
+		for rest := css; ; {
+			at := strings.Index(rest, rule)
+			if at < 0 {
+				break
+			}
+			rest = rest[at+len(rule):]
+			body, _, _ := strings.Cut(rest, "}")
+			if strings.Contains(";"+body, ";min-width:") {
+				t.Errorf("bundled CSS gives .%s a min-width (%s)", table, body)
+			}
+		}
 	}
 	for _, needle := range []string{
 		"--topbar-h:0px",
 		"top:var(--topbar-h)",
-		".services-table.actions{min-width:7.5rem;max-width:11rem;white-space:normal}",
-		".actionsbutton{margin-right:.25rem;margin-bottom:.25rem;",
+		".services-table.actions{min-width:7.5rem;max-width:12rem;white-space:normal}",
+		".actionsbutton{margin:0.1rem.1rem0}",
 		"#notifiers-sectionth:nth-child(3)",
-		"#app-footer.footer-version{margin-left:0;flex-basis:100%;white-space:normal;overflow-wrap:anywhere;text-align:center}",
+		".footer-version{font-size:.76rem;overflow-wrap:anywhere}",
 	} {
 		if !strings.Contains(css, needle) {
 			t.Errorf("bundled CSS missing responsive action marker %q", needle)
@@ -956,7 +949,8 @@ func TestSourceCompactsRowActionsWithoutChangingDispatch(t *testing.T) {
 	appJSMustContain(t, "compact action",
 		`data-service-action="${action}"`,
 		`data-watch-action="${action}"`,
-		`data-mount-action="${actionUmount}"`,
+		`data-mount-action="${action}"`,
+		`mountActionButton(m, actionUmount,`,
 		`act(el.dataset.service || "", el.dataset.serviceAction || "")`)
 }
 
@@ -983,10 +977,8 @@ func TestSourceNetworkWatchTypesUseCanonicalCheckNames(t *testing.T) {
 }
 
 // TestIndexAccessibilitySectionHeadings pins the per-section <h2> headings that
-// let screen-reader users navigate the dashboard by heading. The <details>
-// summaries cannot carry heading semantics (a summary's implicit button role
-// makes its descendants presentational), so each major panel is preceded by a
-// visually-hidden <h2>; the locks panel already ships a visible one.
+// let screen-reader users navigate the dashboard by heading: every panel
+// carries one in its summary.
 func TestIndexAccessibilitySectionHeadings(t *testing.T) {
 	doc, _ := parsedIndex(t)
 	headings := map[string]bool{}
@@ -994,18 +986,12 @@ func TestIndexAccessibilitySectionHeadings(t *testing.T) {
 		if n.Type != html.ElementNode || n.DataAtom != atom.H2 {
 			return
 		}
-		var sb strings.Builder
-		walk(n, func(c *html.Node) {
-			if c.Type == html.TextNode {
-				sb.WriteString(c.Data)
-			}
-		})
-		headings[strings.TrimSpace(sb.String())] = true
+		headings[nodeText(n)] = true
 	})
 	for _, want := range []string{
 		"Services", "Containers", "Virtual machines", "Installed applications", "Installed libraries",
-		"Watches", "Events", "Mount units", "Notifiers",
-		"Daemon / Engine settings",
+		"Sessions", "Runtime locks", "Watches", "Events", "Mount units", "Notifiers",
+		"Daemon",
 	} {
 		if !headings[want] {
 			t.Errorf("missing section heading <h2> %q", want)
@@ -1025,7 +1011,7 @@ func TestIndexAccessibilityBundle(t *testing.T) {
 		"data-event-toggle",
 		"operation in progress",
 		"Disconnected — retrying",
-		"services panel",
+		`"services"} panel`,
 		"-msg",
 		"-panel",
 		"visually-hidden",
@@ -1041,7 +1027,7 @@ func TestIndexAccessibilityBundle(t *testing.T) {
 		"Confirm:",
 		"Start service ",
 		"Monitor watch ",
-		"tile-${t}-gauge",
+		"}-gauge",
 		"service details",
 		"Run preflight checks for ",
 		"Show full event message",
@@ -1121,26 +1107,14 @@ func TestIndexAccessibilityShell(t *testing.T) {
 		}
 	}
 
-	for _, id := range []string{
-		"svc-filters", "container-filters", "vm-filters", "watch-filters", "app-filters",
-	} {
-		el := nodeByID(doc, id)
-		if el == nil {
-			t.Errorf("shell missing filter group id %q", id)
-			continue
-		}
-		role, ok := attr(el, "role")
-		if !ok || role != "group" {
-			t.Errorf("#%s role = %q, want group", id, role)
-		}
-		if label, ok := attr(el, "aria-label"); !ok || label == "" {
-			t.Errorf("#%s missing aria-label", id)
-		}
-	}
-	if svcFilters := nodeByID(doc, "svc-filters"); svcFilters == nil {
-		t.Fatal("shell missing #svc-filters")
-	} else if !hasDescendantAttr(svcFilters, atom.Button, "data-f", "monitored") {
-		t.Fatal(`#svc-filters missing monitored state button`)
+	// The status chips of a list panel are generated: one labelled group per
+	// panel, and the service panels keep their monitored chip.
+	appJSMustContain(t, "labelled filter group",
+		`id="${p.id}-filters" class="filters" role="group" aria-label="Filter ${p.label} by ${p.statusLabel || "state"}"`,
+		`aria-pressed="${pressed ? domBoolTrue : domBoolFalse}"`,
+	)
+	if states := appJSArray(t, "serviceStatusFilterStates"); !strings.Contains(states, "targetStateMonitored") {
+		t.Errorf("serviceStatusFilterStates = %q, want it to hold targetStateMonitored", states)
 	}
 
 	captions := 0
@@ -1170,7 +1144,7 @@ func TestIndexAccessibilityShell(t *testing.T) {
 		live   string
 		atomic string
 	}{
-		{"system-status", "off", ""},
+		{"host-status", "off", ""},
 		{"statusbar", "off", ""},
 		{"err", "polite", ""},
 		{"op-live", "polite", ""},
@@ -1217,7 +1191,15 @@ func TestIndexAccessibilityShell(t *testing.T) {
 	assertAttrEquals(t, doc, "refresh-now", "aria-label", "Refresh dashboard now")
 	assertAttrEquals(t, doc, "event-reset-filters", "aria-label", "Reset event filters")
 	assertAttrContains(t, doc, "watches-section", "class", "panel-hidden")
-	assertAttrContains(t, doc, "event-clear", "class", "admin-hidden")
+	// Admin-only controls are marked, and hidden from a role that cannot act.
+	for _, id := range []string{"event-clear", "event-before"} {
+		if el := nodeByID(doc, id); el == nil {
+			t.Errorf("shell missing admin control %q", id)
+		} else if _, ok := attr(el, "data-admin"); !ok {
+			t.Errorf("#%s is not marked data-admin", id)
+		}
+	}
+	cssBundleMustContain(t, "admin-only", "body:not(.can-act)[data-admin]{display:none}")
 
 	if eventGroup := nodeByID(doc, "event-group"); eventGroup != nil {
 		if _, checked := attr(eventGroup, "checked"); checked {
@@ -1232,8 +1214,6 @@ func TestIndexAccessibilityShell(t *testing.T) {
 		label string
 	}{
 		{"event-clear", "Clear event log"},
-		{"state-compact-btn", "Compact persisted state"},
-		{"reload-btn", "Reload configuration"},
 		{"simple-confirm-ok", "Confirm action"},
 	} {
 		el := nodeByID(doc, spec.id)
@@ -1243,6 +1223,17 @@ func TestIndexAccessibilityShell(t *testing.T) {
 		}
 		if got, ok := attr(el, "aria-label"); !ok || got != spec.label {
 			t.Errorf("#%s aria-label = %q, want %q", spec.id, got, spec.label)
+		}
+	}
+	// The menu's admin actions are named by their own text.
+	for id, text := range map[string]string{"state-compact-btn": "Compact state", "reload-btn": "Reload config"} {
+		el := nodeByID(doc, id)
+		if el == nil {
+			t.Errorf("shell missing admin button id %q", id)
+			continue
+		}
+		if got := nodeText(el); got != text {
+			t.Errorf("#%s text = %q, want %q", id, got, text)
 		}
 	}
 }
