@@ -189,53 +189,6 @@
 <details id="events-section" open class="panel" data-view="events">
   <summary><h2 class="summary-title">Events <span id="event-count" class="muted"></span></h2></summary>
   <div id="event-controls" class="panel-controls" role="group" aria-label="Filter events">
-    <label for="event-service" class="visually-hidden">Filter events by service</label>
-    <select id="event-service" aria-label="Filter events by service">
-      <option value="">all services</option>
-    </select>
-    <label for="event-watch" class="visually-hidden">Filter events by watch</label>
-    <select id="event-watch" aria-label="Filter events by watch">
-      <option value="">all watches</option>
-    </select>
-    <label for="event-kind" class="visually-hidden">Filter events by kind</label>
-    <select id="event-kind" aria-label="Filter events by kind">
-      <option value="">all kinds</option>
-      <option value="action">action</option>
-      <option value="alert">alert</option>
-      <option value="cascade">cascade</option>
-      <option value="dry-run">dry-run</option>
-      <option value="error">error</option>
-      <option value="expand">expand</option>
-      <option value="expand-failed">expand-failed</option>
-      <option value="expand-skipped">expand-skipped</option>
-      <option value="firing">firing</option>
-      <option value="hook">hook</option>
-      <option value="hook-failed">hook-failed</option>
-      <option value="kill">kill</option>
-      <option value="kill-failed">kill-failed</option>
-      <option value="makestep">makestep</option>
-      <option value="makestep-failed">makestep-failed</option>
-      <option value="makestep-skipped">makestep-skipped</option>
-      <option value="notify">notify</option>
-      <option value="notify-failed">notify-failed</option>
-      <option value="notify-suppressed">notify-suppressed</option>
-      <option value="panic-suppressed">panic-suppressed</option>
-      <option value="recovered">recovered</option>
-      <option value="reload">reload</option>
-      <option value="suppressed">suppressed</option>
-    </select>
-    <label for="event-status" class="visually-hidden">Filter events by status</label>
-    <select id="event-status" aria-label="Filter events by status">
-      <option value="">all statuses</option>
-      <option value="ok">ok</option>
-      <option value="running">running</option>
-      <option value="failed">failed</option>
-      <option value="error">error</option>
-      <option value="blocked">blocked</option>
-      <option value="preflight_failed">preflight_failed</option>
-      <option value="postflight_failed">postflight_failed</option>
-      <option value="orphan_processes">orphan_processes</option>
-    </select>
     <label for="event-range" class="visually-hidden">Filter events by time range</label>
     <select id="event-range" aria-label="Filter events by time range">
       <option value="all">any time</option>
@@ -251,11 +204,59 @@
     <label class="check"><input id="event-errors" type="checkbox"> only errors</label>
     <label class="check"><input id="event-group" type="checkbox"> group actions</label>
     <button id="event-reset-filters" type="button" aria-label="Reset event filters">reset</button>
-    <!-- The exact dates and the destructive clear are the rare controls: kept
-         one click away so the everyday filters read as one short row. -->
+    <!-- Service, watch, kind, status, exact dates and the destructive clear
+         are the rare controls: one click away, so the everyday row stays the
+         window and the error toggle. -->
     <details id="event-more-controls" class="more-controls">
       <summary>more</summary>
       <div class="panel-controls">
+        <label for="event-service" class="visually-hidden">Filter events by service</label>
+        <select id="event-service" aria-label="Filter events by service">
+          <option value="">all services</option>
+        </select>
+        <label for="event-watch" class="visually-hidden">Filter events by watch</label>
+        <select id="event-watch" aria-label="Filter events by watch">
+          <option value="">all watches</option>
+        </select>
+        <label for="event-kind" class="visually-hidden">Filter events by kind</label>
+        <select id="event-kind" aria-label="Filter events by kind">
+          <option value="">all kinds</option>
+          <option value="action">action</option>
+          <option value="alert">alert</option>
+          <option value="cascade">cascade</option>
+          <option value="dry-run">dry-run</option>
+          <option value="error">error</option>
+          <option value="expand">expand</option>
+          <option value="expand-failed">expand-failed</option>
+          <option value="expand-skipped">expand-skipped</option>
+          <option value="firing">firing</option>
+          <option value="hook">hook</option>
+          <option value="hook-failed">hook-failed</option>
+          <option value="kill">kill</option>
+          <option value="kill-failed">kill-failed</option>
+          <option value="makestep">makestep</option>
+          <option value="makestep-failed">makestep-failed</option>
+          <option value="makestep-skipped">makestep-skipped</option>
+          <option value="notify">notify</option>
+          <option value="notify-failed">notify-failed</option>
+          <option value="notify-suppressed">notify-suppressed</option>
+          <option value="panic-suppressed">panic-suppressed</option>
+          <option value="recovered">recovered</option>
+          <option value="reload">reload</option>
+          <option value="suppressed">suppressed</option>
+        </select>
+        <label for="event-status" class="visually-hidden">Filter events by status</label>
+        <select id="event-status" aria-label="Filter events by status">
+          <option value="">all statuses</option>
+          <option value="ok">ok</option>
+          <option value="running">running</option>
+          <option value="failed">failed</option>
+          <option value="error">error</option>
+          <option value="blocked">blocked</option>
+          <option value="preflight_failed">preflight_failed</option>
+          <option value="postflight_failed">postflight_failed</option>
+          <option value="orphan_processes">orphan_processes</option>
+        </select>
         <label for="event-from" class="visually-hidden">Show events from date and time</label>
         <input id="event-from" type="datetime-local" class="event-date" title="From (local time)" aria-label="Show events from date and time">
         <label for="event-to" class="visually-hidden">Show events until date and time</label>

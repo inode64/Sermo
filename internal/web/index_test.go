@@ -286,6 +286,40 @@ func TestEventFiltersUseGuidedSelects(t *testing.T) {
 			t.Errorf("event filter %q is not a select", id)
 		}
 	}
+	// The everyday row is the window and the error toggle. Service, watch,
+	// kind and status stay one click away with the exact dates and the clear.
+	more := nodeByID(doc, "event-more-controls")
+	if more == nil {
+		t.Fatal("shell missing #event-more-controls")
+	}
+	for _, id := range []string{"event-service", "event-watch", "event-kind", "event-status", "event-from", "event-to", "event-clear"} {
+		node := nodeByID(doc, id)
+		if node == nil || !hasAncestorID(node, "event-more-controls") {
+			t.Errorf("event control %q is not inside #event-more-controls", id)
+		}
+	}
+	for _, id := range []string{"event-range", "event-errors", "event-group", "event-reset-filters"} {
+		node := nodeByID(doc, id)
+		if node == nil {
+			t.Errorf("shell missing event control %q", id)
+			continue
+		}
+		if hasAncestorID(node, "event-more-controls") {
+			t.Errorf("everyday event control %q is inside #event-more-controls", id)
+		}
+	}
+	appJSMustContain(t, "saved rare event filter stays disclosed",
+		`ef.from || ef.to || ef.service || ef.watch || ef.kind || ef.status`,
+	)
+}
+
+func hasAncestorID(n *html.Node, id string) bool {
+	for p := n; p != nil; p = p.Parent {
+		if v, ok := attr(p, "id"); ok && v == id {
+			return true
+		}
+	}
+	return false
 }
 
 func TestSourceUsesStableEventCursorPagination(t *testing.T) {

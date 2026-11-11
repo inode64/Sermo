@@ -1946,9 +1946,11 @@ function restoreEventFilters(ef) {
   for (const field of eventFilterFields) {
     if (field.key !== "range" || ef.range) setVal(field.id, ef[field.key]);
   }
-  // An exact date still filtering must not hide behind a closed disclosure.
+  // A rare filter still applied must not hide behind a closed disclosure.
+  // The everyday row is the window and the error toggle; service, watch, kind,
+  // status and the exact dates live under "more".
   const more = $("#event-more-controls");
-  if (more && (ef.from || ef.to)) more.open = true;
+  if (more && (ef.from || ef.to || ef.service || ef.watch || ef.kind || ef.status)) more.open = true;
   const err = $("#event-errors");
   if (err && typeof ef.onlyErrors === "boolean") err.checked = ef.onlyErrors;
   const grp = $("#event-group");
