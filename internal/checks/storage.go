@@ -46,6 +46,7 @@ type storageCheck struct {
 	usage        StorageUsageFunc
 	mount        mountCond
 	mountSampler MountSamplerFunc
+	deviceGone   mountDeviceGoneFunc
 }
 
 func (c storageCheck) Run(_ context.Context) Result {
@@ -57,6 +58,7 @@ func (c storageCheck) Run(_ context.Context) Result {
 
 	// Mount verification takes precedence: a wrong/absent mount makes the space
 	// numbers meaningless (statfs would report the parent filesystem).
+	var info *Mount
 	switch {
 	case c.mount.active:
 		if mountErr != nil {
@@ -65,7 +67,8 @@ func (c storageCheck) Run(_ context.Context) Result {
 			res.Data = data
 			return res
 		}
-		reason, info := c.mount.evaluate(mounts, c.path)
+		var reason string
+		reason, info = c.mount.evaluate(mounts, c.path)
 		storageMountData(data, info != nil, info)
 		if reason != "" {
 			if c.mount.expectMount {
@@ -73,22 +76,32 @@ func (c storageCheck) Run(_ context.Context) Result {
 			}
 			return c.mountFailure(c.path+" "+reason, data, start)
 		}
-		if len(c.preds) == 0 {
-			if err := c.mountAnswers(); err != nil {
-				return c.hungMount(err, data, start)
-			}
-			res := c.result(false, c.path+" mounted as expected", start)
-			res.Data = data
-			return res
-		}
 	case mountErr == nil:
 		// The mount metadata is presentation data for the daemon-published
-		// snapshot. A usage-only check remains independent of a failed mount-table
-		// read, so a transient display detail never changes its alert outcome.
-		info := MountForPath(mounts, c.path)
+		// snapshot, and what tells a stale mount below. A usage-only check
+		// remains independent of a failed mount-table read: it then grades the
+		// space numbers as it always did.
+		info = MountForPath(mounts, c.path)
 		storageMountData(data, info != nil, info)
 	default:
 		data[DataKeyMountSampleError] = mountErr.Error()
+	}
+
+	// Before any statfs: a filesystem whose disk was pulled still answers it,
+	// from the superblock the kernel holds, with numbers that mean nothing.
+	if info != nil {
+		if visible := visibleMount(mounts, info); mountStale(visible, c.deviceGone) {
+			data[DataKeyMountFailure] = MountFailureStale
+			return c.mountFailure(fmt.Sprintf("%s is mounted from %s, a device the kernel no longer has", c.path, visible.Device), data, start)
+		}
+	}
+	if c.mount.active && len(c.preds) == 0 {
+		if err := c.mountAnswers(); err != nil {
+			return c.hungMount(err, data, start)
+		}
+		res := c.result(false, c.path+" mounted as expected", start)
+		res.Data = data
+		return res
 	}
 
 	st, err := boundedUsage(c.usageFunc(), c.path, c.timeout)
@@ -136,11 +149,14 @@ func (c storageCheck) Run(_ context.Context) Result {
 	return res
 }
 
-// Mount failures a storage check with `mounted: true` reports under
-// DataKeyMountFailure: the path is not mounted, or it is and does not answer.
+// Mount failures a storage check reports under DataKeyMountFailure. With
+// `mounted: true` the path is not mounted, or it is and does not answer; with
+// or without it, the filesystem at the path is still mounted from a block
+// device that is gone.
 const (
 	MountFailureMissing = "missing"
 	MountFailureHung    = "hung"
+	MountFailureStale   = "stale"
 )
 
 // mountFailure is the failing result of a mount assertion. A declared severity

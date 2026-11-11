@@ -435,7 +435,7 @@ func validateWatchMakeStepAction(prefix string, block, then map[string]any, allo
 }
 
 // validateWatchRemountAction checks a storage watch's `then.remount` action:
-// detach a hung or missing mount and mount it again. It needs the check to
+// detach a hung, stale or missing mount and mount it again. It needs the check to
 // assert `mounted: true` — that assertion is what reports the mount hung or
 // missing — and, like then.makestep, a positive policy.cooldown: a forced
 // unmount fails the I/O its users have pending, so it must be paced.

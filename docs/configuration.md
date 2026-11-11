@@ -67,7 +67,7 @@ configuration omits it.
 - [Telegram report bot](#telegram-report-bot)
 - [Host watches](#host-watches)
   - [then.expand — volume growth (storage watch)](#thenexpand--volume-growth-storage-watch)
-  - [then.remount — repair a hung or missing mount (storage watch)](#thenremount--repair-a-hung-or-missing-mount-storage-watch)
+  - [then.remount — repair a hung, stale or missing mount (storage watch)](#thenremount--repair-a-hung-stale-or-missing-mount-storage-watch)
   - [then.makestep — forced clock correction (clock watch)](#thenmakestep--forced-clock-correction-clock-watch)
   - [Manual RAID reconstruction control](#manual-raid-reconstruction-control)
   - [Service watches (scoped to a service)](#service-watches-scoped-to-a-service)
@@ -2826,12 +2826,14 @@ path is still running is refused, not queued, so the volume never grows twice
 for one request; the refusal is recorded as `expand-skipped`, and when it hits
 the automatic action it also starts that watch's cooldown.
 
-### `then.remount` — repair a hung or missing mount (storage watch)
+### `then.remount` — repair a hung, stale or missing mount (storage watch)
 
 A storage watch whose check asserts `mounted: true` can repair its mount: when
-the path is not mounted, or is mounted but does not answer (an NFS server that
-went away, a mount left hung by a network cut), Sermo detaches it and mounts it
-again. One entry serves any NFS mount, from `/etc/fstab` or from autofs:
+the path is not mounted, is mounted but does not answer (an NFS server that
+went away, a mount left hung by a network cut), or is still mounted from a
+block device that is gone (a disk unplugged while mounted), Sermo detaches it
+and mounts it again. One entry serves any such mount, from `/etc/fstab` or from
+autofs:
 
 ```yaml
 # /etc/sermo/mounts/mount-nas.yml
@@ -2869,7 +2871,9 @@ mount gets an I/O error when the forced unmount aborts its request. The
 refcount of a `mount:` block is not touched. The root filesystem is refused.
 
 The action runs only when the check reports a mount failure — `mount_failure`
-is `missing` or `hung` (`SERMO_MOUNT_FAILURE` to a hook). A watch firing for
+is `missing`, `hung` or `stale` (`SERMO_MOUNT_FAILURE` to a hook). A stale
+mount is detached the same way; mounting it again succeeds once a disk is back,
+and until then each attempt is a `remount-failed` event, one per cooldown. A watch firing for
 space alone is not remounted, and a watch firing for its mount never runs
 `then.expand`, which would grow the volume under the parent filesystem.
 
@@ -3300,8 +3304,13 @@ condition (mount-only is fine). With `mounted: true` the path must also answer:
 a `statfs` that does not return within the check's `timeout` (a hard NFS mount
 whose server is gone) fails the mount condition as `hung`, exactly like a
 missing mount, so the watch's `for` window grades it and
-[`then.remount`](#thenremount--repair-a-hung-or-missing-mount-storage-watch)
+[`then.remount`](#thenremount--repair-a-hung-stale-or-missing-mount-storage-watch)
 can repair it. The failure is reported as `mount_failure` (`missing` or `hung`).
+With or without `mounted`, a filesystem still mounted from a block device the
+kernel no longer has (a disk unplugged while mounted) fails the check as
+`mount_failure: stale` before `statfs` is consulted, since the numbers it would
+return describe a filesystem that can no longer be read; see
+[Stale mounts](rules.md#stale-mounts-stale_mounts).
 Concurrent probes of the same path share the pending `statfs` result. Once a
 probe times out, later probes fail immediately until that call returns; they
 never stack additional blocked calls on the path.

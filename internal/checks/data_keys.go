@@ -46,6 +46,8 @@ const (
 	DataKeyDetached                 = "detached"
 	DataKeyDegradedArrays           = "degraded_arrays"
 	DataKeyBus                      = "bus"
+	DataKeyBusPort                  = "bus_port"
+	DataKeyConnected                = "connected"
 	DataKeyDevice                   = CheckKeyDevice
 	DataKeyDNSNames                 = "dns_names"
 	DataKeyDatabase                 = CheckKeyDatabase
@@ -135,6 +137,7 @@ const (
 	DataKeyMountFailure       = "mount_failure"
 	DataKeyModifiedAt         = "modified_at"
 	DataKeyMounted            = CheckKeyMounted
+	DataKeyMounts             = "mounts"
 	DataKeyMountPoint         = "mount_point"
 	DataKeyNew                = fieldNew
 	DataKeyNumCPU             = "num_cpu"
@@ -195,7 +198,7 @@ const (
 	DataKeyServer             = "server"
 	DataKeyTerminalSessions   = "terminal_sessions"
 	DataKeySelfTest           = "self_test"
-	DataKeySerialNumber       = "serial_number"
+	DataKeySerialNumber       = CheckKeySerialNumber
 	DataKeySignatureAlgorithm = "signature_algorithm"
 	DataKeySize               = CheckKeySize
 	DataKeyScope              = CheckKeyScope

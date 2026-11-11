@@ -141,6 +141,8 @@ const (
 	CheckTypeFirewallRules    = "firewall_rules"
 	CheckTypeFailedUnits      = "failed_units"
 	CheckTypeInotify          = "inotify"
+	CheckTypeUSB              = "usb"
+	CheckTypeStaleMounts      = "stale_mounts"
 )
 
 // CheckTypeTCPConnections counts established local TCP sockets on a port.

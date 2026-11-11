@@ -1047,7 +1047,7 @@ func parseMakeStep(then map[string]any, checkType string) (*MakeStepSpec, error)
 }
 
 // parseRemount reads a `then.remount` action. It is only valid on a storage
-// watch, whose check reports the mount hung or missing.
+// watch, whose check reports the mount hung, stale or missing.
 func parseRemount(then map[string]any, checkType string) (bool, error) {
 	raw, present := then[config.WatchThenKeyRemount]
 	if !present {

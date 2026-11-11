@@ -1,0 +1,12 @@
+name: usb-backup-disk
+category: hardware
+# Alert while a USB device the host depends on is unplugged: a backup disk, a
+# UPS, a modem. `device` is the vendor:product pair lsusb prints; without
+# `serial_number` any unit of that model satisfies the check, which suits a
+# rotated set of backup disks. The window rides out the minutes a swap takes.
+monitor: disabled
+interval: 1m
+for: { cycles: 10 }
+check: { type: usb, device: "0480:a00c" }  # EXAMPLE — your device (run `lsusb`)
+then:
+  notify: [none]

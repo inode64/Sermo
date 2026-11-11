@@ -1,8 +1,6 @@
 package mountctl
 
 import (
-	"strings"
-
 	"sermo/internal/hostfs"
 	"sermo/internal/mounts"
 	"sermo/internal/process"
@@ -11,18 +9,8 @@ import (
 const (
 	procFileMountInfo = "mountinfo"
 
-	mountInfoDeviceIndex = 2
-	mountInfoPointIndex  = 4
-	mountInfoMinFields   = mountInfoPointIndex + 1
-
 	reasonMountNamespaceUnverified = "mount namespace could not be verified"
 )
-
-// mountEntry is one mountinfo line: where a filesystem sits and which one it is.
-type mountEntry struct {
-	point  string
-	device string
-}
 
 // mountNamespaces judges a blocker found by path. /proc links spell a path as
 // its process's own mount namespace sees it, so across namespaces the string
@@ -35,7 +23,7 @@ type mountNamespaces struct {
 	readLink func(string) (string, error)
 	readFile func(string) ([]byte, error)
 	own      string
-	table    []mountEntry
+	table    []mounts.MountInfo
 }
 
 func hostMountNamespaces() mountNamespaces {
@@ -48,7 +36,7 @@ func newMountNamespaces(readLink func(string) (string, error), readFile func(str
 		namespaces.own = own
 	}
 	if data, err := readFile(process.SelfPath(procFileMountInfo)); err == nil {
-		namespaces.table = parseMountInfo(data)
+		namespaces.table = mounts.ParseMountInfo(data)
 	}
 	return namespaces
 }
@@ -68,7 +56,7 @@ func (n mountNamespaces) confirm(pid int, matches []string) (confirmed []string,
 	if err != nil || len(n.table) == 0 {
 		return matches, reasonMountNamespaceUnverified
 	}
-	table := parseMountInfo(data)
+	table := mounts.ParseMountInfo(data)
 	for _, mountPath := range matches {
 		ours, oursOK := deviceAt(n.table, mountPath)
 		theirs, theirsOK := deviceAt(table, mountPath)
@@ -79,30 +67,13 @@ func (n mountNamespaces) confirm(pid int, matches []string) (confirmed []string,
 	return confirmed, ""
 }
 
-// parseMountInfo reads /proc/<pid>/mountinfo. Optional fields only start after
-// the mount options, so the leading columns have fixed positions.
-func parseMountInfo(data []byte) []mountEntry {
-	var table []mountEntry
-	for line := range strings.Lines(string(data)) {
-		fields := strings.Fields(line)
-		if len(fields) < mountInfoMinFields {
-			continue
-		}
-		table = append(table, mountEntry{
-			point:  mounts.UnescapeField(fields[mountInfoPointIndex]),
-			device: fields[mountInfoDeviceIndex],
-		})
-	}
-	return table
-}
-
 // deviceAt returns the filesystem that answers for path: the deepest mount over
 // it, and among mounts stacked on one point the last one listed, the visible one.
-func deviceAt(table []mountEntry, path string) (string, bool) {
+func deviceAt(table []mounts.MountInfo, path string) (string, bool) {
 	device, longest := "", 0
 	for _, entry := range table {
-		if mounts.PathUnder(path, entry.point) && len(entry.point) >= longest {
-			device, longest = entry.device, len(entry.point)
+		if mounts.PathUnder(path, entry.MountPoint) && len(entry.MountPoint) >= longest {
+			device, longest = entry.DeviceID, len(entry.MountPoint)
 		}
 	}
 	return device, device != ""

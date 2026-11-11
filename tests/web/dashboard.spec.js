@@ -679,6 +679,58 @@ test("an idle disk still reports what it has ever moved", async ({ page }) => {
   await expect(row).toContainText("usb");
 });
 
+// A pulled USB disk is two findings, and each row says its own half: the device
+// that is no longer connected, and the filesystem it left mounted.
+test("usb and stale mount watches name the device and the mount left behind", async ({ page }) => {
+  const added = [{
+    name: "usb-ups", display_name: "UPS", category: "hardware",
+    enabled: true, monitored: true, state: "ok", check_type: "usb",
+    readings: [
+      { field: "device", label: "Device", value: "051d:0002" },
+      { field: "model", label: "Model", value: "American Power Conversion Back-UPS" },
+      { field: "serial_number", label: "Serial", value: "4B1234P56789" },
+      { field: "bus_port", label: "USB port", value: "1-4" },
+      { field: "count", label: "USB devices", value: "2" },
+    ],
+    summary: "USB device 051d:0002 connected at 1-4", interval: "1m",
+  }, {
+    name: "usb-backup-disk", display_name: "Backup disk", category: "hardware",
+    enabled: true, monitored: true, state: "failed", check_type: "usb",
+    readings: [
+      { field: "count", label: "USB devices", value: "1" },
+      { field: "connected", label: "Connected instead", value: "051d:0002 American Power Conversion Back-UPS" },
+    ],
+    summary: "no USB device 0480:a00c connected (1 other device(s))", interval: "1m",
+  }, {
+    name: "stale-mounts", display_name: "Stale mounts", category: "storage",
+    enabled: true, monitored: true, state: "failed", check_type: "stale_mounts",
+    readings: [
+      { field: "count", label: "Count", value: "1" },
+      { field: "mounts", label: "Stale mounts", value: "/misc/backup (ext4 on /dev/sdc1)" },
+    ],
+    summary: "1 stale mount(s): /misc/backup (ext4 on /dev/sdc1)", interval: "1m",
+  }];
+  await page.route("**/api/watches", (route) => route.fulfill({ json: [...watches, ...added] }));
+  await page.reload();
+
+  const ups = page.locator("#wat-row-usb-ups");
+  for (const cell of ["051d:0002", "American Power Conversion Back-UPS", "4B1234P56789", "1-4"]) {
+    await expect(ups).toContainText(cell);
+  }
+  // The missing device has no identity to show; its detail says what is plugged in.
+  const disk = page.locator("#wat-row-usb-backup-disk");
+  await expect(disk).toHaveClass(/row-failing/);
+  await disk.locator(".row-toggle").click();
+  await expect(page.locator('[id="exp-wat:usb-backup-disk"]')).toContainText("Connected instead");
+
+  const stale = page.locator("#wat-row-stale-mounts");
+  await expect(stale).toContainText("/misc/backup (ext4 on /dev/sdc1)");
+  // It belongs with the disks, not with the system watches the USB rows sit in.
+  await page.locator('#watch-rows [data-group-name="Storage"]').click();
+  await expect(stale).toBeHidden();
+  await expect(ups).toBeVisible();
+});
+
 test("stale watch samples are visible and filterable", async ({ page }) => {
   const row = page.locator("#wat-row-dns-upstream");
   await expect(row).toContainText("stale");

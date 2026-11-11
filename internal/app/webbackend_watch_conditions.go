@@ -128,7 +128,9 @@ var watchTypeConditionBuilders = map[string]func(map[string]any) []web.WatchCond
 	checks.CheckTypeRoute:            routeWatchConditions,
 	checks.CheckTypeFirewallRules:    firewallWatchConditions,
 	checks.CheckTypeFailedUnits:      failedUnitsWatchConditions,
+	checks.CheckTypeStaleMounts:      staleMountsWatchConditions,
 	checks.CheckTypeSize:             sizeWatchConditions,
+	checks.CheckTypeUSB:              usbWatchConditions,
 }
 
 func replicationWatchConditions(check map[string]any) []web.WatchCondition {
@@ -188,6 +190,11 @@ func routeWatchConditions(check map[string]any) []web.WatchCondition {
 	return appendCompare(out, checks.DataKeyInterface, cfgval.CompareOpEqual, cfgval.AsString(check[checks.CheckKeyInterface]))
 }
 
+func usbWatchConditions(check map[string]any) []web.WatchCondition {
+	out := appendCompare(nil, checks.DataKeyDevice, cfgval.CompareOpEqual, cfgval.AsString(check[checks.CheckKeyDevice]))
+	return appendCompare(out, checks.DataKeySerialNumber, cfgval.CompareOpEqual, cfgval.AsString(check[checks.CheckKeySerialNumber]))
+}
+
 func firewallWatchConditions(check map[string]any) []web.WatchCondition {
 	backend := cmp.Or(cfgval.AsString(check[checks.CheckKeyBackend]), checks.FirewallBackendAuto)
 	minRules := cmp.Or(cfgval.String(check[checks.CheckKeyMinRules]),
@@ -198,16 +205,24 @@ func firewallWatchConditions(check map[string]any) []web.WatchCondition {
 	}
 }
 
-// failedUnitsWatchConditions names the init backend the check asks for. The
-// count predicate is rendered generically; its default (> 0) is added here so a
-// check that omits it still shows what fires.
+// failedUnitsWatchConditions names the init backend the check asks for.
 func failedUnitsWatchConditions(check map[string]any) []web.WatchCondition {
 	backend := cmp.Or(cfgval.AsString(check[checks.CheckKeyBackend]), string(servicemgr.BackendAuto))
-	out := appendCompare(nil, checks.DataKeyBackend, cfgval.CompareOpEqual, backend)
-	if _, present := check[checks.CheckKeyCount].(map[string]any); present {
+	return appendDefaultCount(appendCompare(nil, checks.DataKeyBackend, cfgval.CompareOpEqual, backend), check)
+}
+
+func staleMountsWatchConditions(check map[string]any) []web.WatchCondition {
+	return appendDefaultCount(nil, check)
+}
+
+// appendDefaultCount spells out the default (> 0) of a check whose `count` is
+// optional, so one that omits it still shows what fires. A declared count is
+// rendered generically.
+func appendDefaultCount(out []web.WatchCondition, check map[string]any) []web.WatchCondition {
+	if _, declared := check[checks.CheckKeyCount].(map[string]any); declared {
 		return out
 	}
-	return appendCompare(out, checks.DataKeyCount, cfgval.CompareOpGreater, watchFailedUnitsDefaultCount)
+	return appendCompare(out, checks.DataKeyCount, cfgval.CompareOpGreater, watchConditionDefaultCount)
 }
 
 func sizeWatchConditions(check map[string]any) []web.WatchCondition {

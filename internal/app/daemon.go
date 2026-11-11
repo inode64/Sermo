@@ -342,7 +342,7 @@ type Deps struct {
 	ClockStepper ClockStepper
 	// OutputDrainer repairs only a freshly revalidated terminal wait cycle.
 	OutputDrainer OutputDrainer
-	// MountRemounter repairs a hung or missing mount for a storage watch's
+	// MountRemounter repairs a hung, stale or missing mount for a storage watch's
 	// `then.remount`. Optional: nil uses mountctl.Controller. Tests inject a
 	// fake so no real filesystem is ever unmounted.
 	MountRemounter MountRemounter

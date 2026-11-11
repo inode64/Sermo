@@ -469,6 +469,20 @@ watches:
     check: { type: failed_units, backend: auto, count: { op: ">", value: 0 } }
     then: { notify: [ops-email] }
 
+  # -- filesystems still mounted from a disk that was pulled ----------------
+  stale-mounts:
+    monitor: disabled
+    category: storage
+    check: { type: stale_mounts, count: { op: ">", value: 0 } }
+    then: { notify: [ops-email] }
+
+  # -- a USB device the host depends on is plugged in -----------------------
+  usb-backup-disk:
+    monitor: disabled
+    for: { cycles: 10 }
+    check: { type: usb, device: "0480:a00c", serial_number: "20231012004242F" }
+    then: { notify: [ops-email] }
+
   unowned-processes:
     monitor: disabled
     category: security
@@ -1710,7 +1724,7 @@ for: { cycles: 3 }
 policy: { cooldown: 30m }  # required by then.remount
 then:
   notify: [ops-email]
-  remount: { }  # detach and mount again when hung or missing (needs mounted: true)
+  remount: { }  # detach and mount again when hung, stale or missing (needs mounted: true)
 mount:
   refcount: true  # default: only unmount when all Sermo users released it
   umount:

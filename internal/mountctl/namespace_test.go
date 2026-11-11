@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"sermo/internal/mounts"
 	"sermo/internal/process"
 )
 
@@ -182,19 +183,12 @@ func TestReleaseNeverSignalsAnUnverifiedBlocker(t *testing.T) {
 	}
 }
 
-func TestParseMountInfoReadsEscapedMountPoints(t *testing.T) {
-	table := parseMountInfo([]byte("36 25 8:17 / /mnt/my\\040data rw - ext4 /dev/sdb1 rw\nshort line\n"))
-	if len(table) != 1 || table[0].point != "/mnt/my data" || table[0].device != "8:17" {
-		t.Fatalf("parseMountInfo = %+v", table)
-	}
-}
-
 func TestDeviceAtPrefersDeepestThenTopmostMount(t *testing.T) {
-	table := []mountEntry{
-		{point: "/", device: "8:2"},
-		{point: "/mnt", device: "8:3"},
-		{point: "/mnt/data", device: "8:17"},
-		{point: "/mnt/data", device: "0:93"},
+	table := []mounts.MountInfo{
+		{MountPoint: "/", DeviceID: "8:2"},
+		{MountPoint: "/mnt", DeviceID: "8:3"},
+		{MountPoint: "/mnt/data", DeviceID: "8:17"},
+		{MountPoint: "/mnt/data", DeviceID: "0:93"},
 	}
 	for path, want := range map[string]string{"/mnt/data": "0:93", "/mnt/data/sub": "0:93", "/mnt/other": "8:3", "/srv": "8:2"} {
 		if got, ok := deviceAt(table, path); !ok || got != want {

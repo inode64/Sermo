@@ -46,7 +46,7 @@ const (
 	ActionMount = "mount"
 	// ActionUmount is the Result.Action value and umount(8) subcommand for unmounting.
 	ActionUmount = "umount"
-	// ActionRemount is the Result.Action value for repairing a hung or missing mount.
+	// ActionRemount is the Result.Action value for repairing a hung, stale or missing mount.
 	ActionRemount = "remount"
 
 	// DefaultFstabPath is the system fstab file Sermo reads by default.

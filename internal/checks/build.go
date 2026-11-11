@@ -364,6 +364,10 @@ var builtinCheckSpecs = []checkSpec{
 	{info: conditionTypeInfo(CheckTypeInotify), predicateFields: InotifyPredFields, build: func(in checkBuildInput) (Check, string) {
 		return buildInotifyCheck(in.base, in.entry, in.deps)
 	}},
+	{info: healthTypeInfo(CheckTypeUSB), build: func(in checkBuildInput) (Check, string) { return buildUSBCheck(in.base, in.entry) }},
+	{info: conditionTypeInfo(CheckTypeStaleMounts), predicateFields: StaleMountsPredFields, build: func(in checkBuildInput) (Check, string) {
+		return buildStaleMountsCheck(in.base, in.entry, in.deps)
+	}},
 }
 
 func buildCheck(typ string, b base, entry map[string]any, runner execx.Runner, client *http.Client, deps Deps) (Check, *buildFailure) {

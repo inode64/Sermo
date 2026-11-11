@@ -843,11 +843,13 @@ var singleShotCheckValidators = map[string]singleShotCheckValidator{
 	checks.CheckTypeConntrack:        singleShotThreshold(checks.ConntrackPredFields),
 	checks.CheckTypeFirewallRules:    singleShotNoLock(validateFirewallRulesFields),
 	checks.CheckTypeFailedUnits:      singleShotNoLock(validateFailedUnitsFields),
+	checks.CheckTypeStaleMounts:      singleShotNoLock(validateStaleMountsFields),
 	checks.CheckTypeInotify:          singleShotThreshold(checks.InotifyPredFields),
 	checks.CheckTypeNet:              validateNetSingleShotCheck,
 	checks.CheckTypeICMP:             validateICMPSingleShotCheck,
 	checks.CheckTypeSwap:             validateSwapSingleShotCheck,
 	checks.CheckTypeRoute:            validateRouteCheck,
+	checks.CheckTypeUSB:              validateUSBCheck,
 	checks.CheckTypeZombies:          singleShotThreshold(checks.ZombiePredFields),
 	checks.CheckTypeOOM:              singleShotNoLock(validateOomFields),
 	checks.CheckTypeCoredump:         singleShotNoLock(validateOomFields),
@@ -1419,6 +1421,26 @@ func validateRouteCheck(path string, entry map[string]any, _ string, add addFunc
 	}
 }
 
+// validateUSBCheck validates a usb check: a vendor:product device ID and/or a
+// serial number. Both must be YAML strings, because an unquoted run of digits
+// arrives as a number with its leading zeros already gone.
+func validateUSBCheck(path string, entry map[string]any, _ string, add addFunc) {
+	device, hasDevice := entry[checks.CheckKeyDevice]
+	serial, hasSerial := entry[checks.CheckKeySerialNumber]
+	if !hasDevice && !hasSerial {
+		add("%s requires device (vendor:product) and/or serial_number for a usb check", path)
+	}
+	if hasDevice {
+		id, _ := device.(string)
+		if _, ok := checks.ParseUSBDeviceID(id); !ok {
+			add("%s.device must be %s", path, checks.USBDeviceIDSummary)
+		}
+	}
+	if text, _ := serial.(string); hasSerial && strings.TrimSpace(text) == "" {
+		add("%s.serial_number must be a non-empty quoted string", path)
+	}
+}
+
 func validateSQLiteCheck(path string, entry map[string]any, _ string, add addFunc) {
 	if cfgval.String(entry[checks.CheckKeyPath]) == "" {
 		add("%s.path is required for a sqlite check", path)
@@ -1460,9 +1482,13 @@ func validateFailedUnitsFields(prefix string, fields map[string]any, add addFunc
 	if _, err := servicemgr.ParseBackend(cfgval.String(fields[checks.CheckKeyBackend])); err != nil {
 		add("%s.backend must be %s", prefix, servicemgr.BackendInitSummary)
 	}
-	if _, present := fields[checks.CheckKeyCount]; present {
-		validateThresholdPreds(prefix, fields, checks.FailedUnitsPredFields, add)
-	}
+	validatePresentThresholds(prefix, fields, checks.FailedUnitsPredFields, add)
+}
+
+// validateStaleMountsFields validates a stale_mounts check: its only field is
+// an optional count predicate, which defaults to firing on any stale mount.
+func validateStaleMountsFields(prefix string, fields map[string]any, add addFunc) {
+	validatePresentThresholds(prefix, fields, checks.StaleMountsPredFields, add)
 }
 
 // validateWebsocketFields validates a websocket check: a required url with a

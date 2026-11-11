@@ -136,6 +136,7 @@ const (
 	watchReadingLabelSerialNumber             = "Serial"
 	watchReadingLabelLastSeen                 = "Last seen"
 	watchReadingLabelFailedUnits              = "Failed units"
+	watchReadingLabelStaleMounts              = "Stale mounts"
 	watchReadingLabelInstances                = "Instances"
 	watchReadingLabelInstancesMax             = "Instances limit"
 	watchReadingLabelWatches                  = "Watches"
@@ -159,6 +160,9 @@ const (
 	watchReadingLabelState                    = "State"
 	watchReadingLabelStatus                   = "Status"
 	watchReadingLabelStratum                  = "Stratum"
+	watchReadingLabelUSBConnected             = "Connected instead"
+	watchReadingLabelUSBDevices               = "USB devices"
+	watchReadingLabelUSBPort                  = "USB port"
 	watchReadingLabelUsed                     = "Used"
 	watchReadingLabelUsedBytes                = "Used bytes"
 	watchReadingLabelUniqueName               = "Unique name"
@@ -459,6 +463,8 @@ var checkReadingsByType = map[string]func(map[string]any) []web.WatchReading{
 	checks.CheckTypeRoute:            routeCheckReadings,
 	checks.CheckTypeSQL:              scalarQueryCheckReadings,
 	checks.CheckTypeSensors:          sensorsCheckReadings,
+	checks.CheckTypeUSB:              usbCheckReadings,
+	checks.CheckTypeStaleMounts:      staleMountsCheckReadings,
 	checks.CheckTypeMetric:           metricValueCheckReadings,
 }
 
@@ -538,6 +544,19 @@ func routeCheckReadings(data map[string]any) []web.WatchReading {
 		addString(checks.DataKeyGateway, watchReadingLabelGateway).
 		addInt(checks.DataKeyRoutes, "Routes in table").
 		addInt(checks.DataKeyValue, "Matched").
+		readings()
+}
+
+// usbCheckReadings identifies the device the check found: which unit it is and
+// which socket it sits in. When it found none, the devices connected instead
+// say whether a different unit is plugged in or nothing is.
+func usbCheckReadings(data map[string]any) []web.WatchReading {
+	return readingsFrom(data).
+		addString(checks.DataKeyDevice, watchReadingLabelDevice).
+		addDeviceIdentity().
+		addString(checks.DataKeyBusPort, watchReadingLabelUSBPort).
+		addInt(checks.DataKeyCount, watchReadingLabelUSBDevices).
+		addString(checks.DataKeyConnected, watchReadingLabelUSBConnected).
 		readings()
 }
 
@@ -816,6 +835,15 @@ func failedUnitsCheckReadings(data map[string]any) []web.WatchReading {
 		addString(checks.DataKeyBackend, watchReadingLabelBackend).
 		addInt(checks.DataKeyCount, watchReadingLabelCount).
 		addString(checks.DataKeyUnits, watchReadingLabelFailedUnits).
+		readings()
+}
+
+// staleMountsCheckReadings shows the count with the mounts beside it: which
+// mount point lost its disk, and which device it was, is what the operator acts on.
+func staleMountsCheckReadings(data map[string]any) []web.WatchReading {
+	return readingsFrom(data).
+		addInt(checks.DataKeyCount, watchReadingLabelCount).
+		addString(checks.DataKeyMounts, watchReadingLabelStaleMounts).
 		readings()
 }
 

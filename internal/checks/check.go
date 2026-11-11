@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"math"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -507,6 +508,27 @@ func AddBusyEvidence(data map[string]any, busy conn.Busy) {
 	for key, value := range busy.Evidence() {
 		data[key] = value
 	}
+}
+
+// namedCountResult grades how many items a check found against its count
+// predicate, and names them: which one it is tells the operator what broke, and
+// a count alone would send them back to the host to find out. The same list
+// serves the message and the dashboard reading, under namesKey. Both branches
+// key off the count, never off the joined text, so an item that came without a
+// name is still counted.
+func (b base) namedCountResult(names []string, op string, value float64, noun, namesKey string, start time.Time) Result {
+	count := uint64(len(names))
+	named := strings.Join(names, ", ")
+	message := "no " + noun + "s"
+	if count > 0 {
+		message = fmt.Sprintf("%d %s(s): %s", count, noun, named)
+	}
+	res := b.gradeValue(b.result(cfgval.CompareFloat(float64(count), op, value), message, start), DataKeyCount, float64(count))
+	res.Data = map[string]any{DataKeyCount: count, DataKeyValue: count}
+	if count > 0 {
+		res.Data[namesKey] = named
+	}
+	return res
 }
 
 // samplerOr returns the check's injected sampler, falling back to the package

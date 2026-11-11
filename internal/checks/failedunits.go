@@ -54,27 +54,8 @@ func (c failedUnitsCheck) Run(ctx context.Context) Result {
 		return c.unavailableResult(CheckTypeFailedUnits+": "+execx.FormatContextOrError(err, c.timeout), start)
 	}
 	units := slices.DeleteFunc(slices.Clone(sample.Units), isCoredumpHandlerUnit)
-	count := uint64(len(units))
-	// Name them: which unit failed is what tells the operator what broke, and a
-	// count alone would send them back to the host to find out. The same list
-	// serves the message and the dashboard reading.
-	named := strings.Join(units, ", ")
-	// Both branches key off the count, never off the joined text: a sampler that
-	// ever yields an unnamed unit must still report one failed unit rather than
-	// none.
-	message := "no failed units"
-	if count > 0 {
-		message = fmt.Sprintf("%d failed unit(s): %s", count, named)
-	}
-	res := c.gradeValue(c.result(cfgval.CompareFloat(float64(count), c.op, c.value), message, start), DataKeyCount, float64(count))
-	res.Data = map[string]any{
-		DataKeyBackend: string(sample.Backend),
-		DataKeyCount:   count,
-		DataKeyValue:   count,
-	}
-	if count > 0 {
-		res.Data[DataKeyUnits] = named
-	}
+	res := c.namedCountResult(units, c.op, c.value, "failed unit", DataKeyUnits, start)
+	res.Data[DataKeyBackend] = string(sample.Backend)
 	return res
 }
 
@@ -91,14 +72,9 @@ func buildFailedUnitsCheck(b base, entry map[string]any, runner execx.Runner, de
 	if err != nil {
 		return nil, CheckTypeFailedUnits + " check backend must be " + servicemgr.BackendInitSummary
 	}
-	// count is optional; the default fires on any failed unit (> 0).
-	op, value := cfgval.CompareOpGreater, 0.0
-	if _, present := entry[CheckKeyCount]; present {
-		pred, errs := requireSingleLevelPred(entry, FailedUnitsPredFields, CheckTypeFailedUnits+" check")
-		if errs != "" {
-			return nil, errs
-		}
-		op, value = pred.op, pred.value
+	op, value, errs := optionalCountPred(entry, FailedUnitsPredFields, CheckTypeFailedUnits+" check")
+	if errs != "" {
+		return nil, errs
 	}
 	return failedUnitsCheck{
 		base:    b,

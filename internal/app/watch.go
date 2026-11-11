@@ -46,7 +46,7 @@ type ExpandSpec struct {
 	By int64
 }
 
-// MountRemounter repairs a hung or missing mount. Satisfied by
+// MountRemounter repairs a hung, stale or missing mount. Satisfied by
 // mountctl.Controller; injected so a watch's remount action can be tested
 // without unmounting a real filesystem.
 type MountRemounter interface {
@@ -178,7 +178,7 @@ type Watch struct {
 	DrainOutput   *DrainOutputSpec
 	OutputDrainer OutputDrainer
 	// Remounter, when set, repairs the storage watch's mount on a firing cycle
-	// whose check reports it hung or missing (`then.remount`). It shares Policy
+	// whose check reports it hung, stale or missing (`then.remount`). It shares Policy
 	// with Expand, which a cooldown makes mandatory for it.
 	Remounter MountRemounter
 	Policy    rules.Policy
@@ -787,7 +787,7 @@ func (w *Watch) emissionPolicy() emission.Policy {
 // the volume stays low; an attempt (success or failure) records the time so a
 // failing expansion is not retried every cycle.
 func (w *Watch) runExpand(ctx context.Context, res checks.Result, emitSkipped bool) {
-	// A missing or hung mount makes the path read the parent filesystem, or
+	// A missing, hung or stale mount makes the path read the parent filesystem, or
 	// nothing: growing a volume then grows the wrong one.
 	if failure := cfgval.String(res.Data[checks.DataKeyMountFailure]); failure != "" {
 		w.skipNativeAction(eventKindExpandSkipped, "mount "+failure+", not a space shortage", emitSkipped)
@@ -833,7 +833,7 @@ func (w *Watch) skipNativeAction(kind, reason string, emitSkipped bool) {
 	}
 }
 
-// runRemount repairs a hung or missing mount on a firing cycle, gated by
+// runRemount repairs a hung, stale or missing mount on a firing cycle, gated by
 // Policy like the other native actions: an attempt, successful or not, starts
 // the cooldown, so a server that stays down is not unmounted every cycle. A
 // watch firing for space alone has nothing to remount.

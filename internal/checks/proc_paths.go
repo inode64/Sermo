@@ -9,11 +9,14 @@ const (
 	procMeminfoPath     = "/proc/meminfo"
 	procMountsPath      = "/proc/mounts"
 	procPidMaxPath      = "/proc/sys/kernel/pid_max"
+	procSelfMountInfo   = "/proc/self/mountinfo"
 	procRootPath        = "/proc"
 	procThreadsMaxPath  = "/proc/sys/kernel/threads-max"
 	procVMStatPath      = "/proc/vmstat"
+	sysDevBlockPath     = "/sys/dev/block"
 	sysEDACPath         = "/sys/devices/system/edac"
 	sysHwmonPath        = "/sys/class/hwmon"
+	sysUSBDevicesPath   = "/sys/bus/usb/devices"
 )
 
 // malformedFileFormat reports a procfs/sysfs file whose contents did not parse,

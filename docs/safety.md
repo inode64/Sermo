@@ -507,9 +507,9 @@ Because the daemon runs as root:
   the system clock — additionally *requires* a positive cooldown and acts only on
   an offset breach. **Never enable it on a ceph mon or osd host**: a clock jump
   can cost a monitor its quorum, so alert there instead. `then.remount`
-  likewise requires a positive cooldown and acts only on a missing or hung
-  mount: its forced unmount fails the I/O pending on that mount, never signals
-  a process, and refuses `/`.
+  likewise requires a positive cooldown and acts only on a missing, hung or
+  stale mount: its forced unmount fails the I/O pending on that mount, never
+  signals a process, and refuses `/`.
 - **The config is trusted, root-owned input.** `command` checks and watch `hook`s
   run their `argv` **as root** (never via a shell). Keep `/etc/sermo` writable
   only by root; anyone who can edit it can run code as root. Secrets belong in the

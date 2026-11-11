@@ -34,8 +34,8 @@ const (
 )
 
 const (
-	watchConditionDefaultDelta   = "0"
-	watchFailedUnitsDefaultCount = "0"
-	watchDefaultLockName         = "(default)"
-	watchFallbackFilesystem      = "filesystem"
+	watchConditionDefaultDelta = "0"
+	watchConditionDefaultCount = "0"
+	watchDefaultLockName       = "(default)"
+	watchFallbackFilesystem    = "filesystem"
 )

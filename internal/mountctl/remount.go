@@ -13,7 +13,7 @@ import (
 	"sermo/internal/mounts"
 )
 
-// Remount repairs a mount that is hung or missing: it force-detaches the
+// Remount repairs a mount that is hung, stale or missing: it force-detaches the
 // filesystem mounted at spec.Path (MNT_FORCE aborts the requests a dead NFS
 // server left pending, MNT_DETACH as the fallback), mounts it again — through
 // /etc/fstab, or by touching the path when autofs owns it — and confirms the

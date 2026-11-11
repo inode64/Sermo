@@ -29,6 +29,8 @@
   - [Failed init units (failed_units)](#failed-init-units-failed_units)
   - [An unreachable ceiling is not a ceiling](#an-unreachable-ceiling-is-not-a-ceiling)
   - [inotify limits (inotify)](#inotify-limits-inotify)
+  - [USB device (usb)](#usb-device-usb)
+  - [Stale mounts (stale_mounts)](#stale-mounts-stale_mounts)
   - [Disk throughput (hdparm)](#disk-throughput-hdparm)
   - [Missing devices](#missing-devices)
   - [What a device that stopped answering still reports](#what-a-device-that-stopped-answering-still-reports)
@@ -100,8 +102,10 @@ Connection-protocol checks (MySQL, PostgreSQL, Redis, Docker, libvirt, etc.) are
 | `conntrack`   | condition | the netfilter conntrack table vs its max (used_pct/free/count)      |
 | `firewall_rules` | health | nftables/iptables has at least `min_rules` loaded rules (see Firewall rules) |
 | `failed_units` | condition | the count of init units in a failed state satisfies `count {op, value}` (default `> 0`; see Failed init units) |
+| `stale_mounts` | condition | the count of filesystems still mounted from a block device the kernel no longer has satisfies `count {op, value}` (default `> 0`; see Stale mounts) |
 | `inotify` | condition | the per-user inotify instance/watch limits satisfy their `{op, value}` predicates (see inotify limits) |
 | `route`       | health | an up default route exists, optionally egressing a given `interface` (see Default route)|
+| `usb`         | health | a USB device matching `device` (vendor:product) and/or `serial_number` is connected (see USB device) |
 | `clock`       | health | local wall-clock offset stays within `max_offset`, measured against the configured NTP `servers` or (`source: chrony`) the local chronyd |
 | `net`         | condition | one interface metric (`metric: state\|speed\|errors\|address`) holds — single-metric form of the net watch |
 | `icmp`        | condition | one ping metric (`metric: state\|latency`) against `host`, optionally bound to an `interface` |
@@ -836,7 +840,8 @@ makes the counters outages again. One exception keeps a space ladder from
 hiding a lost filesystem: on a **`storage`** check that declares both
 `mounted:` and a space threshold, the declared `severity:` grades the
 thresholds, and a wrong or absent mount is at least `error`. A mount-only
-check keeps its declaration. So is a hung one: `statfs` on a hard network mount
+check keeps its declaration. A stale mount — one whose block device is gone
+— is graded the same way. So is a hung one: `statfs` on a hard network mount
 whose server is gone blocks in the kernel, so the check gives it its `timeout`
 (the engine's `default_timeout` unless set) and then reports the path
 unavailable — `error` beside space thresholds — and later cycles fail at once
@@ -902,9 +907,9 @@ keeps loading: one that is not strictly stricter than the threshold below it
 level), one that compares in the opposite direction or in the other metric
 form (percentage versus absolute), or one that is not above the check's own
 severity (`levels.error` under `severity: error`). For `oom`, `coredump`,
-`failed_units`, `edac` and `raid` with no declared threshold, the one they fire
-on (any kill, core dump, failed unit, uncorrectable error or degraded array:
-`> 0`) is the threshold
+`failed_units`, `stale_mounts`, `edac` and `raid` with no declared threshold,
+the one they fire on (any kill, core dump, failed unit, stale mount,
+uncorrectable error or degraded array: `> 0`) is the threshold
 below the first level. A whole block under a `reports:` other than the type's
 default is ignored too: the verdict it would grade is inverted or gone, which
 is what happens when an override turns a catalog check into a sensor.
@@ -921,7 +926,7 @@ Types that accept `levels:`, and the threshold keys a level restates:
 | Threshold form | Types | Level keys |
 |---|---|---|
 | level predicates | `storage`, `memory`, `load`, `pressure`, `fds`, `pids`, `conntrack`, `inotify`, `diskio`, `sensors`, `hdparm`, `users`, `tcp_connections`, `ssh_idle`, `terminal_sessions`, `process_count`, `edac`, `raid`, `smart` | the type's predicate fields |
-| single count | `zombies`, `failed_units`, `log` | `count` |
+| single count | `zombies`, `failed_units`, `stale_mounts`, `log` | `count` |
 | counter delta | `oom`, `coredump` | `delta` |
 | count or growth | `count` | `count`, or `delta` in growth mode |
 | per metric | `swap` | `usage`: `used_pct` / `free_pct` / `free_bytes`; `io`: `delta` |
@@ -3401,6 +3406,108 @@ The check needs root: `/proc/<pid>/fd` is owner-only, so an unprivileged run
 counts only its own processes. Rather than report a reassuring `ok` from a partial
 walk, it reports how many fd tables were unreadable and marks the sample a lower
 bound.
+
+### USB device (`usb`)
+
+The `usb` check verifies that a USB device the host depends on is connected: a
+backup disk, a UPS, a modem, a licence dongle. It is a health check (OK means
+the device is there); as a watch it fires while the device is unplugged, and
+under a service's `checks:` it fails that service's health the same way.
+
+```yaml
+watches:
+  usb-backup-disk:
+    category: system
+    interval: 1m
+    for: { cycles: 10 }           # ride out the minutes a disk swap takes
+    check:
+      type: usb
+      device: "0480:a00c"                # vendor:product, as lsusb prints it
+      serial_number: "20231012004242F"   # optional: this unit and no other
+    then: { notify: [ops-email] }
+```
+
+Give `device`, `serial_number` or both. The device is selected by what it is,
+never by the port or the kernel name it happens to get, both of which change
+with the socket it is plugged into. Without `serial_number`, any unit of that
+model satisfies the check, which is what a rotated set of backup disks needs.
+Quote both values: an unquoted run of digits is a YAML number and loses its
+leading zeros.
+
+The devices are read from `/sys/bus/usb/devices`, so `lsusb` does not have to
+be installed. Hubs, the root hub of each controller included, are never
+candidates. To see what a host has connected:
+
+```sh
+grep -H . /sys/bus/usb/devices/*/{idVendor,idProduct,product,serial} 2>/dev/null
+```
+
+Data keys are `device`, `model`, `serial_number` and `bus_port` (where the
+matched device is plugged in, e.g. `3-2`), `count` (devices connected, hubs
+excluded) and `value` (how many match). When none matches, `connected` lists
+what is plugged in instead, so the alert already says whether another unit is
+there or nothing is. A hook receives them as `SERMO_DEVICE`, `SERMO_MODEL`,
+`SERMO_SERIAL_NUMBER`, `SERMO_BUS_PORT`, `SERMO_COUNT` and `SERMO_CONNECTED`.
+
+A host that exposes no USB bus makes the check *unavailable* rather than
+failing: there is nothing there to be unplugged.
+
+The check answers whether the device is there, not whether what was mounted
+from it survived a swap: a disk unplugged while mounted leaves a
+[stale mount](#stale-mounts-stale_mounts) behind, which has its own check.
+
+### Stale mounts (`stale_mounts`)
+
+A disk pulled while it is mounted — a USB backup drive unplugged, a hot-swap
+bay opened — leaves its filesystem in the mount table. `statfs`
+keeps answering from what the kernel holds in memory, so a space check reads it
+as healthy, while every read and write fails with an I/O error and the next disk
+plugged in gets another name. The `stale_mounts` check finds those mounts on
+the whole host and names them:
+
+```yaml
+watches:
+  stale-mounts:
+    category: storage
+    interval: 1m
+    check:
+      type: stale_mounts
+      count: { op: ">", value: 0 }   # optional; this is the default
+    then: { notify: [ops-email] }
+```
+
+A mount is stale when the block device it sits on — the `major:minor` of
+`/proc/self/mountinfo` — has no entry left under `/sys/dev/block`, or has one
+sized `0`. Only the mount table and sysfs are read, never the mount point: the
+check does not trigger an automount, does not keep one from expiring and cannot
+hang on a dead filesystem, so one watch covers every mount without naming a
+path. Only a filesystem mounted from a device node under `/dev` is judged.
+Those the kernel numbers under major `0` are not, because no single block
+device stands for them: network filesystems, `tmpfs`, `btrfs`, ZFS and
+overlays.
+
+The verdict is about the device the filesystem is mounted from, not about what
+lies beneath it. A filesystem on LVM, LUKS, multipath or an md array is mounted
+from the mapped device, which stays when a disk under it goes, so it is not
+reported; neither is a partition of a disk that stopped answering but kept its
+place on the bus. Those are for [`lvm`, `raid`](configuration.md#host-watches)
+and [`smart`](#missing-devices) watches. A host where the check cannot judge at
+all — no device numbers in the mount table, or no `/sys/dev/block` — makes it
+*unavailable* rather than passing.
+
+The check is condition-style and has **no remediation action**: it sees every
+mount of the host, and which of them may be detached is a decision for one
+path. A [`storage`](configuration.md#mount-conditions) watch
+on that path reports the same condition as `mount_failure: stale` when the
+stale filesystem is the one the path reaches (a replacement disk mounted over
+it is not), and its
+[`then.remount`](configuration.md#thenremount--repair-a-hung-stale-or-missing-mount-storage-watch)
+detaches the dead filesystem and mounts the path again. Data keys are `count`
+and `mounts` (each as `mount point (fstype on device)`), and the dashboard shows
+both.
+
+To require that the disk is plugged in at all, pair it with a
+[`usb`](#usb-device-usb) watch.
 
 ### Disk throughput (`hdparm`)
 

@@ -221,6 +221,35 @@ func TestCheckReadingsForAllTypes(t *testing.T) {
 			want: map[string]string{"count": "2", "units": "backup_kvm.service, cleanup.timer"},
 		},
 		{
+			// Which mount point lost its disk is the actionable half.
+			name: "stale_mounts",
+			typ:  checks.CheckTypeStaleMounts,
+			data: map[string]any{
+				checks.DataKeyCount:  uint64(1),
+				checks.DataKeyMounts: "/misc/backup (ext4 on /dev/sdc1)",
+			},
+			want: map[string]string{"count": "1", "mounts": "/misc/backup (ext4 on /dev/sdc1)"},
+		},
+		{
+			// Which unit is plugged in and in which socket.
+			name: "usb connected",
+			typ:  checks.CheckTypeUSB,
+			data: map[string]any{
+				checks.DataKeyCount: 3, checks.DataKeyValue: 1,
+				checks.DataKeyDevice: "0480:a00c", checks.DataKeyBusPort: "3-2",
+				checks.DataKeyModel: "TOSHIBA External USB 3.0", checks.DataKeySerialNumber: "A1",
+			},
+			want:     map[string]string{"device": "0480:a00c", "model": "TOSHIBA External USB 3.0", "serial_number": "A1", "bus_port": "3-2", "count": "3"},
+			minCount: 5,
+		},
+		{
+			// With the device gone, what is connected instead is all there is to show.
+			name: "usb missing",
+			typ:  checks.CheckTypeUSB,
+			data: map[string]any{checks.DataKeyCount: 1, checks.DataKeyValue: 0, checks.DataKeyConnected: "0557:2221 ATEN UC-10KM"},
+			want: map[string]string{"count": "1", "connected": "0557:2221 ATEN UC-10KM"},
+		},
+		{
 			name: "file",
 			typ:  "file",
 			data: map[string]any{"path": "/etc/hosts", "size": int64(220), "age": "2d3h"},

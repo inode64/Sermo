@@ -5502,7 +5502,7 @@ function renderWatchReadings(readings) {
   return tpl`<div class="watch-grid">${cells}</div>`;
 }
 
-const storageWatchTypes = new Set(["diskio", "hdparm", "lvm", "raid", "smart", "ssacli", "storcli", "storage"]);
+const storageWatchTypes = new Set(["diskio", "hdparm", "lvm", "raid", "smart", "ssacli", "stale_mounts", "storcli", "storage"]);
 const networkWatchTypes = new Set(["conntrack", "firewall_rules", "icmp", "net", "route", "tcp_connections"]);
 const securityWatchTypes = new Set(["cert", "file", watchTypeUnownedProcesses]);
 const summaryFileWatchType = "file-summary";
@@ -6061,6 +6061,22 @@ const watchTypeProfiles = {
       swapColumn("used_pct", "Used", fmtPct),
       swapColumn("used_bytes", "Used bytes", fmtBytes),
       swapColumn("free_bytes", "Free bytes", fmtBytes),
+    ],
+  },
+  stale_mounts: {
+    label: "Stale mounts",
+    columns: [
+      numericReadingColumn("count", "Stale"),
+      textReadingColumn("mounts", "Mounts"),
+    ],
+  },
+  usb: {
+    label: "USB devices",
+    columns: [
+      textReadingColumn("device", "Device"),
+      textReadingColumn("model", "Model"),
+      textReadingColumn("serial_number", "Serial"),
+      textReadingColumn("bus_port", "Port"),
     ],
   },
   zombies: {

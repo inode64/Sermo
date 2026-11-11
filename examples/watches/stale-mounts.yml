@@ -1,0 +1,13 @@
+name: stale-mounts
+category: storage
+# Alert on any filesystem still mounted from a block device the kernel no longer
+# has: a USB backup disk unplugged while mounted, a hot-swap bay opened. statfs
+# keeps answering for such a mount, so a space watch reads it as healthy. Only
+# the mount table and sysfs are read, so this never triggers or pins an
+# automount. Reported only: a storage watch on the path repairs it with
+# then.remount.
+monitor: disabled
+interval: 1m
+check: { type: stale_mounts, count: { op: ">", value: 0 } }
+then:
+  notify: [none]

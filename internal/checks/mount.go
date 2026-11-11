@@ -27,6 +27,10 @@ type Mount struct {
 	MountPoint string
 	FSType     string
 	Options    []string
+	// DeviceID is the filesystem's device number, "major:minor", which
+	// identifies the block device it sits on whatever the mount source spells.
+	// Empty when the sampler does not know it.
+	DeviceID string
 }
 
 // MountSamplerFunc returns the current mount table. Injected for tests; the
@@ -65,14 +69,42 @@ func (m mountCond) evaluate(table []Mount, path string) (reason string, info *Mo
 	return "", info
 }
 
-// DefaultMounts reads the mount table from /proc/mounts.
+// DefaultMounts reads the mount table from /proc/mounts, with each
+// filesystem's device number from /proc/self/mountinfo.
 func DefaultMounts() ([]Mount, error) {
 	data, err := hostfs.ReadFile(procMountsPath)
 	if err != nil {
 		return nil, fmt.Errorf("read %s: %w", procMountsPath, err)
 	}
+	out := parseProcMounts(string(data))
+	// Best effort: the device numbers only add what a stale-mount verdict needs,
+	// and a table without them is still the table every other reader wants.
+	if info, err := hostfs.ReadFile(procSelfMountInfo); err == nil {
+		attachDeviceIDs(out, mounts.ParseMountInfo(info))
+	}
+	return out, nil
+}
+
+// attachDeviceIDs gives each mount its device number. Both files list the
+// mounts of one namespace in the same order, so the mounts stacked on one point
+// pair up in sequence. A mount that changed between the two reads is left
+// without a number, or with its successor's, for that one sample.
+func attachDeviceIDs(table []Mount, info []mounts.MountInfo) {
+	ids := make(map[string][]string, len(info))
+	for _, entry := range info {
+		ids[entry.MountPoint] = append(ids[entry.MountPoint], entry.DeviceID)
+	}
+	for i := range table {
+		point := table[i].MountPoint
+		if queue := ids[point]; len(queue) > 0 {
+			table[i].DeviceID, ids[point] = queue[0], queue[1:]
+		}
+	}
+}
+
+func parseProcMounts(data string) []Mount {
 	var out []Mount
-	for line := range strings.SplitSeq(string(data), checkLineSeparator) {
+	for line := range strings.SplitSeq(data, checkLineSeparator) {
 		fields := strings.Fields(line)
 		if len(fields) < procMountsMinFields {
 			continue
@@ -84,7 +116,7 @@ func DefaultMounts() ([]Mount, error) {
 			Options:    strings.Split(fields[procMountsOptionsIndex], procMountsOptionsSep),
 		})
 	}
-	return out, nil
+	return out
 }
 
 // MountForPath returns the deepest mount containing path, or nil when none is

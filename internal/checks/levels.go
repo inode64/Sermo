@@ -104,6 +104,7 @@ var gradeSupports = map[string]gradeSupport{
 	CheckTypeProcessCount:     {kind: gradePredicates},
 	CheckTypeZombies:          {kind: gradePredicates},
 	CheckTypeFailedUnits:      {kind: gradePredicates, defaulted: true, implicit: anyCount(CheckKeyCount)},
+	CheckTypeStaleMounts:      {kind: gradePredicates, defaulted: true, implicit: anyCount(CheckKeyCount)},
 	CheckTypeOOM:              {kind: gradePredicates, defaulted: true, implicit: anyCount(CheckKeyDelta)},
 	CheckTypeCoredump:         {kind: gradePredicates, defaulted: true, implicit: anyCount(CheckKeyDelta)},
 	CheckTypeEDAC:             {kind: gradePredicates, defaulted: true, implicit: anyCount(fieldUE)},

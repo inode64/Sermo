@@ -148,6 +148,7 @@ const (
 	CheckKeyScope                 = "scope"
 	CheckKeyServerName            = "server_name"
 	CheckKeyServers               = "servers"
+	CheckKeySerialNumber          = "serial_number"
 	CheckKeySeverity              = "severity"
 	CheckKeySkipWhenChanged       = "skip_when_changed"
 	CheckKeySLA                   = "sla"

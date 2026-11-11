@@ -139,6 +139,7 @@ var graphMetrics = map[string][]GraphMetric{
 	},
 	CheckTypeZombies:       {{Key: DataKeyZombies, Unit: metrics.MetricUnitProcesses, Label: "Zombies"}},
 	CheckTypeFailedUnits:   {{Key: DataKeyCount, Unit: metrics.MetricUnitNone, Label: "Failed units"}},
+	CheckTypeStaleMounts:   {{Key: DataKeyCount, Unit: metrics.MetricUnitNone, Label: "Stale mounts"}},
 	CheckTypeCount:         {{Key: DataKeyCount, Unit: metrics.MetricUnitNone, Label: "Count"}},
 	CheckTypeLog:           {{Key: DataKeyCount, Unit: metrics.MetricUnitLines, Label: "Matches"}},
 	CheckTypeFirewallRules: {{Key: DataKeyRules, Unit: metrics.MetricUnitNone, Label: "Rules"}},

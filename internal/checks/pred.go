@@ -229,6 +229,9 @@ var (
 	// FailedUnitsPredFields is the single optional predicate of a failed_units
 	// check; absent, it defaults to firing on any failed unit.
 	FailedUnitsPredFields = []string{DataKeyCount}
+	// StaleMountsPredFields is the single optional predicate of a stale_mounts
+	// check; absent, it defaults to firing on any stale mount.
+	StaleMountsPredFields = []string{DataKeyCount}
 	// OOMPredFields is the optional OOM-kill delta predicate. Absent, the check
 	// defaults to firing on any observed kill.
 	OOMPredFields = []string{CheckKeyDelta}
@@ -312,6 +315,17 @@ func requireSingleLevelPred(entry map[string]any, fields []string, label string)
 		return levelPred{}, label + ": requires at least one of " + strings.Join(fields, "/")
 	}
 	return preds[0], ""
+}
+
+// optionalCountPred is the predicate of a check whose `count` may be omitted:
+// declared, it is that predicate; absent, the check fires on any item at all
+// (`> 0`).
+func optionalCountPred(entry map[string]any, fields []string, label string) (op string, value float64, errs string) {
+	if _, present := entry[CheckKeyCount]; !present {
+		return cfgval.CompareOpGreater, 0, ""
+	}
+	pred, errs := requireSingleLevelPred(entry, fields, label)
+	return pred.op, pred.value, errs
 }
 
 // parseDeltaThreshold parses a `delta` {op, value} mapping — the per-cycle

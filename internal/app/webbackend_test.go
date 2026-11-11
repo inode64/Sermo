@@ -1621,6 +1621,41 @@ func TestFailedUnitsWatchConditions(t *testing.T) {
 	}
 }
 
+// A stale_mounts watch with no declared count still shows what fires.
+func TestStaleMountsWatchConditions(t *testing.T) {
+	minimal := watchConditions(map[string]any{checks.CheckKeyType: checks.CheckTypeStaleMounts}, nil)
+	if want := []web.WatchCondition{{Field: "count", Op: ">", Value: "0"}}; !slices.Equal(minimal, want) {
+		t.Fatalf("minimal conditions = %+v, want %+v", minimal, want)
+	}
+	declared := watchConditions(map[string]any{
+		checks.CheckKeyType:  checks.CheckTypeStaleMounts,
+		checks.CheckKeyCount: map[string]any{checks.CheckKeyOp: ">=", checks.CheckKeyValue: 2},
+	}, nil)
+	if want := []web.WatchCondition{{Field: "count", Op: ">=", Value: "2"}}; !slices.Equal(declared, want) {
+		t.Fatalf("declared conditions = %+v, want %+v", declared, want)
+	}
+}
+
+// A usb watch shows what it selects by; a selector left out leaves no row.
+func TestUSBWatchConditions(t *testing.T) {
+	both := watchConditions(map[string]any{
+		checks.CheckKeyType:         checks.CheckTypeUSB,
+		checks.CheckKeyDevice:       "0480:a00c",
+		checks.CheckKeySerialNumber: "A1",
+	}, nil)
+	want := []web.WatchCondition{
+		{Field: "device", Op: "==", Value: "0480:a00c"},
+		{Field: "serial_number", Op: "==", Value: "A1"},
+	}
+	if !slices.Equal(both, want) {
+		t.Fatalf("conditions = %+v, want %+v", both, want)
+	}
+	serialOnly := watchConditions(map[string]any{checks.CheckKeyType: checks.CheckTypeUSB, checks.CheckKeySerialNumber: "A1"}, nil)
+	if !slices.Equal(serialOnly, want[1:]) {
+		t.Fatalf("serial-only conditions = %+v, want %+v", serialOnly, want[1:])
+	}
+}
+
 // A size check shows each configured limit: the absolute max, the growth
 // window, or both; an absent one leaves no row behind.
 func TestSizeWatchConditions(t *testing.T) {
