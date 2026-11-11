@@ -92,6 +92,9 @@ const colDupPhone = "col-dup col-dup-640";
 const eventDetailLimit = "50";
 // eventRangeAll is the events range selector's explicit "any time" value.
 const eventRangeAll = "all";
+// eventRangeDefault is the window an events panel opens on. "any time" and a
+// legacy empty range are the same unfiltered log; every other window is narrower.
+const eventRangeDefault = "24h";
 const eventContextLimit = "1";
 const queryBoolOne = "1";
 const storageBoolTrue = "1";
@@ -1208,6 +1211,27 @@ function eventsWithinDateBounds(events) {
   });
 }
 
+// eventListIsNarrowed reports that the visible log is not the cold default.
+// Service, watch, kind, status and the exact dates are applied by the daemon
+// before the rows arrive, so an empty allEvents cannot tell a quiet host from
+// a filter that matched nothing. The error toggle and a window other than the
+// last day do the same.
+function eventListIsNarrowed() {
+  for (const field of eventFilterFields) {
+    if (field.key === "range") continue;
+    if (eventFilterValue(field).trim()) return true;
+  }
+  if ($("#event-errors") && $("#event-errors").checked) return true;
+  const range = ($("#event-range") || {}).value || "";
+  return range !== "" && range !== eventRangeDefault && range !== eventRangeAll;
+}
+
+function renderGlobalEventEmpty() {
+  const text = eventListIsNarrowed() ? "No events in this view." : "No events yet.";
+  // The global log always has the subject column, so the note spans all four.
+  return tpl`<tr><td colspan="4" class="muted">${text}</td></tr>`;
+}
+
 function renderGlobalEvents() {
   const tbody = $("#events");
   if (!tbody) return;
@@ -1220,10 +1244,8 @@ function renderGlobalEvents() {
   syncEventTargetFilters();
   const grouped = $("#event-group") && $("#event-group").checked;
   if (!grouped) {
-    // Loaded-but-filtered-out must not read as an empty log: the date bounds
-    // (and server-side filters) may hide every fetched event.
-    if (!events.length && (allEvents || []).length) {
-      litRender(tpl`<tr><td class="muted">No events match the filter.</td></tr>`, tbody);
+    if (!events.length) {
+      litRender(renderGlobalEventEmpty(), tbody);
       return;
     }
     litRender(eventRows(events, true, { prefix: "global" }), tbody);
@@ -1231,7 +1253,7 @@ function renderGlobalEvents() {
   }
   const groups = groupedEvents(events);
   if (!groups.length) {
-    litRender(tpl`<tr><td class="muted">No events match the filter.</td></tr>`, tbody);
+    litRender(renderGlobalEventEmpty(), tbody);
     return;
   }
   litRender(groups.map((g, gi) => {

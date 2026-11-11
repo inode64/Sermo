@@ -3141,6 +3141,39 @@ test("a graded event names its level in the event log", async ({ page }) => {
   await expect(page.locator("#events-section tr", { hasText: "started" }).locator(".sev")).toHaveCount(0);
 });
 
+test("an empty event log names a narrowed view and stays quiet otherwise", async ({ page }) => {
+  await page.route("**/api/events**", (route) => route.fulfill({
+    json: { events: [], has_more: false },
+  }));
+  await page.locator("#refresh-now").click();
+  const body = page.locator("#events");
+  await expect(body).toHaveText("No events yet.");
+  await expect(body.locator("td")).toHaveAttribute("colspan", "4");
+
+  // "any time" is still the whole log. A shorter window is a view.
+  await page.locator("#event-range").selectOption("all");
+  await expect(body).toHaveText("No events yet.");
+  await page.locator("#event-range").selectOption("1h");
+  await expect(body).toHaveText("No events in this view.");
+  await page.locator("#event-range").selectOption("24h");
+  await expect(body).toHaveText("No events yet.");
+
+  await page.locator("#event-errors").check();
+  await expect(body).toHaveText("No events in this view.");
+  await page.locator("#event-errors").uncheck();
+  await page.locator("#event-group").check();
+  await expect(body).toHaveText("No events yet.");
+});
+
+test("a date bound that hides every loaded event says the view is empty", async ({ page }) => {
+  await page.locator("#event-more-controls > summary").click();
+  await page.locator("#event-from").fill("2026-11-01T00:00");
+  const body = page.locator("#events");
+  await expect(body).toHaveText("No events in this view.");
+  await expect(body.locator("td")).toHaveAttribute("colspan", "4");
+  await expect(body).not.toContainText("No events match the filter.");
+});
+
 test("event times show age and keep the full instant on hover", async ({ page }) => {
   // The fixture events are months old, so the cell stays the canonical UTC
   // time. The title still carries that instant and the viewer's local time.
