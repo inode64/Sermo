@@ -13,14 +13,14 @@ require (
 	github.com/godbus/dbus/v5 v5.2.4
 	github.com/google/nftables v0.3.0
 	github.com/gosnmp/gosnmp v1.47.0
-	github.com/jackc/pgx/v5 v5.12.0
+	github.com/jackc/pgx/v5 v5.13.0
 	github.com/mdlayher/netlink v1.11.2
 	github.com/quic-go/quic-go v0.65.0
 	github.com/spf13/pflag v1.1.0
 	github.com/vishvananda/netlink v1.3.1
 	github.com/wneessen/go-mail v0.8.2
 	go.mongodb.org/mongo-driver/v2 v2.10.0
-	golang.org/x/crypto v0.58.0
+	golang.org/x/crypto v0.59.0
 	golang.org/x/net v0.62.0
 	golang.org/x/sys v0.50.0
 	golang.org/x/tools v0.52.0
