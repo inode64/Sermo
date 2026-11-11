@@ -57,8 +57,21 @@ jobs:
           # make rule would judge it stale and rebuild on every run.
           if [ -f bin/custom-gcl ]; then touch bin/custom-gcl; fi
           make custom-gcl
+      # The browser comes from a CDN and its libraries from the apt mirror. A
+      # stalled download held this step for ten minutes and failed the job
+      # before the gate ran, where it normally takes seconds: bound each attempt
+      # and retry. The tail is an annotation for the same reason as the gate's.
       - name: Install browser test runtime
-        run: npx playwright install --with-deps chromium
+        run: |
+          set -o pipefail
+          for attempt in 1 2 3; do
+            if timeout --kill-after=15 240 npx playwright install --with-deps chromium 2>&1 | tee /tmp/playwright-install.log; then
+              exit 0
+            fi
+            echo "::warning title=playwright install::attempt ${attempt} failed: $(tail -c 300 /tmp/playwright-install.log | tr '\n' ' ')"
+          done
+          echo "::error title=playwright install (tail)::$(tail -c 700 /tmp/playwright-install.log | tr '\n' ' ')"
+          exit 1
       - run: make build
       # On failure, surface the tail of the gate's output as annotations: job
       # logs need repository auth to read, annotations do not, so the failure
