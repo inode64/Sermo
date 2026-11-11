@@ -1,4 +1,4 @@
-import { html as tpl, render as litRender, nothing } from "./vendor/lit-html.js";
+import { html as tpl, render as litRender, nothing, svg } from "./vendor/lit-html.js";
 import watchPanelDescriptors from "./watch-panels.json";
 import {
   apiActionSuffix, apiActivityPath, apiApplicationsPath, apiDaemonPath, apiHeaderGeneration,
@@ -2948,25 +2948,40 @@ function groupToggleAriaLabel(category, count, collapsed) {
   return `${collapsed ? "Expand" : "Collapse"} ${category} group (${count} items)`;
 }
 
-// actionMeta is the one vocabulary of action buttons: the glyph and, per
+// actionIcon is one stroke icon, the same 16px outline as the top bar. Row
+// actions use it so a phone does not substitute a colour emoji for a character.
+function actionIcon(content) {
+  return svg`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${content}</svg>`;
+}
+
+const iconPlay = actionIcon(svg`<polygon points="6 3 20 12 6 21 6 3"/>`);
+const iconStop = actionIcon(svg`<rect x="5" y="5" width="14" height="14" rx="1"/>`);
+const iconRestart = actionIcon(svg`<path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/>`);
+const iconReload = actionIcon(svg`<path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/>`);
+const iconPause = actionIcon(svg`<rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/>`);
+const iconMonitor = actionIcon(svg`<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/>`);
+const iconUnmonitor = actionIcon(svg`<path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/><path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c6.5 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"/><path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3.5 7 10 7a9.74 9.74 0 0 0 5.39-1.61"/><line x1="2" x2="22" y1="2" y2="22"/>`);
+const iconRepair = actionIcon(svg`<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>`);
+
+// actionMeta is the one vocabulary of action buttons: the icon and, per
 // surface, the accessible label. A surface without an entry falls back to
 // "<action> <surface> <name>", so a new action renders before it is named
 // here — it just reads generically until it is.
-// Action glyphs carry U+FE0E, the text presentation selector: without it a phone
-// draws ▶ and ⏸ as colour emoji, out of step with every other mark.
+// The remaining text glyphs (mount, unmount, notifier test) carry U+FE0E, the
+// text presentation selector: without it a phone draws them as colour emoji.
 const glyphPlay = "▶\uFE0E";
 const actionMeta = {
-  [actionStart]: { glyph: glyphPlay, service: (n) => `Start service ${n}` },
-  [actionRepair]: { glyph: "⚒\uFE0E", service: (n) => `Repair residual service state ${n}` },
-  [actionStop]: { glyph: "■", service: (n) => `Stop service ${n}` },
-  [actionRestart]: { glyph: "↻", service: (n) => `Restart service ${n}` },
-  [actionResume]: { glyph: glyphPlay, service: (n) => `Resume service ${n}`, watch: (n) => `Resume RAID reconstruction for watch ${n}` },
-  [actionReload]: { glyph: "⟳", service: (n) => `Reload service ${n}` },
-  [actionMonitor]: { glyph: "◉", service: (n) => `Monitor service ${n}`, watch: (n) => `Monitor watch ${n}` },
-  [actionUnmonitor]: { glyph: "⊘", service: (n) => `Unmonitor service ${n}`, watch: (n) => `Unmonitor watch ${n}` },
+  [actionStart]: { glyph: iconPlay, service: (n) => `Start service ${n}` },
+  [actionRepair]: { glyph: iconRepair, service: (n) => `Repair residual service state ${n}` },
+  [actionStop]: { glyph: iconStop, service: (n) => `Stop service ${n}` },
+  [actionRestart]: { glyph: iconRestart, service: (n) => `Restart service ${n}` },
+  [actionResume]: { glyph: iconPlay, service: (n) => `Resume service ${n}`, watch: (n) => `Resume RAID reconstruction for watch ${n}` },
+  [actionReload]: { glyph: iconReload, service: (n) => `Reload service ${n}` },
+  [actionMonitor]: { glyph: iconMonitor, service: (n) => `Monitor service ${n}`, watch: (n) => `Monitor watch ${n}` },
+  [actionUnmonitor]: { glyph: iconUnmonitor, service: (n) => `Unmonitor service ${n}`, watch: (n) => `Unmonitor watch ${n}` },
   [actionExpand]: { watch: (n) => `Expand storage for watch ${n}` },
   [actionProbe]: { watch: (n) => `Probe watch ${n}` },
-  [actionPause]: { glyph: "⏸\uFE0E", service: (n) => `Pause service ${n}`, watch: (n) => `Pause RAID reconstruction for watch ${n}` },
+  [actionPause]: { glyph: iconPause, service: (n) => `Pause service ${n}`, watch: (n) => `Pause RAID reconstruction for watch ${n}` },
   [actionReplicationStart]: { watch: (n) => `Start replication for watch ${n}` },
 };
 
@@ -5665,8 +5680,8 @@ function watchActionsCell(w) {
     ? tpl`<span class="muted">disabled in config</span>`
     : (me.can_act
       ? (w.monitored
-        ? watchActionButton(w, actionUnmonitor, tpl`<span aria-hidden="true">⊘</span>`, true)
-        : watchActionButton(w, actionMonitor, tpl`<span aria-hidden="true">◉</span>`, true))
+        ? watchActionButton(w, actionUnmonitor, tpl`<span aria-hidden="true">${iconUnmonitor}</span>`, true)
+        : watchActionButton(w, actionMonitor, tpl`<span aria-hidden="true">${iconMonitor}</span>`, true))
       : readOnlyNote);
   const actions = !w.enabled
     ? tpl`<span class="muted">disabled in config</span>`

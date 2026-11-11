@@ -1277,7 +1277,7 @@ also_apply: [nginx, varnish]
   configuration. In the web UI the per-service **reload** button is enabled only
   when the service is `active` and Sermo reports `can_reload=true` from either
   the init backend (`ExecReload`/OpenRC `reload`) or a valid `reload:` fallback;
-  VM and container rows carry one **pause** toggle (⏸): it pauses an `active`
+  VM and container rows carry one **pause** toggle: it pauses an `active`
   target and, latched while the target is `paused`, resumes it. A paused row
   is tinted in its own colour and its state reads `paused`.
 

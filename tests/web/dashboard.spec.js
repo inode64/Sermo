@@ -1238,14 +1238,13 @@ test("VM pause is one toggle and a paused VM row reads in its own colour", async
   await expect(running).not.toHaveClass(/row-paused/);
   await expect(paused.locator(".state-paused")).toHaveText("paused");
 
-  // One button per row: the same pause glyph, latched while paused. The glyph
-  // carries the text presentation selector so a phone does not draw an emoji.
+  // One button per row: the same pause icon, latched while paused.
   const pause = running.locator(".suspend-btn");
   const resume = paused.locator(".suspend-btn");
   await expect(pause).toHaveCount(1);
   await expect(resume).toHaveCount(1);
-  await expect(pause).toHaveText("⏸\uFE0E");
-  await expect(resume).toHaveText("⏸\uFE0E");
+  await expect(pause.locator("svg")).toHaveCount(1);
+  await expect(resume.locator("svg")).toHaveCount(1);
   await expect(pause).toHaveAttribute("aria-pressed", "false");
   await expect(pause).toHaveAttribute("data-service-action", "pause");
   await expect(pause).toHaveAttribute("aria-label", "Pause service VM vm-run");
