@@ -197,6 +197,10 @@ type Worker struct {
 	// rule name, plus the blocked action for a guard. Cleared when the condition
 	// evaluates cleanly again.
 	evalErrs map[string]string
+	// refusedRemediations names the rules whose last attempt the engine
+	// refused without starting a cooldown: their next attempt comes on the
+	// following cycle and must not announce the alert again.
+	refusedRemediations map[string]bool
 	// libBaseline holds the acknowledged fingerprint of each watched path (a
 	// `changed:` condition target, typically a library .so) and the acknowledged
 	// version of each watched app across cycles. The operation engine shares it
@@ -905,7 +909,10 @@ func (w *Worker) runFiringRemediation(ctx context.Context, ev *rules.Evaluator, 
 		}
 		return false
 	}
-	w.emitAlerts(ctx, ev, firing.Rule, true, firing.change, firing.severity)
+	// An attempt the engine refuses starts no cooldown, so the rule tries again
+	// on every cycle. Each attempt keeps its audit event; the alert belongs to
+	// the episode, and repeating it per refusal would bury every other event.
+	w.emitAlerts(ctx, ev, firing.Rule, firing.announce() || !w.refusedRemediations[firing.Name], firing.change, firing.severity)
 	w.executeRemediation(ctx, now, firing, action)
 	return true
 }
@@ -957,6 +964,12 @@ func (w *Worker) executeRemediation(ctx context.Context, now func() time.Time, f
 	result, recovered := operateRecovering(ctx, operate, w.Service, action)
 	if result.RecordsRemediation() {
 		w.State.Record(now(), w.Policy)
+		delete(w.refusedRemediations, firing.Name)
+	} else {
+		if w.refusedRemediations == nil {
+			w.refusedRemediations = map[string]bool{}
+		}
+		w.refusedRemediations[firing.Name] = true
 	}
 	if result.OK() {
 		w.acknowledgeOperation(firing.Rule, rules.ActionType(action), result.Relaunched)

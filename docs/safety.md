@@ -1049,7 +1049,8 @@ must hold the affected services' named locks; the observation stability window
 does not detect an update's completion. See the
 [configuration and limits](configuration.md#stale_libraries--processes-using-replaced-shared-libraries).
 
-A strict selector named `main` identifies the daemon's role explicitly. If a
+A strict selector named `main`, or `main-<variant>` for a second identity of
+the same daemon, identifies the daemon's role explicitly. If a
 profile names its strict selector differently, its main pidfile must identify
 the affected process: backend attribution may include child daemons and is not
 enough to choose one for a library restart.

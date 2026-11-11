@@ -83,17 +83,14 @@ func (d Discoverer) PrincipalIdentityIn(attributed []Process, selectors []Select
 	return out
 }
 
-// principalIdentity narrows the evidence to the strict main selector when one
-// exists, so a worker cannot stand in for the main process. An external
-// candidate can show a replaced binary but never trust. The first trusted
-// process settles the verdict.
+// principalIdentity narrows the evidence to the strict main identities when
+// the service declares any, so a worker cannot stand in for the main process.
+// An external candidate can show a replaced binary but never trust. The first
+// trusted process settles the verdict.
 func (d Discoverer) principalIdentity(procs []Process, selectors []Selector) PrincipalIdentity {
 	identities := selectors
-	for _, sel := range selectors {
-		if sel.Name == RoleMain && sel.IsStrictPrincipal() {
-			identities = []Selector{sel}
-			break
-		}
+	if main := MainIdentities(selectors); len(main) > 0 {
+		identities = main
 	}
 	out := PrincipalIdentity{Required: HasStrictPrincipal(identities)}
 	reader, resolve := d.reader(), d.resolveUser()

@@ -64,27 +64,24 @@ func (d Discoverer) deletedCandidateBlock(id Identity, selectors []Selector, idx
 	}
 	// A shared helper cannot identify its instance. Count principal roots,
 	// including foreign units, without treating the principal's workers as
-	// additional instances. A cmd constraint still narrows the main selector.
-	for i := range selectors {
-		sel := &selectors[i]
-		if sel.Name != RoleMain || !sel.HasStrictIdentity() || sel.Delegated {
+	// additional instances. A cmd constraint still narrows a main identity.
+	main := MainIdentities(selectors)
+	if len(main) == 0 {
+		return "external process has no strict main selector to distinguish instances"
+	}
+	roots := 0
+	for _, other := range idx.byPID {
+		if !d.claimedBy(main, other, d.resolveUser()) {
 			continue
 		}
-		roots := 0
-		for _, other := range idx.byPID {
-			if !d.claimedBy([]Selector{*sel}, other, d.resolveUser()) {
-				continue
-			}
-			if d.claimedBy([]Selector{*sel}, idx.byPID[other.PPID], d.resolveUser()) {
-				continue
-			}
-			roots++
-			foreign, known := d.ProcessOwnership(other)
-			if !known || foreign || roots > 1 {
-				return "ambiguous service ownership of external process"
-			}
+		if d.claimedBy(main, idx.byPID[other.PPID], d.resolveUser()) {
+			continue
 		}
-		return ""
+		roots++
+		foreign, known := d.ProcessOwnership(other)
+		if !known || foreign || roots > 1 {
+			return "ambiguous service ownership of external process"
+		}
 	}
-	return "external process has no strict main selector to distinguish instances"
+	return ""
 }

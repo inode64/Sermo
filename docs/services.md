@@ -1332,6 +1332,20 @@ to stop gracefully and another 60 seconds after SIGTERM before escalation.
   server that outlived its SSH parent are kept without matching a title.
 - `user` / `group` — the process real UID / GID owner.
 
+A selector named `main` with an exact `exe` and `user` is the identity of the
+daemon itself: with one declared, a worker that runs the same executable
+cannot stand in for it, and start and restart refuse to act while no process
+matches it. A daemon that drops privileges only when its init options ask for
+it runs as one of two users, and a selector holds one. Declare the second
+identity as `main-<variant>`; every selector named `main` or `main-…` counts
+as the daemon. The packaged `rpc-statd` and `ntpd` profiles do so:
+
+```yaml
+processes:
+  main: { exe: "${rpc_statd_binary}", user: "${user}" }
+  main-root: { exe: "${rpc_statd_binary}", user: root }
+```
+
 Do not use a generic helper executable shared by several units as a service
 selector. On systemd, cgroup attribution identifies the unit's processes; where
 there is no unique exact identity, leave the helper unselected. A broad helper

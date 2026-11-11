@@ -110,8 +110,9 @@ func readPrimaryStart(starts processStartReader, principal *process.Process) (ti
 // selectPrimaryProcess chooses only an unambiguous principal identity. Systemd
 // and container backends seed their MainPID first; a top-level pidfile or a
 // pidfiles.main entry is the next strongest evidence; explicit process
-// selectors may opt in with the name "main". A generic process tree root, or a
-// pidfile explicitly assigned to a non-main role, is intentionally not guessed.
+// selectors may opt in with the name "main" or a "main-<variant>". A generic
+// process tree root, or a pidfile explicitly assigned to a non-main role, is
+// intentionally not guessed.
 func selectPrimaryProcess(procs []process.Process) (process.Process, bool) {
 	for _, p := range procs {
 		if p.Source == process.SourceBackend && p.Role == process.RoleMain {
@@ -124,7 +125,7 @@ func selectPrimaryProcess(procs []process.Process) (process.Process, bool) {
 		}
 	}
 	for _, p := range procs {
-		if p.Source == process.SelectorCommandMatch && p.Role == process.RoleMain {
+		if p.Source == process.SelectorCommandMatch && process.IsMainRole(p.Role) {
 			return p, true
 		}
 	}

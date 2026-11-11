@@ -440,9 +440,11 @@ func (d Discoverer) StaleBinariesIn(attributed []Process, selectors []Selector) 
 		return true
 	}
 	daemon := daemonExecutable(attributed)
+	resolve := d.resolveUser()
 	for _, p := range attributed {
 		if !p.Stray && !p.Kept && p.ExePrev != "" && mark(p.PID) {
-			out = append(out, StaleBinary{PID: p.PID, Path: p.ExePrev, Auxiliary: daemon != "" && p.ExePrev != daemon})
+			auxiliary := daemon != "" && p.ExePrev != daemon && !d.namedDeletedProcess(selectors, p.PID, resolve)
+			out = append(out, StaleBinary{PID: p.PID, Path: p.ExePrev, Auxiliary: auxiliary})
 		}
 	}
 	// A live backend or pidfile attribution is authoritative.
@@ -453,22 +455,40 @@ func (d Discoverer) StaleBinariesIn(attributed []Process, selectors []Selector) 
 		return out
 	}
 
-	resolve := d.resolveUser()
 	idx := snapshotIndexFor(d.reader())
 	for _, pid := range idx.deleted {
 		if seen[pid] {
 			continue
 		}
-		id := idx.byPID[pid]
-		for i := range selectors {
-			if !selectors[i].Delegated && selectors[i].Type == SelectorCommandMatch && d.matchesDeletedExe(&selectors[i], id, resolve) {
-				mark(pid)
-				out = append(out, StaleBinary{PID: pid, Path: id.ExePrev})
-				break
-			}
+		if id := idx.byPID[pid]; d.namesDeletedExe(selectors, id, resolve) {
+			mark(pid)
+			out = append(out, StaleBinary{PID: pid, Path: id.ExePrev})
 		}
 	}
 	return out
+}
+
+// namesDeletedExe reports a replaced process that one of the service's own exe
+// selectors would have matched: the profile names that program as its own.
+func (d Discoverer) namesDeletedExe(selectors []Selector, id Identity, resolve UserResolver) bool {
+	for i := range selectors {
+		if !selectors[i].Delegated && selectors[i].Type == SelectorCommandMatch && d.matchesDeletedExe(&selectors[i], id, resolve) {
+			return true
+		}
+	}
+	return false
+}
+
+// namedDeletedProcess is namesDeletedExe for an attributed process. A main
+// pidfile does not always name the daemon: an OpenRC supervisor writes its own
+// PID there, and the program it runs would read as a helper beside it. What
+// the profile declares as the service's program is never one.
+func (d Discoverer) namedDeletedProcess(selectors []Selector, pid int, resolve UserResolver) bool {
+	if !hasExeSelector(selectors) {
+		return false
+	}
+	id, ok := d.reader().Identity(pid)
+	return ok && d.namesDeletedExe(selectors, id, resolve)
 }
 
 // daemonExecutable is the executable of the daemon a main pidfile names — its
@@ -879,6 +899,26 @@ func (s Selector) IsStrictPrincipal() bool {
 // HasStrictPrincipal reports whether any selector is a strict principal.
 func HasStrictPrincipal(selectors []Selector) bool {
 	return slices.ContainsFunc(selectors, Selector.IsStrictPrincipal)
+}
+
+// IsMainRole reports a role that names the service's main process: `main` or
+// one of its `main-<variant>` identities.
+func IsMainRole(role string) bool {
+	return role == RoleMain || strings.HasPrefix(role, mainVariantPrefix)
+}
+
+// MainIdentities returns the strict principal selectors that name the main
+// process. They are the evidence that tells the daemon from its workers, which
+// often run the same executable; every site that asks "is this the daemon"
+// reads them from here so a second declared identity counts at all of them.
+func MainIdentities(selectors []Selector) []Selector {
+	var main []Selector
+	for _, sel := range selectors {
+		if IsMainRole(sel.Name) && sel.IsStrictPrincipal() {
+			main = append(main, sel)
+		}
+	}
+	return main
 }
 
 // selectorCmdRegexp returns the selector's compiled cmd regex, compiling lazily

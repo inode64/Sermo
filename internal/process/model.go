@@ -213,6 +213,11 @@ const (
 const (
 	// RoleMain is the canonical role for the primary service process selector.
 	RoleMain = "main"
+	// mainVariantPrefix opens the name of a selector that declares another
+	// identity of the main process (`main-root`, `main-openrc`). A selector holds
+	// one user, and a daemon that drops privileges only when its init options
+	// ask for it runs as one of two.
+	mainVariantPrefix = RoleMain + "-"
 	// RoleChild marks descendant processes discovered from a primary process.
 	RoleChild = "child"
 )

@@ -2586,6 +2586,10 @@ rules:
 `emission` is valid only globally, under `rules.*`, and under `watches.*`; a
 service does not have a service-wide emission override. Real operation result
 events remain audit events and are recorded whenever an operation is attempted.
+A remediation rule announces its alert with each attempt that runs, which the
+cooldown spaces. An attempt the engine refuses before acting (blocked, skipped
+or failed preflight) starts no cooldown and is tried again on the next cycle:
+those attempts share the episode's one alert, each with its own result event.
 
 `emission.events` also governs the `error` events a worker emits for failures it
 cannot act on: a rule condition that cannot be evaluated at all (a version probe
@@ -3975,6 +3979,10 @@ this alone does not restart the service`. The service still shows
 `restart_required` and the rule still alerts, with that reading as its output,
 but no restart runs: renewing a shell would cut every client of the daemon off
 (see [advisory evidence](rules.md#advisory-evidence-in-a-rule-that-alerts-and-acts)).
+A process that one of the service's own `processes:` selectors names, by exact
+`exe` and its `user`, is the service's program wherever the pidfile points:
+OpenRC's `supervise-daemon` writes its own PID there, and the daemon it runs is
+not a helper beside it.
 Without a live main pidfile Sermo cannot tell the daemon from its launcher, so
 every replaced binary keeps the restart. The RabbitMQ profile names the
 broker's own pidfile for this reason: the OpenRC script's pidfile names the

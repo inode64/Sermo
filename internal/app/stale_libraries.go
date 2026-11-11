@@ -53,12 +53,7 @@ func libraryRestartEligible(lib process.StaleLibrary, principal int) bool {
 // daemon: a mail server detaches short-lived deliveries that run its executable
 // as its user, and they would read as further masters for as long as they live.
 func libraryRestartPrincipal(discoverer process.Discoverer, selectors []process.Selector, procs []process.Process) int {
-	var main []process.Selector
-	for _, selector := range selectors {
-		if selector.Name == process.RoleMain && selector.IsStrictPrincipal() {
-			main = append(main, selector)
-		}
-	}
+	main := process.MainIdentities(selectors)
 	// Catalog profiles may name their only principal after the daemon (for
 	// example postgres). An explicit main selector still takes precedence over
 	// workers. Without one, require the main pidfile: a backend may label every
@@ -76,7 +71,7 @@ func libraryRestartPrincipal(discoverer process.Discoverer, selectors []process.
 		if needsPidfile && !proc.MainPidfile {
 			continue
 		}
-		if (proc.Role != process.RoleMain && !proc.MainPidfile) || proc.Source == process.SourceChild || proc.Delegated || proc.Stray || proc.External || !proc.ExeOK {
+		if (!process.IsMainRole(proc.Role) && !proc.MainPidfile) || proc.Source == process.SourceChild || proc.Delegated || proc.Stray || proc.External || !proc.ExeOK {
 			continue
 		}
 		if _, ok := discoverer.StrictMatchPID(proc.PID, main); !ok {

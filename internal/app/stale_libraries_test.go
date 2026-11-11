@@ -124,6 +124,8 @@ func TestLibraryRestartPrincipalWithNamedCatalogSelector(t *testing.T) {
 	explicitMain.Name, explicitMain.Exe = process.RoleMain, "/opt/sermo-fixture/master"
 	delegated := selector
 	delegated.Delegated = true
+	variant := selector
+	variant.Name = process.RoleMain + "-variant"
 
 	for name, tc := range map[string]struct {
 		selectors []process.Selector
@@ -137,6 +139,7 @@ func TestLibraryRestartPrincipalWithNamedCatalogSelector(t *testing.T) {
 		"ambiguous masters":         {selectors: []process.Selector{selector}, procs: []process.Process{main, otherMain}},
 		"explicit main absent":      {selectors: []process.Selector{selector, explicitMain}, procs: []process.Process{main}},
 		"delegated identity":        {selectors: []process.Selector{delegated}, procs: []process.Process{main}},
+		"second main identity":      {selectors: []process.Selector{explicitMain, variant}, procs: []process.Process{main}, want: 10},
 	} {
 		t.Run(name, func(t *testing.T) {
 			if got := libraryRestartPrincipal(d, tc.selectors, tc.procs); got != tc.want {

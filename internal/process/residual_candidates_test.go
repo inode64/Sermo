@@ -195,3 +195,37 @@ func TestDiscoverDelegatedSelectorAttributesProcessOwnedElsewhere(t *testing.T) 
 		})
 	}
 }
+
+// A second identity of the main process counts as the main for ownership too:
+// two root instances of a daemon that declares `main` and `main-root` are as
+// ambiguous as two instances of one identity, and neither may be cleaned up.
+func TestExternalDeletedCandidateCountsEveryMainIdentity(t *testing.T) {
+	t.Parallel()
+	selectors := []Selector{staleSelector(RoleMain, testExe, "daemon"), staleSelector("main-root", testExe, "root")}
+	for name, tc := range map[string]struct {
+		pids    []int
+		blocked bool
+	}{
+		"one instance":  {pids: []int{100}},
+		"two instances": {pids: []int{100, 200}, blocked: true},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			ids := map[int]Identity{}
+			for _, pid := range tc.pids {
+				ids[pid] = Identity{PID: pid, PPID: 1, UID: 0, ExePrev: testExe}
+			}
+			d := Discoverer{Reader: fakeReader{ids: ids}, ResolveUser: fakeUsers(map[string]uint32{"root": 0, "daemon": 2}),
+				ProcessOwnership: func(Identity) (bool, bool) { return false, true }}
+			out, err := d.Observe(selectors)
+			if err != nil || len(out.Processes) != len(tc.pids) {
+				t.Fatalf("observation = %+v err=%v, want %d candidates", out, err, len(tc.pids))
+			}
+			for _, p := range out.Processes {
+				if (p.SignalBlockReason != "") != tc.blocked {
+					t.Fatalf("pid %d block reason %q, want blocked=%v", p.PID, p.SignalBlockReason, tc.blocked)
+				}
+			}
+		})
+	}
+}

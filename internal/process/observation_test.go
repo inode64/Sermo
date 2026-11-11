@@ -244,6 +244,8 @@ func TestPrincipalIdentityUnverified(t *testing.T) {
 	replacedAlloy := map[int]Identity{100: {PID: 100, UID: 0, PPID: 1, ExePrev: "/usr/bin/alloy"}}
 	main := Selector{Name: RoleMain, Type: SelectorCommandMatch, Exe: "/opt/apache", User: "root"}
 	worker := Selector{Name: "worker", Type: SelectorCommandMatch, Exe: "/opt/apache", User: "apache"}
+	dropped := Selector{Name: RoleMain, Type: SelectorCommandMatch, Exe: "/opt/statd", User: "nobody"}
+	kept := Selector{Name: "main-root", Type: SelectorCommandMatch, Exe: "/opt/statd", User: "root"}
 	tests := []struct {
 		name       string
 		selectors  []Selector
@@ -263,11 +265,13 @@ func TestPrincipalIdentityUnverified(t *testing.T) {
 			100: {PID: 100, UID: 33, PPID: 1, Exe: "/opt/other", ExeOK: true},
 			200: {PID: 200, UID: 0, PPID: 1, ExePrev: "/opt/apache"},
 		}},
+		{name: "main under the second user its profile declares", selectors: []Selector{dropped, kept}, ids: map[int]Identity{100: {PID: 100, UID: 0, PPID: 1, Exe: "/opt/statd", ExeOK: true}}},
+		{name: "replaced main under the second user its profile declares", selectors: []Selector{dropped, kept}, ids: map[int]Identity{100: {PID: 100, UID: 0, PPID: 1, ExePrev: "/opt/statd"}}},
 		{name: "replaced worker with nothing attributed", selectors: []Selector{main, worker}, ids: map[int]Identity{
 			200: {PID: 200, UID: 33, PPID: 1, ExePrev: "/opt/apache"},
 		}, unverified: true},
 	}
-	users := fakeUsers(map[string]uint32{"root": 0, "apache": 33, "alloy": 993})
+	users := fakeUsers(map[string]uint32{"root": 0, "apache": 33, "alloy": 993, "nobody": 65534})
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()

@@ -82,3 +82,40 @@ func TestStaleBinariesClassifiesThroughDiscovery(t *testing.T) {
 		t.Fatalf("stale = %+v, want the launcher shell, auxiliary", got)
 	}
 }
+
+// OpenRC's supervise-daemon writes its own PID to the pidfile the profile
+// declares, so the pidfile's executable is the supervisor's. The program the
+// profile's selector names is still the service's, and replacing it is what a
+// restart renews; the launcher shell beside it stays auxiliary.
+func TestStaleBinariesKeepsTheDeclaredProgramUnderASupervisor(t *testing.T) {
+	const program = "/opt/sermo-test/daemon"
+	supervisor := Process{PID: 10, Source: SelectorPidfile, Role: SelectorPidfile, MainPidfile: true, ExeOK: true, Exe: "/opt/sermo-test/supervisor"}
+	daemon := Process{PID: 11, PPID: 10, Source: SourceChild, Role: RoleChild, ExePrev: program}
+	shell := Process{PID: 12, PPID: 10, Source: SourceChild, Role: RoleChild, ExePrev: "/opt/sermo-test/sh"}
+	d := Discoverer{
+		Reader: fakeReader{ids: map[int]Identity{
+			10: {PID: 10, UID: 0, ExeOK: true, Exe: supervisor.Exe},
+			11: {PID: 11, PPID: 10, UID: 0, ExePrev: program},
+			12: {PID: 12, PPID: 10, UID: 0, ExePrev: shell.ExePrev},
+		}},
+		ResolveUser: fakeUsers(map[string]uint32{"root": 0, "daemon": 2}),
+	}
+	main := Selector{Name: RoleMain, Type: SelectorCommandMatch, Exe: program, User: "root"}
+	want := map[int]bool{11: false, 12: true}
+	got := d.StaleBinariesIn([]Process{supervisor, daemon, shell}, []Selector{main})
+	if len(got) != len(want) {
+		t.Fatalf("stale = %+v, want %d entries", got, len(want))
+	}
+	for _, s := range got {
+		if auxiliary, ok := want[s.PID]; !ok || s.Auxiliary != auxiliary {
+			t.Fatalf("pid %d auxiliary = %v, want %v (%+v)", s.PID, s.Auxiliary, auxiliary, got)
+		}
+	}
+	// Another user's process of that executable is not the declared program.
+	main.User = "daemon"
+	for _, s := range d.StaleBinariesIn([]Process{supervisor, daemon}, []Selector{main}) {
+		if !s.Auxiliary {
+			t.Fatalf("stale = %+v, want the undeclared identity auxiliary", s)
+		}
+	}
+}
