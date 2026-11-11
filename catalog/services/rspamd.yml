@@ -24,10 +24,23 @@ pidfile: /run/rspamd.pid
 socket:
   path: /var/lib/rspamd/rspamd.sock
   optional: true
+# Started by an init script, rspamd keeps its main process as root and drops
+# the workers to ${user}. The packaged systemd unit sets User=, so every process
+# runs as ${user} and only the title rspamd gives itself tells the main one
+# from a worker; with the root identity alone the restart identity guard
+# blocked every operation there.
 processes:
   main:
     exe: ${rspamd_binary}
     user: root
+    enable_if:
+      init: openrc
+  main-systemd:
+    exe: ${rspamd_binary}
+    cmd: '^rspamd: main process'
+    user: ${user}
+    enable_if:
+      init: systemd
   worker:
     exe: ${rspamd_binary}
     user: ${user}

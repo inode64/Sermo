@@ -13,6 +13,11 @@ restart_on_change:
 variables:
   user: root
   port: 161
+os:
+  # Debian's unit starts snmpd with `-u Debian-snmp -g Debian-snmp`.
+  debian:
+    variables:
+      user: Debian-snmp
 pidfile: /run/snmpd.pid
 processes:
   main:

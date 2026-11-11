@@ -8,11 +8,17 @@ apps:
 variables:
   host: 127.0.0.1
   port: 111
+  user: root
+os:
+  # Debian's rpcbind drops to _rpc once its ports are bound.
+  debian:
+    variables:
+      user: _rpc
 socket: /run/rpcbind.sock
 processes:
   main:
     exe: ${rpcbind_binary}
-    user: root
+    user: ${user}
 watches:
   service:
     check:
