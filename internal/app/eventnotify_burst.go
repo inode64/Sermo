@@ -52,7 +52,7 @@ func (n *EventNotifier) burst(target string) *eventNotifyBurst {
 	return b
 }
 
-func (n *EventNotifier) dispatch(ctx context.Context, target notify.Notifier, e Event, msg notify.Message, priority bool) bool {
+func (n *EventNotifier) dispatch(ctx context.Context, target notify.Notifier, e eventNotification, msg notify.Message, priority bool) bool {
 	rec := eventNotifyRecord(e, target.Name(), msg)
 	return n.dispatchPending(ctx, target, eventNotifyPending{record: rec, message: msg, notice: e.Notice}, priority)
 }
@@ -71,7 +71,15 @@ func (n *EventNotifier) dispatchReminder(ctx context.Context, target notify.Noti
 func (n *EventNotifier) dispatchPending(ctx context.Context, target notify.Notifier, pending eventNotifyPending, priority bool) bool {
 	b := n.burst(target.Name())
 	key := pending.record.IncidentKey
+	if !n.allowsAlarmRecord(pending.record) {
+		delete(b.pending, key)
+		return false
+	}
 	prev, found := b.pending[key]
+	if found && !n.allowsAlarmRecord(prev.record) {
+		delete(b.pending, key)
+		prev, found = eventNotifyPending{}, false
+	}
 	pending.occurrences = 1 + prev.occurrences
 	// A fresh budget must not let a lower-grade sample erase an escalation
 	// that still awaits delivery in the summary queue.
@@ -89,7 +97,7 @@ func (n *EventNotifier) dispatchPending(ctx context.Context, target notify.Notif
 		b.priority++
 		allowed = true
 	}
-	if allowed && n.send(ctx, target, pending.message) {
+	if allowed && n.send(ctx, target, pending.message, func() bool { return n.allowsAlarmRecord(pending.record) }) {
 		delete(b.pending, key)
 		return true
 	}
@@ -133,7 +141,14 @@ func (n *EventNotifier) flushSummaries(ctx context.Context, targets []notify.Not
 			continue
 		}
 		msg := n.summaryMessage(b, keys)
-		if !n.send(ctx, target, msg) {
+		if !n.send(ctx, target, msg, func() bool {
+			for _, key := range keys {
+				if !n.allowsAlarmRecord(b.pending[key].record) {
+					return false
+				}
+			}
+			return true
+		}) {
 			continue
 		}
 		for _, key := range keys {
@@ -150,7 +165,12 @@ func (n *EventNotifier) flushSummaries(ctx context.Context, targets []notify.Not
 
 func (n *EventNotifier) summaryKeys(b *eventNotifyBurst, target notify.Notifier) []string {
 	keys := make([]string, 0, len(b.pending))
-	for key, pending := range b.pending {
+	for key := range b.pending {
+		pending := b.pending[key]
+		if !n.allowsAlarmRecord(pending.record) {
+			delete(b.pending, key)
+			continue
+		}
 		// A recovery belongs to the channels that heard the incident, even if a
 		// reload raised their severity filter in the meantime.
 		if pending.record.Phase != eventNotifyPhaseRecovered && !notify.Accepts(target, pending.message.Severity) {

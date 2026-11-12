@@ -265,7 +265,7 @@ func TestEventNotifyRoutesIncidentsBySeverity(t *testing.T) {
 	ctx := context.Background()
 
 	fire := func(level severity.Level) {
-		router.deliver(ctx, Event{Watch: "disk-root", Kind: eventKindFiring, Severity: level, Message: "disk"})
+		router.deliver(ctx, eventNotification{Watch: "disk-root", Kind: eventKindFiring, Severity: level, Message: "disk"})
 	}
 	fire(severity.Warning)
 	if len(all.msgs) != 1 || len(oncall.msgs) != 0 {
@@ -286,7 +286,7 @@ func TestEventNotifyRoutesIncidentsBySeverity(t *testing.T) {
 	if len(all.msgs) != 3 || all.msgs[2].Severity != severity.Critical || !strings.Contains(all.msgs[2].Subject, "continues") {
 		t.Fatalf("reminder = %q", subjects(all.msgs))
 	}
-	router.deliver(ctx, Event{Watch: "disk-root", Kind: eventKindRecovered, Message: "ok"})
+	router.deliver(ctx, eventNotification{Watch: "disk-root", Kind: eventKindRecovered, Message: "ok"})
 	last := func(n *floorNotifier) notify.Message { return n.msgs[len(n.msgs)-1] }
 	if last(all).Severity != severity.Critical || last(oncall).Severity != severity.Critical || !strings.Contains(last(oncall).Subject, "recovered") {
 		t.Fatalf("recoveries all=%q oncall=%q, want both at critical", last(all).Subject, last(oncall).Subject)
@@ -303,7 +303,7 @@ func TestEventNotifyReminderRespectsARaisedMinimum(t *testing.T) {
 	router := newTestEventNotifier(t, n)
 	now := time.Date(2026, 9, 30, 12, 0, 0, 0, time.UTC)
 	router.now = func() time.Time { return now }
-	router.deliver(context.Background(), Event{Watch: "disk-root", Kind: eventKindFiring, Severity: severity.Warning})
+	router.deliver(context.Background(), eventNotification{Watch: "disk-root", Kind: eventKindFiring, Severity: severity.Warning})
 	n.floor = severity.Error
 	now = now.Add(2 * time.Hour)
 	router.remind(context.Background())
@@ -423,8 +423,8 @@ func TestEventNotifyClosesAnAdvisoryAvailabilityIncident(t *testing.T) {
 	n := &floorNotifier{name: "ops"}
 	router := newTestEventNotifier(t, n)
 	ctx := context.Background()
-	router.deliver(ctx, Event{Watch: "api", Kind: eventKindError, Severity: severity.Warning, Check: watchAvailabilityCheck, Message: checkUnavailablePrefix + "timeout"})
-	router.deliver(ctx, Event{Watch: "api", Kind: eventKindRecovered, Check: watchAvailabilityCheck, Message: "check available: ok"})
+	router.deliver(ctx, eventNotification{Watch: "api", Kind: eventKindError, Severity: severity.Warning, Check: watchAvailabilityCheck, Message: checkUnavailablePrefix + "timeout"})
+	router.deliver(ctx, eventNotification{Watch: "api", Kind: eventKindRecovered, Check: watchAvailabilityCheck, Message: "check available: ok"})
 	if len(n.msgs) != 2 || !strings.HasPrefix(n.msgs[0].Subject, "[sermo][warning]") ||
 		!strings.Contains(n.msgs[1].Subject, "recovered") || n.msgs[1].Severity != severity.Warning {
 		t.Fatalf("availability incident = %q, want the warning and its recovery", subjects(n.msgs))

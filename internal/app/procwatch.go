@@ -18,6 +18,7 @@ import (
 	"sermo/internal/notify"
 	"sermo/internal/process"
 	"sermo/internal/severity"
+	"sermo/internal/state"
 	"sermo/internal/units"
 )
 
@@ -192,8 +193,8 @@ type procWatcher struct {
 func (w *procWatcher) edgeMemory() any { return w.state }
 
 func (w *procWatcher) adoptEdgeMemory(memory any) {
-	if state, ok := memory.(map[int]*procState); ok {
-		w.state = state
+	if restored, ok := memory.(map[int]*procState); ok {
+		w.state = restored
 	}
 }
 
@@ -213,6 +214,7 @@ func (w *procWatcher) runCycle(ctx context.Context) {
 		// Treating the empty result as "all matching PIDs vanished" would fire a
 		// spurious `gone` for every tracked PID and discard their state; instead
 		// keep the previous state untouched and retry next cycle.
+		w.observeAlarm(ctx, true, true)
 		w.publishSnapshot(nil, false)
 		return
 	}
@@ -220,6 +222,7 @@ func (w *procWatcher) runCycle(ctx context.Context) {
 	defer w.publishSnapshot(samples, true)
 
 	t := now()
+	active := false
 	seen := make(map[int]bool, len(samples))
 	for i := range samples {
 		if ctx.Err() != nil {
@@ -231,7 +234,7 @@ func (w *procWatcher) runCycle(ctx context.Context) {
 			// Another process now holds this PID. The one we tracked is gone even
 			// though the number is still in use, and the sweep below only sees PIDs
 			// absent from the sample — so report it here, before dropping its state.
-			w.fireGone(ctx, samples[i].PID, st, t)
+			active = w.fireGone(ctx, samples[i].PID, st, t) || active
 			st = nil
 		}
 		if st == nil {
@@ -249,6 +252,8 @@ func (w *procWatcher) runCycle(ctx context.Context) {
 		}
 
 		fire, env, msg := w.evaluate(st, t, samples[i])
+		active = active || fire
+
 		if fire && !st.fired && !observeOnlyCycle(ctx) {
 			w.fire(ctx, samples[i], msg, env)
 		}
@@ -272,20 +277,22 @@ func (w *procWatcher) runCycle(ctx context.Context) {
 			return
 		}
 		if st := w.state[pid]; st != nil {
-			w.fireGone(ctx, pid, st, t)
+			active = w.fireGone(ctx, pid, st, t) || active
 		}
 		delete(w.state, pid)
 	}
+	w.observeAlarm(ctx, active, false)
 }
 
 // fireGone reports a tracked PID's disappearance, whether it vanished from the
 // sample or was replaced by another process holding the same number.
-func (w *procWatcher) fireGone(ctx context.Context, pid int, st *procState, t time.Time) {
+func (w *procWatcher) fireGone(ctx context.Context, pid int, st *procState, t time.Time) bool {
 	if !w.cond.onGone || observeOnlyCycle(ctx) {
-		return
+		return false
 	}
 	env := w.procEnv(pid, procChangeGone, st.age(t))
 	w.fire(ctx, ProcInfo{PID: pid}, fmt.Sprintf("%s pid %d is gone", w.match.Name, pid), env)
+	return true
 }
 
 func (w *procWatcher) publishSnapshot(samples []ProcInfo, ok bool) {
@@ -435,6 +442,7 @@ func (w *procWatcher) evaluate(st *procState, now time.Time, s ProcInfo) (bool, 
 }
 
 func (w *procWatcher) fire(ctx context.Context, info ProcInfo, msg string, values map[string]any) {
+	w.observeAlarm(ctx, true, false)
 	msg = w.summaryMessage(info, msg, values)
 	env := map[string]string{}
 	watchValuesEnv(env, values)
@@ -729,4 +737,11 @@ func procNameMatches(m ProcMatch, id process.Identity) bool {
 		exe = id.ExePrev
 	}
 	return exe != "" && (m.Name == exe || m.Name == filepath.Base(exe))
+}
+
+func (w *procWatcher) observeAlarm(ctx context.Context, active, unavailable bool) {
+	if observeOnlyCycle(ctx) {
+		return
+	}
+	observeWatchAlarm(ctx, checks.CheckTypeProcess, state.WatchAlarmSlot{Active: active, Unavailable: unavailable, Severity: w.severity.Resolved().String()})
 }

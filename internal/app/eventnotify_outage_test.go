@@ -55,7 +55,7 @@ func TestEventNotifierFullDiskKeepsConfirmedEdges(t *testing.T) {
 	event := Event{Watch: "root", Kind: eventKindFiring, Severity: severity.Warning}
 	for i := range 10000 {
 		event.Message = fmt.Sprintf("free bytes %d", i)
-		router.deliver(t.Context(), event)
+		router.deliver(t.Context(), eventNotification{Event: event})
 	}
 	if len(target.messages) != 1 || store.writes != 1 {
 		t.Fatalf("messages=%d writes=%d", len(target.messages), store.writes)
@@ -63,11 +63,11 @@ func TestEventNotifierFullDiskKeepsConfirmedEdges(t *testing.T) {
 	// Receipt overlay works even when later reads fail as well.
 	store.readErr = errors.New("read unavailable")
 	event.Severity = severity.Critical
-	router.deliver(t.Context(), event)
-	router.deliver(t.Context(), event)
+	router.deliver(t.Context(), eventNotification{Event: event})
+	router.deliver(t.Context(), eventNotification{Event: event})
 	event.Kind = eventKindRecovered
-	router.deliver(t.Context(), event)
-	router.deliver(t.Context(), event)
+	router.deliver(t.Context(), eventNotification{Event: event})
+	router.deliver(t.Context(), eventNotification{Event: event})
 	if len(target.messages) != 3 {
 		t.Fatalf("opening/escalation/recovery=%d", len(target.messages))
 	}
@@ -83,12 +83,12 @@ func TestEventNotifierFullDiskKeepsConfirmedEdges(t *testing.T) {
 	restarted, _, _ := outageRouter(t, store, 0)
 	restarted.now = router.now
 	restarted.Update(config.EventNotification{Targets: []string{"ops"}}, map[string]notify.Notifier{"ops": target})
-	restarted.deliver(t.Context(), event)
+	restarted.deliver(t.Context(), eventNotification{Event: event})
 	if len(target.messages) != 3 {
 		t.Fatal("restart repeated recovery")
 	}
 	event.Kind = eventKindFiring
-	restarted.deliver(t.Context(), event)
+	restarted.deliver(t.Context(), eventNotification{Event: event})
 	if len(target.messages) != 4 {
 		t.Fatal("next episode not delivered")
 	}
@@ -98,7 +98,7 @@ func TestEventNotifierFullDiskOverlaysStaleReminders(t *testing.T) {
 	store := &failingEventNotifyStore{Store: openRuleStateStore(t)}
 	router, target, now := outageRouter(t, store, time.Hour)
 	event := Event{Watch: "root", Kind: eventKindFiring}
-	router.deliver(t.Context(), event)
+	router.deliver(t.Context(), eventNotification{Event: event})
 	store.writeErr = errors.New("full")
 	*now = now.Add(time.Hour)
 	router.remind(t.Context())
@@ -109,7 +109,7 @@ func TestEventNotifierFullDiskOverlaysStaleReminders(t *testing.T) {
 		t.Fatalf("reminders=%d", len(target.messages))
 	}
 	event.Kind = eventKindRecovered
-	router.deliver(t.Context(), event)
+	router.deliver(t.Context(), eventNotification{Event: event})
 	*now = now.Add(time.Hour)
 	router.remind(t.Context())
 	if len(target.messages) != 3 {
@@ -126,7 +126,7 @@ func TestEventNotifierFullDiskOverlaysStaleReminders(t *testing.T) {
 func TestEventNotifierOutageRetainAndCapacity(t *testing.T) {
 	store := &failingEventNotifyStore{Store: openRuleStateStore(t), writeErr: errors.New("full")}
 	router, target, now := outageRouter(t, store, time.Hour)
-	router.deliver(t.Context(), Event{Watch: "removed", Kind: eventKindFiring})
+	router.deliver(t.Context(), eventNotification{Watch: "removed", Kind: eventKindFiring})
 	router.Retain(eventNotifyScope{watches: map[string]bool{"kept": true}})
 	store.writeErr = nil
 	*now = now.Add(time.Hour)
@@ -138,7 +138,7 @@ func TestEventNotifierOutageRetainAndCapacity(t *testing.T) {
 		rec := state.EventNotifyRecord{IncidentKey: fmt.Sprint(i), Notifier: "ops"}
 		router.memory[eventNotifyRecordKey(rec.IncidentKey, rec.Notifier)] = rec
 	}
-	router.deliver(t.Context(), Event{Watch: "new", Kind: eventKindFiring})
+	router.deliver(t.Context(), eventNotification{Watch: "new", Kind: eventKindFiring})
 	if len(target.messages) != 1 || len(router.memory) != eventNotifyMemoryLimit {
 		t.Fatal("capacity evicted a receipt or sent without room")
 	}
@@ -147,12 +147,12 @@ func TestEventNotifierOutageRetainAndCapacity(t *testing.T) {
 func TestEventNotifierStoreReadFailureDoesNotSendUntrackedAlert(t *testing.T) {
 	store := &failingEventNotifyStore{Store: openRuleStateStore(t), readErr: errors.New("unreadable")}
 	router, target, _ := outageRouter(t, store, 0)
-	router.deliver(t.Context(), Event{Watch: "root", Kind: eventKindFiring})
+	router.deliver(t.Context(), eventNotification{Watch: "root", Kind: eventKindFiring})
 	if len(target.messages) != 0 {
 		t.Fatal("sent without knowing previous state")
 	}
 	store.readErr = nil
-	router.deliver(t.Context(), Event{Watch: "root", Kind: eventKindFiring})
+	router.deliver(t.Context(), eventNotification{Watch: "root", Kind: eventKindFiring})
 	if len(target.messages) != 1 {
 		t.Fatal("read recovery suppressed opening")
 	}
@@ -162,9 +162,9 @@ func TestEventNotifierReloadKeepsUndurableOperationalErrorReceipt(t *testing.T) 
 	store := &failingEventNotifyStore{Store: openRuleStateStore(t), writeErr: errors.New("full")}
 	router, target, _ := outageRouter(t, store, 0)
 	event := Event{Service: "mysql", Kind: eventKindError, Message: "write state failed"}
-	router.deliver(t.Context(), event)
+	router.deliver(t.Context(), eventNotification{Event: event})
 	router.Retain(eventNotifyScope{services: map[string]eventNotifyServiceScope{"mysql": {}}})
-	router.deliver(t.Context(), event)
+	router.deliver(t.Context(), eventNotification{Event: event})
 	if len(target.messages) != 1 {
 		t.Fatal("reload forgot operational-error receipt during disk outage")
 	}

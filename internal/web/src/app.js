@@ -193,6 +193,7 @@ const monitorModeEnabled = "enabled";
 const actionAlert = "alert";
 const actionExpand = "expand";
 const actionProbe = "probe";
+const actionSilence = "silence";
 const actionPause = "pause";
 const actionReplicationStart = "replication-start";
 const actionMonitor = "monitor";
@@ -2516,12 +2517,13 @@ function attentionSignals() {
   const named = (item) => displayName(item) || item.name;
   const lockLabel = (l) => [l.service, l.name].filter(Boolean).join(":");
   const failing = (allServices || []).filter(isFailing);
-  const failingWatches = (allWatches || []).filter(isWatchAttention);
+  const audibleWatches = (allWatches || []).filter((w) => !w.alarm?.silenced);
+  const failingWatches = audibleWatches.filter(isWatchAttention);
   const failingApps = (allApps || []).filter((a) => appStateText(a) === targetStateFailed);
   signal(healthStatusCritical, failing, (n) => (n === 1 ? "1 service needs attention" : `${n} services need attention`), (s) => s.name, "failed-services");
   signal(healthStatusCritical, failingWatches, (n) => (n === 1 ? "1 watch firing" : `${n} watches firing`), named, "failed-watches");
-  signal(healthStatusWarning, (allWatches || []).filter(isWatchWarning), (n) => (n === 1 ? "1 watch warning" : `${n} watches warning`), named, "warning-watches");
-  signal(healthStatusWarning, (allWatches || []).filter(isWatchSampleStale), (n) => (n === 1 ? "1 watch sample is stale" : `${n} watch samples are stale`), named, "stale-watches");
+  signal(healthStatusWarning, audibleWatches.filter(isWatchWarning), (n) => (n === 1 ? "1 watch warning" : `${n} watches warning`), named, "warning-watches");
+  signal(healthStatusWarning, audibleWatches.filter(isWatchSampleStale), (n) => (n === 1 ? "1 watch sample is stale" : `${n} watch samples are stale`), named, "stale-watches");
   signal(healthStatusCritical, failingApps, (n) => (n === 1 ? "1 application failed" : `${n} applications failed`), named, "failed-apps");
   signal(healthStatusCritical, (latestLocks || []).filter((l) => l.state === lockStateActive), (n) => (n === 1 ? "1 active lock" : `${n} active locks`), lockLabel, "locks-section");
   signal(healthStatusWarning, (latestLocks || []).filter((l) => l.state === lockStateStale), (n) => (n === 1 ? "1 stale lock" : `${n} stale locks`), lockLabel, "locks-section");
@@ -2970,6 +2972,8 @@ const iconReload = actionIcon(svg`<path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6
 const iconPause = actionIcon(svg`<rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/>`);
 const iconMonitor = actionIcon(svg`<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/>`);
 const iconUnmonitor = actionIcon(svg`<path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/><path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c6.5 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"/><path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3.5 7 10 7a9.74 9.74 0 0 0 5.39-1.61"/><line x1="2" x2="22" y1="2" y2="22"/>`);
+const iconBell = actionIcon(svg`<path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"/><path d="M10 21h4"/>`);
+const iconBellOff = actionIcon(svg`<path d="M9 3a6 6 0 0 1 9 5c0 2 .3 4 .8 5M6 6v2c0 7-3 7-3 9h14M10 21h4M2 2l20 20"/>`);
 const iconRepair = actionIcon(svg`<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>`);
 
 // actionMeta is the one vocabulary of action buttons: the icon and, per
@@ -2989,6 +2993,7 @@ const actionMeta = {
   [actionMonitor]: { glyph: iconMonitor, service: (n) => `Monitor service ${n}`, watch: (n) => `Monitor watch ${n}` },
   [actionUnmonitor]: { glyph: iconUnmonitor, service: (n) => `Unmonitor service ${n}`, watch: (n) => `Unmonitor watch ${n}` },
   [actionExpand]: { watch: (n) => `Expand storage for watch ${n}` },
+  [actionSilence]: { watch: (n) => `Silence alarm for watch ${n} until its state changes` },
   [actionProbe]: { watch: (n) => `Probe watch ${n}` },
   [actionPause]: { glyph: iconPause, service: (n) => `Pause service ${n}`, watch: (n) => `Pause RAID reconstruction for watch ${n}` },
   [actionReplicationStart]: { watch: (n) => `Start replication for watch ${n}` },
@@ -5340,7 +5345,7 @@ function watchStateCell(w) {
     return tpl`${stateBadgeLabel(targetStateCollecting, "checking")} <span class="watch-probe" data-probe-started-at="${startedAt}" role="status" aria-live="polite"></span> <span class="muted">previously ${watchStateText(w)}</span>`;
   }
   if (!w || !w.enabled || !w.monitored) return watchMonitoringCell(w);
-  return stateBadge(watchStateText(w));
+  return tpl`${stateBadge(watchStateText(w))}${w.alarm?.silenced ? tpl` <span class="muted" title="Notifications resume when the watch state changes">alarm silenced</span>` : nothing}`;
 }
 
 function watchProbeRunning(w) {
@@ -5567,30 +5572,20 @@ function watchTypeKey(w) {
   return (w && w.check_type) || "";
 }
 
-function watchActionDisabled(w, action) {
-  if (!w || !w.enabled) return true;
-  if (watchStateText(w) === targetStateStarting) return true;
-  switch (action) {
-    case actionMonitor: return !!w.monitored || pendingMonitorToggles.has(watchExpansionKey(w.name));
-    case actionUnmonitor: return !w.monitored || pendingMonitorToggles.has(watchExpansionKey(w.name));
-    case actionExpand: return !watchHasExpand(w);
-    case actionProbe: return !w.can_probe || watchProbeRunning(w);
-    case actionPause: return !w.can_control_raid;
-    case actionResume: return !w.can_control_raid;
-    case actionReplicationStart: return !w.can_control_replication;
-    default: return false;
-  }
-}
-
 function watchActionDisabledReason(w, action) {
+  if (!w || !w.enabled) return "disabled in config";
   if (watchStateText(w) === targetStateStarting) return "watch is starting";
   switch (action) {
+    case actionSilence:
+      if (w.alarm?.silenced) return "alarm silenced until the watch state changes";
+      if (!w.alarm?.active) return "no active alarm";
+      return w.alarm.revision ? "" : "alarm state unavailable";
     case actionMonitor:
       if (w.monitored) return "watch is already monitored";
-      return "";
+      return pendingMonitorToggles.has(watchExpansionKey(w.name)) ? "monitoring change is pending" : "";
     case actionUnmonitor:
       if (!w.monitored) return "watch is paused";
-      return "";
+      return pendingMonitorToggles.has(watchExpansionKey(w.name)) ? "monitoring change is pending" : "";
     case actionExpand:
       if (!watchHasExpand(w)) return "expand is not configured";
       return "";
@@ -5607,8 +5602,8 @@ function watchActionDisabledReason(w, action) {
 }
 
 function watchActionAccessibility(w, action) {
-  const disabled = watchActionDisabled(w, action);
   const reason = watchActionDisabledReason(w, action);
+  const disabled = reason !== "";
   const hintID = actionHintID("wat", w.name, action);
   return { disabled, hint: actionHint(hintID, disabled, reason), describedBy: actionDescribedBy(hintID, disabled, reason) };
 }
@@ -5621,6 +5616,7 @@ function watchActionButton(w, action, content, compact = false) {
 }
 
 function watchActionAriaLabel(w, action) {
+  if (action === actionSilence && w.alarm?.silenced) return `Alarm silenced for watch ${displayName(w) || w.name} until its state changes`;
   return actionAriaLabel("watch", w, action);
 }
 
@@ -5689,7 +5685,8 @@ function watchActionsCell(w) {
       ? watchActionButton(w, actionUnmonitor, tpl`<span aria-hidden="true">${iconUnmonitor}</span>`, true)
       : watchActionButton(w, actionMonitor, tpl`<span aria-hidden="true">${iconMonitor}</span>`, true))
     : readOnlyNote;
-  const actions = tpl`${probeBtn} ${raidButtons} ${replicationBtn} ${expandBtn} ${monitorBtn}`;
+  const alarmBtn = me.can_act ? watchActionButton(w, actionSilence, tpl`<span aria-hidden="true">${w.alarm?.silenced ? iconBellOff : iconBell}</span>`, true) : nothing;
+  const actions = tpl`${probeBtn} ${raidButtons} ${replicationBtn} ${expandBtn} ${alarmBtn} ${monitorBtn}`;
   return tpl`<td class="actions">${actions}</td>`;
 }
 
@@ -7459,6 +7456,7 @@ async function killWatchProcess(watch, pid, startTicks) {
 
 async function actWatch(name, action) {
   const generation = dashboardGeneration;
+  const alarmRevision = (allWatches || []).find((w) => w.name === name)?.alarm?.revision || "";
   let headers = {};
   if (action === actionExpand && !(await confirmWatchExpand(name))) return;
   if (action === actionPause) {
@@ -7476,7 +7474,8 @@ async function actWatch(name, action) {
     if (toggleKey) renderWatches();
     setStatus("");
     if (action === actionProbe) beginWatchProbe(name);
-    const res = await fetch(watchAPI(name, apiActionSuffix(action)), targetPostOptions(headers, generation));
+    const suffix = apiActionSuffix(action) + (action === actionSilence ? `?revision=${encodeURIComponent(alarmRevision)}` : "");
+    const res = await fetch(watchAPI(name, suffix), targetPostOptions(headers, generation));
     const { body, failed, status } = await actionResult(res);
     if (action === actionProbe) {
       applyWatchProbeResult(name, body, failed);

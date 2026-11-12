@@ -16,11 +16,12 @@ const (
 	eventNotifyPersistenceRetryInterval = time.Minute
 )
 
-func eventNotifyRecord(e Event, target string, msg notify.Message) state.EventNotifyRecord {
-	key, active, phase := eventNotifyIdentity(e)
+func eventNotifyRecord(e eventNotification, target string, msg notify.Message) state.EventNotifyRecord {
+	key, active, phase := eventNotifyIdentity(e.Event)
 	return state.EventNotifyRecord{
 		IncidentKey: key, Notifier: target, Phase: phase, Active: active,
 		Subject: msg.Subject, Body: msg.Body, Severity: msg.Severity.String(),
+		AlarmEpoch: e.alarmEpoch,
 	}
 }
 

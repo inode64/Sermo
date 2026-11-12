@@ -173,8 +173,8 @@ func TestPersistenceEventsSlowLogDoesNotBlockOtherWriters(t *testing.T) {
 func TestPersistenceEventsClosesStoredIncidentAfterRestart(t *testing.T) {
 	store := openRuleStateStore(t)
 	router, target, _ := outageRouter(t, store, 0)
-	router.deliver(t.Context(), Event{Kind: eventKindFiring, Check: persistenceCheck})
-	restarted := NewPersistenceEvents(func(e Event) { router.deliver(t.Context(), e) }, router)
+	router.deliver(t.Context(), eventNotification{Kind: eventKindFiring, Check: persistenceCheck})
+	restarted := NewPersistenceEvents(func(e Event) { router.deliver(t.Context(), eventNotification{Event: e}) }, router)
 	restarted.Emit(Event{Watch: "root", Kind: eventKindPersistence, persistenceSource: "result"})
 	restarted.Emit(Event{Watch: "root", Kind: eventKindPersistence, persistenceSource: "result"})
 	if len(target.messages) != 2 {

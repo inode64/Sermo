@@ -11,6 +11,7 @@ import (
 // Active records can receive reminders; closed and operational-error records
 // retain their last delivery time to suppress duplicates.
 type EventNotifyRecord struct {
+	AlarmEpoch  string
 	IncidentKey string
 	Notifier    string
 	Phase       string
@@ -29,9 +30,9 @@ func (s *Store) EventNotifyState(incidentKey, notifier string) (EventNotifyRecor
 	var active int
 	var lastSentAt int64
 	err := s.reader.QueryRowContext(s.sqlCtx(),
-		`SELECT phase, active, last_sent_at, subject, body, severity FROM event_notify_state
+		`SELECT phase, active, last_sent_at, subject, body, severity, alarm_epoch FROM event_notify_state
 		 WHERE incident_key = ? AND notifier = ?`, incidentKey, notifier,
-	).Scan(&rec.Phase, &active, &lastSentAt, &rec.Subject, &rec.Body, &rec.Severity)
+	).Scan(&rec.Phase, &active, &lastSentAt, &rec.Subject, &rec.Body, &rec.Severity, &rec.AlarmEpoch)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return EventNotifyRecord{}, false, nil
@@ -47,12 +48,12 @@ func (s *Store) EventNotifyState(incidentKey, notifier string) (EventNotifyRecor
 // SetEventNotifyState records one successful external delivery.
 func (s *Store) SetEventNotifyState(rec EventNotifyRecord) error {
 	_, err := s.exec(s.sqlCtx(),
-		`INSERT INTO event_notify_state (incident_key, notifier, phase, active, last_sent_at, subject, body, severity)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+		`INSERT INTO event_notify_state (incident_key, notifier, phase, active, last_sent_at, subject, body, severity, alarm_epoch)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 		 ON CONFLICT (incident_key, notifier) DO UPDATE SET
 		 phase = excluded.phase, active = excluded.active, last_sent_at = excluded.last_sent_at,
-		 subject = excluded.subject, body = excluded.body, severity = excluded.severity`,
-		rec.IncidentKey, rec.Notifier, rec.Phase, boolInt(rec.Active), rec.LastSentAt.UTC().UnixNano(), rec.Subject, rec.Body, rec.Severity,
+		 subject = excluded.subject, body = excluded.body, severity = excluded.severity, alarm_epoch = excluded.alarm_epoch`,
+		rec.IncidentKey, rec.Notifier, rec.Phase, boolInt(rec.Active), rec.LastSentAt.UTC().UnixNano(), rec.Subject, rec.Body, rec.Severity, rec.AlarmEpoch,
 	)
 	if err != nil {
 		return fmt.Errorf("persist event notification state: %w", err)
@@ -64,7 +65,7 @@ func (s *Store) SetEventNotifyState(rec EventNotifyRecord) error {
 // enough for a reminder. The caller supplies its configured interval.
 func (s *Store) DueEventNotifyStates(notifier string, before time.Time) ([]EventNotifyRecord, error) {
 	rows, err := s.reader.QueryContext(s.sqlCtx(),
-		`SELECT incident_key, phase, last_sent_at, subject, body, severity FROM event_notify_state
+		`SELECT incident_key, phase, last_sent_at, subject, body, severity, alarm_epoch FROM event_notify_state
 		 WHERE notifier = ? AND active = 1 AND last_sent_at <= ? ORDER BY last_sent_at`,
 		notifier, before.UTC().UnixNano(),
 	)
@@ -76,7 +77,7 @@ func (s *Store) DueEventNotifyStates(notifier string, before time.Time) ([]Event
 	for rows.Next() {
 		var rec EventNotifyRecord
 		var sent int64
-		if err := rows.Scan(&rec.IncidentKey, &rec.Phase, &sent, &rec.Subject, &rec.Body, &rec.Severity); err != nil {
+		if err := rows.Scan(&rec.IncidentKey, &rec.Phase, &sent, &rec.Subject, &rec.Body, &rec.Severity, &rec.AlarmEpoch); err != nil {
 			return nil, fmt.Errorf("scan due event notification: %w", err)
 		}
 		rec.Notifier, rec.Active, rec.LastSentAt = notifier, true, time.Unix(0, sent).UTC()

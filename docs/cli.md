@@ -83,6 +83,7 @@ sermoctl is-active SERVICE
 sermoctl watch status WATCH
 sermoctl watch monitor WATCH
 sermoctl watch unmonitor WATCH
+sermoctl watch silence WATCH
 sermoctl watch probe WATCH
 sermoctl watch refresh [WATCH...]      # run an extra cycle of every enabled watch, or of the named ones, now
 sermoctl watch kill UNOWNED_WATCH PID [--escalate]
@@ -293,6 +294,14 @@ watch name or a service-embedded watch `"<service>:<watch>"`; a watch's monitor
 state is independent of its service's, so `unmonitor` on a service never pauses
 its watches. Repeating either command after that state is already effective is
 a successful no-op and preserves the original monitor source and change time.
+
+`sermoctl watch silence WATCH` acknowledges the watch's current alarm through
+sermod's authenticated web API. It silences notifications until a confirmed
+state change; sampling and configured actions continue. The acknowledgement
+survives daemon restarts and unchanged configuration reloads. A stale request
+is refused, so it cannot silence a newer incident. `watch status` shows the
+silenced alarm alongside the actual health; `--json` includes its `alarm`
+record. See [watch alarm control](configuration.md#silencing-a-watch-alarm).
 
 `sermoctl watch kill UNOWNED_WATCH PID` is the dashboard's per-row kill of an
 [`unowned_processes`](configuration.md#unowned_processes--processes-no-unit-or-package-accounts-for)

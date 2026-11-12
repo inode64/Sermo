@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -64,9 +65,9 @@ func TestRestartWaitsForSystemdReplacementWithoutSignallingIt(t *testing.T) {
 			e := h.engine()
 			ctx, cancel := context.WithTimeout(t.Context(), time.Second)
 			defer cancel()
-			waits := 0
+			var waits atomic.Int64
 			e.Sleep = func(time.Duration) {
-				waits++
+				waits.Add(1)
 				if tc.timeout {
 					<-ctx.Done()
 				}
@@ -105,8 +106,9 @@ func TestRestartWaitsForSystemdReplacementWithoutSignallingIt(t *testing.T) {
 				return d.Observe([]process.Selector{{Name: process.RoleMain, Type: process.SelectorCommandMatch, Exe: old.Exe, User: "mysql"}})
 			}
 			res := e.Do(ctx, actionRestart)
-			if res.Status != tc.want || waits == 0 {
-				t.Fatalf("result=%+v waits=%d, want %s after waiting", res, waits, tc.want)
+			waitCount := waits.Load()
+			if res.Status != tc.want || waitCount == 0 {
+				t.Fatalf("result=%+v waits=%d, want %s after waiting", res, waitCount, tc.want)
 			}
 			if h.mgr.did("start mysqld") || h.mgr.did("reset mysqld") {
 				t.Fatalf("replacement must not be started or reset: %v", h.mgr.calls)
@@ -121,8 +123,8 @@ func TestRestartWaitsForSystemdReplacementWithoutSignallingIt(t *testing.T) {
 			if tc.want == ResultOK && !strings.Contains(res.Message, "systemd reactivated the same unit") {
 				t.Fatalf("missing reactivation outcome: %+v", res)
 			}
-			if tc.neverReady && waits != postflightMaxAttempts-1 {
-				t.Fatalf("unbounded readiness wait: %d", waits)
+			if tc.neverReady && waitCount != postflightMaxAttempts-1 {
+				t.Fatalf("unbounded readiness wait: %d", waitCount)
 			}
 			if h.released != 1 || len(h.emitted) != 1 {
 				t.Fatalf("releases=%d events=%d", h.released, len(h.emitted))

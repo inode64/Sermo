@@ -96,6 +96,13 @@ func (o watchObservation) watchPresentation(w *webWatch, system metrics.Snapshot
 }
 
 func (b *WebBackend) applyWatchRuntimeView(view *web.Watch, w *webWatch, activity watchActivity, observation watchObservation) {
+	alarm := b.watchAlarms.status(w.name)
+	view.Alarm = web.WatchAlarm{
+		Active: alarm.Active, Revision: alarm.Revision, Silenced: alarm.Silenced, Source: alarm.Source,
+	}
+	if !alarm.SilencedAt.IsZero() {
+		view.Alarm.SilencedAt = alarm.SilencedAt.UTC().Format(time.RFC3339)
+	}
 	if w.expand != nil {
 		view.Expand = &web.WatchExpand{ByBytes: w.expand.By}
 	}

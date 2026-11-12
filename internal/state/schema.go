@@ -8,6 +8,10 @@ import (
 
 // storageSchema defines the complete current storage layout.
 var storageSchema = []string{
+	`CREATE TABLE IF NOT EXISTS watch_alarm_state (
+		watch TEXT PRIMARY KEY,
+		record TEXT NOT NULL
+	);`,
 	`CREATE TABLE IF NOT EXISTS monitor_state (
 		service    TEXT PRIMARY KEY,
 		active     INTEGER NOT NULL,
@@ -53,6 +57,7 @@ var storageSchema = []string{
 		subject      TEXT NOT NULL,
 		body         TEXT NOT NULL,
 		severity     TEXT NOT NULL DEFAULT '',
+		alarm_epoch  TEXT NOT NULL DEFAULT '',
 		PRIMARY KEY (incident_key, notifier)
 	);`,
 	`CREATE INDEX IF NOT EXISTS event_notify_due_idx ON event_notify_state (notifier, active, last_sent_at);`,
@@ -337,6 +342,7 @@ var stateColumnMigrations = []struct {
 		     WHEN kind = 'warning' THEN 'firing'
 		     ELSE kind END
 		 WHERE kind IN ('warning', 'firing', 'alert');`},
+	{tableEventNotifyState, "alarm_epoch", "alarm_epoch TEXT NOT NULL DEFAULT ''", ""},
 	{tableEventNotifyState, columnSeverity, severityColumnDecl,
 		`UPDATE event_notify_state SET
 		   severity = CASE phase WHEN 'warning' THEN 'warning' WHEN 'recovered' THEN '' ELSE 'error' END,

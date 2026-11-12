@@ -119,14 +119,14 @@ func TestEventNotifierPersistsIncidentEdgesAndReminds(t *testing.T) {
 	}
 	router := newRouter()
 	event := Event{Watch: "security-user-postgres", Kind: eventKindFiring, Message: "pid 1: unresolved"}
-	router.deliver(t.Context(), event)
+	router.deliver(t.Context(), eventNotification{Event: event})
 	event.Message = "pid 2: unresolved"
-	router.deliver(t.Context(), event)
+	router.deliver(t.Context(), eventNotification{Event: event})
 	if got := len(recorder.messages); got != 1 {
 		t.Fatalf("PID-level events delivered %d times, want once", got)
 	}
 	router = newRouter() // same store, new daemon instance
-	router.deliver(t.Context(), event)
+	router.deliver(t.Context(), eventNotification{Event: event})
 	if got := len(recorder.messages); got != 1 {
 		t.Fatalf("restart repeated open incident: %d messages", got)
 	}
@@ -139,12 +139,12 @@ func TestEventNotifierPersistsIncidentEdgesAndReminds(t *testing.T) {
 	if msg := <-recorder.messages; !strings.Contains(msg.Subject, "continues") {
 		t.Fatalf("reminder subject = %q", msg.Subject)
 	}
-	router.deliver(t.Context(), Event{Watch: event.Watch, Kind: eventKindRecovered, Message: "no violations"})
-	router.deliver(t.Context(), Event{Watch: event.Watch, Kind: eventKindRecovered, Message: "no violations"})
+	router.deliver(t.Context(), eventNotification{Watch: event.Watch, Kind: eventKindRecovered, Message: "no violations"})
+	router.deliver(t.Context(), eventNotification{Watch: event.Watch, Kind: eventKindRecovered, Message: "no violations"})
 	if got := len(recorder.messages); got != 1 {
 		t.Fatalf("recovery messages = %d, want once", got)
 	}
-	router.deliver(t.Context(), event)
+	router.deliver(t.Context(), eventNotification{Event: event})
 	if got := len(recorder.messages); got != 2 {
 		t.Fatalf("new episode did not alert: %d messages", got)
 	}
@@ -157,20 +157,20 @@ func TestEventNotifierSeparatesChecksAndPacesErrors(t *testing.T) {
 	now := time.Date(2026, 9, 28, 12, 0, 0, 0, time.UTC)
 	router.now = func() time.Time { return now }
 	for _, check := range []string{"http", "disk"} {
-		router.deliver(t.Context(), Event{Service: "apache", Check: check, Kind: eventKindFiring})
+		router.deliver(t.Context(), eventNotification{Service: "apache", Check: check, Kind: eventKindFiring})
 	}
 	if got := len(recorder.messages); got != 2 {
 		t.Fatalf("independent checks delivered %d times, want 2", got)
 	}
 	errEvent := Event{Service: "apache", Rule: "repair", Kind: eventKindError, Message: "exit 1"}
-	router.deliver(t.Context(), errEvent)
+	router.deliver(t.Context(), eventNotification{Event: errEvent})
 	errEvent.Message = "exit 2"
-	router.deliver(t.Context(), errEvent)
+	router.deliver(t.Context(), eventNotification{Event: errEvent})
 	if got := len(recorder.messages); got != 3 {
 		t.Fatalf("repeated error delivered %d times, want 3 total", got)
 	}
 	now = now.Add(24 * time.Hour)
-	router.deliver(t.Context(), errEvent)
+	router.deliver(t.Context(), eventNotification{Event: errEvent})
 	if got := len(recorder.messages); got != 4 {
 		t.Fatalf("daily error delivered %d times, want 4 total", got)
 	}
@@ -192,7 +192,7 @@ func TestEventNotifierSendsEveryOneShotNoticeWithoutReminders(t *testing.T) {
 	}
 	notices = append(notices, reclaims...)
 	for _, e := range notices {
-		router.deliver(t.Context(), e)
+		router.deliver(t.Context(), eventNotification{Event: e})
 		now = now.Add(10 * time.Minute)
 	}
 	if got := len(recorder.messages); got != len(notices) {
@@ -222,7 +222,7 @@ func TestEventNotifierRemediationEpisodesRealertAfterRecovery(t *testing.T) {
 		now = now.Add(2 * time.Minute)
 	}
 	for _, e := range h.events {
-		router.deliver(t.Context(), e)
+		router.deliver(t.Context(), eventNotification{Event: e})
 	}
 	want := []string{"web: action", "web: recovered", "web: action"}
 	if got := len(recorder.messages); got != len(want) {
@@ -254,7 +254,7 @@ func TestEventNotifierAvailabilityRecoveryKeepsFiringIncidentOpen(t *testing.T) 
 		w.RunCycle(context.Background())
 	}
 	for _, e := range events {
-		router.deliver(t.Context(), e)
+		router.deliver(t.Context(), eventNotification{Event: e})
 	}
 	for len(recorder.messages) > 0 {
 		msg := <-recorder.messages
@@ -282,7 +282,7 @@ func TestEventNotifierAvailabilityEpisodesCloseAtEveryGrade(t *testing.T) {
 				Name: "api", Severity: level, FireOnFail: true, Sleep: func(time.Duration) {},
 				Check: &scriptedCheck{results: []checks.Result{good, gone, gone, good, gone, gone, good}},
 				Emit: func(e Event) {
-					router.deliver(t.Context(), e)
+					router.deliver(t.Context(), eventNotification{Event: e})
 					*now = now.Add(time.Minute)
 				},
 			}
@@ -306,7 +306,7 @@ func TestEventNotifierAvailabilityEpisodesCloseAtEveryGrade(t *testing.T) {
 // still firing, and held the second metric's own opening.
 func TestEventNotifierKeepsTheMetricsOfAWatchApart(t *testing.T) {
 	router, target, now := outageRouter(t, nil, time.Hour)
-	emit := func(e Event) { router.deliver(t.Context(), e) }
+	emit := func(e Event) { router.deliver(t.Context(), eventNotification{Event: e}) }
 	breach := checks.Result{Check: "gw", OK: true, Message: "breach"}
 	clear := checks.Result{Check: "gw", OK: false, Message: "clear"}
 	loss := &Watch{Name: "gw", StateSlot: "metric:loss", Emit: emit, Check: &scriptedCheck{results: []checks.Result{breach, breach, clear}}}
@@ -354,7 +354,7 @@ func TestEventNotifierRetainMetricIncidents(t *testing.T) {
 		{Watch: "gw", Kind: eventKindFiring},
 		{Watch: "gw", Check: watchAvailabilityCheck, Kind: eventKindError, Severity: severity.Warning},
 	} {
-		router.deliver(t.Context(), e)
+		router.deliver(t.Context(), eventNotification{Event: e})
 	}
 	drainEventNotify(target)
 
@@ -399,7 +399,7 @@ func TestEventNotifierRetainDropsIncidentsNoTargetCanClose(t *testing.T) {
 		{App: "removed-app", Kind: eventKindFiring},
 		{Kind: eventKindFiring, Message: "daemon incident"},
 	} {
-		router.deliver(t.Context(), e)
+		router.deliver(t.Context(), eventNotification{Event: e})
 	}
 	for len(recorder.messages) > 0 {
 		<-recorder.messages
@@ -464,7 +464,7 @@ func TestEventNotifierRetriesOnlyTemporaryFailures(t *testing.T) {
 			router := NewEventNotifier("host-a", logger, nil, nil)
 			var slept []time.Duration
 			router.sleep = func(d time.Duration) { slept = append(slept, d) }
-			err := router.sendWithRetry(t.Context(), target, notify.Message{Subject: "x"})
+			err := router.sendWithRetry(t.Context(), target, notify.Message{Subject: "x"}, nil)
 			if (err != nil) != tc.wantErr || target.calls != tc.wantCalls || len(slept) != tc.wantCalls-1 {
 				t.Fatalf("err=%v calls=%d slept=%v", err, target.calls, slept)
 			}

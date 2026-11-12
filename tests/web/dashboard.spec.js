@@ -482,6 +482,84 @@ test.afterEach(async ({ page }) => {
   expect(uncaughtPageErrors.get(page) || [], "uncaught browser errors").toEqual([]);
 });
 
+for (const width of [1536, 390]) {
+  test(`watch alarm silence preserves health and rearms at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 960 });
+    const watch = {
+      name: "alarm-disk", display_name: "Alarm disk", check_type: "storage", enabled: true,
+      monitored: true, state: "failed", summary: "Space 95%",
+      alarm: { active: true, revision: "incident-1", silenced: false },
+    };
+    const requests = [];
+    await page.route("**/api/watches", (route) => route.fulfill({ json: [watch] }));
+    await page.route("**/api/watches/alarm-disk/silence?**", (route) => {
+      requests.push(new URL(route.request().url()).searchParams.get("revision"));
+      watch.alarm.silenced = true;
+      return route.fulfill({ json: { ok: true, message: "alarm silenced until the watch state changes" } });
+    });
+    await page.reload();
+    const row = page.locator("#wat-row-alarm-disk");
+    const button = row.locator('[data-watch-action="silence"]');
+    await expect(page.locator("#attention")).toContainText("1 watch firing");
+    await button.click();
+    await expect(row).toContainText("alarm silenced");
+    await expect(button).toBeDisabled();
+    await expect(page.locator("#attention")).not.toContainText("1 watch firing");
+    await expect(row.locator(".target-state")).toHaveText("failed");
+    expect(requests).toEqual(["incident-1"]);
+    await page.reload();
+    await expect(row).toContainText("alarm silenced");
+    watch.alarm = { active: true, revision: "incident-2", silenced: false };
+    await page.reload();
+    await expect(button).toBeEnabled();
+    await expect(page.locator("#attention")).toContainText("1 watch firing");
+    const accessibility = await new AxeBuilder({ page }).include("#watches-section").withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"]).analyze();
+    expect(accessibility.violations).toEqual([]);
+  });
+}
+
+test("watch alarm buttons explain every unavailable state", async ({ page }) => {
+  const cases = [
+    { name: "no-alarm", alarm: { active: false }, reason: "no active alarm" },
+    { name: "missing-revision", alarm: { active: true }, reason: "alarm state unavailable" },
+    { name: "silenced", alarm: { active: true, revision: "current", silenced: true }, reason: "alarm silenced until the watch state changes" },
+    { name: "starting", alarm: { active: true, revision: "current" }, state: "starting", reason: "watch is starting" },
+    { name: "ready", alarm: { active: true, revision: "current" }, reason: "" },
+  ];
+  await page.route("**/api/watches", (route) => route.fulfill({ json: cases.map((item) => ({
+    name: item.name, check_type: "storage", enabled: true, monitored: true,
+    state: item.state || "failed", alarm: item.alarm,
+  })) }));
+  await page.reload();
+  for (const item of cases) {
+    const button = page.locator(`#wat-row-${item.name} [data-watch-action="silence"]`);
+    if (item.reason) {
+      await expect(button).toBeDisabled();
+      await expect(button).toHaveAccessibleDescription(item.reason);
+    } else {
+      await expect(button).toBeEnabled();
+    }
+  }
+});
+
+test("watch monitor buttons explain an in-flight change", async ({ page }) => {
+  let release;
+  const responseReady = new Promise((resolve) => { release = resolve; });
+  await page.route("**/api/watches/process-queue/unmonitor", async (route) => {
+    await responseReady;
+    await route.fulfill({ json: { ok: true, message: "unmonitored" } });
+  });
+  const button = page.locator('#wat-row-process-queue [data-watch-action="unmonitor"]');
+  try {
+    await button.click();
+    await expect(button).toBeDisabled();
+    await expect(button).toHaveAccessibleDescription("monitoring change is pending");
+  } finally {
+    release();
+  }
+  await expect(button).toBeEnabled();
+});
+
 test("dashboard passes axe and fits the viewport", async ({ page }) => {
   const results = await new AxeBuilder({ page })
     .withTags(["wcag2a", "wcag2aa", "wcag22aa"])

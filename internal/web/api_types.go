@@ -197,6 +197,7 @@ const (
 // Watch is a dashboard view of a host-level or service-scoped watch, enriched
 // with useful runtime/config info for operators.
 type Watch struct {
+	Alarm             WatchAlarm        `json:"alarm"`
 	Name              string            `json:"name"`
 	Scope             string            `json:"scope"` // host | service
 	DisplayName       string            `json:"display_name,omitempty"`
@@ -251,6 +252,15 @@ type Watch struct {
 	// Processes lists the processes an unowned_processes watch currently
 	// reports, each with the identity its kill button must send back.
 	Processes []WatchProcess `json:"processes,omitempty"`
+}
+
+// WatchAlarm describes an acknowledgement of the current confirmed alarm state.
+type WatchAlarm struct {
+	Active     bool   `json:"active"`
+	Revision   string `json:"revision,omitempty"`
+	Silenced   bool   `json:"silenced"`
+	SilencedAt string `json:"silenced_at,omitempty"`
+	Source     string `json:"source,omitempty"`
 }
 
 // WatchProcess is one process an unowned_processes watch reports: the fields a
@@ -919,6 +929,8 @@ type Backend interface {
 	SetMonitored(ctx context.Context, name string, monitored bool) error
 	// SetWatchMonitored pauses (false) or resumes (true) monitoring of a host watch.
 	SetWatchMonitored(ctx context.Context, name string, monitored bool) error
+	// SilenceWatchAlarm acknowledges the current watch alarm revision.
+	SilenceWatchAlarm(ctx context.Context, name, revision string) ActionResult
 	// ExpandWatch runs a configured storage watch's `then.expand` action on demand.
 	ExpandWatch(ctx context.Context, name string) ActionResult
 	// ProbeWatch runs a fresh, isolated read-only sample of a supported host watch.

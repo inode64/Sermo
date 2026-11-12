@@ -71,7 +71,8 @@ type MakeStepSpec struct {
 // window, and fires its hook when the condition (check.OK) holds for the window.
 // It is independent of services and does not use the operation engine.
 type Watch struct {
-	Name string
+	Alarms *WatchAlarms
+	Name   string
 	// App, when set, marks this as an application-monitoring watch: its events are
 	// emitted on the App dimension (instead of Watch) so they are queryable and
 	// shown per application, separate from host watches. Built by buildAppWatches.
@@ -216,6 +217,7 @@ func (w *Watch) cycleTarget() string { return watchSubjectPrefix + w.Name }
 // RunCycle runs the check, advances the window, and fires the hook on a firing
 // cycle. An evaluation/hook error is emitted, never fatal.
 func (w *Watch) RunCycle(ctx context.Context) {
+	ctx = w.alarmContext(ctx)
 	observeOnly, skip := w.prepareCycle()
 	if skip {
 		return
@@ -252,6 +254,7 @@ func (w *Watch) skipStarvedCycle(res checks.Result) bool {
 // observeResult feeds a sampled result through the shared incident lifecycle.
 // Stateful scanners use it without re-running their scan or their edge actions.
 func (w *Watch) observeResult(ctx context.Context, res checks.Result, observeOnly bool) {
+	ctx = w.alarmContext(ctx)
 	if ctx.Err() != nil {
 		return
 	}
@@ -304,9 +307,10 @@ func (w *Watch) runCheckCycle(ctx context.Context, res checks.Result, observeOnl
 		return
 	}
 	w.recordAvailabilitySample(res)
+	step, firing := w.evaluateFiring(ctx, res)
+	ctx = captureWatchAlarmDelivery(ctx)
 	w.dispatchRaidTransitions(ctx, res)
 	w.dispatchLVMTransition(ctx, res)
-	step, firing := w.evaluateFiring(ctx, res)
 	if !firing {
 		return
 	}
@@ -357,6 +361,7 @@ const checkUnavailablePrefix = "check unavailable: "
 func (w *Watch) updateAvailability(res checks.Result) bool {
 	observation := res.Observation()
 	if observation == checks.ObservationUnavailable {
+		w.observeAlarm(res, true, w.resultSeverity(res))
 		if !w.unavailable {
 			w.unavailable = true
 			w.emit(Event{Watch: w.Name, Kind: eventKindError, Severity: w.resultSeverity(res), Check: watchAvailabilityCheck, Message: checkUnavailablePrefix + res.Message})
@@ -365,6 +370,7 @@ func (w *Watch) updateAvailability(res checks.Result) bool {
 	}
 	if w.unavailable {
 		w.unavailable = false
+		w.observeAlarm(res, w.firing, w.resultSeverity(res))
 		w.emit(Event{Watch: w.Name, Kind: eventKindRecovered, Check: watchAvailabilityCheck, Message: "check available: " + res.Message})
 	}
 	if observation == checks.ObservationSkipped {
@@ -407,6 +413,7 @@ func (w *Watch) evaluateFiring(ctx context.Context, res checks.Result) (watchSte
 	w.adoptLegacyNotification(legacy)
 	announced := w.state.Notified()
 	episode := w.state.FiresGradedAt(w.Window, fired, w.resultSeverity(res), w.clock())
+	w.observeAlarm(res, episode.Firing, episode.Severity)
 	if !episode.Firing {
 		w.recover(ctx, res, cmp.Or(episode.Severity, legacy), announced)
 		if !w.DryRun {
@@ -443,6 +450,8 @@ func (w *Watch) recover(ctx context.Context, res checks.Result, level, announced
 		return
 	}
 	w.firing = false
+	w.observeAlarm(res, false, level)
+	ctx = captureWatchAlarmDelivery(ctx)
 	w.lastNotifyAt = time.Time{}
 	w.emit(Event{Watch: w.Name, Kind: eventKindRecovered, Severity: level, Message: res.Message})
 	w.runRecoverHook(ctx, res, level)
@@ -542,7 +551,7 @@ func (w *Watch) dispatchFiringActions(ctx context.Context, res checks.Result, st
 // notification announced at, so the recovery reaches the same audience. A RAID/LVM watch
 // announces its own transitions instead.
 func (w *Watch) notifyFiring(ctx context.Context, step watchStep, msg notify.Message) {
-	if len(w.RaidNotifyEvents) > 0 || !w.shouldNotify(step) {
+	if !watchAlarmDeliveryAllowed(ctx) || len(w.RaidNotifyEvents) > 0 || !w.shouldNotify(step) {
 		return
 	}
 	// A dry-run notification reaches the console only: the audience a later
@@ -1008,6 +1017,7 @@ func runWatchHook(ctx context.Context, hook HookSpec, runner HookRunner, emit fu
 // every watcher fire ends with. It reports whether live actions were allowed;
 // individual delivery failures are reported through events.
 func dispatchWatchFire(ctx context.Context, spec watchFireSpec, msg string, env map[string]string) bool {
+	ctx = captureWatchAlarmDelivery(ctx)
 	env[sermoEnvSeverity] = spec.severity.Resolved().String()
 	if spec.dryRun {
 		spec.emit(Event{Watch: spec.name, Kind: eventKindDryRun, Message: spec.dryRunLabel + ": " + msg})
@@ -1023,7 +1033,7 @@ func dispatchWatchFire(ctx context.Context, spec watchFireSpec, msg string, env 
 		spec.action()
 	}
 	dispatchNotify(ctx, spec.notifiers, watchMessage(spec.name, msg, env), spec.name, spec.emit)
-	return true
+	return len(spec.hook.Command) > 0 || spec.action != nil || watchAlarmDeliveryAllowed(ctx)
 }
 
 // watchMessage builds a notification from a fired watch's message and hook env.

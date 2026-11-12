@@ -122,14 +122,13 @@ func (w *fileWatcher) runCycle(ctx context.Context) {
 	paths := slices.Sorted(maps.Keys(current)) // shared deterministic order for events and health
 	w.numberFiles = fileWatchNumberFiles(current)
 	blind := w.blindSpot(current, failures)
-	defer func() {
-		result := w.snapshot(current, paths, failures, blind)
-		if w.observe != nil {
-			w.observe(ctx, result, observeOnlyCycle(ctx))
-		} else if w.publish != nil {
-			w.publish(w.name, checks.CheckTypeFile, result)
-		}
-	}()
+	// Establish the confirmed alarm before any edge notification from this scan.
+	result := w.snapshot(current, paths, failures, blind)
+	if w.observe != nil {
+		w.observe(ctx, result, observeOnlyCycle(ctx))
+	} else if w.publish != nil {
+		w.publish(w.name, checks.CheckTypeFile, result)
+	}
 	// The sample reads the fresh scan, never the baseline: observe-only cycles
 	// rewrite the baseline's breached flag to preserve edge detection, and a
 	// state series must report the level the scan actually saw.

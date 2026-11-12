@@ -2830,6 +2830,33 @@ These conventions keep the per-type sections below short:
   against a baseline carried across cycles: the **first cycle primes the baseline
   and never fires**, and a counter reset clamps the per-cycle delta to zero.
 
+### Silencing a watch alarm
+
+The bell button on a watch acknowledges its current alarm until the watch's
+confirmed state changes. It is available to administrators for both host and
+service watches. A crossed bell and `alarm silenced` identify an acknowledged
+alarm; the row, health totals, readings and history still show its actual state.
+The attention banner, favicon and browser notifications omit the silenced watch.
+
+Silencing suppresses the watch's `then.notify`, global `event_notify`, reminders
+and queued notification summaries. A message already handed to a transport
+cannot be recalled. Sampling, history, hooks and other configured actions keep
+running, including automatic remediation. Use `unmonitor` to pause monitoring.
+
+The alarm rearms on confirmed recovery, escalation, loss or return of observation,
+a device health transition, or an incident change in another metric or database
+statement. Changes to a value, message or timestamp alone do not rearm it. Normal
+`for`, `within` and `clear` windows still apply. An unchanged configuration reload,
+daemon restart or browser refresh preserves the acknowledgement; changing the
+watch definition invalidates it on the next observation.
+
+The command-line equivalent is `sermoctl watch silence WATCH`. API clients read
+`alarm.revision` from the watch listing and submit
+`POST /api/watches/{name}/silence?revision=REVISION`, using the usual administrator,
+CSRF and configuration-generation gates. A revision from an older state is
+rejected. The acknowledgement is persisted under `engine.state` and its operator
+outcome is recorded in the event log; there is no YAML setting to disable alarms.
+
 ### `then.expand` — volume growth (storage watch)
 
 A storage watch can grow the LVM-backed filesystem under the checked path

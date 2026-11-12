@@ -533,6 +533,8 @@ func newWatchRuntime(name, checkType string, deps Deps, interval time.Duration) 
 		Sleep:      deps.Sleep,
 		Emit:       deps.Emit,
 		StateStore: deps.WatchState,
+		Alarms:     deps.WatchAlarms,
+		configID:   deps.watchConfigID,
 	}
 }
 

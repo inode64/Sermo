@@ -1810,3 +1810,33 @@ func TestIsErrorEventClassification(t *testing.T) {
 		}
 	}
 }
+
+func (f *fakeBackend) SilenceWatchAlarm(_ context.Context, name, revision string) ActionResult {
+	return ActionResult{OK: name != "" && revision != "", Message: "alarm silenced"}
+}
+
+func TestWatchSilenceActionGates(t *testing.T) {
+	for _, tc := range []struct {
+		name, revision, generation string
+		csrf                       bool
+		status                     int
+	}{
+		{"silence", "current", "7", true, http.StatusOK},
+		{"missing revision", "", "7", true, http.StatusConflict},
+		{"stale generation", "current", "6", true, http.StatusPreconditionFailed},
+		{"missing CSRF", "current", "7", false, http.StatusForbidden},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			req := postReq(testWatchPath("disk", APIActionSilence) + "?" + APIQueryRevision + "=" + tc.revision)
+			req.Header.Set(HeaderGeneration, tc.generation)
+			if !tc.csrf {
+				req.Header.Del(HeaderCSRF)
+			}
+			rec := httptest.NewRecorder()
+			newServer(&pinnedMutationBackend{generation: 7}).ServeHTTP(rec, req)
+			if rec.Code != tc.status {
+				t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+			}
+		})
+	}
+}

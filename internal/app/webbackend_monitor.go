@@ -162,3 +162,20 @@ func (b *WebBackend) emitMonitorSubjectEvent(ev Event, action, kind, status, mes
 	ev.Message = message
 	emitSafe(b.emit, ev)
 }
+
+// SilenceWatchAlarm changes notification control, leaving monitoring and actions running.
+func (b *WebBackend) SilenceWatchAlarm(_ context.Context, name, revision string) web.ActionResult {
+	var err error
+	if _, known := b.watches[name]; !known {
+		err = fmt.Errorf(unknownWatchMessageFmt, name)
+	} else {
+		_, err = b.watchAlarms.Silence(name, revision, state.SourceWeb)
+	}
+	result := web.ActionResult{OK: err == nil, Message: "alarm silenced until the watch state changes"}
+	status := eventStatusOK
+	if err != nil {
+		result.Message, status = err.Error(), eventStatusBlocked
+	}
+	b.emitWatchMonitorEvent(name, web.APIActionSilence, eventKindAction, status, result.Message)
+	return result
+}

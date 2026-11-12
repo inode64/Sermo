@@ -205,6 +205,8 @@ type Deps struct {
 	// WatchState persists host/application watch episodes, windows and action
 	// pacing. Optional: nil keeps those states in memory for this process only.
 	WatchState WatchStateStore
+	// WatchAlarms acknowledges alarms without pausing observation or actions.
+	WatchAlarms *WatchAlarms
 	// SLA persists per-cycle availability samples for SLA reporting. Optional: nil
 	// disables SLA tracking.
 	SLA SLARecorder

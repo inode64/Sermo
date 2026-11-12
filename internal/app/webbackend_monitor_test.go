@@ -9,6 +9,36 @@ import (
 	"sermo/internal/web"
 )
 
+func TestWebBackendSilenceWatchAlarmAuditsAndRejectsOldRevision(t *testing.T) {
+	alarms := NewWatchAlarms(openEventNotifyStore(t), nil)
+	alarms.now = func() time.Time { return time.Date(2026, 11, 12, 15, 0, 0, 0, time.FixedZone("fixture", 3600)) }
+	alarms.Observe("web:latency", "latency", "", state.WatchAlarmSlot{Active: true})
+	var events []Event
+	b := &WebBackend{watchAlarms: alarms, watches: map[string]*webWatch{"web:latency": {}}, emit: func(e Event) { events = append(events, e) }}
+	for _, tc := range []struct {
+		name, revision string
+		ok             bool
+	}{
+		{"web:latency", alarms.status("web:latency").Revision, true},
+		{"web:latency", "old", false},
+		{"unknown", "old", false},
+	} {
+		result := b.SilenceWatchAlarm(t.Context(), tc.name, tc.revision)
+		if result.OK != tc.ok {
+			t.Fatalf("%s: %+v", tc.name, result)
+		}
+	}
+	if len(events) != 3 || events[0].Status != eventStatusOK || events[1].Status != eventStatusBlocked || events[0].Action != web.APIActionSilence {
+		t.Fatalf("audit: %+v", events)
+	}
+	view := web.Watch{}
+	b.applyWatchRuntimeView(&view, &webWatch{name: "web:latency", disabled: true}, watchActivity{}, watchObservation{})
+	if !view.Alarm.Active || !view.Alarm.Silenced || view.Alarm.SilencedAt != "2026-11-12T14:00:00Z" || view.Alarm.Source != state.SourceWeb {
+		t.Fatalf("alarm projection = %+v", view.Alarm)
+	}
+
+}
+
 func TestWebBackendSetMonitoredEmitsEvent(t *testing.T) {
 	store := newFakeStore()
 	store.active["web"] = true

@@ -28,7 +28,7 @@ const (
 // runWatch dispatches host-watch queries against the running daemon.
 func (a App) runWatch(ctx context.Context, opts options) int {
 	if len(opts.args) == 0 {
-		return a.commandUsageError(commandWatch, "watch requires subcommand status, monitor, unmonitor, probe, refresh, kill, pause or resume")
+		return a.commandUsageError(commandWatch, "watch requires subcommand status, monitor, unmonitor, silence, probe, refresh, kill, pause or resume")
 	}
 	switch opts.args[0] {
 	case commandStatus:
@@ -37,6 +37,8 @@ func (a App) runWatch(ctx context.Context, opts options) int {
 		return a.runWatchMonitor(ctx, opts, false)
 	case commandUnmonitor:
 		return a.runWatchMonitor(ctx, opts, true)
+	case web.APIActionSilence:
+		return a.runWatchSilence(ctx, opts)
 	case "probe":
 		return a.runWatchProbe(ctx, opts)
 	case commandArgRefresh:
@@ -257,6 +259,9 @@ func (a App) runWatchStatus(ctx context.Context, opts options) int {
 	}
 	if opts.json {
 		out := map[string]any{cliJSONKeyWatch: name, cliJSONKeyState: watchState}
+		if detail.Alarm.Revision != "" {
+			out["alarm"] = detail.Alarm
+		}
 		if detail.LastCheckedAt != "" {
 			out["last_checked_at"] = detail.LastCheckedAt
 		}
@@ -270,6 +275,9 @@ func (a App) runWatchStatus(ctx context.Context, opts options) int {
 		return code
 	}
 	fmt.Fprintf(a.Stdout, "%s state=%s\n", name, watchState)
+	if detail.Alarm.Silenced {
+		fmt.Fprintln(a.Stdout, "  Alarm: silenced until the watch state changes")
+	}
 	if detail.LastCheckedAt != "" {
 		fmt.Fprintf(a.Stdout, "  Last checked: %s\n", detail.LastCheckedAt)
 	}
@@ -293,4 +301,41 @@ func printWatchReading(out io.Writer, reading web.WatchReading) {
 	if label != "" && value != "" {
 		fmt.Fprintf(out, "  %s: %s\n", label, value)
 	}
+}
+
+func (a App) runWatchSilence(ctx context.Context, opts options) int {
+	if len(opts.args) != watchCommandTargetArgCount {
+		return a.commandUsageError(commandWatch, "watch silence requires exactly one watch name")
+	}
+	cfg, code := a.loadConfig(opts)
+	if cfg == nil {
+		return code
+	}
+	name := opts.args[1]
+	if !knownWatchName(cfg, name) {
+		return a.fail(opts, fmt.Sprintf("unknown watch %q", name))
+	}
+	ctx, cancel := context.WithTimeout(ctx, opts.timeout)
+	defer cancel()
+	detail, ok := a.FetchDaemonWatchDetail(ctx, cfg, name)
+	if !ok {
+		return a.fail(opts, "watch silence: sermod did not report its state")
+	}
+	if !detail.Alarm.Active || detail.Alarm.Revision == "" {
+		return a.fail(opts, "watch silence: watch has no active alarm")
+	}
+	path := web.APIPathWatches + "/" + url.PathEscape(name) + "/" + web.APIActionSilence + "?" + web.APIQueryRevision + "=" + url.QueryEscape(detail.Alarm.Revision)
+	result, status, err := a.postDaemonAction(ctx, cfg, "watch silence", path)
+	if err != nil {
+		return a.fail(opts, "watch silence: "+err.Error())
+	}
+	if opts.json {
+		writeJSON(a.Stdout, result)
+	} else {
+		fmt.Fprintln(a.Stdout, result.Message)
+	}
+	if !result.OK || status != http.StatusOK {
+		return exitBlocked
+	}
+	return exitSuccess
 }

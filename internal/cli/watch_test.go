@@ -38,6 +38,55 @@ func TestManualOperationTimeout(t *testing.T) {
 	}
 }
 
+func TestWatchSilenceUsesDisplayedRevision(t *testing.T) {
+	for _, tc := range []struct {
+		name         string
+		status, code int
+	}{
+		{"current", http.StatusOK, exitSuccess},
+		{"stale", http.StatusConflict, exitBlocked},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			requests := make(chan string, 1)
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				w.Header().Set(web.HeaderGeneration, "7")
+				if r.Method != http.MethodPost {
+					_, _ = w.Write([]byte(`{"generation":7}`))
+					return
+				}
+				requests <- r.URL.Path + "?" + r.URL.Query().Get(web.APIQueryRevision) + ":" + r.Header.Get(web.HeaderGeneration) + ":" + r.Header.Get(web.HeaderCSRF)
+				w.WriteHeader(tc.status)
+				if tc.status == http.StatusOK {
+					_, _ = w.Write([]byte(`{"ok":true,"message":"alarm silenced"}`))
+				} else {
+					_, _ = w.Write([]byte(`{"ok":false,"message":"watch alarm changed; refresh and try again"}`))
+				}
+			}))
+			defer srv.Close()
+			_, global, _ := daemonAPITestConfig(t, srv.URL, "web:\n  address: HOST\n  port: PORT\nwatches:\n  load: { check: { type: oom } }\n")
+			var stdout, stderr bytes.Buffer
+			a := hermeticApp(t, App{Stdout: &stdout, Stderr: &stderr,
+				FetchDaemonWatchDetail: func(context.Context, *config.Config, string) (web.Watch, bool) {
+					return web.Watch{Alarm: web.WatchAlarm{Active: true, Revision: "observed-revision"}}, true
+				},
+			})
+			code := a.Run(t.Context(), []string{"--config", global, "watch", "silence", "load"})
+			if code != tc.code {
+				t.Fatalf("exit=%d stdout=%s stderr=%s", code, &stdout, &stderr)
+			}
+			select {
+			case got := <-requests:
+				if got != "/api/watches/load/silence?observed-revision:7:1" {
+					t.Fatalf("request=%s", got)
+				}
+			default:
+				t.Fatal("silence request missing")
+			}
+		})
+	}
+}
+
 func TestWatchStatus(t *testing.T) {
 	global := filepath.Join(t.TempDir(), "sermo.yml")
 	mustWrite(t, global, `defaults:

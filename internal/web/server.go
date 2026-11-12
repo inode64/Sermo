@@ -123,12 +123,15 @@ const (
 
 // HTTP action names accepted by the dashboard API.
 const (
-	apiActionReload           = string(rules.ActionReload)
-	apiActionResume           = string(rules.ActionResume)
-	apiActionMonitor          = "monitor"
-	apiActionUnmonitor        = "unmonitor"
-	apiActionExpand           = "expand"
-	apiActionProbe            = "probe"
+	apiActionReload    = string(rules.ActionReload)
+	apiActionResume    = string(rules.ActionResume)
+	apiActionMonitor   = "monitor"
+	apiActionUnmonitor = "unmonitor"
+	apiActionExpand    = "expand"
+	apiActionProbe     = "probe"
+	// APIActionSilence acknowledges a watch alarm until its confirmed state changes.
+	APIActionSilence          = "silence"
+	APIQueryRevision          = "revision"
 	apiActionPause            = "pause"
 	apiActionReplicationStart = "replication-start"
 	apiSegmentButton          = "button"

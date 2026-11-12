@@ -10,7 +10,7 @@ import (
 // monitorActions and watchOperateActions are the non-operation action verbs the API accepts.
 var monitorActions = map[string]bool{apiActionMonitor: true, apiActionUnmonitor: true}
 
-var watchOperateActions = map[string]bool{apiActionExpand: true, apiActionProbe: true, apiActionPause: true, apiActionResume: true, apiActionReplicationStart: true}
+var watchOperateActions = map[string]bool{apiActionExpand: true, apiActionProbe: true, APIActionSilence: true, apiActionPause: true, apiActionResume: true, apiActionReplicationStart: true}
 
 // handlePanic enables (action "on") or disables (action "off") the daemon-wide
 // panic mode. It is admin-only (POST gated by withAuth) and CSRF-protected.
@@ -80,6 +80,8 @@ func (s *Server) handleWatchAction(w http.ResponseWriter, r *http.Request) {
 				res = backend.ExpandWatch(ctx, name)
 			case apiActionProbe:
 				res = backend.ProbeWatch(ctx, name)
+			case APIActionSilence:
+				res = backend.SilenceWatchAlarm(ctx, name, r.URL.Query().Get(APIQueryRevision))
 			case apiActionReplicationStart:
 				res = backend.ControlReplication(ctx, name)
 			default:

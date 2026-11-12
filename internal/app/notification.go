@@ -32,7 +32,15 @@ const recoveredMessagePrefix = "recovered: "
 // notifier test, an inventory report) call Send directly and are never
 // filtered.
 func deliverNotification(ctx context.Context, notifiers []notify.Notifier, msg notify.Message, allow func(notify.Notifier) bool, report func(notify.Notifier, error)) {
+	scope, _ := ctx.Value(watchAlarmContextKey{}).(watchAlarmScope)
+	epoch, allowed := scope.notificationEpoch()
+	if !allowed {
+		return
+	}
 	for _, n := range notifiers {
+		if !scope.alarms.allowsNotification(scope.name, epoch) {
+			return
+		}
 		if (allow != nil && !allow(n)) || !notify.Accepts(n, msg.Severity) {
 			continue
 		}

@@ -15,14 +15,14 @@ import (
 func TestEventNotifierBurstSummariesAndPriority(t *testing.T) {
 	router, target, now := outageRouter(t, nil, 0)
 	for i := range eventNotifyBurstLimit + 10 {
-		router.deliver(t.Context(), Event{Watch: fmt.Sprintf("disk-%02d", i), Kind: eventKindFiring, Severity: severity.Warning})
+		router.deliver(t.Context(), eventNotification{Watch: fmt.Sprintf("disk-%02d", i), Kind: eventKindFiring, Severity: severity.Warning})
 	}
 	if len(target.messages) != eventNotifyBurstLimit {
 		t.Fatalf("burst=%d", len(target.messages))
 	}
-	router.deliver(t.Context(), Event{Service: "mysql", Check: "health", Kind: eventKindFiring, Severity: severity.Critical})
+	router.deliver(t.Context(), eventNotification{Service: "mysql", Check: "health", Kind: eventKindFiring, Severity: severity.Critical})
 	// Escalation to error also uses the reserved budget.
-	router.deliver(t.Context(), Event{Watch: "disk-00", Kind: eventKindFiring, Severity: severity.Error})
+	router.deliver(t.Context(), eventNotification{Watch: "disk-00", Kind: eventKindFiring, Severity: severity.Error})
 	if len(target.messages) != eventNotifyBurstLimit+2 {
 		t.Fatal("critical/escalation not prioritized")
 	}
@@ -50,14 +50,14 @@ func TestEventNotifierBurstSummariesAndPriority(t *testing.T) {
 func TestEventNotifierDeferredRecoveryReconcilesLatestState(t *testing.T) {
 	router, target, now := outageRouter(t, nil, 0)
 	for i := range eventNotifyBurstLimit {
-		router.deliver(t.Context(), Event{Watch: fmt.Sprint(i), Kind: eventKindFiring})
+		router.deliver(t.Context(), eventNotification{Watch: fmt.Sprint(i), Kind: eventKindFiring})
 	}
 	// Never announce a recovery for a deferred opening that was never delivered.
-	router.deliver(t.Context(), Event{Watch: "brief", Kind: eventKindFiring})
-	router.deliver(t.Context(), Event{Watch: "brief", Kind: eventKindRecovered})
+	router.deliver(t.Context(), eventNotification{Watch: "brief", Kind: eventKindFiring})
+	router.deliver(t.Context(), eventNotification{Watch: "brief", Kind: eventKindRecovered})
 	// A deferred recovery becomes obsolete when the fault returns.
-	router.deliver(t.Context(), Event{Watch: "0", Kind: eventKindRecovered})
-	router.deliver(t.Context(), Event{Watch: "0", Kind: eventKindFiring})
+	router.deliver(t.Context(), eventNotification{Watch: "0", Kind: eventKindRecovered})
+	router.deliver(t.Context(), eventNotification{Watch: "0", Kind: eventKindFiring})
 	*now = now.Add(time.Minute)
 	router.remind(t.Context())
 	if len(target.messages) != eventNotifyBurstLimit || len(router.bursts["ops"].pending) != 0 {
@@ -72,7 +72,7 @@ func TestEventNotifierFailedSummaryKeepsPendingWithoutReceipts(t *testing.T) {
 	burst := router.burst("ops")
 	burst.ordinary = eventNotifyBurstLimit
 	event := Event{Watch: "root", Kind: eventKindFiring}
-	router.deliver(t.Context(), event)
+	router.deliver(t.Context(), eventNotification{Event: event})
 	router.remind(t.Context())
 	router.remind(t.Context())
 	if target.calls != 1 || len(router.memory) != 0 || len(burst.pending) != 1 {
@@ -88,7 +88,7 @@ func TestEventNotifierFailedSummaryKeepsPendingWithoutReceipts(t *testing.T) {
 func TestEventNotifierBurstCapacityAndCriticalBudget(t *testing.T) {
 	router, target, now := outageRouter(t, nil, 0)
 	for i := range 1000 {
-		router.deliver(t.Context(), Event{Watch: fmt.Sprint(i), Kind: eventKindFiring, Severity: severity.Critical})
+		router.deliver(t.Context(), eventNotification{Watch: fmt.Sprint(i), Kind: eventKindFiring, Severity: severity.Critical})
 	}
 	burst := router.bursts["ops"]
 	if len(target.messages) != eventNotifyBurstLimit+eventNotifyPriorityLimit || len(burst.pending) != eventNotifyPendingLimit || burst.overflow == 0 {
@@ -105,7 +105,7 @@ func TestEventNotifierPanicHoldsSummaryButFlushesReceipts(t *testing.T) {
 	store := &failingEventNotifyStore{Store: openRuleStateStore(t), writeErr: errors.New("full")}
 	router, target, now := outageRouter(t, store, 0)
 	for i := range eventNotifyBurstLimit + 1 {
-		router.deliver(t.Context(), Event{Watch: fmt.Sprint(i), Kind: eventKindFiring})
+		router.deliver(t.Context(), eventNotification{Watch: fmt.Sprint(i), Kind: eventKindFiring})
 	}
 	router.inPanic = func() bool { return true }
 	store.writeErr = nil
@@ -122,7 +122,7 @@ func TestEventNotifierSummaryHonorsChannelSelectionAndReload(t *testing.T) {
 	critical := &floorNotifier{name: "critical", floor: severity.Critical}
 	router.Update(config.EventNotification{Targets: []string{"ops", "critical"}}, map[string]notify.Notifier{"ops": ops, "critical": critical})
 	for i := range eventNotifyBurstLimit + 1 {
-		router.deliver(t.Context(), Event{Watch: fmt.Sprint(i), Kind: eventKindFiring, Severity: severity.Warning})
+		router.deliver(t.Context(), eventNotification{Watch: fmt.Sprint(i), Kind: eventKindFiring, Severity: severity.Warning})
 	}
 	if len(critical.msgs) != 0 {
 		t.Fatal("warning reached critical channel")
@@ -133,7 +133,7 @@ func TestEventNotifierSummaryHonorsChannelSelectionAndReload(t *testing.T) {
 	if len(ops.msgs) != eventNotifyBurstLimit || len(router.bursts["ops"].pending) != 0 {
 		t.Fatal("reload severity floor ignored by summary")
 	}
-	router.deliver(t.Context(), Event{Watch: "0", Kind: eventKindRecovered})
+	router.deliver(t.Context(), eventNotification{Watch: "0", Kind: eventKindRecovered})
 	if len(ops.msgs) != eventNotifyBurstLimit+1 || len(critical.msgs) != 0 {
 		t.Fatal("recovery did not follow actual recipients")
 	}
@@ -142,7 +142,7 @@ func TestEventNotifierSummaryHonorsChannelSelectionAndReload(t *testing.T) {
 func TestEventNotifierRetainDiscardsDeferredRemovedWatch(t *testing.T) {
 	router, target, now := outageRouter(t, nil, 0)
 	for i := range eventNotifyBurstLimit + 1 {
-		router.deliver(t.Context(), Event{Watch: fmt.Sprint(i), Kind: eventKindFiring})
+		router.deliver(t.Context(), eventNotification{Watch: fmt.Sprint(i), Kind: eventKindFiring})
 	}
 	router.Retain(eventNotifyScope{watches: map[string]bool{"0": true}})
 	*now = now.Add(time.Minute)
@@ -156,10 +156,10 @@ func TestEventNotifierFailedRecoverySummaryCannotBecomeReminder(t *testing.T) {
 	router, _, now := outageRouter(t, nil, time.Hour)
 	target := &fakeNotifier{name: "ops"}
 	router.Update(config.EventNotification{Targets: []string{"ops"}, RepeatInterval: time.Hour}, map[string]notify.Notifier{"ops": target})
-	router.deliver(t.Context(), Event{Watch: "root", Kind: eventKindFiring})
+	router.deliver(t.Context(), eventNotification{Watch: "root", Kind: eventKindFiring})
 	*now = now.Add(time.Hour)
 	router.burst("ops").ordinary = eventNotifyBurstLimit
-	router.deliver(t.Context(), Event{Watch: "root", Kind: eventKindRecovered})
+	router.deliver(t.Context(), eventNotification{Watch: "root", Kind: eventKindRecovered})
 	target.fail = true
 	router.remind(t.Context())
 	key, _, _ := eventNotifyIdentity(Event{Watch: "root", Kind: eventKindRecovered})
@@ -180,10 +180,10 @@ func TestEventNotifierQueuedEscalationSurvivesBudgetReset(t *testing.T) {
 	b := router.burst("ops")
 	b.ordinary, b.priority = eventNotifyBurstLimit, eventNotifyPriorityLimit
 	event := Event{Watch: "root", Kind: eventKindFiring, Severity: severity.Critical}
-	router.deliver(t.Context(), event)
+	router.deliver(t.Context(), eventNotification{Event: event})
 	*now = now.Add(time.Minute)
 	event.Severity = severity.Warning
-	router.deliver(t.Context(), event)
+	router.deliver(t.Context(), eventNotification{Event: event})
 	router.remind(t.Context())
 	key, _, _ := eventNotifyIdentity(event)
 	rec, found, err := router.load(key, "ops")
@@ -203,16 +203,16 @@ func TestEventNotifierRecoveryDuringPanicClosesItsIncident(t *testing.T) {
 	router.inPanic = func() bool { return panicking }
 	healed := Event{Watch: "root", Kind: eventKindFiring, Severity: severity.Warning}
 	still := Event{Watch: "data", Kind: eventKindFiring}
-	router.deliver(t.Context(), healed)
-	router.deliver(t.Context(), still)
+	router.deliver(t.Context(), eventNotification{Event: healed})
+	router.deliver(t.Context(), eventNotification{Event: still})
 	// An escalation still queued for the summary must not outlive its incident.
 	router.burst("ops").ordinary = eventNotifyBurstLimit
 	router.burst("ops").priority = eventNotifyPriorityLimit
-	router.deliver(t.Context(), Event{Watch: "root", Kind: eventKindFiring, Severity: severity.Error})
+	router.deliver(t.Context(), eventNotification{Watch: "root", Kind: eventKindFiring, Severity: severity.Error})
 	drainEventNotify(target)
 
 	panicking = true
-	router.deliver(t.Context(), Event{Watch: "root", Kind: eventKindRecovered})
+	router.deliver(t.Context(), eventNotification{Watch: "root", Kind: eventKindRecovered})
 	panicking = false
 	if len(target.messages) != 0 {
 		t.Fatal("panic mode delivered a recovery")
@@ -225,7 +225,7 @@ func TestEventNotifierRecoveryDuringPanicClosesItsIncident(t *testing.T) {
 		t.Fatalf("reminders after the panic = %v, want only the incident still open", got)
 	}
 
-	router.deliver(t.Context(), healed)
+	router.deliver(t.Context(), eventNotification{Event: healed})
 	if got := drainEventNotify(target); len(got) != 1 {
 		t.Fatalf("next failure delivered %d messages, want a new incident", len(got))
 	}
@@ -237,13 +237,13 @@ func TestEventNotifierFailedRecoveryIsRetriedBySummary(t *testing.T) {
 	router, recorder, now := outageRouter(t, nil, time.Hour)
 	firing := Event{Watch: "root", Kind: eventKindFiring}
 	recovered := Event{Watch: "root", Kind: eventKindRecovered}
-	router.deliver(t.Context(), firing)
+	router.deliver(t.Context(), eventNotification{Event: firing})
 	drainEventNotify(recorder)
 	key, _, _ := eventNotifyIdentity(recovered)
 
 	down := &flakyNotifier{errs: []error{errors.New("rejected"), errors.New("rejected")}}
 	router.Update(config.EventNotification{Targets: []string{"ops"}, RepeatInterval: time.Hour}, map[string]notify.Notifier{"ops": down})
-	router.deliver(t.Context(), recovered)
+	router.deliver(t.Context(), eventNotification{Event: recovered})
 	if pending := router.bursts["ops"].pending[key]; pending.record.Phase != eventNotifyPhaseRecovered {
 		t.Fatal("failed recovery was not kept for retry")
 	}

@@ -345,7 +345,9 @@ func run(args []string) int {
 	// emitted event; with the web UI disabled nobody subscribes and Notify is
 	// a cheap no-op.
 	webChanges := web.NewBroadcaster()
+	watchAlarms := app.NewWatchAlarms(store, func(err error) { logger.Error("watch alarm persistence", logFieldError, err) })
 	eventNotifier := app.NewEventNotifier(config.ShortHostname(), logger, panicGate.Active, store)
+	eventNotifier.WatchAlarms = watchAlarms
 	eventNotifier.Update(config.EventNotifyConfig(cfg.Global.Raw), notifiers)
 	persistenceEvents := app.NewPersistenceEvents(app.MultiEmit(app.SlogEmitter(logger), eventLog.Add, func(app.Event) { webChanges.Notify() }, eventNotifier.Emit), eventNotifier)
 	eventNotifyDone := goTracked(func() { eventNotifier.Run(ctx) })
@@ -367,6 +369,7 @@ func run(args []string) int {
 		Panic:                panicGate,
 		RuleState:            store,
 		WatchState:           store,
+		WatchAlarms:          watchAlarms,
 		SLA:                  store,
 		DaemonMetrics:        store,
 		Notifiers:            notifiers,

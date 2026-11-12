@@ -242,7 +242,7 @@ func TestSeverityMigrationBackfillsEventsAndIncidents(t *testing.T) {
 	}
 	for key, want := range map[string][2]string{"w:hdparm": {"firing", "warning"}, "w:disk": {"firing", "error"}, "w:net": {"recovered", ""}} {
 		rec, found, err := s.EventNotifyState(key, "ops")
-		if err != nil || !found || rec.Phase != want[0] || rec.Severity != want[1] {
+		if err != nil || !found || rec.Phase != want[0] || rec.Severity != want[1] || rec.AlarmEpoch != "" {
 			t.Fatalf("incident %s = %+v (found %v, err %v), want phase %q severity %q", key, rec, found, err, want[0], want[1])
 		}
 	}

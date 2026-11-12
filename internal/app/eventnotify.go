@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strconv"
@@ -46,19 +47,27 @@ type EventNotifyStore interface {
 	DeleteEventNotifyIncident(incidentKey string) error
 }
 
+// eventNotification keeps delivery metadata out of the operator-visible event.
+// The epoch is captured when queued and retained through retries and receipts.
+type eventNotification struct {
+	Event
+	alarmEpoch string
+}
+
 // EventNotifier routes daemon alarm events to named notifiers. Its queue keeps
 // external transport latency out of monitoring cycles. The state store ensures
 // a daemon restart does not turn an ongoing incident into a new alert.
 type EventNotifier struct {
-	host    string
-	logger  *slog.Logger
-	inPanic func() bool
-	store   EventNotifyStore
-	now     func() time.Time
-	queue   chan Event
-	mu      sync.RWMutex
-	targets []notify.Notifier
-	policy  config.EventNotification
+	WatchAlarms *WatchAlarms
+	host        string
+	logger      *slog.Logger
+	inPanic     func() bool
+	store       EventNotifyStore
+	now         func() time.Time
+	queue       chan eventNotification
+	mu          sync.RWMutex
+	targets     []notify.Notifier
+	policy      config.EventNotification
 	// deliveryMu serializes delivery and retention across config generations.
 	deliveryMu sync.Mutex
 	// memory overlays records not yet durable; a failed write must never undo
@@ -85,7 +94,7 @@ var eventNotifyRetryDelays = []time.Duration{2 * time.Second, 5 * time.Second}
 func NewEventNotifier(host string, logger *slog.Logger, inPanic func() bool, store EventNotifyStore) *EventNotifier {
 	return &EventNotifier{
 		host: host, logger: logger, inPanic: inPanic, store: store,
-		now: time.Now, queue: make(chan Event, eventNotifyQueueSize),
+		now: time.Now, queue: make(chan eventNotification, eventNotifyQueueSize),
 		memory: make(map[string]state.EventNotifyRecord),
 		bursts: make(map[string]*eventNotifyBurst),
 	}
@@ -113,6 +122,10 @@ func (n *EventNotifier) Emit(e Event) {
 	if n == nil || !eventNeedsNotification(e) {
 		return
 	}
+	epoch, allowed := n.WatchAlarms.notificationEpoch(e.Watch)
+	if !allowed {
+		return
+	}
 	n.mu.RLock()
 	enabled := len(n.targets) > 0
 	n.mu.RUnlock()
@@ -120,7 +133,7 @@ func (n *EventNotifier) Emit(e Event) {
 		return
 	}
 	select {
-	case n.queue <- e:
+	case n.queue <- eventNotification{Event: e, alarmEpoch: epoch}:
 	default:
 		n.queueDropped.Add(1)
 		now := time.Now().UnixNano()
@@ -173,7 +186,8 @@ func (n *EventNotifier) Retain(scope eventNotifyScope) {
 		}
 	}
 	for _, burst := range n.bursts {
-		for key, pending := range burst.pending {
+		for key := range burst.pending {
+			pending := burst.pending[key]
 			if pending.record.Active && !pending.notice && !scope.live(pending.record.IncidentKey) {
 				delete(burst.pending, key)
 			}
@@ -320,15 +334,18 @@ func (n *EventNotifier) deliveryConfig() ([]notify.Notifier, time.Duration) {
 	return append([]notify.Notifier(nil), n.targets...), n.policy.RepeatInterval
 }
 
-func (n *EventNotifier) deliver(ctx context.Context, e Event) {
+func (n *EventNotifier) deliver(ctx context.Context, e eventNotification) {
 	n.deliveryMu.Lock()
 	defer n.deliveryMu.Unlock()
+	if !n.WatchAlarms.allowsNotification(e.Watch, e.alarmEpoch) {
+		return
+	}
 	panicking := n.inPanic != nil && n.inPanic()
 	if panicking && e.Kind != eventKindRecovered {
 		return
 	}
 	targets, interval := n.deliveryConfig()
-	key, active, phase := eventNotifyIdentity(e)
+	key, active, phase := eventNotifyIdentity(e.Event)
 	level := e.level()
 	now := n.now()
 	for _, target := range targets {
@@ -337,7 +354,7 @@ func (n *EventNotifier) deliver(ctx context.Context, e Event) {
 			// edge follows, so persisting it would open an incident that nothing
 			// closes: it would silence the next notice and be reminded forever.
 			if notify.Accepts(target, level) {
-				n.dispatch(ctx, target, e, n.message(e, level), level == severity.Critical)
+				n.dispatch(ctx, target, e, n.message(e.Event, level), level == severity.Critical)
 			}
 			continue
 		}
@@ -352,7 +369,7 @@ func (n *EventNotifier) deliver(ctx context.Context, e Event) {
 			}
 			continue
 		}
-		n.reconcilePending(target.Name(), key, e, rec, found)
+		n.reconcilePending(target.Name(), key, e.Event, rec, found)
 		if panicking {
 			n.closeUnannounced(target.Name(), rec, found)
 			continue
@@ -401,22 +418,22 @@ type deliveryEdge struct {
 // no record, so it can never receive an orphan reminder or recovery — and
 // then delivered on a new incident, an escalation, or a reminder; a lower
 // grade inside an open incident is held.
-func (n *EventNotifier) deliverTo(ctx context.Context, target notify.Notifier, e Event, edge deliveryEdge) (notify.Message, bool) {
+func (n *EventNotifier) deliverTo(ctx context.Context, target notify.Notifier, e eventNotification, edge deliveryEdge) (notify.Message, bool) {
 	if e.Kind == eventKindRecovered {
 		if !edge.found || !edge.rec.Active {
 			return notify.Message{}, false
 		}
-		msg := n.message(e, severity.Level(edge.rec.Severity))
+		msg := n.message(e.Event, severity.Level(edge.rec.Severity))
 		return msg, n.dispatch(ctx, target, e, msg, false)
 	}
-	if !notify.Accepts(target, edge.level) || !shouldDeliverEvent(edge) {
+	if !notify.Accepts(target, edge.level) || (edge.rec.AlarmEpoch == e.alarmEpoch && !shouldDeliverEvent(edge)) {
 		return notify.Message{}, false
 	}
 	held := edge.level
 	if edge.active && edge.found && edge.rec.Active {
 		held = severity.Max(severity.Level(edge.rec.Severity), edge.level)
 	}
-	msg := n.message(e, edge.level)
+	msg := n.message(e.Event, edge.level)
 	priority := edge.level == severity.Critical || (edge.found && edge.level.Rank() > severity.Level(edge.rec.Severity).Resolved().Rank())
 	if !n.dispatch(ctx, target, e, msg, priority) {
 		return notify.Message{}, false
@@ -425,8 +442,11 @@ func (n *EventNotifier) deliverTo(ctx context.Context, target notify.Notifier, e
 	return msg, true
 }
 
-func (n *EventNotifier) send(ctx context.Context, target notify.Notifier, msg notify.Message) bool {
-	if err := n.sendWithRetry(ctx, target, msg); err != nil {
+func (n *EventNotifier) send(ctx context.Context, target notify.Notifier, msg notify.Message, allowed func() bool) bool {
+	if err := n.sendWithRetry(ctx, target, msg, allowed); err != nil {
+		if errors.Is(err, errWatchAlarmSilenced) {
+			return false
+		}
 		n.logger.Error("event notification failed", "notifier", target.Name(),
 			"subject", msg.Subject, "error", err)
 		return false
@@ -454,6 +474,9 @@ func (n *EventNotifier) remind(ctx context.Context) {
 			continue
 		}
 		for _, rec := range due {
+			if !n.allowsAlarmRecord(rec) {
+				continue
+			}
 			if !n.canRemember(rec.IncidentKey, target.Name()) {
 				break
 			}
@@ -476,8 +499,8 @@ func (n *EventNotifier) remind(ctx context.Context) {
 
 // sendWithRetry delivers msg, retrying a failure that may pass. A notifier
 // that rejected the message (a wrong webhook, a bad token) is not retried.
-func (n *EventNotifier) sendWithRetry(ctx context.Context, target notify.Notifier, msg notify.Message) error {
-	err := sendEventNotification(ctx, target, msg)
+func (n *EventNotifier) sendWithRetry(ctx context.Context, target notify.Notifier, msg notify.Message, allowed func() bool) error {
+	err := sendEventNotification(ctx, target, msg, allowed)
 	for _, delay := range eventNotifyRetryDelays {
 		if !notify.IsTemporary(err) {
 			return err
@@ -485,12 +508,15 @@ func (n *EventNotifier) sendWithRetry(ctx context.Context, target notify.Notifie
 		if process.Wait(ctx, n.sleep, delay) != nil {
 			return err
 		}
-		err = sendEventNotification(ctx, target, msg)
+		err = sendEventNotification(ctx, target, msg, allowed)
 	}
 	return err
 }
 
-func sendEventNotification(ctx context.Context, target notify.Notifier, msg notify.Message) error {
+func sendEventNotification(ctx context.Context, target notify.Notifier, msg notify.Message, allowed func() bool) error {
+	if allowed != nil && !allowed() {
+		return errWatchAlarmSilenced
+	}
 	sendCtx, cancel := context.WithTimeout(ctx, eventNotifyTimeout)
 	defer cancel()
 	if err := target.Send(sendCtx, msg); err != nil {

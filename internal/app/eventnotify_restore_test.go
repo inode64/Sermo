@@ -49,7 +49,7 @@ func TestOpenServiceIncidentsListsWhatConfiguredNotifiersHold(t *testing.T) {
 	ops, old := &fakeNotifier{name: "ops"}, &fakeNotifier{name: "old"}
 
 	removed := newRestoreRouter(store, &now, old)
-	removed.deliver(t.Context(), Event{Service: "web", Check: "strays", Kind: eventKindFiring})
+	removed.deliver(t.Context(), eventNotification{Service: "web", Check: "strays", Kind: eventKindFiring})
 
 	router := newRestoreRouter(store, &now, ops)
 	for _, e := range []Event{
@@ -63,7 +63,7 @@ func TestOpenServiceIncidentsListsWhatConfiguredNotifiersHold(t *testing.T) {
 		{Watch: "disk", Kind: eventKindFiring},
 		{App: "salt-minion", Kind: eventKindFiring},
 	} {
-		router.deliver(t.Context(), e)
+		router.deliver(t.Context(), eventNotification{Event: e})
 	}
 
 	got := router.openServiceIncidents()
@@ -259,8 +259,8 @@ func TestRestartClosesIncidentsTheEpisodeMemoryLost(t *testing.T) {
 	now := time.Date(2026, 11, 9, 12, 0, 0, 0, time.UTC)
 	ops := &fakeNotifier{name: "ops"}
 	before := newRestoreRouter(store, &now, ops)
-	before.deliver(t.Context(), Event{Service: "alloy", Check: "strays", Kind: eventKindFiring, Message: "check strays: 1 stray process"})
-	before.deliver(t.Context(), Event{Service: "alloy", Rule: "ready", Action: "restart", Kind: eventKindDryRun, Message: "would restart"})
+	before.deliver(t.Context(), eventNotification{Service: "alloy", Check: "strays", Kind: eventKindFiring, Message: "check strays: 1 stray process"})
+	before.deliver(t.Context(), eventNotification{Service: "alloy", Rule: "ready", Action: "restart", Kind: eventKindDryRun, Message: "would restart"})
 	if len(ops.msgs) != 2 {
 		t.Fatalf("setup delivered %d messages, want 2", len(ops.msgs))
 	}
@@ -283,7 +283,7 @@ func TestRestartClosesIncidentsTheEpisodeMemoryLost(t *testing.T) {
 		},
 		Emit: func(e Event) {
 			if eventNeedsNotification(e) {
-				router.deliver(t.Context(), e)
+				router.deliver(t.Context(), eventNotification{Event: e})
 			}
 		},
 	}

@@ -337,6 +337,9 @@ func (w *dbQueryWatcher) updateStatement(ctx context.Context, q *checks.DBQuery,
 			q.Alerted, q.Announced = false, false
 		}
 	}
+	if !observe {
+		observeWatchAlarm(ctx, dbQueryEventCheck(key), state.WatchAlarmSlot{Active: q.Alerted, Severity: w.severity.Resolved().String()})
+	}
 	st.query = *q
 	if !observe || !replaced {
 		// A replacement during observation leaves the old incident pending.
@@ -421,6 +424,7 @@ func (w *dbQueryWatcher) fire(ctx context.Context, key string, q checks.DBQuery)
 	}
 	message = w.summaryMessage(q, message)
 	check := dbQueryEventCheck(key)
+	observeWatchAlarm(ctx, check, state.WatchAlarmSlot{Active: true, Severity: w.severity.Resolved().String()})
 	w.emitEvent(Event{Watch: w.name, Kind: eventKindFiring, Severity: w.severity, Check: check, Message: message})
 	return w.dispatch(ctx, check, message, w.env(q, change, message))
 }
@@ -434,6 +438,7 @@ func (w *dbQueryWatcher) recover(ctx context.Context, key string, st *dbQuerySta
 		message = fmt.Sprintf("%s (%s) no longer matches the configured thresholds", dbQuerySubject(st.query), dbQueryOrigin(st.query))
 	}
 	check := dbQueryEventCheck(key)
+	observeWatchAlarm(ctx, check, state.WatchAlarmSlot{})
 	w.emitEvent(Event{Watch: w.name, Kind: eventKindRecovered, Severity: w.severity, Check: check, Message: message})
 	if st.query.Announced {
 		env := w.env(st.query, change, message)
@@ -552,6 +557,7 @@ func (w *dbQueryWatcher) reportAvailability(ctx context.Context, failure *sample
 	if observeOnlyCycle(ctx) {
 		return
 	}
+	observeWatchAlarm(ctx, watchAvailabilityCheck, state.WatchAlarmSlot{Active: failure != nil, Unavailable: failure != nil, Severity: w.severity.Resolved().String()})
 	switch {
 	case failure != nil && !w.unavailable:
 		w.unavailable = true
