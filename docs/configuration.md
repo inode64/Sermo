@@ -958,6 +958,11 @@ section. The daemon's state is an icon: a pulse while it runs, and a clock, a wa
 a power sign with the word **starting**, **panic mode** or **stopping** beside
 it otherwise; its tooltip carries the detail, such as the startup progress.
 
+**Last activity** and **Last checked** show elapsed time, including days for
+older entries. These ages advance on screen even when auto-refresh is stopped;
+they do not trigger new checks. Hover over a time for the exact UTC and local
+timestamp. The exact UTC timestamp also remains available to screen readers.
+
 | Section | Tile that leads to it | Panels |
 |---|---|---|
 | **Sessions** | Sessions | SSH, tmux and screen sessions, running database statements |
@@ -1041,13 +1046,16 @@ OK/error from its exit code before the version command is considered. If no
 `health` command is configured, the `version` command is the fallback probe
 while fetching the displayed version.
 
-The lists are sortable by name, category or version, and expanding a row reveals
-the full version string, file location and permissions. When a version is
+The lists are sortable by name or version; applications can also be sorted by
+category. Expanding a row reveals the category, full version string, file
+location and permissions. When a version is
 inherited through `version_from`, the API row includes `version_source` with the
 provider app name. Services, applications and libraries can be filtered and
-grouped by their top-level `category` metadata field. Grouped lists show the
-category in the group heading and hide its repeated column; ungrouping restores
-the column where the screen has room for it. The same data is available
+grouped by their top-level `category` metadata field. Services and libraries
+keep the category in their details and group headings instead of a table column;
+mount units likewise keep their group filter and headings without a Group column.
+Applications hide their Category column while grouped and restore it when
+ungrouped, where the screen has room for it. The same data is available
 from `sermoctl apps`, `sermoctl libs`, `GET /api/applications` and `GET
 /api/libraries`. The dashboard caches each inventory for up to 5 minutes, so
 auto-refreshes do not rerun every version probe. Each row shows when those

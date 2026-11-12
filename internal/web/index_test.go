@@ -919,7 +919,6 @@ func TestIndexDetailDedupesVisibleColumns(t *testing.T) {
 	// naming that breakpoint. Asserted against the source because the constants are
 	// what carry the mapping — the bundle only holds their minified names.
 	for _, field := range []struct{ label, cls string }{
-		{"Category", "colDupWide"},
 		{"Uptime", "colDupWide"},
 		{"CPU total", "colDupWide"},
 		{"Memory", "colDupWide"},
@@ -935,11 +934,11 @@ func TestIndexDetailDedupesVisibleColumns(t *testing.T) {
 		`const colDupPhone = "col-dup col-dup-640";`,
 	)
 
-	// Name and State anchor the expansion at every width, and FDs / Threads reports a
-	// thread count no column carries, so none of the three may be deduplicated: each
+	// Name and State anchor the expansion at every width; Category and the thread
+	// count have no columns, so none of these fields may be deduplicated: each
 	// must sit in a bare <div>. Asserted positively, because "does not contain
 	// col-dup" would silently pass on any change to how the class is spelled.
-	for _, label := range []string{"Name", "State", "FDs / Threads"} {
+	for _, label := range []string{"Name", "State", "Category", "FDs / Threads"} {
 		appJSMustContain(t, "always-visible detail field",
 			`<div><span class="muted">`+label+`</span>`)
 	}

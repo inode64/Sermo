@@ -78,7 +78,7 @@ const vmServiceCategory = "virtual-machine";
 // is on screen and revealed at the breakpoint that retires it, so the reading is
 // shown exactly once and a narrow viewport loses nothing. The suffix names the
 // breakpoint, matching the .col-dup rules in styles.css — colDupWide for the
-// columns the 1420px block drops (Category, Uptime, CPU total, Memory, FDs, IO R/W)
+// columns the 1420px block drops (Uptime, CPU total, Memory, FDs, IO R/W)
 // and colDupPhone for Last activity, which survives down to 640px.
 //
 // A field the column does not restate *exactly* carries neither class:
@@ -1458,16 +1458,16 @@ function operationMarkOutcome(status) {
   return outcome === eventStatusOK ? "" : outcome;
 }
 
-function activityDateCell(e) {
+function activityDateCell(e, relative = true) {
   const time = e && e.time;
-  if (!time) return mutedDash;
+  if (!time || Number.isNaN(Date.parse(time))) return mutedDash;
   const kind = e.kind || "";
   const detail = [kind, e.action, e.status].filter(Boolean).join(" ");
   const local = fmtLocalTime(time);
   const title = [fmtTime(time), local && local + " local", detail, e.message || ""].filter(Boolean).join(" · ");
   const cls = "activity-time activity-" + activitySeverity(kind, e.status, e.severity);
   const label = [fmtTime(time), detail || "activity"].filter(Boolean).join(" · ");
-  return tpl`<div class="event-cell" title="${title}"><span class="${cls}" aria-label="${label}">${fmtTime(time)}</span></div>`;
+  return tpl`<div class="event-cell" title="${title}"><span class="${cls}" aria-label="${label}" data-clock-since=${relative ? time : nothing} .textContent=${relative ? clockSince(time, Date.now()) : fmtTime(time)}></span></div>`;
 }
 
 function nextRemediationCell(s) {
@@ -1537,7 +1537,6 @@ function servicePanel(key, id, surface, nameLabel, label) {
     key, id, label, surface,
     columns: [
       { key: "name", label: nameLabel, sort: nameSort },
-      categoryColumn(defaultCategoryService),
       { key: "state", label: "State", sort: (s) => stateRank(serviceDisplayState(s)) },
       { key: "uptime", label: "Uptime", sort: (s) => numericSortValue(s.uptime_seconds) },
       { key: "cpu", label: "CPU total", sort: (s) => (s.cpu_ready ? numericSortValue(s.cpu) : 0) },
@@ -1573,7 +1572,7 @@ function artifactPanel(def) {
 
 const artifactColumns = (nameLabel, surface) => [
   { key: "name", label: nameLabel, sort: nameSort },
-  categoryColumn(surface),
+  ...(surface === defaultCategoryApp ? [categoryColumn(surface)] : []),
   { key: "state", label: "Status", sort: appStateRank },
   { key: "version", label: "Version", sort: (item) => (item.version_short || item.version || "").toLowerCase() },
 ];
@@ -1614,7 +1613,6 @@ const listPanels = {
     key: "mounts", id: "mount", label: "mount units", groupBy: "group", allGroupsLabel: "all groups",
     columns: [
       { key: "name", label: "Name", sort: nameSort },
-      { ...categoryColumn(defaultCategoryStorage), label: "Group" },
       { key: "path", label: "Path", sort: (m) => (m.path || "").toLowerCase() },
       { key: "mounted", label: "Mounted", sort: mountStateRank },
       { key: "refcount", label: "Refcount", sort: (m) => numericSortValue(m.refcount) },
@@ -3090,7 +3088,6 @@ function serviceActionButton(s, action, busy, compact = false, title = "", opts 
 // commands and expansion rows.
 function serviceRowParts(s) {
   const state = serviceState(s);
-  const category = categoryOf(s, defaultCategoryService);
   const label = displayName(s);
   const op = liveOps.get(s.name);
   const busy = serviceBusy(s);
@@ -3136,7 +3133,6 @@ function serviceRowParts(s) {
   const cols = panelColumnCount(listPanels.services);
   const main = tpl`<tr id="svc-row-${s.name}" class="clickable ${rowClass} ${hasCommands ? "has-commands" : ""}" data-exp-key="${key}">
     <td data-col="name"><div class="svc-main">${expandToggle(key, label, "service details", label, "name row-toggle")}${pin}</div>${stateParts.hasReason ? tpl`<div class="svc-state-note">${stateParts.reason}</div>` : nothing}${busyText}</td>
-    <td data-col="category">${categoryBadge(category)}</td>
     <td data-col="state">${stateParts.badge}</td>
     <td data-col="uptime">${serviceUptimeCell(s)}</td>
     <td data-col="cpu">${serviceCpuCell(s)}</td>
@@ -5111,7 +5107,7 @@ function serviceGeneralDetail(d, processGeneral) {
   return tpl`<div class="runtime-grid">
       <div><span class="muted">Name</span><br><b>${displayName(d)}</b></div>
       <div><span class="muted">State</span><br>${serviceStateCell(d)}</div>
-      <div class="${colDupWide}"><span class="muted">Category</span><br>${categoryBadge(categoryOf(d, defaultCategoryService))}</div>
+      <div><span class="muted">Category</span><br>${categoryBadge(categoryOf(d, defaultCategoryService))}</div>
       <div><span class="muted">Unit</span><br>${unitCell(d)}</div>
       <div><span class="muted">Backend</span><br>${d.backend || "—"}</div>
       <div class="${colDupWide}"><span class="muted">Uptime</span><br>${serviceUptimeCell(d)}</div>
@@ -5682,20 +5678,13 @@ function watchLastCheckedCell(w) {
   return tpl`${checked}<span class="watch-sample-note" title="The latest completed watch sample is older than its freshness limit.">${stateBadgeLabel(targetStateStale, targetStateStale)}</span>`;
 }
 
-// watchLastCheckedDetail adds to the last check's date how long ago it ran,
-// a clock updateWatchClocks advances each second.
-function watchLastCheckedDetail(w) {
-  if (!w.last_checked_at) return watchLastCheckedCell(w);
-  return tpl`${watchLastCheckedCell(w)}<span class="watch-clock muted" data-clock-since="${w.last_checked_at}"></span>`;
-}
-
 // watchNextCheckCell shows when the daemon starts the watch's next scheduled
-// check, as a date and as a countdown updateWatchClocks advances each second.
+// check, as a date and as a countdown updateClocks advances each second.
 // A manual refresh is an extra check and does not move it.
 function watchNextCheckCell(w) {
   const next = w.next_check_at;
   if (!next) return tpl`<span class="muted">${!w.enabled ? "disabled" : (!w.monitored ? "paused" : "—")}</span>`;
-  return tpl`${activityDateCell({ time: next })}<span class="watch-clock muted" data-clock-until="${next}"></span>`;
+  return tpl`${activityDateCell({ time: next }, false)}<span class="watch-clock muted" data-clock-until="${next}"></span>`;
 }
 
 // watchActionsCell renders the shared actions cell (expand / monitor / unmonitor).
@@ -6260,7 +6249,7 @@ function renderWatches(watches) {
   scheduleGlobalTargetSync();
   preserveExpansionCells(isWatchExpansionKey);
   renderListPanel(watchPanel);
-  updateWatchClocks();
+  updateClocks();
   reassertExpansions();
   applyHash();
   refreshChrome();
@@ -6343,7 +6332,7 @@ function renderArtifactRow(item, p) {
   const key = p.expansionKey(item.name);
   const row = tpl`<tr id="${p.rowId(item)}" class="clickable ${rowClass}" data-exp-key="${key}">
     <td data-col="name">${expandToggle(key, label, p.detailLabel)}</td>
-    <td data-col="category">${categoryBadge(p.groupOf(item))}</td>
+    ${p.columns.some((c) => c.key === "category") ? tpl`<td data-col="category">${categoryBadge(p.groupOf(item))}</td>` : nothing}
     ${appStatusCell(item)}
     <td data-col="version">${item.version_short || item.version || "—"}</td>
     ${p.columns.some((c) => c.key === "last") ? tpl`<td data-col="last">${lastEventCell(item)}</td>` : nothing}
@@ -6453,7 +6442,7 @@ function renderWatchExpansion(w, events) {
     <div><span class="muted">State</span><br>${watchStateCell(w)}</div>
     <div><span class="muted">Monitoring</span><br>${watchMonitoringCell(w)}</div>
     <div><span class="muted">Configured monitor</span><br><code>${mode}</code></div>
-    <div><span class="muted">Last checked</span><br>${watchLastCheckedDetail(w)}</div>
+    <div><span class="muted">Last checked</span><br>${watchLastCheckedCell(w)}</div>
     <div><span class="muted">Next check</span><br>${watchNextCheckCell(w)}</div>
     <div><span class="muted">Hook</span><br>${hook}</div>
     <div><span class="muted">Notifies</span><br>${notifiers}</div>
@@ -6591,7 +6580,6 @@ function mountRow(m) {
   const state = mountStateText(m);
   return tpl`<tr id="${mountRowId(m)}" tabindex="-1" title="${m.message || nothing}" class="${mountOperation(m) ? "mount-row-operating" : ""}">
     <td data-col="name">${m.display_name || m.name}</td>
-    <td data-col="category">${categoryBadge(categoryOf(m, defaultCategoryStorage))}</td>
     <td data-col="path">${mountPathCell(m)}</td>
     <td data-col="mounted">${mounted ? tpl`<span class="ok">yes</span>` : tpl`<span class="muted">no</span>`}</td>
     <td data-col="refcount">${m.refcounted === false ? tpl`<span class="muted">off</span>` : Number(m.refcount || 0)}</td>
@@ -8700,8 +8688,8 @@ function showPartialRefresh(failures) {
   setStatus(`Partial refresh — stale: ${failures.join(", ")}${age}`, feedbackStatusWarn, false);
 }
 function tickRefreshAge() {
+  updateClocks();
   if (!connOK) { showDisconnected(); return; } // keep the banner's age fresh
-  updateWatchClocks();
   const el = $("#last-refresh");
   if (!el) return;
   const text = lastRefresh ? `fully updated ${fmtSince(Date.now() - lastRefresh)} ago` : "";
@@ -8709,15 +8697,13 @@ function tickRefreshAge() {
   el.textContent = text;
 }
 
-// updateWatchClocks advances every live watch clock: a running probe's elapsed
-// time, how long ago the last check ran and the countdown to the next one. The
-// clocks own their plain spans' text, outside any lit binding, so the timer
-// never deletes lit-html's part markers.
-function updateWatchClocks() {
+// Clocks use plain spans or textContent property bindings, so updating their
+// text never deletes lit-html's child part markers.
+function updateClocks() {
   const now = Date.now();
   const clocks = [
     ["[data-probe-started-at]", (el) => "· " + watchProbeElapsed(el.dataset.probeStartedAt || "")],
-    ["[data-clock-since]", (el) => checkClockSince(el.dataset.clockSince || "", now)],
+    ["[data-clock-since]", (el) => clockSince(el.dataset.clockSince || "", now)],
     ["[data-clock-until]", (el) => checkClockUntil(el.dataset.clockUntil || "", now)],
   ];
   for (const [selector, text] of clocks) {
@@ -8728,7 +8714,7 @@ function updateWatchClocks() {
   }
 }
 
-function checkClockSince(time, now) {
+function clockSince(time, now) {
   const at = Date.parse(time);
   if (Number.isNaN(at)) return "";
   return `${fmtCountdown((now - at) / millisecondsPerSecond)} ago`;

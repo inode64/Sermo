@@ -682,7 +682,7 @@ test("inventory panels group by their meaningful type", async ({ page }) => {
   await expect(page.locator("#wat-row-firewall-paused")).toBeHidden();
 });
 
-test("grouped inventories show categories only in their headings", async ({ page }) => {
+test("inventories keep category grouping without redundant columns", async ({ page }) => {
   await page.setViewportSize({ width: 1536, height: 960 });
   await page.route("**/api/dashboard**", (route) => route.fulfill({ json: {
     ...dashboard, services: services.map((s) => ({ ...s, category: s.name === "web" ? "web" : "data" })),
@@ -691,7 +691,12 @@ test("grouped inventories show categories only in their headings", async ({ page
   for (const [section, prefix] of [["services", "svc"], ["mounts", "mount"], ["apps", "app"], ["libraries", "library"]]) {
     const panel = page.locator(`#${section}-section`);
     const category = panel.locator('th[data-col="category"]');
-    await expect(category).toBeVisible();
+    if (section === "apps") await expect(category).toBeVisible();
+    else await expect(panel.locator('[data-col="category"]')).toHaveCount(0);
+    const columns = await panel.locator("thead th").count();
+    for (const row of await panel.locator("tbody > tr.clickable").all()) {
+      await expect(row.locator(":scope > td")).toHaveCount(columns);
+    }
     await page.locator(`#${prefix}-group-toggle`).click();
     await expect(panel.locator(".group-row")).toHaveCount(2);
     await expect(category).toBeHidden();
@@ -699,8 +704,12 @@ test("grouped inventories show categories only in their headings", async ({ page
     await page.reload();
     await expect(category).toBeHidden();
     await page.locator(`#${prefix}-group-toggle`).click();
-    await expect(category).toBeVisible();
-    await expect(panel.locator('td[data-col="category"]:visible')).not.toHaveCount(0);
+    if (section === "apps") {
+      await expect(category).toBeVisible();
+      await expect(panel.locator('td[data-col="category"]:visible')).not.toHaveCount(0);
+    } else {
+      await expect(panel.locator('[data-col="category"]')).toHaveCount(0);
+    }
   }
 });
 
@@ -815,8 +824,8 @@ test("stale watch samples are visible and filterable", async ({ page }) => {
 
 test("stale binary has a distinct restart-required state and visible reason", async ({ page }) => {
   const row = page.locator("#svc-row-stale");
-  const service = row.locator("td").nth(0);
-  const state = row.locator("td").nth(2);
+  const service = row.locator('[data-col="name"]');
+  const state = row.locator('[data-col="state"]');
   await expect(state).toContainText("restart required");
   await expect(state.locator(".state-reason")).toHaveCount(0);
   await expect(service.locator(".svc-state-note")).toHaveText("binary replaced on disk");
@@ -1098,9 +1107,9 @@ test("invalid application configuration stays a visible warning", async ({ page 
 
   const row = page.locator("#svc-row-db");
   await expect(row).toHaveClass(/row-warning/);
-  await expect(row.locator("td").nth(2)).toContainText("warning");
-  await expect(row.locator("td").nth(2).locator(".state-reason")).toHaveCount(0);
-  await expect(row.locator("td").nth(0).locator(".svc-state-note")).toHaveText("configuration invalid");
+  await expect(row.locator('[data-col="state"]')).toContainText("warning");
+  await expect(row.locator('[data-col="state"] .state-reason')).toHaveCount(0);
+  await expect(row.locator('[data-col="name"] .svc-state-note')).toHaveText("configuration invalid");
 });
 
 test("a configuration test warning is not called invalid", async ({ page }) => {
@@ -1130,8 +1139,8 @@ test("service warning reason sits below the service instead of widening State", 
   await page.reload();
 
   const row = page.locator("#svc-row-degraded");
-  const serviceCell = row.locator("td").nth(0);
-  const stateCell = row.locator("td").nth(2);
+  const serviceCell = row.locator('[data-col="name"]');
+  const stateCell = row.locator('[data-col="state"]');
   const note = serviceCell.locator(".svc-state-note");
   await expect(page.locator("#svc-row-web .svc-state-note")).toHaveCount(0);
   await expect(stateCell.locator(".target-state")).toHaveText("warning");
@@ -1173,10 +1182,55 @@ test("service warning reason sits below the service instead of widening State", 
   expect(wordsIntact).toEqual({ note: true, badge: true });
 });
 
-// The watch detail shows the last and the next check as dates and as live
-// clocks: how long ago the last ran and a countdown to the next, each spelling
-// only its non-zero units.
-test("a watch shows its last and next check as dates and live clocks", async ({ page }) => {
+test("activity and completed checks show live ages with exact timestamp tooltips", async ({ page }) => {
+  const now = new Date("2026-07-12T12:00:00Z");
+  await page.clock.setFixedTime(now);
+  const older = "2026-07-10T09:00:00Z";
+  let recent = "2026-07-12T11:58:00Z";
+  await page.route("**/api/dashboard**", (route) => route.fulfill({ json: {
+    ...dashboard, services: services.map((s) => ({
+      ...s, last_event: { time: s.name === "web" ? older : (s.name === "db" ? recent : "invalid"), kind: "reload", message: "config reloaded" },
+    })),
+  } }));
+  await page.route("**/api/applications", (route) => route.fulfill({ json: applications.map((app) => ({
+    ...app, ...(app.name === "nginx" ? { last_event: { time: older, kind: "check" } } : {}),
+  })) }));
+  await page.route("**/api/watches", (route) => route.fulfill({ json: watches.map((w) => ({
+    ...w, ...(w.name === "dns-upstream" ? { last_activity: older, last_checked_at: recent } : {}),
+  })) }));
+  await page.reload();
+  await page.locator("#menu-toggle").click();
+  await page.locator("#refresh-select").selectOption("0");
+  await page.locator("#menu-toggle").click();
+
+  const serviceAge = page.locator('#svc-row-db [data-col="last"] .activity-time');
+  await expect(serviceAge).toHaveText("2m ago");
+  await expect(serviceAge).toHaveAttribute("aria-label", "2026-07-12 11:58:00 UTC · reload");
+  await expect(page.locator('#svc-row-db [data-col="last"] .event-cell')).toHaveAttribute("title", /2026-07-12 11:58:00 UTC.*local.*config reloaded/);
+  await expect(page.locator('#svc-row-web [data-col="last"]')).toHaveText("2d 3h ago");
+  await expect(page.locator('#app-row-nginx [data-col="last"]')).toHaveText("2d 3h ago");
+  await expect(page.locator('#app-row-postgres [data-col="last"]')).toHaveText("—");
+  await expect(page.locator('#svc-row-stale [data-col="last"]')).toHaveText("—");
+  const watch = page.locator("#wat-row-dns-upstream");
+  await expect(watch.locator(`[data-clock-since="${older}"]`)).toHaveText("2d 3h ago");
+  await expect(watch.locator(`[data-clock-since="${recent}"]`)).toHaveText("2m ago");
+  await expect(watch.locator(".watch-sample-note")).toHaveText("stale");
+
+  let requests = 0;
+  page.on("request", (request) => { if (new URL(request.url()).pathname.startsWith("/api/")) requests++; });
+  await page.clock.setFixedTime(new Date(now.getTime() + 61000));
+  await expect(serviceAge).toHaveText("3m 1s ago");
+  await expect(watch.locator(`[data-clock-since="${recent}"]`)).toHaveText("3m 1s ago");
+  expect(requests).toBe(0);
+
+  // A new sample must still replace a cell after its clock has changed the DOM.
+  recent = "2026-07-12T12:01:00Z";
+  await page.locator("#refresh-now").click();
+  await expect(serviceAge).toHaveText("1s ago");
+  await expect(watch.locator(`[data-clock-since="${recent}"]`)).toHaveText("1s ago");
+});
+
+test("a watch shows the last check once as an age and the next as a date and countdown", async ({ page }) => {
   const now = Date.now();
   const timed = watches.map((w) => (w.name === "process-queue"
     ? { ...w, last_checked_at: new Date(now - 7200 * 1000).toISOString(), next_check_at: new Date(now + (86400 + 30) * 1000).toISOString() }
@@ -2755,6 +2809,7 @@ test("detail fields appear only where their table column is hidden", async ({ pa
   ];
   for (const band of bands) {
     await page.setViewportSize({ width: band.width, height: 900 });
+    await expect(detail.locator(".runtime-grid > div").filter({ has: page.getByText("Category", { exact: true }) })).toBeVisible();
     for (const pair of pairs) {
       const at = `${pair.label} at ${band.width}px`;
       const field = detail.locator(`.runtime-grid > ${pair.field}`, { hasText: pair.label });
@@ -2865,13 +2920,13 @@ test("a service's stray count is diagnostic only", async ({ page }) => {
   // three leaked processes indistinguishable from a healthy service at a glance.
   // It offers no action of its own: a stop or restart is what terminates them.
   await page.setViewportSize({ width: 1600, height: 900 });
-  const cell = page.locator("#svc-row-stale td").nth(9);
+  const cell = page.locator('#svc-row-stale [data-col="strays"]');
   await expect(cell).toHaveText("3");
   const count = cell.locator("[title]");
   await expect(count).toHaveAttribute("title", /no configured selector claims; a stop or restart terminates them unless the service keeps its children \(stop_policy\.keep_children\)/);
   await expect(count).not.toHaveAttribute("title", /reap/);
   await expect(cell.getByRole("button")).toHaveCount(0);
-  await expect(page.locator("#svc-row-web td").nth(9)).toContainText("—");
+  await expect(page.locator('#svc-row-web [data-col="strays"]')).toContainText("—");
 });
 
 async function openUnownedProcesses(page) {
