@@ -52,6 +52,15 @@ installed `sermod` outside its init system. Stopping the installed daemon needs
 the user's explicit authorization for that host, goes through the init system,
 and the daemon is started again the same way at cleanup.
 
+The installed daemon is in production: its services run with `dry_run: false`,
+so it restarts a service that a test stops, and Monit on those hosts only
+alerts (every check in `mode passive`). Before stopping a service the user
+approved for a test, use the installed `sermoctl stop SERVICE` (its pause
+survives reloads) or `sermoctl unmonitor SERVICE` (a `daemon reload` under
+`monitor: enabled` resumes it), and restore it at cleanup. A shadow daemon built
+from a copy of `/etc/sermo` turns every `dry_run: false` in the copy into `true`:
+they are per target and beat `defaults`.
+
 - Preserve remote system behavior: do not start, stop, restart, reload, kill, package-install, or write permanent host config unless the user explicitly asks.
 - Mutating remote install/update/apply scripts must never change type, mode, uid
   or gid on protected parent system paths: `/`, `/etc`, `/usr`, `/usr/lib`,
