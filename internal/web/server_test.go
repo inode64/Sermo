@@ -1794,6 +1794,11 @@ func TestIsErrorEventClassification(t *testing.T) {
 		{Kind: eventKindAction, Status: "ok"},
 		{Kind: eventKindAlert},
 		{Kind: "recovered"},
+		{Kind: "recovered", Severity: "debug"},
+		{Kind: "recovered", Severity: "info"},
+		{Kind: "recovered", Severity: "warning"},
+		{Kind: "recovered", Severity: "error"},
+		{Kind: "recovered", Severity: "critical"},
 		{Kind: "reload"},
 		// An advisory watch whose probe became unavailable raises an error
 		// graded below an outage: it stays out of the errors-only feed.

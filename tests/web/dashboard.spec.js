@@ -1204,30 +1204,30 @@ test("activity and completed checks show live ages with exact timestamp tooltips
   await page.locator("#menu-toggle").click();
 
   const serviceAge = page.locator('#svc-row-db [data-col="last"] .activity-time');
-  await expect(serviceAge).toHaveText("2m ago");
-  await expect(serviceAge).toHaveAttribute("aria-label", "2026-07-12 11:58:00 UTC · reload");
+  await expect(serviceAge).toHaveText("2m");
+  await expect(serviceAge).toHaveAttribute("aria-label", "2026-07-12 11:58:00 UTC · Reload");
   await expect(page.locator('#svc-row-db [data-col="last"] .event-cell')).toHaveAttribute("title", /2026-07-12 11:58:00 UTC.*local.*config reloaded/);
-  await expect(page.locator('#svc-row-web [data-col="last"]')).toHaveText("2d 3h ago");
-  await expect(page.locator('#app-row-nginx [data-col="last"]')).toHaveText("2d 3h ago");
+  await expect(page.locator('#svc-row-web [data-col="last"]')).toHaveText("2d 3h");
+  await expect(page.locator('#app-row-nginx [data-col="last"]')).toHaveText("2d 3h");
   await expect(page.locator('#app-row-postgres [data-col="last"]')).toHaveText("—");
   await expect(page.locator('#svc-row-stale [data-col="last"]')).toHaveText("—");
   const watch = page.locator("#wat-row-dns-upstream");
-  await expect(watch.locator(`[data-clock-since="${older}"]`)).toHaveText("2d 3h ago");
-  await expect(watch.locator(`[data-clock-since="${recent}"]`)).toHaveText("2m ago");
+  await expect(watch.locator(`[data-clock-since="${older}"]`)).toHaveText("2d 3h");
+  await expect(watch.locator(`[data-clock-since="${recent}"]`)).toHaveText("2m");
   await expect(watch.locator(".watch-sample-note")).toHaveText("stale");
 
   let requests = 0;
   page.on("request", (request) => { if (new URL(request.url()).pathname.startsWith("/api/")) requests++; });
   await page.clock.setFixedTime(new Date(now.getTime() + 61000));
-  await expect(serviceAge).toHaveText("3m 1s ago");
-  await expect(watch.locator(`[data-clock-since="${recent}"]`)).toHaveText("3m 1s ago");
+  await expect(serviceAge).toHaveText("3m 1s");
+  await expect(watch.locator(`[data-clock-since="${recent}"]`)).toHaveText("3m 1s");
   expect(requests).toBe(0);
 
   // A new sample must still replace a cell after its clock has changed the DOM.
   recent = "2026-07-12T12:01:00Z";
   await page.locator("#refresh-now").click();
-  await expect(serviceAge).toHaveText("1s ago");
-  await expect(watch.locator(`[data-clock-since="${recent}"]`)).toHaveText("1s ago");
+  await expect(serviceAge).toHaveText("1s");
+  await expect(watch.locator(`[data-clock-since="${recent}"]`)).toHaveText("1s");
 });
 
 test("a watch shows the last check once as an age and the next as a date and countdown", async ({ page }) => {
@@ -1243,7 +1243,7 @@ test("a watch shows the last check once as an age and the next as a date and cou
   await expect(detail).toContainText(new Date(now + (86400 + 30) * 1000).toISOString().slice(0, 10));
   const countdown = detail.locator("[data-clock-until]");
   await expect(countdown).toHaveText(/^in 1d ([1-9]|[12]\d|30)s$/);
-  await expect(detail.locator("[data-clock-since]")).toHaveText(/^2h( \d+s)? ago$/);
+  await expect(detail.locator("[data-clock-since]")).toHaveText("2h");
   const shown = await countdown.textContent();
   await expect(countdown).not.toHaveText(shown || "");
 });
@@ -1436,9 +1436,8 @@ test("stop confirms without offering engine preflight", async ({ page }) => {
   await page.keyboard.press("Escape");
 });
 
-// Operation outcome marks: the engine's verdict on a service action stays on
-// its button — amber when it refused before acting, red when it failed — until
-// a newer outcome supersedes it, pulsing only when it first appears.
+// Button marks reflect current forecasts; recorded failures remain in history
+// and immediate operation feedback without looking like current blockers.
 const selectorsMessage = "active service has no process matching configured exact exe/user selectors";
 
 // serveWeb answers the dashboard and the web service detail with fields merged
@@ -1486,13 +1485,6 @@ async function confirmWebRestart(page) {
   await page.locator("#confirm-action-btn").click();
 }
 
-// outcomeHint matches a mark's hint text; its age is whatever the canonical
-// duration formatter makes of a few minutes.
-function outcomeHint(prefix, message) {
-  const escape = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  return new RegExp(`^${escape(prefix)} (\\S+ ago|just now): ${escape(message)}$`);
-}
-
 async function horizontalOverflow(page) {
   return page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
 }
@@ -1504,7 +1496,7 @@ async function refreshDashboard(page) {
   await page.evaluate(() => new Promise((resolve) => { requestAnimationFrame(() => resolve()); }));
 }
 
-test("a blocked restart reads amber and stays on its button", async ({ page }, testInfo) => {
+test("a blocked restart stays in feedback and history without marking the button", async ({ page }, testInfo) => {
   let outcome = null;
   await serveWeb(page, () => ({ last_operation: outcome }));
   await page.route("**/api/services/web/restart**", async (route) => {
@@ -1521,17 +1513,19 @@ test("a blocked restart reads amber and stays on its button", async ({ page }, t
   await expect(page.locator("#svc-web-busy")).toHaveClass(/inactive/);
 
   const restart = webButton(page, "restart");
-  await expect(restart).toHaveClass(/outcome-blocked/);
-  await expect(restart).toHaveClass(/outcome-pulse/);
-  await expect(restart.locator(".outcome-badge")).toHaveText("!");
+  await expect(restart).not.toHaveClass(/outcome-/);
   await expect(restart).toBeEnabled();
-  await expect(restart).toHaveAttribute("aria-describedby", /svc-web-restart-outcome/);
-  await expect(restart).toHaveAttribute("title", /Last restart blocked/);
-  await expect(page.locator("#svc-web-restart-outcome")).toHaveText(outcomeHint("Last restart blocked", selectorsMessage));
   await expect(webButton(page, "stop")).not.toHaveClass(/outcome-/);
+  await page.locator("#svc-row-web .row-toggle").click();
+  const history = page.locator('[data-service-detail="web"] .operation-history');
+  await expect(history.locator("summary")).toContainText("Restart blocked");
+  await expect(history).not.toHaveAttribute("open");
+  await history.locator("summary").click();
+  await expect(history.getByText(selectorsMessage, { exact: true })).toBeVisible();
 
   const results = await new AxeBuilder({ page })
     .include("#svc-row-web")
+    .include('[data-service-detail="web"]')
     .withTags(["wcag2a", "wcag2aa", "wcag22aa"])
     .analyze();
   expect(results.violations).toEqual([]);
@@ -1541,14 +1535,12 @@ test("a blocked restart reads amber and stays on its button", async ({ page }, t
     expect(await horizontalOverflow(page)).toBeLessThanOrEqual(1);
   }
 
-  // The pulse ends on its own; a later poll keeps the mark steady.
-  await expect(restart).not.toHaveClass(/outcome-pulse/, { timeout: 5000 });
   await refreshDashboard(page);
-  await expect(restart).toHaveClass(/outcome-blocked/);
-  expect(await restart.getAttribute("class")).not.toMatch(/outcome-pulse/);
+  await expect(restart).not.toHaveClass(/outcome-/);
+  await expect(history).toHaveAttribute("open", "");
 });
 
-test("a restart that left orphans reads red and keeps a failed mark", async ({ page }) => {
+test("a restart that left orphans reports failure without a persistent button mark", async ({ page }) => {
   const message = "residual process 4242 (/usr/sbin/webserverd, www) survived the stop";
   let outcome = null;
   await serveWeb(page, () => ({ last_operation: outcome }));
@@ -1564,35 +1556,44 @@ test("a restart that left orphans reads red and keeps a failed mark", async ({ p
   await expect(page.locator("#svc-web-busy")).toHaveClass(/bad/);
 
   const restart = webButton(page, "restart");
-  await expect(restart).toHaveClass(/outcome-failed/);
-  await expect(restart.locator(".outcome-badge")).toHaveText("✕");
-  await expect(page.locator("#svc-web-restart-outcome")).toHaveText(outcomeHint("Last restart failed (orphan_processes)", message));
+  await expect(restart).not.toHaveClass(/outcome-/);
+  await expect(restart.locator(".outcome-badge")).toHaveCount(0);
+  await page.locator("#svc-row-web .row-toggle").click();
+  const history = page.locator(".operation-history");
+  await expect(history.locator("summary")).toContainText("Restart failed");
+  await history.locator("summary").click();
+  await expect(history).toContainText("Recorded result: orphan_processes");
+  await expect(history.getByText(message, { exact: true })).toBeVisible();
 });
 
-test("a newer successful operation clears the outcome mark", async ({ page }) => {
+test("a newer successful operation replaces the historical result", async ({ page }) => {
   let outcome = webOperation(43, "blocked", selectorsMessage);
   await serveWeb(page, () => ({ last_operation: outcome }));
   await page.reload();
   const restart = webButton(page, "restart");
-  await expect(restart).toHaveClass(/outcome-blocked/);
+  await expect(restart).not.toHaveClass(/outcome-/);
+  await page.locator("#svc-row-web .row-toggle").click();
+  await expect(page.locator(".operation-history summary")).toContainText("Restart blocked");
 
   outcome = { ...webOperation(44, "ok", "restarted"), time: new Date().toISOString() };
   await refreshDashboard(page);
   await expect(restart).not.toHaveClass(/outcome-/);
   await expect(page.locator("#svc-row-web .outcome-badge")).toHaveCount(0);
   await expect(page.locator("#svc-web-restart-outcome")).toHaveCount(0);
+  await expect(page.locator(".operation-history summary")).toContainText("Restart completed");
+  await expect(page.locator(".operation-history")).not.toContainText(selectorsMessage);
 });
 
-test("an outcome whose button left the row marks the power button", async ({ page }) => {
+test("a historical stop failure does not mark a different power action", async ({ page }) => {
   await serveWeb(page, {
     status: "failed", state: "failed",
     last_operation: webOperation(45, "postflight_failed", "unit did not stop in time", "stop"),
   });
   await page.reload();
-  // A failed service's power button is restart; the failed stop names itself.
-  await expect(webButton(page, "restart")).toHaveClass(/outcome-failed/);
-  await expect(page.locator("#svc-web-restart-outcome")).toHaveText(outcomeHint("Last stop failed (postflight_failed)", "unit did not stop in time"));
-  await expect(page.locator("#svc-row-web .outcome-badge")).toHaveCount(1);
+  await expect(webButton(page, "restart")).not.toHaveClass(/outcome-/);
+  await expect(page.locator("#svc-row-web .outcome-badge")).toHaveCount(0);
+  await page.locator("#svc-row-web .row-toggle").click();
+  await expect(page.locator(".operation-history summary")).toContainText("Stop failed");
 });
 
 test("an operation forecast marks only the restart a running service shows", async ({ page }) => {
@@ -1638,9 +1639,27 @@ test("forecast entries mark each action with its own outcome and reason", async 
   await expect(grid.locator(".bad", { hasText: `Reload would fail: ${replaced}` })).toHaveCount(1);
 });
 
+test("current forecasts override historical failures and clear independently", async ({ page }) => {
+  const last_operation = webOperation(46, "failed", "old restart failure");
+  await serveWeb(page, { last_operation, operation_forecast: [
+    { action: "restart", status: "blocked", message: selectorsMessage },
+  ] });
+  await page.reload();
+  await expect(webButton(page, "restart")).toHaveClass(/outcome-blocked/);
+  await expect(webButton(page, "restart")).not.toHaveClass(/outcome-failed/);
+  await expect(page.locator("#svc-web-restart-outcome")).toHaveText(`Restart would be blocked: ${selectorsMessage}`);
+
+  await serveWeb(page, { last_operation, operation_forecast: [] });
+  await refreshDashboard(page);
+  await expect(webButton(page, "restart")).not.toHaveClass(/outcome-/);
+  await expect(page.locator("#svc-row-web .outcome-badge")).toHaveCount(0);
+  await page.locator("#svc-row-web .row-toggle").click();
+  await expect(page.locator(".operation-history summary")).toContainText("Restart failed");
+});
+
 test("reduced motion keeps the outcome mark without the pulse", async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
-  await serveWeb(page, { last_operation: webOperation(46, "blocked", selectorsMessage) });
+  await serveWeb(page, { operation_forecast: [{ action: "restart", status: "blocked", message: selectorsMessage }] });
   const pulse = page.evaluate(() => new Promise((resolve) => {
     document.addEventListener("animationend", (e) => {
       if (e.animationName === "outcome-pulse") resolve(e.elapsedTime);
@@ -1657,33 +1676,36 @@ test("reduced motion keeps the outcome mark without the pulse", async ({ page })
   expect(await restart.evaluate((el) => getComputedStyle(el).boxShadow)).toContain("inset");
 });
 
-test("an outcome already recorded when the page loads does not pulse", async ({ page }) => {
-  await serveWeb(page, { last_operation: webOperation(47, "blocked", selectorsMessage) });
+test("a recovered service keeps the historical failure separate from its controls", async ({ page }) => {
+  await serveWeb(page, {
+    last_operation: webOperation(47, "failed", selectorsMessage),
+    last_event: { id: 48, time: new Date().toISOString(), kind: "recovered", rule: "restart-on-stale-binary", severity: "warning" },
+  });
   await page.reload();
 
   const restart = webButton(page, "restart");
-  await expect(restart).toHaveClass(/outcome-blocked/);
-  expect(await restart.getAttribute("class")).not.toMatch(/outcome-pulse/);
+  await expect(restart).not.toHaveClass(/outcome-/);
   await refreshDashboard(page);
-  expect(await restart.getAttribute("class")).not.toMatch(/outcome-pulse/);
-
-  // Touch has no tooltip: the expansion spells the outcome out.
+  await expect(restart).not.toHaveClass(/outcome-/);
   await page.locator("#svc-row-web .row-toggle").click();
   const grid = page.locator('[data-service-detail="web"] .runtime-grid');
-  await expect(grid).toContainText("Last operation");
-  await expect(grid).toContainText(`restart blocked ${selectorsMessage}`);
-  await expect(grid.locator(".activity-time.activity-warn")).toHaveCount(1);
+  await expect(grid).toContainText("Last operation (history)");
+  const history = grid.locator(".operation-history");
+  await expect(history.locator("summary")).toContainText("Restart failed");
+  await expect(history.locator(".bad, .inactive, .activity-crit, .activity-warn")).toHaveCount(0);
+  await history.locator("summary").click();
+  await expect(history.getByText(selectorsMessage, { exact: true })).toBeVisible();
 });
 
-test("a service a later snapshot adds keeps its old outcome still and pulses a newer one", async ({ page }) => {
+test("a service a later snapshot adds keeps its initial forecast still and pulses a changed one", async ({ page }) => {
   let late = null;
   await serveExtraService(page, () => late);
-  const lateOperation = (id) => ({ ...webOperation(id, "blocked", selectorsMessage), service: "late" });
   // The first snapshot (beforeEach) had no such service; a config reload adds
-  // it already carrying an outcome recorded before this page saw it.
+  // it already carrying a forecast before this page saw it.
   late = {
     name: "late", display_name: "Late service", category: "service", enabled: true,
-    monitored: true, status: "active", state: "active", last_operation: lateOperation(60),
+    monitored: true, status: "active", state: "active",
+    operation_forecast: [{ action: "restart", status: "blocked", message: selectorsMessage }],
   };
   await refreshDashboard(page);
   const restart = serviceButton(page, "late", "restart");
@@ -1691,12 +1713,12 @@ test("a service a later snapshot adds keeps its old outcome still and pulses a n
   await expect(restart.locator(".outcome-badge")).toHaveText("!");
   expect(await restart.getAttribute("class")).not.toMatch(/outcome-pulse/);
 
-  late = { ...late, last_operation: { ...lateOperation(61), time: new Date().toISOString() } };
+  late = { ...late, operation_forecast: [{ action: "restart", status: "blocked", message: "current identity cannot be verified" }] };
   await refreshDashboard(page);
   await expect(restart).toHaveClass(/outcome-pulse/);
 });
 
-test("a pressed resume toggle shows its failed outcome border, not the paused one", async ({ page }) => {
+test("a historical resume failure does not recolor the paused toggle", async ({ page }) => {
   await serveExtraService(page, {
     name: "vm-paused", display_name: "VM vm-paused", category: "virtual-machine", backend: "libvirt", unit: "vm-paused",
     enabled: true, monitored: false, status: "paused", state: "paused", can_reload: false, can_pause: true,
@@ -1706,8 +1728,8 @@ test("a pressed resume toggle shows its failed outcome border, not the paused on
 
   const resume = serviceButton(page, "vm-paused", "resume");
   await expect(resume).toHaveAttribute("aria-pressed", "true");
-  await expect(resume).toHaveClass(/outcome-failed/);
-  await expect(resume.locator(".outcome-badge")).toHaveText("✕");
+  await expect(resume).not.toHaveClass(/outcome-/);
+  await expect(resume.locator(".outcome-badge")).toHaveCount(0);
   const colors = await resume.evaluate((el) => {
     const token = (name) => {
       const probe = document.createElement("span");
@@ -1719,8 +1741,8 @@ test("a pressed resume toggle shows its failed outcome border, not the paused on
     };
     return { border: getComputedStyle(el).borderTopColor, crit: token("--crit"), paused: token("--paused") };
   });
-  expect(colors.border).toBe(colors.crit);
-  expect(colors.border).not.toBe(colors.paused);
+  expect(colors.border).toBe(colors.paused);
+  expect(colors.border).not.toBe(colors.crit);
 });
 
 async function reloadBehindConfirmation(page) {
@@ -3134,6 +3156,8 @@ test("monitor toggle stays guarded until the follow-up refresh lands", async ({ 
 });
 
 test("a reload event paints the activity cell as info like the events table", async ({ page }) => {
+  await page.clock.setFixedTime(new Date("2026-07-10T12:00:00Z"));
+  await page.reload();
   await expect(page.locator("#svc-row-db .activity-time")).toHaveClass(/activity-info/);
 });
 
@@ -3305,9 +3329,100 @@ test("a check that graded its own failure a warning reads warn, not fail", async
 
 test("a graded event names its level in the event log", async ({ page }) => {
   const row = page.locator("#events-section tr", { hasText: "disk-root" });
-  await expect(row.locator(".sev-critical")).toHaveText("critical");
-  // An ungraded event carries no badge.
-  await expect(page.locator("#events-section tr", { hasText: "started" }).locator(".sev")).toHaveCount(0);
+  await expect(row.locator(".kind:visible")).toHaveText("Critical");
+  await expect(row.locator(".kind:visible")).toHaveClass(/activity-critical/);
+  await expect(page.locator("#events-section tr", { hasText: "started" }).locator(".kind:visible")).toHaveText("Action completed");
+});
+
+test("event outcomes distinguish recovery, completion, blocking and failure", async ({ page }) => {
+  await page.clock.setFixedTime(new Date("2026-07-20T12:00:00Z"));
+  const cases = [
+    ...["debug", "info", "warning", "error", "critical"].map((severity) => ({
+      kind: "recovered", severity, rule: "restart-on-change-version", action: "restart",
+      label: "Recovered", tone: "ok",
+    })),
+    { kind: "action", action: "restart", status: "ok", severity: "critical", label: "Restart completed", tone: "ok" },
+    { kind: "suppressed", action: "restart", status: "blocked", label: "Restart blocked", tone: "warn" },
+    { kind: "error", action: "restart", status: "failed", label: "Restart failed", tone: "crit" },
+    { kind: "error", action: "start", status: "preflight_failed", label: "Start failed", tone: "crit" },
+    { kind: "dry-run", action: "restart", severity: "error", label: "Restart · Dry run", tone: "muted" },
+    { kind: "action", action: "restart", status: "running", label: "Restart running", tone: "info" },
+    { kind: "action", action: "restart", label: "Restart", tone: "muted" },
+    { kind: "action", action: "restart", status: "pending", label: "Restart · pending", tone: "muted" },
+    { kind: "firing", severity: "warning", label: "Warning", tone: "warn" },
+    { kind: "alert", severity: "critical", label: "Critical", tone: "critical" },
+    { kind: "firing", label: "Error", tone: "crit" },
+  ].map((event, i) => ({ ...event, id: i + 1, time: "2026-07-20T11:58:00Z", message: `Outcome ${i}: guard, command or check diagnostic.` }));
+  await page.route("**/api/events**", (route) => route.fulfill({ json: { events: cases, has_more: false } }));
+  await page.route("**/api/dashboard**", (route) => route.fulfill({
+    json: { ...dashboard, services: cases.map((event) => ({ ...services[0], name: `outcome-${event.id}`, last_event: event })) },
+  }));
+  await page.reload();
+  for (const event of cases) {
+    const row = page.locator("#events tr", { hasText: event.message });
+    const badge = row.locator(".kind:visible");
+    await expect(badge).toHaveText(event.label);
+    await expect(badge).toHaveClass(`kind activity-${event.tone}`);
+    await expect(row.locator(".event-msg")).toBeVisible();
+    await expect(row.locator("td")).toHaveCount(4);
+    await expect(row.locator("td").nth(1)).toHaveText("system");
+    const activity = page.locator(`#svc-row-outcome-${event.id} .activity-time`);
+    await expect(activity).toHaveClass(`activity-time activity-${event.tone}`);
+    await expect(activity).toHaveAttribute("aria-label", new RegExp(event.label));
+    if (event.kind === "recovered") {
+      await expect(row.locator(".event-detail")).toHaveText(`Rule condition cleared: ${event.rule} · Previous incident severity: ${event.severity}`);
+      await expect(row.locator(".event-detail")).toHaveClass("muted event-detail");
+      await expect(row).not.toContainText("Restart completed");
+      await expect(row.locator(".sev")).toHaveCount(0);
+    }
+  }
+});
+
+test("compact event views keep recovery context and diagnostics visible", async ({ page }) => {
+  await page.clock.setFixedTime(new Date("2026-07-20T12:00:00Z"));
+  const recovery = {
+    id: 101, time: "2026-07-20T11:58:00Z", kind: "recovered", severity: "critical",
+    rule: "restart-on-change-version", action: "restart", message: "rule condition recovered",
+  };
+  const blocked = {
+    id: 102, time: recovery.time, kind: "suppressed", action: "restart", status: "blocked",
+    message: "guard maintenance-window: package update is running",
+  };
+  const diagnostic = "long diagnostic: " + "check details; ".repeat(20) + "final diagnostic";
+  await page.route("**/api/events**", (route) => route.fulfill({ json: {
+    events: [{ ...recovery, watch: "process-queue" }, { ...blocked, watch: "process-queue" },
+      { id: 103, time: recovery.time, watch: "process-queue", kind: "error", message: diagnostic }],
+    has_more: false,
+  } }));
+  await page.route("**/api/services/web/events**", (route) => route.fulfill({ json: [recovery, blocked] }));
+  await page.route("**/api/applications/nginx/events**", (route) => route.fulfill({ json: [recovery, blocked] }));
+  await page.route("**/api/watches", (route) => route.fulfill({ json: watches.map((w) => w.name === "process-queue"
+    ? { ...w, last_activity: recovery.time, last_activity_kind: recovery.kind, last_activity_severity: recovery.severity } : w) }));
+  await page.route("**/api/applications", (route) => route.fulfill({ json: applications.map((a) => a.name === "nginx"
+    ? { ...a, last_event: recovery } : a) }));
+  await page.reload();
+  for (const selector of ["#svc-row-web", "#wat-row-process-queue", "#app-row-nginx"]) {
+    await page.locator(`${selector} .row-toggle`).click();
+  }
+  for (const caption of ["Recent service events", "Recent watch activity", "Recent application events"]) {
+    const table = page.getByRole("table", { name: caption, exact: true });
+    const row = table.locator("tbody tr", { hasText: recovery.message });
+    await expect(row.locator(".kind:visible")).toHaveText("Recovered");
+    await expect(row.locator(".kind:visible")).toHaveClass("kind activity-ok");
+    await expect(row.locator(".event-detail")).toHaveText("Rule condition cleared: restart-on-change-version · Previous incident severity: critical");
+    await expect(row.locator(".event-msg")).toBeVisible();
+    const blockedRow = table.locator("tbody tr", { hasText: blocked.message });
+    await expect(blockedRow.locator(".kind:visible")).toHaveText("Restart blocked");
+    await expect(blockedRow.locator(".event-msg")).toBeVisible();
+  }
+  for (const selector of ["#wat-row-process-queue", "#app-row-nginx"]) {
+    const activity = page.locator(`${selector} .activity-time`);
+    await expect(activity).toHaveClass("activity-time activity-ok");
+    await expect(activity).toHaveAttribute("aria-label", /Recovered.*Previous incident severity: critical/);
+  }
+  const watchTable = page.getByRole("table", { name: "Recent watch activity", exact: true });
+  await watchTable.getByRole("button", { name: "Show full event message" }).click();
+  await expect(watchTable.locator(".event-msg", { hasText: "long diagnostic" })).toContainText(diagnostic);
 });
 
 test("an empty event log names a narrowed view and stays quiet otherwise", async ({ page }) => {
@@ -3343,25 +3458,79 @@ test("a date bound that hides every loaded event says the view is empty", async 
   await expect(body).not.toContainText("No events match the filter.");
 });
 
-test("event times show age and keep the full instant on hover", async ({ page }) => {
-  // The fixture events are months old, so the cell stays the canonical UTC
-  // time. The title still carries that instant and the viewer's local time.
-  const old = page.locator("#events tr", { hasText: "disk-root" }).locator("td.t span");
-  await expect(old).toContainText("UTC");
-  await expect(old).toHaveAttribute("title", /UTC · .+ local/);
-
-  const at = new Date(Date.now() - 4 * 60 * 1000).toISOString();
+test("activity, checks and events share compact ages and keep the full instant on hover", async ({ page }) => {
+  const now = new Date("2026-07-20T12:00:00Z");
+  await page.clock.setFixedTime(now);
+  const ages = [
+    { seconds: 0, want: "0s" },
+    { seconds: 299, want: "4m 59s" },
+    { seconds: 300, want: "5m" },
+    { seconds: 301, want: "5m" },
+    { seconds: 359, want: "5m" },
+    { seconds: 360, want: "6m" },
+    { seconds: 7385, want: "2h 3m" },
+    { seconds: 86461, want: "1d 1m" },
+    { seconds: 15 * 86400, want: "15d" },
+    { seconds: 15 * 86400 + 1, want: "15d", hidden: true },
+  ].map((age, i) => ({ ...age, name: `age-${i}`, time: new Date(now - age.seconds * 1000).toISOString() }));
+  await page.route("**/api/dashboard**", (route) => route.fulfill({
+    json: {
+      ...dashboard,
+      services: ages.map((age) => ({
+        ...services[0], name: age.name, display_name: age.name,
+        last_event: { time: age.time, kind: "reload" },
+      })),
+    },
+  }));
+  await page.route("**/api/watches", (route) => route.fulfill({
+    json: ages.map((age) => ({
+      ...watches.find((w) => w.name === "process-queue"),
+      name: age.name, display_name: age.name,
+      last_checked_at: age.time, last_activity: age.time, last_activity_kind: "reload",
+    })),
+  }));
+  await page.route("**/api/applications", (route) => route.fulfill({
+    json: ages.map((age) => ({
+      ...applications[0], name: age.name, display_name: age.name,
+      last_event: { time: age.time, kind: "reload" },
+    })),
+  }));
   await page.route("**/api/events**", (route) => route.fulfill({
     json: {
-      events: [{ id: 9, time: at, service: "web", kind: "action", status: "ok", message: "age-probe" }],
+      events: ages.map((age, i) => ({ id: i + 1, time: age.time, service: age.name, kind: "action", status: "ok", message: age.name })),
       has_more: false,
     },
   }));
-  await page.locator("#refresh-now").click();
-  const recent = page.locator("#events tr", { hasText: "age-probe" }).locator("td.t span");
-  await expect(recent).toHaveText(/ago$/);
-  await expect(recent).not.toHaveText(/UTC/);
-  await expect(recent).toHaveAttribute("title", /UTC · .+ local/);
+  await page.reload();
+  for (const age of ages) {
+    const watchCells = page.locator(`#wat-row-${age.name} > td`);
+    await expect(watchCells.nth(-4).locator(".activity-time")).toHaveText(age.want);
+    const activityCells = [
+      page.locator(`#svc-row-${age.name} [data-col="last"]`),
+      page.locator(`#app-row-${age.name} [data-col="last"]`),
+      watchCells.nth(-3),
+    ];
+    for (const cell of activityCells) {
+      await expect(cell).toHaveText(age.hidden ? "—" : age.want);
+      if (!age.hidden) {
+        await expect(cell.locator(".event-cell")).toHaveAttribute("title", /UTC · .+ local/);
+        await expect(cell.locator(".activity-time")).toHaveAttribute("aria-label", /UTC · Reload/);
+      }
+    }
+    const event = page.locator("#events tr", { hasText: age.name }).locator("td.t span");
+    await expect(event).toHaveText(age.want);
+    await expect(event).toHaveAttribute("title", /UTC · .+ local/);
+  }
+  await page.clock.setFixedTime(new Date(now.getTime() + 2000));
+  for (const prefix of ["svc", "app"]) {
+    await expect(page.locator(`#${prefix}-row-age-1 [data-col="last"]`)).toHaveText("5m");
+    await expect(page.locator(`#${prefix}-row-age-8 [data-col="last"]`)).toHaveText("—");
+  }
+  const watchCells = page.locator("#wat-row-age-8 > td");
+  await expect(watchCells.nth(-4).locator(".activity-time")).toHaveText("15d");
+  await expect(watchCells.nth(-3)).toHaveText("—");
+  await expect(page.locator("#events tr", { hasText: "age-1" }).locator("td.t span")).toHaveText("5m");
+  await expect(page.locator("#events tr", { hasText: "age-8" }).locator("td.t span")).toHaveText("15d");
 });
 
 test("notifiers show the lowest severity they receive", async ({ page }) => {

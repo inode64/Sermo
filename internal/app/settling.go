@@ -37,10 +37,13 @@ func settlingKeyForWatch(w *Watch) string {
 	return SettlingWatchKey(w.Name)
 }
 
-// Settling tracks which monitored targets have completed their startup
-// observation cycle (backend active plus a first check for services, or a
-// first check for watches/apps). While unsettled, targets report state
-// "starting" and must not drive alerts, hooks or remediation.
+// Settling tracks which monitored targets have completed startup observation.
+// A service settles without checks when init says it is not running, and after
+// one observe-only check cycle when the verdict is active or unknown, or when
+// the status query does not answer. A watch or app settles on its first
+// cycle, which only observes. Pausing one that is still unsettled settles it
+// too. While unsettled, a target reports state "starting" and must not drive
+// alerts, hooks or remediation.
 type Settling struct {
 	mu sync.RWMutex
 	// pending counts, per target key, the runnable objects that have not yet

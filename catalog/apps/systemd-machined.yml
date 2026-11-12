@@ -1,0 +1,11 @@
+name: systemd-machined
+display_name: systemd-machined
+category: virtualization
+description: systemd virtual machine and container registration daemon.
+variables:
+  binary:
+    - /usr/lib/systemd/systemd-machined
+    - /lib/systemd/systemd-machined
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["${binary}", "--version"], timeout: 10s }

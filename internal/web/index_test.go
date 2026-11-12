@@ -809,9 +809,9 @@ func TestIndexAccessibilityForcedColors(t *testing.T) {
 	)
 }
 
-// TestIndexOperationOutcomeMarks pins the service button outcome marks: amber
-// for a blocked operation, red (--crit, not the critical-severity --critical)
-// for a failed one, and a pulse bounded to three .8s iterations, under the 5s
+// TestIndexOperationOutcomeMarks pins the service button forecast marks: amber
+// for an operation that would be blocked, red (--crit, not --critical) for one
+// that would fail, and a pulse bounded to three .8s iterations, under the 5s
 // WCAG 2.2.2 limit for motion nobody asked for.
 func TestIndexOperationOutcomeMarks(t *testing.T) {
 	cssBundleMustContain(t, "operation outcome marks",
@@ -831,7 +831,7 @@ func TestIndexOperationOutcomeMarks(t *testing.T) {
 		"outcome-${mark.outcome}",
 		`<span class="outcome-badge" aria-hidden="true">`,
 		`actionHintID("svc", s.name, action, "outcome")`,
-		"noteOperationOutcomes(services);",
+		"noteOperationForecasts(services);",
 		"document.addEventListener(domEventAnimationEnd,",
 	)
 }

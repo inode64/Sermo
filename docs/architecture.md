@@ -203,19 +203,24 @@ flowchart TD
 ## 4. Lock states (`classify`)
 
 `classify` decides a lock's state in a fixed order: first expiry (TTL), then
-owner liveness and finally PID-reuse detection (comparing the process's *start
-ticks*). Only **active** locks block actions; **expired**/**stale** ones are
+owner liveness and finally PID-reuse detection. Reuse counts only when the
+owner is alive and both start ticks (field 22 of `/proc/<pid>/stat`) are known,
+non-zero and different. A missing owner PID, or a live owner whose start time
+was not recorded or cannot be read, stays **active** until the TTL elapses.
+Only **active** locks block actions; **expired**/**stale** ones are
 reclaimable.
 
 ```mermaid
 flowchart TD
   C["classify(lock, now, ProcessProber)"] --> Q1{"now ≥ expires_at?"}
   Q1 -- "yes" --> EXP["StateExpired<br/>(TTL elapsed · reclaimable)"]
-  Q1 -- "no" --> Q2{"owner_pid>0 and Alive(pid)?<br/>(syscall.Kill(pid,0))"}
-  Q2 -- "not alive" --> STD["StateStale: dead owner"]
-  Q2 -- "alive" --> Q3{"StartTicks(pid) == owner_start_ticks?<br/>(/proc/pid/stat field 22)"}
-  Q3 -- "no match" --> STR["StateStale: pid reuse"]
-  Q3 -- "match" --> ACTV["StateActive<br/>(blocks actions)"]
+  Q1 -- "no" --> Q2{"owner_pid > 0?"}
+  Q2 -- "no" --> ACTV["StateActive<br/>(blocks actions)"]
+  Q2 -- "yes" --> Q3{"Alive(pid)?<br/>(syscall.Kill(pid, 0))"}
+  Q3 -- "no" --> STD["StateStale: dead owner"]
+  Q3 -- "yes" --> Q4{"both start ticks known,<br/>non-zero and different?"}
+  Q4 -- "yes" --> STR["StateStale: pid reuse"]
+  Q4 -- "no: equal, zero or unreadable" --> ACTV
 
   ACTV -. "ReleaseInactive → rejected" .-> KEEP["kept"]
   EXP -. "reclaimStale → deletes" .-> GONE["released"]
@@ -275,24 +280,36 @@ flowchart TD
 
 ## 6. A Worker's cycle (per service)
 
-Each Worker, on every interval tick, runs its checks, records SLA/health,
-publishes the state for the Web and evaluates the rules: **remediation** updates
-the windows of all rules and runs the first one that fires (subject to guard and
-the cooldown/backoff policy), and **alerts** notify. The first cycle after
-startup, the first cycle of a service a reload added, and the first cycle after
-an operation are observation-only: they publish data but run no rules and record
-no SLA sample.
+Each Worker, on every interval tick, runs its checks, publishes the state for
+the Web and evaluates the rules: **remediation** updates the windows of all
+rules and runs the first one that fires (subject to guard and the
+cooldown/backoff policy), and **alerts** notify. A normal cycle records SLA
+with that publish.
+
+A paused service is skipped. So is a cycle that arrives while an operation on
+that service is still running; if startup settling was still open, that skip
+marks the service observed, so the operation does not hold readiness. The
+first cycle after startup, the first cycle of a service a reload added, and
+the first cycle after an operation are observation-only when they run checks:
+they publish those readings, run no rules and record no SLA sample. If the
+init backend answers with a verdict other than `active` or `unknown`, that
+observation ends on the status probe: no checks run, nothing is published and
+no rules run, so a stopped service leaves `starting` without blocking
+readiness. An unanswered status query is not that verdict, and the
+observation-only cycle still runs its checks. See
+[Readiness](configuration.md#readiness-readyz).
 
 ```mermaid
 flowchart LR
-  RC["Worker.RunCycle"] --> P{"paused or<br/>operation running?"}
+  RC["Worker.RunCycle"] --> P{"paused or<br/>operation still running?"}
   P -- "yes" --> SKIP["skip"]
-  P -- "no" --> SAMP["Sample metrics"]
+  P -- "no" --> INACT{"startup, reload or<br/>post-operation, and backend<br/>verdict other than active/unknown?"}
+  INACT -- "yes" --> MARK["mark observed<br/>no checks, no publish, no rules"]
+  INACT -- "no" --> SAMP["Sample metrics"]
   SAMP --> RUN["Run checks + applyGates"]
-  RUN --> SLA["Record SLA / health"]
-  SLA --> PUB["Publish to Web"]
+  RUN --> PUB["Publish to Web<br/>SLA only when not observation-only"]
   PUB --> OBS{"observation-only?"}
-  OBS -- "yes" --> DONE["mark observed"]
+  OBS -- "yes" --> DONE["mark observed<br/>no rules"]
   OBS -- "no" --> HC["check health-change events"]
   HC --> REM["runRemediation:<br/>update windows → Guard? → Policy.Allow? → dry run / panic? → Operate/Cascade"]
   REM --> AL["runAlerts → notifications"]

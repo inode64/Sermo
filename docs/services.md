@@ -1197,9 +1197,11 @@ again before health verification. Finding the unchanged daemon active is not
 proof of a restart.
 
 This requires an exact executable and user in the service's process selectors.
-The `systemd-networkd` catalog profile supplies that identity through its linked
-app's binary discovery and validation. A custom executable belongs in the app's
+The `systemd-networkd`, `systemd-resolved`, `systemd-logind`, `systemd-machined`
+and `bluetooth` catalog profiles supply that identity through their linked
+apps' binary discovery and validation. A custom executable belongs in the app's
 `variables.binary` override; a custom account in the service's `variables.user`.
+The local-seat session guard still applies before stopping `systemd-logind`.
 
 Kept children (`stop_policy.keep_children`: container shims, Gluster bricks,
 SSH sessions) and processes matched by a `delegated` selector remain excluded
@@ -2662,7 +2664,7 @@ watches:
 ## Monitoring flag
 
 The top-level `monitor` flag sets a service's monitoring behavior when the
-daemon starts:
+daemon starts or reloads its configuration:
 
 ```yaml
 name: web
@@ -2670,7 +2672,9 @@ uses: nginx
 monitor: enabled    # enabled (default) | disabled | previous
 ```
 
-- **`enabled`** (the default when the flag is absent): always monitor on startup.
+- **`enabled`** (the default when the flag is absent): monitor on startup,
+  preserving a pause created by a successful manual `stop` or `pause` through
+  Sermo. This also applies to Docker containers and virtual machines.
 - **`disabled`**: never monitor — the worker exists but every cycle is skipped.
 - **`previous`**: restore the runtime state the service had before the daemon
   last stopped. On the very first run (no recorded state) it defaults to
@@ -2684,6 +2688,12 @@ The live state is toggled at runtime with `sermoctl monitor <svc>` /
 `engine.state` (see [configuration](configuration.md)). Because that database
 survives reboots, a `previous` service comes back up in whatever state an
 operator last left it.
+
+A pause created by a manual `stop` or `pause` survives daemon restarts and
+configuration reloads even with `monitor: enabled`. A later successful manual
+`start`, `restart`, `resume` or `repair` restores monitoring; `sermoctl monitor`
+can also resume it explicitly. An independent `unmonitor` request survives
+startup only with `monitor: previous`. See [Pausing monitoring](safety.md#pausing-monitoring).
 
 Host watch documents use the same top-level
 `monitor: enabled | disabled | previous` values; see
@@ -2728,20 +2738,29 @@ control-channel TCP sockets rather than authenticated users. See
 
 ## Login sessions and registered machines
 
-The `systemd-logind` profile blocks `stop` and `restart` while its D-Bus
-`ListSessions` method reports login sessions. The `systemd-machined` profile
-applies the same protection to registered virtual machines and containers with
-`ListMachines`. Both guards use `busctl` with service activation and interactive
-authorization disabled, so inspection cannot start a stopped manager or prompt
-for authorization. They also block on an unsuccessful query, an unrecognized
-response or a five-second timeout. Starting an inactive manager remains available.
+The `systemd-machined` profile permits restart while virtual machines and
+containers are registered. Their processes run in separate scope units, and
+machined restores its registration state when it starts. Neither registered
+guests nor the special `.host` entry block the operation. Its management API is
+temporarily unavailable during restart; operations that use it may need retrying.
 
-These guards apply to manual operations and automatic update restarts. Workload
-enumeration is a snapshot at guard evaluation; new logins or machine
-registrations can arrive before the operation starts. Use a maintenance window
-when starting new workloads must also be prevented.
-The `busctl_binary` variable selects the native inspection command when its
-installation path differs.
+The `systemd-logind` profile permits restart with SSH and background sessions
+that have no local seat. Its `block-stop-during-local-sessions` guard blocks
+`stop` and `restart` if any session is attached to a seat, because Sermo's
+stop/start sequence can release the device descriptors used by local sessions.
+The guard inspects the seat field of every `ListSessions` record using
+`busctl --json=short`. It requires a complete, recognized JSON response with
+only seatless sessions; an unsuccessful query, malformed response or five-second
+timeout blocks the operation. Service activation and interactive authorization
+are disabled. The `busctl_binary` variable selects a different executable path
+when needed. Starting an inactive manager remains available.
+
+The local-seat guard applies to manual operations and automatic update restarts.
+Session enumeration is a snapshot; a local login can arrive after inspection.
+Use a maintenance window when new local sessions must also be prevented.
+Both profiles retain operation locks, required preflight, exact process
+identity checks and postflight health verification. Operator-supplied guards,
+such as a package-update guard, continue to apply.
 
 ## Long-running database statements
 

@@ -728,7 +728,7 @@ func TestEventsList(t *testing.T) {
 		t.Fatalf("events list exit=%d stderr=%s", code, stderr.String())
 	}
 	out := stdout.String()
-	if !strings.Contains(out, "web") || !strings.Contains(out, "storage-root") || !strings.Contains(out, "restart") {
+	if !strings.Contains(out, "web") || !strings.Contains(out, "storage-root") || !strings.Contains(out, "Restart completed") {
 		t.Fatalf("events list output missing data:\n%s", out)
 	}
 	// An app event's target is the app name, never the "-" placeholder.

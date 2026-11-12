@@ -100,6 +100,15 @@ export function fmtCountdown(value) {
   return parts.length ? parts.join(" ") : "0s";
 }
 
+const elapsedSecondsLimit = 5 * secondsPerMinute;
+
+// Older readings need minute precision; exact timestamps remain in tooltips.
+export function fmtElapsedTime(value, now = Date.now()) {
+  let seconds = (now - Date.parse(value)) / millisecondsPerSecond;
+  if (seconds > elapsedSecondsLimit) seconds = Math.floor(seconds / secondsPerMinute) * secondsPerMinute;
+  return fmtCountdown(seconds);
+}
+
 // Sizes are IEC binary (KiB, base 1024); byte rates are SI decimal (KB/s,
 // base 1000). The daemon's formatSummaryBytes/formatSummaryBytesPerSecond
 // mirror this split exactly — keep both sides in step.

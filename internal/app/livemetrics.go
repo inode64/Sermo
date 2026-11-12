@@ -23,8 +23,9 @@ type ServiceLive struct {
 
 // LiveMetrics holds each service's latest live CPU sample so the web UI can show
 // per-process and aggregate CPU without re-sampling /proc (which would corrupt
-// the engine's rate deltas). Workers publish after every cycle; the web reads.
-// Safe for concurrent use, mirroring Snapshots.
+// the engine's rate deltas). A cycle that samples publishes; a skipped cycle
+// leaves the previous sample. The web reads. Safe for concurrent use, mirroring
+// Snapshots.
 type LiveMetrics registry[ServiceLive]
 
 // NewLiveMetrics returns an empty registry.

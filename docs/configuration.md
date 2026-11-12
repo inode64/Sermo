@@ -497,8 +497,9 @@ its copy and truncate). The log paths themselves are read at startup: changing
 `engine.access`, `engine.events` or `engine.diagnostics` takes effect after a
 full `sermod` restart.
 
-`engine.interval` is the default cadence at which every service's checks are
-run. Each service runs all of its checks once per cycle.
+`engine.interval` is the default cadence of a service cycle. Each cycle
+considers every check; a check with its own `interval` reuses its last result
+until that interval is due (see [Per-check interval](#per-check-interval)).
 
 ### Principal-process restart notice
 
@@ -958,10 +959,32 @@ section. The daemon's state is an icon: a pulse while it runs, and a clock, a wa
 a power sign with the word **starting**, **panic mode** or **stopping** beside
 it otherwise; its tooltip carries the detail, such as the startup progress.
 
-**Last activity** and **Last checked** show elapsed time, including days for
-older entries. These ages advance on screen even when auto-refresh is stopped;
-they do not trigger new checks. Hover over a time for the exact UTC and local
-timestamp. The exact UTC timestamp also remains available to screen readers.
+**Last activity**, **Last checked** and the Events **Time** column show elapsed
+time without an “ago” suffix. Seconds are shown up to five minutes; older
+timestamps show whole minutes (for example, `2h 3m`). **Last activity** shows
+`—` once the event is more than 15 days old; **Last checked** and Events keep
+showing older ages. These ages advance on screen even when auto-refresh is
+stopped; they do not trigger new checks. Hover over a time for the exact UTC
+and local timestamp. The exact UTC timestamp also remains available to screen
+readers.
+
+Event labels describe the outcome: **Recovered**, **Restart completed**,
+**Restart blocked**, **Restart failed**, or **Dry run**. Recoveries are green;
+their former grade appears as neutral **Previous incident severity** context.
+A rule's recovery means **Rule condition cleared**, limited to that named
+rule; it does not confirm a restart or the health of the whole service.
+Blocked actions are amber, failures red, and simulations neutral; their
+messages give the reason. Alerts show their current severity. Event details and
+Last activity use the same colours; on phones the label moves into the message
+so the outcome and reason remain visible. Historical events and notification
+severity retain their original values.
+
+Service action buttons mark only current operation forecasts. A past failure
+does not leave a red or amber mark on a restart, reload, power or pause/resume
+button. Immediate operation feedback still reports failures and blocks.
+**Last operation (history)** keeps the original result with its timestamp;
+expand it to read the recorded status and message. A later recovery or an
+active service does not rewrite that historical result as success.
 
 | Section | Tile that leads to it | Panels |
 |---|---|---|
@@ -1726,9 +1749,12 @@ both count toward readiness independently.
 Service operations use the same observation-only settling after startup:
 `start`, `restart`, `reload` and `resume` from automatic remediation, the web UI
 or `sermoctl` suppress service alerts, notifications, automatic remediation and
-SLA samples until the operation has finished and the worker has observed one
-active cycle with fresh data. `stop` suppresses cycles while the operation is
-running; a successful manual stop then pauses monitoring as described below.
+SLA samples while the operation is running and through one following
+observation. That observation publishes fresh check data when init is active
+or unknown, or when the status query does not answer. A verdict that the
+service is not running ends it on the status probe, with nothing published.
+`stop` suppresses cycles while the operation is running; a successful manual
+stop then pauses monitoring as described below.
 This per-service settling does not re-gate `/readyz`.
 
 Events are the daemon's activity — actions, alerts, suppressions, hook/notify
@@ -1816,7 +1842,10 @@ Web-triggered monitor changes are recorded with source `web` in the state store.
 A repeated web or CLI request for the already-effective monitor state is a
 successful no-op and preserves the previous source and timestamp;
 manual stops from the web UI or CLI use `web-manual-stop` / `cli-manual-stop`
-until a later successful start restores the previous monitored state. A
+until a later successful start restores the previous monitored state. A manual
+`stop` or `pause` keeps that pause across daemon restarts and configuration
+reloads even with `monitor: enabled`, for services, Docker containers and
+virtual machines alike. `sermoctl monitor` can explicitly resume monitoring. A
 successful storage `umount` pauses that storage watch with `web-mount-umount` or
 `cli-mount-umount`; a later successful `mount` restores it only when that umount
 created the pause. That pause survives a daemon restart or reload even under

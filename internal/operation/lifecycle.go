@@ -479,12 +479,8 @@ func (e Engine) systemdReactivated(ctx context.Context, action string, before pr
 			return false, nil
 		}
 	}
-	status, err := e.Manager.Status(ctx, e.Unit)
-	if err != nil {
-		return false, fmt.Errorf("verify systemd reactivation: %w", err)
-	}
-	if status.Status != servicemgr.StatusActive {
-		return false, nil
+	if ready, err := e.systemdReactivationReady(ctx, before, residuals); err != nil || !ready {
+		return false, err
 	}
 	after, err := e.observeProcesses(ctx)
 	if err != nil {
@@ -502,6 +498,37 @@ func (e Engine) systemdReactivated(ctx context.Context, action string, before pr
 		return false, fmt.Errorf("verify systemd reactivation: %w", err)
 	}
 	return true, nil
+}
+
+// A replacement in activating is not a surviving old daemon. Give systemd the
+// normal readiness window before rejecting it, without authorizing cleanup of
+// that new generation. Identity and exit proof still follow once it is active.
+func (e Engine) systemdReactivationReady(ctx context.Context, before process.Observation, residuals []process.Process) (bool, error) {
+	for attempt := range postflightMaxAttempts {
+		status, err := e.Manager.Status(ctx, e.Unit)
+		if err != nil {
+			return false, fmt.Errorf("verify systemd reactivation: %w", err)
+		}
+		if status.Status == servicemgr.StatusActive {
+			return true, nil
+		}
+		if attempt == 0 {
+			if status.Status != servicemgr.StatusUnknown {
+				return false, nil
+			}
+			replaced, err := replacedGeneration(nonDelegatedResiduals(before.Processes), residuals)
+			if err != nil || !replaced {
+				return false, err
+			}
+		}
+		if attempt+1 == postflightMaxAttempts {
+			break
+		}
+		if err := process.Wait(ctx, e.Sleep, postflightRetryInterval); err != nil {
+			return false, fmt.Errorf("wait for systemd reactivation: %w", err)
+		}
+	}
+	return false, errors.New("systemd replacement did not become active after stop")
 }
 
 func replacedGeneration(before, after []process.Process) (bool, error) {

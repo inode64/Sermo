@@ -1,0 +1,11 @@
+name: systemd-logind
+display_name: systemd-logind
+category: system
+description: systemd login and seat management daemon.
+variables:
+  binary:
+    - /usr/lib/systemd/systemd-logind
+    - /lib/systemd/systemd-logind
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["${binary}", "--version"], timeout: 10s }

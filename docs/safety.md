@@ -164,9 +164,10 @@ protection below. See [CLI conditional operations](cli.md#exit-codes).
    generations remain tracked if they leave the cgroup or stop matching a
    selector; disappearance from discovery is not proof of exit.
    When strict process identity leaves absence temporarily unproven, Sermo
-   retries fresh observations up to five times, one second apart, within the
-   same operation deadline. A surviving process, a read error or uncertainty
-   after those attempts still prevents reconciliation and the following start.
+   takes up to four further observations, one second apart (five observations
+   in all), within the same operation deadline. A surviving process, a read
+   error or uncertainty after those attempts still prevents reconciliation
+   and the following start.
 7. A stop command error is retained while Sermo checks the actual outcome. Only
    confirmed process absence and successful init reconciliation permit recovery.
    A start command error requires a trusted live process and active init state;
@@ -182,7 +183,12 @@ protection below. See [CLI conditional operations](cli.md#exit-codes).
    started again; only the primary start is skipped. The same proof is required
    if reactivation occurs after residual discovery, immediately before init
    reconciliation; Sermo leaves the new generation running without resetting
-   its init state.
+   its init state. A new backend generation still starting gets up to five
+   readiness observations, one second apart, within the operation deadline;
+   exhausting that window or failing identity verification leaves it untouched
+   and reports failure. Reactivation is checked on every residual rediscovery,
+   including after SIGTERM, so a replacement is neither escalated against nor
+   reported as an orphan once the complete reactivation proof succeeds.
 9. Verify backend and resident-process state before sampling required postflight
    checks. A settling attempt never runs or caches a successful probe; losing
    readiness invalidates earlier postflight success. Verify required postflight for
@@ -428,7 +434,9 @@ resumes it. While paused, the daemon runs no checks, rules or remediation for th
 service — useful during maintenance so a deliberate stop is not "remediated" by an
 automatic restart. The pause is recorded in the persistent state store under
 `engine.state` (the `monitor_state` table), so it persists across daemon
-restarts and reboots until cleared. `sermoctl status SERVICE` shows
+restarts and reboots with `monitor: previous`; `monitor: enabled` resumes an
+explicit `unmonitor` pause on startup or configuration reload.
+`sermoctl status SERVICE` shows
 the single operator state `started` or `stopped` while monitoring is paused
 (`"state": "started"`/`"stopped"` and `"paused": true` in `--json`). Pausing only
 affects Sermo's monitoring; it does not stop the service itself, and manual
@@ -441,6 +449,13 @@ came from that manual action, so a later successful manual `start`, `restart`,
 stayed active — restores monitoring only in that case. If the service was
 already unmonitored before the stop, the later start preserves that operator
 choice.
+
+The pause created by a manual `stop` or `pause` survives daemon restarts and
+configuration reloads even under `monitor: enabled`. Services and Docker
+containers deliberately stopped through Sermo therefore remain `stopped`,
+and frozen containers or virtual machines remain `paused`, without failure
+alerts or automatic remediation. `sermoctl monitor SERVICE` can explicitly
+resume monitoring without starting the target.
 
 ## System metrics
 

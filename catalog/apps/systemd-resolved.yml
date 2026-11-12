@@ -1,0 +1,11 @@
+name: systemd-resolved
+display_name: systemd-resolved
+category: network
+description: systemd network name resolution daemon.
+variables:
+  binary:
+    - /usr/lib/systemd/systemd-resolved
+    - /lib/systemd/systemd-resolved
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["${binary}", "--version"], timeout: 10s }

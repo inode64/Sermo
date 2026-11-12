@@ -138,13 +138,8 @@ func severityLabel(level severity.Level) string {
 const (
 	eventsTableTimestampWidth = 19
 	eventsTableTargetWidth    = 15
-	// Wide enough for the longest event kind ("notify-suppressed");
-	// "recovered" used to truncate to "recovere" at 8.
-	eventsTableKindWidth = 17
 	// Wide enough for the longest severity ("critical").
 	eventsTableSeverityWidth = 8
-	eventsTableRuleWidth     = 14
-	eventsTableActionWidth   = 7
 	eventsTableMessageWidth  = 60
 	eventsTableEllipsisWidth = 3
 	eventsTableEllipsis      = "..."

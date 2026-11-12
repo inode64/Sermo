@@ -39,12 +39,12 @@ type Worker struct {
 	CheckDeps checks.Deps
 
 	// Interval overrides how often this worker runs a cycle. <=0 means the
-	// scheduler's global interval (engine.interval). A per-service `interval`
-	// lets cheap checks run often and expensive ones run rarely.
+	// scheduler's global interval (engine.interval). It is also the resolution
+	// a per-check interval is rounded to.
 	Interval time.Duration
 
-	// Gates holds per-check interdependencies (by check name): a check is skipped
-	// this cycle when a required check is failing or a watched file has changed.
+	// Gates holds per-check interdependencies (by check name). CheckGate says when
+	// a dependency evaluated this cycle, or a changed file, skips the check.
 	Gates map[string]CheckGate
 
 	// cycle counts scheduler ticks for this worker, including paused cycles, so a
@@ -121,13 +121,17 @@ type Worker struct {
 	// notifications and automatic remediation actions are suppressed.
 	InPanic func() bool
 
-	// Settling tracks startup observation for this service. While unsettled the
-	// worker waits for an active backend, runs one observe-only check cycle, and
-	// suppresses alerts and remediation.
+	// Settling tracks startup observation for this service. An init verdict that
+	// the service is not running completes it without checks. Active, unknown,
+	// or a status query that does not answer runs one observe-only check cycle.
+	// Alerts and remediation stay suppressed until that observation completes.
 	Settling *Settling
-	// OperationSettling tracks manual/automatic service operations in progress or
-	// awaiting one post-operation observation cycle. While active, checks may
-	// publish fresh data but must not drive SLA, alerts or remediation.
+	// OperationSettling tracks a manual or automatic service operation that is
+	// still running, or that finished and still needs one observation. A cycle
+	// during the running phase is skipped. The observation publishes check data
+	// without SLA, alerts or remediation, unless init says the service is not
+	// running: that verdict ends the observation on the status probe, with no
+	// checks and nothing published.
 	OperationSettling OperationSettlingStore
 	// OperationTimeout is this service's resolved operation deadline (engine
 	// operation_timeout raised by stop_policy). An operation-settling marker is
@@ -231,11 +235,19 @@ type cycleRecord struct {
 // cycleTarget names this worker for the scheduler panic-recovery log.
 func (w *Worker) cycleTarget() string { return serviceSubjectPrefix + w.Service }
 
-// RunCycle runs one monitoring cycle for the service: build the
-// check cache, evaluate remediation rules in name order, and run the first
-// firing rule whose action is not guard-blocked and is allowed by policy. Then
-// fire any alert rules. The internal operation lock already
-// prevents overlapping operations, so cycles never run concurrently per service.
+// RunCycle runs one monitoring cycle for the service. A paused service returns
+// before checks and is marked observed, so a pause does not hold readiness. A
+// cycle that arrives while an operation is still running also returns before
+// checks, and marks an open startup observation done so that operation does
+// not hold readiness either. Startup, a service added by reload, and the cycle
+// after an operation are observation-only when they run checks: they publish
+// readings and return before rules and SLA. An init verdict that the service
+// is not running ends that observation on the status probe, with no checks and
+// nothing published. Any other cycle builds the check cache, evaluates
+// remediation rules in name order, runs the first firing rule whose action is
+// not guard-blocked and is allowed by policy, then fires alert rules. The
+// internal operation lock already prevents overlapping operations, so cycles
+// never run concurrently per service.
 func (w *Worker) RunCycle(ctx context.Context) {
 	w.cycle++
 	defer w.publishRemediation()
@@ -255,7 +267,7 @@ func (w *Worker) RunCycle(ctx context.Context) {
 	w.publishCycle(ctx, cache, mode.observeOnly)
 	if mode.observeOnly {
 		w.completeObserveCycle(settleKey, mode)
-		return // first active cycle: publish data only, no rules or SLA side effects
+		return // observe-only cycle: publish data only, no rules or SLA side effects
 	}
 	at := now()
 	w.reportCheckHealthChanges(cache)
@@ -665,9 +677,10 @@ func (w *Worker) backendInactive(ctx context.Context) bool {
 	return err == nil && st != servicemgr.StatusActive && st != servicemgr.StatusUnknown
 }
 
-// CheckGate is one check's interdependencies: it is skipped this cycle when any
-// Requires check is missing/failing, or any SkipWhenChanged path has changed since
-// its acknowledged baseline (e.g. a config file or library was updated).
+// CheckGate is one check's interdependencies. The check is skipped this cycle
+// when a Requires dependency evaluated this cycle is unhealthy — a state sensor
+// gates on its OK reading, every other dependency on health — or when a
+// SkipWhenChanged path differs from its acknowledged baseline.
 type CheckGate struct {
 	Requires        []string
 	SkipWhenChanged []string
@@ -708,10 +721,11 @@ func (w *Worker) gatedChecksDue(built []checks.Built, cache map[string]checks.Re
 
 // applyGates rewrites a gated-off check's result to a Skipped result so it does
 // not alert, fail the service or count toward SLA. Gates are evaluated after the
-// cycle's checks ran, so Requires sees this cycle's results; SkipWhenChanged uses
-// the shared change baseline (acknowledged on a successful (re)start). A skipped
-// check keeps its optional flag and is marked Skipped/OK. Checks that regain
-// their gate this cycle are run via gatedChecksDue before applyGates is called.
+// cycle's checks ran, so Requires sees the dependencies that ran this cycle;
+// SkipWhenChanged uses the shared change baseline (acknowledged on a successful
+// (re)start). A skipped check keeps its optional flag and is marked Skipped/OK.
+// Checks that regain their gate this cycle are run via gatedChecksDue before
+// applyGates is called.
 //
 // Every gate is judged against the real results before any is rewritten: a
 // dependency already rewritten to Skipped/OK would read as healthy, so whether

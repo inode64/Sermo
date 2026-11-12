@@ -130,7 +130,7 @@ sermoctl patterns [catalog]                                           # pattern 
 sermoctl sla [TARGET]                   # availability windows for every service and availability watch, or one
 sermoctl sla --series TARGET [--since DURATION]   # stored series; --since default 24h
 
-sermoctl events [SERVICE] [--limit N]   # list recent events (global or for SERVICE); SEVERITY shows a graded event's level
+sermoctl events [SERVICE] [--limit N]   # list recent events (global or for SERVICE), with outcome and severity
 sermoctl events clear [--before TIME]   # omit TIME to clear all; TIME may be non-future RFC3339 or positive duration
                                         # only events strictly before the timestamp are removed
 sermoctl activity clear [--before TIME] # clears the same log shown in Events
@@ -146,6 +146,13 @@ sermoctl wizard
 sermoctl wizard service|docker|vm|mount|volume|net|uplink
 sermoctl wizard docker --json          # read-only discovery and validated Compose recovery references
 ```
+
+The `sermoctl events` table names outcomes in **EVENT**, such as `Recovered`,
+`Restart completed`, `Restart blocked` or `Restart failed`. A recovery's
+**SEVERITY** cell is `-`; its message carries **Previous incident severity**
+and identifies a cleared rule through **RULE**. The rule name and outcome
+remain complete, so similarly named rules and long action names stay distinct.
+The JSON output retains the original event kind, severity, status and message.
 
 ## Availability
 

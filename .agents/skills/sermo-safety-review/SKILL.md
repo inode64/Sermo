@@ -58,6 +58,10 @@ touches them.
     cgroup, and the same unit owns the new generation. Never signal the replacement
     or accept an unchanged daemon as a completed restart. Restore stopped
     auxiliary units even when the primary start is skipped.
+    A newly observed backend generation still starting gets the bounded
+    readiness window before classification; uncertainty never authorizes a
+    signal to that replacement. Recheck reactivation on every rediscovery,
+    including after SIGTERM, not only before residual cleanup begins.
 11. Deleted-executable evidence with the main selector's previous path and real
     user may permit a backend stop, but never validates a new start. Keep it
     separate from current exact identity; workers cannot substitute for an exact

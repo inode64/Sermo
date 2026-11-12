@@ -17,7 +17,7 @@ import {
   watchMetricsAPI, watchProcessKillAPI, watchSLAAPI,
 } from "./api.js";
 import {
-  fmtAge, fmtBytes, fmtBytesPerSecond, fmtCountdown, fmtDuration, fmtMetricValue, fmtNum, fmtPct, fmtRemain,
+  fmtAge, fmtBytes, fmtBytesPerSecond, fmtCountdown, fmtDuration, fmtElapsedTime, fmtMetricValue, fmtNum, fmtPct, fmtRemain,
   fmtSince, fmtTime, fmtUntilShort, millisecondsPerDay,
   millisecondsPerHour, millisecondsPerMinute, millisecondsPerSecond,
   metricUnitBytes, metricUnitBytesPerSecond, metricUnitMilliseconds,
@@ -40,6 +40,7 @@ const hostMetricTotalMemory = "total_memory";
 const hostMetricTotalSwap = "total_swap";
 const hostMetricLoad1 = "load1";
 const eventLogLimit = "500";
+const lastActivityMaxAgeMs = 15 * millisecondsPerDay;
 const httpStatusServiceUnavailable = 503;
 const httpStatusUnauthorized = 401;
 const httpStatusPreconditionFailed = 412;
@@ -1131,6 +1132,7 @@ function toggleEventMsg(key) {
   expanded.forEach((expKey) => {
     if (isServiceExpansionKey(expKey)) loadServiceEvents(expansionName(expKey, expansionPrefixService));
     else if (isAppExpansionKey(expKey)) loadAppEvents(expansionName(expKey, expansionPrefixApp));
+    else if (isWatchExpansionKey(expKey)) rerenderWatchExpansion(expansionName(expKey, expansionPrefixWatch));
   });
 }
 
@@ -1180,7 +1182,7 @@ let evSort = { key: "", dir: 1 };
 const evSortKeys = {
   time: (e) => e.time || "",
   subject: (e) => eventSubject(e).toLowerCase(),
-  kind: (e) => (e.kind || "").toLowerCase(),
+  kind: (e) => eventLabel(e).toLowerCase(),
   message: (e) => (e.message || "").toLowerCase(),
 };
 function sortedEvents(events) {
@@ -1306,15 +1308,13 @@ function fmtLocalTime(value) {
 
 // fmtTimeTitled shows how long ago an event happened. The hover keeps the
 // daemon's canonical UTC and the viewer's local time, so the short age never
-// hides the instant. An event a day old or older stays the full UTC time,
-// which is what fmtAge already does.
+// hides the instant.
 function fmtTimeTitled(value) {
   const utc = fmtTime(value);
   if (!utc) return "";
   const local = fmtLocalTime(value);
   const title = local ? `${utc} · ${local} local` : utc;
-  const age = fmtAge(value) || utc;
-  return tpl`<span title="${title}">${age}</span>`;
+  return tpl`<span title="${title}" data-clock-since=${value} .textContent=${clockSince(value, Date.now()) || utc}></span>`;
 }
 
 function eventRows(events, withService, opts = {}) {
@@ -1322,31 +1322,49 @@ function eventRows(events, withService, opts = {}) {
   if (!events || !events.length) return tpl`<tr><td colspan="${cols}" class="muted">No events yet.</td></tr>`;
   const prefix = opts.prefix || "event";
   return events.map((e, i) => {
-    const who = e.service || e.watch || e.app || "";
-    const detail = [e.rule, e.action, e.status].filter(Boolean).join(" ");
+    const who = eventSubject(e) || "system";
+    const detail = eventDetail(e);
     const key = eventKey(prefix, e, i);
     const rowId = opts.panelId && i === 0 ? opts.panelId : nothing;
     return tpl`<tr id="${rowId}">
       <td class="t">${fmtTimeTitled(e.time)}</td>
-      ${withService && who ? tpl`<td>${who}</td>` : nothing}
-      <td class="kind ${eventKindClass(e)}">${e.kind}${severityBadge(e.severity)}</td>
-      <td>${detail ? tpl`<span class="muted">${detail}</span> ` : nothing}${eventMessageHTML(e, key)}</td>
+      ${withService ? tpl`<td>${who}</td>` : nothing}
+      <td class="event-kind">${eventBadge(e)}</td>
+      <td><span class="event-kind-mobile">${eventBadge(e)} · </span>${detail ? tpl`<div class="muted event-detail">${detail}</div>` : nothing}${eventMessageHTML(e, key)}</td>
     </tr>`;
   });
 }
 
-// eventKindClass colours an event's kind cell; an error an advisory incident
-// raised reads amber rather than red.
-function eventKindClass(e) {
-  if (e.kind === eventKindError && isAdvisorySeverity(e.severity)) return "kind-advisory";
-  return "kind-" + (e.kind || "");
+function eventBadge(e) {
+  return tpl`<span class="kind activity-${activitySeverity(e.kind, e.status, e.severity)}">${eventLabel(e)}</span>`;
 }
 
-// severityBadge names a graded event's or notifier's level; nothing when the
-// value carries no grade.
-function severityBadge(severity) {
-  if (!severityLevels.includes(severity)) return nothing;
-  return tpl`<span class="sev sev-${severity}">${severity}</span>`;
+// A recovery closes one incident; its stored severity is historical. Only an
+// explicit operation outcome can say that an action completed.
+function eventLabel(e) {
+  if (e.kind === eventKindRecovered) return "Recovered";
+  const action = capFirst((e.action || e.kind || "event").replaceAll(/[-_]/g, " "));
+  if (e.kind === eventKindDryRun) return e.action ? `${action} · Dry run` : "Dry run";
+  if (e.status === eventStatusOK) return `${action} completed`;
+  if (e.status === eventStatusBlocked || [eventKindSuppressed, eventKindPanicSuppressed].includes(e.kind)) {
+    return e.action ? `${action} blocked` : "Blocked";
+  }
+  if (e.action && (activityCriticalStatuses.includes(e.status) || e.kind === eventKindError || String(e.kind || "").endsWith("-failed"))) return `${action} failed`;
+  if (e.status === operationStateRunning) return `${action} running`;
+  if ([actionAlert, eventKindFiring, eventKindError].includes(e.kind)) {
+    return capFirst(severityLevels.includes(e.severity) ? e.severity : "error");
+  }
+  return e.status ? `${action} · ${e.status}` : action;
+}
+
+function eventDetail(e) {
+  const recovered = e.kind === eventKindRecovered;
+  const parts = [e.rule ? (recovered ? `Rule condition cleared: ${e.rule}` : e.rule) : ""];
+  if (severityLevels.includes(e.severity) && (recovered || ![actionAlert, eventKindFiring, eventKindError].includes(e.kind))) {
+    parts.push(`${recovered ? "Previous incident severity" : "Incident severity"}: ${e.severity}`);
+  }
+  if (activityCriticalStatuses.includes(e.status) && e.status !== targetStateFailed) parts.push(e.status);
+  return parts.filter(Boolean).join(" · ");
 }
 
 function renderEventsLoading(target, cols = 3) {
@@ -1413,29 +1431,35 @@ function locksCell(s) {
 }
 
 function lastEventCell(s) {
-  return activityDateCell(s && s.last_event);
+  return activityDateCell(s && s.last_event, true, lastActivityMaxAgeMs);
 }
 
 function lastEventTime(item) {
   return (item && item.last_event && item.last_event.time) || "";
 }
 
-// activitySeverity colours an activity timestamp. A graded alarm speaks its
-// grade where it differs from the kind's usual amber: critical in its own hue,
-// debug and info as routine news.
+// Recovery and operation outcomes take precedence over the incident grade,
+// which describes the original problem rather than the action's result.
 function activitySeverity(kind, status, severity) {
   const k = String(kind || "").toLowerCase();
   const st = String(status || "").toLowerCase();
-  const graded = severityLevels.includes(severity) && [actionAlert, eventKindFiring].includes(k);
-  if (graded && severity === severityCritical) return healthStatusCriticalSeverity;
-  if (graded && isAdvisorySeverity(severity) && severity !== targetStateWarning) return healthStatusInfo;
+  if (k === eventKindRecovered) return healthStatusOK;
+  if (k === eventKindDryRun) return healthStatusMuted;
+  if (st === eventStatusBlocked) return healthStatusWarningShort;
   // An error an advisory incident raised (its check became unavailable) is
   // not an outage: it reads at its grade.
   if (k === eventKindError && isAdvisorySeverity(severity)) {
     return severity === targetStateWarning ? healthStatusWarningShort : healthStatusInfo;
   }
   if (activityCriticalStatuses.includes(st)) return healthStatusCriticalShort;
-  if (st === eventStatusBlocked) return healthStatusWarningShort;
+  if (st === operationStateRunning) return healthStatusInfo;
+  if (st === eventStatusOK) return healthStatusOK;
+  if (st || [eventKindAction, eventKindCascade].includes(k)) return healthStatusMuted;
+  if ([actionAlert, eventKindFiring, eventKindError].includes(k)) {
+    if (severity === severityCritical) return healthStatusCriticalSeverity;
+    if (severity === targetStateWarning) return healthStatusWarningShort;
+    return isAdvisorySeverity(severity) ? healthStatusInfo : healthStatusCriticalShort;
+  }
   if (activityCriticalKinds.includes(k)) return healthStatusCriticalShort;
   if (activityWarningKinds.includes(k)) return healthStatusWarningShort;
   if (activityOKKinds.includes(k)) return healthStatusOK;
@@ -1458,16 +1482,16 @@ function operationMarkOutcome(status) {
   return outcome === eventStatusOK ? "" : outcome;
 }
 
-function activityDateCell(e, relative = true) {
+function activityDateCell(e, relative = true, maxAgeMs) {
   const time = e && e.time;
   if (!time || Number.isNaN(Date.parse(time))) return mutedDash;
   const kind = e.kind || "";
-  const detail = [kind, e.action, e.status].filter(Boolean).join(" ");
+  const detail = kind || e.action || e.status ? [eventLabel(e), eventDetail(e)].filter(Boolean).join(" · ") : "";
   const local = fmtLocalTime(time);
   const title = [fmtTime(time), local && local + " local", detail, e.message || ""].filter(Boolean).join(" · ");
   const cls = "activity-time activity-" + activitySeverity(kind, e.status, e.severity);
   const label = [fmtTime(time), detail || "activity"].filter(Boolean).join(" · ");
-  return tpl`<div class="event-cell" title="${title}"><span class="${cls}" aria-label="${label}" data-clock-since=${relative ? time : nothing} .textContent=${relative ? clockSince(time, Date.now()) : fmtTime(time)}></span></div>`;
+  return tpl`<div class="event-cell" title="${title}"><span class="${cls}" aria-label="${label}" data-clock-since=${relative ? time : nothing} data-clock-max-age=${maxAgeMs ?? nothing} .textContent=${relative ? clockSince(time, Date.now(), maxAgeMs) : fmtTime(time)}></span></div>`;
 }
 
 function nextRemediationCell(s) {
@@ -2091,10 +2115,8 @@ let dashboardHostname = "";
 // second phase after the aggregate dashboard. Stays false until the first
 // complete snapshot so a reload never flashes a partial/false alert.
 let firstSnapshotDone = false;
-// outcomeMarksSeen keeps, per service name, the newest marking operation
-// outcome (operationSeq) and forecast this page has seen and when their pulse
-// windows close, so a poll, a re-render or a forecast flapping back never
-// replays a pulse.
+// outcomeMarksSeen keeps each service's latest forecast and its pulse window,
+// so polling does not replay the animation of an unchanged current condition.
 const outcomeMarksSeen = new Map();
 
 function targetStateClass(state) {
@@ -2835,21 +2857,6 @@ function serviceSuspendButton(s) {
   return { action, glyphAction: actionPause, extraClass: "suspend-btn", pressed: action === actionResume };
 }
 
-function isSuspendAction(action) { return action === actionPause || action === actionResume; }
-
-// operationSeq orders a service's recorded operation outcomes: event ids only
-// grow; an outcome without one falls back to its time.
-function operationSeq(op) {
-  return Number(op.id) || Date.parse(op.time) || 0;
-}
-
-// markingOperation is the service's last recorded operation when it marks a
-// button (blocked or failed), else null.
-function markingOperation(s) {
-  const op = s && s.last_operation;
-  return op && operationMarkOutcome(op.status) ? op : null;
-}
-
 const noForecasts = Object.freeze([]);
 
 // markingForecasts lists the service's operation forecast entries that mark a
@@ -2860,11 +2867,8 @@ function markingForecasts(s) {
   return forecasts.filter((f) => f && f.action && operationMarkOutcome(f.status));
 }
 
-// noteOperationOutcomes opens the pulse window of an outcome mark the first time
-// a services snapshot carries it: a newer marking operation, or a forecast that
-// differs from the last one seen. Before the first complete snapshot it only
-// records them, so a page reload does not pulse marks that were already there.
-function noteOperationOutcomes(services) {
+// A changed current forecast pulses once; initial snapshots stay still.
+function noteOperationForecasts(services) {
   const pulseEnd = firstSnapshotDone ? Date.now() + outcomePulseMs : 0;
   for (const s of Array.isArray(services) ? services : []) {
     if (!s || !s.name) continue;
@@ -2873,13 +2877,8 @@ function noteOperationOutcomes(services) {
     // added) records what it already carries without pulsing it.
     const pulseUntil = seen ? pulseEnd : 0;
     if (!seen) {
-      seen = { opSeq: 0, opPulseUntil: 0, forecast: "", forecastPulseUntil: 0 };
+      seen = { forecast: "", forecastPulseUntil: 0 };
       outcomeMarksSeen.set(s.name, seen);
-    }
-    const op = markingOperation(s);
-    if (op && operationSeq(op) > seen.opSeq) {
-      seen.opSeq = operationSeq(op);
-      seen.opPulseUntil = pulseUntil;
     }
     const forecastKey = markingForecasts(s).map((f) => `${f.action}:${f.status}#${f.message || ""}`).sort().join("|");
     if (forecastKey && forecastKey !== seen.forecast) {
@@ -2887,15 +2886,6 @@ function noteOperationOutcomes(services) {
       seen.forecastPulseUntil = pulseUntil;
     }
   }
-}
-
-// lastOperationMarkText says what the last recorded operation did, when and why.
-function lastOperationMarkText(op) {
-  const status = String(op.status || "").toLowerCase();
-  const outcome = operationMarkOutcome(status);
-  const said = outcome === status ? outcome : `${outcome} (${status})`;
-  const age = op.time ? ` ${fmtAge(op.time)}` : "";
-  return `Last ${op.action || "operation"} ${said}${age}${op.message ? ": " + op.message : ""}`;
 }
 
 // operationForecastText is the one sentence for forecast entries that share an
@@ -2923,27 +2913,14 @@ function operationForecastSentences(forecasts) {
 // nothing adds to it.
 const noOperationMarks = new Map();
 
-// serviceOperationMarks places a service's operation outcomes on the row's
-// action buttons (shown), as Map(action -> {outcome, text, pulse}). The newest
-// recorded outcome (last_operation, from any source) marks its action's button
-// unless it succeeded; when that button is not in the row (a failed stop on a
-// service now down) the power button carries it, naming the real action. Pause
-// and resume share the suspend toggle. Each forecast entry then marks its
-// action, when shown and not marked yet, with its own outcome. A mark never
-// disables a button: the operator may retry.
-function serviceOperationMarks(s, shown, powerAction) {
-  const op = markingOperation(s);
+// Buttons describe what an action would encounter now. Historical failures stay
+// in Last operation and Events; they cannot override a fresh forecast.
+function serviceOperationMarks(s, shown) {
   const forecasts = markingForecasts(s);
-  if (!op && !forecasts.length) return noOperationMarks;
+  if (!forecasts.length) return noOperationMarks;
   const seen = outcomeMarksSeen.get(s.name) || {};
   const now = Date.now();
   const marks = new Map();
-  if (op) {
-    const suspend = shown.find(isSuspendAction);
-    let target = shown.includes(op.action) ? op.action : powerAction;
-    if (suspend && isSuspendAction(op.action)) target = suspend;
-    marks.set(target, { outcome: operationMarkOutcome(op.status), text: lastOperationMarkText(op), pulse: seen.opPulseUntil > now });
-  }
   for (const f of forecasts) {
     if (!shown.includes(f.action) || marks.has(f.action)) continue;
     const outcome = operationMarkOutcome(f.status);
@@ -3120,7 +3097,7 @@ function serviceRowParts(s) {
       { action: s.monitored ? actionUnmonitor : actionMonitor },
       serviceRepairAvailable(s) && { action: actionRepair },
     ].filter(Boolean);
-    const marks = serviceOperationMarks(s, buttons.map((b) => b.action), powerAction);
+    const marks = serviceOperationMarks(s, buttons.map((b) => b.action));
     actions = me.can_act
       ? buttons.map((b) => tpl`${serviceActionButton(s, b.action, busy, true, b.title, { ...b, mark: marks.get(b.action) })} `)
       : readOnlyNote;
@@ -3169,7 +3146,7 @@ function render(services) {
   if (services) {
     allServices = services;
     forgetGoneServiceExpansions();
-    noteOperationOutcomes(services);
+    noteOperationForecasts(services);
   }
   scheduleGlobalTargetSync();
   renderServices();
@@ -5085,12 +5062,13 @@ function serviceGraphDetail(d) {
     </div>`;
 }
 
-// lastOperationCell spells out the newest recorded operation outcome — the
-// reason behind a button's mark, readable where its tooltip is not (touch).
+// Keep the audit result readable without presenting it as current health.
 function lastOperationCell(d) {
   const op = d && d.last_operation;
   if (!op || !op.time) return mutedDash;
-  return tpl`${activityDateCell(op)}<div>${op.action || "operation"} <span class="${operationOutcomeStyles[operationOutcome(op.status)].cls}">${op.status || backendStatusUnknown}</span>${op.message ? tpl` <span class="muted">${op.message}</span>` : nothing}</div>`;
+  return tpl`<details class="operation-history"><summary>${eventLabel(op)} · ${fmtTimeTitled(op.time)}</summary>
+    <div class="muted">Recorded result: ${op.status || backendStatusUnknown}</div>
+    ${op.message ? tpl`<div>${op.message}</div>` : nothing}</details>`;
 }
 
 function operationForecastCell(forecasts) {
@@ -5116,7 +5094,7 @@ function serviceGeneralDetail(d, processGeneral) {
       <div><span class="muted">Policy</span><br>${policyCell(d)}</div>
       <div><span class="muted">Locks</span><br>${locksCell(d)}</div>
       <div class="${colDupPhone}"><span class="muted">Last event</span><br>${lastEventCell(d)}</div>
-      <div><span class="muted">Last operation</span><br>${lastOperationCell(d)}</div>
+      <div><span class="muted">Last operation (history)</span><br>${lastOperationCell(d)}</div>
       ${forecasts.length ? tpl`<div><span class="muted">Operation forecast</span><br>${operationForecastCell(forecasts)}</div>` : nothing}
       <div class="${colDupPhone}"><span class="muted">Strays</span><br>${serviceStraysCell(d)}</div>
       <div><span class="muted">Next remediation</span><br>${nextRemediationCell(d)}</div>
@@ -5162,7 +5140,7 @@ function renderServiceDetail(d) {
     <h2>Recent events</h2>
     <table class="events">
       <caption class="visually-hidden">Recent service events</caption>
-      <thead><tr><th scope="col">Time</th><th scope="col">Kind</th><th scope="col">Message</th></tr></thead>
+      <thead><tr><th scope="col">Time</th><th scope="col" class="event-kind">Event</th><th scope="col">Message</th></tr></thead>
       <tbody id="${detailDomId(d.name, "events")}"></tbody></table>
   </div>`;
 }
@@ -5669,7 +5647,7 @@ function watchLastCell(w) {
     time: w && w.last_activity,
     kind: w && w.last_activity_kind,
     severity: w && w.last_activity_severity,
-  });
+  }, true, lastActivityMaxAgeMs);
 }
 
 function watchLastCheckedCell(w) {
@@ -6377,7 +6355,7 @@ function renderAppExpansion(a) {
   <h3 class="expansion-heading">Recent events</h3>
   <table class="events">
     <caption class="visually-hidden">Recent application events</caption>
-    <thead><tr><th scope="col">Time</th><th scope="col">Kind</th><th scope="col">Message</th></tr></thead>
+    <thead><tr><th scope="col">Time</th><th scope="col" class="event-kind">Event</th><th scope="col">Message</th></tr></thead>
     <tbody id="${eventsId}"></tbody></table>`;
 }
 
@@ -6451,17 +6429,10 @@ function renderWatchExpansion(w, events) {
   const live = tpl`${renderStorageWatch(w.storage)}${renderMeterWatch(w.meter)}${renderWatchReadings(w.readings)}${renderWatchProcessesSection(w)}${renderCountHoldersSection(w)}${renderWatchMetricsSection(w)}${w.keeps_sla ? renderSLASection(watchSLAKey(w.name)) : nothing}`;
   const conditions = renderConditionRows(w.conditions || []);
   if (!events || !events.length) return tpl`${cfg}${live}${conditions}<div class="muted">No recent activity.</div>`;
-  const rows = events.slice(0, 50).map((e) => {
-    const detail = [e.action, e.status].filter(Boolean).join(" ");
-    return tpl`<tr>
-      <td class="t">${fmtTimeTitled(e.time)}</td>
-      <td class="kind kind-${e.kind}">${e.kind}</td>
-      <td>${detail ? tpl`<span class="muted">${detail}</span> ` : nothing}${e.message || ""}</td>
-    </tr>`;
-  });
+  const rows = eventRows(events.slice(0, 50), false, { prefix: `watch:${w.name}` });
   return tpl`${cfg}${live}${conditions}<table class="events events-compact-table">
     <caption class="visually-hidden">Recent watch activity</caption>
-    <thead><tr><th scope="col">Time</th><th scope="col">Kind</th><th scope="col">Message</th></tr></thead>
+    <thead><tr><th scope="col">Time</th><th scope="col" class="event-kind">Event</th><th scope="col">Message</th></tr></thead>
     <tbody>${rows}</tbody></table>`;
 }
 
@@ -8022,7 +7993,7 @@ function renderActionConfirm() {
     ? tpl`<span class="muted">No resident process expected</span>`
     : tpl`${(d.processes || []).length} discovered${procWarnings.length ? tpl` <span class="bad">· ${procWarnings.length} warning${procWarnings.length === 1 ? "" : "s"}</span>` : nothing}`;
   const lastEvent = ev
-    ? tpl`${fmtTimeTitled(ev.time)} · <span class="kind kind-${ev.kind}">${ev.kind || ""}</span> ${[ev.action, ev.status].filter(Boolean).join(" ")} <span class="muted">${ev.message || ""}</span>`
+    ? tpl`${fmtTimeTitled(ev.time)} · ${eventBadge(ev)} <span class="muted">${eventDetail(ev)} ${ev.message || ""}</span>`
     : tpl`<span class="muted">none recorded</span>`;
   const preRows = pre ? tpl`<div class="confirm-preflight-block">${preflightRows(pre.checks || [])}</div>` : nothing;
   const warning = ctx.action === actionRepair
@@ -8703,7 +8674,7 @@ function updateClocks() {
   const now = Date.now();
   const clocks = [
     ["[data-probe-started-at]", (el) => "· " + watchProbeElapsed(el.dataset.probeStartedAt || "")],
-    ["[data-clock-since]", (el) => clockSince(el.dataset.clockSince || "", now)],
+    ["[data-clock-since]", (el) => clockSince(el.dataset.clockSince || "", now, Number(el.dataset.clockMaxAge || Infinity))],
     ["[data-clock-until]", (el) => checkClockUntil(el.dataset.clockUntil || "", now)],
   ];
   for (const [selector, text] of clocks) {
@@ -8714,10 +8685,9 @@ function updateClocks() {
   }
 }
 
-function clockSince(time, now) {
-  const at = Date.parse(time);
-  if (Number.isNaN(at)) return "";
-  return `${fmtCountdown((now - at) / millisecondsPerSecond)} ago`;
+function clockSince(time, now, maxAgeMs = Infinity) {
+  if (now - Date.parse(time) > maxAgeMs) return "—";
+  return fmtElapsedTime(time, now);
 }
 
 // checkClockUntil counts down to the next check; once it is due the daemon is

@@ -5,10 +5,19 @@ description: System login and seat manager.
 service:
   systemd:
     - systemd-logind
+apps:
+  - systemd-logind
 variables:
   busctl_binary: /usr/bin/busctl
+  user: root
+processes:
+  main:
+    exe: ${systemd_logind_binary}
+    user: ${user}
 rules:
-  block-stop-during-login-sessions:
+  # SSH and background sessions have no seat. Stop/start may release logind's
+  # device descriptors, so sessions attached to a local seat stay protected.
+  block-stop-during-local-sessions:
     type: guard
     blocks: [stop, restart]
     if:
@@ -19,17 +28,23 @@ rules:
             - --system
             - --auto-start=no
             - --allow-interactive-authorization=no
+            - --json=short
             - call
             - org.freedesktop.login1
             - /org/freedesktop/login1
             - org.freedesktop.login1.Manager
             - ListSessions
           expect_exit: 0
-          expect_stdout: { op: '==', value: 'a(susso) 0' }
+          # Each record must have an empty seat; JSON validation also rejects
+          # truncated arrays, missing separators and trailing commas.
+          expect_stdout:
+            op: '=~'
+            value: '^\{"type":"a\(susso\)","data":\[\[(\["[A-Za-z0-9_-]+",[0-9]+,"([^"\\]|\\.)+","","/org/freedesktop/login1/session/[A-Za-z0-9_]+"\],?)*\]\]\}$'
+          expect_json: { type: 'a(susso)' }
           timeout: 5s
     then:
       action: block
-      message: Login sessions are active or cannot be inspected; stop and restart denied
+      message: Local seat sessions are registered or cannot be inspected; stop and restart denied
 watches:
   service:
     check:

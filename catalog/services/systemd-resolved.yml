@@ -7,6 +7,14 @@ description: systemd network name resolution service.
 service:
   systemd:
     - systemd-resolved
+apps:
+  - systemd-resolved
+variables:
+  user: systemd-resolve
+processes:
+  main:
+    exe: ${systemd_resolved_binary}
+    user: ${user}
 watches:
   service:
     check:

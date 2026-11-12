@@ -3,12 +3,8 @@
 // change over time keep their state in the built check instance. The runner
 // executes a set concurrently and returns one Result per check.
 //
-// Service checks/preflight support tcp, ports, http, command, service,
-// file_exists, file, lockfile, binary, process, metric (via the daemon's stateful collector),
-// libraries, count, and host-resource probes (storage, load, fds, conntrack,
-// firewall_rules, zombies, oom, cert). The multi-target watch types
-// (net, icmp, swap and file) are also usable in single-metric/single-shot form.
-// See buildCheck and TypeInfo for the shared dispatch/validation vocabulary.
+// The built-in vocabulary, and which types a service, a preflight entry or a
+// watch may use, lives in TypeInfo and is dispatched by buildCheck.
 package checks
 
 import (

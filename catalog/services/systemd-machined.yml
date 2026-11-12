@@ -7,31 +7,14 @@ description: systemd virtual machine and container registration service.
 service:
   systemd:
     - systemd-machined
+apps:
+  - systemd-machined
 variables:
-  busctl_binary: /usr/bin/busctl
-rules:
-  block-stop-during-registered-machines:
-    type: guard
-    blocks: [stop, restart]
-    if:
-      not:
-        command:
-          command:
-            - ${busctl_binary}
-            - --system
-            - --auto-start=no
-            - --allow-interactive-authorization=no
-            - call
-            - org.freedesktop.machine1
-            - /org/freedesktop/machine1
-            - org.freedesktop.machine1.Manager
-            - ListMachines
-          expect_exit: 0
-          expect_stdout: { op: '==', value: 'a(ssso) 0' }
-          timeout: 5s
-    then:
-      action: block
-      message: Machines are registered or cannot be inspected; stop and restart denied
+  user: root
+processes:
+  main:
+    exe: ${systemd_machined_binary}
+    user: ${user}
 watches:
   service:
     check:

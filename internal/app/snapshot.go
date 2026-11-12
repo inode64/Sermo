@@ -34,8 +34,9 @@ func (c CheckSnapshot) severityOr(declared severity.Level) severity.Level {
 }
 
 // Snapshots holds each service's most recent check results so the web UI can show
-// them without re-running the checks. Workers publish after every cycle; the web
-// reads. Safe for concurrent use.
+// them without re-running the checks. A cycle that runs checks publishes them; a
+// skipped cycle leaves the previous publication. The web reads. Safe for
+// concurrent use.
 type Snapshots struct {
 	mu          sync.RWMutex
 	now         func() time.Time

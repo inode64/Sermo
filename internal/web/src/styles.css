@@ -637,10 +637,8 @@
   .events { width: 100%; font-size: .86rem; }
   .events .t { white-space: nowrap; color: var(--text-2); font-variant-numeric: tabular-nums; }
   .kind { font-weight: 600; }
-  .kind-error, .kind-hook-failed, .kind-notify-failed, .kind-expand-failed, .kind-kill-failed, .kind-makestep-failed { color: var(--crit); }
-  .kind-alert, .kind-suppressed, .kind-firing, .kind-expand-skipped, .kind-makestep-skipped, .kind-panic-suppressed, .kind-notify-suppressed, .kind-advisory { color: var(--warn); }
-  .kind-action, .kind-hook, .kind-notify, .kind-cascade, .kind-recovered, .kind-expand, .kind-kill { color: var(--ok); }
-  .kind-dry-run, .kind-reload { color: var(--info); }
+  .event-kind-mobile { display: none; }
+  .event-detail { font-size: .9em; }
   .activity-time { font-weight: 600; font-variant-numeric: tabular-nums; }
   .activity-crit { color: var(--crit); }
   .activity-warn { color: var(--warn); }
@@ -723,12 +721,13 @@
     .db-queries-table .db-col-memory, .db-queries-table .db-col-io { display: none; }
     .db-query-row .db-cell-text { max-width: min(8.5rem, 12vw); }
     /* watches: keep Name and the trailing Last activity · State · Actions.
-       Type-specific tables also retain their leading live metric. */
-    .watch-type-table th:not(:first-child):not(:nth-last-child(-n+3)),
-    .watch-type-table td:not(:first-child):not(:nth-last-child(-n+3)) { display: none; }
+       Type-specific tables also retain their leading live metric. Direct
+       children exclude nested events; :where preserves column overrides. */
+    .watch-type-table > :where(thead) > :where(tr) > th:not(:first-child):not(:nth-last-child(-n+3)),
+    .watch-type-table > :where(tbody) > :where(tr) > td:not(:first-child):not(:nth-last-child(-n+3)) { display: none; }
     /* The rules that bring a column back name both classes: that matches the
        specificity of the rule hiding it, so their later position decides. */
-    .watch-table.watch-type-table th:nth-child(2), .watch-table.watch-type-table td:nth-child(2) { display: table-cell; }
+    .watch-table.watch-type-table > :where(thead) > :where(tr) > th:nth-child(2), .watch-table.watch-type-table > :where(tbody) > :where(tr) > td:nth-child(2) { display: table-cell; }
     /* A typed watch table sits in a group inside one cell of the watches table,
        so its minimum width used to become the page's: one usage bar or one
        long state pill widened the whole document a few seconds after load, when
@@ -846,9 +845,9 @@
     /* watches -> Name · State · Actions; typed tables keep their leading live
        metric (its column stays sortable). Wide values wrap rather than scroll,
        so Actions is never pushed off-screen. */
-    .watch-type-table th:not(:first-child):not(:nth-last-child(-n+2)),
-    .watch-type-table td:not(:first-child):not(:nth-last-child(-n+2)) { display: none; }
-    .watch-table.watch-type-table th:nth-child(2), .watch-table.watch-type-table td:nth-child(2) { display: table-cell; }
+    .watch-type-table > :where(thead) > :where(tr) > th:not(:first-child):not(:nth-last-child(-n+2)),
+    .watch-type-table > :where(tbody) > :where(tr) > td:not(:first-child):not(:nth-last-child(-n+2)) { display: none; }
+    .watch-table.watch-type-table > :where(thead) > :where(tr) > th:nth-child(2), .watch-table.watch-type-table > :where(tbody) > :where(tr) > td:nth-child(2) { display: table-cell; }
     /* apps -> Application · Status · Version · Last activity. */
     .apps-table :is(th, td)[data-col="category"] { display: none; }
     /* mount units -> Name · Path · State · Actions: the Mounted flag is already
@@ -856,8 +855,10 @@
        cell of a row that split "Backup" and "/backup" letter by letter. */
     .mount-table :is(th, td):is([data-col="mounted"], [data-col="processes"], [data-col="users"]) { display: none; }
     .mount-table td:is([data-col="name"], [data-col="path"]) { min-width: 5.5rem; }
-    /* events -> Time · Service/watch · Message. */
-    .events th:nth-child(3), .events td:nth-child(3) { display: none; }
+    /* The outcome moves into the message on phones, including compact tables
+       whose second column carries it. Reasons must remain visible. */
+    .events .event-kind { display: none; }
+    .event-kind-mobile { display: inline; }
     /* runtime locks -> Service · Name · State · Reason · Actions. */
     #locks-section th:nth-child(n+4):nth-child(-n+7), #locks-section td:nth-child(n+4):nth-child(-n+7) { display: none; }
     /* notifiers -> Name · Type · State. */
@@ -908,7 +909,7 @@
        short value): give it the room a phone can spare so it stays whole and
        the name wraps instead. 7rem is the most the narrowest supported phone
        fits without a sideways scroll; a longer path still breaks inside. */
-    .watch-table.watch-type-table td:nth-child(2) { min-width: 7rem; }
+    .watch-table.watch-type-table > :where(tbody) > :where(tr) > td:nth-child(2) { min-width: 7rem; }
     /* The storage usage bar is a desktop 10.5rem; on a phone it takes the width
        its column gets (never below a legible 4rem) so the Usage column stops
        deciding the table's width. The probe note beside a checking pill wraps
@@ -922,8 +923,8 @@
        column (still in the row expansion) so Name · State · Actions fits without
        a sideways scroll. Wider phones (>=412, e.g. the mobile test viewport)
        keep the sortable metric column. */
-    .watch-table.watch-type-table th:nth-child(2),
-    .watch-table.watch-type-table td:nth-child(2) { display: none; }
+    .watch-table.watch-type-table > :where(thead) > :where(tr) > th:nth-child(2),
+    .watch-table.watch-type-table > :where(tbody) > :where(tr) > td:nth-child(2) { display: none; }
     /* Five tiles across 360px leave the longest label ("Software") a hair
        short; it gives up a little size rather than its last letters. */
     .tile .t-label { font-size: .5rem; letter-spacing: 0; }

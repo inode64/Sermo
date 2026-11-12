@@ -54,9 +54,11 @@ func TestRestartReactivationBeforeReconciliation(t *testing.T) {
 		readError  bool
 		cancel     bool
 		postflight bool
+		settling   bool
 		want       ResultStatus
 	}{
 		{name: "verified replacement", want: ResultOK},
+		{name: "replacement still starting", settling: true, want: ResultOK},
 		{name: "old process outside unit", oldAlive: true, want: ResultFailed},
 		{name: "wrong replacement user", untrusted: true, want: ResultFailed},
 		{name: "inactive unit", inactive: true, want: ResultFailed},
@@ -73,6 +75,9 @@ func TestRestartReactivationBeforeReconciliation(t *testing.T) {
 				h.backend = tc.backend
 			}
 			h.mgr.stopLeavesActive = !tc.inactive
+			if tc.settling {
+				h.mgr.statusSteps = []servicemgr.Status{servicemgr.StatusActive, servicemgr.StatusUnknown}
+			}
 			h.postflight.OK = !tc.postflight
 			signaler := &recordingSignaler{}
 			h.reaper.Signaler = signaler

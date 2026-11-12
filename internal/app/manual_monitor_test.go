@@ -1,13 +1,71 @@
 package app
 
 import (
+	"context"
 	"fmt"
+	"path/filepath"
 	"testing"
 
+	"sermo/internal/config"
 	"sermo/internal/operation"
 	"sermo/internal/rules"
+	"sermo/internal/servicemgr"
 	"sermo/internal/state"
 )
+
+func TestManualStopMonitoringSurvivesDaemonRestart(t *testing.T) {
+	for _, source := range []string{state.SourceCLIManualStop, state.SourceWebManualStop} {
+		for _, action := range []string{string(rules.ActionStop), operation.ActionPause} {
+			t.Run(source+"/"+action, func(t *testing.T) {
+				path := filepath.Join(t.TempDir(), state.Filename)
+				store, err := state.OpenContextWith(t.Context(), path, state.Options{})
+				if err != nil {
+					t.Fatal(err)
+				}
+				t.Cleanup(func() { _ = store.Close() })
+				result := operation.Result{Service: "web", Action: action, Status: operation.ResultOK}
+				if change, syncErr := SyncManualActionMonitoring(store, "web", action, result, source, state.SourceWeb, false); syncErr != nil || !change.Changed {
+					t.Fatalf("manual %s: change=%+v error=%v", action, change, syncErr)
+				}
+				before, found, err := store.MonitorState("web")
+				if err != nil || !found || before.Active {
+					t.Fatalf("monitor state after %s: %+v found=%v error=%v", action, before, found, err)
+				}
+				if err := store.Close(); err != nil {
+					t.Fatal(err)
+				}
+				reopened, err := state.OpenContextWith(t.Context(), path, state.Options{})
+				if err != nil {
+					t.Fatal(err)
+				}
+				t.Cleanup(func() { _ = reopened.Close() })
+				// Both startup and reload reconcile the configuration with this row.
+				for range 2 {
+					if warning := applyMonitorModeFor(reopened, "service web", "web", config.MonitorEnabled); warning != "" {
+						t.Fatal(warning)
+					}
+				}
+				after, found, err := reopened.MonitorState("web")
+				if err != nil || !found || after != before || !monitorPaused(reopened, "web")() {
+					t.Fatalf("restart lost manual %s: before=%+v after=%+v found=%v error=%v", action, before, after, found, err)
+				}
+				status, wantState, restore := servicemgr.StatusInactive, TargetStateStopped, string(rules.ActionStart)
+				if action == operation.ActionPause {
+					status, wantState, restore = servicemgr.StatusPaused, TargetStatePaused, string(rules.ActionResume)
+				}
+				entry := &webEntry{status: func(context.Context) (servicemgr.Status, error) { return status, nil }}
+				backend := &WebBackend{store: reopened}
+				if view := backend.view(t.Context(), "web", entry); view.Monitored || view.State != wantState {
+					t.Fatalf("view after restart: state=%q monitored=%v, want %q unmonitored", view.State, view.Monitored, wantState)
+				}
+				result.Action = restore
+				if change, syncErr := SyncManualActionMonitoring(reopened, "web", restore, result, source, state.SourceWeb, false); syncErr != nil || !change.Changed || monitorPaused(reopened, "web")() {
+					t.Fatalf("manual %s after restart: change=%+v error=%v", restore, change, syncErr)
+				}
+			})
+		}
+	}
+}
 
 func TestSyncManualActionMonitoringPausesAndRestores(t *testing.T) {
 	store := newFakeStore()

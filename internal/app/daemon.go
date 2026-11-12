@@ -183,8 +183,11 @@ type Deps struct {
 	// restarts and reboots. Optional: nil means every service/watch is always
 	// monitored.
 	Monitor MonitorStore
-	// OperationSettling suppresses checks' side effects while a service operation
-	// is running and through the first active post-operation cycle.
+	// OperationSettling records a service operation that is running or awaiting
+	// one observation. While it is running the worker skips the cycle. The
+	// following observation publishes checks without SLA, alerts or remediation,
+	// unless init says the service is not running, which ends the observation
+	// on the status probe.
 	OperationSettling OperationSettlingStore
 	// ServiceRestartNotice persists principal-process identities so one external
 	// restart emits at most one notice across sermod restarts. Optional: a
@@ -1215,13 +1218,13 @@ func applyMonitorModeFor(store MonitorStore, label, key, mode string) string {
 			err = store.SetActive(key, true, state.SourceConfig)
 		}
 	default: // MonitorEnabled
-		// A storage umount's pause is no operator preference for this mode to
-		// override: the mount is released on purpose and the next mount restores
-		// the watch, so forcing it on would report a released mount as down.
+		// A manual stop/pause or storage umount deliberately takes the target
+		// out of service. Preserve its pause until a matching manual operation
+		// restores it, rather than reporting or remediating an intentional stop.
 		record, found, e := store.MonitorState(key)
 		if e != nil {
 			err = e
-		} else if !found || record.Active || !state.IsMountUmountSource(record.Source) {
+		} else if !found || record.Active || (!state.IsMountUmountSource(record.Source) && !state.IsManualStopSource(record.Source)) {
 			err = store.SetActive(key, true, state.SourceConfig)
 		}
 	}

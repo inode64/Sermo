@@ -9,11 +9,22 @@ import (
 	"net/url"
 	"strings"
 	"time"
+	"unicode"
 	"unicode/utf8"
 
 	"sermo/internal/config"
+	"sermo/internal/operation"
+	"sermo/internal/severity"
 	"sermo/internal/state"
 	"sermo/internal/web"
+)
+
+const (
+	eventKindRecovered = "recovered"
+	eventKindDryRun    = "dry-run"
+	eventKindFiring    = "firing"
+	eventKindAlert     = "alert"
+	eventKindError     = "error"
 )
 
 // runEvents dispatches the events subcommands.
@@ -75,10 +86,10 @@ func (a App) writeEvents(opts options, service string, evs []web.Event) {
 
 func (a App) writeEventsTable(evs []web.Event) {
 	tw := newTabWriter(a.Stdout)
-	fmt.Fprintln(tw, "TIME\tTARGET\tKIND\tSEVERITY\tRULE\tACTION\tMESSAGE")
+	fmt.Fprintln(tw, "TIME\tTARGET\tEVENT\tSEVERITY\tRULE\tMESSAGE")
 	for _, e := range evs {
 		r := eventTableFields(e)
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n", r.timestamp, r.target, r.kind, r.severity, r.rule, r.action, r.message)
+		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\n", r.timestamp, r.target, r.kind, r.severity, r.rule, r.message)
 	}
 	_ = tw.Flush()
 }
@@ -90,7 +101,6 @@ type eventTableRow struct {
 	kind      string
 	severity  string
 	rule      string
-	action    string
 	message   string
 }
 
@@ -104,31 +114,102 @@ func eventTableFields(e web.Event) eventTableRow {
 	}
 	target = eventTableValue(target, eventsTableTargetWidth)
 
-	kind := eventTableValue(e.Kind, eventsTableKindWidth)
 	level := eventTableValue(e.Severity, eventsTableSeverityWidth)
-	if level == "" {
+	if level == "" || e.Kind == eventKindRecovered || e.Kind == eventKindDryRun || e.Action != "" {
 		level = "-"
 	}
 	// The rule distinguishes several rules of one service transitioning in the
 	// same cycle, which otherwise render as identical rows.
-	rule := eventTableValue(e.Rule, eventsTableRuleWidth)
+	rule := e.Rule
 	if rule == "" {
 		rule = "-"
 	}
-	action := e.Action
-	if action == "" {
-		action = e.Status
+	message := eventTableMessage(e.Message)
+	if detail := eventDetail(e); detail != "" {
+		message = detail + " · " + message
 	}
-	action = eventTableValue(action, eventsTableActionWidth)
 	return eventTableRow{
 		timestamp: timestamp,
 		target:    target,
-		kind:      kind,
+		kind:      eventLabel(e),
 		severity:  level,
 		rule:      rule,
-		action:    action,
-		message:   eventTableMessage(e.Message),
+		message:   message,
 	}
+}
+
+// A recovery's grade belongs to the closed incident. Keep it in context, while
+// only an explicit operation outcome can announce a completed action.
+func eventLabel(e web.Event) string {
+	action := e.Action
+	if action == "" {
+		action = e.Kind
+	}
+	if action == "" {
+		action = "event"
+	}
+	action = eventWords(action)
+	blocked := e.Status == string(operation.ResultBlocked) || e.Kind == "suppressed" || e.Kind == "panic-suppressed"
+	switch {
+	case e.Kind == eventKindRecovered:
+		return "Recovered"
+	case e.Kind == eventKindDryRun && e.Action != "":
+		return action + " · Dry run"
+	case e.Kind == eventKindDryRun:
+		return "Dry run"
+	case e.Status == string(operation.ResultOK):
+		return action + " completed"
+	case blocked && e.Action != "":
+		return action + " blocked"
+	case blocked:
+		return "Blocked"
+	case e.Action != "" && (eventFailedStatus(e.Status) || e.Kind == eventKindError || strings.HasSuffix(e.Kind, "-failed")):
+		return action + " failed"
+	case e.Status == "running":
+		return action + " running"
+	case e.Kind == eventKindAlert || e.Kind == eventKindFiring || e.Kind == eventKindError:
+		return eventWords(severity.Level(e.Severity).Resolved().String())
+	case e.Status != "":
+		return action + " · " + e.Status
+	default:
+		return action
+	}
+}
+
+func eventFailedStatus(status string) bool {
+	switch status {
+	case string(operation.ResultFailed), eventKindError, string(operation.ResultPreflightFailed),
+		string(operation.ResultPostflightFailed), string(operation.ResultOrphanProcesses):
+		return true
+	default:
+		return false
+	}
+}
+
+func eventDetail(e web.Event) string {
+	var parts []string
+	if e.Kind == eventKindRecovered && e.Rule != "" {
+		parts = append(parts, "Rule condition cleared")
+	}
+	if severity.Level(e.Severity).Valid() && (e.Kind == eventKindRecovered || e.Kind != eventKindAlert && e.Kind != eventKindFiring && e.Kind != eventKindError) {
+		label := "Incident severity: "
+		if e.Kind == eventKindRecovered {
+			label = "Previous incident severity: "
+		}
+		parts = append(parts, label+e.Severity)
+	}
+	if eventFailedStatus(e.Status) && e.Status != string(operation.ResultFailed) {
+		parts = append(parts, e.Status)
+	}
+	return strings.Join(parts, " · ")
+}
+
+func eventWords(value string) string {
+	words := []rune(strings.ReplaceAll(strings.ReplaceAll(value, "-", " "), "_", " "))
+	if len(words) != 0 {
+		words[0] = unicode.ToUpper(words[0])
+	}
+	return string(words)
 }
 
 func eventTableValue(value string, width int) string {

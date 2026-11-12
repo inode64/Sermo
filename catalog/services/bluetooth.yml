@@ -12,6 +12,12 @@ restart_on_change:
     app: >-
       ${display_name} will restart after version change of ${change.app}: ${change.old_version} -> ${change.new_version}
 pidfile: /run/bluetoothd.pid
+variables:
+  user: root
+processes:
+  main:
+    exe: ${bluetoothd_binary}
+    user: ${user}
 watches:
   service:
     check:
@@ -31,7 +37,7 @@ watches:
     check:
       type: process
       exe: ${bluetoothd_binary}
-      user: root
+      user: ${user}
       state: running
       requires:
         - service

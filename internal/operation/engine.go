@@ -999,13 +999,14 @@ type residualOutcome struct {
 
 // clearResiduals discovers residual processes after a stop and applies signal
 // escalation, returning one outcome that preserves whether any were initially
-// found. accept may acknowledge an already reactivated backend-owned process set
-// before the reaper can signal it.
+// found. accept checks each fresh process set so a replacement appearing during
+// cleanup is verified before any further signal or orphan classification.
 func (e Engine) clearResiduals(ctx context.Context, tracked []process.Process, accept func([]process.Process) (bool, error)) (residualOutcome, error) {
 	if e.Discover == nil {
 		return residualOutcome{}, nil
 	}
 	var discoverErr error
+	outcome := residualOutcome{}
 	discover := func() []process.Process {
 		if discoverErr != nil {
 			return nil
@@ -1024,31 +1025,33 @@ func (e Engine) clearResiduals(ctx context.Context, tracked []process.Process, a
 		// Delegated processes stay tracked: a kept child is told from a surviving
 		// daemon only by the generation carried from one round to the next.
 		tracked = e.reattributeUnitMembers(procs)
-		return nonDelegatedResiduals(tracked)
+		residuals := nonDelegatedResiduals(tracked)
+		outcome.remaining = residuals
+		outcome.found = outcome.found || len(residuals) > 0
+		if accept != nil && len(residuals) > 0 {
+			outcome.accepted, discoverErr = accept(residuals)
+			if outcome.accepted || discoverErr != nil {
+				return nil
+			}
+		}
+		return residuals
 	}
 	residuals := discover()
-	outcome := residualOutcome{remaining: residuals, found: len(residuals) > 0}
-	if discoverErr != nil {
+	if discoverErr != nil || outcome.accepted {
 		return outcome, discoverErr
 	}
 	if !outcome.found {
 		return outcome, nil
 	}
-	if accept != nil {
-		accepted, err := accept(residuals)
-		outcome.accepted = accepted
-		if accepted || err != nil {
-			return outcome, err
-		}
-	}
 	reaper := e.Reaper
 	reaper.Rediscover = discover // re-evaluate identity each round
 	reaper.Sleep = e.Sleep
 	reaped := reaper.Reap(ctx, residuals, e.KillPolicy)
-	outcome.remaining, outcome.failed, outcome.signals = reaped.Remaining, reaped.Failed, reaped.Attempts
+	outcome.failed, outcome.signals = reaped.Failed, reaped.Attempts
 	if discoverErr != nil {
 		return outcome, discoverErr
 	}
+	outcome.remaining = reaped.Remaining
 	return outcome, nil
 }
 
