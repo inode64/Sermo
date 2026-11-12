@@ -643,6 +643,38 @@ test("inventory panels group by their meaningful type", async ({ page }) => {
   await expect(page.locator("#wat-row-firewall-paused")).toBeHidden();
 });
 
+test("grouped inventories show categories only in their headings", async ({ page }) => {
+  await page.setViewportSize({ width: 1536, height: 960 });
+  await page.route("**/api/dashboard**", (route) => route.fulfill({ json: {
+    ...dashboard, services: services.map((s) => ({ ...s, category: s.name === "web" ? "web" : "data" })),
+  } }));
+  await page.reload();
+  for (const [section, prefix] of [["services", "svc"], ["mounts", "mount"], ["apps", "app"], ["libraries", "library"]]) {
+    const panel = page.locator(`#${section}-section`);
+    const category = panel.locator('th[data-col="category"]');
+    await expect(category).toBeVisible();
+    await page.locator(`#${prefix}-group-toggle`).click();
+    await expect(panel.locator(".group-row")).toHaveCount(2);
+    await expect(category).toBeHidden();
+    await expect(panel.locator('td[data-col="category"]:visible')).toHaveCount(0);
+    await page.reload();
+    await expect(category).toBeHidden();
+    await page.locator(`#${prefix}-group-toggle`).click();
+    await expect(category).toBeVisible();
+    await expect(panel.locator('td[data-col="category"]:visible')).not.toHaveCount(0);
+  }
+});
+
+test("empty metric panels show one explanation each", async ({ page }) => {
+  await page.locator("#svc-row-web .row-toggle").click();
+  const empty = page.locator(".metric-panel").filter({ hasText: "No data yet for this window." });
+  await expect(empty).toHaveCount(7);
+  for (const panel of await empty.all()) {
+    await expect(panel.getByText("No data yet for this window.", { exact: true })).toHaveCount(1);
+  }
+  await expect(page.locator('[data-service-metric-name="count"]')).toContainText("avg 2 users");
+});
+
 test("a running manual probe keeps health visible and disables a duplicate", async ({ page }) => {
   const row = page.locator("#wat-row-hdparm-sda");
   await expect(row).toContainText("checking");
@@ -1100,6 +1132,8 @@ test("paused monitoring is distinct from disabled configuration", async ({ page 
 
   const disabled = page.locator("#wat-row-legacy-watch");
   await expect(disabled.locator(".target-state")).toHaveText("disabled in config");
+  await expect(disabled.getByText("disabled in config", { exact: true })).toHaveCount(1);
+  await expect(disabled.locator(".actions button")).toHaveCount(0);
 
   await page.locator('#watch-filters [data-filter="disabled"]').click();
   await expect(paused).toBeVisible();

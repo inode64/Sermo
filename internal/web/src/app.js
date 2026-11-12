@@ -1857,6 +1857,7 @@ function renderListPanel(p) {
   const visibleGroups = sortedGroupValues(list, p.groupOf);
   p.collapsedGroups.forEach((group) => { if (!visibleGroups.includes(group)) p.collapsedGroups.delete(group); });
   if (visibleGroups.length < 2 && !p.alwaysGrouped) p.grouped = false;
+  p.dom.section.classList.toggle("panel-grouped", p.grouped);
   const counts = p.counts ? p.counts(source) : stateCounts(source, p.stateOf, p.states);
   renderPanelToolbar(p, { counts, groups, visibleGroups, shown: list.length, total: source.length });
   renderPanelHead(p);
@@ -5691,28 +5692,25 @@ function watchNextCheckCell(w) {
 
 // watchActionsCell renders the shared actions cell (expand / monitor / unmonitor).
 function watchActionsCell(w) {
-  const probeBtn = (w.can_probe && me.can_act && w.enabled)
+  if (!w.enabled) return tpl`<td class="actions">${mutedDash}</td>`;
+  const probeBtn = (w.can_probe && me.can_act)
     ? watchActionButton(w, actionProbe, tpl`<span aria-hidden="true">◎</span>`, true)
     : nothing;
-  const raidButtons = (w.can_control_raid && me.can_act && w.enabled)
+  const raidButtons = (w.can_control_raid && me.can_act)
     ? tpl`${watchActionButton(w, actionPause, "pause RAID")} ${watchActionButton(w, actionResume, "resume RAID")}`
     : nothing;
-  const replicationBtn = (w.can_control_replication && me.can_act && w.enabled)
+  const replicationBtn = (w.can_control_replication && me.can_act)
     ? watchActionButton(w, actionReplicationStart, "start replication")
     : nothing;
-  const expandBtn = (w.expand && Number(w.expand.by_bytes) > 0 && me.can_act && w.enabled)
+  const expandBtn = (w.expand && Number(w.expand.by_bytes) > 0 && me.can_act)
     ? watchActionButton(w, actionExpand, `${actionExpand} ${fmtBytes(w.expand.by_bytes)}`)
     : nothing;
-  const monitorBtn = !w.enabled
-    ? tpl`<span class="muted">disabled in config</span>`
-    : (me.can_act
-      ? (w.monitored
-        ? watchActionButton(w, actionUnmonitor, tpl`<span aria-hidden="true">${iconUnmonitor}</span>`, true)
-        : watchActionButton(w, actionMonitor, tpl`<span aria-hidden="true">${iconMonitor}</span>`, true))
-      : readOnlyNote);
-  const actions = !w.enabled
-    ? tpl`<span class="muted">disabled in config</span>`
-    : tpl`${probeBtn} ${raidButtons} ${replicationBtn} ${expandBtn} ${monitorBtn}`;
+  const monitorBtn = me.can_act
+    ? (w.monitored
+      ? watchActionButton(w, actionUnmonitor, tpl`<span aria-hidden="true">${iconUnmonitor}</span>`, true)
+      : watchActionButton(w, actionMonitor, tpl`<span aria-hidden="true">${iconMonitor}</span>`, true))
+    : readOnlyNote;
+  const actions = tpl`${probeBtn} ${raidButtons} ${replicationBtn} ${expandBtn} ${monitorBtn}`;
   return tpl`<td class="actions">${actions}</td>`;
 }
 
@@ -8206,7 +8204,7 @@ async function loadMetrics(name, measured, generation = dashboardGeneration) {
 function metricSeriesSummary(series) {
   const summary = (series && series.summary) || {};
   const unit = (series && series.unit) || "";
-  if (!summary.count) return '<span class="muted">No data yet for this window.</span>';
+  if (!summary.count) return "";
   return `avg <b>${esc(fmtMetricValue(summary.avg, unit))}</b> · min ${esc(fmtMetricValue(summary.min, unit))} · max ${esc(fmtMetricValue(summary.max, unit))}`;
 }
 

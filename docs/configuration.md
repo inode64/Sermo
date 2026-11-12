@@ -1035,7 +1035,9 @@ The lists are sortable by name, category or version, and expanding a row reveals
 the full version string, file location and permissions. When a version is
 inherited through `version_from`, the API row includes `version_source` with the
 provider app name. Services, applications and libraries can be filtered and
-grouped by their top-level `category` metadata field. The same data is available
+grouped by their top-level `category` metadata field. Grouped lists show the
+category in the group heading and hide its repeated column; ungrouping restores
+the column where the screen has room for it. The same data is available
 from `sermoctl apps`, `sermoctl libs`, `GET /api/applications` and `GET
 /api/libraries`. The dashboard caches each inventory for up to 5 minutes, so
 auto-refreshes do not rerun every version probe. Each row shows when those

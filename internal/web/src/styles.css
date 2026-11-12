@@ -404,6 +404,7 @@
   .svc-commands { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .3rem; }
   .exp { color: var(--text-2); margin-right: .35rem; user-select: none; font-size: .9em; display: inline-block; }
   .category-badge { display: inline-block; max-width: 8rem; overflow: hidden; text-overflow: ellipsis; vertical-align: top; color: var(--text-2); }
+  .panel-grouped > table > :is(thead, tbody) > tr > [data-col="category"] { display: none; }
   tr.group-row > td { background: var(--panel-2); font-weight: 650; }
   .group-toggle { font-weight: 650; }
   tr.group-row .muted { font-weight: 500; margin-left: .35rem; }
