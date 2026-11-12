@@ -982,6 +982,9 @@ severity retain their original values.
 Service action buttons mark only current operation forecasts. A past failure
 does not leave a red or amber mark on a restart, reload, power or pause/resume
 button. Immediate operation feedback still reports failures and blocks.
+For a service or container whose backend reports it inactive, the power button
+shows the play icon and **Start** label. It still sends the guarded `restart`
+operation, including its confirmation and residual-process checks.
 **Last operation (history)** keeps the original result with its timestamp;
 expand it to read the recorded status and message. A later recovery or an
 active service does not rewrite that historical result as success.

@@ -3037,14 +3037,17 @@ async function pressServiceButton(name, button) {
   if (done !== null) scheduleRefresh();
 }
 
-// serviceActionButton renders one service action button. A toggle passes
+// serviceActionButton renders one service action button. opts.displayAction
+// changes its presentation while keeping the engine action for dispatch.
+// A toggle passes
 // opts.glyphAction to keep one glyph across the actions it alternates,
 // opts.pressed for its latched state and opts.extraClass for its styling.
 // opts.mark (serviceOperationMarks) outlines the button amber (blocked) or red
 // (failed) with a badge, pulsing while its window is open, and describes it.
 function serviceActionButton(s, action, busy, compact = false, title = "", opts = {}) {
-  const label = svcActionAriaLabel(s, action);
-  const glyph = compact ? serviceActionGlyph(opts.glyphAction || action) : "";
+  const displayAction = opts.displayAction || action;
+  const label = svcActionAriaLabel(s, displayAction);
+  const glyph = compact ? serviceActionGlyph(opts.glyphAction || displayAction) : "";
   const disabled = serviceActionDisabled(s, action, busy);
   const reason = serviceActionDisabledReason(s, action, busy);
   const hintID = actionHintID("svc", s.name, action);
@@ -3058,7 +3061,7 @@ function serviceActionButton(s, action, busy, compact = false, title = "", opts 
   const tip = [title || (compact ? label : ""), mark ? mark.text : ""].filter(Boolean).join("\n");
   const outcomeHint = mark ? hiddenDescription(outcomeID, mark.text) : nothing;
   const badge = mark ? tpl`<span class="outcome-badge" aria-hidden="true">${operationOutcomeStyles[mark.outcome].badge}</span>` : nothing;
-  return tpl`${actionHint(hintID, disabled, reason)}${outcomeHint}<button class="${classes}" ?disabled=${disabled} data-service="${s.name}" data-service-action="${action}" aria-pressed="${pressed}" title="${tip || nothing}" aria-label="${label}" aria-describedby="${actionDescribedBy(hintID, disabled, reason, outcomeID)}">${glyph ? tpl`<span aria-hidden="true">${glyph}</span>` : action}${badge}</button>`;
+  return tpl`${actionHint(hintID, disabled, reason)}${outcomeHint}<button class="${classes}" ?disabled=${disabled} data-service="${s.name}" data-service-action="${action}" aria-pressed="${pressed}" title="${tip || nothing}" aria-label="${label}" aria-describedby="${actionDescribedBy(hintID, disabled, reason, outcomeID)}">${glyph ? tpl`<span aria-hidden="true">${glyph}</span>` : displayAction}${badge}</button>`;
 }
 
 // serviceRowParts builds one service's main <tr> and its optional operator
@@ -3082,15 +3085,16 @@ function serviceRowParts(s) {
     actions = tpl`<span class="muted">disabled in config</span>`;
   } else {
     const powerAction = servicePowerAction(s);
+    const powerDisplayAction = (s.status || "").toLowerCase() === backendStatusInactive ? actionStart : powerAction;
     const alsoApply = (s.also_apply || []).length;
     const powerTitle = alsoApply
-      ? `${svcActionAriaLabel(s, powerAction)}; also applies to: ${s.also_apply.join(", ")}`
-      : svcActionAriaLabel(s, powerAction);
+      ? `${svcActionAriaLabel(s, powerDisplayAction)}; also applies to: ${s.also_apply.join(", ")}`
+      : svcActionAriaLabel(s, powerDisplayAction);
     // The row's buttons, in order; the operation outcome marks go on the same
     // list, so a mark only ever lands on a button the row shows. A space after
     // each keeps a gap wide enough for a neighbour's outcome badge.
     const buttons = [
-      { action: powerAction, title: powerTitle },
+      { action: powerAction, displayAction: powerDisplayAction, title: powerTitle },
       powerAction !== actionRestart && { action: actionRestart },
       s.can_pause && serviceSuspendButton(s),
       { action: actionReload },

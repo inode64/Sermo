@@ -1374,6 +1374,7 @@ test("failed services prioritize restart and keep repair as a manual fallback", 
   expect(rendered[0]).toBe("restart");
   expect(rendered.filter((action) => action === "restart")).toHaveLength(1);
   expect(rendered[rendered.length - 1]).toBe("repair");
+  await expect(row.locator('[data-service-action="restart"]')).toHaveAttribute("aria-label", "Restart service Failed repair");
 
   const repair = row.locator('[data-service-action="repair"]');
   await expect(repair).toHaveAttribute("aria-label", "Repair residual service state Failed repair");
@@ -1494,6 +1495,39 @@ async function refreshDashboard(page) {
   await page.locator("#refresh-now").click();
   await response;
   await page.evaluate(() => new Promise((resolve) => { requestAnimationFrame(() => resolve()); }));
+}
+
+for (const category of ["service", "docker"]) {
+  test(`an inactive ${category} shows Start while dispatching restart`, async ({ page }) => {
+    let status = "inactive";
+    await serveWeb(page, () => ({ category, status, state: status === "inactive" ? "stopped" : "started", monitored: false, also_apply: ["db"] }));
+    await page.reload();
+
+    const power = webButton(page, "restart");
+    await expect(power).toHaveAttribute("aria-label", "Start service Web server");
+    await expect(power).toHaveAttribute("title", "Start service Web server; also applies to: db");
+    await expect(power.locator("svg polygon")).toHaveCount(1);
+    await expect(power).toBeEnabled();
+    await expect(webButton(page, "start")).toHaveCount(0);
+    const results = await new AxeBuilder({ page })
+      .include("#svc-row-web")
+      .withTags(["wcag2a", "wcag2aa", "wcag22aa"])
+      .analyze();
+    expect(results.violations).toEqual([]);
+    expect(await horizontalOverflow(page)).toBeLessThanOrEqual(1);
+
+    await power.click();
+    await expect(page.locator("#action-confirm")).toBeVisible();
+    const request = page.waitForRequest((req) => req.method() === "POST" && new URL(req.url()).pathname === "/api/services/web/restart");
+    await page.locator("#confirm-action-btn").click();
+    await request;
+
+    status = "active";
+    await page.reload();
+    await expect(webButton(page, "stop")).toHaveAttribute("aria-label", "Stop service Web server");
+    await expect(power).toHaveAttribute("aria-label", "Restart service Web server");
+    await expect(power.locator("svg polygon")).toHaveCount(0);
+  });
 }
 
 test("a blocked restart stays in feedback and history without marking the button", async ({ page }, testInfo) => {
