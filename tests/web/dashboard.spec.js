@@ -495,9 +495,10 @@ test("dashboard passes axe and fits the viewport", async ({ page }) => {
 
 // Multi-host operators keep many tabs open; the document title must name the
 // short host from GET /api/daemon (fixture here) so tabs stay distinguishable.
-// Attention signals prefix "(N) "; healthy hosts use "Sermo - <host>" alone.
+// Attention signals count groups; healthy hosts use "Sermo - <host>" alone.
 test("browser tab title includes the short hostname", async ({ page }) => {
-  await expect(page).toHaveTitle(/Sermo - fixture/);
+  await expect(page).toHaveTitle("(4 groups) Sermo - fixture");
+  await expect(page.locator("#attention .attn-head")).toHaveText("Needs attention 4 groups");
 });
 
 test("console and SSH logins read apart on the Sessions tile, or beside the host without one", async ({ page }) => {
@@ -513,6 +514,44 @@ test("console and SSH logins read apart on the Sessions tile, or beside the host
   await page.locator("#refresh-now").click();
   await expect(tile).toHaveCount(0);
   await expect(page.locator("#host-status .stat-sessions")).toHaveText(logins);
+});
+
+test("attention counts name groups even when only one remains", async ({ page }) => {
+  await page.route("**/api/watches", (route) => route.fulfill({ json: [] }));
+  await page.route("**/api/applications", (route) => route.fulfill({ json: [] }));
+  await page.route("**/api/dashboard**", (route) => route.fulfill({ json: {
+    ...dashboard, activity: { errors: 1, error_targets: ["web"] },
+  } }));
+  await page.reload();
+  await expect(page.locator("#attention .attn-head")).toHaveText("Needs attention 1 group");
+  await expect(page).toHaveTitle("(1 group) Sermo - fixture");
+  await page.route("**/api/dashboard**", (route) => route.fulfill({ json: dashboard }));
+  await page.reload();
+  await expect(page.locator("#attention .attn-head")).toHaveCount(0);
+  await expect(page).toHaveTitle("Sermo - fixture");
+});
+
+test("session filters count rows and distinguish source notices from sessions", async ({ page }) => {
+  await expect(page.locator("#sessions-count")).toHaveText("7 · 2 notices");
+  await expect(page.locator('#overview [data-open-view="sessions"] .t-value')).toHaveText("7");
+  await page.locator('#session-filters [data-filter="ssh"]').click();
+  await expect(page.locator("#session-rows tr")).toHaveCount(2);
+  await expect(page.locator("#session-count")).toHaveText("showing 2 of 9 rows");
+  await page.locator("#session-search").fill("pts/0");
+  await expect(page.locator("#session-count")).toHaveText("showing 1 of 9 rows");
+  await expect(page.locator("#sessions-count")).toHaveText("7 · 2 notices");
+  await page.locator("#session-search").fill("");
+
+  await page.route("**/api/dashboard**", (route) => route.fulfill({ json: {
+    ...dashboard, sessions: { sources: [{ kind: "database", state: "unavailable", message: "database unreachable" }] },
+  } }));
+  await page.reload();
+  await expect(page.locator("#sessions-count")).toHaveText("0 · 1 notice");
+  await expect(page.locator('#session-filters [data-filter="all"]')).toHaveText("all 1 row");
+  await page.locator('#session-filters [data-filter="database"]').click();
+  await expect(page.locator("#session-count")).toHaveText("showing 1 of 1 row");
+  await expect(page.locator("#db-queries-count")).toHaveText("0 · 1 notice");
+  await expect(page.locator("#db-query-rows")).toContainText("database unreachable");
 });
 
 test("overview host tiles share percentage, capacity and severity rendering", async ({ page }) => {
@@ -2510,9 +2549,10 @@ test("empty tmux sources use a red state and close the server through the API", 
     await route.fulfill({ json: { ok: true, message: "close empty terminal session source ok" } });
   });
 
-  await expect(page.locator('#session-filters [data-filter="all"]')).toContainText("all 9");
-  await expect(page.locator('#session-filters [data-filter="ssh"]')).toContainText("ssh 1");
-  await expect(page.locator('#session-filters [data-filter="tmux"]')).toContainText("tmux 2");
+  await expect(page.locator("#sessions-count")).toHaveText("7 · 2 notices");
+  await expect(page.locator('#session-filters [data-filter="all"]')).toHaveText("all 9 rows");
+  await expect(page.locator('#session-filters [data-filter="ssh"]')).toHaveText("ssh 2");
+  await expect(page.locator('#session-filters [data-filter="tmux"]')).toHaveText("tmux 3");
   await expect(page.locator('#session-filters [data-filter="screen"]')).toContainText("screen 1");
   await expect(page.locator("#session-rows")).toContainText("No active sessions");
   const emptySource = page.locator("#session-rows tr", { hasText: "tmux-empty" });

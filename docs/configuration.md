@@ -976,7 +976,9 @@ to its section and opens it when it was collapsed. They always fill whole rows:
 one on a desktop, two on a tablet or a phone. A tile counts the targets in its
 section and takes the colour of the worst state among them. Each line of
 **Needs attention** goes further than a tile: it opens the panel that holds the
-problem with the matching filter applied. The
+problem with the matching filter applied. Its counter and the browser tab prefix
+count **groups** of notices; each line gives the number of affected items in
+that group. One item can appear in more than one group. The
 menu holds auto-refresh, browser notifications, keyboard shortcuts and, for
 administrators, **reload config**, **compact state** and **panic mode**.
 
@@ -1069,6 +1071,14 @@ when it builds the listener and API endpoints.
   the UI binds to **loopback (`127.0.0.1`) by default** and is fully open.
 
 ### Sessions panel
+
+The heading counts verified sessions and sampled database statements, followed
+separately by notices about unavailable sources, attribution issues or empty
+terminal servers. For example, **Sessions 7 · 2 notices** has **9 rows**. The
+type filters count rows, including notices, so their counts add up to **all**;
+search results also state how many rows they show. The Sessions overview tile
+counts sessions and statements only. Database queries use the same distinction
+between statements and source notices in their subheading.
 
 The dashboard's **Sessions** panel lists, for the whole host:
 

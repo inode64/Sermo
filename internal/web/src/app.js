@@ -1606,6 +1606,7 @@ const listPanels = {
   // (terminal sessions and database statements) are its own.
   sessions: listPanel({
     key: "sessions", id: "session", label: "sessions", statusLabel: "type",
+    countUnit: "row",
     states: sessionTypeFilterStates,
     render: renderSessions,
   }),
@@ -1773,14 +1774,19 @@ function renderPanelHead(p) {
     : tpl`<th scope="col" class="${c.key}" data-col="${c.key}">${c.hideLabel ? tpl`<span class="visually-hidden">${c.label}</span>` : c.label}</th>`))}</tr>`, p.dom.head);
 }
 
+function countLabel(count, unit) {
+  return `${count} ${unit}${count === 1 ? "" : "s"}`;
+}
+
 // filterChips renders a status filter: "all" plus one chip per state with its
 // count. A state nothing is in stays out of the row, unless it is the selected
 // one — an emptied selection must remain visible to be switched away from.
-function filterChips(states, counts, active) {
+function filterChips(states, counts, active, countUnit) {
   return [filterAll, ...states].map((state) => {
     const pressed = state === active;
     const n = counts[state] || 0;
-    return tpl`<button type="button" data-filter="${state}" class="${pressed ? "f-active" : ""}" aria-pressed="${pressed ? domBoolTrue : domBoolFalse}" ?hidden=${!n && state !== filterAll && !pressed}>${state.replace(/_/g, " ")} <span class="muted">${n}</span></button>`;
+    const count = state === filterAll && countUnit ? countLabel(n, countUnit) : n;
+    return tpl`<button type="button" data-filter="${state}" class="${pressed ? "f-active" : ""}" aria-pressed="${pressed ? domBoolTrue : domBoolFalse}" ?hidden=${!n && state !== filterAll && !pressed}>${state.replace(/_/g, " ")} <span class="muted">${count}</span></button>`;
   });
 }
 
@@ -1814,9 +1820,9 @@ function renderPanelToolbar(p, view) {
   litRender(tpl`
     <label for="${p.id}-search" class="visually-hidden">Filter ${p.label}</label>
     <input id="${p.id}-search" type="search" data-panel-search placeholder="Filter ${p.label}…" aria-describedby="search-shortcut-hint">
-    <span id="${p.id}-filters" class="filters" role="group" aria-label="Filter ${p.label} by ${p.statusLabel || "state"}">${filterChips(p.states, view.counts, p.status)}</span>
+    <span id="${p.id}-filters" class="filters" role="group" aria-label="Filter ${p.label} by ${p.statusLabel || "state"}">${filterChips(p.states, view.counts, p.status, p.countUnit)}</span>
     <span class="panel-tools">
-      <span id="${p.id}-count" class="muted">${panelFilterActive(p) ? `showing ${view.shown} of ${view.total}` : ""}</span>
+      <span id="${p.id}-count" class="muted">${panelFilterActive(p) ? `showing ${view.shown} of ${p.countUnit ? countLabel(view.total, p.countUnit) : view.total}` : ""}</span>
       ${panelGroupControls(p, view)}${refresh}
     </span>`, controls);
   const search = controls.querySelector("[data-panel-search]");
@@ -2398,7 +2404,7 @@ function shortHostName(name) {
 
 // setDocumentTitle names the tab for multi-host operators:
 //   Sermo - web01
-//   (3) Sermo - web01
+//   (3 groups) Sermo - web01
 //   Sermo - web01 · starting
 // Until healthIconReady, leave the bootstrap <title> alone.
 function setDocumentTitle({ attentionCount = 0, starting = false } = {}) {
@@ -2409,7 +2415,7 @@ function setDocumentTitle({ attentionCount = 0, starting = false } = {}) {
     document.title = host ? `${base} · starting` : "Sermo · starting";
     return;
   }
-  document.title = attentionCount > 0 ? `(${attentionCount}) ${base}` : base;
+  document.title = attentionCount > 0 ? `(${countLabel(attentionCount, "group")}) ${base}` : base;
 }
 
 function rememberDashboardHostname(hostname) {
@@ -2552,7 +2558,7 @@ function renderAttention() {
   const critical = items.filter((it) => it.level === healthStatusCritical);
   const ordered = [...critical, ...items.filter((it) => it.level !== healthStatusCritical)];
   box.classList.toggle("attn-warning", items.length > 0 && !critical.length);
-  const html = items.length ? `<span class="attn-head">Needs attention <span class="muted">${items.length}</span></span>
+  const html = items.length ? `<span class="attn-head">Needs attention <span class="muted">${countLabel(items.length, "group")}</span></span>
     <span class="attn-list">${ordered.map((it) => `
       <button type="button" class="attn-item ${esc(it.level)}" data-panel-target="${esc(it.target)}" aria-label="${esc(attnAriaLabel(it))}">
         <span class="attn-dot" aria-hidden="true"></span>
@@ -4635,7 +4641,11 @@ function dbQueryRow(row) {
   </tr>${open ? tpl`<tr class="exp-row db-query-expansion" id="${detailID}"><td colspan="11">${dbQueryDetail(row)}</td></tr>` : nothing}`;
 }
 
-function renderDBQueries(rows) {
+function sessionCountLabel(count, notices) {
+  return `${count}${notices ? ` · ${countLabel(notices, "notice")}` : ""}`;
+}
+
+function renderDBQueries(rows, totalRows) {
   const block = $("#db-query-block");
   const body = $("#db-query-rows");
   const hasSource = (latestSessionInventory.sources || []).some((source) => source.kind === sessionKindDatabase)
@@ -4643,7 +4653,8 @@ function renderDBQueries(rows) {
   const show = hasSource && (sessionPanel.status === filterAll || sessionPanel.status === sessionKindDatabase);
   if (block) block.hidden = !show;
   const count = $("#db-queries-count");
-  if (count) count.textContent = String((latestSessionInventory.database || []).length);
+  const statements = (latestSessionInventory.database || []).length;
+  if (count) count.textContent = sessionCountLabel(statements, totalRows - statements);
   if (body) {
     sortDBQueryRows(rows);
     const content = rows.length ? rows.map(dbQueryRow) : tpl`<tr><td colspan="11" class="muted">No statements match the filter.</td></tr>`;
@@ -4661,14 +4672,10 @@ function dbQueryRowMatches(row) {
   return sessionFieldsMatch([row.kind, row.service, row.user, row.database, row.client, row.id, row.state, row.search]);
 }
 
-function sessionFilterCounts(inventory, rows, dbRows) {
-  const sessions = [
-    ...(inventory.ssh || []).map(() => ({ kind: sessionKindSSH })),
-    ...(inventory.terminal || []),
-    ...(inventory.database || []).map(() => ({ kind: sessionKindDatabase })),
-  ];
-  const counts = stateCounts(sessions, (session) => session.multiplexer || session.kind, sessionTypeFilterStates);
-  counts[filterAll] = rows.length + dbRows.length;
+function sessionFilterCounts(rows, dbRows) {
+  const counts = stateCounts(rows, (row) => row.kind, sessionTypeFilterStates);
+  counts[sessionKindDatabase] = dbRows.length;
+  counts[filterAll] += dbRows.length;
   return counts;
 }
 
@@ -4753,7 +4760,7 @@ function renderSessions(inventory = latestSessionInventory) {
   const dbFiltered = dbRows.filter(dbQueryRowMatches);
   const dbShown = filter === filterAll || filter === sessionKindDatabase ? dbFiltered : [];
   renderPanelToolbar(sessionPanel, {
-    counts: sessionFilterCounts(latestSessionInventory, rows, dbRows),
+    counts: sessionFilterCounts(rows, dbRows),
     groups: new Map(), visibleGroups: [],
     shown: filtered.length + dbShown.length, total: rows.length + dbRows.length,
   });
@@ -4762,7 +4769,7 @@ function renderSessions(inventory = latestSessionInventory) {
   // filter, has nothing for the terminal table to say.
   const table = $("#sessions-section .sessions-table");
   if (table) table.hidden = filter === sessionKindDatabase || !sources.some((source) => source.kind !== sessionKindDatabase);
-  renderDBQueries(dbShown);
+  renderDBQueries(dbShown, dbRows.length);
   const body = $("#session-rows");
   if (body) {
     const content = filtered.length ? filtered.map((row) => tpl`<tr>
@@ -4775,7 +4782,7 @@ function renderSessions(inventory = latestSessionInventory) {
     litRender(content, body);
   }
   const count = sessionCount();
-  if (sessionPanel.dom.count) sessionPanel.dom.count.textContent = count ? String(count) : "";
+  if (sessionPanel.dom.count) sessionPanel.dom.count.textContent = sessionCountLabel(count, rows.length + dbRows.length - count);
   updateSortHeaders("sessions");
   refreshChrome();
 }
