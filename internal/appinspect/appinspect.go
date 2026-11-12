@@ -623,66 +623,12 @@ func runProbeCommand(ctx context.Context, runner execx.Runner, cmd probeCommand)
 func catalogPath(tree map[string]any, category string) string {
 	if category == config.CategoryLibrary {
 		if pf, ok := tree[config.SectionPreflight].(map[string]any); ok {
-			if p := preflightCheckPath(pf, checks.CheckTypeFile); p != "" {
+			if p := config.PreflightPath(pf, checks.CheckTypeFile); p != "" {
 				return p
 			}
 		}
 	}
-	return BinaryPath(tree)
-}
-
-// BinaryPath returns the resolved binary path of a daemon: its preflight
-// `binary` check path when present, otherwise the `binary` variable.
-func BinaryPath(tree map[string]any) string {
-	if pf, ok := tree[config.SectionPreflight].(map[string]any); ok {
-		if p := preflightCheckPath(pf, checks.CheckTypeBinary); p != "" {
-			return p
-		}
-		if p := firstNamespacedBinaryPath(pf); p != "" {
-			return p
-		}
-	}
-	if vars, ok := tree[config.SectionVariables].(map[string]any); ok {
-		if p := cfgval.AsString(vars[config.VariableKeyBinary]); p != "" {
-			return p
-		}
-	}
-	return config.DocumentBinary(tree)
-}
-
-func firstNamespacedBinaryPath(preflight map[string]any) string {
-	for _, prefix := range namespacedBinaryPrefixes(preflight) {
-		if p := preflightCheckPath(preflight, prefix+"-"+checks.CheckTypeBinary); p != "" {
-			return p
-		}
-	}
-	return ""
-}
-
-// preflightCheckPath returns the resolved path for a named preflight check.
-func preflightCheckPath(preflight map[string]any, name string) string {
-	entry, ok := preflight[name].(map[string]any)
-	if !ok {
-		return ""
-	}
-	return cfgval.AsString(entry[checks.CheckKeyPath])
-}
-
-func namespacedBinaryPrefixes(preflight map[string]any) []string {
-	prefixes := make([]string, 0, len(preflight))
-	for key, raw := range preflight {
-		prefix, ok := strings.CutSuffix(key, "-"+checks.CheckTypeBinary)
-		if !ok || prefix == "" {
-			continue
-		}
-		entry, ok := raw.(map[string]any)
-		if !ok || cfgval.AsString(entry[checks.CheckKeyType]) != checks.CheckTypeBinary || cfgval.AsString(entry[checks.CheckKeyPath]) == "" {
-			continue
-		}
-		prefixes = append(prefixes, prefix)
-	}
-	slices.Sort(prefixes)
-	return prefixes
+	return config.ServiceBinary(tree)
 }
 
 // probeCommand is a daemon's resolved app probe command and the expectations
@@ -741,7 +687,7 @@ func namespacedReservedCommandEntry(tree map[string]any, key string) map[string]
 	if !ok {
 		return nil
 	}
-	for _, prefix := range namespacedBinaryPrefixes(preflight) {
+	for _, prefix := range config.NamespacedBinaryPrefixes(preflight) {
 		entry, ok := preflight[prefix+"-"+key].(map[string]any)
 		if ok && len(cfgval.StringList(entry[checks.CheckKeyCommand])) > 0 {
 			return entry

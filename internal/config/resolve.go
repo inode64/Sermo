@@ -144,6 +144,9 @@ func (c *Config) resolveExpandedService(merged map[string]any, name string, inpu
 	errs = append(errs, expandFDs(expanded)...)
 	patternSets := analyzePatternSets(expanded)
 	errs = append(errs, c.expandServiceSugar(expanded)...)
+	// After the linked apps and embedded watches: both can contribute the
+	// binary, or a libraries check that names none.
+	errs = append(errs, expandLibrariesBinary(expanded)...)
 	return Resolved{Name: name, Tree: expanded, Apps: apps, PatternSets: patternSets}, errs
 }
 

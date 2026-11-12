@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 
-	"sermo/internal/appinspect"
 	"sermo/internal/cfgval"
 	"sermo/internal/checks"
 	"sermo/internal/config"
@@ -98,7 +97,7 @@ func inspectServiceLibraries(ctx context.Context, session *operationSession, res
 	if err != nil {
 		row.Errors = append(row.Errors, err.Error())
 	}
-	if binary := appinspect.BinaryPath(resolved.Tree); binary != "" {
+	if binary := config.ServiceBinary(resolved.Tree); binary != "" {
 		elf, elfErr := checks.InspectLibraries(ctx, binary)
 		row.ELF = &elf
 		if errors.Is(elfErr, checks.ErrLibraryScript) {
