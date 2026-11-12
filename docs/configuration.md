@@ -982,6 +982,14 @@ that group. One item can appear in more than one group. The
 menu holds auto-refresh, browser notifications, keyboard shortcuts and, for
 administrators, **reload config**, **compact state** and **panic mode**.
 
+In an expanded service, **Checks** and **Rules** are disclosures that open with
+a click, tap or keyboard. They start collapsed on phones and open on wider
+screens. A phone keeps the check name, state and diagnostic message visible
+when Checks is opened; Rules lays out each rule vertically with its type,
+action, condition, window, progress and state. Diagnostic messages and complete
+rule definitions remain available at every width. Refreshing an open service
+preserves its disclosure choices.
+
 When an active service declares exact `processes:` identity (`exe` plus `user`),
 `restart` first verifies that at least one live process still matches that
 identity. If the init backend says the unit is active but Sermo cannot match the

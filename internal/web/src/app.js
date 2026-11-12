@@ -5135,6 +5135,7 @@ function renderServiceDetail(d) {
   const checks = serviceCheckRows(d, connections);
   const locks = serviceLockDetail(d);
   const processes = serviceProcessDetail(d);
+  const diagnosticsOpen = !window.matchMedia("(max-width: 640px)").matches;
   const disabledNote = !d.enabled
     ? tpl`<p class="muted bad">This service is disabled in configuration (enabled: false). Edit its YAML file and reload the daemon to activate it.</p>`
     : nothing;
@@ -5144,22 +5145,22 @@ function renderServiceDetail(d) {
     ${serviceConnectionDetail(connections)}
     ${serviceGraphDetail(d)}
     ${processes.section}
-    <section data-detail-section="checks">
-    <h2>Checks</h2>
+    <details class="detail-section" data-detail-section="checks" ?open=${diagnosticsOpen}>
+    <summary><h2>Checks</h2></summary>
     <table class="detail-checks-table">
       <caption class="visually-hidden">Service checks</caption>
       <thead><tr><th scope="col">Check</th><th scope="col">Type</th><th scope="col">State</th><th scope="col">SLA</th><th scope="col">Message</th></tr></thead>
       <tbody>${checks}</tbody></table>
-    </section>
+    </details>
     <h2>Named locks</h2>
     <table class="detail-locks-table">
       <caption class="visually-hidden">Service named locks</caption>
       <thead><tr><th scope="col">Name</th><th scope="col">State</th><th scope="col">TTL</th><th scope="col">Owner</th><th scope="col">Created</th><th scope="col">Blocks</th><th scope="col">Reason</th><th scope="col"><span class="visually-hidden">Actions</span></th></tr></thead>
       <tbody>${locks.rows}</tbody></table>${locks.warnings}
-    <section data-detail-section="rules">
-    <h2>Rules</h2>
+    <details class="detail-section" data-detail-section="rules" ?open=${diagnosticsOpen}>
+    <summary><h2>Rules</h2></summary>
     ${renderRules(d.rules)}
-    </section>
+    </details>
     <h2>Preflight ${servicePreflightButton(d)}</h2>
     <div id="${detailDomId(d.name, "preflight")}" class="muted">not run yet</div>
     <h2>Recent events</h2>
@@ -8373,9 +8374,13 @@ function renderRules(rules) {
       : tpl`<span class="muted">${r.condition || ""}</span>`;
     const action = r.action ? r.action : mutedDash;
     return tpl`<tr>
-      <td>${r.name}</td><td class="muted">${r.type || ""}</td><td>${action}</td>
-      <td>${cond}</td><td class="muted">${r.window || ""}</td>
-      <td>${r.progress || ""}</td><td>${ruleState(r)}</td></tr>`;
+      <td>${r.name}</td>
+      <td class="muted"><span class="rule-field-label" aria-hidden="true">Type</span>${r.type || ""}</td>
+      <td><span class="rule-field-label" aria-hidden="true">Action</span>${action}</td>
+      <td><span class="rule-field-label" aria-hidden="true">Condition</span>${cond}</td>
+      <td class="muted"><span class="rule-field-label" aria-hidden="true">Window</span>${r.window || ""}</td>
+      <td><span class="rule-field-label" aria-hidden="true">Progress</span>${r.progress || ""}</td>
+      <td><span class="rule-field-label" aria-hidden="true">State</span>${ruleState(r)}</td></tr>`;
   });
   return tpl`<table class="detail-rules-table">
     <caption class="visually-hidden">Remediation rules</caption>

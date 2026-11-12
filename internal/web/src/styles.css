@@ -508,6 +508,9 @@
 
   /* ---- row expansions (service, watch and application detail) ---------------- */
   .service-detail h2 { margin: 1.15rem 0 .45rem; }
+  .detail-section > summary { cursor: pointer; margin: 1.15rem 0 .45rem; }
+  .detail-section > summary h2 { display: inline; margin: 0; }
+  .rule-field-label { display: none; }
   /* Whatever opens the expansion must not push it down: since the name heading was
      dropped as a repeat of the row, that is the General data grid — or the disabled
      note ahead of it, an unreset <p> that would otherwise contribute the browser's
@@ -828,10 +831,14 @@
        of 34vw still spilled past the expansion. The full command stays in the
        cell's title. */
     .detail-compact-table .truncate { max-width: 24vw; }
-    /* A phone reads a service's state and acts on it; the per-check and
-       per-rule tables are desk work and stay on wider viewports (the state
-       reason and the checks-failing count in the row still say what is wrong). */
-    .service-detail [data-detail-section="checks"], .service-detail [data-detail-section="rules"] { display: none; }
+    /* Keep the table headers available to assistive tech while each rule reads
+       vertically on a phone. The inline labels are visual copies only. */
+    .detail-rules-table thead { position: absolute; width: 1px; max-width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+    .detail-rules-table, .detail-rules-table tbody, .detail-rules-table tr { display: block; }
+    .detail-rules-table tbody tr { padding: .5rem 0; border-bottom: 1px solid var(--line); }
+    .detail-rules-table td { display: grid; grid-template-columns: 4.8rem minmax(0, 1fr); gap: .5rem; border: 0; padding: .2rem 0; }
+    .detail-rules-table td:first-child { display: block; font-weight: 650; }
+    .detail-rules-table .rule-field-label { display: block; color: var(--text-2); }
     /* The desktop expansion indents its content under the row's name; on a
        phone that indent is a fifth of the row, so it shrinks with the cell
        padding above and hands the width back to the expansion's own tables. */
