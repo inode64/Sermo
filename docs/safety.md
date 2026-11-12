@@ -744,6 +744,18 @@ Kill decisions depend on how process facts are read, so this is fixed:
   revalidated after opening the pidfd. The pathname alone is insufficient.
   This exception is limited to service residual cleanup. Host process watches
   lack service ownership evidence and continue to refuse deleted executables.
+- **Versioned executables behind a link**: some packages install one file per
+  release and point a stable name at it (`/usr/bin/rspamd -> rspamd-4.2.3`); an
+  upgrade repoints the link and deletes the previous file under the running
+  daemon. When a selector's `exe` is such a link, the deleted previous version
+  in the same directory (`rspamd-4.1.1`: the link's name plus a version) counts
+  as the service's replaced binary. That permits a backend stop and the
+  stale-binary report and grants no signal authority of its own:
+  `kill_only_if` stays exact, and the unit-cgroup membership proof never
+  depended on the path. A live process counts as the link's program only when the
+  link, read again, points to its executable — what a configuration reload
+  would resolve — so a daemon loaded before the upgrade still verifies the
+  new start. A selector that names the versioned file itself stays exact.
 - **External deleted executables require ownership evidence**: a process owned
   by another service or container scope is excluded. A process from an old login
   session can be a candidate when a strict named selector matches, cgroup

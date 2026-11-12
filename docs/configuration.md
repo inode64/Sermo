@@ -4105,6 +4105,14 @@ A process whose executable was replaced still resolves no exe, so it matches no
 `exe` selector and is never signalled — see [safety.md](safety.md). This check
 reports the condition; it does not relax that rule.
 
+A package that installs one versioned file per release behind a stable name
+(`/usr/bin/rspamd -> rspamd-4.2.3`) deletes the previous file on upgrade. When a
+selector's `exe` is that link, the daemon still running `rspamd-4.1.1` is
+reported as the service's replaced binary and the restart stops it through the
+init system; the new process verifies against the link's current target even
+if the configuration was loaded before the upgrade. Details in
+[safety.md](safety.md#process-identity-and-matching).
+
 ### `terminal_output` — blocked terminal output
 
 An opt-in, read-only check for a specific PTY wait cycle: a single-threaded

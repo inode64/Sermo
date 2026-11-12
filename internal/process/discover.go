@@ -864,7 +864,7 @@ func (d Discoverer) matches(sel *Selector, id Identity, resolve UserResolver) bo
 	}
 	if sel.Exe != "" {
 		// Fail-safe exe match: exact resolved /proc/<pid>/exe, never cmdline.
-		if !id.ExeOK || selectorExePath(sel) != id.Exe {
+		if !id.ExeOK || !selectorNamesExe(sel, id.Exe) {
 			return false
 		}
 	}
@@ -940,16 +940,18 @@ func selectorCmdRegexp(sel *Selector) *regexp.Regexp {
 }
 
 // matchesDeletedExe reports whether sel would have matched id if id's binary had
-// not been replaced on disk: the deleted path is exactly the selector's exe and
-// every other field matches. It authorizes nothing — matches() still returns
-// false for such a process. Cleanup needs additional kernel-file proof. This
-// exists only so a package upgrade that silently breaks discovery can be
-// reported instead of surfacing as an unexplained absence of processes.
+// not been replaced on disk: the deleted path is the selector's exe, or the
+// previous version of the versioned file its link points to, and every other
+// field matches. It authorizes nothing — matches() still returns false for
+// such a process. Cleanup needs additional kernel-file proof. This exists only
+// so a package upgrade that silently breaks discovery can be reported, and its
+// daemon stopped through the backend, instead of surfacing as an unexplained
+// absence of processes.
 func (d Discoverer) matchesDeletedExe(sel *Selector, id Identity, resolve UserResolver) bool {
 	if sel.Exe == "" || id.ExePrev == "" {
 		return false
 	}
-	if selectorExePath(sel) != id.ExePrev {
+	if !selectorNamedReplacedExe(sel, id.ExePrev) {
 		return false
 	}
 	return d.matchesNonExe(sel, id, resolve)

@@ -65,7 +65,11 @@ touches them.
 11. Deleted-executable evidence with the main selector's previous path and real
     user may permit a backend stop, but never validates a new start. Keep it
     separate from current exact identity; workers cannot substitute for an exact
-    main selector, and zombies cannot prove a process is running.
+    main selector, and zombies cannot prove a process is running. For an `exe`
+    that is a link to a versioned file, the previous path also covers the
+    deleted previous version beside it (`internal/process/versioned_exe.go`).
+    That naming evidence adds no signal authority (`kill_only_if` stays exact),
+    and a live match re-reads the link instead of guessing.
 12. Incomplete rediscovery stops signal escalation. Keep stop-command,
     auxiliary-stop and artifact warnings in the one audit result even if a
     subsequent phase fails or times out.
