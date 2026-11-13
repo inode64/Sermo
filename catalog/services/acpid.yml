@@ -2,6 +2,10 @@ name: acpid
 display_name: ACPI Daemon
 category: hardware
 service: acpid
+also_service:
+  systemd:
+    - unit: acpid.socket
+      optional: true
 apps:
   - acpid
 restart_on_change:
@@ -23,9 +27,15 @@ watches:
       type: service
       expect: active
   acpid:
+    # A systemd activation socket can stay active after the daemon's socket fails.
     check:
       type: acpid
       timeout: 3s
+      verify: true
+    for:
+      cycles: 2
+    then:
+      action: restart
   alert-if-memory-high:
     check:
       type: metric

@@ -1253,6 +1253,17 @@ when socket activation has already restarted the primary. Both options default
 to `false`; a string entry has those defaults. The networkd catalog uses this
 form to restore its `BindsTo` persistent-storage companion on systems providing it.
 
+The `acpid` profile includes `acpid.socket` as an optional companion: it stops
+before the daemon and starts before it, while hosts without that unit and OpenRC
+use the daemon alone. Its ACPI socket probe verifies operation health and requests
+a guarded restart after two consecutive failures, even when the service check
+reports `idle` because systemd still has an active activation socket. This covers
+a stale socket path that refuses connections; an active unit alone does not prove
+that clients can connect. The probe only connects and closes, without generating
+ACPI events. Automatic recovery respects the service's cooldown and monitoring
+pause, so an intentional `sermoctl stop acpid` stays stopped until monitoring is
+resumed or an operator starts it.
+
 ### `also_apply` — cascade to other services
 
 Where `also_service` acts on *init units of this service*, `also_apply` acts on
