@@ -4713,6 +4713,16 @@ after consecutive remediations) or once `max_actions` is reached in the window.
 progress; checks and alerts keep running. A manual action in that state warns
 and leaves the marker as it found it.
 
+A refused automatic operation (including failed preflight) retries that rule
+after `policy.cooldown`, without consuming `max_actions` or increasing backoff.
+Each attempt retains its audit result. An unchanged guard refusal is audited
+again after the same delay, even with `emission.events: every_cycle`; guards
+are still observed each cycle, so a changed reason is audited immediately and
+a cleared guard releases the action. A more severe incident still alerts while
+waiting. These per-rule refusal delays end with the incident or a daemon
+reload/restart, which refreshes the configuration and refusal evidence. Manual
+operations remain immediately available through the normal safety checks.
+
 `backoff` grows the effective cooldown after each consecutive remediation:
 `initial` the first time, then multiplied by `factor` each subsequent time,
 capped at `max`, including when `factor` is very large. `factor` must be a finite

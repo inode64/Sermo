@@ -35,6 +35,11 @@ the types are `RuleType`, `ActionType` and `Action` in
   `scope: system` metric may drive `alert` only.
 - Guards run before remediation; a blocked action logs the guard's block
   message and records one event.
+- Automatic refusals wait the policy cooldown per rule, independently of the
+  executed-action budget and backoff. Guards remain observable: a new reason
+  is audited immediately and a cleared guard releases the action. Every actual
+  retry retains its result event; a refusal never suppresses severity escalation.
+  The episode-local delay resets on recovery or configuration reload.
 - Cooldown, `max_actions`, `max_actions_window` and backoff are the per-service
   `policy`, not per-rule. The daemon consults the policy before the operation
   engine; a rule may keep firing while the policy suppresses execution.

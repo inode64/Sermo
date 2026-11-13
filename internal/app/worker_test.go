@@ -1779,22 +1779,29 @@ func TestOperationCooldownRecording(t *testing.T) {
 	}
 }
 
-func TestBlockedOperationAllowsImmediateRetry(t *testing.T) {
+func TestBlockedOperationRetriesAfterCooldown(t *testing.T) {
 	h := &workerHarness{
 		cache:    failedCache("http"),
 		opResult: operation.Result{Status: operation.ResultBlocked, Message: "lock held"},
 	}
 	policy := rules.Policy{Cooldown: time.Minute}
 	w := h.worker(remediationTree("restart-if-down", "http", "restart"), policy, nil)
+	at := t0
+	w.Now = func() time.Time { return at }
 
 	w.RunCycle(context.Background())
 	h.opResult = operation.Result{Status: operation.ResultOK}
+	w.RunCycle(context.Background())
+	if len(h.ops) != 1 {
+		t.Fatalf("refused operation retried before cooldown: %v", h.ops)
+	}
+	at = at.Add(policy.Cooldown)
 	w.RunCycle(context.Background())
 
 	if len(h.ops) != 2 {
 		t.Fatalf("ops = %v, want two restart attempts", h.ops)
 	}
-	if !w.State.LastActionAt.Equal(t0) {
+	if !w.State.LastActionAt.Equal(at) {
 		t.Fatalf("only the successful attempt should record cooldown, LastActionAt=%v", w.State.LastActionAt)
 	}
 }

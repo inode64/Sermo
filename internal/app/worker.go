@@ -201,10 +201,9 @@ type Worker struct {
 	// rule name, plus the blocked action for a guard. Cleared when the condition
 	// evaluates cleanly again.
 	evalErrs map[string]string
-	// refusedRemediations names the rules whose last attempt the engine
-	// refused without starting a cooldown: their next attempt comes on the
-	// following cycle and must not announce the alert again.
-	refusedRemediations map[string]bool
+	// Refusals throttle attempts within an episode without spending the
+	// executed-action budget or growing its backoff.
+	refusedRemediations map[string]remediationRefusal
 	// libBaseline holds the acknowledged fingerprint of each watched path (a
 	// `changed:` condition target, typically a library .so) and the acknowledged
 	// version of each watched app across cycles. The operation engine shares it
@@ -923,10 +922,16 @@ func (w *Worker) runFiringRemediation(ctx context.Context, ev *rules.Evaluator, 
 		}
 		return false
 	}
-	// An attempt the engine refuses starts no cooldown, so the rule tries again
-	// on every cycle. Each attempt keeps its audit event; the alert belongs to
-	// the episode, and repeating it per refusal would bury every other event.
-	w.emitAlerts(ctx, ev, firing.Rule, firing.announce() || !w.refusedRemediations[firing.Name], firing.change, firing.severity)
+	refusal, refused := w.refusedRemediations[firing.Name]
+	if refused && refusal.guard == "" && now().Before(refusal.retryAt) {
+		if firing.escalated {
+			w.emitAlerts(ctx, ev, firing.Rule, true, firing.change, firing.severity)
+		}
+		return false
+	}
+	// A guard that has cleared releases its refusal immediately. Engine
+	// refusals wait for the next attempt to refresh preflight and ownership.
+	w.emitAlerts(ctx, ev, firing.Rule, firing.announce() || !refusal.attempted, firing.change, firing.severity)
 	w.executeRemediation(ctx, now, firing, action)
 	return true
 }
@@ -949,7 +954,11 @@ func (w *Worker) remediationSuppression(ctx context.Context, ev *rules.Evaluator
 	}
 	w.clearEvalError(guardKey)
 	if guard != "" {
-		return "guard: " + reason, false
+		if w.ruleDryRun(firing.Rule) {
+			return "guard: " + reason, false
+		}
+		w.refuseGuard(ctx, ev, firing, action, guard, reason, now())
+		return "", true
 	}
 	if ok, reason := w.Policy.Allow(w.State, now()); !ok {
 		return reason, false
@@ -980,10 +989,7 @@ func (w *Worker) executeRemediation(ctx context.Context, now func() time.Time, f
 		w.State.Record(now(), w.Policy)
 		delete(w.refusedRemediations, firing.Name)
 	} else {
-		if w.refusedRemediations == nil {
-			w.refusedRemediations = map[string]bool{}
-		}
-		w.refusedRemediations[firing.Name] = true
+		w.recordRefusal(firing.Name, "", result.Message, now())
 	}
 	if result.OK() {
 		w.acknowledgeOperation(firing.Rule, rules.ActionType(action), result.Relaunched)
@@ -1027,6 +1033,9 @@ func (w *Worker) firingRemediationRules(ctx context.Context, ev *rules.Evaluator
 			continue
 		}
 		evaluation := w.fires(ctx, ev, *rule, at, evals)
+		if evaluation.recovered && !w.ruleDryRun(*rule) {
+			delete(w.refusedRemediations, rule.Name)
+		}
 		if evaluation.firing {
 			firing = append(firing, firingRule{Rule: *rule, holds: evaluation.holds, advisory: evaluation.advisory, rising: evaluation.rising, escalated: evaluation.escalated, severity: evaluation.severity, change: evaluation.change})
 		} else if evaluation.recovered {
