@@ -182,8 +182,10 @@ protection below. See [CLI conditional operations](cli.md#exit-codes).
    unchanged active daemon is insufficient evidence. Auxiliary units are still
    started again; only the primary start is skipped. The same proof is required
    if reactivation occurs after residual discovery, immediately before init
-   reconciliation; Sermo leaves the new generation running without resetting
-   its init state. A new backend generation still starting gets up to five
+   reconciliation or during its backend queries. A positively observed
+   `activating` state gets up to five PID observations, one second apart;
+   arbitrary reset errors still fail. Sermo leaves the new generation running
+   without another reset. A new backend generation still starting gets up to five
    readiness observations, one second apart, within the operation deadline;
    exhausting that window or failing identity verification leaves it untouched
    and reports failure. Reactivation is checked on every residual rediscovery,

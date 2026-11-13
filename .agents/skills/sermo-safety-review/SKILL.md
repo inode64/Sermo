@@ -61,7 +61,9 @@ touches them.
     A newly observed backend generation still starting gets the bounded
     readiness window before classification; uncertainty never authorizes a
     signal to that replacement. Recheck reactivation on every rediscovery,
-    including after SIGTERM, not only before residual cleanup begins.
+    including after SIGTERM and during init reconciliation. A positive activating
+    observation may wait for a new PID; a reset permission or query error cannot
+    be recovered merely because the service later looks active.
 11. Deleted-executable evidence with the main selector's previous path and real
     user may permit a backend stop, but never validates a new start. Keep it
     separate from current exact identity; workers cannot substitute for an exact

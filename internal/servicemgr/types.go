@@ -91,6 +91,7 @@ const (
 	systemdScopeSuffix     = ".scope"
 	systemdDeviceSuffix    = ".device"
 	systemdStateRunning    = "running"
+	systemdStateActivating = "activating"
 	systemdStateDegraded   = "degraded"
 	// systemdLoadStateNotFound is what `systemctl show -p LoadState` reports for
 	// a unit systemd cannot find. `is-active` collapses that case into

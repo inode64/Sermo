@@ -208,6 +208,9 @@ func (e Engine) resetStopped(ctx context.Context, requireAbsence bool, previous 
 	if err != nil {
 		return fmt.Errorf("verify reconciled init state: %w", err)
 	}
+	if e.Backend == string(servicemgr.BackendSystemd) && status.Status == servicemgr.StatusActive {
+		return fmt.Errorf("init state after reconciliation is active: %w", errProcessesAppeared)
+	}
 	if status.Status != servicemgr.StatusInactive {
 		return fmt.Errorf("init state after reconciliation is %s, expected inactive", status.Status)
 	}
@@ -335,19 +338,14 @@ func (e Engine) stopService(ctx context.Context, result *Result) (stopped, react
 		return false, false
 	}
 	if err := e.resetStopped(ctx, stopErr != nil, before.Processes...); err != nil {
-		// D-Bus can reactivate the unit after residual discovery proved absence.
-		// Reuse the generation proof before skipping reconciliation and start.
-		if errors.Is(err, errProcessesAppeared) {
-			after, observeErr := e.observeProcesses(ctx, before.Processes...)
-			if observeErr != nil {
-				err = errors.Join(err, observeErr)
-			} else {
-				accepted, activationErr := e.systemdReactivated(ctx, result.Action, before, nonDelegatedResiduals(after.Processes))
-				if activationErr == nil && accepted {
-					return true, true
-				}
-				err = errors.Join(err, activationErr)
+		// Activation can race both absence discovery and the backend reset query.
+		// Only a positive activation observation permits another generation proof.
+		if errors.Is(err, errProcessesAppeared) || errors.Is(err, servicemgr.ErrUnitActivating) {
+			accepted, activationErr := e.lateSystemdReactivation(ctx, result.Action, before)
+			if activationErr == nil && accepted {
+				return true, true
 			}
+			err = errors.Join(err, activationErr)
 		}
 		result.Status, result.Message = ResultFailed, err.Error()
 		return false, false
@@ -475,6 +473,31 @@ func (e Engine) waitGracefulStop(ctx context.Context, before process.Observation
 		return fmt.Errorf("wait for graceful stop: %w", err)
 	}
 	return nil
+}
+
+// Activating can precede the new PID's appearance. Wait only for that evidence;
+// readiness and generation validation remain owned by systemdReactivated.
+func (e Engine) lateSystemdReactivation(ctx context.Context, action string, before process.Observation) (bool, error) {
+	if action != actionRestart || e.Backend != string(servicemgr.BackendSystemd) {
+		return false, nil
+	}
+	for attempt := range postflightMaxAttempts {
+		after, err := e.observeProcesses(ctx, before.Processes...)
+		if err != nil {
+			return false, err
+		}
+		residuals := nonDelegatedResiduals(after.Processes)
+		if len(residuals) > 0 {
+			return e.systemdReactivated(ctx, action, before, residuals)
+		}
+		if attempt+1 == postflightMaxAttempts {
+			break
+		}
+		if err := process.Wait(ctx, e.Sleep, postflightRetryInterval); err != nil {
+			return false, fmt.Errorf("wait for reactivated systemd process: %w", err)
+		}
+	}
+	return false, errors.New("no systemd replacement appeared after stop")
 }
 
 // systemdReactivated accepts only a verified new generation of this same unit.

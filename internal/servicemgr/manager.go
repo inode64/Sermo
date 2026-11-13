@@ -18,6 +18,10 @@ import (
 // transport, permission or server error must never authorize creating one.
 var ErrNotFound = errors.New("service target does not exist")
 
+// ErrUnitActivating identifies a positive activating observation during reset.
+// It carries no process identity proof and never authorizes success by itself.
+var ErrUnitActivating = errors.New("unit is activating")
+
 // cgroupRoot is the unified cgroup v2 mount point.
 const (
 	cgroupRoot               = "/sys/fs/cgroup"
@@ -302,7 +306,11 @@ func (m systemdManager) ResetState(ctx context.Context, service string) error {
 	if err != nil || result.ExitCode != 0 {
 		return fmt.Errorf("query state before resetting %s: %s", unit, execx.OperatorFailure(err, result, defaultDetectTimeout))
 	}
-	status := systemdStatus(strings.TrimSpace(result.Stdout))
+	state := strings.TrimSpace(result.Stdout)
+	if state == systemdStateActivating {
+		return fmt.Errorf("cannot reset %s: %w", unit, ErrUnitActivating)
+	}
+	status := systemdStatus(state)
 	if status == StatusUnknown {
 		return fmt.Errorf("cannot reset %s with indeterminate active state %q", unit, strings.TrimSpace(result.Stdout))
 	}

@@ -19,8 +19,14 @@ func TestCatalogReactivationIdentity(t *testing.T) {
 		{"systemd-logind", "systemd-logind", "root"},
 		{"systemd-machined", "systemd-machined", "root"},
 		{"bluetooth", "bluetoothd", "root"},
+		{"virtqemud", "virtqemud", "root"},
 	} {
-		for _, user := range []string{service.user, "custom-daemon"} {
+		users := []string{service.user}
+		// virtqemud pins root; the other profiles expose a user variable.
+		if service.name != "virtqemud" {
+			users = append(users, "custom-daemon")
+		}
+		for _, user := range users {
 			t.Run(service.name+"/"+user, func(t *testing.T) {
 				t.Parallel()
 				body := "name: fixture\nuses: " + service.name + "\n"
