@@ -1235,6 +1235,24 @@ guards, locks and preflight wrap the whole operation. Listing the primary unit i
 `also_service` is rejected, and so is an `openrc` entry that is not a single
 init script name.
 
+An entry can be a mapping when a companion is optional or depends on the primary:
+
+```yaml
+also_service:
+  systemd:
+    - unit: systemd-networkd-persistent-storage.service
+      optional: true
+      start_after_primary: true
+```
+
+`optional: true` skips only a unit confirmed absent by the init backend. A failed
+presence query or a present unit that cannot start still fails the start phase;
+stop failures remain warnings. `start_after_primary: true` starts the companion
+after the primary and stops it before the primary. It also restores the companion
+when socket activation has already restarted the primary. Both options default
+to `false`; a string entry has those defaults. The networkd catalog uses this
+form to restore its `BindsTo` persistent-storage companion on systems providing it.
+
 ### `also_apply` — cascade to other services
 
 Where `also_service` acts on *init units of this service*, `also_apply` acts on

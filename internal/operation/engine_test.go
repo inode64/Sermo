@@ -914,7 +914,7 @@ func TestRestartAcceptsSystemdBackendReactivation(t *testing.T) {
 
 	h.mgr.stopLeavesActive = true
 	engine := h.engine()
-	engine.Lifecycle.AuxiliaryUnits = []string{"mysqld.socket"}
+	engine.Lifecycle.AuxiliaryUnits = []config.AuxiliaryUnit{{Unit: "mysqld.socket"}}
 	observations := 0
 	engine.ObserveProcesses = func() (process.Observation, error) {
 		observations++
@@ -2182,7 +2182,9 @@ func assertAlsoServiceWrapOrder(t *testing.T, alsoUnits, want []string) {
 	t.Helper()
 	h := defaultHarness()
 	e := h.engine()
-	e.Lifecycle.AuxiliaryUnits = alsoUnits
+	for _, unit := range alsoUnits {
+		e.Lifecycle.AuxiliaryUnits = append(e.Lifecycle.AuxiliaryUnits, config.AuxiliaryUnit{Unit: unit})
+	}
 	if res := e.Do(context.Background(), actionRestart); res.Status != ResultOK {
 		t.Fatalf("status = %q (%s)", res.Status, res.Message)
 	}
@@ -2225,7 +2227,7 @@ func TestAlsoServiceStartStrictAborts(t *testing.T) {
 	h := defaultHarness()
 	h.mgr.errOn = map[string]error{"start docker.socket": errors.New("socket down")}
 	e := h.engine()
-	e.Lifecycle.AuxiliaryUnits = []string{"docker.socket"}
+	e.Lifecycle.AuxiliaryUnits = []config.AuxiliaryUnit{{Unit: "docker.socket"}}
 	res := e.Do(context.Background(), actionRestart)
 	if res.Status != ResultFailed {
 		t.Fatalf("a failing also_service start must fail the op, got %q", res.Status)
@@ -2239,7 +2241,7 @@ func TestAlsoServiceStopBestEffort(t *testing.T) {
 	h := defaultHarness()
 	h.mgr.errOn = map[string]error{"stop docker.socket": errors.New("socket stuck")}
 	e := h.engine()
-	e.Lifecycle.AuxiliaryUnits = []string{"docker.socket"}
+	e.Lifecycle.AuxiliaryUnits = []config.AuxiliaryUnit{{Unit: "docker.socket"}}
 	res := e.Do(context.Background(), actionRestart)
 	if res.Status != ResultOK {
 		t.Fatalf("a failing also_service stop must not fail the op, got %q (%s)", res.Status, res.Message)

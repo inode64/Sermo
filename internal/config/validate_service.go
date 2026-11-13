@@ -464,9 +464,12 @@ func validateAlsoService(tree map[string]any, add addFunc) {
 			add("also_service key %q is not one of %s", k, initBackendSummary)
 			continue
 		}
-		units := cfgval.StringList(m[k])
-		if !cfgval.IsNonEmptyStringArray(m[k]) {
+		entries, ok := m[k].([]any)
+		if !ok || len(entries) == 0 {
 			add("%s must be a non-empty list", alsoServiceBackendPath(k))
+		}
+		for _, entry := range entries {
+			validateAuxiliaryEntry(alsoServiceBackendPath(k), entry, add)
 		}
 		primary := map[string]bool{}
 		if svc != nil {
@@ -474,7 +477,8 @@ func validateAlsoService(tree map[string]any, add addFunc) {
 				primary[u] = true
 			}
 		}
-		for _, u := range units {
+		for _, auxiliary := range AdditionalUnits(tree, k) {
+			u := auxiliary.Unit
 			if strings.TrimSpace(u) == "" {
 				add("%s contains an empty unit", alsoServiceBackendPath(k))
 			} else if k == backendOpenRC {
@@ -483,6 +487,32 @@ func validateAlsoService(tree map[string]any, add addFunc) {
 			if primary[u] {
 				add("%s lists %q, which is the primary service unit", alsoServiceBackendPath(k), u)
 			}
+		}
+	}
+}
+
+func validateAuxiliaryEntry(path string, entry any, add addFunc) {
+	if _, ok := entry.(string); ok {
+		return
+	}
+	fields, ok := entry.(map[string]any)
+	if !ok {
+		add("%s must be a non-empty list of units or unit mappings", path)
+		return
+	}
+	if unit, ok := fields[AuxiliaryKeyUnit].(string); !ok || strings.TrimSpace(unit) == "" {
+		add("%s.unit must be a non-empty string", path)
+	}
+	for _, key := range slices.Sorted(maps.Keys(fields)) {
+		value := fields[key]
+		switch key {
+		case AuxiliaryKeyUnit:
+		case AuxiliaryKeyOptional, AuxiliaryKeyStartAfterPrimary:
+			if _, ok := value.(bool); !ok {
+				add(validationBooleanFormat, path+"."+key)
+			}
+		default:
+			add("%s has unknown key %q", path, key)
 		}
 	}
 }

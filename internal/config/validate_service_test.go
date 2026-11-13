@@ -1133,3 +1133,17 @@ stop_policy:
 `)
 	mustHave(t, issues, "refuses to recursively delete")
 }
+
+func TestNetworkdAuxiliaryMappingValidation(t *testing.T) {
+	for _, tc := range []struct{ entry, want string }{
+		{`{optional: true}`, "unit must be a non-empty string"},
+		{`{unit: s, optional: true}`, "primary service unit"},
+		{`{unit: companion, optional: yes}`, "optional must be a boolean"},
+		{`{unit: companion, start_after_primary: yes}`, "start_after_primary must be a boolean"},
+		{`{unit: companion, unknown: true}`, "unknown key"},
+	} {
+		t.Run(tc.want, func(t *testing.T) {
+			mustHave(t, validateService(t, "name: s\nservice: {systemd: [s]}\nalso_service: {systemd: ["+tc.entry+"]}\n"), tc.want)
+		})
+	}
+}

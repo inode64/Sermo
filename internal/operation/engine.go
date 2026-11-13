@@ -809,18 +809,10 @@ func (e Engine) runPostflight(ctx context.Context, p plan, result *Result) bool 
 }
 
 func (e Engine) startService(ctx context.Context, result *Result, primaryActive bool) bool {
-	for _, unit := range e.Lifecycle.AuxiliaryUnits {
-		if err := ctx.Err(); err != nil {
-			return failPhase(ctx, result, timeoutDuring(actionStart), "start: ", err)
-		}
-		if err := e.Manager.Start(ctx, unit); err != nil {
-			return failPhase(ctx, result, "operation timed out starting also_service "+unit, "start "+unit+": ", err)
-		}
+	if !e.startAuxiliaryUnits(ctx, result, false) {
+		return false
 	}
-	if primaryActive {
-		return true
-	}
-	return e.runBackendAction(ctx, result, actionStart, func(ctx context.Context) error {
+	if !primaryActive && !e.runBackendAction(ctx, result, actionStart, func(ctx context.Context) error {
 		if result.CreatedContainer != "" {
 			creator, ok := e.Manager.(containerCreator)
 			if !ok {
@@ -829,7 +821,10 @@ func (e Engine) startService(ctx context.Context, result *Result, primaryActive 
 			return creator.StartCreated(ctx, result.CreatedContainer)
 		}
 		return e.Manager.Start(ctx, e.Unit)
-	})
+	}) {
+		return false
+	}
+	return e.startAuxiliaryUnits(ctx, result, true)
 }
 
 func (e Engine) checkNamedLocks(result *Result) bool {

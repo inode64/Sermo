@@ -35,7 +35,7 @@ func TestResolvedLifecycleDrivesInitBackendMatrix(t *testing.T) {
 			if engine.Lifecycle.ProcessMode != config.ServiceProcessNone {
 				t.Fatalf("process mode = %q, want none", engine.Lifecycle.ProcessMode)
 			}
-			if !reflect.DeepEqual(engine.Lifecycle.AuxiliaryUnits, []string{tt.auxiliary}) {
+			if !reflect.DeepEqual(engine.Lifecycle.AuxiliaryUnits, []config.AuxiliaryUnit{{Unit: tt.auxiliary}}) {
 				t.Fatalf("auxiliary units = %v, want [%s]", engine.Lifecycle.AuxiliaryUnits, tt.auxiliary)
 			}
 

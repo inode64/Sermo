@@ -397,12 +397,21 @@ func (e Engine) stopPrimary(ctx context.Context) (time.Duration, error) {
 }
 
 // Activation units go down before their primary so traffic cannot revive it
-// during stop. Companion services retain their existing teardown order after
-// the primary. Both groups preserve reverse declaration order and warnings.
+// during stop. Dependents also stop first; other companions stop after the
+// primary. Both groups preserve reverse declaration order and warnings.
 func (e Engine) stopAuxiliaryUnits(ctx context.Context, result *Result, beforePrimary bool) {
-	for _, unit := range slices.Backward(e.Lifecycle.AuxiliaryUnits) {
-		activates := e.Backend == string(servicemgr.BackendSystemd) && servicemgr.IsSystemdActivationUnit(unit)
+	for _, auxiliary := range slices.Backward(e.Lifecycle.AuxiliaryUnits) {
+		unit := auxiliary.Unit
+		activates := auxiliary.StartAfterPrimary || e.Backend == string(servicemgr.BackendSystemd) && servicemgr.IsSystemdActivationUnit(unit)
 		if activates != beforePrimary || ctx.Err() != nil {
+			continue
+		}
+		present, err := e.auxiliaryPresent(ctx, auxiliary)
+		if err != nil {
+			result.Warnings = append(result.Warnings, fmt.Sprintf("also_service presence %s: %v", unit, err))
+			continue
+		}
+		if !present {
 			continue
 		}
 		if err := e.Manager.Stop(ctx, unit); err != nil {

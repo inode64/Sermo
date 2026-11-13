@@ -44,7 +44,7 @@ func TestResolveServiceLifecycle(t *testing.T) {
 			},
 			want: ServiceLifecycle{
 				ProcessMode:    ServiceProcessResident,
-				AuxiliaryUnits: []string{"demo.socket"},
+				AuxiliaryUnits: []AuxiliaryUnit{{Unit: "demo.socket"}},
 			},
 		},
 	}

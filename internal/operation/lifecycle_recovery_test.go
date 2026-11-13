@@ -163,7 +163,7 @@ func TestStopWarningsSurviveLaterFailure(t *testing.T) {
 			h.mgr.errOn = map[string]error{"stop mysqld.socket": errors.New("auxiliary stop error")}
 			h.mgr.startErr = errors.New("start failed")
 			e := h.engine()
-			e.Lifecycle.AuxiliaryUnits = []string{"mysqld.socket"}
+			e.Lifecycle.AuxiliaryUnits = []config.AuxiliaryUnit{{Unit: "mysqld.socket"}}
 			e.ObserveProcesses = func() (process.Observation, error) { return process.Observation{AbsenceKnown: true}, nil }
 			ctx, cancel := context.WithCancel(t.Context())
 			defer cancel()

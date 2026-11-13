@@ -12,9 +12,9 @@ func TestRealCatalogLifecycleBackendMatrix(t *testing.T) {
 		service        string
 		backend        string
 		processMode    ServiceProcessMode
-		auxiliaryUnits []string
+		auxiliaryUnits []AuxiliaryUnit
 	}{
-		{name: "docker systemd", service: "docker", backend: backendSystemd, processMode: ServiceProcessResident, auxiliaryUnits: []string{"docker.socket"}},
+		{name: "docker systemd", service: "docker", backend: backendSystemd, processMode: ServiceProcessResident, auxiliaryUnits: []AuxiliaryUnit{{Unit: "docker.socket"}}},
 		{name: "docker openrc", service: "docker", backend: backendOpenRC, processMode: ServiceProcessResident},
 		{name: "nfs systemd", service: "nfs", backend: backendSystemd, processMode: ServiceProcessNone},
 		{name: "nfs openrc", service: "nfs", backend: backendOpenRC, processMode: ServiceProcessNone},
@@ -31,5 +31,17 @@ func TestRealCatalogLifecycleBackendMatrix(t *testing.T) {
 				t.Fatalf("lifecycle = %+v, want process=%q auxiliary=%v", lifecycle, tt.processMode, tt.auxiliaryUnits)
 			}
 		})
+	}
+}
+
+func TestNetworkdOptionalDependent(t *testing.T) {
+	resolved := resolveCatalogService(t, "systemd-networkd", backendSystemd)
+	got := ResolveServiceLifecycle(resolved.Tree, backendSystemd).AuxiliaryUnits
+	want := []AuxiliaryUnit{{Unit: "systemd-networkd-persistent-storage.service", Optional: true, StartAfterPrimary: true}}
+	if !slices.Equal(got, want) {
+		t.Fatalf("auxiliary units = %+v, want %+v", got, want)
+	}
+	if got := AdditionalUnits(resolved.Tree, backendOpenRC); len(got) != 0 {
+		t.Fatalf("OpenRC units = %+v", got)
 	}
 }

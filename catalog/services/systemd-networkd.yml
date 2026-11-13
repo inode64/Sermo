@@ -7,6 +7,12 @@ description: systemd network configuration service.
 service:
   systemd:
     - systemd-networkd
+# BindsTo stops this companion with networkd; After requires restoring it last.
+also_service:
+  systemd:
+    - unit: systemd-networkd-persistent-storage.service
+      optional: true
+      start_after_primary: true
 apps:
   - systemd-networkd
 variables:

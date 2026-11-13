@@ -5,6 +5,7 @@ import (
 	"errors"
 	"testing"
 
+	"sermo/internal/config"
 	"sermo/internal/servicemgr"
 )
 
@@ -59,7 +60,7 @@ func TestLifecycleDisablesSocketBeforePrimary(t *testing.T) {
 			mgr := &activationManager{fakeManager: h.mgr, listening: true, active: true}
 			e := h.engine()
 			e.Manager = mgr
-			e.Lifecycle.AuxiliaryUnits = []string{"mysqld.socket"}
+			e.Lifecycle.AuxiliaryUnits = []config.AuxiliaryUnit{{Unit: "mysqld.socket"}}
 			var result Result
 			if action == actionStop {
 				result = e.Do(t.Context(), actionStop)
@@ -84,7 +85,7 @@ func TestAuxiliaryStopCancellationPreventsPrimaryStop(t *testing.T) {
 	mgr := &activationManager{fakeManager: h.mgr, listening: true, active: true, cancel: cancel}
 	e := h.engine()
 	e.Manager = mgr
-	e.Lifecycle.AuxiliaryUnits = []string{"mysqld.socket"}
+	e.Lifecycle.AuxiliaryUnits = []config.AuxiliaryUnit{{Unit: "mysqld.socket"}}
 	result := e.Do(ctx, actionRestart)
 	if result.OK() || h.mgr.did("stop mysqld") || h.mgr.did("start mysqld") || !mgr.active {
 		t.Fatalf("result=%+v active=%v calls=%v", result, mgr.active, mgr.calls)
@@ -98,7 +99,7 @@ func TestOpenRCAuxiliaryRetainsWrapOrder(t *testing.T) {
 	h := defaultHarness()
 	h.backend = string(servicemgr.BackendOpenRC)
 	e := h.engine()
-	e.Lifecycle.AuxiliaryUnits = []string{"helper.socket"}
+	e.Lifecycle.AuxiliaryUnits = []config.AuxiliaryUnit{{Unit: "helper.socket"}}
 	result := e.Do(t.Context(), actionStop)
 	if !result.OK() || len(h.mgr.calls) < 2 || h.mgr.calls[0] != "stop mysqld" || h.mgr.calls[1] != "stop helper.socket" {
 		t.Fatalf("result=%+v calls=%v", result, h.mgr.calls)

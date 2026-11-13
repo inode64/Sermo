@@ -9,7 +9,7 @@ func TestDockerCatalogKeepsSystemdSocketForExplicitStartStop(t *testing.T) {
 
 	resolved := resolveCatalogService(t, "docker", backendSystemd)
 	units := AdditionalUnits(resolved.Tree, backendSystemd)
-	if len(units) != 1 || units[0] != "docker.socket" {
+	if len(units) != 1 || units[0].Unit != "docker.socket" {
 		t.Fatalf("AdditionalUnits(docker) = %v, want [docker.socket]", units)
 	}
 }

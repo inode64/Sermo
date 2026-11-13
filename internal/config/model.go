@@ -851,15 +851,26 @@ func ServiceCandidates(tree map[string]any, backend, fallback string) (candidate
 // AdditionalUnits returns the auxiliary init units declared in `also_service`
 // for the active backend (e.g. `also_service: { systemd: [docker.socket] }`).
 // These are plain init units the operation acts on alongside the primary unit
-// (wrap order: up before the primary, down after) — distinct from `also_apply`,
+// with explicit optional/dependent semantics — distinct from `also_apply`,
 // which cascades to other Sermo services. Empty when absent or when the backend
 // has no list.
-func AdditionalUnits(tree map[string]any, backend string) []string {
+func AdditionalUnits(tree map[string]any, backend string) []AuxiliaryUnit {
 	m, ok := tree[ServiceKeyAlsoService].(map[string]any)
 	if !ok {
 		return nil
 	}
-	return cfgval.StringList(m[backend])
+	entries, _ := m[backend].([]any)
+	var units []AuxiliaryUnit
+	for _, entry := range entries {
+		switch fields := entry.(type) {
+		case string:
+			units = append(units, AuxiliaryUnit{Unit: fields})
+		case map[string]any:
+			units = append(units, AuxiliaryUnit{Unit: cfgval.String(fields[AuxiliaryKeyUnit]),
+				Optional: cfgval.Bool(fields[AuxiliaryKeyOptional]), StartAfterPrimary: cfgval.Bool(fields[AuxiliaryKeyStartAfterPrimary])})
+		}
+	}
+	return units
 }
 
 // CleanPath is one `clean_on_stop` entry: a path (or glob, when not recursive)

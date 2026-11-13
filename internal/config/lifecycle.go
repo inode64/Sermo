@@ -25,8 +25,22 @@ const (
 // PID remain outside this immutable configuration model.
 type ServiceLifecycle struct {
 	ProcessMode    ServiceProcessMode
-	AuxiliaryUnits []string
+	AuxiliaryUnits []AuxiliaryUnit
 }
+
+// AuxiliaryUnit describes an init unit controlled within its primary's operation.
+type AuxiliaryUnit struct {
+	Unit              string
+	Optional          bool
+	StartAfterPrimary bool
+}
+
+// Auxiliary unit entry keys. A string is shorthand for a required unit.
+const (
+	AuxiliaryKeyUnit              = "unit"
+	AuxiliaryKeyOptional          = "optional"
+	AuxiliaryKeyStartAfterPrimary = "start_after_primary"
+)
 
 // ResolveServiceLifecycle derives the operational lifecycle contract for a
 // resolved service tree and active backend; structural validation remains owned

@@ -24,7 +24,7 @@ func TestAdditionalUnitsAndValidation(t *testing.T) {
 		"service":      map[string]any{"systemd": []any{"docker"}, "openrc": []any{"docker"}},
 		"also_service": map[string]any{"systemd": []any{"docker.socket"}},
 	}
-	if got := AdditionalUnits(tree, "systemd"); len(got) != 1 || got[0] != "docker.socket" {
+	if got := AdditionalUnits(tree, "systemd"); len(got) != 1 || got[0].Unit != "docker.socket" {
 		t.Fatalf("AdditionalUnits systemd = %v, want [docker.socket]", got)
 	}
 	if got := AdditionalUnits(tree, "openrc"); len(got) != 0 {
