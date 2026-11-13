@@ -60,14 +60,24 @@ func (b *WebBackend) operateError(name, action, msg string) web.ActionResult {
 	return web.ActionResult{OK: false, Message: msg}
 }
 
-// Operate runs a start/stop/restart/reload/pause/resume/repair action on a service.
-func (b *WebBackend) Operate(ctx context.Context, name, action string, opts web.OperateOpts) web.ActionResult {
+// The caller owns the outcome event: cascades record their operation result
+// separately, while direct web requests report rejected actions immediately.
+func (b *WebBackend) operationEntry(name string) (*webEntry, string) {
 	e := b.entries[name]
 	if e == nil {
-		return b.operateError(name, action, unknownServiceMessage+name)
+		return nil, unknownServiceMessage + name
 	}
 	if e.disabled {
-		return b.operateError(name, action, serviceSubjectPrefix+name+" is disabled in configuration")
+		return nil, serviceSubjectPrefix + name + " is disabled in configuration"
+	}
+	return e, ""
+}
+
+// Operate runs a start/stop/restart/reload/pause/resume/repair action on a service.
+func (b *WebBackend) Operate(ctx context.Context, name, action string, opts web.OperateOpts) web.ActionResult {
+	e, message := b.operationEntry(name)
+	if e == nil {
+		return b.operateError(name, action, message)
 	}
 	if action == string(rules.ActionReload) {
 		canReload, err := e.reloadSupportSnapshot(ctx, b.webNow(), true)
@@ -174,12 +184,9 @@ func (e *webEntry) reloadSupportSnapshot(ctx context.Context, now time.Time, ref
 }
 
 func (b *WebBackend) operationResult(ctx context.Context, name, action string) operation.Result {
-	e := b.entries[name]
+	e, message := b.operationEntry(name)
 	if e == nil {
-		return operation.Result{Service: name, Action: action, Status: operation.ResultFailed, Message: unknownServiceMessage + name}
-	}
-	if e.disabled {
-		return operation.Result{Service: name, Action: action, Status: operation.ResultFailed, Message: serviceSubjectPrefix + name + " is disabled in configuration"}
+		return operation.Result{Service: name, Action: action, Status: operation.ResultFailed, Message: message}
 	}
 	r := e.engine.Do(ctx, action)
 	e.invalidateStatusCache()

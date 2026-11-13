@@ -100,6 +100,7 @@ var gradeSupports = map[string]gradeSupport{
 	CheckTypeUsers:              {kind: gradePredicates},
 	CheckTypeTCPConnections:     {kind: gradePredicates},
 	CheckTypeSSHIdle:            {kind: gradePredicates},
+	CheckTypeSMBSessions:        {kind: gradePredicates},
 	CheckTypeTerminalSessions:   {kind: gradePredicates},
 	CheckTypeProcessCount:       {kind: gradePredicates},
 	CheckTypeZombies:            {kind: gradePredicates},

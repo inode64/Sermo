@@ -238,12 +238,9 @@ func (b *WebBackend) appendSSHSessions(result *web.SessionInventory, seen map[ss
 // the login1 closer, which independently verifies the exact managed session.
 // Neither path trusts a displayed PID after it has been reused.
 func (b *WebBackend) CloseSSHSession(ctx context.Context, name string, session web.SSHSession) web.ActionResult {
-	e := b.entries[name]
+	e, message := b.operationEntry(name)
 	if e == nil {
-		return b.operateError(name, "close SSH session", unknownServiceMessage+name)
-	}
-	if e.disabled {
-		return b.operateError(name, "close SSH session", serviceSubjectPrefix+name+" is disabled in configuration")
+		return b.operateError(name, "close SSH session", message)
 	}
 	if len(e.sshSessionFilters) == 0 {
 		return b.operateError(name, "close SSH session", serviceSubjectPrefix+name+" "+sshSessionUnsupportedMessage)

@@ -11,6 +11,7 @@
 - [Ports](#ports)
   - [TCP connections (tcp_connections)](#tcp-connections-tcp_connections)
   - [SSH terminal idle (ssh_idle)](#ssh-terminal-idle-ssh_idle)
+  - [SMB sessions (smb_sessions)](#smb-sessions-smb_sessions)
   - [Terminal sessions (terminal_sessions)](#terminal-sessions-terminal_sessions)
   - [HTTP](#http)
   - [Cert](#cert)
@@ -60,6 +61,7 @@ Connection-protocol checks (MySQL, PostgreSQL, Redis, Docker, libvirt, etc.) are
 | `tcp`         | health | a TCP connection to `host:port` succeeds                           |
 | `tcp_connections` | condition | the number of local `ESTABLISHED` TCP sockets on `port` satisfies `count {op, value}` |
 | `ssh_idle`    | condition | interactive SSH terminals idle for `idle_for`, or protected terminal sessions, satisfy their configured count predicate |
+| `smb_sessions` | condition | Samba logical sessions satisfy a `count` predicate; groups workers for resource accounting and manual close |
 | `terminal_sessions` | condition | the configured user's `tmux` or `screen` sessions satisfy a `count`/`attached`/`detached` predicate |
 | `ports`       | health | a set of `host` ports satisfy an open/closed expectation (see Ports)|
 | `http`        | health | the response matches `expect_status` (and optional headers/body/JSON, see HTTP)|
@@ -961,7 +963,7 @@ Types that accept `levels:`, and the threshold keys a level restates:
 
 | Threshold form | Types | Level keys |
 |---|---|---|
-| level predicates | `storage`, `memory`, `load`, `pressure`, `fds`, `pids`, `conntrack`, `inotify`, `diskio`, `sensors`, `hdparm`, `users`, `tcp_connections`, `ssh_idle`, `terminal_sessions`, `process_count`, `edac`, `raid`, `smart` | the type's predicate fields |
+| level predicates | `storage`, `memory`, `load`, `pressure`, `fds`, `pids`, `conntrack`, `inotify`, `diskio`, `sensors`, `hdparm`, `users`, `tcp_connections`, `ssh_idle`, `terminal_sessions`, `smb_sessions`, `process_count`, `edac`, `raid`, `smart` | the type's predicate fields |
 | single count | `zombies`, `failed_units`, `stale_mounts`, `seated_sessions`, `users_without_linger`, `log` | `count` |
 | counter delta | `oom`, `coredump` | `delta` |
 | count or growth | `count` | `count`, or `delta` in growth mode |
@@ -1090,6 +1092,55 @@ rows while exposing each unverifiable terminal as an unavailable issue. On
 systemd, a remote issue with a live utmp leader can be closed only through
 login1's independently revalidated session identity; Sermo never signals that
 uncertain PID directly. Such a terminal is not counted as a local console session.
+
+### SMB sessions (`smb_sessions`)
+
+`smb_sessions` reads the local Samba session registry using
+[`smbstatus --json --processes`](https://www.samba.org/samba/docs/current/man-html/smbstatus.1.html).
+It requires an installed `smbstatus` with JSON support and permission to read
+Samba's status databases, normally root. `binary` is its absolute path; optional
+`path` selects the absolute `smb.conf` of this instance. No passwords are needed.
+Missing tools, permission errors, timeouts and malformed output are unavailable,
+not zero sessions. `count` counts logical sessions, even when several share a worker.
+
+```yaml
+watches:
+  sessions:
+    check:
+      type: smb_sessions
+      binary: /usr/bin/smbstatus
+      # path: /etc/samba/smb.conf
+      count: { op: ">=", value: 0 }
+      reports: value
+      optional: true
+      timeout: 5s
+```
+
+The `smb` and `smbd` catalog profiles include this informational watch. Sessions appear in
+**Sessions** and `sermoctl sessions list`: Samba usernames, client IPs, PID,
+logical session count, CPU and RAM. Each row groups one worker. CPU is its share
+of host CPUs, and RAM is its RSS; neither is a per-user estimate. Metrics require
+a verified local process generation, and CPU needs two samples. The dashboard
+reads daemon-published inventory; refreshing the page does not execute `smbstatus`.
+Host watches also provide inventory and metrics, but are observe-only.
+
+An administrator can close a service's worker from its session row. The confirmation
+names the users and client and warns that every session and transfer on that worker
+will disconnect. The operation re-reads Samba's registry and rejects changes to the
+displayed group or process generation. The live parent must match the configured
+exact executable and real Unix user. The worker must run the same executable and
+either match that user or belong to the service's own kernel cgroup, which permits
+Samba's impersonation of connected users. The worker's current UID, executable,
+generation and cgroup are revalidated through the pidfd. The Samba login name
+never grants signal authority. The service listener, delegated or orphaned workers,
+replaced binaries and uncertain ownership cannot be closed this way.
+
+The close uses operation locks, named locks, `close_session` guards and a deadline,
+then pidfd-bound `SIGTERM` and exit verification. It never escalates to `SIGKILL`.
+Closing is scoped to the whole worker, including logins arriving during delivery;
+clients may reconnect. SMB multichannel can retain other connections. CTDB cluster
+entries are displayed without local metrics or close capability, because their PIDs
+cannot safely identify a process on this host.
 
 ### Terminal sessions (`terminal_sessions`)
 

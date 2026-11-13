@@ -496,6 +496,39 @@ func TestSessionMetricsWithoutProcessSessionsSkipsProcAndForgetsRates(t *testing
 	}
 }
 
+func TestSessionMetricsPreserveTreeAndWorkerScopes(t *testing.T) {
+	now := time.Unix(100, 0)
+	reader := mapProcReader{
+		100: {PID: 100, StartTicks: 1000, StartTicksOK: true},
+		101: {PID: 101, PPID: 100, StartTicks: 1010, StartTicksOK: true},
+	}
+	metricReader := &liveCPUReader{cpu: map[int]uint64{100: 100, 101: 100}, rss: map[int]uint64{100: 4096, 101: 8192}, hz: 100, ncpu: 1}
+	collector := metrics.New(metricReader)
+	collector.Now = func() time.Time { return now }
+	b := &WebBackend{terminalProcessReader: reader, sessionMetricCollector: collector, now: func() time.Time { return now }}
+	inventory := web.SessionInventory{
+		SSH:      []web.SSHSession{{Service: "ssh", PID: 100, StartTicks: 1000}},
+		Terminal: []web.TerminalSession{{Service: "terminal", Multiplexer: checks.TerminalMultiplexerTmux, Check: "sessions", Identity: "terminal", PIDs: []int{100}}},
+		SMB:      []web.SMBSession{{Service: "smb", Check: "sessions", PID: 100, StartTicks: 1000, Identity: "smb"}},
+	}
+	b.attachSessionMetrics(&inventory)
+	if inventory.SSH[0].CPUReady || inventory.Terminal[0].CPUReady || inventory.SMB[0].CPUReady || len(b.sessionMetricKeys) != 3 {
+		t.Fatalf("first sample=%+v keys=%v", inventory, b.sessionMetricKeys)
+	}
+	now = now.Add(time.Second)
+	metricReader.cpu[100] += 25
+	metricReader.cpu[101] += 50
+	b.attachSessionMetrics(&inventory)
+	for _, usage := range []web.SessionUsage{inventory.SSH[0].SessionUsage, inventory.Terminal[0].SessionUsage} {
+		if !usage.CPUReady || usage.CPU != 75 || !usage.MemoryReady || usage.RSS != 12288 {
+			t.Fatalf("tree usage=%+v", usage)
+		}
+	}
+	if usage := inventory.SMB[0].SessionUsage; !usage.CPUReady || usage.CPU != 25 || !usage.MemoryReady || usage.RSS != 4096 {
+		t.Fatalf("worker usage=%+v", usage)
+	}
+}
+
 func TestTerminalSessionMetricKeyKeepsComponentsDistinct(t *testing.T) {
 	left := terminalSessionMetricKey(web.TerminalSession{
 		Multiplexer: web.SessionKindTmux, Service: "shells:root", Check: "sessions", Identity: "$7:90",

@@ -92,6 +92,7 @@ type webEntry struct {
 	processWarnings   []string
 	sshSessionFilters []process.IdentityFilter
 	terminalSessions  []terminalSessionSource
+	smbSessions       []smbSessionSource
 	noResidentProcess bool
 	alsoApply         []string
 	canReload         bool
@@ -433,6 +434,7 @@ func prepareWebService(ctx context.Context, cfg *config.Config, name string, res
 		policyCooldown:   rules.ParsePolicy(resolved.Tree).Cooldown,
 		alsoApply:        config.CascadeTargets(resolved.Tree),
 		terminalSessions: terminalSessionSources(resolved.Tree),
+		smbSessions:      smbSessionSources(resolved.Tree),
 		buttons:          serviceButtons(resolved.Tree),
 	}
 	if p.entry.disabled {
@@ -498,6 +500,9 @@ func attachServiceRuntime(ctx context.Context, entry *webEntry, name string, tre
 		engine.TerminalSessionVerifier = freshTerminalSessionVerifier(checks.NewTerminalResidualSampler(nil, deps.UserLookup), entry.terminalSessions)
 		engine.TerminalSessionCloser = freshTerminalSessionCloser(deps.ExecxRunner, entry.terminalSessions)
 		engine.EmptyTerminalSessionCloser = freshEmptyTerminalSessionCloser(deps.ExecxRunner, entry.terminalSessions)
+	}
+	if len(entry.smbSessions) > 0 {
+		engine.SMBSessionVerifier = freshSMBSessionVerifier(entry, deps)
 	}
 	entry.engine = engine
 	entry.reloadSupported = func(ctx context.Context) (bool, error) {

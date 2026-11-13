@@ -60,6 +60,7 @@ var graphMetrics = map[string][]GraphMetric{
 	CheckTypeEDAC:             {{Key: fieldCE, Unit: metrics.MetricUnitNone, Label: "Correctable"}, {Key: fieldUE, Unit: metrics.MetricUnitNone, Label: "Uncorrectable"}},
 	CheckTypeUsers:            {{Key: DataKeyCount, Unit: metrics.MetricUnitUsers}},
 	CheckTypeSSHIdle:          {{Key: DataKeyCount, Unit: metrics.MetricUnitSessions, Label: "Idle sessions"}, {Key: DataKeyProtectedCount, Unit: metrics.MetricUnitSessions, Label: "Protected sessions"}},
+	CheckTypeSMBSessions:      {{Key: DataKeyCount, Unit: metrics.MetricUnitSessions, Label: "Sessions"}},
 	CheckTypeTerminalSessions: {{Key: DataKeyCount, Unit: metrics.MetricUnitSessions, Label: "Sessions"}, {Key: DataKeyAttached, Unit: metrics.MetricUnitSessions, Label: "Attached"}, {Key: DataKeyDetached, Unit: metrics.MetricUnitSessions, Label: "Detached"}},
 	CheckTypeProcessCount:     {{Key: DataKeyCount, Unit: metrics.MetricUnitProcesses}},
 	// Strays graph for the reason the count exists at all: a leak is visible as

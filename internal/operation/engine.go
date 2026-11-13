@@ -84,6 +84,8 @@ type Engine struct {
 	SessionVerifier func(ctx context.Context, target SessionTarget) (SessionBoundary, error)
 	SessionSignaler process.Signaler
 	SessionExited   func(int, uint64) (bool, error)
+	// SMBSessionVerifier refreshes the whole worker group before a manual close.
+	SMBSessionVerifier func(context.Context, SMBSessionTarget) (process.Process, error)
 	// ManagedSessionCloser revalidates and terminates one exact login-manager
 	// session. It never falls through to direct PID signalling.
 	ManagedSessionCloser func(ctx context.Context, target SessionTarget) error
@@ -138,6 +140,7 @@ type plan struct {
 	reload               bool
 	postflight           bool
 	closeSession         *SessionTarget
+	closeSMBSession      *SMBSessionTarget
 	closeTerminalSession *TerminalSessionTarget
 	closeTerminalSource  *TerminalSessionSourceTarget
 	killQuery            *DBQueryTarget
@@ -447,6 +450,11 @@ func (e Engine) runCloseAction(ctx context.Context, p plan, result *Result) bool
 		if e.closeSession(ctx, *p.closeSession, result) {
 			result.Message = "close SSH session ok"
 		}
+		return true
+	}
+	if p.closeSMBSession != nil {
+		e.closeSMBSession(ctx, *p.closeSMBSession, result)
+		result.Message += fmt.Sprintf("; check=%q identity=%q", p.closeSMBSession.Check, p.closeSMBSession.Identity)
 		return true
 	}
 	if p.closeTerminalSession != nil {

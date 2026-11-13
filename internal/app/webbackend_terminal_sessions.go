@@ -91,7 +91,7 @@ func terminalSessionSources(tree map[string]any) []terminalSessionSource {
 }
 
 // Sessions returns the dashboard-wide interactive-session inventory. SSH is
-// sampled through the short-lived shared cache; tmux and screen are decoded
+// sampled through the short-lived shared cache; tmux, screen and SMB are decoded
 // only from daemon-published check snapshots, never by running their clients in
 // an HTTP request.
 func (b *WebBackend) Sessions(_ context.Context) web.SessionInventory {
@@ -104,8 +104,10 @@ func (b *WebBackend) Sessions(_ context.Context) web.SessionInventory {
 		}
 		b.appendSSHSessions(&result, seenSSH, service, entry)
 		b.appendTerminalSessions(&result, service, entry)
+		b.appendSMBSessions(&result, service, entry)
 	}
 	b.appendDBQueries(&result)
+	b.appendHostSMBSessions(&result)
 	b.attachSessionMetrics(&result)
 	slices.SortFunc(result.SSH, compareWebSSHSessions)
 	slices.SortFunc(result.Terminal, compareWebTerminalSessions)
@@ -160,29 +162,39 @@ func (b *WebBackend) attachSessionMetrics(inventory *web.SessionInventory) {
 	}
 	b.sessionMetricsMu.Lock()
 	defer b.sessionMetricsMu.Unlock()
+	count := len(inventory.SSH) + len(inventory.Terminal) + len(inventory.SMB)
 	var snapshot sessionProcessSnapshot
-	if len(inventory.SSH) > 0 || len(inventory.Terminal) > 0 {
+	if count > 0 {
 		snapshot = newSessionProcessSnapshot(b.terminalProcessReader)
 	}
-	active := make(map[string]struct{}, len(inventory.SSH)+len(inventory.Terminal))
+	active := make(map[string]struct{}, count)
+	sample := func(key string, pids []int, usage *web.SessionUsage) {
+		active[key] = struct{}{}
+		if b.sessionMetricCollector != nil && len(pids) > 0 {
+			*usage = sessionUsage(b.sessionMetricCollector.SampleService(key, pids))
+		}
+	}
 	accessedAt := cachedTerminalAccess(b.terminalAccessedAt)
 	for i := range inventory.SSH {
 		session := &inventory.SSH[i]
 		key := sshSessionMetricKey(*session)
-		active[key] = struct{}{}
-		if pids := snapshot.treePIDs([]int{session.PID}); b.sessionMetricCollector != nil && len(pids) > 0 {
-			session.SessionUsage = sessionUsage(b.sessionMetricCollector.SampleService(key, pids))
-		}
+		sample(key, snapshot.treePIDs([]int{session.PID}), &session.SessionUsage)
 	}
 	for i := range inventory.Terminal {
 		session := &inventory.Terminal[i]
 		key := terminalSessionMetricKey(*session)
-		active[key] = struct{}{}
 		pids := snapshot.treePIDs(session.PIDs)
-		if b.sessionMetricCollector != nil && len(pids) > 0 {
-			session.SessionUsage = sessionUsage(b.sessionMetricCollector.SampleService(key, pids))
-		}
+		sample(key, pids, &session.SessionUsage)
 		attachTerminalSessionIdle(snapshot, session, pids, b.webNow(), accessedAt)
+	}
+	for i := range inventory.SMB {
+		session := &inventory.SMB[i]
+		id, ok := snapshot.byPID[session.PID]
+		if !ok || session.StartTicks == 0 || !id.StartTicksOK || id.StartTicks != session.StartTicks {
+			continue
+		}
+		key := sessionMetricKey(web.SessionKindSMB, session.Service, session.Check, session.Identity)
+		sample(key, []int{session.PID}, &session.SessionUsage)
 	}
 	if b.sessionMetricCollector != nil {
 		for key := range b.sessionMetricKeys {
@@ -360,12 +372,9 @@ func freshEmptyTerminalSessionCloser(runner execx.Runner, sources []terminalSess
 // CloseTerminalSession closes one freshly revalidated tmux or screen session
 // through the service operation engine using its client or residual process evidence.
 func (b *WebBackend) CloseTerminalSession(ctx context.Context, name string, session web.TerminalSession) web.ActionResult {
-	e := b.entries[name]
+	e, message := b.operationEntry(name)
 	if e == nil {
-		return b.operateError(name, "close terminal session", unknownServiceMessage+name)
-	}
-	if e.disabled {
-		return b.operateError(name, "close terminal session", serviceSubjectPrefix+name+" is disabled in configuration")
+		return b.operateError(name, "close terminal session", message)
 	}
 	r := e.engine.CloseTerminalSession(ctx, operation.TerminalSessionTarget{
 		Check: session.Check, Multiplexer: session.Multiplexer, Name: session.Name, User: session.User, Identity: session.Identity,
@@ -376,12 +385,9 @@ func (b *WebBackend) CloseTerminalSession(ctx context.Context, name string, sess
 // CloseEmptyTerminalSession closes one configured empty tmux server through
 // the service operation engine. It never accepts a socket path from the caller.
 func (b *WebBackend) CloseEmptyTerminalSession(ctx context.Context, name, check string) web.ActionResult {
-	e := b.entries[name]
+	e, message := b.operationEntry(name)
 	if e == nil {
-		return b.operateError(name, "close empty terminal session", unknownServiceMessage+name)
-	}
-	if e.disabled {
-		return b.operateError(name, "close empty terminal session", serviceSubjectPrefix+name+" is disabled in configuration")
+		return b.operateError(name, "close empty terminal session", message)
 	}
 	r := e.engine.CloseEmptyTerminalSession(ctx, operation.TerminalSessionSourceTarget{Check: check})
 	if r.OK() {

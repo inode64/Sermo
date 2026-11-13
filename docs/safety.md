@@ -236,6 +236,18 @@ the logged-in terminal and its `/proc` ancestry to an exact configured `sshd`
 executable and real user, and requires the same terminal, session PID and
 process start ticks. The verified session executable and real UID are carried
 through to pidfd signal revalidation for ordinary and sudo sessions alike.
+SMB connection close groups every login served by one worker. It refreshes the
+Samba registry and kernel generation, requires a live same-executable parent with
+strict executable/real-user service selectors, and authorizes a worker that
+impersonates another UID only through membership in the service's own kernel
+cgroup. The pidfd revalidates the worker's observed UID and cgroup as well as its
+executable and generation. It rejects delegated, stray and
+unverified processes, then delivers `SIGTERM` through a pidfd and verifies exit.
+It uses the same operation locks, named locks, guards and audit as other manual
+session closes, with no `SIGKILL` escalation. The listener and CTDB entries cannot
+be closed. See [SMB sessions](rules.md#smb-sessions-smb_sessions) for shared-worker
+and multichannel scope.
+
 An unreadable session executable disables direct close.
 Any missing boundary, changed terminal or recycled PID is rejected. A successful
 connected-session close sends one `SIGTERM` to the per-session process; it never escalates to

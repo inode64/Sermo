@@ -221,3 +221,25 @@ func TestSessionsUsageErrors(t *testing.T) {
 		}
 	}
 }
+
+func TestSMBSessionListAndServiceFilter(t *testing.T) {
+	inventory := web.SessionInventory{SMB: []web.SMBSession{
+		{Service: "smb", Check: "sessions", User: "alice", Client: "192.0.2.1", PID: 101, SessionCount: 2, CPU: 12.5, CPUReady: true, RSS: 4096, MemoryReady: true},
+		{Service: "other", User: "bob"},
+	}}
+	selected := filterSessionInventory(inventory, "smb")
+	if len(selected.SMB) != 1 || selected.SMB[0].User != "alice" {
+		t.Fatalf("filtered=%+v", selected)
+	}
+	var out, errs bytes.Buffer
+	app := App{Stdout: &out, Stderr: &errs}
+	app.writeSessionInventory(selected)
+	for _, want := range []string{"SMB connections (resources per worker)", "alice", "192.0.2.1", "101", "12.5%", "4096"} {
+		if !strings.Contains(out.String(), want) {
+			t.Fatalf("output lacks %q: %s", want, out.String())
+		}
+	}
+	if strings.Contains(out.String(), "bob") {
+		t.Fatal("another service leaked into the listing")
+	}
+}

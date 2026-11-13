@@ -161,3 +161,8 @@ export function watchSLAAPI(name, since, metric = "") {
 export function watchMetricsAPI(name, metric, since) {
   return watchAPI(name, `${apiSinceSuffix(apiSuffixMetrics, since)}&${apiQueryMetric}=${encodeURIComponent(metric)}`);
 }
+
+export function smbSessionCloseAPI(service, check, identity) {
+  const query = new URLSearchParams({ identity });
+  return serviceAPI(service, `/smb-sessions/${encodeURIComponent(check)}/close?${query.toString()}`);
+}

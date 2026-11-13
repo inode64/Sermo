@@ -113,6 +113,7 @@ const (
 	apiSegmentRuntime          = "runtime"
 	apiSegmentServices         = "services"
 	apiSegmentSessions         = "sessions"
+	apiSegmentSMBSessions      = "smb-sessions"
 	apiSegmentTerminalSessions = "terminal-sessions"
 	apiSegmentSLA              = "sla"
 	apiSegmentState            = "state"
@@ -272,6 +273,7 @@ const (
 	routeAPIPanic                     = routeMethodPost + apiPathPanic + "/" + routeVarAction
 	routeAPIPreflight                 = routeMethodPost + APIPathServices + "/" + routeVarName + "/" + apiSegmentPreflight
 	routeAPISessionClose              = routeMethodPost + APIPathServices + "/" + routeVarName + "/" + apiSegmentSessions + "/{" + apiParamPID + "}/" + apiActionClose
+	routeAPISMBSessionClose           = routeMethodPost + APIPathServices + "/" + routeVarName + "/" + apiSegmentSMBSessions + "/{" + apiQueryCheck + "}/" + apiActionClose
 	routeAPITerminalSessionClose      = routeMethodPost + APIPathServices + "/" + routeVarName + "/" + apiSegmentTerminalSessions + "/{" + apiQueryCheck + "}/" + apiActionClose
 	routeAPIEmptyTerminalSessionClose = routeMethodPost + APIPathServices + "/" + routeVarName + "/" + apiSegmentTerminalSessions + "/{" + apiQueryCheck + "}/" + apiActionCloseEmpty
 	routeAPIDBQueryKill               = routeMethodPost + APIPathServices + "/" + routeVarName + "/" + APISegmentDBQueries + "/{" + apiQueryWatch + "}/" + APIActionKill
@@ -451,6 +453,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc(routeAPIPanic, s.handlePanic)
 	mux.HandleFunc(routeAPIPreflight, s.handlePreflight)
 	mux.HandleFunc(routeAPISessionClose, s.handleSSHSessionClose)
+	mux.HandleFunc(routeAPISMBSessionClose, s.handleSMBSessionClose)
 	mux.HandleFunc(routeAPITerminalSessionClose, s.handleTerminalSessionClose)
 	mux.HandleFunc(routeAPIEmptyTerminalSessionClose, s.handleEmptyTerminalSessionClose)
 	mux.HandleFunc(routeAPIDBQueryKill, s.handleDBQueryKill)

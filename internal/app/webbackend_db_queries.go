@@ -77,12 +77,9 @@ func (b *WebBackend) appendDBQueries(result *web.SessionInventory) {
 // KillDBQuery cancels one listed statement (or closes its connection) through
 // the service's operation engine, which re-verifies it before acting.
 func (b *WebBackend) KillDBQuery(ctx context.Context, name string, req web.DBQueryKillRequest) web.ActionResult {
-	e := b.entries[name]
+	e, message := b.operationEntry(name)
 	if e == nil {
-		return b.operateError(name, string(rules.ActionKillQuery), unknownServiceMessage+name)
-	}
-	if e.disabled {
-		return b.operateError(name, string(rules.ActionKillQuery), serviceSubjectPrefix+name+" is disabled in configuration")
+		return b.operateError(name, string(rules.ActionKillQuery), message)
 	}
 	r := e.engine.KillDBQuery(ctx, operation.DBQueryTarget{
 		Watch: req.Watch,

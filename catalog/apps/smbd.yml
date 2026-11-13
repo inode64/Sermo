@@ -3,6 +3,7 @@ display_name: "Samba SMB"
 category: storage
 variables:
   binary: ${bindir}/smbd
+  smbstatus: ${bindir}/smbstatus
   smbcontrol: ${bindir}/smbcontrol
   testparm: ${bindir}/testparm
 preflight:

@@ -190,6 +190,9 @@ func filterSessionInventory(inventory web.SessionInventory, service string) web.
 		if inventory.Terminal == nil {
 			inventory.Terminal = []web.TerminalSession{}
 		}
+		if inventory.SMB == nil {
+			inventory.SMB = []web.SMBSession{}
+		}
 		if inventory.Database == nil {
 			inventory.Database = []web.DBQuerySession{}
 		}
@@ -200,6 +203,7 @@ func filterSessionInventory(inventory web.SessionInventory, service string) web.
 		SSH:      []web.SSHSession{},
 		Terminal: []web.TerminalSession{},
 		Database: []web.DBQuerySession{},
+		SMB:      []web.SMBSession{},
 	}
 	for _, source := range inventory.Sources {
 		if source.Service == service {
@@ -214,6 +218,11 @@ func filterSessionInventory(inventory web.SessionInventory, service string) web.
 	for _, row := range inventory.Terminal {
 		if row.Service == service {
 			out.Terminal = append(out.Terminal, row)
+		}
+	}
+	for _, row := range inventory.SMB {
+		if row.Service == service {
+			out.SMB = append(out.SMB, row)
 		}
 	}
 	for i := range inventory.Database {
@@ -252,6 +261,10 @@ func (a App) writeSessionInventory(inventory web.SessionInventory) {
 				sessionsCell(s.State), s.Windows, sessionsSeconds(s.IdleSeconds, s.HasIdle))
 		}
 		_ = tw.Flush()
+	}
+	if len(inventory.SMB) > 0 {
+		section("SMB connections (resources per worker):")
+		a.writeSMBSessions(inventory.SMB)
 	}
 	if len(inventory.Database) > 0 {
 		section("Database statements:")
@@ -323,4 +336,20 @@ func sessionsQueryCell(query string, truncated bool) string {
 		return string(runes) + sessionsTruncationEllipsis
 	}
 	return string(runes)
+}
+
+func (a App) writeSMBSessions(sessions []web.SMBSession) {
+	tw := newTabWriter(a.Stdout)
+	fmt.Fprintln(tw, "SERVICE\tCHECK\tUSER\tCLIENT IP\tPID\tSESSIONS\tCPU\tRAM (bytes)")
+	for _, s := range sessions {
+		cpu, ram := sessionsEmptyCell, sessionsEmptyCell
+		if s.CPUReady {
+			cpu = fmt.Sprintf("%.1f%%", s.CPU)
+		}
+		if s.MemoryReady {
+			ram = strconv.FormatInt(s.RSS, 10)
+		}
+		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%d\t%d\t%s\t%s\n", s.Service, s.Check, sessionsCell(s.User), sessionsCell(s.Client), s.PID, s.SessionCount, cpu, ram)
+	}
+	_ = tw.Flush()
 }

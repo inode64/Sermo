@@ -912,6 +912,14 @@ watches:
       protected_processes:
         deploy: { user: deploy }
         backup: { exe: /usr/bin/mysqldump, user: backup }
+  smb-sessions:
+    check:
+      type: smb_sessions
+      binary: /usr/bin/smbstatus
+      count: { op: ">=", value: 0 }
+      reports: value
+      optional: true
+      timeout: 5s
   tmux-sessions:
     # Read-only tmux session inventory for one explicit account. It can also
     # live under an OpenSSH service to render the sessions in its detail view.

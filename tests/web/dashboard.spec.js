@@ -967,7 +967,7 @@ test("phone session rows keep their words whole", async ({ page }) => {
 // session it closes, so the column goes and the table still fits the device.
 test("phone session rows hide the PID column", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "mobile", "phone layout only");
-  const sessions = page.getByRole("table", { name: "Current SSH, tmux and screen sessions" });
+  const sessions = page.getByRole("table", { name: "Current SSH, tmux, screen and SMB sessions" });
   await expect(sessions.locator("thead th", { hasText: "PID" })).toBeHidden();
   await expect(sessions.locator("thead th", { hasText: "Session" })).toBeVisible();
   const scrollWidth = await page.evaluate(() => document.documentElement.scrollWidth);
@@ -980,7 +980,7 @@ test("phone session rows hide the PID column", async ({ page }, testInfo) => {
 // A tmux session lists its window count under its name; screen reports none,
 // and the cell used to fill the gap with a dash that read as a value.
 test("a screen session shows its name without a placeholder dash", async ({ page }) => {
-  const sessions = page.getByRole("table", { name: "Current SSH, tmux and screen sessions" });
+  const sessions = page.getByRole("table", { name: "Current SSH, tmux, screen and SMB sessions" });
   const screenRow = sessions.locator("tr", { hasText: "16128.pts-0.fixture" });
   await expect(screenRow.locator("td").nth(2)).toHaveText("16128.pts-0.fixture");
   await expect(screenRow.locator("td").nth(2).locator(".muted")).toHaveCount(0);
@@ -989,7 +989,7 @@ test("a screen session shows its name without a placeholder dash", async ({ page
 });
 
 test("session close buttons are labelled icons", async ({ page }) => {
-  const sessions = page.getByRole("table", { name: "Current SSH, tmux and screen sessions" });
+  const sessions = page.getByRole("table", { name: "Current SSH, tmux, screen and SMB sessions" });
   const closers = sessions.locator("[data-ssh-session-close], [data-terminal-session-close], [data-empty-session-close]");
   await expect(closers.first()).toBeVisible();
   const buttons = await closers.evaluateAll((els) => els.map((el) => ({
@@ -2290,7 +2290,7 @@ test("sessions panel shows metrics, sorts columns and closes verified SSH and tm
     await route.fulfill({ json: { ok: true, message: "close terminal session ok" } });
   });
 
-  const sessions = page.getByRole("table", { name: "Current SSH, tmux and screen sessions" });
+  const sessions = page.getByRole("table", { name: "Current SSH, tmux, screen and SMB sessions" });
   await expect(sessions).toContainText("root");
   await expect(sessions).toContainText("pts/11");
   await expect(sessions).toContainText("pts/0");
@@ -2362,7 +2362,7 @@ test("database statements render in their own table, longest first", async ({ pa
 });
 
 test("the database filter and search narrow the statements", async ({ page }) => {
-  const sessions = page.getByRole("table", { name: "Current SSH, tmux and screen sessions" });
+  const sessions = page.getByRole("table", { name: "Current SSH, tmux, screen and SMB sessions" });
   const queries = page.getByRole("table", { name: "Running database statements" });
   await page.locator('#session-filters [data-filter="database"]').click();
   await expect(sessions).toBeHidden();
@@ -2566,7 +2566,7 @@ test("a database source that cannot list statements says why", async ({ page }) 
   } }));
   await page.reload();
   await expect(page.locator("#sessions-section")).toBeVisible();
-  await expect(page.getByRole("table", { name: "Current SSH, tmux and screen sessions" })).toBeHidden();
+  await expect(page.getByRole("table", { name: "Current SSH, tmux, screen and SMB sessions" })).toBeHidden();
   const queries = page.getByRole("table", { name: "Running database statements" });
   await expect(queries.locator("tr", { hasText: "access denied for user sermo" })).toContainText("unavailable");
   await expect(queries.locator("tr", { hasText: "pg-queries" })).toContainText("Waiting for a sample");
@@ -2740,7 +2740,7 @@ test("an SSH close shows closing in place while it runs", async ({ page }) => {
     await new Promise((resolve) => { release = resolve; });
     await route.fulfill({ json: { ok: true, message: "close SSH session ok" } });
   });
-  const sessions = page.getByRole("table", { name: "Current SSH, tmux and screen sessions" });
+  const sessions = page.getByRole("table", { name: "Current SSH, tmux, screen and SMB sessions" });
   const row = sessions.locator("tbody tr", { hasText: "pts/11" });
   await row.locator('[data-ssh-session-pid="96"]').click();
   await page.locator("#simple-confirm-ok").click();
@@ -3852,3 +3852,46 @@ for (const failure of ["blocked", "network"]) {
     } finally { release(); }
   });
 }
+
+
+test("SMB workers show clients and resources and close the confirmed whole group", async ({ page }) => {
+  const sessions = {
+    sources: [{ kind: "smb", service: "web", check: "sessions", state: "available" }],
+    smb: [
+      { service: "web", check: "sessions", user: "alice, bob", client: "192.0.2.4", pid: 101, start_ticks: 1234,
+        session_count: 2, identity: "group:1234", can_close: true, cpu_ready: true, cpu: 2.5, memory_ready: true, rss: 2097152 },
+      { service: "web", check: "sessions", user: "<script>unsafe</script>", client: "2001:db8::2", pid: 102,
+        session_count: 1, can_close: false, message: "cluster session" },
+    ],
+  };
+  await page.route("**/api/dashboard**", (route) => route.fulfill({ json: { ...dashboard, sessions } }));
+  let closeRequest;
+  let release;
+  const held = new Promise((resolve) => { release = resolve; });
+  await page.route("**/api/services/web/smb-sessions/sessions/close**", async (route) => {
+    closeRequest = new URL(route.request().url());
+    await held;
+    await route.fulfill({ json: { ok: true, message: "closed" } });
+  });
+  await page.locator("#refresh-now").click();
+  const row = page.locator("#session-rows tr", { hasText: "192.0.2.4" });
+  await expect(row).toContainText("alice, bob");
+  await expect(row).toContainText("2 SMB session(s)");
+  await expect(row).toContainText("2 MiB");
+  await expect(row).toContainText("2.5%");
+  const unsafe = page.locator("#session-rows tr", { hasText: "2001:db8::2" });
+  await expect(unsafe).toContainText("<script>unsafe</script>");
+  await expect(unsafe.locator("script, [data-smb-session-close]")).toHaveCount(0);
+  await row.locator("[data-smb-session-close]").click();
+  await expect(page.locator("#simple-confirm")).toContainText("all 2 SMB session(s) of alice, bob");
+  await expect(page.locator("#simple-confirm")).toContainText("Open files and transfers");
+  await page.locator("#simple-confirm-ok").click();
+  await expect.poll(() => closeRequest?.searchParams.get("identity")).toBe("group:1234");
+  await expect(row.locator(".session-busy")).toContainText("closing");
+  release();
+  await expect(page.locator("#err")).toContainText("closed");
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+  expect(overflow).toBe(0);
+  const accessibility = await new AxeBuilder({ page }).include("#sessions-section").withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"]).analyze();
+  expect(accessibility.violations).toEqual([]);
+});

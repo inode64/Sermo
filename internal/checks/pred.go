@@ -195,6 +195,8 @@ var (
 	// configured protected sessions; protected_count is available to guards that
 	// must keep a named user or long-running terminal process connected.
 	SSHIdlePredFields = []string{DataKeyCount, DataKeyProtectedCount, DataKeyOldestIdleSeconds}
+	// SMBSessionPredFields counts logical Samba sessions, including shared workers.
+	SMBSessionPredFields = []string{DataKeyCount}
 	// TerminalSessionPredFields are the predicates of a terminal_sessions
 	// check. They count the sessions enumerated for its explicit user.
 	TerminalSessionPredFields = []string{DataKeyCount, DataKeyAttached, DataKeyDetached}

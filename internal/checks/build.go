@@ -16,6 +16,7 @@ import (
 	"sermo/internal/execx"
 	"sermo/internal/httpx"
 	"sermo/internal/metrics"
+	"sermo/internal/process"
 	"sermo/internal/servicemgr"
 	"sermo/internal/severity"
 )
@@ -93,6 +94,8 @@ type Samplers struct {
 
 	// TerminalResidualProcesses observes screen servers when their client is gone.
 	TerminalResidualProcesses TerminalResidualSamplerFunc
+	// SMBSessionIdentity binds status rows to a kernel generation; nil reads procfs.
+	SMBSessionIdentity func(int) (process.Identity, bool)
 	// CertSampler fetches a TLS endpoint's certificate for `cert` checks. Nil
 	// dials the host.
 	CertSampler CertSamplerFunc
@@ -312,6 +315,9 @@ var builtinCheckSpecs = []checkSpec{
 	{info: conditionTypeInfo(CheckTypeLoad), predicateFields: LoadPredFields, build: func(in checkBuildInput) (Check, string) { return buildLoadCheck(in.base, in.entry, in.deps) }},
 	{info: conditionTypeInfo(CheckTypeUsers), predicateFields: UsersPredFields, build: func(in checkBuildInput) (Check, string) { return buildUsersCheck(in.base, in.entry, in.deps) }},
 	{info: conditionTypeInfo(CheckTypeSSHIdle), predicateFields: SSHIdlePredFields, build: func(in checkBuildInput) (Check, string) { return buildSSHIdleCheck(in.base, in.entry, in.deps) }},
+	{info: conditionTypeInfo(CheckTypeSMBSessions), predicateFields: SMBSessionPredFields, build: func(in checkBuildInput) (Check, string) {
+		return buildSMBSessionsCheck(in.base, in.entry, in.deps)
+	}},
 	{info: conditionTypeInfo(CheckTypeTerminalSessions), predicateFields: TerminalSessionPredFields, build: func(in checkBuildInput) (Check, string) {
 		return buildTerminalSessionsCheck(in.base, in.entry, in.deps)
 	}},

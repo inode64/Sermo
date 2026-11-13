@@ -12,6 +12,10 @@ restart_on_change:
       ${display_name} will restart after version change of ${change.app}: ${change.old_version} -> ${change.new_version}
 variables:
   port: 445
+processes:
+  main:
+    exe: ${smbd_binary}
+    user: root
 preflight:
   config:
     type: command
@@ -39,6 +43,14 @@ policy:
     initial: 15m
     max: 1h
 watches:
+  sessions:
+    check:
+      type: smb_sessions
+      binary: ${smbd_smbstatus}
+      count: { op: ">=", value: 0 }
+      reports: value
+      optional: true
+      timeout: 5s
   service:
     check:
       type: service

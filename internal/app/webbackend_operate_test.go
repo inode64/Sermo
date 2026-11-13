@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -15,6 +16,57 @@ import (
 )
 
 type fakeManager struct{ stopped *bool }
+
+func TestWebActionsRejectUnavailableServicesWithOneEvent(t *testing.T) {
+	for _, action := range []struct {
+		name string
+		run  func(*WebBackend) web.ActionResult
+	}{
+		{name: "start", run: func(b *WebBackend) web.ActionResult {
+			return b.Operate(t.Context(), "web", string(rules.ActionStart), web.OperateOpts{})
+		}},
+		{name: "close SSH session", run: func(b *WebBackend) web.ActionResult {
+			return b.CloseSSHSession(t.Context(), "web", web.SSHSession{})
+		}},
+		{name: "close terminal session", run: func(b *WebBackend) web.ActionResult {
+			return b.CloseTerminalSession(t.Context(), "web", web.TerminalSession{})
+		}},
+		{name: "close empty terminal session", run: func(b *WebBackend) web.ActionResult {
+			return b.CloseEmptyTerminalSession(t.Context(), "web", "sessions")
+		}},
+		{name: "close SMB connection", run: func(b *WebBackend) web.ActionResult {
+			return b.CloseSMBSession(t.Context(), "web", "sessions", "identity")
+		}},
+		{name: string(rules.ActionKillQuery), run: func(b *WebBackend) web.ActionResult {
+			return b.KillDBQuery(t.Context(), "web", web.DBQueryKillRequest{})
+		}},
+	} {
+		for _, disabled := range []bool{false, true} {
+			state, message := "missing", "unknown service web"
+			var entry *webEntry
+			if disabled {
+				state, message = "disabled", "service web is disabled in configuration"
+				entry = &webEntry{disabled: true, engine: operation.Engine{ConfigError: errors.New("operation engine must not run")}}
+			}
+			t.Run(action.name+"/"+state, func(t *testing.T) {
+				var events []Event
+				b := &WebBackend{entries: map[string]*webEntry{"web": entry}, emit: func(e Event) { events = append(events, e) }}
+				result := action.run(b)
+				if result.OK || result.Message != message || len(events) != 1 {
+					t.Fatalf("result=%+v events=%+v", result, events)
+				}
+				if e := events[0]; e.Service != "web" || e.Action != action.name || e.Kind != eventKindError || e.Message != message {
+					t.Fatalf("event=%+v", e)
+				}
+				events = nil
+				cascade := b.operationResult(t.Context(), "web", string(rules.ActionStart))
+				if cascade.Status != operation.ResultFailed || cascade.Message != message || len(events) != 0 {
+					t.Fatalf("cascade result=%+v events=%+v", cascade, events)
+				}
+			})
+		}
+	}
+}
 
 func (m fakeManager) Status(context.Context, string) (servicemgr.ServiceStatus, error) {
 	if m.stopped != nil && *m.stopped {

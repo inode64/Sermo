@@ -13,7 +13,7 @@ import {
   dbQueryKillAPI, emptyTerminalSessionCloseAPI,
   liveVerbosePath, lockReleaseAPI, mountAPI, mountBlockersAPI, panicAPI,
   readyVerbosePath, refreshAPI, serviceAPI, serviceButtonAPI, serviceEventsAPI, serviceMetricsAPI,
-  servicePreflightAPI, serviceRuntimeAPI, serviceSLAAPI, sshSessionCloseAPI, terminalSessionCloseAPI, stateCompactAPI, watchAPI,
+  servicePreflightAPI, serviceRuntimeAPI, serviceSLAAPI, smbSessionCloseAPI, sshSessionCloseAPI, terminalSessionCloseAPI, stateCompactAPI, watchAPI,
   watchMetricsAPI, watchProcessKillAPI, watchSLAAPI,
 } from "./api.js";
 import {
@@ -288,6 +288,7 @@ const appStatusFilterStates = [targetStateOK, targetStateStarting, targetStateWa
 const mountStatusFilterStates = [mountStateActive, mountStateInactive];
 const libraryStatusFilterStates = [targetStateOK, targetStateWarning, targetStateFailed];
 const sessionKindSSH = "ssh";
+const sessionKindSMB = "smb";
 const sessionKindTmux = "tmux";
 const sessionKindScreen = "screen";
 const terminalSessionKinds = [sessionKindTmux, sessionKindScreen];
@@ -295,7 +296,7 @@ const terminalSessionKinds = [sessionKindTmux, sessionKindScreen];
 // rows have their own table, since their columns (database, client, running
 // time, statement) differ from a terminal's.
 const sessionKindDatabase = "database";
-const sessionTypeFilterStates = [sessionKindSSH, ...terminalSessionKinds, sessionKindDatabase];
+const sessionTypeFilterStates = [sessionKindSSH, ...terminalSessionKinds, sessionKindSMB, sessionKindDatabase];
 const dbQueryKillModeQuery = "query";
 const dbQueryKillModeConnection = "connection";
 // A statement longer than this shows a preview that expands to the full text.
@@ -2065,7 +2066,7 @@ function revealPanel(section, scroll = true) {
 
 function sessionCount() {
   const inventory = latestSessionInventory || {};
-  return (inventory.ssh || []).length + (inventory.terminal || []).length + (inventory.database || []).length;
+  return (inventory.ssh || []).length + (inventory.terminal || []).length + (inventory.smb || []).length + (inventory.database || []).length;
 }
 
 // refreshChrome asks for the attention row, the favicon and the title to be
@@ -4285,6 +4286,7 @@ function sessionActionKey(...parts) {
 const sshSessionActionKey = (service, pid, startTicks) => sessionActionKey(sessionKindSSH, service, pid, startTicks);
 const terminalSessionActionKey = (service, check, identity) => sessionActionKey(sessionActionKeyTerminal, service, check, identity);
 const emptySourceActionKey = (service, check) => sessionActionKey(sessionActionKeyEmpty, service, check);
+const smbSessionActionKey = (service, check, identity) => sessionActionKey(sessionKindSMB, service, check, identity);
 const dbQueryActionKey = (service, watch, identity) => sessionActionKey(sessionKindDatabase, service, watch, identity);
 const sessionActionKeyWatchProcess = "watch-process";
 const watchProcessActionKey = (watch, pid, startTicks) => sessionActionKey(sessionActionKeyWatchProcess, watch, pid, startTicks);
@@ -4325,6 +4327,7 @@ function presentSessionActionKeys(inventory) {
     if (source.can_close_empty) keys.add(emptySourceActionKey(source.service, source.check));
   }
   for (const session of inventory.terminal || []) keys.add(terminalSessionActionKey(session.service, session.check, session.identity));
+  for (const session of inventory.smb || []) keys.add(smbSessionActionKey(session.service, session.check, session.identity));
   for (const query of inventory.database || []) keys.add(dbQueryActionKey(query.service, query.watch, query.identity));
   // A watch's listed processes share the pending map: a kill is forgotten
   // once the watch no longer lists the process it signalled.
@@ -4367,6 +4370,17 @@ function terminalSessionCloseButton(session) {
   });
 }
 
+function smbSessionCloseButton(session) {
+  const label = `Close SMB connection for ${session.user} from ${session.client}`;
+  return rowKillButton({
+    pendingKey: smbSessionActionKey(session.service, session.check, session.identity),
+    canKill: session.can_close, unavailableTitle: session.message || "Worker identity cannot be verified safely",
+    button: () => tpl`<button class="icon-btn danger-btn" data-smb-session-close="1"
+      data-smb-service="${session.service}" data-smb-check="${session.check}" data-smb-identity="${session.identity}"
+      aria-label="${label}" title="${label}">${closeGlyph}</button>`,
+  });
+}
+
 function sessionStateCell(state) {
   const [badgeState, label] = sessionStateBadges[state] || [targetStateWarning, state || sessionStateUnknown];
   return stateBadgeLabel(badgeState, label);
@@ -4385,6 +4399,9 @@ function emptySessionCloseButton(source) {
 }
 
 function sourceHasSession(source, inventory) {
+  if (source.kind === sessionKindSMB) {
+    return (inventory.smb || []).some((session) => session.service === source.service && session.check === source.check);
+  }
   if (source.kind === sessionKindSSH) {
     return (inventory.ssh || []).some((session) => session.service === source.service);
   }
@@ -4432,6 +4449,14 @@ function sessionRows(inventory) {
     ...sessionUsageRow(session, session.has_idle),
     action: terminalSessionCloseButton(session),
   }));
+  const smb = (inventory.smb || []).map((session) => ({
+    kind: sessionKindSMB, service: session.service || "", user: session.user || "",
+    name: session.client || "", pid: session.pid || 0, pidSort: session.pid || 0, state: sessionStateActive,
+    detail: `${session.session_count || 0} SMB session(s)`,
+    ...sessionUsageRow(session, false),
+    metricsExpected: !!session.start_ticks,
+    action: smbSessionCloseButton(session),
+  }));
   const issues = sources.flatMap((source) => (source.issues || []).map((issue) => ({
     kind: source.kind || "", service: source.service || "", user: issue.user || source.user || "",
     name: issue.terminal || source.check || "—", pid: issue.pid || 0, pidSort: issue.pid || 0, state: sessionSourceUnavailable,
@@ -4455,7 +4480,7 @@ function sessionRows(inventory) {
     ...unmeasuredSessionUsageRow(),
     action: emptySessionCloseButton(source),
   }));
-  return [...ssh, ...terminal, ...issues, ...emptySources];
+  return [...ssh, ...terminal, ...smb, ...issues, ...emptySources];
 }
 
 // rowKillButton is the action cell of one row the daemon may signal or close
@@ -7378,6 +7403,22 @@ async function closeTerminalSession(service, check, multiplexer, session, user, 
     terminalSessionActionKey(service, check, identity), sessionActionClosing, service);
 }
 
+async function closeSMBSession(service, check, identity) {
+  const generation = dashboardGeneration;
+  const pending = pendingSessionAction(smbSessionActionKey(service, check, identity));
+  if (pending && !pending.error) return;
+  const session = (latestSessionInventory.smb || []).find((candidate) =>
+    candidate.service === service && candidate.check === check && candidate.identity === identity && candidate.can_close);
+  if (!session) { setStatus("SMB connection changed; refresh and try again", feedbackStatusErr); return; }
+  if (!(await promptConfirm({
+    title: `Close SMB connection from ${session.client}?`,
+    message: `This disconnects all ${session.session_count} SMB session(s) of ${session.user} served by worker ${session.pid}. Open files and transfers may be interrupted. CPU and RAM refer to this whole worker.`,
+    okLabel: "close connection", danger: true,
+  }))) return;
+  await postSessionClose("close SMB connection", smbSessionCloseAPI(service, check, identity), generation,
+    smbSessionActionKey(service, check, identity), sessionActionClosing, service);
+}
+
 async function closeEmptySessionSource(service, check) {
   const generation = dashboardGeneration;
   const source = (latestSessionInventory.sources || []).find((candidate) =>
@@ -8553,6 +8594,7 @@ const clickRoutes = [
     el.dataset.sshService || "", el.dataset.sshSessionPid || "", el.dataset.sshSessionStartTicks || "",
     el.dataset.sshSessionTerminal || "", el.dataset.sshSessionUser || "",
     el.dataset.sshSessionManaged === domBoolTrue)],
+  ["[data-smb-session-close]", (el) => closeSMBSession(el.dataset.smbService, el.dataset.smbCheck, el.dataset.smbIdentity)],
   ["[data-terminal-session-close]", (el) => closeTerminalSession(
     el.dataset.terminalService || "", el.dataset.terminalCheck || "", el.dataset.terminalMultiplexer || "",
     el.dataset.terminalSession || "", el.dataset.terminalUser || "", el.dataset.terminalIdentity || "")],

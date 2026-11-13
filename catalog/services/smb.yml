@@ -60,6 +60,14 @@ policy:
     initial: 15m
     max: 1h
 watches:
+  sessions:
+    check:
+      type: smb_sessions
+      binary: ${smbd_smbstatus}
+      count: { op: ">=", value: 0 }
+      reports: value
+      optional: true
+      timeout: 5s
   service:
     check:
       type: service

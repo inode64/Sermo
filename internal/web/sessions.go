@@ -150,6 +150,7 @@ type SessionInventory struct {
 	Sources  []SessionSource   `json:"sources"`
 	SSH      []SSHSession      `json:"ssh"`
 	Terminal []TerminalSession `json:"terminal"`
+	SMB      []SMBSession      `json:"smb"`
 	Database []DBQuerySession  `json:"database"`
 }
 

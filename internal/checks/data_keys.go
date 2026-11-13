@@ -197,6 +197,7 @@ const (
 	DataKeySampleError        = "sample_error"
 	DataKeyServer             = "server"
 	DataKeyTerminalSessions   = "terminal_sessions"
+	DataKeySMBSessions        = "smb_sessions"
 	DataKeySelfTest           = "self_test"
 	DataKeySerialNumber       = CheckKeySerialNumber
 	DataKeySignatureAlgorithm = "signature_algorithm"

@@ -832,6 +832,7 @@ var singleShotCheckValidators = map[string]singleShotCheckValidator{
 	checks.CheckTypeLoad:               singleShotNoLock(validateLoadFields),
 	checks.CheckTypeUsers:              singleShotThreshold(checks.UsersPredFields),
 	checks.CheckTypeSSHIdle:            validateSSHIdleCheck,
+	checks.CheckTypeSMBSessions:        validateSMBSessionsCheck,
 	checks.CheckTypeTerminalSessions:   validateTerminalSessionsCheck,
 	checks.CheckTypeProcessCount:       validateProcessCountCheck,
 	checks.CheckTypeHdparm:             singleShotNoLock(validateHdparmFields),
@@ -1776,4 +1777,11 @@ func validateCheckPort(path string, entry map[string]any, typ string, add addFun
 	if _, present := entry[checks.CheckKeyPort]; !present {
 		add("%s.port is required for a %s check", path, typ)
 	}
+}
+
+func validateSMBSessionsCheck(path string, entry map[string]any, _ string, add addFunc) {
+	if err := checks.SMBSessionConfigFromEntry(entry).Validate(); err != nil {
+		add("%s: %s", path, err)
+	}
+	validateThresholdPreds(path, entry, checks.SMBSessionPredFields, add)
 }
