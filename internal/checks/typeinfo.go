@@ -32,10 +32,6 @@ func conditionTypeInfo(name string) TypeInfo {
 	return TypeInfo{Name: name, DefaultReports: ReportsCondition}
 }
 
-func serviceHealthTypeInfo(name string) TypeInfo {
-	return TypeInfo{Name: name, DefaultReports: ReportsHealth, ServiceScoped: true}
-}
-
 func latencyTypeInfo(info TypeInfo) TypeInfo {
 	info.RecordsLatency = true
 	return info

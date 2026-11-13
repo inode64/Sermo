@@ -1246,6 +1246,11 @@ func validateProcessCheck(path string, entry map[string]any, _ string, add addFu
 		add("%s must define only one of exe or exe_any", path)
 	}
 	validateAbsoluteCheckPaths(path, entry, add, checks.CheckKeyExe)
+	for _, candidate := range cfgval.StringList(exeAny) {
+		if !filepath.IsAbs(candidate) {
+			add(validationPathAbsoluteFormat, path+"."+checks.CheckKeyExeAny, candidate)
+		}
+	}
 	if state := cfgval.String(entry[checks.CheckKeyState]); state != "" {
 		if _, ok := processStates[state]; !ok {
 			add("%s state %q is not one of %s", path, state, process.StateSummary)

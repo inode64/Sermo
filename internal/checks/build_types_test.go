@@ -128,7 +128,7 @@ func TestTypeInfoCapabilities(t *testing.T) {
 		{typ: "terminal_sessions", wantKnown: true, wantWatchable: true},
 		{typ: "storage", wantKnown: true, wantWatchable: true},
 		{typ: "metric", wantKnown: true, wantScoped: true},
-		{typ: "process", wantKnown: true, wantHealth: true, wantScoped: true},
+		{typ: "process", wantKnown: true, wantHealth: true, wantWatchable: true},
 		// cert returns OK=true when the certificate is healthy (health-style),
 		// like the http cert path; it must fire on failure, not on success.
 		{typ: "cert", wantKnown: true, wantHealth: true, wantWatchable: true},

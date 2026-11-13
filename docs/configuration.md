@@ -4575,7 +4575,47 @@ beside a rising process count — the shape that distinguishes a leak from load.
 
 ### `process` — process by name
 
-A `process` watch tracks the processes whose **name** matches (the resolved exe
+A process watch with an explicit `state` checks whether the whole selector is
+`running`, `absent` or `zombie`. It uses the same native process observation as
+a service's `process` check, including exact resolved executable and real user
+matching. It detects a missing process on the first sample even if Sermo has
+never seen a PID for it. The alarm remains active until the expected state
+returns; `for` and `clear` can require consecutive samples.
+
+```yaml
+watches:
+  worker-running:
+    monitor: disabled
+    interval: 30s
+    check:
+      type: process
+      exe: /usr/bin/worker
+      user: worker
+      state: running
+      timeout: 3s
+    for: { cycles: 2 }
+    clear: { cycles: 2 }
+```
+
+Use `exe_any` instead of `exe` for alternative executable paths, or `cmd` for
+an RE2 expression over argv; combine `cmd` with `exe` and `user` to narrow a
+selector. Unreadable process evidence is unavailable, never confirmed absence.
+This form works in host watches and service watches and grants no signal
+authority: `then.kill` is rejected. It cannot mix `state` with the per-PID
+fields `name`, `gone`, `for`, `cpu`, `memory` or `io` inside `check`. The
+entry-level `for` above is an alarm window, not a minimum process age.
+
+For application health, combine this with an HTTP watch that asserts its
+documented status and response body or JSON. Process presence, a TCP connection
+and a valid certificate do not prove that an application can serve requests.
+See [HTTP response comparisons](rules.md#http) and
+[`application-health.yml`](../examples/watches/application-health.yml).
+For a daemon that must write a progress file periodically, use the native
+[`file` freshness watch](#file--filedirectory-attributes-and-freshness) with an
+explicit `older_than`; a quiet log is not a heartbeat unless regular writes
+are part of that application's contract.
+
+A `process` watch without `state` tracks processes whose **name** matches (the resolved exe
 basename or its full path) and/or whose `cmd` matches a Go RE2 regex over argv
 joined with spaces, optionally filtered by owning `user`, and fires the
 hook **once per matching PID** when that process has been alive at least `for`

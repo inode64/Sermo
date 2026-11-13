@@ -1,0 +1,14 @@
+name: application-health
+category: web
+monitor: disabled
+interval: 30s
+check:
+  type: http
+  url: http://127.0.0.1:8080/health
+  follow_redirects: false
+  expect_status: 200
+  expect_json:
+    status: ready
+  timeout: 5s
+for: { cycles: 2 }
+clear: { cycles: 2 }

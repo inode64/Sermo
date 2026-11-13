@@ -110,6 +110,14 @@ func buildProcessCheck(b base, entry map[string]any, deps Deps) (Check, string) 
 	}, ""
 }
 
+// ProcessStateWatch distinguishes a whole-selector health check from a watch
+// that tracks individual PIDs. Explicit state keeps per-PID conditions and
+// their signal authority out of the health-check path.
+func ProcessStateWatch(entry map[string]any) bool {
+	_, present := entry[CheckKeyState]
+	return present
+}
+
 // ProcessCommandPattern prepares the optional cmd predicate for state checks
 // and per-PID watches; validation uses the same parser as both builders.
 // The bool reports whether cmd was configured, including malformed values.

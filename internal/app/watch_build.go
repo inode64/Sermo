@@ -68,8 +68,8 @@ func BuildWatches(cfg *config.Config, deps Deps, defaultInterval time.Duration) 
 // buildWatchEntry builds the Watch(es) for one watch entry, shared by host
 // watches (BuildWatches) and service-embedded watches (serviceWatches). It skips
 // a disabled entry, resolves the interval and monitor mode, then dispatches on
-// the check type: net/icmp/swap expand to one Watch per metric, file/process are
-// stateful watchers, and everything else is a single check-backed Watch. The
+// the check type: net/icmp/swap expand to one Watch per metric, file and per-PID
+// process watches are stateful, and everything else is check-backed. The
 // inline check is scoped by deps.WatchCheckDeps when set (service watches).
 func buildWatchEntry(name string, entry map[string]any, deps Deps, defaultInterval time.Duration) ([]*Watch, []string) {
 	deps.watchConfigID = watchSnapshotConfigID(entry)
@@ -100,6 +100,9 @@ func buildWatchEntry(name string, entry map[string]any, deps Deps, defaultInterv
 	case checks.CheckTypeFile:
 		return watchOrWarn(buildFileWatch(name, entry, checkEntry, deps, interval))(warnings)
 	case checks.CheckTypeProcess:
+		if checks.ProcessStateWatch(checkEntry) {
+			return watchOrWarn(buildSingleWatch(name, entry, checkEntry, deps, interval))(warnings)
+		}
 		return watchOrWarn(buildProcWatch(name, entry, checkEntry, deps, interval))(warnings)
 	case checks.CheckTypeProcessPolicy:
 		return watchOrWarn(buildProcessPolicyWatch(name, entry, checkEntry, deps, interval))(warnings)
@@ -272,10 +275,11 @@ func serviceMonitorWatchName(service, monitor string) string {
 
 // unsupportedServiceWatchType reports why a check type cannot back a service
 // watch, or "" when it can. net/icmp/swap are host/network multi-metric watches
-// that belong in the global watches: section. The `process` watch matches
+// that belong in the global watches: section. A per-PID `process` watch matches
 // processes host-wide by name/user and can kill them, which is unsafe from a
 // service scope — use the PID-tree-scoped `process_count`/`metric` types (or a
-// host watch) instead. (metric IS supported: it reads a dedicated per-watch
+// host watch) instead. Process state checks are read-only selectors and work
+// in either scope. (metric IS supported: it reads a dedicated per-watch
 // collector scoped to the service PID tree.)
 func unsupportedServiceWatchType(entry map[string]any) string {
 	checkEntry, _ := entry[config.WatchKeyCheck].(map[string]any)
@@ -285,6 +289,9 @@ func unsupportedServiceWatchType(entry map[string]any) string {
 	}
 	switch typ {
 	case checks.CheckTypeProcess:
+		if checks.ProcessStateWatch(checkEntry) {
+			return ""
+		}
 		return "the process watch matches host-wide (and can kill); use process_count or metric for service-scoped process monitoring, or declare a host watch"
 	case checks.CheckTypeProcessPolicy:
 		return "the process_policy watch audits a host-wide user account; declare it under the global watches: section"
@@ -1261,11 +1268,12 @@ func watchInlineDeps(deps Deps) checks.Deps {
 	discoverer := process.NewDiscovererWithUserLookup(deps.UserLookup)
 	discoverer.Reader = deps.ProcReader
 	checkDeps := checks.Deps{
-		ProcessesAny:   discoverer.ObserveAnyState,
-		Limiter:        deps.CheckLimiter,
-		DefaultTimeout: deps.DefaultTimeout,
-		Runner:         deps.ExecxRunner,
-		Samplers:       deps.Samplers,
+		ProcessesAny:      discoverer.ObserveAnyState,
+		ProcessesReplaced: discoverer.ReplacedAny,
+		Limiter:           deps.CheckLimiter,
+		DefaultTimeout:    deps.DefaultTimeout,
+		Runner:            deps.ExecxRunner,
+		Samplers:          deps.Samplers,
 	}
 	return checkDeps
 }

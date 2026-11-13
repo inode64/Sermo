@@ -163,7 +163,7 @@ func validateWatchMountBlock(name, typ string, entry map[string]any, add addFunc
 // validateServiceWatches validates a service tree's embedded `watches:` section.
 // Fire-and-forget entries run the host-watch runtime with the service's scoped
 // check deps, so service-scoped service/metric/process_count checks are permitted
-// here while the host-wide process watch and net/icmp/swap multi-metric watches
+// here while per-PID process watches and net/icmp/swap multi-metric watches
 // are rejected. Entries without then are desugared to checks:, and entries with
 // then.action are desugared to checks:+rules:, by expandServiceWatches; this pass
 // still validates their grammar when it sees an unexpanded tree. Per-type field
@@ -232,6 +232,10 @@ func validateServiceWatch(name string, entry map[string]any, locksDir string, no
 		validateFileCheck(name, check, entry, defaultNotify, add)
 		return
 	}
+	if typ == checks.CheckTypeProcess && checks.ProcessStateWatch(check) && cfgval.String(then[rules.RuleFieldAction]) == "" {
+		validateProcessStateWatch(name, check, entry, defaultNotify, add)
+		return
+	}
 	if !validateServiceWatchType(name, typ, checkPath, check, locksDir, add) {
 		return
 	}
@@ -298,7 +302,7 @@ func validateServiceWatchType(name, typ, checkPath string, check map[string]any,
 	case typ == checks.CheckTypeNet || typ == checks.CheckTypeICMP || typ == checks.CheckTypeSwap:
 		add("%s %q is host-scoped; declare it under the global watches: section", checkTypePath, typ)
 		return false
-	case typ == checks.CheckTypeProcess:
+	case typ == checks.CheckTypeProcess && !checks.ProcessStateWatch(check):
 		add("%s \"process\" matches host-wide (and can kill); use process_count or metric for service-scoped process monitoring, or a host watch", checkTypePath)
 		return false
 	}
@@ -810,7 +814,8 @@ func validateNetMetricCondition(prefix, metric string, m map[string]any, add add
 // validateWatchableCheck validates the fields of a single-shot service check used
 // as a host watch and reports whether the type is watchable. An explicit
 // service target supplies its own backend; implicit service state, metric
-// samples and process selectors still need service context.
+// samples still need service context. Process state checks carry their own
+// selector and use the same host-wide observer as service process checks.
 func validateWatchableCheck(prefix, typ string, fields map[string]any, locksDir string, add addFunc) bool {
 	if typ == checks.CheckTypeService && !cfgval.IsNonEmptyStringList(fields[checks.CheckKeyService]) {
 		add("%s.service is required for a host service check", prefix)
@@ -953,6 +958,10 @@ func validateFileCheck(name string, check, entry map[string]any, defaultNotify [
 // at least one condition (for duration, or cpu/memory/io {op, value}), plus the
 // entry's hook.
 func validateProcessWatch(name string, check, entry map[string]any, defaultNotify []string, add addFunc) {
+	if checks.ProcessStateWatch(check) {
+		validateProcessStateWatch(name, check, entry, defaultNotify, add)
+		return
+	}
 	validateStatefulWatchEntry(name, checks.CheckTypeProcess, entry, add)
 	_, hasCmd, err := checks.ProcessCommandPattern(check)
 	if err != nil {
@@ -994,6 +1003,18 @@ func validateProcessWatch(name string, check, entry map[string]any, defaultNotif
 	// unowned_processes).
 	validateHookBlock(watchPath(name), entry, watchNativeActions{kill: true}, defaultNotify, add)
 	validateProcessWatchKillSelector(name, check, entry, add)
+}
+
+func validateProcessStateWatch(name string, check, entry map[string]any, defaultNotify []string, add addFunc) {
+	validateProcessCheck(watchCheckPath(name), check, "", add)
+	validateRequiredStringField(watchCheckPath(name), check, checks.CheckKeyState, checks.CheckTypeProcess, add)
+	perPID := slices.Concat([]string{checks.CheckKeyName, checks.CheckKeyFor, checks.CheckKeyGone}, checks.ProcessWatchPredFields)
+	for _, key := range perPID {
+		if _, present := check[key]; present {
+			add("%s is not supported with state; use exe, exe_any, user and cmd", watchCheckFieldPath(name, key))
+		}
+	}
+	validateHookBlock(watchPath(name), entry, watchNativeActions{recoverHook: true}, defaultNotify, add)
 }
 
 func validateProcessWatchKillSelector(name string, check, entry map[string]any, add addFunc) {

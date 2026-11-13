@@ -169,6 +169,13 @@ func countWatchConditions(check map[string]any) []web.WatchCondition {
 }
 
 func processWatchConditions(check map[string]any) []web.WatchCondition {
+	if checks.ProcessStateWatch(check) {
+		out := appendValue(nil, checks.CheckKeyExe, cfgval.String(check[checks.CheckKeyExe]))
+		out = appendValue(out, checks.CheckKeyExeAny, strings.Join(cfgval.StringList(check[checks.CheckKeyExeAny]), displayListSeparator))
+		out = appendValue(out, checks.CheckKeyUser, cfgval.String(check[checks.CheckKeyUser]))
+		out = appendValue(out, checks.CheckKeyCmd, cfgval.String(check[checks.CheckKeyCmd]))
+		return appendCompare(out, checks.CheckKeyState, cfgval.CompareOpEqual, cfgval.String(check[checks.CheckKeyState]))
+	}
 	out := appendCompare(nil, checks.CheckKeyFor, cfgval.CompareOpGreaterEqual, cfgval.String(check[checks.CheckKeyFor]))
 	return appendEnabledFlag(out, check, checks.CheckKeyGone, checks.CheckKeyGone)
 }

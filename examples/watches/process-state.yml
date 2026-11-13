@@ -1,0 +1,12 @@
+name: worker-running
+category: process
+monitor: disabled
+interval: 30s
+check:
+  type: process
+  exe: /usr/bin/worker
+  user: worker
+  state: running
+  timeout: 3s
+for: { cycles: 2 }
+clear: { cycles: 2 }

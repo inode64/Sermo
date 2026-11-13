@@ -298,7 +298,7 @@ var builtinCheckSpecs = []checkSpec{
 	{info: resourcePathTypeInfo(healthTypeInfo(CheckTypeBinary)), readsPaths: true, build: func(in checkBuildInput) (Check, string) { return buildBinaryCheck(in.base, in.entry) }},
 	{info: resourcePathTypeInfo(healthTypeInfo(CheckTypePidfile)), readsPaths: true, build: func(in checkBuildInput) (Check, string) { return buildPidfileCheck(in.base, in.entry, in.deps) }},
 	{info: resourcePathTypeInfo(healthTypeInfo(CheckTypeSocket)), readsPaths: true, build: func(in checkBuildInput) (Check, string) { return buildSocketCheck(in.base, in.entry) }},
-	{info: serviceHealthTypeInfo(CheckTypeProcess), build: func(in checkBuildInput) (Check, string) { return buildProcessCheck(in.base, in.entry, in.deps) }},
+	{info: healthTypeInfo(CheckTypeProcess), build: func(in checkBuildInput) (Check, string) { return buildProcessCheck(in.base, in.entry, in.deps) }},
 	// Condition, not health: OK means "nothing is stale", so a rule fires it
 	// with `active:` the same way it would an alert-style predicate.
 	{info: serviceConditionTypeInfo(CheckTypeStaleBinary), build: func(in checkBuildInput) (Check, string) { return buildStaleBinaryCheck(in.base, in.deps) }},

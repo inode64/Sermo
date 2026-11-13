@@ -1,0 +1,13 @@
+name: service-heartbeat
+category: files
+monitor: disabled
+interval: 30s
+check:
+  type: file
+  paths: [/run/myapp/heartbeat]
+  # Enable only when the application promises a write at least every minute.
+  older_than: 2m
+  existence: { on: delete }
+  timeout: 3s
+then:
+  notify: [none]
