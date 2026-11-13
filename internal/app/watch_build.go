@@ -1254,7 +1254,10 @@ func watchInlineDeps(deps Deps) checks.Deps {
 	if deps.WatchCheckDeps != nil {
 		return *deps.WatchCheckDeps
 	}
+	discoverer := process.NewDiscovererWithUserLookup(deps.UserLookup)
+	discoverer.Reader = deps.ProcReader
 	checkDeps := checks.Deps{
+		ProcessesAny:   discoverer.ObserveAnyState,
 		Limiter:        deps.CheckLimiter,
 		DefaultTimeout: deps.DefaultTimeout,
 		Runner:         deps.ExecxRunner,

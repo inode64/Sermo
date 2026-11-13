@@ -3236,7 +3236,7 @@ state, expect: up}` or `{type: icmp, host: 1.1.1.1, metric: state, expect: up}` 
 works as a service check-only watch or explicit `checks:` entry (used by the
 `pppd` catalog daemon to watch its uplink). The multi-target watches (`file`, `process`, one
 event/hook per changed path or matching pid) stay watch-only.
-`service`/`metric`/`process` checks need per-service context (backend status, a
+`metric`/`process` checks and implicit `service` checks need per-service context (backend status, a
 metric sampler, process discovery) and so are not available as standalone
 watches.
 
@@ -4564,3 +4564,29 @@ rule notifications except `wall`; manual operator actions are unaffected. See
 global defaults. `dry_run: true` on one alert or remediation rule rehearses that
 rule alone; its `false` cannot lift a service's dry run, and a guard refuses the
 key, because it refuses operations in dry-run mode too.
+
+
+### Explicit init-unit checks
+
+A `service` check may name `service: example` and `backend: systemd` or
+`backend: openrc`, in service checks, preflight, guards or host watches. Without
+an explicit target it retains the enclosing service's backend status.
+
+```yaml
+check:
+  type: service
+  backend: systemd
+  service: example.service
+  expect: active
+```
+
+Explicit systemd targets use read-only D-Bus properties without activating or
+loading units. An unloaded unit or a transitional state is unavailable. Use
+`expect_result: success` instead of `expect` to check a loaded service unit's
+last Result, including an idle service activated on demand.
+
+Explicit OpenRC targets read runtime state and registered daemon identities.
+An incomplete process observation, transition, chroot or custom `status()` function is
+unavailable; keep the application's status command when it implements additional
+readiness semantics. Runtime state alone does not hide a crashed registered
+daemon. These observations grant no authority to signal a process.

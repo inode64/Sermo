@@ -1815,3 +1815,8 @@ check:
   network: default
   expect:
     network.active: { op: "==", value: true }
+
+---
+# location: watches
+name: init-unit-active
+check: { type: service, backend: systemd, service: example.service, expect: active }

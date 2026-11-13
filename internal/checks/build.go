@@ -287,7 +287,7 @@ var builtinCheckSpecs = []checkSpec{
 	{info: latencyTypeInfo(healthTypeInfo(CheckTypeHTTP)), build: func(in checkBuildInput) (Check, string) { return buildHTTPCheck(in.base, in.entry, in.client) }},
 	{info: healthTypeInfo(CheckTypeCommand), build: func(in checkBuildInput) (Check, string) { return buildCommandCheck(in.base, in.entry, in.runner) }},
 	{info: healthTypeInfo(CheckTypeClock), build: func(in checkBuildInput) (Check, string) { return buildClockCheck(in.base, in.entry) }},
-	{info: latencyTypeInfo(serviceHealthTypeInfo(CheckTypeService)), build: func(in checkBuildInput) (Check, string) { return buildServiceCheck(in.base, in.entry, in.deps) }},
+	{info: latencyTypeInfo(healthTypeInfo(CheckTypeService)), build: func(in checkBuildInput) (Check, string) { return buildServiceCheck(in.base, in.entry, in.deps) }},
 	{info: healthTypeInfo(CheckTypeFileExists), readsPaths: true, build: func(in checkBuildInput) (Check, string) { return buildFileExistsCheck(in.base, in.entry) }},
 	{info: resourcePathTypeInfo(healthTypeInfo(CheckTypeFile)), readsPaths: true, build: func(in checkBuildInput) (Check, string) { return buildFileCheck(in.base, in.entry) }},
 	{info: resourcePathTypeInfo(healthTypeInfo(CheckTypeLockfile)), readsPaths: true, build: func(in checkBuildInput) (Check, string) { return buildLockfileCheck(in.base, in.entry) }},

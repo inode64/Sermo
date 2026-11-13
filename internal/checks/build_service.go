@@ -12,6 +12,9 @@ import (
 
 // buildServiceCheck builds a check on a service-manager unit's expected state.
 func buildServiceCheck(b base, entry map[string]any, deps Deps) (Check, string) {
+	if _, present := entry[CheckKeyService]; present {
+		return buildUnitServiceCheck(b, entry, deps)
+	}
 	expect := cfgval.AsString(entry[CheckKeyExpect])
 	if expect == "" {
 		return nil, "service check requires expect"

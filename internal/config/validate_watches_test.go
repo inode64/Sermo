@@ -352,7 +352,7 @@ func TestValidateWatchesSingleShotParity(t *testing.T) {
 		"service": map[string]any{"type": "service", "expect": "active"},
 	}),
 		`watches.metric.check.type "metric" is not supported`,
-		`watches.service.check.type "service" is not supported`)
+		"watches.service.check.service is required")
 }
 
 func TestValidateClockWatch(t *testing.T) {

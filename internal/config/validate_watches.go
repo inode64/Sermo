@@ -808,10 +808,13 @@ func validateNetMetricCondition(prefix, metric string, m map[string]any, add add
 }
 
 // validateWatchableCheck validates the fields of a single-shot service check used
-// as a host watch and reports whether the type is watchable. service/metric/
-// process are excluded: they need per-service context (backend status, a metric
-// sampler, process discovery) that the watch builder does not provide.
+// as a host watch and reports whether the type is watchable. An explicit
+// service target supplies its own backend; implicit service state, metric
+// samples and process selectors still need service context.
 func validateWatchableCheck(prefix, typ string, fields map[string]any, locksDir string, add addFunc) bool {
+	if typ == checks.CheckTypeService && cfgval.AsString(fields[checks.CheckKeyService]) == "" {
+		add("%s.service is required for a host service check", prefix)
+	}
 	if checks.IsServiceScopedType(typ) {
 		return false
 	}

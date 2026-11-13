@@ -1160,6 +1160,20 @@ func validateSSHProtectedProcesses(path string, raw any, add addFunc) {
 }
 
 func validateServiceCheck(path string, entry map[string]any, _ string, add addFunc) {
+	if _, present := entry[checks.CheckKeyService]; present {
+		if err := checks.UnitServiceFields(entry); err != nil {
+			add("%s: %v", path, err)
+		}
+	} else if _, present := entry[checks.CheckKeyExpectResult]; present {
+		add("%s.expect_result requires an explicit service", path)
+	}
+	if _, present := entry[checks.CheckKeyExpectResult]; present {
+		if _, state := entry[checks.CheckKeyExpect]; state {
+			add("%s: expect and expect_result are mutually exclusive", path)
+		}
+		return
+	}
+
 	state := cfgval.String(entry[checks.CheckKeyExpect])
 	if state == "" {
 		add("%s.expect is required for a service check", path)
