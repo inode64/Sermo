@@ -407,12 +407,15 @@ func checkBuildResult(typ string, check Check, warning string) (Check, *buildFai
 
 // buildConfigCheck builds a configuration validity/change check.
 func buildConfigCheck(b base, entry map[string]any, runner execx.Runner) (Check, string) {
+	if err := ValidateConfigFormat(entry); err != nil {
+		return nil, err.Error()
+	}
 	argv := cfgval.StringArray(entry[CheckKeyCommand])
 	paths := cfgval.StringList(entry[CheckKeyPath])
 	if len(argv) == 0 && len(paths) == 0 {
 		return nil, "config check requires a command and/or path"
 	}
-	c := configCheck{base: b, runner: runner, argv: argv, user: cfgval.String(entry[CheckKeyUser]), paths: paths}
+	c := configCheck{base: b, runner: runner, argv: argv, user: cfgval.String(entry[CheckKeyUser]), paths: paths, format: cfgval.AsString(entry[CheckKeyFormat])}
 	if c.onChange = cfgval.Bool(entry[CheckKeyOnChange]); c.onChange {
 		c.state = &cmdState{}
 	}

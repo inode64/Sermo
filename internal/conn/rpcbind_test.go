@@ -41,6 +41,11 @@ func rpcAcceptedTCPTestPort(t *testing.T, acceptStat uint32) int {
 
 func rpcTCPTestPort(t *testing.T, reply func(uint32) []byte) int {
 	t.Helper()
+	return rpcTCPCallTestPort(t, func(call []byte) []byte { return reply(binary.BigEndian.Uint32(call[:rpcWordBytes])) })
+}
+
+func rpcTCPCallTestPort(t *testing.T, reply func([]byte) []byte) int {
+	t.Helper()
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
@@ -64,7 +69,7 @@ func rpcTCPTestPort(t *testing.T, reply func(uint32) []byte) int {
 		if _, err := io.ReadFull(conn, call); err != nil {
 			return
 		}
-		response := reply(binary.BigEndian.Uint32(call[:rpcWordBytes]))
+		response := reply(call)
 		binary.BigEndian.PutUint32(marker[:], uint32(len(response))|rpcFragmentLastMask)
 		_, _ = conn.Write(append(marker[:], response...))
 	}()

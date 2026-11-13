@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/binary"
 	"errors"
-	"strconv"
 )
 
 // ONC RPC / portmapper constants (RFC 5531, RFC 1833).
@@ -26,7 +25,6 @@ const (
 	rpcNullCallBytes               = 40
 	rpcUDPReplyBufferBytes         = 1500
 	rpcReplyMinBytes               = 12
-	rpcAcceptedReplyMinBytes       = 20
 	rpcAcceptedReplyFixedTail      = 24
 	rpcXIDOffset                   = 0
 	rpcMessageTypeOffset           = 4
@@ -70,12 +68,7 @@ func (rpcbindProtocol) DefaultPort() int   { return defaultPortRPCBind }
 func (rpcbindProtocol) RequiresUser() bool { return false }
 
 func (rpcbindProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
-	xid := randXID32()
-	reply, err := exchangeUDP(ctx, cfg, defaultPortRPCBind, buildRPCNull(xid, portmapProg, portmapVers), rpcUDPReplyBufferBytes)
-	if err != nil {
-		return Result{}, err
-	}
-	return rpcNullResult(reply, xid, ProtocolNameRPCBind, strconv.Itoa(portmapProg))
+	return probeRPCBind(ctx, cfg)
 }
 
 // buildRPCNull builds an ONC RPC CALL for the NULL procedure of program prog
@@ -110,19 +103,11 @@ func parseRPCReply(b []byte, xid uint32) (string, error) {
 	if binary.BigEndian.Uint32(b[rpcVersionOffset:rpcVersionOffset+rpcWordBytes]) != rpcMsgAccepted {
 		return rpcMsgDenied, nil // MSG_DENIED — still an RPC responder
 	}
-	// accepted_reply: opaque_auth verf (flavor, length, body) then accept_stat.
-	if len(b) < rpcAcceptedReplyMinBytes {
-		return "", errors.New("short accepted RPC reply")
+	off, err := rpcReplyStatusOffset(b)
+	if err != nil {
+		return "", err
 	}
-	verfLen := int(binary.BigEndian.Uint32(b[rpcVerifierLengthOffsetInReply : rpcVerifierLengthOffsetInReply+rpcWordBytes]))
-	// verfLen comes off the wire untrusted. Bound it against the bytes left for
-	// the verifier body plus the 4-byte accept_stat without forming 20+verfLen
-	// first: a hostile length overflows that sum to a negative offset on 32-bit
-	// platforms, slipping past a `len(b) < off+4` guard into an out-of-bounds slice.
-	if verfLen < 0 || verfLen > len(b)-rpcAcceptedReplyFixedTail {
-		return "", errors.New("truncated accepted RPC reply")
-	}
-	off := rpcAcceptStatOffsetBase + verfLen
+
 	return rpcAcceptStatName(binary.BigEndian.Uint32(b[off : off+rpcWordBytes])), nil
 }
 

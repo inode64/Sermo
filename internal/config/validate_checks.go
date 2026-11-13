@@ -984,6 +984,12 @@ func validateSingleShotCheckFields(path, typ string, entry map[string]any, locks
 		// the conn registry, validated generically below.
 		if proto, isProto := conn.Lookup(typ); isProto {
 			validateConnFields(path, typ, entry, proto.RequiresUser(), add)
+			if proto.Name() == conn.ProtocolNameRPCBind {
+				validateParsedCheck(path, conn.ValidateRPCBindParams(checks.RPCBindParams(entry)), add)
+			}
+			if proto.Name() == conn.ProtocolNameDocker {
+				validateParsedCheck(path, checks.DockerMemoryFields(entry), add)
+			}
 			validateConnSocketFields(path, typ, entry, add)
 			validateInterfaceFields(path, entry, add)
 			if proto.Name() == conn.ProtocolNameSMTPAcceptance {
@@ -1383,6 +1389,9 @@ func validateLVMCheck(path string, entry map[string]any, _ string, add addFunc) 
 }
 
 func validateConfigCheck(path string, entry map[string]any, _ string, add addFunc) {
+	if err := checks.ValidateConfigFormat(entry); err != nil {
+		add("%s: %v", path, err)
+	}
 	_, hasCommand := entry[checks.CheckKeyCommand]
 	_, hasPath := entry[checks.CheckKeyPath]
 	if !hasCommand && !hasPath {

@@ -1113,6 +1113,19 @@ watches:
       command: ["${binary}", "--test-config"]
       path: [/etc/demo/demo.conf, /etc/demo/conf.d]
       on_change: true
+  xml-config:
+    check: { type: config, format: xml, path: /etc/demo/server.xml }
+  java-archives:
+    check: { type: config, format: jar, path: /usr/share/demo/app.jar }
+  registered-rpc:
+    check: { type: rpcbind, host: 127.0.0.1, transport: tcp, program: 100024, version: 1 }
+  container-memory:
+    check:
+      type: docker
+      container: demo
+      memory: true
+      expect:
+        memory.used_pct: { op: "<", value: 80 }
   # `fds` is reserved for the service metric Sermo injects (checks.fds and
   # restart-if-fds-high, see fds_limit); the host-wide file-nr check gets another name.
   host-fds:

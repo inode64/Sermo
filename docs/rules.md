@@ -62,7 +62,7 @@ Connection-protocol checks (MySQL, PostgreSQL, Redis, Docker, libvirt, etc.) are
 | `ports`       | health | a set of `host` ports satisfy an open/closed expectation (see Ports)|
 | `http`        | health | the response matches `expect_status` (and optional headers/body/JSON, see HTTP)|
 | `command`     | health | the command exits with `expect_exit` (default 0) and its output matches optional `expect_stdout`/`expect_stderr`; optional `user` runs it as a specific OS user; `on_change` alerts when its output changes (e.g. a version), array form only |
-| `config`      | health | a config-test command (`apachectl configtest`, `nginx -t`, …) passes, and (with `on_change`) the config `path` is unchanged (see Service health conditions)|
+| `config`      | health | a native XML/JAR validator or config-test command (`apachectl configtest`, `nginx -t`, …) passes, and (with `on_change`) the config `path` is unchanged (see Service health conditions)|
 | `supervised_process` | health | exactly one verified supervisor and worker in a unified cgroup, with a bounded respawn grace |
 | `service`     | health | the backend status equals `expect` (active/inactive/paused/failed/unknown)|
 | `file_exists` | health | a foreign flag/lock file exists (never under `<runtime>/locks`)     |
@@ -422,6 +422,36 @@ suppresses non-console notification delivery for these service-owned monitors;
 their alarm events. The underlying `command` (`on_change`) and `config` check
 types can also be used as host watch documents when you want a hook or a
 standalone command.
+
+#### Native XML and Java archive validation
+
+A `config` check with `format: xml` or `format: jar` validates `path` without
+starting a command. `path` is an absolute clean path or a list of paths;
+`format` and `command` are mutually exclusive. Both formats work in preflight,
+service checks and host watches. Invalid content fails health; an unreadable
+file or canceled observation is unavailable. Both block required preflight.
+
+```yaml
+preflight:
+  config: { type: config, format: xml, path: /etc/app/server.xml }
+  archives: { type: config, format: jar, path: /usr/share/app/app.jar }
+```
+
+`xml` checks a single complete XML document, matching elements, namespaces and
+attributes. It accepts UTF-8 XML 1.0 without DTDs or entity declarations, with
+limits of 16 MiB per file and 256 nested elements. It checks document syntax,
+not the application's schema; keep application validators such as `nginx -t`
+when they enforce application-specific rules.
+
+`jar` verifies every ZIP member's CRC and follows the main manifest's
+`Class-Path`, including continuation lines. Only local JAR references are
+accepted. Archives and their resolved parent directories must be root-owned
+and not writable by group or others. Root archives must exist and be nonempty
+regular files. Missing optional manifest dependencies are allowed only below
+verified safe parents. Limits: 256 archives, 512 MiB per compressed archive,
+1 GiB of expanded content across the closure, and 64 KiB for each manifest's main section.
+`on_change` also fingerprints manifest dependencies, including missing ones,
+so installing an optional dependency is observable.
 
 ### Egress interface (`interface`)
 
@@ -2064,6 +2094,14 @@ Protocols, in the order of the table above:
   `container.health` (`healthy`/`unhealthy`/`starting`/`none`), `container.running`,
   `container.restartcount` and `container.exitcode`; `on_change` then alerts on its
   state/health transitions. An unknown container fails the check.
+  With `memory: true`, a selected running container also reports
+  `memory.used_bytes` (raw usage including cache), `memory.limit_bytes` (the
+  effective limit reported by Docker), `memory.limited` and `memory.used_pct`.
+  The sample uses the inspected container ID and a single non-streaming stats
+  request. Unlimited containers report `limited: false`, zero limit and zero
+  percentage; assert `memory.limited` if a limit is required. Missing stats or a
+  changed container identity fail the probe. For example, use
+  `expect: { memory.used_pct: { op: "<", value: 80 } }`.
   On every probe that tracks an identity (`docker`, `libvirt`, `nut`, `ssh`,
   `snmp`, `dbus`), `on_change` reports a transition as a failed cycle, but a move
   into a state the check accepts never drives a `start`/`restart` rule: a
@@ -2139,6 +2177,13 @@ Protocols, in the order of the table above:
   program-version mismatch passes, while an unavailable program, denied reply or
   another acceptance status fails. Result data carries the `rpc_status`. The same
   NULL-call probe backs the `nfs`/`mountd`/`statd` checks below.
+  Set `transport: tcp` to use TCP record marking. Explicit `program` and/or
+  `version` require an exact successful NULL reply; a version mismatch then
+  fails. For another program Sermo first asks portmapper v2 GETPORT for that
+  program/version/transport, rejects an unregistered port and probes the
+  returned endpoint. Example: `{ type: rpcbind, host: 127.0.0.1,
+  transport: tcp, program: 100024, version: 1 }`. Result data includes
+  `program` and, for explicit targets, `program_version`.
 - `nfs` (aliases `nfs-server`, `nfsd`) — an ONC RPC NULL to the NFS program
   (100003) over TCP (record marking), like `rpcbind`; default port 2049. A
   version-mismatch reply (e.g. an NFSv4-only server answering a v3 NULL) still
@@ -4580,6 +4625,11 @@ check:
   service: example.service
   expect: active
 ```
+
+A list such as `service: [example.service, example.socket]` passes when at least
+one unit matches `expect`, preserving `systemctl is-active`'s multi-unit
+semantics. If none matches and any observation is incomplete, the check is
+unavailable. All targets share the check's timeout.
 
 Explicit systemd targets use read-only D-Bus properties without activating or
 loading units. An unloaded unit or a transitional state is unavailable. Use

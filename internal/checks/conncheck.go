@@ -461,6 +461,20 @@ func configureConnProtocol(cfg *conn.Config, protoName string, entry map[string]
 		setConnQuery(cfg, entry, CheckKeyUPS)
 	case conn.ProtocolNameDocker:
 		setConnQuery(cfg, entry, CheckKeyContainer)
+		if err := DockerMemoryFields(entry); err != nil {
+			return err
+		}
+		if cfgval.Bool(entry[CheckKeyMemory]) {
+			setConnParam(cfg, conn.ParamKeyDockerMemory, conn.ParamValueTrue)
+		}
+	case conn.ProtocolNameRPCBind:
+		params := RPCBindParams(entry)
+		if err := conn.ValidateRPCBindParams(params); err != nil {
+			return fmt.Errorf("rpcbind check: %w", err)
+		}
+		for key, value := range params {
+			setConnParam(cfg, key, value)
+		}
 	case conn.ProtocolNameLibvirt:
 		setConnParam(cfg, conn.ParamKeyDomain, cfgval.AsString(entry[CheckKeyDomain]))
 		setConnParam(cfg, conn.ParamKeyNetwork, cfgval.AsString(entry[CheckKeyNetwork]))

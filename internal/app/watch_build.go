@@ -1174,6 +1174,10 @@ func configMonitor(name string, tree map[string]any, deps Deps, interval time.Du
 		if user := cmdEntry[checks.CheckKeyUser]; user != nil {
 			entry[checks.CheckKeyUser] = user
 		}
+		if format := cmdEntry[checks.CheckKeyFormat]; format != nil {
+			entry[checks.CheckKeyFormat] = format
+			entry[checks.CheckKeyPath] = cmdEntry[checks.CheckKeyPath]
+		}
 	}
 	if p, present := block[checks.CheckKeyPath]; present {
 		entry[checks.CheckKeyPath] = p

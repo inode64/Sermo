@@ -56,6 +56,11 @@ func (dockerProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 			return Result{}, probeErr(ProtocolNameDocker, stepInspect, err)
 		}
 		dockerContainer(container, &res)
+		if cfg.Params[ParamKeyDockerMemory] == ParamValueTrue {
+			if err := dockerContainerMemory(ctx, client, container, &res); err != nil {
+				return Result{}, err
+			}
+		}
 	}
 	return res, nil
 }

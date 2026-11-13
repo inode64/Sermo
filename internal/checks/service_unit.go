@@ -36,10 +36,15 @@ func UnitServiceFields(entry map[string]any) error {
 			return errors.New("expect and expect_result are mutually exclusive")
 		}
 	}
-	unit := cfgval.AsString(entry[CheckKeyService])
+	units := cfgval.StringList(entry[CheckKeyService])
 	backend := servicemgr.Backend(cfgval.AsString(entry[CheckKeyBackend]))
-	if !servicemgr.ValidOpenRCUnit(unit) {
-		return errors.New("service must name one init unit")
+	if !cfgval.IsNonEmptyStringList(entry[CheckKeyService]) {
+		return errors.New("service must name an init unit or a non-empty list of units")
+	}
+	for _, unit := range units {
+		if !servicemgr.ValidOpenRCUnit(unit) {
+			return errors.New("service must name valid init units")
+		}
 	}
 	if backend != servicemgr.BackendOpenRC && backend != servicemgr.BackendSystemd {
 		return errors.New("backend must be openrc or systemd for an explicit service")
@@ -56,14 +61,14 @@ func buildUnitServiceCheck(b base, entry map[string]any, deps Deps) (Check, stri
 	if err := UnitServiceFields(entry); err != nil {
 		return nil, err.Error()
 	}
-	unit := cfgval.AsString(entry[CheckKeyService])
+	units := cfgval.StringList(entry[CheckKeyService])
 	backend := servicemgr.Backend(cfgval.AsString(entry[CheckKeyBackend]))
 	expect := cfgval.AsString(entry[CheckKeyExpect])
 	observe := deps.ProcessesAny
 	if observe == nil {
 		observe = (process.Discoverer{}).ObserveAnyState
 	}
-	status := func(ctx context.Context) (servicemgr.Status, error) {
+	read := func(ctx context.Context, unit string) (servicemgr.Status, error) {
 		if backend == servicemgr.BackendSystemd {
 			return systemdUnitState(ctx, unit, conn.SystemdUnitProperty)
 		}
@@ -73,11 +78,36 @@ func buildUnitServiceCheck(b base, entry map[string]any, deps Deps) (Check, stri
 	}
 	if result := cfgval.AsString(entry[CheckKeyExpectResult]); result != "" {
 		expect = result
-		status = func(ctx context.Context) (servicemgr.Status, error) {
+		read = func(ctx context.Context, unit string) (servicemgr.Status, error) {
 			return systemdUnitResult(ctx, unit, conn.SystemdUnitProperty)
 		}
 	}
+	status := func(ctx context.Context) (servicemgr.Status, error) {
+		return anyUnitState(ctx, units, expect, read)
+	}
 	return serviceCheck{base: b, expect: expect, status: status}, ""
+}
+
+// A verified match proves the disjunction even if another unit is unavailable.
+// Without a match, incomplete observations must remain unavailable for guards.
+func anyUnitState(ctx context.Context, units []string, expect string, read func(context.Context, string) (servicemgr.Status, error)) (servicemgr.Status, error) {
+	state := servicemgr.StatusUnknown
+	var failures []error
+	for _, unit := range units {
+		if err := ctx.Err(); err != nil {
+			return servicemgr.StatusUnknown, fmt.Errorf("observe units: %w", err)
+		}
+		observed, err := read(ctx, unit)
+		if err != nil {
+			failures = append(failures, err)
+			continue
+		}
+		if string(observed) == expect {
+			return observed, nil
+		}
+		state = observed
+	}
+	return state, errors.Join(failures...)
 }
 
 type systemdPropertyReader func(context.Context, string, string, string) (any, error)

@@ -812,7 +812,7 @@ func validateNetMetricCondition(prefix, metric string, m map[string]any, add add
 // service target supplies its own backend; implicit service state, metric
 // samples and process selectors still need service context.
 func validateWatchableCheck(prefix, typ string, fields map[string]any, locksDir string, add addFunc) bool {
-	if typ == checks.CheckTypeService && cfgval.AsString(fields[checks.CheckKeyService]) == "" {
+	if typ == checks.CheckTypeService && !cfgval.IsNonEmptyStringList(fields[checks.CheckKeyService]) {
 		add("%s.service is required for a host service check", prefix)
 	}
 	if checks.IsServiceScopedType(typ) {

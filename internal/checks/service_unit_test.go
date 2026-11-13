@@ -81,3 +81,32 @@ func TestOpenRCDaemonObservation(t *testing.T) {
 		}
 	}
 }
+
+func TestAnyUnitState(t *testing.T) {
+	for _, tt := range []struct {
+		name    string
+		states  []servicemgr.Status
+		want    servicemgr.Status
+		wantErr bool
+	}{
+		{"socket active", []servicemgr.Status{servicemgr.StatusInactive, servicemgr.StatusActive}, servicemgr.StatusActive, false},
+		{"missing service and active socket", []servicemgr.Status{servicemgr.StatusUnknown, servicemgr.StatusActive}, servicemgr.StatusActive, false},
+		{"missing service and inactive socket", []servicemgr.Status{servicemgr.StatusUnknown, servicemgr.StatusInactive}, servicemgr.StatusInactive, true},
+		{"both inactive", []servicemgr.Status{servicemgr.StatusInactive, servicemgr.StatusInactive}, servicemgr.StatusInactive, false},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			index := 0
+			state, err := anyUnitState(t.Context(), []string{"app.service", "app.socket"}, "active", func(context.Context, string) (servicemgr.Status, error) {
+				state := tt.states[index]
+				index++
+				if state == servicemgr.StatusUnknown {
+					return state, errors.New("unit not loaded")
+				}
+				return state, nil
+			})
+			if state != tt.want || (err != nil) != tt.wantErr {
+				t.Fatalf("%s %v", state, err)
+			}
+		})
+	}
+}

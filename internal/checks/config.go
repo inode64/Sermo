@@ -2,6 +2,7 @@ package checks
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -22,6 +23,7 @@ type configCheck struct {
 	runner   execx.Runner
 	argv     []string // config-test command (optional)
 	user     string
+	format   string
 	paths    []string // config file(s) to watch (optional)
 	onChange bool
 	state    *cmdState
@@ -32,6 +34,17 @@ func (c configCheck) Run(ctx context.Context) Result {
 	defer run.close()
 	start := run.start
 
+	paths := c.paths
+	if c.format != "" {
+		var err error
+		paths, err = validateNativeConfig(ctx, c.format, paths)
+		if err != nil {
+			if errors.Is(err, errConfigSyntax) {
+				return c.result(false, err.Error(), start)
+			}
+			return c.unavailableResult(err.Error(), start)
+		}
+	}
 	// Validity: a non-zero exit from the config-test command means invalid config.
 	if len(c.argv) > 0 {
 		res, err := runCheckCommand(ctx, c.runner, c.user, c.argv)
@@ -54,7 +67,7 @@ func (c configCheck) Run(ctx context.Context) Result {
 
 	// Change detection: alert when a watched config file changed since last cycle.
 	if c.onChange && len(c.paths) > 0 {
-		fp := configFingerprint(c.paths)
+		fp := configFingerprint(paths)
 		if c.state.primed && fp != c.state.last {
 			c.state.last = fp
 			return c.changeResult(c.result(false, "config changed: "+strings.Join(c.paths, ", "), start))

@@ -2,6 +2,8 @@ package app
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"reflect"
 	"testing"
 	"time"
@@ -282,5 +284,29 @@ func TestServiceMonitorWatchesSkipDisabledServices(t *testing.T) {
 	}
 	if !reflect.DeepEqual(names, []string{"api:version"}) || len(warnings) != 0 {
 		t.Fatalf("service monitors = %v warnings = %v, want only api:version", names, warnings)
+	}
+}
+
+func TestConfigMonitorUsesNativeValidator(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "server.xml")
+	if err := os.WriteFile(path, []byte("<Server>"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	tree := map[string]any{
+		"preflight": map[string]any{"config": map[string]any{"type": "config", "format": "xml", "path": path}},
+		"config":    map[string]any{"on_change": map[string]any{}},
+	}
+	watch, warn := configMonitor("app", tree, monitorTestDeps(), time.Minute)
+	if warn != "" || watch == nil {
+		t.Fatalf("%v, %s", watch, warn)
+	}
+	if result := watch.Check.Run(t.Context()); result.OK || result.Unavailable {
+		t.Fatalf("invalid XML: %+v", result)
+	}
+	if err := os.WriteFile(path, []byte("<Server/>"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if result := watch.Check.Run(t.Context()); !result.OK {
+		t.Fatalf("valid XML: %+v", result)
 	}
 }

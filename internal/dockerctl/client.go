@@ -258,12 +258,18 @@ type ContainerState struct {
 
 // Container is the subset of Docker inspect data Sermo needs.
 type Container struct {
-	ID           string          `json:"Id"`
-	Name         string          `json:"Name"`
-	RestartCount int             `json:"RestartCount"`
-	State        ContainerState  `json:"State"`
-	Image        string          `json:"Image"`
-	Config       ContainerConfig `json:"Config"`
+	HostConfig   ContainerHostConfig `json:"HostConfig"`
+	ID           string              `json:"Id"`
+	Name         string              `json:"Name"`
+	RestartCount int                 `json:"RestartCount"`
+	State        ContainerState      `json:"State"`
+	Image        string              `json:"Image"`
+	Config       ContainerConfig     `json:"Config"`
+}
+
+// ContainerHostConfig carries the configured memory limit, including explicit zero.
+type ContainerHostConfig struct {
+	Memory *int64 `json:"Memory"`
 }
 
 // ContainerConfig carries the ownership labels needed for Compose recovery.
