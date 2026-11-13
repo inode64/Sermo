@@ -100,13 +100,19 @@ func (s supervisedSource) wait(ctx context.Context, spec SupervisedProcessSpec) 
 	ticker := time.NewTicker(s.interval)
 	defer ticker.Stop()
 	var principal supervisedGeneration
+	observationErr := errSupervisedUnstable
 	for {
 		observation, err := s.observe(bounded, spec, workerUID, supervisorUID)
 		if ctx.Err() != nil {
 			return SupervisedProcessSample{}, fmt.Errorf("observe supervised process: %w", ctx.Err())
 		}
+		// The grace deadline may interrupt the next scan; preserve the last
+		// observation, but never turn an unstable snapshot into proven absence.
+		if !errors.Is(err, context.DeadlineExceeded) {
+			observationErr = err
+		}
 		if bounded.Err() != nil {
-			return SupervisedProcessSample{}, fmt.Errorf("%w: no stable worker after %s", ErrSupervisedNotReady, spec.RespawnGrace)
+			return SupervisedProcessSample{}, supervisedRespawnError(spec.RespawnGrace, observationErr)
 		}
 		if err != nil && !errors.Is(err, errSupervisedUnstable) {
 			return SupervisedProcessSample{}, err
@@ -124,10 +130,17 @@ func (s supervisedSource) wait(ctx context.Context, spec SupervisedProcessSpec) 
 		case <-ctx.Done():
 			return SupervisedProcessSample{}, fmt.Errorf("observe supervised process: %w", ctx.Err())
 		case <-bounded.Done():
-			return SupervisedProcessSample{}, fmt.Errorf("%w: no stable worker after %s", ErrSupervisedNotReady, spec.RespawnGrace)
+			return SupervisedProcessSample{}, supervisedRespawnError(spec.RespawnGrace, observationErr)
 		case <-ticker.C:
 		}
 	}
+}
+
+func supervisedRespawnError(grace time.Duration, observationErr error) error {
+	if observationErr != nil {
+		return fmt.Errorf("cannot verify supervised worker after %s: %w", grace, observationErr)
+	}
+	return fmt.Errorf("%w: no stable worker after %s", ErrSupervisedNotReady, grace)
 }
 
 func (s supervisedSource) observe(ctx context.Context, spec SupervisedProcessSpec, workerUID, supervisorUID uint32) (supervisedObservation, error) {
@@ -208,7 +221,7 @@ func (s supervisedSource) members(group string) ([]int, error) {
 }
 
 func (s supervisedSource) stableIdentity(pid int) (Identity, error) {
-	before, ok, err := s.identity(pid)
+	before, ok, err := readIdentity(s.reader, pid)
 	if err != nil {
 		return Identity{}, err
 	}
@@ -218,7 +231,7 @@ func (s supervisedSource) stableIdentity(pid int) (Identity, error) {
 	if !before.StartTicksOK || (!before.ExeOK && before.ExePrev == "") {
 		return Identity{}, errors.New("supervised process identity is incomplete")
 	}
-	after, ok, err := s.identity(pid)
+	after, ok, err := readIdentity(s.reader, pid)
 	if err != nil {
 		return Identity{}, err
 	}
@@ -229,16 +242,4 @@ func (s supervisedSource) stableIdentity(pid int) (Identity, error) {
 		return Identity{}, errSupervisedUnstable
 	}
 	return after, nil
-}
-
-func (s supervisedSource) identity(pid int) (Identity, bool, error) {
-	if checked, ok := s.reader.(IdentityErrorReader); ok {
-		id, present, err := checked.IdentityWithError(pid)
-		if err != nil {
-			return Identity{}, false, fmt.Errorf("read supervised identity: %w", err)
-		}
-		return id, present, nil
-	}
-	id, present := s.reader.Identity(pid)
-	return id, present, nil
 }

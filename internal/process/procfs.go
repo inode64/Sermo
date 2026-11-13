@@ -135,6 +135,19 @@ type IdentityErrorReader interface {
 	IdentityWithError(pid int) (Identity, bool, error)
 }
 
+// Prefer error-aware readers so incomplete observations never become absences.
+func readIdentity(reader Reader, pid int) (Identity, bool, error) {
+	if checked, ok := reader.(IdentityErrorReader); ok {
+		id, present, err := checked.IdentityWithError(pid)
+		if err != nil {
+			return Identity{}, false, fmt.Errorf("read process identity: %w", err)
+		}
+		return id, present, nil
+	}
+	id, present := reader.Identity(pid)
+	return id, present, nil
+}
+
 // OSReader reads the host /proc filesystem.
 type OSReader struct {
 	// LookupUserName maps a UID to a display name. Optional: nil uses native

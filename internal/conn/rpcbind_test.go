@@ -86,18 +86,18 @@ func rpcTCPCallTestPort(t *testing.T, reply func([]byte) []byte) int {
 }
 
 func TestParseRPCReply(t *testing.T) {
-	if s, err := parseRPCReply(rpcAcceptedReply(7, 0), 7); err != nil || s != "success" {
+	if s, _, err := parseRPCReply(rpcAcceptedReply(7, 0), 7); err != nil || s != "success" {
 		t.Fatalf("got %q/%v, want success/nil", s, err)
 	}
-	if s, err := parseRPCReply(rpcAcceptedReply(7, 2), 7); err != nil || s != "prog_mismatch" {
+	if s, _, err := parseRPCReply(rpcAcceptedReply(7, 2), 7); err != nil || s != "prog_mismatch" {
 		t.Fatalf("got %q/%v, want prog_mismatch/nil", s, err)
 	}
-	if _, err := parseRPCReply(rpcAcceptedReply(7, 0), 8); err == nil {
+	if _, _, err := parseRPCReply(rpcAcceptedReply(7, 0), 8); err == nil {
 		t.Fatal("xid mismatch must error")
 	}
 	// A CALL (not a REPLY) must be rejected.
 	call := buildRPCNull(7, portmapProg, portmapVers)
-	if _, err := parseRPCReply(call, 7); err == nil {
+	if _, _, err := parseRPCReply(call, 7); err == nil {
 		t.Fatal("a non-reply message must error")
 	}
 	// A hostile verifier length must be rejected as truncated, never drive an
@@ -106,7 +106,7 @@ func TestParseRPCReply(t *testing.T) {
 	for _, verfLen := range []uint32{0xFFFFFFFF, 0x7FFFFFF0, 24} {
 		hostile := rpcAcceptedReply(7, 0)
 		binary.BigEndian.PutUint32(hostile[16:], verfLen)
-		if _, err := parseRPCReply(hostile, 7); err == nil {
+		if _, _, err := parseRPCReply(hostile, 7); err == nil {
 			t.Fatalf("verifier length %#x must error", verfLen)
 		}
 	}

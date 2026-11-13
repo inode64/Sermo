@@ -28,6 +28,27 @@ func (r fakeReader) Identity(pid int) (Identity, bool) {
 	return id, ok
 }
 
+type partialIdentityReader struct {
+	fakeReader
+	deniedPID int
+}
+
+func (r partialIdentityReader) IdentityWithError(pid int) (Identity, bool, error) {
+	id, present := r.Identity(pid)
+	if pid == r.deniedPID {
+		return id, present, os.ErrPermission
+	}
+	return id, present, nil
+}
+
+func TestSnapshotPreservesIdentityReadErrors(t *testing.T) {
+	reader := partialIdentityReader{ids: map[int]Identity{21: {PID: 21}, 22: {PID: 22}}, deniedPID: 21}
+	snapshot, err := Snapshot(reader)
+	if !errors.Is(err, os.ErrPermission) || len(snapshot) != 1 || snapshot[22].PID != 22 {
+		t.Fatalf("Snapshot() = %v, %v; want only the readable PID and its peer's read error", snapshot, err)
+	}
+}
+
 type countingReader struct {
 	fakeReader
 	pidCalls int

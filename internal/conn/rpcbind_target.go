@@ -71,14 +71,14 @@ func probeRPCBind(ctx context.Context, cfg Config) (Result, error) {
 		cfg.Port = port
 	}
 	xid := randXID32()
-	reply, err := exchangeRPC(ctx, cfg, target.transport, buildRPCNull(xid, target.program, target.version))
+	reply, err := exchangeRPC(ctx, cfg, ProtocolNameRPCBind, defaultPortRPCBind, target.transport, buildRPCNull(xid, target.program, target.version))
 	if err != nil {
 		return Result{}, err
 	}
 	if !target.exact {
 		return rpcNullResult(reply, xid, ProtocolNameRPCBind, strconv.FormatUint(uint64(target.program), numericBaseDecimal))
 	}
-	status, err := parseRPCReply(reply, xid)
+	status, _, err := parseRPCReply(reply, xid)
 	if err != nil {
 		return Result{}, err
 	}
@@ -100,22 +100,17 @@ func lookupRPCPort(ctx context.Context, cfg Config, target rpcBindTarget) (int, 
 		protocol = rpcIPProtocolTCP
 	}
 	binary.BigEndian.PutUint32(mapping[2*rpcWordBytes:], protocol)
-	reply, err := exchangeRPC(ctx, cfg, target.transport, append(payload, mapping...))
+	reply, err := exchangeRPC(ctx, cfg, ProtocolNameRPCBind, defaultPortRPCBind, target.transport, append(payload, mapping...))
 	if err != nil {
 		return 0, err
 	}
-	status, err := parseRPCReply(reply, xid)
+	status, body, err := parseRPCReply(reply, xid)
 	if err != nil {
 		return 0, err
 	}
 	if status != rpcAcceptNameSuccess {
 		return 0, fmt.Errorf("RPC port lookup: %s", status)
 	}
-	offset, err := rpcReplyStatusOffset(reply)
-	if err != nil {
-		return 0, err
-	}
-	body := reply[offset+rpcWordBytes:]
 	if len(body) != rpcWordBytes {
 		return 0, errors.New("RPC port lookup has an invalid result length")
 	}
@@ -124,32 +119,4 @@ func lookupRPCPort(ctx context.Context, cfg Config, target rpcBindTarget) (int, 
 		return 0, fmt.Errorf("RPC program %d version %d has no valid %s port", target.program, target.version, target.transport)
 	}
 	return int(port), nil
-}
-
-func exchangeRPC(ctx context.Context, cfg Config, transport string, payload []byte) ([]byte, error) {
-	if transport == networkUDP {
-		return exchangeUDP(ctx, cfg, defaultPortRPCBind, payload, rpcUDPReplyBufferBytes)
-	}
-	connection, err := newProbeTarget(cfg, defaultPortRPCBind).openTCP(ctx)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = connection.Close() }()
-	return rpcCallTCP(connection, ProtocolNameRPCBind, payload)
-}
-
-// rpcReplyStatusOffset bounds and aligns the opaque verifier before accept_stat.
-func rpcReplyStatusOffset(reply []byte) (int, error) {
-	if len(reply) < rpcAcceptedReplyFixedTail {
-		return 0, errors.New("short accepted RPC reply")
-	}
-	length := int(binary.BigEndian.Uint32(reply[rpcVerifierLengthOffsetInReply : rpcVerifierLengthOffsetInReply+rpcWordBytes]))
-	if length < 0 || length > len(reply)-rpcAcceptedReplyFixedTail {
-		return 0, errors.New("truncated accepted RPC reply")
-	}
-	padding := (rpcWordBytes - length%rpcWordBytes) % rpcWordBytes
-	if length > len(reply)-rpcAcceptedReplyFixedTail-padding {
-		return 0, errors.New("truncated RPC verifier padding")
-	}
-	return rpcAcceptStatOffsetBase + length + padding, nil
 }

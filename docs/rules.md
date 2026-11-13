@@ -4737,6 +4737,7 @@ executables, users and cgroup membership. A worker may respawn within the grace
 supervisors, duplicate workers, or a worker still missing after the grace fail
 health. Unreadable identities, changed supervisor generations and outer timeouts
 are unavailable. Cgroup membership changes are retried within the same grace.
+If observations are still unstable when the grace expires, the check is unavailable.
 The timeout defaults to at least 10s and must exceed the grace; set an explicit
 timeout when increasing it. It reads the target cgroup rather than scanning all
 host processes, and never accepts cached identities during the wait.

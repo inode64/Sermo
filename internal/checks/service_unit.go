@@ -26,16 +26,7 @@ const (
 	systemdLoadStateLoaded     = "loaded"
 )
 
-// UnitServiceFields validates the explicit target independently of its scope.
-func UnitServiceFields(entry map[string]any) error {
-	if cfgval.AsString(entry[CheckKeyExpect]) == "" && cfgval.AsString(entry[CheckKeyExpectResult]) == "" {
-		return errors.New("service check requires expect or expect_result")
-	}
-	if _, state := entry[CheckKeyExpect]; state {
-		if _, result := entry[CheckKeyExpectResult]; result {
-			return errors.New("expect and expect_result are mutually exclusive")
-		}
-	}
+func unitServiceFields(entry map[string]any) error {
 	units := cfgval.StringList(entry[CheckKeyService])
 	backend := servicemgr.Backend(cfgval.AsString(entry[CheckKeyBackend]))
 	if !cfgval.IsNonEmptyStringList(entry[CheckKeyService]) {
@@ -49,18 +40,10 @@ func UnitServiceFields(entry map[string]any) error {
 	if backend != servicemgr.BackendOpenRC && backend != servicemgr.BackendSystemd {
 		return errors.New("backend must be openrc or systemd for an explicit service")
 	}
-	if result, present := entry[CheckKeyExpectResult]; present {
-		if backend != servicemgr.BackendSystemd || cfgval.AsString(result) == "" {
-			return errors.New("expect_result requires systemd and a non-empty string")
-		}
-	}
 	return nil
 }
 
 func buildUnitServiceCheck(b base, entry map[string]any, deps Deps) (Check, string) {
-	if err := UnitServiceFields(entry); err != nil {
-		return nil, err.Error()
-	}
 	units := cfgval.StringList(entry[CheckKeyService])
 	backend := servicemgr.Backend(cfgval.AsString(entry[CheckKeyBackend]))
 	expect := cfgval.AsString(entry[CheckKeyExpect])

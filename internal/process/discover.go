@@ -1110,18 +1110,12 @@ func readSnapshot(reader Reader) (map[int]Identity, error) {
 	}
 	var failures []error
 	for _, pid := range pids {
-		if checked, ok := reader.(IdentityErrorReader); ok {
-			id, present, readErr := checked.IdentityWithError(pid)
-			if readErr != nil {
-				failures = append(failures, fmt.Errorf("read process identity: %w", readErr))
-				continue
-			}
-			if present {
-				snapshot[pid] = id
-			}
+		id, present, err := readIdentity(reader, pid)
+		if err != nil {
+			failures = append(failures, err)
 			continue
 		}
-		if id, ok := reader.Identity(pid); ok {
+		if present {
 			snapshot[pid] = id
 		}
 	}

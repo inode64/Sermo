@@ -89,26 +89,35 @@ func buildRPCNull(xid, prog, vers uint32) []byte {
 	return b
 }
 
-// parseRPCReply validates an ONC RPC reply for xid and returns its status.
-func parseRPCReply(b []byte, xid uint32) (string, error) {
+// parseRPCReply validates the envelope once for both NULL and GETPORT calls.
+// The body begins after the aligned verifier and acceptance status.
+func parseRPCReply(b []byte, xid uint32) (string, []byte, error) {
 	if len(b) < rpcReplyMinBytes {
-		return "", errors.New("short RPC reply")
+		return "", nil, errors.New("short RPC reply")
 	}
 	if binary.BigEndian.Uint32(b[rpcXIDOffset:rpcXIDOffset+rpcWordBytes]) != xid {
-		return "", errors.New("RPC reply xid mismatch")
+		return "", nil, errors.New("RPC reply xid mismatch")
 	}
 	if binary.BigEndian.Uint32(b[rpcMessageTypeOffset:rpcMessageTypeOffset+rpcWordBytes]) != rpcReply {
-		return "", errors.New("not an RPC reply")
+		return "", nil, errors.New("not an RPC reply")
 	}
 	if binary.BigEndian.Uint32(b[rpcVersionOffset:rpcVersionOffset+rpcWordBytes]) != rpcMsgAccepted {
-		return rpcMsgDenied, nil // MSG_DENIED — still an RPC responder
+		return rpcMsgDenied, nil, nil // MSG_DENIED — still an RPC responder
 	}
-	off, err := rpcReplyStatusOffset(b)
-	if err != nil {
-		return "", err
+	if len(b) < rpcAcceptedReplyFixedTail {
+		return "", nil, errors.New("short accepted RPC reply")
 	}
+	length := int(binary.BigEndian.Uint32(b[rpcVerifierLengthOffsetInReply : rpcVerifierLengthOffsetInReply+rpcWordBytes]))
+	if length < 0 || length > len(b)-rpcAcceptedReplyFixedTail {
+		return "", nil, errors.New("truncated accepted RPC reply")
+	}
+	padding := (rpcWordBytes - length%rpcWordBytes) % rpcWordBytes
+	if length > len(b)-rpcAcceptedReplyFixedTail-padding {
+		return "", nil, errors.New("truncated RPC verifier padding")
+	}
+	off := rpcAcceptStatOffsetBase + length + padding
 
-	return rpcAcceptStatName(binary.BigEndian.Uint32(b[off : off+rpcWordBytes])), nil
+	return rpcAcceptStatName(binary.BigEndian.Uint32(b[off : off+rpcWordBytes])), b[off+rpcWordBytes:], nil
 }
 
 // rpcTargetProgramStatusOK reports whether status proves the requested program
@@ -130,4 +139,16 @@ var rpcAcceptStatNames = map[uint32]string{
 
 func rpcAcceptStatName(code uint32) string {
 	return codeName(code, rpcAcceptStatNames, "accept_stat_%d")
+}
+
+func exchangeRPC(ctx context.Context, cfg Config, protocol string, defaultPort int, transport string, payload []byte) ([]byte, error) {
+	if transport == networkUDP {
+		return exchangeUDP(ctx, cfg, defaultPort, payload, rpcUDPReplyBufferBytes)
+	}
+	connection, err := newProbeTarget(cfg, defaultPort).openTCP(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = connection.Close() }()
+	return rpcCallTCP(connection, protocol, payload)
 }

@@ -8,17 +8,47 @@ import (
 	"sermo/internal/cfgval"
 	"sermo/internal/metrics"
 	"sermo/internal/process"
+	"sermo/internal/servicemgr"
 )
+
+// ServiceCheckFields keeps YAML validation and check construction in agreement.
+func ServiceCheckFields(entry map[string]any) error {
+	_, explicit := entry[CheckKeyService]
+	if result, present := entry[CheckKeyExpectResult]; present {
+		if !explicit {
+			return errors.New("expect_result requires an explicit service")
+		}
+		if _, state := entry[CheckKeyExpect]; state {
+			return errors.New("expect and expect_result are mutually exclusive")
+		}
+		if cfgval.AsString(entry[CheckKeyBackend]) != string(servicemgr.BackendSystemd) || cfgval.AsString(result) == "" {
+			return errors.New("expect_result requires systemd and a non-empty string")
+		}
+	} else {
+		state := cfgval.AsString(entry[CheckKeyExpect])
+		switch servicemgr.Status(state) {
+		case servicemgr.StatusActive, servicemgr.StatusInactive, servicemgr.StatusPaused, servicemgr.StatusFailed, servicemgr.StatusUnknown:
+		case "":
+			return errors.New("expect is required for a service check")
+		default:
+			return fmt.Errorf("expect %q is not one of %s", state, servicemgr.StatusSummary)
+		}
+	}
+	if explicit {
+		return unitServiceFields(entry)
+	}
+	return nil
+}
 
 // buildServiceCheck builds a check on a service-manager unit's expected state.
 func buildServiceCheck(b base, entry map[string]any, deps Deps) (Check, string) {
+	if err := ServiceCheckFields(entry); err != nil {
+		return nil, err.Error()
+	}
 	if _, present := entry[CheckKeyService]; present {
 		return buildUnitServiceCheck(b, entry, deps)
 	}
 	expect := cfgval.AsString(entry[CheckKeyExpect])
-	if expect == "" {
-		return nil, "service check requires expect"
-	}
 	if deps.Status == nil {
 		return nil, "service check needs backend detection, unavailable here"
 	}

@@ -110,3 +110,28 @@ func TestAnyUnitState(t *testing.T) {
 		})
 	}
 }
+
+func TestServiceCheckBuildRejectsInvalidFields(t *testing.T) {
+	for _, tt := range []struct {
+		name   string
+		fields map[string]any
+	}{
+		{"invalid state", map[string]any{"expect": "actve"}},
+		{"invalid explicit state", map[string]any{"service": "app", "backend": "systemd", "expect": "actve"}},
+		{"result without target", map[string]any{"expect": "active", "expect_result": "success"}},
+		{"state and result", map[string]any{"service": "app", "backend": "systemd", "expect": "active", "expect_result": "success"}},
+		{"empty result", map[string]any{"service": "app", "backend": "systemd", "expect_result": ""}},
+		{"invalid target list", map[string]any{"service": []any{"app", 42}, "backend": "systemd", "expect": "active"}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.fields[CheckKeyType] = CheckTypeService
+			_, err := BuildInline("unit", tt.fields, Deps{Status: func(context.Context) (servicemgr.Status, error) {
+				t.Fatal("invalid check reached the backend")
+				return servicemgr.StatusUnknown, nil
+			}})
+			if err == nil {
+				t.Fatalf("accepted invalid service fields: %v", tt.fields)
+			}
+		})
+	}
+}

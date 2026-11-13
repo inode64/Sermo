@@ -141,13 +141,13 @@ func TestSupervisedProcessMembershipBounds(t *testing.T) {
 
 type unstableSupervisedReader struct {
 	fakeReader
-	calls int
+	calls, stableReads int
 }
 
 func (r *unstableSupervisedReader) Identity(pid int) (Identity, bool) {
 	r.calls++
 	id, ok := r.fakeReader.Identity(pid)
-	if r.calls%2 == 0 {
+	if r.calls > r.stableReads && (r.calls-r.stableReads)%2 == 0 {
 		id.StartTicks++
 	}
 	return id, ok
@@ -158,6 +158,25 @@ func TestSupervisedProcessRejectsReusedPID(t *testing.T) {
 	source.reader = &unstableSupervisedReader{ids: ids}
 	if _, err := source.observe(t.Context(), spec, 7, 0); !errors.Is(err, errSupervisedUnstable) {
 		t.Fatalf("reused PID: %v", err)
+	}
+}
+
+func TestSupervisedProcessUnstableGraceIsNotAbsence(t *testing.T) {
+	for _, initiallyAbsent := range []bool{false, true} {
+		t.Run(strconv.FormatBool(initiallyAbsent), func(t *testing.T) {
+			spec, source, ids := supervisedFixture()
+			spec.RespawnGrace = 25 * time.Millisecond
+			unstable := &unstableSupervisedReader{ids: ids}
+			if initiallyAbsent {
+				delete(ids, 21)
+				unstable.stableReads = 2
+			}
+			source.reader = unstable
+			_, err := source.wait(t.Context(), spec)
+			if !errors.Is(err, errSupervisedUnstable) || errors.Is(err, ErrSupervisedNotReady) {
+				t.Fatalf("unstable identities classified as a failed worker: %v", err)
+			}
+		})
 	}
 }
 
@@ -178,15 +197,9 @@ func TestSupervisedProcessRetriesChangingMembership(t *testing.T) {
 	}
 }
 
-type deniedSupervisedReader struct{ fakeReader }
-
-func (r deniedSupervisedReader) IdentityWithError(pid int) (Identity, bool, error) {
-	return Identity{}, false, errors.New("permission denied")
-}
-
 func TestSupervisedProcessReadErrorIsNotAbsence(t *testing.T) {
 	spec, source, ids := supervisedFixture()
-	source.reader = deniedSupervisedReader{ids: ids}
+	source.reader = partialIdentityReader{ids: ids, deniedPID: 21}
 	if _, err := source.wait(t.Context(), spec); err == nil || errors.Is(err, ErrSupervisedNotReady) {
 		t.Fatalf("read error treated as absent worker: %v", err)
 	}

@@ -58,13 +58,7 @@ func (p rpcNullProtocol) Probe(ctx context.Context, cfg Config) (Result, error) 
 // required by NFS-family RPC probes.
 func probeRPCNull(ctx context.Context, cfg Config, protocol string, defaultPort int, program, version uint32) (Result, error) {
 	xid := randXID32()
-	c, err := newProbeTarget(cfg, defaultPort).openTCP(ctx)
-	if err != nil {
-		return Result{}, err
-	}
-	defer func() { _ = c.Close() }()
-
-	reply, err := rpcCallTCP(c, protocol, buildRPCNull(xid, program, version))
+	reply, err := exchangeRPC(ctx, cfg, protocol, defaultPort, networkTCP, buildRPCNull(xid, program, version))
 	if err != nil {
 		return Result{}, err
 	}
@@ -72,7 +66,7 @@ func probeRPCNull(ctx context.Context, cfg Config, protocol string, defaultPort 
 }
 
 func rpcNullResult(reply []byte, xid uint32, protocol, programName string) (Result, error) {
-	status, err := parseRPCReply(reply, xid)
+	status, _, err := parseRPCReply(reply, xid)
 	if err != nil {
 		return Result{}, probeErr(protocol, stepRPCReply, err)
 	}
