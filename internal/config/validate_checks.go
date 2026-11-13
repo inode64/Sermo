@@ -788,8 +788,13 @@ var singleShotCheckValidators = map[string]singleShotCheckValidator{
 	checks.CheckTypeCommand: func(path string, entry map[string]any, _ string, add addFunc) {
 		validateCommandFields(path, entry, true, add)
 	},
-	checks.CheckTypeClock:          singleShotNoLock(validateClockFields),
-	checks.CheckTypeService:        validateServiceCheck,
+	checks.CheckTypeClock:   singleShotNoLock(validateClockFields),
+	checks.CheckTypeService: validateServiceCheck,
+	checks.CheckTypeSupervisedProcess: singleShotNoLock(func(path string, entry map[string]any, add addFunc) {
+		if _, err := checks.SupervisedProcessConfig(entry); err != nil {
+			add("%s: %v", path, err)
+		}
+	}),
 	checks.CheckTypeProcess:        validateProcessCheck,
 	checks.CheckTypeStaleBinary:    singleShotNoLock(validateStaleBinaryCheck),
 	checks.CheckTypeStaleLibraries: singleShotNoLock(validateStaleLibrariesCheck),

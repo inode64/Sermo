@@ -63,6 +63,7 @@ Connection-protocol checks (MySQL, PostgreSQL, Redis, Docker, libvirt, etc.) are
 | `http`        | health | the response matches `expect_status` (and optional headers/body/JSON, see HTTP)|
 | `command`     | health | the command exits with `expect_exit` (default 0) and its output matches optional `expect_stdout`/`expect_stderr`; optional `user` runs it as a specific OS user; `on_change` alerts when its output changes (e.g. a version), array form only |
 | `config`      | health | a config-test command (`apachectl configtest`, `nginx -t`, …) passes, and (with `on_change`) the config `path` is unchanged (see Service health conditions)|
+| `supervised_process` | health | exactly one verified supervisor and worker in a unified cgroup, with a bounded respawn grace |
 | `service`     | health | the backend status equals `expect` (active/inactive/paused/failed/unknown)|
 | `file_exists` | health | a foreign flag/lock file exists (never under `<runtime>/locks`)     |
 | `file`        | health | a path exists and is a regular file                                |
@@ -4590,3 +4591,32 @@ An incomplete process observation, transition, chroot or custom `status()` funct
 unavailable; keep the application's status command when it implements additional
 readiness semantics. Runtime state alone does not hide a crashed registered
 daemon. These observations grant no authority to signal a process.
+
+
+### Supervised workers (`supervised_process`)
+
+This native check observes exactly one worker and one supervisor in an explicit
+cgroup v2 path. It is available in services, preflight and host watches. Both
+identities require an exact resolved executable and real user; process names and
+arguments do not substitute for them. No process is signalled.
+
+```yaml
+check:
+  type: supervised_process
+  exe: /usr/bin/php
+  user: app
+  cgroup: /openrc.app-worker
+  supervisor: { exe: /usr/bin/supervise-daemon, user: root }
+  respawn_grace: 8s
+  timeout: 10s
+```
+
+The check reads at most 64 cgroup members and revalidates process generations,
+executables, users and cgroup membership. A worker may respawn within the grace
+(default 8s) while the same supervisor stays alive. Missing or duplicate
+supervisors, duplicate workers, or a worker still missing after the grace fail
+health. Unreadable identities, changed supervisor generations and outer timeouts
+are unavailable. Cgroup membership changes are retried within the same grace.
+The timeout defaults to at least 10s and must exceed the grace; set an explicit
+timeout when increasing it. It reads the target cgroup rather than scanning all
+host processes, and never accepts cached identities during the wait.

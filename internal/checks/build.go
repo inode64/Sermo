@@ -281,6 +281,7 @@ type buildFailure struct {
 // construction and static type capabilities together. Connection protocols
 // remain in conn's own registry because conn owns their catalog and aliases.
 var builtinCheckSpecs = []checkSpec{
+	{info: healthTypeInfo(CheckTypeSupervisedProcess), readsPaths: true, minTimeout: supervisedProcessTimeout, build: func(in checkBuildInput) (Check, string) { return buildSupervisedProcessCheck(in.base, in.entry) }},
 	{info: latencyTypeInfo(healthTypeInfo(CheckTypeTCP)), build: func(in checkBuildInput) (Check, string) { return buildTCPCheck(in.base, in.entry) }},
 	{info: conditionTypeInfo(CheckTypeTCPConnections), predicateFields: TCPConnectionsPredFields, build: func(in checkBuildInput) (Check, string) { return buildTCPConnectionsCheck(in.base, in.entry) }},
 	{info: latencyTypeInfo(healthTypeInfo(CheckTypePorts)), build: func(in checkBuildInput) (Check, string) { return buildPortsCheck(in.base, in.entry) }},

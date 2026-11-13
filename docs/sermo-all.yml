@@ -1820,3 +1820,15 @@ check:
 # location: watches
 name: init-unit-active
 check: { type: service, backend: systemd, service: example.service, expect: active }
+
+---
+# location: watches
+name: supervised-worker
+check:
+  type: supervised_process
+  exe: /usr/bin/php
+  user: app
+  cgroup: /openrc.app-worker
+  supervisor: { exe: /usr/bin/supervise-daemon, user: root }
+  respawn_grace: 8s
+  timeout: 10s
