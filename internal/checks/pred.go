@@ -232,6 +232,10 @@ var (
 	// StaleMountsPredFields is the single optional predicate of a stale_mounts
 	// check; absent, it defaults to firing on any stale mount.
 	StaleMountsPredFields = []string{DataKeyCount}
+	// LogindNamesPredFields is the single optional predicate of the
+	// seated_sessions and users_without_linger checks; absent, it defaults to
+	// firing on any entry.
+	LogindNamesPredFields = []string{DataKeyCount}
 	// OOMPredFields is the optional OOM-kill delta predicate. Absent, the check
 	// defaults to firing on any observed kill.
 	OOMPredFields = []string{CheckKeyDelta}

@@ -228,6 +228,7 @@ const (
 	DataKeyUnits              = "units"
 	DataKeyUnreadable         = "unreadable"
 	DataKeyUsers              = "users"
+	DataKeySessions           = "sessions"
 	DataKeyDimension          = "dimension"
 	DataKeyHolders            = "holders"
 	DataKeyInstances          = fieldInstances

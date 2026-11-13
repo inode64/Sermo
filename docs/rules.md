@@ -31,6 +31,8 @@
   - [inotify limits (inotify)](#inotify-limits-inotify)
   - [USB device (usb)](#usb-device-usb)
   - [Stale mounts (stale_mounts)](#stale-mounts-stale_mounts)
+  - [Seated sessions (seated_sessions)](#seated-sessions-seated_sessions)
+  - [Users without linger (users_without_linger)](#users-without-linger-users_without_linger)
   - [Disk throughput (hdparm)](#disk-throughput-hdparm)
   - [Missing devices](#missing-devices)
   - [What a device that stopped answering still reports](#what-a-device-that-stopped-answering-still-reports)
@@ -104,6 +106,8 @@ Connection-protocol checks (MySQL, PostgreSQL, Redis, Docker, libvirt, etc.) are
 | `firewall_rules` | health | nftables/iptables has at least `min_rules` loaded rules (see Firewall rules) |
 | `failed_units` | condition | the count of init units in a failed state satisfies `count {op, value}` (default `> 0`; see Failed init units) |
 | `stale_mounts` | condition | the count of filesystems still mounted from a block device the kernel no longer has satisfies `count {op, value}` (default `> 0`; see Stale mounts) |
+| `seated_sessions` | condition | the count of systemd-logind sessions attached to a seat satisfies `count {op, value}` (default `> 0`; see Seated sessions) |
+| `users_without_linger` | condition | the count of users systemd-logind tracks that have no linger file satisfies `count {op, value}` (default `> 0`; see Users without linger) |
 | `inotify` | condition | the per-user inotify instance/watch limits satisfy their `{op, value}` predicates (see inotify limits) |
 | `route`       | health | an up default route exists, optionally egressing a given `interface` (see Default route)|
 | `usb`         | health | a USB device matching `device` (vendor:product) and/or `serial_number` is connected (see USB device) |
@@ -938,8 +942,9 @@ keeps loading: one that is not strictly stricter than the threshold below it
 level), one that compares in the opposite direction or in the other metric
 form (percentage versus absolute), or one that is not above the check's own
 severity (`levels.error` under `severity: error`). For `oom`, `coredump`,
-`failed_units`, `stale_mounts`, `edac` and `raid` with no declared threshold,
-the one they fire on (any kill, core dump, failed unit, stale mount,
+`failed_units`, `stale_mounts`, `seated_sessions`, `users_without_linger`,
+`edac` and `raid` with no declared threshold, the one they fire on (any kill,
+core dump, failed unit, stale mount, seated session, user without linger,
 uncorrectable error or degraded array: `> 0`) is the threshold
 below the first level. A whole block under a `reports:` other than the type's
 default is ignored too: the verdict it would grade is inverted or gone, which
@@ -957,7 +962,7 @@ Types that accept `levels:`, and the threshold keys a level restates:
 | Threshold form | Types | Level keys |
 |---|---|---|
 | level predicates | `storage`, `memory`, `load`, `pressure`, `fds`, `pids`, `conntrack`, `inotify`, `diskio`, `sensors`, `hdparm`, `users`, `tcp_connections`, `ssh_idle`, `terminal_sessions`, `process_count`, `edac`, `raid`, `smart` | the type's predicate fields |
-| single count | `zombies`, `failed_units`, `stale_mounts`, `log` | `count` |
+| single count | `zombies`, `failed_units`, `stale_mounts`, `seated_sessions`, `users_without_linger`, `log` | `count` |
 | counter delta | `oom`, `coredump` | `delta` |
 | count or growth | `count` | `count`, or `delta` in growth mode |
 | per metric | `swap` | `usage`: `used_pct` / `free_pct` / `free_bytes`; `io`: `delta` |
@@ -3558,6 +3563,71 @@ both.
 
 To require that the disk is plugged in at all, pair it with a
 [`usb`](#usb-device-usb) watch.
+
+### Seated sessions (`seated_sessions`)
+
+A session on a local seat (a console or graphical login) holds device
+descriptors, DRM and input, that systemd-logind may release when it stops; an
+SSH or background session has no seat. The `seated_sessions` check names the
+seated sessions, so a guard can hold a logind stop or restart:
+
+```yaml
+watches:
+  seated-sessions:
+    check:
+      type: seated_sessions
+      reports: state                 # a guard sensor, not service health
+      optional: true
+      count: { op: ">", value: 0 }   # optional; this is the default
+```
+
+It reads logind's own session records under `/run/systemd/sessions`, where
+logind writes a `SEAT=` line only for a seated session, instead of calling
+login1 over D-Bus: the records stay readable when logind has lost the system
+bus, which is when it needs a restart. The `.ref` FIFO logind keeps beside each
+record is skipped, and every record is opened without blocking. An unreadable
+directory or record, or one that is not a regular file, makes the check
+*unavailable*, so a guard denies instead of calling the host seatless.
+
+The check is condition-style and has **no remediation action**. Data keys are
+`count` and `sessions` (each as `id (user on seat)`), and the dashboard shows
+both. The
+[`systemd-logind`](services.md#login-sessions-and-registered-machines) profile
+uses it to guard its own stop and restart.
+
+### Users without linger (`users_without_linger`)
+
+A restarted systemd-logind may not restore the sessions it tracked. It then
+collects every user it knows that has no session left and no linger file, and
+stops that user's manager (`user@UID.service`) with everything under it: user
+services, and the panes of a `tmux` started from SSH. The
+`users_without_linger` check names the users at risk, so a guard can hold the
+restart:
+
+```yaml
+watches:
+  users-without-linger:
+    check:
+      type: users_without_linger
+      reports: state                 # a guard sensor, not service health
+      optional: true
+      count: { op: ">", value: 0 }   # optional; this is the default
+```
+
+The users come from logind's own records under `/run/systemd/users` (one file
+per UID, read for its `NAME=`), the set logind would collect, and each name is
+looked up in `/var/lib/systemd/linger` the way logind does it: any entry counts,
+following symlinks. Create `/var/lib/systemd/linger/<user>` to protect a user.
+`loginctl enable-linger` does the same but needs logind on the bus, which a
+logind in need of a restart may have lost. A record with no `NAME=`, one that is
+not a regular file, an unreadable directory or a name that is not a plain file
+name makes the check *unavailable*, so a guard denies instead of reading an
+unknown user as lingering.
+
+The check is condition-style and has **no remediation action**. Data keys are
+`count` and `users` (the joined names), and the dashboard shows both. The
+[`systemd-logind`](services.md#login-sessions-and-registered-machines) profile
+uses it to guard its own restart.
 
 ### Disk throughput (`hdparm`)
 

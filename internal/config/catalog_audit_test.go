@@ -2686,7 +2686,7 @@ func TestInstalledAutomationCatalogServicesHaveLocalRemediationPolicy(t *testing
 	for _, name := range []string{
 		"apache", "containerd", "dnsmasq", "docker", "firewalld", "monit",
 		"libvirtd", "networkmanager", "node", "pm2", "polkit", "rsync",
-		"smb", "smbd", "pmcd", "pppd", "syncthing", "tuned", "udisks2",
+		"smb", "smbd", "pmcd", "pppd", "syncthing", "systemd-logind", "tuned", "udisks2",
 		"upower", "virtlockd", "virtlogd", "virtnetworkd", "xinetd",
 		"zigbee2mqtt",
 	} {

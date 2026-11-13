@@ -8,43 +8,47 @@ service:
 apps:
   - systemd-logind
 variables:
-  busctl_binary: /usr/bin/busctl
   user: root
 processes:
   main:
     exe: ${systemd_logind_binary}
     user: ${user}
+policy:
+  cooldown: 15m
+  max_actions: 2
+  max_actions_window: 1h
+  backoff:
+    initial: 15m
+    max: 1h
 rules:
   # SSH and background sessions have no seat. Stop/start may release logind's
   # device descriptors, so sessions attached to a local seat stay protected.
+  # The sensor reads logind's session records from disk instead of calling
+  # ListSessions, so it answers while logind has lost the system bus, the very
+  # failure the login1 restart below repairs; what it cannot read blocks.
   block-stop-during-local-sessions:
     type: guard
     blocks: [stop, restart]
     if:
-      not:
-        command:
-          command:
-            - ${busctl_binary}
-            - --system
-            - --auto-start=no
-            - --allow-interactive-authorization=no
-            - --json=short
-            - call
-            - org.freedesktop.login1
-            - /org/freedesktop/login1
-            - org.freedesktop.login1.Manager
-            - ListSessions
-          expect_exit: 0
-          # Each record must have an empty seat; JSON validation also rejects
-          # truncated arrays, missing separators and trailing commas.
-          expect_stdout:
-            op: '=~'
-            value: '^\{"type":"a\(susso\)","data":\[\[(\["[A-Za-z0-9_-]+",[0-9]+,"([^"\\]|\\.)+","","/org/freedesktop/login1/session/[A-Za-z0-9_]+"\],?)*\]\]\}$'
-          expect_json: { type: 'a(susso)' }
-          timeout: 5s
+      active:
+        check: seated-sessions
     then:
       action: block
       message: Local seat sessions are registered or cannot be inspected; stop and restart denied
+  # A restarted logind may not restore the sessions it tracked. It then
+  # collects every user it knows that has no session left and no linger file,
+  # stopping that user's manager and what runs under it: a tmux started from
+  # SSH keeps its panes there. A linger file keeps the manager.
+  block-restart-while-users-unlingered:
+    type: guard
+    blocks: [stop, restart]
+    if:
+      active:
+        check: users-without-linger
+    then:
+      action: block
+      message: >-
+        A logind restart could stop the manager and processes of logged-in users without linger, or they cannot be inspected; create /var/lib/systemd/linger/<user> or wait until they log out
 watches:
   service:
     check:
@@ -54,6 +58,19 @@ watches:
     check:
       type: dbus
       timeout: 3s
+  seated-sessions:
+    check:
+      type: seated_sessions
+      reports: state
+      optional: true
+  users-without-linger:
+    check:
+      type: users_without_linger
+      reports: state
+      optional: true
+  # logind does not reconnect to a restarted system bus: the unit stays active
+  # while login1 has no owner, and every new login fails to get a session
+  # scope. Gated on the unit and the bus so only that state restarts it.
   login1:
     check:
       type: dbus
@@ -61,6 +78,13 @@ watches:
       object_path: /org/freedesktop/login1
       require_owner: true
       requires:
+        - service
         - bus
       timeout: 3s
       verify: true
+    for:
+      cycles: 3
+    then:
+      action: restart
+      message: >-
+        During ${rule.duration}, ${display_name} did not own org.freedesktop.login1 on the system bus; restarting ${display_name}

@@ -2748,14 +2748,44 @@ The `systemd-logind` profile permits restart with SSH and background sessions
 that have no local seat. Its `block-stop-during-local-sessions` guard blocks
 `stop` and `restart` if any session is attached to a seat, because Sermo's
 stop/start sequence can release the device descriptors used by local sessions.
-The guard inspects the seat field of every `ListSessions` record using
-`busctl --json=short`. It requires a complete, recognized JSON response with
-only seatless sessions; an unsuccessful query, malformed response or five-second
-timeout blocks the operation. Service activation and interactive authorization
-are disabled. The `busctl_binary` variable selects a different executable path
-when needed. Starting an inactive manager remains available.
+The guard reads its
+[`seated_sessions`](rules.md#seated-sessions-seated_sessions) sensor, which
+reads logind's own session records under `/run/systemd/sessions` instead of
+asking logind over D-Bus: those records stay readable when logind has lost the
+system bus, which is the state a restart has to repair. A seated session, or a
+record or directory it cannot read, blocks the operation. Starting an inactive
+manager remains available.
 
-The local-seat guard applies to manual operations and automatic update restarts.
+A restarted logind may not restore the sessions it tracked; it has been seen
+dropping every session record on restart. logind then stops the manager
+(`user@UID.service`) and everything under it of each user left with no session
+and no linger file, including the panes of a `tmux` started from SSH. The `block-restart-while-users-unlingered` guard therefore
+blocks `stop` and `restart` while the
+[`users_without_linger`](rules.md#users-without-linger-users_without_linger)
+sensor names any user logind tracks without
+`/var/lib/systemd/linger/<user>`, or cannot read logind's user records. Create
+that file for every user that must keep its processes (`loginctl enable-linger`
+needs logind on the bus) or wait until they log out; the guard then permits the
+operation.
+
+logind does not reconnect to a restarted system bus: the unit stays active
+while `org.freedesktop.login1` has no owner, and every new login fails to get a
+session scope (`Transport endpoint is not connected`). The `login1` watch
+restarts logind after three consecutive cycles in that state. It requires the
+`service` and `bus` watches, so a stopped unit or a dead bus skips it instead
+of counting toward the restart. The restart passes the same guards: with a
+logged-in user without linger it is blocked, and the block recorded, until
+that user lingers or logs out. The profile's policy allows two restarts per
+hour with a 15-minute cooldown.
+
+The `dbus` profile's `block-restart-under-systemd` guard blocks `stop` and
+`restart` of a running system bus on a host booted with systemd
+(`/run/systemd/system` exists; the `systemd_booted_path` variable changes the
+path). logind, NetworkManager, firewalld and other clients keep their dead
+connection to the old bus, so a new bus is loaded by rebooting. A failed or
+stopped bus can still be started, and OpenRC hosts keep the operation.
+
+The local-seat and linger guards apply to manual operations and automatic restarts.
 Session enumeration is a snapshot; a local login can arrive after inspection.
 Use a maintenance window when new local sessions must also be prevented.
 Both profiles retain operation locks, required preflight, exact process

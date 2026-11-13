@@ -137,6 +137,8 @@ const (
 	watchReadingLabelLastSeen                 = "Last seen"
 	watchReadingLabelFailedUnits              = "Failed units"
 	watchReadingLabelStaleMounts              = "Stale mounts"
+	watchReadingLabelUsersWithoutLinger       = "Users without linger"
+	watchReadingLabelSeatedSessions           = "Seated sessions"
 	watchReadingLabelInstances                = "Instances"
 	watchReadingLabelInstancesMax             = "Instances limit"
 	watchReadingLabelWatches                  = "Watches"
@@ -426,46 +428,48 @@ func (rb *readingBuilder) readings() []web.WatchReading { return rb.out }
 // entry instead of a branch. The builders that also need the check type itself,
 // and the two data-shape fallbacks, stay in checkReadings below.
 var checkReadingsByType = map[string]func(map[string]any) []web.WatchReading{
-	checks.CheckTypeCert:             certCheckReadings,
-	checks.CheckTypeClock:            clockCheckReadings,
-	checks.CheckTypeCount:            countCheckReadings,
-	checks.CheckTypeFirewallRules:    firewallCheckReadings,
-	checks.CheckTypeFailedUnits:      failedUnitsCheckReadings,
-	checks.CheckTypeInotify:          inotifyCheckReadings,
-	checks.CheckTypeFile:             fileCheckReadings,
-	checks.CheckTypeFileExists:       fileCheckReadings,
-	checks.CheckTypeProcess:          processCheckReadings,
-	checks.CheckTypeProcessPolicy:    processPolicyCheckReadings,
-	checks.CheckTypeUnownedProcesses: unownedProcessesCheckReadings,
-	checks.CheckTypeDBQueries:        dbQueriesCheckReadings,
-	checks.CheckTypeStaleBinary:      staleBinaryCheckReadings,
-	checks.CheckTypeStaleLibraries:   staleBinaryCheckReadings,
-	checks.CheckTypeStrays:           straysCheckReadings,
-	checks.CheckTypeSize:             sizeCheckReadings,
-	checks.CheckTypeTCP:              connCheckReadings,
-	checks.CheckTypePorts:            connCheckReadings,
-	conn.ProtocolNameDBus:            dbusCheckReadings,
-	checks.CheckTypeTCPConnections:   tcpConnectionsCheckReadings,
-	checks.CheckTypeSSHIdle:          sshIdleCheckReadings,
-	checks.CheckTypeTerminalSessions: terminalSessionsCheckReadings,
-	checks.CheckTypeHTTP:             httpCheckReadings,
-	checks.URLSchemeHTTPS:            httpCheckReadings,
-	checks.CheckTypePressure:         pressureCheckReadings,
-	checks.CheckTypeDiskIO:           diskioCheckReadings,
-	checks.CheckTypeSmart:            smartCheckReadings,
-	checks.CheckTypeStorCLI:          hardwareRAIDCheckReadings,
-	checks.CheckTypeSSACLI:           hardwareRAIDCheckReadings,
-	checks.CheckTypeRAID:             raidCheckReadings,
-	checks.CheckTypeReplication:      replicationCheckReadings,
-	checks.CheckTypeGlusterCluster:   glusterClusterCheckReadings,
-	checks.CheckTypeLVM:              lvmCheckReadings,
-	checks.CheckTypeNet:              netCheckReadings,
-	checks.CheckTypeRoute:            routeCheckReadings,
-	checks.CheckTypeSQL:              scalarQueryCheckReadings,
-	checks.CheckTypeSensors:          sensorsCheckReadings,
-	checks.CheckTypeUSB:              usbCheckReadings,
-	checks.CheckTypeStaleMounts:      staleMountsCheckReadings,
-	checks.CheckTypeMetric:           metricValueCheckReadings,
+	checks.CheckTypeCert:               certCheckReadings,
+	checks.CheckTypeClock:              clockCheckReadings,
+	checks.CheckTypeCount:              countCheckReadings,
+	checks.CheckTypeFirewallRules:      firewallCheckReadings,
+	checks.CheckTypeFailedUnits:        failedUnitsCheckReadings,
+	checks.CheckTypeInotify:            inotifyCheckReadings,
+	checks.CheckTypeFile:               fileCheckReadings,
+	checks.CheckTypeFileExists:         fileCheckReadings,
+	checks.CheckTypeProcess:            processCheckReadings,
+	checks.CheckTypeProcessPolicy:      processPolicyCheckReadings,
+	checks.CheckTypeUnownedProcesses:   unownedProcessesCheckReadings,
+	checks.CheckTypeDBQueries:          dbQueriesCheckReadings,
+	checks.CheckTypeStaleBinary:        staleBinaryCheckReadings,
+	checks.CheckTypeStaleLibraries:     staleBinaryCheckReadings,
+	checks.CheckTypeStrays:             straysCheckReadings,
+	checks.CheckTypeSize:               sizeCheckReadings,
+	checks.CheckTypeTCP:                connCheckReadings,
+	checks.CheckTypePorts:              connCheckReadings,
+	conn.ProtocolNameDBus:              dbusCheckReadings,
+	checks.CheckTypeTCPConnections:     tcpConnectionsCheckReadings,
+	checks.CheckTypeSSHIdle:            sshIdleCheckReadings,
+	checks.CheckTypeTerminalSessions:   terminalSessionsCheckReadings,
+	checks.CheckTypeHTTP:               httpCheckReadings,
+	checks.URLSchemeHTTPS:              httpCheckReadings,
+	checks.CheckTypePressure:           pressureCheckReadings,
+	checks.CheckTypeDiskIO:             diskioCheckReadings,
+	checks.CheckTypeSmart:              smartCheckReadings,
+	checks.CheckTypeStorCLI:            hardwareRAIDCheckReadings,
+	checks.CheckTypeSSACLI:             hardwareRAIDCheckReadings,
+	checks.CheckTypeRAID:               raidCheckReadings,
+	checks.CheckTypeReplication:        replicationCheckReadings,
+	checks.CheckTypeGlusterCluster:     glusterClusterCheckReadings,
+	checks.CheckTypeLVM:                lvmCheckReadings,
+	checks.CheckTypeNet:                netCheckReadings,
+	checks.CheckTypeRoute:              routeCheckReadings,
+	checks.CheckTypeSQL:                scalarQueryCheckReadings,
+	checks.CheckTypeSensors:            sensorsCheckReadings,
+	checks.CheckTypeUSB:                usbCheckReadings,
+	checks.CheckTypeStaleMounts:        staleMountsCheckReadings,
+	checks.CheckTypeUsersWithoutLinger: usersWithoutLingerCheckReadings,
+	checks.CheckTypeSeatedSessions:     seatedSessionsCheckReadings,
+	checks.CheckTypeMetric:             metricValueCheckReadings,
 }
 
 // gaugedCountSample reports whether this sample is one the panel draws as a
@@ -844,6 +848,20 @@ func staleMountsCheckReadings(data map[string]any) []web.WatchReading {
 	return readingsFrom(data).
 		addInt(checks.DataKeyCount, watchReadingLabelCount).
 		addString(checks.DataKeyMounts, watchReadingLabelStaleMounts).
+		readings()
+}
+
+func usersWithoutLingerCheckReadings(data map[string]any) []web.WatchReading {
+	return readingsFrom(data).
+		addInt(checks.DataKeyCount, watchReadingLabelCount).
+		addString(checks.DataKeyUsers, watchReadingLabelUsersWithoutLinger).
+		readings()
+}
+
+func seatedSessionsCheckReadings(data map[string]any) []web.WatchReading {
+	return readingsFrom(data).
+		addInt(checks.DataKeyCount, watchReadingLabelCount).
+		addString(checks.DataKeySessions, watchReadingLabelSeatedSessions).
 		readings()
 }
 

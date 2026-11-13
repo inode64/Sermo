@@ -19,7 +19,28 @@ restart_on_change:
       ${display_name} will restart after version change of ${change.app}: ${change.old_version} -> ${change.new_version}
 variables:
   user: messagebus
+  # sd_booted(): systemd is PID 1 when this directory exists.
+  systemd_booted_path: /run/systemd/system
 pidfile: /run/dbus.pid
+rules:
+  # Under systemd a running system bus cannot be replaced in place:
+  # systemd-logind, NetworkManager, firewalld and other clients keep their dead
+  # connection, and logins stop getting session scopes until each one is
+  # restarted. A reboot loads a new bus. A failed or stopped bus may still be
+  # started, so the guard needs the unit active.
+  block-restart-under-systemd:
+    type: guard
+    blocks: [stop, restart]
+    if:
+      and:
+        - file:
+            path: ${systemd_booted_path}
+        - service:
+            state: active
+    then:
+      action: block
+      message: >-
+        ${display_name} is not restarted while systemd runs it: logind and other bus clients do not reconnect; reboot to load a new bus
 processes:
   main:
     exe: ${dbus_binary}

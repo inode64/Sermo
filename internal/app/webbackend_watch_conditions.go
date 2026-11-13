@@ -117,20 +117,22 @@ func comparisonCondition(field string, values map[string]any) web.WatchCondition
 }
 
 var watchTypeConditionBuilders = map[string]func(map[string]any) []web.WatchCondition{
-	checks.CheckTypeRAID:             raidWatchConditions,
-	checks.CheckTypeReplication:      replicationWatchConditions,
-	checks.CheckTypeCount:            countWatchConditions,
-	checks.CheckTypeFile:             fileWatchConditions,
-	checks.CheckTypeProcess:          processWatchConditions,
-	checks.CheckTypeProcessPolicy:    processPolicyWatchConditions,
-	checks.CheckTypeUnownedProcesses: unownedProcessesWatchConditions,
-	checks.CheckTypeDBQueries:        dbQueriesWatchConditions,
-	checks.CheckTypeRoute:            routeWatchConditions,
-	checks.CheckTypeFirewallRules:    firewallWatchConditions,
-	checks.CheckTypeFailedUnits:      failedUnitsWatchConditions,
-	checks.CheckTypeStaleMounts:      staleMountsWatchConditions,
-	checks.CheckTypeSize:             sizeWatchConditions,
-	checks.CheckTypeUSB:              usbWatchConditions,
+	checks.CheckTypeRAID:               raidWatchConditions,
+	checks.CheckTypeReplication:        replicationWatchConditions,
+	checks.CheckTypeCount:              countWatchConditions,
+	checks.CheckTypeFile:               fileWatchConditions,
+	checks.CheckTypeProcess:            processWatchConditions,
+	checks.CheckTypeProcessPolicy:      processPolicyWatchConditions,
+	checks.CheckTypeUnownedProcesses:   unownedProcessesWatchConditions,
+	checks.CheckTypeDBQueries:          dbQueriesWatchConditions,
+	checks.CheckTypeRoute:              routeWatchConditions,
+	checks.CheckTypeFirewallRules:      firewallWatchConditions,
+	checks.CheckTypeFailedUnits:        failedUnitsWatchConditions,
+	checks.CheckTypeStaleMounts:        countOnlyWatchConditions,
+	checks.CheckTypeUsersWithoutLinger: countOnlyWatchConditions,
+	checks.CheckTypeSeatedSessions:     countOnlyWatchConditions,
+	checks.CheckTypeSize:               sizeWatchConditions,
+	checks.CheckTypeUSB:                usbWatchConditions,
 }
 
 func replicationWatchConditions(check map[string]any) []web.WatchCondition {
@@ -211,7 +213,9 @@ func failedUnitsWatchConditions(check map[string]any) []web.WatchCondition {
 	return appendDefaultCount(appendCompare(nil, checks.DataKeyBackend, cfgval.CompareOpEqual, backend), check)
 }
 
-func staleMountsWatchConditions(check map[string]any) []web.WatchCondition {
+// countOnlyWatchConditions shows a check whose only condition is its optional
+// `count` (stale_mounts, seated_sessions, users_without_linger).
+func countOnlyWatchConditions(check map[string]any) []web.WatchCondition {
 	return appendDefaultCount(nil, check)
 }
 

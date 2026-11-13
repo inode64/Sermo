@@ -370,6 +370,12 @@ var builtinCheckSpecs = []checkSpec{
 	{info: conditionTypeInfo(CheckTypeStaleMounts), predicateFields: StaleMountsPredFields, build: func(in checkBuildInput) (Check, string) {
 		return buildStaleMountsCheck(in.base, in.entry, in.deps)
 	}},
+	{info: conditionTypeInfo(CheckTypeUsersWithoutLinger), predicateFields: LogindNamesPredFields, build: func(in checkBuildInput) (Check, string) {
+		return buildUsersWithoutLingerCheck(in.base, in.entry)
+	}},
+	{info: conditionTypeInfo(CheckTypeSeatedSessions), predicateFields: LogindNamesPredFields, build: func(in checkBuildInput) (Check, string) {
+		return buildSeatedSessionsCheck(in.base, in.entry)
+	}},
 }
 
 func buildCheck(typ string, b base, entry map[string]any, runner execx.Runner, client *http.Client, deps Deps) (Check, *buildFailure) {
