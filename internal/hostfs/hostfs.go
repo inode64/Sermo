@@ -135,6 +135,16 @@ func LstatTarget(path string) (os.FileInfo, error) {
 	return os.Lstat(path) //nolint:forbidigo,wrapcheck // the *Target door: the configuration owns this path's form
 }
 
+// EvalSymlinksTarget resolves an operator-named path, requiring every component
+// to exist. It preserves filesystem errors instead of returning a lexical guess.
+func EvalSymlinksTarget(path string) (string, error) {
+	resolved, err := filepath.EvalSymlinks(path)
+	if err != nil {
+		return "", fmt.Errorf("resolve %s: %w", path, err)
+	}
+	return resolved, nil
+}
+
 // ReadFileTarget reads an operator- or catalog-named file, as written.
 func ReadFileTarget(path string) ([]byte, error) {
 	return os.ReadFile(path) //nolint:forbidigo,gosec,wrapcheck // the *Target door: G304, the configuration names this file

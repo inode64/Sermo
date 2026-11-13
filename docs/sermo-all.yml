@@ -1798,3 +1798,20 @@ watches:
       cooldown: 10m
       max_actions: 3
       max_actions_window: 1h
+
+---
+# location: watches
+name: selected-interpreter
+check:
+  type: binary
+  path: /usr/bin/php
+  resolved_path: /usr/lib64/php8.4/bin/php
+
+---
+# location: watches
+name: libvirt-network-active
+check:
+  type: libvirt
+  network: default
+  expect:
+    network.active: { op: "==", value: true }

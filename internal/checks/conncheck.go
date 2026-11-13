@@ -463,6 +463,7 @@ func configureConnProtocol(cfg *conn.Config, protoName string, entry map[string]
 		setConnQuery(cfg, entry, CheckKeyContainer)
 	case conn.ProtocolNameLibvirt:
 		setConnParam(cfg, conn.ParamKeyDomain, cfgval.AsString(entry[CheckKeyDomain]))
+		setConnParam(cfg, conn.ParamKeyNetwork, cfgval.AsString(entry[CheckKeyNetwork]))
 	case conn.ProtocolNameDBus:
 		cfg.Socket = conn.DBusAddress(cfgval.AsString(entry[CheckKeySocket]), cfgval.AsString(entry[CheckKeyQuery]))
 		for _, field := range DBusTargetStringFields() {

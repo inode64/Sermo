@@ -67,7 +67,7 @@ Connection-protocol checks (MySQL, PostgreSQL, Redis, Docker, libvirt, etc.) are
 | `file_exists` | health | a foreign flag/lock file exists (never under `<runtime>/locks`)     |
 | `file`        | health | a path exists and is a regular file                                |
 | `lockfile`    | health | one service-created regular lockfile candidate exists — gate with `requires: [service]`; it does not block operations |
-| `binary`      | health | a path exists and is executable                                    |
+| `binary`      | health | a path exists and is executable; optional `resolved_path` requires its fully resolved path to equal that absolute path                                    |
 | `pidfile`     | health | a pidfile exists and references a running, non-zombie process that the service's `exe` selectors or init backend claim; executable identity is read live so a new daemon is not judged against an older process snapshot — gate with `requires: [service]` so a missing/stale pidfile is an error only while the service is active |
 | `socket`      | health | one Unix socket candidate exists — gate with `requires: [service]` for sockets created by the service |
 | `libraries`   | health | all DT_NEEDED shared libraries of the binary can be resolved with the binary's ELF class and machine, each library's own RUNPATH/`$ORIGIN` searched first (native debug/elf, no ldd); `binary` is followed through its links on every run, and in a service it may be omitted to take the service's own executable, so a shared policy never pins a versioned file a package upgrade deletes |
@@ -1858,6 +1858,10 @@ Protocols, in the order of the table above:
   `node.memory_mb`. Set **`domain`** to a VM name to also read its `domain.state`
   (`running`/`paused`/`shutoff`/`crashed`/…) and `domain.running`; `on_change` then
   alerts on that VM's state transitions, and an unknown domain fails the check.
+  Set **`network`** to a virtual network name to read `network.active` (boolean).
+  An unknown network or unreadable state fails the check. For example,
+  `expect: { network.active: { op: "==", value: true } }` checks that it is active
+  without starting it. Network state also participates in `on_change`.
   Result data also carries the libvirt version, connect URI, transport and hostname.
 
   ```yaml

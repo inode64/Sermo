@@ -73,7 +73,7 @@ func buildSocketCheck(b base, entry map[string]any) (Check, string) {
 // buildBinaryCheck builds a check on a binary's fingerprint.
 func buildBinaryCheck(b base, entry map[string]any) (Check, string) {
 	return buildPathCheck(entry, CheckTypeBinary, func(path string) Check {
-		return binaryCheck{base: b, path: path}
+		return binaryCheck{base: b, path: path, resolvedPath: cfgval.AsString(entry[CheckKeyResolvedPath])}
 	})
 }
 

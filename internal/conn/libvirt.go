@@ -66,7 +66,7 @@ func (libvirtProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	// go-libvirt's connect/RPC calls are not context-aware; probeWithDeadline
 	// returns on time and LibvirtDialer releases the abandoned call.
 	return probeWithDeadline(ctx, func(context.Context) (Result, error) {
-		return libvirtProbe(l, uri, mode, cfg.Params[ParamKeyDomain])
+		return libvirtProbe(l, uri, mode, cfg.Params)
 	})
 }
 
@@ -101,7 +101,7 @@ func (d LibvirtDialer) Dial() (net.Conn, error) {
 
 // libvirtProbe opens the connection, reads the version (and hostname), domain
 // counts, node capacity and an optional single domain's state, then closes.
-func libvirtProbe(l *libvirt.Libvirt, uri, mode, domain string) (Result, error) {
+func libvirtProbe(l *libvirt.Libvirt, uri, mode string, params map[string]string) (Result, error) {
 	if err := l.ConnectToURI(libvirt.ConnectURI(uri)); err != nil {
 		return Result{}, probeErr(ProtocolNameLibvirt, stepConnect, err)
 	}
@@ -132,7 +132,7 @@ func libvirtProbe(l *libvirt.Libvirt, uri, mode, domain string) (Result, error) 
 	}
 
 	// Optional single-domain state — fails the check when the VM is unknown.
-	if domain != "" {
+	if domain := params[ParamKeyDomain]; domain != "" {
 		dom, err := l.DomainLookupByName(domain)
 		if err != nil {
 			return Result{}, fmt.Errorf("domain %q: %w", domain, err)
@@ -146,6 +146,16 @@ func libvirtProbe(l *libvirt.Libvirt, uri, mode, domain string) (Result, error) 
 		extra[ExtraKeyDomainState] = s
 		extra[ExtraKeyDomainRunning] = strconv.FormatBool(libvirt.DomainState(state) == libvirt.DomainRunning)
 		extra[ExtraKeyFingerprint] = s // on_change tracks the VM's state
+	}
+
+	if network := params[ParamKeyNetwork]; network != "" {
+		active, err := libvirtNetworkActive(l, network)
+		if err != nil {
+			return Result{}, err
+		}
+		extra[ExtraKeyNetwork] = network
+		extra[ExtraKeyNetworkActive] = strconv.FormatBool(active)
+		extra[ExtraKeyFingerprint] += ";network.active=" + strconv.FormatBool(active)
 	}
 
 	return Result{Version: version, Extra: extra}, nil
@@ -193,3 +203,27 @@ func libvirtTransportWithTarget(target probeTarget) (mode, addr, uri string) {
 func formatLibvirtVersion(v uint64) string {
 	return fmt.Sprintf("%d.%d.%d", v/libvirtVersionMajorMultiplier, (v%libvirtVersionMajorMultiplier)/libvirtVersionMinorMultiplier, v%libvirtVersionMinorMultiplier)
 }
+
+type libvirtNetworkReader interface {
+	NetworkLookupByName(name string) (libvirt.Network, error)
+	NetworkIsActive(network libvirt.Network) (int32, error)
+}
+
+func libvirtNetworkActive(client libvirtNetworkReader, name string) (bool, error) {
+	network, err := client.NetworkLookupByName(name)
+	if err != nil {
+		return false, fmt.Errorf("network %q: %w", name, err)
+	}
+	active, err := client.NetworkIsActive(network)
+	if err != nil {
+		return false, fmt.Errorf("network %q state: %w", name, err)
+	}
+	return active != 0, nil
+}
+
+// Libvirt network selectors and result fields share the public check vocabulary.
+const (
+	ParamKeyNetwork       = "network"
+	ExtraKeyNetwork       = "network"
+	ExtraKeyNetworkActive = "network.active"
+)

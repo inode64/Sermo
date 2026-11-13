@@ -124,6 +124,8 @@ const (
 	CheckKeyOwner                 = "owner"
 	CheckKeyOlderThan             = "older_than"
 	CheckKeyPath                  = "path"
+	CheckKeyResolvedPath          = "resolved_path"
+	CheckKeyNetwork               = "network"
 	CheckKeyPaths                 = "paths"
 	CheckKeyPassword              = "password"
 	CheckKeyPerCPU                = "per_cpu"

@@ -804,6 +804,10 @@ var singleShotCheckValidators = map[string]singleShotCheckValidator{
 	checks.CheckTypeLockfile:   validateLockfileCheck,
 	checks.CheckTypeBinary: func(path string, entry map[string]any, _ string, add addFunc) {
 		validateRequiredStringField(path, entry, checks.CheckKeyPath, checks.CheckTypeBinary, add)
+		if _, present := entry[checks.CheckKeyResolvedPath]; present {
+			validateRequiredStringField(path, entry, checks.CheckKeyResolvedPath, checks.CheckTypeBinary, add)
+			validateAbsoluteCheckPaths(path, entry, add, checks.CheckKeyResolvedPath)
+		}
 	},
 	checks.CheckTypePidfile: func(path string, entry map[string]any, _ string, add addFunc) {
 		validateRequiredStringListField(path, entry, checks.CheckKeyPath, checks.CheckTypePidfile, add)

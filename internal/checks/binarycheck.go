@@ -13,7 +13,8 @@ const binaryExecutableModeMask = 0o111
 // binaryCheck passes when a path exists and is an executable file.
 type binaryCheck struct {
 	base
-	path string
+	path         string
+	resolvedPath string
 }
 
 func (c binaryCheck) Run(_ context.Context) Result {
@@ -30,6 +31,13 @@ func (c binaryCheck) Run(_ context.Context) Result {
 	}
 	if info.Mode().Perm()&binaryExecutableModeMask == 0 {
 		return c.result(false, c.path+" is not executable", start)
+	}
+	if c.resolvedPath != "" {
+		resolved, err := hostfs.EvalSymlinksTarget(c.path)
+		if err != nil {
+			return c.unavailableResult(err.Error(), start)
+		}
+		return c.result(resolved == c.resolvedPath, c.path+" resolves to "+resolved+"; expected "+c.resolvedPath, start)
 	}
 	return c.result(true, c.path+" is executable", start)
 }
