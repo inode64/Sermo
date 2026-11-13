@@ -27,6 +27,10 @@ the types are `RuleType`, `ActionType` and `Action` in
 - Conditions are read-only predicates. Every distinct probe (declared check or
   inline condition) runs at most once per cycle and its result is cached;
   inline `command` conditions are side-effect-free argv arrays with a timeout.
+- `process` leaves use the same check executor and memo as inline probes.
+  `cmd` is a host-wide argv predicate, independent of service attribution;
+  an unreadable argv stays unknown under negation. Operations refresh process
+  observations before evaluating guards; cmd never grants signal authority.
 - A remediation rule triggers only on `scope: service` metrics. A
   `scope: system` metric may drive `alert` only.
 - Guards run before remediation; a blocked action logs the guard's block

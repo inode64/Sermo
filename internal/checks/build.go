@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"maps"
 	"net/http"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -114,9 +115,9 @@ type Deps struct {
 	Status func(context.Context) (servicemgr.Status, error)
 	// Metrics reads a sampled metric value, for `metric` checks.
 	Metrics MetricReader
-	// ProcessesAny reports the observed state of processes matching any exact
-	// resolved executable in exes with the same user. Nil makes process checks unavailable.
-	ProcessesAny func(exes []string, user string) string
+	// ProcessesAny observes host-wide processes matching the supplied executable,
+	// real-user and argv predicates. Nil makes process checks unavailable.
+	ProcessesAny func(ctx context.Context, exes []string, user string, cmd *regexp.Regexp) string
 	// ProcessesReplaced names the executables in exes a live process of user runs
 	// after they were replaced on disk, so an absent reading can say why.
 	ProcessesReplaced func(exes []string, user string) []string

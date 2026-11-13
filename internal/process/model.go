@@ -272,6 +272,9 @@ type Identity struct {
 	Cgroup       string
 	State        string // /proc/<pid>/stat run state: R, S, D, Z (zombie), ...
 	Cmdline      []string
+	// CmdlineUnreadable distinguishes an unreadable argv from a successfully
+	// read empty one (kernel threads and zombies). Only cmd predicates need it.
+	CmdlineUnreadable bool
 }
 
 // Raw process states read from /proc status/stat files.

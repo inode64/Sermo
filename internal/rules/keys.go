@@ -54,6 +54,7 @@ const (
 	FieldApp     = "app"
 	FieldCheck   = "check"
 	FieldExe     = "exe"
+	FieldCmd     = "cmd"
 	FieldExists  = "exists"
 	FieldExpect  = "expect"
 	FieldLevel   = "level"
@@ -94,6 +95,3 @@ const (
 	BackoffKeyFactor  = "factor"
 	BackoffKeyMax     = "max"
 )
-
-// ProcessStateRunning is the default process condition state.
-const ProcessStateRunning = "running"

@@ -48,7 +48,7 @@ func formatConditionLeaf(op string, body any) string {
 	case ConditionService:
 		return formatConditionField(op, body, FieldState)
 	case ConditionProcess:
-		return formatConditionFirstField(op, body, FieldExe, FieldUser, FieldState)
+		return formatConditionFirstField(op, body, FieldExe, FieldCmd, FieldUser, FieldState)
 	case ConditionFile:
 		return formatConditionField(op, body, FieldPath)
 	case ConditionCommand:

@@ -13,6 +13,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"sync/atomic"
@@ -901,7 +902,7 @@ func TestResolveNeededBasic(t *testing.T) {
 }
 
 func TestProcessCheck(t *testing.T) {
-	observe := func(exes []string, user string) string {
+	observe := func(_ context.Context, exes []string, user string, _ *regexp.Regexp) string {
 		if slices.Contains(exes, "/usr/bin/mariadb-backup") {
 			return "running"
 		}
@@ -936,7 +937,7 @@ func TestBuildProcessCheckExeAny(t *testing.T) {
 	}}
 	var gotExes []string
 	var gotUser string
-	built, warnings := Build(section, Deps{ProcessesAny: func(exes []string, user string) string {
+	built, warnings := Build(section, Deps{ProcessesAny: func(_ context.Context, exes []string, user string, _ *regexp.Regexp) string {
 		gotExes = append(gotExes, exes...)
 		gotUser = user
 		return "running"
@@ -957,18 +958,18 @@ func TestBuildProcessCheckNeedsObserver(t *testing.T) {
 	if _, warnings := Build(section, Deps{}); len(warnings) != 1 {
 		t.Fatalf("process check without observer should warn, got %v", warnings)
 	}
-	built, warnings := Build(section, Deps{ProcessesAny: func([]string, string) string { return "running" }})
+	built, warnings := Build(section, Deps{ProcessesAny: func(context.Context, []string, string, *regexp.Regexp) string { return "running" }})
 	if len(warnings) != 0 || len(built) != 1 {
 		t.Fatalf("process check should build with observer: built=%d warnings=%v", len(built), warnings)
 	}
 }
 
-func TestBuildProcessCheckRequiresExe(t *testing.T) {
+func TestBuildProcessCheckRequiresSelector(t *testing.T) {
 	section := map[string]any{"p": map[string]any{"type": "process", "user": "mysql", "state": "running"}}
-	if _, warnings := Build(section, Deps{ProcessesAny: func([]string, string) string { return "running" }}); len(warnings) != 1 {
-		t.Fatalf("process check without exe should warn, got %v", warnings)
-	} else if !strings.Contains(warnings[0], "requires exe or exe_any") {
-		t.Fatalf("warning = %q, want requires exe or exe_any", warnings[0])
+	if _, warnings := Build(section, Deps{ProcessesAny: func(context.Context, []string, string, *regexp.Regexp) string { return "running" }}); len(warnings) != 1 {
+		t.Fatalf("process check without exe, exe_any or cmd should warn, got %v", warnings)
+	} else if !strings.Contains(warnings[0], "requires exe, exe_any or cmd") {
+		t.Fatalf("warning = %q, want requires exe, exe_any or cmd", warnings[0])
 	}
 }
 

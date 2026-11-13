@@ -1,6 +1,10 @@
 package checks
 
 import (
+	"errors"
+	"fmt"
+	"regexp"
+
 	"sermo/internal/cfgval"
 	"sermo/internal/metrics"
 	"sermo/internal/process"
@@ -45,7 +49,7 @@ func buildMetricCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 	return metricCheck{base: b, scope: scope, metric: name, op: op, value: cfgval.String(entry[CheckKeyValue]), source: deps.Metrics, grades: metricGrades(b.levels)}, ""
 }
 
-// buildProcessCheck builds a check on processes matching an exe/user selector.
+// buildProcessCheck builds a check on processes matching an exe/user/cmd selector.
 func buildProcessCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 	exe := cfgval.AsString(entry[CheckKeyExe])
 	exes := cfgval.StringList(entry[CheckKeyExeAny])
@@ -53,8 +57,12 @@ func buildProcessCheck(b base, entry map[string]any, deps Deps) (Check, string) 
 		exes = []string{exe}
 	}
 	user := cfgval.AsString(entry[CheckKeyUser])
-	if len(exes) == 0 {
-		return nil, "process check requires exe or exe_any"
+	cmd, _, err := ProcessCommandPattern(entry)
+	if err != nil {
+		return nil, "process check " + err.Error()
+	}
+	if len(exes) == 0 && cmd == nil {
+		return nil, "process check requires exe, exe_any or cmd"
 	}
 	if deps.ProcessesAny == nil {
 		return nil, "process check needs process discovery, unavailable here"
@@ -64,9 +72,28 @@ func buildProcessCheck(b base, entry map[string]any, deps Deps) (Check, string) 
 		expect = process.StateRunning
 	}
 	return processCheck{
-		base: b, exes: exes, user: user, expect: expect,
+		base: b, exes: exes, user: user, cmd: cmd, expect: expect,
 		observeAny: deps.ProcessesAny, stale: deps.StaleBinaries, replacedAny: deps.ProcessesReplaced,
 	}, ""
+}
+
+// ProcessCommandPattern prepares the optional cmd predicate for state checks
+// and per-PID watches; validation uses the same parser as both builders.
+// The bool reports whether cmd was configured, including malformed values.
+func ProcessCommandPattern(entry map[string]any) (*regexp.Regexp, bool, error) {
+	value, present := entry[CheckKeyCmd]
+	if !present {
+		return nil, false, nil
+	}
+	pattern, ok := value.(string)
+	if !ok || pattern == "" {
+		return nil, true, errors.New("cmd must be a non-empty regex")
+	}
+	re, err := regexp.Compile(pattern)
+	if err != nil {
+		return nil, true, fmt.Errorf("cmd is not a valid regex: %w", err)
+	}
+	return re, true, nil
 }
 
 // buildStaleBinaryCheck builds a check reporting this service's processes whose

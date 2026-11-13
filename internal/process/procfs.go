@@ -152,11 +152,14 @@ type OSReader struct {
 // IdentityWithError retains failures on live processes for operation snapshots.
 func (r OSReader) IdentityWithError(pid int) (Identity, bool, error) {
 	id, ok := r.Identity(pid)
-	if ok && id.StartTicksOK {
+	if ok && id.StartTicksOK && !id.CmdlineUnreadable {
 		return id, true, nil
 	}
 	if _, err := hostfs.ReadFile(PIDPath(pid, ProcFileStat)); errors.Is(err, os.ErrNotExist) {
 		return Identity{}, false, nil
+	}
+	if ok && id.StartTicksOK {
+		return id, true, nil
 	}
 	return id, ok, fmt.Errorf("cannot read identity of live pid %d", pid)
 }
@@ -199,8 +202,8 @@ func (r OSReader) Identity(pid int) (Identity, bool) {
 		User:         r.userName(uid),
 		Group:        r.groupName(gid),
 		State:        state,
-		Cmdline:      readCmdline(pid),
 	}
+	id.Cmdline, id.CmdlineUnreadable = readCmdlineAt(PIDPath(pid, procFileCmdline))
 	if r.ReadTTY {
 		id.TTY, id.TTYOK = device, statOK
 		if !id.TTYOK {
@@ -327,13 +330,16 @@ func readExeAt(path string) (exe string, ok bool, prev string) {
 	return filepath.Clean(target), true, ""
 }
 
-func readCmdline(pid int) []string {
-	data, err := hostfs.ReadFile(PIDPath(pid, procFileCmdline))
-	if err != nil || len(data) == 0 {
-		return nil
+func readCmdlineAt(path string) (argv []string, unreadable bool) {
+	data, err := hostfs.ReadFile(path)
+	if err != nil {
+		return nil, true
+	}
+	if len(data) == 0 {
+		return nil, false
 	}
 	parts := strings.Split(strings.TrimRight(string(data), procCmdlineSeparator), procCmdlineSeparator)
-	return parts
+	return parts, false
 }
 
 // osUserResolver resolves a selector user name (or numeric id) to a real UID

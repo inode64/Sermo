@@ -1,9 +1,11 @@
 package rules
 
 import (
+	"context"
 	"errors"
 	"os"
 	"path/filepath"
+	"regexp"
 	"testing"
 	"time"
 
@@ -31,7 +33,7 @@ func TestUnavailableConditionsNeverMatch(t *testing.T) {
 		{"missing metric", Evaluator{}, map[string]any{ConditionMetric: map[string]any{FieldName: "cpu", FieldOp: ">", FieldValue: "90%"}}},
 		{"unready metric", Evaluator{Deps: checks.Deps{Metrics: func(string, string) (metrics.Reading, bool) { return metrics.Reading{}, true }}}, map[string]any{ConditionMetric: map[string]any{FieldName: "cpu", FieldOp: ">", FieldValue: "90%"}}},
 		{"metric without the threshold's form", Evaluator{Deps: checks.Deps{Metrics: stoppedFDs}}, map[string]any{ConditionMetric: map[string]any{FieldName: "fds", FieldOp: ">", FieldValue: "80%"}}},
-		{"unknown process", Evaluator{Deps: checks.Deps{ProcessesAny: func([]string, string) string { return process.StateUnknown }}}, map[string]any{ConditionProcess: map[string]any{FieldExe: "/usr/bin/demo", FieldUser: "demo"}}},
+		{"unknown process", Evaluator{Deps: checks.Deps{ProcessesAny: func(context.Context, []string, string, *regexp.Regexp) string { return process.StateUnknown }}}, map[string]any{ConditionProcess: map[string]any{FieldExe: "/usr/bin/demo", FieldUser: "demo"}}},
 		{"missing change source", Evaluator{}, map[string]any{ConditionChanged: map[string]any{FieldPath: "/etc/demo"}}},
 		{"missing version source", Evaluator{}, map[string]any{ConditionChanged: map[string]any{FieldApp: "demo"}}},
 		{"file absent unreadable", Evaluator{}, map[string]any{ConditionFile: map[string]any{FieldPath: loop, FieldExists: false}}},

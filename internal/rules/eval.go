@@ -11,7 +11,6 @@ import (
 	"sermo/internal/cfgval"
 	"sermo/internal/checks"
 	"sermo/internal/metrics"
-	"sermo/internal/process"
 )
 
 // ChangeContext describes the changed: leaf that made the current rule true.
@@ -200,7 +199,7 @@ func (e *Evaluator) eval(ctx context.Context, node map[string]any) (bool, error)
 	case ConditionService:
 		return e.evalService(ctx, operand)
 	case ConditionProcess:
-		return e.evalProcess(operand)
+		return e.evalProcess(ctx, operand)
 	case ConditionMetric:
 		return e.evalMetric(operand)
 	case ConditionChanged:
@@ -376,28 +375,13 @@ func (e *Evaluator) evalService(ctx context.Context, v any) (bool, error) {
 }
 
 // evalProcess is true when the observed state of processes matching the
-// exe/user selector equals the requested state (default running).
+// exe/user/cmd selector equals the requested state (default running).
 // With no process source it is false for remediation and an error for guards.
-func (e *Evaluator) evalProcess(v any) (bool, error) {
-	m, err := condMap(v, "process condition")
-	if err != nil {
-		return false, err
-	}
+func (e *Evaluator) evalProcess(ctx context.Context, v any) (bool, error) {
 	if e.Deps.ProcessesAny == nil {
 		return unavailableSignal(errors.New("process condition has no process source"))
 	}
-	want := cfgval.AsString(m[FieldState])
-	if want == "" {
-		want = ProcessStateRunning
-	}
-	exe, user := cfgval.AsString(m[FieldExe]), cfgval.AsString(m[FieldUser])
-	got := e.Deps.ProcessesAny([]string{exe}, user)
-	if got == process.StateUnknown {
-		// An incomplete process table or an unresolvable user proves nothing;
-		// reading it as a state would let a guard allow the action.
-		return unavailableSignal(fmt.Errorf("process %s (user %q) state is unknown: process table or user unreadable", exe, user))
-	}
-	return got == want, nil
+	return e.evalInline(ctx, checks.CheckTypeProcess, v)
 }
 
 // evalMetric reads a sampled metric and compares it to the threshold.

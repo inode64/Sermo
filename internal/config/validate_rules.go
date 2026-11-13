@@ -342,7 +342,14 @@ func validateCondition(node map[string]any, path string, checkNames, systemMetri
 	case rules.ConditionService:
 		validateState(node[rules.ConditionService], rules.FieldState, serviceStates, servicemgr.StatusSummary, path+".service", add)
 	case rules.ConditionProcess:
-		validateState(node[rules.ConditionProcess], rules.FieldState, processStates, process.StateSummary, path+".process", add)
+		if entry, ok := node[key].(map[string]any); ok {
+			validateProcessCheck(path+".process", entry, "", add)
+			if timeout, present := entry[checks.CheckKeyTimeout]; present && !isPositiveDuration(cfgval.String(timeout)) {
+				add(validationPositiveDurationFormat, path+".process.timeout", cfgval.String(timeout))
+			}
+		} else {
+			add(validationMappingFormat, path+".process")
+		}
 	case rules.ConditionFile:
 		validateFileCondition(node[key], path, add)
 	case rules.ConditionCommand:

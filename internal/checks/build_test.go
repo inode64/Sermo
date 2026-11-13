@@ -464,7 +464,7 @@ func TestBuildLibrariesCheckBinaryRequired(t *testing.T) {
 }
 
 func TestBuildProcessCheckStateDefault(t *testing.T) {
-	deps := Deps{ProcessesAny: func(exes []string, user string) string { return "running" }}
+	deps := Deps{ProcessesAny: func(_ context.Context, exes []string, user string, _ *regexp.Regexp) string { return "running" }}
 	c, w := buildProcessCheck(base{}, map[string]any{"exe": "sshd"}, deps)
 	if w != "" {
 		t.Fatalf("unexpected warning: %q", w)

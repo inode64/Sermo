@@ -1218,6 +1218,10 @@ func validateStraysCheck(path string, entry map[string]any, add addFunc) {
 }
 
 func validateProcessCheck(path string, entry map[string]any, _ string, add addFunc) {
+	_, hasCmd, err := checks.ProcessCommandPattern(entry)
+	if err != nil {
+		add("%s.%s", path, err.Error())
+	}
 	hasExe := cfgval.String(entry[checks.CheckKeyExe]) != ""
 	exeAny, hasExeAnyField := entry[checks.CheckKeyExeAny]
 	hasExeAny := cfgval.IsNonEmptyStringList(exeAny)
@@ -1225,11 +1229,12 @@ func validateProcessCheck(path string, entry map[string]any, _ string, add addFu
 		add("%s.exe_any must be a string or non-empty list of strings", path)
 	}
 	switch {
-	case !hasExe && !hasExeAnyField:
-		add("%s.exe or exe_any is required for a process check", path)
+	case !hasExe && !hasExeAnyField && !hasCmd:
+		add("%s.exe, exe_any or cmd is required for a process check", path)
 	case hasExe && hasExeAny:
 		add("%s must define only one of exe or exe_any", path)
 	}
+	validateAbsoluteCheckPaths(path, entry, add, checks.CheckKeyExe)
 	if state := cfgval.String(entry[checks.CheckKeyState]); state != "" {
 		if _, ok := processStates[state]; !ok {
 			add("%s state %q is not one of %s", path, state, process.StateSummary)

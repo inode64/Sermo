@@ -620,14 +620,18 @@ func buildFileWatch(name string, entry, checkEntry map[string]any, deps Deps, in
 // fire one hook per matching PID.
 func buildProcWatch(name string, entry, checkEntry map[string]any, deps Deps, interval time.Duration) (*Watch, string) {
 	pname := cfgval.AsString(checkEntry[checks.CheckKeyName])
-	if pname == "" {
-		return nil, watchSubjectPrefix + name + ": process check requires a name"
+	cmd, _, err := checks.ProcessCommandPattern(checkEntry)
+	if err != nil {
+		return nil, watchSubjectPrefix + name + ": " + err.Error()
+	}
+	if pname == "" && cmd == nil {
+		return nil, watchSubjectPrefix + name + ": process check requires a name or cmd"
 	}
 	cond, err := parseProcCond(checkEntry)
 	if err != nil {
 		return nil, watchSubjectPrefix + name + ": " + err.Error()
 	}
-	match := ProcMatch{Name: pname, User: cfgval.AsString(checkEntry[checks.CheckKeyUser])}
+	match := ProcMatch{Name: pname, User: cfgval.AsString(checkEntry[checks.CheckKeyUser]), Cmd: cmd}
 	actions, err := resolveWatchActions(entry, deps, watchActionOptions{
 		checkType:    checks.CheckTypeProcess,
 		parseKill:    true,

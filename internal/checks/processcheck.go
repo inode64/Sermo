@@ -3,23 +3,24 @@ package checks
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"slices"
 	"strings"
-	"time"
 
 	"sermo/internal/process"
 	"sermo/internal/strutil"
 )
 
 // processCheck passes when the observed state of processes matching its
-// exe/user selector equals the expected state. Matching uses the
-// exact resolved-exe and real-UID rules .
+// exe/user/cmd selector equals the expected state. Executable and user filters
+// retain the exact resolved-exe and real-UID rules.
 type processCheck struct {
 	base
 	exes       []string
 	user       string
+	cmd        *regexp.Regexp
 	expect     string
-	observeAny func(exes []string, user string) string
+	observeAny func(context.Context, []string, string, *regexp.Regexp) string
 	// stale reports the service's processes whose binary was replaced on disk.
 	// It exists to explain an "absent" reading rather than to change it.
 	stale StaleBinariesFunc
@@ -28,16 +29,21 @@ type processCheck struct {
 	replacedAny func(exes []string, user string) []string
 }
 
-func (c processCheck) Run(_ context.Context) Result {
-	start := time.Now()
+func (c processCheck) Run(ctx context.Context) Result {
+	ctx, run := c.begin(ctx)
+	defer run.close()
+	start := run.start
 	if c.observeAny == nil {
 		return c.unavailableResult("process discovery unavailable", start)
 	}
-	state := c.observeAny(c.exes, c.user)
+	state := c.observeAny(ctx, c.exes, c.user, c.cmd)
+	if err := ctx.Err(); err != nil {
+		return c.unavailableResult("process observation: "+err.Error(), start)
+	}
 	if state == process.StateUnknown {
 		// Neither presence nor absence is proven; a guard on this check must
 		// deny rather than read the gap as the process being gone.
-		return c.unavailableResult(fmt.Sprintf("state unknown (want %s): process table incomplete or user %q unresolved", c.expect, c.user), start)
+		return c.unavailableResult(fmt.Sprintf("state unknown (want %s): process table or cmd unreadable, or user %q unresolved", c.expect, c.user), start)
 	}
 	ok := state == c.expect
 	message := fmt.Sprintf("state %s (want %s)", state, c.expect)
@@ -50,7 +56,7 @@ func (c processCheck) Run(_ context.Context) Result {
 	// this check firing, and does not book an outage in health or SLA accounting
 	// for a service that is serving. A bare failure read as a dead daemon and
 	// sent the operator after a process that was there all along.
-	if !ok && state == process.StateAbsent {
+	if !ok && state == process.StateAbsent && c.cmd == nil {
 		if replaced, removed := c.replacedBinaries(); replaced != "" {
 			if removed {
 				message += fmt.Sprintf("; %s is no longer installed, so no process matches this executable; %s",

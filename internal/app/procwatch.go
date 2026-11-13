@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"maps"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strconv"
 	"syscall"
@@ -23,18 +24,29 @@ import (
 )
 
 // ProcMatch selects which processes a process watch tracks: by name (the exe
-// basename or its full resolved path) and optionally the owning user. All
+// basename or its full resolved path), cmd regex and/or the owning user. All
 // selects every process on the host; a watch that evaluates the whole process
 // table sets it explicitly, so an empty selector keeps matching nothing.
 type ProcMatch struct {
 	Name string
 	User string
+	Cmd  *regexp.Regexp
 	All  bool
 	PID  int // > 0: only this process, whatever its name or user; for re-verifying one PID
 	// Replaced also matches Name against the previous path of a binary replaced
 	// on disk. It is for observing: a process matched this way has no resolved
 	// exe, so a kill re-check leaves it off.
 	Replaced bool
+}
+
+func (m ProcMatch) description() string {
+	if m.Name != "" {
+		return m.Name
+	}
+	if m.Cmd != nil {
+		return m.Cmd.String()
+	}
+	return m.User
 }
 
 // ProcInfo is one matched process's current resource counters. CPU and IO are
@@ -291,7 +303,7 @@ func (w *procWatcher) fireGone(ctx context.Context, pid int, st *procState, t ti
 		return false
 	}
 	env := w.procEnv(pid, procChangeGone, st.age(t))
-	w.fire(ctx, ProcInfo{PID: pid}, fmt.Sprintf("%s pid %d is gone", w.match.Name, pid), env)
+	w.fire(ctx, ProcInfo{PID: pid}, fmt.Sprintf("%s pid %d is gone", w.match.description(), pid), env)
 	return true
 }
 
@@ -303,13 +315,13 @@ func (w *procWatcher) publishSnapshot(samples []ProcInfo, ok bool) {
 		w.publish(w.name, checks.CheckTypeProcess, checks.Result{
 			Check:   w.name,
 			OK:      false,
-			Message: "process " + w.match.Name + ": sample unavailable",
-			Data:    map[string]any{watchReadingFieldProcess: w.match.Name},
+			Message: "process " + w.match.description() + ": sample unavailable",
+			Data:    map[string]any{watchReadingFieldProcess: w.match.description()},
 		})
 		return
 	}
-	data := processWatchData(w.match.Name, w.match.User, samples)
-	target := "process " + w.match.Name
+	data := processWatchData(w.match.description(), w.match.User, samples)
+	target := "process " + w.match.description()
 	if w.match.User != "" {
 		target += " user " + w.match.User
 	}
@@ -391,7 +403,7 @@ func procCycleSamplerFromDeps(deps Deps, interval time.Duration) ProcSampler {
 func (w *procWatcher) procEnv(pid int, change string, age time.Duration) map[string]any {
 	env := map[string]any{
 		sermoEnvPID:        strconv.Itoa(pid),
-		sermoEnvProcess:    w.match.Name,
+		sermoEnvProcess:    w.match.description(),
 		sermoEnvChange:     change,
 		sermoEnvAgeSeconds: age,
 	}
@@ -437,7 +449,7 @@ func (w *procWatcher) evaluate(st *procState, now time.Time, s ProcInfo) (bool, 
 		ok = false
 	}
 
-	msg := fmt.Sprintf("%s pid %d matches (age %s, rss %s)", w.match.Name, s.PID, units.HumanizeDuration(age), checks.HumanizeSignedBytes(uintToInt64(s.RSS)))
+	msg := fmt.Sprintf("%s pid %d matches (age %s, rss %s)", w.match.description(), s.PID, units.HumanizeDuration(age), checks.HumanizeSignedBytes(uintToInt64(s.RSS)))
 	return ok, env, msg
 }
 
@@ -477,7 +489,7 @@ func (w *procWatcher) summaryMessage(info ProcInfo, message string, env map[stri
 	data := map[string]any{
 		checks.DataKeyPID:        info.PID,
 		checks.DataKeyTrigger:    env[sermoEnvChange],
-		watchReadingFieldProcess: w.match.Name,
+		watchReadingFieldProcess: w.match.description(),
 	}
 	addSummaryAge(data, env)
 	for _, field := range []struct {
@@ -627,7 +639,11 @@ func (s osProcSampler) Sample(m ProcMatch) ([]ProcInfo, bool) {
 
 	var out []ProcInfo
 	for _, id := range ids {
-		if !procMatchesWithLookup(m, id, lookup) {
+		matched, known := procMatchesWithLookup(m, id, lookup)
+		if !known {
+			return nil, false
+		}
+		if !matched {
 			continue
 		}
 		pid := id.PID
@@ -705,27 +721,31 @@ func sharedIdentityCurrent(mr procCounterReader, id process.Identity, ticks uint
 // against the resolved exe (full path or basename), or the previous path of a
 // replaced binary when the selector observes those, and, if set, the owning
 // user. All matches every process, PID exactly one; without either an empty
-// selector matches none.
-func procMatchesWithLookup(m ProcMatch, id process.Identity, lookup *process.UserLookup) bool {
+// selector matches none. An unreadable cmd is unknown only after the other
+// filters have established that the process could match.
+func procMatchesWithLookup(m ProcMatch, id process.Identity, lookup *process.UserLookup) (matched, known bool) {
 	if m.PID > 0 {
-		return id.PID == m.PID
+		return id.PID == m.PID, true
 	}
 	if m.All {
-		return true
+		return true, true
 	}
 	if m.Name != "" && !procNameMatches(m, id) {
-		return false
+		return false, true
 	}
 	if m.User != "" && m.User != id.User {
 		if lookup == nil {
-			return false
+			return false, true
 		}
 		uid, ok := lookup.ResolveUser(m.User)
 		if !ok || uid != id.UID {
-			return false
+			return false, true
 		}
 	}
-	return m.Name != "" || m.User != ""
+	if m.Name == "" && m.User == "" && m.Cmd == nil {
+		return false, true
+	}
+	return process.MatchCommand(m.Cmd, id)
 }
 
 func procNameMatches(m ProcMatch, id process.Identity) bool {

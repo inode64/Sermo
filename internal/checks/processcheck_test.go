@@ -2,6 +2,7 @@ package checks
 
 import (
 	"context"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -21,7 +22,7 @@ func TestProcessCheckExplainsAReplacedBinaryInsteadOfBareAbsent(t *testing.T) {
 		exes:       []string{"/usr/bin/dmeventd"},
 		user:       "root",
 		expect:     process.StateRunning,
-		observeAny: func([]string, string) string { return process.StateAbsent },
+		observeAny: func(context.Context, []string, string, *regexp.Regexp) string { return process.StateAbsent },
 		stale: func() []process.StaleBinary {
 			return []process.StaleBinary{{PID: 3549, Path: "/usr/bin/dmeventd"}}
 		},
@@ -53,7 +54,7 @@ func TestProcessCheckExplainsAnUninstalledBinaryAndBlocksActions(t *testing.T) {
 		exes:       []string{"/usr/bin/apache2"},
 		user:       "root",
 		expect:     process.StateRunning,
-		observeAny: func([]string, string) string { return process.StateAbsent },
+		observeAny: func(context.Context, []string, string, *regexp.Regexp) string { return process.StateAbsent },
 		stale: func() []process.StaleBinary {
 			return []process.StaleBinary{{PID: 721825, Path: "/usr/bin/apache2", Removed: true}}
 		},
@@ -75,7 +76,7 @@ func TestProcessCheckExplainsAnUninstalledBinaryAndBlocksActions(t *testing.T) {
 func TestProcessCheckExplainsAReplacedBinaryTheServiceDoesNotAttribute(t *testing.T) {
 	c := processCheck{
 		name: "nmbd", exes: []string{"/usr/bin/nmbd"}, user: "root", expect: process.StateRunning,
-		observeAny:  func([]string, string) string { return process.StateAbsent },
+		observeAny:  func(context.Context, []string, string, *regexp.Regexp) string { return process.StateAbsent },
 		stale:       func() []process.StaleBinary { return nil },
 		replacedAny: func([]string, string) []string { return []string{"/usr/bin/nmbd"} },
 	}
@@ -92,7 +93,7 @@ func TestProcessCheckUnknownStateIsUnavailable(t *testing.T) {
 			exes:       []string{"/usr/bin/mysqldump"},
 			user:       "backup",
 			expect:     expect,
-			observeAny: func([]string, string) string { return process.StateUnknown },
+			observeAny: func(context.Context, []string, string, *regexp.Regexp) string { return process.StateUnknown },
 		}
 		res := c.Run(context.Background())
 		if !res.Unavailable || res.OK {
@@ -108,7 +109,7 @@ func TestProcessCheckKeepsTheVerdictWhenNothingWasReplaced(t *testing.T) {
 		name:       "process",
 		exes:       []string{"/usr/sbin/nope"},
 		expect:     process.StateRunning,
-		observeAny: func([]string, string) string { return process.StateAbsent },
+		observeAny: func(context.Context, []string, string, *regexp.Regexp) string { return process.StateAbsent },
 		stale:      func() []process.StaleBinary { return nil },
 	}
 	res := c.Run(context.Background())
@@ -127,7 +128,7 @@ func TestProcessCheckKeepsPlainAbsentWhenNothingWasReplaced(t *testing.T) {
 		name:       "process",
 		exes:       []string{"/usr/sbin/nope"},
 		expect:     process.StateRunning,
-		observeAny: func([]string, string) string { return process.StateAbsent },
+		observeAny: func(context.Context, []string, string, *regexp.Regexp) string { return process.StateAbsent },
 		stale: func() []process.StaleBinary {
 			// A replaced binary belonging to a different selector must not be
 			// blamed for this check's miss.
@@ -147,7 +148,7 @@ func TestProcessCheckRunningIsUnaffected(t *testing.T) {
 		name:       "process",
 		exes:       []string{"/usr/bin/dmeventd"},
 		expect:     process.StateRunning,
-		observeAny: func([]string, string) string { return process.StateRunning },
+		observeAny: func(context.Context, []string, string, *regexp.Regexp) string { return process.StateRunning },
 		stale:      func() []process.StaleBinary { t.Fatal("stale lookup ran for a healthy process"); return nil },
 	}
 	if res := c.Run(context.Background()); !res.OK {

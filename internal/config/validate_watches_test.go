@@ -611,7 +611,7 @@ func TestValidateProcessWatchErrors(t *testing.T) {
 			},
 		},
 	},
-		"watches.no-name.check.name is required for a process check",
+		"watches.no-name.check requires name or cmd for a process check",
 		"watches.no-cond.check requires at least one of for, cpu, memory, io",
 		"watches.bad-for.check.for \"soon\" must be a valid positive duration",
 		"watches.bad-cpu.check.cpu requires {op, value} with a numeric value")

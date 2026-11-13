@@ -469,22 +469,22 @@ func TestObserveAnyStateSingleExe(t *testing.T) {
 	}
 
 	running := d(map[int]Identity{100: {PID: 100, UID: 110, Exe: testExe, ExeOK: true, State: "S"}})
-	if got := running.ObserveAnyState([]string{testExe}, "mysql"); got != StateRunning {
+	if got := running.ObserveAnyState(t.Context(), []string{testExe}, "mysql", nil); got != StateRunning {
 		t.Errorf("ObserveAnyState = %q, want running", got)
 	}
 
 	zombie := d(map[int]Identity{100: {PID: 100, UID: 110, Exe: testExe, ExeOK: true, State: "Z"}})
-	if got := zombie.ObserveAnyState([]string{testExe}, "mysql"); got != StateZombie {
+	if got := zombie.ObserveAnyState(t.Context(), []string{testExe}, "mysql", nil); got != StateZombie {
 		t.Errorf("ObserveAnyState = %q, want zombie", got)
 	}
 
 	absent := d(map[int]Identity{100: {PID: 100, UID: 999, Exe: testExe, ExeOK: true, State: "S"}})
-	if got := absent.ObserveAnyState([]string{testExe}, "mysql"); got != StateAbsent {
+	if got := absent.ObserveAnyState(t.Context(), []string{testExe}, "mysql", nil); got != StateAbsent {
 		t.Errorf("ObserveAnyState = %q, want absent (wrong user)", got)
 	}
 
 	unresolved := d(map[int]Identity{100: {PID: 100, UID: 110, ExeOK: false, State: "S"}})
-	if got := unresolved.ObserveAnyState([]string{testExe}, "mysql"); got != StateAbsent {
+	if got := unresolved.ObserveAnyState(t.Context(), []string{testExe}, "mysql", nil); got != StateAbsent {
 		t.Errorf("ObserveAnyState = %q, want absent (unresolvable exe)", got)
 	}
 }
@@ -498,7 +498,7 @@ func TestObserveAnyState(t *testing.T) {
 		ResolveUser: fakeUsers(map[string]uint32{"mysql": 110}),
 	}
 
-	got := d.ObserveAnyState([]string{"/usr/bin/mysqldump", "/usr/bin/xtrabackup"}, "mysql")
+	got := d.ObserveAnyState(t.Context(), []string{"/usr/bin/mysqldump", "/usr/bin/xtrabackup"}, "mysql", nil)
 	if got != StateRunning {
 		t.Fatalf("ObserveAnyState = %q, want running", got)
 	}
@@ -537,7 +537,7 @@ func TestObserveAnyStateUnknownWhenUnproven(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			d := Discoverer{Reader: tc.reader, ResolveUser: users}
-			if got := d.ObserveAnyState([]string{testExe}, tc.user); got != tc.want {
+			if got := d.ObserveAnyState(t.Context(), []string{testExe}, tc.user, nil); got != tc.want {
 				t.Fatalf("ObserveAnyState = %q, want %q", got, tc.want)
 			}
 		})
@@ -1034,7 +1034,7 @@ func TestObserveAnyStateLiveMatchWinsOverZombies(t *testing.T) {
 				101: tc.live,
 			}}, ResolveUser: fakeUsers(map[string]uint32{"mysql": 110})}
 			for range 20 {
-				if got := d.ObserveAnyState([]string{testExe}, "mysql"); got != tc.want {
+				if got := d.ObserveAnyState(t.Context(), []string{testExe}, "mysql", nil); got != tc.want {
 					t.Fatalf("state = %q, want %q", got, tc.want)
 				}
 			}

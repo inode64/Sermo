@@ -1,6 +1,7 @@
 package process
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -581,14 +582,15 @@ const (
 )
 
 // ObserveAnyState reports the state of processes matching any exact resolved
-// executable in exes with the same real-user selector:
+// executable in exes, the real user and the optional cmd predicate (ANDed).
+// With cmd and no exes it observes argv independently of executable identity:
 //
 //   - running: at least one live (non-zombie) process matches;
 //   - zombie:  matches exist but all are defunct;
 //   - absent:  no process matches in a complete process table;
 //   - unknown: no live match, and the table was incomplete or the user
 //     selector could not be resolved.
-func (d Discoverer) ObserveAnyState(exes []string, user string) string {
+func (d Discoverer) ObserveAnyState(ctx context.Context, exes []string, user string, cmd *regexp.Regexp) string {
 	reader := d.reader()
 	resolve := d.resolveUser()
 	selectors := make([]Selector, 0, len(exes))
@@ -596,23 +598,37 @@ func (d Discoverer) ObserveAnyState(exes []string, user string) string {
 		if exe == "" {
 			continue
 		}
-		selectors = append(selectors, Selector{Type: SelectorCommandMatch, Exe: exe, User: user, exePath: canonicalizePath(exe)})
+		selectors = append(selectors, Selector{Type: SelectorCommandMatch, Exe: exe, exePath: canonicalizePath(exe)})
 	}
-	if len(selectors) == 0 {
+	if len(selectors) == 0 && cmd == nil {
 		return StateAbsent
 	}
 	// An unresolvable user (NSS/LDAP outage) matches nothing, which would read
 	// as "absent" and let a backup guard allow a restart mid-backup.
+	var uid uint32
 	if user != "" {
-		if _, ok := resolve(user); !ok {
+		var ok bool
+		if uid, ok = resolve(user); !ok {
 			return StateUnknown
 		}
 	}
 
-	snapshot, snapshotErr := Snapshot(reader)
+	snapshot, snapshotErr := SnapshotContext(ctx, reader)
 	matched := false
+	unknown := snapshotErr != nil
 	for _, id := range snapshot {
-		if !d.matchesAny(selectors, id, resolve) {
+		if ctx.Err() != nil {
+			return StateUnknown
+		}
+		if len(selectors) > 0 && !d.matchesAny(selectors, id, resolve) {
+			continue
+		}
+		if user != "" && id.UID != uid {
+			continue
+		}
+		matches, known := MatchCommand(cmd, id)
+		unknown = unknown || !known
+		if !matches {
 			continue
 		}
 		if id.State != ProcStateZombie {
@@ -622,7 +638,7 @@ func (d Discoverer) ObserveAnyState(exes []string, user string) string {
 	}
 	// A live match is positive evidence even in a partial table; a missing or
 	// defunct-only match is not, because the unread PIDs may hold the process.
-	if snapshotErr != nil {
+	if unknown || ctx.Err() != nil {
 		return StateUnknown
 	}
 	if matched {
@@ -962,7 +978,8 @@ func (d Discoverer) matchesDeletedExe(sel *Selector, id Identity, resolve UserRe
 func (d Discoverer) matchesNonExe(sel *Selector, id Identity, resolve UserResolver) bool {
 	if sel.Cmd != "" {
 		re := selectorCmdRegexp(sel)
-		if re == nil || !re.MatchString(strings.Join(id.Cmdline, " ")) {
+		matched, known := MatchCommand(re, id)
+		if re == nil || !known || !matched {
 			return false
 		}
 	}

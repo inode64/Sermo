@@ -1,11 +1,17 @@
 package process
 
 import (
+	"context"
 	"fmt"
 	"slices"
 	"sync"
+	"sync/atomic"
 	"time"
+
+	"sermo/internal/hostfs"
 )
+
+const snapshotReadTimeout = 5 * time.Second
 
 // SnapshotReader can return a whole-/proc identity snapshot in one call.
 type SnapshotReader interface {
@@ -30,12 +36,20 @@ type CachingReader struct {
 	inner Reader
 	now   func() time.Time
 
-	mu        sync.Mutex
-	freshness time.Duration
-	idx       *snapshotIndex
-	err       error
-	at        time.Time
-	primed    bool
+	mu             sync.Mutex
+	freshness      time.Duration
+	idx            *snapshotIndex
+	err            error
+	at             time.Time
+	primed         bool
+	reads          *hostfs.InFlight[snapshotReading]
+	revision       atomic.Uint64
+	cachedRevision uint64
+}
+
+type snapshotReading struct {
+	identities map[int]Identity
+	revision   uint64
 }
 
 // NewCachingReader returns a CachingReader over inner. nil uses OSReader.
@@ -43,7 +57,52 @@ func NewCachingReader(inner Reader, freshness time.Duration) *CachingReader {
 	if inner == nil {
 		inner = OSReader{}
 	}
-	return &CachingReader{inner: inner, freshness: freshness, now: time.Now}
+	return &CachingReader{inner: inner, freshness: freshness, now: time.Now,
+		reads: hostfs.NewInFlight[snapshotReading]("process snapshot", context.DeadlineExceeded, 0)}
+}
+
+// SnapshotContext bounds waiting on a shared scan, including another caller's
+// refresh. A stuck reader costs at most one in-flight scan for this cache.
+func (c *CachingReader) SnapshotContext(ctx context.Context) (map[int]Identity, error) {
+	required := c.revision.Load()
+	for {
+		if err := ctx.Err(); err != nil {
+			return nil, fmt.Errorf("read process snapshot: %w", err)
+		}
+		reading, err := c.reads.DoSteps(ctx, "snapshot", snapshotReadTimeout, func(func()) (snapshotReading, error) {
+			return c.readSnapshot()
+		})
+		if err != nil {
+			return reading.identities, fmt.Errorf("read process snapshot: %w", err)
+		}
+		if reading.revision >= required {
+			return reading.identities, nil
+		}
+		// A shared scan started before this caller invalidated the cache.
+		// Its result cannot authorize the operation that requested fresh data.
+	}
+}
+
+// SnapshotContext uses a reader's bounded scan when available. Plain fixture
+// readers still retain their snapshot errors and cancellation verdict.
+func SnapshotContext(ctx context.Context, reader Reader) (map[int]Identity, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, fmt.Errorf("read process snapshot: %w", err)
+	}
+	if bounded, ok := reader.(interface {
+		SnapshotContext(ctx context.Context) (map[int]Identity, error)
+	}); ok {
+		snapshot, err := bounded.SnapshotContext(ctx)
+		if err != nil {
+			return snapshot, fmt.Errorf("read process snapshot: %w", err)
+		}
+		return snapshot, nil
+	}
+	snapshot, err := Snapshot(reader)
+	if ctx.Err() != nil {
+		return nil, fmt.Errorf("read process snapshot: %w", ctx.Err())
+	}
+	return snapshot, err
 }
 
 // Invalidate drops the cached snapshot so the next Snapshot rebuilds from live
@@ -52,9 +111,7 @@ func NewCachingReader(inner Reader, freshness time.Duration) *CachingReader {
 // otherwise SIGKILL a PID that has already exited (and may have been reused) —
 // call this before each read. Safe to call concurrently.
 func (c *CachingReader) Invalidate() {
-	c.mu.Lock()
-	c.primed = false
-	c.mu.Unlock()
+	c.revision.Add(1)
 }
 
 // Snapshot returns the cached identity map, rebuilding it when stale. The
@@ -67,10 +124,15 @@ func (c *CachingReader) Snapshot() map[int]Identity {
 // SnapshotWithError returns the cached snapshot and any failure from the procfs
 // walk that produced it. Callers must treat a non-nil error as incomplete data.
 func (c *CachingReader) SnapshotWithError() (map[int]Identity, error) {
+	reading, err := c.readSnapshot()
+	return reading.identities, err
+}
+
+func (c *CachingReader) readSnapshot() (snapshotReading, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	idx := c.snapshotIndexLocked()
-	return idx.byPID, c.err
+	return snapshotReading{identities: idx.byPID, revision: c.cachedRevision}, c.err
 }
 
 // CachedSnapshot returns the shared snapshot only while it is fresh and
@@ -80,7 +142,7 @@ func (c *CachingReader) SnapshotWithError() (map[int]Identity, error) {
 func (c *CachingReader) CachedSnapshot() (map[int]Identity, bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if !c.primed || c.err != nil || c.freshness <= 0 || c.now().Sub(c.at) >= c.freshness {
+	if !c.primed || c.cachedRevision != c.revision.Load() || c.err != nil || c.freshness <= 0 || c.now().Sub(c.at) >= c.freshness {
 		return nil, false
 	}
 	return c.idx.byPID, true
@@ -96,13 +158,15 @@ func (c *CachingReader) snapshotIndex() *snapshotIndex {
 
 func (c *CachingReader) snapshotIndexLocked() *snapshotIndex {
 	now := c.now()
-	if c.primed && c.freshness > 0 && now.Sub(c.at) < c.freshness {
+	revision := c.revision.Load()
+	if c.primed && c.cachedRevision == revision && c.freshness > 0 && now.Sub(c.at) < c.freshness {
 		return c.idx
 	}
 	snapshot, err := readSnapshot(c.inner)
 	c.idx = buildSnapshotIndex(snapshot)
 	c.err = err
 	c.at = now
+	c.cachedRevision = revision
 	c.primed = true
 	return c.idx
 }

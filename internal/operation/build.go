@@ -173,6 +173,7 @@ func New(c Config) Engine {
 		ttl = max(operationTimeout+lockTTLMargin, defaultLockTTL)
 	}
 
+	guard := guardClosure(tree, deps, c.MetricSample, c.Changed)
 	return Engine{
 		Service:       c.Service,
 		Unit:          c.Unit,
@@ -198,7 +199,14 @@ func New(c Config) Engine {
 			// is held, even though new payloads are published atomically.
 			return report.Locks, warningError("runtime locks", report.Warnings)
 		},
-		Guard:               guardClosure(tree, deps, c.MetricSample, c.Changed),
+		Guard: func(ctx context.Context, action string) (string, string, error) {
+			// Monitoring may have cached absence before an external job started.
+			// An operation must evaluate its guards against a fresh observation.
+			if cached, ok := c.Discoverer.Reader.(*process.CachingReader); ok {
+				cached.Invalidate()
+			}
+			return guard(ctx, action)
+		},
 		SessionVerifier:     c.SessionVerifier,
 		SessionSignaler:     c.SessionSignaler,
 		Preflight:           sectionRunner(tree, deps, c.MetricSample),

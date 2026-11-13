@@ -1477,6 +1477,16 @@ rules:
     type: remediation
     if: { process: { exe: "${binary}", user: "${user}", state: absent } }
     then: { action: stop }
+  block-during-package-update:
+    type: guard
+    blocks: [start, stop, restart, reload, resume]
+    if:
+      not:
+        process:
+          cmd: '(^|[[:space:]/])(emerge|apt-get|dpkg|dnf)([[:space:]]|$)'
+          state: absent
+          timeout: 5s
+    then: { action: block, message: Package update is running or cannot be inspected }
   # The injected `strays` check reports control-group members no selector claims
   # (a diagnostic: it signals nothing), but never alerts on its own: on a fleet
   # the raw condition mostly reports a profile missing keep_children or a

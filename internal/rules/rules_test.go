@@ -7,6 +7,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -228,7 +229,7 @@ func TestGuardFailsSafeOnUnavailableLeaf(t *testing.T) {
 		{
 			// Incomplete /proc or an unresolvable user: "absent" is unproven.
 			name: "unknown process state",
-			ev: &Evaluator{Deps: checks.Deps{ProcessesAny: func([]string, string) string {
+			ev: &Evaluator{Deps: checks.Deps{ProcessesAny: func(context.Context, []string, string, *regexp.Regexp) string {
 				return process.StateUnknown
 			}}},
 			leaf: processLeaf,
@@ -409,7 +410,7 @@ func TestEvalMetricNotReadyOrAbsentIsFalse(t *testing.T) {
 }
 
 func TestEvalProcessCondition(t *testing.T) {
-	observe := func(exes []string, user string) string {
+	observe := func(_ context.Context, exes []string, user string, _ *regexp.Regexp) string {
 		if slices.Equal(exes, []string{"/usr/bin/mariadb-backup"}) && user == "mysql" {
 			return "running"
 		}

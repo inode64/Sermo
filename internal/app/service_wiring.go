@@ -98,6 +98,9 @@ func BuildServiceRuntime(ctx context.Context, cfg ServiceRuntimeConfig) ServiceR
 	if deps.ProcReader != nil {
 		discoverer.Reader = deps.ProcReader
 	}
+	if _, cached := discoverer.Reader.(*process.CachingReader); !cached {
+		discoverer.Reader = process.NewCachingReader(discoverer.Reader, 0)
+	}
 	discoverer.KeepChildren = process.KeepChildren(cfg.Tree)
 	backend := serviceRuntimeBackendPIDs(ctx, deps, cfg.Unit)
 	if backend.checked != nil {

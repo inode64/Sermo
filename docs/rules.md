@@ -71,7 +71,7 @@ Connection-protocol checks (MySQL, PostgreSQL, Redis, Docker, libvirt, etc.) are
 | `pidfile`     | health | a pidfile exists and references a running, non-zombie process that the service's `exe` selectors or init backend claim; executable identity is read live so a new daemon is not judged against an older process snapshot — gate with `requires: [service]` so a missing/stale pidfile is an error only while the service is active |
 | `socket`      | health | one Unix socket candidate exists — gate with `requires: [service]` for sockets created by the service |
 | `libraries`   | health | all DT_NEEDED shared libraries of the binary can be resolved with the binary's ELF class and machine, each library's own RUNPATH/`$ORIGIN` searched first (native debug/elf, no ldd); `binary` is followed through its links on every run, and in a service it may be omitted to take the service's own executable, so a shared policy never pins a versioned file a package upgrade deletes |
-| `process`     | health | a process matching `exe`/`user` is in `state` (running/zombie/absent); an `absent` reading that a replaced binary explains names it and becomes a verdictless state (the service reads `restart_required`, not failed) |
+| `process`     | health | a process matching `exe`/`exe_any`, `user` and/or `cmd` is in `state` (running/zombie/absent); an executable-only `absent` reading that a replaced binary explains names it and becomes a verdictless state (the service reads `restart_required`, not failed) |
 | `process_policy` | health | every process of a user account satisfies the allow/deny policy (alert-only; see configuration.md) |
 | `unowned_processes` | health | no process sits outside every init unit or runs an executable no installed package owns (watch-only; optional `then.kill` gated by `kill_only_if`; see configuration.md) |
 | `db_queries` | health | no MySQL/MariaDB/PostgreSQL statement matches the configured duration or resource thresholds; incidents tracked per statement (watch-only; see Running database statements) |
@@ -4144,6 +4144,41 @@ run without a shell, cached for the cycle like other inline probes, and must be
 side-effect-free. `failed`/`active` may also take an inline
 probe (`tcp`, `command`, ...) instead of a `check:` reference when you need the
 named success/failure polarity.
+
+`process` inspects the host's process table natively, including processes outside
+the service. It accepts `exe` or `exe_any` (exact resolved executable paths),
+`user` (real UID) and `cmd` (a Go RE2 regular expression over the complete argv,
+joined with spaces). At least one of `exe`, `exe_any` or `cmd` is required;
+supplied filters are ANDed. A `cmd`-only predicate also detects scripts run by an
+interpreter. It supplies no ownership or signal authority. The same fields work
+on `type: process` checks. Invalid or empty `cmd` patterns fail validation.
+
+The leaf uses the check executor, with an optional positive `timeout` (otherwise
+the engine's default), and shares its result within the evaluation cycle. A
+guard that must wait until package updates finish can use:
+
+```yaml
+rules:
+  block-during-package-update:
+    type: guard
+    blocks: [start, stop, restart, reload, resume]
+    if:
+      not:
+        process:
+          cmd: '(^|[[:space:]/])(emerge|apt|apt-get|dpkg|dnf|yum|rpm|pacman|apk|zypper)([[:space:]]|$)'
+          state: absent
+          timeout: 5s
+    then:
+      action: block
+      message: Package update is running or cannot be inspected
+```
+
+This permits the operation only after observed absence. Unreadable argv needed
+by `cmd`, an incomplete process table or an expired timeout stays unknown under
+`not`, so the guard denies. A successfully read empty argv is distinct from a
+read error. Matching all arguments can also match an argument that merely names
+the tool; choose the pattern for the jobs that should block the operation.
+Operations refresh the shared process snapshot before evaluating their guards.
 
 `changed` is true when the file at `path` differs (size/mtime) from the baseline
 tracked across artifact samples, or when `app` names a linked app whose version

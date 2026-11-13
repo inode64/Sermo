@@ -951,8 +951,12 @@ func validateFileCheck(name string, check, entry map[string]any, defaultNotify [
 // entry's hook.
 func validateProcessWatch(name string, check, entry map[string]any, defaultNotify []string, add addFunc) {
 	validateStatefulWatchEntry(name, checks.CheckTypeProcess, entry, add)
-	if cfgval.String(check[checks.CheckKeyName]) == "" {
-		add("%s is required for a process check", watchCheckFieldPath(name, checks.CheckKeyName))
+	_, hasCmd, err := checks.ProcessCommandPattern(check)
+	if err != nil {
+		add("%s.%s", watchCheckPath(name), err.Error())
+	}
+	if cfgval.String(check[checks.CheckKeyName]) == "" && !hasCmd {
+		add("%s requires name or cmd for a process check", watchCheckPath(name))
 	}
 	conds := 0
 	if v, present := check[checks.CheckKeyFor]; present {

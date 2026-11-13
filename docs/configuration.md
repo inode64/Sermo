@@ -4576,10 +4576,19 @@ beside a rising process count — the shape that distinguishes a leak from load.
 ### `process` — process by name
 
 A `process` watch tracks the processes whose **name** matches (the resolved exe
-basename or its full path), optionally filtered by owning `user`, and fires the
+basename or its full path) and/or whose `cmd` matches a Go RE2 regex over argv
+joined with spaces, optionally filtered by owning `user`, and fires the
 hook **once per matching PID** when that process has been alive at least `for`
 and/or its CPU/memory/IO crosses a threshold. It is distinct from the
 per-service `process` check, which reports running/zombie/absent state.
+
+At least one of `name` or `cmd` is required; all supplied filters are ANDed.
+`cmd` alone can observe interpreted scripts. An empty or invalid pattern is a
+configuration error. Unreadable argv makes a cmd-filtered sample unavailable,
+preserving tracked PIDs rather than firing `gone`. `cmd` supplies no signal
+authority: `then.kill` still requires an absolute executable `name` and `user`.
+For an operation guard on host-wide presence or absence, use the native
+[`process` condition](rules.md#rules) instead.
 
 ```yaml
 watches:
@@ -4623,7 +4632,7 @@ only when it exits. This is observation only: `then.kill` needs the exact
 resolved `exe`, so it refuses that process and records `kill-failed`.
 
 Hook extras: `SERMO_PID` (the matching pid), `SERMO_PROCESS` (the configured
-name), `SERMO_CHANGE` (`threshold` for a presence fire, `gone` for a
+name, or the `cmd` pattern for a cmd-only watch), `SERMO_CHANGE` (`threshold` for a presence fire, `gone` for a
 disappearance), `SERMO_USER` (if set), `SERMO_AGE_SECONDS`, `SERMO_MEMORY` (RSS
 bytes), and — once a rate is available — `SERMO_CPU` (percent) and `SERMO_IO`
 (bytes/sec).

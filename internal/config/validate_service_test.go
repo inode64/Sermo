@@ -525,7 +525,7 @@ preflight:
 				"command must be an array, not a shell string",
 				"expect is required for a service check",
 				`expect "bogus" is not one of`,
-				"exe or exe_any is required for a process check",
+				"exe, exe_any or cmd is required for a process check",
 				"must define only one of exe or exe_any",
 				"exe_any must be a string or non-empty list of strings",
 				`state "weird" is not one of`,

@@ -61,6 +61,7 @@ const (
 	CheckKeyExpectStderr          = "expect_stderr"
 	CheckKeyExpectStdout          = "expect_stdout"
 	CheckKeyExe                   = "exe"
+	CheckKeyCmd                   = "cmd"
 	CheckKeyExeAny                = "exe_any"
 	CheckKeyExeDir                = "exe_dir"
 	CheckKeyExistence             = "existence"
