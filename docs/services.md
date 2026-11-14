@@ -1262,7 +1262,9 @@ stop failures remain warnings. `start_after_primary: true` starts the companion
 after the primary and stops it before the primary. It also restores the companion
 when socket activation has already restarted the primary. Both options default
 to `false`; a string entry has those defaults. The networkd catalog uses this
-form to restore its `BindsTo` persistent-storage companion on systems providing it.
+form to restore its `BindsTo` persistent-storage companion on systems providing it,
+and the cockpit catalog to stop its socket-activated `cockpit.service` before
+`cockpit.socket`: a worker left running makes systemd refuse to listen again.
 
 The `acpid` profile includes `acpid.socket` as an optional companion: it stops
 before the daemon and starts before it, while hosts without that unit and OpenRC

@@ -7,6 +7,13 @@ description: Socket-activated web-based Linux server administration console.
 service:
   systemd:
     - cockpit.socket
+# Stopping the socket leaves a running worker behind, and systemd then refuses
+# to listen again ("Socket service cockpit.service already active, refusing"),
+# so the worker stops before the socket and starts after it.
+also_service:
+  systemd:
+    - unit: cockpit.service
+      start_after_primary: true
 apps:
   - cockpit
 restart_on_change:

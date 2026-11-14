@@ -19,7 +19,8 @@ func TestRealCatalogLifecycleBackendMatrix(t *testing.T) {
 		{name: "nfs systemd", service: "nfs", backend: backendSystemd, processMode: ServiceProcessNone},
 		{name: "nfs openrc", service: "nfs", backend: backendOpenRC, processMode: ServiceProcessNone},
 		{name: "lvm monitor systemd", service: "lvm2-monitor", backend: backendSystemd, processMode: ServiceProcessNone},
-		{name: "cockpit socket systemd", service: "cockpit", backend: backendSystemd, processMode: ServiceProcessInit},
+		{name: "cockpit socket systemd", service: "cockpit", backend: backendSystemd, processMode: ServiceProcessInit,
+			auxiliaryUnits: []AuxiliaryUnit{{Unit: "cockpit.service", StartAfterPrimary: true}}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

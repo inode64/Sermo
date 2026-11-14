@@ -1164,8 +1164,11 @@ func TestCockpitCatalogMonitorsSocketActivationUnit(t *testing.T) {
 	if trust || !slices.Equal(candidates, []string{"cockpit.socket"}) {
 		t.Fatalf("Cockpit systemd candidates = %v, trust = %v, want [cockpit.socket] and false", candidates, trust)
 	}
-	if units := AdditionalUnits(resolved.Tree, "systemd"); len(units) != 0 {
-		t.Fatalf("Cockpit must not operate static cockpit.service as an auxiliary unit: %v", units)
+	// The static worker is operated, never monitored: it stops before the
+	// socket, or systemd refuses to listen again while it runs, and starts after
+	// it, as socket activation would.
+	if units := AdditionalUnits(resolved.Tree, "systemd"); !slices.Equal(units, []AuxiliaryUnit{{Unit: "cockpit.service", StartAfterPrimary: true}}) {
+		t.Fatalf("Cockpit auxiliary units = %v, want cockpit.service started after the socket", units)
 	}
 	if _, found := resolved.Tree["socket"]; found {
 		t.Fatalf("Cockpit must not monitor session-only runtime sockets: %v", resolved.Tree["socket"])
