@@ -62,8 +62,22 @@ type Result struct {
 // including successful cleanup. A preflight_failed or postflight_failed event
 // thus says which check refused the action and why.
 func (r Result) AuditMessage() string {
-	parts := make([]string, 0, 1+len(r.Checks)+len(r.Processes)+len(r.Signals))
-	parts = append(parts, r.Message)
+	return r.AuditMessageWith(r.Message)
+}
+
+// AuditMessageWith is AuditMessage with message in place of the result's own:
+// a caller that expands the message's runtime built-ins (a guard's ${event})
+// passes the expansion, while the details, which quote the host, stay as
+// written.
+func (r Result) AuditMessageWith(message string) string {
+	return strings.Join(append([]string{message}, r.auditDetails()...), "; ")
+}
+
+// auditDetails is what the audit text adds to the message: the requested
+// action, a created container, the failed checks, the residual processes and
+// the signals.
+func (r Result) auditDetails() []string {
+	parts := make([]string, 0, len(r.Checks)+len(r.Processes)+len(r.Signals))
 	if r.RequestedAction != "" {
 		parts = append(parts, "requested "+r.RequestedAction)
 	}
@@ -89,7 +103,7 @@ func (r Result) AuditMessage() string {
 		}
 		parts = append(parts, message)
 	}
-	return strings.Join(parts, "; ")
+	return parts
 }
 
 // FailedCheckText words a check that failed in an operation, the same in its

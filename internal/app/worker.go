@@ -997,8 +997,11 @@ func (w *Worker) executeRemediation(ctx context.Context, now func() time.Time, f
 	kind := eventKindForResult(result)
 	// The same audit text as a manual operation's event: the residual
 	// processes, signals and failed checks are what explain a refused or
-	// incomplete remediation.
-	w.emit(Event{Kind: kind, Severity: remediationSeverity(kind, firing.severity), Rule: firing.Name, Action: action, Status: string(result.Status), Message: result.AuditMessage()})
+	// incomplete remediation. The message may be a guard's, whose ${event} or
+	// ${date} is expanded; the details quote the host and stay as written.
+	event := Event{Kind: kind, Severity: remediationSeverity(kind, firing.severity), Rule: firing.Name, Action: action, Status: string(result.Status)}
+	event.Message = result.AuditMessageWith(w.expandRuntime(result.Message, event))
+	w.emitLiteral(event)
 	if recovered != nil {
 		panic(recovered)
 	}
@@ -1660,8 +1663,14 @@ func (w *Worker) persistRuleState() {
 }
 
 func (w *Worker) emit(e Event) {
-	e.Service = w.Service
 	e.Message = w.expandRuntime(e.Message, e)
+	w.emitLiteral(e)
+}
+
+// emitLiteral records an event whose message must not be expanded: one that
+// quotes host output, where a ${service} is the program's text, not Sermo's.
+func (w *Worker) emitLiteral(e Event) {
+	e.Service = w.Service
 	emitSafe(w.Emit, e)
 }
 

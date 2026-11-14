@@ -73,6 +73,23 @@ func TestWorkerRemediationEventNamesTheFailedPreflightCheck(t *testing.T) {
 	}
 }
 
+// The audit details quote the host, so a placeholder in a check's output stays
+// as the program printed it, as in the manual operation's event, while the
+// message, which may be a guard's, still expands its runtime built-ins.
+func TestWorkerRemediationEventKeepsHostTextLiteral(t *testing.T) {
+	const output = "exit 1 (want 0): AH00111: Config variable ${event} is not defined at ${date}"
+	refused := operation.Result{Status: operation.ResultBlocked, Message: "blocked for ${event}", Checks: []checks.Result{
+		{Check: "config", Message: output},
+	}}
+	h := &workerHarness{cache: failedCache("http"), opResult: refused}
+	w := h.worker(alertThenRestartTree("http"), rules.Policy{Cooldown: time.Minute}, nil)
+	w.RunCycle(context.Background())
+	event, ok := h.eventOf(eventKindSuppressed)
+	if !ok || event.Message != "blocked for restart-on-stale-binary; check config failed: "+output || event.Service != "web" {
+		t.Fatalf("event = %+v, want the message expanded and the host text as written", event)
+	}
+}
+
 // An attempt that ran starts the cooldown, which is what spaces the next one:
 // each of those is announced, as before.
 func TestWorkerExecutedRemediationAnnouncesEachAttempt(t *testing.T) {
