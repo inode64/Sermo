@@ -1193,6 +1193,7 @@ func TestCatalogServicesUseCanonicalServiceNames(t *testing.T) {
 	systemdAliases := map[string][]string{
 		"clamd":      {"clamd", "clamav-daemon"},
 		"dhcpd":      {"dhcpd", "dhcpd4"},
+		"mariadb":    {"mariadb", "mysql", "mysqld"},
 		"qemu-ga":    {"qemu-ga", "qemu-guest-agent"},
 		"rpc-mountd": {"nfs-mountd", "rpc-mountd"},
 		"smb":        {"smb"},

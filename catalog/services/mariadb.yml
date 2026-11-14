@@ -3,9 +3,13 @@ display_name: MariaDB
 category: database
 type: database
 service:
+  # Gentoo's dev-db/mysql-init-scripts ships the generic mysqld.service for
+  # MariaDB too, so a systemd host may run mariadbd under that unit only. The
+  # mariadb app's version_match keeps a MySQL server out of this profile.
   systemd:
     - mariadb
     - mysql
+    - mysqld
   openrc:
     - mariadb
     - mysql
