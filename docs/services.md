@@ -2948,7 +2948,9 @@ a [`size`](rules.md#size-growth-size) check over the binary logs. It opens one
 `expire_logs_days` that no longer fits the volume. Both limits belong to the
 same check: while the total is already over `binlog_max_size`, a burst of
 growth keeps that incident open and its message names both causes, but it
-does not send a second alert.
+does not send a second alert. The check reports a measured `value` and the
+watch carries its own alert rule: the incident is about what the server keeps
+on disk, so it never reads the service `failed`.
 
 The default pattern matches the usual basenames (`mariadb-bin.000123`,
 `mysql-bin.000123`, `<host>-bin.000123`, `binlog.000123`) and the relay logs

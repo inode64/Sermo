@@ -5,11 +5,13 @@ import (
 
 	"sermo/internal/cfgval"
 	"sermo/internal/checks"
+	"sermo/internal/rules"
 )
 
 // TestBinlogCatalogWatch: the mysql and mariadb profiles size their binary logs
-// every binlog_check_interval, and an override that empties the growth
-// variables keeps only the max limit instead of failing validation.
+// every binlog_check_interval as a measured value with its own alert rule, and
+// an override that empties the growth variables keeps only the max limit
+// instead of failing validation.
 func TestBinlogCatalogWatch(t *testing.T) {
 	const watch = "alert-if-binlog-large"
 	for _, profile := range []string{"mariadb", "mysql"} {
@@ -44,6 +46,20 @@ func TestBinlogCatalogWatch(t *testing.T) {
 				}
 				if got := cfgval.String(check[checks.CheckKeyMax]); got != "20G" {
 					t.Fatalf("max = %q, want 20G", got)
+				}
+				// It alerts on its raw outcome but measures, so a binlog kept
+				// large on purpose never reads the server failed.
+				if got := cfgval.String(check[checks.CheckKeyReports]); got != checks.ReportsValue {
+					t.Fatalf("reports = %q, want %q", got, checks.ReportsValue)
+				}
+				// The incident is the watch's own alert rule, which fires while the
+				// size condition holds.
+				rule := nested(t, resolved.Tree, rules.SectionRules, watch)
+				if got := cfgval.String(nested(t, rule, rules.RuleFieldThen)[rules.RuleFieldAction]); got != "alert" {
+					t.Fatalf("rule action = %q, want alert (rule=%v)", got, rule)
+				}
+				if got := cfgval.String(nested(t, rule, "if", "active")["check"]); got != watch {
+					t.Fatalf("rule condition = %v, want active: %s", rule["if"], watch)
 				}
 				growBy, within := cfgval.String(check[checks.CheckKeyGrowBy]), cfgval.String(check[checks.CheckKeyWithin])
 				if maxOnly && (growBy != "" || within != "") {

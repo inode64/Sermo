@@ -151,6 +151,9 @@ watches:
         During ${rule.duration}, ${display_name} client connections stayed at or above ${check.threshold}% of max_connections (current ${check.value}%)
   # One error incident while the binary logs are over binlog_max_size in
   # total or have grown binlog_grow_by within binlog_grow_within.
+  # The binlog's size is what the server keeps on disk, not whether it serves:
+  # it alerts at error but never reads the service failed (an expire_logs_days
+  # kept long on purpose would otherwise keep a healthy server red).
   alert-if-binlog-large:
     interval: ${binlog_check_interval}
     check:
@@ -159,7 +162,13 @@ watches:
       max: ${binlog_max_size}
       grow_by: ${binlog_grow_by}
       within: ${binlog_grow_within}
+      reports: value
       severity: error
+    then:
+      action: alert
+      message: >-
+        ${display_name} binary logs are over binlog_max_size or grew by more than
+        binlog_grow_by within binlog_grow_within; purge them or shorten their expiry
   # One error incident while a replica thread (IO or SQL) stays stopped, or the
   # replica stays more than replication_behind_limit seconds behind, for 5
   # minutes; the event quotes the server's Last_IO_Error / Last_SQL_Error.
