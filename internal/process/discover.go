@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/fs"
 	"maps"
+	"path/filepath"
 	"regexp"
 	"sermo/internal/cfgval"
 	"sermo/internal/hostfs"
@@ -440,11 +441,11 @@ func (d Discoverer) StaleBinariesIn(attributed []Process, selectors []Selector) 
 		seen[pid] = true
 		return true
 	}
-	daemon := daemonExecutable(attributed)
+	daemons := daemonExecutables(attributed)
 	resolve := d.resolveUser()
 	for _, p := range attributed {
 		if !p.Stray && !p.Kept && p.ExePrev != "" && mark(p.PID) {
-			auxiliary := daemon != "" && p.ExePrev != daemon && !d.namedDeletedProcess(selectors, p.PID, resolve)
+			auxiliary := len(daemons) > 0 && !slices.Contains(daemons, p.ExePrev) && !d.namedDeletedProcess(selectors, p.PID, resolve)
 			out = append(out, StaleBinary{PID: p.PID, Path: p.ExePrev, Auxiliary: auxiliary})
 		}
 	}
@@ -492,22 +493,50 @@ func (d Discoverer) namedDeletedProcess(selectors []Selector, pid int, resolve U
 	return ok && d.namesDeletedExe(selectors, id, resolve)
 }
 
-// daemonExecutable is the executable of the daemon a main pidfile names — its
-// replaced path when the daemon itself is stale — or "" when no main pidfile
-// names a live process whose executable is known. Only that evidence says which
-// member of a backend-attributed unit is the daemon: an OpenRC cgroup labels
-// every process main, launcher shells included.
-func daemonExecutable(attributed []Process) string {
+// openrcSupervisor is OpenRC's supervise-daemon. The pidfile it writes names
+// the supervisor, and the daemon is the service's command, which it runs as its
+// own child: salt-minion's Python under it read as a helper beside it, so a
+// replaced interpreter never restarted the service.
+const openrcSupervisor = "supervise-daemon"
+
+// daemonExecutables are the executables of the daemon a main pidfile names —
+// the replaced path when the daemon itself is stale — and, when that is
+// OpenRC's supervise-daemon, of the programs it runs directly; nil when no
+// main pidfile names a live process whose executable is known. Only that
+// evidence says which member of a backend-attributed unit is the daemon: an
+// OpenRC cgroup labels every process main, launcher shells included.
+func daemonExecutables(attributed []Process) []string {
 	for _, p := range attributed {
 		if !p.MainPidfile {
 			continue
 		}
-		if p.ExePrev != "" {
-			return p.ExePrev
+		exe := knownExecutable(p)
+		if exe == "" {
+			return nil
 		}
-		if p.ExeOK {
-			return p.Exe
+		daemons := []string{exe}
+		if filepath.Base(exe) == openrcSupervisor {
+			for _, child := range attributed {
+				if child.PPID == p.PID {
+					if childExe := knownExecutable(child); childExe != "" {
+						daemons = append(daemons, childExe)
+					}
+				}
+			}
 		}
+		return daemons
+	}
+	return nil
+}
+
+// knownExecutable is a process's replaced path when it runs a deleted binary,
+// its trusted executable otherwise, or "" when neither is known.
+func knownExecutable(p Process) string {
+	if p.ExePrev != "" {
+		return p.ExePrev
+	}
+	if p.ExeOK {
+		return p.Exe
 	}
 	return ""
 }

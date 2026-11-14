@@ -4090,7 +4090,10 @@ but no restart runs: renewing a shell would cut every client of the daemon off
 A process that one of the service's own `processes:` selectors names, by exact
 `exe` and its `user`, is the service's program wherever the pidfile points:
 OpenRC's `supervise-daemon` writes its own PID there, and the daemon it runs is
-not a helper beside it.
+not a helper beside it. That holds without a selector too: when the pidfile
+names `supervise-daemon`, the programs it runs directly are the daemon, so a
+Python daemon whose interpreter was replaced restarts, while the loggers its
+`output_logger` starts stay helpers.
 Without a live main pidfile Sermo cannot tell the daemon from its launcher, so
 every replaced binary keeps the restart. The RabbitMQ profile names the
 broker's own pidfile for this reason: the OpenRC script's pidfile names the

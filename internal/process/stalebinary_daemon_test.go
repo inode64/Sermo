@@ -119,3 +119,32 @@ func TestStaleBinariesKeepsTheDeclaredProgramUnderASupervisor(t *testing.T) {
 		}
 	}
 }
+
+// OpenRC's supervise-daemon writes the pidfile and runs the service's command
+// as its child: salt-minion's Python, whose own children include the loggers
+// output_logger starts. After an interpreter upgrade the Python processes are
+// the daemon's and restart it; the loggers stay helpers beside it, and alone
+// they still restart nothing.
+func TestStaleBinariesTakesWhatSuperviseDaemonRunsAsTheDaemon(t *testing.T) {
+	const python = "/usr/bin/python3.13"
+	supervisor := Process{PID: 10, PPID: 1, Source: SourceBackend, Role: RoleMain, MainPidfile: true, ExeOK: true, Exe: "/usr/bin/supervise-daemon"}
+	minion := Process{PID: 11, PPID: 10, Source: SourceBackend, Role: RoleMain, ExePrev: python}
+	logger := Process{PID: 12, PPID: 11, Source: SourceBackend, Role: RoleMain, ExePrev: "/usr/bin/logger"}
+	worker := Process{PID: 13, PPID: 11, Source: SourceBackend, Role: RoleMain, ExePrev: python}
+	d := Discoverer{}
+	want := map[int]bool{11: false, 12: true, 13: false}
+	got := d.StaleBinariesIn([]Process{supervisor, minion, logger, worker}, nil)
+	if len(got) != len(want) {
+		t.Fatalf("stale = %+v, want %d entries", got, len(want))
+	}
+	for _, s := range got {
+		if auxiliary, ok := want[s.PID]; !ok || s.Auxiliary != auxiliary {
+			t.Fatalf("pid %d auxiliary = %v, want %v (%+v)", s.PID, s.Auxiliary, auxiliary, got)
+		}
+	}
+	minion.ExePrev, minion.ExeOK, minion.Exe = "", true, "/usr/bin/python3.14"
+	got = d.StaleBinariesIn([]Process{supervisor, minion, logger}, nil)
+	if len(got) != 1 || !got[0].Auxiliary {
+		t.Fatalf("stale = %+v, want only the logger, auxiliary", got)
+	}
+}
