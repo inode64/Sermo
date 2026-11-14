@@ -12,6 +12,7 @@ import (
 	"sermo/internal/checks"
 	"sermo/internal/config"
 	"sermo/internal/process"
+	"sermo/internal/strutil"
 )
 
 // processPolicyViolation is deliberately presentation-safe: it names a PID and
@@ -243,11 +244,11 @@ func processPolicyData(user string, samples []ProcInfo, violations []processPoli
 }
 
 func processPolicyViolationList(violations []processPolicyViolation) string {
-	return limitedDisplayList(violations, processPIDListLimit, processPolicyViolationText)
+	return strutil.LimitedList(violations, processPIDListLimit, processPolicyViolationText)
 }
 
 func processPolicyViolationPIDs(violations []processPolicyViolation) string {
-	return limitedDisplayList(violations, processPIDListLimit, func(violation processPolicyViolation) string {
+	return strutil.LimitedList(violations, processPIDListLimit, func(violation processPolicyViolation) string {
 		return strconv.Itoa(violation.info.PID)
 	})
 }

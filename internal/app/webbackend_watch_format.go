@@ -5,6 +5,7 @@ import (
 	"sermo/internal/cfgval"
 	"sermo/internal/checks"
 	"sermo/internal/metrics"
+	"sermo/internal/strutil"
 	"sermo/internal/web"
 	"slices"
 	"strconv"
@@ -34,24 +35,7 @@ func pluralSuffix(count int, singular string) string {
 }
 
 func processPIDList(samples []ProcInfo) string {
-	return limitedDisplayList(samples, processPIDListLimit, func(sample ProcInfo) string { return strconv.Itoa(sample.PID) })
-}
-
-// limitedDisplayList lists at most limit items and makes the omitted count
-// explicit, so a busy host cannot inflate an event, API response or dashboard
-// row. Process watches and process policies share processPIDListLimit.
-func limitedDisplayList[T any](items []T, limit int, format func(T) string) string {
-	parts := make([]string, 0, min(len(items), limit)+1)
-	for i, item := range items {
-		if i >= limit {
-			break
-		}
-		parts = append(parts, format(item))
-	}
-	if extra := len(items) - limit; extra > 0 {
-		parts = append(parts, fmt.Sprintf("+%d more", extra))
-	}
-	return strings.Join(parts, displayListSeparator)
+	return strutil.LimitedList(samples, processPIDListLimit, func(sample ProcInfo) string { return strconv.Itoa(sample.PID) })
 }
 
 // swapWatchInfo reads the host swap usage from the collector's cached system

@@ -15,6 +15,7 @@ import (
 	"sermo/internal/conn"
 	"sermo/internal/execx"
 	"sermo/internal/hostfs"
+	"sermo/internal/strutil"
 )
 
 const (
@@ -136,14 +137,9 @@ func (c *coredumpCheck) crashedSince(since time.Time) string {
 	slices.SortFunc(crashes, func(a, b crash) int {
 		return cmp.Or(cmp.Compare(a.at, b.at), cmp.Compare(a.pid, b.pid))
 	})
-	labels := make([]string, 0, min(len(crashes), maxNamedCoredumps))
-	for _, cr := range crashes[:min(len(crashes), maxNamedCoredumps)] {
-		labels = append(labels, fmt.Sprintf("%s (pid %d)", cr.comm, cr.pid))
-	}
-	if extra := len(crashes) - len(labels); extra > 0 {
-		labels = append(labels, fmt.Sprintf("%d more", extra))
-	}
-	return strings.Join(labels, ", ")
+	return strutil.LimitedList(crashes, maxNamedCoredumps, func(cr crash) string {
+		return fmt.Sprintf("%s (pid %d)", cr.comm, cr.pid)
+	})
 }
 
 func defaultCoredumpLister() ([]string, error) {

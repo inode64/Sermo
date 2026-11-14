@@ -119,7 +119,7 @@ func TestCoredumpCheckNamesTheCrashedProcesses(t *testing.T) {
 	c.sampler = scriptedCoredumps(707)
 	now = now.Add(30 * time.Second)
 	res = c.Run(context.Background())
-	if !strings.HasSuffix(res.Message, "imap (pid 104), 2 more") {
+	if !strings.HasSuffix(res.Message, "imap (pid 104), +2 more") {
 		t.Fatalf("burst message = %q, want five names and the rest counted", res.Message)
 	}
 

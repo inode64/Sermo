@@ -138,7 +138,7 @@ func TestLogNamesWhatNamedGroupsCaptured(t *testing.T) {
 		f.append(fmt.Sprintf(crash, fmt.Sprintf("worker%d", i), "6/ABRT"))
 	}
 	f.now = f.now.Add(30 * time.Second)
-	if res = f.run(); !strings.HasSuffix(res.Message, "process=worker4 signal=6/ABRT (1), 2 more") {
+	if res = f.run(); !strings.HasSuffix(res.Message, "process=worker4 signal=6/ABRT (1), +2 more") {
 		t.Fatalf("burst message = %q, want five labels and the rest counted", res.Message)
 	}
 }

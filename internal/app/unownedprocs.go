@@ -12,6 +12,7 @@ import (
 	"sermo/internal/notify"
 	"sermo/internal/pkgdb"
 	"sermo/internal/process"
+	"sermo/internal/strutil"
 )
 
 const (
@@ -181,7 +182,7 @@ func unownedScanData(scan unownedScan, rows []checks.UnownedProcess) map[string]
 		checks.DataKeyScanned:         scan.scanned,
 		checks.DataKeyViolationCount:  len(scan.findings),
 		checks.DataKeyViolations:      unownedFindingList(scan.findings),
-		checks.DataKeyPIDs:            limitedDisplayList(scan.findings, processPIDListLimit, func(f unownedFinding) string { return strconv.Itoa(f.info.PID) }),
+		checks.DataKeyPIDs:            strutil.LimitedList(scan.findings, processPIDListLimit, func(f unownedFinding) string { return strconv.Itoa(f.info.PID) }),
 		checks.DataKeyUnitAttribution: scan.attribution(),
 		checks.DataKeyPackageDB:       string(scan.packageDB),
 		checks.DataKeyProcesses:       rows,
@@ -189,7 +190,7 @@ func unownedScanData(scan unownedScan, rows []checks.UnownedProcess) map[string]
 }
 
 func unownedFindingList(findings []unownedFinding) string {
-	return limitedDisplayList(findings, processPIDListLimit, unownedFindingText)
+	return strutil.LimitedList(findings, processPIDListLimit, unownedFindingText)
 }
 
 func unownedFindingText(f unownedFinding) string {

@@ -3,6 +3,7 @@ package strutil
 import (
 	"maps"
 	"slices"
+	"strconv"
 	"testing"
 )
 
@@ -66,6 +67,27 @@ func TestUnique(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			if got := Unique(tc.values); !slices.Equal(got, tc.want) {
 				t.Fatalf("Unique(%v) = %v, want %v", tc.values, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestLimitedList(t *testing.T) {
+	tests := []struct {
+		name  string
+		items []int
+		want  string
+	}{
+		{name: "nil"},
+		{name: "under the limit", items: []int{1, 2}, want: "#1, #2"},
+		{name: "at the limit", items: []int{1, 2, 3}, want: "#1, #2, #3"},
+		{name: "over the limit counts the rest", items: []int{1, 2, 3, 4, 5}, want: "#1, #2, #3, +2 more"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := LimitedList(tc.items, 3, func(n int) string { return "#" + strconv.Itoa(n) })
+			if got != tc.want {
+				t.Fatalf("LimitedList(%v, 3) = %q, want %q", tc.items, got, tc.want)
 			}
 		})
 	}

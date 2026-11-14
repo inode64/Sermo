@@ -3,6 +3,7 @@
 package strutil
 
 import (
+	"fmt"
 	"maps"
 	"slices"
 	"strings"
@@ -46,4 +47,24 @@ func Unique(values []string) []string {
 		out = append(out, value)
 	}
 	return out
+}
+
+// listSeparator joins the items LimitedList shows.
+const listSeparator = ", "
+
+// LimitedList joins at most limit formatted items and makes the omitted count
+// explicit ("a, b, +3 more"), so a busy host cannot inflate an event, an API
+// response, a dashboard row or an alert message.
+func LimitedList[T any](items []T, limit int, format func(T) string) string {
+	parts := make([]string, 0, min(len(items), limit)+1)
+	for i, item := range items {
+		if i >= limit {
+			break
+		}
+		parts = append(parts, format(item))
+	}
+	if extra := len(items) - limit; extra > 0 {
+		parts = append(parts, fmt.Sprintf("+%d more", extra))
+	}
+	return strings.Join(parts, listSeparator)
 }

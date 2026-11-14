@@ -16,6 +16,7 @@ import (
 	"sermo/internal/cfgval"
 	"sermo/internal/hostfs"
 	"sermo/internal/metrics"
+	"sermo/internal/strutil"
 	"sermo/internal/units"
 )
 
@@ -91,14 +92,9 @@ func (c *logCaptures) merge(other logCaptures) {
 
 // String lists the labels with their line counts, the first few only.
 func (c *logCaptures) String() string {
-	parts := make([]string, 0, min(len(c.order), maxLogCaptureLabels)+1)
-	for _, label := range c.order[:min(len(c.order), maxLogCaptureLabels)] {
-		parts = append(parts, fmt.Sprintf("%s (%d)", label, c.counts[label]))
-	}
-	if extra := len(c.order) - maxLogCaptureLabels; extra > 0 {
-		parts = append(parts, fmt.Sprintf("%d more", extra))
-	}
-	return strings.Join(parts, ", ")
+	return strutil.LimitedList(c.order, maxLogCaptureLabels, func(label string) string {
+		return fmt.Sprintf("%s (%d)", label, c.counts[label])
+	})
 }
 
 // captureLabel joins the non-empty named groups of one match, in regex order.

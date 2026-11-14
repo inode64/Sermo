@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"sermo/internal/config"
+	"sermo/internal/strutil"
 	"sermo/internal/web"
 )
 
@@ -114,6 +115,6 @@ func appendRefreshGroup(parts []string, label string, names []string) []string {
 	if len(names) == 0 {
 		return parts
 	}
-	list := limitedDisplayList(names, refreshListedNames, func(name string) string { return name })
+	list := strutil.LimitedList(names, refreshListedNames, func(name string) string { return name })
 	return append(parts, fmt.Sprintf("%s: %d (%s)", label, len(names), list))
 }
