@@ -1,7 +1,10 @@
 package process
 
 import (
+	"io/fs"
 	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
 )
 
@@ -63,4 +66,58 @@ func hasVersionSuffix(file, name string) bool {
 		rest = rest[1:]
 	}
 	return rest != "" && rest[0] >= '0' && rest[0] <= '9'
+}
+
+// versionedFileName splits a file name that ends in a version into the program
+// name and that version: python3.13 into python and 3.13, rspamd-4.1.1 into
+// rspamd and 4.1.1. The name must end in a character that is neither a digit
+// nor a separator, so python3.14-config or rspamd_stats carry no version.
+var versionedFileName = regexp.MustCompile(`^(.*[^0-9._-])[-_.]?(\d+(?:\.\d+)*)$`)
+
+// NewerVersionBeside reports whether the directory that held path, read with
+// readDir, holds the same program with a higher version. A deleted versioned
+// executable with a newer one beside it was upgraded, not uninstalled: an
+// interpreter upgrade removes python3.13 once python3.14 is installed, while
+// the daemons it ran stay installed and start again on the new one. A lower or
+// equal version is not an upgrade; a name without a version is never listed,
+// and a listing that fails proves nothing.
+func NewerVersionBeside(path string, readDir func(string) ([]fs.DirEntry, error)) bool {
+	name, version, ok := splitVersionedFileName(filepath.Base(path))
+	if !ok {
+		return false
+	}
+	entries, err := readDir(filepath.Dir(path))
+	if err != nil {
+		return false
+	}
+	for _, entry := range entries {
+		if other, otherVersion, ok := splitVersionedFileName(entry.Name()); ok && other == name && compareVersions(otherVersion, version) > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+func splitVersionedFileName(file string) (name, version string, ok bool) {
+	m := versionedFileName.FindStringSubmatch(file)
+	if m == nil {
+		return "", "", false
+	}
+	return m[1], m[2], true
+}
+
+// compareVersions orders dotted numeric versions component by component, so
+// 3.10 is newer than 3.9; a longer version with an equal prefix is newer.
+func compareVersions(a, b string) int {
+	as, bs := strings.Split(a, "."), strings.Split(b, ".")
+	for i := range min(len(as), len(bs)) {
+		// The pattern admits only digits here, so Atoi fails only past int's
+		// range, which no real version reaches; such a part compares as 0.
+		x, _ := strconv.Atoi(as[i])
+		y, _ := strconv.Atoi(bs[i])
+		if x != y {
+			return x - y
+		}
+	}
+	return len(as) - len(bs)
 }

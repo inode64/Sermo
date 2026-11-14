@@ -605,7 +605,7 @@ func buildWorker(ctx context.Context, name, unit string, tree map[string]any, de
 	// (and, on systemd, the backend PID lookup's subprocesses) for a set that is
 	// normally empty.
 	checkDeps.StaleBinaries = func() []process.StaleBinary {
-		return markRemovedBinaries(discoverer.StaleBinariesIn(processesForCycle(), selectors), hostfs.StatTarget)
+		return markRemovedBinaries(discoverer.StaleBinariesIn(processesForCycle(), selectors), hostfs.StatTarget, hostfs.ReadDirTarget)
 	}
 	// Strays come from the same memoized discovery: classification already ran
 	// inside Discover, so the check costs one slice filter per cycle.

@@ -138,7 +138,7 @@ func BuildServiceRuntime(ctx context.Context, cfg ServiceRuntimeConfig) ServiceR
 		PidfileFallbackPIDs: pidfileFallbackPIDs(needPidfileFallback, backend.checked, procInfo),
 		PidfileClaim:        pidfileClaim(discoverer, selectors, backend.checked),
 		StaleBinaries: func() []process.StaleBinary {
-			return markRemovedBinaries(discoverer.StaleBinaries(selectors), hostfs.StatTarget)
+			return markRemovedBinaries(discoverer.StaleBinaries(selectors), hostfs.StatTarget, hostfs.ReadDirTarget)
 		},
 		StaleLibraries: serviceStaleLibraries(discoverer, selectors),
 		TerminalOutput: serviceTerminalOutput(discoverer, selectors, process.ScanTerminalOutput),
@@ -194,15 +194,19 @@ func pidfileFallbackPIDs(needed bool, backendPIDs func() ([]int, error), info se
 // markRemovedBinaries flags the stale binaries whose path holds no file any
 // more. An upgrade leaves the new version at the path; an uninstall leaves
 // nothing, and then a restart would stop a serving daemon it cannot start
-// again. A path whose stat fails otherwise keeps its replaced reading. Each
-// path is read once per call, however many processes run it.
-func markRemovedBinaries(stale []process.StaleBinary, stat func(string) (fs.FileInfo, error)) []process.StaleBinary {
+// again. A versioned executable gone with a newer version beside it was
+// upgraded too (python3.13 after python3.14 came in): its daemons start on the
+// new one, and the required preflight still refuses a restart that would not.
+// A path whose stat fails otherwise keeps its replaced reading. Each path is
+// read once per call, however many processes run it; a directory is listed
+// only for a versioned path that is gone.
+func markRemovedBinaries(stale []process.StaleBinary, stat func(string) (fs.FileInfo, error), readDir func(string) ([]fs.DirEntry, error)) []process.StaleBinary {
 	removed := map[string]bool{}
 	for i := range stale {
 		gone, seen := removed[stale[i].Path]
 		if !seen {
 			_, err := stat(stale[i].Path)
-			gone = errors.Is(err, fs.ErrNotExist)
+			gone = errors.Is(err, fs.ErrNotExist) && !process.NewerVersionBeside(stale[i].Path, readDir)
 			removed[stale[i].Path] = gone
 		}
 		stale[i].Removed = gone

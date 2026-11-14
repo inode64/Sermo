@@ -4067,7 +4067,12 @@ upgraded: a restart would stop the daemon and find nothing to start. The check
 then says `N process(es) run a binary no longer installed (PATH); reinstall the
 package or stop the service`, and its reading blocks every operation, so
 `restart-on-stale-binary` only alerts. The `process` check of such a service
-names the removal the same way and blocks restart rules keyed on it.
+names the removal the same way and blocks restart rules keyed on it. A
+versioned executable whose path is gone while a newer version of the same
+program sits beside it was upgraded, not uninstalled: an interpreter upgrade
+removes `/usr/bin/python3.13` once `python3.14` is installed, and the daemons
+it ran start on the new one. It reads as replaced, so the rule may restart the
+service, which still has to pass its required preflight first.
 
 When a live main `pidfile:` names the daemon, a replaced binary drives the
 restart only if it is the daemon's own executable: the daemon itself, or a

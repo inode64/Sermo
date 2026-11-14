@@ -1,6 +1,7 @@
 package process
 
 import (
+	"io/fs"
 	"os"
 	"path/filepath"
 	"testing"
@@ -155,5 +156,54 @@ func TestHasVersionSuffix(t *testing.T) {
 		if got := hasVersionSuffix(tc.file, tc.name); got != tc.want {
 			t.Errorf("hasVersionSuffix(%q, %q) = %v, want %v", tc.file, tc.name, got, tc.want)
 		}
+	}
+}
+
+// An interpreter upgrade deletes the old versioned file once the new one is
+// installed; only a higher version of the same program counts as that upgrade.
+func TestNewerVersionBeside(t *testing.T) {
+	dir := t.TempDir()
+	for _, name := range []string{"python3", "python3.14", "python3.14-config", "python3.12", "rspamd-4.2.3", "rspamd_stats", "apache2ctl"} {
+		if err := os.WriteFile(filepath.Join(dir, name), nil, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	listings := 0
+	readDir := func(path string) ([]fs.DirEntry, error) {
+		listings++
+		return os.ReadDir(path)
+	}
+	for _, tc := range []struct {
+		path string
+		want bool
+	}{
+		{"/usr/bin/python3.13", true},
+		{"/usr/bin/python3.14", false},
+		{"/usr/bin/python3.15", false},
+		{"/usr/bin/rspamd-4.1.1", true},
+		{"/usr/bin/rspamd-4.2.3", false},
+		{"/usr/bin/apache2", false},
+		{"/usr/bin/python3.9", true},
+		{"/usr/bin/rspamd", false},
+	} {
+		path := filepath.Join(dir, filepath.Base(tc.path))
+		if got := NewerVersionBeside(path, readDir); got != tc.want {
+			t.Errorf("NewerVersionBeside(%q) = %v, want %v", path, got, tc.want)
+		}
+	}
+	// apache2 reads as version 2 of apache, so it is listed too; only rspamd,
+	// which carries no version, is not.
+	if listings != 7 {
+		t.Errorf("directory listings = %d, want one per versioned name and none for rspamd", listings)
+	}
+	companion := t.TempDir()
+	if err := os.WriteFile(filepath.Join(companion, "python3.10-config"), nil, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if NewerVersionBeside(filepath.Join(companion, "python3.9"), os.ReadDir) {
+		t.Error("a companion tool with a version inside its name counted as the upgrade")
+	}
+	if NewerVersionBeside(filepath.Join(dir, "python3.13"), func(string) ([]fs.DirEntry, error) { return nil, os.ErrPermission }) {
+		t.Error("a directory that cannot be listed counted as proof of an upgrade")
 	}
 }
