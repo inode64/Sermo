@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"sermo/internal/checks"
+	"sermo/internal/config"
 	"sermo/internal/process"
 	"sermo/internal/servicemgr"
 	"sermo/internal/severity"
@@ -42,6 +43,19 @@ func TestCheckHealthSummary(t *testing.T) {
 	health = checkHealthSummary(declared, []string{"disk"}, nil, true)
 	if health != checkHealthFailing {
 		t.Fatalf("undeclared severity: health=%q, want failing", health)
+	}
+
+	// The configuration test is graded error for notifications, but it judges
+	// the next start: the service it reports on keeps serving and reads warning.
+	cfgFailing := map[string]CheckSnapshot{config.ConfigurationCheckName: {Observation: checks.ObservationFailing, OK: false, Severity: string(severity.Error)}}
+	health = checkHealthSummary(cfgFailing, []string{config.ConfigurationCheckName}, map[string]string{config.ConfigurationCheckName: string(severity.Error)}, true)
+	if health != checkHealthWarning {
+		t.Fatalf("failing configuration test: health=%q, want warning", health)
+	}
+	cfgFailing["tcp"] = CheckSnapshot{Observation: checks.ObservationFailing, OK: false}
+	health = checkHealthSummary(cfgFailing, []string{config.ConfigurationCheckName, "tcp"}, nil, true)
+	if health != checkHealthFailing {
+		t.Fatalf("configuration test beside a real failure: health=%q, want failing", health)
 	}
 
 	// The grade the check gave its own result travels with the snapshot and

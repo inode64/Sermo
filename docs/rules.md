@@ -379,9 +379,11 @@ rules:
 ### Service health conditions (version / state / config)
 
 A resolved service that has `preflight.config` automatically receives the
-periodic advisory check `checks.configuration` (default interval `15m`). A
-failure makes an active service `warning` (an `error` when `preflight.config`
-declares `severity: error`, as Apache's does), remains outside SLA, and is visible
+periodic check `checks.configuration` (default interval `15m`). A failure is an
+`error` incident unless `preflight.config` declares another `severity:`, because
+the required preflight then refuses every operation on the service, automatic
+recovery included. It makes an active service `warning` with `state_reason:
+configuration_invalid` rather than `failed`, remains outside SLA, and is visible
 in the Web UI and through `sermoctl status`; `sermoctl preflight SERVICE`
 reruns the required form on demand. The required preflight still blocks an
 operation. The `config.on_change` block below is optional and adds persistent

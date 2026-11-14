@@ -1063,8 +1063,9 @@ then at most one operation.
   event. It needs admin rights, CSRF and the current configuration generation
   like any other action.
 - **Configuration health**: a service's `preflight.config` is copied into the
-  `configuration` check — warning-grade unless the entry declares its own
-  severity, and never counted against SLA — and runs through that same bounded pool,
+  `configuration` check — error-grade unless the entry declares its own
+  severity, never counted against SLA, and an active service reads `warning`
+  rather than `failed` while it fails — and runs through that same bounded pool,
   every `15m` by default. The original required preflight remains in the
   operation path and can block an action before any service mutation.
 - **Shutdown** (SIGTERM/SIGINT): stop starting cycles, cancel worker contexts;

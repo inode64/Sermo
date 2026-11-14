@@ -9,7 +9,9 @@ import (
 	"sermo/internal/severity"
 )
 
-func TestExpandConfigurationCheckCopiesConfigPreflightAsAdvisory(t *testing.T) {
+// The monitoring copy is an error by default: while it fails, the required
+// preflight refuses every operation, automatic recovery included.
+func TestExpandConfigurationCheckCopiesConfigPreflightAsAnError(t *testing.T) {
 	preflightEntry := map[string]any{
 		checks.CheckKeyType:    checks.CheckTypeCommand,
 		checks.CheckKeyCommand: []any{"nginx", "-t"},
@@ -23,7 +25,7 @@ func TestExpandConfigurationCheckCopiesConfigPreflightAsAdvisory(t *testing.T) {
 
 	entries, _ := tree[sectionChecks].(map[string]any)
 	got, _ := entries[ConfigurationCheckName].(map[string]any)
-	if got[checks.CheckKeyType] != checks.CheckTypeCommand || got[checks.CheckKeySeverity] != string(severity.Warning) {
+	if got[checks.CheckKeyType] != checks.CheckTypeCommand || got[checks.CheckKeySeverity] != string(severity.Error) {
 		t.Fatalf("generated configuration check = %#v", got)
 	}
 	if got[EntryKeyInterval] != DefaultConfigurationCheckInterval {
@@ -39,33 +41,36 @@ func TestExpandConfigurationCheckCopiesConfigPreflightAsAdvisory(t *testing.T) {
 	}
 }
 
-// A service whose next reload or restart an invalid configuration would take
-// down declares the grade on preflight.config; the monitoring copy keeps it.
+// A grade declared on preflight.config wins: an operator may demote a test
+// whose failures are routine on that host.
 func TestExpandConfigurationCheckKeepsADeclaredSeverity(t *testing.T) {
 	tree := map[string]any{sectionPreflight: map[string]any{ServiceMonitorKeyConfig: map[string]any{
 		checks.CheckKeyType:     checks.CheckTypeCommand,
-		checks.CheckKeySeverity: "error",
+		checks.CheckKeySeverity: string(severity.Warning),
 	}}}
 	if errs := expandConfigurationCheck(tree); len(errs) > 0 {
 		t.Fatalf("expandConfigurationCheck: %v", errs)
 	}
 	got := tree[sectionChecks].(map[string]any)[ConfigurationCheckName].(map[string]any)
-	if got[checks.CheckKeySeverity] != "error" {
-		t.Fatalf("generated severity = %v, want the declared error", got[checks.CheckKeySeverity])
+	if got[checks.CheckKeySeverity] != string(severity.Warning) {
+		t.Fatalf("generated severity = %v, want the declared warning", got[checks.CheckKeySeverity])
 	}
 }
 
-// Apache declares an invalid configuration an error: its next graceful reload
-// refuses it and a restart takes every site down.
-func TestApacheConfigurationCheckIsAnError(t *testing.T) {
+// Catalog profiles get the error grade without declaring it: named, whose
+// unloadable zones went unreported for a year as a warning, and apache, whose
+// os-selected command must not lose it.
+func TestCatalogConfigurationCheckIsAnError(t *testing.T) {
 	cfg := loadAllCatalogServices(t, repoCatalogDir(repoRoot(t)), "openrc")
-	resolved, errs := cfg.Resolve("apache-audit")
-	if len(errs) > 0 {
-		t.Fatalf("resolve apache: %v", errs)
-	}
-	check := resolved.Tree[sectionChecks].(map[string]any)[ConfigurationCheckName].(map[string]any)
-	if check[checks.CheckKeySeverity] != "error" {
-		t.Fatalf("apache configuration check severity = %v, want error", check[checks.CheckKeySeverity])
+	for _, name := range []string{"apache-audit", "named-audit"} {
+		resolved, errs := cfg.Resolve(name)
+		if len(errs) > 0 {
+			t.Fatalf("resolve %s: %v", name, errs)
+		}
+		check := resolved.Tree[sectionChecks].(map[string]any)[ConfigurationCheckName].(map[string]any)
+		if check[checks.CheckKeySeverity] != string(severity.Error) {
+			t.Fatalf("%s configuration check severity = %v, want error", name, check[checks.CheckKeySeverity])
+		}
 	}
 }
 

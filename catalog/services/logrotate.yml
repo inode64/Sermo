@@ -44,7 +44,6 @@ preflight:
     command: ["${logrotate_binary}", --debug, "${config}"]
     expect_exit: [0, 1]
     timeout: 60s
-    severity: error
     analyze:
       use:
         - logrotate

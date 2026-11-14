@@ -590,6 +590,10 @@ func (b *WebBackend) operationSettlingPending(name string, records map[string]st
 // from live configuration, and decides for a snapshot that carries none — one
 // persisted before the grade was stored — so it is graded correctly on the
 // first cycle.
+//
+// The configuration test reads warning whatever its grade: it judges the next
+// start while the service keeps serving, so it is graded error for the
+// operator's notifications but would misreport a working service as failed.
 func checkHealthSummary(snap map[string]CheckSnapshot, checkNames []string, severities map[string]string, monitored bool) string {
 	if !monitored {
 		return TargetStatePaused
@@ -609,7 +613,7 @@ func checkHealthSummary(snap map[string]CheckSnapshot, checkNames []string, seve
 		if cs.healthy() {
 			continue
 		}
-		if cs.Optional || cs.severityOr(severity.Level(severities[name])).Advisory() {
+		if name == config.ConfigurationCheckName || cs.Optional || cs.severityOr(severity.Level(severities[name])).Advisory() {
 			warning++
 			continue
 		}

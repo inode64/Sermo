@@ -1863,7 +1863,7 @@ for a frozen VM or container (libvirt suspend, Docker pause) whose monitoring
 is paused, `active` while fresh process evidence confirms the daemon but its
 check or runtime indicators are still filling,
 `collecting` while monitoring is active but runtime/check/SLA indicators are
-still filling, `warning` when an advisory application configuration check fails,
+still filling, `warning` when the application configuration check fails,
 a check's own program cannot load a library (`state_reason:
 check_library_missing`, see [the `command` check](rules.md#checks)),
 or the only indicator left is one that will not
@@ -1916,13 +1916,13 @@ resolution](#stored-history-resolution)).
 When a resolved service declares `preflight.config`, Sermo also injects a
 periodic service check named `configuration`. It reuses that exact command,
 user, timeout and analyzer, defaults to a `15m` interval, and has
-`severity: warning`: an active service with a configuration that would fail its
-next operation is degraded, not down. A service whose next reload or restart an
-invalid configuration would take down declares its own grade on
-`preflight.config` — the packaged Apache profile declares `severity: error`,
-because logrotate's graceful reload refuses the file and a restart stops every
-site. Either way the check never reduces SLA: it judges the next start, not the
-running service. Its message states the cause — the command's first line, with
+`severity: error`: while it fails, the required preflight refuses every start,
+restart, reload and resume, so Sermo can no longer recover the service by
+itself. The incident therefore reaches notifiers that take `error`; declare
+`severity: warning` on `preflight.config` for a test whose failures a host
+treats as routine. The check never reduces SLA and leaves an active service
+`warning` (`state_reason: configuration_invalid`) rather than `failed`: it
+judges the next start, not the running service. Its message states the cause — the command's first line, with
 the next one when it only introduces the reason (Apache's `Syntax error on line
 N of FILE:` and the rejected directive) — and the notification body carries the
 command's full output. An explicit `interval` on `preflight.config` overrides the default. The
