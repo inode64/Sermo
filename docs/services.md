@@ -1453,6 +1453,13 @@ services. The example also declares `also_apply` so restarting the portmapper
 then restarts its status monitor, renewing its RPC registration. Each cascade
 step releases its operation/group locks before the next step takes its own.
 
+The packaged `rpc-statd` profile repairs a registration lost any other way. Its
+`restart-if-statd-failed` watch asks rpcbind for the NSM port (program 100024)
+and calls statd there, wherever statd listens, and restarts statd after three
+failed cycles; the same probe verifies every start. Its `block-without-portmapper`
+guard refuses to start or restart statd while the portmapper does not answer,
+because statd could not register then.
+
 ### Dependency isolation (`allow_dependencies`)
 
 Every start and stop Sermo issues is isolated from the init system's dependency

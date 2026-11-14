@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 
 	"sermo/internal/cfgval"
@@ -13,8 +14,8 @@ import (
 
 // resolveCatalogService resolves one real catalog service the way the daemon
 // would, so these assertions are about the shipped catalog rather than a
-// hand-built tree.
-func resolveCatalogService(t *testing.T, catalogService, backend string) Resolved {
+// hand-built tree. Any extra YAML is appended to the service file.
+func resolveCatalogService(t *testing.T, catalogService, backend string, extra ...string) Resolved {
 	t.Helper()
 	root := repoRoot(t)
 	dir := t.TempDir()
@@ -22,7 +23,7 @@ func resolveCatalogService(t *testing.T, catalogService, backend string) Resolve
 	if err := os.MkdirAll(enabled, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	body := "name: " + catalogService + "\nuses: " + catalogService + "\nmonitor: enabled\n"
+	body := "name: " + catalogService + "\nuses: " + catalogService + "\nmonitor: enabled\n" + strings.Join(extra, "")
 	if err := os.WriteFile(filepath.Join(enabled, catalogService+".yml"), []byte(body), 0o644); err != nil {
 		t.Fatal(err)
 	}

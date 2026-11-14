@@ -33,14 +33,24 @@ watches:
     check:
       type: service
       expect: active
-  statd:
+  # rpc.statd registers its port with rpcbind only when it starts, and a
+  # restarted rpcbind forgets every registration: statd then keeps running but
+  # NFS servers can no longer reach it for lock recovery. Asking rpcbind for the
+  # NSM port and calling NSM there proves both, wherever statd listens, and only
+  # a restart registers it again.
+  restart-if-statd-failed:
     check:
-      type: statd
+      type: rpcbind
       host: 127.0.0.1
-      port: 662
-      timeout: 3s
-      optional: true
+      transport: tcp
+      program: 100024
+      version: 1
+      timeout: 5s
       verify: true
+    for:
+      cycles: 3
+    then:
+      action: restart
   alert-if-memory-high:
     check:
       type: metric
@@ -58,3 +68,24 @@ watches:
       action: alert
       message: >-
         During ${rule.duration}, ${display_name} memory usage stayed above ${check.threshold} (current ${check.value})
+rules:
+  # statd cannot register while the portmapper is down, so starting it then
+  # only fails; rpcbind's own recovery restarts statd after it (also_apply).
+  block-without-portmapper:
+    type: guard
+    blocks:
+      - start
+      - restart
+      - resume
+    if:
+      not:
+        active:
+          rpcbind:
+            timeout: 5s
+            host: 127.0.0.1
+            transport: tcp
+            program: 100000
+            version: 2
+    then:
+      action: block
+      message: RPC portmapper cannot be verified; recover rpcbind before restarting ${display_name}
