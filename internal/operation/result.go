@@ -57,16 +57,27 @@ type Result struct {
 	Relaunched bool `json:"-"`
 }
 
-// AuditMessage preserves process identities, policy refusals and each attempted
-// signal in the operation's single persisted event, including successful cleanup.
+// AuditMessage preserves process identities, policy refusals, the checks that
+// failed and each attempted signal in the operation's single persisted event,
+// including successful cleanup. A preflight_failed or postflight_failed event
+// thus says which check refused the action and why.
 func (r Result) AuditMessage() string {
-	parts := make([]string, 0, 1+len(r.Processes)+len(r.Signals))
+	parts := make([]string, 0, 1+len(r.Checks)+len(r.Processes)+len(r.Signals))
 	parts = append(parts, r.Message)
 	if r.RequestedAction != "" {
 		parts = append(parts, "requested "+r.RequestedAction)
 	}
 	if r.CreatedContainer != "" {
 		parts = append(parts, "created container "+r.CreatedContainer)
+	}
+	for _, c := range r.Checks {
+		switch {
+		case c.OK:
+		case c.Optional:
+			parts = append(parts, fmt.Sprintf("optional check %s failed: %s", c.Check, c.Message))
+		default:
+			parts = append(parts, fmt.Sprintf("check %s failed: %s", c.Check, c.Message))
+		}
 	}
 	for _, proc := range r.Processes {
 		exe := proc.Exe

@@ -6,7 +6,10 @@ any `security:` toggle that tries to disable them.
 ## Hard invariants
 
 1. **Never start, restart, reload or resume if a required preflight fails.** A
-   required preflight failure blocks the action with `preflight_failed`.
+   required preflight failure blocks the action with `preflight_failed`. Its
+   event, manual or from a remediation rule, names each failed check and its
+   reason (`preflight failed; check config failed: exit 1 (want 0): …`), as a
+   `postflight_failed` one does.
 2. **Never start, stop, restart, reload or resume if a guard blocks the action.**
    Guards are evaluated before remediation; a remediation action a guard blocks
    never runs. A guard that references a malformed check also denies the action,

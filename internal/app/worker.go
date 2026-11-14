@@ -995,7 +995,10 @@ func (w *Worker) executeRemediation(ctx context.Context, now func() time.Time, f
 		w.acknowledgeOperation(firing.Rule, rules.ActionType(action), result.Relaunched)
 	}
 	kind := eventKindForResult(result)
-	w.emit(Event{Kind: kind, Severity: remediationSeverity(kind, firing.severity), Rule: firing.Name, Action: action, Status: string(result.Status), Message: result.Message})
+	// The same audit text as a manual operation's event: the residual
+	// processes, signals and failed checks are what explain a refused or
+	// incomplete remediation.
+	w.emit(Event{Kind: kind, Severity: remediationSeverity(kind, firing.severity), Rule: firing.Name, Action: action, Status: string(result.Status), Message: result.AuditMessage()})
 	if recovered != nil {
 		panic(recovered)
 	}

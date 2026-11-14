@@ -57,6 +57,22 @@ func TestWorkerRefusedRemediationAlertsOncePerEpisode(t *testing.T) {
 	}
 }
 
+// An automatic remediation's event carries the operation's audit text, so a
+// preflight that refused it names the check and its reason, as a manual
+// operation's event does.
+func TestWorkerRemediationEventNamesTheFailedPreflightCheck(t *testing.T) {
+	refused := operation.Result{Status: operation.ResultPreflightFailed, Message: "preflight failed", Checks: []checks.Result{
+		{Check: "config", Message: "exit 1 (want 0): syntax error on line 3"},
+	}}
+	h := &workerHarness{cache: failedCache("http"), opResult: refused}
+	w := h.worker(alertThenRestartTree("http"), rules.Policy{Cooldown: time.Minute}, nil)
+	w.RunCycle(context.Background())
+	event, ok := h.eventOf(eventKindError)
+	if !ok || event.Message != "preflight failed; check config failed: exit 1 (want 0): syntax error on line 3" {
+		t.Fatalf("events=%+v, want the refusal to name the failed preflight check", h.events)
+	}
+}
+
 // An attempt that ran starts the cooldown, which is what spaces the next one:
 // each of those is announced, as before.
 func TestWorkerExecutedRemediationAnnouncesEachAttempt(t *testing.T) {
