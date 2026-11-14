@@ -183,9 +183,10 @@ func (c artifactCheck) Name() string { return c.name }
 
 func (c artifactCheck) Run(ctx context.Context) checks.Result {
 	report := c.inspect(ctx)
-	if report.Hung {
+	if report.Hung || report.TimedOut {
 		// No answer is no sample: the last one stands, and the watch reads
-		// unavailable instead of broken or recovered.
+		// unavailable instead of broken or recovered. A probe that ran past its
+		// timeout is what a loaded host says, not evidence about the app.
 		return checks.Result{Check: c.name, Unavailable: true, Message: report.Status}
 	}
 	if c.store != nil {

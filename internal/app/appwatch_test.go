@@ -73,6 +73,8 @@ func TestArtifactCheckReadsAHungBinaryAsUnavailable(t *testing.T) {
 		{Name: "demo", Status: "error: exit 1"},
 		{Name: "demo", Installed: true, Hung: true, Status: "error: /mnt/data/demo: hung path: no answer within 5s"},
 		{Name: "demo", Installed: true, Hung: true, Status: "error: /mnt/data/demo: hung path: an earlier stat is still blocked"},
+		{Name: "demo", Installed: true, Hung: true, Status: "error: /mnt/data/demo: hung path: an earlier stat is still blocked"},
+		{Name: "demo", Installed: true, Hung: true, Status: "error: /mnt/data/demo: hung path: an earlier stat is still blocked"},
 	}
 	check := artifactCheck{
 		name: "demo", samples: samples, store: (*ArtifactSamples).StoreAppReport,
@@ -97,11 +99,37 @@ func TestArtifactCheckReadsAHungBinaryAsUnavailable(t *testing.T) {
 
 	w.Check = check
 	w.RunCycle(context.Background())
+	if len(kinds) != 1 || !w.firing {
+		t.Fatalf("first hung cycle events = %v firing = %v, want no announcement yet and the episode open", kinds, w.firing)
+	}
+	w.RunCycle(context.Background())
 	if len(kinds) != 2 || kinds[1] != eventKindError || !w.firing {
-		t.Fatalf("hung cycle events = %v firing = %v, want the check unavailable and the episode open", kinds, w.firing)
+		t.Fatalf("second hung cycle events = %v firing = %v, want the check unavailable and the episode open", kinds, w.firing)
 	}
 	if got, _ := samples.AppReport("demo"); got.Status != sampled.Status {
 		t.Fatalf("hung cycle replaced the sample: %+v", got)
+	}
+}
+
+// TestArtifactCheckReadsATimedOutProbeAsUnavailable pins that a version probe
+// running past its timeout is a measurement that failed on a loaded host, not a
+// broken app: no sample replaces the last one and no grade is looked up.
+func TestArtifactCheckReadsATimedOutProbeAsUnavailable(t *testing.T) {
+	samples := NewArtifactSamples()
+	samples.StoreAppReport("mariadb", appinspect.Report{Name: "mariadb", Installed: true, OK: true, Status: appinspect.StatusOK})
+	check := artifactCheck{
+		name: "mariadb", samples: samples, store: (*ArtifactSamples).StoreAppReport,
+		inspect: func(context.Context) appinspect.Report {
+			return appinspect.Report{Name: "mariadb", Installed: true, TimedOut: true, Status: "error: timeout after 10s"}
+		},
+		activeUsers: func() []string { t.Fatal("a timed-out probe has no grade to look up"); return nil },
+	}
+	res := check.Run(context.Background())
+	if !res.Unavailable || res.OK || res.Severity != "" {
+		t.Fatalf("timed-out probe = %+v, want an ungraded unavailable reading", res)
+	}
+	if got, _ := samples.AppReport("mariadb"); got.Status != appinspect.StatusOK {
+		t.Fatalf("timed-out probe replaced the sample: %+v", got)
 	}
 }
 

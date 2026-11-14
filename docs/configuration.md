@@ -556,8 +556,9 @@ uses its own top-level `interval` for version/config monitors and changed paths.
 A service worker may still run more often, but reads the latest shared artifact
 sample instead of re-running a version command or filesystem probe each cycle.
 A catalog app or library whose file does not answer a stat within
-`engine.default_timeout`, as on a dead network mount, reports its watch unavailable
-and keeps its last sample.
+`engine.default_timeout`, as on a dead network mount, or whose version or health
+command runs past its timeout, as on a loaded host, reports its watch unavailable
+and keeps its last sample: neither says anything about the app itself.
 The Web UI Applications list reads the same samples; it runs an app's version
 command itself only when no sample exists yet, such as for an app installed
 after the daemon started. The internal `artifact:*` samplers only refresh those shared samples: they do
@@ -3871,13 +3872,17 @@ A health `command` killed by a signal is not unavailable: it ran and did not
 exit with `expect_exit`, so the watch fails and runs its actions.
 
 Unavailable observations are unhealthy, but they never satisfy a watch
-condition and never run watch actions. The watch emits one `error` event when
-observation becomes unavailable and one `recovered` event when a valid sample
-returns; this edge state survives daemon restarts and configuration reloads.
-A watch that had observed before probes once more, two seconds later, before
-announcing the loss, so a single lookup timeout or dropped packet does not raise
-an `error`. A watch that has never observed since the daemon started reports
-its first unavailable result at once.
+condition and never run watch actions. One cycle without a reading is a
+measurement that failed (a probe timing out on a loaded host, a dropped packet),
+not news: the watch announces the loss only once observation has stayed
+unavailable for two consecutive cycles, and for its whole `for:` window when
+that is longer (`for: { cycles: 3 }` waits three cycles, `for: { duration: 5m }`
+five minutes). It then emits one `error` event, and one `recovered` event when a
+valid sample returns; a cycle that answers before that leaves no event at all.
+This edge state survives daemon restarts and configuration reloads. Within a
+cycle, a watch that had observed before probes once more, two seconds later,
+before counting it as unavailable, so a single lookup timeout does not even
+start the count.
 
 ```yaml
 check:

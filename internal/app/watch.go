@@ -194,6 +194,10 @@ type Watch struct {
 	stateDirty     bool                     // a failed write must retry even if readings return to persistedState
 	persistedState state.WatchRuntimeRecord // immutable snapshot; replaced after successful persistence
 	unavailable    bool
+	// unavailableStreak counts the consecutive unavailable cycles not yet
+	// announced, and unavailableSince dates the first of them.
+	unavailableStreak int
+	unavailableSince  time.Time
 	// everAvailable records that the check produced a reading at least once,
 	// so a later unavailability is a change worth confirming.
 	everAvailable bool
@@ -322,12 +326,12 @@ func (w *Watch) runCheckCycle(ctx context.Context, res checks.Result, observeOnl
 const watchUnavailableRetryDelay = 2 * time.Second
 
 // confirmedResult re-runs, once and after a short pause, a check that worked
-// and has just become unavailable, and returns the second result. A single
-// failed lookup or a dropped packet (a DNS server slow for a moment) then never
-// opens an availability incident, while a lasting fault (a hung mount, a dead
-// device) fails again and is announced a few seconds later. A watch already
-// known to be unavailable is not re-run, nor one that never produced a reading:
-// a rate's first, baseline-less sample is unavailable by design.
+// and has just become unavailable, and returns the second result, so a single
+// failed lookup or a dropped packet (a DNS server slow for a moment) leaves the
+// cycle available. What still fails counts toward the unavailable cycles that
+// updateAvailability needs before it announces anything. A watch already known
+// to be unavailable is not re-run, nor one that never produced a reading: a
+// rate's first, baseline-less sample is unavailable by design.
 func (w *Watch) confirmedResult(ctx context.Context, res checks.Result) checks.Result {
 	if res.Observation() != checks.ObservationUnavailable {
 		w.everAvailable = true
@@ -355,19 +359,51 @@ const watchAvailabilityCheck = "availability"
 // checkUnavailablePrefix opens the message of a watch's unavailability edge.
 const checkUnavailablePrefix = "check unavailable: "
 
+// minUnavailableCycles is how many consecutive cycles a watch must go without
+// a reading before its unavailability is announced: one cycle without an answer
+// is a measurement that failed (a probe timing out on a loaded host), not news.
+const minUnavailableCycles = 2
+
+// unavailabilityConfirmed reports whether the current streak of unavailable
+// cycles is long enough to announce: at least minUnavailableCycles, and as
+// long as the watch's own `for:` window, the patience it shows before firing.
+func (w *Watch) unavailabilityConfirmed(now time.Time) bool {
+	cycles, hold := minUnavailableCycles, time.Duration(0)
+	if window := w.Window.For; window != nil {
+		if window.Duration > 0 {
+			hold = window.Duration
+		} else {
+			cycles = max(cycles, window.Cycles)
+		}
+	}
+	return w.unavailableStreak >= cycles && !now.Before(w.unavailableSince.Add(hold))
+}
+
 // updateAvailability keeps an unavailable observation out of condition windows
-// and, critically, out of automatic actions. It emits only on edges and stores
-// the edge state with the rest of the watch runtime record.
+// and, critically, out of automatic actions. It emits only on edges, once the
+// streak is confirmed, and stores the edge state with the rest of the watch
+// runtime record. Until then the alarm keeps what it showed: a cycle that came
+// back before the confirmation leaves no trace beyond its own reading.
 func (w *Watch) updateAvailability(res checks.Result) bool {
 	observation := res.Observation()
 	if observation == checks.ObservationUnavailable {
-		w.observeAlarm(res, true, w.resultSeverity(res))
 		if !w.unavailable {
+			now := w.clock()
+			if w.unavailableStreak == 0 {
+				w.unavailableSince = now
+			}
+			w.unavailableStreak++
+			if !w.unavailabilityConfirmed(now) {
+				w.observeAlarm(res, w.firing, w.resultSeverity(res))
+				return true
+			}
 			w.unavailable = true
 			w.emit(Event{Watch: w.Name, Kind: eventKindError, Severity: w.resultSeverity(res), Check: watchAvailabilityCheck, Message: checkUnavailablePrefix + res.Message})
 		}
+		w.observeAlarm(res, true, w.resultSeverity(res))
 		return true
 	}
+	w.unavailableStreak = 0
 	if w.unavailable {
 		w.unavailable = false
 		w.observeAlarm(res, w.firing, w.resultSeverity(res))

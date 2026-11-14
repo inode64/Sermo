@@ -756,6 +756,7 @@ func TestWatchDoesNotRepeatUnavailableErrorAfterRestart(t *testing.T) {
 		Emit:       func(event Event) { firstEvents = append(firstEvents, event) },
 	}
 	first.RunCycle(context.Background())
+	first.RunCycle(context.Background()) // a second cycle without a reading announces it
 	if countEvents(firstEvents, eventKindError) != 1 {
 		t.Fatalf("first unavailable events = %+v, want one error", firstEvents)
 	}

@@ -9,6 +9,7 @@ import (
 	"sermo/internal/checks"
 	"sermo/internal/execx/execxtest"
 	"sermo/internal/notify"
+	"sermo/internal/rules"
 	"sermo/internal/severity"
 	"sermo/internal/web"
 )
@@ -148,6 +149,7 @@ func TestBuildWatchesSeverityMetricOverridesCheck(t *testing.T) {
 func TestWatchAdvisoryCarriesItsSeverityAndStillActs(t *testing.T) {
 	check := &scriptedCheck{results: []checks.Result{
 		{Check: "hdparm", Unavailable: true, Message: "no timing in output", Severity: severity.Warning},
+		{Check: "hdparm", Unavailable: true, Message: "no timing in output", Severity: severity.Warning},
 		{Check: "hdparm", OK: true, Message: "read=0.4 MB/s", Severity: severity.Warning},
 	}}
 	var events []Event
@@ -166,6 +168,7 @@ func TestWatchAdvisoryCarriesItsSeverityAndStillActs(t *testing.T) {
 	}
 
 	w.RunCycle(context.Background()) // unavailable
+	w.RunCycle(context.Background()) // still unavailable: announced
 	w.RunCycle(context.Background()) // condition fires
 
 	kinds := make([]string, 0, len(events))
@@ -208,6 +211,7 @@ func TestWatchErrorSeverityKeepsExistingReporting(t *testing.T) {
 		Name: "http", CheckType: checks.CheckTypeHTTP, Check: check,
 		Emit: func(e Event) { events = append(events, e) },
 	}
+	w.RunCycle(context.Background())
 	w.RunCycle(context.Background())
 	if len(events) != 1 || events[0].Kind != eventKindError {
 		t.Fatalf("events = %+v, want one error", events)
@@ -375,10 +379,71 @@ func TestWatchEscalatesAndHoldsWithinEpisode(t *testing.T) {
 
 // A watch that worked and fails once (a DNS server slow for a moment) is
 // re-run before anything is announced; a fault that lasts is announced.
+// One cycle without a reading is a measurement that failed: it announces no
+// error, opens no alarm and owes no recovery, so nothing reaches a notifier.
+func TestWatchKeepsASingleUnavailableCycleSilent(t *testing.T) {
+	ok := checks.Result{Check: "nfs", OK: true, Message: "nfs 192.168.0.243:2049 ok"}
+	gone := checks.Result{Check: "nfs", Unavailable: true, Message: "dial tcp 192.168.0.243:2049: i/o timeout"}
+	alarms := NewWatchAlarms(openEventNotifyStore(t), nil)
+	var events []Event
+	w := &Watch{
+		Name: "nfs-nas", CheckType: checks.CheckTypeTCP, FireOnFail: true, Alarms: alarms,
+		Check: &scriptedCheck{results: []checks.Result{ok, gone, gone, ok}},
+		Sleep: func(time.Duration) {},
+		Emit:  func(e Event) { events = append(events, e) },
+	}
+	w.RunCycle(context.Background())
+	w.RunCycle(context.Background()) // unavailable even after its re-run
+	if len(events) != 0 || alarms.status("nfs-nas").Active {
+		t.Fatalf("one unavailable cycle: events=%+v alarm=%v, want silence", events, alarms.status("nfs-nas").Active)
+	}
+	w.RunCycle(context.Background()) // answers again
+	if len(events) != 0 || alarms.status("nfs-nas").Active {
+		t.Fatalf("after it came back: events=%+v alarm=%v, want no recovery for an unannounced blip", events, alarms.status("nfs-nas").Active)
+	}
+}
+
+// A watch that waits before firing waits as long before saying it cannot tell:
+// its `for:` window, in cycles or in time, sets how long the outage must last.
+func TestWatchAnnouncesUnavailabilityAfterItsForWindow(t *testing.T) {
+	gone := checks.Result{Check: "nfs", Unavailable: true, Message: "dial tcp 192.168.0.243:2049: i/o timeout"}
+	for _, tc := range []struct {
+		name   string
+		window rules.Rule
+		step   time.Duration
+		cycles int
+	}{
+		{name: "no window", step: time.Minute, cycles: minUnavailableCycles},
+		{name: "three cycles", window: rules.Rule{For: &rules.ForWindow{Cycles: 3}}, step: time.Minute, cycles: 3},
+		{name: "five minutes", window: rules.Rule{For: &rules.ForWindow{Duration: 5 * time.Minute}}, step: time.Minute, cycles: 6},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			now := time.Unix(1_794_000_000, 0)
+			var events []Event
+			w := &Watch{
+				Name: "nfs-nas", CheckType: checks.CheckTypeTCP, FireOnFail: true, Window: tc.window,
+				Check: &scriptedCheck{results: []checks.Result{gone}},
+				Now:   func() time.Time { return now },
+				Emit:  func(e Event) { events = append(events, e) },
+			}
+			for cycle := 1; cycle <= tc.cycles; cycle++ {
+				w.RunCycle(context.Background())
+				if announced := countEvents(events, eventKindError); announced != 0 && cycle < tc.cycles {
+					t.Fatalf("announced at cycle %d, want it at cycle %d", cycle, tc.cycles)
+				}
+				now = now.Add(tc.step)
+			}
+			if countEvents(events, eventKindError) != 1 {
+				t.Fatalf("after %d cycles events = %+v, want one unavailability error", tc.cycles, events)
+			}
+		})
+	}
+}
+
 func TestWatchConfirmsAnUnavailabilityBeforeAnnouncingIt(t *testing.T) {
 	ok := checks.Result{Check: "clock", OK: true, Message: "offset 2ms"}
 	gone := checks.Result{Check: "clock", Unavailable: true, Message: "lookup time.cloudflare.com: i/o timeout"}
-	check := &scriptedCheck{results: []checks.Result{ok, gone, ok, gone, gone}}
+	check := &scriptedCheck{results: []checks.Result{ok, gone, ok, gone, gone, gone, gone}}
 	var events []Event
 	slept := 0
 	w := &Watch{
@@ -391,7 +456,11 @@ func TestWatchConfirmsAnUnavailabilityBeforeAnnouncingIt(t *testing.T) {
 	if len(events) != 0 || slept != 1 {
 		t.Fatalf("a transient unavailability must stay silent: events=%+v slept=%d", events, slept)
 	}
-	w.RunCycle(context.Background()) // fails twice: announced
+	w.RunCycle(context.Background()) // fails twice in one cycle: a failed measurement
+	if len(events) != 0 {
+		t.Fatalf("one cycle without a reading must stay silent: %+v", events)
+	}
+	w.RunCycle(context.Background()) // the next cycle fails too: announced
 	if len(events) != 1 || events[0].Kind != eventKindError || events[0].Check != watchAvailabilityCheck {
 		t.Fatalf("a lasting unavailability must be announced: %+v", events)
 	}

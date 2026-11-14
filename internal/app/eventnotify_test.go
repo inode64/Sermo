@@ -280,13 +280,15 @@ func TestEventNotifierAvailabilityEpisodesCloseAtEveryGrade(t *testing.T) {
 			gone := checks.Result{Check: "scripted", Unavailable: true, Message: "lookup timeout"}
 			w := &Watch{
 				Name: "api", Severity: level, FireOnFail: true, Sleep: func(time.Duration) {},
-				Check: &scriptedCheck{results: []checks.Result{good, gone, gone, good, gone, gone, good}},
+				// Each episode is two cycles without a reading, each confirmed by
+				// its re-run: one such cycle alone is a failed measurement.
+				Check: &scriptedCheck{results: []checks.Result{good, gone, gone, gone, gone, good, gone, gone, gone, gone, good}},
 				Emit: func(e Event) {
 					router.deliver(t.Context(), eventNotification{Event: e})
 					*now = now.Add(time.Minute)
 				},
 			}
-			for range 5 {
+			for range 7 {
 				w.RunCycle(context.Background())
 			}
 			var kinds []string
