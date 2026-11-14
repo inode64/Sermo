@@ -28,7 +28,7 @@ func resolveWatchService(t *testing.T, body string) (map[string]any, []string) {
 	// these tests are about watch desugaring, so the sections under test are
 	// read without them.
 	for section, injected := range map[string][]string{
-		sectionChecks:      {staleBinaryCheckName, fdsCheckName},
+		sectionChecks:      {StaleBinaryCheckName, fdsCheckName},
 		rules.SectionRules: {staleBinaryRuleName, fdsRuleName},
 	} {
 		if entries, ok := resolved.Tree[section].(map[string]any); ok {

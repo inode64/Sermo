@@ -960,10 +960,29 @@ func (w *Worker) remediationSuppression(ctx context.Context, ev *rules.Evaluator
 		w.refuseGuard(ctx, ev, firing, action, guard, reason, now())
 		return "", true
 	}
+	if action == string(rules.ActionReload) {
+		if stale, held := staleDaemonBinary(ev); held {
+			return "reload withheld: " + stale + "; a reload would load the installed version's modules into the old executable", false
+		}
+	}
 	if ok, reason := w.Policy.Allow(w.State, now()); !ok {
 		return reason, false
 	}
 	return "", false
+}
+
+// staleDaemonBinary reports the cycle's stale-binary reading when the daemon's
+// own executable was replaced: a reload then asks the old process to load the
+// new version's modules, which killed Apache after an upgrade (mod_rewrite.so:
+// undefined symbol ap_stat_check). The restart the reading drives renews it
+// instead. Helpers beside the daemon, or a binary no longer installed, block
+// that restart themselves and do not hold a reload.
+func staleDaemonBinary(ev *rules.Evaluator) (string, bool) {
+	res, ok := ev.Cache[config.StaleBinaryCheckName]
+	if !ok || res.OK || res.ActionBlocked || res.Unavailable {
+		return "", false
+	}
+	return res.Message, true
 }
 
 func (w *Worker) emitDryRunRemediation(ctx context.Context, ev *rules.Evaluator, firing firingRule, action, suppress string) {

@@ -594,7 +594,7 @@ func TestEnableIfPruningEverySelectorKeepsInitMode(t *testing.T) {
 			if got := ResolveServiceLifecycle(resolved.Tree, backendSystemd).ProcessMode; got != tc.want {
 				t.Fatalf("ProcessMode = %q, want %q", got, tc.want)
 			}
-			_, sensed := SectionMap(resolved.Tree, sectionChecks)[staleBinaryCheckName]
+			_, sensed := SectionMap(resolved.Tree, sectionChecks)[StaleBinaryCheckName]
 			if want := tc.want != ServiceProcessNone; sensed != want {
 				t.Fatalf("stale-binary check present = %v, want %v", sensed, want)
 			}

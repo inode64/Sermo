@@ -139,3 +139,43 @@ func TestWorkerRestartOnlyRuleRecordsAProgramMissingALibrary(t *testing.T) {
 		t.Fatalf("installing the library must close the episode without acting: ops=%v events=%+v", h.ops, h.events)
 	}
 }
+
+// A reload asks the running process to read the new configuration and load
+// its modules. After the daemon's own binary was replaced, that is the old
+// executable loading the new version's modules, which killed Apache; the
+// reload waits for the restart the stale-binary reading drives. Helpers beside
+// the daemon, or no stale binary at all, leave the reload alone.
+func TestWorkerHoldsAReloadWhileTheDaemonRunsAReplacedBinary(t *testing.T) {
+	tree := map[string]any{"rules": map[string]any{"reload-on-change-1": map[string]any{
+		"type": "remediation",
+		"if":   map[string]any{"failed": map[string]any{"check": "config-changed"}},
+		"then": map[string]any{"action": "reload"},
+	}}}
+	const replaced = "1 process(es) run a replaced binary (/usr/sbin/apache2); restart to pick up the installed version"
+	for name, tc := range map[string]struct {
+		stale  checks.Result
+		reload bool
+	}{
+		"daemon replaced":  {stale: checks.Result{Check: "stale-binary", Message: replaced}},
+		"helpers replaced": {stale: checks.Result{Check: "stale-binary", ActionBlocked: true, Message: "1 process(es) beside the daemon run a replaced binary (/usr/bin/su)"}, reload: true},
+		"nothing replaced": {stale: checks.Result{Check: "stale-binary", OK: true}, reload: true},
+	} {
+		t.Run(name, func(t *testing.T) {
+			cache := failedCache("config-changed")
+			cache["stale-binary"] = tc.stale
+			h := &workerHarness{cache: cache, opResult: operation.Result{Status: operation.ResultOK}}
+			w := h.worker(tree, rules.Policy{Cooldown: time.Minute}, nil)
+			w.RunCycle(context.Background())
+			if tc.reload {
+				if len(h.ops) != 1 || h.ops[0] != "reload" {
+					t.Fatalf("ops=%v events=%+v, want the reload", h.ops, h.events)
+				}
+				return
+			}
+			event, ok := h.eventOf(eventKindSuppressed)
+			if len(h.ops) != 0 || !ok || !strings.Contains(event.Message, "reload withheld: "+replaced) {
+				t.Fatalf("ops=%v events=%+v, want the reload held with the reading", h.ops, h.events)
+			}
+		})
+	}
+}

@@ -9,9 +9,9 @@ import (
 )
 
 const (
-	// staleBinaryCheckName is the injected check that reports processes still
+	// StaleBinaryCheckName is the injected check that reports processes still
 	// running a binary replaced on disk.
-	staleBinaryCheckName = "stale-binary"
+	StaleBinaryCheckName = "stale-binary"
 	// staleBinaryRuleName is the rule it drives.
 	staleBinaryRuleName = "restart-on-stale-binary"
 	// staleBinaryMessageSuffix is deliberately explicit about the two facts an
@@ -60,7 +60,7 @@ func expandStaleBinary(tree map[string]any) []string {
 		checks.CheckKeyType:    checks.CheckTypeStaleBinary,
 		checks.CheckKeyReports: checks.ReportsState,
 	}
-	if err := injectGenerated(tree, sectionChecks, staleBinaryCheckName, "check", checks.CheckTypeStaleBinary, checkEntry); err != "" {
+	if err := injectGenerated(tree, sectionChecks, StaleBinaryCheckName, "check", checks.CheckTypeStaleBinary, checkEntry); err != "" {
 		return []string{err}
 	}
 	rule := staleBinaryRule(allowRestart, staleBinaryAlertMessage(tree))
@@ -98,7 +98,7 @@ func injectGenerated(tree map[string]any, section, name, noun, feature string, v
 func staleBinaryRule(allowRestart bool, message string) map[string]any {
 	// Stale binaries use failed: because a healthy sensor is not a restart trigger.
 	rule := generatedSensorRule(
-		map[string]any{rules.ConditionFailed: map[string]any{rules.FieldCheck: staleBinaryCheckName}},
+		map[string]any{rules.ConditionFailed: map[string]any{rules.FieldCheck: StaleBinaryCheckName}},
 		nil, allowRestart, message,
 	)
 	rule[rules.RuleFieldSeverity] = string(binaryChangeSeverity)

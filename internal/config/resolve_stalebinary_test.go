@@ -56,7 +56,7 @@ func TestStaleBinaryDefaultAllowsRestart(t *testing.T) {
 		t.Fatalf("stale-binary rule severity = %v, want warning", got)
 	}
 	checksMap, _ := tree[sectionChecks].(map[string]any)
-	entry, _ := checksMap[staleBinaryCheckName].(map[string]any)
+	entry, _ := checksMap[StaleBinaryCheckName].(map[string]any)
 	if entry[checks.CheckKeyType] != checks.CheckTypeStaleBinary {
 		t.Fatalf("stale-binary check not injected: %v", checksMap)
 	}
@@ -195,7 +195,7 @@ func TestStaleBinaryRefusesToOverwrite(t *testing.T) {
 		name string
 		tree map[string]any
 	}{
-		{"check", staleBinaryTree(map[string]any{sectionChecks: map[string]any{staleBinaryCheckName: map[string]any{}}})},
+		{"check", staleBinaryTree(map[string]any{sectionChecks: map[string]any{StaleBinaryCheckName: map[string]any{}}})},
 		{"rule", staleBinaryTree(map[string]any{rules.SectionRules: map[string]any{staleBinaryRuleName: map[string]any{}}})},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

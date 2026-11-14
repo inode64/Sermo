@@ -319,8 +319,8 @@ func TestStaleBinaryRuleFiresOnCheckFailureNotOnHealth(t *testing.T) {
 	if !ok {
 		t.Fatalf("condition is not failed:, got %#v", cond)
 	}
-	if got := target[rules.FieldCheck]; got != staleBinaryCheckName {
-		t.Errorf("failed: check = %v, want %q", got, staleBinaryCheckName)
+	if got := target[rules.FieldCheck]; got != StaleBinaryCheckName {
+		t.Errorf("failed: check = %v, want %q", got, StaleBinaryCheckName)
 	}
 }
 

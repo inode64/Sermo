@@ -388,7 +388,13 @@ rules entirely, per service or per host.
 A reload keeps the running code, so it does not consume a pending
 `restart_on_change` target. When a package upgrade changes both a reloaded config
 file and a library, the reload runs and the restart follows once the cooldown
-ends.
+ends. When the upgrade replaced the daemon's own executable, an automatic reload
+is held instead (`reload withheld: …`, a `suppressed` event): it would make the
+old process load the installed version's modules, which kills Apache
+(`mod_rewrite.so: undefined symbol`). The `restart-on-stale-binary` restart
+renews the daemon and picks up the configuration. A manual `sermoctl reload`
+is not held, and neither is a reload when only helpers beside the daemon were
+replaced.
 
 The **`reload`** action runs through the same safe engine as restart but in
 place: it runs **preflight first** (so an invalid config — caught by the
