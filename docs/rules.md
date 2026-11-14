@@ -635,8 +635,10 @@ persists is recorded once rather than every cycle. Optional, skipped and
 verdictless (`state`/`value`) checks never raise one, a result reused from the
 cache because of a per-check `interval` is not a fresh observation, and a check
 some rule already reads is left to that rule so one incident does not become two
-events. These events go to the event log only — notifications stay driven by a
-rule's `notify`.
+events. Besides the event log, these events reach the
+[`event_notify`](configuration.md#fleet-wide-event-alerts) route at the check's
+grade, where each target's `min_severity` decides whether it hears them; no
+rule's `notify` list is involved.
 They keep their own colours — informative for a live state, muted for an idle
 one — so neither is mistaken for the ok/fail verdict.
 

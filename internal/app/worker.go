@@ -370,9 +370,9 @@ func (w *Worker) publishCycle(ctx context.Context, cache map[string]checks.Resul
 // avoid, not create.
 //
 // It is edge-triggered on the observed value, so a condition that persists is
-// reported once rather than every cycle, and it goes only to the event log —
-// notifiers stay driven by rule `notify` actions, so closing this blind spot
-// does not start paging anyone.
+// reported once rather than every cycle. Like every event it also reaches the
+// top-level event_notify route at the check's grade, where each target's
+// min_severity decides who hears it; no rule `notify` list is involved.
 func (w *Worker) reportCheckHealthChanges(cache map[string]checks.Result) {
 	if w.Emit == nil {
 		return
