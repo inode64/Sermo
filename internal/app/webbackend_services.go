@@ -265,6 +265,14 @@ func (b *WebBackend) serviceObservability(name string, e *webEntry, observation 
 // an operator-facing service state. It reads only current worker snapshots: a
 // web request must never run a config command or scan /proc.
 func (o serviceObservation) serviceStateReason(e *webEntry) string {
+	// A check whose program cannot load a library observed nothing, and that is
+	// what turns its failure into a warning: it is the cause to show, also when
+	// the program is the configuration test's.
+	for cs := range o.currentSnapshotsOfType(e, checks.CheckTypeCommand) {
+		if _, missing := cs.Data[checks.DataKeyMissingLibrary]; missing {
+			return stateReasonCheckLibraryMissing
+		}
+	}
 	if cs, ok := o.snapshots[config.ConfigurationCheckName]; ok && !cs.healthy() {
 		// An analyzer warning means the command passed and printed something
 		// worth reading (a deprecated option): the configuration still loads.

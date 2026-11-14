@@ -5,16 +5,18 @@ description: 'Ceph cluster monitor: maintains the cluster maps and the paxos quo
 service: ceph-mon@${hostname}
 apps:
   - ceph-mon
-  - ceph
 restart_on_change:
   apps:
     - ceph-mon
-    - ceph
   messages:
     app: >-
       ${display_name} will restart after version change of ${change.app}: ${change.old_version} -> ${change.new_version}
 variables:
   user: ceph
+  # The admin-socket probe below runs the Python `ceph` CLI. Starting the
+  # daemon does not need it, so it is not a linked app: a CLI that cannot
+  # import a module must not block a restart of the daemon.
+  ceph_binary: ${bindir}/ceph
   host: 127.0.0.1
   port: 3300
 socket: /run/ceph/ceph-mon.${hostname}.asok

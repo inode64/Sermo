@@ -137,6 +137,7 @@ const stateReasonConfigurationWarning = "configuration_warning";
 const stateReasonStaleBinary = "stale_binary";
 const stateReasonStaleLibraries = "stale_libraries";
 const stateReasonFailedUnitLiveProcess = "failed_unit_live_process";
+const stateReasonCheckLibraryMissing = "check_library_missing";
 const watchSampleStateFresh = "fresh";
 const targetStateOK = "ok";
 const targetStateMonitored = "monitored";
@@ -2180,6 +2181,7 @@ function serviceStateParts(s) {
   const configurationInvalid = st === targetStateWarning && s && s.state_reason === stateReasonConfigurationInvalid;
   const configurationWarning = st === targetStateWarning && s && s.state_reason === stateReasonConfigurationWarning;
   const failedUnitLiveProcess = st === targetStateWarning && s && s.state_reason === stateReasonFailedUnitLiveProcess;
+  const checkLibraryMissing = st === targetStateWarning && s && s.state_reason === stateReasonCheckLibraryMissing;
   const blind = (st === targetStateWarning && indicators && !staleBinary && !failedUnitLiveProcess)
     ? `The unit is active and its checks pass, but the daemon attributes no process to it, so ${indicators} stay unavailable`
     : "";
@@ -2189,13 +2191,16 @@ function serviceStateParts(s) {
   const invalidConfiguration = configurationInvalid
     ? "The service is active, but its configuration preflight currently fails"
     : configurationWarning ? "The configuration loads, but its test printed a warning worth reading" : "";
+  const libraryMissing = checkLibraryMissing
+    ? "The service is active, but a check's own program cannot load a library it needs, so that check observes nothing and its remediation is withheld"
+    : "";
   const restartRequired = staleBinary
     ? "The running binary was replaced on disk; restart the service to run the installed version"
     : staleLibraries ? "The main process still maps replaced libraries; restart the service to load the installed versions" : "";
   const active = st === targetStateActive
     ? "Process confirmed; checks and runtime metrics are not available yet"
     : "";
-  const title = missing || blind || degraded || invalidConfiguration || restartRequired || active;
+  const title = missing || blind || degraded || invalidConfiguration || libraryMissing || restartRequired || active;
   // An actionable state carries visible text beyond its colour. A tooltip is
   // invisible until hovered and unreachable on a touch screen.
   const reasonText = (st === targetStateWarning || st === targetStateRestartRequired)
@@ -2231,6 +2236,9 @@ function serviceStateReason(s) {
   }
   if (s && s.state_reason === stateReasonFailedUnitLiveProcess) {
     return "init unit failed; workload healthy";
+  }
+  if (s && s.state_reason === stateReasonCheckLibraryMissing) {
+    return "check program missing a library";
   }
   return "no process attributed";
 }

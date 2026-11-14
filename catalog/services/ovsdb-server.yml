@@ -2,6 +2,10 @@ name: ovsdb-server
 display_name: Open vSwitch Database Server
 category: virtualization
 variables:
+  # ovs-ctl creates or converts the database with ovsdb-tool on start, so that
+  # app stays linked. ovsdb-client only serves the schema watch below: linked,
+  # a broken client would block a restart of the server.
+  ovsdb_client_binary: ${bindir}/ovsdb-client
   database: /var/lib/openvswitch/conf.db
   socket: /run/openvswitch/db.sock
   schema: /usr/share/openvswitch/vswitch.ovsschema
@@ -17,7 +21,6 @@ service:
     - ovsdb-server
 apps:
   - ovsdb-server
-  - ovsdb-client
   - ovsdb-tool
 restart_on_change:
   apps:

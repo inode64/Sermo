@@ -181,6 +181,53 @@ func TestWebBackendConfigurationWarningOutranksRestartRequired(t *testing.T) {
 	}
 }
 
+// The Ceph monitor runs while its admin-socket probe, the Python `ceph` CLI,
+// dies of a missing module: the service is monitored with a warning that names
+// the cause, not failed. The same holds when the program that cannot load its
+// library is the configuration test's, which therefore is not called invalid.
+func TestWebBackendCheckProgramMissingALibraryIsAWarning(t *testing.T) {
+	at := time.Date(2026, 11, 14, 13, 0, 0, 0, time.UTC)
+	const missing = "ModuleNotFoundError: No module named 'prettytable'"
+	broken := func(name string) checks.Result {
+		return checks.Result{
+			Check: name, OK: false, ActionBlocked: true, Severity: severity.Warning,
+			Message: "exit 1; program could not load a library: " + missing,
+			Data:    map[string]any{checks.DataKeyMissingLibrary: missing},
+		}
+	}
+	for _, name := range []string{"restart-if-status-failed", config.ConfigurationCheckName} {
+		t.Run(name, func(t *testing.T) {
+			names := []string{"service", name}
+			types := map[string]string{"service": checks.CheckTypeService, name: checks.CheckTypeCommand}
+			snaps := NewSnapshots()
+			snaps.now = func() time.Time { return at }
+			snaps.publishWithCheckTypes("ceph-mon", map[string]checks.Result{
+				"service": {Check: "service", OK: true},
+				name:      broken(name),
+			}, map[string]bool{"service": true, name: true}, types)
+			entry := &webEntry{
+				checkNames:     names,
+				checkTypes:     types,
+				checkIntervals: map[string]time.Duration{"service": time.Minute, name: time.Minute},
+				interval:       time.Minute,
+				status:         func(context.Context) (servicemgr.Status, error) { return servicemgr.StatusActive, nil },
+			}
+			b := &WebBackend{
+				order:     []string{"ceph-mon"},
+				entries:   map[string]*webEntry{"ceph-mon": entry},
+				snapshots: snaps,
+				now:       func() time.Time { return at },
+			}
+
+			svc := b.view(context.Background(), "ceph-mon", entry)
+			if svc.State != TargetStateWarning || svc.StateReason != stateReasonCheckLibraryMissing {
+				t.Fatalf("active service whose probe lacks a library = state %q reason %q, want warning %q",
+					svc.State, svc.StateReason, stateReasonCheckLibraryMissing)
+			}
+		})
+	}
+}
+
 // testparm exits 0 and only prints a deprecation: the configuration loaded, so
 // calling it invalid sends the operator after a fault that does not exist.
 func TestServiceStateReasonSeparatesConfigurationWarningFromInvalid(t *testing.T) {

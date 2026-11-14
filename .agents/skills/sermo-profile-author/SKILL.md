@@ -36,6 +36,15 @@ policy and restart_on_change
 remediation and alerts in watches.<name>.then
 ```
 
+Link an app only when starting the daemon needs it: the daemon itself, its
+runtime (java, perl, python3) or a tool its init path runs (`ovsdb-tool`). A
+client the profile runs only to probe the daemon is a variable
+(`ceph_binary: ${bindir}/ceph`): linked, its preflight blocks every restart
+while the client is broken, its failure grades as an outage of the active
+service, and `ServiceBinary` may pick the client, since it takes the first
+linked app's `<app>-binary` in name order. An app's `binary` is its daemon, not
+the client of the same package.
+
 A daemon whose workload must survive a restart (sessions, jobs, shims, bricks)
 sets `stop_policy.keep_children: true` with a strict principal selector, never a
 `delegated` selector: `delegated` is observe-only, for processes another backend

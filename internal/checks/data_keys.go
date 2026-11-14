@@ -162,6 +162,7 @@ const (
 	DataKeyPIDs               = "pids"
 	DataKeyProcesses          = "processes"
 	DataKeyLibraries          = "libraries"
+	DataKeyMissingLibrary     = "missing_library"
 	DataKeyDependencies       = "dependencies"
 	DataKeyActionBlocked      = "action_blocked"
 	DataKeyPort               = fieldPort

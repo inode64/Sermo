@@ -1202,6 +1202,21 @@ test("a configuration test warning is not called invalid", async ({ page }) => {
   await expect(page.locator("#svc-row-db td").nth(0).locator(".svc-state-note")).toHaveText("configuration warning");
 });
 
+test("a check whose program misses a library is a warning that names it", async ({ page }) => {
+  const body = JSON.parse(JSON.stringify(dashboard));
+  const service = body.services.find((item) => item.name === "db");
+  service.state = "warning";
+  service.state_reason = "check_library_missing";
+  service.check_health = "warning";
+  await page.route("**/api/dashboard**", (route) => route.fulfill({ json: body }));
+  await page.locator("#refresh-now").click();
+
+  const row = page.locator("#svc-row-db");
+  await expect(row).toHaveClass(/row-warning/);
+  await expect(row.locator('[data-col="state"]')).toContainText("warning");
+  await expect(row.locator('[data-col="name"] .svc-state-note')).toHaveText("check program missing a library");
+});
+
 test("service warning reason sits below the service instead of widening State", async ({ page }) => {
   await page.route("**/api/dashboard**", async (route) => {
     const body = JSON.parse(JSON.stringify(dashboard));

@@ -209,6 +209,20 @@ exception is named. Sermo keeps the first 16 MiB of each of stdout and stderr
 and discards the rest while the command runs on, so a matcher or an `analyze:`
 pattern never sees what comes after.
 
+A command whose **own program cannot load a library** it needs observed
+nothing about its target: the dynamic loader's `error while loading shared
+libraries` or `version … not found (required by …)`, a Python traceback that
+ends in `ModuleNotFoundError` or `ImportError`, or Perl's `Can't locate … in
+@INC`. On a non-zero exit, whatever `expect_exit` lists, the result reads
+`exit 1; program could not load a library: ModuleNotFoundError: No module
+named 'prettytable'`, carries that line as `missing_library`, is graded
+`warning` unless the check declares a `severity`, and is
+[advisory](#advisory-evidence-in-a-rule-that-alerts-and-acts): no restart can
+install the library. A health check reads it as failing and a condition or
+verdictless one as unavailable; an active service shows `warning` with
+`state_reason: check_library_missing`, and its SLA is unaffected. A preflight
+that runs the same program still blocks the operation.
+
 ```yaml
 checks:
   queue-drained:
@@ -1573,15 +1587,19 @@ A reading that may alert but must never drive an operation is **advisory**
 (`action_blocked: true`): the library observations above, a
 [`stale_binary`](configuration.md#stale_binary--service-running-a-replaced-binary)
 reading whose binary is no longer installed or was replaced only beside the
-daemon, a `process` check whose executable was uninstalled, and an identity
-probe's move into a state it accepts. A remediation rule that also alerts
+daemon, a `process` check whose executable was uninstalled, a `command` check
+whose program cannot load a library, and an identity probe's move into a state
+it accepts. A remediation rule that also alerts
 (`then: { actions: [alert, restart] }`, the shape of the generated
 `restart-on-stale-binary`) still delivers its alert on such a reading, with the
 advisory readings as its output, records the withheld action as one
 `suppressed` event per episode naming those readings, and runs nothing. Its
 episode recovers like an alert's, and acts on its next cycle if the same
 reading becomes actionable. A remediation rule without an alert stays
-undecided on advisory evidence, and a busy reading stays unknown for both.
+undecided on advisory evidence, except when a check it reads cannot load its
+program's library: that remediation stays idle until an operator installs the
+library, so the rule records the same `suppressed` event, without an alert or
+a notification. A busy reading stays unknown for both.
 
 #### Busy servers
 

@@ -1863,7 +1863,9 @@ for a frozen VM or container (libvirt suspend, Docker pause) whose monitoring
 is paused, `active` while fresh process evidence confirms the daemon but its
 check or runtime indicators are still filling,
 `collecting` while monitoring is active but runtime/check/SLA indicators are
-still filling, `warning` when an advisory application configuration check fails
+still filling, `warning` when an advisory application configuration check fails,
+a check's own program cannot load a library (`state_reason:
+check_library_missing`, see [the `command` check](rules.md#checks)),
 or the only indicator left is one that will not
 arrive — the unit is active and its checks pass, but a completed daemon cycle
 attributed no process to it, so `observability_missing` reports `service

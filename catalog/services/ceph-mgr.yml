@@ -5,9 +5,12 @@ description: 'Ceph manager daemon: hosts the cluster''s management modules (dash
 service: ceph-mgr@${hostname}
 apps:
   - ceph-mgr
-  - ceph
 variables:
   user: ceph
+  # The admin-socket probe below runs the Python `ceph` CLI. Starting the
+  # daemon does not need it, so it is not a linked app: a CLI that cannot
+  # import a module must not block a restart of the daemon.
+  ceph_binary: ${bindir}/ceph
 socket: /run/ceph/ceph-mgr.${hostname}.asok
 processes:
   ceph-mgr:
@@ -16,7 +19,6 @@ processes:
 restart_on_change:
   apps:
     - ceph-mgr
-    - ceph
   messages:
     app: >-
       ${display_name} will restart after version change of ${change.app}: ${change.old_version} -> ${change.new_version}

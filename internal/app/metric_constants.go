@@ -31,6 +31,7 @@ const (
 	stateReasonStaleBinary           = "stale_binary"
 	stateReasonStaleLibraries        = "stale_libraries"
 	stateReasonFailedUnitLiveProcess = "failed_unit_live_process"
+	stateReasonCheckLibraryMissing   = "check_library_missing"
 )
 
 const (

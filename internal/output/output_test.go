@@ -127,3 +127,52 @@ ModuleNotFoundError: No module named 'prettytable'
 		}
 	}
 }
+
+// A program that could not load a library it needs is reported by the loader,
+// by Python's import machinery or by Perl's module search; any other failure,
+// including a traceback that ended in another exception, is not such a death.
+func TestMissingLibraryNamesTheLibraryAProgramCouldNotLoad(t *testing.T) {
+	const cephTraceback = `Traceback (most recent call last):
+  File "/usr/bin/ceph", line 163, in <module>
+    from ceph_daemon import admin_socket, DaemonWatcher, Termsize
+ModuleNotFoundError: No module named 'prettytable'
+`
+	tests := []struct {
+		name, stdout, stderr, want string
+	}{
+		{name: "python module", stderr: cephTraceback, want: "ModuleNotFoundError: No module named 'prettytable'"},
+		{
+			name:   "python import of a missing name",
+			stderr: "Traceback (most recent call last):\n  File \"/usr/bin/tool\", line 2, in <module>\nImportError: cannot import name 'X' from 'lib'\n",
+			want:   "ImportError: cannot import name 'X' from 'lib'",
+		},
+		{
+			name:   "loader shared object",
+			stderr: "/usr/bin/redis-cli: error while loading shared libraries: libssl.so.3: cannot open shared object file: No such file or directory\n",
+			want:   "/usr/bin/redis-cli: error while loading shared libraries: libssl.so.3: cannot open shared object file: No such file or directory",
+		},
+		{
+			name:   "loader symbol version",
+			stderr: "/usr/bin/tool: /lib64/libc.so.6: version `GLIBC_2.38' not found (required by /usr/bin/tool)\n",
+			want:   "/usr/bin/tool: /lib64/libc.so.6: version `GLIBC_2.38' not found (required by /usr/bin/tool)",
+		},
+		{
+			name:   "perl module",
+			stderr: "Can't locate DBI.pm in @INC (you may need to install the DBI module) (@INC entries checked: /etc/perl) at /usr/bin/check line 3.\nBEGIN failed--compilation aborted at /usr/bin/check line 3.\n",
+			want:   "Can't locate DBI.pm in @INC (you may need to install the DBI module) (@INC entries checked: /etc/perl) at /usr/bin/check line 3.",
+		},
+		{name: "reported on stdout", stdout: cephTraceback, want: "ModuleNotFoundError: No module named 'prettytable'"},
+		{
+			name:   "traceback of another exception",
+			stderr: "Traceback (most recent call last):\n  File \"/usr/bin/ceph\", line 9, in <module>\nImportError: early\nConnectionRefusedError: [Errno 111] Connection refused\n",
+		},
+		{name: "service failure", stderr: "admin_socket: exception getting command descriptions: [Errno 2] No such file or directory\n"},
+		{name: "perl without the module search", stderr: "Can't locate object method \"new\" via package \"Foo\" at /usr/bin/check line 4.\n"},
+		{name: "no output"},
+	}
+	for _, tt := range tests {
+		if got := MissingLibrary(tt.stdout, tt.stderr); got != tt.want {
+			t.Errorf("%s: MissingLibrary = %q, want %q", tt.name, got, tt.want)
+		}
+	}
+}

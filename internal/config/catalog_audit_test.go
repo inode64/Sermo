@@ -1003,6 +1003,39 @@ func TestCatalogUnifiUsesMongodAppBinary(t *testing.T) {
 	}
 }
 
+// A client a profile runs only to probe its daemon is a variable, not a linked
+// app. Linked, its preflight blocked every restart of the daemon while the
+// client was broken (the Python `ceph` CLI missing a module mid-upgrade), its
+// failure read as an outage of the active daemon, and the service's binary
+// became the client's: ServiceBinary takes the first linked app's in name
+// order. An app's own binary is its daemon for the same reason.
+func TestCatalogServiceBinaryIsTheDaemonNotItsClient(t *testing.T) {
+	cfg := loadRepoCatalog(t)
+	tests := []struct {
+		service, binary, client string
+	}{
+		{service: "ceph-mon", binary: "/usr/bin/ceph-mon", client: "ceph"},
+		{service: "ceph-mgr", binary: "/usr/bin/ceph-mgr", client: "ceph"},
+		{service: "ceph-mds", binary: "/usr/bin/ceph-mds", client: "ceph"},
+		{service: "ovsdb-server", binary: "/usr/bin/ovsdb-server", client: "ovsdb-client"},
+		{service: "salt-master", binary: "/usr/bin/salt-master"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.service, func(t *testing.T) {
+			resolved, errs := cfg.ResolveCatalog(CategoryService, tc.service)
+			if len(errs) > 0 {
+				t.Fatalf("ResolveCatalog(%s): %v", tc.service, errs)
+			}
+			if got := ServiceBinary(resolved.Tree); got != tc.binary {
+				t.Fatalf("service binary = %q, want the daemon %q", got, tc.binary)
+			}
+			if tc.client != "" && slices.Contains(resolved.Apps, tc.client) {
+				t.Fatalf("apps = %v: the probe client %q must not gate the daemon's operations", resolved.Apps, tc.client)
+			}
+		})
+	}
+}
+
 func TestFail2banCatalogVerifiesControlSocket(t *testing.T) {
 	cfg := loadRepoCatalog(t)
 	resolved, errs := cfg.ResolveCatalog(CategoryService, "fail2ban")
@@ -2840,10 +2873,13 @@ func TestRedisCatalogAlertsOnPersistenceFailure(t *testing.T) {
 func TestOVSDBServerCatalogChecksLiveDatabaseSchemaAndIntegrity(t *testing.T) {
 	body := catalogDocByName(t, repoRoot(t), "services", "ovsdb-server")
 
-	if apps := cfgval.StringList(body["apps"]); !slices.Equal(apps, []string{"ovsdb-server", "ovsdb-client", "ovsdb-tool"}) {
-		t.Fatalf("ovsdb-server apps = %v, want ovsdb-server, ovsdb-client and ovsdb-tool", apps)
+	if apps := cfgval.StringList(body["apps"]); !slices.Equal(apps, []string{"ovsdb-server", "ovsdb-tool"}) {
+		t.Fatalf("ovsdb-server apps = %v, want ovsdb-server and ovsdb-tool", apps)
 	}
 	variables := nested(t, body, "variables")
+	if got := cfgval.String(variables["ovsdb_client_binary"]); got != "${bindir}/ovsdb-client" {
+		t.Fatalf("ovsdb-server ovsdb_client_binary = %q, want ${bindir}/ovsdb-client", got)
+	}
 	if got := cfgval.String(variables["socket"]); got != "/run/openvswitch/db.sock" {
 		t.Fatalf("ovsdb-server socket = %q, want /run/openvswitch/db.sock", got)
 	}

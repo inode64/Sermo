@@ -10,6 +10,7 @@ import (
 	"sermo/internal/notify"
 	"sermo/internal/operation"
 	"sermo/internal/rules"
+	"sermo/internal/severity"
 )
 
 // alertThenRestartTree is the shape the generated stale-binary rule has: an
@@ -100,5 +101,41 @@ func TestWorkerAdvisoryNeedsAnAlertAndIgnoresBusy(t *testing.T) {
 				t.Fatalf("ops=%v events=%+v, want no action, alert or withheld action", h.ops, h.events)
 			}
 		})
+	}
+}
+
+// A restart-only rule whose check cannot load its own program's library never
+// restarts, alerts nor notifies, but records the withheld restart once per
+// episode with the reading, so the event log says why remediation is idle; the
+// episode closes once the library is installed.
+func TestWorkerRestartOnlyRuleRecordsAProgramMissingALibrary(t *testing.T) {
+	const missing = "ModuleNotFoundError: No module named 'prettytable'"
+	broken := checks.Result{
+		Check: "mon-status", OK: false, ActionBlocked: true, Severity: severity.Warning,
+		Message: "exit 1; program could not load a library: " + missing,
+		Data:    map[string]any{checks.DataKeyMissingLibrary: missing},
+	}
+	h := &workerHarness{cache: map[string]checks.Result{"mon-status": broken}, opResult: operation.Result{Status: operation.ResultOK}}
+	w := h.worker(remediationTree("restart-if-status-failed", "mon-status", "restart"), rules.Policy{Cooldown: time.Minute}, nil)
+	ops := &fakeNotifier{name: "ops", typ: "email"}
+	w.Notifiers = map[string]notify.Notifier{"ops": ops}
+	w.GlobalNotify = []string{"ops"}
+
+	w.RunCycle(context.Background())
+	w.RunCycle(context.Background())
+
+	if len(h.ops) != 0 || h.countEvents(eventKindAlert) != 0 || len(ops.msgs) != 0 {
+		t.Fatalf("ops=%v events=%+v notifications=%d, want no action, alert or notification", h.ops, h.events, len(ops.msgs))
+	}
+	suppressed, ok := h.eventOf(eventKindSuppressed)
+	if !ok || h.countEvents(eventKindSuppressed) != 1 || suppressed.Action != string(rules.ActionRestart) ||
+		suppressed.Severity != severity.Warning || !strings.Contains(suppressed.Message, missing) {
+		t.Fatalf("withheld restart not recorded once as a warning with its reading: %+v", h.events)
+	}
+
+	h.cache = map[string]checks.Result{"mon-status": {Check: "mon-status", OK: true}}
+	w.RunCycle(context.Background())
+	if _, ok := h.eventOf(eventKindRecovered); !ok || len(h.ops) != 0 {
+		t.Fatalf("installing the library must close the episode without acting: ops=%v events=%+v", h.ops, h.events)
 	}
 }

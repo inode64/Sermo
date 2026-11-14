@@ -523,7 +523,12 @@ only when the service action itself requires it. For example, Backrest can be
 monitored and restarted without `restic`; `restic` is required by a backup
 operation, which reports its own error if the binary is absent. Likewise,
 Samba's `winbindd` belongs in an `enable_if`-guarded process/watch, not in
-`apps`, because it depends on the host's Samba configuration.
+`apps`, because it depends on the host's Samba configuration. A client a profile
+runs only to probe its daemon is a variable, not a linked app: the Ceph profiles
+declare `ceph_binary: ${bindir}/ceph` for their admin-socket probe and
+`ovsdb-server` declares `ovsdb_client_binary`, so a client that cannot load a
+library never blocks a restart of the daemon. `ovsdb-tool` stays linked because
+`ovs-ctl` creates or converts the database with it on start.
 
 When a service links several required apps, each one's checks stay distinct:
 

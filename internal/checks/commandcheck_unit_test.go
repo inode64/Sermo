@@ -128,3 +128,66 @@ func TestCommandCheckKilledBySignal(t *testing.T) {
 		})
 	}
 }
+
+// A command whose own program cannot load a library is a warning that never
+// drives an operation, whatever expect_exit lists: a health check reads it as
+// failing, a condition check has no reading. A declared grade still wins, and a
+// preflight that runs it still blocks.
+func TestCommandCheckProgramMissingALibrary(t *testing.T) {
+	const traceback = "Traceback (most recent call last):\n  File \"/usr/bin/ceph\", line 163, in <module>\nModuleNotFoundError: No module named 'prettytable'\n"
+	const missing = "ModuleNotFoundError: No module named 'prettytable'"
+	tests := []struct {
+		name         string
+		expectExit   []int
+		condition    bool
+		reports      string
+		declared     severity.Level
+		wantSeverity severity.Level
+		wantObserved ObservationState
+	}{
+		{name: "health", expectExit: []int{0}, wantSeverity: severity.Warning, wantObserved: ObservationFailing},
+		{name: "exit listed as expected", expectExit: []int{0, 1}, wantSeverity: severity.Warning, wantObserved: ObservationFailing},
+		{name: "condition", expectExit: []int{0}, condition: true, reports: ReportsCondition, wantSeverity: severity.Warning, wantObserved: ObservationUnavailable},
+		{name: "declared grade", expectExit: []int{0}, declared: severity.Error, wantSeverity: severity.Error, wantObserved: ObservationFailing},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			c := commandCheck{
+				name: "restart-if-status-failed", condition: tc.condition, reports: tc.reports, severity: tc.declared,
+				runner:     execxtest.Fixed(execx.Result{ExitCode: 1, Stderr: traceback}, nil),
+				argv:       []string{"/usr/bin/ceph", "--admin-daemon", "/run/ceph/ceph-mon.a.asok", "mon_status"},
+				expectExit: tc.expectExit,
+			}
+			res := c.Run(t.Context())
+			if res.OK || !res.ActionBlocked || res.Optional {
+				t.Fatalf("OK=%t ActionBlocked=%t Optional=%t, want a failed required result that blocks actions", res.OK, res.ActionBlocked, res.Optional)
+			}
+			if got := res.Observation(); got != tc.wantObserved {
+				t.Fatalf("observation = %q, want %q", got, tc.wantObserved)
+			}
+			if res.Severity != tc.wantSeverity {
+				t.Fatalf("severity = %q, want %q", res.Severity, tc.wantSeverity)
+			}
+			if res.Data[DataKeyMissingLibrary] != missing || res.Data[DataKeyOutput] == nil {
+				t.Fatalf("data = %v, want the missing library and the output", res.Data)
+			}
+			if want := "exit 1; program could not load a library: " + missing; res.Message != want {
+				t.Fatalf("message = %q, want %q", res.Message, want)
+			}
+			if Evaluate([]Result{res}).OK {
+				t.Fatal("a preflight running this program must still block")
+			}
+		})
+	}
+
+	// A failure the probed service caused keeps its ordinary verdict.
+	c := commandCheck{
+		name:       "restart-if-status-failed",
+		runner:     execxtest.Fixed(execx.Result{ExitCode: 22, Stderr: "admin_socket: exception getting command descriptions: [Errno 111] Connection refused\n"}, nil),
+		argv:       []string{"/usr/bin/ceph", "--admin-daemon", "/run/ceph/ceph-mon.a.asok", "mon_status"},
+		expectExit: []int{0},
+	}
+	if res := c.Run(t.Context()); res.Unavailable || res.ActionBlocked || res.Severity.Advisory() || res.Data[DataKeyMissingLibrary] != nil {
+		t.Fatalf("service failure = %+v, want an ordinary failing result", res)
+	}
+}

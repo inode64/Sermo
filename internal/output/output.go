@@ -101,6 +101,49 @@ func FailureCause(stdout, stderr string) string {
 	return cause(stdout)
 }
 
+// The words in which a program reports that it died before doing its work
+// because a library it loads is missing: the dynamic loader names an absent
+// shared object or symbol version, Python the module it failed to import and
+// Perl the module it did not find on its search path.
+const (
+	loaderMissingObject  = "error while loading shared libraries: "
+	loaderMissingVersion = "' not found (required by "
+	pythonImportError    = "ImportError: "
+	pythonModuleNotFound = "ModuleNotFoundError: "
+	perlMissingModule    = "Can't locate "
+	perlModuleSearchPath = " in @INC"
+)
+
+// MissingLibrary returns the line in which a failed program reports a library
+// it could not load, or "" when its output shows no such death. Such a program
+// observed nothing: what it was asked to probe may be perfectly well.
+func MissingLibrary(stdout, stderr string) string {
+	if line := missingLibrary(stderr); line != "" {
+		return line
+	}
+	return missingLibrary(stdout)
+}
+
+func missingLibrary(s string) string {
+	if strings.Contains(s, pythonTraceback) {
+		// Only the exception that ended the program counts: an import error
+		// caught and reported further up the traceback is not its cause.
+		last := lastNonEmptyLine(s)
+		if strings.HasPrefix(last, pythonModuleNotFound) || strings.HasPrefix(last, pythonImportError) {
+			return last
+		}
+		return ""
+	}
+	for line := range strings.SplitSeq(s, outputLineSeparator) {
+		t := strings.TrimSpace(line)
+		if strings.Contains(t, loaderMissingObject) || strings.Contains(t, loaderMissingVersion) ||
+			(strings.HasPrefix(t, perlMissingModule) && strings.Contains(t, perlModuleSearchPath)) {
+			return t
+		}
+	}
+	return ""
+}
+
 // Bounds for Bounded: command output kept in an event is capped so a chatty
 // command cannot bloat the event log or the dashboard.
 const (

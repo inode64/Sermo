@@ -13,6 +13,7 @@ import (
 	"sermo/internal/cfgval"
 	"sermo/internal/execx"
 	"sermo/internal/output"
+	"sermo/internal/severity"
 )
 
 // cmdState persists on_change state while a service worker or host watch reuses
@@ -105,6 +106,13 @@ func (c commandCheck) Run(ctx context.Context) Result {
 		r.Died = errors.Is(err, execx.ErrKilledBySignal) && !c.condition && !VerdictlessMode(c.reports)
 		return r
 	}
+	// Whatever expect_exit lists: an interpreter that dies of an import error
+	// exits 1, the code a plugin may use for "warning".
+	if res.ExitCode != 0 {
+		if missing := output.MissingLibrary(res.Stdout, res.Stderr); missing != "" {
+			return c.missingLibraryResult(res, missing, start)
+		}
+	}
 	if !ExitCodeExpected(res.ExitCode, c.expectExit) {
 		msg := fmt.Sprintf("exit %d (want %s)", res.ExitCode, ExpectExitText(c.expectExit))
 		if cause := output.FailureCause(res.Stdout, res.Stderr); cause != "" {
@@ -127,6 +135,27 @@ func (c commandCheck) Run(ctx context.Context) Result {
 	}
 	r := c.outputResult(res, doc, decoded, growths, start)
 	r.Data = increaseData(r.Data, growths, c.window)
+	return r
+}
+
+// missingLibraryResult reports a command whose own program could not load a
+// library it needs. The probed service may be serving normally, so the finding
+// is a warning unless the check declares its grade. As with a busy server, a
+// health check reads it as failing — it could not confirm health — while a
+// condition or verdictless check has no reading. A lifecycle operation cannot
+// install a library, so the finding alerts but never drives one; a preflight
+// that runs it still blocks, since that reads OK and Optional, not the grade.
+func (c commandCheck) missingLibraryResult(res execx.Result, missing string, start time.Time) Result {
+	r := c.outputFailure(res, fmt.Sprintf("exit %d; program could not load a library: %s", res.ExitCode, missing), start)
+	r.ActionBlocked = true
+	r.Unavailable = c.condition || VerdictlessMode(c.reports)
+	if !c.severity.Valid() {
+		r.Severity = severity.Warning
+	}
+	if r.Data == nil {
+		r.Data = map[string]any{}
+	}
+	r.Data[DataKeyMissingLibrary] = missing
 	return r
 }
 

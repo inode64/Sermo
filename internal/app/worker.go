@@ -1059,13 +1059,32 @@ const advisoryRemediationPrefix = "advisory evidence withholds the action: "
 // advisory evidence is read as its alert would read it. EvalRule leaves such a
 // rule undecided, so without this the alert was lost together with the
 // operation the evidence must not drive (a binary removed from disk, or
-// replaced only beside the daemon). A rule with no alert has nothing to keep.
+// replaced only beside the daemon). A rule with no alert has nothing to keep,
+// unless a check it reads cannot load its own program's library: that
+// remediation stays blind until an operator installs it, and the suppressed
+// event is the one record of why it does not run.
 func advisoryHolds(ctx context.Context, ev *rules.Evaluator, r rules.Rule) bool {
-	if _, ok := r.Operation(); !ok || len(r.AlertMessages()) == 0 {
+	if _, ok := r.Operation(); !ok {
+		return false
+	}
+	if len(r.AlertMessages()) == 0 && !readsMissingLibrary(r, ev.Cache) {
 		return false
 	}
 	held, err := ev.EvalAdvisory(ctx, r)
 	return err == nil && held && !ev.Unknown
+}
+
+// readsMissingLibrary reports whether a check the rule names failed because its
+// program could not load a library.
+func readsMissingLibrary(r rules.Rule, cache map[string]checks.Result) bool {
+	return rules.WalkConditionLeaves(r.If, func(operator string, operand any) bool {
+		if operator != rules.ConditionFailed && operator != rules.ConditionActive {
+			return false
+		}
+		leaf, _ := operand.(map[string]any)
+		_, missing := cache[cfgval.AsString(leaf[rules.FieldCheck])].Data[checks.DataKeyMissingLibrary]
+		return missing
+	})
 }
 
 // advisoryReadings names the failing advisory checks a rule references, so
