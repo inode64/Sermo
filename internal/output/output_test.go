@@ -176,3 +176,36 @@ ModuleNotFoundError: No module named 'prettytable'
 		}
 	}
 }
+
+// The exception is the last line shaped like one: notes and the rest of a
+// multi-line message printed after it, and the boxes an ExceptionGroup draws
+// around its sub-exceptions, are not the reason.
+func TestCauseOfAPythonTracebackSkipsNotesAndFrames(t *testing.T) {
+	const frames = "Traceback (most recent call last):\n  File \"/usr/bin/tool\", line 3, in <module>\n    main()\n"
+	group := `  + Exception Group Traceback (most recent call last):
+  |   File "/usr/bin/tool", line 9, in <module>
+  |     asyncio.run(main())
+  | ExceptionGroup: unhandled errors in a TaskGroup (1 sub-exception)
+  +-+---------------- 1 ----------------
+    | Traceback (most recent call last):
+    |   File "/usr/bin/tool", line 5, in probe
+    |     import procfs
+    | ModuleNotFoundError: No module named 'procfs'
+    +------------------------------------
+`
+	for name, tc := range map[string]struct{ stderr, want string }{
+		"note":               {frames + "ValueError: bad value\nwhile parsing /etc/tool.conf\n", "ValueError: bad value"},
+		"multi-line message": {frames + "RuntimeError: first line\nsecond line\n", "RuntimeError: first line"},
+		"exception group":    {group, "ModuleNotFoundError: No module named 'procfs'"},
+		"bare exception":     {frames + "KeyboardInterrupt\n", "KeyboardInterrupt"},
+		"dotted name":        {frames + "salt.exceptions.SaltClientError: no master\n", "salt.exceptions.SaltClientError: no master"},
+		"no exception line":  {frames + "killed\n", "killed"},
+	} {
+		if got := FailureCause("", tc.stderr); got != tc.want {
+			t.Errorf("%s: FailureCause = %q, want %q", name, got, tc.want)
+		}
+	}
+	if got := MissingLibrary("", group); got != "ModuleNotFoundError: No module named 'procfs'" {
+		t.Errorf("MissingLibrary(exception group) = %q, want the sub-exception", got)
+	}
+}

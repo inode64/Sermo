@@ -3,6 +3,7 @@
 package output
 
 import (
+	"regexp"
 	"slices"
 	"strings"
 	"unicode/utf8"
@@ -53,8 +54,17 @@ func Observed(s string) string {
 const causeIntroducer = ":"
 
 // pythonTraceback opens Python's report of an uncaught exception, which names
-// the exception only on its last line, after the stack frames.
+// the exception after the stack frames.
 const pythonTraceback = "Traceback (most recent call last):"
+
+// pythonExceptionLine matches the line a traceback names its exception on: a
+// class whose name ends the way Python's do (ValueError, KeyboardInterrupt,
+// ExceptionGroup), with or without a message.
+var pythonExceptionLine = regexp.MustCompile(`^[A-Za-z_][\w.]*(?:Error|Exception|Warning|Interrupt|Exit|Group|Iteration)(?:: .*)?$`)
+
+// tracebackFrameChars draw the boxes an ExceptionGroup traceback nests its
+// sub-exceptions in.
+const tracebackFrameChars = "|+- "
 
 // cause returns the line a failing command states its reason on: the first
 // non-empty line, joined with the next non-empty one when it only introduces
@@ -62,8 +72,8 @@ const pythonTraceback = "Traceback (most recent call last):"
 // and the directive it rejected on the line below. A Python program that died
 // of an exception states it last ("ModuleNotFoundError: No module named …").
 func cause(s string) string {
-	if strings.Contains(s, pythonTraceback) {
-		return lastNonEmptyLine(s)
+	if exception, ok := pythonException(s); ok {
+		return exception
 	}
 	var first string
 	for line := range strings.SplitSeq(s, outputLineSeparator) {
@@ -81,6 +91,23 @@ func cause(s string) string {
 		}
 	}
 	return first
+}
+
+// pythonException returns the exception a Python traceback in s ended with,
+// and whether s holds one. It is the last line shaped like an exception, so
+// notes and the continuation of a message printed after it, and the frame of
+// an ExceptionGroup, do not hide it; one that never matches falls back to the
+// last line.
+func pythonException(s string) (string, bool) {
+	if !strings.Contains(s, pythonTraceback) {
+		return "", false
+	}
+	for _, line := range slices.Backward(strings.Split(s, outputLineSeparator)) {
+		if t := strings.TrimSpace(strings.TrimLeft(strings.TrimSpace(line), tracebackFrameChars)); pythonExceptionLine.MatchString(t) {
+			return t, true
+		}
+	}
+	return lastNonEmptyLine(s), true
 }
 
 func lastNonEmptyLine(s string) string {
@@ -125,10 +152,9 @@ func MissingLibrary(stdout, stderr string) string {
 }
 
 func missingLibrary(s string) string {
-	if strings.Contains(s, pythonTraceback) {
+	if last, ok := pythonException(s); ok {
 		// Only the exception that ended the program counts: an import error
 		// caught and reported further up the traceback is not its cause.
-		last := lastNonEmptyLine(s)
 		if strings.HasPrefix(last, pythonModuleNotFound) || strings.HasPrefix(last, pythonImportError) {
 			return last
 		}

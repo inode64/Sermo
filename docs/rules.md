@@ -204,8 +204,9 @@ a signal has no exit code to compare: it fails a health check whatever
 `expect_exit` lists, and a guard or a condition reads it as unavailable, never
 as a false condition. A failed command's message quotes the reason it printed:
 the first line of stderr (of stdout when stderr is empty), joined with the next
-when it only introduces it, or the last line of a Python traceback, where the
-exception is named. Sermo keeps the first 16 MiB of each of stdout and stderr
+when it only introduces it, or, for a Python traceback, the line that names
+its exception (the last one shaped like `ValueError: …`, past any note and the
+frames an exception group draws). Sermo keeps the first 16 MiB of each of stdout and stderr
 and discards the rest while the command runs on, so a matcher or an `analyze:`
 pattern never sees what comes after.
 
