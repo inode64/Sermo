@@ -193,6 +193,8 @@ const monitorModeEnabled = "enabled";
 const actionAlert = "alert";
 const actionExpand = "expand";
 const actionProbe = "probe";
+// actionCheck is a UI action only: it posts the Watches refresh for one watch.
+const actionCheck = "check";
 const actionSilence = "silence";
 const actionPause = "pause";
 const actionReplicationStart = "replication-start";
@@ -871,13 +873,32 @@ const refreshPanelPaths = {
   [refreshPanelWatches]: apiWatchesPath,
 };
 
+// watchCheckConfirmDetail is what a manual watch check costs, said before
+// every one of them: the panel's and a single row's.
+const watchCheckConfirmDetail = "It is a real check: alerts, hooks and actions run as on a scheduled one, "
+  + "and it counts toward cycle-based for/within windows.";
+
+// postRefresh posts one manual refresh and says how it went; the daemon answers
+// once the extra checks ran. A 409 carries an outcome that did not complete (a
+// check not refreshed by the deadline), which reads amber rather than as a
+// failed request. The panel's button and a single watch's share it.
+async function postRefresh(url, generation, done, failure) {
+  try {
+    const res = await fetch(url, targetPostOptions({}, generation));
+    const { body, failed, status } = await actionResult(res);
+    if (failed && !(status === httpStatusConflict && body.message)) throw actionError(body, status);
+    setStatus(body.message || done, failed ? feedbackStatusWarn : feedbackStatusOK);
+  } catch (e) {
+    setStatus(`${failure}: ${e.message}`, feedbackStatusErr);
+  }
+}
+
 // refreshPanel asks the daemon to run an extra check of everything behind one
 // panel now, waits for it, then reloads the dashboard; each watch keeps its
 // schedule. A watch's extra cycle runs its alerts and actions and counts toward
 // its cycle windows, so the Watches panel asks first: repeated clicks must not
 // reach a `for: N cycles` window in seconds. Applications and libraries carry
-// no actions. A 409 carries an outcome that did not complete (a check not
-// refreshed by the deadline), which reads amber rather than as a failed request.
+// no actions.
 async function refreshPanel(btn) {
   const panel = btn.dataset.refreshPanel || "";
   const path = refreshPanelPaths[panel];
@@ -886,25 +907,16 @@ async function refreshPanel(btn) {
   if (panel === refreshPanelWatches && !(await promptConfirm({
     title: "Check every watch now?",
     message: "Each enabled watch runs an extra check now; its schedule does not change.",
-    detail: "It is a real check: alerts, hooks and actions run as on a scheduled one, "
-      + "and it counts toward cycle-based for/within windows.",
+    detail: watchCheckConfirmDetail,
     okLabel: "Check now",
   }))) return;
   btn.disabled = true;
   btn.setAttribute("aria-busy", domBoolTrue);
   setStatus(`refreshing ${panel}…`, feedbackStatusOK);
-  try {
-    const res = await fetch(refreshAPI(path), targetPostOptions({}, generation));
-    const { body, failed, status } = await actionResult(res);
-    if (failed && !(status === httpStatusConflict && body.message)) throw actionError(body, status);
-    setStatus(body.message || `${panel} refreshed`, failed ? feedbackStatusWarn : feedbackStatusOK);
-  } catch (e) {
-    setStatus(`refresh ${panel} failed: ${e.message}`, feedbackStatusErr);
-  } finally {
-    btn.disabled = false;
-    btn.removeAttribute("aria-busy");
-    load();
-  }
+  await postRefresh(refreshAPI(path), generation, `${panel} refreshed`, `refresh ${panel} failed`);
+  btn.disabled = false;
+  btn.removeAttribute("aria-busy");
+  load();
 }
 
 let eventNextBeforeID = 0;
@@ -2101,6 +2113,8 @@ const liveOps = new Map(); // operations started from this browser session, keye
 // actions are not tracked in liveOps, so this guards their buttons against a
 // double click until the reply (and the follow-up load) lands.
 const pendingMonitorToggles = new Set();
+// pendingWatchChecks names the watches whose single-row check is running.
+const pendingWatchChecks = new Set();
 const liveMountOps = new Map(); // mount operations started from this browser session, keyed by mount name
 let liveOpsTimer = null;
 let latestLocks = [];
@@ -2996,6 +3010,7 @@ const actionMeta = {
   [actionExpand]: { watch: (n) => `Expand storage for watch ${n}` },
   [actionSilence]: { watch: (n) => `Silence alarm for watch ${n} until its state changes` },
   [actionProbe]: { watch: (n) => `Probe watch ${n}` },
+  [actionCheck]: { watch: (n) => `Check watch ${n} now` },
   [actionPause]: { glyph: iconPause, service: (n) => `Pause service ${n}`, watch: (n) => `Pause RAID reconstruction for watch ${n}` },
   [actionReplicationStart]: { watch: (n) => `Start replication for watch ${n}` },
 };
@@ -5617,6 +5632,9 @@ function watchActionDisabledReason(w, action) {
     case actionProbe:
       if (!w.can_probe) return "manual probe is not supported";
       return watchProbeRunning(w) ? "manual probe is already running" : "";
+    case actionCheck:
+      if (!w.monitored) return "watch is paused";
+      return pendingWatchChecks.has(w.name) ? "check is running" : "";
     case actionPause:
     case actionResume:
       return w.can_control_raid ? "" : "RAID control is not configured";
@@ -5688,6 +5706,14 @@ function watchNextCheckCell(w) {
   const next = w.next_check_at;
   if (!next) return tpl`<span class="muted">${!w.enabled ? "disabled" : (!w.monitored ? "paused" : "—")}</span>`;
   return tpl`${activityDateCell({ time: next }, false)}<span class="watch-clock muted" data-clock-until="${next}"></span>`;
+}
+
+// watchCheckNowButton offers, beside the next scheduled check, an extra one now.
+// It lives in the expansion rather than the row: one more icon in the actions
+// column costs the name column its width on a phone.
+function watchCheckNowButton(w) {
+  if (!w.enabled || !me.can_act) return nothing;
+  return tpl` ${watchActionButton(w, actionCheck, "check now")}`;
 }
 
 // watchActionsCell renders the shared actions cell (expand / monitor / unmonitor).
@@ -6447,7 +6473,7 @@ function renderWatchExpansion(w, events) {
     <div><span class="muted">Monitoring</span><br>${watchMonitoringCell(w)}</div>
     <div><span class="muted">Configured monitor</span><br><code>${mode}</code></div>
     <div><span class="muted">Last checked</span><br>${watchLastCheckedCell(w)}</div>
-    <div><span class="muted">Next check</span><br>${watchNextCheckCell(w)}</div>
+    <div><span class="muted">Next check</span><br>${watchNextCheckCell(w)}${watchCheckNowButton(w)}</div>
     <div><span class="muted">Hook</span><br>${hook}</div>
     <div><span class="muted">Notifies</span><br>${notifiers}</div>
     <div><span class="muted">Dry run</span><br><b>${w.dry_run ? "yes" : "no"}</b></div>
@@ -7496,6 +7522,7 @@ async function killWatchProcess(watch, pid, startTicks) {
 }
 
 async function actWatch(name, action) {
+  if (action === actionCheck) return checkWatchNow(name);
   const generation = dashboardGeneration;
   const alarmRevision = (allWatches || []).find((w) => w.name === name)?.alarm?.revision || "";
   let headers = {};
@@ -7535,6 +7562,28 @@ async function actWatch(name, action) {
   } finally {
     releaseMonitorToggleAfterRefresh(toggleKey, renderWatches);
   }
+}
+
+// checkWatchNow is the Watches panel's refresh for one watch: an extra cycle
+// now, for a watch whose next scheduled check is hours away.
+async function checkWatchNow(name) {
+  if (pendingWatchChecks.has(name)) return;
+  const generation = dashboardGeneration;
+  const w = (allWatches || []).find((item) => item && item.name === name) || { name };
+  if (!(await promptConfirm({
+    title: `Check watch ${displayName(w) || name} now?`,
+    message: "It runs an extra check of this watch now; its schedule does not change.",
+    detail: watchCheckConfirmDetail,
+    okLabel: "Check now",
+  }))) return;
+  pendingWatchChecks.add(name);
+  rerenderWatchExpansion(name);
+  setStatus(`checking watch ${name}…`, feedbackStatusOK);
+  const query = new URLSearchParams({ [apiQueryName]: name });
+  await postRefresh(`${refreshAPI(apiWatchesPath)}?${query}`, generation, `watch ${name} checked`, `check watch ${name} failed`);
+  pendingWatchChecks.delete(name);
+  rerenderWatchExpansion(name);
+  load();
 }
 
 function applyWatchProbeResult(name, body, failed) {

@@ -3040,6 +3040,58 @@ test("cancelling the Watches refresh confirmation sends nothing", async ({ page 
   expect(posted).toBe(false);
 });
 
+// A single watch is checked now from its expansion, beside its next scheduled
+// check: the Watches refresh for one name. It is a real cycle too, so it asks
+// first, and the button stays disabled until the answer.
+test("a watch's check button runs that one watch now", async ({ page }) => {
+  let release;
+  const answered = new Promise((resolve) => { release = resolve; });
+  await page.route("**/api/watches/refresh**", async (route) => {
+    await answered;
+    await route.fulfill({ json: { ok: true, message: "watches refreshed: 1 (raid-md9)" } });
+  });
+  await page.locator("#wat-row-raid-md9 .row-toggle").click();
+  const button = page.locator('[id="exp-wat:raid-md9"] [data-watch-action="check"]');
+  await expect(button).toBeEnabled();
+  await expect(button).toHaveAccessibleName("Check watch RAID md9 now");
+  const request = page.waitForRequest((req) => req.method() === "POST" && new URL(req.url()).pathname === "/api/watches/refresh");
+  await button.click();
+  await expect(page.locator("#simple-confirm")).toBeVisible();
+  await expect(page.locator("#simple-confirm")).toContainText("Check watch RAID md9 now?");
+  await page.locator('[data-simple-result="true"]').click();
+  const sent = await request;
+  expect(new URL(sent.url()).searchParams.getAll("name")).toEqual(["raid-md9"]);
+  expect(sent.headers()["x-sermo-generation"]).toBe("7");
+  expect(sent.headers()["x-sermo-csrf"]).toBe("1");
+  await expect(button).toBeDisabled();
+  release();
+  await expect(page.locator("#err")).toHaveText("watches refreshed: 1 (raid-md9)");
+  await expect(page.locator("#err")).toHaveClass(/status-ok/);
+  await expect(button).toBeEnabled();
+});
+
+test("cancelling a watch's check sends nothing, and a paused watch's is disabled", async ({ page }) => {
+  let posted = false;
+  await page.route("**/api/watches/refresh**", async (route) => {
+    posted = true;
+    await route.fulfill({ json: { ok: true, message: "watches refreshed: 1" } });
+  });
+  await page.locator("#wat-row-raid-md9 .row-toggle").click();
+  await page.locator('[id="exp-wat:raid-md9"] [data-watch-action="check"]').click();
+  await expect(page.locator("#simple-confirm")).toBeVisible();
+  await page.locator('[data-simple-result="false"]').click();
+  await expect(page.locator("#simple-confirm")).toBeHidden();
+  expect(posted).toBe(false);
+  // A paused watch skips its checks, so an extra one would check nothing.
+  await page.locator("#wat-row-firewall-paused .row-toggle").click();
+  await expect(page.locator('[id="exp-wat:firewall-paused"] [data-watch-action="check"]')).toBeDisabled();
+  await page.locator("#wat-row-legacy-watch .row-toggle").click();
+  await expect(page.locator('[id="exp-wat:legacy-watch"]')).toContainText("Next check");
+  await expect(page.locator('[id="exp-wat:legacy-watch"] [data-watch-action="check"]')).toHaveCount(0);
+  // The row itself keeps its actions: the column is no wider than before.
+  await expect(page.locator('#wat-row-raid-md9 [data-watch-action="check"]')).toHaveCount(0);
+});
+
 test("a guest gets no refresh buttons", async ({ page }) => {
   await page.route("**/api/whoami", (route) => route.fulfill({ json: { can_act: false, role: "viewer", auth: true } }));
   await page.reload();
@@ -3047,6 +3099,9 @@ test("a guest gets no refresh buttons", async ({ page }) => {
   // The toolbars that carry a refresh for an admin are drawn without one.
   for (const search of ["#watch-search", "#app-search", "#library-search"]) await expect(page.locator(search)).toBeVisible();
   await expect(page.locator("[data-refresh-panel]")).toHaveCount(0);
+  await page.locator("#wat-row-raid-md9 .row-toggle").click();
+  await expect(page.locator('[id="exp-wat:raid-md9"]')).toContainText("Next check");
+  await expect(page.locator('[data-watch-action="check"]')).toHaveCount(0);
 });
 
 test("a service's stray count is diagnostic only", async ({ page }) => {

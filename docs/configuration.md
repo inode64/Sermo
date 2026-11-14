@@ -3166,8 +3166,10 @@ where available. These are device-operation states, not health verdicts. The
 daemon records the probe and event for the shared Web/CLI view, but does not
 evaluate its watch window or run a rule, notifier, hook or remediation action.
 To run a watch's real next cycle now instead — its window, notifications and
-actions included — use the Watches panel's refresh button or
-`sermoctl watch refresh` (see [CLI](cli.md)).
+actions included — use **check now** beside *Next check* in the watch's
+expansion, the Watches panel's refresh button for every watch, or
+`sermoctl watch refresh` (see [CLI](cli.md)). Both buttons ask first, and only
+an operator who may act sees them.
 
 ### Service watches (scoped to a service)
 
