@@ -165,6 +165,29 @@ func inspectExecutable(ctx context.Context, binary string, searchDirs func(strin
 	return report, resolver.err
 }
 
+// ProgramInstalled reports whether path names a program that is installed: a
+// file that exists and, for a script, whose first line names an interpreter
+// that exists too, the one level the libraries check follows. A script whose
+// interpreter is delegated to env counts as installed, since that lookup
+// depends on the environment it starts in.
+func ProgramInstalled(path string) bool {
+	resolved, err := hostfs.EvalSymlinksTarget(path)
+	if err != nil {
+		return false
+	}
+	head, err := hostfs.ReadRegularFile(resolved, maxShebangBytes)
+	if err != nil || !bytes.HasPrefix(head, []byte(elfScriptPrefix)) {
+		// It exists; what is not a readable script is taken as the program.
+		return true
+	}
+	interpreter := scriptInterpreter(head)
+	if interpreter == "" {
+		return true
+	}
+	_, err = hostfs.StatTarget(interpreter)
+	return err == nil
+}
+
 // scriptInterpreter returns the absolute interpreter a script's first line
 // names, or "" when it names none or delegates the choice to env, whose PATH
 // lookup depends on the environment the service starts in.

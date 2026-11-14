@@ -3,7 +3,6 @@ package app
 import (
 	"io/fs"
 	"os"
-	"path/filepath"
 	"testing"
 	"time"
 
@@ -36,7 +35,7 @@ func TestMarkRemovedBinariesStatsEachPathOnce(t *testing.T) {
 	got := markRemovedBinaries([]process.StaleBinary{
 		{PID: 1, Path: "/usr/bin/apache2"}, {PID: 2, Path: "/usr/bin/apache2"},
 		{PID: 3, Path: "/usr/sbin/sshd"}, {PID: 4, Path: "/usr/sbin/hung"},
-	}, stat, func(string) ([]fs.DirEntry, error) { return nil, nil })
+	}, stat, func() bool { return false })
 	want := []bool{true, true, false, false}
 	for i, s := range got {
 		if s.Removed != want[i] {
@@ -48,33 +47,26 @@ func TestMarkRemovedBinariesStatsEachPathOnce(t *testing.T) {
 	}
 }
 
-// An interpreter upgrade removes python3.13 once python3.14 is beside it: the
-// daemons it ran are upgraded, not uninstalled, so a restart may renew them.
-// Without a newer version the path still reads as removed.
-func TestMarkRemovedBinariesKnowsAnUpgradedInterpreter(t *testing.T) {
+// An interpreter upgrade removes python3.13 while the daemon's own program,
+// whose script now names python3.14, stays installed: an upgrade, not an
+// uninstall, so a restart may renew it. Without the program the path still
+// reads as removed. The program is looked at once, and only for a gone path.
+func TestMarkRemovedBinariesAsksTheServicesProgram(t *testing.T) {
 	gone := func(string) (fs.FileInfo, error) { return nil, os.ErrNotExist }
-	bin := t.TempDir()
-	for _, name := range []string{"python3.14", "perl5.40"} {
-		if err := os.WriteFile(filepath.Join(bin, name), nil, 0o755); err != nil {
-			t.Fatal(err)
+	present := func(path string) (fs.FileInfo, error) { return fakeFileInfo{name: path}, nil }
+	stale := func() []process.StaleBinary {
+		return []process.StaleBinary{{PID: 1, Path: "/usr/bin/python3.13"}, {PID: 2, Path: "/usr/bin/python3.12"}}
+	}
+	for _, installed := range []bool{true, false} {
+		asked := 0
+		got := markRemovedBinaries(stale(), gone, func() bool { asked++; return installed })
+		if got[0].Removed == installed || got[1].Removed == installed || asked != 1 {
+			t.Fatalf("program installed=%v: removed=%v,%v after %d look(s), want %v once", installed, got[0].Removed, got[1].Removed, asked, !installed)
 		}
 	}
-	listings := 0
-	readDir := func(dir string) ([]fs.DirEntry, error) {
-		listings++
-		return os.ReadDir(dir)
-	}
-	got := markRemovedBinaries([]process.StaleBinary{
-		{PID: 1, Path: filepath.Join(bin, "python3.13")}, {PID: 2, Path: filepath.Join(bin, "python3.13")},
-		{PID: 3, Path: filepath.Join(bin, "perl5.42")}, {PID: 4, Path: filepath.Join(bin, "nginx")},
-	}, gone, readDir)
-	want := []bool{false, false, true, true}
-	for i, s := range got {
-		if s.Removed != want[i] {
-			t.Fatalf("pid %d (%s) removed = %v, want %v", s.PID, s.Path, s.Removed, want[i])
-		}
-	}
-	if listings != 2 {
-		t.Fatalf("directory listings = %d, want one per gone versioned path", listings)
+	asked := 0
+	markRemovedBinaries(stale(), present, func() bool { asked++; return false })
+	if asked != 0 {
+		t.Fatalf("the program was looked at %d time(s) for paths still installed", asked)
 	}
 }

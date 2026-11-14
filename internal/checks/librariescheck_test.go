@@ -146,6 +146,42 @@ func TestInspectLibrariesFollowsAScriptToItsInterpreter(t *testing.T) {
 	}
 }
 
+// A program is installed when its file exists and, for a script, so does the
+// interpreter its first line names; env cannot be judged and counts.
+func TestProgramInstalled(t *testing.T) {
+	dir, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	write := func(name, content string) string {
+		path := filepath.Join(dir, name)
+		if err := os.WriteFile(path, []byte(content), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		return path
+	}
+	interpreter := write("python3.14", "\x7fELF")
+	link := filepath.Join(dir, "salt-minion")
+	if err := os.Symlink(interpreter, link); err != nil {
+		t.Fatal(err)
+	}
+	for name, tc := range map[string]struct {
+		path string
+		want bool
+	}{
+		"binary":                      {interpreter, true},
+		"link to a binary":            {link, true},
+		"script with its interpreter": {write("tuned", "#!"+interpreter+" -Es\n"), true},
+		"script without it":           {write("old", "#!"+filepath.Join(dir, "python2.7")+"\n"), false},
+		"env script":                  {write("envscript", "#!/usr/bin/env python3\n"), true},
+		"missing program":             {filepath.Join(dir, "absent"), false},
+	} {
+		if got := ProgramInstalled(tc.path); got != tc.want {
+			t.Errorf("%s: ProgramInstalled(%q) = %v, want %v", name, tc.path, got, tc.want)
+		}
+	}
+}
+
 // writeTestELF writes a minimal little-endian ELF with only the sections the
 // resolver reads: .dynstr and .dynamic (DT_NEEDED, DT_RUNPATH).
 func writeTestELF(t *testing.T, path string, spec testELF) {

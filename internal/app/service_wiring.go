@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/fs"
 	"slices"
+	"sync"
 	"time"
 
 	"sermo/internal/cfgval"
@@ -138,7 +139,7 @@ func BuildServiceRuntime(ctx context.Context, cfg ServiceRuntimeConfig) ServiceR
 		PidfileFallbackPIDs: pidfileFallbackPIDs(needPidfileFallback, backend.checked, procInfo),
 		PidfileClaim:        pidfileClaim(discoverer, selectors, backend.checked),
 		StaleBinaries: func() []process.StaleBinary {
-			return markRemovedBinaries(discoverer.StaleBinaries(selectors), hostfs.StatTarget, hostfs.ReadDirTarget)
+			return markRemovedBinaries(discoverer.StaleBinaries(selectors), hostfs.StatTarget, serviceProgramInstalled(cfg.Tree))
 		},
 		StaleLibraries: serviceStaleLibraries(discoverer, selectors),
 		TerminalOutput: serviceTerminalOutput(discoverer, selectors, process.ScanTerminalOutput),
@@ -194,24 +195,35 @@ func pidfileFallbackPIDs(needed bool, backendPIDs func() ([]int, error), info se
 // markRemovedBinaries flags the stale binaries whose path holds no file any
 // more. An upgrade leaves the new version at the path; an uninstall leaves
 // nothing, and then a restart would stop a serving daemon it cannot start
-// again. A versioned executable gone with a newer version beside it was
-// upgraded too (python3.13 after python3.14 came in): its daemons start on the
-// new one, and the required preflight still refuses a restart that would not.
-// A path whose stat fails otherwise keeps its replaced reading. Each path is
-// read once per call, however many processes run it; a directory is listed
-// only for a versioned path that is gone.
-func markRemovedBinaries(stale []process.StaleBinary, stat func(string) (fs.FileInfo, error), readDir func(string) ([]fs.DirEntry, error)) []process.StaleBinary {
+// again. A path gone while the service's own program is still installed was
+// upgraded, not uninstalled: an interpreter upgrade removes python3.13 once the
+// daemon's script names python3.14, and the required preflight still refuses a
+// restart that would not start. A path whose stat fails otherwise keeps its
+// replaced reading. Each path is read once per call, however many processes
+// run it, and the program is looked at only for a gone path, once.
+func markRemovedBinaries(stale []process.StaleBinary, stat func(string) (fs.FileInfo, error), programInstalled func() bool) []process.StaleBinary {
 	removed := map[string]bool{}
+	installed := sync.OnceValue(programInstalled)
 	for i := range stale {
 		gone, seen := removed[stale[i].Path]
 		if !seen {
 			_, err := stat(stale[i].Path)
-			gone = errors.Is(err, fs.ErrNotExist) && !process.NewerVersionBeside(stale[i].Path, readDir)
+			gone = errors.Is(err, fs.ErrNotExist) && !installed()
 			removed[stale[i].Path] = gone
 		}
 		stale[i].Removed = gone
 	}
 	return stale
+}
+
+// serviceProgramInstalled reports whether the service's own binary, the one
+// its preflight and apps name, is still installed. A service that names none
+// cannot tell an upgrade from an uninstall, so a gone path stays removed.
+func serviceProgramInstalled(tree map[string]any) func() bool {
+	return func() bool {
+		binary := config.ServiceBinary(tree)
+		return binary != "" && checks.ProgramInstalled(binary)
+	}
 }
 
 // pidfileClaim lets a pidfile check reject a PID an unrelated process recycled
