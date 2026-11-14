@@ -105,3 +105,25 @@ func TestCauseJoinsALineThatOnlyIntroducesTheReason(t *testing.T) {
 		t.Errorf("FailureCause preferred %q", got)
 	}
 }
+
+// A Python program that died of an exception names it on the traceback's last
+// line; the frames before it, and any warning printed first, are not the reason.
+func TestCauseOfAPythonTracebackIsItsException(t *testing.T) {
+	const traceback = `Traceback (most recent call last):
+  File "/usr/bin/ceph", line 163, in <module>
+    from ceph_daemon import admin_socket, DaemonWatcher, Termsize
+  File "/usr/lib/python3.13/site-packages/ceph_daemon.py", line 21, in <module>
+    from prettytable import PrettyTable, HEADER
+ModuleNotFoundError: No module named 'prettytable'
+`
+	const want = "ModuleNotFoundError: No module named 'prettytable'"
+	for name, stderr := range map[string]string{
+		"traceback":               traceback,
+		"after a warning":         "/usr/bin/ceph:7: DeprecationWarning: something old\n" + traceback,
+		"without a final newline": strings.TrimSuffix(traceback, "\n"),
+	} {
+		if got := FailureCause("", stderr); got != want {
+			t.Errorf("%s: FailureCause = %q, want %q", name, got, want)
+		}
+	}
+}

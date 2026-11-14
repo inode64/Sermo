@@ -3,6 +3,7 @@
 package output
 
 import (
+	"slices"
 	"strings"
 	"unicode/utf8"
 )
@@ -51,11 +52,19 @@ func Observed(s string) string {
 // causeIntroducer ends a line that only introduces the reason on the next one.
 const causeIntroducer = ":"
 
+// pythonTraceback opens Python's report of an uncaught exception, which names
+// the exception only on its last line, after the stack frames.
+const pythonTraceback = "Traceback (most recent call last):"
+
 // cause returns the line a failing command states its reason on: the first
 // non-empty line, joined with the next non-empty one when it only introduces
 // it — Apache's configtest reports "AH00526: Syntax error on line 3 of FILE:"
-// and the directive it rejected on the line below.
+// and the directive it rejected on the line below. A Python program that died
+// of an exception states it last ("ModuleNotFoundError: No module named …").
 func cause(s string) string {
+	if strings.Contains(s, pythonTraceback) {
+		return lastNonEmptyLine(s)
+	}
 	var first string
 	for line := range strings.SplitSeq(s, outputLineSeparator) {
 		t := strings.TrimSpace(line)
@@ -72,6 +81,15 @@ func cause(s string) string {
 		}
 	}
 	return first
+}
+
+func lastNonEmptyLine(s string) string {
+	for _, line := range slices.Backward(strings.Split(s, outputLineSeparator)) {
+		if t := strings.TrimSpace(line); t != "" {
+			return t
+		}
+	}
+	return ""
 }
 
 // FailureCause is a failing command's stated reason: Cause of stderr, or of
