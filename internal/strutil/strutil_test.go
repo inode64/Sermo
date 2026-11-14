@@ -92,3 +92,28 @@ func TestLimitedList(t *testing.T) {
 		})
 	}
 }
+
+func TestCompareVersions(t *testing.T) {
+	got := []string{"10.0", "8.3", "8.11", "9", "", "8.3.1"}
+	slices.SortFunc(got, CompareVersions)
+	if want := []string{"", "8.3", "8.3.1", "8.11", "9", "10.0"}; !slices.Equal(got, want) {
+		t.Fatalf("order = %v, want %v", got, want)
+	}
+	for _, tc := range []struct {
+		a, b string
+		want int
+	}{
+		{"3.14", "3.13", 1},
+		{"3.10", "3.9", 1},
+		{"3.13", "3.13", 0},
+		{"", "", 0},
+		{"", "1", -1},
+		// A non-numeric segment compares as a string, keeping the order total.
+		{"8.3-rc2", "8.3-rc1", 1},
+		{"8.3", "8.3-rc1", -1},
+	} {
+		if got := CompareVersions(tc.a, tc.b); got != tc.want {
+			t.Errorf("CompareVersions(%q, %q) = %d, want %d", tc.a, tc.b, got, tc.want)
+		}
+	}
+}

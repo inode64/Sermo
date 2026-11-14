@@ -4,7 +4,7 @@ import (
 	"io/fs"
 	"path/filepath"
 	"regexp"
-	"strconv"
+	"sermo/internal/strutil"
 	"strings"
 )
 
@@ -91,7 +91,7 @@ func NewerVersionBeside(path string, readDir func(string) ([]fs.DirEntry, error)
 		return false
 	}
 	for _, entry := range entries {
-		if other, otherVersion, ok := splitVersionedFileName(entry.Name()); ok && other == name && compareVersions(otherVersion, version) > 0 {
+		if other, otherVersion, ok := splitVersionedFileName(entry.Name()); ok && other == name && strutil.CompareVersions(otherVersion, version) > 0 {
 			return true
 		}
 	}
@@ -104,20 +104,4 @@ func splitVersionedFileName(file string) (name, version string, ok bool) {
 		return "", "", false
 	}
 	return m[1], m[2], true
-}
-
-// compareVersions orders dotted numeric versions component by component, so
-// 3.10 is newer than 3.9; a longer version with an equal prefix is newer.
-func compareVersions(a, b string) int {
-	as, bs := strings.Split(a, "."), strings.Split(b, ".")
-	for i := range min(len(as), len(bs)) {
-		// The pattern admits only digits here, so Atoi fails only past int's
-		// range, which no real version reaches; such a part compares as 0.
-		x, _ := strconv.Atoi(as[i])
-		y, _ := strconv.Atoi(bs[i])
-		if x != y {
-			return x - y
-		}
-	}
-	return len(as) - len(bs)
 }

@@ -3,9 +3,11 @@
 package strutil
 
 import (
+	"cmp"
 	"fmt"
 	"maps"
 	"slices"
+	"strconv"
 	"strings"
 )
 
@@ -67,4 +69,35 @@ func LimitedList[T any](items []T, limit int, format func(T) string) string {
 		parts = append(parts, fmt.Sprintf("+%d more", extra))
 	}
 	return strings.Join(parts, listSeparator)
+}
+
+// CompareVersions orders two versions by their dot-separated segments and
+// returns -1, 0 or +1: numerically where both segments are numbers, so 8.3 <
+// 8.11 < 10.0 rather than the lexicographic 10.0 < 8.11 < 8.3, and as strings
+// otherwise (an 8.3-rc1 suffix), which keeps the order total. A longer version
+// with an equal prefix is the newer one, and the empty string sorts first.
+func CompareVersions(a, b string) int {
+	switch {
+	case a == b:
+		return 0
+	case a == "":
+		return -1
+	case b == "":
+		return 1
+	}
+	as, bs := strings.Split(a, "."), strings.Split(b, ".")
+	for i := range min(len(as), len(bs)) {
+		an, aerr := strconv.Atoi(as[i])
+		bn, berr := strconv.Atoi(bs[i])
+		if aerr == nil && berr == nil {
+			if c := cmp.Compare(an, bn); c != 0 {
+				return c
+			}
+			continue
+		}
+		if c := strings.Compare(as[i], bs[i]); c != 0 {
+			return c
+		}
+	}
+	return cmp.Compare(len(as), len(bs))
 }
