@@ -199,9 +199,10 @@ type App struct {
 	// the daemon web API). Defaults to fetching over HTTP using the config's web
 	// address/port (and password for auth if present).
 	FetchEvents func(ctx context.Context, cfg *config.Config, service string, limit int) ([]web.Event, error)
-	// FetchDaemonServiceState returns the daemon-computed service state when
-	// sermod is running and the web API is reachable. ok is false when unavailable.
-	FetchDaemonServiceState func(ctx context.Context, cfg *config.Config, service string) (string, bool)
+	// FetchDaemonServiceState returns the daemon-computed service state, with
+	// the reason behind it and the checks that do not pass, when sermod is
+	// running and the web API is reachable. ok is false when unavailable.
+	FetchDaemonServiceState func(ctx context.Context, cfg *config.Config, service string) (DaemonServiceState, bool)
 	// FetchDaemonWatchDetail returns the current daemon-published snapshot for
 	// one watch. ok is false when sermod or its web API is unavailable.
 	FetchDaemonWatchDetail func(ctx context.Context, cfg *config.Config, watch string) (web.Watch, bool)

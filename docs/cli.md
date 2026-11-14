@@ -243,7 +243,13 @@ still follow the init backend and retain their normal locks, guards and
 preflight gates. The warning only prevents a working workload from being
 presented as an application outage.
 
-`sermoctl status SERVICE` exposes `warning` and `restart_required` directly.
+`sermoctl status SERVICE` exposes `warning` and `restart_required` directly,
+and with the daemon view it says why: a `reason:` line carries the state's
+cause (`stale_binary`, `stale_libraries`, …) and one line per check that does
+not pass names it with its message, `optional check …` for an optional one, as
+an operation's event words it. With `--json` they are `state_reason` and
+`failing_checks`. A sensor that passes no verdict (`reports: state` or
+`value`) is never listed.
 For a configuration warning, `sermoctl preflight SERVICE` reruns the same
 bounded `preflight.config` command and prints its current output. `is-active`
 continues to report only the init backend's active/inactive verdict.

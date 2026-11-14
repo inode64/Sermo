@@ -10,7 +10,9 @@ import (
 	"net/http"
 	"net/url"
 	"path/filepath"
+	"sermo/internal/checks"
 	"sermo/internal/hostfs"
+	"sermo/internal/operation"
 	"slices"
 	"strings"
 
@@ -232,14 +234,34 @@ func (a App) daemonAPIGetWithConfig(ctx context.Context, cfg *config.Config, pat
 	return body, resp.StatusCode, nil
 }
 
-func (a App) fetchDaemonServiceStateWithConfig(ctx context.Context, cfg *config.Config, service string) (string, bool) {
+// DaemonServiceState is the daemon's computed view of one service: its state,
+// the reason behind a degraded one and each check that does not pass, worded
+// as an operation's event words it.
+type DaemonServiceState struct {
+	State   string
+	Reason  string
+	Failing []string
+}
+
+func (a App) fetchDaemonServiceStateWithConfig(ctx context.Context, cfg *config.Config, service string) (DaemonServiceState, bool) {
 	var detail struct {
-		State string `json:"state"`
+		State       string      `json:"state"`
+		StateReason string      `json:"state_reason"`
+		Checks      []web.Check `json:"checks"`
 	}
 	if !a.daemonAPIJSONWithConfig(ctx, cfg, web.APIPathServices+"/"+url.PathEscape(service), &detail) || detail.State == "" {
-		return "", false
+		return DaemonServiceState{}, false
 	}
-	return detail.State, true
+	view := DaemonServiceState{State: detail.State, Reason: detail.StateReason}
+	for _, c := range detail.Checks {
+		// The detail reports availability; a sensor that passes no verdict
+		// reads as a state, never as a failure.
+		if !c.Ran || c.Skipped || c.OK || c.Reports == checks.ReportsState {
+			continue
+		}
+		view.Failing = append(view.Failing, operation.FailedCheckText(checks.Result{Check: c.Name, Optional: c.Optional, Message: c.Message}))
+	}
+	return view, true
 }
 
 func (a App) fetchDaemonWatchDetail(ctx context.Context, cfg *config.Config, watch string) (web.Watch, bool) {

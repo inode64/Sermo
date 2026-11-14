@@ -215,8 +215,8 @@ func TestStatusUsesDaemonStateWhenAvailable(t *testing.T) {
 		Service: "mysql", Backend: servicemgr.BackendSystemd,
 		Unit: "mysql.service", Status: servicemgr.StatusInactive,
 	}, nil, &stdout, nil)
-	app.FetchDaemonServiceState = func(context.Context, *config.Config, string) (string, bool) {
-		return "starting", true
+	app.FetchDaemonServiceState = func(context.Context, *config.Config, string) (DaemonServiceState, bool) {
+		return DaemonServiceState{State: "starting"}, true
 	}
 
 	code := app.Run(context.Background(), []string{"status", "mysql"})
@@ -234,8 +234,8 @@ func TestStatusShowsDaemonRestartRequiredState(t *testing.T) {
 		Service: "acpid", Backend: servicemgr.BackendSystemd,
 		Unit: "acpid.service", Status: servicemgr.StatusActive,
 	}, nil, &stdout, nil)
-	app.FetchDaemonServiceState = func(context.Context, *config.Config, string) (string, bool) {
-		return "restart_required", true
+	app.FetchDaemonServiceState = func(context.Context, *config.Config, string) (DaemonServiceState, bool) {
+		return DaemonServiceState{State: "restart_required"}, true
 	}
 
 	code := app.Run(context.Background(), []string{"status", "acpid"})
@@ -247,6 +247,33 @@ func TestStatusShowsDaemonRestartRequiredState(t *testing.T) {
 	}
 }
 
+// A degraded state says why: the daemon's reason and each check that does not
+// pass follow the status line, and the JSON carries both.
+func TestStatusShowsTheReasonAndFailingChecks(t *testing.T) {
+	view := DaemonServiceState{State: "warning", Reason: "stale_libraries", Failing: []string{
+		"optional check sessions failed: smbstatus timed out after 5s",
+	}}
+	var stdout bytes.Buffer
+	app := statusApp(t, servicemgr.ServiceStatus{
+		Service: "smb", Backend: servicemgr.BackendOpenRC, Unit: "samba", Status: servicemgr.StatusActive,
+	}, nil, &stdout, nil)
+	app.FetchDaemonServiceState = func(context.Context, *config.Config, string) (DaemonServiceState, bool) { return view, true }
+	if code := app.Run(context.Background(), []string{"status", "smb"}); code != exitSuccess {
+		t.Fatalf("Run() exit = %d, want %d", code, exitSuccess)
+	}
+	const want = "smb state=warning backend=openrc service=samba\n  reason: stale_libraries\n  optional check sessions failed: smbstatus timed out after 5s\n"
+	if got := stdout.String(); got != want {
+		t.Fatalf("stdout = %q, want %q", got, want)
+	}
+	stdout.Reset()
+	if code := app.Run(context.Background(), []string{"--json", "status", "smb"}); code != exitSuccess {
+		t.Fatalf("Run(--json) exit = %d", code)
+	}
+	if got := stdout.String(); !strings.Contains(got, `"state_reason":"stale_libraries"`) || !strings.Contains(got, `"failing_checks":["optional check sessions failed: smbstatus timed out after 5s"]`) {
+		t.Fatalf("json = %s", got)
+	}
+}
+
 func TestStatusUsesRequestedServiceForDaemonState(t *testing.T) {
 	var stdout bytes.Buffer
 	app := statusApp(t, servicemgr.ServiceStatus{
@@ -254,9 +281,9 @@ func TestStatusUsesRequestedServiceForDaemonState(t *testing.T) {
 		Unit: "sshd", Status: servicemgr.StatusActive,
 	}, nil, &stdout, nil)
 	var requested string
-	app.FetchDaemonServiceState = func(_ context.Context, _ *config.Config, service string) (string, bool) {
+	app.FetchDaemonServiceState = func(_ context.Context, _ *config.Config, service string) (DaemonServiceState, bool) {
 		requested = service
-		return "monitored", true
+		return DaemonServiceState{State: "monitored"}, true
 	}
 
 	code := app.Run(context.Background(), []string{"status", "ssh-temp"})

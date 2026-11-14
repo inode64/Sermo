@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -41,7 +42,14 @@ func TestFetchDaemonServiceStateHTTP(t *testing.T) {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}
-		writeDaemonAPITestJSON(w, map[string]string{"state": "starting"})
+		writeDaemonAPITestJSON(w, map[string]any{"state": "warning", "state_reason": "stale_libraries", "checks": []map[string]any{
+			{"name": "service", "ran": true, "ok": true},
+			{"name": "sessions", "ran": true, "ok": false, "optional": true, "message": "smbstatus timed out"},
+			{"name": "smb", "ran": true, "ok": false, "message": "smb 127.0.0.1:445: i/o timeout"},
+			{"name": "backup", "ran": true, "ok": false, "reports": "state"},
+			{"name": "skipped", "ran": true, "ok": false, "skipped": true},
+			{"name": "pending", "ran": false},
+		}})
 	}))
 	defer srv.Close()
 
@@ -79,8 +87,12 @@ service: mysql.service
 	if !ok {
 		t.Fatal("fetchDaemonServiceState() ok = false, want true")
 	}
-	if st != "starting" {
-		t.Fatalf("state = %q, want starting", st)
+	want := DaemonServiceState{State: "warning", Reason: "stale_libraries", Failing: []string{
+		"optional check sessions failed: smbstatus timed out",
+		"check smb failed: smb 127.0.0.1:445: i/o timeout",
+	}}
+	if st.State != want.State || st.Reason != want.Reason || !slices.Equal(st.Failing, want.Failing) {
+		t.Fatalf("view = %+v, want %+v", st, want)
 	}
 	if loadCalls != 1 {
 		t.Fatalf("LoadConfig calls = %d, want 1", loadCalls)
@@ -95,8 +107,8 @@ func TestFetchDaemonServiceStateConfigFailureIsSilent(t *testing.T) {
 	app := hermeticApp(t, App{Env: os.Getenv, LoadConfig: testConfigLoader(t), Stderr: &stderr})
 	opts := options{config: filepath.Join(t.TempDir(), "missing.yml")}
 
-	if state, ok := app.fetchDaemonServiceStateWithConfig(context.Background(), app.statusConfig(opts), "mysql"); ok || state != "" {
-		t.Fatalf("fetchDaemonServiceState() = (%q, %v), want (\"\", false)", state, ok)
+	if view, ok := app.fetchDaemonServiceStateWithConfig(context.Background(), app.statusConfig(opts), "mysql"); ok || view.State != "" {
+		t.Fatalf("fetchDaemonServiceState() = (%+v, %v), want an empty view and false", view, ok)
 	}
 	if stderr.Len() != 0 {
 		t.Errorf("stderr = %q, want no best-effort diagnostic", stderr.String())

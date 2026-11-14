@@ -52,7 +52,13 @@ func (a App) runStatus(ctx context.Context, opts options) int {
 	}
 
 	fmt.Fprintf(a.Stdout, "%s state=%s backend=%s service=%s%s\n",
-		status.Service, displayState, status.Backend, status.Unit, metaSuffix(mon.Source, mon.ChangedAt))
+		status.Service, displayState.State, status.Backend, status.Unit, metaSuffix(mon.Source, mon.ChangedAt))
+	if displayState.Reason != "" {
+		fmt.Fprintf(a.Stdout, "  reason: %s\n", displayState.Reason)
+	}
+	for _, failing := range displayState.Failing {
+		fmt.Fprintf(a.Stdout, "  %s\n", failing)
+	}
 	return exitSuccess
 }
 
@@ -157,24 +163,28 @@ func (a App) resolveControlTarget(ctx context.Context, opts options, service str
 }
 
 type statusJSON struct {
-	Service          string `json:"service"`
-	State            string `json:"state"`
-	Backend          string `json:"backend"`
-	Status           string `json:"status"`
-	Unit             string `json:"unit"`
-	Paused           bool   `json:"paused"`
-	MonitorSource    string `json:"monitor_source,omitempty"`
-	MonitorChangedAt string `json:"monitor_changed_at,omitempty"`
+	Service          string   `json:"service"`
+	State            string   `json:"state"`
+	Backend          string   `json:"backend"`
+	Status           string   `json:"status"`
+	Unit             string   `json:"unit"`
+	Paused           bool     `json:"paused"`
+	MonitorSource    string   `json:"monitor_source,omitempty"`
+	MonitorChangedAt string   `json:"monitor_changed_at,omitempty"`
+	StateReason      string   `json:"state_reason,omitempty"`
+	FailingChecks    []string `json:"failing_checks,omitempty"`
 }
 
-func statusToJSON(status servicemgr.ServiceStatus, mon monitorView, displayState string) statusJSON {
+func statusToJSON(status servicemgr.ServiceStatus, mon monitorView, displayState DaemonServiceState) statusJSON {
 	out := statusJSON{
-		Service: status.Service,
-		State:   displayState,
-		Backend: string(status.Backend),
-		Status:  string(status.Status),
-		Unit:    status.Unit,
-		Paused:  mon.Paused,
+		Service:       status.Service,
+		State:         displayState.State,
+		StateReason:   displayState.Reason,
+		FailingChecks: displayState.Failing,
+		Backend:       string(status.Backend),
+		Status:        string(status.Status),
+		Unit:          status.Unit,
+		Paused:        mon.Paused,
 	}
 	if mon.Paused {
 		out.MonitorSource = mon.Source

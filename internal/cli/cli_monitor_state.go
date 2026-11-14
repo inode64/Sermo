@@ -13,13 +13,14 @@ import (
 )
 
 // serviceDisplayState returns the operator-facing state for status output.
-// When sermod is up it prefers the daemon's settled view (including starting);
-// otherwise it derives state from the local backend query only.
-func (a App) serviceDisplayState(ctx context.Context, cfg *config.Config, service string, status servicemgr.ServiceStatus, mon monitorView) string {
-	if serviceState, ok := a.FetchDaemonServiceState(ctx, cfg, service); ok && serviceState != "" {
-		return serviceState
+// When sermod is up it prefers the daemon's settled view (including starting),
+// with its reason and failing checks; otherwise it derives the state from the
+// local backend query only.
+func (a App) serviceDisplayState(ctx context.Context, cfg *config.Config, service string, status servicemgr.ServiceStatus, mon monitorView) DaemonServiceState {
+	if view, ok := a.FetchDaemonServiceState(ctx, cfg, service); ok && view.State != "" {
+		return view
 	}
-	return localServiceState(status, mon)
+	return DaemonServiceState{State: localServiceState(status, mon)}
 }
 
 // localServiceState is the operator-facing state derived from the backend
