@@ -70,7 +70,8 @@ watches:
         During ${rule.duration}, ${display_name} memory usage stayed above ${check.threshold} (current ${check.value})
 rules:
   # statd cannot register while the portmapper is down, so starting it then
-  # only fails; rpcbind's own recovery restarts statd after it (also_apply).
+  # only fails. Once rpcbind answers again, restart-if-statd-failed restarts
+  # statd; a host whose rpcbind lists it in also_apply restarts it at once.
   block-without-portmapper:
     type: guard
     blocks:
