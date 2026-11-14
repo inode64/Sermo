@@ -118,3 +118,72 @@ func TestWorkerRefusalEndsWithItsEpisode(t *testing.T) {
 		t.Fatalf("previous incident delayed a new incident: %v", h.ops)
 	}
 }
+
+// A guard that keeps refusing for the same reason (logged-in users, host
+// infrastructure) is audited at doubling intervals instead of every cooldown;
+// it is still read every cycle, so a new reason is audited at once and starts
+// the spacing again.
+func TestWorkerUnchangedGuardRefusalIsAuditedLessOften(t *testing.T) {
+	h := &workerHarness{cache: failedCache("http"), opResult: operation.Result{Status: operation.ResultOK}}
+	h.cache["sessions"] = checks.Result{OK: false}
+	w := h.worker(alertThenRestartTree("http"), rules.Policy{Cooldown: 30 * time.Minute}, nil)
+	w.Rules = append(w.Rules, rules.Rule{Name: "sessions", Type: rules.RuleGuard, Blocks: []string{"restart"},
+		If:      map[string]any{"failed": map[string]any{"check": "sessions"}},
+		Actions: []rules.Action{{Type: rules.ActionBlock, Message: "users are logged in"}}})
+	at := t0
+	w.Now = func() time.Time { return at }
+	audited := func() int { return h.countEvents(eventKindSuppressed) }
+
+	// Audits fall at 0, 30m, 1h30, 3h30 and 7h30: each wait twice the last.
+	var auditTimes []time.Duration
+	for elapsed := time.Duration(0); elapsed <= 8*time.Hour; elapsed += 5 * time.Minute {
+		at = t0.Add(elapsed)
+		before := audited()
+		w.RunCycle(t.Context())
+		if audited() > before {
+			auditTimes = append(auditTimes, elapsed)
+		}
+	}
+	want := []time.Duration{0, 30 * time.Minute, 90 * time.Minute, 210 * time.Minute, 450 * time.Minute}
+	if len(auditTimes) != len(want) {
+		t.Fatalf("audits at %v, want %v", auditTimes, want)
+	}
+	for i := range want {
+		if auditTimes[i] != want[i] {
+			t.Fatalf("audits at %v, want %v", auditTimes, want)
+		}
+	}
+	if len(h.ops) != 0 {
+		t.Fatalf("a refusing guard let an operation through: %v", h.ops)
+	}
+
+	// A new reason is news: audited at once, then spaced from the cooldown again.
+	w.Rules[len(w.Rules)-1].Actions[0].Message = "a session is being closed"
+	before := audited()
+	w.RunCycle(t.Context())
+	at = at.Add(30 * time.Minute)
+	w.RunCycle(t.Context())
+	if audited() != before+2 {
+		t.Fatalf("changed reason: %d audits, want it at once and again after the cooldown", audited()-before)
+	}
+}
+
+func TestGuardRefusalInterval(t *testing.T) {
+	for _, tc := range []struct {
+		cooldown time.Duration
+		repeats  int
+		want     time.Duration
+	}{
+		{30 * time.Minute, 0, 30 * time.Minute},
+		{30 * time.Minute, 1, time.Hour},
+		{30 * time.Minute, 5, 16 * time.Hour},
+		{30 * time.Minute, 6, maxGuardRefusalInterval},
+		{30 * time.Minute, 200, maxGuardRefusalInterval},
+		// A cooldown longer than the cap is never shortened.
+		{48 * time.Hour, 3, 48 * time.Hour},
+	} {
+		if got := guardRefusalInterval(tc.cooldown, tc.repeats); got != tc.want {
+			t.Errorf("guardRefusalInterval(%v, %d) = %v, want %v", tc.cooldown, tc.repeats, got, tc.want)
+		}
+	}
+}

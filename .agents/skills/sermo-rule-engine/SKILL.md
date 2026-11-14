@@ -36,8 +36,10 @@ the types are `RuleType`, `ActionType` and `Action` in
 - Guards run before remediation; a blocked action logs the guard's block
   message and records one event.
 - Automatic refusals wait the policy cooldown per rule, independently of the
-  executed-action budget and backoff. Guards remain observable: a new reason
-  is audited immediately and a cleared guard releases the action. Every actual
+  executed-action budget and backoff. An unchanged guard refusal doubles that
+  wait at each re-audit, up to a day (`maxGuardRefusalInterval`). Guards remain
+  observable: a new reason is audited immediately (restarting the spacing) and
+  a cleared guard releases the action. Every actual
   retry retains its result event; a refusal never suppresses severity escalation.
   The episode-local delay resets on recovery or configuration reload.
 - Cooldown, `max_actions`, `max_actions_window` and backoff are the per-service

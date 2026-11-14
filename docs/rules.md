@@ -4722,9 +4722,13 @@ and leaves the marker as it found it.
 A refused automatic operation (including failed preflight) retries that rule
 after `policy.cooldown`, without consuming `max_actions` or increasing backoff.
 Each attempt retains its audit result. An unchanged guard refusal is audited
-again after the same delay, even with `emission.events: every_cycle`; guards
-are still observed each cycle, so a changed reason is audited immediately and
-a cleared guard releases the action. A more severe incident still alerts while
+again after `policy.cooldown`, then after twice as long each time the same
+guard refuses for the same reason (30m, 1h, 2h… with a 30m cooldown), up to
+once a day, even with `emission.events: every_cycle`: a guard that keeps
+refusing (logged-in users, host infrastructure) usually will until an operator
+acts. Guards are still observed each cycle, so a changed reason is audited
+immediately and starts the spacing again, and a cleared guard releases the
+action. A more severe incident still alerts while
 waiting. These per-rule refusal delays end with the incident or a daemon
 reload/restart, which refreshes the configuration and refusal evidence. Manual
 operations remain immediately available through the normal safety checks.
