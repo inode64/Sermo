@@ -134,6 +134,16 @@ postgresql: linked postgres app (versioned binaries); native postgres check for 
 
 If a config validation command differs by distribution, make it override-friendly through variables.
 
+`preflight.config` should refuse exactly what the start refuses, on every init
+backend. Read the systemd unit's ExecStartPre lines and the OpenRC `checkconfig`
+before choosing the command: a looser test lets Sermo restart into a unit that
+will not start, and a stricter one refuses every restart, automatic recovery
+included, while the service would start fine. When the backends disagree, keep
+the stricter test and say why in the profile. Gentoo's `named.service` runs
+`named-checkconf -z` but OpenRC only parses named.conf, so named keeps `-z`.
+Its periodic copy, the `configuration` check, is graded error so that refusal
+is reported.
+
 ## Library updates
 
 A daemon that terminates TLS or parses external data (web, PHP, mail) lists

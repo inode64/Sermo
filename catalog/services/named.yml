@@ -23,6 +23,12 @@ os:
     variables:
       user: bind
 preflight:
+  # `-z` also loads every primary zone. Gentoo's named.service runs that same
+  # test before ExecStart, so a zone that does not load makes the start fail
+  # there, and a looser preflight would let Sermo restart named into a failed
+  # unit. OpenRC's checkconfig only parses named.conf, so on OpenRC this is
+  # stricter than the start: it refuses restarts while the zone stays broken,
+  # and the configuration check reports it as an error until it is fixed.
   config:
     type: command
     command:
