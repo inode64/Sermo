@@ -317,8 +317,8 @@ func (a App) printOperation(r operation.Result) {
 		}
 	}
 	for _, c := range r.Checks {
-		if !c.OK {
-			fmt.Fprintf(a.Stdout, "  check %s failed: %s\n", c.Check, c.Message)
+		if text := operation.FailedCheckText(c); text != "" {
+			fmt.Fprintf(a.Stdout, "  %s\n", text)
 		}
 	}
 	for _, p := range r.Processes {

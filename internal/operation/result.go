@@ -71,12 +71,8 @@ func (r Result) AuditMessage() string {
 		parts = append(parts, "created container "+r.CreatedContainer)
 	}
 	for _, c := range r.Checks {
-		switch {
-		case c.OK:
-		case c.Optional:
-			parts = append(parts, fmt.Sprintf("optional check %s failed: %s", c.Check, c.Message))
-		default:
-			parts = append(parts, fmt.Sprintf("check %s failed: %s", c.Check, c.Message))
+		if text := FailedCheckText(c); text != "" {
+			parts = append(parts, text)
 		}
 	}
 	for _, proc := range r.Processes {
@@ -94,6 +90,19 @@ func (r Result) AuditMessage() string {
 		parts = append(parts, message)
 	}
 	return strings.Join(parts, "; ")
+}
+
+// FailedCheckText words a check that failed in an operation, the same in its
+// event and in sermoctl's output; a check that passed has nothing to say.
+func FailedCheckText(c checks.Result) string {
+	switch {
+	case c.OK:
+		return ""
+	case c.Optional:
+		return fmt.Sprintf("optional check %s failed: %s", c.Check, c.Message)
+	default:
+		return fmt.Sprintf("check %s failed: %s", c.Check, c.Message)
+	}
 }
 
 // OK reports whether the operation completed successfully.

@@ -14,6 +14,7 @@ import (
 	sqlite3 "modernc.org/sqlite/lib"
 
 	appcore "sermo/internal/app"
+	"sermo/internal/checks"
 	"sermo/internal/config"
 	"sermo/internal/execx/execxtest"
 	"sermo/internal/operation"
@@ -308,14 +309,32 @@ func TestRestartBlockedForNonBackupDoesNotNotify(t *testing.T) {
 	assertBlockedDoesNotNotify(t, "block-restart-with-clients", "clients connected during backup verification", interactive)
 }
 
+// A refused preflight names each failed check as its event does, required and
+// optional apart, and exits 1.
 func TestPreflightFailedExit1(t *testing.T) {
 	global := writeActionConfig(t)
 	var stdout bytes.Buffer
-	app := actionApp(t, operation.Result{Service: "web", Action: "restart", Status: operation.ResultPreflightFailed, Message: "preflight failed"}, nil, &stdout, nil)
+	app := actionApp(t, operation.Result{Service: "web", Action: "restart", Status: operation.ResultPreflightFailed, Message: "preflight failed",
+		Checks: []checks.Result{
+			{Check: "binary", OK: true, Message: "/usr/sbin/web is executable"},
+			{Check: "config", Message: "exit 1 (want 0): syntax error on line 3"},
+			{Check: "update-libraries", Optional: true, Message: "libfoo.so.1 not found"},
+		}}, nil, &stdout, nil)
 
 	code := app.Run(context.Background(), []string{"--config", global, "restart", "web"})
 	if code != exitNotActive {
 		t.Fatalf("Run() exit = %d, want %d", code, exitNotActive)
+	}
+	for _, want := range []string{
+		"  check config failed: exit 1 (want 0): syntax error on line 3\n",
+		"  optional check update-libraries failed: libfoo.so.1 not found\n",
+	} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Fatalf("output = %q, want the line %q", stdout.String(), want)
+		}
+	}
+	if strings.Contains(stdout.String(), "binary") {
+		t.Fatalf("output = %q, a passing check has nothing to report", stdout.String())
 	}
 }
 
