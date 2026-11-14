@@ -65,6 +65,7 @@ type Samplers struct {
 	LoadSampler     LoadSamplerFunc
 	OomSampler      OomSamplerFunc
 	CoredumpSampler CoredumpSamplerFunc
+	CoredumpLister  CoredumpListerFunc
 	FdsSampler      FdsSamplerFunc
 	MemorySampler   MemorySamplerFunc
 	PressureSampler PressureSamplerFunc

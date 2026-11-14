@@ -3714,10 +3714,14 @@ Like `oom` it is an edge sensor: a crash is true for one cycle, so give it no
 `for:` window and keep it visible with `clear:` (see
 [edge sensors](rules.md#edge-sensors-a-for-window-suppresses-them)). The first
 cycle after a start or reload only records the total. The result says how many
-dumps arrived and the total since the socket started (`core dumps +2 (total
-11)`), and the dashboard graphs the per-cycle count; `coredumpctl list` names
-the programs. During a crash storm past the socket's `MaxConnections`, refused
-dumps are not counted, so the count is a lower bound.
+dumps arrived and the total since the socket started, and names the crashed
+processes from the files systemd-coredump stored in `/var/lib/systemd/coredump`
+(`core dumps +2 (total 11): pmdalinux (pid 232600), pmdalinux (pid 239961)`, at
+most five, then how many more); the dashboard graphs the per-cycle count. A dump
+still being written, or one systemd-coredump did not store (`Storage=none`, over
+its size limit), stays unnamed: `coredumpctl list` shows it. During a crash
+storm past the socket's `MaxConnections`, refused dumps are not counted, so the
+count is a lower bound.
 
 The check is unavailable, rather than silently green, when
 `kernel.core_pattern` does not pipe dumps to `systemd-coredump`, when the socket

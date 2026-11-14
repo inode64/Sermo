@@ -4098,6 +4098,12 @@ checks:
 - **State is in memory.** Like `count`'s `delta` and `size`, the offsets and
   the window live in the built check: `sermoctl daemon reload` or a restart
   re-baselines, and lines written meanwhile are not counted.
+- **Named groups name the matches.** When `regex` declares named groups
+  (`(?P<process>[^)]*)`), each matching line contributes the values they
+  captured, and the message lists the distinct ones within the window with
+  their line counts (`…; process=imap signal=6/ABRT (8)`, at most five, then
+  how many more). Unnamed groups capture nothing, and a regex without named
+  groups keeps the plain count. Capture only what may appear in a notification.
 - Result data carries `count` (matches within the window, also the graphed
   `value` in `lines`), `regex`, `window`, `files`, `bytes_read` and
   `truncated`. A missing or unreadable file makes the check unavailable; with

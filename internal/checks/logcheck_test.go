@@ -2,6 +2,7 @@ package checks
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -102,6 +103,55 @@ func TestLogCountsAppendedMatchesWithinWindow(t *testing.T) {
 	res = f.run()
 	if res.OK || f.count(res) != 0 {
 		t.Fatalf("after the window elapsed = %+v, want 0 matches and the condition released", res)
+	}
+}
+
+func TestLogNamesWhatNamedGroupsCaptured(t *testing.T) {
+	// The kernel line systemd-coredump logs for every crash on a host it does
+	// not manage: the named groups say which process fell and how.
+	const crash = "Nov 13 21:34:44 kvm kernel: systemd-coredump[3090600]: Process 3090597 (%s) of user 8 terminated abnormally with signal %s, processing...\n"
+	f := newLogFixture(t, "", ">", 0, time.Hour)
+	f.check.regex = regexp.MustCompile(`systemd-coredump\[[0-9]+\]: Process [0-9]+ \((?P<process>[^)]*)\) of user [0-9]+ terminated abnormally with signal (?P<signal>[^,]+)`)
+	f.run()
+	f.now = f.now.Add(30 * time.Second)
+	f.append(fmt.Sprintf(crash, "imap", "6/ABRT") + "plain line\n" + fmt.Sprintf(crash, "imap", "6/ABRT"))
+	f.run()
+	f.now = f.now.Add(30 * time.Second)
+	f.append(fmt.Sprintf(crash, "guacd", "11/SEGV"))
+	res := f.run()
+	const want = "; process=imap signal=6/ABRT (2), process=guacd signal=11/SEGV (1)"
+	if !res.OK || f.count(res) != 3 || !strings.HasSuffix(res.Message, want) {
+		t.Fatalf("crashes = %+v, want 3 matches and a message ending %q", res, want)
+	}
+	// What the window still counts it still names; once it expires, nothing.
+	f.now = f.now.Add(30 * time.Minute)
+	if res = f.run(); !strings.HasSuffix(res.Message, want) {
+		t.Fatalf("within the window, message = %q, want it to keep naming the crashes", res.Message)
+	}
+	f.now = f.now.Add(2 * time.Hour)
+	if res = f.run(); res.OK || strings.Contains(res.Message, "process=") {
+		t.Fatalf("after the window = %+v, want no match and no name", res)
+	}
+
+	// A burst lists the first labels and counts the rest.
+	for i := range maxLogCaptureLabels + 2 {
+		f.append(fmt.Sprintf(crash, fmt.Sprintf("worker%d", i), "6/ABRT"))
+	}
+	f.now = f.now.Add(30 * time.Second)
+	if res = f.run(); !strings.HasSuffix(res.Message, "process=worker4 signal=6/ABRT (1), 2 more") {
+		t.Fatalf("burst message = %q, want five labels and the rest counted", res.Message)
+	}
+}
+
+func TestLogWithoutNamedGroupsKeepsItsMessage(t *testing.T) {
+	f := newLogFixture(t, "", ">", 0, 5*time.Minute)
+	f.check.regex = regexp.MustCompile(`cURL error (28)`)
+	f.run()
+	f.now = f.now.Add(30 * time.Second)
+	f.append(logTestMatch)
+	res := f.run()
+	if !res.OK || strings.Contains(res.Message, ";") {
+		t.Fatalf("unnamed group = %+v, want the bare count message", res)
 	}
 }
 

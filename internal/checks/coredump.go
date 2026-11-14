@@ -1,10 +1,15 @@
 package checks
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"path/filepath"
+	"regexp"
+	"slices"
+	"strconv"
 	"strings"
+	"time"
 
 	"sermo/internal/cfgval"
 	"sermo/internal/conn"
@@ -19,11 +24,28 @@ const (
 	systemdSocketNAccepted  = "NAccepted"
 	corePatternPipePrefix   = "|"
 	coredumpUnavailableHead = CheckTypeCoredump + ": "
+	// coredumpStorageDir is where systemd-coredump keeps the dumps it stores
+	// (Storage=external, its default).
+	coredumpStorageDir = "/var/lib/systemd/coredump"
+	// maxNamedCoredumps bounds how many crashes one message names; the count
+	// still says how many there were.
+	maxNamedCoredumps = 5
+	// coredumpNameSlack widens the window a stored dump must fall in: its file
+	// name dates it to the second, the previous sample to the nanosecond.
+	coredumpNameSlack = time.Second
 )
+
+// coredumpFileName parses systemd-coredump's file name,
+// core.COMM.UID.BOOTID.PID.USEC[.COMPRESSION]; COMM may itself hold dots.
+var coredumpFileName = regexp.MustCompile(`^core\.(.+)\.[0-9]+\.[0-9a-f]{32}\.([0-9]+)\.([0-9]+)(?:\.[a-z0-9]+)?$`)
 
 // CoredumpSamplerFunc reads the cumulative number of core dumps the host's
 // collector has taken in. Injected for tests; the default asks systemd-coredump.
 type CoredumpSamplerFunc func(ctx context.Context) (uint64, error)
+
+// CoredumpListerFunc lists the file names of the dumps systemd-coredump stored.
+// Injected for tests; the default reads its storage directory.
+type CoredumpListerFunc func() ([]string, error)
 
 // coredumpCheck fires when processes have dumped core since the last cycle. Like
 // oom it consumes the delta of a cumulative counter, so a crash is true for one
@@ -35,9 +57,12 @@ type coredumpCheck struct {
 	op      string
 	value   float64
 	sampler CoredumpSamplerFunc
+	lister  CoredumpListerFunc
+	clock   func() time.Time
 
 	primed    bool
 	lastCount uint64
+	lastAt    time.Time
 }
 
 func (c *coredumpCheck) Run(ctx context.Context) Result {
@@ -49,22 +74,90 @@ func (c *coredumpCheck) Run(ctx context.Context) Result {
 	if sampler == nil {
 		sampler = defaultCoredumpSampler
 	}
+	now := windowClock(c.clock)()
 	count, err := sampler(ctx)
 	if err != nil {
 		return c.unavailableResult(coredumpUnavailableHead+execx.FormatContextOrError(err, c.timeout), start)
 	}
 	if !c.primed {
-		c.primed, c.lastCount = true, count
+		c.primed, c.lastCount, c.lastAt = true, count, now
 		res := c.result(false, fmt.Sprintf("coredump baseline %d dumps", count), start)
 		res.Data = map[string]any{DataKeyValue: uint64(0), DataKeyDumps: uint64(0), DataKeyTotal: count}
 		return res
 	}
 	delta := deltaOrZero(count, c.lastCount)
-	c.lastCount = count
+	since := c.lastAt
+	c.lastCount, c.lastAt = count, now
+	msg := fmt.Sprintf("core dumps +%d (total %d)", delta, count)
+	if delta > 0 {
+		if crashed := c.crashedSince(since); crashed != "" {
+			msg += ": " + crashed
+		}
+	}
 	met := cfgval.CompareFloat(float64(delta), c.op, c.value)
-	res := c.gradeValue(c.result(met, fmt.Sprintf("core dumps +%d (total %d)", delta, count), start), CheckKeyDelta, float64(delta))
+	res := c.gradeValue(c.result(met, msg, start), CheckKeyDelta, float64(delta))
 	res.Data = map[string]any{DataKeyValue: delta, DataKeyDumps: delta, DataKeyTotal: count}
 	return res
+}
+
+// crashedSince names the processes whose stored dumps are dated from since on,
+// oldest first, as "COMM (pid PID)". The socket counter that detected the crash
+// knows no process, and the journal is out of reach without a client, so the
+// stored files are the only native record. A dump still being written, or one
+// systemd-coredump did not store (Storage=none, over its size limit), stays
+// unnamed; a listing that fails costs the names, never the alert.
+func (c *coredumpCheck) crashedSince(since time.Time) string {
+	lister := c.lister
+	if lister == nil {
+		lister = defaultCoredumpLister
+	}
+	names, err := lister()
+	if err != nil {
+		return ""
+	}
+	type crash struct {
+		at, pid int64
+		comm    string
+	}
+	threshold := since.Add(-coredumpNameSlack).UnixMicro()
+	var crashes []crash
+	for _, name := range names {
+		m := coredumpFileName.FindStringSubmatch(name)
+		if m == nil {
+			continue
+		}
+		at, atErr := strconv.ParseInt(m[3], 10, 64)
+		pid, pidErr := strconv.ParseInt(m[2], 10, 64)
+		if atErr != nil || pidErr != nil || at < threshold {
+			continue
+		}
+		crashes = append(crashes, crash{at: at, pid: pid, comm: m[1]})
+	}
+	slices.SortFunc(crashes, func(a, b crash) int {
+		return cmp.Or(cmp.Compare(a.at, b.at), cmp.Compare(a.pid, b.pid))
+	})
+	labels := make([]string, 0, min(len(crashes), maxNamedCoredumps))
+	for _, cr := range crashes[:min(len(crashes), maxNamedCoredumps)] {
+		labels = append(labels, fmt.Sprintf("%s (pid %d)", cr.comm, cr.pid))
+	}
+	if extra := len(crashes) - len(labels); extra > 0 {
+		labels = append(labels, fmt.Sprintf("%d more", extra))
+	}
+	return strings.Join(labels, ", ")
+}
+
+func defaultCoredumpLister() ([]string, error) {
+	entries, err := hostfs.ReadDir(coredumpStorageDir)
+	if err != nil {
+		return nil, fmt.Errorf("read %s: %w", coredumpStorageDir, err)
+	}
+	names := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		if entry.Type().IsRegular() {
+			names = append(names, entry.Name())
+		}
+	}
+	return names, nil
 }
 
 // defaultCoredumpSampler reads how many connections systemd-coredump.socket has
@@ -112,5 +205,5 @@ func buildCoredumpCheck(b base, entry map[string]any, deps Deps) (Check, string)
 			return nil, errs
 		}
 	}
-	return &coredumpCheck{base: b, op: op, value: value, sampler: deps.CoredumpSampler}, ""
+	return &coredumpCheck{base: b, op: op, value: value, sampler: deps.CoredumpSampler, lister: deps.CoredumpLister}, ""
 }
