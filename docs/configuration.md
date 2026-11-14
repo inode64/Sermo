@@ -4280,8 +4280,11 @@ contains `complete`, `mapped` (loaded dependencies and stale findings), and
 `check_enabled` identifies a configured library scanner; `errors` and
 `skipped` explain incomplete or unsupported inspection. Empty process
 inventories include the backend `state`, distinguishing stopped services from
-active services with failed process attribution. Scripts carry
-`elf_skipped`; their interpreter and modules remain observable in mappings. Exit zero
+active services with failed process attribution. A script's `elf` is the tree
+of the interpreter its first line names, which `elf.interpreter` gives; a
+script that names none (`#!/usr/bin/env python3`) or whose interpreter is
+itself a script carries `elf_skipped`, and its interpreter and modules remain
+observable in mappings. Exit zero
 means the report was produced, not that every row is complete. Automation must
 inspect those fields before changing configuration. ELF resolution uses the
 same search rules and limitations as the `libraries` preflight; mappings add

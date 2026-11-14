@@ -6,9 +6,11 @@ import (
 	"debug/elf"
 	"encoding/binary"
 	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 )
@@ -77,7 +79,7 @@ func TestLibrariesCheckFailsOnAMissingBinary(t *testing.T) {
 }
 
 func TestInspectLibrariesDistinguishesScriptFromCorruptBinary(t *testing.T) {
-	for _, content := range []string{"#!/usr/bin/python3\n", "broken ELF"} {
+	for _, content := range []string{"#!/usr/bin/env python3\n", "broken ELF"} {
 		path := filepath.Join(t.TempDir(), "daemon")
 		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 			t.Fatal(err)
@@ -86,6 +88,61 @@ func TestInspectLibrariesDistinguishesScriptFromCorruptBinary(t *testing.T) {
 		if err == nil || errors.Is(err, ErrLibraryScript) != (content[0] == '#') {
 			t.Fatalf("content=%q error=%v", content, err)
 		}
+	}
+}
+
+// A script loads no library itself: the check follows its first line to the
+// interpreter, which an interpreter upgrade rewrites, so no version is pinned.
+// One level only: env, an interpreter that is a script, or a script naming
+// itself still have no ELF tree, and a missing interpreter fails the check.
+func TestInspectLibrariesFollowsAScriptToItsInterpreter(t *testing.T) {
+	dir, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	interpreter := filepath.Join(dir, "python3.14")
+	lib := filepath.Join(dir, "libpython3.14.so")
+	writeTestELF(t, interpreter, testELF{class: elf.ELFCLASS64, machine: elf.EM_X86_64, needed: []string{lib, filepath.Join(dir, "libgone.so")}})
+	writeTestELF(t, lib, testELF{class: elf.ELFCLASS64, machine: elf.EM_X86_64})
+	write := func(name, content string) string {
+		path := filepath.Join(dir, name)
+		if err := os.WriteFile(path, []byte(content), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		return path
+	}
+	daemon := write("tuned", "#!"+interpreter+" -Es\nimport tuned\n")
+	searchDirs := func(string, *elf.File) []string { return nil }
+
+	report, err := inspectLibraries(t.Context(), daemon, searchDirs)
+	if err != nil || report.Binary != daemon || report.Interpreter != interpreter ||
+		!slices.Equal(report.Paths, []string{lib}) || !slices.Equal(report.Missing, []string{filepath.Join(dir, "libgone.so")}) {
+		t.Fatalf("report=%+v err=%v, want the interpreter's tree", report, err)
+	}
+	res := librariesCheck{name: "libs", timeout: time.Second, binary: daemon}.Run(t.Context())
+	if res.OK || !strings.Contains(res.Message, "(interpreter "+interpreter+")") {
+		t.Fatalf("result = %+v, want a failure naming the interpreter", res)
+	}
+
+	wrapper := write("wrapper", "#!"+daemon+"\n")
+	for name, script := range map[string]string{
+		"env":                    write("envscript", "#!/usr/bin/env python3\n"),
+		"interpreter script":     wrapper,
+		"script naming itself":   write("self", "#!"+filepath.Join(dir, "self")+"\n"),
+		"relative interpreter":   write("relative", "#!python3\n"),
+		"empty interpreter line": write("empty", "#!\n"),
+	} {
+		if _, err := inspectLibraries(t.Context(), script, searchDirs); !errors.Is(err, ErrLibraryScript) {
+			t.Errorf("%s: error = %v, want ErrLibraryScript", name, err)
+		}
+	}
+
+	orphan := write("orphan", "#!"+filepath.Join(dir, "python3.13")+" -Es\n")
+	if _, err := inspectLibraries(t.Context(), orphan, searchDirs); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("error = %v, want the missing interpreter", err)
+	}
+	if res := (librariesCheck{name: "libs", timeout: time.Second, binary: orphan}).Run(t.Context()); res.OK || res.Unavailable {
+		t.Fatalf("result = %+v, want a failure: the script cannot start without its interpreter", res)
 	}
 }
 

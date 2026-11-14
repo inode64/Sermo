@@ -1,6 +1,7 @@
 package checks
 
 import (
+	"bytes"
 	"context"
 	"debug/elf"
 	"errors"
@@ -52,15 +53,23 @@ type librariesCheck struct {
 }
 
 // ErrLibraryScript identifies a script whose interpreter dependencies are
-// observable in process mappings, rather than ELF metadata on the script.
+// observable in process mappings, rather than ELF metadata on the script: one
+// that names no absolute interpreter (`#!/usr/bin/env python3`) or one whose
+// interpreter is itself a script.
 var ErrLibraryScript = errors.New("script has no ELF dependency metadata")
+
+// maxShebangBytes bounds the first line read from a script, the most of an
+// interpreter line Linux itself reads.
+const maxShebangBytes = 256
 
 // LibraryDependencies is the on-disk ELF dependency tree, separate from the
 // process mappings that prove which dynamic modules are actually loaded.
+// Interpreter names the ELF a script's first line runs, whose tree it is.
 type LibraryDependencies struct {
-	Binary  string   `json:"binary"`
-	Paths   []string `json:"paths"`
-	Missing []string `json:"missing"`
+	Binary      string   `json:"binary"`
+	Interpreter string   `json:"interpreter,omitempty"`
+	Paths       []string `json:"paths"`
+	Missing     []string `json:"missing"`
 }
 
 func (c librariesCheck) Run(ctx context.Context) Result {
@@ -76,12 +85,16 @@ func (c librariesCheck) Run(ctx context.Context) Result {
 		}
 		return c.unavailableResult(err.Error(), run.start)
 	}
-	message := c.binary + ": all shared libraries resolve"
+	subject := c.binary
+	if report.Interpreter != "" {
+		subject += " (interpreter " + report.Interpreter + ")"
+	}
+	message := subject + ": all shared libraries resolve"
 	if len(report.Paths) == 0 && len(report.Missing) == 0 {
-		message = c.binary + ": static binary, no shared libraries"
+		message = subject + ": static binary, no shared libraries"
 	}
 	if len(report.Missing) > 0 {
-		message = c.binary + ": missing shared libraries: " + strings.Join(report.Missing, ", ")
+		message = subject + ": missing shared libraries: " + strings.Join(report.Missing, ", ")
 	}
 	result := c.result(len(report.Missing) == 0, message, run.start)
 	result.Data = map[string]any{DataKeyDependencies: report}
@@ -95,6 +108,16 @@ func InspectLibraries(ctx context.Context, binary string) (LibraryDependencies, 
 }
 
 func inspectLibraries(ctx context.Context, binary string, searchDirs func(string, *elf.File) []string) (LibraryDependencies, error) {
+	return inspectExecutable(ctx, binary, searchDirs, true)
+}
+
+// inspectExecutable resolves binary's ELF dependency tree. A script loads no
+// library itself: the interpreter its first line names does, and an
+// interpreter upgrade rewrites that line (#!/usr/bin/python3.14), so following
+// it keeps the check on the interpreter the service starts with now instead of
+// a pinned version. Only one level is followed, which also stops a script that
+// names itself.
+func inspectExecutable(ctx context.Context, binary string, searchDirs func(string, *elf.File) []string, followScript bool) (LibraryDependencies, error) {
 	report := LibraryDependencies{Binary: binary}
 	if err := ctx.Err(); err != nil {
 		return report, fmt.Errorf("inspect libraries: %w", err)
@@ -106,10 +129,20 @@ func inspectLibraries(ctx context.Context, binary string, searchDirs func(string
 	binary, report.Binary = resolved, resolved
 	ef, err := elf.Open(binary)
 	if err != nil {
-		if prefix, readErr := hostfs.ReadRegularFile(binary, int64(len(elfScriptPrefix))); readErr == nil && string(prefix) == elfScriptPrefix {
+		head, readErr := hostfs.ReadRegularFile(binary, maxShebangBytes)
+		if readErr != nil || !bytes.HasPrefix(head, []byte(elfScriptPrefix)) {
+			return report, fmt.Errorf("inspect %s: %w", binary, err)
+		}
+		interpreter := scriptInterpreter(head)
+		if !followScript || interpreter == "" {
 			return report, fmt.Errorf("inspect %s: %w", binary, ErrLibraryScript)
 		}
-		return report, fmt.Errorf("inspect %s: %w", binary, err)
+		tree, err := inspectExecutable(ctx, interpreter, searchDirs, false)
+		tree.Interpreter, tree.Binary = tree.Binary, binary
+		if err != nil {
+			return tree, fmt.Errorf("interpreter of %s: %w", binary, err)
+		}
+		return tree, nil
 	}
 	defer func() { _ = ef.Close() }()
 	needed, err := ef.DynString(elf.DT_NEEDED)
@@ -130,6 +163,18 @@ func inspectLibraries(ctx context.Context, binary string, searchDirs func(string
 		return report, fmt.Errorf("inspect %s: %w", binary, err)
 	}
 	return report, resolver.err
+}
+
+// scriptInterpreter returns the absolute interpreter a script's first line
+// names, or "" when it names none or delegates the choice to env, whose PATH
+// lookup depends on the environment the service starts in.
+func scriptInterpreter(head []byte) string {
+	line, _, _ := bytes.Cut(bytes.TrimPrefix(head, []byte(elfScriptPrefix)), []byte{'\n'})
+	fields := strings.Fields(string(line))
+	if len(fields) == 0 || !filepath.IsAbs(fields[0]) || filepath.Base(fields[0]) == "env" {
+		return ""
+	}
+	return filepath.Clean(fields[0])
 }
 
 // ResolveExecutableDependencies is the libraries preflight's resolver applied
