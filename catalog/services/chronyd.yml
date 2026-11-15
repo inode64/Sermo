@@ -18,6 +18,9 @@ restart_on_change:
     app: >-
       ${display_name} will restart after version change of ${change.app}: ${change.old_version} -> ${change.new_version}
 variables:
+  # Gentoo, Debian and Ubuntu read this path; a host whose init passes another
+  # -f overrides it so the preflight parses the file the daemon will read.
+  config: /etc/chrony/chrony.conf
   host: 127.0.0.1
   port: 323
   user: ntp
@@ -38,9 +41,22 @@ os:
   ubuntu:
     variables:
       user: _chrony
+preflight:
+  # -p parses the file and the include/confdir files it names, prints the
+  # result and exits without touching the running daemon; an invalid directive
+  # exits 1. chronyd exits at once on such a file, so a restart without this
+  # check would leave the host with no time service.
+  config:
+    type: command
+    command:
+      - ${chronyd_binary}
+      - -p
+      - -f
+      - ${config}
+    timeout: 10s
 pidfile: /run/chrony/chronyd.pid
 config_files:
-  - /etc/chrony/chrony.conf
+  - ${config}
   - /etc/chrony.conf
 processes:
   main:
