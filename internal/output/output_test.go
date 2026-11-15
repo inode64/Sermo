@@ -94,7 +94,7 @@ func TestCauseJoinsALineThatOnlyIntroducesTheReason(t *testing.T) {
 		"done in 3s: ok\n": "done in 3s: ok",
 	}
 	for in, want := range tests {
-		if got := cause(in); got != want {
+		if got, _ := cause(in); got != want {
 			t.Errorf("cause(%q) = %q, want %q", in, got, want)
 		}
 	}

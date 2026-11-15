@@ -71,14 +71,9 @@ const tracebackFrameChars = "|+- "
 // it — Apache's configtest reports "AH00526: Syntax error on line 3 of FILE:"
 // and the directive it rejected on the line below. A Python program that died
 // of an exception states it last ("ModuleNotFoundError: No module named …").
-func cause(s string) string {
-	reason, _ := causeOf(s)
-	return reason
-}
-
-// causeOf is cause plus whether the reason is only an introducer that no line
-// followed, a sentence announcing a reason that s never gives.
-func causeOf(s string) (reason string, introducerOnly bool) {
+// introducerOnly reports an introducer that no line followed, a sentence
+// announcing a reason that s never gives.
+func cause(s string) (reason string, introducerOnly bool) {
 	if exception, ok := pythonException(s); ok {
 		return exception, false
 	}
@@ -132,11 +127,11 @@ func lastNonEmptyLine(s string) string {
 // configtest writes "apache2 has detected an error in your setup:" to stderr
 // and the AH00526 syntax error itself to stdout.
 func FailureCause(stdout, stderr string) string {
-	errCause, introducerOnly := causeOf(stderr)
+	errCause, introducerOnly := cause(stderr)
 	if errCause != "" && !introducerOnly {
 		return errCause
 	}
-	if outCause := cause(stdout); outCause != "" {
+	if outCause, _ := cause(stdout); outCause != "" {
 		return outCause
 	}
 	return errCause
