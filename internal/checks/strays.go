@@ -63,7 +63,7 @@ func (c straysCheck) Run(_ context.Context) Result {
 	strays := process.Strays(c.strays())
 	// Name the executables: the count alone says something accumulated, the names
 	// say what, which is the difference between an alert and a diagnosis.
-	exes := strayExecutables(strays)
+	exes := sortedUnique(strays, strayExecutable)
 	if c.maxIncrease > 0 {
 		return c.growthResult(strays, exes, start)
 	}
@@ -151,19 +151,20 @@ func joinedPIDs[T any](items []T, pid func(T) int) string {
 	return strings.Join(pids, ",")
 }
 
-// strayExecutables lists each stray's executable once, in a stable order, so the
-// message and the alert do not reshuffle between cycles. A stray whose exe cannot
-// be resolved falls back to its command, then to a placeholder: an unidentifiable
-// process is exactly the kind this check exists to surface, so it must never
-// vanish from the list.
-func strayExecutables(strays []process.Process) []string {
-	values := make([]string, 0, len(strays))
-	for _, stray := range strays {
-		values = append(values, strayExecutable(stray))
+// sortedUnique lists field of every item once, in a stable order, so a message
+// and its alert do not reshuffle between cycles.
+func sortedUnique[T any](items []T, field func(T) string) []string {
+	values := make([]string, 0, len(items))
+	for _, item := range items {
+		values = append(values, field(item))
 	}
 	return strutil.SortedUnique(values)
 }
 
+// strayExecutable names a stray in the check's list. One whose exe cannot be
+// resolved falls back to its command, then to a placeholder: an unidentifiable
+// process is exactly the kind this check exists to surface, so it must never
+// vanish from the list.
 func strayExecutable(stray process.Process) string {
 	if stray.ExeOK && stray.Exe != "" {
 		return stray.Exe

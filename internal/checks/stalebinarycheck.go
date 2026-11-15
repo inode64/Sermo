@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"sermo/internal/process"
-	"sermo/internal/strutil"
 )
 
 // StaleBinariesFunc reports a service's processes whose binary was replaced or
@@ -90,8 +89,6 @@ func (c staleBinaryCheck) Run(_ context.Context) Result {
 	return res
 }
 
-// staleBinaryPaths lists each replaced binary once, in a stable order, so the
-// message and the alert do not reshuffle between cycles.
 func splitRemovedBinaries(stale []process.StaleBinary) (removed, replaced []process.StaleBinary) {
 	for _, s := range stale {
 		if s.Removed {
@@ -115,9 +112,5 @@ func splitAuxiliaryBinaries(stale []process.StaleBinary) (own, auxiliary []proce
 }
 
 func staleBinaryPaths(stale []process.StaleBinary) []string {
-	values := make([]string, 0, len(stale))
-	for _, s := range stale {
-		values = append(values, s.Path)
-	}
-	return strutil.SortedUnique(values)
+	return sortedUnique(stale, func(s process.StaleBinary) string { return s.Path })
 }

@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"sermo/internal/process"
-	"sermo/internal/strutil"
 )
 
 // PrivateTmpFunc reports a service's systemd PrivateTmp mounts whose host
@@ -33,28 +32,19 @@ func (c privateTmpCheck) Run(_ context.Context) Result {
 		return c.unavailableResult("cannot inspect private /tmp: "+err.Error(), start)
 	}
 	message := "no private /tmp lost"
+	data := map[string]any{DataKeyType: CheckTypePrivateTmp, DataKeyValue: float64(len(lost))}
 	if len(lost) > 0 {
+		pids := joinedPIDs(lost, func(l process.LostPrivateTmp) int { return l.PID })
+		roots := sortedUnique(lost, func(l process.LostPrivateTmp) string { return l.Root })
+		mountPoints := sortedUnique(lost, func(l process.LostPrivateTmp) string { return l.MountPoint })
 		message = fmt.Sprintf("private %s of pid %s deleted on the host (%s); %s",
-			strings.Join(lostPrivateTmpField(lost, func(l process.LostPrivateTmp) string { return l.MountPoint }), ", "),
-			joinedPIDs(lost, func(l process.LostPrivateTmp) int { return l.PID }),
-			strings.Join(lostPrivateTmpField(lost, func(l process.LostPrivateTmp) string { return l.Root }), ", "),
-			PrivateTmpRestartHint)
+			strings.Join(mountPoints, ", "), pids, strings.Join(roots, ", "), PrivateTmpRestartHint)
+		data[DataKeyPIDs] = pids
+		data[DataKeyPath] = strings.Join(roots, ",")
 	}
 	res := c.result(len(lost) == 0, message, start)
-	res.Data = map[string]any{DataKeyType: CheckTypePrivateTmp, DataKeyValue: float64(len(lost))}
-	if len(lost) > 0 {
-		res.Data[DataKeyPIDs] = joinedPIDs(lost, func(l process.LostPrivateTmp) int { return l.PID })
-		res.Data[DataKeyPath] = strings.Join(lostPrivateTmpField(lost, func(l process.LostPrivateTmp) string { return l.Root }), ",")
-	}
+	res.Data = data
 	return res
-}
-
-func lostPrivateTmpField(lost []process.LostPrivateTmp, field func(process.LostPrivateTmp) string) []string {
-	values := make([]string, 0, len(lost))
-	for _, l := range lost {
-		values = append(values, field(l))
-	}
-	return strutil.SortedUnique(values)
 }
 
 // buildPrivateTmpCheck takes no entry fields: it inspects the service's own
