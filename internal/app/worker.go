@@ -705,7 +705,7 @@ func (w *Worker) gatedChecksDue(built []checks.Built, cache map[string]checks.Re
 		if !ok || !r.Skipped {
 			continue
 		}
-		if w.gateReason(gate, cache) != "" {
+		if !w.requiresRanThisCycle(gate) || w.gateReason(gate, cache) != "" {
 			continue
 		}
 		if b, ok := byName[name]; ok {
@@ -752,6 +752,22 @@ func (w *Worker) applyGates(cache map[string]checks.Result) {
 			Message:  "skipped: " + reason,
 		}
 	}
+}
+
+// requiresRanThisCycle reports whether every `requires` dependency of gate ran
+// this cycle. gateReason ignores one that did not, so without fresh evidence a
+// skipped check would rerun on the next cycle of an interval-bound sensor and
+// publish the very result its gate had suppressed.
+func (w *Worker) requiresRanThisCycle(gate CheckGate) bool {
+	if w.cycleRan == nil {
+		return true
+	}
+	for _, dep := range gate.Requires {
+		if !w.cycleRan[dep] {
+			return false
+		}
+	}
+	return true
 }
 
 // gateReason returns why a check is skipped this cycle, or "" to run it.

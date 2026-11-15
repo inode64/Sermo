@@ -571,7 +571,9 @@ checks:
   `query` check is skipped rather than also reported as failing. A dependency's
   own result counts even when its gate skips it, so in a chain where `deep`
   requires `query` and `query` requires `port`, `deep` is skipped whenever
-  `query` failed.
+  `query` failed. Only a dependency that ran this cycle counts: one waiting for
+  its longer `interval` neither skips the check nor releases one it skipped, so
+  give a gating sensor the same `interval` as the check it gates.
 - **`skip_when_changed: [path, …]`** — skip this check while any listed file
   differs from its acknowledged baseline (e.g. a config file or library was just
   updated). The baseline is re-acknowledged after a successful (re)start, by a

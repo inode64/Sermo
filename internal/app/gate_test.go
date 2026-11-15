@@ -256,15 +256,23 @@ func TestGatedChecksDue(t *testing.T) {
 	for _, tc := range []struct {
 		name      string
 		tcpOK     bool
+		tcpRan    bool
 		wantRerun bool
 	}{
-		{"skip clears when dependency recovers", true, true},
-		{"still skipped when dependency failing", false, false},
+		{"skip clears when dependency recovers", true, true, true},
+		{"still skipped when dependency failing", false, true, false},
+		// An interval-bound sensor that did not run this cycle proves nothing:
+		// rerunning query now would publish the result its gate suppressed.
+		{"still skipped while dependency waits for its interval", false, false, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			ran := ranChecks()
+			if tc.tcpRan {
+				ran = ranChecks("tcp")
+			}
 			w := &Worker{
 				Gates:    map[string]CheckGate{"query": {Requires: []string{"tcp"}}},
-				cycleRan: ranChecks("tcp"),
+				cycleRan: ran,
 			}
 			cache := map[string]checks.Result{
 				"tcp":   {Check: "tcp", OK: tc.tcpOK},
