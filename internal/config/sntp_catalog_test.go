@@ -18,7 +18,7 @@ func TestCatalogSNTPHasNoResidentProcess(t *testing.T) {
 		t.Fatalf("selectors = %v, warnings = %v", selectors, warnings)
 	}
 	checks := nested(t, resolved.Tree, "checks")
-	for _, name := range []string{fdsCheckName, StaleBinaryCheckName} {
+	for _, name := range []string{fdsCheckName, StaleBinaryCheckName, PrivateTmpCheckName} {
 		if _, ok := checks[name]; ok {
 			t.Errorf("nonresident service has generated check %s", name)
 		}

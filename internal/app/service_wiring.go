@@ -141,6 +141,10 @@ func BuildServiceRuntime(ctx context.Context, cfg ServiceRuntimeConfig) ServiceR
 		StaleBinaries: func() []process.StaleBinary {
 			return markRemovedBinaries(discoverer.StaleBinaries(selectors), hostfs.StatTarget, serviceProgramInstalled(cfg.Tree))
 		},
+		PrivateTmp: func() ([]process.LostPrivateTmp, error) {
+			procs, _ := discoverer.Discover(selectors)
+			return process.LostPrivateTmpIn(procs)
+		},
 		StaleLibraries: serviceStaleLibraries(discoverer, selectors),
 		TerminalOutput: serviceTerminalOutput(discoverer, selectors, process.ScanTerminalOutput),
 		Strays: func() []process.Process {

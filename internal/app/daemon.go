@@ -607,6 +607,11 @@ func buildWorker(ctx context.Context, name, unit string, tree map[string]any, de
 	checkDeps.StaleBinaries = func() []process.StaleBinary {
 		return markRemovedBinaries(discoverer.StaleBinariesIn(processesForCycle(), selectors), hostfs.StatTarget, serviceProgramInstalled(tree))
 	}
+	// The same memoized discovery: one mount table per namespace, read only on
+	// the private-tmp check's own interval.
+	checkDeps.PrivateTmp = func() ([]process.LostPrivateTmp, error) {
+		return process.LostPrivateTmpIn(processesForCycle())
+	}
 	// Strays come from the same memoized discovery: classification already ran
 	// inside Discover, so the check costs one slice filter per cycle.
 	checkDeps.Strays = func() []process.Process { return process.Strays(processesForCycle()) }

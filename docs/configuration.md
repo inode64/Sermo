@@ -89,6 +89,7 @@ configuration omits it.
   - [Check summaries](#check-summaries)
   - [file — file/directory attributes and freshness](#file--filedirectory-attributes-and-freshness)
   - [stale_binary — service running a replaced binary](#stale_binary--service-running-a-replaced-binary)
+  - [private_tmp — systemd private /tmp deleted under a running unit](#private_tmp--systemd-private-tmp-deleted-under-a-running-unit)
   - [terminal_output — blocked terminal output](#terminal_output--blocked-terminal-output)
   - [stale_libraries — processes using replaced shared libraries](#stale_libraries--processes-using-replaced-shared-libraries)
   - [fds — descriptors against the process limit (fds_limit)](#fds--descriptors-against-the-process-limit-fds_limit)
@@ -4136,6 +4137,33 @@ reported as the service's replaced binary and the restart stops it through the
 init system; the new process verifies against the link's current target even
 if the configuration was loaded before the upgrade. Details in
 [safety.md](safety.md#process-identity-and-matching).
+
+### `private_tmp` — systemd private /tmp deleted under a running unit
+
+Service-scoped. Reports the service's processes whose systemd `PrivateTmp=yes`
+mount, `/tmp` or `/var/tmp`, lost its directory on the host:
+`/tmp/systemd-private-<boot>-<unit>-<random>/tmp` deleted by a cleanup that does
+not know systemd's exclusion (`systemd-tmpfiles` keeps them), or by hand. The
+daemon keeps serving, but systemd rebuilds the unit's mount namespace from those
+directories for every `ExecReload`, `ExecStop` and `ExecStartPost`, so each one
+fails with `status=226/NAMESPACE` (`Failed to set up mount namespacing: /tmp/: No
+such file or directory`) until the unit restarts. A `sermoctl reload` of such a
+service fails the same way.
+
+You do not write this check: Sermo injects it, named `private-tmp`, into the
+same services as [`stale-binary`](#stale_binary--service-running-a-replaced-binary)
+(those whose processes discovery can attribute), together with a rule
+(`restart-if-private-tmp-lost`) that alerts and then restarts through the normal
+operation path (guards, preflight, cooldown), which gives the unit a new
+namespace and new directories. A service with a `delegated: true` selector only
+alerts. It takes no fields and runs every 5 minutes. It reads
+`/proc/<pid>/mountinfo` of one process per mount namespace of the service other
+than Sermo's own, and fails when the kernel reports the root of the `/tmp` or
+`/var/tmp` mount as a `/systemd-private-…` directory ending in `//deleted`. Like
+`stale_binary` it is a state sensor that does not reduce health or SLA; its
+rule is graded `warning`. Under OpenRC, and for a unit without `PrivateTmp`, it
+finds no private mount and stays OK. It inspects the service's own processes, so
+it exists only in services, not as a host watch.
 
 ### `terminal_output` — blocked terminal output
 

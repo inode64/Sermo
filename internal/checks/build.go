@@ -145,6 +145,9 @@ type Deps struct {
 	// or removed on disk, for `stale_binary` checks. It is read-only: such a
 	// process resolves no exe, so it is still never signalled.
 	StaleBinaries StaleBinariesFunc
+	// PrivateTmp reports this service's systemd PrivateTmp mounts whose host
+	// directory was deleted, for `private_tmp` checks. Read-only.
+	PrivateTmp PrivateTmpFunc
 	// StaleLibraries inspects only this service's attributed processes.
 	StaleLibraries StaleLibrariesFunc
 	// TerminalOutput is constrained to this service's strict principals.
@@ -303,6 +306,7 @@ var builtinCheckSpecs = []checkSpec{
 	// Condition, not health: OK means "nothing is stale", so a rule fires it
 	// with `active:` the same way it would an alert-style predicate.
 	{info: serviceConditionTypeInfo(CheckTypeStaleBinary), build: func(in checkBuildInput) (Check, string) { return buildStaleBinaryCheck(in.base, in.deps) }},
+	{info: serviceConditionTypeInfo(CheckTypePrivateTmp), build: func(in checkBuildInput) (Check, string) { return buildPrivateTmpCheck(in.base, in.deps) }},
 	{info: TypeInfo{Name: CheckTypeStaleLibraries, DefaultReports: ReportsState}, build: func(in checkBuildInput) (Check, string) { return buildStaleLibrariesCheck(in.base, in.entry, in.deps) }},
 	// Condition too, and for the same reason: OK means the service's control group
 	// holds nothing Sermo cannot account for.

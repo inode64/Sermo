@@ -90,6 +90,7 @@ const (
 	CheckTypeSocket             = "socket"
 	CheckTypeProcess            = "process"
 	CheckTypeStaleBinary        = "stale_binary"
+	CheckTypePrivateTmp         = "private_tmp"
 	CheckTypeStaleLibraries     = "stale_libraries"
 	CheckTypeStrays             = "strays"
 	CheckTypeMetric             = "metric"

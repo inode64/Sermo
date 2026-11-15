@@ -12,12 +12,15 @@ func TestParseMountInfo(t *testing.T) {
 		"100 22 0:46 / /misc rw,relatime shared:93 - autofs /etc/autofs/auto.misc rw,fd=6\n" +
 		// The leading columns are all that is read.
 		"40 25 8:3 / /srv rw\n" +
+		// A systemd PrivateTmp bind mount whose host directory was deleted.
+		"812 790 0:31 /systemd-private-1a-php-fpm@8.4.service-GD5BVE/tmp//deleted /tmp rw,nosuid,nodev - tmpfs tmpfs rw\n" +
 		"short line\n"
 	want := []MountInfo{
-		{MountPoint: "/mnt/my data", DeviceID: "8:17"},
-		{MountPoint: "/misc/backup", DeviceID: "8:65"},
-		{MountPoint: "/misc", DeviceID: "0:46"},
-		{MountPoint: "/srv", DeviceID: "8:3"},
+		{MountPoint: "/mnt/my data", DeviceID: "8:17", Root: "/"},
+		{MountPoint: "/misc/backup", DeviceID: "8:65", Root: "/"},
+		{MountPoint: "/misc", DeviceID: "0:46", Root: "/"},
+		{MountPoint: "/srv", DeviceID: "8:3", Root: "/"},
+		{MountPoint: "/tmp", DeviceID: "0:31", Root: "/systemd-private-1a-php-fpm@8.4.service-GD5BVE/tmp//deleted"},
 	}
 	if got := ParseMountInfo([]byte(data)); !reflect.DeepEqual(got, want) {
 		t.Fatalf("ParseMountInfo =\n%+v\nwant\n%+v", got, want)

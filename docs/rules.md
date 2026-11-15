@@ -95,6 +95,7 @@ Connection-protocol checks (MySQL, PostgreSQL, Redis, Docker, libvirt, etc.) are
 | `raid`        | condition | a Linux md software-RAID array is degraded/recovering (`degraded`/`recovering`/`arrays`) (see Hardware sensors)|
 | `lvm`         | health | every LVM volume group and logical volume reports healthy (see Hardware sensors) |
 | `stale_binary` | condition | no attributed process runs a binary replaced on disk since it started (service-injected; also available explicitly) |
+| `private_tmp` | condition | no attributed process lost its systemd `PrivateTmp` directory on the host (service-injected, with `restart-if-private-tmp-lost`) |
 | `stale_libraries` | state | no executable shared-library mapping differs from the installed inode; `failed:` alerts, explicit service rules can restart after stable, complete main-process evidence; host inventories are advisory |
 | `terminal_output` | health | no verified parent/child PTY output wait cycle persists; exact process selectors and unchanged evidence gate optional native output recovery (see [configuration](configuration.md#terminal_output--blocked-terminal-output)) |
 | `strays`      | condition | the init unit's control group holds no process outside the configured selectors (service-injected; also available explicitly) |

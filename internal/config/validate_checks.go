@@ -796,7 +796,8 @@ var singleShotCheckValidators = map[string]singleShotCheckValidator{
 		}
 	}),
 	checks.CheckTypeProcess:        validateProcessCheck,
-	checks.CheckTypeStaleBinary:    singleShotNoLock(validateStaleBinaryCheck),
+	checks.CheckTypeStaleBinary:    singleShotNoLock(ownProcessesCheck(checks.CheckTypeStaleBinary)),
+	checks.CheckTypePrivateTmp:     singleShotNoLock(ownProcessesCheck(checks.CheckTypePrivateTmp)),
 	checks.CheckTypeStaleLibraries: singleShotNoLock(validateStaleLibrariesCheck),
 	checks.CheckTypeTerminalOutput: singleShotNoLock(func(path string, entry map[string]any, add addFunc) {
 		if _, _, err := checks.TerminalOutputConfig(entry); err != nil {
@@ -1177,13 +1178,15 @@ func validateServiceCheck(path string, entry map[string]any, _ string, add addFu
 	validateParsedCheck(path, checks.ServiceCheckFields(entry), add)
 }
 
-// validateStaleBinaryCheck rejects selector fields on a stale_binary check. It
-// inspects the service's own processes:/pidfile: declarations, so an exe or
-// user here would look meaningful and silently do nothing.
-func validateStaleBinaryCheck(path string, entry map[string]any, add addFunc) {
-	for _, key := range []string{checks.CheckKeyExe, checks.CheckKeyExeAny, checks.CheckKeyUser, checks.CheckKeyState} {
-		if _, present := entry[key]; present {
-			add("%s.%s is not accepted; stale_binary inspects the service's own processes and pidfile selectors", path, key)
+// ownProcessesCheck rejects selector fields on a check that inspects the
+// service's own processes:/pidfile: declarations (stale_binary, private_tmp),
+// where an exe or user would look meaningful and silently do nothing.
+func ownProcessesCheck(typ string) func(path string, entry map[string]any, add addFunc) {
+	return func(path string, entry map[string]any, add addFunc) {
+		for _, key := range []string{checks.CheckKeyExe, checks.CheckKeyExeAny, checks.CheckKeyUser, checks.CheckKeyState} {
+			if _, present := entry[key]; present {
+				add("%s.%s is not accepted; %s inspects the service's own processes and pidfile selectors", path, key, typ)
+			}
 		}
 	}
 }
