@@ -235,6 +235,33 @@ watches:
       action: alert
       message: >-
         ${display_name} is not accepting connections on ${host}:${port}
+  # The config preflight (postgres -C) never reads pg_hba.conf, yet the
+  # postmaster refuses to start on a line it cannot parse, while a reload keeps
+  # the old rules. pg_hba_file_rules is the server's own parse of the file on
+  # disk, so this needs the server up and cannot be a preflight or a guard:
+  # both fail closed while the server does not answer, which would block the
+  # very restart a hung server needs. Error-grade, so the operator hears before
+  # the next restart; optional, so a running server is not reported down.
+  # The view needs a superuser, the service's own user.
+  alert-if-hba-invalid:
+    interval: 5m
+    check:
+      type: sql
+      engine: postgres
+      host: ${host}
+      port: ${port}
+      user: ${user}
+      database: ${database}
+      timeout: 10s
+      optional: true
+      severity: error
+      query: SELECT count(*) FROM pg_hba_file_rules WHERE error IS NOT NULL
+      op: '>'
+      value: 0
+    then:
+      action: alert
+      message: >-
+        ${display_name}: pg_hba.conf has ${check.value} line(s) the server cannot parse; PostgreSQL will refuse to start until they are fixed (see the pg_hba_file_rules view)
   alert-if-memory-high:
     check:
       type: metric

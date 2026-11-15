@@ -2293,7 +2293,13 @@ A config preflight covers only what its command reads. MariaDB's
 (`innodb_buffer_pool_size=abc`) and only logs `[ERROR] … Disabling plugin`;
 the real start then aborts without InnoDB, so the `mariadb` profile grades an
 `[ERROR]` line as a failure and leaves `[Warning]` lines (deprecated options)
-alone.
+alone. PostgreSQL's `postgres -C` never reads `pg_hba.conf`, although the
+server will not start with a line it cannot parse. A check that asks the
+running server cannot be a preflight, because it would block the restart a
+hung server needs, so the `postgres` profile reports the server's own parse
+instead: `alert-if-hba-invalid` reads `pg_hba_file_rules` every 5 minutes as
+the service's `user` (the view needs a superuser) and raises an error-grade
+alert while any line is invalid. Fix the file before the next restart.
 
 ### Variables read from a config file (`from_file`)
 
