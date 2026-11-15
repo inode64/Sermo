@@ -208,3 +208,45 @@ func TestLibraryRestartEligibleNeedsMainProcessAndVerifiedRoot(t *testing.T) {
 		t.Error("no unique main process must never be eligible")
 	}
 }
+
+// OpenRC's supervise-daemon is salt-minion's only strict identity, and its
+// pidfile names the supervisor, while the libraries that go stale are its
+// Python child's: the one program the supervisor runs directly stands for the
+// daemon. A grandchild (salt's MinionProc, the loggers) never does, and two
+// direct children, or an external one, leave the supervisor as principal.
+func TestLibraryRestartPrincipalFollowsSuperviseDaemonToItsDaemon(t *testing.T) {
+	const (
+		supervisorExe = "/usr/bin/supervise-daemon"
+		python        = "/usr/bin/python3.13"
+	)
+	ids := pidfileClaimReader{10: {PID: 10, UID: 0, Exe: supervisorExe, ExeOK: true}}
+	sels := []process.Selector{
+		{Name: process.RoleMain, Type: process.SelectorCommandMatch, Cmd: "salt-minion", User: "root"},
+		{Name: "supervisor", Type: process.SelectorCommandMatch, Exe: supervisorExe, User: "root"},
+	}
+	d := process.Discoverer{Reader: ids, ResolveUser: func(string) (uint32, bool) { return 0, true }}
+	supervisor := process.Process{PID: 10, PPID: 1, Exe: supervisorExe, ExeOK: true, Role: "supervisor", Source: process.SourceBackend, MainPidfile: true}
+	daemon := process.Process{PID: 11, PPID: 10, Exe: python, ExeOK: true, Role: process.RoleMain, Source: process.SourceBackend}
+	logger := process.Process{PID: 12, PPID: 11, Exe: "/usr/bin/logger", ExeOK: true, Role: process.RoleMain, Source: process.SourceBackend}
+	minion := process.Process{PID: 13, PPID: 11, Exe: python, ExeOK: true, Role: process.RoleMain, Source: process.SourceBackend}
+	second := daemon
+	second.PID = 14
+	external := daemon
+	external.External = true
+
+	for name, tc := range map[string]struct {
+		procs []process.Process
+		want  int
+	}{
+		"the supervised daemon":      {procs: []process.Process{supervisor, daemon, logger, minion}, want: 11},
+		"two directly run programs":  {procs: []process.Process{supervisor, daemon, second, minion}, want: 10},
+		"an external direct child":   {procs: []process.Process{supervisor, external, minion}, want: 10},
+		"supervisor without a child": {procs: []process.Process{supervisor}, want: 10},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if got := libraryRestartPrincipal(d, sels, tc.procs); got != tc.want {
+				t.Fatalf("got %d want %d", got, tc.want)
+			}
+		})
+	}
+}

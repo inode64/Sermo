@@ -4337,7 +4337,10 @@ the operation; the next library scan confirms that the new mappings are clean.
 Automatic action additionally requires a unique main process matching the
 service's exact executable and real-user selector, complete reads, a stable
 replacement file and the same filesystem root as Sermo (the mount namespace
-may differ).
+may differ). When that process is OpenRC's `supervise-daemon` (its pidfile
+names the supervisor), the one program it runs directly stands for it: the
+stale libraries of salt-minion's Python under it restart the service, while
+the processes that Python starts, its loggers included, still never do.
 Sandboxed units are inspected through `/proc/PID/root`, using the files visible
 to that process. A chrooted process, such as Dovecot's `imap-login`, is compared
 through the real root of its mount namespace. Sermo first tries to pin that root

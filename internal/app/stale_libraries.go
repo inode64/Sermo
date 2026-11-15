@@ -52,6 +52,11 @@ func libraryRestartEligible(lib process.StaleLibrary, principal int) bool {
 // A main pidfile settles which of several processes of that identity is the
 // daemon: a mail server detaches short-lived deliveries that run its executable
 // as its user, and they would read as further masters for as long as they live.
+//
+// Under OpenRC's supervise-daemon the strict identity is the supervisor, while
+// the libraries that go stale are its child's (salt-minion's Python): that one
+// directly supervised program stands for the daemon, as it does for a replaced
+// binary. Signal authority is untouched; this only lets the restart rule fire.
 func libraryRestartPrincipal(discoverer process.Discoverer, selectors []process.Selector, procs []process.Process) int {
 	main := process.MainIdentities(selectors)
 	// Catalog profiles may name their only principal after the daemon (for
@@ -66,7 +71,8 @@ func libraryRestartPrincipal(discoverer process.Discoverer, selectors []process.
 			}
 		}
 	}
-	principal, matches := 0, 0
+	var principal process.Process
+	matches := 0
 	for _, proc := range procs {
 		if needsPidfile && !proc.MainPidfile {
 			continue
@@ -78,13 +84,13 @@ func libraryRestartPrincipal(discoverer process.Discoverer, selectors []process.
 			continue
 		}
 		if proc.MainPidfile {
-			return proc.PID
+			return process.SupervisedDaemonPID(procs, proc)
 		}
-		principal = proc.PID
+		principal = proc
 		matches++
 	}
 	if matches != 1 {
 		return 0
 	}
-	return principal
+	return process.SupervisedDaemonPID(procs, principal)
 }

@@ -515,7 +515,7 @@ func daemonExecutables(attributed []Process) []string {
 			return nil
 		}
 		daemons := []string{exe}
-		if filepath.Base(exe) == openrcSupervisor {
+		if isOpenRCSupervisor(p) {
 			for _, child := range attributed {
 				if child.PPID == p.PID {
 					if childExe := knownExecutable(child); childExe != "" {
@@ -527,6 +527,36 @@ func daemonExecutables(attributed []Process) []string {
 		return daemons
 	}
 	return nil
+}
+
+func isOpenRCSupervisor(p Process) bool {
+	return filepath.Base(knownExecutable(p)) == openrcSupervisor
+}
+
+// SupervisedDaemonPID is the process that stands for the daemon when principal
+// is the service's verified principal. For OpenRC's supervise-daemon, whose
+// pidfile names the supervisor, that is the one program it runs directly: the
+// service's command, tied to the strictly identified supervisor by the
+// kernel's parentage. It is principal itself for any other process, and when
+// the supervisor runs no attributed child, or several.
+func SupervisedDaemonPID(procs []Process, principal Process) int {
+	if !isOpenRCSupervisor(principal) {
+		return principal.PID
+	}
+	child := 0
+	for _, p := range procs {
+		if p.PPID != principal.PID || !p.ExeOK || p.Delegated || p.Stray || p.External {
+			continue
+		}
+		if child != 0 {
+			return principal.PID
+		}
+		child = p.PID
+	}
+	if child == 0 {
+		return principal.PID
+	}
+	return child
 }
 
 // knownExecutable is a process's replaced path when it runs a deleted binary,
