@@ -1101,6 +1101,49 @@ func TestCommandCheckAnalyzeError(t *testing.T) {
 	}
 }
 
+// A failing command's reason is the line an error pattern matched when the
+// generic first line misses it: mariadbd warns about a deprecated option
+// before naming the unknown one that made it exit 7. A cause that already
+// carries the matched line keeps its joined continuation.
+func TestCommandCheckFailureCauseIsTheErrorPatternLine(t *testing.T) {
+	analyze := map[string]any{"rules": []any{
+		map[string]any{"id": "option-error", "match": `\[ERROR\]`, "severity": "error"},
+		map[string]any{"id": "warn", "match": `\[Warning\]`, "severity": "warning"},
+	}}
+	for _, tc := range []struct {
+		name, stdout, stderr, want string
+	}{
+		{
+			name:   "error after a warning",
+			stderr: "0 [Warning] --innodb-file-per-table is deprecated\n0 [ERROR] mariadbd: unknown variable 'bogus=1'\n",
+			want:   "exit 7 (want 0): 0 [ERROR] mariadbd: unknown variable 'bogus=1'",
+		},
+		{
+			name:   "first line already is the error",
+			stderr: "0 [ERROR] mariadbd: unknown variable 'bogus=1'\n",
+			want:   "exit 7 (want 0): 0 [ERROR] mariadbd: unknown variable 'bogus=1'",
+		},
+		{
+			name:   "only advisory matches",
+			stderr: "0 [Warning] --innodb-file-per-table is deprecated\n",
+			want:   "exit 7 (want 0): 0 [Warning] --innodb-file-per-table is deprecated",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			built, warns := Build(map[string]any{
+				"config": map[string]any{"type": "command", "command": []any{"mariadbd"}, "analyze": analyze},
+			}, Deps{DefaultTimeout: time.Second, Runner: execxtest.Fixed(execx.Result{ExitCode: 7, Stdout: tc.stdout, Stderr: tc.stderr}, nil)})
+			if len(warns) != 0 {
+				t.Fatalf("build warns=%v", warns)
+			}
+			res := built[0].Check.Run(context.Background())
+			if res.OK || res.Optional || res.Message != tc.want {
+				t.Fatalf("got OK=%v Optional=%v message %q, want failing %q", res.OK, res.Optional, res.Message, tc.want)
+			}
+		})
+	}
+}
+
 func TestCommandCheckAnalyzeClean(t *testing.T) {
 	res := buildAnalyzeCmd(t, "all good\n", "warning")
 	if !res.OK {

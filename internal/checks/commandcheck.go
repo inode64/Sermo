@@ -67,6 +67,23 @@ type commandCheck struct {
 	clock     func() time.Time
 }
 
+// failureCause is the reason a command that exited unexpectedly gives. A line
+// an error-grade analyze pattern matched wins over the generic first line when
+// that one does not carry it: mariadbd prints "[Warning] … is deprecated"
+// before "[ERROR] mariadbd: unknown variable", the line the operator needs.
+func (c commandCheck) failureCause(res execx.Result) string {
+	cause := output.FailureCause(res.Stdout, res.Stderr)
+	if !c.analyzer.Active() {
+		return cause
+	}
+	grade, _, line := c.analyzer.Analyze(res.Stdout, res.Stderr)
+	line = strings.TrimSpace(line)
+	if !grade.Valid() || grade.Advisory() || line == "" || strings.Contains(cause, line) {
+		return cause
+	}
+	return line
+}
+
 // analyzedResult grades the output against the check's analyze patterns; ok is
 // false when no pattern matched.
 func (c commandCheck) analyzedResult(res execx.Result, start time.Time) (Result, bool) {
@@ -115,7 +132,7 @@ func (c commandCheck) Run(ctx context.Context) Result {
 	}
 	if !ExitCodeExpected(res.ExitCode, c.expectExit) {
 		msg := fmt.Sprintf("exit %d (want %s)", res.ExitCode, ExpectExitText(c.expectExit))
-		if cause := output.FailureCause(res.Stdout, res.Stderr); cause != "" {
+		if cause := c.failureCause(res); cause != "" {
 			msg += ": " + cause
 		} else if err != nil {
 			msg += ": " + err.Error()
