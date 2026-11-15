@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -370,4 +371,47 @@ func watchTestConfig(t *testing.T) (global, watches string) {
 	global = filepath.Join(root, "sermo.yml")
 	mustWrite(t, global, "paths:\n  watches: ["+watches+"]\ndefaults:\n  policy: { cooldown: 5m }\n")
 	return global, watches
+}
+
+// Resolution turns a service watch without a watch-level action into a check of
+// that service, so "<service>:<check>" names something real: every watch
+// subcommand says what it is and what controls it, while a true typo stays
+// plain.
+func TestWatchCommandsExplainAServiceCheck(t *testing.T) {
+	root := t.TempDir()
+	servicesDir := filepath.Join(root, "services")
+	if err := os.MkdirAll(servicesDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	mustWrite(t, filepath.Join(servicesDir, "web.yml"), "name: web\nservice: web\npolicy: { cooldown: 5m }\n"+
+		"watches:\n  port:\n    check: { type: tcp, host: 127.0.0.1, port: 80 }\n")
+	global := filepath.Join(root, "sermo.yml")
+	mustWrite(t, global, fmt.Sprintf("engine: { backend: auto, runtime: %s, state: %s }\npaths: { services: [ %s ] }\ndefaults: { policy: { cooldown: 5m } }\n",
+		filepath.Join(root, "run"), filepath.Join(root, "state"), servicesDir))
+	for _, args := range [][]string{
+		{"watch", "status", "web:port"},
+		{"watch", "unmonitor", "web:port"},
+		{"watch", "silence", "web:port"},
+		{"watch", "refresh", "web:port"},
+	} {
+		t.Run(args[1], func(t *testing.T) {
+			var stdout, stderr bytes.Buffer
+			app := hermeticApp(t, App{Env: func(string) string { return "" }, Stdout: &stdout, Stderr: &stderr,
+				FetchDaemonWatchDetail: func(context.Context, *config.Config, string) (web.Watch, bool) {
+					t.Fatal("daemon queried for a check")
+					return web.Watch{}, false
+				}})
+			code := app.Run(context.Background(), append([]string{"--config", global}, args...))
+			if code == exitSuccess || !strings.Contains(stderr.String(), "port is a check of service web, not a watch") ||
+				!strings.Contains(stderr.String(), "sermoctl monitor|unmonitor web") {
+				t.Fatalf("exit=%d stderr=%q", code, stderr.String())
+			}
+		})
+	}
+	var stderr bytes.Buffer
+	app := hermeticApp(t, App{Env: func(string) string { return "" }, Stdout: &bytes.Buffer{}, Stderr: &stderr})
+	app.Run(context.Background(), []string{"--config", global, "watch", "status", "web:nosuch"})
+	if got := stderr.String(); !strings.Contains(got, `unknown watch "web:nosuch"`) || strings.Contains(got, "is a check") {
+		t.Fatalf("stderr = %q, want a plain unknown watch", got)
+	}
 }

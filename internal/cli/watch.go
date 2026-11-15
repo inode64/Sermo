@@ -42,7 +42,20 @@ func (a App) runWatch(ctx context.Context, opts options) int {
 	case "probe":
 		return a.runWatchProbe(ctx, opts)
 	case commandArgRefresh:
-		// Every enabled watch, or the named ones; the daemon resolves the names.
+		// Every enabled watch, or the named ones; the daemon resolves the names,
+		// but a service check named like a watch is answered here, with what
+		// controls it.
+		if len(opts.args) > 1 {
+			cfg, code := a.loadConfig(opts)
+			if cfg == nil {
+				return code
+			}
+			for _, name := range opts.args[1:] {
+				if _, _, isCheck := serviceCheckName(cfg, name); isCheck && !knownWatchName(cfg, name) {
+					return a.fail(opts, unknownWatchMessage(cfg, name))
+				}
+			}
+		}
 		return a.runDaemonRefresh(ctx, opts, commandWatch+" "+commandArgRefresh, web.RefreshPath(web.APIPathWatches, opts.args[1:]...))
 	case commandWatchKill:
 		return a.runWatchKill(ctx, opts)
@@ -192,7 +205,7 @@ func (a App) runWatchMonitor(ctx context.Context, opts options, pause bool) int 
 		return code
 	}
 	if !knownWatchName(cfg, name) {
-		return a.fail(opts, fmt.Sprintf("unknown watch %q", name))
+		return a.fail(opts, unknownWatchMessage(cfg, name))
 	}
 	failPrefix := "watch " + verb
 	return a.applyMonitorTransition(ctx, opts, cfg, app.WatchMonitorKey(name), failPrefix, pause, nil,
@@ -205,6 +218,37 @@ func (a App) runWatchMonitor(ctx context.Context, opts options, pause bool) int 
 			return exitSuccess
 		},
 	)
+}
+
+// unknownWatchMessage says why name is no watch. Resolution turns most of a
+// service's watches (its tcp probe, its service state) into checks of that
+// service, so "<service>:<check>" names something real that only the service
+// controls: say so instead of calling it a typo.
+func unknownWatchMessage(cfg *config.Config, name string) string {
+	if service, check, ok := serviceCheckName(cfg, name); ok {
+		return fmt.Sprintf("unknown watch %q: %s is a check of service %s, not a watch; it follows the service "+
+			"(sermoctl monitor|unmonitor %s) and its result is in the service's panel", name, check, service, service)
+	}
+	return fmt.Sprintf("unknown watch %q", name)
+}
+
+// serviceCheckName splits name into a configured service and one of its
+// resolved checks.
+func serviceCheckName(cfg *config.Config, name string) (service, check string, ok bool) {
+	for _, svc := range cfg.SortedServiceNames() {
+		wn, found := strings.CutPrefix(name, svc+":")
+		if !found {
+			continue
+		}
+		resolved, errs := cfg.Resolve(svc)
+		if len(errs) > 0 || resolved.Tree == nil {
+			continue
+		}
+		if checksMap, _ := resolved.Tree[config.SectionChecks].(map[string]any); checksMap[wn] != nil {
+			return svc, wn, true
+		}
+	}
+	return "", "", false
 }
 
 // knownWatchName reports whether name is a declared watch — a global `watches:`
@@ -245,7 +289,7 @@ func (a App) runWatchStatus(ctx context.Context, opts options) int {
 		return code
 	}
 	if !knownWatchName(cfg, name) {
-		return a.fail(opts, fmt.Sprintf("unknown watch %q", name))
+		return a.fail(opts, unknownWatchMessage(cfg, name))
 	}
 	// Only the daemon observes watches. Without its answer the state is
 	// unknown, never ok: a monitoring script must not read a stopped daemon
@@ -313,7 +357,7 @@ func (a App) runWatchSilence(ctx context.Context, opts options) int {
 	}
 	name := opts.args[1]
 	if !knownWatchName(cfg, name) {
-		return a.fail(opts, fmt.Sprintf("unknown watch %q", name))
+		return a.fail(opts, unknownWatchMessage(cfg, name))
 	}
 	ctx, cancel := context.WithTimeout(ctx, opts.timeout)
 	defer cancel()
