@@ -39,7 +39,11 @@ watches:
       type: http
       url: http://${host}:${port}/metrics
       expect_status: 200
-      timeout: 5s
+      # A scrape runs smartctl on every drive in turn once the exporter's
+      # 60s cache (--smartctl.interval) expires, and a busy disk answers its
+      # SMART query only after the queued I/O: during nightly backups that
+      # took over 5s, so every other cycle failed while the exporter was fine.
+      timeout: 15s
   alert-if-memory-high:
     check:
       type: metric
