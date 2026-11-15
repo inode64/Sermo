@@ -84,6 +84,15 @@ preflight:
       - --pid
       - ${config_test_pidfile}
     timeout: 10s
+    # php-fpm logs the failing pool entry as "[date] ERROR: [file:line] …",
+    # after any PHP startup notice ("Cannot load Zend OPcache - it was already
+    # loaded"); this pattern makes that line the refusal's reason. A passing
+    # --test logs NOTICE lines only.
+    analyze:
+      rules:
+        - id: fpm-error
+          match: '\] ERROR: '
+          severity: error
 processes:
   master:
     exe: ${binary}
