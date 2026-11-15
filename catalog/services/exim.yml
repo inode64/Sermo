@@ -148,6 +148,20 @@ watches:
       host: ${host}
       port: ${port}
       timeout: 3s
+  # A hung exim (stopped, deadlocked, out of processes) still completes the TCP
+  # handshake from the listen backlog but never greets, so the port watch stays
+  # green. A 421 greeting (smtp_accept_max reached) is busy and never fires it.
+  restart-if-smtp-failed:
+    check:
+      type: smtp
+      host: ${host}
+      port: ${port}
+      timeout: 3s
+      verify: true
+    for:
+      cycles: 3
+    then:
+      action: restart
   # `exim -bpc` prints the number of queued messages; `unit:` turns that number
   # into the check's `value` series, so the service carries a queue-depth graph.
   queue:
