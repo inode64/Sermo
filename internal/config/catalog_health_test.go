@@ -175,3 +175,39 @@ func TestCatalogNetworkManagerNeverRequiresNmcli(t *testing.T) {
 		t.Fatalf("reload when = %v, want the init reload preferred (auto)", when)
 	}
 }
+
+// nmcli is NetworkManager's reload fallback, used only when the init cannot
+// reload the daemon itself. systemd's unit reloads over D-Bus, so under
+// systemd an absent nmcli must not show as a failed preflight check; under
+// OpenRC it is the advisory that the fallback cannot run.
+func TestCatalogNetworkManagerChecksNmcliOnlyUnderOpenRC(t *testing.T) {
+	t.Parallel()
+	for backend, want := range map[string]bool{"systemd": false, "openrc": true} {
+		t.Run(backend, func(t *testing.T) {
+			t.Parallel()
+			global := writeConfig(t, map[string]string{
+				"sermo.yml":                     "engine: {backend: " + backend + "}\npaths: {services: [@ROOT@/services], apps: [@ROOT@/apps]}\ndefaults: {policy: {cooldown: 5m}}\n",
+				"services/nm.yml":               "name: nm\nuses: networkmanager\n",
+				"apps.local/networkmanager.yml": "name: networkmanager\nvariables: {binary: /opt/fixture/NetworkManager, nmcli: /opt/fixture/nmcli}\n",
+			})
+			cfg, err := loadConfig(t, global, WithCatalogDirs(repoCatalogDir(repoRoot(t))))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if issues := Validate(cfg); len(issues) != 0 {
+				t.Fatal(issues)
+			}
+			resolved, errs := cfg.Resolve("nm")
+			if len(errs) != 0 {
+				t.Fatal(errs)
+			}
+			preflight := nested(t, resolved.Tree, "preflight")
+			if _, got := preflight["networkmanager-nmcli"]; got != want {
+				t.Fatalf("networkmanager-nmcli present = %v, want %v; preflight keys %v", got, want, slices.Sorted(maps.Keys(preflight)))
+			}
+			if _, ok := preflight["networkmanager-binary"]; !ok {
+				t.Fatalf("the daemon's own binary check must stay; preflight keys %v", slices.Sorted(maps.Keys(preflight)))
+			}
+		})
+	}
+}

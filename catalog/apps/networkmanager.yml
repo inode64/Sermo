@@ -7,4 +7,7 @@ variables:
 preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}", "--version"], timeout: 10s }
-  nmcli: { type: binary, path: "${nmcli}", optional: true }
+  # nmcli is only the reload fallback for an init that cannot reload
+  # NetworkManager itself: systemd's unit reloads over D-Bus, so there an
+  # absent nmcli (a separate build option) is no finding at all.
+  nmcli: { type: binary, path: "${nmcli}", optional: true, enable_if: { init: openrc } }
