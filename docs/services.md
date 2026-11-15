@@ -2304,7 +2304,9 @@ running server cannot be a preflight, because it would block the restart a
 hung server needs, so the `postgres` profile reports the server's own parse
 instead: `alert-if-hba-invalid` reads `pg_hba_file_rules` every 5 minutes as
 the service's `user` (the view needs a superuser) and raises an error-grade
-alert while any line is invalid. Fix the file before the next restart.
+alert while any line is invalid. Fix the file before the next restart. The view
+exists from PostgreSQL 10; on an older server the `hba-rules-view` state sensor
+skips the alert instead of leaving the service in `warning` with an SQL error.
 
 ### Variables read from a config file (`from_file`)
 

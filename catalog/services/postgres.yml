@@ -242,7 +242,24 @@ watches:
   # both fail closed while the server does not answer, which would block the
   # very restart a hung server needs. Error-grade, so the operator hears before
   # the next restart; optional, so a running server is not reported down.
-  # The view needs a superuser, the service's own user.
+  # The view needs a superuser, the service's own user, and PostgreSQL 10:
+  # hba-rules-view senses the version so an older server (8.2, 9.6) runs
+  # no query that can only fail and leave the service in warning. SHOW
+  # server_version may carry a distro suffix ("16.4 (Debian …)"), hence the
+  # two-digit major regex. Both share one interval, so they run in the same
+  # cycles and the requires gate always reads a fresh sensor.
+  hba-rules-view:
+    interval: 5m
+    check:
+      type: postgres
+      host: ${host}
+      port: ${port}
+      user: ${user}
+      timeout: 5s
+      reports: state
+      optional: true
+      expect:
+        version: { op: '=~', value: '^[1-9][0-9]' }
   alert-if-hba-invalid:
     interval: 5m
     check:
@@ -255,6 +272,7 @@ watches:
       timeout: 10s
       optional: true
       severity: error
+      requires: [hba-rules-view]
       query: SELECT count(*) FROM pg_hba_file_rules WHERE error IS NOT NULL
       op: '>'
       value: 0
