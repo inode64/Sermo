@@ -126,7 +126,7 @@ func TestStopRequestDeadline(t *testing.T) {
 		{name: "docker default", backend: servicemgr.BackendDocker, want: defaultDockerStopTimeout},
 		{name: "docker explicit grace", backend: servicemgr.BackendDocker, grace: time.Minute, want: time.Minute},
 		{name: "systemd keeps parent", backend: servicemgr.BackendSystemd, grace: time.Minute, want: time.Hour},
-		{name: "openrc keeps parent", backend: servicemgr.BackendOpenRC, grace: time.Minute, want: time.Hour},
+		{name: "openrc keeps parent, shares grace", backend: servicemgr.BackendOpenRC, grace: time.Minute, want: time.Hour},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			h := defaultHarness()
@@ -149,13 +149,40 @@ func TestStopRequestDeadline(t *testing.T) {
 			if err != nil || ctx.Err() != nil || grace < 0 {
 				t.Fatalf("grace=%v err=%v parent=%v", grace, err, ctx.Err())
 			}
-			if tc.backend == servicemgr.BackendDocker {
+			switch tc.backend {
+			case servicemgr.BackendDocker:
 				if requestCtx.Err() != context.Canceled || grace > tc.want || grace < tc.want-time.Second {
 					t.Fatalf("request=%v remaining grace=%v", requestCtx.Err(), grace)
 				}
-			} else if grace != tc.grace || requestCtx != ctx {
-				t.Fatalf("native request context or grace changed: %v", grace)
+			case servicemgr.BackendOpenRC:
+				if requestCtx != ctx || grace > tc.grace || grace < tc.grace-time.Second {
+					t.Fatalf("openrc request context changed or grace %v not shared", grace)
+				}
+			default:
+				if grace != tc.grace || requestCtx != ctx {
+					t.Fatalf("native request context or grace changed: %v", grace)
+				}
 			}
 		})
+	}
+}
+
+// OpenRC's start-stop-daemon waits its own retry= inside the stop request, and
+// the operation deadline cannot budget it as it does systemd's stop timeout: a
+// request that blocked leaves only the rest of the grace, so the residual
+// escalation, start and postflight still fit the deadline sized for them.
+func TestOpenRCStopRequestSharesTheGrace(t *testing.T) {
+	const blocked = 50 * time.Millisecond
+	h := defaultHarness()
+	e := h.engine()
+	e.Backend = string(servicemgr.BackendOpenRC)
+	e.KillPolicy.GracefulTimeout = time.Second
+	e.Manager = &stopRequestManager{fakeManager: h.mgr, request: func(context.Context) error {
+		time.Sleep(blocked)
+		return errors.New("start-stop-daemon: 1 process refused to stop")
+	}}
+	grace, err := e.stopPrimary(t.Context())
+	if err == nil || grace > time.Second-blocked || grace <= 0 {
+		t.Fatalf("grace=%v err=%v, want the request's %v taken from 1s", grace, err, blocked)
 	}
 }

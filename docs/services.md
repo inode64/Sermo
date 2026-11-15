@@ -1176,7 +1176,12 @@ verifies the stopped state. It proceeds immediately when the backend has already
 stopped the processes; process-free services instead wait for inactive init state.
 The signal escalation limits `term_timeout` and `kill_timeout` also end early
 when fresh discovery confirms that no residual remains. These are maximum grace
-periods, not fixed delays added to every restart. A nonzero command result does
+periods, not fixed delays added to every restart. The operation deadline adds
+systemd's `TimeoutStopSec` to them, but it cannot read OpenRC's `retry=` (shell
+in the init script and `conf.d`), so on OpenRC the time the stop request itself
+waited counts against `graceful_timeout`: a hung daemon that
+`start-stop-daemon` could not stop in its 30 s still leaves room in the
+deadline for Sermo's SIGTERM/SIGKILL, the start and postflight. A nonzero command result does
 not by itself prove that stopping failed: when Sermo demonstrates that the daemon
 is gone and init can be reconciled, it continues and records the command error
 as a warning. Otherwise it fails without starting a replacement. A failed reset

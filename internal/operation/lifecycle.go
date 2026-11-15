@@ -371,11 +371,16 @@ func (e Engine) idleBeforeStop(ctx context.Context, before process.Observation) 
 // Docker's synchronous stop waits indefinitely after SIGTERM (t=-1), so its
 // request must not consume the residual-cleanup and start budget. Share one
 // grace period between the request and observation; only the parent deadline
-// cancels the whole operation. Native init jobs retain their existing deadlines.
+// cancels the whole operation. A native init request keeps the parent
+// deadline. systemd's stop timeout is added to that deadline, but OpenRC's
+// retry= is shell the deadline cannot read, so its request shares the grace:
+// start-stop-daemon spent retry=30 on a SIGSTOPped keydb, the full grace
+// followed, and the restart ran out of time after keydb had started again.
 func (e Engine) stopPrimary(ctx context.Context) (time.Duration, error) {
 	grace := e.KillPolicy.GracefulTimeout
 	stopCtx := ctx
-	if e.Backend == string(servicemgr.BackendDocker) {
+	docker := e.Backend == string(servicemgr.BackendDocker)
+	if docker {
 		if grace <= 0 {
 			grace = defaultDockerStopTimeout
 		}
@@ -385,7 +390,7 @@ func (e Engine) stopPrimary(ctx context.Context) (time.Duration, error) {
 	}
 	started := time.Now()
 	err := e.Manager.Stop(stopCtx, e.Unit)
-	if e.Backend == string(servicemgr.BackendDocker) {
+	if docker || e.Backend == string(servicemgr.BackendOpenRC) {
 		grace = max(0, grace-time.Since(started))
 	}
 	if err != nil {
