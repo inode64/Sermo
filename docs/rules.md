@@ -4749,7 +4749,11 @@ and leaves the marker as it found it.
 
 A refused automatic operation (including failed preflight) retries that rule
 after `policy.cooldown`, without consuming `max_actions` or increasing backoff.
-Each attempt retains its audit result. An unchanged guard refusal is audited
+Each attempt retains its audit result. A refusal by the service's
+`preflight.config` ends sooner: while it waits, the `configuration` check (the
+same command) reruns every minute instead of every 15, and the first pass
+releases the rule, so a configuration fixed after a crash is retried within
+about a minute rather than after a 30-minute cooldown. An unchanged guard refusal is audited
 again after `policy.cooldown`, then after twice as long each time the same
 guard refuses for the same reason (30m, 1h, 2h… with a 30m cooldown), up to
 once a day, even with `emission.events: every_cycle`: a guard that keeps

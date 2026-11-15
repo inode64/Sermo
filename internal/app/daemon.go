@@ -844,6 +844,7 @@ func workerCheckRunner(worker *Worker, built []checks.Built, every map[string]in
 		worker.cycleRan = ran
 		runAndCache(ctx, due, ran)
 		extra := worker.gatedChecksDue(built, cache)
+		extra = append(extra, worker.configurationRecheckDue(built, clockOrNow(worker.Now)())...)
 		for _, b := range extra {
 			ran[b.Check.Name()] = true
 		}

@@ -39,7 +39,9 @@ the types are `RuleType`, `ActionType` and `Action` in
   executed-action budget and backoff. An unchanged guard refusal doubles that
   wait at each re-audit, up to a day (`maxGuardRefusalInterval`). Guards remain
   observable: a new reason is audited immediately (restarting the spacing) and
-  a cleared guard releases the action. Every actual
+  a cleared guard releases the action. A refusal by the config preflight is
+  released likewise by a fresh passing `configuration` check, rerun at most
+  once a minute while it waits (`configurationRecheckInterval`). Every actual
   retry retains its result event; a refusal never suppresses severity escalation.
   The episode-local delay resets on recovery or configuration reload.
 - Cooldown, `max_actions`, `max_actions_window` and backoff are the per-service

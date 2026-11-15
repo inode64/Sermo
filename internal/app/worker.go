@@ -204,6 +204,9 @@ type Worker struct {
 	// Refusals throttle attempts within an episode without spending the
 	// executed-action budget or growing its backoff.
 	refusedRemediations map[string]remediationRefusal
+	// configurationRecheckAt paces the configuration check reruns that can
+	// release a config-preflight refusal (configurationRecheckDue).
+	configurationRecheckAt time.Time
 	// libBaseline holds the acknowledged fingerprint of each watched path (a
 	// `changed:` condition target, typically a library .so) and the acknowledged
 	// version of each watched app across cycles. The operation engine shares it
@@ -939,7 +942,7 @@ func (w *Worker) runFiringRemediation(ctx context.Context, ev *rules.Evaluator, 
 		return false
 	}
 	refusal, refused := w.refusedRemediations[firing.Name]
-	if refused && refusal.guard == "" && now().Before(refusal.retryAt) {
+	if refused && refusal.guard == "" && now().Before(refusal.retryAt) && !w.configurationFixed(refusal, ev.Cache) {
 		if firing.escalated {
 			w.emitAlerts(ctx, ev, firing.Rule, true, firing.change, firing.severity)
 		}
@@ -1024,7 +1027,7 @@ func (w *Worker) executeRemediation(ctx context.Context, now func() time.Time, f
 		w.State.Record(now(), w.Policy)
 		delete(w.refusedRemediations, firing.Name)
 	} else {
-		w.recordRefusal(firing.Name, "", result.Message, now())
+		w.recordEngineRefusal(firing.Name, result, now())
 	}
 	if result.OK() {
 		w.acknowledgeOperation(firing.Rule, rules.ActionType(action), result.Relaunched)

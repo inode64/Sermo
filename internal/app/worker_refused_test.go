@@ -220,3 +220,78 @@ func TestGuardRefusalInterval(t *testing.T) {
 		}
 	}
 }
+
+func restartIfServiceFailedTree() map[string]any {
+	return map[string]any{"rules": map[string]any{"restart-if-service-failed": map[string]any{
+		"type": "remediation",
+		"if":   map[string]any{"failed": map[string]any{"check": "service"}},
+		"then": map[string]any{"action": "restart"},
+	}}}
+}
+
+// A restart the config preflight refused waits for the cooldown only while the
+// configuration stays broken: once the configuration check, which runs the
+// same command, passes again, the next cycle retries. A refusal by another
+// preflight check keeps its cooldown, because a passing config proves nothing
+// about it.
+func TestWorkerConfigPreflightRefusalEndsWhenConfigurationPasses(t *testing.T) {
+	for name, tc := range map[string]struct {
+		failedCheck string
+		wantRetry   bool
+	}{
+		"config preflight":    {failedCheck: "config", wantRetry: true},
+		"libraries preflight": {failedCheck: "update-libraries", wantRetry: false},
+	} {
+		t.Run(name, func(t *testing.T) {
+			broken := checks.Result{Check: "configuration", OK: false, Message: "exit 1 (want 0): AH00526: Syntax error"}
+			h := &workerHarness{
+				cache: map[string]checks.Result{"service": {Check: "service", OK: false}, "configuration": broken},
+				opResult: operation.Result{Status: operation.ResultPreflightFailed, Message: "preflight failed",
+					Checks: []checks.Result{{Check: tc.failedCheck, OK: false}}},
+			}
+			w := h.worker(restartIfServiceFailedTree(), rules.Policy{Cooldown: 30 * time.Minute}, nil)
+			at := t0
+			w.Now = func() time.Time { return at }
+
+			w.RunCycle(context.Background())
+			at = at.Add(30 * time.Second)
+			w.RunCycle(context.Background())
+			if len(h.ops) != 1 {
+				t.Fatalf("ops=%v, want one refused attempt while the configuration is broken", h.ops)
+			}
+
+			at = at.Add(30 * time.Second)
+			h.cache["configuration"] = checks.Result{Check: "configuration", OK: true, Message: "exit 0 (want 0)"}
+			h.opResult = operation.Result{Status: operation.ResultOK}
+			w.RunCycle(context.Background())
+			if got := len(h.ops) == 2; got != tc.wantRetry {
+				t.Fatalf("ops=%v, want retry=%v once the configuration passes", h.ops, tc.wantRetry)
+			}
+		})
+	}
+}
+
+// While a config-preflight refusal waits, the configuration check reruns
+// beyond its own interval at most once per configurationRecheckInterval, and
+// not at all once nothing waits for it.
+func TestConfigurationRecheckDuePacesTheRerun(t *testing.T) {
+	built := []checks.Built{{Check: stubCheck{name: "service"}}, {Check: stubCheck{name: "configuration"}}}
+	w := &Worker{cycleRan: ranChecks("service")}
+	if got := w.configurationRecheckDue(built, t0); got != nil {
+		t.Fatalf("no refusal waits, got %d checks", len(got))
+	}
+	w.refusedRemediations = map[string]remediationRefusal{"restart-if-service-failed": {configPreflight: true, retryAt: t0.Add(time.Hour)}}
+	if got := w.configurationRecheckDue(built, t0); len(got) != 1 || got[0].Check.Name() != "configuration" {
+		t.Fatalf("got %v, want the configuration check", got)
+	}
+	if got := w.configurationRecheckDue(built, t0.Add(configurationRecheckInterval-time.Second)); got != nil {
+		t.Fatal("reran inside the recheck interval")
+	}
+	if got := w.configurationRecheckDue(built, t0.Add(configurationRecheckInterval)); len(got) != 1 {
+		t.Fatal("did not rerun after the recheck interval")
+	}
+	w.cycleRan = ranChecks("service", "configuration")
+	if got := w.configurationRecheckDue(built, t0.Add(2*configurationRecheckInterval)); got != nil {
+		t.Fatal("reran a configuration check its own interval already ran this cycle")
+	}
+}

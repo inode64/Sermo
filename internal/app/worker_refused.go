@@ -4,6 +4,8 @@ import (
 	"context"
 	"time"
 
+	"sermo/internal/checks"
+	"sermo/internal/config"
 	"sermo/internal/operation"
 	"sermo/internal/rules"
 )
@@ -15,17 +17,81 @@ import (
 // event log; once a day still shows the rule wants to act.
 const maxGuardRefusalInterval = 24 * time.Hour
 
+// configurationRecheckInterval paces the configuration check while a refusal by
+// the config preflight waits: often enough that a fixed file is retried within
+// about a minute instead of after the whole cooldown, rarely enough that a
+// slow config test (named-checkconf -z, a JAR walk) stays off most cycles.
+const configurationRecheckInterval = time.Minute
+
 type remediationRefusal struct {
 	guard, reason string
 	retryAt       time.Time
 	attempted     bool
+	// configPreflight marks an engine refusal by the required config
+	// preflight: the configuration check that repeats that command can
+	// release it, as a cleared guard releases a guard refusal.
+	configPreflight bool
 	// repeats counts the audits of this same guard refusal after the first:
 	// each one doubles the wait before the next.
 	repeats int
 }
 
-func (w *Worker) recordRefusal(rule, guard, reason string, at time.Time) {
-	w.recordRefusalAfter(rule, guard, reason, at, w.Policy.Cooldown, 0)
+// recordEngineRefusal records an operation the engine refused (a failed
+// preflight, a blocked or skipped action) for its retry after the cooldown.
+func (w *Worker) recordEngineRefusal(rule string, result operation.Result, at time.Time) {
+	w.recordRefusalAfter(rule, "", result.Message, at, w.Policy.Cooldown, 0)
+	if refusal, ok := w.refusedRemediations[rule]; ok && refusedByConfigPreflight(result) {
+		refusal.configPreflight = true
+		w.refusedRemediations[rule] = refusal
+	}
+}
+
+func refusedByConfigPreflight(result operation.Result) bool {
+	if result.Status != operation.ResultPreflightFailed {
+		return false
+	}
+	for _, check := range result.Checks {
+		if check.Check == config.ServiceMonitorKeyConfig && !check.OK && !check.Optional {
+			return true
+		}
+	}
+	return false
+}
+
+// configurationFixed reports that a config-preflight refusal no longer holds:
+// the configuration check, which runs the same command, ran this cycle and
+// passed. Without a fresh pass the refusal keeps its retry time.
+func (w *Worker) configurationFixed(refusal remediationRefusal, cache map[string]checks.Result) bool {
+	if !refusal.configPreflight || (w.cycleRan != nil && !w.cycleRan[config.ConfigurationCheckName]) {
+		return false
+	}
+	result, ok := cache[config.ConfigurationCheckName]
+	return ok && !result.Skipped && result.Healthy()
+}
+
+// configurationRecheckDue returns the configuration check to run this cycle
+// beyond its own interval while a config-preflight refusal waits, at most once
+// per configurationRecheckInterval.
+func (w *Worker) configurationRecheckDue(built []checks.Built, at time.Time) []checks.Built {
+	if w.cycleRan[config.ConfigurationCheckName] || at.Before(w.configurationRecheckAt) || !w.configRefusalWaiting() {
+		return nil
+	}
+	for _, b := range built {
+		if b.Check.Name() == config.ConfigurationCheckName {
+			w.configurationRecheckAt = at.Add(configurationRecheckInterval)
+			return []checks.Built{b}
+		}
+	}
+	return nil
+}
+
+func (w *Worker) configRefusalWaiting() bool {
+	for _, refusal := range w.refusedRemediations {
+		if refusal.guard == "" && refusal.configPreflight {
+			return true
+		}
+	}
+	return false
 }
 
 func (w *Worker) recordRefusalAfter(rule, guard, reason string, at time.Time, wait time.Duration, repeats int) {
