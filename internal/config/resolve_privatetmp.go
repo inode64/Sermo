@@ -15,10 +15,11 @@ const (
 	// privateTmpCheckInterval keeps the mount-table reads off most cycles: the
 	// loss is rare, and it costs nothing until the unit next reloads or stops.
 	privateTmpCheckInterval = "5m"
-	// privateTmpMessageSuffix states what broke and why the restart is the
-	// remedy; ${check.value} is filled by the worker at alert time.
+	// privateTmpMessageSuffix states what broke and, in the check's own words,
+	// why the restart is the remedy; ${check.value} is filled by the worker at
+	// alert time.
 	privateTmpMessageSuffix = " lost its private /tmp (${check.value} mount(s) deleted on the host); " +
-		"systemd cannot run its reload or stop commands until a restart recreates them"
+		checks.PrivateTmpRestartHint
 )
 
 // expandPrivateTmp injects the private-tmp check and its restart rule into
