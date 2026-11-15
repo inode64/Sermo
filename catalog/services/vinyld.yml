@@ -99,10 +99,13 @@ watches:
   # on new events inside its window, never on history. A restarted child zeroes
   # its MAIN and SMA counters: until the higher pre-restart sample leaves the
   # window, growth reads 0 there, and alert-if-child-crashed reports the
-  # restart itself.
+  # restart itself. With the daemon down vinylstat cannot read them ("Could not get
+  # hold of ...") and each alert would claim its own cause (a panic, dropped
+  # sessions) for a plain stop, so they require the service check.
   alert-if-child-crashed:
     check:
       type: command
+      requires: [service]
       command:
         - ${stat_binary}
         - '-1'
@@ -125,6 +128,7 @@ watches:
   alert-if-backend-failing:
     check:
       type: command
+      requires: [service]
       command:
         - ${stat_binary}
         - '-1'
@@ -152,6 +156,7 @@ watches:
   alert-if-sessions-dropped:
     check:
       type: command
+      requires: [service]
       command:
         - ${stat_binary}
         - '-1'
@@ -182,6 +187,7 @@ watches:
   alert-if-cache-too-small:
     check:
       type: command
+      requires: [service]
       command:
         - ${stat_binary}
         - '-1'
