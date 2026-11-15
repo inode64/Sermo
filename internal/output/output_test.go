@@ -104,6 +104,22 @@ func TestCauseJoinsALineThatOnlyIntroducesTheReason(t *testing.T) {
 	if got := FailureCause("stdout\n", "stderr wins\n"); got != "stderr wins" {
 		t.Errorf("FailureCause preferred %q", got)
 	}
+	if got := FailureCause("", "Error:\n"); got != "Error:" {
+		t.Errorf("FailureCause with an empty stdout gave %q", got)
+	}
+}
+
+// Gentoo's apache2ctl configtest (its init script) prints the syntax error on
+// stdout and only announces it on stderr; the reason is the stdout one.
+func TestFailureCauseSkipsAStderrThatOnlyIntroducesTheReason(t *testing.T) {
+	const stdout = " * Checking apache2 configuration ...AH00526: Syntax error on line 2 of /etc/apache2/vhosts.d/zz.conf:\n" +
+		"Invalid command 'Bogus', perhaps misspelled or defined by a module not included in the server configuration\n [ !! ]\n"
+	const stderr = "\n * apache2 has detected an error in your setup:\n"
+	want := "* Checking apache2 configuration ...AH00526: Syntax error on line 2 of /etc/apache2/vhosts.d/zz.conf: " +
+		"Invalid command 'Bogus', perhaps misspelled or defined by a module not included in the server configuration"
+	if got := FailureCause(stdout, stderr); got != want {
+		t.Errorf("FailureCause = %q, want %q", got, want)
+	}
 }
 
 // A Python program that died of an exception names it on the traceback's last

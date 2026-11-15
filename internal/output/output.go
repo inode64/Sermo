@@ -72,8 +72,15 @@ const tracebackFrameChars = "|+- "
 // and the directive it rejected on the line below. A Python program that died
 // of an exception states it last ("ModuleNotFoundError: No module named …").
 func cause(s string) string {
+	reason, _ := causeOf(s)
+	return reason
+}
+
+// causeOf is cause plus whether the reason is only an introducer that no line
+// followed, a sentence announcing a reason that s never gives.
+func causeOf(s string) (reason string, introducerOnly bool) {
 	if exception, ok := pythonException(s); ok {
-		return exception
+		return exception, false
 	}
 	var first string
 	for line := range strings.SplitSeq(s, outputLineSeparator) {
@@ -83,14 +90,14 @@ func cause(s string) string {
 			continue
 		case first == "":
 			if !strings.HasSuffix(t, causeIntroducer) {
-				return t
+				return t, false
 			}
 			first = t
 		default:
-			return first + " " + t
+			return first + " " + t, false
 		}
 	}
-	return first
+	return first, first != ""
 }
 
 // pythonException returns the exception a Python traceback in s ended with,
@@ -120,12 +127,19 @@ func lastNonEmptyLine(s string) string {
 }
 
 // FailureCause is a failing command's stated reason: Cause of stderr, or of
-// stdout for a command that reports errors there.
+// stdout for a command that reports errors there. A stderr that only
+// introduces a reason it never gives defers to stdout: Gentoo's apache2ctl
+// configtest writes "apache2 has detected an error in your setup:" to stderr
+// and the AH00526 syntax error itself to stdout.
 func FailureCause(stdout, stderr string) string {
-	if cause := cause(stderr); cause != "" {
-		return cause
+	errCause, introducerOnly := causeOf(stderr)
+	if errCause != "" && !introducerOnly {
+		return errCause
 	}
-	return cause(stdout)
+	if outCause := cause(stdout); outCause != "" {
+		return outCause
+	}
+	return errCause
 }
 
 // The words in which a program reports that it died before doing its work
