@@ -6,11 +6,7 @@ import (
 	"sermo/internal/process"
 )
 
-const (
-	procFileMountInfo = "mountinfo"
-
-	reasonMountNamespaceUnverified = "mount namespace could not be verified"
-)
+const reasonMountNamespaceUnverified = "mount namespace could not be verified"
 
 // mountNamespaces judges a blocker found by path. /proc links spell a path as
 // its process's own mount namespace sees it, so across namespaces the string
@@ -35,7 +31,7 @@ func newMountNamespaces(readLink func(string) (string, error), readFile func(str
 	if own, err := readLink(process.SelfPath(process.ProcFileMountNamespace)); err == nil {
 		namespaces.own = own
 	}
-	if data, err := readFile(process.SelfPath(procFileMountInfo)); err == nil {
+	if data, err := readFile(process.SelfPath(process.ProcFileMountInfo)); err == nil {
 		namespaces.table = mounts.ParseMountInfo(data)
 	}
 	return namespaces
@@ -52,7 +48,7 @@ func (n mountNamespaces) confirm(pid int, matches []string) (confirmed []string,
 	if namespace == n.own {
 		return matches, ""
 	}
-	data, err := n.readFile(process.PIDPath(pid, procFileMountInfo))
+	data, err := n.readFile(process.PIDPath(pid, process.ProcFileMountInfo))
 	if err != nil || len(n.table) == 0 {
 		return matches, reasonMountNamespaceUnverified
 	}

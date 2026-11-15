@@ -52,8 +52,8 @@ func TestProcessesByMountRequiresEvidenceAcrossMountNamespaces(t *testing.T) {
 	pid := os.Getpid()
 	ownNS := process.SelfPath(process.ProcFileMountNamespace)
 	pidNS := process.PIDPath(pid, process.ProcFileMountNamespace)
-	ownTable := process.SelfPath(procFileMountInfo)
-	pidTable := process.PIDPath(pid, procFileMountInfo)
+	ownTable := process.SelfPath(process.ProcFileMountInfo)
+	pidTable := process.PIDPath(pid, process.ProcFileMountInfo)
 
 	tests := []struct {
 		name       string

@@ -12,7 +12,6 @@ import (
 )
 
 const (
-	procFileMountInfo = "mountinfo"
 	// systemdPrivateDirMarker names the directories systemd creates for a
 	// unit's PrivateTmp=yes: /tmp/systemd-private-<boot>-<unit>-<random>/tmp,
 	// and the same under /var/tmp.
@@ -74,7 +73,7 @@ func (s privateTmpScanner) lost(procs []Process) ([]LostPrivateTmp, error) {
 			continue
 		}
 		seen[namespace] = true
-		data, err := s.readFile(PIDPath(p.PID, procFileMountInfo))
+		data, err := s.readFile(PIDPath(p.PID, ProcFileMountInfo))
 		if errors.Is(err, fs.ErrNotExist) {
 			continue
 		}

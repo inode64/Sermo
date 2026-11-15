@@ -37,6 +37,9 @@ const (
 	ProcFileTask = "task"
 	// ProcFileMountNamespace is the /proc/<pid>/ns/mnt namespace link name.
 	ProcFileMountNamespace = "ns/mnt"
+	// ProcFileMountInfo is the /proc/<pid>/mountinfo file name: the mount
+	// table as that process's mount namespace sees it.
+	ProcFileMountInfo = "mountinfo"
 
 	procStatusStatePrefix = "State:"
 	procStatusPPIDPrefix  = "PPid:"
