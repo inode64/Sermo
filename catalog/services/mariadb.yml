@@ -79,6 +79,16 @@ preflight:
       - --help
       - --verbose
     timeout: 15s
+    # A bad value for a plugin option (innodb_buffer_pool_size=abc) still exits
+    # 0 here: mariadbd logs "[ERROR] Parsing options for plugin 'InnoDB' failed.
+    # Disabling plugin", and the real start then aborts without InnoDB. Only an
+    # unknown option fails the exit code. [Warning] lines (deprecated options)
+    # are left alone: a healthy config prints them and the daemon starts.
+    analyze:
+      rules:
+        - id: option-error
+          match: '\[ERROR\]'
+          severity: error
 processes:
   mariadbd:
     exe: ${mariadb_binary}

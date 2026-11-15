@@ -2288,6 +2288,13 @@ remotely-managed tunnel whose `config.yml` carries just a `token:` — and a fai
 preflight blocks every operation, restart included. Its config preflight is
 therefore gated on `ingress` being present in the file.
 
+A config preflight covers only what its command reads. MariaDB's
+`--help --verbose` exits 0 when a plugin option has a bad value
+(`innodb_buffer_pool_size=abc`) and only logs `[ERROR] … Disabling plugin`;
+the real start then aborts without InnoDB, so the `mariadb` profile grades an
+`[ERROR]` line as a failure and leaves `[Warning]` lines (deprecated options)
+alone.
+
 ### Variables read from a config file (`from_file`)
 
 A variable may take its value from a config file instead of a literal, useful when
