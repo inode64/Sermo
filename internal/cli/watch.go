@@ -235,8 +235,15 @@ func unknownWatchMessage(cfg *config.Config, name string) string {
 // serviceCheckName splits name into a configured service and one of its
 // resolved checks.
 func serviceCheckName(cfg *config.Config, name string) (service, check string, ok bool) {
+	return serviceEntryName(cfg, name, config.SectionChecks)
+}
+
+// serviceEntryName splits "<service>:<entry>" into a configured service and an
+// entry of section in that service's resolved tree. Only a service the name
+// starts with can own it, so only those resolve.
+func serviceEntryName(cfg *config.Config, name, section string) (service, entry string, ok bool) {
 	for _, svc := range cfg.SortedServiceNames() {
-		wn, found := strings.CutPrefix(name, svc+":")
+		entry, found := strings.CutPrefix(name, svc+":")
 		if !found {
 			continue
 		}
@@ -244,8 +251,9 @@ func serviceCheckName(cfg *config.Config, name string) (service, check string, o
 		if len(errs) > 0 || resolved.Tree == nil {
 			continue
 		}
-		if checksMap, _ := resolved.Tree[config.SectionChecks].(map[string]any); checksMap[wn] != nil {
-			return svc, wn, true
+		entries, _ := resolved.Tree[section].(map[string]any)
+		if _, present := entries[entry]; present {
+			return svc, entry, true
 		}
 	}
 	return "", "", false
@@ -261,22 +269,8 @@ func knownWatchName(cfg *config.Config, name string) bool {
 			return true
 		}
 	}
-	// Only a service the name starts with can own it, so only those resolve.
-	for _, svc := range cfg.SortedServiceNames() {
-		wn, ok := strings.CutPrefix(name, svc+":")
-		if !ok {
-			continue
-		}
-		resolved, errs := cfg.Resolve(svc)
-		if len(errs) > 0 || resolved.Tree == nil {
-			continue
-		}
-		watches, _ := resolved.Tree[config.SectionWatches].(map[string]any)
-		if _, ok := watches[wn]; ok {
-			return true
-		}
-	}
-	return false
+	_, _, ok := serviceEntryName(cfg, name, config.SectionWatches)
+	return ok
 }
 
 func (a App) runWatchStatus(ctx context.Context, opts options) int {
