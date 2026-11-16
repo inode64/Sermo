@@ -41,7 +41,9 @@ killing the wrong one.
    absence and reconcile init before proceeding. Without a strict selector the
    only absence proof is that every generation seen before the stop left the
    process table and the backend reports the service inactive or failed; an
-   empty PID lookup alone proves nothing. A failed start requires a trusted
+   empty PID lookup alone proves nothing. A native init gets the postflight
+   window to read the exit (a just-killed daemon is a zombie that OpenRC still
+   reads as started), with the process table read again at every retry. A failed start requires a trusted
    live process, active init and postflight. Never discard reset errors or infer
    reload/resume success from liveness. systemd reset-failed does not deactivate
    an active unit; OpenRC zap must never hide a surviving daemon.

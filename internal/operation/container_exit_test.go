@@ -53,6 +53,8 @@ func TestStoppedContainerRequiresGenerationAndBackendProof(t *testing.T) {
 		{name: "systemd exited and inactive", backend: servicemgr.BackendSystemd, state: servicemgr.StatusInactive},
 		{name: "openrc exited and crashed", backend: servicemgr.BackendOpenRC, state: servicemgr.StatusInactive, states: []servicemgr.Status{servicemgr.StatusFailed}},
 		{name: "native init still active", backend: servicemgr.BackendSystemd, state: servicemgr.StatusActive, wantError: true},
+		{name: "openrc sees the exit late", backend: servicemgr.BackendOpenRC, state: servicemgr.StatusInactive, states: []servicemgr.Status{servicemgr.StatusActive, servicemgr.StatusActive, servicemgr.StatusFailed}},
+		{name: "native init cancel while awaiting", backend: servicemgr.BackendOpenRC, state: servicemgr.StatusActive, cancelWait: true, wantError: true},
 		{name: "native init survivor", backend: servicemgr.BackendOpenRC, state: servicemgr.StatusInactive, ids: map[int]process.Identity{100: {PID: 100, StartTicks: 10, StartTicksOK: true}}, wantError: true},
 		{name: "native init without previous process", backend: servicemgr.BackendOpenRC, state: servicemgr.StatusInactive, noPrevious: true, wantError: true},
 		{name: "native init unknown previous generation", backend: servicemgr.BackendSystemd, state: servicemgr.StatusInactive, noTicks: true, wantError: true},
@@ -103,6 +105,28 @@ func TestStoppedContainerRequiresGenerationAndBackendProof(t *testing.T) {
 				t.Fatalf("error=%v calls=%v, want error=%v", err, h.mgr.calls, tc.wantError)
 			}
 		})
+	}
+}
+
+// While the init still reads active, a process that appears is never reset away.
+func TestAwaitInitStoppedRefusesAProcessThatAppears(t *testing.T) {
+	h := defaultHarness()
+	h.mgr.status = servicemgr.StatusActive
+	e := h.engine()
+	e.Backend = string(servicemgr.BackendOpenRC)
+	d := process.Discoverer{Reader: &countingPIDReader{}}
+	reads := 0
+	e.ObserveTracked = func(previous []process.Process) (process.Observation, error) {
+		reads++
+		if reads > 1 {
+			return process.Observation{Processes: []process.Process{{PID: 200, StartTicks: 30, Source: process.SourceBackend}}}, nil
+		}
+		return d.ObserveTracked(nil, previous)
+	}
+	previous := []process.Process{{PID: 100, StartTicks: 10, Source: process.SourceBackend}}
+	err := e.resetStopped(t.Context(), true, previous...)
+	if !errors.Is(err, errProcessesAppeared) || h.mgr.did("reset mysqld") {
+		t.Fatalf("error=%v calls=%v, want the new process to refuse the reset", err, h.mgr.calls)
 	}
 }
 
@@ -168,10 +192,20 @@ func TestContainerGraceEndsOnlyWithExitAndInactiveProof(t *testing.T) {
 // crashedAfterStop reports what OpenRC does when a stop request gives up but
 // the daemon exits afterwards: the service still holds its started marker and
 // reads crashed until that marker is reset.
-type crashedAfterStop struct{ *fakeManager }
+// crashedAfterStop reads a unit failed, OpenRC's crashed, once its stop request
+// has run. lateReads reads first still answer active, as OpenRC does while the
+// daemon it lost is a zombie its parent has not reaped yet.
+type crashedAfterStop struct {
+	*fakeManager
+	lateReads *int
+}
 
 func (m crashedAfterStop) Status(ctx context.Context, unit string) (servicemgr.ServiceStatus, error) {
 	if !m.stopped && m.did("stop "+unit) && !m.did("start "+unit) {
+		if m.lateReads != nil && *m.lateReads > 0 {
+			*m.lateReads--
+			return servicemgr.ServiceStatus{Status: servicemgr.StatusActive}, nil
+		}
 		return servicemgr.ServiceStatus{Status: servicemgr.StatusFailed}, nil
 	}
 	return m.fakeManager.Status(ctx, unit)
@@ -181,15 +215,20 @@ func (m crashedAfterStop) Status(ctx context.Context, unit string) (servicemgr.S
 // request fail although it stops. Without a strict selector the service still
 // restarts in the same operation once every earlier generation is gone, with
 // the init's error kept as a warning; a survivor still ends it as an orphan.
+// An init that sees the exit a moment late (OpenRC with the killed daemon still
+// a zombie) is waited for; one that never sees it still refuses the reset.
 func TestRestartCompletesAfterAFailedStopRequestOnceEveryGenerationExited(t *testing.T) {
 	for _, tc := range []struct {
 		name      string
 		survives  bool
+		lateReads int
 		want      ResultStatus
 		wantStart bool
 	}{
 		{name: "process exits", want: ResultOK, wantStart: true},
 		{name: "process survives", survives: true, want: ResultOrphanProcesses},
+		{name: "init sees the exit late", lateReads: postflightMaxAttempts - 1, want: ResultOK, wantStart: true},
+		{name: "init never sees the exit", lateReads: 100, want: ResultFailed},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			h := defaultHarness()
@@ -210,7 +249,8 @@ func TestRestartCompletesAfterAFailedStopRequestOnceEveryGenerationExited(t *tes
 			}
 			engine := h.engine()
 			engine.Lifecycle.ProcessMode = config.ServiceProcessResident
-			engine.Manager = crashedAfterStop{h.mgr}
+			lateReads := tc.lateReads
+			engine.Manager = crashedAfterStop{fakeManager: h.mgr, lateReads: &lateReads}
 			engine.ObserveProcesses = func() (process.Observation, error) {
 				return process.Observation{Processes: live()}, nil
 			}

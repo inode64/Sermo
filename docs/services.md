@@ -1182,9 +1182,12 @@ a strict `processes:` selector demonstrates it by that identity being absent
 from the whole process table. One without a strict selector has no identity to
 look for: it is gone when every process seen before the stop has left the
 process table, none is attributed to it now, and its init reports it inactive
-or failed (OpenRC's `crashed`). A daemon that takes longer to exit than its
-init script waits therefore still restarts in one operation, with the init's
-error as a warning. A failed reset
+or failed (OpenRC's `crashed`). The init gets the start postflight's window to
+say so, five reads a second apart with the process table read again each time:
+a daemon killed a moment ago is a zombie until its parent reaps it, and OpenRC
+still reads it as started meanwhile. A daemon that takes longer to exit than
+its init script waits therefore still restarts in one operation, with the
+init's error as a warning. A failed reset
 or an init state that remains inconsistent is an operation failure.
 Stop-command, auxiliary-stop and stopped-artifact warnings stay in the result
 and audit event even if a later phase fails or times out. An error during

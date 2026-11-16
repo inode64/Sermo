@@ -230,10 +230,10 @@ func (e Engine) resetStopped(ctx context.Context, requireAbsence bool, previous 
 // query, so it can never report AbsenceKnown. Its only absence proof is that
 // every generation seen before the stop left the complete process table, and
 // that its backend no longer reports it running: a container's inactive state
-// is confirmed by the caller, and a native init must already read inactive or
-// failed, the states from which a later start reconciles without any of this
-// proof. Refusing here only postponed the same reset by one cycle, with the
-// service down meanwhile. An empty or failed PID lookup alone grants nothing.
+// is confirmed by the caller, and a native init must read inactive or failed,
+// the states from which a later start reconciles without any of this proof.
+// Refusing here only postponed the same reset by one cycle, with the service
+// down meanwhile. An empty or failed PID lookup alone grants nothing.
 func (e Engine) verifyGenerationsExited(ctx context.Context, observation process.Observation, previous []process.Process) error {
 	previous = nonDelegatedResiduals(previous)
 	if observation.IdentityRequired || len(previous) == 0 {
@@ -245,14 +245,42 @@ func (e Engine) verifyGenerationsExited(ctx context.Context, observation process
 	if e.Backend == string(servicemgr.BackendDocker) {
 		return nil
 	}
-	status, err := e.Manager.Status(ctx, e.Unit)
-	if err != nil {
-		return fmt.Errorf("query init state after stop: %w", err)
+	return e.awaitInitStopped(ctx, previous)
+}
+
+// awaitInitStopped waits, within the postflight window, for a native init to
+// read the service inactive or failed. The snapshot leaves zombies out, so a
+// daemon killed a moment ago has already exited there while the init's own
+// liveness probe (OpenRC's kill(pid, 0) on its pidfile) still finds it until
+// its parent reaps it: asked at once, OpenRC answered "started" and the restart
+// left the service down until the next cooldown. Every retry reads the process
+// table again, so a process that appears meanwhile is never reset away.
+func (e Engine) awaitInitStopped(ctx context.Context, previous []process.Process) error {
+	for attempt := 1; ; attempt++ {
+		status, err := e.Manager.Status(ctx, e.Unit)
+		if err != nil {
+			return fmt.Errorf("query init state after stop: %w", err)
+		}
+		if status.Status == servicemgr.StatusInactive || status.Status == servicemgr.StatusFailed {
+			return nil
+		}
+		if status.Status != servicemgr.StatusActive || attempt == postflightMaxAttempts {
+			return fmt.Errorf("init still reports %s: %w", status.Status, errNoIdentityEvidence)
+		}
+		if err := process.Wait(ctx, e.Sleep, postflightRetryInterval); err != nil {
+			return fmt.Errorf("wait for init state after stop: %w", err)
+		}
+		observation, err := e.observeProcesses(ctx, previous...)
+		if err != nil {
+			return err
+		}
+		if len(nonDelegatedResiduals(observation.Processes)) > 0 {
+			return errProcessesAppeared
+		}
+		if err := observation.VerifyExited(previous); err != nil {
+			return fmt.Errorf("verify process exit: %w", err)
+		}
 	}
-	if status.Status != servicemgr.StatusInactive && status.Status != servicemgr.StatusFailed {
-		return fmt.Errorf("init still reports %s: %w", status.Status, errNoIdentityEvidence)
-	}
-	return nil
 }
 
 var errNoIdentityEvidence = errors.New("no complete process identity evidence")
