@@ -152,6 +152,9 @@ type Deps struct {
 	StaleLibraries StaleLibrariesFunc
 	// TerminalOutput is constrained to this service's strict principals.
 	TerminalOutput TerminalOutputFunc
+	// ProcessIdentity judges this service's processes against its strict main
+	// selectors, with the rule an operation applies before a start or restart.
+	ProcessIdentity ProcessIdentityFunc
 	// Strays reports this service's control-group members that no selector
 	// claims, for `strays` checks. Read-only: reporting a stray authorizes
 	// nothing; only a stop of the service signals one, as a residual.
@@ -307,6 +310,8 @@ var builtinCheckSpecs = []checkSpec{
 	// with `active:` the same way it would an alert-style predicate.
 	{info: serviceConditionTypeInfo(CheckTypeStaleBinary), build: func(in checkBuildInput) (Check, string) { return buildStaleBinaryCheck(in.base, in.deps) }},
 	{info: serviceConditionTypeInfo(CheckTypePrivateTmp), build: func(in checkBuildInput) (Check, string) { return buildPrivateTmpCheck(in.base, in.deps) }},
+	// Health: failing means an operation on this service would be refused.
+	{info: TypeInfo{Name: CheckTypeProcessIdentity, DefaultReports: ReportsHealth, ServiceScoped: true}, build: func(in checkBuildInput) (Check, string) { return buildProcessIdentityCheck(in.base, in.deps) }},
 	{info: TypeInfo{Name: CheckTypeStaleLibraries, DefaultReports: ReportsState}, build: func(in checkBuildInput) (Check, string) { return buildStaleLibrariesCheck(in.base, in.entry, in.deps) }},
 	// Condition too, and for the same reason: OK means the service's control group
 	// holds nothing Sermo cannot account for.

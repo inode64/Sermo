@@ -136,7 +136,16 @@ func (e Engine) identityRefusal(p process.PrincipalIdentity) error {
 	if e.Lifecycle.ProcessMode != config.ServiceProcessResident || !p.Unverified() {
 		return nil
 	}
-	return errProcessIdentity
+	return identityError(p)
+}
+
+// identityError is errProcessIdentity with the evidence of the mismatch, when
+// discovery recorded any: which selector had to match and what runs instead.
+func identityError(p process.PrincipalIdentity) error {
+	if p.Detail == "" {
+		return errProcessIdentity
+	}
+	return fmt.Errorf("%w: %s", errProcessIdentity, p.Detail)
 }
 
 // healthIdentityError is why a resident service's processes cannot prove it
@@ -154,7 +163,7 @@ func (e Engine) healthIdentityError(p process.PrincipalIdentity) error {
 	case p.ReplacedExecutable:
 		return errReplacedBinary
 	default:
-		return errProcessIdentity
+		return identityError(p)
 	}
 }
 

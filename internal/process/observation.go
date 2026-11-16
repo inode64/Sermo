@@ -6,6 +6,7 @@ import (
 	"maps"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 )
 
@@ -28,6 +29,8 @@ type Observation struct {
 	// snapshot retains host-wide generation evidence independently of the
 	// current unit's attributed tree. It is immutable and excludes zombies.
 	snapshot map[int]Identity
+	// identityDetail is PrincipalIdentity.Detail of this observation.
+	identityDetail string
 }
 
 // PrincipalIdentity is how a service's discovered processes relate to its
@@ -46,6 +49,10 @@ type PrincipalIdentity struct {
 	// binary having been replaced on disk. It is judged only while no process
 	// is trusted: a trusted daemon needs no replaced-binary evidence.
 	ReplacedExecutable bool
+	// Detail says, for an unverified identity, what the strict selectors
+	// require and which processes were found instead: what an operator needs
+	// to correct the selector. Empty for every other verdict.
+	Detail string
 }
 
 // Unverified reports processes that cannot be tied to the service's own
@@ -61,6 +68,7 @@ func (o Observation) Principal() PrincipalIdentity {
 		Required:           o.IdentityRequired,
 		Trusted:            o.Trusted,
 		ReplacedExecutable: o.ReplacedExecutable,
+		Detail:             o.identityDetail,
 	}
 }
 
@@ -94,6 +102,7 @@ func (d Discoverer) principalIdentity(procs []Process, selectors []Selector) Pri
 	}
 	out := PrincipalIdentity{Required: HasStrictPrincipal(identities)}
 	reader, resolve := d.reader(), d.resolveUser()
+	var found []Process
 	for _, proc := range procs {
 		if proc.Delegated {
 			continue
@@ -106,6 +115,7 @@ func (d Discoverer) principalIdentity(procs []Process, selectors []Selector) Pri
 		if proc.Stray {
 			continue
 		}
+		found = append(found, proc)
 		for i := range identities {
 			sel := &identities[i]
 			if !proc.External && sel.HasStrictIdentity() && d.matches(sel, id, resolve) {
@@ -117,7 +127,50 @@ func (d Discoverer) principalIdentity(procs []Process, selectors []Selector) Pri
 			}
 		}
 	}
+	if out.Unverified() {
+		out.Detail = identityMismatch(identities, found)
+	}
 	return out
+}
+
+// identityMismatchProcesses bounds the processes an unverified identity names:
+// a unit with hundreds of workers needs a few to show what runs, not a list.
+const identityMismatchProcesses = 3
+
+// identityMismatch words the two sides of an unverified identity: the strict
+// selectors that had to match and the attributed processes that did not.
+func identityMismatch(identities []Selector, found []Process) string {
+	var wanted []string
+	for i := range identities {
+		sel := &identities[i]
+		if !sel.IsStrictPrincipal() {
+			continue
+		}
+		want := fmt.Sprintf("%s wants exe=%s user=%s", sel.Name, sel.Exe, sel.User)
+		if sel.Cmd != "" {
+			want += " cmd=" + sel.Cmd
+		}
+		wanted = append(wanted, want)
+	}
+	ran := make([]string, 0, identityMismatchProcesses)
+	for _, proc := range found[:min(len(found), identityMismatchProcesses)] {
+		exe := proc.Exe
+		if !proc.ExeOK || exe == "" {
+			exe = "(unreadable)"
+		}
+		user := proc.User
+		if user == "" {
+			user = strconv.FormatUint(uint64(proc.UID), 10)
+		}
+		ran = append(ran, fmt.Sprintf("pid %d exe=%s user=%s", proc.PID, exe, user))
+	}
+	if extra := len(found) - len(ran); extra > 0 {
+		ran = append(ran, fmt.Sprintf("%d more", extra))
+	}
+	if len(ran) == 0 {
+		return strings.Join(wanted, "; ")
+	}
+	return strings.Join(wanted, "; ") + "; running: " + strings.Join(ran, ", ")
 }
 
 func hasNonDelegated(procs []Process) bool {
@@ -260,6 +313,7 @@ func (d Discoverer) observe(selectors []Selector, requireSnapshot, fresh bool) (
 	out.Warnings = warnings
 	principal := frozen.principalIdentity(out.Processes, selectors)
 	out.IdentityRequired, out.Trusted, out.ReplacedExecutable = principal.Required, principal.Trusted, principal.ReplacedExecutable
+	out.identityDetail = principal.Detail
 	out.AbsenceKnown = len(UncertainWarnings(warnings)) == 0 && frozen.absenceKnown(selectors, snapshot)
 	if !out.Trusted && !out.ReplacedExecutable && len(UncertainWarnings(warnings)) > 0 {
 		return out, fmt.Errorf("runtime discovery: %s", strings.Join(UncertainWarnings(warnings), "; "))

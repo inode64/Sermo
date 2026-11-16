@@ -622,6 +622,9 @@ func buildWorker(ctx context.Context, name, unit string, tree map[string]any, de
 	principal := func(procs []process.Process) process.PrincipalIdentity {
 		return discoverer.PrincipalIdentityIn(procs, selectors)
 	}
+	// The cycle's memoized discovery again: the identity check costs one pass
+	// over the processes it already holds.
+	checkDeps.ProcessIdentity = func() process.PrincipalIdentity { return principal(processesForCycle()) }
 	liveSample := liveSampler(name, deps.LiveCollector, deps.Live, deps.ServiceMetrics, processesForCycle, principal, observe, deps.Now)
 	if noResident {
 		liveSample = nil

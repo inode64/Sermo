@@ -91,6 +91,7 @@ const (
 	CheckTypeProcess            = "process"
 	CheckTypeStaleBinary        = "stale_binary"
 	CheckTypePrivateTmp         = "private_tmp"
+	CheckTypeProcessIdentity    = "process_identity"
 	CheckTypeStaleLibraries     = "stale_libraries"
 	CheckTypeStrays             = "strays"
 	CheckTypeMetric             = "metric"

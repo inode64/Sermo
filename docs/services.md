@@ -1409,6 +1409,17 @@ processes:
   main-root: { exe: "${rpc_statd_binary}", user: root }
 ```
 
+That refusal is announced before it matters. Every service with a strict
+selector gets a generated `process-identity` check: it fails while the
+service is active and none of its processes matches, and its message names
+both sides, for example `main wants exe=/usr/bin/pm2 user=root; running: pid
+4642 exe=/usr/bin/node user=root`. The service then reads `warning` (the
+check is optional, so availability and SLA are untouched) and, after three
+cycles, the generated `alert-if-process-identity-unverified` rule records a
+warning alert. The refusal of a start or restart quotes the same evidence.
+Correct the selector, or the variable it takes its `exe` or `user` from, in
+the service; nothing restarts or signals anything to resolve it.
+
 Do not use a generic helper executable shared by several units as a service
 selector. On systemd, cgroup attribution identifies the unit's processes; where
 there is no unique exact identity, leave the helper unselected. A broad helper

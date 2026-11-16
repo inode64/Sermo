@@ -142,6 +142,7 @@ func (c *Config) resolveExpandedService(merged map[string]any, name string, inpu
 	errs = append(errs, expandStaleBinary(expanded)...)
 	errs = append(errs, expandPrivateTmp(expanded)...)
 	errs = append(errs, expandStrays(expanded)...)
+	errs = append(errs, expandProcessIdentity(expanded)...)
 	errs = append(errs, expandFDs(expanded)...)
 	patternSets := analyzePatternSets(expanded)
 	errs = append(errs, c.expandServiceSugar(expanded)...)

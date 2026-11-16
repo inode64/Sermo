@@ -96,6 +96,7 @@ Connection-protocol checks (MySQL, PostgreSQL, Redis, Docker, libvirt, etc.) are
 | `lvm`         | health | every LVM volume group and logical volume reports healthy (see Hardware sensors) |
 | `stale_binary` | condition | no attributed process runs a binary replaced on disk since it started (service-injected; also available explicitly) |
 | `private_tmp` | condition | no attributed process lost its systemd `PrivateTmp` directory on the host (service-injected, with `restart-if-private-tmp-lost`) |
+| `process_identity` | health | the service's processes match one of its strict `main` selectors, the rule a start or restart applies before acting (service-injected; see [services](services.md#processes-by-executable-or-cmdline)) |
 | `stale_libraries` | state | no executable shared-library mapping differs from the installed inode; `failed:` alerts, explicit service rules can restart after stable, complete main-process evidence; host inventories are advisory |
 | `terminal_output` | health | no verified parent/child PTY output wait cycle persists; exact process selectors and unchanged evidence gate optional native output recovery (see [configuration](configuration.md#terminal_output--blocked-terminal-output)) |
 | `strays`      | condition | the init unit's control group holds no process outside the configured selectors (service-injected; also available explicitly) |

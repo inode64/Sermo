@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"slices"
+	"strings"
 	"testing"
 
 	"sermo/internal/config"
@@ -81,6 +82,25 @@ func TestForecastActiveMatchesTheEngine(t *testing.T) {
 }
 
 // Only an active service reaches the identity rule.
+// The refusal quotes the evidence discovery recorded, and stays the same error.
+func TestIdentityRefusalQuotesTheMismatchEvidence(t *testing.T) {
+	t.Parallel()
+	engine := defaultHarness().engine()
+	engine.Lifecycle.ProcessMode = config.ServiceProcessResident
+	const detail = "main wants exe=/usr/bin/pm2 user=root; running: pid 4642 exe=/usr/bin/node user=root"
+	err := engine.identityRefusal(process.PrincipalIdentity{Attributed: true, Required: true, Detail: detail})
+	if !errors.Is(err, errProcessIdentity) || !strings.Contains(err.Error(), detail) {
+		t.Fatalf("refusal = %v, want errProcessIdentity quoting the evidence", err)
+	}
+	if reconciliationStatus(err) != ResultBlocked {
+		t.Fatalf("status = %s, want blocked", reconciliationStatus(err))
+	}
+	forecast := engine.ForecastActive(servicemgr.StatusActive, process.PrincipalIdentity{Attributed: true, Required: true, Detail: detail})
+	if len(forecast) == 0 || !strings.Contains(forecast[0].Message, detail) {
+		t.Fatalf("forecast = %+v, want the evidence on the refused action", forecast)
+	}
+}
+
 func TestForecastActiveNeedsAnActiveService(t *testing.T) {
 	t.Parallel()
 	engine := defaultHarness().engine()

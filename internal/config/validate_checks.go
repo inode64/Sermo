@@ -796,10 +796,11 @@ var singleShotCheckValidators = map[string]singleShotCheckValidator{
 			add("%s: %v", path, err)
 		}
 	}),
-	checks.CheckTypeProcess:        validateProcessCheck,
-	checks.CheckTypeStaleBinary:    singleShotNoLock(ownProcessesCheck(checks.CheckTypeStaleBinary)),
-	checks.CheckTypePrivateTmp:     singleShotNoLock(ownProcessesCheck(checks.CheckTypePrivateTmp)),
-	checks.CheckTypeStaleLibraries: singleShotNoLock(validateStaleLibrariesCheck),
+	checks.CheckTypeProcess:         validateProcessCheck,
+	checks.CheckTypeStaleBinary:     singleShotNoLock(ownProcessesCheck(checks.CheckTypeStaleBinary)),
+	checks.CheckTypePrivateTmp:      singleShotNoLock(ownProcessesCheck(checks.CheckTypePrivateTmp)),
+	checks.CheckTypeProcessIdentity: singleShotNoLock(ownProcessesCheck(checks.CheckTypeProcessIdentity)),
+	checks.CheckTypeStaleLibraries:  singleShotNoLock(validateStaleLibrariesCheck),
 	checks.CheckTypeTerminalOutput: singleShotNoLock(func(path string, entry map[string]any, add addFunc) {
 		if _, _, err := checks.TerminalOutputConfig(entry); err != nil {
 			add("%s: %v", path, err)

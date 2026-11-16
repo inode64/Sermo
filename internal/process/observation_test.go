@@ -284,10 +284,48 @@ func TestPrincipalIdentityUnverified(t *testing.T) {
 				t.Fatalf("operation principal=%+v unverified=%v, want %v", out.Principal(), got, tt.unverified)
 			}
 			discovered, _ := d.Discover(tt.selectors)
-			if got := d.PrincipalIdentityIn(discovered, tt.selectors).Unverified(); got != tt.unverified {
+			forecast := d.PrincipalIdentityIn(discovered, tt.selectors)
+			if got := forecast.Unverified(); got != tt.unverified {
 				t.Fatalf("monitor forecast unverified=%v, want %v", got, tt.unverified)
 			}
+			// Only an unverified identity carries evidence, and it always does.
+			for path, detail := range map[string]string{"operation": out.Principal().Detail, "forecast": forecast.Detail} {
+				if (detail != "") != tt.unverified {
+					t.Fatalf("%s detail = %q, want evidence only when unverified (%v)", path, detail, tt.unverified)
+				}
+			}
 		})
+	}
+}
+
+// The evidence of an unverified identity names both sides: what each strict
+// main selector requires and the processes the unit really runs.
+func TestPrincipalIdentityDetailNamesTheSelectorAndTheProcessesFound(t *testing.T) {
+	t.Parallel()
+	launcher := Selector{Name: RoleMain, Type: SelectorCommandMatch, Exe: "/usr/bin/pm2", User: "root", Cmd: "^PM2 v"}
+	ids := map[int]Identity{100: {PID: 100, UID: 0, PPID: 1, Exe: "/usr/bin/node", ExeOK: true}}
+	d := Discoverer{Reader: fakeReader{ids: ids}, ResolveUser: fakeUsers(map[string]uint32{"root": 0}), BackendPIDs: func() []int { return []int{100} }}
+	out, err := d.Observe([]Selector{launcher})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := out.Principal().Detail, "main wants exe=/usr/bin/pm2 user=root cmd=^PM2 v; running: pid 100 exe=/usr/bin/node user=0"; got != want {
+		t.Fatalf("detail = %q, want %q", got, want)
+	}
+
+	// A unit with many workers shows a few, by name when the user resolved.
+	found := make([]Process, 0, 5)
+	for pid := 200; pid < 205; pid++ {
+		found = append(found, Process{PID: pid, User: "www", Exe: "/usr/bin/node", ExeOK: pid != 201})
+	}
+	got := identityMismatch([]Selector{launcher}, found)
+	for _, want := range []string{"pid 200 exe=/usr/bin/node user=www", "pid 201 exe=(unreadable) user=www", "pid 202", "2 more"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("mismatch = %q, want it to contain %q", got, want)
+		}
+	}
+	if strings.Contains(got, "pid 203") {
+		t.Fatalf("mismatch = %q, want the process list bounded", got)
 	}
 }
 

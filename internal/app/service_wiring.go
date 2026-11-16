@@ -151,6 +151,10 @@ func BuildServiceRuntime(ctx context.Context, cfg ServiceRuntimeConfig) ServiceR
 			procs, _ := discoverer.Discover(selectors)
 			return process.Strays(procs)
 		},
+		ProcessIdentity: func() process.PrincipalIdentity {
+			procs, _ := discoverer.Discover(selectors)
+			return discoverer.PrincipalIdentityIn(procs, selectors)
+		},
 		Samplers: deps.Samplers,
 	}
 	lockReclaimed := cfg.LockReclaimed
