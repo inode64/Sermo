@@ -1,0 +1,28 @@
+# The PM2 of one user, from an OpenRC pm2.<user> link to the pm2 script, which
+# runs `pm2 resurrect` as that user. The base profile covers root's PM2.
+name: pm2.%i
+uses: pm2
+display_name: PM2 ${instance}
+description: Node.js process manager of one user, supervising that user's applications.
+service:
+  openrc:
+    - pm2.${instance}
+variables:
+  # The script runs PM2 as the user its link names (pm2.apache runs as apache).
+  user: ${instance}
+  # The God Daemon keeps its pidfile in that user's ~/.pm2, not in root's.
+  home:
+    from_file: /etc/passwd
+    pattern: '(?m)^${instance}:[^:]*:[^:]*:[^:]*:[^:]*:([^:]*):'
+    default: /home/${instance}
+pidfile: { path: "${home}/.pm2/pm2.pid", optional: true }
+watches:
+  # OpenRC reads the unit as started whether or not the daemon still runs.
+  god-daemon:
+    check:
+      type: process
+      exe: ${node_binary}
+      cmd: '^PM2 v[0-9][^ ]*: God Daemon'
+      user: ${user}
+      state: running
+      verify: true

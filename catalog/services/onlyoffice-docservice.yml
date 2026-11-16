@@ -1,0 +1,73 @@
+name: onlyoffice-docservice
+display_name: ONLYOFFICE Docs DocService
+category: web
+description: >-
+  ONLYOFFICE Docs (Document Server) editing service, which serves the editors'
+  API and coauthoring over HTTP.
+service:
+  systemd:
+    - ds-docservice
+  openrc:
+    - ds-docservice
+variables:
+  # Gentoo's onlyoffice-documentserver-bin installs under
+  # /usr/share/onlyoffice/documentserver; the Debian and RPM packages under
+  # /var/www/onlyoffice/documentserver.
+  binary: /usr/share/onlyoffice/documentserver/server/DocService/docservice
+  user: ds
+  host: 127.0.0.1
+  port: 8000
+pidfile: { path: /run/ds-docservice.pid, optional: true }
+processes:
+  main:
+    exe: ${binary}
+    user: ${user}
+stop_policy:
+  kill_only_if:
+    users:
+      - ${user}
+    exe_any:
+      - ${binary}
+watches:
+  service:
+    check:
+      type: service
+      expect: active
+  port:
+    check:
+      type: tcp
+      host: ${host}
+      port: ${port}
+      timeout: 2s
+  # /healthcheck answers "true" only while the service reaches its database,
+  # Redis and RabbitMQ: a live process with a lost backend answers "false".
+  health:
+    check:
+      type: http
+      url: http://${host}:${port}/healthcheck
+      expect_status: 200
+      expect_body: { op: "=~", value: "^true$" }
+      verify: true
+      timeout: 5s
+    for:
+      cycles: 3
+    then:
+      action: alert
+      message: ${display_name} health check fails; its database, Redis or RabbitMQ is unreachable
+  alert-if-memory-high:
+    check:
+      type: metric
+      scope: service
+      name: memory
+      op: '>'
+      value: 30%
+      optional: true
+      severity: warning
+      levels:
+        error: { op: '>', value: 50% }
+    for:
+      duration: 4m
+    then:
+      action: alert
+      message: >-
+        During ${rule.duration}, ${display_name} memory usage stayed above ${check.threshold} (current ${check.value})

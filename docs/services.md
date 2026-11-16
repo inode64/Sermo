@@ -65,16 +65,9 @@ stays inactive for three cycles: the cache keeps serving while the logger is
 down, so only the request log would show it. Every instance runs the same
 binary as the same user and is told apart by the pidfile it was started with
 (`-P /run/<unit>.pid`, as the OpenRC script passes). A second instance, such
-as an OpenRC `vinylncsa.backend` symlink that logs only failed backend fetches,
-is a service document that `uses` it:
-
-```yaml
-# /etc/sermo/services.local/vinylncsa.backend.yml
-name: vinylncsa.backend
-display_name: Vinyl Cache backend error log
-uses: vinylncsa
-service: vinylncsa.backend
-```
+as an OpenRC `vinylncsa.backend` link that logs only failed backend fetches,
+materializes from the `vinylncsa.%i` template: the base profile with the
+instance's own unit and pidfile.
 
 The profile assumes Gentoo, which runs the logger as `root`. On Debian set
 `user: vinyllog` and `pidfile: /run/vinyl-cache/vinylncsa.pid`. A unit that
@@ -2627,6 +2620,37 @@ startup and alerts after three failed cycles. Its process selector names the
 for each Git operation over SSH, and those session processes are not the
 service. A host that changes Gitea's `HTTP_PORT` sets `variables.port` in its
 `services.local` file.
+
+The `pm2.%i` template covers the PM2 of one user run from an OpenRC
+`pm2.<user>` link (`pm2.apache` runs as `apache`). OpenRC reads the unit as
+started whatever its God Daemon does, so the instance adds a `god-daemon`
+process check on the daemon's own title and user, and its pidfile is the one
+in that user's `~/.pm2`, the home taken from `/etc/passwd`.
+
+The three ONLYOFFICE Docs (Document Server) services are separate profiles
+over the `ds-docservice`, `ds-converter` and `ds-metrics` units, run as `ds`.
+DocService's health check requires `/healthcheck` on port 8000 to answer
+`true`, which it does only while it reaches its database, Redis and RabbitMQ;
+it verifies startup and alerts after three failed cycles. The converter's
+selectors name its own workers and the `x2t` children of each conversion, so
+a stop ends the conversions in flight. The paths are those of Gentoo's
+package, under `/usr/share/onlyoffice/documentserver`; the Debian and RPM
+packages install under `/var/www/onlyoffice/documentserver`, so a host with
+them overrides `variables.binary` (and the converter's `x2t_binary`).
+
+The `watchdog` profile covers the software watchdog daemon. Its stop writes
+the magic close and disarms `/dev/watchdog`, unless the kernel was built with
+`nowayout`: then the timer keeps running and a stop longer than its timeout
+reboots the host, which a restart stays well inside.
+
+The Healthchecks workers (`healthchecks-sendalerts` and
+`healthchecks-sendreports`, units `ht-sendalerts` and `ht-sendreports`) and the
+Redmine MCP server are Python programs. Their selectors find the worker by its
+command line and user, so they authorize no signal on the shared interpreter,
+and a `process` check (Healthchecks) or the listener (MCP) says the worker is
+alive. The Grafana MCP server is a Go binary selected by executable and user,
+and restarts after a version change of its app. Both MCP servers listen on
+`127.0.0.1:8000` by default; a host that moves them sets `variables.port`.
 
 Redis and KeyDB provide an opt-in AOF write check. Enable it only on instances
 with `appendonly yes`: servers without AOF may omit `aof_last_write_status`.

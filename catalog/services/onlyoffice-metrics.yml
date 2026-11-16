@@ -1,0 +1,41 @@
+name: onlyoffice-metrics
+display_name: ONLYOFFICE Docs Metrics
+category: observability
+description: >-
+  ONLYOFFICE Docs (Document Server) statsd collector, which receives the other
+  services' metrics on UDP and answers its admin interface on TCP.
+service:
+  systemd:
+    - ds-metrics
+  openrc:
+    - ds-metrics
+variables:
+  # Gentoo's path; see onlyoffice-docservice for the Debian and RPM one.
+  binary: /usr/share/onlyoffice/documentserver/server/Metrics/metrics
+  user: ds
+  host: 127.0.0.1
+  # statsd's admin interface; the metrics themselves arrive on UDP 8125.
+  port: 8126
+pidfile: { path: /run/ds-metrics.pid, optional: true }
+processes:
+  main:
+    exe: ${binary}
+    user: ${user}
+stop_policy:
+  kill_only_if:
+    users:
+      - ${user}
+    exe_any:
+      - ${binary}
+watches:
+  service:
+    check:
+      type: service
+      expect: active
+  port:
+    check:
+      type: tcp
+      host: ${host}
+      port: ${port}
+      timeout: 2s
+      verify: true

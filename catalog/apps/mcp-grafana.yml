@@ -1,0 +1,8 @@
+name: mcp-grafana
+display_name: "Grafana MCP server"
+category: observability
+variables:
+  binary: ${bindir}/mcp-grafana
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["${binary}", "--version"], timeout: 10s }

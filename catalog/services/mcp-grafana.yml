@@ -1,0 +1,39 @@
+name: mcp-grafana
+display_name: Grafana MCP server
+category: observability
+description: MCP (Model Context Protocol) server for the Grafana API, over streamable HTTP.
+service:
+  systemd:
+    - mcp-grafana
+  openrc:
+    - mcp-grafana
+apps:
+  - mcp-grafana
+restart_on_change:
+  apps:
+    - mcp-grafana
+  messages:
+    app: >-
+      ${display_name} will restart after version change of ${change.app}: ${change.old_version} -> ${change.new_version}
+variables:
+  # The systemd unit runs it with DynamicUser under this name.
+  user: mcp-grafana
+  host: 127.0.0.1
+  # --address in MCP_GRAFANA_OPTS (/etc/mcp-grafana/mcp-grafana.conf).
+  port: 8000
+processes:
+  main:
+    exe: ${mcp_grafana_binary}
+    user: ${user}
+watches:
+  service:
+    check:
+      type: service
+      expect: active
+  port:
+    check:
+      type: tcp
+      host: ${host}
+      port: ${port}
+      timeout: 2s
+      verify: true

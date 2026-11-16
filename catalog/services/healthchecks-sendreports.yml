@@ -1,0 +1,33 @@
+name: healthchecks-sendreports
+display_name: Healthchecks report sender
+category: observability
+description: >-
+  Healthchecks background worker (manage.py sendreports), which sends the periodic email reports and reminders.
+service:
+  systemd:
+    - ht-sendreports
+  openrc:
+    - ht-sendreports
+variables:
+  # Gentoo's www-apps/healthchecks runs it as apache, one worker per webapp
+  # install listed in /var/db/webapps/healthchecks.
+  user: apache
+# A Django management command: the process is the Python interpreter running
+# manage.py, so this selector finds the worker but authorizes no signal on
+# the shared interpreter. OpenRC stops it through its own pidfile.
+processes:
+  main:
+    cmd: '(^|/)manage\.py sendreports( |$)'
+    user: ${user}
+watches:
+  service:
+    check:
+      type: service
+      expect: active
+  worker:
+    check:
+      type: process
+      cmd: '(^|/)manage\.py sendreports( |$)'
+      user: ${user}
+      state: running
+      verify: true

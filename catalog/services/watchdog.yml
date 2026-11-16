@@ -1,0 +1,30 @@
+name: watchdog
+display_name: Watchdog daemon
+category: system
+description: >-
+  Software watchdog daemon (watchdog), which tests the system at every interval
+  and keeps /dev/watchdog fed when the host has one.
+service:
+  systemd:
+    - watchdog
+  openrc:
+    - watchdog
+variables:
+  binary: /usr/sbin/watchdog
+  config: /etc/watchdog.conf
+config_files:
+  - ${config}
+pidfile: /run/watchdog.pid
+# A stop writes the magic close and disarms the device, unless the kernel was
+# built with nowayout: then the timer keeps running and a stop that outlasts
+# its timeout (60 s by default) reboots the host. A restart is well inside it.
+processes:
+  main:
+    exe: ${binary}
+    user: root
+watches:
+  service:
+    check:
+      type: service
+      expect: active
+      verify: true

@@ -1,0 +1,33 @@
+name: healthchecks-sendalerts
+display_name: Healthchecks alert sender
+category: observability
+description: >-
+  Healthchecks background worker (manage.py sendalerts), which sends the notifications of checks that change state.
+service:
+  systemd:
+    - ht-sendalerts
+  openrc:
+    - ht-sendalerts
+variables:
+  # Gentoo's www-apps/healthchecks runs it as apache, one worker per webapp
+  # install listed in /var/db/webapps/healthchecks.
+  user: apache
+# A Django management command: the process is the Python interpreter running
+# manage.py, so this selector finds the worker but authorizes no signal on
+# the shared interpreter. OpenRC stops it through its own pidfile.
+processes:
+  main:
+    cmd: '(^|/)manage\.py sendalerts( |$)'
+    user: ${user}
+watches:
+  service:
+    check:
+      type: service
+      expect: active
+  worker:
+    check:
+      type: process
+      cmd: '(^|/)manage\.py sendalerts( |$)'
+      user: ${user}
+      state: running
+      verify: true

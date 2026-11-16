@@ -1,0 +1,34 @@
+name: mcp-redmine
+display_name: Redmine MCP server
+category: web
+description: MCP (Model Context Protocol) server for the Redmine REST API, over streamable HTTP.
+service:
+  systemd:
+    - mcp-redmine
+  openrc:
+    - mcp-redmine
+variables:
+  user: mcp-redmine
+  host: 127.0.0.1
+  # MCP_REDMINE_OPTS in /etc/mcp-redmine/mcp-redmine.conf sets the listener.
+  port: 8000
+pidfile: { path: /run/mcp-redmine.pid, optional: true }
+# A Python program: the process is the interpreter running the python-exec
+# launcher, so this selector finds the server but authorizes no signal on the
+# shared interpreter.
+processes:
+  main:
+    cmd: '(^|[[:space:]])/usr/lib/python-exec/python[0-9.]+/mcp-redmine([[:space:]]|$)'
+    user: ${user}
+watches:
+  service:
+    check:
+      type: service
+      expect: active
+  port:
+    check:
+      type: tcp
+      host: ${host}
+      port: ${port}
+      timeout: 2s
+      verify: true

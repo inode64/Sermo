@@ -1,0 +1,13 @@
+# One more vinylncsa logger from an OpenRC link to the vinylncsa script
+# (vinylncsa.backend, logging failed backend fetches, say). It is the base
+# profile with the instance's own unit; the pidfile follows the unit,
+# /run/vinylncsa.<instance>.pid, as the script passes it with -P.
+name: vinylncsa.%i
+uses: vinylncsa
+display_name: "Vinyl Cache NCSA logger ${instance}"
+description: >-
+  Additional Vinyl Cache request logger (vinylncsa) instance, run from an
+  OpenRC vinylncsa.<instance> link with its own format, query and log file.
+service:
+  openrc:
+    - vinylncsa.${instance}

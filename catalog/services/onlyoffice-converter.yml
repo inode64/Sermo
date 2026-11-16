@@ -1,0 +1,59 @@
+name: onlyoffice-converter
+display_name: ONLYOFFICE Docs Converter
+category: web
+description: >-
+  ONLYOFFICE Docs (Document Server) file converter, which turns documents
+  between formats for the editors through x2t.
+service:
+  systemd:
+    - ds-converter
+  openrc:
+    - ds-converter
+variables:
+  # Gentoo's path; see onlyoffice-docservice for the Debian and RPM one.
+  binary: /usr/share/onlyoffice/documentserver/server/FileConverter/converter
+  x2t_binary: /usr/share/onlyoffice/documentserver/server/FileConverter/bin/x2t
+  user: ds
+# Gentoo's script spells its pidfile ds-docconveter.pid.
+pidfile:
+  - /run/ds-docconveter.pid
+  - /run/ds-converter.pid
+# The converter forks a worker from the same executable, and each conversion
+# runs an x2t child; a stop ends the conversions in flight with them.
+processes:
+  main:
+    exe: ${binary}
+    user: ${user}
+  x2t:
+    exe: ${x2t_binary}
+    user: ${user}
+stop_policy:
+  kill_only_if:
+    users:
+      - ${user}
+    exe_any:
+      - ${binary}
+      - ${x2t_binary}
+watches:
+  service:
+    check:
+      type: service
+      expect: active
+      verify: true
+  alert-if-memory-high:
+    check:
+      type: metric
+      scope: service
+      name: memory
+      op: '>'
+      value: 30%
+      optional: true
+      severity: warning
+      levels:
+        error: { op: '>', value: 50% }
+    for:
+      duration: 4m
+    then:
+      action: alert
+      message: >-
+        During ${rule.duration}, ${display_name} memory usage stayed above ${check.threshold} (current ${check.value})
