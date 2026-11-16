@@ -8,6 +8,10 @@ service:
   openrc:
     - mcp-redmine
 variables:
+  # The python-exec wrapper outlives each Python upgrade, so when the old
+  # interpreter is removed the server reads as upgraded, not uninstalled, and
+  # still restarts onto the new one.
+  binary: /usr/bin/mcp-redmine
   user: mcp-redmine
   host: 127.0.0.1
   # MCP_REDMINE_OPTS in /etc/mcp-redmine/mcp-redmine.conf sets the listener.

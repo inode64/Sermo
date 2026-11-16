@@ -2648,7 +2648,11 @@ The Healthchecks workers (`healthchecks-sendalerts` and
 Redmine MCP server are Python programs. Their selectors find the worker by its
 command line and user, so they authorize no signal on the shared interpreter,
 and a `process` check (Healthchecks) or the listener (MCP) says the worker is
-alive. The Grafana MCP server is a Go binary selected by executable and user,
+alive. When a Python upgrade removes the interpreter they run, a service
+restarts onto the new one only if its own program is still installed: the
+Redmine MCP server names its python-exec wrapper, `/usr/bin/mcp-redmine`, but
+`manage.py` lives wherever each Healthchecks webapp is installed, so the
+workers only alert until the host sets `variables.binary` to it. The Grafana MCP server is a Go binary selected by executable and user,
 and restarts after a version change of its app. Both MCP servers listen on
 `127.0.0.1:8000` by default; a host that moves them sets `variables.port`.
 
