@@ -20,6 +20,24 @@ variables:
   host: 127.0.0.1
   port: 8008
   config: /etc/patroni/patroni.yml
+  # Patroni is a Python program. The daemon's executable is the interpreter its
+  # launcher's `#!` line names, and the launcher is that interpreter's first
+  # argument. Gentoo installs the launcher once per interpreter under
+  # python-exec and makes /usr/bin/patroni a wrapper, so the per-interpreter
+  # files come first; elsewhere the packaged script is the launcher. A launcher
+  # that starts through `env` names no interpreter: set `interpreter` there.
+  launcher:
+    - /usr/lib/python-exec/python3.16/patroni
+    - /usr/lib/python-exec/python3.15/patroni
+    - /usr/lib/python-exec/python3.14/patroni
+    - /usr/lib/python-exec/python3.13/patroni
+    - /usr/lib/python-exec/python3.12/patroni
+    - /usr/lib/python-exec/python3.11/patroni
+    - ${patroni_binary}
+  interpreter:
+    from_file: ${launcher}
+    pattern: '^#!\s*(\S+)'
+    default: /usr/bin/python3
 config_files:
   - ${config}
   - /etc/patroni
@@ -34,7 +52,8 @@ preflight:
     timeout: 30s
 processes:
   main:
-    exe: ${patroni_binary}
+    exe: ${interpreter}
+    cmd: '(^|[[:space:]])${launcher}([[:space:]]|$)'
     user: ${user}
 pidfile: /run/patroni.pid
 reload:
@@ -50,7 +69,7 @@ stop_policy:
     users:
       - ${user}
     exe_any:
-      - ${patroni_binary}
+      - ${interpreter}
 policy:
   cooldown: 15m
   max_actions: 2

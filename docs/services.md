@@ -1353,7 +1353,14 @@ If UniFi uses a separate `JAVA_HOME`, override `processes.main.exe` with that
 runtime's `bin/java`. Its stop policy gives the embedded database 120 seconds
 to stop gracefully and another 60 seconds after SIGTERM before escalation.
 
-- `exe` — exact resolved `/proc/<pid>/exe` (fail-safe; never cmdline).
+- `exe` — exact resolved `/proc/<pid>/exe` (fail-safe; never cmdline). A
+  daemon written in an interpreted language runs the **interpreter**, not its
+  launcher script: PM2's daemon is `node`, Patroni's is `python3.x`. Name the
+  interpreter in `exe` and narrow it with `cmd`, or the selector matches no
+  process. The `pm2` profile matches the title the daemon gives itself; the
+  `patroni` profile reads the interpreter from its launcher's `#!` line with a
+  [`from_file`](#variables-read-from-a-config-file-from_file) variable and
+  requires the launcher as an argument.
 - `cmd` — a Go RE2 regex matched against the process **cmdline** (argv joined).
   Use it for shared binaries (`java .*unifi`, `openvpn .*tun1\.conf`) when one
   executable serves several instances. The cmdline is spoofable, so `cmd` never

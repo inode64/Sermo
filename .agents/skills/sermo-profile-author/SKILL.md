@@ -31,6 +31,13 @@ service, and `ServiceBinary` may pick the client, since it takes the first
 linked app's `<app>-binary` in name order. An app's `binary` is its daemon, not
 the client of the same package.
 
+A daemon written in Python, Node or Perl runs the interpreter: `exe` names the
+interpreter, never the launcher script (a selector on the script matches no
+process and its `kill_only_if` authorizes nothing), and `cmd` narrows it to
+this daemon. `catalog/services/pm2.yml` and `catalog/services/patroni.yml` are
+the references; check `/proc/<pid>/exe` and the command line of the real
+process before writing either field.
+
 A daemon whose workload must survive a restart (sessions, jobs, shims, bricks)
 sets `stop_policy.keep_children: true` with a strict principal selector, never a
 `delegated` selector: `delegated` is observe-only, for processes another backend

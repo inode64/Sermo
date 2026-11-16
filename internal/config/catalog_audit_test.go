@@ -2733,6 +2733,63 @@ func TestCatalogPM2SelectsTheGodDaemonAmongNodeProcesses(t *testing.T) {
 	}
 }
 
+// Patroni runs as the interpreter its launcher names, with the launcher as the
+// first argument. The profile reads that interpreter from the launcher itself,
+// so the selector and the kill authority name the process that really runs.
+func TestCatalogPatroniSelectsTheInterpreterItsLauncherNames(t *testing.T) {
+	for _, tc := range []struct {
+		name, shebang, wantExe string
+	}{
+		{name: "packaged script", shebang: "#!/usr/bin/python3\n", wantExe: "/usr/bin/python3"},
+		{name: "python-exec launcher", shebang: "#!/usr/bin/python3.14\n# -*- coding: utf-8 -*-\n", wantExe: "/usr/bin/python3.14"},
+		{name: "virtualenv", shebang: "#! /opt/patroni/bin/python\n", wantExe: "/opt/patroni/bin/python"},
+		{name: "no launcher", wantExe: "/usr/bin/python3"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			launcher := filepath.Join(t.TempDir(), "patroni")
+			if tc.shebang != "" {
+				if err := os.WriteFile(launcher, []byte(tc.shebang+"import sys\n"), 0o755); err != nil {
+					t.Fatal(err)
+				}
+			}
+			files := map[string]string{
+				"sermo.yml":            "engine: {backend: systemd}\npaths: {services: [@ROOT@/services]}\ndefaults: {policy: {cooldown: 5m}}\n",
+				"services/patroni.yml": "name: patroni\nuses: patroni\nvariables: {launcher: " + launcher + "}\n",
+			}
+			cfg, err := loadConfig(t, writeConfig(t, files), WithCatalogDirs(repoCatalogDir(repoRoot(t))))
+			if err != nil {
+				t.Fatal(err)
+			}
+			resolved, errs := cfg.Resolve("patroni")
+			if len(errs) != 0 {
+				t.Fatal(errs)
+			}
+			main := nested(t, resolved.Tree, "processes", "main")
+			if got := cfgval.String(main["exe"]); got != tc.wantExe {
+				t.Fatalf("main exe = %q, want %q", got, tc.wantExe)
+			}
+			pattern, err := regexp.Compile(cfgval.String(main["cmd"]))
+			if err != nil {
+				t.Fatalf("main cmd: %v", err)
+			}
+			for cmdline, want := range map[string]bool{
+				tc.wantExe + " " + launcher + " /etc/patroni/patroni.yml": true,
+				tc.wantExe + " " + launcher:                               true,
+				tc.wantExe + " " + launcher + "ctl list":                  false,
+				tc.wantExe + " /usr/bin/pg_activity":                      false,
+			} {
+				if got := pattern.MatchString(cmdline); got != want {
+					t.Errorf("cmd matches %q = %v, want %v", cmdline, got, want)
+				}
+			}
+			exes := cfgval.StringList(nested(t, resolved.Tree, "stop_policy", "kill_only_if")["exe_any"])
+			if !slices.Equal(exes, []string{tc.wantExe}) {
+				t.Fatalf("kill_only_if exe_any = %v, want the same interpreter", exes)
+			}
+		})
+	}
+}
+
 func TestPostgresCatalogDeclaresPostmasterPidfile(t *testing.T) {
 	body := catalogDocByName(t, repoRoot(t), "services", "postgres-%v")
 	if got := cfgval.String(body["pidfile"]); got != "${data_dir}/postmaster.pid" {
