@@ -11,6 +11,10 @@ import (
 	"sermo/internal/strutil"
 )
 
+// ProcessesAnyFunc observes host-wide processes matching any of exes, the real
+// user and the cmd predicate (see process.Discoverer.ObserveAnyState).
+type ProcessesAnyFunc func(ctx context.Context, exes []string, user string, cmd *regexp.Regexp) process.StateObservation
+
 // processCheck passes when the observed state of processes matching its
 // exe/user/cmd selector equals the expected state. Executable and user filters
 // retain the exact resolved-exe and real-UID rules.
@@ -20,7 +24,7 @@ type processCheck struct {
 	user       string
 	cmd        *regexp.Regexp
 	expect     string
-	observeAny func(context.Context, []string, string, *regexp.Regexp) string
+	observeAny ProcessesAnyFunc
 	// stale reports the service's processes whose binary was replaced on disk.
 	// It exists to explain an "absent" reading rather than to change it.
 	stale StaleBinariesFunc
@@ -36,7 +40,8 @@ func (c processCheck) Run(ctx context.Context) Result {
 	if c.observeAny == nil {
 		return c.unavailableResult("process discovery unavailable", start)
 	}
-	state := c.observeAny(ctx, c.exes, c.user, c.cmd)
+	observed := c.observeAny(ctx, c.exes, c.user, c.cmd)
+	state := observed.State
 	if err := ctx.Err(); err != nil {
 		return c.unavailableResult("process observation: "+err.Error(), start)
 	}
@@ -47,6 +52,11 @@ func (c processCheck) Run(ctx context.Context) Result {
 	}
 	ok := state == c.expect
 	message := fmt.Sprintf("state %s (want %s)", state, c.expect)
+	if state == process.StateRunning {
+		// "state running" alone, on a guard that waits for absence, left the
+		// operator hunting for the process that held it.
+		message += ": " + describeLiveMatch(observed)
+	}
 	// A process whose executable was replaced on disk resolves no exe, so an
 	// exact-exe selector stops matching it and the service merely *looks* like
 	// it has no process. The stale list only names processes that are still
@@ -104,4 +114,14 @@ func (c processCheck) replacedBinaries() (paths string, removed bool) {
 		return "", false
 	}
 	return strings.Join(strutil.Unique(matched), ", "), removed
+}
+
+// describeLiveMatch names the oldest matching process by PID, parent PID and
+// program.
+func describeLiveMatch(observed process.StateObservation) string {
+	text := fmt.Sprintf("pid %d (ppid %d)", observed.PID, observed.PPID)
+	if observed.Program != "" {
+		text += " " + observed.Program
+	}
+	return text
 }

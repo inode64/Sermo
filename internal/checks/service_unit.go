@@ -144,7 +144,7 @@ func systemdUnitResult(ctx context.Context, unit string, read systemdPropertyRea
 	return servicemgr.Status(result), nil
 }
 
-func openRCDaemonRunning(ctx context.Context, info servicemgr.ProcInfo, observe func(context.Context, []string, string, *regexp.Regexp) string, identity func(int) (process.Identity, bool, error)) (bool, error) {
+func openRCDaemonRunning(ctx context.Context, info servicemgr.ProcInfo, observe ProcessesAnyFunc, identity func(int) (process.Identity, bool, error)) (bool, error) {
 	if info.Pidfile != "" {
 		pid, err := hostfs.ReadPidfile(info.Pidfile)
 		if errors.Is(err, os.ErrNotExist) {
@@ -166,7 +166,7 @@ func openRCDaemonRunning(ctx context.Context, info servicemgr.ProcInfo, observe 
 	if err != nil {
 		return false, fmt.Errorf("read daemon command: %w", err)
 	}
-	state := observe(ctx, nil, "", pattern)
+	state := observe(ctx, nil, "", pattern).State
 	if state == process.StateUnknown {
 		return false, errors.New("OpenRC daemon process observation is incomplete")
 	}

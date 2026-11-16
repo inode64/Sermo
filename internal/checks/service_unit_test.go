@@ -5,7 +5,6 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"regexp"
 	"testing"
 
 	"sermo/internal/process"
@@ -59,7 +58,7 @@ func TestNativeSystemdUnitState(t *testing.T) {
 func TestOpenRCDaemonObservation(t *testing.T) {
 	for _, state := range []string{process.StateRunning, process.StateAbsent, process.StateUnknown} {
 		t.Run(state, func(t *testing.T) {
-			running, err := openRCDaemonRunning(t.Context(), servicemgr.ProcInfo{Cmd: "^worker$"}, func(context.Context, []string, string, *regexp.Regexp) string { return state }, nil)
+			running, err := openRCDaemonRunning(t.Context(), servicemgr.ProcInfo{Cmd: "^worker$"}, observedState(state), nil)
 			if running != (state == process.StateRunning) || (err != nil) != (state == process.StateUnknown) {
 				t.Fatalf("got %v, %v", running, err)
 			}

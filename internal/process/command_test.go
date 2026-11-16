@@ -30,7 +30,7 @@ func TestObserveCommandState(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			d := Discoverer{Reader: fakeReader{ids: map[int]Identity{42: {PID: 42, State: "S", Cmdline: tc.argv}}}}
-			if got := d.ObserveAnyState(t.Context(), nil, "", pattern); got != tc.want {
+			if got := d.ObserveAnyState(t.Context(), nil, "", pattern).State; got != tc.want {
 				t.Fatalf("state = %s, want %s", got, tc.want)
 			}
 		})
@@ -56,18 +56,18 @@ func TestObserveCommandUncertaintyAndFilters(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			d := Discoverer{Reader: fakeReader{ids: map[int]Identity{42: tc.id}}, ResolveUser: fakeUsers(map[string]uint32{"root": 0})}
-			if got := d.ObserveAnyState(t.Context(), tc.exes, tc.user, pattern); got != tc.want {
+			if got := d.ObserveAnyState(t.Context(), tc.exes, tc.user, pattern).State; got != tc.want {
 				t.Fatalf("state = %s, want %s", got, tc.want)
 			}
 		})
 	}
 	d := Discoverer{Reader: snapshotErrReader{err: errors.New("partial table")}}
-	if got := d.ObserveAnyState(t.Context(), nil, "", pattern); got != StateUnknown {
+	if got := d.ObserveAnyState(t.Context(), nil, "", pattern).State; got != StateUnknown {
 		t.Fatalf("partial table = %s", got)
 	}
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
-	if got := d.ObserveAnyState(ctx, nil, "", pattern); got != StateUnknown {
+	if got := d.ObserveAnyState(ctx, nil, "", pattern).State; got != StateUnknown {
 		t.Fatalf("cancelled = %s", got)
 	}
 }
@@ -110,7 +110,7 @@ func TestCommandSnapshotTimeoutSharesBlockedScan(t *testing.T) {
 	d := Discoverer{Reader: NewCachingReader(r, time.Minute)}
 	for range 2 {
 		ctx, cancel := context.WithTimeout(t.Context(), 10*time.Millisecond)
-		state := d.ObserveAnyState(ctx, nil, "", regexp.MustCompile("emerge"))
+		state := d.ObserveAnyState(ctx, nil, "", regexp.MustCompile("emerge")).State
 		cancel()
 		if state != StateUnknown {
 			t.Fatalf("blocked scan = %s, want unknown", state)
@@ -166,7 +166,7 @@ func TestCommandSnapshotInvalidationRejectsInFlightAbsence(t *testing.T) {
 	operation := make(chan string, 1)
 	go func() {
 		d := Discoverer{Reader: cached}
-		operation <- d.ObserveAnyState(ctx, nil, "", regexp.MustCompile("emerge"))
+		operation <- d.ObserveAnyState(ctx, nil, "", regexp.MustCompile("emerge")).State
 	}()
 	close(r.release)
 	if state := <-operation; state != StateRunning {
@@ -177,5 +177,70 @@ func TestCommandSnapshotInvalidationRejectsInFlightAbsence(t *testing.T) {
 	}
 	if r.calls.Load() != 2 {
 		t.Fatalf("scans = %d, want one fresh scan after invalidation", r.calls.Load())
+	}
+}
+
+// A guard on a package manager has to say which process held it. The reading
+// names the oldest live match (a map snapshot must not make it flicker), the
+// name the predicate matched instead of the interpreter, and none of the
+// arguments, which may carry credentials into events and notifications.
+func TestObserveCommandNamesOldestLiveMatch(t *testing.T) {
+	pattern := regexp.MustCompile(`(^|[[:space:]/])(emerge|glus(\.sh)?)([[:space:]]|$)`)
+	ids := map[int]Identity{
+		1310048: {PID: 1310048, PPID: 1, StartTicks: 900, StartTicksOK: true, State: "S",
+			Cmdline: []string{"/usr/bin/python3.13", "/usr/lib/python-exec/python3.13/emerge", "-vp", "--password=secret"}},
+		77: {PID: 77, PPID: 1, StartTicks: 1200, StartTicksOK: true, State: "S", Cmdline: []string{"bash", "/opt/glus.sh"}},
+		55: {PID: 55, PPID: 1, StartTicksOK: false, State: "S", Cmdline: []string{"emerge", "world"}},
+		12: {PID: 12, PPID: 1, StartTicks: 100, StartTicksOK: true, State: ProcStateZombie, Cmdline: []string{"emerge"}},
+	}
+	d := Discoverer{Reader: fakeReader{ids: ids}}
+	want := StateObservation{State: StateRunning, PID: 1310048, PPID: 1, Program: "emerge"}
+	for range 20 {
+		if got := d.ObserveAnyState(t.Context(), nil, "", pattern); got != want {
+			t.Fatalf("observation = %+v, want %+v", got, want)
+		}
+	}
+}
+
+func TestObserveExecutableNamesProgram(t *testing.T) {
+	ids := map[int]Identity{
+		300: {PID: 300, PPID: 1, StartTicks: 5, StartTicksOK: true, Exe: testExe, ExeOK: true, State: "S", Cmdline: []string{testExe, "-psecret"}},
+	}
+	got := Discoverer{Reader: fakeReader{ids: ids}}.ObserveAnyState(t.Context(), []string{testExe}, "", nil)
+	if want := (StateObservation{State: StateRunning, PID: 300, PPID: 1, Program: testExe}); got != want {
+		t.Fatalf("observation = %+v, want %+v", got, want)
+	}
+}
+
+// Only the predicate's own match is named, as a plain name: never an argument
+// beside it or around it, and never text a notifier could read as markup.
+func TestMatchedName(t *testing.T) {
+	packages := `(^|[[:space:]/])(emerge|apt-get|dnf|glus(\.sh)?)([[:space:]]|$)`
+	for _, tc := range []struct {
+		name, pattern string
+		argv          []string
+		want          string
+	}{
+		{name: "script path", pattern: packages, argv: []string{"/usr/bin/python3.13", "/usr/lib/python-exec/python3.13/emerge", "-vp", "rspamd"}, want: "emerge"},
+		{name: "after a separator", pattern: packages, argv: []string{"wrapper", "dnf", "upgrade"}, want: "dnf"},
+		{name: "first word", pattern: packages, argv: []string{"apt-get", "-y", "upgrade"}, want: "apt-get"},
+		{name: "shell script", pattern: packages, argv: []string{"bash", "/opt/tools/glus.sh"}, want: "glus.sh"},
+		{name: "secret in the same word", pattern: `emerge`, argv: []string{"sh", "-c", "export TOKEN=abc;emerge -uDN @world"}, want: "emerge"},
+		{name: "credentials in a url", pattern: packages, argv: []string{"curl", "-O", "https://user:tok@mirror/emerge"}, want: "emerge"},
+		{name: "match spanning arguments", pattern: `mysqldump .*`, argv: []string{"mysqldump", "--password=secret", "db"}, want: ""},
+		{name: "markup", pattern: `\S*emerge`, argv: []string{"<!channel>emerge"}, want: ""},
+		{name: "no match", pattern: `zypper`, argv: []string{"emerge"}, want: ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := MatchedName(regexp.MustCompile(tc.pattern), Identity{Cmdline: tc.argv}); got != tc.want {
+				t.Fatalf("MatchedName = %q, want %q", got, tc.want)
+			}
+		})
+	}
+	if got := MatchedName(nil, Identity{Cmdline: []string{"emerge"}}); got != "" {
+		t.Fatalf("nil pattern = %q", got)
+	}
+	if got := MatchedName(regexp.MustCompile("emerge"), Identity{CmdlineUnreadable: true}); got != "" {
+		t.Fatalf("unreadable argv = %q", got)
 	}
 }

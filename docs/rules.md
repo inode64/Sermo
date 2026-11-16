@@ -4427,6 +4427,15 @@ read error. Matching all arguments can also match an argument that merely names
 the tool; choose the pattern for the jobs that should block the operation.
 Operations refresh the shared process snapshot before evaluating their guards.
 
+A `running` reading names the oldest matching process by PID, parent PID and
+program — `state running (want absent): pid 1310048 (ppid 1) emerge`. The
+program is the name `cmd` matched, reduced to its last path element (`emerge`
+for `python3.13 /usr/lib/python-exec/python3.13/emerge -vp`, not the
+interpreter), or the executable for an `exe` selector. Arguments are left out
+because they can carry credentials, and a match that is not a plain name of
+letters, digits and `._+-` names no program. The oldest match stays the same
+while it runs, so a healthy reading does not change as workers come and go.
+
 `changed` is true when the file at `path` differs (size/mtime) from the baseline
 tracked across artifact samples, or when `app` names a linked app whose version
 changed at the selected `level` (`major`, `minor` or `patch`; default `patch`).

@@ -22,7 +22,7 @@ func TestProcessCheckExplainsAReplacedBinaryInsteadOfBareAbsent(t *testing.T) {
 		exes:       []string{"/usr/bin/dmeventd"},
 		user:       "root",
 		expect:     process.StateRunning,
-		observeAny: func(context.Context, []string, string, *regexp.Regexp) string { return process.StateAbsent },
+		observeAny: observedState(process.StateAbsent),
 		stale: func() []process.StaleBinary {
 			return []process.StaleBinary{{PID: 3549, Path: "/usr/bin/dmeventd"}}
 		},
@@ -54,7 +54,7 @@ func TestProcessCheckExplainsAnUninstalledBinaryAndBlocksActions(t *testing.T) {
 		exes:       []string{"/usr/bin/apache2"},
 		user:       "root",
 		expect:     process.StateRunning,
-		observeAny: func(context.Context, []string, string, *regexp.Regexp) string { return process.StateAbsent },
+		observeAny: observedState(process.StateAbsent),
 		stale: func() []process.StaleBinary {
 			return []process.StaleBinary{{PID: 721825, Path: "/usr/bin/apache2", Removed: true}}
 		},
@@ -76,7 +76,7 @@ func TestProcessCheckExplainsAnUninstalledBinaryAndBlocksActions(t *testing.T) {
 func TestProcessCheckExplainsAReplacedBinaryTheServiceDoesNotAttribute(t *testing.T) {
 	c := processCheck{
 		name: "nmbd", exes: []string{"/usr/bin/nmbd"}, user: "root", expect: process.StateRunning,
-		observeAny:  func(context.Context, []string, string, *regexp.Regexp) string { return process.StateAbsent },
+		observeAny:  observedState(process.StateAbsent),
 		stale:       func() []process.StaleBinary { return nil },
 		replacedAny: func([]string, string) []string { return []string{"/usr/bin/nmbd"} },
 	}
@@ -93,7 +93,7 @@ func TestProcessCheckUnknownStateIsUnavailable(t *testing.T) {
 			exes:       []string{"/usr/bin/mysqldump"},
 			user:       "backup",
 			expect:     expect,
-			observeAny: func(context.Context, []string, string, *regexp.Regexp) string { return process.StateUnknown },
+			observeAny: observedState(process.StateUnknown),
 		}
 		res := c.Run(context.Background())
 		if !res.Unavailable || res.OK {
@@ -109,7 +109,7 @@ func TestProcessCheckKeepsTheVerdictWhenNothingWasReplaced(t *testing.T) {
 		name:       "process",
 		exes:       []string{"/usr/sbin/nope"},
 		expect:     process.StateRunning,
-		observeAny: func(context.Context, []string, string, *regexp.Regexp) string { return process.StateAbsent },
+		observeAny: observedState(process.StateAbsent),
 		stale:      func() []process.StaleBinary { return nil },
 	}
 	res := c.Run(context.Background())
@@ -128,7 +128,7 @@ func TestProcessCheckKeepsPlainAbsentWhenNothingWasReplaced(t *testing.T) {
 		name:       "process",
 		exes:       []string{"/usr/sbin/nope"},
 		expect:     process.StateRunning,
-		observeAny: func(context.Context, []string, string, *regexp.Regexp) string { return process.StateAbsent },
+		observeAny: observedState(process.StateAbsent),
 		stale: func() []process.StaleBinary {
 			// A replaced binary belonging to a different selector must not be
 			// blamed for this check's miss.
@@ -148,10 +148,50 @@ func TestProcessCheckRunningIsUnaffected(t *testing.T) {
 		name:       "process",
 		exes:       []string{"/usr/bin/dmeventd"},
 		expect:     process.StateRunning,
-		observeAny: func(context.Context, []string, string, *regexp.Regexp) string { return process.StateRunning },
+		observeAny: observedState(process.StateRunning),
 		stale:      func() []process.StaleBinary { t.Fatal("stale lookup ran for a healthy process"); return nil },
 	}
 	if res := c.Run(context.Background()); !res.OK {
 		t.Fatalf("running process = %+v, want OK", res)
+	}
+}
+
+// observedState is an observer that always reads state.
+func observedState(state string) ProcessesAnyFunc {
+	return func(context.Context, []string, string, *regexp.Regexp) process.StateObservation {
+		return process.StateObservation{State: state}
+	}
+}
+
+// A guard blocks on "not absent" and repeats this message in its event; on a
+// production host "state running (want absent)" hid a pretend emerge orphaned for hours.
+// The reading names the process, so the operator can inspect or end it.
+func TestProcessCheckNamesTheRunningProcess(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		observed process.StateObservation
+		want     string
+	}{
+		{
+			name:     "single match",
+			observed: process.StateObservation{State: process.StateRunning, PID: 1310048, PPID: 1, Program: "emerge"},
+			want:     "state running (want absent): pid 1310048 (ppid 1) emerge",
+		},
+		{
+			name:     "unnamed program",
+			observed: process.StateObservation{State: process.StateRunning, PID: 9, PPID: 2},
+			want:     "state running (want absent): pid 9 (ppid 2)",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			c := processCheck{
+				name: "process", cmd: regexp.MustCompile("emerge"), expect: process.StateAbsent,
+				observeAny: func(context.Context, []string, string, *regexp.Regexp) process.StateObservation { return tc.observed },
+			}
+			res := c.Run(context.Background())
+			if res.OK || res.Message != tc.want {
+				t.Fatalf("result = ok %v %q, want failing %q", res.OK, res.Message, tc.want)
+			}
+		})
 	}
 }

@@ -53,7 +53,9 @@ func TestProcessStateWatchReusesServiceObserver(t *testing.T) {
 			if why := unsupportedServiceWatchType(entry); why != "" {
 				t.Fatal(why)
 			}
-			deps := Deps{WatchCheckDeps: &checks.Deps{ProcessesAny: func(context.Context, []string, string, *regexp.Regexp) string { return state }}}
+			deps := Deps{WatchCheckDeps: &checks.Deps{ProcessesAny: func(context.Context, []string, string, *regexp.Regexp) process.StateObservation {
+				return process.StateObservation{State: state}
+			}}}
 			watches, warnings := buildWatchEntry("svc:worker", entry, deps, time.Second)
 			if len(warnings) != 0 || len(watches) != 1 {
 				t.Fatalf("watches=%v, warnings=%v", watches, warnings)

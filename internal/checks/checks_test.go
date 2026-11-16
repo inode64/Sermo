@@ -23,6 +23,7 @@ import (
 	"sermo/internal/cfgval"
 	"sermo/internal/execx"
 	"sermo/internal/execx/execxtest"
+	"sermo/internal/process"
 	"sermo/internal/servicemgr"
 	"sermo/internal/severity"
 )
@@ -902,11 +903,11 @@ func TestResolveNeededBasic(t *testing.T) {
 }
 
 func TestProcessCheck(t *testing.T) {
-	observe := func(_ context.Context, exes []string, user string, _ *regexp.Regexp) string {
+	observe := func(_ context.Context, exes []string, user string, _ *regexp.Regexp) process.StateObservation {
 		if slices.Contains(exes, "/usr/bin/mariadb-backup") {
-			return "running"
+			return process.StateObservation{State: "running"}
 		}
-		return "absent"
+		return process.StateObservation{State: "absent"}
 	}
 	ok := processCheck{name: "p", exes: []string{"/usr/bin/mariadb-backup"}, expect: "running", observeAny: observe}
 	if res := ok.Run(context.Background()); !res.OK {
@@ -937,10 +938,10 @@ func TestBuildProcessCheckExeAny(t *testing.T) {
 	}}
 	var gotExes []string
 	var gotUser string
-	built, warnings := Build(section, Deps{ProcessesAny: func(_ context.Context, exes []string, user string, _ *regexp.Regexp) string {
+	built, warnings := Build(section, Deps{ProcessesAny: func(_ context.Context, exes []string, user string, _ *regexp.Regexp) process.StateObservation {
 		gotExes = append(gotExes, exes...)
 		gotUser = user
-		return "running"
+		return process.StateObservation{State: "running"}
 	}})
 	if len(warnings) != 0 || len(built) != 1 {
 		t.Fatalf("process exe_any should build: built=%d warnings=%v", len(built), warnings)
@@ -958,7 +959,7 @@ func TestBuildProcessCheckNeedsObserver(t *testing.T) {
 	if _, warnings := Build(section, Deps{}); len(warnings) != 1 {
 		t.Fatalf("process check without observer should warn, got %v", warnings)
 	}
-	built, warnings := Build(section, Deps{ProcessesAny: func(context.Context, []string, string, *regexp.Regexp) string { return "running" }})
+	built, warnings := Build(section, Deps{ProcessesAny: observedState("running")})
 	if len(warnings) != 0 || len(built) != 1 {
 		t.Fatalf("process check should build with observer: built=%d warnings=%v", len(built), warnings)
 	}
@@ -966,7 +967,7 @@ func TestBuildProcessCheckNeedsObserver(t *testing.T) {
 
 func TestBuildProcessCheckRequiresSelector(t *testing.T) {
 	section := map[string]any{"p": map[string]any{"type": "process", "user": "mysql", "state": "running"}}
-	if _, warnings := Build(section, Deps{ProcessesAny: func(context.Context, []string, string, *regexp.Regexp) string { return "running" }}); len(warnings) != 1 {
+	if _, warnings := Build(section, Deps{ProcessesAny: observedState("running")}); len(warnings) != 1 {
 		t.Fatalf("process check without exe, exe_any or cmd should warn, got %v", warnings)
 	} else if !strings.Contains(warnings[0], "requires exe, exe_any or cmd") {
 		t.Fatalf("warning = %q, want requires exe, exe_any or cmd", warnings[0])

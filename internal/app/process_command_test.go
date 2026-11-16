@@ -33,7 +33,7 @@ func TestProcessCommandGuardObservesExternalJobFreshly(t *testing.T) {
 					Deps: Deps{Backend: servicemgr.BackendOpenRC, Manager: fakeManager{stopped: &stopped}, Runtime: t.TempDir(),
 						ProcReader: cached, ExecxRunner: &execxtest.Runner{}},
 				})
-				if got := runtime.CheckDeps.ProcessesAny(t.Context(), nil, "", regexp.MustCompile("emerge")); got != process.StateAbsent {
+				if got := runtime.CheckDeps.ProcessesAny(t.Context(), nil, "", regexp.MustCompile("emerge")).State; got != process.StateAbsent {
 					t.Fatalf("initial state = %s", got)
 				}
 				host[42] = process.Identity{PID: 42, PPID: 1, StartTicks: 42, StartTicksOK: true,

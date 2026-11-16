@@ -640,6 +640,21 @@ const (
 	StateSummary = StateRunning + ", " + StateZombie + ", " + StateAbsent
 )
 
+// StateObservation is ObserveAnyState's reading. For a running state it also
+// names the oldest live match, so a guard that blocks on the reading, or a
+// check that reports it, can say which process it saw instead of only that one
+// exists. The oldest stays the same while it runs, so a healthy reading does
+// not change as workers come and go. Program is the name a cmd predicate
+// matched (see MatchedName), or else the executable, one of the selector's own
+// paths; never the command line, whose arguments may carry secrets into
+// events and notifications.
+type StateObservation struct {
+	State   string
+	PID     int
+	PPID    int
+	Program string
+}
+
 // ObserveAnyState reports the state of processes matching any exact resolved
 // executable in exes, the real user and the optional cmd predicate (ANDed).
 // With cmd and no exes it observes argv independently of executable identity:
@@ -649,7 +664,7 @@ const (
 //   - absent:  no process matches in a complete process table;
 //   - unknown: no live match, and the table was incomplete or the user
 //     selector could not be resolved.
-func (d Discoverer) ObserveAnyState(ctx context.Context, exes []string, user string, cmd *regexp.Regexp) string {
+func (d Discoverer) ObserveAnyState(ctx context.Context, exes []string, user string, cmd *regexp.Regexp) StateObservation {
 	reader := d.reader()
 	resolve := d.resolveUser()
 	selectors := make([]Selector, 0, len(exes))
@@ -660,7 +675,7 @@ func (d Discoverer) ObserveAnyState(ctx context.Context, exes []string, user str
 		selectors = append(selectors, Selector{Type: SelectorCommandMatch, Exe: exe, exePath: canonicalizePath(exe)})
 	}
 	if len(selectors) == 0 && cmd == nil {
-		return StateAbsent
+		return StateObservation{State: StateAbsent}
 	}
 	// An unresolvable user (NSS/LDAP outage) matches nothing, which would read
 	// as "absent" and let a backup guard allow a restart mid-backup.
@@ -668,16 +683,18 @@ func (d Discoverer) ObserveAnyState(ctx context.Context, exes []string, user str
 	if user != "" {
 		var ok bool
 		if uid, ok = resolve(user); !ok {
-			return StateUnknown
+			return StateObservation{State: StateUnknown}
 		}
 	}
 
 	snapshot, snapshotErr := SnapshotContext(ctx, reader)
+	var oldest Identity
+	live := false
 	matched := false
 	unknown := snapshotErr != nil
 	for _, id := range snapshot {
 		if ctx.Err() != nil {
-			return StateUnknown
+			break
 		}
 		if len(selectors) > 0 && !d.matchesAny(selectors, id, resolve) {
 			continue
@@ -690,20 +707,51 @@ func (d Discoverer) ObserveAnyState(ctx context.Context, exes []string, user str
 		if !matches {
 			continue
 		}
-		if id.State != ProcStateZombie {
-			return StateRunning
+		if id.State == ProcStateZombie {
+			matched = true
+			continue
 		}
-		matched = true
+		// The snapshot is a map, so keep the oldest live match: the same process
+		// is named on every cycle, and it is the one that started the rest (a
+		// glus run before the emerge it launched).
+		if !live || startedBefore(id, oldest) {
+			oldest = id
+		}
+		live = true
 	}
 	// A live match is positive evidence even in a partial table; a missing or
 	// defunct-only match is not, because the unread PIDs may hold the process.
+	if live {
+		return StateObservation{State: StateRunning, PID: oldest.PID, PPID: oldest.PPID, Program: observedProgram(cmd, oldest)}
+	}
 	if unknown || ctx.Err() != nil {
-		return StateUnknown
+		return StateObservation{State: StateUnknown}
 	}
 	if matched {
-		return StateZombie
+		return StateObservation{State: StateZombie}
 	}
-	return StateAbsent
+	return StateObservation{State: StateAbsent}
+}
+
+// observedProgram names a matched process: the name cmd matched, or else the
+// executable, which an exact-exe selector only matches once resolved.
+func observedProgram(cmd *regexp.Regexp, id Identity) string {
+	if cmd != nil {
+		return MatchedName(cmd, id)
+	}
+	return id.Exe
+}
+
+// startedBefore orders processes by kernel start time, then PID. A process
+// whose start time could not be read sorts after one whose start time is known.
+func startedBefore(a, b Identity) bool {
+	if a.StartTicksOK != b.StartTicksOK {
+		return a.StartTicksOK
+	}
+	if a.StartTicksOK && a.StartTicks != b.StartTicks {
+		return a.StartTicks < b.StartTicks
+	}
+	return a.PID < b.PID
 }
 
 // ReplacedAny names the executables in exes that a live process of user still

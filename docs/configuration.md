@@ -4658,6 +4658,8 @@ watches:
 Use `exe_any` instead of `exe` for alternative executable paths, or `cmd` for
 an RE2 expression over argv; combine `cmd` with `exe` and `user` to narrow a
 selector. Unreadable process evidence is unavailable, never confirmed absence.
+A `running` reading names the oldest matching process by PID, parent PID and
+program, never its arguments; see the [`process` condition](rules.md#rules).
 This form works in host watches and service watches and grants no signal
 authority: `then.kill` is rejected. It cannot mix `state` with the per-PID
 fields `name`, `gone`, `for`, `cpu`, `memory` or `io` inside `check`. The
