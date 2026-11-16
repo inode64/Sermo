@@ -5,9 +5,9 @@ description: Use for any Sermo change involving start, stop, restart, reload, re
 
 Safety review for Sermo. Assume production servers and control of databases,
 web servers, caches and mail. Operator policy: `docs/safety.md`. AGENTS.md →
-Safety lists the hard boundaries and is not repeated here; this skill is the
-detail a change to that code must preserve. Leaving an unidentified process
-alive beats killing the wrong one.
+Safety lists the hard boundaries; this skill is the detail behind them that a
+change to that code must preserve. Leaving an unidentified process alive beats
+killing the wrong one.
 
 ## Operation path
 

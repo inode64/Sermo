@@ -77,8 +77,9 @@ Types: `feat`, `fix`, `refactor`, `test`, `docs`, `build`, `chore`, `ci`,
 `perf`. Do not identify an agent as author. Never leave unexplained partial
 staging.
 
-Fleet work uses the `sermo-remote-testing` skill. An operator action is real
-even when daemon remediation has `dry_run: true`.
+Testing on remote hosts uses the `sermo-remote-testing` skill; fleet
+deployment is the operator's private tooling. An operator action is real even
+when daemon remediation has `dry_run: true`.
 
 ## Names, constants, config shape
 
@@ -162,7 +163,9 @@ non-obvious reason — and never restate the code.
 ## Quality gates
 
 Idiomatic Go that passes the configured gate without new suppressions. An
-error says what was attempted, for a sysadmin reader.
+error says what was attempted, for a sysadmin reader. No new package-level
+mutable state: registration goes in the existing registry, and Linux-specific
+behavior stays behind an interface with a fake.
 `.golangci.yml` is the linter source of truth. A necessary `//nolint` names
 the exact analyzer and the design reason. Never weaken a gate or broaden an
 exclusion to land a change. How to add a `.semgrep/` call-boundary rule is in

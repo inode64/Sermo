@@ -26,5 +26,6 @@ Design decisions for `internal/conn` probes.
 - Variable length and count fields on the wire go through the `wire*` helpers
   in `internal/conn/wire.go`, which return an error instead of truncating. A
   conversion with an explicit local bound (FastCGI string lengths below 128)
-  converts directly.
+  converts directly; a helper that accepts arbitrary buffers or ports keeps
+  the check.
 - HTTP goes through `internal/httpx`.

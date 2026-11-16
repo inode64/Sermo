@@ -20,6 +20,10 @@ repository.
 - The host keeps its behavior: no start, stop, restart, reload, kill, package
   install or permanent config unless the user asks for that action on that
   host. No `then.hook`, ever.
+- The temporary daemon observes and never acts: `defaults.dry_run: true`, and
+  no target of the run sets `dry_run: false`. A catalog profile brings its own
+  remediation (a restart after two failed cycles), and the cooldown the config
+  must declare is what arms it.
 - A finding is fixed in the local checkout, then redeployed to every host
   already touched. Never patch a remote file to make a test pass.
 - The installed `sermod` of a host is production. It acts for real
@@ -53,7 +57,8 @@ repository.
   hosts" are the first N usable entries. With no usable inventory, stop: do
   not invent, scan or ask for hosts.
 - The inventory may include the machine the run starts from. Compare
-  `hostname` first: there `/tmp`, `bin/` and the running `sermod` are local.
+  `hostname` first: there `/tmp`, `bin/` and the running `sermod` are local,
+  and a local results directory must not reuse the remote run directory's name.
 - A mutating run (artifacts executed, install, update, config apply) over more
   than four hosts does the first four end to end, reviews them, then
   continues. Read-only collection covers every host in one pass.
@@ -94,6 +99,7 @@ engine:
   state: /tmp/sermo-remote-test-XXX/state
 
 defaults:
+  dry_run: true
   policy: { cooldown: 5m }
 
 web:                # only when the run needs the panel
@@ -104,8 +110,9 @@ web:                # only when the run needs the panel
 
 - Generate targets with Sermo's own wizards (`sermoctl wizard service`, and
   the matching wizard for another target type) against the temporary config;
-  keep detected names and the wizard's defaults, one file per target. Adjust
-  only the generated files under the run directory.
+  keep detected names and the wizard's defaults, except its dry-run question,
+  which defaults to no: answer yes. One file per target. Adjust only the
+  generated files under the run directory.
 - Configure only services the init backend reports active. Volumes,
   interfaces, VMs and the full set of host watches are added only when the
   user asks for a complete configuration.
@@ -131,9 +138,11 @@ web:                # only when the run needs the panel
   non-wall notify delivery; a top-level `event_notify` route still delivers
   unless panic mode is on. `notify: [none]` is monitor-only. Real delivery
   needs the user's request.
-- A generated database or directory profile keeps its backup guards (dump
-  processes blocking stop and restart). If one is missing, add it to the
-  temporary file and report the catalog gap; never bypass an active guard.
+- A generated database or directory profile keeps its backup guards: stop
+  and restart blocked while `mysqldump`, `mariadb-dump` or `wal-g-mysql` runs
+  (MySQL, MariaDB), `pg_dumpall` (PostgreSQL) or `slapcat` (OpenLDAP). If one
+  is missing, add it to the temporary file and report the catalog gap; never
+  bypass an active guard.
 
 `sermoctl config validate --config "$REMOTE_DIR/config.yml"` passes before any
 `sermod` starts.
@@ -149,8 +158,10 @@ echo $! > "$REMOTE_DIR/sermod.pid"
 
 - Operation tests (start, stop, restart, reload) use only `acpid`, only when
   it is active and in the temporary config, and only through Sermo's command
-  path. Skip `pause`/`resume` (their targets are production VMs and
-  containers) unless the user names a disposable target. Stop operation
+  path. No other operation is tested on a remote host: `repair`, `mount`,
+  `umount`, `watch pause`/`resume` and the kill commands act on production
+  mounts, arrays and sessions, and `pause`/`resume` on production VMs and
+  containers, unless the user names a disposable target. Stop operation
   testing at the first unexpected result.
 - A full-feature run the user asked for is observed at least six minutes after
   readiness, sampling `/api/host`, `/api/daemon/metrics?since=10m`,
