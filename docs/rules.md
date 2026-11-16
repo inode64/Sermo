@@ -4589,7 +4589,10 @@ optional `backup` process check and a
 `block-restart-during-backup` guard. The check matches common local backup
 tools by exact resolved executable path (`exe_any`) and database backup user
 (`backup_user`, defaulting to `mysql` or `postgres`). Override that check locally
-when your backup runs under another user or from non-standard paths. If a
+when your backup runs under another user or from non-standard paths. The
+OpenLDAP (`slapd`) service ships the same guard for `slapcat`, matched by
+command line (`cmd`) for any user: the tool is a link to the `slapd` binary, so
+its executable path is the daemon's. If a
 logged-in terminal user runs `sermoctl restart` while this backup guard blocks
 the action, Sermo also sends that user a best-effort native TTY notice; cron and
 other non-interactive runs are not notified. The notice follows the guard by

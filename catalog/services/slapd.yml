@@ -58,3 +58,24 @@ watches:
       cert_verify: false
       expires_in_days: 21
       timeout: 5s
+  # OpenLDAP installs slapcat as a link to the slapd binary, so its executable
+  # path cannot tell a dump from the daemon: match the command line.
+  backup:
+    check:
+      type: process
+      reports: state
+      optional: true
+      cmd: ^([^ ]*/)?slapcat( |$)
+      state: running
+rules:
+  block-restart-during-backup:
+    type: guard
+    blocks:
+      - restart
+      - stop
+    if:
+      active:
+        check: backup
+    then:
+      action: block
+      message: ${display_name} backup is running; stop and restart denied

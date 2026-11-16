@@ -2630,6 +2630,39 @@ func TestDatabaseCatalogServicesBlockStopAndRestartDuringBackup(t *testing.T) {
 	}
 }
 
+// slapcat is a link to the slapd binary, so an executable selector would match
+// the daemon itself and the guard would block every stop and restart.
+func TestCatalogSlapdBlocksStopAndRestartDuringSlapcat(t *testing.T) {
+	doc := catalogDocByName(t, repoRoot(t), "services", "slapd")
+	backup := nested(t, doc, "watches", "backup", "check")
+	if cfgval.String(backup["exe"]) != "" || len(cfgval.StringList(backup["exe_any"])) != 0 {
+		t.Fatalf("slapd backup check selects by executable: %v", backup)
+	}
+	pattern, err := regexp.Compile(cfgval.String(backup["cmd"]))
+	if err != nil {
+		t.Fatalf("slapd backup cmd: %v", err)
+	}
+	for cmdline, want := range map[string]bool{
+		"slapcat -n 1 -l /var/backups/ldap.ldif":                             true,
+		"/usr/sbin/slapcat":                                                  true,
+		"/usr/lib64/openldap/slapd -u ldap -g ldap -F /etc/openldap/slapd.d": false,
+		"/bin/sh /usr/local/bin/backup-slapcat.sh":                           false,
+	} {
+		if got := pattern.MatchString(cmdline); got != want {
+			t.Errorf("cmd matches %q = %v, want %v", cmdline, got, want)
+		}
+	}
+	if !cfgval.Bool(backup["optional"]) || cfgval.String(backup["reports"]) != "state" {
+		t.Fatalf("slapd backup check must be an optional state sensor: %v", backup)
+	}
+	blocks := cfgval.StringList(nested(t, doc, "rules", "block-restart-during-backup")["blocks"])
+	for _, action := range []string{"stop", "restart"} {
+		if !slices.Contains(blocks, action) {
+			t.Fatalf("slapd backup guard blocks = %v, want %s", blocks, action)
+		}
+	}
+}
+
 func TestPostgresCatalogDeclaresPostmasterPidfile(t *testing.T) {
 	body := catalogDocByName(t, repoRoot(t), "services", "postgres-%v")
 	if got := cfgval.String(body["pidfile"]); got != "${data_dir}/postmaster.pid" {

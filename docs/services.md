@@ -2586,8 +2586,8 @@ usage only alerts; `memory_alert_threshold` defaults to `80%` of host RAM and
 should reflect the instance's buffer-pool budget. The alert is a `warning` and
 escalates to `error` past `memory_error_threshold` (`90%`); raise both
 together. The separate `memory` check
-still reports usage over 60%. MySQL, MariaDB, PostgreSQL and Backrest backup
-guards block both `stop` and `restart`; Sermo named locks remain the preferred
+still reports usage over 60%. MySQL, MariaDB, PostgreSQL, OpenLDAP and Backrest
+backup guards block both `stop` and `restart`; Sermo named locks remain the preferred
 way to protect jobs that can be wrapped with `sermoctl lock`.
 
 Grafana's health check requires HTTP 200 and JSON `database: ok`. Prometheus
