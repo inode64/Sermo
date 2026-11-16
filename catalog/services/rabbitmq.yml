@@ -29,14 +29,13 @@ variables:
 pidfile:
   - /var/lib/rabbitmq/mnesia/rabbit@${hostname}.pid
   - /run/rabbitmq.pid
+# No kill_only_if: the broker is the Erlang VM (beam.smp under a versioned erts
+# directory), not the rabbitmq-server launcher script, so a clause naming the
+# launcher authorized nothing. What may be killed after the grace periods is
+# what the kernel places in the unit's own control group.
 stop_policy:
   graceful_timeout: 60s
   term_timeout: 30s
-  kill_only_if:
-    users:
-      - ${user}
-    exe_any:
-      - ${rabbitmq_binary}
 watches:
   service:
     check:

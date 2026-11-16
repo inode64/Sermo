@@ -2841,6 +2841,34 @@ func TestCatalogZigbee2MQTTNamesItsNodeProcessOnlyUnderOpenRC(t *testing.T) {
 	}
 }
 
+// A kill_only_if clause authorizes a SIGKILL only for a process that runs one
+// of its executables. Naming a launcher script, as the rabbitmq and patroni
+// profiles once did, authorizes nothing: every executable it lists must be the
+// one a strict selector of the same profile names.
+func TestCatalogKillOnlyIfNamesAStrictSelectorExecutable(t *testing.T) {
+	walkCatalogDocs(t, filepath.Join(repoRoot(t), "catalog", "services"), func(path string, body map[string]any) {
+		name := filepath.Base(path)
+		policy, _ := body[process.SectionStopPolicy].(map[string]any)
+		killOnlyIf, _ := policy[process.StopPolicyKeyKillOnlyIf].(map[string]any)
+		if killOnlyIf == nil {
+			return
+		}
+		var strict []string
+		selectors, _ := body[process.SectionProcesses].(map[string]any)
+		for _, raw := range selectors {
+			sel, _ := raw.(map[string]any)
+			if sel[process.SelectorKeyDelegated] != true && cfgval.String(sel[process.SelectorKeyExe]) != "" && cfgval.String(sel[process.SelectorKeyUser]) != "" {
+				strict = append(strict, cfgval.String(sel[process.SelectorKeyExe]))
+			}
+		}
+		for _, exe := range cfgval.StringList(killOnlyIf[process.StopPolicyKeyExeAny]) {
+			if !slices.Contains(strict, exe) {
+				t.Errorf("%s: kill_only_if names %s, which no strict selector of the profile runs (%v)", name, exe, strict)
+			}
+		}
+	})
+}
+
 // Running a linked app's binary for its version or help says whether the file
 // on disk executes, never whether the daemon works, and the same probe is that
 // app's required preflight: a watch that restarts on it asks for an operation
