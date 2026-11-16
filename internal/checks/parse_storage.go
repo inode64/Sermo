@@ -3,6 +3,7 @@ package checks
 import (
 	"errors"
 	"fmt"
+	"path/filepath"
 	"regexp"
 	"time"
 
@@ -62,6 +63,14 @@ func parseCountFields(entry map[string]any) (countCheck, error) {
 		c.kind = CountKindAny
 	} else if !validCountKind(c.kind) {
 		errs = append(errs, fmt.Errorf("count `of` %q is not one of %s", c.kind, CountKindSummary))
+	}
+	if raw, present := entry[CheckKeyName]; present {
+		c.namePattern = cfgval.String(raw)
+		if c.namePattern == "" {
+			errs = append(errs, errors.New("count name must be a non-empty file name pattern"))
+		} else if _, err := filepath.Match(c.namePattern, ""); err != nil {
+			errs = append(errs, fmt.Errorf("count name %q is not a valid file name pattern", c.namePattern))
+		}
 	}
 	var recursiveErr, hiddenErr error
 	c.recursive, recursiveErr = parseStorageBool(entry, CheckKeyRecursive, CheckTypeCount)

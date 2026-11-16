@@ -162,30 +162,23 @@ watches:
       cycles: 3
     then:
       action: restart
-  # `exim -bpc` prints the number of queued messages; `unit:` turns that number
-  # into the check's `value` series, so the service carries a queue-depth graph.
-  queue:
-    interval: 1m
-    check:
-      type: command
-      command:
-        - ${exim_binary}
-        - -bpc
-      unit: messages
-      timeout: 15s
+  # The queue depth is the number of envelope files (`-H`, one per message)
+  # under the spool's input directory, in hashed subdirectories with
+  # split_spool_directory: what `exim -bpc` prints, read without starting an
+  # exim every minute. `unit:` graphs it as the service's queue depth.
   alert-if-queue-high:
     interval: 1m
     check:
-      type: command
-      command:
-        - ${exim_binary}
-        - -bpc
+      type: count
+      path: ${spool_dir}/input
+      of: file
+      name: "*-H"
+      recursive: true
       unit: messages
-      expect_stdout: { op: "<=", value: "${queue_limit}" }
+      count: { op: ">", value: "${queue_limit}" }
       severity: warning
       levels:
-        error: { expect_stdout: { op: "<=", value: "${queue_error_limit}" } }
-      timeout: 15s
+        error: { count: { op: ">", value: "${queue_error_limit}" } }
     for:
       duration: 3m
     then:

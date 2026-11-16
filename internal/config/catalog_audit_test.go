@@ -2214,8 +2214,14 @@ func TestCatalogEximDatabaseMaintenanceKeepsOneCommandPerDatabase(t *testing.T) 
 	exim := catalogDocByName(t, repoRoot(t), "services", "exim")
 	buttons := nested(t, exim, "buttons")
 	variables := nested(t, exim, "variables")
-	if got := cfgval.String(catalogWatchCheck(t, exim, "queue")[checks.CheckKeyUnit]); got != "messages" {
+	// The queue depth counts envelope files natively: one per message, in
+	// hashed subdirectories when the spool is split.
+	queue := catalogWatchCheck(t, exim, "alert-if-queue-high")
+	if got := cfgval.String(queue[checks.CheckKeyUnit]); got != "messages" {
 		t.Fatalf("exim queue unit = %q, want messages", got)
+	}
+	if queue[checks.CheckKeyType] != checks.CheckTypeCount || queue[checks.CheckKeyName] != "*-H" || !cfgval.Bool(queue[checks.CheckKeyRecursive]) {
+		t.Fatalf("exim queue check = %v, want a recursive count of *-H files", queue)
 	}
 
 	for _, database := range []string{"callout", "retry"} {

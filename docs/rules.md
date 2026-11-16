@@ -4040,6 +4040,7 @@ checks:
     type: count
     path: /var/spool/myapp        # required: directory to scan
     of: file                      # any (default) | file | dir | symlink
+    name: "*.msg"                 # optional: only entries whose name matches
     recursive: false              # optional, default false
     include_hidden: false         # optional, default false for recursive scans
     count: { op: ">", value: 1000 } # >=, >, <=, <, ==, != and a numeric threshold
@@ -4058,6 +4059,11 @@ checks:
 - **`of`** selects which entries are counted. Entries are classified by their own
   type without following symlinks, so a symlink counts as `symlink` (never as the
   file or directory it points to); `any` counts every entry.
+- **`name`** keeps only the entries whose file name matches a shell pattern
+  (`*`, `?`, `[a-z]`), as `find -name` does; it never matches a path. A mail
+  spool that stores two files per message is counted by one of them: the `exim`
+  catalog service reads its queue depth as `name: "*-H"` under the spool's
+  `input` directory, without running `exim -bpc`.
 - **`recursive: true`** descends the whole subtree (the directory itself is never
   counted); unreadable subdirectories are skipped. Hidden descendants (names starting
   with `.`) and their subtrees are skipped by default; set `include_hidden: true` to

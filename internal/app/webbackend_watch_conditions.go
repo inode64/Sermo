@@ -157,6 +157,7 @@ func raidWatchConditions(check map[string]any) []web.WatchCondition {
 func countWatchConditions(check map[string]any) []web.WatchCondition {
 	out := appendValue(nil, checks.DataKeyPath, cfgval.AsString(check[checks.CheckKeyPath]))
 	out = appendValue(out, checks.DataKeyOf, cfgval.AsString(check[checks.CheckKeyOf]))
+	out = appendValue(out, checks.CheckKeyName, cfgval.AsString(check[checks.CheckKeyName]))
 	out = appendFlag(out, check, checks.CheckKeyRecursive, checks.DataKeyRecursive)
 	out = appendFlag(out, check, checks.CheckKeyIncludeHidden, checks.CheckKeyIncludeHidden)
 	if count, ok := check[checks.CheckKeyCount].(map[string]any); ok {

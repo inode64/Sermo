@@ -3134,7 +3134,7 @@ variable:
 
 | Watch | Signal | Warning variable (default) | Error variable (default) |
 |---|---|---|---|
-| `alert-if-queue-high` | `exim -bpc` above the limit for 3 minutes | `queue_limit` (`200`) | `queue_error_limit` (`1000`) |
+| `alert-if-queue-high` | queued messages (`-H` files under `spool_dir`/input, the figure `exim -bpc` prints) above the limit for 3 minutes | `queue_limit` (`200`) | `queue_error_limit` (`1000`) |
 | `alert-if-msglog-backlog-high` | files under `msglog_dir`, counted recursively | `msglog_backlog_limit` (`200`) | `msglog_backlog_error_limit` (`1000`) |
 | `alert-if-msglog-backlog-growing-fast` | msglog growth inside `msglog_growth_window` | `msglog_growth_limit` (`100`), `msglog_growth_window` (`2m`) | `msglog_growth_error_limit` (`500`) |
 | `alert-if-memory-high` | resident memory of the Exim processes | `memory_limit_bytes` (`104857600`, 100 MiB) | `memory_error_limit_bytes` (`524288000`, 500 MiB) |

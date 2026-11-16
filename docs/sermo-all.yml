@@ -1036,6 +1036,7 @@ watches:
       type: count
       path: /var/spool/demo
       of: any  # any | file | dir | symlink
+      name: "*.msg"  # optional file name pattern
       recursive: true
       count: { op: ">", value: 1000 }
   # A queue depth graded twice: the assertion states the passing side, so the

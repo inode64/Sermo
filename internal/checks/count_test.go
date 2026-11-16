@@ -117,6 +117,62 @@ func TestCountRecursiveDescendsSubtree(t *testing.T) {
 	}
 }
 
+// A mail spool keeps two files per message, so a queue depth is the count of
+// one of them; `name` selects it in a flat or a hashed spool.
+func TestCountNameSelectsEntriesByFileNamePattern(t *testing.T) {
+	root := t.TempDir()
+	writeSizedTree(t, root, map[string]int{
+		"1abc-H":   1,
+		"1abc-D":   1,
+		"2def-H":   1,
+		"2def-D":   1,
+		"x/3ghi-H": 1,
+		"x/3ghi-D": 1,
+		"x/3ghi-J": 1,
+	})
+	for _, tc := range []struct {
+		name      string
+		recursive bool
+		want      int
+	}{
+		{name: "flat", want: 2},
+		{name: "recursive", recursive: true, want: 3},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			c := countOf(root, CountKindFile, tc.recursive, ">", 0)
+			c.namePattern = "*-H"
+			res := c.Run(context.Background())
+			if res.Data[DataKeyCount] != tc.want {
+				t.Fatalf("count = %v, want %d (%s)", res.Data[DataKeyCount], tc.want, res.Message)
+			}
+			if res.Data[CheckKeyName] != "*-H" {
+				t.Fatalf("data = %+v, want the name pattern", res.Data)
+			}
+		})
+	}
+}
+
+func TestCountNameRejectsEmptyAndMalformedPatterns(t *testing.T) {
+	for _, pattern := range []string{"", "["} {
+		entry := map[string]any{
+			CheckKeyPath:  "/var/spool/app",
+			CheckKeyName:  pattern,
+			CheckKeyCount: map[string]any{CheckKeyOp: ">", CheckKeyValue: 1},
+		}
+		if err := ValidateCountCheck(entry); err == nil {
+			t.Errorf("name %v: accepted", pattern)
+		}
+	}
+	entry := map[string]any{
+		CheckKeyPath:  "/var/spool/app",
+		CheckKeyName:  "*-H",
+		CheckKeyCount: map[string]any{CheckKeyOp: ">", CheckKeyValue: 1},
+	}
+	if err := ValidateCountCheck(entry); err != nil {
+		t.Fatalf("valid name pattern rejected: %v", err)
+	}
+}
+
 // writeSizedTree writes each file (path relative to root) with the given byte
 // size, creating parent directories.
 func writeSizedTree(t *testing.T, root string, files map[string]int) {

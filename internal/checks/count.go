@@ -18,6 +18,7 @@ type countCheck struct {
 	base
 	path          string
 	kind          string
+	namePattern   string
 	recursive     bool
 	includeHidden bool
 	op            string
@@ -72,7 +73,7 @@ func (c countCheck) scope() string {
 }
 
 func (c countCheck) baseData(n int) map[string]any {
-	return map[string]any{
+	data := map[string]any{
 		DataKeyPath:           c.path,
 		DataKeyOf:             c.kind,
 		DataKeyRecursive:      c.recursive,
@@ -80,6 +81,10 @@ func (c countCheck) baseData(n int) map[string]any {
 		DataKeyCount:          n,
 		DataKeyValue:          n,
 	}
+	if c.namePattern != "" {
+		data[CheckKeyName] = c.namePattern
+	}
+	return data
 }
 
 // tally excludes the root path itself.
@@ -99,7 +104,7 @@ func (c countCheck) tally(ctx context.Context) (int, error) {
 	}
 	n := 0
 	for _, e := range entries {
-		if c.matches(e.Type()) {
+		if c.matches(e) {
 			n++
 		}
 	}
@@ -135,7 +140,7 @@ func (c countCheck) tallyRecursive(ctx context.Context) (int, error) {
 			}
 			return nil
 		}
-		if c.matches(d.Type()) {
+		if c.matches(d) {
 			n++
 		}
 		return nil
@@ -146,8 +151,15 @@ func (c countCheck) tallyRecursive(ctx context.Context) (int, error) {
 	return n, nil
 }
 
-// matches applies the configured lstat-kind filter.
-func (c countCheck) matches(typ fs.FileMode) bool {
+// matches applies the configured lstat-kind and name filters.
+func (c countCheck) matches(entry fs.DirEntry) bool {
+	if c.namePattern != "" {
+		// parseCountFields rejected a malformed pattern, the only error Match has.
+		if ok, _ := filepath.Match(c.namePattern, entry.Name()); !ok {
+			return false
+		}
+	}
+	typ := entry.Type()
 	switch c.kind {
 	case CountKindAny:
 		return true
