@@ -12,6 +12,12 @@ diagnoses, remediates under strict invariants, keeps availability (SLA) history,
 watches host-level resources, sends notifications, and serves a live web
 dashboard — all from a single daemon.
 
+![The Sermo dashboard on a desktop: the host overview and the Sessions panel with SSH, tmux, screen and SMB sessions and the running database statements](docs/images/dashboard-desktop.png)
+
+*Who is on the host and what is running: SSH logins, tmux and screen sessions,
+SMB clients and the statements running on MariaDB and PostgreSQL, each with its
+CPU, memory and I/O. More in [Screenshots](#screenshots).*
+
 ## Why Sermo
 
 A plain "restart on failure" supervisor is dangerous on a real host: it restarts
@@ -100,13 +106,40 @@ around the opposite principle — **prove it is safe, then act**:
 - A live, self-contained dashboard: per-service checks, SLA history, latency
   graphs, an event feed, and the full inventory (services / apps / libraries)
   and host watches.
-- A **Sessions** panel: interactive SSH, tmux and screen sessions, and the
-  statements running on MySQL, MariaDB and PostgreSQL; an administrator can
-  close a verified session or cancel a re-verified statement.
+- A **Sessions** panel: interactive SSH, tmux and screen sessions, SMB
+  clients, and the statements running on MySQL, MariaDB and PostgreSQL, each
+  with its CPU, memory and I/O; an administrator can close a verified session
+  or cancel a re-verified statement.
+- **One page for every screen**: the same panels on a desktop, a tablet and a
+  phone, each showing the columns that fit.
 - **Push-driven** via server-sent events with a polling fallback, and built to
   **WCAG 2.2 AA** accessibility.
 - Loopback HTTP by default, with admin and read-only guest logins from hashed
   credential files — expose it only behind a TLS reverse proxy.
+
+## Screenshots
+
+The dashboard is one self-contained page served by `sermod`. Every image shows
+the same fictional host.
+
+**A service in detail.** Expanding a row shows what Sermo knows about it: the
+SLA timeline with its incidents, latency and resource graphs, the real
+processes with their busiest core, every check with its own availability and
+message, and the guard, alert and remediation rules with their progress.
+
+![A service expanded on a desktop: SLA timeline, latency, CPU, memory and I/O graphs, its processes and every check with its availability](docs/images/service-detail-desktop.png)
+
+**Tablet and phone.** The same Sessions and Services panels, narrowed to the
+columns that fit; the lifecycle actions stay one tap away.
+
+<p align="center">
+  <img src="docs/images/dashboard-tablet.png" alt="The dashboard on a tablet: overview tiles and the Sessions panel" width="46%" align="top">
+  <img src="docs/images/services-tablet.png" alt="The Services panel on a tablet: state, last activity and actions" width="46%" align="top">
+</p>
+<p align="center">
+  <img src="docs/images/dashboard-mobile.png" alt="The dashboard on a phone: overview tiles, sessions and database statements" width="30%" align="top">
+  <img src="docs/images/services-mobile.png" alt="The Services panel on a phone: state and actions of each service" width="30%" align="top">
+</p>
 
 ## How it works
 

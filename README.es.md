@@ -13,6 +13,13 @@ diagnostica, remedia bajo invariantes estrictos, guarda historial de
 disponibilidad (SLA), vigila recursos a nivel de host, envía notificaciones y
 sirve un dashboard web en vivo — todo desde un único daemon.
 
+![El dashboard de Sermo en un ordenador: el resumen del host y el panel de Sesiones con las sesiones de SSH, tmux, screen y SMB y las sentencias de base de datos en ejecución](docs/images/dashboard-desktop.png)
+
+*Quién está en el host y qué se está ejecutando: accesos por SSH, sesiones de
+tmux y screen, clientes SMB y las sentencias en ejecución en MariaDB y
+PostgreSQL, cada una con su CPU, memoria y E/S. Más en
+[Capturas](#capturas).*
+
 ## Por qué Sermo
 
 Un supervisor de "reiniciar al fallar" simple es peligroso en un host real:
@@ -113,14 +120,42 @@ actuar**:
 - Un dashboard en vivo y autocontenido: checks por servicio, historial de SLA,
   gráficas de latencia, un feed de eventos, y el inventario completo (servicios /
   apps / librerías) y los host watches.
-- Un panel de **Sesiones**: sesiones interactivas de SSH, tmux y screen, y las
-  sentencias en ejecución en MySQL, MariaDB y PostgreSQL; un administrador puede
-  cerrar una sesión verificada o cancelar una sentencia reverificada.
+- Un panel de **Sesiones**: sesiones interactivas de SSH, tmux y screen,
+  clientes SMB, y las sentencias en ejecución en MySQL, MariaDB y PostgreSQL,
+  cada una con su CPU, memoria y E/S; un administrador puede cerrar una sesión
+  verificada o cancelar una sentencia reverificada.
+- **Una página para cualquier pantalla**: los mismos paneles en un ordenador,
+  una tablet y un móvil, cada uno con las columnas que caben.
 - **Dirigido por push** vía server-sent events con fallback a polling, y
   construido con accesibilidad **WCAG 2.2 AA**.
 - HTTP en loopback por defecto, con accesos de administrador y de invitado de
   solo lectura desde ficheros de credenciales con hash — expónlo solo detrás de
   un reverse proxy TLS.
+
+## Capturas
+
+El dashboard es una única página autocontenida que sirve `sermod`. Todas las
+imágenes muestran el mismo host ficticio.
+
+**Un servicio en detalle.** Al desplegar una fila se ve lo que Sermo sabe de
+él: la línea de tiempo del SLA con sus incidencias, las gráficas de latencia y
+de recursos, los procesos reales con su núcleo más cargado, cada check con su
+propia disponibilidad y su mensaje, y las reglas de guarda, alerta y
+remediación con su progreso.
+
+![Un servicio desplegado en un ordenador: línea de tiempo del SLA, gráficas de latencia, CPU, memoria y E/S, sus procesos y cada check con su disponibilidad](docs/images/service-detail-desktop.png)
+
+**Tablet y móvil.** Los mismos paneles de Sesiones y Servicios, reducidos a
+las columnas que caben; las acciones de ciclo de vida siguen a un toque.
+
+<p align="center">
+  <img src="docs/images/dashboard-tablet.png" alt="El dashboard en una tablet: el resumen y el panel de Sesiones" width="46%" align="top">
+  <img src="docs/images/services-tablet.png" alt="El panel de Servicios en una tablet: estado, última actividad y acciones" width="46%" align="top">
+</p>
+<p align="center">
+  <img src="docs/images/dashboard-mobile.png" alt="El dashboard en un móvil: resumen, sesiones y sentencias de base de datos" width="30%" align="top">
+  <img src="docs/images/services-mobile.png" alt="El panel de Servicios en un móvil: estado y acciones de cada servicio" width="30%" align="top">
+</p>
 
 ## Cómo funciona
 
