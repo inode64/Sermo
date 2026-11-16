@@ -57,18 +57,7 @@ watches:
     check:
       type: service
       expect: active
-  restart-if-version-failed:
-    check:
-      type: command
-      command:
-        - ${containerd_binary}
-        - --version
-      timeout: 5s
       verify: true
-    for:
-      cycles: 3
-    then:
-      action: restart
   restart-if-worker-thread-hot:
     check:
       type: metric

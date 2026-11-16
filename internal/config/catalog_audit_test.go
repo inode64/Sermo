@@ -2841,6 +2841,31 @@ func TestCatalogZigbee2MQTTNamesItsNodeProcessOnlyUnderOpenRC(t *testing.T) {
 	}
 }
 
+// Running a linked app's binary for its version or help says whether the file
+// on disk executes, never whether the daemon works, and the same probe is that
+// app's required preflight: a watch that restarts on it asks for an operation
+// its own failure blocks.
+func TestCatalogLifecycleWatchesNeverProbeTheBinaryOnDisk(t *testing.T) {
+	bare := []string{"--version", "-version", "-V", "-v", "version", "--help", "-help", "-h"}
+	walkCatalogDocs(t, filepath.Join(repoRoot(t), "catalog", "services"), func(path string, body map[string]any) {
+		name := filepath.Base(path)
+		watches, _ := body["watches"].(map[string]any)
+		for watchName, raw := range watches {
+			watch, _ := raw.(map[string]any)
+			then, _ := watch["then"].(map[string]any)
+			action := cfgval.String(then["action"])
+			if action == "" || action == "alert" {
+				continue
+			}
+			check, _ := watch["check"].(map[string]any)
+			command := cfgval.StringList(check[checks.CheckKeyCommand])
+			if len(command) == 2 && strings.HasSuffix(command[0], "_binary}") && slices.Contains(bare, command[1]) {
+				t.Errorf("%s: watch %s runs %v to decide a %s", name, watchName, command, action)
+			}
+		}
+	})
+}
+
 func TestPostgresCatalogDeclaresPostmasterPidfile(t *testing.T) {
 	body := catalogDocByName(t, repoRoot(t), "services", "postgres-%v")
 	if got := cfgval.String(body["pidfile"]); got != "${data_dir}/postmaster.pid" {
