@@ -106,9 +106,9 @@ Volatile paths go under `/run`. Normalize host-reported `/var/run/...` to
   `internal/operation`. CLI, daemon and web never call backend lifecycle
   methods. Any other signal (host watch `then.kill`, the dashboard's
   unowned-process kill, `engine.reap_own_strays`, mount blockers,
-  `sermoctl reload`) goes through `process.Signaler`/`process.Reaper` (pidfd)
-  with its own explicit authority. Primitive backend/process implementations
-  and their fakes are the exception.
+  `sermoctl daemon reload`) goes through `process.Signaler`/`process.Reaper`
+  (pidfd) with its own explicit authority. Primitive backend/process
+  implementations and their fakes are the exception.
 - Use Go code (see Dependencies) instead of external commands. Required
   external commands use the injectable `execx` runner, argv, a context and a
   timeout — no shell, no `os/exec` in production. The only product exception is
@@ -161,13 +161,15 @@ non-obvious reason — and never restate the code.
 
 ## Quality gates
 
-Idiomatic Go that passes the configured gate without new suppressions.
+Idiomatic Go that passes the configured gate without new suppressions. An
+error says what was attempted, for a sysadmin reader.
 `.golangci.yml` is the linter source of truth. A necessary `//nolint` names
 the exact analyzer and the design reason. Never weaken a gate or broaden an
 exclusion to land a change. How to add a `.semgrep/` call-boundary rule is in
 [`.semgrep/README.md`](.semgrep/README.md).
 
-Match the owning package's test style. Command execution is scripted with
+Match the owning package's test style; its hermetic seams are listed in
+`sermo-test-engineer`. Command execution is scripted with
 `internal/execx/execxtest`; add another `execx.Runner` fake only for stateful
 or timing behavior. Tests must not operate real services,
 signal host processes, or depend on ambient `/etc`, `/proc`, network or init
@@ -225,8 +227,8 @@ into a change that does not touch them.
 - Rules, windows, guards, policy: `sermo-rule-engine`;
   [docs/rules.md](docs/rules.md)
 - Catalog service definitions: `sermo-profile-author`
-- Protocol probes: honor `cfg.Interface`; register in
-  `internal/conn/registry.go`; dial with `BindDialer`, listen with
+- Protocol probes: `sermo-protocol-probes`. Honor `cfg.Interface`; register
+  in `internal/conn/registry.go`; dial with `BindDialer`, listen with
   `bindListenConfig`
 - Web UI: sources in `internal/web/src/` (design tokens in `tokens.css`,
   shared by the dashboard and the login page); generated
@@ -239,6 +241,10 @@ into a change that does not touch them.
   String-built SVG only in its container. Desktop/mobile and WCAG 2.2 AA
   checks.
 - Wizards: `internal/assist` owns prompts, detected targets and the
-  `all` / `none` / `default` notifier vocabulary
+  `all` / `none` / `default` notifier vocabulary. Never ask for a name
+  detection provides; `none` and `default` stay selectable with no notifier
+  configured (an empty inherited default is monitor-only); preview and
+  confirm generated files; offer cleanup only for targets detection proves
+  absent
 - Instanced catalog services: `${hostname}`, `%n` / `${n}`; templates
   materialize, the operator enables; [docs/services.md](docs/services.md)

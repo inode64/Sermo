@@ -4,37 +4,23 @@ description: Use when creating or reviewing Sermo service definitions for applic
 ---
 
 Catalog service author for Sermo. Schema and merge rules live in
-`sermo-config-schema`; safety policy in `docs/safety.md`. This skill is the
-shape of a catalog service and the traps that produce an unsafe or unusable
-one.
+`sermo-config-schema`, the operator contract in `docs/services.md`, safety
+policy in `docs/safety.md`. Start from the closest existing profile under
+`catalog/services/` (`catalog/services/redis.yml` for a cache or database);
+this skill is the decisions that make a profile safe and usable.
 
-## Service goal
+## What a profile describes
 
-A service should make monitoring and control safer and simpler. A service
-check describes the service process. State of a host resource the service
-observes belongs in a host watch; use `reports: state` or `reports: value`
-only when observed data must remain visible without affecting service health
-or availability. `smartd` is the reference: its catalog checks are `service`,
-`process` and memory, while drive health lives in host `smart` watches
-(`examples/watches/smart.yml`).
+A service check describes the service process. State of a host resource the
+service observes belongs in a host watch; use `reports: state` or
+`reports: value` only when observed data must stay visible without affecting
+service health or availability. `smartd` is the reference: its catalog checks
+are `service`, `process` and memory, while drive health lives in host `smart`
+watches (`examples/watches/smart.yml`).
 
-Each service should define:
-
-```text
-service name and display_name
-per-init service candidates
-linked apps: (binary, version and library preflight are the app's)
-variables
-pidfile when the daemon writes one
-config/preflight checks
-process discovery
-health watches (flag one verify: true for start verification)
-locks
-guards (top-level rules:, type: guard)
-stop_policy (keep_children when the daemon's workload must outlive a restart)
-policy and restart_on_change
-remediation and alerts in watches.<name>.then
-```
+Flag one health watch `verify: true` for start verification. Guards are
+top-level `rules:` of `type: guard`; remediation and alerts attach through
+`watches.<name>.then`.
 
 Link an app only when starting the daemon needs it: the daemon itself, its
 runtime (java, perl, python3) or a tool its init path runs (`ovsdb-tool`). A
@@ -49,28 +35,6 @@ A daemon whose workload must survive a restart (sessions, jobs, shims, bricks)
 sets `stop_policy.keep_children: true` with a strict principal selector, never a
 `delegated` selector: `delegated` is observe-only, for processes another backend
 owns.
-
-## Required sections
-
-Use this general shape:
-
-```yaml
-name: redis
-display_name: Redis
-category: database
-type: cache
-service: { systemd: [redis, redis-server], openrc: [redis, redis-server] }
-apps: [redis]
-variables: { user: redis }
-pidfile: /run/redis/redis.pid
-preflight: {}
-processes: { redis: { exe: "${redis_binary}", user: "${user}" } }
-watches: { service: { check: { type: service, expect: active, verify: true } } }
-rules: {}          # guards
-stop_policy: {}
-policy: {}
-restart_on_change: {}
-```
 
 ## Safety defaults by service class
 
@@ -119,20 +83,10 @@ self-grades (`service`/`process` down is critical, `cert` expiry warning or
 critical); do not declare `severity:` on them unless the profile really means
 a different grade. Quote `${var}` values inside YAML flow mappings.
 
-## Common services
+## Config preflight
 
-When creating catalog services, consider:
-
-```text
-apache/httpd: apache2ctl configtest per OS, ${apache_binary} -t by default; version from the apache app (httpd|apache2 -v)
-nginx: nginx -t; version nginx -V from the nginx app
-php-fpm: php-fpm --test --fpm-config <config>; version php-fpm -v from the php-fpm app
-mysql/mariadb: binary-owned config preflight when reliable; native mysql check for liveness
-redis: linked redis app binary/version preflight; native redis check for PING/INFO liveness
-postgresql: linked postgres app (versioned binaries); native postgres check for liveness
-```
-
-If a config validation command differs by distribution, make it override-friendly through variables.
+If a validation command differs by distribution, make it override-friendly
+through variables.
 
 `preflight.config` should refuse exactly what the start refuses, on every init
 backend. Read the systemd unit's ExecStartPre lines and the OpenRC `checkconfig`

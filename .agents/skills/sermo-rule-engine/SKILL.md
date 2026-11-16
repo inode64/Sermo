@@ -5,22 +5,16 @@ description: Use when designing or implementing Sermo rules, condition trees, an
 
 Rule-engine design for Sermo. The public YAML surface is in `docs/rules.md`;
 the types are `RuleType`, `ActionType` and `Action` in
-`internal/rules/model.go`; policy state lives in `internal/rules/state.go`.
+`internal/rules/model.go`, the condition keys in `internal/rules/keys.go` and
+policy state in `internal/rules/state.go`.
 
-## Model
+## Shape
 
-- `rules` is a map keyed by rule name so a service can override or disable one
-  inherited rule. Types: `remediation`, `guard`, `alert`.
-- `then` is one action (`then: { action: restart }`) or
-  `then: { actions: [...] }`. `block` and `alert` require a `message`; only
-  guards use `block`, and a guard must list `blocks`.
-- Condition leaves: `and`, `or`, `not`, `failed`, `active`, `metric`,
-  `service`, `process`, `file`, `command`, `changed`.
-- `for: { cycles | duration }` counts consecutive matches; `within: { cycles |
-  duration, min_matches }` (default `min_matches: 1`) is a rolling window. A
-  rule declares at most one of them, a guard neither, and `clear:` is valid only
-  on alert rules. `mode` belongs only to the `rule_window` fallback (global
-  `defaults`, or a catalog service or service), never to a rule's `for`/`within`.
+- A rule declares at most one of `for:` and `within:`, a guard neither, and
+  `clear:` is valid only on alert rules. `mode` belongs only to the
+  `rule_window` fallback (global `defaults`, a catalog service or a service),
+  never to a rule's own window.
+- Only guards use `block`, and a guard must list `blocks`.
 
 ## Invariants
 
@@ -31,8 +25,6 @@ the types are `RuleType`, `ActionType` and `Action` in
   `cmd` is a host-wide argv predicate, independent of service attribution;
   an unreadable argv stays unknown under negation. Operations refresh process
   observations before evaluating guards; cmd never grants signal authority.
-- A remediation rule triggers only on `scope: service` metrics. A
-  `scope: system` metric may drive `alert` only.
 - Guards run before remediation; a blocked action logs the guard's block
   message and records one event.
 - Automatic refusals wait the policy cooldown per rule, independently of the
@@ -47,9 +39,8 @@ the types are `RuleType`, `ActionType` and `Action` in
 - Cooldown, `max_actions`, `max_actions_window` and backoff are the per-service
   `policy`, not per-rule. The daemon consults the policy before the operation
   engine; a rule may keep firing while the policy suppresses execution.
-- A resolved policy needs a positive `cooldown`; a missing or zero value is a
-  validation error. Manual actions bypass the whole policy (cooldown,
-  `max_actions`, backoff) but never guards, locks or preflight.
+- Manual actions bypass the whole policy (cooldown, `max_actions`, backoff)
+  but never guards, locks or preflight.
 - An unavailable or erroring guard leaf fails closed. Unavailable or skipped
   observations remain unknown through `not` and `and`; an `or` holds as soon
   as one operand holds, so its outcome never depends on operand order.

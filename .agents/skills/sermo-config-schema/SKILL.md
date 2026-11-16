@@ -14,8 +14,9 @@ here. This skill records the design decisions a change must respect.
   flat resolved config. The daemon consumes resolved targets only.
 - A document's kind comes from its location (catalog subdirectory,
   `paths.services`, `paths.watches`); `kind:` is redundant and must match when
-  present in a `paths.*` document; catalog documents ignore it. One document of one kind per file. A notifier fragment holds exactly
-  one entry under `notifiers:`. `docs/sermo-all.yml` is the only bundle.
+  present in a `paths.*` document; catalog documents ignore it. One document
+  of one kind per file. A notifier fragment holds exactly one entry under
+  `notifiers:`. `docs/sermo-all.yml` is the only bundle.
 - Mergeable sections (`watches`, `checks`, `preflight`, `processes`, `rules`)
   are maps keyed by name, never lists, so an override can disable or delete
   one inherited item. Scalars override, maps merge recursively, arrays replace.
@@ -37,16 +38,12 @@ here. This skill records the design decisions a change must respect.
   documents and are then dropped. The operator still enables the concrete
   services. The full contract is in `docs/services.md`; keep it current when
   the resolver changes.
-- `restart_on_change.libraries` and other catalog sugar desugar at resolution
-  into the canonical runtime tree; the sugar never reaches the daemon.
 - `engine.runtime` is the single runtime root. `paths.locks` and
   `/etc/sermo/locks.d` are not supported.
 - Classified watch directories (`watches/`, `networks/`, `storages/`,
   `mounts/`) are all listed under `paths.watches`; each `.local` sibling is
   the per-host override. Source-tree validation uses
   `SERMO_DATADIR=$PWD make build` and `examples/sermo-dev.yml`.
-- Dangerous behavior needs explicit configuration, and no option may disable a
-  hard safety invariant (AGENTS.md → Safety; `sermo-safety-review`).
 - `control.compose` is a Docker creation capability, not an automatic recovery
   rule. It identifies a local Compose project/service, ordered source/env files
   and a pinned image ID. Parsing belongs to `dockerctl`; Compose resolves its
@@ -64,13 +61,8 @@ here. This skill records the design decisions a change must respect.
 
 ## Traps
 
-- Adding a check, option or behavior to services but not host watches, or the
-  reverse, without a documented owner-level limitation.
-- Keeping a retired field name alive through fixtures or compatibility parsing
-  without an explicit request.
 - Reading a numeric field before expansion, or comparing metric values without
   honoring the `%` suffix.
-- A `scope: system` metric driving anything but `alert`.
 - A `file_exists` check pointing under `<engine.runtime>/locks`.
 - A version template whose `%v` token also appears in the body; the body uses
   `${version}`.

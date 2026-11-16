@@ -4,43 +4,32 @@ description: Use for any Sermo change involving start, stop, restart, reload, re
 ---
 
 Safety review for Sermo. Assume production servers and control of databases,
-web servers, caches and mail. Operator policy: `docs/safety.md`. AGENTS.md
-lists the hard boundaries. This skill is the review checklist for code that
-touches them.
+web servers, caches and mail. Operator policy: `docs/safety.md`. AGENTS.md →
+Safety lists the hard boundaries and is not repeated here; this skill is the
+detail a change to that code must preserve. Leaving an unidentified process
+alive beats killing the wrong one.
 
 ## Operation path
 
-1. Every service action runs through `internal/operation` with a timeout, the
-   operation lock, guards and required preflight. CLI, daemon and web never
-   call a backend lifecycle method; any other signal goes through
-   `process.Signaler`/`process.Reaper` (pidfd) with its own explicit authority.
-2. Start/restart/reload/resume/repair is blocked by a failed required preflight; an
+1. Start/restart/reload/resume/repair is blocked by a failed required preflight; an
    optional preflight warns. A `verify: true` check failing after the operation
    returns `postflight_failed`.
-3. Automatic remediation uses the same path as manual actions, requires a
-   positive resolved `policy.cooldown`, honors `max_actions` and never triggers
-   from a `scope: system` metric. Manual actions skip cooldown only; they still
-   pass guards, locks and preflight.
-4. The operation lock is released on every exit path. Named runtime locks live
+2. The operation lock is released on every exit path. Named runtime locks live
    under `<engine.runtime>/locks`, operation locks under `<engine.runtime>/ops`;
    they never share a directory and are never loaded from `/etc/sermo`.
    A named lock read/parse warning for the target service prevents its operation;
    do not treat a partially written lock as absent.
-5. Locks are staged with `O_CREAT|O_EXCL`, synced and closed before no-replace
+3. Locks are staged with `O_CREAT|O_EXCL`, synced and closed before no-replace
    hard-link publication, and are TTL-bounded. A stale lock
    (expired or dead owner) is reclaimed through a logged path, never silently
    overwritten: every locker (operation, named, watch control, expansion,
    mount) reports the reclaim, and daemon, web and sermoctl record it as the
    same warning event (`app.LockReclaim`).
-6. Every executed or blocked action records exactly one auditable event.
-7. One slow service never blocks monitoring of another; shared check
-   concurrency stays bounded.
-   An explicit `operation_group` serializes related lifecycle actions only:
+4. An explicit `operation_group` serializes related lifecycle actions only:
    acquire its separate group lease and the service lease before any backend
    work, release both on every path and keep contention nonblocking. A cascade
    releases those leases between members, so it cannot deadlock itself.
-
-8. Restart is stop/verify/reconcile/start/verify under the same lock and
+5. Restart is stop/verify/reconcile/start/verify under the same lock and
    deadline. A Docker target positively confirmed inactive only starts; an
    inspect 404 may create a stopped target from a registered Compose source,
    then start its verified new ID. Original restart guards still apply, and
@@ -48,37 +37,37 @@ touches them.
    There is no backend restart mode. Fresh process observations must
    distinguish confirmed absence from incomplete discovery. Process-free services
    cannot be judged by missing PIDs.
-9. A failed stop command may have stopped the process: retain the error, verify
+6. A failed stop command may have stopped the process: retain the error, verify
    absence and reconcile init before proceeding. A failed start requires a trusted
    live process, active init and postflight. Never discard reset errors or infer
    reload/resume success from liveness. systemd reset-failed does not deactivate
    an active unit; OpenRC zap must never hide a surviving daemon.
-10. Accept systemd reactivation only after verifying old process generations
-    exited across the complete process snapshot, including outside the current
-    cgroup, and the same unit owns the new generation. Never signal the replacement
-    or accept an unchanged daemon as a completed restart. Restore stopped
-    auxiliary units even when the primary start is skipped.
-    A newly observed backend generation still starting gets the bounded
-    readiness window before classification; uncertainty never authorizes a
-    signal to that replacement. Recheck reactivation on every rediscovery,
-    including after SIGTERM and during init reconciliation. A positive activating
-    observation may wait for a new PID; a reset permission or query error cannot
-    be recovered merely because the service later looks active.
-11. Deleted-executable evidence with the main selector's previous path and real
-    user may permit a backend stop, but never validates a new start. Keep it
-    separate from current exact identity; workers cannot substitute for an exact
-    main selector, and zombies cannot prove a process is running. For an `exe`
-    that is a link to a versioned file, the previous path also covers the
-    deleted previous version beside it (`internal/process/versioned_exe.go`).
-    That naming evidence adds no signal authority (`kill_only_if` stays exact),
-    and a live match re-reads the link instead of guessing.
-12. Incomplete rediscovery stops signal escalation. Keep stop-command,
-    auxiliary-stop and artifact warnings in the one audit result even if a
-    subsequent phase fails or times out.
-    Before init reconciliation, transient strict-identity absence uncertainty
-    may retry fresh observations within the existing operation deadline and a
-    bounded attempt count. Never reset or start while uncertainty remains;
-    newly observed residuals, snapshot errors and cancellation still refuse it.
+7. Accept systemd reactivation only after verifying old process generations
+   exited across the complete process snapshot, including outside the current
+   cgroup, and the same unit owns the new generation. Never signal the replacement
+   or accept an unchanged daemon as a completed restart. Restore stopped
+   auxiliary units even when the primary start is skipped.
+   A newly observed backend generation still starting gets the bounded
+   readiness window before classification; uncertainty never authorizes a
+   signal to that replacement. Recheck reactivation on every rediscovery,
+   including after SIGTERM and during init reconciliation. A positive activating
+   observation may wait for a new PID; a reset permission or query error cannot
+   be recovered merely because the service later looks active.
+8. Deleted-executable evidence with the main selector's previous path and real
+   user may permit a backend stop, but never validates a new start. Keep it
+   separate from current exact identity; workers cannot substitute for an exact
+   main selector, and zombies cannot prove a process is running. For an `exe`
+   that is a link to a versioned file, the previous path also covers the
+   deleted previous version beside it (`internal/process/versioned_exe.go`).
+   That naming evidence adds no signal authority (`kill_only_if` stays exact),
+   and a live match re-reads the link instead of guessing.
+9. Incomplete rediscovery stops signal escalation. Keep stop-command,
+   auxiliary-stop and artifact warnings in the one audit result even if a
+   subsequent phase fails or times out.
+   Before init reconciliation, transient strict-identity absence uncertainty
+   may retry fresh observations within the existing operation deadline and a
+   bounded attempt count. Never reset or start while uncertainty remains;
+   newly observed residuals, snapshot errors and cancellation still refuse it.
 
 ## Terminal output recovery
 
@@ -95,18 +84,14 @@ touches them.
 
 ## Process identity and signaling
 
-- Signal authority requires the exact resolved `/proc/<pid>/exe` path and the
-  real UID, or the cgroup/session evidence below. Name, basename, substring,
-  argv[0] and cmdline never authorize anything: a cmd-only selector may
-  attribute a process for monitoring but never authorizes a signal, and `cmd`
-  on an exe selector only narrows it.
+- A cmd-only selector may attribute a process for monitoring but never
+  authorizes a signal, and `cmd` on an exe selector only narrows it.
 - Signal delivery uses a pidfd bound before revalidating the discovered start
   time, exact exe and real UID. Missing pidfd support fails closed; never fall
   back to signaling a numeric PID after authorizing a process snapshot.
 - An unreadable exe never matches. A `(deleted)` exe cannot prove a healthy
   start; residual cleanup requires the exact previous path, real UID, verified
   kernel-held file and service ownership.
-  Leaving an unidentified process alive beats killing the wrong one.
 - Prefer extra evidence: pidfile, systemd cgroup or MainPID, parent tree,
   OpenRC supervise metadata, a listening port owned by the PID.
 - `SIGKILL` requires `force_kill: true` plus a `kill_only_if` clause with both
@@ -114,9 +99,8 @@ touches them.
   or, without one, the exe+user(+cmd) pairs `EnableAutomaticReaping` derives
   from strict principal selectors; or proven membership of the unit's own
   cgroup with `force_kill: true` or `auto`. Unset or `false` rules out SIGKILL.
-  The mysql, mariadb, postgres, mongod, influxdb, redis, keydb, memcached, etcd
-  and patroni profiles pair the inherited `auto` with an explicit `kill_only_if`
-  and long grace periods; only garbd, which holds no data, keeps the defaults.
+  Database and cache profiles pair the inherited `auto` with an explicit
+  `kill_only_if` and long grace periods (`sermo-profile-author`).
 - Residuals after stop: under `force_kill: true` or `auto`, processes matching
   `kill_only_if` (or an `auto`-derived pair) get SIGTERM, then SIGKILL after the
   term timeout. A residual the kernel places in
@@ -153,10 +137,7 @@ touches them.
   being a stray; a stop handles it as any other residual. The only exception is
   sermod's own startup hygiene, `engine.reap_own_strays` (SIGTERM only, in
   sermod's own unit cgroup).
-- External commands are argv arrays through the `execx` runner with a context
-  and timeout; no shell, no interpolated user input, no ignored errors or
-  cancellation. A hook without its own `timeout` inherits
-  `engine.default_timeout`.
+- A hook without its own `timeout` inherits `engine.default_timeout`.
 - `sermoctl daemon reload` signals only the sermod installed alongside the
   sermoctl that runs it (its sibling or `../sbin/sermod`, symlinks resolved),
   running as the caller's real UID (any UID for a root caller), through the
@@ -191,24 +172,6 @@ exact previous executable path and real UID, known generation, verified
 kernel-held file, parent PID 1 and no controlling terminal. Revalidate through
 the operation engine and pidfd, send SIGTERM only and verify exit. A tmux server
 can hold multiple sessions, so this process fallback does not apply to tmux.
-
-## Red flags
-
-```text
-matches killable processes by name, basename, substring, argv[0] or cmdline
-runs a shell or ignores command errors or context cancellation
-executes a service action outside internal/operation
-lets remediation bypass locks, guards, preflight or cooldown
-triggers remediation from a system-scope metric
-restarts after a stop that left residual processes
-leaks the operation lock on an early return
-does not log a blocked action
-adds a config toggle that disables a hard invariant
-lets a busy observation (too many connections, loading) drive a lifecycle action
-evaluates a rule for an operation with Eval instead of EvalRule
-lets named locks and operation locks share a directory or load from /etc
-serializes every service through one loop
-```
 
 ## Required tests
 
