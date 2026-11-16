@@ -3,13 +3,18 @@ package operation
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
+	"sermo/internal/config"
 	"sermo/internal/process"
 	"sermo/internal/servicemgr"
 )
 
+// After a stop request that reported an error, a service with no strict
+// selector may be reset only on proof that every earlier generation exited and
+// that its backend reports it stopped.
 func TestStoppedContainerRequiresGenerationAndBackendProof(t *testing.T) {
 	for _, tc := range []struct {
 		name       string
@@ -42,7 +47,17 @@ func TestStoppedContainerRequiresGenerationAndBackendProof(t *testing.T) {
 		{name: "known absence with delayed state", backend: servicemgr.BackendDocker, state: servicemgr.StatusInactive, states: []servicemgr.Status{servicemgr.StatusActive}, known: true},
 		{name: "cancel while awaiting inactive", backend: servicemgr.BackendDocker, state: servicemgr.StatusActive, cancelWait: true, wantError: true},
 		{name: "failed backend", backend: servicemgr.BackendDocker, state: servicemgr.StatusFailed, wantError: true},
-		{name: "native init still needs selectors", backend: servicemgr.BackendSystemd, state: servicemgr.StatusInactive, wantError: true},
+		// A native init service with no strict selector offers the same proof once
+		// its init reports it stopped: the state from which a later start resets
+		// with no proof at all.
+		{name: "systemd exited and inactive", backend: servicemgr.BackendSystemd, state: servicemgr.StatusInactive},
+		{name: "openrc exited and crashed", backend: servicemgr.BackendOpenRC, state: servicemgr.StatusInactive, states: []servicemgr.Status{servicemgr.StatusFailed}},
+		{name: "native init still active", backend: servicemgr.BackendSystemd, state: servicemgr.StatusActive, wantError: true},
+		{name: "native init survivor", backend: servicemgr.BackendOpenRC, state: servicemgr.StatusInactive, ids: map[int]process.Identity{100: {PID: 100, StartTicks: 10, StartTicksOK: true}}, wantError: true},
+		{name: "native init without previous process", backend: servicemgr.BackendOpenRC, state: servicemgr.StatusInactive, noPrevious: true, wantError: true},
+		{name: "native init unknown previous generation", backend: servicemgr.BackendSystemd, state: servicemgr.StatusInactive, noTicks: true, wantError: true},
+		{name: "native init strict identity uncertainty", backend: servicemgr.BackendSystemd, state: servicemgr.StatusInactive, strict: true, wantError: true},
+		{name: "native init status error", backend: servicemgr.BackendOpenRC, state: servicemgr.StatusInactive, stateError: true, wantError: true},
 		{name: "parent cancellation", backend: servicemgr.BackendDocker, state: servicemgr.StatusInactive, cancel: true, wantError: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -147,5 +162,82 @@ func TestContainerGraceEndsOnlyWithExitAndInactiveProof(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+// crashedAfterStop reports what OpenRC does when a stop request gives up but
+// the daemon exits afterwards: the service still holds its started marker and
+// reads crashed until that marker is reset.
+type crashedAfterStop struct{ *fakeManager }
+
+func (m crashedAfterStop) Status(ctx context.Context, unit string) (servicemgr.ServiceStatus, error) {
+	if !m.stopped && m.did("stop "+unit) && !m.did("start "+unit) {
+		return servicemgr.ServiceStatus{Status: servicemgr.StatusFailed}, nil
+	}
+	return m.fakeManager.Status(ctx, unit)
+}
+
+// A daemon that takes longer to exit than its init script waits makes the stop
+// request fail although it stops. Without a strict selector the service still
+// restarts in the same operation once every earlier generation is gone, with
+// the init's error kept as a warning; a survivor still ends it as an orphan.
+func TestRestartCompletesAfterAFailedStopRequestOnceEveryGenerationExited(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		survives  bool
+		want      ResultStatus
+		wantStart bool
+	}{
+		{name: "process exits", want: ResultOK, wantStart: true},
+		{name: "process survives", survives: true, want: ResultOrphanProcesses},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			h := defaultHarness()
+			h.backend = string(servicemgr.BackendOpenRC)
+			h.mgr.status = servicemgr.StatusActive
+			h.mgr.stopErr = errors.New("start-stop-daemon: 1 process refused to stop")
+			old := process.Process{PID: 100, StartTicks: 10, Exe: "/usr/bin/node", ExeOK: true, Source: process.SourceBackend}
+			fresh := process.Process{PID: 200, StartTicks: 20, Exe: "/usr/bin/node", ExeOK: true, Source: process.SourceBackend}
+			live := func() []process.Process {
+				switch {
+				case h.mgr.did("start mysqld"):
+					return []process.Process{fresh}
+				case h.mgr.did("stop mysqld") && !tc.survives:
+					return nil
+				default:
+					return []process.Process{old}
+				}
+			}
+			engine := h.engine()
+			engine.Lifecycle.ProcessMode = config.ServiceProcessResident
+			engine.Manager = crashedAfterStop{h.mgr}
+			engine.ObserveProcesses = func() (process.Observation, error) {
+				return process.Observation{Processes: live()}, nil
+			}
+			engine.ObserveTracked = func(previous []process.Process) (process.Observation, error) {
+				ids := map[int]process.Identity{}
+				for _, proc := range live() {
+					ids[proc.PID] = process.Identity{PID: proc.PID, StartTicks: proc.StartTicks, StartTicksOK: true}
+				}
+				out, err := process.Discoverer{Reader: &countingPIDReader{ids: ids}}.ObserveTracked(nil, previous)
+				out.Processes = live()
+				return out, err
+			}
+			engine.Discover = func() ([]process.Process, error) { return live(), nil }
+
+			res := engine.Do(t.Context(), actionRestart)
+			if res.Status != tc.want {
+				t.Fatalf("result = %+v, want %s; calls=%v", res, tc.want, h.mgr.calls)
+			}
+			if h.mgr.did("start mysqld") != tc.wantStart {
+				t.Fatalf("calls = %v, want start %v", h.mgr.calls, tc.wantStart)
+			}
+			if len(res.Warnings) != 1 || !strings.Contains(res.Warnings[0], "refused to stop") {
+				t.Fatalf("warnings = %v, want the stop request error kept", res.Warnings)
+			}
+			if len(h.emitted) != 1 || h.released != 1 {
+				t.Fatalf("events=%d releases=%d, want one audited outcome and the lock released", len(h.emitted), h.released)
+			}
+		})
 	}
 }

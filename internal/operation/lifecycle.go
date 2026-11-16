@@ -192,7 +192,7 @@ func (e Engine) resetStopped(ctx context.Context, requireAbsence bool, previous 
 		return errProcessesAppeared
 	}
 	if (observation.IdentityRequired || requireAbsence) && !observation.AbsenceKnown {
-		if err := e.verifyContainerExit(observation, previous); err != nil {
+		if err := e.verifyGenerationsExited(ctx, observation, previous); err != nil {
 			return fmt.Errorf("cannot prove process absence before init state reconciliation: %w", err)
 		}
 	}
@@ -217,19 +217,31 @@ func (e Engine) resetStopped(ctx context.Context, requireAbsence bool, previous 
 	return nil
 }
 
-// A container with no selectors has no host-wide executable identity to query.
-// Accept only a confirmed inactive backend and proof that every old generation
-// exited; an empty or failed PID lookup alone never grants this exception.
-func (e Engine) verifyContainerExit(observation process.Observation, previous []process.Process) error {
-	if e.Backend != string(servicemgr.BackendDocker) {
-		return errNoIdentityEvidence
-	}
+// A service with no strict selector has no host-wide executable identity to
+// query, so it can never report AbsenceKnown. Its only absence proof is that
+// every generation seen before the stop left the complete process table, and
+// that its backend no longer reports it running: a container's inactive state
+// is confirmed by the caller, and a native init must already read inactive or
+// failed, the states from which a later start reconciles without any of this
+// proof. Refusing here only postponed the same reset by one cycle, with the
+// service down meanwhile. An empty or failed PID lookup alone grants nothing.
+func (e Engine) verifyGenerationsExited(ctx context.Context, observation process.Observation, previous []process.Process) error {
 	previous = nonDelegatedResiduals(previous)
 	if observation.IdentityRequired || len(previous) == 0 {
 		return errNoIdentityEvidence
 	}
 	if err := observation.VerifyExited(previous); err != nil {
-		return fmt.Errorf("verify container process exit: %w", err)
+		return fmt.Errorf("verify process exit: %w", err)
+	}
+	if e.Backend == string(servicemgr.BackendDocker) {
+		return nil
+	}
+	status, err := e.Manager.Status(ctx, e.Unit)
+	if err != nil {
+		return fmt.Errorf("query init state after stop: %w", err)
+	}
+	if status.Status != servicemgr.StatusInactive && status.Status != servicemgr.StatusFailed {
+		return fmt.Errorf("init still reports %s: %w", status.Status, errNoIdentityEvidence)
 	}
 	return nil
 }

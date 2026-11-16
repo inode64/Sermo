@@ -1184,7 +1184,14 @@ waited counts against `graceful_timeout`: a hung daemon that
 deadline for Sermo's SIGTERM/SIGKILL, the start and postflight. A nonzero command result does
 not by itself prove that stopping failed: when Sermo demonstrates that the daemon
 is gone and init can be reconciled, it continues and records the command error
-as a warning. Otherwise it fails without starting a replacement. A failed reset
+as a warning. Otherwise it fails without starting a replacement. A service with
+a strict `processes:` selector demonstrates it by that identity being absent
+from the whole process table. One without a strict selector has no identity to
+look for: it is gone when every process seen before the stop has left the
+process table, none is attributed to it now, and its init reports it inactive
+or failed (OpenRC's `crashed`). A daemon that takes longer to exit than its
+init script waits therefore still restarts in one operation, with the init's
+error as a warning. A failed reset
 or an init state that remains inconsistent is an operation failure.
 Stop-command, auxiliary-stop and stopped-artifact warnings stay in the result
 and audit event even if a later phase fails or times out. An error during

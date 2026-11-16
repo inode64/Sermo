@@ -38,7 +38,10 @@ killing the wrong one.
    distinguish confirmed absence from incomplete discovery. Process-free services
    cannot be judged by missing PIDs.
 6. A failed stop command may have stopped the process: retain the error, verify
-   absence and reconcile init before proceeding. A failed start requires a trusted
+   absence and reconcile init before proceeding. Without a strict selector the
+   only absence proof is that every generation seen before the stop left the
+   process table and the backend reports the service inactive or failed; an
+   empty PID lookup alone proves nothing. A failed start requires a trusted
    live process, active init and postflight. Never discard reset errors or infer
    reload/resume success from liveness. systemd reset-failed does not deactivate
    an active unit; OpenRC zap must never hide a surviving daemon.
