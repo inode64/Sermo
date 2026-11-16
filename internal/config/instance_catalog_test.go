@@ -58,6 +58,10 @@ func TestCatalogOpenRCLinkInstancesMaterialize(t *testing.T) {
 	if got := cfgval.String(daemon["user"]); got != "apache" || cfgval.String(daemon["cmd"]) != cfgval.String(main["cmd"]) {
 		t.Fatalf("pm2 god-daemon check = %v, want the selector's user and command", daemon)
 	}
+	// A node upgrade leaves the live daemon on a deleted executable no exe matches.
+	if _, ok := daemon["exe"]; ok {
+		t.Fatalf("pm2 god-daemon check names an executable: %v", daemon)
+	}
 	// The home comes from the host's passwd, so only its shape is asserted.
 	pidfile := cfgval.String(manager.Tree["pidfile"])
 	if !strings.HasSuffix(pidfile, "/.pm2/pm2.pid") || slices.Contains([]string{"/run/pm2.pid", "/root/.pm2/pm2.pid"}, pidfile) {

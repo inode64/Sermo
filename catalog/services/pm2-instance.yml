@@ -18,10 +18,12 @@ variables:
 pidfile: { path: "${home}/.pm2/pm2.pid", optional: true }
 watches:
   # OpenRC reads the unit as started whether or not the daemon still runs.
+  # By title and user only: after a node upgrade the daemon's executable is a
+  # deleted file that no exe matches, and it is still alive until the
+  # stale-binary restart renews it. Signal authority stays with the selector.
   god-daemon:
     check:
       type: process
-      exe: ${node_binary}
       cmd: '^PM2 v[0-9][^ ]*: God Daemon'
       user: ${user}
       state: running

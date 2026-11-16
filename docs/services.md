@@ -2624,7 +2624,9 @@ service. A host that changes Gitea's `HTTP_PORT` sets `variables.port` in its
 The `pm2.%i` template covers the PM2 of one user run from an OpenRC
 `pm2.<user>` link (`pm2.apache` runs as `apache`). OpenRC reads the unit as
 started whatever its God Daemon does, so the instance adds a `god-daemon`
-process check on the daemon's own title and user, and its pidfile is the one
+process check on the daemon's own title and user (no executable, so a daemon
+left on a deleted `node` after an upgrade still reads alive until its
+stale-binary restart), and its pidfile is the one
 in that user's `~/.pm2`, the home taken from `/etc/passwd`.
 
 The three ONLYOFFICE Docs (Document Server) services are separate profiles
