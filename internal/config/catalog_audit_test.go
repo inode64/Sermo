@@ -2686,6 +2686,29 @@ func TestCatalogOptionalConfigPreflightsSkipAnAbsentFileWithoutAShell(t *testing
 	}
 }
 
+// Any pm2 CLI invocation starts the God Daemon when none runs, so a probe
+// through it creates the process it was meant to observe.
+func TestCatalogPM2NeverRunsItsCLIToObserveTheDaemon(t *testing.T) {
+	root := repoRoot(t)
+	for _, category := range []string{"services", "apps"} {
+		doc := catalogDocByName(t, root, category, "pm2")
+		for _, section := range []string{"preflight", "watches", "checks"} {
+			entries, _ := doc[section].(map[string]any)
+			for name, entry := range entries {
+				check, _ := entry.(map[string]any)
+				if nestedCheck, ok := check["check"].(map[string]any); ok {
+					check = nestedCheck
+				}
+				for _, arg := range cfgval.StringList(check[checks.CheckKeyCommand]) {
+					if arg == "${pm2_binary}" || arg == "${binary}" {
+						t.Errorf("%s pm2 %s.%s runs the pm2 CLI: %v", category, section, name, check[checks.CheckKeyCommand])
+					}
+				}
+			}
+		}
+	}
+}
+
 func TestPostgresCatalogDeclaresPostmasterPidfile(t *testing.T) {
 	body := catalogDocByName(t, repoRoot(t), "services", "postgres-%v")
 	if got := cfgval.String(body["pidfile"]); got != "${data_dir}/postmaster.pid" {
