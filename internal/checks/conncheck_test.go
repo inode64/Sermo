@@ -1084,6 +1084,17 @@ func TestBuildUnixSocketChecks(t *testing.T) {
 	}
 }
 
+// A ceph check with a socket asks that daemon's admin socket; `query` is the
+// admin command it sends.
+func TestBuildCephAdminSocketCheck(t *testing.T) {
+	c := buildConnCheckForTest(t, "admin", map[string]any{
+		"type": "ceph", "socket": "/run/ceph/ceph-mon.node1.asok", "query": "mon_status",
+	})
+	if c.proto.Name() != conn.ProtocolNameCeph || c.cfg.Socket != "/run/ceph/ceph-mon.node1.asok" || c.cfg.Query != "mon_status" {
+		t.Fatalf("cfg = %+v", c.cfg)
+	}
+}
+
 func TestBuildUnknownTypeStillWarns(t *testing.T) {
 	_, warns := Build(map[string]any{
 		"x": map[string]any{"type": "nope"},

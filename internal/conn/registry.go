@@ -35,7 +35,7 @@ var builtinProtocolRegistrations = []protocolRegistration{
 	{protocol: amqpProtocol{}, aliases: []string{protocolAliasRabbitMQ}, socket: true},
 	{protocol: asteriskProtocol{}, aliases: []string{protocolAliasAMI}, socket: true},
 	{protocol: avahiProtocol{}, aliases: []string{protocolAliasAvahiDaemon}, socket: true},
-	{protocol: cephProtocol{}, aliases: []string{protocolAliasCephMon}},
+	{protocol: cephProtocol{}, aliases: []string{protocolAliasCephMon}, socket: true},
 	{protocol: chronyProtocol{}, aliases: []string{protocolAliasChronyd}, socket: true},
 	{protocol: clamdProtocol{}, aliases: []string{protocolAliasClamAV}, socket: true},
 	{protocol: cloudflaredProtocol{}, aliases: []string{protocolAliasCloudflareTunnel}},

@@ -7,10 +7,6 @@ apps:
   - ceph-mgr
 variables:
   user: ceph
-  # The admin-socket probe below runs the Python `ceph` CLI. Starting the
-  # daemon does not need it, so it is not a linked app: a CLI that cannot
-  # import a module must not block a restart of the daemon.
-  ceph_binary: ${bindir}/ceph
 socket: /run/ceph/ceph-mgr.${hostname}.asok
 processes:
   ceph-mgr:
@@ -28,17 +24,12 @@ watches:
       type: service
       expect: active
   restart-if-status-failed:
+    # The daemon's own admin socket, asked natively: what `ceph --admin-daemon`
+    # does, without starting the Python client for every daemon and cycle.
     check:
-      type: command
-      command:
-        - ${ceph_binary}
-        - --admin-daemon
-        - /run/ceph/ceph-mgr.${hostname}.asok
-        - status
+      type: ceph
+      socket: /run/ceph/ceph-mgr.${hostname}.asok
       timeout: 5s
-      analyze:
-        use:
-          - ceph
       verify: true
     for:
       cycles: 3

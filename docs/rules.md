@@ -1577,7 +1577,7 @@ keep the per-protocol entries short:
 - **Auth** is noted per entry; many protocols are anonymous.
 - **`socket`** (a Unix socket path) dials the socket instead of `host`/`port`
   for the protocols that can reach a Unix endpoint: `amqp`, `asterisk`, `avahi`,
-  `chrony`, `clamd`, `dbus`, `docker`, `fpm`, `ftp`, `imap`, `kafka`, `libvirt`,
+  `ceph`, `chrony`, `clamd`, `dbus`, `docker`, `fpm`, `ftp`, `imap`, `kafka`, `libvirt`,
   `memcached`, `mqtt`, `mysql`, `nntp`, `nut`, `openvswitch`, `pop`, `redis`,
   `rsync`, `sieve`, `smtp`, `spamd`, `varnish` and the socket-only daemons
   (`acpid`, `fail2ban`, `lvmpolld`). Validation rejects `socket` for any other
@@ -2374,6 +2374,26 @@ Protocols, in the order of the table above:
   messenger banner (`ceph v2\n` for v2, `ceph v027` for v1); reading a `ceph v`
   banner proves it is a Ceph endpoint. Result data: the `messenger` version
   (`v1`/`v2`). The banner precedes the authenticated handshake, so no credentials.
+  With `socket` it asks one daemon (mon, mgr, mds or osd) over its **admin
+  socket** instead, natively and read-only, as `ceph --admin-daemon` does:
+  `query` names the admin command (default `status`; a monitor answers
+  `mon_status`), sent as a JSON command, and the check passes when the daemon
+  answers with a JSON object. An unknown command or any other reply fails with
+  the daemon's own first line. Result data: the `socket`, the `query` and the
+  daemon's `state` when it reports one (`peon`, `leader`, `active`,
+  `up:active`…; a manager reports none). No auth beyond the socket's
+  permissions.
+
+  ```yaml
+  checks:
+    osd-admin:
+      type: ceph
+      socket: /run/ceph/ceph-osd.0.asok
+    mon-admin:
+      type: ceph
+      socket: /run/ceph/ceph-mon.node1.asok
+      query: mon_status
+  ```
 - `glusterfs` (aliases `glusterd`, `gluster`) — default port 24007 (TCP, the
   glusterd management daemon). No auth. The check only establishes a TCP
   connection: GlusterFS deliberately leaves the RPC NULL actor in its handshake

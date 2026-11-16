@@ -25,7 +25,7 @@ top-level `rules:` of `type: guard`; remediation and alerts attach through
 Link an app only when starting the daemon needs it: the daemon itself, its
 runtime (java, perl, python3) or a tool its init path runs (`ovsdb-tool`). A
 client the profile runs only to probe the daemon is a variable
-(`ceph_binary: ${bindir}/ceph`): linked, its preflight blocks every restart
+(`ctl_binary: ${bindir}/syslog-ng-ctl`): linked, its preflight blocks every restart
 while the client is broken, its failure grades as an outage of the active
 service, and `ServiceBinary` may pick the client, since it takes the first
 linked app's `<app>-binary` in name order. An app's `binary` is its daemon, not
