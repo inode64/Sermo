@@ -13,12 +13,14 @@ config_files:
 preflight:
   config:
     type: command
+    # The system-wide fetchmailrc is optional: a host that keeps only per-user
+    # files has nothing here to validate.
     command:
-      - sh
-      - -c
-      - test ! -e "$1" || exec "$0" --configdump -f "$1"
       - ${fetchmail_binary}
+      - --configdump
+      - -f
       - ${config}
+    if_exists: ${config}
     timeout: 30s
 restart_on_change:
   paths:

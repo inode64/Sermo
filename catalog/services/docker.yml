@@ -34,11 +34,10 @@ preflight:
     # Docker's config file is optional: validate it when present, but let a host
     # without /etc/docker/daemon.json start normally.
     command:
-      - sh
-      - -c
-      - test ! -e "$1" || exec "$0" --validate --config-file="$1"
       - ${docker_daemon}
-      - ${config}
+      - --validate
+      - --config-file=${config}
+    if_exists: ${config}
     timeout: 30s
 processes:
   main:

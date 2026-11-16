@@ -830,6 +830,7 @@ preflight:  # gate start/restart/reload/resume
     command: ["${binary}", "--test-config"]
     timeout: 10s
     expect_exit: 0
+    if_exists: /etc/demo/demo.conf  # optional file: no file, command not run
     skip_when_changed: /etc/demo/demo.conf
   libraries:
     # Static ELF search: RUNPATH/RPATH and system paths; no daemon environment.

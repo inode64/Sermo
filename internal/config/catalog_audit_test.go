@@ -1493,7 +1493,7 @@ func TestCatalogConfigPreflightsUseResolvedAppTools(t *testing.T) {
 		{
 			service:      "docker",
 			appToolCheck: "docker-daemon",
-			toolArgIndex: 3,
+			toolArgIndex: 0,
 			wantBase:     []string{"dockerd"},
 			wantContains: []string{"--validate", "--config-file"},
 		},
@@ -1507,7 +1507,7 @@ func TestCatalogConfigPreflightsUseResolvedAppTools(t *testing.T) {
 		{
 			service:      "fetchmail",
 			appToolCheck: "fetchmail-binary",
-			toolArgIndex: 3,
+			toolArgIndex: 0,
 			wantBase:     []string{"fetchmail"},
 			wantContains: []string{"--configdump", "-f"},
 		},
@@ -2666,6 +2666,23 @@ func TestCatalogSlapdBlocksStopAndRestartDuringSlapcat(t *testing.T) {
 		if !slices.Contains(blocks, action) {
 			t.Fatalf("slapd backup guard blocks = %v, want %s", blocks, action)
 		}
+	}
+}
+
+// An optional config file is validated only while it exists, by the check
+// itself: no shell stands between Sermo and the validator.
+func TestCatalogOptionalConfigPreflightsSkipAnAbsentFileWithoutAShell(t *testing.T) {
+	for _, service := range []string{"docker", "fetchmail"} {
+		t.Run(service, func(t *testing.T) {
+			doc := catalogDocByName(t, repoRoot(t), "services", service)
+			config := nested(t, doc, "preflight", "config")
+			if got := cfgval.String(config[checks.CheckKeyIfExists]); got != "${config}" {
+				t.Fatalf("%s preflight if_exists = %q, want ${config}", service, got)
+			}
+			if tool := cfgval.StringList(config[checks.CheckKeyCommand])[0]; !strings.HasPrefix(tool, "${") {
+				t.Fatalf("%s preflight runs %q, want the app's own tool", service, tool)
+			}
+		})
 	}
 }
 

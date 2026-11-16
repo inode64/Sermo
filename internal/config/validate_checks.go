@@ -285,6 +285,7 @@ func validateCommandFields(path string, entry map[string]any, validateAnalyzeFie
 		validateParsedCommandFields(path, checks.ValidateAnalyzer(entry), add)
 	}
 	validateParsedCommandFields(path, checks.ValidateCommandExports(entry), add)
+	validateParsedCommandFields(path, checks.ValidateCommandIfExists(entry), add)
 }
 
 func validateCommandExpectations(path string, entry map[string]any, add addFunc) {

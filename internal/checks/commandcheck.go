@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"slices"
 	"strconv"
 	"strings"
@@ -12,6 +13,7 @@ import (
 
 	"sermo/internal/cfgval"
 	"sermo/internal/execx"
+	"sermo/internal/hostfs"
 	"sermo/internal/output"
 	"sermo/internal/severity"
 )
@@ -32,9 +34,12 @@ type cmdState struct {
 // shell string.
 type commandCheck struct {
 	base
-	runner     execx.Runner
-	argv       []string
-	user       string
+	runner execx.Runner
+	argv   []string
+	user   string
+	// ifExists names the file the command works on when that file is optional:
+	// while it is absent the command does not run and the check holds.
+	ifExists   string
 	expectExit []int
 	stdout     OutputMatcher
 	stderr     OutputMatcher
@@ -115,6 +120,13 @@ func (c commandCheck) Run(ctx context.Context) Result {
 	defer run.close()
 	start := run.start
 
+	// Only observed absence skips the command: any other answer lets it run
+	// and report on the path itself.
+	if c.ifExists != "" {
+		if _, err := hostfs.StatTarget(c.ifExists); errors.Is(err, fs.ErrNotExist) {
+			return c.result(true, c.ifExists+" does not exist; command not run", start)
+		}
+	}
 	res, err := runCheckCommand(ctx, c.runner, c.user, c.argv)
 	if res.ExitCode == execx.ExitCodeRunFailure {
 		msg := execx.OperatorFailureOr(err, res, c.timeout, execx.CommandDidNotStart)

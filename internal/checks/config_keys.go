@@ -81,6 +81,7 @@ const (
 	CheckKeyHost                  = "host"
 	CheckKeyHTTP3                 = "http3"
 	CheckKeyID                    = "id"
+	CheckKeyIfExists              = "if_exists"
 	CheckKeyIgnore                = "ignore"
 	CheckKeyIncludeHidden         = "include_hidden"
 	CheckKeyIdleFor               = "idle_for"

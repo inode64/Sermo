@@ -236,6 +236,20 @@ checks:
     expect_stderr: { op: "==", value: "" }   # nothing written to stderr
 ```
 
+`if_exists: /absolute/path` is for a command that works on an optional file: a
+validator of a config file the daemon runs fine without. While that path is
+absent the command does not run and the check holds (`… does not exist; command
+not run`); once it exists the command is the verdict. It replaces a shell
+wrapper around `test -e`:
+
+```yaml
+preflight:
+  config:
+    type: command
+    command: [/usr/bin/dockerd, --validate, --config-file=/etc/docker/daemon.json]
+    if_exists: /etc/docker/daemon.json
+```
+
 `user` runs the command as that OS user (Linux only). Sermo still executes the
 argv directly, never through a shell; the daemon/CLI process must have permission
 to switch user (normally by running as root), and an unresolved user or unsupported

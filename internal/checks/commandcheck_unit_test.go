@@ -3,6 +3,8 @@ package checks
 import (
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -46,6 +48,48 @@ func TestCommandCheckUnitPublishesNumericValue(t *testing.T) {
 // A failing command's message states its cause. Apache's configtest reports
 // the file and line on one line and the rejected directive on the next; both
 // belong in the message, and a command that reports on stdout is heard too.
+// A validator of an optional file has nothing to validate while the file is
+// absent; a present file is the command's to judge, failure included.
+func TestCommandCheckIfExistsRunsOnlyWhileThePathExists(t *testing.T) {
+	dir := t.TempDir()
+	present := filepath.Join(dir, "daemon.json")
+	if err := os.WriteFile(present, []byte("{"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	runner := execxtest.Fixed(execx.Result{ExitCode: 1, Stderr: "unable to configure the Docker daemon"}, nil)
+	c := commandCheck{name: "config", runner: runner, argv: []string{"/usr/bin/dockerd", "--validate"}, expectExit: []int{0}}
+
+	c.ifExists = filepath.Join(dir, "absent.json")
+	res := c.Run(t.Context())
+	if !res.OK || !strings.Contains(res.Message, "does not exist") {
+		t.Fatalf("absent path: ok=%v message=%q, want a passing result that says so", res.OK, res.Message)
+	}
+	if calls := runner.Calls(); len(calls) != 0 {
+		t.Fatalf("absent path ran the command: %v", calls)
+	}
+
+	c.ifExists = present
+	if res = c.Run(t.Context()); res.OK {
+		t.Fatalf("present path: the failing command passed: %s", res.Message)
+	}
+	if calls := runner.Calls(); len(calls) != 1 {
+		t.Fatalf("present path: command ran %d times, want 1", len(calls))
+	}
+}
+
+func TestCommandCheckIfExistsRequiresAnAbsoluteCleanPath(t *testing.T) {
+	for _, path := range []any{"", "etc/docker/daemon.json", "/etc/docker/../daemon.json", 7} {
+		entry := map[string]any{CheckKeyCommand: []any{"/usr/bin/dockerd"}, CheckKeyIfExists: path}
+		if err := ValidateCommandIfExists(entry); err == nil {
+			t.Errorf("if_exists %v: accepted", path)
+		}
+	}
+	entry := map[string]any{CheckKeyCommand: []any{"/usr/bin/dockerd"}, CheckKeyIfExists: "/etc/docker/daemon.json"}
+	if err := ValidateCommandIfExists(entry); err != nil {
+		t.Fatalf("valid if_exists rejected: %v", err)
+	}
+}
+
 func TestCommandCheckFailureStatesTheCause(t *testing.T) {
 	apache := commandCheck{
 		name:       "configuration",
