@@ -2790,6 +2790,57 @@ func TestCatalogPatroniSelectsTheInterpreterItsLauncherNames(t *testing.T) {
 	}
 }
 
+// Zigbee2MQTT runs as node with its launcher as argument. Only OpenRC needs
+// that named: systemd attributes the unit's processes by control group, and a
+// strict main selector would refuse a layout it does not describe.
+func TestCatalogZigbee2MQTTNamesItsNodeProcessOnlyUnderOpenRC(t *testing.T) {
+	for _, backend := range []string{"openrc", "systemd"} {
+		t.Run(backend, func(t *testing.T) {
+			files := map[string]string{
+				"sermo.yml":                "engine: {backend: " + backend + "}\npaths: {services: [@ROOT@/services]}\ndefaults: {policy: {cooldown: 5m}}\n",
+				"services/zigbee2mqtt.yml": "name: zigbee2mqtt\nuses: zigbee2mqtt\n",
+			}
+			cfg, err := loadConfig(t, writeConfig(t, files), WithCatalogDirs(repoCatalogDir(repoRoot(t))))
+			if err != nil {
+				t.Fatal(err)
+			}
+			resolved, errs := cfg.Resolve("zigbee2mqtt")
+			if len(errs) != 0 {
+				t.Fatal(errs)
+			}
+			selectors, _ := resolved.Tree[process.SectionProcesses].(map[string]any)
+			if backend == "systemd" {
+				if len(selectors) != 0 {
+					t.Fatalf("systemd selectors = %v, want none", selectors)
+				}
+				return
+			}
+			main := nested(t, resolved.Tree, process.SectionProcesses, "main")
+			if got := cfgval.String(main["exe"]); filepath.Base(got) != "node" {
+				t.Fatalf("main exe = %q, want the node runtime", got)
+			}
+			if got := cfgval.String(main["user"]); got != "zigbee2mqtt" {
+				t.Fatalf("main user = %q, want zigbee2mqtt", got)
+			}
+			pattern, err := regexp.Compile(cfgval.String(main["cmd"]))
+			if err != nil {
+				t.Fatalf("main cmd: %v", err)
+			}
+			for cmdline, want := range map[string]bool{
+				"node /usr/bin/zigbee2mqtt":          true,
+				"/usr/bin/node /usr/bin/zigbee2mqtt": true,
+				"node /usr/bin/zigbee2mqtt-migrate":  false,
+				"node /usr/bin/pm2 logs":             false,
+				"node index.js":                      false,
+			} {
+				if got := pattern.MatchString(cmdline); got != want {
+					t.Errorf("cmd matches %q = %v, want %v", cmdline, got, want)
+				}
+			}
+		})
+	}
+}
+
 func TestPostgresCatalogDeclaresPostmasterPidfile(t *testing.T) {
 	body := catalogDocByName(t, repoRoot(t), "services", "postgres-%v")
 	if got := cfgval.String(body["pidfile"]); got != "${data_dir}/postmaster.pid" {
