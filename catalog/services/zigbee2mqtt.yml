@@ -25,11 +25,12 @@ processes:
     user: ${user}
     enable_if:
       init: openrc
-# The bridge closes its adapter and its MQTT session before it exits, which
-# takes longer than the 10 seconds an init script's stop usually waits: the
-# stop request returns an error while the process is still on its way out.
+# On SIGTERM the bridge backs up the coordinator before it exits, reading its
+# tables over the serial link: about 20 seconds with a hundred devices, longer
+# on a larger network. A stop that waits less reports an error while the
+# process is still on its way out, or kills it halfway through the backup.
 stop_policy:
-  graceful_timeout: 45s
+  graceful_timeout: 90s
   term_timeout: 15s
 policy:
   cooldown: 15m
