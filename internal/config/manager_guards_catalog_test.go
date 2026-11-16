@@ -65,13 +65,13 @@ func TestCatalogLogindGuards(t *testing.T) {
 					Cache: map[string]checks.Result{seatedSessions: tc.seated, usersWithoutLinger: tc.unlingered},
 					Deps:  checks.Deps{Runner: runner, DefaultTimeout: time.Second},
 				}
-				name, reason, err := rules.Guard(t.Context(), parsed, string(action), ev)
+				block, err := rules.Guard(t.Context(), parsed, string(action), ev)
 				want := tc.guard != "" && action != rules.ActionStart
-				if blocked := name != "" || err != nil; blocked != want {
-					t.Fatalf("blocked=%v, want %v: guard=%q reason=%q err=%v", blocked, want, name, reason, err)
+				if blocked := block.Rule != "" || err != nil; blocked != want {
+					t.Fatalf("blocked=%v, want %v: guard=%q reason=%q err=%v", blocked, want, block.Rule, block.Reason, err)
 				}
-				if want && err == nil && name != tc.guard {
-					t.Fatalf("blocked by %q, want %q", name, tc.guard)
+				if want && err == nil && block.Rule != tc.guard {
+					t.Fatalf("blocked by %q, want %q", block.Rule, tc.guard)
 				}
 				if calls := runner.Calls(); len(calls) != 0 {
 					t.Fatalf("logind guards must not run commands: %v", calls)
@@ -178,10 +178,10 @@ func TestCatalogDBusGuardsRestartUnderSystemd(t *testing.T) {
 			status := func(context.Context) (servicemgr.Status, error) { return state, nil }
 			for _, action := range []rules.ActionType{rules.ActionStop, rules.ActionRestart, rules.ActionStart} {
 				ev := &rules.Evaluator{Deps: checks.Deps{Status: status, DefaultTimeout: time.Second}}
-				name, reason, err := rules.Guard(t.Context(), parsed, string(action), ev)
+				block, err := rules.Guard(t.Context(), parsed, string(action), ev)
 				want := tc.blocked && action != rules.ActionStart
-				if blocked := name != "" || err != nil; blocked != want {
-					t.Fatalf("%s: blocked=%v, want %v: guard=%q reason=%q err=%v", action, blocked, want, name, reason, err)
+				if blocked := block.Rule != "" || err != nil; blocked != want {
+					t.Fatalf("%s: blocked=%v, want %v: guard=%q reason=%q err=%v", action, blocked, want, block.Rule, block.Reason, err)
 				}
 			}
 		})
@@ -197,9 +197,9 @@ func TestCatalogMachinedRestartDoesNotQueryRegisteredMachines(t *testing.T) {
 	}
 	runner := execxtest.Fixed(execx.Result{Stdout: `a(ssso) 2 ".host" "host" "" "/org/freedesktop/machine1/machine/_2ehost" "fixture" "vm" "libvirt-qemu" "/org/freedesktop/machine1/machine/fixture"`}, nil)
 	ev := &rules.Evaluator{Deps: checks.Deps{Runner: runner, DefaultTimeout: time.Second}}
-	name, reason, err := rules.Guard(t.Context(), parsed, string(rules.ActionRestart), ev)
-	if name != "" || err != nil || len(runner.Calls()) != 0 {
-		t.Fatalf("registered guests must not prevent restarting their manager: guard=%q reason=%q err=%v calls=%v", name, reason, err, runner.Calls())
+	block, err := rules.Guard(t.Context(), parsed, string(rules.ActionRestart), ev)
+	if block.Rule != "" || err != nil || len(runner.Calls()) != 0 {
+		t.Fatalf("registered guests must not prevent restarting their manager: guard=%q reason=%q err=%v calls=%v", block.Rule, block.Reason, err, runner.Calls())
 	}
 }
 
@@ -242,9 +242,9 @@ rules:
 			}
 			runner := execxtest.Fixed(execx.Result{}, nil)
 			ev := &rules.Evaluator{Deps: checks.Deps{Runner: runner, DefaultTimeout: time.Second}}
-			name, reason, err := rules.Guard(t.Context(), parsed, string(rules.ActionRestart), ev)
-			if err != nil || name != "block-during-maintenance" || reason != "Maintenance in progress" {
-				t.Fatalf("operator stop guard must still protect restart: guard=%q reason=%q err=%v", name, reason, err)
+			block, err := rules.Guard(t.Context(), parsed, string(rules.ActionRestart), ev)
+			if err != nil || block.Rule != "block-during-maintenance" || block.Reason != "Maintenance in progress" {
+				t.Fatalf("operator stop guard must still protect restart: guard=%q reason=%q err=%v", block.Rule, block.Reason, err)
 			}
 			calls := runner.Calls()
 			if len(calls) != 1 || calls[0].Name != "/fixture/maintenance-check" || !runner.SawDeadline() {

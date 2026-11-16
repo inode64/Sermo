@@ -68,7 +68,7 @@ func (a App) runAction(ctx context.Context, opts options, action string) int {
 	if result.Status != operation.ResultOK && result.Status != operation.ResultSkipped {
 		status = accessStatusError
 	}
-	a.recordAccess(cfg, action, service, status, result.Message)
+	a.recordAccess(cfg, action, service, status, result.Summary())
 
 	if opts.json {
 		writeJSON(a.Stdout, actionJSON{Result: result, Cascade: cascade})
@@ -189,7 +189,7 @@ type cascadeOutcomes struct {
 // record stores a target's outcome; a retried target (blocked, then run
 // again) keeps only its final outcome.
 func (c *cascadeOutcomes) record(svc, action string, out operation.Result, err error) {
-	entry := cascadeTargetJSON{Service: svc, Action: action, Status: out.Status, Message: out.Message}
+	entry := cascadeTargetJSON{Service: svc, Action: action, Status: out.Status, Message: out.Summary()}
 	if err != nil {
 		entry = cascadeTargetJSON{Service: svc, Action: action, Error: err.Error()}
 	}
@@ -308,7 +308,7 @@ func (a App) printOperation(r operation.Result) {
 	case operation.ResultBlocked:
 		fmt.Fprintf(a.Stdout, "BLOCKED %s %s\n", r.Service, r.Action)
 		if r.Message != "" {
-			fmt.Fprintf(a.Stdout, "reason: %s\n", r.Message)
+			fmt.Fprintf(a.Stdout, "reason: %s\n", r.Summary())
 		}
 	default:
 		fmt.Fprintf(a.Stdout, "%s %s %s\n", r.Service, r.Action, r.Status)

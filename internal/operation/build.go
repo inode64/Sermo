@@ -199,7 +199,7 @@ func New(c Config) Engine {
 			// is held, even though new payloads are published atomically.
 			return report.Locks, warningError("runtime locks", report.Warnings)
 		},
-		Guard: func(ctx context.Context, action string) (string, string, error) {
+		Guard: func(ctx context.Context, action string) (rules.GuardBlock, error) {
 			// Monitoring may have cached absence before an external job started.
 			// An operation must evaluate its guards against a fresh observation.
 			if cached, ok := c.Discoverer.Reader.(*process.CachingReader); ok {
@@ -524,8 +524,8 @@ func collectVerifyChecks(tree map[string]any) map[string]any {
 
 // guardClosure evaluates guards with lazy named checks. Each referenced check
 // runs at most once per evaluation; unrelated checks never perform I/O.
-func guardClosure(tree map[string]any, deps checks.Deps, sample func(context.Context) checks.MetricReader, changed func(string) (bool, error)) func(context.Context, string) (string, string, error) {
-	return func(ctx context.Context, action string) (string, string, error) {
+func guardClosure(tree map[string]any, deps checks.Deps, sample func(context.Context) checks.MetricReader, changed func(string) (bool, error)) func(context.Context, string) (rules.GuardBlock, error) {
+	return func(ctx context.Context, action string) (rules.GuardBlock, error) {
 		runDeps := checkDepsForEval(ctx, deps, sample)
 		ruleSet, _ := rules.ParseRules(tree)
 		section, _ := tree[config.SectionChecks].(map[string]any)

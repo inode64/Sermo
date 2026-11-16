@@ -16,6 +16,7 @@ import (
 	"sermo/internal/checks"
 	"sermo/internal/locks"
 	"sermo/internal/process"
+	"sermo/internal/rules"
 )
 
 // ResultStatus is the outcome of an operation.
@@ -42,19 +43,32 @@ type Result struct {
 	// Docker target only needs a start. Guards still use the requested action.
 	RequestedAction  string `json:"requested_action,omitempty"`
 	CreatedContainer string `json:"created_container,omitempty"`
-	// Guard names the guard rule that blocked the action, when one did.
-	Guard     string                  `json:"guard,omitempty"`
-	Backend   string                  `json:"backend,omitempty"`
-	Warnings  []string                `json:"warnings,omitempty"`
-	Checks    []checks.Result         `json:"checks,omitempty"`
-	Locks     []locks.Lock            `json:"locks,omitempty"`
-	Processes []process.Process       `json:"processes,omitempty"`
-	Signals   []process.SignalAttempt `json:"signals,omitempty"`
+	// Guard names the guard rule that blocked the action, when one did;
+	// GuardEvidence holds the readings that made it hold, apart from Message
+	// because they quote the host.
+	Guard         string                  `json:"guard,omitempty"`
+	GuardEvidence string                  `json:"guard_evidence,omitempty"`
+	Backend       string                  `json:"backend,omitempty"`
+	Warnings      []string                `json:"warnings,omitempty"`
+	Checks        []checks.Result         `json:"checks,omitempty"`
+	Locks         []locks.Lock            `json:"locks,omitempty"`
+	Processes     []process.Process       `json:"processes,omitempty"`
+	Signals       []process.SignalAttempt `json:"signals,omitempty"`
 	// Relaunched reports that a successful action left a new generation of the
 	// service running, which is what takes in a changed artifact. A restart always
 	// does; a start only when it found the service down, because on one already
 	// running it succeeds without touching it. An unknown status is no relaunch.
 	Relaunched bool `json:"-"`
+}
+
+// Summary is the message followed by the readings that held a blocking guard,
+// as sermoctl, the Web UI and notifications show a result.
+func (r Result) Summary() string {
+	return r.guardBlock().MessageWith(r.Message)
+}
+
+func (r Result) guardBlock() rules.GuardBlock {
+	return rules.GuardBlock{Rule: r.Guard, Reason: r.Message, Evidence: r.GuardEvidence}
 }
 
 // AuditMessage preserves process identities, policy refusals, the checks that
@@ -73,11 +87,14 @@ func (r Result) AuditMessageWith(message string) string {
 	return strings.Join(append([]string{message}, r.auditDetails()...), "; ")
 }
 
-// auditDetails is what the audit text adds to the message: the requested
-// action, a created container, the failed checks, the residual processes and
-// the signals.
+// auditDetails is what the audit text adds to the message: the readings that
+// held a blocking guard, the requested action, a created container, the
+// failed checks, the residual processes and the signals.
 func (r Result) auditDetails() []string {
 	parts := make([]string, 0, len(r.Checks)+len(r.Processes)+len(r.Signals))
+	if readings := r.guardBlock().Readings(); readings != "" {
+		parts = append(parts, readings)
+	}
 	if r.RequestedAction != "" {
 		parts = append(parts, "requested "+r.RequestedAction)
 	}

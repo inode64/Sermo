@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"sermo/internal/checks"
+	"sermo/internal/rules"
 	"sermo/internal/servicemgr"
 )
 
@@ -53,9 +54,9 @@ func TestDockerRestartStoppedOnlyStarts(t *testing.T) {
 	h.mgr.stopped = true
 	e := h.engine()
 	var guardAction string
-	e.Guard = func(_ context.Context, action string) (string, string, error) {
+	e.Guard = func(_ context.Context, action string) (rules.GuardBlock, error) {
 		guardAction = action
-		return "", "", nil
+		return rules.GuardBlock{}, nil
 	}
 	result := e.Do(t.Context(), actionRestart)
 	if !result.OK() || result.Action != actionStart || result.RequestedAction != actionRestart || guardAction != actionRestart {

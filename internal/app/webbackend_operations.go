@@ -115,7 +115,7 @@ func (b *WebBackend) Operate(ctx context.Context, name, action string, opts web.
 }
 
 func webActionResultFrom(r operation.Result) web.ActionResult {
-	msg := r.Message
+	msg := r.Summary()
 	if msg == "" {
 		msg = string(r.Status)
 	}

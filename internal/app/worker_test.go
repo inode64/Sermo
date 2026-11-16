@@ -1602,7 +1602,7 @@ func TestTimedOutAppVersionRemainsUnknownInConditionsAndGuards(t *testing.T) {
 				t.Fatalf("condition = %v, %v, unknown=%v; want a quiet unknown", match, err, ev.Unknown)
 			}
 			guards := []rules.Rule{{Name: "version", Type: rules.RuleGuard, Blocks: []string{string(rules.ActionRestart)}, If: node}}
-			if _, _, err := rules.Guard(t.Context(), guards, string(rules.ActionRestart), ev); err == nil {
+			if _, err := rules.Guard(t.Context(), guards, string(rules.ActionRestart), ev); err == nil {
 				t.Fatal("a guard with an unknown version must fail closed")
 			}
 		})

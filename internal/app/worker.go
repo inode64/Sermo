@@ -959,7 +959,7 @@ func (w *Worker) remediationSuppression(ctx context.Context, ev *rules.Evaluator
 	if w.settlingUnread {
 		return "operation marker unreadable: remediation waits for a good read", false
 	}
-	guard, reason, err := rules.Guard(ctx, w.Rules, action, ev)
+	block, err := rules.Guard(ctx, w.Rules, action, ev)
 	// A guard is consulted on every cycle its rule keeps firing, so an
 	// unevaluable guard repeats for as long as the underlying probe stays
 	// broken. Same emission policy as the rule's own condition error.
@@ -972,11 +972,12 @@ func (w *Worker) remediationSuppression(ctx context.Context, ev *rules.Evaluator
 		return "", true
 	}
 	w.clearEvalError(guardKey)
-	if guard != "" {
+	if block.Rule != "" {
 		if w.ruleDryRun(firing.Rule) {
-			return "guard: " + reason, false
+			reason := w.expandRuntime(block.Reason, Event{Rule: firing.Name, Action: action})
+			return "guard: " + block.MessageWith(reason), false
 		}
-		w.refuseGuard(ctx, ev, firing, action, guard, reason, now())
+		w.refuseGuard(ctx, ev, firing, action, block, now())
 		return "", true
 	}
 	if action == string(rules.ActionReload) {
@@ -1010,7 +1011,9 @@ func (w *Worker) emitDryRunRemediation(ctx context.Context, ev *rules.Evaluator,
 		message = "would " + action + " (suppressed: " + suppress + ")"
 	}
 	if w.shouldEmitRuleEvent(firing.Rule, firing.announce()) {
-		w.emit(Event{Kind: eventKindDryRun, Severity: firing.severity, Rule: firing.Name, Action: action, Message: message})
+		// suppress arrives expanded where it is Sermo's text; the rest (a guard's
+		// readings, a stale-binary reading) quotes the host.
+		w.emitLiteral(Event{Kind: eventKindDryRun, Severity: firing.severity, Rule: firing.Name, Action: action, Message: message})
 	}
 	if suppress == "" || firing.escalated {
 		w.emitAlerts(ctx, ev, firing.Rule, firing.announce(), firing.change, firing.severity)

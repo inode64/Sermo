@@ -7,10 +7,12 @@ import (
 	"fmt"
 	"maps"
 	"slices"
+	"strings"
 
 	"sermo/internal/cfgval"
 	"sermo/internal/checks"
 	"sermo/internal/metrics"
+	"sermo/internal/strutil"
 )
 
 // ChangeContext describes the changed: leaf that made the current rule true.
@@ -347,15 +349,18 @@ func (e *Evaluator) evalFile(ctx context.Context, v any) (bool, error) {
 	if path == "" {
 		return false, errors.New("file condition requires a path")
 	}
-	wantExists := true
-	if b, ok := m[FieldExists].(bool); ok {
-		wantExists = b
-	}
 	res, err := e.runInline(ctx, checks.CheckTypeFile, map[string]any{FieldType: checks.CheckTypeFileExists, FieldPath: path}, m)
 	if err != nil {
 		return false, err
 	}
-	return res.OK == wantExists, nil
+	return res.OK == fileWantsExists(m), nil
+}
+
+// fileWantsExists is the state a file leaf asks for: present unless it says
+// `exists: false`.
+func fileWantsExists(m map[string]any) bool {
+	exists, set := m[FieldExists].(bool)
+	return exists || !set
 }
 
 func (e *Evaluator) evalService(ctx context.Context, v any) (bool, error) {
@@ -490,7 +495,7 @@ func (e *Evaluator) evalInline(ctx context.Context, typ string, v any) (bool, er
 // runInline builds, runs and memoizes an inline check keyed by its normalized
 // parameters so identical probes run at most once per cycle.
 func (e *Evaluator) runInline(ctx context.Context, name string, entry, keyParams map[string]any) (checks.Result, error) {
-	key := name + ":" + normalizeKey(keyParams)
+	key := inlineMemoKey(name, keyParams)
 	if res, ok := e.memo[key]; ok {
 		if err := e.unavailableCheckError(name, res); err != nil {
 			return res, err
@@ -548,6 +553,12 @@ func inlineEntry(m map[string]any) (map[string]any, string, error) {
 	return nil, "", errors.New("empty inline probe")
 }
 
+// inlineMemoKey is the cycle memo key of an inline probe: its type and its
+// normalized parameters, so identical probes share one result.
+func inlineMemoKey(name string, params map[string]any) string {
+	return name + ":" + normalizeKey(params)
+}
+
 func normalizeKey(m map[string]any) string {
 	data, err := json.Marshal(m) // Go sorts map keys in JSON output
 	if err != nil {
@@ -556,12 +567,40 @@ func normalizeKey(m map[string]any) string {
 	return string(data)
 }
 
-// Guard reports the guard rule that blocks action, by name (empty when none
-// does), with its message. A guard applies when its blocks list names the
-// action or a lifecycle action it performs (see guardedBy). Guards are
-// evaluated in name order; the first blocking guard wins. An evaluation error
-// is returned so the caller can fail safe rather than silently proceed.
-func Guard(ctx context.Context, ruleSet []Rule, action string, ev *Evaluator) (rule, reason string, err error) {
+// GuardBlock is the guard that refused an action: its name (empty when no
+// guard does), its block message, and the readings this cycle that made its
+// condition hold.
+type GuardBlock struct {
+	Rule, Reason, Evidence string
+}
+
+// Readings words the evidence as a detail of the block message, or "" when
+// there is none.
+func (b GuardBlock) Readings() string {
+	if b.Evidence == "" {
+		return ""
+	}
+	return "observed " + b.Evidence
+}
+
+// MessageWith is reason, the block message as the caller shows it (with its
+// runtime built-ins such as ${event} expanded, or not), followed by the
+// readings, which quote the host and stay as written. Reason alone identifies
+// a repeated refusal: a reading may change between cycles (another PID, a
+// latency) without the guard's cause changing.
+func (b GuardBlock) MessageWith(reason string) string {
+	if readings := b.Readings(); readings != "" {
+		return reason + "; " + readings
+	}
+	return reason
+}
+
+// Guard reports the guard rule that blocks action. A guard applies when its
+// blocks list names the action or a lifecycle action it performs (see
+// guardedBy). Guards are evaluated in name order; the first blocking guard
+// wins. An evaluation error is returned so the caller can fail safe rather
+// than silently proceed.
+func Guard(ctx context.Context, ruleSet []Rule, action string, ev *Evaluator) (GuardBlock, error) {
 	guardEvaluator := *ev
 	// A guard may create either cache when it is the first reader this cycle.
 	// Retain those maps, including unavailable results, without leaking the
@@ -578,11 +617,19 @@ func Guard(ctx context.Context, ruleSet []Rule, action string, ev *Evaluator) (r
 		}
 		ok, err := guardEvaluator.Eval(ctx, ruleSet[i].If)
 		if err != nil {
-			return "", "", fmt.Errorf("guard %s: %w", ruleSet[i].Name, err)
+			return GuardBlock{}, fmt.Errorf("guard %s: %w", ruleSet[i].Name, err)
 		}
 		if ok {
-			return ruleSet[i].Name, ruleSet[i].blockReason(), nil
+			block := GuardBlock{Rule: ruleSet[i].Name, Reason: ruleSet[i].blockReason()}
+			// Readings explain the block only when they make the condition hold
+			// by themselves. A leaf with no reading (a metric) that the verdict
+			// needed would otherwise be hidden behind its siblings, or an or
+			// that held through it would name its false operands.
+			if holds, known, readings := guardEvaluator.explain(ruleSet[i].If); holds && known {
+				block.Evidence = strings.Join(strutil.Unique(readings), "; ")
+			}
+			return block, nil
 		}
 	}
-	return "", "", nil
+	return GuardBlock{}, nil
 }

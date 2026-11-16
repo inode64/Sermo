@@ -90,6 +90,20 @@ func TestWorkerRemediationEventKeepsHostTextLiteral(t *testing.T) {
 	}
 }
 
+// A guard the engine re-evaluates at the operation can block an attempt the
+// worker let through; its readings join the audit text as written too.
+func TestWorkerEngineGuardBlockKeepsReadingsLiteral(t *testing.T) {
+	refused := operation.Result{Status: operation.ResultBlocked, Message: "blocked for ${event}", Guard: "packages",
+		GuardEvidence: "process: state running (want absent): pid 41 (ppid 1) /opt/${date}/emerge"}
+	h := &workerHarness{cache: failedCache("http"), opResult: refused}
+	w := h.worker(alertThenRestartTree("http"), rules.Policy{Cooldown: time.Minute}, nil)
+	w.RunCycle(context.Background())
+	event, ok := h.eventOf(eventKindSuppressed)
+	if want := "blocked for restart-on-stale-binary; observed " + refused.GuardEvidence; !ok || event.Message != want {
+		t.Fatalf("event = %+v, want message %q", event, want)
+	}
+}
+
 // An attempt that ran starts the cooldown, which is what spaces the next one:
 // each of those is announced, as before.
 func TestWorkerExecutedRemediationAnnouncesEachAttempt(t *testing.T) {
@@ -136,6 +150,29 @@ func TestWorkerGuardRefusalCooldownKeepsFreshEvidence(t *testing.T) {
 				t.Fatalf("cleared guard must release and announce the first attempt: ops=%v events=%+v", h.ops, h.events)
 			}
 		})
+	}
+}
+
+// The refusal event names the reading that held the guard, but the guard's
+// message alone identifies the refusal: another PID behind the same guard is
+// not a new reason to audit at once. The guard's message expands its runtime
+// built-ins; the reading quotes the host and stays as written.
+func TestWorkerGuardRefusalNamesEvidenceWithoutTreatingItAsNews(t *testing.T) {
+	h := &workerHarness{cache: failedCache("http"), opResult: operation.Result{Status: operation.ResultOK}}
+	h.cache["packages"] = checks.Result{OK: true, Message: "state running (want running): pid 41 (ppid 1) /opt/${date}/emerge"}
+	w := h.worker(alertThenRestartTree("http"), rules.Policy{Cooldown: time.Minute}, nil)
+	w.Rules = append(w.Rules, rules.Rule{Name: "packages", Type: rules.RuleGuard, Blocks: []string{"restart"},
+		If:      map[string]any{"active": map[string]any{"check": "packages"}},
+		Actions: []rules.Action{{Type: rules.ActionBlock, Message: "Package update is running on ${service}"}}})
+	w.RunCycle(t.Context())
+	event, ok := h.eventOf(eventKindSuppressed)
+	if want := "guard: Package update is running on web; observed packages: state running (want running): pid 41 (ppid 1) /opt/${date}/emerge"; !ok || event.Message != want {
+		t.Fatalf("event = %+v, want message %q", event, want)
+	}
+	h.cache["packages"] = checks.Result{OK: true, Message: "state running (want running): pid 42 (ppid 1) /opt/${date}/emerge"}
+	w.RunCycle(t.Context())
+	if got := h.countEvents(eventKindSuppressed); got != 1 || len(h.ops) != 0 {
+		t.Fatalf("refusals audited=%d ops=%v, want one audit while the guard's reason is unchanged", got, h.ops)
 	}
 }
 

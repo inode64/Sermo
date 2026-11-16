@@ -1,7 +1,6 @@
 package rules
 
 import (
-	"sermo/internal/cfgval"
 	"sermo/internal/checks"
 	"sermo/internal/severity"
 )
@@ -54,13 +53,9 @@ func (e *Evaluator) gradeNode(node any) (holds bool, graded severity.Level) {
 		}
 		return anyHolds, anyGrade
 	case ConditionFailed, ConditionActive:
-		res, ok := e.cachedResult(operand)
+		res, _, holds, ok := e.cachedLeaf(operator, operand)
 		if !ok {
 			return true, ""
-		}
-		holds = res.OK
-		if operator == ConditionFailed {
-			holds = !res.OK
 		}
 		if holds && res.Observation() == checks.ObservationFailing {
 			return true, res.Severity.Resolved()
@@ -75,23 +70,4 @@ func (e *Evaluator) gradeNode(node any) (holds bool, graded severity.Level) {
 func asConditionMap(node any) map[string]any {
 	m, _ := node.(map[string]any)
 	return m
-}
-
-// cachedResult returns a failed/active operand's result from this cycle's
-// cache or inline memo, never running a probe.
-func (e *Evaluator) cachedResult(operand any) (checks.Result, bool) {
-	m, ok := operand.(map[string]any)
-	if !ok {
-		return checks.Result{}, false
-	}
-	if ref := cfgval.AsString(m[FieldCheck]); ref != "" {
-		res, ok := e.Cache[ref]
-		return res, ok
-	}
-	_, name, err := inlineEntry(m)
-	if err != nil {
-		return checks.Result{}, false
-	}
-	res, ok := e.memo[name+":"+normalizeKey(m)]
-	return res, ok
 }

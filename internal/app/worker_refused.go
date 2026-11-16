@@ -117,9 +117,9 @@ func guardRefusalInterval(cooldown time.Duration, repeats int) time.Duration {
 	return wait
 }
 
-func (w *Worker) refuseGuard(ctx context.Context, ev *rules.Evaluator, firing firingRule, action, guard, reason string, at time.Time) {
+func (w *Worker) refuseGuard(ctx context.Context, ev *rules.Evaluator, firing firingRule, action string, block rules.GuardBlock, at time.Time) {
 	previous, exists := w.refusedRemediations[firing.Name]
-	unchanged := exists && previous.guard == guard && previous.reason == reason
+	unchanged := exists && previous.guard == block.Rule && previous.reason == block.Reason
 	if !unchanged || !at.Before(previous.retryAt) {
 		// The guard is still read every cycle, so a new reason is audited at
 		// once and a cleared guard releases the action; only the repetition of
@@ -128,9 +128,11 @@ func (w *Worker) refuseGuard(ctx context.Context, ev *rules.Evaluator, firing fi
 		if unchanged {
 			repeats = previous.repeats + 1
 		}
-		w.recordRefusalAfter(firing.Name, guard, reason, at, guardRefusalInterval(w.Policy.Cooldown, repeats), repeats)
-		w.emit(Event{Kind: eventKindSuppressed, Severity: firing.severity, Rule: firing.Name,
-			Action: action, Status: string(operation.ResultBlocked), Message: "guard: " + reason})
+		w.recordRefusalAfter(firing.Name, block.Rule, block.Reason, at, guardRefusalInterval(w.Policy.Cooldown, repeats), repeats)
+		event := Event{Kind: eventKindSuppressed, Severity: firing.severity, Rule: firing.Name,
+			Action: action, Status: string(operation.ResultBlocked)}
+		event.Message = "guard: " + block.MessageWith(w.expandRuntime(block.Reason, event))
+		w.emitLiteral(event)
 	}
 	// Cooldown limits repeated refusals, not the alert for a graver incident.
 	if firing.escalated {

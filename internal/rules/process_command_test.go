@@ -26,9 +26,9 @@ func TestProcessCommandGuardPolarityAndMemo(t *testing.T) {
 				"not": map[string]any{"process": map[string]any{"cmd": "^emerge ", "state": "absent", "timeout": "5s"}},
 			}}
 			for range 2 {
-				blocking, _, err := Guard(t.Context(), []Rule{rule}, "restart", ev)
-				if (blocking != "") != (state == process.StateRunning) || (err != nil) != (state == process.StateUnknown) {
-					t.Fatalf("state=%s blocking=%q err=%v", state, blocking, err)
+				block, err := Guard(t.Context(), []Rule{rule}, "restart", ev)
+				if (block.Rule != "") != (state == process.StateRunning) || (err != nil) != (state == process.StateUnknown) {
+					t.Fatalf("state=%s blocking=%q err=%v", state, block.Rule, err)
 				}
 			}
 			if calls != 1 {
@@ -46,7 +46,7 @@ func TestProcessCommandGuardTimeoutCannotProveAbsent(t *testing.T) {
 	rule := Rule{Name: "packages", Type: RuleGuard, Blocks: []string{"restart"}, If: map[string]any{
 		"not": map[string]any{"process": map[string]any{"cmd": "emerge", "state": "absent", "timeout": "1ms"}},
 	}}
-	if _, _, err := Guard(t.Context(), []Rule{rule}, "restart", ev); err == nil {
+	if _, err := Guard(t.Context(), []Rule{rule}, "restart", ev); err == nil {
 		t.Fatal("timed-out observation allowed the operation")
 	}
 }

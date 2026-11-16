@@ -18,6 +18,7 @@ import (
 	"sermo/internal/locks"
 	"sermo/internal/metrics"
 	"sermo/internal/process"
+	"sermo/internal/rules"
 	"sermo/internal/servicemgr"
 )
 
@@ -169,9 +170,11 @@ func (h *harness) engine() Engine {
 			}
 			return func() error { h.released++; return nil }, nil
 		},
-		LockTTL:          time.Minute,
-		NamedLocks:       func() ([]locks.Lock, error) { return h.named, nil },
-		Guard:            func(context.Context, string) (string, string, error) { return h.guardRule, h.guardReason, h.guardErr },
+		LockTTL:    time.Minute,
+		NamedLocks: func() ([]locks.Lock, error) { return h.named, nil },
+		Guard: func(context.Context, string) (rules.GuardBlock, error) {
+			return rules.GuardBlock{Rule: h.guardRule, Reason: h.guardReason}, h.guardErr
+		},
 		Preflight:        func(context.Context) checks.Outcome { return h.preflight },
 		Postflight:       func(context.Context) checks.Outcome { return h.postflight },
 		ReloadFunc:       func(ctx context.Context) error { return h.mgr.Reload(ctx, "mysqld") },
@@ -803,8 +806,13 @@ func TestRepairBlockedByStartGuard(t *testing.T) {
 	engine, mgr := newInvalidTreeEngine(t, "app", "app", tree)
 	mgr.status = servicemgr.StatusFailed
 	res := engine.Do(context.Background(), ActionRepair)
-	if res.Status != ResultBlocked || res.Message != "volume migration" {
-		t.Fatalf("Repair = %s %q, want blocked by the start guard", res.Status, res.Message)
+	// The result names the reading that made the guard hold apart from the
+	// guard's message, and the summary an operator sees joins them.
+	if res.Status != ResultBlocked || res.Message != "volume migration" || res.GuardEvidence != "file: "+flag+" exists" {
+		t.Fatalf("Repair = %s %q evidence %q, want blocked by the start guard", res.Status, res.Message, res.GuardEvidence)
+	}
+	if want := "volume migration; observed file: " + flag + " exists"; res.Summary() != want || res.AuditMessage() != want {
+		t.Fatalf("summary %q, audit %q, want %q", res.Summary(), res.AuditMessage(), want)
 	}
 	for _, call := range mgr.calls {
 		if strings.HasPrefix(call, "start ") || strings.HasPrefix(call, "reset ") {
@@ -831,9 +839,9 @@ func TestGuardClosureFailsSafeOnUnavailableSQLCheck(t *testing.T) {
 		},
 	}
 	engine, _ := newInvalidTreeEngine(t, "db", "postgresql", tree)
-	guard, _, err := engine.Guard(context.Background(), "restart")
-	if err == nil || guard != "" {
-		t.Fatalf("unavailable SQL guard = blocked by %q, err:%v, want evaluation error", guard, err)
+	block, err := engine.Guard(context.Background(), "restart")
+	if err == nil || block.Rule != "" {
+		t.Fatalf("unavailable SQL guard = blocked by %q, err:%v, want evaluation error", block.Rule, err)
 	}
 }
 
@@ -860,9 +868,9 @@ func TestGuardClosureFailsSafeOnUnavailableSSHIdleCheck(t *testing.T) {
 		},
 	}
 	engine, _ := newInvalidTreeEngineWithCheckDeps(t, "db", "postgresql", tree, deps)
-	guard, _, err := engine.Guard(context.Background(), "restart")
-	if err == nil || guard != "" {
-		t.Fatalf("unavailable SSH idle guard = blocked by %q, err:%v, want evaluation error", guard, err)
+	block, err := engine.Guard(context.Background(), "restart")
+	if err == nil || block.Rule != "" {
+		t.Fatalf("unavailable SSH idle guard = blocked by %q, err:%v, want evaluation error", block.Rule, err)
 	}
 }
 
@@ -2408,11 +2416,11 @@ func TestKillDBQueryFailsClosed(t *testing.T) {
 			e := h.engine()
 			e.DBQueryKiller = tt.killer
 			if tt.guard {
-				e.Guard = func(_ context.Context, action string) (string, string, error) {
+				e.Guard = func(_ context.Context, action string) (rules.GuardBlock, error) {
 					if action != actionKillQuery {
-						return "", "", nil
+						return rules.GuardBlock{}, nil
 					}
-					return "block-kill-during-backup", "blocked: backup running", nil
+					return rules.GuardBlock{Rule: "block-kill-during-backup", Reason: "blocked: backup running"}, nil
 				}
 			}
 			res := e.KillDBQuery(context.Background(), target)

@@ -24,7 +24,7 @@ func TestAdvisoryCannotTriggerOperations(t *testing.T) {
 		if match, err := e.EvalRule(t.Context(), Rule{Type: RuleAlert, If: failed, Actions: []Action{{Type: ActionAlert}}}); !match || err != nil {
 			t.Fatalf("advisory alert lost: %v %v", match, err)
 		}
-		if _, _, err := Guard(t.Context(), []Rule{{Type: RuleGuard, Blocks: []string{string(ActionRestart)}, If: failed}}, string(ActionRestart), e); err == nil {
+		if _, err := Guard(t.Context(), []Rule{{Type: RuleGuard, Blocks: []string{string(ActionRestart)}, If: failed}}, string(ActionRestart), e); err == nil {
 			t.Fatal("guard did not fail closed")
 		}
 	}
@@ -72,7 +72,7 @@ func TestEvalAdvisoryReadsOnlyAdvisoryEvidenceAsFailure(t *testing.T) {
 				t.Fatal("EvalAdvisory leaked its reading into the next EvalRule")
 			}
 			guard := Rule{Name: "g", Type: RuleGuard, Blocks: []string{string(ActionRestart)}, If: failed}
-			if _, _, err := Guard(t.Context(), []Rule{guard}, string(ActionRestart), e); tc.res.ActionBlocked && err == nil {
+			if _, err := Guard(t.Context(), []Rule{guard}, string(ActionRestart), e); tc.res.ActionBlocked && err == nil {
 				t.Fatal("a guard must still fail closed on advisory evidence")
 			}
 		})

@@ -8,6 +8,7 @@ import (
 
 	"sermo/internal/locks"
 	"sermo/internal/process"
+	"sermo/internal/rules"
 )
 
 func TestSMBSessionCloseSafetyPath(t *testing.T) {
@@ -34,7 +35,9 @@ func TestSMBSessionCloseSafetyPath(t *testing.T) {
 			}
 			switch name {
 			case "guard":
-				e.Guard = func(context.Context, string) (string, string, error) { return "guard", "busy", nil }
+				e.Guard = func(context.Context, string) (rules.GuardBlock, error) {
+					return rules.GuardBlock{Rule: "guard", Reason: "busy"}, nil
+				}
 			case "lock":
 				e.AcquireLock = func(time.Duration) (func() error, error) { return nil, errors.New("locked") }
 			case "named lock":

@@ -10,6 +10,7 @@ import (
 	"sermo/internal/config"
 	"sermo/internal/locks"
 	"sermo/internal/process"
+	"sermo/internal/rules"
 	"sermo/internal/servicemgr"
 )
 
@@ -25,9 +26,9 @@ func TestIfRunningInactiveSkipsBeforeHooks(t *testing.T) {
 					t.Fatal("preflight ran for stopped service")
 					return checks.Outcome{}
 				}
-				e.Guard = func(context.Context, string) (string, string, error) {
+				e.Guard = func(context.Context, string) (rules.GuardBlock, error) {
 					t.Fatal("guard ran for stopped service")
-					return "", "", nil
+					return rules.GuardBlock{}, nil
 				}
 				e.Discover = func() ([]process.Process, error) { t.Fatal("reconciliation ran for stopped service"); return nil, nil }
 				out := e.Do(t.Context(), action)

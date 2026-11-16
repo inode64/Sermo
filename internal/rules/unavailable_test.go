@@ -76,8 +76,8 @@ func TestFailedReportsObservationErrorsButNotSkippedChecks(t *testing.T) {
 			t.Fatalf("not active turned unavailable into true: %v %v", got, err)
 		}
 		guard := []Rule{{Type: RuleGuard, Name: "guard", Blocks: []string{string(ActionRestart)}, If: failed}}
-		if blocking, _, err := Guard(t.Context(), guard, string(ActionRestart), ev); blocking != "" || err == nil {
-			t.Fatalf("guard accepted uncertainty: blocked=%v error=%v", blocking, err)
+		if block, err := Guard(t.Context(), guard, string(ActionRestart), ev); block.Rule != "" || err == nil {
+			t.Fatalf("guard accepted uncertainty: blocked=%v error=%v", block.Rule, err)
 		}
 	}
 }
@@ -102,8 +102,8 @@ func TestFailedStaysQuietOnAnUnobservedPassingCheck(t *testing.T) {
 		}
 	}
 	guard := []Rule{{Type: RuleGuard, Name: "guard", Blocks: []string{string(ActionRestart)}, If: failed}}
-	if blocking, _, err := Guard(t.Context(), guard, string(ActionRestart), &Evaluator{Cache: cache}); blocking != "" || err == nil {
-		t.Fatalf("guard accepted an unobserved certificate: blocked=%v error=%v", blocking, err)
+	if block, err := Guard(t.Context(), guard, string(ActionRestart), &Evaluator{Cache: cache}); block.Rule != "" || err == nil {
+		t.Fatalf("guard accepted an unobserved certificate: blocked=%v error=%v", block.Rule, err)
 	}
 }
 
@@ -156,8 +156,8 @@ func TestBusyChecksNeverTriggerOperations(t *testing.T) {
 		if _, err := ev.EvalRule(t.Context(), Rule{Type: RuleAlert, If: failed, Actions: []Action{{Type: ActionAlert, Message: "x"}}}); err != nil {
 			t.Fatal(err)
 		}
-		if blocking, _, err := Guard(t.Context(), guard, string(ActionRestart), ev); blocking != "" || err == nil {
-			t.Fatalf("guard on busy %s check: blocked=%v error=%v; want fail closed", check, blocking, err)
+		if block, err := Guard(t.Context(), guard, string(ActionRestart), ev); block.Rule != "" || err == nil {
+			t.Fatalf("guard on busy %s check: blocked=%v error=%v; want fail closed", check, block.Rule, err)
 		}
 		notActive := map[string]any{ConditionNot: map[string]any{ConditionActive: map[string]any{FieldCheck: check}}}
 		if got, err := ev.EvalRule(t.Context(), Rule{If: notActive, Actions: []Action{{Type: ActionRestart}}}); got || err != nil {
@@ -231,10 +231,10 @@ func TestOrHoldsDespiteUnknownSibling(t *testing.T) {
 		map[string]any{ConditionFailed: map[string]any{FieldCheck: "smtp_587"}},
 	}}
 	guard := []Rule{{Type: RuleGuard, Name: "guard", Blocks: []string{string(ActionRestart)}, If: holds}}
-	if blocking, _, err := Guard(t.Context(), guard, string(ActionRestart), &Evaluator{Cache: map[string]checks.Result{
+	if block, err := Guard(t.Context(), guard, string(ActionRestart), &Evaluator{Cache: map[string]checks.Result{
 		"skipped": {OK: true, Skipped: true}, "smtp_587": {OK: false},
-	}}); blocking == "" || err != nil {
-		t.Fatalf("a guard whose or holds must block: blocked=%v err=%v", blocking, err)
+	}}); block.Rule == "" || err != nil {
+		t.Fatalf("a guard whose or holds must block: blocked=%v err=%v", block.Rule, err)
 	}
 }
 
@@ -258,8 +258,8 @@ func TestOrDecidesOverAMetricWithoutTheThresholdForm(t *testing.T) {
 		t.Fatalf("undecided or = %v, %v (unknown %v); want an unknown no-match", got, err, ev.Unknown)
 	}
 	guard := []Rule{{Type: RuleGuard, Name: "guard", Blocks: []string{string(ActionStart)}, If: undecided}}
-	if blocking, _, err := Guard(t.Context(), guard, string(ActionStart), ev); blocking != "" || !errors.Is(err, ErrUnavailable) {
-		t.Fatalf("guard over an undecided or: blocked by %q, err %v; want it to deny as unavailable", blocking, err)
+	if block, err := Guard(t.Context(), guard, string(ActionStart), ev); block.Rule != "" || !errors.Is(err, ErrUnavailable) {
+		t.Fatalf("guard over an undecided or: blocked by %q, err %v; want it to deny as unavailable", block.Rule, err)
 	}
 }
 
@@ -285,8 +285,8 @@ func TestAndDoesNotDependOnOperandOrder(t *testing.T) {
 			t.Fatalf("rule not(and %v) = %v, %v, unknown=%v; want a definite true", order, got, err, ev.Unknown)
 		}
 		guard := []Rule{{Name: "g", Type: RuleGuard, Blocks: []string{string(ActionRestart)}, If: and}}
-		if rule, _, err := Guard(t.Context(), guard, string(ActionRestart), &Evaluator{Cache: cache}); rule != "" || err == nil {
-			t.Fatalf("guard and %v = %q, %v; want denied on the unobservable operand", order, rule, err)
+		if block, err := Guard(t.Context(), guard, string(ActionRestart), &Evaluator{Cache: cache}); block.Rule != "" || err == nil {
+			t.Fatalf("guard and %v = %q, %v; want denied on the unobservable operand", order, block.Rule, err)
 		}
 	}
 	// With no false operand the conjunction stays unknown.
