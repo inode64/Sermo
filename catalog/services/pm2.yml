@@ -23,9 +23,15 @@ variables:
 pidfile:
   - /run/pm2.pid
   - /root/.pm2/pm2.pid
+# PM2 is a Node.js program: its God Daemon runs the node binary, never the pm2
+# launcher script, and renames itself "PM2 v<version>: God Daemon (<home>)".
+# The applications it manages are node processes of the same user, so the
+# command line is what tells the daemon from its children and from other node
+# services on the host.
 processes:
   main:
-    exe: ${pm2_binary}
+    exe: ${node_binary}
+    cmd: '^PM2 v[0-9][^ ]*: God Daemon'
     user: ${user}
 policy:
   cooldown: 15m

@@ -2709,6 +2709,30 @@ func TestCatalogPM2NeverRunsItsCLIToObserveTheDaemon(t *testing.T) {
 	}
 }
 
+// The God Daemon's executable is node, like every application it manages; only
+// the title it gives itself identifies it.
+func TestCatalogPM2SelectsTheGodDaemonAmongNodeProcesses(t *testing.T) {
+	selector := nested(t, catalogDocByName(t, repoRoot(t), "services", "pm2"), "processes", "main")
+	if got := cfgval.String(selector["exe"]); got != "${node_binary}" {
+		t.Fatalf("pm2 main exe = %q, want the node runtime", got)
+	}
+	pattern, err := regexp.Compile(cfgval.String(selector["cmd"]))
+	if err != nil {
+		t.Fatalf("pm2 main cmd: %v", err)
+	}
+	for cmdline, want := range map[string]bool{
+		"PM2 v6.0.14: God Daemon (/root/.pm2)                    ": true,
+		"PM2 v5.3.0: God Daemon (/home/web/.pm2)":                  true,
+		"node /srv/app/server.js":                                  false,
+		"node /usr/bin/pm2 logs":                                   false,
+		"/usr/bin/node /opt/zigbee2mqtt/index.js":                  false,
+	} {
+		if got := pattern.MatchString(cmdline); got != want {
+			t.Errorf("cmd matches %q = %v, want %v", cmdline, got, want)
+		}
+	}
+}
+
 func TestPostgresCatalogDeclaresPostmasterPidfile(t *testing.T) {
 	body := catalogDocByName(t, repoRoot(t), "services", "postgres-%v")
 	if got := cfgval.String(body["pidfile"]); got != "${data_dir}/postmaster.pid" {
