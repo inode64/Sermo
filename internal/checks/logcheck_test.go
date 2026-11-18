@@ -231,6 +231,22 @@ func TestLogReadBudgetTruncates(t *testing.T) {
 	}
 }
 
+func TestLogWindowRemainsIncompleteUntilGapExpires(t *testing.T) {
+	f := newLogFixture(t, "", ">", 0, time.Minute)
+	f.check.budget = 4
+	f.run()
+	f.append("ok!\n" + logTestMatch)
+	f.run()
+	f.now = f.now.Add(time.Minute)
+	if res := f.run(); f.count(res) != 0 || res.Data[DataKeyTruncated] != true || !strings.Contains(res.Message, "lower bound") {
+		t.Fatalf("skipped match still falls in the window: %+v", res)
+	}
+	f.now = f.now.Add(time.Nanosecond)
+	if res := f.run(); res.Data[DataKeyTruncated] != false || strings.Contains(res.Message, "lower bound") {
+		t.Fatalf("expired gap still marks a clean window incomplete: %+v", res)
+	}
+}
+
 func TestLogGlobSumsAcrossFilesAndDropsVanished(t *testing.T) {
 	f := newLogFixture(t, "", ">", 0, 5*time.Minute)
 	f.check.path = filepath.Join(f.dir, "*_err.log")

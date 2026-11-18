@@ -4163,8 +4163,8 @@ checks:
 - **Read budget**: one cycle reads at most 8 MiB across the matched files,
   including bytes of partial lines that must be re-read next cycle. Past
   that the remainder is skipped, the result carries `truncated: true` and the
-  message says the count is a lower bound — a log that explodes must not stall
-  the worker.
+  message identifies the count as a lower bound. The flag stays set until the
+  last incomplete observation falls outside the counting window.
 - **State is in memory.** Like `count`'s `delta` and `size`, the offsets and
   the window live in the built check: `sermoctl daemon reload` or a restart
   re-baselines, and lines written meanwhile are not counted.

@@ -56,6 +56,7 @@ type logState struct {
 	started bool
 	files   map[logIdentity]*logFileState
 	matches []logMatchBatch
+	lastGap time.Time
 }
 
 type logMatchBatch struct {
@@ -152,7 +153,7 @@ func (c logCheck) Run(ctx context.Context) Result {
 	tally, err := c.state.advance(ctx, paths, c.regex, c.readBudget())
 	// Preserve matches already read even if a later file was unavailable. Their
 	// offsets have advanced, so discarding this batch would lose those events.
-	count, captures := c.state.countWithin(windowClock(c.clock)(), tally, c.window)
+	count, captures, incomplete := c.state.countWithin(windowClock(c.clock)(), tally, c.window)
 	if err != nil {
 		return c.unavailableResult(fmt.Sprintf("log %s: %v", c.path, err), start)
 	}
@@ -163,7 +164,7 @@ func (c logCheck) Run(ctx context.Context) Result {
 	if len(captures.order) > 0 {
 		msg += "; " + captures.String()
 	}
-	if tally.truncated {
+	if incomplete {
 		msg += fmt.Sprintf("; some bytes were unavailable or outside the %d-byte read budget, count is a lower bound", c.readBudget())
 	}
 	res := c.gradeValue(c.result(ok, msg, start), CheckKeyCount, float64(count))
@@ -178,7 +179,7 @@ func (c logCheck) Run(ctx context.Context) Result {
 		DataKeyWindow:    c.window.String(),
 		DataKeyFiles:     tally.files,
 		DataKeyBytesRead: tally.bytesRead,
-		DataKeyTruncated: tally.truncated,
+		DataKeyTruncated: incomplete,
 	}
 	return res
 }
@@ -193,8 +194,11 @@ func (c logCheck) readBudget() int64 {
 // countWithin retains batches by observation time, including the current batch
 // even when the previous cycle is older than the whole window, and sums their
 // lines and captured labels.
-func (s *logState) countWithin(now time.Time, tally logTally, window time.Duration) (int, logCaptures) {
+func (s *logState) countWithin(now time.Time, tally logTally, window time.Duration) (int, logCaptures, bool) {
 	cutoff := now.Add(-window)
+	if tally.truncated {
+		s.lastGap = now
+	}
 	s.matches = slices.DeleteFunc(s.matches, func(b logMatchBatch) bool { return b.at.Before(cutoff) })
 	if tally.matched > 0 {
 		s.matches = append(s.matches, logMatchBatch{at: now, matched: tally.matched, captures: tally.captures})
@@ -205,7 +209,7 @@ func (s *logState) countWithin(now time.Time, tally logTally, window time.Durati
 		total += batch.matched
 		captures.merge(batch.captures)
 	}
-	return total, captures
+	return total, captures, !s.lastGap.IsZero() && !s.lastGap.Before(cutoff)
 }
 
 // advance reads what every file gained since the previous cycle and counts its
