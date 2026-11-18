@@ -1309,8 +1309,9 @@ also_apply: [nginx, varnish]
 - **A target in `dry_run` stays simulated**: a remediation cascade that reaches
   it runs nothing on it, nor on what it lists in its own `also_apply`. It records
   a `dry-run` event, its pending `changed:` baseline stays pending, and it does
-  not count against the cascade. A cascade from `sermoctl` or the Web UI is an
-  operator action, which `dry_run` never gates.
+  not count against the cascade. Automatic cascades also skip a service whose
+  monitoring is paused and any dependants reached only through it. A cascade
+  from `sermoctl` or the Web UI is an operator action, which `dry_run` never gates.
 - **Best-effort & loop-safe**: a blocked target is retried once; if it remains
   blocked, it is reported by a non-fatal `cascade` event. A failed or unresolved
   target is also reported and makes the overall cascade result fail, while the

@@ -332,3 +332,19 @@ func TestWireCascadeHonoursTargetDryRun(t *testing.T) {
 		t.Fatalf("the target must report one dry-run event and nothing else, got %+v", simulated)
 	}
 }
+
+func TestAutomaticCascadeSkipsPausedBranch(t *testing.T) {
+	var calls []string
+	makeWorker := func(name string) *Worker {
+		return &Worker{Service: name, Operate: func(context.Context, string) operation.Result {
+			calls = append(calls, name)
+			return operation.Result{Status: operation.ResultOK}
+		}}
+	}
+	root, paused, child, peer := makeWorker("root"), makeWorker("paused"), makeWorker("child"), makeWorker("peer")
+	paused.IsPaused = func() bool { return true }
+	wireCascade([]*Worker{root, paused, child, peer}, map[string][]string{"root": {"paused", "peer"}, "paused": {"child"}}, Deps{})
+	if result := root.Cascade(t.Context(), "restart"); !result.OK() || !eq(calls, []string{"root", "peer"}) {
+		t.Fatalf("paused cascade: result=%+v calls=%v", result, calls)
+	}
+}

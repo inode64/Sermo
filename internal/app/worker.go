@@ -295,8 +295,12 @@ func (w *Worker) RunCycle(ctx context.Context) {
 	w.persistRuleState()
 }
 
+func (w *Worker) monitoringPaused() bool {
+	return w.IsPaused != nil && w.IsPaused()
+}
+
 func (w *Worker) prepareCycle(ctx context.Context, settleKey string, now func() time.Time) (workerCycleMode, bool) {
-	if w.IsPaused != nil && w.IsPaused() {
+	if w.monitoringPaused() {
 		w.clearObservability()
 		w.Settling.MarkObserved(settleKey)
 		for _, window := range w.windows {

@@ -502,7 +502,7 @@ func wireCascade(workers []*Worker, cascadeMap map[string][]string, deps Deps) {
 	// A service in dry_run never runs an automatic action, whoever's rule asked
 	// for it, and what it would cascade to is its own automatic action too.
 	lookup := func(svc string) []string {
-		if tw := byName[svc]; tw != nil && tw.DryRun {
+		if tw := byName[svc]; tw != nil && (tw.DryRun || tw.monitoringPaused()) {
 			return nil
 		}
 		return cascadeMap[svc]
@@ -524,6 +524,9 @@ func wireCascade(workers []*Worker, cascadeMap map[string][]string, deps Deps) {
 				target := byName[svc]
 				if target == nil {
 					return operation.Result{Service: svc, Action: action, Status: operation.ResultFailed, Message: "cascade target not configured"}, nil
+				}
+				if target.monitoringPaused() {
+					return operation.Result{Service: svc, Action: action, Status: operation.ResultSkipped, Message: "monitoring paused"}, nil
 				}
 				if target == w {
 					return w.operateForRemediation(ctx, action), nil
