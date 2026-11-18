@@ -182,6 +182,27 @@ func TestLogRotationByRenameReadsNewFileFromStart(t *testing.T) {
 	}
 }
 
+func TestLogRotationKeepsUnreadLines(t *testing.T) {
+	for _, pattern := range []string{"worker_err.log", "worker_err.log*"} {
+		t.Run(pattern, func(t *testing.T) {
+			f := newLogFixture(t, "", ">", 0, time.Minute)
+			f.check.path = filepath.Join(f.dir, pattern)
+			f.append(logTestMatch)
+			f.run()
+			f.append(logTestMatch)
+			if err := os.Rename(f.path, f.path+".1"); err != nil {
+				t.Fatal(err)
+			}
+			f.write(logTestMatch)
+			for range 2 {
+				if got := f.count(f.run()); got != 2 {
+					t.Fatalf("count = %d, want one unread line from each inode", got)
+				}
+			}
+		})
+	}
+}
+
 func TestLogTruncationReadsFromZero(t *testing.T) {
 	f := newLogFixture(t, "", ">", 0, 5*time.Minute)
 	f.append(logTestMatch + logTestMatch + logTestMatch)

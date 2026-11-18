@@ -4146,9 +4146,7 @@ checks:
   directories and devices are rejected, including through symlinks; opening a
   FIFO does not wait for a writer. A glob (`*`, `?`, `[`) matches files whose
   matches are summed; the result data reports `files`. A malformed pattern is
-  a validation error, and the directory before the first wildcard must exist. Keep the glob tight
-  (`*_err.log`, never `*_err.log*`): a rotated copy that matches the glob is a
-  new file and would be read from its start.
+  a validation error, and the directory before the first wildcard must exist. Prefer a glob for active logs. A rename within the glob preserves the cursor.
 - **The first cycle only baselines** at the end of every file: lines already
   there are history, not news. From then on each cycle reads what each file
   gained. A trailing partial line waits for its newline.
@@ -4159,7 +4157,9 @@ checks:
 - **Rotation** is handled by identity and size: a new inode under the same name
   (logrotate's rename + create) or a file that shrank (`copytruncate`,
   `truncate`) is read again from its start, and a file that vanished is
-  forgotten.
+  forgotten. After a rename, unread lines are drained from the old inode if it
+  is still available in the same directory. Deletion, compression or moving it
+  outside that directory can leave a gap, reported as `truncated: true`.
 - **Read budget**: one cycle reads at most 8 MiB across the matched files,
   including bytes of partial lines that must be re-read next cycle. Past
   that the remainder is skipped, the result carries `truncated: true` and the

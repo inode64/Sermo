@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"strings"
@@ -53,7 +54,7 @@ type logCheck struct {
 // rather than derived from a cumulative counter that needs an older baseline.
 type logState struct {
 	started bool
-	files   map[string]*logFileState
+	files   map[logIdentity]*logFileState
 	matches []logMatchBatch
 }
 
@@ -112,13 +113,17 @@ func hasNamedGroups(re *regexp.Regexp) bool {
 	return slices.ContainsFunc(re.SubexpNames(), func(name string) bool { return name != "" })
 }
 
+type logIdentity struct {
+	device, inode uint64
+}
+
 type logFileState struct {
-	inode  uint64
+	path   string
 	offset int64
 }
 
 func newLogState() *logState {
-	return &logState{files: map[string]*logFileState{}}
+	return &logState{files: map[logIdentity]*logFileState{}}
 }
 
 // logTally is what one cycle read: matches found, bytes read and whether
@@ -159,7 +164,7 @@ func (c logCheck) Run(ctx context.Context) Result {
 		msg += "; " + captures.String()
 	}
 	if tally.truncated {
-		msg += fmt.Sprintf("; read budget of %d bytes exceeded, count is a lower bound", c.readBudget())
+		msg += fmt.Sprintf("; some bytes were unavailable or outside the %d-byte read budget, count is a lower bound", c.readBudget())
 	}
 	res := c.gradeValue(c.result(ok, msg, start), CheckKeyCount, float64(count))
 	res.Data = map[string]any{
@@ -208,27 +213,69 @@ func (s *logState) countWithin(now time.Time, tally logTally, window time.Durati
 // seen for the first time after the baseline is read from its start (a rotated
 // log's successor is exactly that).
 func (s *logState) advance(ctx context.Context, paths []string, re *regexp.Regexp, budget int64) (logTally, error) {
-	seen := make(map[string]bool, len(paths))
+	seen := make(map[logIdentity]bool, len(paths))
 	tally := logTally{files: len(paths)}
 	for _, path := range paths {
 		if err := ctx.Err(); err != nil {
 			return tally, fmt.Errorf("log read cancelled: %w", err)
 		}
-		seen[path] = true
-		if err := s.advanceFile(ctx, path, re, budget, &tally); err != nil {
+		if err := s.advanceFile(ctx, path, re, budget, &tally, seen, nil); err != nil {
 			return tally, err
 		}
 	}
-	for path := range s.files {
-		if !seen[path] {
-			delete(s.files, path)
+	// A renamed file may have gained lines between polls. Resolve its inode
+	// only on rotation, sharing the directory scan between displaced cursors.
+	dirs := make(map[string]map[logIdentity]string)
+	for id, cursor := range s.files {
+		if seen[id] {
+			continue
 		}
+		dir := filepath.Dir(cursor.path)
+		entries, scanned := dirs[dir]
+		if !scanned {
+			var err error
+			entries, err = rotatedLogPaths(ctx, dir)
+			if err != nil {
+				return tally, err
+			}
+			dirs[dir] = entries
+		}
+		if path := entries[id]; path != "" {
+			if err := s.advanceFile(ctx, path, re, budget, &tally, seen, &id); err != nil {
+				return tally, err
+			}
+		} else {
+			tally.truncated = true
+		}
+		delete(s.files, id)
 	}
 	s.started = true
 	return tally, nil
 }
 
-func (s *logState) advanceFile(ctx context.Context, path string, re *regexp.Regexp, budget int64, tally *logTally) error {
+func rotatedLogPaths(ctx context.Context, dir string) (map[logIdentity]string, error) {
+	entries, err := hostfs.ReadDir(dir)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return nil, fmt.Errorf("locate rotated logs: %w", err)
+	}
+	paths := make(map[logIdentity]string)
+	for _, entry := range entries {
+		if err := ctx.Err(); err != nil {
+			return nil, fmt.Errorf("locate rotated logs: %w", err)
+		}
+		if entry.Type().IsRegular() {
+			info, err := entry.Info()
+			if err == nil {
+				if id, ok := fileIdentity(info); ok {
+					paths[id] = filepath.Join(dir, entry.Name())
+				}
+			}
+		}
+	}
+	return paths, nil
+}
+
+func (s *logState) advanceFile(ctx context.Context, path string, re *regexp.Regexp, budget int64, tally *logTally, seen map[logIdentity]bool, expected *logIdentity) error {
 	// A path (including a symlink target) can become a FIFO between cycles.
 	// Open without waiting for a writer, then validate the opened descriptor.
 	fh, err := hostfs.OpenFile(path, os.O_RDONLY|syscall.O_NONBLOCK, 0)
@@ -246,26 +293,42 @@ func (s *logState) advanceFile(ctx context.Context, path string, re *regexp.Rege
 	if err := ctx.Err(); err != nil {
 		return fmt.Errorf("log read cancelled: %w", err)
 	}
-	inode := fileInode(info)
-	fs, known := s.files[path]
-	switch {
-	case !known && !s.started:
-		// Baseline: what is already there is history.
-		s.files[path] = &logFileState{inode: inode, offset: info.Size()}
-		return nil
-	case !known, fs.inode != inode, info.Size() < fs.offset:
-		// New file, rotated (rename + create) or truncated: read from the start.
-		fs = &logFileState{inode: inode}
-		s.files[path] = fs
+	id, ok := fileIdentity(info)
+	if !ok {
+		return fmt.Errorf("cannot identify log file %s", path)
 	}
-	pending := info.Size() - fs.offset
+	if expected != nil && id != *expected {
+		tally.truncated = true
+		return nil
+	}
+	if seen[id] {
+		return nil
+	}
+	seen[id] = true
+	fs := s.files[id]
+	if fs == nil {
+		fs = &logFileState{path: path}
+		s.files[id] = fs
+		if !s.started {
+			fs.offset = info.Size()
+		}
+	}
+	fs.path = path
+	if info.Size() < fs.offset {
+		fs.offset = 0
+	}
+	return fs.readTail(ctx, fh, info.Size(), re, budget, tally)
+}
+
+func (fs *logFileState) readTail(ctx context.Context, fh *os.File, size int64, re *regexp.Regexp, budget int64, tally *logTally) error {
+	pending := size - fs.offset
 	if pending <= 0 {
 		return nil
 	}
 	remaining := budget - tally.bytesRead
 	if remaining <= 0 {
 		tally.truncated = true
-		fs.offset = info.Size()
+		fs.offset = size
 		return nil
 	}
 	read, err := countMatchingLines(ctx, fh, fs.offset, min(pending, remaining), re)
@@ -279,7 +342,7 @@ func (s *logState) advanceFile(ctx context.Context, path string, re *regexp.Rege
 		// The rest would not fit this cycle: skip it rather than fall behind
 		// forever on a log that outruns the budget.
 		tally.truncated = true
-		fs.offset = info.Size()
+		fs.offset = size
 		return nil
 	}
 	fs.offset += read.consumed
@@ -332,11 +395,10 @@ func countMatchingLines(ctx context.Context, r io.ReaderAt, offset, limit int64,
 	return read, nil
 }
 
-// fileInode identifies the file behind a path, so a rotated log (a new file
-// under the old name) is told apart from the same file that grew.
-func fileInode(info os.FileInfo) uint64 {
-	if sys, ok := info.Sys().(*syscall.Stat_t); ok {
-		return sys.Ino
+func fileIdentity(info os.FileInfo) (logIdentity, bool) {
+	stat, ok := info.Sys().(*syscall.Stat_t)
+	if !ok {
+		return logIdentity{}, false
 	}
-	return 0
+	return logIdentity{device: stat.Dev, inode: stat.Ino}, true
 }
