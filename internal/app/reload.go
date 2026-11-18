@@ -95,17 +95,21 @@ func applyWatchState(watches []*Watch, saved map[watchStateKey]watchSnapshot) {
 
 // workerSnapshot preserves per-service runtime state across a config reload.
 type workerSnapshot struct {
-	cycle         int
-	remediation   *rules.RemediationState
-	windows       map[string]*rules.WindowState
-	libBaseline   *artifactBaselineState
-	checkEpisodes map[string]checkEpisode
+	pendingSupervisors map[string]string
+	cycle              int
+	remediation        *rules.RemediationState
+	windows            map[string]*rules.WindowState
+	libBaseline        *artifactBaselineState
+	checkEpisodes      map[string]checkEpisode
 }
 
 func captureWorkerState(workers []*Worker) map[string]workerSnapshot {
 	out := make(map[string]workerSnapshot, len(workers))
 	for _, w := range workers {
 		snap := workerSnapshot{cycle: w.cycle}
+		if w.renewal != nil {
+			snap.pendingSupervisors = maps.Clone(w.renewal.pending)
+		}
 		if w.State != nil {
 			snap.remediation = cloneRemediationState(w.State)
 		}
@@ -131,6 +135,7 @@ func applyWorkerState(workers []*Worker, saved map[string]workerSnapshot) {
 			continue
 		}
 		w.cycle = snap.cycle
+		w.renewal.restore(w.Service, snap.pendingSupervisors)
 		if snap.remediation != nil {
 			w.State = snap.remediation
 		}

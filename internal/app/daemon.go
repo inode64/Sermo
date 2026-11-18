@@ -388,6 +388,7 @@ func BuildWorkers(ctx context.Context, cfg *config.Config, deps Deps, collector 
 		built[i] = buildServiceWorker(ctx, resolutions[i], deps, collector, resolver, names[i])
 	})
 
+	renewals := &supervisorRenewals{owners: make(map[string]string)}
 	var workers []*Worker
 	var serviceWatchList []*Watch
 	cascadeMap := map[string][]string{}
@@ -399,6 +400,9 @@ func BuildWorkers(ctx context.Context, cfg *config.Config, deps Deps, collector 
 		}
 		if len(b.cascade) > 0 {
 			cascadeMap[name] = b.cascade
+		}
+		if b.worker.renewal != nil {
+			b.worker.renewal.group = renewals
 		}
 		workers = append(workers, b.worker)
 		serviceWatchList = append(serviceWatchList, b.watches...)
@@ -495,12 +499,6 @@ func wireCascade(workers []*Worker, cascadeMap map[string][]string, deps Deps) {
 	for _, w := range workers {
 		byName[w.Service] = w
 	}
-	op := func(ctx context.Context, svc, action string) (operation.Result, error) {
-		if tw := byName[svc]; tw != nil {
-			return tw.operateForRemediation(ctx, action), nil
-		}
-		return operation.Result{Service: svc, Action: action, Status: operation.ResultFailed, Message: "cascade target not configured"}, nil
-	}
 	// A service in dry_run never runs an automatic action, whoever's rule asked
 	// for it, and what it would cascade to is its own automatic action too.
 	lookup := func(svc string) []string {
@@ -522,7 +520,16 @@ func wireCascade(workers []*Worker, cascadeMap map[string][]string, deps Deps) {
 			continue
 		}
 		cfg := CascadeConfig{
-			Operate: op, Lookup: lookup, Emit: deps.Emit, Simulated: simulated,
+			Operate: func(ctx context.Context, svc, action string) (operation.Result, error) {
+				target := byName[svc]
+				if target == nil {
+					return operation.Result{Service: svc, Action: action, Status: operation.ResultFailed, Message: "cascade target not configured"}, nil
+				}
+				if target == w {
+					return w.operateForRemediation(ctx, action), nil
+				}
+				return target.operateCascadeTarget(ctx, action), nil
+			}, Lookup: lookup, Emit: deps.Emit, Simulated: simulated,
 			Target: acknowledgeCascadeTarget(byName),
 			// The worker sees the failed cascade, but this service may have relaunched.
 			Downgraded: func(primary operation.Result) {
@@ -714,6 +721,14 @@ func buildWorker(ctx context.Context, name, unit string, tree map[string]any, de
 		libBaseline:          libBaseline,
 		checkEpisodes:        checkEpisodesFromSnapshots(deps.Snapshots, name, catalog.types, configID),
 		artifactSamples:      deps.ArtifactSamples,
+	}
+	for _, check := range built {
+		if !check.Optional && catalog.types[check.Check.Name()] == checks.CheckTypeSupervisedProcess {
+			if worker.renewal == nil {
+				worker.renewal = &serviceRenewal{probes: make(map[string]checks.Built)}
+			}
+			worker.renewal.probes[check.Check.Name()] = check
+		}
 	}
 	worker.Checks = workerCheckRunner(worker, built, catalog.cycles, maxParallel, recordMeasurement, setCycleMetrics)
 	// Watches run independently of the worker and must not capture its cycle cache.

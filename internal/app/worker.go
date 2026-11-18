@@ -214,6 +214,7 @@ type Worker struct {
 	libBaseline *ArtifactBaseline
 	// artifactSamples provides cadence-limited catalog app/library/file observations.
 	artifactSamples *ArtifactSamples
+	renewal         *serviceRenewal
 }
 
 type workerCycleMode struct {
@@ -262,10 +263,15 @@ func (w *Worker) RunCycle(ctx context.Context) {
 	w.refreshChecks = mode.operation
 
 	w.observeServiceRestart(ctx, mode)
+	var observationStart time.Time
+	if w.renewal != nil {
+		observationStart = time.Now()
+	}
 	deps, cache := w.runChecks(ctx)
 	if ctx.Err() != nil {
 		return
 	}
+	w.renewal.observe(w.Service, cache, w.cycleRan, observationStart)
 	w.publishCycle(ctx, cache, mode.observeOnly)
 	if mode.observeOnly {
 		w.completeObserveCycle(settleKey, mode)
@@ -948,10 +954,22 @@ func (w *Worker) runFiringRemediation(ctx context.Context, ev *rules.Evaluator, 
 		}
 		return false
 	}
+	var renewal map[string]string
+	if op.Type == rules.ActionRestart {
+		var wait string
+		renewal, wait = w.renewal.begin(ctx, w.Service, ev.Cache, w.cycleRan)
+		if wait != "" {
+			w.emitAlerts(ctx, ev, firing.Rule, firing.announce(), firing.change, firing.severity)
+			if w.shouldEmitRuleEvent(firing.Rule, firing.announce()) {
+				w.emit(Event{Kind: eventKindSuppressed, Severity: firing.severity, Rule: firing.Name, Action: action, Message: wait})
+			}
+			return false
+		}
+	}
 	// A guard that has cleared releases its refusal immediately. Engine
 	// refusals wait for the next attempt to refresh preflight and ownership.
 	w.emitAlerts(ctx, ev, firing.Rule, firing.announce() || !refusal.attempted, firing.change, firing.severity)
-	w.executeRemediation(ctx, now, firing, action)
+	w.executeRemediation(ctx, now, firing, action, renewal)
 	return true
 }
 
@@ -1020,12 +1038,13 @@ func (w *Worker) emitDryRunRemediation(ctx context.Context, ev *rules.Evaluator,
 	}
 }
 
-func (w *Worker) executeRemediation(ctx context.Context, now func() time.Time, firing firingRule, action string) {
+func (w *Worker) executeRemediation(ctx context.Context, now func() time.Time, firing firingRule, action string, renewal map[string]string) {
 	operate := w.operateForRemediation
 	if w.Cascade != nil && operation.CascadesAlsoApply(action) {
 		operate = w.Cascade
 	}
 	result, recovered := operateRecovering(ctx, operate, w.Service, action)
+	w.renewal.finish(w.Service, renewal, result.RecordsRemediation())
 	if result.RecordsRemediation() {
 		w.State.Record(now(), w.Policy)
 		delete(w.refusedRemediations, firing.Name)

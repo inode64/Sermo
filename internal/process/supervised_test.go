@@ -204,3 +204,32 @@ func TestSupervisedProcessReadErrorIsNotAbsence(t *testing.T) {
 		t.Fatalf("read error treated as absent worker: %v", err)
 	}
 }
+
+func TestReplacedSupervisorRequiresLiveWorkerAndVerifiedExecutable(t *testing.T) {
+	spec, source, ids := supervisedFixture()
+	id := ids[22]
+	id.Exe, id.ExeOK, id.ExePrev = "", false, spec.SupervisorExe
+	ids[22] = id
+	if _, err := source.wait(t.Context(), spec); err == nil || errors.Is(err, ErrSupervisedNotReady) {
+		t.Fatalf("unverified deleted file classified as absent or ready: %v", err)
+	}
+	id.ExeFile.Inode = 42
+	ids[22] = id
+	sample, err := source.wait(t.Context(), spec)
+	if err != nil || sample.ReplacedSupervisor != spec.SupervisorExe || sample.WorkerPID != 21 {
+		t.Fatalf("live pair: %+v, %v", sample, err)
+	}
+	worker := ids[21]
+	worker.Exe, worker.ExeOK, worker.ExePrev = "", false, spec.Exe
+	worker.ExeFile.Inode = 17
+	ids[21] = worker
+	sample, err = source.wait(t.Context(), spec)
+	if err != nil || sample.ReplacedSupervisor != spec.SupervisorExe || sample.ReplacedWorker != spec.Exe {
+		t.Fatalf("both executables replaced: %+v, %v", sample, err)
+	}
+	delete(ids, 21)
+	spec.RespawnGrace = 10 * time.Millisecond
+	if _, err := source.wait(t.Context(), spec); !errors.Is(err, ErrSupervisedNotReady) {
+		t.Fatalf("absent worker under replaced supervisor: %v", err)
+	}
+}

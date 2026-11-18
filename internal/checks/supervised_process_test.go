@@ -49,3 +49,13 @@ func TestSupervisedProcessConfiguration(t *testing.T) {
 		t.Fatal("accepted root cgroup")
 	}
 }
+
+func TestSupervisedProcessReportsReplacementAsAdvisory(t *testing.T) {
+	c := supervisedProcessCheck{sample: func(context.Context, process.SupervisedProcessSpec) (process.SupervisedProcessSample, error) {
+		return process.SupervisedProcessSample{WorkerPID: 10, SupervisorPID: 11, ReplacedSupervisor: "/usr/bin/supervisor"}, nil
+	}}
+	r := c.Run(t.Context())
+	if r.OK || !r.ActionBlocked || r.Unavailable || r.Data[DataKeyReplacedSupervisor] != "/usr/bin/supervisor" {
+		t.Fatalf("replaced supervisor: %+v", r)
+	}
+}

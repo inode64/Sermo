@@ -17,6 +17,7 @@ const (
 	CheckTypeSupervisedProcess = "supervised_process"
 	CheckKeyCgroup             = "cgroup"
 	CheckKeySupervisor         = "supervisor"
+	DataKeyReplacedSupervisor  = "replaced_supervisor"
 	CheckKeyRespawnGrace       = "respawn_grace"
 	supervisedProcessGrace     = 8 * time.Second
 	supervisedProcessTimeout   = 10 * time.Second
@@ -81,9 +82,21 @@ func (c supervisedProcessCheck) Run(ctx context.Context) Result {
 		if errors.Is(err, process.ErrSupervisedNotReady) {
 			return c.result(false, err.Error(), run.start)
 		}
-		return c.unavailableResult(err.Error(), run.start)
+		result := c.unavailableResult(err.Error(), run.start)
+		result.ActionBlocked = true
+		return result
 	}
 	result := c.result(true, "one verified worker and supervisor in the configured cgroup", run.start)
 	result.Data = map[string]any{DataKeyPID: sample.WorkerPID, "supervisor_pid": sample.SupervisorPID, "respawn_wait_seconds": sample.Waited.Seconds()}
+	if sample.ReplacedWorker != "" {
+		result.OK = false
+		result.Message = "worker is running the replaced executable " + sample.ReplacedWorker
+	}
+	if sample.ReplacedSupervisor != "" {
+		result.OK = false
+		result.ActionBlocked = true
+		result.Message = "worker is present; supervisor is running the replaced executable " + sample.ReplacedSupervisor
+		result.Data[DataKeyReplacedSupervisor] = sample.ReplacedSupervisor
+	}
 	return result
 }

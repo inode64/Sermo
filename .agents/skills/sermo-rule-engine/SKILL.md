@@ -102,3 +102,10 @@ shared probe runs once per cycle
 cooldown suppresses; zero or missing cooldown invalid; max_actions within window
 manual action exempt from cooldown but not from guards, locks or preflight
 ```
+
+A required service `supervised_process` reading distinguishes a missing worker
+from a live worker under a verified replaced supervisor. The latter is advisory.
+Automatic restart rules share the executable's renewal slot until the holder's
+checks freshly verify readiness. Keep the slot across failed operations and
+configuration reloads. Contention consumes no cooldown and must leave genuine
+worker absence eligible for recovery.

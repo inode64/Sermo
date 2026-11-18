@@ -35,8 +35,9 @@ type SupervisedProcessSpec struct {
 
 // SupervisedProcessSample reports the worker and supervisor observed together.
 type SupervisedProcessSample struct {
-	WorkerPID, SupervisorPID int
-	Waited                   time.Duration
+	WorkerPID, SupervisorPID           int
+	Waited                             time.Duration
+	ReplacedSupervisor, ReplacedWorker string
 }
 
 type supervisedSource struct {
@@ -51,8 +52,9 @@ type supervisedGeneration struct {
 	ticks uint64
 }
 type supervisedObservation struct {
-	supervisor supervisedGeneration
-	worker     int
+	supervisor                         supervisedGeneration
+	worker                             int
+	replacedSupervisor, replacedWorker string
 }
 
 // WaitSupervisedProcess checks fresh identities in only the configured cgroup;
@@ -123,7 +125,7 @@ func (s supervisedSource) wait(ctx context.Context, spec SupervisedProcessSpec) 
 			}
 			principal = observation.supervisor
 			if observation.worker != 0 {
-				return SupervisedProcessSample{WorkerPID: observation.worker, SupervisorPID: principal.pid, Waited: time.Since(started)}, nil
+				return SupervisedProcessSample{WorkerPID: observation.worker, SupervisorPID: principal.pid, ReplacedSupervisor: observation.replacedSupervisor, ReplacedWorker: observation.replacedWorker, Waited: time.Since(started)}, nil
 			}
 		}
 		select {
@@ -150,6 +152,7 @@ func (s supervisedSource) observe(ctx context.Context, spec SupervisedProcessSpe
 	}
 	var workers []int
 	var supervisors []supervisedGeneration
+	var observed supervisedObservation
 	for _, pid := range members {
 		if err := ctx.Err(); err != nil {
 			return supervisedObservation{}, fmt.Errorf("observe supervised identity: %w", err)
@@ -158,8 +161,8 @@ func (s supervisedSource) observe(ctx context.Context, spec SupervisedProcessSpe
 		if err != nil {
 			return supervisedObservation{}, err
 		}
-		worker := id.Exe == spec.Exe && id.UID == workerUID
-		supervisor := id.Exe == spec.SupervisorExe && id.UID == supervisorUID
+		worker := id.UID == workerUID && (id.Exe == spec.Exe || id.ExePrev == spec.Exe)
+		supervisor := id.UID == supervisorUID && (id.Exe == spec.SupervisorExe || id.ExePrev == spec.SupervisorExe)
 		if !worker && !supervisor {
 			continue
 		}
@@ -172,7 +175,9 @@ func (s supervisedSource) observe(ctx context.Context, spec SupervisedProcessSpe
 		}
 		if worker {
 			workers = append(workers, pid)
+			observed.replacedWorker = id.ExePrev
 		} else {
+			observed.replacedSupervisor = id.ExePrev
 			supervisors = append(supervisors, supervisedGeneration{pid: pid, ticks: id.StartTicks})
 		}
 	}
@@ -186,7 +191,7 @@ func (s supervisedSource) observe(ctx context.Context, spec SupervisedProcessSpe
 	if len(supervisors) != 1 || len(workers) > 1 {
 		return supervisedObservation{}, fmt.Errorf("%w: got %d supervisors and %d workers", ErrSupervisedNotReady, len(supervisors), len(workers))
 	}
-	observed := supervisedObservation{supervisor: supervisors[0]}
+	observed.supervisor = supervisors[0]
 	if len(workers) == 1 {
 		observed.worker = workers[0]
 	}
@@ -228,7 +233,7 @@ func (s supervisedSource) stableIdentity(pid int) (Identity, error) {
 	if !ok {
 		return Identity{}, errSupervisedUnstable
 	}
-	if !before.StartTicksOK || (!before.ExeOK && before.ExePrev == "") {
+	if !before.StartTicksOK || (!before.ExeOK && (before.ExePrev == "" || before.ExeFile.Inode == 0)) {
 		return Identity{}, errors.New("supervised process identity is incomplete")
 	}
 	after, ok, err := readIdentity(s.reader, pid)
@@ -238,7 +243,7 @@ func (s supervisedSource) stableIdentity(pid int) (Identity, error) {
 	if !ok || !after.StartTicksOK {
 		return Identity{}, errSupervisedUnstable
 	}
-	if before.StartTicks != after.StartTicks || before.Exe != after.Exe || before.UID != after.UID || before.Cgroup != after.Cgroup {
+	if before.StartTicks != after.StartTicks || before.Exe != after.Exe || before.ExePrev != after.ExePrev || before.ExeFile != after.ExeFile || before.UID != after.UID || before.Cgroup != after.Cgroup {
 		return Identity{}, errSupervisedUnstable
 	}
 	return after, nil

@@ -4916,3 +4916,19 @@ If observations are still unstable when the grace expires, the check is unavaila
 The timeout defaults to at least 10s and must exceed the grace; set an explicit
 timeout when increasing it. It reads the target cgroup rather than scanning all
 host processes, and never accepts cached identities during the wait.
+
+If the supervisor still runs a replaced executable, a verified worker in its
+cgroup remains present. The check reports the previous executable path in
+`replaced_supervisor`. This reading alerts and withholds the worker-missing
+action. A missing worker still fails after its configured respawn grace.
+
+For services with a required `supervised_process` check, the daemon uses a fresh
+observation before a rule restarts the service. Services whose supervisors run
+the same replaced executable renew one at a time, whichever restart rule fires.
+The next service waits for a fresh observation of the installed supervisor and
+worker on the previous service. An unsuccessful restart keeps the group waiting
+for recovery. A guard or preflight refusal before execution leaves the group
+available. Waiting services are reconsidered on their next eligible cycle and
+keep their remediation budget. Reloading the configuration preserves pending
+renewals for checks still configured. Manual maintenance uses the usual
+operation locks and preflight.
