@@ -132,6 +132,12 @@ func TestCatalogBackupAndTemplateHealth(t *testing.T) {
 		t.Fatalf("backrest backup guard check = %v, want a native restic process check", check)
 	}
 	fpm := catalogDocByName(t, root, "services", "php-fpm%v%s%i")
+	// A systemd FPM unit can have a MainPID without writing a pidfile.
+	// Only a strict main identity makes its stale libraries actionable then.
+	main := nested(t, fpm, "processes", "main")
+	if main["exe"] != "${binary}" || main["user"] != "root" {
+		t.Fatalf("FPM master identity = %v", main)
+	}
 	if got := nested(t, catalogWatchCheck(t, fpm, "fpm"), "expect", "listen_queue")["value"]; got != "${listen_queue_max}" {
 		t.Fatalf("FPM queue threshold = %v", got)
 	}

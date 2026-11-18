@@ -89,7 +89,7 @@ preflight:
           match: '\] ERROR: '
           severity: error
 processes:
-  master:
+  main:
     exe: ${binary}
     user: root
   workers:
