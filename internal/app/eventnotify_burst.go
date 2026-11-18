@@ -166,6 +166,10 @@ func (n *EventNotifier) flushSummaries(ctx context.Context, targets []notify.Not
 func (n *EventNotifier) summaryKeys(b *eventNotifyBurst, target notify.Notifier) []string {
 	keys := make([]string, 0, len(b.pending))
 	for key := range b.pending {
+		// A newer edge with an unread receipt may cancel this queued delivery.
+		if _, waiting := n.unread[receiptLookup{target.Name(), key}]; waiting {
+			continue
+		}
 		pending := b.pending[key]
 		if !n.allowsAlarmRecord(pending.record) {
 			delete(b.pending, key)

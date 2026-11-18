@@ -2424,7 +2424,9 @@ budget resets; a lower-grade sample cannot erase it before delivery.
 
 The summary queue holds at most 256 incident entries per notifier; additional
 omitted deliveries are counted in the next summary. A fault that clears before
-its opening summary is delivered is dropped without an orphan recovery. Queued
+its opening summary is delivered is dropped without an orphan recovery. If a
+newer event is waiting for a receipt lookup, its summary entry waits for that
+lookup as well. Other incidents remain eligible for delivery. Queued
 summaries are memory-only and can be lost on restart. These budgets apply to
 services, watches, apps, one-shot notices and reminders on this route; per-site
 `then.notify`/rule notifications are independent. To avoid duplicate messages,

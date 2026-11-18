@@ -275,3 +275,28 @@ func drainEventNotify(target *eventNotifyRecorder) []notify.Message {
 	}
 	return out
 }
+
+func TestSummaryWaitsForUnreadRecovery(t *testing.T) {
+	store := &failingEventNotifyStore{Store: openRuleStateStore(t)}
+	router, target, now := outageRouter(t, store, 0)
+	router.burst("ops").ordinary = eventNotifyBurstLimit
+	for _, watch := range []string{"brief", "ongoing"} {
+		router.deliver(t.Context(), eventNotification{Watch: watch, Kind: eventKindFiring})
+	}
+	store.readErr = errors.New("receipt unavailable")
+	router.deliver(t.Context(), eventNotification{Watch: "brief", Kind: eventKindRecovered})
+	*now = now.Add(time.Minute)
+	router.remind(t.Context())
+	if len(target.messages) != 1 {
+		t.Fatalf("expected a summary for the ongoing incident, got %d messages", len(target.messages))
+	}
+	if msg := <-target.messages; strings.Contains(msg.Body, "brief") || !strings.Contains(msg.Body, "ongoing") {
+		t.Fatalf("summary reported a superseded opening: %s", msg.Body)
+	}
+	store.readErr = nil
+	*now = now.Add(time.Minute)
+	router.remind(t.Context())
+	if len(target.messages) != 0 || len(router.burst("ops").pending) != 0 {
+		t.Fatal("announced or retained an incident that cleared before its first delivery")
+	}
+}
