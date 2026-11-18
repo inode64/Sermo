@@ -98,10 +98,13 @@ func TestFileWatcherRecordsBandSamples(t *testing.T) {
 		{"clean file is up", map[string]fileState{"/root/dead.letter": {size: 0}}, true, true},
 		{"absent with absent_ok is up", map[string]fileState{}, true, true},
 		{"absent without absent_ok is down", map[string]fileState{}, false, false},
+		{"one missing required root is down", map[string]fileState{"/present": {}}, false, false},
+		{"one missing optional root is up", map[string]fileState{"/present": {}}, true, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			var got []bool
 			w := &fileWatcher{
+				paths:      []string{"/root/dead.letter", "/present"},
 				absentOK:   tc.absentOK,
 				cond:       fileCond{sizeOp: ">", sizeValue: 0},
 				recordBand: func(ok bool, _ time.Time) { got = append(got, ok) },

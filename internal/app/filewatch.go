@@ -200,14 +200,11 @@ func (w *fileWatcher) recordBandSample(current map[string]fileState, blind error
 	if w.recordBand == nil || w.cond.sizeOp == "" || blind != nil {
 		return
 	}
-	ok := w.absentOK
-	if len(current) > 0 {
-		ok = true
-		for _, st := range current {
-			if st.breached {
-				ok = false
-				break
-			}
+	ok := w.missingRequiredRoot(current, nil) == ""
+	for _, st := range current {
+		if st.breached {
+			ok = false
+			break
 		}
 	}
 	w.recordBand(ok, at)
@@ -278,12 +275,8 @@ func (w *fileWatcher) snapshot(current map[string]fileState, paths []string, fai
 // ownership change alone does not create a permanent failure. Its path selects
 // the same measurement for the message, structured data and summary template.
 func (w *fileWatcher) failure(current map[string]fileState, paths []string, failures readFailures) (path, trigger, message string) {
-	if !w.absentOK {
-		for _, path := range w.paths {
-			if _, exists := current[path]; !exists && failures[path] == nil {
-				return path, "", path + ": not found"
-			}
-		}
+	if path := w.missingRequiredRoot(current, failures); path != "" {
+		return path, "", path + ": not found"
 	}
 	for _, path := range paths {
 		st := current[path]
@@ -295,6 +288,17 @@ func (w *fileWatcher) failure(current map[string]fileState, paths []string, fail
 		}
 	}
 	return "", "", ""
+}
+
+func (w *fileWatcher) missingRequiredRoot(current map[string]fileState, failures readFailures) string {
+	if !w.absentOK {
+		for _, path := range w.paths {
+			if _, exists := current[path]; !exists && failures[path] == nil {
+				return path
+			}
+		}
+	}
+	return ""
 }
 
 // fileWatchOldestAge is the age of the oldest entry older_than judges, or zero

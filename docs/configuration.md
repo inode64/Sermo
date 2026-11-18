@@ -4014,7 +4014,9 @@ when every path is healthy. Attribute changes keep their edge-triggered actions;
 they do not by themselves make the watch permanently unhealthy.
 Set **`absent_ok: true`** for a watch whose job is to report a file *appearing* —
 `/root/dead.letter`, a crash dump, `/forcefsck`. Absence is then healthy, but a
-present file over its size or age threshold still reports a failure.
+present file over its size or age threshold still reports a failure. The size
+history records a down sample whenever any required root is missing, even if
+the remaining files are within the threshold.
 
 The failed watch's message, measured values and `summary` describe the path
 causing the failure, including a descendant of a recursive watch. A size breach
