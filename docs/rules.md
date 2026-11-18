@@ -4825,7 +4825,9 @@ Each attempt retains its audit result. A refusal by the service's
 same command) reruns every minute instead of every 15, and the first pass
 releases the rule, so a configuration fixed after a crash is retried within
 about a minute rather than after a 30-minute cooldown. An unchanged preflight
-failure doubles the wait up to one day. A different failure starts at the policy
+failure doubles the wait up to one day. The comparison ignores numeric PID/TID
+fields and ISO timestamps. The audit retains their original values. A different
+failure starts at the policy
 cooldown again. Its error and recovery share the rule incident for notifications.
 An unchanged guard refusal is audited
 again after `policy.cooldown`, then after twice as long each time the same

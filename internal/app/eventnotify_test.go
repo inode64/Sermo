@@ -181,7 +181,7 @@ func TestEventNotifierPreflightRefusalEpisode(t *testing.T) {
 	router := NewEventNotifier("host", slog.New(slog.NewTextHandler(io.Discard, nil)), nil, nil)
 	router.Update(config.EventNotification{Targets: []string{"ops"}}, map[string]notify.Notifier{"ops": recorder})
 	e := Event{Kind: eventKindError, Service: "web", Rule: "repair", Action: "restart", Status: string(operation.ResultPreflightFailed)}
-	for _, reason := range []string{"missing library", "missing library", "invalid config"} {
+	for _, reason := range []string{"2026-11-18T10:02:00Z [pid 100] missing library", "2026-11-18T10:03:00Z [pid 160] missing library", "invalid config"} {
 		e.Message = reason
 		router.deliver(t.Context(), eventNotification{Event: e})
 	}
@@ -189,6 +189,26 @@ func TestEventNotifierPreflightRefusalEpisode(t *testing.T) {
 	router.deliver(t.Context(), eventNotification{Event: e})
 	if got := len(recorder.messages); got != 4 {
 		t.Fatalf("sent %d messages, want the first refusal, new cause, recovery and recurrence", got)
+	}
+}
+
+func TestPreflightReceiptFromOlderVersion(t *testing.T) {
+	store := openRuleStateStore(t)
+	router, target, _ := outageRouter(t, store, 0)
+	e := eventNotification{Kind: eventKindError, Service: "web", Rule: "repair", Status: string(operation.ResultPreflightFailed), Message: "pid=200: config invalid at line 15"}
+	rec := eventNotifyRecord(e, "ops", notify.Message{Severity: e.level()})
+	rec.Phase = eventKindError + ":pid=100: config invalid at line 15"
+	if err := store.SetEventNotifyState(rec); err != nil {
+		t.Fatal(err)
+	}
+	router.deliver(t.Context(), e)
+	if len(target.messages) != 0 {
+		t.Fatal("upgrade repeated an already announced refusal")
+	}
+	e.Message = "pid=300: config invalid at line 25"
+	router.deliver(t.Context(), e)
+	if len(target.messages) != 1 {
+		t.Fatal("a different configuration line must open a new refusal phase")
 	}
 }
 

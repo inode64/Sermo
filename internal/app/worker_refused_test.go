@@ -67,6 +67,12 @@ func TestWorkerPreflightRefusalSpacing(t *testing.T) {
 	w.Now = func() time.Time { return at }
 	for minute, want := range []int{1, 2, 2, 3, 4} {
 		at = t0.Add(time.Duration(minute) * time.Minute)
+		if minute == 0 {
+			h.opResult.Checks[0].Message = "pid=100 missing library"
+		}
+		if minute == 1 {
+			h.opResult.Checks[0].Message = "pid=160 missing library"
+		}
 		if minute == 3 {
 			h.opResult.Checks[0].Message = "library unreadable"
 		}

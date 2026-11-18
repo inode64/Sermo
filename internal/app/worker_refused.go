@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"regexp"
 	"time"
 
 	"sermo/internal/checks"
@@ -37,6 +38,19 @@ type remediationRefusal struct {
 	repeats int
 }
 
+// Retry and notification decisions compare causes. Command diagnostics often
+// include the PID of each invocation and its timestamp. Keep exit codes,
+// configuration line numbers and the complete audit message intact.
+var (
+	preflightProcessID = regexp.MustCompile(`(?i)\b((?:pid|tid)[ =:]+)\d+\b`)
+	preflightTimestamp = regexp.MustCompile(`\b\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(?:[.,]\d+)?(?:Z|[+-]\d{2}:?\d{2})?\b`)
+)
+
+func preflightCause(message string) string {
+	message = preflightProcessID.ReplaceAllString(message, "${1}<id>")
+	return preflightTimestamp.ReplaceAllString(message, "<timestamp>")
+}
+
 // recordEngineRefusal records an operation the engine refused (a failed
 // preflight, a blocked or skipped action) for its retry after the cooldown.
 func (w *Worker) recordEngineRefusal(rule string, result operation.Result, at time.Time) {
@@ -45,7 +59,7 @@ func (w *Worker) recordEngineRefusal(rule string, result operation.Result, at ti
 	if result.Status == operation.ResultPreflightFailed {
 		// The summary is identical for every failed preflight. Its audit
 		// details identify which check refused this attempt and why.
-		reason = result.AuditMessage()
+		reason = preflightCause(result.AuditMessage())
 		if previous := w.refusedRemediations[rule]; previous.preflight && previous.reason == reason {
 			repeats = previous.repeats + 1
 		}

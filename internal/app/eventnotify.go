@@ -566,10 +566,13 @@ func sendEventNotification(ctx context.Context, target notify.Notifier, msg noti
 }
 
 // normalizeLegacyNotifyRecord reads a delivery record an older binary wrote
-// after the migration: its advisory phase is a firing graded warning.
+// with the same phase vocabulary as newly observed incidents.
 func normalizeLegacyNotifyRecord(rec state.EventNotifyRecord) state.EventNotifyRecord {
 	if rec.Phase == legacyEventKindWarning && rec.Severity == "" {
 		rec.Phase, rec.Severity = eventKindFiring, severity.Warning.String()
+	}
+	if strings.HasPrefix(rec.Phase, eventKindError+":") {
+		rec.Phase = preflightCause(rec.Phase)
 	}
 	return rec
 }
@@ -597,7 +600,7 @@ func eventNotifyIdentity(e Event) (key string, active bool, phase string) {
 		// A rule's failed preflight stays open until that rule recovers.
 		// Keep one receipt while a different refusal can still reach the operator.
 		if e.Kind == eventKindError && e.Rule != "" && e.Status == string(operation.ResultPreflightFailed) {
-			phase = eventKindError + ":" + e.Message
+			phase = eventKindError + ":" + preflightCause(e.Message)
 			break
 		}
 		// An error with a recovery edge of its own stays a health incident, so
