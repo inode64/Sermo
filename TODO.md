@@ -9,7 +9,9 @@ The supported 1.0 scope is a single-host Linux supervisor: daemon, CLI and Web
 UI; systemd and OpenRC; configured services and host watches; catalog-backed
 configuration; persistent history; notifications; and safe, auditable service
 operations. Distributed coordination, remote agents, multi-tenant RBAC, a
-plugin ABI and cross-target dependency orchestration are post-1.0 work.
+plugin ABI and dependency-aware monitoring across targets are post-1.0 work.
+Lifecycle propagation via `also_apply` already exists. See
+[service dependencies](docs/services.md#also_apply--cascade-to-other-services).
 "Fully functional for 1.0" means every path inside that boundary passes the
 release gate, not that every future integration in this file has landed.
 
@@ -113,7 +115,7 @@ per cycle from `/proc/<pid>/io`, CPU per cycle, seconds to `/readyz`).
 - [ ] Trim the live sampler. Done: one `metrics.ProcessObservation` per
       worker cycle shares each PID's `statm`, `io`, `fd/` and `task/` readings
       between `liveSampler` and the engine sampler. Left: `processEntryCount`
-      uses `os.ReadDir`, which sorts thousands of fd entries just to count them
+      calls `hostfs.ReadDir` (backed by `os.ReadDir`), which sorts thousands of fd entries just to count them
       (`internal/metrics/procfs.go`). Count with an unsorted read, reuse the
       thread count, and make the detail-only totals interval-bound.
 - [ ] Fetch `CanReload` lazily instead of blocking the listener bind on it

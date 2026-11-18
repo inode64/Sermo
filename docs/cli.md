@@ -98,13 +98,13 @@ sermoctl reload SERVICE [--if-running]
 sermoctl repair SERVICE                 # manual-only: clear a proven-stale pidfile, then a guarded start
 
 sermoctl mount TARGET                 # TARGET is a configured mount name or absolute path
-sermoctl umount TARGET
+sermoctl umount TARGET [--force] [--lazy] [--kill-blockers]
 sermoctl mount status TARGET
 sermoctl mount list
 
 sermoctl preflight SERVICE
 sermoctl processes SERVICE
-sermoctl sessions [list] [SERVICE]     # SSH, tmux/screen sessions and running database statements
+sermoctl sessions [list] [SERVICE]     # SSH, tmux/screen, SMB and running database statements
 sermoctl sessions kill SERVICE WATCH ID [--connection]   # cancel one listed statement (or close its connection)
 sermoctl locks SERVICE
 sermoctl monitor SERVICE
@@ -121,6 +121,7 @@ sermoctl daemon reload                 # reload sermod config, not services
 sermoctl notifier test NAME            # send an explicit test message through one notifier
 
 sermoctl services [--notify NAME[,NAME]|all]                         # configured services (init, docker, VMs)
+sermoctl services libraries [SERVICE...] [--json]                      # inspect mapped libraries on the host
 sermoctl services catalog [all] [--long] [--notify NAME[,NAME]|all]   # catalog inventory
 sermoctl apps [all] [--long]                                          # catalog apps (see Catalog inventory)
 sermoctl apps refresh                                                 # make sermod re-inspect every installed app now
@@ -180,12 +181,9 @@ existing service name never changes meaning.
 Examples:
 
 ```bash
-sermoctl help restart
-sermoctl restart mysql-main
-sermoctl services --notify ops-email
-sermoctl notifier test ops-email
-sermoctl daemon reload
-sermoctl state compact --before 720h
+sermoctl sla
+sermoctl sla nginx
+sermoctl sla --series nginx --since 24h
 ```
 
 ## Panic mode
@@ -433,7 +431,14 @@ them (`USED BY`).
 `sermoctl patterns catalog` list **catalog definitions** shipped in the packaged
 catalog (see [services.md](services.md)): which profiles are installed, the
 version their version command reports, and whether they resolve. Add `all` to
-include entries whose binary or library file is not present on the host.
+include absent entries for services, apps and libs. Use `patterns catalog` for
+all pattern sets.
+
+To see what a running service actually maps after an upgrade, use
+`sermoctl services libraries [SERVICE...] --json`. It inspects native services
+on the host and reports mapped libraries and ELF dependencies when available.
+For scripts, inspect each row’s `complete`, `skipped` and `errors`: the
+command can return a partial inventory with exit status zero.
 
 | Question | Where to look |
 | --- | --- |
@@ -472,7 +477,7 @@ a survivor ends the operation in `orphan_processes`. A service that sets
 
 `sermoctl sessions` prints the running daemon's session inventory — the same
 data as the Web UI's [Sessions panel](configuration.md#sessions-panel): SSH
-terminals, tmux/screen sessions and the statements each
+terminals, tmux/screen sessions, SMB connections grouped by worker, and the statements each
 [`db_queries`](rules.md#running-database-statements-db_queries) watch last
 sampled. It needs `sermod` with `web.port` set (the same credentials as other
 daemon queries) and never connects to a database itself.
@@ -584,8 +589,9 @@ while `COMMAND` runs; the lock's owner is the `sermoctl` process. `sermoctl`
 therefore stays alive until `COMMAND` exits: it forwards `SIGTERM` and `SIGHUP`
 to `COMMAND`, and it neither dies on nor forwards `SIGINT`/`SIGQUIT` (typed at a
 terminal they already reach `COMMAND` through the foreground process group).
-The lock is released only after `COMMAND` has exited, so a backup that cleans up
-after `SIGTERM` stays protected until it finishes. `SIGKILL` of `sermoctl` cannot
+The wrapper removes its lock when the command exits. The TTL is an independent
+deadline: once it expires, the lock stops blocking operations even if the
+command is still running. Allow time for the backup and its cleanup. `SIGKILL` of `sermoctl` cannot
 be caught; the lock then turns stale (dead owner) and stops blocking.
 
 The wrapper exits with `COMMAND`'s exit status, or `128 + signal` when a signal

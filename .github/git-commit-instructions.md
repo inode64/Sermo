@@ -3,8 +3,7 @@
 PhpStorm / IntelliJ Copilot **does not** read `.gitmessage` or `commit.template`
 when generating a commit message. This file is the workspace prompt for
 **Settings → Tools → GitHub Copilot → Custom Instructions → Git Commit
-Instructions** (Workspace). Keep it in lockstep with `.github/copilot-instructions.md`
-and the commit contract in AGENTS.md.
+Instructions** (Workspace). The repository guide links here for the commit format.
 
 When generating a Git commit message, describe only the changes selected for
 the commit. Output **only** the commit message, in English, with this exact

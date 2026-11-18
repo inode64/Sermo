@@ -57,7 +57,7 @@ flowchart TB
   CLI -- "start/stop/… (own process)" --> OP
   CLI -- "panic · monitor · audit" --> ST
   BROWSER --> WEB
-  WEB -- "/reload → own SIGHUP" --> SIG
+  WEB -- "POST /api/reload → own SIGHUP" --> SIG
 
   SIG -- "SIGTERM/SIGINT" --> MON
   SIG -- "SIGHUP" --> MON
@@ -73,6 +73,7 @@ flowchart TB
   WA -- "checks" --> NT
   OP --> LK
   OP --> SM
+  WEB -- "service action" --> OP
   WEB --> ST
 ```
 
@@ -107,7 +108,7 @@ flowchart LR
   VARS --> EXP["expandRestartOnChange · expandAppsChain<br/>expandPidfileSugar · expandAnalyze<br/>expandServiceArtifact (socket/lockfile) · expandServiceWatches"]
   EXP --> TREE[("Resolved.Tree")]
 
-  TREE --> SC["ServiceCandidates(tree, backend)<br/>→ real init units"]
+  TREE --> SC["ServiceCandidates(tree, backend, fallback)<br/>→ init unit candidates"]
   SC --> SMc["servicemgr"]
   TREE --> CHKc["checks engine"]
   TREE --> RULc["rules engine"]
@@ -141,28 +142,35 @@ Every action on a service (`start`/`stop`/`restart`/`reload`/`resume`, plus the
 manual-only `pause` and `repair`) enters through `Engine.Do` and is orchestrated
 by `Engine.run`. The order is strict: the **operation lock** is acquired
 (serializes per service), the **named locks** are checked (external work in
-progress), **preflight** runs, the **guards** are evaluated and only then is the
-control target's manager invoked; at the end **postflight** runs. On any exit
-path the event is emitted.
+progress), then the engine runs the preflight required by the action, checks
+guards, performs the operation and runs any required postflight. On any exit
+path the engine emits the operation result. Stop and pause skip preflight and
+postflight.
 
 ```mermaid
 flowchart TD
   REQ["Action: start / stop / restart / reload / resume / pause / repair<br/>(sermoctl, Web UI or worker remediation → prepared service runtime)"] --> DO["Engine.Do → Engine.run(plan)"]
   DO --> CE{"ConfigError?"}
   CE -- "yes" --> RF1["ResultFailed"]
-  CE -- "no" --> L1["2 · AcquireLock (oplock, per service)"]
+  CE -- "no" --> L1["Acquire service lock and configured operation group"]
   L1 -- "held (active)" --> B1["ResultBlocked<br/>operation in progress"]
-  L1 -- "ok (release on defer)" --> L2["3 · Named runtime locks (scanner)"]
+  L1 -- "acquired" --> IR{"Check running state if --if-running is set"}
+  IR -- "confirmed not running" --> SK["ResultSkipped"]
+  IR -- "status or discovery error" --> RF2
+  IR -- "running or unconditional" --> L2["Named runtime locks (scanner)"]
+  SK --> EMIT
   L2 -- "active lock present" --> B2["ResultBlocked<br/>blocked by active runtime lock"]
-  L2 -- "free" --> PF{"4 · Preflight<br/>(only start/restart/reload/resume/repair)"}
+  L2 -- "scan error" --> RF2
+  L2 -- "free" --> PF{"Preflight<br/>(only start/restart/reload/resume/repair)"}
   PF -- "required check fails" --> RPF["ResultPreflightFailed<br/>(does not touch the service)"]
-  PF -- "ok" --> GD{"5 · Guard rules<br/>if: failed/active of a check → block"}
+  PF -- "passed, optional failure or skipped" --> GD{"Evaluate applicable guard rules"}
   GD -- "blocks" --> B3["ResultBlocked: «message»<br/>(guard = rule name)"]
   GD -- "cannot evaluate" --> RF2["ResultFailed"]
-  GD -- "passes" --> ACT["6-9 · repair: stale pidfile · reconcile stale init state<br/>then Manager Stop/Start/Reload/Resume/Pause<br/>(systemd/openrc · Docker · libvirt)"]
+  GD -- "passes" --> ACT["Run the operation plan<br/>Repair stale state and call the backend as the action requires"]
   ACT -- "error" --> RF2
   ACT -- "residuals remain" --> ROR["ResultOrphanProcesses"]
-  ACT -- "ok" --> POST{"10 · Postflight"}
+  ACT -- "stop or pause verified" --> OK
+  ACT -- "requires postflight" --> POST{"Postflight"}
   POST -- "fails" --> RPOST["ResultPostflightFailed"]
   POST -- "ok" --> OK["ResultOK"]
 
@@ -183,7 +191,7 @@ flowchart TD
   lock). While they are **active** they block the service's actions.
 - **Preflight**: checks that must pass *before* touching the service (e.g.
   `dhcpd` validates its config with `preflight: { config: { type: command, ... } }`).
-  A failure aborts without running the action.
+  A required failure aborts the action. An optional failure is a warning.
 - **Guard**: `type: guard` rules with `blocks: [restart, start]` and an
   `if: { failed: { check: X } }` condition. They are evaluated **at that moment**
   (not over a window): each check a guard references runs fresh, at most once
@@ -243,7 +251,7 @@ to `/proc` to detect dead owners and PID reuse.
 
 Startup loads config, detects the init manager, opens the state store, builds
 the fleet, writes the pidfile, brings up the web server and enters the
-`Scheduler` loop. **SIGHUP** (sent by `sermoctl daemon reload` or the `/reload`
+`Scheduler` loop. **SIGHUP** (sent by `sermoctl daemon reload` or the `POST /api/reload`
 endpoint) triggers a reload without stopping the daemon: it reopens the
 `engine.access|events|diagnostics` export logs (following a logrotate rename),
 then validates the new config, captures the in-flight state, rebuilds the fleet
@@ -266,7 +274,7 @@ flowchart TD
 
   A9 --> LOOP["Scheduler: stagger + runCycler<br/>each Worker/Watch in its goroutine, at its own interval<br/>(default engine.interval)"]
 
-  SH["SIGHUP<br/>(sermoctl daemon reload / web /reload)"] --> RELOAD["Monitor.Reload:<br/>validate new config → stop generation →<br/>capture state → rebuild → restore state → new generation"]
+  SH["SIGHUP<br/>(sermoctl daemon reload / POST /api/reload)"] --> RELOAD["Monitor.Reload:<br/>validate new config → stop generation →<br/>capture state → rebuild → restore state → new generation"]
   RELOAD --> LOOP
 
   STERM["SIGTERM / SIGINT"] --> SHUT["cancel ctx → drain workers/watches<br/>→ remove pidfile → close store"]
@@ -280,11 +288,10 @@ flowchart TD
 
 ## 6. A Worker's cycle (per service)
 
-Each Worker, on every interval tick, runs its checks, publishes the state for
-the Web and evaluates the rules: **remediation** updates the windows of all
-rules and runs the first one that fires (subject to guard and the
-cooldown/backoff policy), and **alerts** notify. A normal cycle records SLA
-with that publish.
+On a normal cycle, each worker runs its checks, publishes service state for the
+Web UI and records SLA. It updates remediation rule windows and runs at most
+one eligible action in rule-name order, subject to guards and policy. It then
+evaluates alert rules.
 
 A paused service is skipped. So is a cycle that arrives while an operation on
 that service is still running; if startup settling was still open, that skip

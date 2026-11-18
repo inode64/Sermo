@@ -5,12 +5,12 @@ any `security:` toggle that tries to disable them.
 
 ## Hard invariants
 
-1. **Never start, restart, reload or resume if a required preflight fails.** A
+1. **A failed required preflight blocks start, restart, reload, resume and repair.** A
    required preflight failure blocks the action with `preflight_failed`. Its
    event, manual or from a remediation rule, names each failed check and its
    reason (`preflight failed; check config failed: exit 1 (want 0): …`), as a
    `postflight_failed` one does.
-2. **Never start, stop, restart, reload or resume if a guard blocks the action.**
+2. **A blocking guard prevents the requested action.**
    Guards are evaluated before remediation; a remediation action a guard blocks
    never runs. A guard that references a malformed check also denies the action,
    reporting the original construction error, including for optional checks.
@@ -454,8 +454,9 @@ automatic restart. The pause is recorded in the persistent state store under
 restarts and reboots with `monitor: previous`; `monitor: enabled` resumes an
 explicit `unmonitor` pause on startup or configuration reload.
 `sermoctl status SERVICE` shows
-the single operator state `started` or `stopped` while monitoring is paused
-(`"state": "started"`/`"stopped"` and `"paused": true` in `--json`). Pausing only
+the operator state while monitoring is paused, including `paused` for a
+frozen VM or container. The separate JSON flag `"paused": true` refers to
+monitoring. See [CLI status](cli.md#service-target-resolution). Pausing only
 affects Sermo's monitoring; it does not stop the service itself, and manual
 `sermoctl` actions still work.
 
@@ -667,8 +668,9 @@ Lifecycle:
   ignored `.tmp` file; a published lock always has a complete TTL. A corrupt
   legacy lock still blocks operations with a parse diagnostic and requires
   operator inspection; it is never guessed to be expired.
-- A lock is **stale** (ignored, reclaimable) when its TTL elapsed, its owner
-  PID is dead, or the PID is alive with a different start time (reuse). A live
+- A lock is **expired** as soon as its TTL elapses, even with a live owner.
+  Before expiry it is **stale** if its owner died or the PID now belongs to a
+  different process generation. Both states allow reclamation. A live
   lock is **never silently overwritten**.
 - **Reclaim is logged**: read, confirm still stale, unlink, acquire fresh;
   abort if it turned active in between. Every reclaim — of an operation,
@@ -1033,8 +1035,9 @@ then at most one operation.
   workers do not all start at once.
 - **Bounded concurrency**: each service runs at most one operation at a time
   (the cross-process operation lock), and automatic remediation is rate-limited
-  by the mandatory per-service `policy` block (cooldown, `max_actions`,
-  backoff). Check execution shares a global pool
+  by the service's resolved `policy.cooldown`, which must be positive and
+  can be inherited from defaults. The policy can also cap the number of
+  actions or apply backoff. Check execution shares a global pool
   (`engine.max_parallel_checks`). A check that cannot get a slot waits — it is
   not skipped — and its timeout starts only once it gets the slot.
   Cancellation while it waits (shutdown, reload, an operation's deadline)
@@ -1046,14 +1049,15 @@ then at most one operation.
   refresh` run an extra cycle of a watch now. The cycle runs on the watch's own
   goroutine, so it never overlaps a scheduled one, and the schedule stays where
   it was: a check due in two hours still runs in two hours. A refreshed cycle
-  starts no sooner than 2 seconds after the watch's previous cycle ended, and a
-  scheduled cycle that comes due within those 2 seconds waits for them, so a
+  waits after the previous cycle for 2 seconds or the watch interval, whichever
+  is shorter. A scheduled cycle that comes due within that gap also waits, so a
   rate check (process CPU and I/O, net, disk I/O) measures a real window
   instead of reading one clock tick as tens of percent. It is a real cycle: it
   counts toward a cycle-based `for`/`within` window and can run the watch's
   hook and `then` actions earlier than the schedule would have — repeated
-  refreshes shorten such a window, a duration window (`for: 5m`) is
-  unaffected; the dashboard asks for confirmation before refreshing the
+  refreshes can shorten the elapsed time needed to meet a cycle count.
+  A duration window (`for: { duration: 5m }`) still requires the configured
+  time. The dashboard asks for confirmation before refreshing the
   Watches panel. `dry_run`, panic
   mode and the `policy` cooldown of `expand`, `remount` and `makestep` still
   apply; a hook runs on every firing cycle, so refreshing a watch that is

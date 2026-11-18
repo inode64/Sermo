@@ -1553,7 +1553,7 @@ still reports its own timeout.
 
 A health check (`tcp`/`http`/`service`/`command`/`cert`/…) may also set
 `verify: true` to double as the **post-operation start verification**: after a
-successful start/restart/reload/resume the engine runs every `verify: true`
+successful start/restart/reload/resume/repair the engine runs every `verify: true`
 check up to five times, one second apart, within the operation timeout. It
 fails the operation (`postflight_failed`) if a required one is still not OK —
 its `for`/`within` window and any remediation are ignored, only the direct probe
@@ -4197,10 +4197,10 @@ and one that reaches the rule engine anyway is dropped with a warning. This is
 a safety invariant: a system-wide signal must never act on an individual
 service (see [docs/safety.md](safety.md)).
 
-**Service metrics sum across the whole discovered process tree** — the matched
-processes *and* their child/descendant processes — so a service's `cpu`,
-`memory`, `io`, `fds`, etc. account for its workers and helpers, not just the
-main process. `io`/`io_read`/`io_write` are byte/second rates over actual
+**Service metrics include the daemon and its attributed workers.** Children
+kept by `stop_policy.keep_children` still have individual process rows but
+are excluded from the service totals used by rules. Matches of a
+`delegated: true` selector contribute metrics. See [Kept children](safety.md#kept-children-keep_children). `io`/`io_read`/`io_write` are byte/second rates over actual
 block-layer I/O (`io` is read+write); `fds` is the open file-descriptor count
 (summed) and `threads` the thread count. The `fds` **percentage** is the one
 per-process figure: the process of the tree that is closest to its own soft
@@ -4243,8 +4243,8 @@ CPU thread, so `100%` means one thread is saturating a full core and the metric 
 reads above `100%` — no single core can give more. Because the whole-machine `cpu`
 dilutes one hot thread across all cores (a core-bound process on an 8-thread host
 shows only `~12.5%` there), `cpu_thread` is what you alert on to catch a thread
-pegging its core: `metric` `scope: service`, `metric: cpu_thread`, `op: ">"`, `value:
-"90%"`. `cpu_thread` is a rate, so it is not ready on the first cycle.
+pegging its core. A check entry is
+`{ type: metric, scope: service, name: cpu_thread, op: ">", value: "90%" }`. `cpu_thread` is a rate, so it is not ready on the first cycle.
 
 Reading a process's individual threads costs one file per thread per cycle, so it is
 done only for processes at or above **5% of one core**. Below that the process's own
@@ -4271,47 +4271,44 @@ limit is `unlimited`.
 
 Because `io*`/`threads` have no percentage form, a packaged threshold for them
 cannot be normalized to the host the way `memory` and `cpu_thread` are, and a
-service-scoped metric sums **every** process discovery attributes to the
-service, control-group members included. A catalog default is therefore a
+service-scoped absolute count can include workers across the service cgroup. A catalog default is therefore a
 deliberately generous ceiling rather than a tuned number, and the host that needs
 a different one says so in `services.local/` (see
 [per-host overrides](configuration.md#per-host-overrides-dirlocal)). `fds` is
 the exception: its percentage is measured per process against that process's
-own limit, so the `restart-if-fds-high` rule Sermo injects into every service
-uses `80%` (`fds_limit`) as a default alert threshold. Restart requires
+own limit. For services with attributable processes, Sermo generates
+`restart-if-fds-high` with a default alert threshold of `80%` (`fds_limit`).
+It omits the sensor for services that delegate processes or keep their children,
+and when `fds_limit: false`. Restart requires
 `restart_on_fds_high: true`. Tune the threshold against representative load:
 closeness to the limit is not proof of a leak. An absolute ceiling such as
 `50000` can never fire for a daemon whose
 limit is `32768`, which is how a collector leaking one socket per accepted
-connection reached `32761/32768` unnoticed. Where the control group holds
-workload the daemon does not own — a hypervisor's per-domain helpers, a
-container runtime's containers — a summed absolute count describes that
-workload rather than the daemon, so the catalog ships no absolute fd watch for
-such services and host-wide exhaustion is alerted from a host watch instead.
+connection reached `32761/32768` unnoticed. When a service metric includes
+delegated processes, a high absolute count can come from a guest or container
+workload. A host watch can alert on host-wide descriptor exhaustion.
 
 ## Rules
 
-Rule evaluation is deterministic and order-independent: guards always run
-before remediation, at most **one remediation action runs per service per
-cycle**, and when several remediation rules fire at once they are considered
-in sorted name order — the first non-blocked action wins. Every declared check
+The worker considers firing remediation rules in sorted name order. At most
+**one remediation action runs per service per cycle**: the first permitted by
+the guards and service policy. Alert rules are evaluated afterwards. Every declared check
 and inline condition probe runs **at most once per cycle**; rules read the
 cached results.
 
 ```yaml
 rules:
-  RULE_NAME:
-    type: remediation | guard | alert
-    if: { ... }       # condition tree
-    for: { cycles: 3 }            # consecutive cycles (optional)
-    # for: { duration: 6m }        # or consecutive wall-clock time
-    within: { cycles: 15, min_matches: 5 }  # sliding window (optional)
-    # within: { duration: 30m, min_matches: 3 } # or a time window
-    clear: { duration: 6m }       # recovery hysteresis, alert rules only (optional)
-    notify: [ops-email]           # who gets this rule's alert messages (optional)
-    emission: { events: on_change, notify: on_change } # or every_cycle
-    then: { action: alert, message: "http is down" }
+  http-down:
+    type: alert
+    if: { failed: { check: http } }   # references the service’s HTTP check
+    for: { cycles: 3 }
+    clear: { duration: 6m }
+    then: { action: alert, message: "HTTP check failed" }
 ```
+
+For a rolling window, replace `for:` with `within: { cycles: 15, min_matches: 5 }`.
+A guard evaluates the current observation and accepts neither window.
+See [Windows](#windows) for duration-based forms.
 
 A rule's **`notify`** selects which notifiers receive its `alert` messages,
 overriding the global default ([Notifications](configuration.md#default-selection-and-precedence)):
@@ -4788,15 +4785,16 @@ cover that case with a separate connection check (`type: postgres`,
 How a `failed:` leaf, and every other leaf, reads a check that could not
 observe (unavailable) or whose server answered it is [busy](#busy-servers):
 
-| Who evaluates | `failed:` on an unavailable check | `failed:` on a busy check | other leaves, also under `not:` |
+| Who evaluates | `failed:` on an unavailable check that reports failure | `failed:` on a busy check | other leaves, also under `not:` |
 |---|---|---|---|
 | a guard | error: the action is denied | error: the action is denied | error: the action is denied |
 | a rule whose `then` restarts, starts, stops, reloads or resumes | true | unknown: no match, and the `for:` window resets | unknown: no match |
 | an alert rule, or a remediation with no operation | true | true | unknown, except a busy health check, which is a plain failing value |
 
-A skipped check is unknown everywhere, and so is a host `cert` check that could
-not reach its endpoint: that says nothing about the certificate, so `failed:`
-holds for no rule. No option makes a busy check trigger an operation: the cause
+A skipped check supplies no observation. An unavailable probe can also keep
+its result OK. For example, a host `cert` check that cannot reach its endpoint
+has no evidence about certificate validity. Ordinary rules read that result
+as unknown, and a guard that needs it denies the action. No option makes a busy check trigger an operation: the cause
 of a busy server is outside the daemon, and a restart would only drop the clients
 it still serves.
 

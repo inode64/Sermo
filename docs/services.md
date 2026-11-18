@@ -31,11 +31,11 @@ backoff to avoid restart loops.
 
 The packaged `snmpd` profile runs its unauthenticated local SNMP protocol
 probe only when the first `rocommunity` line in `/etc/snmp/snmpd.conf` grants
-the community to localhost (no source, or a `default`/loopback one). An agent
+the `public` community to localhost (no source, or a `default`/loopback one). An agent
 that restricts v1/v2c to remote manager networks, or serves SNMPv3 users only,
-cannot answer that probe, so it keeps just the init-service check; add an
-authenticated site-specific SNMP check when protocol availability itself is
-required there.
+skips that probe. Its init-state and process resource checks still run.
+To probe a different community, override both the check’s `password` and its
+`enable_if` condition. [Packaged snmpd profile](../catalog/services/snmpd.yml)
 
 The `monit` profile checks its control interface with
 `monit -B -c ${config} summary`. The native client reads the listener, TLS and authentication settings
@@ -546,7 +546,7 @@ service or configured service override either form; when several apps are linked
 use the prefixed names.
 
 Because they run in **preflight**, a missing or wrong-version runtime fails the
-service's preflight, which **blocks start/restart/reload/resume** (a
+service's preflight, which **blocks start/restart/reload/resume/repair** (a
 preflight-failed operation never executes the action) — you do not start,
 restart, reload or resume a service whose runtime is absent.
 The link is many-to-many: a service lists several apps, and one app is shared by
@@ -729,7 +729,7 @@ which is handy for OS-specific candidate lists such as pidfile paths:
 pidfile:                        # the resolved value becomes the OS's list
   os:
     fedora: [/run/postgres.pid]
-    gentoo: [/run/postgres${port}.pid, /run/postgres.pid]
+    gentoo: ["/run/postgres${port}.pid", /run/postgres.pid]
     default: [/run/postgres.pid]
 ```
 
@@ -2802,7 +2802,8 @@ monitor: enabled    # enabled (default) | disabled | previous
 - **`enabled`** (the default when the flag is absent): monitor on startup,
   preserving a pause created by a successful manual `stop` or `pause` through
   Sermo. This also applies to Docker containers and virtual machines.
-- **`disabled`**: never monitor — the worker exists but every cycle is skipped.
+- **`disabled`**: start paused on every daemon start or reload. The worker
+  exists, so an operator can resume it with `sermoctl monitor SERVICE`.
 - **`previous`**: restore the runtime state the service had before the daemon
   last stopped. On the very first run (no recorded state) it defaults to
   monitored.

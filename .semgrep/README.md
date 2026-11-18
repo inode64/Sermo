@@ -7,14 +7,15 @@ call-level contracts that were violated at least once.
 
 ## Files
 
-- [rules/sermo.yml](rules/sermo.yml) — every rule. The header of that file is
-  the inventory; do not copy rule ids into other docs.
+- [rules/sermo.yml](rules/sermo.yml) — the rule definitions. Each `id` names the
+  contract checked by its fixtures.
 - [tests/sermo.go](tests/sermo.go) — fixtures. The `semgreptest` build tag and
   the `.semgrep` directory keep Go tooling from compiling them.
 
 `make semgrep` (via `make check`) runs `semgrep --test` against the fixtures,
-then scans `cmd`, `internal` and `tools`. A rule that matches nothing, or a
-`ruleid:` that no longer fires, fails the gate.
+then scans `cmd`, `internal` and `tools`. A positive fixture that stops matching
+or an unexpected finding fails the fixture test. The production scan expects
+zero findings.
 
 Import boundaries have the same executable contract: `make analyzer-config-check`
 (via `make lint` and `make check`) verifies the golangci-lint schema and runs

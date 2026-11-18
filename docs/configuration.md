@@ -24,10 +24,10 @@ A document's **kind is determined by where it lives** — its catalog subdirecto
 the configured path it loads from (`paths.services` → service, `paths.watches`
 → watch). A catalog `services/` definition (a *catalog service*) and a
 `paths.services` instance (a *configured service*) share the kind `service`;
-they stay distinct by location. A top-level `kind:` key is therefore **optional
-and redundant**; when one is present in a deployed file it must match the
-location, which catches a file placed in the wrong directory. Shipped
-configuration omits it.
+they stay distinct by location. Omit `kind:` in both places. Under `paths.services` and `paths.watches`, a
+declared kind must match the directory or loading fails. Inside the packaged
+catalog, the subdirectory selects the registry and the loader ignores the
+file’s `kind:` declaration.
 
 > **Complete annotated example.** [`docs/sermo-all.yml`](sermo-all.yml) shows
 > every configuration surface in one place — global config, watches, and one
@@ -993,7 +993,7 @@ active service does not rewrite that historical result as success.
 
 | Section | Tile that leads to it | Panels |
 |---|---|---|
-| **Sessions** | Sessions | SSH, tmux and screen sessions, running database statements |
+| **Sessions** | Sessions | SSH terminals, tmux/screen sessions, SMB connections and running database statements |
 | **Services** | Services | services, containers, virtual machines, runtime locks |
 | **Watches** | Watches | every watch, grouped by system, storage, network and security |
 | **Mounts** | Mounts | mount units |
@@ -1130,6 +1130,8 @@ The dashboard's **Sessions** panel lists, for the whole host:
   [`terminal_sessions`](rules.md#terminal-sessions-terminal_sessions) checks,
   with idle time and process-tree CPU, memory and IO; an administrator can close
   one verified row (see [safety](safety.md));
+- SMB connections from [`smb_sessions`](rules.md#smb-sessions-smb_sessions). A worker may
+  serve several logins. Closing its row disconnects all of them.
 - the statements each [`db_queries`](rules.md#running-database-statements-db_queries)
   watch last sampled (the catalog `mysql`, `mariadb` and `postgres` services
   ship one): engine, user, database, session ID, command/state, running time,
@@ -1514,7 +1516,7 @@ Read-only endpoints:
 - `GET /api/services/{name}` — service detail: latest checks, rolling SLA, named
   runtime locks, discovered processes, automatic remediation policy state and
   rule window progress.
-- `GET /api/sessions` — current SSH, tmux and screen sessions plus the state of
+- `GET /api/sessions` — SSH terminals, tmux and screen sessions, SMB connections, running database statements and the state of
   each configured session source. A `partial` SSH source keeps every exactly
   verified session and reports each terminal whose `sshd` ancestry cannot be
   verified as an unavailable issue; it never turns that terminal into a
@@ -1526,6 +1528,8 @@ Read-only endpoints:
   HTTP-time client run. After a forced close, a stale utmp entry is ignored only
   when both its terminal and recorded process are proven absent. Permission or
   other read errors remain visible; Sermo does not rewrite login accounting.
+  The `smb` list groups Samba sessions by worker. CPU and memory belong to the
+  worker, which may serve several logins. See [SMB sessions](rules.md#smb-sessions-smb_sessions).
   The `database` list carries the statements every `db_queries` watch last
   published (`service` — empty for a host watch —, `watch`, `engine`, `id`,
   `query_id` and `os_tid` when available, `at` (RFC3339 sample time),
@@ -1597,7 +1601,7 @@ accepted operation cannot switch targets during a concurrent reload.
   `sermoctl preflight SERVICE`, without starting or stopping anything.
 - `POST /api/services/{name}/{action}` — service action. `action` is `monitor`,
   `unmonitor`, `start`, `stop`, `restart`, `reload`, `pause`, `resume` or
-  `repair`; start/stop/restart/reload/pause/resume go through the safe operation
+  `repair`; start/stop/restart/reload/pause/resume/repair go through the safe operation
   engine (`pause` only for a backend that can freeze the target, a libvirt VM or
   a Docker container). `no_cascade=1` acts on this service alone, without its
   `also_apply` targets, like `sermoctl … --no-cascade`. `repair`
@@ -1614,6 +1618,10 @@ accepted operation cannot switch targets during a concurrent reload.
   `sudo` terminal also gets `SIGKILL` after the service's
   `stop_policy.term_timeout` if it survives (see
   [safety](safety.md#the-operation-engine)).
+- `POST /api/services/{name}/smb-sessions/{check}/close?identity=IDENTITY`
+  — close the selected Samba worker and all sessions it serves. Use the
+  identity of a closable row from `GET /api/sessions`. Sermo refreshes the
+  worker’s session membership and refuses a stale selection.
 - `POST /api/services/{name}/terminal-sessions/{check}/close?multiplexer=TYPE&session=NAME&user=USER&identity=IDENTITY`
   — close one freshly revalidated tmux or screen session through its configured
   client. The operation requires the exact published generation identity and
@@ -1648,8 +1656,8 @@ accepted operation cannot switch targets during a concurrent reload.
   resolve), or a name is unknown or disabled. Equivalent to
   `sermoctl apps refresh`, `libs refresh` and `watch refresh`.
 - `POST /api/watches/{name}/{action}` — watch action. `action` is
-  `monitor`, `unmonitor`, `expand`, `probe`, `pause`, `resume` or
-  `replication-start`. `probe` takes one explicit sample of a host diskio,
+  `monitor`, `unmonitor`, `silence`, `expand`, `probe`, `pause`, `resume` or
+  `replication-start`. For `silence`, see [Silencing a watch alarm](#silencing-a-watch-alarm). `probe` takes one explicit sample of a host diskio,
   LVM, RAID (`raid`, `storcli`, `ssacli`), SMART or hdparm watch; it is
   read-only except for SMART, where it starts a short self-test (see below).
   `pause`/`resume` require the RAID control block below; `replication-start`
