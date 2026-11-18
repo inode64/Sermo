@@ -1054,6 +1054,7 @@ displayed until the periodic backend refresh.
 detected through the local Docker socket. The generated check requires
 `container.status == running` and `container.health != unhealthy`, so an
 unhealthy container remains a failure even without a new state transition.
+Becoming healthy clears an open incident or completes startup quietly.
 Containers without a Docker health check and those still in the health check's
 startup grace period are not rejected by the health predicate. Configure
 `container.health == healthy` explicitly when readiness must also be required.

@@ -154,7 +154,6 @@ func buildDockerService(c DockerCandidate) map[string]any {
 	check := map[string]any{
 		checks.CheckKeyType:      dockerctl.ControlType,
 		checks.CheckKeyContainer: c.Container,
-		checks.CheckKeyOnChange:  true,
 		checks.CheckKeyExpect:    expect,
 	}
 	attachSocket(control, check, dockerctl.ControlKeySocket, c.Socket)

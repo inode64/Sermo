@@ -44,7 +44,7 @@ func TestDockerAssistant(t *testing.T) {
 		t.Fatalf("control = %v, want docker/web socket", control)
 	}
 	check := svc[config.SectionWatches].(map[string]any)[dockerctl.ControlType].(map[string]any)[config.WatchKeyCheck].(map[string]any)
-	if check[checks.CheckKeyType] != dockerctl.ControlType || check[checks.CheckKeyContainer] != "web" || check[checks.CheckKeyOnChange] != true {
+	if check[checks.CheckKeyType] != dockerctl.ControlType || check[checks.CheckKeyContainer] != "web" || check[checks.CheckKeyOnChange] != nil {
 		t.Fatalf("docker check = %v", check)
 	}
 	expect := check[checks.CheckKeyExpect].(map[string]any)[conn.ExtraKeyContainerStatus].(map[string]any)
