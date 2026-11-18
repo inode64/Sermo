@@ -57,7 +57,8 @@ type Result struct {
 	// Relaunched reports that a successful action left a new generation of the
 	// service running, which is what takes in a changed artifact. A restart always
 	// does; a start only when it found the service down, because on one already
-	// running it succeeds without touching it. An unknown status is no relaunch.
+	// running it succeeds without touching it. An upgrade reload qualifies only
+	// after the installed executable and library mappings were observed.
 	Relaunched bool `json:"-"`
 }
 

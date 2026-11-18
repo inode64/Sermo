@@ -318,3 +318,53 @@ func TestReloadClosureSignalMainPIDRequiresStrictIdentity(t *testing.T) {
 		t.Fatalf("reload err = %v, want strict MainPID identity failure", err)
 	}
 }
+
+func TestReloadWaitsForInstalledCode(t *testing.T) {
+	for _, cancelDrain := range []bool{false, true} {
+		h := defaultHarness()
+		e := h.engine()
+		ctx, cancel := context.WithCancel(t.Context())
+		samples := 0
+		e.verifyReloaded = func(context.Context) error {
+			samples++
+			if samples == 1 {
+				if cancelDrain {
+					cancel()
+				}
+				return errors.New("workers still map old code")
+			}
+			return nil
+		}
+		result := e.Do(ctx, actionReload)
+		cancel()
+		if result.OK() == cancelDrain || result.Relaunched == cancelDrain || !h.mgr.did("reload mysqld") || h.mgr.did("stop mysqld") {
+			t.Fatalf("cancelDrain=%v result=%+v calls=%v", cancelDrain, result, h.mgr.calls)
+		}
+	}
+}
+
+func TestUpgradeVerifierRequiresFreshProcessesAndCleanMappings(t *testing.T) {
+	const exe = "/usr/sbin/svc"
+	tree := map[string]any{"reload": map[string]any{"on_upgrade": true}}
+	selectors := []process.Selector{{Name: "main", Type: process.SelectorCommandMatch, Exe: exe, User: "svcuser"}}
+	d := reloadDiscoverer(map[int]process.Identity{42: {PID: 42, UID: 1001, Exe: exe, ExeOK: true}})
+	for _, tc := range []struct {
+		name   string
+		report process.LibraryReport
+		err    error
+		want   string
+	}{
+		{"clean", process.LibraryReport{Processes: 1}, nil, ""},
+		{"absent", process.LibraryReport{}, nil, "no processes"},
+		{"incomplete", process.LibraryReport{Processes: 1}, errors.New("incomplete"), "incomplete"},
+		{"old worker", process.LibraryReport{Processes: 2, Libraries: []process.StaleLibrary{{PID: 43, Path: "/lib/test.so"}}}, nil, "process 43"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			verify := upgradeVerifier(tree, func(context.Context) (process.LibraryReport, error) { return tc.report, tc.err }, d, selectors)
+			err := verify(t.Context())
+			if tc.want == "" && err != nil || tc.want != "" && (err == nil || !strings.Contains(err.Error(), tc.want)) {
+				t.Fatalf("verify = %v, want %q", err, tc.want)
+			}
+		})
+	}
+}

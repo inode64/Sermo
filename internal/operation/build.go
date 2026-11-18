@@ -211,6 +211,7 @@ func New(c Config) Engine {
 		SessionSignaler:     c.SessionSignaler,
 		Preflight:           sectionRunner(tree, deps, c.MetricSample),
 		Postflight:          verifyRunner(tree, deps, c.MetricSample),
+		verifyReloaded:      upgradeVerifier(tree, deps.StaleLibraries, c.Discoverer, selectors),
 		ReloadFunc:          reloadClosure(reloadSpec, tree, deps, c.Manager, c.Backend, c.Unit, c.Discoverer, selectors),
 		ResumeFunc:          optionalVerb(c.Manager, c.Unit, resumeManager.Resume),
 		PauseFunc:           optionalVerb(c.Manager, c.Unit, pauseManager.Pause),
@@ -544,5 +545,36 @@ func guardClosure(tree map[string]any, deps checks.Deps, sample func(context.Con
 		}
 		ev := &rules.Evaluator{Cache: cache, ResolveRef: rules.NewCheckResolver(append(preflightBuilt, built...), 0), Deps: runDeps, Changed: changed}
 		return rules.Guard(ctx, ruleSet, action, ev)
+	}
+}
+
+func upgradeVerifier(tree map[string]any, libraries checks.StaleLibrariesFunc, discoverer process.Discoverer, selectors []process.Selector) func(context.Context) error {
+	if !config.ReloadOnUpgrade(tree) {
+		return nil
+	}
+	return func(ctx context.Context) error {
+		observation, err := discoverer.ObserveTracked(selectors, nil)
+		if err != nil {
+			return fmt.Errorf("observe upgraded service: %w", err)
+		}
+		if !observation.Trusted || libraries == nil {
+			return errors.New("cannot verify upgraded service processes")
+		}
+		for _, binary := range discoverer.StaleBinariesIn(observation.Processes, selectors) {
+			if !binary.Auxiliary {
+				return fmt.Errorf("process %d still runs replaced executable %s", binary.PID, binary.Path)
+			}
+		}
+		report, err := libraries(ctx)
+		if err != nil {
+			return fmt.Errorf("inspect upgraded libraries: %w", err)
+		}
+		if report.Processes == 0 {
+			return errors.New("no processes available for library verification")
+		}
+		if len(report.Libraries) > 0 {
+			return fmt.Errorf("process %d still maps %s", report.Libraries[0].PID, report.Libraries[0].Path)
+		}
+		return nil
 	}
 }

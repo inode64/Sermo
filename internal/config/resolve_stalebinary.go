@@ -170,6 +170,9 @@ func serviceDeclaresProcesses(tree map[string]any) bool {
 // staleBinaryAlertMessage names the service the same way restart_on_change
 // does; the ${check.value} placeholder stays for the worker to fill.
 func staleBinaryAlertMessage(tree map[string]any) string {
+	if ReloadOnUpgrade(tree) {
+		return restartOnChangeDisplayName(tree) + " is running a binary that was replaced on disk (${check.value} process(es)); reload to activate the installed version"
+	}
 	return restartOnChangeDisplayName(tree) + staleBinaryMessageSuffix
 }
 

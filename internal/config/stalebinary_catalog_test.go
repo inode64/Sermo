@@ -346,3 +346,58 @@ func TestCatalogRabbitMQNamesTheBrokerAsItsDaemon(t *testing.T) {
 	}
 	t.Fatalf("rabbitmq declares no pidfile selector: %+v", selectors)
 }
+
+func TestReloadOnUpgradeSelectsOnlyPackageRules(t *testing.T) {
+	// Use a concrete catalog service so resolution also builds the automatic
+	// stale-binary rule and the rules linked to installed app versions.
+	resolved := resolveCatalogService(t, "nginx", "systemd", `
+reload: {command: ["/usr/bin/test-reexec"], on_upgrade: true}
+checks:
+  mapped: {type: stale_libraries}
+rules:
+  library-update:
+    type: remediation
+    if: {failed: {check: mapped}}
+    then: {action: restart}
+  unavailable:
+    type: remediation
+    if: {failed: {check: service}}
+    then: {action: restart}
+`)
+	parsed, errs := rules.ParseRules(resolved.Tree)
+	if len(errs) > 0 {
+		t.Fatal(errs)
+	}
+	want := map[string]rules.ActionType{staleBinaryRuleName: rules.ActionReload, "library-update": rules.ActionReload, "restart-on-change-nginx-version": rules.ActionReload, "unavailable": rules.ActionRestart}
+	for _, rule := range parsed {
+		if action, ok := want[rule.Name]; ok {
+			op, found := rule.Operation()
+			if !found || op.Type != action {
+				t.Fatalf("%s operation = %v, want %v", rule.Name, op, action)
+			}
+			delete(want, rule.Name)
+		}
+	}
+	if len(want) != 0 {
+		t.Fatalf("missing rules: %v", want)
+	}
+	if !ReloadOnUpgrade(catalogDocByName(t, repoRoot(t), "services", "php-fpm%v%s%i")) {
+		t.Fatal("PHP-FPM must opt into package reloads")
+	}
+}
+
+func TestReloadOnUpgradeRejectsUnverifiableServices(t *testing.T) {
+	for _, tc := range []struct {
+		mode  any
+		procs map[string]any
+	}{
+		{"true", nil},
+		{true, nil},
+		{true, map[string]any{"main": map[string]any{"exe": "/usr/bin/test-service", "user": "root"}, "guest": map[string]any{"exe": "/usr/bin/guest", "delegated": true}}},
+	} {
+		tree := map[string]any{SectionReload: map[string]any{ReloadKeySignal: "USR2", reloadOnUpgrade: tc.mode}, "processes": tc.procs}
+		if _, err := ParseReload(tree); err == nil {
+			t.Fatalf("accepted unverifiable reload: %v", tree)
+		}
+	}
+}

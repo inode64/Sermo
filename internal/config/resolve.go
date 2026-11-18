@@ -149,6 +149,7 @@ func (c *Config) resolveExpandedService(merged map[string]any, name string, inpu
 	// After the linked apps and embedded watches: both can contribute the
 	// binary, or a libraries check that names none.
 	errs = append(errs, expandLibrariesBinary(expanded)...)
+	resolveUpgradeActions(expanded)
 	return Resolved{Name: name, Tree: expanded, Apps: apps, PatternSets: patternSets}, errs
 }
 
@@ -1193,6 +1194,10 @@ func (c *Config) expandRestartOnChange(tree map[string]any) []string {
 	messages, messageErrs := restartOnChangeMessagesFrom(roc[keyRestartMessages])
 	errs = append(errs, messageErrs...)
 	displayName := restartOnChangeDisplayName(tree)
+	upgradeAction := rules.ActionRestart
+	if ReloadOnUpgrade(tree) {
+		upgradeAction = rules.ActionReload
+	}
 
 	rulesMap, _ := tree[rules.SectionRules].(map[string]any)
 	if rulesMap == nil {
@@ -1206,12 +1211,12 @@ func (c *Config) expandRestartOnChange(tree map[string]any) []string {
 	libraries, libraryErrs := stringListField(keyRestartOnChange+"."+keyLibraries, roc[keyLibraries])
 	errs = append(errs, libraryErrs...)
 	if versionAllowed {
-		errs = append(errs, c.addRestartOnChangeLibraryRules(tree, rulesMap, libraries, messages.libraryMessage(displayName))...)
+		errs = append(errs, c.addRestartOnChangeLibraryRules(tree, rulesMap, libraries, messages.libraryMessage(displayName, upgradeAction))...)
 	}
 	apps, appErrs := restartOnChangeApps(roc[keyApps])
 	errs = append(errs, appErrs...)
 	if versionAllowed {
-		errs = append(errs, addRestartOnChangeAppRules(tree, rulesMap, apps, messages.appMessage(displayName))...)
+		errs = append(errs, addRestartOnChangeAppRules(tree, rulesMap, apps, messages.appMessage(displayName, upgradeAction))...)
 	}
 	if len(rulesMap) > 0 {
 		tree[rules.SectionRules] = rulesMap
@@ -1456,18 +1461,18 @@ func (m restartOnChangeMessages) pathMessage(displayName string) string {
 	return displayName + " will restart after config change: ${change.path}"
 }
 
-func (m restartOnChangeMessages) appMessage(displayName string) string {
+func (m restartOnChangeMessages) appMessage(displayName string, action rules.ActionType) string {
 	if m.app != "" {
 		return m.app
 	}
-	return displayName + " will restart after version change of ${change.app}: ${change.old_version} -> ${change.new_version}"
+	return displayName + " will " + string(action) + " after version change of ${change.app}: ${change.old_version} -> ${change.new_version}"
 }
 
-func (m restartOnChangeMessages) libraryMessage(displayName string) string {
+func (m restartOnChangeMessages) libraryMessage(displayName string, action rules.ActionType) string {
 	if m.library != "" {
 		return m.library
 	}
-	return displayName + " will restart after library change: ${change.library} (${change.path})"
+	return displayName + " will " + string(action) + " after library change: ${change.library} (${change.path})"
 }
 
 // stringListField reads a string-or-list field strictly, reporting a mapping or

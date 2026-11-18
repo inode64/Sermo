@@ -153,18 +153,21 @@ func TestWorkerHoldsAReloadWhileTheDaemonRunsAReplacedBinary(t *testing.T) {
 	}}}
 	const replaced = "1 process(es) run a replaced binary (/usr/sbin/apache2); restart to pick up the installed version"
 	for name, tc := range map[string]struct {
+		reexec bool
 		stale  checks.Result
 		reload bool
 	}{
-		"daemon replaced":  {stale: checks.Result{Check: "stale-binary", Message: replaced}},
-		"helpers replaced": {stale: checks.Result{Check: "stale-binary", ActionBlocked: true, Message: "1 process(es) beside the daemon run a replaced binary (/usr/bin/su)"}, reload: true},
-		"nothing replaced": {stale: checks.Result{Check: "stale-binary", OK: true}, reload: true},
+		"re-executing reload": {stale: checks.Result{Check: "stale-binary", Message: replaced}, reload: true, reexec: true},
+		"daemon replaced":     {stale: checks.Result{Check: "stale-binary", Message: replaced}},
+		"helpers replaced":    {stale: checks.Result{Check: "stale-binary", ActionBlocked: true, Message: "1 process(es) beside the daemon run a replaced binary (/usr/bin/su)"}, reload: true},
+		"nothing replaced":    {stale: checks.Result{Check: "stale-binary", OK: true}, reload: true},
 	} {
 		t.Run(name, func(t *testing.T) {
 			cache := failedCache("config-changed")
 			cache["stale-binary"] = tc.stale
 			h := &workerHarness{cache: cache, opResult: operation.Result{Status: operation.ResultOK}}
 			w := h.worker(tree, rules.Policy{Cooldown: time.Minute}, nil)
+			w.reloadOnUpgrade = tc.reexec
 			w.RunCycle(context.Background())
 			if tc.reload {
 				if len(h.ops) != 1 || h.ops[0] != "reload" {

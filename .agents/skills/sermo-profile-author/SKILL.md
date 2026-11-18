@@ -119,6 +119,8 @@ restart (`keep_children`, OpenSSH) lists only what its main process maps and
 gets no advisory watch: `stale_libraries` scans the kept sessions too, so the
 alert would hold until they close.
 
+PHP-FPM uses `reload.on_upgrade: true` because USR2 executes the installed binary and drains the old workers. A configuration-only reload cannot opt in.
+
 ## Init and reload
 
 Verify every declared systemd/OpenRC backend and every fallback. An OpenRC

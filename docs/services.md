@@ -378,7 +378,7 @@ reload; if you want to be told, add your own alert rule on the same `changed:`
 condition. Set `reload_on_change: { config: false }` to suppress the generated
 rules entirely, per service or per host.
 
-A reload keeps the running code, so it does not consume a pending
+By default, a reload keeps the running code, so it does not consume a pending
 `restart_on_change` target. When a package upgrade changes both a reloaded config
 file and a library, the reload runs and the restart follows once the cooldown
 ends. When the upgrade replaced the daemon's own executable, an automatic reload
@@ -394,6 +394,16 @@ place: it runs **preflight first** (so an invalid config — caught by the
 service's `config` check — blocks the reload), reloads, then verifies health.
 `reload` is also a valid rule action on its own (`then: { action: reload }`) and
 is blocked by guards that list `reload`, like any other service action.
+
+PHP-FPM re-executes the installed binary on USR2. Its profile declares
+`reload.on_upgrade: true`. With this setting, a remediation rule whose sole
+condition is a changed app or library, or a failed `stale_binary` or
+`stale_libraries` check, uses reload for its restart action. This includes
+existing instance rules and preserves their windows, guards and cooldowns.
+Service failure still uses its configured recovery. A reload waits within the
+operation timeout for a trusted running process, the installed executable and
+clean library mappings before acknowledging the upgrade. Configure this only
+for a reload that re-executes the program and drains its old workers.
 
 **What "reload" runs.** By default it is the backend per-unit reload —
 `systemctl reload <unit>` (which runs the unit's `ExecReload`, e.g. `nginx -s

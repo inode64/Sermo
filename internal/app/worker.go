@@ -38,6 +38,8 @@ type Worker struct {
 	State     *rules.RemediationState
 	CheckDeps checks.Deps
 
+	reloadOnUpgrade bool
+
 	// Interval overrides how often this worker runs a cycle. <=0 means the
 	// scheduler's global interval (engine.interval). It is also the resolution
 	// a per-check interval is rounded to.
@@ -1002,7 +1004,7 @@ func (w *Worker) remediationSuppression(ctx context.Context, ev *rules.Evaluator
 		w.refuseGuard(ctx, ev, firing, action, block, now())
 		return "", true
 	}
-	if action == string(rules.ActionReload) {
+	if action == string(rules.ActionReload) && !w.reloadOnUpgrade {
 		if stale, held := staleDaemonBinary(ev); held {
 			return "reload withheld: " + stale + "; a reload would load the installed version's modules into the old executable", false
 		}

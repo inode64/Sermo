@@ -106,8 +106,9 @@ type Engine struct {
 	// a closure: a native signal/command that either overrides the backend reload
 	// (`when: always`) or stands in for it when the init has no reload of its own
 	// (`when: auto`). A nil closure means reload is unavailable.
-	ReloadFunc func(ctx context.Context) error
-	ResumeFunc func(ctx context.Context) error
+	ReloadFunc     func(ctx context.Context) error
+	verifyReloaded func(context.Context) error
+	ResumeFunc     func(ctx context.Context) error
 	// PauseFunc freezes the target in place (libvirt suspend, Docker pause). A
 	// nil closure means the backend cannot pause.
 	PauseFunc        func(ctx context.Context) error
@@ -672,7 +673,30 @@ func (e Engine) reloadService(ctx context.Context, result *Result) bool {
 		result.Status, result.Message = ResultFailed, "reload: operation unsupported by service configuration"
 		return false
 	}
-	return e.runBackendAction(ctx, result, actionReload, e.ReloadFunc)
+	run := e.ReloadFunc
+	if e.verifyReloaded != nil {
+		run = func(ctx context.Context) error {
+			if err := e.ReloadFunc(ctx); err != nil {
+				return err
+			}
+			// Sending a signal only starts the drain. Keep the operation lock until the
+			// service actually runs the installed executable and library mappings.
+			for {
+				err := e.verifyReloaded(ctx)
+				if err == nil {
+					return nil
+				}
+				if waitErr := process.Wait(ctx, e.Sleep, postflightRetryInterval); waitErr != nil {
+					return fmt.Errorf("waiting for upgraded processes: %w: %w", err, waitErr)
+				}
+			}
+		}
+	}
+	if !e.runBackendAction(ctx, result, actionReload, run) {
+		return false
+	}
+	result.Relaunched = e.verifyReloaded != nil
+	return true
 }
 
 // runBackendAction centralizes the result contract shared by backend actions:

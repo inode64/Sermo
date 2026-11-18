@@ -683,6 +683,7 @@ func buildWorker(ctx context.Context, name, unit string, tree map[string]any, de
 	configID := serviceSnapshotConfigID(tree)
 	reportedChecks, busyReportedChecks := ruledChecks(ruleSet)
 	worker = &Worker{
+		reloadOnUpgrade:      config.ReloadOnUpgrade(tree),
 		Service:              name,
 		Unit:                 unit,
 		Rules:                ruleSet,
