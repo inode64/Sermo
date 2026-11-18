@@ -2379,7 +2379,11 @@ holds recovery and reminder receipts, so an old database row cannot repeat an
 already delivered message. Persistence retries at most once per minute during
 an outage, even without reminders configured; recovery flushes receipts without
 resending them. A restart before the receipts become durable can repeat an
-initial alert. At 4096 pending receipts, new deliveries are skipped and a bounded
+initial alert. If a receipt lookup fails, the daemon keeps the latest event for
+each affected incident and channel and retries it on the next minute scan, even
+with reminders disabled. Up to 256 such pairs fit in memory. Further new pairs
+are dropped while the queue is full, and a daemon restart clears the queue.
+At 4096 pending write receipts, new deliveries are skipped and a bounded
 error is logged; existing receipts are never evicted to make room. An open incident
 whose service, check, rule, watch, metric or app is no longer configured (or no
 longer enabled) after a restart or reload is forgotten, since nothing can send its

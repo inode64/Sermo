@@ -109,6 +109,9 @@ func (n *EventNotifier) due(target string, before time.Time) ([]state.EventNotif
 	// A newer in-memory recovery/reminder must hide an old due database row.
 	due := make([]state.EventNotifyRecord, 0, len(records)+len(n.memory))
 	for _, rec := range records {
+		if _, waiting := n.unread[receiptLookup{target, rec.IncidentKey}]; waiting {
+			continue
+		}
 		if n.scope != nil && !n.scope.live(rec.IncidentKey) {
 			continue
 		}

@@ -52,7 +52,12 @@ type EventNotifyStore interface {
 // The epoch is captured when queued and retained through retries and receipts.
 type eventNotification struct {
 	Event
-	alarmEpoch string
+	alarmEpoch    string
+	quietRecovery bool
+}
+
+type receiptLookup struct {
+	target, incident string
 }
 
 // EventNotifier routes daemon alarm events to named notifiers. Its queue keeps
@@ -82,6 +87,7 @@ type EventNotifier struct {
 	sleep         func(time.Duration)
 	bursts        map[string]*eventNotifyBurst
 	scope         *eventNotifyScope
+	unread        map[receiptLookup]eventNotification
 	readLogAt     time.Time
 	capacityLogAt time.Time
 }
@@ -98,6 +104,7 @@ func NewEventNotifier(host string, logger *slog.Logger, inPanic func() bool, sto
 		now: time.Now, queue: make(chan eventNotification, eventNotifyQueueSize),
 		memory: make(map[string]state.EventNotifyRecord),
 		bursts: make(map[string]*eventNotifyBurst),
+		unread: make(map[receiptLookup]eventNotification),
 	}
 }
 
@@ -180,6 +187,12 @@ func (n *EventNotifier) Retain(scope eventNotifyScope) {
 	enabled := make(map[string]bool, len(targets))
 	for _, target := range targets {
 		enabled[target.Name()] = true
+	}
+	for lookup, e := range n.unread {
+		_, active, _ := eventNotifyIdentity(e.Event)
+		if !enabled[lookup.target] || active && !scope.live(lookup.incident) {
+			delete(n.unread, lookup)
+		}
 	}
 	for name := range n.bursts {
 		if !enabled[name] {
@@ -346,42 +359,66 @@ func (n *EventNotifier) deliver(ctx context.Context, e eventNotification) {
 		return
 	}
 	targets, interval := n.deliveryConfig()
-	key, active, phase := eventNotifyIdentity(e.Event)
-	level := e.level()
-	now := n.now()
 	for _, target := range targets {
-		if e.Notice {
-			// Its producer already reports each occurrence once, and no recovery
-			// edge follows, so persisting it would open an incident that nothing
-			// closes: it would silence the next notice and be reminded forever.
-			if notify.Accepts(target, level) {
-				n.dispatch(ctx, target, e, n.message(e.Event, level), level == severity.Critical)
-			}
-			continue
+		n.deliverTarget(ctx, e, target, interval, panicking)
+	}
+}
+
+func (n *EventNotifier) deliverTarget(ctx context.Context, e eventNotification, target notify.Notifier, interval time.Duration, panicking bool) {
+	level := e.level()
+	if e.Notice {
+		if notify.Accepts(target, level) {
+			n.dispatch(ctx, target, e, n.message(e.Event, level), level == severity.Critical)
 		}
-		if !n.canRemember(key, target.Name()) {
-			continue
+		return
+	}
+	key, active, phase := eventNotifyIdentity(e.Event)
+	if !n.canRemember(key, target.Name()) {
+		return
+	}
+	now := n.now()
+	lookup := receiptLookup{target.Name(), key}
+	rec, found, err := n.load(key, target.Name())
+	if err != nil {
+		// A one-shot edge may never be emitted again. Keep the latest edge
+		// until we can decide whether this target has already heard it.
+		_, known := n.unread[lookup]
+		if known || len(n.unread) < eventNotifyQueueSize {
+			e.quietRecovery = panicking
+			n.unread[lookup] = e
 		}
-		rec, found, err := n.load(key, target.Name())
-		if err != nil {
-			if n.readLogAt.IsZero() || now.Sub(n.readLogAt) >= eventNotifyLogInterval {
-				n.readLogAt = now
-				n.logger.Error("load event notification state", "notifier", target.Name(), "error", err)
-			}
-			continue
+		if n.readLogAt.IsZero() || now.Sub(n.readLogAt) >= eventNotifyLogInterval {
+			n.readLogAt = now
+			n.logger.Error("load event notification state", "notifier", target.Name(), "error", err, "deferred", len(n.unread))
 		}
-		n.reconcilePending(target.Name(), key, e.Event, rec, found)
-		if panicking {
-			n.closeUnannounced(target.Name(), rec, found)
-			continue
-		}
-		sent, ok := n.deliverTo(ctx, target, e, deliveryEdge{active: active, phase: phase, level: level, rec: rec, found: found, now: now, interval: interval})
-		if !ok {
-			continue
-		}
+		return
+	}
+	delete(n.unread, lookup)
+	n.reconcilePending(target.Name(), key, e.Event, rec, found)
+	if panicking {
+		n.closeUnannounced(target.Name(), rec, found)
+		return
+	}
+	sent, ok := n.deliverTo(ctx, target, e, deliveryEdge{active: active, phase: phase, level: level, rec: rec, found: found, now: now, interval: interval})
+	if ok {
 		rec = eventNotifyRecord(e, target.Name(), sent)
 		rec.LastSentAt = now
 		n.save(rec)
+	}
+}
+
+func (n *EventNotifier) retryReads(ctx context.Context, targets []notify.Notifier, interval time.Duration) {
+	for lookup, e := range n.unread {
+		if !n.WatchAlarms.allowsNotification(e.Watch, e.alarmEpoch) {
+			delete(n.unread, lookup)
+			continue
+		}
+		for _, target := range targets {
+			if target.Name() == lookup.target {
+				n.deliverTarget(ctx, e, target, interval, e.quietRecovery)
+				break
+			}
+		}
 	}
 }
 
@@ -463,6 +500,7 @@ func (n *EventNotifier) remind(ctx context.Context) {
 		return
 	}
 	targets, interval := n.deliveryConfig()
+	n.retryReads(ctx, targets, interval)
 	n.flushSummaries(ctx, targets)
 	if interval <= 0 {
 		return

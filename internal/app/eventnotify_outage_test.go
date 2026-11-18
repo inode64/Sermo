@@ -151,10 +151,12 @@ func TestEventNotifierStoreReadFailureDoesNotSendUntrackedAlert(t *testing.T) {
 	if len(target.messages) != 0 {
 		t.Fatal("sent without knowing previous state")
 	}
+	router.remind(t.Context())
 	store.readErr = nil
-	router.deliver(t.Context(), eventNotification{Watch: "root", Kind: eventKindFiring})
+	router.remind(t.Context())
+	router.remind(t.Context())
 	if len(target.messages) != 1 {
-		t.Fatal("read recovery suppressed opening")
+		t.Fatalf("receipt retry sent %d messages, want the opening exactly once", len(target.messages))
 	}
 }
 
@@ -167,5 +169,36 @@ func TestEventNotifierReloadKeepsUndurableOperationalErrorReceipt(t *testing.T) 
 	router.deliver(t.Context(), eventNotification{Event: event})
 	if len(target.messages) != 1 {
 		t.Fatal("reload forgot operational-error receipt during disk outage")
+	}
+}
+
+func TestDeferredRecoverySuppressesStaleReminder(t *testing.T) {
+	for _, panicMode := range []bool{false, true} {
+		t.Run(fmt.Sprintf("panic=%t", panicMode), func(t *testing.T) {
+			store := &failingEventNotifyStore{Store: openRuleStateStore(t)}
+			router, target, now := outageRouter(t, store, time.Hour)
+			alarm := eventNotification{Watch: "root", Kind: eventKindFiring}
+			router.deliver(t.Context(), alarm)
+			store.readErr = errors.New("unreadable")
+			router.inPanic = func() bool { return panicMode }
+			alarm.Kind = eventKindRecovered
+			router.deliver(t.Context(), alarm)
+			router.inPanic = nil
+			*now = now.Add(time.Hour)
+			router.remind(t.Context())
+			if len(target.messages) != 1 {
+				t.Fatal("reminded after observing recovery")
+			}
+			store.readErr = nil
+			router.remind(t.Context())
+			router.remind(t.Context())
+			want := 2
+			if panicMode {
+				want = 1
+			}
+			if len(target.messages) != want {
+				t.Fatalf("received %d notifications, want %d", len(target.messages), want)
+			}
+		})
 	}
 }
