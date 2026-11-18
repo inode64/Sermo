@@ -28,8 +28,8 @@ policy state in `internal/rules/state.go`.
 - Guards run before remediation; a blocked action logs the guard's block
   message and records one event.
 - Automatic refusals wait the policy cooldown per rule, independently of the
-  executed-action budget and backoff. An unchanged guard refusal doubles that
-  wait at each re-audit, up to a day (`maxGuardRefusalInterval`). Guards remain
+  executed-action budget and backoff. An unchanged guard or preflight refusal doubles that
+  wait at each re-audit, up to a day (`maxRefusalInterval`). Guards remain
   observable: a new reason is audited immediately (restarting the spacing) and
   a cleared guard releases the action. A refusal by the config preflight is
   released likewise by a fresh passing `configuration` check, rerun at most

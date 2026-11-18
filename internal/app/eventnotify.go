@@ -13,6 +13,7 @@ import (
 
 	"sermo/internal/config"
 	"sermo/internal/notify"
+	"sermo/internal/operation"
 	"sermo/internal/process"
 	"sermo/internal/severity"
 	"sermo/internal/state"
@@ -554,6 +555,12 @@ func eventNotifyIdentity(e Event) (key string, active bool, phase string) {
 	case eventKindDryRun, eventKindSuppressed, eventKindAction:
 		phase = eventKindFiring
 	case eventKindError, eventKindHookFail, eventKindExpandFailed, eventKindKillFailed, eventKindMakeStepFailed, eventKindRemountFailed, eventKindOutputDrainFailed:
+		// A rule's failed preflight stays open until that rule recovers.
+		// Keep one receipt while a different refusal can still reach the operator.
+		if e.Kind == eventKindError && e.Rule != "" && e.Status == string(operation.ResultPreflightFailed) {
+			phase = eventKindError + ":" + e.Message
+			break
+		}
 		// An error with a recovery edge of its own stays a health incident, so
 		// the recovery that follows closes it: an advisory incident's error, and
 		// an unavailable check's at every grade.

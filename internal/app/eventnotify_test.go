@@ -176,6 +176,22 @@ func TestEventNotifierSeparatesChecksAndPacesErrors(t *testing.T) {
 	}
 }
 
+func TestEventNotifierPreflightRefusalEpisode(t *testing.T) {
+	recorder := &eventNotifyRecorder{messages: make(chan notify.Message, 10)}
+	router := NewEventNotifier("host", slog.New(slog.NewTextHandler(io.Discard, nil)), nil, nil)
+	router.Update(config.EventNotification{Targets: []string{"ops"}}, map[string]notify.Notifier{"ops": recorder})
+	e := Event{Kind: eventKindError, Service: "web", Rule: "repair", Action: "restart", Status: string(operation.ResultPreflightFailed)}
+	for _, reason := range []string{"missing library", "missing library", "invalid config"} {
+		e.Message = reason
+		router.deliver(t.Context(), eventNotification{Event: e})
+	}
+	router.deliver(t.Context(), eventNotification{Kind: eventKindRecovered, Service: e.Service, Rule: e.Rule})
+	router.deliver(t.Context(), eventNotification{Event: e})
+	if got := len(recorder.messages); got != 4 {
+		t.Fatalf("sent %d messages, want the first refusal, new cause, recovery and recurrence", got)
+	}
+}
+
 func TestEventNotifierSendsEveryOneShotNoticeWithoutReminders(t *testing.T) {
 	recorder := &eventNotifyRecorder{messages: make(chan notify.Message, 10)}
 	router := NewEventNotifier("host-a", slog.New(slog.NewTextHandler(io.Discard, nil)), nil, nil)

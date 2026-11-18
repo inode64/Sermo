@@ -57,6 +57,26 @@ func TestWorkerRefusedRemediationAlertsOncePerEpisode(t *testing.T) {
 	}
 }
 
+func TestWorkerPreflightRefusalSpacing(t *testing.T) {
+	h := &workerHarness{cache: failedCache("http"), opResult: operation.Result{
+		Status: operation.ResultPreflightFailed, Message: "preflight failed",
+		Checks: []checks.Result{{Check: "libraries", Message: "missing library"}},
+	}}
+	w := h.worker(alertThenRestartTree("http"), rules.Policy{Cooldown: time.Minute}, nil)
+	at := t0
+	w.Now = func() time.Time { return at }
+	for minute, want := range []int{1, 2, 2, 3, 4} {
+		at = t0.Add(time.Duration(minute) * time.Minute)
+		if minute == 3 {
+			h.opResult.Checks[0].Message = "library unreadable"
+		}
+		w.RunCycle(t.Context())
+		if len(h.ops) != want || h.countEvents(eventKindError) != want {
+			t.Fatalf("minute %d: operations=%d audit events=%d, want %d", minute, len(h.ops), h.countEvents(eventKindError), want)
+		}
+	}
+}
+
 // An automatic remediation's event carries the operation's audit text, so a
 // preflight that refused it names the check and its reason, as a manual
 // operation's event does.
@@ -247,13 +267,13 @@ func TestGuardRefusalInterval(t *testing.T) {
 		{30 * time.Minute, 0, 30 * time.Minute},
 		{30 * time.Minute, 1, time.Hour},
 		{30 * time.Minute, 5, 16 * time.Hour},
-		{30 * time.Minute, 6, maxGuardRefusalInterval},
-		{30 * time.Minute, 200, maxGuardRefusalInterval},
+		{30 * time.Minute, 6, maxRefusalInterval},
+		{30 * time.Minute, 200, maxRefusalInterval},
 		// A cooldown longer than the cap is never shortened.
 		{48 * time.Hour, 3, 48 * time.Hour},
 	} {
-		if got := guardRefusalInterval(tc.cooldown, tc.repeats); got != tc.want {
-			t.Errorf("guardRefusalInterval(%v, %d) = %v, want %v", tc.cooldown, tc.repeats, got, tc.want)
+		if got := refusalInterval(tc.cooldown, tc.repeats); got != tc.want {
+			t.Errorf("refusalInterval(%v, %d) = %v, want %v", tc.cooldown, tc.repeats, got, tc.want)
 		}
 	}
 }

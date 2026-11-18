@@ -10,12 +10,12 @@ import (
 	"sermo/internal/rules"
 )
 
-// maxGuardRefusalInterval caps how far apart an unchanged guard refusal is
+// maxRefusalInterval caps how far apart an unchanged refusal is
 // audited. A guard that keeps refusing for the same reason (host
 // infrastructure, logged-in users, a dependency that must stay up) usually
 // will until an operator acts, and auditing it every cooldown only buries the
 // event log; once a day still shows the rule wants to act.
-const maxGuardRefusalInterval = 24 * time.Hour
+const maxRefusalInterval = 24 * time.Hour
 
 // configurationRecheckInterval paces the configuration check while a refusal by
 // the config preflight waits: often enough that a fixed file is retried within
@@ -27,11 +27,12 @@ type remediationRefusal struct {
 	guard, reason string
 	retryAt       time.Time
 	attempted     bool
+	preflight     bool
 	// configPreflight marks an engine refusal by the required config
 	// preflight: the configuration check that repeats that command can
 	// release it, as a cleared guard releases a guard refusal.
 	configPreflight bool
-	// repeats counts the audits of this same guard refusal after the first:
+	// repeats counts the audits of this same refusal after the first:
 	// each one doubles the wait before the next.
 	repeats int
 }
@@ -39,9 +40,20 @@ type remediationRefusal struct {
 // recordEngineRefusal records an operation the engine refused (a failed
 // preflight, a blocked or skipped action) for its retry after the cooldown.
 func (w *Worker) recordEngineRefusal(rule string, result operation.Result, at time.Time) {
-	w.recordRefusalAfter(rule, "", result.Message, at, w.Policy.Cooldown, 0)
-	if refusal, ok := w.refusedRemediations[rule]; ok && refusedByConfigPreflight(result) {
-		refusal.configPreflight = true
+	reason := result.Message
+	repeats := 0
+	if result.Status == operation.ResultPreflightFailed {
+		// The summary is identical for every failed preflight. Its audit
+		// details identify which check refused this attempt and why.
+		reason = result.AuditMessage()
+		if previous := w.refusedRemediations[rule]; previous.preflight && previous.reason == reason {
+			repeats = previous.repeats + 1
+		}
+	}
+	w.recordRefusalAfter(rule, "", reason, at, refusalInterval(w.Policy.Cooldown, repeats), repeats)
+	if refusal, ok := w.refusedRemediations[rule]; ok && result.Status == operation.ResultPreflightFailed {
+		refusal.preflight = true
+		refusal.configPreflight = refusedByConfigPreflight(result)
 		w.refusedRemediations[rule] = refusal
 	}
 }
@@ -50,12 +62,17 @@ func refusedByConfigPreflight(result operation.Result) bool {
 	if result.Status != operation.ResultPreflightFailed {
 		return false
 	}
+	configFailed := false
 	for _, check := range result.Checks {
-		if check.Check == config.ServiceMonitorKeyConfig && !check.OK && !check.Optional {
-			return true
+		if check.OK || check.Optional {
+			continue
 		}
+		if check.Check != config.ServiceMonitorKeyConfig {
+			return false
+		}
+		configFailed = true
 	}
-	return false
+	return configFailed
 }
 
 // configurationFixed reports that a config-preflight refusal no longer holds:
@@ -102,11 +119,11 @@ func (w *Worker) recordRefusalAfter(rule, guard, reason string, at time.Time, wa
 		attempted: guard == "" || w.refusedRemediations[rule].attempted, repeats: repeats}
 }
 
-// guardRefusalInterval is the wait before the repeats-th re-audit of an
-// unchanged guard refusal: the cooldown, doubled each time, never longer than
-// maxGuardRefusalInterval nor shorter than the cooldown itself.
-func guardRefusalInterval(cooldown time.Duration, repeats int) time.Duration {
-	ceiling := max(cooldown, maxGuardRefusalInterval)
+// refusalInterval is the wait before the repeats-th re-audit of an
+// unchanged refusal: the cooldown, doubled each time, never longer than
+// maxRefusalInterval nor shorter than the cooldown itself.
+func refusalInterval(cooldown time.Duration, repeats int) time.Duration {
+	ceiling := max(cooldown, maxRefusalInterval)
 	wait := cooldown
 	for range repeats {
 		if wait >= ceiling/2 {
@@ -128,7 +145,7 @@ func (w *Worker) refuseGuard(ctx context.Context, ev *rules.Evaluator, firing fi
 		if unchanged {
 			repeats = previous.repeats + 1
 		}
-		w.recordRefusalAfter(firing.Name, block.Rule, block.Reason, at, guardRefusalInterval(w.Policy.Cooldown, repeats), repeats)
+		w.recordRefusalAfter(firing.Name, block.Rule, block.Reason, at, refusalInterval(w.Policy.Cooldown, repeats), repeats)
 		event := Event{Kind: eventKindSuppressed, Severity: firing.severity, Rule: firing.Name,
 			Action: action, Status: string(operation.ResultBlocked)}
 		event.Message = "guard: " + block.MessageWith(w.expandRuntime(block.Reason, event))
