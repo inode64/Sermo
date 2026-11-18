@@ -3617,8 +3617,10 @@ watches:
   counters make the sample unavailable; they do not mean no swap is configured.
 - **`io`** sums the pages swapped **in and out** (`pswpin`+`pswpout` from
   `/proc/vmstat`); the `delta` threshold is pages per interval, so it scales with
-  `interval`. An unreadable file or missing counter makes the sample
-  unavailable and does not advance its baseline. The `usage` metric does not
+  `interval`. After startup or a configuration reload, the first sample sets
+  the baseline. An open paging alarm stays open until a measured delta clears
+  it. An unreadable file or missing counter makes the sample unavailable and
+  does not advance its baseline. The `usage` metric does not
   require `/proc/vmstat`.
 - Hook extras: `SERMO_METRIC` (`usage`|`io`), `SERMO_TOTAL_BYTES`,
   `SERMO_FREE_BYTES`.

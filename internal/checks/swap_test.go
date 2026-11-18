@@ -73,8 +73,8 @@ func TestSwapIODeltaPrimes(t *testing.T) {
 	c := &swapCheck{name: "s", metric: "io", op: ">", value: 100,
 		sampler: func() (SwapSample, error) { s := samples[i]; i++; return s, nil }}
 
-	if res := c.Run(context.Background()); res.OK {
-		t.Fatal("first cycle must prime the baseline and not fire")
+	if res := c.Run(context.Background()); res.Observation() != ObservationUnavailable {
+		t.Fatalf("a single counter cannot measure paging: %+v", res)
 	}
 	if res := c.Run(context.Background()); !res.OK {
 		t.Fatalf("delta 150 > 100 should fire, got %q", res.Message)

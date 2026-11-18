@@ -112,7 +112,8 @@ func (c *swapCheck) Run(_ context.Context) Result {
 		total := s.PagesIn + s.PagesOut
 		if !c.primed {
 			c.primed, c.lastIO = true, total
-			res := c.result(false, fmt.Sprintf("swap io baseline %d pages", total), start)
+			// The first counter alone cannot close a paging episode restored after restart.
+			res := c.selfGrade(c.unavailableResult(fmt.Sprintf("swap io baseline %d pages; waiting for a second sample", total), start))
 			res.Data = data
 			return res
 		}

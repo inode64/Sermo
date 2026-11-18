@@ -774,6 +774,49 @@ func TestWatchDoesNotRepeatUnavailableErrorAfterRestart(t *testing.T) {
 	}
 }
 
+func TestRestartedSwapWatchHoldsEpisodeUntilMeasuredDelta(t *testing.T) {
+	store := openRuleStateStore(t)
+	var pages uint64
+	var events []Event
+	newWatch := func() *Watch {
+		check, err := checks.BuildInline("paging", map[string]any{
+			"type": "swap", "metric": "io", "delta": map[string]any{"op": ">", "value": 100},
+		}, checks.Deps{SwapSampler: func() (checks.SwapSample, error) {
+			return checks.SwapSample{PagesIn: pages}, nil
+		}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		settling := NewSettling(nil)
+		settling.Reset([]string{SettlingWatchKey("paging")})
+		return &Watch{Name: "paging", CheckType: checks.CheckTypeSwap, Check: check, StateSlot: checks.SwapMetricIO,
+			StateStore: store, Settling: settling, Emit: func(e Event) {
+				if e.Kind != eventKindPersistence {
+					events = append(events, e)
+				}
+			}}
+	}
+	w := newWatch()
+	w.RunCycle(t.Context())
+	pages += 200
+	w.RunCycle(t.Context())
+	if countEvents(events, eventKindFiring) != 1 {
+		t.Fatalf("expected the first measured breach to open the episode: %+v", events)
+	}
+	events = nil
+	w = newWatch()
+	w.RunCycle(t.Context())
+	pages += 200
+	w.RunCycle(t.Context())
+	if !w.firing || len(events) != 0 {
+		t.Fatalf("restart and continued paging changed the open episode: %+v", events)
+	}
+	w.RunCycle(t.Context())
+	if w.firing || len(events) != 1 || events[0].Kind != eventKindRecovered {
+		t.Fatalf("expected one recovery after measuring zero paging: %+v", events)
+	}
+}
+
 func TestWatchRecoversPersistedEpisodeDuringStartupObservation(t *testing.T) {
 	store := openRuleStateStore(t)
 	first := &Watch{
