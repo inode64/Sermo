@@ -241,6 +241,7 @@ type eventNotifyScope struct {
 }
 
 type eventNotifyServiceScope struct {
+	paused func() bool
 	rules  map[string]bool
 	checks map[string]bool
 }
@@ -256,7 +257,7 @@ func eventNotifyScopeOf(workers []*Worker, watches []*Watch) eventNotifyScope {
 		if w == nil {
 			continue
 		}
-		svc := eventNotifyServiceScope{rules: make(map[string]bool, len(w.Rules)), checks: w.checkNames}
+		svc := eventNotifyServiceScope{rules: make(map[string]bool, len(w.Rules)), checks: w.checkNames, paused: w.IsPaused}
 		for i := range w.Rules {
 			svc.rules[w.Rules[i].Name] = true
 		}

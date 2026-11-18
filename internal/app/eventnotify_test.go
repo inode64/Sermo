@@ -489,3 +489,26 @@ func TestEventNotifierRetriesOnlyTemporaryFailures(t *testing.T) {
 		})
 	}
 }
+
+func TestServicePauseWithholdsIncidentReminders(t *testing.T) {
+	store := &failingEventNotifyStore{Store: openRuleStateStore(t)}
+	router, target, at := outageRouter(t, store, time.Minute)
+	paused := false
+	w := &Worker{Service: "web", IsPaused: func() bool { return paused }, checkNames: map[string]bool{"http": true}}
+	router.Retain(eventNotifyScopeOf([]*Worker{w}, nil))
+	event := eventNotification{Service: "web", Check: "http", Kind: eventKindFiring}
+	router.deliver(t.Context(), event)
+	paused = true
+	*at = at.Add(time.Hour)
+	router.remind(t.Context())
+	if len(target.messages) != 1 {
+		t.Fatal("a paused service sent a reminder")
+	}
+	paused = false
+	event.Kind = eventKindRecovered
+	router.deliver(t.Context(), event)
+	router.remind(t.Context())
+	if len(target.messages) != 2 {
+		t.Fatal("recovery should close the original receipt")
+	}
+}

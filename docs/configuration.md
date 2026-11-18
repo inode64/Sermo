@@ -2362,6 +2362,8 @@ for immediate delivery; a lower severity inside an open incident is held (see
 applies: a target below the incident's level is skipped and keeps no record of
 it, and a recovery goes to exactly the targets that heard the incident, at the
 gravest level each one heard.
+Pausing service monitoring withholds open-incident reminders for that service.
+Confirmed deliveries still receive the recovery when observation resumes.
 A watch whose check becomes unavailable and later available again tracks that
 as its own incident at every severity: the check coming back closes that
 incident with a recovery and never announces a still-firing watch as recovered.
