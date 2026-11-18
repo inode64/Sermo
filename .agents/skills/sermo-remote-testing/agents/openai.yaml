@@ -1,4 +1,4 @@
 interface:
   display_name: "Sermo Remote Testing"
-  short_description: "Run safe Sermo remote checks and installation discovery"
-  default_prompt: "Use $sermo-remote-testing to run safe Sermo validation, or full host discovery only for remote installation/configuration requests, on the hosts of the operator-supplied inventory (SERMO_SSH_ENV), which is kept outside this repository."
+  short_description: "Validate a temporary Sermo build on remote Linux hosts"
+  default_prompt: "Use $sermo-remote-testing to validate Sermo on the requested hosts from the operator's private inventory, record the results and clean up this run."

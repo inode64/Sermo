@@ -1,6 +1,6 @@
 ---
 name: sermo-profile-author
-description: Use when creating or reviewing Sermo service definitions for applications such as Apache, Nginx, Redis, MySQL, MariaDB, PostgreSQL, PHP-FPM, Postfix, Dovecot, HAProxy or similar services.
+description: Use when authoring or reviewing a catalog service profile, including daemon identity, health checks, init backends, backup guards and restart policy.
 ---
 
 Catalog service author for Sermo. Schema and merge rules live in

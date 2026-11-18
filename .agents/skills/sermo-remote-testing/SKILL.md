@@ -1,6 +1,6 @@
 ---
 name: sermo-remote-testing
-description: Use when running Sermo validation or exploratory tests on remote Linux servers over SSH, using the hosts inventory, local GOAMD64=v1 builds, staged all-host runs, temporary /tmp validation, or explicit remote installation under /etc/sermo.
+description: Use for authorized Sermo validation over SSH with temporary builds and configuration, including inventory selection, staged runs and cleanup.
 ---
 
 # Sermo Remote Testing
@@ -24,8 +24,9 @@ repository.
   no target of the run sets `dry_run: false`. A catalog profile brings its own
   remediation (a restart after two failed cycles), and the cooldown the config
   must declare is what arms it.
-- A finding is fixed in the local checkout, then redeployed to every host
-  already touched. Never patch a remote file to make a test pass.
+- For a validation-only request, report the finding and its evidence. If a
+  fix and retest are in scope, rebuild locally and repeat validation on the
+  previously tested hosts within the authorized scope. Never patch a remote file to make a test pass.
 - The installed `sermod` of a host is production. It acts for real
   (`dry_run: false`), so it restarts a service a test stops: before stopping a
   service the user approved, use the installed `sermoctl stop SERVICE` or
@@ -103,7 +104,7 @@ defaults:
   policy: { cooldown: 5m }
 
 web:                # only when the run needs the panel
-  address: 0.0.0.0
+  address: 127.0.0.1
   port: 9797
   password_file: /tmp/sermo-remote-test-XXX/credentials.env
 ```
@@ -130,13 +131,14 @@ web:                # only when the run needs the panel
   ```
 
 - Port `9797` usually belongs to the installed `sermod`; then use another
-  explicit high port. Reclaim it only from a temporary `sermod` whose
-  `/proc/<pid>/exe` resolves under `/tmp/sermo-remote-test-`.
+  explicit high port. Access the loopback listener over SSH. Leave concurrent
+  test runs and their listeners alone.
 - To prove an alert fires, use an alert-only watch (no `then`), or
   `dry_run: true` with `then.notify` naming an existing notifier. Dry run
   logs what would happen and skips remediation, the watch actions and
   non-wall notify delivery; a top-level `event_notify` route still delivers
-  unless panic mode is on. `notify: [none]` is monitor-only. Real delivery
+  unless panic mode is on. Omit external event routes from temporary copies
+  unless real delivery is in scope. `notify: [none]` is monitor-only. Real delivery
   needs the user's request.
 - A generated database or directory profile keeps its backup guards: stop
   and restart blocked while `mysqldump`, `mariadb-dump` or `wal-g-mysql` runs
@@ -171,20 +173,16 @@ echo $! > "$REMOTE_DIR/sermod.pid"
 
 ## Cleanup
 
-Stop the temporary daemon before removing its directory: a removed directory
-leaves `sermod` running from a deleted binary, invisible to any check that
-looks for files.
+At launch, record the daemon PID, its procfs start time and the exact
+executable path under this run's directory. Keep the directory until the
+daemon exits. A stale PID file can point to a concurrent run.
 
-```sh
-pid="$(cat "$REMOTE_DIR/sermod.pid")"
-case "$(readlink "/proc/${pid}/exe")" in
-  /tmp/sermo-remote-test-*) kill -TERM "$pid" ;;
-  *) echo "pid ${pid} is not this run's sermod; not signaling" ;;
-esac
-```
-
-Then confirm no process runs from `/tmp/sermo-remote-test-`; `kill -KILL` only
-a PID that passed the same check. Remove only the run's exact directory.
+For cleanup by a separate SSH session, open a pidfd for the recorded PID,
+then verify the start time and exact `$REMOTE_DIR/sermod` executable before
+sending SIGTERM through that fd. Wait for exit on the fd. If escalation is
+needed, recheck the identity and use the same fd. On missing pidfd support or
+uncertain identity, retain the directory and report cleanup as incomplete.
+Remove only this run's directory after confirming its daemon has exited.
 
 ## Report
 

@@ -1,6 +1,6 @@
 ---
 name: sermo-protocol-probes
-description: Use when adding or changing a protocol probe or network check in internal/conn - a new protocol, a client library for one, dialing or listening, the egress interface, busy server answers, or wire-format parsing.
+description: Use when implementing or reviewing network probes in internal/conn, including client selection, interface binding, wire parsing and busy replies.
 ---
 
 Design decisions for `internal/conn` probes.

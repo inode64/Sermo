@@ -1,26 +1,28 @@
 # Sermo — project conventions
 
-Repository decisions for agents, not a second user manual. Sources of truth:
+Use the implementation and its tests to establish current behavior, `docs/`
+and validated examples for the operator contract, and [TODO.md](TODO.md) for
+planned behavior. If they disagree, identify the trigger, verify the behavior
+in the owning code, and use the request and executable evidence to resolve the
+mismatch. In a review, give the source location and distinguish a reproduced
+defect from a hypothesis.
 
-- current behavior: code and tests
-- public behavior and configuration: `docs/` and validated examples
-- planned behavior: [TODO.md](TODO.md)
-- validation: `Makefile` and CI
-- analyzers: `.golangci.yml`, `.custom-gcl.yml`, `.semgrep/`
-- Web UI: `internal/web/src/` and its tests
-- safety: `internal/operation`, `internal/process`, `internal/locks`,
-  [docs/safety.md](docs/safety.md)
+## Domain pointers
 
-If prose and implementation disagree, report the mismatch, establish the
-intended behavior from the request and executable evidence, then update every
-affected source in the same change.
+Load the skills that cover the decisions the task changes. Edit the sources
+under `.agents/skills/`. Claude reads the same files through symlinks,
+including this guide through `CLAUDE.md`. Keep public behavior in `docs/`
+and update a skill when its implementation assumptions change.
 
-## Skills
-
-Project skills live in `.agents/skills/<name>/SKILL.md` and are linked from
-`.claude/skills/`. A skill records design decisions and traps of one domain.
-Public behavior stays in `docs/`. Do not copy this file into a skill. When a
-skill and the code disagree, fix the skill in the same change.
+| Decision | Project skill |
+|---|---|
+| How YAML loads, merges, expands or validates | [Config schema](.agents/skills/sermo-config-schema/SKILL.md) |
+| Which checks, selectors, guards or preflight a catalog service should ship | [Profile author](.agents/skills/sermo-profile-author/SKILL.md) |
+| How a network probe binds, parses a reply or reports a busy peer | [Protocol probes](.agents/skills/sermo-protocol-probes/SKILL.md) |
+| When a condition fires, clears, blocks or requests an action | [Rule engine](.agents/skills/sermo-rule-engine/SKILL.md) |
+| What authorizes an operation, process attribution, signal or recovery | [Safety review](.agents/skills/sermo-safety-review/SKILL.md) |
+| Which fixture, fake or benchmark exercises the change | [Test engineer](.agents/skills/sermo-test-engineer/SKILL.md) |
+| How to stage and clean up an authorized SSH validation run | [Remote testing](.agents/skills/sermo-remote-testing/SKILL.md) |
 
 ## Workflow
 
@@ -43,7 +45,7 @@ dispatcher, extract or move — do not add a parallel owner. A generally useful
 check, option or behavior belongs on both services and host watches unless an
 owner-level limitation is documented in code and user docs.
 
-Run targeted checks while developing: `go test -shuffle=on ./internal/<pkg>/`
+The `Makefile` and CI own validation. For Go package changes, run `go test -shuffle=on ./internal/<pkg>/`
 and `bin/custom-gcl run ./internal/<pkg>/...` (built by `make custom-gcl`).
 Finish with:
 
@@ -62,24 +64,12 @@ needs `make check`.
 keep the regenerated `internal/web/index.html` and `internal/web/login.html`
 in the patch.
 
-When asked to commit:
+When asked to commit, inspect the staged diff and use the repository's
+[commit message format](.github/git-commit-instructions.md). Keep unrelated
+changes out of the commit and explain any partial staging.
 
-```text
-<type>(<optional-scope>): <concise description>
-
-Objective: <outcome>
-Invariant: <behavior or safety property preserved>
-Evidence: <checks and runtime validation actually run>
-Limitations: <known boundary or None.>
-```
-
-Types: `feat`, `fix`, `refactor`, `test`, `docs`, `build`, `chore`, `ci`,
-`perf`. Do not identify an agent as author. Never leave unexplained partial
-staging.
-
-Testing on remote hosts uses the `sermo-remote-testing` skill; fleet
-deployment is the operator's private tooling. An operator action is real even
-when daemon remediation has `dry_run: true`.
+Fleet deployment uses the operator's private tooling. An operator action is
+real even when daemon remediation has `dry_run: true`.
 
 ## Names, constants, config shape
 
@@ -167,7 +157,8 @@ error says what was attempted, for a sysadmin reader. No new package-level
 mutable state: registration goes in the existing registry, and Linux-specific
 behavior stays behind an interface with a fake.
 `.golangci.yml` is the linter source of truth. A necessary `//nolint` names
-the exact analyzer and the design reason. Never weaken a gate or broaden an
+the exact analyzer and the design reason. Custom analyzers are configured in
+`.custom-gcl.yml`. Never weaken a gate or broaden an
 exclusion to land a change. How to add a `.semgrep/` call-boundary rule is in
 [`.semgrep/README.md`](.semgrep/README.md).
 
@@ -181,58 +172,31 @@ change actually has.
 
 ## Safety
 
-Operator policy: [docs/safety.md](docs/safety.md). Review checklist:
-`sermo-safety-review`. Hard boundaries:
+Read [the operator safety policy](docs/safety.md) and the safety review
+skill before changing operation authority. Keep these invariants across CLI,
+daemon and web entry points.
 
-- service actions use `internal/operation`, a timeout, operation locks,
-  guards and required preflight
-- automatic remediation uses the same path, needs a positive resolved
-  cooldown, and never triggers from a system-scoped metric
-- process authorization never uses name, basename, argv or cmdline alone;
-  signalable processes require exact resolved `exe` and `user`, kernel proof
-  of membership in the service's own cgroup, or — only for the manual close of
-  a residual SSH `sudo` terminal — the verified utmp/sudo/listener-cgroup
-  session evidence, always revalidated through the pidfd at delivery;
-  deleted-executable residual cleanup additionally verifies the kernel-held
-  file and ownership
-- `SIGKILL` requires `force_kill: true` plus restrictive `kill_only_if`;
-  `force_kill: auto` (its explicit `kill_only_if`, or else the exe+user pairs
-  derived from strict principal selectors); or proven unit-cgroup membership
-  under `true` or `auto`. Unset or `false` never escalates; the manual
-  residual `sudo` close escalates after
-  `stop_policy.term_timeout` on its own revalidated evidence
-- a `delegated: true` selector is observe-only: never signalled, never a
-  residual or stray, no kill authority
-- `stop_policy.keep_children` keeps every non-principal process; otherwise
-  every residual must go, and a surviving or unattributed one is an orphan that
-  blocks the following start
-- service strays are diagnostic only; nothing signals a process for being a
-  stray, except sermod's startup hygiene `engine.reap_own_strays` (SIGTERM
-  only, sermod's own unit cgroup)
-- conditions are read-only; mutation belongs to actions
-- named locks and operation locks stay separate, atomically acquired,
-  TTL-bounded and auditable when reclaimed
-- each executed or blocked action records one auditable outcome
-- one slow service must not block monitoring of another; shared check
-  concurrency stays bounded
+- Route service operations through the operation engine with a timeout,
+  locks, guards and required preflight. Record one outcome per executed or
+  blocked action. Named and operation locks are separate, atomic, TTL-bounded
+  and auditable on reclaim.
+- Automatic remediation requires a positive resolved cooldown. System-scoped
+  metrics cannot trigger it. Conditions only observe. Bound shared check
+  concurrency and keep slow services from blocking other workers.
+- Revalidate signal authority through the pidfd at delivery. Name, basename,
+  argv and cmdline alone never establish it. Use the safety skill for exact
+  exe and user, unit-cgroup proof, deleted executables, manual session closes
+  and the separate requirements for SIGKILL.
+- Delegated selectors only observe. Respect `stop_policy.keep_children` and
+  block a subsequent start on surviving or unattributed residuals. Strays are
+  diagnostic except for `engine.reap_own_strays` (SIGTERM in sermod's own unit
+  cgroup at startup).
 
-Database catalog profiles stay conservative. No config option may disable a
-hard invariant.
+Database profiles stay conservative. No configuration may disable a hard
+invariant.
 
-## Domain pointers
+## Web UI and wizards
 
-Load the matching skill when the task is in that domain. Do not copy these
-into a change that does not touch them.
-
-- Config, catalog, merge, variables, templates: `sermo-config-schema`;
-  [docs/configuration.md](docs/configuration.md),
-  [docs/services.md](docs/services.md)
-- Rules, windows, guards, policy: `sermo-rule-engine`;
-  [docs/rules.md](docs/rules.md)
-- Catalog service definitions: `sermo-profile-author`
-- Protocol probes: `sermo-protocol-probes`. Honor `cfg.Interface`; register
-  in `internal/conn/registry.go`; dial with `BindDialer`, listen with
-  `bindListenConfig`
 - Web UI: sources in `internal/web/src/` (design tokens in `tokens.css`,
   shared by the dashboard and the login page); generated
   `internal/web/index.html` and `internal/web/login.html`. A list panel is a
@@ -249,5 +213,3 @@ into a change that does not touch them.
   configured (an empty inherited default is monitor-only); preview and
   confirm generated files; offer cleanup only for targets detection proves
   absent
-- Instanced catalog services: `${hostname}`, `%n` / `${n}`; templates
-  materialize, the operator enables; [docs/services.md](docs/services.md)

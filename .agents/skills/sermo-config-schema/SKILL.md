@@ -1,11 +1,13 @@
 ---
 name: sermo-config-schema
-description: Use when designing, editing, validating, merging, rendering, or reviewing Sermo YAML configuration, catalog services/apps/libs/patterns, services, watches, mounts, clones, variables, version templates, checks, guards, locks, rules, or stop policies.
+description: Use when changing or reviewing how Sermo YAML is loaded, merged, expanded or validated for catalog entries, services and host watches.
 ---
 
 Configuration schema for Sermo. The public schema is in
-`docs/configuration.md`, `docs/services.md` and `docs/rules.md`;
-`docs/sermo-all.yml` validates every documented example. Do not restate those
+`docs/configuration.md`, `docs/services.md` and `docs/rules.md`.
+The test in
+`internal/config/docs_example_test.go` validates the annotated bundle
+`docs/sermo-all.yml`. Do not restate those
 here. This skill records the design decisions a change must respect.
 
 ## Design decisions

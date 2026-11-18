@@ -1,6 +1,6 @@
 ---
 name: sermo-safety-review
-description: Use for any Sermo change involving start, stop, restart, reload, resume, kill, signal, process discovery or matching, pidfiles, /proc, cgroups, residual processes, locks, preflight, guards, remediation rules, or automatic actions.
+description: Use when changing or reviewing service operations, automatic actions, preflight, guards, locks, process discovery or authority to signal a process.
 ---
 
 Safety review for Sermo. Assume production servers and control of databases,
@@ -9,83 +9,10 @@ Safety lists the hard boundaries; this skill is the detail behind them that a
 change to that code must preserve. Leaving an unidentified process alive beats
 killing the wrong one.
 
-## Operation path
-
-1. Start/restart/reload/resume/repair is blocked by a failed required preflight; an
-   optional preflight warns. A `verify: true` check failing after the operation
-   returns `postflight_failed`.
-2. The operation lock is released on every exit path. Named runtime locks live
-   under `<engine.runtime>/locks`, operation locks under `<engine.runtime>/ops`;
-   they never share a directory and are never loaded from `/etc/sermo`.
-   A named lock read/parse warning for the target service prevents its operation;
-   do not treat a partially written lock as absent.
-3. Locks are staged with `O_CREAT|O_EXCL`, synced and closed before no-replace
-   hard-link publication, and are TTL-bounded. A stale lock
-   (expired or dead owner) is reclaimed through a logged path, never silently
-   overwritten: every locker (operation, named, watch control, expansion,
-   mount) reports the reclaim, and daemon, web and sermoctl record it as the
-   same warning event (`app.LockReclaim`).
-4. An explicit `operation_group` serializes related lifecycle actions only:
-   acquire its separate group lease and the service lease before any backend
-   work, release both on every path and keep contention nonblocking. A cascade
-   releases those leases between members, so it cannot deadlock itself.
-5. Restart is stop/verify/reconcile/start/verify under the same lock and
-   deadline. A Docker target positively confirmed inactive only starts; an
-   inspect 404 may create a stopped target from a registered Compose source,
-   then start its verified new ID. Original restart guards still apply, and
-   the audit retains both requested and effective actions and any created ID.
-   There is no backend restart mode. Fresh process observations must
-   distinguish confirmed absence from incomplete discovery. Process-free services
-   cannot be judged by missing PIDs.
-6. A failed stop command may have stopped the process: retain the error, verify
-   absence and reconcile init before proceeding. Without a strict selector the
-   only absence proof is that every generation seen before the stop left the
-   process table and the backend reports the service inactive or failed; an
-   empty PID lookup alone proves nothing. A native init gets the postflight
-   window to read the exit (a just-killed daemon is a zombie that OpenRC still
-   reads as started), with the process table read again at every retry. A failed start requires a trusted
-   live process, active init and postflight. Never discard reset errors or infer
-   reload/resume success from liveness. systemd reset-failed does not deactivate
-   an active unit; OpenRC zap must never hide a surviving daemon.
-7. Accept systemd reactivation only after verifying old process generations
-   exited across the complete process snapshot, including outside the current
-   cgroup, and the same unit owns the new generation. Never signal the replacement
-   or accept an unchanged daemon as a completed restart. Restore stopped
-   auxiliary units even when the primary start is skipped.
-   A newly observed backend generation still starting gets the bounded
-   readiness window before classification; uncertainty never authorizes a
-   signal to that replacement. Recheck reactivation on every rediscovery,
-   including after SIGTERM and during init reconciliation. A positive activating
-   observation may wait for a new PID; a reset permission or query error cannot
-   be recovered merely because the service later looks active.
-8. Deleted-executable evidence with the main selector's previous path and real
-   user may permit a backend stop, but never validates a new start. Keep it
-   separate from current exact identity; workers cannot substitute for an exact
-   main selector, and zombies cannot prove a process is running. For an `exe`
-   that is a link to a versioned file, the previous path also covers the
-   deleted previous version beside it (`internal/process/versioned_exe.go`).
-   That naming evidence adds no signal authority (`kill_only_if` stays exact),
-   and a live match re-reads the link instead of guessing.
-9. Incomplete rediscovery stops signal escalation. Keep stop-command,
-   auxiliary-stop and artifact warnings in the one audit result even if a
-   subsequent phase fails or times out.
-   Before init reconciliation, transient strict-identity absence uncertainty
-   may retry fresh observations within the existing operation deadline and a
-   bounded attempt count. Never reset or start while uncertainty remains;
-   newly observed residuals, snapshot errors and cancellation still refuse it.
-
-## Terminal output recovery
-
-- `terminal_output` observation never consumes terminal bytes. Native
-  `drain_output` requires unchanged stable evidence, strict selectors and a
-  positive cooldown; service scope also revalidates its principal ownership.
-- Keep recovery authority private to typed in-memory observations. JSON
-  round-trips must lose it. Pin generations with pidfds and compare the actual
-  master peer against the writer descriptor before reading.
-- Never change shared file flags, write terminal input or signal a job from
-  this path. Reject blocking or packet-mode masters, shared ownership and
-  uncertain evidence. Reserve private capture space before consuming bytes,
-  enforce byte/time limits and audit preserved bytes separately from job exit.
+For preflight, locking, restart, reconciliation or backend reactivation, follow
+the [operation path](references/operations.md). For output draining or a
+manual SSH, sudo, tmux or screen close, use the [terminal evidence and delivery
+requirements](references/terminals.md) alongside the identity checks below.
 
 ## Process identity and signaling
 
@@ -103,7 +30,7 @@ killing the wrong one.
   `exe_any` and `users`; `force_kill: auto` with its explicit `kill_only_if`
   or, without one, the exe+user(+cmd) pairs `EnableAutomaticReaping` derives
   from strict principal selectors; or proven membership of the unit's own
-  cgroup with `force_kill: true` or `auto`. Unset or `false` rules out SIGKILL.
+  cgroup with `force_kill: true` or `auto`. Unset or `false` rules out SIGKILL during service residual cleanup.
   Database and cache profiles pair the inherited `auto` with an explicit
   `kill_only_if` and long grace periods (`sermo-profile-author`).
 - Residuals after stop: under `force_kill: true` or `auto`, processes matching
@@ -152,32 +79,6 @@ killing the wrong one.
   `SameGeneration` never matches it, so SIGKILL never escalates onto it.
   `CgroupOwnedBy` never matches an empty unit.
 
-Manual session close is distinct from service residual cleanup: split OpenSSH
-session servers may survive their listener and stay kept (`keep_children`)
-during stop. Closing one requires remote utmp/terminal ancestry, an exact helper
-executable and real UID, the live configured listener's non-root cgroup, fresh
-generation verification, and pidfd delivery. A deleted helper also needs its
-pinned kernel-held file.
-
-A residual `sudo` terminal close takes no configured authority (no
-`kill_only_if`): the evidence is the authority. It requires a remote utmp
-session whose leader is reparented to PID 1, the exact `/usr/bin/sudo` or
-`/bin/sudo` executable, the utmp user's real UID, a monitor child running the
-same executable, both in the sshd listener's cgroup. Before each signalling
-round the session verifier re-derives the whole boundary (utmp, sudo
-executables, UID, listener cgroup) and it must match; the pidfd revalidates
-generation, executable and real UID at delivery. SIGTERM, then SIGKILL after
-the service's `stop_policy.term_timeout` to survivors, then verified exit.
-Missing evidence fails closed.
-
-Whole-session tmux/screen close belongs only on the session row, with its
-effects on windows, programs and attached clients explicit in confirmation.
-When the screen client is missing, a residual session may use the configured
-exact previous executable path and real UID, known generation, verified
-kernel-held file, parent PID 1 and no controlling terminal. Revalidate through
-the operation engine and pidfd, send SIGTERM only and verify exit. A tmux server
-can hold multiple sessions, so this process fallback does not apply to tmux.
-
 ## Required tests
 
 A safety-sensitive change covers the relevant rows:
@@ -186,7 +87,7 @@ A safety-sensitive change covers the relevant rows:
 guard blocks every GuardBlocksSummary action, including implied blocks (stop/start -> restart, start -> repair, stop -> pause)
 required preflight failure blocks; optional preflight warns
 lock blocks every action; paths.locks rejected; lock dirs derive from engine.runtime
-force_kill false never sends SIGKILL; force_kill true requires kill_only_if
+service residual cleanup: force_kill false never sends SIGKILL; check configured and cgroup authority separately
 exe matched by resolved /proc/<pid>/exe; substring/basename/name-only rejected
 unresolvable or (deleted) exe never matches a non-delegated selector
 residual not matching kill_only_if nor the unit cgroup is never signalled and yields orphan_processes

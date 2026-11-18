@@ -1,6 +1,6 @@
 ---
 name: sermo-rule-engine
-description: Use when designing or implementing Sermo rules, condition trees, and/or/not logic, for cycles, within cycles, remediation actions, alerts, or guard rules.
+description: Use when changing rule conditions, windows, severity, guard evaluation or the policy that schedules alerts and remediation.
 ---
 
 Rule-engine design for Sermo. The public YAML surface is in `docs/rules.md`;
@@ -79,16 +79,12 @@ policy state in `internal/rules/state.go`.
 
 ## Evaluation order
 
-```text
-1. run declared checks and inline probes once; cache per cycle
-2. evaluate the remediation rules
-3. for each requested action: evaluate the guards that block it, apply the
-   service policy (cooldown, max_actions, backoff; log and skip if suppressed),
-   then execute through internal/operation, which re-checks guards, locks and
-   preflight and records the event
-4. evaluate the alert rules
-5. publish the rule windows and persist rule and policy state
-```
+Trace a normal service cycle in `internal/app/worker.go` (`RunCycle`).
+The worker shares probe results across rules and considers remediation rules
+in name order. At most one eligible remediation runs per service per cycle.
+Trace both a refused and an eligible rule when changing the order. The
+operation engine rechecks guards, locks and preflight before acting. Alert
+rules follow remediation. Observation-only cycles skip rule evaluation.
 
 Two kinds of state exist and must not be conflated: per-rule window history
 (consecutive count or rolling matches) and per-service policy state

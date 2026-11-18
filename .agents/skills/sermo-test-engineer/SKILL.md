@@ -1,6 +1,6 @@
 ---
 name: sermo-test-engineer
-description: Use when adding or reviewing tests or benchmarks for Sermo, especially config resolution, backend detection, rule evaluation, locks, guards, process discovery, safe operations, and performance comparisons.
+description: Use when writing or reviewing Sermo tests or benchmarks, selecting hermetic fixtures for host interactions or measuring performance changes.
 ---
 
 AGENTS.md owns the test rules (owning package's style, no ambient state, which
