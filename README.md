@@ -1,50 +1,33 @@
 # Sermo
 
-**Sermo is a portable, safety-first service supervisor for Linux hosts.** It sits
-above **systemd** and **OpenRC**, validates a service before it ever acts on it,
-understands the service's *real* processes, and applies **guarded** remediation
-rules — it never restarts blindly and never kills the wrong process.
+[Español](README.es.md) · [Comparison](#comparison) · [Quick start](#quick-start) · [Documentation](#documentation)
 
-Where an init system answers "is the unit active?", Sermo answers the harder
-operational questions: *is the service actually healthy, is it safe to touch
-right now, and if it isn't healthy, what is the safe thing to do?* It monitors,
-diagnoses, remediates under strict invariants, keeps availability (SLA) history,
-watches host-level resources, sends notifications, and serves a live web
-dashboard — all from a single daemon.
+**Sermo monitors Linux services and verifies whether a restart is safe.** It runs on the host alongside systemd or OpenRC. One daemon checks what clients actually use, from an HTTP endpoint to a database connection, and records why it acted or why it left the service running.
 
-![The Sermo dashboard on a desktop: the host overview and the Sessions panel with SSH, tmux, screen and SMB sessions and the running database statements](docs/images/dashboard-desktop.png)
+Take MariaDB during a backup. If the packaged profile detects a backup process such as `mariadb-dump` running as the configured backup user, it blocks both stop and restart. The same guard applies when an operator uses `sermoctl` and when a recovery rule fires. Inspect the decision with `sermoctl events mariadb`. [MariaDB profile](catalog/services/mariadb.yml)
 
-*Who is on the host and what is running: SSH logins, tmux and screen sessions,
-SMB clients and the statements running on MariaDB and PostgreSQL, each with its
-CPU, memory and I/O. More in [Screenshots](#screenshots).*
+![Sermo dashboard showing host health, active SSH sessions and running database queries](docs/images/dashboard-desktop.png)
 
 ## Why Sermo
 
-A plain "restart on failure" supervisor is dangerous on a real host: it restarts
-during a backup, kills a process that happens to share a binary name, or acts on
-a service whose config is broken and makes the outage worse. Sermo is built
-around the opposite principle — **prove it is safe, then act**:
+- **Catch a configuration error before stopping Nginx.** The Nginx profile runs `nginx -t` before a restart. Once Nginx starts, Sermo checks the configured HTTP endpoint so an operator can see whether the application serves requests again. [Nginx profile](catalog/services/nginx.yml)
+- **Tell overload from an outage.** When a supported database probe gets a “too many connections” reply, Sermo records a busy result. That result can raise an alert and cannot trigger a restart. The Sessions panel shows running statements for investigating the load. [Busy servers](docs/safety.md#busy-servers) · [Dashboard](docs/configuration.md#web-ui)
+- **Find processes still using yesterday’s libraries.** After a package update, inspect the executable and shared libraries still mapped by a service. Nginx can restart after a tracked OpenSSL change. MariaDB’s profile raises an advisory for a replaced library so you can schedule the restart. [Nginx profile](catalog/services/nginx.yml) · [MariaDB profile](catalog/services/mariadb.yml)
+- **Reconstruct the incident at handover.** Compare check failures and operation outcomes with the service’s latency graph and availability history. Gaps in observation stay visible, so a stopped monitor does not inflate downtime. [Availability](docs/configuration.md#availability-sla)
 
-- **Guarded, never blind.** Every start/stop/restart/reload/resume/pause, plus
-  the manual stale-pidfile repair path, runs through one operation engine that
-  checks preflight, guards and runtime locks first. A blocked action does not
-  run.
-- **Knows the real processes.** It discovers a service's actual PIDs from
-  `/proc`, so health, residual detection and (rare, opt-in) kills are based on
-  the resolved executable and UID — never on a process name.
-- **Validates before it touches anything.** Broken config, a failing required
-  preflight, or an active named lock blocks remediation instead of amplifying an
-  outage.
-- **Busy is not down.** A server that answers "too many connections" or
-  "loading" is reported with its own reason, never restarted for it.
-- **Portable.** The same configuration and behaviour run over systemd *and*
-  OpenRC; the init backend is auto-detected.
-- **Honest availability.** SLA counts only cycles it actually observed — time
-  before any evidence could exist is a gap, not counted as downtime.
+## Comparison
+
+| Tool | What it monitors | How recovery works | Where it fits |
+|---|---|---|---|
+| **Sermo** | Application protocols, service processes, Docker and libvirt workloads, host storage and networking | Catalog checks, maintenance locks and guards govern each service action. A restart verifies shutdown and startup and records its outcome. | On-host recovery with a local dashboard and SLA history across systemd and OpenRC. [Safety model](docs/safety.md) |
+| **Monit** | Local processes, files, filesystems and network services | Tests can alert, execute a program or call configured service methods. Cycle counts and dependencies control when to act. | Unix hosts where you want to define the tests and recovery commands in a control file. [Monit manual](https://mmonit.com/monit/documentation/monit.html) |
+| **systemd service units** | Unit state, process exits and watchdog heartbeats from participating services | `Restart=` selects the exit conditions that trigger recovery. Units can run startup checks with `ExecStartPre=`. | Native process supervision on systemd. Sermo can use that same unit for lifecycle operations. [systemd.service](https://www.freedesktop.org/software/systemd/man/latest/systemd.service.html) |
+| **Zabbix** | Metrics and events across hosts, applications and network devices | Triggers drive notifications and configured remote commands. Scheduled maintenance can pause operations for suppressed problems. | Central dashboards and alerting across a fleet. [Overview](https://www.zabbix.com/documentation/current/en/manual/introduction) · [Remote commands](https://www.zabbix.com/documentation/current/en/manual/config/notifications/action/operation/remote_command) · [Maintenance](https://www.zabbix.com/documentation/current/en/manual/events/maintenance) |
 
 ## Features
 
 **Monitoring & health**
+
 - A **fleet of independent workers** — one per service — each running its own
   checks, evaluating rules and driving remediation on its own schedule; a panic
   in one worker never takes down the daemon.
@@ -68,8 +51,11 @@ around the opposite principle — **prove it is safe, then act**:
   policy does not allow, and `unowned_processes` lists processes no init unit or
   installed package accounts for. Being listed authorizes nothing: only the
   watch's own `kill_only_if` or an administrator's verified choice signals one.
+- **Host diagnostics.** Correlate log errors, file descriptor exhaustion, zombie processes and failed units with service health. Dedicated checks cover UPS battery status through NUT and GlusterFS cluster health. [Check catalog](docs/rules.md#checks)
+- **Virtual machines and containers.** Discover Docker and libvirt workloads with the wizards, check availability, and pause or resume them from the same CLI. Sermo blocks destruction of a virtual network with attached guests. [Services](docs/services.md) · [Safety](docs/safety.md)
 
 **Safe remediation**
+
 - A single **operation engine** shared by the CLI and the daemon: operation
   lock → named runtime locks → required preflight → guards →
   stop → verify processes and reconcile init → start → verify +
@@ -81,12 +67,14 @@ around the opposite principle — **prove it is safe, then act**:
 - **Hard safety invariants** that YAML cannot disable (see below).
 
 **Availability & history**
+
 - **SLA over rolling windows** (hour → year) for every service and availability
   watch, stored as one archive per graph window so a year of history stays
   bounded without losing an incident.
 - An **event/activity log** with retention and compaction of the state store.
 
 **Operate**
+
 - A focused operator **CLI** (`sermoctl`) for status, safe lifecycle actions,
   config validation, locks, processes, preflight, inventory, SLA and events.
 - **Notifications** to email, Slack, Teams, Telegram, ntfy, Gotify and the
@@ -103,6 +91,7 @@ around the opposite principle — **prove it is safe, then act**:
   uplink).
 
 **Web dashboard** (optional)
+
 - A live, self-contained dashboard: per-service checks, SLA history, latency
   graphs, an event feed, and the full inventory (services / apps / libraries)
   and host watches.
@@ -195,16 +184,15 @@ that tries. In full in [docs/safety.md](docs/safety.md):
    it, or the kernel places it in the service's own control group. SIGKILL also
    needs `force_kill`: the engine default is `false`; the shipped `sermo.yml`
    sets `auto`.
-5. **Never kill by process name** — a kill requires an exact match on the
-   resolved `/proc/<pid>/exe` path **and** the real UID; a command line only
-   narrows a match, and anything Sermo cannot positively identify is *reported,
-   not killed*.
+5. **A process name never authorizes a signal.** Sermo revalidates identity
+   through a `pidfd` at delivery. For a service residual it requires the
+   expected executable and user or kernel proof of service cgroup membership.
 6. **Never send terminating signals to PID 1 or kernel threads** — blocked
    centrally, not configurable.
 7. **`force_kill: true` requires `kill_only_if`** with non-empty `users` and
    `exe_any` selectors.
 8. **Restart always verifies stop and start** under the same locks, preflight,
-   guards and deadline; surviving processes block the new start.
+   guards and deadline; unresolved residuals block the new start.
 9. **A stray process is a diagnostic, never a target** — a control-group member
    no selector claims is reported, and nothing signals it for being a stray.
 10. **`process_policy` only alerts, and `unowned_processes` authorizes
@@ -274,47 +262,45 @@ sudo tar --no-overwrite-dir -C / -xpf sermo-stage.tar
 
 ## Quick start
 
+With the binaries installed, identify the init system, inspect an existing unit
+and discover which catalog profiles Sermo recognizes on this host.
+
 ```sh
-# Inspect a unit (no config needed)
 sermoctl backend
 sermoctl status nginx
-sermoctl is-active nginx
+sermoctl services catalog
+```
 
-# List configured services (init units, Docker containers, VMs)
-sermoctl services                     # SERVICE / TYPE / STATE / MONITORED
-sermoctl services --notify ops-email  # email a configured services health report
-sermoctl patterns                     # pattern sets in use
+To bring a service under monitoring, run the wizard with administrator
+permissions. Review the detected target and configuration before confirming.
+Select `dry_run` to observe what automatic remediation would do. Manual
+`sermoctl` operations act on the service even in this mode.
 
-# List catalog inventory
-sermoctl services catalog      # packaged catalog service profiles (nginx, mariadb, ...)
-sermoctl services catalog all  # include profiles not installed on this host
-sermoctl apps          # tools/runtimes (only installed)
-sermoctl apps all      # include not-installed
-sermoctl libs          # shared libraries (restart triggers)
-sermoctl apps refresh  # make sermod re-check installed apps now (also libs refresh, watch refresh)
-
-# Validate configuration
+```sh
+sermoctl wizard service
 sermoctl config validate
+```
 
-# Operate a configured service through the safe engine
-sermoctl restart apache-main
-sermoctl pause vm-web            # suspend a libvirt VM or pause a Docker container
+To run the daemon in the foreground with the installed configuration, use
+`sermod run --config /etc/sermo/sermo.yml`.
 
-# Pause / resume monitoring of a service (e.g. for maintenance)
-sermoctl unmonitor apache-main   # daemon stops checking it
-sermoctl monitor apache-main     # resume
-sermoctl daemon reload           # ask sermod to re-read its config
+Once the daemon is running and the service is configured, use these queries
+to investigate an incident. Substitute your configured service name for `nginx`.
 
-# Fence a maintenance window with a named runtime lock
-sermoctl lock apache-main --reason backup --ttl 1h -- /usr/local/bin/backup.sh
+```sh
+sermoctl processes nginx   # processes attributed to the service
+sermoctl locks nginx       # active maintenance locks
+sermoctl events nginx      # what happened and how it ended
+sermoctl sla nginx         # observed availability
+```
 
-# Availability (SLA) over rolling windows (hour..year)
-sermoctl sla                     # every service and availability watch
-sermoctl sla apache-main         # one service
-sermoctl sla --series apache-main --since 168h  # stored series; buckets follow the window
+To protect a maintenance job, wrap the actual command in a lock with an
+expiry. For example, if the service is named `mariadb` and the backup takes
+less than an hour, the following command runs the backup script and holds the
+lock while it runs.
 
-# Run the daemon
-sermod run --config /etc/sermo/sermo.yml
+```sh
+sermoctl lock mariadb --reason backup --ttl 1h -- /usr/local/bin/backup.sh
 ```
 
 Packaged definitions live under [`catalog/`](catalog/), sample configs under
@@ -333,9 +319,7 @@ Daemon flags (`--verbose`) are in
   policy.
 - [Services](docs/services.md) — writing and overriding services.
 - [CLI](docs/cli.md) — commands, flags and exit codes.
-- [Safety](docs/safety.md) — the invariants that cannot be disabled: no
-  unguarded actions, no SIGKILL by default, never kill by name (exact
-  resolved-exe + UID match only).
+- [Safety](docs/safety.md) — requirements for service operations, process identity and signalling.
 - [Web dashboard](docs/configuration.md#web-ui) — enabling the dashboard, its
   access model and what it shows.
 - [Architecture](docs/architecture.md) — end-to-end diagrams of the daemon,

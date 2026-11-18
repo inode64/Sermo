@@ -1,58 +1,34 @@
 # Sermo
 
-**Sermo es un supervisor de servicios portable y con la seguridad primero para
-hosts Linux.** Se sitúa por encima de **systemd** y **OpenRC**, valida un
-servicio antes de actuar sobre él, entiende los procesos *reales* del servicio, y
-aplica reglas de remediación **con salvaguardas** — nunca reinicia a ciegas ni
-mata el proceso equivocado.
+[English](README.md) · [Comparativa](#comparativa) · [Primeros pasos](#primeros-pasos) · [Documentación](#documentación)
 
-Donde un sistema de init responde "¿está activa la unidad?", Sermo responde las
-preguntas operativas difíciles: *¿está el servicio realmente sano, es seguro
-tocarlo ahora mismo y, si no está sano, cuál es la acción segura?* Monitoriza,
-diagnostica, remedia bajo invariantes estrictos, guarda historial de
-disponibilidad (SLA), vigila recursos a nivel de host, envía notificaciones y
-sirve un dashboard web en vivo — todo desde un único daemon.
+**Sermo supervisa servicios Linux y comprueba si es seguro reiniciarlos.** Se ejecuta en el propio servidor junto a systemd u OpenRC. Un solo demonio prueba lo que usan los clientes, desde una petición HTTP hasta una conexión a la base de datos, y registra por qué ha intervenido o ha dejado el servicio en marcha.
 
-![El dashboard de Sermo en un ordenador: el resumen del host y el panel de Sesiones con las sesiones de SSH, tmux, screen y SMB y las sentencias de base de datos en ejecución](docs/images/dashboard-desktop.png)
+Piensa en MariaDB durante una copia de seguridad. Si el perfil del catálogo detecta un proceso de copia como `mariadb-dump` ejecutándose con el usuario de backup configurado, bloquea tanto la parada como el reinicio. La misma protección se aplica si lo pide un administrador con `sermoctl` o si se dispara una regla de recuperación. Puedes consultar el motivo con `sermoctl events mariadb`. [Perfil de MariaDB](catalog/services/mariadb.yml)
 
-*Quién está en el host y qué se está ejecutando: accesos por SSH, sesiones de
-tmux y screen, clientes SMB y las sentencias en ejecución en MariaDB y
-PostgreSQL, cada una con su CPU, memoria y E/S. Más en
-[Capturas](#capturas).*
+![Panel de Sermo con el estado del servidor, las sesiones SSH activas y las consultas en ejecución](docs/images/dashboard-desktop.png)
 
 ## Por qué Sermo
 
-Un supervisor de "reiniciar al fallar" simple es peligroso en un host real:
-reinicia durante un backup, mata un proceso que casualmente comparte nombre de
-binario, o actúa sobre un servicio cuya config está rota y empeora la caída.
-Sermo se construye sobre el principio opuesto — **demostrar que es seguro y luego
-actuar**:
+- **Detecta un error de configuración antes de parar Nginx.** El perfil de Nginx ejecuta `nginx -t` antes de reiniciar. Tras el arranque, Sermo comprueba el endpoint HTTP configurado para que puedas ver si la aplicación vuelve a atender peticiones. [Perfil de Nginx](catalog/services/nginx.yml)
+- **Distingue la saturación de una caída.** Si una sonda de base de datos compatible recibe «demasiadas conexiones», Sermo registra que el servidor está ocupado. Esa respuesta puede generar una alerta y nunca desencadena un reinicio. El panel de sesiones muestra las consultas en ejecución para investigar la carga. [Servidores ocupados](docs/safety.md#busy-servers) · [Panel web](docs/configuration.md#web-ui)
+- **Localiza servicios que aún usan bibliotecas antiguas.** Tras actualizar un paquete, puedes inspeccionar el ejecutable y las bibliotecas que el proceso mantiene en memoria. Nginx puede reiniciarse cuando cambia la biblioteca OpenSSL configurada en su perfil. El perfil de MariaDB avisa de las bibliotecas reemplazadas para que puedas programar el reinicio. [Perfil de Nginx](catalog/services/nginx.yml) · [Perfil de MariaDB](catalog/services/mariadb.yml)
+- **Reconstruye la incidencia en el cambio de guardia.** Contrasta las comprobaciones fallidas y el resultado de cada operación con la gráfica de latencia y el historial de disponibilidad. Los intervalos sin observaciones quedan visibles, de modo que una parada del monitor no aumenta el tiempo de caída. [Disponibilidad](docs/configuration.md#availability-sla)
 
-- **Con salvaguardas, nunca a ciegas.** Cada start/stop/restart/reload/resume/pause,
-  además de la reparación manual de un pidfile obsoleto, pasa por un único engine
-  de operación que comprueba antes el preflight, los guards y los locks de
-  runtime. Una acción bloqueada no se ejecuta.
-- **Conoce los procesos reales.** Descubre los PIDs reales del servicio desde
-  `/proc`, de modo que la salud, la detección de residuales y los (raros, opt-in)
-  kills se basan en el ejecutable resuelto y el UID — nunca en un nombre de
-  proceso.
-- **Valida antes de tocar nada.** Config rota, un preflight requerido que falla o
-  un lock con nombre activo bloquean la remediación en vez de amplificar una
-  caída.
-- **Ocupado no es caído.** Un servidor que responde "too many connections" o
-  "loading" se reporta con su propio motivo, nunca se reinicia por ello.
-- **Portable.** La misma configuración y comportamiento corren sobre systemd *y*
-  OpenRC; el backend de init se autodetecta.
-- **Disponibilidad honesta.** El SLA cuenta solo los ciclos que realmente
-  observó — el tiempo anterior a que pudiera existir evidencia es un hueco, no se
-  cuenta como caída.
+## Comparativa
+
+| Herramienta | Qué supervisa | Cómo recupera el servicio | Cuándo encaja |
+|---|---|---|---|
+| **Sermo** | Protocolos de aplicación, procesos de servicio, cargas Docker y libvirt, almacenamiento y red del host | Las comprobaciones del catálogo, los bloqueos de mantenimiento y las reglas de protección gobiernan las operaciones. Cada reinicio verifica la parada y el arranque y registra el resultado. | Recuperación en el propio host con panel local e historial de SLA, tanto en systemd como en OpenRC. [Modelo de seguridad](docs/safety.md) |
+| **Monit** | Procesos locales, ficheros, sistemas de archivos y servicios de red | Una prueba puede avisar, ejecutar un programa o invocar los métodos configurados para el servicio. Los ciclos y las dependencias condicionan la intervención. | Sistemas Unix donde quieres definir las pruebas y los comandos de recuperación en un fichero de control. [Manual de Monit](https://mmonit.com/monit/documentation/monit.html) |
+| **Unidades de servicio de systemd** | Estado de la unidad, terminación de procesos y señales periódicas de los servicios que usan el watchdog | `Restart=` selecciona las condiciones de salida que provocan un reinicio. La unidad puede ejecutar comprobaciones de arranque con `ExecStartPre=`. | Supervisión de procesos integrada en systemd. Sermo puede usar esa misma unidad para operar el servicio. [systemd.service](https://www.freedesktop.org/software/systemd/man/latest/systemd.service.html) |
+| **Zabbix** | Métricas y eventos de múltiples servidores, aplicaciones y dispositivos de red | Los disparadores activan notificaciones y comandos remotos configurados. El mantenimiento programado permite pausar operaciones asociadas a problemas silenciados. | Paneles y alertas centralizados para toda la flota. [Descripción](https://www.zabbix.com/documentation/current/en/manual/introduction) · [Comandos remotos](https://www.zabbix.com/documentation/current/en/manual/config/notifications/action/operation/remote_command) · [Mantenimiento](https://www.zabbix.com/documentation/current/en/manual/events/maintenance) |
 
 ## Características
 
 **Monitorización y salud**
-- Una **flota de workers independientes** — uno por servicio — cada uno
-  ejecutando sus propios checks, evaluando reglas y dirigiendo la remediación en
-  su propia cadencia; un panic en un worker nunca tumba el daemon.
+
+- **Supervisión independiente por servicio.** Cada servicio ejecuta sus comprobaciones y evalúa sus reglas a su propio ritmo. Un fallo en su rutina de supervisión queda aislado del resto del demonio.
 - Un amplio **catálogo de checks** ([lista completa](docs/rules.md#checks)):
   estado/versión/config del servicio, puertos TCP, endpoints HTTP(S) y
   WebSocket, expiración de certificados TLS, sondas nativas de protocolo
@@ -77,8 +53,11 @@ actuar**:
   de los que no responde ninguna unidad de init ni paquete instalado. Aparecer
   en la lista no autoriza nada: solo el `kill_only_if` del propio watch o la
   elección verificada de un administrador le envían una señal.
+- **Diagnóstico del host.** Correlaciona errores de logs, descriptores de fichero agotados, procesos zombis y unidades fallidas con el estado de los servicios. Hay comprobaciones específicas para la batería de un SAI con NUT y la salud de un clúster GlusterFS. [Catálogo de comprobaciones](docs/rules.md#checks)
+- **Máquinas virtuales y contenedores.** Los asistentes descubren cargas de Docker y libvirt. Puedes comprobar su disponibilidad y pausarlas o reanudarlas desde la misma CLI. Sermo bloquea la destrucción de una red virtual con invitados conectados. [Servicios](docs/services.md) · [Seguridad](docs/safety.md)
 
 **Remediación segura**
+
 - Un único **engine de operación** compartido por la CLI y el daemon: lock de
   operación → locks de runtime con nombre → preflight requerido → guards →
   stop → verificar procesos y conciliar init → start →
@@ -91,13 +70,15 @@ actuar**:
 - **Invariantes de seguridad duros** que el YAML no puede desactivar (ver abajo).
 
 **Disponibilidad e historial**
+
 - **SLA en ventanas móviles** (hora → año) para cada servicio y watch de
   disponibilidad, guardado como un archivo por ventana de gráfica para que un año
   de historial siga acotado sin perder ningún incidente.
 - Un **registro de eventos/actividad** con retención y compactación del almacén
   de estado.
 
-**Operar**
+**Herramientas de operación**
+
 - Una **CLI** de operador enfocada (`sermoctl`) para status, acciones de ciclo de
   vida seguras, validación de config, locks, procesos, preflight, inventario, SLA
   y eventos.
@@ -117,6 +98,7 @@ actuar**:
   mount, volume, net, uplink).
 
 **Dashboard web** (opcional)
+
 - Un dashboard en vivo y autocontenido: checks por servicio, historial de SLA,
   gráficas de latencia, un feed de eventos, y el inventario completo (servicios /
   apps / librerías) y los host watches.
@@ -214,17 +196,16 @@ No se pueden desactivar en YAML — la validación rechaza cualquier toggle
    de control propio del servicio. SIGKILL además necesita `force_kill`: el
    valor por defecto del motor es `false`; el `sermo.yml` que se instala fija
    `auto`.
-5. **Nunca matar por nombre de proceso** — un kill requiere coincidencia exacta
-   de la ruta `/proc/<pid>/exe` resuelta **y** del UID real; la línea de comandos
-   solo acota una coincidencia, y cualquier cosa que Sermo no pueda identificar
-   positivamente se *reporta, no se mata*.
+5. **El nombre de un proceso nunca autoriza una señal.** Sermo revalida la
+   identidad al enviarla mediante un `pidfd`. Para un proceso residual del
+   servicio exige el ejecutable y el usuario esperados, o la pertenencia al
+   grupo de control del servicio demostrada por el kernel.
 6. **Nunca enviar señales de terminación a PID 1 ni a hilos del kernel** —
    bloqueado centralmente, no configurable.
 7. **`force_kill: true` requiere `kill_only_if`** con selectores `users` y
    `exe_any` no vacíos.
 8. **Un restart siempre verifica el stop y el start** bajo los mismos locks,
-   preflight, guards y plazo; los procesos que sobreviven bloquean el nuevo
-   start.
+   preflight, guards y plazo; si quedan procesos residuales sin resolver, se bloquea el nuevo arranque.
 9. **Un proceso *stray* es un diagnóstico, nunca un objetivo** — un miembro del
    grupo de control que ningún selector reclama se reporta, y nada le envía
    señales por serlo.
@@ -236,11 +217,11 @@ No se pueden desactivar en YAML — la validación rechaza cualquier toggle
 13. **Un servidor ocupado nunca se reinicia por estar ocupado** — "too many
     connections", "loading" o "starting up" significa que está vivo.
 
-## Build
+## Compilación
 
 ```sh
-make build      # produces bin/sermoctl and bin/sermod
-make test       # run the test suite
+make build      # genera bin/sermoctl y bin/sermod
+make test       # ejecuta las pruebas
 ```
 
 Requiere Go 1.27.4+. Dependencias de runtime: `systemctl` o `rc-service` en el host.
@@ -254,7 +235,7 @@ entrada confiable, propiedad de root — los checks `command` y los `hook`s se e
 entorno (`${env:NAME}`). Ver [safety](docs/safety.md#privileges-the-daemon-runs-as-root).
 Los comandos de `sermoctl` de solo lectura (status, config, etc.) no necesitan root.
 
-## Install
+## Instalación
 
 `make install` respeta las variables estándar de directorios GNU y el staging de
 `DESTDIR`, e instala los binarios, el catálogo completo (manteniendo el
@@ -266,7 +247,7 @@ añade la regla de logrotate que lo rota en el sitio (`copytruncate`):
 
 ```sh
 sudo make install PREFIX=/usr                 # /usr/bin, /usr/sbin or merged-/usr /usr/bin, /etc/sermo, ...
-make install DESTDIR=/tmp/stage PREFIX=/usr    # stage for packaging
+make install DESTDIR=/tmp/stage PREFIX=/usr    # preparar el árbol para empaquetarlo
 ```
 
 Variables clave (anula en la línea de comandos): `DESTDIR`, `PREFIX`/`prefix`,
@@ -293,49 +274,47 @@ o extrae archivos de prueba ad-hoc con:
 sudo tar --no-overwrite-dir -C / -xpf sermo-stage.tar
 ```
 
-## Quick start
+## Primeros pasos
+
+Con los binarios instalados, identifica el sistema de init, consulta una unidad
+existente y descubre qué perfiles del catálogo reconoce Sermo en este host.
 
 ```sh
-# Inspect a unit (no config needed)
 sermoctl backend
 sermoctl status nginx
-sermoctl is-active nginx
+sermoctl services catalog
+```
 
-# Listar los servicios configurados (unidades init, contenedores Docker, VMs)
-sermoctl services                     # SERVICE / TYPE / STATE / MONITORED
-sermoctl services --notify ops-email  # enviar por email un informe de salud
-sermoctl patterns                     # juegos de patrones en uso
+Para incorporar un servicio, ejecuta el asistente con permisos de administrador.
+Revisa el destino detectado y la configuración antes de confirmar. Selecciona
+`dry_run` para observar qué harían las reglas automáticas. Las operaciones
+manuales de `sermoctl` actúan sobre el servicio incluso en ese modo.
 
-# Listar el inventario del catálogo
-sermoctl services catalog      # perfiles de servicio del catálogo (nginx, mariadb, ...)
-sermoctl services catalog all  # incluir perfiles no instalados en este host
-sermoctl apps          # tools/runtimes (only installed)
-sermoctl apps all      # include not-installed
-sermoctl libs          # shared libraries (restart triggers)
-sermoctl apps refresh  # que sermod vuelva a comprobar ya las apps (también libs refresh, watch refresh)
-
-# Validate configuration
+```sh
+sermoctl wizard service
 sermoctl config validate
+```
 
-# Operate a configured service through the safe engine
-sermoctl restart apache-main
-sermoctl pause vm-web            # suspender una VM de libvirt o pausar un contenedor Docker
+Para ejecutar el demonio en primer plano con la configuración instalada, usa
+`sermod run --config /etc/sermo/sermo.yml`.
 
-# Pause / resume monitoring of a service (e.g. for maintenance)
-sermoctl unmonitor apache-main   # daemon stops checking it
-sermoctl monitor apache-main     # resume
-sermoctl daemon reload           # ask sermod to re-read its config
+Con el demonio en marcha y el servicio configurado, estas consultas sirven
+para investigar una incidencia. Sustituye `nginx` por el nombre configurado.
 
-# Fence a maintenance window with a named runtime lock
-sermoctl lock apache-main --reason backup --ttl 1h -- /usr/local/bin/backup.sh
+```sh
+sermoctl processes nginx   # procesos atribuidos al servicio
+sermoctl locks nginx       # bloqueos de mantenimiento activos
+sermoctl events nginx      # qué ocurrió y con qué resultado
+sermoctl sla nginx         # disponibilidad observada
+```
 
-# Disponibilidad (SLA) en ventanas móviles (hora..año)
-sermoctl sla                     # cada servicio y watch de disponibilidad
-sermoctl sla apache-main         # un servicio
-sermoctl sla --series apache-main --since 168h  # serie guardada; los tramos siguen a la ventana
+Para proteger una tarea de mantenimiento, envuelve el comando real con un
+bloqueo con caducidad. Por ejemplo, si el servicio se llama `mariadb` y la
+copia dura menos de una hora, el siguiente comando ejecuta el script de copia
+y mantiene el bloqueo mientras se ejecuta.
 
-# Run the daemon
-sermod run --config /etc/sermo/sermo.yml
+```sh
+sermoctl lock mariadb --reason backup --ttl 1h -- /usr/local/bin/backup.sh
 ```
 
 Las definiciones empaquetadas viven en [`catalog/`](catalog/), las configs de ejemplo en
@@ -345,7 +324,7 @@ layout de archivos en el host está en
 Los flags del daemon (`--verbose`) están en
 [CLI → sermod daemon flags](docs/cli.md#sermod-daemon-flags).
 
-## Documentation
+## Documentación
 
 - [Configuration](docs/configuration.md) — config global, catalog services, servicios,
   merge y variables; [`docs/sermo-all.yml`](docs/sermo-all.yml) es el
@@ -354,9 +333,7 @@ Los flags del daemon (`--verbose`) están en
   remediación.
 - [Services](docs/services.md) — escritura y override de servicios.
 - [CLI](docs/cli.md) — comandos, flags y códigos de salida.
-- [Safety](docs/safety.md) — los invariantes que no se pueden desactivar: sin
-  acciones sin salvaguarda, sin SIGKILL por defecto, nunca matar por nombre (solo
-  coincidencia exacta de exe-resuelto + UID).
+- [Seguridad](docs/safety.md) — requisitos para operar un servicio, verificar procesos y enviar señales.
 - [Web dashboard](docs/configuration.md#web-ui) — qué significa cada panel,
   badge y gráfica del dashboard.
 - [Architecture](docs/architecture.md) — diagramas de extremo a extremo del
