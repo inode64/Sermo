@@ -378,12 +378,24 @@ var unpromotedWatchKeys = [...]string{
 	keyMonitor, sectionPolicy, sectionMetrics, keyMount, WatchKeyRAIDControl, WatchKeyReplicationControl,
 }
 
+// ruleWindowKeys shape only the rule a then.action generates. A check-only
+// entry becomes a check, graded on every cycle, so a window there would be
+// dropped while the check still reports from its first failed cycle.
+var ruleWindowKeys = [...]string{rules.RuleFieldFor, rules.RuleFieldWithin, rules.RuleFieldClear}
+
 // validatePromotedWatch reports what a check-only or then.action entry declares
 // that promotion cannot honor. action is "" for a check-only entry.
 func validatePromotedWatch(name, action string, entry map[string]any, add addFunc) {
 	for _, key := range unpromotedWatchKeys {
 		if _, present := entry[key]; present {
 			add("%s is not supported on a watch that becomes a check or rule (one with no then, or with then.action)", watchFieldPath(name, key))
+		}
+	}
+	if action == "" {
+		for _, key := range ruleWindowKeys {
+			if _, present := entry[key]; present {
+				add("%s is not supported on a watch with no then: it becomes a check, graded on every cycle; add then: { action: alert, message: ... } to wait for the window", watchFieldPath(name, key))
+			}
 		}
 	}
 	raw, present := entry[keyDryRun]

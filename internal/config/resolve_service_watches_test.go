@@ -454,6 +454,23 @@ func TestValidateUnifiedWatchActions(t *testing.T) {
     monitor: disabled
     check: { type: tcp, host: 127.0.0.1, port: 80 }
 `, "watches.w.monitor is not supported on a watch that becomes a check or rule"},
+		// The window used to be dropped silently: the check opened its
+		// incident on the first failed cycle the operator meant to absorb.
+		{"for on a check-only watch", `watches:
+  w:
+    check: { type: tcp, host: 127.0.0.1, port: 80 }
+    for: { cycles: 2 }
+`, "watches.w.for is not supported on a watch with no then"},
+		{"within on a check-only watch", `watches:
+  w:
+    check: { type: tcp, host: 127.0.0.1, port: 80 }
+    within: { cycles: 5, min_matches: 3 }
+`, "watches.w.within is not supported on a watch with no then"},
+		{"clear on a check-only watch", `watches:
+  w:
+    check: { type: tcp, host: 127.0.0.1, port: 80 }
+    clear: { cycles: 2 }
+`, "watches.w.clear is not supported on a watch with no then"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -603,18 +620,15 @@ func hasIssueSubstr(errs []string, sub string) bool {
 }
 
 // A watch that declares no `then:` is promoted to a plain check and its entry is
-// removed, so no rule is generated for it. A `for:` window on such a watch is
-// therefore inert — only buildServiceWatchRule ever carries one, and that runs
-// solely on the `then:` path. `optional` behaves the opposite way: it lives
-// inside the check itself and survives the promotion, which is what keeps a
-// transient breach a warning instead of an unavailable service.
+// removed, so no rule is generated for it (nor could it carry a `for:` window,
+// which TestValidateUnifiedWatchActions refuses there). `optional` lives inside
+// the check itself and survives the promotion, which is what keeps a transient
+// breach a warning instead of an unavailable service.
 func TestCheckOnlyWatchKeepsOptionalAndGeneratesNoRule(t *testing.T) {
 	tree, errs := resolveWatchService(t, `
 watches:
   cluster:
     interval: 2m
-    for:
-      cycles: 3
     check:
       type: gluster_cluster
       optional: true
@@ -635,7 +649,7 @@ watches:
 	}
 	if ruleMap, ok := tree["rules"].(map[string]any); ok {
 		if _, exists := ruleMap["cluster"]; exists {
-			t.Fatal("a check-only watch generates no rule, so its for: window is inert; if that changed, revisit the window instead of relying on optional")
+			t.Fatal("a check-only watch generates no rule")
 		}
 	}
 }

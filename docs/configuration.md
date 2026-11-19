@@ -3295,7 +3295,10 @@ higher one.
 
 A service watch with no `then` is a check-only entry: on resolution it becomes
 `checks.<watch>` and participates in service health/SLA/post-operation
-verification exactly like a hand-written check. A watch with `then` is **either**
+verification exactly like a hand-written check. It is graded on every cycle,
+so `for`, `within` and `clear` are refused on it: only the rule a `then.action`
+generates reads a window. To wait before announcing a failure, add
+`then: { action: alert, message: … }`. A watch with `then` is **either**
 an operation/alert (`then.action`) **or** a fire-and-forget side effect
 (`hook`/`expand`/`kill`) — not both. The classic `checks:` + `rules:` sections
 remain fully valid for hand-written sharing, but catalog service profiles use
