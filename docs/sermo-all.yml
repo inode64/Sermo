@@ -1184,6 +1184,7 @@ watches:
       type: sql
       engine: sqlite
       path: /var/lib/demo/demo.db
+      absent_value: 0  # optional: the result while the file does not exist yet
       query: "select count(*) from sqlite_master"
       op: ">="
       value: 0

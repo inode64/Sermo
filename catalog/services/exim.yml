@@ -250,6 +250,9 @@ watches:
       type: sql
       engine: sqlite
       path: ${db_dir}/callout
+      # Exim creates each hints database on first use; until then it holds no
+      # records.
+      absent_value: 0
       query: "SELECT count(*) FROM ${callout_db_table}"
       op: '>'
       value: ${db_cleanup_record_limit}
@@ -273,6 +276,9 @@ watches:
       type: sql
       engine: sqlite
       path: ${db_dir}/retry
+      # Exim creates each hints database on first use; until then it holds no
+      # records.
+      absent_value: 0
       query: "SELECT count(*) FROM ${retry_db_table}"
       op: '>'
       value: ${db_cleanup_record_limit}

@@ -1665,6 +1665,15 @@ func validateSQLFields(prefix string, fields map[string]any, add addFunc) {
 	if defaultsFile != "" && !checks.IsMySQLEngine(engine) {
 		add("%s.%s applies to mysql and mariadb sql checks only", prefix, checks.CheckKeyDefaultsFile)
 	}
+	if raw, present := fields[checks.CheckKeyAbsentValue]; present {
+		if engine != checks.SQLEngineSQLite {
+			add("%s.%s applies to sqlite sql checks only", prefix, checks.CheckKeyAbsentValue)
+		}
+		switch raw.(type) {
+		case nil, map[string]any, []any:
+			add("%s.%s must be a scalar: the result the query stands for while the database file does not exist", prefix, checks.CheckKeyAbsentValue)
+		}
+	}
 }
 
 // validateMySQLAccount validates how a mysql/mariadb check (sql, replication)

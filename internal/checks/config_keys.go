@@ -9,6 +9,7 @@ import (
 // names are part of Sermo's public configuration surface.
 const (
 	CheckKeyAbsentOK              = "absent_ok"
+	CheckKeyAbsentValue           = "absent_value"
 	CheckKeyAnalyze               = "analyze"
 	CheckKeyAllow                 = "allow"
 	CheckKeyArray                 = "array"

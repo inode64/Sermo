@@ -123,6 +123,36 @@ checks:
 			want: []string{"checks.conns.defaults_file applies to mysql and mariadb sql checks only"},
 		},
 		{
+			name: "sqlite sql check reads absent_value for a missing database",
+			service: `
+name: mta
+service: x
+checks:
+  retry: { type: sql, engine: sqlite, path: /var/spool/exim/db/retry, query: "select count(*) from tbl", op: ">", value: 5000, absent_value: 0 }
+`,
+			absent: []string{"checks.retry"},
+		},
+		{
+			name: "sql absent_value is sqlite only",
+			service: `
+name: db
+service: x
+checks:
+  rows: { type: sql, engine: postgres, user: u, query: "select 1", op: ">=", value: 1, absent_value: 0 }
+`,
+			want: []string{"checks.rows.absent_value applies to sqlite sql checks only"},
+		},
+		{
+			name: "sql absent_value must be a scalar",
+			service: `
+name: mta
+service: x
+checks:
+  retry: { type: sql, engine: sqlite, path: /db, query: "select 1", op: ">", value: 1, absent_value: [0] }
+`,
+			want: []string{"checks.retry.absent_value must be a scalar: the result the query stands for while the database file does not exist"},
+		},
+		{
 			name: "sslmode rejected for mongodb query check",
 			service: `
 name: db

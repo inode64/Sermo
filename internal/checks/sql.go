@@ -3,12 +3,15 @@ package checks
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
+	"io/fs"
 	"strings"
 	"time"
 
 	"sermo/internal/cfgval"
 	"sermo/internal/conn"
+	"sermo/internal/hostfs"
 )
 
 // sqlCheck is condition-style: OK means the scalar query result matches
@@ -21,6 +24,10 @@ type sqlCheck struct {
 	query  string
 	valueMatcher
 	grades grades[valueMatcher]
+	// path and absentValue belong to a sqlite check declaring absent_value:
+	// the result its query stands for while the file does not exist yet.
+	path        string
+	absentValue *string
 }
 
 func (c sqlCheck) Run(ctx context.Context) Result {
@@ -31,6 +38,9 @@ func (c sqlCheck) Run(ctx context.Context) Result {
 	data := map[string]any{
 		DataKeyEngine: c.engine,
 		DataKeyQuery:  c.query,
+	}
+	if res, absent := c.absentResult(start, data); absent {
+		return res
 	}
 	db, err := c.open()
 	if err != nil {
@@ -48,6 +58,24 @@ func (c sqlCheck) Run(ctx context.Context) Result {
 
 	res := finishScalarCompare(c.base, "sql "+c.engine, result, c.valueMatcher, start, data)
 	return c.grade(res, result)
+}
+
+// absentResult reads a sqlite database whose file does not exist yet as the
+// declared absent_value. Some programs create their database on first use
+// (Exim's hints databases), and until then the file's absence is the normal
+// state, not a failed measurement. Any other stat error falls through to the
+// open, which reports it.
+func (c sqlCheck) absentResult(start time.Time, data map[string]any) (Result, bool) {
+	if c.absentValue == nil {
+		return Result{}, false
+	}
+	if _, err := hostfs.StatTarget(c.path); !errors.Is(err, fs.ErrNotExist) {
+		return Result{}, false
+	}
+	data[DataKeyPath] = c.path
+	res := finishScalarCompare(c.base, "sql "+c.engine, *c.absentValue, c.valueMatcher, start, data)
+	res.Message += fmt.Sprintf(" (%s does not exist; read as absent_value)", c.path)
+	return c.grade(res, *c.absentValue), true
 }
 
 // failure reports a connection or query error (see driverFailure).
@@ -133,11 +161,17 @@ func buildSQLCheck(b base, entry map[string]any) (Check, string) {
 	}
 
 	var open func() (*sql.DB, error)
+	var path string
+	var absentValue *string
 	switch driver {
 	case SQLEngineSQLite:
-		path := cfgval.AsString(entry[CheckKeyPath])
+		path = cfgval.AsString(entry[CheckKeyPath])
 		if path == "" {
 			return nil, "sql check (sqlite) requires a path"
+		}
+		if raw, present := entry[CheckKeyAbsentValue]; present {
+			value := cfgval.String(raw)
+			absentValue = &value
 		}
 		dsn := sqliteReadOnlyDSN(path)
 		open = func() (*sql.DB, error) {
@@ -154,7 +188,7 @@ func buildSQLCheck(b base, entry map[string]any) (Check, string) {
 		}
 	}
 	return sqlCheck{base: b, engine: engine, open: open, query: query, valueMatcher: newValueMatcher(op, value),
-		grades: sqlGrades(b.levels)}, ""
+		grades: sqlGrades(b.levels), path: path, absentValue: absentValue}, ""
 }
 
 // sqlServerOpener returns the opener for a mysql or postgres sql check; a mysql

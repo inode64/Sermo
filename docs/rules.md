@@ -2612,6 +2612,13 @@ checks:
   the mysql client run by root connects, and root keeps the server's one
   reserved connection, so the check still reads while ordinary clients get
   "too many connections".
+- **`absent_value`** (`sqlite` only, a scalar) is the result the query stands
+  for while the database file does not exist. Use it for a program that
+  creates its database on first use, so that the file's absence is the normal
+  state rather than a failed reading. Exim's hints databases are an example:
+  `absent_value: 0` makes a cleanup watch read "0 records" until the first
+  deferral creates the file. Only a missing file takes this value; any other
+  error opening or querying the database keeps the check unavailable.
 - **`levels:`** restate `op` + `value` with a stricter bound to escalate a
   matching result, e.g. warning from 80 and error from 95:
 
@@ -2632,8 +2639,8 @@ checks:
 
 - Result data carries `engine`, `query`, `op`, `threshold`, the raw `result`
   string and, when numeric, a `value` for hooks/rules. A query error, a missing
-  database or a `NULL` result makes the check unavailable, not a threshold
-  verdict. A server that refuses the
+  database without `absent_value` or a `NULL` result makes the check
+  unavailable, not a threshold verdict. A server that refuses the
   connection or the query as saturated or not ready is
   [busy](#busy-servers), with `busy_reason` and `error_code`. The check only
   reads — point it at a read-only user.

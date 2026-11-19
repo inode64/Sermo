@@ -3,7 +3,9 @@ package checks
 import (
 	"context"
 	"database/sql"
+	"maps"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -159,4 +161,52 @@ func TestSQLConnConfigHostDefault(t *testing.T) {
 	if got := sqlConnConfig("mysql", map[string]any{"user": "u", "host": "db.internal"}).Host; got != "db.internal" {
 		t.Errorf("explicit host = %q, want db.internal", got)
 	}
+}
+
+// TestSQLCheckSQLiteAbsentValue pins how a sqlite sql check reads a database
+// that does not exist yet. Exim creates its hints databases on first use, so
+// without absent_value a host that never deferred a message showed its cleanup
+// watch failed; with it the query stands for that value, and only an absent
+// file does, so a present database and any other error keep their readings.
+func TestSQLCheckSQLiteAbsentValue(t *testing.T) {
+	missing := filepath.Join(t.TempDir(), "retry")
+	run := func(t *testing.T, entry map[string]any) Result {
+		t.Helper()
+		check := map[string]any{"type": "sql", "engine": "sqlite", "query": "SELECT count(*) FROM meta", "op": ">", "value": "5000"}
+		maps.Copy(check, entry)
+		built, warns := Build(map[string]any{"retry": check}, Deps{DefaultTimeout: time.Second})
+		if len(warns) != 0 || len(built) != 1 {
+			t.Fatalf("sql check should build: warns=%v", warns)
+		}
+		return built[0].Check.Run(context.Background())
+	}
+
+	t.Run("absent file reads as absent_value", func(t *testing.T) {
+		res := run(t, map[string]any{"path": missing, "absent_value": 0})
+		if res.OK || res.Unavailable || res.Observation() != ObservationHealthy {
+			t.Fatalf("an absent database below the limit must be healthy: %+v", res)
+		}
+		if res.Data[DataKeyValue] != float64(0) || res.Data[DataKeyPath] != missing {
+			t.Fatalf("data = %v, want value 0 and the path", res.Data)
+		}
+		if !strings.Contains(res.Message, "does not exist") {
+			t.Fatalf("message %q must say the database does not exist", res.Message)
+		}
+	})
+	t.Run("absent_value still meets the condition", func(t *testing.T) {
+		if res := run(t, map[string]any{"path": missing, "absent_value": "9000"}); !res.OK || res.Unavailable {
+			t.Fatalf("absent_value above the limit must match the condition: %+v", res)
+		}
+	})
+	t.Run("absent file without absent_value cannot be read", func(t *testing.T) {
+		if res := run(t, map[string]any{"path": missing}); res.OK || !res.Unavailable {
+			t.Fatalf("a missing database without absent_value must stay unavailable: %+v", res)
+		}
+	})
+	t.Run("present database is queried", func(t *testing.T) {
+		res := run(t, map[string]any{"path": makeSQLMetaDB(t), "absent_value": "9000"})
+		if res.OK || res.Data[DataKeyValue] != float64(2) {
+			t.Fatalf("a present database must answer its query (2 rows): %+v", res)
+		}
+	})
 }
