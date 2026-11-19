@@ -28,6 +28,11 @@ preflight:
       - -cf
       - ${config}
     timeout: 30s
+    # dhcpd -t logs its banner and every configuration warning to syslog on each
+    # run, and -q would silence the parse errors on stderr this check reports.
+    # The periodic configuration check therefore runs every 6h instead of 15m;
+    # the preflight still tests the file before every start, restart and reload.
+    interval: 6h
 os:
   gentoo:
     pidfile: /run/dhcp/dhcpd.pid

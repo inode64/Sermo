@@ -4003,3 +4003,19 @@ func TestDatabaseCatalogServicesPinStopPolicy(t *testing.T) {
 		})
 	}
 }
+
+// TestCatalogDhcpdConfigurationCheckIsSpaced pins the period of dhcpd's
+// configuration check. dhcpd -t writes its banner and warnings to syslog on
+// every run, so the 15m default put about 800 lines a day in the journal of
+// sermod's unit on each DHCP server, while the preflight before every operation
+// is what keeps a broken file from being started.
+func TestCatalogDhcpdConfigurationCheckIsSpaced(t *testing.T) {
+	resolved := resolveCatalogService(t, "dhcpd", backendOpenRC)
+	check := nested(t, resolved.Tree, sectionChecks, "configuration")
+	if got := cfgval.String(check["interval"]); got != "6h" {
+		t.Fatalf("dhcpd configuration interval = %q, want 6h (check=%v)", got, check)
+	}
+	if got := cfgval.StringList(check["command"]); len(got) < 2 || got[1] != "-t" {
+		t.Fatalf("dhcpd configuration command = %v, want the dhcpd -t test", got)
+	}
+}
