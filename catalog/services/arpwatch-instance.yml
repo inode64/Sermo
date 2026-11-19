@@ -1,0 +1,17 @@
+# One more arpwatch from an OpenRC link to the arpwatch script (arpwatch.eth2,
+# watching another link, say). It is the base profile with the instance's own
+# unit; the pidfile follows the unit, /run/arpwatch.<instance>.pid, as the script
+# passes it with -P. Each OpenRC service runs in its own control group, so a
+# stop of one instance never reads the others as its residuals.
+name: arpwatch.%i
+uses: arpwatch
+display_name: "arpwatch ${instance}"
+description: >-
+  Additional arpwatch ARP monitor instance, run from an OpenRC
+  arpwatch.<instance> link on its own interface and data file.
+service:
+  openrc:
+    - arpwatch.${instance}
+pidfile:
+  path: ${pidfile}
+  optional: true

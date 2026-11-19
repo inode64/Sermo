@@ -77,13 +77,45 @@ func TestCatalogOpenRCLinkInstancesStayOffSystemd(t *testing.T) {
 		"services/pm2.yml": "name: pm2\nuses: pm2\n",
 	})
 	cfg, err := loadConfig(t, global, WithCatalogDirs(repoCatalogDir(repoRoot(t))),
-		withServiceUnits("systemd", []string{"pm2-root.service", "vinylncsa.service"}))
+		withServiceUnits("systemd", []string{"pm2-root.service", "vinylncsa.service", "arpwatch.service"}))
 	if err != nil {
 		t.Fatal(err)
 	}
 	for name := range cfg.CatalogServices {
-		if strings.HasPrefix(name, "pm2.") || strings.HasPrefix(name, "vinylncsa.") {
+		if strings.HasPrefix(name, "pm2.") || strings.HasPrefix(name, "vinylncsa.") || strings.HasPrefix(name, "arpwatch.") {
 			t.Fatalf("systemd host materialized %q from an OpenRC link template", name)
+		}
+	}
+}
+
+// An arpwatch per link runs from OpenRC links to the packaged script
+// (arpwatch.eth2). Each materializes with its own unit and the pidfile the
+// script passes it with -P, so neither the base nor another instance reads its
+// daemon as theirs.
+func TestCatalogArpwatchLinkInstancesMaterialize(t *testing.T) {
+	global := writeConfig(t, map[string]string{
+		"sermo.yml":             "engine: {backend: openrc}\npaths: {services: [@ROOT@/services]}\ndefaults: {policy: {cooldown: 5m}}\n",
+		"services/arpwatch.yml": "name: arpwatch\nuses: arpwatch\n",
+		"services/eth2.yml":     "name: arpwatch.eth2\nuses: arpwatch.eth2\n",
+	})
+	cfg, err := loadConfig(t, global, WithCatalogDirs(repoCatalogDir(repoRoot(t))),
+		withServiceUnits("openrc", []string{"arpwatch", "arpwatch.eth2"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if issues := Validate(cfg); len(issues) != 0 {
+		t.Fatal(issues)
+	}
+	for name, pidfile := range map[string]string{"arpwatch": "/run/arpwatch.pid", "arpwatch.eth2": "/run/arpwatch.eth2.pid"} {
+		resolved, errs := cfg.Resolve(name)
+		if len(errs) != 0 {
+			t.Fatal(errs)
+		}
+		if got := serviceUnitFor(resolved.Tree, backendOpenRC, name); got != name {
+			t.Fatalf("%s unit = %q, want its own", name, got)
+		}
+		if got := cfgval.String(resolved.Tree["pidfile"]); got != pidfile {
+			t.Fatalf("%s pidfile = %q, want %q", name, got, pidfile)
 		}
 	}
 }
