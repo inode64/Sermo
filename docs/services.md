@@ -2723,7 +2723,10 @@ up. Declare one such watch per listener address a client population uses
 resolves the same name through the host's own `/etc/resolv.conf`
 (`resolvconf: true`) and belongs on a host whose resolver is this server with
 no fallback: when named stops answering, the host itself loses name
-resolution, including the one Sermo needs to deliver notifications.
+resolution, including the one Sermo needs to deliver notifications. Both
+alert after a second failed cycle; the check still grades health on every
+cycle. A watch added for another listener needs its own `then.action: alert`
+to wait for that window.
 
 ```yaml
 name: named
@@ -2739,6 +2742,9 @@ watches:
       timeout: 3s
       expect: { rcode: NOERROR, answers: { op: ">", value: 0 } }
     for: { cycles: 2 }
+    then:
+      action: alert
+      message: named on the VPN has not resolved example.com for ${rule.duration}
   resolver:
     enabled: true
   zone-authoritative:       # the zone the server is primary for is loaded

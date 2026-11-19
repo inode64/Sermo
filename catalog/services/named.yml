@@ -66,6 +66,10 @@ watches:
   # `port` check alone keeps passing because the daemon is up. Add one watch
   # per listener address a client population uses (LAN, VPN) so an ACL that
   # covers only some networks is caught.
+  #
+  # One unanswered cycle (a host stall, an upstream that drops one query) is not
+  # an outage worth a notification: the alert waits for a second failed cycle,
+  # while the check still grades health every cycle.
   recursion:
     enabled: false
     check:
@@ -78,6 +82,10 @@ watches:
         rcode: NOERROR
         answers: { op: '>', value: 0 }
     for: { cycles: 2 }
+    then:
+      action: alert
+      message: >-
+        ${display_name} on ${host}:${port} has not resolved ${recursion_query} for ${rule.duration}
   # Enable where the host's own resolv.conf points at this server (or has no
   # fallback): when named stops answering, the host itself loses name
   # resolution, including the one Sermo needs to deliver notifications.
@@ -92,6 +100,10 @@ watches:
         rcode: NOERROR
         answers: { op: '>', value: 0 }
     for: { cycles: 2 }
+    then:
+      action: alert
+      message: >-
+        The resolvers in /etc/resolv.conf have not resolved ${recursion_query} for ${rule.duration}
   alert-if-memory-high:
     check:
       type: metric

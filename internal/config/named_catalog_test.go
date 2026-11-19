@@ -8,7 +8,9 @@ import (
 
 // TestNamedCatalogRecursionRequiresOptIn: the named profile's `recursion` and
 // `resolver` watches stay off by default (an authoritative-only server would
-// answer REFUSED) and resolve into service checks once an instance enables them.
+// answer REFUSED) and resolve into service checks once an instance enables them,
+// each with an alert rule that waits for a second failed cycle. Their `for:` was
+// once declared without a `then:`, which left the window on no rule.
 func TestNamedCatalogRecursionRequiresOptIn(t *testing.T) {
 	for _, enabled := range []bool{false, true} {
 		name := "default"
@@ -41,6 +43,22 @@ func TestNamedCatalogRecursionRequiresOptIn(t *testing.T) {
 			}
 			if _, hasPort := checks["port"]; !hasPort {
 				t.Fatal("the liveness probe must stay on")
+			}
+			resolvedRules, _ := resolved.Tree["rules"].(map[string]any)
+			for _, watch := range []string{"recursion", "resolver"} {
+				rule, hasRule := resolvedRules[watch].(map[string]any)
+				if hasRule != enabled {
+					t.Fatalf("opt-in=%v: rules.%s present=%v", enabled, watch, hasRule)
+				}
+				if !enabled {
+					continue
+				}
+				if got := cfgval.String(nested(t, rule, "then")["action"]); got != "alert" {
+					t.Errorf("rules.%s then.action = %q, want alert", watch, got)
+				}
+				if got := cfgval.String(nested(t, rule, "for")["cycles"]); got != "2" {
+					t.Errorf("rules.%s for.cycles = %q, want 2", watch, got)
+				}
 			}
 			if !enabled {
 				return
