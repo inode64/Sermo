@@ -2128,6 +2128,29 @@ func TestCatalogDaemonProcessChecksAreAuxiliary(t *testing.T) {
 // named one packaged layout and the host used another. A resolved tree collapses
 // a candidate list to whichever path exists there, which is host-dependent, so
 // the invariant is asserted on the raw documents.
+// TestCatalogDnsmasqAlertsAfterTwoFailedCycles pins the debounce of the
+// dnsmasq probes. A required check with no rule opens its incident on the first
+// failed cycle, and a host stall that left dnsmasq unanswered for one cycle sent
+// a DNS and a DHCP error and their recoveries four times in a day.
+func TestCatalogDnsmasqAlertsAfterTwoFailedCycles(t *testing.T) {
+	dnsmasq := catalogDocByName(t, repoRoot(t), "services", "dnsmasq")
+	for _, watch := range []string{"dns", "dhcp"} {
+		entry := nested(t, dnsmasq, "watches", watch)
+		if got := cfgval.String(nested(t, entry, "then")["action"]); got != "alert" {
+			t.Errorf("dnsmasq %s then.action = %q, want alert", watch, got)
+		}
+		if got := cfgval.String(nested(t, entry, "for")["cycles"]); got != "2" {
+			t.Errorf("dnsmasq %s for.cycles = %q, want 2", watch, got)
+		}
+	}
+	// The window lives on the generated rule, which owns the check's alarm.
+	resolved := resolveCatalogService(t, "dnsmasq", backendOpenRC)
+	rule := nested(t, resolved.Tree, rules.SectionRules, "dns")
+	if got := cfgval.String(nested(t, rule, "for")["cycles"]); got != "2" {
+		t.Fatalf("resolved dns rule for.cycles = %q, want 2 (rule=%v)", got, rule)
+	}
+}
+
 // TestCatalogDnsmasqDHCPProbeBroadcastsOnAServedLink pins the probe mode that
 // kept every dnsmasq DHCP server failing: a local server never answers a
 // unicast aimed at 127.0.0.1 (the packet reaches it over lo, where it has no

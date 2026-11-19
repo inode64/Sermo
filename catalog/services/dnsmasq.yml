@@ -65,6 +65,9 @@ watches:
     check:
       type: service
       expect: active
+  # A host stall leaves dnsmasq unanswered for a single cycle (both DNS and DHCP
+  # at once), and that alone is not an outage worth a notification: the alert
+  # waits for a second failed cycle. The check still grades health every cycle.
   dns:
     check:
       type: dns
@@ -72,6 +75,11 @@ watches:
       port: ${port}
       query: ${query}
       timeout: 3s
+    for: { cycles: 2 }
+    then:
+      action: alert
+      message: >-
+        ${display_name} has not answered DNS on ${host}:${port} for ${rule.duration}
   dhcp:
     enable_if:
       file: /etc/dnsmasq.conf
@@ -86,6 +94,11 @@ watches:
       # reply before offering it (the probe's anonymous client never has a
       # lease to reuse), so the offer lands after a 3s timeout every cycle.
       timeout: 10s
+    for: { cycles: 2 }
+    then:
+      action: alert
+      message: >-
+        ${display_name} has not offered a DHCP lease for ${rule.duration}
   tftp:
     enable_if:
       file: /etc/dnsmasq.conf
