@@ -5,7 +5,7 @@ import {
   apiEventsRecentPath, apiHostPath, apiLibrariesPath, apiLocksPath,
   apiHeaderConfirm, apiMountsPath, apiNotifiersPath,
   apiQueryBefore, apiQueryBeforeID,
-  apiQueryForce, apiQueryKill, apiQueryKind, apiQueryLazy, apiQueryLimit, apiQueryName, apiQueryNoCascade,
+  apiQueryFor, apiQueryForce, apiQueryKill, apiQueryKind, apiQueryLazy, apiQueryLimit, apiQueryName, apiQueryNoCascade,
   apiQueryOnlyErrors, apiQueryService, apiQuerySince, apiQueryStatus,
   apiQueryWatch, apiReloadPath, notifierTestAPI,
   apiServicesPath, apiSessionsPath, apiStreamPath, apiWatchesPath, apiWhoamiPath, applicationEventsAPI,
@@ -200,6 +200,8 @@ const actionSilence = "silence";
 const actionPause = "pause";
 const actionReplicationStart = "replication-start";
 const actionMonitor = "monitor";
+const actionMute = "mute";
+const actionUnmute = "unmute";
 const actionReload = "reload";
 const actionRepair = "repair";
 const actionRestart = "restart";
@@ -2812,6 +2814,10 @@ function serviceActionDisabled(s, action, busy) {
     case actionReload: return !!(busy || locked || st !== backendStatusActive || !s.can_reload);
     case actionMonitor:
     case actionUnmonitor: return !!(busy || pendingMonitorToggles.has(serviceExpansionKey(s.name)));
+    // A mute never touches the service, so an operation in flight or a lock
+    // does not hold it back.
+    case actionMute:
+    case actionUnmute: return pendingMonitorToggles.has(notifyMuteToggleKey(expansionPrefixService, s.name));
     default: return false;
   }
 }
@@ -2997,6 +3003,10 @@ const iconMonitor = actionIcon(svg`<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 
 const iconUnmonitor = actionIcon(svg`<path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/><path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c6.5 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"/><path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3.5 7 10 7a9.74 9.74 0 0 0 5.39-1.61"/><line x1="2" x2="22" y1="2" y2="22"/>`);
 const iconBell = actionIcon(svg`<path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"/><path d="M10 21h4"/>`);
 const iconBellOff = actionIcon(svg`<path d="M9 3a6 6 0 0 1 9 5c0 2 .3 4 .8 5M6 6v2c0 7-3 7-3 9h14M10 21h4M2 2l20 20"/>`);
+// The notification mute draws a speaker, not the bell: the bell already
+// silences one watch alarm until its state changes, which is another control.
+const iconSpeaker = actionIcon(svg`<path d="M11 5 6 9H2v6h4l5 4V5z"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/>`);
+const iconSpeakerOff = actionIcon(svg`<path d="M11 5 6 9H2v6h4l5 4V5z"/><line x1="22" x2="16" y1="9" y2="15"/><line x1="16" x2="22" y1="9" y2="15"/>`);
 const iconRepair = actionIcon(svg`<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>`);
 
 // actionMeta is the one vocabulary of action buttons: the icon and, per
@@ -3015,6 +3025,8 @@ const actionMeta = {
   [actionReload]: { glyph: iconReload, service: (n) => `Reload service ${n}` },
   [actionMonitor]: { glyph: iconMonitor, service: (n) => `Monitor service ${n}`, watch: (n) => `Monitor watch ${n}` },
   [actionUnmonitor]: { glyph: iconUnmonitor, service: (n) => `Unmonitor service ${n}`, watch: (n) => `Unmonitor watch ${n}` },
+  [actionMute]: { glyph: iconSpeaker, service: (n) => `Mute notifications for service ${n}`, watch: (n) => `Mute notifications for watch ${n}` },
+  [actionUnmute]: { glyph: iconSpeakerOff, service: (n) => `Unmute notifications for service ${n}`, watch: (n) => `Unmute notifications for watch ${n}` },
   [actionExpand]: { watch: (n) => `Expand storage for watch ${n}` },
   [actionSilence]: { watch: (n) => `Silence alarm for watch ${n} until its state changes` },
   [actionProbe]: { watch: (n) => `Probe watch ${n}` },
@@ -3142,6 +3154,7 @@ function serviceRowParts(s) {
       s.can_pause && serviceSuspendButton(s),
       { action: actionReload },
       { action: s.monitored ? actionUnmonitor : actionMonitor },
+      serviceMuteButton(s),
       serviceRepairAvailable(s) && { action: actionRepair },
     ].filter(Boolean);
     const marks = serviceOperationMarks(s, buttons.map((b) => b.action));
@@ -3174,6 +3187,20 @@ function serviceRowParts(s) {
     ? tpl`<tr class="svc-commands-row ${rowClass}"><td colspan="${cols}"><div class="svc-commands">${serviceCustomButtons(s, busy)}</div></td></tr>`
     : null;
   return { main, commands, exp: expansionRow(key, cols) };
+}
+
+// serviceMuteButton is the notification mute toggle: pressed while a mute
+// holds, with its end in the tooltip.
+function serviceMuteButton(s) {
+  if (!s.notify_muted_until) return { action: actionMute };
+  return {
+    action: actionUnmute, pressed: true,
+    title: `${svcActionAriaLabel(s, actionUnmute)}; ${notifyMuteText(s.notify_muted_until, s.notify_mute_source)}`,
+  };
+}
+
+function notifyMuteText(until, source) {
+  return `notifications muted until ${fmtTime(until)}${source ? ` by ${source}` : ""}`;
 }
 
 function serviceRowClass(state) {
@@ -5648,6 +5675,10 @@ function watchActionDisabledReason(w, action) {
     case actionUnmonitor:
       if (!w.monitored) return "watch is paused";
       return pendingMonitorToggles.has(watchExpansionKey(w.name)) ? "monitoring change is pending" : "";
+    case actionMute:
+    case actionUnmute:
+      if (w.notify_mute_from_service) return `muted with its service until ${fmtTime(w.notify_muted_until)}; unmute the service`;
+      return pendingMonitorToggles.has(notifyMuteToggleKey(expansionPrefixWatch, w.name)) ? "mute change is pending" : "";
     case actionExpand:
       if (!watchHasExpand(w)) return "expand is not configured";
       return "";
@@ -5673,11 +5704,26 @@ function watchActionAccessibility(w, action) {
   return { disabled, hint: actionHint(hintID, disabled, reason), describedBy: actionDescribedBy(hintID, disabled, reason) };
 }
 
-function watchActionButton(w, action, content, compact = false) {
+function watchActionButton(w, action, content, compact = false, opts = {}) {
   const label = watchActionAriaLabel(w, action);
   const accessibility = watchActionAccessibility(w, action);
   const className = compact ? "icon-btn" : nothing;
-  return tpl`${accessibility.hint}<button class="${className}" ?disabled=${accessibility.disabled} data-watch="${w.name}" data-watch-action="${action}" title="${compact ? label : nothing}" aria-label="${label}" aria-describedby="${accessibility.describedBy}">${content}</button>`;
+  const pressed = "pressed" in opts ? (opts.pressed ? domBoolTrue : domBoolFalse) : nothing;
+  const title = opts.title || (compact ? label : nothing);
+  return tpl`${accessibility.hint}<button class="${className}" ?disabled=${accessibility.disabled} data-watch="${w.name}" data-watch-action="${action}" aria-pressed="${pressed}" title="${title}" aria-label="${label}" aria-describedby="${accessibility.describedBy}">${content}</button>`;
+}
+
+// watchMuteButton is the watch's notification mute toggle. A service watch
+// muted only through its service shows the mute pressed but cannot lift it.
+function watchMuteButton(w) {
+  if (!w.notify_muted_until) {
+    return watchActionButton(w, actionMute, tpl`<span aria-hidden="true">${iconSpeaker}</span>`, true);
+  }
+  const owner = w.notify_mute_from_service ? " with its service" : "";
+  return watchActionButton(w, actionUnmute, tpl`<span aria-hidden="true">${iconSpeakerOff}</span>`, true, {
+    pressed: true,
+    title: `${watchActionAriaLabel(w, actionUnmute)}; ${notifyMuteText(w.notify_muted_until, w.notify_mute_source).replace("muted", `muted${owner}`)}`,
+  });
 }
 
 function watchActionAriaLabel(w, action) {
@@ -5759,7 +5805,8 @@ function watchActionsCell(w) {
       : watchActionButton(w, actionMonitor, tpl`<span aria-hidden="true">${iconMonitor}</span>`, true))
     : readOnlyNote;
   const alarmBtn = me.can_act ? watchActionButton(w, actionSilence, tpl`<span aria-hidden="true">${w.alarm?.silenced ? iconBellOff : iconBell}</span>`, true) : nothing;
-  const actions = tpl`${probeBtn} ${raidButtons} ${replicationBtn} ${expandBtn} ${alarmBtn} ${monitorBtn}`;
+  const muteBtn = me.can_act ? watchMuteButton(w) : nothing;
+  const actions = tpl`${probeBtn} ${raidButtons} ${replicationBtn} ${expandBtn} ${alarmBtn} ${muteBtn} ${monitorBtn}`;
   return tpl`<td class="actions">${actions}</td>`;
 }
 
@@ -7340,6 +7387,7 @@ function renderStatus(ctx) {
 }
 
 async function act(name, action) {
+  if (action === actionMute || action === actionUnmute) return setNotifyMute(globalTargetService, name, action);
   const generation = dashboardGeneration;
   let noCascade = false;
   if (isServiceConfirmAction(action) && !(await confirmAction(name, action))) return;
@@ -7369,6 +7417,73 @@ async function act(name, action) {
   } finally {
     releaseMonitorToggleAfterRefresh(toggleKey, renderServices);
   }
+}
+
+// notifyMuteToggleKey guards one target's mute or unmute in flight, apart
+// from its monitor toggle: the two never wait for each other.
+function notifyMuteToggleKey(prefix, name) {
+  return `${prefix}${name}#mute`;
+}
+
+// setNotifyMute mutes a service's or watch's notifications for the duration
+// the operator picks, or ends the mute. Monitoring and actions are untouched,
+// so neither asks for the operation confirmation.
+async function setNotifyMute(kind, name, action) {
+  const generation = dashboardGeneration;
+  const isService = kind === globalTargetService;
+  const list = (isService ? allServices : allWatches) || [];
+  const target = list.find((item) => item && item.name === name) || { name };
+  const label = `${kind} ${displayName(target) || name}`;
+  let query = "";
+  if (action === actionMute) {
+    const duration = await promptNotifyMute(label);
+    if (!duration) return;
+    query = `?${apiQueryFor}=${encodeURIComponent(duration)}`;
+  }
+  const key = notifyMuteToggleKey(isService ? expansionPrefixService : expansionPrefixWatch, name);
+  if (pendingMonitorToggles.has(key)) return;
+  pendingMonitorToggles.add(key);
+  const render = isService ? renderServices : renderWatches;
+  try {
+    render();
+    setStatus("");
+    const suffix = apiActionSuffix(action, query);
+    const res = await fetch(isService ? serviceAPI(name, suffix) : watchAPI(name, suffix), targetPostOptions({}, generation));
+    await jsonOrThrow(res);
+    setStatus(`${label}: notifications ${action === actionMute ? "muted" : "unmuted"}`, feedbackStatusOK);
+  } catch (e) {
+    setStatus(`${action} ${label}: ${e.message}`, feedbackStatusErr);
+  } finally {
+    releaseMonitorToggleAfterRefresh(key, render);
+  }
+}
+
+let notifyMuteResolve = null;
+
+// promptNotifyMute asks how long to mute a target, resolving to the chosen
+// duration ("1h") or null when cancelled.
+function promptNotifyMute(label) {
+  const dlg = $("#notify-mute-dialog");
+  if (!dlg || typeof dlg.showModal !== "function") {
+    return Promise.resolve(window.confirm(`Mute notifications for ${label} for 1 hour?`) ? "1h" : null);
+  }
+  const title = $("#notify-mute-title");
+  if (title) title.textContent = `Mute notifications for ${label}?`;
+  const preset = dlg.querySelector('input[name="notify-mute-for"][value="1h"]');
+  if (preset) preset.checked = true;
+  return new Promise((resolve) => {
+    notifyMuteResolve = resolve;
+    dlg.showModal();
+  });
+}
+
+function closeNotifyMute(ok) {
+  const dlg = $("#notify-mute-dialog");
+  const chosen = dlg ? dlg.querySelector('input[name="notify-mute-for"]:checked') : null;
+  if (dlg && dlg.open) dlg.close();
+  const resolve = notifyMuteResolve;
+  notifyMuteResolve = null;
+  if (resolve) resolve(ok && chosen ? chosen.value : null);
 }
 
 async function closeSSHSession(name, pid, startTicks, terminal, user, managedByLogind) {
@@ -7545,6 +7660,7 @@ async function killWatchProcess(watch, pid, startTicks) {
 
 async function actWatch(name, action) {
   if (action === actionCheck) return checkWatchNow(name);
+  if (action === actionMute || action === actionUnmute) return setNotifyMute(globalTargetWatch, name, action);
   const generation = dashboardGeneration;
   const alarmRevision = (allWatches || []).find((w) => w.name === name)?.alarm?.revision || "";
   let headers = {};
@@ -8634,6 +8750,7 @@ function initStaticHandlers() {
   bindStopClick($("#panic-btn"), () => requestPanic(!panicOn));
   bindConfirmDialog($("#panic-confirm"), "[data-panic-result]", "panicResult", closePanicConfirm, () => panicResolve);
   bindConfirmDialog($("#simple-confirm"), "[data-simple-result]", "simpleResult", closePromptConfirm, () => promptConfirmResolve);
+  bindConfirmDialog($("#notify-mute-dialog"), "[data-notify-mute-result]", "notifyMuteResult", closeNotifyMute, () => notifyMuteResolve);
   bindConfirmDialog($("#mount-umount-confirm"), "[data-mount-umount-result]", "mountUmountResult", closeMountUnmountConfirm, () => mountUnmountConfirmResolve);
   const mountUmountKill = $("#mount-umount-kill");
   if (mountUmountKill) {

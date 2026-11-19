@@ -3,12 +3,15 @@ package web
 import (
 	"context"
 	"net/http"
+	"time"
 
 	"sermo/internal/operation"
 )
 
 // monitorActions and watchOperateActions are the non-operation action verbs the API accepts.
 var monitorActions = map[string]bool{apiActionMonitor: true, apiActionUnmonitor: true}
+
+var muteActions = map[string]bool{APIActionMute: true, APIActionUnmute: true}
 
 var watchOperateActions = map[string]bool{apiActionExpand: true, apiActionProbe: true, APIActionSilence: true, apiActionPause: true, apiActionResume: true, apiActionReplicationStart: true}
 
@@ -51,6 +54,10 @@ func (s *Server) handleAction(w http.ResponseWriter, r *http.Request) {
 		})
 	case monitorActions[action]:
 		writeMonitorAction(w, backend.SetMonitored(r.Context(), name, action == apiActionMonitor))
+	case muteActions[action]:
+		if d, ok := muteDuration(w, r, action); ok {
+			writeMonitorAction(w, backend.SetServiceNotifyMute(r.Context(), name, d))
+		}
 	default:
 		writeError(w, http.StatusBadRequest, apiErrorUnknownActionPrefix+action)
 	}
@@ -91,11 +98,32 @@ func (s *Server) handleWatchAction(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
+	if muteActions[action] {
+		if d, ok := muteDuration(w, r, action); ok {
+			writeMonitorAction(w, backend.SetWatchNotifyMute(r.Context(), name, d))
+		}
+		return
+	}
 	if !monitorActions[action] {
 		writeError(w, http.StatusBadRequest, apiErrorUnknownActionPrefix+action)
 		return
 	}
 	writeMonitorAction(w, backend.SetWatchMonitored(r.Context(), name, action == apiActionMonitor))
+}
+
+// muteDuration reads a mute's for duration; an unmute takes none and reads as
+// zero. The backend owns the bounds, so only a missing or unparsable value is
+// refused here.
+func muteDuration(w http.ResponseWriter, r *http.Request, action string) (time.Duration, bool) {
+	if action == APIActionUnmute {
+		return 0, true
+	}
+	d, ok := positiveDuration(r.URL.Query().Get(APIQueryFor))
+	if !ok {
+		writeError(w, http.StatusBadRequest, apiErrorMuteForRequired)
+		return 0, false
+	}
+	return d, true
 }
 
 // A refreshed watch cycle can run that watch's actions, so a refresh shares

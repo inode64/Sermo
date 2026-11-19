@@ -5,7 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"time"
 
+	"sermo/internal/app"
 	"sermo/internal/config"
 	"sermo/internal/control"
 	"sermo/internal/hostfs"
@@ -55,6 +57,9 @@ func (a App) runStatus(ctx context.Context, opts options) int {
 		status.Service, displayState.State, status.Backend, status.Unit, metaSuffix(mon.Source, mon.ChangedAt))
 	if displayState.Reason != "" {
 		fmt.Fprintf(a.Stdout, "  reason: %s\n", displayState.Reason)
+	}
+	if !mon.MutedUntil.IsZero() {
+		fmt.Fprintf(a.Stdout, "  %s%s\n", app.NotificationMuteMessage(mon.MutedUntil, true), metaSuffix(mon.MuteSource, ""))
 	}
 	for _, failing := range displayState.Failing {
 		fmt.Fprintf(a.Stdout, "  %s\n", failing)
@@ -173,6 +178,8 @@ type statusJSON struct {
 	MonitorChangedAt string   `json:"monitor_changed_at,omitempty"`
 	StateReason      string   `json:"state_reason,omitempty"`
 	FailingChecks    []string `json:"failing_checks,omitempty"`
+	NotifyMutedUntil string   `json:"notify_muted_until,omitempty"`
+	NotifyMuteSource string   `json:"notify_mute_source,omitempty"`
 }
 
 func statusToJSON(status servicemgr.ServiceStatus, mon monitorView, displayState DaemonServiceState) statusJSON {
@@ -189,6 +196,10 @@ func statusToJSON(status servicemgr.ServiceStatus, mon monitorView, displayState
 	if mon.Paused {
 		out.MonitorSource = mon.Source
 		out.MonitorChangedAt = mon.ChangedAt
+	}
+	if !mon.MutedUntil.IsZero() {
+		out.NotifyMutedUntil = mon.MutedUntil.UTC().Format(time.RFC3339)
+		out.NotifyMuteSource = mon.MuteSource
 	}
 	return out
 }

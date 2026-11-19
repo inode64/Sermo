@@ -199,6 +199,9 @@ type Deps struct {
 	// Panic gates the daemon-wide panic mode (hooks, alerts and automatic
 	// remediation suppressed). Optional: nil means panic mode is never on.
 	Panic *PanicGate
+	// NotifyMutes reads operators' time-bound mutes of a service's or watch's
+	// notifications. Optional: nil means nothing is ever muted.
+	NotifyMutes NotifyMuteStore
 	// RuleState persists automatic remediation cooldown/backoff and rule-window
 	// progress. Optional: nil keeps those states in memory for this process only.
 	RuleState RuleStateStore
@@ -706,6 +709,7 @@ func buildWorker(ctx context.Context, name, unit string, tree map[string]any, de
 		Operate:              engine.Do,
 		IsPaused:             monitorPaused(deps.Monitor, name),
 		InPanic:              deps.Panic.Active,
+		notifyMuted:          notifyMuteGate(deps.NotifyMutes, deps.Now, name),
 		Settling:             deps.Settling,
 		OperationSettling:    deps.OperationSettling,
 		OperationTimeout:     engine.OperationTimeout,

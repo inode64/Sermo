@@ -30,6 +30,7 @@ const apiQueryCheck = "check";
 const apiQueryMetric = "metric";
 export const apiQueryBefore = "before";
 export const apiQueryBeforeID = "before_id";
+export const apiQueryFor = "for";
 export const apiQueryForce = "force";
 export const apiQueryKill = "kill";
 export const apiQueryLazy = "lazy";

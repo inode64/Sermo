@@ -4,6 +4,7 @@ import (
 	"sermo/internal/config"
 	"sermo/internal/mountctl"
 	"sermo/internal/servicemgr"
+	"sermo/internal/web"
 )
 
 const (
@@ -22,6 +23,8 @@ const (
 	commandRepair    = actionRepair
 	commandMonitor   = "monitor"
 	commandUnmonitor = "unmonitor"
+	commandMute      = web.APIActionMute
+	commandUnmute    = web.APIActionUnmute
 	commandPreflight = "preflight"
 	commandProcesses = "processes"
 	commandLocks     = "locks"

@@ -956,6 +956,9 @@
   .modal-grid code, .modal-body code { font-size: .85rem; overflow-wrap: anywhere; }
   .mount-umount-body { display: grid; gap: .75rem; }
   .mount-umount-options { display: flex; gap: .75rem 1rem; flex-wrap: wrap; align-items: center; }
+  .notify-mute-durations { display: flex; flex-wrap: wrap; gap: .5rem 1rem; margin: .75rem 0 0; padding: .5rem .75rem; border: 1px solid var(--line-2); border-radius: var(--radius-s); }
+  .notify-mute-durations legend { padding: 0 .25rem; font-size: .85rem; color: var(--text-2); }
+  .notify-mute-durations label { display: inline-flex; align-items: center; gap: .35rem; min-height: 24px; }
   .mount-umount-options label { display: inline-flex; align-items: center; gap: .35rem; }
   .mount-blockers-table caption { text-align: left; color: var(--text-2); font-size: .85rem; margin-bottom: .25rem; }
   .mount-blockers-table .cmd { overflow-wrap: anywhere; }

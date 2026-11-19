@@ -128,8 +128,13 @@ const (
 	apiActionResume    = string(rules.ActionResume)
 	apiActionMonitor   = "monitor"
 	apiActionUnmonitor = "unmonitor"
-	apiActionExpand    = "expand"
-	apiActionProbe     = "probe"
+	// APIActionMute withholds a service's or watch's notifications for the
+	// APIQueryFor duration; APIActionUnmute ends the mute early.
+	APIActionMute   = "mute"
+	APIActionUnmute = "unmute"
+	APIQueryFor     = "for"
+	apiActionExpand = "expand"
+	apiActionProbe  = "probe"
 	// APIActionSilence acknowledges a watch alarm until its confirmed state changes.
 	APIActionSilence          = "silence"
 	APIQueryRevision          = "revision"
@@ -155,6 +160,7 @@ const (
 
 const (
 	apiErrorCheckQueryRequired       = "check query parameter is required"
+	apiErrorMuteForRequired          = "mute requires a for query parameter with a duration such as 1h"
 	apiErrorMetricQueryRequired      = "metric query parameter is required"
 	apiErrorEncodeResponse           = "failed to encode response"
 	apiErrorBackendUnavailable       = "web backend unavailable"

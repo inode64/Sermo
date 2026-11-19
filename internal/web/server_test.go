@@ -56,6 +56,8 @@ type fakeBackend struct {
 	emptyTerminalSessionsClosed []string
 	monitored                   map[string]bool
 	watchMonitored              map[string]bool
+	serviceMutes                map[string]time.Duration
+	watchMutes                  map[string]time.Duration
 	panic                       bool
 	watchExpanded               []string
 	watchProbed                 []string
@@ -365,6 +367,20 @@ func (f *fakeBackend) SetWatchMonitored(_ context.Context, name string, monitore
 		f.watchMonitored = map[string]bool{}
 	}
 	f.watchMonitored[name] = monitored
+	return nil
+}
+func (f *fakeBackend) SetServiceNotifyMute(_ context.Context, name string, d time.Duration) error {
+	if f.serviceMutes == nil {
+		f.serviceMutes = map[string]time.Duration{}
+	}
+	f.serviceMutes[name] = d
+	return nil
+}
+func (f *fakeBackend) SetWatchNotifyMute(_ context.Context, name string, d time.Duration) error {
+	if f.watchMutes == nil {
+		f.watchMutes = map[string]time.Duration{}
+	}
+	f.watchMutes[name] = d
 	return nil
 }
 func (f *fakeBackend) SetPanic(_ context.Context, on bool) ActionResult {
@@ -1409,6 +1425,49 @@ func TestWatchMonitorActions(t *testing.T) {
 	assertMonitorToggle(t, newServer(b),
 		func(action string) string { return testWatchPath("storage-root", action) },
 		func() map[string]bool { return b.watchMonitored }, "storage-root")
+}
+
+// A mute carries its duration in the for query and an unmute none; the
+// backend owns the bounds, so the route refuses only a missing or unparsable
+// duration.
+func TestNotifyMuteActions(t *testing.T) {
+	b := &fakeBackend{}
+	h := newServer(b)
+	for _, tc := range []struct {
+		path string
+		code int
+	}{
+		{testServicePath("web", APIActionMute) + "?" + APIQueryFor + "=4h", http.StatusOK},
+		{testWatchPath("storage-root", APIActionMute) + "?" + APIQueryFor + "=15m", http.StatusOK},
+		{testServicePath("db", APIActionMute), http.StatusBadRequest},
+		{testServicePath("db", APIActionMute) + "?" + APIQueryFor + "=soon", http.StatusBadRequest},
+		{testWatchPath("disk", APIActionMute) + "?" + APIQueryFor + "=-1h", http.StatusBadRequest},
+	} {
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, postReq(tc.path))
+		if rec.Code != tc.code {
+			t.Fatalf("%s: code=%d body=%s, want %d", tc.path, rec.Code, rec.Body.String(), tc.code)
+		}
+	}
+	if b.serviceMutes["web"] != 4*time.Hour || b.watchMutes["storage-root"] != 15*time.Minute {
+		t.Fatalf("mutes = %v / %v", b.serviceMutes, b.watchMutes)
+	}
+	if _, refused := b.serviceMutes["db"]; refused {
+		t.Fatalf("a mute without a valid duration reached the backend: %v", b.serviceMutes)
+	}
+	for _, path := range []string{testServicePath("web", APIActionUnmute), testWatchPath("storage-root", APIActionUnmute)} {
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, postReq(path))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("%s: code=%d body=%s", path, rec.Code, rec.Body.String())
+		}
+	}
+	if d, ok := b.serviceMutes["web"]; !ok || d != 0 {
+		t.Fatalf("service unmute = %v, want a zero duration", b.serviceMutes)
+	}
+	if d, ok := b.watchMutes["storage-root"]; !ok || d != 0 {
+		t.Fatalf("watch unmute = %v, want a zero duration", b.watchMutes)
+	}
 }
 
 func TestWatchExpandAction(t *testing.T) {

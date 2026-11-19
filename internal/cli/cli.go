@@ -86,6 +86,7 @@ const (
 	cliFlagConnection = checks.DBQueryKillModeConnection
 	cliFlagCost       = "cost"
 	cliFlagEscalate   = web.APIQueryEscalate
+	cliFlagFor        = web.APIQueryFor
 	cliFlagForce      = "force"
 	cliFlagGenerate   = "generate"
 	cliFlagHash       = "hash"
@@ -258,6 +259,9 @@ type options struct {
 	confirm     string
 	ttl         time.Duration
 	commandArgs []string // tokens after `--`
+	// mute flags
+	muteFor    time.Duration // --for: how long a mute lasts
+	muteForSet bool
 	// sla command flags
 	series bool          // emit the stored availability series instead of a summary
 	since  time.Duration // series lookback window (0 means the command's default)
@@ -402,6 +406,8 @@ var commandHandlers = map[string]commandHandler{
 	commandUnmonitor: func(a App, ctx context.Context, opts options) int { return a.runMonitor(ctx, opts, true) },
 	commandMonitor:   func(a App, ctx context.Context, opts options) int { return a.runMonitor(ctx, opts, false) },
 	commandPanic:     App.runPanic,
+	commandMute:      func(a App, ctx context.Context, opts options) int { return a.runMute(ctx, opts, true) },
+	commandUnmute:    func(a App, ctx context.Context, opts options) int { return a.runMute(ctx, opts, false) },
 	commandSLA:       App.runSLA,
 	commandWizard:    App.runWizard,
 	commandWeb:       func(a App, _ context.Context, opts options) int { return a.runWeb(opts) },
@@ -593,6 +599,7 @@ func parseArgs(args []string) (options, error) {
 	fs.StringVar(&opts.reason, cliFlagReason, "", "")
 	fs.StringVar(&opts.confirm, cliFlagConfirm, "", "")
 	fs.DurationVar(&opts.ttl, cliFlagTTL, 0, "")
+	fs.DurationVar(&opts.muteFor, cliFlagFor, 0, "")
 
 	if err := fs.Parse(flagArgs); err != nil {
 		return opts, cliutil.NormalizePflagError(err) //nolint:wrapcheck // the normalized message is printed verbatim as the usage error; wrapping would re-add the pflag prefix noise the helper strips
@@ -605,6 +612,7 @@ func parseArgs(args []string) (options, error) {
 		opts.config = abs
 	}
 	opts.timeoutSet = fs.Changed(cliFlagTimeout)
+	opts.muteForSet = fs.Changed(cliFlagFor)
 	// An explicit 0 or negative timeout would silently become the command's
 	// default while still counting as an operator override (for example 2s
 	// instead of engine.operation_timeout for `watch pause`).

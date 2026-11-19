@@ -87,6 +87,9 @@ Take MariaDB during a backup. If the packaged profile detects a backup process s
   `/services`, `/sla` and it replies with live reports — long polling only, no
   inbound port, answering allow-listed chats.
 - A **daemon-wide panic switch** to pause all automatic remediation instantly.
+- A **notification mute** per service or watch, from 1 minute to 24 hours, for
+  a maintenance window: monitoring and remediation keep running, and the mute
+  ends on its own.
 - **Guided wizards** for common setups (service, docker, vm, mount, volume, net,
   uplink).
 

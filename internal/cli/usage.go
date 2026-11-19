@@ -113,6 +113,8 @@ var commandUsages = []commandUsage{
 			"sermoctl watch status WATCH",
 			"sermoctl watch monitor WATCH",
 			"sermoctl watch unmonitor WATCH",
+			"sermoctl watch mute WATCH [--for DURATION]",
+			"sermoctl watch unmute WATCH",
 			"sermoctl watch silence WATCH",
 			"sermoctl watch probe WATCH",
 			"sermoctl watch refresh [WATCH...]",
@@ -121,8 +123,9 @@ var commandUsages = []commandUsage{
 			"sermoctl watch resume RAID_WATCH",
 		},
 		Flags: []string{
-			"--json      print the result as JSON",
-			"--escalate  with kill: follow SIGTERM with SIGKILL after the grace period",
+			"--json          print the result as JSON",
+			"--escalate      with kill: follow SIGTERM with SIGKILL after the grace period",
+			"--for DURATION  with mute: how long the mute lasts, from 1m to 24h; default 1h",
 		},
 		Notes: []string{
 			"watch status reports the daemon's computed state (including starting",
@@ -136,6 +139,9 @@ var commandUsages = []commandUsage{
 			"it is a process_policy, unowned_processes or db_queries watch, or its",
 			"then runs no rule action (a hook); the others become checks of the",
 			"service, which follow it, and every watch subcommand says so.",
+			"mute/unmute withhold or restore one watch's notifications, persisted under",
+			"engine.state; the mute ends on its own. A service watch also follows its",
+			"service's mute (sermoctl mute SERVICE), which the watch cannot lift.",
 			"silence acknowledges the current alarm until its confirmed state changes;",
 			"monitoring and configured actions continue. Requires the daemon web API.",
 			"probe runs one fresh sample of a diskio, hdparm, LVM, RAID, SMART, storcli or",
@@ -308,6 +314,35 @@ var commandUsages = []commandUsage{
 		},
 		Examples: []string{
 			"sermoctl unmonitor mysql-main",
+		},
+	},
+	{
+		Name:    commandMute,
+		Summary: "Withhold a service's notifications for a while.",
+		Usage: []string{
+			"sermoctl mute SERVICE [--for DURATION]",
+		},
+		Flags: []string{
+			"--for DURATION  how long the mute lasts, from 1m to 24h; default 1h",
+			"--json          print the result as JSON",
+		},
+		Notes: []string{
+			"Checks, rules, hooks and automatic remediation keep running; only notifications are withheld, and each one is logged as notify-suppressed.",
+			"The service's watches follow its mute. What opens or recovers during the mute is never sent later, like in panic mode.",
+			"The mute is persisted and ends on its own; muting again replaces the end.",
+		},
+		Examples: []string{
+			"sermoctl mute mysql-main --for 4h",
+		},
+	},
+	{
+		Name:    commandUnmute,
+		Summary: "End a service's notification mute early.",
+		Usage: []string{
+			"sermoctl unmute SERVICE",
+		},
+		Examples: []string{
+			"sermoctl unmute mysql-main",
 		},
 	},
 	{

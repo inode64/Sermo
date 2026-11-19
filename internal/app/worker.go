@@ -123,6 +123,10 @@ type Worker struct {
 	// notifications and automatic remediation actions are suppressed.
 	InPanic func() bool
 
+	// notifyMuted reports an operator's mute of this service's notifications.
+	// Checks, rules and remediation run as usual; only delivery is withheld.
+	notifyMuted notifyMute
+
 	// Settling tracks startup observation for this service. An init verdict that
 	// the service is not running completes it without checks. Active, unknown,
 	// or a status query that does not answer runs one observe-only check cycle.
@@ -254,6 +258,7 @@ func (w *Worker) cycleTarget() string { return serviceSubjectPrefix + w.Service 
 // internal operation lock already prevents overlapping operations, so cycles
 // never run concurrently per service.
 func (w *Worker) RunCycle(ctx context.Context) {
+	ctx = withNotifyMute(ctx, w.notifyMuted)
 	w.cycle++
 	defer w.publishRemediation()
 	settleKey := SettlingServiceKey(w.Service)
@@ -1272,8 +1277,9 @@ func (w *Worker) emitAlertsWithOutput(ctx context.Context, ev *rules.Evaluator, 
 		if !emitNotify {
 			continue
 		}
-		if !dryRun {
-			// Only a live delivery defines who the recovery must reach.
+		// Only a live delivery defines who the recovery must reach: a muted
+		// alert reached no one, so its recovery must not either.
+		if muted, _ := notifyMutedFrom(ctx); !dryRun && !muted {
 			w.windowState(r.Name).MarkNotified(level)
 		}
 		w.deliverRuleMessage(ctx, r, alertMessage(w.Service, r.Name, msg, failOutput, level), allow)

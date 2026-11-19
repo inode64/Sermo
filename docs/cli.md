@@ -83,6 +83,8 @@ sermoctl is-active SERVICE
 sermoctl watch status WATCH
 sermoctl watch monitor WATCH
 sermoctl watch unmonitor WATCH
+sermoctl watch mute WATCH [--for DURATION]
+sermoctl watch unmute WATCH
 sermoctl watch silence WATCH
 sermoctl watch probe WATCH
 sermoctl watch refresh [WATCH...]      # run an extra cycle of every enabled watch, or of the named ones, now
@@ -109,6 +111,8 @@ sermoctl sessions kill SERVICE WATCH ID [--connection]   # cancel one listed sta
 sermoctl locks SERVICE
 sermoctl monitor SERVICE
 sermoctl unmonitor SERVICE
+sermoctl mute SERVICE [--for DURATION]  # withhold notifications for 1m-24h (default 1h); see Notification mute
+sermoctl unmute SERVICE
 
 sermoctl panic on|off|status          # daemon-wide emergency switch (see Panic mode)
 
@@ -185,6 +189,34 @@ sermoctl sla
 sermoctl sla nginx
 sermoctl sla --series nginx --since 24h
 ```
+
+## Notification mute
+
+A notification mute withholds one service's or one watch's notifications for a
+while, for a maintenance window on that service, say, without stopping
+monitoring. Checks, rules, hooks and automatic remediation keep running; only
+delivery stops, and each withheld delivery is logged as a `notify-suppressed`
+event that names the notifier. A service's watches follow its mute.
+
+```bash
+sermoctl mute mysql-main --for 4h                    # 1m to 24h; 1h when --for is omitted
+sermoctl watch mute mail-queue:deferred-backlog --for 30m
+sermoctl status mysql-main                           # shows "notifications muted until ..."
+sermoctl unmute mysql-main                           # end it early
+```
+
+Every mute ends on its own, so a forgotten one cannot hide the next outage;
+muting again replaces the end, shorter or longer. The mute is persisted in
+`engine.state`, survives daemon restarts and works without the web UI; the
+daemon reads it on every notification. What opens or recovers during the mute
+is never sent later, as in panic mode: a recovery of an alert nobody received
+would announce an incident nobody opened. A reminder of an incident announced
+before the mute waits until it ends. A service watch muted through its service
+cannot be unmuted on its own; unmute the service.
+
+In the web UI the speaker button on each service and watch row mutes it and
+asks for 15 minutes, 1 hour, 4 hours or 24 hours; pressed, its tooltip says
+until when, and a click unmutes it.
 
 ## Panic mode
 

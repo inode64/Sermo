@@ -142,6 +142,10 @@ type Watch struct {
 	// still runs its check and emits its firing event (so status stays visible)
 	// but suppresses its hook, notifications and its expand/makestep action.
 	InPanic func() bool
+	// notifyMuted reports an operator's mute of this watch's notifications (or,
+	// for a service watch, of its service's). The check, hooks and actions run
+	// as usual; only delivery is withheld.
+	notifyMuted notifyMute
 	// Settling tracks startup observation for this watch. While unsettled the
 	// first cycle runs checks only and suppresses firing, hooks and notifications.
 	Settling *Settling
@@ -590,9 +594,10 @@ func (w *Watch) notifyFiring(ctx context.Context, step watchStep, msg notify.Mes
 	if !watchAlarmDeliveryAllowed(ctx) || len(w.RaidNotifyEvents) > 0 || !w.shouldNotify(step) {
 		return
 	}
-	// A dry-run notification reaches the console only: the audience a later
-	// live recovery must match is the one that really heard the episode.
-	if !w.DryRun {
+	// A dry-run notification reaches the console only, and a muted one no one:
+	// the audience a later live recovery must match is the one that really
+	// heard the episode.
+	if muted, _ := notifyMutedFrom(ctx); !w.DryRun && !muted {
 		w.state.MarkNotified(step.level)
 	}
 	dispatchNotifyFiltered(ctx, w.Notifiers, msg, w.Name, w.emit, dryRunFilter(w.DryRun))
@@ -1069,7 +1074,10 @@ func dispatchWatchFire(ctx context.Context, spec watchFireSpec, msg string, env 
 		spec.action()
 	}
 	dispatchNotify(ctx, spec.notifiers, watchMessage(spec.name, msg, env), spec.name, spec.emit)
-	return len(spec.hook.Command) > 0 || spec.action != nil || watchAlarmDeliveryAllowed(ctx)
+	// A muted notification reached no one, like a silenced alarm's: it must
+	// not count as the delivery that later announces the recovery.
+	muted, _ := notifyMutedFrom(ctx)
+	return len(spec.hook.Command) > 0 || spec.action != nil || (watchAlarmDeliveryAllowed(ctx) && !muted)
 }
 
 // watchMessage builds a notification from a fired watch's message and hook env.

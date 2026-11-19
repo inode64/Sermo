@@ -33,6 +33,8 @@ type Service struct {
 	Monitored            bool     `json:"monitored"`
 	MonitorSource        string   `json:"monitor_source,omitempty"`        // cli | web | config | daemon
 	MonitorChangedAt     string   `json:"monitor_changed_at,omitempty"`    // RFC3339 when monitoring state last changed
+	NotifyMutedUntil     string   `json:"notify_muted_until,omitempty"`    // RFC3339 end of an operator's notification mute
+	NotifyMuteSource     string   `json:"notify_mute_source,omitempty"`    // cli | web: who muted it
 	CheckHealth          string   `json:"check_health,omitempty"`          // ok | warning | failing | unknown | paused | disabled
 	ObservabilityReady   bool     `json:"observability_ready"`             // true when monitored service has fresh visible indicators
 	ObservabilityMissing []string `json:"observability_missing,omitempty"` // indicator groups still collecting
@@ -212,6 +214,8 @@ type Watch struct {
 	Monitored         bool              `json:"monitored"`
 	MonitorSource     string            `json:"monitor_source,omitempty"`
 	MonitorChangedAt  string            `json:"monitor_changed_at,omitempty"`
+	NotifyMutedUntil  string            `json:"notify_muted_until,omitempty"` // RFC3339 end of the mute that holds over this watch
+	NotifyMuteSource  string            `json:"notify_mute_source,omitempty"`
 	FireOnFail        bool              `json:"fire_on_fail"` // true = fires when check fails (e.g. health checks); false = fires on condition (e.g. load/storage)
 	HasHook           bool              `json:"has_hook"`
 	HookCommand       []string          `json:"hook_command,omitempty"`
@@ -241,6 +245,9 @@ type Watch struct {
 	NextCheckAt string      `json:"next_check_at,omitempty"`
 	SampleState string      `json:"sample_state,omitempty"` // collecting | fresh | stale
 	Probe       *WatchProbe `json:"probe,omitempty"`        // current manual probe, if one is running
+	// NotifyMuteFromService is true when only the watch's service is muted:
+	// the watch follows it and cannot be unmuted on its own.
+	NotifyMuteFromService bool `json:"notify_mute_from_service,omitempty"`
 	// KeepsSLA marks a watch whose check asserts availability, so the dashboard
 	// draws it the same SLA section a service gets. A condition watch keeps none:
 	// its threshold being met is not downtime.
@@ -929,6 +936,12 @@ type Backend interface {
 	SetMonitored(ctx context.Context, name string, monitored bool) error
 	// SetWatchMonitored pauses (false) or resumes (true) monitoring of a host watch.
 	SetWatchMonitored(ctx context.Context, name string, monitored bool) error
+	// SetServiceNotifyMute mutes a service's notifications for d, or unmutes
+	// them when d is zero.
+	SetServiceNotifyMute(ctx context.Context, name string, d time.Duration) error
+	// SetWatchNotifyMute mutes a watch's notifications for d, or unmutes them
+	// when d is zero.
+	SetWatchNotifyMute(ctx context.Context, name string, d time.Duration) error
 	// SilenceWatchAlarm acknowledges the current watch alarm revision.
 	SilenceWatchAlarm(ctx context.Context, name, revision string) ActionResult
 	// ExpandWatch runs a configured storage watch's `then.expand` action on demand.

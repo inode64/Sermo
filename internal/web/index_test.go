@@ -184,7 +184,7 @@ func assertIndexShellIDs(t *testing.T, ids map[string]bool) {
 		"session-rows", "rows", "container-rows", "vm-rows", "watch-rows", "mount-rows", "app-rows", "library-rows", "locks-rows",
 		"event-clear", "event-before", "event-reset-filters", "event-group", "event-more", "event-service", "event-watch", "event-kind", "event-status", "event-range",
 		"state-compact-btn", "state-before",
-		"action-confirm", "confirm-no-cascade", "simple-confirm",
+		"action-confirm", "confirm-no-cascade", "simple-confirm", "notify-mute-dialog",
 	} {
 		if !ids[id] {
 			t.Errorf("shell missing element id %q", id)
@@ -233,8 +233,8 @@ func assertIndexShellPanels(t *testing.T, panelControls map[string]bool, views m
 
 func assertIndexShellTable(t *testing.T, headers map[string]bool, dialogs int) {
 	t.Helper()
-	if dialogs != 4 {
-		t.Errorf("want 4 <dialog> elements, got %d", dialogs)
+	if dialogs != 5 {
+		t.Errorf("want 5 <dialog> elements, got %d", dialogs)
 	}
 	for _, header := range []string{"CPU total", "Memory", "IO R/W", "State", "Type", "Group", "Actions"} {
 		if !headers[header] {

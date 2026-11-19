@@ -348,6 +348,7 @@ func run(args []string) int {
 	watchAlarms := app.NewWatchAlarms(store, func(err error) { logger.Error("watch alarm persistence", logFieldError, err) })
 	eventNotifier := app.NewEventNotifier(config.ShortHostname(), logger, panicGate.Active, store)
 	eventNotifier.WatchAlarms = watchAlarms
+	eventNotifier.NotifyMutes = store
 	eventNotifier.Update(config.EventNotifyConfig(cfg.Global.Raw), notifiers)
 	persistenceEvents := app.NewPersistenceEvents(app.MultiEmit(app.SlogEmitter(logger), eventLog.Add, func(app.Event) { webChanges.Notify() }, eventNotifier.Emit), eventNotifier)
 	eventNotifyDone := goTracked(func() { eventNotifier.Run(ctx) })
@@ -367,6 +368,7 @@ func run(args []string) int {
 		OperationSettling:    store,
 		ServiceRestartNotice: store,
 		Panic:                panicGate,
+		NotifyMutes:          store,
 		RuleState:            store,
 		WatchState:           store,
 		WatchAlarms:          watchAlarms,

@@ -38,6 +38,10 @@ type monitorView struct {
 	Paused     bool
 	Source     string
 	ChangedAt  string // RFC3339 when set
+	// MutedUntil ends an operator's notification mute that holds now; zero
+	// when the service is not muted.
+	MutedUntil time.Time
+	MuteSource string
 }
 
 func (m monitorView) Monitored() bool {
@@ -64,6 +68,9 @@ func serviceMonitorState(ctx context.Context, cfg *config.Config, service string
 	withStateStore(ctx, cfg, func(error) int { return exitSuccess }, func(store *state.Store) int {
 		if record, found, err := store.MonitorState(service); err == nil && found {
 			view = view.withRecord(record)
+		}
+		if mute, found, err := store.NotificationMute(service); err == nil && found && mute.MutedAt(time.Now()) {
+			view.MutedUntil, view.MuteSource = mute.Until, mute.Source
 		}
 		return exitSuccess
 	})

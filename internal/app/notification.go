@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 
 	"sermo/internal/config"
 	"sermo/internal/notify"
@@ -28,13 +29,22 @@ const recoveredMessagePrefix = "recovered: "
 
 // deliverNotification sends msg to every notifier that allow admits (nil
 // admits all) and whose min_severity the message meets, reporting each
-// delivery. It is the one monitoring delivery loop: operator actions (a
+// delivery; a target the operator muted reports each one as withheld. It is
+// the one monitoring delivery loop: operator actions (a
 // notifier test, an inventory report) call Send directly and are never
 // filtered.
 func deliverNotification(ctx context.Context, notifiers []notify.Notifier, msg notify.Message, allow func(notify.Notifier) bool, report func(notify.Notifier, error)) {
 	scope, _ := ctx.Value(watchAlarmContextKey{}).(watchAlarmScope)
 	epoch, allowed := scope.notificationEpoch()
 	if !allowed {
+		return
+	}
+	if muted, until := notifyMutedFrom(ctx); muted {
+		for _, n := range notifiers {
+			if (allow == nil || allow(n)) && notify.Accepts(n, msg.Severity) {
+				report(n, notificationsMutedError{until: until})
+			}
+		}
 		return
 	}
 	for _, n := range notifiers {
@@ -48,15 +58,19 @@ func deliverNotification(ctx context.Context, notifiers []notify.Notifier, msg n
 	}
 }
 
-// deliveryReport is the report deliverNotification calls: one notify or
-// notify-failed event per notifier, on the subject that sent the message (a
-// watch, a rule).
+// deliveryReport is the report deliverNotification calls: one notify,
+// notify-failed or (for a muted target) notify-suppressed event per notifier,
+// on the subject that sent the message (a watch, a rule).
 func deliveryReport(emit func(Event), subject Event) func(notify.Notifier, error) {
 	return func(n notify.Notifier, err error) {
 		e := subject
-		if err != nil {
+		var muted notificationsMutedError
+		switch {
+		case errors.As(err, &muted):
+			e.Kind, e.Message = eventKindNotifySuppressed, n.Name()+": "+muted.Error()
+		case err != nil:
 			e.Kind, e.Message = eventKindNotifyFail, n.Name()+": "+err.Error()
-		} else {
+		default:
 			e.Kind, e.Message = eventKindNotify, "notified "+n.Name()
 		}
 		emit(e)

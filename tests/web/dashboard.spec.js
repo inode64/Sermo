@@ -560,6 +560,77 @@ test("watch monitor buttons explain an in-flight change", async ({ page }) => {
   await expect(button).toBeEnabled();
 });
 
+// A notification mute asks only for its duration: it never touches the
+// service, so it skips the operation confirmation and posts the chosen for.
+test("service notification mute posts the chosen duration and unmutes in one click", async ({ page }) => {
+  let muted = false;
+  const posts = [];
+  await serveWeb(page, () => (muted ? { notify_muted_until: "2026-07-10T16:00:00Z", notify_mute_source: "web" } : {}));
+  await page.route("**/api/services/web/mute?**", (route) => {
+    posts.push(new URL(route.request().url()).search);
+    muted = true;
+    return route.fulfill({ json: { ok: true } });
+  });
+  await page.route("**/api/services/web/unmute", (route) => {
+    posts.push("unmute");
+    muted = false;
+    return route.fulfill({ json: { ok: true } });
+  });
+  await page.reload();
+
+  const dialog = page.locator("#notify-mute-dialog");
+  await webButton(page, "mute").click();
+  await expect(dialog).toBeVisible();
+  await expect(page.locator("#notify-mute-title")).toHaveText("Mute notifications for service Web server?");
+  await expect(dialog.getByLabel("1 hour", { exact: true })).toBeChecked();
+  const results = await new AxeBuilder({ page })
+    .include("#notify-mute-dialog")
+    .withTags(["wcag2a", "wcag2aa", "wcag22aa"])
+    .analyze();
+  expect(results.violations).toEqual([]);
+  await dialog.getByRole("button", { name: "Cancel notification mute" }).click();
+  await expect(dialog).toBeHidden();
+  expect(posts).toEqual([]);
+
+  await webButton(page, "mute").click();
+  await dialog.getByLabel("4 hours", { exact: true }).check();
+  await dialog.getByRole("button", { name: "Confirm notification mute" }).click();
+  await expect.poll(() => posts).toEqual(["?for=4h"]);
+
+  const unmute = webButton(page, "unmute");
+  await expect(unmute).toHaveAttribute("aria-pressed", "true");
+  await expect(unmute).toHaveAttribute("title", /notifications muted until 2026-07-10 16:00:00 UTC by web/);
+  await unmute.click();
+  await expect(dialog).toBeHidden();
+  await expect.poll(() => posts).toEqual(["?for=4h", "unmute"]);
+  await expect(webButton(page, "mute")).toBeVisible();
+});
+
+// A service watch muted only through its service follows it: the watch shows
+// the mute but cannot lift it.
+test("watch notification mute follows its service", async ({ page }) => {
+  await page.route("**/api/watches", (route) => route.fulfill({ json: [
+    { name: "web:queue", check_type: "process", scope: "service", enabled: true, monitored: true, state: "ok",
+      notify_muted_until: "2026-07-10T16:00:00Z", notify_mute_source: "cli", notify_mute_from_service: true },
+    { name: "disk-root", check_type: "storage", enabled: true, monitored: true, state: "ok" },
+  ] }));
+  await page.reload();
+
+  const inherited = page.locator('#wat-row-web\\:queue [data-watch-action="unmute"]');
+  await expect(inherited).toBeDisabled();
+  await expect(inherited).toHaveAttribute("aria-pressed", "true");
+  await expect(inherited).toHaveAccessibleDescription("muted with its service until 2026-07-10 16:00:00 UTC; unmute the service");
+
+  const requests = [];
+  await page.route("**/api/watches/disk-root/mute?**", (route) => {
+    requests.push(new URL(route.request().url()).search);
+    return route.fulfill({ json: { ok: true } });
+  });
+  await page.locator('#wat-row-disk-root [data-watch-action="mute"]').click();
+  await page.locator("#notify-mute-dialog").getByRole("button", { name: "Confirm notification mute" }).click();
+  await expect.poll(() => requests).toEqual(["?for=1h"]);
+});
+
 test("dashboard passes axe and fits the viewport", async ({ page }) => {
   const results = await new AxeBuilder({ page })
     .withTags(["wcag2a", "wcag2aa", "wcag22aa"])

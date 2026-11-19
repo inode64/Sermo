@@ -531,17 +531,18 @@ type checkWatchSpec struct {
 // samplers keep running while Watch suppresses only their configured effects.
 func newWatchRuntime(name, checkType string, deps Deps, interval time.Duration) *Watch {
 	return &Watch{
-		Name:       name,
-		CheckType:  checkType,
-		Interval:   interval,
-		InPanic:    deps.Panic.Active,
-		Settling:   deps.Settling,
-		Now:        deps.Now,
-		Sleep:      deps.Sleep,
-		Emit:       deps.Emit,
-		StateStore: deps.WatchState,
-		Alarms:     deps.WatchAlarms,
-		configID:   deps.watchConfigID,
+		Name:        name,
+		CheckType:   checkType,
+		Interval:    interval,
+		InPanic:     deps.Panic.Active,
+		notifyMuted: notifyMuteGate(deps.NotifyMutes, deps.Now, notifyMuteKeys(name)...),
+		Settling:    deps.Settling,
+		Now:         deps.Now,
+		Sleep:       deps.Sleep,
+		Emit:        deps.Emit,
+		StateStore:  deps.WatchState,
+		Alarms:      deps.WatchAlarms,
+		configID:    deps.watchConfigID,
 	}
 }
 

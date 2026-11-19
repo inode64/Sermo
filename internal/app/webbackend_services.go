@@ -84,6 +84,9 @@ type serviceLockView struct {
 	ready           bool
 	monitorRecords  map[string]state.MonitorRecord
 	settlingRecords map[string]state.OperationSettlingRecord
+	// muteRecords is the batch of notification mutes; nil reads them for
+	// this one service.
+	muteRecords map[string]state.NotificationMuteRecord
 }
 
 func (b *WebBackend) viewWithRuntime(ctx context.Context, name string, e *webEntry, observation serviceObservation, lastEvent *web.Event, lockView serviceLockView) web.Service {
@@ -120,6 +123,11 @@ func (b *WebBackend) viewWithRuntime(ctx context.Context, name string, e *webEnt
 		svc.Monitored, svc.MonitorSource = monitoredState.active, monitoredState.source
 		monitorChangedAt, svc.MonitorChangedAt = monitoredState.changedAt, monitoredState.changedAtText()
 	}
+	mutes := lockView.muteRecords
+	if mutes == nil {
+		mutes = b.notifyMuteRecords()
+	}
+	svc.NotifyMutedUntil, svc.NotifyMuteSource, _ = notifyMuteView(mutes, observation.at, name)
 	status, statusAt := e.backendStatusSnapshot(ctx, observation.at)
 	// A sermoctl action runs in a separate process, so it cannot invalidate this
 	// backend's in-memory init-status cache directly. Its monitor-state transition
@@ -645,6 +653,7 @@ func (b *WebBackend) servicesWithLockReports(ctx context.Context, reports map[st
 	lastOperations := b.lastOperations("")
 	operating := b.operationActiveByService()
 	monitored := b.monitorRecords()
+	mutes := b.notifyMuteRecords()
 	var settling map[string]state.OperationSettlingRecord
 	if source, ok := b.operationSettling.(interface {
 		OperationSettlingStates() (map[string]state.OperationSettlingRecord, error)
@@ -661,7 +670,7 @@ func (b *WebBackend) servicesWithLockReports(ctx context.Context, reports map[st
 		}
 		svc := b.viewWithRuntime(ctx, name, e, b.observeService(name, e), lastEvents[name], serviceLockView{
 			active:         activeLockNamesFromReport(reports[name]),
-			monitorRecords: monitored, settlingRecords: settling,
+			monitorRecords: monitored, settlingRecords: settling, muteRecords: mutes,
 			operationActive: operating[name],
 			ready:           true,
 		})

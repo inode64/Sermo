@@ -413,6 +413,26 @@
   </div>
 </dialog>
 
+<dialog id="notify-mute-dialog" aria-labelledby="notify-mute-title" aria-describedby="notify-mute-message">
+  <div class="modal-head">
+    <h2 id="notify-mute-title" class="modal-title"></h2>
+  </div>
+  <div class="modal-body">
+    <p id="notify-mute-message" class="modal-message">Checks, hooks and automatic remediation keep running; only notifications are withheld. What opens or recovers meanwhile is not sent later. The mute ends on its own.</p>
+    <fieldset class="notify-mute-durations">
+      <legend>Mute for</legend>
+      <label><input type="radio" name="notify-mute-for" value="15m"> 15 minutes</label>
+      <label><input type="radio" name="notify-mute-for" value="1h" checked> 1 hour</label>
+      <label><input type="radio" name="notify-mute-for" value="4h"> 4 hours</label>
+      <label><input type="radio" name="notify-mute-for" value="24h"> 24 hours</label>
+    </fieldset>
+  </div>
+  <div class="modal-foot">
+    <button type="button" data-notify-mute-result="false" aria-label="Cancel notification mute">cancel</button>
+    <button type="button" id="notify-mute-ok" data-notify-mute-result="true" aria-label="Confirm notification mute">mute</button>
+  </div>
+</dialog>
+
 <footer id="app-footer" role="contentinfo">
   <span id="state-before-hint" class="visually-hidden">Optional positive duration (e.g. 720h) or non-future RFC3339 timestamp; leave empty for default retention.</span>
   <span id="event-before-hint" class="visually-hidden">Optional positive duration (e.g. 720h) or non-future RFC3339 timestamp; leave empty to clear all events.</span>

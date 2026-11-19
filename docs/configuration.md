@@ -951,8 +951,10 @@ watches:
 ## Web UI
 
 The daemon can serve a small web dashboard to view services and watches.
-Admins can monitor/unmonitor both, and can start/stop/restart/reload/resume/repair services
-over the same safe operation engine the CLI uses.
+Admins can monitor/unmonitor both, mute their notifications for a while (see
+[Notification mute](cli.md#notification-mute)), and can
+start/stop/restart/reload/resume/repair services over the same safe operation
+engine the CLI uses.
 
 The page keeps one sticky bar — the host name with its uptime and the daemon's
 state, a search that opens any service, watch, application, library or mount by
@@ -1605,8 +1607,11 @@ accepted operation cannot switch targets during a concurrent reload.
 - `POST /api/services/{name}/preflight` — run the same preflight checks as
   `sermoctl preflight SERVICE`, without starting or stopping anything.
 - `POST /api/services/{name}/{action}` — service action. `action` is `monitor`,
-  `unmonitor`, `start`, `stop`, `restart`, `reload`, `pause`, `resume` or
-  `repair`; start/stop/restart/reload/pause/resume/repair go through the safe operation
+  `unmonitor`, `mute`, `unmute`, `start`, `stop`, `restart`, `reload`, `pause`,
+  `resume` or `repair`. `mute` requires `for=DURATION` (`1m` to `24h`) and
+  withholds the service's notifications, its watches' included, until then;
+  `unmute` ends it. The list reports a mute in `notify_muted_until` and
+  `notify_mute_source`. Start/stop/restart/reload/pause/resume/repair go through the safe operation
   engine (`pause` only for a backend that can freeze the target, a libvirt VM or
   a Docker container). `no_cascade=1` acts on this service alone, without its
   `also_apply` targets, like `sermoctl … --no-cascade`. `repair`
@@ -1661,8 +1666,10 @@ accepted operation cannot switch targets during a concurrent reload.
   resolve), or a name is unknown or disabled. Equivalent to
   `sermoctl apps refresh`, `libs refresh` and `watch refresh`.
 - `POST /api/watches/{name}/{action}` — watch action. `action` is
-  `monitor`, `unmonitor`, `silence`, `expand`, `probe`, `pause`, `resume` or
-  `replication-start`. For `silence`, see [Silencing a watch alarm](#silencing-a-watch-alarm). `probe` takes one explicit sample of a host diskio,
+  `monitor`, `unmonitor`, `mute`, `unmute`, `silence`, `expand`, `probe`,
+  `pause`, `resume` or `replication-start`. `mute` takes `for` as for a
+  service; a watch muted only through its service reports
+  `notify_mute_from_service` and cannot be unmuted on its own. For `silence`, see [Silencing a watch alarm](#silencing-a-watch-alarm). `probe` takes one explicit sample of a host diskio,
   LVM, RAID (`raid`, `storcli`, `ssacli`), SMART or hdparm watch; it is
   read-only except for SMART, where it starts a short self-test (see below).
   `pause`/`resume` require the RAID control block below; `replication-start`

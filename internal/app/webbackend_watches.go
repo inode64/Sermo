@@ -29,6 +29,8 @@ func (b *WebBackend) Watches(_ context.Context) []web.Watch {
 	system := b.watchSystemSnapshot()
 	// One read of every monitor state and every due time serves the whole list.
 	monitors := b.monitorRecords()
+	mutes := b.notifyMuteRecords()
+	now := b.webNow()
 	nextChecks := b.watchSchedule.nextChecks()
 	for _, name := range b.watchOrder {
 		w := b.watches[name]
@@ -36,6 +38,8 @@ func (b *WebBackend) Watches(_ context.Context) []web.Watch {
 			continue
 		}
 		view := b.watchView(w, system, lastActivities[name], monitors)
+		keys := notifyMuteKeys(w.name)
+		view.NotifyMutedUntil, view.NotifyMuteSource, view.NotifyMuteFromService = notifyMuteView(mutes, now, keys[0], keys[1:]...)
 		if next, ok := nextChecks[scheduleKey{name: w.name, checkType: w.checkType}]; ok && view.Enabled && view.Monitored {
 			view.NextCheckAt = next.UTC().Format(time.RFC3339)
 		}

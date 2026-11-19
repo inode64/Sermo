@@ -212,7 +212,10 @@ func watchAlarmDeliveryAllowed(ctx context.Context) bool {
 	return allowed
 }
 
+// alarmContext scopes a cycle's deliveries to this watch: its operator mute
+// and, for a watch that is not an application's, its alarm acknowledgement.
 func (w *Watch) alarmContext(ctx context.Context) context.Context {
+	ctx = withNotifyMute(ctx, w.notifyMuted)
 	if w.App != "" {
 		return ctx
 	}

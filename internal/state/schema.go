@@ -97,6 +97,16 @@ var storageSchema = []string{
 		updated_at TEXT NOT NULL
 	);`,
 	`CREATE INDEX IF NOT EXISTS event_log_app_at_idx ON event_log (app, at DESC, id DESC);`,
+	// notification_mute holds an operator's time-bound mute of one service's or
+	// watch's notifications, keyed like monitor_state. A row past its until no
+	// longer mutes; it stays until the next mute or unmute of that key replaces
+	// or removes it.
+	`CREATE TABLE IF NOT EXISTS notification_mute (
+		key        TEXT PRIMARY KEY,
+		until      TEXT NOT NULL,
+		source     TEXT NOT NULL,
+		updated_at TEXT NOT NULL
+	);`,
 	// operation_settling suppresses service rules/alerts around manual or
 	// automatic service operations. A row starts in phase "running" while the
 	// operation is in progress, then moves to "settling" after a successful

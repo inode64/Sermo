@@ -65,6 +65,9 @@ type receiptLookup struct {
 // a daemon restart does not turn an ongoing incident into a new alert.
 type EventNotifier struct {
 	WatchAlarms *WatchAlarms
+	// NotifyMutes withholds the events of a service or watch an operator
+	// muted, as panic mode withholds every event. Optional.
+	NotifyMutes NotifyMuteStore
 	host        string
 	logger      *slog.Logger
 	inPanic     func() bool
@@ -355,17 +358,19 @@ func (n *EventNotifier) deliver(ctx context.Context, e eventNotification) {
 	if !n.WatchAlarms.allowsNotification(e.Watch, e.alarmEpoch) {
 		return
 	}
-	panicking := n.inPanic != nil && n.inPanic()
-	if panicking && e.Kind != eventKindRecovered {
+	// A muted target is withheld exactly as panic mode withholds everything:
+	// its opening is never recorded, and its recovery closes quietly.
+	withheld := (n.inPanic != nil && n.inPanic()) || n.muted(e.Event)
+	if withheld && e.Kind != eventKindRecovered {
 		return
 	}
 	targets, interval := n.deliveryConfig()
 	for _, target := range targets {
-		n.deliverTarget(ctx, e, target, interval, panicking)
+		n.deliverTarget(ctx, e, target, interval, withheld)
 	}
 }
 
-func (n *EventNotifier) deliverTarget(ctx context.Context, e eventNotification, target notify.Notifier, interval time.Duration, panicking bool) {
+func (n *EventNotifier) deliverTarget(ctx context.Context, e eventNotification, target notify.Notifier, interval time.Duration, withheld bool) {
 	level := e.level()
 	if e.Notice {
 		if notify.Accepts(target, level) {
@@ -385,7 +390,7 @@ func (n *EventNotifier) deliverTarget(ctx context.Context, e eventNotification, 
 		// until we can decide whether this target has already heard it.
 		_, known := n.unread[lookup]
 		if known || len(n.unread) < eventNotifyQueueSize {
-			e.quietRecovery = panicking
+			e.quietRecovery = withheld
 			n.unread[lookup] = e
 		}
 		if n.readLogAt.IsZero() || now.Sub(n.readLogAt) >= eventNotifyLogInterval {
@@ -396,7 +401,7 @@ func (n *EventNotifier) deliverTarget(ctx context.Context, e eventNotification, 
 	}
 	delete(n.unread, lookup)
 	n.reconcilePending(target.Name(), key, e.Event, rec, found)
-	if panicking {
+	if withheld {
 		n.closeUnannounced(target.Name(), rec, found)
 		return
 	}
@@ -514,7 +519,7 @@ func (n *EventNotifier) remind(ctx context.Context) {
 			continue
 		}
 		for _, rec := range due {
-			if !n.allowsAlarmRecord(rec) {
+			if !n.allowsAlarmRecord(rec) || n.recordMuted(rec) {
 				continue
 			}
 			if !n.canRemember(rec.IncidentKey, target.Name()) {

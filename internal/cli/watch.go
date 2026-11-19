@@ -28,7 +28,7 @@ const (
 // runWatch dispatches host-watch queries against the running daemon.
 func (a App) runWatch(ctx context.Context, opts options) int {
 	if len(opts.args) == 0 {
-		return a.commandUsageError(commandWatch, "watch requires subcommand status, monitor, unmonitor, silence, probe, refresh, kill, pause or resume")
+		return a.commandUsageError(commandWatch, "watch requires subcommand status, monitor, unmonitor, mute, unmute, silence, probe, refresh, kill, pause or resume")
 	}
 	switch opts.args[0] {
 	case commandStatus:
@@ -37,6 +37,10 @@ func (a App) runWatch(ctx context.Context, opts options) int {
 		return a.runWatchMonitor(ctx, opts, false)
 	case commandUnmonitor:
 		return a.runWatchMonitor(ctx, opts, true)
+	case commandMute:
+		return a.runWatchMute(ctx, opts, true)
+	case commandUnmute:
+		return a.runWatchMute(ctx, opts, false)
 	case web.APIActionSilence:
 		return a.runWatchSilence(ctx, opts)
 	case "probe":
@@ -309,12 +313,23 @@ func (a App) runWatchStatus(ctx context.Context, opts options) int {
 		if len(detail.Readings) > 0 {
 			out["readings"] = detail.Readings
 		}
+		if detail.NotifyMutedUntil != "" {
+			out["notify_muted_until"] = detail.NotifyMutedUntil
+			out["notify_mute_from_service"] = detail.NotifyMuteFromService
+		}
 		writeJSON(a.Stdout, out)
 		return code
 	}
 	fmt.Fprintf(a.Stdout, "%s state=%s\n", name, watchState)
 	if detail.Alarm.Silenced {
 		fmt.Fprintln(a.Stdout, "  Alarm: silenced until the watch state changes")
+	}
+	if until, err := time.Parse(time.RFC3339, detail.NotifyMutedUntil); err == nil {
+		with := ""
+		if detail.NotifyMuteFromService {
+			with = " with its service"
+		}
+		fmt.Fprintf(a.Stdout, "  Notifications: muted%s until %s\n", with, until.Local().Format(time.DateTime))
 	}
 	if detail.LastCheckedAt != "" {
 		fmt.Fprintf(a.Stdout, "  Last checked: %s\n", detail.LastCheckedAt)
