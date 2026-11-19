@@ -1442,6 +1442,32 @@ test("global search opens a service and exposes individual actions", async ({ pa
   await expect(row.locator('[data-service-action="unmonitor"]')).toBeVisible();
 });
 
+// Each lifecycle action keeps its hue on the glyph. The power button follows
+// the action it shows: an inactive service's power button posts restart but
+// draws start, and reads green.
+test("service lifecycle buttons color start, stop, restart and reload", async ({ page }) => {
+  const tokenColor = (token) => page.evaluate((name) => {
+    const probe = document.createElement("span");
+    probe.style.color = `var(${name})`;
+    document.body.append(probe);
+    const color = getComputedStyle(probe).color;
+    probe.remove();
+    return color;
+  }, token);
+  const colorOf = (locator) => locator.evaluate((el) => getComputedStyle(el).color);
+
+  await expect(webButton(page, "stop")).toBeVisible();
+  expect(await colorOf(webButton(page, "stop"))).toBe(await tokenColor("--crit"));
+  expect(await colorOf(webButton(page, "restart"))).toBe(await tokenColor("--restart"));
+  expect(await colorOf(webButton(page, "reload"))).toBe(await tokenColor("--info"));
+
+  await serveWeb(page, { status: "inactive", state: "stopped" });
+  await page.reload();
+  const power = webButton(page, "restart");
+  await expect(power).toHaveAttribute("aria-label", "Start service Web server");
+  expect(await colorOf(power)).toBe(await tokenColor("--ok"));
+});
+
 test("failed services prioritize restart and keep repair as a manual fallback", async ({ page }) => {
   await page.route("**/api/services/failed-repair", async (route) => {
     await route.fulfill({ json: {

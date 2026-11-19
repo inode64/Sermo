@@ -981,6 +981,11 @@ Last activity use the same colours; on phones the label moves into the message
 so the outcome and reason remain visible. Historical events and notification
 severity retain their original values.
 
+Each lifecycle button draws its glyph in its own colour: start green, stop
+red, restart orange and reload blue. The power button takes the colour of the
+action it shows. The colour only identifies the action; the outcome marks
+below draw a ring around the button.
+
 Service action buttons mark only current operation forecasts. A past failure
 does not leave a red or amber mark on a restart, reload, power or pause/resume
 button. Immediate operation feedback still reports failures and blocks.

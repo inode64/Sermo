@@ -27,6 +27,10 @@
        (--crit), degraded (--warn) nor running (--info). AA on panel and on
        its own tint. */
     --paused: #6639ba;
+    /* restart is the one lifecycle action without a status hue of its own:
+       orange, apart from start (--ok), stop (--crit) and reload (--info).
+       AA on panel, panel-2 and bg. */
+    --restart: #c2410c;
     --accent: #0860c8;
     --on-accent: #ffffff; /* text on an --accent fill */
     --radius: 8px;
@@ -50,6 +54,7 @@
       --critical: #f778ba;
       --info: #4493f8;
       --paused: #a371f7;
+      --restart: #f0883e;
       --accent: #4493f8;
       --on-accent: #0d1117;
       --shadow: 0 1px 2px rgb(0 0 0 / .4);

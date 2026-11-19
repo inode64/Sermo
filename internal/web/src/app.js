@@ -3073,6 +3073,20 @@ async function pressServiceButton(name, button) {
 // opts.pressed for its latched state and opts.extraClass for its styling.
 // opts.mark (serviceOperationMarks) outlines the button amber (blocked) or red
 // (failed) with a badge, pulsing while its window is open, and describes it.
+// lifecycleActionClass colors a service button by the action it shows, not
+// the one it posts: an inactive service's power button posts its power action
+// but draws start, and reads green like any other start.
+const lifecycleActionClasses = {
+  [actionStart]: "act-start",
+  [actionStop]: "act-stop",
+  [actionRestart]: "act-restart",
+  [actionReload]: "act-reload",
+};
+
+function lifecycleActionClass(action) {
+  return lifecycleActionClasses[action] || "";
+}
+
 function serviceActionButton(s, action, busy, compact = false, title = "", opts = {}) {
   const displayAction = opts.displayAction || action;
   const label = svcActionAriaLabel(s, displayAction);
@@ -3083,7 +3097,7 @@ function serviceActionButton(s, action, busy, compact = false, title = "", opts 
   const mark = opts.mark;
   const outcomeID = mark ? actionHintID("svc", s.name, action, "outcome") : "";
   const classes = [
-    compact ? "icon-btn" : "", opts.extraClass || "",
+    compact ? "icon-btn" : "", opts.extraClass || "", lifecycleActionClass(displayAction),
     mark ? `outcome-${mark.outcome}` : "", mark && mark.pulse ? outcomePulseClass : "",
   ].filter(Boolean).join(" ");
   const pressed = "pressed" in opts ? (opts.pressed ? domBoolTrue : domBoolFalse) : nothing;

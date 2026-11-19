@@ -284,6 +284,13 @@
   .panel tbody .icon-btn { border-color: transparent; background: transparent; }
   .panel tbody .icon-btn:hover:not(:disabled), .panel tbody .icon-btn:focus-visible { border-color: var(--line-2); background: var(--panel-2); }
   .panel tbody .icon-btn.danger-btn { color: var(--crit); }
+  /* Each lifecycle action keeps its hue on the glyph, so a row reads at a
+     glance which button starts, stops, restarts or reloads. Only the glyph is
+     colored: hover, focus and the outcome marks keep their own boxes. */
+  .panel tbody .icon-btn.act-start { color: var(--ok); }
+  .panel tbody .icon-btn.act-stop { color: var(--crit); }
+  .panel tbody .icon-btn.act-restart { color: var(--restart); }
+  .panel tbody .icon-btn.act-reload { color: var(--info); }
   .panel tbody .icon-btn.danger-btn:hover:not(:disabled) { border-color: color-mix(in srgb, var(--crit) 55%, transparent); background: color-mix(in srgb, var(--crit) 12%, transparent); }
   .actions button { margin: 0 .1rem .1rem 0; }
   /* row-toggle: a real <button> that drives row/cross-ref expansion but reads as
