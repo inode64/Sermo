@@ -1550,6 +1550,11 @@ NFS port remains healthy. The packaged `nfs` profile therefore sets
 `allow_dependencies: true`. The NFS profile itself is a no-resident-process
 service because its server runs in the kernel; the separate `rpc-mountd` profile
 owns process discovery and stale-binary reporting for the userspace daemon.
+OpenRC has no mountd service of its own: its `nfs` service starts `rpc.mountd`,
+so under OpenRC the profile restarts `nfs` once mountd has been gone, or has
+run a binary an upgrade replaced, for two cycles while the service is up
+(`restart-if-mountd-stopped-or-replaced`). A mountd whose binary was
+uninstalled only alerts, because a restart could not start it again.
 
 `pmlogger` and `pmie` set it for the same reason. Each is `BindsTo=` its farm
 (`pmlogger_farm`, `pmie_farm`), which is `PartOf=` it. An isolated restart of

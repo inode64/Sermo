@@ -34,8 +34,12 @@ watches:
       expect: active
   # Not a selector, for the reason above, yet OpenRC runs it inside this service
   # with no unit of its own: without this a dead mountd would go unnoticed while
-  # the kernel keeps answering the nfs probe below.
-  mountd:
+  # the kernel keeps answering the nfs probe below, and after an nfs-utils
+  # upgrade nothing would renew the mountd still running the replaced binary.
+  # Restarting the service starts both again. Under systemd mountd is a unit of
+  # its own, which the rpc-mountd profile watches and renews.
+  restart-if-mountd-stopped-or-replaced:
+    enable_if: { init: openrc }
     check:
       type: process
       exe: ${rpc_mountd_binary}
@@ -44,6 +48,9 @@ watches:
       optional: true
       requires:
         - service
+    for: { cycles: 2 }
+    then:
+      action: restart
   nfs:
     check:
       type: nfs
