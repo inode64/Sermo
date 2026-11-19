@@ -401,3 +401,15 @@ func TestReloadOnUpgradeRejectsUnverifiableServices(t *testing.T) {
 		}
 	}
 }
+
+// TestCatalogBitbucketRunnerNamesItsJavaRuntime pins the runtime the runner's
+// unit starts. Without it the service named no program, so a JVM left running
+// from a versioned JDK directory an upgrade removed read as an uninstalled
+// daemon, and the stale-binary restart stayed withheld for weeks although a
+// restart starts the installed JDK through the launcher.
+func TestCatalogBitbucketRunnerNamesItsJavaRuntime(t *testing.T) {
+	resolved := resolveCatalogService(t, "bitbucketrunner", "systemd")
+	if got := ServiceBinary(resolved.Tree); !strings.HasSuffix(got, "/java") {
+		t.Fatalf("ServiceBinary = %q, want the linked java runtime", got)
+	}
+}

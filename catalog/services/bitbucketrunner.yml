@@ -7,6 +7,12 @@ service:
     - bitbucketrunner
   openrc:
     - bitbucketrunner
+# The runner is a jar its unit starts through the java launcher. Linking the
+# runtime names the program a restart starts: once a JDK upgrade removes the
+# versioned directory the JVM ran from, the process reads as running a replaced
+# binary, which a restart renews, rather than an uninstalled one.
+apps:
+  - java
 watches:
   service:
     check:
