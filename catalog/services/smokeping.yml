@@ -1,0 +1,40 @@
+name: smokeping
+display_name: SmokePing
+category: observability
+description: SmokePing latency monitor, which pings its targets through fping and keeps the results in RRD files.
+service:
+  systemd:
+    - smokeping
+  openrc:
+    - smokeping
+# SmokePing is a Perl program that renames its process ("/usr/bin/smokeping
+# [FPing]"), so the interpreter is the running executable: the init backend
+# attributes its processes and the profile declares no selector of its own.
+apps:
+  - perl
+  - smokeping
+restart_on_change:
+  apps:
+    - perl
+    - smokeping
+  messages:
+    app: >-
+      ${display_name} will restart after version change of ${change.app}: ${change.old_version} -> ${change.new_version}
+variables:
+  user: smokeping
+  config: /etc/smokeping/config
+config_files:
+  - ${config}
+# Where Gentoo's OpenRC script has it write its pidfile; optional, since the
+# init attributes the daemon without it.
+pidfile:
+  path: /run/smokeping/smokeping.pid
+  optional: true
+# A latency monitor reports what it measures in its graphs; these checks assert
+# only that SmokePing itself runs, never the latency of its targets.
+watches:
+  service:
+    check:
+      type: service
+      expect: active
+      verify: true

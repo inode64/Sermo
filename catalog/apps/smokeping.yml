@@ -1,0 +1,8 @@
+name: smokeping
+display_name: "SmokePing"
+category: observability
+variables:
+  binary: ${bindir}/smokeping
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["${binary}", "--version"], timeout: 10s }
