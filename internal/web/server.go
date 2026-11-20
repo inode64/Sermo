@@ -128,8 +128,8 @@ const (
 	apiActionResume    = string(rules.ActionResume)
 	apiActionMonitor   = "monitor"
 	apiActionUnmonitor = "unmonitor"
-	// APIActionMute withholds a service's or watch's notifications for the
-	// APIQueryFor duration; APIActionUnmute ends the mute early.
+	// APIActionMute withholds a service's, watch's or notifier's notifications
+	// for the APIQueryFor duration; APIActionUnmute ends the mute early.
 	APIActionMute   = "mute"
 	APIActionUnmute = "unmute"
 	APIQueryFor     = "for"
@@ -250,6 +250,7 @@ const (
 	routeAPIWatchMetrics              = routeMethodGet + APIPathWatches + "/" + routeVarName + "/" + apiSegmentMetrics
 	routeAPINotifiers                 = routeMethodGet + apiPathNotifiers
 	routeAPINotifierTest              = routeMethodPost + apiPathNotifiers + "/" + routeVarName + "/" + apiActionTest
+	routeAPINotifierAction            = routeMethodPost + apiPathNotifiers + "/" + routeVarName + "/" + routeVarAction
 	routeAPIApplications              = routeMethodGet + APIPathApplications
 	routeAPIApplicationsRefresh       = routeMethodPost + APIPathApplications + "/" + APISegmentRefresh
 	routeAPILibraries                 = routeMethodGet + APIPathLibraries
@@ -431,6 +432,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc(routeAPIWatchMetrics, s.handleWatchMetrics)
 	mux.HandleFunc(routeAPINotifiers, s.handleNotifiers)
 	mux.HandleFunc(routeAPINotifierTest, s.handleNotifierTest)
+	mux.HandleFunc(routeAPINotifierAction, s.handleNotifierAction)
 	mux.HandleFunc(routeAPIApplications, s.handleApplications)
 	mux.HandleFunc(routeAPIApplicationsRefresh, s.handleApplicationsRefresh)
 	mux.HandleFunc(routeAPILibraries, s.handleLibraries)

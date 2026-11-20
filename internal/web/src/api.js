@@ -105,7 +105,8 @@ export function lockReleaseAPI(service, query = "") {
 }
 export function mountAPI(name, suffix = "") { return apiEntityPath(apiMountsPath, name, suffix); }
 export function mountBlockersAPI(name) { return mountAPI(name, apiSuffixBlockers); }
-export function notifierTestAPI(name) { return apiEntityPath(apiNotifiersPath, name, apiSuffixTest); }
+export function notifierAPI(name, suffix = "") { return apiEntityPath(apiNotifiersPath, name, suffix); }
+export function notifierTestAPI(name) { return notifierAPI(name, apiSuffixTest); }
 export function panicAPI(enable) { return `${apiPanicPath}/${enable ? "on" : "off"}`; }
 // refreshAPI runs the checks behind one panel now: base is the applications,
 // libraries or watches collection.

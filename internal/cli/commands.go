@@ -55,6 +55,7 @@ const commandWebHashPassword = "hash-password"
 const (
 	commandMountList    = "list"
 	commandNotifierTest = "test"
+	commandNotifierList = "list"
 	commandStateCompact = "compact"
 	commandArgAll       = config.SelectionKeywordAll
 	commandArgClear     = "clear"

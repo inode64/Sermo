@@ -6,7 +6,8 @@ import (
 )
 
 // NotificationMuteRecord is one operator mute of a service's or watch's
-// notifications. It mutes only while the clock reads before Until.
+// notifications, or of a notifier. It mutes only while the clock reads before
+// Until.
 type NotificationMuteRecord struct {
 	Until     time.Time
 	Source    string

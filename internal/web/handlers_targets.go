@@ -40,6 +40,23 @@ func (s *Server) handleNotifierTest(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// handleNotifierAction mutes or unmutes one notifier; its test has its own
+// route.
+func (s *Server) handleNotifierAction(w http.ResponseWriter, r *http.Request) {
+	backend, ok := s.mutationBackend(w, r)
+	if !ok {
+		return
+	}
+	action := r.PathValue(apiParamAction)
+	if !muteActions[action] {
+		writeError(w, http.StatusBadRequest, apiErrorUnknownActionPrefix+action)
+		return
+	}
+	if d, ok := muteDuration(w, r, action); ok {
+		writeMonitorAction(w, backend.SetNotifierNotifyMute(r.Context(), r.PathValue(apiParamName), d))
+	}
+}
+
 func (s *Server) handleApplications(w http.ResponseWriter, r *http.Request) {
 	s.readJSON(w, r, func(ctx context.Context, backend Backend) any { return backend.Applications(ctx) })
 }

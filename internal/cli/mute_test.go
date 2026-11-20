@@ -142,3 +142,67 @@ func TestStatusShowsNotificationMute(t *testing.T) {
 		t.Fatalf("status json = %+v", st)
 	}
 }
+
+// A notifier mute is the channel's, keyed apart from services and watches,
+// and `notifier list` is where the CLI shows it.
+func TestNotifierMuteUnmuteAndListCommand(t *testing.T) {
+	root, global := writeCatalogServiceConfig(t)
+	run := func(args ...string) (int, string) {
+		var out, errOut bytes.Buffer
+		app := hermeticApp(t, App{Env: func(string) string { return "" }, Stdout: &out, Stderr: &errOut, LoadConfig: testLoadConfigWithCatalog(filepath.Join(root, "catalog"))})
+		code := app.Run(context.Background(), append([]string{"--config", global}, args...))
+		return code, out.String() + errOut.String()
+	}
+
+	if code, out := run("notifier", "mute", "wall", "--for", "4h"); code != exitSuccess || !strings.Contains(out, "notifier wall: notifications muted until ") {
+		t.Fatalf("notifier mute exit = %d out=%q", code, out)
+	}
+	store, err := state.OpenContextWith(context.Background(), filepath.Join(root, "state", state.Filename), state.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec, notifierMuted, _ := store.NotificationMute(sermoapp.NotifierMuteKey("wall"))
+	_, serviceMuted, _ := store.NotificationMute("wall")
+	store.Close()
+	if !notifierMuted || serviceMuted || rec.Source != state.SourceCLI {
+		t.Fatalf("notifier mute wrote notifier=%v service=%v rec=%+v, want only the notifier key", notifierMuted, serviceMuted, rec)
+	}
+
+	code, out := run("notifier", "list")
+	if code != exitSuccess || !strings.Contains(out, "muted until ") || !strings.Contains(out, "source=cli") {
+		t.Fatalf("notifier list exit = %d out=%q", code, out)
+	}
+	code, out = run("--json", "notifier", "list")
+	var list []map[string]any
+	if code != exitSuccess || json.Unmarshal([]byte(out), &list) != nil {
+		t.Fatalf("json notifier list exit = %d out=%q", code, out)
+	}
+	muted := map[string]bool{}
+	for _, n := range list {
+		muted[n["name"].(string)] = n["notify_muted_until"] != nil
+	}
+	if !muted["wall"] || muted["tty"] {
+		t.Fatalf("json notifier list mutes = %v, want only wall", muted)
+	}
+
+	for _, args := range [][]string{
+		{"notifier", "mute", "wall", "--for", "30s"},
+		{"notifier", "mute", "ghost"},
+		{"notifier", "mute"},
+		{"notifier", "unmute", "wall", "--for", "1h"},
+		{"notifier", "list", "wall"},
+	} {
+		if code, out := run(args...); code == exitSuccess {
+			t.Errorf("%v must fail, got exit 0: %q", args, out)
+		}
+	}
+
+	code, out = run("--json", "notifier", "unmute", "wall")
+	var payload map[string]any
+	if code != exitSuccess || json.Unmarshal([]byte(out), &payload) != nil || payload["notifier"] != "wall" || payload["notifications"] != muteStatusUnmuted {
+		t.Fatalf("json notifier unmute exit = %d out=%q", code, out)
+	}
+	if code, out := run("notifier", "list"); code != exitSuccess || strings.Contains(out, "muted until ") {
+		t.Fatalf("after unmute, notifier list exit = %d out=%q", code, out)
+	}
+}

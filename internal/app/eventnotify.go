@@ -66,7 +66,8 @@ type receiptLookup struct {
 type EventNotifier struct {
 	WatchAlarms *WatchAlarms
 	// NotifyMutes withholds the events of a service or watch an operator
-	// muted, as panic mode withholds every event. Optional.
+	// muted, as panic mode withholds every event, and everything from a
+	// notifier the operator muted. Optional.
 	NotifyMutes NotifyMuteStore
 	host        string
 	logger      *slog.Logger
@@ -358,15 +359,17 @@ func (n *EventNotifier) deliver(ctx context.Context, e eventNotification) {
 	if !n.WatchAlarms.allowsNotification(e.Watch, e.alarmEpoch) {
 		return
 	}
-	// A muted target is withheld exactly as panic mode withholds everything:
-	// its opening is never recorded, and its recovery closes quietly.
+	// A muted target is withheld exactly as panic mode withholds everything,
+	// and a muted notifier hears nothing: an opening is never recorded for it,
+	// and a recovery closes quietly.
 	withheld := (n.inPanic != nil && n.inPanic()) || n.muted(e.Event)
-	if withheld && e.Kind != eventKindRecovered {
-		return
-	}
 	targets, interval := n.deliveryConfig()
 	for _, target := range targets {
-		n.deliverTarget(ctx, e, target, interval, withheld)
+		held := withheld || n.notifierMuted(target)
+		if held && e.Kind != eventKindRecovered {
+			continue
+		}
+		n.deliverTarget(ctx, e, target, interval, held)
 	}
 }
 
@@ -506,6 +509,9 @@ func (n *EventNotifier) remind(ctx context.Context) {
 		return
 	}
 	targets, interval := n.deliveryConfig()
+	// A muted notifier's deferred edges, summaries and reminders wait for the
+	// mute to end.
+	targets = n.unmutedTargets(targets)
 	n.retryReads(ctx, targets, interval)
 	n.flushSummaries(ctx, targets)
 	if interval <= 0 {

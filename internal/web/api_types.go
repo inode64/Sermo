@@ -386,6 +386,10 @@ type Notifier struct {
 	UsedBy  int    `json:"used_by,omitempty"`
 	// MinSeverity is the lowest severity the notifier receives from monitoring.
 	MinSeverity string `json:"min_severity"`
+	// NotifyMutedUntil is the RFC3339 end of an operator's mute of this
+	// notifier; NotifyMuteSource says who set it (cli | web).
+	NotifyMutedUntil string `json:"notify_muted_until,omitempty"`
+	NotifyMuteSource string `json:"notify_mute_source,omitempty"`
 }
 
 // DaemonInfo provides a summary of the running daemon configuration
@@ -942,6 +946,9 @@ type Backend interface {
 	// SetWatchNotifyMute mutes a watch's notifications for d, or unmutes them
 	// when d is zero.
 	SetWatchNotifyMute(ctx context.Context, name string, d time.Duration) error
+	// SetNotifierNotifyMute mutes one notifier for d, whatever reports to it,
+	// or unmutes it when d is zero.
+	SetNotifierNotifyMute(ctx context.Context, name string, d time.Duration) error
 	// SilenceWatchAlarm acknowledges the current watch alarm revision.
 	SilenceWatchAlarm(ctx context.Context, name, revision string) ActionResult
 	// ExpandWatch runs a configured storage watch's `then.expand` action on demand.

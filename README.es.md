@@ -94,9 +94,10 @@ Piensa en MariaDB durante una copia de seguridad. Si el perfil del catálogo det
   permitida.
 - Un **interruptor de pánico** a nivel de daemon para pausar toda la remediación
   automática al instante.
-- Una **pausa de notificaciones** (`mute`) por servicio o vigilancia, de 1
-  minuto a 24 horas, para una ventana de mantenimiento: la vigilancia y la
-  remediación siguen funcionando, y la pausa termina sola.
+- Una **pausa de notificaciones** (`mute`) por servicio, vigilancia o
+  notificador, de 1 minuto a 24 horas, para una ventana de mantenimiento o un
+  canal que debe callar: la vigilancia y la remediación siguen funcionando, y
+  la pausa termina sola.
 - **Asistentes guiados** para configuraciones comunes (service, docker, vm,
   mount, volume, net, uplink).
 

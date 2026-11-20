@@ -538,16 +538,27 @@ var commandUsages = []commandUsage{
 	},
 	{
 		Name:    commandNotifier,
-		Summary: "Send an explicit test message through one configured notifier.",
+		Summary: "List the configured notifiers, test one, or mute one for a while.",
 		Usage: []string{
+			"sermoctl notifier list",
 			"sermoctl notifier test NAME",
+			"sermoctl notifier mute NAME [--for DURATION]",
+			"sermoctl notifier unmute NAME",
+		},
+		Flags: []string{
+			"--for DURATION  with mute: how long the mute lasts, from 1m to 24h; default 1h",
+			"--json          print the result as JSON",
 		},
 		Notes: []string{
-			"Tests exactly one enabled notifier and sends a clearly marked test message.",
-			"The command does not trigger watches, hooks or automatic remediation.",
+			"test sends a clearly marked message through exactly one enabled notifier; it does not trigger watches, hooks or automatic remediation.",
+			"mute withholds everything the daemon monitors from that notifier, for every service and watch, for 1m to 24h (default 1h); the other notifiers keep receiving, and a test still goes through.",
+			"list shows each notifier's type and whether it is enabled, disabled or muted, and until when.",
 		},
 		Examples: []string{
+			"sermoctl notifier list",
 			"sermoctl notifier test ops-email",
+			"sermoctl notifier mute ops-telegram --for 4h",
+			"sermoctl notifier unmute ops-telegram",
 		},
 	},
 	{

@@ -200,7 +200,7 @@ type Deps struct {
 	// remediation suppressed). Optional: nil means panic mode is never on.
 	Panic *PanicGate
 	// NotifyMutes reads operators' time-bound mutes of a service's or watch's
-	// notifications. Optional: nil means nothing is ever muted.
+	// notifications, or of a notifier. Optional: nil means nothing is ever muted.
 	NotifyMutes NotifyMuteStore
 	// RuleState persists automatic remediation cooldown/backoff and rule-window
 	// progress. Optional: nil keeps those states in memory for this process only.

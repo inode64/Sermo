@@ -51,18 +51,18 @@ func TestNotifyMuteGateHoldsUntilItsEndAndFailsOpen(t *testing.T) {
 	}}
 
 	gate := notifyMuteGate(store, clock, notifyMuteKeys("web:feed")...)
-	if muted, until := gate(); !muted || !until.Equal(now.Add(2*time.Hour)) {
+	if muted, until := gate.target(); !muted || !until.Equal(now.Add(2*time.Hour)) {
 		t.Fatalf("gate = %v until %v, want the latest end among the watch and its service", muted, until)
 	}
-	if muted, _ := notifyMuteGate(store, clock, notifyMuteKeys("web:other")...)(); !muted {
+	if muted, _ := notifyMuteGate(store, clock, notifyMuteKeys("web:other")...).target(); !muted {
 		t.Fatal("a service watch must follow its service's mute")
 	}
 	now = now.Add(time.Hour)
-	if muted, _ := notifyMuteGate(store, clock, "web")(); muted {
+	if muted, _ := notifyMuteGate(store, clock, "web").target(); muted {
 		t.Fatal("a mute must end at its until")
 	}
 	failing := fakeMuteStore{err: errors.New("database is locked")}
-	if muted, _ := notifyMuteGate(failing, clock, "web")(); muted {
+	if muted, _ := notifyMuteGate(failing, clock, "web").target(); muted {
 		t.Fatal("an unreadable mute must let notifications go")
 	}
 	if notifyMuteGate(nil, clock, "web") != nil {
@@ -105,8 +105,8 @@ func TestWorkerNotifyMuteWithholdsAlertAndItsRecovery(t *testing.T) {
 	w.GlobalNotify = []string{"ops"}
 	now := time.Date(2026, 7, 10, 12, 0, 0, 0, time.UTC)
 	w.Now = func() time.Time { return now }
-	muted := true
-	w.notifyMuted = func() (bool, time.Time) { return muted, now.Add(time.Hour) }
+	mutes := fakeMuteStore{rows: map[string]state.NotificationMuteRecord{"web": {Until: now.Add(time.Hour)}}}
+	w.notifyMuted = notifyMuteGate(mutes, w.Now, "web")
 
 	w.RunCycle(context.Background())
 	if len(n.msgs) != 0 {
@@ -119,7 +119,7 @@ func TestWorkerNotifyMuteWithholdsAlertAndItsRecovery(t *testing.T) {
 		t.Fatalf("expected a notify-suppressed event naming the notifier: %+v", h.events)
 	}
 
-	muted = false
+	delete(mutes.rows, "web")
 	h.cache = map[string]checks.Result{"http": {Check: "http", OK: true}}
 	now = now.Add(time.Minute)
 	w.RunCycle(context.Background())
@@ -136,14 +136,14 @@ func TestWorkerNotifyMuteWithholdsAlertAndItsRecovery(t *testing.T) {
 func TestWatchNotifyMuteWithholdsFiringAndItsRecovery(t *testing.T) {
 	n := &fakeNotifier{name: "ops-email"}
 	var events []Event
-	muted := true
+	mutes := fakeMuteStore{rows: map[string]state.NotificationMuteRecord{"watch:storage-root": {Until: time.Now().Add(time.Hour)}}}
 	w := &Watch{
 		Name:        "storage-root",
 		CheckType:   "storage",
 		Check:       stubCheck{name: "storage", ok: true, data: map[string]any{"path": "/", "used_pct": 92.0}},
 		Notifiers:   []notify.Notifier{n},
 		Emit:        func(e Event) { events = append(events, e) },
-		notifyMuted: func() (bool, time.Time) { return muted, time.Now().Add(time.Hour) },
+		notifyMuted: notifyMuteGate(mutes, nil, notifyMuteKeys("storage-root")...),
 	}
 	w.RunCycle(context.Background())
 	if len(n.msgs) != 0 {
@@ -153,7 +153,7 @@ func TestWatchNotifyMuteWithholdsFiringAndItsRecovery(t *testing.T) {
 		t.Fatalf("want the firing event and a notify-suppressed one, got %v", events)
 	}
 
-	muted = false
+	delete(mutes.rows, "watch:storage-root")
 	w.Check = stubCheck{name: "storage", ok: false, data: map[string]any{"path": "/", "used_pct": 40.0}}
 	w.RunCycle(context.Background())
 	if !hasEvent(events, eventKindRecovered) {
@@ -294,5 +294,146 @@ func TestNotifyMuteViewMarksAMuteInheritedFromTheService(t *testing.T) {
 	keys = notifyMuteKeys("db:queue")
 	if until, _, _ := notifyMuteView(records, now, keys[0], keys[1:]...); until != "" {
 		t.Fatalf("an expired mute must not show: %q", until)
+	}
+}
+
+// A muted notifier hears nothing while the others keep hearing: the mute is
+// the channel's, not the target's.
+func TestNotifierMuteWithholdsOnlyThatNotifier(t *testing.T) {
+	email, chat := &fakeNotifier{name: "ops-email"}, &fakeNotifier{name: "ops-chat"}
+	now := time.Date(2026, 7, 10, 12, 0, 0, 0, time.UTC)
+	mutes := fakeMuteStore{rows: map[string]state.NotificationMuteRecord{
+		NotifierMuteKey("ops-email"): {Until: now.Add(time.Hour)},
+	}}
+	var events []Event
+	w := &Watch{
+		Name:        "storage-root",
+		CheckType:   "storage",
+		Check:       stubCheck{name: "storage", ok: true, data: map[string]any{"path": "/", "used_pct": 92.0}},
+		Notifiers:   []notify.Notifier{email, chat},
+		Emit:        func(e Event) { events = append(events, e) },
+		Now:         func() time.Time { return now },
+		notifyMuted: notifyMuteGate(mutes, func() time.Time { return now }, notifyMuteKeys("storage-root")...),
+	}
+	w.RunCycle(context.Background())
+	if len(email.msgs) != 0 || len(chat.msgs) != 1 {
+		t.Fatalf("muted notifier got %d messages and the other %d, want 0 and 1", len(email.msgs), len(chat.msgs))
+	}
+	if !hasEventMessage(events, eventKindNotifySuppressed, "ops-email: notifier muted until ") {
+		t.Fatalf("want a notify-suppressed event naming the muted notifier, got %v", events)
+	}
+	if hasEventMessage(events, eventKindNotifySuppressed, "ops-chat") {
+		t.Fatalf("the unmuted notifier was reported as withheld: %v", events)
+	}
+
+	now = now.Add(time.Hour)
+	w.Check = stubCheck{name: "storage", ok: false, data: map[string]any{"path": "/", "used_pct": 40.0}}
+	w.RunCycle(context.Background())
+	if len(email.msgs) != 1 || len(chat.msgs) != 2 {
+		t.Fatalf("after the mute ended the recovery reached %d and %d messages, want 1 and 2", len(email.msgs), len(chat.msgs))
+	}
+}
+
+// event_notify keeps one record per notifier, so a muted one never records
+// the opening it missed: the recovery after the mute stays quiet for it, and
+// an incident it did hear closes quietly on a recovery it misses.
+func TestEventNotifierWithholdsAMutedNotifier(t *testing.T) {
+	store := openMuteTestStore(t)
+	now := time.Date(2026, 7, 10, 12, 0, 0, 0, time.UTC)
+	email, chat := &fakeNotifier{name: "ops-email"}, &fakeNotifier{name: "ops-chat"}
+	router := NewEventNotifier("host-a", slog.New(slog.NewTextHandler(io.Discard, nil)), nil, store)
+	router.now = func() time.Time { return now }
+	router.NotifyMutes = store
+	router.Update(config.EventNotification{Targets: []string{"ops-email", "ops-chat"}, RepeatInterval: time.Hour},
+		map[string]notify.Notifier{"ops-email": email, "ops-chat": chat})
+
+	router.deliver(t.Context(), eventNotification{Service: "apache", Kind: eventKindFiring, Message: "down"})
+	if len(email.msgs) != 1 || len(chat.msgs) != 1 {
+		t.Fatalf("opening reached %d and %d messages, want 1 and 1", len(email.msgs), len(chat.msgs))
+	}
+	if err := store.SetNotificationMute(NotifierMuteKey("ops-email"), now.Add(time.Hour), state.SourceWeb); err != nil {
+		t.Fatal(err)
+	}
+	router.deliver(t.Context(), eventNotification{Watch: "disk-root", Kind: eventKindFiring, Message: "space low"})
+	router.deliver(t.Context(), eventNotification{Service: "apache", Kind: eventKindRecovered, Message: "up"})
+	if len(email.msgs) != 1 || len(chat.msgs) != 3 {
+		t.Fatalf("during the mute the notifiers hold %d and %d messages, want 1 and 3", len(email.msgs), len(chat.msgs))
+	}
+
+	now = now.Add(2 * time.Hour)
+	router.remind(t.Context())
+	router.deliver(t.Context(), eventNotification{Watch: "disk-root", Kind: eventKindRecovered, Message: "space available"})
+	if len(email.msgs) != 1 {
+		t.Fatalf("the muted notifier was told later of what it missed: %+v", email.msgs[1:])
+	}
+	if len(chat.msgs) != 5 {
+		t.Fatalf("the unmuted notifier holds %d messages, want its reminder and recovery too", len(chat.msgs))
+	}
+}
+
+// A reminder due while its notifier is muted waits for the mute to end.
+func TestEventNotifierHoldsRemindersOfAMutedNotifier(t *testing.T) {
+	store := openMuteTestStore(t)
+	now := time.Date(2026, 7, 10, 12, 0, 0, 0, time.UTC)
+	recorder := &eventNotifyRecorder{messages: make(chan notify.Message, 10)}
+	router := NewEventNotifier("host-a", slog.New(slog.NewTextHandler(io.Discard, nil)), nil, store)
+	router.now = func() time.Time { return now }
+	router.NotifyMutes = store
+	router.Update(config.EventNotification{Targets: []string{"ops"}, RepeatInterval: time.Hour}, map[string]notify.Notifier{"ops": recorder})
+
+	router.deliver(t.Context(), eventNotification{Service: "apache", Kind: eventKindFiring, Message: "down"})
+	<-recorder.messages
+	if err := store.SetNotificationMute(NotifierMuteKey("ops"), now.Add(3*time.Hour), state.SourceCLI); err != nil {
+		t.Fatal(err)
+	}
+	now = now.Add(2 * time.Hour)
+	router.remind(t.Context())
+	if got := len(recorder.messages); got != 0 {
+		t.Fatalf("a muted notifier was reminded %d times", got)
+	}
+	now = now.Add(time.Hour)
+	router.remind(t.Context())
+	if got := len(recorder.messages); got != 1 {
+		t.Fatalf("after the mute ended the reminder sent %d messages, want 1", got)
+	}
+}
+
+func TestWebBackendNotifierMuteAuditsAndShowsInTheList(t *testing.T) {
+	store := openMuteTestStore(t)
+	now := time.Date(2026, 7, 10, 12, 0, 0, 0, time.UTC)
+	var events []Event
+	b := &WebBackend{
+		notifiers:     map[string]*webNotifier{"ops": {name: "ops", typ: notify.TypeSlack, enabled: true}, "pager": {name: "pager", enabled: true}},
+		notifierOrder: []string{"ops", "pager"},
+		store:         store,
+		now:           func() time.Time { return now },
+		emit:          func(e Event) { events = append(events, e) },
+	}
+	if err := b.SetNotifierNotifyMute(t.Context(), "ops", 4*time.Hour); err != nil {
+		t.Fatalf("mute: %v", err)
+	}
+	list := b.Notifiers(t.Context())
+	if len(list) != 2 || list[0].NotifyMutedUntil != "2026-07-10T16:00:00Z" || list[0].NotifyMuteSource != state.SourceWeb || list[1].NotifyMutedUntil != "" {
+		t.Fatalf("notifier list = %+v", list)
+	}
+	if err := b.SetNotifierNotifyMute(t.Context(), "nope", time.Hour); err == nil {
+		t.Fatal("an unknown notifier must be refused")
+	}
+	if err := b.SetNotifierNotifyMute(t.Context(), "ops", 0); err != nil {
+		t.Fatalf("unmute: %v", err)
+	}
+	if got := b.Notifiers(t.Context())[0].NotifyMutedUntil; got != "" {
+		t.Fatalf("an unmuted notifier still shows muted until %q", got)
+	}
+	if len(events) != 3 ||
+		events[0].Kind != eventKindAction || events[0].Action != web.APIActionMute || !strings.HasPrefix(events[0].Message, "notifier ops: notifications muted until ") ||
+		events[1].Status != eventStatusBlocked || !strings.HasSuffix(events[1].Message, "unknown notifier nope") ||
+		events[2].Action != web.APIActionUnmute || events[2].Message != "notifier ops: notifications unmuted" {
+		t.Fatalf("audit events = %+v", events)
+	}
+	for _, e := range events {
+		if eventNeedsNotification(e) {
+			t.Fatalf("a mute request event would reach event_notify: %+v", e)
+		}
 	}
 }

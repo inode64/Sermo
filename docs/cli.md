@@ -122,7 +122,10 @@ sermoctl web hash-password [--stdin|--generate] [--hash bcrypt|sha256] [--cost N
                                        # print one credential line for web.password_file
 
 sermoctl daemon reload                 # reload sermod config, not services
+sermoctl notifier list                 # configured notifiers: type and enabled, disabled or muted
 sermoctl notifier test NAME            # send an explicit test message through one notifier
+sermoctl notifier mute NAME [--for DURATION]   # withhold everything from one notifier; see Notification mute
+sermoctl notifier unmute NAME
 
 sermoctl services [--notify NAME[,NAME]|all]                         # configured services (init, docker, VMs)
 sermoctl services libraries [SERVICE...] [--json]                      # inspect mapped libraries on the host
@@ -198,11 +201,20 @@ monitoring. Checks, rules, hooks and automatic remediation keep running; only
 delivery stops, and each withheld delivery is logged as a `notify-suppressed`
 event that names the notifier. A service's watches follow its mute.
 
+A notifier can be muted too, for the whole host: nothing the daemon monitors
+reaches that one channel, whichever service or watch reports, while the other
+notifiers keep receiving. Use it when a chat or a mailbox must stay quiet for
+a while and the rest of the on-call routing must not.
+
 ```bash
 sermoctl mute mysql-main --for 4h                    # 1m to 24h; 1h when --for is omitted
 sermoctl watch mute mail-queue:deferred-backlog --for 30m
 sermoctl status mysql-main                           # shows "notifications muted until ..."
 sermoctl unmute mysql-main                           # end it early
+
+sermoctl notifier mute ops-telegram --for 4h         # one channel, every service and watch
+sermoctl notifier list                               # shows "muted until ..." per notifier
+sermoctl notifier unmute ops-telegram
 ```
 
 Every mute ends on its own, so a forgotten one cannot hide the next outage;
@@ -214,9 +226,17 @@ would announce an incident nobody opened. A reminder of an incident announced
 before the mute waits until it ends. A service watch muted through its service
 cannot be unmuted on its own; unmute the service.
 
-In the web UI the speaker button on each service and watch row mutes it and
-asks for 15 minutes, 1 hour, 4 hours or 24 hours; pressed, its tooltip says
-until when, and a click unmutes it.
+A muted notifier still delivers what an operator sends on purpose:
+`sermoctl notifier test`, the web UI test button and
+`sermoctl services --notify`. One case differs from a service's or watch's
+mute: a rule's `notify` and a watch's `then.notify` remember who heard an
+alert by severity, not by notifier, so a notifier muted when an alert opened
+can receive its recovery if that comes after the mute ended. `event_notify`
+keeps one record per notifier and never does.
+
+In the web UI the speaker button on each service, watch and notifier row
+mutes it and asks for 15 minutes, 1 hour, 4 hours or 24 hours; pressed, its
+tooltip says until when, and a click unmutes it.
 
 ## Panic mode
 

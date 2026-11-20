@@ -7,7 +7,7 @@ import {
   apiQueryBefore, apiQueryBeforeID,
   apiQueryFor, apiQueryForce, apiQueryKill, apiQueryKind, apiQueryLazy, apiQueryLimit, apiQueryName, apiQueryNoCascade,
   apiQueryOnlyErrors, apiQueryService, apiQuerySince, apiQueryStatus,
-  apiQueryWatch, apiReloadPath, notifierTestAPI,
+  apiQueryWatch, apiReloadPath, notifierAPI, notifierTestAPI,
   apiServicesPath, apiSessionsPath, apiStreamPath, apiWatchesPath, apiWhoamiPath, applicationEventsAPI,
   csrfPostOptions, dashboardAPI, daemonMetricsAPI, eventsAPI, eventsClearAPI,
   dbQueryKillAPI, emptyTerminalSessionCloseAPI,
@@ -58,6 +58,7 @@ const expansionPrefixWatch = "wat:";
 const watchTypeUnownedProcesses = "unowned_processes";
 const globalTargetService = "service";
 const globalTargetWatch = "watch";
+const muteTargetNotifier = "notifier";
 const globalTargetApplication = "application";
 const globalTargetLibrary = "library";
 const globalTargetMount = "mount";
@@ -3025,8 +3026,8 @@ const actionMeta = {
   [actionReload]: { glyph: iconReload, service: (n) => `Reload service ${n}` },
   [actionMonitor]: { glyph: iconMonitor, service: (n) => `Monitor service ${n}`, watch: (n) => `Monitor watch ${n}` },
   [actionUnmonitor]: { glyph: iconUnmonitor, service: (n) => `Unmonitor service ${n}`, watch: (n) => `Unmonitor watch ${n}` },
-  [actionMute]: { glyph: iconSpeaker, service: (n) => `Mute notifications for service ${n}`, watch: (n) => `Mute notifications for watch ${n}` },
-  [actionUnmute]: { glyph: iconSpeakerOff, service: (n) => `Unmute notifications for service ${n}`, watch: (n) => `Unmute notifications for watch ${n}` },
+  [actionMute]: { glyph: iconSpeaker, service: (n) => `Mute notifications for service ${n}`, watch: (n) => `Mute notifications for watch ${n}`, notifier: (n) => `Mute notifier ${n}` },
+  [actionUnmute]: { glyph: iconSpeakerOff, service: (n) => `Unmute notifications for service ${n}`, watch: (n) => `Unmute notifications for watch ${n}`, notifier: (n) => `Unmute notifier ${n}` },
   [actionExpand]: { watch: (n) => `Expand storage for watch ${n}` },
   [actionSilence]: { watch: (n) => `Silence alarm for watch ${n} until its state changes` },
   [actionProbe]: { watch: (n) => `Probe watch ${n}` },
@@ -6710,33 +6711,48 @@ function mountUmountDisabledReason(m) {
   return m.umount_disabled_reason || "root filesystem cannot be unmounted";
 }
 
+// allNotifiers is the last notifier list drawn, so a mute in flight can
+// redraw its row before the next refresh.
+let allNotifiers = [];
+
 function renderNotifiers(notifiers) {
   const section = $("#notifiers-section");
   const tbody = $("#notifier-rows");
   const cnt = $("#notifiers-count");
   if (!section || !tbody) return;
-  const total = (notifiers || []).length;
+  allNotifiers = notifiers || [];
+  const total = allNotifiers.length;
   setPanelVisible(section, total > 0);
   if (cnt) cnt.textContent = total ? String(total) : "";
   refreshChrome();
   if (!total) return;
-  const rows = notifiers.map((n) => {
+  litRender(allNotifiers.map((n) => {
     const enabled = n.enabled !== false;
-    const state = enabled ? "enabled" : "disabled";
-    const cls = enabled ? "state-monitored" : "state-disabled";
-    const dest = n.summary ? esc(n.summary) : '<span class="muted">—</span>';
-    const used = Number(n.used_by || 0);
-    const watches = used ? String(used) : '<span class="muted">—</span>';
+    const muted = enabled && !!n.notify_muted_until;
+    const state = muted
+      ? tpl`<td class="state-paused" title="${notifyMuteText(n.notify_muted_until, n.notify_mute_source)}">muted · ends ${fmtUntilShort(n.notify_muted_until)}</td>`
+      : tpl`<td class="${enabled ? "state-monitored" : "state-disabled"}">${enabled ? "enabled" : "disabled"}</td>`;
     // debug filters nothing: the notifier hears every level.
     const floor = severityLevels.includes(n.min_severity) && n.min_severity !== severityLevels[0]
-      ? `<span class="sev sev-${esc(n.min_severity)}">≥ ${esc(n.min_severity)}</span>`
-      : '<span class="muted">all</span>';
-    const test = enabled && me.can_act
-      ? `<button class="icon-btn" data-notifier-test="${esc(n.name)}" aria-label="Send test notification to ${esc(n.name)}" title="Send test notification to ${esc(n.name)}"><span aria-hidden="true">${glyphPlay}</span></button>`
-      : '<span class="muted">—</span>';
-    return `<tr><td>${esc(n.name)}</td><td>${esc(n.type)}</td><td>${floor}</td><td class="muted">${dest}</td><td>${watches}</td><td class="${cls}">${state}</td><td class="actions">${test}</td></tr>`;
-  });
-  setHTMLIfChanged(tbody, rows.join(""));
+      ? tpl`<span class="sev sev-${n.min_severity}">≥ ${n.min_severity}</span>`
+      : tpl`<span class="muted">all</span>`;
+    const actions = enabled && me.can_act
+      ? tpl`${notifierMuteButton(n)}<button class="icon-btn" data-notifier-test="${n.name}" aria-label="Send test notification to ${n.name}" title="Send test notification to ${n.name}"><span aria-hidden="true">${glyphPlay}</span></button>`
+      : mutedDash;
+    return tpl`<tr><td>${n.name}</td><td>${n.type}</td><td>${floor}</td><td class="muted">${n.summary || "—"}</td><td>${Number(n.used_by || 0) || mutedDash}</td>${state}<td class="actions">${actions}</td></tr>`;
+  }), tbody);
+}
+
+// notifierMuteButton is the notifier's mute toggle: it withholds everything
+// the daemon monitors from this one notifier, whatever reports, and is
+// pressed while the mute holds, with its end in the tooltip.
+function notifierMuteButton(n) {
+  const muted = !!n.notify_muted_until;
+  const action = muted ? actionUnmute : actionMute;
+  const label = actionMeta[action].notifier(n.name);
+  const title = muted ? `${label}; ${notifyMuteText(n.notify_muted_until, n.notify_mute_source)}` : label;
+  const pending = pendingMonitorToggles.has(notifyMuteToggleKey(notifyMuteTargets[muteTargetNotifier].prefix, n.name));
+  return tpl`<button class="icon-btn" ?disabled=${pending} data-notifier="${n.name}" data-notifier-action="${action}" aria-pressed="${muted ? domBoolTrue : domBoolFalse}" title="${title}" aria-label="${label}"><span aria-hidden="true">${actionMeta[action].glyph}</span></button>`;
 }
 
 // setTextOrDash fills one element's text, dashing absent values; shared by the
@@ -7425,30 +7441,37 @@ function notifyMuteToggleKey(prefix, name) {
   return `${prefix}${name}#mute`;
 }
 
-// setNotifyMute mutes a service's or watch's notifications for the duration
-// the operator picks, or ends the mute. Monitoring and actions are untouched,
-// so neither asks for the operation confirmation.
+// notifyMuteTargets is what a mute needs from each kind of target it applies
+// to: its list, its pending-toggle prefix, its API and its redraw.
+const notifyMuteTargets = {
+  [globalTargetService]: { prefix: expansionPrefixService, items: () => allServices, api: serviceAPI, render: () => renderServices() },
+  [globalTargetWatch]: { prefix: expansionPrefixWatch, items: () => allWatches, api: watchAPI, render: () => renderWatches() },
+  // A notifier has no display name: its configured name is what the operator
+  // wrote and what the events report.
+  [muteTargetNotifier]: { prefix: "ntf:", items: () => allNotifiers, api: notifierAPI, render: () => renderNotifiers(allNotifiers), label: (n) => n.name },
+};
+
+// setNotifyMute mutes a service's, watch's or notifier's notifications for
+// the duration the operator picks, or ends the mute. Monitoring and actions
+// are untouched, so neither asks for the operation confirmation.
 async function setNotifyMute(kind, name, action) {
   const generation = dashboardGeneration;
-  const isService = kind === globalTargetService;
-  const list = (isService ? allServices : allWatches) || [];
-  const target = list.find((item) => item && item.name === name) || { name };
-  const label = `${kind} ${displayName(target) || name}`;
+  const { prefix, items, api, render, label: labelOf = displayName } = notifyMuteTargets[kind];
+  const target = (items() || []).find((item) => item && item.name === name) || { name };
+  const label = `${kind} ${labelOf(target) || name}`;
   let query = "";
   if (action === actionMute) {
     const duration = await promptNotifyMute(label);
     if (!duration) return;
     query = `?${apiQueryFor}=${encodeURIComponent(duration)}`;
   }
-  const key = notifyMuteToggleKey(isService ? expansionPrefixService : expansionPrefixWatch, name);
+  const key = notifyMuteToggleKey(prefix, name);
   if (pendingMonitorToggles.has(key)) return;
   pendingMonitorToggles.add(key);
-  const render = isService ? renderServices : renderWatches;
   try {
     render();
     setStatus("");
-    const suffix = apiActionSuffix(action, query);
-    const res = await fetch(isService ? serviceAPI(name, suffix) : watchAPI(name, suffix), targetPostOptions({}, generation));
+    const res = await fetch(api(name, apiActionSuffix(action, query)), targetPostOptions({}, generation));
     await jsonOrThrow(res);
     setStatus(`${label}: notifications ${action === actionMute ? "muted" : "unmuted"}`, feedbackStatusOK);
   } catch (e) {
@@ -8799,6 +8822,7 @@ const clickRoutes = [
   ["[data-watch-action][data-watch]", (el) => actWatch(el.dataset.watch || "", el.dataset.watchAction || "")],
   ["[data-mount-action][data-mount]", (el) => actMount(el.dataset.mount || "", el.dataset.mountAction || "")],
   ["[data-notifier-test]", (el) => testNotifier(el.dataset.notifierTest || "")],
+  ["[data-notifier-action][data-notifier]", (el) => setNotifyMute(muteTargetNotifier, el.dataset.notifier || "", el.dataset.notifierAction || "")],
   ["[data-refresh-panel]", (el) => refreshPanel(el)],
   ["[data-service-pin]", (el) => toggleServicePin(el.dataset.servicePin || "")],
   ["[data-service-open]", (el) => openServiceExpansion(el.dataset.serviceOpen || "", true)],

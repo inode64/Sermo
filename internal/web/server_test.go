@@ -58,6 +58,7 @@ type fakeBackend struct {
 	watchMonitored              map[string]bool
 	serviceMutes                map[string]time.Duration
 	watchMutes                  map[string]time.Duration
+	notifierMutes               map[string]time.Duration
 	panic                       bool
 	watchExpanded               []string
 	watchProbed                 []string
@@ -381,6 +382,13 @@ func (f *fakeBackend) SetWatchNotifyMute(_ context.Context, name string, d time.
 		f.watchMutes = map[string]time.Duration{}
 	}
 	f.watchMutes[name] = d
+	return nil
+}
+func (f *fakeBackend) SetNotifierNotifyMute(_ context.Context, name string, d time.Duration) error {
+	if f.notifierMutes == nil {
+		f.notifierMutes = map[string]time.Duration{}
+	}
+	f.notifierMutes[name] = d
 	return nil
 }
 func (f *fakeBackend) SetPanic(_ context.Context, on bool) ActionResult {
@@ -1442,6 +1450,9 @@ func TestNotifyMuteActions(t *testing.T) {
 		{testServicePath("db", APIActionMute), http.StatusBadRequest},
 		{testServicePath("db", APIActionMute) + "?" + APIQueryFor + "=soon", http.StatusBadRequest},
 		{testWatchPath("disk", APIActionMute) + "?" + APIQueryFor + "=-1h", http.StatusBadRequest},
+		{testTargetPath(apiSegmentNotifiers, "ops", APIActionMute) + "?" + APIQueryFor + "=1h", http.StatusOK},
+		{testTargetPath(apiSegmentNotifiers, "pager", APIActionMute), http.StatusBadRequest},
+		{testTargetPath(apiSegmentNotifiers, "ops", apiActionMonitor), http.StatusBadRequest},
 	} {
 		rec := httptest.NewRecorder()
 		h.ServeHTTP(rec, postReq(tc.path))
@@ -1449,13 +1460,16 @@ func TestNotifyMuteActions(t *testing.T) {
 			t.Fatalf("%s: code=%d body=%s, want %d", tc.path, rec.Code, rec.Body.String(), tc.code)
 		}
 	}
-	if b.serviceMutes["web"] != 4*time.Hour || b.watchMutes["storage-root"] != 15*time.Minute {
-		t.Fatalf("mutes = %v / %v", b.serviceMutes, b.watchMutes)
+	if b.serviceMutes["web"] != 4*time.Hour || b.watchMutes["storage-root"] != 15*time.Minute || b.notifierMutes["ops"] != time.Hour {
+		t.Fatalf("mutes = %v / %v / %v", b.serviceMutes, b.watchMutes, b.notifierMutes)
 	}
 	if _, refused := b.serviceMutes["db"]; refused {
 		t.Fatalf("a mute without a valid duration reached the backend: %v", b.serviceMutes)
 	}
-	for _, path := range []string{testServicePath("web", APIActionUnmute), testWatchPath("storage-root", APIActionUnmute)} {
+	if _, refused := b.notifierMutes["pager"]; refused {
+		t.Fatalf("a notifier mute without a duration reached the backend: %v", b.notifierMutes)
+	}
+	for _, path := range []string{testServicePath("web", APIActionUnmute), testWatchPath("storage-root", APIActionUnmute), testTargetPath(apiSegmentNotifiers, "ops", APIActionUnmute)} {
 		rec := httptest.NewRecorder()
 		h.ServeHTTP(rec, postReq(path))
 		if rec.Code != http.StatusOK {
@@ -1467,6 +1481,9 @@ func TestNotifyMuteActions(t *testing.T) {
 	}
 	if d, ok := b.watchMutes["storage-root"]; !ok || d != 0 {
 		t.Fatalf("watch unmute = %v, want a zero duration", b.watchMutes)
+	}
+	if d, ok := b.notifierMutes["ops"]; !ok || d != 0 {
+		t.Fatalf("notifier unmute = %v, want a zero duration", b.notifierMutes)
 	}
 }
 

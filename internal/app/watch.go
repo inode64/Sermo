@@ -142,10 +142,10 @@ type Watch struct {
 	// still runs its check and emits its firing event (so status stays visible)
 	// but suppresses its hook, notifications and its expand/makestep action.
 	InPanic func() bool
-	// notifyMuted reports an operator's mute of this watch's notifications (or,
-	// for a service watch, of its service's). The check, hooks and actions run
-	// as usual; only delivery is withheld.
-	notifyMuted notifyMute
+	// notifyMuted reads an operator's mute of this watch's notifications (or,
+	// for a service watch, of its service's) and of each notifier. The check,
+	// hooks and actions run as usual; only delivery is withheld.
+	notifyMuted *notifyMute
 	// Settling tracks startup observation for this watch. While unsettled the
 	// first cycle runs checks only and suppresses firing, hooks and notifications.
 	Settling *Settling

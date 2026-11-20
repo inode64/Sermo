@@ -27,6 +27,14 @@ func (b *WebBackend) SetWatchNotifyMute(_ context.Context, name string, d time.D
 	})
 }
 
+// SetNotifierNotifyMute mutes one notifier for d, or unmutes it when d is
+// zero: nothing the daemon monitors reaches it meanwhile, whatever reports.
+func (b *WebBackend) SetNotifierNotifyMute(_ context.Context, name string, d time.Duration) error {
+	return b.setNotifyMute(b.notifiers[name] != nil, NotifierMuteKey(name), "unknown notifier "+name, d, func(action, kind, status, message string) {
+		b.emitMonitorSubjectEvent(Event{}, action, kind, status, "notifier "+name+": "+message)
+	})
+}
+
 // setNotifyMute applies one mute request. A refused request is audited as a
 // blocked action, like a refused alarm silence: an error event would itself
 // reach event_notify and page someone over an operator's own request.

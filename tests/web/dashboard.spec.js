@@ -606,6 +606,61 @@ test("service notification mute posts the chosen duration and unmutes in one cli
   await expect(webButton(page, "mute")).toBeVisible();
 });
 
+// A notifier mute withholds one channel for the whole host. Its row's speaker
+// asks only for the duration, like a service's, and the other notifiers keep
+// their own state.
+test("notifier mute posts the chosen duration and unmutes in one click", async ({ page }) => {
+  let muted = false;
+  const posts = [];
+  await page.route("**/api/dashboard**", (route) => {
+    const body = JSON.parse(JSON.stringify(dashboard));
+    if (muted) Object.assign(body.notifiers.find((n) => n.name === "ops"), { notify_muted_until: "2026-07-10T16:00:00Z", notify_mute_source: "web" });
+    return route.fulfill({ json: body });
+  });
+  await page.route("**/api/notifiers/ops/mute?**", (route) => {
+    posts.push(new URL(route.request().url()).search);
+    muted = true;
+    return route.fulfill({ json: { ok: true } });
+  });
+  await page.route("**/api/notifiers/ops/unmute", (route) => {
+    posts.push("unmute");
+    muted = false;
+    return route.fulfill({ json: { ok: true } });
+  });
+  await page.reload();
+
+  const row = page.locator("#notifier-rows tr", { hasText: "hooks.slack.com" });
+  const button = (action) => row.locator(`[data-notifier-action="${action}"]`);
+  const dialog = page.locator("#notify-mute-dialog");
+  await expect(row).toContainText("enabled");
+  await button("mute").click();
+  await expect(dialog).toBeVisible();
+  await expect(page.locator("#notify-mute-title")).toHaveText("Mute notifications for notifier ops?");
+  await dialog.getByRole("button", { name: "Cancel notification mute" }).click();
+  expect(posts).toEqual([]);
+
+  await button("mute").click();
+  await dialog.getByLabel("4 hours", { exact: true }).check();
+  await dialog.getByRole("button", { name: "Confirm notification mute" }).click();
+  await expect.poll(() => posts).toEqual(["?for=4h"]);
+
+  const unmute = button("unmute");
+  await expect(unmute).toHaveAttribute("aria-pressed", "true");
+  await expect(unmute).toHaveAttribute("title", /Unmute notifier ops; notifications muted until 2026-07-10 16:00:00 UTC by web/);
+  await expect(row).toContainText("muted");
+  await expect(page.locator('#notifier-rows [data-notifier-action="unmute"]')).toHaveCount(1);
+  const results = await new AxeBuilder({ page })
+    .include("#notifiers-section")
+    .withTags(["wcag2a", "wcag2aa", "wcag22aa"])
+    .analyze();
+  expect(results.violations).toEqual([]);
+  await unmute.click();
+  await expect(dialog).toBeHidden();
+  await expect.poll(() => posts).toEqual(["?for=4h", "unmute"]);
+  await expect(button("mute")).toBeVisible();
+  await expect(row).toContainText("enabled");
+});
+
 // A service watch muted only through its service follows it: the watch shows
 // the mute but cannot lift it.
 test("watch notification mute follows its service", async ({ page }) => {

@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"time"
 
@@ -110,6 +111,27 @@ func (m monitorView) withRecord(record state.MonitorRecord) monitorView {
 	m.Source = record.Source
 	m.ChangedAt = recordChangedAt(record.UpdatedAt)
 	return m
+}
+
+// storedNotificationMutes reads every persisted notification mute in one
+// query. A listing whose point is the mute state cannot guess it, so an
+// unreadable store is an error here.
+func storedNotificationMutes(ctx context.Context, cfg *config.Config) (map[string]state.NotificationMuteRecord, error) {
+	var (
+		stored map[string]state.NotificationMuteRecord
+		err    error
+	)
+	withStateStore(ctx, cfg, func(openErr error) int {
+		err = openErr
+		return exitSuccess
+	}, func(store *state.Store) int {
+		stored, err = store.NotificationMutes()
+		return exitSuccess
+	})
+	if err != nil {
+		return nil, fmt.Errorf("state store: %w", err)
+	}
+	return stored, nil
 }
 
 // metaSuffix renders the optional " source=… changed=…" trailer shared by the

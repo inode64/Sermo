@@ -20,6 +20,7 @@ const (
 	cliJSONKeyMutedUntil     = "muted_until"
 	cliJSONKeyNotifications  = "notifications"
 	cliJSONKeyNotified       = "notified"
+	cliJSONKeyNotifier       = "notifier"
 	cliJSONKeyNotifyFailed   = "notify_failed"
 	cliJSONKeyOK             = "ok"
 	cliJSONKeyPanic          = "panic"

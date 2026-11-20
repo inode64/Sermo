@@ -951,8 +951,8 @@ watches:
 ## Web UI
 
 The daemon can serve a small web dashboard to view services and watches.
-Admins can monitor/unmonitor both, mute their notifications for a while (see
-[Notification mute](cli.md#notification-mute)), and can
+Admins can monitor/unmonitor both, mute their notifications or one notifier
+for a while (see [Notification mute](cli.md#notification-mute)), and can
 start/stop/restart/reload/resume/repair services over the same safe operation
 engine the CLI uses.
 
@@ -1571,8 +1571,12 @@ Read-only endpoints:
   paused watch and before the scheduler has started it, and a manual refresh
   does not move it. The dashboard shows both in each watch's detail, with how
   long ago the last check ran and a countdown to the next.
-- `GET /api/notifiers` — configured notifier targets.
+- `GET /api/notifiers` — configured notifier targets. A muted one reports
+  `notify_muted_until` and `notify_mute_source`.
 - `POST /api/notifiers/{name}/test` — sends an explicit test message through one enabled notifier.
+- `POST /api/notifiers/{name}/{action}` — `mute` with `for=DURATION` (`1m` to
+  `24h`) withholds everything the daemon monitors from that notifier, for every
+  service and watch, until then; `unmute` ends it.
 - `GET /api/applications` — installed catalog applications.
 - `GET /api/libraries` — installed catalog libraries.
 - `GET /api/daemon` — daemon/backend/runtime settings and host uptime.
@@ -2227,6 +2231,10 @@ either, so a channel never sees a recovery for an incident it never heard of;
 a notifier that heard an escalation hears the recovery at that level. The
 filter applies to monitoring only: `sermoctl notifier test`, the web UI test
 button and `sermoctl services --notify` always deliver.
+
+To keep one notifier quiet for a while without editing the configuration,
+mute it: `sermoctl notifier mute NAME --for 4h` or the speaker button on its
+row of the Notifiers panel. See [Notification mute](cli.md#notification-mute).
 
 Use `sermoctl notifier test NAME` to send a clearly marked test message through
 one enabled notifier. The Notifiers panel offers the same action to WebUI

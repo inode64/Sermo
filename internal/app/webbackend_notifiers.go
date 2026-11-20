@@ -21,20 +21,24 @@ func (b *WebBackend) Notifiers(_ context.Context) []web.Notifier {
 			usedBy[n]++
 		}
 	}
+	mutes := b.notifyMuteRecords()
+	now := b.webNow()
 	out := make([]web.Notifier, 0, len(b.notifierOrder))
 	for _, name := range b.notifierOrder {
 		n := b.notifiers[name]
 		if n == nil {
 			continue
 		}
-		out = append(out, web.Notifier{
+		view := web.Notifier{
 			Name:        n.name,
 			Type:        n.typ,
 			Enabled:     n.enabled,
 			Summary:     n.summary,
 			UsedBy:      usedBy[name],
 			MinSeverity: n.minSeverity.String(),
-		})
+		}
+		view.NotifyMutedUntil, view.NotifyMuteSource, _ = notifyMuteView(mutes, now, NotifierMuteKey(name))
+		out = append(out, view)
 	}
 	return out
 }

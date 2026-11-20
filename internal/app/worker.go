@@ -123,9 +123,10 @@ type Worker struct {
 	// notifications and automatic remediation actions are suppressed.
 	InPanic func() bool
 
-	// notifyMuted reports an operator's mute of this service's notifications.
-	// Checks, rules and remediation run as usual; only delivery is withheld.
-	notifyMuted notifyMute
+	// notifyMuted reads an operator's mute of this service's notifications and
+	// of each notifier. Checks, rules and remediation run as usual; only
+	// delivery is withheld.
+	notifyMuted *notifyMute
 
 	// Settling tracks startup observation for this service. An init verdict that
 	// the service is not running completes it without checks. Active, unknown,

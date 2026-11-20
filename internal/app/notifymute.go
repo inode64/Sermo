@@ -3,9 +3,11 @@ package app
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
+	"sermo/internal/notify"
 	"sermo/internal/state"
 	"sermo/internal/units"
 )
@@ -20,7 +22,7 @@ const (
 
 // NotifyMuteStore reads operator notification mutes. Satisfied by
 // *state.Store; the keys are the monitor-state keys (a service's name,
-// WatchMonitorKey for a watch).
+// WatchMonitorKey for a watch) and NotifierMuteKey for a notifier.
 type NotifyMuteStore interface {
 	NotificationMute(key string) (state.NotificationMuteRecord, bool, error)
 }
@@ -45,21 +47,45 @@ func notifyMuteKeys(watch string) []string {
 	return keys
 }
 
-// notifyMute reports whether a target's notifications are muted, and until
-// when (the latest until among its keys).
-type notifyMute func() (bool, time.Time)
+// NotifierMuteKey is the mute key of one notifier: an operator's pause of that
+// channel for every service and watch on the host.
+func NotifierMuteKey(name string) string {
+	return "notifier:" + name
+}
 
-// notifyMuteGate reads keys' mutes on every call, so a mute or unmute from the
-// CLI takes effect on the next notification without a daemon reload. It fails
-// open: a store error or a missing row lets the notification go.
-func notifyMuteGate(store NotifyMuteStore, now func() time.Time, keys ...string) notifyMute {
+// notifyMute reads the operator mutes that hold over one target's deliveries:
+// the target's own and, per delivery, the notifier's. It reads the store on
+// every call, so a mute or unmute from the CLI takes effect on the next
+// notification without a daemon reload, and it fails open: a store error or a
+// missing row lets the notification go.
+type notifyMute struct {
+	store NotifyMuteStore
+	now   func() time.Time
+	keys  []string
+}
+
+func notifyMuteGate(store NotifyMuteStore, now func() time.Time, keys ...string) *notifyMute {
 	if store == nil || len(keys) == 0 {
 		return nil
 	}
-	clock := clockOrNow(now)
-	return func() (bool, time.Time) {
-		return mutedUntil(store, clock(), keys)
+	return &notifyMute{store: store, now: clockOrNow(now), keys: keys}
+}
+
+// target reports whether the target's notifications are muted, and until
+// when (the latest until among its keys).
+func (m *notifyMute) target() (bool, time.Time) {
+	if m == nil {
+		return false, time.Time{}
 	}
+	return mutedUntil(m.store, m.now(), m.keys)
+}
+
+// notifier reports whether the named notifier is muted, whatever the target.
+func (m *notifyMute) notifier(name string) (bool, time.Time) {
+	if m == nil {
+		return false, time.Time{}
+	}
+	return mutedUntil(m.store, m.now(), []string{NotifierMuteKey(name)})
 }
 
 func mutedUntil(store NotifyMuteStore, now time.Time, keys []string) (bool, time.Time) {
@@ -78,10 +104,10 @@ func mutedUntil(store NotifyMuteStore, now time.Time, keys []string) (bool, time
 
 type notifyMuteContextKey struct{}
 
-// withNotifyMute carries a target's mute to every delivery its cycle makes:
-// deliverNotification reads it, and so do the sites that must not record a
+// withNotifyMute carries a target's mutes to every delivery its cycle makes:
+// deliverNotification reads them, and so do the sites that must not record a
 // delivery that never happened.
-func withNotifyMute(ctx context.Context, mute notifyMute) context.Context {
+func withNotifyMute(ctx context.Context, mute *notifyMute) context.Context {
 	if mute == nil {
 		return ctx
 	}
@@ -89,21 +115,29 @@ func withNotifyMute(ctx context.Context, mute notifyMute) context.Context {
 }
 
 func notifyMutedFrom(ctx context.Context) (bool, time.Time) {
-	mute, _ := ctx.Value(notifyMuteContextKey{}).(notifyMute)
-	if mute == nil {
-		return false, time.Time{}
-	}
-	return mute()
+	mute, _ := ctx.Value(notifyMuteContextKey{}).(*notifyMute)
+	return mute.target()
 }
 
-// notificationsMutedError is the delivery report of a notification the
-// target's mute withheld; deliveryReport records it as notify-suppressed.
+func notifierMutedFrom(ctx context.Context, name string) (bool, time.Time) {
+	mute, _ := ctx.Value(notifyMuteContextKey{}).(*notifyMute)
+	return mute.notifier(name)
+}
+
+// notificationsMutedError is the delivery report of a notification an
+// operator's mute withheld, the target's or (notifier set) the notifier's own;
+// deliveryReport records it as notify-suppressed.
 type notificationsMutedError struct {
-	until time.Time
+	until    time.Time
+	notifier bool
 }
 
 func (e notificationsMutedError) Error() string {
-	return "notifications muted until " + e.until.Local().Format(time.DateTime)
+	subject := "notifications"
+	if e.notifier {
+		subject = "notifier"
+	}
+	return subject + " muted until " + e.until.Local().Format(time.DateTime)
 }
 
 // muted reports whether an operator muted the service or watch e reports on.
@@ -122,6 +156,21 @@ func (n *EventNotifier) muted(e Event) bool {
 	}
 	muted, _ := mutedUntil(n.NotifyMutes, n.now(), keys)
 	return muted
+}
+
+// notifierMuted reports whether an operator muted target itself: nothing
+// reaches it, whatever reports.
+func (n *EventNotifier) notifierMuted(target notify.Notifier) bool {
+	if n.NotifyMutes == nil {
+		return false
+	}
+	muted, _ := mutedUntil(n.NotifyMutes, n.now(), []string{NotifierMuteKey(target.Name())})
+	return muted
+}
+
+// unmutedTargets drops the notifiers an operator muted.
+func (n *EventNotifier) unmutedTargets(targets []notify.Notifier) []notify.Notifier {
+	return slices.DeleteFunc(targets, n.notifierMuted)
 }
 
 // recordMuted reports whether a reminder's incident belongs to a muted target.

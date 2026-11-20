@@ -29,10 +29,10 @@ const recoveredMessagePrefix = "recovered: "
 
 // deliverNotification sends msg to every notifier that allow admits (nil
 // admits all) and whose min_severity the message meets, reporting each
-// delivery; a target the operator muted reports each one as withheld. It is
-// the one monitoring delivery loop: operator actions (a
-// notifier test, an inventory report) call Send directly and are never
-// filtered.
+// delivery; a target the operator muted reports each one as withheld, and a
+// muted notifier its own. It is the one monitoring delivery loop: operator
+// actions (a notifier test, an inventory report) call Send directly and are
+// never filtered.
 func deliverNotification(ctx context.Context, notifiers []notify.Notifier, msg notify.Message, allow func(notify.Notifier) bool, report func(notify.Notifier, error)) {
 	scope, _ := ctx.Value(watchAlarmContextKey{}).(watchAlarmScope)
 	epoch, allowed := scope.notificationEpoch()
@@ -52,6 +52,10 @@ func deliverNotification(ctx context.Context, notifiers []notify.Notifier, msg n
 			return
 		}
 		if (allow != nil && !allow(n)) || !notify.Accepts(n, msg.Severity) {
+			continue
+		}
+		if muted, until := notifierMutedFrom(ctx, n.Name()); muted {
+			report(n, notificationsMutedError{until: until, notifier: true})
 			continue
 		}
 		report(n, n.Send(ctx, msg))
