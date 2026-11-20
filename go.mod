@@ -19,7 +19,7 @@ require (
 	github.com/spf13/pflag v1.1.0
 	github.com/vishvananda/netlink v1.3.1
 	github.com/wneessen/go-mail v0.8.2
-	go.mongodb.org/mongo-driver/v2 v2.10.0
+	go.mongodb.org/mongo-driver/v2 v2.10.1
 	golang.org/x/crypto v0.59.0
 	golang.org/x/net v0.63.0
 	golang.org/x/sys v0.50.0
