@@ -422,8 +422,8 @@ type SessionSummary struct {
 
 // HostTypeInfo describes the host's virtualization class for the dashboard.
 type HostTypeInfo struct {
-	Kind     string `json:"kind,omitempty"`     // bare_metal | virtual_machine | unknown
-	Platform string `json:"platform,omitempty"` // kvm | hyperv | vmware | virtualbox | xen | ...
+	Kind     string `json:"kind,omitempty"`     // bare_metal | virtual_machine | container | unknown
+	Platform string `json:"platform,omitempty"` // kvm | hyperv | vmware | xen | lxc | docker | ...
 	Label    string `json:"label,omitempty"`    // display-ready summary, e.g. "KVM/QEMU VM"
 	Detail   string `json:"detail,omitempty"`   // source detail such as DMI vendor/product
 }

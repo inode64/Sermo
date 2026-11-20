@@ -49,9 +49,52 @@ func TestDetectHostType(t *testing.T) {
 			files: map[string]string{
 				filepath.Join(dmiIDPath, "sys_vendor"):   "Dell Inc.\n",
 				filepath.Join(dmiIDPath, "product_name"): "PowerEdge R750\n",
+				initEnvironPath:                          "HOME=/\x00TERM=linux\x00",
 			},
 			wantKind:  "bare_metal",
 			wantLabel: "bare metal",
+		},
+		{
+			name: "lxc on physical host from systemd marker",
+			files: map[string]string{
+				filepath.Join(dmiIDPath, "sys_vendor"):   "Supermicro\n",
+				filepath.Join(dmiIDPath, "product_name"): "SYS-212H-TN\n",
+				systemdContainerPath:                     "lxc\n",
+				initEnvironPath:                          "container=lxc\x00container_ttys=pts/1 pts/2\x00",
+			},
+			wantKind:     "container",
+			wantPlatform: "lxc",
+			wantLabel:    "LXC container",
+		},
+		{
+			name: "lxc without systemd inside a virtual machine",
+			files: map[string]string{
+				filepath.Join(dmiIDPath, "sys_vendor"): "QEMU\n",
+				cpuInfoPath:                            "vendor_id\t: GenuineIntel\nflags\t: fpu hypervisor tsc\n",
+				initEnvironPath:                        "PATH=/sbin:/bin\x00container=lxc\x00",
+			},
+			wantKind:     "container",
+			wantPlatform: "lxc",
+			wantLabel:    "LXC container",
+		},
+		{
+			name: "docker from empty marker",
+			files: map[string]string{
+				filepath.Join(dmiIDPath, "sys_vendor"): "Dell Inc.\n",
+				dockerMarkerPath:                       "",
+			},
+			wantKind:     "container",
+			wantPlatform: "docker",
+			wantLabel:    "Docker container",
+		},
+		{
+			name: "unlisted container manager",
+			files: map[string]string{
+				systemdContainerPath: "rkt\n",
+			},
+			wantKind:     "container",
+			wantPlatform: "rkt",
+			wantLabel:    "container",
 		},
 		{
 			name: "kvm from cpu fallback",

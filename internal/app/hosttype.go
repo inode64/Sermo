@@ -15,6 +15,13 @@ const (
 	dmiIDPath      = "/sys/class/dmi/id"
 	hypervisorPath = "/sys/hypervisor/type"
 	cpuInfoPath    = "/proc/cpuinfo"
+
+	// Container markers, as systemd-detect-virt reads them.
+	systemdContainerPath = "/run/systemd/container"
+	initEnvironPath      = "/proc/1/environ"
+	podmanMarkerPath     = "/run/.containerenv"
+	dockerMarkerPath     = "/.dockerenv"
+	containerEnvPrefix   = "container="
 )
 
 const (
@@ -28,9 +35,15 @@ const (
 
 const (
 	hostTypeKindBareMetal      = "bare_metal"
+	hostTypeKindContainer      = "container"
 	hostTypeKindUnknown        = "unknown"
 	hostTypeKindVirtualMachine = "virtual_machine"
 	hostTypeLabelBareMetal     = "bare metal"
+	hostTypeLabelContainer     = "container"
+	hostTypeLabelDocker        = "Docker container"
+	hostTypeLabelLXC           = "LXC container"
+	hostTypeLabelNspawn        = "systemd-nspawn container"
+	hostTypeLabelPodman        = "Podman container"
 	hostTypeLabelAlibabaCloud  = "Alibaba Cloud VM"
 	hostTypeLabelAmazonEC2     = "Amazon EC2 VM"
 	hostTypeLabelAppleVirtual  = "Apple Virtualization VM"
@@ -54,12 +67,17 @@ const (
 	hostTypePlatformApple      = "apple_virtualization"
 	hostTypePlatformBhyve      = "bhyve"
 	hostTypePlatformDigital    = "digitalocean"
+	hostTypePlatformDocker     = "docker"
 	hostTypePlatformGCE        = "gce"
 	hostTypePlatformHyperV     = "hyperv"
 	hostTypePlatformKVM        = "kvm"
+	hostTypePlatformLXC        = "lxc"
+	hostTypePlatformLXCLibvirt = "lxc-libvirt"
+	hostTypePlatformNspawn     = "systemd-nspawn"
 	hostTypePlatformOpenStack  = "openstack"
 	hostTypePlatformOracle     = "oracle_cloud"
 	hostTypePlatformParallels  = "parallels"
+	hostTypePlatformPodman     = "podman"
 	hostTypePlatformQEMU       = "qemu"
 	hostTypePlatformTencent    = "tencent_cloud"
 	hostTypePlatformVirtual    = "virtualized"
@@ -79,6 +97,12 @@ func hostTypeInfo() *web.HostTypeInfo {
 }
 
 func detectHostType(readFile func(string) ([]byte, error)) web.HostTypeInfo {
+	// A container shares its host's kernel, so DMI and cpuinfo describe the
+	// machine underneath it and must not decide the type.
+	if info, ok := detectContainer(readFile); ok {
+		return info
+	}
+
 	facts := readDMIHostTypeFacts(readFile)
 	if platform, label := virtualPlatformFromText(joinHostTypeFacts(facts)); platform != "" {
 		return web.HostTypeInfo{
@@ -126,6 +150,50 @@ func detectHostType(readFile func(string) ([]byte, error)) web.HostTypeInfo {
 	}
 
 	return web.HostTypeInfo{Kind: hostTypeKindUnknown, Label: hostTypeLabelUnknown}
+}
+
+func detectContainer(readFile func(string) ([]byte, error)) (web.HostTypeInfo, bool) {
+	if manager, ok := readHostTypeFile(readFile, systemdContainerPath); ok {
+		return containerHostType(manager, systemdContainerPath+"="+manager), true
+	}
+	// LXC sets container= in PID 1's environment whatever init runs inside,
+	// so this also covers OpenRC containers that never write the systemd file.
+	if environ, err := readFile(initEnvironPath); err == nil {
+		for entry := range strings.SplitSeq(string(environ), "\x00") {
+			if manager, ok := strings.CutPrefix(entry, containerEnvPrefix); ok && manager != "" {
+				return containerHostType(manager, initEnvironPath+" "+entry), true
+			}
+		}
+	}
+	// Both markers may be empty files: their existence is the signal.
+	if _, err := readFile(podmanMarkerPath); err == nil {
+		return containerHostType(hostTypePlatformPodman, podmanMarkerPath), true
+	}
+	if _, err := readFile(dockerMarkerPath); err == nil {
+		return containerHostType(hostTypePlatformDocker, dockerMarkerPath), true
+	}
+	return web.HostTypeInfo{}, false
+}
+
+func containerHostType(manager, detail string) web.HostTypeInfo {
+	platform := strings.ToLower(strings.TrimSpace(manager))
+	label := hostTypeLabelContainer
+	switch platform {
+	case hostTypePlatformLXC, hostTypePlatformLXCLibvirt:
+		label = hostTypeLabelLXC
+	case hostTypePlatformNspawn:
+		label = hostTypeLabelNspawn
+	case hostTypePlatformDocker:
+		label = hostTypeLabelDocker
+	case hostTypePlatformPodman:
+		label = hostTypeLabelPodman
+	}
+	return web.HostTypeInfo{
+		Kind:     hostTypeKindContainer,
+		Platform: platform,
+		Label:    label,
+		Detail:   detail,
+	}
 }
 
 func readDMIHostTypeFacts(readFile func(string) ([]byte, error)) []hostTypeFact {
