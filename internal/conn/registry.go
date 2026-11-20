@@ -69,7 +69,7 @@ var builtinProtocolRegistrations = []protocolRegistration{
 	{protocol: openvpnProtocol{}, aliases: []string{protocolAliasOpenVPN}},
 	{protocol: openvswitchProtocol{}, aliases: []string{protocolAliasOVS, protocolAliasOVSDB, protocolAliasOVSDBServer}, socket: true},
 	{protocol: popProtocol{}, aliases: []string{protocolAliasPOP3}, socket: true},
-	{protocol: postgresProtocol{}, aliases: []string{protocolAliasPostgreSQL}},
+	{protocol: postgresProtocol{}, aliases: []string{protocolAliasPostgreSQL}, socket: true},
 	{protocol: prometheusProtocol{}, aliases: []string{protocolAliasPrometheus}},
 	{protocol: rdpProtocol{}, aliases: []string{protocolAliasMSWBTServer}},
 	{protocol: redisProtocol{}, aliases: []string{protocolAliasValkey}, socket: true},

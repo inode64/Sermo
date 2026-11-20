@@ -1579,8 +1579,8 @@ keep the per-protocol entries short:
 - **`socket`** (a Unix socket path) dials the socket instead of `host`/`port`
   for the protocols that can reach a Unix endpoint: `amqp`, `asterisk`, `avahi`,
   `ceph`, `chrony`, `clamd`, `dbus`, `docker`, `fpm`, `ftp`, `imap`, `kafka`, `libvirt`,
-  `memcached`, `mqtt`, `mysql`, `nntp`, `nut`, `openvswitch`, `pop`, `redis`,
-  `rsync`, `sieve`, `smtp`, `spamd`, `varnish` and the socket-only daemons
+  `memcached`, `mqtt`, `mysql`, `nntp`, `nut`, `openvswitch`, `pop`, `postgres`,
+  `redis`, `rsync`, `sieve`, `smtp`, `spamd`, `varnish` and the socket-only daemons
   (`acpid`, `fail2ban`, `lvmpolld`). Validation rejects `socket` for any other
   protocol, which only dials `host`/`port`.
 - **`query`** is the per-protocol lookup target (e.g. the DNS name for `dns`).
@@ -1717,7 +1717,11 @@ Protocols, in the order of the table above:
   `tls: true` is `sslmode=verify-full` (certificate chain and host name checked
   against the system roots); `skip-verify` is `sslmode=require` (encrypted,
   unverified). Uses `github.com/jackc/pgx/v5`. A startup refusal with SQLSTATE
-  class `53` or `57P03` is [busy](#busy-servers).
+  class `53` or `57P03` is [busy](#busy-servers). `socket` takes the socket
+  file, such as `/run/postgresql/.s.PGSQL.5432`; the server offers no TLS
+  there, so `tls` is ignored, as `psql` does. Over the socket, `peer`
+  authentication matches the role to sermod's system user, root, so a `root`
+  role connects without a password.
 - `redis` (alias `valkey`) — default port 6379; `tls` supported. `user` is
   **optional** (legacy `requirepass` uses a password only, or no auth at all); a
   password-only check sends `AUTH <password>`. Verifies `PING` → `PONG` over RESP
@@ -2602,9 +2606,10 @@ checks:
   matches the result against `value` as a Go (RE2) regular expression.
 - **Engines:** `mysql`/`mariadb` and `postgres` use the same connection fields
   as their protocol checks (`host`/`port`/`user`/`password`/`database`/`tls`)
-  and **require a `user`**; `sqlite` takes a `path` and opens it **read-only**. A `mysql`/`mariadb` engine also accepts `socket`
-  (a Unix socket path, e.g. `/run/mysqld/mysqld.sock`) in place of
-  `host`/`port`; the `replication` check honours it the same way.
+  and **require a `user`**; `sqlite` takes a `path` and opens it **read-only**. The `mysql`/`mariadb` and `postgres` engines also accept `socket`
+  (a Unix socket path, e.g. `/run/mysqld/mysqld.sock` or
+  `/run/postgresql/.s.PGSQL.5432`) in place of `host`/`port`; the
+  `replication` check honours it the same way.
 - **`defaults_file`** (`mysql`/`mariadb` only, an absolute path) reads a MySQL
   option file exactly as [`db_queries`](#running-database-statements-db_queries)
   does: the `[client]` groups fill every connection field the check leaves
@@ -2667,7 +2672,7 @@ watches:
     check:
       type: db_queries
       engine: mariadb            # mysql | mariadb | postgres
-      socket: /run/mysqld/mysqld.sock   # mysql/mariadb only; or host/port
+      socket: /run/mysqld/mysqld.sock   # or host/port
       defaults_file: /root/.my.cnf      # mysql/mariadb only
       min_duration: 5m           # duration-only alert
       exclude_users: [backup]    # optional filters: which statements alert
@@ -2682,7 +2687,8 @@ watches:
   detected once, so a sample is one query; a failed sample detects them again.
 - **`host`, `port`, `user`, `password`, `database`, `tls`**: the usual database
   connection fields; PostgreSQL requires `user`.
-- **`socket`** (MySQL/MariaDB only): a Unix socket path instead of `host`/`port`.
+- **`socket`**: a Unix socket path instead of `host`/`port`, such as
+  `/run/mysqld/mysqld.sock` or `/run/postgresql/.s.PGSQL.5432`.
 - **`defaults_file`** (MySQL/MariaDB only): an option file read natively for the
   fields the check leaves unset (see Credentials below).
 - **`min_duration`**: without resource thresholds, a statement running at least

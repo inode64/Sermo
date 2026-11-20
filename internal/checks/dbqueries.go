@@ -354,8 +354,8 @@ func ParseDBQueryConfig(entry map[string]any) (DBQueryConfig, error) {
 			return DBQueryConfig{}, errors.New("db_queries states applies to postgres only")
 		}
 	} else {
-		if cfgval.AsString(entry[CheckKeySocket]) != "" || cfg.DefaultsFile != "" {
-			return DBQueryConfig{}, errors.New("db_queries socket and defaults_file apply to mysql/mariadb only")
+		if cfg.DefaultsFile != "" {
+			return DBQueryConfig{}, errors.New("db_queries defaults_file applies to mysql/mariadb only")
 		}
 		if cfg.Conn.User == "" {
 			return DBQueryConfig{}, errors.New("db_queries check (postgres) requires a user")

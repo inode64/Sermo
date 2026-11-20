@@ -30,6 +30,12 @@ func TestParseDBQueryConfig(t *testing.T) {
 	if err != nil || len(pg.States) != 1 || pg.States[0] != pgStateActive {
 		t.Fatalf("postgres default states: %+v, %v", pg, err)
 	}
+	// Peer authentication over the socket lets root in without a password.
+	pgSocket, err := ParseDBQueryConfig(map[string]any{"engine": "postgres", "host": "127.0.0.1", "user": "root",
+		"min_duration": "1m", "socket": "/run/postgresql/.s.PGSQL.5432"})
+	if err != nil || pgSocket.Conn.Socket != "/run/postgresql/.s.PGSQL.5432" || !pgSocket.Local() {
+		t.Fatalf("postgres socket: %+v, %v", pgSocket.Conn, err)
+	}
 
 	for name, entry := range map[string]map[string]any{
 		"no engine":          {"min_duration": "5m"},
@@ -37,7 +43,6 @@ func TestParseDBQueryConfig(t *testing.T) {
 		"no min_duration":    {"engine": "mysql"},
 		"zero length":        {"engine": "mysql", "min_duration": "5m", "max_query_length": 0},
 		"mysql states":       {"engine": "mysql", "min_duration": "5m", "states": []any{"active"}},
-		"postgres socket":    {"engine": "postgres", "user": "p", "min_duration": "5m", "socket": "/x"},
 		"postgres w/o user":  {"engine": "postgres", "min_duration": "5m"},
 		"negative max_rows":  {"engine": "mysql", "min_duration": "5m", "max_rows": -1},
 		"bad min_duration":   {"engine": "mysql", "min_duration": "soon"},

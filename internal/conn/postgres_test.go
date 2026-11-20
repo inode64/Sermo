@@ -1,8 +1,14 @@
 package conn
 
 import (
+	"context"
+	"net"
 	"net/url"
+	"path/filepath"
 	"testing"
+	"time"
+
+	"github.com/jackc/pgx/v5/pgproto3"
 )
 
 func TestSSLModeSharesTheFriendlySpellings(t *testing.T) {
@@ -90,6 +96,53 @@ func TestValidTLSValueSSLModesArePostgresOnly(t *testing.T) {
 				t.Errorf("ValidTLSValue(%q, %q) = %v, want %v", tt.protocol, tt.value, got, tt.want)
 			}
 		})
+	}
+}
+
+// A socket target reaches the server through the configured socket file, with
+// no TLS negotiation even when tls is set: the server offers none there.
+func TestPostgresProbeOverUnixSocket(t *testing.T) {
+	socket := filepath.Join(t.TempDir(), ".s.PGSQL.5432")
+	listener, err := net.Listen("unix", socket)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = listener.Close() })
+	first := make(chan pgproto3.FrontendMessage, 1)
+	go func() {
+		c, acceptErr := listener.Accept()
+		if acceptErr != nil {
+			close(first)
+			return
+		}
+		defer func() { _ = c.Close() }()
+		backend := pgproto3.NewBackend(c, c)
+		msg, receiveErr := backend.ReceiveStartupMessage()
+		if receiveErr != nil {
+			close(first)
+			return
+		}
+		first <- msg
+		backend.Send(&pgproto3.ErrorResponse{Severity: "FATAL", Code: "53300", Message: "sorry, too many clients already"})
+		_ = backend.Flush()
+	}()
+
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	protocol, cfg, ok := Prepare(ProtocolNamePostgres, Config{Socket: socket, User: "root", Database: "postgres", TLS: "verify-full"})
+	if !ok {
+		t.Fatal("postgres is not registered")
+	}
+	res, err := protocol.Probe(ctx, cfg)
+	assertBusy(t, res, err, "53300")
+	startup, isStartup := (<-first).(*pgproto3.StartupMessage)
+	if !isStartup || startup.Parameters["user"] != "root" {
+		t.Fatalf("first message = %+v, want root's StartupMessage without an SSLRequest", startup)
+	}
+
+	missing := Config{Socket: filepath.Join(t.TempDir(), ".s.PGSQL.5432"), User: "root"}
+	if _, err := protocol.Probe(ctx, missing); err == nil {
+		t.Fatal("a missing socket must fail the probe")
 	}
 }
 

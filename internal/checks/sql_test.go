@@ -161,6 +161,11 @@ func TestSQLConnConfigHostDefault(t *testing.T) {
 	if got := sqlConnConfig("mysql", map[string]any{"user": "u", "host": "db.internal"}).Host; got != "db.internal" {
 		t.Errorf("explicit host = %q, want db.internal", got)
 	}
+	for _, engine := range []string{"mysql", "postgres"} {
+		if got := sqlConnConfig(engine, map[string]any{"user": "u", "socket": "/run/db.sock"}).Socket; got != "/run/db.sock" {
+			t.Errorf("%s socket = %q, want /run/db.sock", engine, got)
+		}
+	}
 }
 
 // TestSQLCheckSQLiteAbsentValue pins how a sqlite sql check reads a database

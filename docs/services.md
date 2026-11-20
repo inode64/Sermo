@@ -2972,6 +2972,26 @@ distributions give root. To list other accounts' statements the account needs
 default `postgres` superuser has it) and `pg_signal_backend` (or ownership of
 the backend) to cancel a statement.
 
+Debian and Ubuntu answer TCP logins on `127.0.0.1` with `scram-sha-256`, so
+the passwordless `postgres` login fails there. Their `pg_hba.conf` does accept
+`peer` logins on the Unix socket. Connect the watch through the socket as a
+`root` role that holds only the two monitoring grants; `pg_hba.conf` stays
+unchanged and no password is stored:
+
+```sh
+runuser -u postgres -- psql -c 'CREATE ROLE root LOGIN IN ROLE pg_monitor, pg_signal_backend'
+```
+
+```yaml
+# /etc/sermo/services.local/postgres-16.yml — Debian/Ubuntu, peer on the socket
+name: postgres-16
+watches:
+  alert-if-query-long-running:
+    check:
+      socket: /run/postgresql/.s.PGSQL.5432
+      user: root
+```
+
 **Tuning per host** — a `services.local` override, without editing the service
 file:
 

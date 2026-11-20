@@ -4,7 +4,9 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"net"
 	"net/url"
+	"path/filepath"
 	"strings"
 
 	"sermo/internal/netutil"
@@ -48,15 +50,26 @@ func OpenPostgresDB(cfg Config) (*sql.DB, error) {
 }
 
 // postgresConfig builds the pgx connection config for cfg, routing TCP dials
-// through BindDialer. Tests also use it to verify
-// interface binding is wired without opening a connection.
+// through BindDialer, or dialing cfg.Socket when set. Tests also use it to
+// verify interface binding is wired without opening a connection.
 func postgresConfig(cfg Config) (*pgx.ConnConfig, error) {
 	target := newProbeTarget(cfg, defaultPortPostgres)
 	config, err := pgx.ParseConfig(buildPGDSNWithTarget(target))
 	if err != nil {
 		return nil, fmt.Errorf("postgres config: %w", err)
 	}
-	config.DialFunc = target.dialer().DialContext
+	if cfg.Socket == "" {
+		config.DialFunc = target.dialer().DialContext
+		return config, nil
+	}
+	// The server offers no TLS on its Unix socket, so like libpq the socket
+	// ignores tls. A directory host is what makes pgx skip the TLS handshake
+	// and the TCP fallbacks; the dial still goes to the configured socket file.
+	config.Host = filepath.Dir(cfg.Socket)
+	config.TLSConfig, config.Fallbacks = nil, nil
+	config.DialFunc = func(ctx context.Context, _, _ string) (net.Conn, error) {
+		return dialUnix(ctx, cfg.Socket)
+	}
 	return config, nil
 }
 

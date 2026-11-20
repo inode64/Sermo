@@ -169,8 +169,9 @@ name: db
 service: x
 checks:
   conn: { type: mariadb, user: monitor, socket: /run/mysqld/mysqld.sock }
+  pg: { type: postgres, user: root, socket: /run/postgresql/.s.PGSQL.5432 }
 `,
-			absent: []string{"checks.conn"},
+			absent: []string{"checks.conn", "checks.pg"},
 		},
 		{
 			name: "socket rejected where the probe ignores it",
@@ -178,9 +179,9 @@ checks:
 name: db
 service: x
 checks:
-  conn: { type: postgres, user: monitor, socket: /run/postgresql/.s.PGSQL.5432 }
+  conn: { type: mongodb, socket: /tmp/mongodb-27017.sock }
 `,
-			want: []string{"checks.conn.socket is not supported by a postgres check; use host and port"},
+			want: []string{"checks.conn.socket is not supported by a mongodb check; use host and port"},
 		},
 		{
 			name: "empty socket ignored",
