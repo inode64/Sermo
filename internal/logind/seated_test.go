@@ -46,6 +46,30 @@ func TestSeatedSessionsNamesOnlySeatedRecords(t *testing.T) {
 	}
 }
 
+// A display manager guards on the users logged in, not on its own greeter. A
+// seated record that names no class cannot be ruled out, so it still counts.
+func TestSeatedSessionsFiltersByClass(t *testing.T) {
+	t.Parallel()
+	dir := writeSessions(t, map[string]string{
+		"c1": "USER=gdm-greeter\nCLASS=greeter\nTYPE=wayland\nSEAT=seat0\n",
+		"3":  "USER=alice\nCLASS=user\nTYPE=wayland\nSEAT=seat0\n",
+		"4":  "USER=alice\nCLASS=manager\n",
+		"9":  "USER=bob\nSEAT=seat0\n",
+		"12": "USER=root\nCLASS=user\nREMOTE=1\n",
+	})
+	got, err := SeatedSessions(dir, "user")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{"3 (alice on seat0)", "9 (bob on seat0)"}; !slices.Equal(got, want) {
+		t.Fatalf("SeatedSessions(user) = %v, want %v", got, want)
+	}
+	all, err := SeatedSessions(dir)
+	if err != nil || len(all) != 3 {
+		t.Fatalf("SeatedSessions = %v, %v; want the greeter too", all, err)
+	}
+}
+
 // What cannot be read is an error, so a guard on it denies instead of calling
 // the host seatless; a FIFO under a record's name is refused without blocking.
 func TestSeatedSessionsRejectsWhatItCannotRead(t *testing.T) {

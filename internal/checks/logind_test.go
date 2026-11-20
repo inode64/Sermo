@@ -75,3 +75,14 @@ func TestBuildLogindNamesChecks(t *testing.T) {
 		}
 	}
 }
+
+func TestBuildSeatedSessionsCheckClass(t *testing.T) {
+	for _, class := range []any{"user", []any{"user", "greeter"}} {
+		if check, errs := buildSeatedSessionsCheck(base{name: "l"}, map[string]any{CheckKeyClass: class}); errs != "" || check == nil {
+			t.Fatalf("class %v = %+v, %q; want it accepted", class, check, errs)
+		}
+	}
+	if _, errs := buildSeatedSessionsCheck(base{name: "l"}, map[string]any{CheckKeyClass: 3}); !strings.Contains(errs, "class") {
+		t.Fatalf("errs = %q, want the malformed class rejected", errs)
+	}
+}

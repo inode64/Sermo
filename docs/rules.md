@@ -110,7 +110,7 @@ Connection-protocol checks (MySQL, PostgreSQL, Redis, Docker, libvirt, etc.) are
 | `firewall_rules` | health | nftables/iptables has at least `min_rules` loaded rules (see Firewall rules) |
 | `failed_units` | condition | the count of init units in a failed state satisfies `count {op, value}` (default `> 0`; see Failed init units) |
 | `stale_mounts` | condition | the count of filesystems still mounted from a block device the kernel no longer has satisfies `count {op, value}` (default `> 0`; see Stale mounts) |
-| `seated_sessions` | condition | the count of systemd-logind sessions attached to a seat satisfies `count {op, value}` (default `> 0`; see Seated sessions) |
+| `seated_sessions` | condition | the count of systemd-logind sessions attached to a seat, optionally of the listed `class`, satisfies `count {op, value}` (default `> 0`; see Seated sessions) |
 | `users_without_linger` | condition | the count of users systemd-logind tracks that have no linger file satisfies `count {op, value}` (default `> 0`; see Users without linger) |
 | `inotify` | condition | the per-user inotify instance/watch limits satisfy their `{op, value}` predicates (see inotify limits) |
 | `route`       | health | an up default route exists, optionally egressing a given `interface` (see Default route)|
@@ -3707,7 +3707,14 @@ watches:
       reports: state                 # a guard sensor, not service health
       optional: true
       count: { op: ">", value: 0 }   # optional; this is the default
+      class: user                    # optional; a class or a list, every class when absent
 ```
+
+`class` keeps only the sessions of those logind classes. `class: user` counts
+the people logged in on a seat (a graphical session or a console login) and
+leaves out a display manager's own greeter, which is a seated session of class
+`greeter` for as long as the login screen is up. A seated record that names no
+class still counts.
 
 It reads logind's own session records under `/run/systemd/sessions`, where
 logind writes a `SEAT=` line only for a seated session, instead of calling
@@ -3721,7 +3728,8 @@ The check is condition-style and has **no remediation action**. Data keys are
 `count` and `sessions` (each as `id (user on seat)`), and the dashboard shows
 both. The
 [`systemd-logind`](services.md#login-sessions-and-registered-machines) profile
-uses it to guard its own stop and restart.
+uses it to guard its own stop and restart, and the `gdm` profile, with
+`class: user`, to keep a restart from ending a graphical session.
 
 ### Users without linger (`users_without_linger`)
 

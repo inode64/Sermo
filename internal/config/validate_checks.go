@@ -858,7 +858,7 @@ var singleShotCheckValidators = map[string]singleShotCheckValidator{
 	checks.CheckTypeFailedUnits:        singleShotNoLock(validateFailedUnitsFields),
 	checks.CheckTypeStaleMounts:        singleShotNoLock(validateStaleMountsFields),
 	checks.CheckTypeUsersWithoutLinger: singleShotNoLock(validateLogindNamesFields),
-	checks.CheckTypeSeatedSessions:     singleShotNoLock(validateLogindNamesFields),
+	checks.CheckTypeSeatedSessions:     singleShotNoLock(validateSeatedSessionsFields),
 	checks.CheckTypeInotify:            singleShotThreshold(checks.InotifyPredFields),
 	checks.CheckTypeNet:                validateNetSingleShotCheck,
 	checks.CheckTypeICMP:               validateICMPSingleShotCheck,
@@ -1522,6 +1522,15 @@ func validateStaleMountsFields(prefix string, fields map[string]any, add addFunc
 
 func validateLogindNamesFields(prefix string, fields map[string]any, add addFunc) {
 	validatePresentThresholds(prefix, fields, checks.LogindNamesPredFields, add)
+}
+
+// validateSeatedSessionsFields validates a seated_sessions check: the count
+// predicate and the optional class filter.
+func validateSeatedSessionsFields(prefix string, fields map[string]any, add addFunc) {
+	validateLogindNamesFields(prefix, fields, add)
+	if _, err := cfgval.StrictStringList(fields[checks.CheckKeyClass]); err != nil {
+		add("%s.class must be a string or a list of strings", prefix)
+	}
 }
 
 // validateWebsocketFields validates a websocket check: a required url with a

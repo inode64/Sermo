@@ -12,11 +12,32 @@ processes:
   main:
     exe: ${gdm_binary}
     user: root
+rules:
+  # Stopping GDM ends every graphical session it hosts, with whatever the user
+  # had open. An updated binary or library therefore waits for the logout:
+  # the restart is retried and goes through once nobody is logged in on a
+  # seat. The greeter is GDM's own session (class greeter) and does not count.
+  block-stop-during-user-sessions:
+    type: guard
+    blocks: [stop, restart]
+    if:
+      active:
+        check: user-sessions
+    then:
+      action: block
+      message: >-
+        A user is logged in on a local seat, or the sessions cannot be inspected; ${display_name} is not stopped or restarted until they log out
 watches:
   service:
     check:
       type: service
       expect: active
+  user-sessions:
+    check:
+      type: seated_sessions
+      class: user
+      reports: state
+      optional: true
   version:
     check:
       type: dbus

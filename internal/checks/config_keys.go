@@ -35,6 +35,7 @@ const (
 	CheckKeyChange                = "change"
 	CheckKeyChangeLevel           = "change_level"
 	CheckKeyChip                  = "chip"
+	CheckKeyClass                 = "class"
 	CheckKeyColumn                = "column"
 	CheckKeyCollection            = "collection"
 	CheckKeyCommand               = "command"

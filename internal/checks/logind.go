@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"sermo/internal/cfgval"
 	"sermo/internal/logind"
 )
 
@@ -43,16 +44,24 @@ func buildLogindNamesCheck(b base, entry map[string]any, checkType, noun, dataKe
 	return logindNamesCheck{base: b, checkType: checkType, noun: noun, dataKey: dataKey, op: op, value: value, sampler: sampler}, ""
 }
 
+// buildSeatedSessionsCheck reads the optional `class` filter: the logind
+// session classes that count, every class when absent.
 func buildSeatedSessionsCheck(b base, entry map[string]any) (Check, string) {
-	return buildLogindNamesCheck(b, entry, CheckTypeSeatedSessions, "seated session", DataKeySessions, seatedSessionsSampler)
+	classes, err := cfgval.StrictStringList(entry[CheckKeyClass])
+	if err != nil {
+		return nil, CheckTypeSeatedSessions + " check: class must be a string or a list of strings"
+	}
+	return buildLogindNamesCheck(b, entry, CheckTypeSeatedSessions, "seated session", DataKeySessions, func() ([]string, error) {
+		return seatedSessionsSampler(classes)
+	})
 }
 
 func buildUsersWithoutLingerCheck(b base, entry map[string]any) (Check, string) {
 	return buildLogindNamesCheck(b, entry, CheckTypeUsersWithoutLinger, "unlingered user", DataKeyUsers, usersWithoutLingerSampler)
 }
 
-func seatedSessionsSampler() ([]string, error) {
-	sessions, err := logind.SeatedSessions("")
+func seatedSessionsSampler(classes []string) ([]string, error) {
+	sessions, err := logind.SeatedSessions("", classes...)
 	if err != nil {
 		return nil, fmt.Errorf("read logind sessions: %w", err)
 	}

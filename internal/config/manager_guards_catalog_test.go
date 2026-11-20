@@ -81,6 +81,49 @@ func TestCatalogLogindGuards(t *testing.T) {
 	}
 }
 
+// Restarting GDM ends the graphical sessions it hosts: on 20-nov-2026 a
+// replaced binary restarted it under a logged-in user. Stop and restart wait
+// while a user session sits on a seat, or while that cannot be read; the
+// sensor counts class user only, so the greeter never holds GDM. Start stays
+// available.
+func TestCatalogGDMGuardsUserSessions(t *testing.T) {
+	t.Parallel()
+	const sensor = "user-sessions"
+	resolved := resolveCatalogService(t, "gdm", "systemd")
+	check := nested(t, resolved.Tree, "checks", sensor)
+	if cfgval.String(check["type"]) != checks.CheckTypeSeatedSessions || cfgval.String(check[checks.CheckKeyClass]) != "user" {
+		t.Fatalf("%s check = %v, want seated_sessions of class user", sensor, check)
+	}
+	parsed, warnings := rules.ParseRules(resolved.Tree)
+	if len(warnings) != 0 {
+		t.Fatal(warnings)
+	}
+	for _, tc := range []struct {
+		name    string
+		result  checks.Result
+		blocked bool
+	}{
+		{"nobody logged in", checks.Result{Check: sensor}, false},
+		{"user session", checks.Result{Check: sensor, OK: true}, true},
+		{"sessions unreadable", checks.Result{Check: sensor, Unavailable: true}, true},
+	} {
+		for _, action := range []rules.ActionType{rules.ActionStop, rules.ActionRestart, rules.ActionStart} {
+			t.Run(tc.name+"/"+string(action), func(t *testing.T) {
+				t.Parallel()
+				ev := &rules.Evaluator{
+					Cache: map[string]checks.Result{sensor: tc.result},
+					Deps:  checks.Deps{Runner: execxtest.Fixed(execx.Result{}, nil), DefaultTimeout: time.Second},
+				}
+				block, err := rules.Guard(t.Context(), parsed, string(action), ev)
+				want := tc.blocked && action != rules.ActionStart
+				if blocked := block.Rule != "" || err != nil; blocked != want {
+					t.Fatalf("blocked=%v, want %v: guard=%q reason=%q err=%v", blocked, want, block.Rule, block.Reason, err)
+				}
+			})
+		}
+	}
+}
+
 // A logind left without login1 after a bus restart is restarted, but only in
 // that state: a stopped unit or a dead bus skips the probe, so neither counts
 // toward the restart.

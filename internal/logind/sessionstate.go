@@ -22,6 +22,7 @@ const (
 	sessionStateKey     = "STATE="
 	sessionSeatKey      = "SEAT="
 	sessionUserKey      = "USER="
+	sessionClassKey     = "CLASS="
 	// maxRecordBytes bounds one session or user record; logind writes a few
 	// hundred bytes of KEY=VALUE lines.
 	maxRecordBytes = 64 << 10
@@ -76,7 +77,11 @@ func recordField(data []byte, key string) (string, bool) {
 // .ref FIFO beside each record is skipped and every record is opened without
 // blocking. An unreadable directory or record is an error, never "no seat".
 // dir defaults to SessionsDir.
-func SeatedSessions(dir string) ([]string, error) {
+//
+// classes, when given, keeps only the sessions of those logind classes: "user"
+// names the logins on a seat and leaves out a display manager's own greeter.
+// A seated record with no class is kept, since it cannot be ruled out.
+func SeatedSessions(dir string, classes ...string) ([]string, error) {
 	dir = cmp.Or(dir, SessionsDir)
 	entries, err := hostfs.ReadDir(dir)
 	if err != nil {
@@ -99,6 +104,9 @@ func SeatedSessions(dir string) ([]string, error) {
 		}
 		seat, _ := recordField(data, sessionSeatKey)
 		if seat == "" {
+			continue
+		}
+		if class, _ := recordField(data, sessionClassKey); len(classes) > 0 && class != "" && !slices.Contains(classes, class) {
 			continue
 		}
 		user, _ := recordField(data, sessionUserKey)

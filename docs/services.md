@@ -2919,6 +2919,18 @@ that file for every user that must keep its processes (`loginctl enable-linger`
 needs logind on the bus) or wait until they log out; the guard then permits the
 operation.
 
+The `gdm` profile holds `stop` and `restart` while a user is logged in on a
+local seat. Restarting GDM ends every graphical session it hosts, so the
+restart Sermo would run after a package update (a replaced binary, a stale
+library, a new app version) must not happen under a logged-in user. Its
+`block-stop-during-user-sessions` guard reads a `seated_sessions` sensor with
+`class: user`: the greeter of the login screen is GDM's own session and does
+not count, so GDM restarts normally while nobody is logged in. With a user
+logged in each attempt is recorded, and notified, as blocked; the restart goes
+through after the logout. A console login on the seat blocks it too, and so
+does a session directory that cannot be read. To restart GDM anyway, log out
+first or use `systemctl restart gdm`.
+
 logind does not reconnect to a restarted system bus: the unit stays active
 while `org.freedesktop.login1` has no owner, and every new login fails to get a
 session scope (`Transport endpoint is not connected`). The `login1` watch
