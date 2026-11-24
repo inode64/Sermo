@@ -163,6 +163,10 @@ as service names only in the conservative one-service case where a configured
 service has the same name as the catalog service, such as `name: smb`,
 `uses: smb`, with catalog alias `samba`.
 
+The SSH profile opens one connection per cycle to verify the SSH banner. That
+probe also verifies the TCP listener; adding a separate TCP check doubles
+unauthenticated connections and the corresponding sshd log entries.
+
 ### GlusterFS thin arbiter
 
 The `gluster-ta-volume` profile requires a non-empty volume file at
