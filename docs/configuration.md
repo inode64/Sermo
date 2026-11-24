@@ -2387,6 +2387,11 @@ do not open an incident, send reminders or announce a recovery. This applies to
 rules whose sole condition is `changed`, or `failed` on a `stale_binary` or
 `stale_libraries` check. Failed or blocked maintenance and repairs triggered by
 health failures keep their incident severity and recovery notifications.
+An alert message attached to an automatic maintenance operation waits for its
+outcome: success makes it an informational notice too, on both the global route
+and explicit rule notifiers. Failed, blocked or suppressed operations keep the
+alert's severity. Alert-only rules requesting manual maintenance keep their
+normal incident lifecycle.
 The first failure or warning
 for each service check, rule, watch or app is sent immediately within the
 burst budget described below, and each metric of a `net`, `icmp` or `swap` watch

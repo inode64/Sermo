@@ -927,7 +927,7 @@ func (w *Worker) runFiringRemediation(ctx context.Context, ev *rules.Evaluator, 
 		// The evidence keeps the rule's alert but may never drive its
 		// operation: deliver the alert, say why nothing ran, and act on none.
 		reason := advisoryReadings(firing.Rule, ev.Cache)
-		w.emitAlertsWithOutput(ctx, ev, firing.Rule, firing.announce(), firing.change, firing.severity, joinOutputs(w.cycleFailOutput, reason))
+		w.emitAlertsWithOutput(ctx, firing.Rule, firing.announce(), w.alertRuntimeContext(ev, firing.Rule, firing.change), firing.severity, joinOutputs(w.cycleFailOutput, reason), false)
 		if w.shouldEmitRuleEvent(firing.Rule, firing.announce()) {
 			w.emit(Event{Kind: eventKindSuppressed, Severity: firing.severity, Rule: firing.Name, Action: action, Message: advisoryRemediationPrefix + reason})
 		}
@@ -980,8 +980,21 @@ func (w *Worker) runFiringRemediation(ctx context.Context, ev *rules.Evaluator, 
 	}
 	// A guard that has cleared releases its refusal immediately. Engine
 	// refusals wait for the next attempt to refresh preflight and ownership.
-	w.emitAlerts(ctx, ev, firing.Rule, firing.announce() || !refusal.attempted, firing.change, firing.severity)
-	w.executeRemediation(ctx, now, firing, action, renewal)
+	announce := firing.announce() || !refusal.attempted
+	completedMaintenance := false
+	if w.maintenanceRule(firing.Rule) {
+		// Only a successful operation makes its attached alerts informational.
+		// A refusal, failure or panic must still reach explicit rule notifiers.
+		// Capture readings before the operation acknowledges the changed artifacts.
+		rc := w.alertRuntimeContext(ev, firing.Rule, firing.change)
+		failOutput := w.cycleFailOutput
+		defer func() {
+			w.emitAlertsWithOutput(ctx, firing.Rule, announce, rc, firing.severity, failOutput, completedMaintenance)
+		}()
+	} else {
+		w.emitAlerts(ctx, ev, firing.Rule, announce, firing.change, firing.severity)
+	}
+	completedMaintenance = w.executeRemediation(ctx, now, firing, action, renewal)
 	return true
 }
 
@@ -1050,7 +1063,7 @@ func (w *Worker) emitDryRunRemediation(ctx context.Context, ev *rules.Evaluator,
 	}
 }
 
-func (w *Worker) executeRemediation(ctx context.Context, now func() time.Time, firing firingRule, action string, renewal map[string]string) {
+func (w *Worker) executeRemediation(ctx context.Context, now func() time.Time, firing firingRule, action string, renewal map[string]string) bool {
 	operate := w.operateForRemediation
 	if w.Cascade != nil && operation.CascadesAlsoApply(action) {
 		operate = w.Cascade
@@ -1082,6 +1095,7 @@ func (w *Worker) executeRemediation(ctx context.Context, now func() time.Time, f
 	if recovered != nil {
 		panic(recovered)
 	}
+	return result.OK()
 }
 
 func (w *Worker) maintenanceRule(rule rules.Rule) bool {
@@ -1270,22 +1284,25 @@ func (w *Worker) runAlerts(ctx context.Context, ev *rules.Evaluator, at time.Tim
 // episode; level is the episode's held severity. A dry-run worker's alerts
 // reach only the console notifiers.
 func (w *Worker) emitAlerts(ctx context.Context, ev *rules.Evaluator, r rules.Rule, announce bool, change rules.ChangeContext, level severity.Level) {
-	w.emitAlertsWithOutput(ctx, ev, r, announce, change, level, w.cycleFailOutput)
+	w.emitAlertsWithOutput(ctx, r, announce, w.alertRuntimeContext(ev, r, change), level, w.cycleFailOutput, false)
 }
 
 // emitAlertsWithOutput is emitAlerts with the output the alert carries.
-func (w *Worker) emitAlertsWithOutput(ctx context.Context, ev *rules.Evaluator, r rules.Rule, announce bool, change rules.ChangeContext, level severity.Level, failOutput string) {
+func (w *Worker) emitAlertsWithOutput(ctx context.Context, r rules.Rule, announce bool, rc ruleRuntimeContext, level severity.Level, failOutput string, notice bool) {
+	if notice {
+		level = severity.Info
+	}
 	dryRun := w.ruleDryRun(r)
 	allow := dryRunFilter(dryRun)
 	panicking := w.InPanic != nil && w.InPanic()
 	emitEvent := w.shouldEmitRuleEvent(r, announce)
 	emitNotify := w.shouldNotifyRule(r, announce)
 	for _, msg := range r.AlertMessages() {
-		msg = w.expandRuleRuntime(msg, ev, r, change)
+		msg = w.expandRuntimeWithContext(msg, Event{Rule: r.Name, Action: string(r.Primary().Type), Service: w.Service}, rc)
 		// Output carries the failing command's stdout/stderr so the operator can see
 		// why the rule fired on emitted cycles.
 		if emitEvent {
-			w.emit(Event{Kind: eventKindAlert, Severity: level, Rule: r.Name, Message: msg, Output: failOutput})
+			w.emit(Event{Kind: eventKindAlert, Severity: level, Rule: r.Name, Message: msg, Output: failOutput, Notice: notice})
 		}
 		if panicking {
 			if emitEvent {
@@ -1298,7 +1315,7 @@ func (w *Worker) emitAlertsWithOutput(ctx context.Context, ev *rules.Evaluator, 
 		}
 		// Only a live delivery defines who the recovery must reach: a muted
 		// alert reached no one, so its recovery must not either.
-		if muted, _ := notifyMutedFrom(ctx); !dryRun && !muted {
+		if muted, _ := notifyMutedFrom(ctx); !dryRun && !muted && !notice {
 			w.windowState(r.Name).MarkNotified(level)
 		}
 		w.deliverRuleMessage(ctx, r, alertMessage(w.Service, r.Name, msg, failOutput, level), allow)
@@ -1810,14 +1827,15 @@ type ruleCheckCandidate struct {
 	inlineMetric map[string]any
 }
 
-// expandRuleRuntime substitutes a rule alert message's runtime built-ins for
-// both the event log and notifier delivery.
-func (w *Worker) expandRuleRuntime(msg string, ev *rules.Evaluator, r rules.Rule, change rules.ChangeContext) string {
-	if !strings.Contains(msg, "${") {
-		return msg
+// alertRuntimeContext snapshots the readings a templated alert needs before an
+// operation can acknowledge them. Plain messages must not evaluate inline probes.
+func (w *Worker) alertRuntimeContext(ev *rules.Evaluator, r rules.Rule, change rules.ChangeContext) ruleRuntimeContext {
+	for _, action := range r.Actions {
+		if action.Type == rules.ActionAlert && strings.Contains(action.Message, "${") {
+			return w.ruleRuntimeContext(ev, r, change)
+		}
 	}
-	event := Event{Rule: r.Name, Action: string(r.Primary().Type), Service: w.Service}
-	return w.expandRuntimeWithContext(msg, event, w.ruleRuntimeContext(ev, r, change))
+	return ruleRuntimeContext{}
 }
 
 // recoveredRuleMessage records the current reading for a simple check condition,
@@ -1846,7 +1864,7 @@ func (w *Worker) recoveredRuleMessage(ev *rules.Evaluator, r rules.Rule, change 
 
 // expandRuntime substitutes the runtime built-ins a message may carry: event
 // fields such as ${date}/${event}/${action}/${service}, and the rule context
-// supplied by expandRuleRuntime. ${host} was already substituted at resolution.
+// supplied by ruleRuntimeContext. ${host} was already substituted at resolution.
 func (w *Worker) expandRuntime(msg string, e Event) string {
 	return w.expandRuntimeWithContext(msg, e, ruleRuntimeContext{})
 }
