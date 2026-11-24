@@ -4360,6 +4360,10 @@ inode, replacement timestamps, missing-file status and restart eligibility in
 service finding shows `restart_required` with `state_reason: stale_libraries`.
 An incomplete scan retains available findings and reports unavailable; one that
 found no stale mapping states no failure, so an alert on it stays quiet. A
+service with no processes is skipped when its init status confirms it is idle
+and waiting on an active socket, timer or path unit. This does not authorize
+remediation or clear an existing alert. Without that confirmation, an empty
+service inventory remains unavailable. A
 process that exits while it is scanned — a worker a web server recycles, now a
 zombie or its PID another process's — is dropped and does not make the scan
 incomplete. The

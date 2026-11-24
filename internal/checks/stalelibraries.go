@@ -11,6 +11,7 @@ import (
 
 	"sermo/internal/cfgval"
 	"sermo/internal/process"
+	"sermo/internal/servicemgr"
 	"sermo/internal/severity"
 	"sermo/internal/strutil"
 )
@@ -31,6 +32,7 @@ type StaleLibrariesFunc func(context.Context) (process.LibraryReport, error)
 type staleLibrariesCheck struct {
 	base
 	sample    StaleLibrariesFunc
+	status    func(context.Context) (servicemgr.Status, error)
 	stableFor time.Duration
 	clock     func() time.Time
 	mu        sync.Mutex
@@ -68,7 +70,7 @@ func buildStaleLibrariesCheck(b base, entry map[string]any, deps Deps) (Check, s
 	if deps.Service != "" && deps.StaleLibraries == nil {
 		return nil, "stale_libraries needs service process discovery"
 	}
-	return &staleLibrariesCheck{base: b, sample: deps.StaleLibraries, stableFor: stableFor, clock: time.Now}, ""
+	return &staleLibrariesCheck{base: b, sample: deps.StaleLibraries, status: deps.Status, stableFor: stableFor, clock: time.Now}, ""
 }
 
 func (c *staleLibrariesCheck) Run(ctx context.Context) Result {
@@ -97,6 +99,19 @@ func (c *staleLibrariesCheck) Run(ctx context.Context) Result {
 		report, err = c.sample(ctx)
 	} else {
 		report, err = process.ScanLibraries(ctx, nil, 0, ResolveExecutableDependencies)
+	}
+	if err == nil && ctx.Err() == nil && c.sample != nil && report.Processes == 0 && len(report.Libraries) == 0 && c.status != nil {
+		var status servicemgr.Status
+		status, err = c.status(ctx)
+		if err == nil && ctx.Err() == nil && status == servicemgr.StatusIdle {
+			// An active trigger is expected to have no resident process. Keep
+			// the observation out of both health and remediation decisions.
+			res := c.result(true, "service idle: no running processes to inspect", run.start)
+			res.Skipped, res.ActionBlocked = true, true
+			c.since, c.previous = time.Time{}, nil
+			c.last, c.cached = now, res
+			return res
+		}
 	}
 	if ctx.Err() != nil {
 		err = ctx.Err()

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"sermo/internal/process"
+	"sermo/internal/servicemgr"
 )
 
 func TestStaleLibrariesStableWindowAndCache(t *testing.T) {
@@ -131,6 +132,46 @@ func TestStaleLibrariesRefreshesDependenciesAndReportsStopped(t *testing.T) {
 	now = now.Add(time.Minute)
 	if result := c.Run(t.Context()); !result.Unavailable || !result.ActionBlocked || result.Data[DataKeyComplete] != false {
 		t.Fatalf("stopped service reported empty success: %+v", result)
+	}
+}
+
+func TestStaleLibrariesIdleService(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		status    servicemgr.Status
+		scanErr   error
+		statusErr error
+		processes int
+		wantSkip  bool
+	}{
+		{name: "waiting for activation", status: servicemgr.StatusIdle, wantSkip: true},
+		{name: "stopped", status: servicemgr.StatusInactive},
+		{name: "active without attributed processes", status: servicemgr.StatusActive},
+		{name: "status unavailable", status: servicemgr.StatusIdle, statusErr: errors.New("status unavailable")},
+		{name: "scan incomplete", status: servicemgr.StatusIdle, scanErr: errors.New("permission denied")},
+		{name: "live processes", status: servicemgr.StatusIdle, processes: 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			check, issue := buildStaleLibrariesCheck(base{}, nil, Deps{
+				Service: "daemon",
+				Status: func(context.Context) (servicemgr.Status, error) {
+					if tc.processes != 0 || tc.scanErr != nil {
+						t.Fatal("queried activation status without a complete empty scan")
+					}
+					return tc.status, tc.statusErr
+				},
+				StaleLibraries: func(context.Context) (process.LibraryReport, error) {
+					return process.LibraryReport{Processes: tc.processes}, tc.scanErr
+				},
+			})
+			if issue != "" {
+				t.Fatal(issue)
+			}
+			res := check.Run(t.Context())
+			if res.Skipped != tc.wantSkip || res.Unavailable != (tc.processes == 0 && !tc.wantSkip) || res.ActionBlocked != (tc.processes == 0) {
+				t.Fatalf("unexpected library observation: %+v", res)
+			}
+		})
 	}
 }
 
