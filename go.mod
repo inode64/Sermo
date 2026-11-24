@@ -15,7 +15,7 @@ require (
 	github.com/gosnmp/gosnmp v1.47.0
 	github.com/jackc/pgx/v5 v5.13.0
 	github.com/mdlayher/netlink v1.11.2
-	github.com/quic-go/quic-go v0.65.0
+	github.com/quic-go/quic-go v0.66.0
 	github.com/spf13/pflag v1.1.0
 	github.com/vishvananda/netlink v1.3.1
 	github.com/wneessen/go-mail v0.8.2
@@ -24,7 +24,7 @@ require (
 	golang.org/x/net v0.63.0
 	golang.org/x/sys v0.50.0
 	golang.org/x/tools v0.53.0
-	modernc.org/sqlite v1.62.0
+	modernc.org/sqlite v1.63.0
 )
 
 require (
@@ -46,7 +46,7 @@ require (
 	github.com/jcmturner/goidentity/v6 v6.0.1 // indirect
 	github.com/jcmturner/gokrb5/v8 v8.4.4 // indirect
 	github.com/jcmturner/rpc/v2 v2.0.3 // indirect
-	github.com/klauspost/compress v1.20.4 // indirect
+	github.com/klauspost/compress v1.20.5 // indirect
 	github.com/mattn/go-isatty v0.0.24 // indirect
 	github.com/mdlayher/socket v0.8.0 // indirect
 	github.com/ncruces/go-strftime v1.1.0 // indirect
@@ -59,7 +59,7 @@ require (
 	golang.org/x/mod v0.43.0 // indirect
 	golang.org/x/sync v0.25.0 // indirect
 	golang.org/x/text v0.44.0 // indirect
-	modernc.org/libc v1.82.2 // indirect
+	modernc.org/libc v1.82.13 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.13.0 // indirect
 )
