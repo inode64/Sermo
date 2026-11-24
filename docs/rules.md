@@ -1624,6 +1624,13 @@ program's library: that remediation stays idle until an operator installs the
 library, so the rule records the same `suppressed` event, without an alert or
 a notification. A busy reading stays unknown for both.
 
+An already open remediation episode, including one restored after a daemon
+restart, stays open while advisory evidence still reports its problem, even
+without an attached alert. Rebuilding a library check's `stable_for` window
+does not mean its stale mappings recovered. The rule runs no operation during
+that advisory interval; fresh actionable evidence can resume it, and an
+observed clear condition closes it once.
+
 #### Busy servers
 
 A server that answers "too many connections", "loading", "starting up" or

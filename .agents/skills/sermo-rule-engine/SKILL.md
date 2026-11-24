@@ -61,7 +61,10 @@ policy state in `internal/rules/state.go`.
   rule with an operation. A remediation rule that also alerts re-reads it with
   `EvalAdvisory` only to deliver that alert and record the withheld action as
   `suppressed`; nothing operates on that answer, and a busy result stays
-  unknown there too.
+  unknown there too. An already open remediation episode also uses that
+  advisory reading to stay open, even without an attached alert: rebuilding
+  `stable_for` after startup is not a recovery. It still never operates on
+  advisory evidence.
 
 ## Severity
 

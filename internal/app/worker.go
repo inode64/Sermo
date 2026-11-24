@@ -1162,19 +1162,16 @@ func (w *Worker) firingRemediationRules(ctx context.Context, ev *rules.Evaluator
 // only on advisory evidence; the readings that withheld the action follow.
 const advisoryRemediationPrefix = "advisory evidence withholds the action: "
 
-// advisoryHolds reports whether an operation rule that also alerts holds once
-// advisory evidence is read as its alert would read it. EvalRule leaves such a
-// rule undecided, so without this the alert was lost together with the
-// operation the evidence must not drive (a binary removed from disk, or
-// replaced only beside the daemon). A rule with no alert has nothing to keep,
-// unless a check it reads cannot load its own program's library: that
-// remediation stays blind until an operator installs it, and the suppressed
-// event is the one record of why it does not run.
-func advisoryHolds(ctx context.Context, ev *rules.Evaluator, r rules.Rule) bool {
+// advisoryHolds preserves an alert or an open episode while advisory evidence
+// still reports its problem, without authorizing an operation. In particular,
+// rebuilding stable_for after startup must not recover a stale-library episode.
+// A new finding with no alert stays undecided, except when its probe cannot load
+// a library: the suppressed event is the only record of that blind remediation.
+func advisoryHolds(ctx context.Context, ev *rules.Evaluator, r rules.Rule, open bool) bool {
 	if _, ok := r.Operation(); !ok {
 		return false
 	}
-	if len(r.AlertMessages()) == 0 && !readsMissingLibrary(r, ev.Cache) {
+	if !open && len(r.AlertMessages()) == 0 && !readsMissingLibrary(r, ev.Cache) {
 		return false
 	}
 	held, err := ev.EvalAdvisory(ctx, r)
@@ -1413,11 +1410,11 @@ func (w *Worker) fires(ctx context.Context, ev *rules.Evaluator, r rules.Rule, a
 	// Only a real observation may recover a restored incident: a failed or
 	// unknown evaluation also reads as a false condition.
 	observedClear := err == nil && !cond && !ev.Unknown
-	advisory := !cond && ev.Unknown && advisoryHolds(ctx, ev, r)
+	window := w.windowState(r.Name)
+	advisory := !cond && ev.Unknown && advisoryHolds(ctx, ev, r, window.Firing())
 	if advisory {
 		cond = true
 	}
-	window := w.windowState(r.Name)
 	// The previous cycle's episode state is the only reliable edge reference:
 	// recomputing the window status with this cycle's timestamp reads a for:{duration}
 	// window as already elapsed, which made rising unobservable (alerts were
