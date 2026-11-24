@@ -2366,7 +2366,17 @@ with no `then` or rule notification action:
 event_notify:
   targets: [ops-slack]
   # repeat_interval: 24h  # optional reminder while an incident stays open
+  # exclude: ["watch:ping-lab-*"]  # optional subject globs
 ```
+
+`exclude` withholds this route's notifications for matching subjects, including
+queued messages, retries and reminders. Patterns use shell glob syntax (`*`,
+`?`, `[abc]`) against `service:<name>`, `watch:<name>` or `app:<name>`; service
+watches use their qualified name, for example `watch:web:port`. Excluding a
+watch keeps its checks, dashboard and event history. A recovery for an excluded
+subject closes an existing delivery receipt quietly. Reloading the configuration
+applies the filter to pending deliveries too. Explicit rule/watch `notify`
+actions are independent; use `notify: none` there when both routes must be quiet.
 
 This route sends `firing`, `warning`, `alert`, `recovered`, `error`, failed
 watch-action events, and automatic service remediation outcomes (including

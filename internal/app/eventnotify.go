@@ -422,9 +422,14 @@ func (n *EventNotifier) retryReads(ctx context.Context, targets []notify.Notifie
 			delete(n.unread, lookup)
 			continue
 		}
+		withheld := e.quietRecovery || n.muted(e.Event)
+		if withheld && e.Kind != eventKindRecovered {
+			delete(n.unread, lookup)
+			continue
+		}
 		for _, target := range targets {
 			if target.Name() == lookup.target {
-				n.deliverTarget(ctx, e, target, interval, e.quietRecovery)
+				n.deliverTarget(ctx, e, target, interval, withheld)
 				break
 			}
 		}
@@ -588,9 +593,7 @@ func normalizeLegacyNotifyRecord(rec state.EventNotifyRecord) state.EventNotifyR
 	return rec
 }
 
-// eventNotifyIdentity groups all PID-level process-policy events under their
-// watch, while independent service checks and rules retain separate episodes.
-func eventNotifyIdentity(e Event) (key string, active bool, phase string) {
+func eventNotifySubject(e Event) (string, string) {
 	dimension, name := eventNotifyDimensionDaemon, ""
 	switch {
 	case e.Service != "":
@@ -600,6 +603,13 @@ func eventNotifyIdentity(e Event) (key string, active bool, phase string) {
 	case e.App != "":
 		dimension, name = eventNotifyDimensionApp, e.App
 	}
+	return dimension, name
+}
+
+// eventNotifyIdentity groups all PID-level process-policy events under their
+// watch, while independent service checks and rules retain separate episodes.
+func eventNotifyIdentity(e Event) (key string, active bool, phase string) {
+	dimension, name := eventNotifySubject(e)
 	category := eventNotifyCategoryHealth
 	phase = e.Kind
 	switch e.Kind {

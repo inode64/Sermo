@@ -196,6 +196,7 @@ notify: [ops-email]
 event_notify:
   targets: [team-slack]
   repeat_interval: 24h  # optional reminder while an incident stays open
+  exclude: ["watch:ping-lab-*"]  # subject globs; monitoring continues
 
 # Interactive read-only Telegram report bot (long polling; no inbound port).
 # Distinct from a `telegram` notifier: it answers /status, /services, /sla, ...

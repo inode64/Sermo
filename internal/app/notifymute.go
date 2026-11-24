@@ -140,8 +140,11 @@ func (e notificationsMutedError) Error() string {
 	return subject + " muted until " + e.until.Local().Format(time.DateTime)
 }
 
-// muted reports whether an operator muted the service or watch e reports on.
+// muted combines configured exclusions with temporary operator mutes.
 func (n *EventNotifier) muted(e Event) bool {
+	if n.excluded(eventNotifySubject(e)) {
+		return true
+	}
 	if n.NotifyMutes == nil {
 		return false
 	}

@@ -2,6 +2,7 @@ package config
 
 import (
 	"maps"
+	"path"
 	"slices"
 	"strings"
 	"time"
@@ -44,16 +45,16 @@ func validateWeb(webCfg map[string]any, add addFunc) {
 		{webPathPasswordFile, WebKeyPasswordFile},
 		{webPathGuestPasswordFile, WebKeyGuestPasswordFile},
 	} {
-		path, key := pathAndKey[0], pathAndKey[1]
+		fieldPath, key := pathAndKey[0], pathAndKey[1]
 		raw, present := webCfg[key]
 		if !present {
 			continue
 		}
 		switch s, isStr := raw.(string); {
 		case !isStr:
-			add("%s must be a string", path)
+			add("%s must be a string", fieldPath)
 		case strings.TrimSpace(s) == "":
-			add("%s must name a file holding hashed credentials", path)
+			add("%s must name a file holding hashed credentials", fieldPath)
 		}
 	}
 	if v, present := webCfg[WebKeyGuest]; present {
@@ -208,12 +209,13 @@ func EventNotifyConfig(raw map[string]any) EventNotification {
 	if slices.Contains(names, NotifyNone) {
 		names = nil
 	}
-	return EventNotification{Targets: names, RepeatInterval: cfgval.Duration(entry[EventNotifyKeyRepeatInterval])}
+	return EventNotification{Targets: names, Exclude: cfgval.StringList(entry[EventNotifyKeyExclude]), RepeatInterval: cfgval.Duration(entry[EventNotifyKeyRepeatInterval])}
 }
 
 // EventNotification is the resolved global event delivery policy.
 type EventNotification struct {
 	Targets        []string
+	Exclude        []string
 	RepeatInterval time.Duration
 }
 
@@ -224,7 +226,7 @@ func validateEventNotify(raw any, defined map[string]struct{}, add addFunc) {
 		return
 	}
 	for key := range entry {
-		if key != EventNotifyKeyTargets && key != EventNotifyKeyRepeatInterval {
+		if key != EventNotifyKeyTargets && key != EventNotifyKeyRepeatInterval && key != EventNotifyKeyExclude {
 			add("%s.%s is not supported", SectionEventNotify, key)
 		}
 	}
@@ -236,6 +238,18 @@ func validateEventNotify(raw any, defined map[string]struct{}, add addFunc) {
 	}
 	if value, present := entry[EventNotifyKeyRepeatInterval]; present && !isPositiveDuration(cfgval.String(value)) {
 		add("%s.%s must be a positive duration", SectionEventNotify, EventNotifyKeyRepeatInterval)
+	}
+	if value, present := entry[EventNotifyKeyExclude]; present {
+		patterns, err := cfgval.StrictStringArray(value)
+		if err != nil {
+			add("%s.%s must be a list of subject glob patterns", SectionEventNotify, EventNotifyKeyExclude)
+			return
+		}
+		for _, pattern := range patterns {
+			if _, err := path.Match(pattern, ""); err != nil || strings.TrimSpace(pattern) == "" {
+				add("%s.%s has invalid subject glob %q", SectionEventNotify, EventNotifyKeyExclude, pattern)
+			}
+		}
 	}
 }
 

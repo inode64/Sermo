@@ -243,3 +243,33 @@ func TestValidateNotifierTemplate(t *testing.T) {
 		t.Errorf("expected missing-template issue, got: %v", issues)
 	}
 }
+
+func TestEventNotifyExclusionValidation(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		patterns any
+		invalid  bool
+	}{
+		{"qualified subjects", []any{"watch:ping-*", "service:web", "app:preview-?"}, false},
+		{"empty list", []any{}, false},
+		{"scalar", "watch:ping-*", true},
+		{"number", []any{1}, true},
+		{"empty pattern", []any{""}, true},
+		{"blank pattern", []any{"  "}, true},
+		{"invalid glob", []any{"watch:["}, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			raw := map[string]any{SectionEventNotify: map[string]any{EventNotifyKeyTargets: "none", EventNotifyKeyExclude: tc.patterns}}
+			issues := validateRawGlobal(t, raw)
+			if (len(issues) != 0) != tc.invalid {
+				t.Fatalf("issues = %v, invalid = %t", issues, tc.invalid)
+			}
+			if !tc.invalid {
+				got := EventNotifyConfig(raw)
+				if len(got.Exclude) != len(tc.patterns.([]any)) {
+					t.Fatalf("resolved exclusions = %v", got.Exclude)
+				}
+			}
+		})
+	}
+}

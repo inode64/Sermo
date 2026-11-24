@@ -75,6 +75,7 @@ const (
 	// of target dry_run and per-rule/per-watch notification actions.
 	SectionEventNotify           = "event_notify"
 	EventNotifyKeyTargets        = "targets"
+	EventNotifyKeyExclude        = "exclude"
 	EventNotifyKeyRepeatInterval = "repeat_interval"
 	sectionPaths                 = "paths"
 	sectionSecurity              = "security"
