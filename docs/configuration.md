@@ -2371,7 +2371,13 @@ event_notify:
 This route sends `firing`, `warning`, `alert`, `recovered`, `error`, failed
 watch-action events, and automatic service remediation outcomes (including
 `dry-run` and `suppressed`). It includes the host and target in the message and
-does not send routine manual successful actions. The first failure or warning
+does not send routine manual successful actions. Successful automatic configuration
+reloads and binary or library renewals are one-shot informational notices: they
+do not open an incident, send reminders or announce a recovery. This applies to
+rules whose sole condition is `changed`, or `failed` on a `stale_binary` or
+`stale_libraries` check. Failed or blocked maintenance and repairs triggered by
+health failures keep their incident severity and recovery notifications.
+The first failure or warning
 for each service check, rule, watch or app is sent immediately within the
 burst budget described below, and each metric of a `net`, `icmp` or `swap` watch
 counts as its own incident; unchanged

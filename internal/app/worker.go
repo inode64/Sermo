@@ -1072,11 +1072,29 @@ func (w *Worker) executeRemediation(ctx context.Context, now func() time.Time, f
 	// incomplete remediation. The message may be a guard's, whose ${event} or
 	// ${date} is expanded; the details quote the host and stay as written.
 	event := Event{Kind: kind, Severity: remediationSeverity(kind, firing.severity), Rule: firing.Name, Action: action, Status: string(result.Status)}
+	if result.OK() && w.maintenanceRule(firing.Rule) {
+		// A completed renewal is an informational operation, not a health
+		// incident to open, remind and recover on the next healthy cycle.
+		event.Notice, event.Severity = true, severity.Info
+	}
 	event.Message = result.AuditMessageWith(w.expandRuntime(result.Message, event))
 	w.emitLiteral(event)
 	if recovered != nil {
 		panic(recovered)
 	}
+}
+
+func (w *Worker) maintenanceRule(rule rules.Rule) bool {
+	if len(rule.If) != 1 {
+		return false
+	}
+	if _, changed := rule.If[rules.ConditionChanged]; changed {
+		return true
+	}
+	failed, _ := rule.If[rules.ConditionFailed].(map[string]any)
+	entry, _ := w.MetricChecks[cfgval.AsString(failed[rules.FieldCheck])].(map[string]any)
+	typ := cfgval.AsString(entry[checks.CheckKeyType])
+	return typ == checks.CheckTypeStaleBinary || typ == checks.CheckTypeStaleLibraries
 }
 
 // operateRecovering runs one remediation and turns a panic into the failed
